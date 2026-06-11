@@ -1,31 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conectando con tu asesor...</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; }
+        .btn { padding: 15px 30px; background: #25D366; color: white; text-decoration: none; border-radius: 50px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <p>Redirigiendo a WhatsApp...</p>
+    <a href="#" id="link" class="btn">Abrir WhatsApp</a>
+    
     <script>
         const asesores = [
-            "584244634041", // Karlys
-            "584244900601", // Ámbar
-            "584244900601", // Ámbar (duplicada)
-            "584244269876", // Luis
-            "584127136169", // Nicoll
-            "584127136169"  // Nicoll (duplicada)
+            "584244634041", "584244900601", "584244900601", 
+            "584244269876", "584127136169", "584127136169"
         ];
-
-        // Elige uno al azar
         const elegido = asesores[Math.floor(Math.random() * asesores.length)];
         const mensaje = "¡Buenas!, Vengo de Instagram me gustaría más información 😊";
         const urlFinal = "https://wa.me/" + elegido + "?text=" + encodeURIComponent(mensaje);
-
-        // Intenta abrir la App directamente
-        window.location.href = "whatsapp://send?phone=" + elegido + "&text=" + encodeURIComponent(mensaje);
-
-        // Respaldo por si no se abre la App
-        setTimeout(function(){
-            window.location.href = urlFinal;
-        }, 1000);
+        
+        // Actualiza el botón
+        document.getElementById('link').href = urlFinal;
+        
+        // Intenta redirección automática
+        window.location.href = urlFinal;
     </script>
-</head>
-<body>
-    <p>Redirigiendo al asesor...</p>
 </body>
 </html>
