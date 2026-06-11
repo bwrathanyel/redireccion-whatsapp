@@ -10,8 +10,8 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            /* Forzamos el fondo de palmeras de Shor.by de forma más compatible */
-            background-image: url('https://images.shor.by/v2/pages/backgrounds/link_in_bio_beach_palm_trees.jpg');
+            /* Tu imagen de fondo optimizada */
+            background-image: url('lotus%20360%20background.png');
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
@@ -24,12 +24,12 @@
             padding: 35px 20px;
         }
 
-        /* Capa oscura encima del fondo para que el texto resalte igual que en Shor.by */
+        /* Capa oscura intermedia para asegurar que todo el texto sea legible */
         body::before {
             content: "";
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.25);
+            background: rgba(0, 0, 0, 0.35);
             z-index: -1;
         }
 
@@ -40,10 +40,10 @@
             z-index: 1;
         }
 
-        /* Foto de perfil con el borde punteado naranja de Shor.by */
+        /* Contenedor del logo con el círculo punteado oficial de Shor.by */
         .logo-profile {
-            width: 96px;
-            height: 96px;
+            width: 100px;
+            height: 100px;
             border-radius: 50%;
             border: 3px dashed #ff9100;
             padding: 4px;
@@ -68,7 +68,7 @@
             white-space: pre-line;
         }
 
-        /* Fila de botones pequeños (redondos/cuadrados) */
+        /* Fila de botones de contacto rápido */
         .social-row {
             display: flex;
             justify-content: center;
@@ -100,7 +100,7 @@
             text-shadow: 0 2px 4px rgba(0,0,0,0.6);
         }
 
-        /* Botones alargados grandes */
+        /* Botones alargados grandes corporativos */
         .btn-large {
             display: flex;
             align-items: center;
@@ -129,7 +129,7 @@
 <body>
 
     <div class="container">
-        <img src="https://images.shor.by/v2/pages/avatars/LY5g.jpg" onerror="this.src='https://via.placeholder.com/96'" class="logo-profile" alt="Lotus 360">
+        <img src="logo%20destino%20y%20eventos%20lotus.png" class="logo-profile" alt="Lotus 360">
         
         <h1>Destino y Eventos Lotus 360</h1>
         <p class="subtitle">¡Escápate con Nosotros!
@@ -161,5 +161,5 @@ Servicios de Traslado</p>
         </a>
     </div>
 
-</head>
+</body>
 </html>
