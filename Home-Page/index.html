@@ -10,8 +10,10 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            /* Tu imagen de fondo optimizada */
-            background-image: url('lotusbackground.png');
+            
+            /* EXPLICACIÓN: Usamos una ruta relativa desde la raíz */
+            background-image: url('lotus360background.png'); 
+            
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
@@ -24,7 +26,7 @@
             padding: 35px 20px;
         }
 
-        /* Capa oscura intermedia para asegurar que todo el texto sea legible */
+        /* Capa oscura intermedia para legibilidad */
         body::before {
             content: "";
             position: fixed;
@@ -40,7 +42,7 @@
             z-index: 1;
         }
 
-        /* Contenedor del logo con el círculo punteado oficial de Shor.by */
+        /* Contenedor del logo con el círculo punteado oficial */
         .logo-profile {
             width: 100px;
             height: 100px;
@@ -100,7 +102,7 @@
             text-shadow: 0 2px 4px rgba(0,0,0,0.6);
         }
 
-        /* Botones alargados grandes corporativos */
+        /* Botones alargados grandes */
         .btn-large {
             display: flex;
             align-items: center;
