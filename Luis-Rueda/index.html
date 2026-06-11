@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conectando con tu asesor...</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; text-align: center; }
+        .btn { padding: 15px 30px; background: #25D366; color: white; text-decoration: none; border-radius: 50px; font-weight: bold; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <p>Redirigiendo a WhatsApp...</p>
+    <a href="#" id="link" class="btn">Abrir WhatsApp</a>
+    
+    <script>
+        // CAMBIA SOLO ESTE NÚMERO PARA CADA ASESOR
+        const asesor = "584244269876"; 
+        
+        const mensaje = "¡Buenas!, Vengo de Instagram me gustaría más información 😊";
+        const urlFinal = "https://wa.me/" + asesor + "?text=" + encodeURIComponent(mensaje);
+        
+        // Actualiza el botón
+        document.getElementById('link').href = urlFinal;
+        
+        // Intenta redirección automática
+        window.location.href = urlFinal;
+    </script>
+</body>
+</html>
