@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Destino y Eventos Lotus 360</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            /* Usamos la imagen exacta de fondo de su Shor.by */
+            background: linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.3)), 
+                        url('https://images.shor.by/v2/pages/backgrounds/link_in_bio_beach_palm_trees.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 35px 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+            text-align: center;
+        }
+
+        /* Foto de perfil con el borde punteado naranja de Shor.by */
+        .logo-profile {
+            width: 96px;
+            height: 96px;
+            border-radius: 50%;
+            border: 3px dashed #ff9100;
+            padding: 4px;
+            background-color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 20px;
+            object-fit: contain;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+        }
+
+        .subtitle {
+            font-size: 0.95rem;
+            font-weight: 400;
+            line-height: 1.5;
+            margin-bottom: 30px;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+            white-space: pre-line;
+        }
+
+        /* Fila de botones pequeños (redondos/cuadrados) */
+        .social-row {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 35px;
+        }
+
+        .icon-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            height: 56px;
+            background-color: #ff9100;
+            color: white;
+            border-radius: 14px;
+            font-size: 1.4rem;
+            text-decoration: none;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s;
+        }
+
+        .icon-btn:active { transform: scale(0.95); }
+
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin: 30px 0 15px 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+        }
+
+        /* Botones alargados grandes */
+        .btn-large {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            background-color: #ff9100;
+            color: white;
+            padding: 16px;
+            border-radius: 14px;
+            font-weight: 600;
+            font-size: 1rem;
+            text-decoration: none;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s;
+        }
+
+        .btn-large i {
+            margin-right: 10px;
+            font-size: 1.1rem;
+        }
+
+        .btn-large:active { transform: scale(0.98); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <img src="https://destinolotus360.github.io/WhatsappLotus360/logo.png" onerror="this.src='https://via.placeholder.com/96'" class="logo-profile" alt="Lotus 360">
+        
+        <h1>Destino y Eventos Lotus 360</h1>
+        <p class="subtitle">¡Escápate con Nosotros!
+Tours para la playa o montaña
+Servicio de Boletería Aérea y Marítima
+Reservaciones de Hospedaje & Hotelería
+Servicios de Traslado</p>
+
+        <div class="social-row">
+            <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Ambar/" class="icon-btn" title="WhatsApp">
+                <i class="fab fa-whatsapp"></i>
+            </a>
+            <a href="mailto:destinolotus360@gmail.com" class="icon-btn" title="Correo">
+                <i class="far fa-envelope"></i>
+            </a>
+            <a href="tel:+584244900601" class="icon-btn" title="Teléfono">
+                <i class="fas fa-phone-alt"></i>
+            </a>
+        </div>
+
+        <div class="section-title">Planes Corporativos</div>
+
+        <a href="mailto:destinolotus360@gmail.com" class="btn-large">
+            <i class="far fa-envelope"></i> Correo Corporativo
+        </a>
+
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Ambar/" class="btn-large">
+            <i class="fas fa-briefcase"></i> Eventos Corporativos y Fiestas Temáticas
+        </a>
+    </div>
+
+</body>
+</html>
