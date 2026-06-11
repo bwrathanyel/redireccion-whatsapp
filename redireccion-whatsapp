@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script>
+        const asesores = [
+            "584244634041", // Karlys
+            "584244900601", // Ámbar
+            "584244900601", // Ámbar (duplicada)
+            "584244269876", // Luis
+            "584127136169", // Nicoll
+            "584127136169"  // Nicoll (duplicada)
+        ];
+
+        // Elige uno al azar
+        const elegido = asesores[Math.floor(Math.random() * asesores.length)];
+        const mensaje = "¡Buenas!, Vengo de Instagram me gustaría más información 😊";
+        const urlFinal = "https://wa.me/" + elegido + "?text=" + encodeURIComponent(mensaje);
+
+        // Intenta abrir la App directamente
+        window.location.href = "whatsapp://send?phone=" + elegido + "&text=" + encodeURIComponent(mensaje);
+
+        // Respaldo por si no se abre la App
+        setTimeout(function(){
+            window.location.href = urlFinal;
+        }, 1000);
+    </script>
+</head>
+<body>
+    <p>Redirigiendo al asesor...</p>
+</body>
+</html>
