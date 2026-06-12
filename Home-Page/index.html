@@ -10,10 +10,8 @@
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            
             /* Tu fondo de playa en JPG */
             background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'); 
-            
             background-size: cover;
             background-position: center center;
             background-attachment: fixed;
@@ -26,7 +24,7 @@
             padding: 35px 20px;
         }
 
-        /* Capa oscura intermedia totalmente segura para la playa */
+        /* Capa oscura intermedia segura para la playa */
         body::before {
             content: "";
             position: fixed;
@@ -79,7 +77,7 @@
             white-space: pre-line;
         }
 
-        /* Fila de botones de contacto rápido superiores */
+        /* FILA SUPERIOR: Círculos perfectos flotantes */
         .social-row {
             display: flex;
             justify-content: center;
@@ -111,7 +109,6 @@
             text-shadow: 0 2px 5px rgba(0,0,0,0.8);
         }
 
-        /* Texto descriptivo bajo Planes Corporativos */
         .corporate-text {
             font-size: 0.95rem;
             font-weight: 400;
@@ -121,7 +118,7 @@
             white-space: pre-line;
         }
 
-        /* Botones alargados grandes estilo Píldora Premium */
+        /* BOTONES LARGOS: Estilo Píldora Premium */
         .btn-large {
             display: flex;
             align-items: center;
@@ -129,7 +126,7 @@
             width: 100%;
             background-color: #ff9100;
             color: white;
-            padding: 10px 12px;
+            padding: 8px 10px;
             border-radius: 35px;
             font-weight: 600;
             font-size: 1.05rem;
@@ -139,24 +136,24 @@
             transition: transform 0.1s ease;
         }
 
-        /* Círculo blanco interno para los iconos */
+        /* Círculo blanco interno que hace resaltar el icono en naranja */
         .btn-large .icon-circle {
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 42px;
-            height: 42px;
+            width: 44px;
+            height: 44px;
             background-color: white;
             color: #ff9100;
             border-radius: 50%;
             margin-right: 18px;
-            font-size: 1.15rem;
+            font-size: 1.2rem;
             box-shadow: 0 2px 5px rgba(0,0,0,0.15);
         }
 
         .btn-large:active { transform: scale(0.97); }
 
-        /* Fila inferior para Redes Sociales (Footer) */
+        /* FOOTER: Iconos con fondo circular semi-transparente */
         .footer-social {
             display: flex;
             justify-content: center;
@@ -171,7 +168,7 @@
             justify-content: center;
             width: 48px;
             height: 48px;
-            background-color: rgba(255, 255, 255, 0.15);
+            background-color: rgba(255, 255, 255, 0.18);
             color: white;
             border-radius: 50%;
             font-size: 1.4rem;
@@ -211,15 +208,15 @@ Servicios de Traslado</p>
                 </a>
             </div>
 
-            <a href="https://ig.me/m/destinoyeventoslotus360" class="btn-large" target="_blank">
-                <span class="icon-circle"><i class="fas fa-tag"></i></span> Promociones 🔥
-            </a>
-
             <div class="section-title">Planes Corporativos</div>
             
             <p class="corporate-text">Eventos Corporativos y Fiestas Temáticas
 Paquetes Vacacionales y Turísticos
 Actividades de Integración Institucional</p>
+
+            <a href="instagram://sharesheet?text=Promociones" class="btn-large">
+                <span class="icon-circle"><i class="fas fa-tag"></i></span> Promociones
+            </a>
 
             <a href="mailto:corporativo.lotus360@gmail.com" class="btn-large">
                 <span class="icon-circle"><i class="far fa-envelope"></i></span> Correo Corporativo
