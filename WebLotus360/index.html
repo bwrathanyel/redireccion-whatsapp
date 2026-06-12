@@ -29,15 +29,20 @@
     
     <div class="form-group">
         <label>Destino</label>
-        <select id="destino">
+        <select id="destino" onchange="toggleExtranjero()">
             <option>Isla de Margarita</option>
             <option>Morrocoy</option>
             <option>Los Roques</option>
             <option>Mérida</option>
             <option>Canaima</option>
             <option>Catacumbo</option>
-            <option>Viajar al Extranjero</option>
+            <option value="Extranjero">Viajar al Extranjero</option>
         </select>
+    </div>
+
+    <div id="div-extranjero" class="form-group" style="display:none;">
+        <label>¿A qué país/ciudad desea viajar?</label>
+        <input type="text" id="input-extranjero" placeholder="Escriba el destino...">
     </div>
 
     <div class="form-group">
@@ -47,6 +52,17 @@
             <option>Apartamento</option>
             <option>Posada</option>
         </select>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+        <div class="form-group" style="flex: 1;">
+            <label>Check-in</label>
+            <input type="date" id="checkin">
+        </div>
+        <div class="form-group" style="flex: 1;">
+            <label>Check-out</label>
+            <input type="date" id="checkout">
+        </div>
     </div>
 
     <div class="form-group">
@@ -75,6 +91,11 @@
 </div>
 
 <script>
+    function toggleExtranjero() {
+        const dest = document.getElementById('destino').value;
+        document.getElementById('div-extranjero').style.display = (dest === 'Extranjero') ? 'block' : 'none';
+    }
+
     function actualizarEdades() {
         const n = document.getElementById('ninos').value;
         const cont = document.getElementById('contenedor-edades');
@@ -85,10 +106,15 @@
     }
 
     function generar() {
-        const dest = document.getElementById('destino').value;
+        const destBase = document.getElementById('destino').value;
+        const destExtra = document.getElementById('input-extranjero').value;
+        const dest = (destBase === 'Extranjero') ? destExtra : destBase;
+        
         const hosp = document.getElementById('hospedaje').value;
         const ad = document.getElementById('adultos').value;
         const ni = document.getElementById('ninos').value;
+        const checkin = document.getElementById('checkin').value;
+        const checkout = document.getElementById('checkout').value;
         
         let edades = "";
         const inputs = document.getElementsByClassName('edad-input');
@@ -97,16 +123,17 @@
         }
 
         const asesores = [
-            "584124119565", "584124119565", 
-            "584244248434", "584244248434", 
-            "584244136153"
+            "584244634041", "584244900601", 
+            "584147020527", "584244269876", 
+            "584127136169", "584244900601",
+            "584127136169",
         ];
         const tlf = asesores[Math.floor(Math.random() * asesores.length)];
         
-        const msg = `¡Hola! Quiero cotizar:%0ADestino: ${dest}%0AHospedaje: ${hosp}%0AAdultos: ${ad}%0ANiños: ${ni}%0AEdades: ${edades}`;
+        const msg = `¡Hola! Quiero cotizar:%0ADestino: ${dest}%0AHospedaje: ${hosp}%0AFechas: ${checkin} al ${checkout}%0AAdultos: ${ad}%0ANiños: ${ni}%0AEdades: ${edades}`;
         
         document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${msg}`;
-        document.getElementById('res-texto').innerHTML = `<b>Resumen:</b><br>${dest}<br>${hosp}<br>${ad} Adultos, ${ni} Niños<br>Edades: ${edades}`;
+        document.getElementById('res-texto').innerHTML = `<b>Resumen:</b><br>${dest}<br>${hosp}<br>Fechas: ${checkin} al ${checkout}<br>${ad} Adultos, ${ni} Niños<br>Edades: ${edades}`;
         document.getElementById('resultado').style.display = 'block';
     }
 </script>
