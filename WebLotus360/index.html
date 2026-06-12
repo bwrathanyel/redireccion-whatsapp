@@ -3,42 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lotus 360</title>
+    <title>Lotus 360 - Cotiza tu Viaje</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            font-family: sans-serif; 
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg') no-repeat center center fixed;
             background-size: cover;
-            min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
         }
-        .card { 
-        background: rgba(0, 0, 0, 0.4); 
-        backdrop-filter: blur(15px); 
-        -webkit-backdrop-filter: blur(15px);
-        width: 100%; 
-        max-width: 450px; 
-        padding: 25px; 
-        border-radius: 20px; 
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        text-align: center;
-        color: white; 
-    }
 
-    /* Ajustes adicionales necesarios para que todo se lea bien en el nuevo fondo */
-    label { color: #fff; }
-    h2 { color: #fff; }
-    select, input { background: rgba(255, 255, 255, 0.9); border: none; }
-    #resultado { background: rgba(255, 255, 255, 0.2); color: white; border: none; }
-        .logo-profile { width: 100px; height: 100px; border-radius: 50%; border: 3px solid #ff9100; margin-bottom: 10px; }
+        .card {
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            width: 100%;
+            max-width: 450px;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            text-align: center;
+            color: #fff;
+        }
+
+        /* Fallback para navegadores/dispositivos sin soporte de backdrop-filter (gama baja) */
+        @supports not (backdrop-filter: blur(1px)) {
+            .card {
+                background: rgba(15, 15, 15, 0.85);
+            }
+        }
+
+        .logo-profile {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 3px solid #ff9100;
+            margin-bottom: 10px;
+            object-fit: cover;
+        }
+
+        h2 { color: #fff; margin-bottom: 4px; }
+
+        .subtitle {
+            color: #ffd9a8;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
         .form-group { margin-bottom: 15px; text-align: left; }
-        label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
-        select, input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 10px; font-size: 16px; }
-        .btn-gen { width: 100%; padding: 15px; background: #ff9100; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
-        #resultado { display: none; margin-top: 20px; padding: 20px; background: #e8f5e9; border-radius: 15px; border-left: 5px solid #25D366; text-align: left; }
-        .wa-btn { display: block; text-align: center; background: #25D366; color: white; padding: 15px; border-radius: 10px; text-decoration: none; font-weight: bold; margin-top: 15px; }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #fff;
+            font-size: 14px;
+            letter-spacing: .3px;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.92);
+            color: #222;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #ff9100;
+            box-shadow: 0 0 0 3px rgba(255, 145, 0, 0.25);
+        }
+
+        .extra-input { margin-top: 10px; }
+
+        .row { display: flex; gap: 10px; }
+        .row .form-group { flex: 1; }
+
+        .btn-gen {
+            width: 100%;
+            padding: 15px;
+            background: #ff9100;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.15s ease, background 0.2s ease;
+            margin-top: 5px;
+        }
+
+        .btn-gen:active { transform: scale(0.98); }
+
+        .btn-gen:disabled {
+            background: #c97300;
+            cursor: not-allowed;
+            opacity: 0.85;
+        }
+
+        .error-msg {
+            display: none;
+            background: rgba(255, 70, 70, 0.15);
+            border: 1px solid rgba(255, 90, 90, 0.5);
+            color: #ffd6d6;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            text-align: left;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        #resultado {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            border-radius: 15px;
+            border-left: 5px solid #25D366;
+            text-align: left;
+        }
+
+        #resultado b { color: #ffd9a8; }
+
+        .wa-btn {
+            display: block;
+            text-align: center;
+            background: #25D366;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: bold;
+            margin-top: 15px;
+            font-size: 16px;
+        }
+
+        .wa-btn i { margin-right: 6px; }
     </style>
 </head>
 <body>
@@ -46,9 +158,11 @@
 <div class="card">
     <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
     <h2>Destinos y Eventos Lotus 360</h2>
-    <p class="subtitle">¡Escápate con Nosotros!
-    
-    <div class="form-group" style="margin-top:20px;">
+    <p class="subtitle">¡Escápate con Nosotros!</p>
+
+    <div id="error-box" class="error-msg"></div>
+
+    <div class="form-group">
         <label>Destino</label>
         <select id="destino" onchange="toggleExtranjero()">
             <option>Isla de Margarita</option>
@@ -75,12 +189,12 @@
         </select>
     </div>
 
-    <div style="display: flex; gap: 10px;">
-        <div class="form-group" style="flex: 1;">
+    <div class="row">
+        <div class="form-group">
             <label>Check-in</label>
-            <input type="date" id="checkin">
+            <input type="date" id="checkin" onchange="ajustarCheckout()">
         </div>
-        <div class="form-group" style="flex: 1;">
+        <div class="form-group">
             <label>Check-out</label>
             <input type="date" id="checkout">
         </div>
@@ -88,75 +202,223 @@
 
     <div class="form-group">
         <label>Adultos</label>
-        <select id="adultos"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+        <select id="adultos" onchange="toggleAdultosExtra()">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="more">Más de 4</option>
+        </select>
+        <input type="number" id="adultos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos adultos en total?" style="display:none;">
     </div>
 
     <div class="form-group">
         <label>Niños</label>
-        <select id="ninos" onchange="actualizarEdades()">
+        <select id="ninos" onchange="toggleNinosExtra()">
             <option value="0">0</option>
             <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
+            <option value="more">Más de 3</option>
         </select>
+        <input type="number" id="ninos-extra" class="extra-input" min="4" max="50" placeholder="¿Cuántos niños en total?" style="display:none;" oninput="actualizarEdades()">
     </div>
 
     <div id="contenedor-edades"></div>
 
-    <button class="btn-gen" onclick="generar()">Generar Solicitud de Cotización</button>
+    <button class="btn-gen" id="btn-generar" onclick="generar()">Generar Solicitud de Cotización</button>
 
     <div id="resultado">
         <p id="res-texto" style="margin-bottom:10px;"></p>
-        <a id="btn-wa" href="#" class="wa-btn"><i class="fab fa-whatsapp"></i> Contactar Asesor</a>
+        <a id="btn-wa" href="#" target="_blank" rel="noopener" class="wa-btn"><i class="fab fa-whatsapp"></i> Contactar Asesor</a>
     </div>
 </div>
 
 <script>
+    // Tope de campos de edad que se renderizan individualmente.
+    // Si el grupo es más grande, se pide el rango de edades en un solo campo.
+    const MAX_EDADES_INDIVIDUALES = 10;
+
+    function hoyISO() {
+        const d = new Date();
+        return d.toISOString().split('T')[0];
+    }
+
+    // Fecha mínima = hoy, para evitar cotizaciones con fechas pasadas
+    document.getElementById('checkin').min = hoyISO();
+    document.getElementById('checkout').min = hoyISO();
+
+    function ajustarCheckout() {
+        const checkin = document.getElementById('checkin');
+        const checkout = document.getElementById('checkout');
+        checkout.min = checkin.value || hoyISO();
+        // Si el checkout quedó antes que el nuevo checkin, lo limpiamos
+        if (checkout.value && checkout.value < checkin.value) {
+            checkout.value = '';
+        }
+    }
+
     function toggleExtranjero() {
         const dest = document.getElementById('destino').value;
         document.getElementById('div-extranjero').style.display = (dest === 'Extranjero') ? 'block' : 'none';
     }
 
+    function toggleAdultosExtra() {
+        const sel = document.getElementById('adultos');
+        const extra = document.getElementById('adultos-extra');
+        extra.style.display = (sel.value === 'more') ? 'block' : 'none';
+        if (sel.value !== 'more') extra.value = '';
+    }
+
+    function toggleNinosExtra() {
+        const sel = document.getElementById('ninos');
+        const extra = document.getElementById('ninos-extra');
+        extra.style.display = (sel.value === 'more') ? 'block' : 'none';
+        if (sel.value !== 'more') extra.value = '';
+        actualizarEdades();
+    }
+
+    function getAdultosCount() {
+        const sel = document.getElementById('adultos');
+        if (sel.value === 'more') {
+            const extra = parseInt(document.getElementById('adultos-extra').value, 10);
+            return isNaN(extra) ? null : extra;
+        }
+        return parseInt(sel.value, 10);
+    }
+
+    function getNinosCount() {
+        const sel = document.getElementById('ninos');
+        if (sel.value === 'more') {
+            const extra = parseInt(document.getElementById('ninos-extra').value, 10);
+            return isNaN(extra) ? null : extra;
+        }
+        return parseInt(sel.value, 10);
+    }
+
     function actualizarEdades() {
-        const n = document.getElementById('ninos').value;
+        const n = getNinosCount();
         const cont = document.getElementById('contenedor-edades');
         cont.innerHTML = '';
-        for(let i=1; i<=n; i++) {
-            cont.innerHTML += `<div class="form-group"><label>Edad Niño ${i}</label><input type="number" class="edad-input" placeholder="Años"></div>`;
+
+        if (!n || n <= 0) return;
+
+        if (n <= MAX_EDADES_INDIVIDUALES) {
+            for (let i = 1; i <= n; i++) {
+                cont.innerHTML += `<div class="form-group"><label>Edad Niño ${i}</label><input type="number" class="edad-input" min="0" max="17" placeholder="Años"></div>`;
+            }
+        } else {
+            // Grupo grande: pedimos un resumen de edades en un solo campo en vez de saturar el formulario
+            cont.innerHTML = `<div class="form-group"><label>Edades de los niños (resumen)</label><input type="text" id="edades-resumen" placeholder="Ej: 5 de 8 años, 5 de 3 años"></div>`;
         }
     }
 
+    function mostrarError(msg) {
+        const box = document.getElementById('error-box');
+        box.innerHTML = msg;
+        box.style.display = 'block';
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function ocultarError() {
+        document.getElementById('error-box').style.display = 'none';
+    }
+
     function generar() {
+        ocultarError();
+
         const destBase = document.getElementById('destino').value;
-        const destExtra = document.getElementById('input-extranjero').value;
+        const destExtra = document.getElementById('input-extranjero').value.trim();
         const dest = (destBase === 'Extranjero') ? destExtra : destBase;
-        
+
         const hosp = document.getElementById('hospedaje').value;
-        const ad = document.getElementById('adultos').value;
-        const ni = document.getElementById('ninos').value;
         const checkin = document.getElementById('checkin').value;
         const checkout = document.getElementById('checkout').value;
-        
-        let edades = "";
-        const inputs = document.getElementsByClassName('edad-input');
-        for(let i=0; i<inputs.length; i++) {
-            edades += (i+1) + ": " + (inputs[i].value || "N/A") + " años, ";
+
+        const adultos = getAdultosCount();
+        const ninos = getNinosCount();
+
+        // --- Validaciones ---
+        const errores = [];
+
+        if (destBase === 'Extranjero' && !destExtra) {
+            errores.push('Indica a qué país o ciudad deseas viajar.');
+        }
+        if (!checkin) errores.push('Selecciona la fecha de check-in.');
+        if (!checkout) errores.push('Selecciona la fecha de check-out.');
+        if (checkin && checkout && checkout < checkin) {
+            errores.push('La fecha de check-out no puede ser anterior al check-in.');
+        }
+        if (adultos === null || adultos < 5) {
+            if (document.getElementById('adultos').value === 'more' && (adultos === null || adultos < 5)) {
+                errores.push('Indica cuántos adultos viajan (mínimo 5 para esta opción).');
+            }
+        }
+        if (document.getElementById('ninos').value === 'more' && (ninos === null || ninos < 4)) {
+            errores.push('Indica cuántos niños viajan (mínimo 4 para esta opción).');
         }
 
-        // Nueva lista de asesores
+        if (errores.length > 0) {
+            mostrarError('Por favor revisa lo siguiente:<br>• ' + errores.join('<br>• '));
+            return;
+        }
+
+        // --- Construcción del resumen de edades ---
+        let edades = '';
+        const resumenInput = document.getElementById('edades-resumen');
+        if (resumenInput) {
+            edades = resumenInput.value.trim() || 'No especificado';
+        } else {
+            const inputs = document.getElementsByClassName('edad-input');
+            const partes = [];
+            for (let i = 0; i < inputs.length; i++) {
+                partes.push(`Niño ${i + 1}: ${inputs[i].value || 'N/A'} años`);
+            }
+            edades = partes.length > 0 ? partes.join(', ') : 'N/A';
+        }
+
+        // --- Lista de asesores con pesos (los números repetidos reciben más leads) ---
         const asesores = [
-            "584244634041", "584244900601", 
-            "584147020527", "584244269876", 
-            "584127136169", "584244900601",
-            "584127136169"
+            '584244634041', '584244900601',
+            '584147020527', '584244269876',
+            '584127136169', '584244900601',
+            '584127136169'
         ];
         const tlf = asesores[Math.floor(Math.random() * asesores.length)];
-        
-        const msg = `¡Hola! Quiero cotizar:%0ADestino: ${dest}%0AHospedaje: ${hosp}%0AFechas: ${checkin} al ${checkout}%0AAdultos: ${ad}%0ANiños: ${ni}%0AEdades: ${edades}`;
-        
-        document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${msg}`;
-        document.getElementById('res-texto').innerHTML = `<b>Resumen:</b><br>${dest}<br>${hosp}<br>Fechas: ${checkin} al ${checkout}<br>${ad} Adultos, ${ni} Niños<br>Edades: ${edades}`;
+
+        const lineas = [
+            '¡Hola! Quiero cotizar:',
+            `Destino: ${dest}`,
+            `Hospedaje: ${hosp}`,
+            `Fechas: ${checkin} al ${checkout}`,
+            `Adultos: ${adultos}`,
+            `Niños: ${ninos}`
+        ];
+        if (ninos > 0) lineas.push(`Edades: ${edades}`);
+
+        const msg = lineas.join('\n');
+
+        document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${encodeURIComponent(msg)}`;
+        document.getElementById('res-texto').innerHTML = `
+            <b>Resumen de tu solicitud:</b><br>
+            Destino: ${dest}<br>
+            Hospedaje: ${hosp}<br>
+            Fechas: ${checkin} al ${checkout}<br>
+            ${adultos} Adulto(s), ${ninos} Niño(s)
+            ${ninos > 0 ? `<br>Edades: ${edades}` : ''}
+        `;
         document.getElementById('resultado').style.display = 'block';
+        document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Pequeño feedback visual para evitar doble click accidental
+        const btn = document.getElementById('btn-generar');
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '¡Listo! Revisa tu resumen ↓';
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = original;
+        }, 2000);
     }
 </script>
 
