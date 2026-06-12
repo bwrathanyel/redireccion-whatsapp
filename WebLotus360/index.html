@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lotus 360 - Tu Próximo Destino</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'); 
+            background-size: cover;
+            background-position: center center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: -1;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            z-index: 1;
+            padding-bottom: 30px;
+        }
+
+        /* Encabezado estilo perfil */
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+            margin-top: 15px;
+        }
+
+        .logo-profile {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            border: 3px dashed #ff9100;
+            padding: 4px;
+            background-color: white;
+            margin: 0 auto 15px auto;
+            object-fit: contain;
+            display: block;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.35);
+        }
+
+        h1 {
+            font-size: 1.7rem;
+            font-weight: 700;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            margin-bottom: 5px;
+        }
+
+        .tagline {
+            font-size: 0.95rem;
+            color: #e0e0e0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            margin-bottom: 10px;
+        }
+
+        /* Formulario inspirado en Booking (Caja contenedora) */
+        .booking-card {
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            border: 4px solid #ff9100;
+        }
+
+        .booking-card h2 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: #1a1a1a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .booking-card h2 i {
+            color: #ff9100;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #555;
+            text-align: left;
+        }
+
+        .input-icon-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-icon-wrapper i {
+            position: absolute;
+            left: 15px;
+            color: #ff9100;
+            font-size: 1.1rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px 12px 12px 45px;
+            border: 1.5px solid #ccc;
+            border-radius: 35px; /* Estilo píldora */
+            font-size: 1rem;
+            color: #333;
+            background-color: white;
+            outline: none;
+            transition: border-color 0.2s;
+            -webkit-appearance: none; /* Quita estilos nativos en iOS */
+        }
+
+        .form-control:focus {
+            border-color: #ff9100;
+        }
+
+        .row-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        /* Botón de búsqueda principal */
+        .btn-search {
+            width: 100%;
+            background-color: #ff9100;
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 35px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 10px;
+            box-shadow: 0 4px 10px rgba(255, 145, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: transform 0.1s ease;
+        }
+
+        .btn-search:active {
+            transform: scale(0.96);
+        }
+
+        /* Cuadro de resultados simulado */
+        .result-box {
+            display: none;
+            margin-top: 20px;
+            background: #f0f7ff;
+            border-left: 5px solid #ff9100;
+            border-radius: 12px;
+            padding: 15px;
+            text-align: left;
+            animation: fadeIn 0.3s ease-in-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-box h3 {
+            font-size: 1.05rem;
+            color: #1a1a1a;
+            margin-bottom: 8px;
+        }
+
+        .result-box p {
+            font-size: 0.9rem;
+            color: #555;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        /* Botón de acción final para conectar con ManyChat/WhatsApp */
+        .btn-action-final {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            background-color: #25D366; /* Verde WhatsApp / Éxito */
+            color: white;
+            padding: 12px;
+            border-radius: 35px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            box-shadow: 0 4px 10px rgba(37, 211, 102, 0.3);
+            text-align: center;
+        }
+
+        /* Redes del footer fijas */
+        .footer-social {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .footer-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 50%;
+            font-size: 1.2rem;
+            text-decoration: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        
+        <div class="header">
+            <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
+            <h1>Lotus 360</h1>
+            <p class="tagline">Encuentra disponibilidad en los mejores destinos</p>
+        </div>
+
+        <div class="booking-card">
+            <h2><i class="fas fa-bed"></i> ¿A dónde quieres ir?</h2>
+            
+            <div class="form-group">
+                <label for="destino">Destino Turístico</label>
+                <div class="input-icon-wrapper">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <select id="destino" class="form-control">
+                        <option value="Morrocoy">Morrocoy (Posadas & Yates)</option>
+                        <option value="Margarita">Isla de Margarita (Hoteles Todo Incluido)</option>
+                        <option value="Los Roques">Los Roques (Planes Premium)</option>
+                        <option value="Canaima">Canaima (Campamentos Exclusivos)</option>
+                        <option value="Planes Corporativos">Planes Corporativos / Eventos</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row-grid">
+                <div class="form-group">
+                    <label for="entrada">Check-in</label>
+                    <div class="input-icon-wrapper">
+                        <i class="far fa-calendar-alt"></i>
+                        <input type="date" id="entrada" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="salida">Check-out</label>
+                    <div class="input-icon-wrapper">
+                        <i class="far fa-calendar-alt"></i>
+                        <input type="date" id="salida" class="form-control">
+                    </div>
+                </div>
+            </div>
+
+            <div class="row-grid">
+                <div class="form-group">
+                    <label for="adultos">Adultos</label>
+                    <div class="input-icon-wrapper">
+                        <i class="fas fa-user"></i>
+                        <select id="adultos" class="form-control">
+                            <option value="1">1 Adulto</option>
+                            <option value="2" selected>2 Adultos</option>
+                            <option value="3">3 Adultos</option>
+                            <option value="4">4+ Adultos</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="ninos">Niños</label>
+                    <div class="input-icon-wrapper">
+                        <i class="fas fa-child"></i>
+                        <select id="ninos" class="form-control">
+                            <option value="0" selected>0 Niños</option>
+                            <option value="1">1 Niño</option>
+                            <option value="2">2 Niños</option>
+                            <option value="3+">3+ Niños</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-search" onclick="procesarBusqueda()">
+                <i class="fas fa-search"></i> Buscar disponibilidad
+            </button>
+
+            <div id="resultado" class="result-box">
+                <h3><i class="fas fa-check-circle" style="color: #25D366;"></i> ¡Destino disponible!</h3>
+                <p id="resultado-texto">Tenemos excelentes opciones de hospedaje y traslados listos para las fechas seleccionadas.</p>
+                
+                <a id="btn-link-whatsapp" href="#" class="btn-action-final">
+                    <i class="fab fa-whatsapp"></i> Consultar tarifas actuales
+                </a>
+            </div>
+
+        </div>
+
+        <div class="footer-social">
+            <a href="https://www.instagram.com/destinoyeventoslotus360" target="_blank" class="footer-icon"><i class="fab fa-instagram"></i></a>
+            <a href="https://www.tiktok.com/@destinoyeventoslotus360" target="_blank" class="footer-icon"><i class="fab fa-tiktok"></i></a>
+            <a href="mailto:corporativo.lotus360@gmail.com" class="footer-icon"><i class="far fa-envelope"></i></a>
+        </div>
+
+    </div>
+
+    <script>
+        // Establecer las fechas por defecto del día de hoy y mañana al cargar
+        window.onload = function() {
+            const hoy = new Date();
+            const mañana = new Date(hoy);
+            mañana.setDate(mañana.getDate() + 2);
+
+            document.getElementById('entrada').value = hoy.toISOString().split('T')[0];
+            document.getElementById('salida').value = mañana.toISOString().split('T')[0];
+        }
+
+        function procesarBusqueda() {
+            // Capturar los valores seleccionados por el usuario
+            const destino = document.getElementById('destino').value;
+            const entrada = document.getElementById('entrada').value;
+            const salida = document.getElementById('salida').value;
+            const adultos = document.getElementById('adultos').value;
+            const ninos = document.getElementById('ninos').value;
+
+            // Formatear las fechas para el texto de WhatsApp
+            const fEntrada = entrada.split('-').reverse().join('/');
+            const fSalida = salida.split('-').reverse().join('/');
+
+            // Construir el mensaje personalizado que recibirá tu WhatsApp o ManyChat
+            const textoMensaje = `¡Hola! Me interesa cotizar una opción en la plataforma web.%0A%0A✈️ *Destino:* ${destino}%0A📅 *Fecha:* del ${fEntrada} al ${fSalida}%0A👥 *Pasajeros:* ${adultos} Adultos y ${ninos} Niños.`;
+            
+            // Enlace directo al WhatsApp Corporativo pasando los datos limpios
+            const urlWhatsApp = `https://wa.me/584244634041?text=${textoMensaje}`;
+
+            // Actualizar el texto dinámico en pantalla según el destino elegido
+            const textoResultado = document.getElementById('resultado-texto');
+            textoResultado.innerHTML = `Tenemos opciones ideales en **${destino}** preparadas del **${fEntrada}** al **${fSalida}** para **${adultos} adultos** y **${ninos} niños**. Toca el botón de abajo para que tu asesor te envíe las fotos y tarifas de inmediato de forma personalizada.`;
+
+            // Asignar el link dinámico al botón verde
+            document.getElementById('btn-link-whatsapp').href = urlWhatsApp;
+
+            // Mostrar el contenedor de resultados de forma elegante
+            document.getElementById('resultado').style.display = 'block';
+        }
+    </script>
+
+</body>
+</html>
