@@ -11,7 +11,7 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             
-            /* Tu fondo de playa HD en formato .jpg */
+            /* Ruta fija a tu playa HD en JPG */
             background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'); 
             
             background-size: cover;
@@ -24,10 +24,204 @@
             align-items: center;
             min-height: 100vh;
             padding: 35px 20px;
-            background-color: #333333;
         }
 
-        /* Capa oscura intermedia optimizada para dar profundidad */
+        /* Capa oscura intermedia corregida para asegurar que la playa nunca se tape */
         body::before {
             content: "";
             position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: -1;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+            text-align: center;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: calc(100vh - 70px);
+        }
+
+        .main-content {
+            flex: 1;
+        }
+
+        /* Contenedor del logo oficial */
+        .logo-profile {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 3px dashed #ff9100;
+            padding: 4px;
+            background-color: white;
+            margin: 0 auto 20px auto;
+            object-fit: contain;
+            display: block;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+        }
+
+        .subtitle {
+            font-size: 0.95rem;
+            font-weight: 400;
+            line-height: 1.5;
+            margin-bottom: 30px;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            white-space: pre-line;
+        }
+
+        /* Fila de botones de contacto rápido superiores */
+        .social-row {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 35px;
+        }
+
+        .icon-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            height: 56px;
+            /* Naranja vivo con sutil transparencia sin romper el fondo */
+            background-color: rgba(255, 145, 0, 0.95);
+            color: white;
+            border-radius: 14px;
+            font-size: 1.4rem;
+            text-decoration: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            transition: transform 0.1s ease;
+        }
+
+        .icon-btn:active { transform: scale(0.93); }
+
+        .section-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin: 25px 0 10px 0;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+        }
+
+        /* Texto descriptivo bajo Planes Corporativos */
+        .corporate-text {
+            font-size: 0.95rem;
+            font-weight: 400;
+            line-height: 1.6;
+            margin-bottom: 25px;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            white-space: pre-line;
+        }
+
+        /* Botones alargados grandes */
+        .btn-large {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            background-color: rgba(255, 145, 0, 0.95);
+            color: white;
+            padding: 16px;
+            border-radius: 14px;
+            font-weight: 600;
+            font-size: 1rem;
+            text-decoration: none;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            transition: transform 0.1s ease;
+        }
+
+        .btn-large i {
+            margin-right: 10px;
+            font-size: 1.1rem;
+        }
+
+        .btn-large:active { transform: scale(0.97); }
+
+        /* Fila inferior para Redes Sociales (Footer) */
+        .footer-social {
+            display: flex;
+            justify-content: center;
+            gap: 35px;
+            margin-top: 40px;
+            padding-bottom: 10px;
+        }
+
+        .footer-icon {
+            color: white;
+            font-size: 1.8rem;
+            text-decoration: none;
+            transition: transform 0.1s ease;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+        }
+
+        .footer-icon:active {
+            transform: scale(0.85);
+            color: #ff9100;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="main-content">
+            <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
+            
+            <h1>Destino y Eventos Lotus 360</h1>
+            <p class="subtitle">¡Escápate con Nosotros!
+Tours para la playa o montaña
+Servicio de Boletería Aérea y Marítima
+Reservaciones de Hospedaje & Hotelería
+Servicios de Traslado</p>
+
+            <div class="social-row">
+                <a href="https://bwrathanyel.github.io/redireccion-whatsapp/" class="icon-btn" title="WhatsApp">
+                    <i class="fab fa-whatsapp"></i>
+                </a>
+                <a href="mailto:corporativo.lotus360@gmail.com" class="icon-btn" title="Correo">
+                    <i class="far fa-envelope"></i>
+                </a>
+                <a href="tel:+584244634041" class="icon-btn" title="Teléfono">
+                    <i class="fas fa-phone-alt"></i>
+                </a>
+            </div>
+
+            <div class="section-title">Planes Corporativos</div>
+            
+            <p class="corporate-text">Eventos Corporativos y Fiestas Temáticas
+Paquetes Vacacionales y Turísticos
+Actividades de Integración Institucional</p>
+
+            <a href="mailto:corporativo.lotus360@gmail.com" class="btn-large">
+                <i class="far fa-envelope"></i> Correo Corporativo
+            </a>
+
+            <a href="https://wa.me/584244634041?text=Hola!%20--%20Vengo%20de%20su%20pagina%20de%20Instagram." class="btn-large" target="_blank">
+                <i class="fab fa-whatsapp"></i> Whatsapp Corporativo
+            </a>
+        </div>
+
+        <div class="footer-social">
+            <a href="https://www.facebook.com/share/1bxT1wQAzW/" target="_blank" class="footer-icon" title="Facebook">
+                <i class="fab fa-facebook-f"></i>
+            </a>
+            <a href="https://www.instagram.com/destinoyeventoslotus360?igsh=bWUwbHhvb21menhm" target="_blank" class="footer-icon" title="Instagram">
+                <i class="fab fa-instagram"></i>
+            </a>
+            <a href="https://www.tiktok.com/@destinoyeventoslotus360?_r=1&_t=ZS-979NKPpLeIa_." target="_blank" class="footer-icon" title="TikTok">
+                <i class="fab fa-tiktok"></i>
+            </a>
+        </div>
+    </div>
+
+</body>
+</html>
