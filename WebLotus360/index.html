@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lotus 360</title>
+    <title>Destino y Eventos Lotus 360</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -130,7 +130,7 @@
         ];
         const tlf = asesores[Math.floor(Math.random() * asesores.length)];
         
-        const msg = `¡Hola! Quiero cotizar:%0ADestino: ${dest}%0AHospedaje: ${hosp}%0AFechas: ${checkin} al ${checkout}%0AAdultos: ${ad}%0ANiños: ${ni}%0AEdades: ${edades}`;
+        const msg = `¡Hola! Quiero cotizar un Viaje a:%0ADestino: ${dest}%0AHospedaje: ${hosp}%0AFechas: ${checkin} al ${checkout}%0AAdultos: ${ad}%0ANiños: ${ni}%0AEdades: ${edades}`;
         
         document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${msg}`;
         document.getElementById('res-texto').innerHTML = `<b>Resumen:</b><br>${dest}<br>${hosp}<br>Fechas: ${checkin} al ${checkout}<br>${ad} Adultos, ${ni} Niños<br>Edades: ${edades}`;
@@ -139,4 +139,11 @@
 </script>
 
 </body>
+
+    <div class="container">
+        <div class="main-content">
+            <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
+            
+            <h1>Destino y Eventos Lotus 360</h1>
+            <p class="subtitle">¡Escápate con Nosotros!
 </html>
