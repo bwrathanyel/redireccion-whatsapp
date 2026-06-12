@@ -26,12 +26,12 @@
             padding: 35px 20px;
         }
 
-        /* Capa oscura intermedia segura (nunca tapa la imagen) */
+        /* Capa oscura intermedia totalmente segura para la playa */
         body::before {
             content: "";
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.32);
+            background: rgba(0, 0, 0, 0.3);
             z-index: -1;
         }
 
@@ -49,7 +49,7 @@
             flex: 1;
         }
 
-        /* Contenedor del logo con sombra suave */
+        /* Contenedor del logo oficial */
         .logo-profile {
             width: 100px;
             height: 100px;
@@ -60,15 +60,14 @@
             margin: 0 auto 20px auto;
             object-fit: contain;
             display: block;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.35);
         }
 
         h1 {
             font-size: 1.6rem;
             font-weight: 700;
             margin-bottom: 12px;
-            /* Doble sombra para máxima legibilidad */
-            text-shadow: 0 2px 4px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.4);
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
         }
 
         .subtitle {
@@ -76,15 +75,15 @@
             font-weight: 400;
             line-height: 1.5;
             margin-bottom: 30px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.7), 0 4px 10px rgba(0,0,0,0.5);
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
             white-space: pre-line;
         }
 
-        /* Fila de botones de contacto rápido de arriba */
+        /* Fila de botones de contacto rápido rediseñados (Estilo redondeado circular) */
         .social-row {
             display: flex;
             justify-content: center;
-            gap: 15px;
+            gap: 18px;
             margin-bottom: 35px;
         }
 
@@ -92,29 +91,24 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 56px;
-            height: 56px;
-            /* Degradado sutil naranja */
-            background: linear-gradient(135deg, #ff9e1b 0%, #e67e00 100%);
+            width: 58px;
+            height: 58px;
+            background-color: #ff9100;
             color: white;
-            border-radius: 14px;
-            font-size: 1.4rem;
+            border-radius: 50%; /* Ahora son totalmente circulares y limpios */
+            font-size: 1.45rem;
             text-decoration: none;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-            transition: all 0.15s ease;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+            transition: transform 0.1s ease;
         }
 
-        /* Efecto al presionar */
-        .icon-btn:active { 
-            transform: scale(0.94);
-            filter: brightness(1.1);
-        }
+        .icon-btn:active { transform: scale(0.92); }
 
         .section-title {
             font-size: 1.4rem;
             font-weight: 700;
             margin: 25px 0 10px 0;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.4);
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
         }
 
         /* Texto descriptivo bajo Planes Corporativos */
@@ -123,61 +117,72 @@
             font-weight: 400;
             line-height: 1.6;
             margin-bottom: 25px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.7), 0 4px 10px rgba(0,0,0,0.5);
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
             white-space: pre-line;
         }
 
-        /* Botones alargados grandes premium */
+        /* Botones alargados grandes estilo Píldora Premium */
         .btn-large {
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start; /* Alinea el contenido de forma más pro */
             width: 100%;
-            /* Degradado sutil naranja */
-            background: linear-gradient(135deg, #ff9e1b 0%, #e67e00 100%);
+            background-color: #ff9100;
             color: white;
-            padding: 16px;
-            border-radius: 14px;
+            padding: 10px 12px; /* Ajuste para el contenedor interno */
+            border-radius: 35px; /* Bordes totalmente redondeados modernos */
             font-weight: 600;
-            font-size: 1rem;
+            font-size: 1.05rem;
             text-decoration: none;
-            margin-bottom: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-            transition: all 0.15s ease;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            margin-bottom: 14px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.35);
+            transition: transform 0.1s ease;
         }
 
-        .btn-large i {
-            margin-right: 10px;
-            font-size: 1.1rem;
+        /* Círculo blanco interno para los iconos de los botones grandes */
+        .btn-large .icon-circle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            background-color: white;
+            color: #ff9100;
+            border-radius: 50%;
+            margin-right: 18px;
+            font-size: 1.15rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
         }
 
-        /* Efecto al presionar */
-        .btn-large:active { 
-            transform: scale(0.97);
-            filter: brightness(1.1);
-        }
+        .btn-large:active { transform: scale(0.97); }
 
-        /* Fila inferior para Redes Sociales (Footer) */
+        /* Fila inferior para Redes Sociales (Footer) estilizada */
         .footer-social {
             display: flex;
             justify-content: center;
-            gap: 35px;
+            gap: 25px;
             margin-top: 40px;
             padding-bottom: 10px;
         }
 
         .footer-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            background-color: rgba(255, 255, 255, 0.15); /* Fondo sutil flotante */
             color: white;
-            font-size: 1.8rem;
+            border-radius: 50%;
+            font-size: 1.4rem;
             text-decoration: none;
-            transition: transform 0.15s ease;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+            transition: transform 0.1s ease, background-color 0.1s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
         .footer-icon:active {
-            transform: scale(0.85);
-            color: #ff9100;
+            transform: scale(0.88);
+            background-color: #ff9100;
         }
     </style>
 </head>
@@ -213,11 +218,11 @@ Paquetes Vacacionales y Turísticos
 Actividades de Integración Institucional</p>
 
             <a href="mailto:corporativo.lotus360@gmail.com" class="btn-large">
-                <i class="far fa-envelope"></i> Correo Corporativo
+                <span class="icon-circle"><i class="far fa-envelope"></i></span> Correo Corporativo
             </a>
 
             <a href="https://wa.me/584244634041?text=Hola!%20--%20Vengo%20de%20su%20pagina%20de%20Instagram." class="btn-large" target="_blank">
-                <i class="fab fa-whatsapp"></i> Whatsapp Corporativo
+                <span class="icon-circle"><i class="fab fa-whatsapp"></i></span> Whatsapp Corporativo
             </a>
         </div>
 
