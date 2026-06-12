@@ -3,42 +3,269 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Destino y Eventos Lotus 360</title>
+    <title>Lotus 360 - Cotiza tu Boleto</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            font-family: sans-serif; 
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg') no-repeat center center fixed;
             background-size: cover;
-            min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
         }
-        .card { 
-        background: rgba(0, 0, 0, 0.4); 
-        backdrop-filter: blur(15px); 
-        -webkit-backdrop-filter: blur(15px);
-        width: 100%; 
-        max-width: 450px; 
-        padding: 25px; 
-        border-radius: 20px; 
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        text-align: center;
-        color: white; 
-    }
 
-    /* Ajustes adicionales necesarios para que todo se lea bien en el nuevo fondo */
-    label { color: #fff; }
-    h2 { color: #fff; }
-    select, input { background: rgba(255, 255, 255, 0.9); border: none; }
-    #resultado { background: rgba(255, 255, 255, 0.2); color: white; border: none; }
-        .logo-profile { width: 100px; height: 100px; border-radius: 50%; border: 3px solid #ff9100; margin-bottom: 10px; }
+        .card {
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            width: 100%;
+            max-width: 450px;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            text-align: center;
+            color: #fff;
+        }
+
+        @supports not (backdrop-filter: blur(1px)) {
+            .card { background: rgba(15, 15, 15, 0.85); }
+        }
+
+        .logo-profile {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 3px solid #ff9100;
+            margin-bottom: 10px;
+            object-fit: cover;
+        }
+
+        h2 { color: #fff; margin-bottom: 4px; }
+
+        .subtitle {
+            color: #ffd9a8;
+            font-size: 14px;
+            margin-bottom: 18px;
+        }
+
+        /* --- Ruta de vuelo (elemento distintivo) --- */
+        .ruta-box {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 20px;
+            padding: 14px 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 14px;
+        }
+
+        .ruta-punto { flex: 0 0 auto; text-align: center; min-width: 64px; }
+
+        .ruta-punto .codigo {
+            font-size: 20px;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: 1px;
+            line-height: 1.1;
+        }
+
+        .ruta-punto .ciudad {
+            font-size: 10px;
+            color: #ffd9a8;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-top: 2px;
+            display: block;
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .ruta-linea {
+            flex: 1;
+            position: relative;
+            height: 2px;
+            background: repeating-linear-gradient(to right, rgba(255,255,255,.5) 0 6px, transparent 6px 12px);
+            margin: 0 6px;
+            overflow: visible;
+        }
+
+        .ruta-linea i {
+            position: absolute;
+            top: -7px;
+            left: 0;
+            color: #ff9100;
+            font-size: 14px;
+            animation: vuelo 3.5s linear infinite;
+        }
+
+        .ruta-linea.vuelta i.regreso {
+            transform: scaleX(-1);
+            animation-direction: reverse;
+            color: #ffd9a8;
+            top: 6px;
+        }
+
+        @keyframes vuelo {
+            0%   { left: 0%; opacity: 0; }
+            8%   { opacity: 1; }
+            92%  { opacity: 1; }
+            100% { left: 92%; opacity: 0; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .ruta-linea i { animation: none; left: 45%; opacity: 1; }
+        }
+
         .form-group { margin-bottom: 15px; text-align: left; }
-        label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
-        select, input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 10px; font-size: 16px; }
-        .btn-gen { width: 100%; padding: 15px; background: #ff9100; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
-        #resultado { display: none; margin-top: 20px; padding: 20px; background: #e8f5e9; border-radius: 15px; border-left: 5px solid #25D366; text-align: left; }
-        .wa-btn { display: block; text-align: center; background: #25D366; color: white; padding: 15px; border-radius: 10px; text-decoration: none; font-weight: bold; margin-top: 15px; }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #fff;
+            font-size: 14px;
+            letter-spacing: .3px;
+        }
+
+        select, input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.92);
+            color: #222;
+            font-family: inherit;
+        }
+
+        textarea { resize: vertical; min-height: 70px; }
+
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: #ff9100;
+            box-shadow: 0 0 0 3px rgba(255, 145, 0, 0.25);
+        }
+
+        .extra-input { margin-top: 10px; }
+
+        .row { display: flex; gap: 10px; }
+        .row .form-group { flex: 1; }
+
+        .hint {
+            font-size: 12px;
+            color: #ffd9a8;
+            margin-top: 6px;
+            line-height: 1.4;
+            display: block;
+        }
+
+        .info-box {
+            display: none;
+            background: rgba(255, 145, 0, 0.12);
+            border: 1px solid rgba(255, 145, 0, 0.4);
+            color: #ffe3bd;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            text-align: left;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+        .info-box i { margin-right: 6px; }
+
+        /* Checkbox de equipaje */
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            flex: 0 0 20px;
+            accent-color: #ff9100;
+        }
+        .checkbox-group label { margin: 0; font-size: 14px; font-weight: 600; }
+        .checkbox-group span { display: block; font-size: 12px; color: #ffd9a8; font-weight: 400; margin-top: 2px; }
+
+        .btn-gen {
+            width: 100%;
+            padding: 15px;
+            background: #ff9100;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.15s ease, background 0.2s ease;
+            margin-top: 5px;
+        }
+
+        .btn-gen:active { transform: scale(0.98); }
+
+        .btn-gen:disabled {
+            background: #c97300;
+            cursor: not-allowed;
+            opacity: 0.85;
+        }
+
+        .error-msg {
+            display: none;
+            background: rgba(255, 70, 70, 0.15);
+            border: 1px solid rgba(255, 90, 90, 0.5);
+            color: #ffd6d6;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            text-align: left;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        #resultado {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            border-radius: 15px;
+            border-left: 5px solid #25D366;
+            text-align: left;
+        }
+
+        #resultado b { color: #ffd9a8; }
+
+        .wa-btn {
+            display: block;
+            text-align: center;
+            background: #25D366;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: bold;
+            margin-top: 15px;
+            font-size: 16px;
+        }
+
+        .wa-btn i { margin-right: 6px; }
     </style>
 </head>
 <body>
@@ -46,116 +273,378 @@
 <div class="card">
     <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
     <h2>Destinos y Eventos Lotus 360</h2>
-    <p class="subtitle">¡Escápate con Nosotros!
-    
-    <div class="form-group" style="margin-top:20px;">
+    <p class="subtitle">Boletería Aérea ✈️ Te llevamos a donde quieras</p>
+
+    <!-- Ruta visual dinámica -->
+    <div class="ruta-box">
+        <div class="ruta-punto">
+            <span class="codigo" id="origen-codigo">VLN</span>
+            <span class="ciudad" id="origen-ciudad">Valencia</span>
+        </div>
+        <div class="ruta-linea" id="ruta-linea">
+            <i class="fas fa-plane"></i>
+        </div>
+        <div class="ruta-punto">
+            <span class="codigo" id="destino-codigo">¿?</span>
+            <span class="ciudad" id="destino-ciudad">Elige destino</span>
+        </div>
+    </div>
+
+    <div id="error-box" class="error-msg"></div>
+
+    <div class="form-group">
+        <label>Tipo de viaje</label>
+        <select id="tipo-viaje" onchange="toggleRegreso()">
+            <option value="ida">Solo Ida</option>
+            <option value="ida-vuelta" selected>Ida y Vuelta</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Origen</label>
+        <select id="origen" onchange="actualizarRuta('origen')">
+            <option value="VLN|Valencia">Valencia (VLN)</option>
+            <option value="CCS|Caracas">Caracas (CCS)</option>
+            <option value="MAR|Maracaibo">Maracaibo (MAR)</option>
+            <option value="BLA|Barcelona/Pto. La Cruz">Barcelona / Pto. La Cruz (BLA)</option>
+            <option value="MCY|Maracay">Maracay (MCY)</option>
+            <option value="OTRO|Otro origen">Otro (especificar)</option>
+        </select>
+        <input type="text" id="origen-extra" class="extra-input" placeholder="Escribe la ciudad de origen..." style="display:none;">
+    </div>
+
+    <div class="form-group">
         <label>Destino</label>
-        <select id="destino" onchange="toggleExtranjero()">
-            <option>Isla de Margarita</option>
-            <option>Morrocoy</option>
-            <option>Los Roques</option>
-            <option>Mérida</option>
-            <option>Canaima</option>
-            <option>Catacumbo</option>
-            <option value="Extranjero">Viajar al Extranjero</option>
+        <select id="destino" onchange="actualizarRuta('destino')">
+            <option value="">Selecciona un destino...</option>
+            <option value="PMV|Isla de Margarita">Isla de Margarita (PMV)</option>
+            <option value="CCS|Caracas">Caracas (CCS)</option>
+            <option value="MAR|Maracaibo">Maracaibo (MAR)</option>
+            <option value="MER|Mérida">Mérida (MER)</option>
+            <option value="STX|Canaima">Canaima (CAN)</option>
+            <option value="BOG|Bogotá, Colombia">Bogotá, Colombia (BOG)</option>
+            <option value="PTY|Ciudad de Panamá">Ciudad de Panamá (PTY)</option>
+            <option value="MAD|Madrid, España">Madrid, España (MAD)</option>
+            <option value="MIA|Miami, EE.UU.">Miami, EE.UU. (MIA)</option>
+            <option value="OTRO|Otro destino">Otro / Internacional (especificar)</option>
         </select>
-    </div>
-
-    <div id="div-extranjero" class="form-group" style="display:none;">
-        <label>¿A qué país/ciudad desea viajar?</label>
-        <input type="text" id="input-extranjero" placeholder="Escriba el destino...">
-    </div>
-
-    <div class="form-group">
-        <label>Boleteria</label>
-        <select id="Boleteria">
-            <option>Boleteria</option>
-        </select>
-    </div>
-
-    <div style="display: flex; gap: 10px;">
-        <div class="form-group" style="flex: 1;">
-            <label>Check-in</label>
-            <input type="date" id="checkin">
+        <input type="text" id="destino-extra" class="extra-input" placeholder="Escribe ciudad y país de destino..." style="display:none;">
+        <div id="info-pasaporte" class="info-box">
+            <i class="fas fa-passport"></i>Para vuelos internacionales, recuerda: tu pasaporte debe tener mínimo 6 meses de vigencia desde la fecha de viaje.
         </div>
-        <div class="form-group" style="flex: 1;">
-            <label>Check-out</label>
-            <input type="date" id="checkout">
+    </div>
+
+    <div class="row">
+        <div class="form-group">
+            <label>Fecha de salida</label>
+            <input type="date" id="fecha-salida" onchange="ajustarRegreso()">
+        </div>
+        <div class="form-group" id="grupo-regreso">
+            <label>Fecha de regreso</label>
+            <input type="date" id="fecha-regreso">
         </div>
     </div>
 
     <div class="form-group">
-        <label>Adultos</label>
-        <select id="adultos"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+        <label>Adultos <span style="font-weight:400; color:#ffd9a8;">(12+ años)</span></label>
+        <select id="adultos" onchange="toggleAdultosExtra()">
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="more">Más de 4</option>
+        </select>
+        <input type="number" id="adultos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos adultos en total?" style="display:none;">
     </div>
 
     <div class="form-group">
-        <label>Niños</label>
-        <select id="ninos" onchange="actualizarEdades()">
-            <option value="0">0</option>
+        <label>Niños <span style="font-weight:400; color:#ffd9a8;">(2 a 11 años)</span></label>
+        <select id="ninos" onchange="toggleNinosExtra()">
+            <option value="0" selected>0</option>
             <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
+            <option value="more">Más de 3</option>
+        </select>
+        <input type="number" id="ninos-extra" class="extra-input" min="4" max="50" placeholder="¿Cuántos niños en total?" style="display:none;">
+    </div>
+
+    <div class="form-group">
+        <label>Bebés <span style="font-weight:400; color:#ffd9a8;">(0 a 23 meses, en brazos)</span></label>
+        <select id="bebes">
+            <option value="0" selected>0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+        </select>
+        <span class="hint"><i class="fas fa-info-circle"></i> Cada bebé en brazos requiere un adulto que lo cargue (no ocupa asiento).</span>
+    </div>
+
+    <div class="form-group">
+        <label>Clase</label>
+        <select id="clase">
+            <option value="Económica">Económica</option>
+            <option value="Premium Economy">Premium Economy</option>
+            <option value="Ejecutiva">Ejecutiva / Business</option>
+            <option value="Primera">Primera Clase</option>
         </select>
     </div>
 
-    <div id="contenedor-edades"></div>
+    <div class="checkbox-group">
+        <input type="checkbox" id="equipaje">
+        <label for="equipaje">
+            Necesito equipaje adicional
+            <span>Maleta(s) extra, sobrepeso, equipo deportivo, etc.</span>
+        </label>
+    </div>
 
-    <button class="btn-gen" onclick="generar()">Generar Solicitud de Cotización</button>
+    <div class="form-group">
+        <label>Notas adicionales <span style="font-weight:400; color:#ffd9a8;">(opcional)</span></label>
+        <textarea id="notas" placeholder="Ej: fechas flexibles, prefiero vuelo directo, viaje por motivo médico, etc."></textarea>
+    </div>
+
+    <button class="btn-gen" id="btn-generar" onclick="generar()">Generar Solicitud de Boleto</button>
 
     <div id="resultado">
         <p id="res-texto" style="margin-bottom:10px;"></p>
-        <a id="btn-wa" href="#" class="wa-btn"><i class="fab fa-whatsapp"></i> Contactar Asesor</a>
+        <a id="btn-wa" href="#" target="_blank" rel="noopener" class="wa-btn"><i class="fab fa-whatsapp"></i> Contactar Asesor</a>
     </div>
 </div>
 
 <script>
-    function toggleExtranjero() {
-        const dest = document.getElementById('destino').value;
-        document.getElementById('div-extranjero').style.display = (dest === 'Extranjero') ? 'block' : 'none';
+    function hoyISO() {
+        const d = new Date();
+        return d.toISOString().split('T')[0];
     }
 
-    function actualizarEdades() {
-        const n = document.getElementById('ninos').value;
-        const cont = document.getElementById('contenedor-edades');
-        cont.innerHTML = '';
-        for(let i=1; i<=n; i++) {
-            cont.innerHTML += `<div class="form-group"><label>Edad Niño ${i}</label><input type="number" class="edad-input" placeholder="Años"></div>`;
+    document.getElementById('fecha-salida').min = hoyISO();
+    document.getElementById('fecha-regreso').min = hoyISO();
+
+    // --- Tipo de viaje ---
+    function toggleRegreso() {
+        const tipo = document.getElementById('tipo-viaje').value;
+        const grupo = document.getElementById('grupo-regreso');
+        const input = document.getElementById('fecha-regreso');
+        if (tipo === 'ida') {
+            grupo.style.display = 'none';
+            input.value = '';
+        } else {
+            grupo.style.display = 'block';
         }
+    }
+
+    function ajustarRegreso() {
+        const salida = document.getElementById('fecha-salida');
+        const regreso = document.getElementById('fecha-regreso');
+        regreso.min = salida.value || hoyISO();
+        if (regreso.value && regreso.value < salida.value) {
+            regreso.value = '';
+        }
+    }
+
+    // --- Ruta visual dinámica ---
+    function actualizarRuta(tipo) {
+        const sel = document.getElementById(tipo);
+        const extra = document.getElementById(tipo + '-extra');
+        const esOtro = sel.value.startsWith('OTRO');
+
+        extra.style.display = esOtro ? 'block' : 'none';
+        if (!esOtro) extra.value = '';
+
+        const codigoEl = document.getElementById(tipo + '-codigo');
+        const ciudadEl = document.getElementById(tipo + '-ciudad');
+
+        if (sel.value === '') {
+            codigoEl.textContent = '¿?';
+            ciudadEl.textContent = 'Elige destino';
+        } else if (esOtro) {
+            codigoEl.textContent = '✈️';
+            ciudadEl.textContent = extra.value || 'Por especificar';
+        } else {
+            const [codigo, ciudad] = sel.value.split('|');
+            codigoEl.textContent = codigo;
+            ciudadEl.textContent = ciudad;
+        }
+
+        // Mostrar aviso de pasaporte si el destino es internacional
+        const destSel = document.getElementById('destino');
+        const internacionales = ['BOG', 'PTY', 'MAD', 'MIA', 'OTRO'];
+        const codigoDestino = destSel.value.split('|')[0];
+        document.getElementById('info-pasaporte').style.display =
+            internacionales.includes(codigoDestino) ? 'block' : 'none';
+
+        // Animación de regreso en la línea según tipo de viaje
+        actualizarLineaRuta();
+    }
+
+    function actualizarLineaRuta() {
+        const linea = document.getElementById('ruta-linea');
+        const tipo = document.getElementById('tipo-viaje').value;
+        linea.classList.toggle('vuelta', tipo === 'ida-vuelta');
+
+        const existente = linea.querySelector('.regreso');
+        if (tipo === 'ida-vuelta' && !existente) {
+            const icono = document.createElement('i');
+            icono.className = 'fas fa-plane regreso';
+            linea.appendChild(icono);
+        } else if (tipo !== 'ida-vuelta' && existente) {
+            existente.remove();
+        }
+    }
+
+    // --- Campo "Otro destino/origen" actualiza la ruta en vivo ---
+    document.getElementById('origen-extra').addEventListener('input', () => actualizarRuta('origen'));
+    document.getElementById('destino-extra').addEventListener('input', () => actualizarRuta('destino'));
+
+    // --- Adultos / Niños "Más Personas" ---
+    function toggleAdultosExtra() {
+        const sel = document.getElementById('adultos');
+        const extra = document.getElementById('adultos-extra');
+        extra.style.display = (sel.value === 'more') ? 'block' : 'none';
+        if (sel.value !== 'more') extra.value = '';
+    }
+
+    function toggleNinosExtra() {
+        const sel = document.getElementById('ninos');
+        const extra = document.getElementById('ninos-extra');
+        extra.style.display = (sel.value === 'more') ? 'block' : 'none';
+        if (sel.value !== 'more') extra.value = '';
+    }
+
+    function getAdultosCount() {
+        const sel = document.getElementById('adultos');
+        if (sel.value === 'more') {
+            const extra = parseInt(document.getElementById('adultos-extra').value, 10);
+            return isNaN(extra) ? null : extra;
+        }
+        return parseInt(sel.value, 10);
+    }
+
+    function getNinosCount() {
+        const sel = document.getElementById('ninos');
+        if (sel.value === 'more') {
+            const extra = parseInt(document.getElementById('ninos-extra').value, 10);
+            return isNaN(extra) ? null : extra;
+        }
+        return parseInt(sel.value, 10);
+    }
+
+    function mostrarError(msg) {
+        const box = document.getElementById('error-box');
+        box.innerHTML = msg;
+        box.style.display = 'block';
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function ocultarError() {
+        document.getElementById('error-box').style.display = 'none';
+    }
+
+    function nombreLugar(tipo) {
+        const sel = document.getElementById(tipo);
+        if (sel.value.startsWith('OTRO')) {
+            return document.getElementById(tipo + '-extra').value.trim();
+        }
+        return sel.value.split('|')[1] || '';
     }
 
     function generar() {
-        const destBase = document.getElementById('destino').value;
-        const destExtra = document.getElementById('input-extranjero').value;
-        const dest = (destBase === 'Extranjero') ? destExtra : destBase;
-        
-        const hosp = document.getElementById('hospedaje').value;
-        const ad = document.getElementById('adultos').value;
-        const ni = document.getElementById('ninos').value;
-        const checkin = document.getElementById('checkin').value;
-        const checkout = document.getElementById('checkout').value;
-        
-        let edades = "";
-        const inputs = document.getElementsByClassName('edad-input');
-        for(let i=0; i<inputs.length; i++) {
-            edades += (i+1) + ": " + (inputs[i].value || "N/A") + " años, ";
+        ocultarError();
+
+        const tipoViaje = document.getElementById('tipo-viaje').value;
+        const origen = nombreLugar('origen');
+        const destino = nombreLugar('destino');
+        const fechaSalida = document.getElementById('fecha-salida').value;
+        const fechaRegreso = document.getElementById('fecha-regreso').value;
+        const adultos = getAdultosCount();
+        const ninos = getNinosCount();
+        const bebes = parseInt(document.getElementById('bebes').value, 10);
+        const clase = document.getElementById('clase').value;
+        const equipaje = document.getElementById('equipaje').checked;
+        const notas = document.getElementById('notas').value.trim();
+
+        // --- Validaciones ---
+        const errores = [];
+
+        if (document.getElementById('destino').value === '') {
+            errores.push('Selecciona un destino.');
+        }
+        if (document.getElementById('destino').value.startsWith('OTRO') && !destino) {
+            errores.push('Escribe la ciudad/país de destino.');
+        }
+        if (document.getElementById('origen').value.startsWith('OTRO') && !origen) {
+            errores.push('Escribe la ciudad de origen.');
+        }
+        if (!fechaSalida) errores.push('Selecciona la fecha de salida.');
+        if (tipoViaje === 'ida-vuelta') {
+            if (!fechaRegreso) errores.push('Selecciona la fecha de regreso.');
+            if (fechaSalida && fechaRegreso && fechaRegreso < fechaSalida) {
+                errores.push('La fecha de regreso no puede ser anterior a la fecha de salida.');
+            }
+        }
+        if (document.getElementById('adultos').value === 'more' && (adultos === null || adultos < 5)) {
+            errores.push('Indica cuántos adultos viajan (mínimo 5 para esta opción).');
+        }
+        if (document.getElementById('ninos').value === 'more' && (ninos === null || ninos < 4)) {
+            errores.push('Indica cuántos niños viajan (mínimo 4 para esta opción).');
+        }
+        if (bebes > 0 && adultos !== null && bebes > adultos) {
+            errores.push('No puede haber más bebés en brazos que adultos (cada bebé necesita un adulto que lo cargue).');
         }
 
-        // Nueva lista de asesores
+        if (errores.length > 0) {
+            mostrarError('Por favor revisa lo siguiente:<br>• ' + errores.join('<br>• '));
+            return;
+        }
+
+        // --- Lista de asesores con pesos (los números repetidos reciben más leads) ---
         const asesores = [
-            "584140415685", "584244269876", 
-            "584244269876", "584244269876", 
-            "584142495020", "584142495020",
-            "584142495020"
+            '584140415685', '584244269876',
+            '584244269876', '584244269876',
+            '584142495020', '584142495020',
+            '584142495020'
         ];
         const tlf = asesores[Math.floor(Math.random() * asesores.length)];
-        
-        const msg = `¡Hola! Quiero cotizar un Vuelo a:%0ADestino: ${dest}%0ABoleteria: ${hosp}%0AFechas: ${checkin} al ${checkout}%0AAdultos: ${ad}%0ANiños: ${ni}%0AEdades: ${edades}`;
-        
-        document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${msg}`;
-        document.getElementById('res-texto').innerHTML = `<b>Resumen:</b><br>${dest}<br>${hosp}<br>Fechas: ${checkin} al ${checkout}<br>${ad} Adultos, ${ni} Niños<br>Edades: ${edades}`;
+
+        const lineas = [
+            '¡Hola! Quiero cotizar boletos:',
+            `Tipo de viaje: ${tipoViaje === 'ida' ? 'Solo ida' : 'Ida y vuelta'}`,
+            `Ruta: ${origen} → ${destino}`,
+            `Fecha de salida: ${fechaSalida}`
+        ];
+        if (tipoViaje === 'ida-vuelta') lineas.push(`Fecha de regreso: ${fechaRegreso}`);
+        lineas.push(`Pasajeros: ${adultos} adulto(s)` + (ninos > 0 ? `, ${ninos} niño(s)` : '') + (bebes > 0 ? `, ${bebes} bebé(s)` : ''));
+        lineas.push(`Clase: ${clase}`);
+        lineas.push(`Equipaje adicional: ${equipaje ? 'Sí' : 'No'}`);
+        if (notas) lineas.push(`Notas: ${notas}`);
+
+        const msg = lineas.join('\n');
+
+        document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${encodeURIComponent(msg)}`;
+        document.getElementById('res-texto').innerHTML = `
+            <b>Resumen de tu solicitud:</b><br>
+            ${origen} → ${destino}<br>
+            ${tipoViaje === 'ida' ? 'Solo ida' : 'Ida y vuelta'}<br>
+            Salida: ${fechaSalida}${tipoViaje === 'ida-vuelta' ? ` | Regreso: ${fechaRegreso}` : ''}<br>
+            ${adultos} Adulto(s)${ninos > 0 ? `, ${ninos} Niño(s)` : ''}${bebes > 0 ? `, ${bebes} Bebé(s)` : ''}<br>
+            Clase: ${clase}${equipaje ? ' | Con equipaje adicional' : ''}
+        `;
         document.getElementById('resultado').style.display = 'block';
+        document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        const btn = document.getElementById('btn-generar');
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '¡Listo! Revisa tu resumen ↓';
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = original;
+        }, 2000);
     }
+
+    // Inicializar línea de ruta (ida y vuelta por defecto)
+    actualizarLineaRuta();
 </script>
 
 </body>
