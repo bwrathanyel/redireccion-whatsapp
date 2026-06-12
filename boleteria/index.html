@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Destino y Eventos Lotus 360</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: sans-serif; 
+            background: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg') no-repeat center center fixed;
+            background-size: cover;
+            min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px;
+        }
+        .card { 
+        background: rgba(0, 0, 0, 0.4); 
+        backdrop-filter: blur(15px); 
+        -webkit-backdrop-filter: blur(15px);
+        width: 100%; 
+        max-width: 450px; 
+        padding: 25px; 
+        border-radius: 20px; 
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        text-align: center;
+        color: white; 
+    }
+
+    /* Ajustes adicionales necesarios para que todo se lea bien en el nuevo fondo */
+    label { color: #fff; }
+    h2 { color: #fff; }
+    select, input { background: rgba(255, 255, 255, 0.9); border: none; }
+    #resultado { background: rgba(255, 255, 255, 0.2); color: white; border: none; }
+        .logo-profile { width: 100px; height: 100px; border-radius: 50%; border: 3px solid #ff9100; margin-bottom: 10px; }
+        .form-group { margin-bottom: 15px; text-align: left; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
+        select, input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 10px; font-size: 16px; }
+        .btn-gen { width: 100%; padding: 15px; background: #ff9100; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        #resultado { display: none; margin-top: 20px; padding: 20px; background: #e8f5e9; border-radius: 15px; border-left: 5px solid #25D366; text-align: left; }
+        .wa-btn { display: block; text-align: center; background: #25D366; color: white; padding: 15px; border-radius: 10px; text-decoration: none; font-weight: bold; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
+    <h2>Destinos y Eventos Lotus 360</h2>
+    <p class="subtitle">¡Escápate con Nosotros!
+    
+    <div class="form-group" style="margin-top:20px;">
+        <label>Destino</label>
+        <select id="destino" onchange="toggleExtranjero()">
+            <option>Isla de Margarita</option>
+            <option>Morrocoy</option>
+            <option>Los Roques</option>
+            <option>Mérida</option>
+            <option>Canaima</option>
+            <option>Catacumbo</option>
+            <option value="Extranjero">Viajar al Extranjero</option>
+        </select>
+    </div>
+
+    <div id="div-extranjero" class="form-group" style="display:none;">
+        <label>¿A qué país/ciudad desea viajar?</label>
+        <input type="text" id="input-extranjero" placeholder="Escriba el destino...">
+    </div>
+
+    <div class="form-group">
+        <label>Boleteria</label>
+        <select id="Boleteria">
+            <option>Boleteria</option>
+        </select>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+        <div class="form-group" style="flex: 1;">
+            <label>Check-in</label>
+            <input type="date" id="checkin">
+        </div>
+        <div class="form-group" style="flex: 1;">
+            <label>Check-out</label>
+            <input type="date" id="checkout">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Adultos</label>
+        <select id="adultos"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+    </div>
+
+    <div class="form-group">
+        <label>Niños</label>
+        <select id="ninos" onchange="actualizarEdades()">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+        </select>
+    </div>
+
+    <div id="contenedor-edades"></div>
+
+    <button class="btn-gen" onclick="generar()">Generar Solicitud de Cotización</button>
+
+    <div id="resultado">
+        <p id="res-texto" style="margin-bottom:10px;"></p>
+        <a id="btn-wa" href="#" class="wa-btn"><i class="fab fa-whatsapp"></i> Contactar Asesor</a>
+    </div>
+</div>
+
+<script>
+    function toggleExtranjero() {
+        const dest = document.getElementById('destino').value;
+        document.getElementById('div-extranjero').style.display = (dest === 'Extranjero') ? 'block' : 'none';
+    }
+
+    function actualizarEdades() {
+        const n = document.getElementById('ninos').value;
+        const cont = document.getElementById('contenedor-edades');
+        cont.innerHTML = '';
+        for(let i=1; i<=n; i++) {
+            cont.innerHTML += `<div class="form-group"><label>Edad Niño ${i}</label><input type="number" class="edad-input" placeholder="Años"></div>`;
+        }
+    }
+
+    function generar() {
+        const destBase = document.getElementById('destino').value;
+        const destExtra = document.getElementById('input-extranjero').value;
+        const dest = (destBase === 'Extranjero') ? destExtra : destBase;
+        
+        const hosp = document.getElementById('hospedaje').value;
+        const ad = document.getElementById('adultos').value;
+        const ni = document.getElementById('ninos').value;
+        const checkin = document.getElementById('checkin').value;
+        const checkout = document.getElementById('checkout').value;
+        
+        let edades = "";
+        const inputs = document.getElementsByClassName('edad-input');
+        for(let i=0; i<inputs.length; i++) {
+            edades += (i+1) + ": " + (inputs[i].value || "N/A") + " años, ";
+        }
+
+        // Nueva lista de asesores
+        const asesores = [
+            "584140415685", "584244269876", 
+            "584244269876", "584244269876", 
+            "584142495020", "584142495020",
+            "584142495020"
+        ];
+        const tlf = asesores[Math.floor(Math.random() * asesores.length)];
+        
+        const msg = `¡Hola! Quiero cotizar un Vuelo a:%0ADestino: ${dest}%0ABoleteria: ${hosp}%0AFechas: ${checkin} al ${checkout}%0AAdultos: ${ad}%0ANiños: ${ni}%0AEdades: ${edades}`;
+        
+        document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${msg}`;
+        document.getElementById('res-texto').innerHTML = `<b>Resumen:</b><br>${dest}<br>${hosp}<br>Fechas: ${checkin} al ${checkout}<br>${ad} Adultos, ${ni} Niños<br>Edades: ${edades}`;
+        document.getElementById('resultado').style.display = 'block';
+    }
+</script>
+
+</body>
+</html>
