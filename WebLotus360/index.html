@@ -2,17 +2,23 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lotus 360 | Solicitud</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lotus 360</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { font-family: sans-serif; background: #f4f4f4; padding: 20px; display: flex; justify-content: center; }
-        .card { background: white; width: 100%; max-width: 450px; padding: 25px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: sans-serif; 
+            background: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg') no-repeat center center fixed;
+            background-size: cover;
+            min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px;
+        }
+        .card { background: rgba(255, 255, 255, 0.95); width: 100%; max-width: 450px; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 4px solid #ff9100; }
         .form-group { margin-bottom: 15px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
         select, input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 10px; font-size: 16px; }
         .btn-gen { width: 100%; padding: 15px; background: #ff9100; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
-        #resultado { display: none; margin-top: 20px; padding: 20px; background: #fff3e0; border-radius: 15px; border: 1px solid #ff9100; }
+        #resultado { display: none; margin-top: 20px; padding: 20px; background: #e8f5e9; border-radius: 15px; border-left: 5px solid #25D366; }
         .wa-btn { display: block; text-align: center; background: #25D366; color: white; padding: 15px; border-radius: 10px; text-decoration: none; font-weight: bold; margin-top: 15px; }
     </style>
 </head>
@@ -28,11 +34,18 @@
             <option>Morrocoy</option>
             <option>Los Roques</option>
             <option>Mérida</option>
-            <option>Chichiriviche</option>
             <option>Canaima</option>
             <option>Catacumbo</option>
-            <option>Tucacas</option>
-            <option>Viaje al Extranjero</option>
+            <option>Viajar al Extranjero</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Tipo de Hospedaje</label>
+        <select id="hospedaje">
+            <option>Hotel</option>
+            <option>Apartamento</option>
+            <option>Posada</option>
         </select>
     </div>
 
@@ -72,8 +85,8 @@
     }
 
     function generar() {
-        // Captura de datos
         const dest = document.getElementById('destino').value;
+        const hosp = document.getElementById('hospedaje').value;
         const ad = document.getElementById('adultos').value;
         const ni = document.getElementById('ninos').value;
         
@@ -83,22 +96,17 @@
             edades += (i+1) + ": " + (inputs[i].value || "N/A") + " años, ";
         }
 
-        // ALEATORIZADOR: Se ejecuta al presionar el botón
         const asesores = [
-            "584124119565", // Nicoll
-            "584124119565", // Nicoll (duplicado)
-            "584244248434", // Ambar
-            "584244248434", // Ambar (duplicado)
-            "584244136153"  // Luis
+            "584124119565", "584124119565", 
+            "584244248434", "584244248434", 
+            "584244136153"
         ];
         const tlf = asesores[Math.floor(Math.random() * asesores.length)];
         
-        // Formateo del mensaje
-        const msg = `¡Hola! Quiero cotizar:%0ADestino: ${dest}%0AAdultos: ${ad}%0ANiños: ${ni}%0AEdades: ${edades}`;
+        const msg = `¡Hola! Quiero cotizar:%0ADestino: ${dest}%0AHospedaje: ${hosp}%0AAdultos: ${ad}%0ANiños: ${ni}%0AEdades: ${edades}`;
         
-        // Asignación al botón y visualización
         document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${msg}`;
-        document.getElementById('res-texto').innerHTML = `<b>Resumen:</b><br>${dest}<br>${ad} Adultos, ${ni} Niños<br>Edades: ${edades}`;
+        document.getElementById('res-texto').innerHTML = `<b>Resumen:</b><br>${dest}<br>${hosp}<br>${ad} Adultos, ${ni} Niños<br>Edades: ${edades}`;
         document.getElementById('resultado').style.display = 'block';
     }
 </script>
