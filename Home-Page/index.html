@@ -11,11 +11,11 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             
-            /* RUTA ABSOLUTA: Fuerza a buscar la imagen en la raíz del dominio de tu GitHub Pages */
-            background-image: url('https://bwrathanyel.github.io/redireccion-whatsapp/lotus360background.png'); 
+            /* RUTA DEL SERVIDOR RAW: Forzamos la descarga directa del archivo sin intermediarios */
+            background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.png'); 
             
             background-size: cover;
-            background-position: center;
+            background-position: center center;
             background-attachment: fixed;
             background-repeat: no-repeat;
             color: white;
@@ -24,10 +24,10 @@
             align-items: center;
             min-height: 100vh;
             padding: 35px 20px;
-            background-color: #8c8c8c; /* Fondo gris de seguridad mientras carga */
+            background-color: #555555; /* Color gris oscuro de respaldo */
         }
 
-        /* Capa oscura intermedia para que el texto resalte sobre la foto clara */
+        /* Capa oscura intermedia para legibilidad */
         body::before {
             content: "";
             position: fixed;
@@ -142,7 +142,7 @@ Reservaciones de Hospedaje & Hotelería
 Servicios de Traslado</p>
 
         <div class="social-row">
-            <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Ambar/" class="icon-btn" title="WhatsApp">
+            <a href="https://wa.me/584244634041?text=Hola!%20--%20Vengo%20de%20su%20pagina%20de%20Instagram." class="icon-btn" title="WhatsApp" target="_blank">
                 <i class="fab fa-whatsapp"></i>
             </a>
             <a href="mailto:destinolotus360@gmail.com" class="icon-btn" title="Correo">
@@ -159,7 +159,7 @@ Servicios de Traslado</p>
             <i class="far fa-envelope"></i> Correo Corporativo
         </a>
 
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Ambar/" class="btn-large">
+        <a href="https://wa.me/584244634041?text=Hola!%20--%20Vengo%20de%20su%20pagina%20de%20Instagram." class="btn-large" target="_blank">
             <i class="fas fa-briefcase"></i> Eventos Corporativos y Fiestas Temáticas
         </a>
     </div>
