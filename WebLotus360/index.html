@@ -2,236 +2,106 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lotus 360 | Asistente Inteligente de Viajes</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lotus 360 | Solicitud</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <style>
-        /* =========================================================
-           BLOQUE DE ESTILOS CSS - ESTRUCTURA Y DISEÑO RESPONSIVE
-           ========================================================= */
-        :root { 
-            --primary: #ff9100; 
-            --secondary: #25D366; 
-            --dark: #333; 
-            --white: #ffffff;
-            --bg-overlay: rgba(0,0,0,0.5);
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        
-        body {
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: linear-gradient(var(--bg-overlay), var(--bg-overlay)), 
-                        url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg') no-repeat center center fixed;
-            background-size: cover;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-
-        .app-container {
-            width: 100%; 
-            max-width: 500px; 
-            background: var(--white);
-            border-radius: 35px; 
-            padding: 40px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-            border: 5px solid var(--primary);
-        }
-
-        .logo-section { text-align: center; margin-bottom: 30px; }
-        .logo-section img { width: 100px; height: 100px; border-radius: 50%; border: 4px solid var(--primary); padding: 5px; }
-        .logo-section h2 { margin-top: 15px; color: var(--dark); font-size: 1.6rem; }
-
-        .input-group { margin-bottom: 20px; }
-        label { display: block; font-size: 0.9rem; font-weight: 700; color: #555; margin-bottom: 8px; }
-        
-        select, input { 
-            width: 100%; 
-            padding: 14px; 
-            border: 2px solid #eee; 
-            border-radius: 15px; 
-            font-size: 1rem; 
-            outline: none; 
-            transition: all 0.3s ease; 
-        }
-        
-        select:focus, input:focus { border-color: var(--primary); box-shadow: 0 0 8px rgba(255, 145, 0, 0.2); }
-
-        .btn-main { 
-            width: 100%; 
-            background: var(--primary); 
-            color: white; 
-            border: none; 
-            padding: 18px; 
-            border-radius: 15px; 
-            font-size: 1.1rem;
-            font-weight: 800; 
-            cursor: pointer; 
-            margin-top: 15px;
-            transition: transform 0.2s;
-        }
-
-        .btn-main:active { transform: scale(0.98); }
-
-        #resultado { 
-            display: none; 
-            margin-top: 30px; 
-            padding: 20px; 
-            background: #fdfdfd; 
-            border-radius: 20px; 
-            border-left: 6px solid var(--secondary);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-        }
-
-        .wa-link { 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            gap: 12px; 
-            background: var(--secondary); 
-            color: white; 
-            padding: 16px; 
-            border-radius: 15px; 
-            text-decoration: none; 
-            font-weight: 700; 
-            margin-top: 20px; 
-        }
-
-        .edad-input-box { margin-top: 10px; padding: 10px; background: #fff5e6; border-radius: 10px; }
+        body { font-family: sans-serif; background: #f4f4f4; padding: 20px; display: flex; justify-content: center; }
+        .card { background: white; width: 100%; max-width: 450px; padding: 25px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; }
+        select, input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 10px; font-size: 16px; }
+        .btn-gen { width: 100%; padding: 15px; background: #ff9100; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        #resultado { display: none; margin-top: 20px; padding: 20px; background: #fff3e0; border-radius: 15px; border: 1px solid #ff9100; }
+        .wa-btn { display: block; text-align: center; background: #25D366; color: white; padding: 15px; border-radius: 10px; text-decoration: none; font-weight: bold; margin-top: 15px; }
     </style>
 </head>
 <body>
 
-    <div class="app-container">
-        <div class="logo-section">
-            <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" alt="Logo">
-            <h2>Lotus 360</h2>
-        </div>
-
-        <div class="input-group">
-            <label>Destino Turístico</label>
-            <select id="destino" onchange="toggleExtra()">
-                <option value="Isla de Margarita">Isla de Margarita</option>
-                <option value="Morrocoy">Morrocoy</option>
-                <option value="Los Roques">Los Roques</option>
-                <option value="Extranjero">Viaje al Extranjero</option>
-            </select>
-        </div>
-
-        <div id="extra-div" class="input-group" style="display:none;">
-            <label>Especifique el país o ciudad</label>
-            <input type="text" id="extra-text" placeholder="Ej. Madrid, España">
-        </div>
-
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div class="input-group"><label>Check-in</label><input type="date" id="in"></div>
-            <div class="input-group"><label>Check-out</label><input type="date" id="out"></div>
-        </div>
-
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div class="input-group"><label>Adultos</label><select id="adultos"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div>
-            <div class="input-group"><label>Niños</label><select id="ninos" onchange="generarEdadInputs()"><option value="0" selected>0</option><option>1</option><option>2</option><option>3</option></select></div>
-        </div>
-
-        <div id="edades-container" class="input-group"></div>
-
-        <button class="btn-main" onclick="procesar()">Generar Solicitud de Cotización</button>
-
-        <div id="resultado">
-            <p id="res-msg" style="font-size: 0.95rem; line-height: 1.6; color: #444;"></p>
-            <a id="btn-wa" href="#" class="wa-link"><i class="fab fa-whatsapp"></i> Contactar Asesor</a>
-        </div>
+<div class="card">
+    <h2 style="text-align:center; margin-bottom:20px;">Lotus 360</h2>
+    
+    <div class="form-group">
+        <label>Destino</label>
+        <select id="destino">
+            <option>Isla de Margarita</option>
+            <option>Morrocoy</option>
+            <option>Los Roques</option>
+            <option>Mérida</option>
+            <option>Chichiriviche</option>
+            <option>Canaima</option>
+            <option>Catacumbo</option>
+            <option>Tucacas</option>
+            <option>Viaje al Extranjero</option>
+        </select>
     </div>
 
-    <script>
-        // Configuración inicial al cargar la página
-        window.onload = () => {
-            const today = new Date().toISOString().split('T')[0];
-            const tomorrow = new Date(Date.now() + 172800000).toISOString().split('T')[0];
-            document.getElementById('in').value = today;
-            document.getElementById('out').value = tomorrow;
-        };
+    <div class="form-group">
+        <label>Adultos</label>
+        <select id="adultos"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+    </div>
 
-        // Lógica para mostrar campo extra
-        function toggleExtra() {
-            const dest = document.getElementById('destino').value;
-            document.getElementById('extra-div').style.display = (dest === 'Extranjero') ? 'block' : 'none';
+    <div class="form-group">
+        <label>Niños</label>
+        <select id="ninos" onchange="actualizarEdades()">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+        </select>
+    </div>
+
+    <div id="contenedor-edades"></div>
+
+    <button class="btn-gen" onclick="generar()">Generar Solicitud de Cotización</button>
+
+    <div id="resultado">
+        <p id="res-texto" style="margin-bottom:10px;"></p>
+        <a id="btn-wa" href="#" class="wa-btn"><i class="fab fa-whatsapp"></i> Contactar Asesor</a>
+    </div>
+</div>
+
+<script>
+    function actualizarEdades() {
+        const n = document.getElementById('ninos').value;
+        const cont = document.getElementById('contenedor-edades');
+        cont.innerHTML = '';
+        for(let i=1; i<=n; i++) {
+            cont.innerHTML += `<div class="form-group"><label>Edad Niño ${i}</label><input type="number" class="edad-input" placeholder="Años"></div>`;
+        }
+    }
+
+    function generar() {
+        // Captura de datos
+        const dest = document.getElementById('destino').value;
+        const ad = document.getElementById('adultos').value;
+        const ni = document.getElementById('ninos').value;
+        
+        let edades = "";
+        const inputs = document.getElementsByClassName('edad-input');
+        for(let i=0; i<inputs.length; i++) {
+            edades += (i+1) + ": " + (inputs[i].value || "N/A") + " años, ";
         }
 
-        // Lógica para generar campos de edades
-        function generarEdadInputs() {
-            const n = parseInt(document.getElementById('ninos').value);
-            const container = document.getElementById('edades-container');
-            container.innerHTML = n > 0 ? '<label>Indique la edad de cada niño:</label>' : '';
-            
-            for(let i=1; i<=n; i++) {
-                container.innerHTML += `<div class="edad-input-box">
-                    <input type="number" class="edad-input" id="edad${i}" placeholder="Edad niño ${i} (años)">
-                </div>`;
-            }
-        }
+        // ALEATORIZADOR: Se ejecuta al presionar el botón
+        const asesores = [
+            "584124119565", // Nicoll
+            "584124119565", // Nicoll (duplicado)
+            "584244248434", // Ambar
+            "584244248434", // Ambar (duplicado)
+            "584244136153"  // Luis
+        ];
+        const tlf = asesores[Math.floor(Math.random() * asesores.length)];
+        
+        // Formateo del mensaje
+        const msg = `¡Hola! Quiero cotizar:%0ADestino: ${dest}%0AAdultos: ${ad}%0ANiños: ${ni}%0AEdades: ${edades}`;
+        
+        // Asignación al botón y visualización
+        document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${msg}`;
+        document.getElementById('res-texto').innerHTML = `<b>Resumen:</b><br>${dest}<br>${ad} Adultos, ${ni} Niños<br>Edades: ${edades}`;
+        document.getElementById('resultado').style.display = 'block';
+    }
+</script>
 
-        // Lógica principal de procesamiento
-        function procesar() {
-            // Añade esto al inicio de la función procesar() dentro del script
-const checkIn = new Date(document.getElementById('in').value);
-const checkOut = new Date(document.getElementById('out').value);
-const hoy = new Date();
-hoy.setHours(0,0,0,0);
-
-if(checkIn < hoy) {
-    alert("La fecha de entrada no puede ser en el pasado.");
-    return;
-}
-if(checkOut <= checkIn) {
-    alert("La fecha de salida debe ser posterior a la de entrada.");
-    return;
-}
-// Validación de edades
-for(let i=1; i<=kids; i++) {
-    const e = document.getElementById('edad'+i).value;
-    if(e === "") { alert("Por favor, ingresa la edad del niño " + i); return; }
-}
-            const destRaw = document.getElementById('destino').value;
-            const dest = (destRaw === 'Extranjero') ? document.getElementById('extra-text').value : destRaw;
-            
-            if(!dest) { alert('Por favor, especifica el destino.'); return; }
-
-            const fIn = document.getElementById('in').value.split('-').reverse().join('/');
-            const fOut = document.getElementById('out').value.split('-').reverse().join('/');
-            const adults = document.getElementById('adultos').value;
-            const kids = document.getElementById('ninos').value;
-            
-            let edades = "";
-            for(let i=1; i<=kids; i++) {
-                const e = document.getElementById('edad'+i).value;
-                edades += e ? ` (Niño ${i}: ${e} años)` : " (Niño ${i}: Edad no especificada)";
-            }
-
-            // Aleatorizador con peso (Nicoll y Ambar duplicados para mayor probabilidad)
-            const team = ["584124119565", "584124119565", "584244248434", "584244248434", "584244136153"];
-            const phone = team[Math.floor(Math.random() * team.length)];
-
-            // Construcción del mensaje de WhatsApp
-            const msg = `¡Hola! 👋 Me interesa cotizar:%0A%0A` +
-                        `📍 Destino: ${dest}%0A` +
-                        `📅 Fecha: ${fIn} al ${fOut}%0A` +
-                        `👥 ${adults} Adultos, ${kids} Niños${edades}.%0A%0A` +
-                        `¿Podrían darme información?`;
-            
-            // Asignación de datos al botón
-            document.getElementById('btn-wa').href = `https://wa.me/${phone}?text=${msg}`;
-            document.getElementById('res-msg').innerHTML = `<b>Resumen de tu viaje:</b><br>` +
-                                                          `Destino: ${dest}<br>` +
-                                                          `Fechas: ${fIn} al ${fOut}<br>` +
-                                                          `Pasajeros: ${adults} Adultos, ${kids} Niños${edades.replace(/%/g, '')}`;
-            document.getElementById('resultado').style.display = 'block';
-        }
-    </script>
-    
-    </body>
+</body>
 </html>
