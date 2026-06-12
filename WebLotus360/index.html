@@ -2,246 +2,236 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lotus 360 - Tu Próximo Destino</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lotus 360 | Asistente Inteligente de Viajes</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
+        /* =========================================================
+           BLOQUE DE ESTILOS CSS - ESTRUCTURA Y DISEÑO RESPONSIVE
+           ========================================================= */
+        :root { 
+            --primary: #ff9100; 
+            --secondary: #25D366; 
+            --dark: #333; 
+            --white: #ffffff;
+            --bg-overlay: rgba(0,0,0,0.5);
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'); 
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(var(--bg-overlay), var(--bg-overlay)), 
+                        url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg') no-repeat center center fixed;
             background-size: cover;
-            background-position: center center;
-            background-attachment: fixed;
-            background-repeat: no-repeat;
-            color: white;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
             min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             padding: 20px;
         }
 
-        body::before {
-            content: "";
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.4);
-            z-index: -1;
+        .app-container {
+            width: 100%; 
+            max-width: 500px; 
+            background: var(--white);
+            border-radius: 35px; 
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            border: 5px solid var(--primary);
         }
 
-        .container {
-            width: 100%;
-            max-width: 500px;
-            z-index: 1;
-            padding-bottom: 30px;
-        }
+        .logo-section { text-align: center; margin-bottom: 30px; }
+        .logo-section img { width: 100px; height: 100px; border-radius: 50%; border: 4px solid var(--primary); padding: 5px; }
+        .logo-section h2 { margin-top: 15px; color: var(--dark); font-size: 1.6rem; }
 
-        .header { text-align: center; margin-bottom: 25px; margin-top: 15px; }
-
-        .logo-profile {
-            width: 90px; height: 90px; border-radius: 50%; border: 3px dashed #ff9100;
-            padding: 4px; background-color: white; margin: 0 auto 15px auto;
-            object-fit: contain; display: block; box-shadow: 0 4px 15px rgba(0,0,0,0.35);
-        }
-
-        h1 { font-size: 1.7rem; font-weight: 700; text-shadow: 0 2px 5px rgba(0,0,0,0.8); margin-bottom: 5px; }
-        .tagline { font-size: 0.95rem; color: #e0e0e0; text-shadow: 0 2px 4px rgba(0,0,0,0.8); margin-bottom: 10px; }
-
-        .booking-card {
-            background: rgba(255, 255, 255, 0.95); color: #333; border-radius: 20px;
-            padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); border: 4px solid #ff9100;
-        }
-
-        .booking-card h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 15px; color: #1a1a1a; display: flex; align-items: center; gap: 8px; }
-        .booking-card h2 i { color: #ff9100; }
-
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; color: #555; text-align: left; }
-
-        .input-icon-wrapper { position: relative; display: flex; align-items: center; }
-        .input-icon-wrapper i { position: absolute; left: 15px; color: #ff9100; font-size: 1.1rem; }
-
-        .form-control {
-            width: 100%; padding: 12px 12px 12px 45px; border: 1.5px solid #ccc;
-            border-radius: 35px; font-size: 1rem; color: #333; background-color: white;
-            outline: none; transition: border-color 0.2s; -webkit-appearance: none;
-        }
-        .form-control:focus { border-color: #ff9100; }
-
-        .row-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; font-size: 0.9rem; font-weight: 700; color: #555; margin-bottom: 8px; }
         
-        .hidden-section { display: none; animation: fadeInDown 0.3s ease-out forwards; }
-        @keyframes fadeInDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        select, input { 
+            width: 100%; 
+            padding: 14px; 
+            border: 2px solid #eee; 
+            border-radius: 15px; 
+            font-size: 1rem; 
+            outline: none; 
+            transition: all 0.3s ease; 
+        }
+        
+        select:focus, input:focus { border-color: var(--primary); box-shadow: 0 0 8px rgba(255, 145, 0, 0.2); }
 
-        .btn-search {
-            width: 100%; background-color: #ff9100; color: white; border: none; padding: 14px;
-            border-radius: 35px; font-size: 1.1rem; font-weight: 700; cursor: pointer;
-            margin-top: 10px; box-shadow: 0 4px 10px rgba(255, 145, 0, 0.3);
-            display: flex; align-items: center; justify-content: center; gap: 10px;
+        .btn-main { 
+            width: 100%; 
+            background: var(--primary); 
+            color: white; 
+            border: none; 
+            padding: 18px; 
+            border-radius: 15px; 
+            font-size: 1.1rem;
+            font-weight: 800; 
+            cursor: pointer; 
+            margin-top: 15px;
+            transition: transform 0.2s;
         }
 
-        .result-box {
-            display: none; margin-top: 20px; background: #f0f7ff; border-left: 5px solid #ff9100;
-            border-radius: 12px; padding: 15px; text-align: left;
+        .btn-main:active { transform: scale(0.98); }
+
+        #resultado { 
+            display: none; 
+            margin-top: 30px; 
+            padding: 20px; 
+            background: #fdfdfd; 
+            border-radius: 20px; 
+            border-left: 6px solid var(--secondary);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
         }
 
-        .btn-action-final {
-            display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
-            background-color: #25D366; color: white; padding: 12px; border-radius: 35px;
-            text-decoration: none; font-weight: 600; font-size: 1rem; margin-top: 15px;
+        .wa-link { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 12px; 
+            background: var(--secondary); 
+            color: white; 
+            padding: 16px; 
+            border-radius: 15px; 
+            text-decoration: none; 
+            font-weight: 700; 
+            margin-top: 20px; 
         }
 
-        .footer-social { display: flex; justify-content: center; gap: 20px; margin-top: 30px; }
-        .footer-icon {
-            display: flex; align-items: center; justify-content: center; width: 44px; height: 44px;
-            background-color: rgba(255, 255, 255, 0.2); color: white; border-radius: 50%;
-            font-size: 1.2rem; text-decoration: none;
-        }
+        .edad-input-box { margin-top: 10px; padding: 10px; background: #fff5e6; border-radius: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <div class="header">
-            <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
-            <h1>Lotus 360</h1>
-            <p class="tagline">Encuentra disponibilidad en los mejores destinos</p>
+    <div class="app-container">
+        <div class="logo-section">
+            <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" alt="Logo">
+            <h2>Lotus 360</h2>
         </div>
 
-        <div class="booking-card">
-            <h2><i class="fas fa-bed"></i> ¿A dónde quieres ir?</h2>
-            
-            <div class="form-group">
-                <label>Destino Turístico</label>
-                <div class="input-icon-wrapper">
-                    <i class="fas fa-map-marker-alt"></i>
-                    <select id="destino" class="form-control" onchange="evaluarDestino(this.value)">
-                        <option value="Margarita">Isla de Margarita</option>
-                        <option value="Morrocoy">Morrocoy</option>
-                        <option value="Los Roques">Los Roques</option>
-                        <option value="Canaima">Canaima</option>
-                        <option value="Mérida">Mérida</option>
-                        <option value="Viaje al Extranjero">Viaje al Extranjero ✈️</option>
-                        <option value="Otro">(Otro destino)</option>
-                    </select>
-                </div>
-            </div>
+        <div class="input-group">
+            <label>Destino Turístico</label>
+            <select id="destino" onchange="toggleExtra()">
+                <option value="Isla de Margarita">Isla de Margarita</option>
+                <option value="Morrocoy">Morrocoy</option>
+                <option value="Los Roques">Los Roques</option>
+                <option value="Extranjero">Viaje al Extranjero</option>
+            </select>
+        </div>
 
-            <div id="wrapper-extranjero" class="form-group hidden-section">
-                <label>País/Ciudad</label>
-                <select id="destino-extranjero" class="form-control">
-                    <option value="Bogotá">Bogotá</option>
-                    <option value="Miami">Miami</option>
-                    <option value="Buenos Aires">Buenos Aires</option>
-                </select>
-            </div>
+        <div id="extra-div" class="input-group" style="display:none;">
+            <label>Especifique el país o ciudad</label>
+            <input type="text" id="extra-text" placeholder="Ej. Madrid, España">
+        </div>
 
-            <div id="wrapper-otro" class="form-group hidden-section">
-                <label>¿A dónde viajarás?</label>
-                <input type="text" id="destino-manual" class="form-control" placeholder="Escribe tu destino">
-            </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="input-group"><label>Check-in</label><input type="date" id="in"></div>
+            <div class="input-group"><label>Check-out</label><input type="date" id="out"></div>
+        </div>
 
-            <div class="form-group">
-                <label>Tipo de Hospedaje</label>
-                <div class="input-icon-wrapper">
-                    <i class="fas fa-hotel"></i>
-                    <select id="hospedaje" class="form-control" onchange="evaluarHospedaje(this.value)">
-                        <option value="Hotel">Hotel</option>
-                        <option value="Apartamento">Apartamento</option>
-                        <option value="Posada">Posada</option>
-                    </select>
-                </div>
-            </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="input-group"><label>Adultos</label><select id="adultos"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div>
+            <div class="input-group"><label>Niños</label><select id="ninos" onchange="generarEdadInputs()"><option value="0" selected>0</option><option>1</option><option>2</option><option>3</option></select></div>
+        </div>
 
-            <div id="wrapper-zonas" class="form-group hidden-section">
-                <label>Zona de Preferencia</label>
-                <select id="zona" class="form-control">
-                    <option value="Tucacas">Tucacas</option>
-                    <option value="Morrocoy">Morrocoy</option>
-                    <option value="Los Roques">Los Roques</option>
-                </select>
-            </div>
+        <div id="edades-container" class="input-group"></div>
 
-            <div class="row-grid">
-                <div class="form-group">
-                    <label>Check-in</label>
-                    <input type="date" id="entrada" class="form-control">
-                </div>
-                <div class="form-group">
-                    <label>Check-out</label>
-                    <input type="date" id="salida" class="form-control">
-                </div>
-            </div>
+        <button class="btn-main" onclick="procesar()">Generar Solicitud de Cotización</button>
 
-            <div class="row-grid">
-                <div class="form-group">
-                    <label>Adultos</label>
-                    <select id="adultos" class="form-control">
-                        <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Niños</label>
-                    <select id="ninos" class="form-control">
-                        <option value="0" selected>0</option><option value="1">1</option><option value="2">2</option>
-                    </select>
-                </div>
-            </div>
-
-            <button class="btn-search" onclick="procesarBusqueda()">
-                <i class="fas fa-search"></i> Buscar disponibilidad
-            </button>
-
-            <div id="resultado" class="result-box">
-                <p id="resultado-texto"></p>
-                <a id="btn-link-whatsapp" href="#" class="btn-action-final">
-                    <i class="fab fa-whatsapp"></i> Contactar Asesor
-                </a>
-            </div>
+        <div id="resultado">
+            <p id="res-msg" style="font-size: 0.95rem; line-height: 1.6; color: #444;"></p>
+            <a id="btn-wa" href="#" class="wa-link"><i class="fab fa-whatsapp"></i> Contactar Asesor</a>
         </div>
     </div>
 
     <script>
+        // Configuración inicial al cargar la página
         window.onload = () => {
-            const h = new Date();
-            const m = new Date(h); m.setDate(m.getDate() + 2);
-            document.getElementById('entrada').value = h.toISOString().split('T')[0];
-            document.getElementById('salida').value = m.toISOString().split('T')[0];
+            const today = new Date().toISOString().split('T')[0];
+            const tomorrow = new Date(Date.now() + 172800000).toISOString().split('T')[0];
+            document.getElementById('in').value = today;
+            document.getElementById('out').value = tomorrow;
+        };
+
+        // Lógica para mostrar campo extra
+        function toggleExtra() {
+            const dest = document.getElementById('destino').value;
+            document.getElementById('extra-div').style.display = (dest === 'Extranjero') ? 'block' : 'none';
         }
 
-        function evaluarDestino(v) {
-            document.getElementById('wrapper-extranjero').style.display = (v === 'Viaje al Extranjero') ? 'block' : 'none';
-            document.getElementById('wrapper-otro').style.display = (v === 'Otro') ? 'block' : 'none';
-        }
-
-        function evaluarHospedaje(v) {
-            document.getElementById('wrapper-zonas').style.display = (v === 'Apartamento' || v === 'Posada') ? 'block' : 'none';
-        }
-
-        function procesarBusqueda() {
-            const d = document.getElementById('destino').value;
-            const h = document.getElementById('hospedaje').value;
-            const fE = document.getElementById('entrada').value.split('-').reverse().join('/');
-            const fS = document.getElementById('salida').value.split('-').reverse().join('/');
-            const a = document.getElementById('adultos').value;
-            const n = document.getElementById('ninos').value;
-
-            let destFinal = (d === 'Viaje al Extranjero') ? document.getElementById('destino-extranjero').value : 
-                            (d === 'Otro') ? document.getElementById('destino-manual').value : d;
+        // Lógica para generar campos de edades
+        function generarEdadInputs() {
+            const n = parseInt(document.getElementById('ninos').value);
+            const container = document.getElementById('edades-container');
+            container.innerHTML = n > 0 ? '<label>Indique la edad de cada niño:</label>' : '';
             
-            let hospFinal = (h === 'Apartamento' || h === 'Posada') ? `${h} en ${document.getElementById('zona').value}` : h;
+            for(let i=1; i<=n; i++) {
+                container.innerHTML += `<div class="edad-input-box">
+                    <input type="number" class="edad-input" id="edad${i}" placeholder="Edad niño ${i} (años)">
+                </div>`;
+            }
+        }
 
-            const msg = `¡Hola! 👋 Me interesa cotizar un viaje a ${destFinal}.%0A%0A🏨 Hospedaje: ${hospFinal}%0A📅 Fechas: ${fE} al ${fS}%0A👥 ${a} Adultos y ${n} Niños.%0A✨ ¿Me dan información?`;
+        // Lógica principal de procesamiento
+        function procesar() {
+            // Añade esto al inicio de la función procesar() dentro del script
+const checkIn = new Date(document.getElementById('in').value);
+const checkOut = new Date(document.getElementById('out').value);
+const hoy = new Date();
+hoy.setHours(0,0,0,0);
 
-            const asesores = ["584244136153", "584124119565", "584124119565", "584244248434", "584244248434"];
-            const tlf = asesores[Math.floor(Math.random() * asesores.length)];
+if(checkIn < hoy) {
+    alert("La fecha de entrada no puede ser en el pasado.");
+    return;
+}
+if(checkOut <= checkIn) {
+    alert("La fecha de salida debe ser posterior a la de entrada.");
+    return;
+}
+// Validación de edades
+for(let i=1; i<=kids; i++) {
+    const e = document.getElementById('edad'+i).value;
+    if(e === "") { alert("Por favor, ingresa la edad del niño " + i); return; }
+}
+            const destRaw = document.getElementById('destino').value;
+            const dest = (destRaw === 'Extranjero') ? document.getElementById('extra-text').value : destRaw;
+            
+            if(!dest) { alert('Por favor, especifica el destino.'); return; }
 
-            document.getElementById('btn-link-whatsapp').href = `https://wa.me/${tlf}?text=${msg}`;
-            document.getElementById('resultado-texto').innerHTML = `Listo para ${destFinal} (${a} adultos, ${n} niños). Toca el botón para continuar con tu asesor.`;
+            const fIn = document.getElementById('in').value.split('-').reverse().join('/');
+            const fOut = document.getElementById('out').value.split('-').reverse().join('/');
+            const adults = document.getElementById('adultos').value;
+            const kids = document.getElementById('ninos').value;
+            
+            let edades = "";
+            for(let i=1; i<=kids; i++) {
+                const e = document.getElementById('edad'+i).value;
+                edades += e ? ` (Niño ${i}: ${e} años)` : " (Niño ${i}: Edad no especificada)";
+            }
+
+            // Aleatorizador con peso (Nicoll y Ambar duplicados para mayor probabilidad)
+            const team = ["584124119565", "584124119565", "584244248434", "584244248434", "584244136153"];
+            const phone = team[Math.floor(Math.random() * team.length)];
+
+            // Construcción del mensaje de WhatsApp
+            const msg = `¡Hola! 👋 Me interesa cotizar:%0A%0A` +
+                        `📍 Destino: ${dest}%0A` +
+                        `📅 Fecha: ${fIn} al ${fOut}%0A` +
+                        `👥 ${adults} Adultos, ${kids} Niños${edades}.%0A%0A` +
+                        `¿Podrían darme información?`;
+            
+            // Asignación de datos al botón
+            document.getElementById('btn-wa').href = `https://wa.me/${phone}?text=${msg}`;
+            document.getElementById('res-msg').innerHTML = `<b>Resumen de tu viaje:</b><br>` +
+                                                          `Destino: ${dest}<br>` +
+                                                          `Fechas: ${fIn} al ${fOut}<br>` +
+                                                          `Pasajeros: ${adults} Adultos, ${kids} Niños${edades.replace(/%/g, '')}`;
             document.getElementById('resultado').style.display = 'block';
         }
     </script>
-</body>
+    
+    </body>
 </html>
