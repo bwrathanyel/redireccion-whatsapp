@@ -20,112 +20,93 @@
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
-            padding: 30px 20px;
+            padding: 20px;
         }
 
-        /* Capa oscura para que el texto resalte sobre la playa */
         body::before {
             content: "";
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0, 0, 0, 0.4);
-            z-index: 0;
+            z-index: -1;
         }
 
         .container {
-            position: relative; /* CRÍTICO: Evita que el formulario desaparezca detrás del fondo */
             width: 100%;
-            max-width: 480px;
+            max-width: 500px;
             z-index: 1;
-            padding-bottom: 20px;
+            padding-bottom: 30px;
         }
 
+        /* Encabezado estilo perfil */
         .header {
             text-align: center;
             margin-bottom: 25px;
+            margin-top: 15px;
         }
 
         .logo-profile {
-            width: 95px;
-            height: 95px;
+            width: 90px;
+            height: 90px;
             border-radius: 50%;
             border: 3px dashed #ff9100;
-            padding: 5px;
+            padding: 4px;
             background-color: white;
             margin: 0 auto 15px auto;
             object-fit: contain;
             display: block;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-            transition: transform 0.3s ease;
-        }
-        
-        .logo-profile:hover {
-            transform: rotate(15deg) scale(1.05);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.35);
         }
 
         h1 {
-            font-size: 1.8rem;
-            font-weight: 800;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.8);
-            margin-bottom: 4px;
+            font-size: 1.7rem;
+            font-weight: 700;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            margin-bottom: 5px;
         }
 
         .tagline {
             font-size: 0.95rem;
-            color: #f0f0f0;
-            font-weight: 400;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            color: #e0e0e0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            margin-bottom: 10px;
         }
 
-        /* Diseño de Tarjeta Premium */
+        /* Formulario inspirado en Booking (Caja contenedora) */
         .booking-card {
-            background: rgba(255, 255, 255, 0.94);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            color: #2d3748;
-            border-radius: 24px;
-            padding: 24px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.4);
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .booking-card::before {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 5px;
-            background: linear-gradient(90deg, #ff9100, #ffb042);
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            border: 4px solid #ff9100;
         }
 
         .booking-card h2 {
-            font-size: 1.25rem;
+            font-size: 1.2rem;
             font-weight: 700;
-            margin-bottom: 20px;
-            color: #1a202c;
+            margin-bottom: 15px;
+            color: #1a1a1a;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .booking-card h2 i {
             color: #ff9100;
-            font-size: 1.3rem;
         }
 
         .form-group {
-            margin-bottom: 16px;
+            margin-bottom: 15px;
         }
 
         .form-group label {
             display: block;
             font-size: 0.85rem;
-            font-weight: 700;
-            margin-bottom: 6px;
-            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #555;
             text-align: left;
-            text-transform: uppercase;
         }
 
         .input-icon-wrapper {
@@ -136,31 +117,35 @@
 
         .input-icon-wrapper i {
             position: absolute;
-            left: 16px;
+            left: 15px;
             color: #ff9100;
             font-size: 1.1rem;
-            transition: transform 0.2s;
         }
 
         .form-control {
             width: 100%;
-            padding: 13px 16px 13px 48px;
-            border: 1.5px solid #e2e8f0;
+            padding: 12px 12px 12px 45px;
+            border: 1.5px solid #ccc;
             border-radius: 35px;
-            font-size: 0.95rem;
-            color: #2d3748;
+            font-size: 1rem;
+            color: #333;
             background-color: white;
             outline: none;
-            transition: all 0.25s ease;
+            transition: border-color 0.2s;
             -webkit-appearance: none;
         }
 
         .form-control:focus {
             border-color: #ff9100;
-            box-shadow: 0 0 0 3px rgba(255, 145, 0, 0.15);
         }
 
-        /* Ocultar secciones dinámicas por defecto */
+        .row-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        /* Clases nuevas para ocultar/mostrar elementos dinámicos sin romper el diseño */
         .hidden-section {
             display: none;
             animation: fadeInDown 0.3s ease-out forwards;
@@ -171,24 +156,19 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        .row-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 14px;
-        }
-
+        /* Botón de búsqueda principal */
         .btn-search {
             width: 100%;
-            background: linear-gradient(135deg, #ff9100, #ffaa33);
+            background-color: #ff9100;
             color: white;
             border: none;
-            padding: 15px;
+            padding: 14px;
             border-radius: 35px;
-            font-size: 1.05rem;
+            font-size: 1.1rem;
             font-weight: 700;
             cursor: pointer;
-            margin-top: 12px;
-            box-shadow: 0 6px 16px rgba(255, 145, 0, 0.35);
+            margin-top: 10px;
+            box-shadow: 0 4px 10px rgba(255, 145, 0, 0.3);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -200,47 +180,55 @@
             transform: scale(0.96);
         }
 
+        /* Cuadro de resultados simulado */
         .result-box {
             display: none;
-            margin-top: 22px;
-            background: #f7fafc;
+            margin-top: 20px;
+            background: #f0f7ff;
             border-left: 5px solid #ff9100;
-            border-radius: 16px;
-            padding: 18px;
+            border-radius: 12px;
+            padding: 15px;
             text-align: left;
-            animation: fadeInDown 0.3s ease-out forwards;
+            animation: fadeIn 0.3s ease-in-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .result-box h3 {
-            font-size: 1.1rem;
-            color: #1a202c;
+            font-size: 1.05rem;
+            color: #1a1a1a;
             margin-bottom: 8px;
         }
 
         .result-box p {
             font-size: 0.9rem;
-            color: #4a5568;
-            margin-bottom: 16px;
-            line-height: 1.5;
+            color: #555;
+            margin-bottom: 15px;
+            line-height: 1.4;
         }
 
+        /* Botón de acción final */
         .btn-action-final {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 10px;
             width: 100%;
-            background: linear-gradient(135deg, #25D366, #20ba5a);
+            background-color: #25D366;
             color: white;
-            padding: 14px;
+            padding: 12px;
             border-radius: 35px;
             text-decoration: none;
-            font-weight: 700;
+            font-weight: 600;
             font-size: 1rem;
-            box-shadow: 0 6px 16px rgba(37, 211, 102, 0.3);
+            box-shadow: 0 4px 10px rgba(37, 211, 102, 0.3);
             text-align: center;
         }
 
+        /* Redes del footer fijas */
         .footer-social {
             display: flex;
             justify-content: center;
@@ -252,6 +240,117 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 46px;
-            height: 46px;
-            background-color: rgba
+            width: 44px;
+            height: 44px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 50%;
+            font-size: 1.2rem;
+            text-decoration: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        
+        <div class="header">
+            <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
+            <h1>Lotus 360</h1>
+            <p class="tagline">Encuentra disponibilidad en los mejores destinos</p>
+        </div>
+
+        <div class="booking-card">
+            <h2><i class="fas fa-bed"></i> ¿A dónde quieres ir?</h2>
+            
+            <div class="form-group">
+                <label for="destino">Destino Turístico</label>
+                <div class="input-icon-wrapper">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <select id="destino" class="form-control" onchange="evaluarDestino(this.value)">
+                        <option value="Margarita" selected>Isla de Margarita</option>
+                        <option value="Morrocoy">Morrocoy</option>
+                        <option value="Los Roques">Los Roques</option>
+                        <option value="Canaima">Canaima</option>
+                        <option value="Mérida">Mérida</option>
+                        <option value="Colonia Tovar">Colonia Tovar</option>
+                        <option value="Viaje al Extranjero">Viaje al Extranjero ✈️</option>
+                        <option value="Otro">(Otro destino personalizado)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="wrapper-extranjero" class="form-group hidden-section">
+                <label for="destino-extranjero">Selecciona el País/Ciudad</label>
+                <div class="input-icon-wrapper">
+                    <i class="fas fa-globe-americas"></i>
+                    <select id="destino-extranjero" class="form-control">
+                        <option value="Bogotá">Bogotá</option>
+                        <option value="Miami (USA)">Miami (USA)</option>
+                        <option value="Brazil">Brazil</option>
+                        <option value="Buenos Aires">Buenos Aires</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="wrapper-otro" class="form-group hidden-section">
+                <label for="destino-manual">¿A dónde te gustaría viajar?</label>
+                <div class="input-icon-wrapper">
+                    <i class="fas fa-pen"></i>
+                    <input type="text" id="destino-manual" class="form-control" placeholder="Ej. Europa, Madrid...">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="hospedaje">Tipo de Hospedaje</label>
+                <div class="input-icon-wrapper">
+                    <i class="fas fa-hotel"></i>
+                    <select id="hospedaje" class="form-control" onchange="evaluarHospedaje(this.value)">
+                        <option value="Hotel">Hotel</option>
+                        <option value="Apartamento">Apartamento</option>
+                        <option value="Posada">Posada</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="wrapper-zonas" class="form-group hidden-section">
+                <label for="zona">Zona de Preferencia</label>
+                <div class="input-icon-wrapper">
+                    <i class="fas fa-map-signs"></i>
+                    <select id="zona" class="form-control">
+                        <option value="Tucacas">Tucacas</option>
+                        <option value="Chichiriviche">Chichiriviche</option>
+                        <option value="Morrocoy">Morrocoy</option>
+                        <option value="Los Roques">Los Roques</option>
+                        <option value="Margarita">Margarita</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row-grid">
+                <div class="form-group">
+                    <label for="entrada">Check-in</label>
+                    <div class="input-icon-wrapper">
+                        <i class="far fa-calendar-alt"></i>
+                        <input type="date" id="entrada" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="salida">Check-out</label>
+                    <div class="input-icon-wrapper">
+                        <i class="far fa-calendar-alt"></i>
+                        <input type="date" id="salida" class="form-control">
+                    </div>
+                </div>
+            </div>
+
+            <div class="row-grid">
+                <div class="form-group">
+                    <label for="adultos">Adultos</label>
+                    <div class="input-icon-wrapper">
+                        <i class="fas fa-user"></i>
+                        <select id="adultos" class="form-control">
+                            <option value="1">1 Adulto</option>
+                            <option value="2" selected>2 Adultos</option>
+                            <option value="3">3 Adultos</option
