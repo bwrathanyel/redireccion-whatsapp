@@ -33,11 +33,8 @@
             color: #fff;
         }
 
-        /* Fallback para navegadores/dispositivos sin soporte de backdrop-filter (gama baja) */
         @supports not (backdrop-filter: blur(1px)) {
-            .card {
-                background: rgba(15, 15, 15, 0.85);
-            }
+            .card { background: rgba(15, 15, 15, 0.85); }
         }
 
         .logo-profile {
@@ -54,8 +51,27 @@
         .subtitle {
             color: #ffd9a8;
             font-size: 14px;
-            margin-bottom: 20px;
+            margin-bottom: 18px;
         }
+
+        /* --- Caja de noches (elemento distintivo) --- */
+        .noches-box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin: 4px 0 15px;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #ffd9a8;
+            min-height: 20px;
+        }
+        .noches-box i { color: #ff9100; }
+        .noches-box .num { color: #fff; font-size: 16px; }
 
         .form-group { margin-bottom: 15px; text-align: left; }
 
@@ -88,6 +104,28 @@
 
         .row { display: flex; gap: 10px; }
         .row .form-group { flex: 1; }
+
+        .hint {
+            font-size: 12px;
+            color: #ffd9a8;
+            margin-top: 6px;
+            line-height: 1.4;
+            display: block;
+        }
+
+        .info-box {
+            display: none;
+            background: rgba(255, 145, 0, 0.12);
+            border: 1px solid rgba(255, 145, 0, 0.4);
+            color: #ffe3bd;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: 13px;
+            text-align: left;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+        .info-box i { margin-right: 6px; }
 
         .btn-gen {
             width: 100%;
@@ -189,6 +227,44 @@
         </select>
     </div>
 
+    <div class="form-group">
+        <label>Plan de alimentación</label>
+        <select id="plan-alimentacion">
+            <option value="Solo Alojamiento">Solo Alojamiento</option>
+            <option value="Desayuno Incluido">Desayuno Incluido</option>
+            <option value="Todo Incluido">Todo Incluido</option>
+            <option value="No sé / quiero opciones">No sé, quiero opciones</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>¿Es una ocasión especial?</label>
+        <select id="ocasion" onchange="toggleOcasionInfo()">
+            <option value="Vacaciones">Vacaciones regulares</option>
+            <option value="Luna de Miel / Aniversario">Luna de Miel o Aniversario</option>
+            <option value="Cumpleaños">Cumpleaños</option>
+            <option value="Viaje de Negocios">Viaje de Negocios</option>
+            <option value="Otro">Otro</option>
+        </select>
+        <div id="info-ocasion" class="info-box">
+            <i class="fas fa-gift"></i>¡Genial! Le avisaremos al hospedaje para que preparen un detalle especial para tu llegada 🎉
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>¿Cómo llegarás a tu destino?</label>
+        <select id="transporte" onchange="toggleTransporte()">
+            <option value="Vehículo propio">Vehículo propio</option>
+            <option value="Transporte terrestre">Transporte terrestre (necesito que me ayuden a coordinar)</option>
+            <option value="Vuelo">Vuelo (necesito boleto aéreo)</option>
+            <option value="No sé aún">Aún no sé</option>
+        </select>
+        <input type="text" id="origen-vuelo" class="extra-input" placeholder="¿Desde qué ciudad volarías?" style="display:none;">
+        <div id="info-transporte" class="info-box">
+            <i class="fas fa-plane"></i>Perfecto, tu asesor te armará una cotización conjunta de hospedaje + boleto aéreo.
+        </div>
+    </div>
+
     <div class="row">
         <div class="form-group">
             <label>Check-in</label>
@@ -196,8 +272,13 @@
         </div>
         <div class="form-group">
             <label>Check-out</label>
-            <input type="date" id="checkout">
+            <input type="date" id="checkout" onchange="actualizarNoches()">
         </div>
+    </div>
+
+    <div class="noches-box" id="noches-box">
+        <i class="fas fa-moon"></i>
+        <span>Selecciona tus fechas para ver la duración</span>
     </div>
 
     <div class="form-group">
@@ -221,10 +302,24 @@
             <option value="3">3</option>
             <option value="more">Más de 3</option>
         </select>
-        <input type="number" id="ninos-extra" class="extra-input" min="4" max="50" placeholder="¿Cuántos niños en total?" style="display:none;" oninput="actualizarEdades()">
+        <input type="number" id="ninos-extra" class="extra-input" min="4" max="50" placeholder="¿Cuántos niños en total?" style="display:none;" oninput="actualizarEdades(); actualizarSugerenciaHabitaciones();">
     </div>
 
     <div id="contenedor-edades"></div>
+
+    <div class="form-group">
+        <label>Número de habitaciones</label>
+        <select id="habitaciones" onchange="toggleHabitacionesExtra()">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="more">Más de 5</option>
+        </select>
+        <input type="number" id="habitaciones-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántas habitaciones necesitas?" style="display:none;">
+        <span class="hint" id="sugerencia-habitaciones"></span>
+    </div>
 
     <button class="btn-gen" id="btn-generar" onclick="generar()">Generar Solicitud de Cotización</button>
 
@@ -256,6 +351,29 @@
         if (checkout.value && checkout.value < checkin.value) {
             checkout.value = '';
         }
+        actualizarNoches();
+    }
+
+    // --- Caja de noches (cuenta automáticamente la duración de la estadía) ---
+    function actualizarNoches() {
+        const checkin = document.getElementById('checkin').value;
+        const checkout = document.getElementById('checkout').value;
+        const box = document.getElementById('noches-box');
+
+        if (!checkin || !checkout) {
+            box.innerHTML = '<i class="fas fa-moon"></i><span>Selecciona tus fechas para ver la duración</span>';
+            return;
+        }
+
+        const dIn = new Date(checkin);
+        const dOut = new Date(checkout);
+        const dias = Math.round((dOut - dIn) / (1000 * 60 * 60 * 24));
+
+        if (dias <= 0) {
+            box.innerHTML = '<i class="fas fa-sun"></i><span>Pasadía (mismo día) — confírmalo con tu asesor</span>';
+        } else {
+            box.innerHTML = `<i class="fas fa-moon"></i><span><span class="num">${dias}</span> noche${dias > 1 ? 's' : ''} de estadía</span>`;
+        }
     }
 
     function toggleExtranjero() {
@@ -263,11 +381,31 @@
         document.getElementById('div-extranjero').style.display = (dest === 'Extranjero') ? 'block' : 'none';
     }
 
+    // --- Ocasión especial ---
+    function toggleOcasionInfo() {
+        const ocasion = document.getElementById('ocasion').value;
+        const info = document.getElementById('info-ocasion');
+        const especiales = ['Luna de Miel / Aniversario', 'Cumpleaños'];
+        info.style.display = especiales.includes(ocasion) ? 'block' : 'none';
+    }
+
+    // --- Transporte ---
+    function toggleTransporte() {
+        const transporte = document.getElementById('transporte').value;
+        const origenVuelo = document.getElementById('origen-vuelo');
+        const info = document.getElementById('info-transporte');
+        const esVuelo = transporte === 'Vuelo';
+        origenVuelo.style.display = esVuelo ? 'block' : 'none';
+        info.style.display = esVuelo ? 'block' : 'none';
+        if (!esVuelo) origenVuelo.value = '';
+    }
+
     function toggleAdultosExtra() {
         const sel = document.getElementById('adultos');
         const extra = document.getElementById('adultos-extra');
         extra.style.display = (sel.value === 'more') ? 'block' : 'none';
         if (sel.value !== 'more') extra.value = '';
+        actualizarSugerenciaHabitaciones();
     }
 
     function toggleNinosExtra() {
@@ -276,6 +414,14 @@
         extra.style.display = (sel.value === 'more') ? 'block' : 'none';
         if (sel.value !== 'more') extra.value = '';
         actualizarEdades();
+        actualizarSugerenciaHabitaciones();
+    }
+
+    function toggleHabitacionesExtra() {
+        const sel = document.getElementById('habitaciones');
+        const extra = document.getElementById('habitaciones-extra');
+        extra.style.display = (sel.value === 'more') ? 'block' : 'none';
+        if (sel.value !== 'more') extra.value = '';
     }
 
     function getAdultosCount() {
@@ -294,6 +440,30 @@
             return isNaN(extra) ? null : extra;
         }
         return parseInt(sel.value, 10);
+    }
+
+    function getHabitacionesCount() {
+        const sel = document.getElementById('habitaciones');
+        if (sel.value === 'more') {
+            const extra = parseInt(document.getElementById('habitaciones-extra').value, 10);
+            return isNaN(extra) ? null : extra;
+        }
+        return parseInt(sel.value, 10);
+    }
+
+    // --- Sugerencia de habitaciones según el tamaño del grupo (no obliga, solo orienta) ---
+    function actualizarSugerenciaHabitaciones() {
+        const ad = getAdultosCount();
+        const ni = getNinosCount();
+        const span = document.getElementById('sugerencia-habitaciones');
+        const total = (ad || 0) + (ni || 0);
+
+        if (total <= 0) {
+            span.textContent = '';
+            return;
+        }
+        const sugeridas = Math.max(1, Math.ceil(total / 4));
+        span.innerHTML = `<i class="fas fa-lightbulb"></i> Sugerencia: ${sugeridas} habitación${sugeridas > 1 ? 'es' : ''} para ${total} persona${total > 1 ? 's' : ''} (puedes ajustarlo).`;
     }
 
     function actualizarEdades() {
@@ -332,11 +502,16 @@
         const dest = (destBase === 'Extranjero') ? destExtra : destBase;
 
         const hosp = document.getElementById('hospedaje').value;
+        const planAlimentacion = document.getElementById('plan-alimentacion').value;
+        const ocasion = document.getElementById('ocasion').value;
+        const transporte = document.getElementById('transporte').value;
+        const origenVuelo = document.getElementById('origen-vuelo').value.trim();
         const checkin = document.getElementById('checkin').value;
         const checkout = document.getElementById('checkout').value;
 
         const adultos = getAdultosCount();
         const ninos = getNinosCount();
+        const habitaciones = getHabitacionesCount();
 
         // --- Validaciones ---
         const errores = [];
@@ -349,78 +524,10 @@
         if (checkin && checkout && checkout < checkin) {
             errores.push('La fecha de check-out no puede ser anterior al check-in.');
         }
-        if (adultos === null || adultos < 5) {
-            if (document.getElementById('adultos').value === 'more' && (adultos === null || adultos < 5)) {
-                errores.push('Indica cuántos adultos viajan (mínimo 5 para esta opción).');
-            }
+        if (document.getElementById('adultos').value === 'more' && (adultos === null || adultos < 5)) {
+            errores.push('Indica cuántos adultos viajan (mínimo 5 para esta opción).');
         }
         if (document.getElementById('ninos').value === 'more' && (ninos === null || ninos < 4)) {
             errores.push('Indica cuántos niños viajan (mínimo 4 para esta opción).');
         }
-
-        if (errores.length > 0) {
-            mostrarError('Por favor revisa lo siguiente:<br>• ' + errores.join('<br>• '));
-            return;
-        }
-
-        // --- Construcción del resumen de edades ---
-        let edades = '';
-        const resumenInput = document.getElementById('edades-resumen');
-        if (resumenInput) {
-            edades = resumenInput.value.trim() || 'No especificado';
-        } else {
-            const inputs = document.getElementsByClassName('edad-input');
-            const partes = [];
-            for (let i = 0; i < inputs.length; i++) {
-                partes.push(`Niño ${i + 1}: ${inputs[i].value || 'N/A'} años`);
-            }
-            edades = partes.length > 0 ? partes.join(', ') : 'N/A';
-        }
-
-        // --- Lista de asesores con pesos (los números repetidos reciben más leads) ---
-        const asesores = [
-            '584244634041', '584244900601',
-            '584147020527', '584244269876',
-            '584127136169', '584244900601',
-            '584127136169'
-        ];
-        const tlf = asesores[Math.floor(Math.random() * asesores.length)];
-
-        const lineas = [
-            '¡Hola! Quiero cotizar:',
-            `Destino: ${dest}`,
-            `Hospedaje: ${hosp}`,
-            `Fechas: ${checkin} al ${checkout}`,
-            `Adultos: ${adultos}`,
-            `Niños: ${ninos}`
-        ];
-        if (ninos > 0) lineas.push(`Edades: ${edades}`);
-
-        const msg = lineas.join('\n');
-
-        document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${encodeURIComponent(msg)}`;
-        document.getElementById('res-texto').innerHTML = `
-            <b>Resumen de tu solicitud:</b><br>
-            Destino: ${dest}<br>
-            Hospedaje: ${hosp}<br>
-            Fechas: ${checkin} al ${checkout}<br>
-            ${adultos} Adulto(s), ${ninos} Niño(s)
-            ${ninos > 0 ? `<br>Edades: ${edades}` : ''}
-        `;
-        document.getElementById('resultado').style.display = 'block';
-        document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-        // Pequeño feedback visual para evitar doble click accidental
-        const btn = document.getElementById('btn-generar');
-        const original = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = '¡Listo! Revisa tu resumen ↓';
-        setTimeout(() => {
-            btn.disabled = false;
-            btn.textContent = original;
-        }, 2000);
-    }
-</script>
-
-</body>
-</html>
+        if (document.getElementById('habitaciones').value === 'more' && (habitaciones === null || habitaciones 
