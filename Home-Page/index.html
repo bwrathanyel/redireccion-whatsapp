@@ -11,7 +11,7 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             
-            /* Ruta fija a tu playa HD en JPG */
+            /* Tu fondo de playa en JPG */
             background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'); 
             
             background-size: cover;
@@ -26,12 +26,12 @@
             padding: 35px 20px;
         }
 
-        /* Capa oscura intermedia corregida para asegurar que la playa nunca se tape */
+        /* Capa oscura intermedia segura (nunca tapa la imagen) */
         body::before {
             content: "";
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.3);
+            background: rgba(0, 0, 0, 0.32);
             z-index: -1;
         }
 
@@ -49,7 +49,7 @@
             flex: 1;
         }
 
-        /* Contenedor del logo oficial */
+        /* Contenedor del logo con sombra suave */
         .logo-profile {
             width: 100px;
             height: 100px;
@@ -60,14 +60,15 @@
             margin: 0 auto 20px auto;
             object-fit: contain;
             display: block;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
 
         h1 {
             font-size: 1.6rem;
             font-weight: 700;
             margin-bottom: 12px;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            /* Doble sombra para máxima legibilidad */
+            text-shadow: 0 2px 4px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.4);
         }
 
         .subtitle {
@@ -75,11 +76,11 @@
             font-weight: 400;
             line-height: 1.5;
             margin-bottom: 30px;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.7), 0 4px 10px rgba(0,0,0,0.5);
             white-space: pre-line;
         }
 
-        /* Fila de botones de contacto rápido superiores */
+        /* Fila de botones de contacto rápido de arriba */
         .social-row {
             display: flex;
             justify-content: center;
@@ -93,23 +94,27 @@
             justify-content: center;
             width: 56px;
             height: 56px;
-            /* Naranja vivo con sutil transparencia sin romper el fondo */
-            background-color: rgba(255, 145, 0, 0.95);
+            /* Degradado sutil naranja */
+            background: linear-gradient(135deg, #ff9e1b 0%, #e67e00 100%);
             color: white;
             border-radius: 14px;
             font-size: 1.4rem;
             text-decoration: none;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-            transition: transform 0.1s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+            transition: all 0.15s ease;
         }
 
-        .icon-btn:active { transform: scale(0.93); }
+        /* Efecto al presionar */
+        .icon-btn:active { 
+            transform: scale(0.94);
+            filter: brightness(1.1);
+        }
 
         .section-title {
             font-size: 1.4rem;
             font-weight: 700;
             margin: 25px 0 10px 0;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.6), 0 4px 12px rgba(0,0,0,0.4);
         }
 
         /* Texto descriptivo bajo Planes Corporativos */
@@ -118,17 +123,18 @@
             font-weight: 400;
             line-height: 1.6;
             margin-bottom: 25px;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.7), 0 4px 10px rgba(0,0,0,0.5);
             white-space: pre-line;
         }
 
-        /* Botones alargados grandes */
+        /* Botones alargados grandes premium */
         .btn-large {
             display: flex;
             align-items: center;
             justify-content: center;
             width: 100%;
-            background-color: rgba(255, 145, 0, 0.95);
+            /* Degradado sutil naranja */
+            background: linear-gradient(135deg, #ff9e1b 0%, #e67e00 100%);
             color: white;
             padding: 16px;
             border-radius: 14px;
@@ -136,8 +142,9 @@
             font-size: 1rem;
             text-decoration: none;
             margin-bottom: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-            transition: transform 0.1s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+            transition: all 0.15s ease;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
 
         .btn-large i {
@@ -145,7 +152,11 @@
             font-size: 1.1rem;
         }
 
-        .btn-large:active { transform: scale(0.97); }
+        /* Efecto al presionar */
+        .btn-large:active { 
+            transform: scale(0.97);
+            filter: brightness(1.1);
+        }
 
         /* Fila inferior para Redes Sociales (Footer) */
         .footer-social {
@@ -160,8 +171,8 @@
             color: white;
             font-size: 1.8rem;
             text-decoration: none;
-            transition: transform 0.1s ease;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+            transition: transform 0.15s ease;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
         }
 
         .footer-icon:active {
