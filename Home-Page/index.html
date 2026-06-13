@@ -155,6 +155,12 @@
         .servicio-item:nth-child(2) { animation-delay: .15s; }
         .servicio-item:nth-child(3) { animation-delay: .25s; }
         .servicio-item:nth-child(4) { animation-delay: .35s; }
+        a.servicio-item:active {
+            background: rgba(255, 145, 0, 0.3);
+            transform: scale(0.93);
+            transition: transform 0.1s ease, background 0.1s ease;
+        }
+        a.servicio-item { cursor: pointer; }
         @keyframes aparecer { to { opacity: 1; transform: translateY(0); } }
 
         /* --- Escena animada del héroe (playa + vuelo) --- */
@@ -306,16 +312,19 @@
             align-items: center;
             justify-content: flex-start;
             width: 100%;
-            background-color: #ff9100;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             color: white;
             padding: 8px 10px;
-            border-radius: 35px;
+            border-radius: 18px;
             font-weight: 600;
             font-size: 1.05rem;
             text-decoration: none;
             margin-bottom: 14px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.35);
-            transition: transform 0.1s ease;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
+            transition: transform 0.1s ease, background 0.2s ease;
         }
         .btn-large .icon-circle {
             display: flex;
@@ -323,14 +332,33 @@
             justify-content: center;
             width: 44px;
             height: 44px;
-            background-color: white;
-            color: #ff9100;
-            border-radius: 50%;
-            margin-right: 18px;
+            background-color: rgba(255, 145, 0, 0.85);
+            color: white;
+            border-radius: 12px;
+            margin-right: 16px;
             font-size: 1.2rem;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            flex-shrink: 0;
         }
-        .btn-large:active { transform: scale(0.97); }
+        .btn-large:active { transform: scale(0.97); background: rgba(255, 145, 0, 0.2); }
+
+        /* Botón de promociones: especial */
+        .btn-promo {
+            background: linear-gradient(135deg, rgba(255, 145, 0, 0.75) 0%, rgba(220, 80, 20, 0.75) 100%);
+            border: 1px solid rgba(255, 180, 60, 0.45);
+        }
+        .btn-promo .icon-circle {
+            background-color: rgba(255, 255, 255, 0.22);
+        }
+        .btn-promo-hint {
+            font-size: 10.5px;
+            font-weight: 400;
+            color: rgba(255, 255, 255, 0.72);
+            text-align: center;
+            margin-top: -8px;
+            margin-bottom: 16px;
+            letter-spacing: 0.2px;
+        }
+        .btn-promo-hint i { color: rgba(255,200,80,0.9); margin-right: 4px; font-size: 9px; }
 
         /* --- Insignias de confianza --- */
         .badges-row {
@@ -486,10 +514,18 @@
 
         <!-- Servicios -->
         <div class="servicios-grid reveal">
-            <div class="servicio-item"><i class="fas fa-umbrella-beach"></i>Tours</div>
-            <div class="servicio-item"><i class="fas fa-plane"></i>Boletería</div>
-            <div class="servicio-item"><i class="fas fa-hotel"></i>Hospedaje</div>
-            <div class="servicio-item"><i class="fas fa-shuttle-van"></i>Traslados</div>
+            <div class="servicio-item">
+                <i class="fas fa-umbrella-beach"></i>Tours
+            </div>
+            <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="servicio-item" style="text-decoration:none;color:white;">
+                <i class="fas fa-plane"></i>Boletería
+            </a>
+            <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="servicio-item" style="text-decoration:none;color:white;">
+                <i class="fas fa-hotel"></i>Hospedaje
+            </a>
+            <div class="servicio-item">
+                <i class="fas fa-shuttle-van"></i>Traslados
+            </div>
         </div>
 
         <!-- Escena animada -->
@@ -587,8 +623,12 @@ Paquetes Vacacionales y Turísticos
 Actividades de Integración Institucional</p>
 
         <div class="reveal">
-            <a href="https://ig.me/m/destinoyeventoslotus360?ref=w55673950" class="btn-large">
-                <span class="icon-circle"><i class="fas fa-tag"></i></span> Promociones
+            <a href="https://ig.me/m/destinoyeventoslotus360?ref=w55673950" class="btn-large btn-promo">
+                <span class="icon-circle"><i class="fas fa-star"></i></span>
+                <span>
+                    <span style="display:block; font-size:1.05rem; font-weight:700;">Ver Promociones 🔥</span>
+                    <span style="display:block; font-size:10px; font-weight:400; opacity:0.85; margin-top:2px;">Escríbenos "PROMOCIONES" y te enviamos todo</span>
+                </span>
             </a>
 
             <a href="mailto:corporativo.lotus360@gmail.com" class="btn-large">
@@ -619,7 +659,7 @@ Actividades de Integración Institucional</p>
             </a>
         </div>
 
-        <p class="footer-copy reveal">© 2025 Destino y Eventos Lotus 360 · Carabobo, Venezuela</p>
+        <p class="footer-copy reveal">© 2026 Destino y Eventos Lotus 360 · Carabobo, Venezuela</p>
 
     </div>
 
