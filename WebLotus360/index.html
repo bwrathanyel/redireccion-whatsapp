@@ -209,6 +209,26 @@
         }
         .info-box i { margin-right: 6px; }
 
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            flex: 0 0 20px;
+            accent-color: #ff9100;
+        }
+        .checkbox-group label { margin: 0; font-size: 14px; font-weight: 600; }
+        .checkbox-group span { display: block; font-size: 12px; color: #ffd9a8; font-weight: 400; margin-top: 2px; }
+
         .btn-gen {
             width: 100%;
             padding: 15px;
@@ -475,7 +495,7 @@
     </div>
 
     <div class="form-group">
-        <label>Adultos</label>
+        <label>Adultos <span style="font-weight:400; color:#ffd9a8;">(12+ años)</span></label>
         <select id="adultos" onchange="toggleAdultosExtra()">
             <option value="1">1</option>
             <option value="2">2</option>
@@ -487,7 +507,7 @@
     </div>
 
     <div class="form-group">
-        <label>Niños</label>
+        <label>Niños <span style="font-weight:400; color:#ffd9a8;">(2 a 11 años)</span></label>
         <select id="ninos" onchange="toggleNinosExtra()">
             <option value="0">0</option>
             <option value="1">1</option>
@@ -499,6 +519,35 @@
     </div>
 
     <div id="contenedor-edades"></div>
+
+    <div class="form-group">
+        <label>Bebés <span style="font-weight:400; color:#ffd9a8;">(0 a 23 meses)</span></label>
+        <select id="bebes" onchange="toggleCuna()">
+            <option value="0" selected>0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+        </select>
+        <span class="hint"><i class="fas fa-info-circle"></i> La mayoría de los hoteles no cobran por bebés en cuna, pero hay que avisar con anticipación.</span>
+    </div>
+
+    <div class="checkbox-group" id="grupo-cuna" style="display:none;">
+        <input type="checkbox" id="necesita-cuna" checked>
+        <label for="necesita-cuna">
+            Necesito cuna en la habitación
+            <span>Le pediremos al hospedaje que la tenga lista para tu llegada.</span>
+        </label>
+    </div>
+
+    <div class="checkbox-group">
+        <input type="checkbox" id="mascota">
+        <label for="mascota">
+            Viajo con mascota
+            <span>Te recomendaremos hospedajes pet-friendly.</span>
+        </label>
+    </div>
+
 
     <div class="form-group">
         <label>Número de habitaciones</label>
@@ -596,6 +645,11 @@
         const info = document.getElementById('info-ocasion');
         const especiales = ['Luna de Miel / Aniversario', 'Cumpleaños'];
         info.style.display = especiales.includes(ocasion) ? 'block' : 'none';
+    }
+
+    function toggleCuna() {
+        const bebes = parseInt(document.getElementById('bebes').value, 10);
+        document.getElementById('grupo-cuna').style.display = (bebes > 0) ? 'flex' : 'none';
     }
 
     function toggleTransporte() {
@@ -718,6 +772,9 @@
         const adultos = getAdultosCount();
         const ninos = getNinosCount();
         const habitaciones = getHabitacionesCount();
+        const bebes = parseInt(document.getElementById('bebes').value, 10);
+        const necesitaCuna = document.getElementById('necesita-cuna').checked;
+        const mascota = document.getElementById('mascota').checked;
 
         const errores = [];
 
@@ -782,6 +839,8 @@
             `Niños: ${ninos}`
         ];
         if (ninos > 0) lineas.push(`Edades: ${edades}`);
+        if (bebes > 0) lineas.push(`Bebés: ${bebes}${necesitaCuna ? ' (necesita cuna)' : ''}`);
+        if (mascota) lineas.push('Viaja con mascota: Sí');
         lineas.push(`Habitaciones solicitadas: ${habitaciones}`);
         if (ocasion !== 'Vacaciones') lineas.push(`Ocasión especial: ${ocasion} 🎉`);
         lineas.push(`Transporte: ${transporte}${transporte === 'Vuelo' ? ' desde ' + origenVuelo : ''}`);
@@ -794,8 +853,9 @@
             Destino: ${dest}<br>
             Hospedaje: ${hosp} · ${planAlimentacion}<br>
             Fechas: ${checkin} al ${checkout} (${noches} noche${noches !== 1 ? 's' : ''})<br>
-            ${adultos} Adulto(s), ${ninos} Niño(s) · ${habitaciones} habitación(es)
+            ${adultos} Adulto(s), ${ninos} Niño(s)${bebes > 0 ? `, ${bebes} Bebé(s)` : ''} · ${habitaciones} habitación(es)
             ${ninos > 0 ? `<br>Edades: ${edades}` : ''}
+            ${mascota ? '<br>🐾 Viaja con mascota' : ''}
             ${ocasion !== 'Vacaciones' ? `<br>Ocasión especial: ${ocasion} 🎉` : ''}
             <br>Transporte: ${transporte}${transporte === 'Vuelo' ? ' desde ' + origenVuelo : ''}
         `;
