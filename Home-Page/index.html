@@ -3,34 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta property="og:title" content="Destino y Eventos Lotus 360">
+    <meta property="og:description" content="¡Escápate con nosotros! Hospedaje, boletería aérea, tours y eventos corporativos en Venezuela.">
+    <meta property="og:image" content="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png">
     <title>Destino y Eventos Lotus 360</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            /* Tu fondo de playa en JPG */
-            background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'); 
-            background-size: cover;
-            background-position: center center;
-            background-attachment: fixed;
-            background-repeat: no-repeat;
+            background: transparent;
             color: white;
             display: flex;
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
-            padding: 35px 20px;
+            padding: 35px 20px 100px;
+            position: relative;
+            overflow-x: hidden;
         }
 
-        /* Capa oscura intermedia segura para la playa */
-        body::before {
-            content: "";
+        /* Fondo real con div — evita el bug de repintado en Android Chrome */
+        #bg {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.3);
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg');
+            background-size: cover;
+            background-position: center 20%;
+            background-repeat: no-repeat;
+            z-index: -2;
+            will-change: transform;
+        }
+        #bg-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(
+                to bottom,
+                rgba(10, 10, 25, 0.25) 0%,
+                rgba(10, 10, 25, 0.45) 50%,
+                rgba(10, 10, 25, 0.72) 100%
+            );
             z-index: -1;
+            pointer-events: none;
+        }
+        @media (min-width: 768px) {
+            #bg {
+                background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg');
+                background-position: center center;
+            }
+        }
+
+        /* --- Partículas flotantes --- */
+        .particula {
+            position: fixed;
+            bottom: -10px;
+            width: 6px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            animation: flotar linear infinite;
+            z-index: 0;
+            pointer-events: none;
+        }
+        @keyframes flotar {
+            0%   { transform: translateY(0) translateX(0); opacity: 0; }
+            10%  { opacity: .6; }
+            90%  { opacity: .6; }
+            100% { transform: translateY(-100vh) translateX(24px); opacity: 0; }
         }
 
         .container {
@@ -40,22 +83,34 @@
             z-index: 1;
             display: flex;
             flex-direction: column;
-            min-height: calc(100vh - 70px);
         }
 
-        .main-content {
-            flex: 1;
+        /* --- Logo con anillo de pulso --- */
+        .logo-wrap {
+            position: relative;
+            width: 108px;
+            margin: 0 auto 18px auto;
+        }
+        .logo-wrap::before {
+            content: '';
+            position: absolute;
+            inset: -6px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 145, 0, 0.55);
+            animation: pulso-anillo 2.4s ease-out infinite;
+        }
+        @keyframes pulso-anillo {
+            0%   { transform: scale(0.9); opacity: .9; }
+            100% { transform: scale(1.4); opacity: 0; }
         }
 
-        /* Contenedor del logo oficial */
         .logo-profile {
             width: 100px;
             height: 100px;
             border-radius: 50%;
-            border: 3px dashed #ff9100;
+            border: 3px solid #ff9100;
             padding: 4px;
             background-color: white;
-            margin: 0 auto 20px auto;
             object-fit: contain;
             display: block;
             box-shadow: 0 4px 15px rgba(0,0,0,0.35);
@@ -64,27 +119,128 @@
         h1 {
             font-size: 1.6rem;
             font-weight: 700;
-            margin-bottom: 12px;
+            margin-bottom: 6px;
             text-shadow: 0 2px 5px rgba(0,0,0,0.8);
         }
 
         .subtitle {
-            font-size: 0.95rem;
+            font-size: 0.92rem;
             font-weight: 400;
             line-height: 1.5;
-            margin-bottom: 30px;
+            margin-bottom: 18px;
             text-shadow: 0 2px 5px rgba(0,0,0,0.8);
-            white-space: pre-line;
+            color: #ffd9a8;
         }
 
-        /* FILA SUPERIOR: Círculos perfectos flotantes */
+        /* --- Grid de servicios --- */
+        .servicios-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 18px;
+        }
+        .servicio-item {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 10px 4px;
+            font-size: 11px;
+            font-weight: 600;
+            opacity: 0;
+            transform: translateY(10px);
+            animation: aparecer .5s ease forwards;
+        }
+        .servicio-item i { display: block; font-size: 18px; color: #ff9100; margin-bottom: 4px; }
+        .servicio-item:nth-child(1) { animation-delay: .05s; }
+        .servicio-item:nth-child(2) { animation-delay: .15s; }
+        .servicio-item:nth-child(3) { animation-delay: .25s; }
+        .servicio-item:nth-child(4) { animation-delay: .35s; }
+        @keyframes aparecer { to { opacity: 1; transform: translateY(0); } }
+
+        /* --- Escena animada del héroe (playa + vuelo) --- */
+        .hero-escena {
+            position: relative;
+            width: 100%;
+            height: 110px;
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 14px;
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+        }
+        .hero-escena svg { width: 100%; height: 100%; display: block; }
+
+        @keyframes ola { to { transform: translateX(-100px); } }
+        .ola1 { animation: ola 6s linear infinite; }
+        .ola2 { animation: ola 9s linear infinite reverse; }
+
+        @keyframes brillo { 0%, 100% { opacity: 1; } 50% { opacity: .8; } }
+        .sol { animation: brillo 3s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+        @keyframes viento { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+        .hojas { animation: viento 4s ease-in-out infinite alternate; transform-origin: 10px 20px; }
+
+        @keyframes volar-avion {
+            0%   { transform: translate(-10px, 18px) rotate(6deg); opacity: 0; }
+            12%  { opacity: 1; }
+            85%  { opacity: 1; }
+            100% { transform: translate(380px, -6px) rotate(6deg); opacity: 0; }
+        }
+        .avion-hero { animation: volar-avion 9s linear infinite; }
+
+        /* --- Ticker de destinos --- */
+        .ticker-wrap {
+            overflow: hidden;
+            white-space: nowrap;
+            border-top: 1px solid rgba(255,255,255,.15);
+            border-bottom: 1px solid rgba(255,255,255,.15);
+            padding: 8px 0;
+            margin-bottom: 16px;
+        }
+        .ticker {
+            display: flex;
+            width: max-content;
+            animation: desplazar 26s linear infinite;
+            font-size: 12.5px;
+            font-weight: 600;
+            color: #ffd9a8;
+        }
+        .ticker span { padding-right: 18px; }
+        @keyframes desplazar { to { transform: translateX(-50%); } }
+
+        /* --- Indicador de horario --- */
+        .estado-box {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 30px;
+            padding: 8px 16px;
+            font-size: 12.5px;
+            font-weight: 600;
+            margin: 0 auto 18px auto;
+        }
+        .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+        .dot.online {
+            background: #25D366;
+            animation: pulso-dot 1.8s infinite;
+        }
+        .dot.offline { background: #aaa; }
+        @keyframes pulso-dot {
+            0%   { box-shadow: 0 0 0 0 rgba(37,211,102,.6); }
+            70%  { box-shadow: 0 0 0 8px rgba(37,211,102,0); }
+            100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
+        }
+
+        /* --- Fila de iconos de contacto --- */
         .social-row {
             display: flex;
             justify-content: center;
             gap: 18px;
-            margin-bottom: 35px;
+            margin-bottom: 24px;
         }
-
         .icon-btn {
             display: flex;
             align-items: center;
@@ -99,13 +255,39 @@
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
             transition: transform 0.1s ease;
         }
-
         .icon-btn:active { transform: scale(0.92); }
+
+        /* --- CTAs principales: Hospedaje / Boletería --- */
+        .cta-grid {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 28px;
+        }
+        .cta-card {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 18px;
+            padding: 20px 10px;
+            text-decoration: none;
+            color: #fff;
+            transition: transform .15s ease, background .2s ease;
+            text-align: center;
+        }
+        .cta-card:active { transform: scale(0.96); background: rgba(255, 145, 0, 0.28); }
+        .cta-card i {
+            font-size: 30px;
+            color: #ff9100;
+            margin-bottom: 8px;
+            display: block;
+        }
+        .cta-card .titulo { font-weight: 700; font-size: 15px; margin-bottom: 3px; }
+        .cta-card .desc { font-size: 11px; color: #ffd9a8; line-height: 1.3; }
 
         .section-title {
             font-size: 1.4rem;
             font-weight: 700;
-            margin: 25px 0 10px 0;
+            margin: 10px 0 10px 0;
             text-shadow: 0 2px 5px rgba(0,0,0,0.8);
         }
 
@@ -113,12 +295,12 @@
             font-size: 0.95rem;
             font-weight: 400;
             line-height: 1.6;
-            margin-bottom: 25px;
+            margin-bottom: 22px;
             text-shadow: 0 2px 5px rgba(0,0,0,0.8);
             white-space: pre-line;
         }
 
-        /* BOTONES LARGOS: Estilo Píldora Premium */
+        /* --- Botones largos --- */
         .btn-large {
             display: flex;
             align-items: center;
@@ -135,8 +317,6 @@
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.35);
             transition: transform 0.1s ease;
         }
-
-        /* Círculo blanco interno que hace resaltar el icono en naranja */
         .btn-large .icon-circle {
             display: flex;
             align-items: center;
@@ -150,18 +330,69 @@
             font-size: 1.2rem;
             box-shadow: 0 2px 5px rgba(0,0,0,0.15);
         }
-
         .btn-large:active { transform: scale(0.97); }
 
-        /* FOOTER: Iconos con fondo circular semi-transparente */
+        /* --- Insignias de confianza --- */
+        .badges-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin: 6px 0 28px 0;
+        }
+        .badge {
+            position: relative;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, .18);
+            border-radius: 20px;
+            padding: 6px 13px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .badge i { color: #ff9100; margin-right: 4px; }
+        .badge::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -60%;
+            width: 40%; height: 100%;
+            background: linear-gradient(120deg, transparent, rgba(255,255,255,0.35), transparent);
+            animation: brillo-badge 5s ease-in-out infinite;
+        }
+        .badge:nth-child(2)::after { animation-delay: 1.2s; }
+        .badge:nth-child(3)::after { animation-delay: 2.4s; }
+        @keyframes brillo-badge {
+            0%   { left: -60%; }
+            50%  { left: 130%; }
+            100% { left: 130%; }
+        }
+
+        /* --- Divisor decorativo --- */
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 4px 0 18px 0;
+            opacity: 0.4;
+        }
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(255,255,255,0.5);
+        }
+        .divider i { font-size: 10px; color: #ff9100; }
+
+        /* --- Footer social --- */
         .footer-social {
             display: flex;
             justify-content: center;
             gap: 25px;
-            margin-top: 40px;
+            margin-top: 10px;
             padding-bottom: 10px;
         }
-
         .footer-icon {
             display: flex;
             align-items: center;
@@ -176,44 +407,186 @@
             transition: transform 0.1s ease, background-color 0.1s ease;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
-
         .footer-icon:active {
             transform: scale(0.88);
             background-color: #ff9100;
+        }
+
+        /* --- Copyright footer --- */
+        .footer-copy {
+            margin-top: 20px;
+            font-size: 10px;
+            color: rgba(255,255,255,0.35);
+            letter-spacing: 0.5px;
+        }
+
+        /* --- Botón flotante de WhatsApp --- */
+        .wa-float {
+            position: fixed;
+            bottom: 18px;
+            right: 18px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #25D366;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            text-decoration: none;
+            z-index: 20;
+            box-shadow: 0 6px 18px rgba(0,0,0,.45);
+            animation: pulso-wa 2.6s infinite;
+        }
+        @keyframes pulso-wa {
+            0%, 100% { box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 0 rgba(37,211,102,.5); }
+            50%      { box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 10px rgba(37,211,102,0); }
+        }
+
+        /* --- Animaciones de aparición al hacer scroll --- */
+        .reveal {
+            opacity: 0;
+            transform: translateY(16px);
+            transition: opacity .6s ease, transform .6s ease;
+        }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+
+        @media (prefers-reduced-motion: reduce) {
+            .particula, .logo-wrap::before, .ola1, .ola2, .sol, .hojas, .avion-hero,
+            .ticker, .dot.online, .wa-float {
+                animation: none !important;
+            }
+            .reveal { opacity: 1; transform: none; transition: none; }
         }
     </style>
 </head>
 <body>
 
+    <!-- Fondo fijo: div real para evitar bug de repintado en Android -->
+    <div id="bg"></div>
+    <div id="bg-overlay"></div>
+
+    <!-- Partículas decorativas -->
+    <div class="particula" style="left:8%;  animation-duration: 14s; animation-delay: 0s;"></div>
+    <div class="particula" style="left:22%; animation-duration: 18s; animation-delay: 3s;"></div>
+    <div class="particula" style="left:40%; animation-duration: 16s; animation-delay: 6s;"></div>
+    <div class="particula" style="left:58%; animation-duration: 20s; animation-delay: 1s;"></div>
+    <div class="particula" style="left:75%; animation-duration: 15s; animation-delay: 4s;"></div>
+    <div class="particula" style="left:90%; animation-duration: 19s; animation-delay: 8s;"></div>
+
     <div class="container">
-        <div class="main-content">
+
+        <div class="logo-wrap">
             <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
-            
-            <h1>Destino y Eventos Lotus 360</h1>
-            <p class="subtitle">¡Escápate con Nosotros!
-Tours para la playa o montaña
-Servicio de Boletería Aérea y Marítima
-Reservaciones de Hospedaje & Hotelería
-Servicios de Traslado</p>
+        </div>
 
-            <div class="social-row">
-                <a href="https://bwrathanyel.github.io/redireccion-whatsapp/" class="icon-btn" title="WhatsApp">
-                    <i class="fab fa-whatsapp"></i>
-                </a>
-                <a href="mailto:corporativo.lotus360@gmail.com" class="icon-btn" title="Correo">
-                    <i class="far fa-envelope"></i>
-                </a>
-                <a href="tel:+584244634041" class="icon-btn" title="Teléfono">
-                    <i class="fas fa-phone-alt"></i>
-                </a>
+        <h1>Destino y Eventos Lotus 360</h1>
+        <p class="subtitle">¡Escápate con Nosotros! Tu agencia de viajes #1 en Carabobo</p>
+
+        <!-- Servicios -->
+        <div class="servicios-grid reveal">
+            <div class="servicio-item"><i class="fas fa-umbrella-beach"></i>Tours</div>
+            <div class="servicio-item"><i class="fas fa-plane"></i>Boletería</div>
+            <div class="servicio-item"><i class="fas fa-hotel"></i>Hospedaje</div>
+            <div class="servicio-item"><i class="fas fa-shuttle-van"></i>Traslados</div>
+        </div>
+
+        <!-- Escena animada -->
+        <div class="hero-escena reveal">
+            <svg viewBox="0 0 400 110" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+                <defs>
+                    <linearGradient id="cieloHero" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#ff9a56"/>
+                        <stop offset="55%" stop-color="#ff6b6b"/>
+                        <stop offset="100%" stop-color="#3a1c71"/>
+                    </linearGradient>
+                    <linearGradient id="marHero" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#1e6f9a"/>
+                        <stop offset="100%" stop-color="#0c2d4a"/>
+                    </linearGradient>
+                </defs>
+                <rect width="400" height="110" fill="url(#cieloHero)"/>
+                <circle class="sol" cx="325" cy="32" r="16" fill="#ffe28a"/>
+                <path class="avion-hero" d="M0,0 L20,5 L0,10 L5,5 Z" fill="#ffffff"/>
+                <rect y="60" width="400" height="50" fill="url(#marHero)"/>
+                <path class="ola ola1" d="M0,65 Q50,55 100,65 T200,65 T300,65 T400,65 T500,65 V110 H0 Z" fill="rgba(255,255,255,0.18)"/>
+                <path class="ola ola2" d="M0,75 Q50,68 100,75 T200,75 T300,75 T400,75 T500,75 V110 H0 Z" fill="rgba(255,255,255,0.12)"/>
+                <g transform="translate(42,28)">
+                    <path d="M0,82 C-3,55 4,35 9,18" stroke="#5a3825" stroke-width="5" fill="none" stroke-linecap="round"/>
+                    <g class="hojas">
+                        <path d="M9,18 C-12,9 -28,15 -34,26" fill="#2f7d4f"/>
+                        <path d="M9,18 C30,7 46,15 52,29" fill="#3a9863"/>
+                        <path d="M9,18 C0,3 6,-10 17,-15" fill="#2f7d4f"/>
+                        <path d="M9,18 C20,6 36,1 42,-7" fill="#3a9863"/>
+                    </g>
+                </g>
+            </svg>
+        </div>
+
+        <!-- Ticker de destinos -->
+        <div class="ticker-wrap reveal">
+            <div class="ticker">
+                <span>🏖️ Isla de Margarita</span>
+                <span>🐠 Morrocoy</span>
+                <span>🏝️ Los Roques</span>
+                <span>🚡 Mérida</span>
+                <span>💧 Canaima</span>
+                <span>⚡ Catatumbo</span>
+                <span>🌍 Destinos Internacionales</span>
+                <span>🏖️ Isla de Margarita</span>
+                <span>🐠 Morrocoy</span>
+                <span>🏝️ Los Roques</span>
+                <span>🚡 Mérida</span>
+                <span>💧 Canaima</span>
+                <span>⚡ Catatumbo</span>
+                <span>🌍 Destinos Internacionales</span>
             </div>
+        </div>
 
-            <div class="section-title">Planes Corporativos</div>
-            
-            <p class="corporate-text">Eventos Corporativos y Fiestas Temáticas
+        <!-- Estado de atención -->
+        <div class="estado-box reveal">
+            <span class="dot" id="estado-dot"></span>
+            <span id="estado-texto">Verificando disponibilidad...</span>
+        </div>
+
+        <!-- Contacto rápido -->
+        <div class="social-row reveal">
+            <!-- WhatsApp: mismo destino que el botón flotante -->
+            <a href="https://bwrathanyel.github.io/redireccion-whatsapp/" class="icon-btn" title="WhatsApp">
+                <i class="fab fa-whatsapp"></i>
+            </a>
+            <a href="mailto:corporativo.lotus360@gmail.com" class="icon-btn" title="Correo">
+                <i class="far fa-envelope"></i>
+            </a>
+            <a href="tel:+584244634041" class="icon-btn" title="Teléfono">
+                <i class="fas fa-phone-alt"></i>
+            </a>
+        </div>
+
+        <!-- CTAs principales: Hospedaje y Boletería -->
+        <div class="cta-grid reveal">
+            <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="cta-card">
+                <i class="fas fa-hotel"></i>
+                <div class="titulo">Cotizar Hospedaje</div>
+                <div class="desc">Hoteles, posadas y apartamentos en tu destino soñado</div>
+            </a>
+            <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="cta-card">
+                <i class="fas fa-plane-departure"></i>
+                <div class="titulo">Cotizar Boletos</div>
+                <div class="desc">Vuelos nacionales e internacionales al mejor precio</div>
+            </a>
+        </div>
+
+        <div class="divider reveal"><i class="fas fa-circle"></i></div>
+
+        <div class="section-title reveal">Planes Corporativos</div>
+
+        <p class="corporate-text reveal">Eventos Corporativos y Fiestas Temáticas
 Paquetes Vacacionales y Turísticos
 Actividades de Integración Institucional</p>
 
+        <div class="reveal">
             <a href="https://ig.me/m/destinoyeventoslotus360?ref=w55673950" class="btn-large">
                 <span class="icon-circle"><i class="fas fa-tag"></i></span> Promociones
             </a>
@@ -227,7 +600,14 @@ Actividades de Integración Institucional</p>
             </a>
         </div>
 
-        <div class="footer-social">
+        <!-- Insignias de confianza -->
+        <div class="badges-row reveal">
+            <span class="badge"><i class="fas fa-trophy"></i>Líderes en Venezuela</span>
+            <span class="badge"><i class="fas fa-star"></i>+800K seguidores en redes</span>
+            <span class="badge"><i class="fas fa-globe-americas"></i>Alcance Nacional e Internacional</span>
+        </div>
+
+        <div class="footer-social reveal">
             <a href="https://www.facebook.com/share/1bxT1wQAzW/" target="_blank" class="footer-icon" title="Facebook">
                 <i class="fab fa-facebook-f"></i>
             </a>
@@ -238,7 +618,53 @@ Actividades de Integración Institucional</p>
                 <i class="fab fa-tiktok"></i>
             </a>
         </div>
+
+        <p class="footer-copy reveal">© 2025 Destino y Eventos Lotus 360 · Carabobo, Venezuela</p>
+
     </div>
+
+    <!-- Botón flotante de WhatsApp — mismo link que el ícono de arriba -->
+    <a href="https://bwrathanyel.github.io/redireccion-whatsapp/" class="wa-float" title="Escríbenos por WhatsApp">
+        <i class="fab fa-whatsapp"></i>
+    </a>
+
+    <script>
+        // --- Indicador de horario de atención (hora de Venezuela, UTC-4) ---
+        function actualizarEstado() {
+            const ahora = new Date();
+            const utcMs = ahora.getTime() + (ahora.getTimezoneOffset() * 60000);
+            const ve = new Date(utcMs - 4 * 3600000);
+            const dia = ve.getDay();
+            const hora = ve.getHours();
+            const enHorario = dia >= 1 && dia <= 6 && hora >= 8 && hora < 19;
+
+            const dot = document.getElementById('estado-dot');
+            const texto = document.getElementById('estado-texto');
+
+            if (enHorario) {
+                dot.className = 'dot online';
+                texto.textContent = 'Asesores en línea ahora · Respuesta rápida';
+            } else {
+                dot.className = 'dot offline';
+                texto.textContent = 'Fuera de horario · Escríbenos y te respondemos a primera hora';
+            }
+        }
+        actualizarEstado();
+
+        // --- Animaciones de aparición al hacer scroll ---
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) entry.target.classList.add('visible');
+            });
+        }, { threshold: 0.15 });
+
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+        // --- Efecto sutil de paralaje en el fondo ---
+        window.addEventListener('scroll', () => {
+            document.body.style.backgroundPositionY = `calc(20% + ${window.scrollY * 0.25}px)`;
+        }, { passive: true });
+    </script>
 
 </body>
 </html>
