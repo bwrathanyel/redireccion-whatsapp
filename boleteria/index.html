@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta property="og:title" content="Lotus 360 - Cotiza tu Boleto">
+    <meta property="og:description" content="Vuelos nacionales e internacionales al mejor precio, con asesoría personalizada.">
+    <meta property="og:image" content="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png">
     <title>Lotus 360 - Cotiza tu Boleto</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -10,111 +14,202 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg') no-repeat center center fixed;
-            background-size: cover;
+            background: #0a1020;
             min-height: 100vh;
             display: flex;
             justify-content: center;
-            align-items: center;
-            padding: 20px;
+            align-items: flex-start;
+            padding: 28px 16px 60px;
+            position: relative;
+            overflow-x: hidden;
         }
 
+        #bg {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            min-height: 100vh;
+            background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg');
+            background-size: cover;
+            background-position: center 20%;
+            background-repeat: no-repeat;
+            z-index: -2;
+        }
+        #bg-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            min-height: 100vh;
+            background: linear-gradient(
+                160deg,
+                rgba(8, 8, 22, 0.72) 0%,
+                rgba(15, 15, 35, 0.80) 55%,
+                rgba(8, 8, 22, 0.88) 100%
+            );
+            z-index: -1;
+            pointer-events: none;
+        }
+        @media (min-width: 768px) {
+            #bg {
+                background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg');
+                background-position: center center;
+            }
+        }
+
+        /* ── Card principal ── */
         .card {
-            background: rgba(0, 0, 0, 0.45);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
             width: 100%;
-            max-width: 450px;
-            padding: 25px;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            text-align: center;
+            max-width: 460px;
+            z-index: 1;
             color: #fff;
         }
 
-        @supports not (backdrop-filter: blur(1px)) {
-            .card { background: rgba(15, 15, 15, 0.85); }
+        /* ── Header ── */
+        .card-header {
+            text-align: center;
+            margin-bottom: 22px;
         }
 
+        .logo-wrap {
+            position: relative;
+            width: 88px;
+            margin: 0 auto 14px;
+        }
+        .logo-wrap::before {
+            content: '';
+            position: absolute;
+            inset: -5px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 145, 0, 0.5);
+            animation: pulso-anillo 2.4s ease-out infinite;
+        }
+        @keyframes pulso-anillo {
+            0%   { transform: scale(0.9); opacity: .9; }
+            100% { transform: scale(1.4); opacity: 0; }
+        }
         .logo-profile {
-            width: 100px;
-            height: 100px;
+            width: 80px; height: 80px;
             border-radius: 50%;
             border: 3px solid #ff9100;
-            margin-bottom: 10px;
-            object-fit: cover;
+            padding: 3px;
+            background: #fff;
+            object-fit: contain;
+            display: block;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.4);
         }
 
-        h2 { color: #fff; margin-bottom: 4px; }
-
-        .subtitle {
+        .card-header h2 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.7);
+        }
+        .card-header .subtitle {
             color: #ffd9a8;
-            font-size: 14px;
-            margin-bottom: 18px;
+            font-size: 13px;
         }
 
-        /* --- Ruta de vuelo (elemento distintivo) --- */
+        /* ── Estado online ── */
+        .estado-box {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 30px;
+            padding: 7px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 10px auto 0;
+        }
+        .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .dot.online { background: #25D366; animation: pulso-dot 1.8s infinite; }
+        .dot.offline { background: #888; }
+        @keyframes pulso-dot {
+            0%   { box-shadow: 0 0 0 0 rgba(37,211,102,.6); }
+            70%  { box-shadow: 0 0 0 7px rgba(37,211,102,0); }
+            100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
+        }
+
+        /* ── Barra de progreso ── */
+        .progreso-wrap {
+            width: 100%;
+            height: 5px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0 4px;
+        }
+        .progreso-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #ff9100, #ffd166);
+            border-radius: 10px;
+            transition: width .35s ease;
+        }
+        .progreso-texto {
+            font-size: 10.5px;
+            color: rgba(255,217,168,0.7);
+            text-align: right;
+            margin-bottom: 18px;
+            font-weight: 600;
+            letter-spacing: .3px;
+        }
+
+        /* ── Ruta visual ── */
         .ruta-box {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
-            margin-bottom: 20px;
-            padding: 14px 10px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 14px;
+            margin-bottom: 22px;
+            padding: 16px 12px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,145,0,0.2);
+            border-radius: 16px;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
         }
-
         .ruta-punto { flex: 0 0 auto; text-align: center; min-width: 64px; }
-
         .ruta-punto .codigo {
-            font-size: 20px;
+            font-size: 22px;
             font-weight: 800;
-            color: #fff;
             letter-spacing: 1px;
-            line-height: 1.1;
+            line-height: 1;
         }
-
         .ruta-punto .ciudad {
             font-size: 10px;
             color: #ffd9a8;
             text-transform: uppercase;
             letter-spacing: .5px;
-            margin-top: 2px;
+            margin-top: 4px;
             display: block;
             max-width: 80px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-
         .ruta-linea {
             flex: 1;
             position: relative;
             height: 2px;
-            background: repeating-linear-gradient(to right, rgba(255,255,255,.5) 0 6px, transparent 6px 12px);
+            background: repeating-linear-gradient(to right, rgba(255,255,255,.4) 0 5px, transparent 5px 10px);
             margin: 0 6px;
             overflow: visible;
         }
-
         .ruta-linea i {
             position: absolute;
-            top: -7px;
-            left: 0;
+            top: -7px; left: 0;
             color: #ff9100;
             font-size: 14px;
             animation: vuelo 3.5s linear infinite;
         }
-
         .ruta-linea.vuelta i.regreso {
             transform: scaleX(-1);
             animation-direction: reverse;
             color: #ffd9a8;
             top: 6px;
         }
-
         @keyframes vuelo {
             0%   { left: 0%; opacity: 0; }
             8%   { opacity: 1; }
@@ -122,160 +217,284 @@
             100% { left: 92%; opacity: 0; }
         }
 
-        @media (prefers-reduced-motion: reduce) {
-            .ruta-linea i { animation: none; left: 45%; opacity: 1; }
+        /* ── Secciones del formulario ── */
+        .form-section {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 18px;
+            padding: 16px;
+            margin-bottom: 14px;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+        .form-section-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #ff9100;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .form-section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(255,145,0,0.2);
         }
 
-        .form-group { margin-bottom: 15px; text-align: left; }
+        .form-group { margin-bottom: 13px; text-align: left; }
+        .form-group:last-child { margin-bottom: 0; }
 
         .form-group label {
             display: block;
             font-weight: 600;
-            margin-bottom: 6px;
-            color: #fff;
-            font-size: 14px;
-            letter-spacing: .3px;
+            margin-bottom: 7px;
+            color: rgba(255,255,255,0.9);
+            font-size: 13px;
+            letter-spacing: .2px;
+        }
+        .form-group label i {
+            color: #ff9100;
+            margin-right: 6px;
+            width: 16px;
+            text-align: center;
         }
 
-        select, input, textarea {
+        /* ── Inputs con estilo oscuro ── */
+        select, input[type="text"], input[type="date"],
+        input[type="number"], textarea {
             width: 100%;
-            padding: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 10px;
-            font-size: 16px;
-            background: rgba(255, 255, 255, 0.92);
-            color: #222;
+            padding: 12px 14px;
+            border: 1.5px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            font-size: 15px;
+            background: rgba(10, 12, 28, 0.65);
+            color: #fff;
             font-family: inherit;
+            color-scheme: dark;
+            transition: border-color .2s, background .2s, box-shadow .2s;
         }
-
-        textarea { resize: vertical; min-height: 70px; }
-
+        select {
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23ff9100' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-color: rgba(10, 12, 28, 0.65);
+            padding-right: 40px;
+        }
+        select optgroup { background: #0d0f22; color: #ff9100; font-weight: 700; font-style: normal; }
+        select option { background: #0d0f22; color: #fff; }
+        input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.3); }
         select:focus, input:focus, textarea:focus {
             outline: none;
             border-color: #ff9100;
-            box-shadow: 0 0 0 3px rgba(255, 145, 0, 0.25);
+            background: rgba(20, 16, 5, 0.7);
+            box-shadow: 0 0 0 3px rgba(255,145,0,0.15);
         }
-
-        .extra-input { margin-top: 10px; }
-
+        textarea { resize: vertical; min-height: 70px; }
+        .extra-input { margin-top: 8px; }
         .row { display: flex; gap: 10px; }
         .row .form-group { flex: 1; }
-
         .hint {
-            font-size: 12px;
-            color: #ffd9a8;
+            font-size: 11.5px;
+            color: rgba(255,217,168,0.75);
             margin-top: 6px;
             line-height: 1.4;
             display: block;
         }
 
+        /* ── Info pasaporte ── */
         .info-box {
             display: none;
-            background: rgba(255, 145, 0, 0.12);
-            border: 1px solid rgba(255, 145, 0, 0.4);
+            background: rgba(255,145,0,0.1);
+            border: 1px solid rgba(255,145,0,0.35);
             color: #ffe3bd;
             padding: 10px 12px;
             border-radius: 10px;
-            font-size: 13px;
+            font-size: 12.5px;
             text-align: left;
-            margin-bottom: 15px;
+            margin-top: 10px;
             line-height: 1.4;
         }
         .info-box i { margin-right: 6px; }
 
-        /* Checkbox de equipaje */
+        /* ── Tipo de viaje segmentado ── */
+        .segmented {
+            display: flex;
+            background: rgba(10, 12, 28, 0.65);
+            border: 1.5px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 4px;
+            gap: 4px;
+        }
+        .segmented input { display: none; }
+        .segmented label {
+            flex: 1;
+            text-align: center;
+            padding: 10px 6px;
+            border-radius: 9px;
+            font-weight: 600;
+            font-size: 13.5px;
+            color: rgba(255,255,255,0.6);
+            cursor: pointer;
+            transition: background .2s, color .2s;
+            margin: 0;
+        }
+        .segmented input:checked + label {
+            background: linear-gradient(135deg, #ff9100, #ff5e1a);
+            color: #fff;
+            box-shadow: 0 3px 10px rgba(255,100,0,0.3);
+        }
+
+        /* ── Checkbox equipaje ── */
         .checkbox-group {
             display: flex;
             align-items: center;
-            gap: 10px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 10px;
-            padding: 12px;
-            margin-bottom: 15px;
+            gap: 12px;
+            background: rgba(10, 12, 28, 0.65);
+            border: 1.5px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 13px;
             text-align: left;
         }
         .checkbox-group input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
+            width: 20px; height: 20px;
             flex: 0 0 20px;
             accent-color: #ff9100;
         }
-        .checkbox-group label { margin: 0; font-size: 14px; font-weight: 600; }
-        .checkbox-group span { display: block; font-size: 12px; color: #ffd9a8; font-weight: 400; margin-top: 2px; }
+        .checkbox-group label { margin: 0; font-size: 13.5px; font-weight: 600; }
+        .checkbox-group label i { color: #ff9100; margin-right: 6px; }
+        .checkbox-group span { display: block; font-size: 11.5px; color: rgba(255,217,168,0.7); font-weight: 400; margin-top: 2px; }
 
-        .btn-gen {
-            width: 100%;
-            padding: 15px;
-            background: #ff9100;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-weight: bold;
-            font-size: 16px;
-            cursor: pointer;
-            transition: transform 0.15s ease, background 0.2s ease;
-            margin-top: 5px;
-        }
-
-        .btn-gen:active { transform: scale(0.98); }
-
-        .btn-gen:disabled {
-            background: #c97300;
-            cursor: not-allowed;
-            opacity: 0.85;
-        }
-
+        /* ── Error ── */
         .error-msg {
             display: none;
-            background: rgba(255, 70, 70, 0.15);
-            border: 1px solid rgba(255, 90, 90, 0.5);
+            background: rgba(255,60,60,0.12);
+            border: 1px solid rgba(255,80,80,0.4);
             color: #ffd6d6;
-            padding: 10px 12px;
-            border-radius: 10px;
+            padding: 10px 13px;
+            border-radius: 12px;
             font-size: 13px;
             text-align: left;
-            margin-bottom: 15px;
-            line-height: 1.4;
+            margin-bottom: 14px;
+            line-height: 1.5;
         }
 
+        /* ── Botón generar ── */
+        .btn-gen {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #ff9100, #ff5e1a);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-weight: 700;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform .15s, box-shadow .2s;
+            box-shadow: 0 6px 22px rgba(255,100,0,0.35);
+            letter-spacing: .3px;
+        }
+        .btn-gen:active { transform: scale(0.98); }
+        .btn-gen:disabled {
+            opacity: 0.75;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* ── Resultado ── */
         #resultado {
             display: none;
-            margin-top: 20px;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.15);
+            margin-top: 16px;
+            padding: 18px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(37,211,102,0.35);
             color: #fff;
-            border-radius: 15px;
-            border-left: 5px solid #25D366;
+            border-radius: 16px;
+            border-left: 4px solid #25D366;
             text-align: left;
+            font-size: 13.5px;
+            line-height: 1.6;
         }
-
         #resultado b { color: #ffd9a8; }
-
         .wa-btn {
-            display: block;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
             background: #25D366;
             color: white;
             padding: 15px;
-            border-radius: 10px;
+            border-radius: 13px;
             text-decoration: none;
-            font-weight: bold;
-            margin-top: 15px;
-            font-size: 16px;
+            font-weight: 700;
+            margin-top: 14px;
+            font-size: 15px;
+            box-shadow: 0 5px 18px rgba(37,211,102,0.3);
         }
 
-        .wa-btn i { margin-right: 6px; }
+        /* ── Footer ── */
+        .footer-copy {
+            margin-top: 20px;
+            font-size: 10px;
+            color: rgba(255,255,255,0.3);
+            letter-spacing: .5px;
+            text-align: center;
+        }
+
+        /* ── Tip del viajero ── */
+        .tip-box {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            background: rgba(255,145,0,0.08);
+            border: 1px solid rgba(255,145,0,0.2);
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+            font-size: 12.5px;
+            color: rgba(255,217,168,0.9);
+            line-height: 1.5;
+            animation: fadeInTip .5s ease;
+        }
+        .tip-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+        @keyframes fadeInTip { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+
+        @media (prefers-reduced-motion: reduce) {
+            .ruta-linea i, .logo-wrap::before, .dot.online { animation: none !important; }
+            .ruta-linea i { left: 45%; opacity: 1; }
+        }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
-    <h2>Destinos y Eventos Lotus 360</h2>
-    <p class="subtitle">Boletería Aérea ✈️ Te llevamos a donde quieras</p>
+    <div id="bg"></div>
+    <div id="bg-overlay"></div>
 
-    <!-- Ruta visual dinámica -->
+<div class="card">
+
+    <!-- Header -->
+    <div class="card-header">
+        <div class="logo-wrap">
+            <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
+        </div>
+        <h2>Destino y Eventos Lotus 360</h2>
+        <p class="subtitle">Boletería Aérea ✈️ · Te llevamos a donde quieras</p>
+        <div class="estado-box">
+            <span class="dot" id="estado-dot"></span>
+            <span id="estado-texto">Verificando disponibilidad...</span>
+        </div>
+    </div>
+
+    <!-- Progreso -->
+    <div class="progreso-wrap"><div class="progreso-bar" id="progreso-bar"></div></div>
+    <div class="progreso-texto" id="progreso-texto">0 % completado</div>
+
+    <!-- Ruta visual -->
     <div class="ruta-box">
         <div class="ruta-punto">
             <span class="codigo" id="origen-codigo">VLN</span>
@@ -290,362 +509,458 @@
         </div>
     </div>
 
+    <!-- Error -->
     <div id="error-box" class="error-msg"></div>
 
-    <div class="form-group">
-        <label>Tipo de viaje</label>
-        <select id="tipo-viaje" onchange="toggleRegreso()">
-            <option value="ida">Solo Ida</option>
-            <option value="ida-vuelta" selected>Ida y Vuelta</option>
-        </select>
-    </div>
+    <!-- Sección 1: Tipo y ruta -->
+    <div class="form-section">
+        <div class="form-section-title"><i class="fas fa-route"></i> Vuelo</div>
 
-    <div class="form-group">
-        <label>Origen</label>
-        <select id="origen" onchange="actualizarRuta('origen')">
-            <option value="VLN|Valencia">Valencia (VLN)</option>
-            <option value="CCS|Caracas">Caracas (CCS)</option>
-            <option value="MAR|Maracaibo">Maracaibo (MAR)</option>
-            <option value="BLA|Barcelona/Pto. La Cruz">Barcelona / Pto. La Cruz (BLA)</option>
-            <option value="MCY|Maracay">Maracay (MCY)</option>
-            <option value="OTRO|Otro origen">Otro (especificar)</option>
-        </select>
-        <input type="text" id="origen-extra" class="extra-input" placeholder="Escribe la ciudad de origen..." style="display:none;">
-    </div>
-
-    <div class="form-group">
-        <label>Destino</label>
-        <select id="destino" onchange="actualizarRuta('destino')">
-            <option value="">Selecciona un destino...</option>
-            <option value="PMV|Isla de Margarita">Isla de Margarita (PMV)</option>
-            <option value="CCS|Caracas">Caracas (CCS)</option>
-            <option value="MAR|Maracaibo">Maracaibo (MAR)</option>
-            <option value="MER|Mérida">Mérida (MER)</option>
-            <option value="STX|Canaima">Canaima (CAN)</option>
-            <option value="BOG|Bogotá, Colombia">Bogotá, Colombia (BOG)</option>
-            <option value="PTY|Ciudad de Panamá">Ciudad de Panamá (PTY)</option>
-            <option value="MAD|Madrid, España">Madrid, España (MAD)</option>
-            <option value="MIA|Miami, EE.UU.">Miami, EE.UU. (MIA)</option>
-            <option value="OTRO|Otro destino">Otro / Internacional (especificar)</option>
-        </select>
-        <input type="text" id="destino-extra" class="extra-input" placeholder="Escribe ciudad y país de destino..." style="display:none;">
-        <div id="info-pasaporte" class="info-box">
-            <i class="fas fa-passport"></i>Para vuelos internacionales, recuerda: tu pasaporte debe tener mínimo 6 meses de vigencia desde la fecha de viaje.
-        </div>
-    </div>
-
-    <div class="row">
         <div class="form-group">
-            <label>Fecha de salida</label>
-            <input type="date" id="fecha-salida" onchange="ajustarRegreso()">
+            <label>Tipo de viaje</label>
+            <div class="segmented">
+                <input type="radio" name="tipo-viaje" id="tv-ida" value="ida">
+                <label for="tv-ida">✈ Solo Ida</label>
+                <input type="radio" name="tipo-viaje" id="tv-idavuelta" value="ida-vuelta" checked>
+                <label for="tv-idavuelta">↔ Ida y Vuelta</label>
+            </div>
         </div>
-        <div class="form-group" id="grupo-regreso">
-            <label>Fecha de regreso</label>
-            <input type="date" id="fecha-regreso">
+
+        <div class="form-group">
+            <label><i class="fas fa-plane-departure"></i>Origen</label>
+            <select id="origen" onchange="actualizarRuta('origen')">
+                <option value="VLN|Valencia">Valencia (VLN)</option>
+                <option value="CCS|Caracas">Caracas (CCS)</option>
+                <option value="MAR|Maracaibo">Maracaibo (MAR)</option>
+                <option value="BLA|Barcelona / Pto. La Cruz">Barcelona / Pto. La Cruz (BLA)</option>
+                <option value="MCY|Maracay">Maracay (MCY)</option>
+                <option value="OTRO|Otro origen">Otro (especificar)</option>
+            </select>
+            <input type="text" id="origen-extra" class="extra-input" placeholder="Ciudad de origen..." style="display:none;">
+        </div>
+
+        <div class="form-group">
+            <label><i class="fas fa-plane-arrival"></i>Destino</label>
+            <select id="destino" onchange="actualizarRuta('destino')">
+                <option value="">Selecciona un destino...</option>
+                <optgroup label="✈️ Vuelos Nacionales">
+                    <option value="PMV|Isla de Margarita">Isla de Margarita (PMV)</option>
+                    <option value="CCS|Caracas">Caracas (CCS)</option>
+                    <option value="MAR|Maracaibo">Maracaibo (MAR)</option>
+                    <option value="MER|Mérida">Mérida (MER)</option>
+                    <option value="STX|Canaima">Canaima (CAN)</option>
+                </optgroup>
+                <optgroup label="🌍 Vuelos Internacionales">
+                    <option value="BOG|Bogotá, Colombia">Bogotá, Colombia (BOG)</option>
+                    <option value="PTY|Ciudad de Panamá">Ciudad de Panamá (PTY)</option>
+                    <option value="MAD|Madrid, España">Madrid, España (MAD)</option>
+                    <option value="MIA|Miami, EE.UU.">Miami, EE.UU. (MIA)</option>
+                    <option value="CUN|Cancún, México">Cancún, México (CUN)</option>
+                    <option value="LIM|Lima, Perú">Lima, Perú (LIM)</option>
+                </optgroup>
+                <option value="OTRO|Otro destino">Otro / Internacional (especificar)</option>
+            </select>
+            <input type="text" id="destino-extra" class="extra-input" placeholder="Ciudad y país de destino..." style="display:none;">
+            <div id="info-pasaporte" class="info-box">
+                <i class="fas fa-passport"></i>Para vuelos internacionales tu pasaporte debe tener mínimo <strong>6 meses de vigencia</strong> desde la fecha de viaje.
+            </div>
         </div>
     </div>
 
-    <div class="form-group">
-        <label>Adultos <span style="font-weight:400; color:#ffd9a8;">(12+ años)</span></label>
-        <select id="adultos" onchange="toggleAdultosExtra()">
-            <option value="1">1</option>
-            <option value="2" selected>2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="more">Más de 4</option>
-        </select>
-        <input type="number" id="adultos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos adultos en total?" style="display:none;">
+    <!-- Sección 2: Fechas -->
+    <div class="form-section">
+        <div class="form-section-title"><i class="fas fa-calendar-alt"></i> Fechas</div>
+        <div class="row">
+            <div class="form-group">
+                <label><i class="fas fa-calendar-day"></i>Salida</label>
+                <input type="date" id="fecha-salida" onchange="ajustarRegreso()">
+            </div>
+            <div class="form-group" id="grupo-regreso">
+                <label><i class="fas fa-calendar-check"></i>Regreso</label>
+                <input type="date" id="fecha-regreso">
+            </div>
+        </div>
+
+        <div class="checkbox-group" style="margin-top:12px;">
+            <input type="checkbox" id="fechas-flex">
+            <label for="fechas-flex">
+                <i class="fas fa-calendar-week"></i>Mis fechas son flexibles
+                <span>Podemos buscar la mejor tarifa ±3 días</span>
+            </label>
+        </div>
     </div>
 
-    <div class="form-group">
-        <label>Niños <span style="font-weight:400; color:#ffd9a8;">(2 a 11 años)</span></label>
-        <select id="ninos" onchange="toggleNinosExtra()">
-            <option value="0" selected>0</option>
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="more">Más de 3</option>
-        </select>
-        <input type="number" id="ninos-extra" class="extra-input" min="4" max="50" placeholder="¿Cuántos niños en total?" style="display:none;">
+    <!-- Sección 3: Pasajeros -->
+    <div class="form-section">
+        <div class="form-section-title"><i class="fas fa-users"></i> Pasajeros</div>
+
+        <div class="form-group">
+            <label><i class="fas fa-user"></i>Adultos <span style="font-weight:400;color:#ffd9a8;font-size:12px;">(12+ años)</span></label>
+            <select id="adultos" onchange="toggleAdultosExtra()">
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="more">Más de 4</option>
+            </select>
+            <input type="number" id="adultos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos adultos?" style="display:none;">
+        </div>
+
+        <div class="form-group">
+            <label><i class="fas fa-child"></i>Niños <span style="font-weight:400;color:#ffd9a8;font-size:12px;">(2–11 años)</span></label>
+            <select id="ninos" onchange="toggleNinosExtra()">
+                <option value="0" selected>0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="more">Más de 3</option>
+            </select>
+            <input type="number" id="ninos-extra" class="extra-input" min="4" max="50" placeholder="¿Cuántos niños?" style="display:none;">
+        </div>
+
+        <div class="form-group">
+            <label><i class="fas fa-baby"></i>Bebés <span style="font-weight:400;color:#ffd9a8;font-size:12px;">(0–23 meses, en brazos)</span></label>
+            <select id="bebes">
+                <option value="0" selected>0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+            </select>
+            <span class="hint"><i class="fas fa-info-circle" style="color:#ff9100;margin-right:4px;"></i>Cada bebé en brazos requiere un adulto (no ocupa asiento).</span>
+        </div>
     </div>
 
-    <div class="form-group">
-        <label>Bebés <span style="font-weight:400; color:#ffd9a8;">(0 a 23 meses, en brazos)</span></label>
-        <select id="bebes">
-            <option value="0" selected>0</option>
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-        </select>
-        <span class="hint"><i class="fas fa-info-circle"></i> Cada bebé en brazos requiere un adulto que lo cargue (no ocupa asiento).</span>
+    <!-- Sección 4: Preferencias -->
+    <div class="form-section">
+        <div class="form-section-title"><i class="fas fa-sliders-h"></i> Preferencias</div>
+
+        <div class="form-group">
+            <label><i class="fas fa-chair"></i>Clase</label>
+            <select id="clase">
+                <option value="Económica">Económica</option>
+                <option value="Premium Economy">Premium Economy</option>
+                <option value="Ejecutiva">Ejecutiva / Business</option>
+                <option value="Primera">Primera Clase</option>
+            </select>
+        </div>
+
+        <div class="checkbox-group">
+            <input type="checkbox" id="equipaje">
+            <label for="equipaje">
+                <i class="fas fa-suitcase-rolling"></i>Necesito equipaje adicional
+                <span>Maleta(s) extra, sobrepeso, equipo deportivo, etc.</span>
+            </label>
+        </div>
+
+        <!-- Mascotas -->
+        <div class="checkbox-group" style="margin-top:13px;">
+            <input type="checkbox" id="mascotas" onchange="toggleMascotasExtra()">
+            <label for="mascotas">
+                <i class="fas fa-paw"></i>Viajo con mascota
+                <span>Perro, gato u otra mascota a bordo o en bodega</span>
+            </label>
+        </div>
+        <div id="mascotas-extra" style="display:none; margin-top:8px;">
+            <select id="mascota-tipo">
+                <option value="">Tipo de mascota...</option>
+                <option value="Perro pequeño (cabina)">🐶 Perro pequeño (va en cabina)</option>
+                <option value="Perro mediano/grande (bodega)">🐕 Perro mediano/grande (bodega)</option>
+                <option value="Gato (cabina)">🐱 Gato (va en cabina)</option>
+                <option value="Otra mascota (bodega)">🐾 Otra mascota (bodega)</option>
+            </select>
+            <span class="hint" style="margin-top:6px;"><i class="fas fa-info-circle" style="color:#ff9100;margin-right:4px;"></i>Cada aerolínea tiene políticas distintas. Te informamos antes de confirmar.</span>
+        </div>
+
+        <!-- Asistencia especial -->
+        <div class="checkbox-group" style="margin-top:10px;">
+            <input type="checkbox" id="asistencia">
+            <label for="asistencia">
+                <i class="fas fa-wheelchair"></i>Necesito asistencia especial
+                <span>Silla de ruedas, movilidad reducida, embarazo, etc.</span>
+            </label>
+        </div>
+
+        <div class="form-group" style="margin-top:13px;">
+            <label><i class="fas fa-pen"></i>Notas adicionales <span style="font-weight:400;color:#ffd9a8;font-size:12px;">(opcional)</span></label>
+            <textarea id="notas" placeholder="Ej: fechas flexibles, prefiero vuelo directo, viaje médico, etc."></textarea>
+        </div>
     </div>
 
-    <div class="form-group">
-        <label>Clase</label>
-        <select id="clase">
-            <option value="Económica">Económica</option>
-            <option value="Premium Economy">Premium Economy</option>
-            <option value="Ejecutiva">Ejecutiva / Business</option>
-            <option value="Primera">Primera Clase</option>
-        </select>
+    <!-- Tip del viajero -->
+    <div class="tip-box" id="tip-box">
+        <span class="tip-icon">💡</span>
+        <span id="tip-texto"></span>
     </div>
 
-    <div class="checkbox-group">
-        <input type="checkbox" id="equipaje">
-        <label for="equipaje">
-            Necesito equipaje adicional
-            <span>Maleta(s) extra, sobrepeso, equipo deportivo, etc.</span>
-        </label>
-    </div>
-
-    <div class="form-group">
-        <label>Notas adicionales <span style="font-weight:400; color:#ffd9a8;">(opcional)</span></label>
-        <textarea id="notas" placeholder="Ej: fechas flexibles, prefiero vuelo directo, viaje por motivo médico, etc."></textarea>
-    </div>
-
-    <button class="btn-gen" id="btn-generar" onclick="generar()">Generar Solicitud de Boleto</button>
+    <button class="btn-gen" id="btn-generar" onclick="generar()">
+        <i class="fas fa-paper-plane" style="margin-right:8px;"></i>Generar Solicitud de Boleto
+    </button>
 
     <div id="resultado">
         <p id="res-texto" style="margin-bottom:10px;"></p>
-        <a id="btn-wa" href="#" target="_blank" rel="noopener" class="wa-btn"><i class="fab fa-whatsapp"></i> Contactar Asesor</a>
+        <a id="btn-wa" href="#" target="_blank" rel="noopener" class="wa-btn">
+            <i class="fab fa-whatsapp"></i> Contactar Asesor Ahora
+        </a>
     </div>
+
+    <p class="footer-copy">© 2026 Destino y Eventos Lotus 360 · Carabobo, Venezuela</p>
 </div>
 
 <script>
     function hoyISO() {
-        const d = new Date();
-        return d.toISOString().split('T')[0];
+        return new Date().toISOString().split('T')[0];
     }
-
     document.getElementById('fecha-salida').min = hoyISO();
     document.getElementById('fecha-regreso').min = hoyISO();
 
-    // --- Tipo de viaje ---
+    // Estado de atención
+    function actualizarEstado() {
+        const ahora = new Date();
+        const utcMs = ahora.getTime() + (ahora.getTimezoneOffset() * 60000);
+        const ve = new Date(utcMs - 4 * 3600000);
+        const enHorario = ve.getDay() >= 1 && ve.getDay() <= 6 && ve.getHours() >= 8 && ve.getHours() < 19;
+        document.getElementById('estado-dot').className = 'dot ' + (enHorario ? 'online' : 'offline');
+        document.getElementById('estado-texto').textContent = enHorario
+            ? 'Asesores en línea · Respuesta rápida'
+            : 'Fuera de horario · Te respondemos a primera hora';
+    }
+    actualizarEstado();
+
+    function getTipoViaje() {
+        return document.querySelector('input[name="tipo-viaje"]:checked').value;
+    }
+
     function toggleRegreso() {
-        const tipo = document.getElementById('tipo-viaje').value;
+        const tipo = getTipoViaje();
         const grupo = document.getElementById('grupo-regreso');
-        const input = document.getElementById('fecha-regreso');
         if (tipo === 'ida') {
             grupo.style.display = 'none';
-            input.value = '';
+            document.getElementById('fecha-regreso').value = '';
         } else {
             grupo.style.display = 'block';
         }
+        function toggleMascotasExtra() {
+        const checked = document.getElementById('mascotas').checked;
+        document.getElementById('mascotas-extra').style.display = checked ? 'block' : 'none';
+        if (!checked) document.getElementById('mascota-tipo').value = '';
     }
+
+    // Tip rotativo del viajero
+    const tips = [
+        "Reservar con al menos 3 semanas de anticipación puede reducir el precio hasta un 40%.",
+        "Los martes y miércoles suelen tener las tarifas más bajas de la semana.",
+        "Para vuelos internacionales, verifica que tu pasaporte tenga más de 6 meses de vigencia.",
+        "Si viajas en temporada alta, reserva tu hotel al mismo tiempo que el boleto.",
+        "Los vuelos de madrugada o muy temprano suelen ser más económicos y puntuales.",
+        "Lleva siempre un cambio de ropa en tu equipaje de mano por si las maletas se retrasan.",
+        "Consulta con tu asesor si hay promociones de último momento disponibles.",
+    ];
+    let tipIdx = Math.floor(Math.random() * tips.length);
+    function mostrarTip() {
+        const el = document.getElementById('tip-texto');
+        const box = document.getElementById('tip-box');
+        box.style.animation = 'none';
+        void box.offsetWidth;
+        box.style.animation = 'fadeInTip .5s ease';
+        el.textContent = tips[tipIdx];
+        tipIdx = (tipIdx + 1) % tips.length;
+    }
+    mostrarTip();
+    setInterval(mostrarTip, 7000);
+
+    actualizarLineaRuta();
+        actualizarProgreso();
+    }
+    document.querySelectorAll('input[name="tipo-viaje"]').forEach(r => r.addEventListener('change', toggleRegreso));
 
     function ajustarRegreso() {
         const salida = document.getElementById('fecha-salida');
         const regreso = document.getElementById('fecha-regreso');
         regreso.min = salida.value || hoyISO();
-        if (regreso.value && regreso.value < salida.value) {
-            regreso.value = '';
-        }
+        if (regreso.value && regreso.value < salida.value) regreso.value = '';
+        actualizarProgreso();
     }
 
-    // --- Ruta visual dinámica ---
     function actualizarRuta(tipo) {
         const sel = document.getElementById(tipo);
         const extra = document.getElementById(tipo + '-extra');
         const esOtro = sel.value.startsWith('OTRO');
-
         extra.style.display = esOtro ? 'block' : 'none';
         if (!esOtro) extra.value = '';
 
         const codigoEl = document.getElementById(tipo + '-codigo');
         const ciudadEl = document.getElementById(tipo + '-ciudad');
 
-        if (sel.value === '') {
+        if (!sel.value) {
             codigoEl.textContent = '¿?';
             ciudadEl.textContent = 'Elige destino';
         } else if (esOtro) {
-            codigoEl.textContent = '✈️';
+            codigoEl.textContent = '✈';
             ciudadEl.textContent = extra.value || 'Por especificar';
         } else {
-            const [codigo, ciudad] = sel.value.split('|');
-            codigoEl.textContent = codigo;
-            ciudadEl.textContent = ciudad;
+            const [cod, ciu] = sel.value.split('|');
+            codigoEl.textContent = cod;
+            ciudadEl.textContent = ciu;
         }
 
-        // Mostrar aviso de pasaporte si el destino es internacional
-        const destSel = document.getElementById('destino');
-        const internacionales = ['BOG', 'PTY', 'MAD', 'MIA', 'OTRO'];
-        const codigoDestino = destSel.value.split('|')[0];
+        const internacionales = ['BOG','PTY','MAD','MIA','CUN','LIM','OTRO'];
+        const codDest = document.getElementById('destino').value.split('|')[0];
         document.getElementById('info-pasaporte').style.display =
-            internacionales.includes(codigoDestino) ? 'block' : 'none';
+            internacionales.includes(codDest) ? 'block' : 'none';
 
-        // Animación de regreso en la línea según tipo de viaje
         actualizarLineaRuta();
+        actualizarProgreso();
     }
 
     function actualizarLineaRuta() {
         const linea = document.getElementById('ruta-linea');
-        const tipo = document.getElementById('tipo-viaje').value;
-        linea.classList.toggle('vuelta', tipo === 'ida-vuelta');
-
+        const esVuelta = getTipoViaje() === 'ida-vuelta';
+        linea.classList.toggle('vuelta', esVuelta);
         const existente = linea.querySelector('.regreso');
-        if (tipo === 'ida-vuelta' && !existente) {
-            const icono = document.createElement('i');
-            icono.className = 'fas fa-plane regreso';
-            linea.appendChild(icono);
-        } else if (tipo !== 'ida-vuelta' && existente) {
+        if (esVuelta && !existente) {
+            const ic = document.createElement('i');
+            ic.className = 'fas fa-plane regreso';
+            linea.appendChild(ic);
+        } else if (!esVuelta && existente) {
             existente.remove();
         }
     }
 
-    // --- Campo "Otro destino/origen" actualiza la ruta en vivo ---
     document.getElementById('origen-extra').addEventListener('input', () => actualizarRuta('origen'));
     document.getElementById('destino-extra').addEventListener('input', () => actualizarRuta('destino'));
 
-    // --- Adultos / Niños "Más Personas" ---
     function toggleAdultosExtra() {
-        const sel = document.getElementById('adultos');
-        const extra = document.getElementById('adultos-extra');
-        extra.style.display = (sel.value === 'more') ? 'block' : 'none';
-        if (sel.value !== 'more') extra.value = '';
+        const s = document.getElementById('adultos'), e = document.getElementById('adultos-extra');
+        e.style.display = s.value === 'more' ? 'block' : 'none';
+        if (s.value !== 'more') e.value = '';
     }
-
     function toggleNinosExtra() {
-        const sel = document.getElementById('ninos');
-        const extra = document.getElementById('ninos-extra');
-        extra.style.display = (sel.value === 'more') ? 'block' : 'none';
-        if (sel.value !== 'more') extra.value = '';
+        const s = document.getElementById('ninos'), e = document.getElementById('ninos-extra');
+        e.style.display = s.value === 'more' ? 'block' : 'none';
+        if (s.value !== 'more') e.value = '';
     }
-
     function getAdultosCount() {
-        const sel = document.getElementById('adultos');
-        if (sel.value === 'more') {
-            const extra = parseInt(document.getElementById('adultos-extra').value, 10);
-            return isNaN(extra) ? null : extra;
-        }
-        return parseInt(sel.value, 10);
+        const s = document.getElementById('adultos');
+        if (s.value === 'more') { const v = parseInt(document.getElementById('adultos-extra').value,10); return isNaN(v)?null:v; }
+        return parseInt(s.value,10);
     }
-
     function getNinosCount() {
-        const sel = document.getElementById('ninos');
-        if (sel.value === 'more') {
-            const extra = parseInt(document.getElementById('ninos-extra').value, 10);
-            return isNaN(extra) ? null : extra;
-        }
-        return parseInt(sel.value, 10);
+        const s = document.getElementById('ninos');
+        if (s.value === 'more') { const v = parseInt(document.getElementById('ninos-extra').value,10); return isNaN(v)?null:v; }
+        return parseInt(s.value,10);
     }
 
     function mostrarError(msg) {
-        const box = document.getElementById('error-box');
-        box.innerHTML = msg;
-        box.style.display = 'block';
-        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const b = document.getElementById('error-box');
+        b.innerHTML = '<i class="fas fa-exclamation-circle" style="margin-right:6px;color:#ff6b6b;"></i>' + msg;
+        b.style.display = 'block';
+        b.scrollIntoView({ behavior:'smooth', block:'center' });
     }
-
-    function ocultarError() {
-        document.getElementById('error-box').style.display = 'none';
-    }
+    function ocultarError() { document.getElementById('error-box').style.display = 'none'; }
 
     function nombreLugar(tipo) {
         const sel = document.getElementById(tipo);
-        if (sel.value.startsWith('OTRO')) {
-            return document.getElementById(tipo + '-extra').value.trim();
-        }
+        if (sel.value.startsWith('OTRO')) return document.getElementById(tipo+'-extra').value.trim();
         return sel.value.split('|')[1] || '';
     }
 
+    function actualizarProgreso() {
+        let total = 0, completados = 0;
+        total++; // origen
+        const os = document.getElementById('origen');
+        if (os.value.startsWith('OTRO')) { if (document.getElementById('origen-extra').value.trim()) completados++; }
+        else completados++;
+        total++; // destino
+        const ds = document.getElementById('destino');
+        if (ds.value) {
+            if (ds.value.startsWith('OTRO')) { if (document.getElementById('destino-extra').value.trim()) completados++; }
+            else completados++;
+        }
+        total++; if (document.getElementById('fecha-salida').value) completados++;
+        if (getTipoViaje() === 'ida-vuelta') {
+            total++; if (document.getElementById('fecha-regreso').value) completados++;
+        }
+        const pct = Math.round((completados/total)*100);
+        document.getElementById('progreso-bar').style.width = pct+'%';
+        document.getElementById('progreso-texto').textContent = pct+'% completado';
+    }
+    document.getElementById('fecha-salida').addEventListener('change', actualizarProgreso);
+    document.getElementById('fecha-regreso').addEventListener('change', actualizarProgreso);
+
     function generar() {
         ocultarError();
-
-        const tipoViaje = document.getElementById('tipo-viaje').value;
+        const tipoViaje = getTipoViaje();
         const origen = nombreLugar('origen');
         const destino = nombreLugar('destino');
         const fechaSalida = document.getElementById('fecha-salida').value;
         const fechaRegreso = document.getElementById('fecha-regreso').value;
         const adultos = getAdultosCount();
         const ninos = getNinosCount();
-        const bebes = parseInt(document.getElementById('bebes').value, 10);
+        const bebes = parseInt(document.getElementById('bebes').value,10);
         const clase = document.getElementById('clase').value;
         const equipaje = document.getElementById('equipaje').checked;
         const notas = document.getElementById('notas').value.trim();
 
-        // --- Validaciones ---
         const errores = [];
-
-        if (document.getElementById('destino').value === '') {
-            errores.push('Selecciona un destino.');
-        }
-        if (document.getElementById('destino').value.startsWith('OTRO') && !destino) {
-            errores.push('Escribe la ciudad/país de destino.');
-        }
-        if (document.getElementById('origen').value.startsWith('OTRO') && !origen) {
-            errores.push('Escribe la ciudad de origen.');
-        }
+        if (!document.getElementById('destino').value) errores.push('Selecciona un destino.');
+        if (document.getElementById('destino').value.startsWith('OTRO') && !destino) errores.push('Escribe la ciudad/país de destino.');
+        if (document.getElementById('origen').value.startsWith('OTRO') && !origen) errores.push('Escribe la ciudad de origen.');
         if (!fechaSalida) errores.push('Selecciona la fecha de salida.');
         if (tipoViaje === 'ida-vuelta') {
             if (!fechaRegreso) errores.push('Selecciona la fecha de regreso.');
-            if (fechaSalida && fechaRegreso && fechaRegreso < fechaSalida) {
-                errores.push('La fecha de regreso no puede ser anterior a la fecha de salida.');
-            }
+            if (fechaSalida && fechaRegreso && fechaRegreso < fechaSalida) errores.push('La fecha de regreso no puede ser anterior a la salida.');
         }
-        if (document.getElementById('adultos').value === 'more' && (adultos === null || adultos < 5)) {
-            errores.push('Indica cuántos adultos viajan (mínimo 5 para esta opción).');
-        }
-        if (document.getElementById('ninos').value === 'more' && (ninos === null || ninos < 4)) {
-            errores.push('Indica cuántos niños viajan (mínimo 4 para esta opción).');
-        }
-        if (bebes > 0 && adultos !== null && bebes > adultos) {
-            errores.push('No puede haber más bebés en brazos que adultos (cada bebé necesita un adulto que lo cargue).');
-        }
+        if (document.getElementById('adultos').value === 'more' && (adultos===null||adultos<5)) errores.push('Indica cuántos adultos viajan (mínimo 5).');
+        if (document.getElementById('ninos').value === 'more' && (ninos===null||ninos<4)) errores.push('Indica cuántos niños viajan (mínimo 4).');
+        if (bebes > 0 && adultos !== null && bebes > adultos) errores.push('No puede haber más bebés que adultos.');
 
-        if (errores.length > 0) {
-            mostrarError('Por favor revisa lo siguiente:<br>• ' + errores.join('<br>• '));
-            return;
-        }
+        if (errores.length) { mostrarError('Por favor revisa:<br>• '+errores.join('<br>• ')); return; }
 
-        // --- Lista de asesores con pesos (los números repetidos reciben más leads) ---
-        const asesores = [
-            '584140415685', '584244269876',
-            '584244269876', '584244269876',
-            '584142495020', '584142495020',
-            '584142495020'
-        ];
-        const tlf = asesores[Math.floor(Math.random() * asesores.length)];
+        const asesores = ['584140415685','584244269876','584244269876','584244269876','584142495020','584142495020','584142495020'];
+        const tlf = asesores[Math.floor(Math.random()*asesores.length)];
 
         const lineas = [
             '¡Hola! Quiero cotizar boletos:',
-            `Tipo de viaje: ${tipoViaje === 'ida' ? 'Solo ida' : 'Ida y vuelta'}`,
+            `Tipo de viaje: ${tipoViaje==='ida'?'Solo ida':'Ida y vuelta'}`,
             `Ruta: ${origen} → ${destino}`,
             `Fecha de salida: ${fechaSalida}`
         ];
-        if (tipoViaje === 'ida-vuelta') lineas.push(`Fecha de regreso: ${fechaRegreso}`);
-        lineas.push(`Pasajeros: ${adultos} adulto(s)` + (ninos > 0 ? `, ${ninos} niño(s)` : '') + (bebes > 0 ? `, ${bebes} bebé(s)` : ''));
+        if (tipoViaje==='ida-vuelta') lineas.push(`Fecha de regreso: ${fechaRegreso}`);
+        lineas.push(`Pasajeros: ${adultos} adulto(s)`+(ninos>0?`, ${ninos} niño(s)`:'')+( bebes>0?`, ${bebes} bebé(s)`:''));
         lineas.push(`Clase: ${clase}`);
-        lineas.push(`Equipaje adicional: ${equipaje ? 'Sí' : 'No'}`);
+        lineas.push(`Equipaje adicional: ${equipaje?'Sí':'No'}`);
+        const mascota = document.getElementById('mascotas').checked;
+        const mascotaTipo = document.getElementById('mascota-tipo').value;
+        const asistencia = document.getElementById('asistencia').checked;
+        const fechasFlex = document.getElementById('fechas-flex').checked;
+        if (mascota && mascotaTipo) lineas.push(`Mascota: ${mascotaTipo}`);
+        if (asistencia) lineas.push(`Asistencia especial: Sí`);
+        if (fechasFlex) lineas.push(`Fechas flexibles: Sí (±3 días para mejor tarifa)`);
         if (notas) lineas.push(`Notas: ${notas}`);
 
-        const msg = lineas.join('\n');
-
-        document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${encodeURIComponent(msg)}`;
+        document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${encodeURIComponent(lineas.join('\n'))}`;
         document.getElementById('res-texto').innerHTML = `
             <b>Resumen de tu solicitud:</b><br>
             ${origen} → ${destino}<br>
-            ${tipoViaje === 'ida' ? 'Solo ida' : 'Ida y vuelta'}<br>
-            Salida: ${fechaSalida}${tipoViaje === 'ida-vuelta' ? ` | Regreso: ${fechaRegreso}` : ''}<br>
-            ${adultos} Adulto(s)${ninos > 0 ? `, ${ninos} Niño(s)` : ''}${bebes > 0 ? `, ${bebes} Bebé(s)` : ''}<br>
-            Clase: ${clase}${equipaje ? ' | Con equipaje adicional' : ''}
+            ${tipoViaje==='ida'?'Solo ida':'Ida y vuelta'} · Salida: ${fechaSalida}${tipoViaje==='ida-vuelta'?` | Regreso: ${fechaRegreso}`:''}<br>
+            ${adultos} Adulto(s)${ninos>0?`, ${ninos} Niño(s)`:''}${bebes>0?`, ${bebes} Bebé(s)`:''}<br>
+            Clase: ${clase}${equipaje?' · Con equipaje adicional':''}${mascota&&mascotaTipo?' · '+mascotaTipo:''}${asistencia?' · Asistencia especial':''}
         `;
         document.getElementById('resultado').style.display = 'block';
-        document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.getElementById('resultado').scrollIntoView({ behavior:'smooth', block:'center' });
 
         const btn = document.getElementById('btn-generar');
-        const original = btn.textContent;
         btn.disabled = true;
-        btn.textContent = '¡Listo! Revisa tu resumen ↓';
+        btn.innerHTML = '<i class="fas fa-check" style="margin-right:8px;"></i>¡Listo! Revisa tu resumen ↓';
         setTimeout(() => {
             btn.disabled = false;
-            btn.textContent = original;
-        }, 2000);
+            btn.innerHTML = '<i class="fas fa-paper-plane" style="margin-right:8px;"></i>Generar Solicitud de Boleto';
+        }, 2500);
     }
 
-    // Inicializar línea de ruta (ida y vuelta por defecto)
     actualizarLineaRuta();
+    actualizarProgreso();
 </script>
-
 </body>
 </html>
