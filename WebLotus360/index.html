@@ -51,10 +51,92 @@
         .subtitle {
             color: #ffd9a8;
             font-size: 14px;
-            margin-bottom: 18px;
+            margin-bottom: 14px;
         }
 
-        /* --- Caja de noches (elemento distintivo) --- */
+        /* --- Escena animada según destino (elemento distintivo) --- */
+        .escena-box {
+            position: relative;
+            width: 100%;
+            height: 110px;
+            border-radius: 14px;
+            overflow: hidden;
+            margin-bottom: 18px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: #0c2d4a;
+        }
+        .escena-box svg.escena {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: none;
+        }
+        .escena-box svg.escena.activa { display: block; }
+
+        .escena-caption {
+            position: absolute;
+            bottom: 6px; left: 8px;
+            background: rgba(0,0,0,0.45);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 9px;
+            border-radius: 8px;
+            letter-spacing: .2px;
+        }
+
+        /* Animaciones escena playa */
+        @keyframes ola { to { transform: translateX(-100px); } }
+        .ola1 { animation: ola 6s linear infinite; }
+        .ola2 { animation: ola 9s linear infinite reverse; }
+
+        @keyframes brillo { 0%, 100% { opacity: 1; } 50% { opacity: .8; } }
+        .sol { animation: brillo 3s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+        @keyframes viento { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+        .hojas { animation: viento 4s ease-in-out infinite alternate; transform-origin: 10px 20px; }
+
+        /* Animación escena montaña (Mérida) */
+        @keyframes telecabina-mov {
+            0%   { transform: translate(22px, 36px); }
+            100% { transform: translate(360px, 86px); }
+        }
+        .telecabina { animation: telecabina-mov 7s ease-in-out infinite alternate; }
+
+        /* Animación escena cascada (Canaima) */
+        @keyframes caer { to { stroke-dashoffset: -48; } }
+        .agua { animation: caer 0.8s linear infinite; }
+        @keyframes bruma-pulso { 0%, 100% { opacity: .25; } 50% { opacity: .45; } }
+        .bruma { animation: bruma-pulso 2.5s ease-in-out infinite; }
+
+        /* Animación escena tormenta (Catatumbo) */
+        @keyframes relampago {
+            0%, 92%, 100% { opacity: 0; }
+            93%, 96% { opacity: 1; }
+            94% { opacity: .25; }
+            95% { opacity: 1; }
+        }
+        .rayo1 { animation: relampago 4s infinite; }
+        .rayo2 { animation: relampago 5.5s infinite 1.2s; }
+
+        /* Animación escena mundo (Extranjero) */
+        @keyframes girar-globo { to { transform: rotate(360deg); } }
+        .globo-lineas { animation: girar-globo 20s linear infinite; transform-box: fill-box; transform-origin: center; }
+        @keyframes volar-avion {
+            0%   { transform: translate(-10px, 40px) rotate(8deg); opacity: 0; }
+            10%  { opacity: 1; }
+            85%  { opacity: 1; }
+            100% { transform: translate(390px, 0px) rotate(8deg); opacity: 0; }
+        }
+        .avion-mundo { animation: volar-avion 7s linear infinite; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .ola1, .ola2, .sol, .hojas, .telecabina, .agua, .bruma, .rayo1, .rayo2, .globo-lineas, .avion-mundo {
+                animation: none !important;
+            }
+        }
+
+        /* --- Caja de noches --- */
         .noches-box {
             display: flex;
             align-items: center;
@@ -198,6 +280,117 @@
     <h2>Destinos y Eventos Lotus 360</h2>
     <p class="subtitle">¡Escápate con Nosotros!</p>
 
+    <!-- Escena animada: cambia según el destino elegido -->
+    <div class="escena-box">
+        <!-- Playa: Margarita / Morrocoy / Los Roques -->
+        <svg class="escena activa" id="escena-playa" viewBox="0 0 400 110" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs>
+                <linearGradient id="cieloPlaya" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#ff9a56"/>
+                    <stop offset="55%" stop-color="#ff6b6b"/>
+                    <stop offset="100%" stop-color="#3a1c71"/>
+                </linearGradient>
+                <linearGradient id="marPlaya" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#1e6f9a"/>
+                    <stop offset="100%" stop-color="#0c2d4a"/>
+                </linearGradient>
+            </defs>
+            <rect width="400" height="110" fill="url(#cieloPlaya)"/>
+            <circle class="sol" cx="325" cy="32" r="16" fill="#ffe28a"/>
+            <rect y="60" width="400" height="50" fill="url(#marPlaya)"/>
+            <path class="ola ola1" d="M0,65 Q50,55 100,65 T200,65 T300,65 T400,65 T500,65 V110 H0 Z" fill="rgba(255,255,255,0.18)"/>
+            <path class="ola ola2" d="M0,75 Q50,68 100,75 T200,75 T300,75 T400,75 T500,75 V110 H0 Z" fill="rgba(255,255,255,0.12)"/>
+            <g transform="translate(42,28)">
+                <path d="M0,82 C-3,55 4,35 9,18" stroke="#5a3825" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <g class="hojas">
+                    <path d="M9,18 C-12,9 -28,15 -34,26" fill="#2f7d4f"/>
+                    <path d="M9,18 C30,7 46,15 52,29" fill="#3a9863"/>
+                    <path d="M9,18 C0,3 6,-10 17,-15" fill="#2f7d4f"/>
+                    <path d="M9,18 C20,6 36,1 42,-7" fill="#3a9863"/>
+                </g>
+            </g>
+        </svg>
+
+        <!-- Montaña: Mérida -->
+        <svg class="escena" id="escena-montana" viewBox="0 0 400 110" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs>
+                <linearGradient id="cieloMontana" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#aee0f5"/>
+                    <stop offset="100%" stop-color="#6f9bc7"/>
+                </linearGradient>
+            </defs>
+            <rect width="400" height="110" fill="url(#cieloMontana)"/>
+            <polygon points="0,110 90,28 180,110" fill="#5c6b7a"/>
+            <polygon points="65,32 95,28 112,55 78,58" fill="#ffffff"/>
+            <polygon points="150,110 250,12 350,110" fill="#46566a"/>
+            <polygon points="222,18 250,12 272,45 232,50" fill="#ffffff"/>
+            <polygon points="270,110 350,50 400,110" fill="#5c6b7a"/>
+            <line x1="20" y1="38" x2="370" y2="88" stroke="#33424f" stroke-width="2" stroke-dasharray="4 4"/>
+            <g class="telecabina">
+                <line x1="0" y1="0" x2="0" y2="-9" stroke="#33424f" stroke-width="1.5"/>
+                <rect x="-9" y="0" width="18" height="13" rx="2" fill="#ff9100"/>
+            </g>
+        </svg>
+
+        <!-- Cascada: Canaima -->
+        <svg class="escena" id="escena-cascada" viewBox="0 0 400 110" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs>
+                <linearGradient id="cieloCascada" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#d6f0d9"/>
+                    <stop offset="100%" stop-color="#7fb685"/>
+                </linearGradient>
+            </defs>
+            <rect width="400" height="110" fill="url(#cieloCascada)"/>
+            <polygon points="40,0 290,0 330,52 0,52" fill="#7a5230"/>
+            <polygon points="40,0 290,0 280,8 50,8" fill="#977049"/>
+            <line class="agua" x1="123" y1="16" x2="123" y2="108" stroke="#eaf7fb" stroke-width="6" stroke-linecap="round" stroke-dasharray="14 10" opacity="0.85"/>
+            <line class="agua" x1="138" y1="16" x2="138" y2="108" stroke="#dceef5" stroke-width="5" stroke-linecap="round" stroke-dasharray="12 9" opacity="0.7"/>
+            <line class="agua" x1="153" y1="16" x2="153" y2="108" stroke="#eaf7fb" stroke-width="6" stroke-linecap="round" stroke-dasharray="14 10" opacity="0.85"/>
+            <ellipse class="bruma" cx="138" cy="104" rx="62" ry="10" fill="#ffffff" opacity="0.3"/>
+        </svg>
+
+        <!-- Tormenta: Catatumbo -->
+        <svg class="escena" id="escena-tormenta" viewBox="0 0 400 110" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs>
+                <linearGradient id="cieloTormenta" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#1a1a2e"/>
+                    <stop offset="100%" stop-color="#3d2c5f"/>
+                </linearGradient>
+            </defs>
+            <rect width="400" height="110" fill="url(#cieloTormenta)"/>
+            <rect y="85" width="400" height="25" fill="#0f1b2e" opacity="0.85"/>
+            <ellipse cx="100" cy="25" rx="75" ry="20" fill="#2c2c44"/>
+            <ellipse cx="280" cy="20" rx="95" ry="24" fill="#2c2c44"/>
+            <path class="rayo rayo1" d="M180,5 L165,45 L185,45 L160,90" stroke="#ffe89b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <path class="rayo rayo2" d="M270,10 L255,50 L275,50 L250,95" stroke="#ffe89b" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+
+        <!-- Mundo: Extranjero -->
+        <svg class="escena" id="escena-mundo" viewBox="0 0 400 110" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs>
+                <linearGradient id="cieloMundo" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#2b3a67"/>
+                    <stop offset="100%" stop-color="#496a9c"/>
+                </linearGradient>
+            </defs>
+            <rect width="400" height="110" fill="url(#cieloMundo)"/>
+            <circle cx="40" cy="20" r="1.5" fill="#fff"/>
+            <circle cx="90" cy="40" r="1" fill="#fff"/>
+            <circle cx="305" cy="14" r="1.5" fill="#fff"/>
+            <circle cx="355" cy="48" r="1" fill="#fff"/>
+            <circle cx="225" cy="22" r="1" fill="#fff"/>
+            <circle cx="200" cy="100" r="68" fill="#3f6e52" opacity="0.55"/>
+            <g class="globo-lineas">
+                <circle cx="200" cy="100" r="68" fill="none" stroke="#9fd8c2" stroke-width="1.5" opacity="0.6"/>
+                <ellipse cx="200" cy="100" rx="68" ry="24" fill="none" stroke="#9fd8c2" stroke-width="1" opacity="0.5"/>
+                <ellipse cx="200" cy="100" rx="34" ry="68" fill="none" stroke="#9fd8c2" stroke-width="1" opacity="0.5"/>
+            </g>
+            <path class="avion-mundo" d="M0,0 L20,5 L0,10 L5,5 Z" fill="#ff9100"/>
+        </svg>
+
+        <div class="escena-caption" id="escena-caption">🏖️ Arena blanca y aguas turquesa te esperan</div>
+    </div>
+
     <div id="error-box" class="error-msg"></div>
 
     <div class="form-group">
@@ -331,7 +524,6 @@
 
 <script>
     // Tope de campos de edad que se renderizan individualmente.
-    // Si el grupo es más grande, se pide el rango de edades en un solo campo.
     const MAX_EDADES_INDIVIDUALES = 10;
 
     function hoyISO() {
@@ -339,7 +531,6 @@
         return d.toISOString().split('T')[0];
     }
 
-    // Fecha mínima = hoy, para evitar cotizaciones con fechas pasadas
     document.getElementById('checkin').min = hoyISO();
     document.getElementById('checkout').min = hoyISO();
 
@@ -347,14 +538,12 @@
         const checkin = document.getElementById('checkin');
         const checkout = document.getElementById('checkout');
         checkout.min = checkin.value || hoyISO();
-        // Si el checkout quedó antes que el nuevo checkin, lo limpiamos
         if (checkout.value && checkout.value < checkin.value) {
             checkout.value = '';
         }
         actualizarNoches();
     }
 
-    // --- Caja de noches (cuenta automáticamente la duración de la estadía) ---
     function actualizarNoches() {
         const checkin = document.getElementById('checkin').value;
         const checkout = document.getElementById('checkout').value;
@@ -376,12 +565,32 @@
         }
     }
 
+    // --- Escena animada según el destino ---
+    const ESCENAS = {
+        'Isla de Margarita': { id: 'escena-playa', caption: '🏖️ Arena blanca y aguas turquesa te esperan' },
+        'Morrocoy':          { id: 'escena-playa', caption: '🐠 Cayos, manglares y snorkel en Morrocoy' },
+        'Los Roques':        { id: 'escena-playa', caption: '🏝️ El paraíso de aguas cristalinas' },
+        'Mérida':            { id: 'escena-montana', caption: '🚡 Aire de montaña y el teleférico más alto' },
+        'Canaima':           { id: 'escena-cascada', caption: '💧 Tepuyes y cascadas infinitas' },
+        'Catacumbo':         { id: 'escena-tormenta', caption: '⚡ El relámpago eterno del Catatumbo' },
+        'Extranjero':        { id: 'escena-mundo', caption: '🌍 Tu próxima aventura internacional' }
+    };
+
+    function actualizarEscena() {
+        const destino = document.getElementById('destino').value;
+        const config = ESCENAS[destino] || ESCENAS['Isla de Margarita'];
+
+        document.querySelectorAll('.escena').forEach(el => el.classList.remove('activa'));
+        document.getElementById(config.id).classList.add('activa');
+        document.getElementById('escena-caption').textContent = config.caption;
+    }
+
     function toggleExtranjero() {
         const dest = document.getElementById('destino').value;
         document.getElementById('div-extranjero').style.display = (dest === 'Extranjero') ? 'block' : 'none';
+        actualizarEscena();
     }
 
-    // --- Ocasión especial ---
     function toggleOcasionInfo() {
         const ocasion = document.getElementById('ocasion').value;
         const info = document.getElementById('info-ocasion');
@@ -389,7 +598,6 @@
         info.style.display = especiales.includes(ocasion) ? 'block' : 'none';
     }
 
-    // --- Transporte ---
     function toggleTransporte() {
         const transporte = document.getElementById('transporte').value;
         const origenVuelo = document.getElementById('origen-vuelo');
@@ -451,7 +659,6 @@
         return parseInt(sel.value, 10);
     }
 
-    // --- Sugerencia de habitaciones según el tamaño del grupo (no obliga, solo orienta) ---
     function actualizarSugerenciaHabitaciones() {
         const ad = getAdultosCount();
         const ni = getNinosCount();
@@ -478,7 +685,6 @@
                 cont.innerHTML += `<div class="form-group"><label>Edad Niño ${i}</label><input type="number" class="edad-input" min="0" max="17" placeholder="Años"></div>`;
             }
         } else {
-            // Grupo grande: pedimos un resumen de edades en un solo campo en vez de saturar el formulario
             cont.innerHTML = `<div class="form-group"><label>Edades de los niños (resumen)</label><input type="text" id="edades-resumen" placeholder="Ej: 5 de 8 años, 5 de 3 años"></div>`;
         }
     }
@@ -513,7 +719,6 @@
         const ninos = getNinosCount();
         const habitaciones = getHabitacionesCount();
 
-        // --- Validaciones ---
         const errores = [];
 
         if (destBase === 'Extranjero' && !destExtra) {
@@ -530,4 +735,86 @@
         if (document.getElementById('ninos').value === 'more' && (ninos === null || ninos < 4)) {
             errores.push('Indica cuántos niños viajan (mínimo 4 para esta opción).');
         }
-        if (document.getElementById('habitaciones').value === 'more' && (habitaciones === null || habitaciones 
+        if (document.getElementById('habitaciones').value === 'more' && (habitaciones === null || habitaciones < 6)) {
+            errores.push('Indica cuántas habitaciones necesitas (mínimo 6 para esta opción).');
+        }
+        if (transporte === 'Vuelo' && !origenVuelo) {
+            errores.push('Indica desde qué ciudad saldría tu vuelo.');
+        }
+
+        if (errores.length > 0) {
+            mostrarError('Por favor revisa lo siguiente:<br>• ' + errores.join('<br>• '));
+            return;
+        }
+
+        let edades = '';
+        const resumenInput = document.getElementById('edades-resumen');
+        if (resumenInput) {
+            edades = resumenInput.value.trim() || 'No especificado';
+        } else {
+            const inputs = document.getElementsByClassName('edad-input');
+            const partes = [];
+            for (let i = 0; i < inputs.length; i++) {
+                partes.push(`Niño ${i + 1}: ${inputs[i].value || 'N/A'} años`);
+            }
+            edades = partes.length > 0 ? partes.join(', ') : 'N/A';
+        }
+
+        const asesores = [
+            '584244634041', '584244900601',
+            '584147020527', '584244269876',
+            '584127136169', '584244900601',
+            '584127136169'
+        ];
+        const tlf = asesores[Math.floor(Math.random() * asesores.length)];
+
+        const dIn = new Date(checkin);
+        const dOut = new Date(checkout);
+        const noches = Math.round((dOut - dIn) / (1000 * 60 * 60 * 24));
+
+        const lineas = [
+            '¡Hola! Quiero cotizar:',
+            `Destino: ${dest}`,
+            `Hospedaje: ${hosp}`,
+            `Plan de alimentación: ${planAlimentacion}`,
+            `Fechas: ${checkin} al ${checkout} (${noches} noche${noches !== 1 ? 's' : ''})`,
+            `Adultos: ${adultos}`,
+            `Niños: ${ninos}`
+        ];
+        if (ninos > 0) lineas.push(`Edades: ${edades}`);
+        lineas.push(`Habitaciones solicitadas: ${habitaciones}`);
+        if (ocasion !== 'Vacaciones') lineas.push(`Ocasión especial: ${ocasion} 🎉`);
+        lineas.push(`Transporte: ${transporte}${transporte === 'Vuelo' ? ' desde ' + origenVuelo : ''}`);
+
+        const msg = lineas.join('\n');
+
+        document.getElementById('btn-wa').href = `https://wa.me/${tlf}?text=${encodeURIComponent(msg)}`;
+        document.getElementById('res-texto').innerHTML = `
+            <b>Resumen de tu solicitud:</b><br>
+            Destino: ${dest}<br>
+            Hospedaje: ${hosp} · ${planAlimentacion}<br>
+            Fechas: ${checkin} al ${checkout} (${noches} noche${noches !== 1 ? 's' : ''})<br>
+            ${adultos} Adulto(s), ${ninos} Niño(s) · ${habitaciones} habitación(es)
+            ${ninos > 0 ? `<br>Edades: ${edades}` : ''}
+            ${ocasion !== 'Vacaciones' ? `<br>Ocasión especial: ${ocasion} 🎉` : ''}
+            <br>Transporte: ${transporte}${transporte === 'Vuelo' ? ' desde ' + origenVuelo : ''}
+        `;
+        document.getElementById('resultado').style.display = 'block';
+        document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        const btn = document.getElementById('btn-generar');
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '¡Listo! Revisa tu resumen ↓';
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = original;
+        }, 2000);
+    }
+
+    // Estado inicial de la escena
+    actualizarEscena();
+</script>
+
+</body>
+</html>
