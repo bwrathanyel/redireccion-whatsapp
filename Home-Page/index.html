@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#1a1a2e" id="theme-color">
     <meta property="og:title" content="Destino y Eventos Lotus 360">
-    <meta property="og:description" content="¡Escápate con nosotros! Hospedaje, boletería aérea, tours full day y eventos corporativos en Venezuela.">
+    <meta property="og:description" content="¡Escápate con nosotros! Hospedaje, boletería aérea, full days y eventos corporativos en Venezuela.">
     <meta property="og:image" content="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png">
     <title>Destino y Eventos Lotus 360</title>
     <link rel="preload" as="image" href="https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg">
@@ -15,10 +15,9 @@
         :root {
             --accent: #ff9100;
             --accent-light: #ffb74d;
+            --color-fullday: #10b981;
             --color-hospedaje: #ff9100;
             --color-boleteria: #4a9eff;
-            --color-fullday: #10b981;
-            --color-corporativo: #8b5cf6;
             --success: #25D366;
             --text-warm: #ffe0b2;
         }
@@ -27,7 +26,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #0a1020; color: #fff; min-height: 100vh;
             display: flex; flex-direction: column; align-items: center;
-            padding: 20px 14px 100px; position: relative; overflow-x: hidden;
+            padding: 24px 14px 100px; position: relative; overflow-x: hidden;
             -webkit-font-smoothing: antialiased;
             animation: pageEnter 0.4s ease;
         }
@@ -52,76 +51,80 @@
         }
 
         .particula {
-            position: fixed; bottom: -10px; width: 5px; height: 5px;
-            background: rgba(255,255,255,0.4); border-radius: 50%;
+            position: fixed; bottom: -10px; width: 4px; height: 4px;
+            background: rgba(255,255,255,0.3); border-radius: 50%;
             animation: flotar linear infinite; z-index: 0; pointer-events: none;
         }
-        @keyframes flotar { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: .5; } 90% { opacity: .5; } 100% { transform: translateY(-100vh) translateX(20px); opacity: 0; } }
+        @keyframes flotar { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: .4; } 90% { opacity: .4; } 100% { transform: translateY(-100vh) translateX(16px); opacity: 0; } }
 
-        .container { width: 100%; max-width: 480px; text-align: center; z-index: 1; }
+        .container { width: 100%; max-width: 460px; text-align: center; z-index: 1; }
         
-        /* Barra superior minimalista */
-        .top-bar {
-            display: flex; align-items: center; justify-content: center; gap: 14px;
-            margin-bottom: 22px; font-size: 8px; color: rgba(255,255,255,0.35);
-            text-transform: uppercase; letter-spacing: 1.8px;
-        }
-        .top-bar span { display: flex; align-items: center; gap: 5px; }
-        .top-bar i { font-size: 8px; }
-        .top-bar .dot-sep { color: rgba(255,255,255,0.2); font-size: 6px; }
-        
-        .logo-wrap { position: relative; width: 88px; height: 88px; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; }
+        .logo-wrap { position: relative; width: 80px; height: 80px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; }
         .logo-wrap::before {
-            content: ''; position: absolute; width: 88px; height: 88px; border-radius: 50%;
+            content: ''; position: absolute; width: 80px; height: 80px; border-radius: 50%;
             border: 2px solid rgba(255,145,0,0.5); animation: ring-pulse 2.4s ease-out infinite;
             top: 50%; left: 50%; transform: translate(-50%, -50%);
         }
-        @keyframes ring-pulse { 0% { width: 78px; height: 78px; opacity: 0.8; } 100% { width: 108px; height: 108px; opacity: 0; } }
+        @keyframes ring-pulse { 0% { width: 70px; height: 70px; opacity: 0.8; } 100% { width: 100px; height: 100px; opacity: 0; } }
         .logo-profile {
-            width: 78px; height: 78px; border-radius: 50%; border: 3px solid var(--accent);
+            width: 70px; height: 70px; border-radius: 50%; border: 3px solid var(--accent);
             padding: 3px; background: #fff; object-fit: contain; display: block; position: relative; z-index: 1;
             box-shadow: 0 4px 18px rgba(0,0,0,0.4); animation: logoAppear 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;
         }
         @keyframes logoAppear { from { opacity: 0; transform: scale(0.5) rotateY(90deg); } to { opacity: 1; transform: scale(1) rotateY(0deg); } }
         
         h1 { 
-            font-size: 1.3rem; font-weight: 700; margin-bottom: 4px; 
+            font-size: 1.25rem; font-weight: 700; margin-bottom: 2px; 
             background: linear-gradient(to right, #ff9100, #ffb74d, #ff9100);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
-        .subtitle { color: var(--text-warm); font-size: 0.9rem; margin-bottom: 4px; text-shadow: 0 2px 6px rgba(0,0,0,0.7); }
-        .slogan { font-size: 10px; color: rgba(255,183,77,0.5); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; }
+        .subtitle { color: var(--text-warm); font-size: 0.85rem; margin-bottom: 14px; text-shadow: 0 2px 6px rgba(0,0,0,0.7); }
+
+        /* Menú de servicios - líneas sutiles */
+        .servicios-nav {
+            display: flex; justify-content: center; align-items: center; gap: 0;
+            margin-bottom: 18px; animation: fadeSlideUp 0.5s ease 0.15s both;
+        }
+        @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .servicios-nav a {
+            text-decoration: none; color: rgba(255,255,255,0.5); font-size: 10px; font-weight: 600;
+            padding: 6px 14px; transition: all 0.2s ease; position: relative;
+            letter-spacing: 0.3px; white-space: nowrap;
+        }
+        .servicios-nav a::after {
+            content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 0; height: 2px; border-radius: 2px; transition: width 0.2s ease;
+        }
+        .servicios-nav a:active, .servicios-nav a:hover { color: #fff; }
+        .servicios-nav a:active::after, .servicios-nav a:hover::after { width: 60%; }
+        .servicios-nav a.fullday { color: rgba(16,185,129,0.7); }
+        .servicios-nav a.fullday::after { background: #10b981; }
+        .servicios-nav a.fullday:active, .servicios-nav a.fullday:hover { color: #10b981; }
+        .servicios-nav a.hospedaje { color: rgba(255,145,0,0.7); }
+        .servicios-nav a.hospedaje::after { background: #ff9100; }
+        .servicios-nav a.hospedaje:active, .servicios-nav a.hospedaje:hover { color: #ff9100; }
+        .servicios-nav a.boleteria { color: rgba(74,158,255,0.7); }
+        .servicios-nav a.boleteria::after { background: #4a9eff; }
+        .servicios-nav a.boleteria:active, .servicios-nav a.boleteria:hover { color: #4a9eff; }
+        
+        .servicios-nav .nav-sep {
+            width: 1px; height: 12px; background: rgba(255,255,255,0.1); margin: 0 2px;
+        }
 
         .estado-box {
             display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.07);
-            border: 1px solid rgba(255,255,255,0.12); border-radius: 30px; padding: 6px 14px;
-            font-size: 10px; font-weight: 600; margin-bottom: 18px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 30px; padding: 5px 12px;
+            font-size: 10px; font-weight: 600; margin-bottom: 16px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
         }
         .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
         .dot.online { background: #25D366; animation: dot-breathe 1.8s infinite; }
         .dot.offline { background: #f59e0b; }
         @keyframes dot-breathe { 0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); } 70% { box-shadow: 0 0 0 5px rgba(37,211,102,0); } 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); } }
 
-        /* Servicios grid */
-        .servicios-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 16px; }
-        .servicio-item {
-            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px; padding: 10px 4px; font-size: 10px; font-weight: 600;
-            text-decoration: none; color: #fff; cursor: pointer; transition: all 0.15s ease;
-            animation: fadeSlideUp 0.4s ease both;
-        }
-        @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .servicio-item:nth-child(1) { animation-delay: 0.05s; }
-        .servicio-item:nth-child(2) { animation-delay: 0.15s; }
-        .servicio-item:nth-child(3) { animation-delay: 0.25s; }
-        .servicio-item:nth-child(4) { animation-delay: 0.35s; }
-        .servicio-item i { display: block; font-size: 15px; margin-bottom: 4px; }
-        .servicio-item:active { transform: scale(0.93); }
-
         /* Hero escena */
         .hero-escena {
-            position: relative; width: 100%; height: 100px; border-radius: 14px; overflow: hidden;
-            margin-bottom: 14px; border: 1px solid rgba(255,145,0,0.2);
+            position: relative; width: 100%; height: 105px; border-radius: 14px; overflow: hidden;
+            margin-bottom: 12px; border: 1px solid rgba(255,145,0,0.2);
             box-shadow: 0 4px 16px rgba(0,0,0,0.3); animation: fadeSlideUp 0.5s ease 0.2s both;
         }
         .hero-escena svg { width: 100%; height: 100%; display: block; }
@@ -134,158 +137,132 @@
         @keyframes volar-avion { 0% { transform: translate(-10px,18px) rotate(6deg); opacity: 0; } 12% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(380px,-6px) rotate(6deg); opacity: 0; } }
         .avion-hero { animation: volar-avion 9s linear infinite; }
 
-        /* Ticker */
+        /* Ticker simplificado */
         .ticker-wrap {
-            overflow: hidden; white-space: nowrap; border-top: 1px solid rgba(255,255,255,0.1);
-            border-bottom: 1px solid rgba(255,255,255,0.1); padding: 7px 0; margin-bottom: 10px;
+            overflow: hidden; white-space: nowrap;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding: 6px 0; margin-bottom: 10px;
         }
         .ticker {
-            display: flex; width: max-content; animation: desplazar 30s linear infinite;
-            font-size: 11px; font-weight: 600; color: #ffe0b2;
+            display: flex; width: max-content; animation: desplazar 28s linear infinite;
+            font-size: 10px; font-weight: 500; color: rgba(255,255,255,0.5);
         }
         .ticker.paused { animation-play-state: paused; }
         .ticker span {
-            padding: 4px 14px; cursor: pointer; transition: all 0.15s ease;
-            border-radius: 20px; margin: 0 2px;
+            padding: 3px 12px; cursor: pointer; transition: all 0.15s ease;
+            border-radius: 20px; margin: 0 1px;
         }
-        .ticker span:active { background: rgba(255,145,0,0.2); color: #fff; }
+        .ticker span:active { background: rgba(255,145,0,0.15); color: #fff; }
         @keyframes desplazar { to { transform: translateX(-50%); } }
 
-        /* Info destino */
+        /* Info destino - más compacta */
         .destino-info {
-            display: none; background: rgba(15,20,40,0.75); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,145,0,0.2); border-radius: 12px; padding: 10px 14px;
-            margin-bottom: 14px; text-align: center; animation: fadeSlideUp 0.3s ease;
+            display: none; background: rgba(15,20,40,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,145,0,0.15); border-radius: 10px; padding: 8px 12px;
+            margin-bottom: 12px; text-align: center; animation: fadeSlideUp 0.3s ease;
         }
         .destino-info.visible { display: block; }
-        .destino-info .destino-icono { font-size: 28px; margin-bottom: 4px; }
-        .destino-info .destino-nombre { font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
-        .destino-info .destino-desc { font-size: 10px; color: var(--text-warm); line-height: 1.4; }
-        .destino-info .destino-pais { font-size: 9px; color: rgba(255,183,77,0.5); margin-top: 2px; }
+        .destino-info .destino-icono { font-size: 24px; margin-bottom: 2px; }
+        .destino-info .destino-nombre { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 2px; }
+        .destino-info .destino-desc { font-size: 9px; color: var(--text-warm); line-height: 1.4; }
+        .destino-info .destino-pais { font-size: 8px; color: rgba(255,183,77,0.4); margin-top: 1px; }
 
-        /* CTAs - 3 columnas alineadas */
-        .cta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; animation: fadeSlideUp 0.5s ease 0.3s both; }
+        /* CTAs - limpias y espaciosas */
+        .cta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 22px; animation: fadeSlideUp 0.5s ease 0.3s both; }
         .cta-card {
-            background: rgba(15,20,40,0.7); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px 6px 14px;
+            background: rgba(15,20,40,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 18px 8px 16px;
             text-decoration: none; color: #fff; text-align: center; transition: all 0.15s ease;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.2); display: flex; flex-direction: column;
-            align-items: center; justify-content: flex-start; position: relative;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.15); position: relative;
         }
-        .cta-card:active { transform: scale(0.95); }
-        .cta-card i { font-size: 22px; margin-bottom: 8px; display: block; }
-        .cta-card .titulo { font-weight: 700; font-size: 12px; margin-bottom: 3px; }
-        .cta-card .desc { font-size: 8px; color: var(--text-warm); line-height: 1.3; opacity: 0.7; }
-        
-        /* Badge "NUEVO" */
+        .cta-card:active { transform: scale(0.96); }
+        .cta-card i { font-size: 24px; margin-bottom: 8px; display: block; }
+        .cta-card .titulo { font-weight: 700; font-size: 13px; margin-bottom: 3px; }
+        .cta-card .desc { font-size: 9px; color: var(--text-warm); line-height: 1.3; opacity: 0.65; }
         .cta-card .badge-top {
-            position: absolute; top: -7px; font-size: 7px; font-weight: 800; padding: 2px 7px;
-            border-radius: 8px; letter-spacing: 0.5px;
+            position: absolute; top: -7px; left: 50%; transform: translateX(-50%);
+            font-size: 7px; font-weight: 800; padding: 2px 8px; border-radius: 8px;
+            letter-spacing: 0.5px; white-space: nowrap;
         }
 
-        .divider { display: flex; align-items: center; gap: 10px; margin: 4px 0 16px; opacity: 0.3; }
+        .divider { display: flex; align-items: center; gap: 10px; margin: 6px 0 18px; opacity: 0.25; }
         .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.4); }
-        .divider i { font-size: 9px; color: var(--accent); }
+        .divider i { font-size: 8px; color: var(--accent); }
 
-        .section-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 12px; text-shadow: 0 2px 6px rgba(0,0,0,0.7); }
-        .corporate-text { font-size: 0.85rem; line-height: 1.6; margin-bottom: 18px; color: var(--text-warm); }
+        .section-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; text-shadow: 0 2px 6px rgba(0,0,0,0.7); }
+        .corporate-text { font-size: 0.8rem; line-height: 1.6; margin-bottom: 16px; color: var(--text-warm); opacity: 0.8; }
 
         .btn-large {
             display: flex; align-items: center; justify-content: flex-start; width: 100%;
-            background: rgba(15,20,40,0.7); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.12); color: white; padding: 8px 10px;
-            border-radius: 14px; font-weight: 600; font-size: 0.95rem; text-decoration: none;
-            margin-bottom: 10px; box-shadow: 0 3px 12px rgba(0,0,0,0.2); transition: all 0.15s ease;
+            background: rgba(15,20,40,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.1); color: white; padding: 7px 10px;
+            border-radius: 12px; font-weight: 600; font-size: 0.9rem; text-decoration: none;
+            margin-bottom: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); transition: all 0.15s ease;
         }
         .btn-large .icon-circle {
-            display: flex; align-items: center; justify-content: center; width: 40px; height: 40px;
-            background: rgba(255,145,0,0.85); color: white; border-radius: 10px;
-            margin-right: 12px; font-size: 1rem; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; width: 36px; height: 36px;
+            background: rgba(255,145,0,0.8); color: white; border-radius: 8px;
+            margin-right: 10px; font-size: 0.9rem; flex-shrink: 0;
         }
-        .btn-large:active { transform: scale(0.97); background: rgba(255,145,0,0.18); }
-        .btn-promo { background: linear-gradient(135deg, rgba(255,145,0,0.7) 0%, rgba(220,80,20,0.7) 100%); border: 1px solid rgba(255,180,60,0.4); }
-        .btn-promo .icon-circle { background: rgba(255,255,255,0.2); }
+        .btn-large:active { transform: scale(0.97); background: rgba(255,145,0,0.15); }
+        .btn-promo { background: linear-gradient(135deg, rgba(255,145,0,0.65) 0%, rgba(220,80,20,0.65) 100%); border: 1px solid rgba(255,180,60,0.35); }
+        .btn-promo .icon-circle { background: rgba(255,255,255,0.18); }
 
-        .badges-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 10px 0 24px; animation: fadeSlideUp 0.5s ease 0.4s both; }
+        .badges-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin: 8px 0 20px; animation: fadeSlideUp 0.5s ease 0.4s both; }
         .badge {
-            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 20px; padding: 5px 11px; font-size: 10px; font-weight: 600;
-            position: relative; overflow: hidden;
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px; padding: 4px 10px; font-size: 9px; font-weight: 500;
+            position: relative; overflow: hidden; color: rgba(255,255,255,0.6);
         }
-        .badge i { color: var(--accent); margin-right: 3px; font-size: 9px; }
-        .badge::after {
-            content: ''; position: absolute; top: 0; left: -60%; width: 40%; height: 100%;
-            background: linear-gradient(120deg, transparent, rgba(255,255,255,0.25), transparent);
-            animation: badgeShine 5s ease-in-out infinite;
-        }
-        .badge:nth-child(2)::after { animation-delay: 1.2s; }
-        .badge:nth-child(3)::after { animation-delay: 2.4s; }
-        @keyframes badgeShine { 0% { left: -60%; } 50% { left: 130%; } 100% { left: 130%; } }
+        .badge i { color: var(--accent); margin-right: 2px; font-size: 8px; }
 
-        .footer-social { display: flex; justify-content: center; gap: 18px; margin-bottom: 10px; }
+        .footer-social { display: flex; justify-content: center; gap: 16px; margin-bottom: 8px; }
         .footer-icon {
-            display: flex; align-items: center; justify-content: center; width: 42px; height: 42px;
-            background: rgba(255,255,255,0.1); color: white; border-radius: 50%;
-            font-size: 1.1rem; text-decoration: none; transition: all 0.15s ease;
+            display: flex; align-items: center; justify-content: center; width: 38px; height: 38px;
+            background: rgba(255,255,255,0.08); color: white; border-radius: 50%;
+            font-size: 1rem; text-decoration: none; transition: all 0.15s ease;
         }
         .footer-icon:active { transform: scale(0.9); background: var(--accent); }
-        .footer-copy { font-size: 8px; color: rgba(255,255,255,0.25); text-align: center; }
+        .footer-copy { font-size: 8px; color: rgba(255,255,255,0.2); text-align: center; }
 
         .wa-float {
-            position: fixed; bottom: 16px; right: 16px; width: 52px; height: 52px; border-radius: 50%;
+            position: fixed; bottom: 16px; right: 16px; width: 50px; height: 50px; border-radius: 50%;
             background: #25D366; color: #fff; display: flex; align-items: center; justify-content: center;
-            font-size: 24px; text-decoration: none; z-index: 20; box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+            font-size: 22px; text-decoration: none; z-index: 20; box-shadow: 0 6px 18px rgba(0,0,0,0.4);
             animation: pulso-wa 2.6s infinite;
         }
         @keyframes pulso-wa { 0%,100% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 0 rgba(37,211,102,0.5); } 50% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 10px rgba(37,211,102,0); } }
 
-        @media (max-width: 360px) { body { padding: 14px 8px 90px; } .cta-card { padding: 12px 4px 10px; } .cta-card .titulo { font-size: 10px; } }
+        @media (max-width: 360px) { body { padding: 18px 8px 90px; } .cta-card { padding: 14px 4px 12px; } .cta-card .titulo { font-size: 11px; } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }
     </style>
 </head>
 <body>
 <div id="bg"></div>
 <div id="bg-overlay"></div>
-<div class="particula" style="left:8%;animation-duration:16s;animation-delay:0s;"></div>
-<div class="particula" style="left:25%;animation-duration:20s;animation-delay:3s;"></div>
-<div class="particula" style="left:45%;animation-duration:18s;animation-delay:6s;"></div>
-<div class="particula" style="left:65%;animation-duration:22s;animation-delay:1s;"></div>
-<div class="particula" style="left:82%;animation-duration:17s;animation-delay:4s;"></div>
+<div class="particula" style="left:10%;animation-duration:18s;animation-delay:0s;"></div>
+<div class="particula" style="left:35%;animation-duration:22s;animation-delay:3s;"></div>
+<div class="particula" style="left:60%;animation-duration:20s;animation-delay:6s;"></div>
+<div class="particula" style="left:85%;animation-duration:24s;animation-delay:2s;"></div>
 
 <div class="container">
-    <div class="top-bar">
-        <span><i class="fas fa-umbrella-beach" style="color:#10b981;"></i> Full Day</span>
-        <span class="dot-sep">·</span>
-        <span><i class="fas fa-hotel" style="color:#ff9100;"></i> Hospedaje</span>
-        <span class="dot-sep">·</span>
-        <span><i class="fas fa-plane" style="color:#4a9eff;"></i> Boletería</span>
-        <span class="dot-sep">·</span>
-        <span><i class="fas fa-building" style="color:#8b5cf6;"></i> Corporativo</span>
-    </div>
-
     <div class="logo-wrap">
-        <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360" loading="eager" width="78" height="78">
+        <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360" loading="eager" width="70" height="70">
     </div>
     <h1>Destino y Eventos Lotus 360</h1>
-    <p class="subtitle">¡Escápate con Nosotros! Tu agencia #1 en Carabobo</p>
-    <p class="slogan">Viaja con Lotus 360</p>
+    <p class="subtitle">Tu agencia de viajes #1 en Carabobo · Viaja con Lotus 360</p>
+
+    <!-- Menú de servicios - líneas sutiles -->
+    <div class="servicios-nav">
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="fullday">🌴 Full Day</a>
+        <span class="nav-sep"></span>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="hospedaje">🏨 Hospedaje</a>
+        <span class="nav-sep"></span>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="boleteria">✈️ Boletería</a>
+    </div>
 
     <div class="estado-box"><span class="dot" id="estado-dot"></span><span id="estado-texto">Verificando...</span></div>
-
-    <div class="servicios-grid">
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="servicio-item">
-            <i class="fas fa-umbrella-beach" style="color:#10b981;"></i>Full Day
-        </a>
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="servicio-item">
-            <i class="fas fa-hotel" style="color:#ff9100;"></i>Hospedaje
-        </a>
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="servicio-item">
-            <i class="fas fa-plane" style="color:#4a9eff;"></i>Boletería
-        </a>
-        <div class="servicio-item">
-            <i class="fas fa-building" style="color:#8b5cf6;"></i>Corporativo
-        </div>
-    </div>
 
     <div class="hero-escena">
         <svg viewBox="0 0 400 110" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
@@ -302,22 +279,23 @@
         </svg>
     </div>
 
+    <!-- Ticker -->
     <div class="ticker-wrap" id="ticker-wrap">
         <div class="ticker" id="ticker">
-            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Venezuela" data-desc="Playas paradisíacas, duty free, vida nocturna y gastronomía local.">🏖️ Isla de Margarita</span>
-            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Venezuela" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
-            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Venezuela" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
-            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Venezuela" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
-            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Venezuela" data-desc="Tepuyes milenarios y el Salto Ángel (979m).">💧 Canaima</span>
-            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Venezuela" data-desc="El relámpago eterno: 260 noches de tormentas al año.">⚡ Catatumbo</span>
-            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
-            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Venezuela" data-desc="Playas paradisíacas, duty free, vida nocturna y gastronomía local.">🏖️ Isla de Margarita</span>
-            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Venezuela" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
-            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Venezuela" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
-            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Venezuela" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
-            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Venezuela" data-desc="Tepuyes milenarios y el Salto Ángel (979m).">💧 Canaima</span>
-            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Venezuela" data-desc="El relámpago eterno: 260 noches de tormentas al año.">⚡ Catatumbo</span>
-            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
+            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Venezuela" data-desc="Playas paradisíacas, duty free y vida nocturna">🏖️ Isla de Margarita</span>
+            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Venezuela" data-desc="Cayos de arena blanca y snorkel de clase mundial">🐠 Morrocoy</span>
+            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Venezuela" data-desc="Archipiélago virgen ideal para desconectar">🏝️ Los Roques</span>
+            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Venezuela" data-desc="Montañas andinas y el teleférico más alto">🚡 Mérida</span>
+            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Venezuela" data-desc="Tepuyes milenarios y el Salto Ángel">💧 Canaima</span>
+            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Venezuela" data-desc="El relámpago eterno, único en el mundo">⚡ Catatumbo</span>
+            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú">🌍 Internacionales</span>
+            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Venezuela" data-desc="Playas paradisíacas, duty free y vida nocturna">🏖️ Isla de Margarita</span>
+            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Venezuela" data-desc="Cayos de arena blanca y snorkel de clase mundial">🐠 Morrocoy</span>
+            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Venezuela" data-desc="Archipiélago virgen ideal para desconectar">🏝️ Los Roques</span>
+            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Venezuela" data-desc="Montañas andinas y el teleférico más alto">🚡 Mérida</span>
+            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Venezuela" data-desc="Tepuyes milenarios y el Salto Ángel">💧 Canaima</span>
+            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Venezuela" data-desc="El relámpago eterno, único en el mundo">⚡ Catatumbo</span>
+            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú">🌍 Internacionales</span>
         </div>
     </div>
 
@@ -328,20 +306,20 @@
         <div class="destino-pais" id="destino-pais"></div>
     </div>
 
-    <!-- CTAs: 3 columnas alineadas -->
+    <!-- CTAs principales -->
     <div class="cta-grid">
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="cta-card" style="border-color: rgba(16,185,129,0.3);">
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="cta-card" style="border-color: rgba(16,185,129,0.25);">
             <span class="badge-top" style="background:#10b981;color:#000;">NUEVO</span>
             <i class="fas fa-umbrella-beach" style="color:#10b981;"></i>
             <div class="titulo">Full Day</div>
             <div class="desc">Escápate a Cayo Sal</div>
         </a>
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="cta-card" style="border-color: rgba(255,145,0,0.25);">
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="cta-card" style="border-color: rgba(255,145,0,0.2);">
             <i class="fas fa-hotel" style="color:#ff9100;"></i>
             <div class="titulo">Hospedaje</div>
             <div class="desc">Hoteles al mejor precio</div>
         </a>
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="cta-card" style="border-color: rgba(74,158,255,0.25);">
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="cta-card" style="border-color: rgba(74,158,255,0.2);">
             <i class="fas fa-plane-departure" style="color:#4a9eff;"></i>
             <div class="titulo">Boletería</div>
             <div class="desc">Vuelos nacionales e intl.</div>
@@ -356,8 +334,8 @@
     <a href="https://ig.me/m/destinoyeventoslotus360?ref=w55673950" class="btn-large btn-promo">
         <span class="icon-circle"><i class="fas fa-star"></i></span>
         <span>
-            <span style="display:block;font-size:0.95rem;font-weight:700;">Ver Promociones 🔥</span>
-            <span style="display:block;font-size:9px;font-weight:400;opacity:0.85;margin-top:2px;">Escríbenos "PROMOCIONES" y te enviamos todo</span>
+            <span style="display:block;font-size:0.9rem;font-weight:700;">Ver Promociones 🔥</span>
+            <span style="display:block;font-size:8px;font-weight:400;opacity:0.8;margin-top:1px;">Escríbenos "PROMOCIONES" y te enviamos todo</span>
         </span>
     </a>
     <a href="mailto:corporativo.lotus360@gmail.com" class="btn-large">
@@ -368,9 +346,9 @@
     </a>
 
     <div class="badges-row">
-        <span class="badge"><i class="fas fa-trophy"></i>Líderes en Venezuela</span>
-        <span class="badge"><i class="fas fa-star"></i>+800K seguidores</span>
-        <span class="badge"><i class="fas fa-globe-americas"></i>Alcance Internacional</span>
+        <span class="badge"><i class="fas fa-trophy"></i> Líderes en Venezuela</span>
+        <span class="badge"><i class="fas fa-star"></i> +800K seguidores</span>
+        <span class="badge"><i class="fas fa-globe-americas"></i> Alcance Internacional</span>
     </div>
 
     <div class="footer-social">
@@ -406,18 +384,14 @@ var hideTimeout;
 ticker.addEventListener('click', function(e) {
     var span = e.target.closest('span');
     if (!span) return;
-    var icono = span.getAttribute('data-icono');
-    var nombre = span.getAttribute('data-destino');
-    var desc = span.getAttribute('data-desc');
-    var pais = span.getAttribute('data-pais');
-    destinoIcono.textContent = icono;
-    destinoNombre.textContent = nombre;
-    destinoDesc.textContent = desc;
-    destinoPais.textContent = '📍 ' + pais;
+    destinoIcono.textContent = span.getAttribute('data-icono');
+    destinoNombre.textContent = span.getAttribute('data-destino');
+    destinoDesc.textContent = span.getAttribute('data-desc');
+    destinoPais.textContent = '📍 ' + span.getAttribute('data-pais');
     destinoInfo.classList.add('visible');
     ticker.classList.add('paused');
     clearTimeout(hideTimeout);
-    hideTimeout = setTimeout(function() { destinoInfo.classList.remove('visible'); ticker.classList.remove('paused'); }, 7000);
+    hideTimeout = setTimeout(function() { destinoInfo.classList.remove('visible'); ticker.classList.remove('paused'); }, 6000);
 });
 </script>
 </body>
