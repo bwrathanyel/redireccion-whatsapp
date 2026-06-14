@@ -15,7 +15,10 @@
         :root {
             --accent: #ff9100;
             --accent-light: #ffb74d;
-            --accent-blue: #4a9eff;
+            --color-hospedaje: #ff9100;
+            --color-boleteria: #4a9eff;
+            --color-fullday: #10b981;
+            --color-corporativo: #8b5cf6;
             --success: #25D366;
             --text-warm: #ffe0b2;
         }
@@ -57,15 +60,15 @@
 
         .container { width: 100%; max-width: 480px; text-align: center; z-index: 1; }
         
-        /* Barra superior de servicios */
+        /* Barra superior minimalista */
         .top-bar {
-            display: flex; align-items: center; justify-content: center; gap: 12px;
-            margin-bottom: 20px; font-size: 9px; color: rgba(255,183,77,0.5);
-            text-transform: uppercase; letter-spacing: 1.5px;
+            display: flex; align-items: center; justify-content: center; gap: 14px;
+            margin-bottom: 22px; font-size: 8px; color: rgba(255,255,255,0.35);
+            text-transform: uppercase; letter-spacing: 1.8px;
         }
-        .top-bar span { display: flex; align-items: center; gap: 4px; }
-        .top-bar i { color: var(--accent); font-size: 8px; }
-        .top-bar .dot-sep { color: rgba(255,145,0,0.6); }
+        .top-bar span { display: flex; align-items: center; gap: 5px; }
+        .top-bar i { font-size: 8px; }
+        .top-bar .dot-sep { color: rgba(255,255,255,0.2); font-size: 6px; }
         
         .logo-wrap { position: relative; width: 88px; height: 88px; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; }
         .logo-wrap::before {
@@ -99,34 +102,21 @@
         .dot.offline { background: #f59e0b; }
         @keyframes dot-breathe { 0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); } 70% { box-shadow: 0 0 0 5px rgba(37,211,102,0); } 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); } }
 
-        /* Servicios grid - 4 columnas */
+        /* Servicios grid */
         .servicios-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 16px; }
         .servicio-item {
-            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
             border-radius: 12px; padding: 10px 4px; font-size: 10px; font-weight: 600;
             text-decoration: none; color: #fff; cursor: pointer; transition: all 0.15s ease;
-            animation: fadeSlideUp 0.4s ease both; position: relative; overflow: hidden;
+            animation: fadeSlideUp 0.4s ease both;
         }
         @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .servicio-item::after {
-            content: ''; position: absolute; top: 0; left: -60%; width: 40%; height: 100%;
-            background: linear-gradient(120deg, transparent, rgba(255,255,255,0.15), transparent);
-            transition: left 0.5s ease;
-        }
-        .servicio-item:active::after { left: 130%; }
         .servicio-item:nth-child(1) { animation-delay: 0.05s; }
         .servicio-item:nth-child(2) { animation-delay: 0.15s; }
         .servicio-item:nth-child(3) { animation-delay: 0.25s; }
         .servicio-item:nth-child(4) { animation-delay: 0.35s; }
-        .servicio-item i { display: block; font-size: 16px; color: var(--accent); margin-bottom: 4px; }
-        .servicio-item:active { background: rgba(255,145,0,0.25); transform: scale(0.93); }
-        
-        /* Full Day item destacado */
-        .servicio-item.full-day {
-            border-color: rgba(255,145,0,0.3);
-            background: rgba(255,145,0,0.08);
-        }
-        .servicio-item.full-day i { color: #25D366; }
+        .servicio-item i { display: block; font-size: 15px; margin-bottom: 4px; }
+        .servicio-item:active { transform: scale(0.93); }
 
         /* Hero escena */
         .hero-escena {
@@ -144,7 +134,7 @@
         @keyframes volar-avion { 0% { transform: translate(-10px,18px) rotate(6deg); opacity: 0; } 12% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(380px,-6px) rotate(6deg); opacity: 0; } }
         .avion-hero { animation: volar-avion 9s linear infinite; }
 
-        /* Ticker de destinos interactivo */
+        /* Ticker */
         .ticker-wrap {
             overflow: hidden; white-space: nowrap; border-top: 1px solid rgba(255,255,255,0.1);
             border-bottom: 1px solid rgba(255,255,255,0.1); padding: 7px 0; margin-bottom: 10px;
@@ -158,11 +148,7 @@
             padding: 4px 14px; cursor: pointer; transition: all 0.15s ease;
             border-radius: 20px; margin: 0 2px;
         }
-        .ticker span:hover, .ticker span:active {
-            background: rgba(255,145,0,0.2); color: #fff;
-        }
-        .ticker span.venezuela { color: #ffe0b2; }
-        .ticker span.internacional { color: #a8d1ff; }
+        .ticker span:active { background: rgba(255,145,0,0.2); color: #fff; }
         @keyframes desplazar { to { transform: translateX(-50%); } }
 
         /* Info destino */
@@ -177,34 +163,24 @@
         .destino-info .destino-desc { font-size: 10px; color: var(--text-warm); line-height: 1.4; }
         .destino-info .destino-pais { font-size: 9px; color: rgba(255,183,77,0.5); margin-top: 2px; }
 
-        /* CTAs - 3 columnas */
+        /* CTAs - 3 columnas alineadas */
         .cta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; animation: fadeSlideUp 0.5s ease 0.3s both; }
         .cta-card {
             background: rgba(15,20,40,0.7); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,145,0,0.12); border-radius: 16px; padding: 14px 6px;
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px 6px 14px;
             text-decoration: none; color: #fff; text-align: center; transition: all 0.15s ease;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2); display: flex; flex-direction: column;
+            align-items: center; justify-content: flex-start; position: relative;
         }
         .cta-card:active { transform: scale(0.95); }
-        .cta-card i { font-size: 22px; margin-bottom: 6px; display: block; }
-        .cta-card .titulo { font-weight: 700; font-size: 11px; margin-bottom: 2px; }
-        .cta-card .desc { font-size: 8px; color: var(--text-warm); line-height: 1.3; }
+        .cta-card i { font-size: 22px; margin-bottom: 8px; display: block; }
+        .cta-card .titulo { font-weight: 700; font-size: 12px; margin-bottom: 3px; }
+        .cta-card .desc { font-size: 8px; color: var(--text-warm); line-height: 1.3; opacity: 0.7; }
         
-        /* Colores por servicio */
-        .cta-card.hospedaje { border-color: rgba(255,145,0,0.2); }
-        .cta-card.hospedaje i { color: var(--accent); }
-        .cta-card.hospedaje:active { background: rgba(255,145,0,0.18); }
-        
-        .cta-card.boleteria { border-color: rgba(74,158,255,0.2); }
-        .cta-card.boleteria i { color: var(--accent-blue); }
-        .cta-card.boleteria:active { background: rgba(74,158,255,0.15); }
-        
-        .cta-card.fullday { border-color: rgba(37,211,102,0.3); background: rgba(37,211,102,0.05); }
-        .cta-card.fullday i { color: #25D366; }
-        .cta-card.fullday:active { background: rgba(37,211,102,0.15); }
-        .cta-card.fullday .badge-new {
-            display: inline-block; background: #25D366; color: #000; font-size: 7px;
-            font-weight: 800; padding: 1px 6px; border-radius: 6px; margin-bottom: 4px;
+        /* Badge "NUEVO" */
+        .cta-card .badge-top {
+            position: absolute; top: -7px; font-size: 7px; font-weight: 800; padding: 2px 7px;
+            border-radius: 8px; letter-spacing: 0.5px;
         }
 
         .divider { display: flex; align-items: center; gap: 10px; margin: 4px 0 16px; opacity: 0.3; }
@@ -214,7 +190,6 @@
         .section-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 12px; text-shadow: 0 2px 6px rgba(0,0,0,0.7); }
         .corporate-text { font-size: 0.85rem; line-height: 1.6; margin-bottom: 18px; color: var(--text-warm); }
 
-        /* Botones largos */
         .btn-large {
             display: flex; align-items: center; justify-content: flex-start; width: 100%;
             background: rgba(15,20,40,0.7); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -231,7 +206,6 @@
         .btn-promo { background: linear-gradient(135deg, rgba(255,145,0,0.7) 0%, rgba(220,80,20,0.7) 100%); border: 1px solid rgba(255,180,60,0.4); }
         .btn-promo .icon-circle { background: rgba(255,255,255,0.2); }
 
-        /* Badges */
         .badges-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 10px 0 24px; animation: fadeSlideUp 0.5s ease 0.4s both; }
         .badge {
             background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
@@ -265,7 +239,7 @@
         }
         @keyframes pulso-wa { 0%,100% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 0 rgba(37,211,102,0.5); } 50% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 10px rgba(37,211,102,0); } }
 
-        @media (max-width: 360px) { body { padding: 14px 8px 90px; } .cta-card { padding: 10px 4px; } .cta-card .titulo { font-size: 10px; } }
+        @media (max-width: 360px) { body { padding: 14px 8px 90px; } .cta-card { padding: 12px 4px 10px; } .cta-card .titulo { font-size: 10px; } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }
     </style>
 </head>
@@ -279,13 +253,14 @@
 <div class="particula" style="left:82%;animation-duration:17s;animation-delay:4s;"></div>
 
 <div class="container">
-    <!-- Barra superior estilo Lotus -->
     <div class="top-bar">
-        <span><i class="fas fa-hotel"></i> Hospedaje</span>
+        <span><i class="fas fa-umbrella-beach" style="color:#10b981;"></i> Full Day</span>
         <span class="dot-sep">·</span>
-        <span><i class="fas fa-plane"></i> Boletería</span>
+        <span><i class="fas fa-hotel" style="color:#ff9100;"></i> Hospedaje</span>
         <span class="dot-sep">·</span>
-        <span style="color:#25D366;"><i class="fas fa-umbrella-beach"></i> Full Day</span>
+        <span><i class="fas fa-plane" style="color:#4a9eff;"></i> Boletería</span>
+        <span class="dot-sep">·</span>
+        <span><i class="fas fa-building" style="color:#8b5cf6;"></i> Corporativo</span>
     </div>
 
     <div class="logo-wrap">
@@ -298,17 +273,17 @@
     <div class="estado-box"><span class="dot" id="estado-dot"></span><span id="estado-texto">Verificando...</span></div>
 
     <div class="servicios-grid">
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="servicio-item full-day">
-            <i class="fas fa-umbrella-beach"></i>Full Day
-        </a>
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="servicio-item">
-            <i class="fas fa-plane"></i>Boletería
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="servicio-item">
+            <i class="fas fa-umbrella-beach" style="color:#10b981;"></i>Full Day
         </a>
         <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="servicio-item">
-            <i class="fas fa-hotel"></i>Hospedaje
+            <i class="fas fa-hotel" style="color:#ff9100;"></i>Hospedaje
+        </a>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="servicio-item">
+            <i class="fas fa-plane" style="color:#4a9eff;"></i>Boletería
         </a>
         <div class="servicio-item">
-            <i class="fas fa-building"></i>Corporativo
+            <i class="fas fa-building" style="color:#8b5cf6;"></i>Corporativo
         </div>
     </div>
 
@@ -329,20 +304,20 @@
 
     <div class="ticker-wrap" id="ticker-wrap">
         <div class="ticker" id="ticker">
-            <span class="venezuela" data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Venezuela" data-desc="Playas paradisíacas, duty free, vida nocturna y gastronomía local. El Caribe sin salir del país.">🏖️ Isla de Margarita</span>
-            <span class="venezuela" data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Venezuela" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial. Un paraíso tropical.">🐠 Morrocoy</span>
-            <span class="venezuela" data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Venezuela" data-desc="Archipiélago virgen ideal para desconectar, pesca deportiva y aguas turquesas.">🏝️ Los Roques</span>
-            <span class="venezuela" data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Venezuela" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco de 15°C.">🚡 Mérida</span>
-            <span class="venezuela" data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Venezuela" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita en su máxima expresión.">💧 Canaima</span>
-            <span class="venezuela" data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Venezuela" data-desc="El relámpago eterno: 260 noches de tormentas al año. Un fenómeno único en el mundo.">⚡ Catatumbo</span>
-            <span class="internacional" data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más. Conectamos con el mundo.">🌍 Internacionales</span>
-            <span class="venezuela" data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Venezuela" data-desc="Playas paradisíacas, duty free, vida nocturna y gastronomía local. El Caribe sin salir del país.">🏖️ Isla de Margarita</span>
-            <span class="venezuela" data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Venezuela" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial. Un paraíso tropical.">🐠 Morrocoy</span>
-            <span class="venezuela" data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Venezuela" data-desc="Archipiélago virgen ideal para desconectar, pesca deportiva y aguas turquesas.">🏝️ Los Roques</span>
-            <span class="venezuela" data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Venezuela" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco de 15°C.">🚡 Mérida</span>
-            <span class="venezuela" data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Venezuela" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita en su máxima expresión.">💧 Canaima</span>
-            <span class="venezuela" data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Venezuela" data-desc="El relámpago eterno: 260 noches de tormentas al año. Un fenómeno único en el mundo.">⚡ Catatumbo</span>
-            <span class="internacional" data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más. Conectamos con el mundo.">🌍 Internacionales</span>
+            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Venezuela" data-desc="Playas paradisíacas, duty free, vida nocturna y gastronomía local.">🏖️ Isla de Margarita</span>
+            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Venezuela" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
+            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Venezuela" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
+            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Venezuela" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
+            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Venezuela" data-desc="Tepuyes milenarios y el Salto Ángel (979m).">💧 Canaima</span>
+            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Venezuela" data-desc="El relámpago eterno: 260 noches de tormentas al año.">⚡ Catatumbo</span>
+            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
+            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Venezuela" data-desc="Playas paradisíacas, duty free, vida nocturna y gastronomía local.">🏖️ Isla de Margarita</span>
+            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Venezuela" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
+            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Venezuela" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
+            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Venezuela" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
+            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Venezuela" data-desc="Tepuyes milenarios y el Salto Ángel (979m).">💧 Canaima</span>
+            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Venezuela" data-desc="El relámpago eterno: 260 noches de tormentas al año.">⚡ Catatumbo</span>
+            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
         </div>
     </div>
 
@@ -353,23 +328,23 @@
         <div class="destino-pais" id="destino-pais"></div>
     </div>
 
-    <!-- CTAs principales: 3 columnas -->
+    <!-- CTAs: 3 columnas alineadas -->
     <div class="cta-grid">
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="cta-card fullday">
-            <span class="badge-new">NUEVO</span>
-            <i class="fas fa-umbrella-beach"></i>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="cta-card" style="border-color: rgba(16,185,129,0.3);">
+            <span class="badge-top" style="background:#10b981;color:#000;">NUEVO</span>
+            <i class="fas fa-umbrella-beach" style="color:#10b981;"></i>
             <div class="titulo">Full Day</div>
-            <div class="desc">Escápate a Cayo Sal y más destinos</div>
+            <div class="desc">Escápate a Cayo Sal</div>
         </a>
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="cta-card hospedaje">
-            <i class="fas fa-hotel"></i>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="cta-card" style="border-color: rgba(255,145,0,0.25);">
+            <i class="fas fa-hotel" style="color:#ff9100;"></i>
             <div class="titulo">Hospedaje</div>
-            <div class="desc">Hoteles y posadas al mejor precio</div>
+            <div class="desc">Hoteles al mejor precio</div>
         </a>
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="cta-card boleteria">
-            <i class="fas fa-plane-departure"></i>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="cta-card" style="border-color: rgba(74,158,255,0.25);">
+            <i class="fas fa-plane-departure" style="color:#4a9eff;"></i>
             <div class="titulo">Boletería</div>
-            <div class="desc">Vuelos nacionales e internacionales</div>
+            <div class="desc">Vuelos nacionales e intl.</div>
         </a>
     </div>
 
@@ -431,35 +406,18 @@ var hideTimeout;
 ticker.addEventListener('click', function(e) {
     var span = e.target.closest('span');
     if (!span) return;
-    
     var icono = span.getAttribute('data-icono');
     var nombre = span.getAttribute('data-destino');
     var desc = span.getAttribute('data-desc');
     var pais = span.getAttribute('data-pais');
-    
     destinoIcono.textContent = icono;
     destinoNombre.textContent = nombre;
     destinoDesc.textContent = desc;
     destinoPais.textContent = '📍 ' + pais;
     destinoInfo.classList.add('visible');
-    
     ticker.classList.add('paused');
-    
     clearTimeout(hideTimeout);
-    hideTimeout = setTimeout(function() {
-        destinoInfo.classList.remove('visible');
-        ticker.classList.remove('paused');
-    }, 7000);
-});
-
-ticker.addEventListener('mouseover', function(e) {
-    var span = e.target.closest('span');
-    if (!span) return;
-    ticker.classList.add('paused');
-});
-
-ticker.addEventListener('mouseout', function() {
-    ticker.classList.remove('paused');
+    hideTimeout = setTimeout(function() { destinoInfo.classList.remove('visible'); ticker.classList.remove('paused'); }, 7000);
 });
 </script>
 </body>
