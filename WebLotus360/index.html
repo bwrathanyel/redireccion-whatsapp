@@ -289,7 +289,7 @@
             display:none; margin-top:16px; padding:18px;
             background:rgba(255,255,255,.06);
             border:1px solid rgba(37,211,102,.35); color:#fff;
-            border-radius:16px; border-left:4px solid #25D366;
+            border-radius:166px; border-radius:16px; border-left:4px solid #25D366;
             text-align:left; font-size:13.5px; line-height:1.6;
         }
         #resultado b{ color:#ffd9a8; }
@@ -325,12 +325,10 @@
 <div id="bg-overlay"></div>
 <div class="card">
 
-    <!-- Botón volver a Home -->
     <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Home-Page/" class="home-btn">
         <i class="fas fa-chevron-left"></i> Inicio
     </a>
 
-    <!-- Header -->
     <div class="card-header">
         <div class="logo-wrap">
             <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
@@ -343,14 +341,11 @@
         </div>
     </div>
 
-    <!-- Progreso -->
     <div class="progreso-wrap"><div class="progreso-bar" id="progreso-bar"></div></div>
     <div class="progreso-texto" id="progreso-texto">0% completado</div>
 
-    <!-- Escena animada -->
     <div class="escena-box">
 
-        <!-- Playa: Margarita / Morrocoy / Los Roques -->
         <svg class="escena activa" id="escena-playa" viewBox="0 0 400 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
             <defs>
                 <linearGradient id="cieloPlaya" x1="0" y1="0" x2="0" y2="1">
@@ -362,13 +357,11 @@
             </defs>
             <rect width="400" height="115" fill="url(#cieloPlaya)"/>
             <circle class="sol" cx="330" cy="30" r="18" fill="#ffe28a" opacity=".95"/>
-            <!-- nubes -->
             <ellipse class="nube" cx="80" cy="22" rx="32" ry="10" fill="rgba(255,255,255,.18)"/>
             <ellipse class="nube" cx="200" cy="15" rx="22" ry="7" fill="rgba(255,255,255,.12)"/>
             <rect y="62" width="400" height="53" fill="url(#marPlaya)"/>
             <path class="ola ola1" d="M0,66 Q50,56 100,66 T200,66 T300,66 T400,66 T500,66 V115 H0 Z" fill="rgba(255,255,255,.2)"/>
             <path class="ola ola2" d="M0,76 Q50,69 100,76 T200,76 T300,76 T400,76 T500,76 V115 H0 Z" fill="rgba(255,255,255,.13)"/>
-            <!-- palmera -->
             <g transform="translate(44,30)">
                 <path d="M0,85 C-3,58 4,38 9,20" stroke="#5a3825" stroke-width="5" fill="none" stroke-linecap="round"/>
                 <g class="hojas">
@@ -378,7 +371,6 @@
                     <path d="M9,20 C22,7 38,2 44,-8" fill="#3a9863"/>
                 </g>
             </g>
-            <!-- barco lejano -->
             <g transform="translate(290,70)">
                 <rect x="0" y="0" width="28" height="6" rx="1" fill="rgba(255,255,255,.5)"/>
                 <polygon points="8,-8 8,0 22,0" fill="rgba(255,255,255,.35)"/>
@@ -386,7 +378,6 @@
         </svg>
 
 
-        <!-- Manglares / cayos: Morrocoy -->
         <svg class="escena" id="escena-morrocoy" viewBox="0 0 400 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
             <defs>
                 <linearGradient id="cieloMorrocoy" x1="0" y1="0" x2="0" y2="1">
@@ -397,16 +388,12 @@
                 </linearGradient>
             </defs>
             <rect width="400" height="115" fill="url(#cieloMorrocoy)"/>
-            <!-- sol -->
             <circle class="sol" cx="340" cy="26" r="16" fill="#ffe28a" opacity=".9"/>
-            <!-- agua -->
             <rect y="65" width="400" height="50" fill="url(#aguaMorrocoy)"/>
-            <!-- cayos / islotes de arena -->
             <ellipse cx="90"  cy="68" rx="55" ry="10" fill="#e8d89a"/>
             <ellipse cx="90"  cy="66" rx="42" ry="7"  fill="#f0e4b0"/>
             <ellipse cx="290" cy="70" rx="45" ry="9"  fill="#e8d89a"/>
             <ellipse cx="290" cy="68" rx="34" ry="6"  fill="#f0e4b0"/>
-            <!-- manglares izquierda -->
             <g transform="translate(20,40)">
                 <line x1="8" y1="30" x2="8" y2="0"  stroke="#3a6b35" stroke-width="3"/>
                 <line x1="8" y1="22" x2="0" y2="30" stroke="#3a6b35" stroke-width="2"/>
@@ -417,25 +404,21 @@
                 <line x1="6" y1="22" x2="6" y2="0"  stroke="#3a6b35" stroke-width="2.5"/>
                 <ellipse cx="6" cy="0" rx="8" ry="6" fill="#35903a"/>
             </g>
-            <!-- manglares derecha -->
             <g transform="translate(355,38)">
                 <line x1="8" y1="32" x2="8" y2="0"  stroke="#3a6b35" stroke-width="3"/>
                 <line x1="8" y1="24" x2="0" y2="32" stroke="#3a6b35" stroke-width="2"/>
                 <line x1="8" y1="24" x2="16" y2="32" stroke="#3a6b35" stroke-width="2"/>
                 <ellipse cx="8" cy="0" rx="10" ry="7" fill="#2d7a28"/>
             </g>
-            <!-- peces animados bajo el agua -->
             <g style="animation:ola 8s linear infinite">
                 <ellipse cx="160" cy="88" rx="6" ry="3" fill="rgba(255,180,0,.5)"/>
                 <ellipse cx="220" cy="95" rx="5" ry="2.5" fill="rgba(0,200,200,.4)"/>
                 <ellipse cx="310" cy="90" rx="5" ry="2.5" fill="rgba(255,100,50,.4)"/>
             </g>
-            <!-- olas -->
             <path class="ola ola1" d="M0,68 Q50,60 100,68 T200,68 T300,68 T400,68 T500,68 V115 H0 Z" fill="rgba(255,255,255,.15)"/>
             <path class="ola ola2" d="M0,78 Q50,72 100,78 T200,78 T300,78 T400,78 T500,78 V115 H0 Z" fill="rgba(255,255,255,.1)"/>
         </svg>
 
-        <!-- Aguas turquesa / coral: Los Roques -->
         <svg class="escena" id="escena-losroques" viewBox="0 0 400 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
             <defs>
                 <linearGradient id="cieloRoques" x1="0" y1="0" x2="0" y2="1">
@@ -450,15 +433,11 @@
                 </radialGradient>
             </defs>
             <rect width="400" height="115" fill="url(#cieloRoques)"/>
-            <!-- sol zenital -->
             <circle class="sol" cx="200" cy="20" r="18" fill="#fff9b0" opacity=".85"/>
-            <!-- agua translúcida (se ve el fondo) -->
             <rect y="55" width="400" height="60" fill="url(#aguaRoques)"/>
             <rect y="55" width="400" height="60" fill="url(#fondoCoral)"/>
-            <!-- islote de arena blanca -->
             <ellipse cx="200" cy="58" rx="80" ry="14" fill="#f5f0d5"/>
             <ellipse cx="200" cy="56" rx="60" ry="9"  fill="#fffde8"/>
-            <!-- palmera en el islote -->
             <g transform="translate(188,28)">
                 <path d="M4,30 C2,20 5,12 7,4" stroke="#6b4820" stroke-width="3.5" fill="none" stroke-linecap="round"/>
                 <g class="hojas">
@@ -467,7 +446,6 @@
                     <path d="M7,4 C4,-4 8,-10 14,-12" fill="#2a7040"/>
                 </g>
             </g>
-            <!-- coral bajo el agua (siluetas) -->
             <g opacity=".55">
                 <ellipse cx="80"  cy="100" rx="12" ry="8" fill="#ff7040"/>
                 <ellipse cx="100" cy="105" rx="8"  ry="5" fill="#ff9060"/>
@@ -476,18 +454,15 @@
                 <ellipse cx="160" cy="108" rx="10" ry="6" fill="#40c0e0" opacity=".6"/>
                 <ellipse cx="260" cy="107" rx="10" ry="6" fill="#40c0e0" opacity=".6"/>
             </g>
-            <!-- kite surfista -->
             <g style="animation:ola 12s linear infinite reverse">
                 <circle cx="350" cy="50" r="5" fill="rgba(255,100,0,.7)"/>
                 <line x1="350" y1="55" x2="345" y2="72" stroke="rgba(255,255,255,.5)" stroke-width="1"/>
                 <ellipse cx="345" cy="72" rx="4" ry="2" fill="rgba(255,255,255,.6)"/>
             </g>
-            <!-- olas muy translúcidas -->
             <path class="ola ola1" d="M0,60 Q50,53 100,60 T200,60 T300,60 T400,60 T500,60 V115 H0 Z" fill="rgba(255,255,255,.12)"/>
             <path class="ola ola2" d="M0,72 Q50,66 100,72 T200,72 T300,72 T400,72 T500,72 V115 H0 Z" fill="rgba(255,255,255,.08)"/>
         </svg>
 
-        <!-- Montaña: Mérida -->
         <svg class="escena" id="escena-montana" viewBox="0 0 400 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
             <defs>
                 <linearGradient id="cieloMontana" x1="0" y1="0" x2="0" y2="1">
@@ -495,22 +470,17 @@
                 </linearGradient>
             </defs>
             <rect width="400" height="115" fill="url(#cieloMontana)"/>
-            <!-- sol mañanero -->
             <circle cx="340" cy="25" r="14" fill="#ffe28a" opacity=".85"/>
-            <!-- nubes -->
             <ellipse class="nube" cx="70" cy="28" rx="38" ry="11" fill="rgba(255,255,255,.55)"/>
             <ellipse class="nube" cx="210" cy="18" rx="28" ry="8" fill="rgba(255,255,255,.4)"/>
-            <!-- montañas fondo -->
             <polygon points="0,115 80,42 160,115" fill="#6b7f8e"/>
             <polygon points="70,48 100,42 120,62 85,65" fill="#e8f4f8"/>
             <polygon points="130,115 230,18 330,115" fill="#506070"/>
             <polygon points="206,24 230,18 252,48 215,52" fill="#f0f8ff"/>
             <polygon points="260,115 340,55 400,115" fill="#6b7f8e"/>
-            <!-- nieve extra -->
             <circle class="nieve1" cx="95" cy="48" r="2" fill="white" opacity=".7"/>
             <circle class="nieve2" cx="228" cy="30" r="2.5" fill="white" opacity=".7"/>
             <circle class="nieve3" cx="310" cy="62" r="1.8" fill="white" opacity=".6"/>
-            <!-- cable teleférico -->
             <line x1="20" y1="42" x2="375" y2="92" stroke="#2a3540" stroke-width="1.8" stroke-dasharray="5 5"/>
             <g class="telecabina">
                 <line x1="0" y1="0" x2="0" y2="-10" stroke="#2a3540" stroke-width="1.5"/>
@@ -520,7 +490,6 @@
             </g>
         </svg>
 
-        <!-- Cascada: Canaima -->
         <svg class="escena" id="escena-cascada" viewBox="0 0 400 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
             <defs>
                 <linearGradient id="cieloCascada" x1="0" y1="0" x2="0" y2="1">
@@ -528,26 +497,20 @@
                 </linearGradient>
             </defs>
             <rect width="400" height="115" fill="url(#cieloCascada)"/>
-            <!-- tepuyes -->
             <rect x="0"   y="0"  width="130" height="58" rx="4" fill="#6b4220"/>
             <rect x="120" y="0"  width="170" height="54" rx="4" fill="#7a5230"/>
             <rect x="280" y="8"  width="120" height="50" rx="4" fill="#6b4220"/>
-            <!-- borde tepuy iluminado -->
             <rect x="0"   y="0"  width="130" height="6" rx="3" fill="#9a6840" opacity=".8"/>
             <rect x="120" y="0"  width="170" height="6" rx="3" fill="#aa7850" opacity=".8"/>
-            <!-- cascada Ángel -->
             <line class="agua" x1="118" y1="6"  x2="118" y2="112" stroke="#d0eef8" stroke-width="7" stroke-linecap="round" stroke-dasharray="14 10" opacity=".9"/>
             <line class="agua" x1="133" y1="6"  x2="133" y2="112" stroke="#b8ddf0" stroke-width="5" stroke-linecap="round" stroke-dasharray="12 9" opacity=".75"/>
             <line class="agua" x1="147" y1="6"  x2="147" y2="112" stroke="#d0eef8" stroke-width="6" stroke-linecap="round" stroke-dasharray="14 10" opacity=".9"/>
-            <!-- bruma -->
             <ellipse class="bruma" cx="132" cy="110" rx="70" ry="12" fill="#ffffff" opacity=".35"/>
-            <!-- vegetación -->
             <ellipse cx="30"  cy="115" rx="28" ry="12" fill="#2a6e3a" opacity=".9"/>
             <ellipse cx="350" cy="115" rx="30" ry="12" fill="#2a6e3a" opacity=".9"/>
             <ellipse cx="200" cy="115" rx="22" ry="10" fill="#347a44" opacity=".8"/>
         </svg>
 
-        <!-- Tormenta: Catatumbo -->
         <svg class="escena" id="escena-tormenta" viewBox="0 0 400 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
             <defs>
                 <linearGradient id="cieloTormenta" x1="0" y1="0" x2="0" y2="1">
@@ -555,28 +518,22 @@
                 </linearGradient>
             </defs>
             <rect width="400" height="115" fill="url(#cieloTormenta)"/>
-            <!-- lago Maracaibo -->
             <rect y="90" width="400" height="25" fill="#0d1b2e" opacity=".9"/>
-            <!-- nubes tormentosas -->
             <ellipse cx="90"  cy="28" rx="80" ry="24" fill="#1e1e38"/>
             <ellipse cx="90"  cy="20" rx="55" ry="18" fill="#252540"/>
             <ellipse cx="280" cy="22" rx="100" ry="28" fill="#1e1e38"/>
             <ellipse cx="280" cy="14" rx="70"  ry="20" fill="#252540"/>
-            <!-- lluvia fina -->
             <line class="lluvia" x1="60"  y1="50" x2="50"  y2="90" stroke="rgba(180,200,255,.3)" stroke-width="1"/>
             <line class="lluvia" x1="120" y1="50" x2="110" y2="90" stroke="rgba(180,200,255,.3)" stroke-width="1"/>
             <line class="lluvia" x1="200" y1="50" x2="190" y2="90" stroke="rgba(180,200,255,.25)" stroke-width="1"/>
             <line class="lluvia" x1="300" y1="50" x2="290" y2="90" stroke="rgba(180,200,255,.3)" stroke-width="1"/>
             <line class="lluvia" x1="360" y1="50" x2="350" y2="90" stroke="rgba(180,200,255,.25)" stroke-width="1"/>
-            <!-- rayos -->
             <path class="rayo rayo1" d="M175,8 L158,50 L178,50 L152,95" stroke="#ffe89b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
             <path class="rayo rayo2" d="M270,12 L253,54 L273,54 L248,98" stroke="#ffe89b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            <!-- reflejo rayos en lago -->
             <line class="rayo rayo1" x1="163" y1="92" x2="145" y2="115" stroke="rgba(255,232,155,.3)" stroke-width="2"/>
             <line class="rayo rayo2" x1="260" y1="95" x2="245" y2="115" stroke="rgba(255,232,155,.25)" stroke-width="2"/>
         </svg>
 
-        <!-- Mundo: Extranjero -->
         <svg class="escena" id="escena-mundo" viewBox="0 0 400 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
             <defs>
                 <linearGradient id="cieloMundo" x1="0" y1="0" x2="0" y2="1">
@@ -584,34 +541,28 @@
                 </linearGradient>
             </defs>
             <rect width="400" height="115" fill="url(#cieloMundo)"/>
-            <!-- estrellas -->
             <circle cx="30"  cy="18" r="1.5" fill="#fff" opacity=".8"/>
             <circle cx="80"  cy="35" r="1"   fill="#fff" opacity=".6"/>
             <circle cx="300" cy="12" r="1.5" fill="#fff" opacity=".8"/>
             <circle cx="350" cy="42" r="1"   fill="#fff" opacity=".6"/>
             <circle cx="220" cy="20" r="1"   fill="#fff" opacity=".7"/>
             <circle cx="160" cy="10" r="1.2" fill="#fff" opacity=".5"/>
-            <!-- globo terráqueo -->
             <circle cx="200" cy="108" r="72" fill="#2a5c6a" opacity=".6"/>
             <g class="globo-lineas">
                 <circle cx="200" cy="108" r="72" fill="none" stroke="#7dd8c0" stroke-width="1.5" opacity=".5"/>
                 <ellipse cx="200" cy="108" rx="72" ry="26" fill="none" stroke="#7dd8c0" stroke-width="1" opacity=".45"/>
                 <ellipse cx="200" cy="108" rx="36" ry="72" fill="none" stroke="#7dd8c0" stroke-width="1" opacity=".45"/>
-                <!-- continentes simplificados -->
                 <ellipse cx="185" cy="90" rx="18" ry="12" fill="#3a8060" opacity=".5"/>
                 <ellipse cx="218" cy="100" rx="12" ry="8"  fill="#3a8060" opacity=".5"/>
             </g>
-            <!-- avión -->
             <path class="avion-mundo" d="M0,0 L22,5 L0,10 L5,5 Z" fill="#ff9100"/>
         </svg>
 
         <div class="escena-caption" id="escena-caption">🏖️ Arena blanca y aguas turquesa te esperan</div>
     </div>
 
-    <!-- Error -->
     <div id="error-box" class="error-msg"></div>
 
-    <!-- Sección 1: Destino -->
     <div class="form-section">
         <div class="form-section-title"><i class="fas fa-map-marker-alt"></i> Destino</div>
         <div class="form-group">
@@ -632,7 +583,6 @@
         </div>
     </div>
 
-    <!-- Sección 2: Hospedaje -->
     <div class="form-section">
         <div class="form-section-title"><i class="fas fa-hotel"></i> Hospedaje</div>
         <div class="form-group">
@@ -657,7 +607,6 @@
             </select>
         </div>
 
-        <!-- Amenidades -->
         <div class="form-group">
             <label><i class="fas fa-concierge-bell"></i>¿Qué te importa del hospedaje? <span style="font-weight:400;color:#ffd9a8;font-size:11px;">(toca para seleccionar)</span></label>
             <div class="amenidades-grid">
@@ -672,14 +621,12 @@
                 <div class="amenidad-tag" data-value="Aire acondicionado" onclick="toggleAmenidad(this)"><i class="fas fa-snowflake"></i> A/C</div>
                 <div class="amenidad-tag" data-value="Desayuno buffet" onclick="toggleAmenidad(this)"><i class="fas fa-bread-slice"></i> Buffet</div>
             </div>
-            <!-- Preview de seleccionadas -->
             <div class="amenidades-preview" id="amenidades-preview">
                 <strong>✓ Seleccionadas:</strong>
                 <span id="amenidades-lista"></span>
             </div>
         </div>
 
-        <!-- Presupuesto -->
         <div class="form-group">
             <label><i class="fas fa-dollar-sign"></i>Presupuesto por noche <span style="font-weight:400;color:#ffd9a8;font-size:11px;">(USD)</span></label>
             <div class="presupuesto-wrap">
@@ -690,7 +637,6 @@
         </div>
     </div>
 
-    <!-- Sección 3: Fechas -->
     <div class="form-section">
         <div class="form-section-title"><i class="fas fa-calendar-alt"></i> Fechas</div>
         <div class="row">
@@ -716,7 +662,6 @@
         </div>
     </div>
 
-    <!-- Sección 4: Huéspedes -->
     <div class="form-section">
         <div class="form-section-title"><i class="fas fa-users"></i> Huéspedes</div>
         <div class="form-group">
@@ -776,7 +721,6 @@
         </div>
     </div>
 
-    <!-- Sección 5: Habitaciones -->
     <div class="form-section">
         <div class="form-section-title"><i class="fas fa-door-open"></i> Habitaciones</div>
         <div class="form-group">
@@ -794,7 +738,6 @@
         </div>
     </div>
 
-    <!-- Sección 6: Extras -->
     <div class="form-section">
         <div class="form-section-title"><i class="fas fa-star"></i> Detalles Extra</div>
         <div class="form-group">
@@ -837,7 +780,6 @@
         </div>
     </div>
 
-    <!-- Tip -->
     <div class="tip-box" id="tip-box">
         <span class="tip-icon">💡</span>
         <span id="tip-texto"></span>
@@ -1016,14 +958,6 @@
             for(let i=1;i<=n;i++){
                 cont.innerHTML+=`<div class="form-group"><label><i class="fas fa-child"></i>Edad del Niño ${i}</label><input type="number" class="edad-input" min="2" max="11" placeholder="Años (2–11)"></div>`;
             }
-            // Pregunta cédula niños (una sola vez, discreta)
-            cont.innerHTML+=`<div class="checkbox-group" style="margin-top:4px;margin-bottom:0;">
-                <input type="checkbox" id="cedula-ninos">
-                <label for="cedula-ninos">
-                    <i class="fas fa-id-card"></i>Los niños tienen cédula
-                    <span>Algunos hospedajes la solicitan al hacer check-in.</span>
-                </label>
-            </div>`;
         } else {
             cont.innerHTML=`<div class="form-group"><label>Edades de los niños (resumen)</label><input type="text" id="edades-resumen" placeholder="Ej: 3 de 8 años, 2 de 5 años"></div>`;
         }
@@ -1111,17 +1045,13 @@
             `Adultos: ${adultos}`,
             `Niños: ${ninos}`
         ];
+        
         const cedulaAdultosVigente = document.getElementById('cedula-adultos-vigente') ? document.getElementById('cedula-adultos-vigente').checked : true;
         const cedulaNinosEl = document.getElementById('cedula-ninos');
         const cedulaNinos = cedulaNinosEl ? cedulaNinosEl.checked : null;
+        
         if(!cedulaAdultosVigente) lineas.push('⚠️ Cédula(s) de adulto(s) vencida(s) — requiere atención');
-        const cedulaAdultosOk = document.getElementById('cedula-adultos-vigente').checked;
-        const cedulaNinosEl = document.getElementById('cedula-ninos');
-        const cedulaNinos = cedulaNinosEl ? cedulaNinosEl.checked : null;
-        if(!cedulaAdultosOk) lineas.push('⚠️ Cédula(s) de adulto(s) posiblemente vencida(s)');
         if(ninos>0) lineas.push(`Edades niños: ${edades}`);
-        if(ninos>0 && document.getElementById('cedula-ninos-wrap').style.display!=='none')
-            lineas.push(`Niños con cédula: ${cedulaNinos?'Sí':'No'}`);
         if(ninos>0 && cedulaNinos !== null) lineas.push(`Niños con cédula: ${cedulaNinos?'Sí':'No'}`);
         if(bebes>0) lineas.push(`Bebés: ${bebes}${cuna?' (necesita cuna)':''}`);
         lineas.push(`Habitaciones: ${habitaciones}`);
@@ -1177,11 +1107,6 @@
     }
     mostrarTip();
     setInterval(mostrarTip,7000);
-
-    // Aviso cédula adultos
-    document.getElementById('cedula-adultos-vigente').addEventListener('change', function(){
-        document.getElementById('aviso-cedula-adultos').style.display = this.checked ? 'none' : 'block';
-    });
 
     // Init
     actualizarEscena();
