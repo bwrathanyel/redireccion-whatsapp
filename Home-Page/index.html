@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#1a1a2e" id="theme-color">
     <meta property="og:title" content="Destino y Eventos Lotus 360">
-    <meta property="og:description" content="¡Escápate con nosotros! Hospedaje, boletería aérea, tours y eventos corporativos en Venezuela.">
+    <meta property="og:description" content="¡Escápate con nosotros! Hospedaje, boletería aérea, tours full day y eventos corporativos en Venezuela.">
     <meta property="og:image" content="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png">
     <title>Destino y Eventos Lotus 360</title>
     <link rel="preload" as="image" href="https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg">
@@ -30,7 +30,6 @@
         }
         @keyframes pageEnter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         
-        /* Fondo corregido */
         #bg {
             position: fixed; top: 0; left: 0; width: 100%; height: 100vh;
             background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg');
@@ -66,6 +65,7 @@
         }
         .top-bar span { display: flex; align-items: center; gap: 4px; }
         .top-bar i { color: var(--accent); font-size: 8px; }
+        .top-bar .dot-sep { color: rgba(255,145,0,0.6); }
         
         .logo-wrap { position: relative; width: 88px; height: 88px; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; }
         .logo-wrap::before {
@@ -99,7 +99,7 @@
         .dot.offline { background: #f59e0b; }
         @keyframes dot-breathe { 0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); } 70% { box-shadow: 0 0 0 5px rgba(37,211,102,0); } 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); } }
 
-        /* Servicios grid */
+        /* Servicios grid - 4 columnas */
         .servicios-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 16px; }
         .servicio-item {
             background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
@@ -120,6 +120,13 @@
         .servicio-item:nth-child(4) { animation-delay: 0.35s; }
         .servicio-item i { display: block; font-size: 16px; color: var(--accent); margin-bottom: 4px; }
         .servicio-item:active { background: rgba(255,145,0,0.25); transform: scale(0.93); }
+        
+        /* Full Day item destacado */
+        .servicio-item.full-day {
+            border-color: rgba(255,145,0,0.3);
+            background: rgba(255,145,0,0.08);
+        }
+        .servicio-item.full-day i { color: #25D366; }
 
         /* Hero escena */
         .hero-escena {
@@ -170,18 +177,35 @@
         .destino-info .destino-desc { font-size: 10px; color: var(--text-warm); line-height: 1.4; }
         .destino-info .destino-pais { font-size: 9px; color: rgba(255,183,77,0.5); margin-top: 2px; }
 
-        /* CTAs */
-        .cta-grid { display: flex; gap: 10px; margin-bottom: 20px; animation: fadeSlideUp 0.5s ease 0.3s both; }
+        /* CTAs - 3 columnas */
+        .cta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; animation: fadeSlideUp 0.5s ease 0.3s both; }
         .cta-card {
-            flex: 1; background: rgba(15,20,40,0.7); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,145,0,0.12); border-radius: 16px; padding: 18px 10px;
+            background: rgba(15,20,40,0.7); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,145,0,0.12); border-radius: 16px; padding: 14px 6px;
             text-decoration: none; color: #fff; text-align: center; transition: all 0.15s ease;
             box-shadow: 0 4px 16px rgba(0,0,0,0.2);
         }
-        .cta-card:active { transform: scale(0.95); background: rgba(255,145,0,0.18); border-color: rgba(255,145,0,0.3); }
-        .cta-card i { font-size: 26px; color: var(--accent); margin-bottom: 8px; display: block; }
-        .cta-card .titulo { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
-        .cta-card .desc { font-size: 10px; color: var(--text-warm); line-height: 1.3; }
+        .cta-card:active { transform: scale(0.95); }
+        .cta-card i { font-size: 22px; margin-bottom: 6px; display: block; }
+        .cta-card .titulo { font-weight: 700; font-size: 11px; margin-bottom: 2px; }
+        .cta-card .desc { font-size: 8px; color: var(--text-warm); line-height: 1.3; }
+        
+        /* Colores por servicio */
+        .cta-card.hospedaje { border-color: rgba(255,145,0,0.2); }
+        .cta-card.hospedaje i { color: var(--accent); }
+        .cta-card.hospedaje:active { background: rgba(255,145,0,0.18); }
+        
+        .cta-card.boleteria { border-color: rgba(74,158,255,0.2); }
+        .cta-card.boleteria i { color: var(--accent-blue); }
+        .cta-card.boleteria:active { background: rgba(74,158,255,0.15); }
+        
+        .cta-card.fullday { border-color: rgba(37,211,102,0.3); background: rgba(37,211,102,0.05); }
+        .cta-card.fullday i { color: #25D366; }
+        .cta-card.fullday:active { background: rgba(37,211,102,0.15); }
+        .cta-card.fullday .badge-new {
+            display: inline-block; background: #25D366; color: #000; font-size: 7px;
+            font-weight: 800; padding: 1px 6px; border-radius: 6px; margin-bottom: 4px;
+        }
 
         .divider { display: flex; align-items: center; gap: 10px; margin: 4px 0 16px; opacity: 0.3; }
         .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.4); }
@@ -241,7 +265,7 @@
         }
         @keyframes pulso-wa { 0%,100% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 0 rgba(37,211,102,0.5); } 50% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 10px rgba(37,211,102,0); } }
 
-        @media (max-width: 360px) { body { padding: 14px 8px 90px; } .cta-card { padding: 14px 8px; } }
+        @media (max-width: 360px) { body { padding: 14px 8px 90px; } .cta-card { padding: 10px 4px; } .cta-card .titulo { font-size: 10px; } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }
     </style>
 </head>
@@ -258,10 +282,10 @@
     <!-- Barra superior estilo Lotus -->
     <div class="top-bar">
         <span><i class="fas fa-hotel"></i> Hospedaje</span>
-        <span style="color:rgba(255,145,0,0.6);">·</span>
+        <span class="dot-sep">·</span>
         <span><i class="fas fa-plane"></i> Boletería</span>
-        <span style="color:rgba(255,145,0,0.6);">·</span>
-        <span><i class="fas fa-bus"></i> Transporte</span>
+        <span class="dot-sep">·</span>
+        <span style="color:#25D366;"><i class="fas fa-umbrella-beach"></i> Full Day</span>
     </div>
 
     <div class="logo-wrap">
@@ -274,10 +298,18 @@
     <div class="estado-box"><span class="dot" id="estado-dot"></span><span id="estado-texto">Verificando...</span></div>
 
     <div class="servicios-grid">
-        <div class="servicio-item"><i class="fas fa-umbrella-beach"></i>Tours</div>
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="servicio-item"><i class="fas fa-plane"></i>Boletería</a>
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="servicio-item"><i class="fas fa-hotel"></i>Hospedaje</a>
-        <div class="servicio-item"><i class="fas fa-shuttle-van"></i>Traslados</div>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="servicio-item full-day">
+            <i class="fas fa-umbrella-beach"></i>Full Day
+        </a>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="servicio-item">
+            <i class="fas fa-plane"></i>Boletería
+        </a>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="servicio-item">
+            <i class="fas fa-hotel"></i>Hospedaje
+        </a>
+        <div class="servicio-item">
+            <i class="fas fa-building"></i>Corporativo
+        </div>
     </div>
 
     <div class="hero-escena">
@@ -295,7 +327,6 @@
         </svg>
     </div>
 
-    <!-- Ticker de destinos interactivo -->
     <div class="ticker-wrap" id="ticker-wrap">
         <div class="ticker" id="ticker">
             <span class="venezuela" data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Venezuela" data-desc="Playas paradisíacas, duty free, vida nocturna y gastronomía local. El Caribe sin salir del país.">🏖️ Isla de Margarita</span>
@@ -315,7 +346,6 @@
         </div>
     </div>
 
-    <!-- Info del destino seleccionado -->
     <div class="destino-info" id="destino-info">
         <div class="destino-icono" id="destino-icono"></div>
         <div class="destino-nombre" id="destino-nombre"></div>
@@ -323,16 +353,23 @@
         <div class="destino-pais" id="destino-pais"></div>
     </div>
 
+    <!-- CTAs principales: 3 columnas -->
     <div class="cta-grid">
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="cta-card">
-            <i class="fas fa-hotel"></i>
-            <div class="titulo">Cotizar Hospedaje</div>
-            <div class="desc">Hoteles, posadas y apartamentos en tu destino soñado</div>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="cta-card fullday">
+            <span class="badge-new">NUEVO</span>
+            <i class="fas fa-umbrella-beach"></i>
+            <div class="titulo">Full Day</div>
+            <div class="desc">Escápate a Cayo Sal y más destinos</div>
         </a>
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="cta-card">
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="cta-card hospedaje">
+            <i class="fas fa-hotel"></i>
+            <div class="titulo">Hospedaje</div>
+            <div class="desc">Hoteles y posadas al mejor precio</div>
+        </a>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="cta-card boleteria">
             <i class="fas fa-plane-departure"></i>
-            <div class="titulo">Cotizar Boletos</div>
-            <div class="desc">Vuelos nacionales e internacionales al mejor precio</div>
+            <div class="titulo">Boletería</div>
+            <div class="desc">Vuelos nacionales e internacionales</div>
         </a>
     </div>
 
@@ -383,7 +420,6 @@
     document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Domingos 10am-3pm · Volvemos pronto' : 'Lun-Sáb 8:30am-7pm · Volvemos pronto');
 })();
 
-// Ticker interactivo - 7 segundos de visualización
 var ticker = document.getElementById('ticker');
 var destinoInfo = document.getElementById('destino-info');
 var destinoIcono = document.getElementById('destino-icono');
