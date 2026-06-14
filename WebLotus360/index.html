@@ -301,6 +301,18 @@
         }
         .footer-copy{ margin-top:20px; font-size:10px; color:rgba(255,255,255,.3); letter-spacing:.5px; text-align:center; }
 
+        /* Home button */
+        .home-btn {
+            display:inline-flex; align-items:center; gap:7px;
+            background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.14);
+            border-radius:30px; padding:8px 16px; font-size:13px; font-weight:600;
+            color:rgba(255,255,255,.8); text-decoration:none; margin-bottom:18px;
+            backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+            transition:background .2s, color .2s, border-color .2s;
+        }
+        .home-btn:active{ background:rgba(255,145,0,.18); border-color:rgba(255,145,0,.4); color:#ff9100; }
+        .home-btn i{ color:#ff9100; font-size:11px; }
+
         @media(prefers-reduced-motion:reduce){
             .ola1,.ola2,.sol,.hojas,.nube,.telecabina,.nieve1,.nieve2,.nieve3,
             .agua,.bruma,.rayo1,.rayo2,.lluvia,.globo-lineas,.avion-mundo,
@@ -312,6 +324,11 @@
 <div id="bg"></div>
 <div id="bg-overlay"></div>
 <div class="card">
+
+    <!-- Botón volver a Home -->
+    <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Home-Page/" class="home-btn">
+        <i class="fas fa-chevron-left"></i> Inicio
+    </a>
 
     <!-- Header -->
     <div class="card-header">
@@ -366,6 +383,108 @@
                 <rect x="0" y="0" width="28" height="6" rx="1" fill="rgba(255,255,255,.5)"/>
                 <polygon points="8,-8 8,0 22,0" fill="rgba(255,255,255,.35)"/>
             </g>
+        </svg>
+
+
+        <!-- Manglares / cayos: Morrocoy -->
+        <svg class="escena" id="escena-morrocoy" viewBox="0 0 400 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs>
+                <linearGradient id="cieloMorrocoy" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#87ceeb"/><stop offset="60%" stop-color="#4ab8d4"/><stop offset="100%" stop-color="#1a8fa8"/>
+                </linearGradient>
+                <linearGradient id="aguaMorrocoy" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#29b8c8"/><stop offset="100%" stop-color="#0a6070"/>
+                </linearGradient>
+            </defs>
+            <rect width="400" height="115" fill="url(#cieloMorrocoy)"/>
+            <!-- sol -->
+            <circle class="sol" cx="340" cy="26" r="16" fill="#ffe28a" opacity=".9"/>
+            <!-- agua -->
+            <rect y="65" width="400" height="50" fill="url(#aguaMorrocoy)"/>
+            <!-- cayos / islotes de arena -->
+            <ellipse cx="90"  cy="68" rx="55" ry="10" fill="#e8d89a"/>
+            <ellipse cx="90"  cy="66" rx="42" ry="7"  fill="#f0e4b0"/>
+            <ellipse cx="290" cy="70" rx="45" ry="9"  fill="#e8d89a"/>
+            <ellipse cx="290" cy="68" rx="34" ry="6"  fill="#f0e4b0"/>
+            <!-- manglares izquierda -->
+            <g transform="translate(20,40)">
+                <line x1="8" y1="30" x2="8" y2="0"  stroke="#3a6b35" stroke-width="3"/>
+                <line x1="8" y1="22" x2="0" y2="30" stroke="#3a6b35" stroke-width="2"/>
+                <line x1="8" y1="22" x2="16" y2="30" stroke="#3a6b35" stroke-width="2"/>
+                <ellipse cx="8" cy="0" rx="10" ry="7" fill="#2d7a28"/>
+            </g>
+            <g transform="translate(38,48)">
+                <line x1="6" y1="22" x2="6" y2="0"  stroke="#3a6b35" stroke-width="2.5"/>
+                <ellipse cx="6" cy="0" rx="8" ry="6" fill="#35903a"/>
+            </g>
+            <!-- manglares derecha -->
+            <g transform="translate(355,38)">
+                <line x1="8" y1="32" x2="8" y2="0"  stroke="#3a6b35" stroke-width="3"/>
+                <line x1="8" y1="24" x2="0" y2="32" stroke="#3a6b35" stroke-width="2"/>
+                <line x1="8" y1="24" x2="16" y2="32" stroke="#3a6b35" stroke-width="2"/>
+                <ellipse cx="8" cy="0" rx="10" ry="7" fill="#2d7a28"/>
+            </g>
+            <!-- peces animados bajo el agua -->
+            <g style="animation:ola 8s linear infinite">
+                <ellipse cx="160" cy="88" rx="6" ry="3" fill="rgba(255,180,0,.5)"/>
+                <ellipse cx="220" cy="95" rx="5" ry="2.5" fill="rgba(0,200,200,.4)"/>
+                <ellipse cx="310" cy="90" rx="5" ry="2.5" fill="rgba(255,100,50,.4)"/>
+            </g>
+            <!-- olas -->
+            <path class="ola ola1" d="M0,68 Q50,60 100,68 T200,68 T300,68 T400,68 T500,68 V115 H0 Z" fill="rgba(255,255,255,.15)"/>
+            <path class="ola ola2" d="M0,78 Q50,72 100,78 T200,78 T300,78 T400,78 T500,78 V115 H0 Z" fill="rgba(255,255,255,.1)"/>
+        </svg>
+
+        <!-- Aguas turquesa / coral: Los Roques -->
+        <svg class="escena" id="escena-losroques" viewBox="0 0 400 115" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs>
+                <linearGradient id="cieloRoques" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#a8e6f0"/><stop offset="50%" stop-color="#5dcfe0"/><stop offset="100%" stop-color="#1ab0d0"/>
+                </linearGradient>
+                <linearGradient id="aguaRoques" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#00d4e8" stop-opacity=".9"/><stop offset="100%" stop-color="#006a82"/>
+                </linearGradient>
+                <radialGradient id="fondoCoral" cx="50%" cy="100%" r="60%">
+                    <stop offset="0%" stop-color="#00c8dc" stop-opacity=".4"/>
+                    <stop offset="100%" stop-color="#004a5a" stop-opacity=".0"/>
+                </radialGradient>
+            </defs>
+            <rect width="400" height="115" fill="url(#cieloRoques)"/>
+            <!-- sol zenital -->
+            <circle class="sol" cx="200" cy="20" r="18" fill="#fff9b0" opacity=".85"/>
+            <!-- agua translúcida (se ve el fondo) -->
+            <rect y="55" width="400" height="60" fill="url(#aguaRoques)"/>
+            <rect y="55" width="400" height="60" fill="url(#fondoCoral)"/>
+            <!-- islote de arena blanca -->
+            <ellipse cx="200" cy="58" rx="80" ry="14" fill="#f5f0d5"/>
+            <ellipse cx="200" cy="56" rx="60" ry="9"  fill="#fffde8"/>
+            <!-- palmera en el islote -->
+            <g transform="translate(188,28)">
+                <path d="M4,30 C2,20 5,12 7,4" stroke="#6b4820" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+                <g class="hojas">
+                    <path d="M7,4 C-4,0 -14,3 -18,10" fill="#2a7040"/>
+                    <path d="M7,4 C18,0 28,3 32,10" fill="#32864c"/>
+                    <path d="M7,4 C4,-4 8,-10 14,-12" fill="#2a7040"/>
+                </g>
+            </g>
+            <!-- coral bajo el agua (siluetas) -->
+            <g opacity=".55">
+                <ellipse cx="80"  cy="100" rx="12" ry="8" fill="#ff7040"/>
+                <ellipse cx="100" cy="105" rx="8"  ry="5" fill="#ff9060"/>
+                <ellipse cx="310" cy="100" rx="14" ry="9" fill="#ff6030"/>
+                <ellipse cx="330" cy="106" rx="9"  ry="5" fill="#ff8050"/>
+                <ellipse cx="160" cy="108" rx="10" ry="6" fill="#40c0e0" opacity=".6"/>
+                <ellipse cx="260" cy="107" rx="10" ry="6" fill="#40c0e0" opacity=".6"/>
+            </g>
+            <!-- kite surfista -->
+            <g style="animation:ola 12s linear infinite reverse">
+                <circle cx="350" cy="50" r="5" fill="rgba(255,100,0,.7)"/>
+                <line x1="350" y1="55" x2="345" y2="72" stroke="rgba(255,255,255,.5)" stroke-width="1"/>
+                <ellipse cx="345" cy="72" rx="4" ry="2" fill="rgba(255,255,255,.6)"/>
+            </g>
+            <!-- olas muy translúcidas -->
+            <path class="ola ola1" d="M0,60 Q50,53 100,60 T200,60 T300,60 T400,60 T500,60 V115 H0 Z" fill="rgba(255,255,255,.12)"/>
+            <path class="ola ola2" d="M0,72 Q50,66 100,72 T200,72 T300,72 T400,72 T500,72 V115 H0 Z" fill="rgba(255,255,255,.08)"/>
         </svg>
 
         <!-- Montaña: Mérida -->
@@ -532,7 +651,8 @@
                 <option value="Solo Alojamiento">🛏️ Solo Alojamiento</option>
                 <option value="Desayuno Incluido">☕ Desayuno Incluido</option>
                 <option value="Media Pensión">🍽️ Media Pensión (desayuno + cena)</option>
-                <option value="Todo Incluido">🍹 Todo Incluido</option>
+                <option value="Pensión Completa">🍽️🥩 Pensión Completa (desayuno, almuerzo y cena)</option>
+                <option value="Todo Incluido">🍹 Todo Incluido (con bebidas alcohólicas)</option>
                 <option value="No sé, quiero opciones">❓ No sé, quiero opciones</option>
             </select>
         </div>
@@ -609,6 +729,13 @@
                 <option value="more">Más de 4</option>
             </select>
             <input type="number" id="adultos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos adultos?" style="display:none;">
+            <div class="checkbox-group" style="margin-top:10px;">
+                <input type="checkbox" id="cedula-adultos-vigente" checked>
+                <label for="cedula-adultos-vigente">
+                    <i class="fas fa-id-card"></i>Cédula(s) de adultos vigente(s)
+                    <span>Si alguna está vencida, avísanos para coordinar con el hospedaje.</span>
+                </label>
+            </div>
         </div>
         <div class="form-group">
             <label><i class="fas fa-child"></i>Niños <span style="font-weight:400;color:#ffd9a8;font-size:12px;">(2–11 años)</span></label>
@@ -620,6 +747,13 @@
                 <option value="more">Más de 3</option>
             </select>
             <input type="number" id="ninos-extra" class="extra-input" min="4" max="50" placeholder="¿Cuántos niños?" style="display:none;" oninput="actualizarEdades(); actualizarSugerenciaHabitaciones();">
+            <div id="cedula-ninos-wrap" style="display:none; margin-top:10px;">
+                <label style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:0;display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="cedula-ninos" style="width:17px;height:17px;flex-shrink:0;accent-color:#ff9100;">
+                    <span><i class="fas fa-id-card" style="color:#ff9100;margin-right:4px;"></i>Los niños tienen cédula</span>
+                </label>
+                <span class="hint" style="margin-top:5px;">Útil para algunos hospedajes y destinos nacionales.</span>
+            </div>
         </div>
         <div id="contenedor-edades"></div>
         <div class="form-group">
@@ -762,8 +896,8 @@
     // Escena
     const ESCENAS = {
         'Isla de Margarita':{ id:'escena-playa',    caption:'🏖️ Arena blanca y aguas turquesa te esperan' },
-        'Morrocoy':         { id:'escena-playa',    caption:'🐠 Cayos, manglares y snorkel en Morrocoy' },
-        'Los Roques':       { id:'escena-playa',    caption:'🏝️ El paraíso de aguas cristalinas' },
+        'Morrocoy':         { id:'escena-morrocoy', caption:'🐠 Cayos, manglares y snorkel en Morrocoy' },
+        'Los Roques':       { id:'escena-losroques', caption:'🏝️ Aguas cristalinas y fondos de coral' },
         'Mérida':           { id:'escena-montana',  caption:'🚡 Aire de montaña y el teleférico más alto' },
         'Canaima':          { id:'escena-cascada',  caption:'💧 Tepuyes y el Salto Ángel te esperan' },
         'Catatumbo':        { id:'escena-tormenta', caption:'⚡ El relámpago eterno del Catatumbo' },
@@ -842,6 +976,8 @@
         const s=document.getElementById('ninos'), e=document.getElementById('ninos-extra');
         e.style.display=s.value==='more'?'block':'none';
         if(s.value!=='more') e.value='';
+        const tieneNinos = s.value!=='0' && s.value!=='';
+        document.getElementById('cedula-ninos-wrap').style.display = tieneNinos ? 'block' : 'none';
     }
     function toggleHabitacionesExtra(){
         const s=document.getElementById('habitaciones'), e=document.getElementById('habitaciones-extra');
@@ -880,6 +1016,14 @@
             for(let i=1;i<=n;i++){
                 cont.innerHTML+=`<div class="form-group"><label><i class="fas fa-child"></i>Edad del Niño ${i}</label><input type="number" class="edad-input" min="2" max="11" placeholder="Años (2–11)"></div>`;
             }
+            // Pregunta cédula niños (una sola vez, discreta)
+            cont.innerHTML+=`<div class="checkbox-group" style="margin-top:4px;margin-bottom:0;">
+                <input type="checkbox" id="cedula-ninos">
+                <label for="cedula-ninos">
+                    <i class="fas fa-id-card"></i>Los niños tienen cédula
+                    <span>Algunos hospedajes la solicitan al hacer check-in.</span>
+                </label>
+            </div>`;
         } else {
             cont.innerHTML=`<div class="form-group"><label>Edades de los niños (resumen)</label><input type="text" id="edades-resumen" placeholder="Ej: 3 de 8 años, 2 de 5 años"></div>`;
         }
@@ -967,7 +1111,18 @@
             `Adultos: ${adultos}`,
             `Niños: ${ninos}`
         ];
+        const cedulaAdultosVigente = document.getElementById('cedula-adultos-vigente') ? document.getElementById('cedula-adultos-vigente').checked : true;
+        const cedulaNinosEl = document.getElementById('cedula-ninos');
+        const cedulaNinos = cedulaNinosEl ? cedulaNinosEl.checked : null;
+        if(!cedulaAdultosVigente) lineas.push('⚠️ Cédula(s) de adulto(s) vencida(s) — requiere atención');
+        const cedulaAdultosOk = document.getElementById('cedula-adultos-vigente').checked;
+        const cedulaNinosEl = document.getElementById('cedula-ninos');
+        const cedulaNinos = cedulaNinosEl ? cedulaNinosEl.checked : null;
+        if(!cedulaAdultosOk) lineas.push('⚠️ Cédula(s) de adulto(s) posiblemente vencida(s)');
         if(ninos>0) lineas.push(`Edades niños: ${edades}`);
+        if(ninos>0 && document.getElementById('cedula-ninos-wrap').style.display!=='none')
+            lineas.push(`Niños con cédula: ${cedulaNinos?'Sí':'No'}`);
+        if(ninos>0 && cedulaNinos !== null) lineas.push(`Niños con cédula: ${cedulaNinos?'Sí':'No'}`);
         if(bebes>0) lineas.push(`Bebés: ${bebes}${cuna?' (necesita cuna)':''}`);
         lineas.push(`Habitaciones: ${habitaciones}`);
         if(amenidades.length) lineas.push(`Preferencias del hospedaje: ${amenidades.join(', ')}`);
@@ -1022,6 +1177,11 @@
     }
     mostrarTip();
     setInterval(mostrarTip,7000);
+
+    // Aviso cédula adultos
+    document.getElementById('cedula-adultos-vigente').addEventListener('change', function(){
+        document.getElementById('aviso-cedula-adultos').style.display = this.checked ? 'none' : 'block';
+    });
 
     // Init
     actualizarEscena();
