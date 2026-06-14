@@ -138,10 +138,7 @@
             transform: scale(0.96);
         }
         
-        .home-btn i {
-            color: #ff9100;
-            font-size: 11px;
-        }
+        .home-btn i { color: #ff9100; font-size: 11px; }
 
         .card-header {
             text-align: center;
@@ -305,28 +302,54 @@
         .ruta-linea {
             flex: 1;
             position: relative;
-            height: 2px;
-            background: repeating-linear-gradient(to right, rgba(255,255,255,0.3) 0 6px, transparent 6px 12px);
+            height: 24px;
             margin: 0 4px;
             overflow: visible;
         }
         
-        .ruta-linea i {
+        .ruta-linea .trazo {
             position: absolute;
-            top: -8px;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: repeating-linear-gradient(to right, rgba(255,255,255,0.3) 0 6px, transparent 6px 12px);
+            transform: translateY(-50%);
+        }
+        
+        .ruta-linea i.avion-ida {
+            position: absolute;
+            top: 2px;
             left: 0;
             color: #4a9eff;
             font-size: 13px;
-            animation: vuelo 3s linear infinite;
+            animation: vueloIda 3s linear infinite;
             filter: drop-shadow(0 0 4px rgba(74,158,255,0.6));
         }
         
-        @keyframes vuelo {
-            0% { left: 0%; opacity: 0; transform: translateY(0); }
+        .ruta-linea i.avion-vuelta {
+            position: absolute;
+            bottom: 2px;
+            right: 0;
+            color: #ff9100;
+            font-size: 13px;
+            animation: vueloVuelta 3s linear infinite;
+            filter: drop-shadow(0 0 4px rgba(255,145,0,0.6));
+            transform: scaleX(-1);
+        }
+        
+        @keyframes vueloIda {
+            0% { left: 0%; opacity: 0; }
             10% { opacity: 1; }
-            50% { transform: translateY(-3px); }
             90% { opacity: 1; }
-            100% { left: 90%; opacity: 0; transform: translateY(0); }
+            100% { left: 88%; opacity: 0; }
+        }
+        
+        @keyframes vueloVuelta {
+            0% { right: 0%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { right: 88%; opacity: 0; }
         }
 
         .form-section {
@@ -346,6 +369,7 @@
         .form-section:nth-child(3) { animation-delay: 0.4s; }
         .form-section:nth-child(4) { animation-delay: 0.45s; }
         .form-section:nth-child(5) { animation-delay: 0.5s; }
+        .form-section:nth-child(6) { animation-delay: 0.55s; }
         
         .section-title {
             font-size: 10px;
@@ -422,8 +446,12 @@
             font-size: 10px;
             color: rgba(168,209,255,0.7);
             margin-top: 4px;
-            display: block;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
+        
+        .hint i { color: var(--accent-blue); }
 
         /* Segmentado tipo viaje */
         .segmented {
@@ -457,7 +485,103 @@
             box-shadow: 0 3px 10px rgba(74,158,255,0.3);
         }
 
-        /* Pasajeros */
+        /* Fechas flexibles */
+        .flex-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        
+        .flex-tag {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(10,12,28,0.7);
+            border: 1.5px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 7px 11px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            color: rgba(255,255,255,0.6);
+            transition: all 0.15s ease;
+            touch-action: manipulation;
+        }
+        
+        .flex-tag:active { transform: scale(0.93); }
+        
+        .flex-tag i {
+            color: rgba(74,158,255,0.5);
+            font-size: 10px;
+            transition: all 0.15s ease;
+        }
+        
+        .flex-tag.sel {
+            border-color: var(--accent-blue);
+            background: rgba(74,158,255,0.2);
+            color: #fff;
+            transform: scale(1.03);
+            box-shadow: 0 0 10px rgba(74,158,255,0.2);
+        }
+        
+        .flex-tag.sel i { color: var(--accent-blue); transform: scale(1.1); }
+
+        /* Checkbox estilo */
+        .checkbox-group {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            background: rgba(10,12,28,0.5);
+            border: 1.5px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-top: 8px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: 16px; height: 16px;
+            flex: 0 0 16px;
+            accent-color: #4a9eff;
+            margin-top: 1px;
+            cursor: pointer;
+        }
+        
+        .checkbox-group label {
+            margin: 0;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            color: rgba(255,255,255,0.8);
+            line-height: 1.4;
+        }
+        
+        .checkbox-group label i { color: #4a9eff; margin-right: 3px; font-size: 10px; }
+        
+        .checkbox-group span {
+            display: block;
+            font-size: 10px;
+            color: rgba(168,209,255,0.6);
+            font-weight: 400;
+            margin-top: 2px;
+        }
+
+        /* Alerta cédula niños */
+        .alerta-cedula {
+            display: none;
+            background: rgba(255,145,0,0.1);
+            border: 1px solid rgba(255,145,0,0.3);
+            border-radius: 8px;
+            padding: 8px 10px;
+            margin-top: 8px;
+            font-size: 10px;
+            color: #ffd9a8;
+            line-height: 1.4;
+        }
+        
+        .alerta-cedula i { color: #ff9100; margin-right: 4px; }
+        .alerta-cedula.visible { display: flex; align-items: flex-start; gap: 6px; }
+
+        /* Equipaje */
         .pasajeros-grid {
             display: flex;
             flex-wrap: wrap;
@@ -496,10 +620,9 @@
             box-shadow: 0 0 10px rgba(74,158,255,0.2);
         }
         
-        .pasajero-tag.sel i {
-            color: var(--accent-blue);
-            transform: scale(1.1);
-        }
+        .pasajero-tag.sel i { color: var(--accent-blue); transform: scale(1.1); }
+
+        .extra-input { margin-top: 6px; }
 
         .btn-gen {
             width: 100%;
@@ -515,7 +638,7 @@
             letter-spacing: 0.2px;
             touch-action: manipulation;
             transition: transform 0.1s ease, box-shadow 0.2s ease;
-            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.55s both;
+            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.6s both;
         }
         
         .btn-gen:active {
@@ -593,7 +716,6 @@
         }
         
         .btn-cotizar:active { transform: scale(0.96); }
-        
         .btn-cotizar i { animation: iconBounce 2s infinite; }
         
         @keyframes iconBounce {
@@ -630,7 +752,7 @@
             font-size: 9px;
             color: rgba(255,255,255,0.25);
             text-align: center;
-            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.6s both;
+            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.65s both;
         }
 
         .confeti-container {
@@ -656,6 +778,7 @@
             body { padding: 12px 8px 32px; }
             .form-section { padding: 14px; }
             .ruta-punto .codigo { font-size: 17px; }
+            .flex-tag { padding: 6px 9px; font-size: 10px; }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -694,8 +817,10 @@
                 <span class="codigo" id="origen-codigo">VLN</span>
                 <span class="ciudad" id="origen-ciudad">Valencia</span>
             </div>
-            <div class="ruta-linea">
-                <i class="fas fa-plane"></i>
+            <div class="ruta-linea" id="ruta-linea">
+                <div class="trazo"></div>
+                <i class="fas fa-plane avion-ida"></i>
+                <i class="fas fa-plane avion-vuelta" id="avion-vuelta"></i>
             </div>
             <div class="ruta-punto">
                 <span class="codigo" id="destino-codigo">¿?</span>
@@ -708,10 +833,10 @@
             <div class="section-title"><i class="fas fa-route"></i> Tipo de Vuelo</div>
             <div class="form-group">
                 <label><i class="fas fa-exchange-alt"></i>¿Qué necesitas?</label>
-                <div class="segmented" id="tipo-viaje-segmented">
-                    <input type="radio" name="tipo-viaje" id="tv-ida" value="ida">
+                <div class="segmented">
+                    <input type="radio" name="tipo-viaje" id="tv-ida" value="ida" onchange="toggleTipoViaje()">
                     <label for="tv-ida">✈ Solo Ida</label>
-                    <input type="radio" name="tipo-viaje" id="tv-idavuelta" value="ida-vuelta" checked>
+                    <input type="radio" name="tipo-viaje" id="tv-idavuelta" value="ida-vuelta" checked onchange="toggleTipoViaje()">
                     <label for="tv-idavuelta">↔ Ida y Vuelta</label>
                 </div>
             </div>
@@ -770,31 +895,79 @@
                     <input type="date" id="fecha-vuelta">
                 </div>
             </div>
-            <span class="hint"><i class="fas fa-info-circle" style="color:#4a9eff;"></i> Fechas flexibles = mejores tarifas</span>
+            <div class="form-group">
+                <label><i class="fas fa-sliders-h"></i>Flexibilidad de fechas</label>
+                <div class="flex-tags" id="flex-tags">
+                    <div class="flex-tag sel" data-value="0" onclick="toggleFlex(this)"><i class="fas fa-lock"></i>Fechas fijas</div>
+                    <div class="flex-tag" data-value="1" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±1 día</div>
+                    <div class="flex-tag" data-value="2" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±2 días</div>
+                    <div class="flex-tag" data-value="3" onclick="toggleFlex(this)"><i class="fas fa-calendar-week"></i>±3 días</div>
+                    <div class="flex-tag" data-value="7" onclick="toggleFlex(this)"><i class="fas fa-calendar-plus"></i>±1 semana</div>
+                </div>
+                <span class="hint"><i class="fas fa-lightbulb"></i> Más flexibilidad = mejores tarifas</span>
+            </div>
         </div>
 
         <!-- Pasajeros -->
         <div class="form-section">
             <div class="section-title"><i class="fas fa-users"></i> Pasajeros</div>
+            
+            <!-- Adultos -->
             <div class="form-group">
                 <label><i class="fas fa-user"></i>Adultos <span style="font-weight:400;color:#a8d1ff;font-size:10px;">(12+ años)</span></label>
-                <select id="adultos">
+                <select id="adultos" onchange="toggleAdultosExtra()">
                     <option value="1">1 adulto</option>
                     <option value="2" selected>2 adultos</option>
                     <option value="3">3 adultos</option>
                     <option value="4">4 adultos</option>
                     <option value="5">5 adultos</option>
+                    <option value="more">Más de 5</option>
                 </select>
+                <input type="number" id="adultos-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántos adultos?" style="display:none;" oninput="actualizarAlertaCedula()">
+                
+                <!-- Cédulas adultos -->
+                <div class="checkbox-group">
+                    <input type="checkbox" id="cedula-adultos" checked>
+                    <label for="cedula-adultos">
+                        <i class="fas fa-id-card"></i>Todos los adultos tienen cédula vigente
+                        <span>Si alguna está vencida, tu asesor te ayudará a coordinar.</span>
+                    </label>
+                </div>
             </div>
+
+            <!-- Niños -->
             <div class="form-group">
                 <label><i class="fas fa-child"></i>Niños <span style="font-weight:400;color:#a8d1ff;font-size:10px;">(2-11 años)</span></label>
-                <select id="ninos">
+                <select id="ninos" onchange="toggleNinosExtra()">
                     <option value="0" selected>Sin niños</option>
                     <option value="1">1 niño</option>
                     <option value="2">2 niños</option>
                     <option value="3">3 niños</option>
+                    <option value="4">4 niños</option>
+                    <option value="more">Más de 4</option>
                 </select>
+                <input type="number" id="ninos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos niños?" style="display:none;" oninput="toggleNinosExtraInput()">
+                
+                <!-- Alerta cédula niños ≥9 años -->
+                <div class="alerta-cedula" id="alerta-cedula-ninos">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Si algún niño tiene <strong>9 años o más</strong>, es obligatorio que tenga cédula de identidad vigente para viajar.</span>
+                </div>
+                
+                <!-- Edades niños -->
+                <div id="contenedor-edades" style="margin-top:8px;"></div>
+                
+                <!-- Checkbox cédula niños -->
+                <div class="checkbox-group" id="grupo-cedula-ninos" style="display:none;">
+                    <input type="checkbox" id="cedula-ninos">
+                    <label for="cedula-ninos">
+                        <i class="fas fa-id-card"></i>Los niños que viajan tienen cédula
+                        <span>Obligatorio para niños de 9 años o más.</span>
+                    </label>
+                </div>
             </div>
+
+            <!-- Bebés -->
             <div class="form-group">
                 <label><i class="fas fa-baby"></i>Bebés <span style="font-weight:400;color:#a8d1ff;font-size:10px;">(0-23 meses)</span></label>
                 <select id="bebes">
@@ -802,7 +975,10 @@
                     <option value="1">1 bebé</option>
                     <option value="2">2 bebés</option>
                 </select>
+                <span class="hint"><i class="fas fa-info-circle"></i> Los bebés viajan en el regazo. Si prefieres asiento propio, indícalo en notas.</span>
             </div>
+
+            <!-- Equipaje -->
             <div class="form-group">
                 <label><i class="fas fa-suitcase"></i>Equipaje</label>
                 <div class="pasajeros-grid" id="equipaje-grid">
@@ -872,14 +1048,14 @@
         document.getElementById('fecha-ida').min = hoyISO();
         document.getElementById('fecha-vuelta').min = hoyISO();
 
-        // Tipo viaje -> mostrar/ocultar fecha vuelta
-        document.getElementById('tv-ida').addEventListener('change', function() {
-            document.getElementById('grupo-fecha-vuelta').style.display = 'none';
-            document.getElementById('fecha-vuelta').value = '';
-        });
-        document.getElementById('tv-idavuelta').addEventListener('change', function() {
-            document.getElementById('grupo-fecha-vuelta').style.display = 'block';
-        });
+        // Tipo viaje
+        function toggleTipoViaje() {
+            var esIdaVuelta = document.getElementById('tv-idavuelta').checked;
+            document.getElementById('grupo-fecha-vuelta').style.display = esIdaVuelta ? 'block' : 'none';
+            var avionVuelta = document.getElementById('avion-vuelta');
+            avionVuelta.style.display = esIdaVuelta ? 'block' : 'none';
+            if (!esIdaVuelta) document.getElementById('fecha-vuelta').value = '';
+        }
 
         // Ruta
         function actualizarRuta(tipo) {
@@ -918,7 +1094,6 @@
             }
         }
 
-        // Origen extra
         document.getElementById('origen-extra').addEventListener('input', function() {
             if (this.value.trim()) {
                 document.getElementById('origen-codigo').textContent = '???';
@@ -926,13 +1101,119 @@
             }
         });
 
-        // Destino extra
         document.getElementById('destino-extra').addEventListener('input', function() {
             if (this.value.trim()) {
                 document.getElementById('destino-codigo').textContent = '???';
                 document.getElementById('destino-ciudad').textContent = this.value.trim().substring(0, 12);
             }
         });
+
+        // Flexibilidad fechas
+        function toggleFlex(el) {
+            var tags = document.querySelectorAll('#flex-tags .flex-tag');
+            for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel');
+            el.classList.add('sel');
+        }
+
+        function getFlexibilidad() {
+            var sel = document.querySelector('#flex-tags .flex-tag.sel');
+            return sel ? parseInt(sel.dataset.value) : 0;
+        }
+
+        // Adultos extra
+        function toggleAdultosExtra() {
+            var sel = document.getElementById('adultos');
+            var extra = document.getElementById('adultos-extra');
+            extra.style.display = sel.value === 'more' ? 'block' : 'none';
+            if (sel.value !== 'more') extra.value = '';
+        }
+
+        function getAdultosCount() {
+            var sel = document.getElementById('adultos');
+            if (sel.value === 'more') {
+                var v = parseInt(document.getElementById('adultos-extra').value);
+                return isNaN(v) ? null : v;
+            }
+            return parseInt(sel.value);
+        }
+
+        // Niños extra
+        function toggleNinosExtra() {
+            var sel = document.getElementById('ninos');
+            var extra = document.getElementById('ninos-extra');
+            var grupoCedula = document.getElementById('grupo-cedula-ninos');
+            var alertaCedula = document.getElementById('alerta-cedula-ninos');
+            
+            extra.style.display = sel.value === 'more' ? 'block' : 'none';
+            if (sel.value !== 'more') extra.value = '';
+            
+            var ninosCount = getNinosCount();
+            if (ninosCount > 0) {
+                grupoCedula.style.display = 'flex';
+                alertaCedula.classList.add('visible');
+                generarEdadesNinos(ninosCount);
+            } else {
+                grupoCedula.style.display = 'none';
+                alertaCedula.classList.remove('visible');
+                document.getElementById('contenedor-edades').innerHTML = '';
+            }
+        }
+
+        function toggleNinosExtraInput() {
+            var ninosCount = getNinosCount();
+            if (ninosCount > 0) {
+                document.getElementById('grupo-cedula-ninos').style.display = 'flex';
+                document.getElementById('alerta-cedula-ninos').classList.add('visible');
+                generarEdadesNinos(ninosCount);
+            }
+        }
+
+        function getNinosCount() {
+            var sel = document.getElementById('ninos');
+            if (sel.value === 'more') {
+                var v = parseInt(document.getElementById('ninos-extra').value);
+                return isNaN(v) ? null : v;
+            }
+            return parseInt(sel.value);
+        }
+
+        function generarEdadesNinos(count) {
+            var cont = document.getElementById('contenedor-edades');
+            if (!count || count <= 0) { cont.innerHTML = ''; return; }
+            var html = '<label style="font-size:10px;color:#a8d1ff;margin-bottom:6px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>';
+            var max = Math.min(count, 10);
+            for (var i = 1; i <= max; i++) {
+                html += '<input type="number" class="edad-nino extra-input" min="2" max="11" placeholder="Niño ' + i + ': edad (2-11)" style="margin-bottom:4px;">';
+            }
+            if (count > 10) {
+                html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen de edades (ej: 3 de 8, 2 de 5)">';
+            }
+            cont.innerHTML = html;
+            
+            // Eventos para verificar edad ≥9
+            var inputs = cont.querySelectorAll('.edad-nino');
+            for (var j = 0; j < inputs.length; j++) {
+                inputs[j].addEventListener('input', actualizarAlertaCedula);
+            }
+        }
+
+        function actualizarAlertaCedula() {
+            var inputs = document.querySelectorAll('.edad-nino');
+            var tieneMayor9 = false;
+            for (var i = 0; i < inputs.length; i++) {
+                if (parseInt(inputs[i].value) >= 9) { tieneMayor9 = true; break; }
+            }
+            var alerta = document.getElementById('alerta-cedula-ninos');
+            if (tieneMayor9) {
+                alerta.style.borderColor = 'rgba(255,80,80,0.5)';
+                alerta.style.background = 'rgba(255,80,80,0.12)';
+                alerta.querySelector('span').innerHTML = '⚠️ <strong>Obligatorio:</strong> Los niños de 9 años o más deben tener cédula de identidad vigente para abordar.';
+            } else {
+                alerta.style.borderColor = 'rgba(255,145,0,0.3)';
+                alerta.style.background = 'rgba(255,145,0,0.1)';
+                alerta.querySelector('span').innerHTML = 'Si algún niño tiene <strong>9 años o más</strong>, es obligatorio que tenga cédula de identidad vigente para viajar.';
+            }
+        }
 
         // Equipaje
         function toggleEquipaje(el) {
@@ -985,15 +1266,32 @@
             var destino = destinoSel.startsWith('OTRO') ? destinoExtra : (destinoSel ? destinoSel.split('|')[1] : '');
             var fechaIda = document.getElementById('fecha-ida').value;
             var fechaVuelta = document.getElementById('fecha-vuelta').value;
-            var adultos = document.getElementById('adultos').value;
-            var ninos = document.getElementById('ninos').value;
-            var bebes = document.getElementById('bebes').value;
+            var flexibilidad = getFlexibilidad();
+            var adultos = getAdultosCount();
+            var ninos = getNinosCount();
+            var bebes = parseInt(document.getElementById('bebes').value);
             var equipaje = getEquipaje();
+            var cedulaAdultos = document.getElementById('cedula-adultos').checked;
+            var cedulaNinos = document.getElementById('cedula-ninos').checked;
             var ocasion = document.getElementById('ocasion').value;
             var notas = document.getElementById('notas').value.trim();
 
-            if (!origen || !destino || !fechaIda) {
-                alert('Completa origen, destino y fecha de ida por favor.');
+            // Edades niños
+            var edadesNinos = '';
+            var resumenEl = document.getElementById('edades-resumen');
+            if (resumenEl) {
+                edadesNinos = resumenEl.value.trim() || 'No especificadas';
+            } else {
+                var edadInputs = document.querySelectorAll('.edad-nino');
+                var edadesArr = [];
+                for (var i = 0; i < edadInputs.length; i++) {
+                    edadesArr.push('Niño ' + (i+1) + ': ' + (edadInputs[i].value || '?') + ' años');
+                }
+                edadesNinos = edadesArr.length ? edadesArr.join(', ') : 'No especificadas';
+            }
+
+            if (!origen || !destino || !fechaIda || adultos === null) {
+                alert('Completa origen, destino, fecha de ida y cantidad de adultos por favor.');
                 return;
             }
 
@@ -1007,8 +1305,12 @@
                 '\uD83D\uDCCD *Destino:* ' + destino + '\n' +
                 '\uD83D\uDCC5 *Fecha ida:* ' + fechaIda + '\n' +
                 (tipoViaje === 'ida-vuelta' && fechaVuelta ? '\uD83D\uDCC5 *Fecha vuelta:* ' + fechaVuelta + '\n' : '') +
+                (flexibilidad > 0 ? '\uD83D\uDD04 *Flexibilidad:* ±' + flexibilidad + ' día' + (flexibilidad > 1 ? 's' : '') + '\n' : '\uD83D\uDD12 *Fechas fijas*\n') +
                 '\uD83D\uDC65 *Pasajeros:* ' + adultos + ' adulto(s) | ' + ninos + ' niño(s) | ' + bebes + ' bebé(s)\n' +
+                (ninos > 0 ? '\uD83D\uDC76 *Edades niños:* ' + edadesNinos + '\n' : '') +
                 '\uD83E\uDDF3 *Equipaje:* ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado') + '\n' +
+                '\uD83D\uDCCB *Documentos:* Adultos con cédula: ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR') + '\n' +
+                (ninos > 0 ? '\uD83D\uDCCB *Niños con cédula:* ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') + '\n' : '') +
                 (ocasion !== 'Viaje regular' ? '\uD83C\uDF89 *Ocasión:* ' + ocasion + '\n' : '') +
                 (notas ? '\uD83D\uDCDD *Notas:* ' + notas + '\n' : '') +
                 '\n\u2705 *Por favor, enviar opciones con precios. ¡Gracias!*';
@@ -1023,6 +1325,7 @@
                         '<div class="dato"><i class="fas fa-exchange-alt"></i> <strong>' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + '</strong></div>' +
                         '<div class="dato"><i class="fas fa-plane-departure"></i> ' + origen + ' → ' + destino + '</div>' +
                         '<div class="dato"><i class="fas fa-calendar-check"></i> Ida: ' + fechaIda + (tipoViaje === 'ida-vuelta' && fechaVuelta ? ' | Vuelta: ' + fechaVuelta : '') + '</div>' +
+                        '<div class="dato"><i class="fas fa-sliders-h"></i> ' + (flexibilidad > 0 ? 'Flexible ±' + flexibilidad + ' día' + (flexibilidad > 1 ? 's' : '') : 'Fechas fijas') + '</div>' +
                         '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + bebes + ' bebés</div>' +
                         '<div class="dato"><i class="fas fa-suitcase"></i> ' + (equipaje.length ? equipaje.join(' + ') : 'Sin equipaje') + '</div>' +
                         (ocasion !== 'Viaje regular' ? '<div class="dato"><i class="fas fa-gift"></i> ' + ocasion + '</div>' : '') +
@@ -1052,6 +1355,9 @@
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             }, 300);
         }
+
+        // Init
+        toggleTipoViaje();
     </script>
 </body>
 </html>
