@@ -8,13 +8,14 @@
     <meta property="og:description" content="Vuelos nacionales e internacionales al mejor precio, con asesoría personalizada.">
     <meta property="og:image" content="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png">
     <title>Lotus 360 · Boletería Aérea</title>
-    <link rel="preload" as="image" href="https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg">
+    <link rel="preload" as="image" href="https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg">
     <link rel="preload" as="image" href="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <style>
         :root {
             --accent: #ff9100;
             --accent-blue: #4a9eff;
+            --color-fullday: #10b981;
             --success: #25D366;
             --text-warm: #ffe0b2;
             --card-bg: rgba(15,20,40,0.65);
@@ -24,25 +25,30 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #0a1020; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start;
-            padding: 14px 10px 36px; position: relative; overflow-x: hidden; -webkit-font-smoothing: antialiased;
+            padding: 0 10px 36px; position: relative; overflow-x: hidden; -webkit-font-smoothing: antialiased;
             animation: pageEnter 0.35s ease;
         }
         @keyframes pageEnter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         body.salir { animation: pageExit 0.25s ease forwards; }
         @keyframes pageExit { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-25px); } }
-        #bg {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg');
-            background-size: cover; background-position: center 20%; background-repeat: no-repeat;
-            z-index: -2; transform: translateZ(0);
+        body::before {
+            content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 3px;
+            background: linear-gradient(90deg, transparent 0%, rgba(74,158,255,0.3) 15%, rgba(74,158,255,0.6) 30%, rgba(100,180,255,0.4) 50%, rgba(74,158,255,0.6) 70%, rgba(74,158,255,0.3) 85%, transparent 100%);
+            z-index: 10; pointer-events: none;
         }
-        @media (min-width: 768px) { #bg { background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'); background-position: center center; } }
+        #bg {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100vh;
+            background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg');
+            background-size: cover; background-position: center center; background-repeat: no-repeat;
+            background-attachment: fixed; z-index: -2; transform: translateZ(0);
+        }
+        @media (max-width: 768px) { #bg { background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg'); background-position: center 20%; } }
         #bg-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100vh;
             background: linear-gradient(160deg, rgba(8,8,22,0.78) 0%, rgba(15,15,35,0.85) 55%, rgba(8,8,22,0.92) 100%);
             z-index: -1; pointer-events: none;
         }
-        .card { width: 100%; max-width: 500px; z-index: 1; color: #fff; }
+        .card { width: 100%; max-width: 500px; z-index: 1; color: #fff; padding-top: 24px; }
         .home-btn {
             display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.06);
             border: 1px solid rgba(255,255,255,0.15); border-radius: 50px; padding: 8px 16px;
@@ -63,7 +69,9 @@
         .logo-profile {
             width: 64px; height: 64px; border-radius: 50%; border: 3px solid var(--accent);
             padding: 3px; background: #fff; object-fit: contain; display: block; position: relative; z-index: 1;
+            animation: logoAppear 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;
         }
+        @keyframes logoAppear { from { opacity: 0; transform: scale(0.5) rotateY(90deg); } to { opacity: 1; transform: scale(1) rotateY(0deg); } }
         .card-header h2 {
             font-size: 1.1rem; font-weight: 700; margin-bottom: 2px;
             background: linear-gradient(to right, #4a9eff, #7bb8ff, #4a9eff);
@@ -88,11 +96,7 @@
             border: 1px solid rgba(74,158,255,0.18); border-radius: 16px;
             transform: translateZ(0); position: relative; overflow: hidden;
         }
-        .ruta-box::before {
-            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(74,158,255,0.03), transparent);
-            animation: shimmer 3s ease-in-out infinite;
-        }
+        .ruta-box::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(74,158,255,0.03), transparent); animation: shimmer 3s ease-in-out infinite; }
         @keyframes shimmer { 0%, 100% { transform: translateX(-100%); } 50% { transform: translateX(100%); } }
         .ruta-punto { flex: 0 0 auto; text-align: center; min-width: 50px; z-index: 1; }
         .ruta-punto .codigo { font-size: 18px; font-weight: 800; letter-spacing: 1px; line-height: 1; background: linear-gradient(to bottom, #fff, #a8d1ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
@@ -108,15 +112,10 @@
             background: var(--card-bg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(74,158,255,0.08); border-radius: 16px; padding: 14px;
             margin-bottom: 10px; transform: translateZ(0); box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-            content-visibility: auto; contain-intrinsic-size: auto 200px;
         }
-        .section-title {
-            font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
-            color: var(--accent-blue); margin-bottom: 10px; display: flex; align-items: center; gap: 5px;
-        }
+        .section-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-blue); margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
         .section-title::after { content: ''; flex: 1; height: 1px; background: rgba(74,158,255,0.12); }
-        .form-group { margin-bottom: 10px; }
-        .form-group:last-child { margin-bottom: 0; }
+        .form-group { margin-bottom: 10px; } .form-group:last-child { margin-bottom: 0; }
         .form-group label { display: block; font-weight: 600; margin-bottom: 5px; color: rgba(255,255,255,0.9); font-size: 11px; }
         .form-group label i { color: var(--accent-blue); margin-right: 3px; width: 13px; text-align: center; font-size: 10px; }
 
@@ -132,8 +131,7 @@
         }
         select:focus, input:focus, textarea:focus { outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(74,158,255,0.1); }
         textarea { resize: vertical; min-height: 55px; }
-        .row { display: flex; gap: 8px; }
-        .row .form-group { flex: 1; }
+        .row { display: flex; gap: 8px; } .row .form-group { flex: 1; }
         .extra-input { margin-top: 5px; }
 
         .segmented { display: flex; background: rgba(10,12,28,0.7); border: 1.5px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 3px; gap: 3px; }
@@ -150,81 +148,53 @@
         }
         .flex-tag:active, .pasajero-tag:active { transform: scale(0.93); }
         .flex-tag i, .pasajero-tag i { color: rgba(74,158,255,0.45); font-size: 10px; }
-        .flex-tag.sel, .pasajero-tag.sel {
-            border-color: var(--accent-blue); background: rgba(74,158,255,0.18); color: #fff;
-            transform: scale(1.02); box-shadow: 0 0 8px rgba(74,158,255,0.18);
-        }
+        .flex-tag.sel, .pasajero-tag.sel { border-color: var(--accent-blue); background: rgba(74,158,255,0.18); color: #fff; transform: scale(1.02); box-shadow: 0 0 8px rgba(74,158,255,0.18); }
         .flex-tag.sel i, .pasajero-tag.sel i { color: var(--accent-blue); }
 
-        .checkbox-group {
-            display: flex; align-items: flex-start; gap: 7px; background: rgba(10,12,28,0.4);
-            border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 8px 10px; margin-top: 6px;
-        }
+        .checkbox-group { display: flex; align-items: flex-start; gap: 7px; background: rgba(10,12,28,0.4); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
         .checkbox-group input[type="checkbox"] { width: 15px; height: 15px; flex: 0 0 15px; accent-color: #4a9eff; margin-top: 1px; }
         .checkbox-group label { margin: 0; font-size: 10px; font-weight: 500; cursor: pointer; color: rgba(255,255,255,0.75); line-height: 1.4; }
         .checkbox-group label i { color: #4a9eff; margin-right: 2px; font-size: 9px; }
         .checkbox-group span { display: block; font-size: 9px; color: rgba(168,209,255,0.45); font-weight: 400; margin-top: 1px; }
 
-        .alerta-cedula {
-            display: none; background: rgba(255,145,0,0.08); border: 1px solid rgba(255,145,0,0.25);
-            border-radius: 6px; padding: 6px 8px; margin-top: 6px; font-size: 9px; color: #ffd9a8; line-height: 1.4;
-        }
-        .alerta-cedula.visible { display: flex; align-items: flex-start; gap: 5px; }
-        .alerta-cedula i { color: #ff9100; }
+        .alerta-cedula { display: none; background: rgba(255,145,0,0.08); border: 1px solid rgba(255,145,0,0.25); border-radius: 6px; padding: 6px 8px; margin-top: 6px; font-size: 9px; color: #ffd9a8; line-height: 1.4; }
+        .alerta-cedula.visible { display: flex; align-items: flex-start; gap: 5px; } .alerta-cedula i { color: #ff9100; }
 
-        .btn-gen {
-            width: 100%; padding: 15px; background: linear-gradient(135deg, #4a9eff, #2d7dd2);
-            color: white; border: none; border-radius: 12px; font-weight: 700; font-size: 14px;
-            cursor: pointer; box-shadow: 0 4px 16px rgba(74,158,255,0.35); letter-spacing: 0.2px;
-            touch-action: manipulation; transition: transform 0.1s ease;
-        }
+        .btn-gen { width: 100%; padding: 15px; background: linear-gradient(135deg, #4a9eff, #2d7dd2); color: white; border: none; border-radius: 12px; font-weight: 700; font-size: 14px; cursor: pointer; box-shadow: 0 4px 16px rgba(74,158,255,0.35); letter-spacing: 0.2px; touch-action: manipulation; transition: transform 0.1s ease; }
         .btn-gen:active { transform: scale(0.96); }
 
         #resultado { display: none; margin-top: 14px; }
-        .resultado-card {
-            background: rgba(15,20,40,0.8); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-            border: 1px solid rgba(37,211,102,0.2); border-radius: 14px; padding: 14px;
-            border-left: 3px solid #25D366; transform: translateZ(0);
-        }
+        .resultado-card { background: rgba(15,20,40,0.8); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(37,211,102,0.2); border-radius: 14px; padding: 14px; border-left: 3px solid #25D366; transform: translateZ(0); }
         .resultado-card h3 { color: #25D366; font-size: 0.95rem; margin-bottom: 10px; }
         .resumen-detalle { background: rgba(0,0,0,0.25); border-radius: 8px; padding: 10px; margin-bottom: 10px; font-size: 11px; line-height: 1.6; }
         .resumen-detalle .dato { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
         .resumen-detalle .dato i { color: var(--accent-blue); width: 12px; text-align: center; font-size: 10px; }
-        .btn-cotizar {
-            display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%;
-            padding: 13px; background: #25D366; color: white; border: none; border-radius: 12px;
-            font-weight: 700; font-size: 13px; cursor: pointer; text-decoration: none;
-            box-shadow: 0 3px 12px rgba(37,211,102,0.2); touch-action: manipulation; transition: transform 0.1s ease;
-        }
+        .btn-cotizar { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; padding: 13px; background: #25D366; color: white; border: none; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; text-decoration: none; box-shadow: 0 3px 12px rgba(37,211,102,0.2); touch-action: manipulation; transition: transform 0.1s ease; }
         .btn-cotizar:active { transform: scale(0.96); }
-        .btn-nueva {
-            display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%;
-            padding: 11px; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.65);
-            border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; font-weight: 600;
-            font-size: 12px; cursor: pointer; margin-top: 7px; touch-action: manipulation;
-        }
+        .btn-nueva { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; padding: 11px; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.65); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; font-weight: 600; font-size: 12px; cursor: pointer; margin-top: 7px; touch-action: manipulation; }
         .btn-nueva:active { background: rgba(255,255,255,0.1); }
 
-        .footer-servicios { display: flex; justify-content: center; gap: 10px; margin: 18px 0 6px; }
+        .footer-servicios { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 18px 0 6px; }
         .footer-servicio {
             display: flex; align-items: center; gap: 4px; font-size: 8px; color: rgba(168,209,255,0.4);
             text-decoration: none; padding: 3px 8px; border-radius: 20px; background: rgba(74,158,255,0.04);
             border: 1px solid rgba(74,158,255,0.08); transition: all 0.15s ease;
         }
+        .footer-servicio.fullday i { color: var(--color-fullday); }
         .footer-servicio.activo { color: var(--accent-blue); background: rgba(74,158,255,0.1); border-color: rgba(74,158,255,0.25); }
-        .footer-servicio:active { background: rgba(74,158,255,0.15); }
+        .footer-servicio.hospedaje i { color: #ff9100; }
+        .footer-servicio:active { transform: scale(0.95); }
         .footer-copy { font-size: 8px; color: rgba(255,255,255,0.18); text-align: center; }
 
         .confeti-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; }
         .confeti { position: absolute; width: 7px; height: 7px; animation: caerConfeti 1s ease-out forwards; }
         @keyframes caerConfeti { 0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(480deg); opacity: 0; } }
-
         .hint-text { font-size: 9px; color: rgba(168,209,255,0.5); margin-top: 3px; display: flex; align-items: center; gap: 3px; }
         .hint-text i { color: var(--accent-blue); font-size: 8px; }
         .select-desc { font-size: 9px; color: rgba(168,209,255,0.6); margin-top: 3px; font-style: italic; min-height: 16px; display: flex; align-items: center; gap: 4px; }
         .select-desc i { font-size: 8px; color: var(--accent-blue); }
 
-        @media (max-width: 360px) { body { padding: 10px 8px 32px; } .form-section { padding: 12px; } .ruta-punto .codigo { font-size: 16px; } }
+        @media (max-width: 360px) { body { padding: 0 8px 32px; } .card { padding-top: 20px; } .form-section { padding: 12px; } .ruta-punto .codigo { font-size: 16px; } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
     </style>
 </head>
@@ -264,9 +234,12 @@
         <div class="form-group">
             <label><i class="fas fa-plane-departure"></i>Origen</label>
             <select id="origen" onchange="actualizarRuta('origen')">
-                <option value="VLN|Valencia">Valencia (VLN)</option><option value="CCS|Caracas">Caracas (CCS)</option>
-                <option value="MAR|Maracaibo">Maracaibo (MAR)</option><option value="BLA|Barcelona">Barcelona (BLA)</option>
-                <option value="MCY|Maracay">Maracay (MCY)</option><option value="OTRO|Otro origen">Otro (especificar)</option>
+                <option value="VLN|Valencia">Valencia (VLN)</option>
+                <option value="CCS|Caracas">Caracas (CCS)</option>
+                <option value="MAR|Maracaibo">Maracaibo (MAR)</option>
+                <option value="BLA|Barcelona">Barcelona (BLA)</option>
+                <option value="PMV|Isla de Margarita">Isla de Margarita (PMV)</option>
+                <option value="OTRO|Otro origen">Otro (especificar)</option>
             </select>
             <input type="text" id="origen-extra" class="extra-input" placeholder="Ciudad de origen..." style="display:none;">
         </div>
@@ -274,14 +247,19 @@
             <label><i class="fas fa-plane-arrival"></i>Destino</label>
             <select id="destino" onchange="actualizarRuta('destino'); actualizarDescDestino();">
                 <option value="">Selecciona un destino...</option>
-                <optgroup label="✈️ Nacionales">
-                    <option value="PMV|Isla de Margarita" data-desc="Playas paradisíacas, duty free y vida nocturna 🛍️">Isla de Margarita (PMV)</option>
-                    <option value="CCS|Caracas" data-desc="Capital, negocios y conexión internacional 🏙️">Caracas (CCS)</option>
-                    <option value="MAR|Maracaibo" data-desc="Tierra del sol amada, gastronomía y lago 🌅">Maracaibo (MAR)</option>
-                    <option value="MER|Mérida" data-desc="Montañas andinas y el teleférico más alto 🏔️">Mérida (MER)</option>
-                    <option value="STX|Canaima" data-desc="Tepuyes milenarios y el Salto Ángel 💧">Canaima (CAN)</option>
+                <optgroup label="✈️ Destinos Nacionales (con aeropuerto)">
+                    <option value="CCS|Caracas" data-desc="Capital de Venezuela, conexiones internacionales y negocios 🏙️">Caracas (CCS) · Maiquetía</option>
+                    <option value="MAR|Maracaibo" data-desc="Tierra del sol amada, gastronomía y el Lago de Maracaibo 🌅">Maracaibo (MAR) · La Chinita</option>
+                    <option value="BLA|Barcelona" data-desc="Puerta de entrada al oriente venezolano, playas y cultura 🏖️">Barcelona (BLA) · Gral. José Antonio Anzoátegui</option>
+                    <option value="PMV|Isla de Margarita" data-desc="Playas paradisíacas, duty free y vida nocturna 🛍️">Isla de Margarita (PMV) · Santiago Mariño</option>
+                    <option value="VLN|Valencia" data-desc="Ciudad industrial, museos y gastronomía carabobeña 🏭">Valencia (VLN) · Arturo Michelena</option>
+                    <option value="PZO|Puerto Ordaz" data-desc="Naturaleza, Parques Nacionales y el río Caroní 🌿">Puerto Ordaz (PZO) · Manuel Carlos Piar</option>
+                    <option value="CUM|Cumaná" data-desc="Primogénita del continente, historia y playas del oriente 🏛️">Cumaná (CUM) · Antonio José de Sucre</option>
+                    <option value="MUN|Maturín" data-desc="Capital petrolera, gastronomía y cultura oriental 🛢️">Maturín (MUN) · José Tadeo Monagas</option>
+                    <option value="LSP|Las Piedras" data-desc="Entrada a Paraguaná, dunas y atardeceres únicos 🌅">Las Piedras (LSP) · Josefa Camejo</option>
+                    <option value="SFD|San Fernando de Apure" data-desc="Puerta de los Llanos, naturaleza y fauna venezolana 🐊">San Fernando (SFD) · Las Flecheras</option>
                 </optgroup>
-                <optgroup label="🌍 Internacionales">
+                <optgroup label="🌍 Destinos Internacionales">
                     <option value="BOG|Bogotá, Colombia" data-desc="Cultura, café y Monserrate ☕">Bogotá (BOG)</option>
                     <option value="PTY|Panamá" data-desc="Canal, compras y conexión global 🛍️">Panamá (PTY)</option>
                     <option value="MAD|Madrid, España" data-desc="Europa te espera: arte, tapas y historia 🇪🇸">Madrid (MAD)</option>
@@ -305,11 +283,11 @@
         <div class="form-group">
             <label><i class="fas fa-sliders-h"></i>Flexibilidad de fechas</label>
             <div class="flex-tags" id="flex-tags">
-                <div class="flex-tag sel" data-value="0" onclick="toggleFlex(this)"><i class="fas fa-lock"></i>Fechas fijas</div>
-                <div class="flex-tag" data-value="1" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±1 día</div>
-                <div class="flex-tag" data-value="2" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±2 días</div>
-                <div class="flex-tag" data-value="3" onclick="toggleFlex(this)"><i class="fas fa-calendar-week"></i>±3 días</div>
-                <div class="flex-tag" data-value="7" onclick="toggleFlex(this)"><i class="fas fa-calendar-plus"></i>±1 semana</div>
+                <div class="flex-tag sel" data-value="0" onclick="toggleFlex(this)"><i class="fas fa-lock"></i>Fijas</div>
+                <div class="flex-tag" data-value="1" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±1</div>
+                <div class="flex-tag" data-value="2" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±2</div>
+                <div class="flex-tag" data-value="3" onclick="toggleFlex(this)"><i class="fas fa-calendar-week"></i>±3</div>
+                <div class="flex-tag" data-value="7" onclick="toggleFlex(this)"><i class="fas fa-calendar-plus"></i>±7</div>
             </div>
             <div class="hint-text"><i class="fas fa-lightbulb"></i> Más flexibilidad = mejores tarifas</div>
         </div>
@@ -319,29 +297,17 @@
         <div class="section-title"><i class="fas fa-users"></i> Pasajeros</div>
         <div class="form-group">
             <label><i class="fas fa-user"></i>Adultos <span style="font-weight:400;color:#a8d1ff;font-size:9px;">(12+ años)</span></label>
-            <select id="adultos" onchange="toggleAdultosExtra()">
-                <option value="1">1 adulto</option><option value="2" selected>2 adultos</option><option value="3">3 adultos</option>
-                <option value="4">4 adultos</option><option value="5">5 adultos</option><option value="more">Más de 5</option>
-            </select>
+            <select id="adultos" onchange="toggleAdultosExtra()"><option value="1">1 adulto</option><option value="2" selected>2 adultos</option><option value="3">3 adultos</option><option value="4">4 adultos</option><option value="5">5 adultos</option><option value="more">Más de 5</option></select>
             <input type="number" id="adultos-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántos adultos?" style="display:none;">
-            <div class="checkbox-group">
-                <input type="checkbox" id="cedula-adultos" checked>
-                <label for="cedula-adultos"><i class="fas fa-id-card"></i>Todos los adultos tienen cédula vigente<span>Si alguna está vencida, tu asesor te ayudará a coordinar.</span></label>
-            </div>
+            <div class="checkbox-group"><input type="checkbox" id="cedula-adultos" checked><label for="cedula-adultos"><i class="fas fa-id-card"></i>Todos los adultos tienen cédula vigente<span>Si alguna está vencida, tu asesor te ayudará a coordinar.</span></label></div>
         </div>
         <div class="form-group">
             <label><i class="fas fa-child"></i>Niños <span style="font-weight:400;color:#a8d1ff;font-size:9px;">(2-11 años)</span></label>
-            <select id="ninos" onchange="toggleNinosExtra()">
-                <option value="0" selected>Sin niños</option><option value="1">1 niño</option><option value="2">2 niños</option>
-                <option value="3">3 niños</option><option value="4">4 niños</option><option value="more">Más de 4</option>
-            </select>
+            <select id="ninos" onchange="toggleNinosExtra()"><option value="0" selected>Sin niños</option><option value="1">1 niño</option><option value="2">2 niños</option><option value="3">3 niños</option><option value="4">4 niños</option><option value="more">Más de 4</option></select>
             <input type="number" id="ninos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos niños?" style="display:none;" oninput="toggleNinosExtraInput()">
-            <div class="alerta-cedula" id="alerta-cedula-ninos"><i class="fas fa-exclamation-triangle"></i><span>Si algún niño tiene <strong>9 años o más</strong>, necesita cédula vigente para viajar.</span></div>
+            <div class="alerta-cedula" id="alerta-cedula-ninos"><i class="fas fa-exclamation-triangle"></i><span>Si algún niño tiene <strong>9 años o más</strong>, necesita cédula vigente.</span></div>
             <div id="contenedor-edades" style="margin-top:6px;"></div>
-            <div class="checkbox-group" id="grupo-cedula-ninos" style="display:none;">
-                <input type="checkbox" id="cedula-ninos">
-                <label for="cedula-ninos"><i class="fas fa-id-card"></i>Los niños que viajan tienen cédula<span>Obligatorio para niños de 9 años o más.</span></label>
-            </div>
+            <div class="checkbox-group" id="grupo-cedula-ninos" style="display:none;"><input type="checkbox" id="cedula-ninos"><label for="cedula-ninos"><i class="fas fa-id-card"></i>Los niños que viajan tienen cédula<span>Obligatorio para niños de 9 años o más.</span></label></div>
         </div>
         <div class="form-group">
             <label><i class="fas fa-baby"></i>Bebés <span style="font-weight:400;color:#a8d1ff;font-size:9px;">(0-23 meses)</span></label>
@@ -360,39 +326,32 @@
 
     <div class="form-section">
         <div class="section-title"><i class="fas fa-star"></i> Extras</div>
-        <div class="form-group">
-            <label><i class="fas fa-gift"></i>Ocasión especial</label>
-            <select id="ocasion"><option value="Viaje regular">Viaje regular</option><option value="Luna de Miel">💑 Luna de Miel</option><option value="Cumpleaños">🎂 Cumpleaños</option><option value="Viaje de Negocios">💼 Negocios</option><option value="Emergencia">🏥 Emergencia</option></select>
-            <div class="hint-text"><i class="fas fa-heart"></i> Si es una ocasión especial, podemos gestionar servicios adicionales</div>
-        </div>
-        <div class="form-group">
-            <label><i class="fas fa-pen"></i>Notas</label>
-            <textarea id="notas" placeholder="Ej: vuelo directo, ventana, aerolínea preferida..." rows="2"></textarea>
-        </div>
+        <div class="form-group"><label><i class="fas fa-gift"></i>Ocasión especial</label><select id="ocasion"><option value="Viaje regular">Viaje regular</option><option value="Luna de Miel">💑 Luna de Miel</option><option value="Cumpleaños">🎂 Cumpleaños</option><option value="Viaje de Negocios">💼 Negocios</option><option value="Emergencia">🏥 Emergencia</option></select><div class="hint-text"><i class="fas fa-heart"></i> Si es una ocasión especial, podemos gestionar servicios adicionales</div></div>
+        <div class="form-group"><label><i class="fas fa-pen"></i>Notas</label><textarea id="notas" placeholder="Ej: vuelo directo, ventana, aerolínea preferida..." rows="2"></textarea></div>
     </div>
 
     <button class="btn-gen" onclick="generarSolicitud()"><i class="fas fa-paper-plane" style="margin-right:6px;"></i>Cotizar Vuelo</button>
     <div id="resultado"></div>
 
+    <!-- Footer: Full Day | Hospedaje | Boletería -->
     <div class="footer-servicios">
-        <a href="hospedaje.html" class="footer-servicio"><i class="fas fa-hotel"></i> Hospedaje</a>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tour/" class="footer-servicio fullday"><i class="fas fa-umbrella-beach"></i> Full Day</a>
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="footer-servicio hospedaje"><i class="fas fa-hotel"></i> Hospedaje</a>
         <span class="footer-servicio activo"><i class="fas fa-plane"></i> Boletería</span>
-        <a href="#" class="footer-servicio"><i class="fas fa-bus"></i> Transporte</a>
     </div>
     <p class="footer-copy">© 2026 Lotus 360 · Carabobo, Venezuela</p>
 </div>
 
 <script>
-(function() { var img = new Image(); img.src = 'https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg'; })();
+(function() { var img = new Image(); img.src = 'https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'; })();
 function transicionSalida(e) { e.preventDefault(); document.body.classList.add('salir'); setTimeout(function() { window.location.href = document.getElementById('homeBtn').href; }, 250); }
 
 (function() {
-    var ahora = new Date();
-    var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
+    var ahora = new Date(); var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
     var dia = ve.getDay(); var horaDecimal = ve.getHours() + ve.getMinutes() / 60;
     var online = (dia >= 1 && dia <= 6) ? (horaDecimal >= 8.5 && horaDecimal < 19) : (dia === 0 && horaDecimal >= 10 && horaDecimal < 15);
     document.getElementById('estado-dot').className = 'dot ' + (online ? 'online' : 'offline');
-    document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Fuera de horario · Domingos 10am-3pm' : 'Fuera de horario · Lun-Sáb 8:30am-7pm');
+    document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Domingos 10am-3pm' : 'Lun-Sáb 8:30am-7pm');
 })();
 
 function hoyISO() { return new Date().toISOString().split('T')[0]; }
@@ -420,54 +379,21 @@ function actualizarRuta(tipo) {
 document.getElementById('origen-extra').addEventListener('input', function() { if (this.value.trim()) { document.getElementById('origen-codigo').textContent = '???'; document.getElementById('origen-ciudad').textContent = this.value.trim().substring(0, 12); } });
 document.getElementById('destino-extra').addEventListener('input', function() { if (this.value.trim()) { document.getElementById('destino-codigo').textContent = '???'; document.getElementById('destino-ciudad').textContent = this.value.trim().substring(0, 12); } });
 
-function actualizarDescDestino() {
-    var sel = document.getElementById('destino'), opt = sel.options[sel.selectedIndex];
-    document.getElementById('desc-destino').innerHTML = '<i class="fas fa-info-circle"></i> ' + (opt.getAttribute('data-desc') || 'Selecciona tu destino para ver detalles');
-}
-
+function actualizarDescDestino() { var sel = document.getElementById('destino'), opt = sel.options[sel.selectedIndex]; document.getElementById('desc-destino').innerHTML = '<i class="fas fa-info-circle"></i> ' + (opt.getAttribute('data-desc') || 'Selecciona tu destino para ver detalles'); }
 function toggleFlex(el) { var tags = document.querySelectorAll('#flex-tags .flex-tag'); for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel'); el.classList.add('sel'); }
 function getFlexibilidad() { var sel = document.querySelector('#flex-tags .flex-tag.sel'); return sel ? parseInt(sel.dataset.value) : 0; }
-
 function toggleAdultosExtra() { var e = document.getElementById('adultos-extra'); e.style.display = document.getElementById('adultos').value === 'more' ? 'block' : 'none'; if (document.getElementById('adultos').value !== 'more') e.value = ''; }
 function getAdultosCount() { var sel = document.getElementById('adultos'); if (sel.value === 'more') { var v = parseInt(document.getElementById('adultos-extra').value); return isNaN(v) ? null : v; } return parseInt(sel.value); }
-
 function toggleNinosExtra() { var e = document.getElementById('ninos-extra'); e.style.display = document.getElementById('ninos').value === 'more' ? 'block' : 'none'; if (document.getElementById('ninos').value !== 'more') e.value = ''; actualizarNinosUI(); }
 function toggleNinosExtraInput() { actualizarNinosUI(); }
 function getNinosCount() { var sel = document.getElementById('ninos'); if (sel.value === 'more') { var v = parseInt(document.getElementById('ninos-extra').value); return isNaN(v) ? null : v; } return parseInt(sel.value); }
-function actualizarNinosUI() {
-    var count = getNinosCount(); document.getElementById('grupo-cedula-ninos').style.display = count > 0 ? 'flex' : 'none';
-    var alerta = document.getElementById('alerta-cedula-ninos');
-    if (count > 0) { alerta.classList.add('visible'); generarEdades(count); } else { alerta.classList.remove('visible'); document.getElementById('contenedor-edades').innerHTML = ''; }
-}
-function generarEdades(count) {
-    var cont = document.getElementById('contenedor-edades'); if (!count || count <= 0) { cont.innerHTML = ''; return; }
-    var html = '<label style="font-size:9px;color:#a8d1ff;margin-bottom:5px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>';
-    var max = Math.min(count, 10);
-    for (var i = 1; i <= max; i++) html += '<input type="number" class="edad-nino extra-input" min="2" max="11" placeholder="Niño ' + i + ': edad (2-11)" style="margin-bottom:4px;">';
-    if (count > 10) html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen: ej. 3 de 8 años, 2 de 5">';
-    cont.innerHTML = html;
-    var inputs = cont.querySelectorAll('.edad-nino'); for (var j = 0; j < inputs.length; j++) inputs[j].addEventListener('input', actualizarAlertaCedula);
-}
-function actualizarAlertaCedula() {
-    var inputs = document.querySelectorAll('.edad-nino'), tiene = false;
-    for (var i = 0; i < inputs.length; i++) { if (parseInt(inputs[i].value) >= 9) { tiene = true; break; } }
-    var alerta = document.getElementById('alerta-cedula-ninos');
-    alerta.style.borderColor = tiene ? 'rgba(255,80,80,0.5)' : 'rgba(255,145,0,0.25)';
-    alerta.style.background = tiene ? 'rgba(255,80,80,0.1)' : 'rgba(255,145,0,0.08)';
-    alerta.querySelector('span').innerHTML = tiene ? '⚠️ <strong>Obligatorio:</strong> Niños de 9+ años deben tener cédula.' : 'Niños ≥9 años necesitan cédula vigente para viajar.';
-}
-
-function toggleEquipaje(el) {
-    if (el.dataset.value === 'Sin equipaje') { var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag'); for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel'); el.classList.add('sel'); }
-    else { var sin = document.querySelector('#equipaje-grid .pasajero-tag[data-value="Sin equipaje"]'); if (sin) sin.classList.remove('sel'); el.classList.toggle('sel'); }
-}
+function actualizarNinosUI() { var count = getNinosCount(); document.getElementById('grupo-cedula-ninos').style.display = count > 0 ? 'flex' : 'none'; var alerta = document.getElementById('alerta-cedula-ninos'); if (count > 0) { alerta.classList.add('visible'); generarEdades(count); } else { alerta.classList.remove('visible'); document.getElementById('contenedor-edades').innerHTML = ''; } }
+function generarEdades(count) { var cont = document.getElementById('contenedor-edades'); if (!count || count <= 0) { cont.innerHTML = ''; return; } var html = '<label style="font-size:9px;color:#a8d1ff;margin-bottom:5px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>'; var max = Math.min(count, 10); for (var i = 1; i <= max; i++) html += '<input type="number" class="edad-nino extra-input" min="2" max="11" placeholder="Niño ' + i + ': edad (2-11)" style="margin-bottom:4px;">'; if (count > 10) html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen: ej. 3 de 8 años, 2 de 5">'; cont.innerHTML = html; var inputs = cont.querySelectorAll('.edad-nino'); for (var j = 0; j < inputs.length; j++) inputs[j].addEventListener('input', actualizarAlertaCedula); }
+function actualizarAlertaCedula() { var inputs = document.querySelectorAll('.edad-nino'), tiene = false; for (var i = 0; i < inputs.length; i++) { if (parseInt(inputs[i].value) >= 9) { tiene = true; break; } } var alerta = document.getElementById('alerta-cedula-ninos'); alerta.style.borderColor = tiene ? 'rgba(255,80,80,0.5)' : 'rgba(255,145,0,0.25)'; alerta.style.background = tiene ? 'rgba(255,80,80,0.1)' : 'rgba(255,145,0,0.08)'; alerta.querySelector('span').innerHTML = tiene ? '⚠️ <strong>Obligatorio:</strong> Niños de 9+ años deben tener cédula.' : 'Niños ≥9 años necesitan cédula vigente para viajar.'; }
+function toggleEquipaje(el) { if (el.dataset.value === 'Sin equipaje') { var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag'); for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel'); el.classList.add('sel'); } else { var sin = document.querySelector('#equipaje-grid .pasajero-tag[data-value="Sin equipaje"]'); if (sin) sin.classList.remove('sel'); el.classList.toggle('sel'); } }
 function getEquipaje() { var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag.sel'), r = []; for (var i = 0; i < tags.length; i++) r.push(tags[i].dataset.value); return r; }
 
-function lanzarConfeti() {
-    var colores = ['#4a9eff', '#25D366', '#ffd166', '#ff9100', '#7bb8ff']; var c = document.createElement('div'); c.className = 'confeti-container'; var f = document.createDocumentFragment();
-    for (var i = 0; i < 20; i++) { var x = document.createElement('div'); x.className = 'confeti'; x.style.left = Math.random() * 100 + '%'; x.style.animationDelay = Math.random() * 0.4 + 's'; x.style.animationDuration = (Math.random() * 0.8 + 0.7) + 's'; x.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)]; f.appendChild(x); }
-    c.appendChild(f); document.body.appendChild(c); setTimeout(function() { c.remove(); }, 1500);
-}
+function lanzarConfeti() { var colores = ['#4a9eff', '#25D366', '#ffd166', '#ff9100', '#7bb8ff']; var c = document.createElement('div'); c.className = 'confeti-container'; var f = document.createDocumentFragment(); for (var i = 0; i < 20; i++) { var x = document.createElement('div'); x.className = 'confeti'; x.style.left = Math.random() * 100 + '%'; x.style.animationDelay = Math.random() * 0.4 + 's'; x.style.animationDuration = (Math.random() * 0.8 + 0.7) + 's'; x.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)]; f.appendChild(x); } c.appendChild(f); document.body.appendChild(c); setTimeout(function() { c.remove(); }, 1500); }
 
 function generarSolicitud() {
     var tipoViaje = document.querySelector('input[name="tipo-viaje"]:checked').value;
@@ -492,18 +418,9 @@ function generarSolicitud() {
     var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(lineas.filter(function(l) { return l !== ''; }).join('\n'));
 
     document.getElementById('resultado').style.display = 'block';
-    document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Listo!</h3><div class="resumen-detalle">' +
-        '<div class="dato"><i class="fas fa-exchange-alt"></i> <strong>' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + '</strong></div>' +
-        '<div class="dato"><i class="fas fa-plane-departure"></i> ' + origen + ' → ' + destino + '</div>' +
-        '<div class="dato"><i class="fas fa-calendar-check"></i> Ida: ' + fechaIda + (tipoViaje === 'ida-vuelta' && fechaVuelta ? ' | Vuelta: ' + fechaVuelta : '') + '</div>' +
-        '<div class="dato"><i class="fas fa-sliders-h"></i> ' + (flexibilidad > 0 ? 'Flexible ±' + flexibilidad + ' día(s)' : 'Fechas fijas') + '</div>' +
-        '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + bebes + ' bebés</div>' +
-        '<div class="dato"><i class="fas fa-suitcase"></i> ' + (equipaje.length ? equipaje.join(' + ') : 'Sin equipaje') + '</div>' +
-        (ocasion !== 'Viaje regular' ? '<div class="dato"><i class="fas fa-gift"></i> ' + ocasion + '</div>' : '') +
-        '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Enviar a un Asesor</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Nueva cotización</button></div>';
+    document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Listo!</h3><div class="resumen-detalle">' + '<div class="dato"><i class="fas fa-exchange-alt"></i> <strong>' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + '</strong></div>' + '<div class="dato"><i class="fas fa-plane-departure"></i> ' + origen + ' → ' + destino + '</div>' + '<div class="dato"><i class="fas fa-calendar-check"></i> Ida: ' + fechaIda + (tipoViaje === 'ida-vuelta' && fechaVuelta ? ' | Vuelta: ' + fechaVuelta : '') + '</div>' + '<div class="dato"><i class="fas fa-sliders-h"></i> ' + (flexibilidad > 0 ? 'Flexible ±' + flexibilidad + ' día(s)' : 'Fechas fijas') + '</div>' + '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + bebes + ' bebés</div>' + '<div class="dato"><i class="fas fa-suitcase"></i> ' + (equipaje.length ? equipaje.join(' + ') : 'Sin equipaje') + '</div>' + (ocasion !== 'Viaje regular' ? '<div class="dato"><i class="fas fa-gift"></i> ' + ocasion + '</div>' : '') + '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Enviar a un Asesor</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Nueva cotización</button></div>';
     document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' }); lanzarConfeti();
 }
-
 function nuevaCotizacion() { var r = document.getElementById('resultado'); r.style.opacity = '0'; r.style.transform = 'translateY(8px)'; r.style.transition = 'all 0.25s ease'; setTimeout(function() { r.style.display = 'none'; r.innerHTML = ''; r.style.opacity = '1'; r.style.transform = 'translateY(0)'; window.scrollTo({ top: 0, behavior: 'smooth' }); }, 250); }
 
 toggleTipoViaje(); actualizarDescDestino();
