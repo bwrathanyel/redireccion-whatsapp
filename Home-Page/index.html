@@ -32,19 +32,9 @@
         }
         @keyframes pageEnter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         
-        /* Línea de textura superior */
         body::before {
-            content: '';
-            position: fixed; top: 0; left: 0; width: 100%; height: 3px;
-            background: linear-gradient(90deg, 
-                transparent 0%, 
-                rgba(255,145,0,0.3) 15%, 
-                rgba(255,145,0,0.6) 30%,
-                rgba(255,180,100,0.4) 50%,
-                rgba(255,145,0,0.6) 70%,
-                rgba(255,145,0,0.3) 85%,
-                transparent 100%
-            );
+            content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 3px;
+            background: linear-gradient(90deg, transparent 0%, rgba(255,145,0,0.3) 15%, rgba(255,145,0,0.6) 30%, rgba(255,180,100,0.4) 50%, rgba(255,145,0,0.6) 70%, rgba(255,145,0,0.3) 85%, transparent 100%);
             z-index: 10; pointer-events: none;
         }
         
@@ -54,12 +44,7 @@
             background-size: cover; background-position: center center; background-repeat: no-repeat;
             background-attachment: fixed; z-index: -2; transform: translateZ(0);
         }
-        @media (max-width: 768px) {
-            #bg {
-                background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg');
-                background-position: center 20%;
-            }
-        }
+        @media (max-width: 768px) { #bg { background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg'); background-position: center 20%; } }
         #bg-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100vh;
             background: linear-gradient(160deg, rgba(8,8,22,0.72) 0%, rgba(15,15,35,0.82) 55%, rgba(8,8,22,0.9) 100%);
@@ -69,110 +54,96 @@
         .container { width: 100%; max-width: 460px; text-align: center; z-index: 1; padding-top: 24px; }
         
         .logo-wrap { position: relative; width: 80px; height: 80px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; }
-        .logo-wrap::before {
-            content: ''; position: absolute; width: 80px; height: 80px; border-radius: 50%;
-            border: 2px solid rgba(255,145,0,0.5); animation: ring-pulse 2.4s ease-out infinite;
-            top: 50%; left: 50%; transform: translate(-50%, -50%);
-        }
+        .logo-wrap::before { content: ''; position: absolute; width: 80px; height: 80px; border-radius: 50%; border: 2px solid rgba(255,145,0,0.5); animation: ring-pulse 2.4s ease-out infinite; top: 50%; left: 50%; transform: translate(-50%, -50%); }
         @keyframes ring-pulse { 0% { width: 70px; height: 70px; opacity: 0.8; } 100% { width: 100px; height: 100px; opacity: 0; } }
-        .logo-profile {
-            width: 70px; height: 70px; border-radius: 50%; border: 3px solid var(--accent);
-            padding: 3px; background: #fff; object-fit: contain; display: block; position: relative; z-index: 1;
-            box-shadow: 0 4px 18px rgba(0,0,0,0.4); animation: logoAppear 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;
-        }
+        .logo-profile { width: 70px; height: 70px; border-radius: 50%; border: 3px solid var(--accent); padding: 3px; background: #fff; object-fit: contain; display: block; position: relative; z-index: 1; box-shadow: 0 4px 18px rgba(0,0,0,0.4); animation: logoAppear 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.1s both; }
         @keyframes logoAppear { from { opacity: 0; transform: scale(0.5) rotateY(90deg); } to { opacity: 1; transform: scale(1) rotateY(0deg); } }
         
-        h1 { 
-            font-size: 1.25rem; font-weight: 700; margin-bottom: 2px; 
-            background: linear-gradient(to right, #ff9100, #ffb74d, #ff9100);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
+        h1 { font-size: 1.25rem; font-weight: 700; margin-bottom: 2px; background: linear-gradient(to right, #ff9100, #ffb74d, #ff9100); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
         .subtitle { color: var(--text-warm); font-size: 0.85rem; margin-bottom: 14px; text-shadow: 0 2px 6px rgba(0,0,0,0.7); }
 
-        .servicios-nav {
-            display: flex; justify-content: center; align-items: center; gap: 0;
-            margin-bottom: 18px; animation: fadeSlideUp 0.5s ease 0.15s both;
-        }
+        .servicios-nav { display: flex; justify-content: center; align-items: center; gap: 0; margin-bottom: 18px; animation: fadeSlideUp 0.5s ease 0.15s both; }
         @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .servicios-nav a {
-            text-decoration: none; color: rgba(255,255,255,0.5); font-size: 10px; font-weight: 600;
-            padding: 6px 14px; transition: all 0.2s ease; position: relative;
-            letter-spacing: 0.3px; white-space: nowrap;
-        }
-        .servicios-nav a::after {
-            content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
-            width: 0; height: 2px; border-radius: 2px; transition: width 0.2s ease;
-        }
+        .servicios-nav a { text-decoration: none; color: rgba(255,255,255,0.5); font-size: 10px; font-weight: 600; padding: 6px 14px; transition: all 0.2s ease; position: relative; letter-spacing: 0.3px; white-space: nowrap; }
+        .servicios-nav a::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 0; height: 2px; border-radius: 2px; transition: width 0.2s ease; }
         .servicios-nav a:active, .servicios-nav a:hover { color: #fff; }
         .servicios-nav a:active::after, .servicios-nav a:hover::after { width: 60%; }
-        .servicios-nav a.fullday { color: rgba(16,185,129,0.7); }
-        .servicios-nav a.fullday::after { background: #10b981; }
-        .servicios-nav a.fullday:active, .servicios-nav a.fullday:hover { color: #10b981; }
-        .servicios-nav a.hospedaje { color: rgba(255,145,0,0.7); }
-        .servicios-nav a.hospedaje::after { background: #ff9100; }
-        .servicios-nav a.hospedaje:active, .servicios-nav a.hospedaje:hover { color: #ff9100; }
-        .servicios-nav a.boleteria { color: rgba(74,158,255,0.7); }
-        .servicios-nav a.boleteria::after { background: #4a9eff; }
-        .servicios-nav a.boleteria:active, .servicios-nav a.boleteria:hover { color: #4a9eff; }
-        
-        .servicios-nav .nav-sep {
-            width: 1px; height: 12px; background: rgba(255,255,255,0.1); margin: 0 2px;
-        }
+        .servicios-nav a.fullday { color: rgba(16,185,129,0.7); } .servicios-nav a.fullday::after { background: #10b981; } .servicios-nav a.fullday:active, .servicios-nav a.fullday:hover { color: #10b981; }
+        .servicios-nav a.hospedaje { color: rgba(255,145,0,0.7); } .servicios-nav a.hospedaje::after { background: #ff9100; } .servicios-nav a.hospedaje:active, .servicios-nav a.hospedaje:hover { color: #ff9100; }
+        .servicios-nav a.boleteria { color: rgba(74,158,255,0.7); } .servicios-nav a.boleteria::after { background: #4a9eff; } .servicios-nav a.boleteria:active, .servicios-nav a.boleteria:hover { color: #4a9eff; }
+        .servicios-nav .nav-sep { width: 1px; height: 12px; background: rgba(255,255,255,0.1); margin: 0 2px; }
 
-        .estado-box {
-            display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.07);
-            border: 1px solid rgba(255,255,255,0.12); border-radius: 30px; padding: 5px 12px;
-            font-size: 10px; font-weight: 600; margin-bottom: 16px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        }
+        .estado-box { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 30px; padding: 5px 12px; font-size: 10px; font-weight: 600; margin-bottom: 16px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
         .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
         .dot.online { background: #25D366; animation: dot-breathe 1.8s infinite; }
         .dot.offline { background: #f59e0b; }
         @keyframes dot-breathe { 0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); } 70% { box-shadow: 0 0 0 5px rgba(37,211,102,0); } 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); } }
 
-        .hero-escena {
-            position: relative; width: 100%; height: 105px; border-radius: 14px; overflow: hidden;
+        /* ── Escena animada del destino ── */
+        .escena-box {
+            position: relative; width: 100%; height: 110px; border-radius: 14px; overflow: hidden;
             margin-bottom: 12px; border: 1px solid rgba(255,145,0,0.2);
-            box-shadow: 0 4px 16px rgba(0,0,0,0.3); animation: fadeSlideUp 0.5s ease 0.2s both;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3); background: #0c2d4a;
+            animation: fadeSlideUp 0.5s ease 0.2s both;
         }
-        .hero-escena svg { width: 100%; height: 100%; display: block; }
+        .escena-box svg.escena { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; }
+        .escena-box svg.escena.activa { display: block; animation: sceneSwitch 0.4s ease; }
+        @keyframes sceneSwitch { from { opacity: 0.6; transform: scale(1.02); } to { opacity: 1; transform: scale(1); } }
+        .escena-caption {
+            position: absolute; bottom: 6px; left: 10px; background: rgba(0,0,0,0.6);
+            color: #ffe0b2; font-size: 10px; font-weight: 600; padding: 4px 10px;
+            border-radius: 6px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 2;
+        }
+
+        /* Animaciones SVG */
         @keyframes ola { to { transform: translateX(-100px); } }
         .ola1 { animation: ola 8s linear infinite; }
+        .ola2 { animation: ola 12s linear infinite reverse; }
         @keyframes brillo { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
         .sol { animation: brillo 4s ease-in-out infinite; }
         @keyframes viento { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
         .hojas { animation: viento 5s ease-in-out infinite alternate; }
-        @keyframes volar-avion { 0% { transform: translate(-10px,18px) rotate(6deg); opacity: 0; } 12% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(380px,-6px) rotate(6deg); opacity: 0; } }
-        .avion-hero { animation: volar-avion 9s linear infinite; }
+        @keyframes nube-der { 0% { transform: translateX(0); } 100% { transform: translateX(25px); } }
+        .nube { animation: nube-der 10s ease-in-out infinite alternate; }
+        @keyframes telecabina-mov { 0% { transform: translate(22px,36px); } 100% { transform: translate(340px,80px); } }
+        .telecabina { animation: telecabina-mov 8s ease-in-out infinite alternate; }
+        @keyframes nevada { 0% { opacity: 0; } 50% { opacity: 0.6; } 100% { opacity: 0; } }
+        .nieve1 { animation: nevada 4s ease-in-out infinite; }
+        .nieve2 { animation: nevada 4.5s ease-in-out infinite 0.8s; }
+        @keyframes caer { to { stroke-dashoffset: -48; } }
+        .agua { animation: caer 1s linear infinite; }
+        @keyframes bruma-pulso { 0%,100% { opacity: 0.2; } 50% { opacity: 0.4; } }
+        .bruma { animation: bruma-pulso 3s ease-in-out infinite; }
+        @keyframes relampago { 0%,92%,100% { opacity: 0; } 93%,96% { opacity: 1; } }
+        .rayo1 { animation: relampago 5s infinite; }
+        @keyframes lluvia-line { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 40; } }
+        .lluvia { animation: lluvia-line 0.8s linear infinite; stroke-dasharray: 6 10; }
+        @keyframes girar-globo { to { transform: rotate(360deg); } }
+        .globo-lineas { animation: girar-globo 25s linear infinite; }
+        @keyframes volar-avion { 0% { transform: translate(-10px,40px) rotate(8deg); opacity: 0; } 10% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(390px,0px) rotate(8deg); opacity: 0; } }
+        .avion-mundo { animation: volar-avion 8s linear infinite; }
 
-        /* Ticker con animaciones por destino */
+        /* Ticker deslizable */
         .ticker-wrap {
-            overflow: hidden; white-space: nowrap;
-            border-top: 1px solid rgba(255,255,255,0.08);
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            padding: 6px 0; margin-bottom: 10px;
+            overflow-x: auto; overflow-y: hidden; white-space: nowrap;
+            border-top: 1px solid rgba(255,255,255,0.08); border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding: 6px 0; margin-bottom: 10px; -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; cursor: grab;
         }
+        .ticker-wrap::-webkit-scrollbar { display: none; }
+        .ticker-wrap:active { cursor: grabbing; }
         .ticker {
             display: flex; width: max-content; animation: desplazar 35s linear infinite;
             font-size: 10px; font-weight: 500; color: rgba(255,255,255,0.5);
         }
         .ticker.paused { animation-play-state: paused; }
         .ticker span {
-            padding: 3px 12px; cursor: pointer; transition: all 0.2s ease;
-            border-radius: 20px; margin: 0 2px; position: relative;
+            padding: 4px 14px; cursor: pointer; transition: all 0.2s ease;
+            border-radius: 20px; margin: 0 2px; flex-shrink: 0;
         }
         .ticker span:active { background: rgba(255,145,0,0.15); color: #fff; transform: scale(1.05); }
         .ticker span:hover { color: #fff; }
-        
-        /* Animaciones por destino */
-        .ticker span[data-destino="Isla de Margarita"]:hover { text-shadow: 0 0 10px rgba(255,145,0,0.6); }
-        .ticker span[data-destino="Morrocoy"]:hover { text-shadow: 0 0 10px rgba(74,158,255,0.6); }
-        .ticker span[data-destino="Los Roques"]:hover { text-shadow: 0 0 10px rgba(16,185,129,0.6); }
-        .ticker span[data-destino="Mérida"]:hover { text-shadow: 0 0 10px rgba(139,92,246,0.6); }
-        .ticker span[data-destino="Canaima"]:hover { text-shadow: 0 0 10px rgba(6,182,212,0.6); }
-        .ticker span[data-destino="Catatumbo"]:hover { text-shadow: 0 0 10px rgba(250,204,21,0.6); }
-        .ticker span[data-destino="Colonia Tovar"]:hover { text-shadow: 0 0 10px rgba(251,146,60,0.6); }
-        .ticker span[data-destino="Destinos Internacionales"]:hover { text-shadow: 0 0 10px rgba(168,85,247,0.6); }
-        
+        .ticker span.sel { background: rgba(255,145,0,0.25); color: #fff; font-weight: 700; }
         @keyframes desplazar { to { transform: translateX(-50%); } }
 
         .destino-info {
@@ -187,21 +158,12 @@
         .destino-info .destino-pais { font-size: 8px; color: rgba(255,183,77,0.4); margin-top: 1px; }
 
         .cta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 22px; animation: fadeSlideUp 0.5s ease 0.3s both; }
-        .cta-card {
-            background: rgba(15,20,40,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 18px 8px 16px;
-            text-decoration: none; color: #fff; text-align: center; transition: all 0.15s ease;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.15); position: relative;
-        }
+        .cta-card { background: rgba(15,20,40,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 18px 8px 16px; text-decoration: none; color: #fff; text-align: center; transition: all 0.15s ease; box-shadow: 0 3px 12px rgba(0,0,0,0.15); position: relative; }
         .cta-card:active { transform: scale(0.96); }
         .cta-card i { font-size: 24px; margin-bottom: 8px; display: block; }
         .cta-card .titulo { font-weight: 700; font-size: 13px; margin-bottom: 3px; }
         .cta-card .desc { font-size: 9px; color: var(--text-warm); line-height: 1.3; opacity: 0.65; }
-        .cta-card .badge-top {
-            position: absolute; top: -7px; left: 50%; transform: translateX(-50%);
-            font-size: 7px; font-weight: 800; padding: 2px 8px; border-radius: 8px;
-            letter-spacing: 0.5px; white-space: nowrap;
-        }
+        .cta-card .badge-top { position: absolute; top: -7px; left: 50%; transform: translateX(-50%); font-size: 7px; font-weight: 800; padding: 2px 8px; border-radius: 8px; letter-spacing: 0.5px; white-space: nowrap; }
 
         .divider { display: flex; align-items: center; gap: 10px; margin: 6px 0 18px; opacity: 0.25; }
         .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.4); }
@@ -210,45 +172,22 @@
         .section-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; text-shadow: 0 2px 6px rgba(0,0,0,0.7); }
         .corporate-text { font-size: 0.8rem; line-height: 1.6; margin-bottom: 16px; color: var(--text-warm); opacity: 0.8; }
 
-        .btn-large {
-            display: flex; align-items: center; justify-content: flex-start; width: 100%;
-            background: rgba(15,20,40,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.1); color: white; padding: 7px 10px;
-            border-radius: 12px; font-weight: 600; font-size: 0.9rem; text-decoration: none;
-            margin-bottom: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); transition: all 0.15s ease;
-        }
-        .btn-large .icon-circle {
-            display: flex; align-items: center; justify-content: center; width: 36px; height: 36px;
-            background: rgba(255,145,0,0.8); color: white; border-radius: 8px;
-            margin-right: 10px; font-size: 0.9rem; flex-shrink: 0;
-        }
+        .btn-large { display: flex; align-items: center; justify-content: flex-start; width: 100%; background: rgba(15,20,40,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1); color: white; padding: 7px 10px; border-radius: 12px; font-weight: 600; font-size: 0.9rem; text-decoration: none; margin-bottom: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); transition: all 0.15s ease; }
+        .btn-large .icon-circle { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; background: rgba(255,145,0,0.8); color: white; border-radius: 8px; margin-right: 10px; font-size: 0.9rem; flex-shrink: 0; }
         .btn-large:active { transform: scale(0.97); background: rgba(255,145,0,0.15); }
         .btn-promo { background: linear-gradient(135deg, rgba(255,145,0,0.65) 0%, rgba(220,80,20,0.65) 100%); border: 1px solid rgba(255,180,60,0.35); }
         .btn-promo .icon-circle { background: rgba(255,255,255,0.18); }
 
-        .badges-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin: 8px 0 20px; animation: fadeSlideUp 0.5s ease 0.4s both; }
-        .badge {
-            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 20px; padding: 4px 10px; font-size: 9px; font-weight: 500;
-            position: relative; overflow: hidden; color: rgba(255,255,255,0.6);
-        }
+        .badges-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; margin: 8px 0 20px; }
+        .badge { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 4px 10px; font-size: 9px; font-weight: 500; color: rgba(255,255,255,0.6); }
         .badge i { color: var(--accent); margin-right: 2px; font-size: 8px; }
 
         .footer-social { display: flex; justify-content: center; gap: 16px; margin-bottom: 8px; }
-        .footer-icon {
-            display: flex; align-items: center; justify-content: center; width: 38px; height: 38px;
-            background: rgba(255,255,255,0.08); color: white; border-radius: 50%;
-            font-size: 1rem; text-decoration: none; transition: all 0.15s ease;
-        }
+        .footer-icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; background: rgba(255,255,255,0.08); color: white; border-radius: 50%; font-size: 1rem; text-decoration: none; transition: all 0.15s ease; }
         .footer-icon:active { transform: scale(0.9); background: var(--accent); }
         .footer-copy { font-size: 8px; color: rgba(255,255,255,0.2); text-align: center; }
 
-        .wa-float {
-            position: fixed; bottom: 16px; right: 16px; width: 50px; height: 50px; border-radius: 50%;
-            background: #25D366; color: #fff; display: flex; align-items: center; justify-content: center;
-            font-size: 22px; text-decoration: none; z-index: 20; box-shadow: 0 6px 18px rgba(0,0,0,0.4);
-            animation: pulso-wa 2.6s infinite;
-        }
+        .wa-float { position: fixed; bottom: 16px; right: 16px; width: 50px; height: 50px; border-radius: 50%; background: #25D366; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; text-decoration: none; z-index: 20; box-shadow: 0 6px 18px rgba(0,0,0,0.4); animation: pulso-wa 2.6s infinite; }
         @keyframes pulso-wa { 0%,100% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 0 rgba(37,211,102,0.5); } 50% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 10px rgba(37,211,102,0); } }
 
         @media (max-width: 360px) { body { padding: 0 8px 90px; } .container { padding-top: 20px; } .cta-card { padding: 14px 4px 12px; } .cta-card .titulo { font-size: 11px; } }
@@ -260,9 +199,7 @@
 <div id="bg-overlay"></div>
 
 <div class="container">
-    <div class="logo-wrap">
-        <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360" loading="eager" width="70" height="70">
-    </div>
+    <div class="logo-wrap"><img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360" loading="eager" width="70" height="70"></div>
     <h1>Destino y Eventos Lotus 360</h1>
     <p class="subtitle">Tu agencia de viajes #1 en Carabobo · Viaja con Lotus 360</p>
 
@@ -276,41 +213,62 @@
 
     <div class="estado-box"><span class="dot" id="estado-dot"></span><span id="estado-texto">Verificando...</span></div>
 
-    <div class="hero-escena">
-        <svg viewBox="0 0 400 110" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
-            <defs>
-                <linearGradient id="cieloHero" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff9a56"/><stop offset="55%" stop-color="#ff6b6b"/><stop offset="100%" stop-color="#3a1c71"/></linearGradient>
-                <linearGradient id="marHero" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e6f9a"/><stop offset="100%" stop-color="#0c2d4a"/></linearGradient>
-            </defs>
-            <rect width="400" height="110" fill="url(#cieloHero)"/>
-            <circle class="sol" cx="325" cy="32" r="16" fill="#ffe28a"/>
-            <path class="avion-hero" d="M0,0 L20,5 L0,10 L5,5 Z" fill="#ffffff"/>
-            <rect y="60" width="400" height="50" fill="url(#marHero)"/>
-            <path class="ola ola1" d="M0,65 Q50,55 100,65 T200,65 T300,65 T400,65 T500,65 V110 H0 Z" fill="rgba(255,255,255,0.18)"/>
-            <g transform="translate(42,28)"><path d="M0,82 C-3,55 4,35 9,18" stroke="#5a3825" stroke-width="5" fill="none" stroke-linecap="round"/><g class="hojas"><path d="M9,18 C-12,9 -28,15 -34,26" fill="#2f7d4f"/><path d="M9,18 C30,7 46,15 52,29" fill="#3a9863"/></g></g>
+    <!-- Escena animada del destino -->
+    <div class="escena-box" id="escena-box">
+        <svg class="escena activa" id="escena-playa" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs><linearGradient id="cieloPlaya" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff9a56"/><stop offset="55%" stop-color="#ff6b6b"/><stop offset="100%" stop-color="#3a1c71"/></linearGradient><linearGradient id="marPlaya" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e8fba"/><stop offset="100%" stop-color="#0c2d4a"/></linearGradient></defs>
+            <rect width="400" height="130" fill="url(#cieloPlaya)"/><circle class="sol" cx="330" cy="35" r="18" fill="#ffe28a" opacity=".95"/><ellipse class="nube" cx="80" cy="25" rx="32" ry="10" fill="rgba(255,255,255,.18)"/><rect y="70" width="400" height="60" fill="url(#marPlaya)"/><path class="ola ola1" d="M0,74 Q50,64 100,74 T200,74 T300,74 T400,74 T500,74 V130 H0 Z" fill="rgba(255,255,255,.2)"/><path class="ola ola2" d="M0,84 Q50,77 100,84 T200,84 T300,84 T400,84 T500,84 V130 H0 Z" fill="rgba(255,255,255,.13)"/><g transform="translate(44,35)"><path d="M0,85 C-3,58 4,38 9,20" stroke="#5a3825" stroke-width="5" fill="none" stroke-linecap="round"/><g class="hojas"><path d="M9,20 C-14,10 -30,16 -36,28" fill="#2f7d4f"/><path d="M9,20 C32,8 48,16 54,30" fill="#3a9863"/></g></g>
         </svg>
+        <svg class="escena" id="escena-morrocoy" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs><linearGradient id="cieloMorrocoy" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#87ceeb"/><stop offset="60%" stop-color="#4ab8d4"/><stop offset="100%" stop-color="#1a8fa8"/></linearGradient></defs>
+            <rect width="400" height="130" fill="url(#cieloMorrocoy)"/><circle class="sol" cx="340" cy="28" r="16" fill="#ffe28a" opacity=".9"/><rect y="72" width="400" height="58" fill="#0a6070" opacity=".7"/><ellipse cx="90" cy="75" rx="55" ry="10" fill="#e8d89a"/><ellipse cx="300" cy="78" rx="45" ry="9" fill="#e8d89a"/><path class="ola ola1" d="M0,75 Q50,67 100,75 T200,75 T300,75 T400,75 T500,75 V130 H0 Z" fill="rgba(255,255,255,.15)"/>
+        </svg>
+        <svg class="escena" id="escena-losroques" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs><linearGradient id="cieloRoques" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#a8e6f0"/><stop offset="50%" stop-color="#5dcfe0"/><stop offset="100%" stop-color="#1ab0d0"/></linearGradient></defs>
+            <rect width="400" height="130" fill="url(#cieloRoques)"/><circle class="sol" cx="200" cy="22" r="18" fill="#fff9b0" opacity=".85"/><rect y="62" width="400" height="68" fill="#006a82" opacity=".7"/><ellipse cx="200" cy="65" rx="80" ry="14" fill="#f5f0d5"/><ellipse cx="200" cy="63" rx="60" ry="9" fill="#fffde8"/><path class="ola ola1" d="M0,68 Q50,61 100,68 T200,68 T300,68 T400,68 T500,68 V130 H0 Z" fill="rgba(255,255,255,.12)"/>
+        </svg>
+        <svg class="escena" id="escena-montana" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs><linearGradient id="cieloMontana" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b8dff5"/><stop offset="100%" stop-color="#7aabce"/></linearGradient></defs>
+            <rect width="400" height="130" fill="url(#cieloMontana)"/><circle cx="340" cy="28" r="14" fill="#ffe28a" opacity=".85"/><polygon points="0,130 80,48 160,130" fill="#6b7f8e"/><polygon points="130,130 230,22 330,130" fill="#506070"/><polygon points="206,28 230,22 252,52 215,56" fill="#f0f8ff"/><polygon points="260,130 340,60 400,130" fill="#6b7f8e"/><circle class="nieve1" cx="95" cy="54" r="2" fill="white" opacity=".7"/><circle class="nieve2" cx="228" cy="34" r="2.5" fill="white" opacity=".7"/><g class="telecabina"><line x1="0" y1="0" x2="0" y2="-10" stroke="#2a3540" stroke-width="1.5"/><rect x="-10" y="0" width="20" height="14" rx="3" fill="#ff9100"/></g>
+        </svg>
+        <svg class="escena" id="escena-cascada" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs><linearGradient id="cieloCascada" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#c8ecd0"/><stop offset="100%" stop-color="#78b882"/></linearGradient></defs>
+            <rect width="400" height="130" fill="url(#cieloCascada)"/><rect x="0" y="0" width="130" height="65" rx="4" fill="#6b4220"/><rect x="120" y="0" width="170" height="61" rx="4" fill="#7a5230"/><line class="agua" x1="118" y1="6" x2="118" y2="125" stroke="#d0eef8" stroke-width="7" stroke-linecap="round" stroke-dasharray="14 10" opacity=".9"/><ellipse class="bruma" cx="132" cy="122" rx="70" ry="12" fill="#ffffff" opacity=".35"/>
+        </svg>
+        <svg class="escena" id="escena-tormenta" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs><linearGradient id="cieloTormenta" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0e0e20"/><stop offset="100%" stop-color="#2e1e4a"/></linearGradient></defs>
+            <rect width="400" height="130" fill="url(#cieloTormenta)"/><rect y="100" width="400" height="30" fill="#0d1b2e" opacity=".9"/><ellipse cx="90" cy="30" rx="80" ry="24" fill="#1e1e38"/><ellipse cx="280" cy="24" rx="100" ry="28" fill="#1e1e38"/><line class="lluvia" x1="60" y1="55" x2="50" y2="95" stroke="rgba(180,200,255,.3)" stroke-width="1"/><line class="lluvia" x1="200" y1="55" x2="190" y2="95" stroke="rgba(180,200,255,.25)" stroke-width="1"/><path class="rayo rayo1" d="M175,10 L158,55 L178,55 L152,102" stroke="#ffe89b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <svg class="escena" id="escena-colonia" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs><linearGradient id="cieloColonia" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7ab8d4"/><stop offset="100%" stop-color="#4a8a5a"/></linearGradient></defs>
+            <rect width="400" height="130" fill="url(#cieloColonia)"/><circle class="sol" cx="320" cy="25" r="14" fill="#ffe28a" opacity=".8"/><ellipse class="nube" cx="80" cy="20" rx="35" ry="9" fill="rgba(255,255,255,.4)"/><polygon points="30,130 80,55 130,130" fill="#5a7a4a"/><polygon points="120,130 180,50 240,130" fill="#4a6a3a"/><polygon points="230,130 290,60 350,130" fill="#5a7a4a"/><rect x="55" y="95" width="14" height="18" rx="1" fill="#8b4513"/><rect x="75" y="90" width="16" height="22" rx="1" fill="#a0522d"/><rect x="145" y="88" width="18" height="24" rx="1" fill="#8b4513"/><rect x="200" y="85" width="22" height="28" rx="1" fill="#a0522d"/><rect x="260" y="92" width="16" height="20" rx="1" fill="#8b4513"/><polygon points="62,95 55,88 69,88" fill="#d2691e"/><polygon points="154,88 145,80 163,80" fill="#d2691e"/><polygon points="211,85 200,76 222,76" fill="#d2691e"/><circle cx="340" cy="100" r="2" fill="white" opacity=".6"/><circle cx="355" cy="95" r="1.5" fill="white" opacity=".4"/>
+        </svg>
+        <svg class="escena" id="escena-mundo" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+            <defs><linearGradient id="cieloMundo" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a2a55"/><stop offset="100%" stop-color="#3a5a90"/></linearGradient></defs>
+            <rect width="400" height="130" fill="url(#cieloMundo)"/><circle cx="30" cy="20" r="1.5" fill="#fff" opacity=".8"/><circle cx="300" cy="14" r="1.5" fill="#fff" opacity=".8"/><circle cx="200" cy="118" r="72" fill="#2a5c6a" opacity=".6"/><g class="globo-lineas"><circle cx="200" cy="118" r="72" fill="none" stroke="#7dd8c0" stroke-width="1.5" opacity=".5"/></g><path class="avion-mundo" d="M0,0 L22,5 L0,10 L5,5 Z" fill="#ff9100"/>
+        </svg>
+        <div class="escena-caption" id="escena-caption">🏖️ Playas paradisíacas y duty free</div>
     </div>
 
-    <!-- Ticker con Colonia Tovar y animaciones -->
+    <!-- Ticker deslizable -->
     <div class="ticker-wrap" id="ticker-wrap">
         <div class="ticker" id="ticker">
-            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna. El Caribe sin salir de Venezuela.">🏖️ Isla de Margarita</span>
-            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
-            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Dependencias Federales" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
-            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
-            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita.">💧 Canaima</span>
-            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Zulia" data-desc="El relámpago eterno: 260 noches de tormentas al año. Único en el mundo.">⚡ Catatumbo</span>
-            <span data-icono="🏘️" data-destino="Colonia Tovar" data-pais="🇻🇪 Aragua" data-desc="Pueblo alemán en las montañas. Fresas, arquitectura bávara y clima primaveral.">🏘️ Colonia Tovar</span>
-            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
-            <!-- Repetición para loop -->
-            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna. El Caribe sin salir de Venezuela.">🏖️ Isla de Margarita</span>
-            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
-            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Dependencias Federales" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
-            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
-            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita.">💧 Canaima</span>
-            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Zulia" data-desc="El relámpago eterno: 260 noches de tormentas al año. Único en el mundo.">⚡ Catatumbo</span>
-            <span data-icono="🏘️" data-destino="Colonia Tovar" data-pais="🇻🇪 Aragua" data-desc="Pueblo alemán en las montañas. Fresas, arquitectura bávara y clima primaveral.">🏘️ Colonia Tovar</span>
-            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
+            <span class="sel" data-icono="🏖️" data-destino="Isla de Margarita" data-escena="escena-playa" data-caption="🏖️ Playas paradisíacas y duty free" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna. El Caribe sin salir de Venezuela.">🏖️ Isla de Margarita</span>
+            <span data-icono="🐠" data-destino="Morrocoy" data-escena="escena-morrocoy" data-caption="🐠 Cayos y snorkel de clase mundial" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
+            <span data-icono="🏝️" data-destino="Los Roques" data-escena="escena-losroques" data-caption="🏝️ Archipiélago virgen y aguas turquesas" data-pais="🇻🇪 Dependencias Federales" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
+            <span data-icono="🚡" data-destino="Mérida" data-escena="escena-montana" data-caption="🚡 Montañas andinas y el teleférico" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
+            <span data-icono="💧" data-destino="Canaima" data-escena="escena-cascada" data-caption="💧 Tepuyes y el Salto Ángel" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita.">💧 Canaima</span>
+            <span data-icono="⚡" data-destino="Catatumbo" data-escena="escena-tormenta" data-caption="⚡ El relámpago eterno del Catatumbo" data-pais="🇻🇪 Zulia" data-desc="El relámpago eterno: 260 noches de tormentas al año. Único en el mundo.">⚡ Catatumbo</span>
+            <span data-icono="🏘️" data-destino="Colonia Tovar" data-escena="escena-colonia" data-caption="🏘️ Pueblo alemán en las montañas" data-pais="🇻🇪 Aragua" data-desc="Pueblo alemán en las montañas. Fresas, arquitectura bávara y clima primaveral.">🏘️ Colonia Tovar</span>
+            <span data-icono="🌍" data-destino="Destinos Internacionales" data-escena="escena-mundo" data-caption="🌍 Conectamos con el mundo" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
+            <span data-icono="🏖️" data-destino="Isla de Margarita" data-escena="escena-playa" data-caption="🏖️ Playas paradisíacas y duty free" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna. El Caribe sin salir de Venezuela.">🏖️ Isla de Margarita</span>
+            <span data-icono="🐠" data-destino="Morrocoy" data-escena="escena-morrocoy" data-caption="🐠 Cayos y snorkel de clase mundial" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
+            <span data-icono="🏝️" data-destino="Los Roques" data-escena="escena-losroques" data-caption="🏝️ Archipiélago virgen y aguas turquesas" data-pais="🇻🇪 Dependencias Federales" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
+            <span data-icono="🚡" data-destino="Mérida" data-escena="escena-montana" data-caption="🚡 Montañas andinas y el teleférico" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
+            <span data-icono="💧" data-destino="Canaima" data-escena="escena-cascada" data-caption="💧 Tepuyes y el Salto Ángel" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita.">💧 Canaima</span>
+            <span data-icono="⚡" data-destino="Catatumbo" data-escena="escena-tormenta" data-caption="⚡ El relámpago eterno del Catatumbo" data-pais="🇻🇪 Zulia" data-desc="El relámpago eterno: 260 noches de tormentas al año. Único en el mundo.">⚡ Catatumbo</span>
+            <span data-icono="🏘️" data-destino="Colonia Tovar" data-escena="escena-colonia" data-caption="🏘️ Pueblo alemán en las montañas" data-pais="🇻🇪 Aragua" data-desc="Pueblo alemán en las montañas. Fresas, arquitectura bávara y clima primaveral.">🏘️ Colonia Tovar</span>
+            <span data-icono="🌍" data-destino="Destinos Internacionales" data-escena="escena-mundo" data-caption="🌍 Conectamos con el mundo" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
         </div>
     </div>
 
@@ -341,30 +299,16 @@
     </div>
 
     <div class="divider"><i class="fas fa-circle"></i></div>
-
     <div class="section-title">Planes Corporativos</div>
     <p class="corporate-text">Eventos Corporativos y Fiestas Temáticas<br>Paquetes Vacacionales y Turísticos<br>Actividades de Integración Institucional</p>
-
-    <a href="https://ig.me/m/destinoyeventoslotus360?ref=w55673950" class="btn-large btn-promo">
-        <span class="icon-circle"><i class="fas fa-star"></i></span>
-        <span>
-            <span style="display:block;font-size:0.9rem;font-weight:700;">Ver Promociones 🔥</span>
-            <span style="display:block;font-size:8px;font-weight:400;opacity:0.8;margin-top:1px;">Escríbenos "PROMOCIONES" y te enviamos todo</span>
-        </span>
-    </a>
-    <a href="mailto:corporativo.lotus360@gmail.com" class="btn-large">
-        <span class="icon-circle"><i class="far fa-envelope"></i></span> Correo Corporativo
-    </a>
-    <a href="https://wa.me/584244634041?text=Hola!%20--%20Vengo%20de%20su%20pagina%20web." class="btn-large" target="_blank">
-        <span class="icon-circle"><i class="fab fa-whatsapp"></i></span> WhatsApp Corporativo
-    </a>
-
+    <a href="https://ig.me/m/destinoyeventoslotus360?ref=w55673950" class="btn-large btn-promo"><span class="icon-circle"><i class="fas fa-star"></i></span><span><span style="display:block;font-size:0.9rem;font-weight:700;">Ver Promociones 🔥</span><span style="display:block;font-size:8px;font-weight:400;opacity:0.8;margin-top:1px;">Escríbenos "PROMOCIONES" y te enviamos todo</span></span></a>
+    <a href="mailto:corporativo.lotus360@gmail.com" class="btn-large"><span class="icon-circle"><i class="far fa-envelope"></i></span> Correo Corporativo</a>
+    <a href="https://wa.me/584244634041?text=Hola!%20--%20Vengo%20de%20su%20pagina%20web." class="btn-large" target="_blank"><span class="icon-circle"><i class="fab fa-whatsapp"></i></span> WhatsApp Corporativo</a>
     <div class="badges-row">
         <span class="badge"><i class="fas fa-trophy"></i> Líderes en Venezuela</span>
         <span class="badge"><i class="fas fa-star"></i> +800K seguidores</span>
         <span class="badge"><i class="fas fa-globe-americas"></i> Alcance Internacional</span>
     </div>
-
     <div class="footer-social">
         <a href="https://www.facebook.com/share/1bxT1wQAzW/" target="_blank" class="footer-icon" title="Facebook"><i class="fab fa-facebook-f"></i></a>
         <a href="https://www.instagram.com/destinoyeventoslotus360?igsh=bWUwbHhvb21menhm" target="_blank" class="footer-icon" title="Instagram"><i class="fab fa-instagram"></i></a>
@@ -388,24 +332,83 @@
 })();
 
 var ticker = document.getElementById('ticker');
+var tickerWrap = document.getElementById('ticker-wrap');
 var destinoInfo = document.getElementById('destino-info');
 var destinoIcono = document.getElementById('destino-icono');
 var destinoNombre = document.getElementById('destino-nombre');
 var destinoDesc = document.getElementById('destino-desc');
 var destinoPais = document.getElementById('destino-pais');
+var escenaCaption = document.getElementById('escena-caption');
 var hideTimeout;
+var destinoActual = 'Isla de Margarita';
 
+// Cambiar escena
+function cambiarEscena(escenaId, caption) {
+    var escenas = document.querySelectorAll('.escena');
+    for (var i = 0; i < escenas.length; i++) escenas[i].classList.remove('activa');
+    var nuevaEscena = document.getElementById(escenaId);
+    if (nuevaEscena) {
+        nuevaEscena.classList.add('activa');
+        escenaCaption.textContent = caption;
+    }
+}
+
+// Click en ticker
 ticker.addEventListener('click', function(e) {
     var span = e.target.closest('span');
     if (!span) return;
+    
+    // Marcar seleccionado
+    var spans = ticker.querySelectorAll('span');
+    for (var i = 0; i < spans.length; i++) spans[i].classList.remove('sel');
+    span.classList.add('sel');
+    
+    destinoActual = span.getAttribute('data-destino');
     destinoIcono.textContent = span.getAttribute('data-icono');
     destinoNombre.textContent = span.getAttribute('data-destino');
     destinoDesc.textContent = span.getAttribute('data-desc');
     destinoPais.textContent = '📍 ' + span.getAttribute('data-pais');
     destinoInfo.classList.add('visible');
+    
+    // Cambiar escena animada
+    cambiarEscena(span.getAttribute('data-escena'), span.getAttribute('data-caption'));
+    
     ticker.classList.add('paused');
     clearTimeout(hideTimeout);
-    hideTimeout = setTimeout(function() { destinoInfo.classList.remove('visible'); ticker.classList.remove('paused'); }, 6000);
+    hideTimeout = setTimeout(function() {
+        destinoInfo.classList.remove('visible');
+        ticker.classList.remove('paused');
+    }, 6000);
+});
+
+// Desplazamiento táctil/manual del ticker
+var isDragging = false, startX, scrollLeft;
+tickerWrap.addEventListener('mousedown', function(e) {
+    isDragging = true; startX = e.pageX - tickerWrap.offsetLeft; scrollLeft = tickerWrap.scrollLeft;
+    ticker.classList.add('paused'); tickerWrap.style.cursor = 'grabbing';
+});
+tickerWrap.addEventListener('mouseleave', function() { isDragging = false; tickerWrap.style.cursor = 'grab'; });
+tickerWrap.addEventListener('mouseup', function() { isDragging = false; tickerWrap.style.cursor = 'grab'; setTimeout(function() { if (!isDragging) ticker.classList.remove('paused'); }, 3000); });
+tickerWrap.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    var x = e.pageX - tickerWrap.offsetLeft;
+    var walk = (x - startX) * 1.5;
+    tickerWrap.scrollLeft = scrollLeft - walk;
+});
+
+// Táctil
+tickerWrap.addEventListener('touchstart', function(e) {
+    startX = e.touches[0].pageX - tickerWrap.offsetLeft; scrollLeft = tickerWrap.scrollLeft;
+    ticker.classList.add('paused');
+});
+tickerWrap.addEventListener('touchend', function() {
+    setTimeout(function() { ticker.classList.remove('paused'); }, 3000);
+});
+tickerWrap.addEventListener('touchmove', function(e) {
+    var x = e.touches[0].pageX - tickerWrap.offsetLeft;
+    var walk = (x - startX) * 1.5;
+    tickerWrap.scrollLeft = scrollLeft - walk;
 });
 </script>
 </body>
