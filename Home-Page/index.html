@@ -68,9 +68,9 @@
         .servicios-nav a::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 0; height: 2px; border-radius: 2px; transition: width 0.2s ease; }
         .servicios-nav a:active, .servicios-nav a:hover { color: #fff; }
         .servicios-nav a:active::after, .servicios-nav a:hover::after { width: 60%; }
-        .servicios-nav a.fullday { color: rgba(16,185,129,0.7); } .servicios-nav a.fullday::after { background: #10b981; } .servicios-nav a.fullday:active, .servicios-nav a.fullday:hover { color: #10b981; }
-        .servicios-nav a.hospedaje { color: rgba(255,145,0,0.7); } .servicios-nav a.hospedaje::after { background: #ff9100; } .servicios-nav a.hospedaje:active, .servicios-nav a.hospedaje:hover { color: #ff9100; }
-        .servicios-nav a.boleteria { color: rgba(74,158,255,0.7); } .servicios-nav a.boleteria::after { background: #4a9eff; } .servicios-nav a.boleteria:active, .servicios-nav a.boleteria:hover { color: #4a9eff; }
+        .servicios-nav a.fullday { color: rgba(16,185,129,0.7); } .servicios-nav a.fullday::after { background: #10b981; }
+        .servicios-nav a.hospedaje { color: rgba(255,145,0,0.7); } .servicios-nav a.hospedaje::after { background: #ff9100; }
+        .servicios-nav a.boleteria { color: rgba(74,158,255,0.7); } .servicios-nav a.boleteria::after { background: #4a9eff; }
         .servicios-nav .nav-sep { width: 1px; height: 12px; background: rgba(255,255,255,0.1); margin: 0 2px; }
 
         .estado-box { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 30px; padding: 5px 12px; font-size: 10px; font-weight: 600; margin-bottom: 16px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
@@ -79,7 +79,6 @@
         .dot.offline { background: #f59e0b; }
         @keyframes dot-breathe { 0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); } 70% { box-shadow: 0 0 0 5px rgba(37,211,102,0); } 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); } }
 
-        /* ── Escena animada del destino ── */
         .escena-box {
             position: relative; width: 100%; height: 110px; border-radius: 14px; overflow: hidden;
             margin-bottom: 12px; border: 1px solid rgba(255,145,0,0.2);
@@ -89,13 +88,8 @@
         .escena-box svg.escena { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; }
         .escena-box svg.escena.activa { display: block; animation: sceneSwitch 0.4s ease; }
         @keyframes sceneSwitch { from { opacity: 0.6; transform: scale(1.02); } to { opacity: 1; transform: scale(1); } }
-        .escena-caption {
-            position: absolute; bottom: 6px; left: 10px; background: rgba(0,0,0,0.6);
-            color: #ffe0b2; font-size: 10px; font-weight: 600; padding: 4px 10px;
-            border-radius: 6px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 2;
-        }
+        .escena-caption { position: absolute; bottom: 6px; left: 10px; background: rgba(0,0,0,0.6); color: #ffe0b2; font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 6px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 2; }
 
-        /* Animaciones SVG */
         @keyframes ola { to { transform: translateX(-100px); } }
         .ola1 { animation: ola 8s linear infinite; }
         .ola2 { animation: ola 12s linear infinite reverse; }
@@ -123,28 +117,31 @@
         @keyframes volar-avion { 0% { transform: translate(-10px,40px) rotate(8deg); opacity: 0; } 10% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(390px,0px) rotate(8deg); opacity: 0; } }
         .avion-mundo { animation: volar-avion 8s linear infinite; }
 
-        /* Ticker deslizable */
-        .ticker-wrap {
-            overflow-x: auto; overflow-y: hidden; white-space: nowrap;
-            border-top: 1px solid rgba(255,255,255,0.08); border-bottom: 1px solid rgba(255,255,255,0.08);
-            padding: 6px 0; margin-bottom: 10px; -webkit-overflow-scrolling: touch;
-            scrollbar-width: none; cursor: grab;
+        /* Ticker infinito híbrido */
+        .ticker-wrapper {
+            position: relative; width: 100%; overflow: hidden;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding: 6px 0; margin-bottom: 10px;
         }
-        .ticker-wrap::-webkit-scrollbar { display: none; }
-        .ticker-wrap:active { cursor: grabbing; }
-        .ticker {
-            display: flex; width: max-content; animation: desplazar 35s linear infinite;
+        .ticker-track {
+            display: flex; width: fit-content;
+            animation: tickerScroll 40s linear infinite;
+        }
+        .ticker-track.paused { animation-play-state: paused; }
+        @keyframes tickerScroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .ticker-item {
+            flex-shrink: 0; padding: 4px 14px; cursor: pointer;
             font-size: 10px; font-weight: 500; color: rgba(255,255,255,0.5);
+            border-radius: 20px; margin: 0 2px; transition: all 0.2s ease;
+            white-space: nowrap; user-select: none;
         }
-        .ticker.paused { animation-play-state: paused; }
-        .ticker span {
-            padding: 4px 14px; cursor: pointer; transition: all 0.2s ease;
-            border-radius: 20px; margin: 0 2px; flex-shrink: 0;
-        }
-        .ticker span:active { background: rgba(255,145,0,0.15); color: #fff; transform: scale(1.05); }
-        .ticker span:hover { color: #fff; }
-        .ticker span.sel { background: rgba(255,145,0,0.25); color: #fff; font-weight: 700; }
-        @keyframes desplazar { to { transform: translateX(-50%); } }
+        .ticker-item:active { background: rgba(255,145,0,0.15); color: #fff; transform: scale(1.05); }
+        .ticker-item.sel { background: rgba(255,145,0,0.25); color: #fff; font-weight: 700; }
+        @media (hover: hover) { .ticker-item:hover { color: #fff; } }
 
         .destino-info {
             display: none; background: rgba(15,20,40,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
@@ -213,7 +210,6 @@
 
     <div class="estado-box"><span class="dot" id="estado-dot"></span><span id="estado-texto">Verificando...</span></div>
 
-    <!-- Escena animada del destino -->
     <div class="escena-box" id="escena-box">
         <svg class="escena activa" id="escena-playa" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
             <defs><linearGradient id="cieloPlaya" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff9a56"/><stop offset="55%" stop-color="#ff6b6b"/><stop offset="100%" stop-color="#3a1c71"/></linearGradient><linearGradient id="marPlaya" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e8fba"/><stop offset="100%" stop-color="#0c2d4a"/></linearGradient></defs>
@@ -241,7 +237,7 @@
         </svg>
         <svg class="escena" id="escena-colonia" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
             <defs><linearGradient id="cieloColonia" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7ab8d4"/><stop offset="100%" stop-color="#4a8a5a"/></linearGradient></defs>
-            <rect width="400" height="130" fill="url(#cieloColonia)"/><circle class="sol" cx="320" cy="25" r="14" fill="#ffe28a" opacity=".8"/><ellipse class="nube" cx="80" cy="20" rx="35" ry="9" fill="rgba(255,255,255,.4)"/><polygon points="30,130 80,55 130,130" fill="#5a7a4a"/><polygon points="120,130 180,50 240,130" fill="#4a6a3a"/><polygon points="230,130 290,60 350,130" fill="#5a7a4a"/><rect x="55" y="95" width="14" height="18" rx="1" fill="#8b4513"/><rect x="75" y="90" width="16" height="22" rx="1" fill="#a0522d"/><rect x="145" y="88" width="18" height="24" rx="1" fill="#8b4513"/><rect x="200" y="85" width="22" height="28" rx="1" fill="#a0522d"/><rect x="260" y="92" width="16" height="20" rx="1" fill="#8b4513"/><polygon points="62,95 55,88 69,88" fill="#d2691e"/><polygon points="154,88 145,80 163,80" fill="#d2691e"/><polygon points="211,85 200,76 222,76" fill="#d2691e"/><circle cx="340" cy="100" r="2" fill="white" opacity=".6"/><circle cx="355" cy="95" r="1.5" fill="white" opacity=".4"/>
+            <rect width="400" height="130" fill="url(#cieloColonia)"/><circle class="sol" cx="320" cy="25" r="14" fill="#ffe28a" opacity=".8"/><ellipse class="nube" cx="80" cy="20" rx="35" ry="9" fill="rgba(255,255,255,.4)"/><polygon points="30,130 80,55 130,130" fill="#5a7a4a"/><polygon points="120,130 180,50 240,130" fill="#4a6a3a"/><polygon points="230,130 290,60 350,130" fill="#5a7a4a"/><rect x="55" y="95" width="14" height="18" rx="1" fill="#8b4513"/><rect x="75" y="90" width="16" height="22" rx="1" fill="#a0522d"/><rect x="145" y="88" width="18" height="24" rx="1" fill="#8b4513"/><rect x="200" y="85" width="22" height="28" rx="1" fill="#a0522d"/><rect x="260" y="92" width="16" height="20" rx="1" fill="#8b4513"/><polygon points="62,95 55,88 69,88" fill="#d2691e"/><polygon points="154,88 145,80 163,80" fill="#d2691e"/><polygon points="211,85 200,76 222,76" fill="#d2691e"/>
         </svg>
         <svg class="escena" id="escena-mundo" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
             <defs><linearGradient id="cieloMundo" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a2a55"/><stop offset="100%" stop-color="#3a5a90"/></linearGradient></defs>
@@ -250,25 +246,27 @@
         <div class="escena-caption" id="escena-caption">🏖️ Playas paradisíacas y duty free</div>
     </div>
 
-    <!-- Ticker deslizable -->
-    <div class="ticker-wrap" id="ticker-wrap">
-        <div class="ticker" id="ticker">
-            <span class="sel" data-icono="🏖️" data-destino="Isla de Margarita" data-escena="escena-playa" data-caption="🏖️ Playas paradisíacas y duty free" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna. El Caribe sin salir de Venezuela.">🏖️ Isla de Margarita</span>
-            <span data-icono="🐠" data-destino="Morrocoy" data-escena="escena-morrocoy" data-caption="🐠 Cayos y snorkel de clase mundial" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
-            <span data-icono="🏝️" data-destino="Los Roques" data-escena="escena-losroques" data-caption="🏝️ Archipiélago virgen y aguas turquesas" data-pais="🇻🇪 Dependencias Federales" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
-            <span data-icono="🚡" data-destino="Mérida" data-escena="escena-montana" data-caption="🚡 Montañas andinas y el teleférico" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
-            <span data-icono="💧" data-destino="Canaima" data-escena="escena-cascada" data-caption="💧 Tepuyes y el Salto Ángel" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita.">💧 Canaima</span>
-            <span data-icono="⚡" data-destino="Catatumbo" data-escena="escena-tormenta" data-caption="⚡ El relámpago eterno del Catatumbo" data-pais="🇻🇪 Zulia" data-desc="El relámpago eterno: 260 noches de tormentas al año. Único en el mundo.">⚡ Catatumbo</span>
-            <span data-icono="🏘️" data-destino="Colonia Tovar" data-escena="escena-colonia" data-caption="🏘️ Pueblo alemán en las montañas" data-pais="🇻🇪 Aragua" data-desc="Pueblo alemán en las montañas. Fresas, arquitectura bávara y clima primaveral.">🏘️ Colonia Tovar</span>
-            <span data-icono="🌍" data-destino="Destinos Internacionales" data-escena="escena-mundo" data-caption="🌍 Conectamos con el mundo" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
-            <span data-icono="🏖️" data-destino="Isla de Margarita" data-escena="escena-playa" data-caption="🏖️ Playas paradisíacas y duty free" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna. El Caribe sin salir de Venezuela.">🏖️ Isla de Margarita</span>
-            <span data-icono="🐠" data-destino="Morrocoy" data-escena="escena-morrocoy" data-caption="🐠 Cayos y snorkel de clase mundial" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
-            <span data-icono="🏝️" data-destino="Los Roques" data-escena="escena-losroques" data-caption="🏝️ Archipiélago virgen y aguas turquesas" data-pais="🇻🇪 Dependencias Federales" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
-            <span data-icono="🚡" data-destino="Mérida" data-escena="escena-montana" data-caption="🚡 Montañas andinas y el teleférico" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
-            <span data-icono="💧" data-destino="Canaima" data-escena="escena-cascada" data-caption="💧 Tepuyes y el Salto Ángel" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita.">💧 Canaima</span>
-            <span data-icono="⚡" data-destino="Catatumbo" data-escena="escena-tormenta" data-caption="⚡ El relámpago eterno del Catatumbo" data-pais="🇻🇪 Zulia" data-desc="El relámpago eterno: 260 noches de tormentas al año. Único en el mundo.">⚡ Catatumbo</span>
-            <span data-icono="🏘️" data-destino="Colonia Tovar" data-escena="escena-colonia" data-caption="🏘️ Pueblo alemán en las montañas" data-pais="🇻🇪 Aragua" data-desc="Pueblo alemán en las montañas. Fresas, arquitectura bávara y clima primaveral.">🏘️ Colonia Tovar</span>
-            <span data-icono="🌍" data-destino="Destinos Internacionales" data-escena="escena-mundo" data-caption="🌍 Conectamos con el mundo" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
+    <!-- Ticker infinito híbrido -->
+    <div class="ticker-wrapper" id="ticker-wrapper">
+        <div class="ticker-track" id="ticker-track">
+            <!-- Set 1 -->
+            <span class="ticker-item sel" data-icono="🏖️" data-destino="Isla de Margarita" data-escena="escena-playa" data-caption="🏖️ Playas paradisíacas y duty free" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna. El Caribe sin salir de Venezuela.">🏖️ Isla de Margarita</span>
+            <span class="ticker-item" data-icono="🐠" data-destino="Morrocoy" data-escena="escena-morrocoy" data-caption="🐠 Cayos y snorkel de clase mundial" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
+            <span class="ticker-item" data-icono="🏝️" data-destino="Los Roques" data-escena="escena-losroques" data-caption="🏝️ Archipiélago virgen y aguas turquesas" data-pais="🇻🇪 Dependencias Federales" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
+            <span class="ticker-item" data-icono="🚡" data-destino="Mérida" data-escena="escena-montana" data-caption="🚡 Montañas andinas y el teleférico" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
+            <span class="ticker-item" data-icono="💧" data-destino="Canaima" data-escena="escena-cascada" data-caption="💧 Tepuyes y el Salto Ángel" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita.">💧 Canaima</span>
+            <span class="ticker-item" data-icono="⚡" data-destino="Catatumbo" data-escena="escena-tormenta" data-caption="⚡ El relámpago eterno del Catatumbo" data-pais="🇻🇪 Zulia" data-desc="El relámpago eterno: 260 noches de tormentas al año. Único en el mundo.">⚡ Catatumbo</span>
+            <span class="ticker-item" data-icono="🏘️" data-destino="Colonia Tovar" data-escena="escena-colonia" data-caption="🏘️ Pueblo alemán en las montañas" data-pais="🇻🇪 Aragua" data-desc="Pueblo alemán en las montañas. Fresas, arquitectura bávara y clima primaveral.">🏘️ Colonia Tovar</span>
+            <span class="ticker-item" data-icono="🌍" data-destino="Destinos Internacionales" data-escena="escena-mundo" data-caption="🌍 Conectamos con el mundo" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
+            <!-- Set 2 (duplicado para loop) -->
+            <span class="ticker-item" data-icono="🏖️" data-destino="Isla de Margarita" data-escena="escena-playa" data-caption="🏖️ Playas paradisíacas y duty free" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna. El Caribe sin salir de Venezuela.">🏖️ Isla de Margarita</span>
+            <span class="ticker-item" data-icono="🐠" data-destino="Morrocoy" data-escena="escena-morrocoy" data-caption="🐠 Cayos y snorkel de clase mundial" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
+            <span class="ticker-item" data-icono="🏝️" data-destino="Los Roques" data-escena="escena-losroques" data-caption="🏝️ Archipiélago virgen y aguas turquesas" data-pais="🇻🇪 Dependencias Federales" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
+            <span class="ticker-item" data-icono="🚡" data-destino="Mérida" data-escena="escena-montana" data-caption="🚡 Montañas andinas y el teleférico" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
+            <span class="ticker-item" data-icono="💧" data-destino="Canaima" data-escena="escena-cascada" data-caption="💧 Tepuyes y el Salto Ángel" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita.">💧 Canaima</span>
+            <span class="ticker-item" data-icono="⚡" data-destino="Catatumbo" data-escena="escena-tormenta" data-caption="⚡ El relámpago eterno del Catatumbo" data-pais="🇻🇪 Zulia" data-desc="El relámpago eterno: 260 noches de tormentas al año. Único en el mundo.">⚡ Catatumbo</span>
+            <span class="ticker-item" data-icono="🏘️" data-destino="Colonia Tovar" data-escena="escena-colonia" data-caption="🏘️ Pueblo alemán en las montañas" data-pais="🇻🇪 Aragua" data-desc="Pueblo alemán en las montañas. Fresas, arquitectura bávara y clima primaveral.">🏘️ Colonia Tovar</span>
+            <span class="ticker-item" data-icono="🌍" data-destino="Destinos Internacionales" data-escena="escena-mundo" data-caption="🌍 Conectamos con el mundo" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
         </div>
     </div>
 
@@ -331,8 +329,7 @@
     document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Domingos 10am-3pm · Volvemos pronto' : 'Lun-Sáb 8:30am-7pm · Volvemos pronto');
 })();
 
-var ticker = document.getElementById('ticker');
-var tickerWrap = document.getElementById('ticker-wrap');
+var track = document.getElementById('ticker-track');
 var destinoInfo = document.getElementById('destino-info');
 var destinoIcono = document.getElementById('destino-icono');
 var destinoNombre = document.getElementById('destino-nombre');
@@ -340,76 +337,48 @@ var destinoDesc = document.getElementById('destino-desc');
 var destinoPais = document.getElementById('destino-pais');
 var escenaCaption = document.getElementById('escena-caption');
 var hideTimeout;
-var destinoActual = 'Isla de Margarita';
 
-// Cambiar escena
 function cambiarEscena(escenaId, caption) {
     var escenas = document.querySelectorAll('.escena');
     for (var i = 0; i < escenas.length; i++) escenas[i].classList.remove('activa');
-    var nuevaEscena = document.getElementById(escenaId);
-    if (nuevaEscena) {
-        nuevaEscena.classList.add('activa');
-        escenaCaption.textContent = caption;
-    }
+    var nueva = document.getElementById(escenaId);
+    if (nueva) { nueva.classList.add('activa'); escenaCaption.textContent = caption; }
 }
 
-// Click en ticker
-ticker.addEventListener('click', function(e) {
-    var span = e.target.closest('span');
-    if (!span) return;
+// Click en items
+track.addEventListener('click', function(e) {
+    var item = e.target.closest('.ticker-item');
+    if (!item) return;
     
-    // Marcar seleccionado
-    var spans = ticker.querySelectorAll('span');
-    for (var i = 0; i < spans.length; i++) spans[i].classList.remove('sel');
-    span.classList.add('sel');
+    // Marcar seleccionado en AMBOS sets
+    var destino = item.getAttribute('data-destino');
+    var items = track.querySelectorAll('.ticker-item');
+    for (var i = 0; i < items.length; i++) {
+        items[i].classList.toggle('sel', items[i].getAttribute('data-destino') === destino);
+    }
     
-    destinoActual = span.getAttribute('data-destino');
-    destinoIcono.textContent = span.getAttribute('data-icono');
-    destinoNombre.textContent = span.getAttribute('data-destino');
-    destinoDesc.textContent = span.getAttribute('data-desc');
-    destinoPais.textContent = '📍 ' + span.getAttribute('data-pais');
+    destinoIcono.textContent = item.getAttribute('data-icono');
+    destinoNombre.textContent = item.getAttribute('data-destino');
+    destinoDesc.textContent = item.getAttribute('data-desc');
+    destinoPais.textContent = '📍 ' + item.getAttribute('data-pais');
     destinoInfo.classList.add('visible');
+    cambiarEscena(item.getAttribute('data-escena'), item.getAttribute('data-caption'));
     
-    // Cambiar escena animada
-    cambiarEscena(span.getAttribute('data-escena'), span.getAttribute('data-caption'));
-    
-    ticker.classList.add('paused');
+    track.classList.add('paused');
     clearTimeout(hideTimeout);
     hideTimeout = setTimeout(function() {
         destinoInfo.classList.remove('visible');
-        ticker.classList.remove('paused');
+        track.classList.remove('paused');
     }, 6000);
 });
 
-// Desplazamiento táctil/manual del ticker
-var isDragging = false, startX, scrollLeft;
-tickerWrap.addEventListener('mousedown', function(e) {
-    isDragging = true; startX = e.pageX - tickerWrap.offsetLeft; scrollLeft = tickerWrap.scrollLeft;
-    ticker.classList.add('paused'); tickerWrap.style.cursor = 'grabbing';
-});
-tickerWrap.addEventListener('mouseleave', function() { isDragging = false; tickerWrap.style.cursor = 'grab'; });
-tickerWrap.addEventListener('mouseup', function() { isDragging = false; tickerWrap.style.cursor = 'grab'; setTimeout(function() { if (!isDragging) ticker.classList.remove('paused'); }, 3000); });
-tickerWrap.addEventListener('mousemove', function(e) {
-    if (!isDragging) return;
-    e.preventDefault();
-    var x = e.pageX - tickerWrap.offsetLeft;
-    var walk = (x - startX) * 1.5;
-    tickerWrap.scrollLeft = scrollLeft - walk;
-});
-
-// Táctil
-tickerWrap.addEventListener('touchstart', function(e) {
-    startX = e.touches[0].pageX - tickerWrap.offsetLeft; scrollLeft = tickerWrap.scrollLeft;
-    ticker.classList.add('paused');
-});
-tickerWrap.addEventListener('touchend', function() {
-    setTimeout(function() { ticker.classList.remove('paused'); }, 3000);
-});
-tickerWrap.addEventListener('touchmove', function(e) {
-    var x = e.touches[0].pageX - tickerWrap.offsetLeft;
-    var walk = (x - startX) * 1.5;
-    tickerWrap.scrollLeft = scrollLeft - walk;
-});
+// Pausar al tocar/drag y reanudar después
+var pauseTimeout;
+track.addEventListener('touchstart', function() { track.classList.add('paused'); clearTimeout(pauseTimeout); });
+track.addEventListener('touchend', function() { pauseTimeout = setTimeout(function() { track.classList.remove('paused'); }, 3000); });
+track.addEventListener('mousedown', function() { track.classList.add('paused'); clearTimeout(pauseTimeout); });
+track.addEventListener('mouseup', function() { pauseTimeout = setTimeout(function() { track.classList.remove('paused'); }, 3000); });
+track.addEventListener('mouseleave', function() { pauseTimeout = setTimeout(function() { track.classList.remove('paused'); }, 3000); });
 </script>
 </body>
 </html>
