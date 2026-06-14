@@ -26,11 +26,27 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #0a1020; color: #fff; min-height: 100vh;
             display: flex; flex-direction: column; align-items: center;
-            padding: 24px 14px 100px; position: relative; overflow-x: hidden;
+            padding: 0 14px 100px; position: relative; overflow-x: hidden;
             -webkit-font-smoothing: antialiased;
             animation: pageEnter 0.4s ease;
         }
         @keyframes pageEnter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Línea de textura superior */
+        body::before {
+            content: '';
+            position: fixed; top: 0; left: 0; width: 100%; height: 3px;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(255,145,0,0.3) 15%, 
+                rgba(255,145,0,0.6) 30%,
+                rgba(255,180,100,0.4) 50%,
+                rgba(255,145,0,0.6) 70%,
+                rgba(255,145,0,0.3) 85%,
+                transparent 100%
+            );
+            z-index: 10; pointer-events: none;
+        }
         
         #bg {
             position: fixed; top: 0; left: 0; width: 100%; height: 100vh;
@@ -50,14 +66,7 @@
             z-index: -1; pointer-events: none;
         }
 
-        .particula {
-            position: fixed; bottom: -10px; width: 4px; height: 4px;
-            background: rgba(255,255,255,0.3); border-radius: 50%;
-            animation: flotar linear infinite; z-index: 0; pointer-events: none;
-        }
-        @keyframes flotar { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: .4; } 90% { opacity: .4; } 100% { transform: translateY(-100vh) translateX(16px); opacity: 0; } }
-
-        .container { width: 100%; max-width: 460px; text-align: center; z-index: 1; }
+        .container { width: 100%; max-width: 460px; text-align: center; z-index: 1; padding-top: 24px; }
         
         .logo-wrap { position: relative; width: 80px; height: 80px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; }
         .logo-wrap::before {
@@ -80,7 +89,6 @@
         }
         .subtitle { color: var(--text-warm); font-size: 0.85rem; margin-bottom: 14px; text-shadow: 0 2px 6px rgba(0,0,0,0.7); }
 
-        /* Menú de servicios - líneas sutiles */
         .servicios-nav {
             display: flex; justify-content: center; align-items: center; gap: 0;
             margin-bottom: 18px; animation: fadeSlideUp 0.5s ease 0.15s both;
@@ -121,7 +129,6 @@
         .dot.offline { background: #f59e0b; }
         @keyframes dot-breathe { 0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); } 70% { box-shadow: 0 0 0 5px rgba(37,211,102,0); } 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); } }
 
-        /* Hero escena */
         .hero-escena {
             position: relative; width: 100%; height: 105px; border-radius: 14px; overflow: hidden;
             margin-bottom: 12px; border: 1px solid rgba(255,145,0,0.2);
@@ -137,7 +144,7 @@
         @keyframes volar-avion { 0% { transform: translate(-10px,18px) rotate(6deg); opacity: 0; } 12% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(380px,-6px) rotate(6deg); opacity: 0; } }
         .avion-hero { animation: volar-avion 9s linear infinite; }
 
-        /* Ticker simplificado */
+        /* Ticker con animaciones por destino */
         .ticker-wrap {
             overflow: hidden; white-space: nowrap;
             border-top: 1px solid rgba(255,255,255,0.08);
@@ -145,18 +152,29 @@
             padding: 6px 0; margin-bottom: 10px;
         }
         .ticker {
-            display: flex; width: max-content; animation: desplazar 28s linear infinite;
+            display: flex; width: max-content; animation: desplazar 35s linear infinite;
             font-size: 10px; font-weight: 500; color: rgba(255,255,255,0.5);
         }
         .ticker.paused { animation-play-state: paused; }
         .ticker span {
-            padding: 3px 12px; cursor: pointer; transition: all 0.15s ease;
-            border-radius: 20px; margin: 0 1px;
+            padding: 3px 12px; cursor: pointer; transition: all 0.2s ease;
+            border-radius: 20px; margin: 0 2px; position: relative;
         }
-        .ticker span:active { background: rgba(255,145,0,0.15); color: #fff; }
+        .ticker span:active { background: rgba(255,145,0,0.15); color: #fff; transform: scale(1.05); }
+        .ticker span:hover { color: #fff; }
+        
+        /* Animaciones por destino */
+        .ticker span[data-destino="Isla de Margarita"]:hover { text-shadow: 0 0 10px rgba(255,145,0,0.6); }
+        .ticker span[data-destino="Morrocoy"]:hover { text-shadow: 0 0 10px rgba(74,158,255,0.6); }
+        .ticker span[data-destino="Los Roques"]:hover { text-shadow: 0 0 10px rgba(16,185,129,0.6); }
+        .ticker span[data-destino="Mérida"]:hover { text-shadow: 0 0 10px rgba(139,92,246,0.6); }
+        .ticker span[data-destino="Canaima"]:hover { text-shadow: 0 0 10px rgba(6,182,212,0.6); }
+        .ticker span[data-destino="Catatumbo"]:hover { text-shadow: 0 0 10px rgba(250,204,21,0.6); }
+        .ticker span[data-destino="Colonia Tovar"]:hover { text-shadow: 0 0 10px rgba(251,146,60,0.6); }
+        .ticker span[data-destino="Destinos Internacionales"]:hover { text-shadow: 0 0 10px rgba(168,85,247,0.6); }
+        
         @keyframes desplazar { to { transform: translateX(-50%); } }
 
-        /* Info destino - más compacta */
         .destino-info {
             display: none; background: rgba(15,20,40,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
             border: 1px solid rgba(255,145,0,0.15); border-radius: 10px; padding: 8px 12px;
@@ -168,7 +186,6 @@
         .destino-info .destino-desc { font-size: 9px; color: var(--text-warm); line-height: 1.4; }
         .destino-info .destino-pais { font-size: 8px; color: rgba(255,183,77,0.4); margin-top: 1px; }
 
-        /* CTAs - limpias y espaciosas */
         .cta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 22px; animation: fadeSlideUp 0.5s ease 0.3s both; }
         .cta-card {
             background: rgba(15,20,40,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
@@ -234,17 +251,13 @@
         }
         @keyframes pulso-wa { 0%,100% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 0 rgba(37,211,102,0.5); } 50% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 10px rgba(37,211,102,0); } }
 
-        @media (max-width: 360px) { body { padding: 18px 8px 90px; } .cta-card { padding: 14px 4px 12px; } .cta-card .titulo { font-size: 11px; } }
+        @media (max-width: 360px) { body { padding: 0 8px 90px; } .container { padding-top: 20px; } .cta-card { padding: 14px 4px 12px; } .cta-card .titulo { font-size: 11px; } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }
     </style>
 </head>
 <body>
 <div id="bg"></div>
 <div id="bg-overlay"></div>
-<div class="particula" style="left:10%;animation-duration:18s;animation-delay:0s;"></div>
-<div class="particula" style="left:35%;animation-duration:22s;animation-delay:3s;"></div>
-<div class="particula" style="left:60%;animation-duration:20s;animation-delay:6s;"></div>
-<div class="particula" style="left:85%;animation-duration:24s;animation-delay:2s;"></div>
 
 <div class="container">
     <div class="logo-wrap">
@@ -253,7 +266,6 @@
     <h1>Destino y Eventos Lotus 360</h1>
     <p class="subtitle">Tu agencia de viajes #1 en Carabobo · Viaja con Lotus 360</p>
 
-    <!-- Menú de servicios - líneas sutiles -->
     <div class="servicios-nav">
         <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="fullday">🌴 Full Day</a>
         <span class="nav-sep"></span>
@@ -279,23 +291,26 @@
         </svg>
     </div>
 
-    <!-- Ticker -->
+    <!-- Ticker con Colonia Tovar y animaciones -->
     <div class="ticker-wrap" id="ticker-wrap">
         <div class="ticker" id="ticker">
-            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Venezuela" data-desc="Playas paradisíacas, duty free y vida nocturna">🏖️ Isla de Margarita</span>
-            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Venezuela" data-desc="Cayos de arena blanca y snorkel de clase mundial">🐠 Morrocoy</span>
-            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Venezuela" data-desc="Archipiélago virgen ideal para desconectar">🏝️ Los Roques</span>
-            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Venezuela" data-desc="Montañas andinas y el teleférico más alto">🚡 Mérida</span>
-            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Venezuela" data-desc="Tepuyes milenarios y el Salto Ángel">💧 Canaima</span>
-            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Venezuela" data-desc="El relámpago eterno, único en el mundo">⚡ Catatumbo</span>
-            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú">🌍 Internacionales</span>
-            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Venezuela" data-desc="Playas paradisíacas, duty free y vida nocturna">🏖️ Isla de Margarita</span>
-            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Venezuela" data-desc="Cayos de arena blanca y snorkel de clase mundial">🐠 Morrocoy</span>
-            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Venezuela" data-desc="Archipiélago virgen ideal para desconectar">🏝️ Los Roques</span>
-            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Venezuela" data-desc="Montañas andinas y el teleférico más alto">🚡 Mérida</span>
-            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Venezuela" data-desc="Tepuyes milenarios y el Salto Ángel">💧 Canaima</span>
-            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Venezuela" data-desc="El relámpago eterno, único en el mundo">⚡ Catatumbo</span>
-            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú">🌍 Internacionales</span>
+            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna. El Caribe sin salir de Venezuela.">🏖️ Isla de Margarita</span>
+            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
+            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Dependencias Federales" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
+            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
+            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita.">💧 Canaima</span>
+            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Zulia" data-desc="El relámpago eterno: 260 noches de tormentas al año. Único en el mundo.">⚡ Catatumbo</span>
+            <span data-icono="🏘️" data-destino="Colonia Tovar" data-pais="🇻🇪 Aragua" data-desc="Pueblo alemán en las montañas. Fresas, arquitectura bávara y clima primaveral.">🏘️ Colonia Tovar</span>
+            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
+            <!-- Repetición para loop -->
+            <span data-icono="🏖️" data-destino="Isla de Margarita" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna. El Caribe sin salir de Venezuela.">🏖️ Isla de Margarita</span>
+            <span data-icono="🐠" data-destino="Morrocoy" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial.">🐠 Morrocoy</span>
+            <span data-icono="🏝️" data-destino="Los Roques" data-pais="🇻🇪 Dependencias Federales" data-desc="Archipiélago virgen ideal para desconectar y pesca deportiva.">🏝️ Los Roques</span>
+            <span data-icono="🚡" data-destino="Mérida" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas, el teleférico más alto del mundo y clima fresco.">🚡 Mérida</span>
+            <span data-icono="💧" data-destino="Canaima" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel (979m). Naturaleza indómita.">💧 Canaima</span>
+            <span data-icono="⚡" data-destino="Catatumbo" data-pais="🇻🇪 Zulia" data-desc="El relámpago eterno: 260 noches de tormentas al año. Único en el mundo.">⚡ Catatumbo</span>
+            <span data-icono="🏘️" data-destino="Colonia Tovar" data-pais="🇻🇪 Aragua" data-desc="Pueblo alemán en las montañas. Fresas, arquitectura bávara y clima primaveral.">🏘️ Colonia Tovar</span>
+            <span data-icono="🌍" data-destino="Destinos Internacionales" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú y más.">🌍 Internacionales</span>
         </div>
     </div>
 
@@ -306,7 +321,6 @@
         <div class="destino-pais" id="destino-pais"></div>
     </div>
 
-    <!-- CTAs principales -->
     <div class="cta-grid">
         <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tours.html" class="cta-card" style="border-color: rgba(16,185,129,0.25);">
             <span class="badge-top" style="background:#10b981;color:#000;">NUEVO</span>
