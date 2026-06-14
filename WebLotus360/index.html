@@ -3,42 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#1a1a2e">
+    <meta name="theme-color" content="#1a1a2e" id="theme-color">
     <meta property="og:title" content="Lotus 360 - Cotiza tu Hospedaje">
     <meta property="og:description" content="Hoteles, posadas y apartamentos al mejor precio con asesoría personalizada.">
     <meta property="og:image" content="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png">
     <title>Lotus 360 · Cotiza tu Hospedaje</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Precarga del fondo para evitar parpadeo -->
+    <link rel="preload" as="image" href="https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg">
+    <link rel="preload" as="image" href="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
+    
     <style>
         :root {
-            --bg-deep: #0a1020;
             --accent: #ff9100;
-            --accent-glow: rgba(255, 145, 0, 0.5);
             --success: #25D366;
-            --text-primary: #ffffff;
             --text-secondary: #ffd9a8;
-            --surface: rgba(255, 255, 255, 0.04);
-            --border: rgba(255, 255, 255, 0.1);
-            --radius-sm: 14px;
-            --radius-md: 20px;
-            --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        input, textarea, select {
+            -webkit-user-select: text;
+            user-select: text;
+        }
         
         body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: var(--bg-deep);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a1020;
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: flex-start;
-            padding: 20px 16px 60px;
+            padding: 16px 12px 40px;
             position: relative;
             overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            /* Transición de entrada al cargar */
+            animation: pageEnter 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
         }
         
-        /* Fondo con imagen y overlay */
+        /* Animación de entrada de la página */
+        @keyframes pageEnter {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Clase para cuando se va a salir de la página */
+        body.salir {
+            animation: pageExit 0.3s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
+        }
+        
+        @keyframes pageExit {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(-30px);
+            }
+        }
+        
         #bg {
             position: fixed;
             top: 0;
@@ -50,6 +91,15 @@
             background-position: center 20%;
             background-repeat: no-repeat;
             z-index: -2;
+            will-change: transform;
+            transform: translateZ(0);
+            /* El fondo ya está precargado, aparece suavemente */
+            animation: bgFadeIn 0.6s ease;
+        }
+        
+        @keyframes bgFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
         
         @media (min-width: 768px) {
@@ -65,74 +115,84 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(160deg, rgba(8, 8, 22, 0.78) 0%, rgba(15, 15, 35, 0.85) 55%, rgba(8, 8, 22, 0.92) 100%);
+            background: linear-gradient(160deg, rgba(8,8,22,0.78) 0%, rgba(15,15,35,0.85) 55%, rgba(8,8,22,0.92) 100%);
             z-index: -1;
             pointer-events: none;
-            backdrop-filter: blur(2px);
         }
         
         .card {
             width: 100%;
-            max-width: 520px;
+            max-width: 500px;
             z-index: 1;
             color: #fff;
-            animation: fadeInUp 0.6s ease;
+            /* Los elementos internos aparecen escalonados */
+            animation: cardContent 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.1s both;
         }
         
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+        @keyframes cardContent {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
-        /* Botón Home */
         .home-btn {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            gap: 6px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.15);
             border-radius: 50px;
-            padding: 10px 20px;
+            padding: 8px 16px;
             font-size: 13px;
             font-weight: 600;
-            color: rgba(255, 255, 255, 0.85);
+            color: rgba(255,255,255,0.85);
             text-decoration: none;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            transition: all 0.3s ease;
-            letter-spacing: 0.3px;
+            transition: all 0.2s ease;
+            touch-action: manipulation;
         }
         
-        .home-btn:hover {
-            background: rgba(255, 145, 0, 0.15);
-            border-color: rgba(255, 145, 0, 0.4);
-            color: #ff9100;
-            transform: translateX(-3px);
-            box-shadow: 0 4px 15px rgba(255, 145, 0, 0.2);
+        .home-btn:active {
+            background: rgba(255,145,0,0.2);
+            border-color: rgba(255,145,0,0.4);
+            transform: scale(0.96);
         }
         
         .home-btn i {
             color: #ff9100;
-            font-size: 12px;
-            transition: transform 0.3s ease;
-        }
-        
-        .home-btn:hover i {
-            transform: translateX(-3px);
+            font-size: 11px;
+            transition: transform 0.2s ease;
         }
 
-        /* Header */
         .card-header {
             text-align: center;
-            margin-bottom: 22px;
+            margin-bottom: 16px;
+            animation: fadeSlideUp 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.15s both;
+        }
+        
+        @keyframes fadeSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         
         .logo-wrap {
             position: relative;
-            width: 96px;
-            height: 96px;
-            margin: 0 auto 14px;
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 10px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -141,40 +201,52 @@
         .logo-wrap::before {
             content: '';
             position: absolute;
-            width: 96px;
-            height: 96px;
+            width: 80px;
+            height: 80px;
             border-radius: 50%;
-            border: 2px solid rgba(255, 145, 0, 0.5);
+            border: 2px solid rgba(255,145,0,0.4);
             animation: ring-pulse 2.4s ease-out infinite;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            will-change: transform, opacity;
         }
         
         @keyframes ring-pulse {
-            0% { width: 88px; height: 88px; opacity: 0.9; }
-            100% { width: 120px; height: 120px; opacity: 0; }
+            0% { width: 72px; height: 72px; opacity: 0.8; }
+            100% { width: 100px; height: 100px; opacity: 0; }
         }
         
         .logo-profile {
-            width: 80px;
-            height: 80px;
+            width: 72px;
+            height: 72px;
             border-radius: 50%;
             border: 3px solid var(--accent);
             padding: 3px;
             background: #fff;
             object-fit: contain;
             display: block;
-            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
             position: relative;
             z-index: 1;
+            /* Efecto de rotación 3D sutil al aparecer */
+            animation: logoAppear 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
+        }
+        
+        @keyframes logoAppear {
+            from {
+                opacity: 0;
+                transform: scale(0.5) rotateY(90deg);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) rotateY(0deg);
+            }
         }
         
         .card-header h2 {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             font-weight: 700;
-            margin-bottom: 4px;
-            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+            margin-bottom: 2px;
             background: linear-gradient(to right, #ff9100, #ffd166, #ff9100);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -183,27 +255,27 @@
         
         .card-header .subtitle {
             color: var(--text-secondary);
-            font-size: 13px;
-            font-weight: 500;
+            font-size: 12px;
         }
         
         .estado-box {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            background: rgba(255, 255, 255, 0.07);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            gap: 6px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
             border-radius: 30px;
-            padding: 8px 16px;
-            font-size: 12px;
+            padding: 6px 14px;
+            font-size: 11px;
             font-weight: 600;
-            margin: 12px auto 0;
+            margin: 10px auto 0;
             backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
         }
         
         .dot {
-            width: 9px;
-            height: 9px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             flex-shrink: 0;
         }
@@ -218,22 +290,23 @@
         }
         
         @keyframes dot-breathe {
-            0% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.6); }
-            70% { box-shadow: 0 0 0 7px rgba(37, 211, 102, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
+            0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.6); }
+            70% { box-shadow: 0 0 0 6px rgba(37,211,102,0); }
+            100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
         }
 
-        /* Escena animada */
         .escena-box {
             position: relative;
             width: 100%;
-            height: 130px;
-            border-radius: 16px;
+            height: 110px;
+            border-radius: 14px;
             overflow: hidden;
-            margin-bottom: 22px;
-            border: 1px solid rgba(255, 145, 0, 0.25);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            margin-bottom: 16px;
+            border: 1px solid rgba(255,145,0,0.2);
             background: #0c2d4a;
+            transform: translateZ(0);
+            will-change: transform;
+            animation: fadeSlideUp 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.25s both;
         }
         
         .escena-box svg.escena {
@@ -247,99 +320,112 @@
         
         .escena-box svg.escena.activa {
             display: block;
+            /* Transición suave al cambiar de escena */
+            animation: sceneSwitch 0.4s ease;
+        }
+        
+        @keyframes sceneSwitch {
+            from { opacity: 0.6; transform: scale(1.02); }
+            to { opacity: 1; transform: scale(1); }
         }
         
         .escena-caption {
             position: absolute;
-            bottom: 8px;
-            left: 12px;
-            background: rgba(0, 0, 0, 0.55);
+            bottom: 6px;
+            left: 10px;
+            background: rgba(0,0,0,0.55);
             color: #ffd9a8;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 600;
-            padding: 5px 12px;
-            border-radius: 8px;
-            letter-spacing: 0.2px;
-            backdrop-filter: blur(6px);
+            padding: 4px 10px;
+            border-radius: 6px;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
             z-index: 2;
         }
 
-        /* Animaciones escenas */
+        /* Animaciones simplificadas */
         @keyframes ola { to { transform: translateX(-100px); } }
-        .ola1 { animation: ola 6s linear infinite; }
-        .ola2 { animation: ola 9s linear infinite reverse; }
+        .ola1 { animation: ola 8s linear infinite; }
+        .ola2 { animation: ola 12s linear infinite reverse; }
         
-        @keyframes brillo { 0%, 100% { opacity: 1; } 50% { opacity: 0.75; } }
-        .sol { animation: brillo 3s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+        @keyframes brillo { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+        .sol { animation: brillo 4s ease-in-out infinite; }
         
-        @keyframes viento { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
-        .hojas { animation: viento 4s ease-in-out infinite alternate; transform-origin: 10px 20px; }
+        @keyframes viento { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
+        .hojas { animation: viento 5s ease-in-out infinite alternate; }
         
-        @keyframes nube-der { 0% { transform: translateX(0); } 100% { transform: translateX(35px); } }
-        .nube { animation: nube-der 8s ease-in-out infinite alternate; }
+        @keyframes nube-der { 0% { transform: translateX(0); } 100% { transform: translateX(25px); } }
+        .nube { animation: nube-der 10s ease-in-out infinite alternate; }
         
-        @keyframes telecabina-mov { 0% { transform: translate(22px, 36px); } 100% { transform: translate(340px, 80px); } }
-        .telecabina { animation: telecabina-mov 7s ease-in-out infinite alternate; }
+        @keyframes telecabina-mov { 0% { transform: translate(22px,36px); } 100% { transform: translate(340px,80px); } }
+        .telecabina { animation: telecabina-mov 8s ease-in-out infinite alternate; }
         
-        @keyframes nevada { 0% { opacity: 0; transform: translateY(-5px); } 50% { opacity: 0.7; } 100% { opacity: 0; transform: translateY(5px); } }
-        .nieve1 { animation: nevada 3s ease-in-out infinite; }
-        .nieve2 { animation: nevada 3.5s ease-in-out infinite 0.6s; }
-        .nieve3 { animation: nevada 2.8s ease-in-out infinite 1.2s; }
+        @keyframes nevada { 0% { opacity: 0; } 50% { opacity: 0.6; } 100% { opacity: 0; } }
+        .nieve1 { animation: nevada 4s ease-in-out infinite; }
+        .nieve2 { animation: nevada 4.5s ease-in-out infinite 0.8s; }
         
         @keyframes caer { to { stroke-dashoffset: -48; } }
-        .agua { animation: caer 0.8s linear infinite; }
+        .agua { animation: caer 1s linear infinite; }
         
-        @keyframes bruma-pulso { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.5; } }
-        .bruma { animation: bruma-pulso 2.5s ease-in-out infinite; }
+        @keyframes bruma-pulso { 0%,100% { opacity: 0.2; } 50% { opacity: 0.4; } }
+        .bruma { animation: bruma-pulso 3s ease-in-out infinite; }
         
-        @keyframes relampago { 0%, 92%, 100% { opacity: 0; } 93%, 96% { opacity: 1; } 94% { opacity: 0.25; } 95% { opacity: 1; } }
-        .rayo1 { animation: relampago 4s infinite; }
-        .rayo2 { animation: relampago 5.5s infinite 1.2s; }
+        @keyframes relampago { 0%,92%,100% { opacity: 0; } 93%,96% { opacity: 1; } 94% { opacity: 0.2; } }
+        .rayo1 { animation: relampago 5s infinite; }
+        .rayo2 { animation: relampago 6s infinite 1.5s; }
         
         @keyframes lluvia-line { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 40; } }
-        .lluvia { animation: lluvia-line 0.6s linear infinite; stroke-dasharray: 6 10; }
+        .lluvia { animation: lluvia-line 0.8s linear infinite; stroke-dasharray: 6 10; }
         
         @keyframes girar-globo { to { transform: rotate(360deg); } }
-        .globo-lineas { animation: girar-globo 20s linear infinite; transform-box: fill-box; transform-origin: center; }
+        .globo-lineas { animation: girar-globo 25s linear infinite; }
         
-        @keyframes volar-avion { 0% { transform: translate(-10px, 40px) rotate(8deg); opacity: 0; } 10% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(390px, 0px) rotate(8deg); opacity: 0; } }
-        .avion-mundo { animation: volar-avion 7s linear infinite; }
+        @keyframes volar-avion { 0% { transform: translate(-10px,40px) rotate(8deg); opacity: 0; } 10% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(390px,0px) rotate(8deg); opacity: 0; } }
+        .avion-mundo { animation: volar-avion 8s linear infinite; }
 
-        /* Secciones formulario */
         .form-section {
-            background: rgba(15, 20, 40, 0.65);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: var(--radius-md);
-            padding: 20px;
-            margin-bottom: 16px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            transition: var(--transition);
+            background: rgba(15,20,40,0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+            transform: translateZ(0);
+            /* Animación escalonada para cada sección */
+            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) both;
         }
         
+        /* Cada form-section aparece con retraso progresivo */
+        .form-section:nth-child(1) { animation-delay: 0.3s; }
+        .form-section:nth-child(2) { animation-delay: 0.35s; }
+        .form-section:nth-child(3) { animation-delay: 0.4s; }
+        .form-section:nth-child(4) { animation-delay: 0.45s; }
+        .form-section:nth-child(5) { animation-delay: 0.5s; }
+        .form-section:nth-child(6) { animation-delay: 0.55s; }
+        
         .section-title {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 1.2px;
+            letter-spacing: 1px;
             color: var(--accent);
-            margin-bottom: 16px;
+            margin-bottom: 12px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }
         
         .section-title::after {
             content: '';
             flex: 1;
             height: 1px;
-            background: rgba(255, 145, 0, 0.2);
+            background: rgba(255,145,0,0.15);
         }
         
         .form-group {
-            margin-bottom: 14px;
-            text-align: left;
+            margin-bottom: 10px;
         }
         
         .form-group:last-child {
@@ -349,365 +435,322 @@
         .form-group label {
             display: block;
             font-weight: 600;
-            margin-bottom: 7px;
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 13px;
-            letter-spacing: 0.2px;
+            margin-bottom: 5px;
+            color: rgba(255,255,255,0.9);
+            font-size: 12px;
         }
         
         .form-group label i {
             color: var(--accent);
-            margin-right: 6px;
-            width: 16px;
+            margin-right: 4px;
+            width: 14px;
             text-align: center;
+            font-size: 11px;
         }
         
-        select, input[type="text"], input[type="date"], input[type="number"], textarea {
+        select, input[type="text"], input[type="date"], textarea {
             width: 100%;
-            padding: 13px 16px;
-            border: 1.5px solid rgba(255, 255, 255, 0.12);
-            border-radius: var(--radius-sm);
-            font-size: 15px;
-            background: rgba(10, 12, 28, 0.7);
+            padding: 11px 14px;
+            border: 1.5px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            font-size: 14px;
+            background: rgba(10,12,28,0.7);
             color: #fff;
             font-family: inherit;
             color-scheme: dark;
-            transition: all 0.3s ease;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            touch-action: manipulation;
         }
         
         select {
             appearance: none;
             -webkit-appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23ff9100' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ff9100' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
             background-repeat: no-repeat;
-            background-position: right 14px center;
-            padding-right: 40px;
-        }
-        
-        select:hover, input:hover, textarea:hover {
-            border-color: rgba(255, 145, 0, 0.4);
+            background-position: right 12px center;
+            padding-right: 36px;
         }
         
         select:focus, input:focus, textarea:focus {
             outline: none;
             border-color: var(--accent);
-            background: rgba(20, 16, 5, 0.75);
-            box-shadow: 0 0 0 3px rgba(255, 145, 0, 0.15);
+            box-shadow: 0 0 0 2px rgba(255,145,0,0.12);
         }
         
         textarea {
             resize: vertical;
-            min-height: 70px;
+            min-height: 60px;
         }
         
         .row {
             display: flex;
-            gap: 10px;
+            gap: 8px;
         }
         
         .row .form-group {
             flex: 1;
         }
 
-        /* Amenidades */
         .amenidades-grid {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 4px;
+            gap: 6px;
         }
         
         .amenidad-tag {
             display: flex;
             align-items: center;
-            gap: 7px;
-            background: rgba(10, 12, 28, 0.7);
-            border: 1.5px solid rgba(255, 255, 255, 0.12);
-            border-radius: 20px;
-            padding: 8px 14px;
-            font-size: 13px;
+            gap: 5px;
+            background: rgba(10,12,28,0.7);
+            border: 1.5px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 7px 11px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
-            color: rgba(255, 255, 255, 0.65);
-            transition: all 0.2s ease;
+            color: rgba(255,255,255,0.6);
+            transition: all 0.15s ease;
+            touch-action: manipulation;
+            -webkit-user-select: none;
             user-select: none;
-            -webkit-tap-highlight-color: transparent;
         }
         
-        .amenidad-tag:hover {
-            border-color: rgba(255, 145, 0, 0.4);
-            background: rgba(255, 145, 0, 0.1);
+        .amenidad-tag:active {
+            transform: scale(0.93);
         }
         
         .amenidad-tag i {
-            color: rgba(255, 145, 0, 0.5);
-            font-size: 13px;
-            transition: all 0.2s;
+            color: rgba(255,145,0,0.5);
+            font-size: 11px;
+            transition: all 0.15s ease;
         }
         
         .amenidad-tag.sel {
             border-color: var(--accent);
-            background: rgba(255, 145, 0, 0.2);
+            background: rgba(255,145,0,0.2);
             color: #fff;
-            transform: scale(1.05);
-            box-shadow: 0 0 14px rgba(255, 145, 0, 0.25);
+            transform: scale(1.03);
+            box-shadow: 0 0 10px rgba(255,145,0,0.2);
         }
         
         .amenidad-tag.sel i {
             color: var(--accent);
-            transform: scale(1.2);
+            transform: scale(1.1);
         }
 
-        /* Noches */
         .noches-box {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
-            padding: 12px 14px;
-            background: rgba(255, 145, 0, 0.08);
-            border: 1px solid rgba(255, 145, 0, 0.2);
-            border-radius: 12px;
-            margin: 12px 0;
-            font-size: 13.5px;
+            gap: 8px;
+            padding: 10px 12px;
+            background: rgba(255,145,0,0.06);
+            border: 1px solid rgba(255,145,0,0.15);
+            border-radius: 10px;
+            margin: 10px 0;
+            font-size: 12px;
             font-weight: 600;
             color: #ffd9a8;
             transition: all 0.3s ease;
         }
         
-        .noches-box i {
-            color: var(--accent);
-        }
-        
         .noches-box .num {
             color: #fff;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 800;
-            animation: countIn 0.5s ease;
+            animation: countPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
         
-        @keyframes countIn {
-            from { transform: scale(1.5); opacity: 0; }
+        @keyframes countPop {
+            from { transform: scale(1.4); opacity: 0; }
             to { transform: scale(1); opacity: 1; }
         }
 
-        /* Presupuesto */
         .presupuesto-wrap {
-            margin-top: 4px;
+            margin-top: 2px;
         }
         
         .presupuesto-labels {
             display: flex;
             justify-content: space-between;
-            font-size: 11px;
-            color: rgba(255, 217, 168, 0.7);
-            margin-bottom: 6px;
+            font-size: 10px;
+            color: rgba(255,217,168,0.6);
+            margin-bottom: 4px;
         }
         
         input[type="range"] {
             -webkit-appearance: none;
             appearance: none;
             width: 100%;
-            height: 5px;
+            height: 4px;
             border-radius: 10px;
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255,255,255,0.1);
             outline: none;
             border: none;
             padding: 0;
-            box-shadow: none;
+            touch-action: manipulation;
         }
         
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 22px;
-            height: 22px;
+            width: 20px;
+            height: 20px;
             border-radius: 50%;
             background: var(--accent);
             cursor: pointer;
-            box-shadow: 0 2px 12px rgba(255, 145, 0, 0.5);
-            transition: all 0.2s ease;
-        }
-        
-        input[type="range"]::-webkit-slider-thumb:hover {
-            transform: scale(1.2);
-            box-shadow: 0 4px 20px rgba(255, 145, 0, 0.7);
+            box-shadow: 0 2px 8px rgba(255,145,0,0.4);
         }
         
         .presupuesto-val {
             text-align: center;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
             color: #fff;
-            margin-top: 10px;
+            margin-top: 8px;
+            transition: all 0.2s ease;
         }
         
         .presupuesto-val span {
             color: var(--accent);
         }
 
-        /* Botón principal */
         .btn-gen {
             width: 100%;
-            padding: 18px;
+            padding: 16px;
             background: linear-gradient(135deg, #ff9100, #ff5e1a);
             color: white;
             border: none;
-            border-radius: 14px;
+            border-radius: 12px;
             font-weight: 700;
-            font-size: 16px;
+            font-size: 15px;
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 6px 24px rgba(255, 100, 0, 0.4);
-            letter-spacing: 0.3px;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .btn-gen::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s ease;
-        }
-        
-        .btn-gen:hover::before {
-            left: 100%;
-        }
-        
-        .btn-gen:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(255, 100, 0, 0.6);
+            box-shadow: 0 4px 16px rgba(255,100,0,0.35);
+            letter-spacing: 0.2px;
+            touch-action: manipulation;
+            transition: transform 0.1s ease, box-shadow 0.2s ease;
+            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.6s both;
         }
         
         .btn-gen:active {
-            transform: scale(0.97);
+            transform: scale(0.96);
+            box-shadow: 0 2px 8px rgba(255,100,0,0.25);
         }
 
-        /* Resultado */
         #resultado {
             display: none;
-            margin-top: 20px;
-            animation: slideUp 0.5s ease;
-        }
-        
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+            margin-top: 16px;
+            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
         }
         
         .resultado-card {
-            background: rgba(15, 20, 40, 0.8);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(37, 211, 102, 0.3);
-            border-radius: 16px;
-            padding: 20px;
-            border-left: 4px solid #25D366;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            background: rgba(15,20,40,0.8);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(37,211,102,0.25);
+            border-radius: 14px;
+            padding: 16px;
+            border-left: 3px solid #25D366;
+            transform: translateZ(0);
         }
         
         .resultado-card h3 {
             color: #25D366;
-            font-size: 1.1rem;
-            margin-bottom: 16px;
+            font-size: 1rem;
+            margin-bottom: 12px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }
         
-        .resultado-card .resumen-detalle {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
-            font-size: 13px;
-            line-height: 1.8;
+        .resumen-detalle {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 12px;
+            font-size: 12px;
+            line-height: 1.7;
         }
         
-        .resultado-card .resumen-detalle .dato {
+        .resumen-detalle .dato {
             display: flex;
             align-items: center;
-            gap: 8px;
-            margin-bottom: 6px;
+            gap: 6px;
+            margin-bottom: 4px;
         }
         
-        .resultado-card .resumen-detalle .dato i {
+        .resumen-detalle .dato i {
             color: var(--accent);
-            width: 18px;
+            width: 14px;
             text-align: center;
+            font-size: 11px;
         }
         
         .btn-cotizar {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 8px;
             width: 100%;
-            padding: 16px;
-            background: linear-gradient(135deg, #25D366, #128C7E);
+            padding: 14px;
+            background: #25D366;
             color: white;
             border: none;
-            border-radius: 14px;
+            border-radius: 12px;
             font-weight: 700;
-            font-size: 15px;
+            font-size: 14px;
             cursor: pointer;
             text-decoration: none;
-            transition: all 0.3s ease;
-            box-shadow: 0 6px 20px rgba(37, 211, 102, 0.3);
-            letter-spacing: 0.3px;
+            box-shadow: 0 4px 14px rgba(37,211,102,0.25);
+            touch-action: manipulation;
+            transition: transform 0.1s ease, box-shadow 0.2s ease;
         }
         
-        .btn-cotizar:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 28px rgba(37, 211, 102, 0.5);
+        .btn-cotizar:active {
+            transform: scale(0.96);
+            box-shadow: 0 2px 8px rgba(37,211,102,0.2);
         }
         
         .btn-cotizar i {
-            font-size: 1.3rem;
-            animation: bounce 2s infinite;
+            animation: iconBounce 2s infinite;
         }
         
-        @keyframes bounce {
+        @keyframes iconBounce {
             0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-3px); }
+            50% { transform: translateY(-2px); }
         }
         
         .btn-nueva {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
             width: 100%;
-            padding: 14px;
-            background: rgba(255, 255, 255, 0.08);
-            color: rgba(255, 255, 255, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 14px;
+            padding: 12px;
+            background: rgba(255,255,255,0.06);
+            color: rgba(255,255,255,0.7);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 12px;
             font-weight: 600;
-            font-size: 14px;
+            font-size: 13px;
             cursor: pointer;
-            margin-top: 10px;
-            transition: all 0.3s ease;
+            margin-top: 8px;
+            touch-action: manipulation;
+            transition: all 0.15s ease;
         }
         
-        .btn-nueva:hover {
-            background: rgba(255, 255, 255, 0.15);
-            color: #fff;
+        .btn-nueva:active {
+            background: rgba(255,255,255,0.12);
+            transform: scale(0.97);
         }
         
         .footer-copy {
-            margin-top: 24px;
-            font-size: 10px;
-            color: rgba(255, 255, 255, 0.3);
-            letter-spacing: 0.5px;
+            margin-top: 20px;
+            font-size: 9px;
+            color: rgba(255,255,255,0.25);
             text-align: center;
+            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.65s both;
         }
 
-        /* Confeti */
         .confeti-container {
             position: fixed;
             top: 0;
@@ -720,27 +763,28 @@
         
         .confeti {
             position: absolute;
-            width: 10px;
-            height: 10px;
-            animation: caerConfeti 1.5s ease-out forwards;
+            width: 8px;
+            height: 8px;
+            animation: caerConfeti 1.2s ease-out forwards;
         }
         
         @keyframes caerConfeti {
             0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
-            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+            100% { transform: translateY(100vh) rotate(540deg); opacity: 0; }
         }
 
-        @media (max-width: 400px) {
-            body { padding: 16px 10px 40px; }
-            .escena-box { height: 110px; }
-            .amenidad-tag { padding: 6px 10px; font-size: 11px; }
+        @media (max-width: 360px) {
+            body { padding: 12px 8px 32px; }
+            .escena-box { height: 100px; }
+            .amenidad-tag { padding: 6px 9px; font-size: 11px; }
+            .form-section { padding: 14px; }
         }
-        
+
         @media (prefers-reduced-motion: reduce) {
-            .ola1, .ola2, .sol, .hojas, .nube, .telecabina, .nieve1, .nieve2, .nieve3,
-            .agua, .bruma, .rayo1, .rayo2, .lluvia, .globo-lineas, .avion-mundo,
-            .logo-wrap::before, .dot.online, .btn-gen::before, .btn-cotizar i { 
-                animation: none !important; 
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
             }
         }
     </style>
@@ -750,27 +794,23 @@
     <div id="bg-overlay"></div>
     
     <div class="card">
-        <!-- Botón Home -->
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Home-Page/" class="home-btn">
-            <i class="fas fa-chevron-left"></i> Volver al Inicio
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Home-Page/" class="home-btn" id="homeBtn" onclick="transicionSalida(event)">
+            <i class="fas fa-chevron-left"></i> Inicio
         </a>
 
-        <!-- Header -->
         <div class="card-header">
             <div class="logo-wrap">
-                <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360">
+                <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360" loading="eager" width="72" height="72">
             </div>
             <h2>Destino y Eventos Lotus 360</h2>
             <p class="subtitle">Hospedaje 🏨 · Encuentra tu lugar perfecto</p>
             <div class="estado-box">
                 <span class="dot" id="estado-dot"></span>
-                <span id="estado-texto">Verificando disponibilidad...</span>
+                <span id="estado-texto">Verificando...</span>
             </div>
         </div>
 
-        <!-- Escenas animadas -->
         <div class="escena-box">
-            <!-- Playa -->
             <svg class="escena activa" id="escena-playa" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
                 <defs>
                     <linearGradient id="cieloPlaya" x1="0" y1="0" x2="0" y2="1">
@@ -783,7 +823,6 @@
                 <rect width="400" height="130" fill="url(#cieloPlaya)"/>
                 <circle class="sol" cx="330" cy="35" r="18" fill="#ffe28a" opacity=".95"/>
                 <ellipse class="nube" cx="80" cy="25" rx="32" ry="10" fill="rgba(255,255,255,.18)"/>
-                <ellipse class="nube" cx="220" cy="18" rx="22" ry="7" fill="rgba(255,255,255,.12)"/>
                 <rect y="70" width="400" height="60" fill="url(#marPlaya)"/>
                 <path class="ola ola1" d="M0,74 Q50,64 100,74 T200,74 T300,74 T400,74 T500,74 V130 H0 Z" fill="rgba(255,255,255,.2)"/>
                 <path class="ola ola2" d="M0,84 Q50,77 100,84 T200,84 T300,84 T400,84 T500,84 V130 H0 Z" fill="rgba(255,255,255,.13)"/>
@@ -796,13 +835,8 @@
                         <path d="M9,20 C22,7 38,2 44,-8" fill="#3a9863"/>
                     </g>
                 </g>
-                <g transform="translate(290,78)">
-                    <rect x="0" y="0" width="28" height="6" rx="1" fill="rgba(255,255,255,.5)"/>
-                    <polygon points="8,-8 8,0 22,0" fill="rgba(255,255,255,.35)"/>
-                </g>
             </svg>
 
-            <!-- Morrocoy -->
             <svg class="escena" id="escena-morrocoy" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
                 <defs>
                     <linearGradient id="cieloMorrocoy" x1="0" y1="0" x2="0" y2="1">
@@ -818,29 +852,18 @@
                 <ellipse cx="90" cy="75" rx="55" ry="10" fill="#e8d89a"/>
                 <ellipse cx="90" cy="73" rx="42" ry="7" fill="#f0e4b0"/>
                 <ellipse cx="300" cy="78" rx="45" ry="9" fill="#e8d89a"/>
-                <ellipse cx="300" cy="76" rx="34" ry="6" fill="#f0e4b0"/>
-                <g transform="translate(20,45)">
-                    <line x1="8" y1="30" x2="8" y2="0" stroke="#3a6b35" stroke-width="3"/>
-                    <line x1="8" y1="22" x2="0" y2="30" stroke="#3a6b35" stroke-width="2"/>
-                    <line x1="8" y1="22" x2="16" y2="30" stroke="#3a6b35" stroke-width="2"/>
-                    <ellipse cx="8" cy="0" rx="10" ry="7" fill="#2d7a28"/>
-                </g>
                 <path class="ola ola1" d="M0,75 Q50,67 100,75 T200,75 T300,75 T400,75 T500,75 V130 H0 Z" fill="rgba(255,255,255,.15)"/>
             </svg>
 
-            <!-- Los Roques -->
             <svg class="escena" id="escena-losroques" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
                 <defs>
                     <linearGradient id="cieloRoques" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stop-color="#a8e6f0"/><stop offset="50%" stop-color="#5dcfe0"/><stop offset="100%" stop-color="#1ab0d0"/>
                     </linearGradient>
-                    <linearGradient id="aguaRoques" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="#00d4e8" stop-opacity=".9"/><stop offset="100%" stop-color="#006a82"/>
-                    </linearGradient>
                 </defs>
                 <rect width="400" height="130" fill="url(#cieloRoques)"/>
                 <circle class="sol" cx="200" cy="22" r="18" fill="#fff9b0" opacity=".85"/>
-                <rect y="62" width="400" height="68" fill="url(#aguaRoques)"/>
+                <rect y="62" width="400" height="68" fill="#006a82" opacity=".8"/>
                 <ellipse cx="200" cy="65" rx="80" ry="14" fill="#f5f0d5"/>
                 <ellipse cx="200" cy="63" rx="60" ry="9" fill="#fffde8"/>
                 <g transform="translate(188,32)">
@@ -853,7 +876,6 @@
                 <path class="ola ola1" d="M0,68 Q50,61 100,68 T200,68 T300,68 T400,68 T500,68 V130 H0 Z" fill="rgba(255,255,255,.12)"/>
             </svg>
 
-            <!-- Montaña -->
             <svg class="escena" id="escena-montana" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
                 <defs>
                     <linearGradient id="cieloMontana" x1="0" y1="0" x2="0" y2="1">
@@ -862,7 +884,6 @@
                 </defs>
                 <rect width="400" height="130" fill="url(#cieloMontana)"/>
                 <circle cx="340" cy="28" r="14" fill="#ffe28a" opacity=".85"/>
-                <ellipse class="nube" cx="70" cy="32" rx="38" ry="11" fill="rgba(255,255,255,.55)"/>
                 <polygon points="0,130 80,48 160,130" fill="#6b7f8e"/>
                 <polygon points="70,54 100,48 120,68 85,71" fill="#e8f4f8"/>
                 <polygon points="130,130 230,22 330,130" fill="#506070"/>
@@ -870,8 +891,6 @@
                 <polygon points="260,130 340,60 400,130" fill="#6b7f8e"/>
                 <circle class="nieve1" cx="95" cy="54" r="2" fill="white" opacity=".7"/>
                 <circle class="nieve2" cx="228" cy="34" r="2.5" fill="white" opacity=".7"/>
-                <circle class="nieve3" cx="310" cy="68" r="1.8" fill="white" opacity=".6"/>
-                <line x1="20" y1="48" x2="375" y2="98" stroke="#2a3540" stroke-width="1.8" stroke-dasharray="5 5"/>
                 <g class="telecabina">
                     <line x1="0" y1="0" x2="0" y2="-10" stroke="#2a3540" stroke-width="1.5"/>
                     <rect x="-10" y="0" width="20" height="14" rx="3" fill="#ff9100"/>
@@ -880,7 +899,6 @@
                 </g>
             </svg>
 
-            <!-- Cascada -->
             <svg class="escena" id="escena-cascada" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
                 <defs>
                     <linearGradient id="cieloCascada" x1="0" y1="0" x2="0" y2="1">
@@ -893,11 +911,9 @@
                 <rect x="280" y="8" width="120" height="57" rx="4" fill="#6b4220"/>
                 <line class="agua" x1="118" y1="6" x2="118" y2="125" stroke="#d0eef8" stroke-width="7" stroke-linecap="round" stroke-dasharray="14 10" opacity=".9"/>
                 <line class="agua" x1="133" y1="6" x2="133" y2="125" stroke="#b8ddf0" stroke-width="5" stroke-linecap="round" stroke-dasharray="12 9" opacity=".75"/>
-                <line class="agua" x1="147" y1="6" x2="147" y2="125" stroke="#d0eef8" stroke-width="6" stroke-linecap="round" stroke-dasharray="14 10" opacity=".9"/>
                 <ellipse class="bruma" cx="132" cy="122" rx="70" ry="12" fill="#ffffff" opacity=".35"/>
             </svg>
 
-            <!-- Tormenta -->
             <svg class="escena" id="escena-tormenta" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
                 <defs>
                     <linearGradient id="cieloTormenta" x1="0" y1="0" x2="0" y2="1">
@@ -911,12 +927,10 @@
                 <line class="lluvia" x1="60" y1="55" x2="50" y2="95" stroke="rgba(180,200,255,.3)" stroke-width="1"/>
                 <line class="lluvia" x1="120" y1="55" x2="110" y2="95" stroke="rgba(180,200,255,.3)" stroke-width="1"/>
                 <line class="lluvia" x1="200" y1="55" x2="190" y2="95" stroke="rgba(180,200,255,.25)" stroke-width="1"/>
-                <line class="lluvia" x1="300" y1="55" x2="290" y2="95" stroke="rgba(180,200,255,.3)" stroke-width="1"/>
                 <path class="rayo rayo1" d="M175,10 L158,55 L178,55 L152,102" stroke="#ffe89b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
                 <path class="rayo rayo2" d="M270,14 L253,58 L273,58 L248,105" stroke="#ffe89b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
 
-            <!-- Mundo -->
             <svg class="escena" id="escena-mundo" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
                 <defs>
                     <linearGradient id="cieloMundo" x1="0" y1="0" x2="0" y2="1">
@@ -931,15 +945,13 @@
                 <g class="globo-lineas">
                     <circle cx="200" cy="118" r="72" fill="none" stroke="#7dd8c0" stroke-width="1.5" opacity=".5"/>
                     <ellipse cx="200" cy="118" rx="72" ry="26" fill="none" stroke="#7dd8c0" stroke-width="1" opacity=".45"/>
-                    <ellipse cx="200" cy="118" rx="36" ry="72" fill="none" stroke="#7dd8c0" stroke-width="1" opacity=".45"/>
                 </g>
                 <path class="avion-mundo" d="M0,0 L22,5 L0,10 L5,5 Z" fill="#ff9100"/>
             </svg>
 
-            <div class="escena-caption" id="escena-caption">🏖️ Arena blanca y aguas turquesa te esperan</div>
+            <div class="escena-caption" id="escena-caption">🏖️ Arena blanca y aguas turquesa</div>
         </div>
 
-        <!-- Formulario: Destino -->
         <div class="form-section">
             <div class="section-title"><i class="fas fa-map-marker-alt"></i> Destino</div>
             <div class="form-group">
@@ -960,11 +972,10 @@
             </div>
             <div id="div-extranjero" class="form-group" style="display:none;">
                 <label><i class="fas fa-search-location"></i>¿A qué país/ciudad?</label>
-                <input type="text" id="input-extranjero" placeholder="Ej: Cancún, México...">
+                <input type="text" id="input-extranjero" placeholder="Ej: Cancún, México..." autocomplete="off">
             </div>
         </div>
 
-        <!-- Formulario: Hospedaje -->
         <div class="form-section">
             <div class="section-title"><i class="fas fa-hotel"></i> Hospedaje</div>
             <div class="form-group">
@@ -974,7 +985,7 @@
                     <option value="Apartamento / Suite">🏠 Apartamento / Suite</option>
                     <option value="Posada / Ecolodge">🌿 Posada / Ecolodge</option>
                     <option value="Resort">🌴 Resort</option>
-                    <option value="Sin preferencia">✨ Sin preferencia (recomiéndenme)</option>
+                    <option value="Sin preferencia">✨ Sin preferencia</option>
                 </select>
             </div>
             <div class="form-group">
@@ -985,35 +996,34 @@
                     <option value="Media Pensión">🍽️ Media Pensión</option>
                     <option value="Pensión Completa">🍽️🥩 Pensión Completa</option>
                     <option value="Todo Incluido">🍹 Todo Incluido</option>
-                    <option value="No sé, quiero opciones">❓ No sé, quiero opciones</option>
+                    <option value="No sé, quiero opciones">❓ Quiero opciones</option>
                 </select>
             </div>
             <div class="form-group">
-                <label><i class="fas fa-concierge-bell"></i>¿Qué te importa del hospedaje? <span style="font-weight:400;color:#ffd9a8;font-size:11px;">(toca para seleccionar)</span></label>
-                <div class="amenidades-grid">
-                    <div class="amenidad-tag" data-value="Piscina" onclick="toggleAmenidad(this)"><i class="fas fa-swimmer"></i> Piscina</div>
-                    <div class="amenidad-tag" data-value="Playa privada" onclick="toggleAmenidad(this)"><i class="fas fa-umbrella-beach"></i> Playa privada</div>
-                    <div class="amenidad-tag" data-value="Wi-Fi" onclick="toggleAmenidad(this)"><i class="fas fa-wifi"></i> Wi-Fi</div>
-                    <div class="amenidad-tag" data-value="Estacionamiento" onclick="toggleAmenidad(this)"><i class="fas fa-parking"></i> Parqueo</div>
-                    <div class="amenidad-tag" data-value="Jacuzzi" onclick="toggleAmenidad(this)"><i class="fas fa-hot-tub"></i> Jacuzzi</div>
-                    <div class="amenidad-tag" data-value="Gimnasio" onclick="toggleAmenidad(this)"><i class="fas fa-dumbbell"></i> Gym</div>
-                    <div class="amenidad-tag" data-value="Restaurante" onclick="toggleAmenidad(this)"><i class="fas fa-utensils"></i> Restaurante</div>
-                    <div class="amenidad-tag" data-value="Vista al mar" onclick="toggleAmenidad(this)"><i class="fas fa-water"></i> Vista al mar</div>
-                    <div class="amenidad-tag" data-value="Aire acondicionado" onclick="toggleAmenidad(this)"><i class="fas fa-snowflake"></i> A/C</div>
-                    <div class="amenidad-tag" data-value="Desayuno buffet" onclick="toggleAmenidad(this)"><i class="fas fa-bread-slice"></i> Buffet</div>
+                <label><i class="fas fa-concierge-bell"></i>Preferencias <span style="font-weight:400;color:#ffd9a8;font-size:10px;">(toca para elegir)</span></label>
+                <div class="amenidades-grid" id="amenidades-container">
+                    <div class="amenidad-tag" data-value="Piscina" onclick="toggleAmenidad(this)"><i class="fas fa-swimmer"></i>Piscina</div>
+                    <div class="amenidad-tag" data-value="Playa privada" onclick="toggleAmenidad(this)"><i class="fas fa-umbrella-beach"></i>Playa priv.</div>
+                    <div class="amenidad-tag" data-value="Wi-Fi" onclick="toggleAmenidad(this)"><i class="fas fa-wifi"></i>Wi-Fi</div>
+                    <div class="amenidad-tag" data-value="Estacionamiento" onclick="toggleAmenidad(this)"><i class="fas fa-parking"></i>Parqueo</div>
+                    <div class="amenidad-tag" data-value="Jacuzzi" onclick="toggleAmenidad(this)"><i class="fas fa-hot-tub"></i>Jacuzzi</div>
+                    <div class="amenidad-tag" data-value="Gimnasio" onclick="toggleAmenidad(this)"><i class="fas fa-dumbbell"></i>Gym</div>
+                    <div class="amenidad-tag" data-value="Restaurante" onclick="toggleAmenidad(this)"><i class="fas fa-utensils"></i>Restaurante</div>
+                    <div class="amenidad-tag" data-value="Vista al mar" onclick="toggleAmenidad(this)"><i class="fas fa-water"></i>Vista al mar</div>
+                    <div class="amenidad-tag" data-value="Aire acondicionado" onclick="toggleAmenidad(this)"><i class="fas fa-snowflake"></i>A/C</div>
+                    <div class="amenidad-tag" data-value="Desayuno buffet" onclick="toggleAmenidad(this)"><i class="fas fa-bread-slice"></i>Buffet</div>
                 </div>
             </div>
             <div class="form-group">
-                <label><i class="fas fa-dollar-sign"></i>Presupuesto por noche <span style="font-weight:400;color:#ffd9a8;font-size:11px;">(USD)</span></label>
+                <label><i class="fas fa-dollar-sign"></i>Presupuesto por noche <span style="font-weight:400;color:#ffd9a8;font-size:10px;">(USD)</span></label>
                 <div class="presupuesto-wrap">
                     <div class="presupuesto-labels"><span>$20</span><span>$500+</span></div>
                     <input type="range" id="presupuesto-slider" min="20" max="500" step="10" value="100" oninput="actualizarPresupuesto()">
-                    <div class="presupuesto-val" id="presupuesto-val">Hasta <span>$100</span> USD por noche</div>
+                    <div class="presupuesto-val" id="presupuesto-val">Hasta <span>$100</span> USD/noche</div>
                 </div>
             </div>
         </div>
 
-        <!-- Formulario: Fechas -->
         <div class="form-section">
             <div class="section-title"><i class="fas fa-calendar-alt"></i> Fechas</div>
             <div class="row">
@@ -1028,11 +1038,10 @@
             </div>
             <div class="noches-box" id="noches-box">
                 <i class="fas fa-moon"></i>
-                <span>Selecciona tus fechas para ver la duración</span>
+                <span>Selecciona tus fechas</span>
             </div>
         </div>
 
-        <!-- Formulario: Huéspedes -->
         <div class="form-section">
             <div class="section-title"><i class="fas fa-users"></i> Huéspedes</div>
             <div class="row">
@@ -1044,7 +1053,7 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label><i class="fas fa-child"></i>Niños (2-11)</label>
+                    <label><i class="fas fa-child"></i>Niños</label>
                     <select id="ninos">
                         <option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option>
                     </select>
@@ -1058,46 +1067,67 @@
             </div>
         </div>
 
-        <!-- Formulario: Extras -->
         <div class="form-section">
-            <div class="section-title"><i class="fas fa-star"></i> Detalles Extra</div>
+            <div class="section-title"><i class="fas fa-star"></i> Extras</div>
             <div class="form-group">
-                <label><i class="fas fa-gift"></i>¿Es una ocasión especial?</label>
+                <label><i class="fas fa-gift"></i>Ocasión especial</label>
                 <select id="ocasion">
-                    <option value="Vacaciones">Vacaciones regulares</option>
-                    <option value="Luna de Miel / Aniversario">💑 Luna de Miel o Aniversario</option>
+                    <option value="Vacaciones">Vacaciones</option>
+                    <option value="Luna de Miel / Aniversario">💑 Luna de Miel</option>
                     <option value="Cumpleaños">🎂 Cumpleaños</option>
-                    <option value="Viaje de Negocios">💼 Viaje de Negocios</option>
-                    <option value="Despedida de Soltero/a">🥂 Despedida de Soltero/a</option>
+                    <option value="Viaje de Negocios">💼 Negocios</option>
+                    <option value="Despedida de Soltero/a">🥂 Despedida</option>
                 </select>
             </div>
             <div class="form-group">
                 <label><i class="fas fa-pen"></i>Notas adicionales</label>
-                <textarea id="notas" placeholder="Ej: habitación en piso alto, cama king, cerca de la playa..."></textarea>
+                <textarea id="notas" placeholder="Ej: piso alto, cama king, cerca de la playa..." rows="2"></textarea>
             </div>
         </div>
 
-        <!-- Botón -->
         <button class="btn-gen" id="btn-generar" onclick="generarSolicitud()">
-            <i class="fas fa-paper-plane"></i> Generar Solicitud de Hospedaje
+            <i class="fas fa-paper-plane" style="margin-right:6px;"></i>Generar Solicitud de Hospedaje
         </button>
 
-        <!-- Resultado -->
         <div id="resultado"></div>
 
         <p class="footer-copy">© 2026 Destino y Eventos Lotus 360 · Carabobo, Venezuela</p>
     </div>
 
     <script>
-        // Estado de atención
+        // Precarga para evitar parpadeo
         (function() {
-            const ahora = new Date();
-            const ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
-            const ok = ve.getDay() >= 1 && ve.getDay() <= 6 && ve.getHours() >= 8 && ve.getHours() < 19;
+            var img = new Image();
+            img.src = 'https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg';
+        })();
+
+        // Transición de salida hacia Home
+        function transicionSalida(e) {
+            e.preventDefault();
+            var href = document.getElementById('homeBtn').href;
+            
+            // Activar animación de salida
+            document.body.classList.add('salir');
+            
+            // Cambiar color de la barra de estado para transición suave
+            var metaTheme = document.getElementById('theme-color');
+            if (metaTheme) metaTheme.content = '#0a1020';
+            
+            // Navegar después de la animación
+            setTimeout(function() {
+                window.location.href = href;
+            }, 280);
+        }
+
+        // Estado
+        (function() {
+            var ahora = new Date();
+            var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
+            var ok = ve.getDay() >= 1 && ve.getDay() <= 6 && ve.getHours() >= 8 && ve.getHours() < 19;
             document.getElementById('estado-dot').className = 'dot ' + (ok ? 'online' : 'offline');
             document.getElementById('estado-texto').textContent = ok ?
-                'Asesores en línea · Respuesta rápida' :
-                'Fuera de horario · Te respondemos a primera hora';
+                'En línea · Respondemos pronto' :
+                'Fuera de horario · Mañana temprano';
         })();
 
         // Fechas
@@ -1106,43 +1136,42 @@
         document.getElementById('checkout').min = hoyISO();
 
         function ajustarCheckout() {
-            const ci = document.getElementById('checkin');
-            const co = document.getElementById('checkout');
+            var ci = document.getElementById('checkin');
+            var co = document.getElementById('checkout');
             co.min = ci.value || hoyISO();
             if (co.value && co.value < ci.value) co.value = '';
             actualizarNoches();
         }
 
         function actualizarNoches() {
-            const ci = document.getElementById('checkin').value;
-            const co = document.getElementById('checkout').value;
-            const box = document.getElementById('noches-box');
+            var ci = document.getElementById('checkin').value;
+            var co = document.getElementById('checkout').value;
+            var box = document.getElementById('noches-box');
             if (!ci || !co) {
-                box.innerHTML = '<i class="fas fa-moon"></i><span>Selecciona tus fechas para ver la duración</span>';
+                box.innerHTML = '<i class="fas fa-moon"></i><span>Selecciona tus fechas</span>';
                 return;
             }
-            const dias = Math.round((new Date(co) - new Date(ci)) / 86400000);
-            if (dias <= 0) box.innerHTML =
-                '<i class="fas fa-sun" style="color:#ff9100;"></i><span>Pasadía — confírmalo con tu asesor</span>';
-            else box.innerHTML =
-                `<i class="fas fa-moon"></i><span><span class="num">${dias}</span> noche${dias>1?'s':''} de estadía</span>`;
+            var dias = Math.round((new Date(co) - new Date(ci)) / 86400000);
+            if (dias <= 0) box.innerHTML = '<i class="fas fa-sun" style="color:#ff9100;"></i><span>Pasadía — confirma con tu asesor</span>';
+            else box.innerHTML = '<i class="fas fa-moon"></i><span><span class="num">' + dias + '</span> noche' + (dias > 1 ? 's' : '') + '</span>';
         }
 
         // Escenas
-        const ESCENAS = {
-            'Isla de Margarita': { id: 'escena-playa', caption: '🏖️ Arena blanca y aguas turquesa te esperan' },
-            'Morrocoy': { id: 'escena-morrocoy', caption: '🐠 Cayos, manglares y snorkel en Morrocoy' },
-            'Los Roques': { id: 'escena-losroques', caption: '🏝️ Aguas cristalinas y fondos de coral' },
-            'Mérida': { id: 'escena-montana', caption: '🚡 Aire de montaña y el teleférico más alto' },
-            'Canaima': { id: 'escena-cascada', caption: '💧 Tepuyes y el Salto Ángel te esperan' },
-            'Catatumbo': { id: 'escena-tormenta', caption: '⚡ El relámpago eterno del Catatumbo' },
+        var ESCENAS = {
+            'Isla de Margarita': { id: 'escena-playa', caption: '🏖️ Arena blanca y aguas turquesa' },
+            'Morrocoy': { id: 'escena-morrocoy', caption: '🐠 Cayos, manglares y snorkel' },
+            'Los Roques': { id: 'escena-losroques', caption: '🏝️ Aguas cristalinas y coral' },
+            'Mérida': { id: 'escena-montana', caption: '🚡 Aire de montaña y teleférico' },
+            'Canaima': { id: 'escena-cascada', caption: '💧 Tepuyes y el Salto Ángel' },
+            'Catatumbo': { id: 'escena-tormenta', caption: '⚡ Relámpago eterno del Catatumbo' },
             'Extranjero': { id: 'escena-mundo', caption: '🌍 Tu próxima aventura internacional' }
         };
 
         function actualizarEscena() {
-            const dest = document.getElementById('destino').value;
-            const cfg = ESCENAS[dest] || ESCENAS['Isla de Margarita'];
-            document.querySelectorAll('.escena').forEach(e => e.classList.remove('activa'));
+            var dest = document.getElementById('destino').value;
+            var cfg = ESCENAS[dest] || ESCENAS['Isla de Margarita'];
+            var escenas = document.querySelectorAll('.escena');
+            for (var i = 0; i < escenas.length; i++) escenas[i].classList.remove('activa');
             document.getElementById(cfg.id).classList.add('activa');
             document.getElementById('escena-caption').textContent = cfg.caption;
         }
@@ -1158,116 +1187,124 @@
         }
 
         function getAmenidades() {
-            return [...document.querySelectorAll('.amenidad-tag.sel')].map(t => t.dataset.value);
+            var tags = document.querySelectorAll('.amenidad-tag.sel');
+            var result = [];
+            for (var i = 0; i < tags.length; i++) result.push(tags[i].dataset.value);
+            return result;
         }
 
         // Presupuesto
         function actualizarPresupuesto() {
-            const v = document.getElementById('presupuesto-slider').value;
+            var v = document.getElementById('presupuesto-slider').value;
             document.getElementById('presupuesto-val').innerHTML =
-                v >= 500 ? 'Sin límite de presupuesto — <span>lo mejor disponible</span>' :
-                `Hasta <span>$${v}</span> USD por noche`;
+                v >= 500 ? 'Sin límite — <span>lo mejor</span>' : 'Hasta <span>$' + v + '</span> USD/noche';
         }
 
-        // Confeti
+        // Confeti optimizado
         function lanzarConfeti() {
-            const colores = ['#ff9100', '#25D366', '#ffd166', '#ff5e1a', '#fff', '#10b981'];
-            const container = document.createElement('div');
+            var colores = ['#ff9100', '#25D366', '#ffd166', '#ff5e1a', '#10b981'];
+            var container = document.createElement('div');
             container.className = 'confeti-container';
+            var fragment = document.createDocumentFragment();
             
-            for (let i = 0; i < 40; i++) {
-                const confeti = document.createElement('div');
+            for (var i = 0; i < 25; i++) {
+                var confeti = document.createElement('div');
                 confeti.className = 'confeti';
                 confeti.style.left = Math.random() * 100 + '%';
-                confeti.style.animationDelay = Math.random() * 0.8 + 's';
-                confeti.style.animationDuration = (Math.random() * 1.5 + 1) + 's';
+                confeti.style.animationDelay = Math.random() * 0.5 + 's';
+                confeti.style.animationDuration = (Math.random() * 1 + 0.8) + 's';
                 confeti.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)];
-                confeti.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
-                container.appendChild(confeti);
+                fragment.appendChild(confeti);
             }
             
+            container.appendChild(fragment);
             document.body.appendChild(container);
-            setTimeout(() => container.remove(), 2500);
+            setTimeout(function() { container.remove(); }, 2000);
         }
 
-        // Generar solicitud
+        // Generar
         function generarSolicitud() {
-            const destBase = document.getElementById('destino').value;
-            const destExtra = document.getElementById('input-extranjero').value.trim();
-            const dest = destBase === 'Extranjero' ? destExtra : destBase;
-            const hosp = document.getElementById('hospedaje').value;
-            const plan = document.getElementById('plan-alimentacion').value;
-            const ocasion = document.getElementById('ocasion').value;
-            const ci = document.getElementById('checkin').value;
-            const co = document.getElementById('checkout').value;
-            const adultos = document.getElementById('adultos').value;
-            const ninos = document.getElementById('ninos').value;
-            const habitaciones = document.getElementById('habitaciones').value;
-            const amenidades = getAmenidades();
-            const presupuesto = document.getElementById('presupuesto-slider').value;
-            const presTexto = presupuesto >= 500 ? 'Sin límite (lo mejor disponible)' : `$${presupuesto} USD`;
-            const notas = document.getElementById('notas').value.trim();
+            var destBase = document.getElementById('destino').value;
+            var destExtra = document.getElementById('input-extranjero').value.trim();
+            var dest = destBase === 'Extranjero' ? destExtra : destBase;
+            var hosp = document.getElementById('hospedaje').value;
+            var plan = document.getElementById('plan-alimentacion').value;
+            var ocasion = document.getElementById('ocasion').value;
+            var ci = document.getElementById('checkin').value;
+            var co = document.getElementById('checkout').value;
+            var adultos = document.getElementById('adultos').value;
+            var ninos = document.getElementById('ninos').value;
+            var habitaciones = document.getElementById('habitaciones').value;
+            var amenidades = getAmenidades();
+            var presupuesto = document.getElementById('presupuesto-slider').value;
+            var presTexto = presupuesto >= 500 ? 'Sin límite' : '$' + presupuesto + ' USD';
+            var notas = document.getElementById('notas').value.trim();
 
             if (!dest || !ci || !co) {
-                alert('⚠️ Por favor completa el destino y las fechas antes de continuar.');
+                alert('Completa destino y fechas por favor.');
                 return;
             }
 
-            const noches = Math.round((new Date(co) - new Date(ci)) / 86400000);
-            const asesores = ['584244634041', '584244900601', '584147020527', '584244269876', '584127136169'];
-            const tlf = asesores[Math.floor(Math.random() * asesores.length)];
+            var noches = Math.round((new Date(co) - new Date(ci)) / 86400000);
+            var asesores = ['584244634041', '584244900601', '584147020527'];
+            var tlf = asesores[Math.floor(Math.random() * asesores.length)];
 
-            // Mensaje profesional para el asesor
-            const mensajeWA = 
-                `🌟 *NUEVA SOLICITUD DE COTIZACIÓN - LOTUS 360*\n\n` +
-                `📍 *Destino:* ${dest}\n` +
-                `🏨 *Alojamiento:* ${hosp}\n` +
-                `🍽️ *Plan:* ${plan}\n` +
-                `📅 *Check-in:* ${ci}\n` +
-                `📅 *Check-out:* ${co}\n` +
-                `🌙 *Noches:* ${noches}\n` +
-                `👥 *Huéspedes:* ${adultos} adulto(s) | ${ninos} niño(s)\n` +
-                `🛏️ *Habitaciones:* ${habitaciones}\n` +
-                `💰 *Presupuesto/noche:* ${presTexto}\n` +
-                (amenidades.length ? `✨ *Preferencias:* ${amenidades.join(' · ')}\n` : '') +
-                (ocasion !== 'Vacaciones' ? `🎉 *Ocasión especial:* ${ocasion}\n` : '') +
-                (notas ? `📝 *Notas adicionales:* ${notas}\n` : '') +
-                `\n📌 *Fecha de solicitud:* ${new Date().toLocaleDateString('es-VE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n` +
-                `\n✅ *Por favor, enviar cotización personalizada con opciones y disponibilidad.* ¡Gracias!`;
+            var mensajeWA =
+                '\uD83C\uDF1F *NUEVA COTIZACIÓN - LOTUS 360*\n\n' +
+                '\uD83D\uDCCD *Destino:* ' + dest + '\n' +
+                '\uD83C\uDFE8 *Alojamiento:* ' + hosp + '\n' +
+                '\uD83C\uDF7D\uFE0F *Plan:* ' + plan + '\n' +
+                '\uD83D\uDCC5 *Check-in:* ' + ci + '\n' +
+                '\uD83D\uDCC5 *Check-out:* ' + co + '\n' +
+                '\uD83C\uDF19 *Noches:* ' + noches + '\n' +
+                '\uD83D\uDC65 *Huéspedes:* ' + adultos + ' adulto(s) | ' + ninos + ' niño(s)\n' +
+                '\uD83D\uDECF\uFE0F *Habitaciones:* ' + habitaciones + '\n' +
+                '\uD83D\uDCB0 *Presupuesto/noche:* ' + presTexto + '\n' +
+                (amenidades.length ? '\u2728 *Preferencias:* ' + amenidades.join(' · ') + '\n' : '') +
+                (ocasion !== 'Vacaciones' ? '\uD83C\uDF89 *Ocasión:* ' + ocasion + '\n' : '') +
+                (notas ? '\uD83D\uDCDD *Notas:* ' + notas + '\n' : '') +
+                '\n\u2705 *Enviar cotización con opciones. ¡Gracias!*';
 
-            const waLink = `https://wa.me/${tlf}?text=${encodeURIComponent(mensajeWA)}`;
+            var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(mensajeWA);
 
-            // Mostrar resultado
             document.getElementById('resultado').style.display = 'block';
-            document.getElementById('resultado').innerHTML = `
-                <div class="resultado-card">
-                    <h3><i class="fas fa-check-circle"></i> ¡Tu solicitud está lista!</h3>
-                    <div class="resumen-detalle">
-                        <div class="dato"><i class="fas fa-map-marker-alt"></i> <strong>${dest}</strong></div>
-                        <div class="dato"><i class="fas fa-hotel"></i> ${hosp} · ${plan}</div>
-                        <div class="dato"><i class="fas fa-calendar"></i> ${ci} → ${co} <span style="color:#ff9100;margin-left:4px;">(${noches} noches)</span></div>
-                        <div class="dato"><i class="fas fa-users"></i> ${adultos} adultos · ${ninos} niños · ${habitaciones} habitación(es)</div>
-                        <div class="dato"><i class="fas fa-tag"></i> Presupuesto: ${presTexto}/noche</div>
-                        ${amenidades.length ? `<div class="dato"><i class="fas fa-star"></i> ${amenidades.join(' · ')}</div>` : ''}
-                        ${ocasion !== 'Vacaciones' ? `<div class="dato"><i class="fas fa-gift"></i> ${ocasion} 🎉</div>` : ''}
-                    </div>
-                    <a href="${waLink}" target="_blank" rel="noopener" class="btn-cotizar" onclick="lanzarConfeti()">
-                        <i class="fab fa-whatsapp"></i> Enviar a un Asesor por WhatsApp
-                    </a>
-                    <button class="btn-nueva" onclick="nuevaCotizacion()">
-                        <i class="fas fa-redo"></i> Hacer otra cotización
-                    </button>
-                </div>
-            `;
+            document.getElementById('resultado').innerHTML =
+                '<div class="resultado-card">' +
+                    '<h3><i class="fas fa-check-circle"></i> ¡Listo! Tu solicitud:</h3>' +
+                    '<div class="resumen-detalle">' +
+                        '<div class="dato"><i class="fas fa-map-marker-alt"></i> <strong>' + dest + '</strong></div>' +
+                        '<div class="dato"><i class="fas fa-hotel"></i> ' + hosp + ' · ' + plan + '</div>' +
+                        '<div class="dato"><i class="fas fa-calendar"></i> ' + ci + ' → ' + co + ' <span style="color:#ff9100;">(' + noches + ' noches)</span></div>' +
+                        '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + habitaciones + ' hab.</div>' +
+                        '<div class="dato"><i class="fas fa-tag"></i> ' + presTexto + '/noche</div>' +
+                        (amenidades.length ? '<div class="dato"><i class="fas fa-star"></i> ' + amenidades.join(' · ') + '</div>' : '') +
+                        (ocasion !== 'Vacaciones' ? '<div class="dato"><i class="fas fa-gift"></i> ' + ocasion + ' 🎉</div>' : '') +
+                    '</div>' +
+                    '<a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar" id="btn-wa">' +
+                        '<i class="fab fa-whatsapp"></i> Enviar a un Asesor' +
+                    '</a>' +
+                    '<button class="btn-nueva" onclick="nuevaCotizacion()">' +
+                        '<i class="fas fa-redo"></i> Hacer otra cotización' +
+                    '</button>' +
+                '</div>';
 
             document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' });
             lanzarConfeti();
         }
 
         function nuevaCotizacion() {
-            document.getElementById('resultado').style.display = 'none';
-            document.getElementById('resultado').innerHTML = '';
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            var resultado = document.getElementById('resultado');
+            resultado.style.opacity = '0';
+            resultado.style.transform = 'translateY(10px)';
+            resultado.style.transition = 'all 0.3s ease';
+            
+            setTimeout(function() {
+                resultado.style.display = 'none';
+                resultado.innerHTML = '';
+                resultado.style.opacity = '1';
+                resultado.style.transform = 'translateY(0)';
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }, 300);
         }
 
         // Init
