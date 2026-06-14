@@ -15,22 +15,12 @@
         :root {
             --accent: #ff9100;
             --accent-light: #ffb74d;
-            --accent-glow: rgba(255,145,0,0.5);
             --success: #25D366;
             --text-warm: #ffe0b2;
+            --card-bg: rgba(15,20,40,0.65);
         }
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            -webkit-tap-highlight-color: transparent;
-            -webkit-user-select: none;
-            user-select: none;
-        }
-        input, textarea, select {
-            -webkit-user-select: text;
-            user-select: text;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+        input, textarea, select { -webkit-user-select: text; user-select: text; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #0a1020;
@@ -42,513 +32,301 @@
             position: relative;
             overflow-x: hidden;
             -webkit-font-smoothing: antialiased;
-            animation: pageEnter 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+            animation: pageEnter 0.35s ease;
         }
-        @keyframes pageEnter {
-            from { opacity: 0; transform: translateY(16px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        body.salir {
-            animation: pageExit 0.3s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
-        }
-        @keyframes pageExit {
-            from { opacity: 1; transform: translateX(0); }
-            to { opacity: 0; transform: translateX(-30px); }
-        }
+        @keyframes pageEnter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        body.salir { animation: pageExit 0.25s ease forwards; }
+        @keyframes pageExit { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-25px); } }
         #bg {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg');
-            background-size: cover;
-            background-position: center 20%;
-            background-repeat: no-repeat;
-            z-index: -2;
-            will-change: transform;
-            transform: translateZ(0);
-            animation: bgFadeIn 0.6s ease;
+            background-size: cover; background-position: center 20%; background-repeat: no-repeat;
+            z-index: -2; transform: translateZ(0);
         }
-        @keyframes bgFadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @media (min-width: 768px) {
-            #bg {
-                background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg');
-                background-position: center center;
-            }
-        }
+        @media (min-width: 768px) { #bg { background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'); background-position: center center; } }
         #bg-overlay {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: linear-gradient(160deg, rgba(8,8,22,0.78) 0%, rgba(15,15,35,0.85) 55%, rgba(8,8,22,0.92) 100%);
-            z-index: -1;
-            pointer-events: none;
+            z-index: -1; pointer-events: none;
         }
-        .card {
-            width: 100%;
-            max-width: 500px;
-            z-index: 1;
-            color: #fff;
-            animation: cardContent 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.1s both;
-        }
-        @keyframes cardContent {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        .card { width: 100%; max-width: 500px; z-index: 1; color: #fff; }
         .home-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 50px;
-            padding: 8px 16px;
-            font-size: 13px;
-            font-weight: 600;
-            color: rgba(255,255,255,0.85);
-            text-decoration: none;
-            margin-bottom: 16px;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            transition: all 0.2s ease;
-            touch-action: manipulation;
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 50px; padding: 8px 16px; font-size: 13px; font-weight: 600;
+            color: rgba(255,255,255,0.85); text-decoration: none; margin-bottom: 14px;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            transition: all 0.15s ease; touch-action: manipulation;
         }
         .home-btn:active { background: rgba(255,145,0,0.2); border-color: rgba(255,145,0,0.4); transform: scale(0.96); }
         .home-btn i { color: #ff9100; font-size: 11px; }
-        .card-header {
-            text-align: center;
-            margin-bottom: 16px;
-            animation: fadeSlideUp 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.15s both;
-        }
-        @keyframes fadeSlideUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .logo-wrap {
-            position: relative;
-            width: 80px; height: 80px;
-            margin: 0 auto 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+
+        .card-header { text-align: center; margin-bottom: 14px; }
+        .logo-wrap { position: relative; width: 72px; height: 72px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; }
         .logo-wrap::before {
-            content: '';
-            position: absolute;
-            width: 80px; height: 80px;
-            border-radius: 50%;
-            border: 2px solid rgba(255,145,0,0.5);
-            animation: ring-pulse 2.4s ease-out infinite;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            will-change: transform, opacity;
+            content: ''; position: absolute; width: 72px; height: 72px; border-radius: 50%;
+            border: 2px solid rgba(255,145,0,0.45); animation: ring-pulse 2.4s ease-out infinite;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
         }
-        @keyframes ring-pulse {
-            0% { width: 72px; height: 72px; opacity: 0.8; }
-            100% { width: 100px; height: 100px; opacity: 0; }
-        }
+        @keyframes ring-pulse { 0% { width: 66px; height: 66px; opacity: 0.7; } 100% { width: 92px; height: 92px; opacity: 0; } }
         .logo-profile {
-            width: 72px; height: 72px;
-            border-radius: 50%;
-            border: 3px solid var(--accent);
-            padding: 3px;
-            background: #fff;
-            object-fit: contain;
-            display: block;
-            position: relative;
-            z-index: 1;
-            animation: logoAppear 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
-        }
-        @keyframes logoAppear {
-            from { opacity: 0; transform: scale(0.5) rotateY(90deg); }
-            to { opacity: 1; transform: scale(1) rotateY(0deg); }
+            width: 64px; height: 64px; border-radius: 50%; border: 3px solid var(--accent);
+            padding: 3px; background: #fff; object-fit: contain; display: block; position: relative; z-index: 1;
         }
         .card-header h2 {
-            font-size: 1.2rem;
-            font-weight: 700;
-            margin-bottom: 2px;
+            font-size: 1.1rem; font-weight: 700; margin-bottom: 2px;
             background: linear-gradient(to right, #ff9100, #ffb74d, #ff9100);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
-        .card-header .subtitle { color: var(--text-warm); font-size: 12px; font-weight: 500; }
-        .card-header .slogan { font-size: 10px; color: rgba(255,183,77,0.5); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 4px; }
+        .card-header .subtitle { color: var(--text-warm); font-size: 11px; }
+        .card-header .slogan { font-size: 9px; color: rgba(255,183,77,0.5); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 3px; }
         .estado-box {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(255,255,255,0.07);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 30px;
-            padding: 6px 14px;
-            font-size: 11px;
-            font-weight: 600;
-            margin: 10px auto 0;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 30px; padding: 5px 12px; font-size: 10px; font-weight: 600;
+            margin: 8px auto 0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
         }
-        .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
         .dot.online { background: #25D366; animation: dot-breathe 1.8s infinite; }
         .dot.offline { background: #f59e0b; }
-        @keyframes dot-breathe {
-            0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.6); }
-            70% { box-shadow: 0 0 0 6px rgba(37,211,102,0); }
-            100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
-        }
+        @keyframes dot-breathe { 0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); } 70% { box-shadow: 0 0 0 5px rgba(37,211,102,0); } 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); } }
+
         .escena-box {
-            position: relative;
-            width: 100%;
-            height: 110px;
-            border-radius: 14px;
-            overflow: hidden;
-            margin-bottom: 16px;
-            border: 1px solid rgba(255,145,0,0.25);
-            background: #0c2d4a;
+            position: relative; width: 100%; height: 100px; border-radius: 14px; overflow: hidden;
+            margin-bottom: 14px; border: 1px solid rgba(255,145,0,0.2); background: #0c2d4a;
             transform: translateZ(0);
-            will-change: transform;
-            animation: fadeSlideUp 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.25s both;
         }
-        .escena-box svg.escena {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            display: none;
-        }
-        .escena-box svg.escena.activa {
-            display: block;
-            animation: sceneSwitch 0.4s ease;
-        }
-        @keyframes sceneSwitch {
-            from { opacity: 0.6; transform: scale(1.02); }
-            to { opacity: 1; transform: scale(1); }
-        }
+        .escena-box svg.escena { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; }
+        .escena-box svg.escena.activa { display: block; }
         .escena-caption {
-            position: absolute;
-            bottom: 6px; left: 10px;
-            background: rgba(0,0,0,0.6);
-            color: #ffe0b2;
-            font-size: 10px;
-            font-weight: 600;
-            padding: 4px 10px;
-            border-radius: 6px;
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-            z-index: 2;
+            position: absolute; bottom: 5px; left: 8px; background: rgba(0,0,0,0.55);
+            color: #ffe0b2; font-size: 9px; font-weight: 600; padding: 3px 8px;
+            border-radius: 5px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 2;
         }
         @keyframes ola { to { transform: translateX(-100px); } }
-        .ola1 { animation: ola 8s linear infinite; }
-        .ola2 { animation: ola 12s linear infinite reverse; }
-        @keyframes brillo { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
-        .sol { animation: brillo 4s ease-in-out infinite; }
-        @keyframes viento { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
-        .hojas { animation: viento 5s ease-in-out infinite alternate; }
-        @keyframes nube-der { 0% { transform: translateX(0); } 100% { transform: translateX(25px); } }
-        .nube { animation: nube-der 10s ease-in-out infinite alternate; }
-        @keyframes telecabina-mov { 0% { transform: translate(22px,36px); } 100% { transform: translate(340px,80px); } }
-        .telecabina { animation: telecabina-mov 8s ease-in-out infinite alternate; }
-        @keyframes nevada { 0% { opacity: 0; } 50% { opacity: 0.6; } 100% { opacity: 0; } }
-        .nieve1 { animation: nevada 4s ease-in-out infinite; }
-        .nieve2 { animation: nevada 4.5s ease-in-out infinite 0.8s; }
+        .ola1 { animation: ola 10s linear infinite; }
+        @keyframes brillo { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+        .sol { animation: brillo 5s ease-in-out infinite; }
+        @keyframes viento { from { transform: rotate(-2deg); } to { transform: rotate(2deg); } }
+        .hojas { animation: viento 6s ease-in-out infinite alternate; }
+        @keyframes nube-der { 0% { transform: translateX(0); } 100% { transform: translateX(20px); } }
+        .nube { animation: nube-der 12s ease-in-out infinite alternate; }
+        @keyframes nevada { 0% { opacity: 0; } 50% { opacity: 0.5; } 100% { opacity: 0; } }
+        .nieve1 { animation: nevada 5s ease-in-out infinite; }
         @keyframes caer { to { stroke-dashoffset: -48; } }
-        .agua { animation: caer 1s linear infinite; }
-        @keyframes bruma-pulso { 0%,100% { opacity: 0.2; } 50% { opacity: 0.4; } }
-        .bruma { animation: bruma-pulso 3s ease-in-out infinite; }
-        @keyframes relampago { 0%,92%,100% { opacity: 0; } 93%,96% { opacity: 1; } 94% { opacity: 0.2; } }
-        .rayo1 { animation: relampago 5s infinite; }
+        .agua { animation: caer 1.2s linear infinite; }
         @keyframes lluvia-line { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 40; } }
-        .lluvia { animation: lluvia-line 0.8s linear infinite; stroke-dasharray: 6 10; }
-        @keyframes girar-globo { to { transform: rotate(360deg); } }
-        .globo-lineas { animation: girar-globo 25s linear infinite; }
-        @keyframes volar-avion { 0% { transform: translate(-10px,40px) rotate(8deg); opacity: 0; } 10% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(390px,0px) rotate(8deg); opacity: 0; } }
-        .avion-mundo { animation: volar-avion 8s linear infinite; }
+        .lluvia { animation: lluvia-line 1s linear infinite; stroke-dasharray: 6 10; }
+        @keyframes relampago { 0%,92%,100% { opacity: 0; } 93%,96% { opacity: 1; } }
+        .rayo1 { animation: relampago 6s infinite; }
+
         .form-section {
-            background: rgba(15,20,40,0.65);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255,145,0,0.1);
-            border-radius: 16px;
-            padding: 16px;
-            margin-bottom: 12px;
-            transform: translateZ(0);
-            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) both;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            background: var(--card-bg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,145,0,0.08); border-radius: 16px; padding: 14px;
+            margin-bottom: 10px; transform: translateZ(0); box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            content-visibility: auto; contain-intrinsic-size: auto 200px;
         }
         .section-title {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--accent);
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+            color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 5px;
         }
-        .section-title::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: rgba(255,145,0,0.2);
-        }
+        .section-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,145,0,0.15); }
         .form-group { margin-bottom: 10px; }
         .form-group:last-child { margin-bottom: 0; }
         .form-group label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 5px;
-            color: rgba(255,255,255,0.9);
-            font-size: 12px;
+            display: block; font-weight: 600; margin-bottom: 5px;
+            color: rgba(255,255,255,0.9); font-size: 11px;
         }
-        .form-group label i { color: var(--accent); margin-right: 4px; width: 14px; text-align: center; font-size: 11px; }
-        select, input[type="text"], input[type="date"], input[type="number"], textarea {
-            width: 100%;
-            padding: 11px 14px;
-            border: 1.5px solid rgba(255,145,0,0.1);
-            border-radius: 12px;
-            font-size: 14px;
-            background: rgba(10,12,28,0.7);
-            color: #fff;
-            font-family: inherit;
-            color-scheme: dark;
-            transition: border-color 0.15s, box-shadow 0.15s;
-            touch-action: manipulation;
-        }
+        .form-group label i { color: var(--accent); margin-right: 3px; width: 13px; text-align: center; font-size: 10px; }
+
+        /* ── NUEVOS SELECTS PERSONALIZADOS ── */
+        .custom-select-wrap { position: relative; }
         select {
-            appearance: none;
-            -webkit-appearance: none;
+            width: 100%; padding: 12px 14px;
+            border: 1.5px solid rgba(255,145,0,0.12); border-radius: 12px;
+            font-size: 13px; background: rgba(10,12,28,0.75); color: #fff;
+            font-family: inherit; color-scheme: dark;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            touch-action: manipulation; cursor: pointer;
+            appearance: none; -webkit-appearance: none;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ff9100' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 12px center;
-            padding-right: 36px;
+            background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px;
         }
-        select:focus, input:focus, textarea:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(255,145,0,0.15);
+        select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,145,0,0.12); }
+
+        /* Descripción debajo del select */
+        .select-desc {
+            font-size: 9px; color: rgba(255,183,77,0.65); margin-top: 3px;
+            font-style: italic; min-height: 16px; transition: all 0.25s ease;
+            display: flex; align-items: center; gap: 4px;
         }
-        textarea { resize: vertical; min-height: 60px; }
+        .select-desc i { font-size: 8px; color: var(--accent); }
+
+        /* ── TARJETAS DE OPCIÓN ── */
+        .opciones-tarjetas {
+            display: flex; flex-direction: column; gap: 6px; margin-top: 8px;
+        }
+        .opcion-tarjeta {
+            display: flex; align-items: center; gap: 10px;
+            background: rgba(10,12,28,0.5); border: 1.5px solid rgba(255,255,255,0.06);
+            border-radius: 12px; padding: 10px 12px; cursor: pointer;
+            transition: all 0.15s ease; touch-action: manipulation;
+        }
+        .opcion-tarjeta:active { transform: scale(0.97); }
+        .opcion-tarjeta.sel {
+            border-color: var(--accent); background: rgba(255,145,0,0.12);
+            box-shadow: 0 0 12px rgba(255,145,0,0.15);
+        }
+        .opcion-tarjeta .op-icon {
+            width: 32px; height: 32px; border-radius: 50%;
+            background: rgba(255,145,0,0.1); display: flex;
+            align-items: center; justify-content: center; font-size: 14px;
+            flex-shrink: 0; color: var(--accent);
+        }
+        .opcion-tarjeta.sel .op-icon { background: rgba(255,145,0,0.25); }
+        .opcion-tarjeta .op-info { flex: 1; min-width: 0; }
+        .opcion-tarjeta .op-titulo { font-size: 12px; font-weight: 700; color: #fff; }
+        .opcion-tarjeta .op-sub { font-size: 9px; color: rgba(255,183,77,0.6); margin-top: 1px; }
+        .opcion-tarjeta .op-check {
+            width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2);
+            flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+            font-size: 9px; color: transparent; transition: all 0.15s ease;
+        }
+        .opcion-tarjeta.sel .op-check { border-color: var(--accent); background: var(--accent); color: #fff; }
+
+        input[type="text"], input[type="date"], input[type="number"], textarea {
+            width: 100%; padding: 11px 14px;
+            border: 1.5px solid rgba(255,145,0,0.1); border-radius: 12px;
+            font-size: 13px; background: rgba(10,12,28,0.7); color: #fff;
+            font-family: inherit; color-scheme: dark;
+            transition: border-color 0.15s; touch-action: manipulation;
+        }
+        input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,145,0,0.1); }
+        textarea { resize: vertical; min-height: 55px; }
         .row { display: flex; gap: 8px; }
         .row .form-group { flex: 1; }
-        .extra-input { margin-top: 6px; }
-        .amenidades-grid, .flex-tags, .transporte-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
+        .extra-input { margin-top: 5px; }
+
+        .amenidades-grid, .flex-tags, .transporte-grid { display: flex; flex-wrap: wrap; gap: 5px; }
         .amenidad-tag, .flex-tag, .transporte-tag {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            background: rgba(10,12,28,0.7);
-            border: 1.5px solid rgba(255,145,0,0.12);
-            border-radius: 16px;
-            padding: 7px 11px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            color: rgba(255,255,255,0.6);
-            transition: all 0.15s ease;
-            touch-action: manipulation;
+            display: flex; align-items: center; gap: 4px;
+            background: rgba(10,12,28,0.7); border: 1.5px solid rgba(255,145,0,0.1);
+            border-radius: 14px; padding: 6px 10px; font-size: 11px; font-weight: 600;
+            cursor: pointer; color: rgba(255,255,255,0.55); transition: all 0.12s ease; touch-action: manipulation;
         }
         .amenidad-tag:active, .flex-tag:active, .transporte-tag:active { transform: scale(0.93); }
-        .amenidad-tag i, .flex-tag i, .transporte-tag i { color: rgba(255,145,0,0.5); font-size: 11px; transition: all 0.15s ease; }
+        .amenidad-tag i, .flex-tag i, .transporte-tag i { color: rgba(255,145,0,0.45); font-size: 10px; }
         .amenidad-tag.sel, .flex-tag.sel, .transporte-tag.sel {
-            border-color: var(--accent);
-            background: rgba(255,145,0,0.2);
-            color: #fff;
-            transform: scale(1.03);
-            box-shadow: 0 0 12px rgba(255,145,0,0.25);
+            border-color: var(--accent); background: rgba(255,145,0,0.18); color: #fff;
+            transform: scale(1.02); box-shadow: 0 0 8px rgba(255,145,0,0.18);
         }
-        .amenidad-tag.sel i, .flex-tag.sel i, .transporte-tag.sel i { color: var(--accent); transform: scale(1.1); }
-
-        /* Descripciones dinámicas */
-        .descripcion-destino, .descripcion-alojamiento, .descripcion-plan {
-            font-size: 10px;
-            color: rgba(255,183,77,0.75);
-            margin-top: 4px;
-            font-style: italic;
-            min-height: 18px;
-            transition: all 0.3s ease;
-            line-height: 1.4;
-        }
+        .amenidad-tag.sel i, .flex-tag.sel i, .transporte-tag.sel i { color: var(--accent); }
 
         .traslado-aereo-box {
-            display: none;
-            margin-top: 10px;
-            padding: 12px;
-            background: rgba(74,158,255,0.06);
-            border: 1px solid rgba(74,158,255,0.2);
+            display: none; margin-top: 8px; padding: 10px;
+            background: rgba(74,158,255,0.05); border: 1px solid rgba(74,158,255,0.18);
             border-radius: 12px;
-            animation: fadeSlideUp 0.3s ease;
         }
         .traslado-aereo-box.visible { display: block; }
-        .traslado-aereo-box .section-title { color: #4a9eff; font-size: 10px; margin-bottom: 10px; }
-        .traslado-aereo-box .section-title::after { background: rgba(74,158,255,0.15); }
+        .traslado-aereo-box .section-title { color: #4a9eff; font-size: 9px; margin-bottom: 8px; }
+        .traslado-aereo-box .section-title::after { background: rgba(74,158,255,0.12); }
+
         .checkbox-group {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            background: rgba(10,12,28,0.5);
-            border: 1.5px solid rgba(255,255,255,0.08);
-            border-radius: 10px;
-            padding: 10px 12px;
-            margin-top: 8px;
+            display: flex; align-items: flex-start; gap: 7px;
+            background: rgba(10,12,28,0.4); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 8px; padding: 8px 10px; margin-top: 6px;
         }
-        .checkbox-group input[type="checkbox"] { width: 16px; height: 16px; flex: 0 0 16px; accent-color: #ff9100; margin-top: 1px; cursor: pointer; }
-        .checkbox-group label { margin: 0; font-size: 11px; font-weight: 500; cursor: pointer; color: rgba(255,255,255,0.8); line-height: 1.4; }
-        .checkbox-group label i { color: #ff9100; margin-right: 3px; font-size: 10px; }
-        .checkbox-group span { display: block; font-size: 10px; color: rgba(255,183,77,0.5); font-weight: 400; margin-top: 2px; }
+        .checkbox-group input[type="checkbox"] { width: 15px; height: 15px; flex: 0 0 15px; accent-color: #ff9100; margin-top: 1px; }
+        .checkbox-group label { margin: 0; font-size: 10px; font-weight: 500; cursor: pointer; color: rgba(255,255,255,0.75); line-height: 1.4; }
+        .checkbox-group label i { color: #ff9100; margin-right: 2px; font-size: 9px; }
+        .checkbox-group span { display: block; font-size: 9px; color: rgba(255,183,77,0.45); font-weight: 400; margin-top: 1px; }
+
         .alerta-cedula {
-            display: none;
-            background: rgba(255,145,0,0.1);
-            border: 1px solid rgba(255,145,0,0.3);
-            border-radius: 8px;
-            padding: 8px 10px;
-            margin-top: 8px;
-            font-size: 10px;
-            color: #ffd9a8;
-            line-height: 1.4;
+            display: none; background: rgba(255,145,0,0.08); border: 1px solid rgba(255,145,0,0.25);
+            border-radius: 6px; padding: 6px 8px; margin-top: 6px; font-size: 9px; color: #ffd9a8; line-height: 1.4;
         }
-        .alerta-cedula.visible { display: flex; align-items: flex-start; gap: 6px; }
-        .alerta-cedula i { color: #ff9100; margin-right: 4px; }
+        .alerta-cedula.visible { display: flex; align-items: flex-start; gap: 5px; }
+        .alerta-cedula i { color: #ff9100; }
+
         .noches-box {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 10px 12px;
-            background: rgba(255,145,0,0.06);
-            border: 1px solid rgba(255,145,0,0.15);
-            border-radius: 10px;
-            margin: 10px 0;
-            font-size: 12px;
-            font-weight: 600;
-            color: #ffe0b2;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 8px 10px; background: rgba(255,145,0,0.05);
+            border: 1px solid rgba(255,145,0,0.12); border-radius: 8px;
+            margin: 8px 0; font-size: 11px; font-weight: 600; color: #ffe0b2;
         }
-        .noches-box .num { color: #fff; font-size: 16px; font-weight: 800; animation: countPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
-        @keyframes countPop { from { transform: scale(1.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .noches-box .num { color: #fff; font-size: 15px; font-weight: 800; }
+
         input[type="range"] {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 100%;
-            height: 4px;
-            border-radius: 10px;
-            background: rgba(255,145,0,0.15);
-            outline: none;
-            border: none;
-            padding: 0;
-            touch-action: manipulation;
+            -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+            border-radius: 10px; background: rgba(255,145,0,0.12); outline: none; border: none; padding: 0; touch-action: manipulation;
         }
         input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 20px; height: 20px;
-            border-radius: 50%;
-            background: var(--accent);
-            cursor: pointer;
-            box-shadow: 0 2px 10px rgba(255,145,0,0.5);
+            -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+            background: var(--accent); cursor: pointer; box-shadow: 0 2px 8px rgba(255,145,0,0.4);
         }
-        .presupuesto-val { text-align: center; font-size: 14px; font-weight: 700; color: #fff; margin-top: 8px; }
+        .presupuesto-val { text-align: center; font-size: 13px; font-weight: 700; color: #fff; margin-top: 6px; }
         .presupuesto-val span { color: var(--accent); }
-        .presupuesto-labels { display: flex; justify-content: space-between; font-size: 10px; color: rgba(255,183,77,0.5); margin-bottom: 4px; }
+        .presupuesto-labels { display: flex; justify-content: space-between; font-size: 9px; color: rgba(255,183,77,0.45); margin-bottom: 3px; }
+
         .btn-gen {
-            width: 100%;
-            padding: 16px;
-            background: linear-gradient(135deg, #ff9100, #e65100);
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 15px;
-            cursor: pointer;
-            box-shadow: 0 4px 20px rgba(255,145,0,0.4);
-            letter-spacing: 0.2px;
-            touch-action: manipulation;
-            transition: transform 0.1s ease, box-shadow 0.2s ease;
-            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.55s both;
+            width: 100%; padding: 15px;
+            background: linear-gradient(135deg, #ff9100, #e65100); color: white;
+            border: none; border-radius: 12px; font-weight: 700; font-size: 14px;
+            cursor: pointer; box-shadow: 0 4px 16px rgba(255,100,0,0.35);
+            letter-spacing: 0.2px; touch-action: manipulation; transition: transform 0.1s ease;
         }
-        .btn-gen:active { transform: scale(0.96); box-shadow: 0 2px 8px rgba(255,145,0,0.3); }
-        #resultado { display: none; margin-top: 16px; animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1); }
+        .btn-gen:active { transform: scale(0.96); }
+
+        #resultado { display: none; margin-top: 14px; }
         .resultado-card {
-            background: rgba(15,20,40,0.8);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(37,211,102,0.25);
-            border-radius: 14px;
-            padding: 16px;
-            border-left: 3px solid #25D366;
-            transform: translateZ(0);
+            background: rgba(15,20,40,0.8); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(37,211,102,0.2); border-radius: 14px; padding: 14px;
+            border-left: 3px solid #25D366; transform: translateZ(0);
         }
-        .resultado-card h3 { color: #25D366; font-size: 1rem; margin-bottom: 12px; }
-        .resumen-detalle { background: rgba(0,0,0,0.3); border-radius: 10px; padding: 12px; margin-bottom: 12px; font-size: 12px; line-height: 1.7; }
-        .resumen-detalle .dato { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-        .resumen-detalle .dato i { color: var(--accent); width: 14px; text-align: center; font-size: 11px; }
+        .resultado-card h3 { color: #25D366; font-size: 0.95rem; margin-bottom: 10px; }
+        .resumen-detalle { background: rgba(0,0,0,0.25); border-radius: 8px; padding: 10px; margin-bottom: 10px; font-size: 11px; line-height: 1.6; }
+        .resumen-detalle .dato { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+        .resumen-detalle .dato i { color: var(--accent); width: 12px; text-align: center; font-size: 10px; }
         .btn-cotizar {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            width: 100%;
-            padding: 14px;
-            background: #25D366;
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 14px;
-            cursor: pointer;
-            text-decoration: none;
-            box-shadow: 0 4px 14px rgba(37,211,102,0.25);
-            touch-action: manipulation;
-            transition: transform 0.1s ease;
+            display: flex; align-items: center; justify-content: center; gap: 7px;
+            width: 100%; padding: 13px; background: #25D366; color: white;
+            border: none; border-radius: 12px; font-weight: 700; font-size: 13px;
+            cursor: pointer; text-decoration: none; box-shadow: 0 3px 12px rgba(37,211,102,0.2);
+            touch-action: manipulation; transition: transform 0.1s ease;
         }
         .btn-cotizar:active { transform: scale(0.96); }
-        .btn-cotizar i { animation: iconBounce 2s infinite; }
-        @keyframes iconBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
         .btn-nueva {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            width: 100%;
-            padding: 12px;
-            background: rgba(255,255,255,0.06);
-            color: rgba(255,255,255,0.7);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 12px;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            margin-top: 8px;
-            touch-action: manipulation;
+            display: flex; align-items: center; justify-content: center; gap: 5px;
+            width: 100%; padding: 11px; background: rgba(255,255,255,0.05);
+            color: rgba(255,255,255,0.65); border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px; font-weight: 600; font-size: 12px; cursor: pointer;
+            margin-top: 7px; touch-action: manipulation;
         }
-        .btn-nueva:active { background: rgba(255,255,255,0.12); transform: scale(0.97); }
-        .footer-servicios { display: flex; justify-content: center; gap: 12px; margin: 20px 0 8px; animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.6s both; }
+        .btn-nueva:active { background: rgba(255,255,255,0.1); }
+
+        .footer-servicios { display: flex; justify-content: center; gap: 10px; margin: 18px 0 6px; }
         .footer-servicio {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 9px;
-            color: rgba(255,183,77,0.5);
-            text-decoration: none;
-            padding: 4px 10px;
-            border-radius: 20px;
-            background: rgba(255,145,0,0.05);
-            border: 1px solid rgba(255,145,0,0.1);
-            transition: all 0.2s ease;
+            display: flex; align-items: center; gap: 4px; font-size: 8px;
+            color: rgba(255,183,77,0.4); text-decoration: none; padding: 3px 8px;
+            border-radius: 20px; background: rgba(255,145,0,0.04); border: 1px solid rgba(255,145,0,0.08);
+            transition: all 0.15s ease;
         }
-        .footer-servicio.activo { color: var(--accent); background: rgba(255,145,0,0.12); border-color: rgba(255,145,0,0.3); }
-        .footer-servicio:active { background: rgba(255,145,0,0.2); transform: scale(0.95); }
-        .footer-copy { font-size: 9px; color: rgba(255,255,255,0.2); text-align: center; animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.65s both; }
+        .footer-servicio.activo { color: var(--accent); background: rgba(255,145,0,0.1); border-color: rgba(255,145,0,0.25); }
+        .footer-servicio:active { background: rgba(255,145,0,0.15); }
+        .footer-copy { font-size: 8px; color: rgba(255,255,255,0.18); text-align: center; }
+
         .confeti-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; }
-        .confeti { position: absolute; width: 8px; height: 8px; animation: caerConfeti 1.2s ease-out forwards; }
-        @keyframes caerConfeti { 0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(540deg); opacity: 0; } }
-        .hint-text { font-size: 10px; color: rgba(255,183,77,0.55); margin-top: 4px; display: flex; align-items: center; gap: 4px; }
-        .hint-text i { color: var(--accent); font-size: 9px; }
+        .confeti { position: absolute; width: 7px; height: 7px; animation: caerConfeti 1s ease-out forwards; }
+        @keyframes caerConfeti { 0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(480deg); opacity: 0; } }
+
+        .hint-text { font-size: 9px; color: rgba(255,183,77,0.5); margin-top: 3px; display: flex; align-items: center; gap: 3px; }
+        .hint-text i { color: var(--accent); font-size: 8px; }
+
         @media (max-width: 360px) {
-            body { padding: 12px 8px 32px; }
-            .escena-box { height: 100px; }
-            .amenidad-tag, .flex-tag, .transporte-tag { padding: 6px 9px; font-size: 11px; }
-            .form-section { padding: 14px; }
+            body { padding: 10px 8px 32px; }
+            .escena-box { height: 90px; }
+            .form-section { padding: 12px; }
+            .opcion-tarjeta { padding: 8px 10px; }
         }
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
@@ -561,22 +339,21 @@
 <div class="card">
     <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Home-Page/" class="home-btn" id="homeBtn" onclick="transicionSalida(event)"><i class="fas fa-chevron-left"></i> Inicio</a>
     <div class="card-header">
-        <div class="logo-wrap"><img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360" loading="eager" width="72" height="72"></div>
+        <div class="logo-wrap"><img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360" loading="eager" width="64" height="64"></div>
         <h2>Destino y Eventos Lotus 360</h2>
         <p class="subtitle">Hospedaje 🏨 · Encuentra tu lugar perfecto</p>
         <p class="slogan">Viaja con Lotus 360</p>
         <div class="estado-box"><span class="dot" id="estado-dot"></span><span id="estado-texto">Verificando...</span></div>
     </div>
 
-    <!-- Escena -->
     <div class="escena-box">
-        <svg class="escena activa" id="escena-playa" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cieloPlaya" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff9a56"/><stop offset="55%" stop-color="#ff6b6b"/><stop offset="100%" stop-color="#3a1c71"/></linearGradient><linearGradient id="marPlaya" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e8fba"/><stop offset="100%" stop-color="#0c2d4a"/></linearGradient></defs><rect width="400" height="130" fill="url(#cieloPlaya)"/><circle class="sol" cx="330" cy="35" r="18" fill="#ffe28a" opacity=".95"/><ellipse class="nube" cx="80" cy="25" rx="32" ry="10" fill="rgba(255,255,255,.18)"/><rect y="70" width="400" height="60" fill="url(#marPlaya)"/><path class="ola ola1" d="M0,74 Q50,64 100,74 T200,74 T300,74 T400,74 T500,74 V130 H0 Z" fill="rgba(255,255,255,.2)"/><path class="ola ola2" d="M0,84 Q50,77 100,84 T200,84 T300,84 T400,84 T500,84 V130 H0 Z" fill="rgba(255,255,255,.13)"/><g transform="translate(44,35)"><path d="M0,85 C-3,58 4,38 9,20" stroke="#5a3825" stroke-width="5" fill="none" stroke-linecap="round"/><g class="hojas"><path d="M9,20 C-14,10 -30,16 -36,28" fill="#2f7d4f"/><path d="M9,20 C32,8 48,16 54,30" fill="#3a9863"/><path d="M9,20 C0,4 6,-11 18,-16" fill="#2f7d4f"/><path d="M9,20 C22,7 38,2 44,-8" fill="#3a9863"/></g></g></svg>
-        <svg class="escena" id="escena-morrocoy" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cieloMorrocoy" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#87ceeb"/><stop offset="60%" stop-color="#4ab8d4"/><stop offset="100%" stop-color="#1a8fa8"/></linearGradient></defs><rect width="400" height="130" fill="url(#cieloMorrocoy)"/><circle class="sol" cx="340" cy="28" r="16" fill="#ffe28a" opacity=".9"/><rect y="72" width="400" height="58" fill="#0a6070" opacity=".7"/><ellipse cx="90" cy="75" rx="55" ry="10" fill="#e8d89a"/><ellipse cx="300" cy="78" rx="45" ry="9" fill="#e8d89a"/><path class="ola ola1" d="M0,75 Q50,67 100,75 T200,75 T300,75 T400,75 T500,75 V130 H0 Z" fill="rgba(255,255,255,.15)"/></svg>
-        <svg class="escena" id="escena-losroques" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cieloRoques" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#a8e6f0"/><stop offset="50%" stop-color="#5dcfe0"/><stop offset="100%" stop-color="#1ab0d0"/></linearGradient></defs><rect width="400" height="130" fill="url(#cieloRoques)"/><circle class="sol" cx="200" cy="22" r="18" fill="#fff9b0" opacity=".85"/><rect y="62" width="400" height="68" fill="#006a82" opacity=".7"/><ellipse cx="200" cy="65" rx="80" ry="14" fill="#f5f0d5"/><ellipse cx="200" cy="63" rx="60" ry="9" fill="#fffde8"/><path class="ola ola1" d="M0,68 Q50,61 100,68 T200,68 T300,68 T400,68 T500,68 V130 H0 Z" fill="rgba(255,255,255,.12)"/></svg>
-        <svg class="escena" id="escena-montana" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cieloMontana" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b8dff5"/><stop offset="100%" stop-color="#7aabce"/></linearGradient></defs><rect width="400" height="130" fill="url(#cieloMontana)"/><circle cx="340" cy="28" r="14" fill="#ffe28a" opacity=".85"/><polygon points="0,130 80,48 160,130" fill="#6b7f8e"/><polygon points="130,130 230,22 330,130" fill="#506070"/><polygon points="206,28 230,22 252,52 215,56" fill="#f0f8ff"/><polygon points="260,130 340,60 400,130" fill="#6b7f8e"/><circle class="nieve1" cx="95" cy="54" r="2" fill="white" opacity=".7"/><circle class="nieve2" cx="228" cy="34" r="2.5" fill="white" opacity=".7"/><g class="telecabina"><line x1="0" y1="0" x2="0" y2="-10" stroke="#2a3540" stroke-width="1.5"/><rect x="-10" y="0" width="20" height="14" rx="3" fill="#ff9100"/></g></svg>
-        <svg class="escena" id="escena-cascada" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cieloCascada" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#c8ecd0"/><stop offset="100%" stop-color="#78b882"/></linearGradient></defs><rect width="400" height="130" fill="url(#cieloCascada)"/><rect x="0" y="0" width="130" height="65" rx="4" fill="#6b4220"/><rect x="120" y="0" width="170" height="61" rx="4" fill="#7a5230"/><line class="agua" x1="118" y1="6" x2="118" y2="125" stroke="#d0eef8" stroke-width="7" stroke-linecap="round" stroke-dasharray="14 10" opacity=".9"/><line class="agua" x1="133" y1="6" x2="133" y2="125" stroke="#b8ddf0" stroke-width="5" stroke-linecap="round" stroke-dasharray="12 9" opacity=".75"/><ellipse class="bruma" cx="132" cy="122" rx="70" ry="12" fill="#ffffff" opacity=".35"/></svg>
-        <svg class="escena" id="escena-tormenta" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cieloTormenta" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0e0e20"/><stop offset="100%" stop-color="#2e1e4a"/></linearGradient></defs><rect width="400" height="130" fill="url(#cieloTormenta)"/><rect y="100" width="400" height="30" fill="#0d1b2e" opacity=".9"/><ellipse cx="90" cy="30" rx="80" ry="24" fill="#1e1e38"/><ellipse cx="280" cy="24" rx="100" ry="28" fill="#1e1e38"/><line class="lluvia" x1="60" y1="55" x2="50" y2="95" stroke="rgba(180,200,255,.3)" stroke-width="1"/><line class="lluvia" x1="200" y1="55" x2="190" y2="95" stroke="rgba(180,200,255,.25)" stroke-width="1"/><path class="rayo rayo1" d="M175,10 L158,55 L178,55 L152,102" stroke="#ffe89b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <svg class="escena" id="escena-mundo" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cieloMundo" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a2a55"/><stop offset="100%" stop-color="#3a5a90"/></linearGradient></defs><rect width="400" height="130" fill="url(#cieloMundo)"/><circle cx="30" cy="20" r="1.5" fill="#fff" opacity=".8"/><circle cx="300" cy="14" r="1.5" fill="#fff" opacity=".8"/><circle cx="200" cy="118" r="72" fill="#2a5c6a" opacity=".6"/><g class="globo-lineas"><circle cx="200" cy="118" r="72" fill="none" stroke="#7dd8c0" stroke-width="1.5" opacity=".5"/></g><path class="avion-mundo" d="M0,0 L22,5 L0,10 L5,5 Z" fill="#ff9100"/></svg>
+        <svg class="escena activa" id="escena-playa" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="p1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff9a56"/><stop offset="55%" stop-color="#ff6b6b"/><stop offset="100%" stop-color="#3a1c71"/></linearGradient><linearGradient id="p2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e8fba"/><stop offset="100%" stop-color="#0c2d4a"/></linearGradient></defs><rect width="400" height="130" fill="url(#p1)"/><circle class="sol" cx="330" cy="35" r="18" fill="#ffe28a" opacity=".9"/><rect y="70" width="400" height="60" fill="url(#p2)"/><path class="ola ola1" d="M0,74 Q50,64 100,74 T200,74 T300,74 T400,74 T500,74 V130 H0 Z" fill="rgba(255,255,255,.18)"/><g transform="translate(44,35)"><path d="M0,85 C-3,58 4,38 9,20" stroke="#5a3825" stroke-width="5" fill="none" stroke-linecap="round"/><g class="hojas"><path d="M9,20 C-14,10 -30,16 -36,28" fill="#2f7d4f"/><path d="M9,20 C32,8 48,16 54,30" fill="#3a9863"/></g></g></svg>
+        <svg class="escena" id="escena-morrocoy" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="m1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#87ceeb"/><stop offset="60%" stop-color="#4ab8d4"/><stop offset="100%" stop-color="#1a8fa8"/></linearGradient></defs><rect width="400" height="130" fill="url(#m1)"/><circle class="sol" cx="340" cy="28" r="16" fill="#ffe28a" opacity=".9"/><rect y="72" width="400" height="58" fill="#0a6070" opacity=".7"/><ellipse cx="90" cy="75" rx="55" ry="10" fill="#e8d89a"/><ellipse cx="300" cy="78" rx="45" ry="9" fill="#e8d89a"/><path class="ola ola1" d="M0,75 Q50,67 100,75 T200,75 T300,75 T400,75 T500,75 V130 H0 Z" fill="rgba(255,255,255,.12)"/></svg>
+        <svg class="escena" id="escena-losroques" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="r1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#a8e6f0"/><stop offset="50%" stop-color="#5dcfe0"/><stop offset="100%" stop-color="#1ab0d0"/></linearGradient></defs><rect width="400" height="130" fill="url(#r1)"/><circle class="sol" cx="200" cy="22" r="18" fill="#fff9b0" opacity=".85"/><rect y="62" width="400" height="68" fill="#006a82" opacity=".7"/><ellipse cx="200" cy="65" rx="80" ry="14" fill="#f5f0d5"/><ellipse cx="200" cy="63" rx="60" ry="9" fill="#fffde8"/></svg>
+        <svg class="escena" id="escena-montana" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="t1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b8dff5"/><stop offset="100%" stop-color="#7aabce"/></linearGradient></defs><rect width="400" height="130" fill="url(#t1)"/><circle cx="340" cy="28" r="14" fill="#ffe28a" opacity=".85"/><polygon points="0,130 80,48 160,130" fill="#6b7f8e"/><polygon points="130,130 230,22 330,130" fill="#506070"/><polygon points="206,28 230,22 252,52 215,56" fill="#f0f8ff"/><circle class="nieve1" cx="95" cy="54" r="2" fill="white" opacity=".7"/></svg>
+        <svg class="escena" id="escena-cascada" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="c1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#c8ecd0"/><stop offset="100%" stop-color="#78b882"/></linearGradient></defs><rect width="400" height="130" fill="url(#c1)"/><rect x="0" y="0" width="130" height="65" rx="4" fill="#6b4220"/><rect x="120" y="0" width="170" height="61" rx="4" fill="#7a5230"/><line class="agua" x1="118" y1="6" x2="118" y2="125" stroke="#d0eef8" stroke-width="7" stroke-linecap="round" stroke-dasharray="14 10" opacity=".85"/></svg>
+        <svg class="escena" id="escena-tormenta" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="s1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0e0e20"/><stop offset="100%" stop-color="#2e1e4a"/></linearGradient></defs><rect width="400" height="130" fill="url(#s1)"/><rect y="100" width="400" height="30" fill="#0d1b2e" opacity=".9"/><ellipse cx="90" cy="30" rx="80" ry="24" fill="#1e1e38"/><ellipse cx="280" cy="24" rx="100" ry="28" fill="#1e1e38"/><line class="lluvia" x1="60" y1="55" x2="50" y2="95" stroke="rgba(180,200,255,.25)" stroke-width="1"/><path class="rayo rayo1" d="M175,10 L158,55 L178,55 L152,102" stroke="#ffe89b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="escena" id="escena-mundo" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="w1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a2a55"/><stop offset="100%" stop-color="#3a5a90"/></linearGradient></defs><rect width="400" height="130" fill="url(#w1)"/><circle cx="200" cy="118" r="72" fill="#2a5c6a" opacity=".6"/><g class="globo-lineas"><circle cx="200" cy="118" r="72" fill="none" stroke="#7dd8c0" stroke-width="1.5" opacity=".5"/></g></svg>
         <div class="escena-caption" id="escena-caption">🏖️ Arena blanca y aguas turquesa</div>
     </div>
 
@@ -585,12 +362,20 @@
         <div class="section-title"><i class="fas fa-map-marker-alt"></i> Destino</div>
         <div class="form-group">
             <label><i class="fas fa-globe-americas"></i>¿A dónde quieres ir?</label>
-            <select id="destino" onchange="toggleExtranjero(); actualizarEscena(); actualizarDescripcionDestino();">
-                <optgroup label="🏖️ Playas"><option value="Isla de Margarita">Isla de Margarita</option><option value="Morrocoy">Morrocoy</option><option value="Los Roques">Los Roques</option></optgroup>
-                <optgroup label="🏔️ Montaña & Naturaleza"><option value="Mérida">Mérida</option><option value="Canaima">Canaima</option><option value="Catatumbo">Catatumbo</option></optgroup>
-                <option value="Extranjero">🌍 Viajar al Extranjero</option>
+            <select id="destino" onchange="toggleExtranjero(); actualizarEscena(); actualizarDescripcion('destino')">
+                <optgroup label="🏖️ Playas">
+                    <option value="Isla de Margarita" data-desc="Playas paradisíacas, duty free y vida nocturna 🛍️">Isla de Margarita</option>
+                    <option value="Morrocoy" data-desc="Cayos de arena blanca y snorkel de clase mundial 🐠">Morrocoy</option>
+                    <option value="Los Roques" data-desc="Archipiélago virgen ideal para desconectar 🎣">Los Roques</option>
+                </optgroup>
+                <optgroup label="🏔️ Montaña & Naturaleza">
+                    <option value="Mérida" data-desc="Montañas andinas y el teleférico más alto 🏔️">Mérida</option>
+                    <option value="Canaima" data-desc="Tepuyes milenarios y el Salto Ángel (979m) 💧">Canaima</option>
+                    <option value="Catatumbo" data-desc="El relámpago eterno: 260 noches de tormentas al año ⚡">Catatumbo</option>
+                </optgroup>
+                <option value="Extranjero" data-desc="Destinos internacionales con las mejores conexiones aéreas 🌍">🌍 Viajar al Extranjero</option>
             </select>
-            <div class="descripcion-destino" id="descripcion-destino">Playas paradisíacas, duty free y vida nocturna 🛍️</div>
+            <div class="select-desc" id="desc-destino"><i class="fas fa-info-circle"></i> Playas paradisíacas, duty free y vida nocturna 🛍️</div>
         </div>
         <div id="div-extranjero" class="form-group" style="display:none;">
             <label><i class="fas fa-search-location"></i>¿A qué país/ciudad?</label>
@@ -603,25 +388,51 @@
         <div class="section-title"><i class="fas fa-hotel"></i> Hospedaje</div>
         <div class="form-group">
             <label><i class="fas fa-building"></i>Tipo de alojamiento</label>
-            <select id="hospedaje" onchange="actualizarDescripcionAlojamiento()">
-                <option value="Hotel">🏨 Hotel</option><option value="Apartamento / Suite">🏠 Apartamento / Suite</option><option value="Posada / Ecolodge">🌿 Posada / Ecolodge</option><option value="Resort">🌴 Resort</option><option value="Sin preferencia">✨ Sin preferencia</option>
-            </select>
-            <div class="descripcion-alojamiento" id="descripcion-alojamiento">Servicio completo, recepción 24h y amenities para una estancia sin preocupaciones</div>
+            <div class="opciones-tarjetas" id="tarjetas-alojamiento">
+                <div class="opcion-tarjeta sel" data-value="Hotel" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')">
+                    <div class="op-icon">🏨</div><div class="op-info"><div class="op-titulo">Hotel</div><div class="op-sub">Servicio completo, recepción 24h y amenities</div></div><div class="op-check"><i class="fas fa-check"></i></div>
+                </div>
+                <div class="opcion-tarjeta" data-value="Apartamento / Suite" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')">
+                    <div class="op-icon">🏠</div><div class="op-info"><div class="op-titulo">Apartamento / Suite</div><div class="op-sub">Más espacio y privacidad, ideal para familias</div></div><div class="op-check"><i class="fas fa-check"></i></div>
+                </div>
+                <div class="opcion-tarjeta" data-value="Posada / Ecolodge" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')">
+                    <div class="op-icon">🌿</div><div class="op-info"><div class="op-titulo">Posada / Ecolodge</div><div class="op-sub">Experiencia auténtica y contacto con la naturaleza</div></div><div class="op-check"><i class="fas fa-check"></i></div>
+                </div>
+                <div class="opcion-tarjeta" data-value="Resort" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')">
+                    <div class="op-icon">🌴</div><div class="op-info"><div class="op-titulo">Resort</div><div class="op-sub">Todo incluido con actividades y entretenimiento</div></div><div class="op-check"><i class="fas fa-check"></i></div>
+                </div>
+                <div class="opcion-tarjeta" data-value="Sin preferencia" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')">
+                    <div class="op-icon">✨</div><div class="op-info"><div class="op-titulo">Sin preferencia</div><div class="op-sub">Te recomendamos la mejor opción para ti</div></div><div class="op-check"><i class="fas fa-check"></i></div>
+                </div>
+            </div>
+            <input type="hidden" id="hospedaje-hidden" value="Hotel">
         </div>
         <div class="form-group">
             <label><i class="fas fa-utensils"></i>Plan de alimentación</label>
-            <select id="plan-alimentacion" onchange="actualizarDescripcionPlan()">
-                <option value="Solo Alojamiento">🛏️ Solo Alojamiento</option>
-                <option value="Desayuno Incluido">☕ Desayuno Incluido</option>
-                <option value="Media Pensión">🍽️ Media Pensión</option>
-                <option value="Pensión Completa">🍽️🥩 Pensión Completa</option>
-                <option value="Todo Incluido">🍹 Todo Incluido</option>
-                <option value="No sé">❓ Quiero opciones</option>
-            </select>
-            <div class="descripcion-plan" id="descripcion-plan">Solo la habitación. Ideal si planeas comer fuera y explorar la gastronomía local 🍕</div>
+            <div class="opciones-tarjetas" id="tarjetas-plan">
+                <div class="opcion-tarjeta sel" data-value="Solo Alojamiento" onclick="seleccionarTarjeta(this, 'plan-hidden')">
+                    <div class="op-icon">🛏️</div><div class="op-info"><div class="op-titulo">Solo Alojamiento</div><div class="op-sub">Ideal si planeas explorar la gastronomía local 🍕</div></div><div class="op-check"><i class="fas fa-check"></i></div>
+                </div>
+                <div class="opcion-tarjeta" data-value="Desayuno Incluido" onclick="seleccionarTarjeta(this, 'plan-hidden')">
+                    <div class="op-icon">☕</div><div class="op-info"><div class="op-titulo">Desayuno Incluido</div><div class="op-sub">Comienza el día con energía. Desayuno cubierto</div></div><div class="op-check"><i class="fas fa-check"></i></div>
+                </div>
+                <div class="opcion-tarjeta" data-value="Media Pensión" onclick="seleccionarTarjeta(this, 'plan-hidden')">
+                    <div class="op-icon">🍽️</div><div class="op-info"><div class="op-titulo">Media Pensión</div><div class="op-sub">Desayuno + cena. Perfecto para pasar el día fuera</div></div><div class="op-check"><i class="fas fa-check"></i></div>
+                </div>
+                <div class="opcion-tarjeta" data-value="Pensión Completa" onclick="seleccionarTarjeta(this, 'plan-hidden')">
+                    <div class="op-icon">🥩</div><div class="op-info"><div class="op-titulo">Pensión Completa</div><div class="op-sub">Desayuno, almuerzo y cena. Cero preocupaciones</div></div><div class="op-check"><i class="fas fa-check"></i></div>
+                </div>
+                <div class="opcion-tarjeta" data-value="Todo Incluido" onclick="seleccionarTarjeta(this, 'plan-hidden')">
+                    <div class="op-icon">🍹</div><div class="op-info"><div class="op-titulo">Todo Incluido</div><div class="op-sub">Comidas, bebidas y snacks. La opción más relajada</div></div><div class="op-check"><i class="fas fa-check"></i></div>
+                </div>
+                <div class="opcion-tarjeta" data-value="No sé" onclick="seleccionarTarjeta(this, 'plan-hidden')">
+                    <div class="op-icon">❓</div><div class="op-info"><div class="op-titulo">Quiero opciones</div><div class="op-sub">Te asesoramos según tu viaje y presupuesto</div></div><div class="op-check"><i class="fas fa-check"></i></div>
+                </div>
+            </div>
+            <input type="hidden" id="plan-hidden" value="Solo Alojamiento">
         </div>
         <div class="form-group">
-            <label><i class="fas fa-concierge-bell"></i>Preferencias <span style="font-weight:400;color:#ffe0b2;font-size:10px;">(toca para elegir)</span></label>
+            <label><i class="fas fa-concierge-bell"></i>Preferencias <span style="font-weight:400;color:#ffe0b2;font-size:9px;">(toca para elegir)</span></label>
             <div class="amenidades-grid">
                 <div class="amenidad-tag" data-value="Piscina" onclick="toggleAmenidad(this)"><i class="fas fa-swimmer"></i>Piscina</div>
                 <div class="amenidad-tag" data-value="Playa privada" onclick="toggleAmenidad(this)"><i class="fas fa-umbrella-beach"></i>Playa priv.</div>
@@ -636,7 +447,7 @@
             </div>
         </div>
         <div class="form-group">
-            <label><i class="fas fa-dollar-sign"></i>Presupuesto por noche <span style="font-weight:400;color:#ffe0b2;font-size:10px;">(USD)</span></label>
+            <label><i class="fas fa-dollar-sign"></i>Presupuesto por noche <span style="font-weight:400;color:#ffe0b2;font-size:9px;">(USD)</span></label>
             <div class="presupuesto-labels"><span>$20</span><span>$500+</span></div>
             <input type="range" id="presupuesto-slider" min="20" max="500" step="10" value="100" oninput="actualizarPresupuesto()">
             <div class="presupuesto-val" id="presupuesto-val">Hasta <span>$100</span> USD/noche</div>
@@ -652,7 +463,7 @@
             <div class="form-group"><label><i class="fas fa-sign-out-alt"></i>Check-out</label><input type="date" id="checkout" onchange="actualizarNoches()"></div>
         </div>
         <div class="noches-box" id="noches-box"><i class="fas fa-moon"></i><span>Selecciona tus fechas</span></div>
-        <div class="hint-text" style="margin-top:8px;"><i class="fas fa-lightbulb"></i> Reservar con 3 semanas de anticipación puede ahorrarte hasta un 30%</div>
+        <div class="hint-text"><i class="fas fa-lightbulb"></i> Reservar con 3 semanas de anticipación puede ahorrarte hasta un 30%</div>
     </div>
 
     <!-- Huéspedes -->
@@ -670,14 +481,14 @@
                 <input type="number" id="ninos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos niños?" style="display:none;" oninput="toggleNinosExtraInput()">
             </div>
         </div>
-        <div class="hint-text" style="margin-bottom:8px;"><i class="fas fa-info-circle"></i> Así calculamos el espacio y tipo de habitación ideal para tu grupo</div>
+        <div class="hint-text" style="margin-bottom:8px;"><i class="fas fa-info-circle"></i> Así calculamos el espacio y tipo de habitación ideal</div>
         <div class="form-group">
             <label><i class="fas fa-bed"></i>Habitaciones</label>
             <select id="habitaciones"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
         </div>
         <div id="contenedor-edades" style="margin-top:8px;"></div>
-        <div class="alerta-cedula" id="alerta-cedula-ninos"><i class="fas fa-exclamation-triangle"></i><span>Si algún niño tiene <strong>9 años o más</strong>, es obligatorio que tenga cédula de identidad vigente para viajar.</span></div>
-        <div class="checkbox-group" id="grupo-cedula-ninos" style="display:none;"><input type="checkbox" id="cedula-ninos"><label for="cedula-ninos"><i class="fas fa-id-card"></i>Los niños que viajan tienen cédula<span>Obligatorio para niños de 9 años o más.</span></label></div>
+        <div class="alerta-cedula" id="alerta-cedula-ninos"><i class="fas fa-exclamation-triangle"></i><span>Si algún niño tiene <strong>9 años o más</strong>, es obligatorio que tenga cédula.</span></div>
+        <div class="checkbox-group" id="grupo-cedula-ninos" style="display:none;"><input type="checkbox" id="cedula-ninos"><label for="cedula-ninos"><i class="fas fa-id-card"></i>Los niños tienen cédula<span>Obligatorio para niños de 9 años o más.</span></label></div>
     </div>
 
     <!-- Transporte -->
@@ -693,7 +504,7 @@
         </div>
         <div class="traslado-aereo-box" id="traslado-aereo-box">
             <div class="section-title" style="color:#4a9eff;"><i class="fas fa-plane-departure"></i> Datos del vuelo</div>
-            <div class="hint-text" style="color:rgba(168,209,255,0.7);margin-bottom:8px;"><i class="fas fa-lightbulb"></i> Te cotizamos hospedaje + vuelo en un solo paquete</div>
+            <div class="hint-text" style="color:rgba(168,209,255,0.6);margin-bottom:8px;"><i class="fas fa-lightbulb"></i> Te cotizamos hospedaje + vuelo en un solo paquete</div>
             <div class="form-group"><label><i class="fas fa-map-pin"></i>Ciudad de origen del vuelo</label><input type="text" id="origen-vuelo" placeholder="Ej: Caracas, Valencia..."></div>
             <div class="form-group">
                 <label><i class="fas fa-calendar-alt"></i>Flexibilidad de fechas de vuelo</label>
@@ -703,7 +514,7 @@
                     <div class="flex-tag" data-value="2" onclick="toggleFlexVuelo(this)"><i class="fas fa-calendar-alt"></i>±2 días</div>
                     <div class="flex-tag" data-value="3" onclick="toggleFlexVuelo(this)"><i class="fas fa-calendar-week"></i>±3 días</div>
                 </div>
-                <div class="hint-text" style="color:rgba(168,209,255,0.5);"><i class="fas fa-lightbulb"></i> Más flexibilidad = mejores tarifas aéreas</div>
+                <div class="hint-text" style="color:rgba(168,209,255,0.45);"><i class="fas fa-lightbulb"></i> Más flexibilidad = mejores tarifas aéreas</div>
             </div>
             <div class="checkbox-group"><input type="checkbox" id="cedula-adultos-vuelo" checked><label for="cedula-adultos-vuelo"><i class="fas fa-id-card"></i>Todos los adultos tienen cédula vigente<span>Si alguna está vencida, coordinamos con la aerolínea.</span></label></div>
         </div>
@@ -715,7 +526,7 @@
         <div class="form-group">
             <label><i class="fas fa-gift"></i>Ocasión especial</label>
             <select id="ocasion"><option value="Vacaciones">Vacaciones</option><option value="Luna de Miel / Aniversario">💑 Luna de Miel</option><option value="Cumpleaños">🎂 Cumpleaños</option><option value="Viaje de Negocios">💼 Negocios</option><option value="Despedida de Soltero/a">🥂 Despedida</option></select>
-            <div class="hint-text"><i class="fas fa-heart"></i> Si es una ocasión especial, el hospedaje puede preparar un detalle sorpresa 🎁</div>
+            <div class="hint-text"><i class="fas fa-heart"></i> Si es una ocasión especial, el hospedaje puede preparar un detalle 🎁</div>
         </div>
         <div class="form-group">
             <label><i class="fas fa-pen"></i>Notas</label>
@@ -736,213 +547,93 @@
 
 <script>
 (function() { var img = new Image(); img.src = 'https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg'; })();
-
-function transicionSalida(e) {
-    e.preventDefault();
-    document.body.classList.add('salir');
-    setTimeout(function() { window.location.href = document.getElementById('homeBtn').href; }, 280);
-}
+function transicionSalida(e) { e.preventDefault(); document.body.classList.add('salir'); setTimeout(function() { window.location.href = document.getElementById('homeBtn').href; }, 250); }
 
 (function() {
     var ahora = new Date();
     var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
-    var dia = ve.getDay();
-    var horaDecimal = ve.getHours() + ve.getMinutes() / 60;
-    var online = false;
-    if (dia >= 1 && dia <= 6) { online = horaDecimal >= 8.5 && horaDecimal < 19; }
-    else if (dia === 0) { online = horaDecimal >= 10 && horaDecimal < 15; }
+    var dia = ve.getDay(); var horaDecimal = ve.getHours() + ve.getMinutes() / 60;
+    var online = (dia >= 1 && dia <= 6) ? (horaDecimal >= 8.5 && horaDecimal < 19) : (dia === 0 && horaDecimal >= 10 && horaDecimal < 15);
     document.getElementById('estado-dot').className = 'dot ' + (online ? 'online' : 'offline');
     document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Fuera de horario · Domingos 10am-3pm' : 'Fuera de horario · Lun-Sáb 8:30am-7pm');
 })();
 
 function hoyISO() { return new Date().toISOString().split('T')[0]; }
-document.getElementById('checkin').min = hoyISO();
-document.getElementById('checkout').min = hoyISO();
+document.getElementById('checkin').min = hoyISO(); document.getElementById('checkout').min = hoyISO();
 
-function ajustarCheckout() {
-    var ci = document.getElementById('checkin');
-    var co = document.getElementById('checkout');
-    co.min = ci.value || hoyISO();
-    if (co.value && co.value < ci.value) co.value = '';
-    actualizarNoches();
-}
-
+function ajustarCheckout() { var ci = document.getElementById('checkin'); var co = document.getElementById('checkout'); co.min = ci.value || hoyISO(); if (co.value && co.value < ci.value) co.value = ''; actualizarNoches(); }
 function actualizarNoches() {
-    var ci = document.getElementById('checkin').value;
-    var co = document.getElementById('checkout').value;
+    var ci = document.getElementById('checkin').value; var co = document.getElementById('checkout').value;
     var box = document.getElementById('noches-box');
     if (!ci || !co) { box.innerHTML = '<i class="fas fa-moon"></i><span>Selecciona tus fechas</span>'; return; }
     var dias = Math.round((new Date(co) - new Date(ci)) / 86400000);
-    if (dias <= 0) box.innerHTML = '<i class="fas fa-sun" style="color:#ff9100;"></i><span>Pasadía</span>';
-    else box.innerHTML = '<i class="fas fa-moon"></i><span><span class="num">' + dias + '</span> noche' + (dias > 1 ? 's' : '') + '</span>';
+    box.innerHTML = dias <= 0 ? '<i class="fas fa-sun" style="color:#ff9100;"></i><span>Pasadía</span>' : '<i class="fas fa-moon"></i><span><span class="num">' + dias + '</span> noche' + (dias > 1 ? 's' : '') + '</span>';
 }
 
-var ESCENAS = {
-    'Isla de Margarita': { id: 'escena-playa', caption: '🏖️ Arena blanca y aguas turquesa' },
-    'Morrocoy': { id: 'escena-morrocoy', caption: '🐠 Cayos, manglares y snorkel' },
-    'Los Roques': { id: 'escena-losroques', caption: '🏝️ Aguas cristalinas y coral' },
-    'Mérida': { id: 'escena-montana', caption: '🚡 Aire de montaña y teleférico' },
-    'Canaima': { id: 'escena-cascada', caption: '💧 Tepuyes y Salto Ángel' },
-    'Catatumbo': { id: 'escena-tormenta', caption: '⚡ Relámpago del Catatumbo' },
-    'Extranjero': { id: 'escena-mundo', caption: '🌍 Tu aventura internacional' }
-};
+var ESCENAS = { 'Isla de Margarita': { id: 'escena-playa', caption: '🏖️ Arena blanca y aguas turquesa' }, 'Morrocoy': { id: 'escena-morrocoy', caption: '🐠 Cayos, manglares y snorkel' }, 'Los Roques': { id: 'escena-losroques', caption: '🏝️ Aguas cristalinas y coral' }, 'Mérida': { id: 'escena-montana', caption: '🚡 Aire de montaña y teleférico' }, 'Canaima': { id: 'escena-cascada', caption: '💧 Tepuyes y Salto Ángel' }, 'Catatumbo': { id: 'escena-tormenta', caption: '⚡ Relámpago del Catatumbo' }, 'Extranjero': { id: 'escena-mundo', caption: '🌍 Tu aventura internacional' } };
+function actualizarEscena() { var dest = document.getElementById('destino').value; var cfg = ESCENAS[dest] || ESCENAS['Isla de Margarita']; var escenas = document.querySelectorAll('.escena'); for (var i = 0; i < escenas.length; i++) escenas[i].classList.remove('activa'); document.getElementById(cfg.id).classList.add('activa'); document.getElementById('escena-caption').textContent = cfg.caption; }
+function toggleExtranjero() { document.getElementById('div-extranjero').style.display = document.getElementById('destino').value === 'Extranjero' ? 'block' : 'none'; }
 
-function actualizarEscena() {
-    var dest = document.getElementById('destino').value;
-    var cfg = ESCENAS[dest] || ESCENAS['Isla de Margarita'];
-    var escenas = document.querySelectorAll('.escena');
-    for (var i = 0; i < escenas.length; i++) escenas[i].classList.remove('activa');
-    document.getElementById(cfg.id).classList.add('activa');
-    document.getElementById('escena-caption').textContent = cfg.caption;
+function actualizarDescripcion(tipo) {
+    var sel = document.getElementById(tipo); var opt = sel.options[sel.selectedIndex];
+    var desc = opt.getAttribute('data-desc') || ''; document.getElementById('desc-' + tipo).innerHTML = '<i class="fas fa-info-circle"></i> ' + desc;
 }
 
-function toggleExtranjero() {
-    document.getElementById('div-extranjero').style.display = document.getElementById('destino').value === 'Extranjero' ? 'block' : 'none';
-}
-
-var descripcionesDestino = {
-    'Isla de Margarita': 'Playas paradisíacas, duty free y vida nocturna 🛍️',
-    'Morrocoy': 'Cayos de arena blanca, aguas cristalinas y snorkel de clase mundial 🐠',
-    'Los Roques': 'Archipiélago virgen, ideal para desconectar y pesca deportiva 🎣',
-    'Mérida': 'Montañas andinas, teleférico más alto y clima fresco de 15°C 🏔️',
-    'Canaima': 'Tepuyes milenarios, Salto Ángel (979m) y naturaleza indómita 💧',
-    'Catatumbo': 'El relámpago eterno: 260 noches de tormentas al año ⚡',
-    'Extranjero': 'Destinos internacionales con las mejores conexiones aéreas 🌍'
-};
-
-var descripcionesAlojamiento = {
-    'Hotel': 'Servicio completo, recepción 24h y amenities para una estancia sin preocupaciones',
-    'Apartamento / Suite': 'Más espacio y privacidad. Perfecto para familias o estancias largas 🏠',
-    'Posada / Ecolodge': 'Experiencia auténtica, contacto con la naturaleza y trato familiar 🌿',
-    'Resort': 'Todo incluido: piscinas, actividades, restaurantes y entretenimiento sin salir 🌴',
-    'Sin preferencia': 'Te recomendaremos la mejor opción según tu presupuesto y estilo de viaje ✨'
-};
-
-var descripcionesPlan = {
-    'Solo Alojamiento': 'Solo la habitación. Ideal si planeas comer fuera y explorar la gastronomía local 🍕',
-    'Desayuno Incluido': 'Comienza el día con energía. Desayuno buffet o continental incluido ☕',
-    'Media Pensión': 'Desayuno + cena. Perfecto para pasar el día fuera y regresar a cenar sin preocuparte 🍽️',
-    'Pensión Completa': 'Desayuno, almuerzo y cena incluidos. Para no pensar en nada más que disfrutar 🥩',
-    'Todo Incluido': 'Todas las comidas, bebidas (con alcohol) y snacks. La opción más relajada 🍹',
-    'No sé': 'Te asesoramos para elegir el plan que mejor se adapte a tu viaje y presupuesto ❓'
-};
-
-function actualizarDescripcionDestino() {
-    document.getElementById('descripcion-destino').textContent = descripcionesDestino[document.getElementById('destino').value] || '';
-}
-function actualizarDescripcionAlojamiento() {
-    document.getElementById('descripcion-alojamiento').textContent = descripcionesAlojamiento[document.getElementById('hospedaje').value] || '';
-}
-function actualizarDescripcionPlan() {
-    document.getElementById('descripcion-plan').textContent = descripcionesPlan[document.getElementById('plan-alimentacion').value] || '';
+// Tarjetas de selección
+function seleccionarTarjeta(el, hiddenId) {
+    var parent = el.parentElement; var tarjetas = parent.querySelectorAll('.opcion-tarjeta');
+    for (var i = 0; i < tarjetas.length; i++) tarjetas[i].classList.remove('sel');
+    el.classList.add('sel'); document.getElementById(hiddenId).value = el.dataset.value;
 }
 
 function toggleAmenidad(el) { el.classList.toggle('sel'); }
-function getAmenidades() {
-    var tags = document.querySelectorAll('.amenidad-tag.sel'), result = [];
-    for (var i = 0; i < tags.length; i++) result.push(tags[i].dataset.value);
-    return result;
-}
+function getAmenidades() { var tags = document.querySelectorAll('.amenidad-tag.sel'), r = []; for (var i = 0; i < tags.length; i++) r.push(tags[i].dataset.value); return r; }
+function actualizarPresupuesto() { var v = document.getElementById('presupuesto-slider').value; document.getElementById('presupuesto-val').innerHTML = v >= 500 ? 'Sin límite — <span>lo mejor</span>' : 'Hasta <span>$' + v + '</span> USD/noche'; }
 
-function actualizarPresupuesto() {
-    var v = document.getElementById('presupuesto-slider').value;
-    document.getElementById('presupuesto-val').innerHTML = v >= 500 ? 'Sin límite — <span>lo mejor</span>' : 'Hasta <span>$' + v + '</span> USD/noche';
-}
+function toggleTransporte(el) { var tags = document.querySelectorAll('#transporte-grid .transporte-tag'); for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel'); el.classList.add('sel'); document.getElementById('traslado-aereo-box').classList.toggle('visible', el.dataset.value === 'traslado-aereo'); }
+function getTransporte() { var sel = document.querySelector('#transporte-grid .transporte-tag.sel'); return sel ? sel.dataset.value : 'vehiculo-propio'; }
+function toggleFlexVuelo(el) { var tags = document.querySelectorAll('#flex-vuelo-tags .flex-tag'); for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel'); el.classList.add('sel'); }
+function getFlexVuelo() { var sel = document.querySelector('#flex-vuelo-tags .flex-tag.sel'); return sel ? parseInt(sel.dataset.value) : 0; }
 
-function toggleTransporte(el) {
-    var tags = document.querySelectorAll('#transporte-grid .transporte-tag');
-    for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel');
-    el.classList.add('sel');
-    document.getElementById('traslado-aereo-box').classList.toggle('visible', el.dataset.value === 'traslado-aereo');
-}
-function getTransporte() {
-    var sel = document.querySelector('#transporte-grid .transporte-tag.sel');
-    return sel ? sel.dataset.value : 'vehiculo-propio';
-}
-
-function toggleFlexVuelo(el) {
-    var tags = document.querySelectorAll('#flex-vuelo-tags .flex-tag');
-    for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel');
-    el.classList.add('sel');
-}
-function getFlexVuelo() {
-    var sel = document.querySelector('#flex-vuelo-tags .flex-tag.sel');
-    return sel ? parseInt(sel.dataset.value) : 0;
-}
-
-function toggleAdultosExtra() {
-    var extra = document.getElementById('adultos-extra');
-    extra.style.display = document.getElementById('adultos').value === 'more' ? 'block' : 'none';
-    if (document.getElementById('adultos').value !== 'more') extra.value = '';
-}
-function getAdultosCount() {
-    var sel = document.getElementById('adultos');
-    if (sel.value === 'more') { var v = parseInt(document.getElementById('adultos-extra').value); return isNaN(v) ? null : v; }
-    return parseInt(sel.value);
-}
-
-function toggleNinosExtra() {
-    var extra = document.getElementById('ninos-extra');
-    extra.style.display = document.getElementById('ninos').value === 'more' ? 'block' : 'none';
-    if (document.getElementById('ninos').value !== 'more') extra.value = '';
-    actualizarNinosUI();
-}
+function toggleAdultosExtra() { var e = document.getElementById('adultos-extra'); e.style.display = document.getElementById('adultos').value === 'more' ? 'block' : 'none'; if (document.getElementById('adultos').value !== 'more') e.value = ''; }
+function getAdultosCount() { var sel = document.getElementById('adultos'); if (sel.value === 'more') { var v = parseInt(document.getElementById('adultos-extra').value); return isNaN(v) ? null : v; } return parseInt(sel.value); }
+function toggleNinosExtra() { var e = document.getElementById('ninos-extra'); e.style.display = document.getElementById('ninos').value === 'more' ? 'block' : 'none'; if (document.getElementById('ninos').value !== 'more') e.value = ''; actualizarNinosUI(); }
 function toggleNinosExtraInput() { actualizarNinosUI(); }
-function getNinosCount() {
-    var sel = document.getElementById('ninos');
-    if (sel.value === 'more') { var v = parseInt(document.getElementById('ninos-extra').value); return isNaN(v) ? null : v; }
-    return parseInt(sel.value);
-}
+function getNinosCount() { var sel = document.getElementById('ninos'); if (sel.value === 'more') { var v = parseInt(document.getElementById('ninos-extra').value); return isNaN(v) ? null : v; } return parseInt(sel.value); }
 function actualizarNinosUI() {
-    var count = getNinosCount();
-    document.getElementById('grupo-cedula-ninos').style.display = count > 0 ? 'flex' : 'none';
+    var count = getNinosCount(); document.getElementById('grupo-cedula-ninos').style.display = count > 0 ? 'flex' : 'none';
     var alerta = document.getElementById('alerta-cedula-ninos');
-    if (count > 0) { alerta.classList.add('visible'); generarEdades(count); }
-    else { alerta.classList.remove('visible'); document.getElementById('contenedor-edades').innerHTML = ''; }
+    if (count > 0) { alerta.classList.add('visible'); generarEdades(count); } else { alerta.classList.remove('visible'); document.getElementById('contenedor-edades').innerHTML = ''; }
 }
 function generarEdades(count) {
-    var cont = document.getElementById('contenedor-edades');
-    if (!count || count <= 0) { cont.innerHTML = ''; return; }
-    var html = '<label style="font-size:10px;color:#ffe0b2;margin-bottom:6px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>';
+    var cont = document.getElementById('contenedor-edades'); if (!count || count <= 0) { cont.innerHTML = ''; return; }
+    var html = '<label style="font-size:9px;color:#ffe0b2;margin-bottom:5px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>';
     var max = Math.min(count, 10);
     for (var i = 1; i <= max; i++) html += '<input type="number" class="edad-nino extra-input" min="2" max="11" placeholder="Niño ' + i + ': edad (2-11)" style="margin-bottom:4px;">';
     if (count > 10) html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen: ej. 3 de 8 años, 2 de 5">';
     cont.innerHTML = html;
-    var inputs = cont.querySelectorAll('.edad-nino');
-    for (var j = 0; j < inputs.length; j++) inputs[j].addEventListener('input', actualizarAlertaCedula);
+    var inputs = cont.querySelectorAll('.edad-nino'); for (var j = 0; j < inputs.length; j++) inputs[j].addEventListener('input', actualizarAlertaCedula);
 }
 function actualizarAlertaCedula() {
     var inputs = document.querySelectorAll('.edad-nino'), tiene = false;
     for (var i = 0; i < inputs.length; i++) { if (parseInt(inputs[i].value) >= 9) { tiene = true; break; } }
     var alerta = document.getElementById('alerta-cedula-ninos');
-    if (tiene) { alerta.style.borderColor = 'rgba(255,80,80,0.5)'; alerta.style.background = 'rgba(255,80,80,0.12)'; alerta.querySelector('span').innerHTML = '⚠️ <strong>Obligatorio:</strong> Los niños de 9 años o más deben tener cédula para abordar.'; }
-    else { alerta.style.borderColor = 'rgba(255,145,0,0.3)'; alerta.style.background = 'rgba(255,145,0,0.1)'; alerta.querySelector('span').innerHTML = 'Si algún niño tiene <strong>9 años o más</strong>, es obligatorio que tenga cédula vigente.'; }
+    alerta.style.borderColor = tiene ? 'rgba(255,80,80,0.5)' : 'rgba(255,145,0,0.25)';
+    alerta.style.background = tiene ? 'rgba(255,80,80,0.1)' : 'rgba(255,145,0,0.08)';
+    alerta.querySelector('span').innerHTML = tiene ? '⚠️ <strong>Obligatorio:</strong> Los niños de 9+ años deben tener cédula.' : 'Niños ≥9 años necesitan cédula vigente para viajar.';
 }
 
 function lanzarConfeti() {
-    var colores = ['#ff9100', '#25D366', '#ffd166', '#ffb74d', '#e65100'];
-    var container = document.createElement('div');
-    container.className = 'confeti-container';
-    var fragment = document.createDocumentFragment();
-    for (var i = 0; i < 25; i++) {
-        var confeti = document.createElement('div');
-        confeti.className = 'confeti';
-        confeti.style.left = Math.random() * 100 + '%';
-        confeti.style.animationDelay = Math.random() * 0.5 + 's';
-        confeti.style.animationDuration = (Math.random() * 1 + 0.8) + 's';
-        confeti.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)];
-        fragment.appendChild(confeti);
-    }
-    container.appendChild(fragment);
-    document.body.appendChild(container);
-    setTimeout(function() { container.remove(); }, 2000);
+    var colores = ['#ff9100', '#25D366', '#ffd166', '#ffb74d']; var container = document.createElement('div'); container.className = 'confeti-container'; var f = document.createDocumentFragment();
+    for (var i = 0; i < 20; i++) { var c = document.createElement('div'); c.className = 'confeti'; c.style.left = Math.random() * 100 + '%'; c.style.animationDelay = Math.random() * 0.4 + 's'; c.style.animationDuration = (Math.random() * 0.8 + 0.7) + 's'; c.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)]; f.appendChild(c); }
+    container.appendChild(f); document.body.appendChild(container); setTimeout(function() { container.remove(); }, 1500);
 }
 
 function generarSolicitud() {
     var destBase = document.getElementById('destino').value;
     var dest = destBase === 'Extranjero' ? document.getElementById('input-extranjero').value.trim() : destBase;
-    var hosp = document.getElementById('hospedaje').value;
-    var plan = document.getElementById('plan-alimentacion').value;
+    var hosp = document.getElementById('hospedaje-hidden').value;
+    var plan = document.getElementById('plan-hidden').value;
     var ci = document.getElementById('checkin').value, co = document.getElementById('checkout').value;
     var adultos = getAdultosCount(), ninos = getNinosCount();
     var habs = document.getElementById('habitaciones').value;
@@ -952,62 +643,28 @@ function generarSolicitud() {
     var ocasion = document.getElementById('ocasion').value;
     var notas = document.getElementById('notas').value.trim();
     var transporte = getTransporte();
-
     if (!dest || !ci || !co || adultos === null) { alert('Completa destino, fechas y cantidad de adultos.'); return; }
     var noches = Math.round((new Date(co) - new Date(ci)) / 86400000);
-
-    var edadesNinos = '';
-    var resumenEl = document.getElementById('edades-resumen');
+    var edadesNinos = ''; var resumenEl = document.getElementById('edades-resumen');
     if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; }
-    else {
-        var inputs = document.querySelectorAll('.edad-nino'), arr = [];
-        for (var i = 0; i < inputs.length; i++) arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años');
-        edadesNinos = arr.length ? arr.join(', ') : 'No especificadas';
-    }
-
-    var asesores = ['584244634041', '584244900601', '584147020527'];
-    var tlf = asesores[Math.floor(Math.random() * asesores.length)];
-
+    else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
+    var asesores = ['584244634041', '584244900601', '584147020527']; var tlf = asesores[Math.floor(Math.random() * asesores.length)];
     var lineas = ['🌟 *COTIZACIÓN HOSPEDAJE - LOTUS 360*','','📍 *Destino:* ' + dest,'🏨 *Alojamiento:* ' + hosp,'🍽️ *Plan:* ' + plan,'📅 *Check-in:* ' + ci,'📅 *Check-out:* ' + co,'🌙 *Noches:* ' + noches,'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos,'🛏️ *Habitaciones:* ' + habs,'💰 *Presupuesto/noche:* ' + presTexto];
     if (amenidades.length) lineas.push('✨ *Preferencias:* ' + amenidades.join(' · '));
     if (ninos > 0) { lineas.push('👶 *Edades niños:* ' + edadesNinos); lineas.push('🆔 *Niños con cédula:* ' + (document.getElementById('cedula-ninos').checked ? 'Sí' : 'No - REVISAR')); }
-    if (transporte === 'traslado-aereo') {
-        lineas.push('','✈️ *TRASLADO AÉREO SOLICITADO*','🛫 *Origen vuelo:* ' + (document.getElementById('origen-vuelo').value.trim() || 'No especificado'));
-        lineas.push('📅 *Flexibilidad vuelo:* ' + (getFlexVuelo() > 0 ? '±' + getFlexVuelo() + ' día(s)' : 'Fechas fijas'));
-        lineas.push('🆔 *Cédulas adultos vigentes:* ' + (document.getElementById('cedula-adultos-vuelo').checked ? 'Sí' : 'No - REVISAR'));
-    } else if (transporte === 'transporte-terrestre') { lineas.push('🚌 *Transporte terrestre solicitado*'); }
-    else { lineas.push('🚗 *Llega por medios propios*'); }
+    if (transporte === 'traslado-aereo') { lineas.push('','✈️ *TRASLADO AÉREO*','🛫 *Origen:* ' + (document.getElementById('origen-vuelo').value.trim() || 'No especificado'),'📅 *Flexibilidad:* ' + (getFlexVuelo() > 0 ? '±' + getFlexVuelo() + ' día(s)' : 'Fijas'),'🆔 *Cédulas adultos:* ' + (document.getElementById('cedula-adultos-vuelo').checked ? 'Sí' : 'No - REVISAR')); }
+    else if (transporte === 'transporte-terrestre') { lineas.push('🚌 *Transporte terrestre*'); } else { lineas.push('🚗 *Vehículo propio*'); }
     if (ocasion !== 'Vacaciones') lineas.push('🎉 *Ocasión:* ' + ocasion);
     if (notas) lineas.push('📝 *Notas:* ' + notas);
-    lineas.push('','✅ *Enviar opciones con precios. ¡Gracias!*');
-
+    lineas.push('','✅ *Enviar opciones. ¡Gracias!*');
     var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(lineas.join('\n'));
-
     document.getElementById('resultado').style.display = 'block';
-    document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Listo!</h3><div class="resumen-detalle">' +
-        '<div class="dato"><i class="fas fa-map-marker-alt"></i> <strong>' + dest + '</strong></div>' +
-        '<div class="dato"><i class="fas fa-hotel"></i> ' + hosp + ' · ' + plan + '</div>' +
-        '<div class="dato"><i class="fas fa-calendar"></i> ' + ci + ' → ' + co + ' (' + noches + ' noches)</div>' +
-        '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + habs + ' hab.</div>' +
-        '<div class="dato"><i class="fas fa-tag"></i> ' + presTexto + '/noche</div>' +
-        (amenidades.length ? '<div class="dato"><i class="fas fa-star"></i> ' + amenidades.join(' · ') + '</div>' : '') +
-        '<div class="dato"><i class="fas fa-route"></i> ' + (transporte === 'traslado-aereo' ? '✈️ Traslado aéreo' : transporte === 'transporte-terrestre' ? '🚌 Transporte terrestre' : '🚗 Vehículo propio') + '</div>' +
-        '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Enviar a un Asesor</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Nueva cotización</button></div>';
-    document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    lanzarConfeti();
+    document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Listo!</h3><div class="resumen-detalle">' + '<div class="dato"><i class="fas fa-map-marker-alt"></i> <strong>' + dest + '</strong></div>' + '<div class="dato"><i class="fas fa-hotel"></i> ' + hosp + ' · ' + plan + '</div>' + '<div class="dato"><i class="fas fa-calendar"></i> ' + ci + ' → ' + co + ' (' + noches + ' noches)</div>' + '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + habs + ' hab.</div>' + '<div class="dato"><i class="fas fa-tag"></i> ' + presTexto + '/noche</div>' + (amenidades.length ? '<div class="dato"><i class="fas fa-star"></i> ' + amenidades.join(' · ') + '</div>' : '') + '<div class="dato"><i class="fas fa-route"></i> ' + (transporte === 'traslado-aereo' ? '✈️ Traslado aéreo' : transporte === 'transporte-terrestre' ? '🚌 Transporte terrestre' : '🚗 Vehículo propio') + '</div>' + '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Enviar a un Asesor</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Nueva cotización</button></div>';
+    document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' }); lanzarConfeti();
 }
+function nuevaCotizacion() { var r = document.getElementById('resultado'); r.style.opacity = '0'; r.style.transform = 'translateY(8px)'; r.style.transition = 'all 0.25s ease'; setTimeout(function() { r.style.display = 'none'; r.innerHTML = ''; r.style.opacity = '1'; r.style.transform = 'translateY(0)'; window.scrollTo({ top: 0, behavior: 'smooth' }); }, 250); }
 
-function nuevaCotizacion() {
-    var r = document.getElementById('resultado');
-    r.style.opacity = '0'; r.style.transform = 'translateY(10px)'; r.style.transition = 'all 0.3s ease';
-    setTimeout(function() { r.style.display = 'none'; r.innerHTML = ''; r.style.opacity = '1'; r.style.transform = 'translateY(0)'; window.scrollTo({ top: 0, behavior: 'smooth' }); }, 300);
-}
-
-actualizarEscena();
-actualizarPresupuesto();
-actualizarDescripcionDestino();
-actualizarDescripcionAlojamiento();
-actualizarDescripcionPlan();
+actualizarEscena(); actualizarPresupuesto(); actualizarDescripcion('destino');
 </script>
 </body>
 </html>
