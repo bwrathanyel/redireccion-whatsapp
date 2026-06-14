@@ -250,7 +250,7 @@
                 <optgroup label="✈️ Destinos Nacionales (con aeropuerto)">
                     <option value="CCS|Caracas" data-desc="Capital de Venezuela, conexiones internacionales y negocios 🏙️">Caracas (CCS) · Maiquetía</option>
                     <option value="MAR|Maracaibo" data-desc="Tierra del sol amada, gastronomía y el Lago de Maracaibo 🌅">Maracaibo (MAR) · La Chinita</option>
-                    <option value="BLA|Barcelona" data-desc="Puerta de entrada al oriente venezolano, playas y cultura 🏖️">Barcelona (BLA) · Gral. José Antonio Anzoátegui</option>
+                    <option value="BLA|Barcelona" data-desc="Puerta de entrada al oriente venezolano, playas y cultura 🏖️">Barcelona (BLA) · Gral. Anzoátegui</option>
                     <option value="PMV|Isla de Margarita" data-desc="Playas paradisíacas, duty free y vida nocturna 🛍️">Isla de Margarita (PMV) · Santiago Mariño</option>
                     <option value="VLN|Valencia" data-desc="Ciudad industrial, museos y gastronomía carabobeña 🏭">Valencia (VLN) · Arturo Michelena</option>
                     <option value="PZO|Puerto Ordaz" data-desc="Naturaleza, Parques Nacionales y el río Caroní 🌿">Puerto Ordaz (PZO) · Manuel Carlos Piar</option>
@@ -333,7 +333,6 @@
     <button class="btn-gen" onclick="generarSolicitud()"><i class="fas fa-paper-plane" style="margin-right:6px;"></i>Cotizar Vuelo</button>
     <div id="resultado"></div>
 
-    <!-- Footer: Full Day | Hospedaje | Boletería -->
     <div class="footer-servicios">
         <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tour/" class="footer-servicio fullday"><i class="fas fa-umbrella-beach"></i> Full Day</a>
         <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="footer-servicio hospedaje"><i class="fas fa-hotel"></i> Hospedaje</a>
@@ -413,7 +412,10 @@ function generarSolicitud() {
 
     if (!origen || !destino || !fechaIda || adultos === null) { alert('Completa origen, destino, fecha de ida y cantidad de adultos.'); return; }
 
-    var asesores = ['584244634041', '584244900601', '584147020527']; var tlf = asesores[Math.floor(Math.random() * asesores.length)];
+    // Números de asesores de boletería
+    var asesores = ['584244269876', '584244269876', '584142495020', '584142495020', '584140415685'];
+    var tlf = asesores[Math.floor(Math.random() * asesores.length)];
+    
     var lineas = ['✈️ *COTIZACIÓN DE VUELO - LOTUS 360*','','🔄 *Tipo:* ' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida'),'📍 *Origen:* ' + origen,'📍 *Destino:* ' + destino,'📅 *Fecha ida:* ' + fechaIda,(tipoViaje === 'ida-vuelta' && fechaVuelta ? '📅 *Fecha vuelta:* ' + fechaVuelta : ''),(flexibilidad > 0 ? '📆 *Flexibilidad:* ±' + flexibilidad + ' día(s)' : '📆 *Fechas fijas*'),'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos + ' | *Bebés:* ' + bebes,(ninos > 0 ? '👶 *Edades:* ' + edadesNinos : ''),'🧳 *Equipaje:* ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado'),'🆔 *Cédulas adultos:* ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR'),(ninos > 0 ? '🆔 *Cédulas niños:* ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') : ''),(ocasion !== 'Viaje regular' ? '🎉 *Ocasión:* ' + ocasion : ''),(notas ? '📝 *Notas:* ' + notas : ''),'','✅ *Enviar opciones con precios. ¡Gracias!*'];
     var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(lineas.filter(function(l) { return l !== ''; }).join('\n'));
 
