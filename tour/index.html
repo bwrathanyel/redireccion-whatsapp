@@ -10,6 +10,7 @@
     <title>Lotus 360 · Tours & Full Day</title>
     <link rel="preload" as="image" href="https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg">
     <link rel="preload" as="image" href="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png">
+    <link rel="preload" as="image" href="https://bwrathanyel.github.io/redireccion-whatsapp/tour/cayosal.jpeg">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <style>
         :root {
@@ -85,9 +86,10 @@
 
         /* Imagen del tour */
         .tour-img-box {
-            position: relative; width: 100%; height: 160px; border-radius: 14px; overflow: hidden;
+            position: relative; width: 100%; height: 170px; border-radius: 14px; overflow: hidden;
             margin-bottom: 10px; border: 1px solid rgba(255,145,0,0.2);
             box-shadow: 0 4px 16px rgba(0,0,0,0.3); animation: fadeSlideUp 0.4s ease both;
+            background: linear-gradient(135deg,#1a6b8a,#0c2d4a);
         }
         @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .tour-img-box img {
@@ -95,8 +97,8 @@
         }
         .tour-img-overlay {
             position: absolute; bottom: 0; left: 0; right: 0;
-            background: linear-gradient(transparent, rgba(0,0,0,0.7));
-            padding: 20px 12px 8px;
+            background: linear-gradient(transparent, rgba(0,0,0,0.75));
+            padding: 24px 12px 8px;
         }
         .tour-img-overlay .lugar { font-size: 13px; font-weight: 700; }
         .tour-img-overlay .fecha { font-size: 10px; color: var(--accent); font-weight: 600; }
@@ -219,9 +221,7 @@
         .btn-nueva:active { background: rgba(255,255,255,0.1); }
 
         /* Cross-sell */
-        .cross-sell {
-            display: flex; gap: 8px; margin-top: 8px;
-        }
+        .cross-sell { display: flex; gap: 8px; margin-top: 8px; }
         .cross-link {
             flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
             background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
@@ -267,9 +267,9 @@
 
     <!-- Imagen del tour -->
     <div class="tour-img-box">
-        <img src="https://images.unsplash.com/photo-1590523741832-0e2d1b0b0e6c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Cayo Sal - Chichiriviche" loading="lazy" onerror="this.style.display='none';this.parentElement.style.background='linear-gradient(135deg,#1a6b8a,#0c2d4a)';">
+        <img src="https://bwrathanyel.github.io/redireccion-whatsapp/tour/cayosal.jpeg" alt="Cayo Sal - Chichiriviche, Falcón" loading="eager">
         <div class="tour-img-overlay">
-            <div class="lugar">🌴 Cayo Sal · Chichiriviche</div>
+            <div class="lugar">🌴 Cayo Sal · Chichiriviche, Falcón</div>
             <div class="fecha">📅 27 de Junio · ¡Nos escapamos!</div>
         </div>
     </div>
@@ -279,7 +279,7 @@
         <div class="section-title"><i class="fas fa-umbrella-beach"></i> Tour Disponible</div>
         <div class="form-group">
             <label><i class="fas fa-map-pin"></i>Elige tu aventura</label>
-            <select id="tour" onchange="actualizarTour()">
+            <select id="tour">
                 <option value="cayo-sal">🌴 Cayo Sal - Chichiriviche, Falcón</option>
                 <option value="proximamente" disabled>✨ Próximamente más destinos...</option>
             </select>
@@ -288,7 +288,7 @@
     </div>
 
     <!-- Info del Tour -->
-    <div class="form-section" id="info-tour">
+    <div class="form-section">
         <div class="section-title"><i class="fas fa-info-circle"></i> Detalles del Tour</div>
         <div style="display:flex;justify-content:center;gap:20px;margin-bottom:10px;flex-wrap:wrap;">
             <span style="font-size:10px;color:var(--text-warm);"><i class="fas fa-clock" style="color:#ff9100;"></i> 6:00 am - 4:00 pm</span>
@@ -335,17 +335,40 @@
         <div class="section-title"><i class="fas fa-user"></i> Tus Datos</div>
         <div class="form-group">
             <label><i class="fas fa-user"></i>Nombre completo</label>
-            <input type="text" id="nombre" placeholder="Ej: María Pérez">
+            <input type="text" id="nombre" placeholder="Ej: Andrea Hernández" autocomplete="name">
         </div>
-        <div class="form-group">
-            <label><i class="fas fa-users"></i>¿Cuántas personas?</label>
-            <select id="personas" onchange="togglePersonasExtra()">
-                <option value="1">1 persona</option><option value="2" selected>2 personas</option>
-                <option value="3">3 personas</option><option value="4">4 personas</option><option value="5">5 personas</option><option value="more">Más de 5</option>
-            </select>
-            <input type="number" id="personas-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántas personas?" style="display:none;">
+        <div class="row">
+            <div class="form-group">
+                <label><i class="fas fa-users"></i>Adultos</label>
+                <select id="adultos">
+                    <option value="1">1 adulto</option><option value="2" selected>2 adultos</option>
+                    <option value="3">3 adultos</option><option value="4">4 adultos</option><option value="5">5 adultos</option><option value="more">Más de 5</option>
+                </select>
+                <input type="number" id="adultos-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántos adultos?" style="display:none;">
+            </div>
+            <div class="form-group">
+                <label><i class="fas fa-child"></i>Niños <span style="font-weight:400;color:var(--text-warm);font-size:9px;">(2-11)</span></label>
+                <select id="ninos" onchange="toggleNinosUI()">
+                    <option value="0" selected>Sin niños</option><option value="1">1 niño</option><option value="2">2 niños</option>
+                    <option value="3">3 niños</option><option value="4">4 niños</option><option value="more">Más de 4</option>
+                </select>
+                <input type="number" id="ninos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos niños?" style="display:none;">
+            </div>
         </div>
-        <div class="checkbox-group">
+        <div class="row">
+            <div class="form-group">
+                <label><i class="fas fa-baby"></i>Bebés <span style="font-weight:400;color:var(--text-warm);font-size:9px;">(0-23m)</span></label>
+                <select id="bebes">
+                    <option value="0" selected>Sin bebés</option><option value="1">1 bebé</option><option value="2">2 bebés</option>
+                </select>
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-end;">
+                <!-- placeholder visual -->
+            </div>
+        </div>
+        <div class="hint-text"><i class="fas fa-info-circle"></i> Los bebés no pagan, pero necesitamos saber cuántos vienen</div>
+        <div id="contenedor-edades" style="margin-top:8px;"></div>
+        <div class="checkbox-group" style="margin-top:8px;">
             <input type="checkbox" id="terminos" checked>
             <label for="terminos"><i class="fas fa-check-circle"></i>Acepto los términos y condiciones del tour<span>El cupo se confirma con el pago de la reserva.</span></label>
         </div>
@@ -355,14 +378,13 @@
     <div class="form-section">
         <div class="section-title"><i class="fas fa-pen"></i> Notas</div>
         <div class="form-group">
-            <textarea id="notas" placeholder="¿Algo más que debamos saber? Ej: alergias, dieta especial (pollo o pescado)..." rows="2"></textarea>
+            <textarea id="notas" placeholder="¿Algo más que debamos saber? Ej: alergias, prefiero pollo o pescado, dieta especial..." rows="2"></textarea>
         </div>
     </div>
 
     <button class="btn-gen" onclick="generarSolicitud()"><i class="fas fa-paper-plane" style="margin-right:6px;"></i>Reservar mi Cupo</button>
     <div id="resultado"></div>
 
-    <!-- Cross-sell -->
     <div class="cross-sell">
         <a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="cross-link"><i class="fas fa-hotel"></i> ¿Necesitas hospedaje?</a>
         <a href="https://bwrathanyel.github.io/redireccion-whatsapp/boleteria/" class="cross-link"><i class="fas fa-plane"></i> ¿Boleto aéreo?</a>
@@ -394,26 +416,11 @@ var planSeleccionado = 'basico';
 var incluyePlanes = {
     'basico': {
         titulo: '✅ INCLUYE - PLAN BÁSICO · $25 USD',
-        items: [
-            '🚐 Traslado en cómoda encava con A/A',
-            '⚓ Salida desde embarcadero privado',
-            '🌊 Traslado en lancha a Cayo Sal',
-            '🧊 Hidratación + Hielo constante',
-            '🙋 Guías y logística con la mejor energía',
-            '🎶 Música (Rumba) 🥳'
-        ]
+        items: ['🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳']
     },
     'full360': {
         titulo: '✅ INCLUYE - PLAN FULL360 · $35 USD',
-        items: [
-            '🍗🐟 Almuerzo playero (pollo o pescado + ensalada y tostón)',
-            '🚐 Traslado en cómoda encava con A/A',
-            '⚓ Salida desde embarcadero privado',
-            '🌊 Traslado en lancha a Cayo Sal',
-            '🧊 Hidratación + Hielo constante',
-            '🙋 Guías y logística con la mejor energía',
-            '🎶 Música (Rumba) 🥳'
-        ]
+        items: ['🍗🐟 Almuerzo playero (pollo o pescado + ensalada y tostón)','🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳']
     }
 };
 
@@ -422,32 +429,51 @@ function seleccionarPlan(el) {
     for (var i = 0; i < cards.length; i++) cards[i].classList.remove('sel');
     el.classList.add('sel');
     planSeleccionado = el.dataset.plan;
-    
-    var box = document.getElementById('incluye-box');
-    var titulo = document.getElementById('incluye-titulo');
-    var lista = document.getElementById('incluye-lista');
-    
     var plan = incluyePlanes[planSeleccionado];
-    titulo.textContent = plan.titulo;
-    
+    document.getElementById('incluye-titulo').textContent = plan.titulo;
     var html = '';
-    for (var j = 0; j < plan.items.length; j++) {
-        html += '<div class="incluye-item"><i class="fas fa-check"></i> ' + plan.items[j] + '</div>';
-    }
-    lista.innerHTML = html;
-    box.classList.add('visible');
+    for (var j = 0; j < plan.items.length; j++) { html += '<div class="incluye-item"><i class="fas fa-check"></i> ' + plan.items[j] + '</div>'; }
+    document.getElementById('incluye-lista').innerHTML = html;
 }
 
-function togglePersonasExtra() {
-    var extra = document.getElementById('personas-extra');
-    extra.style.display = document.getElementById('personas').value === 'more' ? 'block' : 'none';
-    if (document.getElementById('personas').value !== 'more') extra.value = '';
+function toggleAdultosExtra() {
+    var extra = document.getElementById('adultos-extra');
+    extra.style.display = document.getElementById('adultos').value === 'more' ? 'block' : 'none';
+    if (document.getElementById('adultos').value !== 'more') extra.value = '';
 }
+document.getElementById('adultos').addEventListener('change', toggleAdultosExtra);
 
-function getPersonasCount() {
-    var sel = document.getElementById('personas');
-    if (sel.value === 'more') { var v = parseInt(document.getElementById('personas-extra').value); return isNaN(v) ? null : v; }
+function getAdultosCount() {
+    var sel = document.getElementById('adultos');
+    if (sel.value === 'more') { var v = parseInt(document.getElementById('adultos-extra').value); return isNaN(v) ? null : v; }
     return parseInt(sel.value);
+}
+
+function toggleNinosUI() {
+    var extra = document.getElementById('ninos-extra');
+    extra.style.display = document.getElementById('ninos').value === 'more' ? 'block' : 'none';
+    if (document.getElementById('ninos').value !== 'more') extra.value = '';
+    actualizarEdades();
+}
+document.getElementById('ninos-extra').addEventListener('input', actualizarEdades);
+
+function getNinosCount() {
+    var sel = document.getElementById('ninos');
+    if (sel.value === 'more') { var v = parseInt(document.getElementById('ninos-extra').value); return isNaN(v) ? null : v; }
+    return parseInt(sel.value);
+}
+
+function actualizarEdades() {
+    var count = getNinosCount();
+    var cont = document.getElementById('contenedor-edades');
+    if (!count || count <= 0) { cont.innerHTML = ''; return; }
+    var html = '<label style="font-size:9px;color:var(--text-warm);margin-bottom:5px;"><i class="fas fa-list-ol"></i> Edad de cada niño (para coordinar con la lancha)</label>';
+    var max = Math.min(count, 8);
+    for (var i = 1; i <= max; i++) {
+        html += '<input type="number" class="edad-nino extra-input" min="2" max="11" placeholder="Niño ' + i + ': edad (2-11)" style="margin-bottom:3px;">';
+    }
+    if (count > 8) html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen: ej. 3 de 8 años, 2 de 5">';
+    cont.innerHTML = html;
 }
 
 function lanzarConfeti() {
@@ -458,38 +484,36 @@ function lanzarConfeti() {
 
 function generarSolicitud() {
     var nombre = document.getElementById('nombre').value.trim();
-    var personas = getPersonasCount();
+    var adultos = getAdultosCount();
+    var ninos = getNinosCount();
+    var bebes = parseInt(document.getElementById('bebes').value);
     var notas = document.getElementById('notas').value.trim();
     var plan = planSeleccionado;
     var planNombre = plan === 'full360' ? 'PLAN FULL360' : 'PLAN BÁSICO';
     var planPrecio = plan === 'full360' ? '$35 USD' : '$25 USD';
 
     if (!nombre) { alert('Por favor, ingresa tu nombre.'); return; }
-    if (!personas || personas < 1) { alert('Indica cuántas personas viajan.'); return; }
+    if (!adultos || adultos < 1) { alert('Indica cuántos adultos viajan.'); return; }
 
-    var total = plan === 'full360' ? personas * 35 : personas * 25;
+    var total = plan === 'full360' ? adultos * 35 : adultos * 25;
+    var edadesNinos = '';
+    var resumenEl = document.getElementById('edades-resumen');
+    if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; }
+    else {
+        var inputs = document.querySelectorAll('.edad-nino'), arr = [];
+        for (var i = 0; i < inputs.length; i++) { arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); }
+        edadesNinos = arr.length ? arr.join(', ') : 'No especificadas';
+    }
+
     var asesores = ['584244634041', '584244900601', '584147020527']; var tlf = asesores[Math.floor(Math.random() * asesores.length)];
 
-    var lineas = [
-        '🌴 *RESERVA TOUR - LOTUS 360*','',
-        '📍 *Tour:* Cayo Sal - Chichiriviche, Falcón',
-        '📅 *Fecha:* 27 de Junio',
-        '⏰ *Horario:* 6:00 am - 4:00 pm',
-        '📍 *Salida:* CC Dinastía, Naguanagua',
-        '',
-        '🎫 *Plan:* ' + planNombre + ' (' + planPrecio + ')',
-        '👤 *Nombre:* ' + nombre,
-        '👥 *Personas:* ' + personas,
-        '💰 *Total estimado:* $' + total + ' USD',
-        '',
-        '✅ *Incluye:*'
-    ];
-
+    var lineas = ['🌴 *RESERVA TOUR - LOTUS 360*','','📍 *Tour:* Cayo Sal - Chichiriviche, Falcón','📅 *Fecha:* 27 de Junio','⏰ *Horario:* 6:00 am - 4:00 pm','📍 *Salida:* CC Dinastía, Naguanagua','','🎫 *Plan:* ' + planNombre + ' (' + planPrecio + ')','👤 *Nombre:* ' + nombre,'👥 *Adultos:* ' + adultos + (ninos > 0 ? ' | *Niños:* ' + ninos : '') + (bebes > 0 ? ' | *Bebés:* ' + bebes : ''),'💰 *Total estimado:* $' + total + ' USD (solo adultos)'];
+    if (ninos > 0) lineas.push('👶 *Edades niños:* ' + edadesNinos);
+    lineas.push('','✅ *Incluye:*');
     var items = incluyePlanes[plan].items;
-    for (var i = 0; i < items.length; i++) { lineas.push('  ' + items[i]); }
-    
-    if (notas) lineas.push('', '📝 *Notas:* ' + notas);
-    lineas.push('', '📲 *Aparta tu cupo - Se agotan rápido*', '✅ *Confirmar disponibilidad y método de pago. ¡Gracias!*');
+    for (var j = 0; j < items.length; j++) lineas.push('  ' + items[j]);
+    if (notas) lineas.push('','📝 *Notas:* ' + notas);
+    lineas.push('','📲 *Aparta tu cupo - Se agotan rápido*','✅ *Confirmar disponibilidad y método de pago. ¡Gracias!*');
 
     var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(lineas.join('\n'));
 
@@ -497,8 +521,8 @@ function generarSolicitud() {
     document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Reserva casi lista!</h3><div class="resumen-detalle">' +
         '<div class="dato"><i class="fas fa-map-pin"></i> <strong>Cayo Sal - Falcón</strong> · 27 de Junio</div>' +
         '<div class="dato"><i class="fas fa-ticket-alt"></i> ' + planNombre + ' · ' + planPrecio + ' c/u</div>' +
-        '<div class="dato"><i class="fas fa-user"></i> ' + nombre + ' · ' + personas + ' persona(s)</div>' +
-        '<div class="dato"><i class="fas fa-dollar-sign"></i> Total: <strong>$' + total + ' USD</strong></div>' +
+        '<div class="dato"><i class="fas fa-user"></i> ' + nombre + ' · ' + adultos + ' adulto(s)' + (ninos > 0 ? ' · ' + ninos + ' niño(s)' : '') + (bebes > 0 ? ' · ' + bebes + ' bebé(s)' : '') + '</div>' +
+        '<div class="dato"><i class="fas fa-dollar-sign"></i> Total adultos: <strong>$' + total + ' USD</strong></div>' +
         '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Confirmar Cupo por WhatsApp</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Hacer otra reserva</button></div>';
     document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' }); lanzarConfeti();
 }
