@@ -7,1357 +7,506 @@
     <meta property="og:title" content="Lotus 360 - Cotiza tu Boleto Aéreo">
     <meta property="og:description" content="Vuelos nacionales e internacionales al mejor precio, con asesoría personalizada.">
     <meta property="og:image" content="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png">
-    <title>Lotus 360 · Cotiza tu Boleto Aéreo</title>
-    
+    <title>Lotus 360 · Boletería Aérea</title>
     <link rel="preload" as="image" href="https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg">
     <link rel="preload" as="image" href="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png">
-    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
-    
     <style>
         :root {
             --accent: #ff9100;
             --accent-blue: #4a9eff;
             --success: #25D366;
-            --text-secondary: #ffd9a8;
+            --text-warm: #ffe0b2;
+            --card-bg: rgba(15,20,40,0.65);
         }
-        
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            -webkit-tap-highlight-color: transparent;
-            -webkit-user-select: none;
-            user-select: none;
-        }
-        
-        input, textarea, select {
-            -webkit-user-select: text;
-            user-select: text;
-        }
-        
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+        input, textarea, select { -webkit-user-select: text; user-select: text; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0a1020;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            padding: 16px 12px 40px;
-            position: relative;
-            overflow-x: hidden;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            animation: pageEnter 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+            background: #0a1020; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start;
+            padding: 14px 10px 36px; position: relative; overflow-x: hidden; -webkit-font-smoothing: antialiased;
+            animation: pageEnter 0.35s ease;
         }
-        
-        @keyframes pageEnter {
-            from { opacity: 0; transform: translateY(16px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        body.salir {
-            animation: pageExit 0.3s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
-        }
-        
-        @keyframes pageExit {
-            from { opacity: 1; transform: translateX(0); }
-            to { opacity: 0; transform: translateX(-30px); }
-        }
-        
+        @keyframes pageEnter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        body.salir { animation: pageExit 0.25s ease forwards; }
+        @keyframes pageExit { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-25px); } }
         #bg {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg');
-            background-size: cover;
-            background-position: center 20%;
-            background-repeat: no-repeat;
-            z-index: -2;
-            will-change: transform;
-            transform: translateZ(0);
-            animation: bgFadeIn 0.6s ease;
+            background-size: cover; background-position: center 20%; background-repeat: no-repeat;
+            z-index: -2; transform: translateZ(0);
         }
-        
-        @keyframes bgFadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        @media (min-width: 768px) {
-            #bg {
-                background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg');
-                background-position: center center;
-            }
-        }
-        
+        @media (min-width: 768px) { #bg { background-image: url('https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'); background-position: center center; } }
         #bg-overlay {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: linear-gradient(160deg, rgba(8,8,22,0.78) 0%, rgba(15,15,35,0.85) 55%, rgba(8,8,22,0.92) 100%);
-            z-index: -1;
-            pointer-events: none;
+            z-index: -1; pointer-events: none;
         }
-        
-        .card {
-            width: 100%;
-            max-width: 500px;
-            z-index: 1;
-            color: #fff;
-            animation: cardContent 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.1s both;
-        }
-        
-        @keyframes cardContent {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
+        .card { width: 100%; max-width: 500px; z-index: 1; color: #fff; }
         .home-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 50px;
-            padding: 8px 16px;
-            font-size: 13px;
-            font-weight: 600;
-            color: rgba(255,255,255,0.85);
-            text-decoration: none;
-            margin-bottom: 16px;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            transition: all 0.2s ease;
-            touch-action: manipulation;
+            display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 50px; padding: 8px 16px;
+            font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.85); text-decoration: none;
+            margin-bottom: 14px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            transition: all 0.15s ease; touch-action: manipulation;
         }
-        
-        .home-btn:active {
-            background: rgba(255,145,0,0.2);
-            border-color: rgba(255,145,0,0.4);
-            transform: scale(0.96);
-        }
-        
+        .home-btn:active { background: rgba(255,145,0,0.2); border-color: rgba(255,145,0,0.4); transform: scale(0.96); }
         .home-btn i { color: #ff9100; font-size: 11px; }
-
-        .card-header {
-            text-align: center;
-            margin-bottom: 16px;
-            animation: fadeSlideUp 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.15s both;
-        }
-        
-        @keyframes fadeSlideUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .logo-wrap {
-            position: relative;
-            width: 80px; height: 80px;
-            margin: 0 auto 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
+        .card-header { text-align: center; margin-bottom: 14px; }
+        .logo-wrap { position: relative; width: 72px; height: 72px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; }
         .logo-wrap::before {
-            content: '';
-            position: absolute;
-            width: 80px; height: 80px;
-            border-radius: 50%;
-            border: 2px solid rgba(255,145,0,0.4);
-            animation: ring-pulse 2.4s ease-out infinite;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            will-change: transform, opacity;
+            content: ''; position: absolute; width: 72px; height: 72px; border-radius: 50%;
+            border: 2px solid rgba(255,145,0,0.45); animation: ring-pulse 2.4s ease-out infinite;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
         }
-        
-        @keyframes ring-pulse {
-            0% { width: 72px; height: 72px; opacity: 0.8; }
-            100% { width: 100px; height: 100px; opacity: 0; }
-        }
-        
+        @keyframes ring-pulse { 0% { width: 66px; height: 66px; opacity: 0.7; } 100% { width: 92px; height: 92px; opacity: 0; } }
         .logo-profile {
-            width: 72px; height: 72px;
-            border-radius: 50%;
-            border: 3px solid var(--accent);
-            padding: 3px;
-            background: #fff;
-            object-fit: contain;
-            display: block;
-            position: relative;
-            z-index: 1;
-            animation: logoAppear 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
+            width: 64px; height: 64px; border-radius: 50%; border: 3px solid var(--accent);
+            padding: 3px; background: #fff; object-fit: contain; display: block; position: relative; z-index: 1;
         }
-        
-        @keyframes logoAppear {
-            from { opacity: 0; transform: scale(0.5) rotateY(90deg); }
-            to { opacity: 1; transform: scale(1) rotateY(0deg); }
-        }
-        
         .card-header h2 {
-            font-size: 1.2rem;
-            font-weight: 700;
-            margin-bottom: 2px;
+            font-size: 1.1rem; font-weight: 700; margin-bottom: 2px;
             background: linear-gradient(to right, #4a9eff, #7bb8ff, #4a9eff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
         }
-        
-        .card-header .subtitle {
-            color: #a8d1ff;
-            font-size: 12px;
-        }
-        
+        .card-header .subtitle { color: #a8d1ff; font-size: 11px; }
+        .card-header .slogan { font-size: 9px; color: rgba(168,209,255,0.4); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 3px; }
         .estado-box {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: rgba(255,255,255,0.07);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 30px;
-            padding: 6px 14px;
-            font-size: 11px;
-            font-weight: 600;
-            margin: 10px auto 0;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
+            display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 30px; padding: 5px 12px;
+            font-size: 10px; font-weight: 600; margin: 8px auto 0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
         }
-        
-        .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
         .dot.online { background: #25D366; animation: dot-breathe 1.8s infinite; }
-        .dot.offline { background: #888; }
-        
-        @keyframes dot-breathe {
-            0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.6); }
-            70% { box-shadow: 0 0 0 6px rgba(37,211,102,0); }
-            100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
-        }
+        .dot.offline { background: #f59e0b; }
+        @keyframes dot-breathe { 0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); } 70% { box-shadow: 0 0 0 5px rgba(37,211,102,0); } 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); } }
 
-        /* Ruta visual con avión animado */
         .ruta-box {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 4px;
-            margin-bottom: 16px;
-            padding: 14px 12px;
-            background: rgba(15,20,40,0.65);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(74,158,255,0.2);
-            border-radius: 16px;
-            transform: translateZ(0);
-            animation: fadeSlideUp 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) 0.25s both;
-            position: relative;
-            overflow: hidden;
+            display: flex; align-items: center; justify-content: space-between; gap: 4px;
+            margin-bottom: 14px; padding: 12px 10px; background: rgba(15,20,40,0.65);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(74,158,255,0.18); border-radius: 16px;
+            transform: translateZ(0); position: relative; overflow: hidden;
         }
-        
         .ruta-box::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: linear-gradient(90deg, transparent, rgba(74,158,255,0.03), transparent);
             animation: shimmer 3s ease-in-out infinite;
         }
-        
-        @keyframes shimmer {
-            0%, 100% { transform: translateX(-100%); }
-            50% { transform: translateX(100%); }
-        }
-        
-        .ruta-punto {
-            flex: 0 0 auto;
-            text-align: center;
-            min-width: 55px;
-            z-index: 1;
-        }
-        
-        .ruta-punto .codigo {
-            font-size: 20px;
-            font-weight: 800;
-            letter-spacing: 1px;
-            line-height: 1;
-            background: linear-gradient(to bottom, #fff, #a8d1ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .ruta-punto .ciudad {
-            font-size: 9px;
-            color: #a8d1ff;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-top: 4px;
-            display: block;
-            max-width: 70px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        .ruta-linea {
-            flex: 1;
-            position: relative;
-            height: 24px;
-            margin: 0 4px;
-            overflow: visible;
-        }
-        
-        .ruta-linea .trazo {
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: repeating-linear-gradient(to right, rgba(255,255,255,0.3) 0 6px, transparent 6px 12px);
-            transform: translateY(-50%);
-        }
-        
-        .ruta-linea i.avion-ida {
-            position: absolute;
-            top: 2px;
-            left: 0;
-            color: #4a9eff;
-            font-size: 13px;
-            animation: vueloIda 3s linear infinite;
-            filter: drop-shadow(0 0 4px rgba(74,158,255,0.6));
-        }
-        
-        .ruta-linea i.avion-vuelta {
-            position: absolute;
-            bottom: 2px;
-            right: 0;
-            color: #ff9100;
-            font-size: 13px;
-            animation: vueloVuelta 3s linear infinite;
-            filter: drop-shadow(0 0 4px rgba(255,145,0,0.6));
-            transform: scaleX(-1);
-        }
-        
-        @keyframes vueloIda {
-            0% { left: 0%; opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { left: 88%; opacity: 0; }
-        }
-        
-        @keyframes vueloVuelta {
-            0% { right: 0%; opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { right: 88%; opacity: 0; }
-        }
+        @keyframes shimmer { 0%, 100% { transform: translateX(-100%); } 50% { transform: translateX(100%); } }
+        .ruta-punto { flex: 0 0 auto; text-align: center; min-width: 50px; z-index: 1; }
+        .ruta-punto .codigo { font-size: 18px; font-weight: 800; letter-spacing: 1px; line-height: 1; background: linear-gradient(to bottom, #fff, #a8d1ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .ruta-punto .ciudad { font-size: 8px; color: #a8d1ff; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; display: block; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ruta-linea { flex: 1; position: relative; height: 22px; margin: 0 4px; overflow: visible; }
+        .ruta-linea .trazo { position: absolute; top: 50%; left: 0; right: 0; height: 2px; background: repeating-linear-gradient(to right, rgba(255,255,255,0.3) 0 6px, transparent 6px 12px); transform: translateY(-50%); }
+        .ruta-linea i.avion-ida { position: absolute; top: 1px; left: 0; color: #4a9eff; font-size: 12px; animation: vueloIda 3s linear infinite; filter: drop-shadow(0 0 4px rgba(74,158,255,0.5)); }
+        .ruta-linea i.avion-vuelta { position: absolute; bottom: 1px; right: 0; color: #ff9100; font-size: 12px; animation: vueloVuelta 3s linear infinite; filter: drop-shadow(0 0 4px rgba(255,145,0,0.5)); transform: scaleX(-1); }
+        @keyframes vueloIda { 0% { left: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { left: 86%; opacity: 0; } }
+        @keyframes vueloVuelta { 0% { right: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { right: 86%; opacity: 0; } }
 
         .form-section {
-            background: rgba(15,20,40,0.65);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 16px;
-            padding: 16px;
-            margin-bottom: 12px;
-            transform: translateZ(0);
-            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+            background: var(--card-bg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(74,158,255,0.08); border-radius: 16px; padding: 14px;
+            margin-bottom: 10px; transform: translateZ(0); box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            content-visibility: auto; contain-intrinsic-size: auto 200px;
         }
-        
-        .form-section:nth-child(1) { animation-delay: 0.3s; }
-        .form-section:nth-child(2) { animation-delay: 0.35s; }
-        .form-section:nth-child(3) { animation-delay: 0.4s; }
-        .form-section:nth-child(4) { animation-delay: 0.45s; }
-        .form-section:nth-child(5) { animation-delay: 0.5s; }
-        .form-section:nth-child(6) { animation-delay: 0.55s; }
-        
         .section-title {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--accent-blue);
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+            color: var(--accent-blue); margin-bottom: 10px; display: flex; align-items: center; gap: 5px;
         }
-        
-        .section-title::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: rgba(74,158,255,0.15);
-        }
-        
+        .section-title::after { content: ''; flex: 1; height: 1px; background: rgba(74,158,255,0.12); }
         .form-group { margin-bottom: 10px; }
         .form-group:last-child { margin-bottom: 0; }
-        
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 5px;
-            color: rgba(255,255,255,0.9);
-            font-size: 12px;
-        }
-        
-        .form-group label i {
-            color: var(--accent-blue);
-            margin-right: 4px;
-            width: 14px;
-            text-align: center;
-            font-size: 11px;
-        }
-        
+        .form-group label { display: block; font-weight: 600; margin-bottom: 5px; color: rgba(255,255,255,0.9); font-size: 11px; }
+        .form-group label i { color: var(--accent-blue); margin-right: 3px; width: 13px; text-align: center; font-size: 10px; }
+
         select, input[type="text"], input[type="date"], input[type="number"], textarea {
-            width: 100%;
-            padding: 11px 14px;
-            border: 1.5px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            font-size: 14px;
-            background: rgba(10,12,28,0.7);
-            color: #fff;
-            font-family: inherit;
-            color-scheme: dark;
-            transition: border-color 0.15s, box-shadow 0.15s;
-            touch-action: manipulation;
+            width: 100%; padding: 11px 14px; border: 1.5px solid rgba(74,158,255,0.1);
+            border-radius: 12px; font-size: 13px; background: rgba(10,12,28,0.7); color: #fff;
+            font-family: inherit; color-scheme: dark; transition: border-color 0.15s; touch-action: manipulation;
         }
-        
         select {
-            appearance: none;
-            -webkit-appearance: none;
+            appearance: none; -webkit-appearance: none;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234a9eff' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 12px center;
-            padding-right: 36px;
+            background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px;
         }
-        
-        select:focus, input:focus, textarea:focus {
-            outline: none;
-            border-color: var(--accent-blue);
-            box-shadow: 0 0 0 2px rgba(74,158,255,0.12);
-        }
-        
-        textarea { resize: vertical; min-height: 60px; }
+        select:focus, input:focus, textarea:focus { outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(74,158,255,0.1); }
+        textarea { resize: vertical; min-height: 55px; }
         .row { display: flex; gap: 8px; }
         .row .form-group { flex: 1; }
-        
-        .hint {
-            font-size: 10px;
-            color: rgba(168,209,255,0.7);
-            margin-top: 4px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        
-        .hint i { color: var(--accent-blue); }
+        .extra-input { margin-top: 5px; }
 
-        /* Segmentado tipo viaje */
-        .segmented {
-            display: flex;
-            background: rgba(10,12,28,0.7);
-            border: 1.5px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            padding: 3px;
-            gap: 3px;
-        }
-        
+        .segmented { display: flex; background: rgba(10,12,28,0.7); border: 1.5px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 3px; gap: 3px; }
         .segmented input { display: none; }
-        
-        .segmented label {
-            flex: 1;
-            text-align: center;
-            padding: 9px 6px;
-            border-radius: 10px;
-            font-weight: 600;
-            font-size: 12px;
-            color: rgba(255,255,255,0.6);
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin: 0;
-            touch-action: manipulation;
-        }
-        
-        .segmented input:checked + label {
-            background: linear-gradient(135deg, #4a9eff, #2d7dd2);
-            color: #fff;
-            box-shadow: 0 3px 10px rgba(74,158,255,0.3);
-        }
+        .segmented label { flex: 1; text-align: center; padding: 9px 6px; border-radius: 10px; font-weight: 600; font-size: 12px; color: rgba(255,255,255,0.6); cursor: pointer; transition: all 0.2s ease; margin: 0; touch-action: manipulation; }
+        .segmented input:checked + label { background: linear-gradient(135deg, #4a9eff, #2d7dd2); color: #fff; box-shadow: 0 3px 10px rgba(74,158,255,0.3); }
 
-        /* Fechas flexibles */
-        .flex-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
+        .flex-tags, .transporte-grid { display: flex; flex-wrap: wrap; gap: 5px; }
+        .flex-tag, .pasajero-tag {
+            display: flex; align-items: center; gap: 4px; background: rgba(10,12,28,0.7);
+            border: 1.5px solid rgba(74,158,255,0.1); border-radius: 14px; padding: 6px 10px;
+            font-size: 11px; font-weight: 600; cursor: pointer; color: rgba(255,255,255,0.55);
+            transition: all 0.12s ease; touch-action: manipulation;
         }
-        
-        .flex-tag {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            background: rgba(10,12,28,0.7);
-            border: 1.5px solid rgba(255,255,255,0.1);
-            border-radius: 16px;
-            padding: 7px 11px;
-            font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
-            color: rgba(255,255,255,0.6);
-            transition: all 0.15s ease;
-            touch-action: manipulation;
+        .flex-tag:active, .pasajero-tag:active { transform: scale(0.93); }
+        .flex-tag i, .pasajero-tag i { color: rgba(74,158,255,0.45); font-size: 10px; }
+        .flex-tag.sel, .pasajero-tag.sel {
+            border-color: var(--accent-blue); background: rgba(74,158,255,0.18); color: #fff;
+            transform: scale(1.02); box-shadow: 0 0 8px rgba(74,158,255,0.18);
         }
-        
-        .flex-tag:active { transform: scale(0.93); }
-        
-        .flex-tag i {
-            color: rgba(74,158,255,0.5);
-            font-size: 10px;
-            transition: all 0.15s ease;
-        }
-        
-        .flex-tag.sel {
-            border-color: var(--accent-blue);
-            background: rgba(74,158,255,0.2);
-            color: #fff;
-            transform: scale(1.03);
-            box-shadow: 0 0 10px rgba(74,158,255,0.2);
-        }
-        
-        .flex-tag.sel i { color: var(--accent-blue); transform: scale(1.1); }
+        .flex-tag.sel i, .pasajero-tag.sel i { color: var(--accent-blue); }
 
-        /* Checkbox estilo */
         .checkbox-group {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            background: rgba(10,12,28,0.5);
-            border: 1.5px solid rgba(255,255,255,0.08);
-            border-radius: 10px;
-            padding: 10px 12px;
-            margin-top: 8px;
+            display: flex; align-items: flex-start; gap: 7px; background: rgba(10,12,28,0.4);
+            border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 8px 10px; margin-top: 6px;
         }
-        
-        .checkbox-group input[type="checkbox"] {
-            width: 16px; height: 16px;
-            flex: 0 0 16px;
-            accent-color: #4a9eff;
-            margin-top: 1px;
-            cursor: pointer;
-        }
-        
-        .checkbox-group label {
-            margin: 0;
-            font-size: 11px;
-            font-weight: 500;
-            cursor: pointer;
-            color: rgba(255,255,255,0.8);
-            line-height: 1.4;
-        }
-        
-        .checkbox-group label i { color: #4a9eff; margin-right: 3px; font-size: 10px; }
-        
-        .checkbox-group span {
-            display: block;
-            font-size: 10px;
-            color: rgba(168,209,255,0.6);
-            font-weight: 400;
-            margin-top: 2px;
-        }
+        .checkbox-group input[type="checkbox"] { width: 15px; height: 15px; flex: 0 0 15px; accent-color: #4a9eff; margin-top: 1px; }
+        .checkbox-group label { margin: 0; font-size: 10px; font-weight: 500; cursor: pointer; color: rgba(255,255,255,0.75); line-height: 1.4; }
+        .checkbox-group label i { color: #4a9eff; margin-right: 2px; font-size: 9px; }
+        .checkbox-group span { display: block; font-size: 9px; color: rgba(168,209,255,0.45); font-weight: 400; margin-top: 1px; }
 
-        /* Alerta cédula niños */
         .alerta-cedula {
-            display: none;
-            background: rgba(255,145,0,0.1);
-            border: 1px solid rgba(255,145,0,0.3);
-            border-radius: 8px;
-            padding: 8px 10px;
-            margin-top: 8px;
-            font-size: 10px;
-            color: #ffd9a8;
-            line-height: 1.4;
+            display: none; background: rgba(255,145,0,0.08); border: 1px solid rgba(255,145,0,0.25);
+            border-radius: 6px; padding: 6px 8px; margin-top: 6px; font-size: 9px; color: #ffd9a8; line-height: 1.4;
         }
-        
-        .alerta-cedula i { color: #ff9100; margin-right: 4px; }
-        .alerta-cedula.visible { display: flex; align-items: flex-start; gap: 6px; }
-
-        /* Equipaje */
-        .pasajeros-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-        }
-        
-        .pasajero-tag {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            background: rgba(10,12,28,0.7);
-            border: 1.5px solid rgba(255,255,255,0.1);
-            border-radius: 16px;
-            padding: 7px 11px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            color: rgba(255,255,255,0.6);
-            transition: all 0.15s ease;
-            touch-action: manipulation;
-        }
-        
-        .pasajero-tag:active { transform: scale(0.93); }
-        
-        .pasajero-tag i {
-            color: rgba(74,158,255,0.5);
-            font-size: 11px;
-            transition: all 0.15s ease;
-        }
-        
-        .pasajero-tag.sel {
-            border-color: var(--accent-blue);
-            background: rgba(74,158,255,0.2);
-            color: #fff;
-            transform: scale(1.03);
-            box-shadow: 0 0 10px rgba(74,158,255,0.2);
-        }
-        
-        .pasajero-tag.sel i { color: var(--accent-blue); transform: scale(1.1); }
-
-        .extra-input { margin-top: 6px; }
+        .alerta-cedula.visible { display: flex; align-items: flex-start; gap: 5px; }
+        .alerta-cedula i { color: #ff9100; }
 
         .btn-gen {
-            width: 100%;
-            padding: 16px;
-            background: linear-gradient(135deg, #4a9eff, #2d7dd2);
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 15px;
-            cursor: pointer;
-            box-shadow: 0 4px 16px rgba(74,158,255,0.35);
-            letter-spacing: 0.2px;
-            touch-action: manipulation;
-            transition: transform 0.1s ease, box-shadow 0.2s ease;
-            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.6s both;
+            width: 100%; padding: 15px; background: linear-gradient(135deg, #4a9eff, #2d7dd2);
+            color: white; border: none; border-radius: 12px; font-weight: 700; font-size: 14px;
+            cursor: pointer; box-shadow: 0 4px 16px rgba(74,158,255,0.35); letter-spacing: 0.2px;
+            touch-action: manipulation; transition: transform 0.1s ease;
         }
-        
-        .btn-gen:active {
-            transform: scale(0.96);
-            box-shadow: 0 2px 8px rgba(74,158,255,0.25);
-        }
+        .btn-gen:active { transform: scale(0.96); }
 
-        #resultado {
-            display: none;
-            margin-top: 16px;
-            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
-        }
-        
+        #resultado { display: none; margin-top: 14px; }
         .resultado-card {
-            background: rgba(15,20,40,0.8);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(37,211,102,0.25);
-            border-radius: 14px;
-            padding: 16px;
-            border-left: 3px solid #25D366;
-            transform: translateZ(0);
+            background: rgba(15,20,40,0.8); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(37,211,102,0.2); border-radius: 14px; padding: 14px;
+            border-left: 3px solid #25D366; transform: translateZ(0);
         }
-        
-        .resultado-card h3 {
-            color: #25D366;
-            font-size: 1rem;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        
-        .resumen-detalle {
-            background: rgba(0,0,0,0.3);
-            border-radius: 10px;
-            padding: 12px;
-            margin-bottom: 12px;
-            font-size: 12px;
-            line-height: 1.7;
-        }
-        
-        .resumen-detalle .dato {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            margin-bottom: 4px;
-        }
-        
-        .resumen-detalle .dato i {
-            color: var(--accent-blue);
-            width: 14px;
-            text-align: center;
-            font-size: 11px;
-        }
-        
+        .resultado-card h3 { color: #25D366; font-size: 0.95rem; margin-bottom: 10px; }
+        .resumen-detalle { background: rgba(0,0,0,0.25); border-radius: 8px; padding: 10px; margin-bottom: 10px; font-size: 11px; line-height: 1.6; }
+        .resumen-detalle .dato { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+        .resumen-detalle .dato i { color: var(--accent-blue); width: 12px; text-align: center; font-size: 10px; }
         .btn-cotizar {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            width: 100%;
-            padding: 14px;
-            background: #25D366;
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 14px;
-            cursor: pointer;
-            text-decoration: none;
-            box-shadow: 0 4px 14px rgba(37,211,102,0.25);
-            touch-action: manipulation;
-            transition: transform 0.1s ease;
+            display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%;
+            padding: 13px; background: #25D366; color: white; border: none; border-radius: 12px;
+            font-weight: 700; font-size: 13px; cursor: pointer; text-decoration: none;
+            box-shadow: 0 3px 12px rgba(37,211,102,0.2); touch-action: manipulation; transition: transform 0.1s ease;
         }
-        
         .btn-cotizar:active { transform: scale(0.96); }
-        .btn-cotizar i { animation: iconBounce 2s infinite; }
-        
-        @keyframes iconBounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-2px); }
-        }
-        
         .btn-nueva {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            width: 100%;
-            padding: 12px;
-            background: rgba(255,255,255,0.06);
-            color: rgba(255,255,255,0.7);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 12px;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            margin-top: 8px;
-            touch-action: manipulation;
-            transition: all 0.15s ease;
+            display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%;
+            padding: 11px; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.65);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; font-weight: 600;
+            font-size: 12px; cursor: pointer; margin-top: 7px; touch-action: manipulation;
         }
-        
-        .btn-nueva:active {
-            background: rgba(255,255,255,0.12);
-            transform: scale(0.97);
-        }
-        
-        .footer-copy {
-            margin-top: 20px;
-            font-size: 9px;
-            color: rgba(255,255,255,0.25);
-            text-align: center;
-            animation: fadeSlideUp 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.65s both;
-        }
+        .btn-nueva:active { background: rgba(255,255,255,0.1); }
 
-        .confeti-container {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            pointer-events: none;
-            z-index: 999;
+        .footer-servicios { display: flex; justify-content: center; gap: 10px; margin: 18px 0 6px; }
+        .footer-servicio {
+            display: flex; align-items: center; gap: 4px; font-size: 8px; color: rgba(168,209,255,0.4);
+            text-decoration: none; padding: 3px 8px; border-radius: 20px; background: rgba(74,158,255,0.04);
+            border: 1px solid rgba(74,158,255,0.08); transition: all 0.15s ease;
         }
-        
-        .confeti {
-            position: absolute;
-            width: 8px; height: 8px;
-            animation: caerConfeti 1.2s ease-out forwards;
-        }
-        
-        @keyframes caerConfeti {
-            0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
-            100% { transform: translateY(100vh) rotate(540deg); opacity: 0; }
-        }
+        .footer-servicio.activo { color: var(--accent-blue); background: rgba(74,158,255,0.1); border-color: rgba(74,158,255,0.25); }
+        .footer-servicio:active { background: rgba(74,158,255,0.15); }
+        .footer-copy { font-size: 8px; color: rgba(255,255,255,0.18); text-align: center; }
 
-        @media (max-width: 360px) {
-            body { padding: 12px 8px 32px; }
-            .form-section { padding: 14px; }
-            .ruta-punto .codigo { font-size: 17px; }
-            .flex-tag { padding: 6px 9px; font-size: 10px; }
-        }
+        .confeti-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; }
+        .confeti { position: absolute; width: 7px; height: 7px; animation: caerConfeti 1s ease-out forwards; }
+        @keyframes caerConfeti { 0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(480deg); opacity: 0; } }
 
-        @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after {
-                animation-duration: 0.01ms !important;
-                animation-iteration-count: 1 !important;
-                transition-duration: 0.01ms !important;
-            }
-        }
+        .hint-text { font-size: 9px; color: rgba(168,209,255,0.5); margin-top: 3px; display: flex; align-items: center; gap: 3px; }
+        .hint-text i { color: var(--accent-blue); font-size: 8px; }
+        .select-desc { font-size: 9px; color: rgba(168,209,255,0.6); margin-top: 3px; font-style: italic; min-height: 16px; display: flex; align-items: center; gap: 4px; }
+        .select-desc i { font-size: 8px; color: var(--accent-blue); }
+
+        @media (max-width: 360px) { body { padding: 10px 8px 32px; } .form-section { padding: 12px; } .ruta-punto .codigo { font-size: 16px; } }
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
     </style>
 </head>
 <body>
-    <div id="bg"></div>
-    <div id="bg-overlay"></div>
-    
-    <div class="card">
-        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Home-Page/" class="home-btn" id="homeBtn" onclick="transicionSalida(event)">
-            <i class="fas fa-chevron-left"></i> Inicio
-        </a>
-
-        <div class="card-header">
-            <div class="logo-wrap">
-                <img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360" loading="eager" width="72" height="72">
-            </div>
-            <h2>Destino y Eventos Lotus 360</h2>
-            <p class="subtitle">Boletería Aérea ✈️ · Te llevamos a donde quieras</p>
-            <div class="estado-box">
-                <span class="dot" id="estado-dot"></span>
-                <span id="estado-texto">Verificando...</span>
-            </div>
-        </div>
-
-        <!-- Ruta visual -->
-        <div class="ruta-box">
-            <div class="ruta-punto">
-                <span class="codigo" id="origen-codigo">VLN</span>
-                <span class="ciudad" id="origen-ciudad">Valencia</span>
-            </div>
-            <div class="ruta-linea" id="ruta-linea">
-                <div class="trazo"></div>
-                <i class="fas fa-plane avion-ida"></i>
-                <i class="fas fa-plane avion-vuelta" id="avion-vuelta"></i>
-            </div>
-            <div class="ruta-punto">
-                <span class="codigo" id="destino-codigo">¿?</span>
-                <span class="ciudad" id="destino-ciudad">Elige destino</span>
-            </div>
-        </div>
-
-        <!-- Tipo de viaje -->
-        <div class="form-section">
-            <div class="section-title"><i class="fas fa-route"></i> Tipo de Vuelo</div>
-            <div class="form-group">
-                <label><i class="fas fa-exchange-alt"></i>¿Qué necesitas?</label>
-                <div class="segmented">
-                    <input type="radio" name="tipo-viaje" id="tv-ida" value="ida" onchange="toggleTipoViaje()">
-                    <label for="tv-ida">✈ Solo Ida</label>
-                    <input type="radio" name="tipo-viaje" id="tv-idavuelta" value="ida-vuelta" checked onchange="toggleTipoViaje()">
-                    <label for="tv-idavuelta">↔ Ida y Vuelta</label>
-                </div>
-            </div>
-        </div>
-
-        <!-- Origen y Destino -->
-        <div class="form-section">
-            <div class="section-title"><i class="fas fa-map-marker-alt"></i> Ruta</div>
-            <div class="form-group">
-                <label><i class="fas fa-plane-departure"></i>Origen</label>
-                <select id="origen" onchange="actualizarRuta('origen')">
-                    <option value="VLN|Valencia">Valencia (VLN)</option>
-                    <option value="CCS|Caracas">Caracas (CCS)</option>
-                    <option value="MAR|Maracaibo">Maracaibo (MAR)</option>
-                    <option value="BLA|Barcelona">Barcelona (BLA)</option>
-                    <option value="MCY|Maracay">Maracay (MCY)</option>
-                    <option value="OTRO|Otro origen">Otro (especificar)</option>
-                </select>
-                <input type="text" id="origen-extra" class="extra-input" placeholder="Ciudad de origen..." style="display:none;">
-            </div>
-            <div class="form-group">
-                <label><i class="fas fa-plane-arrival"></i>Destino</label>
-                <select id="destino" onchange="actualizarRuta('destino')">
-                    <option value="">Selecciona un destino...</option>
-                    <optgroup label="✈️ Nacionales">
-                        <option value="PMV|Isla de Margarita">Isla de Margarita (PMV)</option>
-                        <option value="CCS|Caracas">Caracas (CCS)</option>
-                        <option value="MAR|Maracaibo">Maracaibo (MAR)</option>
-                        <option value="MER|Mérida">Mérida (MER)</option>
-                        <option value="STX|Canaima">Canaima (CAN)</option>
-                    </optgroup>
-                    <optgroup label="🌍 Internacionales">
-                        <option value="BOG|Bogotá, Colombia">Bogotá (BOG)</option>
-                        <option value="PTY|Panamá">Panamá (PTY)</option>
-                        <option value="MAD|Madrid, España">Madrid (MAD)</option>
-                        <option value="MIA|Miami, EE.UU.">Miami (MIA)</option>
-                        <option value="CUN|Cancún, México">Cancún (CUN)</option>
-                        <option value="LIM|Lima, Perú">Lima (LIM)</option>
-                    </optgroup>
-                    <option value="OTRO|Otro destino">Otro (especificar)</option>
-                </select>
-                <input type="text" id="destino-extra" class="extra-input" placeholder="Ciudad de destino..." style="display:none;">
-            </div>
-        </div>
-
-        <!-- Fechas -->
-        <div class="form-section">
-            <div class="section-title"><i class="fas fa-calendar-alt"></i> Fechas</div>
-            <div class="row">
-                <div class="form-group">
-                    <label><i class="fas fa-calendar-check"></i>Ida</label>
-                    <input type="date" id="fecha-ida">
-                </div>
-                <div class="form-group" id="grupo-fecha-vuelta">
-                    <label><i class="fas fa-calendar"></i>Vuelta</label>
-                    <input type="date" id="fecha-vuelta">
-                </div>
-            </div>
-            <div class="form-group">
-                <label><i class="fas fa-sliders-h"></i>Flexibilidad de fechas</label>
-                <div class="flex-tags" id="flex-tags">
-                    <div class="flex-tag sel" data-value="0" onclick="toggleFlex(this)"><i class="fas fa-lock"></i>Fechas fijas</div>
-                    <div class="flex-tag" data-value="1" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±1 día</div>
-                    <div class="flex-tag" data-value="2" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±2 días</div>
-                    <div class="flex-tag" data-value="3" onclick="toggleFlex(this)"><i class="fas fa-calendar-week"></i>±3 días</div>
-                    <div class="flex-tag" data-value="7" onclick="toggleFlex(this)"><i class="fas fa-calendar-plus"></i>±1 semana</div>
-                </div>
-                <span class="hint"><i class="fas fa-lightbulb"></i> Más flexibilidad = mejores tarifas</span>
-            </div>
-        </div>
-
-        <!-- Pasajeros -->
-        <div class="form-section">
-            <div class="section-title"><i class="fas fa-users"></i> Pasajeros</div>
-            
-            <!-- Adultos -->
-            <div class="form-group">
-                <label><i class="fas fa-user"></i>Adultos <span style="font-weight:400;color:#a8d1ff;font-size:10px;">(12+ años)</span></label>
-                <select id="adultos" onchange="toggleAdultosExtra()">
-                    <option value="1">1 adulto</option>
-                    <option value="2" selected>2 adultos</option>
-                    <option value="3">3 adultos</option>
-                    <option value="4">4 adultos</option>
-                    <option value="5">5 adultos</option>
-                    <option value="more">Más de 5</option>
-                </select>
-                <input type="number" id="adultos-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántos adultos?" style="display:none;" oninput="actualizarAlertaCedula()">
-                
-                <!-- Cédulas adultos -->
-                <div class="checkbox-group">
-                    <input type="checkbox" id="cedula-adultos" checked>
-                    <label for="cedula-adultos">
-                        <i class="fas fa-id-card"></i>Todos los adultos tienen cédula vigente
-                        <span>Si alguna está vencida, tu asesor te ayudará a coordinar.</span>
-                    </label>
-                </div>
-            </div>
-
-            <!-- Niños -->
-            <div class="form-group">
-                <label><i class="fas fa-child"></i>Niños <span style="font-weight:400;color:#a8d1ff;font-size:10px;">(2-11 años)</span></label>
-                <select id="ninos" onchange="toggleNinosExtra()">
-                    <option value="0" selected>Sin niños</option>
-                    <option value="1">1 niño</option>
-                    <option value="2">2 niños</option>
-                    <option value="3">3 niños</option>
-                    <option value="4">4 niños</option>
-                    <option value="more">Más de 4</option>
-                </select>
-                <input type="number" id="ninos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos niños?" style="display:none;" oninput="toggleNinosExtraInput()">
-                
-                <!-- Alerta cédula niños ≥9 años -->
-                <div class="alerta-cedula" id="alerta-cedula-ninos">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <span>Si algún niño tiene <strong>9 años o más</strong>, es obligatorio que tenga cédula de identidad vigente para viajar.</span>
-                </div>
-                
-                <!-- Edades niños -->
-                <div id="contenedor-edades" style="margin-top:8px;"></div>
-                
-                <!-- Checkbox cédula niños -->
-                <div class="checkbox-group" id="grupo-cedula-ninos" style="display:none;">
-                    <input type="checkbox" id="cedula-ninos">
-                    <label for="cedula-ninos">
-                        <i class="fas fa-id-card"></i>Los niños que viajan tienen cédula
-                        <span>Obligatorio para niños de 9 años o más.</span>
-                    </label>
-                </div>
-            </div>
-
-            <!-- Bebés -->
-            <div class="form-group">
-                <label><i class="fas fa-baby"></i>Bebés <span style="font-weight:400;color:#a8d1ff;font-size:10px;">(0-23 meses)</span></label>
-                <select id="bebes">
-                    <option value="0" selected>Sin bebés</option>
-                    <option value="1">1 bebé</option>
-                    <option value="2">2 bebés</option>
-                </select>
-                <span class="hint"><i class="fas fa-info-circle"></i> Los bebés viajan en el regazo. Si prefieres asiento propio, indícalo en notas.</span>
-            </div>
-
-            <!-- Equipaje -->
-            <div class="form-group">
-                <label><i class="fas fa-suitcase"></i>Equipaje</label>
-                <div class="pasajeros-grid" id="equipaje-grid">
-                    <div class="pasajero-tag sel" data-value="Equipaje de mano" onclick="toggleEquipaje(this)"><i class="fas fa-backpack"></i>Mano</div>
-                    <div class="pasajero-tag" data-value="Equipaje facturado" onclick="toggleEquipaje(this)"><i class="fas fa-suitcase"></i>Facturado</div>
-                    <div class="pasajero-tag" data-value="Sin equipaje" onclick="toggleEquipaje(this)"><i class="fas fa-times-circle"></i>Sin equipaje</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Extras -->
-        <div class="form-section">
-            <div class="section-title"><i class="fas fa-star"></i> Extras</div>
-            <div class="form-group">
-                <label><i class="fas fa-gift"></i>Ocasión especial</label>
-                <select id="ocasion">
-                    <option value="Viaje regular">Viaje regular</option>
-                    <option value="Luna de Miel">💑 Luna de Miel</option>
-                    <option value="Cumpleaños">🎂 Cumpleaños</option>
-                    <option value="Viaje de Negocios">💼 Negocios</option>
-                    <option value="Emergencia">🏥 Emergencia</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label><i class="fas fa-pen"></i>Notas adicionales</label>
-                <textarea id="notas" placeholder="Ej: prefiero vuelo directo, escalas cortas, aerolínea preferida..." rows="2"></textarea>
-            </div>
-        </div>
-
-        <button class="btn-gen" id="btn-generar" onclick="generarSolicitud()">
-            <i class="fas fa-paper-plane" style="margin-right:6px;"></i>Cotizar Vuelo
-        </button>
-
-        <div id="resultado"></div>
-
-        <p class="footer-copy">© 2026 Destino y Eventos Lotus 360 · Carabobo, Venezuela</p>
+<div id="bg"></div>
+<div id="bg-overlay"></div>
+<div class="card">
+    <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Home-Page/" class="home-btn" id="homeBtn" onclick="transicionSalida(event)"><i class="fas fa-chevron-left"></i> Inicio</a>
+    <div class="card-header">
+        <div class="logo-wrap"><img src="https://bwrathanyel.github.io/redireccion-whatsapp/logolotus.png" class="logo-profile" alt="Lotus 360" loading="eager" width="64" height="64"></div>
+        <h2>Destino y Eventos Lotus 360</h2>
+        <p class="subtitle">Boletería Aérea ✈️ · Te llevamos a donde quieras</p>
+        <p class="slogan">Viaja con Lotus 360</p>
+        <div class="estado-box"><span class="dot" id="estado-dot"></span><span id="estado-texto">Verificando...</span></div>
     </div>
 
-    <script>
-        // Precarga
-        (function() {
-            var img = new Image();
-            img.src = 'https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg';
-        })();
+    <div class="ruta-box">
+        <div class="ruta-punto"><span class="codigo" id="origen-codigo">VLN</span><span class="ciudad" id="origen-ciudad">Valencia</span></div>
+        <div class="ruta-linea"><div class="trazo"></div><i class="fas fa-plane avion-ida"></i><i class="fas fa-plane avion-vuelta" id="avion-vuelta"></i></div>
+        <div class="ruta-punto"><span class="codigo" id="destino-codigo">¿?</span><span class="ciudad" id="destino-ciudad">Elige destino</span></div>
+    </div>
 
-        // Transición de salida
-        function transicionSalida(e) {
-            e.preventDefault();
-            var href = document.getElementById('homeBtn').href;
-            document.body.classList.add('salir');
-            var metaTheme = document.getElementById('theme-color');
-            if (metaTheme) metaTheme.content = '#0a1020';
-            setTimeout(function() { window.location.href = href; }, 280);
-        }
+    <div class="form-section">
+        <div class="section-title"><i class="fas fa-route"></i> Tipo de Vuelo</div>
+        <div class="form-group">
+            <label><i class="fas fa-exchange-alt"></i>¿Qué necesitas?</label>
+            <div class="segmented">
+                <input type="radio" name="tipo-viaje" id="tv-ida" value="ida" onchange="toggleTipoViaje()"><label for="tv-ida">✈ Solo Ida</label>
+                <input type="radio" name="tipo-viaje" id="tv-idavuelta" value="ida-vuelta" checked onchange="toggleTipoViaje()"><label for="tv-idavuelta">↔ Ida y Vuelta</label>
+            </div>
+            <div class="hint-text"><i class="fas fa-lightbulb"></i> Ida y vuelta suele ser más económico que dos boletos separados</div>
+        </div>
+    </div>
 
-        // Estado
-        (function() {
-            var ahora = new Date();
-            var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
-            var ok = ve.getDay() >= 1 && ve.getDay() <= 6 && ve.getHours() >= 8 && ve.getHours() < 19;
-            document.getElementById('estado-dot').className = 'dot ' + (ok ? 'online' : 'offline');
-            document.getElementById('estado-texto').textContent = ok ? 'En línea · Respondemos pronto' : 'Fuera de horario · Mañana temprano';
-        })();
+    <div class="form-section">
+        <div class="section-title"><i class="fas fa-map-marker-alt"></i> Ruta</div>
+        <div class="form-group">
+            <label><i class="fas fa-plane-departure"></i>Origen</label>
+            <select id="origen" onchange="actualizarRuta('origen')">
+                <option value="VLN|Valencia">Valencia (VLN)</option><option value="CCS|Caracas">Caracas (CCS)</option>
+                <option value="MAR|Maracaibo">Maracaibo (MAR)</option><option value="BLA|Barcelona">Barcelona (BLA)</option>
+                <option value="MCY|Maracay">Maracay (MCY)</option><option value="OTRO|Otro origen">Otro (especificar)</option>
+            </select>
+            <input type="text" id="origen-extra" class="extra-input" placeholder="Ciudad de origen..." style="display:none;">
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-plane-arrival"></i>Destino</label>
+            <select id="destino" onchange="actualizarRuta('destino'); actualizarDescDestino();">
+                <option value="">Selecciona un destino...</option>
+                <optgroup label="✈️ Nacionales">
+                    <option value="PMV|Isla de Margarita" data-desc="Playas paradisíacas, duty free y vida nocturna 🛍️">Isla de Margarita (PMV)</option>
+                    <option value="CCS|Caracas" data-desc="Capital, negocios y conexión internacional 🏙️">Caracas (CCS)</option>
+                    <option value="MAR|Maracaibo" data-desc="Tierra del sol amada, gastronomía y lago 🌅">Maracaibo (MAR)</option>
+                    <option value="MER|Mérida" data-desc="Montañas andinas y el teleférico más alto 🏔️">Mérida (MER)</option>
+                    <option value="STX|Canaima" data-desc="Tepuyes milenarios y el Salto Ángel 💧">Canaima (CAN)</option>
+                </optgroup>
+                <optgroup label="🌍 Internacionales">
+                    <option value="BOG|Bogotá, Colombia" data-desc="Cultura, café y Monserrate ☕">Bogotá (BOG)</option>
+                    <option value="PTY|Panamá" data-desc="Canal, compras y conexión global 🛍️">Panamá (PTY)</option>
+                    <option value="MAD|Madrid, España" data-desc="Europa te espera: arte, tapas y historia 🇪🇸">Madrid (MAD)</option>
+                    <option value="MIA|Miami, EE.UU." data-desc="Playas, compras y parques temáticos 🌴">Miami (MIA)</option>
+                    <option value="CUN|Cancún, México" data-desc="Caribe mexicano y ruinas mayas 🏝️">Cancún (CUN)</option>
+                    <option value="LIM|Lima, Perú" data-desc="Gastronomía de clase mundial y Machu Picchu 🍽️">Lima (LIM)</option>
+                </optgroup>
+                <option value="OTRO|Otro destino">Otro (especificar)</option>
+            </select>
+            <input type="text" id="destino-extra" class="extra-input" placeholder="Ciudad de destino..." style="display:none;">
+            <div class="select-desc" id="desc-destino"><i class="fas fa-info-circle"></i> Selecciona tu destino para ver detalles</div>
+        </div>
+    </div>
 
-        // Fechas
-        function hoyISO() { return new Date().toISOString().split('T')[0]; }
-        document.getElementById('fecha-ida').min = hoyISO();
-        document.getElementById('fecha-vuelta').min = hoyISO();
+    <div class="form-section">
+        <div class="section-title"><i class="fas fa-calendar-alt"></i> Fechas</div>
+        <div class="row">
+            <div class="form-group"><label><i class="fas fa-calendar-check"></i>Ida</label><input type="date" id="fecha-ida"></div>
+            <div class="form-group" id="grupo-fecha-vuelta"><label><i class="fas fa-calendar"></i>Vuelta</label><input type="date" id="fecha-vuelta"></div>
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-sliders-h"></i>Flexibilidad de fechas</label>
+            <div class="flex-tags" id="flex-tags">
+                <div class="flex-tag sel" data-value="0" onclick="toggleFlex(this)"><i class="fas fa-lock"></i>Fechas fijas</div>
+                <div class="flex-tag" data-value="1" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±1 día</div>
+                <div class="flex-tag" data-value="2" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±2 días</div>
+                <div class="flex-tag" data-value="3" onclick="toggleFlex(this)"><i class="fas fa-calendar-week"></i>±3 días</div>
+                <div class="flex-tag" data-value="7" onclick="toggleFlex(this)"><i class="fas fa-calendar-plus"></i>±1 semana</div>
+            </div>
+            <div class="hint-text"><i class="fas fa-lightbulb"></i> Más flexibilidad = mejores tarifas</div>
+        </div>
+    </div>
 
-        // Tipo viaje
-        function toggleTipoViaje() {
-            var esIdaVuelta = document.getElementById('tv-idavuelta').checked;
-            document.getElementById('grupo-fecha-vuelta').style.display = esIdaVuelta ? 'block' : 'none';
-            var avionVuelta = document.getElementById('avion-vuelta');
-            avionVuelta.style.display = esIdaVuelta ? 'block' : 'none';
-            if (!esIdaVuelta) document.getElementById('fecha-vuelta').value = '';
-        }
+    <div class="form-section">
+        <div class="section-title"><i class="fas fa-users"></i> Pasajeros</div>
+        <div class="form-group">
+            <label><i class="fas fa-user"></i>Adultos <span style="font-weight:400;color:#a8d1ff;font-size:9px;">(12+ años)</span></label>
+            <select id="adultos" onchange="toggleAdultosExtra()">
+                <option value="1">1 adulto</option><option value="2" selected>2 adultos</option><option value="3">3 adultos</option>
+                <option value="4">4 adultos</option><option value="5">5 adultos</option><option value="more">Más de 5</option>
+            </select>
+            <input type="number" id="adultos-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántos adultos?" style="display:none;">
+            <div class="checkbox-group">
+                <input type="checkbox" id="cedula-adultos" checked>
+                <label for="cedula-adultos"><i class="fas fa-id-card"></i>Todos los adultos tienen cédula vigente<span>Si alguna está vencida, tu asesor te ayudará a coordinar.</span></label>
+            </div>
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-child"></i>Niños <span style="font-weight:400;color:#a8d1ff;font-size:9px;">(2-11 años)</span></label>
+            <select id="ninos" onchange="toggleNinosExtra()">
+                <option value="0" selected>Sin niños</option><option value="1">1 niño</option><option value="2">2 niños</option>
+                <option value="3">3 niños</option><option value="4">4 niños</option><option value="more">Más de 4</option>
+            </select>
+            <input type="number" id="ninos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos niños?" style="display:none;" oninput="toggleNinosExtraInput()">
+            <div class="alerta-cedula" id="alerta-cedula-ninos"><i class="fas fa-exclamation-triangle"></i><span>Si algún niño tiene <strong>9 años o más</strong>, necesita cédula vigente para viajar.</span></div>
+            <div id="contenedor-edades" style="margin-top:6px;"></div>
+            <div class="checkbox-group" id="grupo-cedula-ninos" style="display:none;">
+                <input type="checkbox" id="cedula-ninos">
+                <label for="cedula-ninos"><i class="fas fa-id-card"></i>Los niños que viajan tienen cédula<span>Obligatorio para niños de 9 años o más.</span></label>
+            </div>
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-baby"></i>Bebés <span style="font-weight:400;color:#a8d1ff;font-size:9px;">(0-23 meses)</span></label>
+            <select id="bebes"><option value="0" selected>Sin bebés</option><option value="1">1 bebé</option><option value="2">2 bebés</option></select>
+            <div class="hint-text"><i class="fas fa-info-circle"></i> Los bebés viajan en el regazo. Asiento propio indícalo en notas.</div>
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-suitcase"></i>Equipaje</label>
+            <div class="transporte-grid" id="equipaje-grid">
+                <div class="pasajero-tag sel" data-value="Equipaje de mano" onclick="toggleEquipaje(this)"><i class="fas fa-backpack"></i>Mano</div>
+                <div class="pasajero-tag" data-value="Equipaje facturado" onclick="toggleEquipaje(this)"><i class="fas fa-suitcase"></i>Facturado</div>
+                <div class="pasajero-tag" data-value="Sin equipaje" onclick="toggleEquipaje(this)"><i class="fas fa-times-circle"></i>Sin equipaje</div>
+            </div>
+        </div>
+    </div>
 
-        // Ruta
-        function actualizarRuta(tipo) {
-            if (tipo === 'origen') {
-                var sel = document.getElementById('origen');
-                var extra = document.getElementById('origen-extra');
-                if (sel.value.startsWith('OTRO')) {
-                    extra.style.display = 'block';
-                    document.getElementById('origen-codigo').textContent = '???';
-                    document.getElementById('origen-ciudad').textContent = 'Otro';
-                } else {
-                    extra.style.display = 'none';
-                    extra.value = '';
-                    var parts = sel.value.split('|');
-                    document.getElementById('origen-codigo').textContent = parts[0];
-                    document.getElementById('origen-ciudad').textContent = parts[1];
-                }
-            } else {
-                var sel = document.getElementById('destino');
-                var extra = document.getElementById('destino-extra');
-                if (sel.value.startsWith('OTRO')) {
-                    extra.style.display = 'block';
-                    document.getElementById('destino-codigo').textContent = '???';
-                    document.getElementById('destino-ciudad').textContent = 'Otro';
-                } else if (sel.value === '') {
-                    extra.style.display = 'none';
-                    document.getElementById('destino-codigo').textContent = '¿?';
-                    document.getElementById('destino-ciudad').textContent = 'Elige destino';
-                } else {
-                    extra.style.display = 'none';
-                    extra.value = '';
-                    var parts = sel.value.split('|');
-                    document.getElementById('destino-codigo').textContent = parts[0];
-                    document.getElementById('destino-ciudad').textContent = parts[1];
-                }
-            }
-        }
+    <div class="form-section">
+        <div class="section-title"><i class="fas fa-star"></i> Extras</div>
+        <div class="form-group">
+            <label><i class="fas fa-gift"></i>Ocasión especial</label>
+            <select id="ocasion"><option value="Viaje regular">Viaje regular</option><option value="Luna de Miel">💑 Luna de Miel</option><option value="Cumpleaños">🎂 Cumpleaños</option><option value="Viaje de Negocios">💼 Negocios</option><option value="Emergencia">🏥 Emergencia</option></select>
+            <div class="hint-text"><i class="fas fa-heart"></i> Si es una ocasión especial, podemos gestionar servicios adicionales</div>
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-pen"></i>Notas</label>
+            <textarea id="notas" placeholder="Ej: vuelo directo, ventana, aerolínea preferida..." rows="2"></textarea>
+        </div>
+    </div>
 
-        document.getElementById('origen-extra').addEventListener('input', function() {
-            if (this.value.trim()) {
-                document.getElementById('origen-codigo').textContent = '???';
-                document.getElementById('origen-ciudad').textContent = this.value.trim().substring(0, 12);
-            }
-        });
+    <button class="btn-gen" onclick="generarSolicitud()"><i class="fas fa-paper-plane" style="margin-right:6px;"></i>Cotizar Vuelo</button>
+    <div id="resultado"></div>
 
-        document.getElementById('destino-extra').addEventListener('input', function() {
-            if (this.value.trim()) {
-                document.getElementById('destino-codigo').textContent = '???';
-                document.getElementById('destino-ciudad').textContent = this.value.trim().substring(0, 12);
-            }
-        });
+    <div class="footer-servicios">
+        <a href="hospedaje.html" class="footer-servicio"><i class="fas fa-hotel"></i> Hospedaje</a>
+        <span class="footer-servicio activo"><i class="fas fa-plane"></i> Boletería</span>
+        <a href="#" class="footer-servicio"><i class="fas fa-bus"></i> Transporte</a>
+    </div>
+    <p class="footer-copy">© 2026 Lotus 360 · Carabobo, Venezuela</p>
+</div>
 
-        // Flexibilidad fechas
-        function toggleFlex(el) {
-            var tags = document.querySelectorAll('#flex-tags .flex-tag');
-            for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel');
-            el.classList.add('sel');
-        }
+<script>
+(function() { var img = new Image(); img.src = 'https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360backgroundmobile.jpg'; })();
+function transicionSalida(e) { e.preventDefault(); document.body.classList.add('salir'); setTimeout(function() { window.location.href = document.getElementById('homeBtn').href; }, 250); }
 
-        function getFlexibilidad() {
-            var sel = document.querySelector('#flex-tags .flex-tag.sel');
-            return sel ? parseInt(sel.dataset.value) : 0;
-        }
+(function() {
+    var ahora = new Date();
+    var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
+    var dia = ve.getDay(); var horaDecimal = ve.getHours() + ve.getMinutes() / 60;
+    var online = (dia >= 1 && dia <= 6) ? (horaDecimal >= 8.5 && horaDecimal < 19) : (dia === 0 && horaDecimal >= 10 && horaDecimal < 15);
+    document.getElementById('estado-dot').className = 'dot ' + (online ? 'online' : 'offline');
+    document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Fuera de horario · Domingos 10am-3pm' : 'Fuera de horario · Lun-Sáb 8:30am-7pm');
+})();
 
-        // Adultos extra
-        function toggleAdultosExtra() {
-            var sel = document.getElementById('adultos');
-            var extra = document.getElementById('adultos-extra');
-            extra.style.display = sel.value === 'more' ? 'block' : 'none';
-            if (sel.value !== 'more') extra.value = '';
-        }
+function hoyISO() { return new Date().toISOString().split('T')[0]; }
+document.getElementById('fecha-ida').min = hoyISO(); document.getElementById('fecha-vuelta').min = hoyISO();
 
-        function getAdultosCount() {
-            var sel = document.getElementById('adultos');
-            if (sel.value === 'more') {
-                var v = parseInt(document.getElementById('adultos-extra').value);
-                return isNaN(v) ? null : v;
-            }
-            return parseInt(sel.value);
-        }
+function toggleTipoViaje() {
+    var esIdaVuelta = document.getElementById('tv-idavuelta').checked;
+    document.getElementById('grupo-fecha-vuelta').style.display = esIdaVuelta ? 'block' : 'none';
+    document.getElementById('avion-vuelta').style.display = esIdaVuelta ? 'block' : 'none';
+    if (!esIdaVuelta) document.getElementById('fecha-vuelta').value = '';
+}
 
-        // Niños extra
-        function toggleNinosExtra() {
-            var sel = document.getElementById('ninos');
-            var extra = document.getElementById('ninos-extra');
-            var grupoCedula = document.getElementById('grupo-cedula-ninos');
-            var alertaCedula = document.getElementById('alerta-cedula-ninos');
-            
-            extra.style.display = sel.value === 'more' ? 'block' : 'none';
-            if (sel.value !== 'more') extra.value = '';
-            
-            var ninosCount = getNinosCount();
-            if (ninosCount > 0) {
-                grupoCedula.style.display = 'flex';
-                alertaCedula.classList.add('visible');
-                generarEdadesNinos(ninosCount);
-            } else {
-                grupoCedula.style.display = 'none';
-                alertaCedula.classList.remove('visible');
-                document.getElementById('contenedor-edades').innerHTML = '';
-            }
-        }
+function actualizarRuta(tipo) {
+    if (tipo === 'origen') {
+        var sel = document.getElementById('origen'), extra = document.getElementById('origen-extra');
+        if (sel.value.startsWith('OTRO')) { extra.style.display = 'block'; document.getElementById('origen-codigo').textContent = '???'; document.getElementById('origen-ciudad').textContent = 'Otro'; }
+        else { extra.style.display = 'none'; extra.value = ''; var p = sel.value.split('|'); document.getElementById('origen-codigo').textContent = p[0]; document.getElementById('origen-ciudad').textContent = p[1]; }
+    } else {
+        var sel = document.getElementById('destino'), extra = document.getElementById('destino-extra');
+        if (sel.value.startsWith('OTRO')) { extra.style.display = 'block'; document.getElementById('destino-codigo').textContent = '???'; document.getElementById('destino-ciudad').textContent = 'Otro'; }
+        else if (!sel.value) { extra.style.display = 'none'; document.getElementById('destino-codigo').textContent = '¿?'; document.getElementById('destino-ciudad').textContent = 'Elige'; }
+        else { extra.style.display = 'none'; extra.value = ''; var p = sel.value.split('|'); document.getElementById('destino-codigo').textContent = p[0]; document.getElementById('destino-ciudad').textContent = p[1]; }
+    }
+}
+document.getElementById('origen-extra').addEventListener('input', function() { if (this.value.trim()) { document.getElementById('origen-codigo').textContent = '???'; document.getElementById('origen-ciudad').textContent = this.value.trim().substring(0, 12); } });
+document.getElementById('destino-extra').addEventListener('input', function() { if (this.value.trim()) { document.getElementById('destino-codigo').textContent = '???'; document.getElementById('destino-ciudad').textContent = this.value.trim().substring(0, 12); } });
 
-        function toggleNinosExtraInput() {
-            var ninosCount = getNinosCount();
-            if (ninosCount > 0) {
-                document.getElementById('grupo-cedula-ninos').style.display = 'flex';
-                document.getElementById('alerta-cedula-ninos').classList.add('visible');
-                generarEdadesNinos(ninosCount);
-            }
-        }
+function actualizarDescDestino() {
+    var sel = document.getElementById('destino'), opt = sel.options[sel.selectedIndex];
+    document.getElementById('desc-destino').innerHTML = '<i class="fas fa-info-circle"></i> ' + (opt.getAttribute('data-desc') || 'Selecciona tu destino para ver detalles');
+}
 
-        function getNinosCount() {
-            var sel = document.getElementById('ninos');
-            if (sel.value === 'more') {
-                var v = parseInt(document.getElementById('ninos-extra').value);
-                return isNaN(v) ? null : v;
-            }
-            return parseInt(sel.value);
-        }
+function toggleFlex(el) { var tags = document.querySelectorAll('#flex-tags .flex-tag'); for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel'); el.classList.add('sel'); }
+function getFlexibilidad() { var sel = document.querySelector('#flex-tags .flex-tag.sel'); return sel ? parseInt(sel.dataset.value) : 0; }
 
-        function generarEdadesNinos(count) {
-            var cont = document.getElementById('contenedor-edades');
-            if (!count || count <= 0) { cont.innerHTML = ''; return; }
-            var html = '<label style="font-size:10px;color:#a8d1ff;margin-bottom:6px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>';
-            var max = Math.min(count, 10);
-            for (var i = 1; i <= max; i++) {
-                html += '<input type="number" class="edad-nino extra-input" min="2" max="11" placeholder="Niño ' + i + ': edad (2-11)" style="margin-bottom:4px;">';
-            }
-            if (count > 10) {
-                html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen de edades (ej: 3 de 8, 2 de 5)">';
-            }
-            cont.innerHTML = html;
-            
-            // Eventos para verificar edad ≥9
-            var inputs = cont.querySelectorAll('.edad-nino');
-            for (var j = 0; j < inputs.length; j++) {
-                inputs[j].addEventListener('input', actualizarAlertaCedula);
-            }
-        }
+function toggleAdultosExtra() { var e = document.getElementById('adultos-extra'); e.style.display = document.getElementById('adultos').value === 'more' ? 'block' : 'none'; if (document.getElementById('adultos').value !== 'more') e.value = ''; }
+function getAdultosCount() { var sel = document.getElementById('adultos'); if (sel.value === 'more') { var v = parseInt(document.getElementById('adultos-extra').value); return isNaN(v) ? null : v; } return parseInt(sel.value); }
 
-        function actualizarAlertaCedula() {
-            var inputs = document.querySelectorAll('.edad-nino');
-            var tieneMayor9 = false;
-            for (var i = 0; i < inputs.length; i++) {
-                if (parseInt(inputs[i].value) >= 9) { tieneMayor9 = true; break; }
-            }
-            var alerta = document.getElementById('alerta-cedula-ninos');
-            if (tieneMayor9) {
-                alerta.style.borderColor = 'rgba(255,80,80,0.5)';
-                alerta.style.background = 'rgba(255,80,80,0.12)';
-                alerta.querySelector('span').innerHTML = '⚠️ <strong>Obligatorio:</strong> Los niños de 9 años o más deben tener cédula de identidad vigente para abordar.';
-            } else {
-                alerta.style.borderColor = 'rgba(255,145,0,0.3)';
-                alerta.style.background = 'rgba(255,145,0,0.1)';
-                alerta.querySelector('span').innerHTML = 'Si algún niño tiene <strong>9 años o más</strong>, es obligatorio que tenga cédula de identidad vigente para viajar.';
-            }
-        }
+function toggleNinosExtra() { var e = document.getElementById('ninos-extra'); e.style.display = document.getElementById('ninos').value === 'more' ? 'block' : 'none'; if (document.getElementById('ninos').value !== 'more') e.value = ''; actualizarNinosUI(); }
+function toggleNinosExtraInput() { actualizarNinosUI(); }
+function getNinosCount() { var sel = document.getElementById('ninos'); if (sel.value === 'more') { var v = parseInt(document.getElementById('ninos-extra').value); return isNaN(v) ? null : v; } return parseInt(sel.value); }
+function actualizarNinosUI() {
+    var count = getNinosCount(); document.getElementById('grupo-cedula-ninos').style.display = count > 0 ? 'flex' : 'none';
+    var alerta = document.getElementById('alerta-cedula-ninos');
+    if (count > 0) { alerta.classList.add('visible'); generarEdades(count); } else { alerta.classList.remove('visible'); document.getElementById('contenedor-edades').innerHTML = ''; }
+}
+function generarEdades(count) {
+    var cont = document.getElementById('contenedor-edades'); if (!count || count <= 0) { cont.innerHTML = ''; return; }
+    var html = '<label style="font-size:9px;color:#a8d1ff;margin-bottom:5px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>';
+    var max = Math.min(count, 10);
+    for (var i = 1; i <= max; i++) html += '<input type="number" class="edad-nino extra-input" min="2" max="11" placeholder="Niño ' + i + ': edad (2-11)" style="margin-bottom:4px;">';
+    if (count > 10) html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen: ej. 3 de 8 años, 2 de 5">';
+    cont.innerHTML = html;
+    var inputs = cont.querySelectorAll('.edad-nino'); for (var j = 0; j < inputs.length; j++) inputs[j].addEventListener('input', actualizarAlertaCedula);
+}
+function actualizarAlertaCedula() {
+    var inputs = document.querySelectorAll('.edad-nino'), tiene = false;
+    for (var i = 0; i < inputs.length; i++) { if (parseInt(inputs[i].value) >= 9) { tiene = true; break; } }
+    var alerta = document.getElementById('alerta-cedula-ninos');
+    alerta.style.borderColor = tiene ? 'rgba(255,80,80,0.5)' : 'rgba(255,145,0,0.25)';
+    alerta.style.background = tiene ? 'rgba(255,80,80,0.1)' : 'rgba(255,145,0,0.08)';
+    alerta.querySelector('span').innerHTML = tiene ? '⚠️ <strong>Obligatorio:</strong> Niños de 9+ años deben tener cédula.' : 'Niños ≥9 años necesitan cédula vigente para viajar.';
+}
 
-        // Equipaje
-        function toggleEquipaje(el) {
-            if (el.dataset.value === 'Sin equipaje') {
-                var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag');
-                for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel');
-                el.classList.add('sel');
-            } else {
-                var sinEquipaje = document.querySelector('#equipaje-grid .pasajero-tag[data-value="Sin equipaje"]');
-                if (sinEquipaje) sinEquipaje.classList.remove('sel');
-                el.classList.toggle('sel');
-            }
-        }
+function toggleEquipaje(el) {
+    if (el.dataset.value === 'Sin equipaje') { var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag'); for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel'); el.classList.add('sel'); }
+    else { var sin = document.querySelector('#equipaje-grid .pasajero-tag[data-value="Sin equipaje"]'); if (sin) sin.classList.remove('sel'); el.classList.toggle('sel'); }
+}
+function getEquipaje() { var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag.sel'), r = []; for (var i = 0; i < tags.length; i++) r.push(tags[i].dataset.value); return r; }
 
-        function getEquipaje() {
-            var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag.sel');
-            var result = [];
-            for (var i = 0; i < tags.length; i++) result.push(tags[i].dataset.value);
-            return result;
-        }
+function lanzarConfeti() {
+    var colores = ['#4a9eff', '#25D366', '#ffd166', '#ff9100', '#7bb8ff']; var c = document.createElement('div'); c.className = 'confeti-container'; var f = document.createDocumentFragment();
+    for (var i = 0; i < 20; i++) { var x = document.createElement('div'); x.className = 'confeti'; x.style.left = Math.random() * 100 + '%'; x.style.animationDelay = Math.random() * 0.4 + 's'; x.style.animationDuration = (Math.random() * 0.8 + 0.7) + 's'; x.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)]; f.appendChild(x); }
+    c.appendChild(f); document.body.appendChild(c); setTimeout(function() { c.remove(); }, 1500);
+}
 
-        // Confeti
-        function lanzarConfeti() {
-            var colores = ['#4a9eff', '#25D366', '#ffd166', '#ff9100', '#10b981', '#7bb8ff'];
-            var container = document.createElement('div');
-            container.className = 'confeti-container';
-            var fragment = document.createDocumentFragment();
-            for (var i = 0; i < 25; i++) {
-                var confeti = document.createElement('div');
-                confeti.className = 'confeti';
-                confeti.style.left = Math.random() * 100 + '%';
-                confeti.style.animationDelay = Math.random() * 0.5 + 's';
-                confeti.style.animationDuration = (Math.random() * 1 + 0.8) + 's';
-                confeti.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)];
-                fragment.appendChild(confeti);
-            }
-            container.appendChild(fragment);
-            document.body.appendChild(container);
-            setTimeout(function() { container.remove(); }, 2000);
-        }
+function generarSolicitud() {
+    var tipoViaje = document.querySelector('input[name="tipo-viaje"]:checked').value;
+    var origenSel = document.getElementById('origen').value, origenExtra = document.getElementById('origen-extra').value.trim();
+    var origen = origenSel.startsWith('OTRO') ? origenExtra : origenSel.split('|')[1];
+    var destinoSel = document.getElementById('destino').value, destinoExtra = document.getElementById('destino-extra').value.trim();
+    var destino = destinoSel.startsWith('OTRO') ? destinoExtra : (destinoSel ? destinoSel.split('|')[1] : '');
+    var fechaIda = document.getElementById('fecha-ida').value, fechaVuelta = document.getElementById('fecha-vuelta').value;
+    var flexibilidad = getFlexibilidad(), adultos = getAdultosCount(), ninos = getNinosCount();
+    var bebes = parseInt(document.getElementById('bebes').value), equipaje = getEquipaje();
+    var cedulaAdultos = document.getElementById('cedula-adultos').checked, cedulaNinos = document.getElementById('cedula-ninos').checked;
+    var ocasion = document.getElementById('ocasion').value, notas = document.getElementById('notas').value.trim();
 
-        // Generar
-        function generarSolicitud() {
-            var tipoViaje = document.querySelector('input[name="tipo-viaje"]:checked').value;
-            var origenSel = document.getElementById('origen').value;
-            var origenExtra = document.getElementById('origen-extra').value.trim();
-            var origen = origenSel.startsWith('OTRO') ? origenExtra : origenSel.split('|')[1];
-            var destinoSel = document.getElementById('destino').value;
-            var destinoExtra = document.getElementById('destino-extra').value.trim();
-            var destino = destinoSel.startsWith('OTRO') ? destinoExtra : (destinoSel ? destinoSel.split('|')[1] : '');
-            var fechaIda = document.getElementById('fecha-ida').value;
-            var fechaVuelta = document.getElementById('fecha-vuelta').value;
-            var flexibilidad = getFlexibilidad();
-            var adultos = getAdultosCount();
-            var ninos = getNinosCount();
-            var bebes = parseInt(document.getElementById('bebes').value);
-            var equipaje = getEquipaje();
-            var cedulaAdultos = document.getElementById('cedula-adultos').checked;
-            var cedulaNinos = document.getElementById('cedula-ninos').checked;
-            var ocasion = document.getElementById('ocasion').value;
-            var notas = document.getElementById('notas').value.trim();
+    var edadesNinos = ''; var resumenEl = document.getElementById('edades-resumen');
+    if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; }
+    else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
 
-            // Edades niños
-            var edadesNinos = '';
-            var resumenEl = document.getElementById('edades-resumen');
-            if (resumenEl) {
-                edadesNinos = resumenEl.value.trim() || 'No especificadas';
-            } else {
-                var edadInputs = document.querySelectorAll('.edad-nino');
-                var edadesArr = [];
-                for (var i = 0; i < edadInputs.length; i++) {
-                    edadesArr.push('Niño ' + (i+1) + ': ' + (edadInputs[i].value || '?') + ' años');
-                }
-                edadesNinos = edadesArr.length ? edadesArr.join(', ') : 'No especificadas';
-            }
+    if (!origen || !destino || !fechaIda || adultos === null) { alert('Completa origen, destino, fecha de ida y cantidad de adultos.'); return; }
 
-            if (!origen || !destino || !fechaIda || adultos === null) {
-                alert('Completa origen, destino, fecha de ida y cantidad de adultos por favor.');
-                return;
-            }
+    var asesores = ['584244634041', '584244900601', '584147020527']; var tlf = asesores[Math.floor(Math.random() * asesores.length)];
+    var lineas = ['✈️ *COTIZACIÓN DE VUELO - LOTUS 360*','','🔄 *Tipo:* ' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida'),'📍 *Origen:* ' + origen,'📍 *Destino:* ' + destino,'📅 *Fecha ida:* ' + fechaIda,(tipoViaje === 'ida-vuelta' && fechaVuelta ? '📅 *Fecha vuelta:* ' + fechaVuelta : ''),(flexibilidad > 0 ? '📆 *Flexibilidad:* ±' + flexibilidad + ' día(s)' : '📆 *Fechas fijas*'),'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos + ' | *Bebés:* ' + bebes,(ninos > 0 ? '👶 *Edades:* ' + edadesNinos : ''),'🧳 *Equipaje:* ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado'),'🆔 *Cédulas adultos:* ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR'),(ninos > 0 ? '🆔 *Cédulas niños:* ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') : ''),(ocasion !== 'Viaje regular' ? '🎉 *Ocasión:* ' + ocasion : ''),(notas ? '📝 *Notas:* ' + notas : ''),'','✅ *Enviar opciones con precios. ¡Gracias!*'];
+    var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(lineas.filter(function(l) { return l !== ''; }).join('\n'));
 
-            var asesores = ['584244634041', '584244900601', '584147020527'];
-            var tlf = asesores[Math.floor(Math.random() * asesores.length)];
+    document.getElementById('resultado').style.display = 'block';
+    document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Listo!</h3><div class="resumen-detalle">' +
+        '<div class="dato"><i class="fas fa-exchange-alt"></i> <strong>' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + '</strong></div>' +
+        '<div class="dato"><i class="fas fa-plane-departure"></i> ' + origen + ' → ' + destino + '</div>' +
+        '<div class="dato"><i class="fas fa-calendar-check"></i> Ida: ' + fechaIda + (tipoViaje === 'ida-vuelta' && fechaVuelta ? ' | Vuelta: ' + fechaVuelta : '') + '</div>' +
+        '<div class="dato"><i class="fas fa-sliders-h"></i> ' + (flexibilidad > 0 ? 'Flexible ±' + flexibilidad + ' día(s)' : 'Fechas fijas') + '</div>' +
+        '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + bebes + ' bebés</div>' +
+        '<div class="dato"><i class="fas fa-suitcase"></i> ' + (equipaje.length ? equipaje.join(' + ') : 'Sin equipaje') + '</div>' +
+        (ocasion !== 'Viaje regular' ? '<div class="dato"><i class="fas fa-gift"></i> ' + ocasion + '</div>' : '') +
+        '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Enviar a un Asesor</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Nueva cotización</button></div>';
+    document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' }); lanzarConfeti();
+}
 
-            var mensajeWA =
-                '\u2708\uFE0F *COTIZACIÓN DE VUELO - LOTUS 360*\n\n' +
-                '\uD83D\uDD01 *Tipo:* ' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + '\n' +
-                '\uD83D\uDCCD *Origen:* ' + origen + '\n' +
-                '\uD83D\uDCCD *Destino:* ' + destino + '\n' +
-                '\uD83D\uDCC5 *Fecha ida:* ' + fechaIda + '\n' +
-                (tipoViaje === 'ida-vuelta' && fechaVuelta ? '\uD83D\uDCC5 *Fecha vuelta:* ' + fechaVuelta + '\n' : '') +
-                (flexibilidad > 0 ? '\uD83D\uDD04 *Flexibilidad:* ±' + flexibilidad + ' día' + (flexibilidad > 1 ? 's' : '') + '\n' : '\uD83D\uDD12 *Fechas fijas*\n') +
-                '\uD83D\uDC65 *Pasajeros:* ' + adultos + ' adulto(s) | ' + ninos + ' niño(s) | ' + bebes + ' bebé(s)\n' +
-                (ninos > 0 ? '\uD83D\uDC76 *Edades niños:* ' + edadesNinos + '\n' : '') +
-                '\uD83E\uDDF3 *Equipaje:* ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado') + '\n' +
-                '\uD83D\uDCCB *Documentos:* Adultos con cédula: ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR') + '\n' +
-                (ninos > 0 ? '\uD83D\uDCCB *Niños con cédula:* ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') + '\n' : '') +
-                (ocasion !== 'Viaje regular' ? '\uD83C\uDF89 *Ocasión:* ' + ocasion + '\n' : '') +
-                (notas ? '\uD83D\uDCDD *Notas:* ' + notas + '\n' : '') +
-                '\n\u2705 *Por favor, enviar opciones con precios. ¡Gracias!*';
+function nuevaCotizacion() { var r = document.getElementById('resultado'); r.style.opacity = '0'; r.style.transform = 'translateY(8px)'; r.style.transition = 'all 0.25s ease'; setTimeout(function() { r.style.display = 'none'; r.innerHTML = ''; r.style.opacity = '1'; r.style.transform = 'translateY(0)'; window.scrollTo({ top: 0, behavior: 'smooth' }); }, 250); }
 
-            var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(mensajeWA);
-
-            document.getElementById('resultado').style.display = 'block';
-            document.getElementById('resultado').innerHTML =
-                '<div class="resultado-card">' +
-                    '<h3><i class="fas fa-check-circle"></i> ¡Listo! Tu vuelo:</h3>' +
-                    '<div class="resumen-detalle">' +
-                        '<div class="dato"><i class="fas fa-exchange-alt"></i> <strong>' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + '</strong></div>' +
-                        '<div class="dato"><i class="fas fa-plane-departure"></i> ' + origen + ' → ' + destino + '</div>' +
-                        '<div class="dato"><i class="fas fa-calendar-check"></i> Ida: ' + fechaIda + (tipoViaje === 'ida-vuelta' && fechaVuelta ? ' | Vuelta: ' + fechaVuelta : '') + '</div>' +
-                        '<div class="dato"><i class="fas fa-sliders-h"></i> ' + (flexibilidad > 0 ? 'Flexible ±' + flexibilidad + ' día' + (flexibilidad > 1 ? 's' : '') : 'Fechas fijas') + '</div>' +
-                        '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + bebes + ' bebés</div>' +
-                        '<div class="dato"><i class="fas fa-suitcase"></i> ' + (equipaje.length ? equipaje.join(' + ') : 'Sin equipaje') + '</div>' +
-                        (ocasion !== 'Viaje regular' ? '<div class="dato"><i class="fas fa-gift"></i> ' + ocasion + '</div>' : '') +
-                    '</div>' +
-                    '<a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar">' +
-                        '<i class="fab fa-whatsapp"></i> Enviar a un Asesor' +
-                    '</a>' +
-                    '<button class="btn-nueva" onclick="nuevaCotizacion()">' +
-                        '<i class="fas fa-redo"></i> Hacer otra cotización' +
-                    '</button>' +
-                '</div>';
-
-            document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' });
-            lanzarConfeti();
-        }
-
-        function nuevaCotizacion() {
-            var resultado = document.getElementById('resultado');
-            resultado.style.opacity = '0';
-            resultado.style.transform = 'translateY(10px)';
-            resultado.style.transition = 'all 0.3s ease';
-            setTimeout(function() {
-                resultado.style.display = 'none';
-                resultado.innerHTML = '';
-                resultado.style.opacity = '1';
-                resultado.style.transform = 'translateY(0)';
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }, 300);
-        }
-
-        // Init
-        toggleTipoViaje();
-    </script>
+toggleTipoViaje(); actualizarDescDestino();
+</script>
 </body>
 </html>
