@@ -13,7 +13,7 @@
         :root {
             --bg-deep: #0a1020;
             --accent: #ff9100;
-            --accent-glow: rgba(255, 145, 0, 0.45);
+            --accent-glow: rgba(255, 145, 0, 0.5);
             --success: #25D366;
             --text-primary: #ffffff;
             --text-secondary: #ffd9a8;
@@ -33,7 +33,7 @@
             display: flex;
             justify-content: center;
             align-items: flex-start;
-            padding: 28px 16px 60px;
+            padding: 20px 16px 60px;
             position: relative;
             overflow-x: hidden;
         }
@@ -83,10 +83,43 @@
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* Botón Home */
+        .home-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 50px;
+            padding: 10px 20px;
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.85);
+            text-decoration: none;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            letter-spacing: 0.3px;
+        }
         
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 20px rgba(255, 145, 0, 0.2); }
-            50% { box-shadow: 0 0 40px rgba(255, 145, 0, 0.4); }
+        .home-btn:hover {
+            background: rgba(255, 145, 0, 0.15);
+            border-color: rgba(255, 145, 0, 0.4);
+            color: #ff9100;
+            transform: translateX(-3px);
+            box-shadow: 0 4px 15px rgba(255, 145, 0, 0.2);
+        }
+        
+        .home-btn i {
+            color: #ff9100;
+            font-size: 12px;
+            transition: transform 0.3s ease;
+        }
+        
+        .home-btn:hover i {
+            transform: translateX(-3px);
         }
 
         /* Header */
@@ -97,22 +130,30 @@
         
         .logo-wrap {
             position: relative;
-            width: 88px;
+            width: 96px;
+            height: 96px;
             margin: 0 auto 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
         .logo-wrap::before {
             content: '';
             position: absolute;
-            inset: -6px;
+            width: 96px;
+            height: 96px;
             border-radius: 50%;
             border: 2px solid rgba(255, 145, 0, 0.5);
             animation: ring-pulse 2.4s ease-out infinite;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
         
         @keyframes ring-pulse {
-            0% { transform: scale(0.9); opacity: 0.9; }
-            100% { transform: scale(1.5); opacity: 0; }
+            0% { width: 88px; height: 88px; opacity: 0.9; }
+            100% { width: 120px; height: 120px; opacity: 0; }
         }
         
         .logo-profile {
@@ -125,6 +166,8 @@
             object-fit: contain;
             display: block;
             box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+            position: relative;
+            z-index: 1;
         }
         
         .card-header h2 {
@@ -191,7 +234,6 @@
             border: 1px solid rgba(255, 145, 0, 0.25);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
             background: #0c2d4a;
-            animation: pulse-glow 4s ease-in-out infinite;
         }
         
         .escena-box svg.escena {
@@ -330,7 +372,7 @@
             color: #fff;
             font-family: inherit;
             color-scheme: dark;
-            transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+            transition: all 0.3s ease;
         }
         
         select {
@@ -340,6 +382,10 @@
             background-repeat: no-repeat;
             background-position: right 14px center;
             padding-right: 40px;
+        }
+        
+        select:hover, input:hover, textarea:hover {
+            border-color: rgba(255, 145, 0, 0.4);
         }
         
         select:focus, input:focus, textarea:focus {
@@ -361,14 +407,6 @@
         
         .row .form-group {
             flex: 1;
-        }
-        
-        .hint {
-            font-size: 11px;
-            color: rgba(255, 217, 168, 0.75);
-            margin-top: 6px;
-            line-height: 1.4;
-            display: block;
         }
 
         /* Amenidades */
@@ -394,6 +432,11 @@
             transition: all 0.2s ease;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
+        }
+        
+        .amenidad-tag:hover {
+            border-color: rgba(255, 145, 0, 0.4);
+            background: rgba(255, 145, 0, 0.1);
         }
         
         .amenidad-tag i {
@@ -429,6 +472,7 @@
             font-size: 13.5px;
             font-weight: 600;
             color: #ffd9a8;
+            transition: all 0.3s ease;
         }
         
         .noches-box i {
@@ -439,6 +483,12 @@
             color: #fff;
             font-size: 18px;
             font-weight: 800;
+            animation: countIn 0.5s ease;
+        }
+        
+        @keyframes countIn {
+            from { transform: scale(1.5); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
         }
 
         /* Presupuesto */
@@ -475,6 +525,12 @@
             background: var(--accent);
             cursor: pointer;
             box-shadow: 0 2px 12px rgba(255, 145, 0, 0.5);
+            transition: all 0.2s ease;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 4px 20px rgba(255, 145, 0, 0.7);
         }
         
         .presupuesto-val {
@@ -489,10 +545,10 @@
             color: var(--accent);
         }
 
-        /* Botón */
+        /* Botón principal */
         .btn-gen {
             width: 100%;
-            padding: 17px;
+            padding: 18px;
             background: linear-gradient(135deg, #ff9100, #ff5e1a);
             color: white;
             border: none;
@@ -500,9 +556,31 @@
             font-weight: 700;
             font-size: 16px;
             cursor: pointer;
-            transition: transform 0.15s, box-shadow 0.2s;
+            transition: all 0.3s ease;
             box-shadow: 0 6px 24px rgba(255, 100, 0, 0.4);
             letter-spacing: 0.3px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-gen::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .btn-gen:hover::before {
+            left: 100%;
+        }
+        
+        .btn-gen:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(255, 100, 0, 0.6);
         }
         
         .btn-gen:active {
@@ -512,32 +590,113 @@
         /* Resultado */
         #resultado {
             display: none;
-            margin-top: 16px;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(37, 211, 102, 0.35);
-            color: #fff;
-            border-radius: 16px;
-            border-left: 4px solid #25D366;
-            text-align: left;
-            font-size: 13.5px;
-            line-height: 1.6;
+            margin-top: 20px;
+            animation: slideUp 0.5s ease;
         }
         
-        .wa-btn {
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .resultado-card {
+            background: rgba(15, 20, 40, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(37, 211, 102, 0.3);
+            border-radius: 16px;
+            padding: 20px;
+            border-left: 4px solid #25D366;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        
+        .resultado-card h3 {
+            color: #25D366;
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .resultado-card .resumen-detalle {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+        
+        .resultado-card .resumen-detalle .dato {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        
+        .resultado-card .resumen-detalle .dato i {
+            color: var(--accent);
+            width: 18px;
+            text-align: center;
+        }
+        
+        .btn-cotizar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #25D366, #128C7E);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 20px rgba(37, 211, 102, 0.3);
+            letter-spacing: 0.3px;
+        }
+        
+        .btn-cotizar:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 28px rgba(37, 211, 102, 0.5);
+        }
+        
+        .btn-cotizar i {
+            font-size: 1.3rem;
+            animation: bounce 2s infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
+        }
+        
+        .btn-nueva {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 8px;
-            background: #25D366;
-            color: white;
-            padding: 15px;
-            border-radius: 13px;
-            text-decoration: none;
-            font-weight: 700;
-            margin-top: 14px;
-            font-size: 15px;
-            box-shadow: 0 5px 18px rgba(37, 211, 102, 0.3);
+            width: 100%;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 14px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-nueva:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
         }
         
         .footer-copy {
@@ -548,7 +707,29 @@
             text-align: center;
         }
 
-        /* Responsive */
+        /* Confeti */
+        .confeti-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 999;
+        }
+        
+        .confeti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            animation: caerConfeti 1.5s ease-out forwards;
+        }
+        
+        @keyframes caerConfeti {
+            0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+
         @media (max-width: 400px) {
             body { padding: 16px 10px 40px; }
             .escena-box { height: 110px; }
@@ -558,7 +739,9 @@
         @media (prefers-reduced-motion: reduce) {
             .ola1, .ola2, .sol, .hojas, .nube, .telecabina, .nieve1, .nieve2, .nieve3,
             .agua, .bruma, .rayo1, .rayo2, .lluvia, .globo-lineas, .avion-mundo,
-            .logo-wrap::before, .dot.online { animation: none !important; }
+            .logo-wrap::before, .dot.online, .btn-gen::before, .btn-cotizar i { 
+                animation: none !important; 
+            }
         }
     </style>
 </head>
@@ -567,6 +750,11 @@
     <div id="bg-overlay"></div>
     
     <div class="card">
+        <!-- Botón Home -->
+        <a href="https://bwrathanyel.github.io/redireccion-whatsapp/Home-Page/" class="home-btn">
+            <i class="fas fa-chevron-left"></i> Volver al Inicio
+        </a>
+
         <!-- Header -->
         <div class="card-header">
             <div class="logo-wrap">
@@ -636,10 +824,6 @@
                     <line x1="8" y1="22" x2="0" y2="30" stroke="#3a6b35" stroke-width="2"/>
                     <line x1="8" y1="22" x2="16" y2="30" stroke="#3a6b35" stroke-width="2"/>
                     <ellipse cx="8" cy="0" rx="10" ry="7" fill="#2d7a28"/>
-                </g>
-                <g style="animation:ola 8s linear infinite">
-                    <ellipse cx="180" cy="98" rx="6" ry="3" fill="rgba(255,180,0,.5)"/>
-                    <ellipse cx="250" cy="105" rx="5" ry="2.5" fill="rgba(0,200,200,.4)"/>
                 </g>
                 <path class="ola ola1" d="M0,75 Q50,67 100,75 T200,75 T300,75 T400,75 T500,75 V130 H0 Z" fill="rgba(255,255,255,.15)"/>
             </svg>
@@ -862,8 +1046,7 @@
                 <div class="form-group">
                     <label><i class="fas fa-child"></i>Niños (2-11)</label>
                     <select id="ninos">
-                        <option value="0" selected>0</option><option value="1">1</option>
-                        <option value="2">2</option><option value="3">3</option>
+                        <option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option>
                     </select>
                 </div>
             </div>
@@ -896,16 +1079,11 @@
 
         <!-- Botón -->
         <button class="btn-gen" id="btn-generar" onclick="generarSolicitud()">
-            <i class="fas fa-paper-plane" style="margin-right:8px;"></i>Generar Solicitud de Hospedaje
+            <i class="fas fa-paper-plane"></i> Generar Solicitud de Hospedaje
         </button>
 
         <!-- Resultado -->
-        <div id="resultado">
-            <p id="res-texto" style="margin-bottom:10px;"></p>
-            <a id="btn-wa" href="#" target="_blank" rel="noopener" class="wa-btn">
-                <i class="fab fa-whatsapp"></i> Contactar Asesor Ahora
-            </a>
-        </div>
+        <div id="resultado"></div>
 
         <p class="footer-copy">© 2026 Destino y Eventos Lotus 360 · Carabobo, Venezuela</p>
     </div>
@@ -991,6 +1169,27 @@
                 `Hasta <span>$${v}</span> USD por noche`;
         }
 
+        // Confeti
+        function lanzarConfeti() {
+            const colores = ['#ff9100', '#25D366', '#ffd166', '#ff5e1a', '#fff', '#10b981'];
+            const container = document.createElement('div');
+            container.className = 'confeti-container';
+            
+            for (let i = 0; i < 40; i++) {
+                const confeti = document.createElement('div');
+                confeti.className = 'confeti';
+                confeti.style.left = Math.random() * 100 + '%';
+                confeti.style.animationDelay = Math.random() * 0.8 + 's';
+                confeti.style.animationDuration = (Math.random() * 1.5 + 1) + 's';
+                confeti.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)];
+                confeti.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+                container.appendChild(confeti);
+            }
+            
+            document.body.appendChild(container);
+            setTimeout(() => container.remove(), 2500);
+        }
+
         // Generar solicitud
         function generarSolicitud() {
             const destBase = document.getElementById('destino').value;
@@ -1006,11 +1205,11 @@
             const habitaciones = document.getElementById('habitaciones').value;
             const amenidades = getAmenidades();
             const presupuesto = document.getElementById('presupuesto-slider').value;
-            const presTexto = presupuesto >= 500 ? 'sin límite (lo mejor disponible)' : `hasta $${presupuesto} USD`;
+            const presTexto = presupuesto >= 500 ? 'Sin límite (lo mejor disponible)' : `$${presupuesto} USD`;
             const notas = document.getElementById('notas').value.trim();
 
             if (!dest || !ci || !co) {
-                alert('Por favor completa el destino y las fechas.');
+                alert('⚠️ Por favor completa el destino y las fechas antes de continuar.');
                 return;
             }
 
@@ -1018,34 +1217,57 @@
             const asesores = ['584244634041', '584244900601', '584147020527', '584244269876', '584127136169'];
             const tlf = asesores[Math.floor(Math.random() * asesores.length)];
 
-            const lineas = [
-                '¡Hola! Quiero cotizar hospedaje:',
-                `Destino: ${dest}`,
-                `Alojamiento: ${hosp}`,
-                `Plan de alimentación: ${plan}`,
-                `Fechas: ${ci} al ${co} (${noches} noche${noches!==1?'s':''})`,
-                `Adultos: ${adultos}`,
-                `Niños: ${ninos}`,
-                `Habitaciones: ${habitaciones}`,
-                `Presupuesto por noche: ${presTexto}`,
-                `Ocasión: ${ocasion}`
-            ];
-            if (amenidades.length) lineas.push(`Preferencias: ${amenidades.join(', ')}`);
-            if (notas) lineas.push(`Notas: ${notas}`);
+            // Mensaje profesional para el asesor
+            const mensajeWA = 
+                `🌟 *NUEVA SOLICITUD DE COTIZACIÓN - LOTUS 360*\n\n` +
+                `📍 *Destino:* ${dest}\n` +
+                `🏨 *Alojamiento:* ${hosp}\n` +
+                `🍽️ *Plan:* ${plan}\n` +
+                `📅 *Check-in:* ${ci}\n` +
+                `📅 *Check-out:* ${co}\n` +
+                `🌙 *Noches:* ${noches}\n` +
+                `👥 *Huéspedes:* ${adultos} adulto(s) | ${ninos} niño(s)\n` +
+                `🛏️ *Habitaciones:* ${habitaciones}\n` +
+                `💰 *Presupuesto/noche:* ${presTexto}\n` +
+                (amenidades.length ? `✨ *Preferencias:* ${amenidades.join(' · ')}\n` : '') +
+                (ocasion !== 'Vacaciones' ? `🎉 *Ocasión especial:* ${ocasion}\n` : '') +
+                (notas ? `📝 *Notas adicionales:* ${notas}\n` : '') +
+                `\n📌 *Fecha de solicitud:* ${new Date().toLocaleDateString('es-VE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n` +
+                `\n✅ *Por favor, enviar cotización personalizada con opciones y disponibilidad.* ¡Gracias!`;
 
-            document.getElementById('btn-wa').href =
-                `https://wa.me/${tlf}?text=${encodeURIComponent(lineas.join('\n'))}`;
-            document.getElementById('res-texto').innerHTML = `
-                <b>Resumen de tu solicitud:</b><br>
-                ${dest} · ${hosp} · ${plan}<br>
-                ${ci} → ${co} (${noches} noche${noches!==1?'s':''})<br>
-                ${adultos} Adulto(s) · ${ninos} Niño(s) · ${habitaciones} hab.<br>
-                Presupuesto: ${presTexto}
-                ${amenidades.length?`<br>✓ Preferencias: ${amenidades.join(', ')}`:''}
-                ${ocasion!=='Vacaciones'?`<br>Ocasión: ${ocasion} 🎉`:''}
-            `;
+            const waLink = `https://wa.me/${tlf}?text=${encodeURIComponent(mensajeWA)}`;
+
+            // Mostrar resultado
             document.getElementById('resultado').style.display = 'block';
+            document.getElementById('resultado').innerHTML = `
+                <div class="resultado-card">
+                    <h3><i class="fas fa-check-circle"></i> ¡Tu solicitud está lista!</h3>
+                    <div class="resumen-detalle">
+                        <div class="dato"><i class="fas fa-map-marker-alt"></i> <strong>${dest}</strong></div>
+                        <div class="dato"><i class="fas fa-hotel"></i> ${hosp} · ${plan}</div>
+                        <div class="dato"><i class="fas fa-calendar"></i> ${ci} → ${co} <span style="color:#ff9100;margin-left:4px;">(${noches} noches)</span></div>
+                        <div class="dato"><i class="fas fa-users"></i> ${adultos} adultos · ${ninos} niños · ${habitaciones} habitación(es)</div>
+                        <div class="dato"><i class="fas fa-tag"></i> Presupuesto: ${presTexto}/noche</div>
+                        ${amenidades.length ? `<div class="dato"><i class="fas fa-star"></i> ${amenidades.join(' · ')}</div>` : ''}
+                        ${ocasion !== 'Vacaciones' ? `<div class="dato"><i class="fas fa-gift"></i> ${ocasion} 🎉</div>` : ''}
+                    </div>
+                    <a href="${waLink}" target="_blank" rel="noopener" class="btn-cotizar" onclick="lanzarConfeti()">
+                        <i class="fab fa-whatsapp"></i> Enviar a un Asesor por WhatsApp
+                    </a>
+                    <button class="btn-nueva" onclick="nuevaCotizacion()">
+                        <i class="fas fa-redo"></i> Hacer otra cotización
+                    </button>
+                </div>
+            `;
+
             document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            lanzarConfeti();
+        }
+
+        function nuevaCotizacion() {
+            document.getElementById('resultado').style.display = 'none';
+            document.getElementById('resultado').innerHTML = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         // Init
