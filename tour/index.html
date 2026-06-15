@@ -509,11 +509,6 @@ function generarSolicitud() {
 
     var lineas = ['🌴 *RESERVA TOUR - LOTUS 360*','','📍 *Tour:* Cayo Sal - Chichiriviche, Falcón','📅 *Fecha:* 27 de Junio','⏰ *Horario:* 6:00 am - 4:00 pm','📍 *Salida:* CC Dinastía, Naguanagua','','🎫 *Plan:* ' + planNombre + ' (' + planPrecio + ')','👤 *Nombre:* ' + nombre,'👥 *Adultos:* ' + adultos + (ninos > 0 ? ' | *Niños:* ' + ninos : '') + (bebes > 0 ? ' | *Bebés:* ' + bebes : ''),'💰 *Total estimado:* $' + total + ' USD (solo adultos)'];
     if (ninos > 0) lineas.push('👶 *Edades niños:* ' + edadesNinos);
-    lineas.push('','✅ *Incluye:*');
-    var items = incluyePlanes[plan].items;
-    for (var j = 0; j < items.length; j++) lineas.push('  ' + items[j]);
-    if (notas) lineas.push('','📝 *Notas:* ' + notas);
-    lineas.push('','📲 *Aparta tu cupo - Se agotan rápido*','✅ *Confirmar disponibilidad y método de pago. ¡Gracias!*');
 
     var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(lineas.join('\n'));
 
