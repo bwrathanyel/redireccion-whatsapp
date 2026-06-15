@@ -40,7 +40,6 @@
         body.salir { animation: pageExit 0.25s ease forwards; }
         @keyframes pageExit { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-25px); } }
         
-        /* Línea de textura superior */
         body::before {
             content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 3px;
             background: linear-gradient(90deg, transparent 0%, rgba(255,145,0,0.3) 15%, rgba(255,145,0,0.6) 30%, rgba(255,180,100,0.4) 50%, rgba(255,145,0,0.6) 70%, rgba(255,145,0,0.3) 85%, transparent 100%);
@@ -243,7 +242,6 @@
         .btn-nueva { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; padding: 11px; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.65); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; font-weight: 600; font-size: 12px; cursor: pointer; margin-top: 7px; touch-action: manipulation; }
         .btn-nueva:active { background: rgba(255,255,255,0.1); }
 
-        /* Footer con 3 servicios */
         .footer-servicios { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 18px 0 6px; }
         .footer-servicio {
             display: flex; align-items: center; gap: 4px; font-size: 8px;
@@ -282,7 +280,6 @@
         <div class="estado-box"><span class="dot" id="estado-dot"></span><span id="estado-texto">Verificando...</span></div>
     </div>
 
-    <!-- Escena animada -->
     <div class="escena-box">
         <svg class="escena activa" id="escena-playa" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="p1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff9a56"/><stop offset="55%" stop-color="#ff6b6b"/><stop offset="100%" stop-color="#3a1c71"/></linearGradient><linearGradient id="p2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e8fba"/><stop offset="100%" stop-color="#0c2d4a"/></linearGradient></defs><rect width="400" height="130" fill="url(#p1)"/><circle class="sol" cx="330" cy="35" r="18" fill="#ffe28a" opacity=".9"/><rect y="70" width="400" height="60" fill="url(#p2)"/><path class="ola ola1" d="M0,74 Q50,64 100,74 T200,74 T300,74 T400,74 T500,74 V130 H0 Z" fill="rgba(255,255,255,.18)"/><g transform="translate(44,35)"><path d="M0,85 C-3,58 4,38 9,20" stroke="#5a3825" stroke-width="5" fill="none" stroke-linecap="round"/><g class="hojas"><path d="M9,20 C-14,10 -30,16 -36,28" fill="#2f7d4f"/><path d="M9,20 C32,8 48,16 54,30" fill="#3a9863"/></g></g></svg>
         <svg class="escena" id="escena-morrocoy" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="m1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#87ceeb"/><stop offset="60%" stop-color="#4ab8d4"/><stop offset="100%" stop-color="#1a8fa8"/></linearGradient></defs><rect width="400" height="130" fill="url(#m1)"/><circle class="sol" cx="340" cy="28" r="16" fill="#ffe28a" opacity=".9"/><rect y="72" width="400" height="58" fill="#0a6070" opacity=".7"/><ellipse cx="90" cy="75" rx="55" ry="10" fill="#e8d89a"/><ellipse cx="300" cy="78" rx="45" ry="9" fill="#e8d89a"/><path class="ola ola1" d="M0,75 Q50,67 100,75 T200,75 T300,75 T400,75 T500,75 V130 H0 Z" fill="rgba(255,255,255,.12)"/></svg>
@@ -295,101 +292,30 @@
         <div class="escena-caption" id="escena-caption">🏖️ Arena blanca y aguas turquesa</div>
     </div>
 
-    <!-- Destino -->
     <div class="form-section">
         <div class="section-title"><i class="fas fa-map-marker-alt"></i> Destino</div>
-        <div class="form-group">
-            <label><i class="fas fa-globe-americas"></i>¿A dónde quieres ir?</label>
-            <select id="destino" onchange="toggleExtranjero(); actualizarEscena(); actualizarDescripcion('destino')">
-                <optgroup label="🏖️ Playas">
-                    <option value="Isla de Margarita" data-desc="Playas paradisíacas, duty free y vida nocturna 🛍️">Isla de Margarita</option>
-                    <option value="Morrocoy" data-desc="Cayos de arena blanca y snorkel de clase mundial 🐠">Morrocoy</option>
-                    <option value="Los Roques" data-desc="Archipiélago virgen ideal para desconectar 🎣">Los Roques</option>
-                </optgroup>
-                <optgroup label="🏔️ Montaña & Naturaleza">
-                    <option value="Mérida" data-desc="Montañas andinas y el teleférico más alto 🏔️">Mérida</option>
-                    <option value="Canaima" data-desc="Tepuyes milenarios y el Salto Ángel (979m) 💧">Canaima</option>
-                    <option value="Catatumbo" data-desc="El relámpago eterno: 260 noches de tormentas al año ⚡">Catatumbo</option>
-                    <option value="Colonia Tovar" data-desc="Pueblo alemán en las montañas. Fresas y arquitectura bávara 🏘️">Colonia Tovar</option>
-                </optgroup>
-                <option value="Extranjero" data-desc="Destinos internacionales con las mejores conexiones aéreas 🌍">🌍 Viajar al Extranjero</option>
-            </select>
-            <div class="select-desc" id="desc-destino"><i class="fas fa-info-circle"></i> Playas paradisíacas, duty free y vida nocturna 🛍️</div>
-        </div>
-        <div id="div-extranjero" class="form-group" style="display:none;">
-            <label><i class="fas fa-search-location"></i>¿A qué país/ciudad?</label>
-            <input type="text" id="input-extranjero" placeholder="Ej: Cancún, México..." autocomplete="off">
-        </div>
+        <div class="form-group"><label><i class="fas fa-globe-americas"></i>¿A dónde quieres ir?</label><select id="destino" onchange="toggleExtranjero(); actualizarEscena(); actualizarDescripcion('destino')"><optgroup label="🏖️ Playas"><option value="Isla de Margarita" data-desc="Playas paradisíacas, duty free y vida nocturna 🛍️">Isla de Margarita</option><option value="Morrocoy" data-desc="Cayos de arena blanca y snorkel de clase mundial 🐠">Morrocoy</option><option value="Los Roques" data-desc="Archipiélago virgen ideal para desconectar 🎣">Los Roques</option></optgroup><optgroup label="🏔️ Montaña & Naturaleza"><option value="Mérida" data-desc="Montañas andinas y el teleférico más alto 🏔️">Mérida</option><option value="Canaima" data-desc="Tepuyes milenarios y el Salto Ángel (979m) 💧">Canaima</option><option value="Catatumbo" data-desc="El relámpago eterno: 260 noches de tormentas al año ⚡">Catatumbo</option><option value="Colonia Tovar" data-desc="Pueblo alemán en las montañas. Fresas y arquitectura bávara 🏘️">Colonia Tovar</option></optgroup><option value="Extranjero" data-desc="Destinos internacionales con las mejores conexiones aéreas 🌍">🌍 Viajar al Extranjero</option></select><div class="select-desc" id="desc-destino"><i class="fas fa-info-circle"></i> Playas paradisíacas, duty free y vida nocturna 🛍️</div></div>
+        <div id="div-extranjero" class="form-group" style="display:none;"><label><i class="fas fa-search-location"></i>¿A qué país/ciudad?</label><input type="text" id="input-extranjero" placeholder="Ej: Cancún, México..." autocomplete="off"></div>
     </div>
 
-    <!-- Hospedaje -->
     <div class="form-section">
         <div class="section-title"><i class="fas fa-hotel"></i> Hospedaje</div>
-        <div class="form-group">
-            <label><i class="fas fa-building"></i>Tipo de alojamiento</label>
-            <div class="opciones-tarjetas" id="tarjetas-alojamiento">
-                <div class="opcion-tarjeta sel" data-value="Hotel" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')"><div class="op-icon">🏨</div><div class="op-info"><div class="op-titulo">Hotel</div><div class="op-sub">Servicio completo, recepción 24h y amenities</div></div><div class="op-check"><i class="fas fa-check"></i></div></div>
-                <div class="opcion-tarjeta" data-value="Apartamento / Suite" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')"><div class="op-icon">🏠</div><div class="op-info"><div class="op-titulo">Apartamento / Suite</div><div class="op-sub">Más espacio y privacidad, ideal para familias</div></div><div class="op-check"><i class="fas fa-check"></i></div></div>
-                <div class="opcion-tarjeta" data-value="Posada / Ecolodge" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')"><div class="op-icon">🌿</div><div class="op-info"><div class="op-titulo">Posada / Ecolodge</div><div class="op-sub">Experiencia auténtica y contacto con la naturaleza</div></div><div class="op-check"><i class="fas fa-check"></i></div></div>
-                <div class="opcion-tarjeta" data-value="Resort" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')"><div class="op-icon">🌴</div><div class="op-info"><div class="op-titulo">Resort</div><div class="op-sub">Todo incluido con actividades y entretenimiento</div></div><div class="op-check"><i class="fas fa-check"></i></div></div>
-                <div class="opcion-tarjeta" data-value="Sin preferencia" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')"><div class="op-icon">✨</div><div class="op-info"><div class="op-titulo">Sin preferencia</div><div class="op-sub">Te recomendamos la mejor opción para ti</div></div><div class="op-check"><i class="fas fa-check"></i></div></div>
-            </div>
-            <input type="hidden" id="hospedaje-hidden" value="Hotel">
-        </div>
-        <div class="form-group">
-            <label><i class="fas fa-utensils"></i>Plan de alimentación</label>
-            <div class="opciones-tarjetas" id="tarjetas-plan">
-                <div class="opcion-tarjeta sel" data-value="Solo Alojamiento" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">🛏️</div><div class="op-info"><div class="op-titulo">Solo Alojamiento</div><div class="op-sub">Ideal si planeas explorar la gastronomía local 🍕</div></div><div class="op-check"><i class="fas fa-check"></i></div></div>
-                <div class="opcion-tarjeta" data-value="Desayuno Incluido" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">☕</div><div class="op-info"><div class="op-titulo">Desayuno Incluido</div><div class="op-sub">Comienza el día con energía. Desayuno cubierto</div></div><div class="op-check"><i class="fas fa-check"></i></div></div>
-                <div class="opcion-tarjeta" data-value="Media Pensión" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">🍽️</div><div class="op-info"><div class="op-titulo">Media Pensión</div><div class="op-sub">Desayuno + cena. Perfecto para pasar el día fuera</div></div><div class="op-check"><i class="fas fa-check"></i></div></div>
-                <div class="opcion-tarjeta" data-value="Pensión Completa" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">🥩</div><div class="op-info"><div class="op-titulo">Pensión Completa</div><div class="op-sub">Desayuno, almuerzo y cena. Cero preocupaciones</div></div><div class="op-check"><i class="fas fa-check"></i></div></div>
-                <div class="opcion-tarjeta" data-value="Todo Incluido" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">🍹</div><div class="op-info"><div class="op-titulo">Todo Incluido</div><div class="op-sub">Comidas, bebidas y snacks. La opción más relajada</div></div><div class="op-check"><i class="fas fa-check"></i></div></div>
-                <div class="opcion-tarjeta" data-value="No sé" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">❓</div><div class="op-info"><div class="op-titulo">Quiero opciones</div><div class="op-sub">Te asesoramos según tu viaje y presupuesto</div></div><div class="op-check"><i class="fas fa-check"></i></div></div>
-            </div>
-            <input type="hidden" id="plan-hidden" value="Solo Alojamiento">
-        </div>
-        <div class="form-group">
-            <label><i class="fas fa-concierge-bell"></i>Preferencias <span style="font-weight:400;color:#ffe0b2;font-size:9px;">(toca para elegir)</span></label>
-            <div class="amenidades-grid">
-                <div class="amenidad-tag" data-value="Piscina" onclick="toggleAmenidad(this)"><i class="fas fa-swimmer"></i>Piscina</div>
-                <div class="amenidad-tag" data-value="Playa privada" onclick="toggleAmenidad(this)"><i class="fas fa-umbrella-beach"></i>Playa priv.</div>
-                <div class="amenidad-tag" data-value="Wi-Fi" onclick="toggleAmenidad(this)"><i class="fas fa-wifi"></i>Wi-Fi</div>
-                <div class="amenidad-tag" data-value="Estacionamiento" onclick="toggleAmenidad(this)"><i class="fas fa-parking"></i>Parqueo</div>
-                <div class="amenidad-tag" data-value="Jacuzzi" onclick="toggleAmenidad(this)"><i class="fas fa-hot-tub"></i>Jacuzzi</div>
-                <div class="amenidad-tag" data-value="Gimnasio" onclick="toggleAmenidad(this)"><i class="fas fa-dumbbell"></i>Gym</div>
-                <div class="amenidad-tag" data-value="Restaurante" onclick="toggleAmenidad(this)"><i class="fas fa-utensils"></i>Restaurante</div>
-                <div class="amenidad-tag" data-value="Vista al mar" onclick="toggleAmenidad(this)"><i class="fas fa-water"></i>Vista al mar</div>
-                <div class="amenidad-tag" data-value="Aire acondicionado" onclick="toggleAmenidad(this)"><i class="fas fa-snowflake"></i>A/C</div>
-                <div class="amenidad-tag" data-value="Desayuno buffet" onclick="toggleAmenidad(this)"><i class="fas fa-bread-slice"></i>Buffet</div>
-            </div>
-        </div>
-        <div class="form-group">
-            <label><i class="fas fa-dollar-sign"></i>Presupuesto por noche <span style="font-weight:400;color:#ffe0b2;font-size:9px;">(USD)</span></label>
-            <div class="presupuesto-labels"><span>$20</span><span>$500+</span></div>
-            <input type="range" id="presupuesto-slider" min="20" max="500" step="10" value="100" oninput="actualizarPresupuesto()">
-            <div class="presupuesto-val" id="presupuesto-val">Hasta <span>$100</span> USD/noche</div>
-            <div class="hint-text"><i class="fas fa-lightbulb"></i> Te mostraremos opciones que se ajusten a tu bolsillo</div>
-        </div>
+        <div class="form-group"><label><i class="fas fa-building"></i>Tipo de alojamiento</label><div class="opciones-tarjetas" id="tarjetas-alojamiento"><div class="opcion-tarjeta sel" data-value="Hotel" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')"><div class="op-icon">🏨</div><div class="op-info"><div class="op-titulo">Hotel</div><div class="op-sub">Servicio completo, recepción 24h y amenities</div></div><div class="op-check"><i class="fas fa-check"></i></div></div><div class="opcion-tarjeta" data-value="Apartamento / Suite" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')"><div class="op-icon">🏠</div><div class="op-info"><div class="op-titulo">Apartamento / Suite</div><div class="op-sub">Más espacio y privacidad, ideal para familias</div></div><div class="op-check"><i class="fas fa-check"></i></div></div><div class="opcion-tarjeta" data-value="Posada / Ecolodge" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')"><div class="op-icon">🌿</div><div class="op-info"><div class="op-titulo">Posada / Ecolodge</div><div class="op-sub">Experiencia auténtica y contacto con la naturaleza</div></div><div class="op-check"><i class="fas fa-check"></i></div></div><div class="opcion-tarjeta" data-value="Resort" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')"><div class="op-icon">🌴</div><div class="op-info"><div class="op-titulo">Resort</div><div class="op-sub">Todo incluido con actividades y entretenimiento</div></div><div class="op-check"><i class="fas fa-check"></i></div></div><div class="opcion-tarjeta" data-value="Sin preferencia" onclick="seleccionarTarjeta(this, 'hospedaje-hidden')"><div class="op-icon">✨</div><div class="op-info"><div class="op-titulo">Sin preferencia</div><div class="op-sub">Te recomendamos la mejor opción para ti</div></div><div class="op-check"><i class="fas fa-check"></i></div></div></div><input type="hidden" id="hospedaje-hidden" value="Hotel"></div>
+        <div class="form-group"><label><i class="fas fa-utensils"></i>Plan de alimentación</label><div class="opciones-tarjetas" id="tarjetas-plan"><div class="opcion-tarjeta sel" data-value="Solo Alojamiento" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">🛏️</div><div class="op-info"><div class="op-titulo">Solo Alojamiento</div><div class="op-sub">Ideal si planeas explorar la gastronomía local 🍕</div></div><div class="op-check"><i class="fas fa-check"></i></div></div><div class="opcion-tarjeta" data-value="Desayuno Incluido" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">☕</div><div class="op-info"><div class="op-titulo">Desayuno Incluido</div><div class="op-sub">Comienza el día con energía. Desayuno cubierto</div></div><div class="op-check"><i class="fas fa-check"></i></div></div><div class="opcion-tarjeta" data-value="Media Pensión" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">🍽️</div><div class="op-info"><div class="op-titulo">Media Pensión</div><div class="op-sub">Desayuno + cena. Perfecto para pasar el día fuera</div></div><div class="op-check"><i class="fas fa-check"></i></div></div><div class="opcion-tarjeta" data-value="Pensión Completa" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">🥩</div><div class="op-info"><div class="op-titulo">Pensión Completa</div><div class="op-sub">Desayuno, almuerzo y cena. Cero preocupaciones</div></div><div class="op-check"><i class="fas fa-check"></i></div></div><div class="opcion-tarjeta" data-value="Todo Incluido" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">🍹</div><div class="op-info"><div class="op-titulo">Todo Incluido</div><div class="op-sub">Comidas, bebidas y snacks. La opción más relajada</div></div><div class="op-check"><i class="fas fa-check"></i></div></div><div class="opcion-tarjeta" data-value="No sé" onclick="seleccionarTarjeta(this, 'plan-hidden')"><div class="op-icon">❓</div><div class="op-info"><div class="op-titulo">Quiero opciones</div><div class="op-sub">Te asesoramos según tu viaje y presupuesto</div></div><div class="op-check"><i class="fas fa-check"></i></div></div></div><input type="hidden" id="plan-hidden" value="Solo Alojamiento"></div>
+        <div class="form-group"><label><i class="fas fa-concierge-bell"></i>Preferencias <span style="font-weight:400;color:#ffe0b2;font-size:9px;">(toca para elegir)</span></label><div class="amenidades-grid"><div class="amenidad-tag" data-value="Piscina" onclick="toggleAmenidad(this)"><i class="fas fa-swimmer"></i>Piscina</div><div class="amenidad-tag" data-value="Playa privada" onclick="toggleAmenidad(this)"><i class="fas fa-umbrella-beach"></i>Playa priv.</div><div class="amenidad-tag" data-value="Wi-Fi" onclick="toggleAmenidad(this)"><i class="fas fa-wifi"></i>Wi-Fi</div><div class="amenidad-tag" data-value="Estacionamiento" onclick="toggleAmenidad(this)"><i class="fas fa-parking"></i>Parqueo</div><div class="amenidad-tag" data-value="Jacuzzi" onclick="toggleAmenidad(this)"><i class="fas fa-hot-tub"></i>Jacuzzi</div><div class="amenidad-tag" data-value="Gimnasio" onclick="toggleAmenidad(this)"><i class="fas fa-dumbbell"></i>Gym</div><div class="amenidad-tag" data-value="Restaurante" onclick="toggleAmenidad(this)"><i class="fas fa-utensils"></i>Restaurante</div><div class="amenidad-tag" data-value="Vista al mar" onclick="toggleAmenidad(this)"><i class="fas fa-water"></i>Vista al mar</div><div class="amenidad-tag" data-value="Aire acondicionado" onclick="toggleAmenidad(this)"><i class="fas fa-snowflake"></i>A/C</div><div class="amenidad-tag" data-value="Desayuno buffet" onclick="toggleAmenidad(this)"><i class="fas fa-bread-slice"></i>Buffet</div></div></div>
+        <div class="form-group"><label><i class="fas fa-dollar-sign"></i>Presupuesto por noche <span style="font-weight:400;color:#ffe0b2;font-size:9px;">(USD)</span></label><div class="presupuesto-labels"><span>$20</span><span>$500+</span></div><input type="range" id="presupuesto-slider" min="20" max="500" step="10" value="100" oninput="actualizarPresupuesto()"><div class="presupuesto-val" id="presupuesto-val">Hasta <span>$100</span> USD/noche</div><div class="hint-text"><i class="fas fa-lightbulb"></i> Te mostraremos opciones que se ajusten a tu bolsillo</div></div>
     </div>
 
-    <!-- Fechas -->
     <div class="form-section">
         <div class="section-title"><i class="fas fa-calendar-alt"></i> Fechas</div>
-        <div class="row">
-            <div class="form-group"><label><i class="fas fa-sign-in-alt"></i>Check-in</label><input type="date" id="checkin" onchange="ajustarCheckout()"></div>
-            <div class="form-group"><label><i class="fas fa-sign-out-alt"></i>Check-out</label><input type="date" id="checkout" onchange="actualizarNoches()"></div>
-        </div>
+        <div class="row"><div class="form-group"><label><i class="fas fa-sign-in-alt"></i>Check-in</label><input type="date" id="checkin" onchange="ajustarCheckout()"></div><div class="form-group"><label><i class="fas fa-sign-out-alt"></i>Check-out</label><input type="date" id="checkout" onchange="actualizarNoches()"></div></div>
         <div class="noches-box" id="noches-box"><i class="fas fa-moon"></i><span>Selecciona tus fechas</span></div>
         <div class="hint-text"><i class="fas fa-lightbulb"></i> Reservar con semanas de anticipación puede asegurarte el precio de promoción actual</div>
     </div>
 
-    <!-- Huéspedes -->
     <div class="form-section">
         <div class="section-title"><i class="fas fa-users"></i> Huéspedes</div>
-        <div class="row">
-            <div class="form-group"><label><i class="fas fa-user"></i>Adultos</label><select id="adultos" onchange="toggleAdultosExtra()"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="more">Más de 5</option></select><input type="number" id="adultos-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántos adultos?" style="display:none;"></div>
-            <div class="form-group"><label><i class="fas fa-child"></i>Niños</label><select id="ninos" onchange="toggleNinosExtra()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="more">Más de 4</option></select><input type="number" id="ninos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos niños?" style="display:none;" oninput="toggleNinosExtraInput()"></div>
-        </div>
+        <div class="row"><div class="form-group"><label><i class="fas fa-user"></i>Adultos</label><select id="adultos" onchange="toggleAdultosExtra()"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="more">Más de 5</option></select><input type="number" id="adultos-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántos adultos?" style="display:none;"></div><div class="form-group"><label><i class="fas fa-child"></i>Niños</label><select id="ninos" onchange="toggleNinosExtra()"><option value="0" selected>0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="more">Más de 4</option></select><input type="number" id="ninos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos niños?" style="display:none;" oninput="toggleNinosExtraInput()"></div></div>
         <div class="hint-text" style="margin-bottom:8px;"><i class="fas fa-info-circle"></i> Así calculamos el espacio y tipo de habitación ideal</div>
         <div class="form-group"><label><i class="fas fa-bed"></i>Habitaciones</label><select id="habitaciones"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
         <div id="contenedor-edades" style="margin-top:8px;"></div>
@@ -397,27 +323,12 @@
         <div class="checkbox-group" id="grupo-cedula-ninos" style="display:none;"><input type="checkbox" id="cedula-ninos"><label for="cedula-ninos"><i class="fas fa-id-card"></i>Los niños tienen cédula<span>Obligatorio para niños de 9 años o más.</span></label></div>
     </div>
 
-    <!-- Transporte -->
     <div class="form-section">
         <div class="section-title"><i class="fas fa-car"></i> ¿Cómo llegas al destino?</div>
-        <div class="form-group">
-            <label><i class="fas fa-route"></i>Medio de transporte</label>
-            <div class="transporte-grid" id="transporte-grid">
-                <div class="transporte-tag sel" data-value="vehiculo-propio" onclick="toggleTransporte(this)"><i class="fas fa-car"></i>Vehículo propio</div>
-                <div class="transporte-tag" data-value="transporte-terrestre" onclick="toggleTransporte(this)"><i class="fas fa-bus"></i>Transporte terrestre</div>
-                <div class="transporte-tag" data-value="traslado-aereo" onclick="toggleTransporte(this)"><i class="fas fa-plane"></i>Traslado aéreo</div>
-            </div>
-        </div>
-        <div class="traslado-aereo-box" id="traslado-aereo-box">
-            <div class="section-title" style="color:#4a9eff;"><i class="fas fa-plane-departure"></i> Datos del vuelo</div>
-            <div class="hint-text" style="color:rgba(168,209,255,0.6);margin-bottom:8px;"><i class="fas fa-lightbulb"></i> Te cotizamos hospedaje + vuelo en un solo paquete</div>
-            <div class="form-group"><label><i class="fas fa-map-pin"></i>Ciudad de origen del vuelo</label><input type="text" id="origen-vuelo" placeholder="Ej: Caracas, Valencia..."></div>
-            <div class="form-group"><label><i class="fas fa-calendar-alt"></i>Flexibilidad de fechas de vuelo</label><div class="flex-tags" id="flex-vuelo-tags"><div class="flex-tag sel" data-value="0" onclick="toggleFlexVuelo(this)"><i class="fas fa-lock"></i>Fechas fijas</div><div class="flex-tag" data-value="1" onclick="toggleFlexVuelo(this)"><i class="fas fa-calendar-alt"></i>±1 día</div><div class="flex-tag" data-value="2" onclick="toggleFlexVuelo(this)"><i class="fas fa-calendar-alt"></i>±2 días</div><div class="flex-tag" data-value="3" onclick="toggleFlexVuelo(this)"><i class="fas fa-calendar-week"></i>±3 días</div></div></div>
-            <div class="checkbox-group"><input type="checkbox" id="cedula-adultos-vuelo" checked><label for="cedula-adultos-vuelo"><i class="fas fa-id-card"></i>Todos los adultos tienen cédula vigente</label></div>
-        </div>
+        <div class="form-group"><label><i class="fas fa-route"></i>Medio de transporte</label><div class="transporte-grid" id="transporte-grid"><div class="transporte-tag sel" data-value="vehiculo-propio" onclick="toggleTransporte(this)"><i class="fas fa-car"></i>Vehículo propio</div><div class="transporte-tag" data-value="transporte-terrestre" onclick="toggleTransporte(this)"><i class="fas fa-bus"></i>Transporte terrestre</div><div class="transporte-tag" data-value="traslado-aereo" onclick="toggleTransporte(this)"><i class="fas fa-plane"></i>Traslado aéreo</div></div></div>
+        <div class="traslado-aereo-box" id="traslado-aereo-box"><div class="section-title" style="color:#4a9eff;"><i class="fas fa-plane-departure"></i> Datos del vuelo</div><div class="hint-text" style="color:rgba(168,209,255,0.6);margin-bottom:8px;"><i class="fas fa-lightbulb"></i> Te cotizamos hospedaje + vuelo en un solo paquete</div><div class="form-group"><label><i class="fas fa-map-pin"></i>Ciudad de origen del vuelo</label><input type="text" id="origen-vuelo" placeholder="Ej: Caracas, Valencia..."></div><div class="form-group"><label><i class="fas fa-calendar-alt"></i>Flexibilidad de fechas de vuelo</label><div class="flex-tags" id="flex-vuelo-tags"><div class="flex-tag sel" data-value="0" onclick="toggleFlexVuelo(this)"><i class="fas fa-lock"></i>Fechas fijas</div><div class="flex-tag" data-value="1" onclick="toggleFlexVuelo(this)"><i class="fas fa-calendar-alt"></i>±1 día</div><div class="flex-tag" data-value="2" onclick="toggleFlexVuelo(this)"><i class="fas fa-calendar-alt"></i>±2 días</div><div class="flex-tag" data-value="3" onclick="toggleFlexVuelo(this)"><i class="fas fa-calendar-week"></i>±3 días</div></div></div><div class="checkbox-group"><input type="checkbox" id="cedula-adultos-vuelo" checked><label for="cedula-adultos-vuelo"><i class="fas fa-id-card"></i>Todos los adultos tienen cédula vigente</label></div></div>
     </div>
 
-    <!-- Extras -->
     <div class="form-section">
         <div class="section-title"><i class="fas fa-star"></i> Extras</div>
         <div class="form-group"><label><i class="fas fa-gift"></i>Ocasión especial</label><select id="ocasion"><option value="Vacaciones">Vacaciones</option><option value="Luna de Miel / Aniversario">💑 Luna de Miel</option><option value="Cumpleaños">🎂 Cumpleaños</option><option value="Viaje de Negocios">💼 Negocios</option><option value="Despedida de Soltero/a">🥂 Despedida</option></select><div class="hint-text"><i class="fas fa-heart"></i> Si es una ocasión especial, el hospedaje puede preparar un detalle 🎁</div></div>
@@ -427,7 +338,6 @@
     <button class="btn-gen" onclick="generarSolicitud()"><i class="fas fa-paper-plane" style="margin-right:6px;"></i>Cotizar Hospedaje</button>
     <div id="resultado"></div>
 
-    <!-- Footer: Full Day | Hospedaje | Boletería -->
     <div class="footer-servicios">
         <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tour/" class="footer-servicio fullday"><i class="fas fa-umbrella-beach"></i> Full Day</a>
         <span class="footer-servicio activo"><i class="fas fa-hotel"></i> Hospedaje</span>
@@ -483,7 +393,11 @@ function generarSolicitud() {
     var noches = Math.round((new Date(co) - new Date(ci)) / 86400000);
     var edadesNinos = ''; var resumenEl = document.getElementById('edades-resumen');
     if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; } else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
-    var asesores = ['584244634041', '584244900601', '584147020527']; var tlf = asesores[Math.floor(Math.random() * asesores.length)];
+    
+    // Números de asesores de hospedaje
+    var asesores = ['584244634041', '584244900601', '584244900601', '584244900601', '584127136169', '584127136169', '584147020527', '584244269876', '584140415685'];
+    var tlf = asesores[Math.floor(Math.random() * asesores.length)];
+    
     var lineas = ['🌟 *COTIZACIÓN HOSPEDAJE - LOTUS 360*','','📍 *Destino:* ' + dest,'🏨 *Alojamiento:* ' + hosp,'🍽️ *Plan:* ' + plan,'📅 *Check-in:* ' + ci,'📅 *Check-out:* ' + co,'🌙 *Noches:* ' + noches,'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos,'🛏️ *Habitaciones:* ' + habs,'💰 *Presupuesto/noche:* ' + presTexto];
     if (amenidades.length) lineas.push('✨ *Preferencias:* ' + amenidades.join(' · '));
     if (ninos > 0) { lineas.push('👶 *Edades niños:* ' + edadesNinos); lineas.push('🆔 *Niños con cédula:* ' + (document.getElementById('cedula-ninos').checked ? 'Sí' : 'No - REVISAR')); }
