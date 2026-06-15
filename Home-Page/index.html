@@ -79,12 +79,12 @@
         .escena-box svg.escena.activa { display: block; animation: sceneSwitch 0.4s ease; }
         @keyframes sceneSwitch { from { opacity: 0.6; transform: scale(1.02); } to { opacity: 1; transform: scale(1); } }
         .escena-caption { position: absolute; bottom: 6px; left: 10px; background: rgba(0,0,0,0.6); color: #ffe0b2; font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 6px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 2; }
-        @keyframes ola { to { transform: translateX(-100px); } } .ola1 { animation: ola 8s linear infinite; } .ola2 { animation: ola 12s linear infinite reverse; }
+        @keyframes ola { to { transform: translateX(-100px); } } .ola1 { animation: ola 8s linear infinite; }
         @keyframes brillo { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } } .sol { animation: brillo 4s ease-in-out infinite; }
         @keyframes viento { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } } .hojas { animation: viento 5s ease-in-out infinite alternate; }
         @keyframes nube-der { 0% { transform: translateX(0); } 100% { transform: translateX(25px); } } .nube { animation: nube-der 10s ease-in-out infinite alternate; }
         @keyframes telecabina-mov { 0% { transform: translate(22px,36px); } 100% { transform: translate(340px,80px); } } .telecabina { animation: telecabina-mov 8s ease-in-out infinite alternate; }
-        @keyframes nevada { 0% { opacity: 0; } 50% { opacity: 0.6; } 100% { opacity: 0; } } .nieve1 { animation: nevada 4s ease-in-out infinite; } .nieve2 { animation: nevada 4.5s ease-in-out infinite 0.8s; }
+        @keyframes nevada { 0% { opacity: 0; } 50% { opacity: 0.6; } 100% { opacity: 0; } } .nieve1 { animation: nevada 4s ease-in-out infinite; }
         @keyframes caer { to { stroke-dashoffset: -48; } } .agua { animation: caer 1s linear infinite; }
         @keyframes bruma-pulso { 0%,100% { opacity: 0.2; } 50% { opacity: 0.4; } } .bruma { animation: bruma-pulso 3s ease-in-out infinite; }
         @keyframes relampago { 0%,92%,100% { opacity: 0; } 93%,96% { opacity: 1; } } .rayo1 { animation: relampago 5s infinite; }
@@ -92,16 +92,13 @@
         @keyframes girar-globo { to { transform: rotate(360deg); } } .globo-lineas { animation: girar-globo 25s linear infinite; }
         @keyframes volar-avion { 0% { transform: translate(-10px,40px) rotate(8deg); opacity: 0; } 10% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translate(390px,0px) rotate(8deg); opacity: 0; } } .avion-mundo { animation: volar-avion 8s linear infinite; }
 
-        /* Ticker con JS */
         .ticker-wrap {
             overflow: hidden; white-space: nowrap;
             border-top: 1px solid rgba(255,255,255,0.08); border-bottom: 1px solid rgba(255,255,255,0.08);
             padding: 6px 0; margin-bottom: 10px; position: relative; cursor: grab;
         }
         .ticker-wrap:active { cursor: grabbing; }
-        .ticker-track {
-            display: flex; width: fit-content; will-change: transform;
-        }
+        .ticker-track { display: flex; width: fit-content; will-change: transform; }
         .ticker-item {
             flex-shrink: 0; padding: 4px 14px; cursor: pointer;
             font-size: 10px; font-weight: 500; color: rgba(255,255,255,0.5);
@@ -110,10 +107,11 @@
         }
         .ticker-item:active { background: rgba(255,145,0,0.15); color: #fff; transform: scale(1.05); }
         .ticker-item.sel { background: rgba(255,145,0,0.25); color: #fff; font-weight: 700; }
+        .ticker-item.mas { color: rgba(16,185,129,0.7); font-weight: 600; }
 
         .destino-info {
             display: none; background: rgba(15,20,40,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,145,0,0.15); border-radius: 10px; padding: 8px 12px;
+            border: 1px solid rgba(255,145,0,0.15); border-radius: 10px; padding: 10px 12px;
             margin-bottom: 12px; text-align: center; animation: fadeSlideUp 0.3s ease;
         }
         .destino-info.visible { display: block; }
@@ -121,6 +119,15 @@
         .destino-info .destino-nombre { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 2px; }
         .destino-info .destino-desc { font-size: 9px; color: var(--text-warm); line-height: 1.4; }
         .destino-info .destino-pais { font-size: 8px; color: rgba(255,183,77,0.4); margin-top: 1px; }
+        .btn-quiero-ir {
+            display: inline-flex; align-items: center; gap: 5px; margin-top: 8px;
+            background: linear-gradient(135deg, #ff9100, #e65100); color: #fff;
+            border: none; border-radius: 20px; padding: 7px 16px;
+            font-size: 10px; font-weight: 700; cursor: pointer; text-decoration: none;
+            transition: all 0.15s ease; box-shadow: 0 3px 10px rgba(255,145,0,0.3);
+        }
+        .btn-quiero-ir:active { transform: scale(0.95); }
+        .btn-quiero-ir i { font-size: 9px; }
 
         .cta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 22px; animation: fadeSlideUp 0.5s ease 0.3s both; }
         .cta-card { background: rgba(15,20,40,0.6); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 18px 8px 16px; text-decoration: none; color: #fff; text-align: center; transition: all 0.15s ease; box-shadow: 0 3px 12px rgba(0,0,0,0.15); position: relative; }
@@ -147,6 +154,7 @@
         .wa-float { position: fixed; bottom: 16px; right: 16px; width: 50px; height: 50px; border-radius: 50%; background: #25D366; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; text-decoration: none; z-index: 20; box-shadow: 0 6px 18px rgba(0,0,0,0.4); animation: pulso-wa 2.6s infinite; }
         @keyframes pulso-wa { 0%,100% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 0 rgba(37,211,102,0.5); } 50% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 10px rgba(37,211,102,0); } }
         @media (max-width: 360px) { body { padding: 0 8px 90px; } .container { padding-top: 20px; } .cta-card { padding: 14px 4px 12px; } .cta-card .titulo { font-size: 11px; } }
+        @media (min-width: 768px) { .container { transform: scale(1.20); transform-origin: top center; } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }
     </style>
 </head>
@@ -177,16 +185,24 @@
         <svg class="escena" id="escena-tormenta" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cieloTormenta" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0e0e20"/><stop offset="100%" stop-color="#2e1e4a"/></linearGradient></defs><rect width="400" height="130" fill="url(#cieloTormenta)"/><rect y="100" width="400" height="30" fill="#0d1b2e" opacity=".9"/><ellipse cx="90" cy="30" rx="80" ry="24" fill="#1e1e38"/><ellipse cx="280" cy="24" rx="100" ry="28" fill="#1e1e38"/><line class="lluvia" x1="60" y1="55" x2="50" y2="95" stroke="rgba(180,200,255,.3)" stroke-width="1"/><path class="rayo rayo1" d="M175,10 L158,55 L178,55 L152,102" stroke="#ffe89b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <svg class="escena" id="escena-colonia" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cieloColonia" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7ab8d4"/><stop offset="100%" stop-color="#4a8a5a"/></linearGradient></defs><rect width="400" height="130" fill="url(#cieloColonia)"/><circle class="sol" cx="320" cy="25" r="14" fill="#ffe28a" opacity=".8"/><ellipse class="nube" cx="80" cy="20" rx="35" ry="9" fill="rgba(255,255,255,.4)"/><polygon points="30,130 80,55 130,130" fill="#5a7a4a"/><polygon points="120,130 180,50 240,130" fill="#4a6a3a"/><polygon points="230,130 290,60 350,130" fill="#5a7a4a"/><rect x="55" y="95" width="14" height="18" rx="1" fill="#8b4513"/><rect x="75" y="90" width="16" height="22" rx="1" fill="#a0522d"/><rect x="145" y="88" width="18" height="24" rx="1" fill="#8b4513"/><rect x="200" y="85" width="22" height="28" rx="1" fill="#a0522d"/><rect x="260" y="92" width="16" height="20" rx="1" fill="#8b4513"/><polygon points="62,95 55,88 69,88" fill="#d2691e"/><polygon points="154,88 145,80 163,80" fill="#d2691e"/><polygon points="211,85 200,76 222,76" fill="#d2691e"/></svg>
         <svg class="escena" id="escena-mundo" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cieloMundo" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a2a55"/><stop offset="100%" stop-color="#3a5a90"/></linearGradient></defs><rect width="400" height="130" fill="url(#cieloMundo)"/><circle cx="200" cy="118" r="72" fill="#2a5c6a" opacity=".6"/><g class="globo-lineas"><circle cx="200" cy="118" r="72" fill="none" stroke="#7dd8c0" stroke-width="1.5" opacity=".5"/></g><path class="avion-mundo" d="M0,0 L22,5 L0,10 L5,5 Z" fill="#ff9100"/></svg>
+        <svg class="escena" id="escena-muchosmas" viewBox="0 0 400 130" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="cieloMuchos" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a1a2e"/><stop offset="100%" stop-color="#2a2a4e"/></linearGradient></defs><rect width="400" height="130" fill="url(#cieloMuchos)"/><circle cx="60" cy="50" r="6" fill="#ff9100" opacity="0.8"><animate attributeName="opacity" values="0.8;0.3;0.8" dur="2s" repeatCount="indefinite"/></circle><circle cx="140" cy="30" r="5" fill="#4a9eff" opacity="0.7"><animate attributeName="opacity" values="0.7;0.2;0.7" dur="2.5s" repeatCount="indefinite"/></circle><circle cx="220" cy="55" r="7" fill="#10b981" opacity="0.6"><animate attributeName="opacity" values="0.6;0.2;0.6" dur="3s" repeatCount="indefinite"/></circle><circle cx="300" cy="35" r="5" fill="#ffb74d" opacity="0.7"><animate attributeName="opacity" values="0.7;0.3;0.7" dur="2.2s" repeatCount="indefinite"/></circle><circle cx="350" cy="60" r="6" fill="#7dd8c0" opacity="0.6"><animate attributeName="opacity" values="0.6;0.2;0.6" dur="2.8s" repeatCount="indefinite"/></circle><circle cx="100" cy="80" r="4" fill="#ff9100" opacity="0.5"><animate attributeName="opacity" values="0.5;0.1;0.5" dur="3.5s" repeatCount="indefinite"/></circle><circle cx="260" cy="75" r="5" fill="#4a9eff" opacity="0.5"><animate attributeName="opacity" values="0.5;0.1;0.5" dur="2.7s" repeatCount="indefinite"/></circle><circle cx="180" cy="90" r="4" fill="#10b981" opacity="0.4"><animate attributeName="opacity" values="0.4;0.1;0.4" dur="3.2s" repeatCount="indefinite"/></circle><text x="200" y="115" text-anchor="middle" fill="#ffe0b2" font-size="12" font-weight="700" opacity="0.6">✨ Y muchos más...</text></svg>
         <div class="escena-caption" id="escena-caption">🏖️ Playas paradisíacas y duty free</div>
     </div>
 
     <div class="ticker-wrap" id="ticker-wrap">
         <div class="ticker-track" id="ticker-track">
-            <span class="ticker-item sel" data-destino="Isla de Margarita" data-escena="escena-playa" data-caption="🏖️ Playas paradisíacas y duty free" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna">🏖️ Isla de Margarita</span><span class="ticker-item" data-destino="Morrocoy" data-escena="escena-morrocoy" data-caption="🐠 Cayos y snorkel de clase mundial" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca y snorkel de clase mundial">🐠 Morrocoy</span><span class="ticker-item" data-destino="Los Roques" data-escena="escena-losroques" data-caption="🏝️ Archipiélago virgen y aguas turquesas" data-pais="🇻🇪 Dep. Federales" data-desc="Archipiélago virgen ideal para desconectar">🏝️ Los Roques</span><span class="ticker-item" data-destino="Mérida" data-escena="escena-montana" data-caption="🚡 Montañas andinas y el teleférico" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas y el teleférico más alto">🚡 Mérida</span><span class="ticker-item" data-destino="Canaima" data-escena="escena-cascada" data-caption="💧 Tepuyes y el Salto Ángel" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel">💧 Canaima</span><span class="ticker-item" data-destino="Catatumbo" data-escena="escena-tormenta" data-caption="⚡ El relámpago eterno" data-pais="🇻🇪 Zulia" data-desc="260 noches de tormentas al año. Único">⚡ Catatumbo</span><span class="ticker-item" data-destino="Colonia Tovar" data-escena="escena-colonia" data-caption="🏘️ Pueblo alemán en las montañas" data-pais="🇻🇪 Aragua" data-desc="Fresas, arquitectura bávara y clima primaveral">🏘️ Colonia Tovar</span><span class="ticker-item" data-destino="Destinos Internacionales" data-escena="escena-mundo" data-caption="🌍 Conectamos con el mundo" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú">🌍 Internacionales</span><span class="ticker-item" data-destino="Isla de Margarita" data-escena="escena-playa" data-caption="🏖️ Playas paradisíacas y duty free" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna">🏖️ Isla de Margarita</span><span class="ticker-item" data-destino="Morrocoy" data-escena="escena-morrocoy" data-caption="🐠 Cayos y snorkel de clase mundial" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca y snorkel de clase mundial">🐠 Morrocoy</span><span class="ticker-item" data-destino="Los Roques" data-escena="escena-losroques" data-caption="🏝️ Archipiélago virgen y aguas turquesas" data-pais="🇻🇪 Dep. Federales" data-desc="Archipiélago virgen ideal para desconectar">🏝️ Los Roques</span><span class="ticker-item" data-destino="Mérida" data-escena="escena-montana" data-caption="🚡 Montañas andinas y el teleférico" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas y el teleférico más alto">🚡 Mérida</span><span class="ticker-item" data-destino="Canaima" data-escena="escena-cascada" data-caption="💧 Tepuyes y el Salto Ángel" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel">💧 Canaima</span><span class="ticker-item" data-destino="Catatumbo" data-escena="escena-tormenta" data-caption="⚡ El relámpago eterno" data-pais="🇻🇪 Zulia" data-desc="260 noches de tormentas al año. Único">⚡ Catatumbo</span><span class="ticker-item" data-destino="Colonia Tovar" data-escena="escena-colonia" data-caption="🏘️ Pueblo alemán en las montañas" data-pais="🇻🇪 Aragua" data-desc="Fresas, arquitectura bávara y clima primaveral">🏘️ Colonia Tovar</span><span class="ticker-item" data-destino="Destinos Internacionales" data-escena="escena-mundo" data-caption="🌍 Conectamos con el mundo" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú">🌍 Internacionales</span>
+            <span class="ticker-item sel" data-destino="Isla de Margarita" data-escena="escena-playa" data-caption="🏖️ Playas paradisíacas y duty free" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna">🏖️ Isla de Margarita</span><span class="ticker-item" data-destino="Morrocoy" data-escena="escena-morrocoy" data-caption="🐠 Cayos y snorkel de clase mundial" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca y snorkel de clase mundial">🐠 Morrocoy</span><span class="ticker-item" data-destino="Los Roques" data-escena="escena-losroques" data-caption="🏝️ Archipiélago virgen y aguas turquesas" data-pais="🇻🇪 Dep. Federales" data-desc="Archipiélago virgen ideal para desconectar">🏝️ Los Roques</span><span class="ticker-item" data-destino="Mérida" data-escena="escena-montana" data-caption="🚡 Montañas andinas y el teleférico" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas y el teleférico más alto">🚡 Mérida</span><span class="ticker-item" data-destino="Canaima" data-escena="escena-cascada" data-caption="💧 Tepuyes y el Salto Ángel" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel">💧 Canaima</span><span class="ticker-item" data-destino="Catatumbo" data-escena="escena-tormenta" data-caption="⚡ El relámpago eterno" data-pais="🇻🇪 Zulia" data-desc="260 noches de tormentas al año. Único">⚡ Catatumbo</span><span class="ticker-item" data-destino="Colonia Tovar" data-escena="escena-colonia" data-caption="🏘️ Pueblo alemán en las montañas" data-pais="🇻🇪 Aragua" data-desc="Fresas, arquitectura bávara y clima primaveral">🏘️ Colonia Tovar</span><span class="ticker-item mas" data-destino="Y muchos más" data-escena="escena-muchosmas" data-caption="✨ Próximamente más destinos" data-pais="🌍 Venezuela y el mundo" data-desc="Estamos agregando nuevos destinos cada mes">✨ Y muchos más...</span><span class="ticker-item" data-destino="Destinos Internacionales" data-escena="escena-mundo" data-caption="🌍 Conectamos con el mundo" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú">🌍 Internacionales</span>
+            <span class="ticker-item sel" data-destino="Isla de Margarita" data-escena="escena-playa" data-caption="🏖️ Playas paradisíacas y duty free" data-pais="🇻🇪 Nueva Esparta" data-desc="Playas paradisíacas, duty free y vida nocturna">🏖️ Isla de Margarita</span><span class="ticker-item" data-destino="Morrocoy" data-escena="escena-morrocoy" data-caption="🐠 Cayos y snorkel de clase mundial" data-pais="🇻🇪 Falcón" data-desc="Cayos de arena blanca y snorkel de clase mundial">🐠 Morrocoy</span><span class="ticker-item" data-destino="Los Roques" data-escena="escena-losroques" data-caption="🏝️ Archipiélago virgen y aguas turquesas" data-pais="🇻🇪 Dep. Federales" data-desc="Archipiélago virgen ideal para desconectar">🏝️ Los Roques</span><span class="ticker-item" data-destino="Mérida" data-escena="escena-montana" data-caption="🚡 Montañas andinas y el teleférico" data-pais="🇻🇪 Mérida" data-desc="Montañas andinas y el teleférico más alto">🚡 Mérida</span><span class="ticker-item" data-destino="Canaima" data-escena="escena-cascada" data-caption="💧 Tepuyes y el Salto Ángel" data-pais="🇻🇪 Bolívar" data-desc="Tepuyes milenarios y el Salto Ángel">💧 Canaima</span><span class="ticker-item" data-destino="Catatumbo" data-escena="escena-tormenta" data-caption="⚡ El relámpago eterno" data-pais="🇻🇪 Zulia" data-desc="260 noches de tormentas al año. Único">⚡ Catatumbo</span><span class="ticker-item" data-destino="Colonia Tovar" data-escena="escena-colonia" data-caption="🏘️ Pueblo alemán en las montañas" data-pais="🇻🇪 Aragua" data-desc="Fresas, arquitectura bávara y clima primaveral">🏘️ Colonia Tovar</span><span class="ticker-item mas" data-destino="Y muchos más" data-escena="escena-muchosmas" data-caption="✨ Próximamente más destinos" data-pais="🌍 Venezuela y el mundo" data-desc="Estamos agregando nuevos destinos cada mes">✨ Y muchos más...</span><span class="ticker-item" data-destino="Destinos Internacionales" data-escena="escena-mundo" data-caption="🌍 Conectamos con el mundo" data-pais="Múltiples países" data-desc="Colombia, Panamá, España, EE.UU., México, Perú">🌍 Internacionales</span>
         </div>
     </div>
 
-    <div class="destino-info" id="destino-info"><div class="destino-icono" id="destino-icono"></div><div class="destino-nombre" id="destino-nombre"></div><div class="destino-desc" id="destino-desc"></div><div class="destino-pais" id="destino-pais"></div></div>
+    <div class="destino-info" id="destino-info">
+        <div class="destino-icono" id="destino-icono"></div>
+        <div class="destino-nombre" id="destino-nombre"></div>
+        <div class="destino-desc" id="destino-desc"></div>
+        <div class="destino-pais" id="destino-pais"></div>
+        <a class="btn-quiero-ir" id="btn-quiero-ir" href="#"><i class="fas fa-hotel"></i> Quiero ir a este destino</a>
+    </div>
 
     <div class="cta-grid">
         <a href="https://bwrathanyel.github.io/redireccion-whatsapp/tour/" class="cta-card" style="border-color:rgba(16,185,129,0.25);"><span class="badge-top" style="background:#10b981;color:#000;">NUEVO</span><i class="fas fa-umbrella-beach" style="color:#10b981;"></i><div class="titulo">Full Day</div><div class="desc">Escápate a Cayo Sal</div></a>
@@ -220,26 +236,23 @@
     document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Domingos 10am-3pm' : 'Lun-Sáb 8:30am-7pm');
 })();
 
-// Ticker infinito con JavaScript
 var track = document.getElementById('ticker-track');
 var wrap = document.getElementById('ticker-wrap');
 var items = track.querySelectorAll('.ticker-item');
-var itemWidth = items[0].offsetWidth + 4; // ancho + margen
-var totalWidth = itemWidth * 8; // ancho de un set (8 items)
+var itemWidth = items[0].offsetWidth + 4;
+var totalWidth = itemWidth * 9;
 var pos = 0;
-var speed = 0.4; // píxeles por frame
+var autoSpeed = 0.4;
 var animId;
 var isDragging = false;
 var startX, startPos;
-var lastTime = 0;
-var autoSpeed = 0.4;
 
-// Elementos UI
 var destinoInfo = document.getElementById('destino-info');
 var destinoIcono = document.getElementById('destino-icono');
 var destinoNombre = document.getElementById('destino-nombre');
 var destinoDesc = document.getElementById('destino-desc');
 var destinoPais = document.getElementById('destino-pais');
+var btnQuieroIr = document.getElementById('btn-quiero-ir');
 var escenaCaption = document.getElementById('escena-caption');
 var hideTimeout;
 
@@ -260,13 +273,23 @@ function seleccionarItem(item) {
     destinoNombre.textContent = item.getAttribute('data-destino');
     destinoDesc.textContent = item.getAttribute('data-desc');
     destinoPais.textContent = '📍 ' + (item.getAttribute('data-pais') || '');
+    
+    var hospedajeURL = 'https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/';
+    if (destino !== 'Y muchos más') {
+        hospedajeURL += '?destino=' + encodeURIComponent(destino);
+        btnQuieroIr.href = hospedajeURL;
+        btnQuieroIr.innerHTML = '<i class="fas fa-hotel"></i> Quiero ir a ' + destino;
+        btnQuieroIr.style.display = 'inline-flex';
+    } else {
+        btnQuieroIr.style.display = 'none';
+    }
+    
     destinoInfo.classList.add('visible');
     cambiarEscena(item.getAttribute('data-escena'), item.getAttribute('data-caption'));
     clearTimeout(hideTimeout);
-    hideTimeout = setTimeout(function() { destinoInfo.classList.remove('visible'); }, 6000);
+    hideTimeout = setTimeout(function() { destinoInfo.classList.remove('visible'); }, 8000);
 }
 
-// Click
 track.addEventListener('click', function(e) {
     if (isDragging) return;
     var item = e.target.closest('.ticker-item');
@@ -274,62 +297,22 @@ track.addEventListener('click', function(e) {
     seleccionarItem(item);
 });
 
-// Animación automática
 function animate(timestamp) {
     if (!isDragging) {
         pos -= autoSpeed;
         if (pos <= -totalWidth) { pos += totalWidth; }
         track.style.transform = 'translateX(' + pos + 'px)';
     }
-    lastTime = timestamp;
     animId = requestAnimationFrame(animate);
 }
 
-// Drag con mouse
-wrap.addEventListener('mousedown', function(e) {
-    isDragging = true; startX = e.clientX; startPos = pos; track.style.transition = 'none';
-});
-document.addEventListener('mousemove', function(e) {
-    if (!isDragging) return;
-    var dx = e.clientX - startX;
-    pos = startPos + dx;
-    if (pos > 0) pos -= totalWidth;
-    if (pos < -totalWidth * 2) pos += totalWidth;
-    track.style.transform = 'translateX(' + pos + 'px)';
-});
-document.addEventListener('mouseup', function() {
-    if (!isDragging) return;
-    isDragging = false; track.style.transition = 'transform 0.3s ease';
-    var diff = Math.abs(pos - startPos);
-    if (diff < 5) { track.style.transition = ''; }
-    pos = pos % totalWidth;
-    if (pos > 0) pos -= totalWidth;
-    track.style.transform = 'translateX(' + pos + 'px)';
-    setTimeout(function() { track.style.transition = ''; }, 300);
-});
+wrap.addEventListener('mousedown', function(e) { isDragging = true; startX = e.clientX; startPos = pos; track.style.transition = 'none'; });
+document.addEventListener('mousemove', function(e) { if (!isDragging) return; var dx = e.clientX - startX; pos = startPos + dx; if (pos > 0) pos -= totalWidth; if (pos < -totalWidth * 2) pos += totalWidth; track.style.transform = 'translateX(' + pos + 'px)'; });
+document.addEventListener('mouseup', function() { if (!isDragging) return; isDragging = false; track.style.transition = 'transform 0.3s ease'; pos = pos % totalWidth; if (pos > 0) pos -= totalWidth; track.style.transform = 'translateX(' + pos + 'px)'; setTimeout(function() { track.style.transition = ''; }, 300); });
+wrap.addEventListener('touchstart', function(e) { isDragging = true; startX = e.touches[0].clientX; startPos = pos; track.style.transition = 'none'; }, { passive: true });
+wrap.addEventListener('touchmove', function(e) { if (!isDragging) return; var dx = e.touches[0].clientX - startX; pos = startPos + dx; if (pos > 0) pos -= totalWidth; if (pos < -totalWidth * 2) pos += totalWidth; track.style.transform = 'translateX(' + pos + 'px)'; }, { passive: true });
+wrap.addEventListener('touchend', function() { if (!isDragging) return; isDragging = false; track.style.transition = 'transform 0.3s ease'; pos = pos % totalWidth; if (pos > 0) pos -= totalWidth; track.style.transform = 'translateX(' + pos + 'px)'; setTimeout(function() { track.style.transition = ''; }, 300); });
 
-// Drag táctil
-wrap.addEventListener('touchstart', function(e) {
-    isDragging = true; startX = e.touches[0].clientX; startPos = pos; track.style.transition = 'none';
-}, { passive: true });
-wrap.addEventListener('touchmove', function(e) {
-    if (!isDragging) return;
-    var dx = e.touches[0].clientX - startX;
-    pos = startPos + dx;
-    if (pos > 0) pos -= totalWidth;
-    if (pos < -totalWidth * 2) pos += totalWidth;
-    track.style.transform = 'translateX(' + pos + 'px)';
-}, { passive: true });
-wrap.addEventListener('touchend', function() {
-    if (!isDragging) return;
-    isDragging = false; track.style.transition = 'transform 0.3s ease';
-    pos = pos % totalWidth;
-    if (pos > 0) pos -= totalWidth;
-    track.style.transform = 'translateX(' + pos + 'px)';
-    setTimeout(function() { track.style.transition = ''; }, 300);
-});
-
-// Iniciar animación
 animId = requestAnimationFrame(animate);
 </script>
 </body>
