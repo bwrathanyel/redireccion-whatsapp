@@ -195,6 +195,7 @@
         .select-desc i { font-size: 8px; color: var(--accent-blue); }
 
         @media (max-width: 360px) { body { padding: 0 8px 32px; } .card { padding-top: 20px; } .form-section { padding: 12px; } .ruta-punto .codigo { font-size: 16px; } }
+        @media (min-width: 768px) { .card { transform: scale(1.12); transform-origin: top center; } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
     </style>
 </head>
@@ -344,7 +345,6 @@
 <script>
 (function() { var img = new Image(); img.src = 'https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'; })();
 function transicionSalida(e) { e.preventDefault(); document.body.classList.add('salir'); setTimeout(function() { window.location.href = document.getElementById('homeBtn').href; }, 250); }
-
 (function() {
     var ahora = new Date(); var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
     var dia = ve.getDay(); var horaDecimal = ve.getHours() + ve.getMinutes() / 60;
@@ -352,32 +352,15 @@ function transicionSalida(e) { e.preventDefault(); document.body.classList.add('
     document.getElementById('estado-dot').className = 'dot ' + (online ? 'online' : 'offline');
     document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Domingos 10am-3pm' : 'Lun-Sáb 8:30am-7pm');
 })();
-
 function hoyISO() { return new Date().toISOString().split('T')[0]; }
 document.getElementById('fecha-ida').min = hoyISO(); document.getElementById('fecha-vuelta').min = hoyISO();
-
-function toggleTipoViaje() {
-    var esIdaVuelta = document.getElementById('tv-idavuelta').checked;
-    document.getElementById('grupo-fecha-vuelta').style.display = esIdaVuelta ? 'block' : 'none';
-    document.getElementById('avion-vuelta').style.display = esIdaVuelta ? 'block' : 'none';
-    if (!esIdaVuelta) document.getElementById('fecha-vuelta').value = '';
-}
-
+function toggleTipoViaje() { var esIdaVuelta = document.getElementById('tv-idavuelta').checked; document.getElementById('grupo-fecha-vuelta').style.display = esIdaVuelta ? 'block' : 'none'; document.getElementById('avion-vuelta').style.display = esIdaVuelta ? 'block' : 'none'; if (!esIdaVuelta) document.getElementById('fecha-vuelta').value = ''; }
 function actualizarRuta(tipo) {
-    if (tipo === 'origen') {
-        var sel = document.getElementById('origen'), extra = document.getElementById('origen-extra');
-        if (sel.value.startsWith('OTRO')) { extra.style.display = 'block'; document.getElementById('origen-codigo').textContent = '???'; document.getElementById('origen-ciudad').textContent = 'Otro'; }
-        else { extra.style.display = 'none'; extra.value = ''; var p = sel.value.split('|'); document.getElementById('origen-codigo').textContent = p[0]; document.getElementById('origen-ciudad').textContent = p[1]; }
-    } else {
-        var sel = document.getElementById('destino'), extra = document.getElementById('destino-extra');
-        if (sel.value.startsWith('OTRO')) { extra.style.display = 'block'; document.getElementById('destino-codigo').textContent = '???'; document.getElementById('destino-ciudad').textContent = 'Otro'; }
-        else if (!sel.value) { extra.style.display = 'none'; document.getElementById('destino-codigo').textContent = '¿?'; document.getElementById('destino-ciudad').textContent = 'Elige'; }
-        else { extra.style.display = 'none'; extra.value = ''; var p = sel.value.split('|'); document.getElementById('destino-codigo').textContent = p[0]; document.getElementById('destino-ciudad').textContent = p[1]; }
-    }
+    if (tipo === 'origen') { var sel = document.getElementById('origen'), extra = document.getElementById('origen-extra'); if (sel.value.startsWith('OTRO')) { extra.style.display = 'block'; document.getElementById('origen-codigo').textContent = '???'; document.getElementById('origen-ciudad').textContent = 'Otro'; } else { extra.style.display = 'none'; extra.value = ''; var p = sel.value.split('|'); document.getElementById('origen-codigo').textContent = p[0]; document.getElementById('origen-ciudad').textContent = p[1]; } }
+    else { var sel = document.getElementById('destino'), extra = document.getElementById('destino-extra'); if (sel.value.startsWith('OTRO')) { extra.style.display = 'block'; document.getElementById('destino-codigo').textContent = '???'; document.getElementById('destino-ciudad').textContent = 'Otro'; } else if (!sel.value) { extra.style.display = 'none'; document.getElementById('destino-codigo').textContent = '¿?'; document.getElementById('destino-ciudad').textContent = 'Elige'; } else { extra.style.display = 'none'; extra.value = ''; var p = sel.value.split('|'); document.getElementById('destino-codigo').textContent = p[0]; document.getElementById('destino-ciudad').textContent = p[1]; } }
 }
 document.getElementById('origen-extra').addEventListener('input', function() { if (this.value.trim()) { document.getElementById('origen-codigo').textContent = '???'; document.getElementById('origen-ciudad').textContent = this.value.trim().substring(0, 12); } });
 document.getElementById('destino-extra').addEventListener('input', function() { if (this.value.trim()) { document.getElementById('destino-codigo').textContent = '???'; document.getElementById('destino-ciudad').textContent = this.value.trim().substring(0, 12); } });
-
 function actualizarDescDestino() { var sel = document.getElementById('destino'), opt = sel.options[sel.selectedIndex]; document.getElementById('desc-destino').innerHTML = '<i class="fas fa-info-circle"></i> ' + (opt.getAttribute('data-desc') || 'Selecciona tu destino para ver detalles'); }
 function toggleFlex(el) { var tags = document.querySelectorAll('#flex-tags .flex-tag'); for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel'); el.classList.add('sel'); }
 function getFlexibilidad() { var sel = document.querySelector('#flex-tags .flex-tag.sel'); return sel ? parseInt(sel.dataset.value) : 0; }
@@ -391,7 +374,6 @@ function generarEdades(count) { var cont = document.getElementById('contenedor-e
 function actualizarAlertaCedula() { var inputs = document.querySelectorAll('.edad-nino'), tiene = false; for (var i = 0; i < inputs.length; i++) { if (parseInt(inputs[i].value) >= 9) { tiene = true; break; } } var alerta = document.getElementById('alerta-cedula-ninos'); alerta.style.borderColor = tiene ? 'rgba(255,80,80,0.5)' : 'rgba(255,145,0,0.25)'; alerta.style.background = tiene ? 'rgba(255,80,80,0.1)' : 'rgba(255,145,0,0.08)'; alerta.querySelector('span').innerHTML = tiene ? '⚠️ <strong>Obligatorio:</strong> Niños de 9+ años deben tener cédula.' : 'Niños ≥9 años necesitan cédula vigente para viajar.'; }
 function toggleEquipaje(el) { if (el.dataset.value === 'Sin equipaje') { var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag'); for (var i = 0; i < tags.length; i++) tags[i].classList.remove('sel'); el.classList.add('sel'); } else { var sin = document.querySelector('#equipaje-grid .pasajero-tag[data-value="Sin equipaje"]'); if (sin) sin.classList.remove('sel'); el.classList.toggle('sel'); } }
 function getEquipaje() { var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag.sel'), r = []; for (var i = 0; i < tags.length; i++) r.push(tags[i].dataset.value); return r; }
-
 function lanzarConfeti() { var colores = ['#4a9eff', '#25D366', '#ffd166', '#ff9100', '#7bb8ff']; var c = document.createElement('div'); c.className = 'confeti-container'; var f = document.createDocumentFragment(); for (var i = 0; i < 20; i++) { var x = document.createElement('div'); x.className = 'confeti'; x.style.left = Math.random() * 100 + '%'; x.style.animationDelay = Math.random() * 0.4 + 's'; x.style.animationDuration = (Math.random() * 0.8 + 0.7) + 's'; x.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)]; f.appendChild(x); } c.appendChild(f); document.body.appendChild(c); setTimeout(function() { c.remove(); }, 1500); }
 
 function generarSolicitud() {
@@ -405,26 +387,19 @@ function generarSolicitud() {
     var bebes = parseInt(document.getElementById('bebes').value), equipaje = getEquipaje();
     var cedulaAdultos = document.getElementById('cedula-adultos').checked, cedulaNinos = document.getElementById('cedula-ninos').checked;
     var ocasion = document.getElementById('ocasion').value, notas = document.getElementById('notas').value.trim();
-
     var edadesNinos = ''; var resumenEl = document.getElementById('edades-resumen');
     if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; }
     else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
-
     if (!origen || !destino || !fechaIda || adultos === null) { alert('Completa origen, destino, fecha de ida y cantidad de adultos.'); return; }
-
-    // Números de asesores de boletería
     var asesores = ['584244269876', '584244269876', '584142495020', '584142495020', '584140415685'];
     var tlf = asesores[Math.floor(Math.random() * asesores.length)];
-    
     var lineas = ['✈️ *COTIZACIÓN DE VUELO - LOTUS 360*','','🔄 *Tipo:* ' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida'),'📍 *Origen:* ' + origen,'📍 *Destino:* ' + destino,'📅 *Fecha ida:* ' + fechaIda,(tipoViaje === 'ida-vuelta' && fechaVuelta ? '📅 *Fecha vuelta:* ' + fechaVuelta : ''),(flexibilidad > 0 ? '📆 *Flexibilidad:* ±' + flexibilidad + ' día(s)' : '📆 *Fechas fijas*'),'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos + ' | *Bebés:* ' + bebes,(ninos > 0 ? '👶 *Edades:* ' + edadesNinos : ''),'🧳 *Equipaje:* ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado'),'🆔 *Cédulas adultos:* ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR'),(ninos > 0 ? '🆔 *Cédulas niños:* ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') : ''),(ocasion !== 'Viaje regular' ? '🎉 *Ocasión:* ' + ocasion : ''),(notas ? '📝 *Notas:* ' + notas : ''),'','✅ *Enviar opciones con precios. ¡Gracias!*'];
     var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(lineas.filter(function(l) { return l !== ''; }).join('\n'));
-
     document.getElementById('resultado').style.display = 'block';
     document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Listo!</h3><div class="resumen-detalle">' + '<div class="dato"><i class="fas fa-exchange-alt"></i> <strong>' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + '</strong></div>' + '<div class="dato"><i class="fas fa-plane-departure"></i> ' + origen + ' → ' + destino + '</div>' + '<div class="dato"><i class="fas fa-calendar-check"></i> Ida: ' + fechaIda + (tipoViaje === 'ida-vuelta' && fechaVuelta ? ' | Vuelta: ' + fechaVuelta : '') + '</div>' + '<div class="dato"><i class="fas fa-sliders-h"></i> ' + (flexibilidad > 0 ? 'Flexible ±' + flexibilidad + ' día(s)' : 'Fechas fijas') + '</div>' + '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + bebes + ' bebés</div>' + '<div class="dato"><i class="fas fa-suitcase"></i> ' + (equipaje.length ? equipaje.join(' + ') : 'Sin equipaje') + '</div>' + (ocasion !== 'Viaje regular' ? '<div class="dato"><i class="fas fa-gift"></i> ' + ocasion + '</div>' : '') + '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Enviar a un Asesor</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Nueva cotización</button></div>';
     document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' }); lanzarConfeti();
 }
 function nuevaCotizacion() { var r = document.getElementById('resultado'); r.style.opacity = '0'; r.style.transform = 'translateY(8px)'; r.style.transition = 'all 0.25s ease'; setTimeout(function() { r.style.display = 'none'; r.innerHTML = ''; r.style.opacity = '1'; r.style.transform = 'translateY(0)'; window.scrollTo({ top: 0, behavior: 'smooth' }); }, 250); }
-
 toggleTipoViaje(); actualizarDescDestino();
 </script>
 </body>
