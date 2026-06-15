@@ -58,88 +58,40 @@
         .home-btn i { color: #ff9100; font-size: 11px; }
         .card-header { text-align: center; margin-bottom: 14px; }
         .logo-wrap { position: relative; width: 72px; height: 72px; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; }
-        .logo-wrap::before {
-            content: ''; position: absolute; width: 72px; height: 72px; border-radius: 50%;
-            border: 2px solid rgba(255,145,0,0.45); animation: ring-pulse 2.4s ease-out infinite;
-            top: 50%; left: 50%; transform: translate(-50%, -50%);
-        }
+        .logo-wrap::before { content: ''; position: absolute; width: 72px; height: 72px; border-radius: 50%; border: 2px solid rgba(255,145,0,0.45); animation: ring-pulse 2.4s ease-out infinite; top: 50%; left: 50%; transform: translate(-50%, -50%); }
         @keyframes ring-pulse { 0% { width: 66px; height: 66px; opacity: 0.7; } 100% { width: 92px; height: 92px; opacity: 0; } }
-        .logo-profile {
-            width: 64px; height: 64px; border-radius: 50%; border: 3px solid var(--accent);
-            padding: 3px; background: #fff; object-fit: contain; display: block; position: relative; z-index: 1;
-            animation: logoAppear 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;
-        }
+        .logo-profile { width: 64px; height: 64px; border-radius: 50%; border: 3px solid var(--accent); padding: 3px; background: #fff; object-fit: contain; display: block; position: relative; z-index: 1; animation: logoAppear 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.1s both; }
         @keyframes logoAppear { from { opacity: 0; transform: scale(0.5) rotateY(90deg); } to { opacity: 1; transform: scale(1) rotateY(0deg); } }
-        .card-header h2 {
-            font-size: 1.1rem; font-weight: 700; margin-bottom: 2px;
-            background: linear-gradient(to right, #ff9100, #ffb74d, #ff9100);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
+        .card-header h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 2px; background: linear-gradient(to right, #ff9100, #ffb74d, #ff9100); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
         .card-header .subtitle { color: var(--text-warm); font-size: 11px; }
         .card-header .slogan { font-size: 9px; color: rgba(255,183,77,0.5); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 3px; }
-        .estado-box {
-            display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.07);
-            border: 1px solid rgba(255,255,255,0.12); border-radius: 30px; padding: 5px 12px;
-            font-size: 10px; font-weight: 600; margin: 8px auto 0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        }
-        .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-        .dot.online { background: #25D366; animation: dot-breathe 1.8s infinite; }
-        .dot.offline { background: #f59e0b; }
+        .estado-box { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-radius: 30px; padding: 5px 12px; font-size: 10px; font-weight: 600; margin: 8px auto 0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+        .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; } .dot.online { background: #25D366; animation: dot-breathe 1.8s infinite; } .dot.offline { background: #f59e0b; }
         @keyframes dot-breathe { 0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); } 70% { box-shadow: 0 0 0 5px rgba(37,211,102,0); } 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); } }
 
-        .tour-img-box {
-            position: relative; width: 100%; height: 170px; border-radius: 14px; overflow: hidden;
-            margin-bottom: 10px; border: 1px solid rgba(255,145,0,0.2);
-            box-shadow: 0 4px 16px rgba(0,0,0,0.3); animation: fadeSlideUp 0.4s ease both;
-            background: linear-gradient(135deg,#1a6b8a,#0c2d4a);
-        }
+        .tour-img-box { position: relative; width: 100%; height: 170px; border-radius: 14px; overflow: hidden; margin-bottom: 10px; border: 1px solid rgba(255,145,0,0.2); box-shadow: 0 4px 16px rgba(0,0,0,0.3); animation: fadeSlideUp 0.4s ease both; background: linear-gradient(135deg,#1a6b8a,#0c2d4a); }
         @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         .tour-img-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .tour-img-overlay {
-            position: absolute; bottom: 0; left: 0; right: 0;
-            background: linear-gradient(transparent, rgba(0,0,0,0.75));
-            padding: 24px 12px 8px;
-        }
+        .tour-img-overlay { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.75)); padding: 24px 12px 8px; }
         .tour-img-overlay .lugar { font-size: 13px; font-weight: 700; }
         .tour-img-overlay .fecha { font-size: 10px; color: var(--accent); font-weight: 600; }
 
-        .form-section {
-            background: var(--card-bg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,145,0,0.08); border-radius: 16px; padding: 14px;
-            margin-bottom: 10px; transform: translateZ(0); box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-            content-visibility: auto; contain-intrinsic-size: auto 200px;
-        }
-        .section-title {
-            font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
-            color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 5px;
-        }
+        .form-section { background: var(--card-bg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,145,0,0.08); border-radius: 16px; padding: 14px; margin-bottom: 10px; transform: translateZ(0); box-shadow: 0 2px 12px rgba(0,0,0,0.15); content-visibility: auto; contain-intrinsic-size: auto 200px; }
+        .section-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
         .section-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,145,0,0.15); }
-        .form-group { margin-bottom: 10px; }
-        .form-group:last-child { margin-bottom: 0; }
+        .form-group { margin-bottom: 10px; } .form-group:last-child { margin-bottom: 0; }
         .form-group label { display: block; font-weight: 600; margin-bottom: 5px; color: rgba(255,255,255,0.9); font-size: 11px; }
         .form-group label i { color: var(--accent); margin-right: 3px; width: 13px; text-align: center; font-size: 10px; }
 
-        select, input[type="text"], input[type="number"], textarea {
-            width: 100%; padding: 11px 14px; border: 1.5px solid rgba(255,145,0,0.1);
-            border-radius: 12px; font-size: 13px; background: rgba(10,12,28,0.7); color: #fff;
-            font-family: inherit; color-scheme: dark; transition: border-color 0.15s; touch-action: manipulation;
-        }
-        select {
-            appearance: none; -webkit-appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ff9100' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-            background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px;
-        }
+        select, input[type="text"], input[type="number"], textarea { width: 100%; padding: 11px 14px; border: 1.5px solid rgba(255,145,0,0.1); border-radius: 12px; font-size: 13px; background: rgba(10,12,28,0.7); color: #fff; font-family: inherit; color-scheme: dark; transition: border-color 0.15s; touch-action: manipulation; }
+        select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ff9100' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
         select:focus, input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,145,0,0.1); }
         textarea { resize: vertical; min-height: 55px; }
         .row { display: flex; gap: 8px; } .row .form-group { flex: 1; }
         .extra-input { margin-top: 5px; }
 
         .planes-grid { display: flex; gap: 8px; margin-top: 8px; }
-        .plan-card {
-            flex: 1; background: rgba(10,12,28,0.5); border: 1.5px solid rgba(255,255,255,0.08);
-            border-radius: 14px; padding: 12px 10px; cursor: pointer; transition: all 0.15s ease;
-            text-align: center; position: relative;
-        }
+        .plan-card { flex: 1; background: rgba(10,12,28,0.5); border: 1.5px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 12px 10px; cursor: pointer; transition: all 0.15s ease; text-align: center; position: relative; }
         .plan-card:active { transform: scale(0.96); }
         .plan-card.sel { border-color: var(--accent); background: rgba(255,145,0,0.12); box-shadow: 0 0 14px rgba(255,145,0,0.2); }
         .plan-card .plan-badge { position: absolute; top: -8px; right: -4px; background: var(--accent); color: #000; font-size: 8px; font-weight: 800; padding: 2px 8px; border-radius: 10px; opacity: 0; transform: scale(0.5); transition: all 0.2s ease; }
@@ -183,12 +135,7 @@
         .cross-link i { font-size: 10px; }
 
         .footer-servicios { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 18px 0 6px; }
-        .footer-servicio {
-            display: flex; align-items: center; gap: 4px; font-size: 8px;
-            color: rgba(255,183,77,0.4); text-decoration: none; padding: 3px 8px;
-            border-radius: 20px; background: rgba(255,145,0,0.04); border: 1px solid rgba(255,145,0,0.08);
-            transition: all 0.15s ease;
-        }
+        .footer-servicio { display: flex; align-items: center; gap: 4px; font-size: 8px; color: rgba(255,183,77,0.4); text-decoration: none; padding: 3px 8px; border-radius: 20px; background: rgba(255,145,0,0.04); border: 1px solid rgba(255,145,0,0.08); transition: all 0.15s ease; }
         .footer-servicio.activo { color: var(--color-fullday); background: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.25); }
         .footer-servicio.hospedaje i { color: var(--color-hospedaje); }
         .footer-servicio.boleteria i { color: var(--color-boleteria); }
@@ -198,8 +145,7 @@
         .confeti-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; }
         .confeti { position: absolute; width: 7px; height: 7px; animation: caerConfeti 1s ease-out forwards; }
         @keyframes caerConfeti { 0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(480deg); opacity: 0; } }
-        .hint-text { font-size: 9px; color: rgba(255,183,77,0.5); margin-top: 3px; display: flex; align-items: center; gap: 3px; }
-        .hint-text i { color: var(--accent); font-size: 8px; }
+        .hint-text { font-size: 9px; color: rgba(255,183,77,0.5); margin-top: 3px; display: flex; align-items: center; gap: 3px; } .hint-text i { color: var(--accent); font-size: 8px; }
 
         @media (max-width: 360px) { body { padding: 10px 8px 32px; } .form-section { padding: 12px; } .plan-card { padding: 10px 8px; } .tour-img-box { height: 140px; } }
         @media (min-width: 768px) { .card { transform: scale(1.20); transform-origin: top center; } }
@@ -221,10 +167,7 @@
 
     <div class="tour-img-box">
         <img src="https://bwrathanyel.github.io/redireccion-whatsapp/tour/cayosal.jpeg" alt="Cayo Sal - Chichiriviche, Falcón" loading="eager">
-        <div class="tour-img-overlay">
-            <div class="lugar">🌴 Cayo Sal · Chichiriviche, Falcón</div>
-            <div class="fecha">📅 27 de Junio · ¡Nos escapamos!</div>
-        </div>
+        <div class="tour-img-overlay"><div class="lugar">🌴 Cayo Sal · Chichiriviche, Falcón</div><div class="fecha">📅 27 de Junio · ¡Nos escapamos!</div></div>
     </div>
 
     <div class="form-section">
@@ -250,17 +193,7 @@
             <div class="plan-card sel" data-plan="basico" onclick="seleccionarPlan(this)"><div class="plan-icon">🧊</div><div class="plan-nombre">Plan BÁSICO</div><div class="plan-precio">$25<small> USD</small></div><div class="plan-check"><i class="fas fa-check"></i></div></div>
             <div class="plan-card" data-plan="full360" onclick="seleccionarPlan(this)"><div class="plan-badge">RECOMENDADO</div><div class="plan-icon">🐟</div><div class="plan-nombre">Plan FULL360</div><div class="plan-precio">$35<small> USD</small></div><div class="plan-check"><i class="fas fa-check"></i></div></div>
         </div>
-        <div class="incluye-box visible" id="incluye-box">
-            <div class="incluye-titulo" id="incluye-titulo">✅ INCLUYE - PLAN BÁSICO · $25 USD</div>
-            <div id="incluye-lista">
-                <div class="incluye-item"><i class="fas fa-check"></i> 🚐 Traslado en cómoda encava con A/A</div>
-                <div class="incluye-item"><i class="fas fa-check"></i> ⚓ Salida desde embarcadero privado</div>
-                <div class="incluye-item"><i class="fas fa-check"></i> 🌊 Traslado en lancha a Cayo Sal</div>
-                <div class="incluye-item"><i class="fas fa-check"></i> 🧊 Hidratación + Hielo constante</div>
-                <div class="incluye-item"><i class="fas fa-check"></i> 🙋 Guías y logística con la mejor energía</div>
-                <div class="incluye-item"><i class="fas fa-check"></i> 🎶 Música (Rumba) 🥳</div>
-            </div>
-        </div>
+        <div class="incluye-box visible" id="incluye-box"><div class="incluye-titulo" id="incluye-titulo">✅ INCLUYE - PLAN BÁSICO · $25 USD</div><div id="incluye-lista"><div class="incluye-item"><i class="fas fa-check"></i> 🚐 Traslado en cómoda encava con A/A</div><div class="incluye-item"><i class="fas fa-check"></i> ⚓ Salida desde embarcadero privado</div><div class="incluye-item"><i class="fas fa-check"></i> 🌊 Traslado en lancha a Cayo Sal</div><div class="incluye-item"><i class="fas fa-check"></i> 🧊 Hidratación + Hielo constante</div><div class="incluye-item"><i class="fas fa-check"></i> 🙋 Guías y logística con la mejor energía</div><div class="incluye-item"><i class="fas fa-check"></i> 🎶 Música (Rumba) 🥳</div></div></div>
         <div class="hint-text" style="margin-top:8px;"><i class="fas fa-exclamation-circle" style="color:#ff9100;"></i> ¡Aparta tu cupo que se agotan rápido! 📲</div>
     </div>
 
@@ -304,15 +237,23 @@
 <script>
 (function() { var img = new Image(); img.src = 'https://raw.githubusercontent.com/bwrathanyel/redireccion-whatsapp/main/lotus360background.jpg'; })();
 function transicionSalida(e) { e.preventDefault(); document.body.classList.add('salir'); setTimeout(function() { window.location.href = document.getElementById('homeBtn').href; }, 250); }
-
 (function() {
-    var ahora = new Date();
-    var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
+    var ahora = new Date(); var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
     var dia = ve.getDay(); var horaDecimal = ve.getHours() + ve.getMinutes() / 60;
     var online = (dia >= 1 && dia <= 6) ? (horaDecimal >= 8.5 && horaDecimal < 19) : (dia === 0 && horaDecimal >= 10 && horaDecimal < 15);
     document.getElementById('estado-dot').className = 'dot ' + (online ? 'online' : 'offline');
     document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Domingos 10am-3pm · Volvemos pronto' : 'Lun-Sáb 8:30am-7pm · Volvemos pronto');
 })();
+
+// Enviar datos a ManyChat
+function enviarAManyChat(datos) {
+    var subscriberId = 'web_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    fetch('https://api.manychat.com/fb/subscriber/sendData', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer 512610:0de20e36df23bca11c95b470291f30f8' },
+        body: JSON.stringify({ subscriber_id: subscriberId, data: { fecha_hora_lead: datos.fechaHora, destino_lead: datos.destino, servicio_lead: datos.servicio, pagina_lead: datos.pagina, nombre_lead: datos.nombre || 'No especificado' } })
+    });
+}
 
 var planSeleccionado = 'basico';
 var incluyePlanes = {
@@ -320,34 +261,14 @@ var incluyePlanes = {
     'full360': { titulo: '✅ INCLUYE - PLAN FULL360 · $35 USD', items: ['🍗🐟 Almuerzo playero (pollo o pescado + ensalada y tostón)','🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳'] }
 };
 
-function seleccionarPlan(el) {
-    var cards = document.querySelectorAll('#planes-grid .plan-card');
-    for (var i = 0; i < cards.length; i++) cards[i].classList.remove('sel');
-    el.classList.add('sel'); planSeleccionado = el.dataset.plan;
-    var plan = incluyePlanes[planSeleccionado];
-    document.getElementById('incluye-titulo').textContent = plan.titulo;
-    var html = ''; for (var j = 0; j < plan.items.length; j++) { html += '<div class="incluye-item"><i class="fas fa-check"></i> ' + plan.items[j] + '</div>'; }
-    document.getElementById('incluye-lista').innerHTML = html;
-}
-
+function seleccionarPlan(el) { var cards = document.querySelectorAll('#planes-grid .plan-card'); for (var i = 0; i < cards.length; i++) cards[i].classList.remove('sel'); el.classList.add('sel'); planSeleccionado = el.dataset.plan; var plan = incluyePlanes[planSeleccionado]; document.getElementById('incluye-titulo').textContent = plan.titulo; var html = ''; for (var j = 0; j < plan.items.length; j++) { html += '<div class="incluye-item"><i class="fas fa-check"></i> ' + plan.items[j] + '</div>'; } document.getElementById('incluye-lista').innerHTML = html; }
 function toggleAdultosExtra() { var extra = document.getElementById('adultos-extra'); extra.style.display = document.getElementById('adultos').value === 'more' ? 'block' : 'none'; if (document.getElementById('adultos').value !== 'more') extra.value = ''; }
 document.getElementById('adultos').addEventListener('change', toggleAdultosExtra);
 function getAdultosCount() { var sel = document.getElementById('adultos'); if (sel.value === 'more') { var v = parseInt(document.getElementById('adultos-extra').value); return isNaN(v) ? null : v; } return parseInt(sel.value); }
-
 function toggleNinosUI() { var extra = document.getElementById('ninos-extra'); extra.style.display = document.getElementById('ninos').value === 'more' ? 'block' : 'none'; if (document.getElementById('ninos').value !== 'more') extra.value = ''; actualizarEdades(); }
 document.getElementById('ninos-extra').addEventListener('input', actualizarEdades);
 function getNinosCount() { var sel = document.getElementById('ninos'); if (sel.value === 'more') { var v = parseInt(document.getElementById('ninos-extra').value); return isNaN(v) ? null : v; } return parseInt(sel.value); }
-
-function actualizarEdades() {
-    var count = getNinosCount(); var cont = document.getElementById('contenedor-edades');
-    if (!count || count <= 0) { cont.innerHTML = ''; return; }
-    var html = '<label style="font-size:9px;color:var(--text-warm);margin-bottom:5px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>';
-    var max = Math.min(count, 8);
-    for (var i = 1; i <= max; i++) { html += '<input type="number" class="edad-nino extra-input" min="2" max="11" placeholder="Niño ' + i + ': edad (2-11)" style="margin-bottom:3px;">'; }
-    if (count > 8) html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen: ej. 3 de 8 años, 2 de 5">';
-    cont.innerHTML = html;
-}
-
+function actualizarEdades() { var count = getNinosCount(); var cont = document.getElementById('contenedor-edades'); if (!count || count <= 0) { cont.innerHTML = ''; return; } var html = '<label style="font-size:9px;color:var(--text-warm);margin-bottom:5px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>'; var max = Math.min(count, 8); for (var i = 1; i <= max; i++) { html += '<input type="number" class="edad-nino extra-input" min="2" max="11" placeholder="Niño ' + i + ': edad (2-11)" style="margin-bottom:3px;">'; } if (count > 8) html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen: ej. 3 de 8 años, 2 de 5">'; cont.innerHTML = html; }
 function lanzarConfeti() { var colores = ['#ff9100', '#25D366', '#ffd166', '#ffb74d']; var c = document.createElement('div'); c.className = 'confeti-container'; var f = document.createDocumentFragment(); for (var i = 0; i < 20; i++) { var x = document.createElement('div'); x.className = 'confeti'; x.style.left = Math.random() * 100 + '%'; x.style.animationDelay = Math.random() * 0.4 + 's'; x.style.animationDuration = (Math.random() * 0.8 + 0.7) + 's'; x.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)]; f.appendChild(x); } c.appendChild(f); document.body.appendChild(c); setTimeout(function() { c.remove(); }, 1500); }
 
 function generarSolicitud() {
@@ -361,20 +282,19 @@ function generarSolicitud() {
     var edadesNinos = ''; var resumenEl = document.getElementById('edades-resumen');
     if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; }
     else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) { arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); } edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
-
     var asesores = ['584244634041', '584244900601', '584244900601', '584244900601', '584127136169', '584127136169', '584147020527', '584244269876', '584140415685'];
     var tlf = asesores[Math.floor(Math.random() * asesores.length)];
 
+    // Enviar a ManyChat
+    enviarAManyChat({ fechaHora: new Date().toLocaleString('es-VE'), destino: 'Cayo Sal - Falcón', servicio: planNombre + ' · ' + planPrecio, pagina: 'Tours', nombre: nombre });
+
     var lineas = ['🌴 *RESERVA TOUR - LOTUS 360*','','📍 *Tour:* Cayo Sal - Chichiriviche, Falcón','📅 *Fecha:* 27 de Junio','⏰ *Horario:* 6:00 am - 4:00 pm','📍 *Salida:* CC Dinastía, Naguanagua · Carabobo','','🎫 *Plan:* ' + planNombre + ' (' + planPrecio + ')','👤 *Nombre:* ' + nombre,'👥 *Adultos:* ' + adultos + (ninos > 0 ? ' | *Niños:* ' + ninos : '') + (bebes > 0 ? ' | *Bebés:* ' + bebes : ''),'💰 *Total estimado:* $' + total + ' USD (solo adultos)'];
     if (ninos > 0) lineas.push('👶 *Edades niños:* ' + edadesNinos);
-
     var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(lineas.join('\n'));
-
     document.getElementById('resultado').style.display = 'block';
     document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Reserva casi lista!</h3><div class="resumen-detalle">' + '<div class="dato"><i class="fas fa-map-pin"></i> <strong>Cayo Sal - Falcón</strong> · 27 de Junio</div>' + '<div class="dato"><i class="fas fa-ticket-alt"></i> ' + planNombre + ' · ' + planPrecio + ' c/u</div>' + '<div class="dato"><i class="fas fa-user"></i> ' + nombre + ' · ' + adultos + ' adulto(s)' + (ninos > 0 ? ' · ' + ninos + ' niño(s)' : '') + (bebes > 0 ? ' · ' + bebes + ' bebé(s)' : '') + '</div>' + '<div class="dato"><i class="fas fa-dollar-sign"></i> Total adultos: <strong>$' + total + ' USD</strong></div>' + '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Confirmar Cupo por WhatsApp</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Hacer otra reserva</button></div>';
     document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' }); lanzarConfeti();
 }
-
 function nuevaCotizacion() { var r = document.getElementById('resultado'); r.style.opacity = '0'; r.style.transform = 'translateY(8px)'; r.style.transition = 'all 0.25s ease'; setTimeout(function() { r.style.display = 'none'; r.innerHTML = ''; r.style.opacity = '1'; r.style.transform = 'translateY(0)'; window.scrollTo({ top: 0, behavior: 'smooth' }); }, 250); }
 </script>
 </body>
