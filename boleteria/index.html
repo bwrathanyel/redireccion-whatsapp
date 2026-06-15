@@ -160,6 +160,9 @@
         .alerta-cedula { display: none; background: rgba(255,145,0,0.08); border: 1px solid rgba(255,145,0,0.25); border-radius: 6px; padding: 6px 8px; margin-top: 6px; font-size: 9px; color: #ffd9a8; line-height: 1.4; }
         .alerta-cedula.visible { display: flex; align-items: flex-start; gap: 5px; } .alerta-cedula i { color: #ff9100; }
 
+        .noches-box { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 10px; background: rgba(74,158,255,0.06); border: 1px solid rgba(74,158,255,0.12); border-radius: 8px; margin: 8px 0; font-size: 11px; font-weight: 600; color: #a8d1ff; }
+        .noches-box .num { color: #fff; font-size: 15px; font-weight: 800; }
+
         .btn-gen { width: 100%; padding: 15px; background: linear-gradient(135deg, #4a9eff, #2d7dd2); color: white; border: none; border-radius: 12px; font-weight: 700; font-size: 14px; cursor: pointer; box-shadow: 0 4px 16px rgba(74,158,255,0.35); letter-spacing: 0.2px; touch-action: manipulation; transition: transform 0.1s ease; }
         .btn-gen:active { transform: scale(0.96); }
 
@@ -278,8 +281,11 @@
     <div class="form-section">
         <div class="section-title"><i class="fas fa-calendar-alt"></i> Fechas</div>
         <div class="row">
-            <div class="form-group"><label><i class="fas fa-calendar-check"></i>Ida</label><input type="date" id="fecha-ida"></div>
-            <div class="form-group" id="grupo-fecha-vuelta"><label><i class="fas fa-calendar"></i>Vuelta</label><input type="date" id="fecha-vuelta"></div>
+            <div class="form-group"><label><i class="fas fa-calendar-check"></i>Ida</label><input type="date" id="fecha-ida" onchange="actualizarFechaVueltaMin()"></div>
+            <div class="form-group" id="grupo-fecha-vuelta"><label><i class="fas fa-calendar"></i>Vuelta</label><input type="date" id="fecha-vuelta" onchange="actualizarDias()"></div>
+        </div>
+        <div class="noches-box" id="noches-box" style="display:none;">
+            <i class="fas fa-calendar-alt"></i><span>Duración del viaje: <span class="num" id="dias-num">0</span> días</span>
         </div>
         <div class="form-group">
             <label><i class="fas fa-sliders-h"></i>Flexibilidad de fechas</label>
@@ -353,8 +359,57 @@ function transicionSalida(e) { e.preventDefault(); document.body.classList.add('
     document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Domingos 10am-3pm' : 'Lun-Sáb 8:30am-7pm');
 })();
 function hoyISO() { return new Date().toISOString().split('T')[0]; }
-document.getElementById('fecha-ida').min = hoyISO(); document.getElementById('fecha-vuelta').min = hoyISO();
-function toggleTipoViaje() { var esIdaVuelta = document.getElementById('tv-idavuelta').checked; document.getElementById('grupo-fecha-vuelta').style.display = esIdaVuelta ? 'block' : 'none'; document.getElementById('avion-vuelta').style.display = esIdaVuelta ? 'block' : 'none'; if (!esIdaVuelta) document.getElementById('fecha-vuelta').value = ''; }
+document.getElementById('fecha-ida').min = hoyISO();
+document.getElementById('fecha-vuelta').min = hoyISO();
+
+function toggleTipoViaje() {
+    var esIdaVuelta = document.getElementById('tv-idavuelta').checked;
+    document.getElementById('grupo-fecha-vuelta').style.display = esIdaVuelta ? 'block' : 'none';
+    document.getElementById('avion-vuelta').style.display = esIdaVuelta ? 'block' : 'none';
+    if (!esIdaVuelta) {
+        document.getElementById('fecha-vuelta').value = '';
+        document.getElementById('noches-box').style.display = 'none';
+    }
+}
+
+function actualizarFechaVueltaMin() {
+    var fechaIda = document.getElementById('fecha-ida').value;
+    var fechaVueltaInput = document.getElementById('fecha-vuelta');
+    if (fechaIda) {
+        var nextDay = new Date(fechaIda);
+        nextDay.setDate(nextDay.getDate() + 1);
+        fechaVueltaInput.min = nextDay.toISOString().split('T')[0];
+        if (fechaVueltaInput.value && fechaVueltaInput.value < fechaVueltaInput.min) {
+            fechaVueltaInput.value = '';
+        }
+    }
+    actualizarDias();
+}
+
+function actualizarDias() {
+    var fechaIda = document.getElementById('fecha-ida').value;
+    var fechaVuelta = document.getElementById('fecha-vuelta').value;
+    var box = document.getElementById('noches-box');
+    var esIdaVuelta = document.getElementById('tv-idavuelta').checked;
+    
+    if (!esIdaVuelta) {
+        box.style.display = 'none';
+        return;
+    }
+    
+    if (fechaIda && fechaVuelta) {
+        var dias = Math.round((new Date(fechaVuelta) - new Date(fechaIda)) / 86400000);
+        if (dias > 0) {
+            box.style.display = 'flex';
+            document.getElementById('dias-num').textContent = dias;
+        } else {
+            box.style.display = 'none';
+        }
+    } else {
+        box.style.display = 'none';
+    }
+}
+
 function actualizarRuta(tipo) {
     if (tipo === 'origen') { var sel = document.getElementById('origen'), extra = document.getElementById('origen-extra'); if (sel.value.startsWith('OTRO')) { extra.style.display = 'block'; document.getElementById('origen-codigo').textContent = '???'; document.getElementById('origen-ciudad').textContent = 'Otro'; } else { extra.style.display = 'none'; extra.value = ''; var p = sel.value.split('|'); document.getElementById('origen-codigo').textContent = p[0]; document.getElementById('origen-ciudad').textContent = p[1]; } }
     else { var sel = document.getElementById('destino'), extra = document.getElementById('destino-extra'); if (sel.value.startsWith('OTRO')) { extra.style.display = 'block'; document.getElementById('destino-codigo').textContent = '???'; document.getElementById('destino-ciudad').textContent = 'Otro'; } else if (!sel.value) { extra.style.display = 'none'; document.getElementById('destino-codigo').textContent = '¿?'; document.getElementById('destino-ciudad').textContent = 'Elige'; } else { extra.style.display = 'none'; extra.value = ''; var p = sel.value.split('|'); document.getElementById('destino-codigo').textContent = p[0]; document.getElementById('destino-ciudad').textContent = p[1]; } }
@@ -391,12 +446,18 @@ function generarSolicitud() {
     if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; }
     else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
     if (!origen || !destino || !fechaIda || adultos === null) { alert('Completa origen, destino, fecha de ida y cantidad de adultos.'); return; }
+    
+    var dias = 0;
+    if (tipoViaje === 'ida-vuelta' && fechaIda && fechaVuelta) {
+        dias = Math.round((new Date(fechaVuelta) - new Date(fechaIda)) / 86400000);
+    }
+    
     var asesores = ['584244269876', '584244269876', '584142495020', '584142495020', '584140415685'];
     var tlf = asesores[Math.floor(Math.random() * asesores.length)];
-    var lineas = ['✈️ *COTIZACIÓN DE VUELO - LOTUS 360*','','🔄 *Tipo:* ' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida'),'📍 *Origen:* ' + origen,'📍 *Destino:* ' + destino,'📅 *Fecha ida:* ' + fechaIda,(tipoViaje === 'ida-vuelta' && fechaVuelta ? '📅 *Fecha vuelta:* ' + fechaVuelta : ''),(flexibilidad > 0 ? '📆 *Flexibilidad:* ±' + flexibilidad + ' día(s)' : '📆 *Fechas fijas*'),'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos + ' | *Bebés:* ' + bebes,(ninos > 0 ? '👶 *Edades:* ' + edadesNinos : ''),'🧳 *Equipaje:* ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado'),'🆔 *Cédulas adultos:* ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR'),(ninos > 0 ? '🆔 *Cédulas niños:* ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') : ''),(ocasion !== 'Viaje regular' ? '🎉 *Ocasión:* ' + ocasion : ''),(notas ? '📝 *Notas:* ' + notas : ''),'','✅ *Enviar opciones con precios. ¡Gracias!*'];
+    var lineas = ['✈️ *COTIZACIÓN DE VUELO - LOTUS 360*','','🔄 *Tipo:* ' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida'),'📍 *Origen:* ' + origen,'📍 *Destino:* ' + destino,'📅 *Fecha ida:* ' + fechaIda,(tipoViaje === 'ida-vuelta' && fechaVuelta ? '📅 *Fecha vuelta:* ' + fechaVuelta : ''),(tipoViaje === 'ida-vuelta' && dias > 0 ? '📆 *Duración:* ' + dias + ' día(s)' : ''),(flexibilidad > 0 ? '📆 *Flexibilidad:* ±' + flexibilidad + ' día(s)' : '📆 *Fechas fijas*'),'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos + ' | *Bebés:* ' + bebes,(ninos > 0 ? '👶 *Edades:* ' + edadesNinos : ''),'🧳 *Equipaje:* ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado'),'🆔 *Cédulas adultos:* ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR'),(ninos > 0 ? '🆔 *Cédulas niños:* ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') : ''),(ocasion !== 'Viaje regular' ? '🎉 *Ocasión:* ' + ocasion : ''),(notas ? '📝 *Notas:* ' + notas : ''),'','✅ *Enviar opciones con precios. ¡Gracias!*'];
     var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(lineas.filter(function(l) { return l !== ''; }).join('\n'));
     document.getElementById('resultado').style.display = 'block';
-    document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Listo!</h3><div class="resumen-detalle">' + '<div class="dato"><i class="fas fa-exchange-alt"></i> <strong>' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + '</strong></div>' + '<div class="dato"><i class="fas fa-plane-departure"></i> ' + origen + ' → ' + destino + '</div>' + '<div class="dato"><i class="fas fa-calendar-check"></i> Ida: ' + fechaIda + (tipoViaje === 'ida-vuelta' && fechaVuelta ? ' | Vuelta: ' + fechaVuelta : '') + '</div>' + '<div class="dato"><i class="fas fa-sliders-h"></i> ' + (flexibilidad > 0 ? 'Flexible ±' + flexibilidad + ' día(s)' : 'Fechas fijas') + '</div>' + '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + bebes + ' bebés</div>' + '<div class="dato"><i class="fas fa-suitcase"></i> ' + (equipaje.length ? equipaje.join(' + ') : 'Sin equipaje') + '</div>' + (ocasion !== 'Viaje regular' ? '<div class="dato"><i class="fas fa-gift"></i> ' + ocasion + '</div>' : '') + '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Enviar a un Asesor</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Nueva cotización</button></div>';
+    document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Listo!</h3><div class="resumen-detalle">' + '<div class="dato"><i class="fas fa-exchange-alt"></i> <strong>' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + '</strong></div>' + '<div class="dato"><i class="fas fa-plane-departure"></i> ' + origen + ' → ' + destino + '</div>' + '<div class="dato"><i class="fas fa-calendar-check"></i> Ida: ' + fechaIda + (tipoViaje === 'ida-vuelta' && fechaVuelta ? ' | Vuelta: ' + fechaVuelta : '') + '</div>' + (dias > 0 ? '<div class="dato"><i class="fas fa-clock"></i> Duración: ' + dias + ' día(s)</div>' : '') + '<div class="dato"><i class="fas fa-sliders-h"></i> ' + (flexibilidad > 0 ? 'Flexible ±' + flexibilidad + ' día(s)' : 'Fechas fijas') + '</div>' + '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + bebes + ' bebés</div>' + '<div class="dato"><i class="fas fa-suitcase"></i> ' + (equipaje.length ? equipaje.join(' + ') : 'Sin equipaje') + '</div>' + (ocasion !== 'Viaje regular' ? '<div class="dato"><i class="fas fa-gift"></i> ' + ocasion + '</div>' : '') + '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Enviar a un Asesor</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Nueva cotización</button></div>';
     document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' }); lanzarConfeti();
 }
 function nuevaCotizacion() { var r = document.getElementById('resultado'); r.style.opacity = '0'; r.style.transform = 'translateY(8px)'; r.style.transition = 'all 0.25s ease'; setTimeout(function() { r.style.display = 'none'; r.innerHTML = ''; r.style.opacity = '1'; r.style.transform = 'translateY(0)'; window.scrollTo({ top: 0, behavior: 'smooth' }); }, 250); }
