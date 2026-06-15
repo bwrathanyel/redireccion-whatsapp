@@ -51,7 +51,7 @@
         .form-group { margin-bottom: 10px; } .form-group:last-child { margin-bottom: 0; }
         .form-group label { display: block; font-weight: 600; margin-bottom: 5px; color: rgba(255,255,255,0.9); font-size: 11px; }
         .form-group label i { color: var(--accent-blue); margin-right: 3px; width: 13px; text-align: center; font-size: 10px; }
-        select, input[type="text"], input[type="date"], input[type="number"], textarea { width: 100%; padding: 11px 14px; border: 1.5px solid rgba(74,158,255,0.1); border-radius: 12px; font-size: 13px; background: rgba(10,12,28,0.7); color: #fff; font-family: inherit; color-scheme: dark; transition: border-color 0.15s; touch-action: manipulation; }
+        select, input[type="text"], input[type="date"], input[type="number"], input[type="tel"], textarea { width: 100%; padding: 11px 14px; border: 1.5px solid rgba(74,158,255,0.1); border-radius: 12px; font-size: 13px; background: rgba(10,12,28,0.7); color: #fff; font-family: inherit; color-scheme: dark; transition: border-color 0.15s; touch-action: manipulation; }
         select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%234a9eff' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
         select:focus, input:focus, textarea:focus { outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(74,158,255,0.1); }
         textarea { resize: vertical; min-height: 55px; } .row { display: flex; gap: 8px; } .row .form-group { flex: 1; } .extra-input { margin-top: 5px; }
@@ -97,6 +97,16 @@
     <div class="form-section"><div class="section-title"><i class="fas fa-calendar-alt"></i> Fechas</div><div class="row"><div class="form-group"><label><i class="fas fa-calendar-check"></i>Ida</label><input type="date" id="fecha-ida" onchange="actualizarFechaVueltaMin()"></div><div class="form-group" id="grupo-fecha-vuelta"><label><i class="fas fa-calendar"></i>Vuelta</label><input type="date" id="fecha-vuelta" onchange="actualizarDias()"></div></div><div class="noches-box" id="noches-box" style="display:none;"><i class="fas fa-calendar-alt"></i><span>Duración del viaje: <span class="num" id="dias-num">0</span> días</span></div><div class="form-group"><label><i class="fas fa-sliders-h"></i>Flexibilidad de fechas</label><div class="flex-tags" id="flex-tags"><div class="flex-tag sel" data-value="0" onclick="toggleFlex(this)"><i class="fas fa-lock"></i>Fijas</div><div class="flex-tag" data-value="1" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±1</div><div class="flex-tag" data-value="2" onclick="toggleFlex(this)"><i class="fas fa-calendar-alt"></i>±2</div><div class="flex-tag" data-value="3" onclick="toggleFlex(this)"><i class="fas fa-calendar-week"></i>±3</div><div class="flex-tag" data-value="7" onclick="toggleFlex(this)"><i class="fas fa-calendar-plus"></i>±7</div></div><div class="hint-text"><i class="fas fa-lightbulb"></i> Más flexibilidad = mejores tarifas</div></div></div>
     <div class="form-section"><div class="section-title"><i class="fas fa-users"></i> Pasajeros</div><div class="form-group"><label><i class="fas fa-user"></i>Adultos <span style="font-weight:400;color:#a8d1ff;font-size:9px;">(12+ años)</span></label><select id="adultos" onchange="toggleAdultosExtra()"><option value="1">1 adulto</option><option value="2" selected>2 adultos</option><option value="3">3 adultos</option><option value="4">4 adultos</option><option value="5">5 adultos</option><option value="more">Más de 5</option></select><input type="number" id="adultos-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántos adultos?" style="display:none;"><div class="checkbox-group"><input type="checkbox" id="cedula-adultos" checked><label for="cedula-adultos"><i class="fas fa-id-card"></i>Todos los adultos tienen cédula vigente<span>Si alguna está vencida, tu asesor te ayudará a coordinar.</span></label></div></div><div class="form-group"><label><i class="fas fa-child"></i>Niños <span style="font-weight:400;color:#a8d1ff;font-size:9px;">(2-11 años)</span></label><select id="ninos" onchange="toggleNinosExtra()"><option value="0" selected>Sin niños</option><option value="1">1 niño</option><option value="2">2 niños</option><option value="3">3 niños</option><option value="4">4 niños</option><option value="more">Más de 4</option></select><input type="number" id="ninos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos niños?" style="display:none;" oninput="toggleNinosExtraInput()"><div class="alerta-cedula" id="alerta-cedula-ninos"><i class="fas fa-exclamation-triangle"></i><span>Si algún niño tiene <strong>9 años o más</strong>, necesita cédula vigente.</span></div><div id="contenedor-edades" style="margin-top:6px;"></div><div class="checkbox-group" id="grupo-cedula-ninos" style="display:none;"><input type="checkbox" id="cedula-ninos"><label for="cedula-ninos"><i class="fas fa-id-card"></i>Los niños que viajan tienen cédula<span>Obligatorio para niños de 9 años o más.</span></label></div></div><div class="form-group"><label><i class="fas fa-baby"></i>Bebés <span style="font-weight:400;color:#a8d1ff;font-size:9px;">(0-23 meses)</span></label><select id="bebes"><option value="0" selected>Sin bebés</option><option value="1">1 bebé</option><option value="2">2 bebés</option></select><div class="hint-text"><i class="fas fa-info-circle"></i> Los bebés viajan en el regazo. Asiento propio indícalo en notas.</div></div><div class="form-group"><label><i class="fas fa-suitcase"></i>Equipaje</label><div class="transporte-grid" id="equipaje-grid"><div class="pasajero-tag sel" data-value="Equipaje de mano" onclick="toggleEquipaje(this)"><i class="fas fa-backpack"></i>Mano</div><div class="pasajero-tag" data-value="Equipaje facturado" onclick="toggleEquipaje(this)"><i class="fas fa-suitcase"></i>Facturado</div><div class="pasajero-tag" data-value="Sin equipaje" onclick="toggleEquipaje(this)"><i class="fas fa-times-circle"></i>Sin equipaje</div></div></div></div>
     <div class="form-section"><div class="section-title"><i class="fas fa-star"></i> Extras</div><div class="form-group"><label><i class="fas fa-gift"></i>Ocasión especial</label><select id="ocasion"><option value="Viaje regular">Viaje regular</option><option value="Luna de Miel">💑 Luna de Miel</option><option value="Cumpleaños">🎂 Cumpleaños</option><option value="Viaje de Negocios">💼 Negocios</option><option value="Emergencia">🏥 Emergencia</option></select><div class="hint-text"><i class="fas fa-heart"></i> Si es una ocasión especial, podemos gestionar servicios adicionales</div></div><div class="form-group"><label><i class="fas fa-pen"></i>Notas</label><textarea id="notas" placeholder="Ej: vuelo directo, ventana, aerolínea preferida..." rows="2"></textarea></div></div>
+    
+    <!-- NUEVO: Campo de Teléfono -->
+    <div class="form-section">
+        <div class="form-group">
+            <label><i class="fas fa-phone-alt"></i> Tu número de teléfono <span style="font-weight:400;color:#a8d1ff;font-size:9px;">(opcional)</span></label>
+            <input type="tel" id="telefono" placeholder="Ej: 0412-1234567" autocomplete="tel">
+            <div class="hint-text"><i class="fas fa-lock"></i> Solo para que el asesor pueda contactarte más rápido si hay una oferta relámpago</div>
+        </div>
+    </div>
+
     <button class="btn-gen" onclick="generarSolicitud()"><i class="fas fa-paper-plane" style="margin-right:6px;"></i>Cotizar Vuelo</button>
     <div id="resultado"></div>
     <div class="footer-servicios"><a href="https://bwrathanyel.github.io/redireccion-whatsapp/tour/" class="footer-servicio fullday"><i class="fas fa-umbrella-beach"></i> Full Day</a><a href="https://bwrathanyel.github.io/redireccion-whatsapp/WebLotus360/" class="footer-servicio hospedaje"><i class="fas fa-hotel"></i> Hospedaje</a><span class="footer-servicio activo"><i class="fas fa-plane"></i> Boletería</span></div>
@@ -110,6 +120,23 @@ function transicionSalida(e) { e.preventDefault(); document.body.classList.add('
 function hoyISO() { return new Date().toISOString().split('T')[0]; }
 document.getElementById('fecha-ida').min = hoyISO(); document.getElementById('fecha-vuelta').min = hoyISO();
 
+// NUEVA FUNCIÓN: Detectar procedencia del cliente
+function detectarProcedencia() {
+    var ua = navigator.userAgent || navigator.vendor || window.opera;
+    if (ua.indexOf('Instagram') > -1 || ua.indexOf('FBAN') > -1 || ua.indexOf('FBAV') > -1) return 'Instagram';
+    if (ua.indexOf('Facebook') > -1 || ua.indexOf('FB') > -1) return 'Facebook';
+    if (document.referrer.indexOf('instagram.com') > -1) return 'Instagram (Web)';
+    if (document.referrer.indexOf('facebook.com') > -1) return 'Facebook (Web)';
+    return 'Link Directo';
+}
+
+// NUEVA FUNCIÓN: Detectar si está en el navegador interno de Instagram
+function esInstagramInApp() {
+    var ua = navigator.userAgent || navigator.vendor || window.opera;
+    return (ua.indexOf('Instagram') > -1) || (ua.indexOf('FBAN') > -1) || (ua.indexOf('FBAV') > -1);
+}
+
+// FUNCIÓN ACTUALIZADA: Enviar datos a Google Sheets con Procedencia y Teléfono
 function enviarDatos(datos) {
     var formData = new FormData();
     formData.append('Nombres', datos.nombre || 'No especificado');
@@ -117,6 +144,8 @@ function enviarDatos(datos) {
     formData.append('Destino', datos.destino);
     formData.append('Pagina', datos.pagina);
     formData.append('Servicio', datos.servicio);
+    formData.append('Procedencia', datos.procedencia || 'No detectada');
+    formData.append('Telefono', datos.telefono || 'No especificado');
     fetch('https://api.sheetmonkey.io/form/nLKvJpsMkGCFRwwwMMMX21', { method: 'POST', body: formData }).then(function(r) { console.log('Lead registrado en Sheets'); }).catch(function(e) { console.log('Error:', e); });
 }
 
@@ -153,6 +182,8 @@ function generarSolicitud() {
     var cedulaAdultos = document.getElementById('cedula-adultos').checked, cedulaNinos = document.getElementById('cedula-ninos').checked;
     var ocasion = document.getElementById('ocasion').value, notas = document.getElementById('notas').value.trim();
     var nombreCliente = document.getElementById('nombre-cliente')?.value?.trim() || 'No especificado';
+    var telefono = document.getElementById('telefono')?.value?.trim() || 'No especificado';
+    var procedencia = detectarProcedencia();
     var edadesNinos = ''; var resumenEl = document.getElementById('edades-resumen');
     if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; }
     else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
@@ -161,10 +192,40 @@ function generarSolicitud() {
     var asesores = ['584244269876', '584244269876', '584142495020', '584142495020', '584140415685'];
     var tlf = asesores[Math.floor(Math.random() * asesores.length)];
 
-    enviarDatos({ fechaHora: new Date().toLocaleString('es-VE'), destino: origen + ' → ' + destino, servicio: tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida', pagina: 'Boletería', nombre: nombreCliente });
+    enviarDatos({ 
+        fechaHora: new Date().toLocaleString('es-VE'), 
+        destino: origen + ' → ' + destino, 
+        servicio: tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida', 
+        pagina: 'Boletería', 
+        nombre: nombreCliente,
+        procedencia: procedencia,
+        telefono: telefono
+    });
 
-    var lineas = ['✈️ *COTIZACIÓN DE VUELO - LOTUS 360*','','👤 *Nombre:* ' + nombreCliente,'🔄 *Tipo:* ' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida'),'📍 *Origen:* ' + origen,'📍 *Destino:* ' + destino,'📅 *Fecha ida:* ' + fechaIda,(tipoViaje === 'ida-vuelta' && fechaVuelta ? '📅 *Fecha vuelta:* ' + fechaVuelta : ''),(tipoViaje === 'ida-vuelta' && dias > 0 ? '📆 *Duración:* ' + dias + ' día(s)' : ''),(flexibilidad > 0 ? '📆 *Flexibilidad:* ±' + flexibilidad + ' día(s)' : '📆 *Fechas fijas*'),'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos + ' | *Bebés:* ' + bebes,(ninos > 0 ? '👶 *Edades:* ' + edadesNinos : ''),'🧳 *Equipaje:* ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado'),'🆔 *Cédulas adultos:* ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR'),(ninos > 0 ? '🆔 *Cédulas niños:* ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') : ''),(ocasion !== 'Viaje regular' ? '🎉 *Ocasión:* ' + ocasion : ''),(notas ? '📝 *Notas:* ' + notas : ''),'','✅ *Enviar opciones con precios. ¡Gracias!*'];
-    var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(lineas.filter(function(l) { return l !== ''; }).join('\n'));
+    var lineasEmoji = ['✈️ *COTIZACIÓN DE VUELO - LOTUS 360*','','👤 *Nombre:* ' + nombreCliente,'🔄 *Tipo:* ' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida'),'📍 *Origen:* ' + origen,'📍 *Destino:* ' + destino,'📅 *Fecha ida:* ' + fechaIda,(tipoViaje === 'ida-vuelta' && fechaVuelta ? '📅 *Fecha vuelta:* ' + fechaVuelta : ''),(tipoViaje === 'ida-vuelta' && dias > 0 ? '📆 *Duración:* ' + dias + ' día(s)' : ''),(flexibilidad > 0 ? '📆 *Flexibilidad:* ±' + flexibilidad + ' día(s)' : '📆 *Fechas fijas*'),'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos + ' | *Bebés:* ' + bebes,(ninos > 0 ? '👶 *Edades:* ' + edadesNinos : ''),'🧳 *Equipaje:* ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado'),'🆔 *Cédulas adultos:* ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR'),(ninos > 0 ? '🆔 *Cédulas niños:* ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') : ''),(ocasion !== 'Viaje regular' ? '🎉 *Ocasión:* ' + ocasion : ''),(notas ? '📝 *Notas:* ' + notas : ''),'','✅ *Enviar opciones con precios. ¡Gracias!*'];
+
+    var lineasTexto = ['▸ COTIZACIÓN DE VUELO - LOTUS 360 ◂','',
+        '► Nombre: ' + nombreCliente,
+        '► Tipo: ' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida'),
+        '► Origen: ' + origen,
+        '► Destino: ' + destino,
+        '► Fecha ida: ' + fechaIda,
+        (tipoViaje === 'ida-vuelta' && fechaVuelta ? '► Fecha vuelta: ' + fechaVuelta : ''),
+        (tipoViaje === 'ida-vuelta' && dias > 0 ? '► Duración: ' + dias + ' día(s)' : ''),
+        (flexibilidad > 0 ? '► Flexibilidad: ±' + flexibilidad + ' día(s)' : '► Fechas fijas'),
+        '► Adultos: ' + adultos + ' | Niños: ' + ninos + ' | Bebés: ' + bebes,
+        (ninos > 0 ? '► Edades: ' + edadesNinos : ''),
+        '► Equipaje: ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado'),
+        '► Cédulas adultos: ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR'),
+        (ninos > 0 ? '► Cédulas niños: ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') : ''),
+        (ocasion !== 'Viaje regular' ? '► Ocasión: ' + ocasion : ''),
+        (notas ? '► Notas: ' + notas : ''),
+        '',
+        '► Enviar opciones con precios. ¡Gracias!'
+    ];
+
+    var mensajeFinal = esInstagramInApp() ? lineasTexto.filter(function(l) { return l !== ''; }).join('\n') : lineasEmoji.filter(function(l) { return l !== ''; }).join('\n');
+    var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(mensajeFinal);
     document.getElementById('resultado').style.display = 'block';
     document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Listo!</h3><div class="resumen-detalle">' + '<div class="dato"><i class="fas fa-exchange-alt"></i> <strong>' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + '</strong></div>' + '<div class="dato"><i class="fas fa-plane-departure"></i> ' + origen + ' → ' + destino + '</div>' + '<div class="dato"><i class="fas fa-calendar-check"></i> Ida: ' + fechaIda + (tipoViaje === 'ida-vuelta' && fechaVuelta ? ' | Vuelta: ' + fechaVuelta : '') + '</div>' + (dias > 0 ? '<div class="dato"><i class="fas fa-clock"></i> Duración: ' + dias + ' día(s)</div>' : '') + '<div class="dato"><i class="fas fa-sliders-h"></i> ' + (flexibilidad > 0 ? 'Flexible ±' + flexibilidad + ' día(s)' : 'Fechas fijas') + '</div>' + '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + bebes + ' bebés</div>' + '<div class="dato"><i class="fas fa-suitcase"></i> ' + (equipaje.length ? equipaje.join(' + ') : 'Sin equipaje') + '</div>' + (ocasion !== 'Viaje regular' ? '<div class="dato"><i class="fas fa-gift"></i> ' + ocasion + '</div>' : '') + '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Enviar a un Asesor</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Nueva cotización</button></div>';
     document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' }); lanzarConfeti();
