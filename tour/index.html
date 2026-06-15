@@ -84,7 +84,6 @@
         .dot.offline { background: #f59e0b; }
         @keyframes dot-breathe { 0% { box-shadow: 0 0 0 0 rgba(37,211,102,0.5); } 70% { box-shadow: 0 0 0 5px rgba(37,211,102,0); } 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); } }
 
-        /* Imagen del tour */
         .tour-img-box {
             position: relative; width: 100%; height: 170px; border-radius: 14px; overflow: hidden;
             margin-bottom: 10px; border: 1px solid rgba(255,145,0,0.2);
@@ -92,9 +91,7 @@
             background: linear-gradient(135deg,#1a6b8a,#0c2d4a);
         }
         @keyframes fadeSlideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        .tour-img-box img {
-            width: 100%; height: 100%; object-fit: cover; display: block;
-        }
+        .tour-img-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
         .tour-img-overlay {
             position: absolute; bottom: 0; left: 0; right: 0;
             background: linear-gradient(transparent, rgba(0,0,0,0.75));
@@ -131,11 +128,9 @@
         }
         select:focus, input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,145,0,0.1); }
         textarea { resize: vertical; min-height: 55px; }
-        .row { display: flex; gap: 8px; }
-        .row .form-group { flex: 1; }
+        .row { display: flex; gap: 8px; } .row .form-group { flex: 1; }
         .extra-input { margin-top: 5px; }
 
-        /* Tarjetas de plan */
         .planes-grid { display: flex; gap: 8px; margin-top: 8px; }
         .plan-card {
             flex: 1; background: rgba(10,12,28,0.5); border: 1.5px solid rgba(255,255,255,0.08);
@@ -143,100 +138,49 @@
             text-align: center; position: relative;
         }
         .plan-card:active { transform: scale(0.96); }
-        .plan-card.sel {
-            border-color: var(--accent); background: rgba(255,145,0,0.12);
-            box-shadow: 0 0 14px rgba(255,145,0,0.2);
-        }
-        .plan-card .plan-badge {
-            position: absolute; top: -8px; right: -4px; background: var(--accent); color: #000;
-            font-size: 8px; font-weight: 800; padding: 2px 8px; border-radius: 10px;
-            opacity: 0; transform: scale(0.5); transition: all 0.2s ease;
-        }
+        .plan-card.sel { border-color: var(--accent); background: rgba(255,145,0,0.12); box-shadow: 0 0 14px rgba(255,145,0,0.2); }
+        .plan-card .plan-badge { position: absolute; top: -8px; right: -4px; background: var(--accent); color: #000; font-size: 8px; font-weight: 800; padding: 2px 8px; border-radius: 10px; opacity: 0; transform: scale(0.5); transition: all 0.2s ease; }
         .plan-card.sel .plan-badge { opacity: 1; transform: scale(1); }
         .plan-card .plan-icon { font-size: 24px; margin-bottom: 4px; }
         .plan-card .plan-nombre { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 2px; }
         .plan-card .plan-precio { font-size: 18px; font-weight: 800; color: var(--accent); }
         .plan-card .plan-precio small { font-size: 10px; color: var(--text-warm); }
-        .plan-card .plan-check {
-            width: 20px; height: 20px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2);
-            margin: 6px auto 0; display: flex; align-items: center; justify-content: center;
-            font-size: 9px; color: transparent; transition: all 0.15s ease;
-        }
+        .plan-card .plan-check { width: 20px; height: 20px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); margin: 6px auto 0; display: flex; align-items: center; justify-content: center; font-size: 9px; color: transparent; transition: all 0.15s ease; }
         .plan-card.sel .plan-check { border-color: var(--accent); background: var(--accent); color: #fff; }
 
-        /* Incluye lista */
-        .incluye-box {
-            background: rgba(10,12,28,0.4); border: 1px solid rgba(255,145,0,0.1);
-            border-radius: 10px; padding: 10px 12px; margin-top: 8px; display: none;
-        }
+        .incluye-box { background: rgba(10,12,28,0.4); border: 1px solid rgba(255,145,0,0.1); border-radius: 10px; padding: 10px 12px; margin-top: 8px; display: none; }
         .incluye-box.visible { display: block; animation: fadeSlideUp 0.3s ease; }
         .incluye-box .incluye-titulo { font-size: 10px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
-        .incluye-box .incluye-item {
-            display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-warm);
-            margin-bottom: 3px; line-height: 1.4;
-        }
+        .incluye-box .incluye-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-warm); margin-bottom: 3px; line-height: 1.4; }
         .incluye-box .incluye-item i { color: var(--accent); font-size: 9px; width: 12px; text-align: center; }
 
-        /* Checkbox */
-        .checkbox-group {
-            display: flex; align-items: flex-start; gap: 7px; background: rgba(10,12,28,0.4);
-            border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 8px 10px; margin-top: 6px;
-        }
+        .checkbox-group { display: flex; align-items: flex-start; gap: 7px; background: rgba(10,12,28,0.4); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
         .checkbox-group input[type="checkbox"] { width: 15px; height: 15px; flex: 0 0 15px; accent-color: #ff9100; margin-top: 1px; }
         .checkbox-group label { margin: 0; font-size: 10px; font-weight: 500; cursor: pointer; color: rgba(255,255,255,0.75); line-height: 1.4; }
         .checkbox-group label i { color: #ff9100; margin-right: 2px; font-size: 9px; }
         .checkbox-group span { display: block; font-size: 9px; color: rgba(255,183,77,0.45); font-weight: 400; margin-top: 1px; }
 
-        .btn-gen {
-            width: 100%; padding: 15px; background: linear-gradient(135deg, #ff9100, #e65100);
-            color: white; border: none; border-radius: 12px; font-weight: 700; font-size: 14px;
-            cursor: pointer; box-shadow: 0 4px 16px rgba(255,100,0,0.35); letter-spacing: 0.2px;
-            touch-action: manipulation; transition: transform 0.1s ease;
-        }
+        .btn-gen { width: 100%; padding: 15px; background: linear-gradient(135deg, #ff9100, #e65100); color: white; border: none; border-radius: 12px; font-weight: 700; font-size: 14px; cursor: pointer; box-shadow: 0 4px 16px rgba(255,100,0,0.35); letter-spacing: 0.2px; touch-action: manipulation; transition: transform 0.1s ease; }
         .btn-gen:active { transform: scale(0.96); }
 
         #resultado { display: none; margin-top: 14px; }
-        .resultado-card {
-            background: rgba(15,20,40,0.8); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-            border: 1px solid rgba(37,211,102,0.2); border-radius: 14px; padding: 14px;
-            border-left: 3px solid #25D366; transform: translateZ(0);
-        }
+        .resultado-card { background: rgba(15,20,40,0.8); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(37,211,102,0.2); border-radius: 14px; padding: 14px; border-left: 3px solid #25D366; transform: translateZ(0); }
         .resultado-card h3 { color: #25D366; font-size: 0.95rem; margin-bottom: 10px; }
         .resumen-detalle { background: rgba(0,0,0,0.25); border-radius: 8px; padding: 10px; margin-bottom: 10px; font-size: 11px; line-height: 1.6; }
         .resumen-detalle .dato { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
         .resumen-detalle .dato i { color: var(--accent); width: 12px; text-align: center; font-size: 10px; }
-        .btn-cotizar {
-            display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%;
-            padding: 13px; background: #25D366; color: white; border: none; border-radius: 12px;
-            font-weight: 700; font-size: 13px; cursor: pointer; text-decoration: none;
-            box-shadow: 0 3px 12px rgba(37,211,102,0.2); touch-action: manipulation; transition: transform 0.1s ease;
-        }
+        .btn-cotizar { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; padding: 13px; background: #25D366; color: white; border: none; border-radius: 12px; font-weight: 700; font-size: 13px; cursor: pointer; text-decoration: none; box-shadow: 0 3px 12px rgba(37,211,102,0.2); touch-action: manipulation; transition: transform 0.1s ease; }
         .btn-cotizar:active { transform: scale(0.96); }
-        .btn-nueva {
-            display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%;
-            padding: 11px; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.65);
-            border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; font-weight: 600;
-            font-size: 12px; cursor: pointer; margin-top: 7px; touch-action: manipulation;
-        }
+        .btn-nueva { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; padding: 11px; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.65); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; font-weight: 600; font-size: 12px; cursor: pointer; margin-top: 7px; touch-action: manipulation; }
         .btn-nueva:active { background: rgba(255,255,255,0.1); }
 
-        /* Cross-sell */
         .cross-sell { display: flex; gap: 8px; margin-top: 8px; }
-        .cross-link {
-            flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;
-            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 10px; padding: 8px; font-size: 9px; color: rgba(255,255,255,0.5);
-            text-decoration: none; transition: all 0.15s ease;
-        }
+        .cross-link { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 8px; font-size: 9px; color: rgba(255,255,255,0.5); text-decoration: none; transition: all 0.15s ease; }
         .cross-link:active { background: rgba(255,145,0,0.12); color: var(--accent); }
         .cross-link i { font-size: 10px; }
 
         .footer-servicios { display: flex; justify-content: center; gap: 10px; margin: 18px 0 6px; }
-        .footer-servicio {
-            display: flex; align-items: center; gap: 4px; font-size: 8px; color: rgba(255,183,77,0.4);
-            text-decoration: none; padding: 3px 8px; border-radius: 20px; background: rgba(255,145,0,0.04);
-            border: 1px solid rgba(255,145,0,0.08); transition: all 0.15s ease;
-        }
+        .footer-servicio { display: flex; align-items: center; gap: 4px; font-size: 8px; color: rgba(255,183,77,0.4); text-decoration: none; padding: 3px 8px; border-radius: 20px; background: rgba(255,145,0,0.04); border: 1px solid rgba(255,145,0,0.08); transition: all 0.15s ease; }
         .footer-servicio.activo { color: var(--accent); background: rgba(255,145,0,0.1); border-color: rgba(255,145,0,0.25); }
         .footer-servicio:active { background: rgba(255,145,0,0.15); }
         .footer-copy { font-size: 8px; color: rgba(255,255,255,0.18); text-align: center; }
@@ -244,7 +188,6 @@
         .confeti-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; }
         .confeti { position: absolute; width: 7px; height: 7px; animation: caerConfeti 1s ease-out forwards; }
         @keyframes caerConfeti { 0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(480deg); opacity: 0; } }
-
         .hint-text { font-size: 9px; color: rgba(255,183,77,0.5); margin-top: 3px; display: flex; align-items: center; gap: 3px; }
         .hint-text i { color: var(--accent); font-size: 8px; }
 
@@ -265,7 +208,6 @@
         <div class="estado-box"><span class="dot" id="estado-dot"></span><span id="estado-texto">Verificando...</span></div>
     </div>
 
-    <!-- Imagen del tour -->
     <div class="tour-img-box">
         <img src="https://bwrathanyel.github.io/redireccion-whatsapp/tour/cayosal.jpeg" alt="Cayo Sal - Chichiriviche, Falcón" loading="eager">
         <div class="tour-img-overlay">
@@ -274,20 +216,11 @@
         </div>
     </div>
 
-    <!-- Selección de Tour -->
     <div class="form-section">
         <div class="section-title"><i class="fas fa-umbrella-beach"></i> Tour Disponible</div>
-        <div class="form-group">
-            <label><i class="fas fa-map-pin"></i>Elige tu aventura</label>
-            <select id="tour">
-                <option value="cayo-sal">🌴 Cayo Sal - Chichiriviche, Falcón</option>
-                <option value="proximamente" disabled>✨ Próximamente más destinos...</option>
-            </select>
-            <div class="hint-text"><i class="fas fa-info-circle"></i> Nuevos tours cada mes. ¡Espéralos!</div>
-        </div>
+        <div class="form-group"><label><i class="fas fa-map-pin"></i>Elige tu aventura</label><select id="tour"><option value="cayo-sal">🌴 Cayo Sal - Chichiriviche, Falcón</option><option value="proximamente" disabled>✨ Próximamente más destinos...</option></select><div class="hint-text"><i class="fas fa-info-circle"></i> Nuevos tours cada mes. ¡Espéralos!</div></div>
     </div>
 
-    <!-- Info del Tour -->
     <div class="form-section">
         <div class="section-title"><i class="fas fa-info-circle"></i> Detalles del Tour</div>
         <div style="display:flex;justify-content:center;gap:20px;margin-bottom:10px;flex-wrap:wrap;">
@@ -298,23 +231,11 @@
         <p style="font-size:10px;color:rgba(255,183,77,0.7);text-align:center;font-style:italic;">Un lugar completamente paradisíaco, ¡vente que ya nos toca! 😌</p>
     </div>
 
-    <!-- Planes -->
     <div class="form-section">
         <div class="section-title"><i class="fas fa-ticket-alt"></i> Elige tu Plan</div>
         <div class="planes-grid" id="planes-grid">
-            <div class="plan-card sel" data-plan="basico" onclick="seleccionarPlan(this)">
-                <div class="plan-icon">🧊</div>
-                <div class="plan-nombre">Plan BÁSICO</div>
-                <div class="plan-precio">$25<small> USD</small></div>
-                <div class="plan-check"><i class="fas fa-check"></i></div>
-            </div>
-            <div class="plan-card" data-plan="full360" onclick="seleccionarPlan(this)">
-                <div class="plan-badge">RECOMENDADO</div>
-                <div class="plan-icon">🐟</div>
-                <div class="plan-nombre">Plan FULL360</div>
-                <div class="plan-precio">$35<small> USD</small></div>
-                <div class="plan-check"><i class="fas fa-check"></i></div>
-            </div>
+            <div class="plan-card sel" data-plan="basico" onclick="seleccionarPlan(this)"><div class="plan-icon">🧊</div><div class="plan-nombre">Plan BÁSICO</div><div class="plan-precio">$25<small> USD</small></div><div class="plan-check"><i class="fas fa-check"></i></div></div>
+            <div class="plan-card" data-plan="full360" onclick="seleccionarPlan(this)"><div class="plan-badge">RECOMENDADO</div><div class="plan-icon">🐟</div><div class="plan-nombre">Plan FULL360</div><div class="plan-precio">$35<small> USD</small></div><div class="plan-check"><i class="fas fa-check"></i></div></div>
         </div>
         <div class="incluye-box visible" id="incluye-box">
             <div class="incluye-titulo" id="incluye-titulo">✅ INCLUYE - PLAN BÁSICO · $25 USD</div>
@@ -330,56 +251,25 @@
         <div class="hint-text" style="margin-top:8px;"><i class="fas fa-exclamation-circle" style="color:#ff9100;"></i> ¡Aparta tu cupo que se agotan rápido! 📲</div>
     </div>
 
-    <!-- Datos del cliente -->
     <div class="form-section">
         <div class="section-title"><i class="fas fa-user"></i> Tus Datos</div>
-        <div class="form-group">
-            <label><i class="fas fa-user"></i>Nombre completo</label>
-            <input type="text" id="nombre" placeholder="Ej: Andrea Hernández" autocomplete="name">
+        <div class="form-group"><label><i class="fas fa-user"></i>Nombre completo</label><input type="text" id="nombre" placeholder="Ej: Andrea Hernández" autocomplete="name"></div>
+        <div class="row">
+            <div class="form-group"><label><i class="fas fa-users"></i>Adultos</label><select id="adultos"><option value="1">1 adulto</option><option value="2" selected>2 adultos</option><option value="3">3 adultos</option><option value="4">4 adultos</option><option value="5">5 adultos</option><option value="more">Más de 5</option></select><input type="number" id="adultos-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántos adultos?" style="display:none;"></div>
+            <div class="form-group"><label><i class="fas fa-child"></i>Niños <span style="font-weight:400;color:var(--text-warm);font-size:9px;">(2-11)</span></label><select id="ninos" onchange="toggleNinosUI()"><option value="0" selected>Sin niños</option><option value="1">1 niño</option><option value="2">2 niños</option><option value="3">3 niños</option><option value="4">4 niños</option><option value="more">Más de 4</option></select><input type="number" id="ninos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos niños?" style="display:none;"></div>
         </div>
         <div class="row">
-            <div class="form-group">
-                <label><i class="fas fa-users"></i>Adultos</label>
-                <select id="adultos">
-                    <option value="1">1 adulto</option><option value="2" selected>2 adultos</option>
-                    <option value="3">3 adultos</option><option value="4">4 adultos</option><option value="5">5 adultos</option><option value="more">Más de 5</option>
-                </select>
-                <input type="number" id="adultos-extra" class="extra-input" min="6" max="50" placeholder="¿Cuántos adultos?" style="display:none;">
-            </div>
-            <div class="form-group">
-                <label><i class="fas fa-child"></i>Niños <span style="font-weight:400;color:var(--text-warm);font-size:9px;">(2-11)</span></label>
-                <select id="ninos" onchange="toggleNinosUI()">
-                    <option value="0" selected>Sin niños</option><option value="1">1 niño</option><option value="2">2 niños</option>
-                    <option value="3">3 niños</option><option value="4">4 niños</option><option value="more">Más de 4</option>
-                </select>
-                <input type="number" id="ninos-extra" class="extra-input" min="5" max="50" placeholder="¿Cuántos niños?" style="display:none;">
-            </div>
-        </div>
-        <div class="row">
-            <div class="form-group">
-                <label><i class="fas fa-baby"></i>Bebés <span style="font-weight:400;color:var(--text-warm);font-size:9px;">(0-23m)</span></label>
-                <select id="bebes">
-                    <option value="0" selected>Sin bebés</option><option value="1">1 bebé</option><option value="2">2 bebés</option>
-                </select>
-            </div>
-            <div class="form-group" style="display:flex;align-items:flex-end;">
-                <!-- placeholder visual -->
-            </div>
+            <div class="form-group"><label><i class="fas fa-baby"></i>Bebés <span style="font-weight:400;color:var(--text-warm);font-size:9px;">(0-23m)</span></label><select id="bebes"><option value="0" selected>Sin bebés</option><option value="1">1 bebé</option><option value="2">2 bebés</option></select></div>
+            <div class="form-group" style="display:flex;align-items:flex-end;"></div>
         </div>
         <div class="hint-text"><i class="fas fa-info-circle"></i> Los bebés no pagan, pero necesitamos saber cuántos vienen</div>
         <div id="contenedor-edades" style="margin-top:8px;"></div>
-        <div class="checkbox-group" style="margin-top:8px;">
-            <input type="checkbox" id="terminos" checked>
-            <label for="terminos"><i class="fas fa-check-circle"></i>Acepto los términos y condiciones del tour<span>El cupo se confirma con el pago de la reserva.</span></label>
-        </div>
+        <div class="checkbox-group" style="margin-top:8px;"><input type="checkbox" id="terminos" checked><label for="terminos"><i class="fas fa-check-circle"></i>Acepto los términos y condiciones del tour<span>El cupo se confirma con el pago de la reserva.</span></label></div>
     </div>
 
-    <!-- Notas -->
     <div class="form-section">
         <div class="section-title"><i class="fas fa-pen"></i> Notas</div>
-        <div class="form-group">
-            <textarea id="notas" placeholder="¿Algo más que debamos saber? Ej: alergias, prefiero pollo o pescado, dieta especial..." rows="2"></textarea>
-        </div>
+        <div class="form-group"><textarea id="notas" placeholder="¿Algo más que debamos saber? Ej: alergias, prefiero pollo o pescado, dieta especial..." rows="2"></textarea></div>
     </div>
 
     <button class="btn-gen" onclick="generarSolicitud()"><i class="fas fa-paper-plane" style="margin-right:6px;"></i>Reservar mi Cupo</button>
@@ -412,100 +302,56 @@ function transicionSalida(e) { e.preventDefault(); document.body.classList.add('
 })();
 
 var planSeleccionado = 'basico';
-
 var incluyePlanes = {
-    'basico': {
-        titulo: '✅ INCLUYE - PLAN BÁSICO · $25 USD',
-        items: ['🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳']
-    },
-    'full360': {
-        titulo: '✅ INCLUYE - PLAN FULL360 · $35 USD',
-        items: ['🍗🐟 Almuerzo playero (pollo o pescado + ensalada y tostón)','🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳']
-    }
+    'basico': { titulo: '✅ INCLUYE - PLAN BÁSICO · $25 USD', items: ['🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳'] },
+    'full360': { titulo: '✅ INCLUYE - PLAN FULL360 · $35 USD', items: ['🍗🐟 Almuerzo playero (pollo o pescado + ensalada y tostón)','🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳'] }
 };
 
 function seleccionarPlan(el) {
     var cards = document.querySelectorAll('#planes-grid .plan-card');
     for (var i = 0; i < cards.length; i++) cards[i].classList.remove('sel');
-    el.classList.add('sel');
-    planSeleccionado = el.dataset.plan;
+    el.classList.add('sel'); planSeleccionado = el.dataset.plan;
     var plan = incluyePlanes[planSeleccionado];
     document.getElementById('incluye-titulo').textContent = plan.titulo;
-    var html = '';
-    for (var j = 0; j < plan.items.length; j++) { html += '<div class="incluye-item"><i class="fas fa-check"></i> ' + plan.items[j] + '</div>'; }
+    var html = ''; for (var j = 0; j < plan.items.length; j++) { html += '<div class="incluye-item"><i class="fas fa-check"></i> ' + plan.items[j] + '</div>'; }
     document.getElementById('incluye-lista').innerHTML = html;
 }
 
-function toggleAdultosExtra() {
-    var extra = document.getElementById('adultos-extra');
-    extra.style.display = document.getElementById('adultos').value === 'more' ? 'block' : 'none';
-    if (document.getElementById('adultos').value !== 'more') extra.value = '';
-}
+function toggleAdultosExtra() { var extra = document.getElementById('adultos-extra'); extra.style.display = document.getElementById('adultos').value === 'more' ? 'block' : 'none'; if (document.getElementById('adultos').value !== 'more') extra.value = ''; }
 document.getElementById('adultos').addEventListener('change', toggleAdultosExtra);
+function getAdultosCount() { var sel = document.getElementById('adultos'); if (sel.value === 'more') { var v = parseInt(document.getElementById('adultos-extra').value); return isNaN(v) ? null : v; } return parseInt(sel.value); }
 
-function getAdultosCount() {
-    var sel = document.getElementById('adultos');
-    if (sel.value === 'more') { var v = parseInt(document.getElementById('adultos-extra').value); return isNaN(v) ? null : v; }
-    return parseInt(sel.value);
-}
-
-function toggleNinosUI() {
-    var extra = document.getElementById('ninos-extra');
-    extra.style.display = document.getElementById('ninos').value === 'more' ? 'block' : 'none';
-    if (document.getElementById('ninos').value !== 'more') extra.value = '';
-    actualizarEdades();
-}
+function toggleNinosUI() { var extra = document.getElementById('ninos-extra'); extra.style.display = document.getElementById('ninos').value === 'more' ? 'block' : 'none'; if (document.getElementById('ninos').value !== 'more') extra.value = ''; actualizarEdades(); }
 document.getElementById('ninos-extra').addEventListener('input', actualizarEdades);
-
-function getNinosCount() {
-    var sel = document.getElementById('ninos');
-    if (sel.value === 'more') { var v = parseInt(document.getElementById('ninos-extra').value); return isNaN(v) ? null : v; }
-    return parseInt(sel.value);
-}
+function getNinosCount() { var sel = document.getElementById('ninos'); if (sel.value === 'more') { var v = parseInt(document.getElementById('ninos-extra').value); return isNaN(v) ? null : v; } return parseInt(sel.value); }
 
 function actualizarEdades() {
-    var count = getNinosCount();
-    var cont = document.getElementById('contenedor-edades');
+    var count = getNinosCount(); var cont = document.getElementById('contenedor-edades');
     if (!count || count <= 0) { cont.innerHTML = ''; return; }
-    var html = '<label style="font-size:9px;color:var(--text-warm);margin-bottom:5px;"><i class="fas fa-list-ol"></i> Edad de cada niño (para coordinar con la lancha)</label>';
+    var html = '<label style="font-size:9px;color:var(--text-warm);margin-bottom:5px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>';
     var max = Math.min(count, 8);
-    for (var i = 1; i <= max; i++) {
-        html += '<input type="number" class="edad-nino extra-input" min="2" max="11" placeholder="Niño ' + i + ': edad (2-11)" style="margin-bottom:3px;">';
-    }
+    for (var i = 1; i <= max; i++) { html += '<input type="number" class="edad-nino extra-input" min="2" max="11" placeholder="Niño ' + i + ': edad (2-11)" style="margin-bottom:3px;">'; }
     if (count > 8) html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen: ej. 3 de 8 años, 2 de 5">';
     cont.innerHTML = html;
 }
 
-function lanzarConfeti() {
-    var colores = ['#ff9100', '#25D366', '#ffd166', '#ffb74d']; var c = document.createElement('div'); c.className = 'confeti-container'; var f = document.createDocumentFragment();
-    for (var i = 0; i < 20; i++) { var x = document.createElement('div'); x.className = 'confeti'; x.style.left = Math.random() * 100 + '%'; x.style.animationDelay = Math.random() * 0.4 + 's'; x.style.animationDuration = (Math.random() * 0.8 + 0.7) + 's'; x.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)]; f.appendChild(x); }
-    c.appendChild(f); document.body.appendChild(c); setTimeout(function() { c.remove(); }, 1500);
-}
+function lanzarConfeti() { var colores = ['#ff9100', '#25D366', '#ffd166', '#ffb74d']; var c = document.createElement('div'); c.className = 'confeti-container'; var f = document.createDocumentFragment(); for (var i = 0; i < 20; i++) { var x = document.createElement('div'); x.className = 'confeti'; x.style.left = Math.random() * 100 + '%'; x.style.animationDelay = Math.random() * 0.4 + 's'; x.style.animationDuration = (Math.random() * 0.8 + 0.7) + 's'; x.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)]; f.appendChild(x); } c.appendChild(f); document.body.appendChild(c); setTimeout(function() { c.remove(); }, 1500); }
 
 function generarSolicitud() {
     var nombre = document.getElementById('nombre').value.trim();
-    var adultos = getAdultosCount();
-    var ninos = getNinosCount();
-    var bebes = parseInt(document.getElementById('bebes').value);
+    var adultos = getAdultosCount(); var ninos = getNinosCount(); var bebes = parseInt(document.getElementById('bebes').value);
     var notas = document.getElementById('notas').value.trim();
-    var plan = planSeleccionado;
-    var planNombre = plan === 'full360' ? 'PLAN FULL360' : 'PLAN BÁSICO';
-    var planPrecio = plan === 'full360' ? '$35 USD' : '$25 USD';
-
+    var plan = planSeleccionado; var planNombre = plan === 'full360' ? 'PLAN FULL360' : 'PLAN BÁSICO'; var planPrecio = plan === 'full360' ? '$35 USD' : '$25 USD';
     if (!nombre) { alert('Por favor, ingresa tu nombre.'); return; }
     if (!adultos || adultos < 1) { alert('Indica cuántos adultos viajan.'); return; }
-
     var total = plan === 'full360' ? adultos * 35 : adultos * 25;
-    var edadesNinos = '';
-    var resumenEl = document.getElementById('edades-resumen');
+    var edadesNinos = ''; var resumenEl = document.getElementById('edades-resumen');
     if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; }
-    else {
-        var inputs = document.querySelectorAll('.edad-nino'), arr = [];
-        for (var i = 0; i < inputs.length; i++) { arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); }
-        edadesNinos = arr.length ? arr.join(', ') : 'No especificadas';
-    }
+    else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) { arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); } edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
 
-    var asesores = ['584244634041', '584244900601', '584147020527']; var tlf = asesores[Math.floor(Math.random() * asesores.length)];
+    // Números de asesores de Tours/Full Day
+    var asesores = ['584244634041', '584244900601', '584244900601', '584244900601', '584127136169', '584127136169', '584147020527', '584244269876', '584140415685'];
+    var tlf = asesores[Math.floor(Math.random() * asesores.length)];
 
     var lineas = ['🌴 *RESERVA TOUR - LOTUS 360*','','📍 *Tour:* Cayo Sal - Chichiriviche, Falcón','📅 *Fecha:* 27 de Junio','⏰ *Horario:* 6:00 am - 4:00 pm','📍 *Salida:* CC Dinastía, Naguanagua','','🎫 *Plan:* ' + planNombre + ' (' + planPrecio + ')','👤 *Nombre:* ' + nombre,'👥 *Adultos:* ' + adultos + (ninos > 0 ? ' | *Niños:* ' + ninos : '') + (bebes > 0 ? ' | *Bebés:* ' + bebes : ''),'💰 *Total estimado:* $' + total + ' USD (solo adultos)'];
     if (ninos > 0) lineas.push('👶 *Edades niños:* ' + edadesNinos);
@@ -513,12 +359,7 @@ function generarSolicitud() {
     var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(lineas.join('\n'));
 
     document.getElementById('resultado').style.display = 'block';
-    document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Reserva casi lista!</h3><div class="resumen-detalle">' +
-        '<div class="dato"><i class="fas fa-map-pin"></i> <strong>Cayo Sal - Falcón</strong> · 27 de Junio</div>' +
-        '<div class="dato"><i class="fas fa-ticket-alt"></i> ' + planNombre + ' · ' + planPrecio + ' c/u</div>' +
-        '<div class="dato"><i class="fas fa-user"></i> ' + nombre + ' · ' + adultos + ' adulto(s)' + (ninos > 0 ? ' · ' + ninos + ' niño(s)' : '') + (bebes > 0 ? ' · ' + bebes + ' bebé(s)' : '') + '</div>' +
-        '<div class="dato"><i class="fas fa-dollar-sign"></i> Total adultos: <strong>$' + total + ' USD</strong></div>' +
-        '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Confirmar Cupo por WhatsApp</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Hacer otra reserva</button></div>';
+    document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h3><i class="fas fa-check-circle"></i> ¡Reserva casi lista!</h3><div class="resumen-detalle">' + '<div class="dato"><i class="fas fa-map-pin"></i> <strong>Cayo Sal - Falcón</strong> · 27 de Junio</div>' + '<div class="dato"><i class="fas fa-ticket-alt"></i> ' + planNombre + ' · ' + planPrecio + ' c/u</div>' + '<div class="dato"><i class="fas fa-user"></i> ' + nombre + ' · ' + adultos + ' adulto(s)' + (ninos > 0 ? ' · ' + ninos + ' niño(s)' : '') + (bebes > 0 ? ' · ' + bebes + ' bebé(s)' : '') + '</div>' + '<div class="dato"><i class="fas fa-dollar-sign"></i> Total adultos: <strong>$' + total + ' USD</strong></div>' + '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Confirmar Cupo por WhatsApp</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Hacer otra reserva</button></div>';
     document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' }); lanzarConfeti();
 }
 
