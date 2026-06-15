@@ -218,6 +218,20 @@ function generarEdades(count) { var cont = document.getElementById('contenedor-e
 function actualizarAlertaCedula() { var inputs = document.querySelectorAll('.edad-nino'), tiene = false; for (var i = 0; i < inputs.length; i++) { if (parseInt(inputs[i].value) >= 9) { tiene = true; break; } } var alerta = document.getElementById('alerta-cedula-ninos'); alerta.style.borderColor = tiene ? 'rgba(255,80,80,0.5)' : 'rgba(255,145,0,0.25)'; alerta.style.background = tiene ? 'rgba(255,80,80,0.1)' : 'rgba(255,145,0,0.08)'; alerta.querySelector('span').innerHTML = tiene ? '⚠️ <strong>Obligatorio:</strong> Los niños de 9+ años deben tener cédula.' : 'Niños ≥9 años necesitan cédula vigente para viajar.'; }
 function lanzarConfeti() { var colores = ['#ff9100', '#25D366', '#ffd166', '#ffb74d']; var container = document.createElement('div'); container.className = 'confeti-container'; var f = document.createDocumentFragment(); for (var i = 0; i < 20; i++) { var c = document.createElement('div'); c.className = 'confeti'; c.style.left = Math.random() * 100 + '%'; c.style.animationDelay = Math.random() * 0.4 + 's'; c.style.animationDuration = (Math.random() * 0.8 + 0.7) + 's'; c.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)]; f.appendChild(c); } container.appendChild(f); document.body.appendChild(container); setTimeout(function() { container.remove(); }, 1500); }
 
+function enviarDatos(datos) {
+    fetch('https://api.sheetmonkey.io/form/nLKvJpsMkGCFRwwwMMMX21', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            Nombres: datos.nombre || 'No especificado',
+            Fecha: datos.fechaHora,
+            Destino: datos.destino,
+            Pagina: datos.pagina,
+            Servicio: datos.servicio
+        })
+    }).then(function(r) { console.log('Lead registrado en Sheets'); }).catch(function(e) { console.log('Error:', e); });
+}
+    
 function generarSolicitud() {
     var dest = document.getElementById('destino-hidden').value || document.getElementById('input-otro-destino').value.trim();
     var hosp = document.getElementById('hospedaje-hidden').value; var plan = document.getElementById('plan-hidden').value;
@@ -233,8 +247,6 @@ function generarSolicitud() {
     if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; } else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
     var asesores = ['584244634041', '584244900601', '584244900601', '584244900601', '584127136169', '584127136169', '584147020527', '584244269876', '584140415685'];
     var tlf = asesores[Math.floor(Math.random() * asesores.length)];
-
-    enviarAGoogleSheets({ fechaHora: new Date().toLocaleString('es-VE'), destino: dest, servicio: hosp + ' · ' + plan, pagina: 'Hospedaje', nombre: nombreCliente });
 
     var lineas = ['🌟 *COTIZACIÓN HOSPEDAJE - LOTUS 360*','','📍 *Destino:* ' + dest,'👤 *Nombre:* ' + nombreCliente,'🏨 *Alojamiento:* ' + hosp,'🍽️ *Plan:* ' + plan,'📅 *Check-in:* ' + ci,'📅 *Check-out:* ' + co,'🌙 *Noches:* ' + noches,'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos,'🛏️ *Habitaciones:* ' + habs,'💰 *Presupuesto/noche:* ' + presTexto];
     if (amenidades.length) lineas.push('✨ *Preferencias:* ' + amenidades.join(' · '));
