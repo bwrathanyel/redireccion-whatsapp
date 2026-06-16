@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conectando con tu asesor...</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+            background: #0a0a0a;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #333;
+            border-top: 4px solid #25D366;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .btn {
+            padding: 15px 30px;
+            background: #25D366;
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: bold;
+            display: inline-block;
+            margin: 10px;
+            font-size: 16px;
+        }
+        .btn-back {
+            background: #0088cc;
+        }
+        .error {
+            color: #ff4444;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        .info {
+            color: #aaa;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        .success {
+            color: #25D366;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="loader" id="loader"></div>
+    <p id="mensaje">Verificando número...</p>
+    <div id="botones" style="display:none;">
+        <a href="#" id="linkWhatsApp" class="btn">📱 Abrir WhatsApp</a>
+        <a href="#" id="linkVolver" class="btn btn-back">🔄 Volver a intentar</a>
+    </div>
+    <p class="error" id="error" style="display:none;"></p>
+    <p class="info" id="info" style="display:none;"></p>
+    
+    <script>
+        function extraerNumeros(texto) {
+            if (!texto) return '';
+            return String(texto).replace(/[^0-9]/g, '');
+        }
+        
+        function formatearNumero(limpio) {
+            if (!limpio || limpio.length < 7) return null;
+            
+            // Venezuela
+            if ((limpio.startsWith('04') && limpio.length === 11) || (limpio.startsWith('4') && limpio.length === 10)) {
+                return limpio.startsWith('0') ? '58' + limpio.substring(1) : '58' + limpio;
+            }
+            if (limpio.startsWith('58') && limpio.length >= 11) return limpio;
+            
+            // Colombia
+            if (limpio.startsWith('57') && limpio.length >= 12) return limpio;
+            if (limpio.startsWith('3') && limpio.length === 10) return '57' + limpio;
+            
+            // Ecuador
+            if (limpio.startsWith('593') && limpio.length >= 12) return limpio;
+            if (limpio.startsWith('09') && limpio.length === 10) return '593' + limpio.substring(1);
+            if (limpio.startsWith('9') && limpio.length === 9) return '593' + limpio;
+            
+            // Panamá
+            if (limpio.startsWith('507') && limpio.length >= 11) return limpio;
+            if ((limpio.startsWith('6') || limpio.startsWith('5')) && limpio.length === 8) return '507' + limpio;
+            
+            // Brasil
+            if (limpio.startsWith('55') && limpio.length >= 12) return limpio;
+            
+            // Portugal
+            if (limpio.startsWith('351') && limpio.length >= 12) return limpio;
+            if ((limpio.startsWith('9') || limpio.startsWith('2')) && limpio.length === 9) return '351' + limpio;
+            
+            // Italia
+            if (limpio.startsWith('39') && limpio.length >= 11) return limpio;
+            if (limpio.startsWith('3') && limpio.length === 10) return '39' + limpio;
+            if (limpio.startsWith('0') && limpio.length === 10) return '39' + limpio.substring(1);
+            
+            // USA/Canadá
+            if (limpio.startsWith('1') && limpio.length >= 11) return limpio;
+            
+            // México
+            if (limpio.startsWith('52') && limpio.length >= 12) return limpio;
+            
+            // Argentina
+            if (limpio.startsWith('54') && limpio.length >= 11) return limpio;
+            
+            // España
+            if (limpio.startsWith('34') && limpio.length >= 11) return limpio;
+            
+            // Chile
+            if (limpio.startsWith('56') && limpio.length >= 11) return limpio;
+            
+            // Perú
+            if (limpio.startsWith('51') && limpio.length >= 11) return limpio;
+            
+            // Bolivia
+            if (limpio.startsWith('591') && limpio.length >= 11) return limpio;
+            
+            // Paraguay
+            if (limpio.startsWith('595') && limpio.length >= 12) return limpio;
+            
+            // Uruguay
+            if (limpio.startsWith('598') && limpio.length >= 11) return limpio;
+            
+            // Costa Rica
+            if (limpio.startsWith('506') && limpio.length >= 11) return limpio;
+            
+            // Rep Dominicana
+            if ((limpio.startsWith('809') || limpio.startsWith('829') || limpio.startsWith('849')) && limpio.length === 10) return '1' + limpio;
+            
+            // Puerto Rico
+            if ((limpio.startsWith('787') || limpio.startsWith('939')) && limpio.length === 10) return '1' + limpio;
+            
+            // Si tiene 11+ dígitos, devolver tal cual
+            if (limpio.length >= 11) return limpio;
+            
+            // Último recurso
+            if (limpio.length >= 10) return limpio;
+            
+            return null;
+        }
+        
+        function obtenerParametro(nombre) {
+            var urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(nombre) || '';
+        }
+        
+        var numeroRaw = obtenerParametro('numero') || '';
+        var nombre = obtenerParametro('nombre') || 'Cliente';
+        var destino = obtenerParametro('destino') || '';
+        var asesor = obtenerParametro('asesor') || '';
+        var volver = obtenerParametro('volver') || 'https://manychat.com';
+        
+        var numeroLimpio = extraerNumeros(numeroRaw);
+        var numeroFinal = formatearNumero(numeroLimpio);
+        
+        document.getElementById('loader').style.display = 'none';
+        document.getElementById('botones').style.display = 'block';
+        
+        if (numeroFinal) {
+            document.getElementById('mensaje').className = 'success';
+            document.getElementById('mensaje').textContent = '✅ ¡Número válido!';
+            document.getElementById('info').style.display = 'block';
+            document.getElementById('info').textContent = 'Serás redirigido a WhatsApp...';
+            
+            var mensajeWA = '¡Buenas!';
+            if (asesor) mensajeWA += ' Soy ' + asesor;
+            mensajeWA += ' de Lotus 360.';
+            if (destino) mensajeWA += ' Vi que estás interesado/a en ' + destino + '.';
+            mensajeWA += ' Le voy a ofrecer nuestras mejores promociones 😊';
+            
+            var urlFinal = 'https://wa.me/' + numeroFinal + '?text=' + encodeURIComponent(mensajeWA);
+            
+            document.getElementById('linkWhatsApp').href = urlFinal;
+            document.getElementById('linkVolver').style.display = 'none';
+            
+            setTimeout(function() {
+                window.location.href = urlFinal;
+            }, 800);
+        } else {
+            document.getElementById('mensaje').textContent = '⚠️ Problema con el número';
+            document.getElementById('error').style.display = 'block';
+            
+            if (!numeroRaw || numeroRaw.trim() === '') {
+                document.getElementById('error').textContent = 'No se recibió ningún número de teléfono.';
+            } else if (numeroLimpio.length < 7) {
+                document.getElementById('error').textContent = 'El dato recibido tiene muy pocos dígitos: "' + numeroRaw + '"';
+            } else {
+                document.getElementById('error').textContent = 'No se reconoce el formato: "' + numeroRaw + '". Se detectaron ' + numeroLimpio.length + ' dígitos.';
+            }
+            
+            document.getElementById('info').style.display = 'block';
+            document.getElementById('info').textContent = 'Presiona "Volver a intentar" para ingresar tu número de nuevo.';
+            document.getElementById('linkWhatsApp').style.display = 'none';
+            document.getElementById('linkVolver').href = volver;
+        }
+    </script>
+</body>
+</html>
