@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conectando con tu asesor...</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; }
+        .btn { padding: 15px 30px; background: #25D366; color: white; text-decoration: none; border-radius: 50px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <p>Redirigiendo a WhatsApp...</p>
+    <a href="#" id="link" class="btn">Abrir WhatsApp</a>
+    
+    <script>
+        const asesores = [
+            "584244634041", 
+            "584244900601", 
+            "584244900601", 
+            "584244269876", 
+            "584127136169", 
+            "584127136169"
+        ];
+        const elegido = asesores[Math.floor(Math.random() * asesores.length)];
+        const mensaje = "¡Buenas!, Vengo de Instagram me gustaría más información 😊";
+        const urlFinal = "https://wa.me/" + elegido + "?text=" + encodeURIComponent(mensaje);
+        
+        document.getElementById('link').href = urlFinal;
+        window.location.href = urlFinal;
+    </script>
+</body>
+</html>
