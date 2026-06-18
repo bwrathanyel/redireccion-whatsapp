@@ -80,10 +80,10 @@
     if (!limpio || limpio.length < 7) return null;
     
     // Venezuela
+    if (limpio.startsWith('58') && limpio.length >= 11) return limpio;
     if ((limpio.startsWith('04') && limpio.length === 11) || (limpio.startsWith('4') && limpio.length === 10)) {
         return limpio.startsWith('0') ? '58' + limpio.substring(1) : '58' + limpio;
     }
-    if (limpio.startsWith('58') && limpio.length >= 11) return limpio;
     
     // Colombia
     if (limpio.startsWith('57') && limpio.length >= 12) return limpio;
@@ -91,27 +91,18 @@
     
     // Ecuador
     if (limpio.startsWith('593') && limpio.length >= 12) return limpio;
-    if (limpio.startsWith('09') && limpio.length === 10) return '593' + limpio.substring(1);
-    if (limpio.startsWith('9') && limpio.length === 9) return '593' + limpio;
     
     // Panamá
     if (limpio.startsWith('507') && limpio.length >= 11) return limpio;
-    if ((limpio.startsWith('6') || limpio.startsWith('5')) && limpio.length === 8) return '507' + limpio;
     
     // Brasil
     if (limpio.startsWith('55') && limpio.length >= 12) return limpio;
     
     // Portugal
     if (limpio.startsWith('351') && limpio.length >= 12) return limpio;
-    if ((limpio.startsWith('9') || limpio.startsWith('2')) && limpio.length === 9) return '351' + limpio;
     
     // Italia
     if (limpio.startsWith('39') && limpio.length >= 11) return limpio;
-    if (limpio.startsWith('3') && limpio.length === 10) return '39' + limpio;
-    if (limpio.startsWith('0') && limpio.length === 10) return '39' + limpio.substring(1);
-    
-    // USA/Canadá
-    if (limpio.startsWith('1') && limpio.length >= 11) return limpio;
     
     // México
     if (limpio.startsWith('52') && limpio.length >= 12) return limpio;
@@ -127,6 +118,9 @@
     
     // Perú
     if (limpio.startsWith('51') && limpio.length >= 11) return limpio;
+    
+    // USA
+    if (limpio.startsWith('1') && limpio.length >= 11) return limpio;
     
     // Bolivia
     if (limpio.startsWith('591') && limpio.length >= 11) return limpio;
@@ -146,8 +140,8 @@
     // Puerto Rico
     if ((limpio.startsWith('787') || limpio.startsWith('939')) && limpio.length === 10) return '1' + limpio;
     
-    // Si tiene 11+ dígitos, devolver tal cual
-    if (limpio.length >= 11) return limpio;
+    // Si tiene 10+ dígitos, devolver tal cual
+    if (limpio.length >= 10) return limpio;
     
     return null;
 }
