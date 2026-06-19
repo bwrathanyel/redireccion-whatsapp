@@ -179,6 +179,8 @@
             
             document.getElementById('linkWhatsApp').href = urlFinal;
             document.getElementById('linkVolver').style.display = 'none';
+
+            fetch('https://script.google.com/macros/s/AKfycbyO-Su3f4yOH_ElwHW0UU6woORiLDxdkoFecLYga-zrNei5jBEP9iV2oIi1wVZDggaVVQ/exec?accion=whatsapp_directo&nombre=' + encodeURIComponent(nombre) + '&destino=' + encodeURIComponent(destino) + '&asesor=' + encodeURIComponent(asesor));
             
             setTimeout(function() {
                 window.location.href = urlFinal;
