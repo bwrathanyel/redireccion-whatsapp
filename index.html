@@ -84,7 +84,11 @@
             }
             
             // Redirigir a WhatsApp
-            var urlFinal = "https://wa.me/" + numero;
+           var mensajeWA = "";
+if (nombre && destino) {
+    mensajeWA = "?text=" + encodeURIComponent("Hola! Vengo de Instagram. Mi nombre es " + nombre + " y me gustaria informacion para viajar a " + destino);
+}
+var urlFinal = "https://wa.me/" + numero + mensajeWA;
             document.getElementById('loader').style.display = 'none';
             document.getElementById('mensaje').textContent = '✅ Conectando con WhatsApp...';
             document.getElementById('mensaje').style.color = '#25D366';
