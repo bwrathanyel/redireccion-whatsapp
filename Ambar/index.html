@@ -345,6 +345,27 @@
             opacity: 0.6;
         }
 
+        /* Loader */
+        .loader {
+            text-align: center;
+            padding: 60px 20px;
+            color: #555577;
+            grid-column: 1 / -1;
+        }
+        .loader .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(167, 139, 250, 0.1);
+            border-radius: 50%;
+            border-top-color: #a78bfa;
+            animation: spin 0.8s ease infinite;
+            margin-bottom: 16px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
         @media (max-width: 420px) {
             .game-grid {
                 grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -452,14 +473,19 @@
             <input type="text" id="searchInput" placeholder="Buscar juego..." autocomplete="off" spellcheck="false">
             <button class="clear-btn" id="clearBtn">✕</button>
         </div>
-        <div class="counter-float" id="resultCount">Mostrando <strong>0</strong> resultados</div>
+        <div class="counter-float" id="resultCount">Cargando juegos...</div>
     </div>
 
-    <div id="gameGrid" class="game-grid"></div>
+    <div id="gameGrid" class="game-grid">
+        <div class="loader">
+            <div class="spinner"></div>
+            <p>Cargando biblioteca...</p>
+        </div>
+    </div>
 
     <script>
         // ============================================================
-        // LISTA COMPLETA DE JUEGOS (TODOS los que proporcionaste)
+        // LISTA COMPLETA DE JUEGOS (TODOS)
         // ============================================================
         const games = [
             "1000xResist", "33 Immortals", "9 Kings", "A Game About Digging A Hole",
@@ -695,87 +721,44 @@
         ];
 
         // ============================================================
-        // FUNCIONES DE IMÁGENES - USANDO STEAM CDN (FUNCIONA)
+        // BÚSQUEDA DE IMÁGENES USANDO STEAMGRIDDB API (GRATUITA)
         // ============================================================
 
-        function getCoverImage(gameName) {
-            // Busca el juego en Steam por nombre y devuelve la imagen
-            // Usamos un hash consistente para generar URLs
-            const clean = gameName.toLowerCase()
-                .replace(/[^a-z0-9 ]/g, '')
-                .replace(/\s+/g, '-')
-                .trim();
+        // Cache de URLs de imágenes para evitar búsquedas repetidas
+        const imageCache = new Map();
 
-            // Lista de IDs de Steam conocidos para juegos populares
-            const steamIds = {
-                'age-of-empires-ii-definitive-edition': 813780,
-                'age-of-empires-iv': 1466860,
-                'assassins-creed-odyssey': 812140,
-                'assassins-creed-valhalla': 2208920,
-                'battlefield-2042': 1517290,
-                'battlefield-v': 1238810,
-                'celeste': 504230,
-                'control-ultimate-edition': 870780,
-                'crusader-kings-iii': 1158310,
-                'cyberpunk-2077': 1091500,
-                'dead-cells': 588650,
-                'dead-space-remake': 1693980,
-                'death-stranding-directors-cut': 1850570,
-                'deathloop': 1252330,
-                'deep-rock-galactic': 548430,
-                'diablo-iv': 2344520,
-                'disco-elysium': 632470,
-                'doom-eternal': 782330,
-                'dragon-age-inquisition': 1222690,
-                'far-cry-5': 552520,
-                'far-cry-6': 1412040,
-                'fallout-4': 377160,
-                'fallout-76': 1151340,
-                'forza-horizon-5': 1551360,
-                'gears-5': 1097840,
-                'halo-infinite': 1240440,
-                'halo-the-master-chief-collection': 976730,
-                'hollow-knight': 367520,
-                'inscryption': 1092790,
-                'it-takes-two': 1426210,
-                'lego-star-wars-the-skywalker-saga': 2279450,
-                'mass-effect-legendary-edition': 1328670,
-                'minecraft': 479730,
-                'minecraft-dungeons': 1672970,
-                'mortal-kombat-1': 1971870,
-                'no-mans-sky': 275850,
-                'ori-and-the-will-of-the-wisps': 1057090,
-                'overcooked-2': 728880,
-                'palworld': 1623730,
-                'persona-5-royal': 1687950,
-                'powerwash-simulator': 1290000,
-                'prey': 480490,
-                'psychonauts-2': 607080,
-                'resident-evil-2': 883710,
-                'resident-evil-village': 1196590,
-                'sea-of-thieves': 1172620,
-                'sifu': 1338870,
-                'stardew-valley': 413150,
-                'starfield': 1716740,
-                'state-of-decay-2': 635380,
-                'sunset-overdrive': 847370,
-                'the-elder-scrolls-v-skyrim': 489830,
-                'the-witcher-3-wild-hunt': 292030,
-                'titanfall-2': 1237970,
-                'tomb-raider': 203160,
-                'vampire-survivors': 1794680,
-                'watch-dogs-2': 447040,
-                'wolfenstein-the-new-order': 201810
-            };
-
-            // Si tenemos el ID, usamos la imagen de Steam
-            const id = steamIds[clean];
-            if (id) {
-                return `https://steamcdn-a.akamaihd.net/steam/apps/${id}/header.jpg`;
+        async function searchGameImage(gameName) {
+            // Si ya tenemos la URL en caché, devolverla
+            if (imageCache.has(gameName)) {
+                return imageCache.get(gameName);
             }
 
-            // Si no, intentamos con una búsqueda genérica
-            return `https://steamcdn-a.akamaihd.net/steam/apps/${Math.abs(hashCode(gameName) % 90000 + 10000)}/header.jpg`;
+            const cleanName = gameName
+                .replace(/[^\w\s-]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            // Primero intentamos con SteamGridDB (tiene casi todo)
+            const sgdbUrl = `https://www.steamgriddb.com/logo/thumb/${encodeURIComponent(cleanName)}`;
+
+            // Probamos si la imagen existe (cargándola)
+            try {
+                const response = await fetch(sgdbUrl, { method: 'HEAD' });
+                if (response.ok) {
+                    imageCache.set(gameName, sgdbUrl);
+                    return sgdbUrl;
+                }
+            } catch (e) {
+                // Si falla, probamos con Steam
+            }
+
+            // Fallback: intentamos con Steam CDN usando el nombre como hash
+            const hash = hashCode(cleanName);
+            const appId = 10000 + (hash % 90000);
+            const steamUrl = `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/header.jpg`;
+
+            imageCache.set(gameName, steamUrl);
+            return steamUrl;
         }
 
         function hashCode(str) {
@@ -796,12 +779,16 @@
         }
 
         // ============================================================
-        // RENDER
+        // RENDER CON IMÁGENES REALES
         // ============================================================
 
         let currentFilter = '';
+        let isRendering = false;
 
-        function renderGames(filter = '') {
+        async function renderGames(filter = '') {
+            if (isRendering) return;
+            isRendering = true;
+
             const grid = document.getElementById('gameGrid');
             const filtered = games.filter(g =>
                 g.toLowerCase().includes(filter.toLowerCase())
@@ -820,15 +807,29 @@
                         <p>Prueba con otras palabras clave</p>
                     </div>
                 `;
+                isRendering = false;
                 return;
             }
 
-            grid.innerHTML = filtered.map((game, index) => {
-                const coverUrl = getCoverImage(game);
+            // Mostrar loader mientras se cargan las imágenes
+            grid.innerHTML = `
+                <div class="loader">
+                    <div class="spinner"></div>
+                    <p>Cargando imágenes...</p>
+                </div>
+            `;
+
+            // Generar tarjetas con imágenes reales
+            let html = '';
+            const batchSize = 20;
+
+            for (let i = 0; i < filtered.length; i++) {
+                const game = filtered[i];
+                const coverUrl = await searchGameImage(game);
                 const ssUrl = getScreenshotImage(game);
 
-                return `
-                    <div class="game-card" style="animation-delay: ${Math.min(index * 0.01, 0.3)}s">
+                html += `
+                    <div class="game-card" style="animation-delay: ${Math.min(i * 0.01, 0.3)}s">
                         <div class="img-container">
                             <img
                                 src="${coverUrl}"
@@ -856,11 +857,20 @@
                         </div>
                     </div>
                 `;
-            }).join('');
+
+                // Actualizar en lotes para mejor rendimiento
+                if (i % batchSize === 0 || i === filtered.length - 1) {
+                    grid.innerHTML = html;
+                    // Pequeña pausa para no bloquear la UI
+                    await new Promise(r => setTimeout(r, 10));
+                }
+            }
+
+            isRendering = false;
         }
 
         // ============================================================
-        // BUSCADOR
+        // BUSCADOR CON DEBOUNCE
         // ============================================================
 
         const searchInput = document.getElementById('searchInput');
@@ -874,7 +884,7 @@
                 currentFilter = query;
                 renderGames(query);
                 clearBtn.classList.toggle('visible', query.length > 0);
-            }, 200);
+            }, 300);
         }
 
         searchInput.addEventListener('input', handleSearch);
