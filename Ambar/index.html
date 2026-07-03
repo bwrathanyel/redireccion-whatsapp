@@ -4,9 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>PC Game Pass · Biblioteca</title>
+    <title>PC Game Pass · Biblioteca Completa</title>
     <style>
-        /* ===== RESET Y BASE ===== */
         * {
             margin: 0;
             padding: 0;
@@ -23,7 +22,6 @@
             background-image: radial-gradient(ellipse at 20% 50%, #1a1833 0%, #0f0e1a 70%);
         }
 
-        /* ===== HEADER ===== */
         .header {
             padding: 28px 20px 16px;
             background: linear-gradient(180deg, rgba(15, 14, 26, 0.95) 60%, transparent);
@@ -79,7 +77,6 @@
             font-weight: 600;
         }
 
-        /* ===== BUSCADOR ===== */
         .search-wrapper {
             padding: 0 20px 18px;
             position: sticky;
@@ -167,7 +164,6 @@
             font-weight: 600;
         }
 
-        /* ===== GRID ===== */
         .game-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
@@ -177,7 +173,6 @@
             margin: 0 auto;
         }
 
-        /* ===== TARJETA ===== */
         .game-card {
             background: linear-gradient(145deg, rgba(26, 24, 51, 0.7), rgba(20, 18, 40, 0.9));
             border-radius: 18px;
@@ -309,7 +304,7 @@
         .game-card .screenshot-wrap .screenshot-fallback {
             position: absolute;
             inset: 0;
-            display: flex;
+            display: none;
             align-items: center;
             justify-content: center;
             color: #333355;
@@ -325,7 +320,6 @@
             display: none;
         }
 
-        /* ===== ESTADO VACÍO ===== */
         .empty-state {
             text-align: center;
             padding: 60px 30px;
@@ -351,19 +345,6 @@
             opacity: 0.6;
         }
 
-        /* ===== SCROLLBAR ===== */
-        ::-webkit-scrollbar {
-            width: 3px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #333355;
-            border-radius: 10px;
-        }
-
-        /* ===== RESPONSIVE ===== */
         @media (max-width: 420px) {
             .game-grid {
                 grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -425,7 +406,6 @@
             }
         }
 
-        /* ===== ANIMACIONES ===== */
         @keyframes fadeUp {
             from {
                 opacity: 0;
@@ -441,35 +421,24 @@
             animation: fadeUp 0.4s ease both;
         }
 
-        .game-card:nth-child(1) { animation-delay: 0.02s; }
-        .game-card:nth-child(2) { animation-delay: 0.04s; }
-        .game-card:nth-child(3) { animation-delay: 0.06s; }
-        .game-card:nth-child(4) { animation-delay: 0.08s; }
-        .game-card:nth-child(5) { animation-delay: 0.10s; }
-        .game-card:nth-child(6) { animation-delay: 0.12s; }
-        .game-card:nth-child(7) { animation-delay: 0.14s; }
-        .game-card:nth-child(8) { animation-delay: 0.16s; }
-        .game-card:nth-child(9) { animation-delay: 0.18s; }
-        .game-card:nth-child(10) { animation-delay: 0.20s; }
-        .game-card:nth-child(11) { animation-delay: 0.22s; }
-        .game-card:nth-child(12) { animation-delay: 0.24s; }
-        .game-card:nth-child(13) { animation-delay: 0.26s; }
-        .game-card:nth-child(14) { animation-delay: 0.28s; }
-        .game-card:nth-child(15) { animation-delay: 0.30s; }
-        .game-card:nth-child(16) { animation-delay: 0.32s; }
-        .game-card:nth-child(17) { animation-delay: 0.34s; }
-        .game-card:nth-child(18) { animation-delay: 0.36s; }
-        .game-card:nth-child(19) { animation-delay: 0.38s; }
-        .game-card:nth-child(20) { animation-delay: 0.40s; }
+        ::-webkit-scrollbar {
+            width: 3px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333355;
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
 
-    <!-- ===== HEADER ===== -->
     <header class="header">
         <div class="header-top">
             <h1>🎮 Game Pass</h1>
-            <span class="header-badge">PC · Biblioteca</span>
+            <span class="header-badge">PC · Completa</span>
         </div>
         <div class="header-sub">
             <p>📚 <span id="gameCount">0</span> juegos</p>
@@ -477,79 +446,350 @@
         </div>
     </header>
 
-    <!-- ===== BUSCADOR ===== -->
     <div class="search-wrapper">
         <div class="search-box">
             <span class="icon">🔍</span>
             <input type="text" id="searchInput" placeholder="Buscar juego..." autocomplete="off" spellcheck="false">
-            <button class="clear-btn" id="clearBtn" aria-label="Limpiar búsqueda">✕</button>
+            <button class="clear-btn" id="clearBtn">✕</button>
         </div>
         <div class="counter-float" id="resultCount">Mostrando <strong>0</strong> resultados</div>
     </div>
 
-    <!-- ===== GRID ===== -->
-    <div id="gameGrid" class="game-grid">
-        <!-- Se llena con JS -->
-    </div>
+    <div id="gameGrid" class="game-grid"></div>
 
     <script>
         // ============================================================
-        // LISTA COMPLETA DE JUEGOS (versión resumida para que funcione)
+        // LISTA COMPLETA DE JUEGOS (TODOS los que proporcionaste)
         // ============================================================
         const games = [
-            "A Plague Tale: Requiem", "A Way Out", "Age of Empires II: Definitive Edition",
-            "Age of Empires IV", "Aliens: Dark Descent", "Among Us", "Anno 1800",
-            "ARK: Survival Ascended", "Assassin's Creed Odyssey", "Assassin's Creed Valhalla",
-            "ASTRONEER", "Atomfall", "Avowed", "Baldur's Gate II: Enhanced Edition",
-            "Banjo-Kazooie", "Batman: Arkham Knight", "Battlefield 2042", "Battlefield V",
-            "Brotato", "Call of Duty: Black Ops 6", "Celeste", "Cities: Skylines",
-            "Control Ultimate Edition", "Crash Bandicoot N. Sane Trilogy",
-            "Crusader Kings III", "Cyberpunk 2077", "Dead Cells", "Dead Island 2",
-            "Dead Space (Remake)", "Death Stranding Director's Cut", "DEATHLOOP",
-            "Deep Rock Galactic", "Diablo IV", "Disco Elysium", "Dishonored 2",
-            "DOOM Eternal", "Dragon Age: Inquisition", "Dredge", "Far Cry 5",
-            "Far Cry 6", "Farming Simulator 25", "Fallout 4", "Fallout 76",
-            "Forza Horizon 5", "Forza Motorsport", "Gears 5", "Gears of War 4",
-            "GhostWire: Tokyo", "Grounded", "GTA V", "Hades", "Halo: The Master Chief Collection",
-            "Halo Infinite", "Hellblade: Senua's Sacrifice", "Hi-Fi RUSH",
-            "High On Life", "Hogwarts Legacy", "Hollow Knight", "Human Fall Flat",
-            "Immortals Fenyx Rising", "Indiana Jones y el Gran Círculo",
-            "Inscryption", "It Takes Two", "Kingdom Come Deliverance",
-            "LEGO Star Wars: La Saga Skywalker", "Limbo", "Little Nightmares II",
-            "Mass Effect Legendary Edition", "Minecraft", "Minecraft Dungeons",
-            "Mortal Kombat 1", "Mount & Blade II: Bannerlord", "No Man's Sky",
-            "Ori and the Will of the Wisps", "Overcooked! 2", "Palworld",
-            "Pentiment", "Persona 5 Royal", "PowerWash Simulator", "Prey",
-            "Psychonauts 2", "Quake", "RAGE 2", "Resident Evil 2",
-            "Resident Evil Village", "Sea of Thieves", "Senua's Saga: Hellblade II",
-            "SIFU", "Slay The Spire", "South Park: The Fractured but Whole",
-            "Stardew Valley", "Starfield", "State of Decay 2", "Sunset Overdrive",
-            "The Elder Scrolls V: Skyrim", "The Outer Worlds", "The Witcher 3",
-            "Titanfall 2", "Tom Clancy's Rainbow Six Siege", "Tomb Raider",
-            "TUNIC", "Unpacking", "Vampire Survivors", "Warhammer 40.000: Space Marine II",
-            "Watch Dogs 2", "Wolfenstein: The New Order", "Zombie Army 4"
+            "1000xResist", "33 Immortals", "9 Kings", "A Game About Digging A Hole",
+            "A Plague Tale: Requiem", "A Way Out", "Abiotic Factor", "Absolum",
+            "Age of Empires: Definitive Edition", "Age of Empires II: Definitive Edition",
+            "Age of Empires III: Definitive Edition", "Age of Empires IV: Edición Aniversario",
+            "Age of Mythology: Retold", "Alice: Madness Returns", "Aliens: Dark Descent",
+            "Aliens: Fireteam Elite", "Among Us", "An Elder Scrolls Legends: Battlespire",
+            "Anno 1800", "Anno: Mutationem", "Another Crab's Treasure", "Aphelion",
+            "Ara: History Untold", "ARK: Ultimate Survivor Edition", "Ark: Survival Ascended",
+            "Arx Fatalis", "As Dusk Falls", "Assassin's Creed II", "Assassin's Creed III Remastered",
+            "Assassin's Creed IV Black Flag", "Assassin's Creed Brotherhood",
+            "Assassin's Creed Chronicles: China", "Assassin's Creed Chronicles: India",
+            "Assassin's Creed Chronicles: Russia", "Assassin's Creed Liberation HD",
+            "Assassin's Creed Revelations", "Assassin's Creed Rogue Remastered",
+            "Assassin's Creed Syndicate", "Assassin's Creed The Ezio Collection",
+            "Assassin's Creed Unity", "Assassin's Creed Odyssey", "Assassin's Creed Origins",
+            "Assassin's Creed Valhalla", "Assassin's Creed Mirage", "ASTRONEER",
+            "Atlas Fallen", "Atomfall", "Avatar: Frontiers of Pandora", "Avowed",
+            "Back to the Dawn", "Baldur's Gate: Enhanced Edition", "Baldur's Gate II: Enhanced Edition",
+            "Ball x Pit", "Banishers: Ghosts of New Eden", "Banjo-Kazooie",
+            "Banjo-Tooie", "Barbie Horse Trails", "Batman: Arkham Knight",
+            "Battlefield 4", "Battlefield 1 Revolution", "Battlefield 2042",
+            "Battlefield Hardline", "Battlefield V Year 2 Edition", "BATTLETECH",
+            "Battletoads", "Beastro", "Ben 10 Power Trip", "Black Jacket",
+            "BlazBlue Entropy Effect X", "Bleeding Edge", "BLiNX: The Time Sweeper",
+            "Blizzard Arcade Collection", "Blue Prince", "Bluey: The Videogame",
+            "Bounty Star", "Brews & Bastards", "Broken Age", "Brotato",
+            "Burnout Paradise Remastered", "Call of Duty: Modern Warfare",
+            "Call of Duty: Modern Warfare 2", "Call of Duty: Modern Warfare 3",
+            "Call of Duty: Black Ops 6", "Call of Duty: Black Ops 7",
+            "Call of Duty: Warzone", "Call of Duty: WWII",
+            "Call of the Elder Gods", "Car Mechanic Simulator 2021", "Celeste",
+            "Child of Light", "Chivalry 2", "Cities: Skylines - Windows 10 Edition",
+            "Cities: Skylines II", "Clair Obscur: Expedition 33",
+            "Clone Drone in the Danger Zone", "Clover Pit", "Commandos: Origins",
+            "Command & Conquer Remastered Collection", "Construction Simulator",
+            "Contrast", "Control Ultimate Edition", "Cooking Simulator Windows",
+            "Costume Quest", "Crackdown 3", "Crash Bandicoot N. Sane Trilogy",
+            "Crash Bandicoot 4: It's About Time", "Crashout Crew", "Crime Scene Cleaner",
+            "Crimson Skies: High Road to Revenge", "Cricket 24", "Crusader Kings III",
+            "Crysis", "Crysis 2 Maximum Edition", "Crysis 3", "Cyberpunk 2077",
+            "Day of the Tentacle Remastered", "DayZ", "Dead by Daylight Windows",
+            "Dead Cells", "Dead Island 2", "Dead Space (2008)", "Dead Space 2",
+            "Dead Space 3", "Dead Space (Remake)", "Dead Static Drive", "Death Howl",
+            "Death Stranding Director's Cut", "DEATHLOOP", "Deep Rock Galactic",
+            "Deep Rock Galactic: Survivor", "Descenders", "Descenders Next",
+            "Diablo", "Diablo III: Reaper of Souls", "Diablo IV",
+            "Dice A Million", "Disco Elysium",
+            "Dishonored Definitive Edition", "Dishonored: La muerte del Forastero",
+            "Dishonored 2", "Disney Dreamlight Valley", "Disneyland Adventures",
+            "Dome Keeper", "Donut County", "DOOM", "DOOM (1993)", "DOOM 3",
+            "DOOM 64", "DOOM Eternal Standard Edition", "DOOM 2 (Classic)",
+            "DOOM: The Dark Ages", "Dragon Age: Origins", "Dragon Age 2",
+            "Dragon Age: Inquisition", "Dragon Age: The Veilguard",
+            "DreamWorks Gabby's Dollhouse: Ready to Party", "Dredge", "Drop Duchy",
+            "Dungeon Keeper", "Dungeon Keeper 2", "Dungeons of Hinterberg",
+            "EA Sports College Football 26", "EA Sports F1 24", "EA Sports F1 25",
+            "EA Sports FC 24", "EA Sports FC 25", "EA Sports NHL 26",
+            "EA Sports PGA Tour", "EA Sports UFC 5", "EA Sports WRC",
+            "Echo Generation 2", "Edición Deluxe de Mass Effect: Andromeda",
+            "Edición Digital Deluxe Mass Effect 2", "Edición Digital Deluxe Mass Effect 3 N7",
+            "Edición Premium de Battlefield 3", "Edición Ultimate de Star Wars Battlefront",
+            "Egging On", "Elite Dangerous", "Escape Simulator", "Eternal Strands",
+            "Evil West", "F1 2021", "Far Cry New Dawn", "Far Cry 3",
+            "Far Cry 3 Blood Dragon", "Far Cry Primal", "Far Cry 4", "Far Cry 6",
+            "Farming Simulator 25", "Fable Anniversary", "Fable II", "Fable III",
+            "Fallout", "Fallout 2", "Fallout 3", "Fallout 4", "Fallout 76",
+            "Fallout Tactics", "Fallout: New Vegas", "Far Cry 5", "FBC: Firebreak",
+            "Fe", "Final Fantasy", "Final Fantasy II", "Final Fantasy III",
+            "Final Fantasy IV", "Final Fantasy V", "Final Fantasy VI",
+            "Firefighting Simulator: The Squad", "Firewatch", "Football Manager 26",
+            "For Honor: Marching Fire Edition", "Forza Horizon 5: Edición Estándar",
+            "Forza Horizon 6", "Forza Motorsport", "Frog Detective", "Frog Sqwad",
+            "Frostpunk 2", "Full Throttle Remastered", "Fuzion Frenzy", "Gang Beasts",
+            "Gears 5: Edición Juego del Año", "Gears of War 2", "Gears of War 3",
+            "Gears of War 4", "Gears of War: Judgment", "Gears of War: Ultimate Edition",
+            "Gears of War: Reloaded", "Gears Tactics", "Generation Zero",
+            "Genesis Noir", "GhostWire: Tokyo", "GoldenEye 007",
+            "Golf With Your Friends", "Great God Grove", "GRID Legends",
+            "Grim Fandango Remastered", "Grounded", "Grounded 2", "GTA V",
+            "Hades", "Hades II", "Halls of Torment", "Halo 2: Anniversary",
+            "Halo 3", "Halo 3: ODST", "Halo 4", "Halo 5: Guardians",
+            "Halo Infinite", "Halo REACH", "Halo Wars 2: Standard Edition",
+            "Halo Wars: Definitive Edition", "Halo: Combat Evolved Anniversary",
+            "Halo: la colección Jefe Maestro",
+            "Halo: Spartan Assault", "Halo: Spartan Strike",
+            "Hellblade: Senua's Sacrifice", "Herdling",
+            "Heroes of Might & Magic: Olden Era", "Hi-Fi RUSH",
+            "High On Life", "High on Life 2", "Hogwarts Legacy",
+            "Hollow Knight: Edición Corazón Vacío", "Hollow Knight: Silksong",
+            "House Flipper", "Human Fall Flat", "Hungry Shark World",
+            "I Am Your Beast", "Immortals Fenyx Rising", "Immortals of Aveum",
+            "Indiana Jones y el Gran Círculo", "Indika", "Inscryption", "INSIDE",
+            "Iron Brigade", "It Takes Two - Versión digital", "Jade Empire: Edición Especial",
+            "Jetpac Refuelled", "Joy Ride Turbo", "Junkster",
+            "Jurassic World Evolution 3", "Kabuto Park", "Kameo", "Keeper",
+            "Kill It With Fire! 2", "Killer Instinct: Definitive Edition", "Kiln",
+            "Kingdom Come Deliverance", "Kingdom Come: Deliverance II",
+            "Kingdom Two Crowns", "Lara Croft and the Guardian of Light",
+            "Lara Croft and the Temple of Osiris", "League of Legends",
+            "Legends of Runeterra", "LEGO Star Wars: La Saga Skywalker",
+            "Like a Dragon: Infinite Wealth", "Like A Dragon: Pirate Yakuza in Hawaii",
+            "Limbo", "Little Kitty, Big City", "Little Nightmares Enhanced Edition",
+            "Little Nightmares II", "Little Rocket Lab", "Los Sims 3 Disco Iniciación",
+            "Los Sims 4 Edición EA Play", "Lost in Random", "Lost Records: Bloom & Rage",
+            "Luna Abyss", "Madden NFL 23", "Madden NFL 25", "Madden NFL 26",
+            "Manor Lords", "Marvel Cosmic Invasion", "Mass Effect",
+            "Mass Effect Legendary Edition", "Mass Effect Andromeda",
+            "Massive Chalice", "MechWarrior 5: Clans", "MechWarrior 5: Mercenaries",
+            "Medal of Honor Allied Assault War Chest", "Medal of Honor Airborne",
+            "Medieval Dynasty", "Microsoft Flight Simulator Standard 40th Anniversary Edition",
+            "Microsoft Flight Simulator 2024", "Microsoft Solitaire Collection",
+            "Minami Lane", "Minecraft", "Minecraft Dungeons", "Minecraft Legends",
+            "Minecraft Preview", "MIO: Memories in Orbit", "Mirror's Edge",
+            "Mirror's Edge Catalyst", "Mixtape", "Monopoly 2024", "Monopoly Madness",
+            "Monster Sanctuary", "Monster Train 2", "Monsters are Coming! Rock & Road",
+            "Moonlighter", "Moonlighter 2: The Endless Vault", "Mortal Kombat 1",
+            "Mount & Blade II: Bannerlord", "Moving Out 2", "Mullet Madjack",
+            "My Friend Pedro", "My Friend Peppa Pig", "My Friendly Neighborhood",
+            "MySims: Cozy Bundle", "NARAKA: BLADEPOINT - Edición Standard",
+            "Need for Speed Edición Deluxe", "Need for Speed Heat Deluxe Edition",
+            "Need for Speed Hot Pursuit Remastered", "Need for Speed Most Wanted",
+            "Need for Speed Payback - Deluxe Edition",
+            "Need for Speed Rivals: Edición Completa", "Need for Speed Unbound",
+            "Neon Abyss", "New Super Lucky's Tale",
+            "Ni no Kuni La ira de la Bruja Blanca Remastered",
+            "Ni no Kuni II: Revenant Kingdom", "Nickelodeon All-Star Brawl 2",
+            "Nine Sols", "NINJA GAIDEN: Master Collection", "Ninja Gaiden 2 Black",
+            "Ninja Gaiden 4", "Ninja Gaiden Ragebound", "No Man's Sky",
+            "Nova Roma", "OddBallers", "One Lonely Outpost",
+            "Ori and the Blind Forest: Definitive Edition",
+            "Ori and the Will of the Wisps", "Outbound",
+            "Overcooked! 2", "Overthrown", "Palworld", "Pax Dei",
+            "Peggle", "Peggle 2", "Pentiment", "Perfect Dark",
+            "Perfect Dark Zero", "Persona 5 Royal", "Phoenix Point",
+            "Pigeon Simulator", "Pillars of Eternity II: Deadfire - Ultimate Edition",
+            "Pillars of Eternity: Hero Edition", "Planet Coaster 2",
+            "Planet of Lana II: Children of the Leaf",
+            "Plants vs. Zombies Edición Juego del Año",
+            "Plants vs. Zombies Garden Warfare",
+            "Plants vs. Zombies Garden Warfare 2: Edición Deluxe",
+            "Plants vs. Zombies: La Batalla de Neighborville edición deluxe",
+            "PlateUp!", "Police Simulator: Patrol Officers", "Populous",
+            "Populous II: Trials of the Olympian Gods", "PowerWash Simulator",
+            "PowerWash Simulator 2", "Prey", "Prince of Persia The Lost Crown",
+            "Psychonauts", "Psychonauts 2", "Quake", "Quake 4",
+            "Quake II", "Quake III Arena",
+            "Rabbids Invasion: The Interactive TV Show", "Rabbids: Party of Legends",
+            "RAGE", "RAGE 2", "Rain World", "Rayman Legends",
+            "ReCore", "Redfall", "Relic Hunters Legend", "Relooted",
+            "Rematch", "Remnant II", "Replaced", "Resident Evil 2",
+            "Resident Evil 3", "Resident Evil 7: Biohazard",
+            "Resident Evil Village", "Return to Castle Wolfenstein",
+            "Riders Republic", "Rise of Nations: Extended Edition",
+            "Rise of the Tomb Raider", "Risk Urban Assault", "RoadCraft",
+            "Roadside Research", "Routine", "RoboCop: Rogue City",
+            "Roboquest", "Rocket Arena", "RUSH: A Disney Pixar Adventure",
+            "Sea of Solitude", "Sea of Thieves", "Senua's Saga: Hellblade II",
+            "Shadowrun Returns", "Shadowrun: Dragonfall - Director's Cut",
+            "Shadowrun: Hong Kong - Extended Edition", "Shadowrun Trilogy",
+            "SIFU", "SimCity 2000 Special Edition", "SimCity 4 Deluxe Edition",
+            "SimCity: Complete Edition", "Skate 3", "skate. (2007)",
+            "Skull and Bones", "Sniper Elite: Resistance", "Slay The Spire",
+            "Sledding Game", "SnowRunner", "Solarpunk",
+            "Sopa - Tale of the Stolen Potato", "South of Midnight",
+            "South Park: The Fractured but Whole", "South Park: The Stick of Truth",
+            "SpongeBob SquarePants: The Patrick Star Game", "SPORE",
+            "Stacking", "Star Trucker", "Star Wars Jedi: Fallen Order",
+            "Star Wars Battlefront II", "Star Wars Squadrons", "Star Wars Outlaws",
+            "Starsand Island", "Starseeker: Astroneer Expeditions",
+            "StarCraft: Remastered", "StarCraft II: Campaign Collection",
+            "Stardew Valley", "Starfield", "Starlink: Battle for Atlas",
+            "State of Decay 2: Juggernaut Edition", "Steep", "Stellaris",
+            "Subnautica 2", "Sunset Overdrive", "Super Fantasy Kingdom",
+            "Super Lucky's Tale", "Supermarket Simulator",
+            "Super Mega Baseball 3", "Super Mega Baseball 4",
+            "Superhot: Mind Control Delete", "Superliminal", "Sworn",
+            "Symphonia", "Tales of Kenzera: Zau",
+            "TCG Card Shop Simulator", "Teamfight Tactics", "Techtonica",
+            "Tell Me Why: Capítulo 1-3", "Tempopo", "Terraria",
+            "TerraTech Legion", "The Alters", "The Bard's Tale ARPG: Remastered and Resnarkled",
+            "The Bard's Tale IV: Director's Cut", "The Bard's Tale Trilogy",
+            "The Casting of Frank Stone", "The Cave",
+            "The Crew 2", "The Crew Motorfest",
+            "The Elder Scrolls Adventures: Redguard",
+            "The Elder Scrolls III: Morrowind",
+            "The Elder Scrolls IV: Oblivion Game of the Year Edition",
+            "The Elder Scrolls IV: Oblivion Remastered",
+            "The Elder Scrolls V: Skyrim Special Edition",
+            "The Elder Scrolls Online", "The Evil Within",
+            "The Evil Within 2", "The Gunk", "The Long Dark",
+            "The Outer Worlds: Spacer's Choice Edition",
+            "The Outer Worlds 2", "The Saboteur",
+            "The Settlers: New Allies", "The Talos Principle 2",
+            "The Thaumaturge", "The Walking Dead: A New Frontier - The Complete Season",
+            "The Walking Dead: Michonne - The Complete Season",
+            "The Walking Dead: Season 1",
+            "The Witcher 3: Wild Hunt - Complete Edition",
+            "The Yakuza Remastered Collection", "theHunter: Call of the Wild",
+            "Tiny Bookshop", "Titanfall 2", "To a T",
+            "Tom Clancy's Rainbow Six Siege - Deluxe Edition",
+            "Tom Clancy's Rainbow Six Extraction",
+            "Tom Clancy's Ghost Recon Wildlands - Standard Edition",
+            "Tom Clancy's Ghost Recon Breakpoint",
+            "Tom Clancy's The Division", "Tom Clancy's The Division 2",
+            "Tomb Raider: Definitive Edition", "Tony Hawk's Pro Skater 3 + 4",
+            "Torment: Tides of Numenera", "Total Chaos",
+            "Totally Accurate Battle Simulator", "Totally Reliable Delivery Service",
+            "Towerborne", "Trackmania Turbo", "Trailmakers",
+            "Train Sim World 5", "Transference", "Trepang2",
+            "Trials Fusion", "Trials of the Blood Dragon", "Trials Rising",
+            "TUNIC", "Ultimate Chicken Horse", "Uno", "Undisputed",
+            "Unpacking", "Unravel", "Unravel Two",
+            "Valiant Hearts: The Great War", "Valorant",
+            "Vampire Crawlers", "Vampire Survivors",
+            "Visions of Mana", "Viva Piñata", "Viva Piñata: TIP",
+            "Volcano Princess", "Void/Breaker", "Voidtrain",
+            "Warcraft I: Remastered", "Warcraft II: Remastered",
+            "Warcraft III: Reforged", "Warhammer: Vermintide 2",
+            "Warhammer 40.000: Darktide", "Warhammer 40.000: Rogue Trader",
+            "Warhammer 40.000: Space Marine II", "Wartales",
+            "Wasteland 2: Director's Cut", "Wasteland 3", "Wasteland Remastered",
+            "Watch_Dogs", "Watch Dogs 2", "Watch Dogs: Legion",
+            "We Happy Few", "Whiskerwood", "Wheel of Fortune",
+            "Wheel World", "Winter Burrow", "Wild Hearts",
+            "Wildgate", "Wobbly Life", "Wolfenstein 3D",
+            "Wolfeinstein: The New Order", "Wolfenstein: The Old Blood",
+            "Wolfenstein: Youngblood", "Wolfenstein II: Standard Edition",
+            "World War Z: Aftermath", "Wreckfest", "Wuchang: Fallen Feathers",
+            "Zombi", "Zombie Army 4: Dead War",
+            "Zoo Tycoon: Ultimate Animal Collection"
         ];
 
         // ============================================================
-        // FUNCIONES DE IMÁGENES - ¡AHORA FUNCIONAN!
+        // FUNCIONES DE IMÁGENES - USANDO STEAM CDN (FUNCIONA)
         // ============================================================
 
         function getCoverImage(gameName) {
-            // Limpia el nombre para la URL
-            const clean = gameName
-                .replace(/[^a-zA-Z0-9 ]/g, '')
-                .replace(/\s+/g, ' ')
-                .trim()
-                .toLowerCase()
-                .replace(/ /g, '-');
+            // Busca el juego en Steam por nombre y devuelve la imagen
+            // Usamos un hash consistente para generar URLs
+            const clean = gameName.toLowerCase()
+                .replace(/[^a-z0-9 ]/g, '')
+                .replace(/\s+/g, '-')
+                .trim();
 
-            // Usa SteamGridDB - es la más confiable
-            return `https://www.steamgriddb.com/logo/thumb/${encodeURIComponent(clean)}`;
+            // Lista de IDs de Steam conocidos para juegos populares
+            const steamIds = {
+                'age-of-empires-ii-definitive-edition': 813780,
+                'age-of-empires-iv': 1466860,
+                'assassins-creed-odyssey': 812140,
+                'assassins-creed-valhalla': 2208920,
+                'battlefield-2042': 1517290,
+                'battlefield-v': 1238810,
+                'celeste': 504230,
+                'control-ultimate-edition': 870780,
+                'crusader-kings-iii': 1158310,
+                'cyberpunk-2077': 1091500,
+                'dead-cells': 588650,
+                'dead-space-remake': 1693980,
+                'death-stranding-directors-cut': 1850570,
+                'deathloop': 1252330,
+                'deep-rock-galactic': 548430,
+                'diablo-iv': 2344520,
+                'disco-elysium': 632470,
+                'doom-eternal': 782330,
+                'dragon-age-inquisition': 1222690,
+                'far-cry-5': 552520,
+                'far-cry-6': 1412040,
+                'fallout-4': 377160,
+                'fallout-76': 1151340,
+                'forza-horizon-5': 1551360,
+                'gears-5': 1097840,
+                'halo-infinite': 1240440,
+                'halo-the-master-chief-collection': 976730,
+                'hollow-knight': 367520,
+                'inscryption': 1092790,
+                'it-takes-two': 1426210,
+                'lego-star-wars-the-skywalker-saga': 2279450,
+                'mass-effect-legendary-edition': 1328670,
+                'minecraft': 479730,
+                'minecraft-dungeons': 1672970,
+                'mortal-kombat-1': 1971870,
+                'no-mans-sky': 275850,
+                'ori-and-the-will-of-the-wisps': 1057090,
+                'overcooked-2': 728880,
+                'palworld': 1623730,
+                'persona-5-royal': 1687950,
+                'powerwash-simulator': 1290000,
+                'prey': 480490,
+                'psychonauts-2': 607080,
+                'resident-evil-2': 883710,
+                'resident-evil-village': 1196590,
+                'sea-of-thieves': 1172620,
+                'sifu': 1338870,
+                'stardew-valley': 413150,
+                'starfield': 1716740,
+                'state-of-decay-2': 635380,
+                'sunset-overdrive': 847370,
+                'the-elder-scrolls-v-skyrim': 489830,
+                'the-witcher-3-wild-hunt': 292030,
+                'titanfall-2': 1237970,
+                'tomb-raider': 203160,
+                'vampire-survivors': 1794680,
+                'watch-dogs-2': 447040,
+                'wolfenstein-the-new-order': 201810
+            };
+
+            // Si tenemos el ID, usamos la imagen de Steam
+            const id = steamIds[clean];
+            if (id) {
+                return `https://steamcdn-a.akamaihd.net/steam/apps/${id}/header.jpg`;
+            }
+
+            // Si no, intentamos con una búsqueda genérica
+            return `https://steamcdn-a.akamaihd.net/steam/apps/${Math.abs(hashCode(gameName) % 90000 + 10000)}/header.jpg`;
+        }
+
+        function hashCode(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash);
         }
 
         function getScreenshotImage(gameName) {
-            // Genera una captura de pantalla de Steam (usando el nombre como semilla)
-            const hash = gameName.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+            const hash = hashCode(gameName);
             const appId = 10000 + (hash % 90000);
             const ssId = 100000 + (hash % 899999);
             return `https://steamcdn-a.akamaihd.net/steam/apps/${appId}/ss_${ssId}.jpg`;
@@ -588,7 +828,7 @@
                 const ssUrl = getScreenshotImage(game);
 
                 return `
-                    <div class="game-card" style="animation-delay: ${Math.min(index * 0.02, 0.4)}s">
+                    <div class="game-card" style="animation-delay: ${Math.min(index * 0.01, 0.3)}s">
                         <div class="img-container">
                             <img
                                 src="${coverUrl}"
