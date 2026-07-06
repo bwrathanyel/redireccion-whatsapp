@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conectando con tu asesor...</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+            background: #0a0a0a;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #333;
+            border-top: 4px solid #25D366;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .btn {
+            padding: 15px 30px;
+            background: #25D366;
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: bold;
+            display: inline-block;
+            margin: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="loader" id="loader"></div>
+    <p id="mensaje">Conectando con tu asesor...</p>
+    <a href="#" id="link" class="btn" style="display:none;">📱 Abrir WhatsApp</a>
+    
+    <script>
+        const asesoresAleatorios = [
+            "584244634041", "584244900601", "584244900601", 
+            "584244269876", "584127136169", "584127136169"
+        ];
+        const mensajeAleatorio = "¡Buenas!, Vengo de Instagram me gustaría más información 😊";
+        
+        function obtenerParametro(nombre) {
+            var urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(nombre) || '';
+        }
+        
+        var numero = obtenerParametro('numero');
+        var nombre = obtenerParametro('nombre');
+        var destino = obtenerParametro('destino');
+        var asesor = obtenerParametro('asesor');
+        
+        // MODO ALEATORIZADOR (sin parámetros)
+        if (!numero && !nombre && !destino && !asesor) {
+            var elegido = asesoresAleatorios[Math.floor(Math.random() * asesoresAleatorios.length)];
+            var urlFinal = "https://wa.me/" + elegido + "?text=" + encodeURIComponent(mensajeAleatorio);
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('mensaje').textContent = 'Conectando con un asesor...';
+            document.getElementById('mensaje').style.color = '#25D366';
+            setTimeout(function() {
+                window.location.href = urlFinal;
+            }, 500);
+        }
+        // MODO ASESOR (con parámetros)
+        else {
+            // Avisar al script para registrar atención
+            if (nombre && asesor) {
+                fetch('https://script.google.com/macros/s/AKfycbyO-Su3f4yOH_ElwHW0UU6woORiLDxdkoFecLYga-zrNei5jBEP9iV2oIi1wVZDggaVVQ/exec?accion=whatsapp_directo&nombre=' + encodeURIComponent(nombre) + '&destino=' + encodeURIComponent(destino) + '&asesor=' + encodeURIComponent(asesor));
+            }
+            
+            // Redirigir a WhatsApp
+           var mensajeWA = "";
+if (nombre && destino) {
+    mensajeWA = "?text=" + encodeURIComponent("Hola! Vengo de Instagram. Mi nombre es " + nombre + " y me gustaria informacion para viajar a " + destino);
+}
+var urlFinal = "https://wa.me/" + numero + mensajeWA;
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('mensaje').textContent = '✅ Conectando con WhatsApp...';
+            document.getElementById('mensaje').style.color = '#25D366';
+            
+            setTimeout(function() {
+                window.location.href = urlFinal;
+            }, 800);
+        }
+    </script>
+</body>
+</html>
