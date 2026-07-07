@@ -5,13 +5,17 @@ const SUPABASE_KEY = 'sb_publishable_M7Ms9DLwpNSCXZNCDhYtbQ_LhMYeLxk';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const fmt = n => (n ?? 0).toLocaleString('es-VE');
+const money = n => '$' + (Number(n) || 0).toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const fullMonth = k => { const [y, m] = k.split('-'); return MESL[+m - 1] + ' ' + y; };
-const ESTADO_COLORS = { 'POR ATENDER': '#ff9100', 'CLIENTE CONTACTADO': '#4a9eff', 'COTIZACION ENVIADA': '#a06bff', 'EN ESPERA DE PAGO': '#f5b544', 'PAGO REALIZADO': '#10b981', 'Sin gestionar': '#5f677f' };
+const ESTADOS_EDIT = ['POR ATENDER', 'ATENDIDO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'PERDIDO'];
+const ESTADO_COLORS = { 'POR ATENDER': '#ff9100', 'ATENDIDO': '#4a9eff', 'CLIENTE CONTACTADO': '#4a9eff', 'COTIZACION ENVIADA': '#a06bff', 'EN ESPERA DE PAGO': '#f5b544', 'PAGO REALIZADO': '#10b981', 'PERDIDO': '#ef4444', 'Sin gestionar': '#5f677f' };
+const SERVICIOS = ['Vuelos', 'Full Day', 'Hospedaje', 'Paquete Todo Incluido', 'Hotel', 'Tour', 'Evento', 'Otro'];
+const VENTA = 'PAGO REALIZADO';
 const CANAL_CLASS = { 'Instagram': 'ig', 'Facebook': 'fb', 'Ambos': 'am', 'Desconocido': '' };
 const ADV_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a'];
-const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo comercial'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const val = id => document.getElementById(id).value;
@@ -19,9 +23,22 @@ const niceEstado = v => (v === (v || '').toUpperCase() && (v || '').includes(' '
 const sortEntries = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]);
 
 let STATS = {}, page = 1, PER = 25, totalFiltered = 0;
-let activeMonth = null, activeDestino = null;
+let activeMonth = null, activeDestino = null, currentLead = null;
 let trendKeys = [], canalKeys = [], destKeys = [], trendMap = {};
-let previewSel = null;
+let previewSel = null, charts = {};
+let ACTIVOS = [];
+
+/* ---------- Periodos ---------- */
+function periodo(kind) {
+  const now = new Date(); let d = new Date(now);
+  if (kind === 'hoy') { d.setHours(0, 0, 0, 0); return [d, addD(d, 1)]; }
+  if (kind === 'semana') { const w = new Date(now); const day = (w.getDay() + 6) % 7; w.setDate(w.getDate() - day); w.setHours(0, 0, 0, 0); return [w, addD(w, 7)]; }
+  if (kind === 'mes') { const m = new Date(now.getFullYear(), now.getMonth(), 1); return [m, new Date(now.getFullYear(), now.getMonth() + 1, 1)]; }
+  if (kind === 'anio') { return [new Date(now.getFullYear(), 0, 1), new Date(now.getFullYear() + 1, 0, 1)]; }
+  return [addD(now, -30), addD(now, 1)];
+}
+const addD = (dt, n) => { const x = new Date(dt); x.setDate(x.getDate() + n); return x; };
+const iso = dt => dt.toISOString();
 
 /* ---------- Auth ---------- */
 const LOGIN_EMAIL = 'equipo@destinoyeventoslotus360.com';
@@ -29,8 +46,7 @@ let booted = false;
 initAuth();
 async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
-  if (session) startApp();
-  else document.getElementById('login').classList.add('show');
+  if (session) startApp(); else document.getElementById('login').classList.add('show');
 }
 document.getElementById('loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -47,9 +63,11 @@ async function startApp() {
   if (booted) return; booted = true;
   setupNav();
   await loadStats();
+  ACTIVOS = Object.keys(STATS.by_advisor || {});
   renderAll();
   setupFilters();
   await loadTable();
+  setupMetricas(); setupRanking();
   subscribeRealtime();
 }
 function renderAll() { renderKPIs(); renderTrend(); renderCanal(); renderPipe('pipe'); renderPipe('pipe2'); renderDest(); renderAdvisors(); renderAssign(); }
@@ -62,7 +80,7 @@ async function loadStats() {
   document.getElementById('nav-lead-count').textContent = (STATS.total / 1000).toFixed(1).replace('.0', '') + 'k';
 }
 
-/* ---------- KPIs (tocables) ---------- */
+/* ---------- KPIs ---------- */
 function renderKPIs() {
   const thisMonth = new Date().toISOString().slice(0, 7);
   const cards = [
@@ -76,9 +94,8 @@ function renderKPIs() {
   [...box.children].forEach((el, i) => el.onclick = cards[i].go);
 }
 
-/* ---------- Charts ---------- */
+/* ---------- Charts (dashboard) ---------- */
 Chart.defaults.color = '#8b93ad'; Chart.defaults.font.family = 'Inter'; Chart.defaults.font.size = 11;
-let charts = {};
 function mk(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), cfg); }
 const pointer = (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; };
 
@@ -86,73 +103,40 @@ function renderTrend() {
   const t = (STATS.trend || []).slice().sort((a, b) => a.mes.localeCompare(b.mes));
   trendKeys = t.map(x => x.mes);
   const labels = t.map(x => { const [y, m] = x.mes.split('-'); return MES3[+m - 1] + " '" + y.slice(2); });
-  const ctx = document.getElementById('chTrend');
-  const grad = ctx.getContext('2d').createLinearGradient(0, 0, 0, 230);
-  grad.addColorStop(0, 'rgba(255,145,0,.5)'); grad.addColorStop(1, 'rgba(255,145,0,.05)');
   mk('chTrend', {
-    type: 'bar',
-    data: { labels, datasets: [{ data: t.map(x => x.total), backgroundColor: t.map(x => x.mes === (previewSel?.type === 'month' ? previewSel.key : activeMonth) ? '#ffc266' : 'rgba(255,145,0,.72)'), hoverBackgroundColor: '#ffc266', borderRadius: 5, maxBarThickness: 30 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      onClick: (e, el) => { if (el.length) { const k = trendKeys[el[0].index]; chartPreview('month', k, fullMonth(k), 'fa-calendar-day', trendMap[k]); } },
-      onHover: pointer,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => fullMonth(trendKeys[it[0].dataIndex]), label: c => fmt(c.raw) + ' leads' } } },
-      scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } }
-    }
+    type: 'bar', data: { labels, datasets: [{ data: t.map(x => x.total), backgroundColor: t.map(x => x.mes === activeMonth ? '#ffc266' : 'rgba(255,145,0,.72)'), hoverBackgroundColor: '#ffc266', borderRadius: 5, maxBarThickness: 30 }] },
+    options: { responsive: true, maintainAspectRatio: false, onClick: (e, el) => { if (el.length) { const k = trendKeys[el[0].index]; chartPreview('month', k, fullMonth(k), 'fa-calendar-day', trendMap[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => fullMonth(trendKeys[it[0].dataIndex]), label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } }
   });
 }
 function renderCanal() {
   const e = sortEntries(STATS.by_canal); canalKeys = e.map(x => x[0]);
-  mk('chCanal', {
-    type: 'doughnut',
-    data: { labels: canalKeys, datasets: [{ data: e.map(x => x[1]), backgroundColor: ['#ff5c8a', '#a06bff', '#4a9eff', '#5f677f'], borderColor: '#0d1224', borderWidth: 3, hoverOffset: 8 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false, cutout: '64%',
-      onClick: (e, el) => { if (el.length) { const k = canalKeys[el[0].index]; chartPreview('canal', k, k, 'fa-share-nodes', STATS.by_canal[k]); } }, onHover: pointer,
-      plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 14, font: { size: 12 } } }, tooltip: { callbacks: { label: c => c.label + ': ' + fmt(c.raw) } } }
-    }
-  });
+  mk('chCanal', { type: 'doughnut', data: { labels: canalKeys, datasets: [{ data: e.map(x => x[1]), backgroundColor: ['#ff5c8a', '#a06bff', '#4a9eff', '#5f677f'], borderColor: '#0d1224', borderWidth: 3, hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '64%', onClick: (e, el) => { if (el.length) { const k = canalKeys[el[0].index]; chartPreview('canal', k, k, 'fa-share-nodes', STATS.by_canal[k]); } }, onHover: pointer, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 14, font: { size: 12 } } }, tooltip: { callbacks: { label: c => c.label + ': ' + fmt(c.raw) } } } } });
 }
 function renderDest() {
   const e = sortEntries(STATS.top_destinos).slice(0, 8); destKeys = e.map(x => x[0]);
-  mk('chDest', {
-    type: 'bar',
-    data: { labels: destKeys, datasets: [{ data: e.map(x => x[1]), backgroundColor: 'rgba(74,158,255,.75)', hoverBackgroundColor: '#4a9eff', borderRadius: 6, barThickness: 16 }] },
-    options: {
-      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      onClick: (e, el) => { if (el.length) { const k = destKeys[el[0].index]; chartPreview('destino', k, k, 'fa-location-dot', STATS.top_destinos[k]); } }, onHover: pointer,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.raw) + ' leads' } } },
-      scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } }
-    }
-  });
+  mk('chDest', { type: 'bar', data: { labels: destKeys, datasets: [{ data: e.map(x => x[1]), backgroundColor: 'rgba(74,158,255,.75)', hoverBackgroundColor: '#4a9eff', borderRadius: 6, barThickness: 16 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (e, el) => { if (el.length) { const k = destKeys[el[0].index]; chartPreview('destino', k, k, 'fa-location-dot', STATS.top_destinos[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } } });
 }
 function renderAssign() {
   const e = Object.entries(STATS.asignacion_objetivo || {}).sort((a, b) => b[1] - a[1]);
-  mk('chAssign', {
-    type: 'bar',
-    data: { labels: e.map(x => x[0].split(' ')[0]), datasets: [{ data: e.map(x => x[1]), backgroundColor: ADV_COLORS, borderRadius: 7, barThickness: 30 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.raw + '% de los leads' } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { callback: v => v + '%' }, beginAtZero: true } } }
-  });
+  mk('chAssign', { type: 'bar', data: { labels: e.map(x => x[0].split(' ')[0]), datasets: [{ data: e.map(x => x[1]), backgroundColor: ADV_COLORS, borderRadius: 7, barThickness: 30 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.raw + '% de los leads' } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { callback: v => v + '%' }, beginAtZero: true } } } });
 }
 function renderPipe(id) {
-  const order = ['POR ATENDER', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'Sin gestionar'];
-  const be = STATS.by_estado || {}, max = Math.max(...order.map(k => be[k] || 0), 1);
-  document.getElementById(id).innerHTML = order.map(k => {
+  const order = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'PERDIDO', 'Sin gestionar'];
+  const be = STATS.by_estado || {}; const shown = order.filter(k => (be[k] || 0) > 0 || ['POR ATENDER', 'PAGO REALIZADO'].includes(k));
+  const max = Math.max(...shown.map(k => be[k] || 0), 1);
+  document.getElementById(id).innerHTML = shown.map(k => {
     const v = be[k] || 0, w = Math.max((v / max) * 100, 2);
-    return `<div class="pstep" data-est="${k}"><div class="pl">${niceEstado(k)}</div><div class="pbar"><div class="pfill" style="width:${w}%;background:${ESTADO_COLORS[k]}">${v > max * 0.12 ? fmt(v) : ''}</div></div><div class="pv">${fmt(v)}</div></div>`;
+    return `<div class="pstep" data-est="${k}"><div class="pl">${niceEstado(k)}</div><div class="pbar"><div class="pfill" style="width:${w}%;background:${ESTADO_COLORS[k] || '#5f677f'}">${v > max * 0.12 ? fmt(v) : ''}</div></div><div class="pv">${fmt(v)}</div></div>`;
   }).join('');
   document.querySelectorAll('#' + id + ' .pstep').forEach(el => el.onclick = () => { const k = el.dataset.est; chartPreview('estado', k, niceEstado(k), 'fa-diagram-project', be[k] || 0); });
 }
 function renderAdvisors() {
   const e = sortEntries(STATS.by_advisor), max = Math.max(...e.map(x => x[1]), 1);
-  document.getElementById('advList').innerHTML = e.map(([name, v], i) => {
-    const c = ADV_COLORS[i % ADV_COLORS.length];
-    return `<div class="arow adv-click" data-adv="${esc(name)}"><div class="ava" style="background:${c}">${initials(name)}</div><div class="ai"><div class="an"><span>${esc(name)}</span><span class="anv">${fmt(v)} leads</span></div><div class="track"><div class="fill" style="width:${(v / max) * 100}%;background:${c}"></div></div></div></div>`;
-  }).join('') + `<div class="arow" style="opacity:.6"><div class="ava" style="background:#39415c">H</div><div class="ai"><div class="an"><span>Históricos / inactivos</span><span class="anv">${fmt(STATS.historico_inactivo)} leads</span></div><div class="track"><div class="fill" style="width:100%;background:#39415c"></div></div></div></div>`;
+  document.getElementById('advList').innerHTML = e.map(([name, v], i) => { const c = ADV_COLORS[i % ADV_COLORS.length]; return `<div class="arow adv-click" data-adv="${esc(name)}"><div class="ava" style="background:${c}">${initials(name)}</div><div class="ai"><div class="an"><span>${esc(name)}</span><span class="anv">${fmt(v)} leads</span></div><div class="track"><div class="fill" style="width:${(v / max) * 100}%;background:${c}"></div></div></div></div>`; }).join('') + `<div class="arow" style="opacity:.6"><div class="ava" style="background:#39415c">H</div><div class="ai"><div class="an"><span>Históricos / inactivos</span><span class="anv">${fmt(STATS.historico_inactivo)} leads</span></div><div class="track"><div class="fill" style="width:100%;background:#39415c"></div></div></div></div>`;
   document.querySelectorAll('.adv-click').forEach(el => el.onclick = () => { const a = el.dataset.adv; chartPreview('asesor', a, a, 'fa-user-tie', STATS.by_advisor[a]); });
 }
 
-/* ---------- Preview: ver número, luego entrar ---------- */
+/* ---------- Preview + Drill ---------- */
 function chartPreview(type, key, label, icon, count) {
   if (previewSel && previewSel.type === type && previewSel.key === key) { enterDrill(type, key); return; }
   previewSel = { type, key };
@@ -160,17 +144,11 @@ function chartPreview(type, key, label, icon, count) {
   p.innerHTML = `<div class="pp-info"><i class="fas ${icon}"></i><div><div class="pp-label">${esc(label)}</div><div class="pp-count">${fmt(count)} leads</div></div></div><button class="pp-btn">Ver leads <i class="fas fa-arrow-right"></i></button><button class="pp-close"><i class="fas fa-times"></i></button>`;
   p.classList.add('show');
   p.querySelector('.pp-btn').onclick = () => enterDrill(type, key);
-  p.querySelector('.pp-close').onclick = hidePreview;
+  p.querySelector('.pp-close').onclick = () => { previewSel = null; p.classList.remove('show'); if (type === 'month') renderTrend(); };
   if (type === 'month') renderTrend();
 }
-function hidePreview() { previewSel = null; document.getElementById('preview-pill').classList.remove('show'); if (charts.chTrend) renderTrend(); }
-function enterDrill(type, key) {
-  previewSel = null; document.getElementById('preview-pill').classList.remove('show');
-  ({ month: drillMonth, canal: drillCanal, estado: drillEstado, asesor: drillAsesor, destino: drillDestino }[type])(key);
-}
-
-/* ---------- Drill ---------- */
-function clearFiltersQuiet() { ['f-canal', 'f-estado', 'f-asesor', 'f-anio'].forEach(id => document.getElementById(id).value = ''); document.getElementById('global-search').value = ''; activeMonth = null; activeDestino = null; }
+function enterDrill(type, key) { previewSel = null; document.getElementById('preview-pill').classList.remove('show'); ({ month: drillMonth, canal: drillCanal, estado: drillEstado, asesor: drillAsesor, destino: drillDestino }[type])(key); }
+function clearFiltersQuiet() { ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); document.getElementById('global-search').value = ''; activeMonth = null; activeDestino = null; }
 function drillTo(apply) { clearFiltersQuiet(); apply(); activateSection('leads'); page = 1; loadTable(); renderChips(); }
 const drillMonth = m => drillTo(() => { activeMonth = m; });
 const drillCanal = c => drillTo(() => { document.getElementById('f-canal').value = c; });
@@ -180,27 +158,32 @@ const drillDestino = d => drillTo(() => { activeDestino = d; });
 const drillAnio = y => drillTo(() => { document.getElementById('f-anio').value = y; });
 const drillClear = () => drillTo(() => { });
 
-/* ---------- Filters + Table ---------- */
+/* ---------- Filtros + Tabla ---------- */
 function setupFilters() {
   fill('f-canal', Object.keys(STATS.by_canal || {}));
-  fill('f-estado', ['POR ATENDER', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'Sin gestionar']);
-  fill('f-asesor', Object.keys(STATS.by_advisor || {}).concat(['Sin asignar']));
+  fill('f-estado', ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'PERDIDO', 'Sin gestionar']);
+  fill('f-asesor', ACTIVOS.concat(['Sin asignar']));
+  fill('f-servicio', SERVICIOS);
   fill('f-anio', Object.keys(STATS.by_anio || {}).sort().reverse());
-  ['f-canal', 'f-estado', 'f-asesor', 'f-anio'].forEach(id => document.getElementById(id).addEventListener('change', () => { page = 1; loadTable(); renderChips(); }));
+  ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
   let deb; document.getElementById('global-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => { page = 1; loadTable(); renderChips(); }, 300); });
 }
-function fill(id, arr) { const s = document.getElementById(id); [...s.querySelectorAll('option:not([value=""])')].forEach(o => o.remove()); arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = niceEstado(v); s.appendChild(o); }); }
+function fill(id, arr) { const s = document.getElementById(id); if (!s) return; [...s.querySelectorAll('option:not([value=""])')].forEach(o => o.remove()); arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = niceEstado(v); s.appendChild(o); }); }
 
 function renderChips() {
   const box = document.getElementById('active-filters'); if (!box) return;
   const chips = [];
-  if (val('f-canal')) chips.push(['Canal: ' + val('f-canal'), () => setDrop('f-canal', '')]);
-  if (val('f-estado')) chips.push(['Estado: ' + niceEstado(val('f-estado')), () => setDrop('f-estado', '')]);
-  if (val('f-asesor')) chips.push(['Asesor: ' + val('f-asesor'), () => setDrop('f-asesor', '')]);
-  if (val('f-anio')) chips.push(['Año: ' + val('f-anio'), () => setDrop('f-anio', '')]);
-  if (activeMonth) chips.push(['Mes: ' + fullMonth(activeMonth), () => { activeMonth = null; refresh(); }]);
-  if (activeDestino) chips.push(['Destino: ' + activeDestino, () => { activeDestino = null; refresh(); }]);
-  const qs = val('global-search').trim(); if (qs) chips.push(['Buscar: ' + qs, () => { document.getElementById('global-search').value = ''; refresh(); }]);
+  const push = (label, clr) => chips.push([label, clr]);
+  if (val('f-canal')) push('Canal: ' + val('f-canal'), () => setDrop('f-canal', ''));
+  if (val('f-estado')) push('Estado: ' + niceEstado(val('f-estado')), () => setDrop('f-estado', ''));
+  if (val('f-asesor')) push('Asesor: ' + val('f-asesor'), () => setDrop('f-asesor', ''));
+  if (val('f-servicio')) push('Servicio: ' + val('f-servicio'), () => setDrop('f-servicio', ''));
+  if (val('f-anio')) push('Año: ' + val('f-anio'), () => setDrop('f-anio', ''));
+  if (val('f-desde')) push('Desde: ' + val('f-desde'), () => setDrop('f-desde', ''));
+  if (val('f-hasta')) push('Hasta: ' + val('f-hasta'), () => setDrop('f-hasta', ''));
+  if (activeMonth) push('Mes: ' + fullMonth(activeMonth), () => { activeMonth = null; refresh(); });
+  if (activeDestino) push('Destino: ' + activeDestino, () => { activeDestino = null; refresh(); });
+  const qs = val('global-search').trim(); if (qs) push('Buscar: ' + qs, () => { document.getElementById('global-search').value = ''; refresh(); });
   if (!chips.length) { box.innerHTML = ''; return; }
   box.innerHTML = `<span class="chips-label">Filtros:</span>` + chips.map((c, i) => `<span class="fchip">${esc(c[0])} <b data-ci="${i}">✕</b></span>`).join('') + `<button class="clear-all" id="clearAll"><i class="fas fa-times"></i> Limpiar</button>`;
   chips.forEach((c, i) => box.querySelector(`b[data-ci="${i}"]`).onclick = c[1]);
@@ -211,11 +194,14 @@ function refresh() { page = 1; loadTable(); renderChips(); }
 
 function buildQuery(forCount) {
   let q = sb.from('leads').select('*', forCount ? { count: 'exact' } : {});
-  const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), qs = val('global-search').trim();
+  const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim();
   if (fc) q = q.eq('canal', fc);
   if (fe) q = q.eq('estado', fe);
   if (fa) q = q.eq('asesor', fa);
   if (fy) q = q.eq('anio', +fy);
+  if (fs) q = q.eq('servicio', fs);
+  if (fd) q = q.gte('fecha_creacion', fd);
+  if (fh) q = q.lte('fecha_creacion', fh + 'T23:59:59');
   if (activeDestino) q = q.eq('destino', activeDestino);
   if (activeMonth) { const [y, m] = activeMonth.split('-').map(Number); const nm = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; q = q.gte('fecha_creacion', activeMonth + '-01').lt('fecha_creacion', nm + '-01'); }
   if (qs) q = q.or(`nombre.ilike.%${qs}%,telefono.ilike.%${qs}%`);
@@ -254,30 +240,111 @@ function renderPager(pages) {
   if (nx) nx.onclick = () => { page++; loadTable(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 }
 
-/* ---------- Drawer ---------- */
+/* ---------- Drawer editable ---------- */
 function openDrawer(l) {
+  currentLead = l;
   const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
-  const fields = [
-    ['fa-phone', 'Teléfono', esc(l.telefono) || 'No registrado'],
-    ['fa-location-dot', 'Destino de interés', esc(l.destino)],
-    ['fa-comment-dots', 'Consulta original', esc(l.destino_consulta || '—')],
-    ['fa-share-nodes', 'Canal de origen', esc(l.canal)],
-    ['fa-user-tie', 'Asesor asignado', esc(l.asesor)],
-    ['fa-users', 'Personas', esc(l.personas || '—')],
-    ['fa-calendar', 'Fecha estimada de viaje', esc(l.fecha_estimada || '—')],
-    ['fa-clock', 'Fecha de captación', l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : '—'],
-  ];
+  const opt = (arr, sel) => arr.map(v => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(niceEstado(v))}</option>`).join('');
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead"><div class="dava">${initials(l.nombre)}</div><div><div class="dn">${esc(l.nombre)}</div><div class="dm"><span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${niceEstado(l.estado)}</span></div></div></div>
-    ${fields.map(f => `<div class="dfield"><div class="dfi"><i class="fas ${f[0]}"></i></div><div><div class="dfl">${f[1]}</div><div class="dfv">${f[2]}</div></div></div>`).join('')}
-    <div class="dactions">${wa ? `<a class="dbtn wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>` : ''}<button class="dbtn gh"><i class="fas fa-pen"></i> Editar</button></div>
-    <div style="font-size:11px;color:var(--muted2);margin-top:16px;text-align:center">ID: ${esc(l.external_id || l.id)}</div>`;
+    <div class="dhead"><div class="dava">${initials(l.nombre)}</div><div><div class="dn">${esc(l.nombre)}</div>
+      <div class="dm">${esc(l.telefono) || 'Sin teléfono'} · ${esc(l.canal)}</div></div></div>
+
+    <div class="edit-box">
+      <div class="eb-title"><i class="fas fa-sliders"></i> Gestión</div>
+      <label class="fl">Estado</label>
+      <select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>
+      <label class="fl">Asesor asignado</label>
+      <select id="e-asesor" class="ei">${opt(['Sin asignar', ...ACTIVOS], ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar')}</select>
+      <label class="fl">Servicio de interés</label>
+      <select id="e-servicio" class="ei"><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select>
+      <div id="venta-box" class="venta-box ${l.estado === VENTA ? 'show' : ''}">
+        <label class="fl">Monto de la venta (USD)</label>
+        <input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}">
+        <label class="fl">Servicios / paquetes comprados</label>
+        <input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}">
+      </div>
+      <div class="edit-err" id="edit-err"></div>
+      <button class="dbtn save" id="e-save"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>
+    </div>
+
+    <div class="dfield"><div class="dfi"><i class="fas fa-location-dot"></i></div><div><div class="dfl">Destino de interés</div><div class="dfv">${esc(l.destino)}</div></div></div>
+    <div class="dfield"><div class="dfi"><i class="fas fa-comment-dots"></i></div><div><div class="dfl">Consulta original</div><div class="dfv">${esc(l.destino_consulta || '—')}</div></div></div>
+    <div class="dfield"><div class="dfi"><i class="fas fa-users"></i></div><div><div class="dfl">Personas</div><div class="dfv">${esc(l.personas || '—')}</div></div></div>
+    <div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Fecha de captación</div><div class="dfv">${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : '—'}</div></div></div>
+
+    <div class="dactions">${wa ? `<a class="dbtn wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>` : ''}</div>
+    <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">ID: ${esc(l.external_id || l.id)}</div>`;
+
+  document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', e.target.value === VENTA);
+  document.getElementById('e-save').onclick = guardarLead;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
+}
+async function guardarLead() {
+  const btn = document.getElementById('e-save'), err = document.getElementById('edit-err');
+  const estado = val('e-estado'), asesor = val('e-asesor'), servicio = val('e-servicio');
+  const monto = estado === VENTA ? (parseFloat(val('e-monto')) || 0) : null;
+  const comprado = estado === VENTA ? val('e-comprado').trim() : null;
+  err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: currentLead.id, p_estado: estado, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado, p_actor: asesor });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios';
+  if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return; }
+  window.closeDrawer();
+  okToast('Lead actualizado');
+  await loadStats(); renderAll(); loadTable();
 }
 window.closeDrawer = () => { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); };
 document.getElementById('dClose').onclick = window.closeDrawer;
 document.getElementById('drawerBg').onclick = window.closeDrawer;
+
+/* ---------- Métricas ---------- */
+let metPeriodo = 'mes';
+function setupMetricas() {
+  document.querySelectorAll('#met-periodo .seg').forEach(b => b.onclick = () => { document.querySelectorAll('#met-periodo .seg').forEach(x => x.classList.remove('on')); b.classList.add('on'); metPeriodo = b.dataset.p; loadMetricas(); });
+}
+async function loadMetricas() {
+  const [d, h] = periodo(metPeriodo);
+  const { data, error } = await sb.rpc('metricas', { p_desde: iso(d), p_hasta: iso(h) });
+  if (error) { console.error(error); return; }
+  const conv = data.nuevos ? ((data.ventas / data.nuevos) * 100).toFixed(1) : '0';
+  const cards = [
+    { t: 'Clientes nuevos', v: fmt(data.nuevos), i: 'fa-user-plus', c: 'var(--blue)' },
+    { t: 'Atendidos', v: fmt(data.atendidos), i: 'fa-headset', c: 'var(--accent)' },
+    { t: 'Ventas cerradas', v: fmt(data.ventas), i: 'fa-circle-check', c: 'var(--green)' },
+    { t: 'Ingresos', v: money(data.monto), i: 'fa-dollar-sign', c: '#34d399' },
+    { t: 'Conversión', v: conv + '%', i: 'fa-percent', c: 'var(--purple)' },
+  ];
+  document.getElementById('met-kpis').innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  const s = data.serie || [];
+  mk('chSerie', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Nuevos', data: s.map(x => x.nuevos), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }, { label: 'Ventas', data: s.map(x => x.ventas), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.12)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
+  const se = sortEntries(data.por_servicio);
+  mk('chServicio', { type: 'bar', data: { labels: se.map(x => x[0]), datasets: [{ data: se.map(x => x[1]), backgroundColor: '#a06bff', borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } } });
+  document.getElementById('met-servicio-empty').style.display = se.length ? 'none' : 'flex';
+}
+
+/* ---------- Ranking ---------- */
+let rankPeriodo = 'mes', rankSort = 'ventas';
+function setupRanking() {
+  document.querySelectorAll('#rank-periodo .seg').forEach(b => b.onclick = () => { document.querySelectorAll('#rank-periodo .seg').forEach(x => x.classList.remove('on')); b.classList.add('on'); rankPeriodo = b.dataset.p; loadRanking(); });
+}
+async function loadRanking() {
+  const [d, h] = periodo(rankPeriodo);
+  const { data, error } = await sb.rpc('ranking_asesores', { p_desde: iso(d), p_hasta: iso(h) });
+  if (error) { console.error(error); return; }
+  const rows = (data || []).slice().sort((a, b) => (b[rankSort] || 0) - (a[rankSort] || 0));
+  const medal = ['🥇', '🥈', '🥉'];
+  document.getElementById('rank-body').innerHTML = rows.map((r, i) => `
+    <tr>
+      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${ADV_COLORS[i % 6]};color:#0a0a0a">${initials(r.asesor)}</div>${i < 3 ? medal[i] + ' ' : ''}${esc(r.asesor)}</div></td>
+      <td data-label="Nuevos" class="muted">${fmt(r.nuevos)}</td>
+      <td data-label="Atendidos">${fmt(r.atendidos)}</td>
+      <td data-label="Ventas"><b style="color:var(--green)">${fmt(r.ventas)}</b></td>
+      <td data-label="Ingresos"><b>${money(r.monto)}</b></td>
+      <td data-label="Resp. prom." class="muted">${r.horas_respuesta != null ? r.horas_respuesta + 'h' : '—'}</td>
+    </tr>`).join('');
+  const tot = rows.reduce((a, r) => ({ ventas: a.ventas + (+r.ventas || 0), monto: a.monto + (+r.monto || 0), atendidos: a.atendidos + (+r.atendidos || 0) }), { ventas: 0, monto: 0, atendidos: 0 });
+  document.getElementById('rank-tot').innerHTML = `<span>${fmt(tot.atendidos)} atendidos</span><span>${fmt(tot.ventas)} ventas</span><span>${money(tot.monto)} en ingresos</span>`;
+}
 
 /* ---------- Realtime ---------- */
 function subscribeRealtime() {
@@ -287,15 +354,10 @@ function subscribeRealtime() {
     if (page === 1 && document.getElementById('sec-leads').classList.contains('active')) loadTable();
   }).subscribe();
 }
-function toast(l) {
-  const t = document.createElement('div'); t.className = 'toast';
-  t.innerHTML = `<i class="fas fa-bolt"></i> <div><b>Nuevo lead en vivo</b><br>${esc(l.nombre)} · ${esc(l.destino || '')}</div>`;
-  document.getElementById('toasts').appendChild(t);
-  setTimeout(() => t.classList.add('show'), 30);
-  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5200);
-}
+function toast(l) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-bolt"></i> <div><b>Nuevo lead en vivo</b><br>${esc(l.nombre)} · ${esc(l.destino || '')}</div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5200); }
+function okToast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-check"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500); }
 
-/* ---------- Nav (sidebar + bottom) ---------- */
+/* ---------- Nav ---------- */
 function activateSection(sec) {
   document.querySelectorAll('.nav-item,.bn-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -304,6 +366,8 @@ function activateSection(sec) {
   document.getElementById('page-title').textContent = t[0];
   document.getElementById('page-sub').textContent = t[1];
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (sec === 'metricas') loadMetricas();
+  if (sec === 'ranking') loadRanking();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
 function setupNav() { document.querySelectorAll('.nav-item,.bn-item').forEach(n => n.addEventListener('click', () => { if (n.dataset.sec) activateSection(n.dataset.sec); })); }

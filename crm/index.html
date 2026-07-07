@@ -194,6 +194,29 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .toast i{color:var(--green);font-size:16px}.toast b{color:#fff;font-weight:700}
 
 .section{display:none}.section.active{display:block}
+/* formulario de edición (drawer) */
+.edit-box{background:rgba(255,145,0,.05);border:1px solid rgba(255,145,0,.18);border-radius:14px;padding:15px;margin-bottom:18px}
+.eb-title{font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.fl{display:block;font-size:11px;color:var(--muted);font-weight:600;margin:10px 0 5px}
+.ei{width:100%;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:10px;padding:11px 12px;color:var(--txt);font-size:15px;font-family:inherit;outline:none}
+.ei:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238b93ad' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;cursor:pointer;color-scheme:dark}
+.venta-box{display:none;margin-top:8px;padding-top:10px;border-top:1px dashed rgba(255,145,0,.3)}
+.venta-box.show{display:block;animation:fadeSlide .25s ease}
+@keyframes fadeSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.edit-err{color:#ff6b6b;font-size:12px;min-height:14px;margin:8px 0 2px}
+.dbtn.save{background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;width:100%;margin-top:10px}
+.dbtn.save:active{transform:scale(.98)}
+/* toggle de periodo */
+.seg-group{display:inline-flex;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:4px;gap:3px;margin-bottom:16px}
+.seg{background:transparent;border:none;color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 16px;border-radius:9px;cursor:pointer;transition:.15s}
+.seg.on{background:var(--accent-soft);color:#ffd8a8}.seg:hover:not(.on){color:var(--txt)}
+.kpis-5{grid-template-columns:repeat(5,1fr)}
+.fdate{color-scheme:dark;min-width:135px;cursor:pointer}
+#rank-tot{display:flex;gap:12px;flex-wrap:wrap}
+#rank-tot span{background:rgba(255,255,255,.05);padding:3px 11px;border-radius:20px;font-weight:600;color:var(--txt)}
+@media(max-width:1000px){.kpis-5{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:760px){.kpis-5{grid-template-columns:repeat(2,1fr)}.seg-group{width:100%;justify-content:stretch}.seg{flex:1;padding:9px 8px}.fdate{flex:1 1 45%}}
 .foot-note{text-align:center;font-size:11px;color:var(--muted2);margin-top:30px}
 
 /* login */
@@ -287,6 +310,8 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
     <div class="nav-label">Principal</div>
     <a class="nav-item active" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
     <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
+    <a class="nav-item" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
+    <a class="nav-item" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
     <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
     <div class="nav-label">Gestión</div>
     <a class="nav-item" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
@@ -348,7 +373,10 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
           <select class="flt" id="f-canal"><option value="">Todos los canales</option></select>
           <select class="flt" id="f-estado"><option value="">Todos los estados</option></select>
           <select class="flt" id="f-asesor"><option value="">Todos los asesores</option></select>
+          <select class="flt" id="f-servicio"><option value="">Todos los servicios</option></select>
           <select class="flt" id="f-anio"><option value="">Todos los años</option></select>
+          <input type="date" class="flt fdate" id="f-desde" title="Desde esta fecha">
+          <input type="date" class="flt fdate" id="f-hasta" title="Hasta esta fecha">
           <span class="tcount" id="t-count"></span>
         </div>
         <div id="active-filters" class="chips-bar"></div>
@@ -377,6 +405,39 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
       </div>
     </section>
 
+    <!-- MÉTRICAS -->
+    <section class="section" id="sec-metricas">
+      <div class="seg-group" id="met-periodo">
+        <button class="seg" data-p="hoy">Hoy</button>
+        <button class="seg" data-p="semana">Semana</button>
+        <button class="seg on" data-p="mes">Mes</button>
+        <button class="seg" data-p="anio">Año</button>
+      </div>
+      <div class="kpis kpis-5" id="met-kpis"></div>
+      <div class="grid g-2b" style="margin-top:4px">
+        <div class="card"><h3><i class="fas fa-chart-line"></i> Nuevos vs. Ventas</h3><div class="csub">Evolución en el periodo</div><div class="chart-wrap"><canvas id="chSerie"></canvas></div></div>
+        <div class="card"><h3><i class="fas fa-suitcase-rolling"></i> Leads por servicio</h3><div class="csub">Interés por producto</div><div class="chart-wrap" style="position:relative"><canvas id="chServicio"></canvas><div class="tbl-state" id="met-servicio-empty" style="display:none;position:absolute;inset:0"><i class="fas fa-inbox"></i><div class="es-s">Aún sin servicios asignados</div></div></div></div>
+      </div>
+    </section>
+
+    <!-- RANKING -->
+    <section class="section" id="sec-ranking">
+      <div class="seg-group" id="rank-periodo">
+        <button class="seg" data-p="semana">Esta semana</button>
+        <button class="seg on" data-p="mes">Este mes</button>
+      </div>
+      <div class="card">
+        <h3><i class="fas fa-ranking-star"></i> Ranking de asesores</h3>
+        <div class="csub" id="rank-tot"></div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Asesor</th><th>Nuevos</th><th>Atendidos</th><th>Ventas</th><th>Ingresos</th><th>Resp. prom.</th></tr></thead>
+            <tbody id="rank-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <div class="foot-note">Datos reales · Lotus 360 CRM</div>
   </main>
 </div>
@@ -385,8 +446,9 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 <nav class="bottom-nav">
   <a class="bn-item active" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Inicio</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i> Leads</a>
-  <a class="bn-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
-  <a class="bn-item" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
+  <a class="bn-item" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
+  <a class="bn-item" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
+  <a class="bn-item" data-sec="asesores"><i class="fas fa-user-tie"></i> Equipo</a>
 </nav>
 
 <!-- Preview pill -->
