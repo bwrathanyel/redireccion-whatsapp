@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lotus 360 · CRM</title>
+<link rel="icon" href="logolotus.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#080b16; --bg2:#0d1224; --panel:rgba(20,26,48,.72); --panel-solid:#141a30;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
+  --txt:#eef1f8; --muted:#8b93ad; --muted2:#5f677f;
+  --accent:#ff9100; --accent-soft:rgba(255,145,0,.14);
+  --blue:#4a9eff; --green:#10b981; --purple:#a06bff; --amber:#f5b544; --pink:#ff5c8a; --wa:#25D366;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--txt);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background:
+  radial-gradient(900px 500px at 12% -8%,rgba(255,145,0,.10),transparent 60%),
+  radial-gradient(1000px 600px at 110% 10%,rgba(74,158,255,.10),transparent 55%);
+  z-index:-1;pointer-events:none}
+::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:20px}
+::-webkit-scrollbar-track{background:transparent}
+
+.app{display:grid;grid-template-columns:246px 1fr;min-height:100vh}
+
+/* ---------- Sidebar ---------- */
+.sidebar{border-right:1px solid var(--line);padding:20px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:6px;background:linear-gradient(180deg,rgba(13,18,36,.6),rgba(8,11,22,.2))}
+.brand{display:flex;align-items:center;gap:11px;padding:6px 8px 18px}
+.brand img{width:42px;height:42px;border-radius:11px;border:2px solid var(--accent);padding:2px;background:#fff;object-fit:contain}
+.brand .bt{font-weight:800;font-size:15px;letter-spacing:.2px;line-height:1}
+.brand .bs{font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:3px}
+.nav-label{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1.4px;padding:12px 10px 6px;font-weight:600}
+.nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;color:var(--muted);text-decoration:none;font-size:13.5px;font-weight:500;cursor:pointer;transition:.15s;border:1px solid transparent}
+.nav-item i{width:18px;text-align:center;font-size:14px}
+.nav-item:hover{background:rgba(255,255,255,.04);color:var(--txt)}
+.nav-item.active{background:var(--accent-soft);color:#ffd8a8;border-color:rgba(255,145,0,.22)}
+.nav-item.active i{color:var(--accent)}
+.nav-item .badge{margin-left:auto;background:var(--accent);color:#221200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px}
+.side-foot{margin-top:auto;padding:12px 10px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#e0570a);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#1a1000}
+.side-foot .un{font-size:12.5px;font-weight:600}.side-foot .ue{font-size:10.5px;color:var(--muted)}
+.logout-btn{background:transparent;border:1px solid var(--line);color:var(--muted);width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:13px;flex-shrink:0;transition:.15s}
+.logout-btn:hover{color:#ff6b6b;border-color:rgba(255,107,107,.4)}
+
+/* ---------- Main ---------- */
+.main{padding:22px 30px 40px;max-width:1500px;width:100%}
+.topbar{display:flex;align-items:center;gap:18px;margin-bottom:24px}
+.topbar h1{font-size:22px;font-weight:800;letter-spacing:-.3px}
+.topbar .sub{font-size:12.5px;color:var(--muted);margin-top:3px}
+.search{margin-left:auto;position:relative}
+.search input{background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:10px 14px 10px 38px;color:var(--txt);font-size:13px;width:280px;font-family:inherit;outline:none;transition:.15s}
+.search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+.pill{display:inline-flex;align-items:center;gap:7px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:9px 14px;font-size:12.5px;color:var(--muted);font-weight:500}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(16,185,129,.18)}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px 18px 16px;position:relative;overflow:hidden;backdrop-filter:blur(8px)}
+.kpi::after{content:'';position:absolute;right:-20px;top:-20px;width:90px;height:90px;border-radius:50%;opacity:.13;background:var(--kc,var(--accent))}
+.kpi .kt{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px;display:flex;align-items:center;gap:8px}
+.kpi .kt i{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--kc,var(--accent));color:#0a0a0a;font-size:12px;opacity:.95}
+.kpi .kv{font-size:30px;font-weight:800;margin-top:12px;letter-spacing:-.5px}
+.kpi .kd{font-size:11.5px;color:var(--muted);margin-top:5px}
+.kpi .kd b{color:var(--green)}
+
+/* panels grid */
+.grid{display:grid;gap:16px}
+.g-2{grid-template-columns:1.55fr 1fr}
+.g-2b{grid-template-columns:1fr 1fr}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px 20px;backdrop-filter:blur(8px)}
+.card h3{font-size:14px;font-weight:700;display:flex;align-items:center;gap:9px;margin-bottom:4px}
+.card h3 i{color:var(--accent);font-size:13px}
+.card .csub{font-size:11.5px;color:var(--muted);margin-bottom:14px}
+.mt16{margin-top:16px}
+.chart-wrap{position:relative;height:230px}
+.chart-sm{position:relative;height:210px}
+
+/* pipeline */
+.pipe{display:flex;flex-direction:column;gap:9px;margin-top:6px}
+.pstep{display:flex;align-items:center;gap:12px}
+.pstep .pl{font-size:12.5px;width:150px;color:var(--muted);font-weight:500}
+.pstep .pbar{flex:1;height:26px;background:rgba(255,255,255,.04);border-radius:8px;overflow:hidden;position:relative}
+.pstep .pfill{height:100%;border-radius:8px;display:flex;align-items:center;padding-left:10px;font-size:11.5px;font-weight:700;color:#0a0a0a;min-width:34px;transition:width .8s cubic-bezier(.3,1,.4,1)}
+.pstep .pv{width:52px;text-align:right;font-size:13px;font-weight:700}
+
+/* advisor list */
+.adv{display:flex;flex-direction:column;gap:13px;margin-top:6px}
+.arow{display:flex;align-items:center;gap:12px}
+.arow .ava{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:700;font-size:12px;color:#0a0a0a;flex-shrink:0}
+.arow .ai{flex:1;min-width:0}
+.arow .an{font-size:13px;font-weight:600;display:flex;justify-content:space-between;gap:8px}
+.arow .an .anv{color:var(--muted);font-weight:600}
+.arow .track{height:6px;background:rgba(255,255,255,.05);border-radius:10px;margin-top:6px;overflow:hidden}
+.arow .fill{height:100%;border-radius:10px}
+
+/* table */
+.tbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+select.flt{background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:8px 30px 8px 12px;color:var(--txt);font-size:12.5px;font-family:inherit;outline:none;cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238b93ad' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center}
+select.flt:focus{border-color:var(--accent)}
+.tcount{margin-left:auto;font-size:12px;color:var(--muted)}
+table{width:100%;border-collapse:collapse}
+thead th{text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line)}
+tbody td{padding:12px 12px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+tbody tr{cursor:pointer;transition:.12s}
+tbody tr:hover{background:rgba(255,145,0,.05)}
+.lead-name{font-weight:600;display:flex;align-items:center;gap:10px}
+.ln-ava{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#26304f,#1a2138);display:grid;place-items:center;font-size:12px;font-weight:700;color:#c8d0e6;flex-shrink:0}
+.muted{color:var(--muted)}
+.badge-st{font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap;letter-spacing:.2px}
+.chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:7px;background:rgba(255,255,255,.05);color:var(--muted)}
+.chip.ig{color:#ff8fb0;background:rgba(255,92,138,.1)}
+.chip.fb{color:#7fb4ff;background:rgba(74,158,255,.12)}
+.chip.am{color:#c3a0ff;background:rgba(160,107,255,.12)}
+.wa-btn{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:rgba(37,211,102,.12);color:var(--wa);text-decoration:none;font-size:14px;transition:.15s}
+.wa-btn:hover{background:var(--wa);color:#fff}
+.pager{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:16px}
+.pager button{background:var(--panel-solid);border:1px solid var(--line2);color:var(--txt);border-radius:9px;padding:7px 13px;font-size:12.5px;cursor:pointer;font-family:inherit;transition:.15s}
+.pager button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.pager button:disabled{opacity:.4;cursor:default}
+.pager .pinfo{font-size:12.5px;color:var(--muted);padding:0 6px}
+
+/* drawer */
+.drawer-bg{position:fixed;inset:0;background:rgba(4,6,12,.6);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:.25s;z-index:40}
+.drawer-bg.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;height:100vh;width:410px;max-width:92vw;background:var(--bg2);border-left:1px solid var(--line2);transform:translateX(100%);transition:transform .3s cubic-bezier(.3,1,.4,1);z-index:41;padding:24px;overflow-y:auto}
+.drawer.open{transform:translateX(0)}
+.drawer .dclose{position:absolute;top:18px;right:18px;width:34px;height:34px;border-radius:9px;border:1px solid var(--line2);background:transparent;color:var(--muted);cursor:pointer;font-size:15px}
+.drawer .dclose:hover{color:var(--txt);border-color:var(--txt)}
+.dhead{display:flex;align-items:center;gap:14px;margin-bottom:22px;padding-right:40px}
+.dhead .dava{width:54px;height:54px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#e0570a);display:grid;place-items:center;font-size:20px;font-weight:800;color:#1a1000}
+.dhead .dn{font-size:18px;font-weight:800}
+.dhead .dm{font-size:12.5px;color:var(--muted);margin-top:3px}
+.dfield{padding:13px 0;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start}
+.dfield .dfi{width:30px;color:var(--accent);font-size:13px;padding-top:2px}
+.dfield .dfl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.dfield .dfv{font-size:14px;font-weight:600;margin-top:3px;word-break:break-word}
+.dactions{display:flex;gap:10px;margin-top:22px}
+.dbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:12px;font-size:13px;font-weight:700;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:.15s}
+.dbtn.wa{background:var(--wa);color:#fff}.dbtn.wa:hover{filter:brightness(1.08)}
+.dbtn.gh{background:rgba(255,255,255,.06);color:var(--txt);border:1px solid var(--line2)}
+
+.section{display:none}.section.active{display:block}
+/* login */
+#login{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 600px at 50% -10%,rgba(255,145,0,.14),transparent 60%),#080b16}
+#login.show{display:flex}
+.login-card{width:340px;max-width:90vw;background:var(--panel-solid);border:1px solid var(--line2);border-radius:20px;padding:34px 28px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+.login-card img{width:64px;height:64px;border-radius:15px;border:2px solid var(--accent);padding:3px;background:#fff;object-fit:contain}
+.login-card h1{font-size:19px;font-weight:800;margin-top:14px}
+.login-card p{font-size:12.5px;color:var(--muted);margin-top:4px;margin-bottom:22px}
+.login-field{position:relative;margin-bottom:12px}
+.login-field i{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+.login-field input{width:100%;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:12px;padding:13px 14px 13px 40px;color:var(--txt);font-size:14px;font-family:inherit;outline:none;transition:.15s}
+.login-field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.login-err{color:#ff6b6b;font-size:12px;min-height:16px;margin-bottom:8px;font-weight:500}
+#loginBtn{width:100%;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s}
+#loginBtn:hover{filter:brightness(1.07)}#loginBtn:active{transform:scale(.98)}#loginBtn:disabled{opacity:.6;cursor:default}
+.login-foot{font-size:11px;color:var(--muted2);margin-top:16px}
+/* toasts */
+#toasts{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:10px;z-index:60}
+.toast{display:flex;align-items:center;gap:12px;background:var(--panel-solid);border:1px solid rgba(37,211,102,.4);border-left:4px solid var(--green);border-radius:12px;padding:13px 16px;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.5);transform:translateX(130%);opacity:0;transition:.3s cubic-bezier(.3,1,.4,1);max-width:300px}
+.toast.show{transform:translateX(0);opacity:1}
+.toast i{color:var(--green);font-size:16px}
+.toast b{color:#fff;font-weight:700}
+/* filtros activos (chips) */
+.chips-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;min-height:0}
+.chips-bar:empty{margin:0}
+.chips-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.fchip{display:inline-flex;align-items:center;gap:8px;background:var(--accent-soft);border:1px solid rgba(255,145,0,.3);color:#ffd8a8;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600}
+.fchip b{cursor:pointer;color:#ffb04d;font-size:12px;opacity:.8}.fchip b:hover{opacity:1}
+.clear-all{background:transparent;border:1px solid var(--line2);color:var(--muted);border-radius:20px;padding:5px 12px;font-size:11.5px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}
+.clear-all:hover{color:var(--txt);border-color:var(--txt)}
+/* clic en tarjetas/gráficas */
+.kpi-click{cursor:pointer;transition:transform .12s,border-color .15s}.kpi-click:hover{transform:translateY(-2px);border-color:rgba(255,145,0,.35)}
+.pstep{cursor:pointer;border-radius:8px;transition:background .12s;padding:2px 4px;margin:0 -4px}.pstep:hover{background:rgba(255,255,255,.03)}
+.adv-click{cursor:pointer;border-radius:10px;transition:background .12s;padding:4px;margin:-4px}.adv-click:hover{background:rgba(255,255,255,.03)}
+.foot-note{text-align:center;font-size:11px;color:var(--muted2);margin-top:30px}
+@media(max-width:1100px){.kpis{grid-template-columns:repeat(2,1fr)}.g-2,.g-2b{grid-template-columns:1fr}}
+@media(max-width:760px){.app{grid-template-columns:1fr}.sidebar{display:none}.main{padding:16px}}
+</style>
+</head>
+<body>
+<!-- Pantalla de acceso -->
+<div id="login">
+  <form id="loginForm" class="login-card">
+    <img src="logolotus.png" alt="Lotus 360">
+    <h1>Lotus 360 · CRM</h1>
+    <p>Acceso privado del equipo</p>
+    <div class="login-field">
+      <i class="fas fa-lock"></i>
+      <input id="loginPwd" type="password" placeholder="Contraseña" autocomplete="current-password" autofocus>
+    </div>
+    <div class="login-err" id="loginErr"></div>
+    <button type="submit" id="loginBtn">Entrar <i class="fas fa-arrow-right"></i></button>
+    <div class="login-foot">Se recordará en este navegador</div>
+  </form>
+</div>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="logolotus.png" alt="Lotus 360">
+      <div><div class="bt">Lotus 360</div><div class="bs">CRM</div></div>
+    </div>
+    <div class="nav-label">Principal</div>
+    <a class="nav-item active" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
+    <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
+    <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
+    <div class="nav-label">Gestión</div>
+    <a class="nav-item" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
+    <a class="nav-item" data-sec="dashboard"><i class="fas fa-bullhorn"></i> Campañas</a>
+    <a class="nav-item" data-sec="dashboard"><i class="fas fa-gear"></i> Configuración</a>
+    <div class="side-foot">
+      <div class="avatar">L</div>
+      <div style="flex:1"><div class="un">Lotus Admin</div><div class="ue">Equipo comercial</div></div>
+      <button class="logout-btn" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="page-title">Dashboard</h1>
+        <div class="sub" id="page-sub">Resumen general de leads · Destinos y Eventos Lotus 360</div>
+      </div>
+      <div class="search"><i class="fas fa-search"></i><input id="global-search" placeholder="Buscar lead por nombre o teléfono..."></div>
+      <div class="pill"><span class="dot"></span> En línea</div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <section class="section active" id="sec-dashboard">
+      <div class="kpis" id="kpis"></div>
+      <div class="grid g-2" style="margin-bottom:16px">
+        <div class="card">
+          <h3><i class="fas fa-chart-line"></i> Leads por mes</h3>
+          <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Clic en un mes para ver esos leads</div>
+          <div class="chart-wrap"><canvas id="chTrend"></canvas></div>
+        </div>
+        <div class="card">
+          <h3><i class="fas fa-share-nodes"></i> Origen del lead</h3>
+          <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Clic en un canal para filtrar</div>
+          <div class="chart-sm"><canvas id="chCanal"></canvas></div>
+        </div>
+      </div>
+      <div class="grid g-2b">
+        <div class="card">
+          <h3><i class="fas fa-diagram-project"></i> Embudo del pipeline</h3>
+          <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Clic en una etapa para ver esos leads</div>
+          <div class="pipe" id="pipe"></div>
+        </div>
+        <div class="card">
+          <h3><i class="fas fa-location-dot"></i> Destinos más solicitados</h3>
+          <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Clic en un destino para ver sus leads</div>
+          <div class="chart-wrap" style="height:250px"><canvas id="chDest"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEADS -->
+    <section class="section" id="sec-leads">
+      <div class="card">
+        <div class="tbar">
+          <select class="flt" id="f-canal"><option value="">Todos los canales</option></select>
+          <select class="flt" id="f-estado"><option value="">Todos los estados</option></select>
+          <select class="flt" id="f-asesor"><option value="">Todos los asesores</option></select>
+          <select class="flt" id="f-anio"><option value="">Todos los años</option></select>
+          <span class="tcount" id="t-count"></span>
+        </div>
+        <div id="active-filters" class="chips-bar"></div>
+        <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th>Cliente</th><th>Teléfono</th><th>Destino</th><th>Canal</th><th>Asesor</th><th>Estado</th><th>Fecha</th><th></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        </div>
+        <div class="pager" id="pager"></div>
+      </div>
+    </section>
+
+    <!-- PIPELINE -->
+    <section class="section" id="sec-pipeline">
+      <div class="card"><h3><i class="fas fa-diagram-project"></i> Embudo detallado</h3><div class="csub">Conversión por etapa</div><div class="pipe" id="pipe2"></div></div>
+    </section>
+
+    <!-- ASESORES -->
+    <section class="section" id="sec-asesores">
+      <div class="grid g-2b">
+        <div class="card"><h3><i class="fas fa-user-tie"></i> Carga por asesor</h3><div class="csub">Leads asignados (histórico) — 6 asesores activos</div><div class="adv" id="advList"></div></div>
+        <div class="card"><h3><i class="fas fa-scale-balanced"></i> Reparto objetivo</h3><div class="csub">Ponderación configurable del aleatorizador</div><div class="chart-wrap" style="height:280px"><canvas id="chAssign"></canvas></div></div>
+      </div>
+    </section>
+
+    <div class="foot-note">Prototipo visual · datos reales del histórico (47.665 leads) · Lotus 360 CRM — Fase 1</div>
+  </main>
+</div>
+
+<!-- Toasts en vivo -->
+<div id="toasts"></div>
+
+<!-- Drawer -->
+<div class="drawer-bg" id="drawerBg"></div>
+<aside class="drawer" id="drawer">
+  <button class="dclose" id="dClose"><i class="fas fa-times"></i></button>
+  <div id="drawerContent"></div>
+</aside>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
