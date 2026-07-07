@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#1a1a2e" id="theme-color">
+    <meta name="theme-color" content="#0a1020" id="theme-color">
     
     <!-- ============ SEO PRIMARIO ============ -->
     <title>Cotiza tu Boleto Aéreo | Lotus 360 · Vuelos en Venezuela</title>
@@ -87,14 +87,19 @@
     }
     </script>
     
-    <link rel="preload" as="image" href="https://destinoyeventoslotus360.com/lotus360background.jpg" fetchpriority="high">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://api.sheetmonkey.io">
+    <link rel="dns-prefetch" href="https://wa.me">
+    <link rel="preload" as="image" href="https://destinoyeventoslotus360.com/lotus360backgroundmobile.jpg" media="(max-width: 768px)">
+    <link rel="preload" as="image" href="https://destinoyeventoslotus360.com/lotus360background.jpg" media="(min-width: 769px)">
     <link rel="preload" as="image" href="https://destinoyeventoslotus360.com/logolotus.png" fetchpriority="high">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
     <style>
         :root { --accent: #ff9100; --accent-blue: #4a9eff; --color-fullday: #10b981; --success: #25D366; --text-warm: #ffe0b2; --card-bg: rgba(15,20,40,0.65); }
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
         input, textarea, select { -webkit-user-select: text; user-select: text; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a1020; min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 0 10px 36px; position: relative; overflow-x: hidden; -webkit-font-smoothing: antialiased; animation: pageEnter 0.35s ease; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a1020; min-height: 100vh; min-height: 100dvh; display: flex; justify-content: center; align-items: flex-start; padding: 0 max(10px, env(safe-area-inset-right)) calc(36px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); position: relative; overflow-x: hidden; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; animation: pageEnter 0.35s ease; }
         @keyframes pageEnter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         body.salir { animation: pageExit 0.25s ease forwards; } @keyframes pageExit { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(-25px); } }
         body::before { content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 3px; background: linear-gradient(90deg, transparent 0%, rgba(74,158,255,0.3) 15%, rgba(74,158,255,0.6) 30%, rgba(100,180,255,0.4) 50%, rgba(74,158,255,0.6) 70%, rgba(74,158,255,0.3) 85%, transparent 100%); z-index: 10; pointer-events: none; }
@@ -176,7 +181,7 @@
         .select-desc { font-size: 9px; color: rgba(168,209,255,0.6); margin-top: 3px; font-style: italic; min-height: 16px; display: flex; align-items: center; gap: 4px; } .select-desc i { font-size: 8px; color: var(--accent-blue); }
         @media (max-width: 360px) { body { padding: 0 8px 32px; } .card { padding-top: 20px; } .form-section { padding: 12px; } .ruta-punto .codigo { font-size: 16px; } }
         @media (min-width: 768px) { .card { transform: scale(1.12); transform-origin: top center; } }
-        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+        @media (prefers-reduced-motion: reduce) { body { animation-duration: 0.01ms !important; } .confeti { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }
     </style>
 </head>
 <body>
@@ -394,7 +399,7 @@
         
         <nav class="footer-servicios" aria-label="Servicios de Lotus 360">
             <a href="https://destinoyeventoslotus360.com/tour/" class="footer-servicio fullday" title="Full Day y Tours"><i class="fas fa-umbrella-beach" aria-hidden="true"></i> Full Day</a>
-            <a href="https://destinoyeventoslotus360.com/weblotus360/" class="footer-servicio hospedaje" title="Hospedaje"><i class="fas fa-hotel" aria-hidden="true"></i> Hospedaje</a>
+            <a href="https://destinoyeventoslotus360.com/hospedaje/" class="footer-servicio hospedaje" title="Hospedaje"><i class="fas fa-hotel" aria-hidden="true"></i> Hospedaje</a>
             <span class="footer-servicio activo" aria-current="page"><i class="fas fa-plane" aria-hidden="true"></i> Boletería</span>
         </nav>
         
@@ -404,7 +409,6 @@
     </main>
 
 <script>
-(function() { var img = new Image(); img.src = 'https://destinoyeventoslotus360.com/lotus360background.jpg'; })();
 function transicionSalida(e) { e.preventDefault(); document.body.classList.add('salir'); setTimeout(function() { window.location.href = document.getElementById('homeBtn').href; }, 250); }
 (function() { var ahora = new Date(); var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000); var dia = ve.getDay(); var horaDecimal = ve.getHours() + ve.getMinutes() / 60; var online = (dia >= 1 && dia <= 6) ? (horaDecimal >= 8.5 && horaDecimal < 19) : (dia === 0 && horaDecimal >= 10 && horaDecimal < 15); document.getElementById('estado-dot').className = 'dot ' + (online ? 'online' : 'offline'); document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Domingos 10am-3pm' : 'Lun-Sáb 8:30am-7pm'); })();
 function hoyISO() { return new Date().toISOString().split('T')[0]; }

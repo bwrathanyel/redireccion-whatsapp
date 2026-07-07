@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#1a1a2e" id="theme-color">
+    <meta name="theme-color" content="#0a1020" id="theme-color">
     
     <!-- ============ SEO PRIMARIO ============ -->
     <title>Destino y Eventos Lotus 360 · Agencia de Viajes en Venezuela</title>
@@ -93,13 +93,18 @@
     }
     </script>
     
-    <link rel="preload" as="image" href="https://destinoyeventoslotus360.com/lotus360background.jpg">
-    <link rel="preload" as="image" href="https://destinoyeventoslotus360.com/logolotus.png">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="dns-prefetch" href="https://wa.me">
+    <link rel="dns-prefetch" href="https://ig.me">
+    <link rel="preload" as="image" href="https://destinoyeventoslotus360.com/lotus360backgroundmobile.jpg" media="(max-width: 768px)">
+    <link rel="preload" as="image" href="https://destinoyeventoslotus360.com/lotus360background.jpg" media="(min-width: 769px)">
+    <link rel="preload" as="image" href="https://destinoyeventoslotus360.com/logolotus.png" fetchpriority="high">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
     <style>
         :root { --accent: #ff9100; --color-fullday: #10b981; --color-hospedaje: #ff9100; --color-boleteria: #4a9eff; --success: #25D366; --text-warm: #ffe0b2; }
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a1020; color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 0 14px 100px; position: relative; overflow-x: hidden; -webkit-font-smoothing: antialiased; animation: pageEnter 0.4s ease; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a1020; color: #fff; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; padding: 0 max(14px, env(safe-area-inset-right)) calc(100px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); position: relative; overflow-x: hidden; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; animation: pageEnter 0.4s ease; }
         @keyframes pageEnter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         body::before { content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 3px; background: linear-gradient(90deg, transparent 0%, rgba(255,145,0,0.3) 15%, rgba(255,145,0,0.6) 30%, rgba(255,180,100,0.4) 50%, rgba(255,145,0,0.6) 70%, rgba(255,145,0,0.3) 85%, transparent 100%); z-index: 10; pointer-events: none; }
         .skip-link { position: absolute; top: -40px; left: 0; background: #ff9100; color: #fff; padding: 8px; z-index: 100; transition: top 0.2s; text-decoration: none; }
@@ -193,11 +198,11 @@
         .footer-icon:hover { background: var(--accent); }
         .footer-icon:active { transform: scale(0.9); background: var(--accent); }
         .footer-copy { font-size: 8px; color: rgba(255,255,255,0.2); text-align: center; }
-        .wa-float { position: fixed; bottom: 16px; right: 16px; width: 50px; height: 50px; border-radius: 50%; background: #25D366; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; text-decoration: none; z-index: 20; box-shadow: 0 6px 18px rgba(0,0,0,0.4); animation: pulso-wa 2.6s infinite; }
+        .wa-float { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom)); right: calc(16px + env(safe-area-inset-right)); width: 50px; height: 50px; border-radius: 50%; background: #25D366; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; text-decoration: none; z-index: 20; box-shadow: 0 6px 18px rgba(0,0,0,0.4); animation: pulso-wa 2.6s infinite; }
         @keyframes pulso-wa { 0%,100% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 0 rgba(37,211,102,0.5); } 50% { box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 0 0 10px rgba(37,211,102,0); } }
         @media (max-width: 360px) { body { padding: 0 8px 90px; } .container { padding-top: 20px; } .cta-card { padding: 14px 4px 12px; } .cta-card .titulo { font-size: 11px; } }
         @media (min-width: 768px) { .container { transform: scale(1.20); transform-origin: top center; } }
-        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }
+        @media (prefers-reduced-motion: reduce) { body { animation-duration: 0.01ms !important; } }
     </style>
 </head>
 <body>
@@ -216,7 +221,7 @@
         <nav class="servicios-nav" aria-label="Navegación de servicios">
             <a href="https://destinoyeventoslotus360.com/tour/" class="fullday">🌴 Full Day</a>
             <span class="nav-sep" aria-hidden="true"></span>
-            <a href="https://destinoyeventoslotus360.com/weblotus360/" class="hospedaje">🏨 Hospedaje</a>
+            <a href="https://destinoyeventoslotus360.com/hospedaje/" class="hospedaje">🏨 Hospedaje</a>
             <span class="nav-sep" aria-hidden="true"></span>
             <a href="https://destinoyeventoslotus360.com/boleteria/" class="boleteria">✈️ Boletería</a>
         </nav>
@@ -262,7 +267,7 @@
                 <div class="titulo">Full Day</div>
                 <div class="desc">Escápate a Cayo Sal</div>
             </a>
-            <a href="https://destinoyeventoslotus360.com/weblotus360/" class="cta-card" style="border-color:rgba(255,145,0,0.2);">
+            <a href="https://destinoyeventoslotus360.com/hospedaje/" class="cta-card" style="border-color:rgba(255,145,0,0.2);">
                 <i class="fas fa-hotel" style="color:#ff9100;" aria-hidden="true"></i>
                 <div class="titulo">Hospedaje</div>
                 <div class="desc">Hoteles al mejor precio</div>
@@ -304,10 +309,9 @@
         </footer>
     </main>
     
-    <a href="https://wa.me/584244634041" class="wa-float" title="Escríbenos por WhatsApp" aria-label="WhatsApp"><i class="fab fa-whatsapp"></i></a>
+    <a href="https://wa.me/584244634041?text=Hola!%20Vengo%20de%20su%20p%C3%A1gina%20web." class="wa-float" target="_blank" rel="noopener" title="Escríbenos por WhatsApp" aria-label="Escríbenos por WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></a>
 
 <script>
-(function() { var img = new Image(); img.src = 'https://destinoyeventoslotus360.com/lotus360background.jpg'; })();
 (function() {
     var ahora = new Date(); var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
     var dia = ve.getDay(); var horaDecimal = ve.getHours() + ve.getMinutes() / 60;
@@ -354,7 +358,7 @@ function seleccionarItem(item) {
     destinoDesc.textContent = item.getAttribute('data-desc');
     destinoPais.textContent = '📍 ' + (item.getAttribute('data-pais') || '');
     
-    var hospedajeURL = 'https://destinoyeventoslotus360.com/weblotus360/';
+    var hospedajeURL = 'https://destinoyeventoslotus360.com/hospedaje/';
     if (destino !== 'Y muchos más') {
         hospedajeURL += '?destino=' + encodeURIComponent(destino);
         btnQuieroIr.href = hospedajeURL;
