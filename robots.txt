@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /crm/
+Disallow: /Ambar/
+Disallow: /Luis-Rueda/
+Disallow: /Nicoll/
+Disallow: /whatsapp/
+Disallow: /whatsapplotus/
+Disallow: /telegram-whatsapp/
+Disallow: /weblotus360/
+Disallow: /LotusFullDay
+
+Sitemap: https://destinoyeventoslotus360.com/sitemap.xml
