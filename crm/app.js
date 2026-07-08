@@ -43,9 +43,11 @@ const iso = dt => dt.toISOString();
 /* ---------- Auth ---------- */
 const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
+const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
+const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
 let booted = false, ROL = null, MI_NOMBRE = null;
 const overlay = id => document.getElementById(id);
-const showOverlay = id => ['login', 'setup', 'forgot', 'marketing-placeholder'].forEach(o => overlay(o).classList.toggle('show', o === id));
+const showOverlay = id => OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id));
 
 initAuth();
 async function initAuth() {
@@ -161,6 +163,56 @@ document.getElementById('forgotForm').addEventListener('submit', async e => {
     showOverlay('login');
   } catch (_e) {
     btn.disabled = false; btn.innerHTML = 'Cambiar contraseña <i class="fas fa-arrow-right"></i>';
+    errEl.textContent = 'Error de conexión, intenta de nuevo';
+  }
+});
+
+/* ---------- Configurar usuario (reclamar cuenta, sin contraseña previa) ---------- */
+const ROL_LABEL = { admin: 'Admin', asesor: 'Asesor', marketing: 'Marketing' };
+let claimUsername = null;
+
+document.getElementById('claimLink').addEventListener('click', e => { e.preventDefault(); abrirListaClaim(); });
+document.getElementById('claimBackToLogin').addEventListener('click', e => { e.preventDefault(); showOverlay('login'); });
+document.getElementById('claimFormBack').addEventListener('click', e => { e.preventDefault(); abrirListaClaim(); });
+
+async function abrirListaClaim() {
+  showOverlay('claim-list');
+  const box = document.getElementById('claimListItems'), errEl = document.getElementById('claimListErr');
+  errEl.textContent = ''; box.innerHTML = '<div class="claim-empty">Cargando...</div>';
+  const { data, error } = await sb.rpc('listar_usuarios_disponibles');
+  if (error) { box.innerHTML = ''; errEl.textContent = 'No se pudo cargar la lista, intenta de nuevo'; return; }
+  if (!data || !data.length) { box.innerHTML = '<div class="claim-empty">Todos los usuarios ya están configurados.</div>'; return; }
+  box.innerHTML = data.map(u => `<div class="claim-item" data-u="${esc(u.username)}"><span class="cn">${esc(u.nombre)}</span><span class="cr">${ROL_LABEL[u.rol] || u.rol}</span></div>`).join('');
+  box.querySelectorAll('.claim-item').forEach(el => el.onclick = () => abrirFormClaim(el.dataset.u, el.querySelector('.cn').textContent));
+}
+
+function abrirFormClaim(username, nombre) {
+  claimUsername = username;
+  document.getElementById('claimFormTitle').textContent = 'Hola, ' + nombre;
+  document.getElementById('claimForm').reset();
+  document.getElementById('claimFormErr').textContent = '';
+  showOverlay('claim-form');
+}
+
+document.getElementById('claimForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('claimFormBtn'), errEl = document.getElementById('claimFormErr');
+  const p1 = val('claimPwd'), p2 = val('claimPwd2'), pregunta = val('claimPregunta').trim(), respuesta = val('claimRespuesta').trim();
+  errEl.textContent = '';
+  if (p1.length < 6) { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
+  if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
+  if (!pregunta || !respuesta) { errEl.textContent = 'Completa la pregunta y la respuesta de seguridad'; return; }
+  btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
+  try {
+    const r = await fetch(CLAIM_FN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: claimUsername, password: p1, pregunta, respuesta }) });
+    const data = await r.json();
+    btn.disabled = false; btn.innerHTML = 'Crear mi acceso <i class="fas fa-arrow-right"></i>';
+    if (!data.ok) { errEl.textContent = data.error === 'ya_reclamado' ? 'Ese usuario ya fue configurado por otra persona' : 'No se pudo crear el acceso, intenta de nuevo'; return; }
+    okToast('Usuario configurado, ya puedes entrar');
+    document.getElementById('loginUser').value = claimUsername;
+    showOverlay('login');
+  } catch (_e) {
+    btn.disabled = false; btn.innerHTML = 'Crear mi acceso <i class="fas fa-arrow-right"></i>';
     errEl.textContent = 'Error de conexión, intenta de nuevo';
   }
 });

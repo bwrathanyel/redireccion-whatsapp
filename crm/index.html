@@ -221,8 +221,14 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .foot-note{text-align:center;font-size:11px;color:var(--muted2);margin-top:30px}
 
 /* login */
-#login,#setup,#forgot,#marketing-placeholder{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 600px at 50% -10%,rgba(255,145,0,.14),transparent 60%),#080b16;padding:20px}
-#login.show,#setup.show,#forgot.show,#marketing-placeholder.show{display:flex}
+#login,#setup,#forgot,#marketing-placeholder,#claim-list,#claim-form{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 600px at 50% -10%,rgba(255,145,0,.14),transparent 60%),#080b16;padding:20px}
+#login.show,#setup.show,#forgot.show,#marketing-placeholder.show,#claim-list.show,#claim-form.show{display:flex}
+.claim-list-items{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;max-height:280px;overflow-y:auto}
+.claim-item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.15s;text-align:left}
+.claim-item:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.claim-item .cn{font-weight:600;font-size:13.5px}
+.claim-item .cr{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;background:rgba(255,255,255,.06);padding:3px 8px;border-radius:20px}
+.claim-empty{font-size:12.5px;color:var(--muted);padding:10px 0}
 .login-card{width:340px;max-width:100%;background:var(--panel-solid);border:1px solid var(--line2);border-radius:20px;padding:34px 28px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.5)}
 .login-card img{width:64px;height:64px;border-radius:15px;border:2px solid var(--accent);padding:3px;background:#fff;object-fit:contain}
 .login-card h1{font-size:19px;font-weight:800;margin-top:14px}
@@ -306,6 +312,37 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
     <div class="login-err" id="loginErr"></div>
     <button type="submit" id="loginBtn">Entrar <i class="fas fa-arrow-right"></i></button>
     <div class="login-foot"><a href="#" id="forgotLink">¿Olvidaste tu contraseña?</a></div>
+    <div class="login-foot"><a href="#" id="claimLink">¿Primera vez? Configura tu usuario</a></div>
+  </form>
+</div>
+
+<div id="claim-list">
+  <div class="login-card">
+    <img src="logolotus.png" alt="Lotus 360">
+    <h1>Configura tu usuario</h1>
+    <p>Elegí tu nombre en la lista para crear tu contraseña y pregunta de seguridad. Si no aparece, ya está configurado.</p>
+    <div id="claimListItems" class="claim-list-items"></div>
+    <div class="login-err" id="claimListErr"></div>
+    <div class="login-foot"><a href="#" id="claimBackToLogin">Volver al login</a></div>
+  </div>
+</div>
+
+<div id="claim-form">
+  <form id="claimForm" class="login-card">
+    <img src="logolotus.png" alt="Lotus 360">
+    <h1 id="claimFormTitle">Configura tu usuario</h1>
+    <p>Elegí tu contraseña definitiva y una pregunta de seguridad (sirve para recuperar el acceso sin correo)</p>
+    <div class="login-field"><i class="fas fa-lock"></i>
+      <input id="claimPwd" type="password" placeholder="Contraseña nueva" autocomplete="new-password"></div>
+    <div class="login-field"><i class="fas fa-lock"></i>
+      <input id="claimPwd2" type="password" placeholder="Repite la contraseña" autocomplete="new-password"></div>
+    <div class="login-field"><i class="fas fa-circle-question"></i>
+      <input id="claimPregunta" type="text" placeholder="Tu pregunta de seguridad" autocomplete="off"></div>
+    <div class="login-field"><i class="fas fa-key"></i>
+      <input id="claimRespuesta" type="text" placeholder="Tu respuesta" autocomplete="off"></div>
+    <div class="login-err" id="claimFormErr"></div>
+    <button type="submit" id="claimFormBtn">Crear mi acceso <i class="fas fa-arrow-right"></i></button>
+    <div class="login-foot"><a href="#" id="claimFormBack">Elegir otro usuario</a></div>
   </form>
 </div>
 
