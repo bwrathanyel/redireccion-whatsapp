@@ -221,8 +221,8 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .foot-note{text-align:center;font-size:11px;color:var(--muted2);margin-top:30px}
 
 /* login */
-#login{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 600px at 50% -10%,rgba(255,145,0,.14),transparent 60%),#080b16;padding:20px}
-#login.show{display:flex}
+#login,#setup,#forgot,#marketing-placeholder{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 600px at 50% -10%,rgba(255,145,0,.14),transparent 60%),#080b16;padding:20px}
+#login.show,#setup.show,#forgot.show,#marketing-placeholder.show{display:flex}
 .login-card{width:340px;max-width:100%;background:var(--panel-solid);border:1px solid var(--line2);border-radius:20px;padding:34px 28px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.5)}
 .login-card img{width:64px;height:64px;border-radius:15px;border:2px solid var(--accent);padding:3px;background:#fff;object-fit:contain}
 .login-card h1{font-size:19px;font-weight:800;margin-top:14px}
@@ -235,6 +235,9 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 #loginBtn{width:100%;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s}
 #loginBtn:hover{filter:brightness(1.07)}#loginBtn:active{transform:scale(.98)}#loginBtn:disabled{opacity:.6}
 .login-foot{font-size:11px;color:var(--muted2);margin-top:16px}
+.login-foot a{color:var(--accent);text-decoration:none;font-weight:600}
+.rol-asesor .nav-admin-only{display:none}
+.rol-asesor #f-asesor{display:none}
 
 /* ============ MÓVIL ============ */
 @media(max-width:900px){.g-2,.g-2b{grid-template-columns:1fr}}
@@ -296,12 +299,60 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
     <img src="logolotus.png" alt="Lotus 360">
     <h1>Lotus 360 · CRM</h1>
     <p>Acceso privado del equipo</p>
+    <div class="login-field"><i class="fas fa-user"></i>
+      <input id="loginUser" type="text" placeholder="Usuario" autocomplete="username" autocapitalize="off" autocorrect="off" autofocus></div>
     <div class="login-field"><i class="fas fa-lock"></i>
-      <input id="loginPwd" type="password" placeholder="Contraseña" autocomplete="current-password" autofocus></div>
+      <input id="loginPwd" type="password" placeholder="Contraseña" autocomplete="current-password"></div>
     <div class="login-err" id="loginErr"></div>
     <button type="submit" id="loginBtn">Entrar <i class="fas fa-arrow-right"></i></button>
-    <div class="login-foot">Se recordará en este navegador</div>
+    <div class="login-foot"><a href="#" id="forgotLink">¿Olvidaste tu contraseña?</a></div>
   </form>
+</div>
+
+<div id="setup">
+  <form id="setupForm" class="login-card">
+    <img src="logolotus.png" alt="Lotus 360">
+    <h1>Configura tu cuenta</h1>
+    <p>Elige tu contraseña definitiva y una pregunta de seguridad (sirve para recuperar el acceso sin correo)</p>
+    <div class="login-field"><i class="fas fa-lock"></i>
+      <input id="setupPwd" type="password" placeholder="Contraseña nueva" autocomplete="new-password"></div>
+    <div class="login-field"><i class="fas fa-lock"></i>
+      <input id="setupPwd2" type="password" placeholder="Repite la contraseña" autocomplete="new-password"></div>
+    <div class="login-field"><i class="fas fa-circle-question"></i>
+      <input id="setupPregunta" type="text" placeholder="Tu pregunta de seguridad" autocomplete="off"></div>
+    <div class="login-field"><i class="fas fa-key"></i>
+      <input id="setupRespuesta" type="text" placeholder="Tu respuesta" autocomplete="off"></div>
+    <div class="login-err" id="setupErr"></div>
+    <button type="submit" id="setupBtn">Guardar y entrar <i class="fas fa-arrow-right"></i></button>
+  </form>
+</div>
+
+<div id="forgot">
+  <form id="forgotForm" class="login-card">
+    <img src="logolotus.png" alt="Lotus 360">
+    <h1>Recuperar contraseña</h1>
+    <p>Escribe tu usuario para ver tu pregunta de seguridad</p>
+    <div class="login-field"><i class="fas fa-user"></i>
+      <input id="forgotUser" type="text" placeholder="Usuario" autocomplete="username" autocapitalize="off" autocorrect="off"></div>
+    <div class="login-field" id="forgotQWrap" style="display:none"><i class="fas fa-circle-question"></i>
+      <input id="forgotQ" type="text" disabled></div>
+    <div class="login-field" id="forgotAWrap" style="display:none"><i class="fas fa-key"></i>
+      <input id="forgotA" type="text" placeholder="Tu respuesta" autocomplete="off"></div>
+    <div class="login-field" id="forgotPwdWrap" style="display:none"><i class="fas fa-lock"></i>
+      <input id="forgotPwd" type="password" placeholder="Contraseña nueva" autocomplete="new-password"></div>
+    <div class="login-err" id="forgotErr"></div>
+    <button type="submit" id="forgotBtn">Continuar <i class="fas fa-arrow-right"></i></button>
+    <div class="login-foot"><a href="#" id="backToLogin">Volver al login</a></div>
+  </form>
+</div>
+
+<div id="marketing-placeholder">
+  <div class="login-card">
+    <img src="logolotus.png" alt="Lotus 360">
+    <h1>Próximamente</h1>
+    <p>Tu acceso de marketing todavía no tiene funciones activas en el CRM (tarifario, métricas de conversión, etc.). Se habilitará apenas estén listas.</p>
+    <button class="logout-btn" style="width:auto;padding:10px 18px;margin-top:6px" onclick="cerrarSesion()">Cerrar sesión <i class="fas fa-right-from-bracket"></i></button>
+  </div>
 </div>
 
 <div class="app">
@@ -311,14 +362,14 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
     <div class="nav-label">Principal</div>
     <a class="nav-item active" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
     <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
-    <a class="nav-item" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
-    <a class="nav-item" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
+    <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
+    <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
     <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
-    <div class="nav-label">Gestión</div>
-    <a class="nav-item" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
+    <div class="nav-label nav-admin-only">Gestión</div>
+    <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
     <div class="side-foot">
-      <div class="avatar">L</div>
-      <div style="flex:1"><div class="un">Lotus Admin</div><div class="ue">Equipo comercial</div></div>
+      <div class="avatar" id="side-avatar">·</div>
+      <div style="flex:1"><div class="un" id="side-un">—</div><div class="ue" id="side-ue">—</div></div>
       <button class="logout-btn" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
     </div>
   </aside>
@@ -447,9 +498,9 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 <nav class="bottom-nav">
   <a class="bn-item active" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Inicio</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i> Leads</a>
-  <a class="bn-item" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
-  <a class="bn-item" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
-  <a class="bn-item" data-sec="asesores"><i class="fas fa-user-tie"></i> Equipo</a>
+  <a class="bn-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
+  <a class="bn-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
+  <a class="bn-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Equipo</a>
 </nav>
 
 <!-- Preview pill -->

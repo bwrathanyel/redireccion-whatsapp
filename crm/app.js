@@ -41,22 +41,130 @@ const addD = (dt, n) => { const x = new Date(dt); x.setDate(x.getDate() + n); re
 const iso = dt => dt.toISOString();
 
 /* ---------- Auth ---------- */
-const LOGIN_EMAIL = 'equipo@destinoyeventoslotus360.com';
-let booted = false;
+const EMAIL_DOMINIO = 'lotus360.local';
+const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
+let booted = false, ROL = null, MI_NOMBRE = null;
+const overlay = id => document.getElementById(id);
+const showOverlay = id => ['login', 'setup', 'forgot', 'marketing-placeholder'].forEach(o => overlay(o).classList.toggle('show', o === id));
+
 initAuth();
 async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
-  if (session) startApp(); else document.getElementById('login').classList.add('show');
+  if (session) await afterLogin(); else showOverlay('login');
 }
+
+async function cargarUsuario() {
+  const { data: { user } } = await sb.auth.getUser();
+  const { data, error } = await sb.from('usuarios').select('username,nombre,rol,debe_cambiar_password').eq('id', user?.id).single();
+  if (error || !data) {
+    await sb.auth.signOut();
+    showOverlay('login');
+    document.getElementById('loginErr').textContent = 'Cuenta sin configurar, contacta a un administrador';
+    return null;
+  }
+  return data;
+}
+
+async function afterLogin() {
+  const u = await cargarUsuario();
+  if (!u) return;
+  MI_NOMBRE = u.nombre; ROL = u.rol;
+  if (u.debe_cambiar_password) { showOverlay('setup'); return; }
+  entrarSegunRol();
+}
+
+function entrarSegunRol() {
+  if (ROL === 'marketing') { showOverlay('marketing-placeholder'); return; }
+  document.body.classList.toggle('rol-asesor', ROL === 'asesor');
+  overlay('login').classList.remove('show');
+  overlay('setup').classList.remove('show');
+  document.getElementById('side-un').textContent = MI_NOMBRE;
+  document.getElementById('side-ue').textContent = ROL === 'admin' ? 'Administrador' : 'Asesor comercial';
+  document.getElementById('side-avatar').textContent = initials(MI_NOMBRE);
+  startApp();
+}
+
 document.getElementById('loginForm').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = document.getElementById('loginBtn'), errEl = document.getElementById('loginErr');
+  const username = val('loginUser').trim().toLowerCase();
   errEl.textContent = ''; btn.disabled = true; btn.innerHTML = 'Entrando... <i class="fas fa-spinner fa-spin"></i>';
-  const { error } = await sb.auth.signInWithPassword({ email: LOGIN_EMAIL, password: document.getElementById('loginPwd').value });
+  const { error } = await sb.auth.signInWithPassword({ email: `${username}@${EMAIL_DOMINIO}`, password: document.getElementById('loginPwd').value });
   btn.disabled = false; btn.innerHTML = 'Entrar <i class="fas fa-arrow-right"></i>';
-  if (error) { errEl.textContent = 'Contraseña incorrecta'; document.getElementById('loginPwd').select(); return; }
-  document.getElementById('login').classList.remove('show'); startApp();
+  if (error) { errEl.textContent = 'Usuario o contraseña incorrectos'; document.getElementById('loginPwd').select(); return; }
+  await afterLogin();
 });
+
+document.getElementById('setupForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('setupBtn'), errEl = document.getElementById('setupErr');
+  const p1 = val('setupPwd'), p2 = val('setupPwd2'), pregunta = val('setupPregunta').trim(), respuesta = val('setupRespuesta').trim();
+  errEl.textContent = '';
+  if (p1.length < 6) { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
+  if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
+  if (!pregunta || !respuesta) { errEl.textContent = 'Completa la pregunta y la respuesta de seguridad'; return; }
+  btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
+  const { error: e1 } = await sb.auth.updateUser({ password: p1 });
+  const { error: e2 } = e1 ? { error: null } : await sb.rpc('set_pregunta_seguridad', { p_pregunta: pregunta, p_respuesta: respuesta });
+  btn.disabled = false; btn.innerHTML = 'Guardar y entrar <i class="fas fa-arrow-right"></i>';
+  const err = e1 || e2;
+  if (err) { errEl.textContent = 'No se pudo guardar: ' + err.message; return; }
+  const u = await cargarUsuario(); if (!u) return;
+  ROL = u.rol; entrarSegunRol();
+});
+
+document.getElementById('forgotLink').addEventListener('click', e => { e.preventDefault(); resetForgot(); showOverlay('forgot'); });
+document.getElementById('backToLogin').addEventListener('click', e => { e.preventDefault(); showOverlay('login'); });
+
+let forgotStep = 1;
+function resetForgot() {
+  forgotStep = 1;
+  document.getElementById('forgotForm').reset();
+  document.getElementById('forgotUser').disabled = false;
+  document.getElementById('forgotQWrap').style.display = 'none';
+  document.getElementById('forgotAWrap').style.display = 'none';
+  document.getElementById('forgotPwdWrap').style.display = 'none';
+  document.getElementById('forgotErr').textContent = '';
+  document.getElementById('forgotBtn').innerHTML = 'Continuar <i class="fas fa-arrow-right"></i>';
+}
+
+document.getElementById('forgotForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('forgotBtn'), errEl = document.getElementById('forgotErr');
+  errEl.textContent = '';
+  if (forgotStep === 1) {
+    const username = val('forgotUser').trim().toLowerCase();
+    if (!username) { errEl.textContent = 'Escribe tu usuario'; return; }
+    btn.disabled = true;
+    const { data: pregunta, error } = await sb.rpc('obtener_pregunta_seguridad', { p_username: username });
+    btn.disabled = false;
+    if (error || !pregunta) { errEl.textContent = 'Usuario no encontrado o sin pregunta de seguridad configurada'; return; }
+    document.getElementById('forgotQ').value = pregunta;
+    document.getElementById('forgotUser').disabled = true;
+    document.getElementById('forgotQWrap').style.display = 'block';
+    document.getElementById('forgotAWrap').style.display = 'block';
+    document.getElementById('forgotPwdWrap').style.display = 'block';
+    btn.innerHTML = 'Cambiar contraseña <i class="fas fa-arrow-right"></i>';
+    forgotStep = 2;
+    return;
+  }
+  const username = val('forgotUser').trim().toLowerCase(), respuesta = val('forgotA').trim(), nueva = val('forgotPwd');
+  if (nueva.length < 6) { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
+  btn.disabled = true; btn.innerHTML = 'Verificando... <i class="fas fa-spinner fa-spin"></i>';
+  try {
+    const r = await fetch(RESET_FN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, respuesta, nueva_password: nueva }) });
+    const data = await r.json();
+    btn.disabled = false; btn.innerHTML = 'Cambiar contraseña <i class="fas fa-arrow-right"></i>';
+    if (!data.ok) { errEl.textContent = data.error === 'respuesta_incorrecta' ? 'Respuesta incorrecta' : 'No se pudo cambiar la contraseña'; return; }
+    okToast('Contraseña actualizada, ya puedes entrar');
+    document.getElementById('loginUser').value = username;
+    showOverlay('login');
+  } catch (_e) {
+    btn.disabled = false; btn.innerHTML = 'Cambiar contraseña <i class="fas fa-arrow-right"></i>';
+    errEl.textContent = 'Error de conexión, intenta de nuevo';
+  }
+});
+
 window.cerrarSesion = async () => { await sb.auth.signOut(); location.reload(); };
 
 async function startApp() {
@@ -254,7 +362,7 @@ function openDrawer(l) {
       <label class="fl">Estado</label>
       <select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>
       <label class="fl">Asesor asignado</label>
-      <select id="e-asesor" class="ei">${opt(['Sin asignar', ...ACTIVOS], ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar')}</select>
+      <select id="e-asesor" class="ei" ${ROL === 'asesor' ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...ACTIVOS], ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar')}</select>
       <label class="fl">Servicio de interés</label>
       <select id="e-servicio" class="ei"><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select>
       <div id="venta-box" class="venta-box ${l.estado === VENTA ? 'show' : ''}">
@@ -286,7 +394,7 @@ async function guardarLead() {
   const monto = estado === VENTA ? (parseFloat(val('e-monto')) || 0) : null;
   const comprado = estado === VENTA ? val('e-comprado').trim() : null;
   err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
-  const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: currentLead.id, p_estado: estado, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado, p_actor: asesor });
+  const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: currentLead.id, p_estado: estado, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios';
   if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return; }
   window.closeDrawer();
