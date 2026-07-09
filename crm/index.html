@@ -178,7 +178,7 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .drawer .dclose{position:absolute;top:18px;right:18px;width:36px;height:36px;border-radius:9px;border:1px solid var(--line2);background:transparent;color:var(--muted);cursor:pointer;font-size:15px}
 .drawer .dclose:hover{color:var(--txt);border-color:var(--txt)}
 .dhead{display:flex;align-items:center;gap:14px;margin-bottom:22px;padding-right:40px}
-.dhead .dava{width:54px;height:54px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#e0570a);display:grid;place-items:center;font-size:20px;font-weight:800;color:#1a1000}
+.dhead .dava{width:54px;height:54px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#e0570a);background-size:cover;background-position:center;display:grid;place-items:center;font-size:20px;font-weight:800;color:#1a1000;flex-shrink:0}
 .dhead .dn{font-size:18px;font-weight:800}
 .dhead .dm{font-size:12.5px;color:var(--muted);margin-top:5px}
 .dfield{padding:13px 0;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start}
@@ -279,6 +279,12 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .tar-hotel-row .tar-tags{margin-top:0;flex:1 1 auto;justify-content:flex-end}
 .tar-hotel-row .tc-promos{margin-top:0;white-space:nowrap}
 .tar-hotel-row .fa-chevron-right{color:var(--muted2);font-size:12px}
+.thr-thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0;background:var(--panel-solid)}
+.thr-thumb-vacio{display:grid;place-items:center;color:var(--muted2);font-size:14px;border:1px dashed var(--line2)}
+.dgallery{display:flex;gap:8px;overflow-x:auto;margin:14px 0 4px;padding-bottom:4px;scrollbar-width:thin}
+.dgallery a{flex-shrink:0;border-radius:10px;overflow:hidden;display:block;line-height:0}
+.dgallery img{height:90px;width:auto;display:block;border-radius:10px;transition:.15s}
+.dgallery img:hover{opacity:.85}
 @media(max-width:760px){.tar-hotel-row{flex-wrap:wrap}.tar-hotel-row .thr-precio{margin-left:auto}}
 
 /* ---------- Cotizador IA ---------- */

@@ -1,6 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
+const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
 const SUPABASE_KEY = 'sb_publishable_M7Ms9DLwpNSCXZNCDhYtbQ_LhMYeLxk';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -662,7 +663,7 @@ async function loadTarifario() {
   empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
   const q = tarTab === 'promo'
     ? sb.from('promociones').select('*').order('titulo')
-    : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad)').eq('tipo', tarTab).order('nombre');
+    : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad), producto_fotos(storage_path,orden)').eq('tipo', tarTab).order('nombre');
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
@@ -671,6 +672,7 @@ async function loadTarifario() {
 }
 const TAG_LABEL = { todo_incluido: 'Todo incluido', solo_desayuno: 'Solo desayuno', media_pension: 'Media pensión', pension_completa: 'Pensión completa', ninos_gratis: 'Niños gratis', '2x1': '2x1', descuento: 'Descuento' };
 const tagsHtml = tags => (tags || []).length ? `<div class="tar-tags">${tags.map(t => `<span class="tar-tag">${esc(TAG_LABEL[t] || t)}</span>`).join('')}</div>` : '';
+const fotosDe = x => (x.producto_fotos || []).slice().sort((a, b) => a.orden - b.orden).map(f => FOTOS_BASE + f.storage_path);
 const DESTINO_ORDEN = ['Margarita', 'Coche'];
 const hoy = () => new Date().toISOString().slice(0, 10);
 const promoVigente = p => !p.fecha_fin_estimada || p.fecha_fin_estimada >= hoy();
@@ -733,7 +735,9 @@ function renderTarifario() {
 }
 function tarHotelRowHtml(x) {
   const ag = agregarHotel(x);
+  const foto = fotosDe(x)[0];
   return `<div class="tar-hotel-row" data-id="${x.id}">
+    ${foto ? `<img class="thr-thumb" src="${esc(foto)}" alt="" loading="lazy">` : `<div class="thr-thumb thr-thumb-vacio"><i class="fas fa-image"></i></div>`}
     <div class="thr-nombre">${esc(x.nombre)}</div>
     ${ag.tags.length ? tagsHtml(ag.tags) : '<span></span>'}
     ${x.promociones?.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${x.promociones.length} promo${x.promociones.length > 1 ? 's' : ''}</div>` : ''}
@@ -774,9 +778,11 @@ function openProductoDrawer(x) {
   const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
+  const fotos = esPromo ? [] : fotosDe(x);
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead"><div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div><div><div class="dn">${esc(nombre)}</div>
+    <div class="dhead">${fotos[0] ? `<div class="dava" style="background-image:url('${esc(fotos[0])}')"></div>` : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
       <div class="dm">${esc(x.destino || TAR_TAB_LABEL[tarTab])}</div></div></div>
+    ${fotos.length ? `<div class="dgallery">${fotos.map(f => `<a href="${esc(f)}" target="_blank" rel="noopener"><img src="${esc(f)}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}
     ${precio ? `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div><div class="dfv">${esc(precio)}</div></div></div>` : ''}
     ${vigencia ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Vigencia</div><div class="dfv">${esc(vigencia)}</div></div></div>` : ''}
     ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv">${esc(x.descripcion)}</div></div></div>` : ''}
