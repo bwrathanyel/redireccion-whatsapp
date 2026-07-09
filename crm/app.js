@@ -21,7 +21,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de los hoteles del tarifario'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const val = id => document.getElementById(id).value;
@@ -729,7 +729,7 @@ function renderReasignPager(pages) {
 
 /* ---------- Tarifario ---------- */
 let tarTab = 'destino', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
-const TAR_TAB_LABEL = { destino: 'Destino', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción' };
+const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción' };
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche']);
   document.querySelectorAll('#tar-tabs .seg').forEach(b => b.onclick = () => {
@@ -754,17 +754,70 @@ async function loadTarifario() {
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
   empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
   const q = tarTab === 'promo'
-    ? sb.from('promociones').select('*').order('titulo')
+    ? sb.from('promociones').select('*, productos(producto_fotos(storage_path,orden))').order('titulo')
     : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad), producto_fotos(storage_path,orden)').eq('tipo', tarTab).order('nombre');
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
+  // Un paquete puede heredar las fotos de su hotel vinculado (productos.hotel_id)
+  // — PostgREST no resuelve bien el embed self-join `productos!hotel_id` (siempre
+  // devuelve la dirección "hijos", no el padre), así que se resuelve aparte con
+  // un segundo fetch normal (sin ambigüedad de auto-relación) y se cuelga como
+  // x.hotel para que fotosDe() lo use igual que si viniera embebido.
+  if (tarTab === 'paquete') {
+    const hotelIds = [...new Set(data.filter(x => x.hotel_id).map(x => x.hotel_id))];
+    if (hotelIds.length) {
+      const { data: hoteles } = await sb.from('productos').select('id, producto_fotos(storage_path,orden)').in('id', hotelIds);
+      const porId = Object.fromEntries((hoteles || []).map(h => [h.id, h]));
+      data.forEach(x => { if (x.hotel_id) x.hotel = porId[x.hotel_id]; });
+    }
+  }
   tarCache[tarTab] = data;
   renderTarifario();
 }
 const TAG_LABEL = { todo_incluido: 'Todo incluido', solo_desayuno: 'Solo desayuno', media_pension: 'Media pensión', pension_completa: 'Pensión completa', ninos_gratis: 'Niños gratis', '2x1': '2x1', descuento: 'Descuento' };
 const tagsHtml = tags => (tags || []).length ? `<div class="tar-tags">${tags.map(t => `<span class="tar-tag">${esc(TAG_LABEL[t] || t)}</span>`).join('')}</div>` : '';
-const fotosDe = x => (x.producto_fotos || []).slice().sort((a, b) => a.orden - b.orden).map(f => FOTOS_BASE + f.storage_path);
+// Fotos propias del ítem; si no tiene, hereda las de su hotel vinculado
+// (promociones.producto_id o productos.hotel_id, ver push_to_supabase.py
+// HOTEL_ALIASES) — nunca se inventa una foto para algo sin vínculo real.
+const fotosDe = x => {
+  const propias = (x.producto_fotos || []).slice().sort((a, b) => a.orden - b.orden).map(f => FOTOS_BASE + f.storage_path);
+  if (propias.length) return propias;
+  const heredadas = x.productos?.producto_fotos || x.hotel?.producto_fotos || [];
+  return heredadas.slice().sort((a, b) => a.orden - b.orden).map(f => FOTOS_BASE + f.storage_path);
+};
+
+/* ---------- Carrusel de fotos al hover (hoteles/promos/paquetes vinculados) ---------- */
+const carruselPrecargadas = new Set();
+function precargarFotos(fotos) {
+  fotos.forEach(u => { if (!carruselPrecargadas.has(u)) { new Image().src = u; carruselPrecargadas.add(u); } });
+}
+// Cada renderTarifario() reemplaza #tar-grid entero (innerHTML) — si el mouse
+// queda "adentro" de una tarjeta justo cuando eso pasa, el mouseleave de esa
+// tarjeta ya removida nunca dispara y el setInterval quedaría corriendo para
+// siempre sobre un nodo desconectado. Se trackean los timers activos acá para
+// poder apagarlos todos de una vez al principio de cada render.
+let carruselTimers = new Set();
+function detenerCarruseles() { carruselTimers.forEach(t => clearInterval(t)); carruselTimers.clear(); }
+function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto) {
+  if (!mediaEl || !fotos || fotos.length < 2) return;
+  let timer = null, i = 0;
+  cardEl.addEventListener('mouseenter', () => {
+    precargarFotos(fotos);
+    i = 0;
+    timer = setInterval(() => {
+      i = (i + 1) % fotos.length;
+      mediaEl.style.opacity = '0';
+      setTimeout(() => { setFoto(fotos[i]); mediaEl.style.opacity = '1'; }, 180);
+    }, 1100);
+    carruselTimers.add(timer);
+  });
+  cardEl.addEventListener('mouseleave', () => {
+    clearInterval(timer); carruselTimers.delete(timer); timer = null;
+    mediaEl.style.opacity = '1';
+    setFoto(fotos[0]);
+  });
+}
 const DESTINO_ORDEN = ['Margarita', 'Coche'];
 const hoy = () => new Date().toISOString().slice(0, 10);
 const promoVigente = p => !p.fecha_fin_estimada || p.fecha_fin_estimada >= hoy();
@@ -782,6 +835,7 @@ function agregarHotel(x) {
 }
 
 function renderTarifario() {
+  detenerCarruseles();
   const q = val('tar-search').trim().toLowerCase();
   const data = tarCache[tarTab] || [];
   const fDestino = val('tar-f-destino'), fTipo = val('tar-f-tipo');
@@ -821,7 +875,18 @@ function renderTarifario() {
   } else {
     grid.innerHTML = tarItemsWrapHtml(filtered);
   }
-  [...document.querySelectorAll('#tar-grid .tar-item')].forEach(el => el.onclick = () => openProductoDrawer(filtered.find(x => String(x.id) === el.dataset.id)));
+  [...document.querySelectorAll('#tar-grid .tar-item')].forEach(el => {
+    const x = filtered.find(x => String(x.id) === el.dataset.id);
+    el.onclick = () => openProductoDrawer(x);
+    const fotos = fotosDe(x);
+    if (tarView === 'fichas') {
+      const media = el.querySelector('.tf-media');
+      if (media) attachHoverCarousel(el, media, fotos, url => { media.style.backgroundImage = `url('${url}')`; });
+    } else {
+      const media = el.querySelector('.thr-thumb, .tc-thumb');
+      if (media && media.tagName === 'IMG') attachHoverCarousel(el, media, fotos, url => { media.src = url; });
+    }
+  });
 }
 function tarItemsWrapHtml(items) {
   const html = items.map(x => tarView === 'lista' ? tarRowHtml(x) : tarView === 'fichas' ? tarFichaHtml(x) : tarCardHtml(x)).join('');
@@ -831,7 +896,7 @@ function tarItemsWrapHtml(items) {
 function tarRowHtml(x) {
   const esPromo = tarTab === 'promo';
   const nombre = esPromo ? x.titulo : x.nombre;
-  const foto = esPromo ? null : fotosDe(x)[0];
+  const foto = fotosDe(x)[0];
   let tags = [], precioTxt = null, promosCount = 0;
   if (tarTab === 'hotel') {
     const ag = agregarHotel(x);
@@ -851,9 +916,16 @@ function tarRowHtml(x) {
     <i class="fas fa-chevron-right"></i>
   </div>`;
 }
+function tarCardThumbHtml(foto, esPromo) {
+  return foto
+    ? `<img class="tc-thumb" src="${esc(foto)}" alt="" loading="lazy">`
+    : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`;
+}
 function tarCardHtml(x) {
   if (tarTab === 'promo') {
-    return `<div class="tar-item tar-card" data-id="${x.id}"><div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
+    return `<div class="tar-item tar-card" data-id="${x.id}">
+      ${tarCardThumbHtml(fotosDe(x)[0], true)}
+      <div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
       ${x.precio_texto ? `<div class="tc-precio">${esc(x.precio_texto)}</div>` : ''}
       ${x.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(x.vigencia_texto)}</div>` : ''}
       ${tagsHtml(x.incluye_tags)}</div>`;
@@ -861,7 +933,9 @@ function tarCardHtml(x) {
   const tarifa = (x.tarifas || [])[0];
   const promos = x.promociones || [];
   const tagsHotel = [...new Set(promos.flatMap(p => p.incluye_tags || []))];
-  return `<div class="tar-item tar-card" data-id="${x.id}"><div class="tc-top"><div><div class="tc-nombre">${esc(x.nombre)}</div>${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}</div></div>
+  return `<div class="tar-item tar-card" data-id="${x.id}">
+    ${tarCardThumbHtml(fotosDe(x)[0], false)}
+    <div class="tc-top"><div><div class="tc-nombre">${esc(x.nombre)}</div>${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}</div></div>
     <div class="tc-resumen">${esc(x.descripcion || '')}</div>
     ${tarifa ? `<div class="tc-precio">${esc(tarifa.precio_texto)}</div>` : ''}
     ${tarifa && tarifa.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(tarifa.vigencia_texto)}</div>` : ''}
@@ -871,7 +945,7 @@ function tarCardHtml(x) {
 function tarFichaHtml(x) {
   const esPromo = tarTab === 'promo';
   const nombre = esPromo ? x.titulo : x.nombre;
-  const foto = esPromo ? null : fotosDe(x)[0];
+  const foto = fotosDe(x)[0];
   const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
@@ -890,6 +964,25 @@ function tarFichaHtml(x) {
     </div>
   </div>`;
 }
+/* ---------- Galería (solo fotos, sin precios ni filtros) ---------- */
+let galCargada = false;
+async function loadGaleria() {
+  if (galCargada) return;
+  const loading = document.getElementById('gal-loading'), empty = document.getElementById('gal-empty'), list = document.getElementById('gal-list');
+  empty.classList.remove('show'); loading.classList.add('show');
+  const { data, error } = await sb.from('productos').select('nombre, producto_fotos(storage_path,orden)').eq('tipo', 'hotel').eq('activo', true).order('nombre');
+  loading.classList.remove('show');
+  if (error) { console.error(error); errToast('No se pudo cargar la galería'); return; }
+  const conFotos = (data || []).filter(x => x.producto_fotos?.length);
+  if (!conFotos.length) { empty.classList.add('show'); return; }
+  galCargada = true;
+  list.innerHTML = conFotos.map(x => {
+    const fotos = x.producto_fotos.slice().sort((a, b) => a.orden - b.orden).map(f => FOTOS_BASE + f.storage_path);
+    return `<div class="gal-hotel"><h3><i class="fas fa-hotel"></i> ${esc(x.nombre)}</h3>
+      <div class="gal-masonry">${fotos.map(f => `<a href="${esc(f)}" target="_blank" rel="noopener"><img src="${esc(f)}" alt="${esc(x.nombre)}" loading="lazy"></a>`).join('')}</div>
+    </div>`;
+  }).join('');
+}
 async function loadTarifarioInfo() {
   if (tarInfo) return;
   tarInfo = [];
@@ -906,7 +999,7 @@ function openProductoDrawer(x) {
   const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
-  const fotos = esPromo ? [] : fotosDe(x);
+  const fotos = fotosDe(x);
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead">${fotos[0] ? `<div class="dava" style="background-image:url('${esc(fotos[0])}')"></div>` : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
       <div class="dm">${esc(x.destino || TAR_TAB_LABEL[tarTab])}</div></div></div>
@@ -929,6 +1022,23 @@ function setupChat() {
   document.getElementById('chat-send').onclick = enviarChat;
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChat(); } });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  fill('cot-f-destino', DESTINO_ORDEN);
+  document.getElementById('cot-f-clear').onclick = () => {
+    ['cot-f-destino', 'cot-f-tipo', 'cot-f-plan', 'cot-f-precio', 'cot-f-desde', 'cot-f-hasta'].forEach(id => { document.getElementById(id).value = ''; });
+  };
+}
+// Filtros elegidos en la interfaz (no en texto libre) — se mandan como
+// parámetros estructurados al Cotizador, que los aplica ANTES de dejar que
+// la IA razone sobre el pedido en lenguaje natural del cliente.
+function leerFiltrosCotizador() {
+  return {
+    destino: val('cot-f-destino') || null,
+    tipo: val('cot-f-tipo') || null,
+    plan: val('cot-f-plan') || null,
+    precioMax: val('cot-f-precio') ? Number(val('cot-f-precio')) : null,
+    fechaDesde: val('cot-f-desde') || null,
+    fechaHasta: val('cot-f-hasta') || null,
+  };
 }
 async function enviarChat() {
   const input = document.getElementById('chat-input'), btn = document.getElementById('chat-send');
@@ -940,7 +1050,7 @@ async function enviarChat() {
   input.value = ''; input.style.height = 'auto';
   btn.disabled = true;
   const loadingEl = addChatBubble('bot', 'Pensando...', true);
-  const { data, error } = await sb.functions.invoke('cotizador-chat', { body: { messages: chatHistory } });
+  const { data, error } = await sb.functions.invoke('cotizador-chat', { body: { messages: chatHistory, filtros: leerFiltrosCotizador() } });
   loadingEl.remove();
   btn.disabled = false;
   if (error || !data?.respuesta) { addChatBubble('bot', 'No pude conectar con el cotizador, intenta de nuevo en un momento.'); return; }
@@ -992,6 +1102,7 @@ function activateSection(sec) {
   if (sec === 'ranking') loadRanking();
   if (sec === 'reasignaciones') loadReasignaciones();
   if (sec === 'tarifario') loadTarifario();
+  if (sec === 'galeria') loadGaleria();
   if (sec === 'asesores') loadAsesoresPeriodo();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
