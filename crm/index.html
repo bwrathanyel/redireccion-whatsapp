@@ -24,14 +24,19 @@
   --safe-b:env(safe-area-inset-bottom,0px);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html{-webkit-text-size-adjust:100%}
-body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--txt);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+/* Fix del "bar gris" en iOS/Android: <html> sin fondo propio deja ver el
+   fondo por defecto del navegador (blanco/gris) durante el rebote de scroll
+   (rubber-band) o cuando la barra de direcciones colapsa/expande, porque esa
+   zona la pinta <html>, no <body>. overscroll-behavior además apaga el
+   rebote en sí — look más "app nativa", sin la sacudida elástica del navegador. */
+html{-webkit-text-size-adjust:100%;background:var(--bg);height:100%;overscroll-behavior-y:none}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--txt);-webkit-font-smoothing:antialiased;overflow-x:hidden;min-height:100%;overscroll-behavior-y:none}
 body::before{content:'';position:fixed;inset:0;background:
   radial-gradient(900px 500px at 12% -8%,rgba(255,145,0,.10),transparent 60%),
   radial-gradient(1000px 600px at 110% 10%,rgba(74,158,255,.10),transparent 55%);z-index:-1;pointer-events:none}
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:20px}::-webkit-scrollbar-track{background:transparent}
 
-.app{display:grid;grid-template-columns:246px 1fr;min-height:100vh}
+.app{display:grid;grid-template-columns:246px 1fr;min-height:100vh;min-height:100dvh}
 
 /* ---------- Sidebar (desktop) ---------- */
 .sidebar{border-right:1px solid var(--line);padding:20px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:6px;background:linear-gradient(180deg,rgba(13,18,36,.6),rgba(8,11,22,.2))}
@@ -54,11 +59,22 @@ body::before{content:'';position:fixed;inset:0;background:
 
 /* ---------- Bottom nav (mobile) ---------- */
 .bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:50;background:rgba(11,15,28,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line2);padding:6px 6px calc(6px + var(--safe-b));justify-content:space-around}
-.bn-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 4px;color:var(--muted2);text-decoration:none;font-size:10px;font-weight:600;cursor:pointer;border-radius:12px;transition:.15s;position:relative}
-.bn-item i{font-size:17px}
+.bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 4px;min-height:48px;color:var(--muted2);text-decoration:none;font-size:10px;font-weight:600;cursor:pointer;border-radius:12px;transition:.15s;position:relative}
+.bn-item i{font-size:18px}
 .bn-item.active{color:var(--accent)}
 .bn-item.active::before{content:'';position:absolute;top:0;width:26px;height:3px;border-radius:3px;background:var(--accent)}
 .mobile-brand{display:none}
+
+/* ---------- Hoja inferior (bottom sheet) — más opciones del nav, filtros en móvil ---------- */
+.sheet-bg{position:fixed;inset:0;background:rgba(4,6,12,.6);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .25s;z-index:70}
+.sheet-bg.open{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border:1px solid var(--line2);border-bottom:none;border-radius:20px 20px 0 0;z-index:71;padding:10px 18px calc(22px + var(--safe-b));max-height:80vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.3,1,.4,1);box-shadow:0 -20px 50px rgba(0,0,0,.4)}
+.sheet.open{transform:translateY(0)}
+.sheet-handle{width:40px;height:4px;background:var(--line2);border-radius:3px;margin:6px auto 16px}
+.sheet-title{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+.sheet-item{display:flex;align-items:center;gap:14px;min-height:52px;padding:0 6px;color:var(--txt);text-decoration:none;font-size:15px;font-weight:600;border-bottom:1px solid var(--line);cursor:pointer}
+.sheet-item:last-child{border-bottom:none}
+.sheet-item i{width:22px;text-align:center;color:var(--accent);font-size:16px}
 
 /* ---------- Main ---------- */
 .main{padding:22px 30px 40px;max-width:1500px;width:100%}
@@ -119,6 +135,7 @@ body::before{content:'';position:fixed;inset:0;background:
 
 /* table + filters */
 .tbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.mfs-trigger,.mfs-done{display:none}
 select.flt{background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:9px 30px 9px 12px;color:var(--txt);font-size:12.5px;font-family:inherit;outline:none;cursor:pointer;appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238b93ad' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center}
 select.flt:focus{border-color:var(--accent)}
@@ -250,8 +267,13 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .tar-grid{display:block}
 .tar-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;backdrop-filter:blur(8px);cursor:pointer;transition:.12s;overflow:hidden}
 .tar-card:hover{border-color:rgba(255,145,0,.3);transform:translateY(-2px)}
-.tc-thumb{width:calc(100% + 36px);height:120px;object-fit:cover;margin:-16px -18px 12px;display:block;background:var(--panel-solid);transition:opacity .18s ease}
-.tc-thumb.tc-thumb-vacio{width:100%;height:100px;margin:0 0 10px;border-radius:10px;display:grid;place-items:center;color:var(--muted2);font-size:22px;border:1px dashed var(--line2)}
+.tc-media-wrap{position:relative;width:calc(100% + 36px);margin:-16px -18px 12px}
+.tc-thumb{width:100%;height:120px;object-fit:cover;display:block;background:var(--panel-solid);transition:opacity .18s ease}
+.tc-thumb.tc-thumb-vacio{width:calc(100% - 36px);height:100px;margin:16px 18px 0;border-radius:10px;display:grid;place-items:center;color:var(--muted2);font-size:22px;border:1px dashed var(--line2)}
+.carrusel-dots{position:absolute;left:0;right:0;bottom:8px;display:flex;justify-content:center;gap:5px;pointer-events:none}
+.carrusel-dots:empty{display:none}
+.carrusel-dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.35);transition:.2s}
+.carrusel-dot.on{background:#fff;width:14px;border-radius:3px}
 .tar-card .tc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px}
 .tar-card .tc-nombre{font-size:14.5px;font-weight:700;line-height:1.3}
 .tar-card .tc-destino{font-size:11px;color:var(--muted);margin-top:3px}
@@ -299,7 +321,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .tar-fichas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
 .tar-ficha{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;cursor:pointer;transition:.12s}
 .tar-ficha:hover{border-color:rgba(255,145,0,.3);transform:translateY(-2px)}
-.tf-media{height:150px;background:linear-gradient(135deg,rgba(255,145,0,.16),rgba(255,145,0,.04));background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:26px;transition:opacity .18s ease}
+.tf-media{position:relative;height:150px;background:linear-gradient(135deg,rgba(255,145,0,.16),rgba(255,145,0,.04));background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:26px;transition:opacity .18s ease}
 .tar-ficha .tf-body{padding:14px 16px 16px}
 
 /* ---------- Selector de vista (fichas / tarjetas / lista), estándar en todo el CRM ---------- */
@@ -332,7 +354,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 @media(max-width:760px){.cot-filtros{width:100%}.cot-filtros .flt,.cot-f-fecha{flex:1 1 45%}}
 
 /* ---------- Cotizador IA ---------- */
-.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);min-height:420px}
+.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);height:calc(100dvh - 180px);min-height:420px}
 .chat-log{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:6px 2px 16px}
 .chat-msg{max-width:78%;padding:12px 15px;border-radius:16px;font-size:13.5px;line-height:1.55;white-space:pre-wrap}
 .chat-msg.user{align-self:flex-end;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border-bottom-right-radius:5px}
@@ -345,7 +367,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .chat-inputbar textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .chat-send{background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:14px;width:48px;flex-shrink:0;cursor:pointer;font-size:16px}
 .chat-send:disabled{opacity:.5;cursor:default}
-@media(max-width:760px){.chat-wrap{height:calc(100vh - 220px)}.chat-msg{max-width:88%}}
+@media(max-width:760px){.chat-wrap{height:calc(100vh - 220px);height:calc(100dvh - 220px)}.chat-msg{max-width:88%}}
 
 /* ---------- Galería ---------- */
 .gal-hotel{margin-bottom:30px}
@@ -360,7 +382,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 @media(max-width:480px){.gal-masonry{column-count:1}}
 
 /* login */
-#login,#setup,#forgot,#marketing-placeholder,#claim-list,#claim-form{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 600px at 50% -10%,rgba(255,145,0,.14),transparent 60%),#080b16;padding:20px}
+#login,#setup,#forgot,#marketing-placeholder,#claim-list,#claim-form{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 600px at 50% -10%,rgba(255,145,0,.14),transparent 60%),#080b16;padding:20px;overflow-y:auto}
 #login.show,#setup.show,#forgot.show,#marketing-placeholder.show,#claim-list.show,#claim-form.show{display:flex}
 .claim-list-items{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;max-height:280px;overflow-y:auto}
 .claim-item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.15s;text-align:left}
@@ -383,7 +405,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .login-foot a{color:var(--accent);text-decoration:none;font-weight:600}
 .rol-asesor .nav-admin-only{display:none}
 .rol-asesor #f-asesor{display:none}
-.rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok){display:none}
+.rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok),.rol-marketing .sheet-item:not(.nav-marketing-ok){display:none}
 
 /* ============ MÓVIL ============ */
 @media(max-width:900px){.g-2,.g-2b{grid-template-columns:1fr}}
@@ -409,7 +431,10 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
   .chart-wrap{height:210px}.chart-sm{height:200px}
   .pstep .pl{width:104px;font-size:12px}.pstep .pv{width:44px;font-size:12.5px}
   .tbar{gap:8px}
-  select.flt{flex:1 1 44%;font-size:13px;padding:11px 30px 11px 12px}
+  select.flt{flex:1 1 44%;font-size:16px;padding:11px 30px 11px 12px}
+  /* 16px minimo en inputs para que iOS Safari no haga zoom automatico al enfocar */
+  input.flt,#tar-f-precio,#cot-f-precio,.ei,.cot-f-fecha input,.drp-inputs input{font-size:16px!important}
+  input.flt{padding:11px 12px}
   .tcount{flex-basis:100%;order:6;margin-left:0;text-align:right}
   /* tabla -> tarjetas */
   thead{display:none}
@@ -423,7 +448,14 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
   .lead-name{font-size:15px}.ln-ava{width:34px;height:34px;font-size:13px}
   tbody td.td-wa{padding-top:10px;margin-top:4px;border-top:1px solid var(--line)}
   tbody td.td-wa::before{content:'WhatsApp'}
-  .wa-btn{width:40px;height:40px}
+  .wa-btn{width:44px;height:44px}
+  /* área táctil mínima 44x44 (iOS) / 48x48 (Android) en controles chicos */
+  .logout-btn{width:44px;height:44px}
+  .cot-f-clear{width:44px;height:44px}
+  .vs-btn{padding:11px 13px;min-height:44px}
+  .fchip b{padding:6px}
+  .drp-btn,.tar-f-check,select.flt,#tar-f-precio,#cot-f-precio,.pager button,.clear-all{min-height:44px}
+  .seg{min-height:40px}
   /* drawer -> hoja inferior */
   .drawer{top:auto;bottom:0;left:0;right:0;width:100%;max-width:100%;height:auto;max-height:90vh;border-left:none;border-top:1px solid var(--line2);border-radius:22px 22px 0 0;transform:translateY(100%);padding:22px 20px calc(22px + var(--safe-b))}
   .drawer.open{transform:translateY(0)}
@@ -434,6 +466,14 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
   .pp-label{max-width:38vw}
   #toasts{left:12px;right:12px;bottom:calc(84px + var(--safe-b));align-items:stretch}.toast{max-width:none}
   .foot-note{margin-top:20px}
+
+  /* filtros -> hoja inferior (bottom sheet), con botón "Filtros"/"Buscar y filtrar" a pantalla completa de ancho */
+  .mfs-trigger{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:46px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;color:var(--txt);font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;margin-bottom:14px}
+  .mfs{position:fixed;left:0;right:0;bottom:0;z-index:71;background:var(--bg2);border:1px solid var(--line2);border-bottom:none;border-radius:20px 20px 0 0;padding:18px 18px calc(20px + var(--safe-b));max-height:82vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.3,1,.4,1);box-shadow:0 -20px 50px rgba(0,0,0,.45);margin-bottom:0}
+  .mfs.open{transform:translateY(0)}
+  .mfs .flt,.mfs .tar-search,.mfs .tar-f-check,.mfs .cot-f-fecha,.mfs .drp,.mfs #tar-f-precio,.mfs #cot-f-precio{flex:1 1 100%;width:100%}
+  .mfs .tcount{flex-basis:100%;text-align:left;margin:2px 0 0}
+  .mfs-done{display:block;width:100%;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
@@ -611,8 +651,8 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 
     <!-- LEADS -->
     <section class="section" id="sec-leads">
-      <div class="card">
-        <div class="tbar">
+      <button class="mfs-trigger" data-mfs="leads-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
+      <div class="tbar mfs" id="leads-tbar">
           <select class="flt" id="f-canal"><option value="">Todos los canales</option></select>
           <select class="flt" id="f-estado"><option value="">Todos los estados</option></select>
           <select class="flt" id="f-asesor"><option value="">Todos los asesores</option></select>
@@ -636,7 +676,9 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
           </div>
           <div class="view-switch" id="leads-view-switch"></div>
           <span class="tcount" id="t-count"></span>
-        </div>
+          <button class="mfs-done" data-mfs="leads-tbar" type="button">Listo</button>
+      </div>
+      <div class="card">
         <div id="active-filters" class="chips-bar"></div>
         <div class="tbl-state" id="tbl-loading"><div class="spin"></div><div class="es-s">Cargando leads...</div></div>
         <div class="tbl-state" id="tbl-empty"><i class="fas fa-inbox"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay leads con estos filtros</div></div>
@@ -664,7 +706,8 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
         <button class="seg" data-tab="paquete">Paquetes</button>
         <button class="seg" data-tab="promo">Promociones</button>
       </div>
-      <div class="tar-toolbar">
+      <button class="mfs-trigger" data-mfs="tar-toolbar" type="button"><i class="fas fa-sliders"></i> Buscar y filtrar</button>
+      <div class="tar-toolbar mfs" id="tar-toolbar">
         <div class="tar-search"><i class="fas fa-search"></i><input id="tar-search" placeholder="Buscar por nombre o destino..."></div>
         <select class="flt tar-f" id="tar-f-destino" data-tabs="hotel"><option value="">Todos los destinos</option></select>
         <select class="flt tar-f" id="tar-f-tipo" data-tabs="hotel,promo">
@@ -681,6 +724,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
         <label class="tar-f-check" id="tar-f-vigente-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-vigente" checked> Solo vigentes</label>
         <div class="view-switch" id="tar-view-switch"></div>
         <span class="tcount" id="tar-count"></span>
+        <button class="mfs-done" data-mfs="tar-toolbar" type="button">Listo</button>
       </div>
       <div class="tbl-state" id="tar-loading"><div class="spin"></div><div class="es-s">Cargando tarifario...</div></div>
       <div class="tbl-state" id="tar-empty"><i class="fas fa-book-open"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay ítems con este filtro</div></div>
@@ -693,7 +737,8 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 
     <!-- COTIZADOR IA -->
     <section class="section" id="sec-cotizador">
-      <div class="cot-filtros">
+      <button class="mfs-trigger" data-mfs="cot-filtros" type="button"><i class="fas fa-sliders"></i> Filtros</button>
+      <div class="cot-filtros mfs" id="cot-filtros">
         <select class="flt" id="cot-f-destino"><option value="">Cualquier destino</option></select>
         <select class="flt" id="cot-f-tipo">
           <option value="">Cualquier categoría</option>
@@ -715,6 +760,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
         <label class="cot-f-fecha">Desde <input class="fdate" id="cot-f-desde" type="date"></label>
         <label class="cot-f-fecha">Hasta <input class="fdate" id="cot-f-hasta" type="date"></label>
         <button class="cot-f-clear" id="cot-f-clear" type="button" title="Limpiar filtros"><i class="fas fa-eraser"></i></button>
+        <button class="mfs-done" data-mfs="cot-filtros" type="button">Listo</button>
       </div>
       <div class="card chat-wrap">
         <div class="chat-log" id="chat-log">
@@ -752,8 +798,8 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
     <!-- REASIGNACIONES -->
     <section class="section" id="sec-reasignaciones">
       <div class="kpis" id="reasig-kpis"></div>
-      <div class="card">
-        <div class="tbar">
+      <button class="mfs-trigger" data-mfs="rg-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
+      <div class="tbar mfs" id="rg-tbar">
           <select class="flt" id="rg-asesor"><option value="">Todos los asesores</option></select>
           <select class="flt" id="rg-motivo">
             <option value="">Todos los motivos</option>
@@ -778,7 +824,9 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
           </div>
           <div class="view-switch" id="rg-view-switch"></div>
           <span class="tcount" id="rg-count"></span>
-        </div>
+          <button class="mfs-done" data-mfs="rg-tbar" type="button">Listo</button>
+      </div>
+      <div class="card">
         <div class="tbl-state" id="rg-loading"><div class="spin"></div><div class="es-s">Cargando reasignaciones...</div></div>
         <div class="tbl-state" id="rg-empty"><i class="fas fa-shuffle"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay reasignaciones con estos filtros</div></div>
         <div id="rg-wrap" style="overflow-x:auto">
@@ -829,17 +877,27 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
   </main>
 </div>
 
-<!-- Bottom nav (móvil) -->
+<!-- Bottom nav (móvil) — máximo 5 ítems para que sea cómodo con el pulgar; el resto vive en la hoja "Más" -->
 <nav class="bottom-nav">
   <a class="bn-item active" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Inicio</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i> Leads</a>
   <a class="bn-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
   <a class="bn-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador</a>
-  <a class="bn-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
-  <a class="bn-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
-  <a class="bn-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
-  <a class="bn-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Equipo</a>
+  <a class="bn-item nav-marketing-ok" id="bn-more"><i class="fas fa-ellipsis"></i> Más</a>
 </nav>
+
+<!-- Hoja "Más" (móvil) — resto de secciones, filtradas por rol igual que el sidebar -->
+<div class="sheet-bg" id="sheet-bg"></div>
+<div class="sheet" id="more-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Más opciones</div>
+  <a class="sheet-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+  <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
+  <a class="sheet-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
+  <a class="sheet-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
+  <a class="sheet-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
+  <a class="sheet-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
+</div>
 
 <!-- Preview pill -->
 <div class="preview-pill" id="preview-pill"></div>

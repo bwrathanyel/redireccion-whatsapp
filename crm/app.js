@@ -799,23 +799,44 @@ function precargarFotos(fotos) {
 // poder apagarlos todos de una vez al principio de cada render.
 let carruselTimers = new Set();
 function detenerCarruseles() { carruselTimers.forEach(t => clearInterval(t)); carruselTimers.clear(); }
-function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto) {
+// Sin mouse no hay hover — en touch (celular/tablet) el carrusel se controla
+// con swipe (con dots visibles siempre, no solo al interactuar) en vez de
+// auto-rotar solo. Auto-rotar 50 tarjetas a la vez en una grilla de celular
+// sería pesado en gama media (pedido explícito de cuidar performance); swipe
+// es más liviano y más "a propósito" que animar todo sin que nadie lo pida.
+const esTouch = matchMedia('(hover: none)').matches;
+function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
+  if (dotsEl) dotsEl.innerHTML = fotos && fotos.length > 1 ? fotos.map((_, idx) => `<span class="carrusel-dot${idx === 0 ? ' on' : ''}"></span>`).join('') : '';
   if (!mediaEl || !fotos || fotos.length < 2) return;
   let timer = null, i = 0;
+  const irA = n => {
+    i = (n + fotos.length) % fotos.length;
+    mediaEl.style.opacity = '0';
+    setTimeout(() => { setFoto(fotos[i]); mediaEl.style.opacity = '1'; }, 180);
+    if (dotsEl) [...dotsEl.children].forEach((d, idx) => d.classList.toggle('on', idx === i));
+  };
+  if (esTouch) {
+    let startX = null;
+    mediaEl.addEventListener('touchstart', e => { precargarFotos(fotos); startX = e.touches[0].clientX; }, { passive: true });
+    mediaEl.addEventListener('touchend', e => {
+      if (startX == null) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      if (Math.abs(dx) > 30) irA(i + (dx < 0 ? 1 : -1));
+      startX = null;
+    }, { passive: true });
+    return;
+  }
   cardEl.addEventListener('mouseenter', () => {
     precargarFotos(fotos);
     i = 0;
-    timer = setInterval(() => {
-      i = (i + 1) % fotos.length;
-      mediaEl.style.opacity = '0';
-      setTimeout(() => { setFoto(fotos[i]); mediaEl.style.opacity = '1'; }, 180);
-    }, 1100);
+    timer = setInterval(() => irA(i + 1), 1100);
     carruselTimers.add(timer);
   });
   cardEl.addEventListener('mouseleave', () => {
     clearInterval(timer); carruselTimers.delete(timer); timer = null;
     mediaEl.style.opacity = '1';
     setFoto(fotos[0]);
+    if (dotsEl) [...dotsEl.children].forEach((d, idx) => d.classList.toggle('on', idx === 0));
   });
 }
 const DESTINO_ORDEN = ['Margarita', 'Coche'];
@@ -881,9 +902,13 @@ function renderTarifario() {
     const fotos = fotosDe(x);
     if (tarView === 'fichas') {
       const media = el.querySelector('.tf-media');
-      if (media) attachHoverCarousel(el, media, fotos, url => { media.style.backgroundImage = `url('${url}')`; });
+      if (media) attachHoverCarousel(el, media, fotos, url => { media.style.backgroundImage = `url('${url}')`; }, media.querySelector('.carrusel-dots'));
+    } else if (tarView === 'tarjetas') {
+      const media = el.querySelector('.tc-thumb');
+      const dots = el.querySelector('.carrusel-dots');
+      if (media && media.tagName === 'IMG') attachHoverCarousel(el, media, fotos, url => { media.src = url; }, dots);
     } else {
-      const media = el.querySelector('.thr-thumb, .tc-thumb');
+      const media = el.querySelector('.thr-thumb');
       if (media && media.tagName === 'IMG') attachHoverCarousel(el, media, fotos, url => { media.src = url; });
     }
   });
@@ -917,9 +942,10 @@ function tarRowHtml(x) {
   </div>`;
 }
 function tarCardThumbHtml(foto, esPromo) {
-  return foto
+  const media = foto
     ? `<img class="tc-thumb" src="${esc(foto)}" alt="" loading="lazy">`
     : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`;
+  return `<div class="tc-media-wrap">${media}<div class="carrusel-dots"></div></div>`;
 }
 function tarCardHtml(x) {
   if (tarTab === 'promo') {
@@ -952,7 +978,7 @@ function tarFichaHtml(x) {
   const promos = !esPromo ? (x.promociones || []) : [];
   const tags = esPromo ? (x.incluye_tags || []) : [...new Set(promos.flatMap(p => p.incluye_tags || []))];
   return `<div class="tar-item tar-ficha" data-id="${x.id}">
-    <div class="tf-media"${foto ? ` style="background-image:url('${esc(foto)}')"` : ''}>${!foto ? `<i class="fas fa-${esPromo ? 'tag' : 'image'}"></i>` : ''}</div>
+    <div class="tf-media"${foto ? ` style="background-image:url('${esc(foto)}')"` : ''}>${!foto ? `<i class="fas fa-${esPromo ? 'tag' : 'image'}"></i>` : ''}<div class="carrusel-dots"></div></div>
     <div class="tf-body">
       <div class="tc-nombre">${esc(nombre)}</div>
       ${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}
@@ -1090,8 +1116,11 @@ function okToast(msg) { const t = document.createElement('div'); t.className = '
 function errToast(msg) { const t = document.createElement('div'); t.className = 'toast toast-err'; t.innerHTML = `<i class="fas fa-triangle-exclamation"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5000); }
 
 /* ---------- Nav ---------- */
+const BN_CORE_SECS = ['dashboard', 'leads', 'tarifario', 'cotizador'];
 function activateSection(sec) {
   document.querySelectorAll('.nav-item,.bn-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
+  document.getElementById('bn-more')?.classList.toggle('active', !BN_CORE_SECS.includes(sec));
+  if (sheetAbierta) closeSheet(sheetAbierta);
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-' + sec).classList.add('active');
   const t = TITLES[sec] || TITLES.dashboard;
@@ -1106,4 +1135,26 @@ function activateSection(sec) {
   if (sec === 'asesores') loadAsesoresPeriodo();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
-function setupNav() { document.querySelectorAll('.nav-item,.bn-item').forEach(n => n.addEventListener('click', () => { if (n.dataset.sec) activateSection(n.dataset.sec); })); }
+function setupNav() {
+  document.querySelectorAll('.nav-item,.bn-item,.sheet-item').forEach(n => n.addEventListener('click', () => { if (n.dataset.sec) activateSection(n.dataset.sec); }));
+  document.getElementById('bn-more')?.addEventListener('click', () => openSheet('more-sheet'));
+  document.querySelectorAll('.mfs-trigger, .mfs-done').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.mfs;
+    b.classList.contains('mfs-trigger') ? openSheet(id) : closeSheet(id);
+  }));
+}
+
+/* ---------- Hoja inferior genérica (más opciones del nav, filtros en móvil) — un solo backdrop compartido, una hoja abierta a la vez ---------- */
+let sheetAbierta = null;
+function openSheet(id) {
+  if (sheetAbierta && sheetAbierta !== id) closeSheet(sheetAbierta);
+  document.getElementById(id)?.classList.add('open');
+  document.getElementById('sheet-bg')?.classList.add('open');
+  sheetAbierta = id;
+}
+function closeSheet(id) {
+  document.getElementById(id)?.classList.remove('open');
+  document.getElementById('sheet-bg')?.classList.remove('open');
+  if (sheetAbierta === id) sheetAbierta = null;
+}
+document.getElementById('sheet-bg')?.addEventListener('click', () => { if (sheetAbierta) closeSheet(sheetAbierta); });
