@@ -123,6 +123,19 @@ select.flt{background:var(--panel-solid);border:1px solid var(--line2);border-ra
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238b93ad' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center}
 select.flt:focus{border-color:var(--accent)}
 .tcount{margin-left:auto;font-size:12px;color:var(--muted)}
+.drp{position:relative}
+.drp-btn{display:inline-flex;align-items:center;gap:8px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:9px 14px;color:var(--txt);font-size:12.5px;font-family:inherit;cursor:pointer;transition:.15s}
+.drp-btn:hover{border-color:var(--accent)}
+.drp-btn i{color:var(--accent);font-size:12px}
+.drp-panel{display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:20;background:var(--panel-solid);border:1px solid var(--line2);border-radius:14px;padding:14px;box-shadow:0 16px 40px rgba(0,0,0,.5);min-width:270px}
+.drp-panel.open{display:block}
+.drp-presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.drp-presets button{background:rgba(255,255,255,.05);border:1px solid var(--line2);color:var(--muted);border-radius:20px;padding:6px 12px;font-size:11.5px;cursor:pointer;font-family:inherit;transition:.15s}
+.drp-presets button:hover{color:var(--txt);border-color:var(--accent)}
+.drp-inputs{display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px dashed var(--line2)}
+.drp-inputs label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;display:flex;flex-direction:column;gap:5px}
+.drp-inputs input{background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:9px;padding:8px 10px;color:var(--txt);font-size:13px;font-family:inherit;color-scheme:dark}
+@media(max-width:760px){.drp-panel{left:auto;right:0}}
 .chips-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .chips-bar:empty{margin:0}
 .chips-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
@@ -221,6 +234,44 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 @media(max-width:760px){.kpis-5{grid-template-columns:repeat(2,1fr)}.seg-group{width:100%;justify-content:stretch}.seg{flex:1;padding:9px 8px}.fdate{flex:1 1 45%}}
 .foot-note{text-align:center;font-size:11px;color:var(--muted2);margin-top:30px}
 
+/* ---------- Tarifario ---------- */
+.tar-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.tar-search{position:relative;flex:1;min-width:200px}
+.tar-search input{width:100%;background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:10px 14px 10px 38px;color:var(--txt);font-size:13px;font-family:inherit;outline:none}
+.tar-search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.tar-search i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+.tar-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.tar-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;backdrop-filter:blur(8px);cursor:pointer;transition:.12s}
+.tar-card:hover{border-color:rgba(255,145,0,.3);transform:translateY(-2px)}
+.tar-card .tc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px}
+.tar-card .tc-nombre{font-size:14.5px;font-weight:700;line-height:1.3}
+.tar-card .tc-destino{font-size:11px;color:var(--muted);margin-top:3px}
+.tar-card .tc-resumen{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tar-card .tc-precio{font-size:13px;font-weight:700;color:var(--green);margin-top:10px}
+.tar-card .tc-vigencia{font-size:11px;color:var(--amber);margin-top:3px}
+.tar-info-box{margin-top:18px}
+.tar-info-box summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--muted);padding:4px 0;list-style:none}
+.tar-info-box summary::-webkit-details-marker{display:none}
+.tar-info-box summary i{margin-right:6px;color:var(--accent)}
+.tar-info-item{padding:10px 0;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.tar-info-item b{color:var(--txt);display:block;margin-bottom:3px;font-size:13px}
+
+/* ---------- Cotizador IA ---------- */
+.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);min-height:420px}
+.chat-log{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:6px 2px 16px}
+.chat-msg{max-width:78%;padding:12px 15px;border-radius:16px;font-size:13.5px;line-height:1.55;white-space:pre-wrap}
+.chat-msg.user{align-self:flex-end;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border-bottom-right-radius:5px}
+.chat-msg.bot{align-self:flex-start;background:var(--panel-solid);border:1px solid var(--line2);border-bottom-left-radius:5px}
+.chat-msg.bot.loading{color:var(--muted);font-style:italic}
+.chat-empty{margin:auto;text-align:center;color:var(--muted);font-size:13px;max-width:320px}
+.chat-empty i{font-size:26px;color:var(--muted2);margin-bottom:10px;display:block}
+.chat-inputbar{display:flex;gap:10px;padding-top:12px;border-top:1px solid var(--line)}
+.chat-inputbar textarea{flex:1;resize:none;background:var(--panel-solid);border:1.5px solid var(--line2);border-radius:14px;padding:12px 14px;color:var(--txt);font-size:14px;font-family:inherit;outline:none;max-height:120px}
+.chat-inputbar textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.chat-send{background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:14px;width:48px;flex-shrink:0;cursor:pointer;font-size:16px}
+.chat-send:disabled{opacity:.5;cursor:default}
+@media(max-width:760px){.chat-wrap{height:calc(100vh - 220px)}.chat-msg{max-width:88%}}
+
 /* login */
 #login,#setup,#forgot,#marketing-placeholder,#claim-list,#claim-form{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 600px at 50% -10%,rgba(255,145,0,.14),transparent 60%),#080b16;padding:20px}
 #login.show,#setup.show,#forgot.show,#marketing-placeholder.show,#claim-list.show,#claim-form.show{display:flex}
@@ -245,6 +296,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .login-foot a{color:var(--accent);text-decoration:none;font-weight:600}
 .rol-asesor .nav-admin-only{display:none}
 .rol-asesor #f-asesor{display:none}
+.rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok){display:none}
 
 /* ============ MÓVIL ============ */
 @media(max-width:900px){.g-2,.g-2b{grid-template-columns:1fr}}
@@ -403,6 +455,9 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
     <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
     <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
     <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
+    <div class="nav-label">Tarifario</div>
+    <a class="nav-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
+    <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
     <div class="nav-label nav-admin-only">Gestión</div>
     <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
     <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
@@ -466,8 +521,22 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
           <select class="flt" id="f-asesor"><option value="">Todos los asesores</option></select>
           <select class="flt" id="f-servicio"><option value="">Todos los servicios</option></select>
           <select class="flt" id="f-anio"><option value="">Todos los años</option></select>
-          <input type="date" class="flt fdate" id="f-desde" title="Desde esta fecha">
-          <input type="date" class="flt fdate" id="f-hasta" title="Hasta esta fecha">
+          <div class="drp" id="drp-f">
+            <button type="button" class="flt drp-btn" id="drp-f-btn"><i class="fas fa-calendar-days"></i> <span id="drp-f-label">Rango de fechas</span></button>
+            <div class="drp-panel" id="drp-f-panel">
+              <div class="drp-presets">
+                <button type="button" data-preset="hoy">Hoy</button>
+                <button type="button" data-preset="7d">7 días</button>
+                <button type="button" data-preset="mes">Este mes</button>
+                <button type="button" data-preset="anio">Este año</button>
+                <button type="button" data-preset="todo">Todo</button>
+              </div>
+              <div class="drp-inputs">
+                <label>Desde <input type="date" id="f-desde"></label>
+                <label>Hasta <input type="date" id="f-hasta"></label>
+              </div>
+            </div>
+          </div>
           <span class="tcount" id="t-count"></span>
         </div>
         <div id="active-filters" class="chips-bar"></div>
@@ -488,8 +557,49 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
       <div class="card"><h3><i class="fas fa-diagram-project"></i> Embudo detallado</h3><div class="csub">Toca una etapa para ver esos leads</div><div class="pipe" id="pipe2"></div></div>
     </section>
 
+    <!-- TARIFARIO -->
+    <section class="section" id="sec-tarifario">
+      <div class="seg-group" id="tar-tabs">
+        <button class="seg on" data-tab="destino">Destinos</button>
+        <button class="seg" data-tab="hotel">Hoteles</button>
+        <button class="seg" data-tab="paquete">Paquetes</button>
+        <button class="seg" data-tab="promo">Promociones</button>
+      </div>
+      <div class="tar-toolbar">
+        <div class="tar-search"><i class="fas fa-search"></i><input id="tar-search" placeholder="Buscar por nombre o destino..."></div>
+        <span class="tcount" id="tar-count"></span>
+      </div>
+      <div class="tbl-state" id="tar-loading"><div class="spin"></div><div class="es-s">Cargando tarifario...</div></div>
+      <div class="tbl-state" id="tar-empty"><i class="fas fa-book-open"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay ítems con este filtro</div></div>
+      <div class="tar-grid" id="tar-grid"></div>
+      <details class="tar-info-box" id="tar-info-box" style="display:none">
+        <summary><i class="fas fa-circle-info"></i> Normativas y horarios importantes</summary>
+        <div id="tar-info-list"></div>
+      </details>
+    </section>
+
+    <!-- COTIZADOR IA -->
+    <section class="section" id="sec-cotizador">
+      <div class="card chat-wrap">
+        <div class="chat-log" id="chat-log">
+          <div class="chat-empty" id="chat-empty"><i class="fas fa-comments"></i>Preguntá por un destino, hotel, paquete o promoción y el Cotizador arma la respuesta con el tarifario vigente. Nunca inventa precios que no estén cargados.</div>
+        </div>
+        <div class="chat-inputbar">
+          <textarea id="chat-input" rows="1" placeholder="Ej: ¿Cuánto cuesta un paquete a Los Roques para 2 personas?"></textarea>
+          <button class="chat-send" id="chat-send"><i class="fas fa-paper-plane"></i></button>
+        </div>
+      </div>
+    </section>
+
     <!-- ASESORES -->
     <section class="section" id="sec-asesores">
+      <div class="seg-group" id="ase-periodo">
+        <button class="seg" data-p="hoy">Hoy</button>
+        <button class="seg" data-p="semana">Semana</button>
+        <button class="seg" data-p="mes">Mes</button>
+        <button class="seg" data-p="anio">Año</button>
+        <button class="seg on" data-p="historico">Histórico</button>
+      </div>
       <div class="grid g-2b">
         <div class="card"><h3><i class="fas fa-user-tie"></i> Carga por asesor</h3><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
         <div class="card"><h3><i class="fas fa-scale-balanced"></i> Reparto objetivo</h3><div class="csub">Ponderación configurable del aleatorizador</div><div class="chart-wrap" style="height:280px"><canvas id="chAssign"></canvas></div></div>
@@ -507,8 +617,22 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
             <option value="timeout_no_respuesta">Timeout (sin respuesta)</option>
             <option value="manual_no_puedo">Manual (No puedo)</option>
           </select>
-          <input type="date" class="flt fdate" id="rg-desde" title="Desde esta fecha">
-          <input type="date" class="flt fdate" id="rg-hasta" title="Hasta esta fecha">
+          <div class="drp" id="drp-rg">
+            <button type="button" class="flt drp-btn" id="drp-rg-btn"><i class="fas fa-calendar-days"></i> <span id="drp-rg-label">Rango de fechas</span></button>
+            <div class="drp-panel" id="drp-rg-panel">
+              <div class="drp-presets">
+                <button type="button" data-preset="hoy">Hoy</button>
+                <button type="button" data-preset="7d">7 días</button>
+                <button type="button" data-preset="mes">Este mes</button>
+                <button type="button" data-preset="anio">Este año</button>
+                <button type="button" data-preset="todo">Todo</button>
+              </div>
+              <div class="drp-inputs">
+                <label>Desde <input type="date" id="rg-desde"></label>
+                <label>Hasta <input type="date" id="rg-hasta"></label>
+              </div>
+            </div>
+          </div>
           <span class="tcount" id="rg-count"></span>
         </div>
         <div class="tbl-state" id="rg-loading"><div class="spin"></div><div class="es-s">Cargando reasignaciones...</div></div>
@@ -564,6 +688,8 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 <nav class="bottom-nav">
   <a class="bn-item active" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Inicio</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i> Leads</a>
+  <a class="bn-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
+  <a class="bn-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador</a>
   <a class="bn-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
   <a class="bn-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
   <a class="bn-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Equipo</a>

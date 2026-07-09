@@ -20,7 +20,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const val = id => document.getElementById(id).value;
@@ -81,8 +81,8 @@ async function afterLogin() {
 }
 
 function entrarSegunRol() {
-  if (ROL === 'marketing') { showOverlay('marketing-placeholder'); return; }
   document.body.classList.toggle('rol-asesor', ROL === 'asesor');
+  document.body.classList.toggle('rol-marketing', ROL === 'marketing');
   overlay('login').classList.remove('show');
   overlay('setup').classList.remove('show');
   document.getElementById('side-un').textContent = MI_NOMBRE;
@@ -227,12 +227,15 @@ window.cerrarSesion = async () => { await sb.auth.signOut(); location.reload(); 
 async function startApp() {
   if (booted) return; booted = true;
   setupNav();
+  setupTarifarioTabs();
+  setupChat();
+  if (ROL === 'marketing') { activateSection('tarifario'); return; }
   await loadStats();
   ACTIVOS = Object.keys(STATS.by_advisor || {});
   renderAll();
   setupFilters();
   await loadTable();
-  setupMetricas(); setupRanking(); setupReasignaciones();
+  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo();
   subscribeRealtime();
 }
 function renderAll() { renderKPIs(); renderTrend(); renderCanal(); renderPipe('pipe'); renderPipe('pipe2'); renderDest(); renderAdvisors(); renderAssign(); }
@@ -294,11 +297,29 @@ function renderPipe(id) {
   }).join('');
   document.querySelectorAll('#' + id + ' .pstep').forEach(el => el.onclick = () => { const k = el.dataset.est; chartPreview('estado', k, niceEstado(k), 'fa-diagram-project', be[k] || 0); });
 }
-function renderAdvisors() {
-  const e = sortEntries(STATS.by_advisor), max = Math.max(...e.map(x => x[1]), 1);
-  document.getElementById('advList').innerHTML = e.map(([name, v], i) => { const c = ADV_COLORS[i % ADV_COLORS.length]; return `<div class="arow adv-click" data-adv="${esc(name)}"><div class="ava" style="background:${c}">${initials(name)}</div><div class="ai"><div class="an"><span>${esc(name)}</span><span class="anv">${fmt(v)} leads</span></div><div class="track"><div class="fill" style="width:${(v / max) * 100}%;background:${c}"></div></div></div></div>`; }).join('') + `<div class="arow" style="opacity:.6"><div class="ava" style="background:#39415c">H</div><div class="ai"><div class="an"><span>Históricos / inactivos</span><span class="anv">${fmt(STATS.historico_inactivo)} leads</span></div><div class="track"><div class="fill" style="width:100%;background:#39415c"></div></div></div></div>`;
-  document.querySelectorAll('.adv-click').forEach(el => el.onclick = () => { const a = el.dataset.adv; chartPreview('asesor', a, a, 'fa-user-tie', STATS.by_advisor[a]); });
-  document.querySelector('#advList').closest('.card').querySelector('.csub').textContent = `Toca un asesor para ver su cartera · ${e.length} activos`;
+function renderAdvisors(datosPeriodo) {
+  const src = datosPeriodo || STATS.by_advisor;
+  const e = sortEntries(src), max = Math.max(...e.map(x => x[1]), 1);
+  const filaHistorico = datosPeriodo ? '' : `<div class="arow" style="opacity:.6"><div class="ava" style="background:#39415c">H</div><div class="ai"><div class="an"><span>Históricos / inactivos</span><span class="anv">${fmt(STATS.historico_inactivo)} leads</span></div><div class="track"><div class="fill" style="width:100%;background:#39415c"></div></div></div></div>`;
+  document.getElementById('advList').innerHTML = e.map(([name, v], i) => { const c = ADV_COLORS[i % ADV_COLORS.length]; return `<div class="arow adv-click" data-adv="${esc(name)}"><div class="ava" style="background:${c}">${initials(name)}</div><div class="ai"><div class="an"><span>${esc(name)}</span><span class="anv">${fmt(v)} leads</span></div><div class="track"><div class="fill" style="width:${(v / max) * 100}%;background:${c}"></div></div></div></div>`; }).join('') + filaHistorico;
+  document.querySelectorAll('.adv-click').forEach(el => el.onclick = () => { const a = el.dataset.adv; chartPreview('asesor', a, a, 'fa-user-tie', src[a]); });
+  document.querySelector('#advList').closest('.card').querySelector('.csub').textContent = datosPeriodo ? `Toca un asesor para ver su cartera · ${e.length} con actividad en el periodo` : `Toca un asesor para ver su cartera · ${e.length} activos`;
+}
+
+/* ---------- Filtros de periodo en Asesores ---------- */
+let asePeriodo = 'historico';
+function setupAsesoresPeriodo() {
+  document.querySelectorAll('#ase-periodo .seg').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#ase-periodo .seg').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); asePeriodo = b.dataset.p; loadAsesoresPeriodo();
+  });
+}
+async function loadAsesoresPeriodo() {
+  if (asePeriodo === 'historico') { renderAdvisors(); return; }
+  const [d, h] = periodo(asePeriodo);
+  const { data, error } = await sb.rpc('carga_asesores', { p_desde: iso(d), p_hasta: iso(h) });
+  if (error) { console.error(error); errToast('No se pudo cargar la carga por asesor'); return; }
+  renderAdvisors(data || {});
 }
 
 /* ---------- Preview + Drill ---------- */
@@ -332,6 +353,39 @@ function setupFilters() {
   fill('f-anio', Object.keys(STATS.by_anio || {}).sort().reverse());
   ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
   let deb; document.getElementById('global-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => { page = 1; loadTable(); renderChips(); }, 300); });
+  initDateRangePicker('f');
+}
+
+/* ---------- Selector de rango de fechas (Leads + Reasignaciones) ---------- */
+function initDateRangePicker(prefix) {
+  const btn = document.getElementById(`drp-${prefix}-btn`);
+  const panel = document.getElementById(`drp-${prefix}-panel`);
+  const label = document.getElementById(`drp-${prefix}-label`);
+  const desde = document.getElementById(`${prefix}-desde`);
+  const hasta = document.getElementById(`${prefix}-hasta`);
+  const fmtCorta = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
+  const updateLabel = () => {
+    if (desde.value && hasta.value) label.textContent = `${fmtCorta(desde.value)} – ${fmtCorta(hasta.value)}`;
+    else if (desde.value) label.textContent = `Desde ${fmtCorta(desde.value)}`;
+    else if (hasta.value) label.textContent = `Hasta ${fmtCorta(hasta.value)}`;
+    else label.textContent = 'Rango de fechas';
+  };
+  btn.onclick = e => { e.stopPropagation(); panel.classList.toggle('open'); };
+  document.addEventListener('click', e => { if (!panel.contains(e.target) && e.target !== btn) panel.classList.remove('open'); });
+  [desde, hasta].forEach(el => el.addEventListener('change', updateLabel));
+  panel.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => {
+    const hoy = new Date(); const iso = d => d.toISOString().slice(0, 10);
+    const preset = b.dataset.preset;
+    if (preset === 'todo') { desde.value = ''; hasta.value = ''; }
+    else if (preset === 'hoy') { desde.value = iso(hoy); hasta.value = iso(hoy); }
+    else if (preset === '7d') { desde.value = iso(addD(hoy, -6)); hasta.value = iso(hoy); }
+    else if (preset === 'mes') { desde.value = iso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)); hasta.value = iso(hoy); }
+    else if (preset === 'anio') { desde.value = iso(new Date(hoy.getFullYear(), 0, 1)); hasta.value = iso(hoy); }
+    desde.dispatchEvent(new Event('change'));
+    updateLabel();
+    panel.classList.remove('open');
+  });
+  updateLabel();
 }
 function fill(id, arr) { const s = document.getElementById(id); if (!s) return; [...s.querySelectorAll('option:not([value=""])')].forEach(o => o.remove()); arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = niceEstado(v); s.appendChild(o); }); }
 
@@ -354,7 +408,7 @@ function renderChips() {
   chips.forEach((c, i) => box.querySelector(`b[data-ci="${i}"]`).onclick = c[1]);
   document.getElementById('clearAll').onclick = () => { clearFiltersQuiet(); refresh(); };
 }
-function setDrop(id, v) { document.getElementById(id).value = v; refresh(); }
+function setDrop(id, v) { const el = document.getElementById(id); el.value = v; if (id.endsWith('-desde') || id.endsWith('-hasta')) el.dispatchEvent(new Event('change')); refresh(); }
 function refresh() { page = 1; loadTable(); renderChips(); }
 
 function buildQuery(forCount) {
@@ -520,6 +574,7 @@ const MOTIVO_LABEL = { timeout_no_respuesta: 'Timeout', manual_no_puedo: 'No pue
 function setupReasignaciones() {
   fill('rg-asesor', ACTIVOS);
   ['rg-asesor', 'rg-motivo', 'rg-desde', 'rg-hasta'].forEach(id => document.getElementById(id).addEventListener('change', () => { rgPage = 1; loadReasignaciones(); }));
+  initDateRangePicker('rg');
 }
 function reasignFiltered(q) {
   const fa = val('rg-asesor'), fd = val('rg-desde'), fh = val('rg-hasta');
@@ -534,32 +589,26 @@ function buildReasignQuery() {
   if (fm) q = q.eq('motivo', fm);
   return q;
 }
-function buildReasignCount({ motivo, agotados } = {}) {
-  let q = reasignFiltered(sb.from('reasignaciones').select('*', { count: 'exact', head: true }));
-  const fm = motivo || val('rg-motivo');
-  if (fm) q = q.eq('motivo', fm);
-  if (agotados) q = q.is('asesor_nuevo', null);
-  return q;
-}
 async function loadReasignaciones() {
   const loading = document.getElementById('rg-loading'), empty = document.getElementById('rg-empty'), wrap = document.getElementById('rg-wrap');
   empty.classList.remove('show'); loading.classList.add('show'); wrap.style.opacity = '.4';
   const from = (rgPage - 1) * PER;
-  const [{ data, count, error }, timeoutC, manualC, agotadosC] = await Promise.all([
+  const fa = val('rg-asesor') || null, fd = val('rg-desde') || null, fh = val('rg-hasta') ? val('rg-hasta') + 'T23:59:59' : null;
+  const [{ data, count, error }, { data: kpis, error: kpisErr }] = await Promise.all([
     buildReasignQuery().order('created_at', { ascending: false }).range(from, from + PER - 1),
-    buildReasignCount({ motivo: 'timeout_no_respuesta' }),
-    buildReasignCount({ motivo: 'manual_no_puedo' }),
-    buildReasignCount({ agotados: true }),
+    sb.rpc('reasignaciones_kpis', { p_asesor: fa, p_desde: fd, p_hasta: fh }),
   ]);
   loading.classList.remove('show'); wrap.style.opacity = '1';
   if (error) { console.error(error); errToast('No se pudieron cargar las reasignaciones'); return; }
+  if (kpisErr) console.error(kpisErr);
   const total = count ?? 0;
   document.getElementById('rg-count').textContent = `${fmt(total)} reasignaciones`;
-  const kAgotados = agotadosC.count ?? 0;
+  const kpi = kpis || {};
+  const kAgotados = kpi.agotados ?? 0;
   document.getElementById('reasig-kpis').innerHTML = [
     { t: 'Total reasignaciones', v: fmt(total), i: 'fa-shuffle', c: 'var(--accent)' },
-    { t: 'Por timeout', v: fmt(timeoutC.count ?? 0), i: 'fa-clock', c: 'var(--blue)' },
-    { t: 'Manual (No puedo)', v: fmt(manualC.count ?? 0), i: 'fa-hand', c: 'var(--purple)' },
+    { t: 'Por timeout', v: fmt(kpi.timeout ?? 0), i: 'fa-clock', c: 'var(--blue)' },
+    { t: 'Manual (No puedo)', v: fmt(kpi.manual ?? 0), i: 'fa-hand', c: 'var(--purple)' },
     { t: 'Sin asesor disponible', v: fmt(kAgotados), i: 'fa-triangle-exclamation', c: kAgotados > 0 ? '#ef4444' : 'var(--green)' },
   ].map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
   if (!data.length) { empty.classList.add('show'); document.getElementById('rg-tbody').innerHTML = ''; document.getElementById('rg-pager').innerHTML = ''; return; }
@@ -586,6 +635,114 @@ function renderReasignPager(pages) {
   if (nx) nx.onclick = () => { rgPage++; loadReasignaciones(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 }
 
+/* ---------- Tarifario ---------- */
+let tarTab = 'destino', tarCache = {}, tarInfo = null;
+const TAR_TAB_LABEL = { destino: 'Destino', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción' };
+function setupTarifarioTabs() {
+  document.querySelectorAll('#tar-tabs .seg').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#tar-tabs .seg').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); tarTab = b.dataset.tab; loadTarifario();
+  });
+  let deb; document.getElementById('tar-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(renderTarifario, 200); });
+}
+async function loadTarifario() {
+  loadTarifarioInfo();
+  if (tarCache[tarTab]) { renderTarifario(); return; }
+  const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
+  empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
+  const q = tarTab === 'promo'
+    ? sb.from('promociones').select('*').order('titulo')
+    : sb.from('productos').select('*, tarifas(*)').eq('tipo', tarTab).order('nombre');
+  const { data, error } = await q;
+  loading.classList.remove('show'); grid.style.display = 'grid';
+  if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
+  tarCache[tarTab] = data;
+  renderTarifario();
+}
+function renderTarifario() {
+  const q = val('tar-search').trim().toLowerCase();
+  const data = tarCache[tarTab] || [];
+  const filtered = q ? data.filter(x => (x.nombre || x.titulo || '').toLowerCase().includes(q) || (x.destino || '').toLowerCase().includes(q)) : data;
+  document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
+  document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0);
+  document.getElementById('tar-grid').innerHTML = filtered.map(tarCardHtml).join('');
+  [...document.querySelectorAll('#tar-grid .tar-card')].forEach((el, i) => el.onclick = () => openProductoDrawer(filtered[i]));
+}
+function tarCardHtml(x) {
+  if (tarTab === 'promo') {
+    return `<div class="tar-card"><div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
+      ${x.precio_texto ? `<div class="tc-precio">${esc(x.precio_texto)}</div>` : ''}
+      ${x.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(x.vigencia_texto)}</div>` : ''}</div>`;
+  }
+  const tarifa = (x.tarifas || [])[0];
+  return `<div class="tar-card"><div class="tc-top"><div><div class="tc-nombre">${esc(x.nombre)}</div>${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}</div></div>
+    <div class="tc-resumen">${esc(x.descripcion || '')}</div>
+    ${tarifa ? `<div class="tc-precio">${esc(tarifa.precio_texto)}</div>` : ''}
+    ${tarifa && tarifa.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(tarifa.vigencia_texto)}</div>` : ''}</div>`;
+}
+async function loadTarifarioInfo() {
+  if (tarInfo) return;
+  tarInfo = [];
+  const { data, error } = await sb.from('productos').select('*').eq('tipo', 'info').order('nombre');
+  if (error || !data || !data.length) return;
+  tarInfo = data;
+  const box = document.getElementById('tar-info-box'), list = document.getElementById('tar-info-list');
+  box.style.display = '';
+  list.innerHTML = data.map(x => `<div class="tar-info-item"><b>${esc(x.nombre)}</b>${esc(x.descripcion || '')}</div>`).join('');
+}
+function openProductoDrawer(x) {
+  const esPromo = tarTab === 'promo';
+  const nombre = esPromo ? x.titulo : x.nombre;
+  const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
+  const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
+  const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="dhead"><div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div><div><div class="dn">${esc(nombre)}</div>
+      <div class="dm">${esc(x.destino || TAR_TAB_LABEL[tarTab])}</div></div></div>
+    ${precio ? `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div><div class="dfv">${esc(precio)}</div></div></div>` : ''}
+    ${vigencia ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Vigencia</div><div class="dfv">${esc(vigencia)}</div></div></div>` : ''}
+    ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv">${esc(x.descripcion)}</div></div></div>` : ''}
+    ${!esPromo && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv">${esc(x.requisitos)}</div></div></div>` : ''}
+    <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerBg').classList.add('open');
+}
+
+/* ---------- Cotizador IA ---------- */
+let chatHistory = [];
+function setupChat() {
+  const input = document.getElementById('chat-input');
+  document.getElementById('chat-send').onclick = enviarChat;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChat(); } });
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+}
+async function enviarChat() {
+  const input = document.getElementById('chat-input'), btn = document.getElementById('chat-send');
+  const texto = input.value.trim();
+  if (!texto || btn.disabled) return;
+  document.getElementById('chat-empty')?.remove();
+  addChatBubble('user', texto);
+  chatHistory.push({ role: 'user', content: texto });
+  input.value = ''; input.style.height = 'auto';
+  btn.disabled = true;
+  const loadingEl = addChatBubble('bot', 'Pensando...', true);
+  const { data, error } = await sb.functions.invoke('cotizador-chat', { body: { messages: chatHistory } });
+  loadingEl.remove();
+  btn.disabled = false;
+  if (error || !data?.respuesta) { addChatBubble('bot', 'No pude conectar con el cotizador, intenta de nuevo en un momento.'); return; }
+  addChatBubble('bot', data.respuesta);
+  chatHistory.push({ role: 'assistant', content: data.respuesta });
+}
+function addChatBubble(who, texto, loading) {
+  const log = document.getElementById('chat-log');
+  const div = document.createElement('div');
+  div.className = `chat-msg ${who}${loading ? ' loading' : ''}`;
+  div.textContent = texto;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
 /* ---------- Realtime ---------- */
 function subscribeRealtime() {
   sb.channel('leads-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, payload => {
@@ -610,6 +767,8 @@ function activateSection(sec) {
   if (sec === 'metricas') loadMetricas();
   if (sec === 'ranking') loadRanking();
   if (sec === 'reasignaciones') loadReasignaciones();
+  if (sec === 'tarifario') loadTarifario();
+  if (sec === 'asesores') loadAsesoresPeriodo();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
 function setupNav() { document.querySelectorAll('.nav-item,.bn-item').forEach(n => n.addEventListener('click', () => { if (n.dataset.sec) activateSection(n.dataset.sec); })); }
