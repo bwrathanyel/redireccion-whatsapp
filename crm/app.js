@@ -639,11 +639,21 @@ function renderReasignPager(pages) {
 let tarTab = 'destino', tarCache = {}, tarInfo = null;
 const TAR_TAB_LABEL = { destino: 'Destino', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción' };
 function setupTarifarioTabs() {
+  fill('tar-f-destino', ['Margarita', 'Coche']);
   document.querySelectorAll('#tar-tabs .seg').forEach(b => b.onclick = () => {
     document.querySelectorAll('#tar-tabs .seg').forEach(x => x.classList.remove('on'));
-    b.classList.add('on'); tarTab = b.dataset.tab; loadTarifario();
+    b.classList.add('on'); tarTab = b.dataset.tab;
+    actualizarVisibilidadFiltrosTarifario();
+    loadTarifario();
   });
+  actualizarVisibilidadFiltrosTarifario();
   let deb; document.getElementById('tar-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(renderTarifario, 200); });
+  document.querySelectorAll('.tar-f').forEach(el => el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => renderTarifario()));
+}
+function actualizarVisibilidadFiltrosTarifario() {
+  document.querySelectorAll('[data-tabs]').forEach(el => {
+    el.toggleAttribute('data-hidden', !el.dataset.tabs.split(',').includes(tarTab));
+  });
 }
 async function loadTarifario() {
   loadTarifarioInfo();
@@ -652,7 +662,7 @@ async function loadTarifario() {
   empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
   const q = tarTab === 'promo'
     ? sb.from('promociones').select('*').order('titulo')
-    : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,vigencia_texto,incluye_tags)').eq('tipo', tarTab).order('nombre');
+    : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad)').eq('tipo', tarTab).order('nombre');
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
@@ -662,11 +672,50 @@ async function loadTarifario() {
 const TAG_LABEL = { todo_incluido: 'Todo incluido', solo_desayuno: 'Solo desayuno', media_pension: 'Media pensión', pension_completa: 'Pensión completa', ninos_gratis: 'Niños gratis', '2x1': '2x1', descuento: 'Descuento' };
 const tagsHtml = tags => (tags || []).length ? `<div class="tar-tags">${tags.map(t => `<span class="tar-tag">${esc(TAG_LABEL[t] || t)}</span>`).join('')}</div>` : '';
 const DESTINO_ORDEN = ['Margarita', 'Coche'];
+const hoy = () => new Date().toISOString().slice(0, 10);
+const promoVigente = p => !p.fecha_fin_estimada || p.fecha_fin_estimada >= hoy();
+
+// Para hoteles: agrega datos de sus promos vinculadas (precio mínimo, tags, niños gratis, vigencia).
+function agregarHotel(x) {
+  const promos = x.promociones || [];
+  const precios = promos.map(p => p.precio_desde_usd).filter(v => v != null);
+  return {
+    tags: [...new Set(promos.flatMap(p => p.incluye_tags || []))],
+    precioMin: precios.length ? Math.min(...precios) : null,
+    ninosMax: Math.max(0, ...promos.map(p => p.ninos_gratis_cantidad || 0)),
+    algunaVigente: promos.length ? promos.some(promoVigente) : true,
+  };
+}
 
 function renderTarifario() {
   const q = val('tar-search').trim().toLowerCase();
   const data = tarCache[tarTab] || [];
-  const filtered = q ? data.filter(x => (x.nombre || x.titulo || '').toLowerCase().includes(q) || (x.destino || '').toLowerCase().includes(q)) : data;
+  const fDestino = val('tar-f-destino'), fTipo = val('tar-f-tipo');
+  const fPrecio = val('tar-f-precio') ? Number(val('tar-f-precio')) : null;
+  const fNinos = document.getElementById('tar-f-ninos').checked;
+  const fVigente = document.getElementById('tar-f-vigente').checked;
+
+  const filtered = data.filter(x => {
+    if (q && !(x.nombre || x.titulo || '').toLowerCase().includes(q) && !(x.destino || '').toLowerCase().includes(q)) return false;
+    if (tarTab === 'hotel') {
+      if (fDestino && x.destino !== fDestino) return false;
+      const ag = agregarHotel(x);
+      if (fTipo && !ag.tags.includes(fTipo)) return false;
+      if (fPrecio != null && ag.precioMin != null && ag.precioMin > fPrecio) return false;
+      if (fNinos && ag.ninosMax < 1) return false;
+      if (fVigente && !ag.algunaVigente) return false;
+    } else if (tarTab === 'promo') {
+      if (fTipo && !(x.incluye_tags || []).includes(fTipo)) return false;
+      if (fPrecio != null && x.precio_desde_usd != null && x.precio_desde_usd > fPrecio) return false;
+      if (fNinos && !(x.ninos_gratis_cantidad > 0)) return false;
+      if (fVigente && !promoVigente(x)) return false;
+    } else if (fPrecio != null) {
+      const precioTarifa = (x.tarifas || [])[0]?.precio_desde_usd;
+      if (precioTarifa != null && precioTarifa > fPrecio) return false;
+    }
+    return true;
+  });
+
   document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
   document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0);
   const grid = document.getElementById('tar-grid');
@@ -675,11 +724,22 @@ function renderTarifario() {
     const porDestino = {};
     filtered.forEach(x => (porDestino[x.destino || 'Otros'] ??= []).push(x));
     const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
-    grid.innerHTML = destinos.map(d => `<div class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span></div><div class="tar-grid-sub">${porDestino[d].map(tarCardHtml).join('')}</div>`).join('');
+    grid.innerHTML = destinos.map(d => `<div class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span></div><div class="tar-hotel-list">${porDestino[d].map(tarHotelRowHtml).join('')}</div>`).join('');
+    [...document.querySelectorAll('#tar-grid .tar-hotel-row')].forEach(el => el.onclick = () => openProductoDrawer(filtered.find(x => String(x.id) === el.dataset.id)));
   } else {
     grid.innerHTML = filtered.map(tarCardHtml).join('');
+    [...document.querySelectorAll('#tar-grid .tar-card')].forEach(el => el.onclick = () => openProductoDrawer(filtered.find(x => String(x.id) === el.dataset.id)));
   }
-  [...document.querySelectorAll('#tar-grid .tar-card')].forEach(el => el.onclick = () => openProductoDrawer(filtered.find(x => String(x.id) === el.dataset.id)));
+}
+function tarHotelRowHtml(x) {
+  const ag = agregarHotel(x);
+  return `<div class="tar-hotel-row" data-id="${x.id}">
+    <div class="thr-nombre">${esc(x.nombre)}</div>
+    ${ag.tags.length ? tagsHtml(ag.tags) : '<span></span>'}
+    ${x.promociones?.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${x.promociones.length} promo${x.promociones.length > 1 ? 's' : ''}</div>` : ''}
+    <div class="thr-precio${ag.precioMin == null ? ' sin-precio' : ''}">${ag.precioMin != null ? `Desde $${ag.precioMin}` : 'Consultar precio'}</div>
+    <i class="fas fa-chevron-right"></i>
+  </div>`;
 }
 function tarCardHtml(x) {
   if (tarTab === 'promo') {

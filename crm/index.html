@@ -263,6 +263,23 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .tar-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .tar-tag{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:20px;background:rgba(16,185,129,.14);color:#34d399}
 .tc-promos{font-size:11.5px;color:var(--amber);margin-top:8px;font-weight:600}
+.tar-f-check{display:inline-flex;align-items:center;gap:7px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:9px 12px;color:var(--muted);font-size:12.5px;cursor:pointer;user-select:none;white-space:nowrap}
+.tar-f-check:has(input:checked){color:var(--txt);border-color:var(--accent)}
+.tar-f-check input{accent-color:var(--accent);cursor:pointer}
+#tar-f-precio{width:150px}
+.tar-f[data-hidden]{display:none}
+.tar-f-check[data-hidden]{display:none}
+/* ---------- Hoteles: lista ordenada en vez de cards sueltas ---------- */
+.tar-hotel-list{display:flex;flex-direction:column;gap:8px}
+.tar-hotel-row{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 16px;cursor:pointer;transition:.12s}
+.tar-hotel-row:hover{border-color:rgba(255,145,0,.3);background:rgba(255,145,0,.04)}
+.tar-hotel-row .thr-nombre{font-size:14px;font-weight:700;flex:1;min-width:160px}
+.tar-hotel-row .thr-precio{font-size:13px;font-weight:700;color:var(--green);white-space:nowrap;min-width:110px;text-align:right}
+.tar-hotel-row .thr-precio.sin-precio{color:var(--muted);font-weight:500;font-size:12px}
+.tar-hotel-row .tar-tags{margin-top:0;flex:1 1 auto;justify-content:flex-end}
+.tar-hotel-row .tc-promos{margin-top:0;white-space:nowrap}
+.tar-hotel-row .fa-chevron-right{color:var(--muted2);font-size:12px}
+@media(max-width:760px){.tar-hotel-row{flex-wrap:wrap}.tar-hotel-row .thr-precio{margin-left:auto}}
 
 /* ---------- Cotizador IA ---------- */
 .chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);min-height:420px}
@@ -575,6 +592,19 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
       </div>
       <div class="tar-toolbar">
         <div class="tar-search"><i class="fas fa-search"></i><input id="tar-search" placeholder="Buscar por nombre o destino..."></div>
+        <select class="flt tar-f" id="tar-f-destino" data-tabs="hotel"><option value="">Todos los destinos</option></select>
+        <select class="flt tar-f" id="tar-f-tipo" data-tabs="hotel,promo">
+          <option value="">Cualquier plan</option>
+          <option value="todo_incluido">Todo incluido</option>
+          <option value="solo_desayuno">Solo desayuno</option>
+          <option value="media_pension">Media pensión</option>
+          <option value="pension_completa">Pensión completa</option>
+          <option value="2x1">2x1</option>
+          <option value="descuento">Con descuento</option>
+        </select>
+        <input class="flt tar-f" id="tar-f-precio" data-tabs="hotel,promo,destino,paquete" type="number" min="0" placeholder="Precio máx. USD">
+        <label class="tar-f-check" id="tar-f-ninos-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-ninos"> Con niños gratis</label>
+        <label class="tar-f-check" id="tar-f-vigente-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-vigente" checked> Solo vigentes</label>
         <span class="tcount" id="tar-count"></span>
       </div>
       <div class="tbl-state" id="tar-loading"><div class="spin"></div><div class="es-s">Cargando tarifario...</div></div>
