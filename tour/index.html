@@ -174,11 +174,13 @@ function enviarDatos(datos) {
     formData.append('Servicio', datos.servicio);
     formData.append('Procedencia', datos.procedencia || 'No detectada');
     formData.append('Telefono', datos.telefono || 'No especificado');
+    formData.append('Asesor', datos.asesor || 'No asignado');
     fetch('https://api.sheetmonkey.io/form/nLKvJpsMkGCFRwwwMMMX21', { method: 'POST', body: formData }).then(function(r) { console.log('Lead registrado en Sheets'); }).catch(function(e) { console.log('Error:', e); });
 }
 
+var PRECIOS = { basico: 25, full360: 35 };
 var planSeleccionado = 'basico';
-var incluyePlanes = { 'basico': { titulo: '✅ INCLUYE - PLAN BÁSICO · $25 USD', items: ['🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳'] }, 'full360': { titulo: '✅ INCLUYE - PLAN FULL360 · $35 USD', items: ['🍗🐟 Almuerzo playero (pollo o pescado + ensalada y tostón)','🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳'] } };
+var incluyePlanes = { 'basico': { titulo: '✅ INCLUYE - PLAN BÁSICO · $' + PRECIOS.basico + ' USD', items: ['🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳'] }, 'full360': { titulo: '✅ INCLUYE - PLAN FULL360 · $' + PRECIOS.full360 + ' USD', items: ['🍗🐟 Almuerzo playero (pollo o pescado + ensalada y tostón)','🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳'] } };
 function seleccionarPlan(el) { var cards = document.querySelectorAll('#planes-grid .plan-card'); for (var i = 0; i < cards.length; i++) cards[i].classList.remove('sel'); el.classList.add('sel'); planSeleccionado = el.dataset.plan; var plan = incluyePlanes[planSeleccionado]; document.getElementById('incluye-titulo').textContent = plan.titulo; var html = ''; for (var j = 0; j < plan.items.length; j++) { html += '<div class="incluye-item"><i class="fas fa-check"></i> ' + plan.items[j] + '</div>'; } document.getElementById('incluye-lista').innerHTML = html; actualizarTotal(); }
 function getAdultosCount() { var v = parseInt(document.getElementById('adultos').value); return isNaN(v) ? null : v; }
 document.getElementById('adultos').addEventListener('input', actualizarGrupo);
@@ -188,7 +190,7 @@ function getNinosCount() { var sel = document.getElementById('ninos'); if (sel.v
 var MIN_GRUPO = 15;
 function contarGrupo() { return (getAdultosCount() || 0) + (getNinosCount() || 0); }
 function actualizarGrupo() { var total = contarGrupo(); var el = document.getElementById('grupo-status'); if (el) { if (total >= MIN_GRUPO) { el.className = 'grupo-status ok'; el.innerHTML = '<i class="fas fa-circle-check"></i> ¡Grupo listo! ' + total + ' personas · cumplen el mínimo'; } else { var faltan = MIN_GRUPO - total; el.className = 'grupo-status warn'; el.innerHTML = '<i class="fas fa-user-group"></i> Grupo actual: ' + total + ' persona(s) · faltan ' + faltan + ' para el mínimo de 15'; } } actualizarTotal(); }
-function actualizarTotal() { var a = getAdultosCount() || 0; var price = planSeleccionado === 'full360' ? 35 : 25; var el = document.getElementById('total-vivo'); if (!el) return; var span = el.querySelector('span'); if (a < 1) { span.innerHTML = 'Indica cuántos adultos viajan para estimar tu total'; } else { span.innerHTML = 'Estimado del grupo: <b>$' + (a * price) + ' USD</b> · ' + a + ' adultos × $' + price; } }
+function actualizarTotal() { var a = getAdultosCount() || 0; var price = PRECIOS[planSeleccionado]; var el = document.getElementById('total-vivo'); if (!el) return; var span = el.querySelector('span'); if (a < 1) { span.innerHTML = 'Indica cuántos adultos viajan para estimar tu total'; } else { span.innerHTML = 'Estimado del grupo: <b>$' + (a * price) + ' USD</b> · ' + a + ' adultos × $' + price; } }
 actualizarGrupo();
 function actualizarEdades() { var count = getNinosCount(); var cont = document.getElementById('contenedor-edades'); if (!count || count <= 0) { cont.innerHTML = ''; return; } var html = '<label style="font-size:9px;color:var(--text-warm);margin-bottom:5px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>'; var max = Math.min(count, 8); for (var i = 1; i <= max; i++) { html += '<input type="number" class="edad-nino extra-input" min="3" max="10" inputmode="numeric" placeholder="Niño ' + i + ': edad (3-10)" style="margin-bottom:3px;">'; } if (count > 8) html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen: ej. 3 de 8 años, 2 de 5">'; cont.innerHTML = html; }
 function lanzarConfeti() { var colores = ['#ff9100', '#25D366', '#ffd166', '#ffb74d']; var c = document.createElement('div'); c.className = 'confeti-container'; var f = document.createDocumentFragment(); for (var i = 0; i < 20; i++) { var x = document.createElement('div'); x.className = 'confeti'; x.style.left = Math.random() * 100 + '%'; x.style.animationDelay = Math.random() * 0.4 + 's'; x.style.animationDuration = (Math.random() * 0.8 + 0.7) + 's'; x.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)]; f.appendChild(x); } c.appendChild(f); document.body.appendChild(c); setTimeout(function() { c.remove(); }, 1500); }
@@ -198,12 +200,12 @@ function generarSolicitud() {
     var telefono = document.getElementById('telefono').value.trim();
     var adultos = getAdultosCount(); var ninos = getNinosCount(); var bebes = parseInt(document.getElementById('bebes').value);
     var notas = document.getElementById('notas').value.trim();
-    var plan = planSeleccionado; var planNombre = plan === 'full360' ? 'PLAN FULL360' : 'PLAN BÁSICO'; var planPrecio = plan === 'full360' ? '$35 USD' : '$25 USD';
+    var plan = planSeleccionado; var planNombre = plan === 'full360' ? 'PLAN FULL360' : 'PLAN BÁSICO'; var planPrecio = '$' + PRECIOS[plan] + ' USD';
     var procedencia = detectarProcedencia();
     if (!nombre) { alert('Por favor, ingresa tu nombre completo.'); var nEl = document.getElementById('nombre'); nEl.focus(); nEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
     if (!adultos || adultos < 1) { alert('Indica cuántos adultos viajan en el grupo.'); document.getElementById('adultos').focus(); return; }
-    var total = plan === 'full360' ? adultos * 35 : adultos * 25;
-    var precioUnit = plan === 'full360' ? '$35' : '$25';
+    var total = adultos * PRECIOS[plan];
+    var precioUnit = '$' + PRECIOS[plan];
     var grupo = adultos + (ninos > 0 ? ninos : 0);
     var faltanGrupo = grupo < 15 ? (15 - grupo) : 0;
     var edadesNinos = ''; var resumenEl = document.getElementById('edades-resumen');
@@ -211,9 +213,10 @@ function generarSolicitud() {
     else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) { arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); } edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
     var asesores = ['584244634041', '584244900601', '584244900601', '584244900601', '584127136169', '584127136169', '584147020527', '584244269876', '584140415685'];
     var tlf = asesores[Math.floor(Math.random() * asesores.length)];
+    var asesorAsignado = tlf;
 
     // Enviar a Sheet Monkey
-    enviarDatos({ fechaHora: new Date().toLocaleString('es-VE'), destino: 'Cayo Sal - Falcón', servicio: planNombre + ' · ' + planPrecio + ' · Grupo ' + grupo + (faltanGrupo > 0 ? ' (faltan ' + faltanGrupo + ')' : ''), pagina: 'Tours', nombre: nombre, procedencia: procedencia, telefono: telefono });
+    enviarDatos({ fechaHora: new Date().toLocaleString('es-VE'), destino: 'Cayo Sal - Falcón', servicio: planNombre + ' · ' + planPrecio + ' · Grupo ' + grupo + (faltanGrupo > 0 ? ' (faltan ' + faltanGrupo + ')' : ''), pagina: 'Tours', nombre: nombre, procedencia: procedencia, telefono: telefono, asesor: asesorAsignado });
 
     // Versión con emojis (normal)
     var lineasEmoji = ['🌴 *RESERVA TOUR PRIVADO - LOTUS 360*','','📍 *Tour:* Cayo Sal - Chichiriviche, Falcón','🔒 *Modalidad:* Privado por grupo (mín. 15 personas)','📅 *Fecha:* A convenir con el grupo','⏰ *Horario:* 6:00 am - 4:00 pm','📍 *Salida:* CC Dinastía, Naguanagua · Carabobo','','🎫 *Plan:* ' + planNombre + ' (' + precioUnit + ' por persona)','👤 *Responsable:* ' + nombre,'👥 *Grupo:* ' + grupo + ' persona(s) → ' + adultos + ' adulto(s)' + (ninos > 0 ? ' + ' + ninos + ' niño(s)' : '') + (bebes > 0 ? ' + ' + bebes + ' infante(s)' : ''),'💰 *Total estimado:* $' + total + ' USD (' + adultos + ' adultos × ' + precioUnit + ')'];
