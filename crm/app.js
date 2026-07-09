@@ -460,7 +460,7 @@ function buildQuery(forCount) {
   if (fs) q = q.eq('servicio', fs);
   if (fd) q = q.gte('fecha_creacion', fd);
   if (fh) q = q.lte('fecha_creacion', fh + 'T23:59:59');
-  if (activeDestino) q = q.eq('destino', activeDestino);
+  if (activeDestino) q = q.ilike('destino', `%${activeDestino}%`);
   if (activeMonth) { const [y, m] = activeMonth.split('-').map(Number); const nm = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; q = q.gte('fecha_creacion', activeMonth + '-01').lt('fecha_creacion', nm + '-01'); }
   if (qs) q = q.or(`nombre.ilike.%${qs}%,telefono.ilike.%${qs}%`);
   return q;
