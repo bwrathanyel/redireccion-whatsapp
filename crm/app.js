@@ -54,7 +54,18 @@ const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-a
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
 let booted = false, ROL = null, MI_NOMBRE = null;
 const overlay = id => document.getElementById(id);
-const showOverlay = id => OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id));
+const showOverlay = id => { OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
+// Se recarga cada vez que se muestra el login (no solo una vez al abrir la
+// página) para que un usuario recién reclamado en esta misma sesión ya
+// aparezca sin necesitar refrescar.
+async function cargarUsuariosLogin() {
+  const sel = document.getElementById('loginUser');
+  const previo = sel.value;
+  const { data, error } = await sb.rpc('listar_usuarios_activos');
+  if (error || !data) return;
+  sel.innerHTML = '<option value="">Selecciona tu usuario</option>' + data.map(u => `<option value="${esc(u.username)}">${esc(u.nombre)}</option>`).join('');
+  if (previo && [...sel.options].some(o => o.value === previo)) sel.value = previo;
+}
 
 initAuth();
 async function initAuth() {
@@ -777,7 +788,7 @@ function renderReasignPager(pages) {
 }
 
 /* ---------- Tarifario ---------- */
-let tarTab = 'destino', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
+let tarTab = 'promo', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción' };
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche']);
@@ -791,6 +802,85 @@ function setupTarifarioTabs() {
   let deb; document.getElementById('tar-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(renderTarifario, 200); });
   document.querySelectorAll('.tar-f').forEach(el => el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => renderTarifario()));
   tarView = initViewSwitcher('tar-view-switch', 'tarifario', 'tarjetas', v => { tarView = v; renderTarifario(); });
+  cargarTabsOcultas();
+  setupTarAdmin();
+}
+
+/* ---------- Configuración de visibilidad de Tarifario (solo admin) ---------- */
+const TAR_TAB_META = [
+  { key: 'promo', label: 'Promociones' },
+  { key: 'destino', label: 'Guías/Tours' },
+  { key: 'hotel', label: 'Hoteles' },
+  { key: 'paquete', label: 'Paquetes' },
+];
+let tabsOcultas = [];
+async function cargarTabsOcultas() {
+  const { data, error } = await sb.from('tarifario_config').select('value').eq('key', 'tabs_ocultas').single();
+  tabsOcultas = (!error && Array.isArray(data?.value)) ? data.value : [];
+  aplicarTabsOcultas();
+}
+function aplicarTabsOcultas() {
+  document.querySelectorAll('#tar-tabs .seg').forEach(b => {
+    const oculto = tabsOcultas.includes(b.dataset.tab);
+    if (ROL === 'admin') b.classList.toggle('tab-oculta', oculto);
+    else b.style.display = oculto ? 'none' : '';
+  });
+  if (ROL !== 'admin') {
+    const activo = document.querySelector('#tar-tabs .seg.on');
+    if (activo && tabsOcultas.includes(activo.dataset.tab)) {
+      const primera = [...document.querySelectorAll('#tar-tabs .seg')].find(b => !tabsOcultas.includes(b.dataset.tab));
+      primera?.click();
+    }
+  }
+}
+function setupTarAdmin() {
+  const btn = document.getElementById('tar-admin-btn');
+  if (!btn) return;
+  btn.onclick = () => { openSheet('tar-admin-sheet'); renderTasTabs(); cargarTasItems(); };
+  document.getElementById('tas-close').onclick = () => closeSheet('tar-admin-sheet');
+  document.getElementById('tas-search').addEventListener('input', renderTasList);
+}
+function renderTasTabs() {
+  document.getElementById('tas-tabs').innerHTML = TAR_TAB_META.map(t => {
+    const oculto = tabsOcultas.includes(t.key);
+    return `<div class="tas-tab-row"><span>${esc(t.label)}</span><button class="tas-toggle${oculto ? '' : ' on'}" data-tab="${t.key}"></button></div>`;
+  }).join('');
+  document.querySelectorAll('#tas-tabs .tas-toggle').forEach(b => b.onclick = () => toggleTabOculta(b.dataset.tab));
+}
+async function toggleTabOculta(key) {
+  tabsOcultas = tabsOcultas.includes(key) ? tabsOcultas.filter(k => k !== key) : [...tabsOcultas, key];
+  const { error } = await sb.from('tarifario_config').update({ value: tabsOcultas, updated_at: new Date().toISOString() }).eq('key', 'tabs_ocultas');
+  if (error) { errToast('No se pudo guardar'); return; }
+  renderTasTabs();
+  aplicarTabsOcultas();
+}
+let tasItemsCache = null;
+async function cargarTasItems() {
+  const [{ data: prods }, { data: promos }] = await Promise.all([
+    sb.from('productos').select('id,tipo,nombre,activo').neq('tipo', 'info').order('tipo').order('nombre'),
+    sb.from('promociones').select('id,titulo,revisado').order('titulo'),
+  ]);
+  tasItemsCache = [
+    ...(prods || []).map(p => ({ id: p.id, tabla: 'productos', campo: 'activo', tipo: p.tipo, nombre: p.nombre, visible: p.activo })),
+    ...(promos || []).map(p => ({ id: p.id, tabla: 'promociones', campo: 'revisado', tipo: 'promo', nombre: p.titulo, visible: p.revisado })),
+  ];
+  renderTasList();
+}
+function renderTasList() {
+  const q = val('tas-search').trim().toLowerCase();
+  const items = (tasItemsCache || []).filter(x => !q || x.nombre.toLowerCase().includes(q));
+  document.getElementById('tas-list').innerHTML = items.map(x => `<div class="tas-row"><span class="tas-row-tipo">${esc(TAR_TAB_LABEL[x.tipo] || x.tipo)}</span><span class="tas-row-nombre${x.visible ? '' : ' oculto'}">${esc(x.nombre)}</span><button class="tas-toggle${x.visible ? ' on' : ''}" data-id="${x.id}" data-tabla="${x.tabla}" data-campo="${x.campo}"></button></div>`).join('');
+  document.querySelectorAll('#tas-list .tas-toggle').forEach(b => b.onclick = () => toggleTasItem(b));
+}
+async function toggleTasItem(btn) {
+  const { id, tabla, campo } = btn.dataset;
+  const item = tasItemsCache.find(x => String(x.id) === id && x.tabla === tabla);
+  const nuevo = !item.visible;
+  const { error } = await sb.from(tabla).update({ [campo]: nuevo }).eq('id', id);
+  if (error) { errToast('No se pudo guardar'); return; }
+  item.visible = nuevo;
+  renderTasList();
+  tarCache = {};
 }
 function actualizarVisibilidadFiltrosTarifario() {
   document.querySelectorAll('[data-tabs]').forEach(el => {
@@ -969,6 +1059,13 @@ function renderTarifario() {
   [...document.querySelectorAll('#tar-grid .tar-item')].forEach(el => {
     const x = filtered.find(x => String(x.id) === el.dataset.id);
     el.onclick = () => openProductoDrawer(x);
+    // La policy RLS deja al admin ver también lo que él mismo ocultó (para
+    // poder revertirlo) — sin esta marca se vería idéntico a lo visible y
+    // parecería que ocultar no hizo nada.
+    if (ROL === 'admin' && (tarTab === 'promo' ? x.revisado === false : x.activo === false)) {
+      el.classList.add('tar-oculto-admin');
+      el.insertAdjacentHTML('afterbegin', '<span class="tar-oculto-badge">Oculto</span>');
+    }
     const fotos = fotosDe(x);
     if (tarView === 'fichas') {
       const media = el.querySelector('.tf-media');
@@ -1106,9 +1203,27 @@ function openProductoDrawer(x) {
     ${!esPromo && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv">${esc(x.requisitos)}</div></div></div>` : ''}
     ${esPromo ? tagsHtml(x.incluye_tags) : ''}
     ${!esPromo && (x.promociones || []).length ? `<div class="dfield"><div class="dfi"><i class="fas fa-gift"></i></div><div><div class="dfl">Promociones activas</div><div class="dfv" style="font-weight:500">${x.promociones.map(p => `<div style="margin-bottom:8px"><b>${esc(p.titulo)}</b>${p.precio_texto ? `<br>${esc(p.precio_texto)}` : ''}${p.vigencia_texto ? `<br><span style="color:var(--amber);font-weight:400">Vigencia: ${esc(p.vigencia_texto)}</span>` : ''}${tagsHtml(p.incluye_tags)}</div>`).join('')}</div></div></div>` : ''}
+    <div class="dactions"><button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Ir al Cotizador</button></div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
+  document.getElementById('dCotizador').onclick = () => irAlCotizadorConOpcion(esPromo ? 'promociones' : 'productos', x.id, nombre);
+}
+// Deja al filtro "opción de Tarifario" del Cotizador ya elegida, con el
+// chat enfocado y un mensaje sugerido, para no obligar a re-seleccionar
+// lo mismo que ya se estaba viendo en el drawer del Tarifario.
+function irAlCotizadorConOpcion(tabla, id, nombre) {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerBg').classList.remove('open');
+  activateSection('cotizador');
+  const sel = document.getElementById('cot-f-opcion');
+  const valor = `${tabla}:${id}`;
+  const aplicar = () => { if ([...sel.options].some(o => o.value === valor)) { sel.value = valor; return true; } return false; };
+  if (!aplicar()) cargarOpcionesTarifario().then(aplicar);
+  const input = document.getElementById('chat-input');
+  input.value = `Cuéntame más sobre ${nombre}`;
+  input.dispatchEvent(new Event('input'));
+  input.focus();
 }
 
 /* ---------- Lightbox de fotos (drawer de producto + Galería) ---------- */
@@ -1238,18 +1353,41 @@ function setupChat() {
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChat(); } });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
   fill('cot-f-destino', DESTINO_ORDEN);
+  cargarOpcionesTarifario();
   document.getElementById('cot-f-clear').onclick = () => {
-    ['cot-f-destino', 'cot-f-tipo', 'cot-f-plan', 'cot-f-precio', 'cot-f-desde', 'cot-f-hasta'].forEach(id => { document.getElementById(id).value = ''; });
+    ['cot-f-destino', 'cot-f-tipo', 'cot-f-plan', 'cot-f-opcion', 'cot-f-precio', 'cot-f-desde', 'cot-f-hasta'].forEach(id => { document.getElementById(id).value = ''; });
   };
+}
+// Lista de cada hotel/paquete/promo/guía-tour individual, agrupada por
+// categoría, para el filtro "opción de Tarifario" del Cotizador. Solo
+// ítems visibles (activo/revisado) — un ítem que el admin ocultó no
+// debe poder pedirse ni desde acá aunque el rol pueda verlo en Tarifario.
+async function cargarOpcionesTarifario() {
+  const sel = document.getElementById('cot-f-opcion');
+  if (!sel) return;
+  const [{ data: prods }, { data: promos }] = await Promise.all([
+    sb.from('productos').select('id,tipo,nombre').neq('tipo', 'info').eq('activo', true).order('nombre'),
+    sb.from('promociones').select('id,titulo').eq('revisado', true).order('titulo'),
+  ]);
+  const grupos = { promo: [], destino: [], hotel: [], paquete: [] };
+  (prods || []).forEach(p => grupos[p.tipo]?.push({ value: `productos:${p.id}`, label: p.nombre }));
+  (promos || []).forEach(p => grupos.promo.push({ value: `promociones:${p.id}`, label: p.titulo }));
+  const previo = sel.value;
+  sel.innerHTML = '<option value="">Cualquier opción de Tarifario</option>' + TAR_TAB_META.map(t => grupos[t.key].length ? `<optgroup label="${esc(t.label)}">${grupos[t.key].map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}</optgroup>` : '').join('');
+  if (previo && [...sel.options].some(o => o.value === previo)) sel.value = previo;
 }
 // Filtros elegidos en la interfaz (no en texto libre) — se mandan como
 // parámetros estructurados al Cotizador, que los aplica ANTES de dejar que
 // la IA razone sobre el pedido en lenguaje natural del cliente.
 function leerFiltrosCotizador() {
+  const opcion = val('cot-f-opcion');
+  const [opcionTabla, opcionId] = opcion ? opcion.split(':') : [null, null];
   return {
     destino: val('cot-f-destino') || null,
     tipo: val('cot-f-tipo') || null,
     plan: val('cot-f-plan') || null,
+    opcionTabla: opcionTabla || null,
+    opcionId: opcionId ? Number(opcionId) : null,
     precioMax: val('cot-f-precio') ? Number(val('cot-f-precio')) : null,
     fechaDesde: val('cot-f-desde') || null,
     fechaHasta: val('cot-f-hasta') || null,

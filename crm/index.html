@@ -446,6 +446,9 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .login-field i{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
 .login-field input{width:100%;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:12px;padding:14px 14px 14px 40px;color:var(--txt);font-size:16px;font-family:inherit;outline:none;transition:.15s}
 .login-field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.login-field select.login-select{width:100%;appearance:none;-webkit-appearance:none;background:rgba(10,12,28,.7) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b93ad' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 15px center;border:1.5px solid var(--line2);border-radius:12px;padding:14px 34px 14px 40px;color:var(--txt);font-size:16px;font-family:inherit;outline:none;transition:.15s;cursor:pointer}
+.login-field select.login-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.login-field select.login-select option{background:#141a30;color:var(--txt)}
 .login-err{color:#ff6b6b;font-size:12px;min-height:16px;margin-bottom:8px;font-weight:500}
 #loginBtn{width:100%;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s}
 #loginBtn:hover{filter:brightness(1.07)}#loginBtn:active{transform:scale(.98)}#loginBtn:disabled{opacity:.6}
@@ -454,6 +457,32 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .rol-asesor .nav-admin-only{display:none}
 .rol-asesor #f-asesor{display:none}
 .rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok),.rol-marketing .sheet-item:not(.nav-marketing-ok){display:none}
+.rol-asesor .admin-only,.rol-marketing .admin-only{display:none}
+
+/* Tarifario: fila de pestañas + botón de configuración (admin) */
+.tar-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.tar-tabs-row .seg-group{margin-bottom:0}
+.tar-admin-btn{width:38px;height:38px;border-radius:10px;background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted);cursor:pointer;flex-shrink:0;transition:.15s;font-size:14px}
+.tar-admin-btn:hover{color:var(--accent);border-color:rgba(255,145,0,.4)}
+.seg.tab-oculta{opacity:.45}
+.tar-oculto-admin{position:relative;opacity:.55}
+.tar-oculto-badge{position:absolute;top:6px;right:6px;background:#ef4444;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;z-index:2;text-transform:uppercase;letter-spacing:.4px;pointer-events:none}
+
+/* Panel de configuración de Tarifario (admin) */
+.tas-sub{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:16px 0 8px}
+.tas-tabs{display:flex;flex-direction:column;gap:2px}
+.tas-tab-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line);font-size:13px}
+.tas-search{width:100%;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:9px 12px;color:var(--txt);font-family:inherit;font-size:13px;margin-bottom:8px;box-sizing:border-box}
+.tas-list{max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.tas-row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line)}
+.tas-row-nombre{flex:1;min-width:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tas-row-nombre.oculto{color:var(--muted2);text-decoration:line-through}
+.tas-row-tipo{font-size:10px;color:var(--muted2);background:rgba(255,255,255,.05);border-radius:20px;padding:2px 8px;flex-shrink:0}
+.tas-toggle{position:relative;width:38px;height:22px;border-radius:20px;background:var(--line2);border:none;cursor:pointer;flex-shrink:0;transition:background .15s;padding:0}
+.tas-toggle::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s}
+.tas-toggle.on{background:var(--accent)}
+.tas-toggle.on::after{transform:translateX(16px)}
+.tas-close{display:block;width:100%;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:14px}
 
 /* ============ MÓVIL ============ */
 @media(max-width:900px){.g-2,.g-2b{grid-template-columns:1fr}}
@@ -534,7 +563,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
     <h1>Lotus 360 · CRM</h1>
     <p>Acceso privado del equipo</p>
     <div class="login-field"><i class="fas fa-user"></i>
-      <input id="loginUser" type="text" placeholder="Usuario" autocomplete="username" autocapitalize="off" autocorrect="off" autofocus></div>
+      <select id="loginUser" class="login-select" autofocus><option value="">Selecciona tu usuario</option></select></div>
     <div class="login-field"><i class="fas fa-lock"></i>
       <input id="loginPwd" type="password" placeholder="Contraseña" autocomplete="current-password"></div>
     <div class="login-err" id="loginErr"></div>
@@ -748,11 +777,14 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 
     <!-- TARIFARIO -->
     <section class="section" id="sec-tarifario">
-      <div class="seg-group" id="tar-tabs">
-        <button class="seg on" data-tab="destino">Guías/Tours</button>
-        <button class="seg" data-tab="hotel">Hoteles</button>
-        <button class="seg" data-tab="paquete">Paquetes</button>
-        <button class="seg" data-tab="promo">Promociones</button>
+      <div class="tar-tabs-row">
+        <div class="seg-group" id="tar-tabs">
+          <button class="seg on" data-tab="promo">Promociones</button>
+          <button class="seg" data-tab="destino">Guías/Tours</button>
+          <button class="seg" data-tab="hotel">Hoteles</button>
+          <button class="seg" data-tab="paquete">Paquetes</button>
+        </div>
+        <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
       </div>
       <button class="mfs-trigger" data-mfs="tar-toolbar" type="button"><i class="fas fa-sliders"></i> Buscar y filtrar</button>
       <div class="tar-toolbar mfs" id="tar-toolbar">
@@ -804,6 +836,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
           <option value="2x1">2x1</option>
           <option value="descuento">Con descuento</option>
         </select>
+        <select class="flt" id="cot-f-opcion"><option value="">Cualquier opción de Tarifario</option></select>
         <input class="flt" id="cot-f-precio" type="number" min="0" placeholder="Precio máx. USD">
         <label class="cot-f-fecha">Desde <input class="fdate" id="cot-f-desde" type="date"></label>
         <label class="cot-f-fecha">Hasta <input class="fdate" id="cot-f-hasta" type="date"></label>
@@ -945,6 +978,18 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
   <a class="sheet-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
   <a class="sheet-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
   <a class="sheet-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
+</div>
+
+<!-- Configuración de visibilidad de Tarifario (solo admin) -->
+<div class="sheet" id="tar-admin-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Configuración de Tarifario</div>
+  <div class="tas-sub">Pestañas visibles</div>
+  <div class="tas-tabs" id="tas-tabs"></div>
+  <div class="tas-sub">Ítems individuales</div>
+  <input class="tas-search" id="tas-search" placeholder="Buscar hotel, paquete, promo, guía...">
+  <div class="tas-list" id="tas-list"></div>
+  <button class="tas-close" id="tas-close" type="button">Listo</button>
 </div>
 
 <!-- Preview pill -->
