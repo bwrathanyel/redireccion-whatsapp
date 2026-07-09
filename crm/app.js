@@ -652,33 +652,51 @@ async function loadTarifario() {
   empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
   const q = tarTab === 'promo'
     ? sb.from('promociones').select('*').order('titulo')
-    : sb.from('productos').select('*, tarifas(*)').eq('tipo', tarTab).order('nombre');
+    : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,vigencia_texto,incluye_tags)').eq('tipo', tarTab).order('nombre');
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
   tarCache[tarTab] = data;
   renderTarifario();
 }
+const TAG_LABEL = { todo_incluido: 'Todo incluido', solo_desayuno: 'Solo desayuno', media_pension: 'Media pensión', pension_completa: 'Pensión completa', ninos_gratis: 'Niños gratis', '2x1': '2x1', descuento: 'Descuento' };
+const tagsHtml = tags => (tags || []).length ? `<div class="tar-tags">${tags.map(t => `<span class="tar-tag">${esc(TAG_LABEL[t] || t)}</span>`).join('')}</div>` : '';
+const DESTINO_ORDEN = ['Margarita', 'Coche'];
+
 function renderTarifario() {
   const q = val('tar-search').trim().toLowerCase();
   const data = tarCache[tarTab] || [];
   const filtered = q ? data.filter(x => (x.nombre || x.titulo || '').toLowerCase().includes(q) || (x.destino || '').toLowerCase().includes(q)) : data;
   document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
   document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0);
-  document.getElementById('tar-grid').innerHTML = filtered.map(tarCardHtml).join('');
-  [...document.querySelectorAll('#tar-grid .tar-card')].forEach((el, i) => el.onclick = () => openProductoDrawer(filtered[i]));
+  const grid = document.getElementById('tar-grid');
+  grid.classList.toggle('grouped', tarTab === 'hotel');
+  if (tarTab === 'hotel') {
+    const porDestino = {};
+    filtered.forEach(x => (porDestino[x.destino || 'Otros'] ??= []).push(x));
+    const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
+    grid.innerHTML = destinos.map(d => `<div class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span></div><div class="tar-grid-sub">${porDestino[d].map(tarCardHtml).join('')}</div>`).join('');
+  } else {
+    grid.innerHTML = filtered.map(tarCardHtml).join('');
+  }
+  [...document.querySelectorAll('#tar-grid .tar-card')].forEach(el => el.onclick = () => openProductoDrawer(filtered.find(x => String(x.id) === el.dataset.id)));
 }
 function tarCardHtml(x) {
   if (tarTab === 'promo') {
-    return `<div class="tar-card"><div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
+    return `<div class="tar-card" data-id="${x.id}"><div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
       ${x.precio_texto ? `<div class="tc-precio">${esc(x.precio_texto)}</div>` : ''}
-      ${x.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(x.vigencia_texto)}</div>` : ''}</div>`;
+      ${x.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(x.vigencia_texto)}</div>` : ''}
+      ${tagsHtml(x.incluye_tags)}</div>`;
   }
   const tarifa = (x.tarifas || [])[0];
-  return `<div class="tar-card"><div class="tc-top"><div><div class="tc-nombre">${esc(x.nombre)}</div>${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}</div></div>
+  const promos = x.promociones || [];
+  const tagsHotel = [...new Set(promos.flatMap(p => p.incluye_tags || []))];
+  return `<div class="tar-card" data-id="${x.id}"><div class="tc-top"><div><div class="tc-nombre">${esc(x.nombre)}</div>${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}</div></div>
     <div class="tc-resumen">${esc(x.descripcion || '')}</div>
     ${tarifa ? `<div class="tc-precio">${esc(tarifa.precio_texto)}</div>` : ''}
-    ${tarifa && tarifa.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(tarifa.vigencia_texto)}</div>` : ''}</div>`;
+    ${tarifa && tarifa.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(tarifa.vigencia_texto)}</div>` : ''}
+    ${promos.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promos.length} promoción${promos.length > 1 ? 'es' : ''} activa${promos.length > 1 ? 's' : ''}</div>` : ''}
+    ${tagsHtml(tagsHotel)}</div>`;
 }
 async function loadTarifarioInfo() {
   if (tarInfo) return;
@@ -703,6 +721,8 @@ function openProductoDrawer(x) {
     ${vigencia ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Vigencia</div><div class="dfv">${esc(vigencia)}</div></div></div>` : ''}
     ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv">${esc(x.descripcion)}</div></div></div>` : ''}
     ${!esPromo && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv">${esc(x.requisitos)}</div></div></div>` : ''}
+    ${esPromo ? tagsHtml(x.incluye_tags) : ''}
+    ${!esPromo && (x.promociones || []).length ? `<div class="dfield"><div class="dfi"><i class="fas fa-gift"></i></div><div><div class="dfl">Promociones activas</div><div class="dfv" style="font-weight:500">${x.promociones.map(p => `<div style="margin-bottom:8px"><b>${esc(p.titulo)}</b>${p.precio_texto ? `<br>${esc(p.precio_texto)}` : ''}${p.vigencia_texto ? `<br><span style="color:var(--amber);font-weight:400">Vigencia: ${esc(p.vigencia_texto)}</span>` : ''}${tagsHtml(p.incluye_tags)}</div>`).join('')}</div></div></div>` : ''}
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');

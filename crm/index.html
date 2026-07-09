@@ -241,6 +241,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .tar-search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .tar-search i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
 .tar-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.tar-grid.grouped{display:block}
 .tar-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;backdrop-filter:blur(8px);cursor:pointer;transition:.12s}
 .tar-card:hover{border-color:rgba(255,145,0,.3);transform:translateY(-2px)}
 .tar-card .tc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px}
@@ -255,6 +256,13 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .tar-info-box summary i{margin-right:6px;color:var(--accent)}
 .tar-info-item{padding:10px 0;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
 .tar-info-item b{color:var(--txt);display:block;margin-bottom:3px;font-size:13px}
+.tar-destino-header{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.6px;margin:20px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.tar-destino-header:first-child{margin-top:0}
+.tar-destino-header span{background:var(--accent-soft);color:#ffd8a8;border-radius:20px;padding:2px 9px;font-size:11px}
+.tar-grid-sub{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.tar-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tar-tag{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:20px;background:rgba(16,185,129,.14);color:#34d399}
+.tc-promos{font-size:11.5px;color:var(--amber);margin-top:8px;font-weight:600}
 
 /* ---------- Cotizador IA ---------- */
 .chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);min-height:420px}
