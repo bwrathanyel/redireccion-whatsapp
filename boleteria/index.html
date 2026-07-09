@@ -448,25 +448,9 @@ function enviarACRM(datos) {
     fetch('https://begbjhrdbsqftbbleecb.functions.supabase.co/ingest-web-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) }).catch(function(e) { console.log('CRM ingest error:', e); });
 }
 
-// Pool de asesores para el WhatsApp del cliente en esta pagina. peso = probabilidad
-// relativa (mismo criterio que ya se usaba con numeros duplicados, ahora explicito
-// y con nombre -- ver skill web-lead-ingest y decisions/log.md 2026-07-09). Antes
-// boleteria solo tenia Luis Rueda + un numero sin identificar -- ver ese hallazgo
-// en projects/crm/README.md antes de asumir que este pool es definitivo.
-var ASESORES = [
-    { nombre: 'Ambar Arévalo', telefono: '584244900601', peso: 3 },
-    { nombre: 'Nicoll Osorio', telefono: '584127136169', peso: 2 },
-    { nombre: 'Eudys Chourio', telefono: '584147020527', peso: 1 },
-    { nombre: 'Arquímedes Arévalo', telefono: '584128905774', peso: 1 },
-    { nombre: 'Luis Rueda', telefono: '584244269876', peso: 1 },
-    { nombre: 'Andric Arévalo', telefono: '584140415685', peso: 1 }
-];
-function elegirAsesor() {
-    var total = ASESORES.reduce(function(s, a) { return s + a.peso; }, 0);
-    var r = Math.random() * total, acumulado = 0;
-    for (var i = 0; i < ASESORES.length; i++) { acumulado += ASESORES[i].peso; if (r < acumulado) return ASESORES[i]; }
-    return ASESORES[ASESORES.length - 1];
-}
+// Boleteria es unico contacto Luis Rueda -- confirmado por Bwrathanyel
+// 2026-07-09, sin pool/reparto aca (a diferencia de hospedaje/tour).
+var ASESOR_BOLETERIA = { nombre: 'Luis Rueda', telefono: '584244269876' };
 
 function toggleTipoViaje() { var esIdaVuelta = document.getElementById('tv-idavuelta').checked; document.getElementById('grupo-fecha-vuelta').style.display = esIdaVuelta ? 'block' : 'none'; document.getElementById('avion-vuelta').style.display = esIdaVuelta ? 'block' : 'none'; if (!esIdaVuelta) { document.getElementById('fecha-vuelta').value = ''; document.getElementById('noches-box').style.display = 'none'; } }
 function actualizarFechaVueltaMin() { var fechaIda = document.getElementById('fecha-ida').value; var fechaVueltaInput = document.getElementById('fecha-vuelta'); if (fechaIda) { var nextDay = new Date(fechaIda); nextDay.setDate(nextDay.getDate() + 1); fechaVueltaInput.min = nextDay.toISOString().split('T')[0]; if (fechaVueltaInput.value && fechaVueltaInput.value < fechaVueltaInput.min) { fechaVueltaInput.value = ''; } } actualizarDias(); }
@@ -511,8 +495,7 @@ function generarSolicitud() {
     if (!origen || !destino || !fechaIda || adultos === null) { alert('Completa origen, destino, fecha de ida y cantidad de adultos.'); return; }
     
     var dias = 0; if (tipoViaje === 'ida-vuelta' && fechaIda && fechaVuelta) { dias = Math.round((new Date(fechaVuelta) - new Date(fechaIda)) / 86400000); }
-    var asesorElegido = elegirAsesor();
-    var tlf = asesorElegido.telefono;
+    var tlf = ASESOR_BOLETERIA.telefono;
     var asesorAsignado = tlf;
 
     enviarDatos({ 
