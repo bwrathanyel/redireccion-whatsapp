@@ -441,6 +441,13 @@ function enviarDatos(datos) {
     fetch('https://api.sheetmonkey.io/form/nLKvJpsMkGCFRwwwMMMX21', { method: 'POST', body: formData }).then(function(r) { console.log('Lead registrado en Sheets'); }).catch(function(e) { console.log('Error:', e); });
 }
 
+// Registra el lead tambien en el CRM (ademas de Sheet Monkey arriba). Solo
+// si hay telefono real -- sin eso el lead no es accionable en el CRM.
+function enviarACRM(datos) {
+    if (!datos.telefono || datos.telefono === 'No especificado') return;
+    fetch('https://begbjhrdbsqftbbleecb.functions.supabase.co/ingest-web-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) }).catch(function(e) { console.log('CRM ingest error:', e); });
+}
+
 function toggleTipoViaje() { var esIdaVuelta = document.getElementById('tv-idavuelta').checked; document.getElementById('grupo-fecha-vuelta').style.display = esIdaVuelta ? 'block' : 'none'; document.getElementById('avion-vuelta').style.display = esIdaVuelta ? 'block' : 'none'; if (!esIdaVuelta) { document.getElementById('fecha-vuelta').value = ''; document.getElementById('noches-box').style.display = 'none'; } }
 function actualizarFechaVueltaMin() { var fechaIda = document.getElementById('fecha-ida').value; var fechaVueltaInput = document.getElementById('fecha-vuelta'); if (fechaIda) { var nextDay = new Date(fechaIda); nextDay.setDate(nextDay.getDate() + 1); fechaVueltaInput.min = nextDay.toISOString().split('T')[0]; if (fechaVueltaInput.value && fechaVueltaInput.value < fechaVueltaInput.min) { fechaVueltaInput.value = ''; } } actualizarDias(); }
 function actualizarDias() { var fechaIda = document.getElementById('fecha-ida').value; var fechaVuelta = document.getElementById('fecha-vuelta').value; var box = document.getElementById('noches-box'); var esIdaVuelta = document.getElementById('tv-idavuelta').checked; if (!esIdaVuelta) { box.style.display = 'none'; return; } if (fechaIda && fechaVuelta) { var dias = Math.round((new Date(fechaVuelta) - new Date(fechaIda)) / 86400000); if (dias > 0) { box.style.display = 'flex'; document.getElementById('dias-num').textContent = dias; } else { box.style.display = 'none'; } } else { box.style.display = 'none'; } }
@@ -498,6 +505,7 @@ function generarSolicitud() {
         telefono: telefono,
         asesor: asesorAsignado
     });
+    enviarACRM({ nombre: nombreCliente, telefono: telefono, destino: origen + ' → ' + destino, personas: (adultos + (ninos > 0 ? ninos : 0)) + ' persona(s)', consulta: (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + ', fecha ' + fechaIda + (notas ? ' · ' + notas : '') });
 
     var lineasEmoji = ['✈️ *COTIZACIÓN DE VUELO - LOTUS 360*','','👤 *Nombre:* ' + nombreCliente,'🔄 *Tipo:* ' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida'),'📍 *Origen:* ' + origen,'📍 *Destino:* ' + destino,'📅 *Fecha ida:* ' + fechaIda,(tipoViaje === 'ida-vuelta' && fechaVuelta ? '📅 *Fecha vuelta:* ' + fechaVuelta : ''),(tipoViaje === 'ida-vuelta' && dias > 0 ? '📆 *Duración:* ' + dias + ' día(s)' : ''),(flexibilidad > 0 ? '📆 *Flexibilidad:* ±' + flexibilidad + ' día(s)' : '📆 *Fechas fijas*'),'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos + ' | *Bebés:* ' + bebes,(ninos > 0 ? '👶 *Edades:* ' + edadesNinos : ''),'🧳 *Equipaje:* ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado'),'🆔 *Cédulas adultos:* ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR'),(ninos > 0 ? '🆔 *Cédulas niños:* ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') : ''),(ocasion !== 'Viaje regular' ? '🎉 *Ocasión:* ' + ocasion : ''),(notas ? '📝 *Notas:* ' + notas : ''),'','✅ *Enviar opciones con precios. ¡Gracias!*'];
 

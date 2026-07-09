@@ -466,6 +466,13 @@ function detectarProcedencia() { var ua = navigator.userAgent || navigator.vendo
 function esInstagramInApp() { var ua = navigator.userAgent || navigator.vendor || window.opera; return (ua.indexOf('Instagram') > -1) || (ua.indexOf('FBAN') > -1) || (ua.indexOf('FBAV') > -1); }
 function enviarDatos(datos) { var formData = new FormData(); formData.append('Nombres', datos.nombre || 'No especificado'); formData.append('Fecha', datos.fechaHora); formData.append('Destino', datos.destino); formData.append('Pagina', datos.pagina); formData.append('Servicio', datos.servicio); formData.append('Procedencia', datos.procedencia || 'No detectada'); formData.append('Telefono', datos.telefono || 'No especificado'); formData.append('Asesor', datos.asesor || 'No asignado'); fetch('https://api.sheetmonkey.io/form/nLKvJpsMkGCFRwwwMMMX21', { method: 'POST', body: formData }).then(function(r) { console.log('Lead registrado en Sheets'); }).catch(function(e) { console.log('Error:', e); }); }
 
+// Registra el lead tambien en el CRM (ademas de Sheet Monkey arriba). Solo
+// si hay telefono real -- sin eso el lead no es accionable en el CRM.
+function enviarACRM(datos) {
+    if (!datos.telefono || datos.telefono === 'No especificado') return;
+    fetch('https://begbjhrdbsqftbbleecb.functions.supabase.co/ingest-web-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) }).catch(function(e) { console.log('CRM ingest error:', e); });
+}
+
 (function() { var params = new URLSearchParams(window.location.search); var destinoParam = params.get('destino'); if (destinoParam) { var tarjetas = document.querySelectorAll('#colapsables-destino .opcion-tarjeta, #acordeon-destino > .opcion-tarjeta'); for (var i = 0; i < tarjetas.length; i++) { if (tarjetas[i].dataset.value === destinoParam) { seleccionarDestino(tarjetas[i]); break; } } } })();
 
 var ESCENAS = { 'Isla de Margarita': { id: 'escena-playa', caption: '🏖️ Arena blanca y aguas turquesa' }, 'Morrocoy': { id: 'escena-morrocoy', caption: '🐠 Cayos, manglares y snorkel' }, 'Los Roques': { id: 'escena-losroques', caption: '🏝️ Aguas cristalinas y coral' }, 'Mérida': { id: 'escena-montana', caption: '🚡 Aire de montaña y teleférico' }, 'Canaima': { id: 'escena-cascada', caption: '💧 Tepuyes y Salto Ángel' }, 'Catatumbo': { id: 'escena-tormenta', caption: '⚡ Relámpago del Catatumbo' }, 'Colonia Tovar': { id: 'escena-colonia', caption: '🏘️ Pueblo alemán en las montañas' }, 'Extranjero': { id: 'escena-mundo', caption: '🌍 Tu aventura internacional' } };
@@ -512,6 +519,7 @@ function generarSolicitud() {
     var asesorAsignado = tlf;
 
     enviarDatos({ fechaHora: new Date().toLocaleString('es-VE'), destino: dest, servicio: hosp + ' · ' + plan, pagina: 'Hospedaje', nombre: nombreCliente, procedencia: procedencia, telefono: telefono, asesor: asesorAsignado });
+    enviarACRM({ nombre: nombreCliente, telefono: telefono, destino: dest, personas: (adultos + (ninos > 0 ? ninos : 0)) + ' persona(s)', consulta: hosp + ' · ' + plan + (notas ? ' · ' + notas : '') });
 
     var lineasEmoji = ['🌟 *COTIZACIÓN HOSPEDAJE - LOTUS 360*','','📍 *Destino:* ' + dest,'👤 *Nombre:* ' + nombreCliente,'🏨 *Alojamiento:* ' + hosp,'🍽️ *Plan:* ' + plan,'📅 *Check-in:* ' + ci,'📅 *Check-out:* ' + co,'🌙 *Noches:* ' + noches,'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos,'🛏️ *Habitaciones:* ' + habs,'💰 *Presupuesto/noche:* ' + presTexto];
     if (amenidades.length) lineasEmoji.push('✨ *Preferencias:* ' + amenidades.join(' · '));

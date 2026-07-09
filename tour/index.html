@@ -178,6 +178,13 @@ function enviarDatos(datos) {
     fetch('https://api.sheetmonkey.io/form/nLKvJpsMkGCFRwwwMMMX21', { method: 'POST', body: formData }).then(function(r) { console.log('Lead registrado en Sheets'); }).catch(function(e) { console.log('Error:', e); });
 }
 
+// Registra el lead tambien en el CRM (ademas de Sheet Monkey arriba). Solo
+// si hay telefono real -- sin eso el lead no es accionable en el CRM.
+function enviarACRM(datos) {
+    if (!datos.telefono) return;
+    fetch('https://begbjhrdbsqftbbleecb.functions.supabase.co/ingest-web-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) }).catch(function(e) { console.log('CRM ingest error:', e); });
+}
+
 var PRECIOS = { basico: 25, full360: 35 };
 var planSeleccionado = 'basico';
 var incluyePlanes = { 'basico': { titulo: '✅ INCLUYE - PLAN BÁSICO · $' + PRECIOS.basico + ' USD', items: ['🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳'] }, 'full360': { titulo: '✅ INCLUYE - PLAN FULL360 · $' + PRECIOS.full360 + ' USD', items: ['🍗🐟 Almuerzo playero (pollo o pescado + ensalada y tostón)','🚐 Traslado en cómoda encava con A/A','⚓ Salida desde embarcadero privado','🌊 Traslado en lancha a Cayo Sal','🧊 Hidratación + Hielo constante','🙋 Guías y logística con la mejor energía','🎶 Música (Rumba) 🥳'] } };
@@ -217,6 +224,7 @@ function generarSolicitud() {
 
     // Enviar a Sheet Monkey
     enviarDatos({ fechaHora: new Date().toLocaleString('es-VE'), destino: 'Cayo Sal - Falcón', servicio: planNombre + ' · ' + planPrecio + ' · Grupo ' + grupo + (faltanGrupo > 0 ? ' (faltan ' + faltanGrupo + ')' : ''), pagina: 'Tours', nombre: nombre, procedencia: procedencia, telefono: telefono, asesor: asesorAsignado });
+    enviarACRM({ nombre: nombre, telefono: telefono, destino: 'Cayo Sal - Falcón', personas: grupo + ' persona(s)', consulta: planNombre + ' · ' + planPrecio + (notas ? ' · ' + notas : '') });
 
     // Versión con emojis (normal)
     var lineasEmoji = ['🌴 *RESERVA TOUR PRIVADO - LOTUS 360*','','📍 *Tour:* Cayo Sal - Chichiriviche, Falcón','🔒 *Modalidad:* Privado por grupo (mín. 15 personas)','📅 *Fecha:* A convenir con el grupo','⏰ *Horario:* 6:00 am - 4:00 pm','📍 *Salida:* CC Dinastía, Naguanagua · Carabobo','','🎫 *Plan:* ' + planNombre + ' (' + precioUnit + ' por persona)','👤 *Responsable:* ' + nombre,'👥 *Grupo:* ' + grupo + ' persona(s) → ' + adultos + ' adulto(s)' + (ninos > 0 ? ' + ' + ninos + ' niño(s)' : '') + (bebes > 0 ? ' + ' + bebes + ' infante(s)' : ''),'💰 *Total estimado:* $' + total + ' USD (' + adultos + ' adultos × ' + precioUnit + ')'];
