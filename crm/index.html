@@ -193,6 +193,7 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .toast{display:flex;align-items:center;gap:12px;background:var(--panel-solid);border:1px solid rgba(37,211,102,.4);border-left:4px solid var(--green);border-radius:12px;padding:13px 16px;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.5);transform:translateX(130%);opacity:0;transition:.3s cubic-bezier(.3,1,.4,1);max-width:300px}
 .toast.show{transform:translateX(0);opacity:1}
 .toast i{color:var(--green);font-size:16px}.toast b{color:#fff;font-weight:700}
+.toast-err{border-color:rgba(239,68,68,.4);border-left-color:#ef4444}.toast-err i{color:#ef4444}
 
 .section{display:none}.section.active{display:block}
 /* formulario de edición (drawer) */
@@ -404,6 +405,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
     <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
     <div class="nav-label nav-admin-only">Gestión</div>
     <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
+    <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
     <div class="side-foot">
       <div class="avatar" id="side-avatar">·</div>
       <div style="flex:1"><div class="un" id="side-un">—</div><div class="ue" id="side-ue">—</div></div>
@@ -489,8 +491,35 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
     <!-- ASESORES -->
     <section class="section" id="sec-asesores">
       <div class="grid g-2b">
-        <div class="card"><h3><i class="fas fa-user-tie"></i> Carga por asesor</h3><div class="csub">Toca un asesor para ver su cartera · 6 activos</div><div class="adv" id="advList"></div></div>
+        <div class="card"><h3><i class="fas fa-user-tie"></i> Carga por asesor</h3><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
         <div class="card"><h3><i class="fas fa-scale-balanced"></i> Reparto objetivo</h3><div class="csub">Ponderación configurable del aleatorizador</div><div class="chart-wrap" style="height:280px"><canvas id="chAssign"></canvas></div></div>
+      </div>
+    </section>
+
+    <!-- REASIGNACIONES -->
+    <section class="section" id="sec-reasignaciones">
+      <div class="kpis" id="reasig-kpis"></div>
+      <div class="card">
+        <div class="tbar">
+          <select class="flt" id="rg-asesor"><option value="">Todos los asesores</option></select>
+          <select class="flt" id="rg-motivo">
+            <option value="">Todos los motivos</option>
+            <option value="timeout_no_respuesta">Timeout (sin respuesta)</option>
+            <option value="manual_no_puedo">Manual (No puedo)</option>
+          </select>
+          <input type="date" class="flt fdate" id="rg-desde" title="Desde esta fecha">
+          <input type="date" class="flt fdate" id="rg-hasta" title="Hasta esta fecha">
+          <span class="tcount" id="rg-count"></span>
+        </div>
+        <div class="tbl-state" id="rg-loading"><div class="spin"></div><div class="es-s">Cargando reasignaciones...</div></div>
+        <div class="tbl-state" id="rg-empty"><i class="fas fa-shuffle"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay reasignaciones con estos filtros</div></div>
+        <div id="rg-wrap" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Cliente</th><th>Teléfono</th><th>Destino</th><th>De</th><th>A</th><th>Motivo</th><th>Tiempo</th><th>Fecha</th></tr></thead>
+            <tbody id="rg-tbody"></tbody>
+          </table>
+        </div>
+        <div class="pager" id="rg-pager"></div>
       </div>
     </section>
 

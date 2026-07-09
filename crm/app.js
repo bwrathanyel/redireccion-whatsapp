@@ -9,13 +9,18 @@ const money = n => '$' + (Number(n) || 0).toLocaleString('es-VE', { minimumFract
 const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const fullMonth = k => { const [y, m] = k.split('-'); return MESL[+m - 1] + ' ' + y; };
-const ESTADOS_EDIT = ['POR ATENDER', 'ATENDIDO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'PERDIDO'];
+const ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'PERDIDO', 'Sin gestionar'];
+const ESTADOS_EDIT = ESTADOS;
 const ESTADO_COLORS = { 'POR ATENDER': '#ff9100', 'ATENDIDO': '#4a9eff', 'CLIENTE CONTACTADO': '#4a9eff', 'COTIZACION ENVIADA': '#a06bff', 'EN ESPERA DE PAGO': '#f5b544', 'PAGO REALIZADO': '#10b981', 'PERDIDO': '#ef4444', 'Sin gestionar': '#5f677f' };
 const SERVICIOS = ['Vuelos', 'Full Day', 'Hospedaje', 'Paquete Todo Incluido', 'Hotel', 'Tour', 'Evento', 'Otro'];
 const VENTA = 'PAGO REALIZADO';
 const CANAL_CLASS = { 'Instagram': 'ig', 'Facebook': 'fb', 'Ambos': 'am', 'Desconocido': '' };
 const ADV_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a'];
-const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'] };
+const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-rolling', 'fa-compass', 'fa-earth-americas', 'fa-camera-retro', 'fa-map-location-dot', 'fa-sun', 'fa-water', 'fa-mountain-sun', 'fa-passport', 'fa-glasses'];
+const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
+const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const val = id => document.getElementById(id).value;
@@ -227,17 +232,17 @@ async function startApp() {
   renderAll();
   setupFilters();
   await loadTable();
-  setupMetricas(); setupRanking();
+  setupMetricas(); setupRanking(); setupReasignaciones();
   subscribeRealtime();
 }
 function renderAll() { renderKPIs(); renderTrend(); renderCanal(); renderPipe('pipe'); renderPipe('pipe2'); renderDest(); renderAdvisors(); renderAssign(); }
 
 async function loadStats() {
   const { data, error } = await sb.rpc('dashboard_stats');
-  if (error) { console.error('stats', error.message || error); STATS = {}; return; }
+  if (error) { console.error('stats', error.message || error); errToast('No se pudieron cargar las estadísticas'); return; }
   STATS = data;
   trendMap = {}; (STATS.trend || []).forEach(x => trendMap[x.mes] = x.total);
-  document.getElementById('nav-lead-count').textContent = (STATS.total / 1000).toFixed(1).replace('.0', '') + 'k';
+  document.getElementById('nav-lead-count').textContent = Number.isFinite(STATS.total) ? (STATS.total / 1000).toFixed(1).replace('.0', '') + 'k' : '—';
 }
 
 /* ---------- KPIs ---------- */
@@ -281,8 +286,7 @@ function renderAssign() {
   mk('chAssign', { type: 'bar', data: { labels: e.map(x => x[0].split(' ')[0]), datasets: [{ data: e.map(x => x[1]), backgroundColor: ADV_COLORS, borderRadius: 7, barThickness: 30 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.raw + '% de los leads' } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { callback: v => v + '%' }, beginAtZero: true } } } });
 }
 function renderPipe(id) {
-  const order = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'PERDIDO', 'Sin gestionar'];
-  const be = STATS.by_estado || {}; const shown = order.filter(k => (be[k] || 0) > 0 || ['POR ATENDER', 'PAGO REALIZADO'].includes(k));
+  const be = STATS.by_estado || {}; const shown = ESTADOS.filter(k => (be[k] || 0) > 0 || ['POR ATENDER', 'PAGO REALIZADO'].includes(k));
   const max = Math.max(...shown.map(k => be[k] || 0), 1);
   document.getElementById(id).innerHTML = shown.map(k => {
     const v = be[k] || 0, w = Math.max((v / max) * 100, 2);
@@ -294,6 +298,7 @@ function renderAdvisors() {
   const e = sortEntries(STATS.by_advisor), max = Math.max(...e.map(x => x[1]), 1);
   document.getElementById('advList').innerHTML = e.map(([name, v], i) => { const c = ADV_COLORS[i % ADV_COLORS.length]; return `<div class="arow adv-click" data-adv="${esc(name)}"><div class="ava" style="background:${c}">${initials(name)}</div><div class="ai"><div class="an"><span>${esc(name)}</span><span class="anv">${fmt(v)} leads</span></div><div class="track"><div class="fill" style="width:${(v / max) * 100}%;background:${c}"></div></div></div></div>`; }).join('') + `<div class="arow" style="opacity:.6"><div class="ava" style="background:#39415c">H</div><div class="ai"><div class="an"><span>Históricos / inactivos</span><span class="anv">${fmt(STATS.historico_inactivo)} leads</span></div><div class="track"><div class="fill" style="width:100%;background:#39415c"></div></div></div></div>`;
   document.querySelectorAll('.adv-click').forEach(el => el.onclick = () => { const a = el.dataset.adv; chartPreview('asesor', a, a, 'fa-user-tie', STATS.by_advisor[a]); });
+  document.querySelector('#advList').closest('.card').querySelector('.csub').textContent = `Toca un asesor para ver su cartera · ${e.length} activos`;
 }
 
 /* ---------- Preview + Drill ---------- */
@@ -321,7 +326,7 @@ const drillClear = () => drillTo(() => { });
 /* ---------- Filtros + Tabla ---------- */
 function setupFilters() {
   fill('f-canal', Object.keys(STATS.by_canal || {}));
-  fill('f-estado', ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'PERDIDO', 'Sin gestionar']);
+  fill('f-estado', ESTADOS);
   fill('f-asesor', ACTIVOS.concat(['Sin asignar']));
   fill('f-servicio', SERVICIOS);
   fill('f-anio', Object.keys(STATS.by_anio || {}).sort().reverse());
@@ -373,14 +378,14 @@ async function loadTable() {
   const from = (page - 1) * PER;
   const { data, count, error } = await buildQuery(true).order('fecha_creacion', { ascending: false, nullsFirst: false }).range(from, from + PER - 1);
   loading.classList.remove('show'); wrap.style.opacity = '1';
-  if (error) { console.error(error); return; }
+  if (error) { console.error(error); errToast('No se pudieron cargar los leads'); return; }
   totalFiltered = count ?? 0;
   document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`;
   if (!data.length) { empty.classList.add('show'); document.getElementById('tbody').innerHTML = ''; document.getElementById('pager').innerHTML = ''; return; }
   document.getElementById('tbody').innerHTML = data.map(l => {
-    const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
+    const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
-      <td class="td-name"><div class="lead-name"><div class="ln-ava">${initials(l.nombre)}</div>${esc(l.nombre)}</div></td>
+      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}</div></td>
       <td data-label="Teléfono" class="muted">${esc(l.telefono) || '—'}</td>
       <td data-label="Destino">${esc(l.destino)}</td>
       <td data-label="Canal"><span class="chip ${cc}">${esc(l.canal)}</span></td>
@@ -404,9 +409,10 @@ function renderPager(pages) {
 function openDrawer(l) {
   currentLead = l;
   const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
+  const av = clientAvatar(l);
   const opt = (arr, sel) => arr.map(v => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(niceEstado(v))}</option>`).join('');
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead"><div class="dava">${initials(l.nombre)}</div><div><div class="dn">${esc(l.nombre)}</div>
+    <div class="dhead"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div><div class="dn">${esc(l.nombre)}</div>
       <div class="dm">${esc(l.telefono) || 'Sin teléfono'} · ${esc(l.canal)}</div></div></div>
 
     <div class="edit-box">
@@ -443,7 +449,9 @@ function openDrawer(l) {
 async function guardarLead() {
   const btn = document.getElementById('e-save'), err = document.getElementById('edit-err');
   const estado = val('e-estado'), asesor = val('e-asesor'), servicio = val('e-servicio');
-  const monto = estado === VENTA ? (parseFloat(val('e-monto')) || 0) : null;
+  const montoRaw = val('e-monto').trim();
+  if (estado === VENTA && (!montoRaw || !(parseFloat(montoRaw) > 0))) { err.textContent = 'Ingresa el monto de la venta (debe ser mayor a 0)'; return; }
+  const monto = estado === VENTA ? parseFloat(montoRaw) : null;
   const comprado = estado === VENTA ? val('e-comprado').trim() : null;
   err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: currentLead.id, p_estado: estado, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado });
@@ -465,7 +473,7 @@ function setupMetricas() {
 async function loadMetricas() {
   const [d, h] = periodo(metPeriodo);
   const { data, error } = await sb.rpc('metricas', { p_desde: iso(d), p_hasta: iso(h) });
-  if (error) { console.error(error); return; }
+  if (error) { console.error(error); errToast('No se pudieron cargar las métricas'); return; }
   const conv = data.nuevos ? ((data.ventas / data.nuevos) * 100).toFixed(1) : '0';
   const cards = [
     { t: 'Clientes nuevos', v: fmt(data.nuevos), i: 'fa-user-plus', c: 'var(--blue)' },
@@ -490,12 +498,12 @@ function setupRanking() {
 async function loadRanking() {
   const [d, h] = periodo(rankPeriodo);
   const { data, error } = await sb.rpc('ranking_asesores', { p_desde: iso(d), p_hasta: iso(h) });
-  if (error) { console.error(error); return; }
+  if (error) { console.error(error); errToast('No se pudo cargar el ranking'); return; }
   const rows = (data || []).slice().sort((a, b) => (b[rankSort] || 0) - (a[rankSort] || 0));
   const medal = ['🥇', '🥈', '🥉'];
   document.getElementById('rank-body').innerHTML = rows.map((r, i) => `
     <tr>
-      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${ADV_COLORS[i % 6]};color:#0a0a0a">${initials(r.asesor)}</div>${i < 3 ? medal[i] + ' ' : ''}${esc(r.asesor)}</div></td>
+      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${ADV_COLORS[i % ADV_COLORS.length]};color:#0a0a0a">${initials(r.asesor)}</div>${i < 3 ? medal[i] + ' ' : ''}${esc(r.asesor)}</div></td>
       <td data-label="Nuevos" class="muted">${fmt(r.nuevos)}</td>
       <td data-label="Atendidos">${fmt(r.atendidos)}</td>
       <td data-label="Ventas"><b style="color:var(--green)">${fmt(r.ventas)}</b></td>
@@ -504,6 +512,78 @@ async function loadRanking() {
     </tr>`).join('');
   const tot = rows.reduce((a, r) => ({ ventas: a.ventas + (+r.ventas || 0), monto: a.monto + (+r.monto || 0), atendidos: a.atendidos + (+r.atendidos || 0) }), { ventas: 0, monto: 0, atendidos: 0 });
   document.getElementById('rank-tot').innerHTML = `<span>${fmt(tot.atendidos)} atendidos</span><span>${fmt(tot.ventas)} ventas</span><span>${money(tot.monto)} en ingresos</span>`;
+}
+
+/* ---------- Reasignaciones ---------- */
+let rgPage = 1;
+const MOTIVO_LABEL = { timeout_no_respuesta: 'Timeout', manual_no_puedo: 'No puedo' };
+function setupReasignaciones() {
+  fill('rg-asesor', ACTIVOS);
+  ['rg-asesor', 'rg-motivo', 'rg-desde', 'rg-hasta'].forEach(id => document.getElementById(id).addEventListener('change', () => { rgPage = 1; loadReasignaciones(); }));
+}
+function reasignFiltered(q) {
+  const fa = val('rg-asesor'), fd = val('rg-desde'), fh = val('rg-hasta');
+  if (fa) q = q.eq('asesor_anterior', fa);
+  if (fd) q = q.gte('created_at', fd);
+  if (fh) q = q.lte('created_at', fh + 'T23:59:59');
+  return q;
+}
+function buildReasignQuery() {
+  let q = reasignFiltered(sb.from('reasignaciones').select('*, leads(nombre,telefono,destino)', { count: 'exact' }));
+  const fm = val('rg-motivo');
+  if (fm) q = q.eq('motivo', fm);
+  return q;
+}
+function buildReasignCount({ motivo, agotados } = {}) {
+  let q = reasignFiltered(sb.from('reasignaciones').select('*', { count: 'exact', head: true }));
+  const fm = motivo || val('rg-motivo');
+  if (fm) q = q.eq('motivo', fm);
+  if (agotados) q = q.is('asesor_nuevo', null);
+  return q;
+}
+async function loadReasignaciones() {
+  const loading = document.getElementById('rg-loading'), empty = document.getElementById('rg-empty'), wrap = document.getElementById('rg-wrap');
+  empty.classList.remove('show'); loading.classList.add('show'); wrap.style.opacity = '.4';
+  const from = (rgPage - 1) * PER;
+  const [{ data, count, error }, timeoutC, manualC, agotadosC] = await Promise.all([
+    buildReasignQuery().order('created_at', { ascending: false }).range(from, from + PER - 1),
+    buildReasignCount({ motivo: 'timeout_no_respuesta' }),
+    buildReasignCount({ motivo: 'manual_no_puedo' }),
+    buildReasignCount({ agotados: true }),
+  ]);
+  loading.classList.remove('show'); wrap.style.opacity = '1';
+  if (error) { console.error(error); errToast('No se pudieron cargar las reasignaciones'); return; }
+  const total = count ?? 0;
+  document.getElementById('rg-count').textContent = `${fmt(total)} reasignaciones`;
+  const kAgotados = agotadosC.count ?? 0;
+  document.getElementById('reasig-kpis').innerHTML = [
+    { t: 'Total reasignaciones', v: fmt(total), i: 'fa-shuffle', c: 'var(--accent)' },
+    { t: 'Por timeout', v: fmt(timeoutC.count ?? 0), i: 'fa-clock', c: 'var(--blue)' },
+    { t: 'Manual (No puedo)', v: fmt(manualC.count ?? 0), i: 'fa-hand', c: 'var(--purple)' },
+    { t: 'Sin asesor disponible', v: fmt(kAgotados), i: 'fa-triangle-exclamation', c: kAgotados > 0 ? '#ef4444' : 'var(--green)' },
+  ].map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  if (!data.length) { empty.classList.add('show'); document.getElementById('rg-tbody').innerHTML = ''; document.getElementById('rg-pager').innerHTML = ''; return; }
+  document.getElementById('rg-tbody').innerHTML = data.map(r => {
+    const l = r.leads || {}, av = clientAvatar({ id: r.lead_id, telefono: l.telefono, nombre: l.nombre });
+    const sinAsesor = !r.asesor_nuevo;
+    return `<tr${sinAsesor ? ' style="background:rgba(239,68,68,.06)"' : ''}>
+      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre || 'Sin nombre')}</div></td>
+      <td data-label="Teléfono" class="muted">${esc(l.telefono) || '—'}</td>
+      <td data-label="Destino">${esc(l.destino) || '—'}</td>
+      <td data-label="De">${esc(r.asesor_anterior)}</td>
+      <td data-label="A">${sinAsesor ? '<span style="color:#ef4444"><i class="fas fa-triangle-exclamation"></i> Sin asesor disponible</span>' : esc(r.asesor_nuevo)}</td>
+      <td data-label="Motivo"><span class="chip">${MOTIVO_LABEL[r.motivo] || esc(r.motivo)}</span></td>
+      <td data-label="Tiempo" class="muted">${r.minutos_transcurridos != null ? r.minutos_transcurridos + ' min' : '—'}</td>
+      <td data-label="Fecha" class="muted">${r.created_at ? r.created_at.slice(0, 16).replace('T', ' ') : '—'}</td>
+    </tr>`;
+  }).join('');
+  renderReasignPager(Math.max(Math.ceil(total / PER), 1));
+}
+function renderReasignPager(pages) {
+  document.getElementById('rg-pager').innerHTML = `<button ${rgPage <= 1 ? 'disabled' : ''} id="rgprev"><i class="fas fa-chevron-left"></i></button><span class="pinfo">Página ${fmt(rgPage)} de ${fmt(pages)}</span><button ${rgPage >= pages ? 'disabled' : ''} id="rgnext"><i class="fas fa-chevron-right"></i></button>`;
+  const pv = document.getElementById('rgprev'), nx = document.getElementById('rgnext');
+  if (pv) pv.onclick = () => { rgPage--; loadReasignaciones(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  if (nx) nx.onclick = () => { rgPage++; loadReasignaciones(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 }
 
 /* ---------- Realtime ---------- */
@@ -516,6 +596,7 @@ function subscribeRealtime() {
 }
 function toast(l) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-bolt"></i> <div><b>Nuevo lead en vivo</b><br>${esc(l.nombre)} · ${esc(l.destino || '')}</div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5200); }
 function okToast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-check"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500); }
+function errToast(msg) { const t = document.createElement('div'); t.className = 'toast toast-err'; t.innerHTML = `<i class="fas fa-triangle-exclamation"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5000); }
 
 /* ---------- Nav ---------- */
 function activateSection(sec) {
@@ -528,6 +609,7 @@ function activateSection(sec) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
   if (sec === 'metricas') loadMetricas();
   if (sec === 'ranking') loadRanking();
+  if (sec === 'reasignaciones') loadReasignaciones();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
 function setupNav() { document.querySelectorAll('.nav-item,.bn-item').forEach(n => n.addEventListener('click', () => { if (n.dataset.sec) activateSection(n.dataset.sec); })); }
