@@ -230,6 +230,7 @@ async function startApp() {
   if (booted) return; booted = true;
   setupNav();
   setupTarifarioTabs();
+  setupLightbox();
   setupChat();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
   await loadStats();
@@ -320,14 +321,62 @@ function renderPipe(id) {
 function renderAdvisors(datosPeriodo) {
   const src = datosPeriodo || STATS.by_advisor;
   const e = sortEntries(src), max = Math.max(...e.map(x => x[1]), 1);
+  aseAbierto = null;
   const filaHistorico = datosPeriodo ? '' : `<div class="arow" style="opacity:.6"><div class="ava" style="background:#39415c">H</div><div class="ai"><div class="an"><span>Históricos / inactivos</span><span class="anv">${fmt(STATS.historico_inactivo)} leads</span></div><div class="track"><div class="fill" style="width:100%;background:#39415c"></div></div></div></div>`;
-  document.getElementById('advList').innerHTML = e.map(([name, v], i) => { const c = ADV_COLORS[i % ADV_COLORS.length]; return `<div class="arow adv-click" data-adv="${esc(name)}"><div class="ava" style="background:${c}">${initials(name)}</div><div class="ai"><div class="an"><span>${esc(name)}</span><span class="anv">${fmt(v)} leads</span></div><div class="track"><div class="fill" style="width:${(v / max) * 100}%;background:${c}"></div></div></div></div>`; }).join('') + filaHistorico;
-  document.querySelectorAll('.adv-click').forEach(el => el.onclick = () => { const a = el.dataset.adv; chartPreview('asesor', a, a, 'fa-user-tie', src[a]); });
-  document.querySelector('#advList').closest('.card').querySelector('.csub').textContent = datosPeriodo ? `Toca un asesor para ver su cartera · ${e.length} con actividad en el periodo` : `Toca un asesor para ver su cartera · ${e.length} activos`;
+  document.getElementById('advList').innerHTML = e.map(([name, v], i) => { const c = ADV_COLORS[i % ADV_COLORS.length]; return `<div class="arow adv-click" data-adv="${esc(name)}"><div class="ava" style="background:${c}">${initials(name)}</div><div class="ai"><div class="an"><span>${esc(name)}</span><span class="anv">${fmt(v)} leads</span></div><div class="track"><div class="fill" style="width:${(v / max) * 100}%;background:${c}"></div></div></div><i class="fas fa-chevron-right arow-chev"></i></div>`; }).join('') + filaHistorico;
+  document.querySelectorAll('.adv-click').forEach(el => el.onclick = () => toggleAsesorLeads(el, el.dataset.adv));
+  document.querySelector('#advList').closest('.card').querySelector('.csub').textContent = datosPeriodo ? `Toca un asesor para ver sus leads · ${e.length} con actividad en el periodo` : `Toca un asesor para ver sus leads · ${e.length} activos`;
+}
+
+/* ---------- Lista de leads individuales por asesor (expandible, dentro de Asesores) ---------- */
+let aseAbierto = null;
+async function toggleAsesorLeads(rowEl, nombre) {
+  const yaAbierto = rowEl.classList.contains('expanded');
+  if (aseAbierto && aseAbierto !== rowEl) {
+    aseAbierto.classList.remove('expanded');
+    aseAbierto.nextElementSibling?.classList.contains('al-panel') && aseAbierto.nextElementSibling.remove();
+  }
+  if (yaAbierto) {
+    rowEl.classList.remove('expanded');
+    rowEl.nextElementSibling?.classList.contains('al-panel') && rowEl.nextElementSibling.remove();
+    aseAbierto = null;
+    return;
+  }
+  rowEl.classList.add('expanded');
+  aseAbierto = rowEl;
+  const panel = document.createElement('div');
+  panel.className = 'al-panel';
+  panel.innerHTML = '<div class="al-state"><i class="fas fa-spinner fa-spin"></i> Cargando leads...</div>';
+  rowEl.insertAdjacentElement('afterend', panel);
+  await renderAsesorLeads(panel, nombre);
+}
+// Día/Semana: recién llegados primero (orden inverso). Mes/Año/Histórico: orden
+// cronológico normal — se piden los 40 más recientes y, en ese caso, se
+// invierten para mostrarlos del más viejo al más nuevo dentro de esa ventana.
+async function renderAsesorLeads(panel, nombre) {
+  let q = sb.from('leads').select('id,nombre,telefono,fecha_creacion,estado,destino').eq('asesor', nombre).order('fecha_creacion', { ascending: false }).limit(40);
+  if (asePeriodo !== 'historico') {
+    const [d, h] = periodo(asePeriodo);
+    q = q.gte('fecha_creacion', iso(d)).lt('fecha_creacion', iso(h));
+  }
+  const { data, error } = await q;
+  if (!panel.isConnected) return;
+  if (error) { panel.innerHTML = '<div class="al-state">No se pudieron cargar los leads</div>'; return; }
+  let rows = data || [];
+  if (!rows.length) { panel.innerHTML = '<div class="al-state">Sin leads en este periodo</div>'; return; }
+  if (asePeriodo === 'mes' || asePeriodo === 'anio' || asePeriodo === 'historico') rows = rows.slice().reverse();
+  panel.innerHTML = rows.map(l => {
+    const av = clientAvatar(l);
+    const fh = l.fecha_creacion ? new Date(l.fecha_creacion) : null;
+    const fechaTxt = fh ? `${fh.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit' })} · ${fh.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })}` : '—';
+    const col = ESTADO_COLORS[l.estado] || '#5f677f';
+    return `<div class="al-row"><div class="al-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="al-info"><div class="al-nombre">${esc(l.nombre)}</div><div class="al-meta">${esc(l.destino || 'Sin destino')}</div></div><div class="al-right"><span class="al-badge" style="background:${col}22;color:${col}">${esc(niceEstado(l.estado))}</span><div class="al-fecha">${fechaTxt}</div></div></div>`;
+  }).join('') + `<a class="al-more">Ver todos en Leads <i class="fas fa-arrow-right"></i></a>`;
+  panel.querySelector('.al-more').onclick = () => chartPreview('asesor', nombre, nombre, 'fa-user-tie', rows.length);
 }
 
 /* ---------- Filtros de periodo en Asesores ---------- */
-let asePeriodo = 'historico';
+let asePeriodo = 'semana';
 function setupAsesoresPeriodo() {
   document.querySelectorAll('#ase-periodo .seg').forEach(b => b.onclick = () => {
     document.querySelectorAll('#ase-periodo .seg').forEach(x => x.classList.remove('on'));
@@ -809,10 +858,33 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
   if (dotsEl) dotsEl.innerHTML = fotos && fotos.length > 1 ? fotos.map((_, idx) => `<span class="carrusel-dot${idx === 0 ? ' on' : ''}"></span>`).join('') : '';
   if (!mediaEl || !fotos || fotos.length < 2) return;
   let timer = null, i = 0;
-  const irA = n => {
+  // Crossfade real: clona el estado actual como "fantasma" fijo encima (mismo
+  // rect en pantalla) que se desvanece mientras la foto nueva aparece debajo,
+  // en vez de fundir a opacity:0 y recién ahí cambiar la foto (eso dejaba un
+  // parpadeo al color de fondo entre una foto y otra, se sentía como corte).
+  const crossfade = n => {
     i = (n + fotos.length) % fotos.length;
+    const rect = mediaEl.getBoundingClientRect();
+    const ghost = mediaEl.cloneNode(true);
+    ghost.removeAttribute('id');
+    ghost.querySelector('.carrusel-dots')?.remove();
+    Object.assign(ghost.style, { position: 'fixed', top: rect.top + 'px', left: rect.left + 'px', width: rect.width + 'px', height: rect.height + 'px', margin: '0', zIndex: '5', pointerEvents: 'none', transition: 'none', opacity: '1' });
+    document.body.appendChild(ghost);
+    setFoto(fotos[i]);
+    mediaEl.style.transition = 'none';
     mediaEl.style.opacity = '0';
-    setTimeout(() => { setFoto(fotos[i]); mediaEl.style.opacity = '1'; }, 180);
+    // Fuerza al navegador a "fijar" opacity:1 (fantasma) y opacity:0 (foto
+    // nueva) antes de animar — si no, ambos cambios de estilo quedan en el
+    // mismo lote y la transición nunca llega a pintarse (salto instantáneo).
+    void ghost.offsetWidth;
+    void mediaEl.offsetWidth;
+    requestAnimationFrame(() => {
+      ghost.style.transition = 'opacity .35s ease';
+      mediaEl.style.transition = 'opacity .35s ease';
+      mediaEl.style.opacity = '1';
+      ghost.style.opacity = '0';
+    });
+    setTimeout(() => ghost.remove(), 380);
     if (dotsEl) [...dotsEl.children].forEach((d, idx) => d.classList.toggle('on', idx === i));
   };
   if (esTouch) {
@@ -821,7 +893,7 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
     mediaEl.addEventListener('touchend', e => {
       if (startX == null) return;
       const dx = e.changedTouches[0].clientX - startX;
-      if (Math.abs(dx) > 30) irA(i + (dx < 0 ? 1 : -1));
+      if (Math.abs(dx) > 30) crossfade(i + (dx < 0 ? 1 : -1));
       startX = null;
     }, { passive: true });
     return;
@@ -829,14 +901,12 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
   cardEl.addEventListener('mouseenter', () => {
     precargarFotos(fotos);
     i = 0;
-    timer = setInterval(() => irA(i + 1), 1100);
+    timer = setInterval(() => crossfade(i + 1), 1100);
     carruselTimers.add(timer);
   });
   cardEl.addEventListener('mouseleave', () => {
     clearInterval(timer); carruselTimers.delete(timer); timer = null;
-    mediaEl.style.opacity = '1';
-    setFoto(fotos[0]);
-    if (dotsEl) [...dotsEl.children].forEach((d, idx) => d.classList.toggle('on', idx === 0));
+    if (i !== 0) crossfade(0);
   });
 }
 const DESTINO_ORDEN = ['Margarita', 'Coche'];
@@ -1039,6 +1109,125 @@ function openProductoDrawer(x) {
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
+}
+
+/* ---------- Lightbox de fotos (drawer de producto + Galería) ---------- */
+let lbFotos = [], lbIndex = 0, lbScale = 1, lbTX = 0, lbTY = 0;
+const lbEl = () => document.getElementById('lightbox');
+const lbImgEl = () => document.getElementById('lbImg');
+function openLightbox(fotos, index) {
+  if (!fotos || !fotos.length) return;
+  lbFotos = fotos; lbIndex = Math.max(0, index);
+  lbScale = 1; lbTX = 0; lbTY = 0;
+  renderLightbox();
+  lbEl().classList.add('open');
+  document.body.classList.add('lb-lock');
+}
+function closeLightbox() {
+  lbEl().classList.remove('open');
+  document.body.classList.remove('lb-lock');
+}
+function renderLightbox() {
+  const img = lbImgEl();
+  img.src = lbFotos[lbIndex];
+  img.classList.toggle('zoomed', lbScale > 1);
+  img.style.transform = `translate(${lbTX}px,${lbTY}px) scale(${lbScale})`;
+  const multi = lbFotos.length > 1;
+  document.getElementById('lbCounter').textContent = multi ? `${lbIndex + 1} / ${lbFotos.length}` : '';
+  document.getElementById('lbCounter').style.display = multi ? '' : 'none';
+  document.getElementById('lbPrev').style.display = multi ? '' : 'none';
+  document.getElementById('lbNext').style.display = multi ? '' : 'none';
+}
+function lbNext() { if (lbFotos.length < 2) return; lbIndex = (lbIndex + 1) % lbFotos.length; lbScale = 1; lbTX = 0; lbTY = 0; renderLightbox(); }
+function lbPrev() { if (lbFotos.length < 2) return; lbIndex = (lbIndex - 1 + lbFotos.length) % lbFotos.length; lbScale = 1; lbTX = 0; lbTY = 0; renderLightbox(); }
+function setupLightbox() {
+  const img = lbImgEl(), stage = document.getElementById('lbStage');
+  document.getElementById('lbClose').onclick = closeLightbox;
+  document.getElementById('lbNext').onclick = lbNext;
+  document.getElementById('lbPrev').onclick = lbPrev;
+  stage.addEventListener('click', e => { if (e.target === stage) closeLightbox(); });
+  document.addEventListener('keydown', e => {
+    if (!lbEl().classList.contains('open')) return;
+    if (e.key === 'Escape') closeLightbox();
+    else if (e.key === 'ArrowRight') lbNext();
+    else if (e.key === 'ArrowLeft') lbPrev();
+  });
+
+  // Zoom: doble click/doble tap alterna, rueda incrementa (desktop)
+  img.addEventListener('dblclick', e => {
+    e.preventDefault();
+    lbScale = lbScale > 1 ? 1 : 2.4; lbTX = 0; lbTY = 0;
+    renderLightbox();
+  });
+  img.addEventListener('wheel', e => {
+    e.preventDefault();
+    lbScale = Math.min(4, Math.max(1, lbScale + (e.deltaY < 0 ? 0.25 : -0.25)));
+    if (lbScale === 1) { lbTX = 0; lbTY = 0; }
+    renderLightbox();
+  }, { passive: false });
+
+  // Paniar con mouse cuando hay zoom
+  let dragging = false, dragX = 0, dragY = 0, startTX = 0, startTY = 0;
+  img.addEventListener('mousedown', e => {
+    if (lbScale <= 1) return;
+    dragging = true; dragX = e.clientX; dragY = e.clientY; startTX = lbTX; startTY = lbTY;
+    img.classList.add('panning');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    lbTX = startTX + (e.clientX - dragX); lbTY = startTY + (e.clientY - dragY);
+    img.style.transform = `translate(${lbTX}px,${lbTY}px) scale(${lbScale})`;
+  });
+  window.addEventListener('mouseup', () => { dragging = false; img.classList.remove('panning'); });
+
+  // Touch: 1 dedo sin zoom = swipe entre fotos; 1 dedo con zoom = paniar; 2 dedos = pinch-zoom
+  let touchMode = null, pinchStartDist = 0, pinchStartScale = 1, touchStartX = 0, touchStartY = 0, panStartTX = 0, panStartTY = 0;
+  const dist = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+  stage.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      touchMode = 'pinch'; pinchStartDist = dist(e.touches[0], e.touches[1]); pinchStartScale = lbScale;
+    } else if (e.touches.length === 1) {
+      touchMode = lbScale > 1 ? 'pan' : 'swipe';
+      panStartTX = lbTX; panStartTY = lbTY;
+      touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
+    }
+  }, { passive: true });
+  stage.addEventListener('touchmove', e => {
+    if (touchMode === 'pinch' && e.touches.length === 2) {
+      e.preventDefault();
+      lbScale = Math.min(4, Math.max(1, pinchStartScale * (dist(e.touches[0], e.touches[1]) / pinchStartDist)));
+      img.classList.toggle('zoomed', lbScale > 1);
+      img.style.transform = `translate(${lbTX}px,${lbTY}px) scale(${lbScale})`;
+    } else if (touchMode === 'pan' && e.touches.length === 1) {
+      e.preventDefault();
+      lbTX = panStartTX + (e.touches[0].clientX - touchStartX);
+      lbTY = panStartTY + (e.touches[0].clientY - touchStartY);
+      img.style.transform = `translate(${lbTX}px,${lbTY}px) scale(${lbScale})`;
+    }
+  }, { passive: false });
+  stage.addEventListener('touchend', e => {
+    if (touchMode === 'swipe' && e.changedTouches.length === 1) {
+      const dx = e.changedTouches[0].clientX - touchStartX, dy = e.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) dx < 0 ? lbNext() : lbPrev();
+    }
+    if (touchMode === 'pinch' && lbScale <= 1.02) { lbScale = 1; lbTX = 0; lbTY = 0; renderLightbox(); }
+    touchMode = null;
+  });
+
+  document.getElementById('drawerContent').addEventListener('click', e => {
+    const a = e.target.closest('.dgallery a');
+    if (!a) return;
+    e.preventDefault();
+    const fotos = [...a.parentElement.querySelectorAll('a')].map(x => x.href);
+    openLightbox(fotos, fotos.indexOf(a.href));
+  });
+  document.getElementById('gal-list').addEventListener('click', e => {
+    const a = e.target.closest('.gal-masonry a');
+    if (!a) return;
+    e.preventDefault();
+    const fotos = [...a.closest('.gal-masonry').querySelectorAll('a')].map(x => x.href);
+    openLightbox(fotos, fotos.indexOf(a.href));
+  });
 }
 
 /* ---------- Cotizador IA ---------- */
