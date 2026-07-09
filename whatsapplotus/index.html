@@ -14,15 +14,24 @@
     <a href="#" id="link" class="btn">Abrir WhatsApp</a>
     
     <script>
-        const asesores = [
-            "584244634041", 
-            "584244900601", 
-            "584244900601", 
-            "584244269876", 
-            "584127136169", 
-            "584127136169"
+        // Pool de asesores. peso = probabilidad relativa (mismo criterio que ya se
+        // usaba con numeros duplicados, ahora explicito y con nombre -- ver skill
+        // web-lead-ingest y decisions/log.md 2026-07-09).
+        const ASESORES = [
+            { nombre: 'Ambar Arévalo', telefono: '584244900601', peso: 3 },
+            { nombre: 'Nicoll Osorio', telefono: '584127136169', peso: 2 },
+            { nombre: 'Eudys Chourio', telefono: '584147020527', peso: 1 },
+            { nombre: 'Arquímedes Arévalo', telefono: '584128905774', peso: 1 },
+            { nombre: 'Luis Rueda', telefono: '584244269876', peso: 1 },
+            { nombre: 'Andric Arévalo', telefono: '584140415685', peso: 1 }
         ];
-        const elegido = asesores[Math.floor(Math.random() * asesores.length)];
+        function elegirAsesor() {
+            const total = ASESORES.reduce((s, a) => s + a.peso, 0);
+            let r = Math.random() * total, acumulado = 0;
+            for (const a of ASESORES) { acumulado += a.peso; if (r < acumulado) return a; }
+            return ASESORES[ASESORES.length - 1];
+        }
+        const elegido = elegirAsesor().telefono;
         const mensaje = "¡Buenas!, Vengo de Instagram me gustaría más información 😊";
         const urlFinal = "https://wa.me/" + elegido + "?text=" + encodeURIComponent(mensaje);
         

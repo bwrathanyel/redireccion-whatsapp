@@ -473,6 +473,24 @@ function enviarACRM(datos) {
     fetch('https://begbjhrdbsqftbbleecb.functions.supabase.co/ingest-web-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) }).catch(function(e) { console.log('CRM ingest error:', e); });
 }
 
+// Pool de asesores para el WhatsApp del cliente en esta pagina. peso = probabilidad
+// relativa (mismo criterio que ya se usaba con numeros duplicados, ahora explicito
+// y con nombre -- ver skill web-lead-ingest y decisions/log.md 2026-07-09).
+var ASESORES = [
+    { nombre: 'Ambar Arévalo', telefono: '584244900601', peso: 3 },
+    { nombre: 'Nicoll Osorio', telefono: '584127136169', peso: 2 },
+    { nombre: 'Eudys Chourio', telefono: '584147020527', peso: 1 },
+    { nombre: 'Arquímedes Arévalo', telefono: '584128905774', peso: 1 },
+    { nombre: 'Luis Rueda', telefono: '584244269876', peso: 1 },
+    { nombre: 'Andric Arévalo', telefono: '584140415685', peso: 1 }
+];
+function elegirAsesor() {
+    var total = ASESORES.reduce(function(s, a) { return s + a.peso; }, 0);
+    var r = Math.random() * total, acumulado = 0;
+    for (var i = 0; i < ASESORES.length; i++) { acumulado += ASESORES[i].peso; if (r < acumulado) return ASESORES[i]; }
+    return ASESORES[ASESORES.length - 1];
+}
+
 (function() { var params = new URLSearchParams(window.location.search); var destinoParam = params.get('destino'); if (destinoParam) { var tarjetas = document.querySelectorAll('#colapsables-destino .opcion-tarjeta, #acordeon-destino > .opcion-tarjeta'); for (var i = 0; i < tarjetas.length; i++) { if (tarjetas[i].dataset.value === destinoParam) { seleccionarDestino(tarjetas[i]); break; } } } })();
 
 var ESCENAS = { 'Isla de Margarita': { id: 'escena-playa', caption: '🏖️ Arena blanca y aguas turquesa' }, 'Morrocoy': { id: 'escena-morrocoy', caption: '🐠 Cayos, manglares y snorkel' }, 'Los Roques': { id: 'escena-losroques', caption: '🏝️ Aguas cristalinas y coral' }, 'Mérida': { id: 'escena-montana', caption: '🚡 Aire de montaña y teleférico' }, 'Canaima': { id: 'escena-cascada', caption: '💧 Tepuyes y Salto Ángel' }, 'Catatumbo': { id: 'escena-tormenta', caption: '⚡ Relámpago del Catatumbo' }, 'Colonia Tovar': { id: 'escena-colonia', caption: '🏘️ Pueblo alemán en las montañas' }, 'Extranjero': { id: 'escena-mundo', caption: '🌍 Tu aventura internacional' } };
@@ -514,8 +532,8 @@ function generarSolicitud() {
     var noches = Math.round((new Date(co) - new Date(ci)) / 86400000);
     var edadesNinos = ''; var resumenEl = document.getElementById('edades-resumen');
     if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; } else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
-    var asesores = ['584244634041', '584244900601', '584244900601', '584244900601', '584127136169', '584127136169', '584147020527', '584244269876', '584140415685'];
-    var tlf = asesores[Math.floor(Math.random() * asesores.length)];
+    var asesorElegido = elegirAsesor();
+    var tlf = asesorElegido.telefono;
     var asesorAsignado = tlf;
 
     enviarDatos({ fechaHora: new Date().toLocaleString('es-VE'), destino: dest, servicio: hosp + ' · ' + plan, pagina: 'Hospedaje', nombre: nombreCliente, procedencia: procedencia, telefono: telefono, asesor: asesorAsignado });
