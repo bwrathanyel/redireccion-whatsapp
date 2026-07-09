@@ -226,6 +226,11 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .seg-group{display:inline-flex;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:4px;gap:3px;margin-bottom:16px}
 .seg{background:transparent;border:none;color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 16px;border-radius:9px;cursor:pointer;transition:.15s}
 .seg.on{background:var(--accent-soft);color:#ffd8a8}.seg:hover:not(.on){color:var(--txt)}
+.chead-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.chead-row h3{margin-bottom:0}
+.seg-group-sm{margin-bottom:0;padding:3px}
+.seg-group-sm .seg{padding:5px 10px;font-size:11px}
+@media(max-width:760px){.seg-group-sm{width:100%;justify-content:stretch}.seg-group-sm .seg{flex:1;padding:6px 4px}}
 .kpis-5{grid-template-columns:repeat(5,1fr)}
 .fdate{color-scheme:dark;min-width:135px;cursor:pointer}
 #rank-tot{display:flex;gap:12px;flex-wrap:wrap}
@@ -240,8 +245,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .tar-search input{width:100%;background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:10px 14px 10px 38px;color:var(--txt);font-size:13px;font-family:inherit;outline:none}
 .tar-search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .tar-search i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
-.tar-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
-.tar-grid.grouped{display:block}
+.tar-grid{display:block}
 .tar-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;backdrop-filter:blur(8px);cursor:pointer;transition:.12s}
 .tar-card:hover{border-color:rgba(255,145,0,.3);transform:translateY(-2px)}
 .tar-card .tc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px}
@@ -286,6 +290,33 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
 .dgallery img{height:90px;width:auto;display:block;border-radius:10px;transition:.15s}
 .dgallery img:hover{opacity:.85}
 @media(max-width:760px){.tar-hotel-row{flex-wrap:wrap}.tar-hotel-row .thr-precio{margin-left:auto}}
+
+/* ---------- Vista fichas de Tarifario (foto grande + info completa) ---------- */
+.tar-fichas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+.tar-ficha{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;cursor:pointer;transition:.12s}
+.tar-ficha:hover{border-color:rgba(255,145,0,.3);transform:translateY(-2px)}
+.tf-media{height:150px;background:linear-gradient(135deg,rgba(255,145,0,.16),rgba(255,145,0,.04));background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:26px}
+.tar-ficha .tf-body{padding:14px 16px 16px}
+
+/* ---------- Selector de vista (fichas / tarjetas / lista), estándar en todo el CRM ---------- */
+.view-switch{display:inline-flex;gap:3px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:3px}
+.vs-btn{background:transparent;border:none;color:var(--muted);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:12.5px;transition:.15s}
+.vs-btn.on{background:var(--accent-soft);color:#ffd8a8}
+.vs-btn:hover:not(.on){color:var(--txt)}
+
+/* ---------- Tarjetas/fichas genéricas de Leads y Reasignaciones (misma vista que Tarifario) ---------- */
+.card-grid{display:none;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:2px}
+.card-grid.show{display:grid}
+.card-grid.fichas{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+.entity-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;cursor:pointer;transition:.12s}
+.entity-card:hover{border-color:rgba(255,145,0,.3);transform:translateY(-2px)}
+.entity-card .ec-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.entity-card .ec-ava{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px}
+.entity-card .ec-nombre{font-size:14px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.entity-card .ec-row{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);margin-top:6px}
+.entity-card .ec-row i{width:13px;color:var(--muted2);font-size:11px}
+.entity-card .ec-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+#tbl-wrap.hide,#rg-wrap.hide{display:none}
 
 /* ---------- Cotizador IA ---------- */
 .chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);min-height:420px}
@@ -536,7 +567,16 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
           <div class="pipe" id="pipe"></div>
         </div>
         <div class="card">
-          <h3><i class="fas fa-location-dot"></i> Destinos más solicitados</h3>
+          <div class="chead-row">
+            <h3><i class="fas fa-location-dot"></i> Destinos más solicitados</h3>
+            <div class="seg-group seg-group-sm" id="dest-periodo">
+              <button class="seg" data-p="dia">Día</button>
+              <button class="seg" data-p="semana">Semana</button>
+              <button class="seg on" data-p="mes">Mes</button>
+              <button class="seg" data-p="anio">Año</button>
+              <button class="seg" data-p="historico">Histórico</button>
+            </div>
+          </div>
           <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Toca un destino para ver su número</div>
           <div class="chart-wrap" style="height:250px"><canvas id="chDest"></canvas></div>
         </div>
@@ -568,6 +608,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
               </div>
             </div>
           </div>
+          <div class="view-switch" id="leads-view-switch"></div>
           <span class="tcount" id="t-count"></span>
         </div>
         <div id="active-filters" class="chips-bar"></div>
@@ -579,6 +620,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
             <tbody id="tbody"></tbody>
           </table>
         </div>
+        <div id="leads-cards" class="card-grid"></div>
         <div class="pager" id="pager"></div>
       </div>
     </section>
@@ -611,6 +653,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
         <input class="flt tar-f" id="tar-f-precio" data-tabs="hotel,promo,destino,paquete" type="number" min="0" placeholder="Precio máx. USD">
         <label class="tar-f-check" id="tar-f-ninos-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-ninos"> Con niños gratis</label>
         <label class="tar-f-check" id="tar-f-vigente-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-vigente" checked> Solo vigentes</label>
+        <div class="view-switch" id="tar-view-switch"></div>
         <span class="tcount" id="tar-count"></span>
       </div>
       <div class="tbl-state" id="tar-loading"><div class="spin"></div><div class="es-s">Cargando tarifario...</div></div>
@@ -677,6 +720,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
               </div>
             </div>
           </div>
+          <div class="view-switch" id="rg-view-switch"></div>
           <span class="tcount" id="rg-count"></span>
         </div>
         <div class="tbl-state" id="rg-loading"><div class="spin"></div><div class="es-s">Cargando reasignaciones...</div></div>
@@ -687,6 +731,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
             <tbody id="rg-tbody"></tbody>
           </table>
         </div>
+        <div id="rg-cards" class="card-grid"></div>
         <div class="pager" id="rg-pager"></div>
       </div>
     </section>

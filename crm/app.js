@@ -33,6 +33,7 @@ let activeMonth = null, activeDestino = null, currentLead = null;
 let trendKeys = [], canalKeys = [], destKeys = [], trendMap = {};
 let previewSel = null, charts = {};
 let ACTIVOS = [];
+let leadsView = 'lista', rgView = 'lista';
 
 /* ---------- Periodos ---------- */
 function periodo(kind) {
@@ -237,9 +238,10 @@ async function startApp() {
   setupFilters();
   await loadTable();
   setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo();
+  setupDestPeriodo(); loadDestPeriodo();
   subscribeRealtime();
 }
-function renderAll() { renderKPIs(); renderTrend(); renderCanal(); renderPipe('pipe'); renderPipe('pipe2'); renderDest(); renderAdvisors(); renderAssign(); }
+function renderAll() { renderKPIs(); renderTrend(); renderCanal(); renderPipe('pipe'); renderPipe('pipe2'); renderAdvisors(); renderAssign(); }
 
 async function loadStats() {
   const { data, error } = await sb.rpc('dashboard_stats');
@@ -281,9 +283,26 @@ function renderCanal() {
   const e = sortEntries(STATS.by_canal); canalKeys = e.map(x => x[0]);
   mk('chCanal', { type: 'doughnut', data: { labels: canalKeys, datasets: [{ data: e.map(x => x[1]), backgroundColor: ['#ff5c8a', '#a06bff', '#4a9eff', '#5f677f'], borderColor: '#0d1224', borderWidth: 3, hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '64%', onClick: (e, el) => { if (el.length) { const k = canalKeys[el[0].index]; chartPreview('canal', k, k, 'fa-share-nodes', STATS.by_canal[k]); } }, onHover: pointer, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 14, font: { size: 12 } } }, tooltip: { callbacks: { label: c => c.label + ': ' + fmt(c.raw) } } } } });
 }
-function renderDest() {
-  const e = sortEntries(STATS.top_destinos).slice(0, 8); destKeys = e.map(x => x[0]);
-  mk('chDest', { type: 'bar', data: { labels: destKeys, datasets: [{ data: e.map(x => x[1]), backgroundColor: 'rgba(74,158,255,.75)', hoverBackgroundColor: '#4a9eff', borderRadius: 6, barThickness: 16 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (e, el) => { if (el.length) { const k = destKeys[el[0].index]; chartPreview('destino', k, k, 'fa-location-dot', STATS.top_destinos[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } } });
+function renderDest(datosPeriodo) {
+  const src = datosPeriodo || STATS.top_destinos;
+  const e = sortEntries(src).slice(0, 8); destKeys = e.map(x => x[0]);
+  mk('chDest', { type: 'bar', data: { labels: destKeys, datasets: [{ data: e.map(x => x[1]), backgroundColor: 'rgba(74,158,255,.75)', hoverBackgroundColor: '#4a9eff', borderRadius: 6, barThickness: 16 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (e, el) => { if (el.length) { const k = destKeys[el[0].index]; chartPreview('destino', k, k, 'fa-location-dot', src[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } } });
+}
+
+/* ---------- Filtro de periodo en Destinos más solicitados ---------- */
+let destPeriodo = 'mes';
+function setupDestPeriodo() {
+  document.querySelectorAll('#dest-periodo .seg').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#dest-periodo .seg').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); destPeriodo = b.dataset.p; loadDestPeriodo();
+  });
+}
+async function loadDestPeriodo() {
+  if (destPeriodo === 'historico') { renderDest(); return; }
+  const [d, h] = periodo(destPeriodo === 'dia' ? 'hoy' : destPeriodo);
+  const { data, error } = await sb.rpc('top_destinos_periodo', { p_desde: iso(d), p_hasta: iso(h) });
+  if (error) { console.error(error); errToast('No se pudieron cargar los destinos del periodo'); return; }
+  renderDest(data || {});
 }
 function renderAssign() {
   const e = Object.entries(STATS.asignacion_objetivo || {}).sort((a, b) => b[1] - a[1]);
@@ -355,6 +374,7 @@ function setupFilters() {
   ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
   let deb; document.getElementById('global-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => { page = 1; loadTable(); renderChips(); }, 300); });
   initDateRangePicker('f');
+  leadsView = initViewSwitcher('leads-view-switch', 'leads', 'lista', v => { leadsView = v; applyLeadsView(); });
 }
 
 /* ---------- Selector de rango de fechas (Leads + Reasignaciones) ---------- */
@@ -389,6 +409,24 @@ function initDateRangePicker(prefix) {
   updateLabel();
 }
 function fill(id, arr) { const s = document.getElementById(id); if (!s) return; [...s.querySelectorAll('option:not([value=""])')].forEach(o => o.remove()); arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = niceEstado(v); s.appendChild(o); }); }
+
+/* ---------- Selector de vista estándar (fichas / tarjetas / lista) ---------- */
+function initViewSwitcher(containerId, key, defaultView, onChange) {
+  const bar = document.getElementById(containerId);
+  const saved = localStorage.getItem('view_' + key) || defaultView;
+  if (!bar) return saved;
+  bar.innerHTML = `<button class="vs-btn" data-v="fichas" title="Vista de fichas"><i class="fas fa-id-card"></i></button>
+    <button class="vs-btn" data-v="tarjetas" title="Vista de tarjetas"><i class="fas fa-table-cells-large"></i></button>
+    <button class="vs-btn" data-v="lista" title="Vista de lista"><i class="fas fa-list"></i></button>`;
+  const setActive = v => bar.querySelectorAll('.vs-btn').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  setActive(saved);
+  bar.querySelectorAll('.vs-btn').forEach(b => b.onclick = () => {
+    localStorage.setItem('view_' + key, b.dataset.v);
+    setActive(b.dataset.v);
+    onChange(b.dataset.v);
+  });
+  return saved;
+}
 
 function renderChips() {
   const box = document.getElementById('active-filters'); if (!box) return;
@@ -436,7 +474,7 @@ async function loadTable() {
   if (error) { console.error(error); errToast('No se pudieron cargar los leads'); return; }
   totalFiltered = count ?? 0;
   document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`;
-  if (!data.length) { empty.classList.add('show'); document.getElementById('tbody').innerHTML = ''; document.getElementById('pager').innerHTML = ''; return; }
+  if (!data.length) { empty.classList.add('show'); document.getElementById('tbody').innerHTML = ''; document.getElementById('leads-cards').innerHTML = ''; document.getElementById('pager').innerHTML = ''; return; }
   document.getElementById('tbody').innerHTML = data.map(l => {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
@@ -451,7 +489,34 @@ async function loadTable() {
     </tr>`;
   }).join('');
   [...document.querySelectorAll('#tbody tr')].forEach((tr, i) => tr.addEventListener('click', () => openDrawer(data[i])));
+  document.getElementById('leads-cards').innerHTML = data.map(leadCardHtml).join('');
+  [...document.querySelectorAll('#leads-cards .entity-card')].forEach((el, i) => el.addEventListener('click', () => openDrawer(data[i])));
+  applyLeadsView();
   renderPager(Math.max(Math.ceil(totalFiltered / PER), 1));
+}
+function leadCardHtml(l) {
+  const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
+  const detalle = leadsView === 'fichas' ? `
+    <div class="ec-row"><i class="fas fa-comment-dots"></i> ${esc(l.destino_consulta || 'Sin consulta registrada')}</div>
+    <div class="ec-row"><i class="fas fa-users"></i> ${esc(l.personas || '—')} persona(s)</div>` : '';
+  return `<div class="entity-card">
+    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}</div></div>
+    <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
+    <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
+    <div class="ec-row"><i class="fas fa-user-tie"></i> ${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</div>
+    ${detalle}
+    <div class="ec-foot">
+      <span class="chip ${cc}">${esc(l.canal)}</span>
+      <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${niceEstado(l.estado)}</span>
+      ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
+    </div>
+  </div>`;
+}
+function applyLeadsView() {
+  const table = document.getElementById('tbl-wrap'), cards = document.getElementById('leads-cards');
+  table.classList.toggle('hide', leadsView !== 'lista');
+  cards.classList.toggle('show', leadsView !== 'lista');
+  cards.classList.toggle('fichas', leadsView === 'fichas');
 }
 function renderPager(pages) {
   document.getElementById('pager').innerHTML = `<button ${page <= 1 ? 'disabled' : ''} id="pprev"><i class="fas fa-chevron-left"></i></button><span class="pinfo">Página ${fmt(page)} de ${fmt(pages)}</span><button ${page >= pages ? 'disabled' : ''} id="pnext"><i class="fas fa-chevron-right"></i></button>`;
@@ -514,7 +579,7 @@ async function guardarLead() {
   if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return; }
   window.closeDrawer();
   okToast('Lead actualizado');
-  await loadStats(); renderAll(); loadTable();
+  await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
 }
 window.closeDrawer = () => { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); };
 document.getElementById('dClose').onclick = window.closeDrawer;
@@ -576,6 +641,7 @@ function setupReasignaciones() {
   fill('rg-asesor', ACTIVOS);
   ['rg-asesor', 'rg-motivo', 'rg-desde', 'rg-hasta'].forEach(id => document.getElementById(id).addEventListener('change', () => { rgPage = 1; loadReasignaciones(); }));
   initDateRangePicker('rg');
+  rgView = initViewSwitcher('rg-view-switch', 'reasignaciones', 'lista', v => { rgView = v; applyRgView(); });
 }
 function reasignFiltered(q) {
   const fa = val('rg-asesor'), fd = val('rg-desde'), fh = val('rg-hasta');
@@ -612,7 +678,7 @@ async function loadReasignaciones() {
     { t: 'Manual (No puedo)', v: fmt(kpi.manual ?? 0), i: 'fa-hand', c: 'var(--purple)' },
     { t: 'Sin asesor disponible', v: fmt(kAgotados), i: 'fa-triangle-exclamation', c: kAgotados > 0 ? '#ef4444' : 'var(--green)' },
   ].map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
-  if (!data.length) { empty.classList.add('show'); document.getElementById('rg-tbody').innerHTML = ''; document.getElementById('rg-pager').innerHTML = ''; return; }
+  if (!data.length) { empty.classList.add('show'); document.getElementById('rg-tbody').innerHTML = ''; document.getElementById('rg-cards').innerHTML = ''; document.getElementById('rg-pager').innerHTML = ''; return; }
   document.getElementById('rg-tbody').innerHTML = data.map(r => {
     const l = r.leads || {}, av = clientAvatar({ id: r.lead_id, telefono: l.telefono, nombre: l.nombre });
     const sinAsesor = !r.asesor_nuevo;
@@ -627,7 +693,32 @@ async function loadReasignaciones() {
       <td data-label="Fecha" class="muted">${r.created_at ? r.created_at.slice(0, 16).replace('T', ' ') : '—'}</td>
     </tr>`;
   }).join('');
+  document.getElementById('rg-cards').innerHTML = data.map(reasignCardHtml).join('');
+  applyRgView();
   renderReasignPager(Math.max(Math.ceil(total / PER), 1));
+}
+function reasignCardHtml(r) {
+  const l = r.leads || {}, av = clientAvatar({ id: r.lead_id, telefono: l.telefono, nombre: l.nombre });
+  const sinAsesor = !r.asesor_nuevo;
+  const detalle = rgView === 'fichas' ? `
+    <div class="ec-row"><i class="fas fa-arrow-right-arrow-left"></i> ${esc(r.asesor_anterior)} → ${sinAsesor ? '<span style="color:#ef4444">sin asesor disponible</span>' : esc(r.asesor_nuevo)}</div>
+    <div class="ec-row"><i class="fas fa-clock"></i> ${r.minutos_transcurridos != null ? r.minutos_transcurridos + ' min transcurridos' : 'Sin dato de tiempo'}</div>` : '';
+  return `<div class="entity-card">
+    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre || 'Sin nombre')}</div></div>
+    <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || '—'}</div>
+    <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
+    ${detalle}
+    <div class="ec-foot">
+      <span class="chip">${MOTIVO_LABEL[r.motivo] || esc(r.motivo)}</span>
+      <span class="muted" style="font-size:11px">${r.created_at ? r.created_at.slice(0, 16).replace('T', ' ') : '—'}</span>
+    </div>
+  </div>`;
+}
+function applyRgView() {
+  const table = document.getElementById('rg-wrap'), cards = document.getElementById('rg-cards');
+  table.classList.toggle('hide', rgView !== 'lista');
+  cards.classList.toggle('show', rgView !== 'lista');
+  cards.classList.toggle('fichas', rgView === 'fichas');
 }
 function renderReasignPager(pages) {
   document.getElementById('rg-pager').innerHTML = `<button ${rgPage <= 1 ? 'disabled' : ''} id="rgprev"><i class="fas fa-chevron-left"></i></button><span class="pinfo">Página ${fmt(rgPage)} de ${fmt(pages)}</span><button ${rgPage >= pages ? 'disabled' : ''} id="rgnext"><i class="fas fa-chevron-right"></i></button>`;
@@ -637,7 +728,7 @@ function renderReasignPager(pages) {
 }
 
 /* ---------- Tarifario ---------- */
-let tarTab = 'destino', tarCache = {}, tarInfo = null;
+let tarTab = 'destino', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 const TAR_TAB_LABEL = { destino: 'Destino', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción' };
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche']);
@@ -650,6 +741,7 @@ function setupTarifarioTabs() {
   actualizarVisibilidadFiltrosTarifario();
   let deb; document.getElementById('tar-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(renderTarifario, 200); });
   document.querySelectorAll('.tar-f').forEach(el => el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => renderTarifario()));
+  tarView = initViewSwitcher('tar-view-switch', 'tarifario', 'tarjetas', v => { tarView = v; renderTarifario(); });
 }
 function actualizarVisibilidadFiltrosTarifario() {
   document.querySelectorAll('[data-tabs]').forEach(el => {
@@ -721,33 +813,47 @@ function renderTarifario() {
   document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
   document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0);
   const grid = document.getElementById('tar-grid');
-  grid.classList.toggle('grouped', tarTab === 'hotel');
   if (tarTab === 'hotel') {
     const porDestino = {};
     filtered.forEach(x => (porDestino[x.destino || 'Otros'] ??= []).push(x));
     const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
-    grid.innerHTML = destinos.map(d => `<div class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span></div><div class="tar-hotel-list">${porDestino[d].map(tarHotelRowHtml).join('')}</div>`).join('');
-    [...document.querySelectorAll('#tar-grid .tar-hotel-row')].forEach(el => el.onclick = () => openProductoDrawer(filtered.find(x => String(x.id) === el.dataset.id)));
+    grid.innerHTML = destinos.map(d => `<div class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span></div>${tarItemsWrapHtml(porDestino[d])}`).join('');
   } else {
-    grid.innerHTML = filtered.map(tarCardHtml).join('');
-    [...document.querySelectorAll('#tar-grid .tar-card')].forEach(el => el.onclick = () => openProductoDrawer(filtered.find(x => String(x.id) === el.dataset.id)));
+    grid.innerHTML = tarItemsWrapHtml(filtered);
   }
+  [...document.querySelectorAll('#tar-grid .tar-item')].forEach(el => el.onclick = () => openProductoDrawer(filtered.find(x => String(x.id) === el.dataset.id)));
 }
-function tarHotelRowHtml(x) {
-  const ag = agregarHotel(x);
-  const foto = fotosDe(x)[0];
-  return `<div class="tar-hotel-row" data-id="${x.id}">
-    ${foto ? `<img class="thr-thumb" src="${esc(foto)}" alt="" loading="lazy">` : `<div class="thr-thumb thr-thumb-vacio"><i class="fas fa-image"></i></div>`}
-    <div class="thr-nombre">${esc(x.nombre)}</div>
-    ${ag.tags.length ? tagsHtml(ag.tags) : '<span></span>'}
-    ${x.promociones?.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${x.promociones.length} promo${x.promociones.length > 1 ? 's' : ''}</div>` : ''}
-    <div class="thr-precio${ag.precioMin == null ? ' sin-precio' : ''}">${ag.precioMin != null ? `Desde $${ag.precioMin}` : 'Consultar precio'}</div>
+function tarItemsWrapHtml(items) {
+  const html = items.map(x => tarView === 'lista' ? tarRowHtml(x) : tarView === 'fichas' ? tarFichaHtml(x) : tarCardHtml(x)).join('');
+  const cls = tarView === 'lista' ? 'tar-hotel-list' : tarView === 'fichas' ? 'tar-fichas-grid' : 'tar-grid-sub';
+  return `<div class="${cls}">${html}</div>`;
+}
+function tarRowHtml(x) {
+  const esPromo = tarTab === 'promo';
+  const nombre = esPromo ? x.titulo : x.nombre;
+  const foto = esPromo ? null : fotosDe(x)[0];
+  let tags = [], precioTxt = null, promosCount = 0;
+  if (tarTab === 'hotel') {
+    const ag = agregarHotel(x);
+    tags = ag.tags; precioTxt = ag.precioMin != null ? `Desde $${ag.precioMin}` : null;
+    promosCount = x.promociones?.length || 0;
+  } else if (esPromo) {
+    tags = x.incluye_tags || []; precioTxt = x.precio_texto || null;
+  } else {
+    precioTxt = (x.tarifas || [])[0]?.precio_texto || null;
+  }
+  return `<div class="tar-item tar-hotel-row" data-id="${x.id}">
+    ${foto ? `<img class="thr-thumb" src="${esc(foto)}" alt="" loading="lazy">` : `<div class="thr-thumb thr-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`}
+    <div class="thr-nombre">${esc(nombre)}</div>
+    ${tags.length ? tagsHtml(tags) : '<span></span>'}
+    ${promosCount ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promosCount} promo${promosCount > 1 ? 's' : ''}</div>` : ''}
+    <div class="thr-precio${precioTxt == null ? ' sin-precio' : ''}">${precioTxt != null ? esc(precioTxt) : 'Consultar precio'}</div>
     <i class="fas fa-chevron-right"></i>
   </div>`;
 }
 function tarCardHtml(x) {
   if (tarTab === 'promo') {
-    return `<div class="tar-card" data-id="${x.id}"><div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
+    return `<div class="tar-item tar-card" data-id="${x.id}"><div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
       ${x.precio_texto ? `<div class="tc-precio">${esc(x.precio_texto)}</div>` : ''}
       ${x.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(x.vigencia_texto)}</div>` : ''}
       ${tagsHtml(x.incluye_tags)}</div>`;
@@ -755,12 +861,34 @@ function tarCardHtml(x) {
   const tarifa = (x.tarifas || [])[0];
   const promos = x.promociones || [];
   const tagsHotel = [...new Set(promos.flatMap(p => p.incluye_tags || []))];
-  return `<div class="tar-card" data-id="${x.id}"><div class="tc-top"><div><div class="tc-nombre">${esc(x.nombre)}</div>${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}</div></div>
+  return `<div class="tar-item tar-card" data-id="${x.id}"><div class="tc-top"><div><div class="tc-nombre">${esc(x.nombre)}</div>${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}</div></div>
     <div class="tc-resumen">${esc(x.descripcion || '')}</div>
     ${tarifa ? `<div class="tc-precio">${esc(tarifa.precio_texto)}</div>` : ''}
     ${tarifa && tarifa.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(tarifa.vigencia_texto)}</div>` : ''}
     ${promos.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promos.length} promoción${promos.length > 1 ? 'es' : ''} activa${promos.length > 1 ? 's' : ''}</div>` : ''}
     ${tagsHtml(tagsHotel)}</div>`;
+}
+function tarFichaHtml(x) {
+  const esPromo = tarTab === 'promo';
+  const nombre = esPromo ? x.titulo : x.nombre;
+  const foto = esPromo ? null : fotosDe(x)[0];
+  const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
+  const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
+  const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
+  const promos = !esPromo ? (x.promociones || []) : [];
+  const tags = esPromo ? (x.incluye_tags || []) : [...new Set(promos.flatMap(p => p.incluye_tags || []))];
+  return `<div class="tar-item tar-ficha" data-id="${x.id}">
+    <div class="tf-media"${foto ? ` style="background-image:url('${esc(foto)}')"` : ''}>${!foto ? `<i class="fas fa-${esPromo ? 'tag' : 'image'}"></i>` : ''}</div>
+    <div class="tf-body">
+      <div class="tc-nombre">${esc(nombre)}</div>
+      ${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}
+      ${!esPromo && x.descripcion ? `<div class="tc-resumen">${esc(x.descripcion)}</div>` : ''}
+      ${precio ? `<div class="tc-precio">${esc(precio)}</div>` : ''}
+      ${vigencia ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(vigencia)}</div>` : ''}
+      ${promos.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promos.length} promoción${promos.length > 1 ? 'es' : ''} activa${promos.length > 1 ? 's' : ''}</div>` : ''}
+      ${tagsHtml(tags)}
+    </div>
+  </div>`;
 }
 async function loadTarifarioInfo() {
   if (tarInfo) return;
@@ -819,11 +947,21 @@ async function enviarChat() {
   addChatBubble('bot', data.respuesta);
   chatHistory.push({ role: 'assistant', content: data.respuesta });
 }
+// Red de seguridad visual: aunque el prompt le pide a Gemini no usar markdown
+// pesado, a veces igual manda **negritas** o encabezados con #. En vez de
+// mostrarlos literales (feo, símbolos sueltos), se limpian/convierten acá.
+function renderBotText(texto) {
+  return esc(texto)
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/^[*•]\s+/gm, '- ');
+}
 function addChatBubble(who, texto, loading) {
   const log = document.getElementById('chat-log');
   const div = document.createElement('div');
   div.className = `chat-msg ${who}${loading ? ' loading' : ''}`;
-  div.textContent = texto;
+  if (who === 'bot' && !loading) div.innerHTML = renderBotText(texto);
+  else div.textContent = texto;
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
   return div;
@@ -833,7 +971,7 @@ function addChatBubble(who, texto, loading) {
 function subscribeRealtime() {
   sb.channel('leads-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, payload => {
     toast(payload.new);
-    loadStats().then(renderAll);
+    loadStats().then(() => { renderAll(); loadDestPeriodo(); });
     if (page === 1 && document.getElementById('sec-leads').classList.contains('active')) loadTable();
   }).subscribe();
 }
