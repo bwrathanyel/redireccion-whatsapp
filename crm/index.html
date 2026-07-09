@@ -210,8 +210,15 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .dbtn.gh{background:rgba(255,255,255,.06);color:var(--txt);border:1px solid var(--line2)}
 
 /* preview pill (ver número antes de entrar) */
-.preview-pill{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(160%);z-index:56;display:flex;align-items:center;gap:14px;background:var(--panel-solid);border:1px solid var(--accent-soft);border-radius:16px;padding:12px 12px 12px 16px;box-shadow:0 16px 40px rgba(0,0,0,.5);transition:transform .3s cubic-bezier(.3,1,.4,1);max-width:92vw}
-.preview-pill.show{transform:translateX(-50%) translateY(0)}
+/* Antes de la primera vez que se toca un gráfico, #preview-pill está vacío en
+   el HTML (sin texto/ícono adentro) — translateY en % es relativo a la altura
+   PROPIA del elemento, así que con el pill vacío (~24px de alto, solo el
+   padding) un 160%/200% apenas lo movía ~40-50px, dejándolo asomado y visible
+   como una franja de color pegada abajo en cualquier sección. Con un valor
+   fijo en px (y opacity+pointer-events como respaldo) queda ocultado de
+   verdad sin importar si tiene contenido o no. */
+.preview-pill{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(140px);opacity:0;pointer-events:none;z-index:56;display:flex;align-items:center;gap:14px;background:var(--panel-solid);border:1px solid var(--accent-soft);border-radius:16px;padding:12px 12px 12px 16px;box-shadow:0 16px 40px rgba(0,0,0,.5);transition:transform .3s cubic-bezier(.3,1,.4,1),opacity .3s;max-width:92vw}
+.preview-pill.show{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
 .pp-info{display:flex;align-items:center;gap:11px}
 .pp-info>i{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-size:15px;flex-shrink:0}
 .pp-label{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
@@ -461,7 +468,7 @@ select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:ima
   .drawer.open{transform:translateY(0)}
   .drawer::before{content:'';position:absolute;top:9px;left:50%;transform:translateX(-50%);width:40px;height:4px;border-radius:3px;background:var(--line2)}
   .dbtn{padding:15px}
-  .preview-pill{left:12px;right:12px;bottom:calc(84px + var(--safe-b));transform:translateY(200%);max-width:none}
+  .preview-pill{left:12px;right:12px;bottom:calc(84px + var(--safe-b));transform:translateY(140px);max-width:none}
   .preview-pill.show{transform:translateY(0)}
   .pp-label{max-width:38vw}
   #toasts{left:12px;right:12px;bottom:calc(84px + var(--safe-b));align-items:stretch}.toast{max-width:none}
