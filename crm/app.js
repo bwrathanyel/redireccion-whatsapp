@@ -24,6 +24,29 @@ const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); 
 const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de los hoteles del tarifario'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// Las descripciones/requisitos/precios del tarifario vienen del PDF original
+// como un párrafo denso (varias oraciones/datos corridos). Acá NUNCA se
+// toca el texto guardado — solo se corta en oraciones (separador real:
+// ". "/"; " seguido de mayúscula, así "USD 40.000" o "a.m." no disparan un
+// corte falso) para que se lea como líneas cortas en vez de un bloque, y se
+// resaltan montos/porcentajes ya presentes en el texto. Cero información
+// nueva, cero texto perdido — mismo contenido, mejor separado.
+const resaltarNumeros = textoEscapado => textoEscapado.replace(/(?:USD|US\$|EUR|\$)\s?[\d.,]+|\b\d+(?:[.,]\d+)?%/g, m => `<b class="dfv-num">${m}</b>`);
+// Abreviaturas comunes en el tarifario que terminan en "." pero NO cierran
+// oración (ej. "aprox. 230 USD", "Edo. Miranda") — sin esto el corte por
+// oración las trataba como fin de frase real.
+const ABREV_RE = /\b(?:aprox|Edo|Sr|Sra|Dr|Dra|Ing|Lic|Av|Cra|etc|núm|art|pág|No|Nro)\.$/i;
+function formatearTexto(texto) {
+  if (!texto) return '';
+  const partes = String(texto).split(/(?<=[.;])\s+(?=[A-ZÁÉÍÓÚÑÜ0-9])/).map(s => s.trim()).filter(Boolean);
+  const oraciones = [];
+  for (const parte of partes) {
+    if (oraciones.length && ABREV_RE.test(oraciones[oraciones.length - 1])) oraciones[oraciones.length - 1] += ' ' + parte;
+    else oraciones.push(parte);
+  }
+  if (oraciones.length <= 1) return `<p>${resaltarNumeros(esc(texto))}</p>`;
+  return oraciones.map(o => `<p>${resaltarNumeros(esc(o))}</p>`).join('');
+}
 const val = id => document.getElementById(id).value;
 const niceEstado = v => (v === (v || '').toUpperCase() && (v || '').includes(' ')) ? v.charAt(0) + v.slice(1).toLowerCase() : v;
 const sortEntries = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]);
@@ -596,7 +619,23 @@ function openDrawer(l) {
       <div class="dm">${esc(l.telefono) || 'Sin teléfono'} · ${esc(l.canal)}</div></div></div>
 
     <div class="edit-box">
-      <div class="eb-title"><i class="fas fa-sliders"></i> Gestión</div>
+      <div class="eb-title"><i class="fas fa-user-pen"></i> Datos del lead</div>
+      <label class="fl">Nombre</label>
+      <input id="e-nombre" class="ei" type="text" value="${esc(l.nombre || '')}">
+      <label class="fl">Teléfono</label>
+      <input id="e-telefono" class="ei" type="text" value="${esc(l.telefono || '')}">
+      <label class="fl">Canal</label>
+      <input id="e-canal" class="ei" type="text" value="${esc(l.canal || '')}">
+      <label class="fl">Destino de interés</label>
+      <input id="e-destino" class="ei" type="text" value="${esc(l.destino || '')}">
+      <label class="fl">Consulta original</label>
+      <input id="e-destino-consulta" class="ei" type="text" value="${esc(l.destino_consulta || '')}">
+      <label class="fl">Personas</label>
+      <input id="e-personas" class="ei" type="text" value="${esc(l.personas || '')}">
+      <label class="fl">Fecha de captación</label>
+      <input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">
+
+      <div class="eb-title" style="margin-top:16px"><i class="fas fa-sliders"></i> Gestión</div>
       <label class="fl">Estado</label>
       <select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>
       <label class="fl">Asesor asignado</label>
@@ -613,11 +652,6 @@ function openDrawer(l) {
       <button class="dbtn save" id="e-save"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>
     </div>
 
-    <div class="dfield"><div class="dfi"><i class="fas fa-location-dot"></i></div><div><div class="dfl">Destino de interés</div><div class="dfv">${esc(l.destino)}</div></div></div>
-    <div class="dfield"><div class="dfi"><i class="fas fa-comment-dots"></i></div><div><div class="dfl">Consulta original</div><div class="dfv">${esc(l.destino_consulta || '—')}</div></div></div>
-    <div class="dfield"><div class="dfi"><i class="fas fa-users"></i></div><div><div class="dfl">Personas</div><div class="dfv">${esc(l.personas || '—')}</div></div></div>
-    <div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Fecha de captación</div><div class="dfv">${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : '—'}</div></div></div>
-
     <div class="dactions">${wa ? `<a class="dbtn wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>` : ''}</div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">ID: ${esc(l.external_id || l.id)}</div>`;
 
@@ -631,10 +665,18 @@ async function guardarLead() {
   const estado = val('e-estado'), asesor = val('e-asesor'), servicio = val('e-servicio');
   const montoRaw = val('e-monto').trim();
   if (estado === VENTA && (!montoRaw || !(parseFloat(montoRaw) > 0))) { err.textContent = 'Ingresa el monto de la venta (debe ser mayor a 0)'; return; }
+  const nombre = val('e-nombre').trim();
+  if (!nombre) { err.textContent = 'El nombre no puede quedar vacío'; return; }
   const monto = estado === VENTA ? parseFloat(montoRaw) : null;
   const comprado = estado === VENTA ? val('e-comprado').trim() : null;
+  const fechaVal = val('e-fecha');
   err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
-  const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: currentLead.id, p_estado: estado, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado });
+  const { data, error } = await sb.rpc('actualizar_lead', {
+    p_lead_id: currentLead.id, p_estado: estado, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado,
+    p_nombre: nombre, p_telefono: val('e-telefono').trim(), p_canal: val('e-canal').trim(),
+    p_destino: val('e-destino').trim(), p_destino_consulta: val('e-destino-consulta').trim(), p_personas: val('e-personas').trim(),
+    p_fecha_creacion: fechaVal ? new Date(fechaVal + 'T12:00:00').toISOString() : null,
+  });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios';
   if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return; }
   window.closeDrawer();
@@ -792,6 +834,11 @@ let tarTab = 'promo', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción' };
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche']);
+  const mesSel = document.getElementById('tar-f-mes');
+  const mesActual = new Date().getMonth() + 1;
+  mesSel.innerHTML = '<option value="">Cualquier mes</option>'
+    + `<option value="${mesActual}">Este mes (${MESL[mesActual - 1]})</option>`
+    + MESL.map((m, i) => `<option value="${i + 1}">${m.charAt(0).toUpperCase() + m.slice(1)}</option>`).join('');
   document.querySelectorAll('#tar-tabs .seg').forEach(b => b.onclick = () => {
     document.querySelectorAll('#tar-tabs .seg').forEach(x => x.classList.remove('on'));
     b.classList.add('on'); tarTab = b.dataset.tab;
@@ -893,7 +940,7 @@ async function loadTarifario() {
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
   empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
   const q = tarTab === 'promo'
-    ? sb.from('promociones').select('*, productos(producto_fotos(storage_path,orden))').order('titulo')
+    ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden), productos(producto_fotos(storage_path,orden))').order('titulo')
     : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad), producto_fotos(storage_path,orden)').eq('tipo', tarTab).order('nombre');
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
@@ -920,11 +967,29 @@ const tagsHtml = tags => (tags || []).length ? `<div class="tar-tags">${tags.map
 // (promociones.producto_id o productos.hotel_id, ver push_to_supabase.py
 // HOTEL_ALIASES) — nunca se inventa una foto para algo sin vínculo real.
 const fotosDe = x => {
-  const propias = (x.producto_fotos || []).slice().sort((a, b) => a.orden - b.orden).map(f => FOTOS_BASE + f.storage_path);
+  const ordenar = arr => arr.slice().sort((a, b) => a.orden - b.orden).map(f => FOTOS_BASE + f.storage_path);
+  const propias = ordenar(x.producto_fotos || x.promocion_fotos || []);
   if (propias.length) return propias;
   const heredadas = x.productos?.producto_fotos || x.hotel?.producto_fotos || [];
-  return heredadas.slice().sort((a, b) => a.orden - b.orden).map(f => FOTOS_BASE + f.storage_path);
+  return ordenar(heredadas);
 };
+// Cuando un hotel tiene varias promos, todas partían del mismo set de fotos
+// en el mismo orden — se veían idénticas en portada. Se le asigna a cada
+// promo del mismo hotel un índice de arranque distinto (0, 1, 2...) dentro
+// de su propio set, así la portada varía sin inventar ni recortar fotos —
+// el carrusel/lightbox de cada una sigue mostrando el set completo, solo
+// empieza por una foto distinta.
+function asignarPortadas(promos) {
+  const porHotel = {};
+  promos.forEach(x => { if (x.producto_id != null) (porHotel[x.producto_id] ??= []).push(x); });
+  Object.values(porHotel).forEach(grupo => grupo.forEach((x, i) => { x._portadaIdx = i; }));
+}
+function fotosRotadas(x) {
+  const fotos = fotosDe(x);
+  if (!fotos.length) return fotos;
+  const idx = (x._portadaIdx || 0) % fotos.length;
+  return idx ? [...fotos.slice(idx), ...fotos.slice(0, idx)] : fotos;
+}
 
 /* ---------- Carrusel de fotos al hover (hoteles/promos/paquetes vinculados) ---------- */
 const carruselPrecargadas = new Set();
@@ -1002,6 +1067,16 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
 const DESTINO_ORDEN = ['Margarita', 'Coche'];
 const hoy = () => new Date().toISOString().slice(0, 10);
 const promoVigente = p => !p.fecha_fin_estimada || p.fecha_fin_estimada >= hoy();
+// No hay fecha de INICIO de promo en el tarifario (solo fecha_fin_estimada) —
+// "disponible en el mes X" se interpreta igual que el filtro de fechas del
+// Cotizador: sigue vigente al menos hasta el primer día de ese mes. Sin fecha
+// de fin registrada, se asume siempre disponible (nunca se inventa un rango).
+function promoDisponibleEnMes(p, mesNum) {
+  if (!p.fecha_fin_estimada) return true;
+  const anio = new Date().getFullYear();
+  const primerDia = `${anio}-${String(mesNum).padStart(2, '0')}-01`;
+  return p.fecha_fin_estimada >= primerDia;
+}
 
 // Para hoteles: agrega datos de sus promos vinculadas (precio mínimo, tags, niños gratis, vigencia).
 function agregarHotel(x) {
@@ -1021,6 +1096,7 @@ function renderTarifario() {
   const data = tarCache[tarTab] || [];
   const fDestino = val('tar-f-destino'), fTipo = val('tar-f-tipo');
   const fPrecio = val('tar-f-precio') ? Number(val('tar-f-precio')) : null;
+  const fMes = val('tar-f-mes') ? Number(val('tar-f-mes')) : null;
   const fNinos = document.getElementById('tar-f-ninos').checked;
   const fVigente = document.getElementById('tar-f-vigente').checked;
 
@@ -1038,12 +1114,25 @@ function renderTarifario() {
       if (fPrecio != null && x.precio_desde_usd != null && x.precio_desde_usd > fPrecio) return false;
       if (fNinos && !(x.ninos_gratis_cantidad > 0)) return false;
       if (fVigente && !promoVigente(x)) return false;
+      if (fMes != null && !promoDisponibleEnMes(x, fMes)) return false;
     } else if (fPrecio != null) {
       const precioTarifa = (x.tarifas || [])[0]?.precio_desde_usd;
       if (precioTarifa != null && precioTarifa > fPrecio) return false;
     }
     return true;
   });
+  // Orden por defecto de Promociones: más económicas primero. Sin precio
+  // numérico parseado (solo texto libre tipo "Consultar") va al final, no
+  // se le inventa un valor para ordenarlo.
+  if (tarTab === 'promo') {
+    filtered.sort((a, b) => {
+      if (a.precio_desde_usd == null && b.precio_desde_usd == null) return 0;
+      if (a.precio_desde_usd == null) return 1;
+      if (b.precio_desde_usd == null) return -1;
+      return a.precio_desde_usd - b.precio_desde_usd;
+    });
+    asignarPortadas(filtered);
+  }
 
   document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
   document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0);
@@ -1053,6 +1142,15 @@ function renderTarifario() {
     filtered.forEach(x => (porDestino[x.destino || 'Otros'] ??= []).push(x));
     const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
     grid.innerHTML = destinos.map(d => `<div class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span></div>${tarItemsWrapHtml(porDestino[d])}`).join('');
+  } else if (tarTab === 'destino') {
+    // Nacionales primero (prioridad visual pedida), Internacionales después.
+    // Un ítem sin region clasificada (no debería pasar, los 13 ya están
+    // todos clasificados) cae en "Otros" al final en vez de desaparecer.
+    const REGION_LABEL = { nacional: 'Nacionales', internacional: 'Internacionales' };
+    const porRegion = {};
+    filtered.forEach(x => (porRegion[x.region || 'otros'] ??= []).push(x));
+    const orden = ['nacional', 'internacional', 'otros'].filter(r => porRegion[r]?.length);
+    grid.innerHTML = orden.map(r => `<div class="tar-destino-header"><i class="fas fa-earth-americas"></i> ${esc(REGION_LABEL[r] || 'Otros')} <span>${porRegion[r].length}</span></div>${tarItemsWrapHtml(porRegion[r])}`).join('');
   } else {
     grid.innerHTML = tarItemsWrapHtml(filtered);
   }
@@ -1066,7 +1164,7 @@ function renderTarifario() {
       el.classList.add('tar-oculto-admin');
       el.insertAdjacentHTML('afterbegin', '<span class="tar-oculto-badge">Oculto</span>');
     }
-    const fotos = fotosDe(x);
+    const fotos = fotosRotadas(x);
     if (tarView === 'fichas') {
       const media = el.querySelector('.tf-media');
       if (media) attachHoverCarousel(el, media, fotos, url => { media.style.backgroundImage = `url('${url}')`; }, media.querySelector('.carrusel-dots'));
@@ -1088,7 +1186,7 @@ function tarItemsWrapHtml(items) {
 function tarRowHtml(x) {
   const esPromo = tarTab === 'promo';
   const nombre = esPromo ? x.titulo : x.nombre;
-  const foto = fotosDe(x)[0];
+  const foto = fotosRotadas(x)[0];
   let tags = [], precioTxt = null, promosCount = 0;
   if (tarTab === 'hotel') {
     const ag = agregarHotel(x);
@@ -1117,7 +1215,7 @@ function tarCardThumbHtml(foto, esPromo) {
 function tarCardHtml(x) {
   if (tarTab === 'promo') {
     return `<div class="tar-item tar-card" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosDe(x)[0], true)}
+      ${tarCardThumbHtml(fotosRotadas(x)[0], true)}
       <div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
       ${x.precio_texto ? `<div class="tc-precio">${esc(x.precio_texto)}</div>` : ''}
       ${x.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(x.vigencia_texto)}</div>` : ''}
@@ -1138,7 +1236,7 @@ function tarCardHtml(x) {
 function tarFichaHtml(x) {
   const esPromo = tarTab === 'promo';
   const nombre = esPromo ? x.titulo : x.nombre;
-  const foto = fotosDe(x)[0];
+  const foto = fotosRotadas(x)[0];
   const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
@@ -1192,17 +1290,17 @@ function openProductoDrawer(x) {
   const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
-  const fotos = fotosDe(x);
+  const fotos = fotosRotadas(x);
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead">${fotos[0] ? `<div class="dava" style="background-image:url('${esc(fotos[0])}')"></div>` : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
       <div class="dm">${esc(x.destino || TAR_TAB_LABEL[tarTab])}</div></div></div>
     ${fotos.length ? `<div class="dgallery">${fotos.map(f => `<a href="${esc(f)}" target="_blank" rel="noopener"><img src="${esc(f)}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}
-    ${precio ? `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div><div class="dfv">${esc(precio)}</div></div></div>` : ''}
-    ${vigencia ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Vigencia</div><div class="dfv">${esc(vigencia)}</div></div></div>` : ''}
-    ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv">${esc(x.descripcion)}</div></div></div>` : ''}
-    ${!esPromo && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv">${esc(x.requisitos)}</div></div></div>` : ''}
+    ${precio ? `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div><div class="dfv dfv-rich">${formatearTexto(precio)}</div></div></div>` : ''}
+    ${vigencia ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Vigencia</div><div class="dfv dfv-rich">${formatearTexto(vigencia)}</div></div></div>` : ''}
+    ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv dfv-rich">${formatearTexto(x.descripcion)}</div></div></div>` : ''}
+    ${!esPromo && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv dfv-rich">${formatearTexto(x.requisitos)}</div></div></div>` : ''}
     ${esPromo ? tagsHtml(x.incluye_tags) : ''}
-    ${!esPromo && (x.promociones || []).length ? `<div class="dfield"><div class="dfi"><i class="fas fa-gift"></i></div><div><div class="dfl">Promociones activas</div><div class="dfv" style="font-weight:500">${x.promociones.map(p => `<div style="margin-bottom:8px"><b>${esc(p.titulo)}</b>${p.precio_texto ? `<br>${esc(p.precio_texto)}` : ''}${p.vigencia_texto ? `<br><span style="color:var(--amber);font-weight:400">Vigencia: ${esc(p.vigencia_texto)}</span>` : ''}${tagsHtml(p.incluye_tags)}</div>`).join('')}</div></div></div>` : ''}
+    ${!esPromo && (x.promociones || []).length ? `<div class="dfield"><div class="dfi"><i class="fas fa-gift"></i></div><div><div class="dfl">Promociones activas</div><div class="dfv" style="font-weight:500">${x.promociones.map(p => `<div style="margin-bottom:10px"><b>${esc(p.titulo)}</b>${p.precio_texto ? `<div class="dfv-rich" style="margin-top:4px">${formatearTexto(p.precio_texto)}</div>` : ''}${p.vigencia_texto ? `<div class="dfv-rich" style="margin-top:2px;color:var(--amber)">Vigencia: ${formatearTexto(p.vigencia_texto)}</div>` : ''}${tagsHtml(p.incluye_tags)}</div>`).join('')}</div></div></div>` : ''}
     <div class="dactions"><button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Ir al Cotizador</button></div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
