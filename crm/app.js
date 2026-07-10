@@ -21,7 +21,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de los hoteles del tarifario'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de los hoteles del tarifario'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // Las descripciones/requisitos/precios del tarifario vienen del PDF original
@@ -75,7 +75,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, JORNADA_ACTIVA = false;
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, JORNADA_ACTIVA = false;
 const overlay = id => document.getElementById(id);
 const showOverlay = id => { OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
 // Se recarga cada vez que se muestra el login (no solo una vez al abrir la
@@ -98,7 +98,7 @@ async function initAuth() {
 
 async function cargarUsuario() {
   const { data: { user } } = await sb.auth.getUser();
-  const { data, error } = await sb.from('usuarios').select('username,nombre,rol,debe_cambiar_password').eq('id', user?.id).single();
+  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password').eq('id', user?.id).single();
   if (error || !data) {
     await sb.auth.signOut();
     showOverlay('login');
@@ -111,7 +111,7 @@ async function cargarUsuario() {
 async function afterLogin() {
   const u = await cargarUsuario();
   if (!u) return;
-  MI_NOMBRE = u.nombre; ROL = u.rol;
+  MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username;
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   entrarSegunRol();
 }
@@ -127,6 +127,8 @@ function entrarSegunRol() {
   renderJornadaUI();
   handleCheckIn();
   startApp();
+  renderRecordatoriosUI();
+  manejarDeepLinkAsistencia();
 }
 
 /* ---------- Control de asistencia (agent_sessions) ---------- */
@@ -159,6 +161,129 @@ function renderJornadaUI() {
     btn.classList.toggle('on', JORNADA_ACTIVA);
   });
 }
+
+/* ---------- Notificaciones de asistencia (Web Push + FCM nativo) ---------- */
+const VAPID_PUBLIC_KEY = 'BA80pP1UGb4OaMkTh3dfioglbWmYs4lbSf2jmUUDM1LKwz3INE7U8Ia7R7qP6oLZnXRr8zfVqVzrzaQ60XjR8WQ';
+const GERENCIA_USERNAMES = ['luisrueda', 'andric'];
+
+function puedeActivarRecordatorios() {
+  return ROL === 'asesor' || (ROL === 'admin' && GERENCIA_USERNAMES.includes(MI_USERNAME));
+}
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+window.activarRecordatorios = async () => {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) { errToast('Este navegador no soporta notificaciones push'); return; }
+  const permiso = await Notification.requestPermission();
+  if (permiso !== 'granted') { errToast('Permiso de notificaciones denegado'); return; }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from('push_subscriptions').insert({ usuario_id: user.id, platform: 'web', subscription_json: sub.toJSON() });
+    if (error && error.code !== '23505') { errToast('No se pudo activar: ' + error.message); return; }
+    okToast('Recordatorios activados');
+  } catch (e) {
+    console.error('activarRecordatorios', e);
+    errToast('No se pudo activar los recordatorios');
+  }
+  renderRecordatoriosUI();
+};
+window.ocultarRecordatoriosBanner = () => {
+  sessionStorage.setItem('recordatorios_banner_oculto', '1');
+  renderRecordatoriosUI();
+};
+async function renderRecordatoriosUI() {
+  if (!puedeActivarRecordatorios()) return;
+  const { data, error } = await sb.rpc('mi_asistencia_hoy');
+  if (error) return;
+  const mostrar = data && !data.tiene_recordatorios && !sessionStorage.getItem('recordatorios_banner_oculto');
+  const texto = ROL === 'admin' ? 'Activá los avisos de asistencia del equipo' : 'Activá los recordatorios de asistencia';
+  ['-d', '-m'].forEach(sfx => {
+    const el = document.getElementById('recordatorios-banner' + sfx);
+    if (!el) return;
+    el.style.display = mostrar ? 'flex' : 'none';
+    const span = el.querySelector('span');
+    if (span) span.textContent = texto;
+  });
+}
+
+// Deep-link desde el click de una notificación (?accion=marcar-asistencia):
+// en mobile el widget de Jornada vive dentro de la hoja "Más", así que hay
+// que abrirla; en desktop ya está siempre visible en el sidebar, solo se
+// resalta con un pulso breve.
+function manejarDeepLinkAsistencia() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('accion') !== 'marcar-asistencia') return;
+  history.replaceState(null, '', location.pathname);
+  if (window.matchMedia('(max-width:760px)').matches) {
+    openSheet('more-sheet');
+  } else {
+    const w = document.getElementById('jornada-widget-d');
+    if (w) { w.classList.add('jornada-pulse'); setTimeout(() => w.classList.remove('jornada-pulse'), 2400); }
+  }
+}
+
+// Android nativo (Capacitor): sin import, el plugin se consume vía el
+// puente global window.Capacitor -- el proyecto no usa bundler, el paquete
+// npm @capacitor/push-notifications solo hace falta instalado para que
+// `cap sync` copie el módulo nativo al proyecto Gradle.
+(function initPushNativo() {
+  const cap = window.Capacitor;
+  const PushNotifications = cap?.Plugins?.PushNotifications;
+  if (!cap?.isNativePlatform?.() || !PushNotifications) return;
+  PushNotifications.requestPermissions().then(r => { if (r.receive === 'granted') PushNotifications.register(); });
+  PushNotifications.addListener('registration', async (token) => {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+    const { error } = await sb.from('push_subscriptions').insert({ usuario_id: user.id, platform: 'fcm', fcm_token: token.value });
+    if (error && error.code !== '23505') console.error('fcm insert', error);
+  });
+  PushNotifications.addListener('registrationError', (err) => console.error('FCM registration error', err));
+  PushNotifications.addListener('pushNotificationActionPerformed', (n) => {
+    location.href = n.notification?.data?.url || 'index.html?accion=marcar-asistencia';
+  });
+})();
+
+/* ---------- Sección Asistencia (admin) ---------- */
+const hoyCaracas = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(new Date());
+async function loadAsistencia() {
+  const [{ data: hoy, error: e1 }, { data: strikes, error: e2 }] = await Promise.all([
+    sb.rpc('asistencia_admin_hoy'),
+    sb.rpc('asistencia_strikes_mes'),
+  ]);
+  if (e1 || e2) { errToast('No se pudo cargar Asistencia'); return; }
+  document.getElementById('asist-tbody').innerHTML = (hoy || []).map(a => `
+    <tr>
+      <td>${esc(a.nombre)}</td>
+      <td>${a.exento_hoy ? '<span class="asist-badge">Exento hoy</span>' : a.marco_hoy ? '<span class="asist-badge on">Marcó</span>' : '<span class="asist-badge off">No marcó</span>'}</td>
+      <td>${a.tiene_recordatorios ? 'Activos' : '—'}</td>
+      <td>${a.strikes_mes}</td>
+      <td>${a.exento_hoy ? '' : `<button class="btn-sm" onclick="exceptuarHoy('${a.usuario_id}')">Exceptuar hoy</button>`}</td>
+    </tr>`).join('') || '<tr><td colspan="5">Sin asesores</td></tr>';
+  const activos = (strikes || []).filter(s => !s.anulado_at);
+  document.getElementById('asist-strikes-wrap').innerHTML = activos.length
+    ? activos.map(s => `<div class="strike-row"><span>${esc(s.nombre)} — ${s.fecha}</span><button class="btn-sm" onclick="anularStrikeUI(${s.id})">Anular</button></div>`).join('')
+    : '<div class="es-s">Sin strikes este mes</div>';
+}
+window.exceptuarHoy = async (asesorId) => {
+  const motivo = prompt('Motivo (opcional):');
+  const { error } = await sb.rpc('exceptuar_asistencia', { p_asesor_id: asesorId, p_fecha: hoyCaracas(), p_motivo: motivo || null });
+  if (error) { errToast('No se pudo exceptuar: ' + error.message); return; }
+  okToast('Asesor exceptuado hoy');
+  loadAsistencia();
+};
+window.anularStrikeUI = async (strikeId) => {
+  const motivo = prompt('Motivo de la anulación (obligatorio):');
+  if (!motivo || !motivo.trim()) return;
+  const { error } = await sb.rpc('anular_strike', { p_strike_id: strikeId, p_motivo: motivo.trim() });
+  if (error) { errToast('No se pudo anular: ' + error.message); return; }
+  okToast('Strike anulado');
+  loadAsistencia();
+};
 
 document.getElementById('loginForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -1598,6 +1723,7 @@ function activateSection(sec) {
   if (sec === 'metricas') loadMetricas();
   if (sec === 'ranking') loadRanking();
   if (sec === 'reasignaciones') loadReasignaciones();
+  if (sec === 'asistencia') loadAsistencia();
   if (sec === 'tarifario') loadTarifario();
   if (sec === 'galeria') loadGaleria();
   if (sec === 'asesores') loadAsesoresPeriodo();
