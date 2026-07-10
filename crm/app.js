@@ -1810,6 +1810,7 @@ function activateSection(sec) {
   if (sheetAbierta) closeSheet(sheetAbierta);
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-' + sec).classList.add('active');
+  document.querySelector('.topbar').classList.toggle('show-search', sec === 'leads');
   const t = TITLES[sec] || TITLES.dashboard;
   document.getElementById('page-title').textContent = t[0];
   document.getElementById('page-sub').textContent = t[1];
