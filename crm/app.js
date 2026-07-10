@@ -129,6 +129,7 @@ function entrarSegunRol() {
   startApp();
   renderRecordatoriosUI();
   manejarDeepLinkAsistencia();
+  registrarPushNativo();
 }
 
 /* ---------- Control de asistencia (agent_sessions) ---------- */
@@ -231,6 +232,17 @@ function manejarDeepLinkAsistencia() {
 // puente global window.Capacitor -- el proyecto no usa bundler, el paquete
 // npm @capacitor/push-notifications solo hace falta instalado para que
 // `cap sync` copie el módulo nativo al proyecto Gradle.
+//
+// En una instalación nueva sin sesión guardada, este boot corre ANTES del
+// login -- el listener 'registration' de más abajo pide el usuario logueado
+// y si todavía no hay ninguno, descarta el token sin guardarlo. registrarPushNativo()
+// se llama de nuevo desde entrarSegunRol() (ya con sesión resuelta) para
+// forzar un segundo evento 'registration' que esta vez sí encuentra usuario.
+function registrarPushNativo() {
+  const PushNotifications = window.Capacitor?.Plugins?.PushNotifications;
+  if (!window.Capacitor?.isNativePlatform?.() || !PushNotifications) return;
+  PushNotifications.register();
+}
 (function initPushNativo() {
   const cap = window.Capacitor;
   const PushNotifications = cap?.Plugins?.PushNotifications;
