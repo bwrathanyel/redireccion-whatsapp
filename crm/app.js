@@ -75,7 +75,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null;
+let booted = false, ROL = null, MI_NOMBRE = null, JORNADA_ACTIVA = false;
 const overlay = id => document.getElementById(id);
 const showOverlay = id => { OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
 // Se recarga cada vez que se muestra el login (no solo una vez al abrir la
@@ -124,7 +124,40 @@ function entrarSegunRol() {
   document.getElementById('side-un').textContent = MI_NOMBRE;
   document.getElementById('side-ue').textContent = ROL === 'admin' ? 'Administrador' : 'Asesor comercial';
   document.getElementById('side-avatar').textContent = initials(MI_NOMBRE);
+  renderJornadaUI();
+  handleCheckIn();
   startApp();
+}
+
+/* ---------- Control de asistencia (agent_sessions) ---------- */
+// agent_check_in/agent_check_out son RPC security definer: el check-in
+// cierra cualquier sesión "activo" vieja del mismo asesor antes de abrir una
+// nueva, así un refresh de página o un cierre de pestaña sin logout nunca
+// deja 2 sesiones activas ni una activa huérfana para siempre.
+async function handleCheckIn() {
+  if (ROL !== 'admin' && ROL !== 'asesor') return;
+  const { error } = await sb.rpc('agent_check_in');
+  if (error) { console.error('check-in', error); return; }
+  JORNADA_ACTIVA = true;
+  renderJornadaUI();
+}
+async function handleCheckOut() {
+  if (ROL !== 'admin' && ROL !== 'asesor') return;
+  const { error } = await sb.rpc('agent_check_out');
+  if (error) { console.error('check-out', error); return; }
+  JORNADA_ACTIVA = false;
+  renderJornadaUI();
+}
+window.toggleJornada = async () => { JORNADA_ACTIVA ? await handleCheckOut() : await handleCheckIn(); };
+function renderJornadaUI() {
+  ['-d', '-m'].forEach(sfx => {
+    const dot = document.getElementById('jornada-dot' + sfx), text = document.getElementById('jornada-text' + sfx), btn = document.getElementById('jornada-btn' + sfx);
+    if (!dot) return;
+    dot.classList.toggle('on', JORNADA_ACTIVA);
+    text.textContent = JORNADA_ACTIVA ? 'Jornada activa' : 'Jornada inactiva';
+    btn.textContent = JORNADA_ACTIVA ? 'Finalizar' : 'Comenzar';
+    btn.classList.toggle('on', JORNADA_ACTIVA);
+  });
 }
 
 document.getElementById('loginForm').addEventListener('submit', async e => {
@@ -258,7 +291,7 @@ document.getElementById('claimForm').addEventListener('submit', async e => {
   }
 });
 
-window.cerrarSesion = async () => { await sb.auth.signOut(); location.reload(); };
+window.cerrarSesion = async () => { await handleCheckOut(); await sb.auth.signOut(); location.reload(); };
 
 async function startApp() {
   if (booted) return; booted = true;

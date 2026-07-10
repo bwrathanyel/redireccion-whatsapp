@@ -53,6 +53,14 @@ body::before{content:'';position:fixed;inset:0;background:
 .nav-item.active i{color:var(--accent)}
 .nav-item .badge{margin-left:auto;background:var(--accent);color:#221200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px}
 .side-foot{margin-top:auto;padding:12px 10px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.jornada-widget{margin:10px 10px 0;padding:9px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.jornada-dot{width:8px;height:8px;border-radius:50%;background:var(--muted2);flex-shrink:0}
+.jornada-dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(16,185,129,.18)}
+.jornada-text{flex:1;font-size:11.5px;color:var(--muted);font-weight:600}
+.jornada-btn{background:var(--accent);color:#1a1000;border:none;border-radius:7px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0}
+.jornada-btn.on{background:transparent;color:#ef4444;border:1px solid #ef4444}
+.jornada-widget-m{margin:0 0 12px}
+.rol-marketing .jornada-widget{display:none}
 .avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#e0570a);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#1a1000;flex-shrink:0}
 .side-foot .un{font-size:12.5px;font-weight:600}.side-foot .ue{font-size:10.5px;color:var(--muted)}
 .logout-btn{background:transparent;border:1px solid var(--line);color:var(--muted);width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:13px;flex-shrink:0;transition:.15s}
@@ -671,6 +679,11 @@ input.ei[type=date]{color-scheme:dark}
     <div class="nav-label nav-admin-only">Gestión</div>
     <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
     <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
+    <div class="jornada-widget" id="jornada-widget-d">
+      <span class="jornada-dot" id="jornada-dot-d"></span>
+      <span class="jornada-text" id="jornada-text-d">Jornada inactiva</span>
+      <button class="jornada-btn" id="jornada-btn-d" onclick="toggleJornada()">Comenzar</button>
+    </div>
     <div class="side-foot">
       <div class="avatar" id="side-avatar">·</div>
       <div style="flex:1"><div class="un" id="side-un">—</div><div class="ue" id="side-ue">—</div></div>
@@ -978,6 +991,11 @@ input.ei[type=date]{color-scheme:dark}
 <div class="sheet" id="more-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title">Más opciones</div>
+  <div class="jornada-widget jornada-widget-m" id="jornada-widget-m">
+    <span class="jornada-dot" id="jornada-dot-m"></span>
+    <span class="jornada-text" id="jornada-text-m">Jornada inactiva</span>
+    <button class="jornada-btn" id="jornada-btn-m" onclick="toggleJornada()">Comenzar</button>
+  </div>
   <a class="sheet-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
