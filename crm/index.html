@@ -468,6 +468,36 @@ input.ei[type=date]{color-scheme:dark}
 .chat-send:disabled{opacity:.5;cursor:default}
 @media(max-width:760px){.chat-wrap{height:calc(100vh - 250px);height:calc(100dvh - 250px)}.chat-msg{max-width:88%}.chat-row{max-width:92%}}
 
+/* ---------- Extractor IA ---------- */
+.ext-wrap{display:flex;flex-direction:column}
+.ext-target-fixed{display:none;align-items:center;justify-content:space-between;gap:10px;background:var(--accent-soft);border:1px solid rgba(255,145,0,.25);border-radius:12px;padding:12px 14px;margin-bottom:16px}
+.ext-target-fixed.show{display:flex}
+.ext-target-lead{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:700;color:var(--txt);min-width:0}
+.ext-target-lead i{color:var(--accent);flex-shrink:0}
+.ext-target-lead span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ext-target-clear{background:transparent;border:1px solid var(--line2);color:var(--muted);border-radius:8px;padding:7px 11px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.ext-target-clear:hover{color:var(--txt);border-color:var(--accent)}
+.ext-target-search{margin-bottom:16px;position:relative}
+.ext-target-search.hide{display:none}
+.ext-search-results{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;background:var(--bg2);border:1px solid var(--line2);border-radius:12px;max-height:260px;overflow-y:auto;box-shadow:0 16px 40px rgba(0,0,0,.4)}
+.ext-search-results:empty{display:none;border:none}
+.ext-search-row{display:flex;flex-direction:column;gap:2px;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--line)}
+.ext-search-row:last-child{border-bottom:none}
+.ext-search-row:hover{background:rgba(255,255,255,.04)}
+.ext-search-row .esr-n{font-size:13.5px;font-weight:600;color:var(--txt)}
+.ext-search-row .esr-m{font-size:11.5px;color:var(--muted)}
+.ext-preview-hint{font-size:11px;color:var(--muted);margin:-2px 0 12px}
+#ext-chat-input{width:100%;resize:vertical;min-height:140px;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:14px;padding:13px 14px;color:var(--txt);font-size:14px;font-family:inherit;outline:none}
+#ext-chat-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+#ext-chat-input:disabled{opacity:.5}
+.ext-counter{text-align:right;font-size:11px;color:var(--muted2);margin:6px 2px 14px}
+.ext-counter.over{color:#ef4444;font-weight:700}
+.ext-input-err{color:#ef4444;font-size:12.5px;margin:-6px 2px 10px;min-height:0}
+.ext-preview-box{margin-top:20px}
+#ext-descartar-btn{margin-top:10px}
+.dbtn.extractor{background:var(--panel-solid);border:1px solid var(--line2);color:var(--txt)}
+.dbtn.extractor:hover{border-color:var(--accent);color:var(--accent)}
+
 /* ---------- Galería ---------- */
 .gal-hotel{margin-bottom:30px}
 .gal-hotel h2{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
@@ -510,6 +540,13 @@ input.ei[type=date]{color-scheme:dark}
 .rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok),.rol-marketing .sheet-item:not(.nav-marketing-ok){display:none}
 .rol-asesor .admin-only,.rol-marketing .admin-only{display:none}
 .rol-asesor .nav-asesor-hide{display:none}
+/* Inverso de nav-asesor-hide: visible SOLO para rol asesor (en cualquiera de
+   los 3 tipos de nav-item). Usado hoy por Extractor IA en el bottom-nav —
+   Dashboard se oculta para asesor (nav-asesor-hide) así que libera un slot
+   en la fila principal; admin/marketing acceden a esas mismas secciones
+   desde "Más" en vez de tener su propio nav-item/bn-item. */
+.nav-item.nav-asesor-only,.bn-item.nav-asesor-only,.sheet-item.nav-asesor-only{display:none}
+.rol-asesor .nav-item.nav-asesor-only,.rol-asesor .bn-item.nav-asesor-only,.rol-asesor .sheet-item.nav-asesor-only{display:flex}
 
 /* Tarifario: fila de pestañas + botón de configuración (admin) */
 .tar-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
@@ -709,6 +746,7 @@ input.ei[type=date]{color-scheme:dark}
     <div class="nav-label">Principal</div>
     <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
     <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
+    <a class="nav-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
     <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
     <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
     <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
@@ -921,6 +959,51 @@ input.ei[type=date]{color-scheme:dark}
       </div>
     </section>
 
+    <!-- EXTRACTOR IA -->
+    <section class="section" id="sec-extractor">
+      <div class="card ext-wrap">
+        <div class="eb-title"><i class="fas fa-user-check"></i> Lead objetivo</div>
+        <div class="ext-target-fixed" id="ext-target-fixed">
+          <div class="ext-target-lead"><i class="fas fa-user"></i> <span id="ext-target-nombre"></span></div>
+          <button class="ext-target-clear" id="ext-target-clear" type="button"><i class="fas fa-rotate-left"></i> Cambiar</button>
+        </div>
+        <div class="ext-target-search" id="ext-target-search">
+          <input class="ei" id="ext-search-input" type="text" placeholder="Buscar lead por nombre o teléfono...">
+          <div class="ext-search-results" id="ext-search-results"></div>
+        </div>
+
+        <div class="eb-title"><i class="fas fa-comment-dots"></i> Chat con el cliente</div>
+        <textarea id="ext-chat-input" rows="7" placeholder="Pegá acá la conversación de WhatsApp con el cliente..." disabled></textarea>
+        <div class="ext-counter" id="ext-counter">0 / 20.000</div>
+        <div class="ext-input-err" id="ext-input-err"></div>
+        <button class="dbtn save" id="ext-extraer-btn" type="button" disabled><i class="fas fa-wand-magic-sparkles"></i> Extraer datos</button>
+
+        <div class="edit-box ext-preview-box" id="ext-preview-box" style="display:none">
+          <div class="eb-title"><i class="fas fa-list-check"></i> Datos extraídos — revisá antes de aplicar</div>
+          <div class="ext-preview-hint">Los campos que la IA no encontró en el chat muestran el valor actual del lead — no se pierden al aplicar.</div>
+          <label class="fl">Nombre</label>
+          <input id="ext-e-nombre" class="ei" type="text" placeholder="No encontrado en el chat">
+          <label class="fl">Teléfono</label>
+          <input id="ext-e-telefono" class="ei" type="text" placeholder="No encontrado en el chat">
+          <label class="fl">Canal</label>
+          <input id="ext-e-canal" class="ei" type="text" placeholder="No encontrado en el chat">
+          <label class="fl">Destino de interés</label>
+          <input id="ext-e-destino" class="ei" type="text" placeholder="No encontrado en el chat">
+          <label class="fl">Consulta original</label>
+          <input id="ext-e-destino-consulta" class="ei" type="text" placeholder="No encontrado en el chat">
+          <label class="fl">Personas</label>
+          <input id="ext-e-personas" class="ei" type="text" placeholder="No encontrado en el chat">
+          <label class="fl">Fecha de viaje (aprox.)</label>
+          <input id="ext-e-fecha-estimada" class="ei" type="text" placeholder="No encontrado en el chat">
+          <label class="fl">Presupuesto (USD)</label>
+          <input id="ext-e-presupuesto" class="ei" type="number" min="0" step="1" placeholder="No encontrado en el chat">
+          <div class="edit-err" id="ext-err"></div>
+          <button class="dbtn save" id="ext-aplicar-btn" type="button"><i class="fas fa-check"></i> Aplicar a <span id="ext-aplicar-nombre"></span></button>
+          <button class="dbtn gh" id="ext-descartar-btn" type="button">Descartar y empezar de nuevo</button>
+        </div>
+      </div>
+    </section>
+
     <!-- GALERÍA -->
     <section class="section" id="sec-galeria">
       <div class="tbl-state skel-grid" id="gal-loading"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>
@@ -1074,6 +1157,7 @@ input.ei[type=date]{color-scheme:dark}
 <nav class="bottom-nav">
   <a class="bn-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Inicio</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i> Leads</a>
+  <a class="bn-item nav-asesor-only" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor</a>
   <a class="bn-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
   <a class="bn-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador</a>
   <a class="bn-item nav-marketing-ok" id="bn-more"><i class="fas fa-ellipsis"></i> Más</a>
@@ -1095,6 +1179,7 @@ input.ei[type=date]{color-scheme:dark}
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
   <a class="sheet-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+  <a class="sheet-item nav-asesor-hide" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
   <a class="sheet-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>

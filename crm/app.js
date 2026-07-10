@@ -21,7 +21,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de los hoteles del tarifario'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de los hoteles del tarifario'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // Las descripciones/requisitos/precios del tarifario vienen del PDF original
@@ -478,6 +478,7 @@ async function startApp() {
   setupTarifarioTabs();
   setupLightbox();
   setupChat();
+  setupExtractor();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
   if (ROL === 'asesor') activateSection('tarifario');
   await loadStats();
@@ -866,6 +867,10 @@ function openDrawer(l) {
       <input id="e-destino-consulta" class="ei" type="text" value="${esc(l.destino_consulta || '')}">
       <label class="fl">Personas</label>
       <input id="e-personas" class="ei" type="text" value="${esc(l.personas || '')}">
+      <label class="fl">Fecha de viaje (aprox.)</label>
+      <input id="e-fecha-estimada" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09" value="${esc(l.fecha_estimada || '')}">
+      <label class="fl">Presupuesto (USD)</label>
+      <input id="e-presupuesto" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.presupuesto ?? ''}">
       <label class="fl">Fecha de captación</label>
       <input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">
 
@@ -886,11 +891,15 @@ function openDrawer(l) {
       <button class="dbtn save" id="e-save"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>
     </div>
 
-    <div class="dactions">${wa ? `<a class="dbtn wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>` : ''}</div>
+    <div class="dactions">
+      ${wa ? `<a class="dbtn wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>` : ''}
+      <button class="dbtn extractor" id="e-a-extractor" type="button"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</button>
+    </div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">ID: ${esc(l.external_id || l.id)}</div>`;
 
   document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', e.target.value === VENTA);
   document.getElementById('e-save').onclick = guardarLead;
+  document.getElementById('e-a-extractor').onclick = () => irAExtractor(l);
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
@@ -905,12 +914,14 @@ async function guardarLead() {
   const monto = estado === VENTA ? parseFloat(montoRaw) : null;
   const comprado = estado === VENTA ? val('e-comprado').trim() : null;
   const fechaVal = val('e-fecha');
+  const presupuestoRaw = val('e-presupuesto').trim();
   err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.rpc('actualizar_lead', {
     p_lead_id: currentLead.id, p_estado: estado, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado,
     p_nombre: nombre, p_telefono: val('e-telefono').trim(), p_canal: val('e-canal').trim(),
     p_destino: val('e-destino').trim(), p_destino_consulta: val('e-destino-consulta').trim(), p_personas: val('e-personas').trim(),
     p_fecha_creacion: fechaVal ? new Date(fechaVal + 'T12:00:00').toISOString() : null,
+    p_fecha_estimada: val('e-fecha-estimada').trim(), p_presupuesto: presupuestoRaw ? parseFloat(presupuestoRaw) : null,
   });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios';
   if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return; }
@@ -1850,6 +1861,182 @@ function addChatBubble(who, texto, loading) {
   return el;
 }
 
+/* ---------- Extractor IA ---------- */
+// El extractor siempre opera sobre un lead YA existente (nunca crea uno
+// nuevo, eso ya lo hace ingest_lead vía ManyChat) — o llega preseleccionado
+// desde el botón de una ficha (irAExtractor) o el asesor lo busca acá mismo.
+// extractorLeadObjetivo guarda la FILA COMPLETA del lead (no solo id/nombre)
+// para poder precargar en la previsualización el valor actual de cualquier
+// campo que la IA no haya encontrado (ver renderExtractorPreview).
+const EXT_CAMPOS = ['nombre', 'telefono', 'canal', 'destino', 'destino_consulta', 'personas', 'fecha_estimada', 'presupuesto'];
+const extIdCampo = campo => 'ext-e-' + campo.replace(/_/g, '-');
+let extractorLeadObjetivo = null, extractorDatos = null, extractorBusy = false, extractorBuscarSeq = 0, extractorBuscarTimer = null;
+function irAExtractor(lead) {
+  extractorLeadObjetivo = lead;
+  window.closeDrawer(true);
+  activateSection('extractor');
+  descartarExtraccion();
+  renderExtractorTarget();
+}
+function setupExtractor() {
+  const searchInput = document.getElementById('ext-search-input');
+  searchInput.addEventListener('input', () => {
+    clearTimeout(extractorBuscarTimer);
+    const q = searchInput.value.trim();
+    if (q.length < 2) { document.getElementById('ext-search-results').innerHTML = ''; return; }
+    extractorBuscarTimer = setTimeout(() => buscarLeadsExtractor(q), 300);
+  });
+  document.getElementById('ext-target-clear').onclick = () => { extractorLeadObjetivo = null; descartarExtraccion(); renderExtractorTarget(); };
+  document.getElementById('ext-chat-input').addEventListener('input', actualizarContadorExtractor);
+  document.getElementById('ext-extraer-btn').onclick = extraerDatosChat;
+  document.getElementById('ext-aplicar-btn').onclick = aplicarDatosExtraidos;
+  document.getElementById('ext-descartar-btn').onclick = descartarExtraccion;
+  renderExtractorTarget();
+}
+// Deshabilita cambiar/buscar lead mientras hay una llamada en curso (extraer
+// o aplicar) — sin esto, el asesor puede cambiar de lead objetivo a mitad de
+// una extracción y terminar aplicando el chat de un cliente sobre otro lead.
+function actualizarControlesExtractor() {
+  document.getElementById('ext-target-clear').disabled = extractorBusy;
+  document.getElementById('ext-search-input').disabled = extractorBusy;
+}
+function renderExtractorTarget() {
+  const fixed = document.getElementById('ext-target-fixed'), search = document.getElementById('ext-target-search');
+  if (extractorLeadObjetivo) {
+    document.getElementById('ext-target-nombre').textContent = extractorLeadObjetivo.nombre;
+    fixed.classList.add('show');
+    search.classList.add('hide');
+  } else {
+    fixed.classList.remove('show');
+    search.classList.remove('hide');
+    document.getElementById('ext-search-input').value = '';
+    document.getElementById('ext-search-results').innerHTML = '';
+  }
+  document.getElementById('ext-chat-input').disabled = !extractorLeadObjetivo;
+  actualizarControlesExtractor();
+  actualizarBotonExtraer();
+}
+async function buscarLeadsExtractor(q) {
+  const seq = ++extractorBuscarSeq;
+  const qSafe = q.replace(/[,()%]/g, '');
+  const box = document.getElementById('ext-search-results');
+  if (qSafe.length < 2) { box.innerHTML = ''; return; } // tras sacar caracteres especiales, un patrón vacío/de 1 char matchearía cualquier lead
+  const { data, error } = await sb.from('leads').select('*').or(`nombre.ilike.%${qSafe}%,telefono.ilike.%${qSafe}%`).limit(8);
+  if (seq !== extractorBuscarSeq) return; // llegó una búsqueda más nueva mientras esperábamos esta
+  if (error) { box.innerHTML = ''; return; }
+  if (!data.length) { box.innerHTML = '<div class="ext-search-row"><span class="esr-n">Sin resultados</span></div>'; return; }
+  box.innerHTML = data.map(l => `<div class="ext-search-row" data-id="${l.id}"><span class="esr-n">${esc(l.nombre)}</span><span class="esr-m">${esc(l.telefono || 'Sin teléfono')}${l.destino ? ' · ' + esc(l.destino) : ''}</span></div>`).join('');
+  box.querySelectorAll('[data-id]').forEach((el, i) => el.onclick = () => { extractorLeadObjetivo = data[i]; renderExtractorTarget(); });
+}
+function actualizarContadorExtractor() {
+  const len = document.getElementById('ext-chat-input').value.length;
+  const counter = document.getElementById('ext-counter');
+  counter.textContent = `${fmt(len)} / 20.000`;
+  counter.classList.toggle('over', len > 20000);
+  actualizarBotonExtraer();
+}
+function actualizarBotonExtraer() {
+  const len = document.getElementById('ext-chat-input').value.trim().length;
+  document.getElementById('ext-extraer-btn').disabled = extractorBusy || !extractorLeadObjetivo || !len || len > 20000;
+}
+// El body de error de la Edge Function SOLO llega en data cuando la respuesta
+// es 2xx — con status no-2xx (400/401/502/503/504, que es como responde
+// SIEMPRE parse-chat-lead en sus casos de error) supabase-js deja `data` en
+// null y expone el body real en `error.context` (el Response crudo).
+async function mensajeErrorExtraccion(data, error) {
+  let code = data?.error;
+  if (!code && error?.context?.json) {
+    try { code = (await error.context.json())?.error; } catch { /* body no era JSON, se usa el mensaje genérico */ }
+  }
+  const MSG = {
+    timeout_ia: 'La IA tardó demasiado en responder, intenta de nuevo.',
+    error_ia: 'No se pudo conectar con la IA, intenta de nuevo en un momento.',
+    sin_respuesta: 'La IA no devolvió una respuesta, intenta de nuevo.',
+    json_invalido: 'La IA devolvió una respuesta inválida, intenta de nuevo.',
+    texto_muy_largo: 'El texto es muy largo (máximo 20.000 caracteres).',
+    sin_texto: 'Pegá el texto del chat antes de extraer.',
+    no_autenticado: 'Tu sesión expiró, volvé a iniciar sesión.',
+    no_configurado: 'El extractor no está disponible en este momento.',
+    body_invalido: 'Ocurrió un error inesperado, intenta de nuevo.',
+    metodo_no_permitido: 'Ocurrió un error inesperado, intenta de nuevo.',
+  };
+  return MSG[code] || 'No se pudo extraer los datos, intenta de nuevo.';
+}
+async function extraerDatosChat() {
+  const btn = document.getElementById('ext-extraer-btn'), err = document.getElementById('ext-input-err');
+  const chatText = document.getElementById('ext-chat-input').value.trim();
+  err.textContent = '';
+  if (!extractorLeadObjetivo || !chatText) return;
+  const leadIdAlPedir = extractorLeadObjetivo.id;
+  extractorBusy = true; actualizarControlesExtractor();
+  btn.disabled = true; btn.innerHTML = 'Extrayendo... <i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.functions.invoke('parse-chat-lead', { body: { chat_text: chatText } });
+  extractorBusy = false; actualizarControlesExtractor();
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Extraer datos';
+  // Con los controles de cambio de lead deshabilitados mientras extractorBusy
+  // esto no debería poder pasar, pero se valida igual antes de mostrar datos
+  // que quedaron pedidos para un lead que ya no es el objetivo actual.
+  if (!extractorLeadObjetivo || extractorLeadObjetivo.id !== leadIdAlPedir) {
+    err.textContent = 'El lead objetivo cambió mientras se procesaba — los datos extraídos se descartaron, intenta de nuevo.';
+    return;
+  }
+  if (error || !data?.ok) { err.textContent = await mensajeErrorExtraccion(data, error); return; }
+  extractorDatos = data.datos;
+  renderExtractorPreview();
+}
+// Precarga cada campo con lo que extrajo la IA, o si la IA no encontró ese
+// dato, con el valor ACTUAL del lead (nunca lo deja en blanco a menos que el
+// lead tampoco lo tuviera) — así lo que se ve acá es exactamente lo que va a
+// quedar guardado al aplicar, sin sorpresas (actualizar_lead conserva el
+// valor viejo en cualquier campo que llegue vacío, igual que en la ficha).
+function renderExtractorPreview() {
+  const d = extractorDatos, lead = extractorLeadObjetivo;
+  for (const campo of EXT_CAMPOS) {
+    document.getElementById(extIdCampo(campo)).value = (d[campo] ?? lead[campo]) ?? '';
+  }
+  document.getElementById('ext-aplicar-nombre').textContent = lead.nombre;
+  const box = document.getElementById('ext-preview-box');
+  box.style.display = 'block';
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function leerCamposExtractor() {
+  const out = {};
+  for (const campo of EXT_CAMPOS) out[campo] = val(extIdCampo(campo)).trim();
+  return out;
+}
+function descartarExtraccion() {
+  extractorDatos = null;
+  document.getElementById('ext-preview-box').style.display = 'none';
+  document.getElementById('ext-chat-input').value = '';
+  document.getElementById('ext-input-err').textContent = '';
+  actualizarContadorExtractor();
+}
+// Sobrescribe SIEMPRE los 8 campos con lo que quedó en la previsualización
+// (editable por el asesor antes de este punto) — decisión confirmada: la
+// revisión previa ya es la red de seguridad, no hay merge campo por campo.
+async function aplicarDatosExtraidos() {
+  const btn = document.getElementById('ext-aplicar-btn'), err = document.getElementById('ext-err');
+  const campos = leerCamposExtractor();
+  if (!campos.nombre) { err.textContent = 'El nombre no puede quedar vacío'; return; }
+  const leadId = extractorLeadObjetivo.id;
+  const presupuesto = campos.presupuesto ? parseFloat(campos.presupuesto) : null;
+  err.textContent = ''; extractorBusy = true; actualizarControlesExtractor();
+  btn.disabled = true; btn.innerHTML = 'Aplicando... <i class="fas fa-spinner fa-spin"></i>';
+  const rpcParams = { p_lead_id: leadId };
+  for (const campo of EXT_CAMPOS) rpcParams['p_' + campo] = campo === 'presupuesto' ? presupuesto : campos[campo];
+  const { data, error } = await sb.rpc('actualizar_lead', rpcParams);
+  extractorBusy = false; actualizarControlesExtractor();
+  btn.disabled = false; btn.innerHTML = `<i class="fas fa-check"></i> Aplicar a <span id="ext-aplicar-nombre">${esc(extractorLeadObjetivo?.nombre ?? '')}</span>`;
+  if (error || !data?.ok) { err.textContent = 'No se pudo aplicar: ' + (error?.message || data?.error || ''); return; }
+  okToast('Lead actualizado con los datos extraídos');
+  const leadActualizado = { ...extractorLeadObjetivo, ...campos, presupuesto };
+  extractorLeadObjetivo = null;
+  descartarExtraccion();
+  renderExtractorTarget();
+  loadStats().then(() => renderAll()); loadTable(); loadDestPeriodo();
+  openDrawer(leadActualizado);
+}
+
 /* ---------- Realtime ---------- */
 function subscribeRealtime() {
   sb.channel('leads-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, payload => {
@@ -1885,14 +2072,18 @@ window.addEventListener('popstate', () => {
 });
 
 /* ---------- Nav ---------- */
-const BN_CORE_SECS = ['dashboard', 'leads', 'tarifario', 'cotizador'];
+const BN_CORE_SECS = ['dashboard', 'leads', 'extractor', 'tarifario', 'cotizador'];
 let currentSec = null;
 function activateSection(sec, fromNav) {
   if (currentSec === sec) return;
   if (!fromNav && currentSec !== null) navPush({ type: 'section', prevSec: currentSec });
   currentSec = sec;
   document.querySelectorAll('.nav-item,.bn-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
-  document.getElementById('bn-more')?.classList.toggle('active', !BN_CORE_SECS.includes(sec));
+  // 'extractor' es core (fila principal del bottom-nav) SOLO para rol asesor
+  // (ver .nav-asesor-only en el CSS) — para el resto se llega vía "Más", así
+  // que ahí sí tiene que marcarse "Más" como activo.
+  const esCoreParaEsteRol = BN_CORE_SECS.includes(sec) && (sec !== 'extractor' || ROL === 'asesor');
+  document.getElementById('bn-more')?.classList.toggle('active', !esCoreParaEsteRol);
   if (sheetAbierta) closeSheet(sheetAbierta, true);
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-' + sec).classList.add('active');
