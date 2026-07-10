@@ -1488,6 +1488,7 @@ function setupChat() {
   document.getElementById('cot-f-clear').onclick = () => {
     ['cot-f-destino', 'cot-f-tipo', 'cot-f-plan', 'cot-f-opcion', 'cot-f-precio', 'cot-f-desde', 'cot-f-hasta'].forEach(id => { document.getElementById(id).value = ''; });
   };
+  if (!chatHistory.length) addChatBubble('bot', '¡Hola! Soy tu Cotizador IA de Lotus 360, estoy aquí para ayudarte en tus cotizaciones.');
 }
 // Lista de cada hotel/paquete/promo/guía-tour individual, agrupada por
 // categoría, para el filtro "opción de Tarifario" del Cotizador. Solo
@@ -1528,7 +1529,6 @@ async function enviarChat() {
   const input = document.getElementById('chat-input'), btn = document.getElementById('chat-send');
   const texto = input.value.trim();
   if (!texto || btn.disabled) return;
-  document.getElementById('chat-empty')?.remove();
   addChatBubble('user', texto);
   chatHistory.push({ role: 'user', content: texto });
   input.value = ''; input.style.height = 'auto';
@@ -1556,9 +1556,19 @@ function addChatBubble(who, texto, loading) {
   div.className = `chat-msg ${who}${loading ? ' loading' : ''}`;
   if (who === 'bot' && !loading) div.innerHTML = renderBotText(texto);
   else div.textContent = texto;
-  log.appendChild(div);
+  let el = div;
+  if (who === 'bot') {
+    const row = document.createElement('div');
+    row.className = 'chat-row';
+    row.innerHTML = '<span class="chat-avatar"><i class="fas fa-wand-magic-sparkles"></i></span>';
+    row.appendChild(div);
+    log.appendChild(row);
+    el = row;
+  } else {
+    log.appendChild(div);
+  }
   log.scrollTop = log.scrollHeight;
-  return div;
+  return el;
 }
 
 /* ---------- Realtime ---------- */
