@@ -1,15 +1,28 @@
 {
+  "id": "./index.html",
   "name": "Lotus 360 CRM",
   "short_name": "Lotus360",
+  "description": "CRM interno de Destinos y Eventos Lotus360 — leads, tarifario, cotizador y gestión de asesores.",
+  "lang": "es",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#080b16",
   "theme_color": "#080b16",
   "orientation": "portrait-primary",
+  "categories": ["business", "productivity"],
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Leads", "url": "./index.html?ir=leads", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Cotizador IA", "url": "./index.html?ir=cotizador", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Tarifario", "url": "./index.html?ir=tarifario", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ],
+  "screenshots": [
+    { "src": "icons/screenshots/wide-tarifario.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "Tarifario en escritorio" },
+    { "src": "icons/screenshots/narrow-tarifario.png", "sizes": "390x844", "type": "image/png", "form_factor": "narrow", "label": "Tarifario en móvil" }
   ]
 }

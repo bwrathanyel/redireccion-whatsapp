@@ -1,11 +1,12 @@
 // Service worker del CRM. Fase 1: solo cachea el shell estatico para que la PWA sea instalable.
 // Bump CACHE_VERSION en cada deploy que deba invalidar el shell cacheado.
-const CACHE_VERSION = 'lotus-crm-shell-v1';
+const CACHE_VERSION = 'lotus-crm-shell-v2';
 const SHELL_FILES = [
   './index.html',
   './app.js',
   './manifest.json',
   './logolotus.png',
+  './offline.html',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
@@ -43,16 +44,30 @@ self.addEventListener('fetch', (event) => {
         const network = fetch(request).then((res) => {
           if (res.ok) cache.put(request, res.clone());
           return res;
-        }).catch(() => cached);
+        }).catch(() => cached || cache.match('./offline.html'));
         return cached || network;
       })
     );
     return;
   }
 
-  // Resto de estaticos propios (iconos, manifest, logo): cache-first
+  // Navegaciones (ej. deep link directo, refresh): si no hay cache ni red, mostrar offline.html
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      caches.match(request).then((cached) => cached || fetch(request).catch(() => caches.match('./offline.html')))
+    );
+    return;
+  }
+
+  // Resto de estaticos propios (iconos, manifest, logo): cache-first, cacheando oportunisticamente en el miss
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request))
+    caches.open(CACHE_VERSION).then(async (cache) => {
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      const res = await fetch(request);
+      if (res.ok) cache.put(request, res.clone());
+      return res;
+    })
   );
 });
 

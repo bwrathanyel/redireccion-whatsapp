@@ -129,6 +129,7 @@ function entrarSegunRol() {
   startApp();
   renderRecordatoriosUI();
   manejarDeepLinkAsistencia();
+  manejarDeepLinkSeccion();
   registrarPushNativo();
 }
 
@@ -230,6 +231,16 @@ function manejarDeepLinkAsistencia() {
     const w = document.getElementById('jornada-widget-d');
     if (w) { w.classList.add('jornada-pulse'); setTimeout(() => w.classList.remove('jornada-pulse'), 2400); }
   }
+}
+
+// Deep-link desde un app shortcut del manifest (?ir=leads|cotizador|tarifario)
+const IR_SECCIONES = ['leads', 'cotizador', 'tarifario'];
+function manejarDeepLinkSeccion() {
+  const params = new URLSearchParams(location.search);
+  const ir = params.get('ir');
+  if (!IR_SECCIONES.includes(ir)) return;
+  history.replaceState(null, '', location.pathname);
+  activateSection(ir);
 }
 
 // Android nativo (Capacitor): sin import, el plugin se consume vía el
@@ -478,7 +489,7 @@ async function startApp() {
   setupDestPeriodo(); loadDestPeriodo();
   subscribeRealtime();
 }
-function renderAll() { renderKPIs(); renderTrend(); renderCanal(); renderPipe('pipe'); renderPipe('pipe2'); renderAdvisors(); renderAssign(); }
+async function renderAll() { renderKPIs(); renderPipe('pipe'); renderPipe('pipe2'); renderAdvisors(); await ensureChart(); renderTrend(); renderCanal(); renderAssign(); }
 
 async function loadStats() {
   const { data, error } = await sb.rpc('dashboard_stats');
@@ -503,7 +514,26 @@ function renderKPIs() {
 }
 
 /* ---------- Charts (dashboard) ---------- */
-Chart.defaults.color = '#8b93ad'; Chart.defaults.font.family = 'Inter'; Chart.defaults.font.size = 11;
+// Chart.js se carga on-demand (no bloquea el shell/login) — se pide la primera
+// vez que algo necesita dibujar un gráfico real (Dashboard/Métricas). El rol
+// marketing nunca llama a renderAll/loadDestPeriodo/loadMetricas, así que
+// para ese rol Chart.js no se descarga nunca.
+let chartLoadPromise = null;
+function ensureChart() {
+  if (window.Chart) return Promise.resolve();
+  if (chartLoadPromise) return chartLoadPromise;
+  chartLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    s.onload = () => {
+      Chart.defaults.color = '#8b93ad'; Chart.defaults.font.family = 'Inter'; Chart.defaults.font.size = 11;
+      resolve();
+    };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return chartLoadPromise;
+}
 function mk(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), cfg); }
 const pointer = (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; };
 
@@ -535,6 +565,7 @@ function setupDestPeriodo() {
   });
 }
 async function loadDestPeriodo() {
+  await ensureChart();
   if (destPeriodo === 'historico') { renderDest(); return; }
   const [d, h] = periodo(destPeriodo === 'dia' ? 'hoy' : destPeriodo);
   const { data, error } = await sb.rpc('top_destinos_periodo', { p_desde: iso(d), p_hasta: iso(h) });
@@ -770,7 +801,7 @@ async function loadTable() {
       <td data-label="Asesor">${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</td>
       <td data-label="Estado"><span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${niceEstado(l.estado)}</span></td>
       <td data-label="Fecha" class="muted">${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : '—'}</td>
-      <td class="td-wa">${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : '<span class="muted">—</span>'}</td>
+      <td class="td-wa">${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : '<span class="muted">—</span>'}</td>
     </tr>`;
   }).join('');
   [...document.querySelectorAll('#tbody tr')].forEach((tr, i) => tr.addEventListener('click', () => openDrawer(data[i])));
@@ -794,7 +825,7 @@ function leadCardHtml(l) {
     <div class="ec-foot">
       <span class="chip ${cc}">${esc(l.canal)}</span>
       <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${niceEstado(l.estado)}</span>
-      ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
+      ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
     </div>
   </div>`;
 }
@@ -862,6 +893,7 @@ function openDrawer(l) {
   document.getElementById('e-save').onclick = guardarLead;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
+  navPush({ type: 'drawer' });
 }
 async function guardarLead() {
   const btn = document.getElementById('e-save'), err = document.getElementById('edit-err');
@@ -886,9 +918,9 @@ async function guardarLead() {
   okToast('Lead actualizado');
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
 }
-window.closeDrawer = () => { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); };
-document.getElementById('dClose').onclick = window.closeDrawer;
-document.getElementById('drawerBg').onclick = window.closeDrawer;
+window.closeDrawer = (fromNav) => { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume(); };
+document.getElementById('dClose').onclick = () => window.closeDrawer();
+document.getElementById('drawerBg').onclick = () => window.closeDrawer();
 
 /* ---------- Métricas ---------- */
 let metPeriodo = 'mes';
@@ -896,6 +928,7 @@ function setupMetricas() {
   document.querySelectorAll('#met-periodo .seg').forEach(b => b.onclick = () => { document.querySelectorAll('#met-periodo .seg').forEach(x => x.classList.remove('on')); b.classList.add('on'); metPeriodo = b.dataset.p; loadMetricas(); });
 }
 async function loadMetricas() {
+  await ensureChart();
   const [d, h] = periodo(metPeriodo);
   const { data, error } = await sb.rpc('metricas', { p_desde: iso(d), p_hasta: iso(h) });
   if (error) { console.error(error); errToast('No se pudieron cargar las métricas'); return; }
@@ -1088,7 +1121,7 @@ function setupTarAdmin() {
   if (!btn) return;
   btn.onclick = () => { openSheet('tar-admin-sheet'); renderTasTabs(); cargarTasItems(); };
   document.getElementById('tas-close').onclick = () => closeSheet('tar-admin-sheet');
-  document.getElementById('tas-search').addEventListener('input', renderTasList);
+  let debTas; document.getElementById('tas-search').addEventListener('input', () => { clearTimeout(debTas); debTas = setTimeout(renderTasList, 200); });
 }
 function renderTasTabs() {
   document.getElementById('tas-tabs').innerHTML = TAR_TAB_META.map(t => {
@@ -1196,8 +1229,17 @@ function fotosRotadas(x) {
 
 /* ---------- Carrusel de fotos al hover (hoteles/promos/paquetes vinculados) ---------- */
 const carruselPrecargadas = new Set();
+// En conexión lenta/con ahorro de datos no tiene sentido precargar el set
+// completo de fotos de una tarjeta con solo pasar el mouse — se limita a las
+// primeras 2 (la siguiente se ve al toque/scroll natural del carrusel).
+function conexionLenta() {
+  const c = navigator.connection;
+  if (!c) return false;
+  return !!c.saveData || c.effectiveType === '2g' || c.effectiveType === 'slow-2g';
+}
 function precargarFotos(fotos) {
-  fotos.forEach(u => { if (!carruselPrecargadas.has(u)) { new Image().src = u; carruselPrecargadas.add(u); } });
+  const lista = conexionLenta() ? fotos.slice(0, 2) : fotos;
+  lista.forEach(u => { if (!carruselPrecargadas.has(u)) { new Image().src = u; carruselPrecargadas.add(u); } });
 }
 // Cada renderTarifario() reemplaza #tar-grid entero (innerHTML) — si el mouse
 // queda "adentro" de una tarjeta justo cuando eso pasa, el mouseleave de esa
@@ -1459,23 +1501,38 @@ function tarFichaHtml(x) {
   </div>`;
 }
 /* ---------- Galería (solo fotos, sin precios ni filtros) ---------- */
-let galCargada = false;
-async function loadGaleria() {
-  if (galCargada) return;
-  const loading = document.getElementById('gal-loading'), empty = document.getElementById('gal-empty'), list = document.getElementById('gal-list');
-  empty.classList.remove('show'); loading.classList.add('show');
-  const { data, error } = await sb.from('productos').select('nombre, producto_fotos(storage_path,orden)').eq('tipo', 'hotel').eq('activo', true).order('nombre');
+// Carga hoteles de a GAL_PER (con "Cargar más") en vez de traer todos de una
+// vez — con ~200 fotos repartidas en ~22 hoteles, un solo fetch disparaba
+// hasta 147 requests de imágenes en un único acceso a la sección.
+const GAL_PER = 6;
+let galCargada = false, galPage = 0, galTotal = 0;
+async function loadGaleria(append) {
+  if (galCargada && !append) return;
+  const loading = document.getElementById('gal-loading'), empty = document.getElementById('gal-empty'), list = document.getElementById('gal-list'), pager = document.getElementById('gal-pager');
+  if (!append) { empty.classList.remove('show'); loading.classList.add('show'); galPage = 0; list.innerHTML = ''; }
+  const from = galPage * GAL_PER;
+  const { data, count, error } = await sb.from('productos').select('nombre, producto_fotos(storage_path,orden,width,height)', { count: 'exact' }).eq('tipo', 'hotel').eq('activo', true).order('nombre').range(from, from + GAL_PER - 1);
   loading.classList.remove('show');
   if (error) { console.error(error); errToast('No se pudo cargar la galería'); return; }
+  galTotal = count ?? 0;
   const conFotos = (data || []).filter(x => x.producto_fotos?.length);
-  if (!conFotos.length) { empty.classList.add('show'); return; }
+  if (!append && !conFotos.length) { empty.classList.add('show'); pager.classList.remove('show'); return; }
   galCargada = true;
-  list.innerHTML = conFotos.map(x => {
-    const fotos = x.producto_fotos.slice().sort((a, b) => a.orden - b.orden).map(f => FOTOS_BASE + f.storage_path);
-    return `<div class="gal-hotel"><h3><i class="fas fa-hotel"></i> ${esc(x.nombre)}</h3>
-      <div class="gal-masonry">${fotos.map(f => `<a href="${esc(f)}" target="_blank" rel="noopener"><img src="${esc(f)}" alt="${esc(x.nombre)}" loading="lazy"></a>`).join('')}</div>
+  list.insertAdjacentHTML('beforeend', conFotos.map(x => {
+    const fotos = x.producto_fotos.slice().sort((a, b) => a.orden - b.orden);
+    return `<div class="gal-hotel"><h2><i class="fas fa-hotel"></i> ${esc(x.nombre)}</h2>
+      <div class="gal-masonry">${fotos.map(f => {
+        const url = FOTOS_BASE + f.storage_path;
+        // width/height reales (backfill PR3) reservan el aspect-ratio exacto
+        // desde el HTML, sin esperar a que la foto cargue — si falta en
+        // alguna foto vieja sin backfill, el CSS cae al 4/3 aproximado.
+        const dims = f.width && f.height ? ` width="${f.width}" height="${f.height}"` : '';
+        return `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="${esc(x.nombre)}" loading="lazy"${dims}></a>`;
+      }).join('')}</div>
     </div>`;
-  }).join('');
+  }).join(''));
+  galPage++;
+  pager.classList.toggle('show', galPage * GAL_PER < galTotal);
 }
 async function loadTarifarioInfo() {
   if (tarInfo) return;
@@ -1508,14 +1565,14 @@ function openProductoDrawer(x) {
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
+  navPush({ type: 'drawer' });
   document.getElementById('dCotizador').onclick = () => irAlCotizadorConOpcion(esPromo ? 'promociones' : 'productos', x.id, nombre);
 }
 // Deja al filtro "opción de Tarifario" del Cotizador ya elegida, con el
 // chat enfocado y un mensaje sugerido, para no obligar a re-seleccionar
 // lo mismo que ya se estaba viendo en el drawer del Tarifario.
 function irAlCotizadorConOpcion(tabla, id, nombre) {
-  document.getElementById('drawer').classList.remove('open');
-  document.getElementById('drawerBg').classList.remove('open');
+  window.closeDrawer(true);
   activateSection('cotizador');
   const sel = document.getElementById('cot-f-opcion');
   const valor = `${tabla}:${id}`;
@@ -1538,10 +1595,12 @@ function openLightbox(fotos, index) {
   renderLightbox();
   lbEl().classList.add('open');
   document.body.classList.add('lb-lock');
+  navPush({ type: 'lightbox' });
 }
-function closeLightbox() {
+function closeLightbox(fromNav) {
   lbEl().classList.remove('open');
   document.body.classList.remove('lb-lock');
+  if (!fromNav) navConsume();
 }
 function renderLightbox() {
   const img = lbImgEl();
@@ -1558,7 +1617,7 @@ function lbNext() { if (lbFotos.length < 2) return; lbIndex = (lbIndex + 1) % lb
 function lbPrev() { if (lbFotos.length < 2) return; lbIndex = (lbIndex - 1 + lbFotos.length) % lbFotos.length; lbScale = 1; lbTX = 0; lbTY = 0; renderLightbox(); }
 function setupLightbox() {
   const img = lbImgEl(), stage = document.getElementById('lbStage');
-  document.getElementById('lbClose').onclick = closeLightbox;
+  document.getElementById('lbClose').onclick = () => closeLightbox();
   document.getElementById('lbNext').onclick = lbNext;
   document.getElementById('lbPrev').onclick = lbPrev;
   stage.addEventListener('click', e => { if (e.target === stage) closeLightbox(); });
@@ -1684,6 +1743,7 @@ async function openChatsDrawer() {
   box.innerHTML = `<div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent)"><i class="fas fa-clock-rotate-left"></i></div><div><div class="dn">Mis conversaciones</div><div class="dm">Cotizador IA</div></div></div><div id="chats-mine-list" class="es-s" style="padding:14px 0">Cargando...</div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
+  navPush({ type: 'drawer' });
   const { data, error } = await sb.from('chats_ia').select('id,titulo,updated_at').eq('usuario_id', MI_USUARIO_ID).order('updated_at', { ascending: false });
   const list = document.getElementById('chats-mine-list');
   if (error) { list.textContent = 'No se pudieron cargar tus conversaciones'; return; }
@@ -1700,7 +1760,7 @@ async function abrirChatGuardado(id) {
   const log = document.getElementById('chat-log');
   log.innerHTML = '';
   chatHistory.forEach(m => addChatBubble(m.role === 'user' ? 'user' : 'bot', m.content));
-  window.closeDrawer();
+  window.closeDrawer(true);
   activateSection('cotizador');
 }
 // Lista de cada hotel/paquete/promo/guía-tour individual, agrupada por
@@ -1802,12 +1862,38 @@ function toast(l) { const t = document.createElement('div'); t.className = 'toas
 function okToast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-check"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500); }
 function errToast(msg) { const t = document.createElement('div'); t.className = 'toast toast-err'; t.innerHTML = `<i class="fas fa-triangle-exclamation"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5000); }
 
+/* ---------- Historial interno (gesto de "atrás" del SO no debe salir de la PWA) ----------
+   Cada cambio de sección o apertura de overlay (drawer/lightbox/sheet) empuja
+   una entrada de historial. El botón/gesto de atrás de Android y el
+   swipe-back de iOS disparan `popstate` en vez de salir de la app mientras
+   haya algo en NAV_STACK — al vaciarse (pantalla raíz), el siguiente atrás
+   sí sale de la PWA (comportamiento estándar, no se intercepta más allá). */
+let NAV_STACK = [];
+function navPush(entry) { NAV_STACK.push(entry); history.pushState({ navDepth: NAV_STACK.length }, ''); }
+// Usado por los cierres propios de la UI (botón X, backdrop, "Listo") para
+// consumir la entrada de historial que ese overlay había empujado — sin
+// esto, cada cierre manual deja una entrada fantasma y el próximo gesto de
+// atrás del sistema queda desfasado (hay que tocarlo dos veces sin efecto).
+function navConsume() { if (NAV_STACK.length) history.back(); }
+window.addEventListener('popstate', () => {
+  if (!NAV_STACK.length) return; // pantalla raíz: se deja que el SO cierre la PWA
+  const top = NAV_STACK.pop();
+  if (top.type === 'drawer') window.closeDrawer(true);
+  else if (top.type === 'lightbox') closeLightbox(true);
+  else if (top.type === 'sheet') closeSheet(top.id, true);
+  else if (top.type === 'section') activateSection(top.prevSec, true);
+});
+
 /* ---------- Nav ---------- */
 const BN_CORE_SECS = ['dashboard', 'leads', 'tarifario', 'cotizador'];
-function activateSection(sec) {
+let currentSec = null;
+function activateSection(sec, fromNav) {
+  if (currentSec === sec) return;
+  if (!fromNav && currentSec !== null) navPush({ type: 'section', prevSec: currentSec });
+  currentSec = sec;
   document.querySelectorAll('.nav-item,.bn-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
   document.getElementById('bn-more')?.classList.toggle('active', !BN_CORE_SECS.includes(sec));
-  if (sheetAbierta) closeSheet(sheetAbierta);
+  if (sheetAbierta) closeSheet(sheetAbierta, true);
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-' + sec).classList.add('active');
   document.querySelector('.topbar').classList.toggle('show-search', sec === 'leads');
@@ -1827,6 +1913,7 @@ function activateSection(sec) {
 function setupNav() {
   document.querySelectorAll('.nav-item,.bn-item,.sheet-item').forEach(n => n.addEventListener('click', () => { if (n.dataset.sec) activateSection(n.dataset.sec); }));
   document.getElementById('bn-more')?.addEventListener('click', () => openSheet('more-sheet'));
+  document.getElementById('gal-more')?.addEventListener('click', () => loadGaleria(true));
   document.querySelectorAll('.mfs-trigger, .mfs-done').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.mfs;
     b.classList.contains('mfs-trigger') ? openSheet(id) : closeSheet(id);
@@ -1836,14 +1923,16 @@ function setupNav() {
 /* ---------- Hoja inferior genérica (más opciones del nav, filtros en móvil) — un solo backdrop compartido, una hoja abierta a la vez ---------- */
 let sheetAbierta = null;
 function openSheet(id) {
-  if (sheetAbierta && sheetAbierta !== id) closeSheet(sheetAbierta);
+  if (sheetAbierta && sheetAbierta !== id) closeSheet(sheetAbierta, true);
   document.getElementById(id)?.classList.add('open');
   document.getElementById('sheet-bg')?.classList.add('open');
   sheetAbierta = id;
+  navPush({ type: 'sheet', id });
 }
-function closeSheet(id) {
+function closeSheet(id, fromNav) {
   document.getElementById(id)?.classList.remove('open');
   document.getElementById('sheet-bg')?.classList.remove('open');
   if (sheetAbierta === id) sheetAbierta = null;
+  if (!fromNav) navConsume();
 }
 document.getElementById('sheet-bg')?.addEventListener('click', () => { if (sheetAbierta) closeSheet(sheetAbierta); });

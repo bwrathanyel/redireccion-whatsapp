@@ -13,14 +13,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lotus360">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 :root{
   --bg:#080b16; --bg2:#0d1224; --panel:rgba(20,26,48,.72); --panel-solid:#141a30;
   --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
-  --txt:#eef1f8; --muted:#8b93ad; --muted2:#5f677f;
+  --txt:#eef1f8; --muted:#8b93ad; --muted2:#7981a8;
   --accent:#ff9100; --accent-soft:rgba(255,145,0,.14);
   --blue:#4a9eff; --green:#10b981; --purple:#a06bff; --amber:#f5b544; --pink:#ff5c8a; --wa:#25D366;
   --safe-b:env(safe-area-inset-bottom,0px);
@@ -48,7 +48,7 @@ body::before{content:'';position:fixed;inset:0;background:
 .brand .bt{font-weight:800;font-size:15px;letter-spacing:.2px;line-height:1}
 .brand .bs{font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:3px}
 .nav-label{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1.4px;padding:12px 10px 6px;font-weight:600}
-.nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;color:var(--muted);text-decoration:none;font-size:13.5px;font-weight:500;cursor:pointer;transition:.15s;border:1px solid transparent}
+.nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;color:var(--muted);text-decoration:none;font-size:13.5px;font-weight:500;cursor:pointer;transition:background .15s,color .15s,border-color .15s;border:1px solid transparent}
 .nav-item i{width:18px;text-align:center;font-size:14px}
 .nav-item:hover{background:rgba(255,255,255,.04);color:var(--txt)}
 .nav-item.active{background:var(--accent-soft);color:#ffd8a8;border-color:rgba(255,145,0,.22)}
@@ -79,12 +79,12 @@ body::before{content:'';position:fixed;inset:0;background:
 .strike-row:last-child{border-bottom:none}
 .avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#e0570a);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#1a1000;flex-shrink:0}
 .side-foot .un{font-size:12.5px;font-weight:600}.side-foot .ue{font-size:10.5px;color:var(--muted)}
-.logout-btn{background:transparent;border:1px solid var(--line);color:var(--muted);width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:13px;flex-shrink:0;transition:.15s}
+.logout-btn{background:transparent;border:1px solid var(--line);color:var(--muted);width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:13px;flex-shrink:0;transition:color .15s,border-color .15s}
 .logout-btn:hover{color:#ff6b6b;border-color:rgba(255,107,107,.4)}
 
 /* ---------- Bottom nav (mobile) ---------- */
 .bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:50;background:rgba(11,15,28,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line2);padding:6px 6px calc(6px + var(--safe-b));justify-content:space-around}
-.bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 4px;min-height:48px;color:var(--muted2);text-decoration:none;font-size:10px;font-weight:600;cursor:pointer;border-radius:12px;transition:.15s;position:relative}
+.bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 4px;min-height:48px;color:var(--muted2);text-decoration:none;font-size:10px;font-weight:600;cursor:pointer;border-radius:12px;transition:color .15s;position:relative}
 .bn-item i{font-size:18px}
 .bn-item.active{color:var(--accent)}
 .bn-item.active::before{content:'';position:absolute;top:0;width:26px;height:3px;border-radius:3px;background:var(--accent)}
@@ -108,7 +108,7 @@ body::before{content:'';position:fixed;inset:0;background:
 .topbar .sub{font-size:12.5px;color:var(--muted);margin-top:3px}
 .search{margin-left:auto;position:relative;display:none}
 .topbar.show-search .search{display:block}
-.search input{background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:10px 14px 10px 38px;color:var(--txt);font-size:13px;width:280px;font-family:inherit;outline:none;transition:.15s}
+.search input{background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:10px 14px 10px 38px;color:var(--txt);font-size:13px;width:280px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
 .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .search i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
 .pill{display:inline-flex;align-items:center;gap:7px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:9px 14px;font-size:12.5px;color:var(--muted);font-weight:500}
@@ -125,7 +125,7 @@ body::before{content:'';position:fixed;inset:0;background:
 .kpi .kv{font-size:30px;font-weight:800;margin-top:12px;letter-spacing:-.5px}
 .kpi .kd{font-size:11.5px;color:var(--muted);margin-top:5px}
 .kpi .kd b{color:var(--green)}
-.kpi .kgo{position:absolute;right:14px;bottom:14px;color:var(--muted2);font-size:12px;opacity:0;transition:.15s}
+.kpi .kgo{position:absolute;right:14px;bottom:14px;color:var(--muted2);font-size:12px;opacity:0;transition:opacity .15s}
 .kpi:hover .kgo{opacity:1;right:12px}
 
 /* panels */
@@ -133,8 +133,8 @@ body::before{content:'';position:fixed;inset:0;background:
 .g-2{grid-template-columns:1.55fr 1fr}
 .g-2b{grid-template-columns:1fr 1fr}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px 20px;backdrop-filter:blur(8px)}
-.card h3{font-size:14px;font-weight:700;display:flex;align-items:center;gap:9px;margin-bottom:4px}
-.card h3 i{color:var(--accent);font-size:13px}
+.card h2{font-size:14px;font-weight:700;display:flex;align-items:center;gap:9px;margin-bottom:4px}
+.card h2 i{color:var(--accent);font-size:13px}
 .card .csub{font-size:11.5px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:6px}
 .chart-wrap{position:relative;height:230px}
 .chart-sm{position:relative;height:210px}
@@ -186,13 +186,13 @@ input.flt{background:var(--panel-solid);border:1px solid var(--line2);border-rad
 input.flt:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .tcount{margin-left:auto;font-size:12px;color:var(--muted)}
 .drp{position:relative}
-.drp-btn{display:inline-flex;align-items:center;gap:8px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:9px 14px;color:var(--txt);font-size:12.5px;font-family:inherit;cursor:pointer;transition:.15s}
+.drp-btn{display:inline-flex;align-items:center;gap:8px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:9px 14px;color:var(--txt);font-size:12.5px;font-family:inherit;cursor:pointer;transition:border-color .15s}
 .drp-btn:hover{border-color:var(--accent)}
 .drp-btn i{color:var(--accent);font-size:12px}
 .drp-panel{display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:20;background:var(--panel-solid);border:1px solid var(--line2);border-radius:14px;padding:14px;box-shadow:0 16px 40px rgba(0,0,0,.5);min-width:270px}
 .drp-panel.open{display:block}
 .drp-presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
-.drp-presets button{background:rgba(255,255,255,.05);border:1px solid var(--line2);color:var(--muted);border-radius:20px;padding:6px 12px;font-size:11.5px;cursor:pointer;font-family:inherit;transition:.15s}
+.drp-presets button{background:rgba(255,255,255,.05);border:1px solid var(--line2);color:var(--muted);border-radius:20px;padding:6px 12px;font-size:11.5px;cursor:pointer;font-family:inherit;transition:color .15s,border-color .15s}
 .drp-presets button:hover{color:var(--txt);border-color:var(--accent)}
 .drp-inputs{display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px dashed var(--line2)}
 .drp-inputs label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;display:flex;flex-direction:column;gap:5px}
@@ -216,10 +216,11 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .badge-st{font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap;letter-spacing:.2px}
 .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:7px;background:rgba(255,255,255,.05);color:var(--muted)}
 .chip.ig{color:#ff8fb0;background:rgba(255,92,138,.1)}.chip.fb{color:#7fb4ff;background:rgba(74,158,255,.12)}.chip.am{color:#c3a0ff;background:rgba(160,107,255,.12)}
-.wa-btn{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:rgba(37,211,102,.12);color:var(--wa);text-decoration:none;font-size:15px;transition:.15s}
+.wa-btn{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:rgba(37,211,102,.12);color:var(--wa);text-decoration:none;font-size:15px;transition:background .15s,color .15s}
 .wa-btn:hover{background:var(--wa);color:#fff}
 .pager{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:16px}
-.pager button{background:var(--panel-solid);border:1px solid var(--line2);color:var(--txt);border-radius:9px;padding:9px 15px;font-size:12.5px;cursor:pointer;font-family:inherit;transition:.15s}
+#gal-pager{display:none}#gal-pager.show{display:flex}
+.pager button{background:var(--panel-solid);border:1px solid var(--line2);color:var(--txt);border-radius:9px;padding:9px 15px;font-size:12.5px;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s}
 .pager button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
 .pager button:disabled{opacity:.4;cursor:default}
 .pager .pinfo{font-size:12.5px;color:var(--muted);padding:0 6px}
@@ -227,6 +228,15 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .tbl-state{display:none;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;color:var(--muted);gap:12px}
 .tbl-state.show{display:flex}
 .tbl-state i{font-size:26px;color:var(--muted2)}
+/* Skeletons: reservan aproximadamente el alto real del contenido cargado,
+   en vez de un spinner chico centrado que deja saltar el layout al llegar
+   los datos. */
+@keyframes skel-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.tbl-state.skel{padding:0;align-items:stretch}
+.tbl-state.skel.show{display:flex;flex-direction:column;gap:8px}
+.skel-bar{height:52px;border-radius:10px;background:linear-gradient(90deg,var(--panel-solid) 25%,rgba(255,255,255,.07) 50%,var(--panel-solid) 75%);background-size:200% 100%;animation:skel-shimmer 1.4s ease-in-out infinite}
+.tbl-state.skel-grid.show{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.skel-card{height:190px;border-radius:14px;background:linear-gradient(90deg,var(--panel-solid) 25%,rgba(255,255,255,.07) 50%,var(--panel-solid) 75%);background-size:200% 100%;animation:skel-shimmer 1.4s ease-in-out infinite}
 .tbl-state .es-t{font-size:14px;font-weight:600;color:var(--txt)}
 .tbl-state .es-s{font-size:12px}
 .spin{width:30px;height:30px;border:3px solid rgba(255,255,255,.1);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
@@ -252,7 +262,7 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .dfv-rich p:last-child{margin-bottom:0}
 .dfv-num{color:var(--accent);font-weight:700}
 .dactions{display:flex;gap:10px;margin-top:22px}
-.dbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:12px;font-size:13px;font-weight:700;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:.15s}
+.dbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:12px;font-size:13px;font-weight:700;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:filter .15s,transform .15s}
 .dbtn.wa{background:var(--wa);color:#fff}.dbtn.wa:hover{filter:brightness(1.08)}
 .dbtn.gh{background:rgba(255,255,255,.06);color:var(--txt);border:1px solid var(--line2)}
 
@@ -265,16 +275,16 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .lb-img.zoomed{cursor:grab}
 .lb-img.panning{cursor:grabbing;transition:none}
 .lightbox.dragging .lb-img{transition:none}
-.lb-close,.lb-arrow{position:absolute;background:rgba(20,26,48,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--line2);color:var(--txt);cursor:pointer;display:grid;place-items:center;transition:.15s}
+.lb-close,.lb-arrow{position:absolute;background:rgba(20,26,48,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--line2);color:var(--txt);cursor:pointer;display:grid;place-items:center;transition:background .15s,border-color .15s}
 .lb-close:hover,.lb-arrow:hover{background:rgba(255,145,0,.18);border-color:rgba(255,145,0,.4)}
 .lb-close{top:18px;right:18px;width:42px;height:42px;border-radius:12px;font-size:17px;z-index:2}
 .lb-counter{position:absolute;top:24px;left:24px;font-size:12.5px;font-weight:700;color:var(--muted);background:rgba(20,26,48,.72);backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:20px;padding:7px 14px}
 .lb-arrow{top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;font-size:17px;z-index:2}
 .lb-arrow.lb-prev{left:18px}.lb-arrow.lb-next{right:18px}
 @media(max-width:760px){
-  .lb-arrow{width:40px;height:40px;font-size:14px}
+  .lb-arrow{width:44px;height:44px;font-size:14px}
   .lb-arrow.lb-prev{left:8px}.lb-arrow.lb-next{right:8px}
-  .lb-close{top:calc(12px + var(--safe-b,0px));right:12px;width:38px;height:38px}
+  .lb-close{top:calc(12px + var(--safe-b,0px));right:12px;width:44px;height:44px}
   .lb-counter{top:calc(16px + var(--safe-b,0px));left:12px}
   .lb-img{max-width:96vw;max-height:82vh}
 }
@@ -321,10 +331,10 @@ input.ei[type=date]{color-scheme:dark}
 .dbtn.save:active{transform:scale(.98)}
 /* toggle de periodo */
 .seg-group{display:inline-flex;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:4px;gap:3px;margin-bottom:16px}
-.seg{background:transparent;border:none;color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 16px;border-radius:9px;cursor:pointer;transition:.15s}
+.seg{background:transparent;border:none;color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 16px;border-radius:9px;cursor:pointer;transition:background .15s,color .15s}
 .seg.on{background:var(--accent-soft);color:#ffd8a8}.seg:hover:not(.on){color:var(--txt)}
 .chead-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:4px}
-.chead-row h3{margin-bottom:0}
+.chead-row h2{margin-bottom:0}
 .seg-group-sm{margin-bottom:0;padding:3px}
 .seg-group-sm .seg{padding:5px 10px;font-size:11px}
 @media(max-width:760px){.seg-group-sm{width:100%;justify-content:stretch}.seg-group-sm .seg{flex:1;padding:6px 4px}}
@@ -391,7 +401,7 @@ input.ei[type=date]{color-scheme:dark}
 .thr-thumb-vacio{display:grid;place-items:center;color:var(--muted2);font-size:16px;border:1px dashed var(--line2)}
 .dgallery{display:flex;gap:8px;overflow-x:auto;margin:14px 0 4px;padding-bottom:4px;scrollbar-width:thin}
 .dgallery a{flex-shrink:0;border-radius:10px;overflow:hidden;display:block;line-height:0}
-.dgallery img{height:90px;width:auto;display:block;border-radius:10px;transition:.15s}
+.dgallery img{height:90px;width:auto;display:block;border-radius:10px;transition:opacity .15s}
 .dgallery img:hover{opacity:.85}
 @media(max-width:760px){.tar-hotel-row{flex-wrap:wrap;row-gap:8px}.tar-hotel-row .thr-nombre{flex:1 1 100%;max-width:none}.tar-hotel-row .thr-precio{margin-left:auto}}
 
@@ -404,7 +414,7 @@ input.ei[type=date]{color-scheme:dark}
 
 /* ---------- Selector de vista (fichas / tarjetas / lista), estándar en todo el CRM ---------- */
 .view-switch{display:inline-flex;gap:3px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:3px}
-.vs-btn{background:transparent;border:none;color:var(--muted);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:12.5px;transition:.15s}
+.vs-btn{background:transparent;border:none;color:var(--muted);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:12.5px;transition:background .15s,color .15s}
 .vs-btn.on{background:var(--accent-soft);color:#ffd8a8}
 .vs-btn:hover:not(.on){color:var(--txt)}
 
@@ -427,7 +437,7 @@ input.ei[type=date]{color-scheme:dark}
 .cot-f-fecha{display:inline-flex;align-items:center;gap:7px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:7px 12px;color:var(--muted);font-size:12px;white-space:nowrap}
 .cot-f-fecha input{background:transparent;border:none;color:var(--txt);font-family:inherit;font-size:12.5px;outline:none;color-scheme:dark;cursor:pointer}
 #cot-f-precio{width:140px}
-.cot-f-clear{background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;width:36px;height:36px;color:var(--muted);cursor:pointer;transition:.15s;flex-shrink:0}
+.cot-f-clear{background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;width:36px;height:36px;color:var(--muted);cursor:pointer;transition:color .15s,border-color .15s;flex-shrink:0}
 .cot-f-clear:hover{color:#ef4444;border-color:#ef4444}
 @media(max-width:760px){.cot-filtros{width:100%}.cot-filtros .flt,.cot-f-fecha{flex:1 1 45%}}
 @media(min-width:761px){
@@ -439,7 +449,7 @@ input.ei[type=date]{color-scheme:dark}
 /* ---------- Cotizador IA ---------- */
 .chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);height:calc(100dvh - 180px);min-height:420px}
 .chat-toolbar{display:flex;gap:8px;flex-shrink:0;margin-bottom:10px}
-.chat-tool-btn{display:flex;align-items:center;gap:6px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:7px 12px;color:var(--muted);font-size:12px;font-family:inherit;cursor:pointer;transition:.15s}
+.chat-tool-btn{display:flex;align-items:center;gap:6px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:7px 12px;color:var(--muted);font-size:12px;font-family:inherit;cursor:pointer;transition:color .15s,border-color .15s}
 .chat-tool-btn:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 .chat-tool-btn:disabled{opacity:.5;cursor:default;pointer-events:none}
 .chat-log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:6px 2px 16px}
@@ -460,11 +470,11 @@ input.ei[type=date]{color-scheme:dark}
 
 /* ---------- Galería ---------- */
 .gal-hotel{margin-bottom:30px}
-.gal-hotel h3{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.gal-hotel h3 i{color:var(--accent);font-size:13px}
+.gal-hotel h2{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.gal-hotel h2 i{color:var(--accent);font-size:13px}
 .gal-masonry{column-count:4;column-gap:12px}
 .gal-masonry a{display:block;margin-bottom:12px;break-inside:avoid;line-height:0}
-.gal-masonry img{width:100%;display:block;border-radius:12px;border:1px solid var(--line);cursor:pointer;transition:.15s;background:var(--panel-solid)}
+.gal-masonry img{width:100%;aspect-ratio:auto 4/3;display:block;border-radius:12px;border:1px solid var(--line);cursor:pointer;transition:transform .15s,border-color .15s;background:var(--panel-solid)}
 .gal-masonry a:hover img{transform:scale(1.015);border-color:rgba(255,145,0,.3)}
 @media(max-width:1100px){.gal-masonry{column-count:3}}
 @media(max-width:760px){.gal-masonry{column-count:2}}
@@ -474,7 +484,7 @@ input.ei[type=date]{color-scheme:dark}
 #login,#setup,#forgot,#marketing-placeholder,#claim-list,#claim-form{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 600px at 50% -10%,rgba(255,145,0,.14),transparent 60%),#080b16;padding:20px;overflow-y:auto}
 #login.show,#setup.show,#forgot.show,#marketing-placeholder.show,#claim-list.show,#claim-form.show{display:flex}
 .claim-list-items{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;max-height:280px;overflow-y:auto}
-.claim-item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.15s;text-align:left}
+.claim-item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:12px;padding:12px 14px;cursor:pointer;transition:border-color .15s,box-shadow .15s;text-align:left}
 .claim-item:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .claim-item .cn{font-weight:600;font-size:13.5px}
 .claim-item .cr{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;background:rgba(255,255,255,.06);padding:3px 8px;border-radius:20px}
@@ -485,13 +495,13 @@ input.ei[type=date]{color-scheme:dark}
 .login-card p{font-size:12.5px;color:var(--muted);margin-top:4px;margin-bottom:22px}
 .login-field{position:relative;margin-bottom:12px}
 .login-field i{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
-.login-field input{width:100%;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:12px;padding:14px 14px 14px 40px;color:var(--txt);font-size:16px;font-family:inherit;outline:none;transition:.15s}
+.login-field input{width:100%;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:12px;padding:14px 14px 14px 40px;color:var(--txt);font-size:16px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
 .login-field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.login-field select.login-select{width:100%;appearance:none;-webkit-appearance:none;background:rgba(10,12,28,.7) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b93ad' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 15px center;border:1.5px solid var(--line2);border-radius:12px;padding:14px 34px 14px 40px;color:var(--txt);font-size:16px;font-family:inherit;outline:none;transition:.15s;cursor:pointer}
+.login-field select.login-select{width:100%;appearance:none;-webkit-appearance:none;background:rgba(10,12,28,.7) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b93ad' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 15px center;border:1.5px solid var(--line2);border-radius:12px;padding:14px 34px 14px 40px;color:var(--txt);font-size:16px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;cursor:pointer}
 .login-field select.login-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .login-field select.login-select option{background:#141a30;color:var(--txt)}
 .login-err{color:#ff6b6b;font-size:12px;min-height:16px;margin-bottom:8px;font-weight:500}
-#loginBtn{width:100%;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s}
+#loginBtn{width:100%;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;transition:filter .15s,transform .15s}
 #loginBtn:hover{filter:brightness(1.07)}#loginBtn:active{transform:scale(.98)}#loginBtn:disabled{opacity:.6}
 .login-foot{font-size:11px;color:var(--muted2);margin-top:16px}
 .login-foot a{color:var(--accent);text-decoration:none;font-weight:600}
@@ -504,7 +514,7 @@ input.ei[type=date]{color-scheme:dark}
 /* Tarifario: fila de pestañas + botón de configuración (admin) */
 .tar-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
 .tar-tabs-row .seg-group{margin-bottom:0}
-.tar-admin-btn{width:38px;height:38px;border-radius:10px;background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted);cursor:pointer;flex-shrink:0;transition:.15s;font-size:14px}
+.tar-admin-btn{width:38px;height:38px;border-radius:10px;background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted);cursor:pointer;flex-shrink:0;transition:color .15s,border-color .15s;font-size:14px}
 .tar-admin-btn:hover{color:var(--accent);border-color:rgba(255,145,0,.4)}
 .seg.tab-oculta{opacity:.45}
 .tar-oculto-admin{position:relative;opacity:.55}
@@ -571,10 +581,11 @@ input.ei[type=date]{color-scheme:dark}
   /* área táctil mínima 44x44 (iOS) / 48x48 (Android) en controles chicos */
   .logout-btn{width:44px;height:44px}
   .cot-f-clear{width:44px;height:44px}
-  .vs-btn{padding:11px 13px;min-height:44px}
+  .vs-btn{padding:11px 13px;min-height:44px;min-width:44px}
+  .drawer .dclose{width:44px;height:44px}
   .fchip b{padding:6px}
   .drp-btn,.tar-f-check,select.flt,#tar-f-precio,#cot-f-precio,.pager button,.clear-all{min-height:44px}
-  .seg{min-height:40px}
+  .seg{min-height:44px}
   /* drawer -> hoja inferior */
   .drawer{top:auto;bottom:0;left:0;right:0;width:100%;max-width:100%;height:auto;max-height:90vh;border-left:none;border-top:1px solid var(--line2);border-radius:22px 22px 0 0;transform:translateY(100%);padding:22px 20px calc(22px + var(--safe-b))}
   .drawer.open{transform:translateY(0)}
@@ -601,13 +612,13 @@ input.ei[type=date]{color-scheme:dark}
 <!-- Pantalla de acceso -->
 <div id="login">
   <form id="loginForm" class="login-card">
-    <img src="logolotus.png" alt="Lotus 360">
+    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
     <h1>Lotus 360 · CRM</h1>
     <p>Acceso privado del equipo</p>
     <div class="login-field"><i class="fas fa-user"></i>
-      <select id="loginUser" class="login-select" autofocus><option value="">Selecciona tu usuario</option></select></div>
+      <select id="loginUser" class="login-select" autofocus aria-label="Usuario"><option value="">Selecciona tu usuario</option></select></div>
     <div class="login-field"><i class="fas fa-lock"></i>
-      <input id="loginPwd" type="password" placeholder="Contraseña" autocomplete="current-password"></div>
+      <input id="loginPwd" type="password" placeholder="Contraseña" autocomplete="current-password" aria-label="Contraseña"></div>
     <div class="login-err" id="loginErr"></div>
     <button type="submit" id="loginBtn">Entrar <i class="fas fa-arrow-right"></i></button>
     <div class="login-foot"><a href="#" id="forgotLink">¿Olvidaste tu contraseña?</a></div>
@@ -617,7 +628,7 @@ input.ei[type=date]{color-scheme:dark}
 
 <div id="claim-list">
   <div class="login-card">
-    <img src="logolotus.png" alt="Lotus 360">
+    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
     <h1>Configura tu usuario</h1>
     <p>Elegí tu nombre en la lista para crear tu contraseña y pregunta de seguridad. Si no aparece, ya está configurado.</p>
     <div id="claimListItems" class="claim-list-items"></div>
@@ -628,7 +639,7 @@ input.ei[type=date]{color-scheme:dark}
 
 <div id="claim-form">
   <form id="claimForm" class="login-card">
-    <img src="logolotus.png" alt="Lotus 360">
+    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
     <h1 id="claimFormTitle">Configura tu usuario</h1>
     <p>Elegí tu contraseña definitiva y una pregunta de seguridad (sirve para recuperar el acceso sin correo)</p>
     <div class="login-field"><i class="fas fa-lock"></i>
@@ -647,7 +658,7 @@ input.ei[type=date]{color-scheme:dark}
 
 <div id="setup">
   <form id="setupForm" class="login-card">
-    <img src="logolotus.png" alt="Lotus 360">
+    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
     <h1>Configura tu cuenta</h1>
     <p>Elige tu contraseña definitiva y una pregunta de seguridad (sirve para recuperar el acceso sin correo)</p>
     <div class="login-field"><i class="fas fa-lock"></i>
@@ -665,7 +676,7 @@ input.ei[type=date]{color-scheme:dark}
 
 <div id="forgot">
   <form id="forgotForm" class="login-card">
-    <img src="logolotus.png" alt="Lotus 360">
+    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
     <h1>Recuperar contraseña</h1>
     <p>Escribe tu usuario para ver tu pregunta de seguridad</p>
     <div class="login-field"><i class="fas fa-user"></i>
@@ -684,7 +695,7 @@ input.ei[type=date]{color-scheme:dark}
 
 <div id="marketing-placeholder">
   <div class="login-card">
-    <img src="logolotus.png" alt="Lotus 360">
+    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
     <h1>Próximamente</h1>
     <p>Tu acceso de marketing todavía no tiene funciones activas en el CRM (tarifario, métricas de conversión, etc.). Se habilitará apenas estén listas.</p>
     <button class="logout-btn" style="width:auto;padding:10px 18px;margin-top:6px" onclick="cerrarSesion()">Cerrar sesión <i class="fas fa-right-from-bracket"></i></button>
@@ -694,7 +705,7 @@ input.ei[type=date]{color-scheme:dark}
 <div class="app">
   <!-- Sidebar (desktop) -->
   <aside class="sidebar">
-    <div class="brand"><img src="logolotus.png" alt="Lotus 360"><div><div class="bt">Lotus 360</div><div class="bs">CRM</div></div></div>
+    <div class="brand"><img src="logolotus.png" alt="Lotus 360" width="512" height="512"><div><div class="bt">Lotus 360</div><div class="bs">CRM</div></div></div>
     <div class="nav-label">Principal</div>
     <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
     <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
@@ -728,7 +739,7 @@ input.ei[type=date]{color-scheme:dark}
 
   <main class="main">
     <div class="mobile-brand">
-      <img src="logolotus.png" alt="Lotus 360">
+      <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
       <div><div class="mb-t">Lotus 360</div><div class="mb-s">CRM</div></div>
       <button class="logout-btn m-logout" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
     </div>
@@ -746,25 +757,25 @@ input.ei[type=date]{color-scheme:dark}
       <div class="kpis" id="kpis"></div>
       <div class="grid g-2" style="margin-bottom:12px">
         <div class="card">
-          <h3><i class="fas fa-chart-line"></i> Leads por mes</h3>
+          <h2><i class="fas fa-chart-line"></i> Leads por mes</h2>
           <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Toca un mes para ver el número · toca "Ver leads" para entrar</div>
           <div class="chart-wrap"><canvas id="chTrend"></canvas></div>
         </div>
         <div class="card">
-          <h3><i class="fas fa-share-nodes"></i> Origen del lead</h3>
+          <h2><i class="fas fa-share-nodes"></i> Origen del lead</h2>
           <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Toca un canal para ver su número</div>
           <div class="chart-sm"><canvas id="chCanal"></canvas></div>
         </div>
       </div>
       <div class="grid g-2b">
         <div class="card">
-          <h3><i class="fas fa-diagram-project"></i> Embudo del pipeline</h3>
+          <h2><i class="fas fa-diagram-project"></i> Embudo del pipeline</h2>
           <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Toca una etapa para ver su número</div>
           <div class="pipe" id="pipe"></div>
         </div>
         <div class="card">
           <div class="chead-row">
-            <h3><i class="fas fa-location-dot"></i> Destinos más solicitados</h3>
+            <h2><i class="fas fa-location-dot"></i> Destinos más solicitados</h2>
             <div class="seg-group seg-group-sm" id="dest-periodo">
               <button class="seg" data-p="dia">Día</button>
               <button class="seg" data-p="semana">Semana</button>
@@ -810,7 +821,7 @@ input.ei[type=date]{color-scheme:dark}
       </div>
       <div class="card">
         <div id="active-filters" class="chips-bar"></div>
-        <div class="tbl-state" id="tbl-loading"><div class="spin"></div><div class="es-s">Cargando leads...</div></div>
+        <div class="tbl-state skel" id="tbl-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
         <div class="tbl-state" id="tbl-empty"><i class="fas fa-inbox"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay leads con estos filtros</div></div>
         <div id="tbl-wrap" style="overflow-x:auto">
           <table>
@@ -825,7 +836,7 @@ input.ei[type=date]{color-scheme:dark}
 
     <!-- PIPELINE -->
     <section class="section" id="sec-pipeline">
-      <div class="card"><h3><i class="fas fa-diagram-project"></i> Embudo detallado</h3><div class="csub">Toca una etapa para ver esos leads</div><div class="pipe" id="pipe2"></div></div>
+      <div class="card"><h2><i class="fas fa-diagram-project"></i> Embudo detallado</h2><div class="csub">Toca una etapa para ver esos leads</div><div class="pipe" id="pipe2"></div></div>
     </section>
 
     <!-- TARIFARIO -->
@@ -860,7 +871,7 @@ input.ei[type=date]{color-scheme:dark}
         <span class="tcount" id="tar-count"></span>
         <button class="mfs-done" data-mfs="tar-toolbar" type="button">Listo</button>
       </div>
-      <div class="tbl-state" id="tar-loading"><div class="spin"></div><div class="es-s">Cargando tarifario...</div></div>
+      <div class="tbl-state skel-grid" id="tar-loading"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>
       <div class="tbl-state" id="tar-empty"><i class="fas fa-book-open"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay ítems con este filtro</div></div>
       <div class="tar-grid" id="tar-grid"></div>
       <details class="tar-info-box" id="tar-info-box" style="display:none">
@@ -905,16 +916,17 @@ input.ei[type=date]{color-scheme:dark}
         <div class="chat-log" id="chat-log"></div>
         <div class="chat-inputbar">
           <textarea id="chat-input" rows="1" placeholder="Preguntame por un destino, hotel o paquete"></textarea>
-          <button class="chat-send" id="chat-send"><i class="fas fa-paper-plane"></i></button>
+          <button class="chat-send" id="chat-send" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
         </div>
       </div>
     </section>
 
     <!-- GALERÍA -->
     <section class="section" id="sec-galeria">
-      <div class="tbl-state" id="gal-loading"><div class="spin"></div><div class="es-s">Cargando galería...</div></div>
+      <div class="tbl-state skel-grid" id="gal-loading"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>
       <div class="tbl-state" id="gal-empty"><i class="fas fa-images"></i><div class="es-t">Sin fotos todavía</div><div class="es-s">Los hoteles con fotos cargadas van a aparecer acá</div></div>
       <div id="gal-list"></div>
+      <div class="pager" id="gal-pager"><button id="gal-more">Cargar más hoteles</button></div>
     </section>
 
     <!-- ASESORES -->
@@ -927,8 +939,8 @@ input.ei[type=date]{color-scheme:dark}
         <button class="seg" data-p="historico">Histórico</button>
       </div>
       <div class="grid g-2b">
-        <div class="card"><h3><i class="fas fa-user-tie"></i> Carga por asesor</h3><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
-        <div class="card"><h3><i class="fas fa-scale-balanced"></i> Reparto objetivo</h3><div class="csub">Ponderación configurable del aleatorizador</div><div class="chart-wrap" style="height:280px"><canvas id="chAssign"></canvas></div></div>
+        <div class="card"><h2><i class="fas fa-user-tie"></i> Carga por asesor</h2><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
+        <div class="card"><h2><i class="fas fa-scale-balanced"></i> Reparto objetivo</h2><div class="csub">Ponderación configurable del aleatorizador</div><div class="chart-wrap" style="height:280px"><canvas id="chAssign"></canvas></div></div>
       </div>
     </section>
 
@@ -964,7 +976,7 @@ input.ei[type=date]{color-scheme:dark}
           <button class="mfs-done" data-mfs="rg-tbar" type="button">Listo</button>
       </div>
       <div class="card">
-        <div class="tbl-state" id="rg-loading"><div class="spin"></div><div class="es-s">Cargando reasignaciones...</div></div>
+        <div class="tbl-state skel" id="rg-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
         <div class="tbl-state" id="rg-empty"><i class="fas fa-shuffle"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay reasignaciones con estos filtros</div></div>
         <div id="rg-wrap" style="overflow-x:auto">
           <table>
@@ -1031,8 +1043,8 @@ input.ei[type=date]{color-scheme:dark}
       </div>
       <div class="kpis kpis-5" id="met-kpis"></div>
       <div class="grid g-2b" style="margin-top:4px">
-        <div class="card"><h3><i class="fas fa-chart-line"></i> Nuevos vs. Ventas</h3><div class="csub">Evolución en el periodo</div><div class="chart-wrap"><canvas id="chSerie"></canvas></div></div>
-        <div class="card"><h3><i class="fas fa-suitcase-rolling"></i> Leads por servicio</h3><div class="csub">Interés por producto</div><div class="chart-wrap" style="position:relative"><canvas id="chServicio"></canvas><div class="tbl-state" id="met-servicio-empty" style="display:none;position:absolute;inset:0"><i class="fas fa-inbox"></i><div class="es-s">Aún sin servicios asignados</div></div></div></div>
+        <div class="card"><h2><i class="fas fa-chart-line"></i> Nuevos vs. Ventas</h2><div class="csub">Evolución en el periodo</div><div class="chart-wrap"><canvas id="chSerie"></canvas></div></div>
+        <div class="card"><h2><i class="fas fa-suitcase-rolling"></i> Leads por servicio</h2><div class="csub">Interés por producto</div><div class="chart-wrap" style="position:relative"><canvas id="chServicio"></canvas><div class="tbl-state" id="met-servicio-empty" style="display:none;position:absolute;inset:0"><i class="fas fa-inbox"></i><div class="es-s">Aún sin servicios asignados</div></div></div></div>
       </div>
     </section>
 
@@ -1043,7 +1055,7 @@ input.ei[type=date]{color-scheme:dark}
         <button class="seg on" data-p="mes">Este mes</button>
       </div>
       <div class="card">
-        <h3><i class="fas fa-ranking-star"></i> Ranking de asesores</h3>
+        <h2><i class="fas fa-ranking-star"></i> Ranking de asesores</h2>
         <div class="csub" id="rank-tot"></div>
         <div style="overflow-x:auto">
           <table>
@@ -1111,7 +1123,7 @@ input.ei[type=date]{color-scheme:dark}
 <!-- Drawer -->
 <div class="drawer-bg" id="drawerBg"></div>
 <aside class="drawer" id="drawer">
-  <button class="dclose" id="dClose"><i class="fas fa-times"></i></button>
+  <button class="dclose" id="dClose" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times"></i></button>
   <div id="drawerContent"></div>
 </aside>
 
@@ -1119,11 +1131,11 @@ input.ei[type=date]{color-scheme:dark}
 <div class="lightbox" id="lightbox">
   <button class="lb-close" id="lbClose" title="Cerrar (Esc)"><i class="fas fa-times"></i></button>
   <div class="lb-counter" id="lbCounter"></div>
-  <button class="lb-arrow lb-prev" id="lbPrev"><i class="fas fa-chevron-left"></i></button>
+  <button class="lb-arrow lb-prev" id="lbPrev" title="Foto anterior" aria-label="Foto anterior"><i class="fas fa-chevron-left"></i></button>
   <div class="lb-stage" id="lbStage">
     <img class="lb-img" id="lbImg" alt="" draggable="false">
   </div>
-  <button class="lb-arrow lb-next" id="lbNext"><i class="fas fa-chevron-right"></i></button>
+  <button class="lb-arrow lb-next" id="lbNext" title="Foto siguiente" aria-label="Foto siguiente"><i class="fas fa-chevron-right"></i></button>
 </div>
 
 <script type="module" src="app.js"></script>
