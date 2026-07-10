@@ -75,7 +75,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, JORNADA_ACTIVA = false;
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false;
 const overlay = id => document.getElementById(id);
 const showOverlay = id => { OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
 // Se recarga cada vez que se muestra el login (no solo una vez al abrir la
@@ -111,7 +111,7 @@ async function cargarUsuario() {
 async function afterLogin() {
   const u = await cargarUsuario();
   if (!u) return;
-  MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username;
+  MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   entrarSegunRol();
 }
@@ -166,9 +166,13 @@ function renderJornadaUI() {
 /* ---------- Notificaciones de asistencia (Web Push + FCM nativo) ---------- */
 const VAPID_PUBLIC_KEY = 'BA80pP1UGb4OaMkTh3dfioglbWmYs4lbSf2jmUUDM1LKwz3INE7U8Ia7R7qP6oLZnXRr8zfVqVzrzaQ60XjR8WQ';
 const GERENCIA_USERNAMES = ['luisrueda', 'andric'];
+// Ambar Arévalo queda excluida del flujo de recordatorios/strikes (ver
+// USERNAME_EXCLUIDOS en la Edge Function asistencia-recordatorio) — no tiene
+// sentido ofrecerle un botón que nunca le va a disparar nada.
+const ASISTENCIA_USERNAMES_EXCLUIDOS = ['ambar'];
 
 function puedeActivarRecordatorios() {
-  return ROL === 'asesor' || (ROL === 'admin' && GERENCIA_USERNAMES.includes(MI_USERNAME));
+  return (ROL === 'asesor' && !ASISTENCIA_USERNAMES_EXCLUIDOS.includes(MI_USERNAME)) || (ROL === 'admin' && GERENCIA_USERNAMES.includes(MI_USERNAME));
 }
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -280,6 +284,32 @@ async function loadAsistencia() {
   document.getElementById('asist-strikes-wrap').innerHTML = activos.length
     ? activos.map(s => `<div class="strike-row"><span>${esc(s.nombre)} — ${s.fecha}</span><button class="btn-sm" onclick="anularStrikeUI(${s.id})">Anular</button></div>`).join('')
     : '<div class="es-s">Sin strikes este mes</div>';
+  const selAsesor = document.getElementById('asist-hist-asesor');
+  const prevSel = selAsesor.value;
+  selAsesor.innerHTML = '<option value="">Todos los asesores</option>' + (hoy || []).map(a => `<option value="${a.usuario_id}">${esc(a.nombre)}</option>`).join('');
+  if (prevSel && [...selAsesor.options].some(o => o.value === prevSel)) selAsesor.value = prevSel;
+  setupAsistenciaHistorial();
+  loadAsistenciaHistorial();
+}
+let asistHistSetup = false;
+function setupAsistenciaHistorial() {
+  if (asistHistSetup) return; asistHistSetup = true;
+  initDateRangePicker('asist-hist');
+  ['asist-hist-asesor', 'asist-hist-desde', 'asist-hist-hasta'].forEach(id => document.getElementById(id).addEventListener('change', loadAsistenciaHistorial));
+}
+async function loadAsistenciaHistorial() {
+  const fa = val('asist-hist-asesor') || null, fd = val('asist-hist-desde') || null, fh = val('asist-hist-hasta') || null;
+  const { data, error } = await sb.rpc('asistencia_historial', { p_asesor_id: fa, p_desde: fd, p_hasta: fh });
+  if (error) { errToast('No se pudo cargar el historial de asistencia'); return; }
+  const fmtHora = iso => iso ? new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)) : '—';
+  const fmtFecha = iso => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(new Date(iso));
+  document.getElementById('asist-hist-tbody').innerHTML = (data || []).map(s => `
+    <tr>
+      <td data-label="Asesor">${esc(s.nombre)}</td>
+      <td data-label="Fecha" class="muted">${fmtFecha(s.hora_entrada)}</td>
+      <td data-label="Entrada">${fmtHora(s.hora_entrada)}</td>
+      <td data-label="Salida" class="muted">${fmtHora(s.hora_salida)}</td>
+    </tr>`).join('') || '<tr><td colspan="4">Sin registros</td></tr>';
 }
 window.exceptuarHoy = async (asesorId) => {
   const motivo = prompt('Motivo (opcional):');
@@ -323,7 +353,8 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   const err = e1 || e2;
   if (err) { errEl.textContent = 'No se pudo guardar: ' + err.message; return; }
   const u = await cargarUsuario(); if (!u) return;
-  ROL = u.rol; entrarSegunRol();
+  MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
+  entrarSegunRol();
 });
 
 document.getElementById('forgotLink').addEventListener('click', e => { e.preventDefault(); resetForgot(); showOverlay('forgot'); });
@@ -437,6 +468,7 @@ async function startApp() {
   setupLightbox();
   setupChat();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
+  if (ROL === 'asesor') activateSection('tarifario');
   await loadStats();
   ACTIVOS = Object.keys(STATS.by_advisor || {});
   renderAll();
@@ -627,7 +659,7 @@ function setupFilters() {
   ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
   let deb; document.getElementById('global-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => { page = 1; loadTable(); renderChips(); }, 300); });
   initDateRangePicker('f');
-  leadsView = initViewSwitcher('leads-view-switch', 'leads', 'lista', v => { leadsView = v; applyLeadsView(); });
+  leadsView = initViewSwitcher('leads-view-switch', 'leads', window.innerWidth <= 760 ? 'tarjetas' : 'lista', v => { leadsView = v; applyLeadsView(); });
 }
 
 /* ---------- Selector de rango de fechas (Leads + Reasignaciones) ---------- */
@@ -756,6 +788,7 @@ function leadCardHtml(l) {
     <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}</div></div>
     <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
     <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
+    <div class="ec-row"><i class="fas fa-clock"></i> ${l.fecha_creacion ? esc(l.fecha_creacion.slice(0, 16).replace('T', ' ')) : '—'}</div>
     <div class="ec-row"><i class="fas fa-user-tie"></i> ${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</div>
     ${detalle}
     <div class="ec-foot">
@@ -1614,7 +1647,7 @@ function setupLightbox() {
 }
 
 /* ---------- Cotizador IA ---------- */
-let chatHistory = [];
+let chatHistory = [], chatActualId = null;
 function setupChat() {
   const input = document.getElementById('chat-input');
   document.getElementById('chat-send').onclick = enviarChat;
@@ -1625,7 +1658,50 @@ function setupChat() {
   document.getElementById('cot-f-clear').onclick = () => {
     ['cot-f-destino', 'cot-f-tipo', 'cot-f-plan', 'cot-f-opcion', 'cot-f-precio', 'cot-f-desde', 'cot-f-hasta'].forEach(id => { document.getElementById(id).value = ''; });
   };
+  document.getElementById('chat-history-btn').onclick = openChatsDrawer;
+  document.getElementById('chat-new-btn').onclick = nuevoChat;
   if (!chatHistory.length) addChatBubble('bot', '¡Hola! Soy tu Cotizador IA de Lotus 360, estoy aquí para ayudarte en tus cotizaciones.');
+}
+function nuevoChat() {
+  chatHistory = []; chatActualId = null;
+  document.getElementById('chat-log').innerHTML = '';
+  addChatBubble('bot', '¡Hola! Soy tu Cotizador IA de Lotus 360, estoy aquí para ayudarte en tus cotizaciones.');
+}
+/* ---------- Chats guardados del Cotizador IA (mis conversaciones) ---------- */
+async function guardarChatIA() {
+  if (chatActualId) {
+    const { error } = await sb.from('chats_ia').update({ mensajes: chatHistory, updated_at: new Date().toISOString() }).eq('id', chatActualId);
+    if (error) console.error('guardarChatIA update', error);
+    return;
+  }
+  const primerMensaje = chatHistory.find(m => m.role === 'user')?.content || 'Conversación';
+  const titulo = primerMensaje.length > 40 ? primerMensaje.slice(0, 40) + '…' : primerMensaje;
+  const { data, error } = await sb.from('chats_ia').insert({ usuario_id: MI_USUARIO_ID, titulo, mensajes: chatHistory }).select('id').single();
+  if (!error && data) chatActualId = data.id;
+}
+async function openChatsDrawer() {
+  const box = document.getElementById('drawerContent');
+  box.innerHTML = `<div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent)"><i class="fas fa-clock-rotate-left"></i></div><div><div class="dn">Mis conversaciones</div><div class="dm">Cotizador IA</div></div></div><div id="chats-mine-list" class="es-s" style="padding:14px 0">Cargando...</div>`;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerBg').classList.add('open');
+  const { data, error } = await sb.from('chats_ia').select('id,titulo,updated_at').eq('usuario_id', MI_USUARIO_ID).order('updated_at', { ascending: false });
+  const list = document.getElementById('chats-mine-list');
+  if (error) { list.textContent = 'No se pudieron cargar tus conversaciones'; return; }
+  if (!data.length) { list.textContent = 'Todavía no guardaste ninguna conversación'; return; }
+  list.className = '';
+  list.innerHTML = data.map(c => `<div class="strike-row" data-id="${c.id}" style="cursor:pointer"><span>${esc(c.titulo || 'Conversación')}<br><span class="muted" style="font-size:11px">${c.updated_at.slice(0, 16).replace('T', ' ')}</span></span><i class="fas fa-chevron-right"></i></div>`).join('');
+  list.querySelectorAll('[data-id]').forEach(el => el.addEventListener('click', () => abrirChatGuardado(Number(el.dataset.id))));
+}
+async function abrirChatGuardado(id) {
+  const { data, error } = await sb.from('chats_ia').select('id,mensajes').eq('id', id).single();
+  if (error || !data) { errToast('No se pudo abrir esa conversación'); return; }
+  chatActualId = data.id;
+  chatHistory = data.mensajes || [];
+  const log = document.getElementById('chat-log');
+  log.innerHTML = '';
+  chatHistory.forEach(m => addChatBubble(m.role === 'user' ? 'user' : 'bot', m.content));
+  window.closeDrawer();
+  activateSection('cotizador');
 }
 // Lista de cada hotel/paquete/promo/guía-tour individual, agrupada por
 // categoría, para el filtro "opción de Tarifario" del Cotizador. Solo
@@ -1664,19 +1740,25 @@ function leerFiltrosCotizador() {
 }
 async function enviarChat() {
   const input = document.getElementById('chat-input'), btn = document.getElementById('chat-send');
+  const histBtn = document.getElementById('chat-history-btn'), newBtn = document.getElementById('chat-new-btn');
   const texto = input.value.trim();
   if (!texto || btn.disabled) return;
   addChatBubble('user', texto);
   chatHistory.push({ role: 'user', content: texto });
   input.value = ''; input.style.height = 'auto';
-  btn.disabled = true;
+  // Bloquea "Mis chats"/"Nuevo chat" mientras se espera la respuesta: si el
+  // usuario cambia de conversación a mitad de una espera, chatHistory se
+  // reasigna por debajo y la respuesta que llega después se cuelga en el
+  // chat equivocado (o corrompe uno guardado que ni siquiera es este).
+  btn.disabled = true; histBtn.disabled = true; newBtn.disabled = true;
   const loadingEl = addChatBubble('bot', 'Pensando...', true);
   const { data, error } = await sb.functions.invoke('cotizador-chat', { body: { messages: chatHistory, filtros: leerFiltrosCotizador() } });
   loadingEl.remove();
-  btn.disabled = false;
+  btn.disabled = false; histBtn.disabled = false; newBtn.disabled = false;
   if (error || !data?.respuesta) { addChatBubble('bot', 'No pude conectar con el cotizador, intenta de nuevo en un momento.'); return; }
   addChatBubble('bot', data.respuesta);
   chatHistory.push({ role: 'assistant', content: data.respuesta });
+  await guardarChatIA();
 }
 // Red de seguridad visual: aunque el prompt le pide a Gemini no usar markdown
 // pesado, a veces igual manda **negritas** o encabezados con #. En vez de

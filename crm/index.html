@@ -437,7 +437,11 @@ input.ei[type=date]{color-scheme:dark}
 
 /* ---------- Cotizador IA ---------- */
 .chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);height:calc(100dvh - 180px);min-height:420px}
-.chat-log{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:6px 2px 16px}
+.chat-toolbar{display:flex;gap:8px;flex-shrink:0;margin-bottom:10px}
+.chat-tool-btn{display:flex;align-items:center;gap:6px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:7px 12px;color:var(--muted);font-size:12px;font-family:inherit;cursor:pointer;transition:.15s}
+.chat-tool-btn:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
+.chat-tool-btn:disabled{opacity:.5;cursor:default;pointer-events:none}
+.chat-log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:6px 2px 16px}
 .chat-msg{max-width:70%;padding:9px 13px;border-radius:16px;font-size:13px;line-height:1.45;white-space:pre-wrap}
 .chat-msg.user{align-self:flex-end;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border-bottom-right-radius:5px}
 .chat-msg.bot{max-width:none;min-width:0;background:var(--panel-solid);border:1px solid var(--line2);border-bottom-left-radius:5px}
@@ -451,7 +455,7 @@ input.ei[type=date]{color-scheme:dark}
 .chat-inputbar textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .chat-send{background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:14px;width:48px;flex-shrink:0;cursor:pointer;font-size:16px}
 .chat-send:disabled{opacity:.5;cursor:default}
-@media(max-width:760px){.chat-wrap{height:calc(100vh - 220px);height:calc(100dvh - 220px)}.chat-msg{max-width:88%}.chat-row{max-width:92%}}
+@media(max-width:760px){.chat-wrap{height:calc(100vh - 250px);height:calc(100dvh - 250px)}.chat-msg{max-width:88%}.chat-row{max-width:92%}}
 
 /* ---------- Galería ---------- */
 .gal-hotel{margin-bottom:30px}
@@ -494,6 +498,7 @@ input.ei[type=date]{color-scheme:dark}
 .rol-asesor #f-asesor{display:none}
 .rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok),.rol-marketing .sheet-item:not(.nav-marketing-ok){display:none}
 .rol-asesor .admin-only,.rol-marketing .admin-only{display:none}
+.rol-asesor .nav-asesor-hide{display:none}
 
 /* Tarifario: fila de pestañas + botón de configuración (admin) */
 .tar-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
@@ -690,7 +695,7 @@ input.ei[type=date]{color-scheme:dark}
   <aside class="sidebar">
     <div class="brand"><img src="logolotus.png" alt="Lotus 360"><div><div class="bt">Lotus 360</div><div class="bs">CRM</div></div></div>
     <div class="nav-label">Principal</div>
-    <a class="nav-item active" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
+    <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
     <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
     <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
     <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
@@ -892,6 +897,10 @@ input.ei[type=date]{color-scheme:dark}
         <button class="mfs-done" data-mfs="cot-filtros" type="button">Listo</button>
       </div>
       <div class="card chat-wrap">
+        <div class="chat-toolbar">
+          <button class="chat-tool-btn" id="chat-history-btn" type="button"><i class="fas fa-clock-rotate-left"></i> Mis chats</button>
+          <button class="chat-tool-btn" id="chat-new-btn" type="button"><i class="fas fa-plus"></i> Nuevo</button>
+        </div>
         <div class="chat-log" id="chat-log"></div>
         <div class="chat-inputbar">
           <textarea id="chat-input" rows="1" placeholder="Preguntame por un destino, hotel o paquete"></textarea>
@@ -981,6 +990,34 @@ input.ei[type=date]{color-scheme:dark}
         <div class="sheet-title" style="padding:0 0 10px">Strikes del mes</div>
         <div id="asist-strikes-wrap"></div>
       </div>
+      <div class="card" style="margin-top:16px">
+        <div class="sheet-title" style="padding:0 0 10px">Historial de asistencia</div>
+        <div class="tbar" style="margin-bottom:12px">
+          <select class="flt" id="asist-hist-asesor"><option value="">Todos los asesores</option></select>
+          <div class="drp" id="drp-asist-hist">
+            <button type="button" class="flt drp-btn" id="drp-asist-hist-btn"><i class="fas fa-calendar-days"></i> <span id="drp-asist-hist-label">Rango de fechas</span></button>
+            <div class="drp-panel" id="drp-asist-hist-panel">
+              <div class="drp-presets">
+                <button type="button" data-preset="hoy">Hoy</button>
+                <button type="button" data-preset="7d">7 días</button>
+                <button type="button" data-preset="mes">Este mes</button>
+                <button type="button" data-preset="anio">Este año</button>
+                <button type="button" data-preset="todo">Todo</button>
+              </div>
+              <div class="drp-inputs">
+                <label>Desde <input type="date" id="asist-hist-desde"></label>
+                <label>Hasta <input type="date" id="asist-hist-hasta"></label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="asist-hist-wrap" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Asesor</th><th>Fecha</th><th>Entrada</th><th>Salida</th></tr></thead>
+            <tbody id="asist-hist-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- MÉTRICAS -->
@@ -1022,7 +1059,7 @@ input.ei[type=date]{color-scheme:dark}
 
 <!-- Bottom nav (móvil) — máximo 5 ítems para que sea cómodo con el pulgar; el resto vive en la hoja "Más" -->
 <nav class="bottom-nav">
-  <a class="bn-item active" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Inicio</a>
+  <a class="bn-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Inicio</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i> Leads</a>
   <a class="bn-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
   <a class="bn-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador</a>
