@@ -21,7 +21,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de los hoteles del tarifario'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de los hoteles del tarifario'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // Las descripciones/requisitos/precios del tarifario vienen del PDF original
@@ -479,6 +479,7 @@ async function startApp() {
   setupLightbox();
   setupChat();
   setupExtractor();
+  setupMensajes();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
   if (ROL === 'asesor') activateSection('tarifario');
   await loadStats();
@@ -2037,6 +2038,282 @@ async function aplicarDatosExtraidos() {
   openDrawer(leadActualizado);
 }
 
+/* ---------- Mensajes (chat interno del staff) ---------- */
+const ADJUNTO_LIMITE = 20 * 1024 * 1024;
+const ICONO_EXT = { pdf: 'fa-file-pdf', doc: 'fa-file-word', docx: 'fa-file-word', xls: 'fa-file-excel', xlsx: 'fa-file-excel', ppt: 'fa-file-powerpoint', pptx: 'fa-file-powerpoint', zip: 'fa-file-zipper', rar: 'fa-file-zipper' };
+const fmtHoraChat = iso => new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+let msgConversaciones = [];
+let msgActual = null;
+let msgMensajes = [];
+let msgLecturasPorMensaje = {};
+let msgParticipantesActual = [];
+let msgUrlsAdjuntos = {};
+let msgUsuariosStaff = null;
+let msgChannelConv = null;
+
+function setupMensajes() {
+  document.getElementById('msg-nuevo-btn').addEventListener('click', abrirPickerNuevoChat);
+  document.getElementById('msg-conv-back').addEventListener('click', () => cerrarConversacion());
+  document.getElementById('msg-attach-btn').addEventListener('click', () => openSheet('msg-attach-sheet'));
+  document.getElementById('msg-attach-foto').addEventListener('click', () => { closeSheet('msg-attach-sheet'); document.getElementById('msg-file-foto').click(); });
+  document.getElementById('msg-attach-doc').addEventListener('click', () => { closeSheet('msg-attach-sheet'); document.getElementById('msg-file-doc').click(); });
+  document.getElementById('msg-file-foto').addEventListener('change', e => { if (e.target.files[0]) subirAdjunto(e.target.files[0]); e.target.value = ''; });
+  document.getElementById('msg-file-doc').addEventListener('change', e => { if (e.target.files[0]) subirAdjunto(e.target.files[0]); e.target.value = ''; });
+  const input = document.getElementById('msg-input');
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(120, input.scrollHeight) + 'px'; });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensajeTexto(); } });
+  document.getElementById('msg-send-btn').addEventListener('click', enviarMensajeTexto);
+  sb.channel('mensajes-badge').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes' }, () => cargarBandeja(true)).subscribe();
+}
+
+async function cargarUsuariosStaff() {
+  if (msgUsuariosStaff) return msgUsuariosStaff;
+  const { data, error } = await sb.rpc('usuarios_chat');
+  msgUsuariosStaff = error ? [] : (data || []);
+  return msgUsuariosStaff;
+}
+function nombreUsuario(id) { return (msgUsuariosStaff || []).find(u => u.id === id)?.nombre || 'Alguien'; }
+
+async function cargarBandeja(soloBadge) {
+  const { data, error } = await sb.rpc('mis_conversaciones');
+  if (error) { if (!soloBadge) errToast('No se pudieron cargar los mensajes'); return; }
+  msgConversaciones = data || [];
+  const noLeidos = msgConversaciones.reduce((a, c) => a + (c.no_leidos || 0), 0);
+  const badge = document.getElementById('nav-msg-count');
+  badge.textContent = noLeidos > 99 ? '99+' : String(noLeidos);
+  badge.style.display = noLeidos ? '' : 'none';
+  if (!soloBadge) renderBandeja();
+}
+function fmtHoraMsg(iso) {
+  const d = new Date(iso), hoy = new Date();
+  if (d.toDateString() === hoy.toDateString()) return fmtHoraChat(iso);
+  return new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit' }).format(d);
+}
+const MSG_PREVIEW_ICONO = { imagen: '📷 Foto', video: '🎥 Video', documento: '📄 Documento' };
+function renderBandeja() {
+  const cont = document.getElementById('msg-inbox');
+  if (!msgConversaciones.length) { cont.innerHTML = '<div class="msg-empty"><i class="fas fa-comments"></i><br>Sin conversaciones todavía</div>'; return; }
+  cont.innerHTML = msgConversaciones.map(c => {
+    const esGrupo = c.tipo === 'grupo', um = c.ultimo_mensaje;
+    const cuerpo = !um ? 'Sin mensajes todavía' : (um.tipo === 'texto' ? esc(um.contenido || '') : (MSG_PREVIEW_ICONO[um.tipo] || ''));
+    const preview = um?.es_mio ? 'Vos: ' + cuerpo : cuerpo;
+    return `
+    <div class="msg-inbox-row ${esGrupo ? 'grupo' : ''}" data-conv="${c.conversacion_id}">
+      <div class="msg-avatar ${esGrupo ? 'grupo' : ''}">${esGrupo ? '<i class="fas fa-users"></i>' : esc(initials(c.nombre))}</div>
+      <div class="msg-inbox-body">
+        <div class="msg-inbox-top">
+          <div class="msg-inbox-nombre">${esc(c.nombre || 'Sin nombre')}</div>
+          ${um ? `<div class="msg-inbox-hora">${fmtHoraMsg(um.created_at)}</div>` : ''}
+        </div>
+        <div class="msg-inbox-preview"><span>${preview}</span></div>
+      </div>
+      ${c.no_leidos ? `<div class="msg-inbox-badge">${c.no_leidos}</div>` : ''}
+    </div>`;
+  }).join('');
+  cont.querySelectorAll('.msg-inbox-row').forEach(row => row.addEventListener('click', () => {
+    const c = msgConversaciones.find(x => x.conversacion_id === Number(row.dataset.conv));
+    if (c) abrirConversacion(c);
+  }));
+}
+
+async function abrirPickerNuevoChat() {
+  const lista = await cargarUsuariosStaff();
+  const candidatos = lista.filter(u => u.id !== MI_USUARIO_ID);
+  document.getElementById('msg-picker-list').innerHTML = candidatos.map(u => `
+    <div class="msg-picker-row" data-uid="${u.id}">
+      <div class="msg-avatar">${esc(initials(u.nombre))}</div>
+      <div><div class="msg-picker-nombre">${esc(u.nombre)}</div><div class="msg-picker-rol">${esc(u.rol)}</div></div>
+    </div>`).join('') || '<div class="msg-empty">No hay contactos disponibles</div>';
+  document.querySelectorAll('#msg-picker-list .msg-picker-row').forEach(row => row.addEventListener('click', async () => {
+    closeSheet('msg-nuevo-sheet');
+    const { data: convId, error } = await sb.rpc('obtener_o_crear_conversacion_directa', { p_otro_usuario_id: row.dataset.uid });
+    if (error) { errToast('No se pudo iniciar el chat'); return; }
+    const u = candidatos.find(x => x.id === row.dataset.uid);
+    await cargarBandeja();
+    abrirConversacion({ conversacion_id: convId, tipo: 'directo', nombre: u.nombre, otro_usuario_id: u.id });
+  }));
+  openSheet('msg-nuevo-sheet');
+}
+
+// miGen/msgAbrirGen: si el usuario abre una conversación y vuelve atrás antes
+// de que resuelvan sus awaits, cerrarConversacion incrementa msgAbrirGen y esta
+// llamada en vuelo se aborta en vez de pisar el estado de lo que se ve ahora
+// (o marcar como leídos mensajes que el usuario nunca llegó a ver).
+let msgAbrirGen = 0;
+async function abrirConversacion(c) {
+  const miGen = ++msgAbrirGen;
+  msgActual = c;
+  document.getElementById('msg-conv-titulo').textContent = c.nombre || 'Sin nombre';
+  document.getElementById('msg-conv-sub').textContent = c.tipo === 'grupo' ? 'Grupo · todo el staff' : 'Chat individual';
+  const soloLectura = c.tipo === 'grupo' && ROL !== 'admin';
+  document.getElementById('msg-inputbar').style.display = soloLectura ? 'none' : 'flex';
+  document.getElementById('msg-readonly-note').style.display = soloLectura ? 'flex' : 'none';
+  document.getElementById('msg-conv').classList.add('open');
+  navPush({ type: 'msg-conv' });
+
+  await cargarUsuariosStaff();
+  const [{ data: participantes }, { data: mensajes }] = await Promise.all([
+    sb.from('conversacion_participantes').select('usuario_id').eq('conversacion_id', c.conversacion_id),
+    sb.from('mensajes').select('*').eq('conversacion_id', c.conversacion_id).order('created_at'),
+  ]);
+  const ids = (mensajes || []).map(m => m.id);
+  const lecturasRes = ids.length ? await sb.from('mensaje_lecturas').select('mensaje_id,usuario_id').in('mensaje_id', ids) : { data: [] };
+  await cargarUrlsAdjuntos((mensajes || []).filter(m => m.storage_path));
+  if (miGen !== msgAbrirGen) return; // se cerró/cambió de conversación mientras esto cargaba
+
+  msgParticipantesActual = (participantes || []).map(p => p.usuario_id);
+  msgMensajes = mensajes || [];
+  msgLecturasPorMensaje = {};
+  (lecturasRes.data || []).forEach(l => { (msgLecturasPorMensaje[l.mensaje_id] ??= []).push(l.usuario_id); });
+  renderConversacion();
+  marcarMensajesAjenosComoLeidos();
+  suscribirConversacion(c.conversacion_id);
+}
+function cerrarConversacion(fromNav) {
+  msgAbrirGen++; // invalida cualquier abrirConversacion() todavía en vuelo
+  document.getElementById('msg-conv').classList.remove('open');
+  if (msgChannelConv) { sb.removeChannel(msgChannelConv); msgChannelConv = null; }
+  msgActual = null;
+  if (!fromNav) navConsume();
+  cargarBandeja();
+}
+function suscribirConversacion(conversacionId) {
+  if (msgChannelConv) sb.removeChannel(msgChannelConv);
+  msgChannelConv = sb.channel('mensajes-conv-' + conversacionId)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes', filter: `conversacion_id=eq.${conversacionId}` }, async payload => {
+      if (msgMensajes.some(m => m.id === payload.new.id)) return;
+      msgMensajes.push(payload.new);
+      if (payload.new.storage_path) await cargarUrlsAdjuntos([payload.new]);
+      renderConversacion();
+      if (payload.new.remitente_id !== MI_USUARIO_ID) marcarMensajesAjenosComoLeidos();
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensaje_lecturas' }, payload => {
+      const l = payload.new;
+      if (!msgMensajes.some(m => m.id === l.mensaje_id)) return;
+      marcarLocalComoLeido(l.mensaje_id, l.usuario_id);
+      renderConversacion();
+    })
+    .subscribe();
+}
+function marcarLocalComoLeido(mensajeId, usuarioId) {
+  (msgLecturasPorMensaje[mensajeId] ??= []);
+  if (!msgLecturasPorMensaje[mensajeId].includes(usuarioId)) msgLecturasPorMensaje[mensajeId].push(usuarioId);
+}
+async function marcarMensajesAjenosComoLeidos() {
+  const pendientes = msgMensajes.filter(m => m.remitente_id !== MI_USUARIO_ID && !(msgLecturasPorMensaje[m.id] || []).includes(MI_USUARIO_ID));
+  if (!pendientes.length) return;
+  await Promise.all(pendientes.map(async m => {
+    const { error } = await sb.rpc('marcar_leido', { p_mensaje_id: m.id });
+    if (!error) marcarLocalComoLeido(m.id, MI_USUARIO_ID);
+  }));
+  renderConversacion();
+  cargarBandeja(true);
+}
+
+async function cargarUrlsAdjuntos(mensajesConArchivo) {
+  const paths = mensajesConArchivo.map(m => m.storage_path).filter(p => p && !msgUrlsAdjuntos[p]);
+  if (!paths.length) return;
+  const { data, error } = await sb.storage.from('chat-interno-adjuntos').createSignedUrls(paths, 3600);
+  if (error) { errToast('No se pudieron cargar algunos adjuntos'); return; }
+  (data || []).forEach(d => { if (d.signedUrl) msgUrlsAdjuntos[d.path] = d.signedUrl; });
+}
+function formatBytes(n) {
+  if (!n) return '';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
+  return (n / (1024 * 1024)).toFixed(1) + ' MB';
+}
+function iconoPorExtension(nombre) {
+  const ext = (nombre || '').split('.').pop().toLowerCase();
+  return ICONO_EXT[ext] || 'fa-file';
+}
+function etiquetaDia(fecha) {
+  const hoy = new Date(), ayer = new Date(); ayer.setDate(hoy.getDate() - 1);
+  if (fecha.toDateString() === hoy.toDateString()) return 'Hoy';
+  if (fecha.toDateString() === ayer.toDateString()) return 'Ayer';
+  return new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: 'long', year: 'numeric' }).format(fecha);
+}
+function reproducirVideo(el) {
+  const video = el.querySelector('video');
+  el.querySelector('.msg-video-play')?.remove();
+  video.setAttribute('controls', '');
+  video.play();
+}
+
+function renderBurbuja(m, esMio, agrupado, esUltimoDelGrupo, todosLeyeron, nombreRemitente) {
+  const clases = `chat-msg ${esMio ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${esUltimoDelGrupo ? ' tail' : ''}${m.tipo !== 'texto' ? ' adjunto' : ''} msg-new`;
+  const hora = fmtHoraChat(m.created_at);
+  // Un solo timestamp al final del grupo de burbujas consecutivas del mismo remitente, no uno por mensaje.
+  const meta = esUltimoDelGrupo ? `<div class="msg-meta"><span>${hora}</span>${esMio ? `<span class="msg-tick${todosLeyeron ? ' leido' : ''}">${todosLeyeron ? '✓✓' : '✓'}</span>` : ''}</div>` : '';
+  const sender = nombreRemitente ? `<div class="msg-sender">${esc(nombreRemitente)}</div>` : '';
+  const url = msgUrlsAdjuntos[m.storage_path] || '';
+  let cuerpo;
+  if (m.tipo !== 'texto' && !url) cuerpo = `${sender}<div class="msg-doc"><i class="fas fa-triangle-exclamation"></i><div><div class="msg-doc-nombre">${esc(m.nombre_archivo || 'Adjunto')}</div><div class="msg-doc-peso">No se pudo cargar</div></div></div>${meta}`;
+  else if (m.tipo === 'imagen') cuerpo = `${sender}<img class="msg-img" src="${esc(url)}" data-img="${esc(url)}">${m.contenido ? `<div style="padding:4px 4px 0">${esc(m.contenido)}</div>` : ''}${meta}`;
+  else if (m.tipo === 'video') cuerpo = `${sender}<div class="msg-video-wrap" data-video><video src="${esc(url)}" preload="metadata"></video><div class="msg-video-play"><i class="fas fa-play"></i></div></div>${meta}`;
+  else if (m.tipo === 'documento') cuerpo = `${sender}<div class="msg-doc" data-doc="${esc(url)}"><i class="fas ${iconoPorExtension(m.nombre_archivo)}"></i><div><div class="msg-doc-nombre">${esc(m.nombre_archivo || 'Archivo')}</div><div class="msg-doc-peso">${formatBytes(m.peso_bytes)}</div></div></div>${meta}`;
+  else cuerpo = `${sender}<div>${esc(m.contenido || '')}</div>${meta}`;
+  return `<div class="${clases}">${cuerpo}</div>`;
+}
+function renderConversacion() {
+  const log = document.getElementById('msg-conv-log');
+  const scrollAbajo = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+  const esGrupo = msgActual?.tipo === 'grupo';
+  const otrosParticipantes = msgParticipantesActual.filter(id => id !== MI_USUARIO_ID);
+  let html = '', diaAnterior = null, remitenteAnterior = null;
+  msgMensajes.forEach((m, i) => {
+    const fecha = new Date(m.created_at), diaKey = fecha.toDateString();
+    if (diaKey !== diaAnterior) { html += `<div class="msg-date-chip">${etiquetaDia(fecha)}</div>`; diaAnterior = diaKey; remitenteAnterior = null; }
+    const esMio = m.remitente_id === MI_USUARIO_ID;
+    const agrupado = remitenteAnterior === m.remitente_id;
+    const sig = msgMensajes[i + 1];
+    const esUltimoDelGrupo = !sig || sig.remitente_id !== m.remitente_id || new Date(sig.created_at).toDateString() !== diaKey;
+    const lecturas = msgLecturasPorMensaje[m.id] || [];
+    const todosLeyeron = otrosParticipantes.length > 0 && otrosParticipantes.every(id => lecturas.includes(id));
+    const nombreRemitente = esGrupo && !esMio && !agrupado ? nombreUsuario(m.remitente_id) : null;
+    html += renderBurbuja(m, esMio, agrupado, esUltimoDelGrupo, todosLeyeron, nombreRemitente);
+    remitenteAnterior = m.remitente_id;
+  });
+  log.innerHTML = html || '<div class="chat-empty"><i class="fas fa-comment-dots"></i>Todavía no hay mensajes en esta conversación</div>';
+  log.querySelectorAll('[data-img]').forEach(el => el.addEventListener('click', () => openLightbox([el.dataset.img], 0)));
+  log.querySelectorAll('[data-video]').forEach(el => el.addEventListener('click', () => reproducirVideo(el)));
+  log.querySelectorAll('[data-doc]').forEach(el => el.addEventListener('click', () => window.open(el.dataset.doc, '_blank')));
+  if (scrollAbajo) log.scrollTop = log.scrollHeight;
+}
+
+async function enviarMensajeTexto() {
+  const input = document.getElementById('msg-input');
+  const texto = input.value.trim();
+  if (!texto || !msgActual) return;
+  input.value = ''; input.style.height = 'auto';
+  const { data, error } = await sb.rpc('enviar_mensaje', { p_conversacion_id: msgActual.conversacion_id, p_tipo: 'texto', p_contenido: texto });
+  if (error || !data?.ok) { errToast('No se pudo enviar el mensaje'); return; }
+  // El eco de este INSERT también llega por el canal realtime de la conversación (suscribirConversacion);
+  // ese handler ya chequea por id antes de empujar, así que este push optimista no duplica la burbuja.
+  if (!msgMensajes.some(m => m.id === data.id)) {
+    msgMensajes.push({ id: data.id, conversacion_id: msgActual.conversacion_id, remitente_id: MI_USUARIO_ID, tipo: 'texto', contenido: texto, created_at: new Date().toISOString() });
+    renderConversacion();
+  }
+}
+async function subirAdjunto(file) {
+  if (!msgActual) return;
+  if (file.size > ADJUNTO_LIMITE) { errToast('El archivo supera los 20MB — achicalo antes de subirlo'); return; }
+  const tipo = file.type.startsWith('image/') ? 'imagen' : file.type.startsWith('video/') ? 'video' : 'documento';
+  const path = `${msgActual.conversacion_id}/${crypto.randomUUID()}-${file.name}`;
+  const { error: upErr } = await sb.storage.from('chat-interno-adjuntos').upload(path, file);
+  if (upErr) { errToast('No se pudo subir el archivo'); return; }
+  const { data, error } = await sb.rpc('enviar_mensaje', { p_conversacion_id: msgActual.conversacion_id, p_tipo: tipo, p_storage_path: path, p_nombre_archivo: file.name, p_peso_bytes: file.size });
+  if (error || !data?.ok) {
+    await sb.storage.from('chat-interno-adjuntos').remove([path]); // evita huérfanos en el bucket si el RPC falla
+    errToast('No se pudo enviar el adjunto');
+    return;
+  }
+  if (!msgMensajes.some(m => m.id === data.id)) {
+    msgMensajes.push({ id: data.id, conversacion_id: msgActual.conversacion_id, remitente_id: MI_USUARIO_ID, tipo, storage_path: path, nombre_archivo: file.name, peso_bytes: file.size, created_at: new Date().toISOString() });
+    await cargarUrlsAdjuntos([{ storage_path: path }]);
+    renderConversacion();
+  }
+}
+
 /* ---------- Realtime ---------- */
 function subscribeRealtime() {
   sb.channel('leads-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, payload => {
@@ -2068,11 +2345,12 @@ window.addEventListener('popstate', () => {
   if (top.type === 'drawer') window.closeDrawer(true);
   else if (top.type === 'lightbox') closeLightbox(true);
   else if (top.type === 'sheet') closeSheet(top.id, true);
+  else if (top.type === 'msg-conv') cerrarConversacion(true);
   else if (top.type === 'section') activateSection(top.prevSec, true);
 });
 
 /* ---------- Nav ---------- */
-const BN_CORE_SECS = ['dashboard', 'leads', 'extractor', 'tarifario', 'cotizador'];
+const BN_CORE_SECS = ['dashboard', 'leads', 'mensajes', 'extractor', 'tarifario', 'cotizador'];
 let currentSec = null;
 function activateSection(sec, fromNav) {
   if (currentSec === sec) return;
@@ -2097,6 +2375,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'reasignaciones') loadReasignaciones();
   if (sec === 'asistencia') loadAsistencia();
   if (sec === 'tarifario') loadTarifario();
+  if (sec === 'mensajes') cargarBandeja();
   if (sec === 'galeria') loadGaleria();
   if (sec === 'asesores') loadAsesoresPeriodo();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);

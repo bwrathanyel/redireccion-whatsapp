@@ -498,6 +498,76 @@ input.ei[type=date]{color-scheme:dark}
 .dbtn.extractor{background:var(--panel-solid);border:1px solid var(--line2);color:var(--txt)}
 .dbtn.extractor:hover{border-color:var(--accent);color:var(--accent)}
 
+/* ---------- Mensajes (chat interno del staff) ---------- */
+.msg-layout{position:relative;overflow:hidden}
+.msg-inbox{display:flex;flex-direction:column;gap:2px}
+.msg-inbox-row{display:flex;align-items:center;gap:12px;padding:12px 8px;border-radius:12px;cursor:pointer;transition:background .15s}
+.msg-inbox-row:hover{background:rgba(255,255,255,.04)}
+.msg-inbox-row.grupo{background:var(--accent-soft);border:1px solid rgba(255,145,0,.2);margin-bottom:8px}
+.msg-avatar{flex-shrink:0;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#e0570a);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:700}
+.msg-avatar.grupo{background:linear-gradient(135deg,var(--blue),#2f6fd6)}
+.msg-inbox-body{flex:1;min-width:0}
+.msg-inbox-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.msg-inbox-nombre{font-size:14px;font-weight:700;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-inbox-hora{font-size:10.5px;color:var(--muted2);flex-shrink:0}
+.msg-inbox-preview{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+.msg-inbox-badge{background:var(--accent);color:#221200;font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:20px;flex-shrink:0}
+.msg-empty{margin:auto;text-align:center;color:var(--muted);font-size:13px;padding:40px 20px}
+
+/* Vista de conversación abierta — cubre la bandeja (mobile-first) */
+.msg-conv{position:absolute;inset:0;background:var(--bg);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s cubic-bezier(.3,1,.4,1);z-index:5;padding:18px 20px}
+.msg-conv.open{transform:translateX(0)}
+.msg-conv-head{display:flex;align-items:center;gap:12px;padding:0 0 14px;border-bottom:1px solid var(--line);flex-shrink:0}
+.msg-conv-back{width:36px;height:36px;border-radius:10px;background:var(--panel-solid);border:1px solid var(--line2);color:var(--txt);cursor:pointer;flex-shrink:0}
+.msg-conv-titulo{font-size:14.5px;font-weight:700}
+.msg-conv-sub{font-size:11px;color:var(--muted)}
+.msg-conv-log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:14px 2px}
+.msg-readonly-note{display:flex;align-items:center;gap:8px;justify-content:center;padding:12px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);flex-shrink:0}
+
+/* Separador de fecha sticky */
+.msg-date-chip{position:sticky;top:4px;align-self:center;background:rgba(20,26,48,.85);backdrop-filter:blur(6px);border:1px solid var(--line2);color:var(--muted);font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;margin:10px 0;z-index:2}
+
+/* Burbujas: propia/ajena, agrupación consecutiva, cola, remitente en grupo */
+.chat-msg.mine{align-self:flex-end;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border-bottom-right-radius:5px;max-width:74%}
+.chat-msg.other{align-self:flex-start;background:var(--panel-solid);border:1px solid var(--line2);border-bottom-left-radius:5px;max-width:74%}
+.chat-msg.grouped{margin-top:-2px}
+.chat-msg.mine.grouped{border-bottom-right-radius:16px}
+.chat-msg.other.grouped{border-bottom-left-radius:16px}
+.chat-msg.mine.tail{border-bottom-right-radius:5px}
+.chat-msg.other.tail{border-bottom-left-radius:5px}
+.msg-sender{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:2px}
+.msg-meta{display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:4px;font-size:10px;color:rgba(255,255,255,.75)}
+.chat-msg.other .msg-meta{color:var(--muted2)}
+.msg-tick.leido{color:#fff}
+.msg-new{animation:fadeSlide .25s ease}
+
+/* Adjuntos dentro de la burbuja */
+.chat-msg.adjunto{padding:5px}
+.msg-img{max-width:220px;border-radius:12px;display:block;cursor:pointer}
+.msg-video-wrap{position:relative;max-width:220px;border-radius:12px;overflow:hidden;cursor:pointer}
+.msg-video-wrap video{display:block;width:100%;border-radius:12px}
+.msg-video-play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.28)}
+.msg-video-play i{width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px}
+.msg-doc{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;min-width:180px}
+.msg-doc i{width:34px;height:34px;border-radius:9px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--accent);flex-shrink:0}
+.msg-doc-nombre{font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.msg-doc-peso{font-size:10.5px;color:var(--muted)}
+
+/* Barra de escritura + adjuntar */
+.msg-inputbar{display:flex;gap:8px;align-items:flex-end;padding-top:12px;border-top:1px solid var(--line);flex-shrink:0}
+.msg-attach-btn{width:44px;height:44px;border-radius:12px;background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted);cursor:pointer;flex-shrink:0;font-size:16px}
+.msg-attach-btn:hover{color:var(--accent);border-color:var(--accent)}
+.msg-input{flex:1;resize:none;background:var(--panel-solid);border:1.5px solid var(--line2);border-radius:14px;padding:12px 14px;color:var(--txt);font-size:14px;font-family:inherit;outline:none;max-height:120px}
+.msg-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+/* Picker "nuevo chat" */
+.msg-picker-row{display:flex;align-items:center;gap:12px;min-height:56px;padding:0 6px;border-bottom:1px solid var(--line);cursor:pointer}
+.msg-picker-row:last-child{border-bottom:none}
+.msg-picker-row .msg-avatar{width:36px;height:36px;font-size:13px}
+.msg-picker-nombre{font-size:14px;font-weight:600}
+.msg-picker-rol{font-size:10.5px;color:var(--muted);text-transform:uppercase}
+@media(max-width:760px){.msg-img,.msg-video-wrap{max-width:200px}.msg-conv{padding:14px 16px}}
+
 /* ---------- Galería ---------- */
 .gal-hotel{margin-bottom:30px}
 .gal-hotel h2{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
@@ -746,6 +816,7 @@ input.ei[type=date]{color-scheme:dark}
     <div class="nav-label">Principal</div>
     <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
     <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
+    <a class="nav-item nav-marketing-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
     <a class="nav-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
     <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
     <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
@@ -959,6 +1030,34 @@ input.ei[type=date]{color-scheme:dark}
       </div>
     </section>
 
+    <!-- MENSAJES (chat interno del staff) -->
+    <section class="section" id="sec-mensajes">
+      <div class="card chat-wrap msg-layout">
+        <div class="chat-toolbar" style="justify-content:space-between">
+          <div class="eb-title" style="margin:0"><i class="fas fa-comment-dots"></i> Mensajes</div>
+          <button class="chat-tool-btn" id="msg-nuevo-btn" type="button"><i class="fas fa-plus"></i> Nuevo chat</button>
+        </div>
+        <div class="msg-inbox" id="msg-inbox" style="flex:1;overflow-y:auto"></div>
+
+        <div class="msg-conv" id="msg-conv">
+          <div class="msg-conv-head">
+            <button class="msg-conv-back" id="msg-conv-back" type="button"><i class="fas fa-arrow-left"></i></button>
+            <div>
+              <div class="msg-conv-titulo" id="msg-conv-titulo"></div>
+              <div class="msg-conv-sub" id="msg-conv-sub"></div>
+            </div>
+          </div>
+          <div class="msg-conv-log" id="msg-conv-log"></div>
+          <div class="msg-inputbar" id="msg-inputbar">
+            <button class="msg-attach-btn" id="msg-attach-btn" type="button" title="Adjuntar"><i class="fas fa-paperclip"></i></button>
+            <textarea class="msg-input" id="msg-input" rows="1" placeholder="Escribí un mensaje..."></textarea>
+            <button class="chat-send" id="msg-send-btn" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
+          </div>
+          <div class="msg-readonly-note" id="msg-readonly-note" style="display:none"><i class="fas fa-lock"></i> Solo lectura — únicamente los admins escriben acá</div>
+        </div>
+      </div>
+    </section>
+
     <!-- EXTRACTOR IA -->
     <section class="section" id="sec-extractor">
       <div class="card ext-wrap">
@@ -1157,6 +1256,7 @@ input.ei[type=date]{color-scheme:dark}
 <nav class="bottom-nav">
   <a class="bn-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Inicio</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i> Leads</a>
+  <a class="bn-item nav-marketing-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
   <a class="bn-item nav-asesor-only" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor</a>
   <a class="bn-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
   <a class="bn-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador</a>
@@ -1186,6 +1286,23 @@ input.ei[type=date]{color-scheme:dark}
   <a class="sheet-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
   <a class="sheet-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
   <a class="sheet-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
+</div>
+
+<!-- Mensajes: adjuntar archivo -->
+<div class="sheet" id="msg-attach-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Adjuntar</div>
+  <a class="sheet-item" id="msg-attach-foto"><i class="fas fa-image"></i> Foto o video</a>
+  <a class="sheet-item" id="msg-attach-doc"><i class="fas fa-file"></i> Documento</a>
+</div>
+<input type="file" id="msg-file-foto" accept="image/*,video/*" style="display:none">
+<input type="file" id="msg-file-doc" style="display:none">
+
+<!-- Mensajes: iniciar chat nuevo -->
+<div class="sheet" id="msg-nuevo-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Nuevo chat</div>
+  <div id="msg-picker-list"></div>
 </div>
 
 <!-- Configuración de visibilidad de Tarifario (solo admin) -->
