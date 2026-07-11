@@ -131,6 +131,7 @@ function entrarSegunRol() {
   document.getElementById('side-un').textContent = MI_NOMBRE;
   document.getElementById('side-ue').textContent = ROL === 'admin' ? 'Administrador' : 'Asesor comercial';
   pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
+  aplicarPreferencias();
   renderJornadaUI();
   handleCheckIn();
   startApp();
@@ -152,6 +153,28 @@ function openPerfilDrawer() {
       <button class="dbtn gh" id="perfil-avatar-btn" type="button"><i class="fas fa-camera"></i> Cambiar foto</button>
       <input type="file" id="perfil-avatar-file" accept="image/png,image/jpeg,image/webp" style="display:none">
     </div>
+    <div class="edit-box" style="margin-top:16px">
+      <div class="eb-title"><i class="fas fa-sliders"></i> Personalización</div>
+      <label class="fl">Tema</label>
+      <div class="seg-group" id="perfil-tema" style="margin-bottom:0">
+        <button type="button" data-v="dark" class="seg${(MI_PREFERENCIAS.tema || 'dark') === 'dark' ? ' on' : ''}"><i class="fas fa-moon"></i> Oscuro</button>
+        <button type="button" data-v="light" class="seg${MI_PREFERENCIAS.tema === 'light' ? ' on' : ''}"><i class="fas fa-sun"></i> Claro</button>
+      </div>
+      <label class="fl" style="margin-top:12px">Tamaño de letra</label>
+      <div class="seg-group" id="perfil-fuente" style="margin-bottom:0">
+        <button type="button" data-v="chico" class="seg${MI_PREFERENCIAS.fuente === 'chico' ? ' on' : ''}">Chico</button>
+        <button type="button" data-v="normal" class="seg${(MI_PREFERENCIAS.fuente || 'normal') === 'normal' ? ' on' : ''}">Normal</button>
+        <button type="button" data-v="grande" class="seg${MI_PREFERENCIAS.fuente === 'grande' ? ' on' : ''}">Grande</button>
+      </div>
+    </div>
+    ${puedeActivarRecordatorios() ? `
+    <div class="edit-box" style="margin-top:16px">
+      <div class="eb-title"><i class="fas fa-bell"></i> Notificaciones</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span style="font-size:13px">Recordatorios de asistencia</span>
+        <button type="button" class="tas-toggle" id="perfil-notif-toggle"></button>
+      </div>
+    </div>` : ''}
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Solo vos podés ver y editar tu propio perfil</div>`;
   // Avatar seteado vía DOM (pintarAvatar), no interpolado en el template de
   // innerHTML -- MI_AVATAR_URL termina en un style.backgroundImage por API,
@@ -162,6 +185,73 @@ function openPerfilDrawer() {
   navPush({ type: 'drawer' });
   document.getElementById('perfil-avatar-btn').onclick = () => document.getElementById('perfil-avatar-file').click();
   document.getElementById('perfil-avatar-file').onchange = e => { if (e.target.files[0]) subirAvatar(e.target.files[0]); e.target.value = ''; };
+  document.querySelectorAll('#perfil-tema button').forEach(b => b.onclick = () => guardarPreferencia('tema', b.dataset.v, 'perfil-tema'));
+  document.querySelectorAll('#perfil-fuente button').forEach(b => b.onclick = () => guardarPreferencia('fuente', b.dataset.v, 'perfil-fuente'));
+  if (puedeActivarRecordatorios()) actualizarToggleNotif();
+}
+function aplicarPreferencias() {
+  document.documentElement.dataset.theme = MI_PREFERENCIAS.tema === 'light' ? 'light' : 'dark';
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', MI_PREFERENCIAS.tema === 'light' ? '#f4f5f9' : '#080b16');
+  document.body.classList.toggle('fsize-chico', MI_PREFERENCIAS.fuente === 'chico');
+  document.body.classList.toggle('fsize-grande', MI_PREFERENCIAS.fuente === 'grande');
+  // Cache local para que el script inline en <head> (ver index.html) pueda
+  // aplicar tema/tamaño ANTES del primer paint en la próxima carga -- sin
+  // esto, un usuario con tema claro ve un flash oscuro en cada refresh
+  // mientras se resuelve sesión+perfil por red.
+  try { localStorage.setItem('lotus_prefs', JSON.stringify({ tema: MI_PREFERENCIAS.tema, fuente: MI_PREFERENCIAS.fuente })); } catch (_e) { /* localStorage puede fallar en modo privado -- solo se pierde el cache, no rompe nada */ }
+}
+async function guardarPreferencia(clave, valor, grupoId) {
+  const anterior = MI_PREFERENCIAS;
+  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, [clave]: valor };
+  aplicarPreferencias();
+  document.querySelectorAll(`#${grupoId} button`).forEach(b => b.classList.toggle('on', b.dataset.v === valor));
+  const { error } = await sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS });
+  if (error) {
+    // Rollback -- si no se pudo guardar, no dejar la UI mostrando algo
+    // que un refresh (que relee de la DB) va a revertir sin avisar.
+    MI_PREFERENCIAS = anterior;
+    aplicarPreferencias();
+    const valorPrevio = anterior[clave] ?? (grupoId === 'perfil-tema' ? 'dark' : 'normal');
+    document.querySelectorAll(`#${grupoId} button`).forEach(b => b.classList.toggle('on', b.dataset.v === valorPrevio));
+    errToast('No se pudo guardar: ' + error.message);
+  }
+}
+async function actualizarToggleNotif() {
+  const btn = document.getElementById('perfil-notif-toggle');
+  if (!btn) return;
+  const { data, error } = await sb.rpc('mi_asistencia_hoy');
+  const activo = !error && data?.tiene_recordatorios;
+  btn.classList.toggle('on', !!activo);
+  btn.onclick = async () => {
+    btn.disabled = true;
+    if (activo) await desactivarRecordatorios(); else await window.activarRecordatorios();
+    btn.disabled = false;
+    actualizarToggleNotif();
+  };
+}
+async function desactivarRecordatorios() {
+  // Solo la suscripción web de ESTE navegador -- activarRecordatorios()
+  // también es web-only (chequea 'serviceWorker' in navigator), mismo
+  // alcance. Filtrar solo por usuario_id borraría la suscripción de
+  // OTROS dispositivos del mismo asesor (ej. si tiene el CRM abierto en
+  // el teléfono y en la compu), apagándoles los avisos sin que se enteren.
+  if (!('serviceWorker' in navigator)) { errToast('Este navegador no soporta notificaciones push'); return; }
+  const { data: { user } } = await sb.auth.getUser();
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      const { error } = await sb.from('push_subscriptions').delete().eq('usuario_id', user.id).eq('subscription_json->>endpoint', sub.endpoint);
+      if (error) { errToast('No se pudo desactivar: ' + error.message); return; }
+      await sub.unsubscribe();
+    }
+  } catch (e) {
+    console.error('desactivarRecordatorios', e);
+    errToast('No se pudo desactivar los recordatorios');
+    return;
+  }
+  okToast('Recordatorios desactivados');
+  renderRecordatoriosUI();
 }
 async function subirAvatar(file) {
   if (!AVATAR_MIME.includes(file.type)) { errToast('Formato no válido — solo PNG, JPG o WEBP'); return; }

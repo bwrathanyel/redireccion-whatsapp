@@ -6,6 +6,19 @@
 <meta name="theme-color" content="#080b16">
 <meta name="robots" content="noindex, nofollow">
 <title>Lotus 360 · CRM</title>
+<script>
+// Aplica tema/tamaño desde cache local ANTES del primer paint -- evita el
+// flash de tema oscuro (default) en usuarios que eligieron claro, mientras
+// se resuelve sesión+perfil por red (aplicarPreferencias() en app.js hace
+// lo mismo pero recién tras el login, ver ese comentario para el porqué).
+try {
+  var p = JSON.parse(localStorage.getItem('lotus_prefs') || '{}');
+  if (p.tema === 'light') {
+    document.documentElement.dataset.theme = 'light';
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f4f5f9');
+  }
+} catch (e) { /* localStorage no disponible (modo privado) -- se pierde el cache, no rompe nada */ }
+</script>
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.json">
@@ -35,6 +48,27 @@
   --blue:#4a9eff; --green:#10b981; --purple:#a06bff; --amber:#f5b544; --pink:#ff5c8a; --wa:#25D366;
   --safe-b:env(safe-area-inset-bottom,0px);
 }
+/* Tema claro (Bloque 8, opt-in en Mi Perfil -- por defecto sigue oscuro,
+   que es como está diseñada la app desde siempre). Solo se pisan los
+   tokens de superficie/texto -- los colores de marca/estado (accent,
+   blue, green, etc.) se mantienen, ya dan contraste aceptable sobre
+   blanco también. */
+:root[data-theme="light"]{
+  --bg:#f4f5f9; --bg2:#e9ebf2; --panel:rgba(255,255,255,.85); --panel-solid:#ffffff;
+  --line:rgba(15,23,42,.09); --line2:rgba(15,23,42,.16);
+  --txt:#12172a; --muted:#5b6478; --muted2:#3f4658;
+}
+/* .sidebar no usa variables (gradiente hardcodeado para el look oscuro
+   original) -- override puntual, si no queda con fondo oscuro fijo en
+   medio de una app que pasó a clara. */
+:root[data-theme="light"] .sidebar{background:linear-gradient(180deg,rgba(255,255,255,.75),rgba(233,235,242,.55))}
+/* Tamaño de fuente (Bloque 8) -- el CSS de esta app es casi todo px, no
+   rem, así que escalar font-size del root no cambiaría nada; zoom sí
+   escala todo el layout de una. Soportado en Chromium/WebKit (Android
+   Chrome, iOS Safari, desktop Chrome/Edge) -- únicos navegadores reales
+   de uso en este CRM. */
+body.fsize-chico{zoom:.9}
+body.fsize-grande{zoom:1.15}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 /* Fix del "bar gris" en iOS/Android: <html> sin fondo propio deja ver el
    fondo por defecto del navegador (blanco/gris) durante el rebote de scroll
