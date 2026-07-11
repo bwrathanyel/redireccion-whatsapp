@@ -87,8 +87,10 @@ body::before{content:'';position:fixed;inset:0;background:
 .btn-sm:hover{border-color:var(--accent)}
 .strike-row{display:flex;align-items:center;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--line);font-size:12.5px}
 .strike-row:last-child{border-bottom:none}
-.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#e0570a);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#1a1000;flex-shrink:0}
+.avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#e0570a);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#1a1000;flex-shrink:0;background-size:cover;background-position:center}
 .side-foot .un{font-size:12.5px;font-weight:600}.side-foot .ue{font-size:10.5px;color:var(--muted)}
+.side-foot-perfil{display:flex;align-items:center;gap:10px;flex:1;background:transparent;border:none;padding:0;cursor:pointer;color:inherit;font-family:inherit;border-radius:8px}
+.side-foot-perfil:hover .un{color:var(--accent)}
 .logout-btn{background:transparent;border:1px solid var(--line);color:var(--muted);width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:13px;flex-shrink:0;transition:color .15s,border-color .15s}
 .logout-btn:hover{color:#ff6b6b;border-color:rgba(255,107,107,.4)}
 
@@ -869,8 +871,10 @@ input.ei[type=date]{color-scheme:dark}
       <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
     </div>
     <div class="side-foot">
-      <div class="avatar" id="side-avatar">·</div>
-      <div style="flex:1"><div class="un" id="side-un">—</div><div class="ue" id="side-ue">—</div></div>
+      <button class="side-foot-perfil" id="side-foot-perfil" title="Mi perfil" type="button">
+        <div class="avatar" id="side-avatar">·</div>
+        <div style="flex:1;text-align:left"><div class="un" id="side-un">—</div><div class="ue" id="side-ue">—</div></div>
+      </button>
       <button class="logout-btn" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
     </div>
   </aside>
@@ -1335,6 +1339,7 @@ input.ei[type=date]{color-scheme:dark}
     <button onclick="activarRecordatorios()">Activar</button>
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
+  <a class="sheet-item nav-marketing-ok" id="sheet-item-perfil"><i class="fas fa-user-circle"></i> Mi perfil</a>
   <a class="sheet-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-asesor-hide" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>

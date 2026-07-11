@@ -23,6 +23,11 @@ const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.ch
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
 const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+function pintarAvatar(el, url, nombre) {
+  if (!el) return;
+  if (url) { el.style.backgroundImage = `url('${url}')`; el.textContent = ''; }
+  else { el.style.backgroundImage = ''; el.textContent = initials(nombre); }
+}
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // Las descripciones/requisitos/precios del tarifario vienen del PDF original
 // como un párrafo denso (varias oraciones/datos corridos). Acá NUNCA se
@@ -76,7 +81,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false;
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {};
 const overlay = id => document.getElementById(id);
 const showOverlay = id => { OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
 // Se recarga cada vez que se muestra el login (no solo una vez al abrir la
@@ -99,7 +104,7 @@ async function initAuth() {
 
 async function cargarUsuario() {
   const { data: { user } } = await sb.auth.getUser();
-  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password').eq('id', user?.id).single();
+  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias').eq('id', user?.id).single();
   if (error || !data) {
     await sb.auth.signOut();
     showOverlay('login');
@@ -113,6 +118,7 @@ async function afterLogin() {
   const u = await cargarUsuario();
   if (!u) return;
   MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
+  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {};
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   entrarSegunRol();
 }
@@ -124,7 +130,7 @@ function entrarSegunRol() {
   overlay('setup').classList.remove('show');
   document.getElementById('side-un').textContent = MI_NOMBRE;
   document.getElementById('side-ue').textContent = ROL === 'admin' ? 'Administrador' : 'Asesor comercial';
-  document.getElementById('side-avatar').textContent = initials(MI_NOMBRE);
+  pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
   renderJornadaUI();
   handleCheckIn();
   startApp();
@@ -132,6 +138,55 @@ function entrarSegunRol() {
   manejarDeepLinkAsistencia();
   manejarDeepLinkSeccion();
   registrarPushNativo();
+}
+
+/* ---------- Mi Perfil (Bloque 8) — cada asesor edita solo lo propio ---------- */
+const AVATAR_LIMITE = 3 * 1024 * 1024, AVATAR_MIME = ['image/png', 'image/jpeg', 'image/webp'];
+function openPerfilDrawer() {
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="dhead"><div class="dava" id="perfil-avatar-preview"></div>
+      <div><div class="dn">${esc(MI_NOMBRE)}</div>
+      <div class="dm">${ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : 'Asesor comercial'} · @${esc(MI_USERNAME)}</div></div></div>
+    <div class="edit-box" style="margin-top:16px">
+      <div class="eb-title"><i class="fas fa-image"></i> Foto de perfil</div>
+      <button class="dbtn gh" id="perfil-avatar-btn" type="button"><i class="fas fa-camera"></i> Cambiar foto</button>
+      <input type="file" id="perfil-avatar-file" accept="image/png,image/jpeg,image/webp" style="display:none">
+    </div>
+    <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Solo vos podés ver y editar tu propio perfil</div>`;
+  // Avatar seteado vía DOM (pintarAvatar), no interpolado en el template de
+  // innerHTML -- MI_AVATAR_URL termina en un style.backgroundImage por API,
+  // no en un string HTML, así que no hay forma de inyectar CSS/HTML por ahí.
+  pintarAvatar(document.getElementById('perfil-avatar-preview'), MI_AVATAR_URL, MI_NOMBRE);
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerBg').classList.add('open');
+  navPush({ type: 'drawer' });
+  document.getElementById('perfil-avatar-btn').onclick = () => document.getElementById('perfil-avatar-file').click();
+  document.getElementById('perfil-avatar-file').onchange = e => { if (e.target.files[0]) subirAvatar(e.target.files[0]); e.target.value = ''; };
+}
+async function subirAvatar(file) {
+  if (!AVATAR_MIME.includes(file.type)) { errToast('Formato no válido — solo PNG, JPG o WEBP'); return; }
+  if (file.size > AVATAR_LIMITE) { errToast('La imagen pesa más de 3MB'); return; }
+  const btn = document.getElementById('perfil-avatar-btn');
+  btn.disabled = true; btn.innerHTML = 'Subiendo... <i class="fas fa-spinner fa-spin"></i>';
+  const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase() : '.jpg';
+  const path = `${MI_USUARIO_ID}/avatar-${Date.now()}${ext}`;
+  const { error: eUpload } = await sb.storage.from('avatares').upload(path, file, { contentType: file.type });
+  if (eUpload) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-camera"></i> Cambiar foto'; errToast('No se pudo subir la imagen: ' + eUpload.message); return; }
+  const { data: pub } = sb.storage.from('avatares').getPublicUrl(path);
+  const nuevaUrl = pub.publicUrl;
+  const { error: eRpc } = await sb.rpc('actualizar_mi_perfil', { p_avatar_url: nuevaUrl });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-camera"></i> Cambiar foto';
+  if (eRpc) { errToast('No se pudo guardar la foto: ' + eRpc.message); return; }
+  const avatarViejo = MI_AVATAR_URL;
+  MI_AVATAR_URL = nuevaUrl;
+  pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
+  pintarAvatar(document.getElementById('perfil-avatar-preview'), MI_AVATAR_URL, MI_NOMBRE);
+  okToast('Foto de perfil actualizada');
+  // Limpieza del avatar viejo (misma carpeta propia, política avatar_delete_propio).
+  if (avatarViejo) {
+    const vieja = avatarViejo.split('/avatares/')[1];
+    if (vieja) sb.storage.from('avatares').remove([vieja]);
+  }
 }
 
 /* ---------- Control de asistencia (agent_sessions) ---------- */
@@ -366,6 +421,7 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   if (err) { errEl.textContent = 'No se pudo guardar: ' + err.message; return; }
   const u = await cargarUsuario(); if (!u) return;
   MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
+  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {};
   entrarSegunRol();
 });
 
@@ -2651,6 +2707,8 @@ function activateSection(sec, fromNav) {
 function setupNav() {
   document.querySelectorAll('.nav-item,.bn-item,.sheet-item').forEach(n => n.addEventListener('click', () => { if (n.dataset.sec) activateSection(n.dataset.sec); }));
   document.getElementById('bn-more')?.addEventListener('click', () => openSheet('more-sheet'));
+  document.getElementById('side-foot-perfil')?.addEventListener('click', () => openPerfilDrawer());
+  document.getElementById('sheet-item-perfil')?.addEventListener('click', () => { closeSheet('more-sheet', true); openPerfilDrawer(); });
   document.querySelectorAll('.mfs-trigger, .mfs-done').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.mfs;
     b.classList.contains('mfs-trigger') ? openSheet(id) : closeSheet(id);
