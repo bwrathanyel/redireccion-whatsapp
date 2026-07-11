@@ -1284,8 +1284,8 @@ async function loadTarifario() {
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
   empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
   const q = tarTab === 'promo'
-    ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden), productos(producto_fotos(storage_path,orden))').order('titulo')
-    : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad), producto_fotos(storage_path,orden)').eq('tipo', tarTab).order('nombre');
+    ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden,es_principal,activo), productos(producto_fotos(storage_path,orden,es_principal,activo))').order('titulo')
+    : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad), producto_fotos(storage_path,orden,es_principal,activo)').eq('tipo', tarTab).order('nombre');
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
@@ -1297,7 +1297,7 @@ async function loadTarifario() {
   if (tarTab === 'paquete') {
     const hotelIds = [...new Set(data.filter(x => x.hotel_id).map(x => x.hotel_id))];
     if (hotelIds.length) {
-      const { data: hoteles } = await sb.from('productos').select('id, producto_fotos(storage_path,orden)').in('id', hotelIds);
+      const { data: hoteles } = await sb.from('productos').select('id, producto_fotos(storage_path,orden,es_principal,activo)').in('id', hotelIds);
       const porId = Object.fromEntries((hoteles || []).map(h => [h.id, h]));
       data.forEach(x => { if (x.hotel_id) x.hotel = porId[x.hotel_id]; });
     }
@@ -1310,13 +1310,20 @@ const tagsHtml = tags => (tags || []).length ? `<div class="tar-tags">${tags.map
 // Fotos propias del ítem; si no tiene, hereda las de su hotel vinculado
 // (promociones.producto_id o productos.hotel_id, ver push_to_supabase.py
 // HOTEL_ALIASES) — nunca se inventa una foto para algo sin vínculo real.
+const fotosRaw = x => x.producto_fotos || x.promocion_fotos || x.productos?.producto_fotos || x.hotel?.producto_fotos || [];
 const fotosDe = x => {
-  const ordenar = arr => arr.slice().sort((a, b) => a.orden - b.orden).map(f => FOTOS_BASE + f.storage_path);
+  // activo=false son reemplazadas (Bloque 7) -- se guardan como histórico
+  // en storage pero no deben volver a mostrarse. es_principal (Bloque 4)
+  // manda sobre el orden normal cuando el admin eligió una a mano.
+  const ordenar = arr => arr.filter(f => f.activo !== false).slice()
+    .sort((a, b) => (b.es_principal ? 1 : 0) - (a.es_principal ? 1 : 0) || a.orden - b.orden)
+    .map(f => FOTOS_BASE + f.storage_path);
   const propias = ordenar(x.producto_fotos || x.promocion_fotos || []);
   if (propias.length) return propias;
   const heredadas = x.productos?.producto_fotos || x.hotel?.producto_fotos || [];
   return ordenar(heredadas);
 };
+const tieneFotoPrincipalPropia = x => fotosRaw(x).some(f => f.es_principal);
 // Cuando un hotel tiene varias promos, todas partían del mismo set de fotos
 // en el mismo orden — se veían idénticas en portada. Se le asigna a cada
 // promo del mismo hotel un índice de arranque distinto (0, 1, 2...) dentro
@@ -1331,6 +1338,9 @@ function asignarPortadas(promos) {
 function fotosRotadas(x) {
   const fotos = fotosDe(x);
   if (!fotos.length) return fotos;
+  // Si el admin marcó una foto principal a mano, esa decisión manda siempre
+  // como portada -- no se rota cosméticamente por encima de ella.
+  if (tieneFotoPrincipalPropia(x)) return fotos;
   const idx = (x._portadaIdx || 0) % fotos.length;
   return idx ? [...fotos.slice(idx), ...fotos.slice(0, idx)] : fotos;
 }
@@ -1619,15 +1629,15 @@ async function loadGaleria(append) {
   const loading = document.getElementById('gal-loading'), empty = document.getElementById('gal-empty'), list = document.getElementById('gal-list'), pager = document.getElementById('gal-pager');
   if (!append) { empty.classList.remove('show'); loading.classList.add('show'); galPage = 0; list.innerHTML = ''; }
   const from = galPage * GAL_PER;
-  const { data, count, error } = await sb.from('productos').select('nombre, producto_fotos(storage_path,orden,width,height)', { count: 'exact' }).eq('tipo', 'hotel').eq('activo', true).order('nombre').range(from, from + GAL_PER - 1);
+  const { data, count, error } = await sb.from('productos').select('nombre, producto_fotos(storage_path,orden,width,height,es_principal,activo)', { count: 'exact' }).eq('tipo', 'hotel').eq('activo', true).order('nombre').range(from, from + GAL_PER - 1);
   loading.classList.remove('show');
   if (error) { console.error(error); errToast('No se pudo cargar la galería'); return; }
   galTotal = count ?? 0;
-  const conFotos = (data || []).filter(x => x.producto_fotos?.length);
+  const conFotos = (data || []).filter(x => x.producto_fotos?.some(f => f.activo !== false));
   if (!append && !conFotos.length) { empty.classList.add('show'); pager.classList.remove('show'); return; }
   galCargada = true;
   list.insertAdjacentHTML('beforeend', conFotos.map(x => {
-    const fotos = x.producto_fotos.slice().sort((a, b) => a.orden - b.orden);
+    const fotos = x.producto_fotos.filter(f => f.activo !== false).slice().sort((a, b) => (b.es_principal ? 1 : 0) - (a.es_principal ? 1 : 0) || a.orden - b.orden);
     return `<div class="gal-hotel"><h2><i class="fas fa-hotel"></i> ${esc(x.nombre)}</h2>
       <div class="gal-masonry">${fotos.map(f => {
         const url = FOTOS_BASE + f.storage_path;
@@ -1669,12 +1679,108 @@ function openProductoDrawer(x) {
     ${!esPromo && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv dfv-rich">${formatearTexto(x.requisitos)}</div></div></div>` : ''}
     ${esPromo ? tagsHtml(x.incluye_tags) : ''}
     ${!esPromo && (x.promociones || []).length ? `<div class="dfield"><div class="dfi"><i class="fas fa-gift"></i></div><div><div class="dfl">Promociones activas</div><div class="dfv" style="font-weight:500">${x.promociones.map(p => `<div style="margin-bottom:10px"><b>${esc(p.titulo)}</b>${p.precio_texto ? `<div class="dfv-rich" style="margin-top:4px">${formatearTexto(p.precio_texto)}</div>` : ''}${p.vigencia_texto ? `<div class="dfv-rich" style="margin-top:2px;color:var(--amber)">Vigencia: ${formatearTexto(p.vigencia_texto)}</div>` : ''}${tagsHtml(p.incluye_tags)}</div>`).join('')}</div></div></div>` : ''}
+    ${ROL === 'admin' ? `
+    <div class="edit-box" style="margin-top:16px">
+      <div class="eb-title"><i class="fas fa-note-sticky"></i> Notas internas (solo admin)</div>
+      <textarea id="tar-notas" class="ei" rows="3" placeholder="Notas propias, no vienen del tarifario automático...">${esc(x.notas || '')}</textarea>
+      <button class="dbtn save" id="tar-notas-save" type="button" style="margin-top:8px"><i class="fas fa-floppy-disk"></i> Guardar notas</button>
+      <div class="eb-title" style="margin-top:16px"><i class="fas fa-images"></i> Fotos (solo admin)</div>
+      <div id="tar-fotos-admin"><div class="muted" style="font-size:12.5px">Cargando...</div></div>
+    </div>` : ''}
     <div class="dactions"><button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Ir al Cotizador</button></div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
   document.getElementById('dCotizador').onclick = () => irAlCotizadorConOpcion(esPromo ? 'promociones' : 'productos', x.id, nombre);
+  if (ROL === 'admin') {
+    document.getElementById('tar-notas-save').onclick = () => guardarNotasTarifario(esPromo ? 'promociones' : 'productos', x.id);
+    cargarFotosAdmin(esPromo ? 'promocion_fotos' : 'producto_fotos', esPromo ? 'promocion_id' : 'producto_id', x.id, esPromo ? 'promos' : 'hoteles');
+  }
+}
+async function guardarNotasTarifario(tabla, id) {
+  const btn = document.getElementById('tar-notas-save');
+  const notas = document.getElementById('tar-notas').value.trim();
+  btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
+  const { error } = await sb.from(tabla).update({ notas: notas || null }).eq('id', id);
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar notas';
+  if (error) { errToast('No se pudieron guardar las notas: ' + error.message); return; }
+  okToast('Notas guardadas');
+  delete tarCache[tarTab];
+}
+const TAR_FOTOS_LIMITE = 5 * 1024 * 1024, TAR_FOTOS_MIME = ['image/png', 'image/jpeg', 'image/webp'];
+function slugArchivo(nombre) {
+  return nombre.normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'foto';
+}
+async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
+  const box = document.getElementById('tar-fotos-admin');
+  const { data, error } = await sb.from(tabla).select('id,storage_path,orden,es_principal').eq(fk, entidadId).eq('activo', true).order('es_principal', { ascending: false }).order('orden');
+  if (!box) return; // el drawer se pudo haber cerrado mientras esto cargaba
+  if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudieron cargar las fotos</div>'; return; }
+  if (!data.length) { box.innerHTML = '<div class="muted" style="font-size:12.5px">Esta opción no tiene fotos cargadas todavía.</div>'; return; }
+  box.innerHTML = `<div class="tar-fotos-admin-grid">${data.map(f => `
+    <div class="tfa-item" data-foto-id="${f.id}">
+      <div class="tfa-img" style="background-image:url('${esc(FOTOS_BASE + f.storage_path)}')">${f.es_principal ? '<span class="tfa-principal-badge"><i class="fas fa-star"></i> Principal</span>' : ''}</div>
+      <div class="tfa-actions">
+        ${f.es_principal ? '' : `<button type="button" class="tfa-btn" data-accion="principal" title="Marcar como principal"><i class="fas fa-star"></i></button>`}
+        <button type="button" class="tfa-btn" data-accion="reemplazar" title="Reemplazar imagen"><i class="fas fa-rotate"></i></button>
+      </div>
+    </div>`).join('')}</div>
+    <input type="file" id="tar-foto-file" accept="image/png,image/jpeg,image/webp" style="display:none">`;
+  box.querySelectorAll('[data-accion="principal"]').forEach(btn => btn.onclick = () => marcarFotoPrincipal(tabla, fk, entidadId, +btn.closest('.tfa-item').dataset.fotoId, prefijo));
+  box.querySelectorAll('[data-accion="reemplazar"]').forEach(btn => btn.onclick = () => {
+    const fotoId = +btn.closest('.tfa-item').dataset.fotoId;
+    const input = document.getElementById('tar-foto-file');
+    input.onchange = () => { if (input.files[0]) reemplazarFoto(tabla, fk, entidadId, fotoId, prefijo, input.files[0]); input.value = ''; };
+    input.click();
+  });
+}
+async function marcarFotoPrincipal(tabla, fk, entidadId, fotoId, prefijo) {
+  const box = document.getElementById('tar-fotos-admin');
+  box.style.opacity = '.5';
+  await sb.from(tabla).update({ es_principal: false }).eq(fk, entidadId).eq('es_principal', true);
+  const { error } = await sb.from(tabla).update({ es_principal: true }).eq('id', fotoId);
+  box.style.opacity = '1';
+  if (error) { errToast('No se pudo marcar como principal: ' + error.message); return; }
+  okToast('Foto principal actualizada');
+  delete tarCache[tarTab];
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo);
+}
+async function reemplazarFoto(tabla, fk, entidadId, fotoIdViejo, prefijo, file) {
+  if (!TAR_FOTOS_MIME.includes(file.type)) { errToast('Formato no válido — solo PNG, JPG o WEBP'); return; }
+  if (file.size > TAR_FOTOS_LIMITE) { errToast('La imagen pesa más de 5MB'); return; }
+  const box = document.getElementById('tar-fotos-admin');
+  box.style.opacity = '.5';
+  const { data: vieja, error: eVieja } = await sb.from(tabla).select('orden,es_principal').eq('id', fotoIdViejo).single();
+  if (eVieja) { box.style.opacity = '1'; errToast('No se pudo leer la foto a reemplazar: ' + eVieja.message); return; }
+  const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '.jpg';
+  const storagePath = `${prefijo}/${entidadId}/manual-${Date.now()}-${slugArchivo(file.name.replace(/\.[^.]+$/, ''))}${ext.toLowerCase()}`;
+  const { error: eUpload } = await sb.storage.from('tarifario-fotos').upload(storagePath, file, { contentType: file.type });
+  if (eUpload) { box.style.opacity = '1'; errToast('No se pudo subir la imagen: ' + eUpload.message); return; }
+  // La vieja se desactiva Y pierde es_principal ANTES de insertar la nueva —
+  // el índice único parcial (una sola es_principal por producto/promoción)
+  // rechaza el insert si las dos filas quedan marcadas principal a la vez.
+  const { error: eDesactivar } = await sb.from(tabla).update({ activo: false, reemplazada_en: new Date().toISOString(), es_principal: false }).eq('id', fotoIdViejo);
+  if (eDesactivar) {
+    box.style.opacity = '1';
+    await sb.storage.from('tarifario-fotos').remove([storagePath]);
+    errToast('No se pudo desactivar la imagen anterior: ' + eDesactivar.message);
+    return;
+  }
+  const { error: eInsert } = await sb.from(tabla).insert({ [fk]: entidadId, storage_path: storagePath, orden: vieja.orden, es_principal: vieja.es_principal, origen: 'manual' });
+  if (eInsert) {
+    box.style.opacity = '1';
+    await sb.storage.from('tarifario-fotos').remove([storagePath]);
+    // Best-effort: restaurar la vieja tal como estaba, para no dejar la
+    // opción sin ninguna foto activa si el insert de la nueva falló.
+    await sb.from(tabla).update({ activo: true, reemplazada_en: null, es_principal: vieja.es_principal }).eq('id', fotoIdViejo);
+    errToast('No se pudo registrar la imagen nueva: ' + eInsert.message);
+    return;
+  }
+  box.style.opacity = '1';
+  okToast('Foto reemplazada');
+  delete tarCache[tarTab];
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo);
 }
 // Deja al filtro "opción de Tarifario" del Cotizador ya elegida, con el
 // chat enfocado y un mensaje sugerido, para no obligar a re-seleccionar
