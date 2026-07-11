@@ -2130,6 +2130,55 @@ function setupLightbox() {
   });
 }
 
+/* ---------- Dictado por voz (Bloque 9) — Web Speech API nativa, sin costo.
+   Un solo helper para los 3 chats (Cotizador IA, Mensajes, Extractor IA) --
+   cada uno solo pasa su botón y su campo de texto. ---------- */
+const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+// Lock compartido entre los 3 botones (no uno por closure) -- la mayoría de
+// los navegadores solo permiten UNA sesión de reconocimiento de voz activa
+// por vez en todo el sistema. Sin este lock, arrancar el mic de un chat
+// mientras el de otro sigue escuchando (posible: cambiar de sección no para
+// el reconocimiento en curso) podía matar la primera sesión por debajo sin
+// que ese botón se enterara, dejándolo trabado en "escuchando" para siempre.
+let vozActiva = null; // { rec, btn }
+function attachVoiceInput(btn, campo) {
+  if (!btn) return;
+  if (!SpeechRecognitionCtor) { btn.style.display = 'none'; return; } // sin soporte -- no mostrar un botón que siempre falla
+  btn.onclick = () => {
+    if (vozActiva) {
+      const eraEsteBoton = vozActiva.btn === btn;
+      vozActiva.rec.stop();
+      vozActiva = null;
+      if (eraEsteBoton) return; // toggle: tocar de nuevo el mismo botón corta
+    }
+    const rec = new SpeechRecognitionCtor();
+    rec.lang = 'es-419';
+    rec.continuous = false; // el navegador corta solo tras el silencio -- sin timer propio
+    rec.interimResults = false;
+    vozActiva = { rec, btn };
+    btn.classList.add('on');
+    rec.onresult = e => {
+      const texto = e.results[0]?.[0]?.transcript?.trim();
+      if (!texto) return;
+      const actual = campo.value.trim();
+      campo.value = actual ? `${actual} ${texto}` : texto;
+      // Dispara 'input' real -- cualquier listener ya existente en el campo
+      // (auto-resize, contador de caracteres, etc.) reacciona solo, sin
+      // que este helper necesite saber qué campo es ni qué hace cada uno.
+      campo.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    rec.onerror = e => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        errToast('Necesitamos permiso de micrófono para dictar — habilitalo en la configuración del navegador');
+      } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        errToast('No se pudo escuchar — intentá de nuevo');
+      }
+    };
+    rec.onend = () => { btn.classList.remove('on'); if (vozActiva?.btn === btn) vozActiva = null; };
+    try { rec.start(); } catch (_e) { btn.classList.remove('on'); if (vozActiva?.btn === btn) vozActiva = null; }
+  };
+}
+
 /* ---------- Cotizador IA ---------- */
 let chatHistory = [], chatActualId = null;
 function setupChat() {
@@ -2137,6 +2186,7 @@ function setupChat() {
   document.getElementById('chat-send').onclick = enviarChat;
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChat(); } });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  attachVoiceInput(document.getElementById('chat-mic-btn'), input);
   fill('cot-f-destino', DESTINO_ORDEN);
   cargarOpcionesTarifario();
   document.getElementById('cot-f-clear').onclick = () => {
@@ -2302,6 +2352,7 @@ function setupExtractor() {
   });
   document.getElementById('ext-target-clear').onclick = () => { extractorLeadObjetivo = null; descartarExtraccion(); renderExtractorTarget(); };
   document.getElementById('ext-chat-input').addEventListener('input', actualizarContadorExtractor);
+  attachVoiceInput(document.getElementById('ext-mic-btn'), document.getElementById('ext-chat-input'));
   document.getElementById('ext-extraer-btn').onclick = extraerDatosChat;
   document.getElementById('ext-aplicar-btn').onclick = aplicarDatosExtraidos;
   document.getElementById('ext-descartar-btn').onclick = descartarExtraccion;
@@ -2327,6 +2378,7 @@ function renderExtractorTarget() {
     document.getElementById('ext-search-results').innerHTML = '';
   }
   document.getElementById('ext-chat-input').disabled = !extractorLeadObjetivo;
+  document.getElementById('ext-mic-btn').disabled = !extractorLeadObjetivo;
   actualizarControlesExtractor();
   actualizarBotonExtraer();
 }
@@ -2475,6 +2527,7 @@ function setupMensajes() {
   const input = document.getElementById('msg-input');
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(120, input.scrollHeight) + 'px'; });
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensajeTexto(); } });
+  attachVoiceInput(document.getElementById('msg-mic-btn'), input);
   document.getElementById('msg-send-btn').addEventListener('click', enviarMensajeTexto);
   sb.channel('mensajes-badge').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes' }, () => cargarBandeja(true)).subscribe();
 }

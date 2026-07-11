@@ -522,6 +522,15 @@ input.ei[type=date]{color-scheme:dark}
 .chat-send:disabled{opacity:.5;cursor:default}
 @media(max-width:760px){.chat-wrap{height:calc(100vh - 250px);height:calc(100dvh - 250px)}.chat-msg{max-width:88%}.chat-row{max-width:92%}}
 
+/* ---------- Dictado por voz (Bloque 9) — Cotizador IA, Mensajes, Extractor IA ---------- */
+.mic-btn{background:var(--panel-solid);border:1.5px solid var(--line2);color:var(--muted);border-radius:14px;width:48px;flex-shrink:0;cursor:pointer;font-size:15px;transition:color .15s,border-color .15s}
+.mic-btn:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}
+.mic-btn:disabled{opacity:.4;cursor:default}
+.mic-btn.on{color:#fff;background:linear-gradient(135deg,#ef4444,#b91c1c);border-color:transparent;animation:mic-pulse 1.4s ease-in-out infinite}
+@keyframes mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.45)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
+.ext-textarea-wrap{position:relative}
+.ext-mic-btn{position:absolute;top:10px;right:10px;width:38px;height:38px;border-radius:10px;z-index:2}
+
 /* ---------- Extractor IA ---------- */
 .ext-wrap{display:flex;flex-direction:column}
 .ext-target-fixed{display:none;align-items:center;justify-content:space-between;gap:10px;background:var(--accent-soft);border:1px solid rgba(255,145,0,.25);border-radius:12px;padding:12px 14px;margin-bottom:16px}
@@ -1092,6 +1101,7 @@ input.ei[type=date]{color-scheme:dark}
         <div class="chat-log" id="chat-log"></div>
         <div class="chat-inputbar">
           <textarea id="chat-input" rows="1" placeholder="Preguntame por un destino, hotel o paquete"></textarea>
+          <button class="mic-btn" id="chat-mic-btn" type="button" title="Dictar por voz" aria-label="Dictar por voz"><i class="fas fa-microphone"></i></button>
           <button class="chat-send" id="chat-send" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
         </div>
       </div>
@@ -1118,6 +1128,7 @@ input.ei[type=date]{color-scheme:dark}
           <div class="msg-inputbar" id="msg-inputbar">
             <button class="msg-attach-btn" id="msg-attach-btn" type="button" title="Adjuntar"><i class="fas fa-paperclip"></i></button>
             <textarea class="msg-input" id="msg-input" rows="1" placeholder="Escribí un mensaje..."></textarea>
+            <button class="mic-btn" id="msg-mic-btn" type="button" title="Dictar por voz" aria-label="Dictar por voz"><i class="fas fa-microphone"></i></button>
             <button class="chat-send" id="msg-send-btn" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
           </div>
           <div class="msg-readonly-note" id="msg-readonly-note" style="display:none"><i class="fas fa-lock"></i> Solo lectura — únicamente los admins escriben acá</div>
@@ -1139,7 +1150,10 @@ input.ei[type=date]{color-scheme:dark}
         </div>
 
         <div class="eb-title"><i class="fas fa-comment-dots"></i> Chat con el cliente</div>
-        <textarea id="ext-chat-input" rows="7" placeholder="Pegá acá la conversación de WhatsApp con el cliente..." disabled></textarea>
+        <div class="ext-textarea-wrap">
+          <textarea id="ext-chat-input" rows="7" placeholder="Pegá acá la conversación de WhatsApp con el cliente..." disabled></textarea>
+          <button class="mic-btn ext-mic-btn" id="ext-mic-btn" type="button" title="Dictar por voz" aria-label="Dictar por voz" disabled><i class="fas fa-microphone"></i></button>
+        </div>
         <div class="ext-counter" id="ext-counter">0 / 20.000</div>
         <div class="ext-input-err" id="ext-input-err"></div>
         <button class="dbtn save" id="ext-extraer-btn" type="button" disabled><i class="fas fa-wand-magic-sparkles"></i> Extraer datos</button>
