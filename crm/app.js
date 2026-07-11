@@ -2290,10 +2290,35 @@ async function enviarChat() {
   const { data, error } = await sb.functions.invoke('cotizador-chat', { body: { messages: chatHistory, filtros: leerFiltrosCotizador() } });
   loadingEl.remove();
   btn.disabled = false; histBtn.disabled = false; newBtn.disabled = false;
-  if (error || !data?.respuesta) { addChatBubble('bot', 'No pude conectar con el cotizador, intenta de nuevo en un momento.'); return; }
-  addChatBubble('bot', data.respuesta);
+  if (error || !data?.respuesta) { addChatBubble('bot', await mensajeErrorCotizador(data, error)); return; }
+  // El prompt puede pedirle al modelo separar una intro corta de un bloque
+  // de datos con "---BLOQUE---" (ver REGLA DURA #3 en cotizador-chat) --
+  // cada parte se muestra como su propia burbuja en vez de un solo mensaje
+  // largo, sin necesitar tool-calling ni turnos extra del modelo.
+  const partes = data.respuesta.split('---BLOQUE---').map(p => p.trim()).filter(Boolean);
+  (partes.length ? partes : [data.respuesta]).forEach(parte => addChatBubble('bot', parte));
   chatHistory.push({ role: 'assistant', content: data.respuesta });
   await guardarChatIA();
+}
+// Mismo patrón que mensajeErrorExtraccion (ver setupExtractor más abajo):
+// con status no-2xx supabase-js deja `data` en null y el body real queda en
+// `error.context`.
+async function mensajeErrorCotizador(data, error) {
+  let code = data?.error;
+  if (!code && error?.context?.json) {
+    try { code = (await error.context.json())?.error; } catch { /* body no era JSON, se usa el mensaje genérico */ }
+  }
+  const MSG = {
+    timeout_ia: 'El cotizador tardó demasiado en responder, intenta de nuevo.',
+    error_ia: 'No se pudo conectar con la IA, intenta de nuevo en un momento.',
+    error_tarifario: 'No se pudo consultar el tarifario, intenta de nuevo.',
+    sin_respuesta: 'La IA no devolvió una respuesta, intenta de nuevo.',
+    no_autenticado: 'Tu sesión expiró, volvé a iniciar sesión.',
+    no_configurado: 'El cotizador no está disponible en este momento.',
+    body_invalido: 'Ocurrió un error inesperado, intenta de nuevo.',
+    sin_mensajes: 'Escribí un mensaje antes de enviar.',
+  };
+  return MSG[code] || 'No pude conectar con el cotizador, intenta de nuevo en un momento.';
 }
 // Red de seguridad visual: aunque el prompt le pide a Gemini no usar markdown
 // pesado, a veces igual manda **negritas** o encabezados con #. En vez de
