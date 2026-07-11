@@ -80,6 +80,7 @@ function periodo(kind) {
   if (kind === 'mes') { const m = new Date(now.getFullYear(), now.getMonth(), 1); return [m, new Date(now.getFullYear(), now.getMonth() + 1, 1)]; }
   if (kind === 'anio') { return [new Date(now.getFullYear(), 0, 1), new Date(now.getFullYear() + 1, 0, 1)]; }
   if (kind === '7d') { return [addD(now, -7), addD(now, 1)]; }
+  if (kind === '3m') { const t = new Date(now); t.setMonth(t.getMonth() - 3); return [t, addD(now, 1)]; }
   return [addD(now, -30), addD(now, 1)];
 }
 const addD = (dt, n) => { const x = new Date(dt); x.setDate(x.getDate() + n); return x; };
@@ -1131,13 +1132,17 @@ function inboxCardHtml(l) {
 }
 async function atenderInboxLead(l) {
   // window.open ANTES del await -- si va después, ya no corre dentro del
-  // gesto síncrono del click y Chrome/Firefox lo bloquean como popup.
+  // gesto síncrono del click y Chrome/Firefox lo bloquean como popup. Si de
+  // todos modos vuelve null (ej. llamado async desde manejarDeepLinkLeadAccion
+  // al tocar el botón nativo de una notificación push -- ahí no hay gesto vivo
+  // para heredar), se ofrece el link a mano en vez de fallar en silencio.
   const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
-  if (wa) window.open(`https://wa.me/${wa}`, '_blank');
-  const { error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: 'ATENDIDO' });
-  if (error) { errToast('No se pudo marcar como atendido: ' + error.message); return; }
+  const winRef = wa ? window.open(`https://wa.me/${wa}`, '_blank') : null;
+  const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: 'ATENDIDO' });
+  if (error || !data?.ok) { errToast('No se pudo marcar como atendido: ' + (error?.message || data?.error || '')); return; }
   quitarDeInbox(l.id);
   okToast('Lead marcado como atendido');
+  if (wa && !winRef) linkToast(`El navegador bloqueó la apertura automática -- <a href="https://wa.me/${wa}" target="_blank" rel="noopener">tocá acá para abrir WhatsApp</a>`);
   loadTable();
 }
 async function noPuedoInboxLead(l) {
@@ -1147,6 +1152,7 @@ async function noPuedoInboxLead(l) {
   // salía (solo lo disparan telegram-webhook/timeout-leads hoy).
   const { data, error } = await sb.functions.invoke('reasignar-lead', { body: { p_lead_id: l.id } });
   if (error) { errToast('No se pudo reasignar: ' + error.message); return; }
+  if (data?.motivo === 'fuera_de_horario') { errToast('No se reasignan leads entre 9pm y 9am -- el lead sigue contigo'); return; }
   if (!data?.ok) { errToast('No se pudo reasignar: ' + (data?.motivo || data?.error || 'error desconocido')); return; }
   if (data.pool_agotado) { errToast('No hay más asesores disponibles por ahora -- el lead sigue contigo'); return; }
   quitarDeInbox(l.id);
@@ -3018,7 +3024,7 @@ function subscribeRealtime() {
     // del inbox sin esperar un refresh manual.
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, payload => {
       if (ROL !== 'asesor' || !INBOX_LEADS.some(x => x.id === payload.new.id)) return;
-      if (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto) quitarDeInbox(payload.new.id);
+      if (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto || payload.new.eliminado_at) quitarDeInbox(payload.new.id);
     })
     .subscribe();
 }
@@ -3029,13 +3035,23 @@ function recibirLeadNuevoInbox(lead) {
   renderInbox();
   const card = document.querySelector(`.inbox-card[data-id="${lead.id}"]`);
   if (card) { card.classList.add('inbox-new'); setTimeout(() => card.classList.remove('inbox-new'), 2200); }
-  if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-    new Notification('Nuevo lead — ' + (lead.destino || 'sin destino'), { body: `${lead.nombre} · ${lead.telefono || ''}`, icon: './icons/icon-192.png' });
+  // showNotification() vía SW, no `new Notification(...)` -- ese constructor
+  // directo tira "Illegal constructor" en Chrome/Android cuando corre como
+  // PWA instalada (la forma en que la usan los asesores), no solo en sitios
+  // sueltos de escritorio.
+  if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted' && navigator.serviceWorker) {
+    navigator.serviceWorker.ready.then(reg => reg.showNotification('Nuevo lead — ' + (lead.destino || 'sin destino'), {
+      body: `${lead.nombre} · ${lead.telefono || ''}`, icon: './icons/icon-192.png',
+    }));
   }
 }
 function toast(l) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-bolt"></i> <div><b>Nuevo lead en vivo</b><br>${esc(l.nombre)} · ${esc(l.destino || '')}</div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5200); }
 function okToast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-check"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500); }
 function errToast(msg) { const t = document.createElement('div'); t.className = 'toast toast-err'; t.innerHTML = `<i class="fas fa-triangle-exclamation"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5000); }
+// Igual que okToast/errToast pero con HTML propio (nunca de input de usuario)
+// y más tiempo en pantalla -- para acciones que el asesor tiene que tocar,
+// como el link de WhatsApp cuando window.open() vuelve bloqueado.
+function linkToast(html) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-link"></i> <div>${html}</div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 10000); }
 
 /* ---------- Historial interno (gesto de "atrás" del SO no debe salir de la PWA) ----------
    Cada cambio de sección o apertura de overlay (drawer/lightbox/sheet) empuja
