@@ -825,6 +825,7 @@ input.ei[type=date]{color-scheme:dark}
     <a class="nav-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
     <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
     <a class="nav-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+    <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
     <div class="nav-label nav-admin-only">Gestión</div>
     <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
     <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
@@ -1248,6 +1249,37 @@ input.ei[type=date]{color-scheme:dark}
       </div>
     </section>
 
+    <!-- REDES (Instagram: métricas + analista IA) -->
+    <section class="section" id="sec-redes">
+      <div class="seg-group" id="redes-periodo">
+        <button class="seg" data-p="7d">7 días</button>
+        <button class="seg on" data-p="30d">30 días</button>
+        <button class="seg" data-p="mes">Este mes</button>
+      </div>
+      <div class="kpis kpis-5" id="redes-kpis"></div>
+      <div class="grid g-2b" style="margin-top:4px">
+        <div class="card"><h2><i class="fas fa-chart-line"></i> Alcance diario</h2><div class="csub">Posts, reels y carousels</div><div class="chart-wrap"><canvas id="chSerieRedes"></canvas></div></div>
+        <div class="card"><h2><i class="fas fa-chart-pie"></i> Por tipo de contenido</h2><div class="csub">Distribución del período</div><div class="chart-wrap"><canvas id="chTipoRedes"></canvas></div></div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h2><i class="fas fa-ranking-star"></i> Top posts por alcance</h2>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Publicación</th><th>Tipo</th><th>Alcance</th><th>Interacciones</th></tr></thead>
+            <tbody id="redes-top-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card chat-wrap" style="margin-top:14px">
+        <div class="chat-toolbar"><div class="eb-title" style="margin:0"><i class="fa-brands fa-instagram"></i> Analista IA</div></div>
+        <div class="chat-log" id="redes-chat-log"></div>
+        <div class="chat-inputbar">
+          <textarea id="redes-chat-input" rows="1" placeholder="Preguntale al analista sobre estas métricas"></textarea>
+          <button class="chat-send" id="redes-chat-send" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
+        </div>
+      </div>
+    </section>
+
     <div class="foot-note">Datos reales · Lotus 360 CRM</div>
   </main>
 </div>
@@ -1279,6 +1311,7 @@ input.ei[type=date]{color-scheme:dark}
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
   <a class="sheet-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+  <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-asesor-hide" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
@@ -1303,6 +1336,17 @@ input.ei[type=date]{color-scheme:dark}
   <div class="sheet-handle"></div>
   <div class="sheet-title">Nuevo chat</div>
   <div id="msg-picker-list"></div>
+</div>
+
+<!-- Eliminar lead (solo admin) — confirmación explícita, soft delete -->
+<div class="sheet" id="confirm-delete-lead-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-triangle-exclamation" style="color:#ef4444"></i> Eliminar lead</div>
+  <p style="padding:0 16px 4px;color:var(--muted2);font-size:13.5px;line-height:1.5">Este lead va a desaparecer de la tabla, el pipeline y las métricas. La acción queda registrada y es recuperable solo desde la base de datos — no desde el CRM.</p>
+  <div style="display:flex;gap:10px;padding:14px 16px 4px">
+    <button class="dbtn" id="confirm-delete-lead-cancel" type="button" style="flex:1">Cancelar</button>
+    <button class="dbtn" id="confirm-delete-lead-ok" type="button" style="flex:1;background:#ef4444;color:#fff"><i class="fas fa-trash"></i> Eliminar</button>
+  </div>
 </div>
 
 <!-- Configuración de visibilidad de Tarifario (solo admin) -->

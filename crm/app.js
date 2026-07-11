@@ -21,7 +21,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de los hoteles del tarifario'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de los hoteles del tarifario'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // Las descripciones/requisitos/precios del tarifario vienen del PDF original
@@ -65,6 +65,7 @@ function periodo(kind) {
   if (kind === 'semana') { const w = new Date(now); const day = (w.getDay() + 6) % 7; w.setDate(w.getDate() - day); w.setHours(0, 0, 0, 0); return [w, addD(w, 7)]; }
   if (kind === 'mes') { const m = new Date(now.getFullYear(), now.getMonth(), 1); return [m, new Date(now.getFullYear(), now.getMonth() + 1, 1)]; }
   if (kind === 'anio') { return [new Date(now.getFullYear(), 0, 1), new Date(now.getFullYear() + 1, 0, 1)]; }
+  if (kind === '7d') { return [addD(now, -7), addD(now, 1)]; }
   return [addD(now, -30), addD(now, 1)];
 }
 const addD = (dt, n) => { const x = new Date(dt); x.setDate(x.getDate() + n); return x; };
@@ -480,6 +481,7 @@ async function startApp() {
   setupChat();
   setupExtractor();
   setupMensajes();
+  setupRedes();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
   if (ROL === 'asesor') activateSection('tarifario');
   await loadStats();
@@ -769,7 +771,7 @@ function setDrop(id, v) { const el = document.getElementById(id); el.value = v; 
 function refresh() { page = 1; loadTable(); renderChips(); }
 
 function buildQuery(forCount) {
-  let q = sb.from('leads').select('*', forCount ? { count: 'exact' } : {});
+  let q = sb.from('leads').select('*', forCount ? { count: 'exact' } : {}).is('eliminado_at', null);
   const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim();
   if (fc) q = q.eq('canal', fc);
   if (fe) q = q.eq('estado', fe);
@@ -895,16 +897,36 @@ function openDrawer(l) {
     <div class="dactions">
       ${wa ? `<a class="dbtn wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>` : ''}
       <button class="dbtn extractor" id="e-a-extractor" type="button"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</button>
+      ${ROL === 'admin' ? `<button class="dbtn" id="e-a-eliminar" type="button" style="background:#ef444422;color:#ef4444"><i class="fas fa-trash"></i> Eliminar lead</button>` : ''}
     </div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">ID: ${esc(l.external_id || l.id)}</div>`;
 
   document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', e.target.value === VENTA);
   document.getElementById('e-save').onclick = guardarLead;
   document.getElementById('e-a-extractor').onclick = () => irAExtractor(l);
+  if (ROL === 'admin') document.getElementById('e-a-eliminar').onclick = () => openSheet('confirm-delete-lead-sheet');
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
 }
+document.getElementById('confirm-delete-lead-cancel')?.addEventListener('click', () => closeSheet('confirm-delete-lead-sheet'));
+document.getElementById('confirm-delete-lead-ok')?.addEventListener('click', async () => {
+  if (!currentLead) return;
+  const btn = document.getElementById('confirm-delete-lead-ok');
+  btn.disabled = true; btn.innerHTML = 'Eliminando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.rpc('eliminar_lead', { p_lead_id: currentLead.id });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i> Eliminar';
+  if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (error?.message || data?.error || '')); return; }
+  // La hoja de confirmación quedó apilada arriba del drawer (openSheet
+  // empujó su propia entrada de historial) — se descarta esa entrada a
+  // mano en vez de sumar un history.back() extra, así el cierre de
+  // ambos overlays consume un solo history.back() (el del drawer).
+  if (NAV_STACK[NAV_STACK.length - 1]?.type === 'sheet') NAV_STACK.pop();
+  closeSheet('confirm-delete-lead-sheet', true);
+  window.closeDrawer();
+  okToast('Lead eliminado');
+  await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
+});
 async function guardarLead() {
   const btn = document.getElementById('e-save'), err = document.getElementById('edit-err');
   const estado = val('e-estado'), asesor = val('e-asesor'), servicio = val('e-servicio');
@@ -982,6 +1004,80 @@ async function loadRanking() {
     </tr>`).join('');
   const tot = rows.reduce((a, r) => ({ ventas: a.ventas + (+r.ventas || 0), monto: a.monto + (+r.monto || 0), atendidos: a.atendidos + (+r.atendidos || 0) }), { ventas: 0, monto: 0, atendidos: 0 });
   document.getElementById('rank-tot').innerHTML = `<span>${fmt(tot.atendidos)} atendidos</span><span>${fmt(tot.ventas)} ventas</span><span>${money(tot.monto)} en ingresos</span>`;
+}
+
+/* ---------- Redes (Instagram) ---------- */
+let redesPeriodo = '30d', redesChatHistory = [];
+function setupRedes() {
+  document.querySelectorAll('#redes-periodo .seg').forEach(b => b.onclick = () => { document.querySelectorAll('#redes-periodo .seg').forEach(x => x.classList.remove('on')); b.classList.add('on'); redesPeriodo = b.dataset.p; loadRedes(); });
+  const input = document.getElementById('redes-chat-input');
+  document.getElementById('redes-chat-send').onclick = enviarChatRedes;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatRedes(); } });
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  addChatBubbleRedes('bot', 'Hola, soy el analista de redes. Preguntame sobre el alcance, los posts con mejor desempeño o las historias del período seleccionado.');
+}
+async function loadRedes() {
+  await ensureChart();
+  const [d, h] = periodo(redesPeriodo);
+  const { data, error } = await sb.rpc('redes_metricas_resumen', { p_desde: iso(d), p_hasta: iso(h) });
+  if (error) { console.error(error); errToast('No se pudieron cargar las métricas de redes'); return; }
+  const cards = [
+    { t: 'Publicaciones', v: fmt(data.publicaciones), i: 'fa-images', c: 'var(--blue)' },
+    { t: 'Historias', v: fmt(data.historias), i: 'fa-circle-play', c: 'var(--purple)' },
+    { t: 'Alcance total', v: fmt(data.reach_total), i: 'fa-eye', c: 'var(--accent)' },
+    { t: 'Interacciones', v: fmt(data.interacciones_total), i: 'fa-heart', c: '#ff5c8a' },
+    { t: 'Alcance prom. historias', v: fmt(data.reach_prom_historias), i: 'fa-chart-simple', c: '#34d399' },
+  ];
+  document.getElementById('redes-kpis').innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  const s = data.serie || [];
+  mk('chSerieRedes', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Alcance', data: s.map(x => x.reach), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
+  const te = sortEntries(data.por_tipo);
+  mk('chTipoRedes', { type: 'bar', data: { labels: te.map(x => x[0]), datasets: [{ data: te.map(x => x[1]), backgroundColor: '#a06bff', borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } } });
+  const top = data.top_posts || [];
+  document.getElementById('redes-top-body').innerHTML = top.length ? top.map(p => `
+    <tr>
+      <td class="td-name">${p.permalink ? `<a href="${esc(p.permalink)}" target="_blank" rel="noopener">${esc(p.caption || p.id)}</a>` : esc(p.caption || p.id)}</td>
+      <td data-label="Tipo" class="muted">${esc(p.tipo)}</td>
+      <td data-label="Alcance">${fmt(p.reach)}</td>
+      <td data-label="Interacciones">${fmt(p.interacciones)}</td>
+    </tr>`).join('') : '<tr><td colspan="4" class="muted">Sin publicaciones en este período</td></tr>';
+}
+async function enviarChatRedes() {
+  const input = document.getElementById('redes-chat-input'), btn = document.getElementById('redes-chat-send');
+  const texto = input.value.trim();
+  if (!texto || btn.disabled) return;
+  addChatBubbleRedes('user', texto);
+  redesChatHistory.push({ role: 'user', content: texto });
+  input.value = ''; input.style.height = 'auto';
+  btn.disabled = true;
+  const loadingEl = addChatBubbleRedes('bot', 'Pensando...', true);
+  const [d, h] = periodo(redesPeriodo);
+  const { data, error } = await sb.functions.invoke('redes-analista-chat', { body: { messages: redesChatHistory, periodo: { desde: iso(d), hasta: iso(h) } } });
+  loadingEl.remove();
+  btn.disabled = false;
+  if (error || !data?.respuesta) { addChatBubbleRedes('bot', 'No pude conectar con el analista, intenta de nuevo en un momento.'); return; }
+  addChatBubbleRedes('bot', data.respuesta);
+  redesChatHistory.push({ role: 'assistant', content: data.respuesta });
+}
+function addChatBubbleRedes(who, texto, loading) {
+  const log = document.getElementById('redes-chat-log');
+  const div = document.createElement('div');
+  div.className = `chat-msg ${who}${loading ? ' loading' : ''}`;
+  if (who === 'bot' && !loading) div.innerHTML = renderBotText(texto);
+  else div.textContent = texto;
+  let el = div;
+  if (who === 'bot') {
+    const row = document.createElement('div');
+    row.className = 'chat-row';
+    row.innerHTML = '<span class="chat-avatar"><i class="fa-brands fa-instagram"></i></span>';
+    row.appendChild(div);
+    log.appendChild(row);
+    el = row;
+  } else {
+    log.appendChild(div);
+  }
+  log.scrollTop = log.scrollHeight;
+  return el;
 }
 
 /* ---------- Reasignaciones ---------- */
@@ -2378,6 +2474,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'galeria') loadGaleria();
   if (sec === 'asesores') loadAsesoresPeriodo();
+  if (sec === 'redes') loadRedes();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
 function setupNav() {
