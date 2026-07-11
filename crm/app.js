@@ -21,7 +21,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de los hoteles del tarifario'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // Las descripciones/requisitos/precios del tarifario vienen del PDF original
@@ -1193,7 +1193,7 @@ function setupTarifarioTabs() {
   let deb; document.getElementById('tar-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(renderTarifario, 200); });
   document.querySelectorAll('.tar-f').forEach(el => el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => renderTarifario()));
   tarView = initViewSwitcher('tar-view-switch', 'tarifario', 'tarjetas', v => { tarView = v; renderTarifario(); });
-  cargarTabsOcultas();
+  tabsOcultasListo = cargarTabsOcultas();
   setupTarAdmin();
 }
 
@@ -1204,7 +1204,7 @@ const TAR_TAB_META = [
   { key: 'hotel', label: 'Hoteles' },
   { key: 'paquete', label: 'Paquetes' },
 ];
-let tabsOcultas = [];
+let tabsOcultas = [], tabsOcultasListo = null;
 async function cargarTabsOcultas() {
   const { data, error } = await sb.from('tarifario_config').select('value').eq('key', 'tabs_ocultas').single();
   tabsOcultas = (!error && Array.isArray(data?.value)) ? data.value : [];
@@ -1310,19 +1310,20 @@ const tagsHtml = tags => (tags || []).length ? `<div class="tar-tags">${tags.map
 // Fotos propias del ítem; si no tiene, hereda las de su hotel vinculado
 // (promociones.producto_id o productos.hotel_id, ver push_to_supabase.py
 // HOTEL_ALIASES) — nunca se inventa una foto para algo sin vínculo real.
-const fotosRaw = x => x.producto_fotos || x.promocion_fotos || x.productos?.producto_fotos || x.hotel?.producto_fotos || [];
-const fotosDe = x => {
-  // activo=false son reemplazadas (Bloque 7) -- se guardan como histórico
-  // en storage pero no deben volver a mostrarse. es_principal (Bloque 4)
-  // manda sobre el orden normal cuando el admin eligió una a mano.
-  const ordenar = arr => arr.filter(f => f.activo !== false).slice()
-    .sort((a, b) => (b.es_principal ? 1 : 0) - (a.es_principal ? 1 : 0) || a.orden - b.orden)
-    .map(f => FOTOS_BASE + f.storage_path);
-  const propias = ordenar(x.producto_fotos || x.promocion_fotos || []);
+// activo=false son reemplazadas (Bloque 7) -- se guardan como histórico en
+// storage pero no deben volver a mostrarse. es_principal (Bloque 4) manda
+// sobre el orden normal cuando el admin eligió una a mano.
+const ordenarFotos = arr => (arr || []).filter(f => f.activo !== false).slice()
+  .sort((a, b) => (b.es_principal ? 1 : 0) - (a.es_principal ? 1 : 0) || a.orden - b.orden);
+// Propias si tiene, si no hereda del hotel vinculado -- mismo fallback en
+// los dos casos reales (paquete/promo -> hotel), a diferencia de `a || b`
+// que NO sirve acá porque un array vacío es truthy en JS.
+const fotosRaw = x => {
+  const propias = ordenarFotos(x.producto_fotos || x.promocion_fotos || []);
   if (propias.length) return propias;
-  const heredadas = x.productos?.producto_fotos || x.hotel?.producto_fotos || [];
-  return ordenar(heredadas);
+  return ordenarFotos(x.productos?.producto_fotos || x.hotel?.producto_fotos || []);
 };
+const fotosDe = x => fotosRaw(x).map(f => FOTOS_BASE + f.storage_path);
 const tieneFotoPrincipalPropia = x => fotosRaw(x).some(f => f.es_principal);
 // Cuando un hotel tiene varias promos, todas partían del mismo set de fotos
 // en el mismo orden — se veían idénticas en portada. Se le asigna a cada
@@ -1618,39 +1619,103 @@ function tarFichaHtml(x) {
     </div>
   </div>`;
 }
-/* ---------- Galería (solo fotos, sin precios ni filtros) ---------- */
-// Carga hoteles de a GAL_PER (con "Cargar más") en vez de traer todos de una
-// vez — con ~200 fotos repartidas en ~22 hoteles, un solo fetch disparaba
-// hasta 147 requests de imágenes en un único acceso a la sección.
+/* ---------- Galería (4 carpetas desplegables, mismo orden/categorías que Tarifario) ---------- */
+// Bloque 6: antes solo cubría Hoteles. Ahora son 4 carpetas <details> (una
+// por TAR_TAB_META) que arrancan cerradas -- una carpeta cerrada no dispara
+// NINGÚN fetch de fotos hasta que se abre (ontoggle), así una carpeta con
+// muchos ítems no carga de arranque junto con las otras 3. Dentro de cada
+// carpeta se mantiene la paginación de a GAL_PER que ya evitaba el problema
+// original (147 requests de fotos en un solo acceso, ver docs/pwa-audit).
 const GAL_PER = 6;
-let galCargada = false, galPage = 0, galTotal = 0;
-async function loadGaleria(append) {
-  if (galCargada && !append) return;
-  const loading = document.getElementById('gal-loading'), empty = document.getElementById('gal-empty'), list = document.getElementById('gal-list'), pager = document.getElementById('gal-pager');
-  if (!append) { empty.classList.remove('show'); loading.classList.add('show'); galPage = 0; list.innerHTML = ''; }
-  const from = galPage * GAL_PER;
-  const { data, count, error } = await sb.from('productos').select('nombre, producto_fotos(storage_path,orden,width,height,es_principal,activo)', { count: 'exact' }).eq('tipo', 'hotel').eq('activo', true).order('nombre').range(from, from + GAL_PER - 1);
+const GAL_ICONS = { promo: 'fa-tag', destino: 'fa-map-location-dot', hotel: 'fa-hotel', paquete: 'fa-suitcase-rolling' };
+const galEstado = {};
+TAR_TAB_META.forEach(t => { galEstado[t.key] = { cargada: false, page: 0, total: 0 }; });
+let galArmada = false;
+async function loadGaleria() {
+  if (galArmada) return;
+  galArmada = true;
+  // Espera a que termine de cargar tabs_ocultas (arranca en [] y se llena
+  // async desde setupTarifarioTabs) -- si no, una carpeta que el admin
+  // ocultó en Tarifario podría verse igual acá si Galería se abre primero.
+  await tabsOcultasListo;
+  const list = document.getElementById('gal-list');
+  const cats = TAR_TAB_META.filter(t => !tabsOcultas.includes(t.key));
+  if (!cats.length) { list.innerHTML = '<div class="tbl-state"><i class="fas fa-images"></i><div class="es-t">Sin categorías visibles</div></div>'; return; }
+  list.innerHTML = cats.map(t => `
+    <details class="gal-folder" data-cat="${t.key}">
+      <summary><i class="fas ${GAL_ICONS[t.key]}"></i> ${esc(t.label)}<i class="fas fa-chevron-down gal-folder-caret"></i></summary>
+      <div class="gal-folder-body">
+        <div class="tbl-state skel-grid" id="gal-loading-${t.key}"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>
+        <div class="tbl-state" id="gal-empty-${t.key}" style="display:none"><i class="fas fa-images"></i><div class="es-t">Sin fotos todavía en esta categoría</div></div>
+        <div id="gal-cat-list-${t.key}"></div>
+        <div class="pager" id="gal-pager-${t.key}"><button data-cat="${t.key}" class="gal-more-btn">Cargar más</button></div>
+      </div>
+    </details>`).join('');
+  list.querySelectorAll('.gal-folder').forEach(det => det.addEventListener('toggle', () => {
+    const key = det.dataset.cat;
+    if (det.open && !galEstado[key].cargada) cargarGaleriaCategoria(key);
+  }));
+  list.querySelectorAll('.gal-more-btn').forEach(btn => btn.onclick = () => cargarGaleriaCategoria(btn.dataset.cat, true));
+}
+// Mismo shape de consulta que usa loadTarifario() por tab (incluida la
+// herencia de fotos de paquete->hotel y promo->hotel vía fotosDe()), para no
+// duplicar la lógica de vínculo -- reusa fotosDe/fotosRotadas ya probados.
+async function fetchGaleriaPagina(key, from) {
+  if (key === 'promo') {
+    const { data, count, error } = await sb.from('promociones')
+      .select('id, titulo, promocion_fotos(storage_path,orden,es_principal,activo), productos(producto_fotos(storage_path,orden,width,height,es_principal,activo))', { count: 'exact' })
+      .order('titulo').range(from, from + GAL_PER - 1);
+    return { data, count, error, nombreDe: x => x.titulo };
+  }
+  const q = sb.from('productos').select('id, nombre, hotel_id, producto_fotos(storage_path,orden,width,height,es_principal,activo)', { count: 'exact' }).eq('tipo', key).eq('activo', true).order('nombre').range(from, from + GAL_PER - 1);
+  const { data, count, error } = await q;
+  if (!error && key === 'paquete') {
+    const hotelIds = [...new Set((data || []).filter(x => x.hotel_id && !x.producto_fotos?.length).map(x => x.hotel_id))];
+    if (hotelIds.length) {
+      const { data: hoteles } = await sb.from('productos').select('id, producto_fotos(storage_path,orden,width,height,es_principal,activo)').in('id', hotelIds);
+      const porId = Object.fromEntries((hoteles || []).map(h => [h.id, h]));
+      data.forEach(x => { if (x.hotel_id && porId[x.hotel_id]) x.hotel = porId[x.hotel_id]; });
+    }
+  }
+  return { data, count, error, nombreDe: x => x.nombre };
+}
+async function cargarGaleriaCategoria(key, append) {
+  const st = galEstado[key];
+  const loading = document.getElementById(`gal-loading-${key}`), empty = document.getElementById(`gal-empty-${key}`),
+    list = document.getElementById(`gal-cat-list-${key}`), pager = document.getElementById(`gal-pager-${key}`);
+  if (!append) { st.page = 0; list.innerHTML = ''; empty.style.display = 'none'; }
+  loading.classList.add('show');
+  const from = st.page * GAL_PER;
+  const { data, count, error, nombreDe } = await fetchGaleriaPagina(key, from);
   loading.classList.remove('show');
-  if (error) { console.error(error); errToast('No se pudo cargar la galería'); return; }
-  galTotal = count ?? 0;
-  const conFotos = (data || []).filter(x => x.producto_fotos?.some(f => f.activo !== false));
-  if (!append && !conFotos.length) { empty.classList.add('show'); pager.classList.remove('show'); return; }
-  galCargada = true;
+  if (error) { console.error(error); errToast('No se pudo cargar esta categoría de la galería'); return; }
+  st.total = count ?? 0;
+  const conFotos = (data || []).filter(x => fotosRaw(x).length);
+  // cargada=true y page++ SIEMPRE, incluso si esta página en particular no
+  // trajo ningún ítem con fotos -- si no, reabrir la carpeta la reintenta
+  // desde la página 0 por siempre (ítems sin foto al principio del orden
+  // alfabético la dejarían atascada, sin poder llegar nunca a los que sí
+  // tienen). El botón "Cargar más" es lo que avanza a través de eso.
+  st.cargada = true;
+  st.page++;
+  const hayMas = st.page * GAL_PER < st.total;
+  if (!conFotos.length) {
+    if (!append && !list.children.length && !hayMas) empty.style.display = '';
+    pager.classList.toggle('show', hayMas);
+    return;
+  }
+  empty.style.display = 'none';
   list.insertAdjacentHTML('beforeend', conFotos.map(x => {
-    const fotos = x.producto_fotos.filter(f => f.activo !== false).slice().sort((a, b) => (b.es_principal ? 1 : 0) - (a.es_principal ? 1 : 0) || a.orden - b.orden);
-    return `<div class="gal-hotel"><h2><i class="fas fa-hotel"></i> ${esc(x.nombre)}</h2>
+    const fotos = fotosRaw(x);
+    return `<div class="gal-hotel"><h2><i class="fas ${GAL_ICONS[key]}"></i> ${esc(nombreDe(x))}</h2>
       <div class="gal-masonry">${fotos.map(f => {
         const url = FOTOS_BASE + f.storage_path;
-        // width/height reales (backfill PR3) reservan el aspect-ratio exacto
-        // desde el HTML, sin esperar a que la foto cargue — si falta en
-        // alguna foto vieja sin backfill, el CSS cae al 4/3 aproximado.
         const dims = f.width && f.height ? ` width="${f.width}" height="${f.height}"` : '';
-        return `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="${esc(x.nombre)}" loading="lazy"${dims}></a>`;
+        return `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="${esc(nombreDe(x))}" loading="lazy"${dims}></a>`;
       }).join('')}</div>
     </div>`;
   }).join(''));
-  galPage++;
-  pager.classList.toggle('show', galPage * GAL_PER < galTotal);
+  pager.classList.toggle('show', hayMas);
 }
 async function loadTarifarioInfo() {
   if (tarInfo) return;
@@ -2586,7 +2651,6 @@ function activateSection(sec, fromNav) {
 function setupNav() {
   document.querySelectorAll('.nav-item,.bn-item,.sheet-item').forEach(n => n.addEventListener('click', () => { if (n.dataset.sec) activateSection(n.dataset.sec); }));
   document.getElementById('bn-more')?.addEventListener('click', () => openSheet('more-sheet'));
-  document.getElementById('gal-more')?.addEventListener('click', () => loadGaleria(true));
   document.querySelectorAll('.mfs-trigger, .mfs-done').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.mfs;
     b.classList.contains('mfs-trigger') ? openSheet(id) : closeSheet(id);

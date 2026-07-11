@@ -587,6 +587,16 @@ input.ei[type=date]{color-scheme:dark}
 @media(max-width:760px){.msg-img,.msg-video-wrap{max-width:200px}.msg-conv{padding:14px 16px}}
 
 /* ---------- Galería ---------- */
+/* Carpetas desplegables por categoría (Bloque 6) -- <details> nativo: sin
+   costo de JS para animar, y el contenido de una carpeta cerrada ni se
+   arma en el DOM hasta que loadGaleriaCategoria() la puebla al abrirla. */
+.gal-folder{border:1px solid var(--line);border-radius:14px;margin-bottom:14px;overflow:hidden;background:var(--panel)}
+.gal-folder summary{list-style:none;cursor:pointer;padding:16px 18px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:10px;user-select:none}
+.gal-folder summary::-webkit-details-marker{display:none}
+.gal-folder summary i.fa-folder{color:var(--accent)}
+.gal-folder summary .gal-folder-caret{margin-left:auto;transition:transform .15s;color:var(--muted)}
+.gal-folder[open] summary .gal-folder-caret{transform:rotate(180deg)}
+.gal-folder-body{padding:0 18px 18px}
 .gal-hotel{margin-bottom:30px}
 .gal-hotel h2{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .gal-hotel h2 i{color:var(--accent);font-size:13px}
@@ -1124,10 +1134,7 @@ input.ei[type=date]{color-scheme:dark}
 
     <!-- GALERÍA -->
     <section class="section" id="sec-galeria">
-      <div class="tbl-state skel-grid" id="gal-loading"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>
-      <div class="tbl-state" id="gal-empty"><i class="fas fa-images"></i><div class="es-t">Sin fotos todavía</div><div class="es-s">Los hoteles con fotos cargadas van a aparecer acá</div></div>
       <div id="gal-list"></div>
-      <div class="pager" id="gal-pager"><button id="gal-more">Cargar más hoteles</button></div>
     </section>
 
     <!-- ASESORES -->
