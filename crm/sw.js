@@ -1,6 +1,6 @@
 // Service worker del CRM. Fase 1: solo cachea el shell estatico para que la PWA sea instalable.
 // Bump CACHE_VERSION en cada deploy que deba invalidar el shell cacheado.
-const CACHE_VERSION = 'lotus-crm-shell-v4';
+const CACHE_VERSION = 'lotus-crm-shell-v5';
 const SHELL_FILES = [
   './index.html',
   './app.js',
@@ -71,8 +71,11 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Notificaciones de asistencia (asistencia-recordatorio). El payload viene
-// como JSON: {title, body, url, critico}.
+// Notificaciones push (asistencia-recordatorio*, notificar_lead). Payload
+// JSON: {title, body, url, critico?, actions?}. `actions` son los botones
+// nativos (ej. Atender/No puedo) -- Android/Chrome/Edge los muestran, iOS
+// Safari los ignora sin más (limitación real de WebKit, no hay forma de
+// arreglarlo desde acá: ahí solo queda tocar la notificación entera).
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data ? event.data.text() : '' }; }
@@ -81,14 +84,21 @@ self.addEventListener('push', (event) => {
     icon: './icons/icon-192.png',
     badge: './icons/icon-192.png',
     data: { url: data.url || './index.html?accion=marcar-asistencia' },
-    tag: data.critico ? 'asistencia-critico' : 'asistencia',
+    tag: data.critico ? 'asistencia-critico' : (data.tag || 'asistencia'),
     requireInteraction: !!data.critico,
+    actions: data.actions || undefined,
   }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || './index.html?accion=marcar-asistencia';
+  let url = event.notification.data?.url || './index.html?accion=marcar-asistencia';
+  // Botón de acción nativo tocado (ver notificarNuevoLeadPush): se agrega
+  // ?accion=<action> a la URL del lead para que la página, ya con sesión,
+  // ejecute lo mismo que el botón del inbox (manejarDeepLinkLeadAccion).
+  if (event.action === 'atender' || event.action === 'no_puedo') {
+    url += (url.includes('?') ? '&' : '?') + 'accion=' + event.action;
+  }
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
       for (const c of cs) {

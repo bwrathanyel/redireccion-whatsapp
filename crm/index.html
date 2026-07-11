@@ -86,8 +86,10 @@ body::before{content:'';position:fixed;inset:0;background:
 .app{display:grid;grid-template-columns:246px 1fr;min-height:100vh;min-height:100dvh}
 
 /* ---------- Sidebar (desktop) ---------- */
-.sidebar{border-right:1px solid var(--line);padding:20px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:6px;background:linear-gradient(180deg,rgba(13,18,36,.6),rgba(8,11,22,.2))}
-.brand{display:flex;align-items:center;gap:11px;padding:6px 8px 18px}
+.sidebar{border-right:1px solid var(--line);position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(13,18,36,.6),rgba(8,11,22,.2))}
+.sidebar-top{flex-shrink:0;padding:20px 14px 10px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--line)}
+.sidebar-nav{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+.brand{display:flex;align-items:center;gap:11px;padding:6px 8px 12px}
 .brand img{width:42px;height:42px;border-radius:11px;border:2px solid var(--accent);padding:2px;background:#fff;object-fit:contain}
 .brand .bt{font-weight:800;font-size:15px;letter-spacing:.2px;line-height:1}
 .brand .bs{font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:3px}
@@ -98,7 +100,7 @@ body::before{content:'';position:fixed;inset:0;background:
 .nav-item.active{background:var(--accent-soft);color:#ffd8a8;border-color:rgba(255,145,0,.22)}
 .nav-item.active i{color:var(--accent)}
 .nav-item .badge{margin-left:auto;background:var(--accent);color:#221200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px}
-.side-foot{margin-top:auto;padding:12px 10px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.side-foot{flex-shrink:0;padding:12px 14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
 .jornada-widget{margin:10px 10px 0;padding:9px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--line);display:flex;align-items:center;gap:8px}
 .jornada-dot{width:8px;height:8px;border-radius:50%;background:var(--muted2);flex-shrink:0}
 .jornada-dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(16,185,129,.18)}
@@ -123,6 +125,7 @@ body::before{content:'';position:fixed;inset:0;background:
 .strike-row:last-child{border-bottom:none}
 .avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#e0570a);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#1a1000;flex-shrink:0;background-size:cover;background-position:center}
 .side-foot .un{font-size:12.5px;font-weight:600}.side-foot .ue{font-size:10.5px;color:var(--muted)}
+.sidebar-perfil{display:flex}
 .side-foot-perfil{display:flex;align-items:center;gap:10px;flex:1;background:transparent;border:none;padding:0;cursor:pointer;color:inherit;font-family:inherit;border-radius:8px}
 .side-foot-perfil:hover .un{color:var(--accent)}
 .logout-btn{background:transparent;border:1px solid var(--line);color:var(--muted);width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:13px;flex-shrink:0;transition:color .15s,border-color .15s}
@@ -134,6 +137,8 @@ body::before{content:'';position:fixed;inset:0;background:
 .bn-item i{font-size:18px}
 .bn-item.active{color:var(--accent)}
 .bn-item.active::before{content:'';position:absolute;top:0;width:26px;height:3px;border-radius:3px;background:var(--accent)}
+.bn-badge{display:none;position:absolute;top:2px;right:calc(50% - 26px);background:var(--accent);color:#1a1000;font-size:9px;font-weight:800;min-width:15px;height:15px;line-height:15px;text-align:center;border-radius:20px;padding:0 3px}
+.bn-badge.show{display:block}
 .mobile-brand{display:none}
 
 /* ---------- Hoja inferior (bottom sheet) — más opciones del nav, filtros en móvil ---------- */
@@ -145,6 +150,8 @@ body::before{content:'';position:fixed;inset:0;background:
 .sheet-title{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
 .sheet-item{display:flex;align-items:center;gap:14px;min-height:52px;padding:0 6px;color:var(--txt);text-decoration:none;font-size:15px;font-weight:600;border-bottom:1px solid var(--line);cursor:pointer}
 .sheet-item:last-child{border-bottom:none}
+.sheet-perfil-card{display:flex;align-items:center;gap:12px;padding:10px 6px 16px;color:var(--txt);text-decoration:none;cursor:pointer}
+.sheet-perfil-card .un{font-size:14.5px;font-weight:700}.sheet-perfil-card .ue{font-size:12px;color:var(--muted)}
 .sheet-item i{width:22px;text-align:center;color:var(--accent);font-size:16px}
 
 /* ---------- Main ---------- */
@@ -309,6 +316,7 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .dfv-num{color:var(--accent);font-weight:700}
 .dactions{display:flex;gap:10px;margin-top:22px}
 .dbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:12px;font-size:13px;font-weight:700;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:filter .15s,transform .15s}
+.dbtn:disabled{opacity:.45;cursor:not-allowed}
 .dbtn.wa{background:var(--wa);color:#fff}.dbtn.wa:hover{filter:brightness(1.08)}
 .dbtn.gh{background:rgba(255,255,255,.06);color:var(--txt);border:1px solid var(--line2)}
 
@@ -486,6 +494,27 @@ input.ei[type=date]{color-scheme:dark}
 .entity-card .ec-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 #tbl-wrap.hide,#rg-wrap.hide{display:none}
 
+/* ---------- Inbox de leads estilo Telegram (solo rol asesor, sec-leads) ---------- */
+.leads-inbox{display:none;margin-bottom:18px}
+.rol-asesor .leads-inbox{display:block}
+.leads-inbox-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.leads-inbox-head h2{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;margin:0}
+.leads-inbox-head .lih-count{background:var(--accent);color:#1a1000;font-size:11px;font-weight:800;padding:1px 8px;border-radius:20px}
+.leads-inbox-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.inbox-card{cursor:pointer}
+.inbox-card.inbox-new{animation:inbox-pulse 1.1s ease-in-out 2}
+@keyframes inbox-pulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 4px var(--accent-soft)}}
+.inbox-actions{display:flex;gap:6px;margin-top:10px}
+.inbox-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:9px 6px;border-radius:9px;font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;border:1px solid transparent;transition:filter .15s}
+.inbox-btn.atender{background:var(--green);color:#04241a}
+.inbox-btn.nopuedo{background:transparent;color:#ef4444;border-color:#ef4444}
+.inbox-btn.avisar{background:transparent;color:var(--amber);border-color:var(--amber)}
+.inbox-btn:hover{filter:brightness(1.08)}
+.inbox-btn:disabled{opacity:.5;cursor:default}
+.sheet-input{width:100%;box-sizing:border-box;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:9px;padding:10px 12px;color:var(--txt);font-size:16px;font-family:inherit;outline:none;color-scheme:dark;margin:10px 0}
+.sheet-input:focus{border-color:var(--accent)}
+@media(max-width:760px){.inbox-btn{min-height:44px;font-size:12px}}
+
 /* ---------- Filtros estructurados del Cotizador IA (van ANTES del texto libre) ---------- */
 .cot-filtros{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .cot-f-fecha{display:inline-flex;align-items:center;gap:7px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:7px 12px;color:var(--muted);font-size:12px;white-space:nowrap}
@@ -518,6 +547,8 @@ input.ei[type=date]{color-scheme:dark}
 .chat-inputbar{display:flex;gap:10px;padding-top:12px;border-top:1px solid var(--line)}
 .chat-inputbar textarea{flex:1;resize:none;background:var(--panel-solid);border:1.5px solid var(--line2);border-radius:14px;padding:12px 14px;color:var(--txt);font-size:14px;font-family:inherit;outline:none;max-height:120px}
 .chat-inputbar textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.jornada-resumen-input{width:100%;box-sizing:border-box;resize:vertical;background:var(--panel-solid);border:1.5px solid var(--line2);border-radius:14px;padding:12px 14px;color:var(--txt);font-size:14px;font-family:inherit;outline:none;margin:10px 0}
+.jornada-resumen-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .chat-send{background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:14px;width:48px;flex-shrink:0;cursor:pointer;font-size:16px}
 .chat-send:disabled{opacity:.5;cursor:default}
 @media(max-width:760px){.chat-wrap{height:calc(100vh - 250px);height:calc(100dvh - 250px)}.chat-msg{max-width:88%}.chat-row{max-width:92%}}
@@ -885,39 +916,46 @@ input.ei[type=date]{color-scheme:dark}
 <div class="app">
   <!-- Sidebar (desktop) -->
   <aside class="sidebar">
-    <div class="brand"><img src="logolotus.png" alt="Lotus 360" width="512" height="512"><div><div class="bt">Lotus 360</div><div class="bs">CRM</div></div></div>
-    <div class="nav-label">Principal</div>
-    <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
-    <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
-    <a class="nav-item nav-marketing-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
-    <a class="nav-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
-    <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
-    <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
-    <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
-    <div class="nav-label">Tarifario</div>
-    <a class="nav-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
-    <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
-    <a class="nav-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
-    <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
-    <div class="nav-label nav-admin-only">Gestión</div>
-    <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
-    <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
-    <a class="nav-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
-    <div class="jornada-widget" id="jornada-widget-d">
-      <span class="jornada-dot" id="jornada-dot-d"></span>
-      <span class="jornada-text" id="jornada-text-d">Jornada inactiva</span>
-      <button class="jornada-btn" id="jornada-btn-d" onclick="toggleJornada()">Comenzar</button>
+    <div class="sidebar-top">
+      <div class="brand"><img src="logolotus.png" alt="Lotus 360" width="512" height="512"><div><div class="bt">Lotus 360</div><div class="bs">CRM</div></div></div>
+      <div class="sidebar-perfil">
+        <button class="side-foot-perfil" id="side-foot-perfil" title="Mi perfil" type="button">
+          <div class="avatar" id="side-avatar">·</div>
+          <div style="flex:1;text-align:left"><div class="un" id="side-un">—</div><div class="ue" id="side-ue">—</div></div>
+        </button>
+      </div>
+      <div class="jornada-widget" id="jornada-widget-d">
+        <span class="jornada-dot" id="jornada-dot-d"></span>
+        <span class="jornada-text" id="jornada-text-d">Jornada inactiva</span>
+        <button class="jornada-btn" id="jornada-btn-d" onclick="toggleJornada()">Comenzar</button>
+      </div>
+      <div class="recordatorios-banner" id="recordatorios-banner-d">
+        <span>Activá los recordatorios de asistencia</span>
+        <button onclick="activarRecordatorios()">Activar</button>
+        <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
+      </div>
     </div>
-    <div class="recordatorios-banner" id="recordatorios-banner-d">
-      <span>Activá los recordatorios de asistencia</span>
-      <button onclick="activarRecordatorios()">Activar</button>
-      <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
-    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Principal</div>
+      <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
+      <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
+      <a class="nav-item nav-marketing-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
+      <a class="nav-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
+      <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
+      <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
+      <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
+      <div class="nav-label">Tarifario</div>
+      <a class="nav-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
+      <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
+      <a class="nav-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+      <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
+      <div class="nav-label nav-admin-only">Gestión</div>
+      <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
+      <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
+      <a class="nav-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
+      <a class="nav-item nav-admin-only solo-informe-diario" id="nav-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
+    </nav>
     <div class="side-foot">
-      <button class="side-foot-perfil" id="side-foot-perfil" title="Mi perfil" type="button">
-        <div class="avatar" id="side-avatar">·</div>
-        <div style="flex:1;text-align:left"><div class="un" id="side-un">—</div><div class="ue" id="side-ue">—</div></div>
-      </button>
       <button class="logout-btn" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
     </div>
   </aside>
@@ -977,6 +1015,14 @@ input.ei[type=date]{color-scheme:dark}
 
     <!-- LEADS -->
     <section class="section" id="sec-leads">
+      <div class="leads-inbox" id="leads-inbox">
+        <div class="leads-inbox-head">
+          <h2><i class="fas fa-inbox"></i> Leads nuevos <span class="lih-count" id="inbox-count">0</span></h2>
+        </div>
+        <div class="tbl-state skel" id="inbox-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
+        <div class="tbl-state" id="inbox-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tenés leads nuevos esperando respuesta</div></div>
+        <div class="leads-inbox-grid" id="inbox-grid"></div>
+      </div>
       <button class="mfs-trigger" data-mfs="leads-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
       <div class="tbar mfs" id="leads-tbar">
           <select class="flt" id="f-canal"><option value="">Todos los canales</option></select>
@@ -1293,6 +1339,20 @@ input.ei[type=date]{color-scheme:dark}
       </div>
     </section>
 
+    <!-- INFORME DIARIO (Bloque 14 — solo Luis Rueda, gate por MI_VE_INFORME_DIARIO) -->
+    <section class="section" id="sec-informe-diario">
+      <div class="card">
+        <h2><i class="fas fa-file-lines"></i> Informe Diario</h2>
+        <div class="csub">Resumen de cierre de jornada de cada asesor · últimos 14 días, más reciente primero</div>
+        <div id="informe-diario-wrap" style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Fecha</th><th>Asesor</th><th>Hora salida</th><th>Resumen</th></tr></thead>
+            <tbody id="informe-diario-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- MÉTRICAS -->
     <section class="section" id="sec-metricas">
       <div class="seg-group" id="met-periodo">
@@ -1364,7 +1424,7 @@ input.ei[type=date]{color-scheme:dark}
 <!-- Bottom nav (móvil) — máximo 5 ítems para que sea cómodo con el pulgar; el resto vive en la hoja "Más" -->
 <nav class="bottom-nav">
   <a class="bn-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Inicio</a>
-  <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i> Leads</a>
+  <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i><span class="bn-badge" id="nav-lead-count-m"></span> Leads</a>
   <a class="bn-item nav-marketing-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
   <a class="bn-item nav-asesor-only" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor</a>
   <a class="bn-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
@@ -1377,6 +1437,11 @@ input.ei[type=date]{color-scheme:dark}
 <div class="sheet" id="more-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title">Más opciones</div>
+  <a class="sheet-perfil-card nav-marketing-ok" id="sheet-item-perfil">
+    <div class="avatar" id="side-avatar-m">·</div>
+    <div style="flex:1;text-align:left"><div class="un" id="side-un-m">—</div><div class="ue" id="side-ue-m">—</div></div>
+    <i class="fas fa-chevron-right" style="color:var(--muted2);font-size:12px"></i>
+  </a>
   <div class="jornada-widget jornada-widget-m" id="jornada-widget-m">
     <span class="jornada-dot" id="jornada-dot-m"></span>
     <span class="jornada-text" id="jornada-text-m">Jornada inactiva</span>
@@ -1387,7 +1452,6 @@ input.ei[type=date]{color-scheme:dark}
     <button onclick="activarRecordatorios()">Activar</button>
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
-  <a class="sheet-item nav-marketing-ok" id="sheet-item-perfil"><i class="fas fa-user-circle"></i> Mi perfil</a>
   <a class="sheet-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-asesor-hide" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
@@ -1397,6 +1461,7 @@ input.ei[type=date]{color-scheme:dark}
   <a class="sheet-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
   <a class="sheet-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
   <a class="sheet-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
+  <a class="sheet-item nav-admin-only solo-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
 </div>
 
 <!-- Mensajes: adjuntar archivo -->
@@ -1414,6 +1479,37 @@ input.ei[type=date]{color-scheme:dark}
   <div class="sheet-handle"></div>
   <div class="sheet-title">Nuevo chat</div>
   <div id="msg-picker-list"></div>
+</div>
+
+<!-- Resumen de cierre de jornada (Bloque 14) — obligatorio para finalizar; si se
+     cancela, la jornada sigue activa (agent_check_out exige p_resumen, ver
+     migración 20260711020000). -->
+<div class="sheet" id="jornada-resumen-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-flag-checkered"></i> Resumen del día</div>
+  <p style="padding:0 16px 4px;color:var(--muted2);font-size:13.5px;line-height:1.5">Contanos brevemente qué hiciste hoy antes de cerrar tu jornada.</p>
+  <div style="padding:0 16px">
+    <textarea class="jornada-resumen-input" id="jornada-resumen-input" rows="5" placeholder="Ej: atendí 8 leads nuevos, cerré 2 ventas, seguimiento a cotizaciones pendientes..."></textarea>
+  </div>
+  <div style="display:flex;gap:10px;padding:4px 16px 4px">
+    <button class="dbtn" id="jornada-resumen-cancelar" type="button" style="flex:1;background:var(--panel-solid);color:var(--txt);border:1px solid var(--line2)">Seguir trabajando</button>
+    <button class="dbtn" id="jornada-resumen-ok" type="button" style="flex:1;background:var(--accent);color:#1a1000" disabled><i class="fas fa-check"></i> Finalizar jornada</button>
+  </div>
+</div>
+
+<!-- Avisar número incorrecto (Inbox de leads, Bloque nuevo) — versión simplificada,
+     sin sugerencia IA: el asesor corrige a mano o marca inválido para revisión de gestión. -->
+<div class="sheet" id="inbox-telefono-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-flag"></i> Avisar número incorrecto</div>
+  <p style="padding:0 16px 4px;color:var(--muted2);font-size:13.5px;line-height:1.5">Corregí el número si lo sabés, o marcalo como inválido para que gestión lo revise.</p>
+  <div style="padding:0 16px">
+    <input type="tel" class="sheet-input" id="inbox-telefono-input" placeholder="Número corregido (opcional)">
+  </div>
+  <div style="display:flex;gap:10px;padding:4px 16px 4px">
+    <button class="dbtn" id="inbox-telefono-invalido" type="button" style="flex:1;background:var(--panel-solid);color:var(--txt);border:1px solid var(--line2)">Marcar inválido</button>
+    <button class="dbtn" id="inbox-telefono-guardar" type="button" style="flex:1;background:var(--accent);color:#1a1000">Guardar corrección</button>
+  </div>
 </div>
 
 <!-- Eliminar lead (solo admin) — confirmación explícita, soft delete -->

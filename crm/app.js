@@ -6,6 +6,14 @@ const SUPABASE_KEY = 'sb_publishable_M7Ms9DLwpNSCXZNCDhYtbQ_LhMYeLxk';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const fmt = n => (n ?? 0).toLocaleString('es-VE');
+const tiempoRelativo = iso => {
+  if (!iso) return '—';
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (min < 1) return 'ahora mismo';
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  return h < 24 ? `hace ${h}h` : `hace ${Math.round(h / 24)}d`;
+};
 const money = n => '$' + (Number(n) || 0).toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -21,7 +29,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
@@ -62,6 +70,7 @@ let trendKeys = [], canalKeys = [], destKeys = [], trendMap = {};
 let previewSel = null, charts = {};
 let ACTIVOS = [];
 let leadsView = 'lista', rgView = 'lista';
+let INBOX_LEADS = [], INBOX_TEL_LEAD_ID = null;
 
 /* ---------- Periodos ---------- */
 function periodo(kind) {
@@ -81,7 +90,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {};
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false;
 const overlay = id => document.getElementById(id);
 const showOverlay = id => { OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
 // Se recarga cada vez que se muestra el login (no solo una vez al abrir la
@@ -104,7 +113,7 @@ async function initAuth() {
 
 async function cargarUsuario() {
   const { data: { user } } = await sb.auth.getUser();
-  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias').eq('id', user?.id).single();
+  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario').eq('id', user?.id).single();
   if (error || !data) {
     await sb.auth.signOut();
     showOverlay('login');
@@ -118,7 +127,7 @@ async function afterLogin() {
   const u = await cargarUsuario();
   if (!u) return;
   MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
-  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {};
+  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   entrarSegunRol();
 }
@@ -131,12 +140,24 @@ function entrarSegunRol() {
   document.getElementById('side-un').textContent = MI_NOMBRE;
   document.getElementById('side-ue').textContent = ROL === 'admin' ? 'Administrador' : 'Asesor comercial';
   pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
+  document.getElementById('side-un-m').textContent = MI_NOMBRE;
+  document.getElementById('side-ue-m').textContent = ROL === 'admin' ? 'Administrador' : 'Asesor comercial';
+  pintarAvatar(document.getElementById('side-avatar-m'), MI_AVATAR_URL, MI_NOMBRE);
+  // nav-admin-only ya oculta esto para asesores/marketing vía CSS (.rol-asesor) --
+  // acá se ajusta el caso fino de que no todo admin ve Informe Diario, solo Luis Rueda.
+  document.querySelectorAll('.solo-informe-diario').forEach(el => el.style.display = MI_VE_INFORME_DIARIO ? '' : 'none');
   aplicarPreferencias();
   renderJornadaUI();
   handleCheckIn();
   startApp();
   renderRecordatoriosUI();
   manejarDeepLinkAsistencia();
+  // Antes de manejarDeepLinkSeccion: ese maneja "?ir=leads" con un
+  // history.replaceState(null,'',location.pathname) que borra TODA la query
+  // string, incluido "&accion=&lead=" -- si corriera primero, los botones
+  // nativos de la notificación de lead nunca dispararían nada (accion ya no
+  // estaría en la URL para cuando se leyera acá).
+  manejarDeepLinkLeadAccion();
   manejarDeepLinkSeccion();
   registrarPushNativo();
 }
@@ -270,6 +291,7 @@ async function subirAvatar(file) {
   const avatarViejo = MI_AVATAR_URL;
   MI_AVATAR_URL = nuevaUrl;
   pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
+  pintarAvatar(document.getElementById('side-avatar-m'), MI_AVATAR_URL, MI_NOMBRE);
   pintarAvatar(document.getElementById('perfil-avatar-preview'), MI_AVATAR_URL, MI_NOMBRE);
   okToast('Foto de perfil actualizada');
   // Limpieza del avatar viejo (misma carpeta propia, política avatar_delete_propio).
@@ -291,14 +313,40 @@ async function handleCheckIn() {
   JORNADA_ACTIVA = true;
   renderJornadaUI();
 }
-async function handleCheckOut() {
+// Finalizar jornada exige resumen (Bloque 14): el click en "Finalizar" solo
+// abre el sheet, sin tocar el backend todavía -- agent_check_out(p_resumen)
+// cierra la sesión y guarda el informe en un único viaje transaccional, así
+// que si se cancela el sheet la jornada sigue activa (nunca queda cerrada
+// sin informe).
+function abrirResumenJornada() {
   if (ROL !== 'admin' && ROL !== 'asesor') return;
-  const { error } = await sb.rpc('agent_check_out');
-  if (error) { console.error('check-out', error); return; }
+  document.getElementById('jornada-resumen-input').value = '';
+  document.getElementById('jornada-resumen-ok').disabled = true;
+  openSheet('jornada-resumen-sheet');
+}
+document.getElementById('jornada-resumen-input')?.addEventListener('input', (e) => {
+  document.getElementById('jornada-resumen-ok').disabled = !e.target.value.trim();
+});
+document.getElementById('jornada-resumen-cancelar')?.addEventListener('click', (e) => {
+  if (e.currentTarget.disabled) return; // envío en curso -- no se puede cancelar a mitad de camino
+  closeSheet('jornada-resumen-sheet');
+});
+document.getElementById('jornada-resumen-ok')?.addEventListener('click', async () => {
+  const btn = document.getElementById('jornada-resumen-ok');
+  const cancelarBtn = document.getElementById('jornada-resumen-cancelar');
+  const resumen = document.getElementById('jornada-resumen-input').value.trim();
+  if (!resumen) return;
+  btn.disabled = true; cancelarBtn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
+  const { error } = await sb.rpc('agent_check_out', { p_resumen: resumen });
+  btn.innerHTML = '<i class="fas fa-check"></i> Finalizar jornada';
+  cancelarBtn.disabled = false;
+  if (error) { btn.disabled = false; errToast('No se pudo cerrar la jornada: ' + error.message); return; }
   JORNADA_ACTIVA = false;
   renderJornadaUI();
-}
-window.toggleJornada = async () => { JORNADA_ACTIVA ? await handleCheckOut() : await handleCheckIn(); };
+  closeSheet('jornada-resumen-sheet');
+  okToast('Jornada finalizada — informe enviado');
+});
+window.toggleJornada = async () => { JORNADA_ACTIVA ? abrirResumenJornada() : await handleCheckIn(); };
 function renderJornadaUI() {
   ['-d', '-m'].forEach(sfx => {
     const dot = document.getElementById('jornada-dot' + sfx), text = document.getElementById('jornada-text' + sfx), btn = document.getElementById('jornada-btn' + sfx);
@@ -389,6 +437,22 @@ function manejarDeepLinkSeccion() {
   activateSection(ir);
 }
 
+// Deep-link desde los botones de acción de la notificación push de "lead
+// nuevo" (?accion=atender|no_puedo&lead=<id>) -- el service worker no puede
+// llamar a Supabase autenticado por su cuenta (no tiene la sesión de la
+// página), así que abre la app con esto y la página ya logueada ejecuta la
+// MISMA acción que los botones del inbox (reuso total, ver sw.js).
+async function manejarDeepLinkLeadAccion() {
+  const params = new URLSearchParams(location.search);
+  const accion = params.get('accion'), leadId = Number(params.get('lead'));
+  if (!['atender', 'no_puedo'].includes(accion) || !Number.isFinite(leadId)) return;
+  history.replaceState(null, '', location.pathname);
+  if (ROL !== 'asesor') return;
+  const { data: l, error } = await sb.from('leads').select('*').eq('id', leadId).single();
+  if (error || !l) { errToast('No se pudo cargar ese lead'); return; }
+  if (accion === 'atender') await atenderInboxLead(l); else await noPuedoInboxLead(l);
+}
+
 // Android nativo (Capacitor): sin import, el plugin se consume vía el
 // puente global window.Capacitor -- el proyecto no usa bundler, el paquete
 // npm @capacitor/push-notifications solo hace falta instalado para que
@@ -423,6 +487,13 @@ function registrarPushNativo() {
 
 /* ---------- Sección Asistencia (admin) ---------- */
 const hoyCaracas = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(new Date());
+// timestamptz (con offset) -> hora local Caracas. Reusado por Asistencia e Informe Diario.
+const fmtHoraCaracas = iso => iso ? new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)) : '—';
+// `date` de Postgres (ej. "2026-07-11", SIN hora/offset) -- a propósito no pasa por
+// Date()/timeZone: un date puro interpretado como hora local del navegador puede
+// correrse un día en timezones lejanos a Caracas (ej. UTC+9 lo lee como el día
+// anterior al reformatearlo). Se formatea directo de los componentes del string.
+const fmtFechaSolo = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
 async function loadAsistencia() {
   const [{ data: hoy, error: e1 }, { data: strikes, error: e2 }] = await Promise.all([
     sb.rpc('asistencia_admin_hoy'),
@@ -458,14 +529,26 @@ async function loadAsistenciaHistorial() {
   const fa = val('asist-hist-asesor') || null, fd = val('asist-hist-desde') || null, fh = val('asist-hist-hasta') || null;
   const { data, error } = await sb.rpc('asistencia_historial', { p_asesor_id: fa, p_desde: fd, p_hasta: fh });
   if (error) { errToast('No se pudo cargar el historial de asistencia'); return; }
-  const fmtHora = iso => iso ? new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)) : '—';
   const fmtFecha = iso => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(new Date(iso));
   document.getElementById('asist-hist-tbody').innerHTML = (data || []).map(s => `
     <tr>
       <td data-label="Asesor">${esc(s.nombre)}</td>
       <td data-label="Fecha" class="muted">${fmtFecha(s.hora_entrada)}</td>
-      <td data-label="Entrada">${fmtHora(s.hora_entrada)}</td>
-      <td data-label="Salida" class="muted">${fmtHora(s.hora_salida)}</td>
+      <td data-label="Entrada">${fmtHoraCaracas(s.hora_entrada)}</td>
+      <td data-label="Salida" class="muted">${fmtHoraCaracas(s.hora_salida)}</td>
+    </tr>`).join('') || '<tr><td colspan="4">Sin registros</td></tr>';
+}
+
+/* ---------- Informe Diario (Bloque 14 — solo Luis Rueda) ---------- */
+async function loadInformeDiario() {
+  const { data, error } = await sb.rpc('informes_diarios_listado');
+  if (error) { errToast('No se pudo cargar el Informe Diario'); return; }
+  document.getElementById('informe-diario-tbody').innerHTML = (data || []).map(f => `
+    <tr>
+      <td data-label="Fecha" class="muted">${fmtFechaSolo(f.fecha)}</td>
+      <td data-label="Asesor">${esc(f.nombre)}</td>
+      <td data-label="Hora salida">${f.tiene_informe ? fmtHoraCaracas(f.hora_salida) : '<span class="asist-badge off">Sin informe</span>'}</td>
+      <td data-label="Resumen">${f.tiene_informe ? esc(f.resumen) : '—'}</td>
     </tr>`).join('') || '<tr><td colspan="4">Sin registros</td></tr>';
 }
 window.exceptuarHoy = async (asesorId) => {
@@ -511,7 +594,7 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   if (err) { errEl.textContent = 'No se pudo guardar: ' + err.message; return; }
   const u = await cargarUsuario(); if (!u) return;
   MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
-  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {};
+  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
   entrarSegunRol();
 });
 
@@ -617,7 +700,11 @@ document.getElementById('claimForm').addEventListener('submit', async e => {
   }
 });
 
-window.cerrarSesion = async () => { await handleCheckOut(); await sb.auth.signOut(); location.reload(); };
+// Ya no cierra la jornada acá (agent_check_out ahora exige resumen, Bloque 14)
+// -- si queda activa, agent_check_in ya la cierra sola en el próximo login
+// (mismo criterio que un refresh/cierre de pestaña sin logout, ver comentario
+// arriba de agent_check_in).
+window.cerrarSesion = async () => { await sb.auth.signOut(); location.reload(); };
 
 async function startApp() {
   if (booted) return; booted = true;
@@ -629,12 +716,15 @@ async function startApp() {
   setupMensajes();
   setupRedes();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
-  if (ROL === 'asesor') activateSection('tarifario');
+  if (ROL === 'asesor') activateSection('leads');
   await loadStats();
   ACTIVOS = Object.keys(STATS.by_advisor || {});
   renderAll();
   setupFilters();
   await loadTable();
+  // No se llama loadInboxLeads() acá de nuevo -- activateSection('leads')
+  // (arriba, para asesor) ya la dispara; llamarla dos veces corría 2 fetches
+  // del mismo query en paralelo sin orden garantizado de resolución.
   setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo();
   setupDestPeriodo(); loadDestPeriodo();
   subscribeRealtime();
@@ -646,7 +736,9 @@ async function loadStats() {
   if (error) { console.error('stats', error.message || error); errToast('No se pudieron cargar las estadísticas'); return; }
   STATS = data;
   trendMap = {}; (STATS.trend || []).forEach(x => trendMap[x.mes] = x.total);
-  document.getElementById('nav-lead-count').textContent = Number.isFinite(STATS.total) ? (STATS.total / 1000).toFixed(1).replace('.0', '') + 'k' : '—';
+  // Para asesor el badge de Leads muestra pendientes del inbox (actualizarBadgeLeads),
+  // no el total histórico -- no pisarlo acá.
+  if (ROL !== 'asesor') document.getElementById('nav-lead-count').textContent = Number.isFinite(STATS.total) ? (STATS.total / 1000).toFixed(1).replace('.0', '') + 'k' : '—';
 }
 
 /* ---------- KPIs ---------- */
@@ -945,7 +1037,7 @@ async function loadTable() {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
       <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}</div></td>
-      <td data-label="Teléfono" class="muted">${esc(l.telefono) || '—'}</td>
+      <td data-label="Teléfono" class="muted">${esc(l.telefono) || '—'}${l.requiere_revision_telefono ? ' <i class="fas fa-flag" style="color:#ef4444" title="Número marcado para revisión"></i>' : ''}</td>
       <td data-label="Destino">${esc(l.destino)}</td>
       <td data-label="Canal"><span class="chip ${cc}">${esc(l.canal)}</span></td>
       <td data-label="Asesor">${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</td>
@@ -990,6 +1082,113 @@ function renderPager(pages) {
   const pv = document.getElementById('pprev'), nx = document.getElementById('pnext');
   if (pv) pv.onclick = () => { page--; loadTable(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   if (nx) nx.onclick = () => { page++; loadTable(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+}
+
+/* ---------- Inbox de leads estilo Telegram (solo rol asesor) ----------
+   Reemplaza la dependencia de Telegram para el flujo Atender/No puedo/Avisar
+   número: mismos datos, mismas 3 acciones, pero sobre las RPC ya existentes
+   (actualizar_lead, reasignar_lead) + reportar_telefono_incorrecto (nueva). */
+async function loadInboxLeads() {
+  if (ROL !== 'asesor') return;
+  document.getElementById('inbox-loading').classList.add('show');
+  const { data, error } = await sb.from('leads').select('*')
+    .eq('estado', 'POR ATENDER').is('fecha_primer_contacto', null).is('eliminado_at', null)
+    .order('fecha_creacion', { ascending: false });
+  document.getElementById('inbox-loading').classList.remove('show');
+  if (error) { console.error('inbox', error); errToast('No se pudo cargar el inbox de leads'); return; }
+  INBOX_LEADS = data || [];
+  renderInbox();
+}
+function renderInbox() {
+  const grid = document.getElementById('inbox-grid'), empty = document.getElementById('inbox-empty');
+  document.getElementById('inbox-count').textContent = INBOX_LEADS.length;
+  empty.classList.toggle('show', INBOX_LEADS.length === 0);
+  grid.innerHTML = INBOX_LEADS.map(inboxCardHtml).join('');
+  [...grid.querySelectorAll('.inbox-card')].forEach((el, i) => {
+    const l = INBOX_LEADS[i];
+    el.addEventListener('click', () => openDrawer(l));
+    el.querySelector('.inbox-btn.atender').addEventListener('click', e => { e.stopPropagation(); atenderInboxLead(l); });
+    el.querySelector('.inbox-btn.nopuedo').addEventListener('click', e => { e.stopPropagation(); noPuedoInboxLead(l); });
+    el.querySelector('.inbox-btn.avisar').addEventListener('click', e => { e.stopPropagation(); abrirAvisarTelefono(l); });
+  });
+  actualizarBadgeLeads(INBOX_LEADS.length);
+}
+function inboxCardHtml(l) {
+  const av = clientAvatar(l);
+  return `<div class="entity-card inbox-card" data-id="${l.id}">
+    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}</div></div>
+    <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
+    <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
+    ${l.destino_consulta ? `<div class="ec-row"><i class="fas fa-comment-dots"></i> ${esc(l.destino_consulta)}</div>` : ''}
+    ${l.personas ? `<div class="ec-row"><i class="fas fa-users"></i> ${esc(l.personas)} persona(s)</div>` : ''}
+    <div class="ec-row"><i class="fas fa-clock"></i> ${tiempoRelativo(l.fecha_creacion)}</div>
+    <div class="inbox-actions">
+      <button type="button" class="inbox-btn atender"><i class="fas fa-check"></i> Atender</button>
+      <button type="button" class="inbox-btn nopuedo"><i class="fas fa-xmark"></i> No puedo</button>
+      <button type="button" class="inbox-btn avisar" title="Avisar número incorrecto"><i class="fas fa-flag"></i></button>
+    </div>
+  </div>`;
+}
+async function atenderInboxLead(l) {
+  // window.open ANTES del await -- si va después, ya no corre dentro del
+  // gesto síncrono del click y Chrome/Firefox lo bloquean como popup.
+  const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
+  if (wa) window.open(`https://wa.me/${wa}`, '_blank');
+  const { error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: 'ATENDIDO' });
+  if (error) { errToast('No se pudo marcar como atendido: ' + error.message); return; }
+  quitarDeInbox(l.id);
+  okToast('Lead marcado como atendido');
+  loadTable();
+}
+async function noPuedoInboxLead(l) {
+  // Vía Edge Function reasignar-lead (no RPC directo): además de reasignar
+  // (misma reasignar_lead(), mismo check de ownership) dispara el push al
+  // asesor nuevo -- si se llamara la RPC directo desde acá, ese aviso nunca
+  // salía (solo lo disparan telegram-webhook/timeout-leads hoy).
+  const { data, error } = await sb.functions.invoke('reasignar-lead', { body: { p_lead_id: l.id } });
+  if (error) { errToast('No se pudo reasignar: ' + error.message); return; }
+  if (!data?.ok) { errToast('No se pudo reasignar: ' + (data?.motivo || data?.error || 'error desconocido')); return; }
+  if (data.pool_agotado) { errToast('No hay más asesores disponibles por ahora -- el lead sigue contigo'); return; }
+  quitarDeInbox(l.id);
+  okToast('Lead reasignado a otro asesor');
+}
+function quitarDeInbox(leadId) {
+  INBOX_LEADS = INBOX_LEADS.filter(x => x.id !== leadId);
+  renderInbox();
+}
+function abrirAvisarTelefono(l) {
+  INBOX_TEL_LEAD_ID = l.id;
+  document.getElementById('inbox-telefono-input').value = '';
+  openSheet('inbox-telefono-sheet');
+}
+document.getElementById('inbox-telefono-invalido')?.addEventListener('click', () => guardarTelefonoIncorrecto(null));
+document.getElementById('inbox-telefono-guardar')?.addEventListener('click', () => {
+  const v = document.getElementById('inbox-telefono-input').value.trim();
+  if (!v) { errToast('Escribí el número corregido, o usá "Marcar inválido"'); return; }
+  guardarTelefonoIncorrecto(v);
+});
+async function guardarTelefonoIncorrecto(telefonoCorregido) {
+  if (!INBOX_TEL_LEAD_ID) return;
+  const { error } = await sb.rpc('reportar_telefono_incorrecto', { p_lead_id: INBOX_TEL_LEAD_ID, p_telefono_corregido: telefonoCorregido });
+  if (error) { errToast('No se pudo guardar: ' + error.message); return; }
+  closeSheet('inbox-telefono-sheet');
+  okToast(telefonoCorregido ? 'Número corregido' : 'Marcado para revisión de gestión');
+  // El lead sigue pendiente (esto no toca estado/fecha_primer_contacto) --
+  // se actualiza el teléfono en memoria para que la card ya lo refleje sin
+  // esperar el próximo reload/realtime.
+  const l = INBOX_LEADS.find(x => x.id === INBOX_TEL_LEAD_ID);
+  if (l && telefonoCorregido) l.telefono = telefonoCorregido;
+  if (l) renderInbox();
+  INBOX_TEL_LEAD_ID = null;
+}
+// Badge de "Leads" para rol asesor: pendientes del inbox, no el total histórico (ver loadStats).
+// setAppBadge/clearAppBadge: puntito de conteo en el ícono de la PWA instalada (feature-detected,
+// Safari/iOS y navegadores viejos no lo soportan -- no rompe nada donde falta).
+function actualizarBadgeLeads(pendientes) {
+  const d = document.getElementById('nav-lead-count'), m = document.getElementById('nav-lead-count-m');
+  if (d) d.textContent = pendientes > 0 ? String(pendientes) : '—';
+  if (m) { m.textContent = pendientes > 9 ? '9+' : String(pendientes); m.classList.toggle('show', pendientes > 0); }
+  if ('setAppBadge' in navigator) { (pendientes > 0 ? navigator.setAppBadge(pendientes) : navigator.clearAppBadge()).catch(() => {}); }
 }
 
 /* ---------- Drawer editable ---------- */
@@ -2807,11 +3006,32 @@ async function subirAdjunto(file) {
 
 /* ---------- Realtime ---------- */
 function subscribeRealtime() {
-  sb.channel('leads-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, payload => {
-    toast(payload.new);
-    loadStats().then(() => { renderAll(); loadDestPeriodo(); });
-    if (page === 1 && document.getElementById('sec-leads').classList.contains('active')) loadTable();
-  }).subscribe();
+  sb.channel('leads-live')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, payload => {
+      toast(payload.new);
+      loadStats().then(() => { renderAll(); loadDestPeriodo(); });
+      if (page === 1 && document.getElementById('sec-leads').classList.contains('active')) loadTable();
+      if (ROL === 'asesor') recibirLeadNuevoInbox(payload.new);
+    })
+    // RLS ya filtra este evento a leads propios -- si uno deja de estar
+    // pendiente por otra vía (ej. lo editan a mano en el drawer/tabla), sale
+    // del inbox sin esperar un refresh manual.
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, payload => {
+      if (ROL !== 'asesor' || !INBOX_LEADS.some(x => x.id === payload.new.id)) return;
+      if (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto) quitarDeInbox(payload.new.id);
+    })
+    .subscribe();
+}
+// Card nueva al tope del inbox en vivo + notificación local instantánea si la
+// pestaña no está en foco (no depende de la latencia del push del servidor).
+function recibirLeadNuevoInbox(lead) {
+  INBOX_LEADS.unshift(lead);
+  renderInbox();
+  const card = document.querySelector(`.inbox-card[data-id="${lead.id}"]`);
+  if (card) { card.classList.add('inbox-new'); setTimeout(() => card.classList.remove('inbox-new'), 2200); }
+  if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    new Notification('Nuevo lead — ' + (lead.destino || 'sin destino'), { body: `${lead.nombre} · ${lead.telefono || ''}`, icon: './icons/icon-192.png' });
+  }
 }
 function toast(l) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-bolt"></i> <div><b>Nuevo lead en vivo</b><br>${esc(l.nombre)} · ${esc(l.destino || '')}</div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5200); }
 function okToast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-check"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500); }
@@ -2865,6 +3085,8 @@ function activateSection(sec, fromNav) {
   if (sec === 'ranking') loadRanking();
   if (sec === 'reasignaciones') loadReasignaciones();
   if (sec === 'asistencia') loadAsistencia();
+  if (sec === 'informe-diario') loadInformeDiario();
+  if (sec === 'leads' && ROL === 'asesor') loadInboxLeads();
   if (sec === 'tarifario') loadTarifario();
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'galeria') loadGaleria();
