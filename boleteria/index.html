@@ -95,6 +95,7 @@
     <link rel="preload" as="image" href="https://destinoyeventoslotus360.com/logolotus-small.png" fetchpriority="high">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
+    <link rel="stylesheet" href="/assets/cart-ui.css">
     <style>
         :root { --accent: #ff9100; --accent-blue: #4a9eff; --color-fullday: #10b981; --success: #25D366; --text-warm: #ffe0b2; --card-bg: rgba(15,20,40,0.65); }
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
@@ -408,45 +409,12 @@
         </footer>
     </main>
 
+<script src="/assets/common.js"></script>
+<script src="/assets/cart.js"></script>
 <script>
-function transicionSalida(e) { e.preventDefault(); document.body.classList.add('salir'); setTimeout(function() { window.location.href = document.getElementById('homeBtn').href; }, 250); }
-(function() { var ahora = new Date(); var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000); var dia = ve.getDay(); var horaDecimal = ve.getHours() + ve.getMinutes() / 60; var online = (dia >= 1 && dia <= 6) ? (horaDecimal >= 8.5 && horaDecimal < 19) : (dia === 0 && horaDecimal >= 10 && horaDecimal < 15); document.getElementById('estado-dot').className = 'dot ' + (online ? 'online' : 'offline'); document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Domingos 10am-3pm' : 'Lun-Sáb 8:30am-7pm'); })();
+L360Cart.initFAB();
 function hoyISO() { return new Date().toISOString().split('T')[0]; }
 document.getElementById('fecha-ida').min = hoyISO(); document.getElementById('fecha-vuelta').min = hoyISO();
-
-function detectarProcedencia() {
-    var ua = navigator.userAgent || navigator.vendor || window.opera;
-    if (ua.indexOf('Instagram') > -1 || ua.indexOf('FBAN') > -1 || ua.indexOf('FBAV') > -1) return 'Instagram';
-    if (ua.indexOf('Facebook') > -1 || ua.indexOf('FB') > -1) return 'Facebook';
-    if (document.referrer.indexOf('instagram.com') > -1) return 'Instagram (Web)';
-    if (document.referrer.indexOf('facebook.com') > -1) return 'Facebook (Web)';
-    return 'Link Directo';
-}
-
-function esInstagramInApp() {
-    var ua = navigator.userAgent || navigator.vendor || window.opera;
-    return (ua.indexOf('Instagram') > -1) || (ua.indexOf('FBAN') > -1) || (ua.indexOf('FBAV') > -1);
-}
-
-function enviarDatos(datos) {
-    var formData = new FormData();
-    formData.append('Nombres', datos.nombre || 'No especificado');
-    formData.append('Fecha', datos.fechaHora);
-    formData.append('Destino', datos.destino);
-    formData.append('Pagina', datos.pagina);
-    formData.append('Servicio', datos.servicio);
-    formData.append('Procedencia', datos.procedencia || 'No detectada');
-    formData.append('Telefono', datos.telefono || 'No especificado');
-    formData.append('Asesor', datos.asesor || 'No asignado');
-    fetch('https://api.sheetmonkey.io/form/nLKvJpsMkGCFRwwwMMMX21', { method: 'POST', body: formData }).then(function(r) { console.log('Lead registrado en Sheets'); }).catch(function(e) { console.log('Error:', e); });
-}
-
-// Registra el lead tambien en el CRM (ademas de Sheet Monkey arriba). Solo
-// si hay telefono real -- sin eso el lead no es accionable en el CRM.
-function enviarACRM(datos) {
-    if (!datos.telefono || datos.telefono === 'No especificado') return;
-    fetch('https://begbjhrdbsqftbbleecb.functions.supabase.co/ingest-web-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) }).catch(function(e) { console.log('CRM ingest error:', e); });
-}
 
 // Boleteria es unico contacto Luis Rueda -- confirmado por Bwrathanyel
 // 2026-07-09, sin pool/reparto aca (a diferencia de hospedaje/tour).
@@ -471,7 +439,7 @@ function generarEdades(count) { var cont = document.getElementById('contenedor-e
 function actualizarAlertaCedula() { var inputs = document.querySelectorAll('.edad-nino'), tiene = false; for (var i = 0; i < inputs.length; i++) { if (parseInt(inputs[i].value) >= 9) { tiene = true; break; } } var alerta = document.getElementById('alerta-cedula-ninos'); alerta.style.borderColor = tiene ? 'rgba(255,80,80,0.5)' : 'rgba(255,145,0,0.25)'; alerta.style.background = tiene ? 'rgba(255,80,80,0.1)' : 'rgba(255,145,0,0.08)'; alerta.querySelector('span').innerHTML = tiene ? '⚠️ <strong>Obligatorio:</strong> Niños de 9+ años deben tener cédula.' : 'Niños ≥9 años necesitan cédula vigente para viajar.'; }
 function toggleEquipaje(el) { if (el.dataset.value === 'Sin equipaje') { var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag'); for (var i = 0; i < tags.length; i++) { tags[i].classList.remove('sel'); tags[i].setAttribute('aria-checked', 'false'); } el.classList.add('sel'); el.setAttribute('aria-checked', 'true'); } else { var sin = document.querySelector('#equipaje-grid .pasajero-tag[data-value="Sin equipaje"]'); if (sin) { sin.classList.remove('sel'); sin.setAttribute('aria-checked', 'false'); } el.classList.toggle('sel'); el.setAttribute('aria-checked', el.classList.contains('sel') ? 'true' : 'false'); } }
 function getEquipaje() { var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag.sel'), r = []; for (var i = 0; i < tags.length; i++) r.push(tags[i].dataset.value); return r; }
-function lanzarConfeti() { var colores = ['#4a9eff', '#25D366', '#ffd166', '#ff9100', '#7bb8ff']; var c = document.createElement('div'); c.className = 'confeti-container'; var f = document.createDocumentFragment(); for (var i = 0; i < 20; i++) { var x = document.createElement('div'); x.className = 'confeti'; x.style.left = Math.random() * 100 + '%'; x.style.animationDelay = Math.random() * 0.4 + 's'; x.style.animationDuration = (Math.random() * 0.8 + 0.7) + 's'; x.style.backgroundColor = colores[Math.floor(Math.random() * colores.length)]; f.appendChild(x); } c.appendChild(f); document.body.appendChild(c); setTimeout(function() { c.remove(); }, 1500); }
+function lanzarConfetiAzul() { lanzarConfeti(['#4a9eff', '#25D366', '#ffd166', '#ff9100', '#7bb8ff']); }
 
 function generarSolicitud() {
     var tipoViaje = document.querySelector('input[name="tipo-viaje"]:checked').value;
@@ -518,7 +486,7 @@ function generarSolicitud() {
     var waLink = 'https://wa.me/' + tlf + '?text=' + encodeURIComponent(mensajeFinal);
     document.getElementById('resultado').style.display = 'block';
     document.getElementById('resultado').innerHTML = '<div class="resultado-card"><h2><i class="fas fa-check-circle"></i> ¡Listo!</h2><div class="resumen-detalle">' + '<div class="dato"><i class="fas fa-exchange-alt"></i> <strong>' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + '</strong></div>' + '<div class="dato"><i class="fas fa-plane-departure"></i> ' + origen + ' → ' + destino + '</div>' + '<div class="dato"><i class="fas fa-calendar-check"></i> Ida: ' + fechaIda + (tipoViaje === 'ida-vuelta' && fechaVuelta ? ' | Vuelta: ' + fechaVuelta : '') + '</div>' + (dias > 0 ? '<div class="dato"><i class="fas fa-clock"></i> Duración: ' + dias + ' día(s)</div>' : '') + '<div class="dato"><i class="fas fa-sliders-h"></i> ' + (flexibilidad > 0 ? 'Flexible ±' + flexibilidad + ' día(s)' : 'Fechas fijas') + '</div>' + '<div class="dato"><i class="fas fa-users"></i> ' + adultos + ' adultos · ' + ninos + ' niños · ' + bebes + ' bebés</div>' + '<div class="dato"><i class="fas fa-suitcase"></i> ' + (equipaje.length ? equipaje.join(' + ') : 'Sin equipaje') + '</div>' + (ocasion !== 'Viaje regular' ? '<div class="dato"><i class="fas fa-gift"></i> ' + ocasion + '</div>' : '') + '</div><a href="' + waLink + '" target="_blank" rel="noopener" class="btn-cotizar"><i class="fab fa-whatsapp"></i> Enviar a un Asesor</a><button class="btn-nueva" onclick="nuevaCotizacion()"><i class="fas fa-redo"></i> Nueva cotización</button></div>';
-    document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' }); lanzarConfeti();
+    document.getElementById('resultado').scrollIntoView({ behavior: 'smooth', block: 'center' }); lanzarConfetiAzul();
 }
 function nuevaCotizacion() { var r = document.getElementById('resultado'); r.style.opacity = '0'; r.style.transform = 'translateY(8px)'; r.style.transition = 'all 0.25s ease'; setTimeout(function() { r.style.display = 'none'; r.innerHTML = ''; r.style.opacity = '1'; r.style.transform = 'translateY(0)'; window.scrollTo({ top: 0, behavior: 'smooth' }); }, 250); }
 toggleTipoViaje(); actualizarDescDestino();

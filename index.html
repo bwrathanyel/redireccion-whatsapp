@@ -102,6 +102,7 @@
     <link rel="preload" as="image" href="https://destinoyeventoslotus360.com/logolotus-small.png" fetchpriority="high">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
+    <link rel="stylesheet" href="/assets/cart-ui.css">
     <style>
         :root { --accent: #ff9100; --color-fullday: #10b981; --color-hospedaje: #ff9100; --color-boleteria: #4a9eff; --success: #25D366; --text-warm: #ffe0b2; }
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -312,14 +313,10 @@
     
     <a href="https://wa.me/584244634041?text=Hola!%20Vengo%20de%20su%20p%C3%A1gina%20web." class="wa-float" target="_blank" rel="noopener" title="Escríbenos por WhatsApp" aria-label="Escríbenos por WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></a>
 
+<script src="/assets/common.js"></script>
+<script src="/assets/cart.js"></script>
 <script>
-(function() {
-    var ahora = new Date(); var ve = new Date(ahora.getTime() + ahora.getTimezoneOffset() * 60000 - 4 * 3600000);
-    var dia = ve.getDay(); var horaDecimal = ve.getHours() + ve.getMinutes() / 60;
-    var online = (dia >= 1 && dia <= 6) ? (horaDecimal >= 8.5 && horaDecimal < 19) : (dia === 0 && horaDecimal >= 10 && horaDecimal < 15);
-    document.getElementById('estado-dot').className = 'dot ' + (online ? 'online' : 'offline');
-    document.getElementById('estado-texto').textContent = online ? 'En línea · Respondemos pronto' : (dia === 0 ? 'Domingos 10am-3pm' : 'Lun-Sáb 8:30am-7pm');
-})();
+L360Cart.initFAB();
 
 var track = document.getElementById('ticker-track');
 var wrap = document.getElementById('ticker-wrap');
