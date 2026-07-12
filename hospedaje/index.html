@@ -241,13 +241,6 @@
             <div class="escena-caption" id="escena-caption">🏖️ Arena blanca y aguas turquesa</div>
         </div>
 
-        <section class="form-section">
-            <div class="section-title"><i class="fas fa-hotel" aria-hidden="true"></i> Paquetes de Hotel <span style="font-weight:600;color:var(--text-warm);letter-spacing:0;text-transform:none;font-size:9px;margin-left:auto;">agrega al carrito</span></div>
-            <p class="hint-text" style="margin-bottom:8px;"><i class="fas fa-info-circle" aria-hidden="true"></i> Catálogo de Isla de Margarita. Puedes combinar hoteles con un Full Day en un mismo carrito y pedir todo en una sola cotización.</p>
-            <div id="l360-hospedaje-catalogo"></div>
-            <p class="hint-text" style="margin-top:6px;"><i class="fas fa-arrow-down" aria-hidden="true"></i> ¿Otro destino o no encuentras lo que buscas? Usa el formulario de abajo.</p>
-        </section>
-
         <form id="form-cotizacion" onsubmit="return false;">
             <fieldset class="form-section">
                 <legend class="section-title"><i class="fas fa-map-marker-alt" aria-hidden="true"></i> Destino</legend>
@@ -278,6 +271,18 @@
                     <input type="hidden" id="destino-hidden" value="Isla de Margarita">
                 </div>
             </fieldset>
+
+            <div class="form-section" id="l360-hospedaje-promo-wrap" style="display:none;">
+                <button type="button" class="l360-toggle-btn" id="l360-hoteles-toggle-btn" onclick="L360Cart.toggleHotelesPromo()">
+                    <i class="fas fa-fire"></i>
+                    <span id="l360-hoteles-toggle-label">Ver hoteles en oferta</span>
+                    <i class="fas fa-chevron-down l360-toggle-chevron"></i>
+                </button>
+                <div id="l360-hospedaje-catalogo-wrap" class="l360-collapse">
+                    <p class="hint-text" style="margin-bottom:8px;"><i class="fas fa-info-circle" aria-hidden="true"></i> Puedes combinar un hotel con un Full Day en un mismo carrito y pedir todo en una sola cotización.</p>
+                    <div id="l360-hospedaje-catalogo"></div>
+                </div>
+            </div>
 
             <fieldset class="form-section">
                 <legend class="section-title"><i class="fas fa-hotel" aria-hidden="true"></i> Hospedaje</legend>
@@ -467,6 +472,7 @@
 <script>
 L360Cart.initFAB();
 L360Cart.renderCatalogoHospedaje('l360-hospedaje-catalogo');
+L360Cart.actualizarDestinoHospedaje(document.getElementById('destino-hidden').value);
 
 function hoyISO() { return new Date().toISOString().split('T')[0]; }
 document.getElementById('checkin').min = hoyISO(); document.getElementById('checkout').min = hoyISO();
@@ -476,8 +482,8 @@ function actualizarNoches() { var ci = document.getElementById('checkin').value;
 (function() { var params = new URLSearchParams(window.location.search); var destinoParam = params.get('destino'); if (destinoParam) { var tarjetas = document.querySelectorAll('#colapsables-destino .opcion-tarjeta, #acordeon-destino > .opcion-tarjeta'); for (var i = 0; i < tarjetas.length; i++) { if (tarjetas[i].dataset.value === destinoParam) { seleccionarDestino(tarjetas[i]); break; } } } })();
 
 var ESCENAS = { 'Isla de Margarita': { id: 'escena-playa', caption: '🏖️ Arena blanca y aguas turquesa' }, 'Morrocoy': { id: 'escena-morrocoy', caption: '🐠 Cayos, manglares y snorkel' }, 'Los Roques': { id: 'escena-losroques', caption: '🏝️ Aguas cristalinas y coral' }, 'Mérida': { id: 'escena-montana', caption: '🚡 Aire de montaña y teleférico' }, 'Canaima': { id: 'escena-cascada', caption: '💧 Tepuyes y Salto Ángel' }, 'Catatumbo': { id: 'escena-tormenta', caption: '⚡ Relámpago del Catatumbo' }, 'Colonia Tovar': { id: 'escena-colonia', caption: '🏘️ Pueblo alemán en las montañas' }, 'Extranjero': { id: 'escena-mundo', caption: '🌍 Tu aventura internacional' } };
-function seleccionarDestino(el) { if (el.dataset.value === 'otro') { toggleOtroDestino(); return; } var acordeon = document.getElementById('acordeon-destino'); var primera = acordeon.querySelector('.opcion-tarjeta'); if (primera !== el) { var temp = document.createElement('div'); acordeon.insertBefore(temp, primera); acordeon.insertBefore(el, temp); acordeon.insertBefore(primera, el); temp.remove(); } var todas = acordeon.querySelectorAll('.opcion-tarjeta'); for (var i = 0; i < todas.length; i++) todas[i].classList.remove('sel'); el.classList.add('sel'); document.getElementById('destino-hidden').value = el.dataset.value; document.getElementById('desc-destino').innerHTML = '<i class="fas fa-info-circle"></i> ' + (el.dataset.desc || ''); var cfg = ESCENAS[el.dataset.value] || ESCENAS['Isla de Margarita']; var escenas = document.querySelectorAll('.escena'); for (var j = 0; j < escenas.length; j++) escenas[j].classList.remove('activa'); document.getElementById(cfg.id).classList.add('activa'); document.getElementById('escena-caption').textContent = cfg.caption; document.getElementById('otro-destino-box').classList.remove('visible'); var colapsable = document.getElementById('colapsables-destino'); var btn = document.getElementById('ver-mas-destino'); colapsable.classList.remove('abierto'); btn.classList.remove('abierto'); btn.querySelector('span').textContent = 'Ver más destinos'; }
-function toggleOtroDestino() { var box = document.getElementById('otro-destino-box'); box.classList.toggle('visible'); if (box.classList.contains('visible')) { document.getElementById('input-otro-destino').focus(); var todas = document.querySelectorAll('#acordeon-destino .opcion-tarjeta'); for (var i = 0; i < todas.length; i++) todas[i].classList.remove('sel'); document.getElementById('destino-hidden').value = ''; } }
+function seleccionarDestino(el) { if (el.dataset.value === 'otro') { toggleOtroDestino(); return; } var acordeon = document.getElementById('acordeon-destino'); var primera = acordeon.querySelector('.opcion-tarjeta'); if (primera !== el) { var temp = document.createElement('div'); acordeon.insertBefore(temp, primera); acordeon.insertBefore(el, temp); acordeon.insertBefore(primera, el); temp.remove(); } var todas = acordeon.querySelectorAll('.opcion-tarjeta'); for (var i = 0; i < todas.length; i++) todas[i].classList.remove('sel'); el.classList.add('sel'); document.getElementById('destino-hidden').value = el.dataset.value; document.getElementById('desc-destino').innerHTML = '<i class="fas fa-info-circle"></i> ' + (el.dataset.desc || ''); var cfg = ESCENAS[el.dataset.value] || ESCENAS['Isla de Margarita']; var escenas = document.querySelectorAll('.escena'); for (var j = 0; j < escenas.length; j++) escenas[j].classList.remove('activa'); document.getElementById(cfg.id).classList.add('activa'); document.getElementById('escena-caption').textContent = cfg.caption; document.getElementById('otro-destino-box').classList.remove('visible'); var colapsable = document.getElementById('colapsables-destino'); var btn = document.getElementById('ver-mas-destino'); colapsable.classList.remove('abierto'); btn.classList.remove('abierto'); btn.querySelector('span').textContent = 'Ver más destinos'; L360Cart.actualizarDestinoHospedaje(el.dataset.value); }
+function toggleOtroDestino() { var box = document.getElementById('otro-destino-box'); box.classList.toggle('visible'); if (box.classList.contains('visible')) { document.getElementById('input-otro-destino').focus(); var todas = document.querySelectorAll('#acordeon-destino .opcion-tarjeta'); for (var i = 0; i < todas.length; i++) todas[i].classList.remove('sel'); document.getElementById('destino-hidden').value = ''; L360Cart.actualizarDestinoHospedaje(''); } }
 function actualizarOtroDestino() { var val = document.getElementById('input-otro-destino').value.trim(); document.getElementById('destino-hidden').value = val; document.getElementById('desc-destino').innerHTML = val ? '<i class="fas fa-info-circle"></i> Destino personalizado: ' + val : '<i class="fas fa-info-circle"></i> Escribe tu destino ideal'; }
 function toggleAcordeon(colapsableId, btn) { var colapsable = document.getElementById(colapsableId); var abierto = colapsable.classList.contains('abierto'); if (abierto) { colapsable.classList.remove('abierto'); btn.classList.remove('abierto'); btn.querySelector('span').textContent = btn.querySelector('span').textContent.replace('Ocultar', 'Ver más'); } else { colapsable.classList.add('abierto'); btn.classList.add('abierto'); btn.querySelector('span').textContent = btn.querySelector('span').textContent.replace('Ver más', 'Ocultar'); } }
 function seleccionarTarjetaAcordeon(el, hiddenId, acordeonId) { var acordeon = document.getElementById(acordeonId); var primera = acordeon.querySelector('.opcion-tarjeta'); if (primera !== el) { var temp = document.createElement('div'); acordeon.insertBefore(temp, primera); acordeon.insertBefore(el, temp); acordeon.insertBefore(primera, el); temp.remove(); } var todas = acordeon.querySelectorAll('.opcion-tarjeta'); for (var i = 0; i < todas.length; i++) todas[i].classList.remove('sel'); el.classList.add('sel'); document.getElementById(hiddenId).value = el.dataset.value; var colapsableId = acordeonId.replace('acordeon-', 'colapsables-'); var colapsable = document.getElementById(colapsableId); var btn = document.getElementById('ver-mas-' + acordeonId.replace('acordeon-', '')); if (colapsable && btn) { colapsable.classList.remove('abierto'); btn.classList.remove('abierto'); btn.querySelector('span').textContent = 'Ver más ' + (acordeonId.includes('plan') ? 'planes' : 'alojamientos'); } }

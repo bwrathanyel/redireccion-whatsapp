@@ -244,16 +244,39 @@ var L360Cart = (function() {
             .catch(function() { return []; });
     }
 
+    function tienePromoRevisada(h) { return (h.promociones || []).some(function(p) { return p.revisado; }); }
+
     function renderCatalogoHospedaje(containerId) {
         var cont = document.getElementById(containerId);
         if (!cont) return;
-        cont.innerHTML = '<div class="l360-cat-loading"><i class="fas fa-circle-notch fa-spin"></i> Cargando hoteles...</div>';
+        cont.innerHTML = '<div class="l360-cat-loading"><i class="fas fa-circle-notch fa-spin"></i> Cargando ofertas...</div>';
         cargarCatalogoHospedaje().then(function(lista) {
-            if (!lista || !lista.length) { cont.innerHTML = '<div class="l360-cat-empty">No pudimos cargar el catálogo ahora — escríbenos directo con el formulario de abajo 👇</div>'; return; }
-            cont.innerHTML = lista.map(function(h) { return tarjetaHospedajeHtml(h); }).join('');
+            var enPromo = (lista || []).filter(tienePromoRevisada);
+            actualizarLabelToggleHoteles(enPromo.length);
+            if (!enPromo.length) { cont.innerHTML = '<div class="l360-cat-empty">No hay ofertas de hotel activas ahora mismo — escríbenos directo con el formulario de abajo 👇</div>'; return; }
+            cont.innerHTML = enPromo.map(function(h) { return tarjetaHospedajeHtml(h); }).join('');
         }).catch(function() {
-            cont.innerHTML = '<div class="l360-cat-empty">No pudimos cargar el catálogo ahora — escríbenos directo con el formulario de abajo 👇</div>';
+            cont.innerHTML = '<div class="l360-cat-empty">No pudimos cargar las ofertas ahora — escríbenos directo con el formulario de abajo 👇</div>';
         });
+    }
+
+    // ---------- Desplegable de ofertas de hotel, solo visible si el destino
+    // elegido en el formulario de abajo es Isla de Margarita (unico destino
+    // con hoteles cargados en el tarifario hoy).
+    function actualizarDestinoHospedaje(destino) {
+        var wrap = document.getElementById('l360-hospedaje-promo-wrap');
+        if (wrap) wrap.style.display = (destino === 'Isla de Margarita') ? '' : 'none';
+    }
+    function actualizarLabelToggleHoteles(n) {
+        var label = document.getElementById('l360-hoteles-toggle-label');
+        if (label) label.textContent = n > 0 ? ('Ver ' + n + ' hotel(es) en oferta') : 'Sin ofertas de hotel ahora mismo';
+    }
+    function toggleHotelesPromo() {
+        var btn = document.getElementById('l360-hoteles-toggle-btn');
+        var cont = document.getElementById('l360-hospedaje-catalogo-wrap');
+        if (!btn || !cont) return;
+        var abierto = cont.classList.toggle('open');
+        btn.classList.toggle('open', abierto);
     }
 
     function tarjetaHospedajeHtml(h) {
@@ -455,6 +478,8 @@ var L360Cart = (function() {
         renderCatalogoHospedaje: renderCatalogoHospedaje,
         cambiarStepper: cambiarStepper,
         cambiarFoto: cambiarFoto,
+        actualizarDestinoHospedaje: actualizarDestinoHospedaje,
+        toggleHotelesPromo: toggleHotelesPromo,
         agregarFullDayDesdeCard: agregarFullDayDesdeCard,
         agregarHospedajeDesdeCard: agregarHospedajeDesdeCard,
         quitarDelCarrito: quitarDelCarrito,

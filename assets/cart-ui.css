@@ -100,6 +100,14 @@
 
 .l360-cat-loading, .l360-cat-empty { text-align: center; font-size: 11px; color: rgba(255,224,178,0.6); padding: 14px; }
 
+.l360-toggle-btn { display: flex; align-items: center; gap: 8px; width: 100%; background: rgba(255,145,0,0.1); border: 1.5px dashed rgba(255,145,0,0.35); color: #ffb74d; font-weight: 700; font-size: 12px; padding: 11px 14px; border-radius: 12px; cursor: pointer; font-family: inherit; touch-action: manipulation; }
+.l360-toggle-btn:active { background: rgba(255,145,0,0.16); }
+.l360-toggle-btn i:first-child { color: #ff9100; }
+.l360-toggle-chevron { margin-left: auto; transition: transform 0.25s ease; }
+.l360-toggle-btn.open .l360-toggle-chevron { transform: rotate(180deg); }
+.l360-collapse { max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1); }
+.l360-collapse.open { max-height: 6000px; margin-top: 10px; }
+
 .l360-pkg-card { background: rgba(10,12,28,0.5); border: 1.5px solid rgba(255,255,255,0.08); border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
 .l360-pkg-body { padding: 12px; }
 
