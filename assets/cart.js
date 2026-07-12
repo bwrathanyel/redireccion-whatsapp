@@ -13,7 +13,19 @@
 var L360Cart = (function() {
     var SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
     var SUPABASE_ANON_KEY = 'sb_publishable_M7Ms9DLwpNSCXZNCDhYtbQ_LhMYeLxk';
+    var FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
     var CART_KEY = 'l360_carrito';
+    var fotosPorUid = {};
+
+    // Mismo criterio que lotus-crm-preview/app.js: activo!==false, es_principal
+    // primero, luego orden. Fotos reales curadas del hotel/paquete -- nunca se
+    // inventa una imagen para algo sin fotos propias.
+    function ordenarFotos(arr) {
+        return (arr || []).filter(function(f) { return f.activo !== false; }).slice()
+            .sort(function(a, b) { return (b.es_principal ? 1 : 0) - (a.es_principal ? 1 : 0) || a.orden - b.orden; });
+    }
+    function fotosDe(producto) { return ordenarFotos(producto && producto.producto_fotos).map(function(f) { return FOTOS_BASE + f.storage_path; }); }
+    function truncar(txt, max) { if (!txt) return ''; return txt.length > max ? txt.slice(0, max).replace(/\s+\S*$/, '') + '…' : txt; }
 
     var FULLDAY_PRECIO_RULES = {
         'Coche Express (Sunsol)': { adultoUsd: 89, ninoUsd: 45, ninoEdadTexto: '4-10 años', ninosPolicy: { tipo: 'precio_fijo_nino' }, emoji: '🏝️' },
@@ -113,7 +125,7 @@ var L360Cart = (function() {
     function cargarCatalogoFullDay() {
         var nombres = Object.keys(FULLDAY_PRECIO_RULES);
         return Promise.all(nombres.map(function(nombre) {
-            return sbGet('productos?select=nombre,tarifas(precio_texto,vigencia_texto,vigente)&nombre=eq.' + encodeURIComponent(nombre) + '&activo=eq.true')
+            return sbGet('productos?select=nombre,descripcion,tarifas(precio_texto,vigencia_texto,vigente),producto_fotos(storage_path,orden,es_principal,activo)&nombre=eq.' + encodeURIComponent(nombre) + '&activo=eq.true')
                 .then(function(rows) { return rows && rows[0] ? rows[0] : null; })
                 .catch(function() { return null; });
         })).then(function(resultados) {
@@ -122,7 +134,7 @@ var L360Cart = (function() {
             return nombres.map(function(nombre) {
                 var db = porNombre[nombre];
                 var tarifa = db && db.tarifas && db.tarifas[0];
-                return { nombre: nombre, precio_texto: tarifa ? tarifa.precio_texto : null, vigencia_texto: tarifa ? tarifa.vigencia_texto : null };
+                return { nombre: nombre, precio_texto: tarifa ? tarifa.precio_texto : null, vigencia_texto: tarifa ? tarifa.vigencia_texto : null, descripcion: db ? db.descripcion : null, producto_fotos: db ? db.producto_fotos : null };
             });
         }).catch(function() { return FULLDAY_FALLBACK; });
     }
@@ -143,19 +155,46 @@ var L360Cart = (function() {
         var precioRef = p.precio_texto || ('Adultos $' + regla.adultoUsd + (regla.ninoUsd != null ? ', Niños $' + regla.ninoUsd : ''));
         return '' +
             '<div class="l360-pkg-card" data-nombre="' + escHtml(p.nombre) + '">' +
-                '<div class="l360-pkg-head">' +
-                    '<div class="l360-pkg-icon">' + (regla.emoji || '🌴') + '</div>' +
-                    '<div class="l360-pkg-info"><div class="l360-pkg-titulo">' + escHtml(p.nombre) + '</div>' +
-                    '<div class="l360-pkg-precio-ref">' + escHtml(precioRef) + '</div></div>' +
+                fotoHeaderHtml(uid, fotosDe(p), regla.emoji || '🌴') +
+                '<div class="l360-pkg-body">' +
+                    '<div class="l360-pkg-titulo">' + escHtml(p.nombre) + '</div>' +
+                    '<div class="l360-pkg-precio-ref">' + escHtml(precioRef) + '</div>' +
+                    (p.descripcion ? '<p class="l360-pkg-desc">' + escHtml(truncar(p.descripcion, 130)) + '</p>' : '') +
+                    (regla.nota ? '<div class="l360-pkg-nota"><i class="fas fa-circle-info"></i> ' + escHtml(regla.nota) + '</div>' : '') +
+                    '<div class="l360-stepper-row">' +
+                        stepperHtml(uid, 'adultos', 'Adultos', 1) +
+                        stepperHtml(uid, 'ninos', 'Niños' + (regla.ninoEdadTexto ? ' (' + regla.ninoEdadTexto + ')' : ''), 0) +
+                    '</div>' +
+                    '<div class="l360-pkg-total" id="' + uid + '-total"></div>' +
+                    '<button class="l360-btn-add" onclick="L360Cart.agregarFullDayDesdeCard(\'' + uid + '\')"><i class="fas fa-cart-plus"></i> Agregar al carrito</button>' +
                 '</div>' +
-                (regla.nota ? '<div class="l360-pkg-nota"><i class="fas fa-circle-info"></i> ' + escHtml(regla.nota) + '</div>' : '') +
-                '<div class="l360-stepper-row">' +
-                    stepperHtml(uid, 'adultos', 'Adultos', 1) +
-                    stepperHtml(uid, 'ninos', 'Niños' + (regla.ninoEdadTexto ? ' (' + regla.ninoEdadTexto + ')' : ''), 0) +
-                '</div>' +
-                '<div class="l360-pkg-total" id="' + uid + '-total"></div>' +
-                '<button class="l360-btn-add" onclick="L360Cart.agregarFullDayDesdeCard(\'' + uid + '\')"><i class="fas fa-cart-plus"></i> Agregar al carrito</button>' +
             '</div>';
+    }
+
+    function fotoHeaderHtml(uid, fotos, emojiFallback) {
+        fotosPorUid[uid] = fotos || [];
+        if (!fotos || !fotos.length) return '<div class="l360-pkg-photo l360-pkg-photo-empty">' + emojiFallback + '</div>';
+        var dots = fotos.length > 1 ? '<div class="l360-pkg-photo-dots" id="' + uid + '-dots">' + fotos.map(function(_, i) { return '<span class="' + (i === 0 ? 'on' : '') + '"></span>'; }).join('') + '</div>' : '';
+        var nav = fotos.length > 1 ? (
+            '<button type="button" class="l360-pkg-photo-nav prev" onclick="event.stopPropagation();L360Cart.cambiarFoto(\'' + uid + '\',-1)" aria-label="Foto anterior"><i class="fas fa-chevron-left"></i></button>' +
+            '<button type="button" class="l360-pkg-photo-nav next" onclick="event.stopPropagation();L360Cart.cambiarFoto(\'' + uid + '\',1)" aria-label="Foto siguiente"><i class="fas fa-chevron-right"></i></button>'
+        ) : '';
+        var count = fotos.length > 1 ? '<span class="l360-pkg-photo-count">1/' + fotos.length + '</span>' : '';
+        return '<div class="l360-pkg-photo"><img id="' + uid + '-img" src="' + fotos[0] + '" data-idx="0" loading="lazy" alt="">' + nav + dots + count + '</div>';
+    }
+
+    function cambiarFoto(uid, delta) {
+        var fotos = fotosPorUid[uid];
+        if (!fotos || !fotos.length) return;
+        var img = document.getElementById(uid + '-img');
+        if (!img) return;
+        var idx = (parseInt(img.dataset.idx || '0') + delta + fotos.length) % fotos.length;
+        img.dataset.idx = idx;
+        img.src = fotos[idx];
+        var dotsWrap = document.getElementById(uid + '-dots');
+        if (dotsWrap) { for (var i = 0; i < dotsWrap.children.length; i++) dotsWrap.children[i].className = i === idx ? 'on' : ''; }
+        var countEl = img.parentElement.querySelector('.l360-pkg-photo-count');
+        if (countEl) countEl.textContent = (idx + 1) + '/' + fotos.length;
     }
 
     function stepperHtml(uid, campo, label, valorInicial) {
@@ -201,7 +240,7 @@ var L360Cart = (function() {
 
     // ---------- Catalogo Hospedaje ----------
     function cargarCatalogoHospedaje() {
-        return sbGet('productos?select=id,nombre,destino,descripcion,tarifas(precio_texto,precio_desde_usd,vigencia_texto,vigente),promociones(titulo,precio_texto,precio_desde_usd,ninos_gratis_cantidad,revisado)&tipo=eq.hotel&activo=eq.true&order=nombre')
+        return sbGet('productos?select=id,nombre,destino,descripcion,tarifas(precio_texto,precio_desde_usd,vigencia_texto,vigente),promociones(titulo,precio_texto,precio_desde_usd,ninos_gratis_cantidad,revisado),producto_fotos(storage_path,orden,es_principal,activo)&tipo=eq.hotel&activo=eq.true&order=nombre')
             .catch(function() { return []; });
     }
 
@@ -219,27 +258,34 @@ var L360Cart = (function() {
 
     function tarjetaHospedajeHtml(h) {
         var tarifa = (h.tarifas && h.tarifas[0]) || {};
-        var promo = (h.promociones || []).filter(function(p) { return p.revisado; })[0];
+        var promos = (h.promociones || []).filter(function(p) { return p.revisado; }).sort(function(a, b) {
+            if (a.precio_desde_usd == null) return 1;
+            if (b.precio_desde_usd == null) return -1;
+            return a.precio_desde_usd - b.precio_desde_usd;
+        });
+        var promo = promos[0];
         var precioDesde = (promo && promo.precio_desde_usd) || tarifa.precio_desde_usd || null;
         var precioTexto = (promo && promo.precio_texto) || tarifa.precio_texto || 'Precio a consultar con tu asesor';
         var ninosGratis = promo && promo.ninos_gratis_cantidad;
         var uid = 'hp_' + h.id;
         return '' +
             '<div class="l360-pkg-card" data-hotel-id="' + h.id + '" data-nombre="' + escHtml(h.nombre) + '" data-precio-desde="' + (precioDesde || '') + '">' +
-                '<div class="l360-pkg-head">' +
-                    '<div class="l360-pkg-icon">🏨</div>' +
-                    '<div class="l360-pkg-info"><div class="l360-pkg-titulo">' + escHtml(h.nombre) + '</div>' +
-                    '<div class="l360-pkg-precio-ref">' + escHtml(precioTexto) + '</div></div>' +
+                fotoHeaderHtml(uid, fotosDe(h), '🏨') +
+                '<div class="l360-pkg-body">' +
+                    (promo ? '<div class="l360-pkg-promo-badge"><i class="fas fa-fire"></i> ' + escHtml(promo.titulo) + '</div>' : '') +
+                    '<div class="l360-pkg-titulo">' + escHtml(h.nombre) + '</div>' +
+                    '<div class="l360-pkg-precio-ref">' + escHtml(precioTexto) + '</div>' +
+                    (h.descripcion ? '<p class="l360-pkg-desc">' + escHtml(truncar(h.descripcion, 130)) + '</p>' : '') +
+                    (ninosGratis ? '<div class="l360-pkg-nota l360-pkg-nota-ok"><i class="fas fa-child"></i> Primeros ' + ninosGratis + ' niño(s) gratis en esta promo</div>' : '') +
+                    '<div class="l360-estimado-tag"><i class="fas fa-triangle-exclamation"></i> Estimado, sujeto a confirmación con tu asesor</div>' +
+                    '<div class="l360-stepper-row">' +
+                        stepperHtml(uid, 'adultos', 'Adultos', 2) +
+                        stepperHtml(uid, 'ninos', 'Niños', 0) +
+                        stepperHtml(uid, 'noches', 'Noches', 1) +
+                    '</div>' +
+                    '<div class="l360-pkg-total" id="' + uid + '-total"></div>' +
+                    '<button class="l360-btn-add" onclick="L360Cart.agregarHospedajeDesdeCard(\'' + uid + '\')"><i class="fas fa-cart-plus"></i> Agregar al carrito</button>' +
                 '</div>' +
-                (ninosGratis ? '<div class="l360-pkg-nota l360-pkg-nota-ok"><i class="fas fa-child"></i> Primeros ' + ninosGratis + ' niño(s) gratis en esta promo</div>' : '') +
-                '<div class="l360-estimado-tag"><i class="fas fa-triangle-exclamation"></i> Estimado, sujeto a confirmación con tu asesor</div>' +
-                '<div class="l360-stepper-row">' +
-                    stepperHtml(uid, 'adultos', 'Adultos', 2) +
-                    stepperHtml(uid, 'ninos', 'Niños', 0) +
-                    stepperHtml(uid, 'noches', 'Noches', 1) +
-                '</div>' +
-                '<div class="l360-pkg-total" id="' + uid + '-total"></div>' +
-                '<button class="l360-btn-add" onclick="L360Cart.agregarHospedajeDesdeCard(\'' + uid + '\')"><i class="fas fa-cart-plus"></i> Agregar al carrito</button>' +
             '</div>';
     }
 
@@ -408,6 +454,7 @@ var L360Cart = (function() {
         renderCatalogoFullDay: renderCatalogoFullDay,
         renderCatalogoHospedaje: renderCatalogoHospedaje,
         cambiarStepper: cambiarStepper,
+        cambiarFoto: cambiarFoto,
         agregarFullDayDesdeCard: agregarFullDayDesdeCard,
         agregarHospedajeDesdeCard: agregarHospedajeDesdeCard,
         quitarDelCarrito: quitarDelCarrito,
