@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#080b16">
 <meta name="robots" content="noindex, nofollow">
-<title>Lotus 360 · CRM</title>
+<title>Destino y Eventos Lotus 360 · CRM</title>
 <script>
 // Aplica tema/tamaño desde cache local ANTES del primer paint -- evita el
 // flash de tema oscuro (default) en usuarios que eligieron claro, mientras
@@ -24,7 +24,7 @@ try {
 <link rel="manifest" href="manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Lotus360">
+<meta name="apple-mobile-web-app-title" content="Lotus 360 CRM">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -153,6 +153,28 @@ body::before{content:'';position:fixed;inset:0;background:
 .sheet-perfil-card{display:flex;align-items:center;gap:12px;padding:10px 6px 16px;color:var(--txt);text-decoration:none;cursor:pointer}
 .sheet-perfil-card .un{font-size:14.5px;font-weight:700}.sheet-perfil-card .ue{font-size:12px;color:var(--muted)}
 .sheet-item i{width:22px;text-align:center;color:var(--accent);font-size:16px}
+.sheet-item .si-sub{display:block;font-size:11.5px;font-weight:500;color:var(--muted);margin-top:2px}
+.sheet-item .si-t{flex:1}
+
+/* ---------- Tour guiado (tutorial) ---------- */
+#tour-overlay{position:fixed;inset:0;z-index:95;display:none}
+#tour-overlay.open{display:block}
+#tour-spotlight{position:fixed;border-radius:14px;box-shadow:0 0 0 9999px rgba(4,6,12,.72);transition:top .3s cubic-bezier(.3,1,.4,1),left .3s cubic-bezier(.3,1,.4,1),width .3s cubic-bezier(.3,1,.4,1),height .3s cubic-bezier(.3,1,.4,1);pointer-events:none}
+#tour-bubble{position:fixed;max-width:340px;width:calc(100vw - 40px);background:var(--bg2);border:1px solid var(--accent-soft);border-radius:16px;padding:16px 18px;box-shadow:0 20px 50px rgba(0,0,0,.5);transition:top .3s cubic-bezier(.3,1,.4,1),left .3s cubic-bezier(.3,1,.4,1)}
+.tb-title{font-size:15px;font-weight:800;color:var(--txt);margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.tb-title i{color:var(--accent)}
+.tb-text{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:12px}
+.tb-mockup{background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:10px;margin-bottom:12px}
+.tb-dots{display:flex;gap:5px;margin-bottom:12px}
+.tb-dot{width:6px;height:6px;border-radius:50%;background:var(--line2)}
+.tb-dot.on{background:var(--accent);width:16px;border-radius:3px}
+.tb-actions{display:flex;align-items:center;gap:8px}
+.tb-btn{border:none;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.tb-btn.tb-next{background:var(--accent);color:#1a1000;margin-left:auto}
+.tb-btn.tb-back{background:transparent;color:var(--muted);padding:9px 6px}
+.tb-btn.tb-skip{background:transparent;color:var(--muted);text-decoration:underline}
+.tour-chap-item{cursor:pointer}
+.tour-chap-item.done i.fa-circle-check{color:var(--green);margin-left:8px}
 
 /* ---------- Main ---------- */
 .main{padding:22px 30px 40px;max-width:1500px;width:100%}
@@ -336,6 +358,7 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .lb-arrow{top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;font-size:17px;z-index:2}
 .lb-arrow.lb-prev{left:18px}.lb-arrow.lb-next{right:18px}
 @media(max-width:760px){
+  html,body{max-width:100%;overflow-x:hidden}.main{min-width:0;max-width:100vw;width:100%}.section{min-width:0;max-width:100%}
   .lb-arrow{width:44px;height:44px;font-size:14px}
   .lb-arrow.lb-prev{left:8px}.lb-arrow.lb-next{right:8px}
   .lb-close{top:calc(12px + var(--safe-b,0px));right:12px;width:44px;height:44px}
@@ -419,7 +442,11 @@ input.ei[type=date]{color-scheme:dark}
 .tar-card .tc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px}
 .tar-card .tc-nombre{font-size:14.5px;font-weight:700;line-height:1.3}
 .tar-card .tc-destino{font-size:11px;color:var(--muted);margin-top:3px}
-.tar-card .tc-resumen{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tc-resumen{list-style:none;margin:8px 0 0;padding:0;font-size:12.5px;color:var(--muted);line-height:1.5}
+.tc-resumen li{position:relative;padding-left:13px;margin-bottom:3px}
+.tc-resumen li::before{content:"•";position:absolute;left:0;color:var(--accent)}
+.tar-card .tc-resumen{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tc-resumen-ficha{-webkit-line-clamp:unset;display:block;overflow:visible}
 .tar-card .tc-precio{font-size:13px;font-weight:700;color:var(--green);margin-top:10px}
 .tar-card .tc-vigencia{font-size:11px;color:var(--amber);margin-top:3px}
 .tar-info-box{margin-top:18px}
@@ -818,14 +845,96 @@ input.ei[type=date]{color-scheme:dark}
   .mfs-done{display:block;width:100%;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* ============ EVOLUCIÓN VISUAL 2026 ============ */
+:root{
+  --bg:#070b12;--bg2:#0c131d;--panel:rgba(15,24,36,.82);--panel-solid:#101a27;
+  --line:rgba(165,190,216,.10);--line2:rgba(165,190,216,.19);
+  --txt:#f5f7fb;--muted:#8ea0b5;--muted2:#66778c;
+  --accent:#f59e0b;--accent-soft:rgba(245,158,11,.12);
+  --shadow:0 24px 70px rgba(0,0,0,.28);--radius:20px;
+}
+body{background:
+  radial-gradient(circle at 78% -10%,rgba(245,158,11,.08),transparent 30%),
+  radial-gradient(circle at 12% 36%,rgba(56,189,248,.045),transparent 28%),var(--bg)}
+body::before{opacity:.45}
+.app{isolation:isolate}
+.sidebar{background:linear-gradient(180deg,rgba(11,18,29,.97),rgba(7,11,18,.94));box-shadow:18px 0 50px rgba(0,0,0,.15)}
+.brand img,.mobile-brand img{border-radius:50%;border:1px solid rgba(245,158,11,.55);padding:4px;background:linear-gradient(145deg,#182332,#0b111a);box-shadow:0 0 0 5px rgba(245,158,11,.06);object-fit:contain}
+.login-card img{border-radius:50%;border:1px solid rgba(245,158,11,.58);padding:0;background:#0b1522;box-shadow:0 0 0 7px rgba(245,158,11,.055),0 12px 34px rgba(0,0,0,.3)}
+.brand .bt{font-size:13.5px;line-height:1.22;max-width:155px}.brand .bs{color:#f6b94c;letter-spacing:1.6px}
+.nav-label{color:#5f7188;font-size:9.5px;letter-spacing:1.7px;margin-top:8px}
+.nav-item{min-height:43px;border-radius:12px;font-weight:600;position:relative}
+.nav-item::before{content:'';position:absolute;left:-15px;width:3px;height:20px;border-radius:3px;background:transparent}
+.nav-item.active{background:linear-gradient(90deg,rgba(245,158,11,.15),rgba(245,158,11,.05));color:#ffe4b5;border-color:rgba(245,158,11,.15)}
+.nav-item.active::before{background:var(--accent);box-shadow:0 0 16px rgba(245,158,11,.7)}
+.topbar{z-index:35}
+.topbar h1{font-size:26px;letter-spacing:-.7px}.topbar .sub{font-size:12px;letter-spacing:.05px}
+.pill{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.18);color:#a7f3d0}
+.card,.kpi,.entity-card,.inbox-card{box-shadow:0 12px 40px rgba(0,0,0,.12);border-color:rgba(165,190,216,.11)}
+.card{border-radius:var(--radius)}
+.card:hover{border-color:rgba(165,190,216,.17)}
+.kpi{background:linear-gradient(145deg,rgba(18,29,44,.94),rgba(12,20,31,.88));border-radius:18px}
+.kpi::after{right:-30px;top:-34px;width:120px;height:120px;filter:blur(2px)}
+.section.active{animation:section-in .24s ease both}
+@keyframes section-in{from{opacity:.55;transform:translateY(5px)}to{opacity:1;transform:none}}
+tbody tr{transition:background .15s,transform .15s}tbody tr:hover{transform:translateX(2px)}
+thead th{position:sticky;top:0;background:rgba(16,26,39,.96);backdrop-filter:blur(12px);z-index:2}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Postventa */
+.pv-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:15px}
+.pv-search{position:relative;flex:1;min-width:240px}.pv-search i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted2)}
+.pv-search input{width:100%;height:44px;border:1px solid var(--line2);border-radius:13px;background:var(--panel-solid);color:var(--txt);padding:0 14px 0 38px;font:inherit}
+.pv-refresh{width:44px;height:44px;border-radius:13px;border:1px solid var(--line2);background:var(--panel-solid);color:var(--muted);cursor:pointer}
+.pv-kpis{grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+.pv-kpi{padding:15px;cursor:default}.pv-kpi .kv{font-size:24px;margin-top:9px}.pv-kpi .kt{text-transform:none;letter-spacing:0;font-size:11px}
+.pv-stagebar{display:flex;gap:7px;overflow-x:auto;padding:2px 1px 12px;scrollbar-width:none}.pv-stagebar::-webkit-scrollbar{display:none}
+.pv-stage{white-space:nowrap;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--muted);padding:8px 12px;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer}
+.pv-stage.on{background:var(--accent-soft);color:#ffd595;border-color:rgba(245,158,11,.35)}
+.pv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(315px,1fr));gap:13px}
+.pv-card{background:linear-gradient(150deg,rgba(18,29,44,.94),rgba(11,19,29,.94));border:1px solid var(--line);border-radius:18px;padding:17px;box-shadow:0 14px 36px rgba(0,0,0,.14);transition:transform .16s,border-color .16s}
+.pv-card:hover{transform:translateY(-2px);border-color:rgba(245,158,11,.28)}
+.pv-card-top,.pv-card-foot,.pv-money-row,.pv-meta{display:flex;align-items:center;justify-content:space-between;gap:9px}
+.pv-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:rgba(56,189,248,.09);color:#9bdcff;font-size:10px;font-weight:750}
+.pv-prio{font-size:9.5px;font-weight:800;letter-spacing:.5px}.pv-prio.ALTA{color:#fbbf24}.pv-prio.URGENTE{color:#fb7185}.pv-prio.BAJA{color:#7dd3fc}
+.pv-name{font-size:16px;font-weight:800;margin:14px 0 4px}.pv-dest{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-money-row{margin-top:14px;font-size:11px;color:var(--muted)}.pv-money-row b{color:var(--txt);font-size:12px}
+.pv-progress{height:6px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden;margin:7px 0 12px}.pv-progress span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),#fbbf24)}
+.pv-meta{justify-content:flex-start;flex-wrap:wrap;color:var(--muted);font-size:10.5px;margin:5px 0}.pv-meta span{display:inline-flex;gap:5px;align-items:center}
+.pv-meta .overdue{color:#fb7185}.pv-docs{margin-left:auto}
+.pv-card-foot{margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}
+.pv-btn{border:1px solid var(--line2);background:rgba(255,255,255,.025);color:var(--txt);border-radius:10px;min-height:38px;padding:0 12px;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer}
+.pv-btn.primary{background:var(--accent);border-color:var(--accent);color:#241400}.pv-btn.wa{color:#72e59e}
+.pv-empty{grid-column:1/-1;padding:55px 20px;text-align:center;color:var(--muted)}.pv-empty i{font-size:30px;color:var(--green);display:block;margin-bottom:12px}
+.pv-doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}.pv-doc{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:9px;font-size:11px;color:var(--muted);cursor:pointer}.pv-doc input{accent-color:var(--accent)}
+.pv-balance{border-radius:12px;padding:12px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.14);margin:12px 0;font-size:12px;color:var(--muted)}
+
+@media(min-width:761px){
+  .app{grid-template-columns:272px minmax(0,1fr)}
+  .main{max-width:1800px;padding:28px 36px 46px}
+  .topbar{position:sticky;top:0;margin:-8px 0 22px;padding:14px 0 16px;background:linear-gradient(180deg,rgba(7,11,18,.97) 72%,rgba(7,11,18,0));backdrop-filter:blur(10px)}
+}
+@media(max-width:1100px){.pv-kpis{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:760px){
+  .mobile-brand img{border-radius:50%;background:linear-gradient(145deg,#182332,#0b111a)}
+  .mobile-brand .mb-t{font-size:12.5px;max-width:230px;line-height:1.2}.mobile-brand .mb-s{color:#f6b94c}
+  .topbar h1{font-size:23px}.main{padding-top:12px}
+  .pv-toolbar{flex-wrap:nowrap;min-width:0;max-width:100%}.pv-search{min-width:0}.pv-refresh{flex:0 0 44px}
+  .pv-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.pv-kpi{padding:12px;min-width:0}.pv-kpi .kt{white-space:normal;line-height:1.25}.pv-kpi .kv{font-size:21px}
+  .pv-stagebar{width:100%;max-width:calc(100vw - 28px);min-width:0}
+  .pv-grid{grid-template-columns:minmax(0,1fr);min-width:0}.pv-card{padding:15px;min-width:0}
+  .pv-btn{min-height:44px}.pv-doc-grid{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){.section.active{animation:none!important}}
 </style>
 </head>
 <body>
 <!-- Pantalla de acceso -->
 <div id="login">
   <form id="loginForm" class="login-card">
-    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
-    <h1>Lotus 360 · CRM</h1>
+    <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
+    <h1>Destino y Eventos Lotus 360</h1>
     <p>Acceso privado del equipo</p>
     <div class="login-field"><i class="fas fa-user"></i>
       <select id="loginUser" class="login-select" autofocus aria-label="Usuario"><option value="">Selecciona tu usuario</option></select></div>
@@ -840,7 +949,7 @@ input.ei[type=date]{color-scheme:dark}
 
 <div id="claim-list">
   <div class="login-card">
-    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
+    <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
     <h1>Configura tu usuario</h1>
     <p>Elegí tu nombre en la lista para crear tu contraseña y pregunta de seguridad. Si no aparece, ya está configurado.</p>
     <div id="claimListItems" class="claim-list-items"></div>
@@ -851,7 +960,7 @@ input.ei[type=date]{color-scheme:dark}
 
 <div id="claim-form">
   <form id="claimForm" class="login-card">
-    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
+    <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
     <h1 id="claimFormTitle">Configura tu usuario</h1>
     <p>Elegí tu contraseña definitiva y una pregunta de seguridad (sirve para recuperar el acceso sin correo)</p>
     <div class="login-field"><i class="fas fa-lock"></i>
@@ -870,7 +979,7 @@ input.ei[type=date]{color-scheme:dark}
 
 <div id="setup">
   <form id="setupForm" class="login-card">
-    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
+    <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
     <h1>Configura tu cuenta</h1>
     <p>Elige tu contraseña definitiva y una pregunta de seguridad (sirve para recuperar el acceso sin correo)</p>
     <div class="login-field"><i class="fas fa-lock"></i>
@@ -888,7 +997,7 @@ input.ei[type=date]{color-scheme:dark}
 
 <div id="forgot">
   <form id="forgotForm" class="login-card">
-    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
+    <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
     <h1>Recuperar contraseña</h1>
     <p>Escribe tu usuario para ver tu pregunta de seguridad</p>
     <div class="login-field"><i class="fas fa-user"></i>
@@ -907,7 +1016,7 @@ input.ei[type=date]{color-scheme:dark}
 
 <div id="marketing-placeholder">
   <div class="login-card">
-    <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
+    <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
     <h1>Próximamente</h1>
     <p>Tu acceso de marketing todavía no tiene funciones activas en el CRM (tarifario, métricas de conversión, etc.). Se habilitará apenas estén listas.</p>
     <button class="logout-btn" style="width:auto;padding:10px 18px;margin-top:6px" onclick="cerrarSesion()">Cerrar sesión <i class="fas fa-right-from-bracket"></i></button>
@@ -918,7 +1027,7 @@ input.ei[type=date]{color-scheme:dark}
   <!-- Sidebar (desktop) -->
   <aside class="sidebar">
     <div class="sidebar-top">
-      <div class="brand"><img src="logolotus.png" alt="Lotus 360" width="512" height="512"><div><div class="bt">Lotus 360</div><div class="bs">CRM</div></div></div>
+      <div class="brand"><img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512"><div><div class="bt">Destino y Eventos Lotus 360</div><div class="bs">CRM comercial</div></div></div>
       <div class="sidebar-perfil">
         <button class="side-foot-perfil" id="side-foot-perfil" title="Mi perfil" type="button">
           <div class="avatar" id="side-avatar">·</div>
@@ -945,6 +1054,7 @@ input.ei[type=date]{color-scheme:dark}
       <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
       <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
       <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
+      <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
       <div class="nav-label">Tarifario</div>
       <a class="nav-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
       <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
@@ -955,6 +1065,8 @@ input.ei[type=date]{color-scheme:dark}
       <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
       <a class="nav-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
       <a class="nav-item nav-admin-only solo-informe-diario" id="nav-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
+      <div class="nav-label">Ayuda</div>
+      <a class="nav-item nav-marketing-ok" id="nav-tutorial"><i class="fas fa-circle-question"></i> Tutorial</a>
     </nav>
     <div class="side-foot">
       <button class="logout-btn" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
@@ -963,14 +1075,14 @@ input.ei[type=date]{color-scheme:dark}
 
   <main class="main">
     <div class="mobile-brand">
-      <img src="logolotus.png" alt="Lotus 360" width="512" height="512">
-      <div><div class="mb-t">Lotus 360</div><div class="mb-s">CRM</div></div>
+      <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
+      <div><div class="mb-t">Destino y Eventos Lotus 360</div><div class="mb-s">CRM comercial</div></div>
       <button class="logout-btn m-logout" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
     </div>
     <div class="topbar">
       <div>
         <h1 id="page-title">Dashboard</h1>
-        <div class="sub" id="page-sub">Resumen general de leads · Lotus 360</div>
+        <div class="sub" id="page-sub">Resumen general · Destino y Eventos Lotus 360</div>
       </div>
       <div class="search"><i class="fas fa-search"></i><input id="global-search" placeholder="Buscar por nombre o teléfono..."></div>
       <div class="pill"><span class="dot"></span> En vivo</div>
@@ -1071,6 +1183,26 @@ input.ei[type=date]{color-scheme:dark}
       <div class="card"><h2><i class="fas fa-diagram-project"></i> Embudo detallado</h2><div class="csub">Toca una etapa para ver esos leads</div><div class="pipe" id="pipe2"></div></div>
     </section>
 
+    <!-- POSTVENTA -->
+    <section class="section" id="sec-postventa">
+      <div class="pv-toolbar">
+        <div class="pv-search"><i class="fas fa-search"></i><input id="pv-search" type="search" placeholder="Buscar cliente, destino o localizador..."></div>
+        <button class="pv-refresh" id="pv-refresh" type="button" title="Actualizar" aria-label="Actualizar postventa"><i class="fas fa-rotate"></i></button>
+      </div>
+      <div class="kpis pv-kpis" id="pv-kpis"></div>
+      <div class="pv-stagebar" id="pv-stagebar">
+        <button class="pv-stage on" data-etapa="">Todos</button>
+        <button class="pv-stage" data-etapa="COBRO_PENDIENTE">Cobro</button>
+        <button class="pv-stage" data-etapa="CONFIRMACION_RESERVA">Reserva</button>
+        <button class="pv-stage" data-etapa="DOCUMENTACION">Documentación</button>
+        <button class="pv-stage" data-etapa="LISTO_PARA_VIAJAR">Listo para viajar</button>
+        <button class="pv-stage" data-etapa="EN_VIAJE">En viaje</button>
+        <button class="pv-stage" data-etapa="SEGUIMIENTO_POSTVIAJE">Seguimiento</button>
+        <button class="pv-stage" data-etapa="CERRADO">Cerrados</button>
+      </div>
+      <div class="pv-grid" id="pv-grid"><div class="pv-empty"><i class="fas fa-circle-notch fa-spin"></i>Cargando postventa...</div></div>
+    </section>
+
     <!-- TARIFARIO -->
     <section class="section" id="sec-tarifario">
       <div class="tar-tabs-row">
@@ -1085,7 +1217,7 @@ input.ei[type=date]{color-scheme:dark}
       <button class="mfs-trigger" data-mfs="tar-toolbar" type="button"><i class="fas fa-sliders"></i> Buscar y filtrar</button>
       <div class="tar-toolbar mfs" id="tar-toolbar">
         <div class="tar-search"><i class="fas fa-search"></i><input id="tar-search" placeholder="Buscar por nombre o destino..."></div>
-        <select class="flt tar-f" id="tar-f-destino" data-tabs="hotel"><option value="">Todos los destinos</option></select>
+        <select class="flt tar-f" id="tar-f-destino" data-tabs="hotel,promo,paquete"><option value="">Todos los destinos</option></select>
         <select class="flt tar-f" id="tar-f-tipo" data-tabs="hotel,promo">
           <option value="">Cualquier plan</option>
           <option value="todo_incluido">Todo incluido</option>
@@ -1419,7 +1551,7 @@ input.ei[type=date]{color-scheme:dark}
       </div>
     </section>
 
-    <div class="foot-note">Datos reales · Lotus 360 CRM</div>
+    <div class="foot-note">Datos reales · Destino y Eventos Lotus 360 CRM</div>
   </main>
 </div>
 
@@ -1458,12 +1590,37 @@ input.ei[type=date]{color-scheme:dark}
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-asesor-hide" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
+  <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
   <a class="sheet-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
   <a class="sheet-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
   <a class="sheet-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
   <a class="sheet-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
   <a class="sheet-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
   <a class="sheet-item nav-admin-only solo-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
+  <a class="sheet-item nav-marketing-ok" id="sheet-item-tutorial"><i class="fas fa-circle-question"></i> Tutorial</a>
+</div>
+
+<!-- Tutorial: menú de capítulos -->
+<div class="sheet" id="tutorial-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Tutorial</div>
+  <div id="tutorial-chap-list"></div>
+</div>
+
+<!-- Tutorial: overlay del recorrido guiado -->
+<div id="tour-overlay">
+  <div id="tour-spotlight"></div>
+  <div id="tour-bubble">
+    <div class="tb-title"><i class="fas fa-graduation-cap"></i> <span id="tb-titulo"></span></div>
+    <div class="tb-text" id="tb-texto"></div>
+    <div class="tb-mockup" id="tb-mockup" style="display:none"></div>
+    <div class="tb-dots" id="tb-dots"></div>
+    <div class="tb-actions">
+      <button type="button" class="tb-btn tb-back" id="tb-back"><i class="fas fa-chevron-left"></i></button>
+      <button type="button" class="tb-btn tb-skip" id="tb-skip">Saltar</button>
+      <button type="button" class="tb-btn tb-next" id="tb-next">Siguiente</button>
+    </div>
+  </div>
 </div>
 
 <!-- Mensajes: adjuntar archivo -->

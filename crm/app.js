@@ -14,6 +14,19 @@ const tiempoRelativo = iso => {
   const h = Math.round(min / 60);
   return h < 24 ? `hace ${h}h` : `hace ${Math.round(h / 24)}d`;
 };
+const tiempoSeguimiento = iso => {
+  if (!iso) return 'Sin próximo seguimiento';
+  const fecha = new Date(iso).getTime();
+  if (Number.isNaN(fecha)) return 'Fecha inválida';
+  const minutos = Math.round((fecha - Date.now()) / 60000);
+  if (minutos < 0) return `Vencido ${tiempoRelativo(iso)}`;
+  if (minutos < 1) return 'Ahora mismo';
+  if (minutos < 60) return `En ${minutos} min`;
+  const horas = Math.round(minutos / 60);
+  if (horas < 24) return `En ${horas}h`;
+  const dias = Math.round(horas / 24);
+  return dias === 1 ? 'Mañana' : `En ${dias} días`;
+};
 const money = n => '$' + (Number(n) || 0).toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -29,7 +42,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general de leads · Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
@@ -71,6 +84,7 @@ let previewSel = null, charts = {};
 let ACTIVOS = [];
 let leadsView = 'lista', rgView = 'lista';
 let INBOX_LEADS = [], INBOX_TEL_LEAD_ID = null;
+let POSTVENTA = [], PV_ACTUAL = null, PV_ETAPA = '', PV_SEARCH_TIMER = null;
 
 /* ---------- Periodos ---------- */
 function periodo(kind) {
@@ -161,6 +175,12 @@ function entrarSegunRol() {
   manejarDeepLinkLeadAccion();
   manejarDeepLinkSeccion();
   registrarPushNativo();
+  // Primera vez del usuario: se abre solo el menú de capítulos (no un
+  // capítulo al azar) -- guardarPreferencia() marca tutorial_visto al
+  // cerrarlo, así no vuelve a abrirse solo. marketing queda afuera del
+  // auto-open (el pedido original era admin/asesor), pero el ítem de nav
+  // sigue disponible para abrirlo a mano.
+  if (!MI_PREFERENCIAS.tutorial_visto && (ROL === 'admin' || ROL === 'asesor')) abrirMenuTutorial();
 }
 
 /* ---------- Mi Perfil (Bloque 8) — cada asesor edita solo lo propio ---------- */
@@ -429,7 +449,7 @@ function manejarDeepLinkAsistencia() {
 }
 
 // Deep-link desde un app shortcut del manifest (?ir=leads|cotizador|tarifario)
-const IR_SECCIONES = ['leads', 'cotizador', 'tarifario'];
+const IR_SECCIONES = ['leads', 'postventa', 'cotizador', 'tarifario'];
 function manejarDeepLinkSeccion() {
   const params = new URLSearchParams(location.search);
   const ir = params.get('ir');
@@ -716,6 +736,8 @@ async function startApp() {
   setupExtractor();
   setupMensajes();
   setupRedes();
+  setupPostventa();
+  setupTutorial();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
   if (ROL === 'asesor') activateSection('leads');
   await loadStats();
@@ -828,6 +850,163 @@ function renderPipe(id) {
   }).join('');
   document.querySelectorAll('#' + id + ' .pstep').forEach(el => el.onclick = () => { const k = el.dataset.est; chartPreview('estado', k, niceEstado(k), 'fa-diagram-project', be[k] || 0); });
 }
+
+/* ---------- Postventa: cobro, reserva, documentos y viaje ---------- */
+const PV_ETAPAS = {
+  COBRO_PENDIENTE: ['Cobro pendiente', 'fa-wallet'],
+  CONFIRMACION_RESERVA: ['Confirmar reserva', 'fa-ticket'],
+  DOCUMENTACION: ['Documentación', 'fa-folder-open'],
+  LISTO_PARA_VIAJAR: ['Listo para viajar', 'fa-suitcase-rolling'],
+  EN_VIAJE: ['En viaje', 'fa-plane-departure'],
+  SEGUIMIENTO_POSTVIAJE: ['Seguimiento', 'fa-heart'],
+  CERRADO: ['Cerrado', 'fa-circle-check'],
+};
+const PV_DOCS = {
+  comprobante_pago: 'Comprobante de pago', reserva_emitida: 'Reserva emitida',
+  voucher_hotel: 'Voucher de hotel', boletos: 'Boletos', seguro: 'Seguro',
+  itinerario_entregado: 'Itinerario entregado',
+};
+function setupPostventa() {
+  document.querySelectorAll('#pv-stagebar .pv-stage').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#pv-stagebar .pv-stage').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); PV_ETAPA = b.dataset.etapa || ''; loadPostventa();
+  }));
+  document.getElementById('pv-refresh')?.addEventListener('click', loadPostventa);
+  document.getElementById('pv-search')?.addEventListener('input', () => {
+    clearTimeout(PV_SEARCH_TIMER); PV_SEARCH_TIMER = setTimeout(loadPostventa, 280);
+  });
+}
+async function loadPostventa() {
+  const grid = document.getElementById('pv-grid');
+  if (!grid || ROL === 'marketing') return;
+  grid.innerHTML = '<div class="pv-empty"><i class="fas fa-circle-notch fa-spin"></i>Cargando postventa...</div>';
+  const busqueda = document.getElementById('pv-search')?.value.trim() || null;
+  const [resumen, bandeja] = await Promise.all([
+    sb.rpc('postventa_resumen'),
+    sb.rpc('postventa_bandeja', { p_etapa: PV_ETAPA || null, p_busqueda: busqueda }),
+  ]);
+  if (resumen.error || bandeja.error) {
+    console.error('postventa', resumen.error || bandeja.error);
+    grid.innerHTML = '<div class="pv-empty"><i class="fas fa-triangle-exclamation"></i>No se pudo cargar postventa</div>';
+    errToast('No se pudo cargar la bandeja de postventa');
+    return;
+  }
+  POSTVENTA = bandeja.data || [];
+  renderPostventaKPIs(resumen.data || {});
+  renderPostventa();
+  const badge = document.getElementById('nav-postventa-count');
+  const pendientes = Number(resumen.data?.total || 0);
+  if (badge) { badge.textContent = pendientes; badge.style.display = pendientes > 0 ? '' : 'none'; }
+}
+function renderPostventaKPIs(r) {
+  const cards = [
+    ['Casos de postventa', fmt(r.total || 0), 'fa-handshake-angle', 'var(--blue)'],
+    ['Cobros', fmt(r.cobros_pendientes || 0), 'fa-wallet', 'var(--amber)'],
+    ['Documentación', fmt(r.documentacion || 0), 'fa-folder-open', 'var(--purple)'],
+    ['Viajes en 14 días', fmt(r.viajes_proximos || 0), 'fa-plane-departure', 'var(--green)'],
+    ['Seguimientos vencidos', fmt(r.seguimientos_vencidos || 0), 'fa-clock', '#fb7185'],
+    ['Saldo por cobrar', money(r.saldo_pendiente || 0), 'fa-coins', 'var(--accent)'],
+  ];
+  document.getElementById('pv-kpis').innerHTML = cards.map(c => `<div class="kpi pv-kpi" style="--kc:${c[3]}"><div class="kt"><i class="fas ${c[2]}"></i>${c[0]}</div><div class="kv">${c[1]}</div></div>`).join('');
+}
+function renderPostventa() {
+  const grid = document.getElementById('pv-grid');
+  if (!POSTVENTA.length) {
+    grid.innerHTML = '<div class="pv-empty"><i class="fas fa-circle-check"></i><b>Todo al día</b><br>No hay casos con este filtro</div>';
+    return;
+  }
+  const ahora = Date.now();
+  grid.innerHTML = POSTVENTA.map(c => {
+    const etapa = PV_ETAPAS[c.etapa] || [c.etapa, 'fa-circle'];
+    const total = Number(c.monto_total || 0), pagado = Number(c.monto_pagado || 0);
+    const pct = total > 0 ? Math.min(100, Math.round(pagado / total * 100)) : 0;
+    const docs = c.documentos || {}, docsListos = Object.keys(PV_DOCS).filter(k => docs[k] === true).length;
+    const vencido = c.proximo_seguimiento_at && new Date(c.proximo_seguimiento_at).getTime() < ahora && c.etapa !== 'CERRADO';
+    const wa = String(c.telefono || '').replace(/\D/g, '');
+    return `<article class="pv-card" data-id="${c.lead_id}">
+      <div class="pv-card-top"><span class="pv-chip"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span><span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span></div>
+      <div class="pv-name">${esc(c.nombre || 'Sin nombre')}</div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}</div>
+      <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>Saldo <b>${money(c.saldo_pendiente)}</b></span></div>
+      <div class="pv-progress"><span style="width:${pct}%"></span></div>
+      <div class="pv-meta"><span><i class="fas fa-calendar"></i>${c.fecha_viaje_inicio ? pvFecha(c.fecha_viaje_inicio) : 'Viaje sin fecha'}</span><span class="pv-docs"><i class="fas fa-file-circle-check"></i>${docsListos}/6 docs</span></div>
+      <div class="pv-meta"><span class="${vencido ? 'overdue' : ''}"><i class="fas fa-bell"></i>${tiempoSeguimiento(c.proximo_seguimiento_at)}</span>${c.incidencia_abierta ? '<span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span>' : ''}</div>
+      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button"><i class="fab fa-whatsapp"></i> WhatsApp</button>` : '<span></span>'}<button class="pv-btn primary" data-pv-open="${c.lead_id}" type="button">Gestionar <i class="fas fa-arrow-right"></i></button></div>
+    </article>`;
+  }).join('');
+  grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => abrirPostventa(POSTVENTA.find(c => c.lead_id === Number(b.dataset.pvOpen))));
+  grid.querySelectorAll('[data-pv-wa]').forEach(b => b.onclick = () => window.open(`https://wa.me/${b.dataset.pvWa}`, '_blank', 'noopener'));
+}
+function pvFecha(iso) {
+  if (!iso) return '—';
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(iso + 'T12:00:00') : new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function pvDateTimeInput(iso) {
+  if (!iso) return '';
+  const d = new Date(iso), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function abrirPostventa(c) {
+  if (!c) return; PV_ACTUAL = c;
+  const opt = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
+  const docs = c.documentos || {};
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent)"><i class="fas fa-handshake-angle"></i></div><div><div class="dn">${esc(c.nombre)}</div><div class="dm">${esc(c.destino || c.servicio || 'Postventa')} · ${esc(c.asesor || 'Sin asignar')}</div></div></div>
+    <div class="edit-box"><div class="eb-title"><i class="fas fa-route"></i> Operación</div>
+      <label class="fl">Etapa</label><select class="ei" id="pv-e-etapa">${opt(PV_ETAPAS, c.etapa)}</select>
+      <label class="fl">Prioridad</label><select class="ei" id="pv-e-prioridad">${opt({ BAJA:'Baja', NORMAL:'Normal', ALTA:'Alta', URGENTE:'Urgente' }, c.prioridad)}</select>
+      <div class="pv-balance">Mantén el monto total y lo abonado al día. El saldo se calcula automáticamente.</div>
+      <label class="fl">Monto total (USD)</label><input class="ei" id="pv-e-total" type="number" min="0" step="0.01" value="${Number(c.monto_total || 0)}">
+      <label class="fl">Monto pagado (USD)</label><input class="ei" id="pv-e-pagado" type="number" min="0" step="0.01" value="${Number(c.monto_pagado || 0)}">
+      <div class="eb-title" style="margin-top:17px"><i class="fas fa-plane"></i> Viaje y reserva</div>
+      <label class="fl">Inicio del viaje</label><input class="ei" id="pv-e-inicio" type="date" value="${esc(c.fecha_viaje_inicio || '')}">
+      <label class="fl">Fin del viaje</label><input class="ei" id="pv-e-fin" type="date" value="${esc(c.fecha_viaje_fin || '')}">
+      <label class="fl">Proveedor</label><input class="ei" id="pv-e-proveedor" value="${esc(c.proveedor || '')}" placeholder="Hotel, aerolínea u operador">
+      <label class="fl">Localizador / reserva</label><input class="ei" id="pv-e-localizador" value="${esc(c.localizador_reserva || '')}" placeholder="Código de confirmación">
+      <div class="eb-title" style="margin-top:17px"><i class="fas fa-list-check"></i> Documentos</div>
+      <div class="pv-doc-grid">${Object.entries(PV_DOCS).map(([k, t]) => `<label class="pv-doc"><input type="checkbox" data-pv-doc="${k}" ${docs[k] === true ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div>
+      <div class="eb-title" style="margin-top:17px"><i class="fas fa-bell"></i> Seguimiento</div>
+      <label class="fl">Próxima acción</label><input class="ei" id="pv-e-seguimiento" type="datetime-local" value="${pvDateTimeInput(c.proximo_seguimiento_at)}">
+      <label class="fl">Satisfacción (postviaje)</label><select class="ei" id="pv-e-satisfaccion"><option value="">Sin medir</option>${[1,2,3,4,5].map(n => `<option value="${n}" ${Number(c.satisfaccion) === n ? 'selected' : ''}>${n} / 5</option>`).join('')}</select>
+      <label class="pv-doc" style="margin-top:10px"><input type="checkbox" id="pv-e-incidencia" ${c.incidencia_abierta ? 'checked' : ''}>Hay una incidencia que requiere atención</label>
+      <label class="fl">Notas internas</label><textarea class="ei" id="pv-e-notas" rows="4" placeholder="Acuerdos, pendientes y próximo paso...">${esc(c.notas || '')}</textarea>
+      <div class="edit-err" id="pv-e-error"></div>
+      <button class="dbtn save" id="pv-e-guardar" type="button"><i class="fas fa-floppy-disk"></i> Guardar postventa</button>
+      ${c.estado_lead !== 'PAGO REALIZADO' ? '<button class="dbtn gh" id="pv-e-pago" type="button" style="margin-top:9px"><i class="fas fa-circle-check"></i> Registrar pago completo</button>' : ''}
+    </div>`;
+  document.getElementById('pv-e-guardar').onclick = () => guardarPostventa(false);
+  document.getElementById('pv-e-pago')?.addEventListener('click', () => {
+    document.getElementById('pv-e-pagado').value = document.getElementById('pv-e-total').value;
+    guardarPostventa(true);
+  });
+  document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); navPush({ type: 'drawer' });
+}
+async function guardarPostventa(marcarPagado) {
+  if (!PV_ACTUAL) return;
+  const btn = document.getElementById(marcarPagado ? 'pv-e-pago' : 'pv-e-guardar');
+  const err = document.getElementById('pv-e-error');
+  const total = Number(val('pv-e-total') || 0), pagado = Number(val('pv-e-pagado') || 0);
+  const inicio = val('pv-e-inicio') || null, fin = val('pv-e-fin') || null;
+  if (total < 0 || pagado < 0 || pagado > total) { err.textContent = 'El monto pagado no puede superar el total.'; return; }
+  if (marcarPagado && total <= 0) { err.textContent = 'Define un monto total mayor a cero antes de registrar el pago.'; return; }
+  if (inicio && fin && fin < inicio) { err.textContent = 'La fecha de fin no puede ser anterior al inicio.'; return; }
+  const documentos = {}; document.querySelectorAll('[data-pv-doc]').forEach(x => documentos[x.dataset.pvDoc] = x.checked);
+  const seguimiento = val('pv-e-seguimiento');
+  err.textContent = ''; btn.disabled = true; const previo = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+  const { data, error } = await sb.rpc('guardar_postventa', {
+    p_lead_id: PV_ACTUAL.lead_id, p_etapa: val('pv-e-etapa'), p_prioridad: val('pv-e-prioridad'),
+    p_monto_total: total, p_monto_pagado: pagado, p_fecha_viaje_inicio: inicio, p_fecha_viaje_fin: fin,
+    p_proveedor: val('pv-e-proveedor').trim() || null, p_localizador_reserva: val('pv-e-localizador').trim() || null,
+    p_documentos: documentos, p_proximo_seguimiento_at: seguimiento ? new Date(seguimiento).toISOString() : null,
+    p_notas: val('pv-e-notas').trim() || null, p_incidencia_abierta: document.getElementById('pv-e-incidencia').checked,
+    p_satisfaccion: val('pv-e-satisfaccion') ? Number(val('pv-e-satisfaccion')) : null, p_marcar_pagado: marcarPagado,
+  });
+  btn.disabled = false; btn.innerHTML = previo;
+  if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || 'error desconocido'); return; }
+  window.closeDrawer(); okToast(marcarPagado ? 'Pago registrado y postventa actualizada' : 'Postventa actualizada');
+  await Promise.all([loadPostventa(), loadStats()]); renderAll();
+}
+
 function renderAdvisors(datosPeriodo) {
   const src = datosPeriodo || STATS.by_advisor;
   const e = sortEntries(src), max = Math.max(...e.map(x => x[1]), 1);
@@ -1528,7 +1707,7 @@ function renderReasignPager(pages) {
 let tarTab = 'promo', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción' };
 function setupTarifarioTabs() {
-  fill('tar-f-destino', ['Margarita', 'Coche']);
+  fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas']);
   const mesSel = document.getElementById('tar-f-mes');
   const mesActual = new Date().getMonth() + 1;
   mesSel.innerHTML = '<option value="">Cualquier mes</option>'
@@ -1635,7 +1814,7 @@ async function loadTarifario() {
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
   empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
   const q = tarTab === 'promo'
-    ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden,es_principal,activo), productos(producto_fotos(storage_path,orden,es_principal,activo))').order('titulo')
+    ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden,es_principal,activo), productos(destino,producto_fotos(storage_path,orden,es_principal,activo))').order('titulo')
     : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad), producto_fotos(storage_path,orden,es_principal,activo)').eq('tipo', tarTab).order('nombre');
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
@@ -1648,7 +1827,7 @@ async function loadTarifario() {
   if (tarTab === 'paquete') {
     const hotelIds = [...new Set(data.filter(x => x.hotel_id).map(x => x.hotel_id))];
     if (hotelIds.length) {
-      const { data: hoteles } = await sb.from('productos').select('id, producto_fotos(storage_path,orden,es_principal,activo)').in('id', hotelIds);
+      const { data: hoteles } = await sb.from('productos').select('id, destino, producto_fotos(storage_path,orden,es_principal,activo)').in('id', hotelIds);
       const porId = Object.fromEntries((hoteles || []).map(h => [h.id, h]));
       data.forEach(x => { if (x.hotel_id) x.hotel = porId[x.hotel_id]; });
     }
@@ -1779,7 +1958,23 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
     if (i !== 0) crossfade(0);
   });
 }
-const DESTINO_ORDEN = ['Margarita', 'Coche'];
+const DESTINO_ORDEN = ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas'];
+// Divide un párrafo de descripción en oraciones para mostrarlo como lista —
+// parte en los espacios que siguen a . ! ? (nunca dentro de un número como
+// "$150.000" porque ahí no hay espacio después del punto), así ningún
+// caracter del texto original se pierde ni se reescribe.
+function resumenBullets(texto) {
+  if (!texto) return [];
+  return texto.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+}
+// Destino de un ítem del Tarifario según la pestaña: hotel lo trae directo,
+// paquete/promo lo heredan del hotel vinculado (producto_id/hotel_id) cuando
+// no tienen uno propio -- misma resolución para filtrar y para agrupar.
+function destinoDe(x) {
+  if (tarTab === 'promo') return x.productos?.destino || null;
+  if (tarTab === 'paquete') return x.destino || x.hotel?.destino || null;
+  return x.destino || null;
+}
 const hoy = () => new Date().toISOString().slice(0, 10);
 const promoVigente = p => !p.fecha_fin_estimada || p.fecha_fin_estimada >= hoy();
 // No hay fecha de INICIO de promo en el tarifario (solo fecha_fin_estimada) —
@@ -1825,11 +2020,18 @@ function renderTarifario() {
       if (fNinos && ag.ninosMax < 1) return false;
       if (fVigente && !ag.algunaVigente) return false;
     } else if (tarTab === 'promo') {
+      if (fDestino && destinoDe(x) !== fDestino) return false;
       if (fTipo && !(x.incluye_tags || []).includes(fTipo)) return false;
       if (fPrecio != null && x.precio_desde_usd != null && x.precio_desde_usd > fPrecio) return false;
       if (fNinos && !(x.ninos_gratis_cantidad > 0)) return false;
       if (fVigente && !promoVigente(x)) return false;
       if (fMes != null && !promoDisponibleEnMes(x, fMes)) return false;
+    } else if (tarTab === 'paquete') {
+      if (fDestino && destinoDe(x) !== fDestino) return false;
+      if (fPrecio != null) {
+        const precioTarifa = (x.tarifas || [])[0]?.precio_desde_usd;
+        if (precioTarifa != null && precioTarifa > fPrecio) return false;
+      }
     } else if (fPrecio != null) {
       const precioTarifa = (x.tarifas || [])[0]?.precio_desde_usd;
       if (precioTarifa != null && precioTarifa > fPrecio) return false;
@@ -1852,9 +2054,9 @@ function renderTarifario() {
   document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
   document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0);
   const grid = document.getElementById('tar-grid');
-  if (tarTab === 'hotel') {
+  if (tarTab === 'hotel' || tarTab === 'promo' || tarTab === 'paquete') {
     const porDestino = {};
-    filtered.forEach(x => (porDestino[x.destino || 'Otros'] ??= []).push(x));
+    filtered.forEach(x => (porDestino[destinoDe(x) || 'Otros'] ??= []).push(x));
     const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
     grid.innerHTML = destinos.map(d => `<div class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span></div>${tarItemsWrapHtml(porDestino[d])}`).join('');
   } else if (tarTab === 'destino') {
@@ -1942,7 +2144,7 @@ function tarCardHtml(x) {
   return `<div class="tar-item tar-card" data-id="${x.id}">
     ${tarCardThumbHtml(fotosDe(x)[0], false)}
     <div class="tc-top"><div><div class="tc-nombre">${esc(x.nombre)}</div>${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}</div></div>
-    <div class="tc-resumen">${esc(x.descripcion || '')}</div>
+    <ul class="tc-resumen">${resumenBullets(x.descripcion).map(s => `<li>${esc(s)}</li>`).join('')}</ul>
     ${tarifa ? `<div class="tc-precio">${esc(tarifa.precio_texto)}</div>` : ''}
     ${tarifa && tarifa.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(tarifa.vigencia_texto)}</div>` : ''}
     ${promos.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promos.length} promoción${promos.length > 1 ? 'es' : ''} activa${promos.length > 1 ? 's' : ''}</div>` : ''}
@@ -1962,7 +2164,7 @@ function tarFichaHtml(x) {
     <div class="tf-body">
       <div class="tc-nombre">${esc(nombre)}</div>
       ${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}
-      ${!esPromo && x.descripcion ? `<div class="tc-resumen">${esc(x.descripcion)}</div>` : ''}
+      ${!esPromo && x.descripcion ? `<ul class="tc-resumen tc-resumen-ficha">${resumenBullets(x.descripcion).map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
       ${precio ? `<div class="tc-precio">${esc(precio)}</div>` : ''}
       ${vigencia ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(vigencia)}</div>` : ''}
       ${promos.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promos.length} promoción${promos.length > 1 ? 'es' : ''} activa${promos.length > 1 ? 's' : ''}</div>` : ''}
@@ -2399,12 +2601,12 @@ function setupChat() {
   };
   document.getElementById('chat-history-btn').onclick = openChatsDrawer;
   document.getElementById('chat-new-btn').onclick = nuevoChat;
-  if (!chatHistory.length) addChatBubble('bot', '¡Hola! Soy tu Cotizador IA de Lotus 360, estoy aquí para ayudarte en tus cotizaciones.');
+  if (!chatHistory.length) addChatBubble('bot', '¡Hola! Soy el Cotizador IA de Destino y Eventos Lotus 360. Estoy aquí para ayudarte con tus cotizaciones.');
 }
 function nuevoChat() {
   chatHistory = []; chatActualId = null;
   document.getElementById('chat-log').innerHTML = '';
-  addChatBubble('bot', '¡Hola! Soy tu Cotizador IA de Lotus 360, estoy aquí para ayudarte en tus cotizaciones.');
+  addChatBubble('bot', '¡Hola! Soy el Cotizador IA de Destino y Eventos Lotus 360. Estoy aquí para ayudarte con tus cotizaciones.');
 }
 /* ---------- Chats guardados del Cotizador IA (mis conversaciones) ---------- */
 async function guardarChatIA() {
@@ -3023,8 +3225,9 @@ function subscribeRealtime() {
     // pendiente por otra vía (ej. lo editan a mano en el drawer/tabla), sale
     // del inbox sin esperar un refresh manual.
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, payload => {
-      if (ROL !== 'asesor' || !INBOX_LEADS.some(x => x.id === payload.new.id)) return;
-      if (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto || payload.new.eliminado_at) quitarDeInbox(payload.new.id);
+      if (ROL === 'asesor' && INBOX_LEADS.some(x => x.id === payload.new.id)
+          && (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto || payload.new.eliminado_at)) quitarDeInbox(payload.new.id);
+      if (document.getElementById('sec-postventa')?.classList.contains('active')) loadPostventa();
     })
     .subscribe();
 }
@@ -3074,6 +3277,7 @@ window.addEventListener('popstate', () => {
   else if (top.type === 'sheet') closeSheet(top.id, true);
   else if (top.type === 'msg-conv') cerrarConversacion(true);
   else if (top.type === 'section') activateSection(top.prevSec, true);
+  else if (top.type === 'tour') volverAlMenuTutorial(true);
 });
 
 /* ---------- Nav ---------- */
@@ -3101,6 +3305,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'ranking') loadRanking();
   if (sec === 'reasignaciones') loadReasignaciones();
   if (sec === 'asistencia') loadAsistencia();
+  if (sec === 'postventa') loadPostventa();
   if (sec === 'informe-diario') loadInformeDiario();
   if (sec === 'leads' && ROL === 'asesor') loadInboxLeads();
   if (sec === 'tarifario') loadTarifario();
@@ -3131,9 +3336,186 @@ function openSheet(id) {
   navPush({ type: 'sheet', id });
 }
 function closeSheet(id, fromNav) {
+  // Cerrar el menú de capítulos por cualquier vía (X, tocar afuera, elegir
+  // un capítulo) cuenta como "ya vio el tutorial" -- no solo completarlo.
+  if (id === 'tutorial-sheet') marcarTutorialVisto();
   document.getElementById(id)?.classList.remove('open');
   document.getElementById('sheet-bg')?.classList.remove('open');
   if (sheetAbierta === id) sheetAbierta = null;
   if (!fromNav) navConsume();
 }
 document.getElementById('sheet-bg')?.addEventListener('click', () => { if (sheetAbierta) closeSheet(sheetAbierta); });
+
+/* ---------- Tutorial guiado ---------- *
+ * Motor de tour dirigido por datos: TOUR_CAPITULOS define contenido, el
+ * resto son funciones genéricas de recorrido (spotlight sobre la UI real +
+ * burbuja de texto). Un capítulo = una sección del nav. Los pasos con
+ * soloAdmin solo los ve ROL==='admin' (ahí el admin ve un mockup de cómo le
+ * queda esa misma pantalla a un asesor -- HTML/CSS real del proyecto, no
+ * capturas, para que nunca quede desincronizado).
+ */
+function mockupBandejaAsesor() {
+  return `<div class="entity-card inbox-card" style="pointer-events:none;margin:0">
+    <div class="ec-top"><div class="ec-ava" style="background:#ff910022;color:#ff9100"><i class="fas fa-user"></i></div><div class="ec-nombre">Andrea Triana</div></div>
+    <div class="ec-row"><i class="fas fa-phone"></i> +58 412 555 1234</div>
+    <div class="ec-row"><i class="fas fa-location-dot"></i> Cancún</div>
+    <div class="ec-row"><i class="fas fa-clock"></i> hace 2 min</div>
+    <div class="inbox-actions">
+      <button type="button" class="inbox-btn atender"><i class="fas fa-check"></i> Atender</button>
+      <button type="button" class="inbox-btn nopuedo"><i class="fas fa-xmark"></i> No puedo</button>
+      <button type="button" class="inbox-btn avisar"><i class="fas fa-flag"></i></button>
+    </div>
+  </div>`;
+}
+function mockupExtractorAsesor() {
+  return `<div style="font-size:12px;color:var(--muted);margin-bottom:6px"><i class="fas fa-wand-magic-sparkles" style="color:var(--accent)"></i> Extractor IA</div>
+    <textarea rows="3" disabled style="width:100%;resize:none;background:var(--bg);border:1px solid var(--line2);border-radius:8px;color:var(--muted);font-size:12px;padding:8px;font-family:inherit">Hola, quiero viajar a Margarita con mi esposa del 10 al 15...</textarea>`;
+}
+function mockupAsistenciaAsesor() {
+  return `<div class="jornada-widget" style="margin:0">
+    <span class="jornada-dot on"></span>
+    <span class="jornada-text">Jornada activa · 08:52</span>
+    <button class="jornada-btn on" disabled>Finalizar</button>
+  </div>`;
+}
+
+const TOUR_CAPITULOS = [
+  { id: 'dashboard', titulo: 'Dashboard', icono: 'fa-chart-pie', roles: ['admin'], seccion: 'dashboard', pasos: [
+    { titulo: 'Panorama general', texto: 'Acá ves de un vistazo cuántos leads llegaron, cómo vienen (Instagram, TikTok, web) y cómo va cada asesor.', selector: '#kpis' },
+    { titulo: 'Tocá para profundizar', texto: 'Cualquier gráfico o número se puede tocar para ver el detalle de esos leads.', selector: '#sec-dashboard' },
+  ]},
+  { id: 'leads', titulo: 'Leads', icono: 'fa-users', roles: ['admin', 'asesor'], seccion: 'leads', pasos: [
+    { titulo: 'Tus clientes', texto: () => ROL === 'asesor' ? 'Acá aparecen los clientes que te asignaron. Los nuevos suben arriba de todo.' : 'Acá el admin ve y filtra todos los leads del negocio, de todos los asesores.', selector: '#sec-leads' },
+    { titulo: 'Leads nuevos por atender', texto: 'Cada tarjeta nueva tiene 3 botones: ✅ Atender (lo tomás), ❌ No puedo (se lo pasás a otro asesor), 🚩 (avisás que el número está mal).', selector: '#inbox-grid' },
+    { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Cada asesor solo ve sus propios leads nuevos, con estos mismos 3 botones. Si no toca ninguno a tiempo, el lead se reasigna automático a otro asesor.', mockup: mockupBandejaAsesor },
+  ]},
+  { id: 'mensajes', titulo: 'Mensajes', icono: 'fa-comment-dots', roles: ['admin', 'asesor', 'marketing'], seccion: 'mensajes', pasos: [
+    { titulo: 'Chat interno del equipo', texto: 'Esto no es WhatsApp del cliente -- es un chat interno para hablar con tus compañeros y con administración.', selector: '#sec-mensajes' },
+  ]},
+  { id: 'extractor', titulo: 'Extractor IA', icono: 'fa-wand-magic-sparkles', roles: ['admin', 'asesor'], seccion: 'extractor', pasos: [
+    { titulo: 'Copiá y pegá la conversación', texto: 'Pegá acá la conversación de WhatsApp con el cliente y la IA saca automáticamente destino, fechas, cantidad de personas y presupuesto.', selector: '#ext-chat-input' },
+    { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Los asesores usan esto todo el tiempo para no tener que tipear los datos del cliente a mano en cada cotización.', mockup: mockupExtractorAsesor },
+  ]},
+  { id: 'metricas', titulo: 'Métricas', icono: 'fa-chart-simple', roles: ['admin'], seccion: 'metricas', pasos: [
+    { titulo: 'Números del negocio', texto: 'Conversión, tiempos de respuesta y ventas, con filtro de fecha. Solo lo ve administración.', selector: '#sec-metricas' },
+  ]},
+  { id: 'ranking', titulo: 'Ranking', icono: 'fa-ranking-star', roles: ['admin'], seccion: 'ranking', pasos: [
+    { titulo: 'Ranking de asesores', texto: 'Compará el desempeño de cada asesor: cuántos leads atendió, cuántos cerró, tiempo de respuesta.', selector: '#sec-ranking' },
+  ]},
+  { id: 'pipeline', titulo: 'Pipeline', icono: 'fa-diagram-project', roles: ['admin', 'asesor'], seccion: 'pipeline', pasos: [
+    { titulo: 'El camino de un cliente', texto: 'Acá ves en qué etapa está cada cliente: Atendido → Cotización enviada → Esperando pago → Pago realizado.', selector: '#sec-pipeline' },
+  ]},
+  { id: 'tarifario', titulo: 'Tarifario', icono: 'fa-book-open', roles: ['admin', 'asesor', 'marketing'], seccion: 'tarifario', pasos: [
+    { titulo: 'Catálogo de hoteles y paquetes', texto: 'Todos los precios y opciones que le podés ofrecer a un cliente, con fotos.', selector: '#sec-tarifario' },
+  ]},
+  { id: 'cotizador', titulo: 'Cotizador IA', icono: 'fa-comments', roles: ['admin', 'asesor', 'marketing'], seccion: 'cotizador', pasos: [
+    { titulo: 'Armá una cotización hablando', texto: 'Contale a la IA qué busca el cliente (destino, presupuesto, fechas) y te arma opciones del Tarifario al toque.', selector: '#chat-input' },
+  ]},
+  { id: 'galeria', titulo: 'Galería', icono: 'fa-images', roles: ['admin', 'asesor', 'marketing'], seccion: 'galeria', pasos: [
+    { titulo: 'Fotos para mandar al cliente', texto: 'Fotos reales de hoteles y paquetes, listas para compartir por WhatsApp.', selector: '#sec-galeria' },
+  ]},
+  { id: 'redes', titulo: 'Redes', icono: 'fa-share-nodes', roles: ['admin', 'marketing'], seccion: 'redes', pasos: [
+    { titulo: 'Instagram y Meta', texto: 'Métricas de las redes sociales del negocio -- alcance, seguidores, publicaciones que mejor funcionan.', selector: '#sec-redes' },
+  ]},
+  { id: 'asesores', titulo: 'Asesores', icono: 'fa-user-tie', roles: ['admin'], seccion: 'asesores', pasos: [
+    { titulo: 'Tu equipo', texto: 'Alta/baja de asesores, y el peso de cada uno en el sorteo automático de leads nuevos.', selector: '#sec-asesores' },
+  ]},
+  { id: 'reasignaciones', titulo: 'Reasignaciones', icono: 'fa-shuffle', roles: ['admin'], seccion: 'reasignaciones', pasos: [
+    { titulo: 'Historial de reasignaciones', texto: 'Cada vez que un lead pasa de un asesor a otro por no responder a tiempo, queda acá con el motivo.', selector: '#sec-reasignaciones' },
+  ]},
+  { id: 'asistencia', titulo: 'Asistencia', icono: 'fa-user-clock', roles: ['admin'], seccion: 'asistencia', pasos: [
+    { titulo: 'Asistencia del equipo', texto: 'Quién marcó entrada/salida cada día y a qué hora.', selector: '#sec-asistencia' },
+    { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Cada asesor marca su propia jornada con este botón, siempre visible arriba del menú.', mockup: mockupAsistenciaAsesor },
+  ]},
+  { id: 'informe-diario', titulo: 'Informe Diario', icono: 'fa-file-lines', roles: ['admin'], seccion: 'informe-diario',
+    visibleIf: () => getComputedStyle(document.getElementById('nav-informe-diario')).display !== 'none', pasos: [
+    { titulo: 'Resumen del día', texto: 'Un resumen automático del día, para no tener que revisar todo a mano.', selector: '#sec-informe-diario' },
+  ]},
+  { id: 'asistencia-personal', titulo: 'Marcar asistencia', icono: 'fa-user-clock', roles: ['asesor'], seccion: null, pasos: [
+    { titulo: 'Marcá tu entrada y salida', texto: 'Tocá "Comenzar" al empezar tu jornada y "Finalizar" al terminarla. Administración lo ve reflejado al instante.', selector: '#jornada-widget-d, #jornada-widget-m' },
+  ]},
+];
+
+function pasosVisiblesCapitulo(cap) { return cap.pasos.filter(p => !p.soloAdmin || ROL === 'admin'); }
+function capitulosVisiblesTour() { return TOUR_CAPITULOS.filter(c => c.roles.includes(ROL) && (!c.visibleIf || c.visibleIf())); }
+function elVisible(selector) { return [...document.querySelectorAll(selector)].find(el => el.offsetParent !== null) || null; }
+
+let TOUR_CAP_ACTUAL = null, TOUR_PASO_IDX = 0;
+
+function abrirMenuTutorial() {
+  const lista = capitulosVisiblesTour();
+  document.getElementById('tutorial-chap-list').innerHTML = lista.map(c => `
+    <a class="sheet-item tour-chap-item" data-cap="${c.id}">
+      <i class="fas ${c.icono}"></i>
+      <span class="si-t">${esc(c.titulo)}<span class="si-sub">${pasosVisiblesCapitulo(c).length} paso${pasosVisiblesCapitulo(c).length === 1 ? '' : 's'}</span></span>
+    </a>`).join('');
+  document.querySelectorAll('#tutorial-chap-list .tour-chap-item').forEach(el => { el.onclick = () => iniciarCapituloTour(el.dataset.cap); });
+  openSheet('tutorial-sheet');
+}
+function iniciarCapituloTour(capId) {
+  const cap = TOUR_CAPITULOS.find(c => c.id === capId);
+  if (!cap) return;
+  closeSheet('tutorial-sheet', true);
+  TOUR_CAP_ACTUAL = cap;
+  TOUR_PASO_IDX = 0;
+  document.getElementById('tour-overlay').classList.add('open');
+  navPush({ type: 'tour' });
+  renderPasoTour();
+}
+function siguientePasoTour() {
+  const pasos = pasosVisiblesCapitulo(TOUR_CAP_ACTUAL);
+  if (TOUR_PASO_IDX < pasos.length - 1) { TOUR_PASO_IDX++; renderPasoTour(); } else volverAlMenuTutorial();
+}
+function pasoAnteriorTour() { if (TOUR_PASO_IDX > 0) { TOUR_PASO_IDX--; renderPasoTour(); } }
+function volverAlMenuTutorial(fromNav) {
+  document.getElementById('tour-overlay').classList.remove('open');
+  if (!fromNav) navConsume();
+  TOUR_CAP_ACTUAL = null;
+  marcarTutorialVisto();
+  abrirMenuTutorial();
+}
+function marcarTutorialVisto() {
+  if (MI_PREFERENCIAS.tutorial_visto) return;
+  guardarPreferencia('tutorial_visto', true);
+}
+function renderPasoTour() {
+  const pasos = pasosVisiblesCapitulo(TOUR_CAP_ACTUAL);
+  const paso = pasos[TOUR_PASO_IDX];
+  document.getElementById('tb-titulo').textContent = paso.titulo;
+  document.getElementById('tb-texto').textContent = typeof paso.texto === 'function' ? paso.texto() : paso.texto;
+  const mockupEl = document.getElementById('tb-mockup');
+  if (paso.mockup) { mockupEl.style.display = ''; mockupEl.innerHTML = paso.mockup(); } else mockupEl.style.display = 'none';
+  document.getElementById('tb-dots').innerHTML = pasos.map((_, i) => `<span class="tb-dot${i === TOUR_PASO_IDX ? ' on' : ''}"></span>`).join('');
+  document.getElementById('tb-back').style.visibility = TOUR_PASO_IDX === 0 ? 'hidden' : 'visible';
+  document.getElementById('tb-next').textContent = TOUR_PASO_IDX === pasos.length - 1 ? 'Listo' : 'Siguiente';
+  posicionarSpotlight(paso);
+}
+function posicionarSpotlight(paso) {
+  const spot = document.getElementById('tour-spotlight'), bubble = document.getElementById('tour-bubble');
+  const centrar = () => { spot.style.opacity = '0'; bubble.style.top = '50%'; bubble.style.bottom = ''; bubble.style.left = '50%'; bubble.style.transform = 'translate(-50%,-50%)'; };
+  if (!paso.selector) { centrar(); return; }
+  const posicionar = () => {
+    const el = elVisible(paso.selector);
+    if (!el) { centrar(); return; }
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setTimeout(() => {
+      const r = el.getBoundingClientRect();
+      spot.style.opacity = '1';
+      spot.style.top = (r.top - 8) + 'px'; spot.style.left = (r.left - 8) + 'px';
+      spot.style.width = (r.width + 16) + 'px'; spot.style.height = (r.height + 16) + 'px';
+      const debajo = r.top < window.innerHeight / 2;
+      bubble.style.transform = 'none';
+      bubble.style.top = debajo ? Math.min(r.bottom + 16, window.innerHeight - 200) + 'px' : '';
+      bubble.style.bottom = !debajo ? (window.innerHeight - r.top + 16) + 'px' : '';
+      bubble.style.left = Math.max(16, Math.min(r.left, window.innerWidth - 356)) + 'px';
+    }, 260);
+  };
+  if (TOUR_CAP_ACTUAL.seccion && currentSec !== TOUR_CAP_ACTUAL.seccion) { activateSection(TOUR_CAP_ACTUAL.seccion, true); setTimeout(posicionar, 80); } else posicionar();
+}
+function setupTutorial() {
+  document.getElementById('nav-tutorial')?.addEventListener('click', () => abrirMenuTutorial());
+  document.getElementById('sheet-item-tutorial')?.addEventListener('click', () => { closeSheet('more-sheet', true); abrirMenuTutorial(); });
+  document.getElementById('tb-next').addEventListener('click', siguientePasoTour);
+  document.getElementById('tb-back').addEventListener('click', pasoAnteriorTour);
+  document.getElementById('tb-skip').addEventListener('click', () => volverAlMenuTutorial());
+}

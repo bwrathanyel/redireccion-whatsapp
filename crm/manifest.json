@@ -1,14 +1,14 @@
 {
   "id": "./index.html",
-  "name": "Lotus 360 CRM",
-  "short_name": "Lotus360",
-  "description": "CRM interno de Destinos y Eventos Lotus360 — leads, tarifario, cotizador y gestión de asesores.",
+  "name": "Destino y Eventos Lotus 360 CRM",
+  "short_name": "Lotus 360 CRM",
+  "description": "CRM interno de Destino y Eventos Lotus 360: leads, ventas, postventa, tarifario y gestión del equipo.",
   "lang": "es",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#080b16",
-  "theme_color": "#080b16",
+  "background_color": "#070b12",
+  "theme_color": "#070b12",
   "orientation": "portrait-primary",
   "categories": ["business", "productivity"],
   "icons": [
@@ -18,6 +18,7 @@
   ],
   "shortcuts": [
     { "name": "Leads", "url": "./index.html?ir=leads", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Postventa", "url": "./index.html?ir=postventa", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Cotizador IA", "url": "./index.html?ir=cotizador", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Tarifario", "url": "./index.html?ir=tarifario", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ],

@@ -1,11 +1,12 @@
 // Service worker del CRM. Fase 1: solo cachea el shell estatico para que la PWA sea instalable.
 // Bump CACHE_VERSION en cada deploy que deba invalidar el shell cacheado.
-const CACHE_VERSION = 'lotus-crm-shell-v5';
+const CACHE_VERSION = 'lotus-crm-shell-v6';
 const SHELL_FILES = [
   './index.html',
   './app.js',
   './manifest.json',
   './logolotus.png',
+  './logolotus-integrado.png',
   './offline.html',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -79,7 +80,7 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data ? event.data.text() : '' }; }
-  event.waitUntil(self.registration.showNotification(data.title || 'Lotus 360 CRM', {
+  event.waitUntil(self.registration.showNotification(data.title || 'Destino y Eventos Lotus 360 CRM', {
     body: data.body || '',
     icon: './icons/icon-192.png',
     badge: './icons/icon-192.png',
