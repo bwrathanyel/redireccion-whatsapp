@@ -1705,6 +1705,7 @@ function renderReasignPager(pages) {
 
 /* ---------- Tarifario ---------- */
 let tarTab = 'promo', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
+const tarDestinosAbiertos = new Set();
 const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción' };
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas']);
@@ -2054,7 +2055,25 @@ function renderTarifario() {
   document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
   document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0);
   const grid = document.getElementById('tar-grid');
-  if (tarTab === 'hotel' || tarTab === 'promo' || tarTab === 'paquete') {
+  if (tarTab === 'hotel') {
+    // Contraídas por defecto (pedido explícito) -- son ~7 destinos con
+    // decenas de hoteles cada uno, todas abiertas de arranque era una
+    // pantalla larguísima de scroll antes de ver nada útil. renderTarifario()
+    // se llama de nuevo en cada tecla del buscador/cambio de filtro y
+    // reconstruye todo el innerHTML -- sin guardar qué destinos tenía
+    // abiertos el usuario, cada re-render los cerraría todos de vuelta.
+    const porDestino = {};
+    filtered.forEach(x => (porDestino[destinoDe(x) || 'Otros'] ??= []).push(x));
+    const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
+    grid.innerHTML = destinos.map(d => `<details class="tar-destino-block" data-destino="${esc(d)}"${tarDestinosAbiertos.has(d) ? ' open' : ''}>
+      <summary class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span><i class="fas fa-chevron-down tar-destino-caret"></i></summary>
+      ${tarItemsWrapHtml(porDestino[d])}
+    </details>`).join('');
+    grid.querySelectorAll('.tar-destino-block').forEach(det => det.addEventListener('toggle', () => {
+      const d = det.dataset.destino;
+      if (det.open) tarDestinosAbiertos.add(d); else tarDestinosAbiertos.delete(d);
+    }));
+  } else if (tarTab === 'promo' || tarTab === 'paquete') {
     const porDestino = {};
     filtered.forEach(x => (porDestino[destinoDe(x) || 'Otros'] ??= []).push(x));
     const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
