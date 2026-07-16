@@ -1067,6 +1067,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
       <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
       <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
+      <a class="nav-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
       <div class="nav-label">Tarifario</div>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
       <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
@@ -1075,6 +1076,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="nav-label nav-admin-only">Gestión</div>
       <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
       <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
+      <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
       <a class="nav-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
       <a class="nav-item nav-admin-only solo-informe-diario" id="nav-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
       <a class="nav-item nav-boleteria-ok solo-voucher" id="nav-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>
@@ -1446,6 +1448,60 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
     </section>
 
+    <!-- FACTURACIÓN -->
+    <section class="section" id="sec-facturacion">
+      <div class="kpis" id="fact-kpis"></div>
+      <div class="card">
+        <h2><i class="fas fa-percent"></i> Comisión por asesor</h2>
+        <div class="csub">% que se aplica automáticamente sobre cada venta pagada</div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Asesor</th><th>% Comisión</th><th></th></tr></thead>
+            <tbody id="fact-asesores-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <button class="mfs-trigger" data-mfs="fact-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
+      <div class="tbar mfs" id="fact-tbar">
+        <select class="flt" id="fact-estado">
+          <option value="">Todos los estados</option>
+          <option value="pagada">Pagada</option>
+          <option value="anulada">Anulada</option>
+        </select>
+        <button class="mfs-done" data-mfs="fact-tbar" type="button">Listo</button>
+      </div>
+      <div class="card">
+        <h2><i class="fas fa-file-invoice-dollar"></i> Facturas</h2>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>N°</th><th>Lead</th><th>Asesor</th><th>Monto</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
+            <tbody id="fact-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2><i class="fas fa-sack-dollar"></i> Comisiones</h2>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Asesor</th><th>Monto venta</th><th>%</th><th>Comisión</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="fact-com-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- MIS COMISIONES (asesor) -->
+    <section class="section" id="sec-mis-comisiones">
+      <div class="card">
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Monto venta</th><th>%</th><th>Mi comisión</th><th>Estado</th><th>Fecha de pago</th></tr></thead>
+            <tbody id="miscom-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- ASISTENCIA -->
     <section class="section" id="sec-asistencia">
       <div class="card">
@@ -1648,10 +1704,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <a class="sheet-item nav-asesor-hide" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
+  <a class="sheet-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
   <a class="sheet-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
   <a class="sheet-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
   <a class="sheet-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
   <a class="sheet-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
+  <a class="sheet-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
   <a class="sheet-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
   <a class="sheet-item nav-admin-only solo-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
   <a class="sheet-item nav-boleteria-ok solo-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>

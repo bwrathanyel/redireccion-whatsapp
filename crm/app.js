@@ -42,7 +42,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
@@ -752,7 +752,7 @@ async function startApp() {
   // No se llama loadInboxLeads() acá de nuevo -- activateSection('leads')
   // (arriba, para asesor) ya la dispara; llamarla dos veces corría 2 fetches
   // del mismo query en paralelo sin orden garantizado de resolución.
-  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo();
+  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion();
   setupDestPeriodo(); loadDestPeriodo();
   subscribeRealtime();
 }
@@ -1747,6 +1747,109 @@ function renderReasignPager(pages) {
   const pv = document.getElementById('rgprev'), nx = document.getElementById('rgnext');
   if (pv) pv.onclick = () => { rgPage--; loadReasignaciones(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   if (nx) nx.onclick = () => { rgPage++; loadReasignaciones(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+}
+
+/* ---------- Facturación ---------- */
+let FACT_ASESORES_CACHE = [];
+function setupFacturacion() {
+  document.getElementById('fact-estado').addEventListener('change', loadFacturas);
+}
+async function loadFacturacion() {
+  loadFacturacionKpis();
+  loadAsesoresComision();
+  loadFacturas();
+  loadComisionesAdmin();
+}
+async function loadFacturacionKpis() {
+  const { data, error } = await sb.rpc('resumen_facturacion');
+  if (error) { errToast('No se pudo cargar el resumen de facturación'); return; }
+  const r = data || {};
+  const sinConfigurar = r.comisiones_sin_configurar ?? 0;
+  document.getElementById('fact-kpis').innerHTML = [
+    { t: 'Total facturado', v: money(r.total_facturado), i: 'fa-sack-dollar', c: 'var(--green)' },
+    { t: 'Facturas pagadas', v: fmt(r.facturas_pagadas ?? 0), i: 'fa-file-invoice-dollar', c: 'var(--accent)' },
+    { t: 'Facturas anuladas', v: fmt(r.facturas_anuladas ?? 0), i: 'fa-ban', c: 'var(--muted)' },
+    { t: 'Comisiones sin configurar', v: fmt(sinConfigurar), i: 'fa-triangle-exclamation', c: sinConfigurar > 0 ? '#ef4444' : 'var(--green)' },
+    { t: 'Comisiones pendientes', v: money(r.comisiones_pendientes_monto), i: 'fa-clock', c: 'var(--blue)' },
+    { t: 'Comisiones pagadas', v: money(r.comisiones_pagadas_monto), i: 'fa-check', c: 'var(--green)' },
+  ].map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+}
+async function loadAsesoresComision() {
+  const { data, error } = await sb.rpc('listar_asesores_comision');
+  if (error) { errToast('No se pudo cargar la comisión de asesores'); return; }
+  FACT_ASESORES_CACHE = data || [];
+  document.getElementById('fact-asesores-tbody').innerHTML = FACT_ASESORES_CACHE.map(a => `
+    <tr>
+      <td>${esc(a.nombre)}</td>
+      <td>${a.porcentaje_comision != null ? a.porcentaje_comision + '%' : '<span class="asist-badge off">Sin configurar</span>'}</td>
+      <td><button class="btn-sm" onclick="editarPorcentajeComision(${a.id})">Editar %</button></td>
+    </tr>`).join('') || '<tr><td colspan="3">Sin asesores</td></tr>';
+}
+async function loadFacturas() {
+  const { data, error } = await sb.rpc('listar_facturas', { p_estado: val('fact-estado') || null });
+  if (error) { errToast('No se pudieron cargar las facturas'); return; }
+  document.getElementById('fact-tbody').innerHTML = (data || []).map(f => `
+    <tr>
+      <td>${fmt(f.numero_factura)}</td>
+      <td>#${fmt(f.lead_id)}</td>
+      <td>${esc(f.asesor || 'Sin asesor')}</td>
+      <td>${money(f.monto_total)}</td>
+      <td><span class="chip">${esc(f.estado)}</span></td>
+      <td class="muted">${f.fecha_emision ? f.fecha_emision.slice(0, 16).replace('T', ' ') : '—'}</td>
+      <td>${f.estado === 'pagada' ? `<button class="btn-sm" onclick="anularFacturaUI(${f.id})">Anular</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="7">Sin facturas</td></tr>';
+}
+async function loadComisionesAdmin() {
+  const { data, error } = await sb.rpc('listar_comisiones');
+  if (error) { errToast('No se pudieron cargar las comisiones'); return; }
+  document.getElementById('fact-com-tbody').innerHTML = (data || []).map(c => `
+    <tr>
+      <td>${esc(c.asesor)}</td>
+      <td>${money(c.monto_venta)}</td>
+      <td>${c.porcentaje != null ? c.porcentaje + '%' : '—'}</td>
+      <td>${c.monto_comision != null ? money(c.monto_comision) : '—'}</td>
+      <td><span class="chip">${esc(c.estado)}</span></td>
+      <td>${c.estado === 'pendiente' ? `<button class="btn-sm" onclick="marcarComisionPagadaUI(${c.id})">Marcar pagada</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="6">Sin comisiones</td></tr>';
+}
+window.editarPorcentajeComision = async (asesorId) => {
+  const a = FACT_ASESORES_CACHE.find(x => x.id === asesorId);
+  if (!a) return;
+  const input = prompt(`% de comisión para ${a.nombre} (0-100):`, a.porcentaje_comision ?? '');
+  if (input === null) return;
+  const porcentaje = Number(input);
+  if (!Number.isFinite(porcentaje) || porcentaje < 0 || porcentaje > 100) { errToast('Porcentaje inválido'); return; }
+  const { data, error } = await sb.rpc('establecer_porcentaje_comision', { p_asesor_id: asesorId, p_porcentaje: porcentaje });
+  if (error || !data?.ok) { errToast('No se pudo actualizar: ' + (error?.message || data?.error || '')); return; }
+  okToast(`Comisión de ${a.nombre} actualizada a ${porcentaje}%`);
+  loadAsesoresComision(); loadComisionesAdmin(); loadFacturacionKpis();
+};
+window.anularFacturaUI = async (facturaId) => {
+  const motivo = prompt('Motivo de la anulación (obligatorio):');
+  if (!motivo || !motivo.trim()) return;
+  const { error } = await sb.rpc('anular_factura', { p_factura_id: facturaId, p_motivo: motivo.trim() });
+  if (error) { errToast('No se pudo anular: ' + error.message); return; }
+  okToast('Factura anulada');
+  loadFacturas(); loadComisionesAdmin(); loadFacturacionKpis();
+};
+window.marcarComisionPagadaUI = async (comisionId) => {
+  if (!confirm('¿Marcar esta comisión como pagada?')) return;
+  const { error } = await sb.rpc('marcar_comision_pagada', { p_comision_id: comisionId });
+  if (error) { errToast('No se pudo marcar como pagada: ' + error.message); return; }
+  okToast('Comisión marcada como pagada');
+  loadComisionesAdmin(); loadFacturacionKpis();
+};
+async function loadMisComisiones() {
+  const { data, error } = await sb.rpc('listar_comisiones');
+  if (error) { errToast('No se pudieron cargar tus comisiones'); return; }
+  document.getElementById('miscom-tbody').innerHTML = (data || []).map(c => `
+    <tr>
+      <td>${money(c.monto_venta)}</td>
+      <td>${c.porcentaje != null ? c.porcentaje + '%' : '—'}</td>
+      <td>${c.monto_comision != null ? money(c.monto_comision) : 'Sin configurar'}</td>
+      <td><span class="chip">${esc(c.estado)}</span></td>
+      <td class="muted">${c.fecha_pago ? c.fecha_pago.slice(0, 16).replace('T', ' ') : '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="5">Sin comisiones todavía</td></tr>';
 }
 
 /* ---------- Tarifario ---------- */
@@ -3549,6 +3652,8 @@ function activateSection(sec, fromNav) {
   if (sec === 'metricas') loadMetricas();
   if (sec === 'ranking') loadRanking();
   if (sec === 'reasignaciones') loadReasignaciones();
+  if (sec === 'facturacion') loadFacturacion();
+  if (sec === 'mis-comisiones') loadMisComisiones();
   if (sec === 'asistencia') loadAsistencia();
   if (sec === 'postventa') loadPostventa();
   if (sec === 'informe-diario') loadInformeDiario();
