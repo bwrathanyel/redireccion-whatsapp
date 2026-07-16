@@ -3494,7 +3494,16 @@ function ensureVoucherLibs() {
   return voucherLibsPromise;
 }
 async function loadVoucherSeccion() {
-  document.getElementById('vc-asesor').value = MI_NOMBRE || '';
+  const sel = document.getElementById('vc-asesor');
+  const optHtml = (nombre, sel_) => `<option value="${esc(nombre)}" ${nombre === sel_ ? 'selected' : ''}>${esc(nombre)}</option>`;
+  if (ROL === 'admin') {
+    const preSel = ACTIVOS.includes(MI_NOMBRE) ? MI_NOMBRE : ACTIVOS[0];
+    sel.innerHTML = ACTIVOS.map(n => optHtml(n, preSel)).join('');
+    sel.disabled = false;
+  } else {
+    sel.innerHTML = optHtml(MI_NOMBRE, MI_NOMBRE);
+    sel.disabled = true;
+  }
   await cargarHistorialVouchers();
 }
 async function cargarHistorialVouchers() {
@@ -3523,8 +3532,9 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
   const btn = document.getElementById('vc-generar-btn');
   const clienteNombre = val('vc-cliente-nombre').trim();
   if (!clienteNombre) { errToast('Ingresá el nombre del cliente'); return; }
+  const asesorNombre = ROL === 'admin' ? (val('vc-asesor').trim() || MI_NOMBRE) : MI_NOMBRE;
   const fila = {
-    creado_por: MI_USUARIO_ID, asesor_nombre: MI_NOMBRE, cliente_nombre: clienteNombre,
+    creado_por: MI_USUARIO_ID, asesor_nombre: asesorNombre, cliente_nombre: clienteNombre,
     documento_identidad: val('vc-documento').trim() || null, telefono: val('vc-telefono').trim() || null,
     destino_hospedaje: val('vc-destino').trim() || null, fecha_entrada: val('vc-fecha-entrada') || null,
     check_in: val('vc-check-in').trim() || null, fecha_salida: val('vc-fecha-salida') || null,
