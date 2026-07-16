@@ -1200,7 +1200,7 @@ function buildQuery(forCount) {
   if (fh) q = q.lte('fecha_creacion', fh + 'T23:59:59');
   if (activeDestino) q = q.ilike('destino', `%${activeDestino}%`);
   if (activeMonth) { const [y, m] = activeMonth.split('-').map(Number); const nm = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; q = q.gte('fecha_creacion', activeMonth + '-01').lt('fecha_creacion', nm + '-01'); }
-  if (qs) q = q.or(`nombre.ilike.%${qs}%,telefono.ilike.%${qs}%`);
+  if (qs) { const qsSafe = qs.replace(/[,()%]/g, ''); q = q.or(`nombre.ilike.%${qsSafe}%,telefono.ilike.%${qsSafe}%`); }
   return q;
 }
 async function loadTable() {
@@ -1221,7 +1221,7 @@ async function loadTable() {
       <td data-label="Destino">${esc(l.destino)}</td>
       <td data-label="Canal"><span class="chip ${cc}">${esc(l.canal)}</span></td>
       <td data-label="Asesor">${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</td>
-      <td data-label="Estado"><span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${niceEstado(l.estado)}</span></td>
+      <td data-label="Estado"><span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${esc(niceEstado(l.estado))}</span></td>
       <td data-label="Fecha" class="muted">${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : '—'}</td>
       <td class="td-wa">${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : '<span class="muted">—</span>'}</td>
     </tr>`;
@@ -1246,7 +1246,7 @@ function leadCardHtml(l) {
     ${detalle}
     <div class="ec-foot">
       <span class="chip ${cc}">${esc(l.canal)}</span>
-      <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${niceEstado(l.estado)}</span>
+      <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${esc(niceEstado(l.estado))}</span>
       ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
     </div>
   </div>`;
