@@ -734,6 +734,7 @@ window.cerrarSesion = async () => { await sb.auth.signOut(); location.reload(); 
 
 async function startApp() {
   if (booted) return; booted = true;
+  aplicarOrdenSidebar();
   setupNav();
   setupBuscarTarifario();
   setupTarifarioTabs();
@@ -746,9 +747,21 @@ async function startApp() {
   setupTutorial();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
   if (ROL === 'boleteria') { activateSection('mensajes'); return; }
-  if (ROL === 'asesor') activateSection('leads');
+  // Restaura la última sección visitada por este usuario (admin/asesor,
+  // ver guardarUltimaSeccion) -- marketing/boleteria arriba se quedan
+  // siempre en su única sección fija, no aplica.
+  const seccionGuardada = MI_PREFERENCIAS.ultima_seccion;
+  const seccionValida = seccionGuardada && document.getElementById('sec-' + seccionGuardada);
+  if (ROL === 'asesor') {
+    const destino = seccionValida ? seccionGuardada : 'leads';
+    activateSection(destino);
+    // Si el destino restaurado no es 'leads', activateSection no dispara
+    // loadInboxLeads() -- hace falta igual para el badge de pendientes.
+    if (destino !== 'leads') loadInboxLeads();
+  }
   await loadStats();
   ACTIVOS = Object.keys(STATS.by_advisor || {});
+  if (ROL === 'admin') activateSection(seccionValida ? seccionGuardada : 'dashboard');
   renderAll();
   setupFilters();
   await loadTable();
@@ -3744,6 +3757,7 @@ function activateSection(sec, fromNav) {
   if (!fromNav && currentSec !== null) navPush({ type: 'section', prevSec: currentSec });
   if (currentSec === 'leads' && sec !== 'leads') detenerPollLeads();
   currentSec = sec;
+  guardarUltimaSeccion(sec);
   document.querySelectorAll('.nav-item,.bn-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
   // 'extractor' es core (fila principal del bottom-nav) SOLO para rol asesor
   // (ver .nav-asesor-only en el CSS) — para el resto se llega vía "Más", así
@@ -3784,6 +3798,69 @@ function setupNav() {
     const id = b.dataset.mfs;
     b.classList.contains('mfs-trigger') ? openSheet(id) : closeSheet(id);
   }));
+  setupSidebarReorder();
+}
+
+/* ---------- Orden de la sidebar a mano (drag & drop, guardado en
+   preferencias.orden_sidebar) ---------- Solo el sidebar de escritorio;
+   bottom-nav/more-sheet mobile quedan con su orden fijo de siempre. Los
+   nav-label también entran en el orden guardado (se arrastran los nav-item,
+   pero las etiquetas de grupo se mueven junto con ellos al reconstruir). */
+function setupSidebarReorder() {
+  const nav = document.getElementById('sidebar-nav');
+  if (!nav) return;
+  let dragEl = null;
+  nav.querySelectorAll(':scope > .nav-item').forEach(item => {
+    item.draggable = true;
+    item.addEventListener('dragstart', () => { dragEl = item; item.classList.add('dragging'); });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      nav.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      dragEl = null;
+      guardarOrdenSidebar();
+    });
+    item.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (!dragEl || dragEl === item) return;
+      item.classList.add('drag-over');
+      const before = (e.clientY - item.getBoundingClientRect().top) < item.offsetHeight / 2;
+      nav.insertBefore(dragEl, before ? item : item.nextSibling);
+    });
+    item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+  });
+}
+function guardarOrdenSidebar() {
+  const orden = [...document.querySelectorAll('#sidebar-nav > .nav-item, #sidebar-nav > .nav-label')]
+    .map(el => el.classList.contains('nav-label') ? 'label:' + el.dataset.label : 'sec:' + el.dataset.sec);
+  if (JSON.stringify(orden) === JSON.stringify(MI_PREFERENCIAS.orden_sidebar || null)) return;
+  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, orden_sidebar: orden };
+  sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS }).catch(() => {});
+}
+function aplicarOrdenSidebar() {
+  const orden = MI_PREFERENCIAS.orden_sidebar;
+  const nav = document.getElementById('sidebar-nav');
+  if (!orden?.length || !nav) return;
+  const hijos = [...nav.querySelectorAll(':scope > .nav-item, :scope > .nav-label')];
+  const idDe = el => el.classList.contains('nav-label') ? 'label:' + el.dataset.label : 'sec:' + el.dataset.sec;
+  const mapa = new Map(hijos.map(el => [idDe(el), el]));
+  // Los que no estén en el orden guardado (secciones nuevas agregadas después
+  // de que el usuario guardó su orden) quedan al final, en su posición
+  // original entre sí.
+  const usados = new Set();
+  const final = [];
+  orden.forEach(id => { const el = mapa.get(id); if (el) { final.push(el); usados.add(el); } });
+  hijos.forEach(el => { if (!usados.has(el)) final.push(el); });
+  final.forEach(el => nav.appendChild(el));
+}
+
+/* ---------- Recordar la última sección visitada (preferencias.ultima_seccion) ----------
+   Se guarda para cualquier rol, pero solo se restaura al entrar para admin/
+   asesor -- marketing y boleteria arrancan siempre en su única sección fija
+   (ver startApp), no tiene sentido restaurarles nada ahí. */
+function guardarUltimaSeccion(sec) {
+  if (MI_PREFERENCIAS.ultima_seccion === sec) return;
+  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, ultima_seccion: sec };
+  sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS }).catch(() => {});
 }
 
 /* ---------- Buscar Tarifario (full-text search de productos+promociones vía RPC buscar_tarifario) ---------- */
