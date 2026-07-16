@@ -405,6 +405,11 @@ input.ei[type=date]{color-scheme:dark}
 @keyframes fadeSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .edit-err{color:#ff6b6b;font-size:12px;min-height:14px;margin:8px 0 2px}
 .dbtn.save{background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;width:100%;margin-top:10px}
+#vc-generar-btn{background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:12px;padding:15px 30px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:10px;transition:filter .15s,transform .15s,box-shadow .15s;box-shadow:0 10px 24px rgba(255,145,0,.32)}
+#vc-generar-btn i{font-size:16px}
+#vc-generar-btn:hover{filter:brightness(1.08);transform:translateY(-2px);box-shadow:0 14px 28px rgba(255,145,0,.42)}
+#vc-generar-btn:active{transform:translateY(0) scale(.97)}
+#vc-generar-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
 .dbtn.save:active{transform:scale(.98)}
 /* toggle de periodo */
 .seg-group{display:inline-flex;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:4px;gap:3px;margin-bottom:16px}
@@ -746,7 +751,8 @@ input.ei[type=date]{color-scheme:dark}
 .rol-asesor .nav-admin-only{display:none}
 .rol-asesor #f-asesor{display:none}
 .rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok),.rol-marketing .sheet-item:not(.nav-marketing-ok){display:none}
-.rol-asesor .admin-only,.rol-marketing .admin-only{display:none}
+.rol-boleteria .nav-item:not(.nav-boleteria-ok),.rol-boleteria .bn-item:not(.nav-boleteria-ok),.rol-boleteria .sheet-item:not(.nav-boleteria-ok){display:none}
+.rol-asesor .admin-only,.rol-marketing .admin-only,.rol-boleteria .admin-only{display:none}
 .rol-asesor .nav-asesor-hide{display:none}
 /* Inverso de nav-asesor-hide: visible SOLO para rol asesor (en cualquiera de
    los 3 tipos de nav-item). Usado hoy por Extractor IA en el bottom-nav —
@@ -1055,22 +1061,23 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="nav-label">Principal</div>
       <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
       <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
-      <a class="nav-item nav-marketing-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
       <a class="nav-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
       <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
       <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
       <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
       <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
       <div class="nav-label">Tarifario</div>
-      <a class="nav-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
       <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
-      <a class="nav-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only">Gestión</div>
       <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
       <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
       <a class="nav-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
       <a class="nav-item nav-admin-only solo-informe-diario" id="nav-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
+      <a class="nav-item nav-boleteria-ok solo-voucher" id="nav-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>
       <div class="nav-label">Ayuda</div>
       <a class="nav-item nav-marketing-ok" id="nav-tutorial"><i class="fas fa-circle-question"></i> Tutorial</a>
     </nav>
@@ -1134,6 +1141,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
     <!-- LEADS -->
     <section class="section" id="sec-leads">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <button class="dbtn save" id="nl-abrir-btn" type="button" style="width:auto;padding:8px 14px"><i class="fas fa-user-plus"></i> Nuevo lead</button>
+      </div>
       <div class="leads-inbox" id="leads-inbox">
         <div class="leads-inbox-head">
           <h2><i class="fas fa-inbox"></i> Leads nuevos <span class="lih-count" id="inbox-count">0</span></h2>
@@ -1360,8 +1370,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <input id="ext-e-personas" class="ei" type="text" placeholder="No encontrado en el chat">
           <label class="fl">Fecha de viaje (aprox.)</label>
           <input id="ext-e-fecha-estimada" class="ei" type="text" placeholder="No encontrado en el chat">
-          <label class="fl">Presupuesto (USD)</label>
-          <input id="ext-e-presupuesto" class="ei" type="number" min="0" step="1" placeholder="No encontrado en el chat">
+          <label class="fl">Monto Completo (USD)</label>
+          <input id="ext-e-monto-completo" class="ei" type="number" min="0" step="1" placeholder="No encontrado en el chat">
+          <label class="fl">Monto Inicial (USD)</label>
+          <input id="ext-e-monto-inicial" class="ei" type="number" min="0" step="1" placeholder="No encontrado en el chat">
           <div class="edit-err" id="ext-err"></div>
           <button class="dbtn save" id="ext-aplicar-btn" type="button"><i class="fas fa-check"></i> Aplicar a <span id="ext-aplicar-nombre"></span></button>
           <button class="dbtn gh" id="ext-descartar-btn" type="button">Descartar y empezar de nuevo</button>
@@ -1492,6 +1504,45 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
     </section>
 
+    <!-- VOUCHER (solo Luis Rueda y Beatriz Olmedillo, gate por MI_VE_VOUCHER) -->
+    <section class="section" id="sec-voucher">
+      <div class="card">
+        <h2><i class="fas fa-file-invoice"></i> Voucher de hospedaje</h2>
+        <div class="csub">Genera el voucher en PDF con los datos del cliente y descárgalo para compartir</div>
+        <div class="grid g-2">
+          <div class="field"><label class="fl">Nombre y apellido</label><input id="vc-cliente-nombre" class="ei"></div>
+          <div class="field"><label class="fl">Documento de identificación</label><input id="vc-documento" class="ei"></div>
+          <div class="field"><label class="fl">Teléfono</label><input id="vc-telefono" class="ei"></div>
+          <div class="field"><label class="fl">Asesor(a) de ventas</label><input id="vc-asesor" class="ei" readonly></div>
+          <div class="field"><label class="fl">Destino / Hospedaje</label><input id="vc-destino" class="ei"></div>
+          <div class="field"><label class="fl">Modalidad hospedaje</label><input id="vc-modalidad" class="ei" placeholder="Todo incluido"></div>
+          <div class="field"><label class="fl">Fecha de entrada</label><input id="vc-fecha-entrada" class="ei" type="date"></div>
+          <div class="field"><label class="fl">Check in</label><input id="vc-check-in" class="ei" placeholder="3:00 PM"></div>
+          <div class="field"><label class="fl">Fecha de salida</label><input id="vc-fecha-salida" class="ei" type="date"></div>
+          <div class="field"><label class="fl">Check out</label><input id="vc-check-out" class="ei" placeholder="12:00 PM"></div>
+          <div class="field"><label class="fl">Total días de disfrute</label><input id="vc-total-dias" class="ei" placeholder="5 días y 4 noches"></div>
+          <div class="field"><label class="fl">Cantidad de habitaciones / clase</label><input id="vc-habitaciones" class="ei" placeholder="Habitación doble"></div>
+          <div class="field"><label class="fl">Cantidad de adultos</label><input id="vc-adultos" class="ei" type="number" min="0" step="1"></div>
+          <div class="field"><label class="fl">Cantidad de niños</label><input id="vc-ninos" class="ei" placeholder="N/A"></div>
+          <div class="field"><label class="fl">Status de la reserva / N° localizador</label><input id="vc-status" class="ei" placeholder="Activa"></div>
+          <div class="field"><label class="fl">Total general (USD)</label><input id="vc-total-general" class="ei" type="number" min="0" step="0.01"></div>
+          <div class="field"><label class="fl">Forma de pago</label><input id="vc-forma-pago" class="ei" placeholder="TDC, Zelle, efectivo..."></div>
+          <div class="field"><label class="fl">Monto pagado (USD)</label><input id="vc-monto-pagado" class="ei" type="number" min="0" step="0.01"></div>
+          <div class="field"><label class="fl">Resta (USD)</label><input id="vc-resta" class="ei" type="number" min="0" step="0.01"></div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:10px">
+          <button id="vc-generar-btn" onclick="generarVoucherPdf()"><i class="fas fa-file-pdf"></i> Generar PDF</button>
+        </div>
+        <div class="csub" id="vc-historial-sub" style="margin-top:24px">Últimos vouchers generados por vos</div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>N° factura</th><th>Fecha</th><th>Cliente</th><th>Destino</th><th>Total</th></tr></thead>
+            <tbody id="vc-historial-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- MÉTRICAS -->
     <section class="section" id="sec-metricas">
       <div class="seg-group" id="met-periodo">
@@ -1565,11 +1616,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <nav class="bottom-nav">
   <a class="bn-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Inicio</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i><span class="bn-badge" id="nav-lead-count-m"></span> Leads</a>
-  <a class="bn-item nav-marketing-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
   <a class="bn-item nav-asesor-only" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor</a>
-  <a class="bn-item nav-marketing-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
   <a class="bn-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador</a>
-  <a class="bn-item nav-marketing-ok" id="bn-more"><i class="fas fa-ellipsis"></i> Más</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok" id="bn-more"><i class="fas fa-ellipsis"></i> Más</a>
 </nav>
 
 <!-- Hoja "Más" (móvil) — resto de secciones, filtradas por rol igual que el sidebar -->
@@ -1577,7 +1628,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <div class="sheet" id="more-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title">Más opciones</div>
-  <a class="sheet-perfil-card nav-marketing-ok" id="sheet-item-perfil">
+  <a class="sheet-perfil-card nav-marketing-ok nav-boleteria-ok" id="sheet-item-perfil">
     <div class="avatar" id="side-avatar-m">·</div>
     <div style="flex:1;text-align:left"><div class="un" id="side-un-m">—</div><div class="ue" id="side-ue-m">—</div></div>
     <i class="fas fa-chevron-right" style="color:var(--muted2);font-size:12px"></i>
@@ -1592,7 +1643,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <button onclick="activarRecordatorios()">Activar</button>
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
-  <a class="sheet-item nav-marketing-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-asesor-hide" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
@@ -1603,7 +1654,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <a class="sheet-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
   <a class="sheet-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
   <a class="sheet-item nav-admin-only solo-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
-  <a class="sheet-item nav-marketing-ok" id="sheet-item-tutorial"><i class="fas fa-circle-question"></i> Tutorial</a>
+  <a class="sheet-item nav-boleteria-ok solo-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok" id="sheet-item-tutorial"><i class="fas fa-circle-question"></i> Tutorial</a>
 </div>
 
 <!-- Tutorial: menú de capítulos -->
@@ -1685,6 +1737,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <div style="display:flex;gap:10px;padding:14px 16px 4px">
     <button class="dbtn" id="confirm-delete-lead-cancel" type="button" style="flex:1">Cancelar</button>
     <button class="dbtn" id="confirm-delete-lead-ok" type="button" style="flex:1;background:#ef4444;color:#fff"><i class="fas fa-trash"></i> Eliminar</button>
+  </div>
+</div>
+
+<!-- Nuevo Lead manual (admin y asesor) -->
+<div class="sheet" id="nuevo-lead-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-user-plus"></i> Nuevo lead</div>
+  <div class="edit-box" style="margin-top:4px">
+    <label class="fl">Nombre</label>
+    <input id="nl-nombre" class="ei" type="text">
+    <label class="fl">Teléfono</label>
+    <input id="nl-telefono" class="ei" type="text">
+    <label class="fl">Destino de interés</label>
+    <input id="nl-destino" class="ei" type="text">
+    <label class="fl">Personas</label>
+    <input id="nl-personas" class="ei" type="text">
+    <label class="fl admin-only">Asesor</label>
+    <select id="nl-asesor" class="ei admin-only"><option value="">Sin asignar</option></select>
+    <div class="edit-err" id="nl-err"></div>
+  </div>
+  <div style="display:flex;gap:10px;padding:14px 16px 4px">
+    <button class="dbtn" id="nl-cancelar" type="button" style="flex:1">Cancelar</button>
+    <button class="dbtn save" id="nl-crear" type="button" style="flex:1"><i class="fas fa-floppy-disk"></i> Crear lead</button>
   </div>
 </div>
 

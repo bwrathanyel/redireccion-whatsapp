@@ -42,7 +42,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
@@ -105,7 +105,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false;
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_VE_VOUCHER = false;
 const overlay = id => document.getElementById(id);
 const showOverlay = id => { OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
 // Se recarga cada vez que se muestra el login (no solo una vez al abrir la
@@ -128,7 +128,7 @@ async function initAuth() {
 
 async function cargarUsuario() {
   const { data: { user } } = await sb.auth.getUser();
-  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario').eq('id', user?.id).single();
+  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,ve_voucher').eq('id', user?.id).single();
   if (error || !data) {
     await sb.auth.signOut();
     showOverlay('login');
@@ -142,7 +142,7 @@ async function afterLogin() {
   const u = await cargarUsuario();
   if (!u) return;
   MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
-  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
+  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario; MI_VE_VOUCHER = !!u.ve_voucher;
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   entrarSegunRol();
 }
@@ -150,17 +150,20 @@ async function afterLogin() {
 function entrarSegunRol() {
   document.body.classList.toggle('rol-asesor', ROL === 'asesor');
   document.body.classList.toggle('rol-marketing', ROL === 'marketing');
+  document.body.classList.toggle('rol-boleteria', ROL === 'boleteria');
   overlay('login').classList.remove('show');
   overlay('setup').classList.remove('show');
+  const rolLabelUi = ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : 'Asesor comercial';
   document.getElementById('side-un').textContent = MI_NOMBRE;
-  document.getElementById('side-ue').textContent = ROL === 'admin' ? 'Administrador' : 'Asesor comercial';
+  document.getElementById('side-ue').textContent = rolLabelUi;
   pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
   document.getElementById('side-un-m').textContent = MI_NOMBRE;
-  document.getElementById('side-ue-m').textContent = ROL === 'admin' ? 'Administrador' : 'Asesor comercial';
+  document.getElementById('side-ue-m').textContent = rolLabelUi;
   pintarAvatar(document.getElementById('side-avatar-m'), MI_AVATAR_URL, MI_NOMBRE);
   // nav-admin-only ya oculta esto para asesores/marketing vía CSS (.rol-asesor) --
   // acá se ajusta el caso fino de que no todo admin ve Informe Diario, solo Luis Rueda.
   document.querySelectorAll('.solo-informe-diario').forEach(el => el.style.display = MI_VE_INFORME_DIARIO ? '' : 'none');
+  document.querySelectorAll('.solo-voucher').forEach(el => el.style.display = MI_VE_VOUCHER ? '' : 'none');
   aplicarPreferencias();
   renderJornadaUI();
   handleCheckIn();
@@ -189,7 +192,7 @@ function openPerfilDrawer() {
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div class="dava" id="perfil-avatar-preview"></div>
       <div><div class="dn">${esc(MI_NOMBRE)}</div>
-      <div class="dm">${ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : 'Asesor comercial'} · @${esc(MI_USERNAME)}</div></div></div>
+      <div class="dm">${ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : 'Asesor comercial'} · @${esc(MI_USERNAME)}</div></div></div>
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-image"></i> Foto de perfil</div>
       <button class="dbtn gh" id="perfil-avatar-btn" type="button"><i class="fas fa-camera"></i> Cambiar foto</button>
@@ -615,7 +618,7 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   if (err) { errEl.textContent = 'No se pudo guardar: ' + err.message; return; }
   const u = await cargarUsuario(); if (!u) return;
   MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
-  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
+  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario; MI_VE_VOUCHER = !!u.ve_voucher;
   entrarSegunRol();
 });
 
@@ -672,7 +675,7 @@ document.getElementById('forgotForm').addEventListener('submit', async e => {
 });
 
 /* ---------- Configurar usuario (reclamar cuenta, sin contraseña previa) ---------- */
-const ROL_LABEL = { admin: 'Admin', asesor: 'Asesor', marketing: 'Marketing' };
+const ROL_LABEL = { admin: 'Admin', asesor: 'Asesor', marketing: 'Marketing', boleteria: 'Boletería' };
 let claimUsername = null;
 
 document.getElementById('claimLink').addEventListener('click', e => { e.preventDefault(); abrirListaClaim(); });
@@ -739,6 +742,7 @@ async function startApp() {
   setupPostventa();
   setupTutorial();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
+  if (ROL === 'boleteria') { activateSection('mensajes'); return; }
   if (ROL === 'asesor') activateSection('leads');
   await loadStats();
   ACTIVOS = Object.keys(STATS.by_advisor || {});
@@ -1402,8 +1406,12 @@ function openDrawer(l) {
       <input id="e-personas" class="ei" type="text" value="${esc(l.personas || '')}">
       <label class="fl">Fecha de viaje (aprox.)</label>
       <input id="e-fecha-estimada" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09" value="${esc(l.fecha_estimada || '')}">
-      <label class="fl">Presupuesto (USD)</label>
-      <input id="e-presupuesto" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.presupuesto ?? ''}">
+      <label class="fl">Monto Completo (USD)</label>
+      <input id="e-monto-completo" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_completo ?? ''}">
+      <label class="fl">Monto Inicial (USD)</label>
+      <input id="e-monto-inicial" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_inicial ?? ''}">
+      <label class="fl">Restante de pago (USD)</label>
+      <input id="e-restante-pago" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.restante_pago ?? ''}">
       <label class="fl">Fecha de captación</label>
       <input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">
 
@@ -1467,14 +1475,19 @@ async function guardarLead() {
   const monto = estado === VENTA ? parseFloat(montoRaw) : null;
   const comprado = estado === VENTA ? val('e-comprado').trim() : null;
   const fechaVal = val('e-fecha');
-  const presupuestoRaw = val('e-presupuesto').trim();
+  const montoCompletoRaw = val('e-monto-completo').trim();
+  const montoInicialRaw = val('e-monto-inicial').trim();
+  const restantePagoRaw = val('e-restante-pago').trim();
   err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.rpc('actualizar_lead', {
     p_lead_id: currentLead.id, p_estado: estado, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado,
     p_nombre: nombre, p_telefono: val('e-telefono').trim(), p_canal: val('e-canal').trim(),
     p_destino: val('e-destino').trim(), p_destino_consulta: val('e-destino-consulta').trim(), p_personas: val('e-personas').trim(),
     p_fecha_creacion: fechaVal ? new Date(fechaVal + 'T12:00:00').toISOString() : null,
-    p_fecha_estimada: val('e-fecha-estimada').trim(), p_presupuesto: presupuestoRaw ? parseFloat(presupuestoRaw) : null,
+    p_fecha_estimada: val('e-fecha-estimada').trim(),
+    p_monto_completo: montoCompletoRaw ? parseFloat(montoCompletoRaw) : null,
+    p_monto_inicial: montoInicialRaw ? parseFloat(montoInicialRaw) : null,
+    p_restante_pago: restantePagoRaw ? parseFloat(restantePagoRaw) : null,
   });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios';
   if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return; }
@@ -1482,6 +1495,39 @@ async function guardarLead() {
   okToast('Lead actualizado');
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
 }
+
+/* ---------- Nuevo lead manual (botón "Nuevo lead" en Leads, admin + asesor) ---------- */
+document.getElementById('nl-abrir-btn')?.addEventListener('click', async () => {
+  document.getElementById('nl-nombre').value = '';
+  document.getElementById('nl-telefono').value = '';
+  document.getElementById('nl-destino').value = '';
+  document.getElementById('nl-personas').value = '';
+  document.getElementById('nl-err').textContent = '';
+  if (ROL === 'admin') {
+    const sel = document.getElementById('nl-asesor');
+    sel.innerHTML = '<option value="">Sin asignar</option>';
+    const { data, error } = await sb.rpc('listar_asesores_activos');
+    if (!error && data) sel.innerHTML += data.map(a => `<option value="${esc(a.nombre)}">${esc(a.nombre)}</option>`).join('');
+  }
+  openSheet('nuevo-lead-sheet');
+});
+document.getElementById('nl-cancelar')?.addEventListener('click', () => closeSheet('nuevo-lead-sheet'));
+document.getElementById('nl-crear')?.addEventListener('click', async () => {
+  const btn = document.getElementById('nl-crear'), err = document.getElementById('nl-err');
+  const nombre = val('nl-nombre').trim();
+  if (!nombre) { err.textContent = 'El nombre no puede quedar vacío'; return; }
+  err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.rpc('crear_lead_manual', {
+    p_nombre: nombre, p_telefono: val('nl-telefono').trim(), p_destino: val('nl-destino').trim(),
+    p_personas: val('nl-personas').trim(), p_asesor: ROL === 'admin' ? (val('nl-asesor') || null) : null,
+  });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Crear lead';
+  if (error || !data?.ok) { err.textContent = 'No se pudo crear: ' + (error?.message || data?.error || ''); return; }
+  closeSheet('nuevo-lead-sheet');
+  okToast('Lead creado');
+  // El INSERT ya dispara el canal 'leads-live' (subscribeRealtime) que
+  // refresca stats/tabla/inbox solo -- no hace falta duplicar esa recarga acá.
+});
 window.closeDrawer = (fromNav) => { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume(); };
 document.getElementById('dClose').onclick = () => window.closeDrawer();
 document.getElementById('drawerBg').onclick = () => window.closeDrawer();
@@ -2783,7 +2829,8 @@ function addChatBubble(who, texto, loading) {
 // extractorLeadObjetivo guarda la FILA COMPLETA del lead (no solo id/nombre)
 // para poder precargar en la previsualización el valor actual de cualquier
 // campo que la IA no haya encontrado (ver renderExtractorPreview).
-const EXT_CAMPOS = ['nombre', 'telefono', 'canal', 'destino', 'destino_consulta', 'personas', 'fecha_estimada', 'presupuesto'];
+const EXT_CAMPOS = ['nombre', 'telefono', 'canal', 'destino', 'destino_consulta', 'personas', 'fecha_estimada', 'monto_completo', 'monto_inicial'];
+const EXT_CAMPOS_NUMERICOS = ['monto_completo', 'monto_inicial'];
 const extIdCampo = campo => 'ext-e-' + campo.replace(/_/g, '-');
 let extractorLeadObjetivo = null, extractorDatos = null, extractorBusy = false, extractorBuscarSeq = 0, extractorBuscarTimer = null;
 function irAExtractor(lead) {
@@ -2936,17 +2983,18 @@ async function aplicarDatosExtraidos() {
   const campos = leerCamposExtractor();
   if (!campos.nombre) { err.textContent = 'El nombre no puede quedar vacío'; return; }
   const leadId = extractorLeadObjetivo.id;
-  const presupuesto = campos.presupuesto ? parseFloat(campos.presupuesto) : null;
+  const numericos = {};
+  for (const campo of EXT_CAMPOS_NUMERICOS) numericos[campo] = campos[campo] ? parseFloat(campos[campo]) : null;
   err.textContent = ''; extractorBusy = true; actualizarControlesExtractor();
   btn.disabled = true; btn.innerHTML = 'Aplicando... <i class="fas fa-spinner fa-spin"></i>';
   const rpcParams = { p_lead_id: leadId };
-  for (const campo of EXT_CAMPOS) rpcParams['p_' + campo] = campo === 'presupuesto' ? presupuesto : campos[campo];
+  for (const campo of EXT_CAMPOS) rpcParams['p_' + campo] = EXT_CAMPOS_NUMERICOS.includes(campo) ? numericos[campo] : campos[campo];
   const { data, error } = await sb.rpc('actualizar_lead', rpcParams);
   extractorBusy = false; actualizarControlesExtractor();
   btn.disabled = false; btn.innerHTML = `<i class="fas fa-check"></i> Aplicar a <span id="ext-aplicar-nombre">${esc(extractorLeadObjetivo?.nombre ?? '')}</span>`;
   if (error || !data?.ok) { err.textContent = 'No se pudo aplicar: ' + (error?.message || data?.error || ''); return; }
   okToast('Lead actualizado con los datos extraídos');
-  const leadActualizado = { ...extractorLeadObjetivo, ...campos, presupuesto };
+  const leadActualizado = { ...extractorLeadObjetivo, ...campos, ...numericos };
   extractorLeadObjetivo = null;
   descartarExtraccion();
   renderExtractorTarget();
@@ -3231,6 +3279,167 @@ async function subirAdjunto(file) {
   }
 }
 
+/* ---------- Voucher (Bloque 15 — solo Luis Rueda y Beatriz Olmedillo, gate por MI_VE_VOUCHER) ----------
+   La página 1 (datos variables) se genera con jsPDF+autotable; las páginas 2-4
+   (términos y condiciones fijos) se copian tal cual de voucher-terminos.pdf con
+   pdf-lib -- nunca se reescribe ese texto legal a mano. Ambas libs se cargan
+   perezosas (mismo patrón que ensureChart), solo cuando se entra a esta sección. */
+let voucherLibsPromise = null;
+function ensureVoucherLibs() {
+  if (window.jspdf && window.PDFLib) return Promise.resolve();
+  if (voucherLibsPromise) return voucherLibsPromise;
+  const cargarScript = src => new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  voucherLibsPromise = cargarScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')
+    .then(() => cargarScript('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'))
+    .then(() => cargarScript('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js'))
+    // Si un solo intento falla (CDN caído, red cortada), no dejar la promesa
+    // rota cacheada para siempre -- el próximo llamado a ensureVoucherLibs()
+    // tiene que poder reintentar la carga en vez de heredar el rechazo viejo.
+    .catch(e => { voucherLibsPromise = null; throw e; });
+  return voucherLibsPromise;
+}
+async function loadVoucherSeccion() {
+  document.getElementById('vc-asesor').value = MI_NOMBRE || '';
+  await cargarHistorialVouchers();
+}
+async function cargarHistorialVouchers() {
+  const tbody = document.getElementById('vc-historial-tbody');
+  const { data, error } = await sb.from('vouchers')
+    .select('numero_factura,created_at,cliente_nombre,destino_hospedaje,total_general')
+    .order('created_at', { ascending: false }).limit(10);
+  if (error || !data) { tbody.innerHTML = ''; return; }
+  tbody.innerHTML = data.map(v => `<tr>
+    <td>${fmt(v.numero_factura)}</td>
+    <td class="muted">${esc((v.created_at || '').slice(0, 10))}</td>
+    <td>${esc(v.cliente_nombre)}</td>
+    <td>${esc(v.destino_hospedaje || '—')}</td>
+    <td>${v.total_general != null ? '$' + fmt(v.total_general) : '—'}</td>
+  </tr>`).join('');
+}
+function cargarImagenBase64(src) {
+  return fetch(src).then(r => r.blob()).then(blob => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  }));
+}
+window.generarVoucherPdf = async function generarVoucherPdf() {
+  const btn = document.getElementById('vc-generar-btn');
+  const clienteNombre = val('vc-cliente-nombre').trim();
+  if (!clienteNombre) { errToast('Ingresá el nombre del cliente'); return; }
+  const fila = {
+    creado_por: MI_USUARIO_ID, asesor_nombre: MI_NOMBRE, cliente_nombre: clienteNombre,
+    documento_identidad: val('vc-documento').trim() || null, telefono: val('vc-telefono').trim() || null,
+    destino_hospedaje: val('vc-destino').trim() || null, fecha_entrada: val('vc-fecha-entrada') || null,
+    check_in: val('vc-check-in').trim() || null, fecha_salida: val('vc-fecha-salida') || null,
+    check_out: val('vc-check-out').trim() || null, modalidad: val('vc-modalidad').trim() || null,
+    total_dias: val('vc-total-dias').trim() || null, habitaciones: val('vc-habitaciones').trim() || null,
+    adultos: val('vc-adultos') ? parseInt(val('vc-adultos'), 10) : null, ninos: val('vc-ninos').trim() || null,
+    status_reserva: val('vc-status').trim() || null,
+    total_general: val('vc-total-general') ? parseFloat(val('vc-total-general')) : null,
+    forma_pago: val('vc-forma-pago').trim() || null,
+    monto_pagado: val('vc-monto-pagado') ? parseFloat(val('vc-monto-pagado')) : null,
+    resta: val('vc-resta') ? parseFloat(val('vc-resta')) : null,
+  };
+  btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
+  try {
+    const { data: registro, error } = await sb.from('vouchers').insert(fila).select().single();
+    if (error || !registro) { errToast('No se pudo guardar el voucher: ' + (error?.message || '')); return; }
+    await ensureVoucherLibs();
+    const pdfBytes = await construirVoucherPdf(registro);
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `Voucher-${registro.numero_factura}-${clienteNombre.replace(/\s+/g, '-')}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    okToast('Voucher generado');
+    cargarHistorialVouchers();
+  } catch (e) {
+    // El registro en `vouchers` (con su numero_factura) ya pudo haberse
+    // guardado antes de que fallara la generación del PDF (CDN caído, red
+    // cortada, voucher-terminos.pdf no disponible) -- avisar explícito en vez
+    // de dejar el botón "colgado" sin feedback, que es lo que ocultaba el bug.
+    console.error('generarVoucherPdf', e);
+    errToast('El voucher se guardó pero no se pudo generar el PDF, reintentá');
+    cargarHistorialVouchers();
+  } finally {
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-pdf"></i> Generar PDF';
+  }
+};
+async function construirVoucherPdf(v) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const naranja = [255, 145, 0], gris = [244, 245, 249];
+  doc.setFillColor(...naranja);
+  doc.rect(0, 0, 612, 70, 'F');
+  try {
+    const logo = await cargarImagenBase64('logolotus-integrado.png');
+    doc.addImage(logo, 'PNG', 40, 12, 46, 46);
+  } catch (_e) { /* sin logo el voucher igual se genera, solo queda sin el ícono */ }
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+  doc.text('DESTINO Y EVENTOS LOTUS 360', 100, 40);
+  doc.setTextColor(20, 20, 20); doc.setFontSize(11);
+  doc.text(`FACTURA N° ${v.numero_factura}`, 572, 30, { align: 'right' });
+  doc.text(`FECHA ${new Date(v.created_at).toLocaleDateString('es-VE')}`, 572, 48, { align: 'right' });
+  doc.setFontSize(14);
+  doc.text('VOUCHER HOSPEDAJE', 306, 100, { align: 'center' });
+
+  const filas = [
+    ['NOMBRE Y APELLIDO', v.cliente_nombre || ''],
+    ['DOCUMENTO DE IDENTIFICACIÓN', v.documento_identidad || ''],
+    ['TELÉFONO', v.telefono || ''],
+    ['ASESOR(A) DE VENTAS', v.asesor_nombre || ''],
+    ['DESTINO / HOSPEDAJE', v.destino_hospedaje || ''],
+    ['FECHA DE ENTRADA', v.fecha_entrada || ''],
+    ['CHECK IN', v.check_in || ''],
+    ['FECHA DE SALIDA', v.fecha_salida || ''],
+    ['CHECK OUT', v.check_out || ''],
+    ['MODALIDAD HOSPEDAJE', v.modalidad || ''],
+    ['TOTAL DÍAS DE DISFRUTE', v.total_dias || ''],
+    ['CANTIDAD DE HABITACIONES / CLASE', v.habitaciones || ''],
+    ['CANTIDAD DE ADULTOS', v.adultos ?? ''],
+    ['CANTIDAD DE NIÑOS', v.ninos || 'N/A'],
+    ['STATUS DE LA RESERVA / N° LOCALIZADOR', v.status_reserva || ''],
+  ];
+  doc.autoTable({
+    startY: 115, theme: 'grid', margin: { left: 40, right: 40 },
+    styles: { fontSize: 9, cellPadding: 6 },
+    columnStyles: { 0: { fontStyle: 'bold', fillColor: gris, cellWidth: 220 } },
+    body: filas,
+  });
+
+  const totales = [
+    ['TOTAL GENERAL', v.total_general != null ? `$${Number(v.total_general).toFixed(2)}` : ''],
+    [`PAGO ${v.forma_pago || ''}`.trim(), v.monto_pagado != null ? `${Number(v.monto_pagado).toFixed(2)}` : ''],
+    ['RESTA', v.resta != null ? `$${Number(v.resta).toFixed(2)}` : ''],
+  ];
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 16, theme: 'grid', margin: { left: 40, right: 40 },
+    styles: { fontSize: 9, cellPadding: 6 },
+    columnStyles: { 0: { fontStyle: 'bold', fillColor: naranja, textColor: 255, cellWidth: 220 } },
+    body: totales,
+  });
+
+  const page1Bytes = doc.output('arraybuffer');
+  const { PDFDocument } = window.PDFLib;
+  const page1Doc = await PDFDocument.load(page1Bytes);
+  const finalDoc = await PDFDocument.create();
+  const [p1] = await finalDoc.copyPages(page1Doc, [0]);
+  finalDoc.addPage(p1);
+  const terminosBytes = await fetch('voucher-terminos.pdf').then(r => r.arrayBuffer());
+  const terminosDoc = await PDFDocument.load(terminosBytes);
+  const paginasTerminos = await finalDoc.copyPages(terminosDoc, terminosDoc.getPageIndices());
+  paginasTerminos.forEach(p => finalDoc.addPage(p));
+  return finalDoc.save();
+}
+
 /* ---------- Realtime ---------- */
 function subscribeRealtime() {
   sb.channel('leads-live')
@@ -3247,9 +3456,25 @@ function subscribeRealtime() {
       if (ROL === 'asesor' && INBOX_LEADS.some(x => x.id === payload.new.id)
           && (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto || payload.new.eliminado_at)) quitarDeInbox(payload.new.id);
       if (document.getElementById('sec-postventa')?.classList.contains('active')) loadPostventa();
+      // A diferencia del INSERT (siempre entra en página 1 por el order by
+      // fecha_creacion desc), un UPDATE puede tocar un lead de cualquier
+      // página -- se refresca igual, loadTable() ya respeta filtros/página
+      // actuales así que si el lead editado no está en la vista no cambia nada.
+      if (document.getElementById('sec-leads').classList.contains('active')) loadTable();
     })
     .subscribe();
 }
+// Red de seguridad si el websocket de Realtime se cae y tarda en reconectar
+// -- refresco silencioso de la tabla mientras la sección Leads esté abierta,
+// se arranca/para desde activateSection() para no dejarlo corriendo en fondo.
+let leadsPollInterval = null;
+function iniciarPollLeads() {
+  if (leadsPollInterval) return;
+  leadsPollInterval = setInterval(() => {
+    if (document.getElementById('sec-leads').classList.contains('active')) loadTable();
+  }, 50000);
+}
+function detenerPollLeads() { clearInterval(leadsPollInterval); leadsPollInterval = null; }
 // Card nueva al tope del inbox en vivo + notificación local instantánea si la
 // pestaña no está en foco (no depende de la latencia del push del servidor).
 function recibirLeadNuevoInbox(lead) {
@@ -3305,6 +3530,7 @@ let currentSec = null;
 function activateSection(sec, fromNav) {
   if (currentSec === sec) return;
   if (!fromNav && currentSec !== null) navPush({ type: 'section', prevSec: currentSec });
+  if (currentSec === 'leads' && sec !== 'leads') detenerPollLeads();
   currentSec = sec;
   document.querySelectorAll('.nav-item,.bn-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
   // 'extractor' es core (fila principal del bottom-nav) SOLO para rol asesor
@@ -3326,12 +3552,13 @@ function activateSection(sec, fromNav) {
   if (sec === 'asistencia') loadAsistencia();
   if (sec === 'postventa') loadPostventa();
   if (sec === 'informe-diario') loadInformeDiario();
-  if (sec === 'leads' && ROL === 'asesor') loadInboxLeads();
+  if (sec === 'leads') { if (ROL === 'asesor') loadInboxLeads(); iniciarPollLeads(); }
   if (sec === 'tarifario') loadTarifario();
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'galeria') loadGaleria();
   if (sec === 'asesores') loadAsesoresPeriodo();
   if (sec === 'redes') loadRedes();
+  if (sec === 'voucher') loadVoucherSeccion();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
 function setupNav() {
@@ -3412,7 +3639,7 @@ const TOUR_CAPITULOS = [
     { titulo: 'Chat interno del equipo', texto: 'Esto no es WhatsApp del cliente -- es un chat interno para hablar con tus compañeros y con administración.', selector: '#sec-mensajes' },
   ]},
   { id: 'extractor', titulo: 'Extractor IA', icono: 'fa-wand-magic-sparkles', roles: ['admin', 'asesor'], seccion: 'extractor', pasos: [
-    { titulo: 'Copiá y pegá la conversación', texto: 'Pegá acá la conversación de WhatsApp con el cliente y la IA saca automáticamente destino, fechas, cantidad de personas y presupuesto.', selector: '#ext-chat-input' },
+    { titulo: 'Copiá y pegá la conversación', texto: 'Pegá acá la conversación de WhatsApp con el cliente y la IA saca automáticamente destino, fechas, cantidad de personas y montos.', selector: '#ext-chat-input' },
     { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Los asesores usan esto todo el tiempo para no tener que tipear los datos del cliente a mano en cada cotización.', mockup: mockupExtractorAsesor },
   ]},
   { id: 'metricas', titulo: 'Métricas', icono: 'fa-chart-simple', roles: ['admin'], seccion: 'metricas', pasos: [
