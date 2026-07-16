@@ -1061,6 +1061,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="nav-label">Principal</div>
       <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
       <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
+      <a class="nav-item" data-sec="buscar-tarifario"><i class="fas fa-magnifying-glass"></i> Buscar Tarifario</a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
       <a class="nav-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
       <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
@@ -1193,6 +1194,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         </div>
         <div id="leads-cards" class="card-grid"></div>
         <div class="pager" id="pager"></div>
+      </div>
+    </section>
+
+    <!-- BUSCAR TARIFARIO -->
+    <section class="section" id="sec-buscar-tarifario">
+      <div class="card">
+        <h2><i class="fas fa-magnifying-glass"></i> Buscar en el tarifario</h2>
+        <div class="csub">Buscá por destino, hotel, paquete o palabra clave — ej. "Los Roques todo incluido"</div>
+        <div style="margin:14px 0">
+          <input type="text" id="bt-input" class="flt" style="width:100%;max-width:480px" placeholder="¿Qué estás buscando?" autocomplete="off">
+        </div>
+        <div class="tbl-state" id="bt-empty"><i class="fas fa-magnifying-glass"></i><div class="es-t">Escribí para buscar</div><div class="es-s">Busca en productos y promociones activos</div></div>
+        <div class="tbl-state" id="bt-sin-resultados" style="display:none"><i class="fas fa-circle-question"></i><div class="es-t">Sin resultados</div><div class="es-s">Probá con otra palabra o menos términos</div></div>
+        <div id="bt-resultados" class="card-grid" style="display:grid"></div>
       </div>
     </section>
 
@@ -1702,6 +1717,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-asesor-hide" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
+  <a class="sheet-item" data-sec="buscar-tarifario"><i class="fas fa-magnifying-glass"></i> Buscar Tarifario</a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
   <a class="sheet-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>

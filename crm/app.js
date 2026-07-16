@@ -42,7 +42,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
@@ -733,6 +733,7 @@ window.cerrarSesion = async () => { await sb.auth.signOut(); location.reload(); 
 async function startApp() {
   if (booted) return; booted = true;
   setupNav();
+  setupBuscarTarifario();
   setupTarifarioTabs();
   setupLightbox();
   setupChat();
@@ -3675,6 +3676,37 @@ function setupNav() {
     const id = b.dataset.mfs;
     b.classList.contains('mfs-trigger') ? openSheet(id) : closeSheet(id);
   }));
+}
+
+/* ---------- Buscar Tarifario (full-text search de productos+promociones vía RPC buscar_tarifario) ---------- */
+let btDebounce = null;
+function setupBuscarTarifario() {
+  const input = document.getElementById('bt-input');
+  input?.addEventListener('input', () => {
+    clearTimeout(btDebounce);
+    btDebounce = setTimeout(() => ejecutarBusquedaTarifario(input.value.trim()), 350);
+  });
+}
+async function ejecutarBusquedaTarifario(query) {
+  const empty = document.getElementById('bt-empty'), sinRes = document.getElementById('bt-sin-resultados'), grid = document.getElementById('bt-resultados');
+  if (!query || query.length < 2) {
+    empty.style.display = ''; sinRes.style.display = 'none'; grid.innerHTML = '';
+    return;
+  }
+  const { data, error } = await sb.rpc('buscar_tarifario', { p_query: query });
+  if (error) { console.error('buscar_tarifario:', error); return; }
+  empty.style.display = 'none';
+  if (!data || !data.length) {
+    sinRes.style.display = ''; grid.innerHTML = '';
+    return;
+  }
+  sinRes.style.display = 'none';
+  grid.innerHTML = data.map(r => `<div class="entity-card">
+    <div class="ec-top"><div class="ec-ava" style="background:#6c5ce722;color:#6c5ce7"><i class="fas ${r.tipo === 'promocion' ? 'fa-tags' : 'fa-hotel'}"></i></div><div class="ec-nombre">${esc(r.titulo)}</div></div>
+    <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(r.destino) || '—'}</div>
+    ${r.extracto ? `<div class="ec-row"><i class="fas fa-align-left"></i> ${esc(r.extracto)}</div>` : ''}
+    <div class="ec-foot"><span class="chip">${r.tipo === 'promocion' ? 'Promoción' : 'Producto'}</span></div>
+  </div>`).join('');
 }
 
 /* ---------- Hoja inferior genérica (más opciones del nav, filtros en móvil) — un solo backdrop compartido, una hoja abierta a la vez ---------- */
