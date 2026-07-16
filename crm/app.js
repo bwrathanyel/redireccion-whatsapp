@@ -3589,6 +3589,17 @@ async function construirVoucherPdf(v) {
   doc.setTextColor(20, 20, 20); doc.setFontSize(11);
   doc.text(`FACTURA N° ${v.numero_factura}`, 572, 30, { align: 'right' });
   doc.text(`FECHA ${new Date(v.created_at).toLocaleDateString('es-VE')}`, 572, 48, { align: 'right' });
+
+  // Datos fiscales de la agencia -- esquina superior izquierda, debajo de la
+  // franja naranja. Fijos (no vienen del registro del voucher).
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+  doc.text('DESTINO Y EVENTOS LOTUS 360', 40, 82);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+  doc.text('J-412-9355-85', 40, 92);
+  doc.text('C.C.P. Dinastía, P-3 Oficina 5-4, Naguanagua.', 40, 101);
+  doc.text('0241-5144470 / 0424-4634041', 40, 110);
+  doc.text('Destinoyeventoslotus360@gmail.com', 40, 119);
+
   doc.setFontSize(14);
   doc.text('VOUCHER HOSPEDAJE', 306, 100, { align: 'center' });
 
@@ -3610,7 +3621,7 @@ async function construirVoucherPdf(v) {
     ['STATUS DE LA RESERVA / N° LOCALIZADOR', v.status_reserva || ''],
   ];
   doc.autoTable({
-    startY: 115, theme: 'grid', margin: { left: 40, right: 40 },
+    startY: 132, theme: 'grid', margin: { left: 40, right: 40 },
     styles: { fontSize: 9, cellPadding: 6 },
     columnStyles: { 0: { fontStyle: 'bold', fillColor: gris, cellWidth: 220 } },
     body: filas,
