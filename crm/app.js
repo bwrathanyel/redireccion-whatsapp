@@ -79,6 +79,7 @@ const sortEntries = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]);
 
 let STATS = {}, page = 1, PER = 25, totalFiltered = 0;
 let activeMonth = null, activeDestino = null, currentLead = null;
+let SELECTED_LEADS = new Set(), deleteMode = 'single';
 let trendKeys = [], canalKeys = [], destKeys = [], trendMap = {};
 let previewSel = null, charts = {};
 let ACTIVOS = [];
@@ -105,7 +106,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_VE_VOUCHER = false;
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false;
 const overlay = id => document.getElementById(id);
 const showOverlay = id => { OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
 // Se recarga cada vez que se muestra el login (no solo una vez al abrir la
@@ -128,7 +129,7 @@ async function initAuth() {
 
 async function cargarUsuario() {
   const { data: { user } } = await sb.auth.getUser();
-  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,ve_voucher').eq('id', user?.id).single();
+  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario').eq('id', user?.id).single();
   if (error || !data) {
     await sb.auth.signOut();
     showOverlay('login');
@@ -142,7 +143,7 @@ async function afterLogin() {
   const u = await cargarUsuario();
   if (!u) return;
   MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
-  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario; MI_VE_VOUCHER = !!u.ve_voucher;
+  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   entrarSegunRol();
 }
@@ -163,7 +164,8 @@ function entrarSegunRol() {
   // nav-admin-only ya oculta esto para asesores/marketing vía CSS (.rol-asesor) --
   // acá se ajusta el caso fino de que no todo admin ve Informe Diario, solo Luis Rueda.
   document.querySelectorAll('.solo-informe-diario').forEach(el => el.style.display = MI_VE_INFORME_DIARIO ? '' : 'none');
-  document.querySelectorAll('.solo-voucher').forEach(el => el.style.display = MI_VE_VOUCHER ? '' : 'none');
+  document.querySelectorAll('.solo-voucher').forEach(el => el.style.display = (ROL === 'admin' || ROL === 'asesor') ? '' : 'none');
+  document.querySelectorAll('.solo-admin-borrar').forEach(el => el.style.display = ROL === 'admin' ? '' : 'none');
   aplicarPreferencias();
   renderJornadaUI();
   handleCheckIn();
@@ -618,7 +620,7 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   if (err) { errEl.textContent = 'No se pudo guardar: ' + err.message; return; }
   const u = await cargarUsuario(); if (!u) return;
   MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
-  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario; MI_VE_VOUCHER = !!u.ve_voucher;
+  MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
   entrarSegunRol();
 });
 
@@ -1221,6 +1223,7 @@ async function loadTable() {
   document.getElementById('tbody').innerHTML = data.map(l => {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
+      <td class="solo-admin-borrar"><input type="checkbox" class="lead-check" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''}></td>
       <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}</div></td>
       <td data-label="Teléfono" class="muted">${esc(l.telefono) || '—'}${l.requiere_revision_telefono ? ' <i class="fas fa-flag" style="color:#ef4444" title="Número marcado para revisión"></i>' : ''}</td>
       <td data-label="Destino">${esc(l.destino)}</td>
@@ -1234,15 +1237,39 @@ async function loadTable() {
   [...document.querySelectorAll('#tbody tr')].forEach((tr, i) => tr.addEventListener('click', () => openDrawer(data[i])));
   document.getElementById('leads-cards').innerHTML = data.map(leadCardHtml).join('');
   [...document.querySelectorAll('#leads-cards .entity-card')].forEach((el, i) => el.addEventListener('click', () => openDrawer(data[i])));
+  wireLeadChecks();
+  document.querySelectorAll('.solo-admin-borrar').forEach(el => el.style.display = ROL === 'admin' ? '' : 'none');
   applyLeadsView();
   renderPager(Math.max(Math.ceil(totalFiltered / PER), 1));
 }
+function wireLeadChecks() {
+  document.querySelectorAll('.lead-check').forEach(cb => {
+    cb.addEventListener('click', e => e.stopPropagation());
+    cb.addEventListener('change', () => {
+      const id = +cb.dataset.id;
+      if (cb.checked) SELECTED_LEADS.add(id); else SELECTED_LEADS.delete(id);
+      updateBulkBar();
+    });
+  });
+  updateBulkBar();
+}
+function updateBulkBar() {
+  const bar = document.getElementById('bulk-bar'), count = document.getElementById('bulk-count');
+  const n = SELECTED_LEADS.size;
+  if (bar) bar.style.display = (n > 0 && ROL === 'admin') ? 'flex' : 'none';
+  if (count) count.textContent = `${n} seleccionado${n === 1 ? '' : 's'}`;
+  const ids = [...document.querySelectorAll('.lead-check')].map(cb => +cb.dataset.id);
+  const selectAll = document.getElementById('th-select-all');
+  if (selectAll) selectAll.checked = ids.length > 0 && ids.every(id => SELECTED_LEADS.has(id));
+}
+function clearSelection() { SELECTED_LEADS.clear(); updateBulkBar(); document.querySelectorAll('.lead-check').forEach(cb => cb.checked = false); }
 function leadCardHtml(l) {
   const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
   const detalle = leadsView === 'fichas' ? `
     <div class="ec-row"><i class="fas fa-comment-dots"></i> ${esc(l.destino_consulta || 'Sin consulta registrada')}</div>
     <div class="ec-row"><i class="fas fa-users"></i> ${esc(l.personas || '—')} persona(s)</div>` : '';
-  return `<div class="entity-card">
+  return `<div class="entity-card" style="position:relative">
+    <input type="checkbox" class="lead-check solo-admin-borrar" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''} style="position:absolute;top:10px;right:10px;width:18px;height:18px">
     <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}</div></div>
     <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
     <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
@@ -1472,28 +1499,59 @@ function openDrawer(l) {
   document.getElementById('e-save').onclick = guardarLead;
   document.getElementById('e-a-extractor').onclick = () => irAExtractor(l);
   document.getElementById('e-a-sugerir').onclick = () => sugerirRespuestaLead(l);
-  if (ROL === 'admin') document.getElementById('e-a-eliminar').onclick = () => openSheet('confirm-delete-lead-sheet');
+  if (ROL === 'admin') document.getElementById('e-a-eliminar').onclick = () => abrirConfirmarEliminar('single');
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
 }
+function abrirConfirmarEliminar(modo) {
+  deleteMode = modo;
+  const desc = document.getElementById('confirm-delete-lead-desc');
+  const input = document.getElementById('confirm-delete-lead-input');
+  const ok = document.getElementById('confirm-delete-lead-ok');
+  desc.textContent = modo === 'bulk'
+    ? `Vas a eliminar ${SELECTED_LEADS.size} lead(s) seleccionados. Van a desaparecer de la tabla, el pipeline y las métricas. La acción queda registrada y es recuperable solo desde la base de datos — no desde el CRM.`
+    : 'Este lead va a desaparecer de la tabla, el pipeline y las métricas. La acción queda registrada y es recuperable solo desde la base de datos — no desde el CRM.';
+  input.value = '';
+  ok.disabled = true; ok.style.opacity = '.5';
+  openSheet('confirm-delete-lead-sheet');
+  setTimeout(() => input.focus(), 50);
+}
+document.getElementById('confirm-delete-lead-input')?.addEventListener('input', e => {
+  const ok = document.getElementById('confirm-delete-lead-ok');
+  const listo = e.target.value.trim().toLowerCase() === 'eliminar';
+  ok.disabled = !listo; ok.style.opacity = listo ? '1' : '.5';
+});
 document.getElementById('confirm-delete-lead-cancel')?.addEventListener('click', () => closeSheet('confirm-delete-lead-sheet'));
 document.getElementById('confirm-delete-lead-ok')?.addEventListener('click', async () => {
-  if (!currentLead) return;
+  if (deleteMode === 'single' && !currentLead) return;
+  if (deleteMode === 'bulk' && !SELECTED_LEADS.size) return;
   const btn = document.getElementById('confirm-delete-lead-ok');
   btn.disabled = true; btn.innerHTML = 'Eliminando... <i class="fas fa-spinner fa-spin"></i>';
-  const { data, error } = await sb.rpc('eliminar_lead', { p_lead_id: currentLead.id });
-  btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i> Eliminar';
-  if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (error?.message || data?.error || '')); return; }
+  const ids = deleteMode === 'bulk' ? [...SELECTED_LEADS] : [currentLead.id];
+  const resultados = await Promise.all(ids.map(id => sb.rpc('eliminar_lead', { p_lead_id: id })));
+  const fallidos = resultados.filter(r => r.error || !r.data?.ok);
+  btn.innerHTML = '<i class="fas fa-trash"></i> Eliminar';
+  if (fallidos.length) errToast(`No se pudieron eliminar ${fallidos.length} de ${ids.length} lead(s): ${fallidos[0].error?.message || fallidos[0].data?.error || ''}`);
   // La hoja de confirmación quedó apilada arriba del drawer (openSheet
   // empujó su propia entrada de historial) — se descarta esa entrada a
   // mano en vez de sumar un history.back() extra, así el cierre de
   // ambos overlays consume un solo history.back() (el del drawer).
   if (NAV_STACK[NAV_STACK.length - 1]?.type === 'sheet') NAV_STACK.pop();
   closeSheet('confirm-delete-lead-sheet', true);
-  window.closeDrawer();
-  okToast('Lead eliminado');
+  if (deleteMode === 'single') { window.closeDrawer(); if (!fallidos.length) okToast('Lead eliminado'); }
+  else { clearSelection(); if (!fallidos.length) okToast(`${ids.length} lead(s) eliminados`); }
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
+});
+document.getElementById('bulk-clear')?.addEventListener('click', clearSelection);
+document.getElementById('bulk-eliminar')?.addEventListener('click', () => abrirConfirmarEliminar('bulk'));
+document.getElementById('th-select-all')?.addEventListener('change', e => {
+  document.querySelectorAll('.lead-check').forEach(cb => {
+    cb.checked = e.target.checked;
+    const id = +cb.dataset.id;
+    if (e.target.checked) SELECTED_LEADS.add(id); else SELECTED_LEADS.delete(id);
+  });
+  updateBulkBar();
 });
 async function guardarLead() {
   const btn = document.getElementById('e-save'), err = document.getElementById('edit-err');
@@ -3412,7 +3470,7 @@ async function subirAdjunto(file) {
   }
 }
 
-/* ---------- Voucher (Bloque 15 — solo Luis Rueda y Beatriz Olmedillo, gate por MI_VE_VOUCHER) ----------
+/* ---------- Voucher (Bloque 15 — disponible para admin y asesor, gate por ROL) ----------
    La página 1 (datos variables) se genera con jsPDF+autotable; las páginas 2-4
    (términos y condiciones fijos) se copian tal cual de voucher-terminos.pdf con
    pdf-lib -- nunca se reescribe ese texto legal a mano. Ambas libs se cargan

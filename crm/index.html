@@ -1184,11 +1184,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
       <div class="card">
         <div id="active-filters" class="chips-bar"></div>
+        <div class="bulk-bar" id="bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
+          <span id="bulk-count" style="font-size:13.5px;font-weight:600"></span>
+          <button class="dbtn" id="bulk-clear" type="button" style="width:auto;padding:6px 12px">Cancelar selección</button>
+          <button class="dbtn" id="bulk-eliminar" type="button" style="width:auto;padding:6px 12px;background:#ef4444;color:#fff;margin-left:auto"><i class="fas fa-trash"></i> Eliminar seleccionados</button>
+        </div>
         <div class="tbl-state skel" id="tbl-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
         <div class="tbl-state" id="tbl-empty"><i class="fas fa-inbox"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay leads con estos filtros</div></div>
         <div id="tbl-wrap" style="overflow-x:auto">
           <table>
-            <thead><tr><th>Cliente</th><th>Teléfono</th><th>Destino</th><th>Canal</th><th>Asesor</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
+            <thead><tr><th class="solo-admin-borrar" style="width:34px"><input type="checkbox" id="th-select-all"></th><th>Cliente</th><th>Teléfono</th><th>Destino</th><th>Canal</th><th>Asesor</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
             <tbody id="tbody"></tbody>
           </table>
         </div>
@@ -1803,14 +1808,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   </div>
 </div>
 
-<!-- Eliminar lead (solo admin) — confirmación explícita, soft delete -->
+<!-- Eliminar lead (solo admin) — confirmación explícita, soft delete. Sirve tanto para
+     borrado individual (desde el drawer) como masivo (desde la tabla de Leads); deleteMode
+     en app.js decide cuál. -->
 <div class="sheet" id="confirm-delete-lead-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title"><i class="fas fa-triangle-exclamation" style="color:#ef4444"></i> Eliminar lead</div>
-  <p style="padding:0 16px 4px;color:var(--muted2);font-size:13.5px;line-height:1.5">Este lead va a desaparecer de la tabla, el pipeline y las métricas. La acción queda registrada y es recuperable solo desde la base de datos — no desde el CRM.</p>
+  <p id="confirm-delete-lead-desc" style="padding:0 16px 4px;color:var(--muted2);font-size:13.5px;line-height:1.5">Este lead va a desaparecer de la tabla, el pipeline y las métricas. La acción queda registrada y es recuperable solo desde la base de datos — no desde el CRM.</p>
+  <div style="padding:8px 16px 4px">
+    <label class="fl">Escribí <b>eliminar</b> para confirmar</label>
+    <input id="confirm-delete-lead-input" class="ei" type="text" autocomplete="off" placeholder="eliminar">
+  </div>
   <div style="display:flex;gap:10px;padding:14px 16px 4px">
     <button class="dbtn" id="confirm-delete-lead-cancel" type="button" style="flex:1">Cancelar</button>
-    <button class="dbtn" id="confirm-delete-lead-ok" type="button" style="flex:1;background:#ef4444;color:#fff"><i class="fas fa-trash"></i> Eliminar</button>
+    <button class="dbtn" id="confirm-delete-lead-ok" type="button" disabled style="flex:1;background:#ef4444;color:#fff;opacity:.5"><i class="fas fa-trash"></i> Eliminar</button>
   </div>
 </div>
 
