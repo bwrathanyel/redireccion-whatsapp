@@ -3834,7 +3834,12 @@ function guardarOrdenSidebar() {
     .map(el => el.classList.contains('nav-label') ? 'label:' + el.dataset.label : 'sec:' + el.dataset.sec);
   if (JSON.stringify(orden) === JSON.stringify(MI_PREFERENCIAS.orden_sidebar || null)) return;
   MI_PREFERENCIAS = { ...MI_PREFERENCIAS, orden_sidebar: orden };
-  sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS }).catch(() => {});
+  // sb.rpc() devuelve un builder "thenable" de postgrest-js, no una Promise real:
+  // tiene .then() pero NO .catch(). Llamar .catch() directo tira
+  // "TypeError: sb.rpc(...).catch is not a function" y, al ocurrir dentro de
+  // startApp, cortaba la inicialización entera (sin KPIs ni gráficas).
+  // Promise.resolve() lo normaliza a Promise real antes de encadenar .catch().
+  Promise.resolve(sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS })).catch(() => {});
 }
 function aplicarOrdenSidebar() {
   const orden = MI_PREFERENCIAS.orden_sidebar;
@@ -3860,7 +3865,12 @@ function aplicarOrdenSidebar() {
 function guardarUltimaSeccion(sec) {
   if (MI_PREFERENCIAS.ultima_seccion === sec) return;
   MI_PREFERENCIAS = { ...MI_PREFERENCIAS, ultima_seccion: sec };
-  sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS }).catch(() => {});
+  // sb.rpc() devuelve un builder "thenable" de postgrest-js, no una Promise real:
+  // tiene .then() pero NO .catch(). Llamar .catch() directo tira
+  // "TypeError: sb.rpc(...).catch is not a function" y, al ocurrir dentro de
+  // startApp, cortaba la inicialización entera (sin KPIs ni gráficas).
+  // Promise.resolve() lo normaliza a Promise real antes de encadenar .catch().
+  Promise.resolve(sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS })).catch(() => {});
 }
 
 /* ---------- Buscar Tarifario (full-text search de productos+promociones vía RPC buscar_tarifario) ---------- */
