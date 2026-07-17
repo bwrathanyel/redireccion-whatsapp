@@ -222,7 +222,7 @@ function openPerfilDrawer() {
         <button type="button" class="tas-toggle" id="perfil-notif-toggle"></button>
       </div>
     </div>` : ''}
-    <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Solo vos podés ver y editar tu propio perfil</div>`;
+    <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Solo tú puedes ver y editar tu propio perfil</div>`;
   // Avatar seteado vía DOM (pintarAvatar), no interpolado en el template de
   // innerHTML -- MI_AVATAR_URL termina en un style.backgroundImage por API,
   // no en un string HTML, así que no hay forma de inyectar CSS/HTML por ahí.
@@ -3960,34 +3960,34 @@ function mockupAsistenciaAsesor() {
 const TOUR_CAPITULOS = [
   { id: 'dashboard', titulo: 'Dashboard', icono: 'fa-chart-pie', roles: ['admin'], seccion: 'dashboard', pasos: [
     { titulo: 'Panorama general', texto: 'Acá ves de un vistazo cuántos leads llegaron, cómo vienen (Instagram, TikTok, web) y cómo va cada asesor.', selector: '#kpis' },
-    { titulo: 'Tocá para profundizar', texto: 'Cualquier gráfico o número se puede tocar para ver el detalle de esos leads.', selector: '#sec-dashboard' },
+    { titulo: 'Toca para profundizar', texto: 'Cualquier gráfico o número se puede tocar para ver el detalle de esos leads.', selector: '#sec-dashboard' },
   ]},
   { id: 'leads', titulo: 'Leads', icono: 'fa-users', roles: ['admin', 'asesor'], seccion: 'leads', pasos: [
     { titulo: 'Tus clientes', texto: () => ROL === 'asesor' ? 'Acá aparecen los clientes que te asignaron. Los nuevos suben arriba de todo.' : 'Acá el admin ve y filtra todos los leads del negocio, de todos los asesores.', selector: '#sec-leads' },
-    { titulo: 'Leads nuevos por atender', texto: 'Cada tarjeta nueva tiene 3 botones: ✅ Atender (lo tomás), ❌ No puedo (se lo pasás a otro asesor), 🚩 (avisás que el número está mal).', selector: '#inbox-grid' },
+    { titulo: 'Leads nuevos por atender', texto: 'Cada tarjeta nueva tiene 3 botones: ✅ Atender (lo tomas), ❌ No puedo (se lo pasas a otro asesor), 🚩 (avisas que el número está mal).', selector: '#inbox-grid' },
     { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Cada asesor solo ve sus propios leads nuevos, con estos mismos 3 botones. Si no toca ninguno a tiempo, el lead se reasigna automático a otro asesor.', mockup: mockupBandejaAsesor },
   ]},
   { id: 'mensajes', titulo: 'Mensajes', icono: 'fa-comment-dots', roles: ['admin', 'asesor', 'marketing'], seccion: 'mensajes', pasos: [
     { titulo: 'Chat interno del equipo', texto: 'Esto no es WhatsApp del cliente -- es un chat interno para hablar con tus compañeros y con administración.', selector: '#sec-mensajes' },
   ]},
   { id: 'extractor', titulo: 'Extractor IA', icono: 'fa-wand-magic-sparkles', roles: ['admin', 'asesor'], seccion: 'extractor', pasos: [
-    { titulo: 'Copiá y pegá la conversación', texto: 'Pegá acá la conversación de WhatsApp con el cliente y la IA saca automáticamente destino, fechas, cantidad de personas y montos.', selector: '#ext-chat-input' },
+    { titulo: 'Copia y pega la conversación', texto: 'Pega acá la conversación de WhatsApp con el cliente y la IA saca automáticamente destino, fechas, cantidad de personas y montos.', selector: '#ext-chat-input' },
     { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Los asesores usan esto todo el tiempo para no tener que tipear los datos del cliente a mano en cada cotización.', mockup: mockupExtractorAsesor },
   ]},
   { id: 'metricas', titulo: 'Métricas', icono: 'fa-chart-simple', roles: ['admin'], seccion: 'metricas', pasos: [
     { titulo: 'Números del negocio', texto: 'Conversión, tiempos de respuesta y ventas, con filtro de fecha. Solo lo ve administración.', selector: '#sec-metricas' },
   ]},
   { id: 'ranking', titulo: 'Ranking', icono: 'fa-ranking-star', roles: ['admin'], seccion: 'ranking', pasos: [
-    { titulo: 'Ranking de asesores', texto: 'Compará el desempeño de cada asesor: cuántos leads atendió, cuántos cerró, tiempo de respuesta.', selector: '#sec-ranking' },
+    { titulo: 'Ranking de asesores', texto: 'Compara el desempeño de cada asesor: cuántos leads atendió, cuántos cerró, tiempo de respuesta.', selector: '#sec-ranking' },
   ]},
   { id: 'pipeline', titulo: 'Pipeline', icono: 'fa-diagram-project', roles: ['admin', 'asesor'], seccion: 'pipeline', pasos: [
     { titulo: 'El camino de un cliente', texto: 'Acá ves en qué etapa está cada cliente: Atendido → Cotización enviada → Esperando pago → Pago realizado.', selector: '#sec-pipeline' },
   ]},
   { id: 'tarifario', titulo: 'Tarifario', icono: 'fa-book-open', roles: ['admin', 'asesor', 'marketing'], seccion: 'tarifario', pasos: [
-    { titulo: 'Catálogo de hoteles y paquetes', texto: 'Todos los precios y opciones que le podés ofrecer a un cliente, con fotos.', selector: '#sec-tarifario' },
+    { titulo: 'Catálogo de hoteles y paquetes', texto: 'Todos los precios y opciones que le puedes ofrecer a un cliente, con fotos.', selector: '#sec-tarifario' },
   ]},
   { id: 'cotizador', titulo: 'Cotizador IA', icono: 'fa-comments', roles: ['admin', 'asesor', 'marketing'], seccion: 'cotizador', pasos: [
-    { titulo: 'Armá una cotización hablando', texto: 'Contale a la IA qué busca el cliente (destino, presupuesto, fechas) y te arma opciones del Tarifario al toque.', selector: '#chat-input' },
+    { titulo: 'Arma una cotización hablando', texto: 'Cuéntale a la IA qué busca el cliente (destino, presupuesto, fechas) y te arma opciones del Tarifario al toque.', selector: '#chat-input' },
   ]},
   { id: 'galeria', titulo: 'Galería', icono: 'fa-images', roles: ['admin', 'asesor', 'marketing'], seccion: 'galeria', pasos: [
     { titulo: 'Fotos para mandar al cliente', texto: 'Fotos reales de hoteles y paquetes, listas para compartir por WhatsApp.', selector: '#sec-galeria' },
@@ -4010,7 +4010,7 @@ const TOUR_CAPITULOS = [
     { titulo: 'Resumen del día', texto: 'Un resumen automático del día, para no tener que revisar todo a mano.', selector: '#sec-informe-diario' },
   ]},
   { id: 'asistencia-personal', titulo: 'Marcar asistencia', icono: 'fa-user-clock', roles: ['asesor'], seccion: null, pasos: [
-    { titulo: 'Marcá tu entrada y salida', texto: 'Tocá "Comenzar" al empezar tu jornada y "Finalizar" al terminarla. Administración lo ve reflejado al instante.', selector: '#jornada-widget-d, #jornada-widget-m' },
+    { titulo: 'Marca tu entrada y salida', texto: 'Toca "Comenzar" al empezar tu jornada y "Finalizar" al terminarla. Administración lo ve reflejado al instante.', selector: '#jornada-widget-d, #jornada-widget-m' },
   ]},
 ];
 
