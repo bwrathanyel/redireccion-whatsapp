@@ -2604,15 +2604,20 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
   const { data, error } = await sb.from(tabla).select('id,storage_path,orden,es_principal').eq(fk, entidadId).eq('activo', true).order('es_principal', { ascending: false }).order('orden');
   if (!box) return; // el drawer se pudo haber cerrado mientras esto cargaba
   if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudieron cargar las fotos</div>'; return; }
-  if (!data.length) { box.innerHTML = '<div class="muted" style="font-size:12.5px">Esta opción no tiene fotos cargadas todavía.</div>'; return; }
-  box.innerHTML = `<div class="tar-fotos-admin-grid">${data.map(f => `
+  // Antes, si la opción no tenía NINGUNA foto todavía, esto cortaba acá con
+  // solo el mensaje y ni un botón -- "reemplazar" solo existe por cada foto
+  // ya cargada, así que una opción nueva (0 fotos) no tenía ninguna forma de
+  // subir la primera. Ahora "Agregar foto" siempre está, tenga 0 o más.
+  const grid = data.length ? `<div class="tar-fotos-admin-grid">${data.map(f => `
     <div class="tfa-item" data-foto-id="${f.id}">
       <div class="tfa-img" style="background-image:url('${esc(FOTOS_BASE + f.storage_path)}')">${f.es_principal ? '<span class="tfa-principal-badge"><i class="fas fa-star"></i> Principal</span>' : ''}</div>
       <div class="tfa-actions">
         ${f.es_principal ? '' : `<button type="button" class="tfa-btn" data-accion="principal" title="Marcar como principal"><i class="fas fa-star"></i></button>`}
         <button type="button" class="tfa-btn" data-accion="reemplazar" title="Reemplazar imagen"><i class="fas fa-rotate"></i></button>
       </div>
-    </div>`).join('')}</div>
+    </div>`).join('')}</div>` : '<div class="muted" style="font-size:12.5px">Esta opción no tiene fotos cargadas todavía.</div>';
+  box.innerHTML = `${grid}
+    <button type="button" class="dbtn gh" id="tar-foto-agregar" style="margin-top:10px;width:100%"><i class="fas fa-plus"></i> Agregar foto</button>
     <input type="file" id="tar-foto-file" accept="image/png,image/jpeg,image/webp" style="display:none">`;
   box.querySelectorAll('[data-accion="principal"]').forEach(btn => btn.onclick = () => marcarFotoPrincipal(tabla, fk, entidadId, +btn.closest('.tfa-item').dataset.fotoId, prefijo));
   box.querySelectorAll('[data-accion="reemplazar"]').forEach(btn => btn.onclick = () => {
@@ -2621,6 +2626,34 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
     input.onchange = () => { if (input.files[0]) reemplazarFoto(tabla, fk, entidadId, fotoId, prefijo, input.files[0]); input.value = ''; };
     input.click();
   });
+  document.getElementById('tar-foto-agregar').onclick = () => {
+    const input = document.getElementById('tar-foto-file');
+    input.onchange = () => { if (input.files[0]) agregarFoto(tabla, fk, entidadId, prefijo, data.length, input.files[0]); input.value = ''; };
+    input.click();
+  };
+}
+async function agregarFoto(tabla, fk, entidadId, prefijo, ordenSiguiente, file) {
+  if (!TAR_FOTOS_MIME.includes(file.type)) { errToast('Formato no válido — solo PNG, JPG o WEBP'); return; }
+  if (file.size > TAR_FOTOS_LIMITE) { errToast('La imagen pesa más de 5MB'); return; }
+  const box = document.getElementById('tar-fotos-admin');
+  box.style.opacity = '.5';
+  const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '.jpg';
+  const storagePath = `${prefijo}/${entidadId}/manual-${Date.now()}-${slugArchivo(file.name.replace(/\.[^.]+$/, ''))}${ext.toLowerCase()}`;
+  const { error: eUpload } = await sb.storage.from('tarifario-fotos').upload(storagePath, file, { contentType: file.type });
+  if (eUpload) { box.style.opacity = '1'; errToast('No se pudo subir la imagen: ' + eUpload.message); return; }
+  // La primera foto que se agrega a una opción queda como principal
+  // automáticamente (nadie eligió otra todavía); de ahí en adelante, no.
+  const { error: eInsert } = await sb.from(tabla).insert({ [fk]: entidadId, storage_path: storagePath, orden: ordenSiguiente, es_principal: ordenSiguiente === 0, origen: 'manual' });
+  if (eInsert) {
+    box.style.opacity = '1';
+    await sb.storage.from('tarifario-fotos').remove([storagePath]);
+    errToast('No se pudo registrar la imagen: ' + eInsert.message);
+    return;
+  }
+  box.style.opacity = '1';
+  okToast('Foto agregada');
+  delete tarCache[tarTab];
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo);
 }
 async function marcarFotoPrincipal(tabla, fk, entidadId, fotoId, prefijo) {
   const box = document.getElementById('tar-fotos-admin');
