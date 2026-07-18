@@ -1629,7 +1629,11 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
   // El INSERT ya dispara el canal 'leads-live' (subscribeRealtime) que
   // refresca stats/tabla/inbox solo -- no hace falta duplicar esa recarga acá.
 });
-window.closeDrawer = (fromNav) => { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume(); };
+window.closeDrawer = (fromNav) => {
+  const notas = document.getElementById('tar-notas');
+  if (notas && notas.value.trim() !== (notas.dataset.original || '').trim() && !confirm('Hay notas sin guardar. ¿Cerrar de todas formas?')) return;
+  document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume();
+};
 document.getElementById('dClose').onclick = () => window.closeDrawer();
 document.getElementById('drawerBg').onclick = () => window.closeDrawer();
 
@@ -2559,7 +2563,7 @@ function openProductoDrawer(x) {
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead">${fotos[0] ? `<div class="dava" style="background-image:url('${esc(fotos[0])}')"></div>` : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
       <div class="dm">${esc(x.destino || TAR_TAB_LABEL[tarTab])}</div></div></div>
-    ${fotos.length ? `<div class="dgallery">${fotos.map(f => `<a href="${esc(f)}" target="_blank" rel="noopener"><img src="${esc(f)}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}
+    ${fotos.length ? `<div class="dgallery">${fotos.map((f, i) => `<img src="${esc(f)}" alt="" loading="lazy" data-drawer-foto="${i}">`).join('')}</div>` : ''}
     ${precio ? `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div><div class="dfv dfv-rich">${formatearTexto(precio)}</div></div></div>` : ''}
     ${vigencia ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Vigencia</div><div class="dfv dfv-rich">${formatearTexto(vigencia)}</div></div></div>` : ''}
     ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv dfv-rich">${formatearTexto(x.descripcion)}</div></div></div>` : ''}
@@ -2569,7 +2573,7 @@ function openProductoDrawer(x) {
     ${ROL === 'admin' ? `
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-note-sticky"></i> Notas internas (solo admin)</div>
-      <textarea id="tar-notas" class="ei" rows="3" placeholder="Notas propias, no vienen del tarifario automático...">${esc(x.notas || '')}</textarea>
+      <textarea id="tar-notas" class="ei" rows="3" placeholder="Notas propias, no vienen del tarifario automático..." data-original="${esc(x.notas || '')}">${esc(x.notas || '')}</textarea>
       <button class="dbtn save" id="tar-notas-save" type="button" style="margin-top:8px"><i class="fas fa-floppy-disk"></i> Guardar notas</button>
       <div class="eb-title" style="margin-top:16px"><i class="fas fa-images"></i> Fotos (solo admin)</div>
       <div id="tar-fotos-admin"><div class="muted" style="font-size:12.5px">Cargando...</div></div>
@@ -2580,6 +2584,7 @@ function openProductoDrawer(x) {
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
   document.getElementById('dCotizador').onclick = () => irAlCotizadorConOpcion(esPromo ? 'promociones' : 'productos', x.id, nombre);
+  document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotos, +el.dataset.drawerFoto)));
   if (ROL === 'admin') {
     document.getElementById('tar-notas-save').onclick = () => guardarNotasTarifario(esPromo ? 'promociones' : 'productos', x.id);
     cargarFotosAdmin(esPromo ? 'promocion_fotos' : 'producto_fotos', esPromo ? 'promocion_id' : 'producto_id', x.id, esPromo ? 'promos' : 'hoteles');
@@ -2593,6 +2598,7 @@ async function guardarNotasTarifario(tabla, id) {
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar notas';
   if (error) { errToast('No se pudieron guardar las notas: ' + error.message); return; }
   okToast('Notas guardadas');
+  document.getElementById('tar-notas').dataset.original = notas;
   delete tarCache[tarTab];
 }
 const TAR_FOTOS_LIMITE = 5 * 1024 * 1024, TAR_FOTOS_MIME = ['image/png', 'image/jpeg', 'image/webp'];
@@ -2616,7 +2622,7 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
         <button type="button" class="tfa-btn" data-accion="reemplazar" title="Reemplazar imagen"><i class="fas fa-rotate"></i></button>
         <button type="button" class="tfa-btn" data-accion="eliminar" title="Eliminar foto"><i class="fas fa-trash"></i></button>
       </div>
-    </div>`).join('')}</div>` : '<div class="muted" style="font-size:12.5px">Esta opción no tiene fotos cargadas todavía.</div>';
+    </div>`).join('')}</div>` : `<div class="muted" style="font-size:12.5px">${tabla === 'promocion_fotos' ? 'Esta promoción no tiene fotos propias — arriba se muestran las del hotel vinculado.' : 'Esta opción no tiene fotos cargadas todavía.'}</div>`;
   box.innerHTML = `${grid}
     <button type="button" class="dbtn gh" id="tar-foto-agregar" style="margin-top:10px;width:100%"><i class="fas fa-plus"></i> Agregar foto</button>
     <input type="file" id="tar-foto-file" accept="image/png,image/jpeg,image/webp" style="display:none">`;
@@ -3056,7 +3062,7 @@ async function mensajeErrorCotizador(data, error) {
     no_autenticado: 'Tu sesión expiró, volvé a iniciar sesión.',
     no_configurado: 'El cotizador no está disponible en este momento.',
     body_invalido: 'Ocurrió un error inesperado, intenta de nuevo.',
-    sin_mensajes: 'Escribí un mensaje antes de enviar.',
+    sin_mensajes: 'Escribe un mensaje antes de enviar.',
   };
   return MSG[code] || 'No pude conectar con el cotizador, intenta de nuevo en un momento.';
 }
@@ -3329,7 +3335,7 @@ function renderBandeja() {
   cont.innerHTML = msgConversaciones.map(c => {
     const esGrupo = c.tipo === 'grupo', um = c.ultimo_mensaje;
     const cuerpo = !um ? 'Sin mensajes todavía' : (um.tipo === 'texto' ? esc(um.contenido || '') : (MSG_PREVIEW_ICONO[um.tipo] || ''));
-    const preview = um?.es_mio ? 'Vos: ' + cuerpo : cuerpo;
+    const preview = um?.es_mio ? 'Tú: ' + cuerpo : cuerpo;
     return `
     <div class="msg-inbox-row ${esGrupo ? 'grupo' : ''}" data-conv="${c.conversacion_id}">
       <div class="msg-avatar ${esGrupo ? 'grupo' : ''}">${esGrupo ? '<i class="fas fa-users"></i>' : esc(initials(c.nombre))}</div>
@@ -3519,7 +3525,7 @@ async function enviarMensajeTexto() {
   if (!texto || !msgActual) return;
   input.value = ''; input.style.height = 'auto';
   const { data, error } = await sb.rpc('enviar_mensaje', { p_conversacion_id: msgActual.conversacion_id, p_tipo: 'texto', p_contenido: texto });
-  if (error || !data?.ok) { errToast('No se pudo enviar el mensaje'); return; }
+  if (error || !data?.ok) { errToast('No se pudo enviar el mensaje'); input.value = texto; input.style.height = 'auto'; input.style.height = input.scrollHeight + 'px'; return; }
   // El eco de este INSERT también llega por el canal realtime de la conversación (suscribirConversacion);
   // ese handler ya chequea por id antes de empujar, así que este push optimista no duplica la burbuja.
   if (!msgMensajes.some(m => m.id === data.id)) {
@@ -3529,21 +3535,27 @@ async function enviarMensajeTexto() {
 }
 async function subirAdjunto(file) {
   if (!msgActual) return;
-  if (file.size > ADJUNTO_LIMITE) { errToast('El archivo supera los 20MB — achicalo antes de subirlo'); return; }
-  const tipo = file.type.startsWith('image/') ? 'imagen' : file.type.startsWith('video/') ? 'video' : 'documento';
-  const path = `${msgActual.conversacion_id}/${crypto.randomUUID()}-${file.name}`;
-  const { error: upErr } = await sb.storage.from('chat-interno-adjuntos').upload(path, file);
-  if (upErr) { errToast('No se pudo subir el archivo'); return; }
-  const { data, error } = await sb.rpc('enviar_mensaje', { p_conversacion_id: msgActual.conversacion_id, p_tipo: tipo, p_storage_path: path, p_nombre_archivo: file.name, p_peso_bytes: file.size });
-  if (error || !data?.ok) {
-    await sb.storage.from('chat-interno-adjuntos').remove([path]); // evita huérfanos en el bucket si el RPC falla
-    errToast('No se pudo enviar el adjunto');
-    return;
-  }
-  if (!msgMensajes.some(m => m.id === data.id)) {
-    msgMensajes.push({ id: data.id, conversacion_id: msgActual.conversacion_id, remitente_id: MI_USUARIO_ID, tipo, storage_path: path, nombre_archivo: file.name, peso_bytes: file.size, created_at: new Date().toISOString() });
-    await cargarUrlsAdjuntos([{ storage_path: path }]);
-    renderConversacion();
+  if (file.size > ADJUNTO_LIMITE) { errToast('El archivo supera los 20MB — redúcelo antes de subirlo'); return; }
+  const attachBtn = document.getElementById('msg-attach-btn');
+  attachBtn.disabled = true; attachBtn.classList.add('msg-attach-uploading');
+  try {
+    const tipo = file.type.startsWith('image/') ? 'imagen' : file.type.startsWith('video/') ? 'video' : 'documento';
+    const path = `${msgActual.conversacion_id}/${crypto.randomUUID()}-${file.name}`;
+    const { error: upErr } = await sb.storage.from('chat-interno-adjuntos').upload(path, file);
+    if (upErr) { errToast('No se pudo subir el archivo'); return; }
+    const { data, error } = await sb.rpc('enviar_mensaje', { p_conversacion_id: msgActual.conversacion_id, p_tipo: tipo, p_storage_path: path, p_nombre_archivo: file.name, p_peso_bytes: file.size });
+    if (error || !data?.ok) {
+      await sb.storage.from('chat-interno-adjuntos').remove([path]); // evita huérfanos en el bucket si el RPC falla
+      errToast('No se pudo enviar el adjunto');
+      return;
+    }
+    if (!msgMensajes.some(m => m.id === data.id)) {
+      msgMensajes.push({ id: data.id, conversacion_id: msgActual.conversacion_id, remitente_id: MI_USUARIO_ID, tipo, storage_path: path, nombre_archivo: file.name, peso_bytes: file.size, created_at: new Date().toISOString() });
+      await cargarUrlsAdjuntos([{ storage_path: path }]);
+      renderConversacion();
+    }
+  } finally {
+    attachBtn.disabled = false; attachBtn.classList.remove('msg-attach-uploading');
   }
 }
 
