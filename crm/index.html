@@ -1672,34 +1672,58 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
     </section>
 
-    <!-- REDES (Instagram: métricas + analista IA) -->
+    <!-- REDES (Instagram + TikTok: métricas + analista IA) -->
     <section class="section" id="sec-redes">
-      <div class="seg-group" id="redes-periodo">
+      <div class="seg-group" id="redes-red-tabs">
+        <button class="seg on" data-red="instagram"><i class="fa-brands fa-instagram"></i> Instagram</button>
+        <button class="seg" data-red="tiktok"><i class="fa-brands fa-tiktok"></i> TikTok</button>
+      </div>
+      <div class="seg-group" id="redes-periodo" style="margin-top:8px">
         <button class="seg" data-p="7d">7 días</button>
         <button class="seg on" data-p="30d">30 días</button>
         <button class="seg" data-p="3m">Últimos 3 meses</button>
         <button class="seg" data-p="anio">Este año</button>
       </div>
-      <div class="kpis kpis-5" id="redes-kpis"></div>
-      <div class="grid g-2b" style="margin-top:4px">
-        <div class="card"><h2><i class="fas fa-chart-line"></i> Alcance diario</h2><div class="csub">Posts, reels y carousels</div><div class="chart-wrap"><canvas id="chSerieRedes"></canvas></div></div>
-        <div class="card"><h2><i class="fas fa-chart-pie"></i> Por tipo de contenido</h2><div class="csub">Distribución del período</div><div class="chart-wrap"><canvas id="chTipoRedes"></canvas></div></div>
-      </div>
-      <div class="card" style="margin-top:14px">
-        <h2><i class="fas fa-ranking-star"></i> Top posts por alcance</h2>
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr><th>Publicación</th><th>Tipo</th><th>Alcance</th><th>Interacciones</th></tr></thead>
-            <tbody id="redes-top-body"></tbody>
-          </table>
+
+      <div id="redes-ig-panel">
+        <div class="kpis kpis-5" id="redes-kpis"></div>
+        <div class="grid g-2b" style="margin-top:4px">
+          <div class="card"><h2><i class="fas fa-chart-line"></i> Alcance diario</h2><div class="csub">Posts, reels y carousels</div><div class="chart-wrap"><canvas id="chSerieRedes"></canvas></div></div>
+          <div class="card"><h2><i class="fas fa-chart-pie"></i> Por tipo de contenido</h2><div class="csub">Distribución del período</div><div class="chart-wrap"><canvas id="chTipoRedes"></canvas></div></div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h2><i class="fas fa-ranking-star"></i> Top posts por alcance</h2>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Publicación</th><th>Tipo</th><th>Alcance</th><th>Interacciones</th></tr></thead>
+              <tbody id="redes-top-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card chat-wrap" style="margin-top:14px">
+          <div class="chat-toolbar"><div class="eb-title" style="margin:0"><i class="fa-brands fa-instagram"></i> Analista IA</div></div>
+          <div class="chat-log" id="redes-chat-log"></div>
+          <div class="chat-inputbar">
+            <textarea id="redes-chat-input" rows="1" placeholder="Preguntale al analista sobre estas métricas"></textarea>
+            <button class="chat-send" id="redes-chat-send" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
+          </div>
         </div>
       </div>
-      <div class="card chat-wrap" style="margin-top:14px">
-        <div class="chat-toolbar"><div class="eb-title" style="margin:0"><i class="fa-brands fa-instagram"></i> Analista IA</div></div>
-        <div class="chat-log" id="redes-chat-log"></div>
-        <div class="chat-inputbar">
-          <textarea id="redes-chat-input" rows="1" placeholder="Preguntale al analista sobre estas métricas"></textarea>
-          <button class="chat-send" id="redes-chat-send" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
+
+      <div id="redes-tiktok-panel" style="display:none">
+        <div class="kpis" id="redes-tiktok-kpis"></div>
+        <div class="card" style="margin-top:14px">
+          <h2><i class="fas fa-chart-line"></i> Vistas diarias</h2><div class="csub">Videos publicados en el período</div>
+          <div class="chart-wrap"><canvas id="chSerieRedesTikTok"></canvas></div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h2><i class="fas fa-ranking-star"></i> Top videos por vistas</h2>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Video</th><th>Vistas</th><th>Interacciones</th></tr></thead>
+              <tbody id="redes-tiktok-top-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>

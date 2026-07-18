@@ -1687,16 +1687,25 @@ async function loadRanking() {
   document.getElementById('rank-tot').innerHTML = `<span>${fmt(tot.atendidos)} atendidos</span><span>${fmt(tot.ventas)} ventas</span><span>${money(tot.monto)} en ingresos</span>`;
 }
 
-/* ---------- Redes (Instagram) ---------- */
-let redesPeriodo = '30d', redesChatHistory = [];
+/* ---------- Redes (Instagram + TikTok) ---------- */
+let redesPeriodo = '30d', redesRed = 'instagram', redesChatHistory = [];
 function setupRedes() {
-  document.querySelectorAll('#redes-periodo .seg').forEach(b => b.onclick = () => { document.querySelectorAll('#redes-periodo .seg').forEach(x => x.classList.remove('on')); b.classList.add('on'); redesPeriodo = b.dataset.p; loadRedes(); });
+  document.querySelectorAll('#redes-red-tabs .seg').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#redes-red-tabs .seg').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    redesRed = b.dataset.red;
+    document.getElementById('redes-ig-panel').style.display = redesRed === 'instagram' ? '' : 'none';
+    document.getElementById('redes-tiktok-panel').style.display = redesRed === 'tiktok' ? '' : 'none';
+    cargarRedActual();
+  });
+  document.querySelectorAll('#redes-periodo .seg').forEach(b => b.onclick = () => { document.querySelectorAll('#redes-periodo .seg').forEach(x => x.classList.remove('on')); b.classList.add('on'); redesPeriodo = b.dataset.p; cargarRedActual(); });
   const input = document.getElementById('redes-chat-input');
   document.getElementById('redes-chat-send').onclick = enviarChatRedes;
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatRedes(); } });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
   addChatBubbleRedes('bot', 'Hola, soy el analista de redes. Preguntame sobre el alcance, los posts con mejor desempeño o las historias del período seleccionado.');
 }
+function cargarRedActual() { redesRed === 'tiktok' ? loadRedesTikTok() : loadRedes(); }
 async function loadRedes() {
   await ensureChart();
   const [d, h] = periodo(redesPeriodo);
@@ -1722,6 +1731,27 @@ async function loadRedes() {
       <td data-label="Alcance">${fmt(p.reach)}</td>
       <td data-label="Interacciones">${fmt(p.interacciones)}</td>
     </tr>`).join('') : '<tr><td colspan="4" class="muted">Sin publicaciones en este período</td></tr>';
+}
+async function loadRedesTikTok() {
+  await ensureChart();
+  const [d, h] = periodo(redesPeriodo);
+  const { data, error } = await sb.rpc('redes_tiktok_resumen', { p_desde: iso(d), p_hasta: iso(h) });
+  if (error) { console.error(error); errToast('No se pudieron cargar las métricas de TikTok'); return; }
+  const cards = [
+    { t: 'Videos publicados', v: fmt(data.publicaciones), i: 'fa-video', c: 'var(--blue)' },
+    { t: 'Vistas totales', v: fmt(data.reach_total), i: 'fa-eye', c: 'var(--accent)' },
+    { t: 'Interacciones', v: fmt(data.interacciones_total), i: 'fa-heart', c: '#ff5c8a' },
+  ];
+  document.getElementById('redes-tiktok-kpis').innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  const s = data.serie || [];
+  mk('chSerieRedesTikTok', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Vistas', data: s.map(x => x.reach), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
+  const top = data.top_posts || [];
+  document.getElementById('redes-tiktok-top-body').innerHTML = top.length ? top.map(p => `
+    <tr>
+      <td class="td-name">${p.share_url ? `<a href="${esc(p.share_url)}" target="_blank" rel="noopener">${esc(p.titulo || p.id)}</a>` : esc(p.titulo || p.id)}</td>
+      <td data-label="Vistas">${fmt(p.reach)}</td>
+      <td data-label="Interacciones">${fmt(p.interacciones)}</td>
+    </tr>`).join('') : '<tr><td colspan="3" class="muted">Sin videos en este período</td></tr>';
 }
 async function enviarChatRedes() {
   const input = document.getElementById('redes-chat-input'), btn = document.getElementById('redes-chat-send');
@@ -3861,7 +3891,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'galeria') loadGaleria();
   if (sec === 'asesores') loadAsesoresPeriodo();
-  if (sec === 'redes') loadRedes();
+  if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }

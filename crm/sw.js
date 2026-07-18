@@ -1,6 +1,6 @@
 // Service worker del CRM. Fase 1: solo cachea el shell estatico para que la PWA sea instalable.
 // Bump CACHE_VERSION en cada deploy que deba invalidar el shell cacheado.
-const CACHE_VERSION = 'lotus-crm-shell-v8';
+const CACHE_VERSION = 'lotus-crm-shell-v9';
 const SHELL_FILES = [
   './index.html',
   './app.js',
