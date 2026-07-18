@@ -506,7 +506,7 @@ input.ei[type=date]{color-scheme:dark}
 /* ---------- Gestión de fotos del Tarifario (drawer, admin) ---------- */
 .tar-fotos-admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:8px}
 .tfa-item{position:relative;border-radius:10px;overflow:hidden;background:var(--panel-solid)}
-.tfa-img{width:100%;aspect-ratio:1/1;background-size:cover;background-position:center;position:relative}
+.tfa-img{width:100%;aspect-ratio:1/1;background-size:cover;background-position:center;position:relative;transform:translateZ(0);backface-visibility:hidden}
 .tfa-principal-badge{position:absolute;top:4px;left:4px;background:rgba(255,145,0,.92);color:#080b16;font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:6px;display:flex;align-items:center;gap:3px}
 .tfa-actions{display:flex;gap:4px;padding:4px;background:rgba(8,11,22,.55)}
 .tfa-btn{flex:1;background:var(--line);border:none;border-radius:6px;color:var(--txt);font-size:11px;padding:5px 0;cursor:pointer}
@@ -518,7 +518,12 @@ input.ei[type=date]{color-scheme:dark}
 .tar-fichas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
 .tar-ficha{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;cursor:pointer;transition:.12s}
 .tar-ficha:hover{border-color:rgba(255,145,0,.3);transform:translateY(-2px)}
-.tf-media{position:relative;height:150px;background:linear-gradient(135deg,rgba(255,145,0,.16),rgba(255,145,0,.04));background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:26px;transition:opacity .18s ease}
+/* transform:translateZ(0) fuerza esta capa a su propio compositing layer de
+   GPU -- sin esto, una background-image dentro de una tarjeta con
+   border-radius, dentro de un contenedor con -webkit-overflow-scrolling:touch,
+   deja una "estela" de la imagen vieja medio segundo durante el scroll en
+   iOS/Android real (bug real reportado 2026-07-18, la tarjeta del Tarifario). */
+.tf-media{position:relative;height:150px;background:linear-gradient(135deg,rgba(255,145,0,.16),rgba(255,145,0,.04));background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:26px;transition:opacity .18s ease;transform:translateZ(0);backface-visibility:hidden}
 .tar-ficha .tf-body{padding:14px 16px 16px}
 
 /* ---------- Selector de vista (fichas / tarjetas / lista), estándar en todo el CRM ---------- */
