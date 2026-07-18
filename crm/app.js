@@ -2614,6 +2614,7 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
       <div class="tfa-actions">
         ${f.es_principal ? '' : `<button type="button" class="tfa-btn" data-accion="principal" title="Marcar como principal"><i class="fas fa-star"></i></button>`}
         <button type="button" class="tfa-btn" data-accion="reemplazar" title="Reemplazar imagen"><i class="fas fa-rotate"></i></button>
+        <button type="button" class="tfa-btn" data-accion="eliminar" title="Eliminar foto"><i class="fas fa-trash"></i></button>
       </div>
     </div>`).join('')}</div>` : '<div class="muted" style="font-size:12.5px">Esta opción no tiene fotos cargadas todavía.</div>';
   box.innerHTML = `${grid}
@@ -2626,11 +2627,41 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
     input.onchange = () => { if (input.files[0]) reemplazarFoto(tabla, fk, entidadId, fotoId, prefijo, input.files[0]); input.value = ''; };
     input.click();
   });
+  box.querySelectorAll('[data-accion="eliminar"]').forEach(btn => btn.onclick = () => {
+    const fotoId = +btn.closest('.tfa-item').dataset.fotoId;
+    const eraPrincipal = data.find(f => f.id === fotoId)?.es_principal ?? false;
+    eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal);
+  });
   document.getElementById('tar-foto-agregar').onclick = () => {
     const input = document.getElementById('tar-foto-file');
     input.onchange = () => { if (input.files[0]) agregarFoto(tabla, fk, entidadId, prefijo, data.length, input.files[0]); input.value = ''; };
     input.click();
   };
+}
+async function eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal) {
+  if (!confirm('¿Eliminar esta foto? No se puede deshacer desde aquí.')) return;
+  const box = document.getElementById('tar-fotos-admin');
+  box.style.opacity = '.5';
+  // Baja lógica, mismo patrón que reemplazarFoto -- nunca se borra el
+  // archivo real de Storage, así que siempre queda forma de recuperarla a
+  // mano desde la tabla si hiciera falta.
+  const { error } = await sb.from(tabla).update({ activo: false, reemplazada_en: new Date().toISOString() }).eq('id', fotoId);
+  if (error) {
+    box.style.opacity = '1';
+    errToast('No se pudo eliminar la foto: ' + error.message);
+    return;
+  }
+  // Si la que se borró era la principal, la siguiente foto activa (por
+  // orden) pasa a ser principal -- si no, la opción se queda sin ninguna
+  // foto marcada como principal aunque le queden fotos activas.
+  if (eraPrincipal) {
+    const { data: siguiente } = await sb.from(tabla).select('id').eq(fk, entidadId).eq('activo', true).order('orden').limit(1).maybeSingle();
+    if (siguiente) await sb.from(tabla).update({ es_principal: true }).eq('id', siguiente.id);
+  }
+  box.style.opacity = '1';
+  okToast('Foto eliminada');
+  delete tarCache[tarTab];
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo);
 }
 async function agregarFoto(tabla, fk, entidadId, prefijo, ordenSiguiente, file) {
   if (!TAR_FOTOS_MIME.includes(file.type)) { errToast('Formato no válido — solo PNG, JPG o WEBP'); return; }
