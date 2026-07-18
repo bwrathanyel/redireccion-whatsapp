@@ -1452,7 +1452,21 @@ function openDrawer(l) {
       <div class="dm">${esc(l.telefono) || 'Sin teléfono'} · ${esc(l.canal)}</div></div></div>
 
     <div class="edit-box">
-      <div class="eb-title"><i class="fas fa-user-pen"></i> Datos del lead</div>
+      <div class="eb-title"><i class="fas fa-sliders"></i> Gestión</div>
+      <label class="fl">Estado</label>
+      <select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>
+      <label class="fl">Asesor asignado</label>
+      <select id="e-asesor" class="ei" ${ROL === 'asesor' ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...ACTIVOS], ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar')}</select>
+      <label class="fl">Servicio de interés</label>
+      <select id="e-servicio" class="ei"><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select>
+      <div id="venta-box" class="venta-box ${l.estado === VENTA ? 'show' : ''}">
+        <label class="fl">Monto de la venta (USD)</label>
+        <input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}">
+        <label class="fl">Servicios / paquetes comprados</label>
+        <input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}">
+      </div>
+
+      <div class="eb-title" style="margin-top:16px"><i class="fas fa-user-pen"></i> Datos del lead</div>
       <label class="fl">Nombre</label>
       <input id="e-nombre" class="ei" type="text" value="${esc(l.nombre || '')}">
       <label class="fl">Teléfono</label>
@@ -1475,20 +1489,6 @@ function openDrawer(l) {
       <input id="e-restante-pago" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.restante_pago ?? ''}">
       <label class="fl">Fecha de captación</label>
       <input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">
-
-      <div class="eb-title" style="margin-top:16px"><i class="fas fa-sliders"></i> Gestión</div>
-      <label class="fl">Estado</label>
-      <select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>
-      <label class="fl">Asesor asignado</label>
-      <select id="e-asesor" class="ei" ${ROL === 'asesor' ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...ACTIVOS], ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar')}</select>
-      <label class="fl">Servicio de interés</label>
-      <select id="e-servicio" class="ei"><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select>
-      <div id="venta-box" class="venta-box ${l.estado === VENTA ? 'show' : ''}">
-        <label class="fl">Monto de la venta (USD)</label>
-        <input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}">
-        <label class="fl">Servicios / paquetes comprados</label>
-        <input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}">
-      </div>
       <div class="edit-err" id="edit-err"></div>
       <button class="dbtn save" id="e-save"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>
     </div>
