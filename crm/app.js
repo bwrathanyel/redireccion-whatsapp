@@ -3114,8 +3114,42 @@ async function enviarChat() {
   const partes = data.respuesta.split('---BLOQUE---').map(p => p.trim()).filter(Boolean);
   (partes.length ? partes : [data.respuesta]).forEach(parte => addChatBubble('bot', parte));
   if (data.opciones?.length) addChatOpcionesCards(data.opciones);
+  if (data.voucher_datos) addChatVoucherSuggestion(data.voucher_datos);
   chatHistory.push({ role: 'assistant', content: data.respuesta });
   await guardarChatIA();
+}
+// Botón que aparece cuando el Cotizador IA ya tiene los datos principales del
+// cliente y el asesor confirmó que cerró (ver REGLA DURA #4 en cotizador-chat)
+// -- prellena el formulario de Voucher ya existente, el asesor completa lo
+// que falte (documento, forma de pago) y genera el PDF con el flujo de siempre.
+function addChatVoucherSuggestion(datos) {
+  const log = document.getElementById('chat-log');
+  const row = document.createElement('div');
+  row.className = 'chat-row';
+  row.innerHTML = '<span class="chat-avatar"><i class="fas fa-wand-magic-sparkles"></i></span>';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-sm';
+  btn.style.marginLeft = '8px';
+  btn.innerHTML = '<i class="fas fa-file-pdf"></i> Prellenar Voucher';
+  btn.onclick = () => prellenarVoucherDesdeChat(datos);
+  row.appendChild(btn);
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+}
+function prellenarVoucherDesdeChat(datos) {
+  activateSection('voucher');
+  const MAPA = {
+    cliente_nombre: 'vc-cliente-nombre', destino_hospedaje: 'vc-destino',
+    fecha_entrada: 'vc-fecha-entrada', fecha_salida: 'vc-fecha-salida',
+    modalidad: 'vc-modalidad', total_dias: 'vc-total-dias',
+    adultos: 'vc-adultos', ninos: 'vc-ninos', total_general: 'vc-total-general',
+  };
+  for (const [campo, id] of Object.entries(MAPA)) {
+    const el = document.getElementById(id);
+    if (el && datos[campo] != null && datos[campo] !== '') el.value = datos[campo];
+  }
+  okToast('Voucher prellenado, revisá y completá lo que falte');
 }
 // Tarjetas de comparación (máx 2, hoteles distintos -- ver
 // fotosParaOpcionesComparadas en cotizador-chat) con foto real del tarifario,
