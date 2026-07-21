@@ -31,9 +31,12 @@ const money = n => '$' + (Number(n) || 0).toLocaleString('es-VE', { minimumFract
 const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const fullMonth = k => { const [y, m] = k.split('-'); return MESL[+m - 1] + ' ' + y; };
-const ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'PERDIDO', 'Sin gestionar'];
+const ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'PERDIDO', 'NUMERO INVALIDO', 'Sin gestionar'];
 const ESTADOS_EDIT = ESTADOS;
-const ESTADO_COLORS = { 'POR ATENDER': '#ff9100', 'ATENDIDO': '#4a9eff', 'CLIENTE CONTACTADO': '#4a9eff', 'COTIZACION ENVIADA': '#a06bff', 'EN ESPERA DE PAGO': '#f5b544', 'PAGO REALIZADO': '#10b981', 'PERDIDO': '#ef4444', 'Sin gestionar': '#5f677f' };
+const ESTADO_COLORS = { 'POR ATENDER': '#ff9100', 'ATENDIDO': '#4a9eff', 'CLIENTE CONTACTADO': '#4a9eff', 'COTIZACION ENVIADA': '#a06bff', 'EN ESPERA DE PAGO': '#f5b544', 'PAGO REALIZADO': '#10b981', 'PERDIDO': '#ef4444', 'NUMERO INVALIDO': '#94a3b8', 'Sin gestionar': '#5f677f' };
+// Ciclo de flechitas prev/next en la ficha del lead -- excluye 'Sin gestionar'
+// (fallback legacy, no es un paso real del pipeline al que se quiera navegar).
+const ESTADOS_CICLO = ESTADOS.filter(e => e !== 'Sin gestionar');
 const SERVICIOS = ['Vuelos', 'Full Day', 'Hospedaje', 'Paquete Todo Incluido', 'Hotel', 'Tour', 'Evento', 'Otro'];
 const VENTA = 'PAGO REALIZADO';
 const CANAL_CLASS = { 'Instagram': 'ig', 'Facebook': 'fb', 'Ambos': 'am', 'Desconocido': '' };
@@ -1261,7 +1264,13 @@ async function loadTable() {
   }).join('');
   [...document.querySelectorAll('#tbody tr')].forEach((tr, i) => tr.addEventListener('click', () => openDrawer(data[i])));
   document.getElementById('leads-cards').innerHTML = data.map(leadCardHtml).join('');
-  [...document.querySelectorAll('#leads-cards .entity-card')].forEach((el, i) => el.addEventListener('click', () => openDrawer(data[i])));
+  [...document.querySelectorAll('#leads-cards .entity-card')].forEach((el, i) => {
+    el.addEventListener('click', () => openDrawer(data[i]));
+    el.querySelectorAll('.estado-arrow').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      moverEstadoLead(data[i], Number(btn.dataset.dir));
+    }));
+  });
   wireLeadChecks();
   document.querySelectorAll('.solo-admin-borrar').forEach(el => el.style.display = ROL === 'admin' ? '' : 'none');
   applyLeadsView();
@@ -1303,10 +1312,27 @@ function leadCardHtml(l) {
     ${detalle}
     <div class="ec-foot">
       <span class="chip ${cc}">${esc(l.canal)}</span>
-      <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${esc(niceEstado(l.estado))}</span>
+      <span class="estado-stepper" data-id="${l.id}">
+        <button type="button" class="estado-arrow" data-dir="-1" title="Estado anterior" aria-label="Estado anterior"><i class="fas fa-chevron-left"></i></button>
+        <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${esc(niceEstado(l.estado))}</span>
+        <button type="button" class="estado-arrow" data-dir="1" title="Siguiente estado" aria-label="Siguiente estado"><i class="fas fa-chevron-right"></i></button>
+      </span>
       ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
     </div>
   </div>`;
+}
+// Flechitas del stepper de estado en la ficha del lead -- avanza/retrocede
+// dentro de ESTADOS_CICLO sin abrir el drawer completo. Si el estado actual
+// es 'Sin gestionar' (legacy, fuera del ciclo), la flecha lo manda al primer
+// paso real del pipeline en vez de fallar.
+async function moverEstadoLead(l, dir) {
+  const i = ESTADOS_CICLO.indexOf(l.estado);
+  const siguiente = i === -1 ? ESTADOS_CICLO[0] : ESTADOS_CICLO[Math.min(ESTADOS_CICLO.length - 1, Math.max(0, i + dir))];
+  if (siguiente === l.estado) return;
+  const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: siguiente });
+  if (error || !data?.ok) { errToast('No se pudo cambiar el estado: ' + (error?.message || data?.error || '')); return; }
+  l.estado = siguiente;
+  loadTable();
 }
 function applyLeadsView() {
   const table = document.getElementById('tbl-wrap'), cards = document.getElementById('leads-cards');
