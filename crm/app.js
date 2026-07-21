@@ -515,6 +515,17 @@ function registrarPushNativo() {
 const hoyCaracas = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(new Date());
 // timestamptz (con offset) -> hora local Caracas. Reusado por Asistencia e Informe Diario.
 const fmtHoraCaracas = iso => iso ? new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)) : '—';
+// timestamptz -> "dd/mm hh:mm" en hora de Caracas. Bug real (2026-07-21): varias
+// tarjetas mostraban el timestamp crudo (`iso.slice(0,16).replace('T',' ')`), que es
+// UTC sin convertir -- un lead creado a las 10am Venezuela se veía como "14:00"
+// (offset de 4h, UTC-4). Reusar SIEMPRE esta función en vez de recortar el string.
+const fmtFechaHoraCaracas = iso => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const fecha = new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit' }).format(d);
+  const hora = new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(d);
+  return `${fecha} ${hora}`;
+};
 // `date` de Postgres (ej. "2026-07-11", SIN hora/offset) -- a propósito no pasa por
 // Date()/timeZone: un date puro interpretado como hora local del navegador puede
 // correrse un día en timezones lejanos a Caracas (ej. UTC+9 lo lee como el día
@@ -1076,8 +1087,9 @@ async function renderAsesorLeads(panel, nombre) {
   if (asePeriodo === 'mes' || asePeriodo === 'anio' || asePeriodo === 'historico') rows = rows.slice().reverse();
   panel.innerHTML = rows.map(l => {
     const av = clientAvatar(l);
-    const fh = l.fecha_creacion ? new Date(l.fecha_creacion) : null;
-    const fechaTxt = fh ? `${fh.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit' })} · ${fh.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })}` : '—';
+    // Forzado a America/Caracas (no al huso horario del navegador/dispositivo)
+    // -- ver fmtFechaHoraCaracas, mismo bug real de horas corridas.
+    const fechaTxt = l.fecha_creacion ? fmtFechaHoraCaracas(l.fecha_creacion).replace(' ', ' · ') : '—';
     const col = ESTADO_COLORS[l.estado] || '#5f677f';
     return `<div class="al-row"><div class="al-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="al-info"><div class="al-nombre">${esc(l.nombre)}</div><div class="al-meta">${esc(l.destino || 'Sin destino')}</div></div><div class="al-right"><span class="al-badge" style="background:${col}22;color:${col}">${esc(niceEstado(l.estado))}</span><div class="al-fecha">${fechaTxt}</div></div></div>`;
   }).join('') + `<a class="al-more">Ver todos en Leads <i class="fas fa-arrow-right"></i></a>`;
@@ -1237,7 +1249,7 @@ async function loadTable() {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
       <td class="solo-admin-borrar"><input type="checkbox" class="lead-check" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''}></td>
-      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}</div></td>
+      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div></td>
       <td data-label="Teléfono" class="muted">${esc(l.telefono) || '—'}${l.requiere_revision_telefono ? ' <i class="fas fa-flag" style="color:#ef4444" title="Número marcado para revisión"></i>' : ''}</td>
       <td data-label="Destino">${esc(l.destino)}</td>
       <td data-label="Canal"><span class="chip ${cc}">${esc(l.canal)}</span></td>
@@ -1286,7 +1298,7 @@ function leadCardHtml(l) {
     <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}</div></div>
     <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
     <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
-    <div class="ec-row"><i class="fas fa-clock"></i> ${l.fecha_creacion ? esc(l.fecha_creacion.slice(0, 16).replace('T', ' ')) : '—'}</div>
+    <div class="ec-row"><i class="fas fa-clock"></i> ${esc(fmtFechaHoraCaracas(l.fecha_creacion))}</div>
     <div class="ec-row"><i class="fas fa-user-tie"></i> ${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</div>
     ${detalle}
     <div class="ec-foot">
@@ -1603,6 +1615,8 @@ document.getElementById('nl-abrir-btn')?.addEventListener('click', async () => {
   document.getElementById('nl-telefono').value = '';
   document.getElementById('nl-destino').value = '';
   document.getElementById('nl-personas').value = '';
+  document.getElementById('nl-fecha').value = '';
+  document.getElementById('nl-es-prueba').checked = false;
   document.getElementById('nl-err').textContent = '';
   if (ROL === 'admin') {
     const sel = document.getElementById('nl-asesor');
@@ -1611,6 +1625,16 @@ document.getElementById('nl-abrir-btn')?.addEventListener('click', async () => {
     if (!error && data) sel.innerHTML += data.map(a => `<option value="${esc(a.nombre)}">${esc(a.nombre)}</option>`).join('');
   }
   openSheet('nuevo-lead-sheet');
+});
+document.getElementById('nl-aleatorio-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('nl-aleatorio-btn'), err = document.getElementById('nl-err');
+  err.textContent = ''; btn.disabled = true;
+  const { data, error } = await sb.rpc('sortear_asesor_manual', { p_destino: val('nl-destino').trim() });
+  btn.disabled = false;
+  if (error || !data?.ok) { err.textContent = 'No se pudo sortear: ' + (error?.message || data?.motivo || ''); return; }
+  const sel = document.getElementById('nl-asesor');
+  if ([...sel.options].some(o => o.value === data.asesor)) sel.value = data.asesor;
+  okToast(`Asignado aleatoriamente a ${data.asesor}`);
 });
 document.getElementById('nl-cancelar')?.addEventListener('click', () => closeSheet('nuevo-lead-sheet'));
 document.getElementById('nl-crear')?.addEventListener('click', async () => {
@@ -1621,6 +1645,8 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
   const { data, error } = await sb.rpc('crear_lead_manual', {
     p_nombre: nombre, p_telefono: val('nl-telefono').trim(), p_destino: val('nl-destino').trim(),
     p_personas: val('nl-personas').trim(), p_asesor: ROL === 'admin' ? (val('nl-asesor') || null) : null,
+    p_fecha_estimada: val('nl-fecha').trim(),
+    p_es_prueba: document.getElementById('nl-es-prueba').checked,
   });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Crear lead';
   if (error || !data?.ok) { err.textContent = 'No se pudo crear: ' + (error?.message || data?.error || ''); return; }
@@ -1748,7 +1774,12 @@ async function loadRedesTikTok() {
   const top = data.top_posts || [];
   document.getElementById('redes-tiktok-top-body').innerHTML = top.length ? top.map(p => `
     <tr>
-      <td class="td-name">${p.share_url ? `<a href="${esc(p.share_url)}" target="_blank" rel="noopener">${esc(p.titulo || p.id)}</a>` : esc(p.titulo || p.id)}</td>
+      <td class="td-name">
+        <div class="tt-row">
+          <img class="tt-thumb" src="https://begbjhrdbsqftbbleecb.functions.supabase.co/redes-tiktok-cover?id=${encodeURIComponent(p.id)}" alt="" loading="lazy" onerror="this.style.display='none'">
+          <div class="tt-title">${p.share_url ? `<a href="${esc(p.share_url)}" target="_blank" rel="noopener">${esc(p.titulo || p.id)}</a>` : esc(p.titulo || p.id)}</div>
+        </div>
+      </td>
       <td data-label="Vistas">${fmt(p.reach)}</td>
       <td data-label="Interacciones">${fmt(p.interacciones)}</td>
     </tr>`).join('') : '<tr><td colspan="3" class="muted">Sin videos en este período</td></tr>';
@@ -1847,7 +1878,7 @@ async function loadReasignaciones() {
       <td data-label="A">${sinAsesor ? '<span style="color:#ef4444"><i class="fas fa-triangle-exclamation"></i> Sin asesor disponible</span>' : esc(r.asesor_nuevo)}</td>
       <td data-label="Motivo"><span class="chip">${MOTIVO_LABEL[r.motivo] || esc(r.motivo)}</span></td>
       <td data-label="Tiempo" class="muted">${r.minutos_transcurridos != null ? r.minutos_transcurridos + ' min' : '—'}</td>
-      <td data-label="Fecha" class="muted">${r.created_at ? r.created_at.slice(0, 16).replace('T', ' ') : '—'}</td>
+      <td data-label="Fecha" class="muted">${esc(fmtFechaHoraCaracas(r.created_at))}</td>
     </tr>`;
   }).join('');
   document.getElementById('rg-cards').innerHTML = data.map(reasignCardHtml).join('');
@@ -1867,7 +1898,7 @@ function reasignCardHtml(r) {
     ${detalle}
     <div class="ec-foot">
       <span class="chip">${MOTIVO_LABEL[r.motivo] || esc(r.motivo)}</span>
-      <span class="muted" style="font-size:11px">${r.created_at ? r.created_at.slice(0, 16).replace('T', ' ') : '—'}</span>
+      <span class="muted" style="font-size:11px">${esc(fmtFechaHoraCaracas(r.created_at))}</span>
     </div>
   </div>`;
 }
@@ -1930,7 +1961,7 @@ async function loadFacturas() {
       <td>${esc(f.asesor || 'Sin asesor')}</td>
       <td>${money(f.monto_total)}</td>
       <td><span class="chip">${esc(f.estado)}</span></td>
-      <td class="muted">${f.fecha_emision ? f.fecha_emision.slice(0, 16).replace('T', ' ') : '—'}</td>
+      <td class="muted">${esc(fmtFechaHoraCaracas(f.fecha_emision))}</td>
       <td>${f.estado === 'pagada' ? `<button class="btn-sm" onclick="anularFacturaUI(${f.id})">Anular</button>` : ''}</td>
     </tr>`).join('') || '<tr><td colspan="7">Sin facturas</td></tr>';
 }
@@ -1983,7 +2014,7 @@ async function loadMisComisiones() {
       <td>${c.porcentaje != null ? c.porcentaje + '%' : '—'}</td>
       <td>${c.monto_comision != null ? money(c.monto_comision) : 'Sin configurar'}</td>
       <td><span class="chip">${esc(c.estado)}</span></td>
-      <td class="muted">${c.fecha_pago ? c.fecha_pago.slice(0, 16).replace('T', ' ') : '—'}</td>
+      <td class="muted">${esc(fmtFechaHoraCaracas(c.fecha_pago))}</td>
     </tr>`).join('') || '<tr><td colspan="5">Sin comisiones todavía</td></tr>';
 }
 
@@ -3000,7 +3031,7 @@ async function openChatsDrawer() {
   if (error) { list.textContent = 'No se pudieron cargar tus conversaciones'; return; }
   if (!data.length) { list.textContent = 'Todavía no guardaste ninguna conversación'; return; }
   list.className = '';
-  list.innerHTML = data.map(c => `<div class="strike-row" data-id="${c.id}" style="cursor:pointer"><span>${esc(c.titulo || 'Conversación')}<br><span class="muted" style="font-size:11px">${c.updated_at.slice(0, 16).replace('T', ' ')}</span></span><i class="fas fa-chevron-right"></i></div>`).join('');
+  list.innerHTML = data.map(c => `<div class="strike-row" data-id="${c.id}" style="cursor:pointer"><span>${esc(c.titulo || 'Conversación')}<br><span class="muted" style="font-size:11px">${esc(fmtFechaHoraCaracas(c.updated_at))}</span></span><i class="fas fa-chevron-right"></i></div>`).join('');
   list.querySelectorAll('[data-id]').forEach(el => el.addEventListener('click', () => abrirChatGuardado(Number(el.dataset.id))));
 }
 async function abrirChatGuardado(id) {
@@ -3073,8 +3104,30 @@ async function enviarChat() {
   // largo, sin necesitar tool-calling ni turnos extra del modelo.
   const partes = data.respuesta.split('---BLOQUE---').map(p => p.trim()).filter(Boolean);
   (partes.length ? partes : [data.respuesta]).forEach(parte => addChatBubble('bot', parte));
+  if (data.opciones?.length) addChatOpcionesCards(data.opciones);
   chatHistory.push({ role: 'assistant', content: data.respuesta });
   await guardarChatIA();
+}
+// Tarjetas de comparación (máx 2, hoteles distintos -- ver
+// fotosParaOpcionesComparadas en cotizador-chat) con foto real del tarifario,
+// mismas clases visuales que la grilla del Tarifario (tc-thumb/tc-nombre/tc-precio).
+function addChatOpcionesCards(opciones) {
+  const log = document.getElementById('chat-log');
+  const row = document.createElement('div');
+  row.className = 'chat-row';
+  row.innerHTML = '<span class="chat-avatar"><i class="fas fa-wand-magic-sparkles"></i></span>';
+  const wrap = document.createElement('div');
+  wrap.className = 'cot-cards';
+  wrap.innerHTML = opciones.map(op => `
+    <div class="cot-card">
+      ${op.foto ? `<img class="tc-thumb" src="${esc(op.foto)}" alt="" loading="lazy">` : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${op.tipo === 'promocion' ? 'tag' : 'image'}"></i></div>`}
+      <div class="tc-nombre">${esc(op.titulo)}</div>
+      ${op.precio_texto ? `<div class="tc-precio">${esc(op.precio_texto)}</div>` : ''}
+    </div>
+  `).join('');
+  row.appendChild(wrap);
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
 }
 // Mismo patrón que mensajeErrorExtraccion (ver setupExtractor más abajo):
 // con status no-2xx supabase-js deja `data` en null y el body real queda en

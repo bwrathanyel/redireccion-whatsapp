@@ -1,10 +1,10 @@
 {
-  "id": "./index.html",
+  "id": "./",
   "name": "Destino y Eventos Lotus 360 CRM",
   "short_name": "Lotus 360 CRM",
   "description": "CRM interno de Destino y Eventos Lotus 360: leads, ventas, postventa, tarifario y gestión del equipo.",
   "lang": "es",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#070b12",
@@ -17,10 +17,10 @@
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Leads", "url": "./index.html?ir=leads", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Postventa", "url": "./index.html?ir=postventa", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Cotizador IA", "url": "./index.html?ir=cotizador", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Tarifario", "url": "./index.html?ir=tarifario", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Leads", "url": "./?ir=leads", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Postventa", "url": "./?ir=postventa", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Cotizador IA", "url": "./?ir=cotizador", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Tarifario", "url": "./?ir=tarifario", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ],
   "screenshots": [
     { "src": "icons/screenshots/wide-tarifario.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "Tarifario en escritorio" },

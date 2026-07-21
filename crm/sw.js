@@ -1,8 +1,18 @@
 // Service worker del CRM. Fase 1: solo cachea el shell estatico para que la PWA sea instalable.
 // Bump CACHE_VERSION en cada deploy que deba invalidar el shell cacheado.
-const CACHE_VERSION = 'lotus-crm-shell-v9';
+//
+// Hallazgo real (2026-07-19): './index.html' redirige (308) a './' en el
+// servidor (comportamiento estandar de Cloudflare Pages con "clean URLs").
+// cache.addAll() sigue el redirect y cachea la respuesta final, pero la
+// marca internamente como "redirected" -- Chrome/Chromium RECHAZA servir una
+// Response con redirected=true como respuesta a una navegación
+// (net::ERR_FAILED), aunque el body sea válido. La PWA instalada (start_url
+// apuntando a index.html) siempre pegaba ese camino roto; una pestaña normal
+// del navegador no, porque pedía '/' directo. Se cachea './' en vez de
+// './index.html' para no arrastrar el redirect.
+const CACHE_VERSION = 'lotus-crm-shell-v10';
 const SHELL_FILES = [
-  './index.html',
+  './',
   './app.js',
   './manifest.json',
   './logolotus.png',
@@ -36,8 +46,18 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // Supabase/CDN externos: siempre red
 
-  // app.js/index.html: stale-while-revalidate (mostrar shell cacheado ya, actualizar en segundo plano)
-  const isCoreShell = url.pathname.endsWith('/app.js') || url.pathname.endsWith('/index.html') || url.pathname.endsWith('/crm/');
+  // Chrome/Chromium rechaza (net::ERR_FAILED) cualquier respuesta con
+  // redirected=true para una navegación -- ver hallazgo real arriba. Instalaciones
+  // viejas de la PWA (manifest cacheado con start_url=index.html) pueden seguir
+  // pidiendo esta ruta un tiempo; se responde con un redirect explícito y limpio
+  // en vez de dejar pasar el 308 del servidor ya "consumido" por un fetch normal.
+  if (request.mode === 'navigate' && url.pathname.endsWith('/index.html')) {
+    event.respondWith(Response.redirect(url.origin + url.pathname.replace(/index\.html$/, ''), 302));
+    return;
+  }
+
+  // app.js: stale-while-revalidate (mostrar shell cacheado ya, actualizar en segundo plano)
+  const isCoreShell = url.pathname.endsWith('/app.js') || url.pathname === '/' || url.pathname.endsWith('/crm/');
   if (isCoreShell) {
     event.respondWith(
       caches.open(CACHE_VERSION).then(async (cache) => {
@@ -84,7 +104,7 @@ self.addEventListener('push', (event) => {
     body: data.body || '',
     icon: './icons/icon-192.png',
     badge: './icons/icon-192.png',
-    data: { url: data.url || './index.html?accion=marcar-asistencia' },
+    data: { url: data.url || './?accion=marcar-asistencia' },
     tag: data.critico ? 'asistencia-critico' : (data.tag || 'asistencia'),
     requireInteraction: !!data.critico,
     actions: data.actions || undefined,
@@ -93,7 +113,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  let url = event.notification.data?.url || './index.html?accion=marcar-asistencia';
+  let url = event.notification.data?.url || './?accion=marcar-asistencia';
   // Botón de acción nativo tocado (ver notificarNuevoLeadPush): se agrega
   // ?accion=<action> a la URL del lead para que la página, ya con sesión,
   // ejecute lo mismo que el botón del inbox (manejarDeepLinkLeadAccion).
