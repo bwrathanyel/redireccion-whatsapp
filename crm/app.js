@@ -1596,7 +1596,16 @@ async function guardarLead() {
     p_lead_id: currentLead.id, p_estado: estado, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado,
     p_nombre: nombre, p_telefono: val('e-telefono').trim(), p_canal: val('e-canal').trim(),
     p_destino: val('e-destino').trim(), p_destino_consulta: val('e-destino-consulta').trim(), p_personas: val('e-personas').trim(),
-    p_fecha_creacion: fechaVal ? new Date(fechaVal + 'T12:00:00').toISOString() : null,
+    // Bug real (2026-07-21): esto se mandaba SIEMPRE que se guardaba el drawer,
+    // aunque el admin no hubiera tocado el campo "Fecha de captación" -- como el
+    // input solo tiene fecha (sin hora), cada guardado reescribía fecha_creacion
+    // a las 12:00 en punto, borrando la hora REAL de creación del lead cada vez
+    // que se editaba cualquier otra cosa (estado, asesor, etc). Ahora solo se
+    // manda si la fecha visible realmente cambió respecto a la que ya tenía el
+    // lead -- si no cambió, se manda null y el RPC (coalesce) deja la hora real intacta.
+    p_fecha_creacion: fechaVal && fechaVal !== (currentLead.fecha_creacion ? currentLead.fecha_creacion.slice(0, 10) : '')
+      ? new Date(fechaVal + 'T12:00:00').toISOString()
+      : null,
     p_fecha_estimada: val('e-fecha-estimada').trim(),
     p_monto_completo: montoCompletoRaw ? parseFloat(montoCompletoRaw) : null,
     p_monto_inicial: montoInicialRaw ? parseFloat(montoInicialRaw) : null,
