@@ -1109,6 +1109,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
+      <a class="nav-item nav-admin-only" data-sec="leads-colaboraciones"><i class="fas fa-handshake"></i> Leads Colaboraciones</a>
       <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
       <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
       <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
@@ -1681,6 +1682,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <table>
             <thead><tr><th>Asesor</th><th>Nuevos</th><th>Atendidos</th><th>Ventas</th><th>Ingresos</th><th>Resp. prom.</th></tr></thead>
             <tbody id="rank-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEADS COLABORACIONES (campañas de colaboración paga -- ej. Casa
+         Vacacional Playa del Sur -- que se mandan directo al WhatsApp del
+         colaborador, sin pasar por el pipeline normal de asesores) -->
+    <section class="section" id="sec-leads-colaboraciones">
+      <div class="card">
+        <h2><i class="fas fa-handshake"></i> Leads Colaboraciones</h2>
+        <div class="csub">Leads de campañas de colaboración paga -- se mandan directo al WhatsApp del colaborador, no tienen asesor asignado.</div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Nombre</th><th>Teléfono</th><th>Campaña</th><th>Destino</th><th>Canal</th><th>Contacto directo</th><th>Fecha</th></tr></thead>
+            <tbody id="leads-colab-body"></tbody>
           </table>
         </div>
       </div>
