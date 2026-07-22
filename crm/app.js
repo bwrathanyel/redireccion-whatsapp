@@ -1779,8 +1779,9 @@ async function loadLeadsFallidos() {
       <td data-label="Etapa" class="muted">${esc(r.etapa)}</td>
       <td data-label="Error" class="muted">${r.error ? esc(r.error) : '—'}</td>
       <td data-label="Fecha" class="muted">${r.created_at ? new Date(r.created_at).toLocaleString('es-VE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-      <td>${r.resuelto ? '<span class="muted">Resuelto</span>' : `<button class="btn-sm" onclick="marcarLeadFallidoResuelto(${r.id})">Marcar resuelto</button>`}</td>
-    </tr>`).join('') || `<tr><td colspan="9" class="muted">Sin leads fallidos pendientes.</td></tr>`;
+      <td data-label="Estado">${r.resuelto ? '<span class="muted">Resuelto</span>' : r.revision_humana ? '<span style="color:#e0a030">⚠ Revisión manual</span>' : '<span class="muted">Auto-reintentando</span>'}</td>
+      <td>${r.resuelto ? '' : `<button class="btn-sm" onclick="marcarLeadFallidoResuelto(${r.id})">Marcar resuelto</button>`}</td>
+    </tr>`).join('') || `<tr><td colspan="10" class="muted">Sin leads fallidos pendientes.</td></tr>`;
 }
 
 async function marcarLeadFallidoResuelto(id) {
