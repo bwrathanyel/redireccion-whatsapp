@@ -1110,6 +1110,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
       <a class="nav-item nav-admin-only" data-sec="leads-colaboraciones"><i class="fas fa-handshake"></i> Leads Colaboraciones</a>
+      <a class="nav-item nav-admin-only" data-sec="leads-fallidos"><i class="fas fa-triangle-exclamation"></i> Leads Fallidos</a>
       <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
       <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
       <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
@@ -1698,6 +1699,26 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <table>
             <thead><tr><th>Nombre</th><th>Teléfono</th><th>Campaña</th><th>Destino</th><th>Canal</th><th>Contacto directo</th><th>Fecha</th></tr></thead>
             <tbody id="leads-colab-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEADS FALLIDOS (leads que el bot no pudo registrar en el CRM -- red
+         de seguridad para que ningún lead se pierda en silencio, ver hallazgo
+         real 2026-07-22: Neidy/Yoselys Dell'Onto/Roy Wesche tuvieron que
+         recuperarse a mano por esto) -->
+    <section class="section" id="sec-leads-fallidos">
+      <div class="card">
+        <h2><i class="fas fa-triangle-exclamation"></i> Leads Fallidos</h2>
+        <div class="csub">Leads que el bot NO pudo registrar automáticamente -- recrearlos a mano con estos datos y marcar resuelto.</div>
+        <label style="display:inline-flex;align-items:center;gap:6px;margin-bottom:10px">
+          <input type="checkbox" id="leads-fallidos-ver-resueltos"> Ver también resueltos
+        </label>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Nombre</th><th>Teléfono</th><th>Destino</th><th>Canal</th><th>Función</th><th>Etapa</th><th>Error</th><th>Fecha</th><th></th></tr></thead>
+            <tbody id="leads-fallidos-body"></tbody>
           </table>
         </div>
       </div>

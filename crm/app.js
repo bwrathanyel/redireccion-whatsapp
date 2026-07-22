@@ -45,7 +45,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], 'leads-colaboraciones': ['Leads Colaboraciones', 'Leads de campañas de colaboración paga -- van directo al WhatsApp del colaborador'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'] };
+const TITLES = { dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], 'leads-colaboraciones': ['Leads Colaboraciones', 'Leads de campañas de colaboración paga -- van directo al WhatsApp del colaborador'], 'leads-fallidos': ['Leads Fallidos', 'Leads que el bot no pudo registrar automáticamente'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
@@ -1762,6 +1762,33 @@ async function loadLeadsColaboraciones() {
       <td data-label="Fecha" class="muted">${r.created_at ? new Date(r.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
     </tr>`).join('') || `<tr><td colspan="7" class="muted">Sin leads de colaboraciones todavía.</td></tr>`;
 }
+
+async function loadLeadsFallidos() {
+  const verResueltos = document.getElementById('leads-fallidos-ver-resueltos')?.checked;
+  let query = sb.from('leads_fallidos').select('*').order('created_at', { ascending: false });
+  if (!verResueltos) query = query.eq('resuelto', false);
+  const { data, error } = await query;
+  if (error) { console.error(error); errToast('No se pudo cargar Leads Fallidos'); return; }
+  document.getElementById('leads-fallidos-body').innerHTML = (data || []).map((r) => `
+    <tr>
+      <td data-label="Nombre">${r.nombre ? esc(r.nombre) : '—'}</td>
+      <td data-label="Teléfono" class="muted">${r.telefono ? esc(r.telefono) : '—'}</td>
+      <td data-label="Destino" class="muted">${r.destino ? esc(r.destino) : '—'}</td>
+      <td data-label="Canal" class="muted">${r.canal ? esc(r.canal) : '—'}</td>
+      <td data-label="Función" class="muted">${r.funcion ? esc(r.funcion) : '—'}</td>
+      <td data-label="Etapa" class="muted">${esc(r.etapa)}</td>
+      <td data-label="Error" class="muted">${r.error ? esc(r.error) : '—'}</td>
+      <td data-label="Fecha" class="muted">${r.created_at ? new Date(r.created_at).toLocaleString('es-VE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+      <td>${r.resuelto ? '<span class="muted">Resuelto</span>' : `<button class="btn-sm" onclick="marcarLeadFallidoResuelto(${r.id})">Marcar resuelto</button>`}</td>
+    </tr>`).join('') || `<tr><td colspan="9" class="muted">Sin leads fallidos pendientes.</td></tr>`;
+}
+
+async function marcarLeadFallidoResuelto(id) {
+  const { error } = await sb.from('leads_fallidos').update({ resuelto: true, resuelto_en: new Date().toISOString() }).eq('id', id);
+  if (error) { console.error(error); errToast('No se pudo marcar como resuelto'); return; }
+  loadLeadsFallidos();
+}
+document.getElementById('leads-fallidos-ver-resueltos')?.addEventListener('change', loadLeadsFallidos);
 
 /* ---------- Redes (Instagram + TikTok) ---------- */
 let redesPeriodo = '30d', redesRed = 'instagram', redesChatHistory = [];
@@ -4018,6 +4045,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'metricas') loadMetricas();
   if (sec === 'ranking') loadRanking();
   if (sec === 'leads-colaboraciones') loadLeadsColaboraciones();
+  if (sec === 'leads-fallidos') loadLeadsFallidos();
   if (sec === 'reasignaciones') loadReasignaciones();
   if (sec === 'facturacion') loadFacturacion();
   if (sec === 'mis-comisiones') loadMisComisiones();
