@@ -40,6 +40,10 @@ function badgePrioridadIA(l) {
   const [icono, color] = PRIORIDAD_IA_ICONOS[l.prioridad_ia];
   return ` <span style="color:${color}" title="${esc(l.prioridad_ia_razon || '')}">${icono}</span>`;
 }
+function badgeNombreDudoso(l) {
+  if (!l.nombre_dudoso) return '';
+  return ` <span style="color:#f59e0b" title="No parece un Nombre propio, cuando tengas su nombre, edítalo">❓</span>`;
+}
 // Ciclo de flechitas prev/next en la ficha del lead -- excluye 'Sin gestionar'
 // (fallback legacy, no es un paso real del pipeline al que se quiera navegar).
 const ESTADOS_CICLO = ESTADOS.filter(e => e !== 'Sin gestionar');
@@ -1258,7 +1262,7 @@ async function loadTable() {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
       <td class="solo-admin-borrar"><input type="checkbox" class="lead-check" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''}></td>
-      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}${badgePrioridadIA(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div></td>
+      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div></td>
       <td data-label="Teléfono" class="muted">${esc(l.telefono) || '—'}${l.requiere_revision_telefono ? ' <i class="fas fa-flag" style="color:#ef4444" title="Número marcado para revisión"></i>' : ''}</td>
       <td data-label="Destino">${esc(l.destino)}</td>
       <td data-label="Canal"><span class="chip ${cc}">${esc(l.canal)}</span></td>
@@ -1310,7 +1314,7 @@ function leadCardHtml(l) {
     <div class="ec-row"><i class="fas fa-users"></i> ${esc(l.personas || '—')} persona(s)</div>` : '';
   return `<div class="entity-card" style="position:relative">
     <input type="checkbox" class="lead-check solo-admin-borrar" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''} style="position:absolute;top:10px;right:10px;width:18px;height:18px">
-    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}</div></div>
+    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}</div></div>
     <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
     <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
     <div class="ec-row"><i class="fas fa-clock"></i> ${esc(fmtFechaHoraCaracas(l.fecha_creacion))}</div>
@@ -1385,7 +1389,7 @@ function renderInbox() {
 function inboxCardHtml(l) {
   const av = clientAvatar(l);
   return `<div class="entity-card inbox-card" data-id="${l.id}">
-    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}</div></div>
+    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}</div></div>
     <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
     <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
     ${l.destino_consulta ? `<div class="ec-row"><i class="fas fa-comment-dots"></i> ${esc(l.destino_consulta)}</div>` : ''}
