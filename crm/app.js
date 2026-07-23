@@ -2752,7 +2752,7 @@ function slugArchivo(nombre) {
 }
 async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
   const box = document.getElementById('tar-fotos-admin');
-  const { data, error } = await sb.from(tabla).select('id,storage_path,orden,es_principal').eq(fk, entidadId).eq('activo', true).order('es_principal', { ascending: false }).order('orden');
+  const { data, error } = await sb.from(tabla).select('id,storage_path,orden,es_principal,origen').eq(fk, entidadId).eq('activo', true).order('es_principal', { ascending: false }).order('orden');
   if (!box) return; // el drawer se pudo haber cerrado mientras esto cargaba
   if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudieron cargar las fotos</div>'; return; }
   // Antes, si la opción no tenía NINGUNA foto todavía, esto cortaba acá con
@@ -2761,7 +2761,7 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
   // subir la primera. Ahora "Agregar foto" siempre está, tenga 0 o más.
   const grid = data.length ? `<div class="tar-fotos-admin-grid">${data.map(f => `
     <div class="tfa-item" data-foto-id="${f.id}">
-      <div class="tfa-img" style="background-image:url('${esc(FOTOS_BASE + f.storage_path)}')">${f.es_principal ? '<span class="tfa-principal-badge"><i class="fas fa-star"></i> Principal</span>' : ''}</div>
+      <div class="tfa-img" style="background-image:url('${esc(FOTOS_BASE + f.storage_path)}')">${f.es_principal ? '<span class="tfa-principal-badge"><i class="fas fa-star"></i> Principal</span>' : ''}${f.origen === 'ia_referencial' ? '<span class="tfa-principal-badge" style="left:auto;right:4px;background:rgba(139,92,246,.92)"><i class="fas fa-wand-magic-sparkles"></i> IA referencial</span>' : ''}</div>
       <div class="tfa-actions">
         ${f.es_principal ? '' : `<button type="button" class="tfa-btn" data-accion="principal" title="Marcar como principal"><i class="fas fa-star"></i></button>`}
         <button type="button" class="tfa-btn" data-accion="reemplazar" title="Reemplazar imagen"><i class="fas fa-rotate"></i></button>
