@@ -794,6 +794,7 @@ async function startApp() {
   // del mismo query en paralelo sin orden garantizado de resolución.
   setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion();
   setupDestPeriodo(); loadDestPeriodo();
+  setupVoucher(); actualizarBadgeVoucher();
   subscribeRealtime();
 }
 async function renderAll() { renderKPIs(); renderPipe('pipe'); renderPipe('pipe2'); renderAdvisors(); await ensureChart(); renderTrend(); renderCanal(); renderAssign(); }
@@ -816,6 +817,7 @@ function renderKPIs() {
     { t: 'Leads en 2026', v: fmt(STATS.anio_actual), d: `<b>+${fmt(STATS.by_canal?.Facebook || 0)}</b> por Facebook`, i: 'fa-calendar-day', c: 'var(--blue)', go: () => drillAnio('2026') },
     { t: 'Nuevos este mes', v: fmt(STATS.mes_actual), d: fullMonth(thisMonth), i: 'fa-bolt', c: 'var(--green)', go: () => drillMonth(thisMonth) },
     { t: 'Por atender', v: fmt(STATS.por_atender), d: 'Requieren primer contacto', i: 'fa-bell', c: 'var(--amber)', go: () => drillEstado('POR ATENDER') },
+    { t: 'Vouchers este mes', v: fmt(STATS.vouchers_mes || 0), d: 'Generados por todo el equipo', i: 'fa-file-invoice', c: 'var(--purple)', go: () => activateSection('voucher') },
   ];
   const box = document.getElementById('kpis');
   box.innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c}"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div><div class="kd">${k.d}</div><i class="fas fa-arrow-right kgo"></i></div>`).join('');
@@ -3787,6 +3789,16 @@ function ensureVoucherLibs() {
     .catch(e => { voucherLibsPromise = null; throw e; });
   return voucherLibsPromise;
 }
+const VC_PAGE_SIZE = 20;
+let vcOffset = 0;
+let vcSearchTimer = null;
+function setupVoucher() {
+  document.getElementById('vc-buscar')?.addEventListener('input', () => {
+    clearTimeout(vcSearchTimer); vcSearchTimer = setTimeout(() => { vcOffset = 0; cargarHistorialVouchers(false); }, 280);
+  });
+  document.getElementById('vc-filtro-desde')?.addEventListener('change', () => { vcOffset = 0; cargarHistorialVouchers(false); });
+  document.getElementById('vc-filtro-hasta')?.addEventListener('change', () => { vcOffset = 0; cargarHistorialVouchers(false); });
+}
 async function loadVoucherSeccion() {
   const sel = document.getElementById('vc-asesor');
   const optHtml = (nombre, sel_) => `<option value="${esc(nombre)}" ${nombre === sel_ ? 'selected' : ''}>${esc(nombre)}</option>`;
@@ -3798,21 +3810,70 @@ async function loadVoucherSeccion() {
     sel.innerHTML = optHtml(MI_NOMBRE, MI_NOMBRE);
     sel.disabled = true;
   }
-  await cargarHistorialVouchers();
+  vcOffset = 0;
+  await cargarHistorialVouchers(false);
 }
-async function cargarHistorialVouchers() {
+function vcQueryBase() {
+  let q = sb.from('vouchers').select('numero_factura,created_at,asesor_nombre,cliente_nombre,destino_hospedaje,total_general,pdf_path');
+  // Sin comas/paréntesis -- romperían la sintaxis del filtro .or() de PostgREST.
+  const buscar = (val('vc-buscar') || '').trim().replace(/[,()]/g, '');
+  if (buscar) q = q.or(`cliente_nombre.ilike.%${buscar}%,asesor_nombre.ilike.%${buscar}%`);
+  const desde = val('vc-filtro-desde'), hasta = val('vc-filtro-hasta');
+  if (desde) q = q.gte('created_at', desde);
+  if (hasta) q = q.lt('created_at', new Date(new Date(hasta).getTime() + 86400000).toISOString().slice(0, 10));
+  return q;
+}
+async function cargarHistorialVouchers(append) {
   const tbody = document.getElementById('vc-historial-tbody');
-  const { data, error } = await sb.from('vouchers')
-    .select('numero_factura,created_at,cliente_nombre,destino_hospedaje,total_general')
-    .order('created_at', { ascending: false }).limit(10);
-  if (error || !data) { tbody.innerHTML = ''; return; }
-  tbody.innerHTML = data.map(v => `<tr>
+  const masBtn = document.getElementById('vc-cargar-mas-btn');
+  const { data, error } = await vcQueryBase()
+    .order('created_at', { ascending: false })
+    .range(vcOffset, vcOffset + VC_PAGE_SIZE - 1);
+  if (error) { if (!append) tbody.innerHTML = ''; return; }
+  const filas = (data || []).map(v => `<tr>
     <td>${fmt(v.numero_factura)}</td>
-    <td class="muted">${esc((v.created_at || '').slice(0, 10))}</td>
+    <td class="muted">${esc((v.created_at || '').replace('T', ' ').slice(0, 16))}</td>
+    <td>${esc(v.asesor_nombre)}</td>
     <td>${esc(v.cliente_nombre)}</td>
     <td>${esc(v.destino_hospedaje || '—')}</td>
     <td>${v.total_general != null ? '$' + fmt(v.total_general) : '—'}</td>
+    <td><button class="dbtn" type="button" style="width:auto;padding:4px 10px" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})">${v.pdf_path ? 'Ver PDF' : 'Reconstruir'}</button></td>
   </tr>`).join('');
+  tbody.innerHTML = append ? tbody.innerHTML + filas : filas;
+  if (masBtn) masBtn.style.display = (data || []).length < VC_PAGE_SIZE ? 'none' : '';
+  await actualizarBadgeVoucher();
+}
+function cargarMasVouchers() { vcOffset += VC_PAGE_SIZE; cargarHistorialVouchers(true); }
+window.cargarMasVouchers = cargarMasVouchers;
+window.verVoucherPdf = async function verVoucherPdf(pdfPath, numeroFactura) {
+  if (pdfPath) {
+    const { data, error } = await sb.storage.from('vouchers-pdf').createSignedUrl(pdfPath, 60);
+    if (error || !data?.signedUrl) { errToast('No se pudo abrir el PDF'); return; }
+    window.open(data.signedUrl, '_blank');
+    return;
+  }
+  // Voucher generado antes de guardar el PDF real -- se reconstruye desde los
+  // datos guardados (mismo comportamiento de siempre, solo como fallback).
+  const { data: registro, error } = await sb.from('vouchers').select('*').eq('numero_factura', numeroFactura).single();
+  if (error || !registro) { errToast('No se pudo reconstruir el voucher'); return; }
+  try {
+    await ensureVoucherLibs();
+    const pdfBytes = await construirVoucherPdf(registro);
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    window.open(URL.createObjectURL(blob), '_blank');
+  } catch (e) {
+    console.error('verVoucherPdf reconstruir', e);
+    errToast('No se pudo generar el PDF reconstruido');
+  }
+};
+async function actualizarBadgeVoucher() {
+  const badge = document.getElementById('nav-voucher-count');
+  if (!badge) return;
+  const inicioMes = new Date(); inicioMes.setDate(1); inicioMes.setHours(0, 0, 0, 0);
+  const { count, error } = await sb.from('vouchers').select('id', { count: 'exact', head: true }).gte('created_at', inicioMes.toISOString());
+  if (error) return;
+  badge.textContent = count || 0;
+  badge.style.display = count ? '' : 'none';
 }
 function cargarImagenBase64(src) {
   return fetch(src).then(r => r.blob()).then(blob => new Promise((resolve, reject) => {
@@ -3848,13 +3909,25 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     await ensureVoucherLibs();
     const pdfBytes = await construirVoucherPdf(registro);
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    // Guarda el PDF real en Storage -- el historial siempre muestra este
+    // archivo exacto, no una reconstrucción, aunque cambie la plantilla más
+    // adelante. No bloquea la descarga inmediata al asesor si falla (queda
+    // sin pdf_path, cargarHistorialVouchers cae al fallback de reconstruir).
+    try {
+      const pdfPath = `${MI_USUARIO_ID}/${registro.numero_factura}.pdf`;
+      const { error: upErr } = await sb.storage.from('vouchers-pdf').upload(pdfPath, blob, { contentType: 'application/pdf' });
+      if (!upErr) await sb.from('vouchers').update({ pdf_path: pdfPath }).eq('id', registro.id);
+      else console.error('subir pdf voucher a storage', upErr);
+    } catch (upEx) {
+      console.error('subir pdf voucher a storage', upEx);
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = `Voucher-${registro.numero_factura}-${clienteNombre.replace(/\s+/g, '-')}.pdf`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
     okToast('Voucher generado');
-    cargarHistorialVouchers();
+    vcOffset = 0; cargarHistorialVouchers(false);
   } catch (e) {
     // El registro en `vouchers` (con su numero_factura) ya pudo haberse
     // guardado antes de que fallara la generación del PDF (CDN caído, red
@@ -3862,7 +3935,7 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     // de dejar el botón "colgado" sin feedback, que es lo que ocultaba el bug.
     console.error('generarVoucherPdf', e);
     errToast('El voucher se guardó pero no se pudo generar el PDF, reintentá');
-    cargarHistorialVouchers();
+    vcOffset = 0; cargarHistorialVouchers(false);
   } finally {
     btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-pdf"></i> Generar PDF';
   }
