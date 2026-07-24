@@ -307,6 +307,7 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .estado-arrow{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:3px;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:color .15s,background .15s}
 .estado-arrow:hover{color:var(--accent);background:var(--panel-solid)}
 .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:7px;background:rgba(255,255,255,.05);color:var(--muted)}
+.chip.ok{background:rgba(16,185,129,.15);color:var(--green)}
 .chip.ig{color:#ff8fb0;background:rgba(255,92,138,.1)}.chip.fb{color:#7fb4ff;background:rgba(74,158,255,.12)}.chip.am{color:#c3a0ff;background:rgba(160,107,255,.12)}
 .wa-btn{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:rgba(37,211,102,.12);color:var(--wa);text-decoration:none;font-size:15px;transition:background .15s,color .15s}
 .wa-btn:hover{background:var(--wa);color:#fff}
@@ -454,6 +455,7 @@ input.ei[type=date]{color-scheme:dark}
 .seg-group-sm{margin-bottom:0;padding:3px}
 .seg-group-sm .seg{padding:5px 10px;font-size:11px}
 @media(max-width:760px){.seg-group-sm{width:100%;justify-content:stretch}.seg-group-sm .seg{flex:1;padding:6px 4px}}
+.tfoot-sum td{font-weight:700;color:var(--txt);border-top:2px solid var(--line2);padding-top:10px}
 .kpis-5{grid-template-columns:repeat(5,1fr)}
 .fdate{color-scheme:dark;min-width:135px;cursor:pointer}
 #rank-tot{display:flex;gap:12px;flex-wrap:wrap}
@@ -1563,6 +1565,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <!-- FACTURACIÓN -->
     <section class="section" id="sec-facturacion">
       <div class="kpis" id="fact-kpis"></div>
+
+      <div class="seg-group" id="fact-tabs">
+        <button class="seg on" data-fact-tab="ventas">Ventas</button>
+        <button class="seg" data-fact-tab="comisiones">Comisiones</button>
+        <button class="seg" data-fact-tab="cxp">Cuentas por Pagar</button>
+      </div>
+
       <div class="card">
         <h2><i class="fas fa-percent"></i> Comisión por asesor</h2>
         <div class="csub">% que se aplica automáticamente sobre cada venta pagada</div>
@@ -1573,34 +1582,74 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           </table>
         </div>
       </div>
-      <button class="mfs-trigger" data-mfs="fact-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
-      <div class="tbar mfs" id="fact-tbar">
-        <select class="flt" id="fact-estado">
-          <option value="">Todos los estados</option>
-          <option value="pagada">Pagada</option>
-          <option value="anulada">Anulada</option>
-        </select>
-        <button class="mfs-done" data-mfs="fact-tbar" type="button">Listo</button>
-      </div>
-      <div class="card">
-        <h2><i class="fas fa-file-invoice-dollar"></i> Facturas</h2>
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr><th>N°</th><th>Lead</th><th>Asesor</th><th>Monto</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
-            <tbody id="fact-tbody"></tbody>
-          </table>
+
+      <div class="fact-tab-panel" data-fact-panel="ventas">
+        <button class="mfs-trigger" data-mfs="fact-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
+        <div class="tbar mfs" id="fact-tbar">
+          <select class="flt" id="fact-estado">
+            <option value="">Todos los estados</option>
+            <option value="pagada">Pagada</option>
+            <option value="anulada">Anulada</option>
+          </select>
+          <button class="mfs-done" data-mfs="fact-tbar" type="button">Listo</button>
+        </div>
+        <div class="card">
+          <h2><i class="fas fa-file-invoice-dollar"></i> Ventas</h2>
+          <div class="csub">Precio de venta, costo neto (cargado en Postventa) y margen por venta</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>N°</th><th>Cliente</th><th>Asesor</th><th>Precio venta</th><th>Costo neto</th><th>Margen</th><th>Proveedor</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
+              <tbody id="fact-tbody"></tbody>
+              <tfoot><tr class="tfoot-sum"><td colspan="3">Totales</td><td id="fact-sum-venta">—</td><td id="fact-sum-costo">—</td><td id="fact-sum-margen">—</td><td colspan="4"></td></tr></tfoot>
+            </table>
+          </div>
         </div>
       </div>
-      <div class="card">
-        <h2><i class="fas fa-sack-dollar"></i> Comisiones</h2>
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr><th>Asesor</th><th>Monto venta</th><th>%</th><th>Comisión</th><th>Estado</th><th></th></tr></thead>
-            <tbody id="fact-com-tbody"></tbody>
-          </table>
+
+      <div class="fact-tab-panel" data-fact-panel="comisiones" style="display:none">
+        <div class="card">
+          <h2><i class="fas fa-sack-dollar"></i> Comisiones</h2>
+          <div class="csub">Tocá "Editar %" para pisar el % de una venta puntual</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Asesor</th><th>Monto venta</th><th>%</th><th>Comisión</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="fact-com-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="fact-tab-panel" data-fact-panel="cxp" style="display:none">
+        <div class="card">
+          <h2><i class="fas fa-file-invoice"></i> Cuentas por Pagar</h2>
+          <div class="csub">Lo que le debemos a cada proveedor por reservas ya vendidas</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Proveedor</th><th>Cliente</th><th>A transferir</th><th>Abonado</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="cxp-tbody"></tbody>
+              <tfoot><tr class="tfoot-sum"><td colspan="2">Totales</td><td id="cxp-sum-transferir">—</td><td id="cxp-sum-abonado">—</td><td id="cxp-sum-saldo">—</td><td colspan="2"></td></tr></tfoot>
+            </table>
+          </div>
         </div>
       </div>
     </section>
+
+    <!-- Hoja genérica de un solo monto -- reusada por "Editar %" de comisión y
+         "Registrar abono" de cuentas por pagar, para no abrir un drawer nuevo
+         para cada acción chica (patrón sheet ya existente en el resto de la app). -->
+    <div class="sheet" id="monto-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="monto-sheet-title">Editar</div>
+      <div style="padding:4px 6px 14px">
+        <label class="fl" id="monto-sheet-label">Monto</label>
+        <input class="ei" id="monto-sheet-input" type="number" min="0" step="0.01">
+        <div class="edit-err" id="monto-sheet-error"></div>
+      </div>
+      <div style="display:flex;gap:10px;padding:0 6px">
+        <button class="dbtn" id="monto-sheet-cancelar" type="button" style="flex:1">Cancelar</button>
+        <button class="dbtn save" id="monto-sheet-confirmar" type="button" style="flex:1">Guardar</button>
+      </div>
+    </div>
 
     <!-- MIS COMISIONES (asesor) -->
     <section class="section" id="sec-mis-comisiones">

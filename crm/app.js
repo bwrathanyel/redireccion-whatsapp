@@ -1014,6 +1014,7 @@ function abrirPostventa(c) {
       <label class="fl">Inicio del viaje</label><input class="ei" id="pv-e-inicio" type="date" value="${esc(c.fecha_viaje_inicio || '')}">
       <label class="fl">Fin del viaje</label><input class="ei" id="pv-e-fin" type="date" value="${esc(c.fecha_viaje_fin || '')}">
       <label class="fl">Proveedor</label><input class="ei" id="pv-e-proveedor" value="${esc(c.proveedor || '')}" placeholder="Hotel, aerolínea u operador">
+      <label class="fl">Costo neto (USD) <span style="font-weight:400;color:var(--muted2)">— lo que le pagamos al proveedor</span></label><input class="ei" id="pv-e-costo-neto" type="number" min="0" step="0.01" value="${c.costo_neto ?? ''}" placeholder="Sin definir">
       <label class="fl">Localizador / reserva</label><input class="ei" id="pv-e-localizador" value="${esc(c.localizador_reserva || '')}" placeholder="Código de confirmación">
       <div class="eb-title" style="margin-top:17px"><i class="fas fa-list-check"></i> Documentos</div>
       <div class="pv-doc-grid">${Object.entries(PV_DOCS).map(([k, t]) => `<label class="pv-doc"><input type="checkbox" data-pv-doc="${k}" ${docs[k] === true ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div>
@@ -1039,7 +1040,10 @@ async function guardarPostventa(marcarPagado) {
   const err = document.getElementById('pv-e-error');
   const total = Number(val('pv-e-total') || 0), pagado = Number(val('pv-e-pagado') || 0);
   const inicio = val('pv-e-inicio') || null, fin = val('pv-e-fin') || null;
+  const costoNetoRaw = val('pv-e-costo-neto');
+  const costoNeto = costoNetoRaw === '' ? null : Number(costoNetoRaw);
   if (total < 0 || pagado < 0 || pagado > total) { err.textContent = 'El monto pagado no puede superar el total.'; return; }
+  if (costoNeto !== null && costoNeto < 0) { err.textContent = 'El costo neto no puede ser negativo.'; return; }
   if (marcarPagado && total <= 0) { err.textContent = 'Define un monto total mayor a cero antes de registrar el pago.'; return; }
   if (inicio && fin && fin < inicio) { err.textContent = 'La fecha de fin no puede ser anterior al inicio.'; return; }
   const documentos = {}; document.querySelectorAll('[data-pv-doc]').forEach(x => documentos[x.dataset.pvDoc] = x.checked);
@@ -1052,6 +1056,7 @@ async function guardarPostventa(marcarPagado) {
     p_documentos: documentos, p_proximo_seguimiento_at: seguimiento ? new Date(seguimiento).toISOString() : null,
     p_notas: val('pv-e-notas').trim() || null, p_incidencia_abierta: document.getElementById('pv-e-incidencia').checked,
     p_satisfaccion: val('pv-e-satisfaccion') ? Number(val('pv-e-satisfaccion')) : null, p_marcar_pagado: marcarPagado,
+    p_costo_neto: costoNeto,
   });
   btn.disabled = false; btn.innerHTML = previo;
   if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || 'error desconocido'); return; }
@@ -2145,14 +2150,22 @@ function renderReasignPager(pages) {
   if (nx) nx.onclick = () => { rgPage++; loadReasignaciones(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 }
 
-/* ---------- Facturación ---------- */
-let FACT_ASESORES_CACHE = [];
+/* ---------- Facturación (Ventas / Comisiones / Cuentas por Pagar) ---------- */
+let FACT_ASESORES_CACHE = [], CXP_CACHE = [], factTab = 'ventas';
 function setupFacturacion() {
   document.getElementById('fact-estado').addEventListener('change', loadFacturas);
+  document.querySelectorAll('#fact-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
+    factTab = btn.dataset.factTab;
+    document.querySelectorAll('#fact-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
+    document.querySelectorAll('.fact-tab-panel').forEach(p => p.style.display = p.dataset.factPanel === factTab ? '' : 'none');
+  }));
+  document.getElementById('monto-sheet-cancelar').addEventListener('click', () => closeSheet('monto-sheet'));
+  document.getElementById('monto-sheet-confirmar').addEventListener('click', confirmarMontoSheet);
 }
 async function loadFacturacion() {
   loadFacturacionKpis();
   loadAsesoresComision();
+  await loadCuentasPorPagar(); // CXP_CACHE poblado antes: loadFacturas lo usa para costo neto/proveedor/margen
   loadFacturas();
   loadComisionesAdmin();
 }
@@ -2184,16 +2197,29 @@ async function loadAsesoresComision() {
 async function loadFacturas() {
   const { data, error } = await sb.rpc('listar_facturas', { p_estado: val('fact-estado') || null });
   if (error) { errToast('No se pudieron cargar las facturas'); return; }
-  document.getElementById('fact-tbody').innerHTML = (data || []).map(f => `
-    <tr>
+  const cxpPorLead = new Map(CXP_CACHE.map(c => [c.lead_id, c]));
+  let sumaVenta = 0, sumaCosto = 0, sumaMargen = 0;
+  document.getElementById('fact-tbody').innerHTML = (data || []).map(f => {
+    const cxp = cxpPorLead.get(f.lead_id);
+    const costoNeto = cxp ? cxp.monto_a_transferir : null;
+    const margen = costoNeto != null ? f.monto_total - costoNeto : null;
+    if (f.estado === 'pagada') { sumaVenta += f.monto_total; if (costoNeto != null) { sumaCosto += costoNeto; sumaMargen += margen; } }
+    return `<tr>
       <td>${fmt(f.numero_factura)}</td>
-      <td>#${fmt(f.lead_id)}</td>
+      <td>${esc(f.cliente || ('#' + fmt(f.lead_id)))}</td>
       <td>${esc(f.asesor || 'Sin asesor')}</td>
       <td>${money(f.monto_total)}</td>
+      <td>${costoNeto != null ? money(costoNeto) : '<span class="muted">Sin definir</span>'}</td>
+      <td>${margen != null ? money(margen) : '—'}</td>
+      <td>${cxp ? esc(cxp.proveedor) : '<span class="muted">—</span>'}</td>
       <td><span class="chip">${esc(f.estado)}</span></td>
       <td class="muted">${esc(fmtFechaHoraCaracas(f.fecha_emision))}</td>
       <td>${f.estado === 'pagada' ? `<button class="btn-sm" onclick="anularFacturaUI(${f.id})">Anular</button>` : ''}</td>
-    </tr>`).join('') || '<tr><td colspan="7">Sin facturas</td></tr>';
+    </tr>`;
+  }).join('') || '<tr><td colspan="10">Sin facturas</td></tr>';
+  document.getElementById('fact-sum-venta').textContent = money(sumaVenta);
+  document.getElementById('fact-sum-costo').textContent = money(sumaCosto);
+  document.getElementById('fact-sum-margen').textContent = money(sumaMargen);
 }
 async function loadComisionesAdmin() {
   const { data, error } = await sb.rpc('listar_comisiones');
@@ -2205,8 +2231,78 @@ async function loadComisionesAdmin() {
       <td>${c.porcentaje != null ? c.porcentaje + '%' : '—'}</td>
       <td>${c.monto_comision != null ? money(c.monto_comision) : '—'}</td>
       <td><span class="chip">${esc(c.estado)}</span></td>
-      <td>${c.estado === 'pendiente' ? `<button class="btn-sm" onclick="marcarComisionPagadaUI(${c.id})">Marcar pagada</button>` : ''}</td>
+      <td style="display:flex;gap:6px">
+        ${['sin_configurar', 'pendiente'].includes(c.estado) ? `<button class="btn-sm" onclick="abrirEditarComisionUI(${c.id}, ${c.porcentaje ?? 'null'})">Editar %</button>` : ''}
+        ${c.estado === 'pendiente' ? `<button class="btn-sm" onclick="marcarComisionPagadaUI(${c.id})">Marcar pagada</button>` : ''}
+      </td>
     </tr>`).join('') || '<tr><td colspan="6">Sin comisiones</td></tr>';
+}
+async function loadCuentasPorPagar() {
+  const { data, error } = await sb.rpc('listar_cuentas_por_pagar');
+  if (error) { errToast('No se pudieron cargar las cuentas por pagar'); return; }
+  CXP_CACHE = data || [];
+  let sumaTransferir = 0, sumaAbonado = 0, sumaSaldo = 0;
+  document.getElementById('cxp-tbody').innerHTML = CXP_CACHE.map(c => {
+    sumaTransferir += c.monto_a_transferir; sumaAbonado += c.monto_abonado; sumaSaldo += c.saldo_pendiente;
+    return `<tr>
+      <td>${esc(c.proveedor)}</td>
+      <td>${esc(c.cliente)}</td>
+      <td>${money(c.monto_a_transferir)}</td>
+      <td>${money(c.monto_abonado)}</td>
+      <td>${money(c.saldo_pendiente)}</td>
+      <td><span class="chip ${c.estado === 'pagado' ? 'ok' : ''}">${esc(c.estado)}</span></td>
+      <td>${c.estado === 'pendiente' ? `<button class="btn-sm" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})">Registrar abono</button>` : ''}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7">Sin cuentas por pagar</td></tr>';
+  document.getElementById('cxp-sum-transferir').textContent = money(sumaTransferir);
+  document.getElementById('cxp-sum-abonado').textContent = money(sumaAbonado);
+  document.getElementById('cxp-sum-saldo').textContent = money(sumaSaldo);
+}
+
+/* ---------- Hoja genérica de un solo monto (reusada por Editar % de
+   comisión y Registrar abono de cuentas por pagar) ---------- */
+let MONTO_SHEET_ACCION = null;
+window.abrirEditarComisionUI = (comisionId, porcentajeActual) => {
+  MONTO_SHEET_ACCION = { tipo: 'comision', id: comisionId };
+  document.getElementById('monto-sheet-title').textContent = 'Editar % de esta venta';
+  document.getElementById('monto-sheet-label').textContent = 'Porcentaje (0-100)';
+  const input = document.getElementById('monto-sheet-input');
+  input.min = 0; input.max = 100; input.step = 0.01; input.value = porcentajeActual ?? '';
+  document.getElementById('monto-sheet-error').textContent = '';
+  openSheet('monto-sheet');
+};
+window.abrirRegistrarAbonoUI = (cxpId, saldoPendiente) => {
+  MONTO_SHEET_ACCION = { tipo: 'abono', id: cxpId, saldoPendiente };
+  document.getElementById('monto-sheet-title').textContent = 'Registrar abono al proveedor';
+  document.getElementById('monto-sheet-label').textContent = `Monto a abonar (saldo: ${money(saldoPendiente)})`;
+  const input = document.getElementById('monto-sheet-input');
+  input.min = 0; input.max = saldoPendiente; input.step = 0.01; input.value = '';
+  document.getElementById('monto-sheet-error').textContent = '';
+  openSheet('monto-sheet');
+};
+async function confirmarMontoSheet() {
+  if (!MONTO_SHEET_ACCION) return;
+  const err = document.getElementById('monto-sheet-error');
+  const valor = Number(document.getElementById('monto-sheet-input').value);
+  if (!Number.isFinite(valor) || valor <= 0) { err.textContent = 'Ingresá un monto válido.'; return; }
+  const btn = document.getElementById('monto-sheet-confirmar');
+  btn.disabled = true; const previo = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+  let resultado;
+  if (MONTO_SHEET_ACCION.tipo === 'comision') {
+    if (valor > 100) { err.textContent = 'El porcentaje no puede superar 100.'; btn.disabled = false; btn.innerHTML = previo; return; }
+    resultado = await sb.rpc('editar_comision_manual', { p_comision_id: MONTO_SHEET_ACCION.id, p_porcentaje: valor });
+  } else {
+    if (valor > MONTO_SHEET_ACCION.saldoPendiente) { err.textContent = 'El abono no puede superar el saldo pendiente.'; btn.disabled = false; btn.innerHTML = previo; return; }
+    resultado = await sb.rpc('registrar_abono_proveedor', { p_cxp_id: MONTO_SHEET_ACCION.id, p_monto: valor });
+  }
+  btn.disabled = false; btn.innerHTML = previo;
+  const { data, error } = resultado;
+  if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return; }
+  closeSheet('monto-sheet');
+  okToast('Guardado');
+  if (MONTO_SHEET_ACCION.tipo === 'comision') { loadComisionesAdmin(); loadFacturacionKpis(); }
+  else { await loadCuentasPorPagar(); loadFacturacionKpis(); }
+  MONTO_SHEET_ACCION = null;
 }
 window.editarPorcentajeComision = async (asesorId) => {
   const a = FACT_ASESORES_CACHE.find(x => x.id === asesorId);
@@ -4166,7 +4262,12 @@ function subscribeRealtime() {
       toast(payload.new);
       loadStats().then(() => { renderAll(); loadDestPeriodo(); });
       if (page === 1 && document.getElementById('sec-leads').classList.contains('active')) loadTable();
-      if (ROL === 'asesor') recibirLeadNuevoInbox(payload.new);
+      // Solo empujar al inbox en vivo si el lead realmente llegó sin atender
+      // -- un INSERT no siempre significa "nuevo por atender" (ej. import
+      // masivo con estado ya PAGO REALIZADO, hallazgo real 2026-07-24: sin
+      // este chequeo, cualquier INSERT terminaba en el inbox del asesor con
+      // botón Atender aunque la venta ya estuviera cerrada).
+      if (ROL === 'asesor' && payload.new.estado === 'POR ATENDER' && !payload.new.fecha_primer_contacto) recibirLeadNuevoInbox(payload.new);
     })
     // RLS ya filtra este evento a leads propios -- si uno deja de estar
     // pendiente por otra vía (ej. lo editan a mano en el drawer/tabla), sale
