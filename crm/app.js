@@ -1007,17 +1007,18 @@ function abrirFormClaim(username, nombre) {
 document.getElementById('claimForm').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = document.getElementById('claimFormBtn'), errEl = document.getElementById('claimFormErr');
-  const p1 = val('claimPwd'), p2 = val('claimPwd2'), pregunta = val('claimPregunta').trim(), respuesta = val('claimRespuesta').trim();
+  const p1 = val('claimPwd'), p2 = val('claimPwd2'), pregunta = val('claimPregunta').trim(), respuesta = val('claimRespuesta').trim(), claimToken = val('claimToken').trim();
   errEl.textContent = '';
+  if (!claimToken) { errEl.textContent = 'Pedile el código a un admin (te lo pasa por WhatsApp)'; return; }
   if (p1.length < 6) { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
   if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
   if (!pregunta || !respuesta) { errEl.textContent = 'Completa la pregunta y la respuesta de seguridad'; return; }
   btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
   try {
-    const r = await fetch(CLAIM_FN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: claimUsername, password: p1, pregunta, respuesta }) });
+    const r = await fetch(CLAIM_FN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: claimUsername, password: p1, pregunta, respuesta, claim_token: claimToken }) });
     const data = await r.json();
     btn.disabled = false; btn.innerHTML = 'Crear mi acceso <i class="fas fa-arrow-right"></i>';
-    if (!data.ok) { errEl.textContent = data.error === 'ya_reclamado' ? 'Ese usuario ya fue configurado por otra persona' : 'No se pudo crear el acceso, intenta de nuevo'; return; }
+    if (!data.ok) { errEl.textContent = data.error === 'token_o_usuario_invalido' ? 'Código incorrecto o usuario ya configurado' : 'No se pudo crear el acceso, intenta de nuevo'; return; }
     okToast('Usuario configurado, ya puedes entrar');
     document.getElementById('loginUser').value = claimUsername;
     showOverlay('login');
@@ -1772,7 +1773,6 @@ function renderHoyAdmin() {
 }
 function setupHoy() {
   document.getElementById('hoy-nuevo-lead-btn')?.addEventListener('click', () => document.getElementById('nl-abrir-btn')?.click());
-  document.getElementById('fact-nuevo-cliente-btn')?.addEventListener('click', () => document.getElementById('nl-abrir-btn')?.click());
   document.getElementById('hoy-cotizador-btn')?.addEventListener('click', () => activateSection('cotizador'));
   document.getElementById('hoy-ver-dashboard-btn')?.addEventListener('click', () => activateSection('dashboard'));
 }
@@ -1916,6 +1916,7 @@ function openDrawer(l) {
       ${wa ? `<a class="dbtn wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>` : ''}
       <button class="dbtn extractor" id="e-a-extractor" type="button"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</button>
       <button class="dbtn" id="e-a-sugerir" type="button"><i class="fas fa-comment-dots"></i> Sugerir respuesta</button>
+      ${(ROL === 'asesor' || ROL === 'admin') && l.estado !== 'PAGO REALIZADO' ? `<button class="dbtn" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i> Enviar a facturación</button>` : ''}
       ${ROL === 'admin' ? `<button class="dbtn" id="e-a-eliminar" type="button" style="background:#ef444422;color:#ef4444"><i class="fas fa-trash"></i> Eliminar lead</button>` : ''}
     </div>
     <div id="sugerir-box" style="display:none;margin-top:14px" class="edit-box">
@@ -1945,6 +1946,7 @@ function openDrawer(l) {
   document.getElementById('e-a-sugerir').onclick = () => sugerirRespuestaLead(l);
   if (ROL === 'admin') document.getElementById('e-a-eliminar').onclick = () => abrirConfirmarEliminar('single');
   document.getElementById('e-a-atender')?.addEventListener('click', () => atenderInboxLead(l));
+  document.getElementById('e-a-facturar')?.addEventListener('click', () => abrirEnviarFacturacionSheet(l));
   document.querySelectorAll('.lead-tab-btn').forEach(btn => btn.addEventListener('click', () => {
     document.querySelectorAll('.lead-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.lead-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === btn.dataset.tab));
@@ -2088,23 +2090,196 @@ window.abrirClienteDesdeFacturacion = async (leadId) => {
   openDrawer(data);
 };
 
-/* ---------- Nuevo lead manual (botón "Nuevo lead" en Leads, admin + asesor) ---------- */
-document.getElementById('nl-abrir-btn')?.addEventListener('click', async () => {
+/* ---------- Enviar a facturación (asesor/admin, desde el drawer de un lead) ---------- */
+let EF_LEAD_ACTUAL = null;
+async function abrirEnviarFacturacionSheet(l) {
+  EF_LEAD_ACTUAL = l;
+  document.getElementById('ef-err').textContent = '';
+  const sel = document.getElementById('ef-admin');
+  sel.innerHTML = '<option value="">Luis Rueda (por defecto)</option>';
+  const { data, error } = await sb.rpc('usuarios_chat');
+  if (!error && data) {
+    (data || []).filter(u => u.rol === 'admin').forEach(u => {
+      sel.innerHTML += `<option value="${esc(u.id)}">${esc(u.nombre)}</option>`;
+    });
+  }
+  openSheet('enviar-facturacion-sheet');
+}
+document.getElementById('ef-cancelar')?.addEventListener('click', () => closeSheet('enviar-facturacion-sheet'));
+document.getElementById('ef-enviar')?.addEventListener('click', async () => {
+  if (!EF_LEAD_ACTUAL) return;
+  const btn = document.getElementById('ef-enviar'), err = document.getElementById('ef-err');
+  err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.rpc('enviar_a_facturacion', {
+    p_lead_id: EF_LEAD_ACTUAL.id, p_admin_destino_id: val('ef-admin') || null,
+  });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar';
+  if (error || !data?.ok) {
+    const motivo = data?.error === 'ya_facturado' ? 'Este cliente ya tiene una factura' : (error?.message || data?.error || '');
+    err.textContent = 'No se pudo enviar: ' + motivo; return;
+  }
+  closeSheet('enviar-facturacion-sheet');
+  okToast(`Enviado a ${data.admin_destino}`);
+});
+
+/* ---------- Bandeja de Entrada de Facturación (admin) ---------- */
+let FACT_BANDEJA_CACHE = [];
+async function loadBandejaFacturacion() {
+  if (ROL !== 'admin') return;
+  const loading = document.getElementById('fact-bandeja-loading'), empty = document.getElementById('fact-bandeja-empty');
+  loading?.classList.add('show');
+  const { data, error } = await sb.rpc('listar_bandeja_facturacion');
+  loading?.classList.remove('show');
+  if (error) { console.error('bandeja_facturacion', error); return; }
+  FACT_BANDEJA_CACHE = data || [];
+  document.getElementById('fact-bandeja-count').textContent = FACT_BANDEJA_CACHE.length;
+  empty?.classList.toggle('show', FACT_BANDEJA_CACHE.length === 0);
+  const grid = document.getElementById('fact-bandeja-grid');
+  grid.innerHTML = FACT_BANDEJA_CACHE.map(b => `
+    <div class="entity-card inbox-card" data-id="${b.lead_id}">
+      <div class="ec-top"><div class="ec-nombre">${esc(b.nombre)}</div></div>
+      <div class="ec-row"><i class="fas fa-phone"></i> ${esc(b.telefono) || 'Sin teléfono'}</div>
+      <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(b.destino) || '—'}</div>
+      <div class="ec-row"><i class="fas fa-user"></i> Enviado por ${esc(b.enviado_por)}</div>
+      <div class="ec-row"><i class="fas fa-clock"></i> ${tiempoRelativo(b.creado_en)}</div>
+      <div class="inbox-actions">
+        <button type="button" class="inbox-btn atender" data-bandeja-lead-id="${b.lead_id}"><i class="fas fa-file-invoice-dollar"></i> Facturar</button>
+      </div>
+    </div>`).join('');
+  grid.querySelectorAll('[data-bandeja-lead-id]').forEach(btn => btn.addEventListener('click', () => {
+    const item = FACT_BANDEJA_CACHE.find(x => String(x.lead_id) === btn.dataset.bandejaLeadId);
+    if (item) window.abrirNuevoClienteFacturacion(item);
+  }));
+}
+
+/* ---------- Nuevo lead manual (botón "Nuevo lead" en Leads, admin + asesor) /
+   Nuevo cliente de Facturación (mismo sheet, modo distinto) ---------- */
+let NL_MODO_FACTURACION = false, NL_BANDEJA_LEAD_ID = null, NL_BUSCAR_DEBOUNCE = null;
+
+async function poblarAsesoresSheetNuevoLead() {
+  const sel = document.getElementById('nl-asesor');
+  sel.innerHTML = '<option value="">Sin asignar</option>';
+  const { data, error } = await sb.rpc('listar_asesores_activos');
+  if (!error && data) sel.innerHTML += data.map(a => `<option value="${esc(a.nombre)}">${esc(a.nombre)}</option>`).join('');
+}
+
+function resetSheetNuevoCliente() {
+  document.getElementById('nl-lead-id-existente').value = '';
   document.getElementById('nl-nombre').value = '';
+  document.getElementById('nl-nombre').readOnly = false;
   document.getElementById('nl-telefono').value = '';
+  document.getElementById('nl-telefono').readOnly = false;
   document.getElementById('nl-destino').value = '';
   document.getElementById('nl-personas').value = '';
   document.getElementById('nl-fecha').value = '';
   document.getElementById('nl-es-prueba').checked = false;
+  document.getElementById('nl-precio-venta').value = '';
+  document.getElementById('nl-costo-neto').value = '';
+  document.getElementById('nl-proveedor').value = '';
+  document.getElementById('nl-buscar-cliente').value = '';
+  document.getElementById('nl-buscar-resultados').style.display = 'none';
+  document.getElementById('nl-buscar-resultados').innerHTML = '';
+  document.getElementById('nl-buscar-seleccionado').style.display = 'none';
+  document.getElementById('nl-buscar-cliente').style.display = '';
   document.getElementById('nl-err').textContent = '';
-  if (ROL === 'admin') {
-    const sel = document.getElementById('nl-asesor');
-    sel.innerHTML = '<option value="">Sin asignar</option>';
-    const { data, error } = await sb.rpc('listar_asesores_activos');
-    if (!error && data) sel.innerHTML += data.map(a => `<option value="${esc(a.nombre)}">${esc(a.nombre)}</option>`).join('');
-  }
+}
+
+document.getElementById('nl-abrir-btn')?.addEventListener('click', async () => {
+  resetSheetNuevoCliente();
+  NL_MODO_FACTURACION = false; NL_BANDEJA_LEAD_ID = null;
+  document.getElementById('nl-titulo').innerHTML = '<i class="fas fa-user-plus"></i> Nuevo lead';
+  document.getElementById('nl-crear').innerHTML = '<i class="fas fa-floppy-disk"></i> Crear lead';
+  document.getElementById('nl-buscar-box').style.display = 'none';
+  document.getElementById('nl-fact-box').style.display = 'none';
+  document.getElementById('nl-prueba-label').style.display = '';
+  if (ROL === 'admin') await poblarAsesoresSheetNuevoLead();
   openSheet('nuevo-lead-sheet');
 });
+
+// Abre el mismo sheet en modo "Nuevo cliente" de Facturación -- con datos de
+// venta (precio/costo/proveedor) y buscador de clientes existentes. Si viene
+// de la Bandeja de Entrada, `bandejaItem` trae lead_id/nombre/telefono ya
+// resueltos y precargados de solo lectura (no se puede "crear otro cliente"
+// desde ahí, ya existe).
+window.abrirNuevoClienteFacturacion = async (bandejaItem) => {
+  resetSheetNuevoCliente();
+  NL_MODO_FACTURACION = true;
+  NL_BANDEJA_LEAD_ID = bandejaItem ? bandejaItem.lead_id : null;
+  document.getElementById('nl-titulo').innerHTML = '<i class="fas fa-file-invoice-dollar"></i> Nuevo cliente';
+  document.getElementById('nl-crear').innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar';
+  document.getElementById('nl-fact-box').style.display = '';
+  document.getElementById('nl-prueba-label').style.display = 'none';
+  await poblarAsesoresSheetNuevoLead();
+  if (bandejaItem) {
+    document.getElementById('nl-buscar-box').style.display = '';
+    document.getElementById('nl-buscar-cliente').style.display = 'none';
+    document.getElementById('nl-buscar-seleccionado').style.display = '';
+    document.getElementById('nl-lead-id-existente').value = bandejaItem.lead_id;
+    document.getElementById('nl-nombre').value = bandejaItem.nombre || '';
+    document.getElementById('nl-nombre').readOnly = true;
+    document.getElementById('nl-telefono').value = bandejaItem.telefono || '';
+    document.getElementById('nl-telefono').readOnly = true;
+    document.getElementById('nl-destino').value = bandejaItem.destino || '';
+    if (bandejaItem.asesor && [...document.getElementById('nl-asesor').options].some(o => o.value === bandejaItem.asesor)) {
+      document.getElementById('nl-asesor').value = bandejaItem.asesor;
+    }
+  } else {
+    document.getElementById('nl-buscar-box').style.display = '';
+  }
+  openSheet('nuevo-lead-sheet');
+};
+
+document.getElementById('fact-nuevo-cliente-btn')?.addEventListener('click', () => window.abrirNuevoClienteFacturacion());
+
+document.getElementById('nl-buscar-cliente')?.addEventListener('input', (e) => {
+  clearTimeout(NL_BUSCAR_DEBOUNCE);
+  const q = e.target.value.trim();
+  const box = document.getElementById('nl-buscar-resultados');
+  if (q.length < 2) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  NL_BUSCAR_DEBOUNCE = setTimeout(async () => {
+    // ,()% son operadores del filtro .or() de PostgREST -- se sacan del texto
+    // libre para que no se interprete como sintaxis de filtro (mismo patrón
+    // que buildQuery() usa para el buscador de Leads).
+    const qSafe = q.replace(/[,()%]/g, '');
+    const { data, error } = await sb.from('leads').select('id,nombre,telefono,destino,asesor,estado')
+      .or(`nombre.ilike.%${qSafe}%,telefono.ilike.%${qSafe}%,telefono_2.ilike.%${qSafe}%`)
+      .is('eliminado_at', null).limit(15);
+    if (error) { box.style.display = 'none'; return; }
+    if (!data || !data.length) { box.innerHTML = '<div style="padding:10px;font-size:12.5px;color:var(--muted)">Sin resultados</div>'; box.style.display = ''; return; }
+    box.innerHTML = data.map(l => `
+      <div class="nl-buscar-row" data-lead-id="${l.id}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border,#333);font-size:13px">
+        <b>${esc(l.nombre)}</b> <span style="color:var(--muted)">${esc(l.telefono || 'sin teléfono')}</span>
+        <div style="font-size:11.5px;color:var(--muted2)">${esc(l.asesor || 'Sin asignar')} · ${esc(niceEstado(l.estado))}</div>
+      </div>`).join('');
+    box.style.display = '';
+    box.querySelectorAll('.nl-buscar-row').forEach(row => row.addEventListener('click', () => {
+      const l = data.find(x => String(x.id) === row.dataset.leadId);
+      if (!l) return;
+      document.getElementById('nl-lead-id-existente').value = l.id;
+      document.getElementById('nl-nombre').value = l.nombre || '';
+      document.getElementById('nl-nombre').readOnly = true;
+      document.getElementById('nl-telefono').value = l.telefono || '';
+      document.getElementById('nl-telefono').readOnly = true;
+      document.getElementById('nl-destino').value = l.destino || '';
+      if (l.asesor && [...document.getElementById('nl-asesor').options].some(o => o.value === l.asesor)) {
+        document.getElementById('nl-asesor').value = l.asesor;
+      }
+      document.getElementById('nl-buscar-cliente').style.display = 'none';
+      box.style.display = 'none'; box.innerHTML = '';
+      document.getElementById('nl-buscar-seleccionado').style.display = '';
+    }));
+  }, 300);
+});
+document.getElementById('nl-buscar-limpiar')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  document.getElementById('nl-lead-id-existente').value = '';
+  document.getElementById('nl-nombre').value = ''; document.getElementById('nl-nombre').readOnly = false;
+  document.getElementById('nl-telefono').value = ''; document.getElementById('nl-telefono').readOnly = false;
+  document.getElementById('nl-buscar-cliente').value = '';
+  document.getElementById('nl-buscar-cliente').style.display = '';
+  document.getElementById('nl-buscar-seleccionado').style.display = 'none';
+});
+
 document.getElementById('nl-aleatorio-btn')?.addEventListener('click', async () => {
   const btn = document.getElementById('nl-aleatorio-btn'), err = document.getElementById('nl-err');
   err.textContent = ''; btn.disabled = true;
@@ -2120,19 +2295,72 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
   const btn = document.getElementById('nl-crear'), err = document.getElementById('nl-err');
   const nombre = val('nl-nombre').trim();
   if (!nombre) { err.textContent = 'El nombre no puede quedar vacío'; return; }
-  err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
-  const { data, error } = await sb.rpc('crear_lead_manual', {
-    p_nombre: nombre, p_telefono: val('nl-telefono').trim(), p_destino: val('nl-destino').trim(),
-    p_personas: val('nl-personas').trim(), p_asesor: ROL === 'admin' ? (val('nl-asesor') || null) : null,
-    p_fecha_estimada: val('nl-fecha').trim(),
-    p_es_prueba: document.getElementById('nl-es-prueba').checked,
+
+  if (!NL_MODO_FACTURACION) {
+    err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
+    const { data, error } = await sb.rpc('crear_lead_manual', {
+      p_nombre: nombre, p_telefono: val('nl-telefono').trim(), p_destino: val('nl-destino').trim(),
+      p_personas: val('nl-personas').trim(), p_asesor: ROL === 'admin' ? (val('nl-asesor') || null) : null,
+      p_fecha_estimada: val('nl-fecha').trim(),
+      p_es_prueba: document.getElementById('nl-es-prueba').checked,
+    });
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Crear lead';
+    if (error || !data?.ok) { err.textContent = 'No se pudo crear: ' + (error?.message || data?.error || ''); return; }
+    closeSheet('nuevo-lead-sheet');
+    okToast('Lead creado');
+    // El INSERT ya dispara el canal 'leads-live' (subscribeRealtime) que
+    // refresca stats/tabla/inbox solo -- no hace falta duplicar esa recarga acá.
+    return;
+  }
+
+  // ---------- Modo Facturación: crear/reusar lead + venta + postventa,
+  // encadenando 3 RPCs ya existentes (crear_lead_manual, actualizar_lead,
+  // guardar_postventa con p_marcar_pagado:true) -- ver diseño en
+  // vivid-bubbling-bachman.md. Genera factura+comisión+cuenta por pagar
+  // automáticamente vía los triggers ya existentes, sin RPC nuevo. ----------
+  const precioVenta = Number(val('nl-precio-venta') || 0);
+  if (precioVenta <= 0) { err.textContent = 'Definí un precio de venta mayor a cero'; return; }
+  const costoNetoRaw = val('nl-costo-neto');
+  const costoNeto = costoNetoRaw === '' ? null : Number(costoNetoRaw);
+  if (costoNeto !== null && costoNeto < 0) { err.textContent = 'El costo neto no puede ser negativo'; return; }
+  const asesorSel = ROL === 'admin' ? (val('nl-asesor') || null) : null;
+
+  err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
+  let leadId = val('nl-lead-id-existente') || null;
+  if (!leadId) {
+    const { data, error } = await sb.rpc('crear_lead_manual', {
+      p_nombre: nombre, p_telefono: val('nl-telefono').trim(), p_destino: val('nl-destino').trim(),
+      p_personas: val('nl-personas').trim(), p_asesor: asesorSel,
+    });
+    if (error || !data?.ok) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar'; err.textContent = 'No se pudo crear el cliente: ' + (error?.message || data?.error || ''); return; }
+    leadId = data.lead_id;
+  }
+
+  const upd = await sb.rpc('actualizar_lead', { p_lead_id: leadId, p_estado: 'EN ESPERA DE PAGO', p_asesor: asesorSel, p_monto: precioVenta });
+  if (upd.error || !upd.data?.ok) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar'; err.textContent = 'No se pudo actualizar el lead: ' + (upd.error?.message || upd.data?.error || ''); return; }
+
+  const pv = await sb.rpc('guardar_postventa', {
+    p_lead_id: leadId, p_etapa: 'COBRO_PENDIENTE', p_prioridad: 'NORMAL',
+    p_monto_total: precioVenta, p_monto_pagado: precioVenta,
+    p_proveedor: val('nl-proveedor').trim() || null, p_costo_neto: costoNeto,
+    p_marcar_pagado: true,
   });
-  btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Crear lead';
-  if (error || !data?.ok) { err.textContent = 'No se pudo crear: ' + (error?.message || data?.error || ''); return; }
+  if (pv.error || !pv.data?.ok) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar'; err.textContent = 'No se pudo facturar: ' + (pv.error?.message || pv.data?.error || ''); return; }
+
+  if (NL_BANDEJA_LEAD_ID) {
+    const marc = await sb.rpc('marcar_bandeja_procesada', { p_lead_id: NL_BANDEJA_LEAD_ID });
+    // La factura/comisión ya se generaron -- esto NO revierte nada si falla,
+    // solo avisa que la tarjeta puede seguir viéndose en la Bandeja aunque
+    // ya esté facturada (se puede volver a facturar sin duplicar, guardar_postventa
+    // es idempotente vía on conflict, así que no rompe nada, es solo prolijidad).
+    if (marc.error || !marc.data?.ok) console.error('marcar_bandeja_procesada', marc.error || marc.data);
+  }
+
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar';
   closeSheet('nuevo-lead-sheet');
-  okToast('Lead creado');
-  // El INSERT ya dispara el canal 'leads-live' (subscribeRealtime) que
-  // refresca stats/tabla/inbox solo -- no hace falta duplicar esa recarga acá.
+  okToast('Cliente facturado');
+  loadFacturacion();
+  loadBandejaFacturacion();
 });
 window.closeDrawer = (fromNav) => {
   const notas = document.getElementById('tar-notas');
@@ -2537,6 +2765,7 @@ function setupFacturacion() {
     factTab = btn.dataset.factTab;
     document.querySelectorAll('#fact-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
     document.querySelectorAll('.fact-tab-panel').forEach(p => p.style.display = p.dataset.factPanel === factTab ? '' : 'none');
+    if (factTab === 'bandeja') loadBandejaFacturacion();
   }));
   document.querySelectorAll('.th-sort').forEach(th => th.addEventListener('click', () => {
     const tabla = th.dataset.sortTbl, col = th.dataset.sortCol, spec = FACT_SORT[tabla];
@@ -2563,6 +2792,7 @@ function setupFacturacion() {
 async function loadFacturacion() {
   loadFacturacionKpis();
   loadAsesoresComision();
+  loadBandejaFacturacion();
   await loadCuentasPorPagar(); // CXP_CACHE poblado antes: loadFacturas lo usa para costo neto/proveedor/margen
   loadFacturas();
   loadComisionesAdmin();
