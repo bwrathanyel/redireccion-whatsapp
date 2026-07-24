@@ -39,6 +39,7 @@ try {
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </noscript>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --bg:#080b16; --bg2:#0d1224; --panel:rgba(20,26,48,.72); --panel-solid:#141a30;
@@ -67,8 +68,9 @@ try {
    escala todo el layout de una. Soportado en Chromium/WebKit (Android
    Chrome, iOS Safari, desktop Chrome/Edge) -- únicos navegadores reales
    de uso en este CRM. */
-body.fsize-chico{zoom:.9}
-body.fsize-grande{zoom:1.15}
+body{zoom:.9}
+body.fsize-chico{zoom:.8}
+body.fsize-grande{zoom:1.05}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 /* Fix del "bar gris" en iOS/Android: <html> sin fondo propio deja ver el
    fondo por defecto del navegador (blanco/gris) durante el rebote de scroll
@@ -95,21 +97,22 @@ body::before{content:'';position:fixed;inset:0;background:
 
 /* ---------- Sidebar (desktop) ---------- */
 .sidebar{border-right:1px solid var(--line);position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(13,18,36,.6),rgba(8,11,22,.2))}
-.sidebar-top{flex-shrink:0;padding:20px 14px 10px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--line)}
-.sidebar-nav{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
-.brand{display:flex;align-items:center;gap:11px;padding:6px 8px 12px}
-.brand img{width:42px;height:42px;border-radius:11px;border:2px solid var(--accent);padding:2px;background:#fff;object-fit:contain}
+.sidebar-top{flex-shrink:0;padding:14px 14px 8px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--line)}
+.sidebar-nav{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:8px 14px;display:flex;flex-direction:column;gap:3px}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 8px}
+.brand img{width:32px;height:32px;border-radius:9px;border:2px solid var(--accent);padding:2px;background:#fff;object-fit:contain}
 .brand .bt{font-weight:800;font-size:15px;letter-spacing:.2px;line-height:1}
 .brand .bs{font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:3px}
-.nav-label{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1.4px;padding:12px 10px 6px;font-weight:600}
-.nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;color:var(--muted);text-decoration:none;font-size:13.5px;font-weight:500;cursor:pointer;transition:background .15s,color .15s,border-color .15s;border:1px solid transparent}
+.nav-label{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1.4px;padding:8px 10px 4px;font-weight:600}
+.nav-item{display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:11px;color:var(--muted);text-decoration:none;font-size:13.5px;font-weight:500;cursor:pointer;transition:background .15s,color .15s,border-color .15s;border:1px solid transparent}
 .nav-item i{width:18px;text-align:center;font-size:14px}
 .nav-item:hover{background:rgba(255,255,255,.04);color:var(--txt)}
 .nav-item.active{background:var(--accent-soft);color:#ffd8a8;border-color:rgba(255,145,0,.22)}
 .nav-item.active i{color:var(--accent)}
 .nav-item .badge{margin-left:auto;background:var(--accent);color:#221200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px}
-.side-foot{flex-shrink:0;padding:12px 14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
-.jornada-widget{margin:10px 10px 0;padding:9px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.side-foot{flex-shrink:0;padding:14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.logout-btn-lg{width:50px;height:50px;font-size:18px;border-radius:13px;background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);color:#ff6b6b}
+.jornada-widget{margin:8px 10px 0;padding:7px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--line);display:flex;align-items:center;gap:8px}
 .jornada-dot{width:8px;height:8px;border-radius:50%;background:var(--muted2);flex-shrink:0}
 .jornada-dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(16,185,129,.18)}
 .jornada-text{flex:1;font-size:11.5px;color:var(--muted);font-weight:600}
@@ -128,6 +131,11 @@ body::before{content:'';position:fixed;inset:0;background:
 .asist-badge.on{background:rgba(16,185,129,.15);color:var(--green)}
 .asist-badge.off{background:rgba(239,68,68,.15);color:#ef4444}
 .btn-sm{background:var(--panel-solid);border:1px solid var(--line2);border-radius:8px;padding:6px 11px;font-size:11.5px;font-weight:600;color:var(--txt);cursor:pointer;font-family:inherit}
+.export-dd{position:relative;display:inline-block}
+.export-dd-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--bg2);border:1px solid var(--line2);border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.4);z-index:20;min-width:150px;overflow:hidden}
+.export-dd-menu.show{display:block}
+.export-dd-menu button{display:flex;align-items:center;gap:9px;width:100%;padding:10px 14px;background:transparent;border:none;color:var(--txt);font-size:12.5px;font-family:inherit;cursor:pointer;text-align:left}
+.export-dd-menu button:hover{background:rgba(255,255,255,.06)}
 .btn-sm:hover{border-color:var(--accent)}
 .strike-row{display:flex;align-items:center;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--line);font-size:12.5px}
 .strike-row:last-child{border-bottom:none}
@@ -456,6 +464,9 @@ input.ei[type=date]{color-scheme:dark}
 .seg-group-sm .seg{padding:5px 10px;font-size:11px}
 @media(max-width:760px){.seg-group-sm{width:100%;justify-content:stretch}.seg-group-sm .seg{flex:1;padding:6px 4px}}
 .tfoot-sum td{font-weight:700;color:var(--txt);border-top:2px solid var(--line2);padding-top:10px}
+.th-sort{cursor:pointer;user-select:none;white-space:nowrap}
+.th-sort:hover{color:var(--txt)}
+.th-sort .sort-arrow{margin-left:4px;font-size:10px;color:var(--accent)}
 .kpis-5{grid-template-columns:repeat(5,1fr)}
 .fdate{color-scheme:dark;min-width:135px;cursor:pointer}
 #rank-tot{display:flex;gap:12px;flex-wrap:wrap}
@@ -1119,15 +1130,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <nav class="sidebar-nav" id="sidebar-nav">
       <div class="nav-label" data-label="principal">Principal</div>
       <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
-      <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
-      <a class="nav-item" data-sec="buscar-tarifario"><i class="fas fa-magnifying-glass"></i> Buscar Tarifario</a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
+      <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
+      <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
+      <a class="nav-item nav-boleteria-ok solo-voucher" id="nav-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher <span class="badge" id="nav-voucher-count" style="display:none">0</span></a>
+      <a class="nav-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
+      <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
+      <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
+      <a class="nav-item" data-sec="buscar-tarifario"><i class="fas fa-magnifying-glass"></i> Buscar Tarifario</a>
       <a class="nav-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
       <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
       <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
-      <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
-      <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
-      <a class="nav-item nav-boleteria-ok solo-voucher" id="nav-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher <span class="badge" id="nav-voucher-count" style="display:none">0</span></a>
       <a class="nav-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
       <div class="nav-label" data-label="tarifario">Tarifario</div>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
@@ -1139,14 +1152,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <a class="nav-item nav-admin-only" data-sec="leads-fallidos"><i class="fas fa-triangle-exclamation"></i> Leads Fallidos</a>
       <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
       <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
-      <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
-      <a class="nav-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
       <a class="nav-item nav-admin-only solo-informe-diario" id="nav-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
       <div class="nav-label" data-label="ayuda">Ayuda</div>
       <a class="nav-item nav-marketing-ok" id="nav-tutorial"><i class="fas fa-circle-question"></i> Tutorial</a>
     </nav>
     <div class="side-foot">
-      <button class="logout-btn" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
+      <button class="logout-btn logout-btn-lg" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
     </div>
   </aside>
 
@@ -1570,35 +1581,51 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <button class="seg on" data-fact-tab="ventas">Ventas</button>
         <button class="seg" data-fact-tab="comisiones">Comisiones</button>
         <button class="seg" data-fact-tab="cxp">Cuentas por Pagar</button>
-      </div>
-
-      <div class="card">
-        <h2><i class="fas fa-percent"></i> Comisión por asesor</h2>
-        <div class="csub">% que se aplica automáticamente sobre cada venta pagada</div>
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr><th>Asesor</th><th>% Comisión</th><th></th></tr></thead>
-            <tbody id="fact-asesores-tbody"></tbody>
-          </table>
-        </div>
+        <button class="seg" data-fact-tab="asesores">Asesores</button>
       </div>
 
       <div class="fact-tab-panel" data-fact-panel="ventas">
-        <button class="mfs-trigger" data-mfs="fact-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
-        <div class="tbar mfs" id="fact-tbar">
-          <select class="flt" id="fact-estado">
-            <option value="">Todos los estados</option>
-            <option value="pagada">Pagada</option>
-            <option value="anulada">Anulada</option>
-          </select>
-          <button class="mfs-done" data-mfs="fact-tbar" type="button">Listo</button>
-        </div>
         <div class="card">
-          <h2><i class="fas fa-file-invoice-dollar"></i> Ventas</h2>
-          <div class="csub">Precio de venta, costo neto (cargado en Postventa) y margen por venta</div>
+          <div class="chead-row">
+            <h2><i class="fas fa-file-invoice-dollar"></i> Ventas</h2>
+            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="fact-ventas-search" placeholder="Buscar cliente o asesor..."></div>
+            <div class="export-dd">
+              <button class="btn-sm" onclick="toggleExportMenu(event,'ventas')"><i class="fas fa-download"></i> Exportar tabla</button>
+              <div class="export-dd-menu" id="export-menu-ventas">
+                <button onclick="exportarPDF('ventas','Ventas')"><i class="fas fa-file-pdf"></i> PDF</button>
+                <button onclick="exportarCSV('ventas')"><i class="fas fa-file-csv"></i> CSV</button>
+                <button onclick="exportarXLSX('ventas','Ventas')"><i class="fas fa-file-excel"></i> XLSX</button>
+              </div>
+            </div>
+          </div>
+          <div class="csub">Precio de venta, costo neto (cargado en Postventa) y margen por venta · tocá un encabezado para ordenar</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <select class="flt" id="fact-estado">
+              <option value="">Todos los estados</option>
+              <option value="pagada">Pagada</option>
+              <option value="anulada">Anulada</option>
+            </select>
+            <select class="flt" id="fact-mes">
+              <option value="">Todos los meses</option>
+            </select>
+            <select class="flt" id="fact-asesor">
+              <option value="">Todos los asesores</option>
+            </select>
+          </div>
           <div style="overflow-x:auto">
             <table>
-              <thead><tr><th>N°</th><th>Cliente</th><th>Asesor</th><th>Precio venta</th><th>Costo neto</th><th>Margen</th><th>Proveedor</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
+              <thead><tr>
+                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="numero_factura">N°</th>
+                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="cliente">Cliente</th>
+                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="asesor">Asesor</th>
+                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="monto_total">Precio venta</th>
+                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="costo_neto">Costo neto</th>
+                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="margen">Margen</th>
+                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="proveedor">Proveedor</th>
+                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="estado">Estado</th>
+                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="fecha_emision">Fecha</th>
+                <th></th>
+              </tr></thead>
               <tbody id="fact-tbody"></tbody>
               <tfoot><tr class="tfoot-sum"><td colspan="3">Totales</td><td id="fact-sum-venta">—</td><td id="fact-sum-costo">—</td><td id="fact-sum-margen">—</td><td colspan="4"></td></tr></tfoot>
             </table>
@@ -1608,11 +1635,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
       <div class="fact-tab-panel" data-fact-panel="comisiones" style="display:none">
         <div class="card">
-          <h2><i class="fas fa-sack-dollar"></i> Comisiones</h2>
-          <div class="csub">Tocá "Editar %" para pisar el % de una venta puntual</div>
+          <div class="chead-row">
+            <h2><i class="fas fa-sack-dollar"></i> Comisiones</h2>
+            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="fact-com-search" placeholder="Buscar asesor..."></div>
+            <div class="export-dd">
+              <button class="btn-sm" onclick="toggleExportMenu(event,'comisiones')"><i class="fas fa-download"></i> Exportar tabla</button>
+              <div class="export-dd-menu" id="export-menu-comisiones">
+                <button onclick="exportarPDF('comisiones','Comisiones')"><i class="fas fa-file-pdf"></i> PDF</button>
+                <button onclick="exportarCSV('comisiones')"><i class="fas fa-file-csv"></i> CSV</button>
+                <button onclick="exportarXLSX('comisiones','Comisiones')"><i class="fas fa-file-excel"></i> XLSX</button>
+              </div>
+            </div>
+          </div>
+          <div class="csub">Tocá "Editar %" para pisar el % de una venta puntual · tocá un encabezado para ordenar</div>
           <div style="overflow-x:auto">
             <table>
-              <thead><tr><th>Asesor</th><th>Monto venta</th><th>%</th><th>Comisión</th><th>Estado</th><th></th></tr></thead>
+              <thead><tr>
+                <th class="th-sort" data-sort-tbl="comisiones" data-sort-col="asesor">Asesor</th>
+                <th class="th-sort" data-sort-tbl="comisiones" data-sort-col="monto_venta">Monto venta</th>
+                <th class="th-sort" data-sort-tbl="comisiones" data-sort-col="porcentaje">%</th>
+                <th class="th-sort" data-sort-tbl="comisiones" data-sort-col="monto_comision">Comisión</th>
+                <th class="th-sort" data-sort-tbl="comisiones" data-sort-col="estado">Estado</th>
+                <th></th>
+              </tr></thead>
               <tbody id="fact-com-tbody"></tbody>
             </table>
           </div>
@@ -1621,13 +1666,60 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
       <div class="fact-tab-panel" data-fact-panel="cxp" style="display:none">
         <div class="card">
-          <h2><i class="fas fa-file-invoice"></i> Cuentas por Pagar</h2>
-          <div class="csub">Lo que le debemos a cada proveedor por reservas ya vendidas</div>
+          <div class="chead-row">
+            <h2><i class="fas fa-file-invoice"></i> Cuentas por Pagar</h2>
+            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="cxp-search" placeholder="Buscar proveedor o cliente..."></div>
+            <div class="export-dd">
+              <button class="btn-sm" onclick="toggleExportMenu(event,'cxp')"><i class="fas fa-download"></i> Exportar tabla</button>
+              <div class="export-dd-menu" id="export-menu-cxp">
+                <button onclick="exportarPDF('cxp','Cuentas por Pagar')"><i class="fas fa-file-pdf"></i> PDF</button>
+                <button onclick="exportarCSV('cxp')"><i class="fas fa-file-csv"></i> CSV</button>
+                <button onclick="exportarXLSX('cxp','Cuentas por Pagar')"><i class="fas fa-file-excel"></i> XLSX</button>
+              </div>
+            </div>
+          </div>
+          <div class="csub">Lo que le debemos a cada proveedor por reservas ya vendidas · tocá un encabezado para ordenar</div>
           <div style="overflow-x:auto">
             <table>
-              <thead><tr><th>Proveedor</th><th>Cliente</th><th>A transferir</th><th>Abonado</th><th>Saldo</th><th>Estado</th><th></th></tr></thead>
+              <thead><tr>
+                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="proveedor">Proveedor</th>
+                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="cliente">Cliente</th>
+                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="monto_a_transferir">A transferir</th>
+                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="monto_abonado">Abonado</th>
+                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="saldo_pendiente">Saldo</th>
+                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="estado">Estado</th>
+                <th></th>
+              </tr></thead>
               <tbody id="cxp-tbody"></tbody>
               <tfoot><tr class="tfoot-sum"><td colspan="2">Totales</td><td id="cxp-sum-transferir">—</td><td id="cxp-sum-abonado">—</td><td id="cxp-sum-saldo">—</td><td colspan="2"></td></tr></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="fact-tab-panel" data-fact-panel="asesores" style="display:none">
+        <div class="card">
+          <div class="chead-row">
+            <h2><i class="fas fa-percent"></i> Comisión por asesor</h2>
+            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="fact-asesores-search" placeholder="Buscar asesor..."></div>
+            <div class="export-dd">
+              <button class="btn-sm" onclick="toggleExportMenu(event,'asesores')"><i class="fas fa-download"></i> Exportar tabla</button>
+              <div class="export-dd-menu" id="export-menu-asesores">
+                <button onclick="exportarPDF('asesores','Comisión por asesor')"><i class="fas fa-file-pdf"></i> PDF</button>
+                <button onclick="exportarCSV('asesores')"><i class="fas fa-file-csv"></i> CSV</button>
+                <button onclick="exportarXLSX('asesores','Comisión por asesor')"><i class="fas fa-file-excel"></i> XLSX</button>
+              </div>
+            </div>
+          </div>
+          <div class="csub">% que se aplica automáticamente sobre cada venta pagada · tocá un encabezado para ordenar</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr>
+                <th class="th-sort" data-sort-tbl="asesores" data-sort-col="nombre">Asesor</th>
+                <th class="th-sort" data-sort-tbl="asesores" data-sort-col="porcentaje_comision">% Comisión</th>
+                <th></th>
+              </tr></thead>
+              <tbody id="fact-asesores-tbody"></tbody>
             </table>
           </div>
         </div>

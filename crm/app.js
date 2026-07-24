@@ -2150,17 +2150,128 @@ function renderReasignPager(pages) {
   if (nx) nx.onclick = () => { rgPage++; loadReasignaciones(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 }
 
-/* ---------- Facturación (Ventas / Comisiones / Cuentas por Pagar) ---------- */
-let FACT_ASESORES_CACHE = [], CXP_CACHE = [], factTab = 'ventas';
+/* ---------- Facturación (Ventas / Comisiones / Cuentas por Pagar / Asesores) ----------
+   Cada tabla se guarda en memoria (FACT_*_CACHE) para poder filtrar/ordenar
+   en el cliente sin volver a pedirle nada al backend -- ver ordenarYFiltrar. */
+let FACT_ASESORES_CACHE = [], CXP_CACHE = [], FACT_VENTAS_CACHE = [], FACT_COMISIONES_CACHE = [], factTab = 'ventas';
+const FACT_LAST = {}; // últimas filas renderizadas (post filtro/búsqueda/orden) por tabla -- exportar CSV/PDF usa esto, así "exportar por cliente" es solo filtrar y exportar
+const FACT_COLS = {
+  ventas: [['numero_factura', 'N°'], ['cliente', 'Cliente'], ['asesor', 'Asesor'], ['monto_total', 'Precio venta'], ['costo_neto', 'Costo neto'], ['margen', 'Margen'], ['proveedor', 'Proveedor'], ['estado', 'Estado'], ['fecha_emision', 'Fecha']],
+  comisiones: [['asesor', 'Asesor'], ['monto_venta', 'Monto venta'], ['porcentaje', '%'], ['monto_comision', 'Comisión'], ['estado', 'Estado']],
+  cxp: [['proveedor', 'Proveedor'], ['cliente', 'Cliente'], ['monto_a_transferir', 'A transferir'], ['monto_abonado', 'Abonado'], ['saldo_pendiente', 'Saldo'], ['estado', 'Estado']],
+  asesores: [['nombre', 'Asesor'], ['porcentaje_comision', '% Comisión']],
+};
+const FACT_MONEY_COLS = new Set(['monto_total', 'costo_neto', 'margen', 'monto_venta', 'monto_comision', 'monto_a_transferir', 'monto_abonado', 'saldo_pendiente']);
+function formatCeldaExport(col, row) {
+  const v = row[col];
+  if (v == null) return '';
+  if (col === 'fecha_emision') return fmtFechaHoraCaracas(v);
+  if (FACT_MONEY_COLS.has(col)) return money(v);
+  if (col === 'porcentaje' || col === 'porcentaje_comision') return v + '%';
+  return String(v);
+}
+window.exportarCSV = (tabla) => {
+  const filas = FACT_LAST[tabla] || [];
+  const cols = FACT_COLS[tabla];
+  const lineas = [cols.map(c => c[1]), ...filas.map(f => cols.map(c => formatCeldaExport(c[0], f)))];
+  const csv = lineas.map(fila => fila.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${tabla}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+window.toggleExportMenu = (ev, tabla) => {
+  ev.stopPropagation();
+  const menu = document.getElementById(`export-menu-${tabla}`);
+  const abierto = menu.classList.contains('show');
+  document.querySelectorAll('.export-dd-menu.show').forEach(m => m.classList.remove('show'));
+  if (!abierto) menu.classList.add('show');
+};
+document.addEventListener('click', () => document.querySelectorAll('.export-dd-menu.show').forEach(m => m.classList.remove('show')));
+window.exportarXLSX = (tabla, titulo) => {
+  if (typeof XLSX === 'undefined') { errToast('La librería de Excel no cargó todavía, probá de nuevo en un segundo'); return; }
+  const filas = FACT_LAST[tabla] || [];
+  const cols = FACT_COLS[tabla];
+  const aoa = [cols.map(c => c[1]), ...filas.map(f => cols.map(c => formatCeldaExport(c[0], f)))];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, titulo.slice(0, 31));
+  XLSX.writeFile(wb, `${tabla}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+};
+window.exportarPDF = (tabla, titulo) => {
+  const filas = FACT_LAST[tabla] || [];
+  const cols = FACT_COLS[tabla];
+  const filasHtml = filas.map(f => `<tr>${cols.map(c => `<td>${esc(String(formatCeldaExport(c[0], f)))}</td>`).join('')}</tr>`).join('');
+  const win = window.open('', '_blank');
+  if (!win) { errToast('El navegador bloqueó la ventana de impresión'); return; }
+  win.document.write(`<html><head><title>${esc(titulo)}</title><style>
+    body{font-family:Arial,sans-serif;padding:20px}
+    h1{font-size:18px;margin-bottom:2px}
+    p{color:#666;font-size:12px;margin-top:0}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}
+    th{background:#f2f2f2}
+  </style></head><body>
+    <h1>${esc(titulo)}</h1>
+    <p>Generado ${new Date().toLocaleString('es-VE')}</p>
+    <table><thead><tr>${cols.map(c => `<th>${esc(c[1])}</th>`).join('')}</tr></thead><tbody>${filasHtml || `<tr><td colspan="${cols.length}">Sin datos</td></tr>`}</tbody></table>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  win.print();
+};
+const FACT_SORT = {
+  ventas: { col: 'numero_factura', dir: 1 }, comisiones: { col: null, dir: 1 },
+  cxp: { col: null, dir: 1 }, asesores: { col: 'nombre', dir: 1 },
+};
+function ordenarYFiltrar(cache, campos, searchVal, sortSpec) {
+  let out = cache;
+  if (searchVal && searchVal.trim()) {
+    const q = searchVal.trim().toLowerCase();
+    out = out.filter(row => campos.some(c => String(row[c] ?? '').toLowerCase().includes(q)));
+  }
+  if (sortSpec.col) {
+    out = [...out].sort((a, b) => {
+      let va = a[sortSpec.col], vb = b[sortSpec.col];
+      if (typeof va === 'string' || typeof vb === 'string') { va = String(va ?? '').toLowerCase(); vb = String(vb ?? '').toLowerCase(); }
+      else { va = va ?? -Infinity; vb = vb ?? -Infinity; }
+      return va < vb ? -sortSpec.dir : va > vb ? sortSpec.dir : 0;
+    });
+  }
+  return out;
+}
 function setupFacturacion() {
   document.getElementById('fact-estado').addEventListener('change', loadFacturas);
+  document.getElementById('fact-mes').addEventListener('change', renderVentas);
+  document.getElementById('fact-asesor').addEventListener('change', renderVentas);
   document.querySelectorAll('#fact-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
     factTab = btn.dataset.factTab;
     document.querySelectorAll('#fact-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
     document.querySelectorAll('.fact-tab-panel').forEach(p => p.style.display = p.dataset.factPanel === factTab ? '' : 'none');
   }));
+  document.querySelectorAll('.th-sort').forEach(th => th.addEventListener('click', () => {
+    const tabla = th.dataset.sortTbl, col = th.dataset.sortCol, spec = FACT_SORT[tabla];
+    spec.dir = (spec.col === col) ? -spec.dir : 1;
+    spec.col = col;
+    document.querySelectorAll(`.th-sort[data-sort-tbl="${tabla}"]`).forEach(h => h.querySelector('.sort-arrow')?.remove());
+    th.insertAdjacentHTML('beforeend', `<span class="sort-arrow">${spec.dir === 1 ? '▲' : '▼'}</span>`);
+    ({ ventas: renderVentas, comisiones: renderComisiones, cxp: renderCuentasPorPagar, asesores: renderAsesoresComision })[tabla]();
+  }));
+  document.getElementById('fact-ventas-search').addEventListener('input', renderVentas);
+  document.getElementById('fact-com-search').addEventListener('input', renderComisiones);
+  document.getElementById('cxp-search').addEventListener('input', renderCuentasPorPagar);
+  document.getElementById('fact-asesores-search').addEventListener('input', renderAsesoresComision);
   document.getElementById('monto-sheet-cancelar').addEventListener('click', () => closeSheet('monto-sheet'));
   document.getElementById('monto-sheet-confirmar').addEventListener('click', confirmarMontoSheet);
+  // Flechita del orden por defecto (numero_factura asc en Ventas) visible
+  // desde el primer render, no solo después de tocar un encabezado.
+  Object.entries(FACT_SORT).forEach(([tabla, spec]) => {
+    if (!spec.col) return;
+    const th = document.querySelector(`.th-sort[data-sort-tbl="${tabla}"][data-sort-col="${spec.col}"]`);
+    th?.insertAdjacentHTML('beforeend', `<span class="sort-arrow">${spec.dir === 1 ? '▲' : '▼'}</span>`);
+  });
 }
 async function loadFacturacion() {
   loadFacturacionKpis();
@@ -2187,7 +2298,12 @@ async function loadAsesoresComision() {
   const { data, error } = await sb.rpc('listar_asesores_comision');
   if (error) { errToast('No se pudo cargar la comisión de asesores'); return; }
   FACT_ASESORES_CACHE = data || [];
-  document.getElementById('fact-asesores-tbody').innerHTML = FACT_ASESORES_CACHE.map(a => `
+  renderAsesoresComision();
+}
+function renderAsesoresComision() {
+  const filas = ordenarYFiltrar(FACT_ASESORES_CACHE, ['nombre'], val('fact-asesores-search'), FACT_SORT.asesores);
+  FACT_LAST.asesores = filas;
+  document.getElementById('fact-asesores-tbody').innerHTML = filas.map(a => `
     <tr>
       <td>${esc(a.nombre)}</td>
       <td>${a.porcentaje_comision != null ? a.porcentaje_comision + '%' : '<span class="asist-badge off">Sin configurar</span>'}</td>
@@ -2198,20 +2314,43 @@ async function loadFacturas() {
   const { data, error } = await sb.rpc('listar_facturas', { p_estado: val('fact-estado') || null });
   if (error) { errToast('No se pudieron cargar las facturas'); return; }
   const cxpPorLead = new Map(CXP_CACHE.map(c => [c.lead_id, c]));
-  let sumaVenta = 0, sumaCosto = 0, sumaMargen = 0;
-  document.getElementById('fact-tbody').innerHTML = (data || []).map(f => {
+  FACT_VENTAS_CACHE = (data || []).map(f => {
     const cxp = cxpPorLead.get(f.lead_id);
-    const costoNeto = cxp ? cxp.monto_a_transferir : null;
-    const margen = costoNeto != null ? f.monto_total - costoNeto : null;
-    if (f.estado === 'pagada') { sumaVenta += f.monto_total; if (costoNeto != null) { sumaCosto += costoNeto; sumaMargen += margen; } }
+    const costo_neto = cxp ? cxp.monto_a_transferir : null;
+    return { ...f, costo_neto, proveedor: cxp ? cxp.proveedor : null, margen: costo_neto != null ? f.monto_total - costo_neto : null };
+  });
+  poblarFiltrosVentas();
+  renderVentas();
+}
+function poblarFiltrosVentas() {
+  const selMes = document.getElementById('fact-mes'), selAsesor = document.getElementById('fact-asesor');
+  const mesPrevio = selMes.value, asesorPrevio = selAsesor.value;
+  const meses = [...new Set(FACT_VENTAS_CACHE.map(f => (f.fecha_emision || '').slice(0, 7)).filter(Boolean))].sort().reverse();
+  const asesores = [...new Set(FACT_VENTAS_CACHE.map(f => f.asesor).filter(Boolean))].sort();
+  const nombreMes = ym => new Date(ym + '-02').toLocaleDateString('es-VE', { month: 'long', year: 'numeric' });
+  selMes.innerHTML = '<option value="">Todos los meses</option>' + meses.map(ym => `<option value="${ym}">${nombreMes(ym)}</option>`).join('');
+  selAsesor.innerHTML = '<option value="">Todos los asesores</option>' + asesores.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+  selMes.value = meses.includes(mesPrevio) ? mesPrevio : '';
+  selAsesor.value = asesores.includes(asesorPrevio) ? asesorPrevio : '';
+}
+function renderVentas() {
+  const mes = val('fact-mes'), asesor = val('fact-asesor');
+  let base = FACT_VENTAS_CACHE;
+  if (mes) base = base.filter(f => (f.fecha_emision || '').slice(0, 7) === mes);
+  if (asesor) base = base.filter(f => f.asesor === asesor);
+  const filas = ordenarYFiltrar(base, ['cliente', 'asesor', 'proveedor'], val('fact-ventas-search'), FACT_SORT.ventas);
+  FACT_LAST.ventas = filas;
+  let sumaVenta = 0, sumaCosto = 0, sumaMargen = 0;
+  document.getElementById('fact-tbody').innerHTML = filas.map(f => {
+    if (f.estado === 'pagada') { sumaVenta += f.monto_total; if (f.costo_neto != null) { sumaCosto += f.costo_neto; sumaMargen += f.margen; } }
     return `<tr>
       <td>${fmt(f.numero_factura)}</td>
       <td>${esc(f.cliente || ('#' + fmt(f.lead_id)))}</td>
       <td>${esc(f.asesor || 'Sin asesor')}</td>
       <td>${money(f.monto_total)}</td>
-      <td>${costoNeto != null ? money(costoNeto) : '<span class="muted">Sin definir</span>'}</td>
-      <td>${margen != null ? money(margen) : '—'}</td>
-      <td>${cxp ? esc(cxp.proveedor) : '<span class="muted">—</span>'}</td>
+      <td>${f.costo_neto != null ? money(f.costo_neto) : '<span class="muted">Sin definir</span>'}</td>
+      <td>${f.margen != null ? money(f.margen) : '—'}</td>
+      <td>${f.proveedor ? esc(f.proveedor) : '<span class="muted">—</span>'}</td>
       <td><span class="chip">${esc(f.estado)}</span></td>
       <td class="muted">${esc(fmtFechaHoraCaracas(f.fecha_emision))}</td>
       <td>${f.estado === 'pagada' ? `<button class="btn-sm" onclick="anularFacturaUI(${f.id})">Anular</button>` : ''}</td>
@@ -2224,7 +2363,13 @@ async function loadFacturas() {
 async function loadComisionesAdmin() {
   const { data, error } = await sb.rpc('listar_comisiones');
   if (error) { errToast('No se pudieron cargar las comisiones'); return; }
-  document.getElementById('fact-com-tbody').innerHTML = (data || []).map(c => `
+  FACT_COMISIONES_CACHE = data || [];
+  renderComisiones();
+}
+function renderComisiones() {
+  const filas = ordenarYFiltrar(FACT_COMISIONES_CACHE, ['asesor'], val('fact-com-search'), FACT_SORT.comisiones);
+  FACT_LAST.comisiones = filas;
+  document.getElementById('fact-com-tbody').innerHTML = filas.map(c => `
     <tr>
       <td>${esc(c.asesor)}</td>
       <td>${money(c.monto_venta)}</td>
@@ -2241,8 +2386,13 @@ async function loadCuentasPorPagar() {
   const { data, error } = await sb.rpc('listar_cuentas_por_pagar');
   if (error) { errToast('No se pudieron cargar las cuentas por pagar'); return; }
   CXP_CACHE = data || [];
+  renderCuentasPorPagar();
+}
+function renderCuentasPorPagar() {
+  const filas = ordenarYFiltrar(CXP_CACHE, ['proveedor', 'cliente'], val('cxp-search'), FACT_SORT.cxp);
+  FACT_LAST.cxp = filas;
   let sumaTransferir = 0, sumaAbonado = 0, sumaSaldo = 0;
-  document.getElementById('cxp-tbody').innerHTML = CXP_CACHE.map(c => {
+  document.getElementById('cxp-tbody').innerHTML = filas.map(c => {
     sumaTransferir += c.monto_a_transferir; sumaAbonado += c.monto_abonado; sumaSaldo += c.saldo_pendiente;
     return `<tr>
       <td>${esc(c.proveedor)}</td>
