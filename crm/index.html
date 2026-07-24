@@ -341,11 +341,11 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .drawer.open{transform:translateX(0)}
 .drawer .dclose{position:absolute;top:18px;right:18px;width:36px;height:36px;border-radius:9px;border:1px solid var(--line2);background:transparent;color:var(--muted);cursor:pointer;font-size:15px}
 .drawer .dclose:hover{color:var(--txt);border-color:var(--txt)}
-/* Fase 3 (registro de lead con pestañas) -- SOLO mobile. En desktop
-   .lead-tabs queda oculta y por lo tanto nunca hay forma de activar los
-   paneles Conversación/Actividad -- el drawer se ve y funciona exactamente
-   igual que hoy, mismo componente, sin sheet aparte. */
-.lead-tabs{display:none;gap:6px;margin:14px 0}
+/* Fase 3 (registro de lead con pestañas). Al principio solo mobile; el
+   dueño pidió (2026-07-24) habilitar también Conversación en desktop, así
+   que la barra de pestañas ahora se ve en ambos breakpoints -- mismo
+   componente/drawer de siempre, sin sheet aparte. */
+.lead-tabs{display:flex;gap:6px;margin:14px 0}
 .lead-tab-btn{flex:1;text-align:center;padding:9px 4px;border-radius:10px;font-size:12.5px;font-weight:700;background:transparent;color:var(--muted);border:1px solid var(--line2);cursor:pointer;font-family:inherit}
 .lead-tab-btn.active{background:var(--accent-soft);color:#ffd8a8;border-color:rgba(255,145,0,.3)}
 .lead-tab-panel{display:none}
@@ -358,7 +358,6 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .act-row:last-child{border-bottom:none}
 .act-row .act-txt{flex:1;font-size:12.5px}
 .act-row .act-hora{font-size:10.5px;color:var(--muted2);white-space:nowrap}
-@media(max-width:760px){.lead-tabs{display:flex}}
 .dhead{display:flex;align-items:center;gap:14px;margin-bottom:22px;padding-right:40px}
 .dhead .dava{width:54px;height:54px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#e0570a);background-size:cover;background-position:center;display:grid;place-items:center;font-size:20px;font-weight:800;color:#1a1000;flex-shrink:0}
 .dhead .dn{font-size:18px;font-weight:800}
