@@ -341,6 +341,24 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .drawer.open{transform:translateX(0)}
 .drawer .dclose{position:absolute;top:18px;right:18px;width:36px;height:36px;border-radius:9px;border:1px solid var(--line2);background:transparent;color:var(--muted);cursor:pointer;font-size:15px}
 .drawer .dclose:hover{color:var(--txt);border-color:var(--txt)}
+/* Fase 3 (registro de lead con pestañas) -- SOLO mobile. En desktop
+   .lead-tabs queda oculta y por lo tanto nunca hay forma de activar los
+   paneles Conversación/Actividad -- el drawer se ve y funciona exactamente
+   igual que hoy, mismo componente, sin sheet aparte. */
+.lead-tabs{display:none;gap:6px;margin:14px 0}
+.lead-tab-btn{flex:1;text-align:center;padding:9px 4px;border-radius:10px;font-size:12.5px;font-weight:700;background:transparent;color:var(--muted);border:1px solid var(--line2);cursor:pointer;font-family:inherit}
+.lead-tab-btn.active{background:var(--accent-soft);color:#ffd8a8;border-color:rgba(255,145,0,.3)}
+.lead-tab-panel{display:none}
+.lead-tab-panel.active{display:block}
+.conv-msg{border-radius:12px;padding:9px 12px;margin-bottom:8px;font-size:12.5px;line-height:1.4}
+.conv-msg.lead{background:var(--panel-solid)}
+.conv-msg.ia{background:rgba(74,158,255,.1)}
+.conv-msg .conv-who{font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.3px}
+.act-row{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.act-row:last-child{border-bottom:none}
+.act-row .act-txt{flex:1;font-size:12.5px}
+.act-row .act-hora{font-size:10.5px;color:var(--muted2);white-space:nowrap}
+@media(max-width:760px){.lead-tabs{display:flex}}
 .dhead{display:flex;align-items:center;gap:14px;margin-bottom:22px;padding-right:40px}
 .dhead .dava{width:54px;height:54px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#e0570a);background-size:cover;background-position:center;display:grid;place-items:center;font-size:20px;font-weight:800;color:#1a1000;flex-shrink:0}
 .dhead .dn{font-size:18px;font-weight:800}
@@ -784,10 +802,9 @@ input.ei[type=date]{color-scheme:dark}
 .rol-asesor .admin-only,.rol-marketing .admin-only,.rol-boleteria .admin-only{display:none}
 .rol-asesor .nav-asesor-hide{display:none}
 /* Inverso de nav-asesor-hide: visible SOLO para rol asesor (en cualquiera de
-   los 3 tipos de nav-item). Usado hoy por Extractor IA en el bottom-nav —
-   Dashboard se oculta para asesor (nav-asesor-hide) así que libera un slot
-   en la fila principal; admin/marketing acceden a esas mismas secciones
-   desde "Más" en vez de tener su propio nav-item/bn-item. */
+   los 3 tipos de nav-item). Usado hoy por "Mis Comisiones" en el sidebar
+   (equivalente asesor de Facturación, que es nav-admin-only) — admin
+   accede a la sección equivalente desde su propio nav-item, no desde acá. */
 .nav-item.nav-asesor-only,.bn-item.nav-asesor-only,.sheet-item.nav-asesor-only{display:none}
 .rol-asesor .nav-item.nav-asesor-only,.rol-asesor .bn-item.nav-asesor-only,.rol-asesor .sheet-item.nav-asesor-only{display:flex}
 
@@ -824,6 +841,13 @@ input.ei[type=date]{color-scheme:dark}
 /* ============ MÓVIL ============ */
 @media(max-width:900px){.g-2,.g-2b{grid-template-columns:1fr}}
 @media(max-width:760px){
+  /* Fase 2 (Leads unificado): en mobile el inbox separado de arriba queda
+     fusionado dentro de las tarjetas de la lista general (badge "Sin
+     atender" + botón "Atender" en leadCardHtml) -- ocultarlo acá evita
+     mostrar el mismo lead dos veces. Desktop no se toca, sigue con el
+     inbox propio arriba de la tabla para el rol asesor (.rol-asesor
+     .leads-inbox{display:block} en la hoja de estilos base). */
+  .leads-inbox{display:none !important}
   .app{grid-template-columns:1fr}
   .sidebar{display:none}
   .bottom-nav{display:flex}
@@ -1139,6 +1163,39 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="search"><i class="fas fa-search"></i><input id="global-search" placeholder="Buscar por nombre o teléfono..."></div>
       <div class="pill"><span class="dot"></span> En vivo</div>
     </div>
+
+    <!-- HOY (mobile-only, punto de entrada del bottom-nav; desktop sigue entrando por Dashboard/Leads en el sidebar) -->
+    <section class="section" id="sec-hoy">
+      <div id="hoy-asesor">
+        <h2 id="hoy-saludo" style="margin-bottom:4px">Buen día</h2>
+        <div class="sub" style="margin-bottom:16px" id="hoy-resumen">Cargando...</div>
+
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <strong style="font-size:13.5px"><i class="fas fa-fire" style="color:var(--accent)"></i> Necesitan tu atención</strong>
+          <span class="badge" id="hoy-urgent-count">0</span>
+        </div>
+        <div class="leads-inbox-grid" id="hoy-urgent"></div>
+
+        <div class="kpis" id="hoy-stats" style="margin:18px 0"></div>
+
+        <div class="grid g-2">
+          <button class="dbtn save" id="hoy-nuevo-lead-btn" type="button"><i class="fas fa-user-plus"></i> Nuevo lead</button>
+          <button class="dbtn" id="hoy-cotizador-btn" type="button"><i class="fas fa-comments"></i> Cotizador IA</button>
+        </div>
+      </div>
+
+      <div id="hoy-admin" style="display:none">
+        <h2 style="margin-bottom:4px">Panel de equipo</h2>
+        <div class="sub" style="margin-bottom:16px">Vista general del día para todo el equipo</div>
+        <div class="kpis" id="hoy-kpis" style="margin-bottom:14px"></div>
+        <div class="card">
+          <h2><i class="fas fa-diagram-project"></i> Embudo del pipeline</h2>
+          <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Toca una etapa para ver su número</div>
+          <div class="pipe" id="hoy-pipe"></div>
+        </div>
+        <button class="dbtn" id="hoy-ver-dashboard-btn" type="button" style="margin-top:12px"><i class="fas fa-chart-pie"></i> Ver dashboard completo</button>
+      </div>
+    </section>
 
     <!-- DASHBOARD -->
     <section class="section active" id="sec-dashboard">
@@ -1794,20 +1851,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
 <!-- Bottom nav (móvil) — máximo 5 ítems para que sea cómodo con el pulgar; el resto vive en la hoja "Más" -->
 <nav class="bottom-nav">
-  <a class="bn-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Inicio</a>
+  <a class="bn-item active" data-sec="hoy"><i class="fas fa-house"></i> Hoy</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i><span class="bn-badge" id="nav-lead-count-m"></span> Leads</a>
   <a class="bn-item nav-marketing-ok nav-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
-  <a class="bn-item nav-asesor-only" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor</a>
   <a class="bn-item nav-marketing-ok nav-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
-  <a class="bn-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok" id="bn-more"><i class="fas fa-ellipsis"></i> Más</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok" id="bn-more"><i class="fas fa-user"></i> Yo</a>
 </nav>
 
 <!-- Hoja "Más" (móvil) — resto de secciones, filtradas por rol igual que el sidebar -->
 <div class="sheet-bg" id="sheet-bg"></div>
 <div class="sheet" id="more-sheet">
   <div class="sheet-handle"></div>
-  <div class="sheet-title">Más opciones</div>
+  <div class="sheet-title">Yo</div>
   <a class="sheet-perfil-card nav-marketing-ok nav-boleteria-ok" id="sheet-item-perfil">
     <div class="avatar" id="side-avatar-m">·</div>
     <div style="flex:1;text-align:left"><div class="un" id="side-un-m">—</div><div class="ue" id="side-ue-m">—</div></div>
@@ -1823,9 +1878,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <button onclick="activarRecordatorios()">Activar</button>
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
+  <a class="sheet-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
+  <a class="sheet-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
-  <a class="sheet-item nav-asesor-hide" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
   <a class="sheet-item" data-sec="buscar-tarifario"><i class="fas fa-magnifying-glass"></i> Buscar Tarifario</a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
@@ -1839,6 +1895,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <a class="sheet-item nav-admin-only solo-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
   <a class="sheet-item nav-boleteria-ok solo-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" id="sheet-item-tutorial"><i class="fas fa-circle-question"></i> Tutorial</a>
+  <a class="sheet-item" id="sheet-item-logout" style="color:#ff6b6b"><i class="fas fa-right-from-bracket"></i> Cerrar sesión</a>
 </div>
 
 <!-- Tutorial: menú de capítulos -->

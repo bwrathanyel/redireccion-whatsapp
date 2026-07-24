@@ -55,7 +55,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], 'leads-colaboraciones': ['Leads Colaboraciones', 'Leads de campañas de colaboración paga -- van directo al WhatsApp del colaborador'], 'leads-fallidos': ['Leads Fallidos', 'Leads que el bot no pudo registrar automáticamente'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'] };
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], 'leads-colaboraciones': ['Leads Colaboraciones', 'Leads de campañas de colaboración paga -- van directo al WhatsApp del colaborador'], 'leads-fallidos': ['Leads Fallidos', 'Leads que el bot no pudo registrar automáticamente'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
@@ -769,23 +769,29 @@ async function startApp() {
   setupRedes();
   setupPostventa();
   setupTutorial();
+  setupHoy();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
   if (ROL === 'boleteria') { activateSection('mensajes'); return; }
   // Restaura la última sección visitada por este usuario (admin/asesor,
   // ver guardarUltimaSeccion) -- marketing/boleteria arriba se quedan
-  // siempre en su única sección fija, no aplica.
+  // siempre en su única sección fija, no aplica. En mobile el punto de
+  // entrada por default pasa a ser 'hoy' (bottom-nav de 5 zonas); desktop
+  // sigue entrando por leads/dashboard como siempre, sin cambios.
+  const esMobile = window.matchMedia('(max-width:760px)').matches;
   const seccionGuardada = MI_PREFERENCIAS.ultima_seccion;
   const seccionValida = seccionGuardada && document.getElementById('sec-' + seccionGuardada);
   if (ROL === 'asesor') {
-    const destino = seccionValida ? seccionGuardada : 'leads';
+    const destino = seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'leads');
     activateSection(destino);
     // Si el destino restaurado no es 'leads', activateSection no dispara
-    // loadInboxLeads() -- hace falta igual para el badge de pendientes.
+    // loadInboxLeads() -- hace falta igual para el badge de pendientes
+    // (y 'hoy' además la necesita para su lista "Necesitan tu atención").
     if (destino !== 'leads') loadInboxLeads();
   }
   await loadStats();
   ACTIVOS = Object.keys(STATS.by_advisor || {});
-  if (ROL === 'admin') activateSection(seccionValida ? seccionGuardada : 'dashboard');
+  if (ROL === 'admin') activateSection(seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'dashboard'));
+  renderHoy();
   renderAll();
   setupFilters();
   await loadTable();
@@ -1282,6 +1288,10 @@ async function loadTable() {
       e.stopPropagation();
       moverEstadoLead(data[i], Number(btn.dataset.dir));
     }));
+    el.querySelector('[data-atender-id]')?.addEventListener('click', e => {
+      e.stopPropagation();
+      atenderInboxLead(data[i]);
+    });
   });
   wireLeadChecks();
   document.querySelectorAll('.solo-admin-borrar').forEach(el => el.style.display = ROL === 'admin' ? '' : 'none');
@@ -1314,6 +1324,11 @@ function leadCardHtml(l) {
   const detalle = leadsView === 'fichas' ? `
     <div class="ec-row"><i class="fas fa-comment-dots"></i> ${esc(l.destino_consulta || 'Sin consulta registrada')}</div>
     <div class="ec-row"><i class="fas fa-users"></i> ${esc(l.personas || '—')} persona(s)</div>` : '';
+  // "Sin atender"/"Atender" -- Fase 2 (Leads unificado), SOLO mobile: en
+  // desktop la tabla/tarjetas siguen exactamente igual que hoy (el inbox
+  // separado de arriba sigue siendo la señal de "sin atender" ahí).
+  const esMobile = window.matchMedia('(max-width:760px)').matches;
+  const sinAtender = esMobile && l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
   return `<div class="entity-card" style="position:relative">
     <input type="checkbox" class="lead-check solo-admin-borrar" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''} style="position:absolute;top:10px;right:10px;width:18px;height:18px">
     <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}</div></div>
@@ -1324,13 +1339,14 @@ function leadCardHtml(l) {
     ${detalle}
     <div class="ec-foot">
       <span class="chip ${cc}">${esc(l.canal)}</span>
-      <span class="estado-stepper" data-id="${l.id}">
+      ${sinAtender ? `<span class="badge-st" style="color:var(--accent);background:var(--accent-soft)">Sin atender</span>` : `<span class="estado-stepper" data-id="${l.id}">
         <button type="button" class="estado-arrow" data-dir="-1" title="Estado anterior" aria-label="Estado anterior"><i class="fas fa-chevron-left"></i></button>
         <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${esc(niceEstado(l.estado))}</span>
         <button type="button" class="estado-arrow" data-dir="1" title="Siguiente estado" aria-label="Siguiente estado"><i class="fas fa-chevron-right"></i></button>
-      </span>
+      </span>`}
       ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
     </div>
+    ${sinAtender ? `<button type="button" class="inbox-btn atender" style="width:100%;margin-top:9px" data-atender-id="${l.id}"><i class="fas fa-check"></i> Atender</button>` : ''}
   </div>`;
 }
 // Flechitas del stepper de estado en la ficha del lead -- avanza/retrocede
@@ -1373,6 +1389,7 @@ async function loadInboxLeads() {
   if (error) { console.error('inbox', error); errToast('No se pudo cargar el inbox de leads'); return; }
   INBOX_LEADS = data || [];
   renderInbox();
+  renderHoyAsesor();
 }
 function renderInbox() {
   const grid = document.getElementById('inbox-grid'), empty = document.getElementById('inbox-empty');
@@ -1419,6 +1436,62 @@ async function atenderInboxLead(l) {
   if (wa && !winRef) linkToast(`El navegador bloqueó la apertura automática -- <a href="https://wa.me/${wa}" target="_blank" rel="noopener">tocá acá para abrir WhatsApp</a>`);
   loadTable();
 }
+
+/* ---------- Hoy (mobile-only, punto de entrada del bottom-nav) ----------
+   Reusa datos/renderers que ya existen (INBOX_LEADS+inboxCardHtml del inbox
+   de leads, STATS del dashboard, renderPipe del embudo) -- no duplica lógica
+   de negocio, solo arma una vista resumen. Desktop nunca entra a 'hoy'
+   (sidebar sigue apuntando a dashboard/leads como siempre). */
+function renderHoy() {
+  if (!document.getElementById('sec-hoy')) return;
+  const esAsesor = ROL === 'asesor';
+  document.getElementById('hoy-asesor').style.display = esAsesor ? '' : 'none';
+  document.getElementById('hoy-admin').style.display = esAsesor ? 'none' : '';
+  if (esAsesor) renderHoyAsesor(); else renderHoyAdmin();
+}
+function renderHoyAsesor() {
+  const saludo = document.getElementById('hoy-saludo');
+  if (!saludo) return; // sec-hoy no montada todavía
+  saludo.textContent = 'Buen día' + (MI_NOMBRE ? ', ' + MI_NOMBRE.split(' ')[0] : '');
+  document.getElementById('hoy-resumen').textContent = `${INBOX_LEADS.length} lead(s) esperan respuesta`;
+  document.getElementById('hoy-urgent-count').textContent = INBOX_LEADS.length;
+  const box = document.getElementById('hoy-urgent');
+  const top = INBOX_LEADS.slice(0, 4);
+  box.innerHTML = top.length ? top.map(inboxCardHtml).join('')
+    : '<div class="tbl-state show"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tenés leads nuevos esperando respuesta</div></div>';
+  [...box.querySelectorAll('.inbox-card')].forEach((el, i) => {
+    const l = top[i];
+    el.addEventListener('click', () => openDrawer(l));
+    el.querySelector('.inbox-btn.atender').addEventListener('click', e => { e.stopPropagation(); atenderInboxLead(l); });
+    el.querySelector('.inbox-btn.nopuedo').addEventListener('click', e => { e.stopPropagation(); noPuedoInboxLead(l); });
+    el.querySelector('.inbox-btn.avisar').addEventListener('click', e => { e.stopPropagation(); abrirAvisarTelefono(l); });
+  });
+  const stats = document.getElementById('hoy-stats');
+  if (STATS && Object.keys(STATS).length) {
+    const cards = [
+      { t: 'Por atender', v: fmt(STATS.por_atender), i: 'fa-bell', c: 'var(--amber)' },
+      { t: 'Nuevos este mes', v: fmt(STATS.mes_actual), i: 'fa-bolt', c: 'var(--green)' },
+      { t: 'Leads totales', v: fmt(STATS.total), i: 'fa-users', c: 'var(--accent)' },
+    ];
+    stats.innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  }
+}
+function renderHoyAdmin() {
+  if (!STATS || !Object.keys(STATS).length) return; // loadStats todavía no resolvió
+  renderPipe('hoy-pipe');
+  const cards = [
+    { t: 'Leads en 2026', v: fmt(STATS.anio_actual), i: 'fa-calendar-day', c: 'var(--blue)' },
+    { t: 'Nuevos este mes', v: fmt(STATS.mes_actual), i: 'fa-bolt', c: 'var(--green)' },
+    { t: 'Por atender', v: fmt(STATS.por_atender), i: 'fa-bell', c: 'var(--amber)' },
+    { t: 'Vouchers este mes', v: fmt(STATS.vouchers_mes || 0), i: 'fa-file-invoice', c: 'var(--purple)' },
+  ];
+  document.getElementById('hoy-kpis').innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+}
+function setupHoy() {
+  document.getElementById('hoy-nuevo-lead-btn')?.addEventListener('click', () => document.getElementById('nl-abrir-btn')?.click());
+  document.getElementById('hoy-cotizador-btn')?.addEventListener('click', () => activateSection('cotizador'));
+  document.getElementById('hoy-ver-dashboard-btn')?.addEventListener('click', () => activateSection('dashboard'));
+}
 async function sugerirRespuestaLead(l) {
   const box = document.getElementById('sugerir-box'), loading = document.getElementById('sugerir-loading'),
     err = document.getElementById('sugerir-error'), texto = document.getElementById('sugerir-texto'),
@@ -1455,6 +1528,7 @@ async function noPuedoInboxLead(l) {
 function quitarDeInbox(leadId) {
   INBOX_LEADS = INBOX_LEADS.filter(x => x.id !== leadId);
   renderInbox();
+  renderHoyAsesor();
 }
 function abrirAvisarTelefono(l) {
   INBOX_TEL_LEAD_ID = l.id;
@@ -1494,13 +1568,24 @@ function actualizarBadgeLeads(pendientes) {
 /* ---------- Drawer editable ---------- */
 function openDrawer(l) {
   currentLead = l;
+  CONV_CACHE = null; ACTIVIDAD_CACHE = null; // se recargan por lead, ver cargarConversacionLead/cargarActividadLead
   const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
   const av = clientAvatar(l);
+  const sinAtender = l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
   const opt = (arr, sel) => arr.map(v => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(niceEstado(v))}</option>`).join('');
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div><div class="dn">${esc(l.nombre)}</div>
       <div class="dm">${esc(l.telefono) || 'Sin teléfono'} · ${esc(l.canal)}</div></div></div>
 
+    <div class="lead-tabs">
+      <button type="button" class="lead-tab-btn active" data-tab="resumen">Resumen</button>
+      <button type="button" class="lead-tab-btn" data-tab="conversacion">Conversación</button>
+      <button type="button" class="lead-tab-btn" data-tab="actividad">Actividad</button>
+    </div>
+
+    ${sinAtender ? `<button type="button" class="inbox-btn atender" id="e-a-atender" style="width:100%;margin-bottom:14px"><i class="fas fa-check"></i> Atender este lead</button>` : ''}
+
+    <div class="lead-tab-panel active" data-tab="resumen">
     <div class="edit-box">
       <div class="eb-title"><i class="fas fa-sliders"></i> Gestión</div>
       <label class="fl">Estado</label>
@@ -1556,16 +1641,71 @@ function openDrawer(l) {
       <pre id="sugerir-texto" style="display:none;white-space:pre-wrap;font-family:inherit;font-size:13.5px;line-height:1.5;background:var(--bg2, #f5f5f7);padding:10px;border-radius:8px;margin:8px 0"></pre>
       <button class="dbtn save" id="sugerir-copiar" type="button" style="display:none"><i class="fas fa-copy"></i> Copiar</button>
     </div>
-    <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">ID: ${esc(l.external_id || l.id)}</div>`;
+    <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">ID: ${esc(l.external_id || l.id)}</div>
+    </div>
+
+    <div class="lead-tab-panel" data-tab="conversacion">
+      <div style="font-size:11px;color:var(--muted2);background:rgba(255,255,255,.03);border-radius:10px;padding:9px 11px;margin-bottom:12px;line-height:1.5">
+        <i class="fas fa-paperclip"></i> Extracto de la conversación gestionada por la IA en ${esc(l.canal || 'el canal')} (ManyChat) — solo lectura.
+      </div>
+      <div id="conv-body"><i class="fas fa-circle-notch fa-spin"></i> Cargando conversación...</div>
+    </div>
+
+    <div class="lead-tab-panel" data-tab="actividad">
+      <div id="act-body"><i class="fas fa-circle-notch fa-spin"></i> Cargando actividad...</div>
+    </div>`;
 
   document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', e.target.value === VENTA);
   document.getElementById('e-save').onclick = guardarLead;
   document.getElementById('e-a-extractor').onclick = () => irAExtractor(l);
   document.getElementById('e-a-sugerir').onclick = () => sugerirRespuestaLead(l);
   if (ROL === 'admin') document.getElementById('e-a-eliminar').onclick = () => abrirConfirmarEliminar('single');
+  document.getElementById('e-a-atender')?.addEventListener('click', () => atenderInboxLead(l));
+  document.querySelectorAll('.lead-tab-btn').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.lead-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.lead-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === btn.dataset.tab));
+    if (btn.dataset.tab === 'conversacion') cargarConversacionLead(l);
+    if (btn.dataset.tab === 'actividad') cargarActividadLead(l);
+  }));
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
+}
+
+/* ---------- Conversación/Actividad del registro de lead (Fase 3, tabs
+   mobile-only -- ver .lead-tabs en el CSS). Carga perezosa: solo se pide al
+   backend la primera vez que se toca cada pestaña (en desktop, sin tab bar
+   visible, nunca se llega a llamar esto). ---------- */
+let CONV_CACHE = null, ACTIVIDAD_CACHE = null;
+async function cargarConversacionLead(l) {
+  const box = document.getElementById('conv-body');
+  if (!box) return;
+  if (CONV_CACHE) { box.innerHTML = CONV_CACHE; return; }
+  const { data, error } = await sb.from('manychat_ia_sesiones').select('historial').eq('lead_id', l.id).order('updated_at', { ascending: false }).limit(1);
+  if (error) { box.innerHTML = '<div class="muted">No se pudo cargar la conversación</div>'; return; }
+  const historial = data?.[0]?.historial || [];
+  if (!historial.length) { CONV_CACHE = '<div class="muted">Sin conversación registrada con la IA para este lead</div>'; box.innerHTML = CONV_CACHE; return; }
+  CONV_CACHE = historial.map(m => `<div class="conv-msg ${m.rol === 'ia' ? 'ia' : 'lead'}"><div class="conv-who">${m.rol === 'ia' ? 'Lotus IA' : 'Cliente'}</div>${esc(m.texto)}</div>`).join('');
+  box.innerHTML = CONV_CACHE;
+}
+async function cargarActividadLead(l) {
+  const box = document.getElementById('act-body');
+  if (!box) return;
+  if (ACTIVIDAD_CACHE) { box.innerHTML = ACTIVIDAD_CACHE; return; }
+  const [eventos, reasignaciones] = await Promise.all([
+    sb.from('lead_eventos').select('tipo,estado_de,estado_a,asesor,created_at').eq('lead_id', l.id).order('created_at', { ascending: false }),
+    sb.from('reasignaciones').select('asesor_anterior,asesor_nuevo,motivo,created_at').eq('lead_id', l.id).order('created_at', { ascending: false }),
+  ]);
+  const filas = [
+    ...(eventos.data || []).map(e => ({ hora: e.created_at, texto: `${e.asesor ? esc(e.asesor) + ': ' : ''}cambió de <b>${esc(niceEstado(e.estado_de))}</b> a <b>${esc(niceEstado(e.estado_a))}</b>` })),
+    // reasignaciones: RLS es admin-only -- para asesor esta consulta vuelve
+    // vacía en silencio (no es un error), la Actividad les queda sin este
+    // renglón, comportamiento esperado del modelo de permisos actual.
+    ...(reasignaciones.data || []).map(r => ({ hora: r.created_at, texto: `Reasignado de <b>${esc(r.asesor_anterior || '—')}</b> a <b>${esc(r.asesor_nuevo || 'sin asignar')}</b> (${esc(r.motivo)})` })),
+    { hora: l.fecha_creacion, texto: 'Lead creado' },
+  ].filter(f => f.hora).sort((a, b) => new Date(b.hora) - new Date(a.hora));
+  ACTIVIDAD_CACHE = filas.map(f => `<div class="act-row"><div class="act-txt">${f.texto}</div><div class="act-hora">${esc(fmtFechaHoraCaracas(f.hora))}</div></div>`).join('');
+  box.innerHTML = ACTIVIDAD_CACHE;
 }
 function abrirConfirmarEliminar(modo) {
   deleteMode = modo;
@@ -4104,7 +4244,7 @@ window.addEventListener('popstate', () => {
 });
 
 /* ---------- Nav ---------- */
-const BN_CORE_SECS = ['dashboard', 'leads', 'mensajes', 'extractor', 'tarifario', 'cotizador'];
+const BN_CORE_SECS = ['hoy', 'leads', 'mensajes', 'tarifario'];
 let currentSec = null;
 function activateSection(sec, fromNav) {
   if (currentSec === sec) return;
@@ -4113,11 +4253,10 @@ function activateSection(sec, fromNav) {
   currentSec = sec;
   guardarUltimaSeccion(sec);
   document.querySelectorAll('.nav-item,.bn-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
-  // 'extractor' es core (fila principal del bottom-nav) SOLO para rol asesor
-  // (ver .nav-asesor-only en el CSS) — para el resto se llega vía "Más", así
-  // que ahí sí tiene que marcarse "Más" como activo.
-  const esCoreParaEsteRol = BN_CORE_SECS.includes(sec) && (sec !== 'extractor' || ROL === 'asesor');
-  document.getElementById('bn-more')?.classList.toggle('active', !esCoreParaEsteRol);
+  // Todo lo que no es una de las 5 zonas fijas del bottom-nav se alcanza
+  // hoy vía la hoja "Yo" (id sigue siendo bn-more en el DOM) -- marcarla
+  // activa cuando la sección abierta no es una de esas 5.
+  document.getElementById('bn-more')?.classList.toggle('active', !BN_CORE_SECS.includes(sec));
   if (sheetAbierta) closeSheet(sheetAbierta, true);
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-' + sec).classList.add('active');
@@ -4136,6 +4275,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'asistencia') loadAsistencia();
   if (sec === 'postventa') loadPostventa();
   if (sec === 'informe-diario') loadInformeDiario();
+  if (sec === 'hoy') renderHoy();
   if (sec === 'leads') { if (ROL === 'asesor') loadInboxLeads(); iniciarPollLeads(); }
   if (sec === 'tarifario') loadTarifario();
   if (sec === 'mensajes') cargarBandeja();
@@ -4449,6 +4589,7 @@ function posicionarSpotlight(paso) {
 function setupTutorial() {
   document.getElementById('nav-tutorial')?.addEventListener('click', () => abrirMenuTutorial());
   document.getElementById('sheet-item-tutorial')?.addEventListener('click', () => { closeSheet('more-sheet', true); abrirMenuTutorial(); });
+  document.getElementById('sheet-item-logout')?.addEventListener('click', () => cerrarSesion());
   document.getElementById('tb-next').addEventListener('click', siguientePasoTour);
   document.getElementById('tb-back').addEventListener('click', pasoAnteriorTour);
   document.getElementById('tb-skip').addEventListener('click', () => volverAlMenuTutorial());
