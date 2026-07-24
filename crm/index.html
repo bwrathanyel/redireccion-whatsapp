@@ -131,6 +131,22 @@ body::before{content:'';position:fixed;inset:0;background:
 .asist-badge.on{background:rgba(16,185,129,.15);color:var(--green)}
 .asist-badge.off{background:rgba(239,68,68,.15);color:#ef4444}
 .btn-sm{background:var(--panel-solid);border:1px solid var(--line2);border-radius:8px;padding:6px 11px;font-size:11.5px;font-weight:600;color:var(--txt);cursor:pointer;font-family:inherit}
+.tareas-board{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px}
+@media(max-width:900px){.tareas-board{grid-template-columns:1fr}}
+.tareas-col-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;display:flex;align-items:center;gap:7px}
+.tareas-col-body{display:flex;flex-direction:column;gap:10px;min-height:40px}
+.tarea-card{background:var(--panel-solid);border:1px solid var(--line2);border-radius:14px;padding:14px}
+.tarea-card .tc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}
+.tarea-card .tc-titulo{font-weight:700;font-size:13.5px}
+.tarea-card .tc-venc{font-size:11.5px;color:var(--muted);margin-bottom:10px}
+.tarea-card .tc-venc.vencida{color:#ef4444;font-weight:700}
+.tarea-card .tc-actions{display:flex;gap:8px;flex-wrap:wrap}
+.chip-prioridad{font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;text-transform:uppercase}
+.chip-prioridad.baja{background:rgba(139,147,173,.15);color:var(--muted)}
+.chip-prioridad.media{background:rgba(59,130,246,.15);color:#3b82f6}
+.chip-prioridad.alta{background:rgba(245,158,11,.15);color:#f59e0b}
+.chip-prioridad.urgente{background:rgba(239,68,68,.15);color:#ef4444}
+.tareas-empty{color:var(--muted2);font-size:12.5px;text-align:center;padding:14px 0}
 .export-dd{position:relative;display:inline-block}
 .export-dd-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--bg2);border:1px solid var(--line2);border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.4);z-index:20;min-width:150px;overflow:hidden}
 .export-dd-menu.show{display:block}
@@ -785,6 +801,8 @@ input.ei[type=date]{color-scheme:dark}
 /* login */
 #login,#setup,#forgot,#marketing-placeholder,#claim-list,#claim-form{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 600px at 50% -10%,rgba(255,145,0,.14),transparent 60%),#080b16;padding:20px;overflow-y:auto}
 #login.show,#setup.show,#forgot.show,#marketing-placeholder.show,#claim-list.show,#claim-form.show{display:flex}
+#bloqueo-overlay{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;background:radial-gradient(1000px 600px at 50% -10%,rgba(239,68,68,.16),transparent 60%),#080b16;padding:20px}
+#bloqueo-overlay.show{display:flex}
 .claim-list-items{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;max-height:280px;overflow-y:auto}
 .claim-item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:12px;padding:12px 14px;cursor:pointer;transition:border-color .15s,box-shadow .15s;text-align:left}
 .claim-item:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -819,6 +837,8 @@ input.ei[type=date]{color-scheme:dark}
    accede a la sección equivalente desde su propio nav-item, no desde acá. */
 .nav-item.nav-asesor-only,.bn-item.nav-asesor-only,.sheet-item.nav-asesor-only{display:none}
 .rol-asesor .nav-item.nav-asesor-only,.rol-asesor .bn-item.nav-asesor-only,.rol-asesor .sheet-item.nav-asesor-only{display:flex}
+.nav-item.nav-freelancer-only,.sheet-item.nav-freelancer-only{display:none}
+.es-freelancer .nav-item.nav-freelancer-only,.es-freelancer .sheet-item.nav-freelancer-only{display:flex}
 
 /* Sidebar reordenable a mano (drag & drop, orden guardado por-usuario) */
 .sidebar-nav .nav-item{cursor:grab}
@@ -1059,6 +1079,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   </form>
 </div>
 
+<!-- Bloqueo por inactividad (freelancer) -- tapa toda la UI, sin botón de
+     cerrar, solo se oculta cuando un admin desbloquea (Realtime en usuarios). -->
+<div id="bloqueo-overlay">
+  <div class="login-card" style="text-align:center">
+    <i class="fas fa-lock" style="font-size:34px;color:#ff6b6b;margin-bottom:14px"></i>
+    <h1>Bloqueado por inactividad</h1>
+    <p>Pasaste 15 minutos sin actividad. Pedile a un admin que te desbloquee desde Freelancers para seguir.</p>
+  </div>
+</div>
+
 <div id="setup">
   <form id="setupForm" class="login-card">
     <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
@@ -1130,6 +1160,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <nav class="sidebar-nav" id="sidebar-nav">
       <div class="nav-label" data-label="principal">Principal</div>
       <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
+      <a class="nav-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas <span class="badge" id="nav-tareas-count" style="display:none">0</span></a>
+      <a class="nav-item nav-admin-only" data-sec="freelancers"><i class="fas fa-user-shield"></i> Freelancers</a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
       <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
       <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
@@ -1344,6 +1376,25 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <button class="pv-stage" data-etapa="CERRADO">Cerrados</button>
       </div>
       <div class="pv-grid" id="pv-grid"><div class="pv-empty"><i class="fas fa-circle-notch fa-spin"></i>Cargando postventa...</div></div>
+    </section>
+
+    <!-- TAREAS (freelancer) -->
+    <section class="section" id="sec-tareas">
+      <div class="kpis" id="tareas-resumen"></div>
+      <div class="tareas-board" id="tareas-board">
+        <div class="tareas-col">
+          <div class="tareas-col-title"><i class="fas fa-bolt"></i> Hoy / Urgente</div>
+          <div class="tareas-col-body" id="tareas-col-urgente"></div>
+        </div>
+        <div class="tareas-col">
+          <div class="tareas-col-title"><i class="fas fa-calendar"></i> Próximas</div>
+          <div class="tareas-col-body" id="tareas-col-proximas"></div>
+        </div>
+        <div class="tareas-col">
+          <div class="tareas-col-title"><i class="fas fa-hourglass-half"></i> Esperando</div>
+          <div class="tareas-col-body" id="tareas-col-esperando"></div>
+        </div>
+      </div>
     </section>
 
     <!-- TARIFARIO -->
@@ -1589,6 +1640,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <div class="chead-row">
             <h2><i class="fas fa-file-invoice-dollar"></i> Ventas</h2>
             <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="fact-ventas-search" placeholder="Buscar cliente o asesor..."></div>
+            <button class="btn-sm" id="fact-nuevo-cliente-btn"><i class="fas fa-user-plus"></i> Nuevo cliente</button>
             <div class="export-dd">
               <button class="btn-sm" onclick="toggleExportMenu(event,'ventas')"><i class="fas fa-download"></i> Exportar tabla</button>
               <div class="export-dd-menu" id="export-menu-ventas">
@@ -1740,6 +1792,125 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div style="display:flex;gap:10px;padding:0 6px">
         <button class="dbtn" id="monto-sheet-cancelar" type="button" style="flex:1">Cancelar</button>
         <button class="dbtn save" id="monto-sheet-confirmar" type="button" style="flex:1">Guardar</button>
+      </div>
+    </div>
+
+    <!-- Hoja: reportar problema en una tarea. Reportar no resta nada -- no
+         genera strike, sirve para destrabarte antes (ver filosofía en
+         docs/superpowers/specs/2026-07-24-freelancers-tareas-design.md). -->
+    <div class="sheet" id="reporte-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Reportar un problema</div>
+      <div style="padding:4px 6px 14px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Reportar no te resta nada. Sirve para que te destraben antes.</div>
+        <label class="fl">Motivo</label>
+        <select class="ei" id="reporte-motivo">
+          <option value="bloqueado_por_terceros">Depende de un tercero</option>
+          <option value="falta_info">Me falta información</option>
+          <option value="sobrecarga">Tengo demasiadas tareas encima</option>
+          <option value="problema_tecnico">Problema técnico</option>
+          <option value="otro">Otro</option>
+        </select>
+        <label class="fl" style="margin-top:10px">Contanos qué pasó</label>
+        <textarea class="ei" id="reporte-descripcion" rows="3" placeholder="Opcional"></textarea>
+        <div class="edit-err" id="reporte-error"></div>
+      </div>
+      <div style="display:flex;gap:10px;padding:0 6px">
+        <button class="dbtn" id="reporte-cancelar" type="button" style="flex:1">Cancelar</button>
+        <button class="dbtn save" id="reporte-confirmar" type="button" style="flex:1">Enviar</button>
+      </div>
+    </div>
+
+    <!-- FREELANCERS (admin) -->
+    <section class="section" id="sec-freelancers">
+      <div class="seg-group" id="frl-tabs">
+        <button class="seg on" data-frl-tab="equipo">Equipo</button>
+        <button class="seg" data-frl-tab="tareas">Tareas</button>
+      </div>
+
+      <div class="frl-tab-panel" data-frl-panel="equipo">
+        <div class="card">
+          <div class="chead-row">
+            <h2><i class="fas fa-user-shield"></i> Freelancers</h2>
+            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="frl-search" placeholder="Buscar nombre..."></div>
+          </div>
+          <div class="csub">Jornadas, strikes y carga de leads de cada freelancer</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr>
+                <th>Nombre</th><th>Estado</th><th>Strikes</th><th>Última conexión</th>
+                <th>Conectado hoy</th><th>Leads asignados</th><th>Leads atendidos</th><th></th>
+              </tr></thead>
+              <tbody id="frl-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="frl-tab-panel" data-frl-panel="tareas" style="display:none">
+        <div class="card">
+          <div class="chead-row">
+            <h2><i class="fas fa-flag"></i> Reportes abiertos</h2>
+          </div>
+          <div class="csub">Pedidos de ayuda esperando respuesta -- atender primero</div>
+          <div id="frl-reportes-abiertos"></div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <div class="chead-row">
+            <h2><i class="fas fa-list-check"></i> Todas las tareas</h2>
+            <button class="btn-sm" onclick="abrirNuevaTareaUI()"><i class="fas fa-plus"></i> Nueva tarea</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <select class="flt" id="frl-tareas-freelancer"><option value="">Todos los freelancers</option></select>
+            <select class="flt" id="frl-tareas-estado">
+              <option value="">Todos los estados</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="en_proceso">En proceso</option>
+              <option value="bloqueada">Bloqueada</option>
+              <option value="en_revision">En revisión</option>
+              <option value="completada">Completada</option>
+              <option value="cerrada">Cerrada</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Freelancer</th><th>Título</th><th>Prioridad</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
+              <tbody id="frl-tareas-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hoja: nueva tarea (admin, dentro de Freelancers) -->
+    <div class="sheet" id="nueva-tarea-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Nueva tarea</div>
+      <div style="padding:4px 6px 14px">
+        <label class="fl">Freelancer</label>
+        <select class="ei" id="nt-freelancer"></select>
+        <label class="fl" style="margin-top:10px">Título</label>
+        <input class="ei" id="nt-titulo" type="text" placeholder="Ej. Publicar promo de fin de semana">
+        <label class="fl" style="margin-top:10px">Descripción</label>
+        <textarea class="ei" id="nt-descripcion" rows="3" placeholder="Opcional"></textarea>
+        <label class="fl" style="margin-top:10px">Prioridad</label>
+        <select class="ei" id="nt-prioridad">
+          <option value="baja">Baja</option>
+          <option value="media" selected>Media</option>
+          <option value="alta">Alta</option>
+          <option value="urgente">Urgente</option>
+        </select>
+        <label class="fl" style="margin-top:10px">Vence</label>
+        <input class="ei" id="nt-vence" type="datetime-local">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px">
+          <input type="checkbox" id="nt-requiere-evidencia"> Requiere evidencia para pasar a revisión
+        </label>
+        <div class="edit-err" id="nt-error"></div>
+      </div>
+      <div style="display:flex;gap:10px;padding:0 6px">
+        <button class="dbtn" id="nt-cancelar" type="button" style="flex:1">Cancelar</button>
+        <button class="dbtn save" id="nt-confirmar" type="button" style="flex:1">Crear</button>
       </div>
     </div>
 
@@ -1987,6 +2158,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
     <div class="foot-note">Datos reales · Destino y Eventos Lotus 360 CRM</div>
   </main>
+  <!-- Fondos de sheet/drawer viven ACÁ ADENTRO de .app (no como hermanos de
+       body) a propósito -- .app tiene isolation:isolate (línea ~963), que le
+       crea su propio stacking context. Si un fondo quedara afuera de .app,
+       su z-index compite en el nivel de <body> y le gana a CUALQUIER
+       .sheet/.drawer de adentro sin importar su z-index (71 > 70 nunca
+       importa si están en contextos de stacking distintos) -- el fondo tapa
+       el click aunque se vea bien pintado encima. Bug real encontrado
+       2026-07-24 con el sheet "Nueva tarea" de Freelancers, pre-existente
+       desde el 2026-07-15 (commit 320dd344), afectaba a TODOS los sheets. -->
+  <div class="sheet-bg" id="sheet-bg"></div>
+  <div class="drawer-bg" id="drawerBg"></div>
 </div>
 
 <!-- Bottom nav (móvil) — máximo 5 ítems para que sea cómodo con el pulgar; el resto vive en la hoja "Más" -->
@@ -1999,7 +2181,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 </nav>
 
 <!-- Hoja "Más" (móvil) — resto de secciones, filtradas por rol igual que el sidebar -->
-<div class="sheet-bg" id="sheet-bg"></div>
 <div class="sheet" id="more-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title">Yo</div>
@@ -2018,6 +2199,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <button onclick="activarRecordatorios()">Activar</button>
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
+  <a class="sheet-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas</a>
+  <a class="sheet-item nav-admin-only" data-sec="freelancers"><i class="fas fa-user-shield"></i> Freelancers</a>
   <a class="sheet-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
   <a class="sheet-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
@@ -2175,7 +2358,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <div id="toasts"></div>
 
 <!-- Drawer -->
-<div class="drawer-bg" id="drawerBg"></div>
 <aside class="drawer" id="drawer">
   <button class="dclose" id="dClose" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times"></i></button>
   <div id="drawerContent"></div>

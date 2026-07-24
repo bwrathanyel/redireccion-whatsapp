@@ -55,7 +55,8 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], 'leads-colaboraciones': ['Leads Colaboraciones', 'Leads de campañas de colaboración paga -- van directo al WhatsApp del colaborador'], 'leads-fallidos': ['Leads Fallidos', 'Leads que el bot no pudo registrar automáticamente'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'] };
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], 'leads-colaboraciones': ['Leads Colaboraciones', 'Leads de campañas de colaboración paga -- van directo al WhatsApp del colaborador'], 'leads-fallidos': ['Leads Fallidos', 'Leads que el bot no pudo registrar automáticamente'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
+  tareas: ['Tareas', 'Tus tareas activas'], freelancers: ['Freelancers', 'Jornadas, tareas y cumplimiento del equipo freelancer'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
@@ -119,7 +120,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false;
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false;
 const overlay = id => document.getElementById(id);
 const showOverlay = id => { OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
 // Se recarga cada vez que se muestra el login (no solo una vez al abrir la
@@ -142,7 +143,7 @@ async function initAuth() {
 
 async function cargarUsuario() {
   const { data: { user } } = await sb.auth.getUser();
-  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario').eq('id', user?.id).single();
+  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,es_freelancer,bloqueado').eq('id', user?.id).single();
   if (error || !data) {
     await sb.auth.signOut();
     showOverlay('login');
@@ -157,6 +158,7 @@ async function afterLogin() {
   if (!u) return;
   MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
   MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
+  MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado;
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   entrarSegunRol();
 }
@@ -165,6 +167,7 @@ function entrarSegunRol() {
   document.body.classList.toggle('rol-asesor', ROL === 'asesor');
   document.body.classList.toggle('rol-marketing', ROL === 'marketing');
   document.body.classList.toggle('rol-boleteria', ROL === 'boleteria');
+  document.body.classList.toggle('es-freelancer', MI_ES_FREELANCER);
   overlay('login').classList.remove('show');
   overlay('setup').classList.remove('show');
   const rolLabelUi = ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : 'Asesor comercial';
@@ -183,6 +186,11 @@ function entrarSegunRol() {
   renderJornadaUI();
   handleCheckIn();
   startApp();
+  if (MI_ES_FREELANCER) {
+    setupHeartbeatFreelancer();
+    subscribeMiUsuarioLive();
+    if (MI_BLOQUEADO) mostrarBloqueoOverlay();
+  }
   renderRecordatoriosUI();
   manejarDeepLinkAsistencia();
   // Antes de manejarDeepLinkSeccion: ese maneja "?ir=leads" con un
@@ -338,6 +346,275 @@ async function subirAvatar(file) {
     const vieja = avatarViejo.split('/avatares/')[1];
     if (vieja) sb.storage.from('avatares').remove([vieja]);
   }
+}
+
+/* ---------- Freelancer: heartbeat + bloqueo por inactividad ----------
+   Solo corre si MI_ES_FREELANCER -- un asesor normal nunca manda heartbeat
+   ni puede quedar bloqueado, el cron del servidor (cron_bloquear_
+   freelancers_inactivos) solo mira usuarios con es_freelancer=true. */
+let ultimoHeartbeat = 0;
+function setupHeartbeatFreelancer() {
+  const enviar = () => {
+    if (!MI_ES_FREELANCER || !JORNADA_ACTIVA || MI_BLOQUEADO) return;
+    const ahora = Date.now();
+    if (ahora - ultimoHeartbeat < 20000) return;
+    ultimoHeartbeat = ahora;
+    sb.rpc('registrar_actividad'); // fire-and-forget, no bloquea la UI
+  };
+  ['mousemove', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, enviar, { passive: true }));
+}
+function subscribeMiUsuarioLive() {
+  sb.channel('mi-usuario-live')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'usuarios', filter: `id=eq.${MI_USUARIO_ID}` }, payload => {
+      MI_BLOQUEADO = !!payload.new.bloqueado;
+      MI_BLOQUEADO ? mostrarBloqueoOverlay() : ocultarBloqueoOverlay();
+    })
+    .subscribe();
+}
+function mostrarBloqueoOverlay() {
+  document.getElementById('bloqueo-overlay')?.classList.add('show');
+}
+function ocultarBloqueoOverlay() {
+  document.getElementById('bloqueo-overlay')?.classList.remove('show');
+}
+
+/* ---------- Tareas (freelancer) ----------
+   Tablero de 3 columnas sobre listar_mis_tareas() -- filosofía del spec:
+   un clic para avanzar, reportar problema siempre visible y nunca genera
+   strike, mismo dato que ve el admin sobre uno (transparencia). */
+let TAREAS_CACHE = [], REPORTE_TASK_ID = null;
+function tiempoRelativoTarea(iso) {
+  if (!iso) return null;
+  const diffMs = new Date(iso).getTime() - Date.now();
+  const abs = Math.abs(diffMs);
+  const horas = abs / 3600000;
+  let texto;
+  if (horas < 1) texto = Math.round(abs / 60000) + ' min';
+  else if (horas < 24) texto = Math.round(horas) + 'h';
+  else texto = Math.round(horas / 24) + 'd';
+  return diffMs < 0 ? `vencida hace ${texto}` : `vence en ${texto}`;
+}
+async function loadTareas() {
+  const { data, error } = await sb.rpc('listar_mis_tareas');
+  if (error) { errToast('No se pudieron cargar tus tareas'); return; }
+  TAREAS_CACHE = data || [];
+  renderTareas();
+}
+function renderTareas() {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const urgente = [], proximas = [], esperando = [];
+  TAREAS_CACHE.forEach(t => {
+    if (['bloqueada', 'en_revision'].includes(t.estado)) { esperando.push(t); return; }
+    const venceHoy = t.vence_at && t.vence_at.slice(0, 10) === hoy;
+    if (venceHoy || t.prioridad === 'urgente' || t.prioridad === 'alta') urgente.push(t); else proximas.push(t);
+  });
+  const orden = (a, b) => (a.vence_at || '9999') < (b.vence_at || '9999') ? -1 : 1;
+  document.getElementById('tareas-col-urgente').innerHTML = tarjetasHtml(urgente.sort(orden));
+  document.getElementById('tareas-col-proximas').innerHTML = tarjetasHtml(proximas.sort(orden));
+  document.getElementById('tareas-col-esperando').innerHTML = tarjetasHtml(esperando.sort(orden));
+
+  const completadasSemana = TAREAS_CACHE.filter(t => t.estado === 'completada').length;
+  const aTiempo = TAREAS_CACHE.filter(t => t.estado === 'completada' && (!t.vence_at || new Date(t.completada_at) <= new Date(t.vence_at))).length;
+  document.getElementById('tareas-resumen').innerHTML = [
+    { t: 'Completadas', v: fmt(completadasSemana), i: 'fa-check', c: 'var(--green)' },
+    { t: 'A tiempo', v: fmt(aTiempo), i: 'fa-clock', c: 'var(--accent)' },
+    { t: 'En curso', v: fmt(TAREAS_CACHE.filter(t => t.estado === 'en_proceso').length), i: 'fa-spinner', c: 'var(--blue)' },
+    { t: 'Reportes abiertos', v: fmt(TAREAS_CACHE.filter(t => t.reporte_abierto).length), i: 'fa-flag', c: '#ef4444' },
+  ].map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+}
+function tarjetasHtml(filas) {
+  if (!filas.length) return '<div class="tareas-empty">Nada por acá</div>';
+  return filas.map(t => {
+    const venc = tiempoRelativoTarea(t.vence_at);
+    const vencida = venc && venc.startsWith('vencida');
+    const vaDirectoACompletada = t.auto_cierre && !t.requiere_evidencia;
+    const btnPrimario = t.estado === 'pendiente'
+      ? `<button class="btn-sm" onclick="cambiarEstadoTareaUI(${t.id},'en_proceso')">Empezar</button>`
+      : t.estado === 'en_proceso'
+      ? `<button class="btn-sm" onclick="cambiarEstadoTareaUI(${t.id},'${vaDirectoACompletada ? 'completada' : 'en_revision'}')">${vaDirectoACompletada ? 'Marcar completada' : 'Mandar a revisión'}</button>`
+      : t.estado === 'bloqueada'
+      ? `<button class="btn-sm" onclick="cambiarEstadoTareaUI(${t.id},'en_proceso')">Retomar</button>`
+      : '';
+    return `<div class="tarea-card" data-id="${t.id}">
+      <div class="tc-top"><span class="tc-titulo">${esc(t.titulo)}</span><span class="chip-prioridad ${esc(t.prioridad)}">${esc(t.prioridad)}</span></div>
+      ${t.descripcion ? `<div class="muted" style="font-size:12px;margin-bottom:8px">${esc(t.descripcion)}</div>` : ''}
+      ${venc ? `<div class="tc-venc ${vencida ? 'vencida' : ''}">${esc(venc)}</div>` : ''}
+      ${t.reporte_abierto ? '<div class="tc-venc" style="color:#ef4444"><i class="fas fa-flag"></i> Reporte esperando respuesta</div>' : ''}
+      <div class="tc-actions">
+        ${btnPrimario}
+        ${!['completada', 'cerrada', 'cancelada'].includes(t.estado) ? `<button class="btn-sm" onclick="abrirReportarProblemaUI(${t.id})">Reportar problema</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+window.cambiarEstadoTareaUI = async (taskId, nuevoEstado) => {
+  const { data, error } = await sb.rpc('cambiar_estado_tarea', { p_task_id: taskId, p_nuevo_estado: nuevoEstado });
+  if (error || !data?.ok) { errToast('No se pudo actualizar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Actualizado');
+  loadTareas();
+};
+window.abrirReportarProblemaUI = (taskId) => {
+  REPORTE_TASK_ID = taskId;
+  document.getElementById('reporte-motivo').value = 'bloqueado_por_terceros';
+  document.getElementById('reporte-descripcion').value = '';
+  document.getElementById('reporte-error').textContent = '';
+  openSheet('reporte-sheet');
+};
+function setupTareas() {
+  document.getElementById('reporte-cancelar')?.addEventListener('click', () => closeSheet('reporte-sheet'));
+  document.getElementById('reporte-confirmar')?.addEventListener('click', async () => {
+    const motivo = val('reporte-motivo'), descripcion = val('reporte-descripcion');
+    const btn = document.getElementById('reporte-confirmar');
+    btn.disabled = true; const previo = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+    const { data, error } = await sb.rpc('reportar_problema_tarea', { p_task_id: REPORTE_TASK_ID, p_motivo: motivo, p_descripcion: descripcion || null });
+    btn.disabled = false; btn.innerHTML = previo;
+    if (error || !data?.ok) { document.getElementById('reporte-error').textContent = 'No se pudo enviar: ' + (error?.message || data?.error || ''); return; }
+    closeSheet('reporte-sheet');
+    okToast('Reporte enviado');
+    loadTareas();
+  });
+}
+
+/* ---------- Freelancers (admin) ----------
+   Pestaña "Equipo" (jornadas/strikes/leads, listar_freelancers) + pestaña
+   "Tareas" (tablero admin sobre listar_tareas_admin, cola de reportes
+   abiertos). Ver spec sección 8 -- frecuencia de reportes se muestra como
+   señal de diagnóstico, nunca como demérito. */
+let FRL_CACHE = [], FRL_TAREAS_CACHE = [], frlTab = 'equipo';
+function setupFreelancers() {
+  document.querySelectorAll('#frl-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
+    frlTab = btn.dataset.frlTab;
+    document.querySelectorAll('#frl-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
+    document.querySelectorAll('.frl-tab-panel').forEach(p => p.style.display = p.dataset.frlPanel === frlTab ? '' : 'none');
+    if (frlTab === 'tareas') loadTareasAdmin();
+  }));
+  document.getElementById('frl-search')?.addEventListener('input', renderFreelancersTabla);
+  document.getElementById('frl-tareas-freelancer')?.addEventListener('change', renderTareasAdminTabla);
+  document.getElementById('frl-tareas-estado')?.addEventListener('change', renderTareasAdminTabla);
+  document.getElementById('nt-cancelar')?.addEventListener('click', () => closeSheet('nueva-tarea-sheet'));
+  document.getElementById('nt-confirmar')?.addEventListener('click', confirmarNuevaTarea);
+}
+async function loadFreelancers() {
+  const { data, error } = await sb.rpc('listar_freelancers');
+  if (error) { errToast('No se pudieron cargar los freelancers'); return; }
+  FRL_CACHE = data || [];
+  renderFreelancersTabla();
+  const sel = document.getElementById('frl-tareas-freelancer');
+  if (sel) sel.innerHTML = '<option value="">Todos los freelancers</option>' + FRL_CACHE.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('');
+  const selNt = document.getElementById('nt-freelancer');
+  if (selNt) selNt.innerHTML = FRL_CACHE.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('');
+}
+function renderFreelancersTabla() {
+  const q = (val('frl-search') || '').toLowerCase();
+  const filas = FRL_CACHE.filter(f => !q || f.nombre.toLowerCase().includes(q));
+  document.getElementById('frl-tbody').innerHTML = filas.map(f => `
+    <tr>
+      <td>${esc(f.nombre)}</td>
+      <td>${f.bloqueado ? '<span class="asist-badge off">Bloqueado</span>' : f.conectado_ahora ? '<span class="asist-badge on">Conectado</span>' : '<span class="asist-badge">Desconectado</span>'}</td>
+      <td>${fmt(f.strikes)}</td>
+      <td class="muted">${f.ultima_conexion ? esc(fmtFechaHoraCaracas(f.ultima_conexion)) : '—'}</td>
+      <td>${Math.round((f.minutos_conectado_hoy || 0) / 60 * 10) / 10}h</td>
+      <td>${fmt(f.leads_asignados)}</td>
+      <td>${fmt(f.leads_atendidos)}</td>
+      <td style="display:flex;gap:6px">
+        ${f.bloqueado ? `<button class="btn-sm" onclick="desbloquearFreelancerUI('${f.id}')">Desbloquear</button>` : ''}
+        <button class="btn-sm" onclick="abrirDetalleFreelancerUI('${f.id}')">Ver detalle</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="8">Sin freelancers registrados</td></tr>';
+}
+window.desbloquearFreelancerUI = async (usuarioId) => {
+  const { data, error } = await sb.rpc('desbloquear_freelancer', { p_usuario_id: usuarioId });
+  if (error || !data?.ok) { errToast('No se pudo desbloquear: ' + (error?.message || data?.error || '')); return; }
+  okToast('Freelancer desbloqueado');
+  loadFreelancers();
+};
+window.abrirDetalleFreelancerUI = async (usuarioId) => {
+  const f = FRL_CACHE.find(x => x.id === usuarioId);
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="dhead"><div><div class="dn">${esc(f?.nombre || '')}</div><div class="dm">Historial de jornadas y strikes</div></div></div>
+    <div class="edit-box" style="margin-top:16px">
+      <div class="eb-title"><i class="fas fa-clock"></i> Jornadas</div>
+      <div id="frl-detalle-jornadas"><i class="fas fa-spinner fa-spin"></i></div>
+    </div>
+    <div class="edit-box" style="margin-top:16px">
+      <div class="eb-title"><i class="fas fa-triangle-exclamation"></i> Strikes</div>
+      <div id="frl-detalle-strikes"><i class="fas fa-spinner fa-spin"></i></div>
+    </div>`;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerBg').classList.add('open');
+  navPush({ type: 'drawer' });
+
+  const [{ data: sesiones }, { data: strikes }] = await Promise.all([
+    sb.from('agent_sessions').select('hora_entrada,hora_salida,estado_actual').eq('asesor_id', usuarioId).order('hora_entrada', { ascending: false }).limit(20),
+    sb.from('freelancer_strikes').select('creado_en,motivo,desbloqueado_en').eq('usuario_id', usuarioId).order('creado_en', { ascending: false }).limit(20),
+  ]);
+  document.getElementById('frl-detalle-jornadas').innerHTML = (sesiones || []).map(s => `
+    <div class="strike-row"><span>${esc(fmtFechaHoraCaracas(s.hora_entrada))}</span><span class="muted">${s.hora_salida ? esc(fmtFechaHoraCaracas(s.hora_salida)) : 'En curso'}</span></div>
+  `).join('') || '<div class="muted" style="font-size:12px">Sin jornadas registradas</div>';
+  document.getElementById('frl-detalle-strikes').innerHTML = (strikes || []).map(s => `
+    <div class="strike-row"><span>${esc(fmtFechaHoraCaracas(s.creado_en))}</span><span class="muted">${s.desbloqueado_en ? 'Desbloqueado' : 'Sigue bloqueado'}</span></div>
+  `).join('') || '<div class="muted" style="font-size:12px">Sin strikes -- ningún bloqueo por inactividad hasta ahora</div>';
+};
+async function loadTareasAdmin() {
+  const { data, error } = await sb.rpc('listar_tareas_admin', {
+    p_asesor_id: val('frl-tareas-freelancer') || null,
+    p_estado: val('frl-tareas-estado') || null,
+  });
+  if (error) { errToast('No se pudieron cargar las tareas'); return; }
+  FRL_TAREAS_CACHE = data || [];
+  renderTareasAdminTabla();
+  document.getElementById('frl-reportes-abiertos').innerHTML = FRL_TAREAS_CACHE.filter(t => t.reporte_abierto).map(t => `
+    <div class="strike-row"><span>${esc(t.asesor_nombre)} · ${esc(t.titulo)}</span><span class="chip-prioridad ${esc(t.prioridad)}">${esc(t.prioridad)}</span></div>
+  `).join('') || '<div class="muted" style="font-size:12px">Sin reportes abiertos</div>';
+}
+function renderTareasAdminTabla() {
+  const asesorSel = val('frl-tareas-freelancer'), estadoSel = val('frl-tareas-estado');
+  const filas = FRL_TAREAS_CACHE.filter(t =>
+    (!asesorSel || String(t.asesor_id) === asesorSel) && (!estadoSel || t.estado === estadoSel));
+  document.getElementById('frl-tareas-tbody').innerHTML = filas.map(t => `
+    <tr>
+      <td>${esc(t.asesor_nombre)}</td>
+      <td>${esc(t.titulo)}${t.reporte_abierto ? ' <i class="fas fa-flag" style="color:#ef4444" title="Reporte abierto"></i>' : ''}</td>
+      <td><span class="chip-prioridad ${esc(t.prioridad)}">${esc(t.prioridad)}</span></td>
+      <td><span class="chip">${esc(t.estado)}</span></td>
+      <td class="muted">${t.vence_at ? esc(fmtFechaHoraCaracas(t.vence_at)) : '—'}</td>
+      <td>${t.estado === 'en_revision' ? `<button class="btn-sm" onclick="aprobarTareaUI(${t.id})">Aprobar</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="6">Sin tareas</td></tr>';
+}
+window.aprobarTareaUI = async (taskId) => {
+  const { data, error } = await sb.rpc('cambiar_estado_tarea', { p_task_id: taskId, p_nuevo_estado: 'completada' });
+  if (error || !data?.ok) { errToast('No se pudo aprobar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Tarea aprobada');
+  loadTareasAdmin();
+};
+window.abrirNuevaTareaUI = () => {
+  document.getElementById('nt-titulo').value = '';
+  document.getElementById('nt-descripcion').value = '';
+  document.getElementById('nt-prioridad').value = 'media';
+  document.getElementById('nt-vence').value = '';
+  document.getElementById('nt-requiere-evidencia').checked = false;
+  document.getElementById('nt-error').textContent = '';
+  openSheet('nueva-tarea-sheet');
+};
+async function confirmarNuevaTarea() {
+  const err = document.getElementById('nt-error');
+  const titulo = val('nt-titulo');
+  if (!titulo || !titulo.trim()) { err.textContent = 'El título es obligatorio.'; return; }
+  const asesorId = val('nt-freelancer');
+  if (!asesorId) { err.textContent = 'Elegí un freelancer.'; return; }
+  const venceInput = val('nt-vence');
+  const btn = document.getElementById('nt-confirmar');
+  btn.disabled = true; const previo = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando...';
+  const { data, error } = await sb.rpc('crear_tarea', {
+    p_asesor_id: asesorId, p_titulo: titulo.trim(), p_descripcion: val('nt-descripcion') || null,
+    p_prioridad: val('nt-prioridad'), p_vence_at: venceInput ? new Date(venceInput).toISOString() : null,
+    p_requiere_evidencia: document.getElementById('nt-requiere-evidencia').checked,
+  });
+  btn.disabled = false; btn.innerHTML = previo;
+  if (error || !data?.ok) { err.textContent = 'No se pudo crear: ' + (error?.message || data?.error || ''); return; }
+  closeSheet('nueva-tarea-sheet');
+  okToast('Tarea creada');
+  loadTareasAdmin();
 }
 
 /* ---------- Control de asistencia (agent_sessions) ---------- */
@@ -801,6 +1078,7 @@ async function startApp() {
   setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion();
   setupDestPeriodo(); loadDestPeriodo();
   setupVoucher(); actualizarBadgeVoucher();
+  setupTareas(); setupFreelancers();
   subscribeRealtime();
 }
 async function renderAll() { renderKPIs(); renderPipe('pipe'); renderPipe('pipe2'); renderAdvisors(); await ensureChart(); renderTrend(); renderCanal(); renderAssign(); }
@@ -1494,6 +1772,7 @@ function renderHoyAdmin() {
 }
 function setupHoy() {
   document.getElementById('hoy-nuevo-lead-btn')?.addEventListener('click', () => document.getElementById('nl-abrir-btn')?.click());
+  document.getElementById('fact-nuevo-cliente-btn')?.addEventListener('click', () => document.getElementById('nl-abrir-btn')?.click());
   document.getElementById('hoy-cotizador-btn')?.addEventListener('click', () => activateSection('cotizador'));
   document.getElementById('hoy-ver-dashboard-btn')?.addEventListener('click', () => activateSection('dashboard'));
 }
@@ -1800,6 +2079,14 @@ async function guardarLead() {
   okToast('Lead actualizado');
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
 }
+
+// Abre el drawer de edición completo de un lead/cliente desde Facturación
+// (Ventas/Cuentas por Pagar) -- reusa openDrawer, mismo formulario que Leads.
+window.abrirClienteDesdeFacturacion = async (leadId) => {
+  const { data, error } = await sb.from('leads').select('*').eq('id', leadId).single();
+  if (error || !data) { errToast('No se pudo cargar el cliente'); return; }
+  openDrawer(data);
+};
 
 /* ---------- Nuevo lead manual (botón "Nuevo lead" en Leads, admin + asesor) ---------- */
 document.getElementById('nl-abrir-btn')?.addEventListener('click', async () => {
@@ -2353,7 +2640,10 @@ function renderVentas() {
       <td>${f.proveedor ? esc(f.proveedor) : '<span class="muted">—</span>'}</td>
       <td><span class="chip">${esc(f.estado)}</span></td>
       <td class="muted">${esc(fmtFechaHoraCaracas(f.fecha_emision))}</td>
-      <td>${f.estado === 'pagada' ? `<button class="btn-sm" onclick="anularFacturaUI(${f.id})">Anular</button>` : ''}</td>
+      <td style="display:flex;gap:6px">
+        <button class="btn-sm" onclick="abrirClienteDesdeFacturacion(${f.lead_id})">Editar cliente</button>
+        ${f.estado === 'pagada' ? `<button class="btn-sm" onclick="anularFacturaUI(${f.id})">Anular</button>` : ''}
+      </td>
     </tr>`;
   }).join('') || '<tr><td colspan="10">Sin facturas</td></tr>';
   document.getElementById('fact-sum-venta').textContent = money(sumaVenta);
@@ -2401,7 +2691,10 @@ function renderCuentasPorPagar() {
       <td>${money(c.monto_abonado)}</td>
       <td>${money(c.saldo_pendiente)}</td>
       <td><span class="chip ${c.estado === 'pagado' ? 'ok' : ''}">${esc(c.estado)}</span></td>
-      <td>${c.estado === 'pendiente' ? `<button class="btn-sm" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})">Registrar abono</button>` : ''}</td>
+      <td style="display:flex;gap:6px">
+        <button class="btn-sm" onclick="abrirClienteDesdeFacturacion(${c.lead_id})">Editar cliente</button>
+        ${c.estado === 'pendiente' ? `<button class="btn-sm" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})">Registrar abono</button>` : ''}
+      </td>
     </tr>`;
   }).join('') || '<tr><td colspan="7">Sin cuentas por pagar</td></tr>';
   document.getElementById('cxp-sum-transferir').textContent = money(sumaTransferir);
@@ -4534,6 +4827,8 @@ function activateSection(sec, fromNav) {
   if (sec === 'asesores') loadAsesoresPeriodo();
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
+  if (sec === 'tareas') loadTareas();
+  if (sec === 'freelancers') loadFreelancers();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
 function setupNav() {
