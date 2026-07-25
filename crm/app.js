@@ -1529,6 +1529,12 @@ function renderChips() {
 }
 function setDrop(id, v) { const el = document.getElementById(id); el.value = v; if (id.endsWith('-desde') || id.endsWith('-hasta')) el.dispatchEvent(new Event('change')); refresh(); }
 function refresh() { page = 1; loadTable(); renderChips(); }
+document.getElementById('leads-reload-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('leads-reload-btn');
+  btn.disabled = true; const html0 = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Recargar';
+  await loadTable();
+  btn.disabled = false; btn.innerHTML = html0;
+});
 
 function buildQuery(forCount) {
   let q = sb.from('leads').select('*', forCount ? { count: 'exact' } : {}).is('eliminado_at', null);
@@ -1783,26 +1789,6 @@ function setupHoy() {
   document.getElementById('hoy-cotizador-btn')?.addEventListener('click', () => activateSection('cotizador'));
   document.getElementById('hoy-ver-dashboard-btn')?.addEventListener('click', () => activateSection('dashboard'));
 }
-async function sugerirRespuestaLead(l) {
-  const box = document.getElementById('sugerir-box'), loading = document.getElementById('sugerir-loading'),
-    err = document.getElementById('sugerir-error'), texto = document.getElementById('sugerir-texto'),
-    copiarBtn = document.getElementById('sugerir-copiar');
-  box.style.display = ''; loading.style.display = ''; err.style.display = 'none';
-  texto.style.display = 'none'; copiarBtn.style.display = 'none';
-  const { data, error } = await sb.functions.invoke('sugerir-respuesta', { body: { p_lead_id: l.id } });
-  loading.style.display = 'none';
-  if (error || !data?.ok) {
-    err.textContent = 'No se pudo generar la sugerencia: ' + (error?.message || data?.error || 'error desconocido');
-    err.style.display = '';
-    return;
-  }
-  texto.textContent = data.mensaje;
-  texto.style.display = '';
-  copiarBtn.style.display = '';
-  copiarBtn.onclick = () => {
-    navigator.clipboard.writeText(data.mensaje).then(() => okToast('Copiado al portapapeles'));
-  };
-}
 async function noPuedoInboxLead(l) {
   // Vía Edge Function reasignar-lead (no RPC directo): además de reasignar
   // (misma reasignar_lead(), mismo check de ownership) dispara el push al
@@ -1922,17 +1908,8 @@ function openDrawer(l) {
 
     <div class="dactions">
       ${wa ? `<a class="dbtn wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>` : ''}
-      <button class="dbtn extractor" id="e-a-extractor" type="button"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</button>
-      <button class="dbtn" id="e-a-sugerir" type="button"><i class="fas fa-comment-dots"></i> Sugerir respuesta</button>
       ${(ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado) ? `<button class="dbtn" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i> Enviar a facturación</button>` : ''}
       ${ROL === 'admin' ? `<button class="dbtn" id="e-a-eliminar" type="button" style="background:#ef444422;color:#ef4444"><i class="fas fa-trash"></i> Eliminar lead</button>` : ''}
-    </div>
-    <div id="sugerir-box" style="display:none;margin-top:14px" class="edit-box">
-      <div class="eb-title"><i class="fas fa-comment-dots"></i> Respuesta sugerida</div>
-      <div id="sugerir-loading" style="display:none;color:var(--muted);font-size:13px"><i class="fas fa-spinner fa-spin"></i> Armando cotización con el tarifario real...</div>
-      <div id="sugerir-error" style="display:none;color:#ef4444;font-size:13px"></div>
-      <pre id="sugerir-texto" style="display:none;white-space:pre-wrap;font-family:inherit;font-size:13.5px;line-height:1.5;background:var(--bg2, #f5f5f7);padding:10px;border-radius:8px;margin:8px 0"></pre>
-      <button class="dbtn save" id="sugerir-copiar" type="button" style="display:none"><i class="fas fa-copy"></i> Copiar</button>
     </div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">ID: ${esc(l.external_id || l.id)}</div>
     </div>
@@ -1950,8 +1927,6 @@ function openDrawer(l) {
 
   document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', e.target.value === VENTA);
   document.getElementById('e-save').onclick = guardarLead;
-  document.getElementById('e-a-extractor').onclick = () => irAExtractor(l);
-  document.getElementById('e-a-sugerir').onclick = () => sugerirRespuestaLead(l);
   if (ROL === 'admin') document.getElementById('e-a-eliminar').onclick = () => abrirConfirmarEliminar('single');
   document.getElementById('e-a-atender')?.addEventListener('click', () => atenderInboxLead(l));
   document.getElementById('e-a-facturar')?.addEventListener('click', () => abrirEnviarFacturacionSheet(l));
