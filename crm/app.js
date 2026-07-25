@@ -1689,7 +1689,7 @@ function renderInbox() {
     const l = INBOX_LEADS[i];
     el.addEventListener('click', () => openDrawer(l));
     el.querySelector('.inbox-btn.atender').addEventListener('click', e => { e.stopPropagation(); atenderInboxLead(l); });
-    el.querySelector('.inbox-btn.nopuedo').addEventListener('click', e => { e.stopPropagation(); noPuedoInboxLead(l); });
+    el.querySelector('.inbox-btn.nopuedo')?.addEventListener('click', e => { e.stopPropagation(); noPuedoInboxLead(l); });
     el.querySelector('.inbox-btn.avisar').addEventListener('click', e => { e.stopPropagation(); abrirAvisarTelefono(l); });
   });
   actualizarBadgeLeads(INBOX_LEADS.length);
@@ -1703,9 +1703,10 @@ function inboxCardHtml(l) {
     ${l.destino_consulta ? `<div class="ec-row"><i class="fas fa-comment-dots"></i> ${esc(l.destino_consulta)}</div>` : ''}
     ${l.personas ? `<div class="ec-row"><i class="fas fa-users"></i> ${esc(l.personas)} persona(s)</div>` : ''}
     <div class="ec-row"><i class="fas fa-clock"></i> ${tiempoRelativo(l.fecha_creacion)}</div>
+    ${l.no_reasignar ? `<div class="ec-row" style="color:var(--muted2)"><i class="fas fa-lock"></i> Llegó directo por WhatsApp -- no se reasigna</div>` : ''}
     <div class="inbox-actions">
       <button type="button" class="inbox-btn atender"><i class="fas fa-check"></i> Atender</button>
-      <button type="button" class="inbox-btn nopuedo"><i class="fas fa-xmark"></i> No puedo</button>
+      ${l.no_reasignar ? '' : `<button type="button" class="inbox-btn nopuedo"><i class="fas fa-xmark"></i> No puedo</button>`}
       <button type="button" class="inbox-btn avisar" title="Avisar número incorrecto"><i class="fas fa-flag"></i></button>
     </div>
   </div>`;
@@ -1752,7 +1753,7 @@ function renderHoyAsesor() {
     const l = top[i];
     el.addEventListener('click', () => openDrawer(l));
     el.querySelector('.inbox-btn.atender').addEventListener('click', e => { e.stopPropagation(); atenderInboxLead(l); });
-    el.querySelector('.inbox-btn.nopuedo').addEventListener('click', e => { e.stopPropagation(); noPuedoInboxLead(l); });
+    el.querySelector('.inbox-btn.nopuedo')?.addEventListener('click', e => { e.stopPropagation(); noPuedoInboxLead(l); });
     el.querySelector('.inbox-btn.avisar').addEventListener('click', e => { e.stopPropagation(); abrirAvisarTelefono(l); });
   });
   const stats = document.getElementById('hoy-stats');
@@ -1809,6 +1810,7 @@ async function noPuedoInboxLead(l) {
   const { data, error } = await sb.functions.invoke('reasignar-lead', { body: { p_lead_id: l.id } });
   if (error) { errToast('No se pudo reasignar: ' + error.message); return; }
   if (data?.motivo === 'fuera_de_horario') { errToast('No se reasignan leads entre 9pm y 9am -- el lead sigue contigo'); return; }
+  if (data?.motivo === 'no_reasignable') { errToast('Este lead llegó directo por WhatsApp -- no se puede reasignar'); return; }
   if (!data?.ok) { errToast('No se pudo reasignar: ' + (data?.motivo || data?.error || 'error desconocido')); return; }
   if (data.pool_agotado) { errToast('No hay más asesores disponibles por ahora -- el lead sigue contigo'); return; }
   quitarDeInbox(l.id);

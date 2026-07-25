@@ -440,7 +440,7 @@ function toggleEquipaje(el) { if (el.dataset.value === 'Sin equipaje') { var tag
 function getEquipaje() { var tags = document.querySelectorAll('#equipaje-grid .pasajero-tag.sel'), r = []; for (var i = 0; i < tags.length; i++) r.push(tags[i].dataset.value); return r; }
 function lanzarConfetiAzul() { lanzarConfeti(['#4a9eff', '#25D366', '#ffd166', '#ff9100', '#7bb8ff']); }
 
-function generarSolicitud() {
+async function generarSolicitud() {
     var tipoViaje = document.querySelector('input[name="tipo-viaje"]:checked').value;
     var origenSel = document.getElementById('origen').value, origenExtra = document.getElementById('origen-extra').value.trim();
     var origen = origenSel.startsWith('OTRO') ? origenExtra : origenSel.split('|')[1];
@@ -462,20 +462,28 @@ function generarSolicitud() {
     if (!origen || !destino || !fechaIda || adultos === null) { alert('Completa origen, destino, fecha de ida y cantidad de adultos.'); return; }
     
     var dias = 0; if (tipoViaje === 'ida-vuelta' && fechaIda && fechaVuelta) { dias = Math.round((new Date(fechaVuelta) - new Date(fechaIda)) / 86400000); }
-    var tlf = ASESOR_BOLETERIA.telefono;
+
+    // Se fuerza el lead al mismo asesor (p_asesor) para que el WhatsApp y el
+    // dueño del lead en el CRM sean siempre la misma persona -- antes el
+    // WhatsApp iba fijo a Luis Rueda pero el CRM lo asignaba por su cuenta,
+    // pudiendo tocarle a otro. Si Luis Rueda llegara a desactivarse, el CRM
+    // avisa (asesor_pedido_no_honrado) y cae al pool -- por eso el WhatsApp
+    // también usa el asesor_whatsapp devuelto, no el fijo, salvo que el
+    // request falle entero.
+    var resultadoCRM = await enviarACRM({ nombre: nombreCliente, telefono: telefono, destino: origen + ' → ' + destino, personas: (adultos + (ninos > 0 ? ninos : 0)) + ' persona(s)', consulta: (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + ', fecha ' + fechaIda + (notas ? ' · ' + notas : ''), asesor: ASESOR_BOLETERIA.nombre });
+    var tlf = (resultadoCRM && resultadoCRM.asesor_whatsapp) ? resultadoCRM.asesor_whatsapp.replace(/[^\d]/g, '') : ASESOR_BOLETERIA.telefono;
     var asesorAsignado = tlf;
 
-    enviarDatos({ 
-        fechaHora: new Date().toLocaleString('es-VE'), 
-        destino: origen + ' → ' + destino, 
-        servicio: tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida', 
-        pagina: 'Boletería', 
+    enviarDatos({
+        fechaHora: new Date().toLocaleString('es-VE'),
+        destino: origen + ' → ' + destino,
+        servicio: tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida',
+        pagina: 'Boletería',
         nombre: nombreCliente,
         procedencia: procedencia,
         telefono: telefono,
         asesor: asesorAsignado
     });
-    enviarACRM({ nombre: nombreCliente, telefono: telefono, destino: origen + ' → ' + destino, personas: (adultos + (ninos > 0 ? ninos : 0)) + ' persona(s)', consulta: (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida') + ', fecha ' + fechaIda + (notas ? ' · ' + notas : '') });
 
     var lineasEmoji = ['✈️ *COTIZACIÓN DE VUELO - LOTUS 360*','','👤 *Nombre:* ' + nombreCliente,'🔄 *Tipo:* ' + (tipoViaje === 'ida-vuelta' ? 'Ida y Vuelta' : 'Solo Ida'),'📍 *Origen:* ' + origen,'📍 *Destino:* ' + destino,'📅 *Fecha ida:* ' + fechaIda,(tipoViaje === 'ida-vuelta' && fechaVuelta ? '📅 *Fecha vuelta:* ' + fechaVuelta : ''),(tipoViaje === 'ida-vuelta' && dias > 0 ? '📆 *Duración:* ' + dias + ' día(s)' : ''),(flexibilidad > 0 ? '📆 *Flexibilidad:* ±' + flexibilidad + ' día(s)' : '📆 *Fechas fijas*'),'👥 *Adultos:* ' + adultos + ' | *Niños:* ' + ninos + ' | *Bebés:* ' + bebes,(ninos > 0 ? '👶 *Edades:* ' + edadesNinos : ''),'🧳 *Equipaje:* ' + (equipaje.length ? equipaje.join(' + ') : 'No especificado'),'🆔 *Cédulas adultos:* ' + (cedulaAdultos ? 'Sí' : 'No - REVISAR'),(ninos > 0 ? '🆔 *Cédulas niños:* ' + (cedulaNinos ? 'Sí' : 'No - REVISAR') : ''),(ocasion !== 'Viaje regular' ? '🎉 *Ocasión:* ' + ocasion : ''),(notas ? '📝 *Notas:* ' + notas : ''),'','✅ *Enviar opciones con precios. ¡Gracias!*'];
 

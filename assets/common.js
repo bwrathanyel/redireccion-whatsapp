@@ -31,14 +31,25 @@ function enviarDatos(datos) {
 
 // Registra el lead tambien en el CRM (ademas de Sheet Monkey arriba). Solo
 // si hay telefono real -- sin eso el lead no es accionable en el CRM.
+// Devuelve la respuesta parseada (antes era fire-and-forget) para que quien
+// abre WhatsApp use el asesor que el CRM realmente asigno (asesor_whatsapp)
+// en vez de sortear aparte en el navegador -- dos sorteos independientes
+// terminaban desalineados casi siempre. Si el request falla entero, resuelve
+// null -- el que llama cae a elegirAsesor()/el numero fijo, nunca deja al
+// visitante sin salida.
 function enviarACRM(datos) {
-    if (!datos.telefono || datos.telefono === 'No especificado') return;
-    fetch('https://begbjhrdbsqftbbleecb.functions.supabase.co/ingest-web-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) }).catch(function(e) { console.log('CRM ingest error:', e); });
+    if (!datos.telefono || datos.telefono === 'No especificado') return Promise.resolve(null);
+    return fetch('https://begbjhrdbsqftbbleecb.functions.supabase.co/ingest-web-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) })
+        .then(function(r) { return r.json(); })
+        .catch(function(e) { console.log('CRM ingest error:', e); return null; });
 }
 
-// Pool de asesores (tour/hospedaje). peso = probabilidad relativa. Boleteria
-// usa su propio contacto unico (ASESOR_BOLETERIA), no este pool -- confirmado
-// intencional por el usuario 2026-07-09, no tocar.
+// Pool de asesores (tour/hospedaje) -- ahora solo de FALLBACK, para cuando
+// enviarACRM() no devuelve asesor_whatsapp (request al CRM fallo entero). El
+// asesor real lo decide el servidor (ingest_lead_v2 -> elegir_asesor_rotacion),
+// que ya tiene los pesos reales y evita rachas -- ver assets/common.js uso en
+// hospedaje/tour. Boleteria usa su propio contacto unico (ASESOR_BOLETERIA),
+// no este pool -- confirmado intencional por el usuario 2026-07-09, no tocar.
 var ASESORES = [
     { nombre: 'Ambar Arévalo', telefono: '584244900601', peso: 3 },
     { nombre: 'Nicoll Osorio', telefono: '584127136169', peso: 2 },

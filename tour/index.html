@@ -173,7 +173,7 @@ function actualizarTotal() { var a = getAdultosCount() || 0; var price = PRECIOS
 actualizarGrupo();
 function actualizarEdades() { var count = getNinosCount(); var cont = document.getElementById('contenedor-edades'); if (!count || count <= 0) { cont.innerHTML = ''; return; } var html = '<label style="font-size:9px;color:var(--text-warm);margin-bottom:5px;"><i class="fas fa-list-ol"></i> Edad de cada niño</label>'; var max = Math.min(count, 8); for (var i = 1; i <= max; i++) { html += '<input type="number" class="edad-nino extra-input" min="3" max="10" inputmode="numeric" placeholder="Niño ' + i + ': edad (3-10)" style="margin-bottom:3px;">'; } if (count > 8) html += '<input type="text" id="edades-resumen" class="extra-input" placeholder="Resumen: ej. 3 de 8 años, 2 de 5">'; cont.innerHTML = html; }
 
-function generarSolicitud() {
+async function generarSolicitud() {
     var nombre = document.getElementById('nombre').value.trim();
     var telefono = document.getElementById('telefono').value.trim();
     var adultos = getAdultosCount(); var ninos = getNinosCount(); var bebes = parseInt(document.getElementById('bebes').value);
@@ -189,13 +189,15 @@ function generarSolicitud() {
     var edadesNinos = ''; var resumenEl = document.getElementById('edades-resumen');
     if (resumenEl) { edadesNinos = resumenEl.value.trim() || 'No especificadas'; }
     else { var inputs = document.querySelectorAll('.edad-nino'), arr = []; for (var i = 0; i < inputs.length; i++) { arr.push('Niño ' + (i+1) + ': ' + (inputs[i].value || '?') + ' años'); } edadesNinos = arr.length ? arr.join(', ') : 'No especificadas'; }
-    var asesorElegido = elegirAsesor();
-    var tlf = asesorElegido.telefono;
+    // El asesor real lo decide el CRM (mismo pool con pesos reales que usa
+    // todo el reparto -- ver assets/common.js). elegirAsesor() local queda
+    // solo de respaldo si el request al CRM falla entero.
+    var resultadoCRM = await enviarACRM({ nombre: nombre, telefono: telefono, destino: 'Cayo Sal - Falcón', personas: grupo + ' persona(s)', consulta: planNombre + ' · ' + planPrecio + (notas ? ' · ' + notas : '') });
+    var tlf = (resultadoCRM && resultadoCRM.asesor_whatsapp) ? resultadoCRM.asesor_whatsapp.replace(/[^\d]/g, '') : elegirAsesor().telefono;
     var asesorAsignado = tlf;
 
     // Enviar a Sheet Monkey
     enviarDatos({ fechaHora: new Date().toLocaleString('es-VE'), destino: 'Cayo Sal - Falcón', servicio: planNombre + ' · ' + planPrecio + ' · Grupo ' + grupo + (faltanGrupo > 0 ? ' (faltan ' + faltanGrupo + ')' : ''), pagina: 'Tours', nombre: nombre, procedencia: procedencia, telefono: telefono, asesor: asesorAsignado });
-    enviarACRM({ nombre: nombre, telefono: telefono, destino: 'Cayo Sal - Falcón', personas: grupo + ' persona(s)', consulta: planNombre + ' · ' + planPrecio + (notas ? ' · ' + notas : '') });
 
     // Versión con emojis (normal)
     var lineasEmoji = ['🌴 *RESERVA TOUR PRIVADO - LOTUS 360*','','📍 *Tour:* Cayo Sal - Chichiriviche, Falcón','🔒 *Modalidad:* Privado por grupo (mín. 15 personas)','📅 *Fecha:* A convenir con el grupo','⏰ *Horario:* 6:00 am - 4:00 pm','📍 *Salida:* CC Dinastía, Naguanagua · Carabobo','','🎫 *Plan:* ' + planNombre + ' (' + precioUnit + ' por persona)','👤 *Responsable:* ' + nombre,'👥 *Grupo:* ' + grupo + ' persona(s) → ' + adultos + ' adulto(s)' + (ninos > 0 ? ' + ' + ninos + ' niño(s)' : '') + (bebes > 0 ? ' + ' + bebes + ' infante(s)' : ''),'💰 *Total estimado:* $' + total + ' USD (' + adultos + ' adultos × ' + precioUnit + ')'];
