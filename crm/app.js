@@ -1339,7 +1339,12 @@ async function guardarPostventa(marcarPagado) {
   });
   btn.disabled = false; btn.innerHTML = previo;
   if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || 'error desconocido'); return; }
-  window.closeDrawer(); okToast(marcarPagado ? 'Pago registrado y postventa actualizada' : 'Postventa actualizada');
+  window.closeDrawer();
+  // Si lo cerró un asesor, guardar_postventa lo manda a verificación en vez
+  // de a PAGO REALIZADO directo (ver 20260728000000_blindar_cierre_venta.sql)
+  // -- avisar con un toast distinto para que no piense que ya generó factura.
+  const pendienteVerificar = data.estado_lead === 'VENTA PENDIENTE DE VERIFICAR';
+  okToast(!marcarPagado ? 'Postventa actualizada' : pendienteVerificar ? 'Enviado a verificar -- un admin tiene que confirmarlo' : 'Pago registrado y postventa actualizada');
   await Promise.all([loadPostventa(), loadStats()]); renderAll();
 }
 
@@ -1916,7 +1921,7 @@ function openDrawer(l) {
       ${wa ? `<a class="dbtn wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>` : ''}
       <button class="dbtn extractor" id="e-a-extractor" type="button"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</button>
       <button class="dbtn" id="e-a-sugerir" type="button"><i class="fas fa-comment-dots"></i> Sugerir respuesta</button>
-      ${(ROL === 'asesor' || ROL === 'admin') && l.estado !== 'PAGO REALIZADO' ? `<button class="dbtn" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i> Enviar a facturación</button>` : ''}
+      ${(ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado) ? `<button class="dbtn" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i> Enviar a facturación</button>` : ''}
       ${ROL === 'admin' ? `<button class="dbtn" id="e-a-eliminar" type="button" style="background:#ef444422;color:#ef4444"><i class="fas fa-trash"></i> Eliminar lead</button>` : ''}
     </div>
     <div id="sugerir-box" style="display:none;margin-top:14px" class="edit-box">
@@ -2149,6 +2154,52 @@ async function loadBandejaFacturacion() {
   grid.querySelectorAll('[data-bandeja-lead-id]').forEach(btn => btn.addEventListener('click', () => {
     const item = FACT_BANDEJA_CACHE.find(x => String(x.lead_id) === btn.dataset.bandejaLeadId);
     if (item) window.abrirNuevoClienteFacturacion(item);
+  }));
+}
+
+/* ---------- Ventas por verificar (admin) -- ventas que un asesor cerró
+   solo, blindaje contra monto/comisión inflada sin verificación
+   independiente (ver 20260728000000_blindar_cierre_venta.sql) ---------- */
+let FACT_VERIFICAR_CACHE = [];
+async function loadVentasPendientesVerificar() {
+  if (ROL !== 'admin') return;
+  const loading = document.getElementById('fact-verificar-loading'), empty = document.getElementById('fact-verificar-empty');
+  loading?.classList.add('show');
+  const { data, error } = await sb.rpc('listar_ventas_pendientes_verificar');
+  loading?.classList.remove('show');
+  if (error) { console.error('ventas_pendientes_verificar', error); return; }
+  FACT_VERIFICAR_CACHE = data || [];
+  document.getElementById('fact-verificar-count').textContent = FACT_VERIFICAR_CACHE.length;
+  empty?.classList.toggle('show', FACT_VERIFICAR_CACHE.length === 0);
+  const grid = document.getElementById('fact-verificar-grid');
+  grid.innerHTML = FACT_VERIFICAR_CACHE.map(v => `
+    <div class="entity-card inbox-card" data-id="${v.lead_id}">
+      <div class="ec-top"><div class="ec-nombre">${esc(v.nombre)}</div></div>
+      <div class="ec-row"><i class="fas fa-phone"></i> ${esc(v.telefono) || 'Sin teléfono'}</div>
+      <div class="ec-row"><i class="fas fa-user"></i> Cerrada por ${esc(v.asesor) || 'Sin asignar'}</div>
+      <div class="ec-row"><i class="fas fa-dollar-sign"></i> ${money(v.monto_total)}${v.costo_neto != null ? ` · costo ${money(v.costo_neto)}` : ''}${v.proveedor ? ` · ${esc(v.proveedor)}` : ''}</div>
+      <div class="ec-row"><i class="fas fa-clock"></i> ${tiempoRelativo(v.actualizado_en)}</div>
+      <div class="inbox-actions">
+        <button type="button" class="inbox-btn atender" data-confirmar-lead-id="${v.lead_id}"><i class="fas fa-check"></i> Confirmar</button>
+        <button type="button" class="inbox-btn nopuedo" data-rechazar-lead-id="${v.lead_id}"><i class="fas fa-xmark"></i> Rechazar</button>
+      </div>
+    </div>`).join('');
+  grid.querySelectorAll('[data-confirmar-lead-id]').forEach(btn => btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    const { data, error } = await sb.rpc('confirmar_venta', { p_lead_id: Number(btn.dataset.confirmarLeadId) });
+    if (error || !data?.ok) { errToast('No se pudo confirmar: ' + (error?.message || data?.error || '')); btn.disabled = false; return; }
+    okToast('Venta confirmada -- factura y comisión generadas');
+    loadVentasPendientesVerificar();
+    loadFacturas();
+  }));
+  grid.querySelectorAll('[data-rechazar-lead-id]').forEach(btn => btn.addEventListener('click', async () => {
+    const motivo = prompt('Motivo del rechazo (opcional):');
+    if (motivo === null) return; // canceló el prompt
+    btn.disabled = true;
+    const { data, error } = await sb.rpc('rechazar_venta', { p_lead_id: Number(btn.dataset.rechazarLeadId), p_motivo: motivo });
+    if (error || !data?.ok) { errToast('No se pudo rechazar: ' + (error?.message || data?.error || '')); btn.disabled = false; return; }
+    okToast('Venta rechazada -- vuelve a En espera de pago');
+    loadVentasPendientesVerificar();
   }));
 }
 
@@ -2766,6 +2817,7 @@ function setupFacturacion() {
     document.querySelectorAll('#fact-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
     document.querySelectorAll('.fact-tab-panel').forEach(p => p.style.display = p.dataset.factPanel === factTab ? '' : 'none');
     if (factTab === 'bandeja') loadBandejaFacturacion();
+    if (factTab === 'verificar') loadVentasPendientesVerificar();
   }));
   document.querySelectorAll('.th-sort').forEach(th => th.addEventListener('click', () => {
     const tabla = th.dataset.sortTbl, col = th.dataset.sortCol, spec = FACT_SORT[tabla];
@@ -2793,6 +2845,7 @@ async function loadFacturacion() {
   loadFacturacionKpis();
   loadAsesoresComision();
   loadBandejaFacturacion();
+  loadVentasPendientesVerificar();
   await loadCuentasPorPagar(); // CXP_CACHE poblado antes: loadFacturas lo usa para costo neto/proveedor/margen
   loadFacturas();
   loadComisionesAdmin();

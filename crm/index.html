@@ -1636,6 +1636,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <button class="seg" data-fact-tab="cxp">Cuentas por Pagar</button>
         <button class="seg" data-fact-tab="asesores">Asesores</button>
         <button class="seg" data-fact-tab="bandeja">Bandeja de Entrada <span class="lih-count" id="fact-bandeja-count">0</span></button>
+        <button class="seg" data-fact-tab="verificar">Por Verificar <span class="lih-count" id="fact-verificar-count">0</span></button>
       </div>
 
       <div class="fact-tab-panel" data-fact-panel="bandeja" style="display:none">
@@ -1646,6 +1647,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <div class="tbl-state skel" id="fact-bandeja-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
           <div class="tbl-state" id="fact-bandeja-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tenés clientes pendientes de facturar</div></div>
           <div class="leads-inbox-grid" id="fact-bandeja-grid"></div>
+        </div>
+      </div>
+
+      <div class="fact-tab-panel" data-fact-panel="verificar" style="display:none">
+        <div class="leads-inbox" id="fact-verificar-inbox" style="display:block">
+          <div class="leads-inbox-head">
+            <h2><i class="fas fa-shield-halved"></i> Ventas cerradas por un asesor, pendientes de confirmar</h2>
+          </div>
+          <div class="csub">Un asesor cerró estas ventas -- no generan factura ni comisión hasta que las confirmés. Revisá el monto contra el comprobante real antes de confirmar.</div>
+          <div class="tbl-state skel" id="fact-verificar-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="tbl-state" id="fact-verificar-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No hay ventas pendientes de verificar</div></div>
+          <div class="leads-inbox-grid" id="fact-verificar-grid"></div>
         </div>
       </div>
 
