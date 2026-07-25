@@ -1587,6 +1587,10 @@ async function loadTable() {
       e.stopPropagation();
       atenderInboxLead(data[i]);
     });
+    el.querySelector('[data-facturar-id]')?.addEventListener('click', e => {
+      e.stopPropagation();
+      abrirEnviarFacturacionSheet(data[i]);
+    });
   });
   wireLeadChecks();
   document.querySelectorAll('.solo-admin-borrar').forEach(el => el.style.display = ROL === 'admin' ? '' : 'none');
@@ -1640,6 +1644,7 @@ function leadCardHtml(l) {
         <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}2e">${esc(niceEstado(l.estado))}</span>
         <button type="button" class="estado-arrow" data-dir="1" title="Siguiente estado" aria-label="Siguiente estado"><i class="fas fa-chevron-right"></i></button>
       </span>`}
+      ${(ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado) ? `<button type="button" class="fact-btn" data-facturar-id="${l.id}" title="Enviar a facturación" aria-label="Enviar a facturación" onclick="event.stopPropagation()"><i class="fas fa-paper-plane"></i></button>` : ''}
       ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
     </div>
     ${sinAtender ? `<button type="button" class="inbox-btn atender" style="width:100%;margin-top:9px" data-atender-id="${l.id}"><i class="fas fa-check"></i> Atender</button>` : ''}
@@ -3051,7 +3056,8 @@ async function loadMisComisiones() {
 /* ---------- Tarifario ---------- */
 let tarTab = 'promo', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 const tarDestinosAbiertos = new Set();
-const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción' };
+const tarHotelesAbiertos = new Set();
+const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale' };
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas']);
   const mesSel = document.getElementById('tar-f-mes');
@@ -3075,6 +3081,7 @@ function setupTarifarioTabs() {
 
 /* ---------- Configuración de visibilidad de Tarifario (solo admin) ---------- */
 const TAR_TAB_META = [
+  { key: 'hotsale', label: 'Hot Sales' },
   { key: 'promo', label: 'Promociones' },
   { key: 'destino', label: 'Guías/Tours' },
   { key: 'hotel', label: 'Hoteles' },
@@ -3159,8 +3166,8 @@ async function loadTarifario() {
   if (tarCache[tarTab]) { renderTarifario(); return; }
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
   empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
-  const q = tarTab === 'promo'
-    ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden,es_principal,activo), productos(destino,producto_fotos(storage_path,orden,es_principal,activo))').order('titulo')
+  const q = (tarTab === 'promo' || tarTab === 'hotsale')
+    ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden,es_principal,activo), productos(nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))').order('titulo')
     : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad), producto_fotos(storage_path,orden,es_principal,activo)').eq('tipo', tarTab).order('nombre');
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
@@ -3317,9 +3324,30 @@ function resumenBullets(texto) {
 // paquete/promo lo heredan del hotel vinculado (producto_id/hotel_id) cuando
 // no tienen uno propio -- misma resolución para filtrar y para agrupar.
 function destinoDe(x) {
-  if (tarTab === 'promo') return x.productos?.destino || null;
+  if (tarTab === 'promo' || tarTab === 'hotsale') return x.productos?.destino || null;
   if (tarTab === 'paquete') return x.destino || x.hotel?.destino || null;
   return x.destino || null;
+}
+// Nombre de hotel para agrupar Promociones -- si la promo está vinculada a
+// un producto (hotel), usa su nombre; si no, cae al título de la propia
+// promo (única señal de "hotel" que tiene una promo suelta sin vínculo).
+function hotelDe(x) { return x.productos?.nombre || x.titulo || 'Otros'; }
+// Mismo criterio "Hot Sale" que la página web (lib/promociones/hotSales.ts):
+// entre las promos vigentes/revisadas, una por hotel (la más barata, porque
+// ya llegan ordenadas por precio) y que tenga al menos 2 fotos -- si no,
+// no hay material para destacarla. Nunca se inventa una etiqueta en la DB,
+// se deriva igual en los dos lados.
+function promosHotSales(promos) {
+  const vistos = new Set(), out = [];
+  promos.forEach(x => {
+    if (x.revisado === false) return;
+    const clave = x.producto_id != null ? x.producto_id : `promo:${x.id}`;
+    if (vistos.has(clave)) return;
+    if (fotosDe(x).length < 2) return;
+    vistos.add(clave);
+    out.push(x);
+  });
+  return out;
 }
 const hoy = () => new Date().toISOString().slice(0, 10);
 const promoVigente = p => !p.fecha_fin_estimada || p.fecha_fin_estimada >= hoy();
@@ -3356,7 +3384,7 @@ function renderTarifario() {
   const fNinos = document.getElementById('tar-f-ninos').checked;
   const fVigente = document.getElementById('tar-f-vigente').checked;
 
-  const filtered = data.filter(x => {
+  let filtered = data.filter(x => {
     if (q && !(x.nombre || x.titulo || '').toLowerCase().includes(q) && !(x.destino || '').toLowerCase().includes(q)) return false;
     if (tarTab === 'hotel') {
       if (fDestino && x.destino !== fDestino) return false;
@@ -3372,6 +3400,9 @@ function renderTarifario() {
       if (fNinos && !(x.ninos_gratis_cantidad > 0)) return false;
       if (fVigente && !promoVigente(x)) return false;
       if (fMes != null && !promoDisponibleEnMes(x, fMes)) return false;
+    } else if (tarTab === 'hotsale') {
+      if (fDestino && destinoDe(x) !== fDestino) return false;
+      if (fVigente && !promoVigente(x)) return false;
     } else if (tarTab === 'paquete') {
       if (fDestino && destinoDe(x) !== fDestino) return false;
       if (fPrecio != null) {
@@ -3387,7 +3418,7 @@ function renderTarifario() {
   // Orden por defecto de Promociones: más económicas primero. Sin precio
   // numérico parseado (solo texto libre tipo "Consultar") va al final, no
   // se le inventa un valor para ordenarlo.
-  if (tarTab === 'promo') {
+  if (tarTab === 'promo' || tarTab === 'hotsale') {
     filtered.sort((a, b) => {
       if (a.precio_desde_usd == null && b.precio_desde_usd == null) return 0;
       if (a.precio_desde_usd == null) return 1;
@@ -3396,6 +3427,7 @@ function renderTarifario() {
     });
     asignarPortadas(filtered);
   }
+  if (tarTab === 'hotsale') filtered = promosHotSales(filtered);
 
   document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
   document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0);
@@ -3418,7 +3450,30 @@ function renderTarifario() {
       const d = det.dataset.destino;
       if (det.open) tarDestinosAbiertos.add(d); else tarDestinosAbiertos.delete(d);
     }));
-  } else if (tarTab === 'promo' || tarTab === 'paquete') {
+  } else if (tarTab === 'promo') {
+    // Agrupado por hotel (no por destino): varias promos del mismo hotel
+    // ya no aparecen sueltas mezcladas en el scroll -- quedan juntas bajo
+    // su hotel, en <details> igual que la pestaña Hoteles (contraídas por
+    // defecto, mismo motivo: decenas de hoteles de una vez es demasiado
+    // scroll antes de ver algo útil).
+    const porHotel = {};
+    filtered.forEach(x => (porHotel[hotelDe(x)] ??= []).push(x));
+    const hoteles = Object.keys(porHotel).sort((a, b) => {
+      const pa = porHotel[a][0]?.precio_desde_usd, pb = porHotel[b][0]?.precio_desde_usd;
+      if (pa == null && pb == null) return a.localeCompare(b, 'es');
+      if (pa == null) return 1;
+      if (pb == null) return -1;
+      return pa - pb;
+    });
+    grid.innerHTML = hoteles.map(h => `<details class="tar-destino-block" data-hotel="${esc(h)}"${tarHotelesAbiertos.has(h) ? ' open' : ''}>
+      <summary class="tar-destino-header"><i class="fas fa-hotel"></i> ${esc(h)} <span>${porHotel[h].length}</span><i class="fas fa-chevron-down tar-destino-caret"></i></summary>
+      ${tarItemsWrapHtml(porHotel[h])}
+    </details>`).join('');
+    grid.querySelectorAll('.tar-destino-block').forEach(det => det.addEventListener('toggle', () => {
+      const h = det.dataset.hotel;
+      if (det.open) tarHotelesAbiertos.add(h); else tarHotelesAbiertos.delete(h);
+    }));
+  } else if (tarTab === 'paquete') {
     const porDestino = {};
     filtered.forEach(x => (porDestino[destinoDe(x) || 'Otros'] ??= []).push(x));
     const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
@@ -3441,7 +3496,7 @@ function renderTarifario() {
     // La policy RLS deja al admin ver también lo que él mismo ocultó (para
     // poder revertirlo) — sin esta marca se vería idéntico a lo visible y
     // parecería que ocultar no hizo nada.
-    if (ROL === 'admin' && (tarTab === 'promo' ? x.revisado === false : x.activo === false)) {
+    if (ROL === 'admin' && ((tarTab === 'promo' || tarTab === 'hotsale') ? x.revisado === false : x.activo === false)) {
       el.classList.add('tar-oculto-admin');
       el.insertAdjacentHTML('afterbegin', '<span class="tar-oculto-badge">Oculto</span>');
     }
@@ -3465,7 +3520,7 @@ function tarItemsWrapHtml(items) {
   return `<div class="${cls}">${html}</div>`;
 }
 function tarRowHtml(x) {
-  const esPromo = tarTab === 'promo';
+  const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
   const nombre = esPromo ? x.titulo : x.nombre;
   const foto = fotosRotadas(x)[0];
   let tags = [], precioTxt = null, promosCount = 0;
@@ -3494,7 +3549,7 @@ function tarCardThumbHtml(foto, esPromo) {
   return `<div class="tc-media-wrap">${media}<div class="carrusel-dots"></div></div>`;
 }
 function tarCardHtml(x) {
-  if (tarTab === 'promo') {
+  if (tarTab === 'promo' || tarTab === 'hotsale') {
     return `<div class="tar-item tar-card" data-id="${x.id}">
       ${tarCardThumbHtml(fotosRotadas(x)[0], true)}
       <div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
@@ -3515,7 +3570,7 @@ function tarCardHtml(x) {
     ${tagsHtml(tagsHotel)}</div>`;
 }
 function tarFichaHtml(x) {
-  const esPromo = tarTab === 'promo';
+  const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
   const nombre = esPromo ? x.titulo : x.nombre;
   const foto = fotosRotadas(x)[0];
   const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
@@ -3645,7 +3700,7 @@ async function loadTarifarioInfo() {
   list.innerHTML = data.map(x => `<div class="tar-info-item"><b>${esc(x.nombre)}</b>${esc(x.descripcion || '')}</div>`).join('');
 }
 function openProductoDrawer(x) {
-  const esPromo = tarTab === 'promo';
+  const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
   const nombre = esPromo ? x.titulo : x.nombre;
   const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
@@ -4090,7 +4145,11 @@ async function cargarOpcionesTarifario() {
   (prods || []).forEach(p => grupos[p.tipo]?.push({ value: `productos:${p.id}`, label: p.nombre }));
   (promos || []).forEach(p => grupos.promo.push({ value: `promociones:${p.id}`, label: p.titulo }));
   const previo = sel.value;
-  sel.innerHTML = '<option value="">Cualquier opción de Tarifario</option>' + TAR_TAB_META.map(t => grupos[t.key].length ? `<optgroup label="${esc(t.label)}">${grupos[t.key].map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}</optgroup>` : '').join('');
+  // "Hot Sales" (TAR_TAB_META) no es una categoría propia de la DB -- es un
+  // subconjunto derivado de promociones (ver promosHotSales) -- no tiene
+  // bucket en `grupos`, se salta con optional chaining en vez de agregarle
+  // un grupo fantasma vacío al Cotizador.
+  sel.innerHTML = '<option value="">Cualquier opción de Tarifario</option>' + TAR_TAB_META.map(t => grupos[t.key]?.length ? `<optgroup label="${esc(t.label)}">${grupos[t.key].map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}</optgroup>` : '').join('');
   if (previo && [...sel.options].some(o => o.value === previo)) sel.value = previo;
 }
 // Filtros elegidos en la interfaz (no en texto libre) — se mandan como

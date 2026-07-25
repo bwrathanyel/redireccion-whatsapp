@@ -306,6 +306,12 @@ input.flt:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-sof
 .drp-btn{display:inline-flex;align-items:center;gap:8px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:9px 14px;color:var(--txt);font-size:12.5px;font-family:inherit;cursor:pointer;transition:border-color .15s}
 .drp-btn:hover{border-color:var(--accent)}
 .drp-btn i{color:var(--accent);font-size:12px}
+.reload-btn{display:inline-flex;align-items:center;gap:8px;background:var(--accent-soft);border:1px solid rgba(255,145,0,.35);border-radius:10px;padding:9px 14px;color:#ffd8a8;font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer;transition:border-color .15s,background .15s,transform .15s}
+.reload-btn i{color:var(--accent);font-size:12px;transition:transform .4s}
+.reload-btn:hover{border-color:var(--accent);background:rgba(255,145,0,.22)}
+.reload-btn:active{transform:scale(.96)}
+.reload-btn.spin i{animation:reload-spin .6s linear}
+@keyframes reload-spin{to{transform:rotate(360deg)}}
 .drp-panel{display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:20;background:var(--panel-solid);border:1px solid var(--line2);border-radius:14px;padding:14px;box-shadow:0 16px 40px rgba(0,0,0,.5);min-width:270px}
 .drp-panel.open{display:block}
 .drp-presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
@@ -343,7 +349,13 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:7px;background:rgba(255,255,255,.05);color:var(--muted)}
 .chip.ok{background:rgba(16,185,129,.15);color:var(--green)}
 .chip.ig{color:#ff8fb0;background:rgba(255,92,138,.1)}.chip.fb{color:#7fb4ff;background:rgba(74,158,255,.12)}.chip.am{color:#c3a0ff;background:rgba(160,107,255,.12)}
+.entity-card .lead-check{appearance:none;-webkit-appearance:none;width:20px;height:20px;border-radius:6px;border:1.5px solid var(--line2);background:var(--panel-solid);cursor:pointer;transition:background .15s,border-color .15s;position:relative}
+.entity-card .lead-check:hover{border-color:var(--accent)}
+.entity-card .lead-check:checked{background:var(--accent);border-color:var(--accent)}
+.entity-card .lead-check:checked::after{content:'';position:absolute;left:6px;top:2px;width:5px;height:10px;border:solid #1a1000;border-width:0 2px 2px 0;transform:rotate(45deg)}
 .wa-btn{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:rgba(37,211,102,.12);color:var(--wa);text-decoration:none;font-size:15px;transition:background .15s,color .15s}
+.fact-btn{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:var(--accent-soft);border:none;color:var(--accent);font-size:14px;cursor:pointer;transition:background .15s}
+.fact-btn:hover{background:rgba(255,145,0,.24)}
 .wa-btn:hover{background:var(--wa);color:#fff}
 .pager{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:16px}
 #gal-pager{display:none}#gal-pager.show{display:flex}
@@ -935,7 +947,7 @@ input.ei[type=date]{color-scheme:dark}
   .vs-btn{padding:11px 13px;min-height:44px;min-width:44px}
   .drawer .dclose{width:44px;height:44px}
   .fchip b{padding:6px}
-  .drp-btn,.tar-f-check,select.flt,#tar-f-precio,#cot-f-precio,.pager button,.clear-all{min-height:44px}
+  .drp-btn,.reload-btn,.tar-f-check,select.flt,#tar-f-precio,#cot-f-precio,.pager button,.clear-all{min-height:44px}
   .seg{min-height:44px}
   /* drawer -> hoja inferior */
   .drawer{top:auto;bottom:0;left:0;right:0;width:100%;max-width:100%;height:auto;max-height:90vh;border-left:none;border-top:1px solid var(--line2);border-radius:22px 22px 0 0;transform:translateY(100%);padding:22px 20px calc(22px + var(--safe-b))}
@@ -1328,7 +1340,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
             </div>
           </div>
           <div class="view-switch" id="leads-view-switch"></div>
-          <button class="flt" id="leads-reload-btn" type="button" title="Recargar leads"><i class="fas fa-rotate"></i> Recargar</button>
+          <button class="reload-btn" id="leads-reload-btn" type="button" title="Recargar leads"><i class="fas fa-rotate"></i> Recargar</button>
           <span class="tcount" id="t-count"></span>
           <button class="mfs-done" data-mfs="leads-tbar" type="button">Listo</button>
       </div>
@@ -1414,6 +1426,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <section class="section" id="sec-tarifario">
       <div class="tar-tabs-row">
         <div class="seg-group" id="tar-tabs">
+          <button class="seg" data-tab="hotsale">🔥 Hot Sales</button>
           <button class="seg on" data-tab="promo">Promociones</button>
           <button class="seg" data-tab="destino">Guías/Tours</button>
           <button class="seg" data-tab="hotel">Hoteles</button>
@@ -1424,7 +1437,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <button class="mfs-trigger" data-mfs="tar-toolbar" type="button"><i class="fas fa-sliders"></i> Buscar y filtrar</button>
       <div class="tar-toolbar mfs" id="tar-toolbar">
         <div class="tar-search"><i class="fas fa-search"></i><input id="tar-search" placeholder="Buscar por nombre o destino..."></div>
-        <select class="flt tar-f" id="tar-f-destino" data-tabs="hotel,promo,paquete"><option value="">Todos los destinos</option></select>
+        <select class="flt tar-f" id="tar-f-destino" data-tabs="hotel,promo,paquete,hotsale"><option value="">Todos los destinos</option></select>
         <select class="flt tar-f" id="tar-f-tipo" data-tabs="hotel,promo">
           <option value="">Cualquier plan</option>
           <option value="todo_incluido">Todo incluido</option>
@@ -1437,7 +1450,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <select class="flt tar-f" id="tar-f-mes" data-tabs="promo"><option value="">Cualquier mes</option></select>
         <input class="flt tar-f" id="tar-f-precio" data-tabs="hotel,promo,destino,paquete" type="number" min="0" placeholder="Precio máx. USD">
         <label class="tar-f-check" id="tar-f-ninos-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-ninos"> Con niños gratis</label>
-        <label class="tar-f-check" id="tar-f-vigente-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-vigente" checked> Solo vigentes</label>
+        <label class="tar-f-check" id="tar-f-vigente-wrap" data-tabs="hotel,promo,hotsale"><input type="checkbox" class="tar-f" id="tar-f-vigente" checked> Solo vigentes</label>
         <div class="view-switch" id="tar-view-switch"></div>
         <span class="tcount" id="tar-count"></span>
         <button class="mfs-done" data-mfs="tar-toolbar" type="button">Listo</button>
