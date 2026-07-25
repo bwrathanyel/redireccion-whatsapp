@@ -1564,7 +1564,7 @@ async function loadTable() {
       <td data-label="Destino">${esc(l.destino)}</td>
       <td data-label="Canal"><span class="chip ${cc}">${esc(l.canal)}</span></td>
       <td data-label="Asesor">${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</td>
-      <td data-label="Estado"><span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${esc(niceEstado(l.estado))}</span></td>
+      <td data-label="Estado"><span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}2e">${esc(niceEstado(l.estado))}</span></td>
       <td data-label="Fecha" class="muted">${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : '—'}</td>
       <td class="td-wa">${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : '<span class="muted">—</span>'}</td>
     </tr>`;
@@ -1617,7 +1617,7 @@ function leadCardHtml(l) {
   // desktop la tabla/tarjetas siguen exactamente igual que hoy (el inbox
   // separado de arriba sigue siendo la señal de "sin atender" ahí).
   const esMobile = window.matchMedia('(max-width:760px)').matches;
-  const sinAtender = esMobile && l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
+  const sinAtender = esMobile && ROL === 'asesor' && l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
   return `<div class="entity-card" style="position:relative">
     <input type="checkbox" class="lead-check solo-admin-borrar" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''} style="position:absolute;top:10px;right:10px;width:18px;height:18px">
     <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}</div></div>
@@ -1630,7 +1630,7 @@ function leadCardHtml(l) {
       <span class="chip ${cc}">${esc(l.canal)}</span>
       ${sinAtender ? `<span class="badge-st" style="color:var(--accent);background:var(--accent-soft)">Sin atender</span>` : `<span class="estado-stepper" data-id="${l.id}">
         <button type="button" class="estado-arrow" data-dir="-1" title="Estado anterior" aria-label="Estado anterior"><i class="fas fa-chevron-left"></i></button>
-        <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}22">${esc(niceEstado(l.estado))}</span>
+        <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}2e">${esc(niceEstado(l.estado))}</span>
         <button type="button" class="estado-arrow" data-dir="1" title="Siguiente estado" aria-label="Siguiente estado"><i class="fas fa-chevron-right"></i></button>
       </span>`}
       ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
