@@ -1618,7 +1618,8 @@ function leadCardHtml(l) {
   // separado de arriba sigue siendo la señal de "sin atender" ahí).
   const esMobile = window.matchMedia('(max-width:760px)').matches;
   const sinAtender = esMobile && ROL === 'asesor' && l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
-  return `<div class="entity-card" style="position:relative">
+  const estadoColor = ESTADO_COLORS[l.estado] || '#5f677f';
+  return `<div class="entity-card" style="position:relative;border-left:4px solid ${estadoColor}">
     <input type="checkbox" class="lead-check solo-admin-borrar" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''} style="position:absolute;top:10px;right:10px;width:18px;height:18px">
     <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}</div></div>
     <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
