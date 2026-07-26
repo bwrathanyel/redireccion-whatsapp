@@ -1051,6 +1051,7 @@ async function startApp() {
   setupPostventa();
   setupTutorial();
   setupManual();
+  registrarServiceWorkerConAviso();
   setupHoy();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
   if (ROL === 'boleteria') { activateSection('mensajes'); return; }
@@ -5611,6 +5612,43 @@ function renderActualizaciones() {
           </div>
         </div>`).join('')}
     </div>`).join('');
+}
+
+/* ---------- Aviso de actualización disponible (Service Worker) ----------
+   sw.js ya hace self.skipWaiting() + clients.claim() en cada instalación --
+   la versión nueva toma control del tab sola en segundo plano apenas Cloudflare
+   sirve el sw.js actualizado. Lo único que faltaba era avisarle al usuario que
+   ya hay una versión nueva activa y dejarlo elegir cuándo recargar (nunca solo
+   -- puede estar a mitad de escribir algo). Pedido del dueño (2026-07-26):
+   mismo pop-up sirve de mini-changelog reusando ACTUALIZACIONES_LOG.
+   'controllerchange' también dispara en la instalación inicial del SW (cuando
+   el tab pasa de sin-controlador a controlado por primera vez) -- yaHabiaControlador
+   distingue eso de una actualización real para no avisar de más a alguien
+   que recién entra por primera vez. */
+function registrarServiceWorkerConAviso() {
+  if (!('serviceWorker' in navigator)) return;
+  const yaHabiaControlador = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (yaHabiaControlador) mostrarAvisoActualizacion();
+  });
+  navigator.serviceWorker.register('sw.js').catch(console.error);
+}
+function mostrarAvisoActualizacion() {
+  if (document.getElementById('update-toast')) return;
+  const novedades = ACTUALIZACIONES_LOG.filter(e => e.roles.includes(ROL)).slice(0, 3);
+  const toast = document.createElement('div');
+  toast.id = 'update-toast';
+  toast.className = 'update-toast';
+  toast.innerHTML = `
+    <div class="ut-head"><i class="fas fa-arrows-rotate"></i> Hay una actualización del CRM</div>
+    <div class="ut-list">${novedades.length ? novedades.map(n => `<div class="ut-item">${n.emoji} ${esc(n.titulo)}</div>`).join('') : '<div class="ut-item">Se agregaron mejoras nuevas.</div>'}</div>
+    <div class="ut-actions">
+      <button type="button" class="ut-despues" id="ut-despues">Después</button>
+      <button type="button" class="ut-recargar" id="ut-recargar"><i class="fas fa-rotate"></i> Actualizar ahora</button>
+    </div>`;
+  document.body.appendChild(toast);
+  document.getElementById('ut-despues').onclick = () => toast.remove();
+  document.getElementById('ut-recargar').onclick = () => location.reload();
 }
 
 function pasosVisiblesCapitulo(cap) { return cap.pasos.filter(p => !p.soloAdmin || ROL === 'admin'); }

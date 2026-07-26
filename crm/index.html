@@ -283,6 +283,18 @@ body::before{content:'';position:fixed;inset:0;background:
 .act-fecha{font-size:11px;color:var(--muted2);white-space:nowrap}
 .act-texto{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:3px}
 
+/* Aviso de actualización disponible */
+.update-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:900;width:min(360px,calc(100vw - 32px));background:var(--panel-solid);border:1px solid var(--line2);border-radius:16px;padding:16px 18px;box-shadow:0 16px 40px rgba(0,0,0,.35);animation:ut-in .25s ease}
+@keyframes ut-in{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.update-toast .ut-head{font-size:13.5px;font-weight:800;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.update-toast .ut-head i{color:var(--accent)}
+.update-toast .ut-list{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.update-toast .ut-item{font-size:12px;color:var(--muted);line-height:1.4}
+.update-toast .ut-actions{display:flex;gap:8px;justify-content:flex-end}
+.update-toast .ut-despues{background:transparent;border:none;color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;padding:9px 10px}
+.update-toast .ut-recargar{display:flex;align-items:center;gap:7px;background:linear-gradient(135deg,#ff9100,#ff5c8a);border:none;border-radius:10px;padding:9px 15px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer}
+@media (max-width:640px){.update-toast{bottom:78px}}
+
 /* pipeline */
 .pipe{display:flex;flex-direction:column;gap:9px;margin-top:6px}
 .pstep{display:flex;align-items:center;gap:12px;cursor:pointer;border-radius:8px;transition:background .12s;padding:3px 4px;margin:0 -4px}
@@ -2567,10 +2579,5 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 </div>
 
 <script type="module" src="app.js"></script>
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(console.error));
-}
-</script>
 </body>
 </html>
