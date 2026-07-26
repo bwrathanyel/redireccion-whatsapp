@@ -5693,7 +5693,18 @@ function registrarServiceWorkerConAviso() {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (yaHabiaControlador) mostrarAvisoActualizacion();
   });
-  navigator.serviceWorker.register('sw.js').catch(console.error);
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // El navegador NO revisa solo si sw.js cambió en el server mientras la
+    // pestaña queda abierta sin navegar -- solo lo hace al recargar, o cada
+    // ~24h por su cuenta (hallazgo real, 2026-07-26: probamos 3 deploys
+    // seguidos con la pestaña abierta y el aviso nunca disparó). reg.update()
+    // fuerza ese chequeo -- acá cada 5 min, y también apenas la pestaña
+    // vuelve a estar visible (alguien que cambia de pestaña y vuelve).
+    setInterval(() => reg.update().catch(() => {}), 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) reg.update().catch(() => {});
+    });
+  }).catch(console.error);
 }
 function mostrarAvisoActualizacion() {
   if (document.getElementById('update-toast')) return;
