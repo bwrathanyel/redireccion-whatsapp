@@ -1226,13 +1226,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="nav-label" data-label="principal">Principal</div>
       <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
       <a class="nav-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas <span class="badge" id="nav-tareas-count" style="display:none">0</span></a>
-      <a class="nav-item nav-admin-only" data-sec="freelancers"><i class="fas fa-user-shield"></i> Freelancers</a>
-      <a class="nav-item nav-admin-only" data-sec="postulaciones"><i class="fas fa-address-card"></i> Postulaciones <span class="badge" id="nav-postulaciones-count" style="display:none">0</span></a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
       <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
       <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
       <a class="nav-item nav-boleteria-ok solo-voucher" id="nav-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher <span class="badge" id="nav-voucher-count" style="display:none">0</span></a>
-      <a class="nav-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
       <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
       <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
       <a class="nav-item" data-sec="buscar-tarifario"><i class="fas fa-magnifying-glass"></i> Buscar Tarifario</a>
@@ -1248,7 +1245,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
       <a class="nav-item nav-admin-only" data-sec="leads-colaboraciones"><i class="fas fa-handshake"></i> Leads Colaboraciones</a>
       <a class="nav-item nav-admin-only" data-sec="leads-fallidos"><i class="fas fa-triangle-exclamation"></i> Leads Fallidos</a>
-      <a class="nav-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
+      <a class="nav-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
       <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
       <a class="nav-item nav-admin-only solo-informe-diario" id="nav-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
       <div class="nav-label" data-label="ayuda">Ayuda</div>
@@ -1636,17 +1633,200 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </section>
 
     <!-- ASESORES -->
-    <section class="section" id="sec-asesores">
-      <div class="seg-group" id="ase-periodo">
-        <button class="seg" data-p="hoy">Hoy</button>
-        <button class="seg on" data-p="semana">Semana</button>
-        <button class="seg" data-p="mes">Mes</button>
-        <button class="seg" data-p="anio">Año</button>
-        <button class="seg" data-p="historico">Histórico</button>
+    <!-- GESTIÓN DE PERSONAL (admin) -- junta Personal/Asistencia/Asesores/Freelancers/Postulaciones,
+         antes 4 secciones sueltas en el menú, pedido del dueño (2026-07-26). -->
+    <section class="section" id="sec-gestion-personal">
+      <div class="kpis" id="gp-kpis" style="margin-bottom:16px">
+        <div class="kpi"><div class="kt">Conectados ahora</div><div class="kv" id="gp-kpi-conectados">—</div></div>
+        <div class="kpi"><div class="kt">Equipo activo</div><div class="kv" id="gp-kpi-equipo">—</div></div>
+        <div class="kpi"><div class="kt">Postulaciones sin revisar</div><div class="kv" id="gp-kpi-postulaciones">—</div></div>
       </div>
-      <div class="grid g-2b">
-        <div class="card"><h2><i class="fas fa-user-tie"></i> Carga por asesor</h2><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
-        <div class="card"><h2><i class="fas fa-scale-balanced"></i> Reparto objetivo</h2><div class="csub">Ponderación configurable del aleatorizador</div><div class="chart-wrap" style="height:280px"><canvas id="chAssign"></canvas></div></div>
+      <div class="seg-group" id="gp-tabs">
+        <button class="seg on" data-gp-tab="personal">Personal</button>
+        <button class="seg" data-gp-tab="asistencia">Asistencia</button>
+        <button class="seg" data-gp-tab="asesores">Asesores</button>
+        <button class="seg" data-gp-tab="freelancers">Freelancers</button>
+        <button class="seg" data-gp-tab="postulaciones">Postulaciones <span class="badge" id="gp-postulaciones-count" style="display:none">0</span></button>
+      </div>
+
+      <!-- PERSONAL -- nuevo, tiempo total de cada quien en el CRM (suma de agent_sessions) -->
+      <div class="gp-tab-panel" data-gp-panel="personal">
+        <div class="card">
+          <h2><i class="fas fa-id-badge"></i> Equipo</h2>
+          <div class="csub">Cuánto tiempo estuvo cada quien conectado al CRM en total</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Nombre</th><th>Rol</th><th>Tiempo en el CRM</th></tr></thead>
+              <tbody id="gp-personal-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ASISTENCIA -->
+      <div class="gp-tab-panel" data-gp-panel="asistencia" style="display:none">
+        <div class="card">
+          <div id="asist-wrap" style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Asesor</th><th>Hoy</th><th>Recordatorios</th><th>Strikes (mes)</th><th></th></tr></thead>
+              <tbody id="asist-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="sheet-title" style="padding:0 0 10px">Strikes del mes</div>
+          <div id="asist-strikes-wrap"></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <div class="sheet-title" style="padding:0 0 10px">Historial de asistencia</div>
+          <div class="tbar" style="margin-bottom:12px">
+            <select class="flt" id="asist-hist-asesor"><option value="">Todos los asesores</option></select>
+            <div class="drp" id="drp-asist-hist">
+              <button type="button" class="flt drp-btn" id="drp-asist-hist-btn"><i class="fas fa-calendar-days"></i> <span id="drp-asist-hist-label">Rango de fechas</span></button>
+              <div class="drp-panel" id="drp-asist-hist-panel">
+                <div class="drp-presets">
+                  <button type="button" data-preset="hoy">Hoy</button>
+                  <button type="button" data-preset="7d">7 días</button>
+                  <button type="button" data-preset="mes">Este mes</button>
+                  <button type="button" data-preset="anio">Este año</button>
+                  <button type="button" data-preset="todo">Todo</button>
+                </div>
+                <div class="drp-inputs">
+                  <label>Desde <input type="date" id="asist-hist-desde"></label>
+                  <label>Hasta <input type="date" id="asist-hist-hasta"></label>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="asist-hist-wrap" style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Asesor</th><th>Fecha</th><th>Entrada</th><th>Salida</th></tr></thead>
+              <tbody id="asist-hist-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ASESORES -->
+      <div class="gp-tab-panel" data-gp-panel="asesores" style="display:none">
+        <div class="seg-group" id="ase-periodo">
+          <button class="seg" data-p="hoy">Hoy</button>
+          <button class="seg on" data-p="semana">Semana</button>
+          <button class="seg" data-p="mes">Mes</button>
+          <button class="seg" data-p="anio">Año</button>
+          <button class="seg" data-p="historico">Histórico</button>
+        </div>
+        <div class="grid g-2b">
+          <div class="card"><h2><i class="fas fa-user-tie"></i> Carga por asesor</h2><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
+          <div class="card"><h2><i class="fas fa-scale-balanced"></i> Reparto objetivo</h2><div class="csub">Ponderación configurable del aleatorizador</div><div class="chart-wrap" style="height:280px"><canvas id="chAssign"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- FREELANCERS -->
+      <div class="gp-tab-panel" data-gp-panel="freelancers" style="display:none">
+        <div class="seg-group" id="frl-tabs">
+          <button class="seg on" data-frl-tab="equipo">Equipo</button>
+          <button class="seg" data-frl-tab="tareas">Tareas</button>
+        </div>
+
+        <div class="frl-tab-panel" data-frl-panel="equipo">
+          <div class="card">
+            <div class="chead-row">
+              <h2><i class="fas fa-user-shield"></i> Freelancers</h2>
+              <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="frl-search" placeholder="Buscar nombre..."></div>
+            </div>
+            <div class="csub">Jornadas, strikes y carga de leads de cada freelancer</div>
+            <div style="overflow-x:auto">
+              <table>
+                <thead><tr>
+                  <th>Nombre</th><th>Estado</th><th>Strikes</th><th>Última conexión</th>
+                  <th>Conectado hoy</th><th>Leads asignados</th><th>Leads atendidos</th><th></th>
+                </tr></thead>
+                <tbody id="frl-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="frl-tab-panel" data-frl-panel="tareas" style="display:none">
+          <div class="card">
+            <div class="chead-row">
+              <h2><i class="fas fa-flag"></i> Reportes abiertos</h2>
+            </div>
+            <div class="csub">Pedidos de ayuda esperando respuesta -- atender primero</div>
+            <div id="frl-reportes-abiertos"></div>
+          </div>
+          <div class="card" style="margin-top:14px">
+            <div class="chead-row">
+              <h2><i class="fas fa-list-check"></i> Todas las tareas</h2>
+              <button class="btn-sm" onclick="abrirNuevaTareaUI()"><i class="fas fa-plus"></i> Nueva tarea</button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+              <select class="flt" id="frl-tareas-freelancer"><option value="">Todos los freelancers</option></select>
+              <select class="flt" id="frl-tareas-estado">
+                <option value="">Todos los estados</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="en_proceso">En proceso</option>
+                <option value="bloqueada">Bloqueada</option>
+                <option value="en_revision">En revisión</option>
+                <option value="completada">Completada</option>
+                <option value="cerrada">Cerrada</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </div>
+            <div style="overflow-x:auto">
+              <table>
+                <thead><tr><th>Freelancer</th><th>Título</th><th>Prioridad</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
+                <tbody id="frl-tareas-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- POSTULACIONES -->
+      <div class="gp-tab-panel" data-gp-panel="postulaciones" style="display:none">
+        <div class="card">
+          <div class="chead-row">
+            <h2><i class="fas fa-address-card"></i> Postulaciones</h2>
+            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="post-search" placeholder="Buscar nombre o teléfono..."></div>
+          </div>
+          <div class="csub">Candidatos que aplicaron desde "Trabaja con nosotros" en la web</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+            <select class="flt" id="post-f-modalidad">
+              <option value="">Todas las modalidades</option>
+              <option value="presencial">Presencial</option>
+              <option value="freelance">Freelance</option>
+            </select>
+            <select class="flt" id="post-f-llamada">
+              <option value="">Cualquier estado de llamada</option>
+              <option value="pendiente">Pendiente de llamar</option>
+              <option value="llamado">Llamado</option>
+            </select>
+            <select class="flt" id="post-f-calidad">
+              <option value="">Cualquier calificación</option>
+              <option value="sin_calificar">Sin calificar</option>
+              <option value="buen_prospecto">Buen prospecto</option>
+              <option value="no_calza">No calza</option>
+            </select>
+            <label class="tar-f-check"><input type="checkbox" id="post-f-sin-revisar"> Solo sin revisar</label>
+          </div>
+          <div class="bulk-bar" id="post-bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
+            <span id="post-bulk-count" style="font-size:13.5px;font-weight:600"></span>
+            <button class="dbtn" id="post-bulk-clear" type="button" style="width:auto;padding:6px 12px">Cancelar selección</button>
+            <button class="dbtn" id="post-bulk-eliminar" type="button" style="width:auto;padding:6px 12px;background:#ef4444;color:#fff;margin-left:auto"><i class="fas fa-trash"></i> Eliminar seleccionados</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr>
+                <th style="width:34px"><input type="checkbox" id="post-th-select-all"></th><th></th><th>Nombre</th><th>Modalidad</th><th>Rol de interés</th><th>Teléfono</th>
+                <th>Llamada</th><th>Prospecto</th><th>Fecha</th>
+              </tr></thead>
+              <tbody id="post-tbody"></tbody>
+            </table>
+          </div>
+          <div id="post-empty" class="tbl-state" style="display:none"><i class="fas fa-address-card"></i><div class="es-t">Sin postulaciones</div><div class="es-s">No hay candidatos con estos filtros</div></div>
+        </div>
       </div>
     </section>
 
@@ -1917,113 +2097,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
     </div>
 
-    <!-- FREELANCERS (admin) -->
-    <section class="section" id="sec-freelancers">
-      <div class="seg-group" id="frl-tabs">
-        <button class="seg on" data-frl-tab="equipo">Equipo</button>
-        <button class="seg" data-frl-tab="tareas">Tareas</button>
-      </div>
-
-      <div class="frl-tab-panel" data-frl-panel="equipo">
-        <div class="card">
-          <div class="chead-row">
-            <h2><i class="fas fa-user-shield"></i> Freelancers</h2>
-            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="frl-search" placeholder="Buscar nombre..."></div>
-          </div>
-          <div class="csub">Jornadas, strikes y carga de leads de cada freelancer</div>
-          <div style="overflow-x:auto">
-            <table>
-              <thead><tr>
-                <th>Nombre</th><th>Estado</th><th>Strikes</th><th>Última conexión</th>
-                <th>Conectado hoy</th><th>Leads asignados</th><th>Leads atendidos</th><th></th>
-              </tr></thead>
-              <tbody id="frl-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div class="frl-tab-panel" data-frl-panel="tareas" style="display:none">
-        <div class="card">
-          <div class="chead-row">
-            <h2><i class="fas fa-flag"></i> Reportes abiertos</h2>
-          </div>
-          <div class="csub">Pedidos de ayuda esperando respuesta -- atender primero</div>
-          <div id="frl-reportes-abiertos"></div>
-        </div>
-        <div class="card" style="margin-top:14px">
-          <div class="chead-row">
-            <h2><i class="fas fa-list-check"></i> Todas las tareas</h2>
-            <button class="btn-sm" onclick="abrirNuevaTareaUI()"><i class="fas fa-plus"></i> Nueva tarea</button>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-            <select class="flt" id="frl-tareas-freelancer"><option value="">Todos los freelancers</option></select>
-            <select class="flt" id="frl-tareas-estado">
-              <option value="">Todos los estados</option>
-              <option value="pendiente">Pendiente</option>
-              <option value="en_proceso">En proceso</option>
-              <option value="bloqueada">Bloqueada</option>
-              <option value="en_revision">En revisión</option>
-              <option value="completada">Completada</option>
-              <option value="cerrada">Cerrada</option>
-              <option value="cancelada">Cancelada</option>
-            </select>
-          </div>
-          <div style="overflow-x:auto">
-            <table>
-              <thead><tr><th>Freelancer</th><th>Título</th><th>Prioridad</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
-              <tbody id="frl-tareas-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- POSTULACIONES (solo admin) -->
-    <section class="section" id="sec-postulaciones">
-      <div class="card">
-        <div class="chead-row">
-          <h2><i class="fas fa-address-card"></i> Postulaciones</h2>
-          <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="post-search" placeholder="Buscar nombre o teléfono..."></div>
-        </div>
-        <div class="csub">Candidatos que aplicaron desde "Trabaja con nosotros" en la web</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-          <select class="flt" id="post-f-modalidad">
-            <option value="">Todas las modalidades</option>
-            <option value="presencial">Presencial</option>
-            <option value="freelance">Freelance</option>
-          </select>
-          <select class="flt" id="post-f-llamada">
-            <option value="">Cualquier estado de llamada</option>
-            <option value="pendiente">Pendiente de llamar</option>
-            <option value="llamado">Llamado</option>
-          </select>
-          <select class="flt" id="post-f-calidad">
-            <option value="">Cualquier calificación</option>
-            <option value="sin_calificar">Sin calificar</option>
-            <option value="buen_prospecto">Buen prospecto</option>
-            <option value="no_calza">No calza</option>
-          </select>
-          <label class="tar-f-check"><input type="checkbox" id="post-f-sin-revisar"> Solo sin revisar</label>
-        </div>
-        <div class="bulk-bar" id="post-bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
-          <span id="post-bulk-count" style="font-size:13.5px;font-weight:600"></span>
-          <button class="dbtn" id="post-bulk-clear" type="button" style="width:auto;padding:6px 12px">Cancelar selección</button>
-          <button class="dbtn" id="post-bulk-eliminar" type="button" style="width:auto;padding:6px 12px;background:#ef4444;color:#fff;margin-left:auto"><i class="fas fa-trash"></i> Eliminar seleccionados</button>
-        </div>
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr>
-              <th style="width:34px"><input type="checkbox" id="post-th-select-all"></th><th></th><th>Nombre</th><th>Modalidad</th><th>Rol de interés</th><th>Teléfono</th>
-              <th>Llamada</th><th>Prospecto</th><th>Fecha</th>
-            </tr></thead>
-            <tbody id="post-tbody"></tbody>
-          </table>
-        </div>
-        <div id="post-empty" class="tbl-state" style="display:none"><i class="fas fa-address-card"></i><div class="es-t">Sin postulaciones</div><div class="es-s">No hay candidatos con estos filtros</div></div>
-      </div>
-    </section>
-
     <!-- Drawer: detalle de postulación -->
     <div class="sheet" id="post-drawer-sheet">
       <div class="sheet-handle"></div>
@@ -2069,50 +2142,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <table>
             <thead><tr><th>Monto venta</th><th>%</th><th>Mi comisión</th><th>Estado</th><th>Fecha de pago</th></tr></thead>
             <tbody id="miscom-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- ASISTENCIA -->
-    <section class="section" id="sec-asistencia">
-      <div class="card">
-        <div id="asist-wrap" style="overflow-x:auto">
-          <table>
-            <thead><tr><th>Asesor</th><th>Hoy</th><th>Recordatorios</th><th>Strikes (mes)</th><th></th></tr></thead>
-            <tbody id="asist-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="card" style="margin-top:16px">
-        <div class="sheet-title" style="padding:0 0 10px">Strikes del mes</div>
-        <div id="asist-strikes-wrap"></div>
-      </div>
-      <div class="card" style="margin-top:16px">
-        <div class="sheet-title" style="padding:0 0 10px">Historial de asistencia</div>
-        <div class="tbar" style="margin-bottom:12px">
-          <select class="flt" id="asist-hist-asesor"><option value="">Todos los asesores</option></select>
-          <div class="drp" id="drp-asist-hist">
-            <button type="button" class="flt drp-btn" id="drp-asist-hist-btn"><i class="fas fa-calendar-days"></i> <span id="drp-asist-hist-label">Rango de fechas</span></button>
-            <div class="drp-panel" id="drp-asist-hist-panel">
-              <div class="drp-presets">
-                <button type="button" data-preset="hoy">Hoy</button>
-                <button type="button" data-preset="7d">7 días</button>
-                <button type="button" data-preset="mes">Este mes</button>
-                <button type="button" data-preset="anio">Este año</button>
-                <button type="button" data-preset="todo">Todo</button>
-              </div>
-              <div class="drp-inputs">
-                <label>Desde <input type="date" id="asist-hist-desde"></label>
-                <label>Hasta <input type="date" id="asist-hist-hasta"></label>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div id="asist-hist-wrap" style="overflow-x:auto">
-          <table>
-            <thead><tr><th>Asesor</th><th>Fecha</th><th>Entrada</th><th>Salida</th></tr></thead>
-            <tbody id="asist-hist-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -2372,8 +2401,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
   <a class="sheet-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas</a>
-  <a class="sheet-item nav-admin-only" data-sec="freelancers"><i class="fas fa-user-shield"></i> Freelancers</a>
-  <a class="sheet-item nav-admin-only" data-sec="postulaciones"><i class="fas fa-address-card"></i> Postulaciones</a>
   <a class="sheet-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
   <a class="sheet-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
@@ -2384,10 +2411,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <a class="sheet-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
   <a class="sheet-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
   <a class="sheet-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
-  <a class="sheet-item nav-admin-only" data-sec="asesores"><i class="fas fa-user-tie"></i> Asesores</a>
+  <a class="sheet-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
   <a class="sheet-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
   <a class="sheet-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
-  <a class="sheet-item nav-admin-only" data-sec="asistencia"><i class="fas fa-user-clock"></i> Asistencia</a>
   <a class="sheet-item nav-admin-only solo-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
   <a class="sheet-item nav-boleteria-ok solo-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" id="sheet-item-tutorial"><i class="fas fa-circle-question"></i> Recorrido guiado</a>

@@ -55,9 +55,9 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], 'leads-colaboraciones': ['Leads Colaboraciones', 'Leads de campañas de colaboración paga -- van directo al WhatsApp del colaborador'], 'leads-fallidos': ['Leads Fallidos', 'Leads que el bot no pudo registrar automáticamente'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
-  tareas: ['Tareas', 'Tus tareas activas'], freelancers: ['Freelancers', 'Jornadas, tareas y cumplimiento del equipo freelancer'],
-  postulaciones: ['Postulaciones', 'Candidatos que aplicaron desde la web -- presencial y freelance'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], 'leads-colaboraciones': ['Leads Colaboraciones', 'Leads de campañas de colaboración paga -- van directo al WhatsApp del colaborador'], 'leads-fallidos': ['Leads Fallidos', 'Leads que el bot no pudo registrar automáticamente'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
+  tareas: ['Tareas', 'Tus tareas activas'],
+  'gestion-personal': ['Gestión de Personal', 'Personal, asistencia, asesores, freelancers y postulaciones -- todo el equipo en un solo lugar'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -824,6 +824,76 @@ const fmtFechaHoraCaracas = iso => {
 // correrse un día en timezones lejanos a Caracas (ej. UTC+9 lo lee como el día
 // anterior al reformatearlo). Se formatea directo de los componentes del string.
 const fmtFechaSolo = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
+/* ---------- Gestión de Personal (admin) -- junta Personal/Asistencia/Asesores/
+   Freelancers/Postulaciones en una sola sección con pestañas, pedido del dueño
+   (2026-07-26). Cada pestaña sigue usando su loader original (loadAsistencia,
+   loadAsesoresPeriodo, loadFreelancers, loadPostulaciones) sin tocar su lógica --
+   esto solo cambia cómo se navega hacia ellas. */
+let gpTab = 'personal';
+function setupGestionPersonal() {
+  document.querySelectorAll('#gp-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
+    gpTab = btn.dataset.gpTab;
+    document.querySelectorAll('#gp-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
+    document.querySelectorAll('.gp-tab-panel').forEach(p => p.style.display = p.dataset.gpPanel === gpTab ? '' : 'none');
+    cargarTabGestionPersonal(gpTab);
+  }));
+}
+function cargarTabGestionPersonal(tab) {
+  if (tab === 'personal') loadPersonalTiempo();
+  else if (tab === 'asistencia') loadAsistencia();
+  else if (tab === 'asesores') loadAsesoresPeriodo();
+  else if (tab === 'freelancers') loadFreelancers();
+  else if (tab === 'postulaciones') loadPostulaciones();
+}
+async function loadGestionPersonal() {
+  cargarResumenPersonalKPIs();
+  cargarTabGestionPersonal(gpTab);
+}
+async function cargarResumenPersonalKPIs() {
+  const [{ data: usuarios }, { data: sesionesActivas }, { count: postSinRevisar }] = await Promise.all([
+    sb.from('usuarios').select('id,rol,bloqueado'),
+    sb.from('agent_sessions').select('asesor_id').eq('estado_actual', 'activo'),
+    sb.from('postulaciones_empleo').select('id', { count: 'exact', head: true }).eq('revisado', false),
+  ]);
+  document.getElementById('gp-kpi-equipo').textContent = (usuarios || []).filter(u => !u.bloqueado).length;
+  document.getElementById('gp-kpi-conectados').textContent = new Set((sesionesActivas || []).map(s => s.asesor_id)).size;
+  document.getElementById('gp-kpi-postulaciones').textContent = postSinRevisar ?? 0;
+  const badge = document.getElementById('gp-postulaciones-count');
+  if (badge) { badge.textContent = postSinRevisar ?? 0; badge.style.display = postSinRevisar ? '' : 'none'; }
+}
+const ROL_LABEL_GP = { admin: 'Administrador', asesor: 'Asesor', marketing: 'Marketing', boleteria: 'Boletería' };
+function formatDuracionLarga(ms) {
+  if (!ms) return 'Sin registro';
+  const horasTotales = Math.floor(ms / 3600000);
+  const dias = Math.floor(horasTotales / 24);
+  const horas = horasTotales % 24;
+  const minutos = Math.floor((ms % 3600000) / 60000);
+  if (dias > 0) return `${dias}d ${horas}h`;
+  if (horasTotales > 0) return `${horasTotales}h ${minutos}min`;
+  return `${minutos}min`;
+}
+async function loadPersonalTiempo() {
+  const tbody = document.getElementById('gp-personal-tbody');
+  tbody.innerHTML = '<tr><td colspan="3" class="muted">Cargando...</td></tr>';
+  const [{ data: usuarios, error: e1 }, { data: sesiones, error: e2 }] = await Promise.all([
+    sb.from('usuarios').select('id,nombre,rol,bloqueado,es_freelancer').order('nombre'),
+    sb.from('agent_sessions').select('asesor_id,hora_entrada,hora_salida'),
+  ]);
+  if (e1 || e2) { tbody.innerHTML = '<tr><td colspan="3" class="muted">No se pudo cargar</td></tr>'; return; }
+  const ahora = Date.now();
+  const msPorId = {};
+  (sesiones || []).forEach(s => {
+    const ini = new Date(s.hora_entrada).getTime();
+    const fin = s.hora_salida ? new Date(s.hora_salida).getTime() : ahora;
+    msPorId[s.asesor_id] = (msPorId[s.asesor_id] || 0) + Math.max(0, fin - ini);
+  });
+  const filas = (usuarios || []).map(u => ({ ...u, ms: msPorId[u.id] || 0 })).sort((a, b) => b.ms - a.ms);
+  tbody.innerHTML = filas.map(u => `<tr>
+    <td data-label="Nombre">${esc(u.nombre)}${u.bloqueado ? ' <span class="muted">(bloqueado)</span>' : ''}</td>
+    <td data-label="Rol"><span class="chip">${ROL_LABEL_GP[u.rol] || u.rol}${u.es_freelancer ? ' · Freelance' : ''}</span></td>
+    <td data-label="Tiempo en el CRM">${formatDuracionLarga(u.ms)}</td>
+  </tr>`).join('');
+}
 async function loadAsistencia() {
   const [{ data: hoy, error: e1 }, { data: strikes, error: e2 }] = await Promise.all([
     sb.rpc('asistencia_admin_hoy'),
@@ -1081,7 +1151,7 @@ async function startApp() {
   // No se llama loadInboxLeads() acá de nuevo -- activateSection('leads')
   // (arriba, para asesor) ya la dispara; llamarla dos veces corría 2 fetches
   // del mismo query en paralelo sin orden garantizado de resolución.
-  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion();
+  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion(); setupGestionPersonal();
   setupDestPeriodo(); loadDestPeriodo();
   setupVoucher(); actualizarBadgeVoucher();
   setupTareas(); setupFreelancers();
@@ -2544,7 +2614,7 @@ function renderPostulaciones() {
   });
   wirePostChecks();
   const pendientes = postCache.filter(p => !p.revisado).length;
-  const badge = document.getElementById('nav-postulaciones-count');
+  const badge = document.getElementById('gp-postulaciones-count');
   if (badge) { badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
 }
 function wirePostChecks() {
@@ -5309,7 +5379,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'reasignaciones') loadReasignaciones();
   if (sec === 'facturacion') loadFacturacion();
   if (sec === 'mis-comisiones') loadMisComisiones();
-  if (sec === 'asistencia') loadAsistencia();
+  if (sec === 'gestion-personal') loadGestionPersonal();
   if (sec === 'postventa') loadPostventa();
   if (sec === 'informe-diario') loadInformeDiario();
   if (sec === 'hoy') renderHoy();
@@ -5317,12 +5387,9 @@ function activateSection(sec, fromNav) {
   if (sec === 'tarifario') loadTarifario();
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'galeria') loadGaleria();
-  if (sec === 'asesores') loadAsesoresPeriodo();
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'tareas') loadTareas();
-  if (sec === 'freelancers') loadFreelancers();
-  if (sec === 'postulaciones') loadPostulaciones();
   if (sec === 'manual') renderManual();
   if (sec === 'actualizaciones') renderActualizaciones();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
@@ -5533,15 +5600,12 @@ const TOUR_CAPITULOS = [
   { id: 'redes', titulo: 'Redes', icono: 'fa-share-nodes', roles: ['admin', 'marketing'], seccion: 'redes', pasos: [
     { titulo: 'Instagram y Meta', texto: 'Métricas de las redes sociales del negocio -- alcance, seguidores, publicaciones que mejor funcionan.', selector: '#sec-redes' },
   ]},
-  { id: 'asesores', titulo: 'Asesores', icono: 'fa-user-tie', roles: ['admin'], seccion: 'asesores', pasos: [
-    { titulo: 'Tu equipo', texto: 'Alta/baja de asesores, y el peso de cada uno en el sorteo automático de leads nuevos.', selector: '#sec-asesores' },
-  ]},
   { id: 'reasignaciones', titulo: 'Reasignaciones', icono: 'fa-shuffle', roles: ['admin'], seccion: 'reasignaciones', pasos: [
     { titulo: 'Historial de reasignaciones', texto: 'Cada vez que un lead pasa de un asesor a otro por no responder a tiempo, queda acá con el motivo.', selector: '#sec-reasignaciones' },
   ]},
-  { id: 'asistencia', titulo: 'Asistencia', icono: 'fa-user-clock', roles: ['admin'], seccion: 'asistencia', pasos: [
-    { titulo: 'Asistencia del equipo', texto: 'Quién marcó entrada/salida cada día y a qué hora.', selector: '#sec-asistencia' },
-    { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Cada asesor marca su propia jornada con este botón, siempre visible arriba del menú.', mockup: mockupAsistenciaAsesor },
+  { id: 'gestion-personal', titulo: 'Gestión de Personal', icono: 'fa-people-group', roles: ['admin'], seccion: 'gestion-personal', pasos: [
+    { titulo: 'Todo el equipo en un lugar', texto: 'Personal (tiempo de cada quien en el CRM), Asistencia, Asesores, Freelancers y Postulaciones -- como pestañas de una sola sección.', selector: '#sec-gestion-personal' },
+    { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Cada asesor marca su propia jornada con este botón, siempre visible arriba del menú -- no ve esta sección, es solo de Admin.', mockup: mockupAsistenciaAsesor },
   ]},
   { id: 'informe-diario', titulo: 'Informe Diario', icono: 'fa-file-lines', roles: ['admin'], seccion: 'informe-diario',
     visibleIf: () => getComputedStyle(document.getElementById('nav-informe-diario')).display !== 'none', pasos: [
@@ -5574,12 +5638,12 @@ const MANUAL_EXTRA = [
   { id: 'mis-comisiones', titulo: 'Mis Comisiones', icono: 'fa-sack-dollar', roles: ['asesor'], pasos: [
     { titulo: 'Lo que ganaste', texto: 'Tus comisiones sobre las ventas ya pagadas, con filtro por mes.' },
   ]},
-  { id: 'postulaciones', titulo: 'Postulaciones', icono: 'fa-address-card', roles: ['admin'], pasos: [
-    { titulo: 'Candidatos que aplicaron', texto: 'Todos los que postularon desde "Trabaja con nosotros" en la web (o le contaron a la IA por Instagram/Facebook que querían trabajar acá) -- presencial y freelance, con su CV si lo subieron.' },
-    { titulo: 'Gestioná el proceso', texto: 'Marcá si ya revisaste el perfil, si es buen prospecto, y si ya lo llamaste -- todo desde la ficha de cada candidato, igual que con un lead.' },
-  ]},
-  { id: 'freelancers', titulo: 'Freelancers', icono: 'fa-user-shield', roles: ['admin'], pasos: [
-    { titulo: 'Tu equipo freelance', texto: 'Jornadas, tareas asignadas y cumplimiento de cada asesor freelance, aparte del equipo presencial.' },
+  { id: 'gestion-personal', titulo: 'Gestión de Personal', icono: 'fa-people-group', roles: ['admin'], pasos: [
+    { titulo: 'Personal', texto: 'Cuánto tiempo lleva cada quien conectado al CRM en total, con su nombre y rol -- de un vistazo.' },
+    { titulo: 'Asistencia', texto: 'Quién marcó entrada/salida cada día, strikes del mes e historial completo.' },
+    { titulo: 'Asesores', texto: 'Alta/baja de tu equipo y el peso de cada uno en el sorteo automático de leads nuevos.' },
+    { titulo: 'Freelancers', texto: 'Jornadas, tareas asignadas y cumplimiento de cada asesor freelance, aparte del equipo presencial.' },
+    { titulo: 'Postulaciones', texto: 'Candidatos que aplicaron desde "Trabaja con nosotros" en la web (o le contaron a la IA por Instagram/Facebook) -- presencial y freelance, con su CV. Marcá si ya revisaste el perfil, si es buen prospecto, y si ya lo llamaste.' },
   ]},
   { id: 'tareas', titulo: 'Tareas', icono: 'fa-list-check', roles: ['admin', 'asesor'], pasos: [
     { titulo: 'Lo que tenés pendiente', texto: 'Tareas que te asignó administración, con su estado -- para no perder de vista pendientes que no son un lead.' },
@@ -5592,9 +5656,6 @@ const MANUAL_EXTRA = [
   ]},
   { id: 'leads-fallidos', titulo: 'Leads Fallidos', icono: 'fa-triangle-exclamation', roles: ['admin'], pasos: [
     { titulo: 'Red de seguridad', texto: 'Si un lead no se pudo registrar automático (falla de red, de ManyChat, etc.), cae acá para que no se pierda -- el sistema reintenta solo y marca si necesitás revisarlo a mano.' },
-  ]},
-  { id: 'asesores', titulo: 'Asesores', icono: 'fa-user-tie', roles: ['admin'], pasos: [
-    { titulo: 'Alta y baja de tu equipo', texto: 'Agregá o desactivá asesores, y ajustá el peso de cada uno en el sorteo automático de leads nuevos.' },
   ]},
   { id: 'perfil', titulo: 'Mi Perfil', icono: 'fa-user-gear', roles: ['admin', 'asesor', 'marketing', 'boleteria'], pasos: [
     { titulo: 'Personalizá tu CRM', texto: 'Foto de perfil, tema claro/oscuro, tamaño de letra y recordatorios de asistencia -- todo desde tu avatar arriba a la derecha.' },
