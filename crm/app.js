@@ -3165,7 +3165,7 @@ async function loadMisComisiones() {
 }
 
 /* ---------- Tarifario ---------- */
-let tarTab = 'promo', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
+let tarTab = 'hotsale', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 const tarDestinosAbiertos = new Set();
 const tarHotelesAbiertos = new Set();
 const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale' };
