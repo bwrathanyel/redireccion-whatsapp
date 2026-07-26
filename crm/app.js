@@ -57,7 +57,9 @@ const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.ch
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
 const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], 'leads-colaboraciones': ['Leads Colaboraciones', 'Leads de campañas de colaboración paga -- van directo al WhatsApp del colaborador'], 'leads-fallidos': ['Leads Fallidos', 'Leads que el bot no pudo registrar automáticamente'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
   tareas: ['Tareas', 'Tus tareas activas'], freelancers: ['Freelancers', 'Jornadas, tareas y cumplimiento del equipo freelancer'],
-  postulaciones: ['Postulaciones', 'Candidatos que aplicaron desde la web -- presencial y freelance'] };
+  postulaciones: ['Postulaciones', 'Candidatos que aplicaron desde la web -- presencial y freelance'],
+  manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
+  actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
@@ -1048,6 +1050,7 @@ async function startApp() {
   setupRedes();
   setupPostventa();
   setupTutorial();
+  setupManual();
   setupHoy();
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
   if (ROL === 'boleteria') { activateSection('mensajes'); return; }
@@ -5257,6 +5260,8 @@ function activateSection(sec, fromNav) {
   if (sec === 'tareas') loadTareas();
   if (sec === 'freelancers') loadFreelancers();
   if (sec === 'postulaciones') loadPostulaciones();
+  if (sec === 'manual') renderManual();
+  if (sec === 'actualizaciones') renderActualizaciones();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
 function setupNav() {
@@ -5484,6 +5489,129 @@ const TOUR_CAPITULOS = [
   ]},
 ];
 
+/* ---------- Manual del CRM (sección estática con capturas, complementa el tour) ----------
+   Reusa el contenido de TOUR_CAPITULOS (para no mantener el mismo texto dos veces) y lo
+   completa con MANUAL_EXTRA para las secciones que el tour todavía no cubre. Pedido del
+   dueño (2026-07-26): manual completo con capturas, accesible por sección o de corrido,
+   más visible que el tour de bienvenida (botón propio en el topbar). */
+const MANUAL_EXTRA = [
+  { id: 'hoy', titulo: 'Hoy', icono: 'fa-sun', roles: ['admin', 'asesor', 'marketing', 'boleteria'], pasos: [
+    { titulo: 'Tu resumen del día', texto: 'La pantalla con la que arrancás: leads nuevos, pendientes por atender y tu jornada, todo en un vistazo.' },
+  ]},
+  { id: 'buscar-tarifario', titulo: 'Buscar Tarifario', icono: 'fa-magnifying-glass', roles: ['admin', 'asesor'], pasos: [
+    { titulo: 'Encontrá una promo al toque', texto: 'Buscador de texto libre sobre todo el Tarifario -- escribí el hotel, destino o tipo de promo y te muestra las coincidencias, sin tener que navegar pestaña por pestaña.' },
+  ]},
+  { id: 'postventa', titulo: 'Postventa', icono: 'fa-handshake-angle', roles: ['admin', 'asesor'], pasos: [
+    { titulo: 'Después de la venta', texto: 'Cobros pendientes, reservas confirmadas, documentos del cliente y seguimiento del viaje una vez que ya pagó -- para no perder el hilo después del cierre.' },
+  ]},
+  { id: 'facturacion', titulo: 'Facturación', icono: 'fa-file-invoice-dollar', roles: ['admin'], pasos: [
+    { titulo: 'Facturas y comisiones', texto: 'Creá o buscá el cliente, registrá la venta con su costo neto y proveedor, y el sistema calcula la comisión de cada asesor automáticamente.' },
+    { titulo: 'Cuentas por pagar', texto: 'Lo que se le debe a cada proveedor queda registrado acá, separado de la comisión del asesor.' },
+  ]},
+  { id: 'mis-comisiones', titulo: 'Mis Comisiones', icono: 'fa-sack-dollar', roles: ['asesor'], pasos: [
+    { titulo: 'Lo que ganaste', texto: 'Tus comisiones sobre las ventas ya pagadas, con filtro por mes.' },
+  ]},
+  { id: 'postulaciones', titulo: 'Postulaciones', icono: 'fa-address-card', roles: ['admin'], pasos: [
+    { titulo: 'Candidatos que aplicaron', texto: 'Todos los que postularon desde "Trabaja con nosotros" en la web (o le contaron a la IA por Instagram/Facebook que querían trabajar acá) -- presencial y freelance, con su CV si lo subieron.' },
+    { titulo: 'Gestioná el proceso', texto: 'Marcá si ya revisaste el perfil, si es buen prospecto, y si ya lo llamaste -- todo desde la ficha de cada candidato, igual que con un lead.' },
+  ]},
+  { id: 'freelancers', titulo: 'Freelancers', icono: 'fa-user-shield', roles: ['admin'], pasos: [
+    { titulo: 'Tu equipo freelance', texto: 'Jornadas, tareas asignadas y cumplimiento de cada asesor freelance, aparte del equipo presencial.' },
+  ]},
+  { id: 'tareas', titulo: 'Tareas', icono: 'fa-list-check', roles: ['admin', 'asesor'], pasos: [
+    { titulo: 'Lo que tenés pendiente', texto: 'Tareas que te asignó administración, con su estado -- para no perder de vista pendientes que no son un lead.' },
+  ]},
+  { id: 'voucher', titulo: 'Voucher', icono: 'fa-file-invoice', roles: ['admin', 'asesor'], pasos: [
+    { titulo: 'Genera el voucher', texto: 'Arma el voucher de hospedaje en PDF para el cliente, con los datos de la reserva ya cargados.' },
+  ]},
+  { id: 'leads-colaboraciones', titulo: 'Leads Colaboraciones', icono: 'fa-handshake', roles: ['admin'], pasos: [
+    { titulo: 'Campañas pagas con colaboradores', texto: 'Estos leads van directo al WhatsApp del colaborador (no a un asesor) -- acá queda el registro de esa campaña.' },
+  ]},
+  { id: 'leads-fallidos', titulo: 'Leads Fallidos', icono: 'fa-triangle-exclamation', roles: ['admin'], pasos: [
+    { titulo: 'Red de seguridad', texto: 'Si un lead no se pudo registrar automático (falla de red, de ManyChat, etc.), cae acá para que no se pierda -- el sistema reintenta solo y marca si necesitás revisarlo a mano.' },
+  ]},
+  { id: 'asesores', titulo: 'Asesores', icono: 'fa-user-tie', roles: ['admin'], pasos: [
+    { titulo: 'Alta y baja de tu equipo', texto: 'Agregá o desactivá asesores, y ajustá el peso de cada uno en el sorteo automático de leads nuevos.' },
+  ]},
+  { id: 'perfil', titulo: 'Mi Perfil', icono: 'fa-user-gear', roles: ['admin', 'asesor', 'marketing', 'boleteria'], pasos: [
+    { titulo: 'Personalizá tu CRM', texto: 'Foto de perfil, tema claro/oscuro, tamaño de letra y recordatorios de asistencia -- todo desde tu avatar arriba a la derecha.' },
+  ]},
+];
+const MANUAL_IMG = {
+  leads: 'leads.png', mensajes: 'mensajes.png', tarifario: 'tarifario.png', facturacion: 'facturacion.png',
+  postulaciones: 'postulaciones.png', redes: 'redes.png', asistencia: 'asistencia.png', reasignaciones: 'reasignaciones.png',
+};
+function temasManualVisibles() {
+  const deTour = capitulosVisiblesTour().map(c => ({ id: c.id, titulo: c.titulo, icono: c.icono, pasos: pasosVisiblesCapitulo(c) }));
+  const extra = MANUAL_EXTRA.filter(t => t.roles.includes(ROL));
+  const vistos = new Set(deTour.map(t => t.id));
+  return [...deTour, ...extra.filter(t => !vistos.has(t.id))];
+}
+function renderManual() {
+  const temas = temasManualVisibles();
+  document.getElementById('manual-list').innerHTML = temas.map(t => `
+    <details class="manual-tema" id="manual-${t.id}">
+      <summary><i class="fas ${t.icono}"></i> <span>${esc(t.titulo)}</span><i class="fas fa-chevron-down manual-chev"></i></summary>
+      <div class="manual-body">${MANUAL_IMG[t.id] ? `<img class="manual-shot" src="img/manual/${MANUAL_IMG[t.id]}" alt="Captura de ${esc(t.titulo)}" loading="lazy">` : ''}${t.pasos.map(p => `
+        <div class="manual-paso">
+          <div class="mp-t">${esc(p.titulo)}</div>
+          <div class="mp-x">${esc(typeof p.texto === 'function' ? p.texto() : p.texto)}</div>
+        </div>`).join('')}
+      </div>
+    </details>`).join('');
+  document.getElementById('manual-count').textContent = `${temas.length} secciones`;
+}
+function setupManual() {
+  document.getElementById('manual-expand-all')?.addEventListener('click', () => document.querySelectorAll('#manual-list details').forEach(d => d.open = true));
+  document.getElementById('manual-collapse-all')?.addEventListener('click', () => document.querySelectorAll('#manual-list details').forEach(d => d.open = false));
+}
+
+/* ---------- Actualizaciones (changelog del CRM, pedido del dueño 2026-07-26) ----------
+   Curado a mano a partir del historial real de commits de lotus-crm-preview y
+   redireccion-whatsapp/crm -- traducido a lenguaje de usuario final, no mensajes de commit
+   crudos. Orden: más reciente primero. Agregar acá arriba cada vez que se publique algo
+   nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
+const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-07-26', emoji: '📖', titulo: 'Manual del CRM y esta sección de Actualizaciones', texto: 'Guía completa por secciones (con capturas) accesible desde un botón arriba de toda pantalla, y este historial de novedades.' },
+  { fecha: '2026-07-25', emoji: '🧑‍💼', titulo: 'Sección Postulaciones', texto: 'Los candidatos que aplican desde "Trabaja con nosotros" (web o Instagram/Facebook) quedan acá, con CV, estado de llamada y calificación de prospecto -- solo Admin.' },
+  { fecha: '2026-07-25', emoji: '🏷️', titulo: 'Tarjetas de lead y Tarifario reorganizados', texto: 'Botón de "Enviar a facturación" directo en la tarjeta, checkboxes con más estilo, recarga manual de Leads, y Promociones agrupadas por hotel + nueva sección Hot Sales.' },
+  { fecha: '2026-07-24', emoji: '📱', titulo: 'CRM móvil rediseñado', texto: 'Navegación de 5 zonas (Hoy / Leads / Mensajes / Tarifario / Yo), pestaña Conversación y Actividad en la ficha del lead, también en desktop.' },
+  { fecha: '2026-07-24', emoji: '💰', titulo: 'Ventas y Cobranzas', texto: 'Costo neto, proveedor y Cuentas por Pagar por venta, con % de comisión calculado por asesor. Filtros por mes/asesor y exportar a CSV/PDF/XLSX.' },
+  { fecha: '2026-07-24', emoji: '🧑‍💻', titulo: 'Perfil freelancer', texto: 'Sección Freelancers con jornadas y tareas propias, separado del equipo presencial.' },
+  { fecha: '2026-07-23', emoji: '🏅', titulo: 'Badges inteligentes en Leads', texto: 'La IA marca prioridad del lead y avisa cuando el nombre parece dudoso (perfil de Instagram/Facebook en vez del nombre real).' },
+  { fecha: '2026-07-22', emoji: '🛡️', titulo: 'Leads Fallidos y Colaboraciones', texto: 'Red de seguridad para leads que el bot no pudo registrar solo, y sección aparte para leads de campañas pagas con colaboradores.' },
+  { fecha: '2026-07-21', emoji: '🔀', titulo: 'Estado NUMERO INVALIDO + flechitas de estado', texto: 'Nuevo estado para números que no sirven, y flechitas para avanzar/retroceder el estado del lead directo desde la ficha.' },
+  { fecha: '2026-07-18', emoji: '📸', titulo: 'Fotos del Tarifario mejoradas', texto: 'Se pueden borrar fotos desde el CRM, arreglos de scroll en celular, y pestaña TikTok agregada junto a Instagram en Redes.' },
+  { fecha: '2026-07-17', emoji: '🧭', titulo: 'Sidebar reordenable', texto: 'Podés reordenar el menú lateral a tu gusto, borrado masivo de leads, y voucher disponible para todos los asesores.' },
+  { fecha: '2026-07-16', emoji: '🧾', titulo: 'Facturación y Buscar Tarifario', texto: 'Sección de Facturación con Mis Comisiones para asesores, buscador de texto libre sobre el Tarifario, y botón "Sugerir respuesta" con IA en la ficha del lead.' },
+  { fecha: '2026-07-15', emoji: '🎨', titulo: 'Rediseño de UI', texto: 'Postventa, bandeja de leads, jornada laboral y tema claro/oscuro -- lavado de cara grande al CRM.' },
+  { fecha: '2026-07-11', emoji: '🚫', titulo: 'Cotizador IA no promete sin entregar', texto: 'Regla dura + timeout de 20s: la IA nunca deja al cliente esperando una respuesta que no puede cumplir.' },
+  { fecha: '2026-07-10', emoji: '🗣️', titulo: 'Dictado por voz + Extractor de datos IA', texto: 'Podés dictar en vez de escribir en Cotizador/Mensajes/Extractor. El Extractor IA (con Gemini) parsea una conversación de WhatsApp y precarga la ficha del lead solo.' },
+  { fecha: '2026-07-10', emoji: '💬', titulo: 'Chat interno del equipo', texto: 'Mensajería 1 a 1 y grupo "Comunidad" con fotos, videos y documentos, estilo WhatsApp -- para hablar con compañeros sin salir del CRM.' },
+  { fecha: '2026-07-10', emoji: '⚡', titulo: 'PWA instalable + rendimiento', texto: 'El CRM se instala como app, funciona offline, y mejoras grandes de velocidad y accesibilidad.' },
+  { fecha: '2026-07-10', emoji: '🕒', titulo: 'Control de asistencia', texto: 'Marcá entrada/salida de tu jornada, con recordatorios y notificaciones push.' },
+  { fecha: '2026-07-09', emoji: '🏨', titulo: 'Tarifario con fotos y filtros', texto: 'Fotos de hoteles, filtros por precio/tipo de plan/niños gratis, y el Cotizador IA arma opciones usando ese catálogo.' },
+  { fecha: '2026-07-08', emoji: '🔐', titulo: 'Login individual por usuario', texto: 'Cada asesor entra con su propia cuenta y rol (admin/asesor/marketing), con autoservicio para configurar su contraseña.' },
+  { fecha: '2026-07-07', emoji: '🚀', titulo: 'Nace el CRM Lotus360', texto: 'Primera versión: leads editables, ranking de asesores y métricas -- reemplazando el flujo disperso de ManyChat, Telegram y Google Sheets.' },
+];
+function renderActualizaciones() {
+  const porMes = {};
+  ACTUALIZACIONES_LOG.forEach(e => { const k = e.fecha.slice(0, 7); (porMes[k] ||= []).push(e); });
+  const meses = Object.keys(porMes).sort().reverse();
+  document.getElementById('actualizaciones-list').innerHTML = meses.map(k => `
+    <div class="act-mes">
+      <div class="act-mes-t">${esc(fullMonth(k))}</div>
+      ${porMes[k].map(e => `
+        <div class="act-item">
+          <div class="act-emoji">${e.emoji}</div>
+          <div class="act-body">
+            <div class="act-head"><span class="act-titulo">${esc(e.titulo)}</span><span class="act-fecha">${e.fecha.slice(8, 10)}/${e.fecha.slice(5, 7)}</span></div>
+            <div class="act-texto">${esc(e.texto)}</div>
+          </div>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
 function pasosVisiblesCapitulo(cap) { return cap.pasos.filter(p => !p.soloAdmin || ROL === 'admin'); }
 function capitulosVisiblesTour() { return TOUR_CAPITULOS.filter(c => c.roles.includes(ROL) && (!c.visibleIf || c.visibleIf())); }
 function elVisible(selector) { return [...document.querySelectorAll(selector)].find(el => el.offsetParent !== null) || null; }
@@ -5567,4 +5695,5 @@ function setupTutorial() {
   document.getElementById('tb-next').addEventListener('click', siguientePasoTour);
   document.getElementById('tb-back').addEventListener('click', pasoAnteriorTour);
   document.getElementById('tb-skip').addEventListener('click', () => volverAlMenuTutorial());
+  document.getElementById('topbar-manual-btn')?.addEventListener('click', () => activateSection('manual'));
 }
