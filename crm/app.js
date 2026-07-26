@@ -2506,6 +2506,7 @@ document.getElementById('leads-fallidos-ver-resueltos')?.addEventListener('chang
 const CALIDAD_PROSPECTO_LABEL = { buen_prospecto: 'Buen prospecto', no_calza: 'No calza' };
 const CALIDAD_PROSPECTO_COLOR = { buen_prospecto: '#22c55e', no_calza: '#ef4444' };
 let postCache = [], postDrawerActual = null, postSearchDeb;
+const SELECTED_POST = new Set();
 async function loadPostulaciones() {
   const { data, error } = await sb.from('postulaciones_empleo').select('*').order('created_at', { ascending: false });
   if (error) { console.error(error); errToast('No se pudo cargar Postulaciones'); return; }
@@ -2527,6 +2528,7 @@ function renderPostulaciones() {
   });
   document.getElementById('post-empty').classList.toggle('show', filtered.length === 0);
   document.getElementById('post-tbody').innerHTML = filtered.map(p => `<tr data-id="${p.id}">
+    <td><input type="checkbox" class="post-check" data-id="${p.id}" ${SELECTED_POST.has(p.id) ? 'checked' : ''}></td>
     <td>${p.revisado ? '<i class="fas fa-circle-check" style="color:#22c55e" title="Revisado"></i>' : '<i class="fas fa-circle" style="color:#5f677f" title="Sin revisar"></i>'}</td>
     <td data-label="Nombre">${esc(p.nombre)}</td>
     <td data-label="Modalidad"><span class="chip">${p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'}</span></td>
@@ -2540,10 +2542,70 @@ function renderPostulaciones() {
     const p = postCache.find(x => String(x.id) === tr.dataset.id);
     if (p) abrirPostulacionDrawer(p);
   });
+  wirePostChecks();
   const pendientes = postCache.filter(p => !p.revisado).length;
   const badge = document.getElementById('nav-postulaciones-count');
   if (badge) { badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
 }
+function wirePostChecks() {
+  document.querySelectorAll('.post-check').forEach(cb => {
+    cb.addEventListener('click', e => e.stopPropagation());
+    cb.addEventListener('change', () => {
+      const id = +cb.dataset.id;
+      if (cb.checked) SELECTED_POST.add(id); else SELECTED_POST.delete(id);
+      updatePostBulkBar();
+    });
+  });
+  updatePostBulkBar();
+}
+function updatePostBulkBar() {
+  const bar = document.getElementById('post-bulk-bar'), count = document.getElementById('post-bulk-count');
+  const n = SELECTED_POST.size;
+  if (bar) bar.style.display = n > 0 ? 'flex' : 'none';
+  if (count) count.textContent = `${n} seleccionado${n === 1 ? '' : 's'}`;
+  const ids = [...document.querySelectorAll('.post-check')].map(cb => +cb.dataset.id);
+  const selectAll = document.getElementById('post-th-select-all');
+  if (selectAll) selectAll.checked = ids.length > 0 && ids.every(id => SELECTED_POST.has(id));
+}
+function clearPostSelection() { SELECTED_POST.clear(); updatePostBulkBar(); document.querySelectorAll('.post-check').forEach(cb => cb.checked = false); }
+document.getElementById('post-th-select-all')?.addEventListener('change', e => {
+  document.querySelectorAll('.post-check').forEach(cb => {
+    cb.checked = e.target.checked;
+    const id = +cb.dataset.id;
+    if (e.target.checked) SELECTED_POST.add(id); else SELECTED_POST.delete(id);
+  });
+  updatePostBulkBar();
+});
+document.getElementById('post-bulk-clear')?.addEventListener('click', clearPostSelection);
+document.getElementById('post-bulk-eliminar')?.addEventListener('click', () => {
+  if (!SELECTED_POST.size) return;
+  const desc = document.getElementById('confirm-delete-post-desc');
+  const input = document.getElementById('confirm-delete-post-input');
+  const ok = document.getElementById('confirm-delete-post-ok');
+  desc.textContent = `Vas a eliminar ${SELECTED_POST.size} postulación(es) seleccionadas. Van a desaparecer de la lista. La acción es recuperable solo desde la base de datos -- no desde el CRM.`;
+  input.value = ''; ok.disabled = true; ok.style.opacity = '.5';
+  openSheet('confirm-delete-post-sheet');
+  setTimeout(() => input.focus(), 50);
+});
+document.getElementById('confirm-delete-post-input')?.addEventListener('input', e => {
+  const ok = document.getElementById('confirm-delete-post-ok');
+  const listo = e.target.value.trim().toLowerCase() === 'eliminar';
+  ok.disabled = !listo; ok.style.opacity = listo ? '1' : '.5';
+});
+document.getElementById('confirm-delete-post-cancel')?.addEventListener('click', () => closeSheet('confirm-delete-post-sheet'));
+document.getElementById('confirm-delete-post-ok')?.addEventListener('click', async () => {
+  if (!SELECTED_POST.size) return;
+  const btn = document.getElementById('confirm-delete-post-ok');
+  btn.disabled = true; btn.innerHTML = 'Eliminando... <i class="fas fa-spinner fa-spin"></i>';
+  const ids = [...SELECTED_POST];
+  const { error } = await sb.from('postulaciones_empleo').delete().in('id', ids);
+  btn.innerHTML = '<i class="fas fa-trash"></i> Eliminar';
+  if (error) errToast('No se pudieron eliminar: ' + error.message);
+  closeSheet('confirm-delete-post-sheet', true);
+  clearPostSelection();
+  if (!error) okToast(`${ids.length} postulación(es) eliminada(s)`);
+  loadPostulaciones();
+});
 function abrirPostulacionDrawer(p) {
   postDrawerActual = p;
   document.getElementById('post-d-nombre').textContent = p.nombre;

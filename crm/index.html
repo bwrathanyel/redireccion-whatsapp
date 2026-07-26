@@ -2006,10 +2006,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           </select>
           <label class="tar-f-check"><input type="checkbox" id="post-f-sin-revisar"> Solo sin revisar</label>
         </div>
+        <div class="bulk-bar" id="post-bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
+          <span id="post-bulk-count" style="font-size:13.5px;font-weight:600"></span>
+          <button class="dbtn" id="post-bulk-clear" type="button" style="width:auto;padding:6px 12px">Cancelar selección</button>
+          <button class="dbtn" id="post-bulk-eliminar" type="button" style="width:auto;padding:6px 12px;background:#ef4444;color:#fff;margin-left:auto"><i class="fas fa-trash"></i> Eliminar seleccionados</button>
+        </div>
         <div style="overflow-x:auto">
           <table>
             <thead><tr>
-              <th></th><th>Nombre</th><th>Modalidad</th><th>Rol de interés</th><th>Teléfono</th>
+              <th style="width:34px"><input type="checkbox" id="post-th-select-all"></th><th></th><th>Nombre</th><th>Modalidad</th><th>Rol de interés</th><th>Teléfono</th>
               <th>Llamada</th><th>Prospecto</th><th>Fecha</th>
             </tr></thead>
             <tbody id="post-tbody"></tbody>
@@ -2476,6 +2481,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <div style="display:flex;gap:10px;padding:14px 16px 4px">
     <button class="dbtn" id="confirm-delete-lead-cancel" type="button" style="flex:1">Cancelar</button>
     <button class="dbtn" id="confirm-delete-lead-ok" type="button" disabled style="flex:1;background:#ef4444;color:#fff;opacity:.5"><i class="fas fa-trash"></i> Eliminar</button>
+  </div>
+</div>
+
+<div class="sheet" id="confirm-delete-post-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-triangle-exclamation" style="color:#ef4444"></i> Eliminar postulaciones</div>
+  <p id="confirm-delete-post-desc" style="padding:0 16px 4px;color:var(--muted2);font-size:13.5px;line-height:1.5">Van a desaparecer de la lista. La acción es recuperable solo desde la base de datos -- no desde el CRM.</p>
+  <div style="padding:8px 16px 4px">
+    <label class="fl">Escribí <b>eliminar</b> para confirmar</label>
+    <input id="confirm-delete-post-input" class="ei" type="text" autocomplete="off" placeholder="eliminar">
+  </div>
+  <div style="display:flex;gap:10px;padding:14px 16px 4px">
+    <button class="dbtn" id="confirm-delete-post-cancel" type="button" style="flex:1">Cancelar</button>
+    <button class="dbtn" id="confirm-delete-post-ok" type="button" disabled style="flex:1;background:#ef4444;color:#fff;opacity:.5"><i class="fas fa-trash"></i> Eliminar</button>
   </div>
 </div>
 
