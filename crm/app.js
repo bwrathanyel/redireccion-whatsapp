@@ -5571,32 +5571,33 @@ function setupManual() {
    redireccion-whatsapp/crm -- traducido a lenguaje de usuario final, no mensajes de commit
    crudos. Orden: más reciente primero. Agregar acá arriba cada vez que se publique algo
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
+const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-07-26', emoji: '📖', titulo: 'Manual del CRM y esta sección de Actualizaciones', texto: 'Guía completa por secciones (con capturas) accesible desde un botón arriba de toda pantalla, y este historial de novedades.' },
-  { fecha: '2026-07-25', emoji: '🧑‍💼', titulo: 'Sección Postulaciones', texto: 'Los candidatos que aplican desde "Trabaja con nosotros" (web o Instagram/Facebook) quedan acá, con CV, estado de llamada y calificación de prospecto -- solo Admin.' },
-  { fecha: '2026-07-25', emoji: '🏷️', titulo: 'Tarjetas de lead y Tarifario reorganizados', texto: 'Botón de "Enviar a facturación" directo en la tarjeta, checkboxes con más estilo, recarga manual de Leads, y Promociones agrupadas por hotel + nueva sección Hot Sales.' },
-  { fecha: '2026-07-24', emoji: '📱', titulo: 'CRM móvil rediseñado', texto: 'Navegación de 5 zonas (Hoy / Leads / Mensajes / Tarifario / Yo), pestaña Conversación y Actividad en la ficha del lead, también en desktop.' },
-  { fecha: '2026-07-24', emoji: '💰', titulo: 'Ventas y Cobranzas', texto: 'Costo neto, proveedor y Cuentas por Pagar por venta, con % de comisión calculado por asesor. Filtros por mes/asesor y exportar a CSV/PDF/XLSX.' },
-  { fecha: '2026-07-24', emoji: '🧑‍💻', titulo: 'Perfil freelancer', texto: 'Sección Freelancers con jornadas y tareas propias, separado del equipo presencial.' },
-  { fecha: '2026-07-23', emoji: '🏅', titulo: 'Badges inteligentes en Leads', texto: 'La IA marca prioridad del lead y avisa cuando el nombre parece dudoso (perfil de Instagram/Facebook en vez del nombre real).' },
-  { fecha: '2026-07-22', emoji: '🛡️', titulo: 'Leads Fallidos y Colaboraciones', texto: 'Red de seguridad para leads que el bot no pudo registrar solo, y sección aparte para leads de campañas pagas con colaboradores.' },
-  { fecha: '2026-07-21', emoji: '🔀', titulo: 'Estado NUMERO INVALIDO + flechitas de estado', texto: 'Nuevo estado para números que no sirven, y flechitas para avanzar/retroceder el estado del lead directo desde la ficha.' },
-  { fecha: '2026-07-18', emoji: '📸', titulo: 'Fotos del Tarifario mejoradas', texto: 'Se pueden borrar fotos desde el CRM, arreglos de scroll en celular, y pestaña TikTok agregada junto a Instagram en Redes.' },
-  { fecha: '2026-07-17', emoji: '🧭', titulo: 'Sidebar reordenable', texto: 'Podés reordenar el menú lateral a tu gusto, borrado masivo de leads, y voucher disponible para todos los asesores.' },
-  { fecha: '2026-07-16', emoji: '🧾', titulo: 'Facturación y Buscar Tarifario', texto: 'Sección de Facturación con Mis Comisiones para asesores, buscador de texto libre sobre el Tarifario, y botón "Sugerir respuesta" con IA en la ficha del lead.' },
-  { fecha: '2026-07-15', emoji: '🎨', titulo: 'Rediseño de UI', texto: 'Postventa, bandeja de leads, jornada laboral y tema claro/oscuro -- lavado de cara grande al CRM.' },
-  { fecha: '2026-07-11', emoji: '🚫', titulo: 'Cotizador IA no promete sin entregar', texto: 'Regla dura + timeout de 20s: la IA nunca deja al cliente esperando una respuesta que no puede cumplir.' },
-  { fecha: '2026-07-10', emoji: '🗣️', titulo: 'Dictado por voz + Extractor de datos IA', texto: 'Podés dictar en vez de escribir en Cotizador/Mensajes/Extractor. El Extractor IA (con Gemini) parsea una conversación de WhatsApp y precarga la ficha del lead solo.' },
-  { fecha: '2026-07-10', emoji: '💬', titulo: 'Chat interno del equipo', texto: 'Mensajería 1 a 1 y grupo "Comunidad" con fotos, videos y documentos, estilo WhatsApp -- para hablar con compañeros sin salir del CRM.' },
-  { fecha: '2026-07-10', emoji: '⚡', titulo: 'PWA instalable + rendimiento', texto: 'El CRM se instala como app, funciona offline, y mejoras grandes de velocidad y accesibilidad.' },
-  { fecha: '2026-07-10', emoji: '🕒', titulo: 'Control de asistencia', texto: 'Marcá entrada/salida de tu jornada, con recordatorios y notificaciones push.' },
-  { fecha: '2026-07-09', emoji: '🏨', titulo: 'Tarifario con fotos y filtros', texto: 'Fotos de hoteles, filtros por precio/tipo de plan/niños gratis, y el Cotizador IA arma opciones usando ese catálogo.' },
-  { fecha: '2026-07-08', emoji: '🔐', titulo: 'Login individual por usuario', texto: 'Cada asesor entra con su propia cuenta y rol (admin/asesor/marketing), con autoservicio para configurar su contraseña.' },
-  { fecha: '2026-07-07', emoji: '🚀', titulo: 'Nace el CRM Lotus360', texto: 'Primera versión: leads editables, ranking de asesores y métricas -- reemplazando el flujo disperso de ManyChat, Telegram y Google Sheets.' },
+  { fecha: '2026-07-26', emoji: '📖', titulo: 'Manual del CRM y esta sección de Actualizaciones', texto: 'Guía completa por secciones (con capturas) accesible desde un botón arriba de toda pantalla, y este historial de novedades.', roles: ROLES_TODOS },
+  { fecha: '2026-07-25', emoji: '🧑‍💼', titulo: 'Sección Postulaciones', texto: 'Los candidatos que aplican desde "Trabaja con nosotros" (web o Instagram/Facebook) quedan acá, con CV, estado de llamada y calificación de prospecto.', roles: ['admin'] },
+  { fecha: '2026-07-25', emoji: '🏷️', titulo: 'Tarjetas de lead y Tarifario reorganizados', texto: 'Botón de "Enviar a facturación" directo en la tarjeta, checkboxes con más estilo, recarga manual de Leads, y Promociones agrupadas por hotel + nueva sección Hot Sales.', roles: ['admin', 'asesor', 'marketing'] },
+  { fecha: '2026-07-24', emoji: '📱', titulo: 'CRM móvil rediseñado', texto: 'Navegación de 5 zonas (Hoy / Leads / Mensajes / Tarifario / Yo), pestaña Conversación y Actividad en la ficha del lead, también en desktop.', roles: ROLES_TODOS },
+  { fecha: '2026-07-24', emoji: '💰', titulo: 'Ventas y Cobranzas', texto: 'Costo neto, proveedor y Cuentas por Pagar por venta, con % de comisión calculado por asesor. Filtros por mes/asesor y exportar a CSV/PDF/XLSX.', roles: ['admin'] },
+  { fecha: '2026-07-24', emoji: '🧑‍💻', titulo: 'Perfil freelancer', texto: 'Sección Freelancers con jornadas y tareas propias, separado del equipo presencial.', roles: ['admin', 'asesor'] },
+  { fecha: '2026-07-23', emoji: '🏅', titulo: 'Badges inteligentes en Leads', texto: 'La IA marca prioridad del lead y avisa cuando el nombre parece dudoso (perfil de Instagram/Facebook en vez del nombre real).', roles: ['admin', 'asesor'] },
+  { fecha: '2026-07-22', emoji: '🛡️', titulo: 'Leads Fallidos y Colaboraciones', texto: 'Red de seguridad para leads que el bot no pudo registrar solo, y sección aparte para leads de campañas pagas con colaboradores.', roles: ['admin'] },
+  { fecha: '2026-07-21', emoji: '🔀', titulo: 'Estado NUMERO INVALIDO + flechitas de estado', texto: 'Nuevo estado para números que no sirven, y flechitas para avanzar/retroceder el estado del lead directo desde la ficha.', roles: ['admin', 'asesor'] },
+  { fecha: '2026-07-18', emoji: '📸', titulo: 'Fotos del Tarifario mejoradas', texto: 'Se pueden borrar fotos desde el CRM, arreglos de scroll en celular, y pestaña TikTok agregada junto a Instagram en Redes.', roles: ['admin', 'marketing'] },
+  { fecha: '2026-07-17', emoji: '🧭', titulo: 'Sidebar reordenable', texto: 'Podés reordenar el menú lateral a tu gusto, borrado masivo de leads, y voucher disponible para todos los asesores.', roles: ['admin', 'asesor'] },
+  { fecha: '2026-07-16', emoji: '🧾', titulo: 'Facturación y Buscar Tarifario', texto: 'Sección de Facturación con Mis Comisiones para asesores, buscador de texto libre sobre el Tarifario, y botón "Sugerir respuesta" con IA en la ficha del lead.', roles: ['admin', 'asesor'] },
+  { fecha: '2026-07-15', emoji: '🎨', titulo: 'Rediseño de UI', texto: 'Postventa, bandeja de leads, jornada laboral y tema claro/oscuro -- lavado de cara grande al CRM.', roles: ROLES_TODOS },
+  { fecha: '2026-07-11', emoji: '🚫', titulo: 'Cotizador IA no promete sin entregar', texto: 'Regla dura + timeout de 20s: la IA nunca deja al cliente esperando una respuesta que no puede cumplir.', roles: ['admin', 'asesor', 'marketing'] },
+  { fecha: '2026-07-10', emoji: '🗣️', titulo: 'Dictado por voz + Extractor de datos IA', texto: 'Podés dictar en vez de escribir en Cotizador/Mensajes/Extractor. El Extractor IA (con Gemini) parsea una conversación de WhatsApp y precarga la ficha del lead solo.', roles: ['admin', 'asesor'] },
+  { fecha: '2026-07-10', emoji: '💬', titulo: 'Chat interno del equipo', texto: 'Mensajería 1 a 1 y grupo "Comunidad" con fotos, videos y documentos, estilo WhatsApp -- para hablar con compañeros sin salir del CRM.', roles: ROLES_TODOS },
+  { fecha: '2026-07-10', emoji: '⚡', titulo: 'PWA instalable + rendimiento', texto: 'El CRM se instala como app, funciona offline, y mejoras grandes de velocidad y accesibilidad.', roles: ROLES_TODOS },
+  { fecha: '2026-07-10', emoji: '🕒', titulo: 'Control de asistencia', texto: 'Marcá entrada/salida de tu jornada, con recordatorios y notificaciones push.', roles: ['admin', 'asesor'] },
+  { fecha: '2026-07-09', emoji: '🏨', titulo: 'Tarifario con fotos y filtros', texto: 'Fotos de hoteles, filtros por precio/tipo de plan/niños gratis, y el Cotizador IA arma opciones usando ese catálogo.', roles: ['admin', 'asesor', 'marketing'] },
+  { fecha: '2026-07-08', emoji: '🔐', titulo: 'Login individual por usuario', texto: 'Cada asesor entra con su propia cuenta y rol (admin/asesor/marketing), con autoservicio para configurar su contraseña.', roles: ROLES_TODOS },
+  { fecha: '2026-07-07', emoji: '🚀', titulo: 'Nace el CRM Lotus360', texto: 'Primera versión: leads editables, ranking de asesores y métricas -- reemplazando el flujo disperso de ManyChat, Telegram y Google Sheets.', roles: ROLES_TODOS },
 ];
 function renderActualizaciones() {
   const porMes = {};
-  ACTUALIZACIONES_LOG.forEach(e => { const k = e.fecha.slice(0, 7); (porMes[k] ||= []).push(e); });
+  ACTUALIZACIONES_LOG.filter(e => e.roles.includes(ROL)).forEach(e => { const k = e.fecha.slice(0, 7); (porMes[k] ||= []).push(e); });
   const meses = Object.keys(porMes).sort().reverse();
   document.getElementById('actualizaciones-list').innerHTML = meses.map(k => `
     <div class="act-mes">
