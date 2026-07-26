@@ -1186,6 +1186,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
       <a class="nav-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas <span class="badge" id="nav-tareas-count" style="display:none">0</span></a>
       <a class="nav-item nav-admin-only" data-sec="freelancers"><i class="fas fa-user-shield"></i> Freelancers</a>
+      <a class="nav-item nav-admin-only" data-sec="postulaciones"><i class="fas fa-address-card"></i> Postulaciones <span class="badge" id="nav-postulaciones-count" style="display:none">0</span></a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
       <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
       <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
@@ -1934,6 +1935,53 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
     </section>
 
+    <!-- POSTULACIONES (solo admin) -->
+    <section class="section" id="sec-postulaciones">
+      <div class="card">
+        <div class="chead-row">
+          <h2><i class="fas fa-address-card"></i> Postulaciones</h2>
+          <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="post-search" placeholder="Buscar nombre o teléfono..."></div>
+        </div>
+        <div class="csub">Candidatos que aplicaron desde "Trabaja con nosotros" en la web</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <select class="flt" id="post-f-modalidad">
+            <option value="">Todas las modalidades</option>
+            <option value="presencial">Presencial</option>
+            <option value="freelance">Freelance</option>
+          </select>
+          <select class="flt" id="post-f-llamada">
+            <option value="">Cualquier estado de llamada</option>
+            <option value="pendiente">Pendiente de llamar</option>
+            <option value="llamado">Llamado</option>
+          </select>
+          <select class="flt" id="post-f-calidad">
+            <option value="">Cualquier calificación</option>
+            <option value="sin_calificar">Sin calificar</option>
+            <option value="buen_prospecto">Buen prospecto</option>
+            <option value="no_calza">No calza</option>
+          </select>
+          <label class="tar-f-check"><input type="checkbox" id="post-f-sin-revisar"> Solo sin revisar</label>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th></th><th>Nombre</th><th>Modalidad</th><th>Rol de interés</th><th>Teléfono</th>
+              <th>Llamada</th><th>Prospecto</th><th>Fecha</th>
+            </tr></thead>
+            <tbody id="post-tbody"></tbody>
+          </table>
+        </div>
+        <div id="post-empty" class="tbl-state" style="display:none"><i class="fas fa-address-card"></i><div class="es-t">Sin postulaciones</div><div class="es-s">No hay candidatos con estos filtros</div></div>
+      </div>
+    </section>
+
+    <!-- Drawer: detalle de postulación -->
+    <div class="sheet" id="post-drawer-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="post-d-nombre">Postulación</div>
+      <div style="padding:4px 6px 14px" id="post-d-body"></div>
+    </div>
+
     <!-- Hoja: nueva tarea (admin, dentro de Freelancers) -->
     <div class="sheet" id="nueva-tarea-sheet">
       <div class="sheet-handle"></div>
@@ -2252,6 +2300,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   </div>
   <a class="sheet-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas</a>
   <a class="sheet-item nav-admin-only" data-sec="freelancers"><i class="fas fa-user-shield"></i> Freelancers</a>
+  <a class="sheet-item nav-admin-only" data-sec="postulaciones"><i class="fas fa-address-card"></i> Postulaciones</a>
   <a class="sheet-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
   <a class="sheet-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>

@@ -56,7 +56,8 @@ const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
 const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], 'leads-colaboraciones': ['Leads Colaboraciones', 'Leads de campañas de colaboración paga -- van directo al WhatsApp del colaborador'], 'leads-fallidos': ['Leads Fallidos', 'Leads que el bot no pudo registrar automáticamente'], asesores: ['Asesores', 'Carga de trabajo del equipo'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], asistencia: ['Asistencia', 'Control de jornada y strikes del equipo'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
-  tareas: ['Tareas', 'Tus tareas activas'], freelancers: ['Freelancers', 'Jornadas, tareas y cumplimiento del equipo freelancer'] };
+  tareas: ['Tareas', 'Tus tareas activas'], freelancers: ['Freelancers', 'Jornadas, tareas y cumplimiento del equipo freelancer'],
+  postulaciones: ['Postulaciones', 'Candidatos que aplicaron desde la web -- presencial y freelance'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
@@ -2496,6 +2497,112 @@ async function marcarLeadFallidoResuelto(id) {
   loadLeadsFallidos();
 }
 document.getElementById('leads-fallidos-ver-resueltos')?.addEventListener('change', loadLeadsFallidos);
+
+/* ---------- Postulaciones (candidatos de "Trabaja con nosotros", solo admin) ---------- */
+const CALIDAD_PROSPECTO_LABEL = { buen_prospecto: 'Buen prospecto', no_calza: 'No calza' };
+const CALIDAD_PROSPECTO_COLOR = { buen_prospecto: '#22c55e', no_calza: '#ef4444' };
+let postCache = [], postDrawerActual = null, postSearchDeb;
+async function loadPostulaciones() {
+  const { data, error } = await sb.from('postulaciones_empleo').select('*').order('created_at', { ascending: false });
+  if (error) { console.error(error); errToast('No se pudo cargar Postulaciones'); return; }
+  postCache = data || [];
+  renderPostulaciones();
+}
+function renderPostulaciones() {
+  const q = val('post-search').trim().toLowerCase();
+  const fModalidad = val('post-f-modalidad'), fLlamada = val('post-f-llamada'), fCalidad = val('post-f-calidad');
+  const soloSinRevisar = document.getElementById('post-f-sin-revisar').checked;
+  const filtered = postCache.filter(p => {
+    if (q && !(p.nombre || '').toLowerCase().includes(q) && !(p.telefono || '').toLowerCase().includes(q)) return false;
+    if (fModalidad && p.modalidad !== fModalidad) return false;
+    if (fLlamada && p.estado_llamada !== fLlamada) return false;
+    if (fCalidad === 'sin_calificar' && p.calidad_prospecto) return false;
+    if (fCalidad && fCalidad !== 'sin_calificar' && p.calidad_prospecto !== fCalidad) return false;
+    if (soloSinRevisar && p.revisado) return false;
+    return true;
+  });
+  document.getElementById('post-empty').classList.toggle('show', filtered.length === 0);
+  document.getElementById('post-tbody').innerHTML = filtered.map(p => `<tr data-id="${p.id}">
+    <td>${p.revisado ? '<i class="fas fa-circle-check" style="color:#22c55e" title="Revisado"></i>' : '<i class="fas fa-circle" style="color:#5f677f" title="Sin revisar"></i>'}</td>
+    <td data-label="Nombre">${esc(p.nombre)}</td>
+    <td data-label="Modalidad"><span class="chip">${p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'}</span></td>
+    <td data-label="Rol" class="muted">${esc(p.rol_interes || '—')}</td>
+    <td data-label="Teléfono" class="muted">${esc(p.telefono)}</td>
+    <td data-label="Llamada"><span class="badge-st" style="color:${p.estado_llamada === 'llamado' ? '#22c55e' : '#e0a030'};background:${p.estado_llamada === 'llamado' ? '#22c55e2e' : '#e0a0302e'}">${p.estado_llamada === 'llamado' ? 'Llamado' : 'Pendiente'}</span></td>
+    <td data-label="Prospecto">${p.calidad_prospecto ? `<span class="badge-st" style="color:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]};background:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]}2e">${CALIDAD_PROSPECTO_LABEL[p.calidad_prospecto]}</span>` : '<span class="muted">Sin calificar</span>'}</td>
+    <td data-label="Fecha" class="muted">${esc(fmtFechaHoraCaracas(p.created_at))}</td>
+  </tr>`).join('');
+  document.querySelectorAll('#post-tbody tr').forEach(tr => tr.onclick = () => {
+    const p = postCache.find(x => String(x.id) === tr.dataset.id);
+    if (p) abrirPostulacionDrawer(p);
+  });
+  const pendientes = postCache.filter(p => !p.revisado).length;
+  const badge = document.getElementById('nav-postulaciones-count');
+  if (badge) { badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
+}
+function abrirPostulacionDrawer(p) {
+  postDrawerActual = p;
+  document.getElementById('post-d-nombre').textContent = p.nombre;
+  const cvHtml = p.cv_storage_path
+    ? `<button class="dbtn" type="button" id="post-d-ver-cv"><i class="fas fa-file-arrow-down"></i> Ver CV</button>`
+    : '<span class="muted">Sin CV adjunto</span>';
+  document.getElementById('post-d-body').innerHTML = `
+    <label class="fl">Modalidad</label>
+    <div class="dfv" style="margin-bottom:10px">${p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'}</div>
+    <label class="fl">Teléfono</label>
+    <div class="dfv" style="margin-bottom:10px">${esc(p.telefono)}</div>
+    ${p.email ? `<label class="fl">Email</label><div class="dfv" style="margin-bottom:10px">${esc(p.email)}</div>` : ''}
+    ${p.rol_interes ? `<label class="fl">Rol de interés</label><div class="dfv" style="margin-bottom:10px">${esc(p.rol_interes)}</div>` : ''}
+    ${p.mensaje ? `<label class="fl">Mensaje del candidato</label><div class="dfv" style="margin-bottom:10px;white-space:pre-wrap">${esc(p.mensaje)}</div>` : ''}
+    <label class="fl">CV</label>
+    <div style="margin-bottom:10px">${cvHtml}</div>
+    <label class="fl">Estado de llamada</label>
+    <select class="ei" id="post-d-llamada">
+      <option value="pendiente"${p.estado_llamada === 'pendiente' ? ' selected' : ''}>Pendiente de llamar</option>
+      <option value="llamado"${p.estado_llamada === 'llamado' ? ' selected' : ''}>Llamado</option>
+    </select>
+    <label class="fl" style="margin-top:10px">Calificación</label>
+    <select class="ei" id="post-d-calidad">
+      <option value=""${!p.calidad_prospecto ? ' selected' : ''}>Sin calificar</option>
+      <option value="buen_prospecto"${p.calidad_prospecto === 'buen_prospecto' ? ' selected' : ''}>Buen prospecto</option>
+      <option value="no_calza"${p.calidad_prospecto === 'no_calza' ? ' selected' : ''}>No calza</option>
+    </select>
+    <label class="fl" style="margin-top:10px">Notas internas</label>
+    <textarea class="ei" id="post-d-notas" rows="3" placeholder="Notas propias, no visibles para el candidato...">${esc(p.notas_admin || '')}</textarea>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13.5px;cursor:pointer">
+      <input type="checkbox" id="post-d-revisado"${p.revisado ? ' checked' : ''}> Marcar perfil como revisado
+    </label>
+    <div class="edit-err" id="post-d-err"></div>
+    <button class="dbtn save" id="post-d-save" type="button" style="margin-top:14px"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>`;
+  document.getElementById('post-d-save').onclick = guardarPostulacion;
+  document.getElementById('post-d-ver-cv')?.addEventListener('click', () => verCVPostulacion(p.cv_storage_path));
+  openSheet('post-drawer-sheet');
+}
+async function guardarPostulacion() {
+  if (!postDrawerActual) return;
+  const btn = document.getElementById('post-d-save'), err = document.getElementById('post-d-err');
+  btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>'; err.textContent = '';
+  const cambios = {
+    estado_llamada: val('post-d-llamada'),
+    calidad_prospecto: val('post-d-calidad') || null,
+    notas_admin: val('post-d-notas').trim() || null,
+    revisado: document.getElementById('post-d-revisado').checked,
+  };
+  const { error } = await sb.from('postulaciones_empleo').update(cambios).eq('id', postDrawerActual.id);
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios';
+  if (error) { err.textContent = 'No se pudo guardar: ' + error.message; return; }
+  Object.assign(postDrawerActual, cambios);
+  okToast('Postulación actualizada');
+  renderPostulaciones();
+  closeSheet('post-drawer-sheet');
+}
+async function verCVPostulacion(path) {
+  const { data, error } = await sb.storage.from('postulaciones-cv').createSignedUrl(path, 3600);
+  if (error || !data?.signedUrl) { errToast('No se pudo generar el link del CV'); return; }
+  window.open(data.signedUrl, '_blank');
+}
+document.getElementById('post-search')?.addEventListener('input', () => { clearTimeout(postSearchDeb); postSearchDeb = setTimeout(renderPostulaciones, 200); });
+document.querySelectorAll('#post-f-modalidad,#post-f-llamada,#post-f-calidad,#post-f-sin-revisar').forEach(el => el.addEventListener('change', renderPostulaciones));
 
 /* ---------- Redes (Instagram + TikTok) ---------- */
 let redesPeriodo = '30d', redesRed = 'instagram', redesChatHistory = [];
@@ -5149,6 +5256,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'tareas') loadTareas();
   if (sec === 'freelancers') loadFreelancers();
+  if (sec === 'postulaciones') loadPostulaciones();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
 function setupNav() {
