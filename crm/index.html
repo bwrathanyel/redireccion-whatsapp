@@ -559,6 +559,37 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238b93ad' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;cursor:pointer;color-scheme:dark}
 input.ei[type=date]{color-scheme:dark}
 .venta-box{display:none;margin-top:8px;padding-top:10px;border-top:1px dashed rgba(255,145,0,.3)}
+/* Enviar a facturación */
+.ef-cliente{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);margin:2px 0 10px;padding:0 2px}
+.ef-cliente b{color:var(--txt);font-weight:700}
+.ef-tipos{display:flex;gap:7px;flex-wrap:wrap}
+.ef-tipo{flex:1;min-width:96px;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:10px;padding:9px 8px;color:var(--muted);font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:border-color .15s,color .15s}
+.ef-tipo i{font-size:12px}
+.ef-tipo:hover{border-color:rgba(255,145,0,.45)}
+.ef-tipo.on{border-color:var(--accent);color:var(--txt);background:var(--accent-soft)}
+.ef-fila{display:flex;gap:10px}
+.ef-fila>*{min-width:0}
+.ef-opc{color:var(--muted2);font-weight:500;text-transform:none;letter-spacing:0}
+.ef-abono{display:none;font-size:12px;margin-top:7px;padding:8px 10px;border-radius:9px;background:rgba(74,158,255,.09);border:1px solid rgba(74,158,255,.25);color:#9ec5ff}
+.ef-abono.show{display:block}
+.ef-abono.malo{background:rgba(239,68,68,.09);border-color:rgba(239,68,68,.3);color:#ffa5a5}
+/* Sub-pestaña "En facturación" de Leads */
+.lf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:14px}
+.lf-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.lf-card.lf-lista{border-color:rgba(16,185,129,.35)}
+.lf-top{display:flex;align-items:flex-start;gap:9px;margin-bottom:9px}
+.lf-nombre{font-weight:700;font-size:14.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.lf-chip{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.lf-chip.pend{background:rgba(255,145,0,.14);color:var(--accent)}
+.lf-chip.list{background:rgba(16,185,129,.14);color:var(--green)}
+.lf-que{font-size:12.5px;color:var(--txt);margin-bottom:9px;display:flex;align-items:center;gap:7px}
+.lf-que i{color:var(--muted);width:14px;text-align:center}
+.lf-datos{display:grid;grid-template-columns:auto 1fr;gap:5px 10px;font-size:12px}
+.lf-k{color:var(--muted2)}
+.lf-v{color:var(--txt);word-break:break-word}
+.lf-pie{display:flex;justify-content:space-between;gap:8px;margin-top:11px;padding-top:9px;border-top:1px solid var(--line);font-size:11px;color:var(--muted2)}
+.lf-saldo{color:var(--amber);font-weight:600}
+.lf-falta{color:#ff8a8a;font-size:11.5px;margin-top:8px}
 .venta-box.show{display:block;animation:fadeSlide .25s ease}
 @keyframes fadeSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .edit-err{color:#ff6b6b;font-size:12px;min-height:14px;margin:8px 0 2px}
@@ -1446,6 +1477,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <section class="section" id="sec-leads">
       <div class="seg-group" id="leads-tabs">
         <button class="seg on" data-leads-tab="pipeline">Leads</button>
+        <button class="seg" data-leads-tab="facturacion">En facturación <span class="lih-count" id="leads-fact-count">0</span></button>
         <button class="seg nav-admin-only" data-leads-tab="colaboraciones">Colaboraciones</button>
       </div>
 
@@ -1512,6 +1544,19 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <!-- Colaboraciones: campañas de colaboración paga (ej. Casa Vacacional
            Playa del Sur) que van directo al WhatsApp del colaborador, sin
            pasar por el pipeline normal de asesores. -->
+      <div class="leads-tab-panel" data-leads-panel="facturacion" style="display:none">
+        <div class="card">
+          <div class="chead-row">
+            <h2><i class="fas fa-file-invoice-dollar"></i> En facturación</h2>
+            <button class="btn-sm" id="lf-refrescar" type="button"><i class="fas fa-rotate"></i> Actualizar</button>
+          </div>
+          <div class="csub">Clientes que se mandaron a facturar, con los datos de la venta que cargó el asesor. Los ya facturados quedan a la vista 30 días.</div>
+          <div class="tbl-state skel" id="lf-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="tbl-state" id="lf-empty"><i class="fas fa-inbox"></i><div class="es-t">Nada en facturación</div><div class="es-s">Cuando mandes un cliente a facturar, aparece acá con todo lo que cargaste</div></div>
+          <div class="lf-grid" id="lf-grid"></div>
+        </div>
+      </div>
+
       <div class="leads-tab-panel" data-leads-panel="colaboraciones" style="display:none">
         <div class="card">
           <h2><i class="fas fa-handshake"></i> Leads Colaboraciones</h2>
@@ -2601,9 +2646,80 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 <div class="sheet" id="enviar-facturacion-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title"><i class="fas fa-paper-plane"></i> Enviar a facturación</div>
+  <div class="ef-cliente" id="ef-cliente"></div>
   <div class="edit-box" style="margin-top:4px">
     <label class="fl">¿A qué admin se lo mandás?</label>
     <select id="ef-admin" class="ei"></select>
+
+    <label class="fl">Cédula del cliente</label>
+    <input id="ef-cedula" class="ei" placeholder="V-12345678" autocomplete="off">
+
+    <label class="fl">¿Qué se vendió?</label>
+    <div class="ef-tipos" id="ef-tipos">
+      <button type="button" class="ef-tipo on" data-ef-tipo="hospedaje"><i class="fas fa-bed"></i> Hospedaje</button>
+      <button type="button" class="ef-tipo" data-ef-tipo="boleteria"><i class="fas fa-plane"></i> Boletería</button>
+      <button type="button" class="ef-tipo" data-ef-tipo="paquete"><i class="fas fa-suitcase-rolling"></i> Paquete</button>
+      <button type="button" class="ef-tipo" data-ef-tipo="otro"><i class="fas fa-ellipsis"></i> Otro</button>
+    </div>
+
+    <div id="ef-campo-hotel">
+      <label class="fl">Hotel / Posada</label>
+      <input id="ef-hotel" class="ei" placeholder="Nombre exacto del hotel o posada" autocomplete="off">
+    </div>
+
+    <div id="ef-campo-vuelo">
+      <label class="fl">Vuelo — ¿de dónde a dónde?</label>
+      <div class="ef-fila">
+        <input id="ef-vuelo-origen" class="ei" placeholder="Sale de (ej. Valencia)" autocomplete="off">
+        <input id="ef-vuelo-destino" class="ei" placeholder="Llega a (ej. Porlamar)" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="ef-fila">
+      <div style="flex:1">
+        <label class="fl" id="ef-lbl-fecha">Fecha del viaje</label>
+        <input id="ef-fecha-viaje" class="ei" type="date">
+      </div>
+      <div style="flex:1">
+        <label class="fl" id="ef-lbl-regreso">Fecha de regreso <span class="ef-opc">(opcional)</span></label>
+        <input id="ef-fecha-regreso" class="ei" type="date">
+      </div>
+    </div>
+
+    <label class="fl">¿Cuántas personas? <span class="ef-opc">(opcional)</span></label>
+    <input id="ef-personas" class="ei" type="number" min="1" step="1" placeholder="2">
+
+    <label class="fl">Método de pago</label>
+    <select id="ef-metodo" class="ei">
+      <option value="">Elegí uno...</option>
+      <option>Zelle</option>
+      <option>Pago móvil</option>
+      <option>Transferencia bancaria</option>
+      <option>Efectivo USD</option>
+      <option>Efectivo Bs</option>
+      <option>Binance / USDT</option>
+      <option>Punto de venta</option>
+      <option>Otro</option>
+    </select>
+
+    <label class="fl">Referencia del pago <span class="ef-opc">(opcional, para cuadrar con el banco)</span></label>
+    <input id="ef-referencia" class="ei" placeholder="Últimos dígitos o número de referencia" autocomplete="off">
+
+    <div class="ef-fila">
+      <div style="flex:1">
+        <label class="fl">Monto que pagó (USD)</label>
+        <input id="ef-monto-pagado" class="ei" type="number" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div style="flex:1">
+        <label class="fl">Total de la venta (USD) <span class="ef-opc">(opcional)</span></label>
+        <input id="ef-monto-total" class="ei" type="number" min="0" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+    <div class="ef-abono" id="ef-abono"></div>
+
+    <label class="fl">Notas para el que factura <span class="ef-opc">(opcional)</span></label>
+    <textarea id="ef-notas" class="ei" rows="2" placeholder="Algo que el admin tenga que saber antes de facturar"></textarea>
+
     <div class="edit-err" id="ef-err"></div>
   </div>
   <div style="display:flex;gap:10px;padding:14px 16px 4px">

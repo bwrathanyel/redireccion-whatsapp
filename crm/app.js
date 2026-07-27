@@ -2527,10 +2527,41 @@ window.abrirClienteDesdeFacturacion = async (leadId) => {
 };
 
 /* ---------- Enviar a facturación (asesor/admin, desde el drawer de un lead) ---------- */
+// El botón manda el lead Y los datos de la venta. Antes iba pelado y el admin
+// tenía que perseguir por chat cédula, qué se vendió, cuándo viaja y cuánto
+// pagó -- se piden acá, que es el momento en que el asesor los tiene a mano.
 let EF_LEAD_ACTUAL = null;
+let efTipo = 'hospedaje';
+
+const EF_ERRORES = {
+  ya_facturado: 'Este cliente ya tiene una factura',
+  falta_cedula: 'Falta la cédula del cliente',
+  falta_hotel: 'Falta el hotel o posada',
+  falta_ruta_vuelo: 'Falta de dónde a dónde es el vuelo',
+  falta_fecha_viaje: 'Falta la fecha del viaje',
+  regreso_antes_de_ida: 'La fecha de regreso es anterior a la de ida',
+  falta_metodo_pago: 'Falta el método de pago',
+  falta_monto_pagado: 'Falta el monto que pagó',
+  pagado_mayor_que_total: 'El monto pagado es mayor que el total de la venta',
+  lead_no_disponible: 'Este lead ya no está disponible',
+};
+
 async function abrirEnviarFacturacionSheet(l) {
   EF_LEAD_ACTUAL = l;
   document.getElementById('ef-err').textContent = '';
+  document.getElementById('ef-cliente').innerHTML =
+    `<i class="fas fa-user"></i> Facturando a <b>${esc(l.nombre || 'Sin nombre')}</b>${l.telefono ? ' · ' + esc(l.telefono) : ''}`;
+
+  ['ef-cedula', 'ef-hotel', 'ef-vuelo-origen', 'ef-vuelo-destino', 'ef-fecha-viaje',
+   'ef-fecha-regreso', 'ef-personas', 'ef-referencia', 'ef-monto-pagado',
+   'ef-monto-total', 'ef-notas'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  document.getElementById('ef-metodo').value = '';
+  document.getElementById('ef-abono').className = 'ef-abono';
+  // El destino del lead suele ser la ciudad a la que viaja: sirve de arranque
+  // para la ruta del vuelo, pero se deja editable porque no siempre coincide.
+  if (l.destino) document.getElementById('ef-vuelo-destino').value = l.destino;
+  efSetTipo('hospedaje');
+
   const sel = document.getElementById('ef-admin');
   sel.innerHTML = '<option value="">Luis Rueda (por defecto)</option>';
   const { data, error } = await sb.rpc('usuarios_chat');
@@ -2541,21 +2572,75 @@ async function abrirEnviarFacturacionSheet(l) {
   }
   openSheet('enviar-facturacion-sheet');
 }
+
+function efSetTipo(tipo) {
+  efTipo = tipo;
+  document.querySelectorAll('#ef-tipos .ef-tipo').forEach(b => b.classList.toggle('on', b.dataset.efTipo === tipo));
+  // Un paquete puede llevar hotel y vuelo a la vez; "otro" no pide ninguno de
+  // los dos pero sigue exigiendo fecha, método y monto.
+  document.getElementById('ef-campo-hotel').style.display = (tipo === 'hospedaje' || tipo === 'paquete') ? '' : 'none';
+  document.getElementById('ef-campo-vuelo').style.display = (tipo === 'boleteria' || tipo === 'paquete') ? '' : 'none';
+  document.getElementById('ef-lbl-fecha').textContent = tipo === 'hospedaje' ? 'Fecha de entrada' : 'Fecha del viaje';
+  document.getElementById('ef-lbl-regreso').innerHTML = (tipo === 'hospedaje' ? 'Fecha de salida' : 'Fecha de regreso') + ' <span class="ef-opc">(opcional)</span>';
+}
+document.getElementById('ef-tipos')?.addEventListener('click', e => {
+  const b = e.target.closest('.ef-tipo'); if (b) efSetTipo(b.dataset.efTipo);
+});
+
+// Aviso en vivo de abono vs total: que el asesor vea el saldo antes de mandar,
+// no que se entere el admin al facturar.
+function efPintarAbono() {
+  const pagado = parseFloat(val('ef-monto-pagado'));
+  const total = parseFloat(val('ef-monto-total'));
+  const box = document.getElementById('ef-abono');
+  if (!Number.isFinite(pagado) || !Number.isFinite(total) || total <= 0) { box.className = 'ef-abono'; return; }
+  if (pagado > total) {
+    box.className = 'ef-abono show malo';
+    box.textContent = 'Pagó más que el total de la venta. Revisá los dos montos antes de enviar.';
+  } else if (pagado < total) {
+    box.className = 'ef-abono show';
+    box.textContent = `Es un abono: queda un saldo de ${money(total - pagado)}.`;
+  } else {
+    box.className = 'ef-abono show';
+    box.textContent = 'Pago completo.';
+  }
+}
+['ef-monto-pagado', 'ef-monto-total'].forEach(id =>
+  document.getElementById(id)?.addEventListener('input', efPintarAbono));
+
 document.getElementById('ef-cancelar')?.addEventListener('click', () => closeSheet('enviar-facturacion-sheet'));
 document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   if (!EF_LEAD_ACTUAL) return;
   const btn = document.getElementById('ef-enviar'), err = document.getElementById('ef-err');
+  const num = id => { const v = parseFloat(val(id)); return Number.isFinite(v) ? v : null; };
+  const ent = id => { const v = parseInt(val(id), 10); return Number.isFinite(v) ? v : null; };
   err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.rpc('enviar_a_facturacion', {
-    p_lead_id: EF_LEAD_ACTUAL.id, p_admin_destino_id: val('ef-admin') || null,
+    p_lead_id: EF_LEAD_ACTUAL.id,
+    p_admin_destino_id: val('ef-admin') || null,
+    p_cedula: val('ef-cedula'),
+    p_tipo_venta: efTipo,
+    p_hotel_posada: val('ef-hotel'),
+    p_vuelo_origen: val('ef-vuelo-origen'),
+    p_vuelo_destino: val('ef-vuelo-destino'),
+    p_fecha_viaje: val('ef-fecha-viaje') || null,
+    p_fecha_regreso: val('ef-fecha-regreso') || null,
+    p_personas: ent('ef-personas'),
+    p_metodo_pago: val('ef-metodo'),
+    p_referencia_pago: val('ef-referencia'),
+    p_monto_pagado: num('ef-monto-pagado'),
+    p_monto_total: num('ef-monto-total'),
+    p_notas_venta: val('ef-notas'),
   });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar';
   if (error || !data?.ok) {
-    const motivo = data?.error === 'ya_facturado' ? 'Este cliente ya tiene una factura' : (error?.message || data?.error || '');
-    err.textContent = 'No se pudo enviar: ' + motivo; return;
+    const clave = data?.error;
+    err.textContent = 'No se pudo enviar: ' + (EF_ERRORES[clave] || error?.message || clave || '');
+    return;
   }
   closeSheet('enviar-facturacion-sheet');
   okToast(`Enviado a ${data.admin_destino}`);
+  if (typeof loadLeadsEnFacturacion === 'function') loadLeadsEnFacturacion();
 });
 
 /* ---------- Bandeja de Entrada de Facturación (admin) ---------- */
@@ -2571,17 +2656,33 @@ async function loadBandejaFacturacion() {
   document.getElementById('fact-bandeja-count').textContent = FACT_BANDEJA_CACHE.length;
   empty?.classList.toggle('show', FACT_BANDEJA_CACHE.length === 0);
   const grid = document.getElementById('fact-bandeja-grid');
-  grid.innerHTML = FACT_BANDEJA_CACHE.map(b => `
+  grid.innerHTML = FACT_BANDEJA_CACHE.map(b => {
+    // Los datos que cargó el asesor al enviar. Se muestran acá para no tener
+    // que abrir el lead ni preguntarle nada por chat antes de facturar.
+    const meta = LF_TIPO[b.tipo_venta];
+    const queSeVendio = [meta?.t, lfDetalleVenta(b)].filter(Boolean).join(' · ');
+    const fechas = [b.fecha_viaje && fmtDiaCorto(b.fecha_viaje), b.fecha_regreso && fmtDiaCorto(b.fecha_regreso)]
+      .filter(Boolean).join(' → ');
+    const pagado = b.monto_pagado != null ? Number(b.monto_pagado) : null;
+    const total = b.monto_total != null ? Number(b.monto_total) : null;
+    const fila = (icono, texto) => texto ? `<div class="ec-row"><i class="fas ${icono}"></i> ${texto}</div>` : '';
+    return `
     <div class="entity-card inbox-card" data-id="${b.lead_id}">
       <div class="ec-top"><div class="ec-nombre">${esc(b.nombre)}</div></div>
       <div class="ec-row"><i class="fas fa-phone"></i> ${esc(b.telefono) || 'Sin teléfono'}</div>
-      <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(b.destino) || '—'}</div>
+      ${fila('fa-id-card', esc(b.cedula || ''))}
+      ${queSeVendio ? fila(meta?.i || 'fa-tag', esc(queSeVendio)) : `<div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(b.destino) || '—'}</div>`}
+      ${fila('fa-calendar-day', esc(fechas) + (b.personas != null ? ` · ${b.personas} pers.` : ''))}
+      ${fila('fa-dollar-sign', pagado != null ? `Pagó ${money(pagado)}${total != null ? ` de ${money(total)}` : ''}${(total != null && total > pagado) ? ` · <b style="color:var(--amber)">saldo ${money(total - pagado)}</b>` : ''}` : '')}
+      ${fila('fa-credit-card', esc([b.metodo_pago, b.referencia_pago].filter(Boolean).join(' · ')))}
+      ${fila('fa-note-sticky', esc(b.notas_venta || ''))}
       <div class="ec-row"><i class="fas fa-user"></i> Enviado por ${esc(b.enviado_por)}</div>
       <div class="ec-row"><i class="fas fa-clock"></i> ${tiempoRelativo(b.creado_en)}</div>
       <div class="inbox-actions">
         <button type="button" class="inbox-btn atender" data-bandeja-lead-id="${b.lead_id}"><i class="fas fa-file-invoice-dollar"></i> Facturar</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   grid.querySelectorAll('[data-bandeja-lead-id]').forEach(btn => btn.addEventListener('click', () => {
     const item = FACT_BANDEJA_CACHE.find(x => String(x.lead_id) === btn.dataset.bandejaLeadId);
     if (item) window.abrirNuevoClienteFacturacion(item);
@@ -2705,6 +2806,12 @@ window.abrirNuevoClienteFacturacion = async (bandejaItem) => {
     if (bandejaItem.asesor && [...document.getElementById('nl-asesor').options].some(o => o.value === bandejaItem.asesor)) {
       document.getElementById('nl-asesor').value = bandejaItem.asesor;
     }
+    // Lo que cargó el asesor al enviar entra precargado, editable: el admin
+    // verifica contra el comprobante en vez de volver a tipearlo. El precio de
+    // venta es el total, no lo abonado -- si solo hay abono se deja vacío
+    // para que nadie facture una inicial como si fuera la venta completa.
+    if (bandejaItem.monto_total != null) document.getElementById('nl-precio-venta').value = bandejaItem.monto_total;
+    if (bandejaItem.hotel_posada) document.getElementById('nl-proveedor').value = bandejaItem.hotel_posada;
   } else {
     document.getElementById('nl-buscar-box').style.display = '';
   }
@@ -5949,7 +6056,89 @@ function setupLeadsTabs() {
     document.querySelectorAll('#leads-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
     document.querySelectorAll('.leads-tab-panel').forEach(p => p.style.display = p.dataset.leadsPanel === leadsTab ? '' : 'none');
     if (leadsTab === 'colaboraciones') loadLeadsColaboraciones();
+    if (leadsTab === 'facturacion') loadLeadsEnFacturacion();
   }));
+  document.getElementById('lf-refrescar')?.addEventListener('click', () => loadLeadsEnFacturacion());
+  loadLeadsEnFacturacion(); // el contador de la pestaña tiene que estar antes de que la abran
+}
+
+/* ---------- Sub-pestaña "En facturación" de Leads ----------
+   Vista de seguimiento, no cola de trabajo: el asesor ve lo suyo y el admin ve
+   todo. La Bandeja de Facturación sigue siendo la cola del admin que factura
+   (filtrada a lo que le mandaron a él), acá se ve el estado. */
+const LF_TIPO = {
+  hospedaje: { i: 'fa-bed', t: 'Hospedaje' },
+  boleteria: { i: 'fa-plane', t: 'Boletería' },
+  paquete:   { i: 'fa-suitcase-rolling', t: 'Paquete' },
+  otro:      { i: 'fa-ellipsis', t: 'Otro' },
+};
+// Un reenvío que cambia de tipo no borra lo del envío anterior (el upsert
+// conserva lo que ya estaba), así que se filtra por tipo_venta al mostrar: si
+// no, una venta de hospedaje aparece con la ruta de vuelo de un envío viejo.
+function lfDetalleVenta(x) {
+  const partes = [];
+  if (x.hotel_posada && (x.tipo_venta === 'hospedaje' || x.tipo_venta === 'paquete')) partes.push(x.hotel_posada);
+  if ((x.vuelo_origen || x.vuelo_destino) && (x.tipo_venta === 'boleteria' || x.tipo_venta === 'paquete')) {
+    partes.push(`${x.vuelo_origen || '?'} → ${x.vuelo_destino || '?'}`);
+  }
+  return partes.join(' · ');
+}
+function lfQueSeVendio(x) {
+  const meta = LF_TIPO[x.tipo_venta] || { i: 'fa-tag', t: 'Sin especificar' };
+  const detalle = lfDetalleVenta(x);
+  return `<div class="lf-que"><i class="fas ${meta.i}"></i> <span>${esc(meta.t)}${detalle ? ' — ' + esc(detalle) : ''}</span></div>`;
+}
+function lfFila(k, v) { return v ? `<div class="lf-k">${esc(k)}</div><div class="lf-v">${v}</div>` : ''; }
+function lfCardHtml(x) {
+  const lista = x.facturada || x.estado === 'procesado';
+  const pagado = x.monto_pagado != null ? Number(x.monto_pagado) : null;
+  const total = x.monto_total != null ? Number(x.monto_total) : null;
+  const saldo = (pagado != null && total != null && total > pagado) ? total - pagado : null;
+  const fechas = [x.fecha_viaje && fmtDiaCorto(x.fecha_viaje), x.fecha_regreso && fmtDiaCorto(x.fecha_regreso)]
+    .filter(Boolean).join(' → ');
+  // Los envíos viejos (anteriores a esta pantalla) no tienen nada cargado: se
+  // dice explícito en vez de mostrar una tarjeta vacía que parezca un bug.
+  const sinDatos = !x.tipo_venta && !x.cedula && pagado == null;
+  return `<div class="lf-card${lista ? ' lf-lista' : ''}">
+    <div class="lf-top">
+      <div class="lf-nombre">${esc(x.nombre || 'Sin nombre')}</div>
+      <span class="lf-chip ${lista ? 'list' : 'pend'}">${lista ? 'Facturado' : 'Pendiente'}</span>
+    </div>
+    ${sinDatos ? '' : lfQueSeVendio(x)}
+    <div class="lf-datos">
+      ${lfFila('Teléfono', esc(x.telefono || ''))}
+      ${lfFila('Cédula', esc(x.cedula || ''))}
+      ${lfFila(x.tipo_venta === 'hospedaje' ? 'Entrada/salida' : 'Viaje', esc(fechas))}
+      ${lfFila('Personas', x.personas != null ? String(x.personas) : '')}
+      ${lfFila('Pagó', pagado != null ? money(pagado) + (total != null ? ` de ${money(total)}` : '') : '')}
+      ${lfFila('Método', esc([x.metodo_pago, x.referencia_pago].filter(Boolean).join(' · ')))}
+      ${lfFila('Notas', esc(x.notas_venta || ''))}
+    </div>
+    ${saldo != null ? `<div class="lf-falta lf-saldo">Saldo pendiente: ${money(saldo)}</div>` : ''}
+    ${sinDatos ? '<div class="lf-falta">Se envió sin los datos de la venta — mandalo de nuevo desde el lead para completarlos.</div>' : ''}
+    <div class="lf-pie">
+      <span>Por ${esc(x.enviado_por || '—')}${(x.admin_destino && x.admin_destino !== x.enviado_por) ? ' → ' + esc(x.admin_destino) : ''}</span>
+      <span>${tiempoRelativo(x.creado_en)}</span>
+    </div>
+  </div>`;
+}
+async function loadLeadsEnFacturacion() {
+  if (ROL !== 'admin' && ROL !== 'asesor') return;
+  const loading = document.getElementById('lf-loading'), empty = document.getElementById('lf-empty');
+  const grid = document.getElementById('lf-grid');
+  if (!grid) return;
+  loading?.classList.add('show');
+  const { data, error } = await sb.rpc('listar_leads_en_facturacion');
+  loading?.classList.remove('show');
+  if (error) { console.error('leads_en_facturacion', error); errToast('No se pudo cargar En facturación'); return; }
+  const filas = data || [];
+  // El contador de la pestaña muestra pendientes, no el total: los facturados
+  // siguen visibles pero ya no son trabajo por hacer.
+  const pendientes = filas.filter(x => !(x.facturada || x.estado === 'procesado')).length;
+  const badge = document.getElementById('leads-fact-count');
+  if (badge) { badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
+  empty?.classList.toggle('show', filas.length === 0);
+  grid.innerHTML = filas.map(lfCardHtml).join('');
 }
 
 /* ---------- Tarifario: buscador con IA ----------
