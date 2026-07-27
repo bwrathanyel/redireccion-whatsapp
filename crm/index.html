@@ -758,6 +758,32 @@ input.ei[type=date]{color-scheme:dark}
 .gp-aviso{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:12px;padding:11px 14px;font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px}
 .gp-aviso:empty{display:none}
 .gp-aviso b{color:#f6c66a}
+.pc-chip-rojo{color:#ef4444;border-color:#ef444455}
+.pc-bloq{border-color:rgba(239,68,68,.35);background:linear-gradient(180deg,rgba(239,68,68,.06),transparent)}
+.pc-edit{background:transparent;border:1px solid var(--line2);color:var(--muted);border-radius:9px;width:30px;height:30px;cursor:pointer;font-size:12px;flex-shrink:0;font-family:inherit;transition:color .15s,border-color .15s}
+.pc-edit:hover{color:var(--accent);border-color:var(--accent)}
+/* Asistencia del día, ahora dentro de la tarjeta de la persona */
+.pc-asist-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:11px}
+.pc-asist-row:empty{display:none}
+.pc-asist{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;border:1px solid var(--line2);color:var(--muted)}
+.pc-asist.ok{color:#22c55e;border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.08)}
+.pc-asist.no{color:#ef4444;border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.07)}
+.pc-asist.exento{color:#38bdf8;border-color:rgba(56,189,248,.3);background:rgba(56,189,248,.07)}
+.pc-asist.strike{color:#f59e0b;border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.07)}
+/* Bloque propio del freelance: trabajo real vs inactivo */
+.pc-frl{margin-top:12px;padding:10px 12px;border-radius:11px;background:rgba(20,184,166,.06);border:1px solid rgba(20,184,166,.22)}
+.pc-frl-r{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:12px;color:var(--muted);padding:2px 0}
+.pc-frl-r b{color:var(--txt);font-size:13px}
+.pc-frl-r b.pc-idle{color:#f59e0b}
+.pc-desbloq{margin-top:12px}
+.pe-check{display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer}
+.pe-check input{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+.pn-cred{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;padding:9px 12px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;font-size:13px}
+.pn-cred span{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.5px}
+.pn-cred b{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;user-select:all}
+.rg-flujo{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px}
+.rg-flujo i{color:var(--muted2);font-size:10px}
+.rg-acc{display:flex;gap:6px;white-space:nowrap}
 
 /* ---------- Inbox de leads estilo Telegram (solo rol asesor, sec-leads) ---------- */
 .leads-inbox{display:none;margin-bottom:18px}
@@ -1677,7 +1703,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
       <div class="seg-group" id="gp-tabs">
         <button class="seg on" data-gp-tab="personal">Personal</button>
-        <button class="seg" data-gp-tab="asistencia">Asistencia</button>
         <button class="seg" data-gp-tab="asesores">Asesores</button>
         <button class="seg" data-gp-tab="freelancers">Freelancers</button>
         <button class="seg" data-gp-tab="postulaciones">Postulaciones <span class="badge" id="gp-postulaciones-count" style="display:none">0</span></button>
@@ -1695,28 +1720,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
             <option value="30">Detalle: últimos 30 días</option>
           </select>
           <span class="tcount" id="gp-personal-count"></span>
+          <button class="btn-sm" id="gp-personal-nuevo" type="button" style="margin-left:auto"><i class="fas fa-user-plus"></i> Agregar personal</button>
         </div>
         <div class="gp-aviso" id="gp-personal-aviso"></div>
         <div class="tbl-state skel-grid" id="gp-personal-loading"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>
         <div class="personal-grid" id="gp-personal-grid"></div>
-      </div>
+        <div id="gp-personal-baja" style="margin-top:16px"></div>
 
-      <!-- ASISTENCIA -->
-      <div class="gp-tab-panel" data-gp-panel="asistencia" style="display:none">
-        <div class="card">
-          <div id="asist-wrap" style="overflow-x:auto">
-            <table>
-              <thead><tr><th>Asesor</th><th>Hoy</th><th>Recordatorios</th><th>Strikes (mes)</th><th></th></tr></thead>
-              <tbody id="asist-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="card" style="margin-top:16px">
-          <div class="sheet-title" style="padding:0 0 10px">Strikes del mes</div>
+        <!-- Strikes e historial de asistencia: venían de la pestaña Asistencia,
+             que se retiró. El estado de hoy y el botón de exceptuar viven ahora
+             en la tarjeta de cada persona; acá queda lo que es histórico. -->
+        <div class="card" style="margin-top:18px">
+          <div class="sheet-title" style="padding:0 0 10px">Strikes de asistencia del mes</div>
           <div id="asist-strikes-wrap"></div>
         </div>
         <div class="card" style="margin-top:16px">
-          <div class="sheet-title" style="padding:0 0 10px">Historial de asistencia</div>
+          <div class="sheet-title" style="padding:0 0 10px">Historial de entradas y salidas</div>
           <div class="tbar" style="margin-bottom:12px">
             <select class="flt" id="asist-hist-asesor"><option value="">Todos los asesores</option></select>
             <div class="drp" id="drp-asist-hist">
@@ -1767,23 +1786,24 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <button class="seg" data-frl-tab="tareas">Tareas</button>
         </div>
 
+        <!-- Mismas tarjetas que Personal, filtradas a es_freelancer: es la
+             misma entidad (una fila de usuarios), no tiene sentido mantener dos
+             vistas distintas del mismo dato. Lo propio del freelance (trabajo
+             real vs inactivo, bloqueo por los 15 min) se agrega en la tarjeta. -->
         <div class="frl-tab-panel" data-frl-panel="equipo">
-          <div class="card">
-            <div class="chead-row">
-              <h2><i class="fas fa-user-shield"></i> Freelancers</h2>
-              <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="frl-search" placeholder="Buscar nombre..."></div>
-            </div>
-            <div class="csub">Jornadas, strikes y carga de leads de cada freelancer</div>
-            <div style="overflow-x:auto">
-              <table>
-                <thead><tr>
-                  <th>Nombre</th><th>Estado</th><th>Strikes</th><th>Última conexión</th>
-                  <th>Conectado hoy</th><th>Leads asignados</th><th>Leads atendidos</th><th></th>
-                </tr></thead>
-                <tbody id="frl-tbody"></tbody>
-              </table>
-            </div>
+          <div class="tbar" style="margin-bottom:12px">
+            <select class="flt" id="frl-personal-dias">
+              <option value="7" selected>Detalle: últimos 7 días</option>
+              <option value="14">Detalle: últimos 14 días</option>
+              <option value="30">Detalle: últimos 30 días</option>
+            </select>
+            <span class="tcount" id="frl-personal-count"></span>
+            <button class="btn-sm" id="frl-personal-nuevo" type="button" style="margin-left:auto"><i class="fas fa-user-plus"></i> Agregar freelancer</button>
           </div>
+          <div class="gp-aviso" id="frl-personal-aviso"></div>
+          <div class="tbl-state skel-grid" id="frl-personal-loading"><div class="skel-card"></div><div class="skel-card"></div></div>
+          <div class="personal-grid" id="frl-personal-grid"></div>
+          <div id="frl-personal-baja" style="margin-top:16px"></div>
         </div>
 
         <div class="frl-tab-panel" data-frl-panel="tareas" style="display:none">
@@ -1902,7 +1922,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <div class="tbl-state" id="rg-empty"><i class="fas fa-shuffle"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay reasignaciones con estos filtros</div></div>
           <div id="rg-wrap" style="overflow-x:auto">
             <table>
-              <thead><tr><th>Cliente</th><th>Teléfono</th><th>Destino</th><th>De</th><th>A</th><th>Motivo</th><th>Tiempo</th><th>Fecha</th></tr></thead>
+              <thead><tr><th>Cliente</th><th>Teléfono</th><th>Destino</th><th>De &rarr; A</th><th>Motivo</th><th>Tiempo</th><th>Fecha</th><th></th></tr></thead>
               <tbody id="rg-tbody"></tbody>
             </table>
           </div>

@@ -493,45 +493,31 @@ function setupFreelancers() {
     document.querySelectorAll('.frl-tab-panel').forEach(p => p.style.display = p.dataset.frlPanel === frlTab ? '' : 'none');
     if (frlTab === 'tareas') loadTareasAdmin();
   }));
-  document.getElementById('frl-search')?.addEventListener('input', renderFreelancersTabla);
   document.getElementById('frl-tareas-freelancer')?.addEventListener('change', renderTareasAdminTabla);
   document.getElementById('frl-tareas-estado')?.addEventListener('change', renderTareasAdminTabla);
   document.getElementById('nt-cancelar')?.addEventListener('click', () => closeSheet('nueva-tarea-sheet'));
   document.getElementById('nt-confirmar')?.addEventListener('click', confirmarNuevaTarea);
+  document.getElementById('frl-personal-dias')?.addEventListener('change', () => loadPersonalTiempo(true));
+  document.getElementById('frl-personal-nuevo')?.addEventListener('click', () => abrirAltaPersona(true));
 }
+// La pestaña Freelancers usa las mismas tarjetas que Personal, filtradas a
+// es_freelancer. FRL_CACHE se sigue cargando porque los selectores de Tareas
+// ("asignar a...") lo necesitan.
 async function loadFreelancers() {
+  loadPersonalTiempo(true);
   const { data, error } = await sb.rpc('listar_freelancers');
-  if (error) { errToast('No se pudieron cargar los freelancers'); return; }
+  if (error) return;
   FRL_CACHE = data || [];
-  renderFreelancersTabla();
   const sel = document.getElementById('frl-tareas-freelancer');
   if (sel) sel.innerHTML = '<option value="">Todos los freelancers</option>' + FRL_CACHE.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('');
   const selNt = document.getElementById('nt-freelancer');
   if (selNt) selNt.innerHTML = FRL_CACHE.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('');
 }
-function renderFreelancersTabla() {
-  const q = (val('frl-search') || '').toLowerCase();
-  const filas = FRL_CACHE.filter(f => !q || f.nombre.toLowerCase().includes(q));
-  document.getElementById('frl-tbody').innerHTML = filas.map(f => `
-    <tr>
-      <td>${esc(f.nombre)}</td>
-      <td>${f.bloqueado ? '<span class="asist-badge off">Bloqueado</span>' : f.conectado_ahora ? '<span class="asist-badge on">Conectado</span>' : '<span class="asist-badge">Desconectado</span>'}</td>
-      <td>${fmt(f.strikes)}</td>
-      <td class="muted">${f.ultima_conexion ? esc(fmtFechaHoraCaracas(f.ultima_conexion)) : '—'}</td>
-      <td>${Math.round((f.minutos_conectado_hoy || 0) / 60 * 10) / 10}h</td>
-      <td>${fmt(f.leads_asignados)}</td>
-      <td>${fmt(f.leads_atendidos)}</td>
-      <td style="display:flex;gap:6px">
-        ${f.bloqueado ? `<button class="btn-sm" onclick="desbloquearFreelancerUI('${f.id}')">Desbloquear</button>` : ''}
-        <button class="btn-sm" onclick="abrirDetalleFreelancerUI('${f.id}')">Ver detalle</button>
-      </td>
-    </tr>`).join('') || '<tr><td colspan="8">Sin freelancers registrados</td></tr>';
-}
 window.desbloquearFreelancerUI = async (usuarioId) => {
   const { data, error } = await sb.rpc('desbloquear_freelancer', { p_usuario_id: usuarioId });
   if (error || !data?.ok) { errToast('No se pudo desbloquear: ' + (error?.message || data?.error || '')); return; }
   okToast('Freelancer desbloqueado');
-  loadFreelancers();
+  loadPersonalTiempo(personalSoloFreelancers);
 };
 window.abrirDetalleFreelancerUI = async (usuarioId) => {
   const f = FRL_CACHE.find(x => x.id === usuarioId);
@@ -841,11 +827,11 @@ function setupGestionPersonal() {
     document.querySelectorAll('.gp-tab-panel').forEach(p => p.style.display = p.dataset.gpPanel === gpTab ? '' : 'none');
     cargarTabGestionPersonal(gpTab);
   }));
-  document.getElementById('gp-personal-dias')?.addEventListener('change', loadPersonalTiempo);
+  document.getElementById('gp-personal-dias')?.addEventListener('change', () => loadPersonalTiempo(false));
+  document.getElementById('gp-personal-nuevo')?.addEventListener('click', () => abrirAltaPersona(false));
 }
 function cargarTabGestionPersonal(tab) {
-  if (tab === 'personal') loadPersonalTiempo();
-  else if (tab === 'asistencia') loadAsistencia();
+  if (tab === 'personal') { loadPersonalTiempo(false); loadAsistenciaExtras(); }
   else if (tab === 'asesores') loadAsesoresPeriodo();
   else if (tab === 'freelancers') loadFreelancers();
   else if (tab === 'postulaciones') loadPostulaciones();
@@ -911,70 +897,128 @@ function fmtMinutos(min) {
   const h = Math.floor(min / 60), m = min % 60;
   return h ? (m ? h + 'h ' + m + 'min' : h + 'h') : m + 'min';
 }
-
-let personalCache = [], personalMeta = null;
-async function loadPersonalTiempo() {
-  const grid = document.getElementById('gp-personal-grid');
-  const load = document.getElementById('gp-personal-loading');
-  const dias = Number(document.getElementById('gp-personal-dias')?.value) || 14;
-  if (load) load.style.display = '';
-  grid.innerHTML = '';
-  const { data, error } = await sb.rpc('personal_sesiones_por_dia', { p_dias: dias });
-  if (load) load.style.display = 'none';
-  if (error) { console.error('personal_sesiones_por_dia:', error); grid.innerHTML = '<div class="pc-vacio">No se pudo cargar el equipo.</div>'; return; }
-  personalMeta = data || null;
-  personalCache = data?.personas || [];
-  renderPersonalCards();
-}
-
-function renderPersonalCards() {
-  const grid = document.getElementById('gp-personal-grid');
-  if (!grid) return;
-  const cont = document.getElementById('gp-personal-count');
-  if (cont) cont.textContent = personalCache.length + (personalCache.length === 1 ? ' persona' : ' personas');
-  // El contador arranca en la fecha de corte (app_config.horas_crm_desde), no
-  // en el origen de los tiempos: hasta el 26/07/2026 el CRM abría una sesión
-  // NUEVA en cada recarga de página, así que esos datos venían encadenados y
-  // daban días de 24h. Se dice de dónde arranca en vez de mostrar un total
-  // que nadie puede interpretar.
-  const aviso = document.getElementById('gp-personal-aviso');
-  if (aviso) {
-    aviso.innerHTML = 'El contador arranca el <b>' + (personalMeta?.desde ? fmtFechaLarga(personalMeta.desde) : 'inicio')
-      + '</b>. Mide <b>tiempo con el CRM abierto</b>, no horas trabajadas. Los días con ⚠ tienen sesiones que nadie cerró: ese total es aproximado.';
-  }
-  if (!personalCache.length) { grid.innerHTML = '<div class="pc-vacio">Sin datos del equipo todavía.</div>'; return; }
-  grid.innerHTML = personalCache.map(cardPersonaHtml).join('');
-  grid.querySelectorAll('[data-cargo-edit]').forEach(btn => { btn.onclick = () => editarCargo(btn.dataset.cargoEdit); });
-}
 const fmtFechaLarga = iso => {
   const p = new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'long' }).formatToParts(new Date(iso));
   const dia = p.find(x => x.type === 'day')?.value, mes = p.find(x => x.type === 'month')?.value;
   return `${dia} de ${mes}`;
 };
 
+let personalCache = [], personalMeta = null, personalBaja = [];
+// La pestaña Freelancers reusa exactamente esta misma vista, filtrada: son la
+// misma entidad (una fila de usuarios), lo único que cambia es qué se resalta.
+let personalSoloFreelancers = false;
+
+async function loadPersonalTiempo(soloFreelancers) {
+  personalSoloFreelancers = !!soloFreelancers;
+  const pre = personalSoloFreelancers ? 'frl' : 'gp';
+  const grid = document.getElementById(pre + '-personal-grid');
+  const load = document.getElementById(pre + '-personal-loading');
+  const dias = Number(document.getElementById(pre + '-personal-dias')?.value) || 7;
+  if (!grid) return;
+  if (load) load.style.display = '';
+  grid.innerHTML = '';
+  const { data, error } = await sb.rpc('personal_resumen', { p_dias: dias });
+  if (load) load.style.display = 'none';
+  if (error) { console.error('personal_resumen:', error); grid.innerHTML = '<div class="pc-vacio">No se pudo cargar el equipo.</div>'; return; }
+  personalMeta = data || null;
+  personalCache = (data?.personas || []);
+  personalBaja = data?.de_baja || [];
+  renderPersonalCards();
+}
+
+function personalVisibles() {
+  return personalSoloFreelancers ? personalCache.filter(u => u.es_freelancer) : personalCache;
+}
+
+function renderPersonalCards() {
+  const pre = personalSoloFreelancers ? 'frl' : 'gp';
+  const grid = document.getElementById(pre + '-personal-grid');
+  if (!grid) return;
+  const visibles = personalVisibles();
+  const cont = document.getElementById(pre + '-personal-count');
+  if (cont) cont.textContent = visibles.length + (visibles.length === 1 ? ' persona' : ' personas');
+  // El contador arranca en la fecha de corte (app_config.horas_crm_desde): hasta
+  // el 26/07/2026 el CRM abría una sesión nueva en cada recarga y esos totales
+  // no significan nada. Se dice de dónde arranca en vez de mostrar un número
+  // que nadie puede interpretar.
+  const aviso = document.getElementById(pre + '-personal-aviso');
+  if (aviso) {
+    aviso.innerHTML = 'El contador arranca el <b>' + (personalMeta?.desde ? fmtFechaLarga(personalMeta.desde) : 'inicio')
+      + '</b>. Mide <b>tiempo con el CRM abierto</b>, no horas trabajadas. Los días con ⚠ tienen sesiones que nadie cerró: ese total es aproximado.';
+  }
+  if (!visibles.length) {
+    grid.innerHTML = '<div class="pc-vacio">' + (personalSoloFreelancers ? 'No hay freelancers cargados.' : 'Sin datos del equipo todavía.') + '</div>';
+  } else {
+    grid.innerHTML = visibles.map(cardPersonaHtml).join('');
+  }
+  const bajaBox = document.getElementById(pre + '-personal-baja');
+  if (bajaBox) {
+    bajaBox.innerHTML = personalBaja.length
+      ? '<details class="pc-dias"><summary><i class="fas fa-user-slash"></i> Dados de baja (' + personalBaja.length + ')</summary>'
+        + personalBaja.map(u => '<div class="pc-dia"><div class="pc-dia-h"><span class="pc-dia-f">' + esc(u.nombre || '')
+          + '</span><button class="btn-sm" data-reactivar="' + u.usuario_id + '">Reactivar</button></div>'
+          + '<div class="pc-dia-s">' + (ROL_LABEL_GP[u.rol] || esc(u.rol || '')) + (u.cargo ? ' · ' + esc(u.cargo) : '') + '</div></div>').join('')
+        + '</details>'
+      : '';
+    bajaBox.querySelectorAll('[data-reactivar]').forEach(b => {
+      b.onclick = () => bajaPersonal(b.dataset.reactivar, true);
+    });
+  }
+  grid.querySelectorAll('[data-editar]').forEach(b => { b.onclick = () => abrirEditorPersona(b.dataset.editar); });
+  grid.querySelectorAll('[data-desbloquear]').forEach(b => { b.onclick = () => desbloquearFreelancerUI(b.dataset.desbloquear); });
+  grid.querySelectorAll('[data-exentar]').forEach(b => { b.onclick = () => exceptuarHoy(b.dataset.exentar); });
+}
+
 function cardPersonaHtml(u) {
   const ico = iconoDePersona(u);
-  const enCurso = (u.dias || []).some(d => (d.sesiones || []).some(s => s.abierta));
   const chips = (u.es_freelancer ? '<span class="pc-chip">Freelance</span>' : '')
-    + (u.bloqueado ? '<span class="pc-chip" style="color:#ef4444;border-color:#ef444455">Bloqueado</span>' : '');
+    + (u.bloqueado ? '<span class="pc-chip pc-chip-rojo">Bloqueado</span>' : '');
   const cargo = u.cargo ? esc(u.cargo) : '<span class="pc-cargo-vacio">Sin cargo asignado</span>';
   const dias = (u.dias || []).map(diaPersonaHtml).join('');
   const detalle = dias
     ? '<details class="pc-dias"><summary><i class="fas fa-calendar-days"></i> Ver día por día (' + (u.dias || []).length + ')</summary>' + dias + '</details>'
     : '<div class="pc-vacio">Todavía no se conectó desde que arrancó el contador.</div>';
-  return '<div class="pc">'
+
+  // Asistencia de hoy: antes era una pestaña aparte. Acá vive donde importa,
+  // en la tarjeta de la persona.
+  const asist = u.exento_hoy
+    ? '<span class="pc-asist exento">Exento hoy</span>'
+    : u.marco_hoy
+      ? '<span class="pc-asist ok">Marcó hoy</span>'
+      : '<span class="pc-asist no">No marcó hoy</span>';
+  const strikes = u.strikes_mes ? '<span class="pc-asist strike">' + u.strikes_mes + ' strike' + (u.strikes_mes === 1 ? '' : 's') + ' este mes</span>' : '';
+  const exentarBtn = (!u.exento_hoy && !u.marco_hoy)
+    ? '<button class="btn-sm" data-exentar="' + u.usuario_id + '">Exceptuar hoy</button>' : '';
+
+  // Bloque freelance: activo vs idle. Solo tiene sentido para freelancers --
+  // son los únicos con latido de actividad y con bloqueo a los 15 min.
+  const a = u.actividad || {};
+  const frlBloque = u.es_freelancer
+    ? '<div class="pc-frl">'
+      + '<div class="pc-frl-r"><span>Trabajo real hoy</span><b>' + fmtMinutos(a.activo_hoy || 0) + '</b></div>'
+      + '<div class="pc-frl-r"><span>Inactivo hoy</span><b class="pc-idle">' + fmtMinutos(a.idle_hoy || 0) + '</b></div>'
+      + '<div class="pc-frl-r"><span>Semana (real / inactivo)</span><b>' + fmtMinutos(a.activo_semana || 0) + ' / ' + fmtMinutos(a.idle_semana || 0) + '</b></div>'
+      + (u.strikes_freelancer ? '<div class="pc-frl-r"><span>Bloqueos por inactividad</span><b>' + u.strikes_freelancer + '</b></div>' : '')
+      + '</div>'
+    : '';
+  const desbloquear = (u.es_freelancer && u.bloqueado)
+    ? '<button class="dbtn save pc-desbloq" data-desbloquear="' + u.usuario_id + '"><i class="fas fa-unlock"></i> Desbloquear</button>' : '';
+
+  return '<div class="pc' + (u.bloqueado ? ' pc-bloq' : '') + '">'
     + '<div class="pc-top">'
       + '<div class="pc-ico" style="background:' + ico.c + '1f;color:' + ico.c + '"><i class="fas ' + ico.i + '"></i></div>'
       + '<div class="pc-id">'
-        + '<div class="pc-nombre">' + esc(u.nombre || 'Sin nombre') + (enCurso ? '<span class="pc-online" title="Conectado ahora"></span>' : '') + chips + '</div>'
-        + '<div class="pc-rol">' + (ROL_LABEL_GP[u.rol] || esc(u.rol || '')) + '</div>'
-        + '<div class="pc-cargo">' + cargo + '<button class="pc-cargo-edit" type="button" data-cargo-edit="' + u.usuario_id + '" title="Cambiar cargo"><i class="fas fa-pen"></i></button></div>'
+        + '<div class="pc-nombre">' + esc(u.nombre || 'Sin nombre') + (u.conectado_ahora ? '<span class="pc-online" title="Conectado ahora"></span>' : '') + chips + '</div>'
+        + '<div class="pc-rol">' + (ROL_LABEL_GP[u.rol] || esc(u.rol || '')) + (u.username ? ' · @' + esc(u.username) : '') + '</div>'
+        + '<div class="pc-cargo">' + cargo + '</div>'
       + '</div>'
+      + '<button class="pc-edit" type="button" data-editar="' + u.usuario_id + '" title="Editar"><i class="fas fa-pen"></i></button>'
     + '</div>'
-    + '<div class="pc-cifras">'
-      + '<div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_hoy) + '</span><span class="pc-cifra-t">Hoy</span></div>'
-      + '<div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_semana) + '</span><span class="pc-cifra-t">Esta semana</span></div>'
-    + '</div>'
+    + '<div class="pc-asist-row">' + asist + strikes + exentarBtn + '</div>'
+    + '<div class="pc-cifras"><div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_hoy) + '</span><span class="pc-cifra-t">Hoy</span></div>'
+    + '<div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_semana) + '</span><span class="pc-cifra-t">Esta semana</span></div></div>'
+    + frlBloque
+    + desbloquear
     + detalle
   + '</div>';
 }
@@ -995,40 +1039,168 @@ function diaPersonaHtml(d) {
   + '</div>';
 }
 
-async function editarCargo(usuarioId) {
+/* ---------- Alta / edición / baja ---------- */
+function abrirEditorPersona(usuarioId) {
   const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
   if (!u) return;
-  const valor = prompt('Cargo de ' + u.nombre + '\n\nEj: Ejecutivo de Boletería · Gerente Administrativo', u.cargo || '');
-  if (valor === null) return;
-  const { error } = await sb.rpc('actualizar_cargo_usuario', { p_usuario_id: usuarioId, p_cargo: valor.trim() || null });
-  if (error) { console.error('actualizar_cargo_usuario:', error); errToast('No se pudo guardar el cargo'); return; }
-  u.cargo = valor.trim() || null;
-  renderPersonalCards();
-  okToast('Cargo actualizado');
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="dhead"><div><div class="dn">${esc(u.nombre)}</div><div class="dm">@${esc(u.username || '')}</div></div></div>
+    <div class="edit-box" style="margin-top:16px">
+      <div class="eb-title"><i class="fas fa-id-card"></i> Datos</div>
+      <label class="fl">Nombre</label>
+      <input id="pe-nombre" class="ei" type="text" value="${esc(u.nombre || '')}">
+      <label class="fl">Cargo</label>
+      <input id="pe-cargo" class="ei" type="text" placeholder="Ej: Ejecutivo de Boletería · Gerente Administrativo" value="${esc(u.cargo || '')}">
+      <label class="fl">Rol</label>
+      <select id="pe-rol" class="ei">
+        ${['asesor', 'admin', 'marketing', 'boleteria'].map(r => `<option value="${r}"${u.rol === r ? ' selected' : ''}>${ROL_LABEL_GP[r] || r}</option>`).join('')}
+      </select>
+      <label class="pe-check" style="margin-top:12px"><input type="checkbox" id="pe-freelancer"${u.es_freelancer ? ' checked' : ''}> Es freelancer (se bloquea a los 15 min sin actividad)</label>
+      <div class="edit-err" id="pe-err"></div>
+      <button class="dbtn save" id="pe-guardar" type="button"><i class="fas fa-check"></i> Guardar</button>
+      <button class="dbtn gh" id="pe-baja" type="button" style="color:#ef4444"><i class="fas fa-user-slash"></i> Dar de baja</button>
+      <div style="font-size:11px;color:var(--muted2);margin-top:10px;line-height:1.5">Dar de baja le quita el acceso al instante y lo saca de las listas, pero <b>no borra su historial</b> de asistencia, leads ni comisiones. Se puede reactivar.</div>
+    </div>`;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerBg').classList.add('open');
+  navPush({ type: 'drawer' });
+  document.getElementById('pe-guardar').onclick = () => guardarPersona(usuarioId);
+  document.getElementById('pe-baja').onclick = () => bajaPersonal(usuarioId, false);
 }
 
-async function loadAsistencia() {
-  const [{ data: hoy, error: e1 }, { data: strikes, error: e2 }] = await Promise.all([
+async function guardarPersona(usuarioId) {
+  const btn = document.getElementById('pe-guardar');
+  const err = document.getElementById('pe-err');
+  const nombre = val('pe-nombre').trim();
+  if (nombre.length < 3) { err.textContent = 'El nombre es muy corto.'; return; }
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('admin_actualizar_personal', {
+    p_usuario_id: usuarioId,
+    p_nombre: nombre,
+    p_cargo: val('pe-cargo').trim(),
+    p_rol: val('pe-rol'),
+    p_es_freelancer: document.getElementById('pe-freelancer').checked,
+  });
+  btn.disabled = false;
+  if (error || !data?.ok) {
+    err.textContent = ERR_PERSONAL[data?.error] || error?.message || 'No se pudo guardar.';
+    return;
+  }
+  window.closeDrawer();
+  okToast('Datos actualizados');
+  loadPersonalTiempo(personalSoloFreelancers);
+}
+
+const ERR_PERSONAL = {
+  no_podes_cambiar_tu_propio_rol: 'No podés cambiarte el rol a vos mismo — pedíselo a otro admin.',
+  no_podes_darte_de_baja_a_vos_mismo: 'No podés darte de baja a vos mismo.',
+  es_el_ultimo_admin: 'Es el único admin que queda. Nombrá otro antes de darlo de baja.',
+  rol_invalido: 'Ese rol no existe.',
+  no_existe: 'Esa persona ya no está en el sistema.',
+  username_ocupado: 'Ese usuario ya está en uso.',
+  username_invalido: 'El usuario solo puede tener letras, números, punto, guion y guion bajo (3 a 32).',
+  nombre_invalido: 'El nombre es muy corto.',
+};
+
+async function bajaPersonal(usuarioId, reactivar) {
+  const u = [...personalCache, ...personalBaja].find(x => String(x.usuario_id) === String(usuarioId));
+  if (!reactivar && !confirm(`¿Dar de baja a ${u?.nombre || 'esta persona'}?\n\nPierde el acceso al CRM al instante. Su historial de asistencia, leads y comisiones NO se borra, y podés reactivarla cuando quieras.`)) return;
+  const { data, error } = await sb.rpc('admin_baja_personal', { p_usuario_id: usuarioId, p_reactivar: !!reactivar });
+  if (error || !data?.ok) { errToast(ERR_PERSONAL[data?.error] || error?.message || 'No se pudo aplicar'); return; }
+  window.closeDrawer();
+  okToast(reactivar ? 'Persona reactivada' : 'Persona dada de baja');
+  loadPersonalTiempo(personalSoloFreelancers);
+}
+
+function abrirAltaPersona(comoFreelancer) {
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="dhead"><div><div class="dn">${comoFreelancer ? 'Nuevo freelancer' : 'Nuevo miembro del equipo'}</div><div class="dm">Se crea su cuenta de acceso al CRM</div></div></div>
+    <div class="edit-box" style="margin-top:16px">
+      <label class="fl">Nombre y apellido</label>
+      <input id="pn-nombre" class="ei" type="text" placeholder="Ej: María Pérez">
+      <label class="fl">Usuario (con el que inicia sesión)</label>
+      <input id="pn-username" class="ei" type="text" placeholder="Ej: maria" autocapitalize="off" autocorrect="off">
+      <label class="fl">Cargo (opcional)</label>
+      <input id="pn-cargo" class="ei" type="text" placeholder="Ej: Ejecutiva de Boletería">
+      <label class="fl">Rol</label>
+      <select id="pn-rol" class="ei">
+        <option value="asesor">Asesor</option>
+        <option value="admin">Administrador</option>
+        <option value="marketing">Marketing</option>
+        <option value="boleteria">Boletería</option>
+      </select>
+      <label class="pe-check" style="margin-top:12px"><input type="checkbox" id="pn-freelancer"${comoFreelancer ? ' checked' : ''}> Es freelancer (se bloquea a los 15 min sin actividad)</label>
+      <div class="edit-err" id="pn-err"></div>
+      <button class="dbtn save" id="pn-crear" type="button"><i class="fas fa-user-plus"></i> Crear cuenta</button>
+      <div id="pn-listo"></div>
+    </div>`;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerBg').classList.add('open');
+  navPush({ type: 'drawer' });
+  document.getElementById('pn-crear').onclick = crearPersona;
+}
+
+async function crearPersona() {
+  const btn = document.getElementById('pn-crear');
+  const err = document.getElementById('pn-err');
+  err.textContent = '';
+  btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.functions.invoke('crear-personal', {
+    body: {
+      nombre: val('pn-nombre').trim(),
+      username: val('pn-username').trim().toLowerCase(),
+      cargo: val('pn-cargo').trim(),
+      rol: val('pn-rol'),
+      es_freelancer: document.getElementById('pn-freelancer').checked,
+    },
+  });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-user-plus"></i> Crear cuenta';
+  if (error || !data?.ok) {
+    err.textContent = ERR_PERSONAL[data?.error] || data?.detalle || error?.message || 'No se pudo crear la cuenta.';
+    return;
+  }
+  // La contraseña temporal se muestra UNA sola vez: no queda guardada en
+  // ningún lado en texto plano, así que si se cierra sin copiarla hay que
+  // resetearla.
+  btn.style.display = 'none';
+  document.getElementById('pn-listo').innerHTML = `
+    <div class="edit-box" style="margin-top:14px;border-color:rgba(34,197,94,.4)">
+      <div class="eb-title" style="color:var(--green)"><i class="fas fa-circle-check"></i> Cuenta creada</div>
+      <div style="font-size:13px;line-height:1.6">Pasale estos datos por WhatsApp o Telegram. <b>La contraseña se muestra una sola vez</b> — si cerrás esta ventana sin copiarla, hay que resetearla.</div>
+      <div class="pn-cred"><span>Usuario</span><b>${esc(data.username)}</b></div>
+      <div class="pn-cred"><span>Contraseña temporal</span><b>${esc(data.password_temporal)}</b></div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:8px">Se la va a pedir cambiar en el primer ingreso.</div>
+      <button class="dbtn gh" id="pn-copiar" type="button"><i class="fas fa-copy"></i> Copiar</button>
+    </div>`;
+  document.getElementById('pn-copiar').onclick = () => {
+    navigator.clipboard.writeText(`Usuario: ${data.username}\nContraseña temporal: ${data.password_temporal}`)
+      .then(() => okToast('Copiado')).catch(() => errToast('No se pudo copiar'));
+  };
+  loadPersonalTiempo(personalSoloFreelancers);
+}
+
+// La pestaña Asistencia se retiró (2026-07-27): el estado de hoy, los strikes
+// del mes y el botón de exceptuar viven en la tarjeta de cada persona dentro de
+// Personal. Acá queda solo lo histórico -- strikes del mes y el listado de
+// entradas/salidas -- que no cabe en una tarjeta.
+async function loadAsistenciaExtras() {
+  const [{ data: hoy }, { data: strikes }] = await Promise.all([
     sb.rpc('asistencia_admin_hoy'),
     sb.rpc('asistencia_strikes_mes'),
   ]);
-  if (e1 || e2) { errToast('No se pudo cargar Asistencia'); return; }
-  document.getElementById('asist-tbody').innerHTML = (hoy || []).map(a => `
-    <tr>
-      <td>${esc(a.nombre)}</td>
-      <td>${a.exento_hoy ? '<span class="asist-badge">Exento hoy</span>' : a.marco_hoy ? '<span class="asist-badge on">Marcó</span>' : '<span class="asist-badge off">No marcó</span>'}</td>
-      <td>${a.tiene_recordatorios ? 'Activos' : '—'}</td>
-      <td>${a.strikes_mes}</td>
-      <td>${a.exento_hoy ? '' : `<button class="btn-sm" onclick="exceptuarHoy('${a.usuario_id}')">Exceptuar hoy</button>`}</td>
-    </tr>`).join('') || '<tr><td colspan="5">Sin asesores</td></tr>';
   const activos = (strikes || []).filter(s => !s.anulado_at);
-  document.getElementById('asist-strikes-wrap').innerHTML = activos.length
-    ? activos.map(s => `<div class="strike-row"><span>${esc(s.nombre)} — ${s.fecha}</span><button class="btn-sm" onclick="anularStrikeUI(${s.id})">Anular</button></div>`).join('')
-    : '<div class="es-s">Sin strikes este mes</div>';
+  const wrap = document.getElementById('asist-strikes-wrap');
+  if (wrap) {
+    wrap.innerHTML = activos.length
+      ? activos.map(s => `<div class="strike-row"><span>${esc(s.nombre)} — ${s.fecha}</span><button class="btn-sm" onclick="anularStrikeUI(${s.id})">Anular</button></div>`).join('')
+      : '<div class="es-s">Sin strikes este mes</div>';
+  }
   const selAsesor = document.getElementById('asist-hist-asesor');
-  const prevSel = selAsesor.value;
-  selAsesor.innerHTML = '<option value="">Todos los asesores</option>' + (hoy || []).map(a => `<option value="${a.usuario_id}">${esc(a.nombre)}</option>`).join('');
-  if (prevSel && [...selAsesor.options].some(o => o.value === prevSel)) selAsesor.value = prevSel;
+  if (selAsesor) {
+    const prevSel = selAsesor.value;
+    selAsesor.innerHTML = '<option value="">Todos los asesores</option>' + (hoy || []).map(a => `<option value="${a.usuario_id}">${esc(a.nombre)}</option>`).join('');
+    if (prevSel && [...selAsesor.options].some(o => o.value === prevSel)) selAsesor.value = prevSel;
+  }
   setupAsistenciaHistorial();
   loadAsistenciaHistorial();
 }
@@ -1069,7 +1241,7 @@ window.exceptuarHoy = async (asesorId) => {
   const { error } = await sb.rpc('exceptuar_asistencia', { p_asesor_id: asesorId, p_fecha: hoyCaracas(), p_motivo: motivo || null });
   if (error) { errToast('No se pudo exceptuar: ' + error.message); return; }
   okToast('Asesor exceptuado hoy');
-  loadAsistencia();
+  loadPersonalTiempo(personalSoloFreelancers);
 };
 window.anularStrikeUI = async (strikeId) => {
   const motivo = prompt('Motivo de la anulación (obligatorio):');
@@ -1077,7 +1249,7 @@ window.anularStrikeUI = async (strikeId) => {
   const { error } = await sb.rpc('anular_strike', { p_strike_id: strikeId, p_motivo: motivo.trim() });
   if (error) { errToast('No se pudo anular: ' + error.message); return; }
   okToast('Strike anulado');
-  loadAsistencia();
+  loadAsistenciaExtras();
 };
 
 document.getElementById('loginForm').addEventListener('submit', async e => {
@@ -2963,6 +3135,64 @@ function buildReasignQuery() {
   if (fm) q = q.eq('motivo', fm);
   return q;
 }
+
+/* ---------- Reasignaciones: editar y eliminar a mano (admin) ----------
+   Sirve para corregir un traspaso mal registrado sin tener que entrar a la
+   base. Borrar acá es DEFINITIVO: la fila de reasignaciones es el historial de
+   quién le pasó qué cliente a quién, no hay papelera. */
+let REASIG_CACHE = [];
+function abrirEditorReasignacion(id) {
+  const r = REASIG_CACHE.find(x => x.id === id);
+  if (!r) return;
+  const l = r.leads || {};
+  const nombres = [...new Set([...(ACTIVOS || []), r.asesor_anterior, r.asesor_nuevo].filter(Boolean))].sort();
+  const opciones = nombres.map(a => esc(a));
+  const sel = (valor) => `<select class="ei">${['<option value="">Sin asesor</option>', ...opciones.map(a => `<option value="${a}"${a === valor ? ' selected' : ''}>${a}</option>`)].join('')}</select>`;
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="dhead"><div><div class="dn">${esc(l.nombre || 'Lead ' + r.lead_id)}</div><div class="dm">Reasignación del ${esc(fmtFechaHoraCaracas(r.created_at))}</div></div></div>
+    <div class="edit-box" style="margin-top:16px">
+      <label class="fl">De (asesor anterior)</label>
+      <div id="re-de">${sel(r.asesor_anterior)}</div>
+      <label class="fl">A (asesor nuevo)</label>
+      <div id="re-a">${sel(r.asesor_nuevo)}</div>
+      <label class="fl">Motivo</label>
+      <select id="re-motivo" class="ei">
+        <option value="timeout_no_respuesta"${r.motivo === 'timeout_no_respuesta' ? ' selected' : ''}>Timeout (sin respuesta)</option>
+        <option value="manual_no_puedo"${r.motivo === 'manual_no_puedo' ? ' selected' : ''}>Manual (No puedo)</option>
+        <option value="correccion_admin"${r.motivo === 'correccion_admin' ? ' selected' : ''}>Corrección de administración</option>
+      </select>
+      <div class="edit-err" id="re-err"></div>
+      <button class="dbtn save" id="re-guardar" type="button"><i class="fas fa-check"></i> Guardar</button>
+      <button class="dbtn gh" id="re-borrar" type="button" style="color:#ef4444"><i class="fas fa-trash"></i> Eliminar este registro</button>
+      <div style="font-size:11px;color:var(--muted2);margin-top:10px;line-height:1.5">Esto edita el <b>registro histórico</b> de la reasignación. No cambia a qué asesor está asignado el lead hoy — eso se hace desde la ficha del lead.</div>
+    </div>`;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerBg').classList.add('open');
+  navPush({ type: 'drawer' });
+  document.getElementById('re-guardar').onclick = async () => {
+    const { data, error } = await sb.rpc('admin_actualizar_reasignacion', {
+      p_id: id,
+      p_asesor_anterior: document.querySelector('#re-de select').value,
+      p_asesor_nuevo: document.querySelector('#re-a select').value,
+      p_motivo: val('re-motivo'),
+    });
+    if (error || !data?.ok) { document.getElementById('re-err').textContent = error?.message || 'No se pudo guardar.'; return; }
+    window.closeDrawer(); okToast('Reasignación actualizada'); loadReasignaciones();
+  };
+  document.getElementById('re-borrar').onclick = () => borrarReasignacion(id);
+}
+
+async function borrarReasignacion(id) {
+  const r = REASIG_CACHE.find(x => x.id === id);
+  const quien = r ? `${r.asesor_anterior || '—'} → ${r.asesor_nuevo || 'sin asesor'}` : 'este registro';
+  if (!confirm(`¿Eliminar la reasignación ${quien}?
+
+Es el historial de quién le pasó el cliente a quién. No se puede deshacer desde el CRM.`)) return;
+  const { data, error } = await sb.rpc('admin_eliminar_reasignacion', { p_id: id });
+  if (error || !data?.ok) { errToast(error?.message || 'No se pudo eliminar'); return; }
+  window.closeDrawer(); okToast('Reasignación eliminada'); loadReasignaciones();
+}
+
 async function loadReasignaciones() {
   const loading = document.getElementById('rg-loading'), empty = document.getElementById('rg-empty'), wrap = document.getElementById('rg-wrap');
   empty.classList.remove('show'); loading.classList.add('show'); wrap.style.opacity = '.4';
@@ -2993,14 +3223,17 @@ async function loadReasignaciones() {
       <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre || 'Sin nombre')}</div></td>
       <td data-label="Teléfono" class="muted">${esc(l.telefono) || '—'}</td>
       <td data-label="Destino">${esc(l.destino) || '—'}</td>
-      <td data-label="De">${esc(r.asesor_anterior)}</td>
-      <td data-label="A">${sinAsesor ? '<span style="color:#ef4444"><i class="fas fa-triangle-exclamation"></i> Sin asesor disponible</span>' : esc(r.asesor_nuevo)}</td>
+      <td data-label="De → A"><span class="rg-flujo"><b>${esc(r.asesor_anterior || '—')}</b><i class="fas fa-arrow-right"></i>${sinAsesor ? '<span style="color:#ef4444">Sin asesor disponible</span>' : `<b>${esc(r.asesor_nuevo)}</b>`}</span></td>
       <td data-label="Motivo"><span class="chip">${MOTIVO_LABEL[r.motivo] || esc(r.motivo)}</span></td>
       <td data-label="Tiempo" class="muted">${r.minutos_transcurridos != null ? r.minutos_transcurridos + ' min' : '—'}</td>
       <td data-label="Fecha" class="muted">${esc(fmtFechaHoraCaracas(r.created_at))}</td>
+      <td class="rg-acc"><button class="btn-sm" data-rg-editar="${r.id}" title="Editar"><i class="fas fa-pen"></i></button><button class="btn-sm" data-rg-borrar="${r.id}" title="Eliminar"><i class="fas fa-trash"></i></button></td>
     </tr>`;
   }).join('');
   document.getElementById('rg-cards').innerHTML = data.map(reasignCardHtml).join('');
+  REASIG_CACHE = data;
+  document.querySelectorAll('#rg-tbody [data-rg-editar]').forEach(b => { b.onclick = () => abrirEditorReasignacion(Number(b.dataset.rgEditar)); });
+  document.querySelectorAll('#rg-tbody [data-rg-borrar]').forEach(b => { b.onclick = () => borrarReasignacion(Number(b.dataset.rgBorrar)); });
   applyRgView();
   renderReasignPager(Math.max(Math.ceil(total / PER), 1));
 }
@@ -5876,6 +6109,9 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-07-27', emoji: '👥', titulo: 'Gestión de Personal renovada', texto: 'Ahora podés agregar gente nueva (se le crea su usuario y contraseña temporal), editarle nombre, cargo y rol, y darla de baja sin perder su historial. La pestaña Asistencia desapareció: quién marcó hoy, sus strikes y el botón de exceptuar están en la tarjeta de cada persona, y el historial de entradas y salidas quedó más abajo en la misma pestaña.', roles: ['admin'] },
+  { fecha: '2026-07-27', emoji: '⏱️', titulo: 'Freelancers: trabajo real vs inactividad', texto: 'Los freelancers ahora se ven con las mismas tarjetas que el resto del equipo, y además muestran cuánto tiempo trabajaron de verdad y cuánto estuvieron inactivos (hoy y en la semana). Si alguno queda bloqueado por los 15 minutos sin actividad, la tarjeta se marca en rojo con la etiqueta Bloqueado y un botón para desbloquearlo ahí mismo.', roles: ['admin'] },
+  { fecha: '2026-07-27', emoji: '🔀', titulo: 'Reasignaciones editables', texto: 'La tabla ahora muestra el traspaso completo (de quién a quién) en una sola columna, y cada fila se puede corregir o eliminar a mano. Se limpió el historial anterior al 20 de julio.', roles: ['admin'] },
   { fecha: '2026-07-27', emoji: '🧲', titulo: 'El mismo cliente ya no genera dos leads', texto: 'Si un cliente escribe por la web y después por Instagram (o al revés) con el mismo número, el CRM lo reconoce y NO crea un lead nuevo: suma la info al que ya existe y te avisa por Telegram que volvió a escribir. El asesor asignado no cambia nunca, así que no pasa más que dos personas llamen al mismo cliente. Lo ves en la pestaña Actividad del lead.', roles: ['admin', 'asesor'] },
   { fecha: '2026-07-27', emoji: '📱', titulo: 'Barra de abajo a tu gusto + deslizar para cambiar de sección', texto: 'Desde el celular podés elegir qué secciones tenés en la barra de abajo (hasta 6 más "Yo"): entrá a Yo > tu nombre > "Barra de abajo" y tildá las que quieras. Además, deslizando el dedo de un lado al otro pasás de una sección a la otra sin tocar nada. Los nombres de la barra ahora se leen mucho mejor.', roles: ROLES_TODOS },
   { fecha: '2026-07-27', emoji: '🔄', titulo: 'Botón "Actualizar CRM"', texto: 'Arriba a la derecha del logo y abajo del menú (y en "Yo" desde el celular). Hace lo mismo que Ctrl+Shift+R: borra lo que quedó guardado del navegador y trae la última versión, sin cerrar tu sesión. Usalo cuando algo se vea raro o cuando te avisemos de una novedad.', roles: ROLES_TODOS },
