@@ -701,9 +701,11 @@ input.ei[type=date]{color-scheme:dark}
 .pc-cargo-edit:hover{color:var(--accent)}
 .pc-online{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);flex-shrink:0}
 .pc-chip{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:20px;background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted)}
-.pc-total{display:flex;align-items:baseline;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
-.pc-total-v{font-size:20px;font-weight:800;color:var(--accent)}
-.pc-total-t{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.pc-cifras{display:flex;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.pc-cifra{flex:1;min-width:0;background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:9px 11px}
+.pc-cifra-v{display:block;font-size:19px;font-weight:800;color:var(--accent);line-height:1.15}
+.pc-cifra:last-child .pc-cifra-v{color:var(--txt)}
+.pc-cifra-t{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:2px}
 .pc-dias{margin-top:10px}
 .pc-dias > summary{list-style:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:7px;padding:6px 0}
 .pc-dias > summary::-webkit-details-marker{display:none}
@@ -1648,9 +1650,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="gp-tab-panel" data-gp-panel="personal">
         <div class="tbar" style="margin-bottom:12px">
           <select class="flt" id="gp-personal-dias">
-            <option value="7">Últimos 7 días</option>
-            <option value="14" selected>Últimos 14 días</option>
-            <option value="30">Últimos 30 días</option>
+            <option value="7" selected>Detalle: últimos 7 días</option>
+            <option value="14">Detalle: últimos 14 días</option>
+            <option value="30">Detalle: últimos 30 días</option>
           </select>
           <span class="tcount" id="gp-personal-count"></span>
         </div>

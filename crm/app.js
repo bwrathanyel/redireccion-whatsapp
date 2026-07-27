@@ -910,7 +910,7 @@ function fmtMinutos(min) {
   return h ? (m ? h + 'h ' + m + 'min' : h + 'h') : m + 'min';
 }
 
-let personalCache = [];
+let personalCache = [], personalMeta = null;
 async function loadPersonalTiempo() {
   const grid = document.getElementById('gp-personal-grid');
   const load = document.getElementById('gp-personal-loading');
@@ -920,7 +920,8 @@ async function loadPersonalTiempo() {
   const { data, error } = await sb.rpc('personal_sesiones_por_dia', { p_dias: dias });
   if (load) load.style.display = 'none';
   if (error) { console.error('personal_sesiones_por_dia:', error); grid.innerHTML = '<div class="pc-vacio">No se pudo cargar el equipo.</div>'; return; }
-  personalCache = data || [];
+  personalMeta = data || null;
+  personalCache = data?.personas || [];
   renderPersonalCards();
 }
 
@@ -929,17 +930,25 @@ function renderPersonalCards() {
   if (!grid) return;
   const cont = document.getElementById('gp-personal-count');
   if (cont) cont.textContent = personalCache.length + (personalCache.length === 1 ? ' persona' : ' personas');
-  // Aviso de honestidad: hasta el 27/07/2026 el CRM abría una sesión NUEVA en
-  // cada recarga de página, así que las sesiones viejas vienen encadenadas y
-  // el total mide "CRM abierto", no "horas trabajadas". El bug ya está
-  // arreglado, pero el histórico anterior no se puede reconstruir -- mejor
-  // decirlo que dejar que alguien decida algo con ese número.
+  // El contador arranca en la fecha de corte (app_config.horas_crm_desde), no
+  // en el origen de los tiempos: hasta el 26/07/2026 el CRM abría una sesión
+  // NUEVA en cada recarga de página, así que esos datos venían encadenados y
+  // daban días de 24h. Se dice de dónde arranca en vez de mostrar un total
+  // que nadie puede interpretar.
   const aviso = document.getElementById('gp-personal-aviso');
-  if (aviso) aviso.innerHTML = 'Esto mide <b>tiempo con el CRM abierto</b>, no horas trabajadas. Los días con ⚠ tienen sesiones que nadie cerró: ese total es aproximado.';
-  if (!personalCache.length) { grid.innerHTML = '<div class="pc-vacio">Sin datos del equipo en este período.</div>'; return; }
+  if (aviso) {
+    aviso.innerHTML = 'El contador arranca el <b>' + (personalMeta?.desde ? fmtFechaLarga(personalMeta.desde) : 'inicio')
+      + '</b>. Mide <b>tiempo con el CRM abierto</b>, no horas trabajadas. Los días con ⚠ tienen sesiones que nadie cerró: ese total es aproximado.';
+  }
+  if (!personalCache.length) { grid.innerHTML = '<div class="pc-vacio">Sin datos del equipo todavía.</div>'; return; }
   grid.innerHTML = personalCache.map(cardPersonaHtml).join('');
   grid.querySelectorAll('[data-cargo-edit]').forEach(btn => { btn.onclick = () => editarCargo(btn.dataset.cargoEdit); });
 }
+const fmtFechaLarga = iso => {
+  const p = new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'long' }).formatToParts(new Date(iso));
+  const dia = p.find(x => x.type === 'day')?.value, mes = p.find(x => x.type === 'month')?.value;
+  return `${dia} de ${mes}`;
+};
 
 function cardPersonaHtml(u) {
   const ico = iconoDePersona(u);
@@ -950,7 +959,7 @@ function cardPersonaHtml(u) {
   const dias = (u.dias || []).map(diaPersonaHtml).join('');
   const detalle = dias
     ? '<details class="pc-dias"><summary><i class="fas fa-calendar-days"></i> Ver día por día (' + (u.dias || []).length + ')</summary>' + dias + '</details>'
-    : '<div class="pc-vacio">Sin conexiones registradas en el período.</div>';
+    : '<div class="pc-vacio">Todavía no se conectó desde que arrancó el contador.</div>';
   return '<div class="pc">'
     + '<div class="pc-top">'
       + '<div class="pc-ico" style="background:' + ico.c + '1f;color:' + ico.c + '"><i class="fas ' + ico.i + '"></i></div>'
@@ -960,8 +969,10 @@ function cardPersonaHtml(u) {
         + '<div class="pc-cargo">' + cargo + '<button class="pc-cargo-edit" type="button" data-cargo-edit="' + u.usuario_id + '" title="Cambiar cargo"><i class="fas fa-pen"></i></button></div>'
       + '</div>'
     + '</div>'
-    + '<div class="pc-total"><span class="pc-total-v">' + fmtMinutos(u.minutos_total) + '</span>'
-    + '<span class="pc-total-t">en el período' + (u.tiene_anomala ? ' ⚠' : '') + '</span></div>'
+    + '<div class="pc-cifras">'
+      + '<div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_hoy) + '</span><span class="pc-cifra-t">Hoy</span></div>'
+      + '<div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_semana) + '</span><span class="pc-cifra-t">Esta semana</span></div>'
+    + '</div>'
     + detalle
   + '</div>';
 }
