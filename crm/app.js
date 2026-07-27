@@ -443,12 +443,14 @@ function renderTareas() {
 
   const completadasSemana = TAREAS_CACHE.filter(t => t.estado === 'completada').length;
   const aTiempo = TAREAS_CACHE.filter(t => t.estado === 'completada' && (!t.vence_at || new Date(t.completada_at) <= new Date(t.vence_at))).length;
-  document.getElementById('tareas-resumen').innerHTML = [
+  // Sin `go`: el tablero de tareas son 3 columnas fijas (urgente/próximas/
+  // esperando) y ninguna de estas cifras se corresponde con una de ellas.
+  pintarKPIs('tareas-resumen', [
     { t: 'Completadas', v: fmt(completadasSemana), i: 'fa-check', c: 'var(--green)' },
     { t: 'A tiempo', v: fmt(aTiempo), i: 'fa-clock', c: 'var(--accent)' },
     { t: 'En curso', v: fmt(TAREAS_CACHE.filter(t => t.estado === 'en_proceso').length), i: 'fa-spinner', c: 'var(--blue)' },
     { t: 'Reportes abiertos', v: fmt(TAREAS_CACHE.filter(t => t.reporte_abierto).length), i: 'fa-flag', c: '#ef4444' },
-  ].map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  ]);
 }
 function tarjetasHtml(filas) {
   if (!filas.length) return '<div class="tareas-empty">Nada por acá</div>';
@@ -1076,7 +1078,8 @@ function cardPersonaHtml(u) {
       + '<button class="pc-edit" type="button" data-editar="' + u.usuario_id + '" title="Editar"><i class="fas fa-pen"></i></button>'
     + '</div>'
     + '<div class="pc-asist-row">' + asist + strikes + exentarBtn + '</div>'
-    + '<div class="pc-cifras"><div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_hoy) + '</span><span class="pc-cifra-t">Hoy</span></div>'
+    + '<div class="pc-cifras" title="Tiempo con el CRM abierto y a la vista. No cuenta la pestaña en segundo plano ni la jornada que quedó sin cerrar.">'
+    + '<div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_hoy) + '</span><span class="pc-cifra-t">Presente hoy</span></div>'
     + '<div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_semana) + '</span><span class="pc-cifra-t">Esta semana</span></div></div>'
     + frlBloque
     + desbloquear
@@ -1092,7 +1095,7 @@ function diaPersonaHtml(d) {
     : fmtHoraCaracas(s.entrada) + '&ndash;' + fmtHoraCaracas(s.salida));
   const ocultas = (d.cant_sesiones || 0) - ses.length;
   if (ocultas > 0) ses.push('+' + ocultas + ' más');
-  const warn = d.tiene_anomala ? ' <span class="pc-dia-warn" title="Hay sesiones que nadie cerró: el total del día es aproximado">⚠</span>' : '';
+  const warn = d.tiene_anomala ? ' <span class="pc-dia-warn" title="Quedó una jornada sin cerrar. No afecta los minutos (salen del tiempo presente), pero el horario de salida de ese día no se registró.">⚠</span>' : '';
   return '<div class="pc-dia">'
     + '<div class="pc-dia-h"><span class="pc-dia-f">' + fmtDiaCorto(d.dia) + warn + '</span>'
     + '<span class="pc-dia-m">' + fmtMinutos(d.minutos) + '</span></div>'
@@ -1516,6 +1519,25 @@ async function loadStats() {
 }
 
 /* ---------- KPIs ---------- */
+// Pintor único de tarjetas KPI. Con `go` sale un <button> real (navegable con
+// teclado, no un div con onclick); sin `go`, un div sin cursor de mano para no
+// prometer un click que no hace nada.
+// Ojo: <button> NO hereda el color del texto, hay que forzarlo -- lo hace
+// .kpi-btn en index.html. Sin eso el número sale negro sobre panel oscuro.
+function pintarKPIs(box, cards) {
+  if (typeof box === 'string') box = document.getElementById(box);
+  if (!box) return;
+  box.innerHTML = cards.map(k => {
+    const tag = k.go ? 'button' : 'div';
+    return `<${tag} class="kpi${k.go ? ' kpi-btn' : ''}" style="--kc:${k.c}${k.go ? '' : ';cursor:default'}"`
+      + (k.go ? ` type="button"${k.tt ? ` title="${esc(k.tt)}"` : ''}` : '')
+      + `><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div>`
+      + (k.d ? `<div class="kd">${k.d}</div>` : '')
+      + (k.go ? '<i class="fas fa-arrow-right kgo"></i>' : '')
+      + `</${tag}>`;
+  }).join('');
+  [...box.children].forEach((el, i) => { if (cards[i].go) el.addEventListener('click', cards[i].go); });
+}
 function renderKPIs() {
   const thisMonth = new Date().toISOString().slice(0, 7);
   const cards = [
@@ -1525,9 +1547,7 @@ function renderKPIs() {
     { t: 'Por atender', v: fmt(STATS.por_atender), d: 'Requieren primer contacto', i: 'fa-bell', c: 'var(--amber)', go: () => drillEstado('POR ATENDER') },
     { t: 'Vouchers este mes', v: fmt(STATS.vouchers_mes || 0), d: 'Generados por todo el equipo', i: 'fa-file-invoice', c: 'var(--purple)', go: () => activateSection('voucher') },
   ];
-  const box = document.getElementById('kpis');
-  box.innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c}"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div><div class="kd">${k.d}</div><i class="fas fa-arrow-right kgo"></i></div>`).join('');
-  [...box.children].forEach((el, i) => el.onclick = cards[i].go);
+  pintarKPIs('kpis', cards);
 }
 
 /* ---------- Charts (dashboard) ---------- */
@@ -2191,24 +2211,24 @@ function renderHoyAsesor() {
   });
   const stats = document.getElementById('hoy-stats');
   if (STATS && Object.keys(STATS).length) {
-    const cards = [
-      { t: 'Por atender', v: fmt(STATS.por_atender), i: 'fa-bell', c: 'var(--amber)' },
-      { t: 'Nuevos este mes', v: fmt(STATS.mes_actual), i: 'fa-bolt', c: 'var(--green)' },
-      { t: 'Leads totales', v: fmt(STATS.total), i: 'fa-users', c: 'var(--accent)' },
-    ];
-    stats.innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+    const mes = new Date().toISOString().slice(0, 7);
+    pintarKPIs(stats, [
+      { t: 'Por atender', v: fmt(STATS.por_atender), i: 'fa-bell', c: 'var(--amber)', tt: 'Ver los leads por atender', go: () => drillEstado('POR ATENDER') },
+      { t: 'Nuevos este mes', v: fmt(STATS.mes_actual), i: 'fa-bolt', c: 'var(--green)', tt: 'Ver los leads de este mes', go: () => drillMonth(mes) },
+      { t: 'Leads totales', v: fmt(STATS.total), i: 'fa-users', c: 'var(--accent)', tt: 'Ver todos los leads, sin filtros', go: () => drillClear() },
+    ]);
   }
 }
 function renderHoyAdmin() {
   if (!STATS || !Object.keys(STATS).length) return; // loadStats todavía no resolvió
   renderPipe('hoy-pipe');
-  const cards = [
-    { t: 'Leads en 2026', v: fmt(STATS.anio_actual), i: 'fa-calendar-day', c: 'var(--blue)' },
-    { t: 'Nuevos este mes', v: fmt(STATS.mes_actual), i: 'fa-bolt', c: 'var(--green)' },
-    { t: 'Por atender', v: fmt(STATS.por_atender), i: 'fa-bell', c: 'var(--amber)' },
-    { t: 'Vouchers este mes', v: fmt(STATS.vouchers_mes || 0), i: 'fa-file-invoice', c: 'var(--purple)' },
-  ];
-  document.getElementById('hoy-kpis').innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  const mes = new Date().toISOString().slice(0, 7);
+  pintarKPIs('hoy-kpis', [
+    { t: 'Leads en 2026', v: fmt(STATS.anio_actual), i: 'fa-calendar-day', c: 'var(--blue)', tt: 'Ver los leads de 2026', go: () => drillAnio('2026') },
+    { t: 'Nuevos este mes', v: fmt(STATS.mes_actual), i: 'fa-bolt', c: 'var(--green)', tt: 'Ver los leads de este mes', go: () => drillMonth(mes) },
+    { t: 'Por atender', v: fmt(STATS.por_atender), i: 'fa-bell', c: 'var(--amber)', tt: 'Ver los leads por atender', go: () => drillEstado('POR ATENDER') },
+    { t: 'Vouchers este mes', v: fmt(STATS.vouchers_mes || 0), i: 'fa-file-invoice', c: 'var(--purple)', tt: 'Ir a Vouchers', go: () => activateSection('voucher') },
+  ]);
 }
 function setupHoy() {
   document.getElementById('hoy-nuevo-lead-btn')?.addEventListener('click', () => document.getElementById('nl-abrir-btn')?.click());
@@ -2850,7 +2870,10 @@ async function loadMetricas() {
     { t: 'Ingresos', v: money(data.monto), i: 'fa-dollar-sign', c: '#34d399' },
     { t: 'Conversión', v: conv + '%', i: 'fa-percent', c: 'var(--purple)' },
   ];
-  document.getElementById('met-kpis').innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  // Sin `go`: estas cifras son del período elegido acá arriba y la tabla de
+  // Leads no filtra por rango de fechas, así que no hay a dónde mandar el click
+  // sin mostrar un conjunto distinto al que dice la tarjeta.
+  pintarKPIs('met-kpis', cards);
   const s = data.serie || [];
   mk('chSerie', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Nuevos', data: s.map(x => x.nuevos), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }, { label: 'Ventas', data: s.map(x => x.ventas), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.12)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
   const se = sortEntries(data.por_servicio);
@@ -3096,7 +3119,7 @@ async function loadRedes() {
     { t: 'Interacciones', v: fmt(data.interacciones_total), i: 'fa-heart', c: '#ff5c8a' },
     { t: 'Alcance prom. historias', v: fmt(data.reach_prom_historias), i: 'fa-chart-simple', c: '#34d399' },
   ];
-  document.getElementById('redes-kpis').innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  pintarKPIs('redes-kpis', cards);
   const s = data.serie || [];
   mk('chSerieRedes', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Alcance', data: s.map(x => x.reach), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
   const te = sortEntries(data.por_tipo);
@@ -3120,7 +3143,7 @@ async function loadRedesTikTok() {
     { t: 'Vistas totales', v: fmt(data.reach_total), i: 'fa-eye', c: 'var(--accent)' },
     { t: 'Interacciones', v: fmt(data.interacciones_total), i: 'fa-heart', c: '#ff5c8a' },
   ];
-  document.getElementById('redes-tiktok-kpis').innerHTML = cards.map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  pintarKPIs('redes-tiktok-kpis', cards);
   const s = data.serie || [];
   mk('chSerieRedesTikTok', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Vistas', data: s.map(x => x.reach), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
   const top = data.top_posts || [];
@@ -3182,6 +3205,12 @@ function setupReasignaciones() {
   ['rg-asesor', 'rg-motivo', 'rg-desde', 'rg-hasta'].forEach(id => document.getElementById(id).addEventListener('change', () => { rgPage = 1; loadReasignaciones(); }));
   initDateRangePicker('rg');
   rgView = initViewSwitcher('rg-view-switch', 'reasignaciones', 'lista', v => { rgView = v; applyRgView(); });
+}
+function filtrarReasigPorMotivo(motivo) {
+  const sel = document.getElementById('rg-motivo');
+  if (!sel) return;
+  sel.value = motivo;
+  sel.dispatchEvent(new Event('change')); // reusa el listener que ya resetea la página y recarga
 }
 function reasignFiltered(q) {
   const fa = val('rg-asesor'), fd = val('rg-desde'), fh = val('rg-hasta');
@@ -3270,12 +3299,14 @@ async function loadReasignaciones() {
   document.getElementById('rg-count').textContent = `${fmt(total)} reasignaciones`;
   const kpi = kpis || {};
   const kAgotados = kpi.agotados ?? 0;
-  document.getElementById('reasig-kpis').innerHTML = [
-    { t: 'Total reasignaciones', v: fmt(total), i: 'fa-shuffle', c: 'var(--accent)' },
-    { t: 'Por timeout', v: fmt(kpi.timeout ?? 0), i: 'fa-clock', c: 'var(--blue)' },
-    { t: 'Manual (No puedo)', v: fmt(kpi.manual ?? 0), i: 'fa-hand', c: 'var(--purple)' },
+  pintarKPIs('reasig-kpis', [
+    { t: 'Total reasignaciones', v: fmt(total), i: 'fa-shuffle', c: 'var(--accent)', tt: 'Quitar el filtro de motivo', go: () => filtrarReasigPorMotivo('') },
+    { t: 'Por timeout', v: fmt(kpi.timeout ?? 0), i: 'fa-clock', c: 'var(--blue)', tt: 'Ver solo las reasignadas por timeout', go: () => filtrarReasigPorMotivo('timeout_no_respuesta') },
+    { t: 'Manual (No puedo)', v: fmt(kpi.manual ?? 0), i: 'fa-hand', c: 'var(--purple)', tt: 'Ver solo las reasignadas a mano', go: () => filtrarReasigPorMotivo('manual_no_puedo') },
+    // "Sin asesor disponible" no es un motivo, es el resultado de no encontrar a
+    // quién pasársela: no hay filtro que lo aísle, así que no se hace clickeable.
     { t: 'Sin asesor disponible', v: fmt(kAgotados), i: 'fa-triangle-exclamation', c: kAgotados > 0 ? '#ef4444' : 'var(--green)' },
-  ].map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  ]);
   if (!data.length) { empty.classList.add('show'); document.getElementById('rg-tbody').innerHTML = ''; document.getElementById('rg-cards').innerHTML = ''; document.getElementById('rg-pager').innerHTML = ''; return; }
   document.getElementById('rg-tbody').innerHTML = data.map(r => {
     const l = r.leads || {}, av = clientAvatar({ id: r.lead_id, telefono: l.telefono, nombre: l.nombre });
@@ -3467,14 +3498,15 @@ async function loadFacturacionKpis() {
   if (error) { errToast('No se pudo cargar el resumen de facturación'); return; }
   const r = data || {};
   const sinConfigurar = r.comisiones_sin_configurar ?? 0;
-  document.getElementById('fact-kpis').innerHTML = [
-    { t: 'Total facturado', v: money(r.total_facturado), i: 'fa-sack-dollar', c: 'var(--green)' },
-    { t: 'Facturas pagadas', v: fmt(r.facturas_pagadas ?? 0), i: 'fa-file-invoice-dollar', c: 'var(--accent)' },
-    { t: 'Facturas anuladas', v: fmt(r.facturas_anuladas ?? 0), i: 'fa-ban', c: 'var(--muted)' },
-    { t: 'Comisiones sin configurar', v: fmt(sinConfigurar), i: 'fa-triangle-exclamation', c: sinConfigurar > 0 ? '#ef4444' : 'var(--green)' },
-    { t: 'Comisiones pendientes', v: money(r.comisiones_pendientes_monto), i: 'fa-clock', c: 'var(--blue)' },
-    { t: 'Comisiones pagadas', v: money(r.comisiones_pagadas_monto), i: 'fa-check', c: 'var(--green)' },
-  ].map(k => `<div class="kpi" style="--kc:${k.c};cursor:default"><div class="kt"><i class="fas ${k.i}"></i> ${k.t}</div><div class="kv">${k.v}</div></div>`).join('');
+  const irA = tab => () => document.querySelector(`#fact-tabs .seg[data-fact-tab="${tab}"]`)?.click();
+  pintarKPIs('fact-kpis', [
+    { t: 'Total facturado', v: money(r.total_facturado), i: 'fa-sack-dollar', c: 'var(--green)', tt: 'Ver las ventas', go: irA('ventas') },
+    { t: 'Facturas pagadas', v: fmt(r.facturas_pagadas ?? 0), i: 'fa-file-invoice-dollar', c: 'var(--accent)', tt: 'Ver las ventas', go: irA('ventas') },
+    { t: 'Facturas anuladas', v: fmt(r.facturas_anuladas ?? 0), i: 'fa-ban', c: 'var(--muted)', tt: 'Ver las ventas', go: irA('ventas') },
+    { t: 'Comisiones sin configurar', v: fmt(sinConfigurar), i: 'fa-triangle-exclamation', c: sinConfigurar > 0 ? '#ef4444' : 'var(--green)', tt: 'Configurar la comisión de cada asesor', go: irA('asesores') },
+    { t: 'Comisiones pendientes', v: money(r.comisiones_pendientes_monto), i: 'fa-clock', c: 'var(--blue)', tt: 'Ver las comisiones', go: irA('comisiones') },
+    { t: 'Comisiones pagadas', v: money(r.comisiones_pagadas_monto), i: 'fa-check', c: 'var(--green)', tt: 'Ver las comisiones', go: irA('comisiones') },
+  ]);
 }
 async function loadAsesoresComision() {
   const { data, error } = await sb.rpc('listar_asesores_comision');
