@@ -590,6 +590,36 @@ input.ei[type=date]{color-scheme:dark}
 .lf-pie{display:flex;justify-content:space-between;gap:8px;margin-top:11px;padding-top:9px;border-top:1px solid var(--line);font-size:11px;color:var(--muted2)}
 .lf-saldo{color:var(--amber);font-weight:600}
 .lf-falta{color:#ff8a8a;font-size:11.5px;margin-top:8px}
+/* Cola de boletería */
+.bol-agentes{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px}
+.bol-ag{display:flex;align-items:center;gap:7px;font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+.bol-ag-dot{width:8px;height:8px;border-radius:50%;background:var(--muted2);flex:none}
+.bol-ag-dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(16,185,129,.18)}
+.bol-ag b{color:var(--txt)}
+.bol-ag-carga{color:var(--muted2)}
+.bol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:14px}
+.bol-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.bol-card.st-atendiendo{border-color:rgba(74,158,255,.4)}
+.bol-card.st-resuelta{border-color:rgba(16,185,129,.32);opacity:.85}
+.bol-card.st-cancelada{opacity:.6}
+.bol-top{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.bol-nombre{font-weight:700;font-size:14.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.bol-chip{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.bol-chip.cola{background:rgba(255,145,0,.14);color:var(--accent)}
+.bol-chip.aten{background:rgba(74,158,255,.15);color:#7db8ff}
+.bol-chip.res{background:rgba(16,185,129,.15);color:var(--green)}
+.bol-chip.can{background:rgba(148,163,184,.15);color:var(--muted)}
+.bol-ruta{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin-bottom:8px}
+.bol-ruta i{color:var(--accent);font-size:12px}
+.bol-precio{font-size:12px;margin-top:6px;color:var(--green)}
+.bol-precio:empty{display:none}
+.bol-datos{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px}
+.bol-k{color:var(--muted2)}
+.bol-v{color:var(--txt);word-break:break-word}
+.bol-puesto{font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:8px;padding:2px 8px}
+.bol-pie{display:flex;justify-content:space-between;gap:8px;margin-top:11px;padding-top:9px;border-top:1px solid var(--line);font-size:11px;color:var(--muted2)}
+.bol-acc{display:flex;gap:8px;margin-top:10px}
+.bol-acc .dbtn{flex:1;padding:8px}
 .venta-box.show{display:block;animation:fadeSlide .25s ease}
 @keyframes fadeSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .edit-err{color:#ff6b6b;font-size:12px;min-height:14px;margin:8px 0 2px}
@@ -1477,6 +1507,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <section class="section" id="sec-leads">
       <div class="seg-group" id="leads-tabs">
         <button class="seg on" data-leads-tab="pipeline">Leads</button>
+        <button class="seg" data-leads-tab="boleteria">Boletería <span class="lih-count" id="leads-bol-count">0</span></button>
         <button class="seg" data-leads-tab="facturacion">En facturación <span class="lih-count" id="leads-fact-count">0</span></button>
         <button class="seg nav-admin-only" data-leads-tab="colaboraciones">Colaboraciones</button>
       </div>
@@ -1544,6 +1575,21 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <!-- Colaboraciones: campañas de colaboración paga (ej. Casa Vacacional
            Playa del Sur) que van directo al WhatsApp del colaborador, sin
            pasar por el pipeline normal de asesores. -->
+      <div class="leads-tab-panel" data-leads-panel="boleteria" style="display:none">
+        <div class="card">
+          <div class="chead-row">
+            <h2><i class="fas fa-plane-departure"></i> Cola de boletería</h2>
+            <button class="dbtn save" id="bol-nueva-btn" type="button" style="width:auto;padding:8px 14px"><i class="fas fa-plus"></i> Nueva solicitud</button>
+            <button class="btn-sm" id="bol-refrescar" type="button"><i class="fas fa-rotate"></i> Actualizar</button>
+          </div>
+          <div class="csub">Solicitudes de vuelos que los asesores mandan a boletería. Se atienden por orden de llegada.</div>
+          <div class="bol-agentes" id="bol-agentes"></div>
+          <div class="tbl-state skel" id="bol-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="tbl-state" id="bol-empty"><i class="fas fa-plane-slash"></i><div class="es-t">Cola vacía</div><div class="es-s">Cuando mandes un cliente a boletería, aparece acá con su puesto en la cola</div></div>
+          <div class="bol-grid" id="bol-grid"></div>
+        </div>
+      </div>
+
       <div class="leads-tab-panel" data-leads-panel="facturacion" style="display:none">
         <div class="card">
           <div class="chead-row">
@@ -2639,6 +2685,68 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <div style="display:flex;gap:10px;padding:14px 16px 4px">
     <button class="dbtn" id="nl-cancelar" type="button" style="flex:1">Cancelar</button>
     <button class="dbtn save" id="nl-crear" type="button" style="flex:1"><i class="fas fa-floppy-disk"></i> Crear lead</button>
+  </div>
+</div>
+
+<!-- Nueva solicitud de boletería (asesor/admin) -->
+<div class="sheet" id="boleteria-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-plane-departure"></i> Solicitud de boletería</div>
+  <div class="ef-cliente" id="bol-cliente" style="display:none"></div>
+  <div class="edit-box" style="margin-top:4px">
+    <label class="fl">Cliente</label>
+    <div id="bol-buscar-box">
+      <input id="bol-buscar" class="ei" placeholder="Buscá un lead por nombre o teléfono..." autocomplete="off">
+      <div id="bol-buscar-res" style="display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-top:4px;max-height:220px;overflow:auto"></div>
+      <div class="ef-opc" style="margin-top:6px">O escribí los datos a mano abajo si no está en Leads.</div>
+    </div>
+
+    <label class="fl">Nombre del cliente</label>
+    <input id="bol-nombre" class="ei" placeholder="Nombre y apellido" autocomplete="off">
+    <div class="ef-fila">
+      <div style="flex:1"><label class="fl">Teléfono <span class="ef-opc">(opcional)</span></label><input id="bol-telefono" class="ei" autocomplete="off"></div>
+      <div style="flex:1"><label class="fl">Cédula <span class="ef-opc">(opcional)</span></label><input id="bol-cedula" class="ei" placeholder="V-12345678" autocomplete="off"></div>
+    </div>
+
+    <label class="fl">Vuelo — ¿de dónde a dónde?</label>
+    <div class="ef-fila">
+      <input id="bol-origen" class="ei" placeholder="Sale de (ej. Valencia)" autocomplete="off">
+      <input id="bol-destino" class="ei" placeholder="Llega a (ej. Porlamar)" autocomplete="off">
+    </div>
+    <div class="bol-precio" id="bol-precio"></div>
+
+    <div class="ef-fila">
+      <div style="flex:1"><label class="fl">Fecha del viaje <span class="ef-opc">(opcional)</span></label><input id="bol-fecha-viaje" class="ei" type="date"></div>
+      <div style="flex:1"><label class="fl">Fecha de regreso <span class="ef-opc">(opcional)</span></label><input id="bol-fecha-regreso" class="ei" type="date"></div>
+    </div>
+    <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="bol-flexible" style="width:auto"> El cliente tiene flexibilidad de fechas</label>
+
+    <label class="fl" style="margin-top:10px">¿Cuántas personas? <span class="ef-opc">(opcional)</span></label>
+    <input id="bol-personas" class="ei" type="number" min="1" step="1" placeholder="1">
+
+    <label class="fl">Notas para el agente <span class="ef-opc">(opcional)</span></label>
+    <textarea id="bol-notas" class="ei" rows="2" placeholder="Algo que el agente tenga que saber"></textarea>
+
+    <div class="edit-err" id="bol-err"></div>
+  </div>
+  <div style="display:flex;gap:10px;padding:14px 16px 4px">
+    <button class="dbtn" id="bol-cancelar" type="button" style="flex:1">Cancelar</button>
+    <button class="dbtn save" id="bol-enviar" type="button" style="flex:1"><i class="fas fa-paper-plane"></i> Mandar a la cola</button>
+  </div>
+</div>
+
+<!-- Cerrar solicitud de boletería (agente) -->
+<div class="sheet" id="bol-cerrar-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-circle-check"></i> Cerrar solicitud</div>
+  <div class="edit-box" style="margin-top:4px">
+    <label class="fl">Resultado / nota <span class="ef-opc">(opcional)</span></label>
+    <textarea id="bol-cerrar-nota" class="ei" rows="3" placeholder="Aerolínea, precio final, o por qué no se pudo"></textarea>
+    <div class="edit-err" id="bol-cerrar-err"></div>
+  </div>
+  <div style="display:flex;gap:10px;padding:14px 16px 4px">
+    <button class="dbtn" id="bol-cerrar-cancelar" type="button" style="flex:1">Volver</button>
+    <button class="dbtn save" id="bol-cerrar-ok" type="button" style="flex:1"><i class="fas fa-check"></i> Marcar resuelta</button>
   </div>
 </div>
 
