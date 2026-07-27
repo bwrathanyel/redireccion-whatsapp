@@ -5658,6 +5658,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-07-27', emoji: '🔄', titulo: 'Botón "Actualizar CRM"', texto: 'Arriba a la derecha del logo y abajo del menú (y en "Yo" desde el celular). Hace lo mismo que Ctrl+Shift+R: borra lo que quedó guardado del navegador y trae la última versión, sin cerrar tu sesión. Usalo cuando algo se vea raro o cuando te avisemos de una novedad.', roles: ROLES_TODOS },
   { fecha: '2026-07-27', emoji: '🧭', titulo: 'Menú más corto: cada cosa donde corresponde', texto: 'Colaboraciones ahora es una pestaña dentro de Leads. Reasignaciones y Métricas pasaron a Gestión de Personal. Buscar Tarifario se integró al Tarifario. El Recorrido guiado y el Manual son ahora lo mismo: desde el Manual tocás "Ver en pantalla" y el recorrido arranca solo.', roles: ROLES_TODOS },
   { fecha: '2026-07-27', emoji: '🔎', titulo: 'Buscador con IA en el Tarifario', texto: 'Escribí lo que busca el cliente en tus palabras ("algo de playa para una pareja en diciembre") y la IA lo traduce a una búsqueda sobre todo el tarifario. Los precios salen siempre de la ficha real: la IA nunca los inventa ni los reescribe.', roles: ['admin', 'asesor', 'marketing'] },
   { fecha: '2026-07-27', emoji: '🪪', titulo: 'Personal ahora son tarjetas', texto: 'Una tarjeta por persona, con icono según su cargo, el tiempo que tuvo el CRM abierto en el período y el detalle día por día con las horas de conexión y desconexión. El cargo se edita desde la misma tarjeta.', roles: ['admin'] },
@@ -5714,6 +5715,51 @@ function renderActualizaciones() {
    el tab pasa de sin-controlador a controlado por primera vez) -- yaHabiaControlador
    distingue eso de una actualización real para no avisar de más a alguien
    que recién entra por primera vez. */
+/* ---------- Actualizar CRM (equivalente a Ctrl+Shift+R) ----------
+   Pedido del dueño (2026-07-27): un botón visible, porque nadie del equipo se
+   acuerda del atajo y quedaban trabajando sobre una versión vieja cacheada.
+
+   Un location.reload() pelado NO alcanza: el Service Worker sirve app.js e
+   index.html desde Cache Storage, así que el navegador vuelve a mostrar lo
+   mismo. Hay que vaciar los cachés y sacar el SW de encima ANTES de recargar.
+   El SW se vuelve a registrar solo en la carga siguiente
+   (registrarServiceWorkerConAviso), así que no se pierde el modo offline. */
+let refreshEnCurso = false;
+async function actualizarCRM() {
+  if (refreshEnCurso) return;
+  refreshEnCurso = true;
+  document.querySelectorAll('[data-refresh]').forEach(b => {
+    b.classList.add('girando');
+    b.disabled = true;
+  });
+  try {
+    if (window.caches) {
+      const claves = await caches.keys();
+      await Promise.all(claves.map(k => caches.delete(k)));
+    }
+    if (navigator.serviceWorker) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+  } catch (err) {
+    // Si falla el limpiado igual conviene recargar: peor caso, queda la versión
+    // vieja y el usuario reintenta. Bloquear acá no ayuda a nadie.
+    console.error('actualizarCRM: no se pudo limpiar el caché', err);
+  }
+  // El query param fuerza a saltear el caché HTTP del navegador para el
+  // documento; el resto de los assets ya quedaron sin caché arriba.
+  const url = new URL(location.href);
+  url.searchParams.set('_v', Date.now().toString(36));
+  location.replace(url.toString());
+}
+
+// Se engancha en el nivel del módulo, no dentro de startApp: si startApp
+// revienta a mitad (justo el caso donde hace falta actualizar), el botón tiene
+// que seguir andando.
+document.querySelectorAll('[data-refresh]').forEach(b => {
+  b.addEventListener('click', e => { e.preventDefault(); actualizarCRM(); });
+});
+
 function registrarServiceWorkerConAviso() {
   if (!('serviceWorker' in navigator)) return;
   const yaHabiaControlador = !!navigator.serviceWorker.controller;
