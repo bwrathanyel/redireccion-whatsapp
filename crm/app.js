@@ -2157,11 +2157,16 @@ async function cargarActividadLead(l) {
   if (!box) return;
   if (ACTIVIDAD_CACHE) { box.innerHTML = ACTIVIDAD_CACHE; return; }
   const [eventos, reasignaciones] = await Promise.all([
-    sb.from('lead_eventos').select('tipo,estado_de,estado_a,asesor,created_at').eq('lead_id', l.id).order('created_at', { ascending: false }),
+    sb.from('lead_eventos').select('tipo,estado_de,estado_a,asesor,detalle,created_at').eq('lead_id', l.id).order('created_at', { ascending: false }),
     sb.from('reasignaciones').select('asesor_anterior,asesor_nuevo,motivo,created_at').eq('lead_id', l.id).order('created_at', { ascending: false }),
   ]);
   const filas = [
-    ...(eventos.data || []).map(e => ({ hora: e.created_at, texto: `${e.asesor ? esc(e.asesor) + ': ' : ''}cambió de <b>${esc(niceEstado(e.estado_de))}</b> a <b>${esc(niceEstado(e.estado_a))}</b>` })),
+    // contacto_duplicado: el mismo cliente volvió a escribir por otro canal y
+    // NO se creó un lead nuevo (ver ingest_lead_v2). El asesor tiene que verlo
+    // acá, si no le queda invisible que el cliente insistió.
+    ...(eventos.data || []).map(e => e.tipo === 'contacto_duplicado'
+      ? { hora: e.created_at, texto: `🔁 Volvió a escribir por <b>${esc(e.detalle?.canal || 'otro canal')}</b>${e.detalle?.destino && e.detalle.destino !== e.detalle?.destino_previo ? `, preguntando por <b>${esc(e.detalle.destino)}</b>` : ''} — no se creó un lead nuevo` }
+      : { hora: e.created_at, texto: `${e.asesor ? esc(e.asesor) + ': ' : ''}cambió de <b>${esc(niceEstado(e.estado_de))}</b> a <b>${esc(niceEstado(e.estado_a))}</b>` }),
     // reasignaciones: RLS es admin-only -- para asesor esta consulta vuelve
     // vacía en silencio (no es un error), la Actividad les queda sin este
     // renglón, comportamiento esperado del modelo de permisos actual.
@@ -5871,6 +5876,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-07-27', emoji: '🧲', titulo: 'El mismo cliente ya no genera dos leads', texto: 'Si un cliente escribe por la web y después por Instagram (o al revés) con el mismo número, el CRM lo reconoce y NO crea un lead nuevo: suma la info al que ya existe y te avisa por Telegram que volvió a escribir. El asesor asignado no cambia nunca, así que no pasa más que dos personas llamen al mismo cliente. Lo ves en la pestaña Actividad del lead.', roles: ['admin', 'asesor'] },
   { fecha: '2026-07-27', emoji: '📱', titulo: 'Barra de abajo a tu gusto + deslizar para cambiar de sección', texto: 'Desde el celular podés elegir qué secciones tenés en la barra de abajo (hasta 6 más "Yo"): entrá a Yo > tu nombre > "Barra de abajo" y tildá las que quieras. Además, deslizando el dedo de un lado al otro pasás de una sección a la otra sin tocar nada. Los nombres de la barra ahora se leen mucho mejor.', roles: ROLES_TODOS },
   { fecha: '2026-07-27', emoji: '🔄', titulo: 'Botón "Actualizar CRM"', texto: 'Arriba a la derecha del logo y abajo del menú (y en "Yo" desde el celular). Hace lo mismo que Ctrl+Shift+R: borra lo que quedó guardado del navegador y trae la última versión, sin cerrar tu sesión. Usalo cuando algo se vea raro o cuando te avisemos de una novedad.', roles: ROLES_TODOS },
   { fecha: '2026-07-27', emoji: '🧭', titulo: 'Menú más corto: cada cosa donde corresponde', texto: 'Colaboraciones ahora es una pestaña dentro de Leads. Reasignaciones y Métricas pasaron a Gestión de Personal. Buscar Tarifario se integró al Tarifario. El Recorrido guiado y el Manual son ahora lo mismo: desde el Manual tocás "Ver en pantalla" y el recorrido arranca solo.', roles: ROLES_TODOS },
