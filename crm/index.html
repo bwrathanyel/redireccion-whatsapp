@@ -784,6 +784,12 @@ input.ei[type=date]{color-scheme:dark}
 .rg-flujo{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px}
 .rg-flujo i{color:var(--muted2);font-size:10px}
 .rg-acc{display:flex;gap:6px;white-space:nowrap}
+/* KPIs de Gestión de Personal como botones de filtro */
+.kpi-btn{font-family:inherit;text-align:left;cursor:pointer;border:1px solid var(--line);transition:border-color .15s,transform .12s}
+.kpi-btn:hover{border-color:rgba(255,145,0,.45);transform:translateY(-2px)}
+.kpi-btn.kpi-on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.kpi-btn .kt i{font-size:10px;opacity:.8}
+#gp-quitar-filtro{margin-left:8px}
 
 /* ---------- Inbox de leads estilo Telegram (solo rol asesor, sec-leads) ---------- */
 .leads-inbox{display:none;margin-bottom:18px}
@@ -1696,10 +1702,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <!-- GESTIÓN DE PERSONAL (admin) -- junta Personal/Asistencia/Asesores/Freelancers/Postulaciones,
          antes 4 secciones sueltas en el menú, pedido del dueño (2026-07-26). -->
     <section class="section" id="sec-gestion-personal">
+      <!-- Los tres son botones de filtro, no números decorativos: tocar uno
+           filtra la lista de abajo (o salta a Postulaciones). -->
       <div class="kpis" id="gp-kpis" style="margin-bottom:16px">
-        <div class="kpi"><div class="kt">Conectados ahora</div><div class="kv" id="gp-kpi-conectados">—</div></div>
-        <div class="kpi"><div class="kt">Equipo activo</div><div class="kv" id="gp-kpi-equipo">—</div></div>
-        <div class="kpi"><div class="kt">Postulaciones sin revisar</div><div class="kv" id="gp-kpi-postulaciones">—</div></div>
+        <button type="button" class="kpi kpi-btn" id="gp-kpi-card-conectados" title="Ver solo quién está conectado ahora"><div class="kt"><i class="fas fa-circle-dot"></i> Conectados ahora</div><div class="kv" id="gp-kpi-conectados">—</div></button>
+        <button type="button" class="kpi kpi-btn kpi-on" id="gp-kpi-card-equipo" title="Ver todo el equipo"><div class="kt"><i class="fas fa-users"></i> Miembros de equipo</div><div class="kv" id="gp-kpi-equipo">—</div></button>
+        <button type="button" class="kpi kpi-btn" id="gp-kpi-card-postulaciones" title="Ir a Postulaciones"><div class="kt"><i class="fas fa-address-card"></i> Postulaciones sin revisar</div><div class="kv" id="gp-kpi-postulaciones">—</div></button>
       </div>
       <div class="seg-group" id="gp-tabs">
         <button class="seg on" data-gp-tab="personal">Personal</button>

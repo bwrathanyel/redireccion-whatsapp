@@ -194,6 +194,7 @@ function entrarSegunRol() {
     subscribeMiUsuarioLive();
     if (MI_BLOQUEADO) mostrarBloqueoOverlay();
   }
+  setupLatidoPresencia();
   renderRecordatoriosUI();
   manejarDeepLinkAsistencia();
   // Antes de manejarDeepLinkSeccion: ese maneja "?ir=leads" con un
@@ -353,10 +354,12 @@ async function subirAvatar(file) {
   }
 }
 
-/* ---------- Freelancer: heartbeat + bloqueo por inactividad ----------
-   Solo corre si MI_ES_FREELANCER -- un asesor normal nunca manda heartbeat
-   ni puede quedar bloqueado, el cron del servidor (cron_bloquear_
-   freelancers_inactivos) solo mira usuarios con es_freelancer=true. */
+/* ---------- Freelancer: heartbeat de ACTIVIDAD ----------
+   Solo lo manda un freelancer, y solo ante un gesto real (mouse, teclado,
+   toque). De acá sale el bloqueo a los 15 minutos y la medición de trabajo
+   real vs inactivo -- por eso NO puede dispararse con un temporizador: si lo
+   hiciera, nadie se bloquearía nunca y la regla quedaría muerta en silencio.
+   Para saber quién está presente existe el latido aparte de más abajo. */
 let ultimoHeartbeat = 0;
 function setupHeartbeatFreelancer() {
   const enviar = () => {
@@ -368,6 +371,26 @@ function setupHeartbeatFreelancer() {
   };
   ['mousemove', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, enviar, { passive: true }));
 }
+/* ---------- Latido de PRESENCIA (todo el equipo) ----------
+   Cada minuto mientras la pestaña esté visible y haya jornada abierta. Alimenta
+   "Conectados ahora" en Gestión de Personal. Es una señal distinta de la
+   actividad del freelancer a propósito: acá alguien leyendo una ficha sin mover
+   el mouse SÍ está presente. */
+function setupLatidoPresencia() {
+  const enviar = () => {
+    if (document.hidden) return;
+    // No se chequea JORNADA_ACTIVA acá: handleCheckIn() todavía puede estar en
+    // vuelo cuando esto arranca, y el primer latido se perdería. El criterio de
+    // "conectado" exige jornada abierta del lado de la base
+    // (personal_resumen), así que marcar presencia sin jornada no cuenta a
+    // nadie de más.
+    Promise.resolve(sb.rpc('registrar_presencia')).catch(() => {});
+  };
+  enviar();
+  setInterval(enviar, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) enviar(); });
+}
+
 function subscribeMiUsuarioLive() {
   sb.channel('mi-usuario-live')
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'usuarios', filter: `id=eq.${MI_USUARIO_ID}` }, payload => {
@@ -829,6 +852,7 @@ function setupGestionPersonal() {
   }));
   document.getElementById('gp-personal-dias')?.addEventListener('change', () => loadPersonalTiempo(false));
   document.getElementById('gp-personal-nuevo')?.addEventListener('click', () => abrirAltaPersona(false));
+  setupKPIsPersonal();
 }
 function cargarTabGestionPersonal(tab) {
   if (tab === 'personal') { loadPersonalTiempo(false); loadAsistenciaExtras(); }
@@ -843,16 +867,45 @@ async function loadGestionPersonal() {
   cargarTabGestionPersonal(gpTab);
 }
 async function cargarResumenPersonalKPIs() {
-  const [{ data: usuarios }, { data: sesionesActivas }, { count: postSinRevisar }] = await Promise.all([
-    sb.from('usuarios').select('id,rol,bloqueado'),
-    sb.from('agent_sessions').select('asesor_id').eq('estado_actual', 'activo'),
-    sb.from('postulaciones_empleo').select('id', { count: 'exact', head: true }).eq('revisado', false),
-  ]);
-  document.getElementById('gp-kpi-equipo').textContent = (usuarios || []).filter(u => !u.bloqueado).length;
-  document.getElementById('gp-kpi-conectados').textContent = new Set((sesionesActivas || []).map(s => s.asesor_id)).size;
+  const { count: postSinRevisar } = await sb.from('postulaciones_empleo')
+    .select('id', { count: 'exact', head: true }).eq('revisado', false);
   document.getElementById('gp-kpi-postulaciones').textContent = postSinRevisar ?? 0;
   const badge = document.getElementById('gp-postulaciones-count');
   if (badge) { badge.textContent = postSinRevisar ?? 0; badge.style.display = postSinRevisar ? '' : 'none'; }
+  pintarKPIsPersonal();
+}
+
+// Los dos primeros KPIs salen de personalCache, la MISMA fuente que las
+// tarjetas: si contaran aparte, el número de arriba y lo que se ve abajo
+// podrían no coincidir (que es justo lo que pasaba antes).
+function pintarKPIsPersonal() {
+  const conectados = personalCache.filter(u => u.conectado_ahora).length;
+  const kc = document.getElementById('gp-kpi-conectados');
+  const ke = document.getElementById('gp-kpi-equipo');
+  if (kc) kc.textContent = personalCache.length ? conectados : '—';
+  if (ke) ke.textContent = personalCache.length || '—';
+}
+
+/* ---------- Filtro por KPI ----------
+   Tocar una tarjeta de arriba filtra la lista de abajo, en vez de ser un
+   número decorativo. "Miembros de equipo" limpia el filtro. */
+let personalFiltro = null;   // null = todos | 'conectados'
+function setupKPIsPersonal() {
+  document.getElementById('gp-kpi-card-conectados')?.addEventListener('click', () => {
+    aplicarFiltroPersonal(personalFiltro === 'conectados' ? null : 'conectados');
+  });
+  document.getElementById('gp-kpi-card-equipo')?.addEventListener('click', () => aplicarFiltroPersonal(null));
+  document.getElementById('gp-kpi-card-postulaciones')?.addEventListener('click', () => {
+    document.querySelector('#gp-tabs .seg[data-gp-tab="postulaciones"]')?.click();
+  });
+}
+function aplicarFiltroPersonal(filtro) {
+  personalFiltro = filtro;
+  // Si estabas en otra pestaña, el filtro no se ve: hay que llevarte a Personal.
+  if (gpTab !== 'personal') document.querySelector('#gp-tabs .seg[data-gp-tab="personal"]')?.click();
+  document.getElementById('gp-kpi-card-conectados')?.classList.toggle('kpi-on', filtro === 'conectados');
+  document.getElementById('gp-kpi-card-equipo')?.classList.toggle('kpi-on', !filtro);
+  renderPersonalCards();
 }
 const ROL_LABEL_GP = { admin: 'Administrador', asesor: 'Asesor', marketing: 'Marketing', boleteria: 'Boletería' };
 function formatDuracionLarga(ms) {
@@ -923,11 +976,14 @@ async function loadPersonalTiempo(soloFreelancers) {
   personalMeta = data || null;
   personalCache = (data?.personas || []);
   personalBaja = data?.de_baja || [];
+  pintarKPIsPersonal();
   renderPersonalCards();
 }
 
 function personalVisibles() {
-  return personalSoloFreelancers ? personalCache.filter(u => u.es_freelancer) : personalCache;
+  let out = personalSoloFreelancers ? personalCache.filter(u => u.es_freelancer) : personalCache;
+  if (!personalSoloFreelancers && personalFiltro === 'conectados') out = out.filter(u => u.conectado_ahora);
+  return out;
 }
 
 function renderPersonalCards() {
@@ -936,7 +992,12 @@ function renderPersonalCards() {
   if (!grid) return;
   const visibles = personalVisibles();
   const cont = document.getElementById(pre + '-personal-count');
-  if (cont) cont.textContent = visibles.length + (visibles.length === 1 ? ' persona' : ' personas');
+  if (cont) {
+    cont.innerHTML = visibles.length + (visibles.length === 1 ? ' persona' : ' personas')
+      + (personalFiltro === 'conectados' && !personalSoloFreelancers
+        ? ' <button class="btn-sm" id="gp-quitar-filtro" type="button">Ver todos</button>' : '');
+    document.getElementById('gp-quitar-filtro')?.addEventListener('click', () => aplicarFiltroPersonal(null));
+  }
   // El contador arranca en la fecha de corte (app_config.horas_crm_desde): hasta
   // el 26/07/2026 el CRM abría una sesión nueva en cada recarga y esos totales
   // no significan nada. Se dice de dónde arranca en vez de mostrar un número
@@ -6109,6 +6170,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-07-27', emoji: '🟢', titulo: '"Conectados ahora" ahora dice la verdad', texto: 'Ese número contaba jornadas que nadie cerró, por eso marcaba 9 de 15 personas hasta de madrugada. Ahora cuenta solo a quien de verdad tiene el CRM abierto en este momento. Además los tres recuadros de arriba pasaron a ser filtros: tocá "Conectados ahora" para ver solo a esos, "Miembros de equipo" para ver a todos, y "Postulaciones sin revisar" te lleva directo a esa pestaña.', roles: ['admin'] },
   { fecha: '2026-07-27', emoji: '👥', titulo: 'Gestión de Personal renovada', texto: 'Ahora podés agregar gente nueva (se le crea su usuario y contraseña temporal), editarle nombre, cargo y rol, y darla de baja sin perder su historial. La pestaña Asistencia desapareció: quién marcó hoy, sus strikes y el botón de exceptuar están en la tarjeta de cada persona, y el historial de entradas y salidas quedó más abajo en la misma pestaña.', roles: ['admin'] },
   { fecha: '2026-07-27', emoji: '⏱️', titulo: 'Freelancers: trabajo real vs inactividad', texto: 'Los freelancers ahora se ven con las mismas tarjetas que el resto del equipo, y además muestran cuánto tiempo trabajaron de verdad y cuánto estuvieron inactivos (hoy y en la semana). Si alguno queda bloqueado por los 15 minutos sin actividad, la tarjeta se marca en rojo con la etiqueta Bloqueado y un botón para desbloquearlo ahí mismo.', roles: ['admin'] },
   { fecha: '2026-07-27', emoji: '🔀', titulo: 'Reasignaciones editables', texto: 'La tabla ahora muestra el traspaso completo (de quién a quién) en una sola columna, y cada fila se puede corregir o eliminar a mano. Se limpió el historial anterior al 20 de julio.', roles: ['admin'] },
