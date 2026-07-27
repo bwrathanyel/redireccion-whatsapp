@@ -238,6 +238,7 @@ function openPerfilDrawer() {
         <button type="button" data-v="grande" class="seg${MI_PREFERENCIAS.fuente === 'grande' ? ' on' : ''}">Grande</button>
       </div>
     </div>
+    ${bnEditorHtml()}
     ${puedeActivarRecordatorios() ? `
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-bell"></i> Notificaciones</div>
@@ -258,6 +259,7 @@ function openPerfilDrawer() {
   document.getElementById('perfil-avatar-file').onchange = e => { if (e.target.files[0]) subirAvatar(e.target.files[0]); e.target.value = ''; };
   document.querySelectorAll('#perfil-tema button').forEach(b => b.onclick = () => guardarPreferencia('tema', b.dataset.v, 'perfil-tema'));
   document.querySelectorAll('#perfil-fuente button').forEach(b => b.onclick = () => guardarPreferencia('fuente', b.dataset.v, 'perfil-fuente'));
+  bnEditorWire();
   if (puedeActivarRecordatorios()) actualizarToggleNotif();
 }
 function aplicarPreferencias() {
@@ -1222,6 +1224,8 @@ async function startApp() {
   if (booted) return; booted = true;
   aplicarOrdenSidebar();
   setupNav();
+  renderBottomNav();
+  setupSwipeSecciones();
   setupTarifarioTabs();
   setupLightbox();
   setupChat();
@@ -2025,7 +2029,9 @@ async function guardarTelefonoIncorrecto(telefonoCorregido) {
 // Badge de "Leads" para rol asesor: pendientes del inbox, no el total histórico (ver loadStats).
 // setAppBadge/clearAppBadge: puntito de conteo en el ícono de la PWA instalada (feature-detected,
 // Safari/iOS y navegadores viejos no lo soportan -- no rompe nada donde falta).
+let BN_LEADS_PENDIENTES = 0;
 function actualizarBadgeLeads(pendientes) {
+  BN_LEADS_PENDIENTES = pendientes || 0;
   const d = document.getElementById('nav-lead-count'), m = document.getElementById('nav-lead-count-m');
   if (d) d.textContent = pendientes > 0 ? String(pendientes) : '—';
   if (m) { m.textContent = pendientes > 9 ? '9+' : String(pendientes); m.classList.toggle('show', pendientes > 0); }
@@ -5259,7 +5265,6 @@ window.addEventListener('popstate', () => {
 });
 
 /* ---------- Nav ---------- */
-const BN_CORE_SECS = ['hoy', 'leads', 'mensajes', 'tarifario'];
 let currentSec = null;
 // Secciones que se retiraron del menú (2026-07-27) y a dónde fue su contenido.
 // Sin esto, quien tenía guardada una de ellas como última sección abría el CRM
@@ -5280,11 +5285,10 @@ function activateSection(sec, fromNav) {
   if (currentSec === 'leads' && sec !== 'leads') detenerPollLeads();
   currentSec = sec;
   guardarUltimaSeccion(sec);
-  document.querySelectorAll('.nav-item,.bn-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
-  // Todo lo que no es una de las 5 zonas fijas del bottom-nav se alcanza
-  // hoy vía la hoja "Yo" (id sigue siendo bn-more en el DOM) -- marcarla
-  // activa cuando la sección abierta no es una de esas 5.
-  document.getElementById('bn-more')?.classList.toggle('active', !BN_CORE_SECS.includes(sec));
+  document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
+  // La barra de abajo ya no tiene un set fijo: se marca "Yo" cuando la sección
+  // abierta no es ninguna de las que el usuario eligió tener a mano.
+  marcarBottomNavActivo(sec);
   if (sheetAbierta) closeSheet(sheetAbierta, true);
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-' + sec).classList.add('active');
@@ -5321,6 +5325,215 @@ function setupNav() {
     b.classList.contains('mfs-trigger') ? openSheet(id) : closeSheet(id);
   }));
   setupSidebarReorder();
+}
+
+/* ---------- Barra de abajo (móvil): configurable + swipe ----------
+   Pedido del dueño (2026-07-27): poder elegir qué secciones aparecen abajo
+   (máximo 7 contando "Yo") y moverse entre ellas deslizando el dedo.
+
+   El catálogo NO se define acá a mano: se lee del sidebar, que ya tiene todas
+   las secciones y ya está filtrado por rol vía CSS. Se pregunta por
+   getComputedStyle porque el display calculado de cada .nav-item refleja las
+   reglas de rol aunque el sidebar entero esté oculto en móvil -- así esto no
+   se desincroniza cuando se agregue o saque una sección del menú. */
+const BN_MAX = 7;                                              // incluye "Yo"
+const BN_DEFAULT = ['hoy', 'leads', 'mensajes', 'tarifario'];
+// "Hoy" solo existe en móvil (no está en el sidebar), así que va a mano.
+const BN_HOY = { sec: 'hoy', icono: 'fas fa-house', label: 'Hoy' };
+// Nombres cortos: en una barra de 7 no entra "Gestión de Personal".
+const BN_LABEL_CORTO = {
+  'gestion-personal': 'Personal',
+  'informe-diario': 'Informe',
+  'mis-comisiones': 'Comisiones',
+  'buscar-tarifario': 'Buscar',
+  actualizaciones: 'Novedades',
+  facturacion: 'Facturas',
+  cotizador: 'Cotizador',
+};
+// Badges que ya existían en la barra vieja y hay que preservar al reconstruirla.
+const BN_BADGES = { leads: 'nav-lead-count-m' };
+
+function bnCatalogo() {
+  const items = [BN_HOY];
+  document.querySelectorAll('#sidebar-nav > .nav-item[data-sec]').forEach(el => {
+    if (getComputedStyle(el).display === 'none') return;
+    const sec = el.dataset.sec;
+    if (!sec || items.some(x => x.sec === sec)) return;
+    const icono = el.querySelector('i')?.className || 'fas fa-circle';
+    const label = BN_LABEL_CORTO[sec]
+      || [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim()
+      || sec;
+    items.push({ sec, icono, label });
+  });
+  return items;
+}
+
+// Secciones elegidas, saneadas: sin duplicados, sin las que este rol no puede
+// ver (ej. quedó guardado "facturacion" y después lo pasaron a asesor), y
+// acotadas al máximo. Si queda vacío, vuelve al default.
+function bnSeleccion() {
+  const catalogo = bnCatalogo();
+  const validas = new Set(catalogo.map(x => x.sec));
+  const guardada = Array.isArray(MI_PREFERENCIAS.barra_mobile) ? MI_PREFERENCIAS.barra_mobile : BN_DEFAULT;
+  const out = [];
+  for (const sec of guardada) {
+    if (validas.has(sec) && !out.includes(sec)) out.push(sec);
+    if (out.length >= BN_MAX - 1) break;
+  }
+  if (!out.length) return BN_DEFAULT.filter(s => validas.has(s));
+  return out;
+}
+
+function renderBottomNav() {
+  const nav = document.querySelector('.bottom-nav');
+  if (!nav) return;
+  const catalogo = bnCatalogo();
+  const porSec = Object.fromEntries(catalogo.map(x => [x.sec, x]));
+  const secs = bnSeleccion();
+  nav.innerHTML = secs.map(sec => {
+    const it = porSec[sec];
+    const badge = BN_BADGES[sec] ? `<span class="bn-badge" id="${BN_BADGES[sec]}"></span>` : '';
+    return `<a class="bn-item" data-sec="${esc(sec)}"><i class="${esc(it.icono)}"></i>${badge}<span class="bn-t">${esc(it.label)}</span></a>`;
+  }).join('') + '<a class="bn-item" id="bn-more"><i class="fas fa-user"></i><span class="bn-t">Yo</span></a>';
+  // El CSS achica la letra según cuántos entren, para que el nombre no se corte.
+  nav.dataset.n = String(secs.length + 1);
+
+  nav.querySelectorAll('.bn-item[data-sec]').forEach(el => {
+    el.addEventListener('click', () => activateSection(el.dataset.sec));
+  });
+  document.getElementById('bn-more').addEventListener('click', () => openSheet('more-sheet'));
+  // El badge de leads se pinta aparte y ya pudo haber corrido antes de que la
+  // barra existiera: se repinta con el último valor conocido.
+  actualizarBadgeLeads(BN_LEADS_PENDIENTES);
+  marcarBottomNavActivo(currentSec);
+}
+
+function marcarBottomNavActivo(sec) {
+  document.querySelectorAll('.bn-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
+  const enBarra = bnSeleccion().includes(sec);
+  document.getElementById('bn-more')?.classList.toggle('active', !enBarra);
+}
+
+/* ---------- Editor de la barra (dentro de Mi Perfil) ---------- */
+function bnEditorHtml() {
+  const catalogo = bnCatalogo();
+  const sel = bnSeleccion();
+  const filas = catalogo.map(it => {
+    const on = sel.includes(it.sec);
+    const pos = on ? sel.indexOf(it.sec) + 1 : null;
+    return `<label class="bn-cfg-row${on ? ' on' : ''}">
+      <input type="checkbox" data-bn-sec="${esc(it.sec)}"${on ? ' checked' : ''}>
+      <i class="${esc(it.icono)}"></i>
+      <span class="bn-cfg-n">${esc(it.label)}</span>
+      <span class="bn-cfg-pos">${pos ? '#' + pos : ''}</span>
+    </label>`;
+  }).join('');
+  return `<div class="edit-box" style="margin-top:16px">
+    <div class="eb-title"><i class="fas fa-table-columns"></i> Barra de abajo (celular)</div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px">
+      Elegí qué secciones querés tener a mano. Hasta ${BN_MAX - 1} más "Yo", que va siempre.
+      En el celular también podés deslizar el dedo a los costados para pasar de una a otra.
+    </div>
+    <div class="bn-cfg-count" id="bn-cfg-count"></div>
+    <div id="bn-cfg-list">${filas}</div>
+  </div>`;
+}
+
+function bnEditorWire() {
+  const lista = document.getElementById('bn-cfg-list');
+  if (!lista) return;
+  const pintarContador = () => {
+    const n = lista.querySelectorAll('input[data-bn-sec]:checked').length;
+    const c = document.getElementById('bn-cfg-count');
+    if (c) c.textContent = `${n + 1} de ${BN_MAX} usados (incluye "Yo")`;
+    // Deshabilitar lo no marcado al llegar al tope explica el límite mejor que
+    // dejar tocar y después rebotar con un error.
+    lista.querySelectorAll('input[data-bn-sec]').forEach(i => {
+      i.disabled = !i.checked && n >= BN_MAX - 1;
+      i.closest('.bn-cfg-row').classList.toggle('tope', i.disabled);
+    });
+  };
+  pintarContador();
+  lista.querySelectorAll('input[data-bn-sec]').forEach(inp => {
+    inp.addEventListener('change', async () => {
+      // Las que ya estaban conservan su posición y las nuevas se agregan al
+      // final: agregar una sección no debería reordenarle la barra a nadie.
+      const marcada = sec => !!lista.querySelector(`input[data-bn-sec="${sec}"]`)?.checked;
+      const elegidas = bnSeleccion().filter(marcada);
+      bnCatalogo().forEach(x => { if (marcada(x.sec) && !elegidas.includes(x.sec)) elegidas.push(x.sec); });
+      inp.closest('.bn-cfg-row').classList.toggle('on', inp.checked);
+      pintarContador();
+      await guardarPreferencia('barra_mobile', elegidas);
+      renderBottomNav();
+      // Repintar las posiciones (#1, #2...) sin recargar el drawer entero.
+      const sel = bnSeleccion();
+      lista.querySelectorAll('.bn-cfg-row').forEach(row => {
+        const sec = row.querySelector('input').dataset.bnSec;
+        const i = sel.indexOf(sec);
+        row.querySelector('.bn-cfg-pos').textContent = i >= 0 ? '#' + (i + 1) : '';
+      });
+    });
+  });
+}
+
+/* ---------- Swipe lateral entre secciones (móvil) ----------
+   Recorre las mismas secciones de la barra de abajo, en ese orden. Umbral
+   deliberadamente alto ("de forma pronunciada", pedido del dueño): un gesto
+   flojo o diagonal no cambia de pantalla sin querer mientras se scrollea. */
+const SWIPE_MIN_X = 90;      // px horizontales mínimos
+const SWIPE_RATIO = 2;       // cuánto más horizontal que vertical tiene que ser
+const SWIPE_MAX_MS = 700;    // más lento que esto es un arrastre, no un swipe
+
+// Un swipe NO debe robarle el gesto a algo que scrollea de costado (tablas,
+// carruseles del tarifario, filas de pestañas). Se busca hacia arriba desde el
+// elemento tocado.
+function dentroDeScrollHorizontal(el) {
+  for (let n = el; n && n !== document.body; n = n.parentElement) {
+    if (n.scrollWidth - n.clientWidth > 12) {
+      const ov = getComputedStyle(n).overflowX;
+      if (ov === 'auto' || ov === 'scroll') return true;
+    }
+  }
+  return false;
+}
+
+function setupSwipeSecciones() {
+  let x0 = 0, y0 = 0, t0 = 0, activo = false;
+  document.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { activo = false; return; }
+    // Con una hoja, drawer, tour u overlay abierto el swipe es del contenido de
+    // eso, no de la navegación de fondo.
+    if (sheetAbierta
+      || document.getElementById('drawer')?.classList.contains('open')
+      || document.getElementById('tour-overlay')?.classList.contains('open')
+      || document.body.classList.contains('lb-lock')) { activo = false; return; }
+    if (dentroDeScrollHorizontal(e.target)) { activo = false; return; }
+    if (e.target.closest('input,textarea,select,canvas')) { activo = false; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); activo = true;
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    if (!activo) return;
+    activo = false;
+    if (Date.now() - t0 > SWIPE_MAX_MS) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    if (Math.abs(dx) < SWIPE_MIN_X) return;
+    if (Math.abs(dx) < Math.abs(dy) * SWIPE_RATIO) return;
+    const secs = bnSeleccion();
+    if (secs.length < 2) return;
+    const i = secs.indexOf(currentSec);
+    // Si estás en una sección que no está en la barra (llegaste desde "Yo"),
+    // el swipe te devuelve al principio en vez de no hacer nada.
+    const siguiente = i < 0
+      ? secs[0]
+      : secs[(i + (dx < 0 ? 1 : -1) + secs.length) % secs.length];
+    if (siguiente && siguiente !== currentSec) {
+      document.body.classList.add(dx < 0 ? 'swipe-izq' : 'swipe-der');
+      setTimeout(() => document.body.classList.remove('swipe-izq', 'swipe-der'), 260);
+      activateSection(siguiente);
+    }
+  }, { passive: true });
 }
 
 /* ---------- Orden de la sidebar a mano (drag & drop, guardado en
@@ -5658,6 +5871,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-07-27', emoji: '📱', titulo: 'Barra de abajo a tu gusto + deslizar para cambiar de sección', texto: 'Desde el celular podés elegir qué secciones tenés en la barra de abajo (hasta 6 más "Yo"): entrá a Yo > tu nombre > "Barra de abajo" y tildá las que quieras. Además, deslizando el dedo de un lado al otro pasás de una sección a la otra sin tocar nada. Los nombres de la barra ahora se leen mucho mejor.', roles: ROLES_TODOS },
   { fecha: '2026-07-27', emoji: '🔄', titulo: 'Botón "Actualizar CRM"', texto: 'Arriba a la derecha del logo y abajo del menú (y en "Yo" desde el celular). Hace lo mismo que Ctrl+Shift+R: borra lo que quedó guardado del navegador y trae la última versión, sin cerrar tu sesión. Usalo cuando algo se vea raro o cuando te avisemos de una novedad.', roles: ROLES_TODOS },
   { fecha: '2026-07-27', emoji: '🧭', titulo: 'Menú más corto: cada cosa donde corresponde', texto: 'Colaboraciones ahora es una pestaña dentro de Leads. Reasignaciones y Métricas pasaron a Gestión de Personal. Buscar Tarifario se integró al Tarifario. El Recorrido guiado y el Manual son ahora lo mismo: desde el Manual tocás "Ver en pantalla" y el recorrido arranca solo.', roles: ROLES_TODOS },
   { fecha: '2026-07-27', emoji: '🔎', titulo: 'Buscador con IA en el Tarifario', texto: 'Escribí lo que busca el cliente en tus palabras ("algo de playa para una pareja en diciembre") y la IA lo traduce a una búsqueda sobre todo el tarifario. Los precios salen siempre de la ficha real: la IA nunca los inventa ni los reescribe.', roles: ['admin', 'asesor', 'marketing'] },
