@@ -269,6 +269,7 @@ body::before{content:'';position:fixed;inset:0;background:
 .manual-tema[open] .manual-chev{transform:rotate(180deg)}
 .manual-body{padding:0 16px 14px 42px;display:flex;flex-direction:column;gap:12px}
 .manual-shot{width:100%;border-radius:10px;border:1px solid var(--line2);display:block;margin-bottom:2px}
+.manual-ver-btn{align-self:flex-start}
 .manual-paso .mp-t{font-size:12.5px;font-weight:700;margin-bottom:3px}
 .manual-paso .mp-x{font-size:12.5px;color:var(--muted);line-height:1.5}
 
@@ -559,8 +560,30 @@ input.ei[type=date]{color-scheme:dark}
 .tar-search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .tar-search i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
 .tar-grid{display:block}
-.tar-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;backdrop-filter:blur(8px);cursor:pointer;transition:.12s;overflow:hidden}
+/* flex + margin-top:auto en el pie: sin esto las tarjetas de una misma fila
+   estiran su alto pero el precio/vigencia queda a distinta altura en cada una. */
+.tar-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;backdrop-filter:blur(8px);cursor:pointer;transition:.12s;overflow:hidden;display:flex;flex-direction:column}
 .tar-card:hover{border-color:rgba(255,145,0,.3);transform:translateY(-2px)}
+.tc-pie{margin-top:auto}
+/* Descripción normalizada con IA (promociones.resumen_ia) -- misma que usa la
+   web pública. Alto fijo para que todas las tarjetas midan igual. */
+.tc-resumen-ia{font-size:12.5px;color:var(--muted);line-height:1.45;margin:8px 0 4px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:3.9em}
+
+/* ---------- Buscador IA del Tarifario ---------- */
+.tar-ia-box{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:12px 14px;margin-bottom:14px}
+.tar-ia-row{display:flex;align-items:center;gap:10px}
+.tar-ia-row > i{color:var(--accent);font-size:14px;flex-shrink:0}
+.tar-ia-row input{flex:1;min-width:0;background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:10px 13px;color:var(--txt);font-size:13px;font-family:inherit;outline:none}
+.tar-ia-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.tar-ia-estado{font-size:11.5px;color:var(--muted);margin-top:8px;min-height:0}
+.tar-ia-estado:empty{display:none}
+.tar-ia-resultados{margin-top:10px}
+.tar-ia-resultados:empty{display:none}
+.tia-row{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer;background:var(--panel-solid)}
+.tia-row:hover{border-color:var(--accent)}
+.tia-row i{color:var(--accent);font-size:13px;margin-top:2px;flex-shrink:0}
+.tia-n{font-size:13.5px;font-weight:700;line-height:1.3}
+.tia-m{font-size:11.5px;color:var(--muted);margin-top:2px}
 .tc-media-wrap{position:relative;width:calc(100% + 36px);margin:-16px -18px 12px}
 .tc-thumb{width:100%;height:120px;object-fit:cover;display:block;background:var(--panel-solid);transition:opacity .18s ease}
 .tc-thumb.tc-thumb-vacio{width:calc(100% - 36px);height:100px;margin:16px 18px 0;border-radius:10px;display:grid;place-items:center;color:var(--muted2);font-size:22px;border:1px dashed var(--line2)}
@@ -661,6 +684,42 @@ input.ei[type=date]{color-scheme:dark}
 .entity-card .ec-foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;row-gap:8px;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 #tbl-wrap.hide,#rg-wrap.hide{display:none}
 
+/* ---------- Personal (Gestión de Personal > tarjetas del equipo) ---------- */
+.personal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+.pc{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;transition:.12s}
+.pc:hover{border-color:rgba(255,145,0,.3)}
+.pc-top{display:flex;align-items:flex-start;gap:12px}
+/* El icono representa el ROL (no es un avatar aleatorio por hash como el de
+   clientes): mismo rol, mismo icono y mismo color siempre. */
+.pc-ico{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;flex-shrink:0;font-size:17px}
+.pc-id{flex:1;min-width:0}
+.pc-nombre{font-size:15px;font-weight:700;line-height:1.25;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.pc-rol{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-top:3px}
+.pc-cargo{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--txt);margin-top:5px;flex-wrap:wrap}
+.pc-cargo .pc-cargo-vacio{color:var(--muted2);font-style:italic}
+.pc-cargo-edit{background:transparent;border:none;color:var(--muted2);cursor:pointer;font-size:11px;padding:2px 4px;font-family:inherit}
+.pc-cargo-edit:hover{color:var(--accent)}
+.pc-online{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);flex-shrink:0}
+.pc-chip{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:20px;background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted)}
+.pc-total{display:flex;align-items:baseline;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.pc-total-v{font-size:20px;font-weight:800;color:var(--accent)}
+.pc-total-t{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.pc-dias{margin-top:10px}
+.pc-dias > summary{list-style:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:7px;padding:6px 0}
+.pc-dias > summary::-webkit-details-marker{display:none}
+.pc-dias > summary:hover{color:var(--accent)}
+.pc-dia{padding:8px 0;border-bottom:1px solid var(--line)}
+.pc-dia:last-child{border-bottom:none}
+.pc-dia-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:12.5px}
+.pc-dia-f{font-weight:600}
+.pc-dia-m{font-weight:700;color:var(--txt);flex-shrink:0}
+.pc-dia-s{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5}
+.pc-dia-warn{color:#f59e0b}
+.pc-vacio{color:var(--muted2);font-size:12.5px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.gp-aviso{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:12px;padding:11px 14px;font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+.gp-aviso:empty{display:none}
+.gp-aviso b{color:#f6c66a}
+
 /* ---------- Inbox de leads estilo Telegram (solo rol asesor, sec-leads) ---------- */
 .leads-inbox{display:none;margin-bottom:18px}
 .rol-asesor .leads-inbox{display:block}
@@ -725,44 +784,12 @@ input.ei[type=date]{color-scheme:dark}
 .cot-card .tc-nombre{padding:8px 10px 0;font-size:12.5px;font-weight:700;line-height:1.3}
 .cot-card .tc-precio{padding:4px 10px 8px}
 
-/* ---------- Dictado por voz (Bloque 9) — Cotizador IA, Mensajes, Extractor IA ---------- */
+/* ---------- Dictado por voz (Bloque 9) — Cotizador IA, Mensajes ---------- */
 .mic-btn{background:var(--panel-solid);border:1.5px solid var(--line2);color:var(--muted);border-radius:14px;width:48px;flex-shrink:0;cursor:pointer;font-size:15px;transition:color .15s,border-color .15s}
 .mic-btn:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}
 .mic-btn:disabled{opacity:.4;cursor:default}
 .mic-btn.on{color:#fff;background:linear-gradient(135deg,#ef4444,#b91c1c);border-color:transparent;animation:mic-pulse 1.4s ease-in-out infinite}
 @keyframes mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.45)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
-.ext-textarea-wrap{position:relative}
-.ext-mic-btn{position:absolute;top:10px;right:10px;width:38px;height:38px;border-radius:10px;z-index:2}
-
-/* ---------- Extractor IA ---------- */
-.ext-wrap{display:flex;flex-direction:column}
-.ext-target-fixed{display:none;align-items:center;justify-content:space-between;gap:10px;background:var(--accent-soft);border:1px solid rgba(255,145,0,.25);border-radius:12px;padding:12px 14px;margin-bottom:16px}
-.ext-target-fixed.show{display:flex}
-.ext-target-lead{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:700;color:var(--txt);min-width:0}
-.ext-target-lead i{color:var(--accent);flex-shrink:0}
-.ext-target-lead span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ext-target-clear{background:transparent;border:1px solid var(--line2);color:var(--muted);border-radius:8px;padding:7px 11px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;flex-shrink:0}
-.ext-target-clear:hover{color:var(--txt);border-color:var(--accent)}
-.ext-target-search{margin-bottom:16px;position:relative}
-.ext-target-search.hide{display:none}
-.ext-search-results{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;background:var(--bg2);border:1px solid var(--line2);border-radius:12px;max-height:260px;overflow-y:auto;box-shadow:0 16px 40px rgba(0,0,0,.4)}
-.ext-search-results:empty{display:none;border:none}
-.ext-search-row{display:flex;flex-direction:column;gap:2px;padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--line)}
-.ext-search-row:last-child{border-bottom:none}
-.ext-search-row:hover{background:rgba(255,255,255,.04)}
-.ext-search-row .esr-n{font-size:13.5px;font-weight:600;color:var(--txt)}
-.ext-search-row .esr-m{font-size:11.5px;color:var(--muted)}
-.ext-preview-hint{font-size:11px;color:var(--muted);margin:-2px 0 12px}
-#ext-chat-input{width:100%;resize:vertical;min-height:140px;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:14px;padding:13px 14px;color:var(--txt);font-size:14px;font-family:inherit;outline:none}
-#ext-chat-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-#ext-chat-input:disabled{opacity:.5}
-.ext-counter{text-align:right;font-size:11px;color:var(--muted2);margin:6px 2px 14px}
-.ext-counter.over{color:#ef4444;font-weight:700}
-.ext-input-err{color:#ef4444;font-size:12.5px;margin:-6px 2px 10px;min-height:0}
-.ext-preview-box{margin-top:20px}
-#ext-descartar-btn{margin-top:10px}
-.dbtn.extractor{background:var(--panel-solid);border:1px solid var(--line2);color:var(--txt)}
-.dbtn.extractor:hover{border-color:var(--accent);color:var(--accent)}
 
 /* ---------- Mensajes (chat interno del staff) ---------- */
 .msg-layout{position:relative;overflow:hidden}
@@ -1232,9 +1259,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <a class="nav-item nav-boleteria-ok solo-voucher" id="nav-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher <span class="badge" id="nav-voucher-count" style="display:none">0</span></a>
       <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
       <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
-      <a class="nav-item" data-sec="buscar-tarifario"><i class="fas fa-magnifying-glass"></i> Buscar Tarifario</a>
-      <a class="nav-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
-      <a class="nav-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
       <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
       <a class="nav-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
       <div class="nav-label" data-label="tarifario">Tarifario</div>
@@ -1243,13 +1267,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
-      <a class="nav-item nav-admin-only" data-sec="leads-colaboraciones"><i class="fas fa-handshake"></i> Leads Colaboraciones</a>
-      <a class="nav-item nav-admin-only" data-sec="leads-fallidos"><i class="fas fa-triangle-exclamation"></i> Leads Fallidos</a>
       <a class="nav-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
-      <a class="nav-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
       <a class="nav-item nav-admin-only solo-informe-diario" id="nav-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
       <div class="nav-label" data-label="ayuda">Ayuda</div>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok" id="nav-tutorial"><i class="fas fa-circle-question"></i> Recorrido guiado</a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
     </nav>
@@ -1347,76 +1367,85 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
     <!-- LEADS -->
     <section class="section" id="sec-leads">
-      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
-        <button class="dbtn save" id="nl-abrir-btn" type="button" style="width:auto;padding:8px 14px"><i class="fas fa-user-plus"></i> Nuevo lead</button>
+      <div class="seg-group" id="leads-tabs">
+        <button class="seg on" data-leads-tab="pipeline">Leads</button>
+        <button class="seg nav-admin-only" data-leads-tab="colaboraciones">Colaboraciones</button>
       </div>
-      <div class="leads-inbox" id="leads-inbox">
-        <div class="leads-inbox-head">
-          <h2><i class="fas fa-inbox"></i> Leads nuevos <span class="lih-count" id="inbox-count">0</span></h2>
+
+      <div class="leads-tab-panel" data-leads-panel="pipeline">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <button class="dbtn save" id="nl-abrir-btn" type="button" style="width:auto;padding:8px 14px"><i class="fas fa-user-plus"></i> Nuevo lead</button>
         </div>
-        <div class="tbl-state skel" id="inbox-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
-        <div class="tbl-state" id="inbox-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tenés leads nuevos esperando respuesta</div></div>
-        <div class="leads-inbox-grid" id="inbox-grid"></div>
-      </div>
-      <button class="mfs-trigger" data-mfs="leads-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
-      <div class="tbar mfs" id="leads-tbar">
-          <select class="flt" id="f-canal"><option value="">Todos los canales</option></select>
-          <select class="flt" id="f-estado"><option value="">Todos los estados</option></select>
-          <select class="flt" id="f-asesor"><option value="">Todos los asesores</option></select>
-          <select class="flt" id="f-servicio"><option value="">Todos los servicios</option></select>
-          <select class="flt" id="f-anio"><option value="">Todos los años</option></select>
-          <div class="drp" id="drp-f">
-            <button type="button" class="flt drp-btn" id="drp-f-btn"><i class="fas fa-calendar-days"></i> <span id="drp-f-label">Rango de fechas</span></button>
-            <div class="drp-panel" id="drp-f-panel">
-              <div class="drp-presets">
-                <button type="button" data-preset="hoy">Hoy</button>
-                <button type="button" data-preset="7d">7 días</button>
-                <button type="button" data-preset="mes">Este mes</button>
-                <button type="button" data-preset="anio">Este año</button>
-                <button type="button" data-preset="todo">Todo</button>
-              </div>
-              <div class="drp-inputs">
-                <label>Desde <input type="date" id="f-desde"></label>
-                <label>Hasta <input type="date" id="f-hasta"></label>
+        <div class="leads-inbox" id="leads-inbox">
+          <div class="leads-inbox-head">
+            <h2><i class="fas fa-inbox"></i> Leads nuevos <span class="lih-count" id="inbox-count">0</span></h2>
+          </div>
+          <div class="tbl-state skel" id="inbox-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="tbl-state" id="inbox-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tenés leads nuevos esperando respuesta</div></div>
+          <div class="leads-inbox-grid" id="inbox-grid"></div>
+        </div>
+        <button class="mfs-trigger" data-mfs="leads-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
+        <div class="tbar mfs" id="leads-tbar">
+            <select class="flt" id="f-canal"><option value="">Todos los canales</option></select>
+            <select class="flt" id="f-estado"><option value="">Todos los estados</option></select>
+            <select class="flt" id="f-asesor"><option value="">Todos los asesores</option></select>
+            <select class="flt" id="f-servicio"><option value="">Todos los servicios</option></select>
+            <select class="flt" id="f-anio"><option value="">Todos los años</option></select>
+            <div class="drp" id="drp-f">
+              <button type="button" class="flt drp-btn" id="drp-f-btn"><i class="fas fa-calendar-days"></i> <span id="drp-f-label">Rango de fechas</span></button>
+              <div class="drp-panel" id="drp-f-panel">
+                <div class="drp-presets">
+                  <button type="button" data-preset="hoy">Hoy</button>
+                  <button type="button" data-preset="7d">7 días</button>
+                  <button type="button" data-preset="mes">Este mes</button>
+                  <button type="button" data-preset="anio">Este año</button>
+                  <button type="button" data-preset="todo">Todo</button>
+                </div>
+                <div class="drp-inputs">
+                  <label>Desde <input type="date" id="f-desde"></label>
+                  <label>Hasta <input type="date" id="f-hasta"></label>
+                </div>
               </div>
             </div>
+            <div class="view-switch" id="leads-view-switch"></div>
+            <button class="reload-btn" id="leads-reload-btn" type="button" title="Recargar leads"><i class="fas fa-rotate"></i> Recargar</button>
+            <span class="tcount" id="t-count"></span>
+            <button class="mfs-done" data-mfs="leads-tbar" type="button">Listo</button>
+        </div>
+        <div class="card">
+          <div id="active-filters" class="chips-bar"></div>
+          <div class="bulk-bar" id="bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
+            <span id="bulk-count" style="font-size:13.5px;font-weight:600"></span>
+            <button class="dbtn" id="bulk-clear" type="button" style="width:auto;padding:6px 12px">Cancelar selección</button>
+            <button class="dbtn" id="bulk-eliminar" type="button" style="width:auto;padding:6px 12px;background:#ef4444;color:#fff;margin-left:auto"><i class="fas fa-trash"></i> Eliminar seleccionados</button>
           </div>
-          <div class="view-switch" id="leads-view-switch"></div>
-          <button class="reload-btn" id="leads-reload-btn" type="button" title="Recargar leads"><i class="fas fa-rotate"></i> Recargar</button>
-          <span class="tcount" id="t-count"></span>
-          <button class="mfs-done" data-mfs="leads-tbar" type="button">Listo</button>
-      </div>
-      <div class="card">
-        <div id="active-filters" class="chips-bar"></div>
-        <div class="bulk-bar" id="bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
-          <span id="bulk-count" style="font-size:13.5px;font-weight:600"></span>
-          <button class="dbtn" id="bulk-clear" type="button" style="width:auto;padding:6px 12px">Cancelar selección</button>
-          <button class="dbtn" id="bulk-eliminar" type="button" style="width:auto;padding:6px 12px;background:#ef4444;color:#fff;margin-left:auto"><i class="fas fa-trash"></i> Eliminar seleccionados</button>
+          <div class="tbl-state skel" id="tbl-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="tbl-state" id="tbl-empty"><i class="fas fa-inbox"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay leads con estos filtros</div></div>
+          <div id="tbl-wrap" style="overflow-x:auto">
+            <table>
+              <thead><tr><th class="solo-admin-borrar" style="width:34px"><input type="checkbox" id="th-select-all"></th><th>Cliente</th><th>Teléfono</th><th>Destino</th><th>Canal</th><th>Asesor</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+          <div id="leads-cards" class="card-grid"></div>
+          <div class="pager" id="pager"></div>
         </div>
-        <div class="tbl-state skel" id="tbl-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
-        <div class="tbl-state" id="tbl-empty"><i class="fas fa-inbox"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay leads con estos filtros</div></div>
-        <div id="tbl-wrap" style="overflow-x:auto">
-          <table>
-            <thead><tr><th class="solo-admin-borrar" style="width:34px"><input type="checkbox" id="th-select-all"></th><th>Cliente</th><th>Teléfono</th><th>Destino</th><th>Canal</th><th>Asesor</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
-            <tbody id="tbody"></tbody>
-          </table>
-        </div>
-        <div id="leads-cards" class="card-grid"></div>
-        <div class="pager" id="pager"></div>
       </div>
-    </section>
 
-    <!-- BUSCAR TARIFARIO -->
-    <section class="section" id="sec-buscar-tarifario">
-      <div class="card">
-        <h2><i class="fas fa-magnifying-glass"></i> Buscar en el tarifario</h2>
-        <div class="csub">Buscá por destino, hotel, paquete o palabra clave — ej. "Los Roques todo incluido"</div>
-        <div style="margin:14px 0">
-          <input type="text" id="bt-input" class="flt" style="width:100%;max-width:480px" placeholder="¿Qué estás buscando?" autocomplete="off">
+      <!-- Colaboraciones: campañas de colaboración paga (ej. Casa Vacacional
+           Playa del Sur) que van directo al WhatsApp del colaborador, sin
+           pasar por el pipeline normal de asesores. -->
+      <div class="leads-tab-panel" data-leads-panel="colaboraciones" style="display:none">
+        <div class="card">
+          <h2><i class="fas fa-handshake"></i> Leads Colaboraciones</h2>
+          <div class="csub">Leads de campañas de colaboración paga -- se mandan directo al WhatsApp del colaborador, no tienen asesor asignado.</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Nombre</th><th>Teléfono</th><th>Campaña</th><th>Destino</th><th>Canal</th><th>Contacto directo</th><th>Fecha</th></tr></thead>
+              <tbody id="leads-colab-body"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="tbl-state" id="bt-empty"><i class="fas fa-magnifying-glass"></i><div class="es-t">Escribí para buscar</div><div class="es-s">Busca en productos y promociones activos</div></div>
-        <div class="tbl-state" id="bt-sin-resultados" style="display:none"><i class="fas fa-circle-question"></i><div class="es-t">Sin resultados</div><div class="es-s">Probá con otra palabra o menos términos</div></div>
-        <div id="bt-resultados" class="card-grid" style="display:grid"></div>
       </div>
     </section>
 
@@ -1475,6 +1504,19 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <button class="seg" data-tab="paquete">Paquetes</button>
         </div>
         <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
+      </div>
+      <!-- Buscador IA: reemplaza la sección suelta "Buscar Tarifario". El
+           #tar-search de abajo sigue siendo filtro de texto sobre lo que ya
+           está en pantalla; esto es una consulta en lenguaje natural que va a
+           la base entera. -->
+      <div class="tar-ia-box">
+        <div class="tar-ia-row">
+          <i class="fas fa-wand-magic-sparkles"></i>
+          <input id="tar-ia-input" type="text" autocomplete="off" placeholder="Preguntá en tus palabras: &quot;playa para una pareja en diciembre&quot;">
+          <button class="btn-sm" id="tar-ia-btn" type="button">Buscar</button>
+        </div>
+        <div class="tar-ia-estado" id="tar-ia-estado"></div>
+        <div class="tar-ia-resultados" id="tar-ia-resultados"></div>
       </div>
       <button class="mfs-trigger" data-mfs="tar-toolbar" type="button"><i class="fas fa-sliders"></i> Buscar y filtrar</button>
       <div class="tar-toolbar mfs" id="tar-toolbar">
@@ -1577,56 +1619,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
     </section>
 
-    <!-- EXTRACTOR IA -->
-    <section class="section" id="sec-extractor">
-      <div class="card ext-wrap">
-        <div class="eb-title"><i class="fas fa-user-check"></i> Lead objetivo</div>
-        <div class="ext-target-fixed" id="ext-target-fixed">
-          <div class="ext-target-lead"><i class="fas fa-user"></i> <span id="ext-target-nombre"></span></div>
-          <button class="ext-target-clear" id="ext-target-clear" type="button"><i class="fas fa-rotate-left"></i> Cambiar</button>
-        </div>
-        <div class="ext-target-search" id="ext-target-search">
-          <input class="ei" id="ext-search-input" type="text" placeholder="Buscar lead por nombre o teléfono...">
-          <div class="ext-search-results" id="ext-search-results"></div>
-        </div>
-
-        <div class="eb-title"><i class="fas fa-comment-dots"></i> Chat con el cliente</div>
-        <div class="ext-textarea-wrap">
-          <textarea id="ext-chat-input" rows="7" placeholder="Pegá acá la conversación de WhatsApp con el cliente..." disabled></textarea>
-          <button class="mic-btn ext-mic-btn" id="ext-mic-btn" type="button" title="Dictar por voz" aria-label="Dictar por voz" disabled><i class="fas fa-microphone"></i></button>
-        </div>
-        <div class="ext-counter" id="ext-counter">0 / 20.000</div>
-        <div class="ext-input-err" id="ext-input-err"></div>
-        <button class="dbtn save" id="ext-extraer-btn" type="button" disabled><i class="fas fa-wand-magic-sparkles"></i> Extraer datos</button>
-
-        <div class="edit-box ext-preview-box" id="ext-preview-box" style="display:none">
-          <div class="eb-title"><i class="fas fa-list-check"></i> Datos extraídos — revisá antes de aplicar</div>
-          <div class="ext-preview-hint">Los campos que la IA no encontró en el chat muestran el valor actual del lead — no se pierden al aplicar.</div>
-          <label class="fl">Nombre</label>
-          <input id="ext-e-nombre" class="ei" type="text" placeholder="No encontrado en el chat">
-          <label class="fl">Teléfono</label>
-          <input id="ext-e-telefono" class="ei" type="text" placeholder="No encontrado en el chat">
-          <label class="fl">Canal</label>
-          <input id="ext-e-canal" class="ei" type="text" placeholder="No encontrado en el chat">
-          <label class="fl">Destino de interés</label>
-          <input id="ext-e-destino" class="ei" type="text" placeholder="No encontrado en el chat">
-          <label class="fl">Consulta original</label>
-          <input id="ext-e-destino-consulta" class="ei" type="text" placeholder="No encontrado en el chat">
-          <label class="fl">Personas</label>
-          <input id="ext-e-personas" class="ei" type="text" placeholder="No encontrado en el chat">
-          <label class="fl">Fecha de viaje (aprox.)</label>
-          <input id="ext-e-fecha-estimada" class="ei" type="text" placeholder="No encontrado en el chat">
-          <label class="fl">Monto Completo (USD)</label>
-          <input id="ext-e-monto-completo" class="ei" type="number" min="0" step="1" placeholder="No encontrado en el chat">
-          <label class="fl">Monto Inicial (USD)</label>
-          <input id="ext-e-monto-inicial" class="ei" type="number" min="0" step="1" placeholder="No encontrado en el chat">
-          <div class="edit-err" id="ext-err"></div>
-          <button class="dbtn save" id="ext-aplicar-btn" type="button"><i class="fas fa-check"></i> Aplicar a <span id="ext-aplicar-nombre"></span></button>
-          <button class="dbtn gh" id="ext-descartar-btn" type="button">Descartar y empezar de nuevo</button>
-        </div>
-      </div>
-    </section>
-
     <!-- GALERÍA -->
     <section class="section" id="sec-galeria">
       <div id="gal-list"></div>
@@ -1647,20 +1639,24 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <button class="seg" data-gp-tab="asesores">Asesores</button>
         <button class="seg" data-gp-tab="freelancers">Freelancers</button>
         <button class="seg" data-gp-tab="postulaciones">Postulaciones <span class="badge" id="gp-postulaciones-count" style="display:none">0</span></button>
+        <button class="seg" data-gp-tab="reasignaciones">Reasignaciones</button>
+        <button class="seg" data-gp-tab="metricas">Métricas</button>
       </div>
 
-      <!-- PERSONAL -- nuevo, tiempo total de cada quien en el CRM (suma de agent_sessions) -->
+      <!-- PERSONAL -- tarjetas con icono por rol, cargo editable y desglose
+           diario de conexión (RPC personal_sesiones_por_dia). -->
       <div class="gp-tab-panel" data-gp-panel="personal">
-        <div class="card">
-          <h2><i class="fas fa-id-badge"></i> Equipo</h2>
-          <div class="csub">Cuánto tiempo estuvo cada quien conectado al CRM en total</div>
-          <div style="overflow-x:auto">
-            <table>
-              <thead><tr><th>Nombre</th><th>Rol</th><th>Tiempo en el CRM</th></tr></thead>
-              <tbody id="gp-personal-tbody"></tbody>
-            </table>
-          </div>
+        <div class="tbar" style="margin-bottom:12px">
+          <select class="flt" id="gp-personal-dias">
+            <option value="7">Últimos 7 días</option>
+            <option value="14" selected>Últimos 14 días</option>
+            <option value="30">Últimos 30 días</option>
+          </select>
+          <span class="tcount" id="gp-personal-count"></span>
         </div>
+        <div class="gp-aviso" id="gp-personal-aviso"></div>
+        <div class="tbl-state skel-grid" id="gp-personal-loading"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>
+        <div class="personal-grid" id="gp-personal-grid"></div>
       </div>
 
       <!-- ASISTENCIA -->
@@ -1828,51 +1824,66 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <div id="post-empty" class="tbl-state" style="display:none"><i class="fas fa-address-card"></i><div class="es-t">Sin postulaciones</div><div class="es-s">No hay candidatos con estos filtros</div></div>
         </div>
       </div>
-    </section>
-
-    <!-- REASIGNACIONES -->
-    <section class="section" id="sec-reasignaciones">
-      <div class="kpis" id="reasig-kpis"></div>
-      <button class="mfs-trigger" data-mfs="rg-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
-      <div class="tbar mfs" id="rg-tbar">
-          <select class="flt" id="rg-asesor"><option value="">Todos los asesores</option></select>
-          <select class="flt" id="rg-motivo">
-            <option value="">Todos los motivos</option>
-            <option value="timeout_no_respuesta">Timeout (sin respuesta)</option>
-            <option value="manual_no_puedo">Manual (No puedo)</option>
-          </select>
-          <div class="drp" id="drp-rg">
-            <button type="button" class="flt drp-btn" id="drp-rg-btn"><i class="fas fa-calendar-days"></i> <span id="drp-rg-label">Rango de fechas</span></button>
-            <div class="drp-panel" id="drp-rg-panel">
-              <div class="drp-presets">
-                <button type="button" data-preset="hoy">Hoy</button>
-                <button type="button" data-preset="7d">7 días</button>
-                <button type="button" data-preset="mes">Este mes</button>
-                <button type="button" data-preset="anio">Este año</button>
-                <button type="button" data-preset="todo">Todo</button>
-              </div>
-              <div class="drp-inputs">
-                <label>Desde <input type="date" id="rg-desde"></label>
-                <label>Hasta <input type="date" id="rg-hasta"></label>
+      <!-- REASIGNACIONES (antes sección suelta del menú) -->
+      <div class="gp-tab-panel" data-gp-panel="reasignaciones" style="display:none">
+        <div class="kpis" id="reasig-kpis"></div>
+        <button class="mfs-trigger" data-mfs="rg-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
+        <div class="tbar mfs" id="rg-tbar">
+            <select class="flt" id="rg-asesor"><option value="">Todos los asesores</option></select>
+            <select class="flt" id="rg-motivo">
+              <option value="">Todos los motivos</option>
+              <option value="timeout_no_respuesta">Timeout (sin respuesta)</option>
+              <option value="manual_no_puedo">Manual (No puedo)</option>
+            </select>
+            <div class="drp" id="drp-rg">
+              <button type="button" class="flt drp-btn" id="drp-rg-btn"><i class="fas fa-calendar-days"></i> <span id="drp-rg-label">Rango de fechas</span></button>
+              <div class="drp-panel" id="drp-rg-panel">
+                <div class="drp-presets">
+                  <button type="button" data-preset="hoy">Hoy</button>
+                  <button type="button" data-preset="7d">7 días</button>
+                  <button type="button" data-preset="mes">Este mes</button>
+                  <button type="button" data-preset="anio">Este año</button>
+                  <button type="button" data-preset="todo">Todo</button>
+                </div>
+                <div class="drp-inputs">
+                  <label>Desde <input type="date" id="rg-desde"></label>
+                  <label>Hasta <input type="date" id="rg-hasta"></label>
+                </div>
               </div>
             </div>
-          </div>
-          <div class="view-switch" id="rg-view-switch"></div>
-          <span class="tcount" id="rg-count"></span>
-          <button class="mfs-done" data-mfs="rg-tbar" type="button">Listo</button>
-      </div>
-      <div class="card">
-        <div class="tbl-state skel" id="rg-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
-        <div class="tbl-state" id="rg-empty"><i class="fas fa-shuffle"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay reasignaciones con estos filtros</div></div>
-        <div id="rg-wrap" style="overflow-x:auto">
-          <table>
-            <thead><tr><th>Cliente</th><th>Teléfono</th><th>Destino</th><th>De</th><th>A</th><th>Motivo</th><th>Tiempo</th><th>Fecha</th></tr></thead>
-            <tbody id="rg-tbody"></tbody>
-          </table>
+            <div class="view-switch" id="rg-view-switch"></div>
+            <span class="tcount" id="rg-count"></span>
+            <button class="mfs-done" data-mfs="rg-tbar" type="button">Listo</button>
         </div>
-        <div id="rg-cards" class="card-grid"></div>
-        <div class="pager" id="rg-pager"></div>
+        <div class="card">
+          <div class="tbl-state skel" id="rg-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="tbl-state" id="rg-empty"><i class="fas fa-shuffle"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay reasignaciones con estos filtros</div></div>
+          <div id="rg-wrap" style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Cliente</th><th>Teléfono</th><th>Destino</th><th>De</th><th>A</th><th>Motivo</th><th>Tiempo</th><th>Fecha</th></tr></thead>
+              <tbody id="rg-tbody"></tbody>
+            </table>
+          </div>
+          <div id="rg-cards" class="card-grid"></div>
+          <div class="pager" id="rg-pager"></div>
+        </div>
       </div>
+
+      <!-- MÉTRICAS (antes sección suelta del menú) -->
+      <div class="gp-tab-panel" data-gp-panel="metricas" style="display:none">
+        <div class="seg-group" id="met-periodo">
+          <button class="seg" data-p="hoy">Hoy</button>
+          <button class="seg" data-p="semana">Semana</button>
+          <button class="seg on" data-p="mes">Mes</button>
+          <button class="seg" data-p="anio">Año</button>
+        </div>
+        <div class="kpis kpis-5" id="met-kpis"></div>
+        <div class="grid g-2b" style="margin-top:4px">
+          <div class="card"><h2><i class="fas fa-chart-line"></i> Nuevos vs. Ventas</h2><div class="csub">Evolución en el periodo</div><div class="chart-wrap"><canvas id="chSerie"></canvas></div></div>
+          <div class="card"><h2><i class="fas fa-suitcase-rolling"></i> Leads por servicio</h2><div class="csub">Interés por producto</div><div class="chart-wrap" style="position:relative"><canvas id="chServicio"></canvas><div class="tbl-state" id="met-servicio-empty" style="display:none;position:absolute;inset:0"><i class="fas fa-inbox"></i><div class="es-s">Aún sin servicios asignados</div></div></div></div>
+        </div>
+      </div>
+
     </section>
 
     <!-- FACTURACIÓN -->
@@ -2209,20 +2220,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </section>
 
     <!-- MÉTRICAS -->
-    <section class="section" id="sec-metricas">
-      <div class="seg-group" id="met-periodo">
-        <button class="seg" data-p="hoy">Hoy</button>
-        <button class="seg" data-p="semana">Semana</button>
-        <button class="seg on" data-p="mes">Mes</button>
-        <button class="seg" data-p="anio">Año</button>
-      </div>
-      <div class="kpis kpis-5" id="met-kpis"></div>
-      <div class="grid g-2b" style="margin-top:4px">
-        <div class="card"><h2><i class="fas fa-chart-line"></i> Nuevos vs. Ventas</h2><div class="csub">Evolución en el periodo</div><div class="chart-wrap"><canvas id="chSerie"></canvas></div></div>
-        <div class="card"><h2><i class="fas fa-suitcase-rolling"></i> Leads por servicio</h2><div class="csub">Interés por producto</div><div class="chart-wrap" style="position:relative"><canvas id="chServicio"></canvas><div class="tbl-state" id="met-servicio-empty" style="display:none;position:absolute;inset:0"><i class="fas fa-inbox"></i><div class="es-s">Aún sin servicios asignados</div></div></div></div>
-      </div>
-    </section>
-
     <!-- RANKING -->
     <section class="section" id="sec-ranking">
       <div class="seg-group" id="rank-periodo">
@@ -2236,42 +2233,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <table>
             <thead><tr><th>Asesor</th><th>Nuevos</th><th>Atendidos</th><th>Ventas</th><th>Ingresos</th><th>Resp. prom.</th></tr></thead>
             <tbody id="rank-body"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- LEADS COLABORACIONES (campañas de colaboración paga -- ej. Casa
-         Vacacional Playa del Sur -- que se mandan directo al WhatsApp del
-         colaborador, sin pasar por el pipeline normal de asesores) -->
-    <section class="section" id="sec-leads-colaboraciones">
-      <div class="card">
-        <h2><i class="fas fa-handshake"></i> Leads Colaboraciones</h2>
-        <div class="csub">Leads de campañas de colaboración paga -- se mandan directo al WhatsApp del colaborador, no tienen asesor asignado.</div>
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr><th>Nombre</th><th>Teléfono</th><th>Campaña</th><th>Destino</th><th>Canal</th><th>Contacto directo</th><th>Fecha</th></tr></thead>
-            <tbody id="leads-colab-body"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- LEADS FALLIDOS (leads que el bot no pudo registrar en el CRM -- red
-         de seguridad para que ningún lead se pierda en silencio, ver hallazgo
-         real 2026-07-22: Neidy/Yoselys Dell'Onto/Roy Wesche tuvieron que
-         recuperarse a mano por esto) -->
-    <section class="section" id="sec-leads-fallidos">
-      <div class="card">
-        <h2><i class="fas fa-triangle-exclamation"></i> Leads Fallidos</h2>
-        <div class="csub">Leads que el bot NO pudo registrar automáticamente -- recrearlos a mano con estos datos y marcar resuelto.</div>
-        <label style="display:inline-flex;align-items:center;gap:6px;margin-bottom:10px">
-          <input type="checkbox" id="leads-fallidos-ver-resueltos"> Ver también resueltos
-        </label>
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr><th>Nombre</th><th>Teléfono</th><th>Destino</th><th>Canal</th><th>Función</th><th>Etapa</th><th>Error</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
-            <tbody id="leads-fallidos-body"></tbody>
           </table>
         </div>
       </div>
@@ -2401,32 +2362,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
   <a class="sheet-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas</a>
-  <a class="sheet-item" data-sec="extractor"><i class="fas fa-wand-magic-sparkles"></i> Extractor IA</a>
   <a class="sheet-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
-  <a class="sheet-item" data-sec="buscar-tarifario"><i class="fas fa-magnifying-glass"></i> Buscar Tarifario</a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
   <a class="sheet-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
-  <a class="sheet-item nav-admin-only" data-sec="metricas"><i class="fas fa-chart-simple"></i> Métricas</a>
   <a class="sheet-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
   <a class="sheet-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
-  <a class="sheet-item nav-admin-only" data-sec="reasignaciones"><i class="fas fa-shuffle"></i> Reasignaciones</a>
   <a class="sheet-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
   <a class="sheet-item nav-admin-only solo-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
   <a class="sheet-item nav-boleteria-ok solo-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok" id="sheet-item-tutorial"><i class="fas fa-circle-question"></i> Recorrido guiado</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
   <a class="sheet-item" id="sheet-item-logout" style="color:#ff6b6b"><i class="fas fa-right-from-bracket"></i> Cerrar sesión</a>
-</div>
-
-<!-- Tutorial: menú de capítulos -->
-<div class="sheet" id="tutorial-sheet">
-  <div class="sheet-handle"></div>
-  <div class="sheet-title">Tutorial</div>
-  <div id="tutorial-chap-list"></div>
 </div>
 
 <!-- Tutorial: overlay del recorrido guiado -->

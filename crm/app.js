@@ -55,9 +55,9 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'buscar-tarifario': ['Buscar Tarifario', 'Buscá destinos, hoteles, paquetes y promociones vigentes'], metricas: ['Métricas', 'Ventas, clientes nuevos y conversión'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], 'leads-colaboraciones': ['Leads Colaboraciones', 'Leads de campañas de colaboración paga -- van directo al WhatsApp del colaborador'], 'leads-fallidos': ['Leads Fallidos', 'Leads que el bot no pudo registrar automáticamente'], reasignaciones: ['Reasignaciones', 'Historial de leads reasignados por timeout o manualmente'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], extractor: ['Extractor IA', 'Pegá una conversación de WhatsApp y completá los datos del cliente'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
   tareas: ['Tareas', 'Tus tareas activas'],
-  'gestion-personal': ['Gestión de Personal', 'Personal, asistencia, asesores, freelancers y postulaciones -- todo el equipo en un solo lugar'],
+  'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -209,7 +209,7 @@ function entrarSegunRol() {
   // cerrarlo, así no vuelve a abrirse solo. marketing queda afuera del
   // auto-open (el pedido original era admin/asesor), pero el ítem de nav
   // sigue disponible para abrirlo a mano.
-  if (!MI_PREFERENCIAS.tutorial_visto && (ROL === 'admin' || ROL === 'asesor')) abrirMenuTutorial();
+  if (!MI_PREFERENCIAS.tutorial_visto && (ROL === 'admin' || ROL === 'asesor')) activateSection('manual');
 }
 
 /* ---------- Mi Perfil (Bloque 8) — cada asesor edita solo lo propio ---------- */
@@ -826,9 +826,11 @@ const fmtFechaHoraCaracas = iso => {
 const fmtFechaSolo = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
 /* ---------- Gestión de Personal (admin) -- junta Personal/Asistencia/Asesores/
    Freelancers/Postulaciones en una sola sección con pestañas, pedido del dueño
-   (2026-07-26). Cada pestaña sigue usando su loader original (loadAsistencia,
-   loadAsesoresPeriodo, loadFreelancers, loadPostulaciones) sin tocar su lógica --
-   esto solo cambia cómo se navega hacia ellas. */
+   (2026-07-26), más Reasignaciones y Métricas (2026-07-27). Cada pestaña sigue
+   usando su loader original sin tocar su lógica -- esto solo cambia cómo se
+   navega hacia ellas. Ojo: el setup de Reasignaciones y Métricas (view switcher,
+   date pickers, listeners de periodo) sigue corriendo en startApp; acá solo
+   cambió dónde vive su DOM. */
 let gpTab = 'personal';
 function setupGestionPersonal() {
   document.querySelectorAll('#gp-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
@@ -837,6 +839,7 @@ function setupGestionPersonal() {
     document.querySelectorAll('.gp-tab-panel').forEach(p => p.style.display = p.dataset.gpPanel === gpTab ? '' : 'none');
     cargarTabGestionPersonal(gpTab);
   }));
+  document.getElementById('gp-personal-dias')?.addEventListener('change', loadPersonalTiempo);
 }
 function cargarTabGestionPersonal(tab) {
   if (tab === 'personal') loadPersonalTiempo();
@@ -844,6 +847,8 @@ function cargarTabGestionPersonal(tab) {
   else if (tab === 'asesores') loadAsesoresPeriodo();
   else if (tab === 'freelancers') loadFreelancers();
   else if (tab === 'postulaciones') loadPostulaciones();
+  else if (tab === 'reasignaciones') loadReasignaciones();
+  else if (tab === 'metricas') loadMetricas();
 }
 async function loadGestionPersonal() {
   cargarResumenPersonalKPIs();
@@ -872,28 +877,123 @@ function formatDuracionLarga(ms) {
   if (horasTotales > 0) return `${horasTotales}h ${minutos}min`;
   return `${minutos}min`;
 }
-async function loadPersonalTiempo() {
-  const tbody = document.getElementById('gp-personal-tbody');
-  tbody.innerHTML = '<tr><td colspan="3" class="muted">Cargando...</td></tr>';
-  const [{ data: usuarios, error: e1 }, { data: sesiones, error: e2 }] = await Promise.all([
-    sb.from('usuarios').select('id,nombre,rol,bloqueado,es_freelancer').order('nombre'),
-    sb.from('agent_sessions').select('asesor_id,hora_entrada,hora_salida'),
-  ]);
-  if (e1 || e2) { tbody.innerHTML = '<tr><td colspan="3" class="muted">No se pudo cargar</td></tr>'; return; }
-  const ahora = Date.now();
-  const msPorId = {};
-  (sesiones || []).forEach(s => {
-    const ini = new Date(s.hora_entrada).getTime();
-    const fin = s.hora_salida ? new Date(s.hora_salida).getTime() : ahora;
-    msPorId[s.asesor_id] = (msPorId[s.asesor_id] || 0) + Math.max(0, fin - ini);
-  });
-  const filas = (usuarios || []).map(u => ({ ...u, ms: msPorId[u.id] || 0 })).sort((a, b) => b.ms - a.ms);
-  tbody.innerHTML = filas.map(u => `<tr>
-    <td data-label="Nombre">${esc(u.nombre)}${u.bloqueado ? ' <span class="muted">(bloqueado)</span>' : ''}</td>
-    <td data-label="Rol"><span class="chip">${ROL_LABEL_GP[u.rol] || u.rol}${u.es_freelancer ? ' · Freelance' : ''}</span></td>
-    <td data-label="Tiempo en el CRM">${formatDuracionLarga(u.ms)}</td>
-  </tr>`).join('');
+// Un icono y un color por ROL -- a diferencia de clientAvatar (que es
+// aleatorio por hash del nombre), acá el icono significa algo: el mismo rol se
+// ve igual siempre.
+const ROL_ICONO = {
+  admin:     { i: 'fa-crown',    c: '#f59e0b' },
+  asesor:    { i: 'fa-headset',  c: '#3b82f6' },
+  marketing: { i: 'fa-bullhorn', c: '#a855f7' },
+  boleteria: { i: 'fa-ticket',   c: '#22c55e' },
+};
+const ROL_ICONO_FREELANCE = { i: 'fa-user-clock', c: '#14b8a6' };
+// El cargo manda sobre el rol cuando dice algo más específico: Sistemas y
+// Editor de Redes son admins en la base pero no hacen trabajo de jefe.
+const CARGO_ICONO = [
+  [/sistema|dev|técnic/i,            { i: 'fa-code',            c: '#38bdf8' }],
+  [/editor|redes|social|contenido/i, { i: 'fa-photo-film',      c: '#ec4899' }],
+  [/jefe|due[nñ]/i,                  { i: 'fa-crown',           c: '#f59e0b' }],
+  [/gerente|administrativ/i,         { i: 'fa-briefcase',       c: '#f97316' }],
+  [/boleter/i,                       { i: 'fa-plane-departure', c: '#22c55e' }],
+  [/contab|finanz|factur/i,          { i: 'fa-calculator',      c: '#84cc16' }],
+];
+function iconoDePersona(u) {
+  if (u.cargo) { for (const [re, ico] of CARGO_ICONO) if (re.test(u.cargo)) return ico; }
+  if (u.es_freelancer) return ROL_ICONO_FREELANCE;
+  return ROL_ICONO[u.rol] || { i: 'fa-user', c: '#94a3b8' };
 }
+
+const fmtDiaCorto = dia => new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(dia + 'T12:00:00Z'));
+function fmtMinutos(min) {
+  if (!min) return '0min';
+  const h = Math.floor(min / 60), m = min % 60;
+  return h ? (m ? h + 'h ' + m + 'min' : h + 'h') : m + 'min';
+}
+
+let personalCache = [];
+async function loadPersonalTiempo() {
+  const grid = document.getElementById('gp-personal-grid');
+  const load = document.getElementById('gp-personal-loading');
+  const dias = Number(document.getElementById('gp-personal-dias')?.value) || 14;
+  if (load) load.style.display = '';
+  grid.innerHTML = '';
+  const { data, error } = await sb.rpc('personal_sesiones_por_dia', { p_dias: dias });
+  if (load) load.style.display = 'none';
+  if (error) { console.error('personal_sesiones_por_dia:', error); grid.innerHTML = '<div class="pc-vacio">No se pudo cargar el equipo.</div>'; return; }
+  personalCache = data || [];
+  renderPersonalCards();
+}
+
+function renderPersonalCards() {
+  const grid = document.getElementById('gp-personal-grid');
+  if (!grid) return;
+  const cont = document.getElementById('gp-personal-count');
+  if (cont) cont.textContent = personalCache.length + (personalCache.length === 1 ? ' persona' : ' personas');
+  // Aviso de honestidad: hasta el 27/07/2026 el CRM abría una sesión NUEVA en
+  // cada recarga de página, así que las sesiones viejas vienen encadenadas y
+  // el total mide "CRM abierto", no "horas trabajadas". El bug ya está
+  // arreglado, pero el histórico anterior no se puede reconstruir -- mejor
+  // decirlo que dejar que alguien decida algo con ese número.
+  const aviso = document.getElementById('gp-personal-aviso');
+  if (aviso) aviso.innerHTML = 'Esto mide <b>tiempo con el CRM abierto</b>, no horas trabajadas. Los días con ⚠ tienen sesiones que nadie cerró: ese total es aproximado.';
+  if (!personalCache.length) { grid.innerHTML = '<div class="pc-vacio">Sin datos del equipo en este período.</div>'; return; }
+  grid.innerHTML = personalCache.map(cardPersonaHtml).join('');
+  grid.querySelectorAll('[data-cargo-edit]').forEach(btn => { btn.onclick = () => editarCargo(btn.dataset.cargoEdit); });
+}
+
+function cardPersonaHtml(u) {
+  const ico = iconoDePersona(u);
+  const enCurso = (u.dias || []).some(d => (d.sesiones || []).some(s => s.abierta));
+  const chips = (u.es_freelancer ? '<span class="pc-chip">Freelance</span>' : '')
+    + (u.bloqueado ? '<span class="pc-chip" style="color:#ef4444;border-color:#ef444455">Bloqueado</span>' : '');
+  const cargo = u.cargo ? esc(u.cargo) : '<span class="pc-cargo-vacio">Sin cargo asignado</span>';
+  const dias = (u.dias || []).map(diaPersonaHtml).join('');
+  const detalle = dias
+    ? '<details class="pc-dias"><summary><i class="fas fa-calendar-days"></i> Ver día por día (' + (u.dias || []).length + ')</summary>' + dias + '</details>'
+    : '<div class="pc-vacio">Sin conexiones registradas en el período.</div>';
+  return '<div class="pc">'
+    + '<div class="pc-top">'
+      + '<div class="pc-ico" style="background:' + ico.c + '1f;color:' + ico.c + '"><i class="fas ' + ico.i + '"></i></div>'
+      + '<div class="pc-id">'
+        + '<div class="pc-nombre">' + esc(u.nombre || 'Sin nombre') + (enCurso ? '<span class="pc-online" title="Conectado ahora"></span>' : '') + chips + '</div>'
+        + '<div class="pc-rol">' + (ROL_LABEL_GP[u.rol] || esc(u.rol || '')) + '</div>'
+        + '<div class="pc-cargo">' + cargo + '<button class="pc-cargo-edit" type="button" data-cargo-edit="' + u.usuario_id + '" title="Cambiar cargo"><i class="fas fa-pen"></i></button></div>'
+      + '</div>'
+    + '</div>'
+    + '<div class="pc-total"><span class="pc-total-v">' + fmtMinutos(u.minutos_total) + '</span>'
+    + '<span class="pc-total-t">en el período' + (u.tiene_anomala ? ' ⚠' : '') + '</span></div>'
+    + detalle
+  + '</div>';
+}
+
+function diaPersonaHtml(d) {
+  // Horarios reales registrados (hecho verificable), hasta 6 por día: un día
+  // con 80 sesiones encadenadas sería ilegible.
+  const ses = (d.sesiones || []).map(s => s.abierta
+    ? fmtHoraCaracas(s.entrada) + ' &rarr; <span style="color:var(--green)">en curso</span>'
+    : fmtHoraCaracas(s.entrada) + '&ndash;' + fmtHoraCaracas(s.salida));
+  const ocultas = (d.cant_sesiones || 0) - ses.length;
+  if (ocultas > 0) ses.push('+' + ocultas + ' más');
+  const warn = d.tiene_anomala ? ' <span class="pc-dia-warn" title="Hay sesiones que nadie cerró: el total del día es aproximado">⚠</span>' : '';
+  return '<div class="pc-dia">'
+    + '<div class="pc-dia-h"><span class="pc-dia-f">' + fmtDiaCorto(d.dia) + warn + '</span>'
+    + '<span class="pc-dia-m">' + fmtMinutos(d.minutos) + '</span></div>'
+    + '<div class="pc-dia-s">' + (ses.join(' · ') || '—') + '</div>'
+  + '</div>';
+}
+
+async function editarCargo(usuarioId) {
+  const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
+  if (!u) return;
+  const valor = prompt('Cargo de ' + u.nombre + '\n\nEj: Ejecutivo de Boletería · Gerente Administrativo', u.cargo || '');
+  if (valor === null) return;
+  const { error } = await sb.rpc('actualizar_cargo_usuario', { p_usuario_id: usuarioId, p_cargo: valor.trim() || null });
+  if (error) { console.error('actualizar_cargo_usuario:', error); errToast('No se pudo guardar el cargo'); return; }
+  u.cargo = valor.trim() || null;
+  renderPersonalCards();
+  okToast('Cargo actualizado');
+}
+
 async function loadAsistencia() {
   const [{ data: hoy, error: e1 }, { data: strikes, error: e2 }] = await Promise.all([
     sb.rpc('asistencia_admin_hoy'),
@@ -1111,11 +1211,9 @@ async function startApp() {
   if (booted) return; booted = true;
   aplicarOrdenSidebar();
   setupNav();
-  setupBuscarTarifario();
   setupTarifarioTabs();
   setupLightbox();
   setupChat();
-  setupExtractor();
   setupMensajes();
   setupRedes();
   setupPostventa();
@@ -1151,7 +1249,7 @@ async function startApp() {
   // No se llama loadInboxLeads() acá de nuevo -- activateSection('leads')
   // (arriba, para asesor) ya la dispara; llamarla dos veces corría 2 fetches
   // del mismo query en paralelo sin orden garantizado de resolución.
-  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion(); setupGestionPersonal();
+  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion(); setupGestionPersonal(); setupLeadsTabs(); setupBuscadorIATarifario();
   setupDestPeriodo(); loadDestPeriodo();
   setupVoucher(); actualizarBadgeVoucher();
   setupTareas(); setupFreelancers();
@@ -2544,34 +2642,6 @@ async function loadLeadsColaboraciones() {
     </tr>`).join('') || `<tr><td colspan="7" class="muted">Sin leads de colaboraciones todavía.</td></tr>`;
 }
 
-async function loadLeadsFallidos() {
-  const verResueltos = document.getElementById('leads-fallidos-ver-resueltos')?.checked;
-  let query = sb.from('leads_fallidos').select('*').order('created_at', { ascending: false });
-  if (!verResueltos) query = query.eq('resuelto', false);
-  const { data, error } = await query;
-  if (error) { console.error(error); errToast('No se pudo cargar Leads Fallidos'); return; }
-  document.getElementById('leads-fallidos-body').innerHTML = (data || []).map((r) => `
-    <tr>
-      <td data-label="Nombre">${r.nombre ? esc(r.nombre) : '—'}</td>
-      <td data-label="Teléfono" class="muted">${r.telefono ? esc(r.telefono) : '—'}</td>
-      <td data-label="Destino" class="muted">${r.destino ? esc(r.destino) : '—'}</td>
-      <td data-label="Canal" class="muted">${r.canal ? esc(r.canal) : '—'}</td>
-      <td data-label="Función" class="muted">${r.funcion ? esc(r.funcion) : '—'}</td>
-      <td data-label="Etapa" class="muted">${esc(r.etapa)}</td>
-      <td data-label="Error" class="muted">${r.error ? esc(r.error) : '—'}</td>
-      <td data-label="Fecha" class="muted">${r.created_at ? new Date(r.created_at).toLocaleString('es-VE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-      <td data-label="Estado">${r.resuelto ? '<span class="muted">Resuelto</span>' : r.revision_humana ? '<span style="color:#e0a030">⚠ Revisión manual</span>' : '<span class="muted">Auto-reintentando</span>'}</td>
-      <td>${r.resuelto ? '' : `<button class="btn-sm" onclick="marcarLeadFallidoResuelto(${r.id})">Marcar resuelto</button>`}</td>
-    </tr>`).join('') || `<tr><td colspan="10" class="muted">Sin leads fallidos pendientes.</td></tr>`;
-}
-
-async function marcarLeadFallidoResuelto(id) {
-  const { error } = await sb.from('leads_fallidos').update({ resuelto: true, resuelto_en: new Date().toISOString() }).eq('id', id);
-  if (error) { console.error(error); errToast('No se pudo marcar como resuelto'); return; }
-  loadLeadsFallidos();
-}
-document.getElementById('leads-fallidos-ver-resueltos')?.addEventListener('change', loadLeadsFallidos);
-
 /* ---------- Postulaciones (candidatos de "Trabaja con nosotros", solo admin) ---------- */
 const CALIDAD_PROSPECTO_LABEL = { buen_prospecto: 'Buen prospecto', no_calza: 'No calza' };
 const CALIDAD_PROSPECTO_COLOR = { buen_prospecto: '#22c55e', no_calza: '#ef4444' };
@@ -3411,7 +3481,7 @@ async function loadTarifario() {
   empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
   const q = (tarTab === 'promo' || tarTab === 'hotsale')
     ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden,es_principal,activo), productos(nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))').order('titulo')
-    : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad), producto_fotos(storage_path,orden,es_principal,activo)').eq('tipo', tarTab).order('nombre');
+    : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad,resumen_ia), producto_fotos(storage_path,orden,es_principal,activo)').eq('tipo', tarTab).order('nombre');
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
@@ -3793,12 +3863,18 @@ function tarCardThumbHtml(foto, esPromo) {
 }
 function tarCardHtml(x) {
   if (tarTab === 'promo' || tarTab === 'hotsale') {
+    // resumen_ia: descripción normalizada al mismo largo por IA (la misma que
+    // usa la web pública). Por diseño NUNCA contiene precios -- el precio real
+    // sale siempre de precio_texto, tal cual está cargado.
     return `<div class="tar-item tar-card" data-id="${x.id}">
       ${tarCardThumbHtml(fotosRotadas(x)[0], true)}
       <div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
-      ${x.precio_texto ? `<div class="tc-precio">${esc(x.precio_texto)}</div>` : ''}
-      ${x.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(x.vigencia_texto)}</div>` : ''}
-      ${tagsHtml(x.incluye_tags)}</div>`;
+      ${x.resumen_ia ? `<div class="tc-resumen-ia">${esc(x.resumen_ia)}</div>` : ''}
+      <div class="tc-pie">
+        ${x.precio_texto ? `<div class="tc-precio">${esc(x.precio_texto)}</div>` : ''}
+        ${x.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(x.vigencia_texto)}</div>` : ''}
+        ${tagsHtml(x.incluye_tags)}
+      </div></div>`;
   }
   const tarifa = (x.tarifas || [])[0];
   const promos = x.promociones || [];
@@ -3807,10 +3883,12 @@ function tarCardHtml(x) {
     ${tarCardThumbHtml(fotosDe(x)[0], false)}
     <div class="tc-top"><div><div class="tc-nombre">${esc(x.nombre)}</div>${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}</div></div>
     <ul class="tc-resumen">${resumenBullets(x.descripcion).map(s => `<li>${esc(s)}</li>`).join('')}</ul>
-    ${tarifa ? `<div class="tc-precio">${esc(tarifa.precio_texto)}</div>` : ''}
-    ${tarifa && tarifa.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(tarifa.vigencia_texto)}</div>` : ''}
-    ${promos.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promos.length} promoción${promos.length > 1 ? 'es' : ''} activa${promos.length > 1 ? 's' : ''}</div>` : ''}
-    ${tagsHtml(tagsHotel)}</div>`;
+    <div class="tc-pie">
+      ${tarifa ? `<div class="tc-precio">${esc(tarifa.precio_texto)}</div>` : ''}
+      ${tarifa && tarifa.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(tarifa.vigencia_texto)}</div>` : ''}
+      ${promos.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promos.length} promoción${promos.length > 1 ? 'es' : ''} activa${promos.length > 1 ? 's' : ''}</div>` : ''}
+      ${tagsHtml(tagsHotel)}
+    </div></div>`;
 }
 function tarFichaHtml(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
@@ -4495,9 +4573,8 @@ function addChatOpcionesCards(opciones) {
   log.appendChild(row);
   log.scrollTop = log.scrollHeight;
 }
-// Mismo patrón que mensajeErrorExtraccion (ver setupExtractor más abajo):
-// con status no-2xx supabase-js deja `data` en null y el body real queda en
-// `error.context`.
+// Cuando el status no es 2xx, supabase-js deja `data` en null y el body real
+// queda en `error.context`.
 async function mensajeErrorCotizador(data, error) {
   let code = data?.error;
   if (!code && error?.context?.json) {
@@ -4543,186 +4620,6 @@ function addChatBubble(who, texto, loading) {
   }
   log.scrollTop = log.scrollHeight;
   return el;
-}
-
-/* ---------- Extractor IA ---------- */
-// El extractor siempre opera sobre un lead YA existente (nunca crea uno
-// nuevo, eso ya lo hace ingest_lead vía ManyChat) — o llega preseleccionado
-// desde el botón de una ficha (irAExtractor) o el asesor lo busca acá mismo.
-// extractorLeadObjetivo guarda la FILA COMPLETA del lead (no solo id/nombre)
-// para poder precargar en la previsualización el valor actual de cualquier
-// campo que la IA no haya encontrado (ver renderExtractorPreview).
-const EXT_CAMPOS = ['nombre', 'telefono', 'canal', 'destino', 'destino_consulta', 'personas', 'fecha_estimada', 'monto_completo', 'monto_inicial'];
-const EXT_CAMPOS_NUMERICOS = ['monto_completo', 'monto_inicial'];
-const extIdCampo = campo => 'ext-e-' + campo.replace(/_/g, '-');
-let extractorLeadObjetivo = null, extractorDatos = null, extractorBusy = false, extractorBuscarSeq = 0, extractorBuscarTimer = null;
-function irAExtractor(lead) {
-  extractorLeadObjetivo = lead;
-  window.closeDrawer(true);
-  activateSection('extractor');
-  descartarExtraccion();
-  renderExtractorTarget();
-}
-function setupExtractor() {
-  const searchInput = document.getElementById('ext-search-input');
-  searchInput.addEventListener('input', () => {
-    clearTimeout(extractorBuscarTimer);
-    const q = searchInput.value.trim();
-    if (q.length < 2) { document.getElementById('ext-search-results').innerHTML = ''; return; }
-    extractorBuscarTimer = setTimeout(() => buscarLeadsExtractor(q), 300);
-  });
-  document.getElementById('ext-target-clear').onclick = () => { extractorLeadObjetivo = null; descartarExtraccion(); renderExtractorTarget(); };
-  document.getElementById('ext-chat-input').addEventListener('input', actualizarContadorExtractor);
-  attachVoiceInput(document.getElementById('ext-mic-btn'), document.getElementById('ext-chat-input'));
-  document.getElementById('ext-extraer-btn').onclick = extraerDatosChat;
-  document.getElementById('ext-aplicar-btn').onclick = aplicarDatosExtraidos;
-  document.getElementById('ext-descartar-btn').onclick = descartarExtraccion;
-  renderExtractorTarget();
-}
-// Deshabilita cambiar/buscar lead mientras hay una llamada en curso (extraer
-// o aplicar) — sin esto, el asesor puede cambiar de lead objetivo a mitad de
-// una extracción y terminar aplicando el chat de un cliente sobre otro lead.
-function actualizarControlesExtractor() {
-  document.getElementById('ext-target-clear').disabled = extractorBusy;
-  document.getElementById('ext-search-input').disabled = extractorBusy;
-}
-function renderExtractorTarget() {
-  const fixed = document.getElementById('ext-target-fixed'), search = document.getElementById('ext-target-search');
-  if (extractorLeadObjetivo) {
-    document.getElementById('ext-target-nombre').textContent = extractorLeadObjetivo.nombre;
-    fixed.classList.add('show');
-    search.classList.add('hide');
-  } else {
-    fixed.classList.remove('show');
-    search.classList.remove('hide');
-    document.getElementById('ext-search-input').value = '';
-    document.getElementById('ext-search-results').innerHTML = '';
-  }
-  document.getElementById('ext-chat-input').disabled = !extractorLeadObjetivo;
-  document.getElementById('ext-mic-btn').disabled = !extractorLeadObjetivo;
-  actualizarControlesExtractor();
-  actualizarBotonExtraer();
-}
-async function buscarLeadsExtractor(q) {
-  const seq = ++extractorBuscarSeq;
-  const qSafe = q.replace(/[,()%]/g, '');
-  const box = document.getElementById('ext-search-results');
-  if (qSafe.length < 2) { box.innerHTML = ''; return; } // tras sacar caracteres especiales, un patrón vacío/de 1 char matchearía cualquier lead
-  const { data, error } = await sb.from('leads').select('*').or(`nombre.ilike.%${qSafe}%,telefono.ilike.%${qSafe}%`).limit(8);
-  if (seq !== extractorBuscarSeq) return; // llegó una búsqueda más nueva mientras esperábamos esta
-  if (error) { box.innerHTML = ''; return; }
-  if (!data.length) { box.innerHTML = '<div class="ext-search-row"><span class="esr-n">Sin resultados</span></div>'; return; }
-  box.innerHTML = data.map(l => `<div class="ext-search-row" data-id="${l.id}"><span class="esr-n">${esc(l.nombre)}</span><span class="esr-m">${esc(l.telefono || 'Sin teléfono')}${l.destino ? ' · ' + esc(l.destino) : ''}</span></div>`).join('');
-  box.querySelectorAll('[data-id]').forEach((el, i) => el.onclick = () => { extractorLeadObjetivo = data[i]; renderExtractorTarget(); });
-}
-function actualizarContadorExtractor() {
-  const len = document.getElementById('ext-chat-input').value.length;
-  const counter = document.getElementById('ext-counter');
-  counter.textContent = `${fmt(len)} / 20.000`;
-  counter.classList.toggle('over', len > 20000);
-  actualizarBotonExtraer();
-}
-function actualizarBotonExtraer() {
-  const len = document.getElementById('ext-chat-input').value.trim().length;
-  document.getElementById('ext-extraer-btn').disabled = extractorBusy || !extractorLeadObjetivo || !len || len > 20000;
-}
-// El body de error de la Edge Function SOLO llega en data cuando la respuesta
-// es 2xx — con status no-2xx (400/401/502/503/504, que es como responde
-// SIEMPRE parse-chat-lead en sus casos de error) supabase-js deja `data` en
-// null y expone el body real en `error.context` (el Response crudo).
-async function mensajeErrorExtraccion(data, error) {
-  let code = data?.error;
-  if (!code && error?.context?.json) {
-    try { code = (await error.context.json())?.error; } catch { /* body no era JSON, se usa el mensaje genérico */ }
-  }
-  const MSG = {
-    timeout_ia: 'La IA tardó demasiado en responder, intenta de nuevo.',
-    error_ia: 'No se pudo conectar con la IA, intenta de nuevo en un momento.',
-    sin_respuesta: 'La IA no devolvió una respuesta, intenta de nuevo.',
-    json_invalido: 'La IA devolvió una respuesta inválida, intenta de nuevo.',
-    texto_muy_largo: 'El texto es muy largo (máximo 20.000 caracteres).',
-    sin_texto: 'Pegá el texto del chat antes de extraer.',
-    no_autenticado: 'Tu sesión expiró, volvé a iniciar sesión.',
-    no_configurado: 'El extractor no está disponible en este momento.',
-    body_invalido: 'Ocurrió un error inesperado, intenta de nuevo.',
-    metodo_no_permitido: 'Ocurrió un error inesperado, intenta de nuevo.',
-  };
-  return MSG[code] || 'No se pudo extraer los datos, intenta de nuevo.';
-}
-async function extraerDatosChat() {
-  const btn = document.getElementById('ext-extraer-btn'), err = document.getElementById('ext-input-err');
-  const chatText = document.getElementById('ext-chat-input').value.trim();
-  err.textContent = '';
-  if (!extractorLeadObjetivo || !chatText) return;
-  const leadIdAlPedir = extractorLeadObjetivo.id;
-  extractorBusy = true; actualizarControlesExtractor();
-  btn.disabled = true; btn.innerHTML = 'Extrayendo... <i class="fas fa-spinner fa-spin"></i>';
-  const { data, error } = await sb.functions.invoke('parse-chat-lead', { body: { chat_text: chatText } });
-  extractorBusy = false; actualizarControlesExtractor();
-  btn.disabled = false; btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Extraer datos';
-  // Con los controles de cambio de lead deshabilitados mientras extractorBusy
-  // esto no debería poder pasar, pero se valida igual antes de mostrar datos
-  // que quedaron pedidos para un lead que ya no es el objetivo actual.
-  if (!extractorLeadObjetivo || extractorLeadObjetivo.id !== leadIdAlPedir) {
-    err.textContent = 'El lead objetivo cambió mientras se procesaba — los datos extraídos se descartaron, intenta de nuevo.';
-    return;
-  }
-  if (error || !data?.ok) { err.textContent = await mensajeErrorExtraccion(data, error); return; }
-  extractorDatos = data.datos;
-  renderExtractorPreview();
-}
-// Precarga cada campo con lo que extrajo la IA, o si la IA no encontró ese
-// dato, con el valor ACTUAL del lead (nunca lo deja en blanco a menos que el
-// lead tampoco lo tuviera) — así lo que se ve acá es exactamente lo que va a
-// quedar guardado al aplicar, sin sorpresas (actualizar_lead conserva el
-// valor viejo en cualquier campo que llegue vacío, igual que en la ficha).
-function renderExtractorPreview() {
-  const d = extractorDatos, lead = extractorLeadObjetivo;
-  for (const campo of EXT_CAMPOS) {
-    document.getElementById(extIdCampo(campo)).value = (d[campo] ?? lead[campo]) ?? '';
-  }
-  document.getElementById('ext-aplicar-nombre').textContent = lead.nombre;
-  const box = document.getElementById('ext-preview-box');
-  box.style.display = 'block';
-  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-function leerCamposExtractor() {
-  const out = {};
-  for (const campo of EXT_CAMPOS) out[campo] = val(extIdCampo(campo)).trim();
-  return out;
-}
-function descartarExtraccion() {
-  extractorDatos = null;
-  document.getElementById('ext-preview-box').style.display = 'none';
-  document.getElementById('ext-chat-input').value = '';
-  document.getElementById('ext-input-err').textContent = '';
-  actualizarContadorExtractor();
-}
-// Sobrescribe SIEMPRE los 8 campos con lo que quedó en la previsualización
-// (editable por el asesor antes de este punto) — decisión confirmada: la
-// revisión previa ya es la red de seguridad, no hay merge campo por campo.
-async function aplicarDatosExtraidos() {
-  const btn = document.getElementById('ext-aplicar-btn'), err = document.getElementById('ext-err');
-  const campos = leerCamposExtractor();
-  if (!campos.nombre) { err.textContent = 'El nombre no puede quedar vacío'; return; }
-  const leadId = extractorLeadObjetivo.id;
-  const numericos = {};
-  for (const campo of EXT_CAMPOS_NUMERICOS) numericos[campo] = campos[campo] ? parseFloat(campos[campo]) : null;
-  err.textContent = ''; extractorBusy = true; actualizarControlesExtractor();
-  btn.disabled = true; btn.innerHTML = 'Aplicando... <i class="fas fa-spinner fa-spin"></i>';
-  const rpcParams = { p_lead_id: leadId };
-  for (const campo of EXT_CAMPOS) rpcParams['p_' + campo] = EXT_CAMPOS_NUMERICOS.includes(campo) ? numericos[campo] : campos[campo];
-  const { data, error } = await sb.rpc('actualizar_lead', rpcParams);
-  extractorBusy = false; actualizarControlesExtractor();
-  btn.disabled = false; btn.innerHTML = `<i class="fas fa-check"></i> Aplicar a <span id="ext-aplicar-nombre">${esc(extractorLeadObjetivo?.nombre ?? '')}</span>`;
-  if (error || !data?.ok) { err.textContent = 'No se pudo aplicar: ' + (error?.message || data?.error || ''); return; }
-  okToast('Lead actualizado con los datos extraídos');
-  const leadActualizado = { ...extractorLeadObjetivo, ...campos, ...numericos };
-  extractorLeadObjetivo = null;
-  descartarExtraccion();
-  renderExtractorTarget();
-  loadStats().then(() => renderAll()); loadTable(); loadDestPeriodo();
-  openDrawer(leadActualizado);
 }
 
 /* ---------- Mensajes (chat interno del staff) ---------- */
@@ -5353,7 +5250,20 @@ window.addEventListener('popstate', () => {
 /* ---------- Nav ---------- */
 const BN_CORE_SECS = ['hoy', 'leads', 'mensajes', 'tarifario'];
 let currentSec = null;
+// Secciones que se retiraron del menú (2026-07-27) y a dónde fue su contenido.
+// Sin esto, quien tenía guardada una de ellas como última sección abría el CRM
+// contra un id que ya no existe y reventaba en el getElementById de abajo.
+const SECCIONES_REUBICADAS = {
+  metricas: 'gestion-personal',
+  reasignaciones: 'gestion-personal',
+  'leads-colaboraciones': 'leads',
+  'leads-fallidos': 'gestion-personal',
+  'buscar-tarifario': 'tarifario',
+  extractor: 'leads',
+};
 function activateSection(sec, fromNav) {
+  sec = SECCIONES_REUBICADAS[sec] || sec;
+  if (!document.getElementById('sec-' + sec)) sec = 'hoy';
   if (currentSec === sec) return;
   if (!fromNav && currentSec !== null) navPush({ type: 'section', prevSec: currentSec });
   if (currentSec === 'leads' && sec !== 'leads') detenerPollLeads();
@@ -5372,11 +5282,7 @@ function activateSection(sec, fromNav) {
   document.getElementById('page-title').textContent = t[0];
   document.getElementById('page-sub').textContent = t[1];
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  if (sec === 'metricas') loadMetricas();
   if (sec === 'ranking') loadRanking();
-  if (sec === 'leads-colaboraciones') loadLeadsColaboraciones();
-  if (sec === 'leads-fallidos') loadLeadsFallidos();
-  if (sec === 'reasignaciones') loadReasignaciones();
   if (sec === 'facturacion') loadFacturacion();
   if (sec === 'mis-comisiones') loadMisComisiones();
   if (sec === 'gestion-personal') loadGestionPersonal();
@@ -5478,35 +5384,86 @@ function guardarUltimaSeccion(sec) {
   Promise.resolve(sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS })).catch(() => {});
 }
 
-/* ---------- Buscar Tarifario (full-text search de productos+promociones vía RPC buscar_tarifario) ---------- */
-let btDebounce = null;
-function setupBuscarTarifario() {
-  const input = document.getElementById('bt-input');
-  input?.addEventListener('input', () => {
-    clearTimeout(btDebounce);
-    btDebounce = setTimeout(() => ejecutarBusquedaTarifario(input.value.trim()), 350);
+/* ---------- Leads: sub-pestañas (Leads / Colaboraciones) ----------
+   Colaboraciones era una sección suelta del menú; ahora vive acá porque es el
+   mismo objeto (un lead) con otro origen. Solo admin la ve. */
+let leadsTab = 'pipeline';
+function setupLeadsTabs() {
+  document.querySelectorAll('#leads-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
+    leadsTab = btn.dataset.leadsTab;
+    document.querySelectorAll('#leads-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
+    document.querySelectorAll('.leads-tab-panel').forEach(p => p.style.display = p.dataset.leadsPanel === leadsTab ? '' : 'none');
+    if (leadsTab === 'colaboraciones') loadLeadsColaboraciones();
+  }));
+}
+
+/* ---------- Tarifario: buscador con IA ----------
+   Reemplaza la sección "Buscar Tarifario". El #tar-search de la barra sigue
+   siendo un filtro de texto sobre lo que ya está en pantalla; esto manda la
+   frase del asesor a la Edge Function buscar-tarifario-ia, que la traduce a
+   términos reales y corre el RPC buscar_tarifario contra toda la base.
+
+   La IA solo produce PALABRAS DE BÚSQUEDA: los resultados salen tal cual de la
+   base, así que no hay forma de que invente un precio. */
+let tarIABusy = false;
+function setupBuscadorIATarifario() {
+  const input = document.getElementById('tar-ia-input');
+  const btn = document.getElementById('tar-ia-btn');
+  if (!input || !btn) return;
+  btn.addEventListener('click', () => buscarTarifarioIA(input.value.trim()));
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') buscarTarifarioIA(input.value.trim()); });
+}
+
+async function buscarTarifarioIA(consulta) {
+  const estado = document.getElementById('tar-ia-estado');
+  const box = document.getElementById('tar-ia-resultados');
+  if (!estado || !box) return;
+  if (consulta.length < 2) { estado.textContent = 'Escribí qué estás buscando.'; box.innerHTML = ''; return; }
+  if (tarIABusy) return;
+  tarIABusy = true;
+  estado.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Buscando...';
+  box.innerHTML = '';
+  const { data, error } = await sb.functions.invoke('buscar-tarifario-ia', { body: { consulta } });
+  tarIABusy = false;
+  if (error || !data?.ok) {
+    console.error('buscar-tarifario-ia:', error || data);
+    estado.textContent = 'No se pudo buscar en este momento. Probá de nuevo.';
+    return;
+  }
+  const res = data.resultados || [];
+  if (!res.length) {
+    estado.textContent = data.interpretacion
+      ? 'Entendí: ' + data.interpretacion + ' — pero no hay nada cargado que coincida.'
+      : 'Sin resultados. Probá con otras palabras.';
+    return;
+  }
+  estado.innerHTML = (data.interpretacion ? '<b>Entendí:</b> ' + esc(data.interpretacion) + ' · ' : '')
+    + res.length + (res.length === 1 ? ' resultado' : ' resultados')
+    + (data.ia_disponible ? '' : ' (búsqueda literal: la IA no respondió)');
+  box.innerHTML = res.map(r => {
+    const ico = r.tipo === 'promocion' ? 'fa-tag' : 'fa-hotel';
+    const meta = [r.destino, r.extracto].filter(Boolean).join(' · ');
+    return '<div class="tia-row" data-tipo="' + esc(r.tipo) + '" data-id="' + r.id + '">'
+      + '<i class="fas ' + ico + '"></i>'
+      + '<div><div class="tia-n">' + esc(r.titulo || 'Sin nombre') + '</div>'
+      + '<div class="tia-m">' + esc(meta) + '</div></div>'
+    + '</div>';
+  }).join('');
+  box.querySelectorAll('.tia-row').forEach(row => {
+    row.onclick = () => abrirDesdeBusquedaIA(row.dataset.tipo, Number(row.dataset.id));
   });
 }
-async function ejecutarBusquedaTarifario(query) {
-  const empty = document.getElementById('bt-empty'), sinRes = document.getElementById('bt-sin-resultados'), grid = document.getElementById('bt-resultados');
-  if (!query || query.length < 2) {
-    empty.style.display = ''; sinRes.style.display = 'none'; grid.innerHTML = '';
-    return;
-  }
-  const { data, error } = await sb.rpc('buscar_tarifario', { p_query: query });
-  if (error) { console.error('buscar_tarifario:', error); return; }
-  empty.style.display = 'none';
-  if (!data || !data.length) {
-    sinRes.style.display = ''; grid.innerHTML = '';
-    return;
-  }
-  sinRes.style.display = 'none';
-  grid.innerHTML = data.map(r => `<div class="entity-card">
-    <div class="ec-top"><div class="ec-ava" style="background:#6c5ce722;color:#6c5ce7"><i class="fas ${r.tipo === 'promocion' ? 'fa-tags' : 'fa-hotel'}"></i></div><div class="ec-nombre">${esc(r.titulo)}</div></div>
-    <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(r.destino) || '—'}</div>
-    ${r.extracto ? `<div class="ec-row"><i class="fas fa-align-left"></i> ${esc(r.extracto)}</div>` : ''}
-    <div class="ec-foot"><span class="chip">${r.tipo === 'promocion' ? 'Promoción' : 'Producto'}</span></div>
-  </div>`).join('');
+
+// El buscador devuelve ids de productos/promociones. Si el item ya está en la
+// pestaña abierta se usa esa fila (viene con fotos y tarifas embebidas); si no,
+// se trae de la base para poder abrir la ficha igual.
+async function abrirDesdeBusquedaIA(tipo, id) {
+  const enCache = (tarCache[tarTab] || []).find(x => Number(x.id) === id);
+  if (enCache) { openProductoDrawer(enCache); return; }
+  const tabla = tipo === 'promocion' ? 'promociones' : 'productos';
+  const { data, error } = await sb.from(tabla).select('*').eq('id', id).maybeSingle();
+  if (error || !data) { errToast('No se pudo abrir ese ítem'); return; }
+  openProductoDrawer(data);
 }
 
 /* ---------- Hoja inferior genérica (más opciones del nav, filtros en móvil) — un solo backdrop compartido, una hoja abierta a la vez ---------- */
@@ -5521,7 +5478,6 @@ function openSheet(id) {
 function closeSheet(id, fromNav) {
   // Cerrar el menú de capítulos por cualquier vía (X, tocar afuera, elegir
   // un capítulo) cuenta como "ya vio el tutorial" -- no solo completarlo.
-  if (id === 'tutorial-sheet') marcarTutorialVisto();
   document.getElementById(id)?.classList.remove('open');
   document.getElementById('sheet-bg')?.classList.remove('open');
   if (sheetAbierta === id) sheetAbierta = null;
@@ -5550,10 +5506,6 @@ function mockupBandejaAsesor() {
     </div>
   </div>`;
 }
-function mockupExtractorAsesor() {
-  return `<div style="font-size:12px;color:var(--muted);margin-bottom:6px"><i class="fas fa-wand-magic-sparkles" style="color:var(--accent)"></i> Extractor IA</div>
-    <textarea rows="3" disabled style="width:100%;resize:none;background:var(--bg);border:1px solid var(--line2);border-radius:8px;color:var(--muted);font-size:12px;padding:8px;font-family:inherit">Hola, quiero viajar a Margarita con mi esposa del 10 al 15...</textarea>`;
-}
 function mockupAsistenciaAsesor() {
   return `<div class="jornada-widget" style="margin:0">
     <span class="jornada-dot on"></span>
@@ -5575,12 +5527,8 @@ const TOUR_CAPITULOS = [
   { id: 'mensajes', titulo: 'Mensajes', icono: 'fa-comment-dots', roles: ['admin', 'asesor', 'marketing'], seccion: 'mensajes', pasos: [
     { titulo: 'Chat interno del equipo', texto: 'Esto no es WhatsApp del cliente -- es un chat interno para hablar con tus compañeros y con administración.', selector: '#sec-mensajes' },
   ]},
-  { id: 'extractor', titulo: 'Extractor IA', icono: 'fa-wand-magic-sparkles', roles: ['admin', 'asesor'], seccion: 'extractor', pasos: [
-    { titulo: 'Copia y pega la conversación', texto: 'Pega acá la conversación de WhatsApp con el cliente y la IA saca automáticamente destino, fechas, cantidad de personas y montos.', selector: '#ext-chat-input' },
-    { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Los asesores usan esto todo el tiempo para no tener que tipear los datos del cliente a mano en cada cotización.', mockup: mockupExtractorAsesor },
-  ]},
-  { id: 'metricas', titulo: 'Métricas', icono: 'fa-chart-simple', roles: ['admin'], seccion: 'metricas', pasos: [
-    { titulo: 'Números del negocio', texto: 'Conversión, tiempos de respuesta y ventas, con filtro de fecha. Solo lo ve administración.', selector: '#sec-metricas' },
+  { id: 'metricas', titulo: 'Métricas', icono: 'fa-chart-simple', roles: ['admin'], seccion: 'gestion-personal', pasos: [
+    { titulo: 'Números del negocio', texto: 'Conversión, tiempos de respuesta y ventas, con filtro de fecha. Está dentro de Gestión de Personal, como una pestaña más.', selector: '#gp-tabs' },
   ]},
   { id: 'ranking', titulo: 'Ranking', icono: 'fa-ranking-star', roles: ['admin'], seccion: 'ranking', pasos: [
     { titulo: 'Ranking de asesores', texto: 'Compara el desempeño de cada asesor: cuántos leads atendió, cuántos cerró, tiempo de respuesta.', selector: '#sec-ranking' },
@@ -5590,6 +5538,7 @@ const TOUR_CAPITULOS = [
   ]},
   { id: 'tarifario', titulo: 'Tarifario', icono: 'fa-book-open', roles: ['admin', 'asesor', 'marketing'], seccion: 'tarifario', pasos: [
     { titulo: 'Catálogo de hoteles y paquetes', texto: 'Todos los precios y opciones que le puedes ofrecer a un cliente, con fotos.', selector: '#sec-tarifario' },
+    { titulo: 'Buscador con IA', texto: 'Escribí lo que busca el cliente en tus propias palabras ("playa para una pareja en diciembre") y la IA lo traduce a una búsqueda sobre todo el tarifario. Los precios que ves salen siempre de la ficha real, la IA nunca los inventa.', selector: '#tar-ia-input' },
   ]},
   { id: 'cotizador', titulo: 'Cotizador IA', icono: 'fa-comments', roles: ['admin', 'asesor', 'marketing'], seccion: 'cotizador', pasos: [
     { titulo: 'Arma una cotización hablando', texto: 'Cuéntale a la IA qué busca el cliente (destino, presupuesto, fechas) y te arma opciones del Tarifario al toque.', selector: '#chat-input' },
@@ -5600,11 +5549,11 @@ const TOUR_CAPITULOS = [
   { id: 'redes', titulo: 'Redes', icono: 'fa-share-nodes', roles: ['admin', 'marketing'], seccion: 'redes', pasos: [
     { titulo: 'Instagram y Meta', texto: 'Métricas de las redes sociales del negocio -- alcance, seguidores, publicaciones que mejor funcionan.', selector: '#sec-redes' },
   ]},
-  { id: 'reasignaciones', titulo: 'Reasignaciones', icono: 'fa-shuffle', roles: ['admin'], seccion: 'reasignaciones', pasos: [
-    { titulo: 'Historial de reasignaciones', texto: 'Cada vez que un lead pasa de un asesor a otro por no responder a tiempo, queda acá con el motivo.', selector: '#sec-reasignaciones' },
+  { id: 'reasignaciones', titulo: 'Reasignaciones', icono: 'fa-shuffle', roles: ['admin'], seccion: 'gestion-personal', pasos: [
+    { titulo: 'Historial de reasignaciones', texto: 'Cada vez que un lead pasa de un asesor a otro por no responder a tiempo, queda acá con el motivo. Es una pestaña de Gestión de Personal.', selector: '#gp-tabs' },
   ]},
   { id: 'gestion-personal', titulo: 'Gestión de Personal', icono: 'fa-people-group', roles: ['admin'], seccion: 'gestion-personal', pasos: [
-    { titulo: 'Todo el equipo en un lugar', texto: 'Personal (tiempo de cada quien en el CRM), Asistencia, Asesores, Freelancers y Postulaciones -- como pestañas de una sola sección.', selector: '#sec-gestion-personal' },
+    { titulo: 'Todo el equipo en un lugar', texto: 'Personal (tarjeta de cada quien con su cargo y sus horarios de conexión), Asistencia, Asesores, Freelancers, Postulaciones, Reasignaciones y Métricas -- todo como pestañas de una sola sección.', selector: '#sec-gestion-personal' },
     { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Cada asesor marca su propia jornada con este botón, siempre visible arriba del menú -- no ve esta sección, es solo de Admin.', mockup: mockupAsistenciaAsesor },
   ]},
   { id: 'informe-diario', titulo: 'Informe Diario', icono: 'fa-file-lines', roles: ['admin'], seccion: 'informe-diario',
@@ -5625,9 +5574,6 @@ const MANUAL_EXTRA = [
   { id: 'hoy', titulo: 'Hoy', icono: 'fa-sun', roles: ['admin', 'asesor', 'marketing', 'boleteria'], pasos: [
     { titulo: 'Tu resumen del día', texto: 'La pantalla con la que arrancás: leads nuevos, pendientes por atender y tu jornada, todo en un vistazo.' },
   ]},
-  { id: 'buscar-tarifario', titulo: 'Buscar Tarifario', icono: 'fa-magnifying-glass', roles: ['admin', 'asesor'], pasos: [
-    { titulo: 'Encontrá una promo al toque', texto: 'Buscador de texto libre sobre todo el Tarifario -- escribí el hotel, destino o tipo de promo y te muestra las coincidencias, sin tener que navegar pestaña por pestaña.' },
-  ]},
   { id: 'postventa', titulo: 'Postventa', icono: 'fa-handshake-angle', roles: ['admin', 'asesor'], pasos: [
     { titulo: 'Después de la venta', texto: 'Cobros pendientes, reservas confirmadas, documentos del cliente y seguimiento del viaje una vez que ya pagó -- para no perder el hilo después del cierre.' },
   ]},
@@ -5639,7 +5585,7 @@ const MANUAL_EXTRA = [
     { titulo: 'Lo que ganaste', texto: 'Tus comisiones sobre las ventas ya pagadas, con filtro por mes.' },
   ]},
   { id: 'gestion-personal', titulo: 'Gestión de Personal', icono: 'fa-people-group', roles: ['admin'], pasos: [
-    { titulo: 'Personal', texto: 'Cuánto tiempo lleva cada quien conectado al CRM en total, con su nombre y rol -- de un vistazo.' },
+    { titulo: 'Personal', texto: 'Una tarjeta por persona, con su icono según el cargo, el tiempo que tuvo el CRM abierto en el período y el detalle día por día: a qué hora entró y a qué hora salió.' },
     { titulo: 'Asistencia', texto: 'Quién marcó entrada/salida cada día, strikes del mes e historial completo.' },
     { titulo: 'Asesores', texto: 'Alta/baja de tu equipo y el peso de cada uno en el sorteo automático de leads nuevos.' },
     { titulo: 'Freelancers', texto: 'Jornadas, tareas asignadas y cumplimiento de cada asesor freelance, aparte del equipo presencial.' },
@@ -5651,11 +5597,8 @@ const MANUAL_EXTRA = [
   { id: 'voucher', titulo: 'Voucher', icono: 'fa-file-invoice', roles: ['admin', 'asesor'], pasos: [
     { titulo: 'Genera el voucher', texto: 'Arma el voucher de hospedaje en PDF para el cliente, con los datos de la reserva ya cargados.' },
   ]},
-  { id: 'leads-colaboraciones', titulo: 'Leads Colaboraciones', icono: 'fa-handshake', roles: ['admin'], pasos: [
-    { titulo: 'Campañas pagas con colaboradores', texto: 'Estos leads van directo al WhatsApp del colaborador (no a un asesor) -- acá queda el registro de esa campaña.' },
-  ]},
-  { id: 'leads-fallidos', titulo: 'Leads Fallidos', icono: 'fa-triangle-exclamation', roles: ['admin'], pasos: [
-    { titulo: 'Red de seguridad', texto: 'Si un lead no se pudo registrar automático (falla de red, de ManyChat, etc.), cae acá para que no se pierda -- el sistema reintenta solo y marca si necesitás revisarlo a mano.' },
+  { id: 'leads-colaboraciones', titulo: 'Colaboraciones (dentro de Leads)', icono: 'fa-handshake', roles: ['admin'], pasos: [
+    { titulo: 'Campañas pagas con colaboradores', texto: 'Es una pestaña dentro de Leads. Estos leads van directo al WhatsApp del colaborador (no a un asesor) -- acá queda el registro de esa campaña.' },
   ]},
   { id: 'perfil', titulo: 'Mi Perfil', icono: 'fa-user-gear', roles: ['admin', 'asesor', 'marketing', 'boleteria'], pasos: [
     { titulo: 'Personalizá tu CRM', texto: 'Foto de perfil, tema claro/oscuro, tamaño de letra y recordatorios de asistencia -- todo desde tu avatar arriba a la derecha.' },
@@ -5666,7 +5609,9 @@ const MANUAL_IMG = {
   postulaciones: 'postulaciones.png', redes: 'redes.png', asistencia: 'asistencia.png', reasignaciones: 'reasignaciones.png',
 };
 function temasManualVisibles() {
-  const deTour = capitulosVisiblesTour().map(c => ({ id: c.id, titulo: c.titulo, icono: c.icono, pasos: pasosVisiblesCapitulo(c) }));
+  // tour:true marca los temas que además se pueden REPRODUCIR sobre la pantalla
+  // real (botón "Ver en pantalla"): son los que vienen de TOUR_CAPITULOS.
+  const deTour = capitulosVisiblesTour().map(c => ({ id: c.id, titulo: c.titulo, icono: c.icono, pasos: pasosVisiblesCapitulo(c), tour: true }));
   const extra = MANUAL_EXTRA.filter(t => t.roles.includes(ROL));
   const vistos = new Set(deTour.map(t => t.id));
   return [...deTour, ...extra.filter(t => !vistos.has(t.id))];
@@ -5676,7 +5621,7 @@ function renderManual() {
   document.getElementById('manual-list').innerHTML = temas.map(t => `
     <details class="manual-tema" id="manual-${t.id}">
       <summary><i class="fas ${t.icono}"></i> <span>${esc(t.titulo)}</span><i class="fas fa-chevron-down manual-chev"></i></summary>
-      <div class="manual-body">${MANUAL_IMG[t.id] ? `<img class="manual-shot" src="img/manual/${MANUAL_IMG[t.id]}" alt="Captura de ${esc(t.titulo)}" loading="lazy">` : ''}${t.pasos.map(p => `
+      <div class="manual-body">${t.tour ? `<button class="btn-sm manual-ver-btn" type="button" data-tour="${t.id}"><i class="fas fa-play"></i> Ver en pantalla</button>` : ''}${MANUAL_IMG[t.id] ? `<img class="manual-shot" src="img/manual/${MANUAL_IMG[t.id]}" alt="Captura de ${esc(t.titulo)}" loading="lazy">` : ''}${t.pasos.map(p => `
         <div class="manual-paso">
           <div class="mp-t">${esc(p.titulo)}</div>
           <div class="mp-x">${esc(typeof p.texto === 'function' ? p.texto() : p.texto)}</div>
@@ -5684,6 +5629,11 @@ function renderManual() {
       </div>
     </details>`).join('');
   document.getElementById('manual-count').textContent = `${temas.length} secciones`;
+  // El recorrido guiado dejó de tener menú propio: se arranca desde acá.
+  document.querySelectorAll('#manual-list .manual-ver-btn').forEach(btn => {
+    btn.onclick = e => { e.preventDefault(); iniciarCapituloTour(btn.dataset.tour); };
+  });
+  marcarTutorialVisto();
 }
 function setupManual() {
   document.getElementById('manual-expand-all')?.addEventListener('click', () => document.querySelectorAll('#manual-list details').forEach(d => d.open = true));
@@ -5697,6 +5647,11 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-07-27', emoji: '🧭', titulo: 'Menú más corto: cada cosa donde corresponde', texto: 'Colaboraciones ahora es una pestaña dentro de Leads. Reasignaciones y Métricas pasaron a Gestión de Personal. Buscar Tarifario se integró al Tarifario. El Recorrido guiado y el Manual son ahora lo mismo: desde el Manual tocás "Ver en pantalla" y el recorrido arranca solo.', roles: ROLES_TODOS },
+  { fecha: '2026-07-27', emoji: '🔎', titulo: 'Buscador con IA en el Tarifario', texto: 'Escribí lo que busca el cliente en tus palabras ("algo de playa para una pareja en diciembre") y la IA lo traduce a una búsqueda sobre todo el tarifario. Los precios salen siempre de la ficha real: la IA nunca los inventa ni los reescribe.', roles: ['admin', 'asesor', 'marketing'] },
+  { fecha: '2026-07-27', emoji: '🪪', titulo: 'Personal ahora son tarjetas', texto: 'Una tarjeta por persona, con icono según su cargo, el tiempo que tuvo el CRM abierto en el período y el detalle día por día con las horas de conexión y desconexión. El cargo se edita desde la misma tarjeta.', roles: ['admin'] },
+  { fecha: '2026-07-27', emoji: '🔕', titulo: 'Se acabaron los avisos de Leads Fallidos', texto: 'Antes llegaba un mensaje a Telegram por cada lead que fallaba, aunque el sistema lo recuperara solo minutos después. Ahora un proceso automático los recupera cada 20 minutos y solo te avisa si uno agotó los reintentos y de verdad necesita tu mano.', roles: ['admin'] },
+  { fecha: '2026-07-27', emoji: '🖼️', titulo: 'Tarjetas del Tarifario parejas', texto: 'Las promociones muestran una descripción corta normalizada (la misma que se ve en la web) y todas las tarjetas quedan del mismo alto, con el precio siempre a la misma altura.', roles: ['admin', 'asesor', 'marketing'] },
   { fecha: '2026-07-26', emoji: '📖', titulo: 'Manual del CRM y esta sección de Actualizaciones', texto: 'Guía completa por secciones (con capturas) accesible desde un botón arriba de toda pantalla, y este historial de novedades.', roles: ROLES_TODOS },
   { fecha: '2026-07-25', emoji: '🧑‍💼', titulo: 'Sección Postulaciones', texto: 'Los candidatos que aplican desde "Trabaja con nosotros" (web o Instagram/Facebook) quedan acá, con CV, estado de llamada y calificación de prospecto.', roles: ['admin'] },
   { fecha: '2026-07-25', emoji: '🏷️', titulo: 'Tarjetas de lead y Tarifario reorganizados', texto: 'Botón de "Enviar a facturación" directo en la tarjeta, checkboxes con más estilo, recarga manual de Leads, y Promociones agrupadas por hotel + nueva sección Hot Sales.', roles: ['admin', 'asesor', 'marketing'] },
@@ -5791,20 +5746,13 @@ function elVisible(selector) { return [...document.querySelectorAll(selector)].f
 
 let TOUR_CAP_ACTUAL = null, TOUR_PASO_IDX = 0;
 
-function abrirMenuTutorial() {
-  const lista = capitulosVisiblesTour();
-  document.getElementById('tutorial-chap-list').innerHTML = lista.map(c => `
-    <a class="sheet-item tour-chap-item" data-cap="${c.id}">
-      <i class="fas ${c.icono}"></i>
-      <span class="si-t">${esc(c.titulo)}<span class="si-sub">${pasosVisiblesCapitulo(c).length} paso${pasosVisiblesCapitulo(c).length === 1 ? '' : 's'}</span></span>
-    </a>`).join('');
-  document.querySelectorAll('#tutorial-chap-list .tour-chap-item').forEach(el => { el.onclick = () => iniciarCapituloTour(el.dataset.cap); });
-  openSheet('tutorial-sheet');
-}
+// El menú de capítulos del tour desapareció: ahora ES el Manual (2026-07-27).
+// El overlay + renderPasoTour + posicionarSpotlight se conservan tal cual --
+// son el motor que reproduce el recorrido sobre la pantalla real; lo único que
+// cambió es desde dónde se arranca.
 function iniciarCapituloTour(capId) {
   const cap = TOUR_CAPITULOS.find(c => c.id === capId);
   if (!cap) return;
-  closeSheet('tutorial-sheet', true);
   TOUR_CAP_ACTUAL = cap;
   TOUR_PASO_IDX = 0;
   document.getElementById('tour-overlay').classList.add('open');
@@ -5821,7 +5769,7 @@ function volverAlMenuTutorial(fromNav) {
   if (!fromNav) navConsume();
   TOUR_CAP_ACTUAL = null;
   marcarTutorialVisto();
-  abrirMenuTutorial();
+  activateSection('manual');
 }
 function marcarTutorialVisto() {
   if (MI_PREFERENCIAS.tutorial_visto) return;
@@ -5862,8 +5810,6 @@ function posicionarSpotlight(paso) {
   if (TOUR_CAP_ACTUAL.seccion && currentSec !== TOUR_CAP_ACTUAL.seccion) { activateSection(TOUR_CAP_ACTUAL.seccion, true); setTimeout(posicionar, 80); } else posicionar();
 }
 function setupTutorial() {
-  document.getElementById('nav-tutorial')?.addEventListener('click', () => abrirMenuTutorial());
-  document.getElementById('sheet-item-tutorial')?.addEventListener('click', () => { closeSheet('more-sheet', true); abrirMenuTutorial(); });
   document.getElementById('sheet-item-logout')?.addEventListener('click', () => cerrarSesion());
   document.getElementById('tb-next').addEventListener('click', siguientePasoTour);
   document.getElementById('tb-back').addEventListener('click', pasoAnteriorTour);
