@@ -2020,8 +2020,14 @@ async function loadTable() {
   }).join('');
   [...document.querySelectorAll('#tbody tr')].forEach((tr, i) => tr.addEventListener('click', () => openDrawer(data[i])));
   document.getElementById('leads-cards').innerHTML = data.map(leadCardHtml).join('');
+  // Caché de la página para resolver el lead al soltarlo en una pestaña
+  // (arrastrar-y-soltar). Se rearma en cada render.
+  LEADS_PAGINA = {};
+  data.forEach(l => { LEADS_PAGINA[l.id] = l; });
+  const dndDesktop = window.matchMedia('(min-width:761px)').matches;
   [...document.querySelectorAll('#leads-cards .entity-card')].forEach((el, i) => {
     el.addEventListener('click', () => openDrawer(data[i]));
+    if (dndDesktop && (ROL === 'asesor' || ROL === 'admin')) wireLeadDrag(el, data[i].id);
     el.querySelectorAll('.estado-arrow').forEach(btn => btn.addEventListener('click', e => {
       e.stopPropagation();
       moverEstadoLead(data[i], Number(btn.dataset.dir));
@@ -2039,6 +2045,49 @@ async function loadTable() {
   document.querySelectorAll('.solo-admin-borrar').forEach(el => el.style.display = ROL === 'admin' ? '' : 'none');
   applyLeadsView();
   renderPager(Math.max(Math.ceil(totalFiltered / PER), 1));
+}
+/* ---------- Arrastrar un lead a una pestaña (solo escritorio) ----------
+   Soltar una tarjeta sobre "Boletería" o "En facturación" abre el mismo
+   formulario precargado que el botón de cada acción -- no crea nada solo,
+   porque falta la ruta/datos de venta. En móvil no se activa (el arrastre choca
+   con el scroll); ahí siguen los botones. */
+let LEADS_PAGINA = {};
+function wireLeadDrag(el, leadId) {
+  el.draggable = true;
+  el.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/lead-id', String(leadId));
+    e.dataTransfer.effectAllowed = 'move';
+    el.classList.add('dragging');
+    document.body.classList.add('arrastrando-lead'); // resalta las pestañas-destino
+  });
+  el.addEventListener('dragend', () => {
+    el.classList.remove('dragging');
+    document.body.classList.remove('arrastrando-lead');
+  });
+}
+// data-drop = qué acción dispara cada pestaña al recibir una tarjeta.
+const LEADS_DROP = {
+  boleteria:   id => abrirSolicitudBoleteria(LEADS_PAGINA[id]),
+  facturacion: id => abrirEnviarFacturacionSheet(LEADS_PAGINA[id]),
+};
+function setupLeadsDropTargets() {
+  document.querySelectorAll('#leads-tabs .seg[data-leads-tab]').forEach(tab => {
+    const accion = LEADS_DROP[tab.dataset.leadsTab];
+    if (!accion) return; // solo Boletería y En facturación son destinos
+    tab.addEventListener('dragover', e => {
+      if (!e.dataTransfer.types.includes('text/lead-id')) return;
+      e.preventDefault();               // habilita el drop
+      tab.classList.add('drop-ok');
+    });
+    tab.addEventListener('dragleave', () => tab.classList.remove('drop-ok'));
+    tab.addEventListener('drop', e => {
+      e.preventDefault();
+      tab.classList.remove('drop-ok');
+      const id = Number(e.dataTransfer.getData('text/lead-id'));
+      const lead = LEADS_PAGINA[id];
+      if (lead) accion(id);
+    });
+  });
 }
 function wireLeadChecks() {
   document.querySelectorAll('.lead-check').forEach(cb => {
@@ -6067,6 +6116,7 @@ function setupLeadsTabs() {
   loadLeadsEnFacturacion(); // el contador de la pestaña tiene que estar antes de que la abran
   setupBoleteria();
   loadColaBoleteria();
+  setupLeadsDropTargets();
 }
 
 /* ---------- Cola de boletería (sub-pestaña de Leads) ----------

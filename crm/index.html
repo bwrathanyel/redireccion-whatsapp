@@ -620,6 +620,13 @@ input.ei[type=date]{color-scheme:dark}
 .bol-pie{display:flex;justify-content:space-between;gap:8px;margin-top:11px;padding-top:9px;border-top:1px solid var(--line);font-size:11px;color:var(--muted2)}
 .bol-acc{display:flex;gap:8px;margin-top:10px}
 .bol-acc .dbtn{flex:1;padding:8px}
+/* Arrastrar un lead a una pestaña (escritorio) */
+.entity-card.dragging{opacity:.5}
+/* Mientras se arrastra, las pestañas-destino se marcan como zona válida */
+body.arrastrando-lead #leads-tabs .seg[data-leads-tab="boleteria"],
+body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
+  outline:2px dashed rgba(255,145,0,.6);outline-offset:2px}
+#leads-tabs .seg.drop-ok{background:var(--accent);color:#0a0a0a;outline-style:solid}
 .venta-box.show{display:block;animation:fadeSlide .25s ease}
 @keyframes fadeSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .edit-err{color:#ff6b6b;font-size:12px;min-height:14px;margin:8px 0 2px}
