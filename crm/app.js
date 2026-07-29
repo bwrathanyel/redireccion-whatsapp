@@ -1993,13 +1993,19 @@ function initDateRangePicker(prefix) {
 function fill(id, arr) { const s = document.getElementById(id); if (!s) return; [...s.querySelectorAll('option:not([value=""])')].forEach(o => o.remove()); arr.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = niceEstado(v); s.appendChild(o); }); }
 
 /* ---------- Selector de vista estándar (fichas / tarjetas / lista) ---------- */
-function initViewSwitcher(containerId, key, defaultView, onChange) {
+const VISTAS_BTN = {
+  fichas: ['fa-id-card', 'Vista de fichas'],
+  tarjetas: ['fa-table-cells-large', 'Vista de tarjetas'],
+  lista: ['fa-list', 'Vista de lista'],
+};
+// `vistas` permite que cada sección ofrezca solo las que tienen sentido para
+// ella (Postulaciones no tiene vista de fichas, por ejemplo).
+function initViewSwitcher(containerId, key, defaultView, onChange, vistas = ['fichas', 'tarjetas', 'lista']) {
   const bar = document.getElementById(containerId);
-  const saved = localStorage.getItem('view_' + key) || defaultView;
+  const guardada = localStorage.getItem('view_' + key);
+  const saved = vistas.includes(guardada) ? guardada : defaultView;
   if (!bar) return saved;
-  bar.innerHTML = `<button class="vs-btn" data-v="fichas" title="Vista de fichas"><i class="fas fa-id-card"></i></button>
-    <button class="vs-btn" data-v="tarjetas" title="Vista de tarjetas"><i class="fas fa-table-cells-large"></i></button>
-    <button class="vs-btn" data-v="lista" title="Vista de lista"><i class="fas fa-list"></i></button>`;
+  bar.innerHTML = vistas.map(v => `<button class="vs-btn" data-v="${v}" title="${VISTAS_BTN[v][1]}"><i class="fas ${VISTAS_BTN[v][0]}"></i></button>`).join('');
   const setActive = v => bar.querySelectorAll('.vs-btn').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   setActive(saved);
   bar.querySelectorAll('.vs-btn').forEach(b => b.onclick = () => {
@@ -3142,13 +3148,56 @@ async function loadLeadsColaboraciones() {
 /* ---------- Postulaciones (candidatos de "Trabaja con nosotros", solo admin) ---------- */
 const CALIDAD_PROSPECTO_LABEL = { buen_prospecto: 'Buen prospecto', no_calza: 'No calza' };
 const CALIDAD_PROSPECTO_COLOR = { buen_prospecto: '#22c55e', no_calza: '#ef4444' };
-let postCache = [], postDrawerActual = null, postSearchDeb;
+let postCache = [], postDrawerActual = null, postSearchDeb, postView = 'lista';
 const SELECTED_POST = new Set();
+// Las fotos viven en un bucket privado (son dato personal), así que hay que
+// firmar cada URL. Se firman TODAS de una en vez de una por tarjeta, y se
+// cachean: 30 tarjetas serían 30 round-trips.
+const postFotoUrls = new Map();
+async function firmarFotosPostulaciones(filas) {
+  const faltan = [...new Set(filas.map(p => p.foto_storage_path).filter(x => x && !postFotoUrls.has(x)))];
+  if (!faltan.length) return;
+  const { data } = await sb.storage.from('postulaciones-cv').createSignedUrls(faltan, 3600);
+  (data || []).forEach(d => { if (d.signedUrl) postFotoUrls.set(d.path, d.signedUrl); });
+}
+const postFotoHtml = (p, clase) => {
+  const url = p.foto_storage_path && postFotoUrls.get(p.foto_storage_path);
+  return url
+    ? `<img class="${clase}" src="${esc(url)}" alt="">`
+    : `<div class="${clase} post-foto-vacia"><i class="fas fa-user"></i></div>`;
+};
+const GENERO_LABEL = { femenino: 'Femenino', masculino: 'Masculino', otro: 'Otro' };
 async function loadPostulaciones() {
   const { data, error } = await sb.from('postulaciones_empleo').select('*').order('created_at', { ascending: false });
   if (error) { console.error(error); errToast('No se pudo cargar Postulaciones'); return; }
   postCache = data || [];
+  await firmarFotosPostulaciones(postCache);
   renderPostulaciones();
+}
+function postCardHtml(p) {
+  const datos = [
+    p.edad ? `${p.edad} años` : null,
+    p.genero ? GENERO_LABEL[p.genero] : null,
+    p.anios_experiencia != null ? `${p.anios_experiencia} años de exp.` : null,
+  ].filter(Boolean);
+  return `<div class="post-card" data-id="${p.id}">
+    <div class="post-card-top">
+      ${postFotoHtml(p, 'post-foto')}
+      <div style="min-width:0;flex:1">
+        <div style="font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis">${esc(p.nombre)}</div>
+        <div class="muted" style="font-size:12.5px">${esc(p.rol_interes || (p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'))}</div>
+        <div class="muted" style="font-size:12px;margin-top:2px">${esc(p.telefono)}</div>
+      </div>
+      ${p.revisado ? '<i class="fas fa-circle-check" style="color:#22c55e" title="Revisado"></i>' : ''}
+    </div>
+    ${datos.length ? `<div class="post-card-datos">${datos.map(d => `<span class="post-dato">${esc(d)}</span>`).join('')}</div>` : ''}
+    ${p.estudios ? `<div class="muted" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><i class="fas fa-graduation-cap"></i> ${esc(p.estudios)}</div>` : ''}
+    <div style="display:flex;gap:6px;align-items:center;margin-top:auto;flex-wrap:wrap">
+      ${p.calidad_prospecto ? `<span class="badge-st" style="color:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]};background:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]}2e">${CALIDAD_PROSPECTO_LABEL[p.calidad_prospecto]}</span>` : '<span class="muted" style="font-size:12px">Sin calificar</span>'}
+      <span class="badge-st" style="color:${p.estado_llamada === 'llamado' ? '#22c55e' : '#e0a030'};background:${p.estado_llamada === 'llamado' ? '#22c55e2e' : '#e0a0302e'}">${p.estado_llamada === 'llamado' ? 'Llamado' : 'Pendiente'}</span>
+      ${p.cv_storage_path ? '<span class="post-dato"><i class="fas fa-file-pdf"></i> CV</span>' : ''}
+    </div>
+  </div>`;
 }
 function renderPostulaciones() {
   const q = val('post-search').trim().toLowerCase();
@@ -3175,8 +3224,13 @@ function renderPostulaciones() {
     <td data-label="Prospecto">${p.calidad_prospecto ? `<span class="badge-st" style="color:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]};background:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]}2e">${CALIDAD_PROSPECTO_LABEL[p.calidad_prospecto]}</span>` : '<span class="muted">Sin calificar</span>'}</td>
     <td data-label="Fecha" class="muted">${esc(fmtFechaHoraCaracas(p.created_at))}</td>
   </tr>`).join('');
-  document.querySelectorAll('#post-tbody tr').forEach(tr => tr.onclick = () => {
-    const p = postCache.find(x => String(x.id) === tr.dataset.id);
+  const grid = document.getElementById('post-vista-tarjetas');
+  grid.innerHTML = postView === 'tarjetas' ? filtered.map(postCardHtml).join('') : '';
+  grid.style.display = postView === 'tarjetas' ? '' : 'none';
+  document.getElementById('post-vista-lista').style.display = postView === 'tarjetas' ? 'none' : '';
+
+  document.querySelectorAll('#post-tbody tr, #post-vista-tarjetas .post-card').forEach(el => el.onclick = () => {
+    const p = postCache.find(x => String(x.id) === el.dataset.id);
     if (p) abrirPostulacionDrawer(p);
   });
   wirePostChecks();
@@ -3254,7 +3308,6 @@ function analisisIAHtml(a) {
       ${a.fortalezas?.length ? `<label class="fl">Dónde destaca</label>${listaHtml(a.fortalezas, '#22c55e')}` : ''}
       ${a.debilidades?.length ? `<label class="fl">Dónde flojea</label>${listaHtml(a.debilidades, '#e0a030')}` : ''}
       ${a.banderas?.length ? `<label class="fl">Para mirar con lupa</label>${listaHtml(a.banderas, '#ef4444')}` : ''}
-      ${a.anios_experiencia != null ? `<div class="muted" style="font-size:12px">Años de experiencia relevante: ${esc(String(a.anios_experiencia))}</div>` : ''}
     </div>
   </details>`;
 }
@@ -3272,12 +3325,23 @@ function abrirPostulacionDrawer(p) {
     <input type="file" id="post-d-cv-input" accept="application/pdf" style="display:none">
   </div>`;
   document.getElementById('post-d-body').innerHTML = `
-    <label class="fl">Modalidad</label>
-    <div class="dfv" style="margin-bottom:10px">${p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'}</div>
+    <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
+      ${postFotoHtml(p, 'post-foto-ficha')}
+      <div style="flex:1;min-width:0">
+        <div class="muted" style="font-size:12.5px;margin-bottom:6px">${p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'}${p.rol_interes ? ' · ' + esc(p.rol_interes) : ''}</div>
+        <div class="post-card-datos">
+          ${p.edad ? `<span class="post-dato">${esc(String(p.edad))} años</span>` : ''}
+          ${p.genero ? `<span class="post-dato">${esc(GENERO_LABEL[p.genero] || p.genero)}</span>` : ''}
+          ${p.anios_experiencia != null ? `<span class="post-dato">${esc(String(p.anios_experiencia))} años de experiencia</span>` : ''}
+        </div>
+        <button class="btn-sm" type="button" id="post-d-adjuntar-foto" style="margin-top:8px"><i class="fas fa-camera"></i> ${p.foto_storage_path ? 'Cambiar foto' : 'Adjuntar foto'}</button>
+        <input type="file" id="post-d-foto-input" accept="image/jpeg,image/png" style="display:none">
+      </div>
+    </div>
+    ${p.estudios ? `<label class="fl">Estudios</label><div class="dfv" style="margin-bottom:10px">${esc(p.estudios)}</div>` : ''}
     <label class="fl">Teléfono</label>
     <div class="dfv" style="margin-bottom:10px">${esc(p.telefono)}</div>
     ${p.email ? `<label class="fl">Email</label><div class="dfv" style="margin-bottom:10px">${esc(p.email)}</div>` : ''}
-    ${p.rol_interes ? `<label class="fl">Rol de interés</label><div class="dfv" style="margin-bottom:10px">${esc(p.rol_interes)}</div>` : ''}
     ${p.mensaje ? `<label class="fl">Mensaje del candidato</label><div class="dfv" style="margin-bottom:10px;white-space:pre-wrap">${esc(p.mensaje)}</div>` : ''}
     <label class="fl">CV</label>
     <div style="margin-bottom:10px">${cvHtml}</div>
@@ -3293,6 +3357,24 @@ function abrirPostulacionDrawer(p) {
       <option value="buen_prospecto"${p.calidad_prospecto === 'buen_prospecto' ? ' selected' : ''}>Buen prospecto</option>
       <option value="no_calza"${p.calidad_prospecto === 'no_calza' ? ' selected' : ''}>No calza</option>
     </select>
+    <details style="margin-top:12px;border:1px solid var(--line2);border-radius:10px;padding:8px 10px">
+      <summary style="cursor:pointer;font-size:13px;font-weight:600">Corregir datos del candidato</summary>
+      <div style="margin-top:10px">
+        <label class="fl">Edad</label>
+        <input class="ei" id="post-d-edad" type="number" min="14" max="99" value="${p.edad ?? ''}" placeholder="Vacío si el CV no lo dice">
+        <label class="fl" style="margin-top:8px">Género</label>
+        <select class="ei" id="post-d-genero">
+          <option value=""${!p.genero ? ' selected' : ''}>Sin especificar</option>
+          <option value="femenino"${p.genero === 'femenino' ? ' selected' : ''}>Femenino</option>
+          <option value="masculino"${p.genero === 'masculino' ? ' selected' : ''}>Masculino</option>
+          <option value="otro"${p.genero === 'otro' ? ' selected' : ''}>Otro</option>
+        </select>
+        <label class="fl" style="margin-top:8px">Años de experiencia</label>
+        <input class="ei" id="post-d-anios" type="number" min="0" max="60" step="0.5" value="${p.anios_experiencia ?? ''}">
+        <label class="fl" style="margin-top:8px">Estudios</label>
+        <input class="ei" id="post-d-estudios" value="${esc(p.estudios || '')}" placeholder="Ej: TSU en Turismo — CUC (2019)">
+      </div>
+    </details>
     <label class="fl" style="margin-top:10px">Notas internas</label>
     <textarea class="ei" id="post-d-notas" rows="3" placeholder="Notas propias, no visibles para el candidato...">${esc(p.notas_admin || '')}</textarea>
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13.5px;cursor:pointer">
@@ -3308,8 +3390,47 @@ function abrirPostulacionDrawer(p) {
     e.target.value = '';
     if (f) adjuntarCVaPostulacion(p, f);
   });
+  document.getElementById('post-d-adjuntar-foto')?.addEventListener('click', () => document.getElementById('post-d-foto-input').click());
+  document.getElementById('post-d-foto-input')?.addEventListener('change', e => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (f) adjuntarFotoAPostulacion(p, f);
+  });
   openSheet('post-drawer-sheet');
 }
+async function adjuntarFotoAPostulacion(p, file) {
+  if (!['image/jpeg', 'image/png'].includes(file.type)) { errToast('La foto debe ser JPG o PNG'); return; }
+  if (file.size > 3 * 1024 * 1024) { errToast('La foto no puede pesar más de 3MB'); return; }
+  const btn = document.getElementById('post-d-adjuntar-foto');
+  btn.disabled = true; btn.innerHTML = 'Subiendo... <i class="fas fa-spinner fa-spin"></i>';
+
+  const ext = file.type === 'image/png' ? 'png' : 'jpg';
+  const path = `fotos/${p.id}-${Date.now()}.${ext}`;
+  const anterior = p.foto_storage_path;
+  const { error: eUp } = await sb.storage.from('postulaciones-cv').upload(path, file, { contentType: file.type });
+  if (eUp) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-camera"></i> Adjuntar foto'; errToast('No se pudo subir la foto: ' + eUp.message); return; }
+
+  const { error: eDb } = await sb.from('postulaciones_empleo').update({ foto_storage_path: path }).eq('id', p.id);
+  if (eDb) {
+    await sb.storage.from('postulaciones-cv').remove([path]);
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-camera"></i> Adjuntar foto';
+    errToast('No se pudo guardar la foto en la ficha: ' + eDb.message);
+    return;
+  }
+  if (anterior && anterior !== path) {
+    await sb.storage.from('postulaciones-cv').remove([anterior]);
+    postFotoUrls.delete(anterior);
+  }
+
+  p.foto_storage_path = path;
+  const enCache = postCache.find(x => x.id === p.id);
+  if (enCache) enCache.foto_storage_path = path;
+  await firmarFotosPostulaciones([p]);
+  okToast('Foto adjuntada');
+  abrirPostulacionDrawer(p);
+  renderPostulaciones();
+}
+
 async function adjuntarCVaPostulacion(p, file) {
   if (file.type !== 'application/pdf') { errToast('El CV debe ser un PDF'); return; }
   if (file.size > 5 * 1024 * 1024) { errToast('El PDF no puede pesar más de 5MB'); return; }
@@ -3345,11 +3466,16 @@ async function guardarPostulacion() {
   if (!postDrawerActual) return;
   const btn = document.getElementById('post-d-save'), err = document.getElementById('post-d-err');
   btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>'; err.textContent = '';
+  const numeroONull = id => { const v = val(id).trim(); return v === '' ? null : Number(v); };
   const cambios = {
     estado_llamada: val('post-d-llamada'),
     calidad_prospecto: val('post-d-calidad') || null,
     notas_admin: val('post-d-notas').trim() || null,
     revisado: document.getElementById('post-d-revisado').checked,
+    edad: numeroONull('post-d-edad'),
+    genero: val('post-d-genero') || null,
+    anios_experiencia: numeroONull('post-d-anios'),
+    estudios: val('post-d-estudios').trim() || null,
   };
   const { error } = await sb.from('postulaciones_empleo').update(cambios).eq('id', postDrawerActual.id);
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios';
@@ -3364,6 +3490,7 @@ async function verCVPostulacion(path) {
   if (error || !data?.signedUrl) { errToast('No se pudo generar el link del CV'); return; }
   window.open(data.signedUrl, '_blank');
 }
+postView = initViewSwitcher('post-view-switch', 'postulaciones', 'lista', v => { postView = v; renderPostulaciones(); }, ['tarjetas', 'lista']);
 document.getElementById('post-search')?.addEventListener('input', () => { clearTimeout(postSearchDeb); postSearchDeb = setTimeout(renderPostulaciones, 200); });
 document.querySelectorAll('#post-f-modalidad,#post-f-llamada,#post-f-calidad,#post-f-sin-revisar').forEach(el => el.addEventListener('change', renderPostulaciones));
 
@@ -3512,6 +3639,19 @@ async function revisarCVAnalizado() {
     </select>
     <label class="fl" style="margin-top:8px">Rol que mejor calza</label>
     <input class="ei" id="cv-rol" value="${esc(a.rol_interes || '')}">
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <div style="flex:1;min-width:90px"><label class="fl">Edad</label><input class="ei" id="cv-edad" type="number" min="14" max="99" value="${a.edad ?? ''}" placeholder="—"></div>
+      <div style="flex:1;min-width:110px"><label class="fl">Años exp.</label><input class="ei" id="cv-anios" type="number" min="0" max="60" step="0.5" value="${a.anios_experiencia ?? ''}" placeholder="—"></div>
+    </div>
+    <label class="fl" style="margin-top:8px">Género <span class="muted" style="font-weight:400">(solo si el CV lo dice)</span></label>
+    <select class="ei" id="cv-genero">
+      <option value=""${!a.genero ? ' selected' : ''}>Sin especificar</option>
+      <option value="femenino"${a.genero === 'femenino' ? ' selected' : ''}>Femenino</option>
+      <option value="masculino"${a.genero === 'masculino' ? ' selected' : ''}>Masculino</option>
+      <option value="otro"${a.genero === 'otro' ? ' selected' : ''}>Otro</option>
+    </select>
+    <label class="fl" style="margin-top:8px">Estudios</label>
+    <input class="ei" id="cv-estudios" value="${esc(a.estudios || '')}" placeholder="—">
 
     <label class="fl" style="margin-top:14px">Dónde destaca</label>
     ${listaHtml(a.fortalezas, '#22c55e')}
@@ -3542,6 +3682,10 @@ async function guardarCVAnalizado(actualizar) {
     modalidad: val('cv-modalidad'),
     rol_interes: val('cv-rol').trim() || null,
     calidad_prospecto: a.calidad_prospecto,
+    edad: val('cv-edad').trim() === '' ? null : Number(val('cv-edad')),
+    genero: val('cv-genero') || null,
+    estudios: val('cv-estudios').trim() || null,
+    anios_experiencia: val('cv-anios').trim() === '' ? null : Number(val('cv-anios')),
     analisis_ia: {
       resumen: a.resumen, fortalezas: a.fortalezas, debilidades: a.debilidades,
       banderas: a.banderas, anios_experiencia: a.anios_experiencia, motor: cvAnalizado.motor,
