@@ -2,6 +2,59 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
+// Miniaturas pregeneradas (_d/<ancho>/<ruta_original>.jpg) -- servir el
+// original para pintar un thumb de 56px reventó la cuota de egress de
+// Supabase. Los 3 tamaños existen siempre, no hace falta fallback.
+const fotoMini = (storagePath, ancho) => `${FOTOS_BASE}_d/${ancho}/${storagePath}.jpg`;
+const DERIVADOS_ANCHOS = [256, 640, 1280];
+const rutaDerivado = (storagePath, ancho) => `_d/${ancho}/${storagePath}.jpg`;
+// Los consumidores piden el derivado sin fallback, así que una foto sin sus
+// miniaturas se ve rota. Se generan acá, en el navegador, al subir una foto
+// nueva, porque Canvas decodifica WebP y la librería del backend
+// (imagescript) no.
+async function generarDerivados(file) {
+  const salidas = [];
+  let origen;
+  try {
+    let anchoOriginal, altoOriginal;
+    if (typeof createImageBitmap === 'function') {
+      origen = await createImageBitmap(file);
+      anchoOriginal = origen.width; altoOriginal = origen.height;
+    } else {
+      const url = URL.createObjectURL(file);
+      origen = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+      anchoOriginal = origen.naturalWidth; altoOriginal = origen.naturalHeight;
+      URL.revokeObjectURL(url);
+    }
+    for (const ancho of DERIVADOS_ANCHOS) {
+      try {
+        const anchoFinal = Math.min(ancho, anchoOriginal);
+        const altoFinal = Math.round(altoOriginal * (anchoFinal / anchoOriginal));
+        const canvas = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(anchoFinal, altoFinal) : document.createElement('canvas');
+        canvas.width = anchoFinal; canvas.height = altoFinal;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, anchoFinal, altoFinal);
+        ctx.drawImage(origen, 0, 0, anchoFinal, altoFinal);
+        const blob = canvas.convertToBlob ? await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.78 }) : await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.78));
+        if (blob) salidas.push({ ancho, blob });
+      } catch (e) { /* un tamaño fallido no debe tumbar los demás */ }
+    }
+  } catch (e) { /* sin derivados generados, la subida del original sigue igual */ }
+  if (origen?.close) origen.close();
+  return salidas;
+}
+// Best-effort a propósito: el original ya subió, y un derivado que falte se
+// regenera después con scripts/generar_derivados_fotos.py. Si esto tirara, la
+// foto quedaría subida pero sin registrar en la tabla.
+async function subirDerivados(storagePath, file) {
+  try {
+    const derivados = await generarDerivados(file);
+    for (const { ancho, blob } of derivados) {
+      await sb.storage.from('tarifario-fotos').upload(rutaDerivado(storagePath, ancho), blob, { contentType: 'image/jpeg', upsert: true });
+    }
+  } catch (e) { console.warn('derivados', e); }
+}
 const SUPABASE_KEY = 'sb_publishable_M7Ms9DLwpNSCXZNCDhYtbQ_LhMYeLxk';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -4027,7 +4080,7 @@ const fotosRaw = x => {
   if (propias.length) return propias;
   return ordenarFotos(x.productos?.producto_fotos || x.hotel?.producto_fotos || []);
 };
-const fotosDe = x => fotosRaw(x).map(f => FOTOS_BASE + f.storage_path);
+const fotosDe = (x, ancho) => fotosRaw(x).map(f => ancho ? fotoMini(f.storage_path, ancho) : FOTOS_BASE + f.storage_path);
 const tieneFotoPrincipalPropia = x => fotosRaw(x).some(f => f.es_principal);
 // Cuando un hotel tiene varias promos, todas partían del mismo set de fotos
 // en el mismo orden — se veían idénticas en portada. Se le asigna a cada
@@ -4040,8 +4093,8 @@ function asignarPortadas(promos) {
   promos.forEach(x => { if (x.producto_id != null) (porHotel[x.producto_id] ??= []).push(x); });
   Object.values(porHotel).forEach(grupo => grupo.forEach((x, i) => { x._portadaIdx = i; }));
 }
-function fotosRotadas(x) {
-  const fotos = fotosDe(x);
+function fotosRotadas(x, ancho) {
+  const fotos = fotosDe(x, ancho);
   if (!fotos.length) return fotos;
   // Si el admin marcó una foto principal a mano, esa decisión manda siempre
   // como portada -- no se rota cosméticamente por encima de ella.
@@ -4321,7 +4374,7 @@ function renderTarifario() {
       el.classList.add('tar-oculto-admin');
       el.insertAdjacentHTML('afterbegin', '<span class="tar-oculto-badge">Oculto</span>');
     }
-    const fotos = fotosRotadas(x);
+    const fotos = fotosRotadas(x, 256);
     if (tarView === 'fichas') {
       const media = el.querySelector('.tf-media');
       if (media) attachHoverCarousel(el, media, fotos, url => { media.style.backgroundImage = `url('${url}')`; }, media.querySelector('.carrusel-dots'));
@@ -4343,7 +4396,7 @@ function tarItemsWrapHtml(items) {
 function tarRowHtml(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
   const nombre = esPromo ? x.titulo : x.nombre;
-  const foto = fotosRotadas(x)[0];
+  const foto = fotosRotadas(x, 256)[0];
   let tags = [], precioTxt = null, promosCount = 0;
   if (tarTab === 'hotel') {
     const ag = agregarHotel(x);
@@ -4375,7 +4428,7 @@ function tarCardHtml(x) {
     // usa la web pública). Por diseño NUNCA contiene precios -- el precio real
     // sale siempre de precio_texto, tal cual está cargado.
     return `<div class="tar-item tar-card" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosRotadas(x)[0], true)}
+      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true)}
       <div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
       ${x.resumen_ia ? `<div class="tc-resumen-ia">${esc(x.resumen_ia)}</div>` : ''}
       <div class="tc-pie">
@@ -4388,7 +4441,7 @@ function tarCardHtml(x) {
   const promos = x.promociones || [];
   const tagsHotel = [...new Set(promos.flatMap(p => p.incluye_tags || []))];
   return `<div class="tar-item tar-card" data-id="${x.id}">
-    ${tarCardThumbHtml(fotosDe(x)[0], false)}
+    ${tarCardThumbHtml(fotosDe(x, 256)[0], false)}
     <div class="tc-top"><div><div class="tc-nombre">${esc(x.nombre)}</div>${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}</div></div>
     <ul class="tc-resumen">${resumenBullets(x.descripcion).map(s => `<li>${esc(s)}</li>`).join('')}</ul>
     <div class="tc-pie">
@@ -4401,7 +4454,7 @@ function tarCardHtml(x) {
 function tarFichaHtml(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
   const nombre = esPromo ? x.titulo : x.nombre;
-  const foto = fotosRotadas(x)[0];
+  const foto = fotosRotadas(x, 256)[0];
   const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
@@ -4511,8 +4564,9 @@ async function cargarGaleriaCategoria(key, append) {
     return `<div class="gal-hotel"><h2><i class="fas ${GAL_ICONS[key]}"></i> ${esc(nombreDe(x))}</h2>
       <div class="gal-masonry">${fotos.map(f => {
         const url = FOTOS_BASE + f.storage_path;
+        const thumbUrl = fotoMini(f.storage_path, 640);
         const dims = f.width && f.height ? ` width="${f.width}" height="${f.height}"` : '';
-        return `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="${esc(nombreDe(x))}" loading="lazy"${dims}></a>`;
+        return `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(thumbUrl)}" alt="${esc(nombreDe(x))}" loading="lazy"${dims}></a>`;
       }).join('')}</div>
     </div>`;
   }).join(''));
@@ -4534,7 +4588,8 @@ function openProductoDrawer(x) {
   const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
-  const fotos = fotosRotadas(x);
+  const fotos = fotosRotadas(x, 256);
+  const fotosOrig = fotosRotadas(x);
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead">${fotos[0] ? `<div class="dava" style="background-image:url('${esc(fotos[0])}')"></div>` : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
       <div class="dm">${esc(x.destino || TAR_TAB_LABEL[tarTab])}</div></div></div>
@@ -4559,7 +4614,7 @@ function openProductoDrawer(x) {
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
   document.getElementById('dCotizador').onclick = () => irAlCotizadorConOpcion(esPromo ? 'promociones' : 'productos', x.id, nombre);
-  document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotos, +el.dataset.drawerFoto)));
+  document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotosOrig, +el.dataset.drawerFoto)));
   if (ROL === 'admin') {
     document.getElementById('tar-notas-save').onclick = () => guardarNotasTarifario(esPromo ? 'promociones' : 'productos', x.id);
     cargarFotosAdmin(esPromo ? 'promocion_fotos' : 'producto_fotos', esPromo ? 'promocion_id' : 'producto_id', x.id, esPromo ? 'promos' : 'hoteles');
@@ -4591,7 +4646,7 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
   // subir la primera. Ahora "Agregar foto" siempre está, tenga 0 o más.
   const grid = data.length ? `<div class="tar-fotos-admin-grid">${data.map(f => `
     <div class="tfa-item" data-foto-id="${f.id}">
-      <div class="tfa-img" style="background-image:url('${esc(FOTOS_BASE + f.storage_path)}')">${f.es_principal ? '<span class="tfa-principal-badge"><i class="fas fa-star"></i> Principal</span>' : ''}${f.origen === 'ia_referencial' ? '<span class="tfa-principal-badge" style="left:auto;right:4px;background:rgba(139,92,246,.92)"><i class="fas fa-wand-magic-sparkles"></i> IA referencial</span>' : ''}</div>
+      <div class="tfa-img" style="background-image:url('${esc(fotoMini(f.storage_path, 256))}')">${f.es_principal ? '<span class="tfa-principal-badge"><i class="fas fa-star"></i> Principal</span>' : ''}${f.origen === 'ia_referencial' ? '<span class="tfa-principal-badge" style="left:auto;right:4px;background:rgba(139,92,246,.92)"><i class="fas fa-wand-magic-sparkles"></i> IA referencial</span>' : ''}</div>
       <div class="tfa-actions">
         ${f.es_principal ? '' : `<button type="button" class="tfa-btn" data-accion="principal" title="Marcar como principal"><i class="fas fa-star"></i></button>`}
         <button type="button" class="tfa-btn" data-accion="reemplazar" title="Reemplazar imagen"><i class="fas fa-rotate"></i></button>
@@ -4653,12 +4708,13 @@ async function agregarFoto(tabla, fk, entidadId, prefijo, ordenSiguiente, file) 
   const storagePath = `${prefijo}/${entidadId}/manual-${Date.now()}-${slugArchivo(file.name.replace(/\.[^.]+$/, ''))}${ext.toLowerCase()}`;
   const { error: eUpload } = await sb.storage.from('tarifario-fotos').upload(storagePath, file, { contentType: file.type });
   if (eUpload) { box.style.opacity = '1'; errToast('No se pudo subir la imagen: ' + eUpload.message); return; }
+  await subirDerivados(storagePath, file);
   // La primera foto que se agrega a una opción queda como principal
   // automáticamente (nadie eligió otra todavía); de ahí en adelante, no.
   const { error: eInsert } = await sb.from(tabla).insert({ [fk]: entidadId, storage_path: storagePath, orden: ordenSiguiente, es_principal: ordenSiguiente === 0, origen: 'manual' });
   if (eInsert) {
     box.style.opacity = '1';
-    await sb.storage.from('tarifario-fotos').remove([storagePath]);
+    await sb.storage.from('tarifario-fotos').remove([storagePath, ...DERIVADOS_ANCHOS.map(a => rutaDerivado(storagePath, a))]);
     errToast('No se pudo registrar la imagen: ' + eInsert.message);
     return;
   }
@@ -4689,20 +4745,21 @@ async function reemplazarFoto(tabla, fk, entidadId, fotoIdViejo, prefijo, file) 
   const storagePath = `${prefijo}/${entidadId}/manual-${Date.now()}-${slugArchivo(file.name.replace(/\.[^.]+$/, ''))}${ext.toLowerCase()}`;
   const { error: eUpload } = await sb.storage.from('tarifario-fotos').upload(storagePath, file, { contentType: file.type });
   if (eUpload) { box.style.opacity = '1'; errToast('No se pudo subir la imagen: ' + eUpload.message); return; }
+  await subirDerivados(storagePath, file);
   // La vieja se desactiva Y pierde es_principal ANTES de insertar la nueva —
   // el índice único parcial (una sola es_principal por producto/promoción)
   // rechaza el insert si las dos filas quedan marcadas principal a la vez.
   const { error: eDesactivar } = await sb.from(tabla).update({ activo: false, reemplazada_en: new Date().toISOString(), es_principal: false }).eq('id', fotoIdViejo);
   if (eDesactivar) {
     box.style.opacity = '1';
-    await sb.storage.from('tarifario-fotos').remove([storagePath]);
+    await sb.storage.from('tarifario-fotos').remove([storagePath, ...DERIVADOS_ANCHOS.map(a => rutaDerivado(storagePath, a))]);
     errToast('No se pudo desactivar la imagen anterior: ' + eDesactivar.message);
     return;
   }
   const { error: eInsert } = await sb.from(tabla).insert({ [fk]: entidadId, storage_path: storagePath, orden: vieja.orden, es_principal: vieja.es_principal, origen: 'manual' });
   if (eInsert) {
     box.style.opacity = '1';
-    await sb.storage.from('tarifario-fotos').remove([storagePath]);
+    await sb.storage.from('tarifario-fotos').remove([storagePath, ...DERIVADOS_ANCHOS.map(a => rutaDerivado(storagePath, a))]);
     // Best-effort: restaurar la vieja tal como estaba, para no dejar la
     // opción sin ninguna foto activa si el insert de la nueva falló.
     await sb.from(tabla).update({ activo: true, reemplazada_en: null, es_principal: vieja.es_principal }).eq('id', fotoIdViejo);
@@ -5070,13 +5127,19 @@ function addChatOpcionesCards(opciones) {
   row.innerHTML = '<span class="chat-avatar"><i class="fas fa-wand-magic-sparkles"></i></span>';
   const wrap = document.createElement('div');
   wrap.className = 'cot-cards';
-  wrap.innerHTML = opciones.map(op => `
+  wrap.innerHTML = opciones.map(op => {
+    // op.foto llega de cotizador-chat (edge function) como URL completa al
+    // original (FOTOS_BASE + storage_path) -- se reescribe acá al derivado
+    // chico en vez de tocar esa función, mismo motivo que fotoMini arriba.
+    const fotoMiniOp = op.foto && op.foto.startsWith(FOTOS_BASE) ? fotoMini(op.foto.slice(FOTOS_BASE.length), 256) : op.foto;
+    return `
     <div class="cot-card">
-      ${op.foto ? `<img class="tc-thumb" src="${esc(op.foto)}" alt="" loading="lazy">` : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${op.tipo === 'promocion' ? 'tag' : 'image'}"></i></div>`}
+      ${fotoMiniOp ? `<img class="tc-thumb" src="${esc(fotoMiniOp)}" alt="" loading="lazy">` : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${op.tipo === 'promocion' ? 'tag' : 'image'}"></i></div>`}
       <div class="tc-nombre">${esc(op.titulo)}</div>
       ${op.precio_texto ? `<div class="tc-precio">${esc(op.precio_texto)}</div>` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
   row.appendChild(wrap);
   log.appendChild(row);
   log.scrollTop = log.scrollHeight;
