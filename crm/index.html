@@ -733,7 +733,46 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .post-card-datos{display:flex;flex-wrap:wrap;gap:6px}
 .post-dato{font-size:11.5px;padding:3px 8px;border-radius:999px;background:var(--panel-solid);color:var(--muted);white-space:nowrap}
 /* La foto en la ficha es más grande porque ahí sí se la mira con atención. */
-.post-foto-ficha{width:88px;height:88px;border-radius:14px;object-fit:cover;background:var(--panel-solid)}
+.post-foto-ficha{width:72px;height:72px;border-radius:14px;object-fit:cover;background:var(--panel-solid)}
+
+/* Ficha del candidato: en escritorio es un panel lateral, no una hoja a todo
+   el ancho -- la hoja tapaba la lista entera y perdías el contexto de dónde
+   estabas. En móvil se queda como hoja inferior, que ahí sí es lo natural. */
+@media (min-width:900px){
+  .sheet.sheet-lateral{left:auto;right:0;top:0;bottom:0;width:min(470px,92vw);max-height:none;
+    border-radius:18px 0 0 18px;border-right:none;padding:0;
+    transform:translateX(100%);box-shadow:-20px 0 60px rgba(0,0,0,.45)}
+  .sheet.sheet-lateral.open{transform:translateX(0)}
+  .sheet.sheet-lateral .sheet-handle{display:none}
+}
+.sheet-lateral .pf-cuerpo{padding:0 18px calc(20px + var(--safe-b))}
+/* Cabecera fija: el nombre y la foto tienen que seguir a la vista al scrollear
+   el análisis, si no perdés de quién estás leyendo. */
+.pf-head{position:sticky;top:0;z-index:2;background:var(--bg2);padding:14px 18px 0;
+  display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--line)}
+.pf-head-txt{flex:1;min-width:0;padding-bottom:12px}
+.pf-nombre{font-size:16px;font-weight:700;line-height:1.25}
+.pf-rol{font-size:12.5px;color:var(--muted);margin-top:2px}
+.pf-cerrar{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:2px 6px;border-radius:8px}
+.pf-cerrar:hover{background:var(--panel-solid);color:var(--txt)}
+.pf-tabs{display:flex;gap:2px;padding:0 18px;border-bottom:1px solid var(--line);
+  position:sticky;top:0;background:var(--bg2);z-index:1}
+.pf-tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);
+  font-size:13px;font-weight:600;padding:11px 4px;cursor:pointer;transition:.12s}
+.pf-tab:hover{color:var(--txt)}
+.pf-tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.pf-panel{padding-top:14px}
+/* Rejilla de datos: cada dato con su etiqueta, y los vacíos se muestran igual
+   con un guion. Ocultarlos hacía parecer que el sistema estaba roto. */
+.pf-datos{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.pf-dato{background:var(--panel-solid);border:1px solid var(--line);border-radius:12px;padding:9px 11px}
+.pf-dato-lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted2);font-weight:700}
+.pf-dato-val{font-size:14px;font-weight:600;margin-top:3px}
+.pf-dato-val.vacio{color:var(--muted2);font-weight:500}
+.pf-ancho{grid-column:1/-1}
+.pf-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.pf-bloque{margin-bottom:14px}
+.pf-bloque > .fl{margin-bottom:6px}
 .tar-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .tar-tag{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:20px;background:rgba(16,185,129,.14);color:#34d399}
 .tc-promos{font-size:11.5px;color:var(--amber);margin-top:8px;font-weight:600}
@@ -2298,10 +2337,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </div>
 
     <!-- Drawer: detalle de postulación -->
-    <div class="sheet" id="post-drawer-sheet">
+    <div class="sheet sheet-lateral" id="post-drawer-sheet">
       <div class="sheet-handle"></div>
-      <div class="sheet-title" id="post-d-nombre">Postulación</div>
-      <div style="padding:4px 6px 14px" id="post-d-body"></div>
+      <div id="post-d-body"></div>
     </div>
 
     <!-- Hoja: revisar el CV analizado por IA antes de guardarlo. Nunca se

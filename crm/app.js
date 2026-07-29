@@ -3299,89 +3299,131 @@ document.getElementById('confirm-delete-post-ok')?.addEventListener('click', asy
 });
 // Se muestra plegado: cuando el análisis ya se leyó una vez, lo que interesa
 // del drawer es llamar y calificar, no volver a leer el informe entero.
-function analisisIAHtml(a) {
-  if (!a) return '';
-  return `<details style="margin-bottom:12px;border:1px solid var(--line2);border-radius:10px;padding:8px 10px">
-    <summary style="cursor:pointer;font-size:13px;font-weight:600"><i class="fas fa-wand-magic-sparkles" style="color:#8b5cf6"></i> Análisis del CV por IA</summary>
-    <div style="margin-top:10px">
-      ${a.resumen ? `<div class="dfv" style="margin-bottom:10px;white-space:pre-wrap">${esc(a.resumen)}</div>` : ''}
-      ${a.fortalezas?.length ? `<label class="fl">Dónde destaca</label>${listaHtml(a.fortalezas, '#22c55e')}` : ''}
-      ${a.debilidades?.length ? `<label class="fl">Dónde flojea</label>${listaHtml(a.debilidades, '#e0a030')}` : ''}
-      ${a.banderas?.length ? `<label class="fl">Para mirar con lupa</label>${listaHtml(a.banderas, '#ef4444')}` : ''}
-    </div>
-  </details>`;
+// Estado vacío explícito: una pestaña en blanco no dice si el candidato no
+// tiene análisis o si algo se rompió.
+function analisisPanelHtml(a) {
+  if (!a) {
+    return `<div class="muted" style="text-align:center;padding:26px 10px;font-size:13px">
+      <i class="fas fa-wand-magic-sparkles" style="font-size:22px;display:block;margin-bottom:8px;color:var(--muted2)"></i>
+      Este candidato no tiene análisis de IA.<br>Se genera al cargar su CV desde el botón "Cargar CV".
+    </div>`;
+  }
+  return `
+    ${a.resumen ? `<div class="dfv" style="margin-bottom:14px;white-space:pre-wrap">${esc(a.resumen)}</div>` : ''}
+    ${a.fortalezas?.length ? `<div class="pf-bloque"><label class="fl">Dónde destaca</label>${listaHtml(a.fortalezas, '#22c55e')}</div>` : ''}
+    ${a.debilidades?.length ? `<div class="pf-bloque"><label class="fl">Dónde flojea o falta preguntar</label>${listaHtml(a.debilidades, '#e0a030')}</div>` : ''}
+    ${a.banderas?.length ? `<div class="pf-bloque"><label class="fl">Para mirar con lupa</label>${listaHtml(a.banderas, '#ef4444')}</div>` : ''}
+    <div class="muted" style="font-size:11.5px;margin-top:6px">Generado por IA a partir del CV. Revisá antes de decidir.</div>`;
 }
-function abrirPostulacionDrawer(p) {
+function abrirPostulacionDrawer(p, tab) {
   postDrawerActual = p;
-  document.getElementById('post-d-nombre').textContent = p.nombre;
-  // Adjuntar desde acá cubre el caso real: el candidato se postuló por la web
-  // sin CV y después lo mandó por correo, y quien revisa quiere verlo en su
-  // ficha en vez de buscarlo en el mail.
-  const cvHtml = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-    ${p.cv_storage_path
-      ? `<button class="dbtn" type="button" id="post-d-ver-cv"><i class="fas fa-file-arrow-down"></i> Ver CV</button>`
-      : '<span class="muted">Sin CV adjunto</span>'}
-    <button class="btn-sm" type="button" id="post-d-adjuntar-cv"><i class="fas fa-paperclip"></i> ${p.cv_storage_path ? 'Reemplazar' : 'Adjuntar CV'}</button>
-    <input type="file" id="post-d-cv-input" accept="application/pdf" style="display:none">
-  </div>`;
+  const pestana = tab || 'perfil';
+  const cal = p.calidad_prospecto;
+  // Los datos vacíos se muestran igual, con un guion: esconderlos hacía que
+  // pareciera que el sistema no los había leído, cuando en realidad el CV no
+  // los traía.
+  const dato = (lbl, valor, ancho) =>
+    `<div class="pf-dato${ancho ? ' pf-ancho' : ''}">
+      <div class="pf-dato-lbl">${lbl}</div>
+      <div class="pf-dato-val${valor ? '' : ' vacio'}">${valor ? esc(String(valor)) : '—'}</div>
+    </div>`;
+
   document.getElementById('post-d-body').innerHTML = `
-    <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:14px">
+    <div class="pf-head">
       ${postFotoHtml(p, 'post-foto-ficha')}
-      <div style="flex:1;min-width:0">
-        <div class="muted" style="font-size:12.5px;margin-bottom:6px">${p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'}${p.rol_interes ? ' · ' + esc(p.rol_interes) : ''}</div>
-        <div class="post-card-datos">
-          ${p.edad ? `<span class="post-dato">${esc(String(p.edad))} años</span>` : ''}
-          ${p.genero ? `<span class="post-dato">${esc(GENERO_LABEL[p.genero] || p.genero)}</span>` : ''}
-          ${p.anios_experiencia != null ? `<span class="post-dato">${esc(String(p.anios_experiencia))} años de experiencia</span>` : ''}
+      <div class="pf-head-txt">
+        <div class="pf-nombre">${esc(p.nombre)}</div>
+        <div class="pf-rol">${p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'}${p.rol_interes ? ' · ' + esc(p.rol_interes) : ''}</div>
+        <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
+          ${cal ? `<span class="badge-st" style="color:${CALIDAD_PROSPECTO_COLOR[cal]};background:${CALIDAD_PROSPECTO_COLOR[cal]}2e">${CALIDAD_PROSPECTO_LABEL[cal]}</span>` : ''}
+          <span class="badge-st" style="color:${p.estado_llamada === 'llamado' ? '#22c55e' : '#e0a030'};background:${p.estado_llamada === 'llamado' ? '#22c55e2e' : '#e0a0302e'}">${p.estado_llamada === 'llamado' ? 'Llamado' : 'Pendiente'}</span>
+          ${p.revisado ? '<span class="badge-st" style="color:#22c55e;background:#22c55e2e">Revisado</span>' : ''}
         </div>
-        <button class="btn-sm" type="button" id="post-d-adjuntar-foto" style="margin-top:8px"><i class="fas fa-camera"></i> ${p.foto_storage_path ? 'Cambiar foto' : 'Adjuntar foto'}</button>
-        <input type="file" id="post-d-foto-input" accept="image/jpeg,image/png" style="display:none">
       </div>
+      <button class="pf-cerrar" type="button" id="pf-cerrar" title="Cerrar"><i class="fas fa-xmark"></i></button>
     </div>
-    ${p.estudios ? `<label class="fl">Estudios</label><div class="dfv" style="margin-bottom:10px">${esc(p.estudios)}</div>` : ''}
-    <label class="fl">Teléfono</label>
-    <div class="dfv" style="margin-bottom:10px">${esc(p.telefono)}</div>
-    ${p.email ? `<label class="fl">Email</label><div class="dfv" style="margin-bottom:10px">${esc(p.email)}</div>` : ''}
-    ${p.mensaje ? `<label class="fl">Mensaje del candidato</label><div class="dfv" style="margin-bottom:10px;white-space:pre-wrap">${esc(p.mensaje)}</div>` : ''}
-    <label class="fl">CV</label>
-    <div style="margin-bottom:10px">${cvHtml}</div>
-    ${analisisIAHtml(p.analisis_ia)}
-    <label class="fl">Estado de llamada</label>
-    <select class="ei" id="post-d-llamada">
-      <option value="pendiente"${p.estado_llamada === 'pendiente' ? ' selected' : ''}>Pendiente de llamar</option>
-      <option value="llamado"${p.estado_llamada === 'llamado' ? ' selected' : ''}>Llamado</option>
-    </select>
-    <label class="fl" style="margin-top:10px">Calificación</label>
-    <select class="ei" id="post-d-calidad">
-      <option value=""${!p.calidad_prospecto ? ' selected' : ''}>Sin calificar</option>
-      <option value="buen_prospecto"${p.calidad_prospecto === 'buen_prospecto' ? ' selected' : ''}>Buen prospecto</option>
-      <option value="no_calza"${p.calidad_prospecto === 'no_calza' ? ' selected' : ''}>No calza</option>
-    </select>
-    <details style="margin-top:12px;border:1px solid var(--line2);border-radius:10px;padding:8px 10px">
-      <summary style="cursor:pointer;font-size:13px;font-weight:600">Corregir datos del candidato</summary>
-      <div style="margin-top:10px">
-        <label class="fl">Edad</label>
-        <input class="ei" id="post-d-edad" type="number" min="14" max="99" value="${p.edad ?? ''}" placeholder="Vacío si el CV no lo dice">
-        <label class="fl" style="margin-top:8px">Género</label>
-        <select class="ei" id="post-d-genero">
-          <option value=""${!p.genero ? ' selected' : ''}>Sin especificar</option>
-          <option value="femenino"${p.genero === 'femenino' ? ' selected' : ''}>Femenino</option>
-          <option value="masculino"${p.genero === 'masculino' ? ' selected' : ''}>Masculino</option>
-          <option value="otro"${p.genero === 'otro' ? ' selected' : ''}>Otro</option>
-        </select>
-        <label class="fl" style="margin-top:8px">Años de experiencia</label>
-        <input class="ei" id="post-d-anios" type="number" min="0" max="60" step="0.5" value="${p.anios_experiencia ?? ''}">
-        <label class="fl" style="margin-top:8px">Estudios</label>
-        <input class="ei" id="post-d-estudios" value="${esc(p.estudios || '')}" placeholder="Ej: TSU en Turismo — CUC (2019)">
+
+    <div class="pf-tabs">
+      <button class="pf-tab${pestana === 'perfil' ? ' on' : ''}" data-tab="perfil" type="button">Perfil</button>
+      <button class="pf-tab${pestana === 'analisis' ? ' on' : ''}" data-tab="analisis" type="button">Análisis IA</button>
+      <button class="pf-tab${pestana === 'gestion' ? ' on' : ''}" data-tab="gestion" type="button">Gestión</button>
+    </div>
+
+    <div class="pf-cuerpo">
+      <div class="pf-panel" data-panel="perfil" style="display:${pestana === 'perfil' ? '' : 'none'}">
+        <div class="pf-datos">
+          ${dato('Edad', p.edad ? p.edad + ' años' : null)}
+          ${dato('Género', p.genero ? GENERO_LABEL[p.genero] : null)}
+          ${dato('Experiencia', p.anios_experiencia != null ? p.anios_experiencia + ' años' : null)}
+          ${dato('Teléfono', p.telefono)}
+          ${dato('Email', p.email, true)}
+          ${dato('Estudios', p.estudios, true)}
+        </div>
+        <div class="pf-acciones">
+          ${p.cv_storage_path ? '<button class="btn-sm" type="button" id="post-d-ver-cv"><i class="fas fa-file-pdf"></i> Ver CV</button>' : ''}
+          <button class="btn-sm" type="button" id="post-d-adjuntar-cv"><i class="fas fa-paperclip"></i> ${p.cv_storage_path ? 'Reemplazar CV' : 'Adjuntar CV'}</button>
+          <button class="btn-sm" type="button" id="post-d-adjuntar-foto"><i class="fas fa-camera"></i> ${p.foto_storage_path ? 'Cambiar foto' : 'Adjuntar foto'}</button>
+          <input type="file" id="post-d-cv-input" accept="application/pdf" style="display:none">
+          <input type="file" id="post-d-foto-input" accept="image/jpeg,image/png" style="display:none">
+        </div>
+        ${p.mensaje ? `<div class="pf-bloque"><label class="fl">Mensaje del candidato</label><div class="dfv" style="white-space:pre-wrap">${esc(p.mensaje)}</div></div>` : ''}
+        <details style="border:1px solid var(--line2);border-radius:12px;padding:9px 11px">
+          <summary style="cursor:pointer;font-size:13px;font-weight:600">Corregir datos</summary>
+          <div style="margin-top:10px">
+            <div style="display:flex;gap:8px">
+              <div style="flex:1"><label class="fl">Edad</label><input class="ei" id="post-d-edad" type="number" min="14" max="99" value="${p.edad ?? ''}" placeholder="—"></div>
+              <div style="flex:1"><label class="fl">Años exp.</label><input class="ei" id="post-d-anios" type="number" min="0" max="60" step="0.5" value="${p.anios_experiencia ?? ''}" placeholder="—"></div>
+            </div>
+            <label class="fl" style="margin-top:8px">Género</label>
+            <select class="ei" id="post-d-genero">
+              <option value=""${!p.genero ? ' selected' : ''}>Sin especificar</option>
+              <option value="femenino"${p.genero === 'femenino' ? ' selected' : ''}>Femenino</option>
+              <option value="masculino"${p.genero === 'masculino' ? ' selected' : ''}>Masculino</option>
+              <option value="otro"${p.genero === 'otro' ? ' selected' : ''}>Otro</option>
+            </select>
+            <label class="fl" style="margin-top:8px">Estudios</label>
+            <input class="ei" id="post-d-estudios" value="${esc(p.estudios || '')}" placeholder="—">
+            <div class="muted" style="font-size:11.5px;margin-top:8px">Se guardan con el botón de la pestaña Gestión.</div>
+          </div>
+        </details>
       </div>
-    </details>
-    <label class="fl" style="margin-top:10px">Notas internas</label>
-    <textarea class="ei" id="post-d-notas" rows="3" placeholder="Notas propias, no visibles para el candidato...">${esc(p.notas_admin || '')}</textarea>
-    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13.5px;cursor:pointer">
-      <input type="checkbox" id="post-d-revisado"${p.revisado ? ' checked' : ''}> Marcar perfil como revisado
-    </label>
-    <div class="edit-err" id="post-d-err"></div>
-    <button class="dbtn save" id="post-d-save" type="button" style="margin-top:14px"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>`;
+
+      <div class="pf-panel" data-panel="analisis" style="display:${pestana === 'analisis' ? '' : 'none'}">
+        ${analisisPanelHtml(p.analisis_ia)}
+      </div>
+
+      <div class="pf-panel" data-panel="gestion" style="display:${pestana === 'gestion' ? '' : 'none'}">
+        <label class="fl">Estado de llamada</label>
+        <select class="ei" id="post-d-llamada">
+          <option value="pendiente"${p.estado_llamada === 'pendiente' ? ' selected' : ''}>Pendiente de llamar</option>
+          <option value="llamado"${p.estado_llamada === 'llamado' ? ' selected' : ''}>Llamado</option>
+        </select>
+        <label class="fl" style="margin-top:10px">Calificación</label>
+        <select class="ei" id="post-d-calidad">
+          <option value=""${!p.calidad_prospecto ? ' selected' : ''}>Sin calificar</option>
+          <option value="buen_prospecto"${p.calidad_prospecto === 'buen_prospecto' ? ' selected' : ''}>Buen prospecto</option>
+          <option value="no_calza"${p.calidad_prospecto === 'no_calza' ? ' selected' : ''}>No calza</option>
+        </select>
+        <label class="fl" style="margin-top:10px">Notas internas</label>
+        <textarea class="ei" id="post-d-notas" rows="4" placeholder="Notas propias, no visibles para el candidato...">${esc(p.notas_admin || '')}</textarea>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13.5px;cursor:pointer">
+          <input type="checkbox" id="post-d-revisado"${p.revisado ? ' checked' : ''}> Marcar perfil como revisado
+        </label>
+        <div class="edit-err" id="post-d-err"></div>
+        <button class="dbtn save" id="post-d-save" type="button" style="margin-top:14px"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>
+      </div>
+    </div>`;
+
+  // Cambiar de pestaña no re-renderiza: si lo hiciera, se perderían los
+  // cambios a medio escribir en los campos de las otras pestañas.
+  document.querySelectorAll('#post-d-body .pf-tab').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#post-d-body .pf-tab').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('#post-d-body .pf-panel').forEach(pane => {
+      pane.style.display = pane.dataset.panel === b.dataset.tab ? '' : 'none';
+    });
+  });
+
+  document.getElementById('pf-cerrar').onclick = () => closeSheet('post-drawer-sheet');
   document.getElementById('post-d-save').onclick = guardarPostulacion;
   document.getElementById('post-d-ver-cv')?.addEventListener('click', () => verCVPostulacion(p.cv_storage_path));
   document.getElementById('post-d-adjuntar-cv')?.addEventListener('click', () => document.getElementById('post-d-cv-input').click());
