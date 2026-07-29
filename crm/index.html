@@ -1956,9 +1956,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <div class="card">
           <div class="chead-row">
             <h2><i class="fas fa-address-card"></i> Postulaciones</h2>
-            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="post-search" placeholder="Buscar nombre o teléfono..."></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap">
+              <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="post-search" placeholder="Buscar nombre o teléfono..."></div>
+              <button class="btn-sm" type="button" id="post-cargar-cv"><i class="fas fa-file-arrow-up"></i> Cargar CV</button>
+              <input type="file" id="post-cv-input" accept="application/pdf" style="display:none">
+            </div>
           </div>
-          <div class="csub">Candidatos que aplicaron desde "Trabaja con nosotros" en la web</div>
+          <div class="csub">Candidatos de "Trabaja con nosotros" y CVs cargados a mano (los que llegan por correo)</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
             <select class="flt" id="post-f-modalidad">
               <option value="">Todas las modalidades</option>
@@ -2284,6 +2288,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="post-d-nombre">Postulación</div>
       <div style="padding:4px 6px 14px" id="post-d-body"></div>
+    </div>
+
+    <!-- Hoja: revisar el CV analizado por IA antes de guardarlo. Nunca se
+         guarda solo: la IA puede leer mal un teléfono y nadie lo verifica
+         antes de llamar. -->
+    <div class="sheet" id="post-cv-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="post-cv-title">Analizando CV...</div>
+      <div style="padding:4px 6px 14px" id="post-cv-body"></div>
     </div>
 
     <!-- Hoja: nueva tarea (admin, dentro de Freelancers) -->

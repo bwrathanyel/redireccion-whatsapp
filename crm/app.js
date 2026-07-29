@@ -3243,6 +3243,21 @@ document.getElementById('confirm-delete-post-ok')?.addEventListener('click', asy
   if (!error) okToast(`${ids.length} postulación(es) eliminada(s)`);
   loadPostulaciones();
 });
+// Se muestra plegado: cuando el análisis ya se leyó una vez, lo que interesa
+// del drawer es llamar y calificar, no volver a leer el informe entero.
+function analisisIAHtml(a) {
+  if (!a) return '';
+  return `<details style="margin-bottom:12px;border:1px solid var(--line2);border-radius:10px;padding:8px 10px">
+    <summary style="cursor:pointer;font-size:13px;font-weight:600"><i class="fas fa-wand-magic-sparkles" style="color:#8b5cf6"></i> Análisis del CV por IA</summary>
+    <div style="margin-top:10px">
+      ${a.resumen ? `<div class="dfv" style="margin-bottom:10px;white-space:pre-wrap">${esc(a.resumen)}</div>` : ''}
+      ${a.fortalezas?.length ? `<label class="fl">Dónde destaca</label>${listaHtml(a.fortalezas, '#22c55e')}` : ''}
+      ${a.debilidades?.length ? `<label class="fl">Dónde flojea</label>${listaHtml(a.debilidades, '#e0a030')}` : ''}
+      ${a.banderas?.length ? `<label class="fl">Para mirar con lupa</label>${listaHtml(a.banderas, '#ef4444')}` : ''}
+      ${a.anios_experiencia != null ? `<div class="muted" style="font-size:12px">Años de experiencia relevante: ${esc(String(a.anios_experiencia))}</div>` : ''}
+    </div>
+  </details>`;
+}
 function abrirPostulacionDrawer(p) {
   postDrawerActual = p;
   document.getElementById('post-d-nombre').textContent = p.nombre;
@@ -3259,6 +3274,7 @@ function abrirPostulacionDrawer(p) {
     ${p.mensaje ? `<label class="fl">Mensaje del candidato</label><div class="dfv" style="margin-bottom:10px;white-space:pre-wrap">${esc(p.mensaje)}</div>` : ''}
     <label class="fl">CV</label>
     <div style="margin-bottom:10px">${cvHtml}</div>
+    ${analisisIAHtml(p.analisis_ia)}
     <label class="fl">Estado de llamada</label>
     <select class="ei" id="post-d-llamada">
       <option value="pendiente"${p.estado_llamada === 'pendiente' ? ' selected' : ''}>Pendiente de llamar</option>
@@ -3306,6 +3322,203 @@ async function verCVPostulacion(path) {
 }
 document.getElementById('post-search')?.addEventListener('input', () => { clearTimeout(postSearchDeb); postSearchDeb = setTimeout(renderPostulaciones, 200); });
 document.querySelectorAll('#post-f-modalidad,#post-f-llamada,#post-f-calidad,#post-f-sin-revisar').forEach(el => el.addEventListener('change', renderPostulaciones));
+
+/* ---------- Cargar un CV y analizarlo con IA ----------
+   Para los CVs que llegan por correo (corporativo.lotus360@gmail.com está
+   publicado en la web): en vez de leer el PDF y tipear los datos a mano, la IA
+   los saca y evalúa el perfil con la misma vara que la entrevista de la web.
+   El resultado SIEMPRE pasa por una pantalla de revisión antes de guardarse --
+   la IA puede leer mal un teléfono y nadie lo verifica antes de llamar. */
+const PDFJS_VER = '4.7.76';
+const CV_ANALISIS_FN = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/analizar-cv-postulacion';
+let cvAnalizado = null;
+
+// pdf.js se carga a demanda, no en el arranque del CRM: son ~350KB que solo
+// hacen falta cuando alguien va a cargar un CV.
+let pdfjsLib = null;
+async function cargarPdfjs() {
+  if (pdfjsLib) return pdfjsLib;
+  pdfjsLib = await import(`https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/build/pdf.min.mjs`);
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/build/pdf.worker.min.mjs`;
+  return pdfjsLib;
+}
+
+async function textoDelPdf(file) {
+  const lib = await cargarPdfjs();
+  const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+  const partes = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const contenido = await (await doc.getPage(i)).getTextContent();
+    partes.push(contenido.items.map(it => it.str).join(' '));
+  }
+  return partes.join('\n').replace(/\s+/g, ' ').trim();
+}
+
+const archivoABase64 = file => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = () => res(String(r.result).split(',')[1]);
+  r.onerror = () => rej(r.error);
+  r.readAsDataURL(file);
+});
+
+async function cargarCVPostulacion(file) {
+  if (file.type !== 'application/pdf') { errToast('El CV debe ser un PDF'); return; }
+  if (file.size > 5 * 1024 * 1024) { errToast('El PDF no puede pesar más de 5MB'); return; }
+
+  cvAnalizado = null;
+  document.getElementById('post-cv-title').textContent = 'Analizando CV...';
+  document.getElementById('post-cv-body').innerHTML = '<div class="muted" style="padding:18px 2px"><i class="fas fa-spinner fa-spin"></i> Leyendo el PDF y evaluando el perfil. Puede tardar unos segundos.</div>';
+  openSheet('post-cv-sheet');
+
+  try {
+    const texto = await textoDelPdf(file).catch(() => '');
+    // Poco texto = PDF escaneado (una foto del CV). Ese caso lo resuelve el
+    // backend con un modelo que lee PDF nativo, así que se manda el archivo.
+    const cuerpo = texto.length >= 250 ? { texto_cv: texto } : { pdf_base64: await archivoABase64(file) };
+
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(CV_ANALISIS_FN, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token || ''}`,
+        apikey: SUPABASE_KEY,
+      },
+      body: JSON.stringify(cuerpo),
+    });
+    const out = await res.json().catch(() => null);
+    if (!res.ok || !out?.ok) {
+      const msg = out?.error === 'cv_sin_texto' ? 'No se pudo leer ese PDF. Probá con otro archivo.'
+        : out?.error === 'no_autorizado' ? 'Solo un administrador puede analizar CVs.'
+        : 'No se pudo analizar el CV. Intentá de nuevo en un momento.';
+      document.getElementById('post-cv-body').innerHTML = `<div class="edit-err" style="display:block">${esc(msg)}</div>`;
+      document.getElementById('post-cv-title').textContent = 'No se pudo analizar';
+      return;
+    }
+
+    const nombreLimpio = slugArchivo(file.name.replace(/\.[^.]+$/, ''));
+    const storagePath = `crm-manual/${Date.now()}-${nombreLimpio}.pdf`;
+    const { error: eUp } = await sb.storage.from('postulaciones-cv').upload(storagePath, file, { contentType: 'application/pdf' });
+    // Que falle la subida no invalida el análisis: se guarda igual la
+    // postulación, solo queda sin el PDF adjunto.
+    cvAnalizado = { analisis: out.analisis, motor: out.motor, cvPath: eUp ? null : storagePath };
+    await revisarCVAnalizado();
+  } catch (e) {
+    console.error('analisis de CV', e);
+    document.getElementById('post-cv-title').textContent = 'No se pudo analizar';
+    document.getElementById('post-cv-body').innerHTML = '<div class="edit-err" style="display:block">Falló la lectura del PDF. Probá con otro archivo.</div>';
+  }
+}
+
+/** Busca si el candidato ya está en postulaciones antes de crear otra fila.
+ *  El teléfono es el identificador real acá; el email es secundario porque
+ *  muchos CVs no lo traen. */
+async function buscarPostulacionExistente(analisis) {
+  const filtros = [];
+  const tel = (analisis.telefono || '').replace(/\D/g, '');
+  if (tel.length >= 7) filtros.push(`telefono.ilike.%${tel.slice(-7)}%`);
+  if (analisis.email) filtros.push(`email.ilike.${analisis.email.trim()}`);
+  if (!filtros.length) return null;
+  const { data } = await sb.from('postulaciones_empleo').select('*').or(filtros.join(',')).limit(1);
+  return data?.[0] || null;
+}
+
+function listaHtml(items, color) {
+  if (!items?.length) return '<div class="muted" style="margin-bottom:10px">—</div>';
+  return `<ul style="margin:0 0 10px;padding-left:18px">${items.map(x => `<li style="margin-bottom:4px;color:${color}">${esc(x)}</li>`).join('')}</ul>`;
+}
+
+async function revisarCVAnalizado() {
+  const a = cvAnalizado.analisis;
+  const existente = await buscarPostulacionExistente(a);
+  cvAnalizado.existente = existente;
+
+  const cal = a.calidad_prospecto;
+  document.getElementById('post-cv-title').textContent = a.nombre || 'CV analizado';
+  document.getElementById('post-cv-body').innerHTML = `
+    ${existente ? `<div style="padding:10px 12px;margin-bottom:12px;background:#e0a03014;border:1px solid #e0a03040;border-radius:10px;font-size:13.5px">
+      <b><i class="fas fa-triangle-exclamation" style="color:#e0a030"></i> Ya existe una postulación de esta persona</b><br>
+      <span class="muted">${esc(existente.nombre)} · ${esc(existente.telefono)} · ${esc(fmtFechaHoraCaracas(existente.created_at))}</span>
+    </div>` : ''}
+
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span class="badge-st" style="color:${CALIDAD_PROSPECTO_COLOR[cal]};background:${CALIDAD_PROSPECTO_COLOR[cal]}2e">${CALIDAD_PROSPECTO_LABEL[cal] || cal}</span>
+      <span class="muted" style="font-size:12px">Analizado con ${cvAnalizado.motor === 'claude' ? 'lectura de PDF escaneado' : 'DeepSeek'}</span>
+    </div>
+    <div class="dfv" style="margin-bottom:12px;white-space:pre-wrap">${esc(a.resumen || '')}</div>
+
+    <label class="fl">Nombre</label>
+    <input class="ei" id="cv-nombre" value="${esc(a.nombre || '')}" placeholder="Nombre y apellido">
+    <label class="fl" style="margin-top:8px">Teléfono</label>
+    <input class="ei" id="cv-telefono" value="${esc(a.telefono || '')}" placeholder="Si el CV no lo trae, completalo a mano">
+    <label class="fl" style="margin-top:8px">Email</label>
+    <input class="ei" id="cv-email" value="${esc(a.email || '')}" placeholder="Opcional">
+    <label class="fl" style="margin-top:8px">Modalidad</label>
+    <select class="ei" id="cv-modalidad">
+      <option value="presencial"${a.modalidad !== 'freelance' ? ' selected' : ''}>Presencial</option>
+      <option value="freelance"${a.modalidad === 'freelance' ? ' selected' : ''}>Freelance</option>
+    </select>
+    <label class="fl" style="margin-top:8px">Rol que mejor calza</label>
+    <input class="ei" id="cv-rol" value="${esc(a.rol_interes || '')}">
+
+    <label class="fl" style="margin-top:14px">Dónde destaca</label>
+    ${listaHtml(a.fortalezas, '#22c55e')}
+    <label class="fl">Dónde flojea o falta preguntar</label>
+    ${listaHtml(a.debilidades, '#e0a030')}
+    ${a.banderas?.length ? `<label class="fl">Para mirar con lupa</label>${listaHtml(a.banderas, '#ef4444')}` : ''}
+    ${a.anios_experiencia != null ? `<label class="fl">Años de experiencia relevante</label><div class="dfv" style="margin-bottom:10px">${esc(String(a.anios_experiencia))}</div>` : ''}
+
+    <div class="edit-err" id="cv-err"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button class="dbtn save" id="cv-guardar" type="button"><i class="fas fa-floppy-disk"></i> ${existente ? 'Crear otra postulación' : 'Guardar postulación'}</button>
+      ${existente ? '<button class="dbtn" id="cv-actualizar" type="button"><i class="fas fa-rotate"></i> Actualizar la existente</button>' : ''}
+    </div>`;
+
+  document.getElementById('cv-guardar').onclick = () => guardarCVAnalizado(false);
+  document.getElementById('cv-actualizar')?.addEventListener('click', () => guardarCVAnalizado(true));
+}
+
+async function guardarCVAnalizado(actualizar) {
+  const err = document.getElementById('cv-err');
+  const nombre = val('cv-nombre').trim(), telefono = val('cv-telefono').trim();
+  if (!nombre || !telefono) { err.textContent = 'Nombre y teléfono son obligatorios — completalos si el CV no los traía.'; err.style.display = 'block'; return; }
+
+  const a = cvAnalizado.analisis;
+  const fila = {
+    nombre, telefono,
+    email: val('cv-email').trim() || null,
+    modalidad: val('cv-modalidad'),
+    rol_interes: val('cv-rol').trim() || null,
+    calidad_prospecto: a.calidad_prospecto,
+    analisis_ia: {
+      resumen: a.resumen, fortalezas: a.fortalezas, debilidades: a.debilidades,
+      banderas: a.banderas, anios_experiencia: a.anios_experiencia, motor: cvAnalizado.motor,
+    },
+    analisis_ia_at: new Date().toISOString(),
+  };
+  if (cvAnalizado.cvPath) fila.cv_storage_path = cvAnalizado.cvPath;
+
+  const btn = document.getElementById(actualizar ? 'cv-actualizar' : 'cv-guardar');
+  btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
+
+  const { error } = actualizar
+    ? await sb.from('postulaciones_empleo').update(fila).eq('id', cvAnalizado.existente.id)
+    : await sb.from('postulaciones_empleo').insert({ ...fila, origen: 'cv_crm', estado_llamada: 'pendiente', revisado: false });
+
+  btn.disabled = false;
+  if (error) { err.textContent = 'No se pudo guardar: ' + error.message; err.style.display = 'block'; return; }
+  okToast(actualizar ? 'Postulación actualizada con el CV' : 'Postulación creada desde el CV');
+  closeSheet('post-cv-sheet');
+  cvAnalizado = null;
+  loadPostulaciones();
+}
+
+document.getElementById('post-cargar-cv')?.addEventListener('click', () => document.getElementById('post-cv-input').click());
+document.getElementById('post-cv-input')?.addEventListener('change', e => {
+  const f = e.target.files?.[0];
+  e.target.value = '';
+  if (f) cargarCVPostulacion(f);
+});
 
 /* ---------- Redes (Instagram + TikTok) ---------- */
 let redesPeriodo = '30d', redesRed = 'instagram', redesChatHistory = [];
