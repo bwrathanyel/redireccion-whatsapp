@@ -6,7 +6,7 @@ const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
 // original para pintar un thumb de 56px reventó la cuota de egress de
 // Supabase. Los 3 tamaños existen siempre, no hace falta fallback.
 const fotoMini = (storagePath, ancho) => `${FOTOS_BASE}_d/${ancho}/${storagePath}.jpg`;
-const DERIVADOS_ANCHOS = [256, 640, 1280];
+const DERIVADOS_ANCHOS = [256, 384, 640, 1280];
 const rutaDerivado = (storagePath, ancho) => `_d/${ancho}/${storagePath}.jpg`;
 // Los consumidores piden el derivado sin fallback, así que una foto sin sus
 // miniaturas se ve rota. Se generan acá, en el navegador, al subir una foto
