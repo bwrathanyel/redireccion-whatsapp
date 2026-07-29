@@ -3261,9 +3261,16 @@ function analisisIAHtml(a) {
 function abrirPostulacionDrawer(p) {
   postDrawerActual = p;
   document.getElementById('post-d-nombre').textContent = p.nombre;
-  const cvHtml = p.cv_storage_path
-    ? `<button class="dbtn" type="button" id="post-d-ver-cv"><i class="fas fa-file-arrow-down"></i> Ver CV</button>`
-    : '<span class="muted">Sin CV adjunto</span>';
+  // Adjuntar desde acá cubre el caso real: el candidato se postuló por la web
+  // sin CV y después lo mandó por correo, y quien revisa quiere verlo en su
+  // ficha en vez de buscarlo en el mail.
+  const cvHtml = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    ${p.cv_storage_path
+      ? `<button class="dbtn" type="button" id="post-d-ver-cv"><i class="fas fa-file-arrow-down"></i> Ver CV</button>`
+      : '<span class="muted">Sin CV adjunto</span>'}
+    <button class="btn-sm" type="button" id="post-d-adjuntar-cv"><i class="fas fa-paperclip"></i> ${p.cv_storage_path ? 'Reemplazar' : 'Adjuntar CV'}</button>
+    <input type="file" id="post-d-cv-input" accept="application/pdf" style="display:none">
+  </div>`;
   document.getElementById('post-d-body').innerHTML = `
     <label class="fl">Modalidad</label>
     <div class="dfv" style="margin-bottom:10px">${p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'}</div>
@@ -3295,8 +3302,45 @@ function abrirPostulacionDrawer(p) {
     <button class="dbtn save" id="post-d-save" type="button" style="margin-top:14px"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>`;
   document.getElementById('post-d-save').onclick = guardarPostulacion;
   document.getElementById('post-d-ver-cv')?.addEventListener('click', () => verCVPostulacion(p.cv_storage_path));
+  document.getElementById('post-d-adjuntar-cv')?.addEventListener('click', () => document.getElementById('post-d-cv-input').click());
+  document.getElementById('post-d-cv-input')?.addEventListener('change', e => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (f) adjuntarCVaPostulacion(p, f);
+  });
   openSheet('post-drawer-sheet');
 }
+async function adjuntarCVaPostulacion(p, file) {
+  if (file.type !== 'application/pdf') { errToast('El CV debe ser un PDF'); return; }
+  if (file.size > 5 * 1024 * 1024) { errToast('El PDF no puede pesar más de 5MB'); return; }
+  const btn = document.getElementById('post-d-adjuntar-cv');
+  btn.disabled = true; btn.innerHTML = 'Subiendo... <i class="fas fa-spinner fa-spin"></i>';
+
+  const anterior = p.cv_storage_path;
+  const { path, error } = await subirCVPostulacion(file);
+  if (error) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paperclip"></i> Adjuntar CV'; errToast('No se pudo subir el CV: ' + error); return; }
+
+  const { error: eDb } = await sb.from('postulaciones_empleo').update({ cv_storage_path: path }).eq('id', p.id);
+  if (eDb) {
+    // La fila no quedó apuntando al archivo nuevo, así que ese archivo no le
+    // sirve a nadie: se borra para no dejar basura en el bucket.
+    await sb.storage.from('postulaciones-cv').remove([path]);
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-paperclip"></i> Adjuntar CV';
+    errToast('No se pudo guardar el CV en la ficha: ' + eDb.message);
+    return;
+  }
+
+  // Recién ahora se borra el anterior: si se borrara antes y fallara algo,
+  // el candidato quedaría sin ningún CV.
+  if (anterior && anterior !== path) await sb.storage.from('postulaciones-cv').remove([anterior]);
+
+  p.cv_storage_path = path;
+  const enCache = postCache.find(x => x.id === p.id);
+  if (enCache) enCache.cv_storage_path = path;
+  okToast('CV adjuntado');
+  abrirPostulacionDrawer(p);
+}
+
 async function guardarPostulacion() {
   if (!postDrawerActual) return;
   const btn = document.getElementById('post-d-save'), err = document.getElementById('post-d-err');
@@ -3354,6 +3398,15 @@ async function textoDelPdf(file) {
   return partes.join('\n').replace(/\s+/g, ' ').trim();
 }
 
+/** Sube un PDF al bucket de CVs. Devuelve {path} o {error} con el motivo --
+ *  nunca falla en silencio, un CV que no se guardó tiene que ser visible. */
+async function subirCVPostulacion(file) {
+  const nombreLimpio = slugArchivo(file.name.replace(/\.[^.]+$/, ''));
+  const path = `crm-manual/${Date.now()}-${nombreLimpio}.pdf`;
+  const { error } = await sb.storage.from('postulaciones-cv').upload(path, file, { contentType: 'application/pdf' });
+  return error ? { path: null, error: error.message } : { path, error: null };
+}
+
 const archivoABase64 = file => new Promise((res, rej) => {
   const r = new FileReader();
   r.onload = () => res(String(r.result).split(',')[1]);
@@ -3396,12 +3449,11 @@ async function cargarCVPostulacion(file) {
       return;
     }
 
-    const nombreLimpio = slugArchivo(file.name.replace(/\.[^.]+$/, ''));
-    const storagePath = `crm-manual/${Date.now()}-${nombreLimpio}.pdf`;
-    const { error: eUp } = await sb.storage.from('postulaciones-cv').upload(storagePath, file, { contentType: 'application/pdf' });
-    // Que falle la subida no invalida el análisis: se guarda igual la
-    // postulación, solo queda sin el PDF adjunto.
-    cvAnalizado = { analisis: out.analisis, motor: out.motor, cvPath: eUp ? null : storagePath };
+    const { path: storagePath, error: eUp } = await subirCVPostulacion(file);
+    // Si el archivo no se pudo guardar hay que decirlo: antes esto era
+    // silencioso y la postulación quedaba sin CV sin que nadie se enterara.
+    if (eUp) errToast('El análisis salió bien, pero el PDF no se pudo guardar: ' + eUp);
+    cvAnalizado = { analisis: out.analisis, motor: out.motor, cvPath: storagePath };
     await revisarCVAnalizado();
   } catch (e) {
     console.error('analisis de CV', e);
