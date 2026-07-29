@@ -3,11 +3,17 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
 // Miniaturas pregeneradas (_d/<ancho>/<ruta_original>.jpg) -- servir el
-// original para pintar un thumb de 56px reventó la cuota de egress de
-// Supabase. Los 3 tamaños existen siempre, no hace falta fallback.
-const fotoMini = (storagePath, ancho) => `${FOTOS_BASE}_d/${ancho}/${storagePath}.jpg`;
+// original para pintar un thumb de 56px reventó la cuota de egress de Supabase.
+// Los 4 tamaños existen siempre, no hace falta fallback.
+//
+// Se piden a un Worker propio con R2 detrás (CRM/workers/fotos), no a Supabase:
+// R2 no cobra egress, así que cada foto sale de Supabase UNA vez y después es
+// gratis. Las fotos nuevas se siguen SUBIENDO a Supabase -- el Worker las copia
+// sola la primera vez que alguien las mira.
+const CDN_FOTOS = 'https://fotos.destinoyeventoslotus360.com/';
 const DERIVADOS_ANCHOS = [256, 384, 640, 1280];
 const rutaDerivado = (storagePath, ancho) => `_d/${ancho}/${storagePath}.jpg`;
+const fotoMini = (storagePath, ancho) => CDN_FOTOS + rutaDerivado(storagePath, ancho);
 // Los consumidores piden el derivado sin fallback, así que una foto sin sus
 // miniaturas se ve rota. Se generan acá, en el navegador, al subir una foto
 // nueva, porque Canvas decodifica WebP y la librería del backend
