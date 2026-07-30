@@ -2819,6 +2819,193 @@ async function retirarTodosLosVencidos() {
   loadTarifario();
 }
 
+/* ---------- Actualizador de Tarifario (2026-07-30) ----------
+   Tres cosas que antes no tenían pantalla: confirmar lo que la IA publicó,
+   correr la actualización sin esperar al cron de cada 2 horas, y ver qué entró.
+
+   La cola de revisión existe porque la ruta de imagen (flyers) publica todo con
+   necesita_revision=true a propósito: Qwen3-VL lee bien los precios pero marcó
+   necesita_revision_humana=false en los 4 flyers medidos, incluido uno con dos
+   vigencias que se contradicen. Esa bandera del modelo no es señal de nada
+   todavía, así que el filtro real lo pone una persona acá. */
+let ACT_PENDIENTES = [];
+
+async function abrirActualizadorTarifario(pestana) {
+  openSheet('actualizador-sheet');
+  actCambiarTab(pestana || 'revisar');
+}
+
+function actCambiarTab(clave) {
+  document.querySelectorAll('#act-tabs .act-tab').forEach(b => b.classList.toggle('on', b.dataset.atab === clave));
+  document.querySelectorAll('#actualizador-sheet .act-panel').forEach(p => p.classList.toggle('on', p.dataset.apanel === clave));
+  if (clave === 'revisar') cargarRevisionTarifario();
+  else if (clave === 'correr') cargarPanelCorrer();
+  else cargarHistorialTarifario();
+}
+
+function actSkel(id) {
+  document.getElementById(id).innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+}
+
+/* --- Pestaña 1: por revisar --- */
+async function cargarRevisionTarifario() {
+  actSkel('act-panel-revisar');
+  const { data, error } = await sb.rpc('revision_tarifario_pendientes');
+  const cont = document.getElementById('act-panel-revisar');
+  if (error) { cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
+  ACT_PENDIENTES = data || [];
+  actPintarPill();
+  if (!ACT_PENDIENTES.length) {
+    cont.innerHTML = '<div class="vig-vacio"><i class="fas fa-circle-check"></i><b>Nada por confirmar</b><div style="font-size:12.5px;margin-top:6px">Todo lo que publicó la IA ya está revisado.</div></div>';
+    return;
+  }
+  const etiqueta = { promocion: 'Promo', tarifa: 'Tarifa', producto: 'Producto' };
+  cont.innerHTML = `
+    <div class="vig-grupo-d">Estos ${ACT_PENDIENTES.length} item(s) los publicó la IA y están esperando tu confirmación. Ya se ven en el catálogo — confirmarlos solo los saca de esta lista.</div>
+    ${ACT_PENDIENTES.map(f => {
+      const clave = `${f.tipo}:${f.item_id}`;
+      const editable = f.tipo !== 'producto';
+      return `<div class="act-rev" data-act-item="${clave}">
+        <div class="act-rev-top">
+          <div class="act-rev-nom">${esc(f.nombre || '(sin nombre)')}</div>
+          <span class="vig-tipo">${etiqueta[f.tipo] || f.tipo}</span>
+        </div>
+        ${f.precio_texto ? `<div class="act-rev-precio">${esc(f.precio_texto)}</div>` : ''}
+        ${f.vigencia_texto ? `<div class="act-rev-vig">${esc(f.vigencia_texto)}</div>` : ''}
+        ${f.nota_revision ? `<div class="act-rev-nota"><i class="fas fa-triangle-exclamation"></i> ${esc(f.nota_revision)}</div>` : ''}
+        <div class="act-rev-src"><i class="fas fa-file-lines"></i>${esc(f.fuente_archivo || 'sin archivo')}</div>
+        <div class="act-rev-acc">
+          <button class="dbtn primary" data-act-ok="${clave}"><i class="fas fa-check"></i> Está bien</button>
+          ${editable ? `<button class="dbtn" data-act-edit="${clave}"><i class="fas fa-pen"></i> Corregir precio</button>` : ''}
+          <button class="dbtn" data-act-quitar="${clave}"><i class="fas fa-eye-slash"></i> Quitar</button>
+        </div>
+        ${editable ? `<div class="act-rev-edit" data-act-editrow="${clave}">
+          <input class="ei" data-act-precio type="text" value="${esc(f.precio_texto || '')}" placeholder="Precio corregido">
+          <button class="dbtn primary" data-act-guardar="${clave}">Guardar</button>
+        </div>` : ''}
+      </div>`;
+    }).join('')}`;
+}
+
+function actPintarPill() {
+  const pill = document.getElementById('act-pill-rev');
+  if (!pill) return;
+  pill.textContent = ACT_PENDIENTES.length;
+  pill.hidden = !ACT_PENDIENTES.length;
+}
+
+function actPartes(clave) {
+  const [tipo, id] = clave.split(':');
+  return { tipo, id: Number(id) };
+}
+
+async function actAprobar(clave, btn) {
+  const { tipo, id } = actPartes(clave);
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('aprobar_item_tarifario', { p_tipo: tipo, p_id: id });
+  if (error || !data?.ok) { btn.disabled = false; errToast('No se pudo confirmar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Confirmado');
+  await cargarRevisionTarifario();
+}
+
+async function actGuardarPrecio(clave, btn) {
+  const { tipo, id } = actPartes(clave);
+  const input = document.querySelector(`[data-act-editrow="${clave}"] [data-act-precio]`);
+  const precio = input?.value?.trim();
+  if (!precio) { errToast('Escribí el precio corregido'); return; }
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('corregir_precio_tarifario', { p_tipo: tipo, p_id: id, p_precio_texto: precio });
+  if (error || !data?.ok) { btn.disabled = false; errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Precio corregido');
+  await cargarRevisionTarifario();
+  loadTarifario();
+}
+
+async function actQuitar(clave, btn) {
+  const { tipo, id } = actPartes(clave);
+  const item = ACT_PENDIENTES.find(f => `${f.tipo}:${f.item_id}` === clave);
+  if (tipo === 'producto') { errToast('Los productos se ocultan desde el panel de configuración del tarifario'); return; }
+  if (!confirm(`Quitar "${item?.nombre || 'este item'}" del catálogo.\n\nDeja de verse en el CRM, en la web y para el bot. Se puede volver a activar a mano.`)) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('retirar_item_tarifario', { p_tipo: tipo, p_id: id });
+  if (error || !data?.ok) { btn.disabled = false; errToast('No se pudo quitar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Quitado del catálogo');
+  await cargarRevisionTarifario();
+  loadTarifario();
+}
+
+/* --- Pestaña 2: correr la actualización --- */
+async function cargarPanelCorrer() {
+  const cont = document.getElementById('act-panel-correr');
+  const { data, error } = await sb.rpc('estado_cola_tarifario');
+  const e = error ? {} : (data || {});
+  cont.innerHTML = `
+    <div class="vig-resumen">
+      <div class="vig-kpi ${e.pendientes ? 'aviso' : ''}"><b>${e.pendientes ?? '—'}</b><span>En cola</span></div>
+      <div class="vig-kpi"><b>${e.procesando ?? '—'}</b><span>Procesando</span></div>
+      <div class="vig-kpi ${e.con_error ? 'grave' : ''}"><b>${e.con_error ?? '—'}</b><span>Con error</span></div>
+      <div class="vig-kpi ${e.por_revisar ? 'aviso' : ''}"><b>${e.por_revisar ?? '—'}</b><span>Por revisar</span></div>
+    </div>
+    <div class="act-run">
+      <h4>Buscar y actualizar</h4>
+      <p>Revisa las carpetas de Drive, extrae los archivos nuevos y los publica en el catálogo.<br>Tarda unos minutos; podés cerrar esta pantalla mientras corre.</p>
+      <button class="dbtn primary" id="act-correr-btn"><i class="fas fa-arrows-rotate"></i> Actualizar ahora</button>
+      <div class="act-estado" id="act-correr-estado">
+        ${e.ultima_corrida ? `Última actualización: <b>${esc(fmtFechaHoraCaracas(e.ultima_corrida))}</b>` : 'Sin corridas registradas todavía.'}
+        <br>${e.procesados ?? 0} archivo(s) procesados en total.
+      </div>
+    </div>`;
+  document.getElementById('act-correr-btn').addEventListener('click', correrActualizacionTarifario);
+}
+
+async function correrActualizacionTarifario() {
+  const btn = document.getElementById('act-correr-btn');
+  const estado = document.getElementById('act-correr-estado');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Corriendo...';
+  const { data, error } = await sb.rpc('disparar_actualizacion_tarifario');
+  if (error || !data?.ok) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-arrows-rotate"></i> Actualizar ahora';
+    errToast('No se pudo disparar: ' + (error?.message || data?.error || ''));
+    return;
+  }
+  okToast('Actualización lanzada');
+  // El pipeline es asíncrono: el botón no puede saber cuándo terminó, así que
+  // en vez de mentir con un spinner eterno se refresca el estado al rato.
+  estado.innerHTML = 'Corriendo en segundo plano. El resultado aparece en el Historial en unos minutos.';
+  setTimeout(() => { if (document.getElementById('act-correr-btn')) cargarPanelCorrer(); }, 45000);
+}
+
+/* --- Pestaña 3: historial --- */
+async function cargarHistorialTarifario() {
+  actSkel('act-panel-historial');
+  const { data, error } = await sb.rpc('historial_tarifario', { p_limite: 60 });
+  const cont = document.getElementById('act-panel-historial');
+  if (error) { cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
+  const filas = data || [];
+  if (!filas.length) { cont.innerHTML = '<div class="vig-vacio"><i class="fas fa-clock-rotate-left"></i><b>Sin historial</b></div>'; return; }
+  cont.innerHTML = filas.map(f => {
+    const nombreCorto = (f.fuente_archivo || '').split('/').pop() || f.fuente_archivo || '(sin archivo)';
+    const detalle = f.ok
+      ? (f.titulos ? esc(f.titulos) : `${f.filas} fila(s) publicada(s)`)
+      : esc(f.error || 'error sin detalle');
+    return `<div class="act-h">
+      <div class="act-h-ic ${f.ok ? 'ok' : 'err'}"><i class="fas ${f.ok ? 'fa-check' : 'fa-xmark'}"></i></div>
+      <div class="act-h-body">
+        <div class="act-h-file">${esc(nombreCorto)}</div>
+        <div class="act-h-det">${detalle}</div>
+        <div class="act-h-meta">
+          <span class="act-h-modelo">${esc(f.modelo || 'n/a')}</span>
+          ${f.ok ? `${f.filas} fila(s)` : ''}
+          ${f.precio_alerta ? ' · <span style="color:#ff6b6b">cambio de precio grande</span>' : ''}
+          ${f.necesita_revision ? ' · pendiente de revisión' : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 /* ---------- Servicio de interés detectado por IA ----------
    El campo estaba vacío en el 99,8% de los leads: nadie lo llenaba a mano y la
    ingesta no lo mandaba. Desde el 2026-07-30 los leads nuevos entran ya
@@ -4835,6 +5022,25 @@ function setupTarAdmin() {
   if (!btn) return;
   btn.onclick = () => { openSheet('tar-admin-sheet'); renderTasTabs(); cargarTasItems(); };
   document.getElementById('tar-vigencias-btn')?.addEventListener('click', abrirRevisionVigencias);
+  document.getElementById('tar-actualizador-btn')?.addEventListener('click', () => abrirActualizadorTarifario());
+  document.getElementById('act-tabs')?.addEventListener('click', ev => {
+    const t = ev.target.closest('.act-tab');
+    if (t) actCambiarTab(t.dataset.atab);
+  });
+  // Delegado: las tarjetas de revisión se repintan enteras en cada acción, así
+  // que enganchar listeners por tarjeta se perdería en el primer refresco.
+  document.getElementById('actualizador-sheet')?.addEventListener('click', ev => {
+    const ok = ev.target.closest('[data-act-ok]');
+    if (ok) return actAprobar(ok.dataset.actOk, ok);
+    const edit = ev.target.closest('[data-act-edit]');
+    if (edit) return document.querySelector(`[data-act-editrow="${edit.dataset.actEdit}"]`)?.classList.toggle('on');
+    const guardar = ev.target.closest('[data-act-guardar]');
+    if (guardar) return actGuardarPrecio(guardar.dataset.actGuardar, guardar);
+    const quitar = ev.target.closest('[data-act-quitar]');
+    if (quitar) return actQuitar(quitar.dataset.actQuitar, quitar);
+    const det = ev.target.closest('.act-h-det');
+    if (det) det.classList.toggle('abierto');
+  });
   document.getElementById('tas-close').onclick = () => closeSheet('tar-admin-sheet');
   let debTas; document.getElementById('tas-search').addEventListener('input', () => { clearTimeout(debTas); debTas = setTimeout(renderTasList, 200); });
 }

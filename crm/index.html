@@ -1392,6 +1392,56 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .vig-vacio{text-align:center;padding:34px 16px;color:var(--muted)}
 .vig-vacio i{font-size:30px;color:var(--green);display:block;margin-bottom:12px}
 
+/* ============ Actualizador de Tarifario (2026-07-30) ============ */
+/* Tres pestañas: Por revisar / Actualizar / Historial. Reusa el lenguaje
+   visual de la hoja de vigencias (.vig-kpi, .vig-item) para que las dos
+   pantallas de mantenimiento del tarifario se lean igual. */
+.act-tabs{display:flex;gap:4px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:16px}
+.act-tab{flex:1;background:none;border:0;border-radius:9px;padding:9px 6px;color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;transition:background .15s,color .15s;position:relative}
+.act-tab.on{background:var(--panel-solid);color:var(--txt);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.act-tab .act-pill{display:inline-block;min-width:17px;padding:1px 5px;margin-left:5px;border-radius:999px;background:var(--accent);color:#1a1005;font-size:9.5px;font-weight:800;vertical-align:1px}
+.act-tab.on .act-pill{background:var(--accent)}
+.act-panel{display:none}
+.act-panel.on{display:block;animation:section-in .2s ease}
+
+/* Tarjeta de un item esperando confirmación */
+.act-rev{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:9px;background:rgba(255,255,255,.02)}
+.act-rev-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+.act-rev-nom{font-weight:700;font-size:13.5px;flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.35}
+.act-rev-precio{font-size:13px;color:var(--txt);font-weight:600;line-height:1.5;white-space:pre-line;overflow-wrap:anywhere}
+.act-rev-vig{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.5;white-space:pre-line}
+.act-rev-nota{font-size:11.5px;color:#ffd595;background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.22);border-radius:9px;padding:7px 10px;margin-top:8px;line-height:1.45}
+.act-rev-src{font-size:10.5px;color:var(--muted2);margin-top:7px;overflow-wrap:anywhere}
+.act-rev-src i{margin-right:5px}
+.act-rev-acc{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.act-rev-acc .dbtn{flex:none;width:auto;padding:8px 13px;font-size:12px}
+.act-rev-edit{display:none;gap:7px;margin-top:9px}
+.act-rev-edit.on{display:flex}
+.act-rev-edit .ei{flex:1;min-width:0;width:auto;padding:8px 10px;font-size:12.5px}
+
+/* Panel "Actualizar" */
+.act-run{border:1px solid var(--line);border-radius:14px;padding:18px;background:rgba(255,255,255,.02);text-align:center}
+.act-run h4{margin:0 0 6px;font-size:15px;font-weight:800}
+.act-run p{margin:0 0 15px;font-size:12.5px;color:var(--muted);line-height:1.6}
+.act-run .dbtn{flex:none;width:auto;padding:12px 22px;font-size:13.5px;margin:0 auto}
+.act-estado{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.6}
+.act-estado b{color:var(--txt)}
+
+/* Historial */
+.act-h{display:flex;align-items:flex-start;gap:10px;padding:11px 2px;border-bottom:1px solid var(--line);font-size:12.5px}
+.act-h:last-child{border-bottom:0}
+.act-h-ic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex-shrink:0;font-size:11px}
+.act-h-ic.ok{background:rgba(34,197,94,.12);color:#4ade80}
+.act-h-ic.err{background:rgba(239,68,68,.12);color:#f87171}
+.act-h-body{flex:1;min-width:0}
+.act-h-file{font-weight:600;overflow-wrap:anywhere;line-height:1.4}
+/* Un tarifario de 11 filas escupe párrafos enteros de precios; sin recorte el
+   historial deja de ser una lista y pasa a ser un muro. Se abre al tocarlo. */
+.act-h-det{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.5;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}
+.act-h-det.abierto{-webkit-line-clamp:unset;overflow:visible}
+.act-h-meta{font-size:10.5px;color:var(--muted2);margin-top:4px}
+.act-h-modelo{display:inline-block;padding:1px 6px;border-radius:5px;background:rgba(255,255,255,.05);margin-right:6px}
+
 /* ============ Boletería — tarjeta resumida + hoja de detalle (2026-07-30) ============ */
 /* La tarjeta pasó a ser un resumen tocable: todo el detalle vive en la hoja,
    así la cola se lee de un vistazo en vez de ser un muro de datos. */
@@ -1852,6 +1902,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <button class="seg" data-tab="hotel">Hoteles</button>
           <button class="seg" data-tab="paquete">Paquetes</button>
         </div>
+        <button class="tar-admin-btn admin-only" id="tar-actualizador-btn" type="button" title="Actualizador de Tarifario"><i class="fas fa-arrows-rotate"></i></button>
         <button class="tar-admin-btn admin-only" id="tar-vigencias-btn" type="button" title="Revisar vigencias"><i class="fas fa-calendar-check"></i></button>
         <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
       </div>
@@ -2950,6 +3001,21 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <div class="sheet-handle"></div>
   <div class="sheet-title"><i class="fas fa-calendar-check"></i> Revisión de vigencias</div>
   <div id="vig-cuerpo"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+</div>
+
+<!-- Actualizador de Tarifario: confirmar lo que la IA publicó, correr la
+     actualización a mano, y ver qué entró en cada corrida. -->
+<div class="sheet" id="actualizador-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-arrows-rotate"></i> Actualizador de Tarifario</div>
+  <div class="act-tabs" id="act-tabs">
+    <button class="act-tab on" data-atab="revisar" type="button">Por revisar<span class="act-pill" id="act-pill-rev" hidden>0</span></button>
+    <button class="act-tab" data-atab="correr" type="button">Actualizar</button>
+    <button class="act-tab" data-atab="historial" type="button">Historial</button>
+  </div>
+  <div class="act-panel on" data-apanel="revisar" id="act-panel-revisar"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+  <div class="act-panel" data-apanel="correr" id="act-panel-correr"></div>
+  <div class="act-panel" data-apanel="historial" id="act-panel-historial"></div>
 </div>
 
 <!-- Detalle de una solicitud de boletería: se abre al tocar una tarjeta de la cola -->
