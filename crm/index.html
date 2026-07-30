@@ -1367,6 +1367,31 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .dsec-body{padding:2px 12px 14px}
 }
 
+/* ============ Revisión de vigencias del tarifario ============ */
+.vig-resumen{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.vig-kpi{flex:1;min-width:96px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.vig-kpi b{display:block;font-size:20px;font-weight:800;line-height:1.1}
+.vig-kpi span{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px}
+.vig-kpi.grave b{color:#ff6b6b}.vig-kpi.aviso b{color:var(--accent)}
+.vig-grupo{margin-bottom:16px}
+.vig-grupo-t{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.vig-grupo-d{font-size:11.5px;color:var(--muted2);line-height:1.5;margin-bottom:9px}
+.vig-item{border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:8px;background:rgba(255,255,255,.02)}
+.vig-item.grave{border-color:rgba(239,68,68,.3)}
+.vig-top{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.vig-nombre{font-weight:700;font-size:13.5px;flex:1;min-width:0;overflow-wrap:anywhere}
+.vig-tipo{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--muted);white-space:nowrap}
+.vig-texto{font-size:11.5px;color:var(--muted);line-height:1.5}
+.vig-fechas{font-size:11px;color:var(--muted2);margin-top:4px}
+.vig-fechas b{color:#ff6b6b}
+.vig-acc{display:flex;gap:7px;align-items:center;margin-top:9px;flex-wrap:wrap}
+.vig-acc .ei{width:auto;flex:1;min-width:130px;padding:7px 9px;font-size:12.5px}
+.vig-acc .dbtn{flex:none;width:auto;padding:8px 12px;font-size:12px}
+.vig-huerfano{font-size:11.5px;color:#ffd595;background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.22);border-radius:9px;padding:7px 10px;margin-top:7px;line-height:1.45}
+.vig-huerfano i{color:var(--accent);margin-right:5px}
+.vig-vacio{text-align:center;padding:34px 16px;color:var(--muted)}
+.vig-vacio i{font-size:30px;color:var(--green);display:block;margin-bottom:12px}
+
 /* ============ Boletería — tarjeta resumida + hoja de detalle (2026-07-30) ============ */
 /* La tarjeta pasó a ser un resumen tocable: todo el detalle vive en la hoja,
    así la cola se lee de un vistazo en vez de ser un muro de datos. */
@@ -1827,6 +1852,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <button class="seg" data-tab="hotel">Hoteles</button>
           <button class="seg" data-tab="paquete">Paquetes</button>
         </div>
+        <button class="tar-admin-btn admin-only" id="tar-vigencias-btn" type="button" title="Revisar vigencias"><i class="fas fa-calendar-check"></i></button>
         <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
       </div>
       <!-- Buscador IA: reemplaza la sección suelta "Buscar Tarifario". El
@@ -2917,6 +2943,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <button class="dbtn" id="bol-cancelar" type="button" style="flex:1">Cancelar</button>
     <button class="dbtn save" id="bol-enviar" type="button" style="flex:2"><i class="fas fa-paper-plane"></i> Mandar a la cola</button>
   </div>
+</div>
+
+<!-- Revisión de vigencias del tarifario (admin) -->
+<div class="sheet" id="vigencias-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-calendar-check"></i> Revisión de vigencias</div>
+  <div id="vig-cuerpo"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
 </div>
 
 <!-- Detalle de una solicitud de boletería: se abre al tocar una tarjeta de la cola -->

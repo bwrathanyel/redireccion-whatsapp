@@ -2669,6 +2669,156 @@ async function guardarLead() {
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
 }
 
+/* ---------- Revisión de vigencias del tarifario (admin) ----------
+   Reemplaza el chequeo que se hacía a mano leyendo SQL. Es 100% determinista
+   -- fechas, no criterio -- así que no pasa por ninguna IA: sale más barato,
+   es instantáneo y no se equivoca. El RPC revisar_vigencias_tarifario hace
+   todo el trabajo; acá solo se agrupa y se pinta. */
+const VIG_GRUPOS = [
+  { k: 'venta_cerrada', t: 'Ya no se puede vender', grave: true,
+    d: 'El período de VENTA cerró, aunque el viaje sea más adelante. El bot las sigue ofreciendo hasta que se retiren.' },
+  { k: 'vencida', t: 'Vencidas', grave: true,
+    d: 'La fecha de fin ya pasó y siguen apareciendo en el catálogo.' },
+  { k: 'venta_cierra_pronto', t: 'La venta cierra esta semana', grave: false,
+    d: 'Todavía se venden, pero quedan pocos días. Avisale al equipo antes de que se caigan solas.' },
+  { k: 'vence_pronto', t: 'Vencen esta semana', grave: false,
+    d: 'Fecha de fin dentro de los próximos 7 días.' },
+  { k: 'sin_fecha_con_pista', t: 'Sin fecha de fin, pero el texto la tiene', grave: false,
+    d: 'El campo de fecha está vacío, así que se ofrecen para siempre — pero la vigencia está escrita en el texto. Poné la fecha y el filtro vuelve a funcionar solo.' },
+  { k: 'dos_ventanas', t: 'Dos temporadas en la misma vigencia', grave: false,
+    d: 'El texto declara dos rangos y el campo guarda solo el último: el hueco del medio no lo filtra nadie.' },
+  { k: 'sin_fecha', t: 'Sin fecha de fin', grave: false,
+    d: 'Se ofrecen para siempre. Puede estar bien (temporada abierta) o ser un olvido de carga.' },
+];
+let VIG_FILAS = [];
+
+async function abrirRevisionVigencias() {
+  openSheet('vigencias-sheet');
+  const cuerpo = document.getElementById('vig-cuerpo');
+  cuerpo.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  const { data, error } = await sb.rpc('revisar_vigencias_tarifario', { p_dias_aviso: 7 });
+  if (error) { cuerpo.innerHTML = `<div class="vig-vacio">No se pudo revisar: ${esc(error.message)}</div>`; return; }
+  VIG_FILAS = data || [];
+  renderRevisionVigencias();
+}
+
+function renderRevisionVigencias() {
+  const cuerpo = document.getElementById('vig-cuerpo');
+  if (!VIG_FILAS.length) {
+    cuerpo.innerHTML = '<div class="vig-vacio"><i class="fas fa-circle-check"></i><b>Todo en orden</b><div style="font-size:12.5px;margin-top:6px">No hay nada vencido ni por vencer en los próximos 7 días.</div></div>';
+    return;
+  }
+  const porGrupo = k => VIG_FILAS.filter(f => f.problema === k);
+  const paraRetirar = VIG_FILAS.filter(f => (f.problema === 'venta_cerrada' || f.problema === 'vencida') && !f.deja_sin_precio);
+  const urgentes = porGrupo('venta_cerrada').length + porGrupo('vencida').length;
+  const huerfanos = porGrupo('venta_cerrada').concat(porGrupo('vencida')).filter(f => f.deja_sin_precio).length;
+  const proximos = porGrupo('venta_cierra_pronto').length + porGrupo('vence_pronto').length;
+  const sinFecha = porGrupo('sin_fecha_con_pista').length + porGrupo('sin_fecha').length;
+
+  const item = f => {
+    const grave = f.problema === 'vencida' || f.problema === 'venta_cerrada';
+    // La fecha que ya viene en el texto se ofrece precargada: es el arreglo de
+    // raíz (llenar el campo) en vez de solo retirar el item de hoy.
+    const sugerida = f.problema === 'sin_fecha_con_pista' ? (fechaSugeridaDeTexto(f.vigencia_texto) || '') : '';
+    const cuando = [];
+    if (f.fecha_venta) cuando.push(`venta hasta ${esc(fmtDiaCorto(f.fecha_venta))}`);
+    if (f.fecha_fin) cuando.push(`fin ${esc(fmtDiaCorto(f.fecha_fin))}`);
+    if (f.dias != null) cuando.push(f.dias < 0 ? `<b>hace ${Math.abs(f.dias)} día(s)</b>` : `en ${f.dias} día(s)`);
+    return `<div class="vig-item ${grave ? 'grave' : ''}">
+      <div class="vig-top">
+        <div class="vig-nombre">${esc(f.nombre)}</div>
+        <span class="vig-tipo">${f.tipo === 'promocion' ? 'Promo' : 'Tarifa'}</span>
+      </div>
+      ${f.precio_texto ? `<div class="vig-texto">${esc(f.precio_texto)}</div>` : ''}
+      ${f.vigencia_texto ? `<div class="vig-texto">${esc(f.vigencia_texto)}</div>` : ''}
+      ${cuando.length ? `<div class="vig-fechas">${cuando.join(' · ')}</div>` : ''}
+      ${f.deja_sin_precio ? '<div class="vig-huerfano"><i class="fas fa-triangle-exclamation"></i> Es el único precio de este hotel: si lo retirás queda incotizable. Cargá el precio nuevo antes.</div>' : ''}
+      <div class="vig-acc">
+        ${grave ? '' : `<input type="date" class="ei" value="${esc(sugerida)}" data-vig-fecha="${f.tipo}:${f.item_id}">
+        <button class="dbtn gh" data-vig-fijar="${f.tipo}:${f.item_id}"><i class="fas fa-calendar-day"></i> Poner fecha</button>`}
+        <button class="dbtn peligro" data-vig-retirar="${f.tipo}:${f.item_id}"><i class="fas fa-eye-slash"></i> Retirar</button>
+      </div>
+    </div>`;
+  };
+
+  cuerpo.innerHTML = `
+    <div class="vig-resumen">
+      <div class="vig-kpi ${urgentes ? 'grave' : ''}"><b>${urgentes}</b><span>Retirar ya</span></div>
+      <div class="vig-kpi ${proximos ? 'aviso' : ''}"><b>${proximos}</b><span>Esta semana</span></div>
+      <div class="vig-kpi"><b>${sinFecha}</b><span>Sin fecha</span></div>
+    </div>
+    ${paraRetirar.length ? `<button class="dbtn peligro" id="vig-retirar-todo" type="button" style="width:100%;margin-bottom:${huerfanos ? '6' : '16'}px"><i class="fas fa-eye-slash"></i> Retirar los ${paraRetirar.length} que ya no se venden</button>` : ''}
+    ${huerfanos ? `<div class="vig-grupo-d" style="margin-bottom:16px"><i class="fas fa-triangle-exclamation" style="color:var(--accent)"></i> ${huerfanos} quedan afuera del retiro masivo porque son el único precio de su hotel — revisalos uno por uno más abajo.</div>` : ''}
+    ${VIG_GRUPOS.map(g => {
+      const filas = porGrupo(g.k);
+      if (!filas.length) return '';
+      return `<div class="vig-grupo">
+        <div class="vig-grupo-t">${esc(g.t)} <span class="vig-tipo">${filas.length}</span></div>
+        <div class="vig-grupo-d">${esc(g.d)}</div>
+        ${filas.map(item).join('')}
+      </div>`;
+    }).join('')}`;
+
+  cuerpo.querySelectorAll('[data-vig-retirar]').forEach(b => b.addEventListener('click', () => retirarItemVigencia(b.dataset.vigRetirar, b)));
+  cuerpo.querySelectorAll('[data-vig-fijar]').forEach(b => b.addEventListener('click', () => fijarFechaVigencia(b.dataset.vigFijar, b)));
+  document.getElementById('vig-retirar-todo')?.addEventListener('click', retirarTodosLosVencidos);
+}
+
+// Primera fecha del texto que sea de hoy en adelante; si todas ya pasaron, la
+// última. Es solo una sugerencia precargada -- el admin la revisa antes de
+// guardarla, por eso no se aplica sola.
+function fechaSugeridaDeTexto(texto) {
+  const encontradas = [...String(texto || '').matchAll(/(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{2,4}))?/g)].map(m => {
+    const anio = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : new Date().getFullYear();
+    const d = new Date(Date.UTC(anio, Number(m[2]) - 1, Number(m[1])));
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  }).filter(Boolean).sort();
+  if (!encontradas.length) return '';
+  const hoy = new Date().toISOString().slice(0, 10);
+  return encontradas.find(f => f >= hoy) || encontradas[encontradas.length - 1];
+}
+
+function vigPartes(clave) { const [tipo, id] = clave.split(':'); return { tipo, id: Number(id) }; }
+
+async function retirarItemVigencia(clave, btn) {
+  const { tipo, id } = vigPartes(clave);
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('retirar_item_tarifario', { p_tipo: tipo, p_id: id });
+  if (error || !data?.ok) { btn.disabled = false; errToast('No se pudo retirar: ' + (error?.message || data?.error || '')); return; }
+  VIG_FILAS = VIG_FILAS.filter(f => !(f.tipo === tipo && f.item_id === id));
+  renderRevisionVigencias();
+  okToast('Retirado del catálogo');
+}
+
+async function fijarFechaVigencia(clave, btn) {
+  const { tipo, id } = vigPartes(clave);
+  const input = btn.parentElement.querySelector('[data-vig-fecha]');
+  const fecha = input?.value;
+  if (!fecha) { errToast('Elegí la fecha de fin primero'); return; }
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('fijar_fecha_fin_tarifario', { p_tipo: tipo, p_id: id, p_fecha: fecha });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Fecha guardada');
+  abrirRevisionVigencias();
+}
+
+async function retirarTodosLosVencidos() {
+  // Nunca en bulk los que dejarían al hotel sin ningún precio: eso lo vuelve
+  // incotizable y tiene que ser una decisión mirada, no un click.
+  const objetivo = VIG_FILAS.filter(f => (f.problema === 'vencida' || f.problema === 'venta_cerrada') && !f.deja_sin_precio);
+  if (!objetivo.length) return;
+  const detalle = objetivo.slice(0, 6).map(f => `• ${f.nombre}`).join('\n');
+  if (!confirm(`Vas a retirar ${objetivo.length} item(s) del catálogo:\n\n${detalle}${objetivo.length > 6 ? `\n• ...y ${objetivo.length - 6} más` : ''}\n\nDejan de verse en el CRM, en la web y para el bot. Se pueden volver a activar a mano.`)) return;
+  const btn = document.getElementById('vig-retirar-todo');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Retirando...';
+  const res = await Promise.all(objetivo.map(f => sb.rpc('retirar_item_tarifario', { p_tipo: f.tipo, p_id: f.item_id })));
+  const fallidos = res.filter(r => r.error || !r.data?.ok).length;
+  (fallidos ? errToast : okToast)(fallidos ? `${objetivo.length - fallidos} retirados, ${fallidos} fallaron` : `${objetivo.length} retirados del catálogo`);
+  await abrirRevisionVigencias();
+  loadTarifario();
+}
+
 /* ---------- Servicio de interés detectado por IA ----------
    El campo estaba vacío en el 99,8% de los leads: nadie lo llenaba a mano y la
    ingesta no lo mandaba. Desde el 2026-07-30 los leads nuevos entran ya
@@ -4684,6 +4834,7 @@ function setupTarAdmin() {
   const btn = document.getElementById('tar-admin-btn');
   if (!btn) return;
   btn.onclick = () => { openSheet('tar-admin-sheet'); renderTasTabs(); cargarTasItems(); };
+  document.getElementById('tar-vigencias-btn')?.addEventListener('click', abrirRevisionVigencias);
   document.getElementById('tas-close').onclick = () => closeSheet('tar-admin-sheet');
   let debTas; document.getElementById('tas-search').addEventListener('input', () => { clearTimeout(debTas); debTas = setTimeout(renderTasList, 200); });
 }
