@@ -2030,6 +2030,9 @@ function renderChips() {
   if (activeMonth) push('Mes: ' + fullMonth(activeMonth), () => { activeMonth = null; refresh(); });
   if (activeDestino) push('Destino: ' + activeDestino, () => { activeDestino = null; refresh(); });
   const qs = val('global-search').trim(); if (qs) push('Buscar: ' + qs, () => { document.getElementById('global-search').value = ''; refresh(); });
+  // En móvil el botón de filtros es solo un ícono: sin este puntito no habría
+  // forma de saber que hay filtros puestos sin abrir la hoja.
+  document.getElementById('leads-mfs-trigger')?.classList.toggle('con-filtros', chips.length > 0);
   if (!chips.length) { box.innerHTML = ''; return; }
   box.innerHTML = `<span class="chips-label">Filtros:</span>` + chips.map((c, i) => `<span class="fchip">${esc(c[0])} <b data-ci="${i}">✕</b></span>`).join('') + `<button class="clear-all" id="clearAll"><i class="fas fa-times"></i> Limpiar</button>`;
   chips.forEach((c, i) => box.querySelector(`b[data-ci="${i}"]`).onclick = c[1]);
@@ -2424,68 +2427,79 @@ function openDrawer(l) {
   const av = clientAvatar(l);
   const sinAtender = l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
   const opt = (arr, sel) => arr.map(v => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(niceEstado(v))}</option>`).join('');
+  const estColor = ESTADO_COLORS[l.estado] || '#8b93ad';
+  // campo(): cada input con su etiqueta en una celda de la grilla, para que la
+  // ficha se lea en dos columnas en vez de una tira vertical infinita.
+  const campo = (etiqueta, html, full) => `<div class="fcol ${full ? 'f-full' : ''}"><label class="fl">${etiqueta}</label>${html}</div>`;
+  const seccion = (id, icono, titulo, cuerpo, abierta) => `
+    <details class="dsec" ${abierta ? 'open' : ''} data-dsec="${id}">
+      <summary><i class="fas ${icono} dsec-ic"></i> ${titulo} <i class="fas fa-chevron-down dsec-arrow"></i></summary>
+      <div class="dsec-body">${cuerpo}</div>
+    </details>`;
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div><div class="dn">${esc(l.nombre)}</div>
-      <div class="dm">${esc(l.telefono) || 'Sin teléfono'} · ${esc(l.canal)}</div></div></div>
+    <div class="dhead"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
+      <div class="dhead-info"><div class="dn">${esc(l.nombre)}</div>
+      <div class="dm">${esc(l.telefono) || 'Sin teléfono'} · ${esc(l.canal)}</div>
+      <span class="badge-st" style="color:${estColor};background:${estColor}2e">${esc(niceEstado(l.estado))}</span></div></div>
+
+    ${sinAtender ? `<button type="button" class="inbox-btn atender" id="e-a-atender" style="width:100%;margin-bottom:12px"><i class="fas fa-check"></i> Atender este lead</button>` : ''}
+
+    <div class="dquick">
+      ${wa ? `<a class="dq wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></a>` : ''}
+      ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-boleteria" type="button"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
+      ${(ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
+    </div>
 
     <div class="lead-tabs">
-      <button type="button" class="lead-tab-btn active" data-tab="resumen">Resumen</button>
-      <button type="button" class="lead-tab-btn" data-tab="conversacion">Conversación</button>
+      <button type="button" class="lead-tab-btn active" data-tab="resumen">Ficha</button>
+      <button type="button" class="lead-tab-btn" data-tab="notas">Notas</button>
+      <button type="button" class="lead-tab-btn" data-tab="conversacion">Chat</button>
       <button type="button" class="lead-tab-btn" data-tab="actividad">Actividad</button>
     </div>
 
-    ${sinAtender ? `<button type="button" class="inbox-btn atender" id="e-a-atender" style="width:100%;margin-bottom:14px"><i class="fas fa-check"></i> Atender este lead</button>` : ''}
-
     <div class="lead-tab-panel active" data-tab="resumen">
-    <div class="edit-box">
-      <div class="eb-title"><i class="fas fa-sliders"></i> Gestión</div>
-      <label class="fl">Estado</label>
-      <select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>
-      <label class="fl">Asesor asignado</label>
-      <select id="e-asesor" class="ei" ${ROL === 'asesor' ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...ACTIVOS], ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar')}</select>
-      <label class="fl">Servicio de interés</label>
-      <select id="e-servicio" class="ei"><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select>
-      <div id="venta-box" class="venta-box ${l.estado === VENTA ? 'show' : ''}">
-        <label class="fl">Monto de la venta (USD)</label>
-        <input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}">
-        <label class="fl">Servicios / paquetes comprados</label>
-        <input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}">
+    ${seccion('gestion', 'fa-sliders', 'Gestión', `
+      <div class="dgrid">
+        ${campo('Estado', `<select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>`, true)}
+        ${campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...ACTIVOS], ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar')}</select>`)}
+        ${campo('Servicio de interés', `<select id="e-servicio" class="ei"><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select>`)}
       </div>
+      <div id="venta-box" class="venta-box ${l.estado === VENTA ? 'show' : ''}">
+        <div class="dgrid">
+          ${campo('Monto de la venta (USD)', `<input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}">`, true)}
+          ${campo('Servicios / paquetes comprados', `<input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}">`, true)}
+        </div>
+      </div>`, true)}
 
-      <div class="eb-title" style="margin-top:16px"><i class="fas fa-user-pen"></i> Datos del lead</div>
-      <label class="fl">Nombre</label>
-      <input id="e-nombre" class="ei" type="text" value="${esc(l.nombre || '')}">
-      <label class="fl">Teléfono</label>
-      <input id="e-telefono" class="ei" type="text" value="${esc(l.telefono || '')}">
-      <label class="fl">Canal</label>
-      <input id="e-canal" class="ei" type="text" value="${esc(l.canal || '')}">
-      <label class="fl">Destino de interés</label>
-      <input id="e-destino" class="ei" type="text" value="${esc(l.destino || '')}">
-      <label class="fl">Consulta original</label>
-      <input id="e-destino-consulta" class="ei" type="text" value="${esc(l.destino_consulta || '')}">
-      <label class="fl">Personas</label>
-      <input id="e-personas" class="ei" type="text" value="${esc(l.personas || '')}">
-      <label class="fl">Fecha de viaje (aprox.)</label>
-      <input id="e-fecha-estimada" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09" value="${esc(l.fecha_estimada || '')}">
-      <label class="fl">Monto Completo (USD)</label>
-      <input id="e-monto-completo" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_completo ?? ''}">
-      <label class="fl">Monto Inicial (USD)</label>
-      <input id="e-monto-inicial" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_inicial ?? ''}">
-      <label class="fl">Restante de pago (USD)</label>
-      <input id="e-restante-pago" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.restante_pago ?? ''}">
-      <label class="fl">Fecha de captación</label>
-      <input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">
-      <div class="edit-err" id="edit-err"></div>
-      <button class="dbtn save" id="e-save"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>
+    ${seccion('datos', 'fa-user-pen', 'Datos del cliente', `
+      <div class="dgrid">
+        ${campo('Nombre', `<input id="e-nombre" class="ei" type="text" value="${esc(l.nombre || '')}">`, true)}
+        ${campo('Teléfono', `<input id="e-telefono" class="ei" type="text" value="${esc(l.telefono || '')}">`)}
+        ${campo('Canal', `<input id="e-canal" class="ei" type="text" value="${esc(l.canal || '')}">`)}
+        ${campo('Destino de interés', `<input id="e-destino" class="ei" type="text" value="${esc(l.destino || '')}">`)}
+        ${campo('Personas', `<input id="e-personas" class="ei" type="text" value="${esc(l.personas || '')}">`)}
+        ${campo('Fecha de viaje (aprox.)', `<input id="e-fecha-estimada" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09" value="${esc(l.fecha_estimada || '')}">`, true)}
+        ${campo('Consulta original', `<input id="e-destino-consulta" class="ei" type="text" value="${esc(l.destino_consulta || '')}">`, true)}
+      </div>`, true)}
+
+    ${seccion('pagos', 'fa-dollar-sign', 'Pagos y captación', `
+      <div class="dgrid">
+        ${campo('Monto completo (USD)', `<input id="e-monto-completo" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_completo ?? ''}">`)}
+        ${campo('Monto inicial (USD)', `<input id="e-monto-inicial" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_inicial ?? ''}">`)}
+        ${campo('Restante de pago (USD)', `<input id="e-restante-pago" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.restante_pago ?? ''}">`)}
+        ${campo('Fecha de captación', `<input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">`)}
+      </div>`, false)}
+
+    <div class="edit-err" id="edit-err"></div>
+    <div class="dsave"><button class="dbtn save" id="e-save"><i class="fas fa-floppy-disk"></i> Guardar cambios</button></div>
+    <div class="did"><span>ID: ${esc(l.external_id || l.id)}</span><button type="button" id="e-copiar-id" title="Copiar ID"><i class="fas fa-copy"></i></button></div>
     </div>
 
-    <div class="dactions">
-      ${wa ? `<a class="dbtn wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i> WhatsApp</a>` : ''}
-      ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dbtn" id="e-a-boleteria" type="button"><i class="fas fa-plane-departure"></i> Mandar a boletería</button>` : ''}
-      ${(ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado) ? `<button class="dbtn" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i> Enviar a facturación</button>` : ''}
-      ${ROL === 'admin' ? `<button class="dbtn" id="e-a-eliminar" type="button" style="background:#ef444422;color:#ef4444"><i class="fas fa-trash"></i> Eliminar lead</button>` : ''}
-    </div>
-    <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">ID: ${esc(l.external_id || l.id)}</div>
+    <div class="lead-tab-panel" data-tab="notas">
+      <label class="fl">Notas internas — solo las ve el equipo, nunca el cliente</label>
+      <textarea id="e-notas" class="ei" rows="10" placeholder="Qué se habló, qué quedó pendiente, próximo paso...">${esc(l.notas || '')}</textarea>
+      <button class="dbtn save" id="e-notas-save" type="button"><i class="fas fa-floppy-disk"></i> Guardar notas</button>
+      <div class="dnotas-meta" id="e-notas-meta"></div>
     </div>
 
     <div class="lead-tab-panel" data-tab="conversacion">
@@ -2501,7 +2515,11 @@ function openDrawer(l) {
 
   document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', e.target.value === VENTA);
   document.getElementById('e-save').onclick = guardarLead;
-  if (ROL === 'admin') document.getElementById('e-a-eliminar').onclick = () => abrirConfirmarEliminar('single');
+  document.getElementById('e-notas-save').onclick = guardarNotasLead;
+  document.getElementById('e-copiar-id').onclick = async () => {
+    try { await navigator.clipboard.writeText(String(l.external_id || l.id)); okToast('ID copiado'); }
+    catch { errToast('El navegador no dejó copiar'); }
+  };
   document.getElementById('e-a-atender')?.addEventListener('click', () => atenderInboxLead(l));
   document.getElementById('e-a-facturar')?.addEventListener('click', () => abrirEnviarFacturacionSheet(l));
   document.getElementById('e-a-boleteria')?.addEventListener('click', () => { window.closeDrawer(); abrirSolicitudBoleteria(l); });
@@ -2643,6 +2661,22 @@ async function guardarLead() {
   window.closeDrawer();
   okToast('Lead actualizado');
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
+}
+
+// Las notas se guardan solas, sin pasar por actualizar_lead: no son parte del
+// pipeline (no disparan eventos ni tocan métricas) y así el asesor puede
+// anotar sin arrastrar el resto del formulario. Va por RPC porque leads no
+// tiene grant de UPDATE para authenticated -- todo escribe vía security definer.
+async function guardarNotasLead() {
+  const btn = document.getElementById('e-notas-save'), meta = document.getElementById('e-notas-meta');
+  const notas = val('e-notas').trim();
+  btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.rpc('guardar_notas_lead', { p_lead_id: currentLead.id, p_notas: notas });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar notas';
+  if (error || !data?.ok) { meta.textContent = 'No se pudieron guardar: ' + (error?.message || data?.error || ''); return; }
+  currentLead.notas = notas || null;
+  meta.textContent = 'Guardado ' + fmtHoraCaracas(new Date().toISOString());
+  okToast('Notas guardadas');
 }
 
 // Abre el drawer de edición completo de un lead/cliente desde Facturación

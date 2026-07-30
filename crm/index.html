@@ -1233,7 +1233,9 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 
   /* filtros -> hoja inferior (bottom sheet), con botón "Filtros"/"Buscar y filtrar" a pantalla completa de ancho */
   .mfs-trigger{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:46px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;color:var(--txt);font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;margin-bottom:14px}
-  .mfs{position:fixed;left:0;right:0;bottom:0;z-index:71;background:var(--bg2);border:1px solid var(--line2);border-bottom:none;border-radius:20px 20px 0 0;padding:18px 18px calc(20px + var(--safe-b));max-height:82vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.3,1,.4,1);box-shadow:0 -20px 50px rgba(0,0,0,.45);margin-bottom:0}
+  /* El padding de abajo deja pasar la barra de navegación móvil: si no, el
+     botón "Listo" queda justo debajo de ella y no se puede tocar. */
+  .mfs{position:fixed;left:0;right:0;bottom:0;z-index:71;background:var(--bg2);border:1px solid var(--line2);border-bottom:none;border-radius:20px 20px 0 0;padding:18px 18px calc(80px + var(--safe-b));max-height:82vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.3,1,.4,1);box-shadow:0 -20px 50px rgba(0,0,0,.45);margin-bottom:0}
   .mfs.open{transform:translateY(0)}
   .mfs .flt,.mfs .tar-search,.mfs .tar-f-check,.mfs .cot-f-fecha,.mfs .drp,.mfs #tar-f-precio,.mfs #cot-f-precio{flex:1 1 100%;width:100%}
   .mfs .tcount{flex-basis:100%;text-align:left;margin:2px 0 0}
@@ -1271,7 +1273,12 @@ body::before{opacity:.45}
 .card:hover{border-color:rgba(165,190,216,.17)}
 .kpi{background:linear-gradient(145deg,rgba(18,29,44,.94),rgba(12,20,31,.88));border-radius:18px}
 .kpi::after{right:-30px;top:-34px;width:120px;height:120px;filter:blur(2px)}
-.section.active{animation:section-in .24s ease both}
+/* Sin `both`: con animation-fill-mode:both la sección activa se queda con
+   transform:matrix(...) aplicado para siempre, y eso la convierte en bloque
+   contenedor de sus hijos position:fixed -- las hojas de filtros (.mfs) de
+   móvil se dibujaban al final del documento en vez de pegadas al viewport, o
+   sea el botón "Filtros" parecía no hacer nada. */
+.section.active{animation:section-in .24s ease}
 @keyframes section-in{from{opacity:.55;transform:translateY(5px)}to{opacity:1;transform:none}}
 tbody tr{transition:background .15s,transform .15s}tbody tr:hover{transform:translateX(2px)}
 thead th{position:sticky;top:0;background:rgba(16,26,39,.96);backdrop-filter:blur(12px);z-index:2}
@@ -1322,6 +1329,50 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .pv-btn{min-height:44px}.pv-doc-grid{grid-template-columns:1fr}
 }
 @media(prefers-reduced-motion:reduce){.section.active{animation:none!important}}
+
+/* ============ Ficha del lead — rediseño 2026-07-30 ============ */
+.dhead{align-items:flex-start;margin-bottom:14px}
+.dhead-info{min-width:0;flex:1}
+.dhead .dn{overflow-wrap:anywhere;line-height:1.2}
+.dhead .badge-st{display:inline-block;margin-top:8px;padding:5px 10px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.3px}
+.dquick{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:8px;margin-bottom:4px}
+.dq{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:58px;padding:6px 4px;border-radius:13px;border:1px solid var(--line2);background:rgba(255,255,255,.025);color:var(--txt);font:inherit;font-size:10.5px;font-weight:700;line-height:1.15;text-align:center;text-decoration:none;cursor:pointer;transition:border-color .15s}
+.dq i{font-size:15px;color:var(--muted)}
+.dq:hover{border-color:rgba(245,158,11,.35)}.dq:hover i{color:var(--accent)}
+.dq.wa i{color:#25d366}
+.dsec{border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.02);margin-bottom:10px}
+.dsec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:9px;padding:13px 14px;font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+.dsec>summary::-webkit-details-marker{display:none}
+.dsec>summary .dsec-ic{color:var(--accent);font-size:12.5px}
+.dsec>summary .dsec-arrow{margin-left:auto;font-size:10px;color:var(--muted2);transition:transform .2s}
+.dsec[open]>summary{color:var(--txt);border-bottom:1px solid var(--line)}
+.dsec[open]>summary .dsec-arrow{transform:rotate(180deg)}
+.dsec-body{padding:2px 14px 15px}
+.dsec-body .fl:first-child,.dgrid>.fcol:first-child .fl{margin-top:8px}
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 11px}
+.dgrid .f-full{grid-column:1/-1}
+.dgrid .fcol{min-width:0}
+.dsave{position:sticky;bottom:-1px;z-index:2;margin-top:12px;padding:10px 0 calc(4px + var(--safe-b));background:linear-gradient(180deg,rgba(12,19,29,0),var(--bg2) 30%)}
+.dsave .dbtn.save{margin-top:0}
+.did{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;font-size:10.5px;color:var(--muted2)}
+.did button{background:none;border:none;color:var(--muted2);cursor:pointer;font:inherit;padding:4px}
+.did button:hover{color:var(--accent)}
+.dnotas-meta{font-size:11px;color:var(--muted2);margin-top:10px;text-align:center;min-height:14px}
+@media(max-width:760px){
+  .drawer{padding:22px 15px calc(18px + var(--safe-b))}
+  .dq{min-height:62px;font-size:10px}
+  .dsec-body{padding:2px 12px 14px}
+}
+
+/* Botón de filtros como ícono en móvil (Leads y Redes): la barra de ancho
+   completo comía media pantalla y no aportaba nada. */
+@media(max-width:760px){
+  .mfs-trigger.mfs-icon{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;margin-left:auto;position:relative}
+  .mfs-trigger.mfs-icon .mfs-lbl{display:none}
+  .mfs-trigger.mfs-icon i{font-size:16px}
+  .mfs-trigger.mfs-icon.con-filtros{border-color:rgba(245,158,11,.5);color:var(--accent)}
+  .mfs-trigger.mfs-icon.con-filtros::after{content:'';position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--bg)}
+}
 </style>
 </head>
 <body>
@@ -1592,7 +1643,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <div class="tbl-state" id="inbox-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tenés leads nuevos esperando respuesta</div></div>
           <div class="leads-inbox-grid" id="inbox-grid"></div>
         </div>
-        <button class="mfs-trigger" data-mfs="leads-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
+        <button class="mfs-trigger mfs-icon" id="leads-mfs-trigger" data-mfs="leads-tbar" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
         <div class="tbar mfs" id="leads-tbar">
             <select class="flt" id="f-canal"><option value="">Todos los canales</option></select>
             <select class="flt" id="f-estado"><option value="">Todos los estados</option></select>
@@ -2068,7 +2119,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <!-- REASIGNACIONES (antes sección suelta del menú) -->
       <div class="gp-tab-panel" data-gp-panel="reasignaciones" style="display:none">
         <div class="kpis" id="reasig-kpis"></div>
-        <button class="mfs-trigger" data-mfs="rg-tbar" type="button"><i class="fas fa-sliders"></i> Filtros</button>
+        <button class="mfs-trigger mfs-icon" data-mfs="rg-tbar" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
         <div class="tbar mfs" id="rg-tbar">
             <select class="flt" id="rg-asesor"><option value="">Todos los asesores</option></select>
             <select class="flt" id="rg-motivo">
