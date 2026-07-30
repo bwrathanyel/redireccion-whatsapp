@@ -3155,8 +3155,10 @@ async function loadLeadsColaboraciones() {
 }
 
 /* ---------- Postulaciones (candidatos de "Trabaja con nosotros", solo admin) ---------- */
-const CALIDAD_PROSPECTO_LABEL = { buen_prospecto: 'Buen prospecto', no_calza: 'No calza' };
-const CALIDAD_PROSPECTO_COLOR = { buen_prospecto: '#22c55e', no_calza: '#ef4444' };
+// Cuatro niveles, de mayor a menor. El orden de las claves es el que usan el
+// dropdown de la ficha y el orden de la tabla, así que no reordenar sin querer.
+const CALIDAD_PROSPECTO_LABEL = { excelente: 'Excelente', bueno: 'Bueno', debil: 'Débil', descartado: 'Descartado' };
+const CALIDAD_PROSPECTO_COLOR = { excelente: '#a855f7', bueno: '#22c55e', debil: '#f59e0b', descartado: '#ef4444' };
 let postCache = [], postDrawerActual = null, postSearchDeb, postView = 'lista';
 const SELECTED_POST = new Set();
 // Las fotos viven en un bucket privado (son dato personal), así que hay que
@@ -3370,6 +3372,9 @@ function abrirPostulacionDrawer(p, tab) {
         </div>
         <div class="pf-acciones">
           ${p.cv_storage_path ? '<button class="btn-sm" type="button" id="post-d-ver-cv"><i class="fas fa-file-pdf"></i> Ver CV</button>' : ''}
+          ${p.cv_storage_path
+            ? '<button class="btn-sm" type="button" id="post-d-reanalizar" title="Vuelve a evaluar el CV con el criterio actual. No toca el nombre, teléfono ni email."><i class="fas fa-wand-magic-sparkles"></i> Re-analizar CV</button>'
+            : '<button class="btn-sm" type="button" disabled title="Hace falta un CV adjunto para poder re-analizar"><i class="fas fa-wand-magic-sparkles"></i> Re-analizar CV</button>'}
           <button class="btn-sm" type="button" id="post-d-adjuntar-cv"><i class="fas fa-paperclip"></i> ${p.cv_storage_path ? 'Reemplazar CV' : 'Adjuntar CV'}</button>
           <button class="btn-sm" type="button" id="post-d-adjuntar-foto"><i class="fas fa-camera"></i> ${p.foto_storage_path ? 'Cambiar foto' : 'Adjuntar foto'}</button>
           <input type="file" id="post-d-cv-input" accept="application/pdf" style="display:none">
@@ -3410,8 +3415,8 @@ function abrirPostulacionDrawer(p, tab) {
         <label class="fl" style="margin-top:10px">Calificación</label>
         <select class="ei" id="post-d-calidad">
           <option value=""${!p.calidad_prospecto ? ' selected' : ''}>Sin calificar</option>
-          <option value="buen_prospecto"${p.calidad_prospecto === 'buen_prospecto' ? ' selected' : ''}>Buen prospecto</option>
-          <option value="no_calza"${p.calidad_prospecto === 'no_calza' ? ' selected' : ''}>No calza</option>
+          ${Object.entries(CALIDAD_PROSPECTO_LABEL).map(([v, t]) =>
+            `<option value="${v}"${p.calidad_prospecto === v ? ' selected' : ''}>${t}</option>`).join('')}
         </select>
         <label class="fl" style="margin-top:10px">Notas internas</label>
         <textarea class="ei" id="post-d-notas" rows="4" placeholder="Notas propias, no visibles para el candidato...">${esc(p.notas_admin || '')}</textarea>
@@ -3435,6 +3440,7 @@ function abrirPostulacionDrawer(p, tab) {
   document.getElementById('pf-cerrar').onclick = () => closeSheet('post-drawer-sheet');
   document.getElementById('post-d-save').onclick = guardarPostulacion;
   document.getElementById('post-d-ver-cv')?.addEventListener('click', () => verCVPostulacion(p.cv_storage_path));
+  document.getElementById('post-d-reanalizar')?.addEventListener('click', () => reanalizarUnaPostulacion(p));
   document.getElementById('post-d-adjuntar-cv')?.addEventListener('click', () => document.getElementById('post-d-cv-input').click());
   document.getElementById('post-d-cv-input')?.addEventListener('change', e => {
     const f = e.target.files?.[0];
@@ -3541,6 +3547,7 @@ async function verCVPostulacion(path) {
   if (error || !data?.signedUrl) { errToast('No se pudo generar el link del CV'); return; }
   window.open(data.signedUrl, '_blank');
 }
+document.getElementById('post-reanalizar-todas')?.addEventListener('click', reanalizarTodasLasPostulaciones);
 postView = initViewSwitcher('post-view-switch', 'postulaciones', 'lista', v => { postView = v; renderPostulaciones(); }, ['tarjetas', 'lista']);
 document.getElementById('post-search')?.addEventListener('input', () => { clearTimeout(postSearchDeb); postSearchDeb = setTimeout(renderPostulaciones, 200); });
 document.querySelectorAll('#post-f-modalidad,#post-f-llamada,#post-f-calidad,#post-f-sin-revisar').forEach(el => el.addEventListener('change', renderPostulaciones));
@@ -3637,6 +3644,132 @@ async function cargarCVPostulacion(file) {
     console.error('analisis de CV', e);
     document.getElementById('post-cv-title').textContent = 'No se pudo analizar';
     document.getElementById('post-cv-body').innerHTML = '<div class="edit-err" style="display:block">Falló la lectura del PDF. Probá con otro archivo.</div>';
+  }
+}
+
+/* ---------- Re-análisis con el criterio vigente ----------
+   Existe porque el criterio de evaluación cambió (2026-07-30: de 2 niveles a 4,
+   y más exigente), así que los análisis viejos quedaron calificados con otra
+   vara y no se pueden comparar con los nuevos.
+
+   REGLA CLAVE: el re-análisis pisa SOLO el juicio -- calificación, resumen,
+   fortalezas, debilidades, banderas. NUNCA el nombre, teléfono, email, edad,
+   género ni estudios. Esos datos ya pasaron por revisión humana (y se pueden
+   haber corregido a mano desde la ficha); dejar que la IA los vuelva a leer y
+   los sobrescriba significaría perder la corrección y llamar a un número mal
+   transcrito. */
+
+/** Baja el PDF del bucket, lo manda a analizar y devuelve {analisis} o {error}.
+ *  No escribe nada: el que llama decide qué hacer con el resultado. */
+async function analizarCVGuardado(p) {
+  if (!p.cv_storage_path) return { error: 'sin CV adjunto' };
+  const { data: firmada, error: eFirma } = await sb.storage
+    .from('postulaciones-cv').createSignedUrl(p.cv_storage_path, 300);
+  if (eFirma || !firmada?.signedUrl) return { error: 'no se pudo abrir el CV guardado' };
+
+  const resp = await fetch(firmada.signedUrl);
+  if (!resp.ok) return { error: `no se pudo bajar el CV (HTTP ${resp.status})` };
+  const blob = await resp.blob();
+  const file = new File([blob], 'cv.pdf', { type: 'application/pdf' });
+
+  const texto = await textoDelPdf(file).catch(() => '');
+  const cuerpo = texto.length >= 250 ? { texto_cv: texto } : { pdf_base64: await archivoABase64(file) };
+
+  const { data: { session } } = await sb.auth.getSession();
+  const res = await fetch(CV_ANALISIS_FN, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session?.access_token || ''}`,
+      apikey: SUPABASE_KEY,
+    },
+    body: JSON.stringify(cuerpo),
+  });
+  const out = await res.json().catch(() => null);
+  if (!res.ok || !out?.ok) {
+    return { error: out?.error === 'no_autorizado' ? 'solo un administrador puede analizar CVs'
+      : out?.error === 'cv_sin_texto' ? 'el PDF guardado no se pudo leer'
+      : `falló el análisis${out?.error ? ' (' + out.error + ')' : ''}` };
+  }
+  return { analisis: out.analisis, motor: out.motor };
+}
+
+/** Guarda solo los campos de juicio. Devuelve {error} si la escritura falla.
+ *  `mensaje` queda intacto a propósito: la ficha lo muestra como "Mensaje del
+ *  candidato" y en las postulaciones del formulario web guarda lo que escribió
+ *  la persona (ver postular-empleo). El resumen nuevo de la IA ya viaja dentro
+ *  de analisis_ia, que es de donde lo lee la ficha. */
+async function guardarReanalisis(p, analisis) {
+  // Lista blanca contra CALIDAD_PROSPECTO_LABEL: un nivel que no exista entra
+  // como null ("Sin calificar") en vez de reventar el CHECK de la tabla.
+  const nivel = CALIDAD_PROSPECTO_LABEL[analisis.calidad_prospecto] ? analisis.calidad_prospecto : null;
+  const { error } = await sb.from('postulaciones_empleo').update({
+    calidad_prospecto: nivel,
+    analisis_ia: analisis,
+    analisis_ia_at: new Date().toISOString(),
+  }).eq('id', p.id);
+  return { error: error?.message || null, nivel };
+}
+
+async function reanalizarUnaPostulacion(p) {
+  const btn = document.getElementById('post-d-reanalizar');
+  const previo = p.calidad_prospecto;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analizando...'; }
+  try {
+    const { analisis, error } = await analizarCVGuardado(p);
+    if (error) { errToast('No se pudo re-analizar: ' + error); return; }
+    const { error: eDb, nivel } = await guardarReanalisis(p, analisis);
+    if (eDb) { errToast('Se analizó, pero no se pudo guardar: ' + eDb); return; }
+    const antes = CALIDAD_PROSPECTO_LABEL[previo] || 'Sin calificar';
+    const ahora = CALIDAD_PROSPECTO_LABEL[nivel] || 'Sin calificar';
+    okToast(antes === ahora ? `Re-analizado: sigue en ${ahora}` : `Re-analizado: ${antes} → ${ahora}`);
+    await loadPostulaciones();
+    const fresco = postCache.find(x => x.id === p.id);
+    if (fresco) abrirPostulacionDrawer(fresco, 'perfil');
+  } catch (e) {
+    console.error('re-analisis de CV', e);
+    errToast('Falló el re-análisis. Revisá la consola.');
+  } finally {
+    if (btn && document.body.contains(btn)) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Re-analizar CV';
+    }
+  }
+}
+
+/** Re-analiza en lote. Secuencial a propósito: son llamadas a un modelo que se
+ *  pagan por uso, y en serie se puede cortar a mitad sin haber disparado 16
+ *  pedidos en paralelo que igual se cobran. */
+async function reanalizarTodasLasPostulaciones() {
+  const conCV = postCache.filter(p => p.cv_storage_path);
+  const sinCV = postCache.length - conCV.length;
+  if (!conCV.length) { errToast('Ninguna postulación tiene CV adjunto para re-analizar'); return; }
+  const aviso = `Se van a re-analizar ${conCV.length} postulacion(es) con el criterio actual.`
+    + (sinCV ? `\n${sinCV} se saltan por no tener CV adjunto.` : '')
+    + '\n\nEsto gasta créditos de IA (una llamada por CV) y sobrescribe la calificación anterior.'
+    + '\nLos datos de contacto no se tocan.\n\n¿Seguimos?';
+  if (!confirm(aviso)) return;
+
+  const btn = document.getElementById('post-reanalizar-todas');
+  const original = btn?.innerHTML;
+  let ok = 0, fallos = [], cambios = 0;
+  for (let i = 0; i < conCV.length; i++) {
+    const p = conCV[i];
+    if (btn) btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${i + 1} de ${conCV.length}...`;
+    const { analisis, error } = await analizarCVGuardado(p);
+    if (error) { fallos.push(`${p.nombre}: ${error}`); continue; }
+    const { error: eDb, nivel } = await guardarReanalisis(p, analisis);
+    if (eDb) { fallos.push(`${p.nombre}: ${eDb}`); continue; }
+    ok++;
+    if (nivel !== p.calidad_prospecto) cambios++;
+  }
+  if (btn) { btn.disabled = false; btn.innerHTML = original; }
+  await loadPostulaciones();
+  if (fallos.length) {
+    console.warn('re-analisis masivo, fallos:', fallos);
+    errToast(`${ok} re-analizadas (${cambios} cambiaron de nivel). ${fallos.length} fallaron -- detalle en la consola.`);
+  } else {
+    okToast(`${ok} re-analizadas, ${cambios} cambiaron de nivel.`);
   }
 }
 
