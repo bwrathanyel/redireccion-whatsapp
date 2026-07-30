@@ -2463,6 +2463,10 @@ function openDrawer(l) {
         ${campo('Estado', `<select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>`, true)}
         ${campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...ACTIVOS], ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar')}</select>`)}
         ${campo('Servicio de interés', `<select id="e-servicio" class="ei"><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select>`)}
+        <div class="fcol f-full">
+          <button class="dbtn gh" id="e-servicio-ia" type="button" style="width:100%;padding:9px;font-size:12px;margin-top:9px"><i class="fas fa-wand-magic-sparkles"></i> Detectar servicio con IA</button>
+          <div class="e-servicio-razon" id="e-servicio-razon">${l.servicio_ia_razon ? '<i class="fas fa-robot"></i> ' + esc(l.servicio_ia_razon) : ''}</div>
+        </div>
       </div>
       <div id="venta-box" class="venta-box ${l.estado === VENTA ? 'show' : ''}">
         <div class="dgrid">
@@ -2516,6 +2520,7 @@ function openDrawer(l) {
   document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', e.target.value === VENTA);
   document.getElementById('e-save').onclick = guardarLead;
   document.getElementById('e-notas-save').onclick = guardarNotasLead;
+  document.getElementById('e-servicio-ia').onclick = detectarServicioDelLead;
   document.getElementById('e-copiar-id').onclick = async () => {
     try { await navigator.clipboard.writeText(String(l.external_id || l.id)); okToast('ID copiado'); }
     catch { errToast('El navegador no dejó copiar'); }
@@ -2615,6 +2620,7 @@ document.getElementById('confirm-delete-lead-ok')?.addEventListener('click', asy
 });
 document.getElementById('bulk-clear')?.addEventListener('click', clearSelection);
 document.getElementById('bulk-eliminar')?.addEventListener('click', () => abrirConfirmarEliminar('bulk'));
+document.getElementById('bulk-servicio-ia')?.addEventListener('click', detectarServicioSeleccionados);
 document.getElementById('th-select-all')?.addEventListener('change', e => {
   document.querySelectorAll('.lead-check').forEach(cb => {
     cb.checked = e.target.checked;
@@ -2661,6 +2667,66 @@ async function guardarLead() {
   window.closeDrawer();
   okToast('Lead actualizado');
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
+}
+
+/* ---------- Servicio de interés detectado por IA ----------
+   El campo estaba vacío en el 99,8% de los leads: nadie lo llenaba a mano y la
+   ingesta no lo mandaba. Desde el 2026-07-30 los leads nuevos entran ya
+   clasificados (_shared/servicio_ia.ts) y estos dos botones -- uno en la ficha,
+   otro en la barra de selección -- sirven para los que ya estaban cargados.
+   La Edge Function acepta hasta 25 por llamada; el bulk manda de a 10 para que
+   cada tanda vuelva rápido y la barra de progreso se mueva de verdad. */
+const SERVICIO_IA_LOTE = 10;
+
+async function clasificarServicioLeads(ids) {
+  const { data, error } = await sb.functions.invoke('clasificar-servicio-lead', { body: { lead_ids: ids } });
+  if (error) return { error: error.message || 'No se pudo conectar con la IA' };
+  if (!data?.ok) return { error: data?.error || 'La IA no pudo procesar el lote' };
+  return data;
+}
+
+async function detectarServicioDelLead() {
+  const btn = document.getElementById('e-servicio-ia'), razon = document.getElementById('e-servicio-razon');
+  const html0 = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analizando...';
+  const res = await clasificarServicioLeads([currentLead.id]);
+  btn.disabled = false; btn.innerHTML = html0;
+  if (res.error) { razon.textContent = 'No se pudo analizar: ' + res.error; return; }
+  const r = res.resultados?.[0];
+  if (!r?.servicio) {
+    razon.innerHTML = '<i class="fas fa-circle-question"></i> La IA no encontró datos suficientes para decidir el servicio. Podés elegirlo a mano.';
+    return;
+  }
+  document.getElementById('e-servicio').value = r.servicio;
+  currentLead.servicio = r.servicio;
+  currentLead.servicio_ia_razon = r.razon;
+  razon.innerHTML = '<i class="fas fa-robot"></i> ' + esc(r.razon || '');
+  okToast('Servicio detectado: ' + r.servicio);
+  loadTable();
+}
+
+async function detectarServicioSeleccionados() {
+  const ids = [...SELECTED_LEADS];
+  if (!ids.length) return;
+  const btn = document.getElementById('bulk-servicio-ia');
+  const html0 = btn.innerHTML;
+  btn.disabled = true;
+  let guardados = 0, sinDecidir = 0, fallidos = 0;
+  for (let i = 0; i < ids.length; i += SERVICIO_IA_LOTE) {
+    const lote = ids.slice(i, i + SERVICIO_IA_LOTE);
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${Math.min(i + lote.length, ids.length)}/${ids.length}`;
+    const res = await clasificarServicioLeads(lote);
+    if (res.error) { fallidos += lote.length; continue; }
+    guardados += res.guardados || 0;
+    sinDecidir += res.sin_decidir || 0;
+  }
+  btn.disabled = false; btn.innerHTML = html0;
+  const partes = [`${guardados} con servicio detectado`];
+  if (sinDecidir) partes.push(`${sinDecidir} sin datos suficientes`);
+  if (fallidos) partes.push(`${fallidos} con error`);
+  (fallidos ? errToast : okToast)(partes.join(' · '));
+  clearSelection();
+  loadTable();
 }
 
 // Las notas se guardan solas, sin pasar por actualizar_lead: no son parte del
@@ -6823,6 +6889,8 @@ function setupLeadsTabs() {
 let MI_ES_AGENTE_BOLETERIA = false;
 let BOL_CERRAR_ID = null;
 let BOL_BUSCAR_DEBOUNCE = null;
+// Última cola cargada: la hoja de detalle lee de acá en vez de volver a pedirla.
+let BOL_COLA = [];
 
 // Precios de boletería nacional ya confirmados (mismos que en la IA). Si la ruta
 // de la solicitud coincide, se le muestra al agente el precio que ya tenemos en
@@ -6845,7 +6913,36 @@ const BOL_ERR = {
   ya_en_cola: 'Ese lead ya tiene una solicitud abierta en la cola',
   lead_no_disponible: 'Ese lead ya no está disponible',
   no_disponible: 'Esa solicitud ya la tomó o cerró alguien más',
+  ida_en_el_pasado: 'La fecha de ida ya pasó',
+  regreso_en_el_pasado: 'La fecha de regreso ya pasó',
+  personas_invalidas: 'La cantidad de personas tiene que estar entre 1 y 60',
+  no_existe: 'Esa solicitud ya no existe',
+  ya_cerrada: 'Esa solicitud ya estaba cerrada',
 };
+
+// Hoy en Caracas, en formato YYYY-MM-DD -- el mismo día que usa el RPC para
+// validar. Con la hora del navegador se corría un día para quien tenga el
+// dispositivo en otro huso.
+function hoyCaracasISO() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
+// Validación de fechas en vivo: el navegador ya bloquea elegir antes del `min`,
+// pero se puede escribir la fecha a mano, así que igual se revisa acá y el RPC
+// lo revisa de nuevo del lado del servidor.
+function bolValidarFechas() {
+  const hoy = hoyCaracasISO();
+  const ida = val('bol-fecha-viaje'), regreso = val('bol-fecha-regreso');
+  const aviso = document.getElementById('bol-fecha-aviso');
+  const reg = document.getElementById('bol-fecha-regreso');
+  if (reg) reg.min = ida || hoy;
+  let msg = '';
+  if (ida && ida < hoy) msg = 'La fecha de ida ya pasó.';
+  else if (regreso && regreso < hoy) msg = 'La fecha de regreso ya pasó.';
+  else if (ida && regreso && regreso < ida) msg = 'El regreso no puede ser antes de la ida.';
+  if (aviso) aviso.textContent = msg;
+  return msg;
+}
 
 function setupBoleteria() {
   document.getElementById('bol-refrescar')?.addEventListener('click', () => loadColaBoleteria());
@@ -6856,6 +6953,8 @@ function setupBoleteria() {
     document.getElementById('bol-precio').textContent = bolPrecioRuta(val('bol-origen'), val('bol-destino'));
   }));
   document.getElementById('bol-buscar')?.addEventListener('input', bolBuscarLead);
+  ['bol-fecha-viaje', 'bol-fecha-regreso'].forEach(id =>
+    document.getElementById(id)?.addEventListener('change', bolValidarFechas));
   document.getElementById('bol-cerrar-cancelar')?.addEventListener('click', () => closeSheet('bol-cerrar-sheet'));
   document.getElementById('bol-cerrar-ok')?.addEventListener('click', cerrarSolicitudBoleteria);
 }
@@ -6868,6 +6967,11 @@ function abrirSolicitudBoleteria(lead) {
   });
   document.getElementById('bol-flexible').checked = false;
   document.getElementById('bol-precio').textContent = '';
+  // El navegador no deja elegir un día anterior a `min` en el calendario.
+  const hoy = hoyCaracasISO();
+  document.getElementById('bol-fecha-viaje').min = hoy;
+  document.getElementById('bol-fecha-regreso').min = hoy;
+  document.getElementById('bol-fecha-aviso').textContent = '';
   document.getElementById('bol-buscar-res').style.display = 'none';
   document.getElementById('bol-lead-id')?.remove();
   const hid = document.createElement('input');
@@ -6918,6 +7022,8 @@ async function enviarSolicitudBoleteria() {
   const btn = document.getElementById('bol-enviar'), err = document.getElementById('bol-err');
   const ent = id => { const v = parseInt(val(id), 10); return Number.isFinite(v) ? v : null; };
   const leadId = document.getElementById('bol-lead-id')?.value;
+  const problemaFecha = bolValidarFechas();
+  if (problemaFecha) { err.textContent = problemaFecha; return; }
   err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.rpc('crear_solicitud_boleteria', {
     p_cliente_nombre: val('bol-nombre'),
@@ -6941,43 +7047,121 @@ const BOL_ESTADO = {
   resuelta:   { cls: 'res', t: 'Resuelta' },
   cancelada:  { cls: 'can', t: 'Cancelada' },
 };
+// La tarjeta es un resumen tocable. Todo el detalle y las acciones viven en la
+// hoja que abre al tocarla (bolDetalleHtml) -- antes la cola era un muro de
+// datos donde no se distinguía una solicitud de otra.
 function bolCardHtml(s) {
   const est = BOL_ESTADO[s.estado] || BOL_ESTADO.en_cola;
   const fechas = [s.fecha_viaje && fmtDiaCorto(s.fecha_viaje), s.fecha_regreso && fmtDiaCorto(s.fecha_regreso)].filter(Boolean).join(' → ');
-  const precio = bolPrecioRuta(s.origen, s.destino);
-  const fila = (k, v) => v ? `<div class="bol-k">${esc(k)}</div><div class="bol-v">${v}</div>` : '';
   const puesto = (s.estado === 'en_cola' && s.puesto) ? `<span class="bol-puesto">#${s.puesto} en la cola</span>` : '';
-  // Acciones: el agente toma/resuelve; el asesor dueño puede cancelar mientras nadie la tomó.
-  let acc = '';
-  if (MI_ES_AGENTE_BOLETERIA) {
-    if (s.estado === 'en_cola') acc = `<button class="dbtn save" data-bol-tomar="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`;
-    else if (s.estado === 'atendiendo') acc = `<button class="dbtn save" data-bol-cerrar="${s.id}"><i class="fas fa-check"></i> Cerrar</button>`
-      + `<button class="dbtn" data-bol-cancelar="${s.id}"><i class="fas fa-xmark"></i></button>`;
-  } else if (s.es_mia && s.estado === 'en_cola') {
-    acc = `<button class="dbtn" data-bol-cancelar="${s.id}"><i class="fas fa-xmark"></i> Cancelar</button>`;
-  }
-  return `<div class="bol-card st-${s.estado}">
+  const resumen = [
+    fechas ? `<span><i class="fas fa-calendar-days"></i> ${esc(fechas)}</span>` : '',
+    s.personas != null ? `<span><i class="fas fa-users"></i> ${s.personas}</span>` : '',
+    s.flexible_fechas ? '<span><i class="fas fa-shuffle"></i> Fechas flexibles</span>' : '',
+  ].filter(Boolean).join('');
+  return `<div class="bol-card st-${s.estado}" data-bol-abrir="${s.id}" role="button" tabindex="0">
     <div class="bol-top">
       <div class="bol-nombre">${esc(s.cliente_nombre)}</div>
       ${puesto}
       <span class="bol-chip ${est.cls}">${est.t}</span>
     </div>
-    <div class="bol-ruta"><i class="fas fa-plane"></i> ${esc(s.origen)} → ${esc(s.destino)}${s.flexible_fechas ? ' <span class="ef-opc">(fechas flexibles)</span>' : ''}</div>
-    ${precio ? `<div class="bol-precio">${precio}</div>` : ''}
-    <div class="bol-datos">
-      ${fila('Fechas', esc(fechas))}
-      ${fila('Personas', s.personas != null ? String(s.personas) : '')}
-      ${fila('Teléfono', esc(s.cliente_telefono || ''))}
-      ${fila('Cédula', esc(s.cliente_cedula || ''))}
-      ${fila('Notas', esc(s.notas || ''))}
-      ${fila('Resultado', esc(s.resultado || ''))}
-    </div>
-    ${acc ? `<div class="bol-acc">${acc}</div>` : ''}
+    <div class="bol-ruta"><i class="fas fa-plane"></i> ${esc(s.origen)} → ${esc(s.destino)}</div>
+    ${resumen ? `<div class="bol-resumen">${resumen}</div>` : ''}
     <div class="bol-pie">
       <span>Por ${esc(s.creado_por || '—')}${s.tomada_por ? ' · atiende ' + esc(s.tomada_por) : ''}</span>
       <span>${tiempoRelativo(s.creado_en)}</span>
     </div>
   </div>`;
+}
+
+function bolDetalleHtml(s) {
+  const est = BOL_ESTADO[s.estado] || BOL_ESTADO.en_cola;
+  const precio = bolPrecioRuta(s.origen, s.destino);
+  const dato = (k, v, ancho) => v ? `<div class="bd-dato ${ancho ? 'ancho' : ''}"><div class="bd-k">${esc(k)}</div><div class="bd-v">${v}</div></div>` : '';
+  const fechaTxt = f => f ? esc(fmtDiaCorto(f)) : '<span style="color:var(--muted2)">Sin definir</span>';
+  // Mismas reglas de permiso que el backend: el agente toma/resuelve/cancela;
+  // el asesor dueño solo cancela lo suyo mientras nadie lo tomó; borrar es admin.
+  const acc = [];
+  if (MI_ES_AGENTE_BOLETERIA) {
+    if (s.estado === 'en_cola') acc.push(`<button class="dbtn save" data-bol-tomar="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
+    else if (s.estado === 'atendiendo') {
+      acc.push(`<button class="dbtn save" data-bol-cerrar="${s.id}"><i class="fas fa-check"></i> Marcar resuelta</button>`);
+      acc.push(`<button class="dbtn gh" data-bol-cancelar="${s.id}"><i class="fas fa-xmark"></i> Cancelar</button>`);
+    }
+  } else if (s.es_mia && s.estado === 'en_cola') {
+    acc.push(`<button class="dbtn gh" data-bol-cancelar="${s.id}"><i class="fas fa-xmark"></i> Cancelar solicitud</button>`);
+  }
+  if (ROL === 'admin') acc.push(`<button class="dbtn peligro" data-bol-eliminar="${s.id}"><i class="fas fa-trash"></i> Eliminar</button>`);
+
+  return `
+    <div class="bd-head">
+      <div class="bd-ava"><i class="fas fa-plane-departure"></i></div>
+      <div style="min-width:0;flex:1">
+        <div class="bd-nombre">${esc(s.cliente_nombre)}</div>
+        <div class="bd-sub">Solicitud #${s.id} · ${tiempoRelativo(s.creado_en)}</div>
+        <span class="bol-chip ${est.cls}" style="margin-top:8px;display:inline-block">${est.t}</span>
+        ${(s.estado === 'en_cola' && s.puesto) ? `<span class="bol-puesto" style="margin-left:6px">#${s.puesto} en la cola</span>` : ''}
+      </div>
+    </div>
+
+    <div class="bd-ruta">
+      <div class="bd-ciudad"><span>Sale de</span><b>${esc(s.origen)}</b></div>
+      <i class="fas fa-plane bd-flecha"></i>
+      <div class="bd-ciudad"><span>Llega a</span><b>${esc(s.destino)}</b></div>
+    </div>
+    ${precio ? `<div class="bol-precio" style="text-align:center;margin:-6px 0 12px">${precio}</div>` : ''}
+
+    <div class="bd-datos">
+      <div class="bd-dato"><div class="bd-k">Ida</div><div class="bd-v">${fechaTxt(s.fecha_viaje)}</div></div>
+      <div class="bd-dato"><div class="bd-k">Regreso</div><div class="bd-v">${fechaTxt(s.fecha_regreso)}</div></div>
+      ${dato('Personas', s.personas != null ? String(s.personas) : '')}
+      ${dato('Flexibilidad', s.flexible_fechas ? 'Acepta otras fechas' : '')}
+      ${dato('Teléfono', esc(s.cliente_telefono || ''))}
+      ${dato('Cédula', esc(s.cliente_cedula || ''))}
+      ${dato('Notas del asesor', esc(s.notas || ''), true)}
+      ${dato('Resultado', esc(s.resultado || ''), true)}
+    </div>
+
+    ${acc.length ? `<div class="bd-acc">${acc.join('')}</div>` : ''}
+    <div class="bd-pie">
+      Pedida por ${esc(s.creado_por || '—')} · ${esc(fmtFechaHoraCaracas(s.creado_en))}
+      ${s.tomada_por ? `<br>Atiende ${esc(s.tomada_por)}${s.tomada_en ? ' · ' + esc(fmtFechaHoraCaracas(s.tomada_en)) : ''}` : ''}
+      ${s.cerrada_en ? `<br>Cerrada ${esc(fmtFechaHoraCaracas(s.cerrada_en))}` : ''}
+    </div>`;
+}
+
+function abrirDetalleBoleteria(id) {
+  const s = (BOL_COLA || []).find(x => String(x.id) === String(id));
+  if (!s) return;
+  const cuerpo = document.getElementById('bol-detalle-cuerpo');
+  cuerpo.innerHTML = bolDetalleHtml(s);
+  cuerpo.querySelector('[data-bol-tomar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); bolTomar(id); });
+  cuerpo.querySelector('[data-bol-cancelar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); bolCancelar(id); });
+  cuerpo.querySelector('[data-bol-eliminar]')?.addEventListener('click', () => bolEliminar(id));
+  cuerpo.querySelector('[data-bol-cerrar]')?.addEventListener('click', () => {
+    cerrarDetalleBoleteria();
+    BOL_CERRAR_ID = id;
+    document.getElementById('bol-cerrar-nota').value = '';
+    document.getElementById('bol-cerrar-err').textContent = '';
+    openSheet('bol-cerrar-sheet');
+  });
+  openSheet('bol-detalle-sheet');
+}
+// Cierra la hoja descartando su entrada de historial a mano, para no encadenar
+// dos history.back() cuando abre otra hoja arriba (mismo patrón que el borrado
+// de leads, ver confirm-delete-lead-ok).
+function cerrarDetalleBoleteria() {
+  if (NAV_STACK[NAV_STACK.length - 1]?.type === 'sheet') NAV_STACK.pop();
+  closeSheet('bol-detalle-sheet', true);
+}
+
+async function bolEliminar(id) {
+  if (!confirm('¿Eliminar esta solicitud de la cola? Deja de verse para todos.')) return;
+  const { data, error } = await sb.rpc('eliminar_solicitud_boleteria', { p_id: Number(id) });
+  if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (BOL_ERR[data?.error] || error?.message || '')); return; }
+  cerrarDetalleBoleteria();
+  okToast('Solicitud eliminada');
+  loadColaBoleteria();
 }
 
 async function loadColaBoleteria() {
@@ -7006,10 +7190,12 @@ async function loadColaBoleteria() {
     : '<div class="ef-opc">No hay agentes de boletería configurados. Un admin lo activa en Gestión de Personal.</div>';
 
   empty?.classList.toggle('show', filas.length === 0);
+  BOL_COLA = filas;
   grid.innerHTML = filas.map(bolCardHtml).join('');
-  grid.querySelectorAll('[data-bol-tomar]').forEach(b => b.addEventListener('click', () => bolTomar(b.dataset.bolTomar)));
-  grid.querySelectorAll('[data-bol-cerrar]').forEach(b => b.addEventListener('click', () => { BOL_CERRAR_ID = b.dataset.bolCerrar; document.getElementById('bol-cerrar-nota').value = ''; document.getElementById('bol-cerrar-err').textContent = ''; openSheet('bol-cerrar-sheet'); }));
-  grid.querySelectorAll('[data-bol-cancelar]').forEach(b => b.addEventListener('click', () => bolCancelar(b.dataset.bolCancelar)));
+  grid.querySelectorAll('[data-bol-abrir]').forEach(c => {
+    c.addEventListener('click', () => abrirDetalleBoleteria(c.dataset.bolAbrir));
+    c.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirDetalleBoleteria(c.dataset.bolAbrir); } });
+  });
 }
 
 async function bolTomar(id) {

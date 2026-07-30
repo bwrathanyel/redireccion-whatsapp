@@ -1358,11 +1358,47 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .did button{background:none;border:none;color:var(--muted2);cursor:pointer;font:inherit;padding:4px}
 .did button:hover{color:var(--accent)}
 .dnotas-meta{font-size:11px;color:var(--muted2);margin-top:10px;text-align:center;min-height:14px}
+.e-servicio-razon{font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:7px}
+.e-servicio-razon:empty{display:none}
+.e-servicio-razon i{color:var(--accent);margin-right:4px}
 @media(max-width:760px){
   .drawer{padding:22px 15px calc(18px + var(--safe-b))}
   .dq{min-height:62px;font-size:10px}
   .dsec-body{padding:2px 12px 14px}
 }
+
+/* ============ Boletería — tarjeta resumida + hoja de detalle (2026-07-30) ============ */
+/* La tarjeta pasó a ser un resumen tocable: todo el detalle vive en la hoja,
+   así la cola se lee de un vistazo en vez de ser un muro de datos. */
+.bol-card{cursor:pointer;transition:transform .16s,border-color .16s}
+.bol-card:hover{transform:translateY(-2px);border-color:rgba(245,158,11,.3)}
+.bol-card .bol-resumen{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:9px}
+.bol-card .bol-resumen span{display:inline-flex;align-items:center;gap:6px}
+.bol-card .bol-resumen i{color:var(--muted2);font-size:11px}
+.bol-ruta-edit{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:9px}
+.bol-ruta-flecha{color:var(--accent);padding-bottom:13px}
+.bol-fecha-aviso{color:#ff6b6b;font-size:11.5px;min-height:14px;margin-top:6px}
+.bol-fecha-aviso:empty{margin-top:0}
+/* Detalle */
+.bd-head{display:flex;align-items:flex-start;gap:13px;margin-bottom:4px}
+.bd-ava{width:48px;height:48px;border-radius:13px;display:grid;place-items:center;font-size:18px;flex-shrink:0;background:var(--accent-soft);color:var(--accent)}
+.bd-nombre{font-size:17px;font-weight:800;line-height:1.2;overflow-wrap:anywhere}
+.bd-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.bd-ruta{display:flex;align-items:center;justify-content:center;gap:14px;margin:14px 0;padding:15px 12px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid var(--line)}
+.bd-ciudad{text-align:center;min-width:0;flex:1}
+.bd-ciudad b{display:block;font-size:15px;font-weight:800;overflow-wrap:anywhere}
+.bd-ciudad span{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.7px}
+.bd-ruta .bd-flecha{color:var(--accent);font-size:15px;flex-shrink:0}
+.bd-datos{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:4px}
+.bd-dato{background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:11px;padding:10px 12px;min-width:0}
+.bd-dato.ancho{grid-column:1/-1}
+.bd-dato .bd-k{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+.bd-dato .bd-v{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.bd-pie{font-size:11px;color:var(--muted2);text-align:center;margin-top:12px;line-height:1.7}
+.bd-acc{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+.bd-acc .dbtn{flex:1;min-width:130px}
+.dbtn.peligro{background:rgba(239,68,68,.13);color:#ff6b6b;border:1px solid rgba(239,68,68,.3)}
+@media(max-width:760px){.bd-datos{grid-template-columns:1fr}}
 
 /* Botón de filtros como ícono en móvil (Leads y Redes): la barra de ancho
    completo comía media pantalla y no aportaba nada. */
@@ -1633,7 +1669,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
       <div class="leads-tab-panel" data-leads-panel="pipeline">
         <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
-          <button class="dbtn save" id="nl-abrir-btn" type="button" style="width:auto;padding:8px 14px"><i class="fas fa-user-plus"></i> Nuevo lead</button>
+          <button class="dbtn save" id="nl-abrir-btn" type="button" style="width:auto;flex:none;padding:8px 14px"><i class="fas fa-user-plus"></i> Nuevo lead</button>
         </div>
         <div class="leads-inbox" id="leads-inbox">
           <div class="leads-inbox-head">
@@ -1676,6 +1712,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
           <div class="bulk-bar" id="bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
             <span id="bulk-count" style="font-size:13.5px;font-weight:600"></span>
             <button class="dbtn" id="bulk-clear" type="button" style="width:auto;padding:6px 12px">Cancelar selección</button>
+            <button class="dbtn gh" id="bulk-servicio-ia" type="button" style="width:auto;padding:6px 12px"><i class="fas fa-wand-magic-sparkles"></i> Detectar servicio con IA</button>
             <button class="dbtn" id="bulk-eliminar" type="button" style="width:auto;padding:6px 12px;background:#ef4444;color:#fff;margin-left:auto"><i class="fas fa-trash"></i> Eliminar seleccionados</button>
           </div>
           <div class="tbl-state skel" id="tbl-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
@@ -1698,7 +1735,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <div class="card">
           <div class="chead-row">
             <h2><i class="fas fa-plane-departure"></i> Cola de boletería</h2>
-            <button class="dbtn save" id="bol-nueva-btn" type="button" style="width:auto;padding:8px 14px"><i class="fas fa-plus"></i> Nueva solicitud</button>
+            <button class="dbtn save" id="bol-nueva-btn" type="button" style="width:auto;flex:none;padding:8px 14px"><i class="fas fa-plus"></i> Nueva solicitud</button>
             <button class="btn-sm" id="bol-refrescar" type="button"><i class="fas fa-rotate"></i> Actualizar</button>
           </div>
           <div class="csub">Solicitudes de vuelos que los asesores mandan a boletería. Se atienden por orden de llegada.</div>
@@ -2829,46 +2866,63 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <div class="sheet-handle"></div>
   <div class="sheet-title"><i class="fas fa-plane-departure"></i> Solicitud de boletería</div>
   <div class="ef-cliente" id="bol-cliente" style="display:none"></div>
-  <div class="edit-box" style="margin-top:4px">
-    <label class="fl">Cliente</label>
-    <div id="bol-buscar-box">
-      <input id="bol-buscar" class="ei" placeholder="Buscá un lead por nombre o teléfono..." autocomplete="off">
-      <div id="bol-buscar-res" style="display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-top:4px;max-height:220px;overflow:auto"></div>
-      <div class="ef-opc" style="margin-top:6px">O escribí los datos a mano abajo si no está en Leads.</div>
+
+  <details class="dsec" open>
+    <summary><i class="fas fa-user dsec-ic"></i> Cliente <i class="fas fa-chevron-down dsec-arrow"></i></summary>
+    <div class="dsec-body">
+      <div id="bol-buscar-box">
+        <label class="fl">Buscar en Leads</label>
+        <input id="bol-buscar" class="ei" placeholder="Nombre o teléfono del cliente..." autocomplete="off">
+        <div id="bol-buscar-res" style="display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-top:4px;max-height:220px;overflow:auto"></div>
+        <div class="ef-opc" style="margin-top:6px">O escribí los datos a mano abajo si no está en Leads.</div>
+      </div>
+      <div class="dgrid">
+        <div class="fcol f-full"><label class="fl">Nombre del cliente</label><input id="bol-nombre" class="ei" placeholder="Nombre y apellido" autocomplete="off"></div>
+        <div class="fcol"><label class="fl">Teléfono <span class="ef-opc">(opcional)</span></label><input id="bol-telefono" class="ei" autocomplete="off"></div>
+        <div class="fcol"><label class="fl">Cédula <span class="ef-opc">(opcional)</span></label><input id="bol-cedula" class="ei" placeholder="V-12345678" autocomplete="off"></div>
+      </div>
     </div>
+  </details>
 
-    <label class="fl">Nombre del cliente</label>
-    <input id="bol-nombre" class="ei" placeholder="Nombre y apellido" autocomplete="off">
-    <div class="ef-fila">
-      <div style="flex:1"><label class="fl">Teléfono <span class="ef-opc">(opcional)</span></label><input id="bol-telefono" class="ei" autocomplete="off"></div>
-      <div style="flex:1"><label class="fl">Cédula <span class="ef-opc">(opcional)</span></label><input id="bol-cedula" class="ei" placeholder="V-12345678" autocomplete="off"></div>
+  <details class="dsec" open>
+    <summary><i class="fas fa-plane dsec-ic"></i> El vuelo <i class="fas fa-chevron-down dsec-arrow"></i></summary>
+    <div class="dsec-body">
+      <div class="bol-ruta-edit">
+        <div class="fcol"><label class="fl">Sale de</label><input id="bol-origen" class="ei" placeholder="Ej. Valencia" autocomplete="off"></div>
+        <i class="fas fa-arrow-right bol-ruta-flecha"></i>
+        <div class="fcol"><label class="fl">Llega a</label><input id="bol-destino" class="ei" placeholder="Ej. Porlamar" autocomplete="off"></div>
+      </div>
+      <div class="bol-precio" id="bol-precio"></div>
+      <div class="dgrid" style="margin-top:4px">
+        <div class="fcol"><label class="fl">Fecha de ida <span class="ef-opc">(opcional)</span></label><input id="bol-fecha-viaje" class="ei" type="date"></div>
+        <div class="fcol"><label class="fl">Fecha de regreso <span class="ef-opc">(opcional)</span></label><input id="bol-fecha-regreso" class="ei" type="date"></div>
+      </div>
+      <div class="bol-fecha-aviso" id="bol-fecha-aviso"></div>
+      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="bol-flexible" style="width:auto"> El cliente tiene flexibilidad de fechas</label>
+      <div class="dgrid" style="margin-top:4px">
+        <div class="fcol"><label class="fl">¿Cuántas personas? <span class="ef-opc">(opcional)</span></label><input id="bol-personas" class="ei" type="number" min="1" max="60" step="1" placeholder="1"></div>
+      </div>
     </div>
+  </details>
 
-    <label class="fl">Vuelo — ¿de dónde a dónde?</label>
-    <div class="ef-fila">
-      <input id="bol-origen" class="ei" placeholder="Sale de (ej. Valencia)" autocomplete="off">
-      <input id="bol-destino" class="ei" placeholder="Llega a (ej. Porlamar)" autocomplete="off">
+  <details class="dsec">
+    <summary><i class="fas fa-note-sticky dsec-ic"></i> Notas para el agente <i class="fas fa-chevron-down dsec-arrow"></i></summary>
+    <div class="dsec-body">
+      <textarea id="bol-notas" class="ei" rows="3" placeholder="Algo que el agente tenga que saber: aerolínea preferida, equipaje, restricciones..."></textarea>
     </div>
-    <div class="bol-precio" id="bol-precio"></div>
+  </details>
 
-    <div class="ef-fila">
-      <div style="flex:1"><label class="fl">Fecha del viaje <span class="ef-opc">(opcional)</span></label><input id="bol-fecha-viaje" class="ei" type="date"></div>
-      <div style="flex:1"><label class="fl">Fecha de regreso <span class="ef-opc">(opcional)</span></label><input id="bol-fecha-regreso" class="ei" type="date"></div>
-    </div>
-    <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="bol-flexible" style="width:auto"> El cliente tiene flexibilidad de fechas</label>
-
-    <label class="fl" style="margin-top:10px">¿Cuántas personas? <span class="ef-opc">(opcional)</span></label>
-    <input id="bol-personas" class="ei" type="number" min="1" step="1" placeholder="1">
-
-    <label class="fl">Notas para el agente <span class="ef-opc">(opcional)</span></label>
-    <textarea id="bol-notas" class="ei" rows="2" placeholder="Algo que el agente tenga que saber"></textarea>
-
-    <div class="edit-err" id="bol-err"></div>
-  </div>
-  <div style="display:flex;gap:10px;padding:14px 16px 4px">
+  <div class="edit-err" id="bol-err"></div>
+  <div style="display:flex;gap:10px;padding:10px 0 4px">
     <button class="dbtn" id="bol-cancelar" type="button" style="flex:1">Cancelar</button>
-    <button class="dbtn save" id="bol-enviar" type="button" style="flex:1"><i class="fas fa-paper-plane"></i> Mandar a la cola</button>
+    <button class="dbtn save" id="bol-enviar" type="button" style="flex:2"><i class="fas fa-paper-plane"></i> Mandar a la cola</button>
   </div>
+</div>
+
+<!-- Detalle de una solicitud de boletería: se abre al tocar una tarjeta de la cola -->
+<div class="sheet" id="bol-detalle-sheet">
+  <div class="sheet-handle"></div>
+  <div id="bol-detalle-cuerpo"></div>
 </div>
 
 <!-- Cerrar solicitud de boletería (agente) -->
