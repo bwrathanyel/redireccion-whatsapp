@@ -838,6 +838,16 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .entity-card .ec-row{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);margin-top:6px}
 .entity-card .ec-row i{width:13px;color:var(--muted2);font-size:11px}
 .entity-card .ec-foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;row-gap:8px;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+/* Pie en DOS filas fijas: etiquetas arriba, botones abajo. Antes los cuatro
+   hijos iban sueltos en una sola fila con flex-wrap + space-between, así que
+   el reparto dependía del largo del texto: "Instagram + Por atender" entraba
+   completo, pero "Facebook + ATENDIDO" empujaba el botón de WhatsApp a la fila
+   de abajo y dejaba el de facturar arriba. Con los dos grupos la tarjeta se ve
+   igual siempre. `.ec-badges` sí envuelve por dentro para que un estado muy
+   largo no desborde la tarjeta. */
+.entity-card .ec-foot-cols{flex-direction:column;align-items:stretch;justify-content:flex-start;flex-wrap:nowrap}
+.entity-card .ec-badges{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.entity-card .ec-actions{display:flex;align-items:center;gap:8px}
 #tbl-wrap.hide,#rg-wrap.hide{display:none}
 
 /* ---------- Personal (Gestión de Personal > tarjetas del equipo) ---------- */

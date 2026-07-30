@@ -2186,6 +2186,14 @@ function leadCardHtml(l) {
   const esMobile = window.matchMedia('(max-width:760px)').matches;
   const sinAtender = esMobile && ROL === 'asesor' && l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
   const estadoColor = ESTADO_COLORS[l.estado] || '#5f677f';
+  // Los botones se arman aparte para poder omitir el contenedor `.ec-actions`
+  // cuando no queda ninguno: un div vacío igual sumaría el gap de la columna y
+  // dejaría un hueco muerto abajo de la tarjeta.
+  const acciones = [
+    (ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado)
+      ? `<button type="button" class="fact-btn" data-facturar-id="${l.id}" title="Enviar a facturación" aria-label="Enviar a facturación" onclick="event.stopPropagation()"><i class="fas fa-paper-plane"></i></button>` : '',
+    wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : '',
+  ].filter(Boolean).join('');
   return `<div class="entity-card" style="position:relative;border-left:4px solid ${estadoColor}">
     <input type="checkbox" class="lead-check solo-admin-borrar" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''} style="position:absolute;top:10px;right:10px;width:18px;height:18px">
     <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}</div></div>
@@ -2194,15 +2202,16 @@ function leadCardHtml(l) {
     <div class="ec-row"><i class="fas fa-clock"></i> ${esc(fmtFechaHoraCaracas(l.fecha_creacion))}</div>
     <div class="ec-row"><i class="fas fa-user-tie"></i> ${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</div>
     ${detalle}
-    <div class="ec-foot">
-      <span class="chip ${cc}">${esc(l.canal)}</span>
-      ${sinAtender ? `<span class="badge-st" style="color:var(--accent);background:var(--accent-soft)">Sin atender</span>` : `<span class="estado-stepper" data-id="${l.id}">
-        <button type="button" class="estado-arrow" data-dir="-1" title="Estado anterior" aria-label="Estado anterior"><i class="fas fa-chevron-left"></i></button>
-        <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}2e">${esc(niceEstado(l.estado))}</span>
-        <button type="button" class="estado-arrow" data-dir="1" title="Siguiente estado" aria-label="Siguiente estado"><i class="fas fa-chevron-right"></i></button>
-      </span>`}
-      ${(ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado) ? `<button type="button" class="fact-btn" data-facturar-id="${l.id}" title="Enviar a facturación" aria-label="Enviar a facturación" onclick="event.stopPropagation()"><i class="fas fa-paper-plane"></i></button>` : ''}
-      ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
+    <div class="ec-foot ec-foot-cols">
+      <div class="ec-badges">
+        <span class="chip ${cc}">${esc(l.canal)}</span>
+        ${sinAtender ? `<span class="badge-st" style="color:var(--accent);background:var(--accent-soft)">Sin atender</span>` : `<span class="estado-stepper" data-id="${l.id}">
+          <button type="button" class="estado-arrow" data-dir="-1" title="Estado anterior" aria-label="Estado anterior"><i class="fas fa-chevron-left"></i></button>
+          <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}2e">${esc(niceEstado(l.estado))}</span>
+          <button type="button" class="estado-arrow" data-dir="1" title="Siguiente estado" aria-label="Siguiente estado"><i class="fas fa-chevron-right"></i></button>
+        </span>`}
+      </div>
+      ${acciones ? `<div class="ec-actions">${acciones}</div>` : ''}
     </div>
     ${sinAtender ? `<button type="button" class="inbox-btn atender" style="width:100%;margin-top:9px" data-atender-id="${l.id}"><i class="fas fa-check"></i> Atender</button>` : ''}
   </div>`;
