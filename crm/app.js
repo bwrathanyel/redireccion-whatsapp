@@ -2853,6 +2853,7 @@ function actCambiarTab(clave) {
   if (clave !== 'proceso') actPararRefresco();
   if (clave === 'revisar') cargarRevisionTarifario();
   else if (clave === 'proceso') cargarPanelProceso();
+  else if (clave === 'portadas') cargarPanelPortadas();
   else if (clave === 'correr') cargarPanelCorrer();
   else cargarHistorialTarifario();
 }
@@ -2967,6 +2968,7 @@ const ACT_ESPERADO = {
   'tarifario-drive-scan': 30,
   'tarifario-extraer-publicar': 120,
   'tarifario-revisor-ia': 1440,
+  'tarifario-curador-fotos': 1440,
 };
 
 const ACT_NOMBRES = {
@@ -2974,6 +2976,7 @@ const ACT_NOMBRES = {
   'tarifario-drive-scan': 'Búsqueda de archivos en Drive',
   'tarifario-extraer-publicar': 'Flyers y fichas sueltas',
   'tarifario-revisor-ia': 'Revisor automático',
+  'tarifario-curador-fotos': 'Lectura de fotos',
 };
 
 async function cargarPanelProceso() {
@@ -3078,10 +3081,14 @@ function actSaludHtml(salud) {
     const m = s.minutos;
     // Dos señales distintas y las dos importan: el reloj puede estar corriendo
     // al día mientras la función falla en cada corrida.
-    const parado = !s.activo || m === null || m > esperado * 3;
+    // Un job recién programado todavía no tiene corrida: eso no es una falla,
+    // es que no le tocó. Rojo ahí gastaría la alarma que sí importa.
+    const nuevo = m === null && s.activo;
+    const parado = !nuevo && (!s.activo || m === null || m > esperado * 3);
     const fallando = s.resultado_ok === false;
-    const estado = parado || fallando ? 'mal' : m > esperado * 1.5 ? 'tibio' : 'ok';
-    const cuando = m === null ? 'nunca corrió' : m < 1 ? 'recién' : m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`;
+    const estado = parado || fallando ? 'mal' : nuevo ? 'tibio' : m > esperado * 1.5 ? 'tibio' : 'ok';
+    const cuando = m === null ? (nuevo ? 'todavía no le toca' : 'nunca corrió')
+                 : m < 1 ? 'recién' : m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`;
     return `<div class="act-salud" style="align-items:flex-start">
       <span class="act-punto ${estado}" style="margin-top:5px"></span>
       <div class="act-salud-nom">
@@ -3114,6 +3121,7 @@ function actPintarPillProceso(d) {
   const puertaMal = (d.puertas || []).some(p => !p.ok);
   const cronMal = (d.salud || []).some(s => {
     const esperado = ACT_ESPERADO[s.proceso] || 60;
+    if (s.minutos === null && s.activo) return false; // programado, sin corrida todavía
     return !s.activo || s.minutos === null || s.minutos > esperado * 3 || s.resultado_ok === false;
   });
   pill.hidden = !(puertaMal || cronMal);
@@ -3143,6 +3151,84 @@ async function actRevertirCarga() {
   okToast('Borrador descartado');
   cargarPanelProceso();
 }
+
+/* --- Pestaña: portadas propuestas por el curador ---
+   `cola_portadas()` compara la primera foto que ve el cliente contra la mejor
+   que ya está cargada. Solo propone: cambiar la portada lo hace una persona
+   acá, porque es visible para todo el mundo en el instante en que se aplica. */
+let ACT_PORTADAS = [];
+
+async function cargarPanelPortadas() {
+  const cont = document.getElementById('act-panel-portadas');
+  if (!cont.dataset.pintado) actSkel('act-panel-portadas');
+  const { data, error } = await sb.rpc('cola_portadas');
+  if (error) {
+    cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`;
+    return;
+  }
+  cont.dataset.pintado = '1';
+  ACT_PORTADAS = data || [];
+  const pill = document.getElementById('act-pill-port');
+  pill.textContent = ACT_PORTADAS.length;
+  pill.hidden = !ACT_PORTADAS.length;
+  cont.innerHTML = ACT_PORTADAS.length
+    ? ACT_PORTADAS.map((p, i) => portadaCardHtml(p, i)).join('')
+    : `<div class="act-vacio"><i class="fas fa-image"></i>Ninguna portada para cambiar.<br>La primera foto de cada ficha es una foto del lugar.</div>`;
+}
+
+const PF_CLASES = {
+  lugar: 'foto del lugar', texto: 'captura de texto', collage: 'montaje de varias fotos',
+  plano: 'plano o mapa', logo: 'logo', persona: 'gente posando', otro: 'no identificada',
+};
+
+function portadaCardHtml(p, i) {
+  const lado = (f, cap, elegida) => `
+    <div class="pf-lado${elegida ? ' elegida' : ''}">
+      <div class="pf-cap">${cap}</div>
+      <div class="pf-img" style="background-image:url('${esc(fotoMini(f.storage_path, 384))}')"></div>
+      <span class="pf-clase${f.clase === 'lugar' && f.portada >= 7 ? ' lugar' : ''}">${esc(PF_CLASES[f.clase] || f.clase)}${f.portada ? ` · ${f.portada}/10` : ''}</span>
+      <div class="pf-motivo">${esc(f.motivo || '')}</div>
+    </div>`;
+  return `
+    <div class="act-blk">
+      <div class="act-blk-t">${esc(p.entidad || 'Sin nombre')}${p.destino ? ` · ${esc(p.destino)}` : ''}</div>
+      <div class="pf-par">
+        ${lado(p.actual, 'Se ve hoy', false)}
+        <div class="pf-flecha"><i class="fas fa-arrow-right"></i></div>
+        ${lado(p.propuesta, 'Propuesta', true)}
+      </div>
+      <div class="pf-acciones">
+        <button class="dbtn" type="button" onclick="portadaDescartar(${i})">Dejar como está</button>
+        <button class="dbtn save" type="button" onclick="portadaAplicar(${i})"><i class="fas fa-check"></i> Cambiar portada</button>
+      </div>
+    </div>`;
+}
+
+// app.js es un módulo: lo que llama un onclick del HTML tiene que colgar de
+// window a mano.
+window.portadaAplicar = async (i) => {
+  const p = ACT_PORTADAS[i];
+  if (!p) return;
+  const { data, error } = await sb.rpc('aplicar_portada', { p_tabla: p.tabla, p_foto_id: p.propuesta.id });
+  if (error) return errToast(error.message);
+  if (!data?.ok) return errToast(data?.error || 'No se pudo');
+  okToast(`Portada cambiada en ${p.entidad}`);
+  cargarPanelPortadas();
+};
+
+// Descartar es solo visual: la propuesta vuelve a aparecer en la próxima
+// apertura. Marcarla como "vista" para siempre necesitaría otra tabla, y todavía
+// no sabemos cuántas propuestas se rechazan de verdad.
+window.portadaDescartar = (i) => {
+  ACT_PORTADAS.splice(i, 1);
+  const cont = document.getElementById('act-panel-portadas');
+  cont.innerHTML = ACT_PORTADAS.length
+    ? ACT_PORTADAS.map((p, n) => portadaCardHtml(p, n)).join('')
+    : `<div class="act-vacio"><i class="fas fa-image"></i>No queda ninguna propuesta pendiente.</div>`;
+  const pill = document.getElementById('act-pill-port');
+  pill.textContent = ACT_PORTADAS.length;
+  pill.hidden = !ACT_PORTADAS.length;
+};
 
 /* --- Pestaña 2: correr la actualización --- */
 async function cargarPanelCorrer() {
