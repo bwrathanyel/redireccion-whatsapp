@@ -13,7 +13,17 @@ const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
 const CDN_FOTOS = 'https://fotos.destinoyeventoslotus360.com/';
 const DERIVADOS_ANCHOS = [256, 384, 640, 1280];
 const rutaDerivado = (storagePath, ancho) => `_d/${ancho}/${storagePath}.jpg`;
-const fotoMini = (storagePath, ancho) => CDN_FOTOS + rutaDerivado(storagePath, ancho);
+// Las miniaturas se sirven con `max-age=31536000, immutable`, así que cambiar el
+// archivo en el origen NO alcanza: el navegador que ya lo tiene no vuelve a
+// pedirlo en un año, ni siquiera para revalidar. La única forma de forzar la
+// bajada es cambiar la URL.
+//
+// Subir este número cuando cambie el CONTENIDO de las fotos sin cambiar su
+// ruta. v=2: 2026-07-31, se devolvieron 504 fotos a su versión sin el relleno
+// espejado (ver workers/fotos). La query no toca la clave de R2 -- el Worker
+// solo mira el pathname -- así que no invalida la caché del servidor.
+const FOTOS_VERSION = '?v=2';
+const fotoMini = (storagePath, ancho) => CDN_FOTOS + rutaDerivado(storagePath, ancho) + FOTOS_VERSION;
 // Los consumidores piden el derivado sin fallback, así que una foto sin sus
 // miniaturas se ve rota. Se generan acá, en el navegador, al subir una foto
 // nueva, porque Canvas decodifica WebP y la librería del backend
