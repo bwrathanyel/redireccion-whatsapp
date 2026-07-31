@@ -3076,16 +3076,24 @@ function actSaludHtml(salud) {
   const filas = salud.map(s => {
     const esperado = ACT_ESPERADO[s.proceso] || 60;
     const m = s.minutos;
-    const estado = !s.activo || m === null ? 'mal' : m > esperado * 3 ? 'mal' : m > esperado * 1.5 ? 'tibio' : 'ok';
+    // Dos señales distintas y las dos importan: el reloj puede estar corriendo
+    // al día mientras la función falla en cada corrida.
+    const parado = !s.activo || m === null || m > esperado * 3;
+    const fallando = s.resultado_ok === false;
+    const estado = parado || fallando ? 'mal' : m > esperado * 1.5 ? 'tibio' : 'ok';
     const cuando = m === null ? 'nunca corrió' : m < 1 ? 'recién' : m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`;
-    return `<div class="act-salud">
-      <span class="act-punto ${estado}"></span>
-      <div class="act-salud-nom">${esc(ACT_NOMBRES[s.proceso] || s.proceso)}${s.fallidas_24h ? ` <span style="color:#fca5a5">· ${s.fallidas_24h} fallo(s) hoy</span>` : ''}</div>
-      <div class="act-salud-t">${esc(cuando)}</div>
+    return `<div class="act-salud" style="align-items:flex-start">
+      <span class="act-punto ${estado}" style="margin-top:5px"></span>
+      <div class="act-salud-nom">
+        ${esc(ACT_NOMBRES[s.proceso] || s.proceso)}
+        ${parado ? '<span style="color:#fca5a5"> · dejó de correr</span>' : ''}
+        ${s.resultado ? `<div class="act-sub" style="margin-top:2px;${fallando ? 'color:#fca5a5' : ''}">${esc(s.resultado)}</div>` : ''}
+      </div>
+      <div class="act-salud-t" style="margin-top:1px">${esc(cuando)}</div>
     </div>`;
   }).join('');
   return `<div class="act-blk"><div class="act-blk-t">Procesos automáticos</div>${filas}
-    <div class="act-sub" style="margin-top:9px;color:var(--muted2)">Si alguno queda en rojo, dejó de correr. Eso explica que el tarifario "no se actualice" sin que aparezca ningún error.</div></div>`;
+    <div class="act-sub" style="margin-top:9px;color:var(--muted2)">Debajo de cada uno está lo que contestó la última vez. Rojo es que dejó de correr, o que corre y falla.</div></div>`;
 }
 
 function actColaHtml(d) {
@@ -3106,7 +3114,7 @@ function actPintarPillProceso(d) {
   const puertaMal = (d.puertas || []).some(p => !p.ok);
   const cronMal = (d.salud || []).some(s => {
     const esperado = ACT_ESPERADO[s.proceso] || 60;
-    return !s.activo || s.minutos === null || s.minutos > esperado * 3;
+    return !s.activo || s.minutos === null || s.minutos > esperado * 3 || s.resultado_ok === false;
   });
   pill.hidden = !(puertaMal || cronMal);
 }
