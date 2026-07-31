@@ -2848,7 +2848,11 @@ async function abrirActualizadorTarifario(pestana) {
 function actCambiarTab(clave) {
   document.querySelectorAll('#act-tabs .act-tab').forEach(b => b.classList.toggle('on', b.dataset.atab === clave));
   document.querySelectorAll('#actualizador-sheet .act-panel').forEach(p => p.classList.toggle('on', p.dataset.apanel === clave));
+  // La pestaña Proceso se refresca sola: es lo único que muestra que la cadena
+  // automática sigue viva. Se corta al salir para no dejar un timer huérfano.
+  if (clave !== 'proceso') actPararRefresco();
   if (clave === 'revisar') cargarRevisionTarifario();
+  else if (clave === 'proceso') cargarPanelProceso();
   else if (clave === 'correr') cargarPanelCorrer();
   else cargarHistorialTarifario();
 }
@@ -2942,6 +2946,194 @@ async function actQuitar(clave, btn) {
   okToast('Quitado del catálogo');
   await cargarRevisionTarifario();
   loadTarifario();
+}
+
+/* --- Pestaña Proceso: qué está haciendo la cadena automática ---------------
+   La actualización del tarifario corre sola cada 3 minutos y hasta acá no se
+   veía desde ningún lado. El modo de falla que importa no es que algo explote
+   -- eso deja rastro -- sino que algo DEJE DE CORRER en silencio, así que lo
+   primero de la pantalla es cuándo corrió cada proceso por última vez. */
+let ACT_REFRESCO = null;
+let ACT_PANEL_DATA = null;
+
+function actPararRefresco() {
+  if (ACT_REFRESCO) { clearInterval(ACT_REFRESCO); ACT_REFRESCO = null; }
+}
+
+// Cada cuánto DEBERÍA correr cada proceso, en minutos. Se marca en rojo al
+// triplicar ese número: un salteo puede ser un pico de carga, tres seguidos no.
+const ACT_ESPERADO = {
+  'tarifario-maestro': 3,
+  'tarifario-drive-scan': 30,
+  'tarifario-extraer-publicar': 120,
+  'tarifario-revisor-ia': 1440,
+};
+
+const ACT_NOMBRES = {
+  'tarifario-maestro': 'Actualización del tarifario',
+  'tarifario-drive-scan': 'Búsqueda de archivos en Drive',
+  'tarifario-extraer-publicar': 'Flyers y fichas sueltas',
+  'tarifario-revisor-ia': 'Revisor automático',
+};
+
+async function cargarPanelProceso() {
+  const cont = document.getElementById('act-panel-proceso');
+  if (!cont.dataset.pintado) actSkel('act-panel-proceso');
+  const { data, error } = await sb.rpc('panel_tarifario');
+  if (error) {
+    cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`;
+    return;
+  }
+  cont.dataset.pintado = '1';
+  ACT_PANEL_DATA = data || {};
+  cont.innerHTML = actProcesoHtml(ACT_PANEL_DATA);
+  actPintarPillProceso(data || {});
+  actPararRefresco();
+  ACT_REFRESCO = setInterval(() => {
+    // Si la hoja se cerró o cambiaron de pestaña, el timer se apaga solo.
+    const viva = document.getElementById('actualizador-sheet')?.classList.contains('open')
+      && document.querySelector('#actualizador-sheet .act-panel[data-apanel="proceso"]')?.classList.contains('on');
+    if (!viva) return actPararRefresco();
+    cargarPanelProceso();
+  }, 20000);
+}
+
+function actProcesoHtml(d) {
+  return actCargaHtml(d) + actPuertasHtml(d) + actSaludHtml(d.salud || []) + actColaHtml(d);
+}
+
+function actCargaHtml(d) {
+  const c = d.carga;
+  if (!c) {
+    const ultima = (d.ultimas_cargas || [])[0];
+    return `<div class="act-blk">
+      <div class="act-blk-t">Ahora mismo</div>
+      <div class="act-vacio" style="padding:16px 8px">
+        <i class="fas fa-circle-check"></i><b>Sin cargas en curso</b>
+        <div style="margin-top:6px">El sistema está mirando Drive. Cuando suban un tarifario nuevo, entra solo.</div>
+        ${ultima ? `<div style="margin-top:9px;font-size:11.5px;color:var(--muted2)">Última: ${esc(ultima.archivo)} · ${ultima.activadas ?? 0} precios nuevos, ${ultima.retiradas ?? 0} retirados</div>` : ''}
+      </div></div>`;
+  }
+  const t = c.tandas || {};
+  const hechas = (t.ok || 0) + (t.dividido || 0) + (t.error || 0);
+  const pct = t.total ? Math.round(hechas / t.total * 100) : 0;
+  const paso = {
+    extrayendo: ['Leyendo el archivo', 'tibio'],
+    verificando: ['Verificando', 'tibio'],
+    lista: ['Verificada, preparando borrador', 'tibio'],
+    borrador: ['Borrador listo, sin publicar', 'ok'],
+  }[c.estado] || [c.estado, 'tibio'];
+
+  return `<div class="act-blk">
+    <div class="act-blk-t">Ahora mismo</div>
+    <div class="act-est">
+      <div class="act-est-nom">${esc(c.archivo)}</div>
+      <span class="act-chip ${paso[1]}">${esc(paso[0])}</span>
+    </div>
+    ${t.total ? `<div class="act-barra"><div class="act-barra-int" style="width:${pct}%"></div></div>
+      <div class="act-sub">${hechas} de ${t.total} tandas · ${c.paginas} páginas${t.error ? ` · <b style="color:#fca5a5">${t.error} con error</b>` : ''}</div>` : ''}
+    <div class="act-sub" style="margin-top:6px;color:var(--muted2)">Nada de esto se ve en el catálogo hasta que pase las tres puertas.</div>
+  </div>`;
+}
+
+function actPuertasHtml(d) {
+  const p = d.puertas || [];
+  if (!p.length) return '';
+  const todas = p.every(x => x.ok);
+  const filas = p.map(x => `
+    <div class="act-puerta">
+      <div class="act-puerta-ico ${x.ok ? 'act-puerta-ok' : 'act-puerta-mal'}"><i class="fas fa-${x.ok ? 'circle-check' : 'circle-exclamation'}"></i></div>
+      <div style="flex:1;min-width:0">
+        <div class="act-puerta-nom">${esc(x.nombre)}</div>
+        <div class="act-puerta-det">${esc(x.detalle || '')}</div>
+        ${(x.pares || []).length ? `<div class="act-puerta-det" style="margin-top:4px;color:#ffd595">${(x.pares || []).map(q => esc(`${q.a} ↔ ${q.b}`)).join('<br>')}</div>` : ''}
+      </div>
+    </div>`).join('');
+
+  const mov = ((d.carga?.informe?.precios || {}).saltos_fuertes || []).slice(0, 8);
+  return `<div class="act-blk">
+    <div class="act-blk-t">Puertas para publicar</div>
+    ${filas}
+    ${mov.length ? `<div class="act-blk-t" style="margin:13px 0 7px">Los que más se mueven</div>
+      ${mov.map(m => `<div class="act-mov">
+        <div class="act-mov-nom">${esc(m.hotel)}</div>
+        <div class="act-sub" style="white-space:nowrap">$${m.viejo} → $${m.nuevo}</div>
+        <div class="act-mov-delta ${Number(m.delta_pct) >= 0 ? 'sube' : 'baja'}">${Number(m.delta_pct) >= 0 ? '+' : ''}${m.delta_pct}%</div>
+      </div>`).join('')}` : ''}
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">
+      <button class="dbtn ${todas ? 'primary' : ''}" id="act-activar" type="button" style="flex:none;width:auto;padding:9px 14px;font-size:12.5px">
+        <i class="fas fa-rocket"></i> Publicar ahora</button>
+      <button class="dbtn" id="act-revertir" type="button" style="flex:none;width:auto;padding:9px 14px;font-size:12.5px">
+        <i class="fas fa-rotate-left"></i> Descartar borrador</button>
+    </div>
+    ${todas ? '<div class="act-sub" style="margin-top:8px">Pasó las tres. Se publica sola en la próxima corrida; el botón solo la adelanta.</div>'
+            : '<div class="act-sub" style="margin-top:8px;color:#ffd595">No se va a publicar sola hasta que resuelvas lo de arriba.</div>'}
+  </div>`;
+}
+
+function actSaludHtml(salud) {
+  if (!salud.length) return '';
+  const filas = salud.map(s => {
+    const esperado = ACT_ESPERADO[s.proceso] || 60;
+    const m = s.minutos;
+    const estado = !s.activo || m === null ? 'mal' : m > esperado * 3 ? 'mal' : m > esperado * 1.5 ? 'tibio' : 'ok';
+    const cuando = m === null ? 'nunca corrió' : m < 1 ? 'recién' : m < 60 ? `hace ${m} min` : `hace ${Math.round(m / 60)} h`;
+    return `<div class="act-salud">
+      <span class="act-punto ${estado}"></span>
+      <div class="act-salud-nom">${esc(ACT_NOMBRES[s.proceso] || s.proceso)}${s.fallidas_24h ? ` <span style="color:#fca5a5">· ${s.fallidas_24h} fallo(s) hoy</span>` : ''}</div>
+      <div class="act-salud-t">${esc(cuando)}</div>
+    </div>`;
+  }).join('');
+  return `<div class="act-blk"><div class="act-blk-t">Procesos automáticos</div>${filas}
+    <div class="act-sub" style="margin-top:9px;color:var(--muted2)">Si alguno queda en rojo, dejó de correr. Eso explica que el tarifario "no se actualice" sin que aparezca ningún error.</div></div>`;
+}
+
+function actColaHtml(d) {
+  const cola = d.cola_drive || [];
+  if (!cola.length) return '';
+  return `<div class="act-blk"><div class="act-blk-t">Esperando en Drive</div>
+    ${cola.map(a => `<div class="act-salud">
+      <div class="act-salud-nom">${esc(a.archivo)}</div>
+      <div class="act-salud-t">${a.camino === 'maestro' ? 'tarifario completo' : 'archivo suelto'}</div>
+    </div>`).join('')}</div>`;
+}
+
+// Punto rojo en la pestaña cuando algo necesita una persona: una carga frenada
+// o un proceso que dejó de correr.
+function actPintarPillProceso(d) {
+  const pill = document.getElementById('act-pill-proc');
+  if (!pill) return;
+  const puertaMal = (d.puertas || []).some(p => !p.ok);
+  const cronMal = (d.salud || []).some(s => {
+    const esperado = ACT_ESPERADO[s.proceso] || 60;
+    return !s.activo || s.minutos === null || s.minutos > esperado * 3;
+  });
+  pill.hidden = !(puertaMal || cronMal);
+}
+
+async function actActivarCarga() {
+  const d = ACT_PANEL_DATA;
+  if (!d?.carga?.id) return;
+  const puertasMal = (d.puertas || []).filter(p => !p.ok);
+  const aviso = puertasMal.length
+    ? `Hay ${puertasMal.length} puerta(s) sin pasar:\n\n${puertasMal.map(p => `• ${p.nombre}: ${p.detalle}`).join('\n')}\n\n¿Publicar igual?`
+    : '¿Publicar el tarifario nuevo ahora?';
+  if (!confirm(aviso)) return;
+  const { data, error } = await sb.rpc('activar_carga_maestra', { p_carga_id: d.carga.id });
+  if (error) return errToast(error.message);
+  okToast(`Publicado: ${data?.tarifas_activadas ?? 0} precios nuevos`);
+  cargarPanelProceso();
+  loadTarifario();
+}
+
+async function actRevertirCarga() {
+  const d = ACT_PANEL_DATA;
+  if (!d?.carga?.id) return;
+  if (!confirm('¿Descartar el borrador? El catálogo queda como está ahora.')) return;
+  const { error } = await sb.rpc('revertir_carga_maestra', { p_carga_id: d.carga.id });
+  if (error) return errToast(error.message);
+  okToast('Borrador descartado');
+  cargarPanelProceso();
 }
 
 /* --- Pestaña 2: correr la actualización --- */
@@ -5050,6 +5242,8 @@ function setupTarAdmin() {
     if (quitar) return actQuitar(quitar.dataset.actQuitar, quitar);
     const det = ev.target.closest('.act-h-det');
     if (det) det.classList.toggle('abierto');
+    if (ev.target.closest('#act-activar')) return actActivarCarga();
+    if (ev.target.closest('#act-revertir')) return actRevertirCarga();
   });
   document.getElementById('tas-close').onclick = () => closeSheet('tar-admin-sheet');
   let debTas; document.getElementById('tas-search').addEventListener('input', () => { clearTimeout(debTas); debTas = setTimeout(renderTasList, 200); });

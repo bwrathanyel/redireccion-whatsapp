@@ -1404,6 +1404,46 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .act-panel{display:none}
 .act-panel.on{display:block;animation:section-in .2s ease}
 
+/* --- Pestaña Proceso: qué está haciendo la cadena automática ahora mismo --- */
+.act-pill-alerta{background:#ef4444 !important;color:#fff !important}
+.act-blk{border:1px solid var(--line);border-radius:12px;padding:13px 14px;margin-bottom:11px;background:rgba(255,255,255,.02)}
+.act-blk-t{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px}
+.act-est{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.act-est-nom{font-weight:700;font-size:13.5px;flex:1;min-width:0;overflow-wrap:anywhere;line-height:1.35}
+.act-chip{font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.act-chip.ok{background:rgba(34,197,94,.14);color:#86efac;border:1px solid rgba(34,197,94,.3)}
+.act-chip.tibio{background:rgba(245,158,11,.13);color:#ffd595;border:1px solid rgba(245,158,11,.3)}
+.act-chip.mal{background:rgba(239,68,68,.13);color:#fca5a5;border:1px solid rgba(239,68,68,.32)}
+/* Barra de tandas: el único indicador de que la extracción avanza. */
+.act-barra{height:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;margin:8px 0 6px}
+.act-barra-int{height:100%;background:linear-gradient(90deg,var(--accent),#f5b942);border-radius:999px;transition:width .4s ease}
+.act-sub{font-size:11.5px;color:var(--muted);line-height:1.5}
+/* Puertas: cada una es una condición que frena la activación automática. */
+.act-puerta{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-top:1px solid var(--line)}
+.act-puerta:first-of-type{border-top:0;padding-top:2px}
+.act-puerta-ico{width:19px;flex:none;text-align:center;font-size:13px;margin-top:1px}
+.act-puerta-ok{color:#86efac}
+.act-puerta-mal{color:#fca5a5}
+.act-puerta-nom{font-weight:700;font-size:12.5px;margin-bottom:2px}
+.act-puerta-det{font-size:11.5px;color:var(--muted);line-height:1.45;overflow-wrap:anywhere}
+/* Semáforo de procesos: lo primero que hay que mirar si algo "no se actualizó". */
+.act-salud{display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid var(--line);font-size:12px}
+.act-salud:first-of-type{border-top:0}
+.act-salud-nom{flex:1;min-width:0;overflow-wrap:anywhere}
+.act-salud-t{color:var(--muted);font-size:11.5px;white-space:nowrap}
+.act-punto{width:8px;height:8px;border-radius:50%;flex:none}
+.act-punto.ok{background:#22c55e}
+.act-punto.tibio{background:#f59e0b}
+.act-punto.mal{background:#ef4444}
+.act-mov{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--line);font-size:12px}
+.act-mov:first-of-type{border-top:0}
+.act-mov-nom{flex:1;min-width:0;overflow-wrap:anywhere}
+.act-mov-delta{font-weight:800;font-size:12px;white-space:nowrap}
+.act-mov-delta.sube{color:#fca5a5}
+.act-mov-delta.baja{color:#86efac}
+.act-vacio{text-align:center;padding:26px 14px;color:var(--muted);font-size:12.5px;line-height:1.6}
+.act-vacio i{font-size:26px;display:block;margin-bottom:10px;color:var(--muted2)}
+
 /* Tarjeta de un item esperando confirmación */
 .act-rev{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:9px;background:rgba(255,255,255,.02)}
 .act-rev-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
@@ -3010,10 +3050,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <div class="sheet-title"><i class="fas fa-arrows-rotate"></i> Actualizador de Tarifario</div>
   <div class="act-tabs" id="act-tabs">
     <button class="act-tab on" data-atab="revisar" type="button">Por revisar<span class="act-pill" id="act-pill-rev" hidden>0</span></button>
+    <button class="act-tab" data-atab="proceso" type="button">Proceso<span class="act-pill act-pill-alerta" id="act-pill-proc" hidden>!</span></button>
     <button class="act-tab" data-atab="correr" type="button">Actualizar</button>
     <button class="act-tab" data-atab="historial" type="button">Historial</button>
   </div>
   <div class="act-panel on" data-apanel="revisar" id="act-panel-revisar"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+  <div class="act-panel" data-apanel="proceso" id="act-panel-proceso"></div>
   <div class="act-panel" data-apanel="correr" id="act-panel-correr"></div>
   <div class="act-panel" data-apanel="historial" id="act-panel-historial"></div>
 </div>
