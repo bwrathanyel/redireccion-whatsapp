@@ -6295,6 +6295,7 @@ function tarAbrirEditorFicha(id) {
   document.getElementById('tf-destinos').innerHTML =
     [...new Set((tarCache[tarTab] || []).map(x => x.destino).filter(Boolean))].sort()
       .map(d => `<option value="${esc(d)}">`).join('');
+  window.closeDrawer(true);
   openSheet('tar-ficha-sheet');
 }
 
@@ -6320,6 +6321,9 @@ function tarAbrirEditorPromo(id) {
   document.getElementById('tp-moneda').value = p.moneda || 'USD';
   document.getElementById('tp-tags').value = (p.incluye_tags || []).join(', ');
   tpAvisoFecha();
+  // El panel de detalle queda detrás mostrando los datos de antes: se cierra
+  // para que no compitan en pantalla y para que al guardar no haya que cerrarlo.
+  window.closeDrawer(true);
   openSheet('tar-promo-sheet');
 }
 
@@ -6373,7 +6377,6 @@ async function tarGuardarPromo(btn) {
   if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
   okToast('Promoción actualizada — la IA la usa desde el próximo mensaje');
   closeSheet('tar-promo-sheet');
-  window.closeDrawer(true);
   delete tarCache[tarTab];
   loadTarifario();
 }
@@ -6391,9 +6394,6 @@ async function tarGuardarFicha(btn) {
   if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
   okToast('Ficha corregida — ya se ve así en la web y para la IA');
   closeSheet('tar-ficha-sheet');
-  // El panel de detalle quedó abierto detrás con los datos de antes: si no se
-  // cierra, lo primero que ve el usuario después de guardar es el valor viejo.
-  window.closeDrawer(true);
   // El tarifario se cachea por pestaña: sin invalidar, la tarjeta seguiría
   // mostrando el valor viejo aunque la base ya tenga el nuevo.
   delete tarCache[tarTab];

@@ -744,6 +744,12 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
     transform:translateX(100%);box-shadow:-20px 0 60px rgba(0,0,0,.45)}
   .sheet.sheet-lateral.open{transform:translateX(0)}
   .sheet.sheet-lateral .sheet-handle{display:none}
+  /* En una pantalla ancha, una hoja de borde a borde deja campos de 1.000px de
+     largo para escribir un precio, y el ojo pierde dónde empieza cada uno. Se
+     centra y se le pone un ancho de lectura. En el teléfono no cambia nada:
+     ahí ocupar todo el ancho es lo correcto. */
+  .sheet:not(.sheet-lateral){left:0;right:0;margin-inline:auto;width:min(620px,94vw);
+    border-radius:20px 20px 0 0}
 }
 .sheet-lateral .pf-cuerpo{padding:0 18px calc(20px + var(--safe-b))}
 /* Cabecera fija: el nombre y la foto tienen que seguir a la vista al scrollear
@@ -1174,6 +1180,9 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
   .app{grid-template-columns:1fr}
   .sidebar{display:none}
   .bottom-nav{display:flex}
+  /* Alto real de la barra de abajo, para que lo que se pega al fondo de una
+     hoja no le quede encima. Medido: 59px + el área segura del teléfono. */
+  :root{--nav-h:calc(62px + var(--safe-b))}
   .main{padding:14px 14px calc(86px + var(--safe-b))}
   .mobile-brand{display:flex;align-items:center;gap:10px;margin-bottom:14px}
   .mobile-brand img{width:34px;height:34px;border-radius:9px;border:2px solid var(--accent);padding:2px;background:#fff}
@@ -1465,6 +1474,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 #ce-texto{min-height:150px;resize:vertical;line-height:1.6}
 .ce-insertar{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
 .ce-insertar select{flex:1;min-width:170px}
+/* El botón de guardar de una hoja larga queda pegado al fondo mientras se
+   scrollea. Antes desaparecía debajo del borde y la hoja parecía cortada: no
+   había forma de saber que abajo había un botón. */
+.sheet-form .dbtn.save{position:sticky;bottom:var(--nav-h,0px);margin-top:22px;
+  /* El spread sólido tapa el campo que pasa por detrás al scrollear -- sin él
+     se ve medio input cortado debajo del botón. El segundo shadow difumina el
+     corte para que se note que abajo sigue habiendo contenido. */
+  box-shadow:0 0 0 20px var(--bg2),0 -26px 18px -14px var(--bg2)}
 /* Probar: se muestra como una conversación y no como un formulario, porque lo
    que se está evaluando es si suena bien, no si el JSON está bien formado. */
 .ce-sugerencias{display:flex;flex-wrap:wrap;gap:7px;margin:-4px 0 14px}
@@ -2694,7 +2711,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <div class="sheet" id="tar-promo-sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title"><i class="fas fa-tag"></i> Editar promoción</div>
-      <div style="padding:4px 6px 14px">
+      <div class="sheet-form" style="padding:4px 6px 14px">
         <div class="ce-intro" style="margin-bottom:14px">
           Lo que guardes lo usa la IA <b>desde el próximo mensaje</b>, en Instagram, Facebook y la web.
           También se ve enseguida en el catálogo de la página.
@@ -2737,7 +2754,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <div class="sheet" id="tar-ficha-sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title"><i class="fas fa-pen"></i> Corregir ficha</div>
-      <div style="padding:4px 6px 14px">
+      <div class="sheet-form" style="padding:4px 6px 14px">
         <div class="ce-intro" style="margin-bottom:14px">
           Esto arregla los <b>textos</b> de la ficha. Los precios no se tocan acá: siguen saliendo del tarifario.
           Lo que guardes se ve enseguida en la web y lo usa la IA para cotizar.
@@ -2763,7 +2780,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     <div class="sheet" id="ce-editor-sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="ce-editor-titulo"><i class="fas fa-brain"></i> Nueva regla</div>
-      <div style="padding:4px 6px 14px">
+      <div class="sheet-form" style="padding:4px 6px 14px">
         <div class="ce-campo">
           <label class="ce-lbl">¿Cuándo se aplica?</label>
           <select class="ei" id="ce-ambito">
