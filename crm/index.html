@@ -2691,6 +2691,49 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </div>
 
     <!-- Hoja: nueva tarea (admin, dentro de Freelancers) -->
+    <div class="sheet" id="tar-promo-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title"><i class="fas fa-tag"></i> Editar promoción</div>
+      <div style="padding:4px 6px 14px">
+        <div class="ce-intro" style="margin-bottom:14px">
+          Lo que guardes lo usa la IA <b>desde el próximo mensaje</b>, en Instagram, Facebook y la web.
+          También se ve enseguida en el catálogo de la página.
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">Título</label>
+          <input class="ei" id="tp-titulo" type="text">
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">Precio, tal cual se lo va a decir al cliente</label>
+          <textarea class="ei" id="tp-precio" rows="4"></textarea>
+          <div class="ce-ayuda">Poné adelante el dato que el cliente vio en la publicación. Lo que queda al final de una
+            línea larga la IA lo pasa por alto — pasó de verdad con el <b>$18 por persona</b> de Chichiriviche.</div>
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">Moneda</label>
+          <select class="ei" id="tp-moneda">
+            <option value="USD">Dólares (USD)</option>
+            <option value="EUR">Euros (EUR)</option>
+          </select>
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">Vigencia (como texto, para el cliente)</label>
+          <input class="ei" id="tp-vigencia" type="text" placeholder="Ej. Temporada alta: del 01/08 al 15/09">
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">Se retira sola el</label>
+          <input class="ei" id="tp-fecha-fin" type="date">
+          <div class="ce-ayuda" id="tp-aviso-fecha"></div>
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">Qué incluye</label>
+          <input class="ei" id="tp-tags" type="text" placeholder="desayuno, piscina, niños gratis">
+          <div class="ce-ayuda">Separado por comas. Son las etiquetas que se ven en la tarjeta y que la IA usa para comparar opciones.</div>
+        </div>
+        <button class="dbtn save" id="tp-guardar">Guardar</button>
+      </div>
+    </div>
+
     <div class="sheet" id="tar-ficha-sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title"><i class="fas fa-pen"></i> Corregir ficha</div>

@@ -5722,6 +5722,8 @@ function setupTarifarioTabs() {
   // Delegado sobre el contenedor: las tarjetas se repintan en cada filtro, así
   // que engancharlas una por una las dejaría sin listener al primer render.
   document.getElementById('tf-guardar')?.addEventListener('click', (e) => tarGuardarFicha(e.currentTarget));
+  document.getElementById('tp-guardar')?.addEventListener('click', (e) => tarGuardarPromo(e.currentTarget));
+  document.getElementById('tp-fecha-fin')?.addEventListener('change', tpAvisoFecha);
   setupTarAdmin();
 }
 
@@ -6296,6 +6298,86 @@ function tarAbrirEditorFicha(id) {
   openSheet('tar-ficha-sheet');
 }
 
+/* ---------- Editar una promoción -------------------------------------------
+   Las promociones son lo que más cambia --son las que se publican en reels e
+   historias-- y eran lo único que no se podía tocar desde acá: para productos
+   estaba "Corregir ficha", y para el precio de una promo solo el "Corregir
+   precio" del Actualizador, que aparece unicamente si quedó marcada por
+   revisar. Todo lo demás había que pedirlo.
+
+   La fecha de fin es el campo que más importa y el que nadie ve: sin ella la
+   promo se ofrece para siempre, y con ella se retira sola. */
+let TAR_PROMO_ID = null;
+
+function tarAbrirEditorPromo(id) {
+  const p = (tarCache[tarTab] || []).find(x => x.id === Number(id));
+  if (!p) { errToast('No se encontró esa promoción'); return; }
+  TAR_PROMO_ID = p.id;
+  document.getElementById('tp-titulo').value = p.titulo || '';
+  document.getElementById('tp-precio').value = p.precio_texto || '';
+  document.getElementById('tp-vigencia').value = p.vigencia_texto || '';
+  document.getElementById('tp-fecha-fin').value = p.fecha_fin_estimada || '';
+  document.getElementById('tp-moneda').value = p.moneda || 'USD';
+  document.getElementById('tp-tags').value = (p.incluye_tags || []).join(', ');
+  tpAvisoFecha();
+  openSheet('tar-promo-sheet');
+}
+
+// El margen de 7 días es una regla de negocio real (pedido del 19/07): una promo
+// que se acaba en dos días genera falsa urgencia. Si la fecha cae adentro de ese
+// margen, la promo deja de ofrecerse aunque técnicamente siga vigente -- y eso
+// sorprende a cualquiera que no lo sepa, así que se avisa mientras se escribe.
+function tpAvisoFecha() {
+  const v = document.getElementById('tp-fecha-fin').value;
+  const aviso = document.getElementById('tp-aviso-fecha');
+  if (!v) {
+    aviso.innerHTML = `<i class="fas fa-infinity"></i> Sin fecha, se ofrece hasta que alguien la baje a mano.`;
+    aviso.className = 'ce-ayuda';
+    return;
+  }
+  const dias = Math.round((new Date(v + 'T12:00:00') - new Date()) / 86400000);
+  if (dias < 0) {
+    aviso.innerHTML = `<i class="fas fa-circle-xmark"></i> Esa fecha ya pasó: la IA no la va a ofrecer.`;
+    aviso.className = 'ce-ayuda';
+    aviso.style.color = '#fca5a5';
+  } else if (dias <= 7) {
+    aviso.innerHTML = `<i class="fas fa-triangle-exclamation"></i> Faltan ${dias} día(s). La IA deja de ofrecer una promo cuando le quedan 7 o menos, así que esta no se va a mostrar.`;
+    aviso.className = 'ce-ayuda';
+    aviso.style.color = 'var(--amber)';
+  } else {
+    aviso.innerHTML = `<i class="fas fa-calendar-check"></i> Se va a ofrecer ${dias - 7} día(s) más y después se retira sola.`;
+    aviso.className = 'ce-ayuda';
+    aviso.style.color = '';
+  }
+}
+
+async function tarGuardarPromo(btn) {
+  const titulo = document.getElementById('tp-titulo').value.trim();
+  const precio = document.getElementById('tp-precio').value.trim();
+  if (!titulo) { errToast('El título no puede quedar vacío'); return; }
+  if (!precio) { errToast('El precio no puede quedar vacío'); return; }
+  const tags = document.getElementById('tp-tags').value
+    .split(',').map(s => s.trim()).filter(Boolean);
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('editar_promocion', {
+    p_id: TAR_PROMO_ID,
+    p_titulo: titulo,
+    p_precio_texto: precio,
+    p_vigencia_texto: document.getElementById('tp-vigencia').value.trim(),
+    // Cadena vacía = quitarle la fecha de fin; el RPC distingue eso de "no tocar".
+    p_fecha_fin: document.getElementById('tp-fecha-fin').value,
+    p_incluye_tags: tags,
+    p_moneda: document.getElementById('tp-moneda').value,
+  });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Promoción actualizada — la IA la usa desde el próximo mensaje');
+  closeSheet('tar-promo-sheet');
+  window.closeDrawer(true);
+  delete tarCache[tarTab];
+  loadTarifario();
+}
+
 async function tarGuardarFicha(btn) {
   const nombre = document.getElementById('tf-nombre').value.trim();
   if (!nombre) { errToast('El nombre no puede quedar vacío'); return; }
@@ -6451,7 +6533,9 @@ function openProductoDrawer(x) {
       <button class="dbtn save" id="tar-notas-save" type="button" style="margin-top:8px"><i class="fas fa-floppy-disk"></i> Guardar notas</button>
       <div class="eb-title" style="margin-top:16px"><i class="fas fa-images"></i> Fotos (solo admin)</div>
       <div id="tar-fotos-admin"><div class="muted" style="font-size:12.5px">Cargando...</div></div>
-      ${!esPromo ? `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>` : ''}
+      ${esPromo
+        ? `<button class="dbtn gh" id="tar-editar-promo" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Editar esta promoción</button>`
+        : `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>`}
     </div>` : ''}
     <div class="dactions"><button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Ir al Cotizador</button></div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
@@ -6460,6 +6544,7 @@ function openProductoDrawer(x) {
   navPush({ type: 'drawer' });
   document.getElementById('dCotizador').onclick = () => irAlCotizadorConOpcion(esPromo ? 'promociones' : 'productos', x.id, nombre);
   document.getElementById('tar-editar-ficha')?.addEventListener('click', () => tarAbrirEditorFicha(x.id));
+  document.getElementById('tar-editar-promo')?.addEventListener('click', () => tarAbrirEditorPromo(x.id));
   document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotosOrig, +el.dataset.drawerFoto)));
   if (ROL === 'admin') {
     document.getElementById('tar-notas-save').onclick = () => guardarNotasTarifario(esPromo ? 'promociones' : 'productos', x.id);
