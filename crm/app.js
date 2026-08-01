@@ -128,6 +128,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   tareas: ['Tareas', 'Tus tareas activas'],
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
   'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
+  'ia-atencion': ['IA Atención al Cliente', 'Posadas y apartamentos que pidieron el asistente desde la página'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -2058,8 +2059,18 @@ document.getElementById('leads-reload-btn')?.addEventListener('click', async () 
   btn.disabled = false; btn.innerHTML = html0;
 });
 
+// Las posadas interesadas en el asistente comparten tabla con los clientes de
+// viaje, pero no son lo mismo y no se trabajan igual. La RLS ya se las esconde
+// a los asesores (entran sin asesor); acá se excluyen también para el admin,
+// que sí las vería, y viven en su propia sección: IA Atención al Cliente.
+const SERVICIO_POSADA_IA = 'Asistente IA (posada)';
+
 function buildQuery(forCount) {
-  let q = sb.from('leads').select('*', forCount ? { count: 'exact' } : {}).is('eliminado_at', null);
+  let q = sb.from('leads').select('*', forCount ? { count: 'exact' } : {})
+    // El valor va entre comillas porque tiene paréntesis y espacios, que
+    // PostgREST usa como sintaxis dentro de un `or`. La rama `is.null` hace
+    // falta porque `neq` sobre un NULL da NULL y escondería esos leads.
+    .is('eliminado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
   const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim();
   if (fc) q = q.eq('canal', fc);
   if (fe) q = q.eq('estado', fe);
@@ -3372,6 +3383,7 @@ function setupCerebroIA() {
     const b = e.target.closest('[data-cp-sug]');
     if (b) document.getElementById('cp-mensaje').value = b.dataset.cpSug;
   });
+  document.getElementById('ia-recargar')?.addEventListener('click', loadIaAtencion);
   document.getElementById('ce-nueva')?.addEventListener('click', () => ceAbrirEditor(null));
   document.getElementById('ce-recargar')?.addEventListener('click', loadCerebroIA);
   document.getElementById('ce-ambito')?.addEventListener('change', ceMostrarCampoDestino);
@@ -3384,6 +3396,59 @@ function setupCerebroIA() {
     if (t.dataset.ceBorrar) return ceBorrar(t.dataset.ceBorrar, t);
     ceAbrirEditor(CE_REGLAS.find(x => x.id === Number(t.dataset.ceEditar)));
   });
+}
+
+/* --- IA Atención al Cliente ------------------------------------------------
+   Posadas y apartamentos que entraron por destinoyeventoslotus360.com/ia-planes,
+   armaron el asistente y dejaron sus datos. Viven en `leads` pero sin asesor y
+   con `servicio = 'Asistente IA (posada)'` -- eso es lo que las mantiene fuera
+   de la vista de los asesores, y `posadas_interesadas` exige rol admin. */
+async function loadIaAtencion() {
+  const cont = document.getElementById('ia-lista');
+  const { data, error } = await sb.rpc('posadas_interesadas');
+  if (error || !data?.ok) {
+    cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error?.message || data?.error || '')}</div>`;
+    document.getElementById('ia-conteo').textContent = '';
+    return;
+  }
+  const posadas = data.posadas || [];
+  document.getElementById('ia-conteo').textContent =
+    posadas.length ? `${posadas.length} ${posadas.length === 1 ? 'posada interesada' : 'posadas interesadas'}` : '';
+  if (!posadas.length) {
+    cont.innerHTML = `<div class="vig-vacio"><i class="fas fa-headset"></i><b>Todavía no entró ninguna</b>
+      <div style="font-size:12.5px;margin-top:6px">Acá van a aparecer las posadas que completen el recorrido en la página, con el plan que eligieron.</div></div>`;
+    return;
+  }
+  cont.innerHTML = posadas.map(iaCard).join('');
+}
+
+function iaCard(p) {
+  const wa = String(p.telefono || '').replace(/\D/g, '');
+  // El texto que dejó la página trae la configuración línea por línea. La
+  // línea del plan sube a badge; el resto se muestra tal cual vino, sin
+  // reinterpretar nada: si la página cambia sus opciones, esto no se rompe.
+  const lineas = String(p.consulta || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const linPlan = lineas.find(l => /^plan:/i.test(l)) || '';
+  const esFull = /completo/i.test(linPlan);
+  const resto = lineas.filter(l => l !== linPlan);
+  const cuerpo = resto.map(l => {
+    const i = l.indexOf(':');
+    return i > 0 ? `<b>${esc(l.slice(0, i))}:</b>${esc(l.slice(i + 1))}` : esc(l);
+  }).join('<br>');
+  return `<div class="ia-card">
+    <div class="ia-top">
+      <div class="ia-nom">${esc(p.nombre || 'Sin nombre')}</div>
+      <div class="ia-fecha">${pvFecha(p.created_at)}</div>
+    </div>
+    ${linPlan ? `<span class="ia-plan ${esFull ? 'full' : 'basico'}"><i class="fas fa-${esFull ? 'star' : 'circle-half-stroke'}"></i> ${esc(linPlan.replace(/^plan:\s*/i, 'Plan '))}</span>` : ''}
+    <div class="ia-datos">
+      ${wa ? `<a class="ia-dato" href="https://wa.me/${wa}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> ${esc(p.telefono)}</a>`
+           : `<span class="ia-dato"><i class="fas fa-phone-slash"></i> Sin teléfono</span>`}
+      ${p.destino ? `<span class="ia-dato"><i class="fas fa-location-dot"></i> ${esc(p.destino)}</span>` : ''}
+      <span class="ia-dato"><i class="fas fa-flag"></i> ${esc(p.estado || '—')}</span>
+    </div>
+    ${cuerpo ? `<div class="ia-cfg">${cuerpo}</div>` : ''}
+  </div>`;
 }
 
 /* --- Pestaña Proceso: qué está haciendo la cadena automática ---------------
@@ -7794,6 +7859,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'galeria') loadGaleria();
   if (sec === 'cerebro-ia') loadCerebroIA();
+  if (sec === 'ia-atencion') loadIaAtencion();
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'tareas') loadTareas();

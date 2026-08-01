@@ -1457,6 +1457,24 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ce-mini:hover{color:var(--txt);border-color:var(--line2);background:rgba(255,255,255,.09)}
 .ce-mini.on{color:var(--accent);border-color:rgba(255,145,0,.4)}
 .ce-mini.peligro:hover{color:#fca5a5;border-color:rgba(239,68,68,.4)}
+/* IA Atención al Cliente -- posadas que pidieron el asistente desde /posadas.
+   Reusa las tarjetas del Cerebro IA: es la misma familia de pantalla y no
+   necesita un lenguaje visual propio. */
+.ia-card{border:1px solid var(--line);border-radius:14px;padding:15px 16px;margin-bottom:11px;background:var(--panel)}
+.ia-top{display:flex;align-items:flex-start;gap:11px}
+.ia-nom{flex:1;min-width:0;font-size:14.5px;font-weight:700;overflow-wrap:anywhere}
+.ia-fecha{flex:0 0 auto;font-size:11.5px;color:var(--muted2);white-space:nowrap}
+.ia-plan{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 11px;
+  font-size:11px;font-weight:800;letter-spacing:.03em;margin-top:8px}
+.ia-plan.full{background:var(--accent-soft);color:var(--accent)}
+.ia-plan.basico{background:rgba(255,255,255,.06);color:var(--muted)}
+.ia-datos{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px}
+.ia-dato{display:inline-flex;align-items:center;gap:7px;background:var(--panel-solid);border:1px solid var(--line2);
+  border-radius:9px;padding:6px 11px;font-size:12px;color:var(--muted);text-decoration:none;font-family:inherit;cursor:pointer}
+a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
+.ia-cfg{margin-top:12px;padding-top:11px;border-top:1px solid var(--line);
+  font-size:12.5px;line-height:1.7;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
+.ia-cfg b{color:var(--txt)}
 /* Vista previa: sin esto, quien escribe una regla no tiene forma de saber si
    quedó bien hasta que un cliente real recibe la respuesta equivocada. */
 .ce-previa{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:0;overflow:hidden;margin-top:6px}
@@ -1809,6 +1827,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
       <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
+      <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> IA Atención al Cliente</a>
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
       <a class="nav-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
@@ -3003,6 +3022,21 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       </div>
     </section>
 
+    <!-- IA ATENCIÓN AL CLIENTE: posadas que pidieron el asistente desde /posadas -->
+    <section class="section" id="sec-ia-atencion">
+      <div class="ce-intro">
+        Cada tarjeta es una posada que entró a <b>destinoyeventoslotus360.com/ia-planes</b>,
+        armó el asistente a su gusto y dejó sus datos.<br>
+        No se le asigna asesor y <b>no aparecen en Leads</b>: no son clientes de viaje,
+        son quienes quieren contratar el asistente. Solo las ven los admin.
+      </div>
+      <div class="ce-barra">
+        <button class="ce-mini" id="ia-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+        <span class="ce-vig" id="ia-conteo"></span>
+      </div>
+      <div id="ia-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+    </section>
+
     <!-- REDES (Instagram + TikTok: métricas + analista IA) -->
     <section class="section" id="sec-redes">
       <div class="seg-group" id="redes-red-tabs">
@@ -3130,6 +3164,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   <a class="sheet-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
+  <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> IA Atención al Cliente <span class="si-sub">Posadas que quieren el asistente</span></a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
   <a class="sheet-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
