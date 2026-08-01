@@ -1406,6 +1406,111 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
 /* --- Pestaña Proceso: qué está haciendo la cadena automática ahora mismo --- */
 .act-pill-alerta{background:#ef4444 !important;color:#fff !important}
+/* ---------- Cerebro IA: reglas de venta ---------------------------------
+   Cada tarjeta es UNA orden que la IA obedece. Se lee de arriba a abajo en el
+   mismo orden en que la IA la recibe, para que el que la escribe pueda predecir
+   el resultado sin abrir la vista previa. */
+.ce-intro{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--muted);line-height:1.6}
+.ce-intro b{color:var(--txt)}
+.ce-barra{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.ce-barra .dbtn{flex:0 0 auto;padding:11px 16px}
+.ce-grupo{margin-bottom:22px}
+.ce-grupo-t{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:800;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted2);margin:0 2px 10px}
+.ce-grupo-t .ce-dest{color:var(--accent)}
+.ce-grupo-t::after{content:"";flex:1;height:1px;background:var(--line)}
+.ce-card{border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;
+  background:var(--panel);transition:border-color .15s,opacity .15s}
+.ce-card:hover{border-color:rgba(255,145,0,.3)}
+.ce-card.apagada{opacity:.5}
+.ce-card.apagada .ce-texto{text-decoration:line-through;text-decoration-color:var(--muted2)}
+.ce-card-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:9px}
+.ce-orden{flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--accent-soft);
+  color:var(--accent);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.ce-texto{flex:1;min-width:0;font-size:13.5px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+/* Los hoteles que la regla nombra, con su foto: sin esto la tarjeta muestra un
+   "[hotel#1086]" crudo, que no le dice nada a quien la está leyendo. */
+.ce-prods{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}
+.ce-prod{display:inline-flex;align-items:center;gap:7px;background:var(--panel-solid);
+  border:1px solid var(--line2);border-radius:999px;padding:3px 11px 3px 3px;font-size:11.5px;font-weight:600;max-width:100%}
+.ce-prod img,.ce-prod .ce-prod-sf{width:22px;height:22px;border-radius:999px;object-fit:cover;flex:0 0 auto}
+.ce-prod-sf{background:var(--line2);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--muted2)}
+.ce-prod span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ce-prod.roto{border-color:rgba(239,68,68,.45);color:#fca5a5}
+.ce-pie{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;
+  padding-top:11px;border-top:1px solid var(--line)}
+.ce-vig{font-size:11.5px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.ce-vig.vencida{color:#fca5a5;font-weight:700}
+.ce-vig.eterna{color:var(--muted2)}
+.ce-acc{display:flex;gap:7px;margin-left:auto}
+.ce-mini{background:rgba(255,255,255,.05);border:1px solid var(--line2);color:var(--muted);
+  border-radius:9px;padding:6px 11px;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:.12s}
+.ce-mini:hover{color:var(--txt);border-color:var(--line2);background:rgba(255,255,255,.09)}
+.ce-mini.on{color:var(--accent);border-color:rgba(255,145,0,.4)}
+.ce-mini.peligro:hover{color:#fca5a5;border-color:rgba(239,68,68,.4)}
+/* Vista previa: sin esto, quien escribe una regla no tiene forma de saber si
+   quedó bien hasta que un cliente real recibe la respuesta equivocada. */
+.ce-previa{background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:0;overflow:hidden;margin-top:6px}
+.ce-previa summary{padding:13px 16px;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--muted);list-style:none}
+.ce-previa summary::-webkit-details-marker{display:none}
+.ce-previa summary::before{content:"\f0d7";font-family:"Font Awesome 6 Free";font-weight:900;margin-right:9px;color:var(--accent)}
+.ce-previa[open] summary{border-bottom:1px solid var(--line);color:var(--txt)}
+.ce-previa pre{margin:0;padding:15px 16px;font-size:11.5px;line-height:1.6;color:var(--muted);
+  white-space:pre-wrap;overflow-wrap:anywhere;max-height:380px;overflow-y:auto;font-family:ui-monospace,Menlo,Consolas,monospace}
+/* Editor */
+.ce-campo{margin-bottom:13px}
+.ce-lbl{display:block;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--muted2);margin-bottom:6px}
+.ce-ayuda{font-size:11.5px;color:var(--muted2);margin-top:6px;line-height:1.5}
+#ce-texto{min-height:150px;resize:vertical;line-height:1.6}
+.ce-insertar{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.ce-insertar select{flex:1;min-width:170px}
+/* Probar: se muestra como una conversación y no como un formulario, porque lo
+   que se está evaluando es si suena bien, no si el JSON está bien formado. */
+.ce-sugerencias{display:flex;flex-wrap:wrap;gap:7px;margin:-4px 0 14px}
+.ce-sug{background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted);
+  border-radius:999px;padding:7px 13px;font-size:12px;font-family:inherit;cursor:pointer;transition:.12s}
+.ce-sug:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
+.cp-chat{margin-top:18px}
+.cp-burbuja{max-width:82%;padding:12px 15px;border-radius:16px;font-size:13.5px;line-height:1.6;
+  white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:10px}
+.cp-cliente{background:var(--panel-solid);border:1px solid var(--line2);border-bottom-right-radius:5px;margin-left:auto}
+.cp-ia{background:linear-gradient(135deg,rgba(255,145,0,.13),rgba(255,145,0,.06));
+  border:1px solid rgba(255,145,0,.25);border-bottom-left-radius:5px}
+.cp-quien{font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--muted2);margin-bottom:5px}
+.cp-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.cp-tag{font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;
+  background:var(--panel-solid);border:1px solid var(--line);color:var(--muted)}
+.cp-tag.precio{color:#34d399;border-color:rgba(16,185,129,.3)}
+.cp-verif{margin-top:12px}
+.cp-verif summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);list-style:none}
+.cp-verif summary::-webkit-details-marker{display:none}
+.cp-verif summary::before{content:"\f0d7";font-family:"Font Awesome 6 Free";font-weight:900;margin-right:8px;color:var(--accent)}
+.cp-verif p{margin:9px 0 0;font-size:12.5px;line-height:1.6;color:var(--muted);
+  background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.cp-pensando{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;padding:18px 2px}
+/* Cargar flyer */
+.fl-drop{display:flex;flex-direction:column;align-items:center;gap:7px;padding:30px 18px;cursor:pointer;
+  border:2px dashed var(--line2);border-radius:16px;background:var(--panel);transition:.15s;text-align:center}
+.fl-drop:hover{border-color:rgba(255,145,0,.5);background:var(--accent-soft)}
+.fl-drop.cargando{opacity:.55;pointer-events:none}
+.fl-drop i{font-size:26px;color:var(--accent)}
+.fl-drop b{font-size:13.5px}
+.fl-drop span{font-size:11.5px;color:var(--muted2)}
+.fl-previa{display:flex;gap:14px;align-items:flex-start;margin-top:16px}
+.fl-previa img{width:130px;border-radius:12px;border:1px solid var(--line2);flex:0 0 auto}
+.fl-campos{flex:1;min-width:0}
+/* Lo que la IA entendió, editable: nadie publica al catálogo algo que no leyó
+   como va a quedar. El 31/07 el modelo leyó bien un flyer y la respuesta al
+   cliente igual salió mal, porque el precio quedó enterrado en la línea. */
+.fl-rev{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-top:16px}
+.fl-rev-t{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:800;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted2);margin-bottom:14px}
+.fl-alerta{background:rgba(245,181,68,.12);border:1px solid rgba(245,181,68,.35);color:var(--amber);
+  border-radius:12px;padding:11px 13px;font-size:12.5px;line-height:1.55;margin-bottom:14px}
+.fl-acc{display:flex;gap:9px;margin-top:6px;flex-wrap:wrap}
+.fl-acc .dbtn{flex:1;min-width:150px}
 .act-blk{border:1px solid var(--line);border-radius:12px;padding:13px 14px;margin-bottom:11px;background:rgba(255,255,255,.02)}
 .act-blk-t{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px}
 .act-est{display:flex;align-items:center;gap:9px;margin-bottom:9px}
@@ -1686,6 +1791,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
       <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+      <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
       <a class="nav-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
@@ -2585,6 +2691,67 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
     </div>
 
     <!-- Hoja: nueva tarea (admin, dentro de Freelancers) -->
+    <div class="sheet" id="tar-ficha-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title"><i class="fas fa-pen"></i> Corregir ficha</div>
+      <div style="padding:4px 6px 14px">
+        <div class="ce-intro" style="margin-bottom:14px">
+          Esto arregla los <b>textos</b> de la ficha. Los precios no se tocan acá: siguen saliendo del tarifario.
+          Lo que guardes se ve enseguida en la web y lo usa la IA para cotizar.
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">Nombre</label>
+          <input class="ei" id="tf-nombre" type="text">
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">Destino</label>
+          <input class="ei" id="tf-destino" type="text" list="tf-destinos" autocomplete="off">
+          <datalist id="tf-destinos"></datalist>
+          <div class="ce-ayuda">La región o ciudad, no el nombre del hotel. Es lo que usan los filtros y las reglas de la IA.</div>
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">Descripción</label>
+          <textarea class="ei" id="tf-descripcion" rows="5"></textarea>
+        </div>
+        <button class="dbtn save" id="tf-guardar">Guardar</button>
+      </div>
+    </div>
+
+    <div class="sheet" id="ce-editor-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="ce-editor-titulo"><i class="fas fa-brain"></i> Nueva regla</div>
+      <div style="padding:4px 6px 14px">
+        <div class="ce-campo">
+          <label class="ce-lbl">¿Cuándo se aplica?</label>
+          <select class="ei" id="ce-ambito">
+            <option value="destino">Solo para un destino</option>
+            <option value="general">Siempre, en cualquier destino</option>
+          </select>
+        </div>
+        <div class="ce-campo" id="ce-campo-destino">
+          <label class="ce-lbl">Destino</label>
+          <input class="ei" id="ce-destino" type="text" list="ce-destinos" placeholder="Ej. Margarita" autocomplete="off">
+          <datalist id="ce-destinos"></datalist>
+          <div class="ce-ayuda">Tiene que escribirse igual que en el tarifario. Elegilo de la lista para no errarle.</div>
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">La instrucción</label>
+          <textarea class="ei" id="ce-texto" placeholder="Ej. Para Margarita ofrecé primero el Hotel X, porque es el que tiene promo activa. Solo mostrá otro si el cliente pide algo distinto."></textarea>
+          <div class="ce-insertar">
+            <select class="ei" id="ce-prod-sel"><option value="">Nombrar un hotel…</option></select>
+            <button class="ce-mini" id="ce-prod-insertar" type="button"><i class="fas fa-plus"></i> Insertar</button>
+          </div>
+          <div class="ce-ayuda">Insertar el hotel deja una marca tipo <code>[hotel#319]</code>: es como la IA lo identifica sin equivocarse. No la borres al editar.</div>
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">Dejar de aplicarse el (opcional)</label>
+          <input class="ei" id="ce-vence" type="date">
+          <div class="ce-ayuda">Para promos con fecha. Si lo dejás vacío, la regla vale hasta que la apagues a mano.</div>
+        </div>
+        <button class="dbtn save" id="ce-guardar">Guardar</button>
+      </div>
+    </div>
+
     <div class="sheet" id="nueva-tarea-sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title">Nueva tarea</div>
@@ -2704,6 +2871,75 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
             <tbody id="rank-body"></tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <!-- CEREBRO IA: las órdenes de venta que antes había que pedirle a un
+         programador. Cada tarjeta es una instrucción que la IA obedece en los
+         3 canales (Instagram, Facebook y la web) a la vez. -->
+    <section class="section" id="sec-cerebro-ia">
+      <div class="seg-group" id="ce-tabs">
+        <button class="seg on" data-ce-tab="reglas"><i class="fas fa-list-check"></i> Reglas</button>
+        <button class="seg" data-ce-tab="probar"><i class="fas fa-comment-dots"></i> Probar</button>
+        <button class="seg" data-ce-tab="flyer"><i class="fas fa-image"></i> Cargar flyer</button>
+      </div>
+
+      <div class="ce-panel" data-ce-panel="flyer" style="display:none">
+        <div class="ce-intro">
+          Subí la captura del flyer o del reel y la IA lee el precio, la vigencia y qué incluye.
+          <b>No se publica nada hasta que vos lo confirmes</b>: primero te muestra lo que entendió para que lo corrijas.<br>
+          Lo que cargues acá queda marcado <b>por revisar</b> en el Actualizador, igual que todo lo que entra por imagen.
+        </div>
+        <label class="fl-drop" id="fl-drop">
+          <input type="file" id="fl-file" accept="image/png,image/jpeg,image/webp" hidden>
+          <i class="fas fa-cloud-arrow-up"></i>
+          <b>Elegí la imagen del flyer</b>
+          <span>JPG, PNG o WEBP · se achica sola antes de subirse</span>
+        </label>
+        <div id="fl-previa"></div>
+        <div id="fl-resultado"></div>
+      </div>
+
+      <div class="ce-panel" data-ce-panel="probar" style="display:none">
+        <div class="ce-intro">
+          Escribí lo que diría un cliente y mirá qué le contestaría la IA <b>ahora mismo</b>,
+          con el tarifario y las reglas de este momento.<br>
+          No crea ningún lead, no le avisa a ningún asesor y no queda registrado en ninguna conversación.
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">¿Por dónde escribe el cliente?</label>
+          <select class="ei" id="cp-canal">
+            <option value="instagram">Instagram o Facebook</option>
+            <option value="web">La página web</option>
+          </select>
+          <div class="ce-ayuda">Cambia poco: por Instagram la IA no pide el nombre porque lo ve en el perfil.</div>
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">El mensaje del cliente</label>
+          <textarea class="ei" id="cp-mensaje" rows="3" placeholder="Ej. hola, cuánto sale ir a Margarita en agosto para 2 personas?"></textarea>
+        </div>
+        <div class="ce-sugerencias" id="cp-sugerencias"></div>
+        <button class="dbtn save" id="cp-enviar">Ver qué contesta</button>
+        <div id="cp-resultado"></div>
+      </div>
+
+      <div class="ce-panel" data-ce-panel="reglas">
+      <div class="ce-intro">
+        Acá le decís a la IA <b>en qué orden ofrecer</b> y <b>qué aclarar</b> en cada destino.
+        Lo que escribas lo obedece en Instagram, Facebook y la web, en el próximo mensaje que le llegue —
+        no hay que publicar nada.<br>
+        Escribilo como se lo dirías a un asesor nuevo. Para nombrar un hotel usá el botón
+        <b>Nombrar un hotel</b>: así la IA sabe exactamente cuál es y no lo confunde con otro parecido.
+      </div>
+      <div class="ce-barra">
+        <button class="dbtn primary" id="ce-nueva"><i class="fas fa-plus"></i> Nueva regla</button>
+        <button class="ce-mini" id="ce-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+      </div>
+      <div id="ce-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+      <details class="ce-previa" id="ce-previa">
+        <summary>Ver el texto exacto que recibe la IA</summary>
+        <pre id="ce-previa-txt"></pre>
+      </details>
       </div>
     </section>
 

@@ -127,6 +127,7 @@ const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); 
 const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
   tareas: ['Tareas', 'Tus tareas activas'],
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
+  'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -1571,7 +1572,7 @@ async function startApp() {
   // No se llama loadInboxLeads() acá de nuevo -- activateSection('leads')
   // (arriba, para asesor) ya la dispara; llamarla dos veces corría 2 fetches
   // del mismo query en paralelo sin orden garantizado de resolución.
-  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion(); setupGestionPersonal(); setupLeadsTabs(); setupBuscadorIATarifario();
+  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion(); setupGestionPersonal(); setupLeadsTabs(); setupBuscadorIATarifario(); setupCerebroIA();
   setupDestPeriodo(); loadDestPeriodo();
   setupVoucher(); actualizarBadgeVoucher();
   setupTareas(); setupFreelancers();
@@ -2947,6 +2948,442 @@ async function actQuitar(clave, btn) {
   okToast('Quitado del catálogo');
   await cargarRevisionTarifario();
   loadTarifario();
+}
+
+/* ================= CEREBRO IA: las reglas de venta =========================
+   Hasta el 01/08/2026, "para Madrid ofrecé primero el vuelo de $999" era una
+   línea escrita a mano dentro de un prompt de 1.500 líneas: cada cambio pedía
+   una sesión de programación. Peor: el prompt estaba duplicado entre Instagram
+   y la web, así que una regla podía quedar aplicada en un canal y no en el otro
+   sin que nada avisara. Acá son datos, y valen para los 3 canales a la vez.
+
+   La regla se guarda como TEXTO libre, no como una lista ordenada de hoteles,
+   porque las reglas reales tienen matices que una lista no aguanta ("solo si el
+   lead deja claro que quiere un hotel de verdad, no cabañas"). El editor
+   redacta el caso simple por vos e inserta la marca [hotel#N] con un botón. */
+let CE_REGLAS = [];
+let CE_DESTINOS = [];
+let CE_EDITANDO = null;
+
+async function loadCerebroIA() {
+  const cont = document.getElementById('ce-lista');
+  const { data, error } = await sb.rpc('reglas_venta_listar');
+  if (error || !data?.ok) {
+    cont.innerHTML = `<div class="vig-vacio">No se pudieron cargar las reglas: ${esc(error?.message || data?.error || '')}</div>`;
+    return;
+  }
+  CE_REGLAS = data.reglas || [];
+  CE_DESTINOS = data.destinos || [];
+  document.getElementById('ce-destinos').innerHTML =
+    CE_DESTINOS.map(d => `<option value="${esc(d)}">`).join('');
+  cePintarLista();
+  cePintarPrevia();
+}
+
+function cePintarLista() {
+  const cont = document.getElementById('ce-lista');
+  if (!CE_REGLAS.length) {
+    cont.innerHTML = `<div class="vig-vacio"><i class="fas fa-brain"></i><b>Todavía no hay reglas</b>
+      <div style="font-size:12.5px;margin-top:6px">La IA vende con su criterio general: primero la promo más económica, después todo incluido.</div></div>`;
+    return;
+  }
+  // Agrupadas igual que como las lee la IA: primero las que valen siempre,
+  // después cada destino. El orden de la pantalla ES el orden del prompt.
+  const generales = CE_REGLAS.filter(r => r.ambito === 'general');
+  const porDestino = new Map();
+  for (const r of CE_REGLAS.filter(r => r.ambito === 'destino')) {
+    if (!porDestino.has(r.destino)) porDestino.set(r.destino, []);
+    porDestino.get(r.destino).push(r);
+  }
+  const grupo = (titulo, reglas, icono) => `
+    <div class="ce-grupo">
+      <div class="ce-grupo-t"><i class="fas fa-${icono}"></i> ${titulo}</div>
+      ${reglas.map(ceCardHtml).join('')}
+    </div>`;
+  cont.innerHTML =
+    (generales.length ? grupo('Siempre, en cualquier destino', generales, 'globe') : '') +
+    [...porDestino.entries()].map(([d, rs]) =>
+      grupo(`Solo para <span class="ce-dest">${esc(d)}</span>`, rs, 'location-dot')).join('');
+}
+
+function ceCardHtml(r, i) {
+  const prods = (r.productos || []).map(p => p.foto
+    ? `<span class="ce-prod${p.activo ? '' : ' roto'}"><img src="${esc(fotoMini(p.foto, 256))}" alt="" loading="lazy"><span>${esc(p.nombre)}</span></span>`
+    : `<span class="ce-prod${p.activo ? '' : ' roto'}"><span class="ce-prod-sf"><i class="fas fa-hotel"></i></span><span>${esc(p.nombre)}</span></span>`).join('');
+  // Un hotel nombrado que ya no está en el catálogo hace que la regla mande a
+  // ofrecer algo que no existe. Se avisa acá y no en la vista previa, que casi
+  // nadie abre.
+  const rotos = (r.productos || []).filter(p => !p.activo).length;
+  const vig = r.vence_el
+    ? `<span class="ce-vig${r.vencida ? ' vencida' : ''}"><i class="fas fa-${r.vencida ? 'circle-xmark' : 'calendar-day'}"></i>
+        ${r.vencida ? 'Venció el' : 'Hasta el'} ${fmtFechaSolo(r.vence_el)}${r.vencida ? ' — la IA ya no la usa' : ''}</span>`
+    : `<span class="ce-vig eterna"><i class="fas fa-infinity"></i> Sin fecha de fin</span>`;
+  return `<div class="ce-card${r.activa && !r.vencida ? '' : ' apagada'}" data-ce-id="${r.id}">
+    <div class="ce-card-top">
+      <div class="ce-orden">${i + 1}</div>
+      <div class="ce-texto">${esc(r.texto)}</div>
+    </div>
+    ${prods ? `<div class="ce-prods">${prods}</div>` : ''}
+    ${rotos ? `<div class="ce-ayuda" style="color:#fca5a5"><i class="fas fa-triangle-exclamation"></i>
+       ${rotos === 1 ? 'Un hotel que nombra esta regla ya no está en el catálogo' : `${rotos} hoteles que nombra esta regla ya no están en el catálogo`}: la IA va a ofrecer algo que no existe.</div>` : ''}
+    <div class="ce-pie">
+      ${vig}
+      <div class="ce-acc">
+        <button class="ce-mini${r.activa ? ' on' : ''}" data-ce-toggle="${r.id}">
+          <i class="fas fa-${r.activa ? 'toggle-on' : 'toggle-off'}"></i> ${r.activa ? 'Activa' : 'Apagada'}</button>
+        <button class="ce-mini" data-ce-editar="${r.id}"><i class="fas fa-pen"></i> Editar</button>
+        <button class="ce-mini peligro" data-ce-borrar="${r.id}"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// La vista previa se arma en el navegador con las MISMAS reglas que devolvió el
+// RPC, no con otra consulta: si mostrara algo distinto a lo que se acaba de
+// editar, sería peor que no mostrar nada.
+function cePintarPrevia() {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const vivas = CE_REGLAS
+    .filter(r => r.activa && (!r.vence_el || r.vence_el >= hoy))
+    .sort((a, b) => (a.ambito === 'general' ? 0 : 1) - (b.ambito === 'general' ? 0 : 1)
+      || a.orden - b.orden || a.id - b.id);
+  document.getElementById('ce-previa-txt').textContent =
+    vivas.map(r => r.texto).join('\n') || '(sin reglas activas)';
+}
+
+function ceAbrirEditor(regla) {
+  CE_EDITANDO = regla;
+  document.getElementById('ce-editor-titulo').innerHTML =
+    `<i class="fas fa-brain"></i> ${regla ? 'Editar regla' : 'Nueva regla'}`;
+  document.getElementById('ce-ambito').value = regla?.ambito || 'destino';
+  document.getElementById('ce-destino').value = regla?.destino || '';
+  document.getElementById('ce-texto').value = regla?.texto || '';
+  document.getElementById('ce-vence').value = regla?.vence_el || '';
+  ceMostrarCampoDestino();
+  ceLlenarSelectorProductos();
+  openSheet('ce-editor-sheet');
+}
+
+function ceMostrarCampoDestino() {
+  const esDestino = document.getElementById('ce-ambito').value === 'destino';
+  document.getElementById('ce-campo-destino').style.display = esDestino ? '' : 'none';
+}
+
+// El selector se llena del tarifario ya cargado. Si el usuario entró directo a
+// esta sección sin pasar por Tarifario, se pide una vez.
+async function ceLlenarSelectorProductos() {
+  const sel = document.getElementById('ce-prod-sel');
+  if (sel.dataset.lleno) return;
+  const { data } = await sb.from('productos').select('id,nombre,destino')
+    .eq('activo', true).order('destino').order('nombre');
+  sel.innerHTML = '<option value="">Nombrar un hotel…</option>' +
+    (data || []).map(p => `<option value="${p.id}">${esc(p.nombre)}${p.destino ? ` — ${esc(p.destino)}` : ''}</option>`).join('');
+  sel.dataset.lleno = '1';
+}
+
+function ceInsertarProducto() {
+  const sel = document.getElementById('ce-prod-sel');
+  if (!sel.value) { errToast('Elegí un hotel de la lista'); return; }
+  const nombre = sel.options[sel.selectedIndex].text.split(' — ')[0];
+  const ta = document.getElementById('ce-texto');
+  // Se inserta donde está el cursor, no al final: la referencia casi siempre va
+  // en medio de la frase ("ofrecé primero el X porque...").
+  const ini = ta.selectionStart ?? ta.value.length;
+  const fin = ta.selectionEnd ?? ta.value.length;
+  const marca = `${nombre} [hotel#${sel.value}]`;
+  ta.value = ta.value.slice(0, ini) + marca + ta.value.slice(fin);
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = ini + marca.length;
+  sel.value = '';
+}
+
+async function ceGuardar(btn) {
+  const ambito = document.getElementById('ce-ambito').value;
+  const destino = document.getElementById('ce-destino').value.trim();
+  const texto = document.getElementById('ce-texto').value.trim();
+  const vence = document.getElementById('ce-vence').value || null;
+  if (!texto) { errToast('Escribí la instrucción'); return; }
+  if (ambito === 'destino' && !destino) { errToast('Elegí el destino'); return; }
+  // Avisar, no bloquear: un destino nuevo puede ser legítimo (un producto que
+  // se carga mañana), pero un typo silencioso deja la regla sin aplicarse nunca.
+  if (ambito === 'destino' && CE_DESTINOS.length && !CE_DESTINOS.includes(destino)
+      && !confirm(`"${destino}" no coincide con ningún destino del tarifario.\n\nLa regla se guarda igual, pero no se va a aplicar hasta que exista un producto con ese destino escrito igual.\n\n¿Guardar de todos modos?`)) return;
+
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('regla_venta_guardar', {
+    p_id: CE_EDITANDO?.id ?? null, p_ambito: ambito,
+    p_destino: ambito === 'destino' ? destino : null,
+    p_texto: texto, p_orden: CE_EDITANDO?.orden ?? 100, p_vence_el: vence,
+  });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
+  okToast(CE_EDITANDO ? 'Regla actualizada' : 'Regla creada');
+  closeSheet('ce-editor-sheet');
+  await loadCerebroIA();
+}
+
+async function ceToggle(id, btn) {
+  const r = CE_REGLAS.find(x => x.id === Number(id));
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('regla_venta_activar', { p_id: Number(id), p_activa: !r.activa });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo cambiar: ' + (error?.message || data?.error || '')); return; }
+  okToast(r.activa ? 'Regla apagada — la IA deja de usarla' : 'Regla activa — la IA ya la está usando');
+  await loadCerebroIA();
+}
+
+async function ceBorrar(id, btn) {
+  const r = CE_REGLAS.find(x => x.id === Number(id));
+  if (!confirm(`Borrar esta regla para siempre.\n\n"${(r?.texto || '').slice(0, 120)}…"\n\nSi solo querés que la IA deje de usarla, mejor apagala: así la podés volver a prender.`)) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('regla_venta_borrar', { p_id: Number(id) });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo borrar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Regla borrada');
+  await loadCerebroIA();
+}
+
+/* --- Probar: qué contestaría la IA -----------------------------------------
+   Antes de esto, probar un cambio en cómo vende la IA era desplegar una función
+   descartable, llamarla, leer el JSON crudo y borrarla -- lo podía hacer una
+   sola persona. Acá lo hace cualquier admin en el momento de escribir la regla.
+   La función de atrás NO escribe nada: ni leads, ni sesiones, ni avisos. */
+const CP_SUGERENCIAS = [
+  'hola, cuánto sale ir a Margarita en agosto para 2 personas?',
+  'quiero ir a Madrid, qué tienen?',
+  'vi un reel de ustedes con otro precio, por qué me lo cambian?',
+  'info de Canaima porfa',
+  'están contratando?',
+];
+
+function cpPintarSugerencias() {
+  const cont = document.getElementById('cp-sugerencias');
+  if (!cont || cont.dataset.pintado) return;
+  cont.innerHTML = CP_SUGERENCIAS.map(s => `<button class="ce-sug" type="button" data-cp-sug="${esc(s)}">${esc(s)}</button>`).join('');
+  cont.dataset.pintado = '1';
+}
+
+async function cpProbar(btn) {
+  const mensaje = document.getElementById('cp-mensaje').value.trim();
+  if (!mensaje) { errToast('Escribí el mensaje del cliente'); return; }
+  const canal = document.getElementById('cp-canal').value;
+  const salida = document.getElementById('cp-resultado');
+  btn.disabled = true;
+  salida.innerHTML = `<div class="cp-pensando"><i class="fas fa-circle-notch fa-spin"></i> Preguntándole a la IA con el tarifario de este momento…</div>`;
+
+  const { data, error } = await sb.functions.invoke('probar-cerebro-ia', { body: { mensaje, canal } });
+  btn.disabled = false;
+
+  if (error || !data?.ok) {
+    // El detalle del modelo importa: un timeout y una regla mal escrita se
+    // arreglan de formas muy distintas.
+    const motivo = data?.detalle || data?.error || error?.message || 'error desconocido';
+    salida.innerHTML = `<div class="vig-vacio" style="text-align:left">
+      <b>No se pudo probar.</b><div style="font-size:12.5px;margin-top:6px">${esc(motivo)}</div></div>`;
+    return;
+  }
+
+  const c = data.contexto || {};
+  const precio = data.precio_citado;
+  salida.innerHTML = `
+    <div class="cp-chat">
+      <div class="cp-burbuja cp-cliente"><div class="cp-quien">El cliente</div>${esc(mensaje)}</div>
+      <div class="cp-burbuja cp-ia"><div class="cp-quien">La IA responde</div>${esc(data.respuesta || '(vacío)')}</div>
+    </div>
+    <div class="cp-meta">
+      ${precio ? `<span class="cp-tag precio"><i class="fas fa-tag"></i> Cotizó $${esc(String(precio.monto))}</span>` : ''}
+      <span class="cp-tag">${c.reglas_aplicadas || 0} línea(s) de reglas</span>
+      <span class="cp-tag">${c.productos || 0} hoteles · ${c.promociones || 0} promos</span>
+    </div>
+    ${data.verificacion ? `<details class="cp-verif"><summary>Por qué contestó eso</summary><p>${esc(data.verificacion)}</p></details>` : ''}`;
+}
+
+/* --- Cargar flyer: de la captura al tarifario -------------------------------
+   Dos pasos SIEMPRE, nunca uno: la IA lee y muestra, la persona corrige y
+   confirma. El 31/07/2026 el modelo leyó bien un flyer de Chichiriviche y la
+   respuesta al cliente igual salió mal, porque el precio quedó enterrado al
+   final de una línea larga -- leer bien no alcanza, hay que ver cómo queda. */
+let FL_ITEM = null, FL_NOMBRE = '';
+
+// La imagen se achica acá y no en el servidor: subir 4 MB de captura para que
+// el modelo mire 1280px es pagar egress y esperar por nada.
+function flAchicar(file, maxLado = 1280) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const escala = Math.min(1, maxLado / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * escala);
+      c.height = Math.round(img.height * escala);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      // JPEG siempre: el modelo no gana nada con PNG y pesa el triple.
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('No se pudo abrir la imagen')); };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function flLeer(file) {
+  const drop = document.getElementById('fl-drop');
+  const salida = document.getElementById('fl-resultado');
+  FL_NOMBRE = file.name || 'flyer';
+  drop.classList.add('cargando');
+  salida.innerHTML = `<div class="cp-pensando"><i class="fas fa-circle-notch fa-spin"></i> Leyendo el flyer…</div>`;
+
+  let dataUrl;
+  try { dataUrl = await flAchicar(file); }
+  catch (e) { drop.classList.remove('cargando'); salida.innerHTML = ''; errToast(e.message); return; }
+  document.getElementById('fl-previa').innerHTML = `<img class="fl-mini" src="${dataUrl}" alt="" style="width:120px;border-radius:12px;border:1px solid var(--line2);margin-top:14px">`;
+
+  const { data, error } = await sb.functions.invoke('flyer-a-tarifario', {
+    body: { accion: 'leer', imagen_base64: dataUrl.split(',')[1], mime_type: 'image/jpeg', nombre_archivo: FL_NOMBRE },
+  });
+  drop.classList.remove('cargando');
+  if (error || !data?.ok) {
+    salida.innerHTML = `<div class="vig-vacio" style="text-align:left"><b>No se pudo leer el flyer.</b>
+      <div style="font-size:12.5px;margin-top:6px">${esc(data?.detalle || data?.error || error?.message || '')}</div></div>`;
+    return;
+  }
+  FL_ITEM = data.item;
+  flPintarRevision(data.modelo);
+}
+
+function flPintarRevision(modelo) {
+  const it = FL_ITEM || {};
+  const esPromo = it.clase === 'promocion';
+  const tarifa = (it.tarifas || [])[0] || {};
+  const precio = esPromo ? (it.promocion?.precio_texto || '') : (tarifa.precio_texto || '');
+  const vigencia = esPromo ? (it.promocion?.vigencia_texto || '') : (tarifa.vigencia_texto || '');
+  document.getElementById('fl-resultado').innerHTML = `
+    <div class="fl-rev">
+      <div class="fl-rev-t"><i class="fas fa-eye"></i> Esto entendió — corregilo antes de publicar</div>
+      ${it.clase === 'no_aplica' ? `<div class="fl-alerta"><i class="fas fa-triangle-exclamation"></i>
+        La IA no reconoció una promoción en esta imagen. Si igual querés cargarla, completá los campos a mano.</div>` : ''}
+      ${it.nota_revision ? `<div class="fl-alerta"><i class="fas fa-circle-info"></i> ${esc(it.nota_revision)}</div>` : ''}
+      <div class="ce-campo">
+        <label class="ce-lbl">¿Qué es?</label>
+        <select class="ei" id="fl-clase">
+          <option value="promocion"${esPromo ? ' selected' : ''}>Una promoción de un hotel que ya existe</option>
+          <option value="producto"${!esPromo ? ' selected' : ''}>Un hotel o paquete nuevo</option>
+        </select>
+      </div>
+      <div class="ce-campo">
+        <label class="ce-lbl">Nombre del hotel</label>
+        <input class="ei" id="fl-nombre" type="text" value="${esc(it.nombre || '')}">
+        <div class="ce-ayuda">Si el hotel ya existe, escribilo IGUAL que en el tarifario: así la promo se le engancha en vez de crear uno repetido.</div>
+      </div>
+      <div class="ce-campo">
+        <label class="ce-lbl">Destino</label>
+        <input class="ei" id="fl-destino" type="text" value="${esc(it.destino || '')}">
+      </div>
+      <div class="ce-campo">
+        <label class="ce-lbl">Precio, tal cual se lo va a decir al cliente</label>
+        <textarea class="ei" id="fl-precio" rows="3">${esc(precio)}</textarea>
+        <div class="ce-ayuda">Poné adelante el dato que el cliente vio en la publicación. Si el reel dice "$18 por persona",
+          que esa frase esté al principio y no al final: la IA lee de arriba hacia abajo y lo que queda enterrado lo pasa por alto.</div>
+      </div>
+      <div class="ce-campo">
+        <label class="ce-lbl">Vigencia</label>
+        <input class="ei" id="fl-vigencia" type="text" value="${esc(vigencia)}" placeholder="Ej. Del 01/08 al 15/09">
+      </div>
+      <div class="ce-campo">
+        <label class="ce-lbl">Qué incluye / descripción</label>
+        <textarea class="ei" id="fl-descripcion" rows="3">${esc(it.descripcion || '')}</textarea>
+      </div>
+      <div class="fl-acc">
+        <button class="dbtn gh" id="fl-cancelar">Descartar</button>
+        <button class="dbtn primary" id="fl-publicar"><i class="fas fa-check"></i> Publicar al tarifario</button>
+      </div>
+      ${modelo ? `<div style="font-size:11px;color:var(--muted2);margin-top:12px;text-align:center">Leído con ${esc(modelo)}</div>` : ''}
+    </div>`;
+  document.getElementById('fl-publicar').addEventListener('click', (e) => flPublicar(e.currentTarget));
+  document.getElementById('fl-cancelar').addEventListener('click', flLimpiar);
+}
+
+function flLimpiar() {
+  FL_ITEM = null;
+  document.getElementById('fl-resultado').innerHTML = '';
+  document.getElementById('fl-previa').innerHTML = '';
+  document.getElementById('fl-file').value = '';
+}
+
+async function flPublicar(btn) {
+  const clase = document.getElementById('fl-clase').value;
+  const nombre = document.getElementById('fl-nombre').value.trim();
+  const precio = document.getElementById('fl-precio').value.trim();
+  if (!nombre) { errToast('Falta el nombre del hotel'); return; }
+  if (!precio) { errToast('Falta el precio'); return; }
+  if (!confirm(`Publicar al tarifario:\n\n${nombre}\n${precio.slice(0, 140)}\n\nSe va a ver en la web y la IA lo va a poder cotizar. Queda marcado "por revisar" en el Actualizador.`)) return;
+
+  const vigencia = document.getElementById('fl-vigencia').value.trim() || null;
+  const item = {
+    clase,
+    tipo_producto: clase === 'producto' ? (FL_ITEM?.tipo_producto || 'hotel') : null,
+    nombre,
+    destino: document.getElementById('fl-destino').value.trim() || null,
+    descripcion: document.getElementById('fl-descripcion').value.trim() || null,
+    requisitos: FL_ITEM?.requisitos || null,
+    tarifas: clase === 'producto' ? [{ precio_texto: precio, vigencia_texto: vigencia, moneda: 'USD' }] : [],
+    promocion: clase === 'promocion' ? { precio_texto: precio, vigencia_texto: vigencia, moneda: 'USD' } : null,
+    nota_revision: 'Cargado a mano desde un flyer en el CRM.',
+  };
+  btn.disabled = true;
+  const { data, error } = await sb.functions.invoke('flyer-a-tarifario', {
+    body: { accion: 'publicar', item, nombre_archivo: FL_NOMBRE },
+  });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo publicar: ' + (data?.error || error?.message || '')); return; }
+
+  // El salto de precio contra lo que ya había es la señal más útil de que el
+  // modelo leyó mal un número. Se avisa fuerte, no en un toast que se va solo.
+  if (data.precio_alerta) {
+    document.getElementById('fl-resultado').innerHTML = `<div class="fl-rev">
+      <div class="fl-alerta"><i class="fas fa-triangle-exclamation"></i>
+        <b>Publicado, pero revisalo.</b> El precio quedó ${data.precio_delta_pct > 0 ? 'un ' + Math.round(data.precio_delta_pct) + '% más alto' : 'un ' + Math.abs(Math.round(data.precio_delta_pct)) + '% más bajo'}
+        que el que había para este hotel. Si el flyer decía otra cosa, corregilo en el Actualizador.</div></div>`;
+  } else {
+    okToast('Publicado al tarifario — quedó marcado por revisar');
+    flLimpiar();
+  }
+  delete tarCache[tarTab];
+}
+
+function cpCambiarTab(tab) {
+  document.querySelectorAll('#ce-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.ceTab === tab));
+  document.querySelectorAll('#sec-cerebro-ia .ce-panel').forEach(p => {
+    p.style.display = p.dataset.cePanel === tab ? '' : 'none';
+  });
+  if (tab === 'probar') cpPintarSugerencias();
+}
+
+function setupCerebroIA() {
+  document.getElementById('ce-tabs')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ce-tab]');
+    if (b) cpCambiarTab(b.dataset.ceTab);
+  });
+  document.getElementById('cp-enviar')?.addEventListener('click', (e) => cpProbar(e.currentTarget));
+  document.getElementById('fl-file')?.addEventListener('change', (e) => {
+    const f = e.target.files?.[0];
+    if (f) flLeer(f);
+  });
+  document.getElementById('cp-sugerencias')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cp-sug]');
+    if (b) document.getElementById('cp-mensaje').value = b.dataset.cpSug;
+  });
+  document.getElementById('ce-nueva')?.addEventListener('click', () => ceAbrirEditor(null));
+  document.getElementById('ce-recargar')?.addEventListener('click', loadCerebroIA);
+  document.getElementById('ce-ambito')?.addEventListener('change', ceMostrarCampoDestino);
+  document.getElementById('ce-prod-insertar')?.addEventListener('click', ceInsertarProducto);
+  document.getElementById('ce-guardar')?.addEventListener('click', (e) => ceGuardar(e.currentTarget));
+  document.getElementById('ce-lista')?.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-ce-toggle],[data-ce-editar],[data-ce-borrar]');
+    if (!t) return;
+    if (t.dataset.ceToggle) return ceToggle(t.dataset.ceToggle, t);
+    if (t.dataset.ceBorrar) return ceBorrar(t.dataset.ceBorrar, t);
+    ceAbrirEditor(CE_REGLAS.find(x => x.id === Number(t.dataset.ceEditar)));
+  });
 }
 
 /* --- Pestaña Proceso: qué está haciendo la cadena automática ---------------
@@ -5282,6 +5719,9 @@ function setupTarifarioTabs() {
   document.querySelectorAll('.tar-f').forEach(el => el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => renderTarifario()));
   tarView = initViewSwitcher('tar-view-switch', 'tarifario', 'tarjetas', v => { tarView = v; renderTarifario(); });
   tabsOcultasListo = cargarTabsOcultas();
+  // Delegado sobre el contenedor: las tarjetas se repintan en cada filtro, así
+  // que engancharlas una por una las dejaría sin listener al primer render.
+  document.getElementById('tf-guardar')?.addEventListener('click', (e) => tarGuardarFicha(e.currentTarget));
   setupTarAdmin();
 }
 
@@ -5834,6 +6274,49 @@ function tarFichaHtml(x) {
     </div>
   </div>`;
 }
+
+/* ---------- Corregir la ficha (nombre, destino, descripción) ----------------
+   El Tarifario era de solo lectura: arreglar el `destino` de Casa Vacacional
+   Playa del Sur --que decía el nombre del propio hotel, y por eso no aparecía
+   al filtrar por destino-- necesitó una migración a mano el 31/07/2026. Un
+   error de tipeo no debería necesitar un programador.
+   No toca precios: esos siguen saliendo del tarifario cargado. */
+let TAR_EDIT_ID = null;
+
+function tarAbrirEditorFicha(id) {
+  const p = (tarCache[tarTab] || []).find(x => x.id === Number(id));
+  if (!p) { errToast('No se encontró esa ficha'); return; }
+  TAR_EDIT_ID = p.id;
+  document.getElementById('tf-nombre').value = p.nombre || '';
+  document.getElementById('tf-destino').value = p.destino || '';
+  document.getElementById('tf-descripcion').value = p.descripcion || '';
+  document.getElementById('tf-destinos').innerHTML =
+    [...new Set((tarCache[tarTab] || []).map(x => x.destino).filter(Boolean))].sort()
+      .map(d => `<option value="${esc(d)}">`).join('');
+  openSheet('tar-ficha-sheet');
+}
+
+async function tarGuardarFicha(btn) {
+  const nombre = document.getElementById('tf-nombre').value.trim();
+  if (!nombre) { errToast('El nombre no puede quedar vacío'); return; }
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('editar_ficha_producto', {
+    p_id: TAR_EDIT_ID, p_nombre: nombre,
+    p_destino: document.getElementById('tf-destino').value.trim(),
+    p_descripcion: document.getElementById('tf-descripcion').value.trim(),
+  });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Ficha corregida — ya se ve así en la web y para la IA');
+  closeSheet('tar-ficha-sheet');
+  // El panel de detalle quedó abierto detrás con los datos de antes: si no se
+  // cierra, lo primero que ve el usuario después de guardar es el valor viejo.
+  window.closeDrawer(true);
+  // El tarifario se cachea por pestaña: sin invalidar, la tarjeta seguiría
+  // mostrando el valor viejo aunque la base ya tenga el nuevo.
+  delete tarCache[tarTab];
+  loadTarifario();
+}
 /* ---------- Galería (4 carpetas desplegables, mismo orden/categorías que Tarifario) ---------- */
 // Bloque 6: antes solo cubría Hoteles. Ahora son 4 carpetas <details> (una
 // por TAR_TAB_META) que arrancan cerradas -- una carpeta cerrada no dispara
@@ -5968,6 +6451,7 @@ function openProductoDrawer(x) {
       <button class="dbtn save" id="tar-notas-save" type="button" style="margin-top:8px"><i class="fas fa-floppy-disk"></i> Guardar notas</button>
       <div class="eb-title" style="margin-top:16px"><i class="fas fa-images"></i> Fotos (solo admin)</div>
       <div id="tar-fotos-admin"><div class="muted" style="font-size:12.5px">Cargando...</div></div>
+      ${!esPromo ? `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>` : ''}
     </div>` : ''}
     <div class="dactions"><button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Ir al Cotizador</button></div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
@@ -5975,6 +6459,7 @@ function openProductoDrawer(x) {
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
   document.getElementById('dCotizador').onclick = () => irAlCotizadorConOpcion(esPromo ? 'promociones' : 'productos', x.id, nombre);
+  document.getElementById('tar-editar-ficha')?.addEventListener('click', () => tarAbrirEditorFicha(x.id));
   document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotosOrig, +el.dataset.drawerFoto)));
   if (ROL === 'admin') {
     document.getElementById('tar-notas-save').onclick = () => guardarNotasTarifario(esPromo ? 'promociones' : 'productos', x.id);
@@ -7223,6 +7708,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'tarifario') loadTarifario();
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'galeria') loadGaleria();
+  if (sec === 'cerebro-ia') loadCerebroIA();
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'tareas') loadTareas();
