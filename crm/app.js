@@ -5263,7 +5263,7 @@ async function loadMisComisiones() {
 let tarTab = 'hotsale', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 const tarDestinosAbiertos = new Set();
 const tarHotelesAbiertos = new Set();
-const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale' };
+const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale', boleteria: 'Boletería' };
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas']);
   const mesSel = document.getElementById('tar-f-mes');
@@ -5292,6 +5292,7 @@ const TAR_TAB_META = [
   { key: 'destino', label: 'Guías/Tours' },
   { key: 'hotel', label: 'Hoteles' },
   { key: 'paquete', label: 'Paquetes' },
+  { key: 'boleteria', label: 'Boletería' },
 ];
 let tabsOcultas = [], tabsOcultasListo = null;
 async function cargarTabsOcultas() {
@@ -5394,9 +5395,15 @@ async function loadTarifario() {
   if (tarCache[tarTab]) { renderTarifario(); return; }
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
   empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
+  // Boletería no es un `tipo`: los vuelos siguen siendo 'paquete' para que el
+  // catálogo público los rutee igual. Se filtran por la bandera es_boleteria,
+  // y por eso esta pestaña necesita su propio filtro en vez de .eq('tipo', ...).
+  const selProductos = '*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad,resumen_ia), producto_fotos(storage_path,orden,es_principal,activo)';
   const q = (tarTab === 'promo' || tarTab === 'hotsale')
     ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden,es_principal,activo), productos(nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))').order('titulo')
-    : sb.from('productos').select('*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad,resumen_ia), producto_fotos(storage_path,orden,es_principal,activo)').eq('tipo', tarTab).order('nombre');
+    : tarTab === 'boleteria'
+    ? sb.from('productos').select(selProductos).eq('es_boleteria', true).order('nombre')
+    : sb.from('productos').select(selProductos).eq('tipo', tarTab).eq('es_boleteria', false).order('nombre');
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
