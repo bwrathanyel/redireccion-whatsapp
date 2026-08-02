@@ -1457,6 +1457,39 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ce-mini:hover{color:var(--txt);border-color:var(--line2);background:rgba(255,255,255,.09)}
 .ce-mini.on{color:var(--accent);border-color:rgba(255,145,0,.4)}
 .ce-mini.peligro:hover{color:#fca5a5;border-color:rgba(239,68,68,.4)}
+/* ---------- Cerebro IA: ramas ------------------------------------------
+   El punto de esta pantalla es que se VEA de dónde sale cada pedazo del texto
+   que recibe el modelo. El color no es decoración: es la única forma de notar
+   que una rama está pisando una regla de la Base sin querer. */
+.cb-nodo{display:flex;align-items:center;gap:11px;border:1px solid var(--line);border-radius:14px;
+  padding:12px 15px;margin-bottom:8px;background:var(--panel);cursor:pointer;transition:.15s;width:100%;
+  text-align:left;font-family:inherit;color:var(--txt)}
+.cb-nodo:hover{border-color:rgba(255,145,0,.3)}
+.cb-nodo.on{border-color:var(--accent);background:var(--accent-soft)}
+.cb-nodo.hijo{margin-left:26px;position:relative}
+.cb-nodo.hijo::before{content:"";position:absolute;left:-16px;top:50%;width:14px;height:1px;background:var(--line2)}
+.cb-ico{width:30px;height:30px;border-radius:10px;background:var(--accent-soft);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.cb-nom{flex:1;min-width:0;font-size:14px;font-weight:700;overflow-wrap:anywhere}
+.cb-sub{font-size:11.5px;color:var(--muted);font-weight:500;margin-top:2px}
+.cb-leyenda{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 10px}
+.cb-chip{font-size:11px;font-weight:700;border-radius:999px;padding:3px 11px;border:1px solid transparent}
+.cb-chip.cb-propio{background:var(--accent-soft);color:var(--accent)}
+.cb-chip.cb-heredado{background:rgba(255,255,255,.05);color:var(--muted)}
+.cb-chip.cb-anula{background:rgba(59,130,246,.14);color:#93c5fd}
+.cb-chip.cb-marca{background:rgba(34,197,94,.13);color:#86efac}
+.cb-bloque{border:1px solid var(--line);border-left-width:3px;border-radius:12px;padding:11px 14px;
+  margin-bottom:8px;background:var(--panel)}
+.cb-bloque.propio{border-left-color:var(--accent)}
+.cb-bloque.heredado{border-left-color:var(--line2)}
+.cb-bloque.anula{border-left-color:#3b82f6}
+.cb-bloque.marca{border-left-color:#22c55e}
+.cb-cab{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px;font-size:11px;
+  font-weight:700;letter-spacing:.03em;color:var(--muted2);text-transform:uppercase}
+.cb-cab .cb-de{color:var(--muted);text-transform:none;letter-spacing:0;font-weight:600}
+.cb-txt{font-size:12.5px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--txt)}
+.cb-resumen{font-size:12.5px;color:var(--muted);margin-bottom:10px}
+.cb-resumen b{color:var(--txt)}
 /* IA Atención al Cliente -- posadas que pidieron el asistente desde /posadas.
    Reusa las tarjetas del Cerebro IA: es la misma familia de pantalla y no
    necesita un lenguaje visual propio. */
@@ -2960,6 +2993,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <div class="seg-group" id="ce-tabs">
         <button class="seg on" data-ce-tab="reglas"><i class="fas fa-list-check"></i> Reglas</button>
         <button class="seg" data-ce-tab="probar"><i class="fas fa-comment-dots"></i> Probar</button>
+        <button class="seg" data-ce-tab="ramas"><i class="fas fa-sitemap"></i> Ramas</button>
         <button class="seg" data-ce-tab="flyer"><i class="fas fa-image"></i> Cargar flyer</button>
       </div>
 
@@ -2979,11 +3013,40 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <div id="fl-resultado"></div>
       </div>
 
+      <div class="ce-panel" data-ce-panel="ramas" style="display:none">
+        <div class="ce-intro">
+          La IA no es un solo texto: es una <b>Base</b> — cómo vende, qué nunca inventa, cuándo
+          pasa a un humano — y una <b>rama por cliente</b> con lo suyo. Lotus es una rama más.<br>
+          Elegí una rama y abajo vas a ver <b>el texto exacto que recibe el modelo</b>, con lo
+          heredado de la Base y lo propio de la rama en colores distintos.
+        </div>
+        <div id="cb-arbol"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+        <div class="ce-barra" style="margin-top:12px">
+          <select class="ei" id="cb-canal" style="max-width:230px">
+            <option value="instagram">Instagram o Facebook</option>
+            <option value="web">La página web</option>
+          </select>
+          <button class="ce-mini" id="cb-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+        </div>
+        <div class="cb-leyenda">
+          <span class="cb-chip cb-propio">De esta rama</span>
+          <span class="cb-chip cb-heredado">Heredado de la Base</span>
+          <span class="cb-chip cb-anula">Reemplaza lo de la Base</span>
+          <span class="cb-chip cb-marca">Se rellena con su catálogo</span>
+        </div>
+        <div id="cb-prompt"></div>
+      </div>
+
       <div class="ce-panel" data-ce-panel="probar" style="display:none">
         <div class="ce-intro">
           Escribí lo que diría un cliente y mirá qué le contestaría la IA <b>ahora mismo</b>,
           con el tarifario y las reglas de este momento.<br>
           No crea ningún lead, no le avisa a ningún asesor y no queda registrado en ninguna conversación.
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">¿Contra qué rama?</label>
+          <select class="ei" id="cp-cerebro"></select>
+          <div class="ce-ayuda">La Base no tiene catálogo: probarla muestra qué hereda un cliente nuevo antes de cargarle nada.</div>
         </div>
         <div class="ce-campo">
           <label class="ce-lbl">¿Por dónde escribe el cliente?</label>

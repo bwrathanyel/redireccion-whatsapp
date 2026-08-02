@@ -3182,7 +3182,8 @@ async function cpProbar(btn) {
   btn.disabled = true;
   salida.innerHTML = `<div class="cp-pensando"><i class="fas fa-circle-notch fa-spin"></i> Preguntándole a la IA con el tarifario de este momento…</div>`;
 
-  const { data, error } = await sb.functions.invoke('probar-cerebro-ia', { body: { mensaje, canal } });
+  const cerebro_id = Number(document.getElementById('cp-cerebro')?.value) || null;
+  const { data, error } = await sb.functions.invoke('probar-cerebro-ia', { body: { mensaje, canal, cerebro_id } });
   btn.disabled = false;
 
   if (error || !data?.ok) {
@@ -3205,6 +3206,7 @@ async function cpProbar(btn) {
       ${precio ? `<span class="cp-tag precio"><i class="fas fa-tag"></i> Cotizó $${esc(String(precio.monto))}</span>` : ''}
       <span class="cp-tag">${c.reglas_aplicadas || 0} línea(s) de reglas</span>
       <span class="cp-tag">${c.productos || 0} hoteles · ${c.promociones || 0} promos</span>
+      ${c.cerebro_id ? `<span class="cp-tag"><i class="fas fa-sitemap"></i> ${esc(CB_ARBOL.find(n => n.id === c.cerebro_id)?.nombre || '')}</span>` : ''}
     </div>
     ${data.verificacion ? `<details class="cp-verif"><summary>Por qué contestó eso</summary><p>${esc(data.verificacion)}</p></details>` : ''}`;
 }
@@ -3361,12 +3363,186 @@ async function flPublicar(btn) {
   delete tarCache[tarTab];
 }
 
+/* --- Ramas del cerebro: ver de dónde sale cada pedazo del prompt ------------
+   Esta pantalla existe por un incidente concreto: el 01/08 el prompt terminó
+   duplicado y la IA sirvió 2.693 precios retirados durante un día. Nadie lo vio
+   leyendo el código -- se vio comparando el texto GENERADO. Así que acá se
+   muestra el texto generado, no las tablas que lo arman, y cada edición
+   contesta primero "qué cambió" antes de guardarse. */
+let CB_ARBOL = [], CB_SEL = null, CB_BLOQUES = [], CB_PROMPT = '';
+
+const cbCanal = () => document.getElementById('cb-canal')?.value || 'instagram';
+const cbTexto = () => CB_BLOQUES.map(b => b.texto).join('\n');
+
+async function loadCerebroRamas() {
+  const cont = document.getElementById('cb-arbol');
+  const { data, error } = await sb.rpc('cerebro_arbol');
+  if (error) {
+    cont.innerHTML = `<div class="vig-vacio">No se pudo cargar el árbol: ${esc(error.message)}</div>`;
+    return;
+  }
+  CB_ARBOL = data || [];
+  if (!CB_SEL || !CB_ARBOL.some(n => n.id === CB_SEL)) {
+    CB_SEL = (CB_ARBOL.find(n => !n.padre_id) || CB_ARBOL[0])?.id ?? null;
+  }
+  cbPintarArbol();
+  cbPintarSelectorPrueba();
+  await cbCargarBloques();
+}
+
+function cbPintarArbol() {
+  document.getElementById('cb-arbol').innerHTML = CB_ARBOL.map(n => {
+    const esBase = !n.padre_id;
+    const sub = esBase
+      ? 'Personalidad, honestidad y escalada. La heredan todas las ramas.'
+      : `${n.productos} hotel(es) propios · ${n.catalogo_publico ? 'catálogo publicado en la web' : 'catálogo privado'}`;
+    return `<button class="cb-nodo ${esBase ? '' : 'hijo'} ${n.id === CB_SEL ? 'on' : ''}" data-cb-nodo="${n.id}">
+      <span class="cb-ico"><i class="fas ${esBase ? 'fa-brain' : 'fa-store'}"></i></span>
+      <span class="cb-nom">${esc(n.nombre)}${n.activo ? '' : ' (apagada)'}
+        <div class="cb-sub">${esc(sub)} · ${n.bloques_propios} bloque(s) propios</div></span>
+    </button>`;
+  }).join('');
+}
+
+function cbPintarSelectorPrueba() {
+  const sel = document.getElementById('cp-cerebro');
+  if (!sel) return;
+  const previo = sel.value;
+  sel.innerHTML = CB_ARBOL.map(n =>
+    `<option value="${n.id}">${esc(n.nombre)}${n.padre_id ? '' : ' (lienzo en blanco)'}</option>`).join('');
+  if (previo && CB_ARBOL.some(n => String(n.id) === previo)) sel.value = previo;
+  else sel.value = String(CB_ARBOL.find(n => n.padre_id)?.id ?? CB_ARBOL[0]?.id ?? '');
+}
+
+async function cbCargarBloques() {
+  const cont = document.getElementById('cb-prompt');
+  cont.innerHTML = `<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>`;
+  const { data, error } = await sb.rpc('cerebro_bloques_resueltos', { p_cerebro_id: CB_SEL, p_canal: cbCanal() });
+  if (error) {
+    cont.innerHTML = `<div class="vig-vacio">No se pudo componer el prompt: ${esc(error.message)}</div>`;
+    return;
+  }
+  CB_BLOQUES = data || [];
+  CB_PROMPT = cbTexto();
+  cbPintarBloques();
+}
+
+function cbPintarBloques() {
+  const propios = CB_BLOQUES.filter(b => b.propio).length;
+  const anulan = CB_BLOQUES.filter(b => b.anula).length;
+  const cont = document.getElementById('cb-prompt');
+  cont.innerHTML = `<div class="cb-resumen">
+      El modelo recibe <b>${CB_BLOQUES.length} bloque(s)</b> · <b>${(CB_PROMPT.length).toLocaleString('es')}</b> caracteres.
+      ${propios} de esta rama, ${CB_BLOQUES.length - propios} heredados${anulan ? `, ${anulan} reemplazan uno de la Base` : ''}.
+    </div>` + CB_BLOQUES.map(b => {
+    const marca = b.tipo !== 'texto';
+    const clase = marca ? 'marca' : b.anula ? 'anula' : b.propio ? 'propio' : 'heredado';
+    const etiqueta = marca ? 'Se rellena con su catálogo'
+      : b.anula ? 'Reemplaza lo de la Base' : b.propio ? 'De esta rama' : 'Heredado';
+    return `<div class="cb-bloque ${clase}" data-cb-bloque="${b.bloque_id}">
+      <div class="cb-cab">
+        <span>${esc(b.clave)}</span>
+        <span class="cb-chip cb-${clase}">${etiqueta}</span>
+        <span class="cb-de">viene de ${esc(b.origen_nombre)}</span>
+        ${marca ? '' : `<button class="ce-mini" style="margin-left:auto" data-cb-editar="${b.bloque_id}">
+          ${b.propio ? 'Editar' : 'Cambiar solo acá'}</button>`}
+      </div>
+      <div class="cb-txt">${esc(marca ? `(acá entra el catálogo del cliente de esta rama, al momento de responder)` : b.texto)}</div>
+    </div>`;
+  }).join('');
+}
+
+/* Diff por líneas del prompt COMPLETO, no del bloque editado: el modo de falla
+   que importa es que un cambio chico mueva o duplique algo lejos de donde se
+   estaba mirando. LCS clásica -- el prompt ronda las 900 líneas, así que la
+   tabla cuadrática es irrelevante en tiempo. */
+function cbDiffLineas(antes, despues) {
+  const a = antes.split('\n'), b = despues.split('\n');
+  const n = a.length, m = b.length;
+  const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push(['=', a[i]]); i++; j++; }
+    else if (L[i + 1][j] >= L[i][j + 1]) { out.push(['-', a[i]]); i++; }
+    else { out.push(['+', b[j]]); j++; }
+  }
+  while (i < n) out.push(['-', a[i++]]);
+  while (j < m) out.push(['+', b[j++]]);
+  return out.filter(([s]) => s !== '=');
+}
+
+function cbAbrirEditor(bloqueId) {
+  const b = CB_BLOQUES.find(x => String(x.bloque_id) === String(bloqueId));
+  if (!b) return;
+  const caja = document.querySelector(`[data-cb-bloque="${bloqueId}"]`);
+  if (!caja || caja.querySelector('textarea')) return;
+  const aviso = b.propio
+    ? 'Se guarda en esta rama. Antes de guardar vas a ver qué cambia en el texto completo.'
+    : `Este bloque hoy lo hereda de <b>${esc(b.origen_nombre)}</b>. Al guardarlo se crea una versión propia de esta rama que lo reemplaza — la Base no se toca.`;
+  caja.insertAdjacentHTML('beforeend', `<div class="ce-campo" style="margin-top:11px">
+      <div class="ce-ayuda" style="margin-bottom:7px">${aviso}</div>
+      <textarea class="ei" rows="8" data-cb-txt>${esc(b.texto)}</textarea>
+      <div class="ce-barra" style="margin:10px 0 0">
+        <button class="dbtn save" data-cb-guardar="${bloqueId}">Ver qué cambia y guardar</button>
+        <button class="ce-mini" data-cb-cancelar>Cancelar</button>
+      </div>
+      <div data-cb-diff></div>
+    </div>`);
+}
+
+async function cbGuardar(bloqueId, btn) {
+  const b = CB_BLOQUES.find(x => String(x.bloque_id) === String(bloqueId));
+  const caja = document.querySelector(`[data-cb-bloque="${bloqueId}"]`);
+  const nuevo = caja.querySelector('[data-cb-txt]').value;
+  if (!b || nuevo === b.texto) { errToast('No cambiaste nada'); return; }
+
+  // El diff se calcula ANTES de escribir, contra el prompt que el modelo está
+  // recibiendo en este momento, y hay que confirmarlo. Guardar primero y
+  // mostrar después sería contar lo que ya pasó.
+  const antes = CB_PROMPT;
+  const despues = CB_BLOQUES.map(x => x.bloque_id === b.bloque_id ? nuevo : x.texto).join('\n');
+  const cambios = cbDiffLineas(antes, despues);
+  const caja2 = caja.querySelector('[data-cb-diff]');
+  if (!caja2.dataset.confirmado) {
+    caja2.dataset.confirmado = '1';
+    caja2.innerHTML = `<div class="cb-resumen" style="margin-top:12px">
+        Cambian <b>${cambios.length}</b> línea(s) del texto que recibe el modelo
+        (${antes.length.toLocaleString('es')} → ${despues.length.toLocaleString('es')} caracteres).
+        Volvé a tocar el botón para guardar.</div>
+      <pre style="max-height:280px;overflow:auto;font-size:11.5px;line-height:1.5">${cambios.slice(0, 200).map(([s, t]) =>
+        `<span style="color:${s === '+' ? '#86efac' : '#fca5a5'}">${s} ${esc(t)}</span>`).join('\n')}</pre>`;
+    return;
+  }
+
+  btn.disabled = true;
+  let error;
+  if (b.propio) {
+    ({ error } = await sb.from('cerebro_bloques').update({ texto: nuevo }).eq('id', b.bloque_id));
+  } else {
+    // Anular un heredado = declarar uno propio con la MISMA clave y el mismo
+    // orden: así queda donde estaba y no se mueve de lugar en el prompt.
+    ({ error } = await sb.from('cerebro_bloques').insert({
+      cerebro_id: CB_SEL, clave: b.clave, orden: b.orden, tipo: b.tipo,
+      canales: b.canales, texto: nuevo,
+    }));
+  }
+  btn.disabled = false;
+  if (error) { errToast('No se pudo guardar: ' + error.message); return; }
+  okToast('Guardado. La IA lo usa en el próximo mensaje que le llegue.');
+  await loadCerebroRamas();
+}
+
 function cpCambiarTab(tab) {
   document.querySelectorAll('#ce-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.ceTab === tab));
   document.querySelectorAll('#sec-cerebro-ia .ce-panel').forEach(p => {
     p.style.display = p.dataset.cePanel === tab ? '' : 'none';
   });
-  if (tab === 'probar') cpPintarSugerencias();
+  if (tab === 'probar') { cpPintarSugerencias(); if (!CB_ARBOL.length) loadCerebroRamas(); }
+  if (tab === 'ramas' && !CB_ARBOL.length) loadCerebroRamas();
 }
 
 function setupCerebroIA() {
@@ -3382,6 +3558,22 @@ function setupCerebroIA() {
   document.getElementById('cp-sugerencias')?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-cp-sug]');
     if (b) document.getElementById('cp-mensaje').value = b.dataset.cpSug;
+  });
+  document.getElementById('cb-recargar')?.addEventListener('click', loadCerebroRamas);
+  document.getElementById('cb-canal')?.addEventListener('change', cbCargarBloques);
+  document.getElementById('cb-arbol')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cb-nodo]');
+    if (!b) return;
+    CB_SEL = Number(b.dataset.cbNodo);
+    cbPintarArbol();
+    cbCargarBloques();
+  });
+  document.getElementById('cb-prompt')?.addEventListener('click', (e) => {
+    const ed = e.target.closest('[data-cb-editar]');
+    if (ed) return cbAbrirEditor(ed.dataset.cbEditar);
+    const gu = e.target.closest('[data-cb-guardar]');
+    if (gu) return cbGuardar(gu.dataset.cbGuardar, gu);
+    if (e.target.closest('[data-cb-cancelar]')) cbPintarBloques();
   });
   document.getElementById('ia-recargar')?.addEventListener('click', loadIaAtencion);
   document.getElementById('ce-nueva')?.addEventListener('click', () => ceAbrirEditor(null));
