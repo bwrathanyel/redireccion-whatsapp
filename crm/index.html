@@ -1472,8 +1472,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   text-align:left;font-family:inherit;color:var(--txt)}
 .cb-nodo:hover{border-color:rgba(255,145,0,.3)}
 .cb-nodo.on{border-color:var(--accent);background:var(--accent-soft)}
-.cb-nodo.hijo{margin-left:26px;position:relative}
-.cb-nodo.hijo::before{content:"";position:absolute;left:-16px;top:50%;width:14px;height:1px;background:var(--line2)}
+.cb-fila{display:flex;align-items:center;gap:8px}
+.cb-fila.hijo{margin-left:26px;position:relative}
+.cb-fila.hijo::before{content:"";position:absolute;left:-16px;top:calc(50% - 4px);width:14px;height:1px;background:var(--line2)}
+.cb-fila .cb-nodo{margin-bottom:8px}
+.cb-fila .cb-acc{display:flex;gap:6px;flex:0 0 auto;margin-bottom:8px}
 .cb-ico{width:30px;height:30px;border-radius:10px;background:var(--accent-soft);color:var(--accent);
   display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .cb-nom{flex:1;min-width:0;font-size:14px;font-weight:700;overflow-wrap:anywhere}
@@ -3027,6 +3030,34 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           heredado de la Base y lo propio de la rama en colores distintos.
         </div>
         <div id="cb-arbol"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+        <div class="ce-barra" style="margin-top:12px">
+          <button class="dbtn primary" id="cb-nueva"><i class="fas fa-plus"></i> Nueva rama</button>
+        </div>
+        <div id="cb-alta" style="display:none">
+          <div class="ce-campo">
+            <label class="ce-lbl">Nombre de la posada o empresa</label>
+            <input class="ei" id="cb-nombre" maxlength="80" placeholder="Ej. Posada Villa Coral">
+          </div>
+          <div class="ce-campo">
+            <label class="ce-lbl">Identificador</label>
+            <input class="ei" id="cb-slug" maxlength="32" placeholder="posada-villa-coral">
+            <div class="ce-ayuda">Minúsculas, números y guiones. Es como el sistema la nombra por dentro; después no conviene cambiarlo.</div>
+          </div>
+          <div class="ce-campo">
+            <label class="ce-lbl">Hereda de</label>
+            <select class="ei" id="cb-padre"></select>
+            <div class="ce-ayuda">Normalmente la Base: la personalidad, la honestidad con los precios y cuándo pasar a un humano se heredan tal cual.</div>
+          </div>
+          <div class="ce-barra">
+            <button class="dbtn save" id="cb-crear">Crear la rama</button>
+            <button class="ce-mini" id="cb-cancelar-alta">Cancelar</button>
+          </div>
+          <div class="ce-intro" style="margin-top:4px">
+            La rama nace con el cerebro heredado y <b>sin catálogo</b>: todavía no hay forma de
+            cargarle sus habitaciones y fotos desde acá, ni de que sus mensajes le lleguen
+            (eso es el enrutado, que viene después). Sirve para armarle la identidad y probarla.
+          </div>
+        </div>
         <div class="ce-barra" style="margin-top:12px">
           <select class="ei" id="cb-canal" style="max-width:230px">
             <option value="instagram">Instagram o Facebook</option>

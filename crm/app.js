@@ -3396,12 +3396,72 @@ function cbPintarArbol() {
     const sub = esBase
       ? 'Personalidad, honestidad y escalada. La heredan todas las ramas.'
       : `${n.productos} hotel(es) propios · ${n.catalogo_publico ? 'catálogo publicado en la web' : 'catálogo privado'}`;
-    return `<button class="cb-nodo ${esBase ? '' : 'hijo'} ${n.id === CB_SEL ? 'on' : ''}" data-cb-nodo="${n.id}">
-      <span class="cb-ico"><i class="fas ${esBase ? 'fa-brain' : 'fa-store'}"></i></span>
-      <span class="cb-nom">${esc(n.nombre)}${n.activo ? '' : ' (apagada)'}
-        <div class="cb-sub">${esc(sub)} · ${n.bloques_propios} bloque(s) propios</div></span>
-    </button>`;
+    // Las acciones van fuera del botón del nodo: un <button> dentro de otro no
+    // es HTML válido y el navegador lo desarma por su cuenta.
+    return `<div class="cb-fila ${esBase ? '' : 'hijo'}">
+      <button class="cb-nodo ${n.id === CB_SEL ? 'on' : ''}" data-cb-nodo="${n.id}">
+        <span class="cb-ico"><i class="fas ${esBase ? 'fa-brain' : 'fa-store'}"></i></span>
+        <span class="cb-nom">${esc(n.nombre)}${n.activo ? '' : ' (apagada)'}
+          <div class="cb-sub">${esc(sub)} · ${n.bloques_propios} bloque(s) propios</div></span>
+      </button>
+      ${esBase ? '' : `<span class="cb-acc">
+        <button class="ce-mini" data-cb-activar="${n.id}" data-cb-a="${n.activo ? '0' : '1'}">${n.activo ? 'Apagar' : 'Prender'}</button>
+        <button class="ce-mini peligro" data-cb-borrar="${n.id}">Borrar</button>
+      </span>`}
+    </div>`;
   }).join('');
+}
+
+function cbFormAlta(abrir) {
+  const caja = document.getElementById('cb-alta');
+  caja.style.display = abrir ? '' : 'none';
+  if (!abrir) return;
+  document.getElementById('cb-nombre').value = '';
+  document.getElementById('cb-slug').value = '';
+  document.getElementById('cb-padre').innerHTML = CB_ARBOL.filter(n => n.activo)
+    .map(n => `<option value="${n.id}"${n.padre_id ? '' : ' selected'}>${esc(n.nombre)}${n.padre_id ? '' : ' (la Base)'}</option>`).join('');
+  document.getElementById('cb-nombre').focus();
+}
+
+// El identificador se propone solo a partir del nombre, pero se puede corregir:
+// escribirlo a mano es la parte más fácil de equivocar y la más cara de cambiar
+// después (queda enganchado al enrutado de los mensajes).
+const cbSlugificar = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+
+async function cbCrear(btn) {
+  const nombre = document.getElementById('cb-nombre').value.trim();
+  const slug = document.getElementById('cb-slug').value.trim();
+  const padre = Number(document.getElementById('cb-padre').value) || null;
+  if (!nombre) { errToast('Ponele el nombre de la posada'); return; }
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('crear_rama_cerebro', { p_nombre: nombre, p_slug: slug || cbSlugificar(nombre), p_padre_id: padre });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast(data?.error || error?.message || 'No se pudo crear'); return; }
+  okToast(`Rama "${nombre}" creada. Hereda todo lo de la Base y todavía no tiene catálogo.`);
+  CB_SEL = data.cerebro_id;
+  cbFormAlta(false);
+  await loadCerebroRamas();
+}
+
+async function cbActivar(id, activo, btn) {
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('activar_rama_cerebro', { p_cerebro_id: Number(id), p_activo: activo });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast(data?.error || error?.message || 'No se pudo cambiar'); return; }
+  await loadCerebroRamas();
+}
+
+async function cbBorrar(id, btn) {
+  const nodo = CB_ARBOL.find(n => n.id === Number(id));
+  if (!confirm(`¿Borrar la rama "${nodo?.nombre ?? id}"? Solo se puede si nunca se le cargó catálogo.`)) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('borrar_rama_cerebro', { p_cerebro_id: Number(id) });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast(data?.error || error?.message || 'No se pudo borrar'); return; }
+  okToast('Rama borrada.');
+  CB_SEL = null;
+  await loadCerebroRamas();
 }
 
 function cbPintarSelectorPrueba() {
@@ -3562,12 +3622,24 @@ function setupCerebroIA() {
   document.getElementById('cb-recargar')?.addEventListener('click', loadCerebroRamas);
   document.getElementById('cb-canal')?.addEventListener('change', cbCargarBloques);
   document.getElementById('cb-arbol')?.addEventListener('click', (e) => {
+    const act = e.target.closest('[data-cb-activar]');
+    if (act) return cbActivar(act.dataset.cbActivar, act.dataset.cbA === '1', act);
+    const bor = e.target.closest('[data-cb-borrar]');
+    if (bor) return cbBorrar(bor.dataset.cbBorrar, bor);
     const b = e.target.closest('[data-cb-nodo]');
     if (!b) return;
     CB_SEL = Number(b.dataset.cbNodo);
     cbPintarArbol();
     cbCargarBloques();
   });
+  document.getElementById('cb-nueva')?.addEventListener('click', () => cbFormAlta(true));
+  document.getElementById('cb-cancelar-alta')?.addEventListener('click', () => cbFormAlta(false));
+  document.getElementById('cb-crear')?.addEventListener('click', (e) => cbCrear(e.currentTarget));
+  document.getElementById('cb-nombre')?.addEventListener('input', (e) => {
+    const slug = document.getElementById('cb-slug');
+    if (!slug.dataset.tocado) slug.value = cbSlugificar(e.target.value);
+  });
+  document.getElementById('cb-slug')?.addEventListener('input', (e) => { e.target.dataset.tocado = '1'; });
   document.getElementById('cb-prompt')?.addEventListener('click', (e) => {
     const ed = e.target.closest('[data-cb-editar]');
     if (ed) return cbAbrirEditor(ed.dataset.cbEditar);
@@ -6821,7 +6893,7 @@ async function guardarNotasTarifario(tabla, id) {
 }
 const TAR_FOTOS_LIMITE = 5 * 1024 * 1024, TAR_FOTOS_MIME = ['image/png', 'image/jpeg', 'image/webp'];
 function slugArchivo(nombre) {
-  return nombre.normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'foto';
+  return nombre.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'foto';
 }
 async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
   const box = document.getElementById('tar-fotos-admin');
@@ -9039,6 +9111,8 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-02', emoji: '🌱', titulo: 'Crear ramas de la IA desde el CRM', texto: 'En Cerebro IA > Ramas hay un botón "Nueva rama": le ponés el nombre de la posada y queda creada heredando toda la Base (cómo vende, qué nunca inventa, cuándo pasa a un humano). Se puede apagar y volver a prender sin perder lo que le hayas escrito, y borrar si nunca se le cargó nada. Ojo: la rama todavía no tiene forma de cargar sus habitaciones y fotos, ni le llegan mensajes — sirve para armarle la identidad y probarla en "Probar".', roles: ['admin'] },
+  { fecha: '2026-08-02', emoji: '📞', titulo: 'Un cliente que deja su número ya no se pierde', texto: 'Si el cliente escribe su teléfono en el chat, el lead se crea sí o sí — antes eso dependía de que la IA además "decidiera" que estaba listo, y en 30 días 36 conversaciones dieron el número sin generar ningún lead. También se arregló que una consulta que no es un destino del catálogo (ej. un boleto Cancún–Venezuela) dejaba a la IA pidiendo el destino en círculos, y que a un número sin código de país se le asignaba el país por orden de una lista en vez de por lo que dijo el cliente.', roles: ['admin', 'asesor'] },
   { fecha: '2026-08-01', emoji: '🌑', titulo: 'Se fue la sombra negra de abajo', texto: 'Aparecía una banda oscura fija en la parte de abajo del Dashboard que tapaba el embudo del pipeline. Eran las hojas de edición cerradas, que aunque no se vieran seguían pintando su sombra dentro de la pantalla. Ya no.', roles: ROLES_TODOS },
   { fecha: '2026-08-01', emoji: '🌳', titulo: 'Cerebro IA: pestaña "Ramas"', texto: 'Ahora se ve cómo está armada la IA por dentro: un árbol con la Base (cómo vende, qué nunca inventa, cuándo pasa a un humano) y la rama de Lotus 360 con lo nuestro (hoteles, asesores, boletería). Al elegir una rama sale el texto exacto que recibe la IA, con colores según venga de la Base o sea propio de la rama. Si editás un pedazo, antes de guardar te muestra qué líneas cambian y te pide confirmar. En "Probar" ahora elegís contra qué rama conversar.', roles: ['admin'] },
   { fecha: '2026-08-01', emoji: '🏨', titulo: 'IA Atención al Cliente', texto: 'Las posadas que entran a destinoyeventoslotus360.com/ia-planes, arman su asistente y dejan sus datos caen en esta sección nueva. No se les asigna asesor y no aparecen en Leads: no son clientes de viaje, son quienes quieren contratar el asistente.', roles: ['admin'] },
