@@ -1499,6 +1499,30 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .cb-txt{font-size:12.5px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--txt)}
 .cb-resumen{font-size:12.5px;color:var(--muted);margin-bottom:10px}
 .cb-resumen b{color:var(--txt)}
+/* ---------- Clientes de la IA: consumo del mes -------------------------
+   Dos barras y no una: la de mensajes es lo que le vendiste, la de contactos
+   es lo que te cuesta. Se ven juntas porque la segunda es la que se pasa
+   primero y es la única que mueve la factura de ManyChat. */
+.cl-card{padding-bottom:6px}
+.cl-sub{font-size:11.5px;color:var(--muted2);font-weight:500;margin-top:3px}
+.cl-estado{flex:0 0 auto;font-size:11px;font-weight:800;border-radius:999px;padding:3px 11px;
+  background:rgba(255,255,255,.06);color:var(--muted)}
+.cl-estado.activo{background:rgba(34,197,94,.14);color:#86efac}
+.cl-estado.pausado{background:rgba(234,179,8,.14);color:#fde047}
+.cl-estado.baja{background:rgba(239,68,68,.13);color:#fca5a5}
+.cl-barras{display:flex;flex-direction:column;gap:10px;margin:13px 0 4px}
+.cl-medida-t{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;
+  color:var(--muted);margin-bottom:5px}
+.cl-medida-t b{color:var(--txt);font-variant-numeric:tabular-nums}
+.cl-barra{height:7px;border-radius:999px;background:var(--line2);overflow:hidden}
+.cl-barra i{display:block;height:100%;border-radius:999px;background:var(--accent);transition:width .3s}
+.cl-barra i.alto{background:#fbbf24}
+.cl-barra i.lleno{background:#f87171}
+.cl-aviso{display:flex;gap:8px;align-items:flex-start;margin-top:11px;padding:9px 12px;border-radius:11px;
+  background:rgba(251,191,36,.10);color:#fcd34d;font-size:12.5px;line-height:1.5}
+.cl-nums{display:flex;gap:16px;flex-wrap:wrap;margin-top:13px;font-size:12px;color:var(--muted)}
+.cl-num b{display:block;font-size:16px;font-weight:800;color:var(--txt);font-variant-numeric:tabular-nums}
+.cl-num.malo b{color:#fca5a5}
 /* IA Atención al Cliente -- posadas que pidieron el asistente desde /posadas.
    Reusa las tarjetas del Cerebro IA: es la misma familia de pantalla y no
    necesita un lenguaje visual propio. */
@@ -3124,18 +3148,79 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 
     <!-- IA ATENCIÓN AL CLIENTE: posadas que pidieron el asistente desde /posadas -->
     <section class="section" id="sec-ia-atencion">
-      <div class="ce-intro">
-        Cada tarjeta es una posada que entró a <b>destinoyeventoslotus360.com/ia-planes</b>,
-        armó el asistente a su gusto y dejó sus datos.<br>
-        No se le asigna asesor y <b>no aparecen en Leads</b>: no son clientes de viaje,
-        son quienes quieren contratar el asistente. Solo las ven los admin.
+      <div class="seg-group" id="ia-tabs">
+        <button class="seg on" data-ia-tab="interesados"><i class="fas fa-hand-sparkles"></i> Interesados</button>
+        <button class="seg" data-ia-tab="clientes"><i class="fas fa-store"></i> Clientes</button>
       </div>
-      <div class="ce-barra">
-        <button class="ce-mini" id="ia-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
-        <span class="ce-vig" id="ia-conteo"></span>
+
+      <div class="ia-panel" data-ia-panel="interesados">
+        <div class="ce-intro">
+          Cada tarjeta es una posada que entró a <b>destinoyeventoslotus360.com/ia-planes</b>,
+          armó el asistente a su gusto y dejó sus datos.<br>
+          No se le asigna asesor y <b>no aparecen en Leads</b>: no son clientes de viaje,
+          son quienes quieren contratar el asistente. Solo las ven los admin.
+        </div>
+        <div class="ce-barra">
+          <button class="ce-mini" id="ia-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+          <span class="ce-vig" id="ia-conteo"></span>
+        </div>
+        <div id="ia-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
       </div>
-      <div id="ia-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+
+      <div class="ia-panel" data-ia-panel="clientes" style="display:none">
+        <div class="ce-intro">
+          Quién tiene la IA contratada, cuánto consumió este mes y cómo va su cobro.<br>
+          El plan se vende por <b>mensajes</b>, pero ManyChat nos cobra por <b>contactos activos</b>
+          (personas distintas que escriben en el mes) — por eso están los dos números.
+          Al 80% del plan aparece el aviso: la IA <b>nunca</b> se corta ni se cobra nada solo.
+        </div>
+        <div class="ce-barra">
+          <input class="ei" type="month" id="cl-periodo" style="max-width:180px">
+          <button class="ce-mini" id="cl-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+        </div>
+        <div id="cl-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+      </div>
     </section>
+
+    <div class="sheet" id="cl-plan-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="cl-plan-titulo">Plan del cliente</div>
+      <div class="ce-campo">
+        <label class="ce-lbl">Plan</label>
+        <select class="ei" id="cl-plan"><option value="">Sin plan todavía</option><option value="basico">Básico</option><option value="pro">Pro</option></select>
+      </div>
+      <div class="ce-campo">
+        <label class="ce-lbl">Mensajes incluidos</label>
+        <select class="ei" id="cl-tier"></select>
+        <div class="ce-ayuda" id="cl-tier-ayuda"></div>
+      </div>
+      <div class="ce-campo">
+        <label class="ce-lbl">Precio mensual (USD)</label>
+        <input class="ei" id="cl-precio" type="number" min="0" step="1">
+        <div class="ce-ayuda">Se propone el de la lista al elegir plan y mensajes; se puede cambiar.</div>
+      </div>
+      <div class="ce-campo">
+        <label class="ce-lbl">Estado</label>
+        <select class="ei" id="cl-estado">
+          <option value="prueba">En prueba</option>
+          <option value="activo">Activo</option>
+          <option value="pausado">Pausado</option>
+          <option value="baja">De baja</option>
+        </select>
+      </div>
+      <div class="ce-campo">
+        <label class="ce-lbl">Inicio del servicio</label>
+        <input class="ei" id="cl-inicio" type="date">
+      </div>
+      <label class="ce-campo" style="display:flex;align-items:center;gap:9px">
+        <input type="checkbox" id="cl-instalacion">
+        <span>Ya pagó la instalación</span>
+      </label>
+      <div class="ce-barra">
+        <button class="dbtn save" id="cl-guardar">Guardar</button>
+        <button class="ce-mini" data-cerrar-sheet="cl-plan-sheet">Cancelar</button>
+      </div>
+    </div>
 
     <!-- REDES (Instagram + TikTok: métricas + analista IA) -->
     <section class="section" id="sec-redes">

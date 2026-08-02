@@ -3648,6 +3648,34 @@ function setupCerebroIA() {
     if (e.target.closest('[data-cb-cancelar]')) cbPintarBloques();
   });
   document.getElementById('ia-recargar')?.addEventListener('click', loadIaAtencion);
+  document.getElementById('ia-tabs')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ia-tab]');
+    if (b) iaCambiarTab(b.dataset.iaTab);
+  });
+  document.getElementById('ia-lista')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ia-convertir]');
+    if (b) iaConvertir(b.dataset.iaConvertir, b);
+  });
+  document.getElementById('cl-recargar')?.addEventListener('click', loadClientesIA);
+  document.getElementById('cl-periodo')?.addEventListener('change', loadClientesIA);
+  document.getElementById('cl-lista')?.addEventListener('click', (e) => {
+    const p = e.target.closest('[data-cl-plan]');
+    if (p) return clAbrirPlan(p.dataset.clPlan);
+    const co = e.target.closest('[data-cl-cobro]');
+    if (co) return clMarcarCobro(co.dataset.clCobro, co.dataset.clPagado === '1', co);
+  });
+  document.getElementById('cl-plan')?.addEventListener('change', (e) => {
+    clPintarTiers(e.target.value, Number(document.getElementById('cl-tier').value));
+    const sug = clPrecioSugerido();
+    if (sug != null) document.getElementById('cl-precio').value = sug;
+  });
+  document.getElementById('cl-tier')?.addEventListener('change', () => {
+    const sug = clPrecioSugerido();
+    if (sug != null) document.getElementById('cl-precio').value = sug;
+  });
+  document.getElementById('cl-guardar')?.addEventListener('click', (e) => clGuardarPlan(e.currentTarget));
+  document.querySelectorAll('[data-cerrar-sheet]').forEach(b =>
+    b.addEventListener('click', () => closeSheet(b.dataset.cerrarSheet)));
   document.getElementById('ce-nueva')?.addEventListener('click', () => ceAbrirEditor(null));
   document.getElementById('ce-recargar')?.addEventListener('click', loadCerebroIA);
   document.getElementById('ce-ambito')?.addEventListener('change', ceMostrarCampoDestino);
@@ -3676,6 +3704,9 @@ async function loadIaAtencion() {
     return;
   }
   const posadas = data.posadas || [];
+  // Qué solicitudes ya tienen su rama creada, para no ofrecer crearla dos veces.
+  const { data: yaClientes } = await sb.from('clientes').select('id,lead_id').not('lead_id', 'is', null);
+  IA_CONVERTIDOS = new Map((yaClientes || []).map(c => [c.lead_id, c.id]));
   document.getElementById('ia-conteo').textContent =
     posadas.length ? `${posadas.length} ${posadas.length === 1 ? 'posada interesada' : 'posadas interesadas'}` : '';
   if (!posadas.length) {
@@ -3683,6 +3714,7 @@ async function loadIaAtencion() {
       <div style="font-size:12.5px;margin-top:6px">Acá van a aparecer las posadas que completen el recorrido en la página, con el plan que eligieron.</div></div>`;
     return;
   }
+  window.__iaPosadas = posadas;
   cont.innerHTML = posadas.map(iaCard).join('');
 }
 
@@ -3712,7 +3744,229 @@ function iaCard(p) {
       <span class="ia-dato"><i class="fas fa-flag"></i> ${esc(p.estado || '—')}</span>
     </div>
     ${cuerpo ? `<div class="ia-cfg">${cuerpo}</div>` : ''}
+    <div class="ce-pie">
+      ${IA_CONVERTIDOS.has(p.id)
+        ? `<span class="ce-vig"><i class="fas fa-circle-check" style="color:#86efac"></i> Ya es cliente, con su rama creada</span>`
+        : `<span class="ce-vig"><i class="fas fa-hand-sparkles"></i> Todavía es solo una solicitud</span>
+           <span class="ce-acc"><button class="ce-mini on" data-ia-convertir="${p.id}">Crear su rama</button></span>`}
+    </div>
   </div>`;
+}
+
+let IA_CONVERTIDOS = new Map();
+
+/* Convertir una solicitud en cliente: crea su rama del cerebro heredando la
+   Base y deja anotado de qué solicitud salió. No le pone plan ni precio -- eso
+   se carga después desde la pestaña Clientes, cuando se sepa qué contrató. */
+async function iaConvertir(leadId, btn) {
+  const p = (window.__iaPosadas || []).find(x => String(x.id) === String(leadId));
+  const nombre = (p?.nombre || '').trim();
+  if (!nombre) { errToast('Esa solicitud no tiene nombre; creá la rama a mano desde Cerebro IA › Ramas'); return; }
+  const slug = cbSlugificar(nombre);
+  if (!confirm(`¿Crear la rama de "${nombre}"?\n\nIdentificador: ${slug}\n\nHereda toda la Base y nace sin catálogo ni plan.`)) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('crear_rama_cerebro',
+    { p_nombre: nombre, p_slug: slug, p_padre_id: null, p_lead_id: Number(leadId) });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast(data?.error || error?.message || 'No se pudo crear'); return; }
+  okToast(`Rama de "${nombre}" creada. Cargale el plan en la pestaña Clientes.`);
+  CB_ARBOL = [];
+  await loadIaAtencion();
+}
+
+/* --- Clientes de la IA: consumo del mes y cobro ----------------------------
+   La página /ia-planes vende planes por MENSAJES, pero ManyChat nos cobra por
+   CONTACTOS ACTIVOS (personas distintas que escriben en el mes). Con nuestros
+   propios números son 2,2 mensajes por contacto, así que un plan de 2.000
+   mensajes ya se pasa de los 500 contactos que cuestan $15. Por eso la tarjeta
+   muestra las dos barras: la que le vendiste y la que te cuesta. */
+let CL_DATOS = [], CL_EDITANDO = null;
+
+// Copia de la escalera de precios de pagina-web-next/components/posadas/datos.ts.
+// Son dos repos distintos y no hay forma de importar de allá; si cambian los
+// precios hay que tocar los dos lados, y el comentario está en ambos.
+const CL_TIERS = [
+  { mensajes: 500, basico: 59, pro: null },
+  { mensajes: 2000, basico: 69, pro: null },
+  { mensajes: 5000, basico: 79, pro: 109 },
+  { mensajes: 10000, basico: 89, pro: 129 },
+];
+// Lo que ManyChat cobra sin escalar. Pasarse de acá es lo único que mueve el costo.
+const CL_CONTACTOS_INCLUIDOS = 500;
+// $0,14 por millón de tokens de entrada, $0,28 por millón de salida. El acierto
+// de caché se cobra ~10x más barato, por eso se descuenta aparte -- y no es un
+// detalle: medido con tráfico real el 02/08, el 97,7% de los tokens de entrada
+// entran por caché. Contarlos a precio lleno multiplicaría el costo por 10.
+const CL_USD_ENTRADA = 0.14 / 1e6, CL_USD_CACHE = 0.014 / 1e6, CL_USD_SALIDA = 0.28 / 1e6;
+const CL_MANYCHAT = 15;
+
+const clPeriodo = () => (document.getElementById('cl-periodo')?.value || '') + '-01';
+const clPct = (usado, tope) => tope ? Math.min(100, Math.round(usado * 100 / tope)) : 0;
+
+function clCostoModelo(c) {
+  const sinCache = Math.max(0, Number(c.tokens_entrada || 0) - Number(c.tokens_cache || 0));
+  return sinCache * CL_USD_ENTRADA + Number(c.tokens_cache || 0) * CL_USD_CACHE
+       + Number(c.tokens_salida || 0) * CL_USD_SALIDA;
+}
+
+async function loadClientesIA() {
+  const cont = document.getElementById('cl-lista');
+  const per = document.getElementById('cl-periodo');
+  if (!per.value) per.value = new Date().toISOString().slice(0, 7);
+  const { data, error } = await sb.rpc('clientes_ia_panel', { p_periodo: clPeriodo() });
+  if (error) {
+    cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`;
+    return;
+  }
+  CL_DATOS = data || [];
+  cont.innerHTML = CL_DATOS.length
+    ? CL_DATOS.map(clCard).join('')
+    : `<div class="vig-vacio"><i class="fas fa-store"></i><b>Todavía no hay clientes</b>
+       <div style="font-size:12.5px;margin-top:6px">Cuando le crees la rama a una posada en Cerebro IA › Ramas, aparece acá.</div></div>`;
+}
+
+function clCard(c) {
+  const tope = c.tier_mensajes || 0;
+  const pctMsg = clPct(c.mensajes, tope);
+  const pctCon = clPct(c.contactos, CL_CONTACTOS_INCLUIDOS);
+  const costoModelo = clCostoModelo(c);
+  const costo = costoModelo + CL_MANYCHAT;
+  const precio = Number(c.precio_mensual || 0);
+  const margen = precio - costo;
+  const siguiente = CL_TIERS.find(t => t.mensajes > tope);
+  const precioSiguiente = siguiente ? (c.plan === 'pro' ? siguiente.pro : siguiente.basico) : null;
+  // Sin tokens medidos el costo del modelo es 0 y el margen mentiría por lo
+  // alto. Se dice, en vez de mostrar un número que parece exacto.
+  const sinMedir = !Number(c.tokens_entrada || 0);
+
+  const avisos = [];
+  if (tope && pctMsg >= 100) {
+    avisos.push(`Se pasó del plan.${precioSiguiente ? ` El de ${siguiente.mensajes.toLocaleString('es')} mensajes cuesta $${precioSiguiente}.` : ''} No se cortó nada.`);
+  } else if (tope && pctMsg >= 80) {
+    avisos.push(`Va por el ${pctMsg}% de sus mensajes.${precioSiguiente ? ` El plan siguiente cuesta $${precioSiguiente}.` : ''}`);
+  }
+  if (c.contactos > CL_CONTACTOS_INCLUIDOS) {
+    avisos.push(`Pasó los ${CL_CONTACTOS_INCLUIDOS} contactos de ManyChat: el costo real de este mes es mayor al estimado.`);
+  }
+
+  return `<div class="ia-card cl-card">
+    <div class="ia-top">
+      <div class="ia-nom">${esc(c.nombre)}
+        <div class="cl-sub">${esc(c.slug)} · ${c.productos} en su catálogo</div></div>
+      <span class="cl-estado ${esc(c.estado_comercial)}">${clEstadoTexto(c.estado_comercial)}</span>
+    </div>
+
+    <div class="cl-barras">
+      <div class="cl-medida">
+        <div class="cl-medida-t"><span>Mensajes</span>
+          <b>${Number(c.mensajes).toLocaleString('es')}${tope ? ` / ${tope.toLocaleString('es')}` : ''}</b></div>
+        <div class="cl-barra"><i class="${pctMsg >= 100 ? 'lleno' : pctMsg >= 80 ? 'alto' : ''}" style="width:${pctMsg}%"></i></div>
+      </div>
+      <div class="cl-medida">
+        <div class="cl-medida-t"><span>Contactos activos</span>
+          <b>${Number(c.contactos).toLocaleString('es')} / ${CL_CONTACTOS_INCLUIDOS}</b></div>
+        <div class="cl-barra"><i class="${pctCon >= 100 ? 'lleno' : pctCon >= 80 ? 'alto' : ''}" style="width:${pctCon}%"></i></div>
+      </div>
+    </div>
+
+    ${avisos.map(a => `<div class="cl-aviso"><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</div>`).join('')}
+
+    <div class="cl-nums">
+      <span class="cl-num"><b>${precio ? '$' + precio : '—'}</b>${c.plan ? ` plan ${c.plan === 'pro' ? 'Pro' : 'Básico'}` : ' sin plan'}</span>
+      <span class="cl-num"><b>${sinMedir ? '—' : '$' + costo.toFixed(2)}</b> nos cuesta</span>
+      <span class="cl-num ${!sinMedir && margen < 0 ? 'malo' : ''}"><b>${sinMedir || !precio ? '—' : '$' + margen.toFixed(2)}</b> de ganancia</span>
+    </div>
+    ${sinMedir ? `<div class="ce-ayuda">Sin tokens medidos todavía en este mes: el costo aparece cuando entren mensajes nuevos.</div>` : ''}
+
+    <div class="ce-pie">
+      <span class="ce-vig">${c.cobro_id
+        ? (c.cobro_estado === 'pagado'
+            ? `<i class="fas fa-circle-check" style="color:#86efac"></i> Cobrado $${Number(c.cobro_monto).toFixed(2)}`
+            : `<i class="fas fa-clock"></i> Pendiente $${Number(c.cobro_monto).toFixed(2)}`)
+        : '<i class="fas fa-minus"></i> Sin cobro registrado este mes'}</span>
+      <span class="ce-acc">
+        <button class="ce-mini" data-cl-plan="${c.cliente_id}">Plan</button>
+        ${c.cobro_estado === 'pagado'
+          ? `<button class="ce-mini" data-cl-cobro="${c.cliente_id}" data-cl-pagado="0">Marcar pendiente</button>`
+          : `<button class="ce-mini on" data-cl-cobro="${c.cliente_id}" data-cl-pagado="1">Marcar pagado</button>`}
+      </span>
+    </div>
+  </div>`;
+}
+
+const clEstadoTexto = (e) => ({ prueba: 'En prueba', activo: 'Activo', pausado: 'Pausado', baja: 'De baja' }[e] || e);
+
+function clAbrirPlan(id) {
+  const c = CL_DATOS.find(x => String(x.cliente_id) === String(id));
+  if (!c) return;
+  CL_EDITANDO = c.cliente_id;
+  document.getElementById('cl-plan-titulo').textContent = `Plan de ${c.nombre}`;
+  document.getElementById('cl-plan').value = c.plan || '';
+  document.getElementById('cl-estado').value = c.estado_comercial || 'prueba';
+  document.getElementById('cl-inicio').value = c.inicio_servicio || '';
+  document.getElementById('cl-instalacion').checked = !!c.instalacion_pagada;
+  document.getElementById('cl-precio').value = c.precio_mensual ?? '';
+  clPintarTiers(c.plan || '', c.tier_mensajes);
+  openSheet('cl-plan-sheet');
+}
+
+function clPintarTiers(plan, elegido) {
+  const sel = document.getElementById('cl-tier');
+  const disponibles = CL_TIERS.filter(t => !plan || t[plan] != null);
+  sel.innerHTML = disponibles.map(t =>
+    `<option value="${t.mensajes}"${t.mensajes === elegido ? ' selected' : ''}>${t.mensajes.toLocaleString('es')} mensajes${plan ? ` — $${t[plan]}` : ''}</option>`).join('');
+  document.getElementById('cl-tier-ayuda').textContent = plan === 'pro'
+    ? 'El Pro arranca en 5.000 mensajes.'
+    : 'Como referencia: 2,2 mensajes por contacto, y ManyChat cobra aparte pasando los 500 contactos.';
+}
+
+function clPrecioSugerido() {
+  const plan = document.getElementById('cl-plan').value;
+  const tier = Number(document.getElementById('cl-tier').value);
+  const t = CL_TIERS.find(x => x.mensajes === tier);
+  return plan && t && t[plan] != null ? t[plan] : null;
+}
+
+async function clGuardarPlan(btn) {
+  const plan = document.getElementById('cl-plan').value || null;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('guardar_plan_cliente', {
+    p_cliente_id: CL_EDITANDO,
+    p_plan: plan,
+    p_tier_mensajes: Number(document.getElementById('cl-tier').value) || null,
+    p_precio_mensual: document.getElementById('cl-precio').value === '' ? null : Number(document.getElementById('cl-precio').value),
+    p_estado: document.getElementById('cl-estado').value,
+    p_inicio: document.getElementById('cl-inicio').value || null,
+    p_instalacion_pagada: document.getElementById('cl-instalacion').checked,
+  });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast(data?.error || error?.message || 'No se pudo guardar'); return; }
+  closeSheet('cl-plan-sheet');
+  okToast('Plan guardado.');
+  await loadClientesIA();
+}
+
+async function clMarcarCobro(id, pagado, btn) {
+  const c = CL_DATOS.find(x => String(x.cliente_id) === String(id));
+  // El monto se congela con el cobro: si mañana le cambiás el precio, los meses
+  // ya cobrados tienen que seguir diciendo lo que se cobró de verdad.
+  const monto = c?.cobro_monto ?? c?.precio_mensual;
+  if (monto == null) { errToast('Ponele primero un precio mensual en Plan'); return; }
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('marcar_cobro_cliente', {
+    p_cliente_id: Number(id), p_periodo: clPeriodo(), p_monto: Number(monto), p_pagado: pagado,
+  });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast(data?.error || error?.message || 'No se pudo guardar'); return; }
+  await loadClientesIA();
+}
+
+function iaCambiarTab(tab) {
+  document.querySelectorAll('#ia-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.iaTab === tab));
+  document.querySelectorAll('#sec-ia-atencion .ia-panel').forEach(p => {
+    p.style.display = p.dataset.iaPanel === tab ? '' : 'none';
+  });
+  if (tab === 'clientes') loadClientesIA();
 }
 
 /* --- Pestaña Proceso: qué está haciendo la cadena automática ---------------
@@ -9111,6 +9365,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-02', emoji: '📊', titulo: 'Clientes de la IA: cuánto consumen y cómo va su cobro', texto: 'En "IA Atención al Cliente" hay dos pestañas. Interesados es lo de antes, con un botón nuevo para convertir una solicitud en cliente (le crea su rama de la IA). Clientes muestra, por cada uno: cuántos mensajes lleva del plan, cuántas personas distintas le escribieron este mes, cuánto nos costó de verdad, cuánto se ganó, y si ya pagó. Al 80% del plan avisa y propone el siguiente — la IA nunca se corta ni se cobra nada solo.', roles: ['admin'] },
   { fecha: '2026-08-02', emoji: '🌱', titulo: 'Crear ramas de la IA desde el CRM', texto: 'En Cerebro IA > Ramas hay un botón "Nueva rama": le ponés el nombre de la posada y queda creada heredando toda la Base (cómo vende, qué nunca inventa, cuándo pasa a un humano). Se puede apagar y volver a prender sin perder lo que le hayas escrito, y borrar si nunca se le cargó nada. Ojo: la rama todavía no tiene forma de cargar sus habitaciones y fotos, ni le llegan mensajes — sirve para armarle la identidad y probarla en "Probar".', roles: ['admin'] },
   { fecha: '2026-08-02', emoji: '📞', titulo: 'Un cliente que deja su número ya no se pierde', texto: 'Si el cliente escribe su teléfono en el chat, el lead se crea sí o sí — antes eso dependía de que la IA además "decidiera" que estaba listo, y en 30 días 36 conversaciones dieron el número sin generar ningún lead. También se arregló que una consulta que no es un destino del catálogo (ej. un boleto Cancún–Venezuela) dejaba a la IA pidiendo el destino en círculos, y que a un número sin código de país se le asignaba el país por orden de una lista en vez de por lo que dijo el cliente.', roles: ['admin', 'asesor'] },
   { fecha: '2026-08-01', emoji: '🌑', titulo: 'Se fue la sombra negra de abajo', texto: 'Aparecía una banda oscura fija en la parte de abajo del Dashboard que tapaba el embudo del pipeline. Eran las hojas de edición cerradas, que aunque no se vieran seguían pintando su sombra dentro de la pantalla. Ya no.', roles: ROLES_TODOS },
