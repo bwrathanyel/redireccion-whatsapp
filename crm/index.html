@@ -223,8 +223,14 @@ body.swipe-der .section.active{animation:sw-der .24s ease-out}
 /* ---------- Hoja inferior (bottom sheet) — más opciones del nav, filtros en móvil ---------- */
 .sheet-bg{position:fixed;inset:0;background:rgba(4,6,12,.6);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .25s;z-index:70}
 .sheet-bg.open{opacity:1;pointer-events:auto}
-.sheet{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border:1px solid var(--line2);border-bottom:none;border-radius:20px 20px 0 0;z-index:71;padding:10px 18px calc(22px + var(--safe-b));max-height:80vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.3,1,.4,1);box-shadow:0 -20px 50px rgba(0,0,0,.4)}
-.sheet.open{transform:translateY(0)}
+.sheet{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border:1px solid var(--line2);border-bottom:none;border-radius:20px 20px 0 0;z-index:71;padding:10px 18px calc(22px + var(--safe-b));max-height:80vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.3,1,.4,1)}
+/* La sombra SOLO cuando la hoja está abierta. Cerrada vive en translateY(100%),
+   o sea justo debajo del borde de abajo -- y una sombra hacia arriba de 50px de
+   difuminado sigue pintándose dentro de la pantalla aunque la hoja no se vea.
+   Con 24 hojas apiladas eso daba una banda oscura fija abajo. Se notó recién el
+   01/08 porque ese día las hojas pasaron a ir centradas en escritorio: antes
+   iban de borde a borde y la banda parecía un degradado del fondo. */
+.sheet.open{transform:translateY(0);box-shadow:0 -20px 50px rgba(0,0,0,.4)}
 .sheet-handle{width:40px;height:4px;background:var(--line2);border-radius:3px;margin:6px auto 16px}
 .sheet-title{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
 .sheet-item{display:flex;align-items:center;gap:14px;min-height:52px;padding:0 6px;color:var(--txt);text-decoration:none;font-size:15px;font-weight:600;border-bottom:1px solid var(--line);cursor:pointer}
@@ -741,8 +747,8 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 @media (min-width:900px){
   .sheet.sheet-lateral{left:auto;right:0;top:0;bottom:0;width:min(470px,92vw);max-height:none;
     border-radius:18px 0 0 18px;border-right:none;padding:0;
-    transform:translateX(100%);box-shadow:-20px 0 60px rgba(0,0,0,.45)}
-  .sheet.sheet-lateral.open{transform:translateX(0)}
+    transform:translateX(100%)}
+  .sheet.sheet-lateral.open{transform:translateX(0);box-shadow:-20px 0 60px rgba(0,0,0,.45)}
   .sheet.sheet-lateral .sheet-handle{display:none}
   /* En una pantalla ancha, una hoja de borde a borde deja campos de 1.000px de
      largo para escribir un precio, y el ojo pierde dónde empieza cada uno. Se
