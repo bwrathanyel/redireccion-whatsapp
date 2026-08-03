@@ -1894,6 +1894,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
       <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
       <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> IA Atención al Cliente</a>
+      <a class="nav-item nav-admin-only" data-sec="consultor-ia"><i class="fas fa-user-tie"></i> Consultor IA</a>
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
       <a class="nav-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
@@ -3222,6 +3223,26 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       </div>
     </div>
 
+    <!-- CONSULTOR IA (DeepSeek, solo consulta -- responde con la documentación real del proyecto) -->
+    <section class="section" id="sec-consultor-ia">
+      <div class="card chat-wrap">
+        <div class="chat-toolbar">
+          <div class="eb-title" style="margin:0"><i class="fas fa-user-tie"></i> Consultor IA</div>
+          <button type="button" class="ce-mini" id="consultor-chat-nuevo" style="margin-left:auto"><i class="fas fa-rotate"></i> Nueva conversación</button>
+        </div>
+        <div class="ce-intro">
+          Preguntale sobre arquitectura, decisiones tomadas y qué falta del proyecto -- responde con
+          la documentación real (CLAUDE.md, HANDOFF, decisiones). Es de <b>solo consulta</b>: no edita
+          código ni ejecuta nada, para eso está Claude Code.
+        </div>
+        <div class="chat-log" id="consultor-chat-log"></div>
+        <div class="chat-inputbar">
+          <textarea id="consultor-chat-input" rows="1" placeholder="Preguntale al consultor sobre el proyecto"></textarea>
+          <button class="chat-send" id="consultor-chat-send" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
+        </div>
+      </div>
+    </section>
+
     <!-- REDES (Instagram + TikTok: métricas + analista IA) -->
     <section class="section" id="sec-redes">
       <div class="seg-group" id="redes-red-tabs">
@@ -3350,6 +3371,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> IA Atención al Cliente <span class="si-sub">Posadas que quieren el asistente</span></a>
+  <a class="sheet-item nav-admin-only" data-sec="consultor-ia"><i class="fas fa-user-tie"></i> Consultor IA <span class="si-sub">Preguntale sobre el proyecto</span></a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
   <a class="sheet-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>

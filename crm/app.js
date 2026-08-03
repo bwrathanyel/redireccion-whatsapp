@@ -129,6 +129,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
   'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
   'ia-atencion': ['IA Atención al Cliente', 'Posadas y apartamentos que pidieron el asistente desde la página'],
+  'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y qué falta del proyecto -- no edita ni ejecuta nada'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -1573,7 +1574,7 @@ async function startApp() {
   // No se llama loadInboxLeads() acá de nuevo -- activateSection('leads')
   // (arriba, para asesor) ya la dispara; llamarla dos veces corría 2 fetches
   // del mismo query en paralelo sin orden garantizado de resolución.
-  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion(); setupGestionPersonal(); setupLeadsTabs(); setupBuscadorIATarifario(); setupCerebroIA();
+  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion(); setupGestionPersonal(); setupLeadsTabs(); setupBuscadorIATarifario(); setupCerebroIA(); setupConsultorIA();
   setupDestPeriodo(); loadDestPeriodo();
   setupVoucher(); actualizarBadgeVoucher();
   setupTareas(); setupFreelancers();
@@ -5741,8 +5742,8 @@ async function enviarChatRedes() {
   addChatBubbleRedes('bot', data.respuesta);
   redesChatHistory.push({ role: 'assistant', content: data.respuesta });
 }
-function addChatBubbleRedes(who, texto, loading) {
-  const log = document.getElementById('redes-chat-log');
+function addChatBubble(logId, avatarIcon, who, texto, loading) {
+  const log = document.getElementById(logId);
   const div = document.createElement('div');
   div.className = `chat-msg ${who}${loading ? ' loading' : ''}`;
   if (who === 'bot' && !loading) div.innerHTML = renderBotText(texto);
@@ -5751,7 +5752,7 @@ function addChatBubbleRedes(who, texto, loading) {
   if (who === 'bot') {
     const row = document.createElement('div');
     row.className = 'chat-row';
-    row.innerHTML = '<span class="chat-avatar"><i class="fa-brands fa-instagram"></i></span>';
+    row.innerHTML = `<span class="chat-avatar">${avatarIcon}</span>`;
     row.appendChild(div);
     log.appendChild(row);
     el = row;
@@ -5760,6 +5761,46 @@ function addChatBubbleRedes(who, texto, loading) {
   }
   log.scrollTop = log.scrollHeight;
   return el;
+}
+function addChatBubbleRedes(who, texto, loading) {
+  return addChatBubble('redes-chat-log', '<i class="fa-brands fa-instagram"></i>', who, texto, loading);
+}
+
+/* ---------- Consultor IA (DeepSeek, solo consulta -- no edita ni ejecuta nada) ---------- */
+let consultorChatHistory = [];
+const MSG_BIENVENIDA_CONSULTOR = 'Preguntame sobre la arquitectura, las decisiones tomadas o qué falta del proyecto. '
+  + 'Respondo con la documentación real (CLAUDE.md, HANDOFF, decisiones) -- si algo no está ahí, te lo digo en vez '
+  + 'de inventarlo. Soy de solo consulta: no edito código ni ejecuto nada, para eso está Claude Code.';
+function setupConsultorIA() {
+  const input = document.getElementById('consultor-chat-input');
+  document.getElementById('consultor-chat-send').onclick = enviarChatConsultor;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatConsultor(); } });
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  document.getElementById('consultor-chat-nuevo').onclick = () => {
+    consultorChatHistory = [];
+    document.getElementById('consultor-chat-log').innerHTML = '';
+    addChatBubbleConsultor('bot', MSG_BIENVENIDA_CONSULTOR);
+  };
+  addChatBubbleConsultor('bot', MSG_BIENVENIDA_CONSULTOR);
+}
+async function enviarChatConsultor() {
+  const input = document.getElementById('consultor-chat-input'), btn = document.getElementById('consultor-chat-send');
+  const texto = input.value.trim();
+  if (!texto || btn.disabled) return;
+  addChatBubbleConsultor('user', texto);
+  consultorChatHistory.push({ role: 'user', content: texto });
+  input.value = ''; input.style.height = 'auto';
+  btn.disabled = true;
+  const loadingEl = addChatBubbleConsultor('bot', 'Pensando...', true);
+  const { data, error } = await sb.functions.invoke('crm-consultor-chat', { body: { messages: consultorChatHistory } });
+  loadingEl.remove();
+  btn.disabled = false;
+  if (error || !data?.respuesta) { addChatBubbleConsultor('bot', 'No pude conectar con el consultor, intenta de nuevo en un momento.'); return; }
+  addChatBubbleConsultor('bot', data.respuesta);
+  consultorChatHistory.push({ role: 'assistant', content: data.respuesta });
+}
+function addChatBubbleConsultor(who, texto, loading) {
+  return addChatBubble('consultor-chat-log', '<i class="fas fa-user-tie"></i>', who, texto, loading);
 }
 
 /* ---------- Reasignaciones ---------- */
