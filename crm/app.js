@@ -1529,22 +1529,35 @@ document.getElementById('claimForm').addEventListener('submit', async e => {
 // arriba de agent_check_in).
 window.cerrarSesion = async () => { await sb.auth.signOut(); location.reload(); };
 
+/* Corre cada inicialización por separado y aislada: si una revienta, se anota
+   en la consola y las demás siguen.
+
+   Incidente real (2026-08-03): la sección nueva "Consultor IA" agregaba su
+   HTML y su JS en la misma publicación, pero el service worker llegó a servir
+   el app.js nuevo contra el index.html viejo (ver sw.js). El setup de la
+   sección buscó un elemento que todavía no existía, tiró TypeError, y como
+   todas las inicializaciones iban seguidas en la misma cadena, se llevó puesto
+   todo lo que venía después -- Voucher, Tareas, Freelancers, Destinos. El CRM
+   quedó inutilizable por una sección que ni siquiera se estaba usando.
+
+   La causa de fondo (el shell mezclado) está arreglada en sw.js; esto es la
+   segunda línea de defensa: que un solo elemento faltante nunca más pueda
+   apagar funciones que no tienen nada que ver. */
+function arrancar(...pasos) {
+  for (const paso of pasos) {
+    try { paso(); }
+    catch (err) { console.error('CRM: falló la inicialización de', paso.name || '(anónima)', err); }
+  }
+}
+
 async function startApp() {
   if (booted) return; booted = true;
-  aplicarOrdenSidebar();
-  setupNav();
-  renderBottomNav();
-  setupSwipeSecciones();
-  setupTarifarioTabs();
-  setupLightbox();
-  setupChat();
-  setupMensajes();
-  setupRedes();
-  setupPostventa();
-  setupTutorial();
-  setupManual();
-  registrarServiceWorkerConAviso();
-  setupHoy();
+  arrancar(
+    aplicarOrdenSidebar, setupNav, renderBottomNav, setupSwipeSecciones,
+    setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupRedes,
+    setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso,
+    setupHoy,
+  );
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
   if (ROL === 'boleteria') { activateSection('mensajes'); return; }
   // Restaura la última sección visitada por este usuario (admin/asesor,
@@ -1573,11 +1586,15 @@ async function startApp() {
   // No se llama loadInboxLeads() acá de nuevo -- activateSection('leads')
   // (arriba, para asesor) ya la dispara; llamarla dos veces corría 2 fetches
   // del mismo query en paralelo sin orden garantizado de resolución.
-  setupMetricas(); setupRanking(); setupReasignaciones(); setupAsesoresPeriodo(); setupFacturacion(); setupGestionPersonal(); setupLeadsTabs(); setupBuscadorIATarifario(); setupCerebroIA();
-  setupDestPeriodo(); loadDestPeriodo();
-  setupVoucher(); actualizarBadgeVoucher();
-  setupTareas(); setupFreelancers();
-  subscribeRealtime();
+  arrancar(
+    setupMetricas, setupRanking, setupReasignaciones, setupAsesoresPeriodo,
+    setupFacturacion, setupGestionPersonal, setupLeadsTabs,
+    setupBuscadorIATarifario, setupCerebroIA,
+    setupDestPeriodo, loadDestPeriodo,
+    setupVoucher, actualizarBadgeVoucher,
+    setupTareas, setupFreelancers,
+    subscribeRealtime,
+  );
 }
 async function renderAll() { renderKPIs(); renderPipe('pipe'); renderPipe('pipe2'); renderAdvisors(); await ensureChart(); renderTrend(); renderCanal(); renderAssign(); }
 
@@ -9365,6 +9382,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-05', emoji: '🛡️', titulo: 'El CRM ya no se cae entero por una sola sección', texto: 'El 3 de agosto el CRM quedó inutilizable después de una actualización. La causa: al publicar, el navegador podía quedarse con una mitad nueva y otra vieja, y con esa mezcla una sección fallaba y arrastraba a todas las demás (Voucher, Tareas, Freelancers dejaban de cargar). Se arregló por dos lados: ahora las dos mitades entran juntas o no entra ninguna, y si una sección falla queda apagada solo ella, sin tocar el resto.', roles: ROLES_TODOS },
   { fecha: '2026-08-02', emoji: '📊', titulo: 'Clientes de la IA: cuánto consumen y cómo va su cobro', texto: 'En "IA Atención al Cliente" hay dos pestañas. Interesados es lo de antes, con un botón nuevo para convertir una solicitud en cliente (le crea su rama de la IA). Clientes muestra, por cada uno: cuántos mensajes lleva del plan, cuántas personas distintas le escribieron este mes, cuánto nos costó de verdad, cuánto se ganó, y si ya pagó. Al 80% del plan avisa y propone el siguiente — la IA nunca se corta ni se cobra nada solo.', roles: ['admin'] },
   { fecha: '2026-08-02', emoji: '🌱', titulo: 'Crear ramas de la IA desde el CRM', texto: 'En Cerebro IA > Ramas hay un botón "Nueva rama": le ponés el nombre de la posada y queda creada heredando toda la Base (cómo vende, qué nunca inventa, cuándo pasa a un humano). Se puede apagar y volver a prender sin perder lo que le hayas escrito, y borrar si nunca se le cargó nada. Ojo: la rama todavía no tiene forma de cargar sus habitaciones y fotos, ni le llegan mensajes — sirve para armarle la identidad y probarla en "Probar".', roles: ['admin'] },
   { fecha: '2026-08-02', emoji: '📞', titulo: 'Un cliente que deja su número ya no se pierde', texto: 'Si el cliente escribe su teléfono en el chat, el lead se crea sí o sí — antes eso dependía de que la IA además "decidiera" que estaba listo, y en 30 días 36 conversaciones dieron el número sin generar ningún lead. También se arregló que una consulta que no es un destino del catálogo (ej. un boleto Cancún–Venezuela) dejaba a la IA pidiendo el destino en círculos, y que a un número sin código de país se le asignaba el país por orden de una lista en vez de por lo que dijo el cliente.', roles: ['admin', 'asesor'] },

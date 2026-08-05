@@ -10,7 +10,7 @@
 // apuntando a index.html) siempre pegaba ese camino roto; una pestaña normal
 // del navegador no, porque pedía '/' directo. Se cachea './' en vez de
 // './index.html' para no arrastrar el redirect.
-const CACHE_VERSION = 'lotus-crm-shell-v53';
+const CACHE_VERSION = 'lotus-crm-shell-v54';
 const SHELL_FILES = [
   './',
   './app.js',
@@ -56,17 +56,30 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // app.js: stale-while-revalidate (mostrar shell cacheado ya, actualizar en segundo plano)
+  // El shell (index.html + app.js) se sirve del cache, pero NUNCA se
+  // reescribe desde acá.
+  //
+  // Incidente real (2026-08-03): antes esto era stale-while-revalidate y cada
+  // archivo revalidaba por su cuenta, escribiendo el resultado en el cache con
+  // `cache.put`. index.html y app.js son DOS pedidos independientes que
+  // terminan en momentos distintos, así que quedaba una ventana en la que el
+  // cache tenía el app.js NUEVO junto al index.html VIEJO. Con esa mezcla, el
+  // app.js nuevo buscaba elementos de una sección que el HTML viejo todavía no
+  // tenía, reventaba en el arranque y el CRM quedaba inutilizable.
+  //
+  // Estos dos archivos SIEMPRE tienen que venir de la misma publicación. La
+  // única escritura del shell es el `cache.addAll` del install, que es atómico:
+  // o entran los dos archivos nuevos, o no entra ninguno. Si el cache no lo
+  // tiene, se va a la red, pero no se guarda -- guardarlo es justo lo que
+  // rompía la atomicidad. El shell nuevo entra cuando el service worker nuevo
+  // instala y activa (skipWaiting + clients.claim), los dos archivos juntos.
   const isCoreShell = url.pathname.endsWith('/app.js') || url.pathname === '/' || url.pathname.endsWith('/crm/');
   if (isCoreShell) {
     event.respondWith(
       caches.open(CACHE_VERSION).then(async (cache) => {
         const cached = await cache.match(request);
-        const network = fetch(request).then((res) => {
-          if (res.ok) cache.put(request, res.clone());
-          return res;
-        }).catch(() => cached || cache.match('./offline.html'));
-        return cached || network;
+        if (cached) return cached;
+        return fetch(request).catch(() => cache.match('./offline.html'));
       })
     );
     return;
