@@ -25,7 +25,17 @@ const SHELL_FILES = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => cache.addAll(SHELL_FILES))
+    // `cache: 'reload'` obliga a ir a la red por cada archivo del shell,
+    // salteando el caché HTTP del navegador.
+    //
+    // Sin esto el arreglo del incidente del 2026-08-03 quedaba a medias: el
+    // `addAll` es atómico entre sí, pero si el navegador tiene el `app.js`
+    // anterior todavía fresco en su caché HTTP, `addAll` guarda ESE junto con
+    // el `index.html` nuevo -- y vuelve a quedar el shell mezclado que dejó el
+    // CRM inutilizable, solo que ahora entrando por la otra puerta.
+    caches.open(CACHE_VERSION).then((cache) =>
+      cache.addAll(SHELL_FILES.map((url) => new Request(url, { cache: 'reload' })))
+    )
   );
   self.skipWaiting();
 });
