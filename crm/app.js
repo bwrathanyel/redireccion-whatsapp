@@ -5962,6 +5962,7 @@ function setupStopSales() {
     if (f) ssLeer(f);
     e.target.value = '';
   });
+  document.getElementById('ss-vig-buscar')?.addEventListener('input', () => ssRenderVigentes());
 }
 
 async function ssProductosHotel() {
@@ -6010,13 +6011,36 @@ async function ssLeer(file) {
   ssActualizarBotonPublicar();
 }
 
+// Badge de color semántico real (no la coincidencia forzada de .chip.fb/.chip.am
+// que se usaba antes -- esas clases son de Facebook/Ads en otro contexto). Mismo
+// tono rojo que ESTADO_COLORS.PERDIDO para stop_sale, ámbar para on_request.
+function ssBadge(estado) {
+  const stop = estado === 'stop_sale';
+  const color = stop ? '#ef4444' : '#e0a030';
+  return `<span class="badge-st" style="color:${color};background:${color}2e">${stop ? 'Stop sale' : 'On request'}</span>`;
+}
+
+// Días restantes hasta fecha_hasta (redondeado al día, sin hora) -- solo para
+// dar urgencia visual ("termina mañana"), no necesita precisión de huso horario.
+function ssDiasRestantes(fechaHasta) {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const fin = new Date(fechaHasta + 'T00:00:00');
+  return Math.round((fin - hoy) / 86400000);
+}
+
+function ssTextoCuando(dias) {
+  if (dias <= 0) return 'termina hoy';
+  if (dias === 1) return 'termina mañana';
+  return `termina en ${dias} día(s)`;
+}
+
 async function ssPintarMapeo() {
   const box = document.getElementById('ss-mapeo');
   const hoteles = await ssProductosHotel();
   box.innerHTML = `<div class="card" style="margin-top:12px">
     <h2><i class="fas fa-link"></i> Hoteles nuevos -- confirmá a qué hotel del tarifario corresponde cada uno</h2>
     <div class="csub">Se recuerda para la próxima carga. "No lo tengo" también se recuerda, así no se vuelve a preguntar por un hotel que no vendemos.</div>
-    <div id="ss-mapeo-filas" style="margin-top:10px;display:flex;flex-direction:column;gap:10px"></div>
+    <div id="ss-mapeo-filas" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"></div>
   </div>`;
   const filas = document.getElementById('ss-mapeo-filas');
   filas.innerHTML = SS_DATA.sin_mapear.map((bt) => {
@@ -6030,9 +6054,9 @@ async function ssPintarMapeo() {
       `<option disabled>──────────</option>`,
       `<option value="ninguno">No lo tengo / no corresponde a ningún hotel nuestro</option>`,
     ].join('');
-    return `<div class="dgrid" style="grid-template-columns:1fr 1.4fr;align-items:center">
-      <div><b>${esc(bt)}</b></div>
-      <select class="ei" data-ss-mapeo="${esc(bt)}">${opciones}</select>
+    return `<div class="vig-item">
+      <div class="vig-top"><div class="vig-nombre">${esc(bt)}</div><span class="vig-tipo">Sin mapear</span></div>
+      <select class="ei" data-ss-mapeo="${esc(bt)}" style="margin-top:8px">${opciones}</select>
     </div>`;
   }).join('');
   filas.querySelectorAll('[data-ss-mapeo]').forEach((sel) => {
@@ -6044,29 +6068,63 @@ async function ssPintarMapeo() {
   });
 }
 
-// Recorte de mes -> nombre para el título de cada bloque de la previa.
-const SS_MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+// Agrupa filas sueltas (de cualquier fuente: previa del PDF o vigentes en base)
+// por el nombre de hotel, ordena cada grupo por fecha y decide el "peor" estado
+// del grupo (si tiene algún stop_sale, el grupo entero se trata como grave aunque
+// también tenga rangos on_request) -- mismo criterio en previa y en vigentes, para
+// que las dos pantallas se lean igual.
+function ssAgruparPorHotel(filas, campoNombre) {
+  const mapa = new Map();
+  for (const f of filas) {
+    const nombre = f[campoNombre];
+    if (!mapa.has(nombre)) mapa.set(nombre, []);
+    mapa.get(nombre).push(f);
+  }
+  return [...mapa.entries()].map(([nombre, rangos]) => {
+    rangos.sort((a, b) => a.fecha_desde.localeCompare(b.fecha_desde));
+    return {
+      nombre, rangos,
+      peor: rangos.some((r) => r.estado === 'stop_sale') ? 'stop_sale' : 'on_request',
+      urgente: rangos.some((r) => ssDiasRestantes(r.fecha_hasta) <= 1),
+    };
+  }).sort((a, b) => (a.peor === b.peor ? a.nombre.localeCompare(b.nombre) : a.peor === 'stop_sale' ? -1 : 1));
+}
+
+// Tarjeta desplegable de un hotel para la PREVIA del PDF (antes de publicar):
+// resumen visible aunque esté plegada (nombre + cantidad + peor estado en el
+// ícono), y abierta por defecto si tiene algún stop_sale -- así una carga con
+// varios hoteles no es un muro de texto, pero lo urgente salta a la vista.
+function ssTarjetaHotelPreview(g) {
+  const grave = g.peor === 'stop_sale';
+  return `<details class="dsec" ${grave ? 'open' : ''} style="margin-bottom:8px">
+    <summary><i class="fas ${grave ? 'fa-ban' : 'fa-clock'} dsec-ic" style="color:${grave ? '#ef4444' : '#e0a030'}"></i> ${esc(g.nombre)}
+      <span class="vig-tipo">${g.rangos.length}</span>
+      <i class="fas fa-chevron-down dsec-arrow"></i></summary>
+    <div class="dsec-body">
+      ${g.rangos.map((r) => `<div class="vig-texto" style="display:flex;align-items:center;gap:8px;padding:3px 0;flex-wrap:wrap">
+        ${ssBadge(r.estado)}<span>${fmtDiaCorto(r.fecha_desde)} → ${fmtDiaCorto(r.fecha_hasta)}</span>
+        ${r.problemas?.length ? `<i class="fas fa-triangle-exclamation" style="color:#f59e0b" title="${esc(r.problemas.join(', '))}"></i>` : ''}
+      </div>`).join('')}
+    </div>
+  </details>`;
+}
 
 function ssPintarPreview() {
   const box = document.getElementById('ss-preview');
-  const totalCeldas = SS_DATA.paginas.reduce((a, p) => a + p.filas.length, 0);
+  const filas = SS_DATA.paginas.flatMap((p) => p.filas);
+  const grupos = ssAgruparPorHotel(filas, 'hotel');
+  const hotelesStop = grupos.filter((g) => g.peor === 'stop_sale').length;
+  const hotelesOnRequest = grupos.length - hotelesStop;
+
   box.innerHTML = `<div class="card" style="margin-top:12px">
     <h2><i class="fas fa-table-cells"></i> Lo que se leyó del PDF</h2>
-    <div class="csub">${totalCeldas} bloqueo(s) en ${SS_DATA.hoteles_bt.length} hotel(es), en ${SS_DATA.paginas.length} mes(es). Compará contra el PDF original antes de confirmar.</div>
-    <div style="margin-top:10px;display:flex;flex-direction:column;gap:14px">
-      ${SS_DATA.paginas.map((p) => `
-        <div>
-          <b>${esc(SS_MESES[p.mes] || p.titulo)} ${p.anio}</b>
-          ${!p.filas.length ? '<div class="muted" style="font-size:12.5px;margin-top:4px">Sin bloqueos este mes.</div>' : `
-          <table style="margin-top:6px"><thead><tr><th>Hotel</th><th>Estado</th><th>Días</th></tr></thead><tbody>
-            ${p.filas.map((f) => `<tr>
-              <td>${esc(f.hotel)}</td>
-              <td><span class="chip ${f.estado === 'stop_sale' ? 'fb' : 'am'}">${f.estado === 'stop_sale' ? 'Stop sale' : 'On request'}</span></td>
-              <td>${f.fecha_desde.slice(8, 10)} al ${f.fecha_hasta.slice(8, 10)}${f.problemas.length ? ` <i class="fas fa-triangle-exclamation" style="color:#f59e0b" title="${esc(f.problemas.join(', '))}"></i>` : ''}</td>
-            </tr>`).join('')}
-          </tbody></table>`}
-        </div>`).join('')}
+    <div class="csub">Compará contra el PDF original antes de confirmar. Tocá un hotel para ver sus fechas.</div>
+    <div class="vig-resumen" style="margin-top:12px">
+      <div class="vig-kpi"><b>${filas.length}</b><span>Bloqueo(s)</span></div>
+      <div class="vig-kpi ${hotelesStop ? 'grave' : ''}"><b>${hotelesStop}</b><span>Hoteles en stop sale</span></div>
+      <div class="vig-kpi ${hotelesOnRequest ? 'aviso' : ''}"><b>${hotelesOnRequest}</b><span>Hoteles en on request</span></div>
     </div>
+    <div style="margin-top:14px">${grupos.map(ssTarjetaHotelPreview).join('')}</div>
   </div>`;
 }
 
@@ -6125,18 +6183,52 @@ async function ssPublicar() {
   loadStopSalesVigentes();
 }
 
+// Tarjeta de un hotel para "Bloqueos vigentes hoy": se resalta en rojo
+// (misma clase .grave de vig-item) si algún rango vence hoy o mañana -- da la
+// urgencia real de un vistazo sin tener que leer la fecha exacta.
+function ssTarjetaVigente(g) {
+  return `<div class="vig-item ${g.urgente ? 'grave' : ''}">
+    <div class="vig-top"><div class="vig-nombre">${esc(g.nombre)}</div><span class="vig-tipo">${g.rangos.length}</span></div>
+    ${g.rangos.map((r) => `<div class="vig-texto" style="display:flex;align-items:center;gap:8px;padding:2px 0;flex-wrap:wrap">
+      ${ssBadge(r.estado)}<span>${fmtDiaCorto(r.fecha_desde)} → ${fmtDiaCorto(r.fecha_hasta)}</span>
+      <span class="muted" style="font-size:11px">(${ssTextoCuando(ssDiasRestantes(r.fecha_hasta))})</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+let SS_VIGENTES_DATA = null;
+
 async function loadStopSalesVigentes() {
-  const body = document.getElementById('ss-vigentes-body');
-  body.innerHTML = '<tr><td colspan="4" class="muted">Cargando…</td></tr>';
+  const cont = document.getElementById('ss-vigentes');
+  cont.innerHTML = '<div class="muted" style="padding:14px 2px">Cargando…</div>';
   const { data, error } = await sb.rpc('stop_sales_vigentes');
-  if (error) { body.innerHTML = `<tr><td colspan="4" class="muted">No se pudo cargar: ${esc(error.message)}</td></tr>`; return; }
-  if (!data?.length) { body.innerHTML = '<tr><td colspan="4" class="muted">Sin bloqueos vigentes.</td></tr>'; return; }
-  body.innerHTML = data.map((f) => `<tr>
-    <td>${esc(f.nombre)}</td>
-    <td><span class="chip ${f.estado === 'stop_sale' ? 'fb' : 'am'}">${f.estado === 'stop_sale' ? 'Stop sale' : 'On request'}</span></td>
-    <td class="muted">${esc(f.fecha_desde)}</td>
-    <td class="muted">${esc(f.fecha_hasta)}</td>
-  </tr>`).join('');
+  if (error) { cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
+  SS_VIGENTES_DATA = data || [];
+  ssRenderVigentes();
+}
+
+function ssRenderVigentes() {
+  const cont = document.getElementById('ss-vigentes');
+  if (!SS_VIGENTES_DATA) return;
+  if (!SS_VIGENTES_DATA.length) {
+    cont.innerHTML = '<div class="vig-vacio"><i class="fas fa-circle-check"></i><b>Sin bloqueos vigentes</b></div>';
+    return;
+  }
+  const filtro = (document.getElementById('ss-vig-buscar')?.value || '').trim().toLowerCase();
+  const filas = filtro ? SS_VIGENTES_DATA.filter((f) => f.nombre.toLowerCase().includes(filtro)) : SS_VIGENTES_DATA;
+  if (!filas.length) {
+    cont.innerHTML = `<div class="vig-vacio">Ningún hotel coincide con "${esc(filtro)}".</div>`;
+    return;
+  }
+  const grupos = ssAgruparPorHotel(filas, 'nombre');
+  const hotelesStop = grupos.filter((g) => g.peor === 'stop_sale').length;
+  const hotelesOnRequest = grupos.length - hotelesStop;
+
+  cont.innerHTML = `<div class="vig-resumen">
+      <div class="vig-kpi ${hotelesStop ? 'grave' : ''}"><b>${hotelesStop}</b><span>En stop sale</span></div>
+      <div class="vig-kpi ${hotelesOnRequest ? 'aviso' : ''}"><b>${hotelesOnRequest}</b><span>En on request</span></div>
+    </div>
+    <div style="margin-top:12px">${grupos.map(ssTarjetaVigente).join('')}</div>`;
 }
 
 /* ---------- Reasignaciones ---------- */
