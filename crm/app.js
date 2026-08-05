@@ -5785,6 +5785,10 @@ function addChatBubbleRedes(who, texto, loading) {
    web Y además se reasignó aparece UNA vez marcado "Ambos": contarlo en las dos
    listas inflaría el total justo en la pantalla que se usa para cobrar. */
 let WR_DATOS = null, wrFiltro = 'todos', wrBusqueda = '';
+// Selección para el marcado masivo -- Set aparte de SELECTED_LEADS (la de
+// Leads) porque son dos pantallas y dos acciones distintas conviviendo en el
+// mismo momento no deberían pisarse.
+const WR_SELECTED = new Set();
 
 const WR_ORIGEN = {
   web:        { txt: 'Web',       clase: 'ig' },
@@ -5805,14 +5809,22 @@ function setupWebReasignados() {
     wrBusqueda = e.target.value.trim().toLowerCase();
     wrPintarTabla();
   });
+  document.getElementById('wr-select-all').addEventListener('change', e => {
+    const visibles = [...document.querySelectorAll('#wr-body .wr-check')].map(cb => Number(cb.dataset.id));
+    visibles.forEach(id => e.target.checked ? WR_SELECTED.add(id) : WR_SELECTED.delete(id));
+    wrPintarTabla();
+  });
+  document.getElementById('wr-bulk-clear').onclick = () => { WR_SELECTED.clear(); wrPintarTabla(); };
+  document.getElementById('wr-bulk-agregar').onclick = () => wrMarcar([...WR_SELECTED], true);
+  document.getElementById('wr-bulk-quitar').onclick = () => wrMarcar([...WR_SELECTED], false);
 }
 
 async function loadWebReasignados() {
   const body = document.getElementById('wr-body');
-  body.innerHTML = '<tr><td colspan="7" class="muted">Cargando…</td></tr>';
+  body.innerHTML = '<tr><td colspan="8" class="muted">Cargando…</td></tr>';
   const { data, error } = await sb.rpc('comisiones_origen_panel');
   if (error || !data) {
-    body.innerHTML = `<tr><td colspan="7" class="muted">No se pudo cargar: ${esc(error?.message || '')}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="muted">No se pudo cargar: ${esc(error?.message || '')}</td></tr>`;
     return;
   }
   WR_DATOS = data;
@@ -5823,7 +5835,12 @@ async function loadWebReasignados() {
     { t: 'Ya vendidos', v: fmt(r.vendidos || 0), d: r.vendidos ? 'Con factura emitida' : 'Todavía ninguno cerró', i: 'fa-circle-check', c: 'var(--green)' },
     { t: 'Vendido', v: '$' + fmt(r.monto_vendido || 0), d: 'Suma de las facturas', i: 'fa-receipt', c: 'var(--purple)' },
     { t: 'Mi comisión', v: '$' + fmt(r.mi_comision_total || 0), d: `Al ${data.pct}% de lo vendido`, i: 'fa-hand-holding-dollar', c: 'var(--accent)' },
+    { t: 'Comisiones Bwrathanyel', v: fmt(r.comisiones_bwrathanyel || 0), d: 'Marcados a mano', i: 'fa-star', c: 'var(--yellow, #eab308)' },
   ]);
+  // Un lead sacado de la lista mientras estaba seleccionado (o vendido/filtrado
+  // fuera) no debe seguir contando para la barra de selección.
+  const idsVigentes = new Set((data.filas || []).map(f => f.id));
+  [...WR_SELECTED].forEach(id => { if (!idsVigentes.has(id)) WR_SELECTED.delete(id); });
   wrPintarTabla();
 }
 
@@ -5835,6 +5852,7 @@ function wrPintarTabla() {
     const pasaFiltro =
       wrFiltro === 'todos' ? true
       : wrFiltro === 'vendidos' ? f.monto_total != null
+      : wrFiltro === 'comisiones' ? f.en_manual
       // "Solo web" y "Solo reasignados" incluyen a los que son ambos: quien filtra
       // por web quiere ver todo lo que entró por la web, no lo que entró por la
       // web y encima nunca se reasignó.
@@ -5846,15 +5864,17 @@ function wrPintarTabla() {
   });
 
   if (!filas.length) {
-    body.innerHTML = `<tr><td colspan="7" class="muted">${
+    body.innerHTML = `<tr><td colspan="8" class="muted">${
       todas.length ? 'Ningún lead con ese filtro/búsqueda.' : 'Todavía no hay leads de estos dos orígenes.'}</td></tr>`;
+    wrActualizarBulkBar();
     return;
   }
   body.innerHTML = filas.map(f => {
     const o = WR_ORIGEN[f.origen] || WR_ORIGEN.web;
     const vendido = f.monto_total != null;
-    return `<tr class="wr-row" data-wr-id="${f.id}" style="cursor:pointer">
-      <td class="td-name">${esc(f.nombre || 'Sin nombre')}
+    return `<tr class="wr-row" data-wr-id="${f.id}">
+      <td><input type="checkbox" class="wr-check" data-id="${f.id}" ${WR_SELECTED.has(f.id) ? 'checked' : ''}></td>
+      <td class="td-name" style="cursor:pointer">${esc(f.nombre || 'Sin nombre')}
         ${f.telefono ? `<small class="muted" style="display:block">${esc(f.telefono)}</small>` : ''}</td>
       <td data-label="Origen"><span class="chip ${o.clase}">${o.txt}</span></td>
       <td data-label="Destino" class="muted">${esc(f.destino || '—')}</td>
@@ -5862,15 +5882,58 @@ function wrPintarTabla() {
       <td data-label="Asesor" class="muted">${esc(f.asesor || '—')}</td>
       <td data-label="Venta">${vendido ? '$' + fmt(f.monto_total) : '<span class="muted">—</span>'}</td>
       <td data-label="Mi comisión">${vendido ? `<b>$${fmt(f.mi_comision)}</b>` : '<span class="muted">—</span>'}</td>
+      <td><button type="button" class="ce-mini wr-marcar" data-id="${f.id}" data-en="${f.en_manual ? '1' : '0'}"
+        title="${f.en_manual ? 'Sacar de Comisiones Bwrathanyel' : 'Mandar a Comisiones Bwrathanyel'}">
+        <i class="fas ${f.en_manual ? 'fa-star' : 'fa-star-half-stroke'}"></i></button></td>
     </tr>`;
   }).join('');
+
   // Abre la ficha completa del cliente, mismo drawer que usan Leads y
   // Facturación -- reusa abrirClienteDesdeFacturacion porque acá tampoco hay
   // ya cargada la fila completa de `leads` (comisiones_origen_panel solo trae
-  // los campos que necesita el panel, no la ficha entera).
-  document.querySelectorAll('#wr-body .wr-row').forEach(tr => {
-    tr.addEventListener('click', () => window.abrirClienteDesdeFacturacion(Number(tr.dataset.wrId)));
+  // los campos que necesita el panel, no la ficha entera). Solo la celda del
+  // nombre abre la ficha: el resto de la fila es checkbox/botón, que no deben
+  // disparar el click de abrir por encima.
+  document.querySelectorAll('#wr-body .wr-row .td-name').forEach(td => {
+    td.addEventListener('click', () => window.abrirClienteDesdeFacturacion(Number(td.closest('tr').dataset.wrId)));
   });
+  document.querySelectorAll('#wr-body .wr-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const id = Number(cb.dataset.id);
+      if (cb.checked) WR_SELECTED.add(id); else WR_SELECTED.delete(id);
+      wrActualizarBulkBar();
+    });
+  });
+  document.querySelectorAll('#wr-body .wr-marcar').forEach(btn => {
+    btn.addEventListener('click', () => wrMarcar([Number(btn.dataset.id)], btn.dataset.en !== '1'));
+  });
+  wrActualizarBulkBar();
+}
+
+function wrActualizarBulkBar() {
+  const bar = document.getElementById('wr-bulk-bar');
+  const n = WR_SELECTED.size;
+  bar.style.display = n > 0 ? 'flex' : 'none';
+  document.getElementById('wr-bulk-count').textContent = `${n} seleccionado${n === 1 ? '' : 's'}`;
+  // Dentro de la pestaña "Comisiones Bwrathanyel" lo que se hace con lo
+  // seleccionado es sacarlo, no volver a agregarlo -- en cualquier otra
+  // pestaña es al revés.
+  document.getElementById('wr-bulk-agregar').style.display = wrFiltro === 'comisiones' ? 'none' : '';
+  document.getElementById('wr-bulk-quitar').style.display = wrFiltro === 'comisiones' ? '' : 'none';
+  const ids = [...document.querySelectorAll('#wr-body .wr-check')].map(cb => Number(cb.dataset.id));
+  const selectAll = document.getElementById('wr-select-all');
+  if (selectAll) selectAll.checked = ids.length > 0 && ids.every(id => WR_SELECTED.has(id));
+}
+
+async function wrMarcar(ids, activo) {
+  if (!ids.length) return;
+  const { error } = await sb.rpc('comisiones_manuales_set', { p_lead_ids: ids, p_activo: activo });
+  if (error) { errToast('No se pudo actualizar: ' + error.message); return; }
+  okToast(activo
+    ? `${ids.length} lead${ids.length === 1 ? '' : 's'} marcado${ids.length === 1 ? '' : 's'} en Comisiones Bwrathanyel`
+    : `${ids.length} lead${ids.length === 1 ? '' : 's'} sacado${ids.length === 1 ? '' : 's'} de Comisiones Bwrathanyel`);
+  ids.forEach(id => WR_SELECTED.delete(id));
+  loadWebReasignados();
 }
 
 async function wrGuardarPct() {
