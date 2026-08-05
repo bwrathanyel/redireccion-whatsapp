@@ -130,6 +130,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
   'ia-atencion': ['IA Atención al Cliente', 'Posadas y apartamentos que pidieron el asistente desde la página'],
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
+  'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles que manda BT Travel -- cargá el PDF y confirmá antes de publicar'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -1590,7 +1591,7 @@ async function startApp() {
   arrancar(
     setupMetricas, setupRanking, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupGestionPersonal, setupLeadsTabs,
-    setupBuscadorIATarifario, setupCerebroIA, setupWebReasignados,
+    setupBuscadorIATarifario, setupCerebroIA, setupWebReasignados, setupStopSales,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers,
@@ -5945,6 +5946,199 @@ async function wrGuardarPct() {
   loadWebReasignados();
 }
 
+/* ---------- Stop Sales (disponibilidad de hoteles, BT Travel) ----------
+   Dos pasos SIEMPRE, nunca uno solo (mismo principio que "Cargar flyer"): el
+   PDF se lee y se muestra, una persona lo revisa y recién ahí se confirma.
+   La lectura no usa IA -- lee directo el color de cada celda del PDF (ver
+   supabase/functions/_shared/stop_sales_parser.ts), así que lo único que puede
+   fallar es el cruce de nombres BT -> hotel real, que por eso queda a mano. */
+let SS_DATA = null;          // último resultado de 'leer', sin publicar todavía
+let SS_MAPEOS = {};          // bt_nombre -> producto_id elegido en ESTA carga (null = "no lo tengo")
+let SS_PRODUCTOS_CACHE = null;
+
+function setupStopSales() {
+  document.getElementById('ss-file').addEventListener('change', (e) => {
+    const f = e.target.files?.[0];
+    if (f) ssLeer(f);
+    e.target.value = '';
+  });
+}
+
+async function ssProductosHotel() {
+  if (SS_PRODUCTOS_CACHE) return SS_PRODUCTOS_CACHE;
+  const { data, error } = await sb.from('productos').select('id,nombre,destino').eq('tipo', 'hotel').eq('activo', true).order('nombre');
+  if (error) { errToast('No se pudo cargar la lista de hoteles: ' + error.message); return []; }
+  SS_PRODUCTOS_CACHE = data || [];
+  return SS_PRODUCTOS_CACHE;
+}
+
+async function ssLeer(file) {
+  const drop = document.getElementById('ss-drop');
+  const preview = document.getElementById('ss-preview');
+  const mapeoBox = document.getElementById('ss-mapeo');
+  const alertaBox = document.getElementById('ss-alerta');
+  document.getElementById('ss-publicar-box').style.display = 'none';
+  mapeoBox.innerHTML = ''; alertaBox.innerHTML = '';
+  drop.classList.add('cargando');
+  preview.innerHTML = `<div class="cp-pensando"><i class="fas fa-circle-notch fa-spin"></i> Leyendo el PDF…</div>`;
+
+  let base64;
+  try { base64 = await archivoABase64(file); }
+  catch (e) { drop.classList.remove('cargando'); preview.innerHTML = ''; errToast('No se pudo leer el archivo: ' + e.message); return; }
+
+  const { data, error } = await sb.functions.invoke('stop-sales-leer', {
+    body: { accion: 'leer', pdf_base64: base64, nombre_archivo: file.name },
+  });
+  drop.classList.remove('cargando');
+  if (error || !data?.ok) {
+    preview.innerHTML = `<div class="vig-vacio" style="text-align:left"><b>No se pudo leer el PDF.</b>
+      <div style="font-size:12.5px;margin-top:6px">${esc(data?.detalle || data?.error || error?.message || '')}</div></div>`;
+    return;
+  }
+
+  SS_DATA = data;
+  SS_MAPEOS = {};
+  for (const bt of data.sin_mapear) SS_MAPEOS[bt] = undefined; // undefined = todavía sin elegir
+
+  if (data.alerta_cobertura) {
+    alertaBox.innerHTML = `<div class="vig-vacio" style="text-align:left;border-color:#f59e0b66;background:#f59e0b14">
+      <i class="fas fa-triangle-exclamation" style="color:#f59e0b"></i> <b>${esc(data.alerta_cobertura)}</b></div>`;
+  }
+
+  if (data.sin_mapear.length) await ssPintarMapeo();
+  ssPintarPreview();
+  ssActualizarBotonPublicar();
+}
+
+async function ssPintarMapeo() {
+  const box = document.getElementById('ss-mapeo');
+  const hoteles = await ssProductosHotel();
+  box.innerHTML = `<div class="card" style="margin-top:12px">
+    <h2><i class="fas fa-link"></i> Hoteles nuevos -- confirmá a qué hotel del tarifario corresponde cada uno</h2>
+    <div class="csub">Se recuerda para la próxima carga. "No lo tengo" también se recuerda, así no se vuelve a preguntar por un hotel que no vendemos.</div>
+    <div id="ss-mapeo-filas" style="margin-top:10px;display:flex;flex-direction:column;gap:10px"></div>
+  </div>`;
+  const filas = document.getElementById('ss-mapeo-filas');
+  filas.innerHTML = SS_DATA.sin_mapear.map((bt) => {
+    const candidatos = SS_DATA.candidatos[bt] || [];
+    const idsCandidatos = new Set(candidatos.map((c) => c.producto_id));
+    const opciones = [
+      `<option value="">— elegí un hotel —</option>`,
+      ...candidatos.map((c) => `<option value="${c.producto_id}">★ ${esc(c.nombre)}${c.destino ? ` (${esc(c.destino)})` : ''}</option>`),
+      candidatos.length ? `<option disabled>──────────</option>` : '',
+      ...hoteles.filter((h) => !idsCandidatos.has(h.id)).map((h) => `<option value="${h.id}">${esc(h.nombre)}${h.destino ? ` (${esc(h.destino)})` : ''}</option>`),
+      `<option disabled>──────────</option>`,
+      `<option value="ninguno">No lo tengo / no corresponde a ningún hotel nuestro</option>`,
+    ].join('');
+    return `<div class="dgrid" style="grid-template-columns:1fr 1.4fr;align-items:center">
+      <div><b>${esc(bt)}</b></div>
+      <select class="ei" data-ss-mapeo="${esc(bt)}">${opciones}</select>
+    </div>`;
+  }).join('');
+  filas.querySelectorAll('[data-ss-mapeo]').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      const bt = sel.dataset.ssMapeo;
+      SS_MAPEOS[bt] = sel.value === '' ? undefined : sel.value === 'ninguno' ? null : Number(sel.value);
+      ssActualizarBotonPublicar();
+    });
+  });
+}
+
+// Recorte de mes -> nombre para el título de cada bloque de la previa.
+const SS_MESES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+function ssPintarPreview() {
+  const box = document.getElementById('ss-preview');
+  const totalCeldas = SS_DATA.paginas.reduce((a, p) => a + p.filas.length, 0);
+  box.innerHTML = `<div class="card" style="margin-top:12px">
+    <h2><i class="fas fa-table-cells"></i> Lo que se leyó del PDF</h2>
+    <div class="csub">${totalCeldas} bloqueo(s) en ${SS_DATA.hoteles_bt.length} hotel(es), en ${SS_DATA.paginas.length} mes(es). Compará contra el PDF original antes de confirmar.</div>
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:14px">
+      ${SS_DATA.paginas.map((p) => `
+        <div>
+          <b>${esc(SS_MESES[p.mes] || p.titulo)} ${p.anio}</b>
+          ${!p.filas.length ? '<div class="muted" style="font-size:12.5px;margin-top:4px">Sin bloqueos este mes.</div>' : `
+          <table style="margin-top:6px"><thead><tr><th>Hotel</th><th>Estado</th><th>Días</th></tr></thead><tbody>
+            ${p.filas.map((f) => `<tr>
+              <td>${esc(f.hotel)}</td>
+              <td><span class="chip ${f.estado === 'stop_sale' ? 'fb' : 'am'}">${f.estado === 'stop_sale' ? 'Stop sale' : 'On request'}</span></td>
+              <td>${f.fecha_desde.slice(8, 10)} al ${f.fecha_hasta.slice(8, 10)}${f.problemas.length ? ` <i class="fas fa-triangle-exclamation" style="color:#f59e0b" title="${esc(f.problemas.join(', '))}"></i>` : ''}</td>
+            </tr>`).join('')}
+          </tbody></table>`}
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function ssActualizarBotonPublicar() {
+  const faltan = SS_DATA.sin_mapear.filter((bt) => SS_MAPEOS[bt] === undefined);
+  const box = document.getElementById('ss-publicar-box');
+  const btn = document.getElementById('ss-publicar');
+  box.style.display = SS_DATA ? '' : 'none';
+  if (faltan.length) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-hourglass-half"></i> Faltan ${faltan.length} hotel(es) por confirmar arriba`;
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = `<i class="fas fa-check"></i> Confirmar y publicar`;
+  }
+}
+
+document.getElementById('ss-publicar')?.addEventListener('click', ssPublicar);
+
+async function ssPublicar() {
+  if (!SS_DATA) return;
+  const btn = document.getElementById('ss-publicar');
+  btn.disabled = true; btn.innerHTML = 'Publicando... <i class="fas fa-spinner fa-spin"></i>';
+
+  // 1) Confirmar los mapeos nuevos de esta carga (incluye "no lo tengo" = null).
+  for (const bt of SS_DATA.sin_mapear) {
+    const pid = SS_MAPEOS[bt];
+    const { error } = await sb.rpc('stop_sales_mapeo_confirmar', { p_bt_nombre: bt, p_producto_id: pid });
+    if (error) { errToast(`No se pudo confirmar "${bt}": ` + error.message); btn.disabled = false; ssActualizarBotonPublicar(); return; }
+  }
+
+  // 2) Resolver producto_id final por fila (mapeo ya existente + lo recién
+  //    confirmado) y armar las filas a publicar -- las de hoteles marcados
+  //    "no lo tengo" (producto_id null) se excluyen, no se inventan.
+  const mapeoTotal = { ...SS_DATA.mapeo_existente, ...SS_MAPEOS };
+  const filas = [];
+  for (const p of SS_DATA.paginas) {
+    for (const f of p.filas) {
+      const pid = mapeoTotal[f.hotel];
+      if (pid == null) continue;
+      filas.push({ producto_id: pid, fecha_desde: f.fecha_desde, fecha_hasta: f.fecha_hasta, estado: f.estado });
+    }
+  }
+
+  const cargaId = crypto.randomUUID();
+  const { data, error } = await sb.rpc('stop_sales_publicar', { p_filas: filas, p_carga_id: cargaId });
+  btn.disabled = false;
+  if (error) { errToast('No se pudo publicar: ' + error.message); ssActualizarBotonPublicar(); return; }
+
+  okToast(`Publicado: ${data.insertados} bloqueo(s) en ${new Set(filas.map((f) => f.producto_id)).size} hotel(es)`);
+  SS_DATA = null; SS_MAPEOS = {};
+  document.getElementById('ss-preview').innerHTML = '';
+  document.getElementById('ss-mapeo').innerHTML = '';
+  document.getElementById('ss-alerta').innerHTML = '';
+  document.getElementById('ss-publicar-box').style.display = 'none';
+  loadStopSalesVigentes();
+}
+
+async function loadStopSalesVigentes() {
+  const body = document.getElementById('ss-vigentes-body');
+  body.innerHTML = '<tr><td colspan="4" class="muted">Cargando…</td></tr>';
+  const { data, error } = await sb.rpc('stop_sales_vigentes');
+  if (error) { body.innerHTML = `<tr><td colspan="4" class="muted">No se pudo cargar: ${esc(error.message)}</td></tr>`; return; }
+  if (!data?.length) { body.innerHTML = '<tr><td colspan="4" class="muted">Sin bloqueos vigentes.</td></tr>'; return; }
+  body.innerHTML = data.map((f) => `<tr>
+    <td>${esc(f.nombre)}</td>
+    <td><span class="chip ${f.estado === 'stop_sale' ? 'fb' : 'am'}">${f.estado === 'stop_sale' ? 'Stop sale' : 'On request'}</span></td>
+    <td class="muted">${esc(f.fecha_desde)}</td>
+    <td class="muted">${esc(f.fecha_hasta)}</td>
+  </tr>`).join('');
+}
+
 /* ---------- Reasignaciones ---------- */
 let rgPage = 1;
 const MOTIVO_LABEL = { timeout_no_respuesta: 'Timeout', manual_no_puedo: 'No puedo' };
@@ -8562,6 +8756,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'cerebro-ia') loadCerebroIA();
   if (sec === 'ia-atencion') loadIaAtencion();
   if (sec === 'web-reasignados') loadWebReasignados();
+  if (sec === 'stop-sales') loadStopSalesVigentes();
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'tareas') loadTareas();

@@ -1895,6 +1895,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
       <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> IA Atención al Cliente</a>
       <a class="nav-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados</a>
+      <a class="nav-item nav-admin-only" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales</a>
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
       <a class="nav-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
@@ -3272,6 +3273,40 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       </div>
     </section>
 
+    <!-- STOP SALES (BT Travel: disponibilidad de hoteles) -->
+    <section class="section" id="sec-stop-sales">
+      <div class="ce-intro">
+        BT Travel manda cada tanto un PDF con qué hoteles están <b>en stop sale</b> (sin cupo) o
+        <b>on request</b> (hay que confirmar) para cada día del mes. Subilo acá: se lee solo
+        (sin IA -- lee directo el color de cada celda del PDF, cero riesgo de inventar una
+        fecha) y te muestra la grilla para que la revises antes de confirmar.
+      </div>
+
+      <label class="fl-drop" id="ss-drop">
+        <input type="file" id="ss-file" accept="application/pdf" hidden>
+        <i class="fas fa-cloud-arrow-up"></i>
+        <b>Elegí el PDF de Stop Sales</b>
+        <span>El que manda BT Travel por mail</span>
+      </label>
+
+      <div id="ss-alerta"></div>
+      <div id="ss-mapeo"></div>
+      <div id="ss-preview"></div>
+      <div id="ss-publicar-box" style="display:none;margin-top:14px">
+        <button class="dbtn save" id="ss-publicar"><i class="fas fa-check"></i> Confirmar y publicar</button>
+      </div>
+
+      <div class="card" style="margin-top:20px">
+        <h2><i class="fas fa-calendar-xmark"></i> Bloqueos vigentes hoy</h2>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Hotel</th><th>Estado</th><th>Desde</th><th>Hasta</th></tr></thead>
+            <tbody id="ss-vigentes-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- REDES (Instagram + TikTok: métricas + analista IA) -->
     <section class="section" id="sec-redes">
       <div class="seg-group" id="redes-red-tabs">
@@ -3401,6 +3436,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> IA Atención al Cliente <span class="si-sub">Posadas que quieren el asistente</span></a>
   <a class="sheet-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados <span class="si-sub">Los leads por los que cobrás comisión</span></a>
+  <a class="sheet-item nav-admin-only" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales <span class="si-sub">Disponibilidad de hoteles (BT Travel)</span></a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
   <a class="sheet-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
