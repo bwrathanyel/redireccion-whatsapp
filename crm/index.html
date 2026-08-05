@@ -1894,6 +1894,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
       <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
       <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> IA Atención al Cliente</a>
+      <a class="nav-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados</a>
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
       <a class="nav-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
@@ -3222,6 +3223,44 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       </div>
     </div>
 
+    <!-- WEB Y REASIGNADOS (comisiones del dueño por origen del lead) -->
+    <section class="section" id="sec-web-reasignados">
+      <div class="ce-intro">
+        Todos los leads que entraron <b>por la página web</b> o que en algún momento
+        <b>se reasignaron</b>, juntos en un solo lugar. Son los dos orígenes por los que
+        cobrás comisión.<br>
+        Un lead puede ser de los dos (entró por la web y después se reasignó): aparece
+        una sola vez, marcado <b>Ambos</b>, para no contarlo doble.
+      </div>
+
+      <div class="kpis" id="wr-kpis"></div>
+
+      <div class="ce-barra">
+        <button class="ce-mini on" data-wr-filtro="todos">Todos</button>
+        <button class="ce-mini" data-wr-filtro="web">Solo web</button>
+        <button class="ce-mini" data-wr-filtro="reasignado">Solo reasignados</button>
+        <button class="ce-mini" data-wr-filtro="vendidos">Vendidos</button>
+        <span style="flex:1"></span>
+        <label class="ce-lbl" style="margin:0">Mi comisión</label>
+        <input class="ei" id="wr-pct" type="number" min="0" max="100" step="0.5" style="max-width:80px">
+        <span class="ce-vig">%</span>
+        <button class="ce-mini" id="wr-guardar-pct">Guardar</button>
+        <button class="ce-mini" id="wr-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th>Cliente</th><th>Origen</th><th>Destino</th><th>Estado</th>
+              <th>Asesor</th><th>Venta</th><th>Mi comisión</th>
+            </tr></thead>
+            <tbody id="wr-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- REDES (Instagram + TikTok: métricas + analista IA) -->
     <section class="section" id="sec-redes">
       <div class="seg-group" id="redes-red-tabs">
@@ -3350,6 +3389,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> IA Atención al Cliente <span class="si-sub">Posadas que quieren el asistente</span></a>
+  <a class="sheet-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados <span class="si-sub">Los leads por los que cobrás comisión</span></a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
   <a class="sheet-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>

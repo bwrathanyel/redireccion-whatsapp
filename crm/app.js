@@ -129,6 +129,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
   'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
   'ia-atencion': ['IA Atención al Cliente', 'Posadas y apartamentos que pidieron el asistente desde la página'],
+  'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -1589,7 +1590,7 @@ async function startApp() {
   arrancar(
     setupMetricas, setupRanking, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupGestionPersonal, setupLeadsTabs,
-    setupBuscadorIATarifario, setupCerebroIA,
+    setupBuscadorIATarifario, setupCerebroIA, setupWebReasignados,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers,
@@ -5779,6 +5780,91 @@ function addChatBubbleRedes(who, texto, loading) {
   return el;
 }
 
+/* ---------- Web y Reasignados (comisiones del dueño por origen del lead) ----
+   Los dos orígenes por los que cobra comisión, juntos. Un lead que entró por la
+   web Y además se reasignó aparece UNA vez marcado "Ambos": contarlo en las dos
+   listas inflaría el total justo en la pantalla que se usa para cobrar. */
+let WR_DATOS = null, wrFiltro = 'todos';
+
+const WR_ORIGEN = {
+  web:        { txt: 'Web',       clase: 'ig' },
+  reasignado: { txt: 'Reasignado', clase: 'fb' },
+  ambos:      { txt: 'Ambos',     clase: 'am' },
+};
+
+function setupWebReasignados() {
+  document.getElementById('wr-recargar').onclick = loadWebReasignados;
+  document.getElementById('wr-guardar-pct').onclick = wrGuardarPct;
+  document.querySelectorAll('[data-wr-filtro]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('[data-wr-filtro]').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    wrFiltro = b.dataset.wrFiltro;
+    wrPintarTabla();
+  });
+}
+
+async function loadWebReasignados() {
+  const body = document.getElementById('wr-body');
+  body.innerHTML = '<tr><td colspan="7" class="muted">Cargando…</td></tr>';
+  const { data, error } = await sb.rpc('comisiones_origen_panel');
+  if (error || !data) {
+    body.innerHTML = `<tr><td colspan="7" class="muted">No se pudo cargar: ${esc(error?.message || '')}</td></tr>`;
+    return;
+  }
+  WR_DATOS = data;
+  document.getElementById('wr-pct').value = data.pct ?? 5;
+  const r = data.resumen || {};
+  pintarKPIs('wr-kpis', [
+    { t: 'Leads en total', v: fmt(r.total || 0), d: `${fmt(r.web || 0)} web · ${fmt(r.reasignados || 0)} reasignados · ${fmt(r.ambos || 0)} ambos`, i: 'fa-users', c: 'var(--blue)' },
+    { t: 'Ya vendidos', v: fmt(r.vendidos || 0), d: r.vendidos ? 'Con factura emitida' : 'Todavía ninguno cerró', i: 'fa-circle-check', c: 'var(--green)' },
+    { t: 'Vendido', v: '$' + fmt(r.monto_vendido || 0), d: 'Suma de las facturas', i: 'fa-receipt', c: 'var(--purple)' },
+    { t: 'Mi comisión', v: '$' + fmt(r.mi_comision_total || 0), d: `Al ${data.pct}% de lo vendido`, i: 'fa-hand-holding-dollar', c: 'var(--accent)' },
+  ]);
+  wrPintarTabla();
+}
+
+function wrPintarTabla() {
+  const body = document.getElementById('wr-body');
+  const todas = WR_DATOS?.filas || [];
+  const filas = todas.filter(f =>
+    wrFiltro === 'todos' ? true
+    : wrFiltro === 'vendidos' ? f.monto_total != null
+    // "Solo web" y "Solo reasignados" incluyen a los que son ambos: quien filtra
+    // por web quiere ver todo lo que entró por la web, no lo que entró por la
+    // web y encima nunca se reasignó.
+    : wrFiltro === 'web' ? (f.origen === 'web' || f.origen === 'ambos')
+    : (f.origen === 'reasignado' || f.origen === 'ambos'));
+
+  if (!filas.length) {
+    body.innerHTML = `<tr><td colspan="7" class="muted">${
+      todas.length ? 'Ningún lead con ese filtro.' : 'Todavía no hay leads de estos dos orígenes.'}</td></tr>`;
+    return;
+  }
+  body.innerHTML = filas.map(f => {
+    const o = WR_ORIGEN[f.origen] || WR_ORIGEN.web;
+    const vendido = f.monto_total != null;
+    return `<tr>
+      <td class="td-name">${esc(f.nombre || 'Sin nombre')}
+        ${f.telefono ? `<small class="muted" style="display:block">${esc(f.telefono)}</small>` : ''}</td>
+      <td data-label="Origen"><span class="chip ${o.clase}">${o.txt}</span></td>
+      <td data-label="Destino" class="muted">${esc(f.destino || '—')}</td>
+      <td data-label="Estado">${esc(f.estado || '—')}</td>
+      <td data-label="Asesor" class="muted">${esc(f.asesor || '—')}</td>
+      <td data-label="Venta">${vendido ? '$' + fmt(f.monto_total) : '<span class="muted">—</span>'}</td>
+      <td data-label="Mi comisión">${vendido ? `<b>$${fmt(f.mi_comision)}</b>` : '<span class="muted">—</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function wrGuardarPct() {
+  const pct = parseFloat(document.getElementById('wr-pct').value);
+  if (!(pct >= 0 && pct <= 100)) { errToast('El porcentaje tiene que estar entre 0 y 100'); return; }
+  const { error } = await sb.rpc('guardar_comision_origen_pct', { p_pct: pct });
+  if (error) { errToast('No se pudo guardar: ' + error.message); return; }
+  okToast(`Comisión guardada en ${pct}%`);
+  loadWebReasignados();
+}
+
 /* ---------- Reasignaciones ---------- */
 let rgPage = 1;
 const MOTIVO_LABEL = { timeout_no_respuesta: 'Timeout', manual_no_puedo: 'No puedo' };
@@ -8395,6 +8481,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'galeria') loadGaleria();
   if (sec === 'cerebro-ia') loadCerebroIA();
   if (sec === 'ia-atencion') loadIaAtencion();
+  if (sec === 'web-reasignados') loadWebReasignados();
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'tareas') loadTareas();
@@ -9382,6 +9469,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-05', emoji: '💰', titulo: 'Web y Reasignados', texto: 'Sección nueva (solo admin) con todos los leads que entraron por la página web o que en algún momento se reasignaron, juntos en un solo lugar. Se puede filtrar por origen y ver cuáles ya cerraron en venta, con el monto y la comisión calculada al porcentaje que configures ahí mismo. Los que son de los dos orígenes aparecen una sola vez, marcados "Ambos", para no contarlos doble.', roles: ['admin'] },
   { fecha: '2026-08-05', emoji: '🛡️', titulo: 'El CRM ya no se cae entero por una sola sección', texto: 'El 3 de agosto el CRM quedó inutilizable después de una actualización. La causa: al publicar, el navegador podía quedarse con una mitad nueva y otra vieja, y con esa mezcla una sección fallaba y arrastraba a todas las demás (Voucher, Tareas, Freelancers dejaban de cargar). Se arregló por dos lados: ahora las dos mitades entran juntas o no entra ninguna, y si una sección falla queda apagada solo ella, sin tocar el resto.', roles: ROLES_TODOS },
   { fecha: '2026-08-02', emoji: '📊', titulo: 'Clientes de la IA: cuánto consumen y cómo va su cobro', texto: 'En "IA Atención al Cliente" hay dos pestañas. Interesados es lo de antes, con un botón nuevo para convertir una solicitud en cliente (le crea su rama de la IA). Clientes muestra, por cada uno: cuántos mensajes lleva del plan, cuántas personas distintas le escribieron este mes, cuánto nos costó de verdad, cuánto se ganó, y si ya pagó. Al 80% del plan avisa y propone el siguiente — la IA nunca se corta ni se cobra nada solo.', roles: ['admin'] },
   { fecha: '2026-08-02', emoji: '🌱', titulo: 'Crear ramas de la IA desde el CRM', texto: 'En Cerebro IA > Ramas hay un botón "Nueva rama": le ponés el nombre de la posada y queda creada heredando toda la Base (cómo vende, qué nunca inventa, cuándo pasa a un humano). Se puede apagar y volver a prender sin perder lo que le hayas escrito, y borrar si nunca se le cargó nada. Ojo: la rama todavía no tiene forma de cargar sus habitaciones y fotos, ni le llegan mensajes — sirve para armarle la identidad y probarla en "Probar".', roles: ['admin'] },
