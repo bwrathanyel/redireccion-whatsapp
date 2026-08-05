@@ -5784,7 +5784,7 @@ function addChatBubbleRedes(who, texto, loading) {
    Los dos orígenes por los que cobra comisión, juntos. Un lead que entró por la
    web Y además se reasignó aparece UNA vez marcado "Ambos": contarlo en las dos
    listas inflaría el total justo en la pantalla que se usa para cobrar. */
-let WR_DATOS = null, wrFiltro = 'todos';
+let WR_DATOS = null, wrFiltro = 'todos', wrBusqueda = '';
 
 const WR_ORIGEN = {
   web:        { txt: 'Web',       clase: 'ig' },
@@ -5799,6 +5799,10 @@ function setupWebReasignados() {
     document.querySelectorAll('[data-wr-filtro]').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     wrFiltro = b.dataset.wrFiltro;
+    wrPintarTabla();
+  });
+  document.getElementById('wr-buscar').addEventListener('input', e => {
+    wrBusqueda = e.target.value.trim().toLowerCase();
     wrPintarTabla();
   });
 }
@@ -5826,24 +5830,30 @@ async function loadWebReasignados() {
 function wrPintarTabla() {
   const body = document.getElementById('wr-body');
   const todas = WR_DATOS?.filas || [];
-  const filas = todas.filter(f =>
-    wrFiltro === 'todos' ? true
-    : wrFiltro === 'vendidos' ? f.monto_total != null
-    // "Solo web" y "Solo reasignados" incluyen a los que son ambos: quien filtra
-    // por web quiere ver todo lo que entró por la web, no lo que entró por la
-    // web y encima nunca se reasignó.
-    : wrFiltro === 'web' ? (f.origen === 'web' || f.origen === 'ambos')
-    : (f.origen === 'reasignado' || f.origen === 'ambos'));
+  const q = wrBusqueda;
+  const filas = todas.filter(f => {
+    const pasaFiltro =
+      wrFiltro === 'todos' ? true
+      : wrFiltro === 'vendidos' ? f.monto_total != null
+      // "Solo web" y "Solo reasignados" incluyen a los que son ambos: quien filtra
+      // por web quiere ver todo lo que entró por la web, no lo que entró por la
+      // web y encima nunca se reasignó.
+      : wrFiltro === 'web' ? (f.origen === 'web' || f.origen === 'ambos')
+      : (f.origen === 'reasignado' || f.origen === 'ambos');
+    if (!pasaFiltro) return false;
+    if (!q) return true;
+    return (f.nombre || '').toLowerCase().includes(q) || (f.telefono || '').toLowerCase().includes(q);
+  });
 
   if (!filas.length) {
     body.innerHTML = `<tr><td colspan="7" class="muted">${
-      todas.length ? 'Ningún lead con ese filtro.' : 'Todavía no hay leads de estos dos orígenes.'}</td></tr>`;
+      todas.length ? 'Ningún lead con ese filtro/búsqueda.' : 'Todavía no hay leads de estos dos orígenes.'}</td></tr>`;
     return;
   }
   body.innerHTML = filas.map(f => {
     const o = WR_ORIGEN[f.origen] || WR_ORIGEN.web;
     const vendido = f.monto_total != null;
-    return `<tr>
+    return `<tr class="wr-row" data-wr-id="${f.id}" style="cursor:pointer">
       <td class="td-name">${esc(f.nombre || 'Sin nombre')}
         ${f.telefono ? `<small class="muted" style="display:block">${esc(f.telefono)}</small>` : ''}</td>
       <td data-label="Origen"><span class="chip ${o.clase}">${o.txt}</span></td>
@@ -5854,6 +5864,13 @@ function wrPintarTabla() {
       <td data-label="Mi comisión">${vendido ? `<b>$${fmt(f.mi_comision)}</b>` : '<span class="muted">—</span>'}</td>
     </tr>`;
   }).join('');
+  // Abre la ficha completa del cliente, mismo drawer que usan Leads y
+  // Facturación -- reusa abrirClienteDesdeFacturacion porque acá tampoco hay
+  // ya cargada la fila completa de `leads` (comisiones_origen_panel solo trae
+  // los campos que necesita el panel, no la ficha entera).
+  document.querySelectorAll('#wr-body .wr-row').forEach(tr => {
+    tr.addEventListener('click', () => window.abrirClienteDesdeFacturacion(Number(tr.dataset.wrId)));
+  });
 }
 
 async function wrGuardarPct() {
