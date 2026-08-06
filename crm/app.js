@@ -6028,6 +6028,13 @@ let SS_MAPEOS = {};          // bt_nombre -> producto_id elegido en ESTA carga (
 let SS_PRODUCTOS_CACHE = null;
 
 function setupStopSales() {
+  // Cargar/mapear/publicar sigue siendo solo admin (decidido 2026-08-06: la
+  // lectura de "vigentes hoy" se abrió a todo rol, la escritura no). La
+  // sección en sí ya no es nav-admin-only -- se esconde acá adentro, no en el
+  // menú, para que cualquier rol pueda entrar y ver los bloqueos vigentes.
+  const adminBox = document.getElementById('ss-admin-box');
+  if (adminBox) adminBox.style.display = ROL === 'admin' ? '' : 'none';
+
   document.getElementById('ss-file').addEventListener('change', (e) => {
     const f = e.target.files?.[0];
     if (f) ssLeer(f);
@@ -8949,7 +8956,12 @@ function setupNav() {
    reglas de rol aunque el sidebar entero esté oculto en móvil -- así esto no
    se desincroniza cuando se agregue o saque una sección del menú. */
 const BN_MAX = 7;                                              // incluye "Yo"
-const BN_DEFAULT = ['hoy', 'leads', 'mensajes', 'tarifario'];
+// stop-sales y gestion-personal sumados 2026-08-06: bnSeleccion() ya filtra
+// por lo que el rol puede ver (vía bnCatalogo/getComputedStyle), así que basta
+// con agregarlos acá una sola vez -- a un asesor/marketing/boleteria le queda
+// "stop-sales" (ahora visible para todo rol) y se le cae solo "gestion-personal"
+// (sigue nav-admin-only); a un admin le quedan las dos.
+const BN_DEFAULT = ['hoy', 'leads', 'mensajes', 'tarifario', 'stop-sales', 'gestion-personal'];
 // "Hoy" solo existe en móvil (no está en el sidebar), así que va a mano.
 const BN_HOY = { sec: 'hoy', icono: 'fas fa-house', label: 'Hoy' };
 // Nombres cortos: en una barra de 7 no entra "Gestión de Personal".
