@@ -6573,7 +6573,7 @@ async function loadStopSalesVigentes() {
   const { data, error } = await sb.rpc('stop_sales_vigentes');
   if (error) { cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
   SS_VIGENTES_DATA = data || [];
-  ssView = initViewSwitcher('ss-view-switch', 'stop-sales', 'hoteles', (v) => { ssView = v; SS_DIA_ABIERTO = null; ssRenderVigentes(); }, ['calendario', 'hoteles']);
+  ssView = initViewSwitcher('ss-view-switch', 'stop-sales', 'calendario', (v) => { ssView = v; SS_DIA_ABIERTO = null; ssRenderVigentes(); }, ['calendario', 'hoteles']);
   ssRenderVigentes();
 }
 
@@ -6604,17 +6604,17 @@ function ssFilasVisibles() {
 function ssChipsHoteles() {
   const porNombre = new Map();
   for (const f of SS_VIGENTES_DATA) {
-    if (!porNombre.has(f.nombre)) porNombre.set(f.nombre, { n: 0, tieneStop: false });
-    const g = porNombre.get(f.nombre);
-    g.n++;
-    if (f.estado === 'stop_sale') g.tieneStop = true;
+    porNombre.set(f.nombre, (porNombre.get(f.nombre) || 0) + 1);
   }
+  // Color por hotel, no por estado -- acá TODO es stop sale, así que
+  // rojo/ámbar no distingue nada y quedaba muy monocromático. Mismo
+  // ADV_COLORS que "Carga por asesor" (app.js:122).
   return [...porNombre.entries()]
-    .sort((a, b) => b[1].n - a[1].n)
-    .map(([nombre, g]) => {
-      const color = g.tieneStop ? '#ef4444' : '#e0a030';
+    .sort((a, b) => b[1] - a[1])
+    .map(([nombre, n], i) => {
+      const color = ADV_COLORS[i % ADV_COLORS.length];
       const on = ssHotelSel === nombre;
-      return `<button type="button" class="ss-hotel-chip${on ? ' on' : ''}" data-ss-hotel="${esc(nombre)}" style="--c:${color}">${esc(nombre)} <span>${g.n}</span></button>`;
+      return `<button type="button" class="ss-hotel-chip${on ? ' on' : ''}" data-ss-hotel="${esc(nombre)}" style="--c:${color}">${esc(nombre)} <span>${n}</span></button>`;
     }).join('');
 }
 
