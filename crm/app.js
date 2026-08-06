@@ -7889,6 +7889,9 @@ function openProductoDrawer(x) {
       <button class="dbtn save" id="tar-notas-save" type="button" style="margin-top:8px"><i class="fas fa-floppy-disk"></i> Guardar notas</button>
       <div class="eb-title" style="margin-top:16px"><i class="fas fa-images"></i> Fotos (solo admin)</div>
       <div id="tar-fotos-admin"><div class="muted" style="font-size:12.5px">Cargando...</div></div>
+      ${!esPromo ? `
+      <div class="eb-title" style="margin-top:16px"><i class="fas fa-video"></i> Video (piloto, solo admin)</div>
+      <div id="tar-video-admin"><div class="muted" style="font-size:12.5px">Cargando...</div></div>` : ''}
       ${esPromo
         ? `<button class="dbtn gh" id="tar-editar-promo" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Editar esta promoción</button>`
         : `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>`}
@@ -7905,6 +7908,54 @@ function openProductoDrawer(x) {
   if (ROL === 'admin') {
     document.getElementById('tar-notas-save').onclick = () => guardarNotasTarifario(esPromo ? 'promociones' : 'productos', x.id);
     cargarFotosAdmin(esPromo ? 'promocion_fotos' : 'producto_fotos', esPromo ? 'promocion_id' : 'producto_id', x.id, esPromo ? 'promos' : 'hoteles');
+    if (!esPromo) cargarVideoAdmin(x.id, x.video_url || null);
+  }
+}
+// Piloto de video (ver docs/superpowers/specs/2026-08-06-mifafi-video-piloto-design.md):
+// sube directo al Worker de fotos vía la Edge Function producto-video-subir,
+// que valida rol admin y guarda productos.video_url. Un solo video por
+// producto -- subir otro reemplaza al anterior.
+const TAR_VIDEO_LIMITE = 25 * 1024 * 1024, TAR_VIDEO_MIME = ['video/mp4', 'video/quicktime', 'video/webm'];
+const VIDEO_SUBIR_FN = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/producto-video-subir';
+function cargarVideoAdmin(productoId, videoUrl) {
+  const box = document.getElementById('tar-video-admin');
+  if (!box) return;
+  box.innerHTML = `
+    ${videoUrl ? `<video src="${esc(videoUrl)}" controls style="width:100%;border-radius:10px;max-height:220px;background:#000"></video>` : `<div class="muted" style="font-size:12.5px">Esta opción no tiene video cargado todavía.</div>`}
+    <button type="button" class="dbtn gh" id="tar-video-agregar" style="margin-top:10px;width:100%"><i class="fas fa-plus"></i> ${videoUrl ? 'Reemplazar video' : 'Subir video'}</button>
+    <input type="file" id="tar-video-file" accept="video/mp4,video/quicktime,video/webm" style="display:none">`;
+  document.getElementById('tar-video-agregar').onclick = () => {
+    const input = document.getElementById('tar-video-file');
+    input.onchange = () => { if (input.files[0]) subirVideoProducto(productoId, input.files[0]); input.value = ''; };
+    input.click();
+  };
+}
+async function subirVideoProducto(productoId, file) {
+  if (!TAR_VIDEO_MIME.includes(file.type)) { errToast('Formato no soportado. Usá MP4, MOV o WebM.'); return; }
+  if (file.size > TAR_VIDEO_LIMITE) { errToast(`El video pesa ${(file.size / 1e6).toFixed(1)} MB. Máximo 25 MB (límite de Meta para adjuntos).`); return; }
+  const btn = document.getElementById('tar-video-agregar');
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Subiendo... <i class="fas fa-spinner fa-spin"></i>'; }
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch(VIDEO_SUBIR_FN, {
+      method: 'POST',
+      headers: {
+        'Content-Type': file.type,
+        Authorization: `Bearer ${session?.access_token || ''}`,
+        apikey: SUPABASE_KEY,
+        'x-producto-id': String(productoId),
+        'x-nombre-archivo': slugArchivo(file.name.replace(/\.[^.]+$/, '')) + (file.name.match(/\.[^.]+$/)?.[0] || '.mp4'),
+      },
+      body: file,
+    });
+    const out = await res.json().catch(() => null);
+    if (!res.ok || !out?.ok) { errToast('No se pudo subir el video: ' + (out?.error || res.status)); cargarVideoAdmin(productoId, null); return; }
+    okToast('Video subido');
+    delete tarCache[tarTab];
+    cargarVideoAdmin(productoId, out.video_url);
+  } catch (e) {
+    errToast('No se pudo subir el video: ' + e.message);
+    cargarVideoAdmin(productoId, null);
   }
 }
 async function guardarNotasTarifario(tabla, id) {
