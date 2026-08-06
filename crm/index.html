@@ -360,6 +360,22 @@ body.swipe-der .section.active{animation:sw-der .24s ease-out}
 .arow .fill{height:100%;border-radius:10px}
 .arow .arow-chev{color:var(--muted2);font-size:12px;flex-shrink:0;transition:transform .2s}
 .arow.expanded .arow-chev{transform:rotate(90deg);color:var(--accent)}
+.arow .op{font-size:11.5px;color:var(--muted);margin-top:4px}
+.arow .destchips{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.arow .destchip{font-size:10.5px;padding:2px 7px;border-radius:20px;background:rgba(255,255,255,.05);color:var(--muted)}
+.peso-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.peso-row:last-child{border-bottom:none}
+.peso-row .pn{flex:1;font-size:12.5px;font-weight:600}
+.peso-row input{width:64px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#fff;padding:5px 8px;font-size:12.5px;text-align:right}
+.peso-row input:focus{outline:none;border-color:var(--accent)}
+.peso-row button{background:transparent;border:none;color:var(--muted2);cursor:pointer;font-size:13px;padding:5px;transition:color .15s}
+.peso-row button:hover{color:var(--green)}
+.peso-row button:disabled{opacity:.4;cursor:default}
+.dc-row{display:flex;align-items:center;gap:10px;padding:6px 0}
+.dc-row .dn{width:120px;font-size:12px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dc-row .track{flex:1;height:6px;background:rgba(255,255,255,.05);border-radius:10px;overflow:hidden}
+.dc-row .fill{height:100%;border-radius:10px}
+.dc-row .dv{width:44px;text-align:right;font-size:11.5px;color:var(--muted);flex-shrink:0}
 
 /* panel de leads individuales por asesor (expandible) */
 .al-panel{margin:2px 0 4px 46px;padding-left:12px;border-left:2px solid var(--line2);display:flex;flex-direction:column;gap:2px}
@@ -2049,6 +2065,8 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           </div>
           <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Toca un destino para ver su número</div>
           <div class="chart-wrap" style="height:250px"><canvas id="chDest"></canvas></div>
+          <div class="eb-title" style="margin-top:14px"><i class="fas fa-percent"></i> Conversión a venta por destino</div>
+          <div id="destConversion"><div class="muted" style="font-size:12.5px">Cargando...</div></div>
         </div>
       </div>
     </section>
@@ -2431,7 +2449,12 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         </div>
         <div class="grid g-2b">
           <div class="card"><h2><i class="fas fa-user-tie"></i> Carga por asesor</h2><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
-          <div class="card"><h2><i class="fas fa-scale-balanced"></i> Reparto objetivo</h2><div class="csub">Ponderación configurable del aleatorizador</div><div class="chart-wrap" style="height:280px"><canvas id="chAssign"></canvas></div></div>
+          <div class="card"><h2><i class="fas fa-scale-balanced"></i> Reparto objetivo</h2><div class="csub">Ponderación del aleatorizador -- editable abajo</div><div class="chart-wrap" style="height:200px"><canvas id="chAssign"></canvas></div><div id="pesoEditable" style="margin-top:12px"></div></div>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h2><i class="fas fa-gauge-high"></i> Rendimiento y tasa de respuesta</h2>
+          <div class="csub">Leads asignados vs. perdidos por no responder a tiempo (timeout de reasignación)</div>
+          <div class="adv" id="rendList"></div>
         </div>
       </div>
 

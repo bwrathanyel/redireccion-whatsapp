@@ -1698,11 +1698,34 @@ function setupDestPeriodo() {
 }
 async function loadDestPeriodo() {
   await ensureChart();
-  if (destPeriodo === 'historico') { renderDest(); return; }
-  const [d, h] = periodo(destPeriodo === 'dia' ? 'hoy' : destPeriodo);
-  const { data, error } = await sb.rpc('top_destinos_periodo', { p_desde: iso(d), p_hasta: iso(h) });
-  if (error) { console.error(error); errToast('No se pudieron cargar los destinos del periodo'); return; }
-  renderDest(data || {});
+  let desde = null, hasta = null;
+  if (destPeriodo !== 'historico') { const [d, h] = periodo(destPeriodo === 'dia' ? 'hoy' : destPeriodo); desde = iso(d); hasta = iso(h); }
+  if (destPeriodo === 'historico') { renderDest(); }
+  else {
+    const { data, error } = await sb.rpc('top_destinos_periodo', { p_desde: desde, p_hasta: hasta });
+    if (error) { console.error(error); errToast('No se pudieron cargar los destinos del periodo'); }
+    else renderDest(data || {});
+  }
+  cargarConversionDestino(desde, hasta);
+}
+
+/* ---------- Conversión a venta por destino ---------- */
+function colorPctConversion(pct) {
+  if (pct >= 15) return '#10b981';
+  if (pct >= 7) return '#f5b544';
+  return '#ef4444';
+}
+async function cargarConversionDestino(desde, hasta) {
+  const box = document.getElementById('destConversion');
+  if (!box) return;
+  const { data, error } = await sb.rpc('conversion_por_destino', { p_desde: desde, p_hasta: hasta });
+  if (error) { console.error(error); box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar</div>'; return; }
+  const entries = Object.entries(data || {}).sort((a, b) => b[1].pct - a[1].pct);
+  if (!entries.length) { box.innerHTML = '<div class="muted" style="font-size:12.5px">Sin datos en el periodo</div>'; return; }
+  box.innerHTML = entries.map(([destino, v]) => {
+    const c = colorPctConversion(v.pct);
+    return `<div class="dc-row"><span class="dn" title="${esc(destino)}">${esc(destino)}</span><div class="track"><div class="fill" style="width:${Math.min(v.pct, 100)}%;background:${c}"></div></div><span class="dv">${v.pct}%</span></div>`;
+  }).join('');
 }
 function renderAssign() {
   const e = Object.entries(STATS.asignacion_objetivo || {}).sort((a, b) => b[1] - a[1]);
@@ -1951,11 +1974,99 @@ function setupAsesoresPeriodo() {
   });
 }
 async function loadAsesoresPeriodo() {
-  if (asePeriodo === 'historico') { renderAdvisors(); return; }
-  const [d, h] = periodo(asePeriodo);
-  const { data, error } = await sb.rpc('carga_asesores', { p_desde: iso(d), p_hasta: iso(h) });
-  if (error) { console.error(error); errToast('No se pudo cargar la carga por asesor'); return; }
-  renderAdvisors(data || {});
+  if (asePeriodo === 'historico') { renderAdvisors(); }
+  else {
+    const [d, h] = periodo(asePeriodo);
+    const { data, error } = await sb.rpc('carga_asesores', { p_desde: iso(d), p_hasta: iso(h) });
+    if (error) { console.error(error); errToast('No se pudo cargar la carga por asesor'); }
+    else renderAdvisors(data || {});
+  }
+  cargarRendimientoAsesores();
+  cargarPesoEditable();
+}
+
+/* ---------- Rendimiento por asesor: % perdido por timeout + opinión calculada ---------- */
+// Sin llamar a un modelo -- frase armada por reglas sobre el % real contra el
+// promedio del equipo en el mismo periodo. Pedido explícito del dueño
+// (2026-08-06): más rápido, sin costo, y se actualiza al instante.
+function opinionAsesor(pct, promedio) {
+  if (pct === 0) return 'Sin pérdidas por timeout en el periodo.';
+  if (pct > promedio * 2) return 'Rebote elevado -- revisar disponibilidad.';
+  if (pct > promedio) return 'Por encima del resto del equipo.';
+  return 'Dentro de lo normal.';
+}
+function colorPctPerdido(pct) {
+  if (pct > 30) return '#ef4444';
+  if (pct > 15) return '#f5b544';
+  return '#10b981';
+}
+async function cargarRendimientoAsesores() {
+  const box = document.getElementById('rendList');
+  if (!box) return;
+  let desde = null, hasta = null;
+  if (asePeriodo !== 'historico') { const [d, h] = periodo(asePeriodo); desde = iso(d); hasta = iso(h); }
+  const { data, error } = await sb.rpc('rendimiento_asesores', { p_desde: desde, p_hasta: hasta });
+  if (error) { console.error(error); box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar el rendimiento</div>'; return; }
+  renderRendimiento(data || {});
+}
+function renderRendimiento(datos) {
+  const box = document.getElementById('rendList');
+  if (!box) return;
+  const entries = Object.entries(datos).filter(([, v]) => v.asignados + v.perdidos > 0);
+  if (!entries.length) { box.innerHTML = '<div class="muted" style="font-size:12.5px">Sin actividad en el periodo</div>'; return; }
+  const promedio = entries.reduce((s, [, v]) => s + v.pct_perdido, 0) / entries.length;
+  entries.sort((a, b) => b[1].pct_perdido - a[1].pct_perdido);
+  box.innerHTML = entries.map(([nombre, v]) => {
+    const c = colorPctPerdido(v.pct_perdido);
+    const chips = (v.top_destinos_perdidos || []).map(d => `<span class="destchip">${esc(d.destino)} (${d.c})</span>`).join('');
+    return `<div class="arow"><div class="ava" style="background:${c}">${initials(nombre)}</div><div class="ai">
+      <div class="an"><span>${esc(nombre)}</span><span class="anv">${v.pct_perdido}% perdido</span></div>
+      <div class="track"><div class="fill" style="width:${Math.min(v.pct_perdido, 100)}%;background:${c}"></div></div>
+      <div class="op">${v.asignados} asignados, ${v.perdidos} perdidos por timeout -- ${opinionAsesor(v.pct_perdido, promedio)}</div>
+      ${chips ? `<div class="destchips">${chips}</div>` : ''}
+    </div></div>`;
+  }).join('');
+}
+
+/* ---------- Edición manual de peso_asignacion/peso_internacional ---------- */
+// Sin autoajuste entre asesores -- pedido explícito del dueño: cada peso es
+// independiente, no tiene que sumar 100.
+let pesoAsesoresCache = [];
+async function cargarPesoEditable() {
+  const box = document.getElementById('pesoEditable');
+  if (!box) return;
+  const { data, error } = await sb.from('asesores').select('nombre,peso_asignacion,peso_internacional').eq('activo', true).order('nombre');
+  if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar</div>'; return; }
+  pesoAsesoresCache = data || [];
+  renderPesoEditable();
+}
+function pesoRowHtml(nombre, pool, valor) {
+  return `<div class="peso-row" data-nombre="${esc(nombre)}" data-pool="${pool}"><span class="pn">${esc(nombre)}${pool === 'internacional' ? ' (intl)' : ''}</span><input type="number" min="0" step="1" value="${valor}"><button type="button" data-guardar-peso title="Guardar"><i class="fas fa-floppy-disk"></i></button></div>`;
+}
+function renderPesoEditable() {
+  const box = document.getElementById('pesoEditable');
+  if (!box) return;
+  box.innerHTML = pesoAsesoresCache.map(a => {
+    const filas = [];
+    if (a.peso_asignacion !== null) filas.push(pesoRowHtml(a.nombre, 'domestico', a.peso_asignacion));
+    if (a.peso_internacional !== null) filas.push(pesoRowHtml(a.nombre, 'internacional', a.peso_internacional));
+    return filas.join('');
+  }).join('') || '<div class="muted" style="font-size:12.5px">Sin asesores activos</div>';
+  box.querySelectorAll('[data-guardar-peso]').forEach(btn => btn.onclick = () => {
+    const row = btn.closest('.peso-row');
+    guardarPesoAsesor(row.dataset.nombre, row.dataset.pool, row.querySelector('input').value, btn);
+  });
+}
+async function guardarPesoAsesor(nombre, pool, valor, btn) {
+  const n = Number(valor);
+  if (!Number.isFinite(n) || n < 0) { errToast('Peso inválido'); return; }
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('admin_actualizar_peso_asesor', { p_nombre: nombre, p_pool: pool, p_peso: n });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo guardar: ' + (data?.error || error?.message || '')); return; }
+  okToast('Peso actualizado');
+  await cargarPesoEditable();
+  if (pool === 'domestico') { await loadStats(); renderAssign(); }
 }
 
 /* ---------- Preview + Drill ---------- */
