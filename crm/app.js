@@ -6026,6 +6026,8 @@ async function wrGuardarPct() {
 let SS_DATA = null;          // último resultado de 'leer', sin publicar todavía
 let SS_MAPEOS = {};          // bt_nombre -> producto_id elegido en ESTA carga (null = "no lo tengo")
 let SS_PRODUCTOS_CACHE = null;
+let SS_ARCHIVO_ACTUAL = null; // el File tal cual se eligió -- se sube al bucket recién al publicar, no al leer
+let SS_PDF_ACTUAL = null;    // { storage_path, creado_en, creado_por } del último PDF publicado, cacheado
 
 function setupStopSales() {
   // Cargar/mapear/publicar sigue siendo solo admin (decidido 2026-08-06: la
@@ -6041,6 +6043,36 @@ function setupStopSales() {
     e.target.value = '';
   });
   document.getElementById('ss-vig-buscar')?.addEventListener('input', () => ssRenderVigentes());
+  document.getElementById('ss-ver-pdf')?.addEventListener('click', ssVerPdfOriginal);
+}
+
+// El botón "Ver PDF original" es para TODO rol (no vive dentro de
+// #ss-admin-box) -- es justo lo que permite confiar en lo que el parser leyó
+// sin tener que ser admin ni pedirle el archivo a nadie por WhatsApp.
+async function ssCargarPdfActual() {
+  const btn = document.getElementById('ss-ver-pdf');
+  const meta = document.getElementById('ss-pdf-meta');
+  if (!btn) return;
+  const { data, error } = await sb.rpc('stop_sales_pdf_actual');
+  const fila = !error && Array.isArray(data) ? data[0] : null;
+  SS_PDF_ACTUAL = fila || null;
+  btn.disabled = !SS_PDF_ACTUAL;
+  meta.textContent = SS_PDF_ACTUAL
+    ? `Última carga: ${fmtDiaCorto(SS_PDF_ACTUAL.creado_en.slice(0, 10))}${SS_PDF_ACTUAL.creado_por ? ` — ${SS_PDF_ACTUAL.creado_por}` : ''}`
+    : 'Todavía no se cargó ningún PDF.';
+}
+
+async function ssVerPdfOriginal() {
+  if (!SS_PDF_ACTUAL) return;
+  const btn = document.getElementById('ss-ver-pdf');
+  btn.disabled = true;
+  // Bucket privado -- URL firmada de corta duración, mismo patrón que
+  // verVoucherPdf (no getPublicUrl, que serviría el archivo para siempre a
+  // cualquiera con el link).
+  const { data, error } = await sb.storage.from('stop-sales-pdfs').createSignedUrl(SS_PDF_ACTUAL.storage_path, 60);
+  btn.disabled = false;
+  if (error || !data?.signedUrl) { errToast('No se pudo abrir el PDF: ' + (error?.message || '')); return; }
+  window.open(data.signedUrl, '_blank');
 }
 
 async function ssProductosHotel() {
@@ -6052,6 +6084,7 @@ async function ssProductosHotel() {
 }
 
 async function ssLeer(file) {
+  SS_ARCHIVO_ACTUAL = file;
   const drop = document.getElementById('ss-drop');
   const preview = document.getElementById('ss-preview');
   const mapeoBox = document.getElementById('ss-mapeo');
@@ -6248,17 +6281,34 @@ async function ssPublicar() {
   }
 
   const cargaId = crypto.randomUUID();
-  const { data, error } = await sb.rpc('stop_sales_publicar', { p_filas: filas, p_carga_id: cargaId });
+
+  // 3) Guardar el PDF original en el bucket ANTES de publicar -- así, si la
+  //    subida falla, no se escribe nada en stop_sales (falla cerrado). Si
+  //    publicar falla después de subir bien, queda un PDF huérfano en el
+  //    bucket -- inofensivo, mismo criterio de tolerancia que el resto del
+  //    proyecto (ver reemplazarFoto/subirAvatar). Sirve para que cualquier
+  //    usuario pueda abrir el archivo fuente y comparar contra lo leído --
+  //    pedido real (2026-08-06): "por si no confían la pestaña los primeros
+  //    días".
+  let storagePath = null;
+  if (SS_ARCHIVO_ACTUAL) {
+    storagePath = `${cargaId}.pdf`;
+    const { error: eUpload } = await sb.storage.from('stop-sales-pdfs').upload(storagePath, SS_ARCHIVO_ACTUAL, { contentType: 'application/pdf' });
+    if (eUpload) { errToast('No se pudo guardar el PDF original: ' + eUpload.message); btn.disabled = false; ssActualizarBotonPublicar(); return; }
+  }
+
+  const { data, error } = await sb.rpc('stop_sales_publicar', { p_filas: filas, p_carga_id: cargaId, p_storage_path: storagePath });
   btn.disabled = false;
   if (error) { errToast('No se pudo publicar: ' + error.message); ssActualizarBotonPublicar(); return; }
 
   okToast(`Publicado: ${data.insertados} bloqueo(s) en ${new Set(filas.map((f) => f.producto_id)).size} hotel(es)`);
-  SS_DATA = null; SS_MAPEOS = {};
+  SS_DATA = null; SS_MAPEOS = {}; SS_ARCHIVO_ACTUAL = null; SS_PDF_ACTUAL = null;
   document.getElementById('ss-preview').innerHTML = '';
   document.getElementById('ss-mapeo').innerHTML = '';
   document.getElementById('ss-alerta').innerHTML = '';
   document.getElementById('ss-publicar-box').style.display = 'none';
   loadStopSalesVigentes();
+  ssCargarPdfActual();
 }
 
 // Tarjeta de un hotel para "Bloqueos vigentes hoy": se resalta en rojo
@@ -8926,7 +8976,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'cerebro-ia') loadCerebroIA();
   if (sec === 'ia-atencion') loadIaAtencion();
   if (sec === 'web-reasignados') loadWebReasignados();
-  if (sec === 'stop-sales') loadStopSalesVigentes();
+  if (sec === 'stop-sales') { loadStopSalesVigentes(); ssCargarPdfActual(); }
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'tareas') loadTareas();
