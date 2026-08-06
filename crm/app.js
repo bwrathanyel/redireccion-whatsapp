@@ -8872,14 +8872,30 @@ function subscribeRealtime() {
 // Red de seguridad si el websocket de Realtime se cae y tarda en reconectar
 // -- refresco silencioso de la tabla mientras la sección Leads esté abierta,
 // se arranca/para desde activateSection() para no dejarlo corriendo en fondo.
+//
+// Cada refresco cuesta 45 KB (`select('*')` = 52 columnas × 25 filas) y no se
+// puede recortar sin romper la ficha: `openDrawer(l)` recibe el objeto entero.
+// A 50 s eran 72 refrescos por hora POR USUARIO, y como el timer solo miraba la
+// sección visible y no `document.hidden`, seguía corriendo con la PWA abierta en
+// segundo plano en el teléfono de cada asesor -- toda la noche incluida. Medido:
+// ~200 MB/día entre los 7 usuarios, sobre una cuota de 5 GB al mes.
+//
+// Realtime ya cubre el caso normal (INSERT/UPDATE llegan al instante); esto solo
+// existe para cuando el websocket se cae. 3 minutos alcanza de sobra para eso, y
+// el `visibilitychange` recupera la frescura apenas alguien vuelve a mirar --
+// mismo patrón que `setupLatidoPresencia`.
 let leadsPollInterval = null;
+const leadsVisible = () => !document.hidden && document.getElementById('sec-leads').classList.contains('active');
 function iniciarPollLeads() {
   if (leadsPollInterval) return;
-  leadsPollInterval = setInterval(() => {
-    if (document.getElementById('sec-leads').classList.contains('active')) loadTable();
-  }, 50000);
+  leadsPollInterval = setInterval(() => { if (leadsVisible()) loadTable(); }, 180000);
+  document.addEventListener('visibilitychange', pollLeadsAlVolver);
 }
-function detenerPollLeads() { clearInterval(leadsPollInterval); leadsPollInterval = null; }
+function pollLeadsAlVolver() { if (leadsVisible()) loadTable(); }
+function detenerPollLeads() {
+  clearInterval(leadsPollInterval); leadsPollInterval = null;
+  document.removeEventListener('visibilitychange', pollLeadsAlVolver);
+}
 // Card nueva al tope del inbox en vivo + notificación local instantánea si la
 // pestaña no está en foco (no depende de la latencia del push del servidor).
 function recibirLeadNuevoInbox(lead) {
