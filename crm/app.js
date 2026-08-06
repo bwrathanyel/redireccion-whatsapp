@@ -6432,6 +6432,7 @@ async function ssPublicar() {
 let SS_VIGENTES_DATA = null;
 let ssView = 'calendario';
 let ssFiltro = 'todos';
+let ssHotelSel = null; // nombre exacto del hotel elegido en los chips, o null = todos
 let SS_MES = null;       // 'YYYY-MM' que se está mostrando
 let SS_DIA_ABIERTO = null;
 // fecha ISO -> [{nombre, estado, fecha_desde, fecha_hasta}], ya expandido día por
@@ -6588,11 +6589,44 @@ function ssFilasVisibles() {
   const filtro = (document.getElementById('ss-vig-buscar')?.value || '').trim().toLowerCase();
   return SS_VIGENTES_DATA.filter((f) => {
     if (filtro && !f.nombre.toLowerCase().includes(filtro)) return false;
+    if (ssHotelSel && f.nombre !== ssHotelSel) return false;
     if (ssFiltro === 'stop_sale') return f.estado === 'stop_sale';
     if (ssFiltro === 'on_request') return f.estado === 'on_request';
     if (ssFiltro === 'semana') return ssDiasRestantes(f.fecha_hasta) <= 7;
     return true;
   });
+}
+
+// Chips de hotel: uno por hotel con bloqueo vigente, tocarlo filtra el
+// calendario a ese hotel puntual (2026-08-06, pedido del dueño). Mismo color
+// que ssBadge -- rojo si tiene algún rango sin cupo, ámbar si todos sus
+// rangos son solo "a confirmar".
+function ssChipsHoteles() {
+  const porNombre = new Map();
+  for (const f of SS_VIGENTES_DATA) {
+    if (!porNombre.has(f.nombre)) porNombre.set(f.nombre, { n: 0, tieneStop: false });
+    const g = porNombre.get(f.nombre);
+    g.n++;
+    if (f.estado === 'stop_sale') g.tieneStop = true;
+  }
+  return [...porNombre.entries()]
+    .sort((a, b) => b[1].n - a[1].n)
+    .map(([nombre, g]) => {
+      const color = g.tieneStop ? '#ef4444' : '#e0a030';
+      const on = ssHotelSel === nombre;
+      return `<button type="button" class="ss-hotel-chip${on ? ' on' : ''}" data-ss-hotel="${esc(nombre)}" style="--c:${color}">${esc(nombre)} <span>${g.n}</span></button>`;
+    }).join('');
+}
+
+function ssIrAHotel(nombre) {
+  ssHotelSel = ssHotelSel === nombre ? null : nombre;
+  SS_DIA_ABIERTO = null;
+  if (ssHotelSel && ssView !== 'calendario') {
+    ssView = 'calendario';
+    localStorage.setItem('view_stop-sales', 'calendario');
+    document.querySelectorAll('#ss-view-switch .vs-btn').forEach((b) => b.classList.toggle('on', b.dataset.v === 'calendario'));
+  }
+  ssRenderVigentes();
 }
 
 function ssRenderVigentes() {
@@ -6608,6 +6642,7 @@ function ssRenderVigentes() {
   const nSemana = SS_VIGENTES_DATA.filter((f) => ssDiasRestantes(f.fecha_hasta) <= 7).length;
 
   cont.innerHTML = `<div id="ss-kpis" class="kpis kpis-3" style="margin-bottom:14px"></div>
+    <div id="ss-chips-hotel" style="margin-bottom:14px"></div>
     <div id="ss-calendario" class="${ssView === 'calendario' ? 'show' : ''}"></div>
     <div id="ss-hoteles" class="${ssView === 'hoteles' ? 'show' : ''}"></div>`;
 
@@ -6616,6 +6651,10 @@ function ssRenderVigentes() {
     { t: 'A confirmar', v: nReq, d: 'hoteles on request', i: 'fa-clock', c: '#e0a030', key: 'on_request', on: ssFiltro === 'on_request', tt: 'Ver solo los que hay que confirmar', go: () => ssIrAFiltro('on_request') },
     { t: 'Se liberan pronto', v: nSemana, d: 'terminan en 7 días o menos', i: 'fa-calendar-check', c: 'var(--green)', key: 'semana', on: ssFiltro === 'semana', tt: 'Ver los que se liberan esta semana', go: () => ssIrAFiltro('semana') },
   ]);
+
+  const chipsBox = document.getElementById('ss-chips-hotel');
+  chipsBox.innerHTML = ssChipsHoteles();
+  chipsBox.querySelectorAll('[data-ss-hotel]').forEach((b) => b.addEventListener('click', () => ssIrAHotel(b.dataset.ssHotel)));
 
   if (!filas.length) {
     const donde = ssView === 'calendario' ? 'ss-calendario' : 'ss-hoteles';
