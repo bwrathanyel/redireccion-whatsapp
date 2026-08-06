@@ -2031,6 +2031,9 @@ const VISTAS_BTN = {
   fichas: ['fa-id-card', 'Vista de fichas'],
   tarjetas: ['fa-table-cells-large', 'Vista de tarjetas'],
   lista: ['fa-list', 'Vista de lista'],
+  // Solo Stop Sales: "qué pasa tal día" vs "cómo está tal hotel".
+  calendario: ['fa-calendar-days', 'Vista de calendario'],
+  hoteles: ['fa-hotel', 'Vista por hotel'],
 };
 // `vistas` permite que cada sección ofrezca solo las que tienen sentido para
 // ella (Postulaciones no tiene vista de fichas, por ejemplo).
@@ -6311,20 +6314,146 @@ async function ssPublicar() {
   ssCargarPdfActual();
 }
 
-// Tarjeta de un hotel para "Bloqueos vigentes hoy": se resalta en rojo
-// (misma clase .grave de vig-item) si algún rango vence hoy o mañana -- da la
-// urgencia real de un vistazo sin tener que leer la fecha exacta.
-function ssTarjetaVigente(g) {
-  return `<div class="vig-item ${g.urgente ? 'grave' : ''}">
-    <div class="vig-top"><div class="vig-nombre">${esc(g.nombre)}</div><span class="vig-tipo">${g.rangos.length}</span></div>
-    ${g.rangos.map((r) => `<div class="vig-texto" style="display:flex;align-items:center;gap:8px;padding:2px 0;flex-wrap:wrap">
-      ${ssBadge(r.estado)}<span>${fmtDiaCorto(r.fecha_desde)} → ${fmtDiaCorto(r.fecha_hasta)}</span>
-      <span class="muted" style="font-size:11px">(${ssTextoCuando(ssDiasRestantes(r.fecha_hasta))})</span>
+/* ---------- "Bloqueos vigentes hoy": calendario + vista por hotel ----------
+   Dos preguntas distintas, dos vistas: el calendario contesta "¿qué tengo
+   bloqueado el 15?" y la de hoteles "¿cómo está el Wyndham?". El selector es el
+   mismo initViewSwitcher del resto del CRM, así que la elección se recuerda. */
+let SS_VIGENTES_DATA = null;
+let ssView = 'calendario';
+let ssFiltro = 'todos';
+let SS_MES = null;       // 'YYYY-MM' que se está mostrando
+let SS_DIA_ABIERTO = null;
+// fecha ISO -> [{nombre, estado, fecha_desde, fecha_hasta}], ya expandido día por
+// día. Se rearma en cada render del calendario porque los filtros cambian el
+// conjunto de rangos; con 27 filas eso es gratis. Si algún día el horizonte
+// creciera a miles de rangos, esto es lo primero que habría que memoizar por
+// (filtro + búsqueda), no por mes: el mes se lee de este mapa, no lo construye.
+let SS_POR_DIA = new Map();
+
+const SS_MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const ssMesLargo = (mes) => { const [a, m] = mes.split('-'); return `${SS_MESES[+m - 1]} ${a}`; };
+// Las fechas de la base son `date` puro. `new Date('2026-08-14')` las lee como
+// UTC y en Venezuela (UTC-4) devuelve el día anterior -- de ahí el 'T00:00:00',
+// igual que en ssDiasRestantes.
+const ssFecha = (iso) => new Date(iso + 'T00:00:00');
+const ssISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+function ssDiasBloqueados(filas) {
+  const mapa = new Map();
+  for (const f of filas) {
+    const fin = ssFecha(f.fecha_hasta);
+    for (const d = ssFecha(f.fecha_desde); d <= fin; d.setDate(d.getDate() + 1)) {
+      const clave = ssISO(d);
+      if (!mapa.has(clave)) mapa.set(clave, []);
+      mapa.get(clave).push(f);
+    }
+  }
+  return mapa;
+}
+
+// Meses (de los que tienen bloqueo) ordenados, para saber a dónde saltar con las
+// flechas sin recorrer meses vacíos de a uno hasta mayo de 2027.
+function ssMesesConDatos() {
+  return [...new Set([...SS_POR_DIA.keys()].map((f) => f.slice(0, 7)))].sort();
+}
+
+function ssCalendarioHtml(mes) {
+  const [anio, m] = mes.split('-').map(Number);
+  const primero = new Date(anio, m - 1, 1);
+  const diasEnMes = new Date(anio, m, 0).getDate();
+  // getDay() da 0=domingo; acá la semana arranca el lunes, como el calendario
+  // que usa cualquiera en Venezuela.
+  const offset = (primero.getDay() + 6) % 7;
+  const hoyISO = ssISO(new Date());
+  const meses = ssMesesConDatos();
+  const previos = meses.filter((x) => x < mes);
+  const siguientes = meses.filter((x) => x > mes);
+
+  const celdas = [];
+  for (let i = 0; i < offset; i++) celdas.push('<div class="ss-dia vacio"></div>');
+  for (let d = 1; d <= diasEnMes; d++) {
+    const iso = `${anio}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const hoteles = SS_POR_DIA.get(iso) || [];
+    const clases = ['ss-dia'];
+    if (iso === hoyISO) clases.push('hoy');
+    if (iso === SS_DIA_ABIERTO) clases.push('sel');
+    if (hoteles.length) {
+      const soloRequest = hoteles.every((h) => h.estado === 'on_request');
+      clases.push('hay', soloRequest ? 'req' : hoteles.length >= 3 ? 'n3' : hoteles.length === 2 ? 'n2' : 'n1');
+      const q = hoteles.length === 1 ? '1 hotel' : `${hoteles.length} hoteles`;
+      celdas.push(`<button type="button" class="${clases.join(' ')}" data-ss-dia="${iso}" title="${q} ${soloRequest ? 'a confirmar' : 'sin cupo'} — tocá para ver cuáles">${d}</button>`);
+    } else {
+      celdas.push(`<div class="${clases.join(' ')}">${d}</div>`);
+    }
+  }
+
+  const proximo = siguientes[0] || previos[previos.length - 1];
+  return `<div class="ss-cal-nav">
+      <button type="button" class="ss-nav-btn" data-ss-mes="${previos[previos.length - 1] || ''}" ${previos.length ? '' : 'disabled'} title="Mes anterior con bloqueos"><i class="fas fa-chevron-left"></i></button>
+      <b>${ssMesLargo(mes)}</b>
+      <button type="button" class="ss-nav-btn" data-ss-mes="${siguientes[0] || ''}" ${siguientes.length ? '' : 'disabled'} title="Mes siguiente con bloqueos"><i class="fas fa-chevron-right"></i></button>
+    </div>
+    <div class="ss-cal">
+      ${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((x) => `<div class="ss-dow">${x}</div>`).join('')}
+      ${celdas.join('')}
+    </div>
+    <div class="ss-leyenda">
+      <span><i style="background:rgba(239,68,68,.22)"></i> 1 hotel</span>
+      <span><i style="background:rgba(239,68,68,.4)"></i> 2 hoteles</span>
+      <span><i style="background:rgba(239,68,68,.65)"></i> 3 o más</span>
+      <span><i style="background:rgba(224,160,48,.2);border:1px dashed rgba(224,160,48,.55)"></i> Solo a confirmar</span>
+    </div>
+    ${!ssMesesConDatos().includes(mes) && proximo ? `<div class="ss-cal-nota">Sin bloqueos en ${ssMesLargo(mes)}. El más cercano es en ${ssMesLargo(proximo)}.</div>` : ''}
+    <div id="ss-detalle"></div>`;
+}
+
+function ssPintarDetalleDia() {
+  const box = document.getElementById('ss-detalle');
+  if (!box) return;
+  if (!SS_DIA_ABIERTO) { box.innerHTML = ''; return; }
+  const hoteles = SS_POR_DIA.get(SS_DIA_ABIERTO) || [];
+  box.innerHTML = `<div class="ss-detalle">
+    <div class="ss-detalle-t">${fmtDiaCorto(SS_DIA_ABIERTO)} — ${hoteles.length === 1 ? '1 hotel' : `${hoteles.length} hoteles`}</div>
+    ${hoteles.map((h) => `<div class="vig-item">
+      <div class="vig-top"><div class="vig-nombre">${esc(h.nombre)}</div>${ssBadge(h.estado)}</div>
+      <div class="vig-texto">${fmtDiaCorto(h.fecha_desde)} → ${fmtDiaCorto(h.fecha_hasta)}
+        <span class="muted">(${ssTextoCuando(ssDiasRestantes(h.fecha_hasta))})</span></div>
     </div>`).join('')}
   </div>`;
 }
 
-let SS_VIGENTES_DATA = null;
+// Tira de un mes: un segmento por día. Da la FORMA del bloqueo (dónde cae, qué
+// tan largo es) sin tener que leer fechas; los rangos exactos van igual debajo.
+function ssTiraMes(rangos, mes) {
+  const [anio, m] = mes.split('-').map(Number);
+  const diasEnMes = new Date(anio, m, 0).getDate();
+  const segmentos = [];
+  for (let d = 1; d <= diasEnMes; d++) {
+    const iso = `${anio}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const r = rangos.find((x) => x.fecha_desde <= iso && iso <= x.fecha_hasta);
+    segmentos.push(r
+      ? `<i class="${r.estado === 'stop_sale' ? 'st' : 'rq'}" title="${fmtDiaCorto(r.fecha_desde)} → ${fmtDiaCorto(r.fecha_hasta)}"></i>`
+      : '<i></i>');
+  }
+  return `<div class="ss-tira-fila"><span class="ss-tira-mes">${SS_MESES[m - 1].slice(0, 3)}</span><div class="ss-tira">${segmentos.join('')}</div></div>`;
+}
+
+// Tarjeta de un hotel: se resalta en rojo (misma clase .grave de vig-item) si
+// algún rango vence hoy o mañana -- da la urgencia real de un vistazo sin tener
+// que leer la fecha exacta.
+function ssTarjetaVigente(g) {
+  const meses = [...new Set(g.rangos.map((r) => r.fecha_desde.slice(0, 7)))].sort().slice(0, 3);
+  return `<div class="vig-item ${g.urgente ? 'grave' : ''}">
+    <div class="vig-top"><div class="vig-nombre">${esc(g.nombre)}</div><span class="vig-tipo">${g.rangos.length}</span></div>
+    ${meses.map((m) => ssTiraMes(g.rangos, m)).join('')}
+    <div style="margin-top:7px">
+      ${g.rangos.map((r) => `<div class="vig-texto" style="display:flex;align-items:center;gap:8px;padding:2px 0;flex-wrap:wrap">
+        ${ssBadge(r.estado)}<span>${fmtDiaCorto(r.fecha_desde)} → ${fmtDiaCorto(r.fecha_hasta)}</span>
+        <span class="muted" style="font-size:11px">(${ssTextoCuando(ssDiasRestantes(r.fecha_hasta))})</span>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
 
 async function loadStopSalesVigentes() {
   const cont = document.getElementById('ss-vigentes');
@@ -6332,7 +6461,27 @@ async function loadStopSalesVigentes() {
   const { data, error } = await sb.rpc('stop_sales_vigentes');
   if (error) { cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
   SS_VIGENTES_DATA = data || [];
+  ssView = initViewSwitcher('ss-view-switch', 'stop-sales', 'calendario', (v) => { ssView = v; SS_DIA_ABIERTO = null; ssRenderVigentes(); }, ['calendario', 'hoteles']);
   ssRenderVigentes();
+}
+
+// Un solo lugar sincroniza el KPI activo y repinta -- mismo patrón que
+// wrIrAFiltro en Web y Reasignados.
+function ssIrAFiltro(clave) {
+  ssFiltro = ssFiltro === clave ? 'todos' : clave;
+  SS_DIA_ABIERTO = null;
+  ssRenderVigentes();
+}
+
+function ssFilasVisibles() {
+  const filtro = (document.getElementById('ss-vig-buscar')?.value || '').trim().toLowerCase();
+  return SS_VIGENTES_DATA.filter((f) => {
+    if (filtro && !f.nombre.toLowerCase().includes(filtro)) return false;
+    if (ssFiltro === 'stop_sale') return f.estado === 'stop_sale';
+    if (ssFiltro === 'on_request') return f.estado === 'on_request';
+    if (ssFiltro === 'semana') return ssDiasRestantes(f.fecha_hasta) <= 7;
+    return true;
+  });
 }
 
 function ssRenderVigentes() {
@@ -6342,21 +6491,48 @@ function ssRenderVigentes() {
     cont.innerHTML = '<div class="vig-vacio"><i class="fas fa-circle-check"></i><b>Sin bloqueos vigentes</b></div>';
     return;
   }
-  const filtro = (document.getElementById('ss-vig-buscar')?.value || '').trim().toLowerCase();
-  const filas = filtro ? SS_VIGENTES_DATA.filter((f) => f.nombre.toLowerCase().includes(filtro)) : SS_VIGENTES_DATA;
+  const filas = ssFilasVisibles();
+  const nStop = new Set(SS_VIGENTES_DATA.filter((f) => f.estado === 'stop_sale').map((f) => f.nombre)).size;
+  const nReq = new Set(SS_VIGENTES_DATA.filter((f) => f.estado === 'on_request').map((f) => f.nombre)).size;
+  const nSemana = SS_VIGENTES_DATA.filter((f) => ssDiasRestantes(f.fecha_hasta) <= 7).length;
+
+  cont.innerHTML = `<div id="ss-kpis" class="kpis kpis-3" style="margin-bottom:14px"></div>
+    <div id="ss-calendario" class="${ssView === 'calendario' ? 'show' : ''}"></div>
+    <div id="ss-hoteles" class="${ssView === 'hoteles' ? 'show' : ''}"></div>`;
+
+  pintarKPIs('ss-kpis', [
+    { t: 'Sin cupo', v: nStop, d: 'hoteles en stop sale', i: 'fa-ban', c: '#ef4444', key: 'stop_sale', on: ssFiltro === 'stop_sale', tt: 'Ver solo los bloqueos sin cupo', go: () => ssIrAFiltro('stop_sale') },
+    { t: 'A confirmar', v: nReq, d: 'hoteles on request', i: 'fa-clock', c: '#e0a030', key: 'on_request', on: ssFiltro === 'on_request', tt: 'Ver solo los que hay que confirmar', go: () => ssIrAFiltro('on_request') },
+    { t: 'Se liberan pronto', v: nSemana, d: 'terminan en 7 días o menos', i: 'fa-calendar-check', c: 'var(--green)', key: 'semana', on: ssFiltro === 'semana', tt: 'Ver los que se liberan esta semana', go: () => ssIrAFiltro('semana') },
+  ]);
+
   if (!filas.length) {
-    cont.innerHTML = `<div class="vig-vacio">Ningún hotel coincide con "${esc(filtro)}".</div>`;
+    const donde = ssView === 'calendario' ? 'ss-calendario' : 'ss-hoteles';
+    document.getElementById(donde).innerHTML = '<div class="vig-vacio">Ningún bloqueo coincide con lo que buscás.</div>';
     return;
   }
-  const grupos = ssAgruparPorHotel(filas, 'nombre');
-  const hotelesStop = grupos.filter((g) => g.peor === 'stop_sale').length;
-  const hotelesOnRequest = grupos.length - hotelesStop;
 
-  cont.innerHTML = `<div class="vig-resumen">
-      <div class="vig-kpi ${hotelesStop ? 'grave' : ''}"><b>${hotelesStop}</b><span>En stop sale</span></div>
-      <div class="vig-kpi ${hotelesOnRequest ? 'aviso' : ''}"><b>${hotelesOnRequest}</b><span>En on request</span></div>
-    </div>
-    <div style="margin-top:12px">${grupos.map(ssTarjetaVigente).join('')}</div>`;
+  if (ssView === 'calendario') {
+    SS_POR_DIA = ssDiasBloqueados(filas);
+    const meses = ssMesesConDatos();
+    const mesHoy = ssISO(new Date()).slice(0, 7);
+    // Si el mes que se estaba viendo se quedó sin datos por un filtro, saltar al
+    // primero que sí tenga en vez de mostrar una grilla vacía sin explicación.
+    if (!SS_MES || !meses.includes(SS_MES)) SS_MES = meses.includes(mesHoy) ? mesHoy : (meses.find((m) => m >= mesHoy) || meses[0]);
+    const box = document.getElementById('ss-calendario');
+    box.innerHTML = ssCalendarioHtml(SS_MES);
+    ssPintarDetalleDia();
+    box.querySelectorAll('[data-ss-mes]').forEach((b) => b.addEventListener('click', () => {
+      if (!b.dataset.ssMes) return;
+      SS_MES = b.dataset.ssMes; SS_DIA_ABIERTO = null; ssRenderVigentes();
+    }));
+    box.querySelectorAll('[data-ss-dia]').forEach((b) => b.addEventListener('click', () => {
+      SS_DIA_ABIERTO = SS_DIA_ABIERTO === b.dataset.ssDia ? null : b.dataset.ssDia;
+      ssRenderVigentes();
+    }));
+  } else {
+    document.getElementById('ss-hoteles').innerHTML = ssAgruparPorHotel(filas, 'nombre').map(ssTarjetaVigente).join('');
+  }
 }
 
 /* ---------- Reasignaciones ---------- */
@@ -9985,6 +10161,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-06', emoji: '📅', titulo: 'Stop Sales: calendario de bloqueos', texto: 'La pestaña Stop Sales (qué hoteles no tienen cupo, según el PDF que manda BT Travel) ahora se ve como un calendario del mes: los días con bloqueo salen pintados, y cuanto más oscuro, más hoteles caen ese día. Tocá un día y te dice cuáles son. Arriba a la derecha podés cambiar a la vista por hotel, donde cada uno muestra una barra con sus días bloqueados. Los tres recuadros de arriba son filtros: sin cupo, a confirmar, y los que se liberan en menos de una semana. También está el botón "Ver PDF original" por si querés comparar contra lo que mandó BT Travel.', roles: ROLES_TODOS },
   { fecha: '2026-08-05', emoji: '💰', titulo: 'Web y Reasignados', texto: 'Sección nueva (solo admin) con todos los leads que entraron por la página web o que en algún momento se reasignaron, juntos en un solo lugar. Se puede filtrar por origen y ver cuáles ya cerraron en venta, con el monto y la comisión calculada al porcentaje que configures ahí mismo. Los que son de los dos orígenes aparecen una sola vez, marcados "Ambos", para no contarlos doble.', roles: ['admin'] },
   { fecha: '2026-08-05', emoji: '🛡️', titulo: 'El CRM ya no se cae entero por una sola sección', texto: 'El 3 de agosto el CRM quedó inutilizable después de una actualización. La causa: al publicar, el navegador podía quedarse con una mitad nueva y otra vieja, y con esa mezcla una sección fallaba y arrastraba a todas las demás (Voucher, Tareas, Freelancers dejaban de cargar). Se arregló por dos lados: ahora las dos mitades entran juntas o no entra ninguna, y si una sección falla queda apagada solo ella, sin tocar el resto.', roles: ROLES_TODOS },
   { fecha: '2026-08-02', emoji: '📊', titulo: 'Clientes de la IA: cuánto consumen y cómo va su cobro', texto: 'En "IA Atención al Cliente" hay dos pestañas. Interesados es lo de antes, con un botón nuevo para convertir una solicitud en cliente (le crea su rama de la IA). Clientes muestra, por cada uno: cuántos mensajes lleva del plan, cuántas personas distintas le escribieron este mes, cuánto nos costó de verdad, cuánto se ganó, y si ya pagó. Al 80% del plan avisa y propone el siguiente — la IA nunca se corta ni se cobra nada solo.', roles: ['admin'] },
