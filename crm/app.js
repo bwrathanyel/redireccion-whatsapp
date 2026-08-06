@@ -6461,7 +6461,7 @@ async function loadStopSalesVigentes() {
   const { data, error } = await sb.rpc('stop_sales_vigentes');
   if (error) { cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
   SS_VIGENTES_DATA = data || [];
-  ssView = initViewSwitcher('ss-view-switch', 'stop-sales', 'calendario', (v) => { ssView = v; SS_DIA_ABIERTO = null; ssRenderVigentes(); }, ['calendario', 'hoteles']);
+  ssView = initViewSwitcher('ss-view-switch', 'stop-sales', 'hoteles', (v) => { ssView = v; SS_DIA_ABIERTO = null; ssRenderVigentes(); }, ['calendario', 'hoteles']);
   ssRenderVigentes();
 }
 
