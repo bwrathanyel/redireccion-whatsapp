@@ -1196,6 +1196,7 @@ function abrirEditorPersona(usuarioId) {
       <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-boleteria"${u.es_boleteria ? ' checked' : ''}> Es agente de boletería (atiende la cola de solicitudes de vuelos)</label>
       <div class="edit-err" id="pe-err"></div>
       <button class="dbtn save" id="pe-guardar" type="button"><i class="fas fa-check"></i> Guardar</button>
+      <button class="dbtn gh" id="pe-restablecer" type="button"><i class="fas fa-key"></i> Restablecer acceso</button>
       <button class="dbtn gh" id="pe-baja" type="button" style="color:#ef4444"><i class="fas fa-user-slash"></i> Dar de baja</button>
       <div style="font-size:11px;color:var(--muted2);margin-top:10px;line-height:1.5">Dar de baja le quita el acceso al instante y lo saca de las listas, pero <b>no borra su historial</b> de asistencia, leads ni comisiones. Se puede reactivar.</div>
     </div>`;
@@ -1203,7 +1204,25 @@ function abrirEditorPersona(usuarioId) {
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
   document.getElementById('pe-guardar').onclick = () => guardarPersona(usuarioId);
+  document.getElementById('pe-restablecer').onclick = () => restablecerAcceso(usuarioId);
   document.getElementById('pe-baja').onclick = () => bajaPersonal(usuarioId, false);
+}
+
+async function restablecerAcceso(usuarioId) {
+  const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
+  if (!u || !confirm(`¿Restablecer el acceso de ${u.nombre}?\n\nVas a recibir una contraseña temporal para pasársela una sola vez. La persona deberá cambiarla al entrar.`)) return;
+  const { data, error } = await sb.functions.invoke('restablecer-acceso', { body: { usuario_id: usuarioId } });
+  if (error || !data?.ok) { errToast('No se pudo restablecer el acceso.'); return; }
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="dhead"><div><div class="dn">Acceso restablecido</div><div class="dm">${esc(u.nombre)}</div></div></div>
+    <div class="edit-box" style="margin-top:16px;border-color:rgba(34,197,94,.4)">
+      <div style="font-size:13px;line-height:1.6">Pasale esta contraseña por un canal privado. <b>Se muestra una sola vez</b> y deberá cambiarla al iniciar sesión.</div>
+      <div class="pn-cred"><span>Usuario</span><b>${esc(data.username)}</b></div>
+      <div class="pn-cred"><span>Contraseña temporal</span><b>${esc(data.password_temporal)}</b></div>
+      <button class="dbtn gh" id="pe-copiar-reset" type="button"><i class="fas fa-copy"></i> Copiar</button>
+    </div>`;
+  document.getElementById('pe-copiar-reset').onclick = () => navigator.clipboard.writeText(`Usuario: ${data.username}\nContraseña temporal: ${data.password_temporal}`)
+    .then(() => okToast('Copiado')).catch(() => errToast('No se pudo copiar'));
 }
 
 async function guardarPersona(usuarioId) {
@@ -1407,9 +1426,9 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   const btn = document.getElementById('setupBtn'), errEl = document.getElementById('setupErr');
   const p1 = val('setupPwd'), p2 = val('setupPwd2'), pregunta = val('setupPregunta').trim(), respuesta = val('setupRespuesta').trim();
   errEl.textContent = '';
-  if (p1.length < 6) { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
+  if (p1.length < 12) { errEl.textContent = 'La contraseña debe tener al menos 12 caracteres'; return; }
   if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
-  if (!pregunta || !respuesta) { errEl.textContent = 'Completa la pregunta y la respuesta de seguridad'; return; }
+  if (pregunta.length < 8 || respuesta.length < 8 || /^\d+$/.test(respuesta)) { errEl.textContent = 'Usa una pregunta y respuesta de al menos 8 caracteres; la respuesta no puede ser sólo números'; return; }
   btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
   const { error: e1 } = await sb.auth.updateUser({ password: p1 });
   const { error: e2 } = e1 ? { error: null } : await sb.rpc('set_pregunta_seguridad', { p_pregunta: pregunta, p_respuesta: respuesta });
@@ -1422,56 +1441,9 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   entrarSegunRol();
 });
 
-document.getElementById('forgotLink').addEventListener('click', e => { e.preventDefault(); resetForgot(); showOverlay('forgot'); });
-document.getElementById('backToLogin').addEventListener('click', e => { e.preventDefault(); showOverlay('login'); });
-
-let forgotStep = 1;
-function resetForgot() {
-  forgotStep = 1;
-  document.getElementById('forgotForm').reset();
-  document.getElementById('forgotUser').disabled = false;
-  document.getElementById('forgotQWrap').style.display = 'none';
-  document.getElementById('forgotAWrap').style.display = 'none';
-  document.getElementById('forgotPwdWrap').style.display = 'none';
-  document.getElementById('forgotErr').textContent = '';
-  document.getElementById('forgotBtn').innerHTML = 'Continuar <i class="fas fa-arrow-right"></i>';
-}
-
-document.getElementById('forgotForm').addEventListener('submit', async e => {
+document.getElementById('forgotLink').addEventListener('click', e => {
   e.preventDefault();
-  const btn = document.getElementById('forgotBtn'), errEl = document.getElementById('forgotErr');
-  errEl.textContent = '';
-  if (forgotStep === 1) {
-    const username = val('forgotUser').trim().toLowerCase();
-    if (!username) { errEl.textContent = 'Escribe tu usuario'; return; }
-    btn.disabled = true;
-    const { data: pregunta, error } = await sb.rpc('obtener_pregunta_seguridad', { p_username: username });
-    btn.disabled = false;
-    if (error || !pregunta) { errEl.textContent = 'Usuario no encontrado o sin pregunta de seguridad configurada'; return; }
-    document.getElementById('forgotQ').value = pregunta;
-    document.getElementById('forgotUser').disabled = true;
-    document.getElementById('forgotQWrap').style.display = 'block';
-    document.getElementById('forgotAWrap').style.display = 'block';
-    document.getElementById('forgotPwdWrap').style.display = 'block';
-    btn.innerHTML = 'Cambiar contraseña <i class="fas fa-arrow-right"></i>';
-    forgotStep = 2;
-    return;
-  }
-  const username = val('forgotUser').trim().toLowerCase(), respuesta = val('forgotA').trim(), nueva = val('forgotPwd');
-  if (nueva.length < 6) { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
-  btn.disabled = true; btn.innerHTML = 'Verificando... <i class="fas fa-spinner fa-spin"></i>';
-  try {
-    const r = await fetch(RESET_FN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, respuesta, nueva_password: nueva }) });
-    const data = await r.json();
-    btn.disabled = false; btn.innerHTML = 'Cambiar contraseña <i class="fas fa-arrow-right"></i>';
-    if (!data.ok) { errEl.textContent = data.error === 'respuesta_incorrecta' ? 'Respuesta incorrecta' : 'No se pudo cambiar la contraseña'; return; }
-    okToast('Contraseña actualizada, ya puedes entrar');
-    document.getElementById('loginUser').value = username;
-    showOverlay('login');
-  } catch (_e) {
-    btn.disabled = false; btn.innerHTML = 'Cambiar contraseña <i class="fas fa-arrow-right"></i>';
-    errEl.textContent = 'Error de conexión, intenta de nuevo';
-  }
+  errToast('Pedile a un administrador que restablezca tu acceso desde Gestión de Personal.');
 });
 
 /* ---------- Configurar usuario (reclamar cuenta, sin contraseña previa) ---------- */
@@ -1506,10 +1478,10 @@ document.getElementById('claimForm').addEventListener('submit', async e => {
   const btn = document.getElementById('claimFormBtn'), errEl = document.getElementById('claimFormErr');
   const p1 = val('claimPwd'), p2 = val('claimPwd2'), pregunta = val('claimPregunta').trim(), respuesta = val('claimRespuesta').trim(), claimToken = val('claimToken').trim();
   errEl.textContent = '';
-  if (!claimToken) { errEl.textContent = 'Pedile el código a un admin (te lo pasa por WhatsApp)'; return; }
-  if (p1.length < 6) { errEl.textContent = 'La contraseña debe tener al menos 6 caracteres'; return; }
+  if (claimToken.length !== 48) { errEl.textContent = 'El código de reclamo debe tener 48 caracteres'; return; }
+  if (p1.length < 12) { errEl.textContent = 'La contraseña debe tener al menos 12 caracteres'; return; }
   if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
-  if (!pregunta || !respuesta) { errEl.textContent = 'Completa la pregunta y la respuesta de seguridad'; return; }
+  if (pregunta.length < 8 || respuesta.length < 8 || /^\d+$/.test(respuesta)) { errEl.textContent = 'Usa una pregunta y respuesta de al menos 8 caracteres; la respuesta no puede ser sólo números'; return; }
   btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
   try {
     const r = await fetch(CLAIM_FN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: claimUsername, password: p1, pregunta, respuesta, claim_token: claimToken }) });
@@ -10362,6 +10334,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-07', emoji: '🔐', titulo: 'Accesos más seguros', texto: 'Si olvidaste tu contraseña, pedí ayuda a un administrador: desde Gestión de Personal puede restablecer tu acceso y entregarte una contraseña temporal que debés cambiar al entrar. Los códigos para configurar una cuenta nueva ahora los genera el admin y vencen; ya no se usa la pregunta personal para recuperar cuentas.', roles: ROLES_TODOS },
   { fecha: '2026-08-06', emoji: '📅', titulo: 'Stop Sales: calendario de bloqueos', texto: 'La pestaña Stop Sales (qué hoteles no tienen cupo, según el PDF que manda BT Travel) ahora se ve como un calendario del mes: los días con bloqueo salen pintados, y cuanto más oscuro, más hoteles caen ese día. Tocá un día y te dice cuáles son. Arriba a la derecha podés cambiar a la vista por hotel, donde cada uno muestra una barra con sus días bloqueados. Los tres recuadros de arriba son filtros: sin cupo, a confirmar, y los que se liberan en menos de una semana. También está el botón "Ver PDF original" por si querés comparar contra lo que mandó BT Travel.', roles: ROLES_TODOS },
   { fecha: '2026-08-05', emoji: '💰', titulo: 'Web y Reasignados', texto: 'Sección nueva (solo admin) con todos los leads que entraron por la página web o que en algún momento se reasignaron, juntos en un solo lugar. Se puede filtrar por origen y ver cuáles ya cerraron en venta, con el monto y la comisión calculada al porcentaje que configures ahí mismo. Los que son de los dos orígenes aparecen una sola vez, marcados "Ambos", para no contarlos doble.', roles: ['admin'] },
   { fecha: '2026-08-05', emoji: '🛡️', titulo: 'El CRM ya no se cae entero por una sola sección', texto: 'El 3 de agosto el CRM quedó inutilizable después de una actualización. La causa: al publicar, el navegador podía quedarse con una mitad nueva y otra vieja, y con esa mezcla una sección fallaba y arrastraba a todas las demás (Voucher, Tareas, Freelancers dejaban de cargar). Se arregló por dos lados: ahora las dos mitades entran juntas o no entra ninguna, y si una sección falla queda apagada solo ella, sin tocar el resto.', roles: ROLES_TODOS },

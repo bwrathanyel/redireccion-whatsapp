@@ -1839,7 +1839,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <input id="loginPwd" type="password" placeholder="Contraseña" autocomplete="current-password" aria-label="Contraseña"></div>
     <div class="login-err" id="loginErr"></div>
     <button type="submit" id="loginBtn">Entrar <i class="fas fa-arrow-right"></i></button>
-    <div class="login-foot"><a href="#" id="forgotLink">¿Olvidaste tu contraseña?</a></div>
+    <div class="login-foot"><a href="#" id="forgotLink">¿Olvidaste tu contraseña? Pedile ayuda a un admin</a></div>
     <div class="login-foot"><a href="#" id="claimLink">¿Primera vez? Configura tu usuario</a></div>
   </form>
 </div>
@@ -1859,9 +1859,9 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <form id="claimForm" class="login-card">
     <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
     <h1 id="claimFormTitle">Configura tu usuario</h1>
-    <p>Elegí tu contraseña definitiva y una pregunta de seguridad (sirve para recuperar el acceso sin correo)</p>
+    <p>Elegí tu contraseña definitiva y una pregunta de seguridad personal.</p>
     <div class="login-field"><i class="fas fa-shield-halved"></i>
-      <input id="claimToken" type="text" inputmode="numeric" placeholder="Código que te dio el admin" autocomplete="off"></div>
+      <input id="claimToken" type="text" maxlength="48" placeholder="Código de 48 caracteres que te dio el admin" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
     <div class="login-field"><i class="fas fa-lock"></i>
       <input id="claimPwd" type="password" placeholder="Contraseña nueva" autocomplete="new-password"></div>
     <div class="login-field"><i class="fas fa-lock"></i>
@@ -1890,7 +1890,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <form id="setupForm" class="login-card">
     <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
     <h1>Configura tu cuenta</h1>
-    <p>Elige tu contraseña definitiva y una pregunta de seguridad (sirve para recuperar el acceso sin correo)</p>
+    <p>Elige tu contraseña definitiva y una pregunta de seguridad personal.</p>
     <div class="login-field"><i class="fas fa-lock"></i>
       <input id="setupPwd" type="password" placeholder="Contraseña nueva" autocomplete="new-password"></div>
     <div class="login-field"><i class="fas fa-lock"></i>
