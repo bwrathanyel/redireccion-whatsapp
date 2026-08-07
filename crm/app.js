@@ -9378,7 +9378,7 @@ const BN_MAX = 7;                                              // incluye "Yo"
 // (sigue nav-admin-only); a un admin le quedan las dos.
 const BN_DEFAULT = ['hoy', 'leads', 'mensajes', 'tarifario', 'stop-sales', 'gestion-personal'];
 // "Hoy" solo existe en móvil (no está en el sidebar), así que va a mano.
-const BN_HOY = { sec: 'hoy', icono: 'fas fa-house', label: 'Hoy' };
+const BN_HOY = { sec: 'hoy', icono: 'fas fa-house', label: 'Hoy', clases: 'nav-marketing-ok nav-boleteria-ok' };
 // Nombres cortos: en una barra de 7 no entra "Gestión de Personal".
 const BN_LABEL_CORTO = {
   'gestion-personal': 'Personal',
@@ -9402,7 +9402,7 @@ function bnCatalogo() {
     const label = BN_LABEL_CORTO[sec]
       || [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim()
       || sec;
-    items.push({ sec, icono, label });
+    items.push({ sec, icono, label, clases: [...el.classList].filter(c => c.startsWith('nav-')).join(' ') });
   });
   return items;
 }
@@ -9432,7 +9432,7 @@ function renderBottomNav() {
   nav.innerHTML = secs.map(sec => {
     const it = porSec[sec];
     const badge = BN_BADGES[sec] ? `<span class="bn-badge" id="${BN_BADGES[sec]}"></span>` : '';
-    return `<a class="bn-item" data-sec="${esc(sec)}"><i class="${esc(it.icono)}"></i>${badge}<span class="bn-t">${esc(it.label)}</span></a>`;
+    return `<a class="bn-item ${esc(it.clases || '')}" data-sec="${esc(sec)}"><i class="${esc(it.icono)}"></i>${badge}<span class="bn-t">${esc(it.label)}</span></a>`;
   }).join('') + '<a class="bn-item" id="bn-more"><i class="fas fa-user"></i><span class="bn-t">Yo</span></a>';
   // El CSS achica la letra según cuántos entren, para que el nombre no se corte.
   nav.dataset.n = String(secs.length + 1);
