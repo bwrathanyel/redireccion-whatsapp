@@ -1579,6 +1579,27 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .cb-txt{font-size:12.5px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--txt)}
 .cb-resumen{font-size:12.5px;color:var(--muted);margin-bottom:10px}
 .cb-resumen b{color:var(--txt)}
+/* Rendimiento IA: resumen ejecutivo y detalle operativo sin exponer chats ni PII. */
+.ria-dashboard{width:100%;display:grid;grid-template-columns:minmax(190px,1.3fr) repeat(5,minmax(90px,1fr));gap:12px;align-items:center;text-align:left;margin:0 0 12px;padding:15px 17px;border:1px solid rgba(245,158,11,.22);border-radius:16px;background:linear-gradient(110deg,rgba(245,158,11,.11),rgba(255,255,255,.025));color:var(--txt);font-family:inherit;cursor:pointer}
+.ria-dashboard:hover{border-color:rgba(245,158,11,.45)}
+.ria-db-title{font-size:13px;font-weight:800}.ria-db-title small{display:block;color:var(--muted);font-size:11px;font-weight:500;margin-top:4px}
+.ria-db-m{font-size:11px;color:var(--muted)}.ria-db-m b{display:block;color:var(--txt);font-size:18px;margin-bottom:2px}
+.ria-estado{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;border-radius:999px;padding:4px 10px}
+.ria-estado.bien{background:rgba(34,197,94,.14);color:#86efac}.ria-estado.atencion{background:rgba(234,179,8,.14);color:#fde047}.ria-estado.critico{background:rgba(239,68,68,.14);color:#fca5a5}.ria-estado.sin_datos{background:rgba(148,163,184,.12);color:#cbd5e1}
+.ria-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:13px}.ria-toolbar .seg-group{margin:0}
+.ria-estado-card{display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--panel);margin-bottom:12px}
+.ria-estado-card .ria-texto{flex:1;min-width:180px;font-size:12.5px;color:var(--muted);line-height:1.5}.ria-estado-card .ria-texto b{color:var(--txt)}
+.ria-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:12px;margin-bottom:12px}.ria-card{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:16px}
+.ria-card h2{font-size:14px;margin:0 0 4px}.ria-sub{font-size:11.5px;color:var(--muted);margin-bottom:14px;line-height:1.5}
+.ria-funnel{display:flex;flex-direction:column;gap:8px}.ria-paso{display:grid;grid-template-columns:minmax(105px,1fr) 2.5fr 48px;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.ria-paso b{color:var(--txt);text-align:right}.ria-bar{height:9px;background:var(--line2);border-radius:999px;overflow:hidden}.ria-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),#fbbf24)}
+.ria-lista{display:flex;flex-direction:column;gap:8px}.ria-fila{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+.ria-fila:last-child{border-bottom:0}.ria-fila b{color:var(--txt);font-variant-numeric:tabular-nums}.ria-malo{color:#fca5a5!important}.ria-bien{color:#86efac!important}
+.ria-cal-head,.ria-cal-fila{display:grid;grid-template-columns:minmax(130px,1fr) 90px 90px;gap:8px;align-items:center}.ria-cal-head{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2);padding-bottom:8px}
+.ria-cal-fila{font-size:12px;color:var(--muted);padding:8px 0;border-top:1px solid var(--line)}.ria-cal-fila b{text-align:center;color:var(--txt)}
+.ria-vacio{font-size:12.5px;color:var(--muted);padding:18px 0;text-align:center}
+@media(max-width:900px){.ria-dashboard{grid-template-columns:repeat(3,1fr)}.ria-db-title{grid-column:1/-1}.ria-grid{grid-template-columns:1fr}}
+@media(max-width:560px){.ria-dashboard{grid-template-columns:repeat(2,1fr)}.ria-dashboard .ria-db-m:last-child{display:none}.ria-paso{grid-template-columns:100px 1fr 38px}.ria-cal-head,.ria-cal-fila{grid-template-columns:minmax(115px,1fr) 62px 62px}}
 /* ---------- Clientes de la IA: consumo del mes -------------------------
    Dos barras y no una: la de mensajes es lo que le vendiste, la de contactos
    es lo que te cuesta. Se ven juntas porque la segunda es la que se pasa
@@ -1959,6 +1980,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <nav class="sidebar-nav" id="sidebar-nav">
       <div class="nav-label" data-label="principal">Principal</div>
       <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
+      <a class="nav-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA</a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales</a>
       <a class="nav-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas <span class="badge" id="nav-tareas-count" style="display:none">0</span></a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
@@ -1974,7 +1996,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
       <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
-      <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> IA Atención al Cliente</a>
+      <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA</a>
       <a class="nav-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados</a>
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
@@ -2042,6 +2064,15 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <!-- DASHBOARD -->
     <section class="section active" id="sec-dashboard">
       <div class="kpis" id="kpis"></div>
+      <button class="ria-dashboard nav-admin-only" id="ria-dashboard" type="button">
+        <span class="ria-db-title"><i class="fas fa-wand-magic-sparkles"></i> IA comercial
+          <small id="ria-db-estado">Cargando el resumen de hoy…</small></span>
+        <span class="ria-db-m"><b id="ria-db-conversaciones">—</b>Conversaciones</span>
+        <span class="ria-db-m"><b id="ria-db-telefonos">—</b>Teléfonos</span>
+        <span class="ria-db-m"><b id="ria-db-leads">—</b>Leads calificados</span>
+        <span class="ria-db-m"><b id="ria-db-conversion">—</b>Conversión</span>
+        <span class="ria-db-m"><b id="ria-db-incidentes">—</b>Alertas</span>
+      </button>
       <div class="grid g-2" style="margin-bottom:12px">
         <div class="card">
           <h2><i class="fas fa-chart-line"></i> Leads por mes</h2>
@@ -3235,7 +3266,38 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       </div>
     </section>
 
-    <!-- IA ATENCIÓN AL CLIENTE: posadas que pidieron el asistente desde /posadas -->
+    <!-- RENDIMIENTO IA: control comercial y operativo, siempre agregado y sin PII -->
+    <section class="section" id="sec-rendimiento-ia">
+      <div class="ria-toolbar">
+        <div class="seg-group" id="ria-periodos">
+          <button class="seg" data-ria-dias="1">Hoy</button>
+          <button class="seg on" data-ria-dias="7">7 días</button>
+          <button class="seg" data-ria-dias="30">30 días</button>
+        </div>
+        <button class="ce-mini" id="ria-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+        <span class="ce-vig" id="ria-actualizado"></span>
+      </div>
+      <div class="ria-estado-card" id="ria-estado-card">
+        <span class="ria-estado sin_datos" id="ria-estado">Cargando</span>
+        <div class="ria-texto" id="ria-estado-texto">Consultando la telemetría privada de la IA…</div>
+      </div>
+      <div class="kpis" id="ria-kpis"></div>
+      <div class="ria-grid">
+        <div class="ria-card"><h2><i class="fas fa-filter"></i> Embudo comercial</h2><div class="ria-sub">En qué paso avanzan o se pierden las conversaciones.</div><div id="ria-embudo"></div></div>
+        <div class="ria-card"><h2><i class="fas fa-handshake"></i> Resultado del negocio</h2><div class="ria-sub">Leads entregados, seguimiento y ventas atribuibles a la IA.</div><div id="ria-ventas"></div></div>
+      </div>
+      <div class="ria-grid">
+        <div class="ria-card"><h2><i class="fas fa-shield-heart"></i> Calidad de las respuestas</h2><div class="ria-sub">Separa lo que intentó el modelo de lo que realmente recibió el cliente.</div><div id="ria-calidad"></div></div>
+        <div class="ria-card"><h2><i class="fas fa-share-nodes"></i> Canales</h2><div class="ria-sub">Instagram y web comparados con la misma definición.</div><div id="ria-canales"></div></div>
+      </div>
+      <div class="ria-grid">
+        <div class="ria-card"><h2><i class="fas fa-gauge-high"></i> Funcionamiento y costo</h2><div class="ria-sub">Velocidad, errores y consumo real de tokens.</div><div id="ria-operacion"></div></div>
+        <div class="ria-card"><h2><i class="fas fa-code-branch"></i> Versiones activas</h2><div class="ria-sub">Resultados separados por cerebro y motor para comparar cambios.</div><div id="ria-versiones"></div></div>
+      </div>
+      <div class="ce-ayuda"><i class="fas fa-lock"></i> Este panel usa agregados y hashes. No almacena ni muestra chats, teléfonos o nombres de clientes.</div>
+    </section>
+
+    <!-- PROSPECTOS DE IA: posadas que pidieron el asistente desde /posadas -->
     <section class="section" id="sec-ia-atencion">
       <div class="seg-group" id="ia-tabs">
         <button class="seg on" data-ia-tab="interesados"><i class="fas fa-hand-sparkles"></i> Interesados</button>
@@ -3540,7 +3602,8 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <a class="sheet-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
-  <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> IA Atención al Cliente <span class="si-sub">Posadas que quieren el asistente</span></a>
+  <a class="sheet-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA <span class="si-sub">Ventas, calidad, errores y costos</span></a>
+  <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA <span class="si-sub">Posadas que quieren el asistente</span></a>
   <a class="sheet-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados <span class="si-sub">Los leads por los que cobrás comisión</span></a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>

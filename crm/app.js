@@ -128,7 +128,8 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   tareas: ['Tareas', 'Tus tareas activas'],
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
   'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
-  'ia-atencion': ['IA Atención al Cliente', 'Posadas y apartamentos que pidieron el asistente desde la página'],
+  'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
+  'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
   'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles que manda BT Travel -- cargá el PDF y confirmá antes de publicar'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
@@ -1563,7 +1564,7 @@ async function startApp() {
   arrancar(
     setupMetricas, setupRanking, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupGestionPersonal, setupLeadsTabs,
-    setupBuscadorIATarifario, setupCerebroIA, setupWebReasignados, setupStopSales,
+    setupBuscadorIATarifario, setupCerebroIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers,
@@ -3798,7 +3799,151 @@ function setupCerebroIA() {
   });
 }
 
-/* --- IA Atención al Cliente ------------------------------------------------
+/* --- Rendimiento de la IA comercial -------------------------------------
+   El panel consume exclusivamente agregados admin-only. Los hashes de contacto
+   no salen de la RPC y el navegador nunca recibe chats, nombres o telÃ©fonos. */
+let RIA_DIAS = 7;
+const RIA_CACHE = new Map();
+const RIA_COSTO_ENTRADA = 0.14 / 1e6;
+const RIA_COSTO_CACHE = 0.014 / 1e6;
+const RIA_COSTO_SALIDA = 0.28 / 1e6;
+
+function riaRango(dias) {
+  const hasta = new Date();
+  const desde = new Date(hasta);
+  if (dias === 1) desde.setHours(0, 0, 0, 0);
+  else desde.setTime(hasta.getTime() - dias * 86400000);
+  return { desde: desde.toISOString(), hasta: hasta.toISOString() };
+}
+
+async function riaConsultar(dias, forzar = false) {
+  const guardado = RIA_CACHE.get(dias);
+  if (!forzar && guardado && Date.now() - guardado.en < 60000) return guardado.data;
+  const rango = riaRango(dias);
+  const { data, error } = await sb.rpc('panel_rendimiento_ia', {
+    p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta,
+  });
+  if (error) throw error;
+  RIA_CACHE.set(dias, { en: Date.now(), data });
+  return data;
+}
+
+const riaNum = n => Number(n || 0);
+const riaPct = (n, total) => total ? Math.round(riaNum(n) * 1000 / riaNum(total)) / 10 : 0;
+const riaDinero = n => '$' + riaNum(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const riaHora = iso => iso ? new Date(iso).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' }) : 'Sin actividad';
+function riaCambio(actual, anterior) {
+  actual = riaNum(actual); anterior = riaNum(anterior);
+  if (!anterior) return actual ? 'Sin base comparable' : 'Sin cambios';
+  const p = Math.round((actual - anterior) * 100 / anterior);
+  return `${p >= 0 ? '+' : ''}${p}% frente al período anterior`;
+}
+
+function riaEstadoInfo(data) {
+  const estado = data?.salud?.estado || 'sin_datos';
+  const r = data?.resumen || {}, s = data?.salud || {};
+  if (estado === 'bien') return { estado, titulo: 'Funcionando sin incidentes visibles', texto: `Última actividad: ${riaHora(s.ultima_actividad)}. No se detectaron errores críticos en las respuestas medidas.` };
+  if (estado === 'critico') return { estado, titulo: 'Requiere revisión inmediata', texto: `${riaNum(s.incidentes_criticos)} incidente(s) crítico(s) o ${riaNum(r.duplicados)} contacto(s) con leads duplicados.` };
+  if (estado === 'atencion') return { estado, titulo: 'Hay puntos para revisar', texto: `${riaNum(s.errores_tecnicos)} error(es) técnico(s) y ${riaNum(r.oportunidades_sin_lead)} oportunidad(es) completa(s) sin lead.` };
+  return { estado, titulo: 'Sin conversaciones en este período', texto: 'Esto no significa que la IA esté caída; solo conviene investigarlo si esperabas tráfico.' };
+}
+
+function riaPintarDashboard(data) {
+  const r = data?.resumen || {}, salud = riaEstadoInfo(data);
+  const alertas = riaNum(data?.salud?.incidentes_criticos) + riaNum(data?.salud?.errores_tecnicos) + riaNum(r.oportunidades_sin_lead) + riaNum(r.duplicados);
+  document.getElementById('ria-db-conversaciones').textContent = fmt(riaNum(r.conversaciones));
+  document.getElementById('ria-db-telefonos').textContent = fmt(riaNum(r.telefonos));
+  document.getElementById('ria-db-leads').textContent = fmt(riaNum(r.leads_calificados));
+  document.getElementById('ria-db-conversion').textContent = riaPct(r.leads_calificados, r.conversaciones) + '%';
+  document.getElementById('ria-db-incidentes').textContent = fmt(alertas);
+  document.getElementById('ria-db-estado').innerHTML = `<span class="ria-estado ${salud.estado}">${esc(salud.titulo)}</span>`;
+}
+
+async function loadResumenIADashboard(forzar = false) {
+  if (ROL !== 'admin' || !document.getElementById('ria-dashboard')) return;
+  try { riaPintarDashboard(await riaConsultar(1, forzar)); }
+  catch (e) {
+    console.error('rendimiento IA dashboard', e);
+    document.getElementById('ria-db-estado').textContent = 'No se pudo cargar el resumen';
+  }
+}
+
+function riaPintarPanel(data) {
+  const r = data.resumen || {}, ant = data.anterior || {}, op = data.operacion || {}, ventas = data.ventas || {};
+  const salud = riaEstadoInfo(data), estado = document.getElementById('ria-estado');
+  estado.className = `ria-estado ${salud.estado}`; estado.textContent = salud.titulo;
+  document.getElementById('ria-estado-texto').innerHTML = `${esc(salud.texto)} <b>${esc(riaCambio(r.leads_calificados, ant.leads_calificados))}</b>`;
+  document.getElementById('ria-actualizado').textContent = 'Actualizado ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+
+  pintarKPIs('ria-kpis', [
+    { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: riaCambio(r.conversaciones, ant.conversaciones), i: 'fa-comments', c: 'var(--blue)' },
+    { t: 'Teléfonos', v: fmt(riaNum(r.telefonos)), d: `${riaPct(r.telefonos, r.conversaciones)}% de conversaciones`, i: 'fa-phone', c: 'var(--accent)' },
+    { t: 'Leads calificados', v: fmt(riaNum(r.leads_calificados)), d: `${riaPct(r.leads_calificados, r.conversaciones)}% de conversión`, i: 'fa-user-check', c: 'var(--green)' },
+    { t: 'Oportunidades sin lead', v: fmt(riaNum(r.oportunidades_sin_lead)), d: 'Teléfono + destino + intención', i: 'fa-triangle-exclamation', c: riaNum(r.oportunidades_sin_lead) ? '#ef4444' : 'var(--green)' },
+    { t: 'Errores técnicos', v: fmt(riaNum(data.salud?.errores_tecnicos)), d: 'Fallos del modelo o proveedor', i: 'fa-plug-circle-xmark', c: riaNum(data.salud?.errores_tecnicos) ? '#ef4444' : 'var(--green)' },
+  ]);
+
+  const pasos = [['Conversaciones', r.conversaciones], ['Destino', r.destinos], ['Teléfono', r.telefonos], ['Intención real', r.intenciones], ['Lead creado', r.leads_calificados]];
+  document.getElementById('ria-embudo').innerHTML = `<div class="ria-funnel">${pasos.map(([n, v]) => `<div class="ria-paso"><span>${esc(n)}</span><div class="ria-bar"><i style="width:${Math.min(100, riaPct(v, r.conversaciones))}%"></i></div><b>${fmt(riaNum(v))}</b></div>`).join('')}</div>`;
+
+  document.getElementById('ria-ventas').innerHTML = `<div class="ria-lista">
+    <div class="ria-fila"><span>Leads entregados</span><b>${fmt(riaNum(r.leads_calificados))}</b></div>
+    <div class="ria-fila"><span>Esperando primer contacto</span><b class="${riaNum(ventas.esperando_primer_contacto) ? 'ria-malo' : 'ria-bien'}">${fmt(riaNum(ventas.esperando_primer_contacto))}</b></div>
+    <div class="ria-fila"><span>Ventas confirmadas</span><b>${fmt(riaNum(ventas.ventas_confirmadas))}</b></div>
+    <div class="ria-fila"><span>Facturación atribuida</span><b>${riaDinero(ventas.facturacion_atribuida)}</b></div>
+    <div class="ria-fila"><span>Leads duplicados</span><b class="${riaNum(r.duplicados) ? 'ria-malo' : 'ria-bien'}">${fmt(riaNum(r.duplicados))}</b></div>
+  </div>`;
+
+  const cal = data.calidad || {}, modelo = cal.modelo || {}, visible = cal.visible || {};
+  const salidaMedida = riaNum(op.salidas_finales_medidas) > 0;
+  const fallos = [['Precio sin respaldo', 'precio_invalido'], ['Dato inventado', 'dato_inventado'], ['Pregunta repetida', 'pregunta_repetida'], ['Teléfono perdido', 'telefono_perdido'], ['Mala interpretación', 'mala_interpretacion'], ['Respuesta extensa', 'respuesta_extensa'], ['Escalamiento tardío', 'escalamiento_tardio']];
+  document.getElementById('ria-calidad').innerHTML = `<div class="ria-cal-head"><span>Control</span><span>Intentos</span><span>Visible</span></div>${fallos.map(([n, k]) => `<div class="ria-cal-fila"><span>${esc(n)}</span><b>${fmt(riaNum(modelo[k]))}</b><b class="${riaNum(visible[k]) ? 'ria-malo' : 'ria-bien'}">${salidaMedida ? fmt(riaNum(visible[k])) : '—'}</b></div>`).join('')}<div class="ce-ayuda">${salidaMedida ? `${fmt(op.salidas_finales_medidas)} respuestas finales medidas.` : 'La medición de salida visible comienza con esta versión; el historial anterior no se presenta como cero.'}</div>`;
+
+  const canales = data.por_canal || [];
+  document.getElementById('ria-canales').innerHTML = canales.length ? `<div class="ria-lista">${canales.map(c => `<div class="ria-fila"><span><b>${c.canal === 'instagram' ? 'Instagram' : 'Web'}</b><br>${fmt(riaNum(c.telefonos))} teléfonos · ${fmt(riaNum(c.leads_calificados))} leads</span><b>${fmt(riaNum(c.conversaciones))}<small style="display:block;color:var(--muted);font-weight:500">${riaNum(c.latencia_promedio_ms) ? (riaNum(c.latencia_promedio_ms) / 1000).toFixed(1) + ' s' : '—'}</small></b></div>`).join('')}</div>` : '<div class="ria-vacio">Sin actividad por canal en este período.</div>';
+
+  const sinCache = Math.max(0, riaNum(op.tokens_entrada) - riaNum(op.tokens_cache));
+  const costo = sinCache * RIA_COSTO_ENTRADA + riaNum(op.tokens_cache) * RIA_COSTO_CACHE + riaNum(op.tokens_salida) * RIA_COSTO_SALIDA;
+  document.getElementById('ria-operacion').innerHTML = `<div class="ria-lista">
+    <div class="ria-fila"><span>Última actividad</span><b>${esc(riaHora(op.ultima_actividad))}</b></div>
+    <div class="ria-fila"><span>Latencia promedio</span><b>${riaNum(op.latencia_promedio_ms) ? (riaNum(op.latencia_promedio_ms) / 1000).toFixed(2) + ' s' : '—'}</b></div>
+    <div class="ria-fila"><span>Latencia p95</span><b>${riaNum(op.latencia_p95_ms) ? (riaNum(op.latencia_p95_ms) / 1000).toFixed(2) + ' s' : '—'}</b></div>
+    <div class="ria-fila"><span>Tokens entrada / salida</span><b>${fmt(riaNum(op.tokens_entrada))} / ${fmt(riaNum(op.tokens_salida))}</b></div>
+    <div class="ria-fila"><span>Entrada atendida por caché</span><b>${riaPct(op.tokens_cache, op.tokens_entrada)}%</b></div>
+    <div class="ria-fila"><span>Costo estimado del modelo</span><b>${riaDinero(costo)}</b></div>
+  </div><div class="ce-ayuda">No incluye el costo fijo de ManyChat. El cálculo usa las tarifas configuradas actualmente para entrada, caché y salida.</div>`;
+
+  const versiones = data.versiones || [];
+  document.getElementById('ria-versiones').innerHTML = versiones.length ? `<div class="ria-lista">${versiones.map(v => `<div class="ria-fila"><span><b>${esc(v.nombre_version || 'Cerebro sin versión')}</b><br>${esc(v.motor_version)} · ${esc(v.estado_version || 'sin estado')}</span><b>${fmt(riaNum(v.conversaciones))}<small style="display:block;color:var(--muted);font-weight:500">${fmt(riaNum(v.leads_calificados))} leads</small></b></div>`).join('')}</div>` : '<div class="ria-vacio">Sin versiones con actividad en este período.</div>';
+}
+
+async function loadRendimientoIA(forzar = false) {
+  if (ROL !== 'admin' || !document.getElementById('ria-kpis')) return;
+  document.getElementById('ria-actualizado').textContent = 'Cargando…';
+  try {
+    const data = await riaConsultar(RIA_DIAS, forzar);
+    riaPintarPanel(data);
+  } catch (e) {
+    console.error('rendimiento IA', e);
+    document.getElementById('ria-actualizado').textContent = 'No se pudo cargar';
+    errToast('No se pudo cargar Rendimiento IA');
+  }
+}
+
+function setupRendimientoIA() {
+  if (ROL !== 'admin') return;
+  document.getElementById('ria-dashboard')?.addEventListener('click', () => activateSection('rendimiento-ia'));
+  document.getElementById('ria-recargar')?.addEventListener('click', () => { RIA_CACHE.clear(); loadRendimientoIA(true); loadResumenIADashboard(true); });
+  document.getElementById('ria-periodos')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-ria-dias]'); if (!b) return;
+    RIA_DIAS = Number(b.dataset.riaDias);
+    document.querySelectorAll('[data-ria-dias]').forEach(x => x.classList.toggle('on', x === b));
+    loadRendimientoIA();
+  });
+  loadResumenIADashboard();
+}
+
+/* --- Prospectos de IA ----------------------------------------------------
    Posadas y apartamentos que entraron por destinoyeventoslotus360.com/ia-planes,
    armaron el asistente y dejaron sus datos. Viven en `leads` pero sin asesor y
    con `servicio = 'Asistente IA (posada)'` -- eso es lo que las mantiene fuera
@@ -9339,6 +9484,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'galeria') loadGaleria();
   if (sec === 'cerebro-ia') loadCerebroIA();
+  if (sec === 'rendimiento-ia') loadRendimientoIA();
   if (sec === 'ia-atencion') loadIaAtencion();
   if (sec === 'web-reasignados') loadWebReasignados();
   if (sec === 'stop-sales') { loadStopSalesVigentes(); ssCargarPdfActual(); }
