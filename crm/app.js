@@ -9493,6 +9493,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'tareas') loadTareas();
   if (sec === 'manual') renderManual();
   if (sec === 'actualizaciones') renderActualizaciones();
+  if (sec === 'proyecto-constructor') renderProyectoConstructor();
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
 function setupNav() {
@@ -10541,6 +10542,35 @@ function renderActualizaciones() {
           <div class="act-body">
             <div class="act-head"><span class="act-titulo">${esc(e.titulo)}</span><span class="act-fecha">${e.fecha.slice(8, 10)}/${e.fecha.slice(5, 7)}</span></div>
             <div class="act-texto">${esc(e.texto)}</div>
+          </div>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+// Avance del Proyecto Constructor de CRM para Empresas (producto de marca
+// blanca aparte, ver `plataforma-crm` -- nada que ver con este CRM). Solo
+// admin: el link ya lleva `nav-admin-only`, así que no hace falta filtrar por
+// rol acá como sí hace `ACTUALIZACIONES_LOG`. Una entrada por JORNADA
+// CERRADA del plan, no por cada commit -- si se vuelve una entrada por día,
+// se convierte en trabajo de mantenimiento en vez de una foto del avance.
+const PROYECTO_CONSTRUCTOR_LOG = [
+  { fecha: '2026-08-09', emoji: '🎨', titulo: 'Día 1 — Fundación de diseño', texto: 'Un solo sistema de colores y tipografía para todo el lado interno (antes eran tres estilos distintos que no combinaban). Botones y textos ahora se leen bien para cualquier persona, y la página ya no se rompe en el celular.', capturas: ['dia1-estado.png', 'dia1-constructor.png'] },
+  { fecha: '2026-08-09', emoji: '🏗️', titulo: 'Shell del CRM del cliente + Tareas y Catálogo', texto: 'El CRM que ve cada empresa cliente pasó de una página plana a una aplicación real: menú lateral, colores de marca de cada empresa, y dos secciones nuevas de punta a punta (Tareas y Catálogo de productos).', capturas: ['tenant-panel.png', 'tenant-catalogo.png'] },
+];
+function renderProyectoConstructor() {
+  const porMes = {};
+  PROYECTO_CONSTRUCTOR_LOG.forEach(e => { const k = e.fecha.slice(0, 7); (porMes[k] ||= []).push(e); });
+  const meses = Object.keys(porMes).sort().reverse();
+  document.getElementById('proyecto-constructor-list').innerHTML = meses.map(k => `
+    <div class="act-mes">
+      <div class="act-mes-t">${esc(fullMonth(k))}</div>
+      ${porMes[k].map(e => `
+        <div class="act-item">
+          <div class="act-emoji">${e.emoji}</div>
+          <div class="act-body">
+            <div class="act-head"><span class="act-titulo">${esc(e.titulo)}</span><span class="act-fecha">${e.fecha.slice(8, 10)}/${e.fecha.slice(5, 7)}</span></div>
+            <div class="act-texto">${esc(e.texto)}</div>
+            ${e.capturas?.length ? `<div class="pc-capturas">${e.capturas.map(c => `<img class="manual-shot" src="img/proyecto-constructor/${c}" alt="Captura: ${esc(e.titulo)}" loading="lazy">`).join('')}</div>` : ''}
           </div>
         </div>`).join('')}
     </div>`).join('');
