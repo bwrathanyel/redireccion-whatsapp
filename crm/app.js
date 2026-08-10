@@ -1477,18 +1477,17 @@ function abrirFormClaim(username, nombre) {
 document.getElementById('claimForm').addEventListener('submit', async e => {
   e.preventDefault();
   const btn = document.getElementById('claimFormBtn'), errEl = document.getElementById('claimFormErr');
-  const p1 = val('claimPwd'), p2 = val('claimPwd2'), pregunta = val('claimPregunta').trim(), respuesta = val('claimRespuesta').trim(), claimToken = val('claimToken').trim();
+  const p1 = val('claimPwd'), p2 = val('claimPwd2'), pregunta = val('claimPregunta').trim(), respuesta = val('claimRespuesta').trim();
   errEl.textContent = '';
-  if (claimToken.length !== 48) { errEl.textContent = 'El código de reclamo debe tener 48 caracteres'; return; }
   if (p1.length < 12) { errEl.textContent = 'La contraseña debe tener al menos 12 caracteres'; return; }
   if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
   if (pregunta.length < 8 || respuesta.length < 8 || /^\d+$/.test(respuesta)) { errEl.textContent = 'Usa una pregunta y respuesta de al menos 8 caracteres; la respuesta no puede ser sólo números'; return; }
   btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
   try {
-    const r = await fetch(CLAIM_FN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: claimUsername, password: p1, pregunta, respuesta, claim_token: claimToken }) });
+    const r = await fetch(CLAIM_FN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: claimUsername, password: p1, pregunta, respuesta }) });
     const data = await r.json();
     btn.disabled = false; btn.innerHTML = 'Crear mi acceso <i class="fas fa-arrow-right"></i>';
-    if (!data.ok) { errEl.textContent = data.error === 'token_o_usuario_invalido' ? 'Código incorrecto o usuario ya configurado' : 'No se pudo crear el acceso, intenta de nuevo'; return; }
+    if (!data.ok) { errEl.textContent = data.error === 'usuario_invalido' ? 'Ese usuario ya está configurado' : 'No se pudo crear el acceso, intenta de nuevo'; return; }
     okToast('Usuario configurado, ya puedes entrar');
     document.getElementById('loginUser').value = claimUsername;
     showOverlay('login');
@@ -10556,6 +10555,11 @@ function renderActualizaciones() {
 const PROYECTO_CONSTRUCTOR_LOG = [
   { fecha: '2026-08-09', emoji: '🎨', titulo: 'Día 1 — Fundación de diseño', texto: 'Un solo sistema de colores y tipografía para todo el lado interno (antes eran tres estilos distintos que no combinaban). Botones y textos ahora se leen bien para cualquier persona, y la página ya no se rompe en el celular.', capturas: ['dia1-estado.png', 'dia1-constructor.png'] },
   { fecha: '2026-08-09', emoji: '🏗️', titulo: 'Shell del CRM del cliente + Tareas y Catálogo', texto: 'El CRM que ve cada empresa cliente pasó de una página plana a una aplicación real: menú lateral, colores de marca de cada empresa, y dos secciones nuevas de punta a punta (Tareas y Catálogo de productos).', capturas: ['tenant-panel.png', 'tenant-catalogo.png'] },
+  { fecha: '2026-08-09', emoji: '🧩', titulo: 'Día 3 — Elegir qué contrata cada empresa', texto: 'Hasta ahora, qué secciones ve una empresa quedaba fijado para siempre al crearla. Ahora se puede agregar o quitar un módulo (Citas, Inventario, Pagos...) desde el constructor en cualquier momento, con aviso claro de cuáles todavía no están listos.', capturas: [] },
+  { fecha: '2026-08-09', emoji: '🖼️', titulo: 'Día 4 — Vista previa real y botón Publicar arreglado', texto: 'La vista previa del constructor dejó de ser cajas genéricas y ahora muestra una maqueta real del CRM de esa empresa, con su color de marca. Además, el botón "Publicar" -- que llevaba tiempo sin hacer nada -- ya funciona, con avisos claros mientras guarda o publica.', capturas: [] },
+  { fecha: '2026-08-10', emoji: '🌐', titulo: 'Día 5 — Dominios propios conectados de verdad', texto: 'Quedó conectada la pieza que hospeda el dominio de cada empresa (ej. crm.empresacliente.com): al registrar uno, el sistema ya devuelve las instrucciones de DNS reales para configurarlo. Falta el último paso -- probarlo con un dominio real de una empresa, no uno de prueba.', capturas: [] },
+  { fecha: '2026-08-10', emoji: '📊', titulo: 'Día 6 — Planes con límites reales', texto: 'Cada empresa cliente ahora tiene un plan (Inicio, Taller o Empresa) con topes reales de usuarios, contactos y módulos -- y esos topes se respetan de verdad, no son sólo un cartel. Se ve una barra de uso por empresa y se puede subir de plan con un clic.', capturas: ['dia6-plan-uso.png', 'dia6-modulos-tope.png'] },
+  { fecha: '2026-08-10', emoji: '📅', titulo: 'Día 7 — Módulo de Citas de punta a punta', texto: 'Primer módulo nuevo agregado siguiendo una receta escrita para repetirla con los que faltan. Las empresas que lo contraten ya ven una agenda real (agrupada por día, con la hora de cada quien la mira) para agendar, confirmar y reasignar turnos.', capturas: ['dia7-citas-agenda.png', 'dia7-citas-movil.png'] },
 ];
 function renderProyectoConstructor() {
   const porMes = {};
