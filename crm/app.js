@@ -130,6 +130,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
   'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
+  'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
   'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles que manda BT Travel -- cargá el PDF y confirmá antes de publicar'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
@@ -1530,7 +1531,7 @@ async function startApp() {
     aplicarOrdenSidebar, setupNav, renderBottomNav, setupSwipeSecciones,
     setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso,
-    setupHoy,
+    setupHoy, setupConsultorIA,
   );
   if (ROL === 'marketing') { activateSection('tarifario'); return; }
   if (ROL === 'boleteria') { activateSection('mensajes'); return; }
@@ -6004,6 +6005,60 @@ function addChatBubbleRedes(who, texto, loading) {
     const row = document.createElement('div');
     row.className = 'chat-row';
     row.innerHTML = '<span class="chat-avatar"><i class="fa-brands fa-instagram"></i></span>';
+    row.appendChild(div);
+    log.appendChild(row);
+    el = row;
+  } else {
+    log.appendChild(div);
+  }
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+
+/* ---------- Consultor IA (2026-08-11) ----------------------------------
+   Chat de solo consulta contra crm-consultor-chat: arquitectura/decisiones
+   (CLAUDE.md, HANDOFFs, memoria de Claude) + estado operativo en vivo
+   (leads de hoy, pendientes de timeout, última corrida de cada cron). Nunca
+   edita ni ejecuta nada -- para eso está Claude Code, ver aviso en el propio
+   HTML de la sección. Mismo patrón de chat que Redes (enviarChatRedes),
+   reusando las mismas clases CSS (chat-wrap/chat-log/chat-inputbar). */
+let consultorChatHistory = [];
+function setupConsultorIA() {
+  const input = document.getElementById('consultor-chat-input');
+  document.getElementById('consultor-chat-send').onclick = enviarChatConsultor;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatConsultor(); } });
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  if (!consultorChatHistory.length) {
+    addChatBubbleConsultor('bot', 'Hola, soy el consultor técnico del proyecto. Preguntame cómo está armado algo, qué se decidió y por qué, o cómo va el CRM ahora mismo (leads de hoy, quién va atrasado).');
+  }
+}
+async function enviarChatConsultor() {
+  const input = document.getElementById('consultor-chat-input'), btn = document.getElementById('consultor-chat-send');
+  const texto = input.value.trim();
+  if (!texto || btn.disabled) return;
+  addChatBubbleConsultor('user', texto);
+  consultorChatHistory.push({ role: 'user', content: texto });
+  input.value = ''; input.style.height = 'auto';
+  btn.disabled = true;
+  const loadingEl = addChatBubbleConsultor('bot', 'Pensando...', true);
+  const { data, error } = await sb.functions.invoke('crm-consultor-chat', { body: { messages: consultorChatHistory } });
+  loadingEl.remove();
+  btn.disabled = false;
+  if (error || !data?.respuesta) { addChatBubbleConsultor('bot', 'No pude conectar con el consultor, intenta de nuevo en un momento.'); return; }
+  addChatBubbleConsultor('bot', data.respuesta);
+  consultorChatHistory.push({ role: 'assistant', content: data.respuesta });
+}
+function addChatBubbleConsultor(who, texto, loading) {
+  const log = document.getElementById('consultor-chat-log');
+  const div = document.createElement('div');
+  div.className = `chat-msg ${who}${loading ? ' loading' : ''}`;
+  if (who === 'bot' && !loading) div.innerHTML = renderBotText(texto);
+  else div.textContent = texto;
+  let el = div;
+  if (who === 'bot') {
+    const row = document.createElement('div');
+    row.className = 'chat-row';
+    row.innerHTML = '<span class="chat-avatar"><i class="fas fa-user-tie"></i></span>';
     row.appendChild(div);
     log.appendChild(row);
     el = row;
