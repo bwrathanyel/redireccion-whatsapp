@@ -2001,6 +2001,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
       <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA</a>
       <a class="nav-item nav-admin-only" data-sec="consultor-ia"><i class="fas fa-user-tie"></i> Consultor IA</a>
+      <a class="nav-item nav-admin-only" data-sec="voz-ia"><i class="fas fa-microphone-lines"></i> Voz IA</a>
       <a class="nav-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados</a>
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
@@ -3356,6 +3357,42 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       </div>
     </section>
 
+    <!-- VOZ IA: pantalla para probar la voz clonada de la jefa y controlar la
+         muestra de referencia sin tocar la base a mano. Dos muestras separadas
+         (mensajes / video de Instagram) -- ver plan "vamos-a-empezar-a-unified-kay". -->
+    <section class="section" id="sec-voz-ia">
+      <div class="ce-intro">
+        La voz clonada de la jefa para las notas de voz de la IA. El texto que escribas se pule
+        primero con la misma regla que usa el bot en producción, para que suene natural.
+      </div>
+      <div class="seg-group" id="vi-modo">
+        <button class="seg on" data-vi-modo="mensajes"><i class="fas fa-comment"></i> Voz para mensajes</button>
+        <button class="seg" data-vi-modo="video"><i class="fas fa-video"></i> Voz para videos de Instagram</button>
+      </div>
+      <div class="seg-group" id="vi-tabs" style="margin-top:10px">
+        <button class="seg on" data-vi-tab="probar"><i class="fas fa-play"></i> Probar</button>
+        <button class="seg" data-vi-tab="referencia"><i class="fas fa-microphone"></i> Muestra de referencia</button>
+      </div>
+
+      <div class="ce-panel" data-vi-panel="probar">
+        <div class="card" style="margin-top:14px;padding:16px">
+          <label class="ce-lbl">Texto crudo</label>
+          <textarea class="ei" id="vi-texto" rows="4" placeholder="Pegá el texto que querés escuchar como nota de voz..." style="width:100%;resize:vertical"></textarea>
+          <button class="dbtn gh" id="vi-generar" style="margin-top:10px"><i class="fas fa-wand-magic-sparkles"></i> Generar audio</button>
+          <div id="vi-resultado" style="margin-top:14px"></div>
+        </div>
+      </div>
+
+      <div class="ce-panel" data-vi-panel="referencia" style="display:none">
+        <div class="card" style="margin-top:14px;padding:16px">
+          <div id="vi-ref-actual" class="muted" style="font-size:12.5px">Cargando...</div>
+          <label class="ce-lbl" style="margin-top:14px;display:block">Subir muestra nueva</label>
+          <input type="file" id="vi-ref-file" accept="audio/mpeg,audio/mp3,audio/ogg,audio/wav,audio/mp4,audio/webm" hidden>
+          <button class="dbtn gh" id="vi-ref-subir"><i class="fas fa-upload"></i> Subir y usar como voz</button>
+        </div>
+      </div>
+    </section>
+
     <div class="sheet" id="cl-plan-sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="cl-plan-titulo">Plan del cliente</div>
@@ -3637,6 +3674,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <a class="sheet-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA <span class="si-sub">Ventas, calidad, errores y costos</span></a>
   <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA <span class="si-sub">Posadas que quieren el asistente</span></a>
   <a class="sheet-item nav-admin-only" data-sec="consultor-ia"><i class="fas fa-user-tie"></i> Consultor IA <span class="si-sub">Preguntale sobre el proyecto, sin gastar Claude Code</span></a>
+  <a class="sheet-item nav-admin-only" data-sec="voz-ia"><i class="fas fa-microphone-lines"></i> Voz IA <span class="si-sub">Probá la voz clonada y cambiá la muestra de referencia</span></a>
   <a class="sheet-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados <span class="si-sub">Los leads por los que cobrás comisión</span></a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
