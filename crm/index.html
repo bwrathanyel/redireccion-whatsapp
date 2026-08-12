@@ -3378,22 +3378,40 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <div class="card" style="margin-top:14px;padding:16px">
           <label class="ce-lbl">Texto crudo</label>
           <textarea class="ei" id="vi-texto" rows="4" placeholder="Pegá el texto que querés escuchar como nota de voz..." style="width:100%;resize:vertical"></textarea>
-          <button class="dbtn gh" id="vi-generar" style="margin-top:10px"><i class="fas fa-wand-magic-sparkles"></i> Generar audio</button>
+
+          <div style="margin-top:16px;display:grid;gap:14px">
+            <div>
+              <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Expresividad</span><span id="vi-sl-temp-val" class="muted">0.70</span></label>
+              <input type="range" id="vi-sl-temperatura" min="0" max="1" step="0.05" value="0.7" style="width:100%">
+            </div>
+            <div>
+              <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Variación</span><span id="vi-sl-topp-val" class="muted">0.70</span></label>
+              <input type="range" id="vi-sl-top_p" min="0" max="1" step="0.05" value="0.7" style="width:100%">
+            </div>
+            <div>
+              <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Velocidad</span><span id="vi-sl-vel-val" class="muted">1.00x</span></label>
+              <input type="range" id="vi-sl-velocidad" min="0.5" max="2" step="0.05" value="1" style="width:100%">
+            </div>
+          </div>
+
+          <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="dbtn gh" id="vi-generar"><i class="fas fa-wand-magic-sparkles"></i> Generar audio</button>
+            <button class="dbtn gh" id="vi-guardar-prosodia"><i class="fas fa-floppy-disk"></i> Guardar como predeterminado</button>
+          </div>
           <div id="vi-resultado" style="margin-top:14px"></div>
         </div>
       </div>
 
       <div class="ce-panel" data-vi-panel="referencia" style="display:none">
         <div class="card" style="margin-top:14px;padding:16px">
-          <div id="vi-ref-actual" class="muted" style="font-size:12.5px">Cargando...</div>
+          <div id="vi-ref-estado" class="muted" style="font-size:12.5px">Cargando...</div>
+          <button class="dbtn gh" id="vi-ref-entrenar" style="margin-top:10px"><i class="fas fa-brain"></i> Entrenar voz con estas muestras</button>
 
-          <label class="ce-lbl" style="margin-top:14px;display:block">Transcripción (la usa la IA para pronunciar mejor)</label>
-          <textarea class="ei" id="vi-ref-transcripcion" rows="3" placeholder="Se genera sola al subir una muestra -- corregí acá si Whisper entendió mal algo (ej. un nombre propio)" style="width:100%;resize:vertical"></textarea>
-          <button class="dbtn gh" id="vi-ref-guardar-transcripcion" style="margin-top:8px"><i class="fas fa-floppy-disk"></i> Guardar transcripción</button>
+          <div id="vi-ref-lista" style="margin-top:16px;display:grid;gap:12px"></div>
 
-          <label class="ce-lbl" style="margin-top:18px;display:block">Subir muestra nueva</label>
+          <label class="ce-lbl" style="margin-top:18px;display:block">Agregar muestra nueva</label>
           <input type="file" id="vi-ref-file" accept="audio/mpeg,audio/mp3,audio/ogg,audio/wav,audio/mp4,audio/webm" hidden>
-          <button class="dbtn gh" id="vi-ref-subir"><i class="fas fa-upload"></i> Subir y usar como voz</button>
+          <button class="dbtn gh" id="vi-ref-subir"><i class="fas fa-upload"></i> Agregar muestra</button>
 
           <div class="ce-ayuda" style="margin-top:14px">
             <b>Cómo grabar para que el clon salga bien:</b><br>
@@ -3402,7 +3420,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
             · Cuarto en silencio: sin música, sin TV, sin gente hablando atrás.<br>
             · El teléfono a un palmo de la boca, no pegado.<br>
             · Hablá como le hablarías a un cliente sobre un viaje -- la IA copia ese tono, no solo la voz.<br>
-            · Pasá el archivo por correo o por cable, nunca por WhatsApp.
+            · Pasá el archivo por correo o por cable, nunca por WhatsApp.<br>
+            · Se pueden combinar varias muestras (ej. una con buen timbre y otra con buen flow) --
+            después de subir hay que apretar <b>"Entrenar voz con estas muestras"</b> para que el
+            cambio se aplique.
           </div>
         </div>
       </div>

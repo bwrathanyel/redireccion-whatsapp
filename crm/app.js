@@ -6071,18 +6071,18 @@ function addChatBubbleConsultor(who, texto, loading) {
 }
 
 /* ---------- Voz IA (2026-08-12, ver plan "vamos-a-empezar-a-unified-kay") ---
-   Panel de prueba de la voz clonada + gestión de la muestra de referencia.
-   Dos muestras independientes ("mensajes" / "video de Instagram"), elegidas
-   con el toggle de arriba -- las dos tabs de abajo (Probar / Muestra de
-   referencia) siempre operan sobre el modo activo. */
+   Panel de prueba de la voz clonada + gestión de muestras + sliders de
+   prosodia (Fish Audio directo -- OpenRouter no aplica esos parámetros,
+   probado en vivo). Dos modos independientes ("mensajes" / "video de
+   Instagram"), elegidos con el toggle de arriba -- las dos tabs de abajo
+   siempre operan sobre el modo activo. */
 const VOZ_IA_REF_FN = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/voz-ia-referencia';
 const VI_TIPOS_OK = ['audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/webm'];
 const VI_MAX_BYTES = 20 * 1024 * 1024;
-// Pisos de calidad (2026-08-12, ver plan "vamos-a-empezar-a-unified-kay" --
-// diagnóstico de la primera prueba robótica: era una nota de WhatsApp, 10,8s
-// a 18 kbps, sin nada arriba de 8 kHz). Debajo del mínimo se bloquea, entre
-// mínimo e ideal se deja subir con advertencia. El servidor repite el chequeo
-// del mínimo con los bytes reales -- esto es solo para explicar antes de subir.
+// Pisos de calidad (2026-08-12 -- diagnóstico de la primera prueba robótica:
+// era una nota de WhatsApp, 10,8s a 18 kbps, sin nada arriba de 8 kHz).
+// Debajo del mínimo se bloquea, entre mínimo e ideal se deja subir con
+// advertencia. El servidor repite el chequeo del mínimo con los bytes reales.
 const VI_MIN_DURACION = 8, VI_MIN_BITRATE = 32;
 const VI_IDEAL_DURACION = 25, VI_IDEAL_BITRATE = 64;
 let viModo = 'mensajes';
@@ -6095,31 +6095,92 @@ function setupVozIA() {
     document.querySelectorAll('#vi-modo .seg').forEach(x => x.classList.toggle('on', x === b));
     document.getElementById('vi-resultado').innerHTML = '';
     if (document.querySelector('#vi-tabs .seg.on')?.dataset.viTab === 'referencia') viCargarReferencia();
+    else viCargarProsodia();
   });
   document.getElementById('vi-tabs')?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-vi-tab]');
     if (b) viCambiarTab(b.dataset.viTab);
   });
   document.getElementById('vi-generar')?.addEventListener('click', viGenerar);
+  document.getElementById('vi-guardar-prosodia')?.addEventListener('click', viGuardarProsodia);
+  ['temperatura', 'top_p', 'velocidad'].forEach(k => {
+    document.getElementById(`vi-sl-${k}`)?.addEventListener('input', viActualizarSliderLabel);
+  });
+  document.getElementById('vi-ref-entrenar')?.addEventListener('click', viEntrenar);
   document.getElementById('vi-ref-subir')?.addEventListener('click', () => document.getElementById('vi-ref-file').click());
   document.getElementById('vi-ref-file')?.addEventListener('change', (e) => {
     const f = e.target.files[0];
     if (f) viSubirReferencia(f);
     e.target.value = '';
   });
-  document.getElementById('vi-ref-guardar-transcripcion')?.addEventListener('click', viGuardarTranscripcion);
+  document.getElementById('vi-ref-lista')?.addEventListener('click', (e) => {
+    const borrar = e.target.closest('[data-vi-borrar]');
+    if (borrar) return viBorrarMuestra(borrar.dataset.viBorrar);
+    const guardar = e.target.closest('[data-vi-guardar-trans]');
+    if (guardar) return viGuardarTranscripcion(guardar.dataset.viGuardarTrans);
+  });
+  viActualizarSliderLabel();
+  viCargarProsodia();
 }
 function viCambiarTab(tab) {
   document.querySelectorAll('#vi-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.viTab === tab));
   document.querySelectorAll('#sec-voz-ia .ce-panel').forEach(p => { p.style.display = p.dataset.viPanel === tab ? '' : 'none'; });
   if (tab === 'referencia') viCargarReferencia();
 }
+function viActualizarSliderLabel() {
+  document.getElementById('vi-sl-temp-val').textContent = Number(document.getElementById('vi-sl-temperatura').value).toFixed(2);
+  document.getElementById('vi-sl-topp-val').textContent = Number(document.getElementById('vi-sl-top_p').value).toFixed(2);
+  document.getElementById('vi-sl-vel-val').textContent = Number(document.getElementById('vi-sl-velocidad').value).toFixed(2) + 'x';
+}
+function viLeerSliders() {
+  return {
+    temperatura: Number(document.getElementById('vi-sl-temperatura').value),
+    top_p: Number(document.getElementById('vi-sl-top_p').value),
+    velocidad: Number(document.getElementById('vi-sl-velocidad').value),
+  };
+}
+// Carga los valores guardados como predeterminados en los sliders al entrar
+// o cambiar de modo -- sin esto, el slider siempre arrancaría en 0.7/0.7/1.0
+// aunque ya se hubiera guardado otra cosa para ese modo.
+async function viCargarProsodia() {
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}`, {
+      headers: { Authorization: `Bearer ${session?.access_token || ''}`, apikey: SUPABASE_KEY },
+    });
+    const out = await res.json().catch(() => null);
+    if (!res.ok || !out?.ok) return;
+    document.getElementById('vi-sl-temperatura').value = out.temperatura ?? 0.7;
+    document.getElementById('vi-sl-top_p').value = out.top_p ?? 0.7;
+    document.getElementById('vi-sl-velocidad').value = out.velocidad ?? 1.0;
+    viActualizarSliderLabel();
+  } catch (e) { /* se queda con lo que había en pantalla */ }
+}
+async function viGuardarProsodia() {
+  const btn = document.getElementById('vi-guardar-prosodia');
+  btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}`, apikey: SUPABASE_KEY },
+      body: JSON.stringify(viLeerSliders()),
+    });
+    const out = await res.json().catch(() => null);
+    if (!res.ok || !out?.ok) { errToast('No se pudo guardar: ' + (out?.error || res.status)); return; }
+    okToast('Guardado como predeterminado -- así va a sonar la voz real de ahora en más');
+  } catch (e) {
+    errToast('No se pudo guardar: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar como predeterminado';
+  }
+}
 async function viGenerar() {
   const btn = document.getElementById('vi-generar');
   const texto = document.getElementById('vi-texto').value.trim();
   if (!texto) { errToast('Escribí un texto primero'); return; }
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
-  const { data, error } = await sb.functions.invoke('voz-ia-probar', { body: { texto, modo: viModo } });
+  const { data, error } = await sb.functions.invoke('voz-ia-probar', { body: { texto, modo: viModo, ...viLeerSliders() } });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Generar audio';
   const out = document.getElementById('vi-resultado');
   if (error || !data?.ok) { errToast('No se pudo generar el audio: ' + (data?.error || error?.message || '')); out.innerHTML = ''; return; }
@@ -6128,26 +6189,36 @@ async function viGenerar() {
     <audio controls style="width:100%" src="data:audio/mpeg;base64,${data.audio_base64}"></audio>`;
 }
 async function viCargarReferencia() {
-  const box = document.getElementById('vi-ref-actual');
-  const transTxt = document.getElementById('vi-ref-transcripcion');
-  box.textContent = 'Cargando...';
-  transTxt.value = '';
+  const estado = document.getElementById('vi-ref-estado');
+  const lista = document.getElementById('vi-ref-lista');
+  estado.textContent = 'Cargando...';
+  lista.innerHTML = '';
   const { data: { session } } = await sb.auth.getSession();
   try {
     const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}`, {
       headers: { Authorization: `Bearer ${session?.access_token || ''}`, apikey: SUPABASE_KEY },
     });
     const out = await res.json().catch(() => null);
-    if (!res.ok || !out?.ok) { box.innerHTML = 'No se pudo cargar la muestra actual.'; return; }
-    if (!out.existe) { box.innerHTML = `Todavía no hay muestra cargada para ${viModo === 'mensajes' ? 'mensajes' : 'videos de Instagram'}.`; return; }
-    const metricas = (out.duracion_seg != null && out.bitrate_kbps != null)
-      ? `${out.duracion_seg.toFixed(1)}s · ${out.bitrate_kbps} kbps` : '';
-    box.innerHTML = `
-      <div style="margin-bottom:6px">Muestra actual (${new Date(out.ultima_modificacion).toLocaleString('es-VE')}${metricas ? ' · ' + metricas : ''}):</div>
-      <audio controls style="width:100%" src="${esc(out.url)}"></audio>`;
-    transTxt.value = out.transcripcion || '';
+    if (!res.ok || !out?.ok) { estado.innerHTML = 'No se pudieron cargar las muestras.'; return; }
+    estado.innerHTML = out.entrenado
+      ? `<i class="fas fa-circle-check" style="color:var(--ok,#10b981)"></i> Voz entrenada con ${out.muestras.length} muestra(s)`
+      : `<i class="fas fa-triangle-exclamation" style="color:var(--warn,#f5b544)"></i> Todavía sin entrenar -- las muestras de abajo no afectan la voz hasta apretar "Entrenar"`;
+    if (!out.muestras.length) {
+      lista.innerHTML = `<div class="muted" style="font-size:12.5px">Todavía no hay muestras para ${viModo === 'mensajes' ? 'mensajes' : 'videos de Instagram'}.</div>`;
+      return;
+    }
+    lista.innerHTML = out.muestras.map(m => `
+      <div class="card" style="padding:12px" data-vi-muestra-id="${m.id}">
+        <div class="muted" style="font-size:12px;margin-bottom:6px">${m.duracion_seg ? m.duracion_seg.toFixed(1) + 's · ' : ''}${m.bitrate_kbps ? m.bitrate_kbps + ' kbps' : ''}</div>
+        ${m.url ? `<audio controls style="width:100%" src="${esc(m.url)}"></audio>` : '<div class="muted">Sin reproducir</div>'}
+        <textarea class="ei" rows="2" style="width:100%;margin-top:8px;resize:vertical" id="vi-trans-${m.id}">${esc(m.transcripcion || '')}</textarea>
+        <div style="margin-top:6px;display:flex;gap:8px">
+          <button class="dbtn gh" style="padding:6px 10px;font-size:12.5px" data-vi-guardar-trans="${m.id}"><i class="fas fa-floppy-disk"></i> Guardar texto</button>
+          <button class="dbtn gh" style="padding:6px 10px;font-size:12.5px" data-vi-borrar="${m.id}"><i class="fas fa-trash"></i> Borrar</button>
+        </div>
+      </div>`).join('');
   } catch (e) {
-    box.innerHTML = 'No se pudo cargar la muestra actual.';
+    estado.innerHTML = 'No se pudieron cargar las muestras.';
   }
 }
 // Mide duración real decodificando el audio -- el bitrate efectivo sale de
@@ -6192,12 +6263,6 @@ async function viSubirReferencia(file) {
     if (!seguir) return;
   }
 
-  const etiqueta = viModo === 'mensajes' ? 'los mensajes' : 'los videos de Instagram';
-  const advertencia = viModo === 'mensajes'
-    ? 'Esto va a sonar así en TODOS los audios nuevos que se manden a clientes a partir de ahora.'
-    : 'Esto va a sonar así en los próximos voiceovers de video.';
-  if (!confirm(`Vas a cambiar la voz para ${etiqueta}.\n\n${advertencia}\n\n¿Confirmás?`)) return;
-
   const btn = document.getElementById('vi-ref-subir');
   btn.disabled = true; btn.innerHTML = 'Subiendo... <i class="fas fa-spinner fa-spin"></i>';
   const { data: { session } } = await sb.auth.getSession();
@@ -6214,37 +6279,65 @@ async function viSubirReferencia(file) {
     });
     const out = await res.json().catch(() => null);
     if (!res.ok || !out?.ok) { errToast('No se pudo subir la muestra: ' + (out?.error || res.status)); return; }
-    okToast('Muestra actualizada' + (out.transcripcion ? ' -- transcripta automáticamente' : ''));
+    okToast('Muestra agregada -- apretá "Entrenar voz" para que afecte lo que suena');
     viCargarReferencia();
   } catch (e) {
     errToast('No se pudo subir la muestra: ' + e.message);
   } finally {
-    btn.disabled = false; btn.innerHTML = '<i class="fas fa-upload"></i> Subir y usar como voz';
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-upload"></i> Agregar muestra';
   }
 }
-async function viGuardarTranscripcion() {
-  const texto = document.getElementById('vi-ref-transcripcion').value.trim();
-  if (!texto) { errToast('La transcripción no puede quedar vacía'); return; }
-  const btn = document.getElementById('vi-ref-guardar-transcripcion');
-  btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
+async function viBorrarMuestra(id) {
+  if (!confirm('¿Borrar esta muestra? Hay que entrenar de nuevo para que el cambio se aplique a la voz.')) return;
   const { data: { session } } = await sb.auth.getSession();
   try {
-    const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}`, {
+    const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}&id=${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${session?.access_token || ''}`, apikey: SUPABASE_KEY },
+    });
+    const out = await res.json().catch(() => null);
+    if (!res.ok || !out?.ok) { errToast('No se pudo borrar: ' + (out?.error || res.status)); return; }
+    okToast('Muestra borrada');
+    viCargarReferencia();
+  } catch (e) {
+    errToast('No se pudo borrar: ' + e.message);
+  }
+}
+async function viGuardarTranscripcion(id) {
+  const texto = document.getElementById(`vi-trans-${id}`)?.value.trim();
+  if (!texto) { errToast('La transcripción no puede quedar vacía'); return; }
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}&id=${id}`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session?.access_token || ''}`,
-        apikey: SUPABASE_KEY,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}`, apikey: SUPABASE_KEY },
       body: JSON.stringify({ transcripcion: texto }),
     });
     const out = await res.json().catch(() => null);
     if (!res.ok || !out?.ok) { errToast('No se pudo guardar: ' + (out?.error || res.status)); return; }
-    okToast('Transcripción guardada');
+    okToast('Transcripción guardada -- entrená de nuevo para que la use el modelo');
   } catch (e) {
     errToast('No se pudo guardar: ' + e.message);
+  }
+}
+async function viEntrenar() {
+  if (!confirm(`Se va a entrenar la voz de "${viModo === 'mensajes' ? 'mensajes' : 'videos de Instagram'}" con todas las muestras cargadas. Puede tardar unos segundos. ¿Confirmás?`)) return;
+  const btn = document.getElementById('vi-ref-entrenar');
+  btn.disabled = true; btn.innerHTML = 'Entrenando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}&accion=entrenar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session?.access_token || ''}`, apikey: SUPABASE_KEY },
+    });
+    const out = await res.json().catch(() => null);
+    if (!res.ok || !out?.ok) { errToast('No se pudo entrenar: ' + (out?.error || res.status)); return; }
+    okToast(`Voz entrenada con ${out.muestras_usadas} muestra(s)`);
+    viCargarReferencia();
+  } catch (e) {
+    errToast('No se pudo entrenar: ' + e.message);
   } finally {
-    btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar transcripción';
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-brain"></i> Entrenar voz con estas muestras';
   }
 }
 
@@ -10714,6 +10807,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-12', emoji: '🎚️', titulo: 'Voz IA: sliders y varias muestras por voz', texto: 'La voz clonada sonaba un poco robótica porque la muestra era una locución de comercial, no una conversación. Ahora se pueden cargar VARIAS muestras por modo (una con buen timbre, otra con buen flow conversacional) y entrenarlas juntas en un solo botón "Entrenar voz". Se sumaron 3 sliders (Expresividad, Variación, Velocidad) para ajustar por oído cómo habla la IA, con un botón para guardarlos como predeterminados -- eso es lo que de verdad va a escuchar el cliente el día que se conecte a las conversaciones reales.', roles: ['admin'] },
   { fecha: '2026-08-12', emoji: '🎙️', titulo: 'Voz IA: control de calidad de la muestra', texto: 'La primera prueba sonó metálica porque la muestra de referencia era una nota de voz de WhatsApp (calidad muy comprimida). Ahora, al subir una muestra nueva, el panel mide su duración y calidad reales antes de subirla: bloquea las que son imposibles de usar bien y avisa cuando la calidad es apenas aceptable, con instrucciones de cómo grabar bien (app de notas de voz del teléfono, nunca por WhatsApp). También transcribe la muestra automáticamente para que la IA pronuncie mejor, con la transcripción editable por si se equivoca en algún nombre.', roles: ['admin'] },
   { fecha: '2026-08-12', emoji: '🎙️', titulo: 'Voz IA: probar y controlar la voz de la IA', texto: 'Sección nueva (solo admin) para escuchar cómo suena la voz clonada antes de que llegue a un cliente real. Pegás un texto, se pule automáticamente con las reglas de venta y se sintetiza con la voz de referencia. Un toggle arriba cambia entre la voz para mensajes y la voz para videos de Instagram, cada una con su propia muestra de referencia (subible desde ahí mismo, con confirmación antes de reemplazarla). Todavía no está conectado a las conversaciones reales.', roles: ['admin'] },
   { fecha: '2026-08-07', emoji: '🔐', titulo: 'Accesos más seguros', texto: 'Si olvidaste tu contraseña, pedí ayuda a un administrador: desde Gestión de Personal puede restablecer tu acceso y entregarte una contraseña temporal que debés cambiar al entrar. Los códigos para configurar una cuenta nueva ahora los genera el admin y vencen; ya no se usa la pregunta personal para recuperar cuentas.', roles: ROLES_TODOS },
