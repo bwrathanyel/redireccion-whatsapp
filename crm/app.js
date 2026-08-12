@@ -131,6 +131,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
   'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
+  'voz-ia': ['Voz IA', 'Probá la voz clonada de la jefa y controlá la muestra de referencia que usa la IA'],
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
   'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles que manda BT Travel -- cargá el PDF y confirmá antes de publicar'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
@@ -1564,7 +1565,7 @@ async function startApp() {
   arrancar(
     setupMetricas, setupRanking, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupGestionPersonal, setupLeadsTabs,
-    setupBuscadorIATarifario, setupCerebroIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
+    setupBuscadorIATarifario, setupCerebroIA, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers,
@@ -6069,6 +6070,102 @@ function addChatBubbleConsultor(who, texto, loading) {
   return el;
 }
 
+/* ---------- Voz IA (2026-08-12, ver plan "vamos-a-empezar-a-unified-kay") ---
+   Panel de prueba de la voz clonada + gestión de la muestra de referencia.
+   Dos muestras independientes ("mensajes" / "video de Instagram"), elegidas
+   con el toggle de arriba -- las dos tabs de abajo (Probar / Muestra de
+   referencia) siempre operan sobre el modo activo. */
+const VOZ_IA_REF_FN = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/voz-ia-referencia';
+const VI_TIPOS_OK = ['audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/webm'];
+const VI_MAX_BYTES = 20 * 1024 * 1024;
+let viModo = 'mensajes';
+
+function setupVozIA() {
+  document.getElementById('vi-modo')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-vi-modo]');
+    if (!b) return;
+    viModo = b.dataset.viModo;
+    document.querySelectorAll('#vi-modo .seg').forEach(x => x.classList.toggle('on', x === b));
+    document.getElementById('vi-resultado').innerHTML = '';
+    if (document.querySelector('#vi-tabs .seg.on')?.dataset.viTab === 'referencia') viCargarReferencia();
+  });
+  document.getElementById('vi-tabs')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-vi-tab]');
+    if (b) viCambiarTab(b.dataset.viTab);
+  });
+  document.getElementById('vi-generar')?.addEventListener('click', viGenerar);
+  document.getElementById('vi-ref-subir')?.addEventListener('click', () => document.getElementById('vi-ref-file').click());
+  document.getElementById('vi-ref-file')?.addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (f) viSubirReferencia(f);
+    e.target.value = '';
+  });
+}
+function viCambiarTab(tab) {
+  document.querySelectorAll('#vi-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.viTab === tab));
+  document.querySelectorAll('#sec-voz-ia .ce-panel').forEach(p => { p.style.display = p.dataset.viPanel === tab ? '' : 'none'; });
+  if (tab === 'referencia') viCargarReferencia();
+}
+async function viGenerar() {
+  const btn = document.getElementById('vi-generar');
+  const texto = document.getElementById('vi-texto').value.trim();
+  if (!texto) { errToast('Escribí un texto primero'); return; }
+  btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.functions.invoke('voz-ia-probar', { body: { texto, modo: viModo } });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Generar audio';
+  const out = document.getElementById('vi-resultado');
+  if (error || !data?.ok) { errToast('No se pudo generar el audio: ' + (data?.error || error?.message || '')); out.innerHTML = ''; return; }
+  out.innerHTML = `
+    <div class="muted" style="font-size:12.5px;margin-bottom:8px"><b>Guion pulido:</b> ${esc(data.texto_mejorado)}</div>
+    <audio controls style="width:100%" src="data:audio/mpeg;base64,${data.audio_base64}"></audio>`;
+}
+async function viCargarReferencia() {
+  const box = document.getElementById('vi-ref-actual');
+  box.textContent = 'Cargando...';
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}`, {
+      headers: { Authorization: `Bearer ${session?.access_token || ''}`, apikey: SUPABASE_KEY },
+    });
+    const out = await res.json().catch(() => null);
+    if (!res.ok || !out?.ok) { box.innerHTML = 'No se pudo cargar la muestra actual.'; return; }
+    if (!out.existe) { box.innerHTML = `Todavía no hay muestra cargada para ${viModo === 'mensajes' ? 'mensajes' : 'videos de Instagram'}.`; return; }
+    box.innerHTML = `
+      <div style="margin-bottom:6px">Muestra actual (${new Date(out.ultima_modificacion).toLocaleString('es-VE')}):</div>
+      <audio controls style="width:100%" src="${esc(out.url)}"></audio>`;
+  } catch (e) {
+    box.innerHTML = 'No se pudo cargar la muestra actual.';
+  }
+}
+async function viSubirReferencia(file) {
+  if (!VI_TIPOS_OK.includes(file.type)) { errToast('Formato no soportado. Usá MP3, OGG, WAV, M4A o WebM.'); return; }
+  if (file.size > VI_MAX_BYTES) { errToast(`El archivo pesa ${(file.size / 1e6).toFixed(1)} MB. Máximo 20 MB.`); return; }
+  const etiqueta = viModo === 'mensajes' ? 'los mensajes' : 'los videos de Instagram';
+  const advertencia = viModo === 'mensajes'
+    ? 'Esto va a sonar así en TODOS los audios nuevos que se manden a clientes a partir de ahora.'
+    : 'Esto va a sonar así en los próximos voiceovers de video.';
+  if (!confirm(`Vas a cambiar la voz para ${etiqueta}.\n\n${advertencia}\n\n¿Confirmás?`)) return;
+
+  const btn = document.getElementById('vi-ref-subir');
+  btn.disabled = true; btn.innerHTML = 'Subiendo... <i class="fas fa-spinner fa-spin"></i>';
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type, Authorization: `Bearer ${session?.access_token || ''}`, apikey: SUPABASE_KEY },
+      body: file,
+    });
+    const out = await res.json().catch(() => null);
+    if (!res.ok || !out?.ok) { errToast('No se pudo subir la muestra: ' + (out?.error || res.status)); return; }
+    okToast('Muestra actualizada');
+    viCargarReferencia();
+  } catch (e) {
+    errToast('No se pudo subir la muestra: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-upload"></i> Subir y usar como voz';
+  }
+}
+
 /* ---------- Web y Reasignados (comisiones del dueño por origen del lead) ----
    Los dos orígenes por los que cobra comisión, juntos. Un lead que entró por la
    web Y además se reasignó aparece UNA vez marcado "Ambos": contarlo en las dos
@@ -10535,6 +10632,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-12', emoji: '🎙️', titulo: 'Voz IA: probar y controlar la voz de la IA', texto: 'Sección nueva (solo admin) para escuchar cómo suena la voz clonada antes de que llegue a un cliente real. Pegás un texto, se pule automáticamente con las reglas de venta y se sintetiza con la voz de referencia. Un toggle arriba cambia entre la voz para mensajes y la voz para videos de Instagram, cada una con su propia muestra de referencia (subible desde ahí mismo, con confirmación antes de reemplazarla). Todavía no está conectado a las conversaciones reales.', roles: ['admin'] },
   { fecha: '2026-08-07', emoji: '🔐', titulo: 'Accesos más seguros', texto: 'Si olvidaste tu contraseña, pedí ayuda a un administrador: desde Gestión de Personal puede restablecer tu acceso y entregarte una contraseña temporal que debés cambiar al entrar. Los códigos para configurar una cuenta nueva ahora los genera el admin y vencen; ya no se usa la pregunta personal para recuperar cuentas.', roles: ROLES_TODOS },
   { fecha: '2026-08-06', emoji: '📅', titulo: 'Stop Sales: calendario de bloqueos', texto: 'La pestaña Stop Sales (qué hoteles no tienen cupo, según el PDF que manda BT Travel) ahora se ve como un calendario del mes: los días con bloqueo salen pintados, y cuanto más oscuro, más hoteles caen ese día. Tocá un día y te dice cuáles son. Arriba a la derecha podés cambiar a la vista por hotel, donde cada uno muestra una barra con sus días bloqueados. Los tres recuadros de arriba son filtros: sin cupo, a confirmar, y los que se liberan en menos de una semana. También está el botón "Ver PDF original" por si querés comparar contra lo que mandó BT Travel.', roles: ROLES_TODOS },
   { fecha: '2026-08-05', emoji: '💰', titulo: 'Web y Reasignados', texto: 'Sección nueva (solo admin) con todos los leads que entraron por la página web o que en algún momento se reasignaron, juntos en un solo lugar. Se puede filtrar por origen y ver cuáles ya cerraron en venta, con el monto y la comisión calculada al porcentaje que configures ahí mismo. Los que son de los dos orígenes aparecen una sola vez, marcados "Ambos", para no contarlos doble.', roles: ['admin'] },
