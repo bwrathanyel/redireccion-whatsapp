@@ -6078,6 +6078,13 @@ function addChatBubbleConsultor(who, texto, loading) {
 const VOZ_IA_REF_FN = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/voz-ia-referencia';
 const VI_TIPOS_OK = ['audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/webm'];
 const VI_MAX_BYTES = 20 * 1024 * 1024;
+// Pisos de calidad (2026-08-12, ver plan "vamos-a-empezar-a-unified-kay" --
+// diagnóstico de la primera prueba robótica: era una nota de WhatsApp, 10,8s
+// a 18 kbps, sin nada arriba de 8 kHz). Debajo del mínimo se bloquea, entre
+// mínimo e ideal se deja subir con advertencia. El servidor repite el chequeo
+// del mínimo con los bytes reales -- esto es solo para explicar antes de subir.
+const VI_MIN_DURACION = 8, VI_MIN_BITRATE = 32;
+const VI_IDEAL_DURACION = 25, VI_IDEAL_BITRATE = 64;
 let viModo = 'mensajes';
 
 function setupVozIA() {
@@ -6100,6 +6107,7 @@ function setupVozIA() {
     if (f) viSubirReferencia(f);
     e.target.value = '';
   });
+  document.getElementById('vi-ref-guardar-transcripcion')?.addEventListener('click', viGuardarTranscripcion);
 }
 function viCambiarTab(tab) {
   document.querySelectorAll('#vi-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.viTab === tab));
@@ -6121,7 +6129,9 @@ async function viGenerar() {
 }
 async function viCargarReferencia() {
   const box = document.getElementById('vi-ref-actual');
+  const transTxt = document.getElementById('vi-ref-transcripcion');
   box.textContent = 'Cargando...';
+  transTxt.value = '';
   const { data: { session } } = await sb.auth.getSession();
   try {
     const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}`, {
@@ -6130,16 +6140,58 @@ async function viCargarReferencia() {
     const out = await res.json().catch(() => null);
     if (!res.ok || !out?.ok) { box.innerHTML = 'No se pudo cargar la muestra actual.'; return; }
     if (!out.existe) { box.innerHTML = `Todavía no hay muestra cargada para ${viModo === 'mensajes' ? 'mensajes' : 'videos de Instagram'}.`; return; }
+    const metricas = (out.duracion_seg != null && out.bitrate_kbps != null)
+      ? `${out.duracion_seg.toFixed(1)}s · ${out.bitrate_kbps} kbps` : '';
     box.innerHTML = `
-      <div style="margin-bottom:6px">Muestra actual (${new Date(out.ultima_modificacion).toLocaleString('es-VE')}):</div>
+      <div style="margin-bottom:6px">Muestra actual (${new Date(out.ultima_modificacion).toLocaleString('es-VE')}${metricas ? ' · ' + metricas : ''}):</div>
       <audio controls style="width:100%" src="${esc(out.url)}"></audio>`;
+    transTxt.value = out.transcripcion || '';
   } catch (e) {
     box.innerHTML = 'No se pudo cargar la muestra actual.';
+  }
+}
+// Mide duración real decodificando el audio -- el bitrate efectivo sale de
+// tamaño/duración. Es lo que permite avisar ANTES de subir en vez de que el
+// servidor rechace después de que ya se esperó la subida completa.
+async function viMedirAudio(file) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  try {
+    const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+    const duracion = buf.duration;
+    return { duracion, bitrateKbps: (file.size * 8) / duracion / 1000 };
+  } finally {
+    ctx.close();
   }
 }
 async function viSubirReferencia(file) {
   if (!VI_TIPOS_OK.includes(file.type)) { errToast('Formato no soportado. Usá MP3, OGG, WAV, M4A o WebM.'); return; }
   if (file.size > VI_MAX_BYTES) { errToast(`El archivo pesa ${(file.size / 1e6).toFixed(1)} MB. Máximo 20 MB.`); return; }
+
+  let duracion, bitrateKbps;
+  try {
+    ({ duracion, bitrateKbps } = await viMedirAudio(file));
+  } catch (e) {
+    errToast('No se pudo leer el archivo de audio -- probá con otro formato.');
+    return;
+  }
+
+  if (duracion < VI_MIN_DURACION || bitrateKbps < VI_MIN_BITRATE) {
+    errToast(
+      `No se puede usar: ${duracion.toFixed(1)}s a ${bitrateKbps.toFixed(0)} kbps. ` +
+      `Es calidad de nota de WhatsApp, la voz clonada va a sonar metálica. ` +
+      `Grabá con la app de notas de voz del teléfono (nunca por WhatsApp), 30-60s, en un cuarto silencioso.`
+    );
+    return;
+  }
+  if (duracion < VI_IDEAL_DURACION || bitrateKbps < VI_IDEAL_BITRATE) {
+    const seguir = confirm(
+      `Calidad ajustada: ${duracion.toFixed(1)}s a ${bitrateKbps.toFixed(0)} kbps. ` +
+      `Es probable que la voz clonada suene un poco metálica. Lo ideal es 25-60s y más de 64 kbps.\n\n` +
+      `¿Subir igual?`
+    );
+    if (!seguir) return;
+  }
+
   const etiqueta = viModo === 'mensajes' ? 'los mensajes' : 'los videos de Instagram';
   const advertencia = viModo === 'mensajes'
     ? 'Esto va a sonar así en TODOS los audios nuevos que se manden a clientes a partir de ahora.'
@@ -6152,17 +6204,47 @@ async function viSubirReferencia(file) {
   try {
     const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}`, {
       method: 'PUT',
-      headers: { 'Content-Type': file.type, Authorization: `Bearer ${session?.access_token || ''}`, apikey: SUPABASE_KEY },
+      headers: {
+        'Content-Type': file.type,
+        Authorization: `Bearer ${session?.access_token || ''}`,
+        apikey: SUPABASE_KEY,
+        'x-duracion-seg': String(duracion),
+      },
       body: file,
     });
     const out = await res.json().catch(() => null);
     if (!res.ok || !out?.ok) { errToast('No se pudo subir la muestra: ' + (out?.error || res.status)); return; }
-    okToast('Muestra actualizada');
+    okToast('Muestra actualizada' + (out.transcripcion ? ' -- transcripta automáticamente' : ''));
     viCargarReferencia();
   } catch (e) {
     errToast('No se pudo subir la muestra: ' + e.message);
   } finally {
     btn.disabled = false; btn.innerHTML = '<i class="fas fa-upload"></i> Subir y usar como voz';
+  }
+}
+async function viGuardarTranscripcion() {
+  const texto = document.getElementById('vi-ref-transcripcion').value.trim();
+  if (!texto) { errToast('La transcripción no puede quedar vacía'); return; }
+  const btn = document.getElementById('vi-ref-guardar-transcripcion');
+  btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token || ''}`,
+        apikey: SUPABASE_KEY,
+      },
+      body: JSON.stringify({ transcripcion: texto }),
+    });
+    const out = await res.json().catch(() => null);
+    if (!res.ok || !out?.ok) { errToast('No se pudo guardar: ' + (out?.error || res.status)); return; }
+    okToast('Transcripción guardada');
+  } catch (e) {
+    errToast('No se pudo guardar: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar transcripción';
   }
 }
 
@@ -10632,6 +10714,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-12', emoji: '🎙️', titulo: 'Voz IA: control de calidad de la muestra', texto: 'La primera prueba sonó metálica porque la muestra de referencia era una nota de voz de WhatsApp (calidad muy comprimida). Ahora, al subir una muestra nueva, el panel mide su duración y calidad reales antes de subirla: bloquea las que son imposibles de usar bien y avisa cuando la calidad es apenas aceptable, con instrucciones de cómo grabar bien (app de notas de voz del teléfono, nunca por WhatsApp). También transcribe la muestra automáticamente para que la IA pronuncie mejor, con la transcripción editable por si se equivoca en algún nombre.', roles: ['admin'] },
   { fecha: '2026-08-12', emoji: '🎙️', titulo: 'Voz IA: probar y controlar la voz de la IA', texto: 'Sección nueva (solo admin) para escuchar cómo suena la voz clonada antes de que llegue a un cliente real. Pegás un texto, se pule automáticamente con las reglas de venta y se sintetiza con la voz de referencia. Un toggle arriba cambia entre la voz para mensajes y la voz para videos de Instagram, cada una con su propia muestra de referencia (subible desde ahí mismo, con confirmación antes de reemplazarla). Todavía no está conectado a las conversaciones reales.', roles: ['admin'] },
   { fecha: '2026-08-07', emoji: '🔐', titulo: 'Accesos más seguros', texto: 'Si olvidaste tu contraseña, pedí ayuda a un administrador: desde Gestión de Personal puede restablecer tu acceso y entregarte una contraseña temporal que debés cambiar al entrar. Los códigos para configurar una cuenta nueva ahora los genera el admin y vencen; ya no se usa la pregunta personal para recuperar cuentas.', roles: ROLES_TODOS },
   { fecha: '2026-08-06', emoji: '📅', titulo: 'Stop Sales: calendario de bloqueos', texto: 'La pestaña Stop Sales (qué hoteles no tienen cupo, según el PDF que manda BT Travel) ahora se ve como un calendario del mes: los días con bloqueo salen pintados, y cuanto más oscuro, más hoteles caen ese día. Tocá un día y te dice cuáles son. Arriba a la derecha podés cambiar a la vista por hotel, donde cada uno muestra una barra con sus días bloqueados. Los tres recuadros de arriba son filtros: sin cupo, a confirmar, y los que se liberan en menos de una semana. También está el botón "Ver PDF original" por si querés comparar contra lo que mandó BT Travel.', roles: ROLES_TODOS },

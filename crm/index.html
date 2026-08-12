@@ -3386,9 +3386,24 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <div class="ce-panel" data-vi-panel="referencia" style="display:none">
         <div class="card" style="margin-top:14px;padding:16px">
           <div id="vi-ref-actual" class="muted" style="font-size:12.5px">Cargando...</div>
-          <label class="ce-lbl" style="margin-top:14px;display:block">Subir muestra nueva</label>
+
+          <label class="ce-lbl" style="margin-top:14px;display:block">Transcripción (la usa la IA para pronunciar mejor)</label>
+          <textarea class="ei" id="vi-ref-transcripcion" rows="3" placeholder="Se genera sola al subir una muestra -- corregí acá si Whisper entendió mal algo (ej. un nombre propio)" style="width:100%;resize:vertical"></textarea>
+          <button class="dbtn gh" id="vi-ref-guardar-transcripcion" style="margin-top:8px"><i class="fas fa-floppy-disk"></i> Guardar transcripción</button>
+
+          <label class="ce-lbl" style="margin-top:18px;display:block">Subir muestra nueva</label>
           <input type="file" id="vi-ref-file" accept="audio/mpeg,audio/mp3,audio/ogg,audio/wav,audio/mp4,audio/webm" hidden>
           <button class="dbtn gh" id="vi-ref-subir"><i class="fas fa-upload"></i> Subir y usar como voz</button>
+
+          <div class="ce-ayuda" style="margin-top:14px">
+            <b>Cómo grabar para que el clon salga bien:</b><br>
+            · Con la app de notas de voz del teléfono (Grabadora / Notas de voz). <b>Nunca por WhatsApp</b> -- recomprime el audio y lo arruina, aunque lo hayas grabado perfecto.<br>
+            · Entre 30 y 60 segundos hablando corrido.<br>
+            · Cuarto en silencio: sin música, sin TV, sin gente hablando atrás.<br>
+            · El teléfono a un palmo de la boca, no pegado.<br>
+            · Hablá como le hablarías a un cliente sobre un viaje -- la IA copia ese tono, no solo la voz.<br>
+            · Pasá el archivo por correo o por cable, nunca por WhatsApp.
+          </div>
         </div>
       </div>
     </section>
