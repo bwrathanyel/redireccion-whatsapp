@@ -200,6 +200,14 @@ const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-p
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
 let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false;
+// Rol REAL del usuario logueado -- distinto de ROL cuando hay una vista
+// previa activa (ver "Vista previa de rol" más abajo). ROL_REAL nunca
+// cambia con la vista previa: el switcher lo usa para decidir si mostrarse
+// (solo admin), y assert_rol/current_rol() del lado del servidor siguen
+// leyendo el rol real de auth -- esto NUNCA toca permisos, solo lo que
+// se renderiza en pantalla.
+let ROL_REAL = null;
+const VISTA_ROL_KEY = 'vista_rol_preview';
 const overlay = id => document.getElementById(id);
 const showOverlay = id => { OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
 // Se recarga cada vez que se muestra el login (no solo una vez al abrir la
@@ -232,10 +240,56 @@ async function cargarUsuario() {
   return data;
 }
 
+const VISTA_ROL_OPCIONES = ['admin', 'asesor', 'marketing', 'boleteria'];
+const VISTA_ROL_LABEL = { admin: 'Administrador', asesor: 'Asesor comercial', marketing: 'Marketing', boleteria: 'Boletería' };
+
+/** Activa la vista previa de un rol y recarga -- recargar (en vez de mutar
+ *  ROL en caliente) reusa TODO el flujo normal de login (los ~25 puntos del
+ *  código que ramifican por ROL, no solo las clases CSS), así la vista
+ *  previa queda fiel a lo que ese rol realmente ve, sin duplicar lógica de
+ *  arranque a mano. Nunca toca `usuarios.rol` en la base -- assert_rol()
+ *  del servidor sigue viendo al admin real, así que las acciones que se
+ *  hagan durante la vista previa se ejecutan con permisos de admin de
+ *  verdad (el banner lo aclara para no confundir "lo que se ve" con "lo
+ *  que se puede hacer"). */
+function activarVistaPreviaRol(rolFalso) {
+  if (ROL_REAL !== 'admin' || !VISTA_ROL_OPCIONES.includes(rolFalso)) return;
+  if (rolFalso === 'admin') sessionStorage.removeItem(VISTA_ROL_KEY);
+  else sessionStorage.setItem(VISTA_ROL_KEY, rolFalso);
+  location.reload();
+}
+function salirVistaPreviaRol() {
+  sessionStorage.removeItem(VISTA_ROL_KEY);
+  location.reload();
+}
+function pintarBannerVistaPrevia() {
+  let banner = document.getElementById('vista-previa-banner');
+  if (ROL_REAL !== 'admin' || ROL === ROL_REAL) {
+    banner?.remove();
+    return;
+  }
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'vista-previa-banner';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML = `<i class="fas fa-eye"></i> Viendo el CRM como <b>${esc(VISTA_ROL_LABEL[ROL] || ROL)}</b> -- las acciones que hagas se ejecutan igual con tus permisos reales de admin. <button type="button" id="vista-previa-salir">Volver a mi vista</button>`;
+  document.getElementById('vista-previa-salir').onclick = salirVistaPreviaRol;
+}
+
 async function afterLogin() {
   const u = await cargarUsuario();
   if (!u) return;
-  MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
+  ROL_REAL = u.rol;
+  // Vista previa de rol (solo admin, ver openPerfilDrawer): sessionStorage
+  // -- no localStorage -- para que nunca sobreviva a cerrar la pestaña ni
+  // se filtre a otra sesión/dispositivo. Si el override quedó pegado de
+  // una sesión vieja con OTRO usuario real (ej. se deslogueó del admin y
+  // entró un asesor en la misma pestaña), se ignora: la vista previa es
+  // exclusiva de admin.
+  const previa = sessionStorage.getItem(VISTA_ROL_KEY);
+  MI_NOMBRE = u.nombre; ROL = (u.rol === 'admin' && VISTA_ROL_OPCIONES.includes(previa)) ? previa : u.rol;
+  MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
   MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
   MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado;
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
@@ -247,6 +301,7 @@ function entrarSegunRol() {
   document.body.classList.toggle('rol-marketing', ROL === 'marketing');
   document.body.classList.toggle('rol-boleteria', ROL === 'boleteria');
   document.body.classList.toggle('es-freelancer', MI_ES_FREELANCER);
+  pintarBannerVistaPrevia();
   overlay('login').classList.remove('show');
   overlay('setup').classList.remove('show');
   const rolLabelUi = ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : 'Asesor comercial';
@@ -315,6 +370,14 @@ function openPerfilDrawer() {
         <button type="button" data-v="grande" class="seg${MI_PREFERENCIAS.fuente === 'grande' ? ' on' : ''}">Grande</button>
       </div>
     </div>
+    ${ROL_REAL === 'admin' ? `
+    <div class="edit-box" style="margin-top:16px">
+      <div class="eb-title"><i class="fas fa-eye"></i> Vista previa de rol</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Ver el CRM como lo ve otro rol, para revisar y corregir errores. No cambia tus permisos reales -- seguís pudiendo hacer todo como admin mientras la usás.</div>
+      <div class="seg-group" id="perfil-vista-rol" style="margin-bottom:0;flex-wrap:wrap">
+        ${VISTA_ROL_OPCIONES.map(r => `<button type="button" data-v="${r}" class="seg${ROL === r ? ' on' : ''}">${esc(VISTA_ROL_LABEL[r])}</button>`).join('')}
+      </div>
+    </div>` : ''}
     ${bnEditorHtml()}
     ${puedeActivarRecordatorios() ? `
     <div class="edit-box" style="margin-top:16px">
@@ -336,6 +399,7 @@ function openPerfilDrawer() {
   document.getElementById('perfil-avatar-file').onchange = e => { if (e.target.files[0]) subirAvatar(e.target.files[0]); e.target.value = ''; };
   document.querySelectorAll('#perfil-tema button').forEach(b => b.onclick = () => guardarPreferencia('tema', b.dataset.v, 'perfil-tema'));
   document.querySelectorAll('#perfil-fuente button').forEach(b => b.onclick = () => guardarPreferencia('fuente', b.dataset.v, 'perfil-fuente'));
+  document.querySelectorAll('#perfil-vista-rol button').forEach(b => b.onclick = () => activarVistaPreviaRol(b.dataset.v));
   bnEditorWire();
   if (puedeActivarRecordatorios()) actualizarToggleNotif();
 }
@@ -1439,6 +1503,7 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   const err = e1 || e2;
   if (err) { errEl.textContent = 'No se pudo guardar: ' + err.message; return; }
   const u = await cargarUsuario(); if (!u) return;
+  ROL_REAL = u.rol; // ver afterLogin -- sin esto, un admin recién configurado pierde el switcher de vista previa hasta refrescar
   MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
   MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
   entrarSegunRol();
@@ -1503,7 +1568,15 @@ document.getElementById('claimForm').addEventListener('submit', async e => {
 // -- si queda activa, agent_check_in ya la cierra sola en el próximo login
 // (mismo criterio que un refresh/cierre de pestaña sin logout, ver comentario
 // arriba de agent_check_in).
-window.cerrarSesion = async () => { await sb.auth.signOut(); location.reload(); };
+window.cerrarSesion = async () => {
+  // Sin esto, una vista previa activa quedaba en sessionStorage y se le
+  // pegaba al PRÓXIMO admin que loguee en la misma pestaña (compu
+  // compartida) -- sessionStorage sobrevive a un logout, solo se limpia al
+  // cerrar la pestaña.
+  sessionStorage.removeItem(VISTA_ROL_KEY);
+  await sb.auth.signOut();
+  location.reload();
+};
 
 /* Corre cada inicialización por separado y aislada: si una revienta, se anota
    en la consola y las demás siguen.
@@ -2774,7 +2847,15 @@ document.getElementById('th-select-all')?.addEventListener('change', e => {
 });
 async function guardarLead() {
   const btn = document.getElementById('e-save'), err = document.getElementById('edit-err');
-  const estado = val('e-estado'), asesor = val('e-asesor'), servicio = val('e-servicio');
+  // Vista previa de rol activa (admin real viendo como asesor): el select de
+  // "Asesor asignado" queda deshabilitado con el NOMBRE DEL ADMIN adentro
+  // (mismo render que ve un asesor real, ver campo() más arriba) -- sin este
+  // guard, guardar cualquier lead ajeno mientras se previsualiza "asesor" le
+  // reasignaría el lead al admin en silencio (el admin real puede abrir
+  // cualquier lead, a diferencia de un asesor real). Se manda el asesor que
+  // el lead YA tenía, sin tocarlo.
+  const enVistaPreviaNoAdmin = ROL_REAL === 'admin' && ROL !== ROL_REAL;
+  const estado = val('e-estado'), asesor = enVistaPreviaNoAdmin ? currentLead.asesor : val('e-asesor'), servicio = val('e-servicio');
   const montoRaw = val('e-monto').trim();
   if (estado === VENTA && (!montoRaw || !(parseFloat(montoRaw) > 0))) { err.textContent = 'Ingresa el monto de la venta (debe ser mayor a 0)'; return; }
   const nombre = val('e-nombre').trim();
@@ -6136,6 +6217,16 @@ const VI_IDEAL_DURACION = 25, VI_IDEAL_BITRATE = 64;
 let viModo = 'mensajes';
 
 function setupVozIA() {
+  // El nav-item es nav-admin-only/nav-marketing-ok (index.html) -- un asesor
+  // real nunca ve esta sección, pero SÍ llega a este setup (arrancar() de
+  // startApp incluye setupVozIA en el bloque compartido admin/asesor, ver
+  // startApp más arriba). Sin este guard, cada login de asesor disparaba
+  // igual las 3 RPCs de "Voces de Redes" (viCambiarTab('redes') más abajo),
+  // que rechazan con assert_rol(['admin','marketing']) -- 3 errToast rojos
+  // en cada login de asesor, para una sección que ni siquiera puede abrir.
+  // También hace que la vista previa de rol "asesor" (ver activarVistaPreviaRol)
+  // se comporte igual que un asesor real: sin esta sección.
+  if (ROL !== 'admin' && ROL !== 'marketing') return;
   document.getElementById('vi-modo')?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-vi-modo]');
     if (!b) return;
@@ -6282,7 +6373,10 @@ function viCambiarTab(tab) {
     // contra vrCargarVoces, todas las tarjetas de perfil quedarían con el
     // color naranja por defecto (VR_VOCES vacío) sin que nada las repinte
     // después.
-    vrCargarPresets().then(() => vrCargarVoces()).then(() => vrCargarPerfiles());
+    // Presets y voces no dependen entre sí -- en paralelo. Perfiles sí tiene
+    // que esperar a que VR_VOCES esté poblado (vrTarjetaPerfil busca ahí el
+    // color de la voz asignada).
+    Promise.all([vrCargarPresets(), vrCargarVoces()]).then(() => vrCargarPerfiles());
     if (!localStorage.getItem('vr_tutorial_visto')) vrToggleTutorial(true);
   }
 }
@@ -6342,7 +6436,7 @@ async function viGenerar() {
   const { data, error } = await sb.functions.invoke('voz-ia-probar', { body: { texto, modo: viModo, ...viLeerSliders() } });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Generar audio';
   const out = document.getElementById('vi-resultado');
-  if (error || !data?.ok) { errToast('No se pudo generar el audio: ' + (data?.error || error?.message || '')); out.innerHTML = ''; return; }
+  if (error || !data?.ok) { errToast('No se pudo generar el audio: ' + (await msgErrorFn(error, data))); out.innerHTML = ''; return; }
   out.innerHTML = `
     <div class="muted" style="font-size:12.5px;margin-bottom:8px"><b>Guion pulido:</b> ${esc(data.texto_mejorado)}</div>
     <audio controls style="width:100%" src="data:audio/mpeg;base64,${data.audio_base64}"></audio>`;

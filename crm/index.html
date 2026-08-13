@@ -134,6 +134,15 @@ body::before{content:'';position:fixed;inset:0;background:
 @keyframes jornada-pulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 3px var(--accent-soft)}}
 .jornada-pulse{animation:jornada-pulse 1s ease-in-out 2}
 .recordatorios-banner{margin:10px 10px 0;padding:9px 10px;border-radius:10px;background:rgba(255,145,0,.08);border:1px solid rgba(255,145,0,.3);display:none;align-items:center;gap:8px}
+/* Banner de vista previa de rol -- fijo arriba de TODO (por encima del
+   drawer, z-index 61) para que sea imposible perder de vista que las
+   acciones se siguen haciendo con permisos reales de admin mientras se
+   navega "disfrazado" de otro rol. */
+#vista-previa-banner{position:fixed;top:0;left:0;right:0;z-index:70;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:600;text-align:center;padding:8px 14px;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+#vista-previa-banner button{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:700;cursor:pointer}
+#vista-previa-banner button:hover{background:rgba(255,255,255,.3)}
+body:has(#vista-previa-banner){padding-top:36px}
+@media(max-width:760px){body:has(#vista-previa-banner){padding-top:56px}#vista-previa-banner{padding:6px 10px}}
 .recordatorios-banner span{flex:1;font-size:11.5px;color:var(--txt);font-weight:600}
 .recordatorios-banner button{background:var(--accent);color:#1a1000;border:none;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0}
 .recordatorios-banner .rb-close{background:transparent;color:var(--muted);font-size:14px;padding:4px 6px;font-weight:400}
