@@ -3085,6 +3085,7 @@ async function actQuitar(clave, btn) {
 let CE_REGLAS = [];
 let CE_DESTINOS = [];
 let CE_EDITANDO = null;
+let CE_AUDIO_CANALES = [];
 
 async function loadCerebroIA() {
   const cont = document.getElementById('ce-lista');
@@ -3099,6 +3100,37 @@ async function loadCerebroIA() {
     CE_DESTINOS.map(d => `<option value="${esc(d)}">`).join('');
   cePintarLista();
   cePintarPrevia();
+  await cargarAudioCanales();
+}
+
+async function cargarAudioCanales() {
+  const { data, error } = await sb.rpc('config_audio_canal_listar');
+  if (error || !data?.ok) return;
+  CE_AUDIO_CANALES = data.canales || [];
+  cePintarAudioCanales();
+}
+
+const AUDIO_CANAL_LABEL = { web: 'Web', manychat: 'Instagram/Facebook' };
+
+function cePintarAudioCanales() {
+  document.querySelectorAll('#ce-audio-canales [data-audio-canal]').forEach(btn => {
+    const canal = btn.dataset.audioCanal;
+    const fila = CE_AUDIO_CANALES.find(c => c.canal === canal);
+    const activo = !!fila?.activo;
+    btn.classList.toggle('on', activo);
+    btn.innerHTML = `<i class="fas fa-toggle-${activo ? 'on' : 'off'}"></i> ${AUDIO_CANAL_LABEL[canal] || canal}`;
+  });
+}
+
+async function toggleAudioCanal(canal, btn) {
+  const fila = CE_AUDIO_CANALES.find(c => c.canal === canal);
+  const activoNuevo = !fila?.activo;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('config_audio_canal_set', { p_canal: canal, p_activo: activoNuevo });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo cambiar: ' + (error?.message || data?.error || '')); return; }
+  okToast(activoNuevo ? 'Notas de voz activadas para ese canal' : 'Notas de voz apagadas para ese canal');
+  await cargarAudioCanales();
 }
 
 function cePintarLista() {
@@ -3797,6 +3829,11 @@ function setupCerebroIA() {
     if (t.dataset.ceToggle) return ceToggle(t.dataset.ceToggle, t);
     if (t.dataset.ceBorrar) return ceBorrar(t.dataset.ceBorrar, t);
     ceAbrirEditor(CE_REGLAS.find(x => x.id === Number(t.dataset.ceEditar)));
+  });
+  document.getElementById('ce-audio-canales')?.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-audio-canal]');
+    if (!t) return;
+    toggleAudioCanal(t.dataset.audioCanal, t);
   });
 }
 
@@ -10807,6 +10844,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-13', emoji: '🔊', titulo: 'Voz IA: ya conectada al chat de la web (opcional)', texto: 'En Cerebro IA, arriba de las reglas, hay dos interruptores nuevos para prender las notas de voz en el chat de la página web y en Instagram/Facebook, por separado. Apagados por defecto: nada cambia hasta que los prendas a propósito. Cuando está prendido, al cotizar un precio la IA manda una nota de voz con la voz clonada en vez de texto. Se puede apagar en cualquier momento sin perder nada.', roles: ['admin'] },
   { fecha: '2026-08-12', emoji: '🎚️', titulo: 'Voz IA: sliders y varias muestras por voz', texto: 'La voz clonada sonaba un poco robótica porque la muestra era una locución de comercial, no una conversación. Ahora se pueden cargar VARIAS muestras por modo (una con buen timbre, otra con buen flow conversacional) y entrenarlas juntas en un solo botón "Entrenar voz". Se sumaron 3 sliders (Expresividad, Variación, Velocidad) para ajustar por oído cómo habla la IA, con un botón para guardarlos como predeterminados -- eso es lo que de verdad va a escuchar el cliente el día que se conecte a las conversaciones reales.', roles: ['admin'] },
   { fecha: '2026-08-12', emoji: '🎙️', titulo: 'Voz IA: control de calidad de la muestra', texto: 'La primera prueba sonó metálica porque la muestra de referencia era una nota de voz de WhatsApp (calidad muy comprimida). Ahora, al subir una muestra nueva, el panel mide su duración y calidad reales antes de subirla: bloquea las que son imposibles de usar bien y avisa cuando la calidad es apenas aceptable, con instrucciones de cómo grabar bien (app de notas de voz del teléfono, nunca por WhatsApp). También transcribe la muestra automáticamente para que la IA pronuncie mejor, con la transcripción editable por si se equivoca en algún nombre.', roles: ['admin'] },
   { fecha: '2026-08-12', emoji: '🎙️', titulo: 'Voz IA: probar y controlar la voz de la IA', texto: 'Sección nueva (solo admin) para escuchar cómo suena la voz clonada antes de que llegue a un cliente real. Pegás un texto, se pule automáticamente con las reglas de venta y se sintetiza con la voz de referencia. Un toggle arriba cambia entre la voz para mensajes y la voz para videos de Instagram, cada una con su propia muestra de referencia (subible desde ahí mismo, con confirmación antes de reemplazarla). Todavía no está conectado a las conversaciones reales.', roles: ['admin'] },
