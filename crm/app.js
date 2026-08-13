@@ -6257,7 +6257,8 @@ function setupVozIA() {
   });
 
   viActualizarSliderLabel();
-  viCargarProsodia();
+  viCargarProsodia(); // precarga la config de "Probar" aunque no sea la tab activa -- así ya está lista si se entra a esa tab después
+  viCambiarTab('redes'); // "Voces de Redes" es lo principal de la sección -- entra directo ahí en vez de "Probar"
 }
 function viCambiarTab(tab) {
   document.querySelectorAll('#vi-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.viTab === tab));

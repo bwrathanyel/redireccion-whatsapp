@@ -3433,17 +3433,17 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         La voz clonada de la jefa para las notas de voz de la IA. El texto que escribas se pule
         primero con la misma regla que usa el bot en producción, para que suene natural.
       </div>
-      <div class="seg-group" id="vi-modo">
+      <div class="seg-group" id="vi-modo" style="display:none">
         <button class="seg on" data-vi-modo="mensajes"><i class="fas fa-comment"></i> Voz para mensajes</button>
         <button class="seg" data-vi-modo="video"><i class="fas fa-video"></i> Voz para videos de Instagram</button>
       </div>
       <div class="seg-group" id="vi-tabs" style="margin-top:10px">
-        <button class="seg on" data-vi-tab="probar"><i class="fas fa-play"></i> Probar</button>
+        <button class="seg" data-vi-tab="probar"><i class="fas fa-play"></i> Probar</button>
         <button class="seg" data-vi-tab="referencia"><i class="fas fa-microphone"></i> Muestra de referencia</button>
-        <button class="seg" data-vi-tab="redes"><i class="fas fa-hashtag"></i> Voces de Redes</button>
+        <button class="seg on" data-vi-tab="redes"><i class="fas fa-hashtag"></i> Voces de Redes</button>
       </div>
 
-      <div class="ce-panel" data-vi-panel="probar">
+      <div class="ce-panel" data-vi-panel="probar" style="display:none">
         <div class="card" style="margin-top:14px;padding:16px">
           <label class="ce-lbl">Texto crudo</label>
           <textarea class="ei" id="vi-texto" rows="4" placeholder="Pegá el texto que querés escuchar como nota de voz..." style="width:100%;resize:vertical"></textarea>
@@ -3497,7 +3497,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         </div>
       </div>
 
-      <div class="ce-panel" data-vi-panel="redes" style="display:none">
+      <div class="ce-panel" data-vi-panel="redes">
         <div id="vr-vista-lista">
           <div class="ce-intro" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
             <span>
@@ -3527,6 +3527,14 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           </div>
 
           <div class="card" style="margin-top:14px;padding:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <b style="font-size:14px"><i class="fas fa-users"></i> Perfiles</b>
+              <button class="dbtn gh" id="vr-perfil-nuevo" style="padding:6px 10px;font-size:12.5px"><i class="fas fa-plus"></i> Nuevo perfil</button>
+            </div>
+            <div id="vr-perfiles-lista" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px"></div>
+          </div>
+
+          <div class="card" style="margin-top:14px;padding:16px">
             <b style="font-size:14px"><i class="fas fa-magnifying-glass"></i> Buscar voces en Fish Audio</b>
             <div class="muted" style="font-size:12px;margin-top:4px">Buscá por acento o estilo (ej. "venezolana", "caracas", "locutor"), escuchá la muestra y agregala al catálogo con un click -- sin pegar IDs a mano.</div>
             <div style="display:flex;gap:8px;margin-top:10px">
@@ -3551,14 +3559,6 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
               <button class="dbtn gh" id="vr-voz-nueva" style="padding:6px 10px;font-size:12.5px"><i class="fas fa-plus"></i> Nueva voz</button>
             </div>
             <div id="vr-voces-lista" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px"></div>
-          </div>
-
-          <div class="card" style="margin-top:14px;padding:16px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <b style="font-size:14px"><i class="fas fa-users"></i> Perfiles</b>
-              <button class="dbtn gh" id="vr-perfil-nuevo" style="padding:6px 10px;font-size:12.5px"><i class="fas fa-plus"></i> Nuevo perfil</button>
-            </div>
-            <div id="vr-perfiles-lista" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px"></div>
           </div>
         </div>
 
