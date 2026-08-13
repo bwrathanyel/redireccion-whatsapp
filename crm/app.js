@@ -6201,7 +6201,15 @@ function setupVozIA() {
     if (e.target.closest('#vr-detalle-guardar')) return vrGuardarDetalle();
     if (e.target.closest('#vr-detalle-eliminar')) return vrEliminarDetalle();
     if (e.target.closest('#vr-detalle-generar')) return vrGenerarDetalle();
+    if (e.target.closest('#vr-detalle-puntuar')) return vrArreglarPuntuacion();
+    if (e.target.closest('#vr-detalle-deshacer-puntuar')) return vrDeshacerPuntuacion();
+    const borrarHist = e.target.closest('[data-vr-borrar-historial]');
+    if (borrarHist) return vrBorrarHistorial(borrarHist.dataset.vrBorrarHistorial);
+    const compartir = e.target.closest('[data-vr-compartir]');
+    if (compartir) return vrCompartirAudio(compartir.dataset.vrCompartir);
   });
+  document.getElementById('vr-tutorial-abrir')?.addEventListener('click', () => vrToggleTutorial(true));
+  document.getElementById('vr-tutorial-cerrar')?.addEventListener('click', () => vrToggleTutorial(false));
   viActualizarSliderLabel();
   viCargarProsodia();
 }
@@ -6224,6 +6232,7 @@ function viCambiarTab(tab) {
     if (detalle) detalle.style.display = 'none';
     vrCargarVoces();
     vrCargarPerfiles();
+    if (!localStorage.getItem('vr_tutorial_visto')) vrToggleTutorial(true);
   }
 }
 function viActualizarSliderLabel() {
@@ -6453,6 +6462,8 @@ let VR_PERFILES = [];
 let vrEditandoVoz = null;      // null | 'nueva' | "<id>" -- edición inline en la lista de voces
 let vrPerfilDetalleId = null;  // null | 'nuevo' | "<id>" -- qué perfil está abierto en la vista de detalle
 let vrPerfilDetalleAvatar = null; // emoji elegido en la vista de detalle, todavía no guardado
+let vrTextoAntesDePuntuar = null; // texto previo a "Arreglar puntuación", null = nada que deshacer
+let VR_HISTORIAL = [];
 const VR_EMOJIS = ['🎙️','📸','🎬','✈️','🏖️','🌴','🗺️','📱','💬','🎉','😀','😎','🔥','💃','🕺','🎵','📺','🎥','⭐','🌟','🚀','🏝️','🍹','🧳'];
 
 async function vrCargarVoces() {
@@ -6636,14 +6647,18 @@ function vrAbrirDetallePerfil(id) {
   vrPerfilDetalleId = String(id);
   const perfil = id === 'nuevo' ? null : VR_PERFILES.find(p => String(p.id) === String(id));
   vrPerfilDetalleAvatar = perfil?.avatar || '🎙️';
+  vrTextoAntesDePuntuar = null;
+  VR_HISTORIAL = [];
   document.getElementById('vr-vista-lista').style.display = 'none';
   document.getElementById('vr-vista-detalle').style.display = '';
   vrPintarDetalle();
+  if (id !== 'nuevo') vrCargarHistorial();
 }
 
 function vrVolverALista() {
   vrPerfilDetalleId = null;
   vrPerfilDetalleAvatar = null;
+  vrTextoAntesDePuntuar = null;
   document.getElementById('vr-vista-lista').style.display = '';
   document.getElementById('vr-vista-detalle').style.display = 'none';
   vrCargarPerfiles();
@@ -6684,9 +6699,84 @@ function vrPintarDetalle() {
       <b style="font-size:14px"><i class="fas fa-wand-magic-sparkles"></i> Generar voz en off</b>
       <div class="muted" style="font-size:12px;margin-top:4px">Sintetiza con la voz elegida arriba (guardada o no) -- probá antes de confirmar si querés.</div>
       <textarea class="ei" id="vr-detalle-texto" rows="3" style="width:100%;resize:vertical;margin-top:10px" placeholder="Escribí el guion del video..."></textarea>
-      <button class="dbtn gh" id="vr-detalle-generar" style="margin-top:10px"><i class="fas fa-play"></i> Generar audio</button>
+      <div class="vr-accion-bar" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="dbtn gh" id="vr-detalle-puntuar" style="min-height:44px"><i class="fas fa-quote-right"></i> Arreglar puntuación</button>
+        <button class="dbtn gh" id="vr-detalle-deshacer-puntuar" style="min-height:44px;display:none"><i class="fas fa-rotate-left"></i> Deshacer</button>
+        <button class="dbtn gh" id="vr-detalle-generar" style="min-height:44px"><i class="fas fa-play"></i> Generar audio</button>
+      </div>
       <div id="vr-detalle-audio" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card" style="padding:18px;margin-top:14px">
+      <b style="font-size:14px"><i class="fas fa-clock-rotate-left"></i> Historial de audios</b>
+      <div class="muted" style="font-size:12px;margin-top:4px">Lo que ya generaste para este perfil -- reescuchá o descargá sin volver a generar.</div>
+      <div id="vr-detalle-historial" style="margin-top:10px">${esNuevo ? '<div class="muted" style="font-size:12.5px">Guardá el perfil primero para que quede historial.</div>' : '<div class="muted" style="font-size:12.5px">Cargando...</div>'}</div>
     </div>`;
+}
+
+function vrFilaHistorial(item) {
+  const fecha = new Date(item.creado_en);
+  const fechaTxt = fecha.toLocaleDateString('es-VE', { day: '2-digit', month: 'short' }) + ' ' + fecha.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+  const url = `https://fotos.destinoyeventoslotus360.com/${item.storage_path}`;
+  const previa = item.texto.length > 60 ? item.texto.slice(0, 60) + '…' : item.texto;
+  return `
+    <div class="card" style="padding:10px 12px;margin-top:8px">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--muted)">${esc(fechaTxt)} · ${esc(item.voz_nombre)}</div>
+        <button class="dbtn gh" style="padding:3px 8px;font-size:11px" data-vr-borrar-historial="${item.id}"><i class="fas fa-trash"></i></button>
+      </div>
+      <div style="font-size:12.5px;margin-top:4px">${esc(previa)}</div>
+      <audio controls style="width:100%;margin-top:8px;height:36px" src="${esc(url)}"></audio>
+      <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+        <a class="dbtn gh" style="padding:6px 10px;font-size:12px;min-height:36px" href="${esc(url)}" download="voz-redes-${item.id}.mp3"><i class="fas fa-download"></i> Descargar</a>
+        ${navigator.share ? `<button class="dbtn gh" style="padding:6px 10px;font-size:12px;min-height:36px" data-vr-compartir="${esc(url)}"><i class="fas fa-share-nodes"></i> Compartir</button>` : ''}
+      </div>
+    </div>`;
+}
+
+async function vrCargarHistorial() {
+  const cont = document.getElementById('vr-detalle-historial');
+  if (!cont) return;
+  const { data, error } = await sb.rpc('voz_redes_historial_listar', { p_perfil_id: Number(vrPerfilDetalleId) });
+  if (error || !data?.ok) { cont.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar el historial.</div>'; return; }
+  VR_HISTORIAL = data.historial;
+  cont.innerHTML = VR_HISTORIAL.length
+    ? VR_HISTORIAL.map(vrFilaHistorial).join('')
+    : '<div class="muted" style="font-size:12.5px">Todavía no generaste audio para este perfil.</div>';
+}
+
+async function vrBorrarHistorial(id) {
+  const { data, error } = await sb.rpc('voz_redes_historial_eliminar', { p_id: Number(id) });
+  if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (error?.message || data?.error || '')); return; }
+  vrCargarHistorial();
+}
+
+async function vrArreglarPuntuacion() {
+  const textarea = document.getElementById('vr-detalle-texto');
+  const texto = textarea?.value.trim();
+  if (!texto) { errToast('Escribí un texto primero'); return; }
+  const btn = document.getElementById('vr-detalle-puntuar');
+  btn.disabled = true; btn.innerHTML = 'Arreglando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.functions.invoke('voz-texto-puntuar', { body: { texto } });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-quote-right"></i> Arreglar puntuación';
+  if (error || !data?.ok) { errToast('No se pudo arreglar la puntuación: ' + (data?.error || error?.message || '')); return; }
+  vrTextoAntesDePuntuar = texto;
+  textarea.value = data.texto_puntuado;
+  document.getElementById('vr-detalle-deshacer-puntuar').style.display = '';
+}
+
+function vrDeshacerPuntuacion() {
+  if (vrTextoAntesDePuntuar === null) return;
+  const textarea = document.getElementById('vr-detalle-texto');
+  if (textarea) textarea.value = vrTextoAntesDePuntuar;
+  vrTextoAntesDePuntuar = null;
+  document.getElementById('vr-detalle-deshacer-puntuar').style.display = 'none';
+}
+
+function vrToggleTutorial(mostrar) {
+  const cont = document.getElementById('vr-tutorial');
+  if (cont) cont.style.display = mostrar ? '' : 'none';
+  if (mostrar) localStorage.setItem('vr_tutorial_visto', '1');
 }
 
 function vrTogglePicker() {
@@ -6728,6 +6818,7 @@ async function vrGuardarDetalle() {
   await vrCargarPerfiles();
   vrPerfilDetalleId = String(data.id); // si era "nuevo", ya queda como existente
   vrPintarDetalle();
+  vrCargarHistorial(); // si era "nuevo" recién ahora tiene id real -- sin esto el historial se queda en "Cargando..." para siempre
 }
 
 async function vrEliminarDetalle() {
@@ -6754,10 +6845,22 @@ async function vrGenerarDetalle() {
   const btn = document.getElementById('vr-detalle-generar');
   const out = document.getElementById('vr-detalle-audio');
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
-  const { data, error } = await sb.functions.invoke('voz-perfil-probar', { body: { voz_id: Number(vozId), texto } });
+  const body = { voz_id: Number(vozId), texto };
+  if (vrPerfilDetalleId !== 'nuevo') body.p_perfil_id = Number(vrPerfilDetalleId);
+  const { data, error } = await sb.functions.invoke('voz-perfil-probar', { body });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-play"></i> Generar audio';
   if (error || !data?.ok) { errToast('No se pudo generar: ' + (data?.error || error?.message || '')); return; }
-  out.innerHTML = `<audio controls style="width:100%" src="data:audio/mpeg;base64,${data.audio_base64}"></audio>`;
+  out.innerHTML = `
+    <audio controls style="width:100%" src="${esc(data.audio_url)}"></audio>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <a class="dbtn gh" style="padding:6px 10px;font-size:12.5px;min-height:44px" href="${esc(data.audio_url)}" download="voz-redes.mp3"><i class="fas fa-download"></i> Descargar</a>
+      ${navigator.share ? `<button class="dbtn gh" style="padding:6px 10px;font-size:12.5px;min-height:44px" data-vr-compartir="${esc(data.audio_url)}"><i class="fas fa-share-nodes"></i> Compartir</button>` : ''}
+    </div>`;
+  if (vrPerfilDetalleId !== 'nuevo') vrCargarHistorial();
+}
+
+async function vrCompartirAudio(url) {
+  try { await navigator.share({ url, title: 'Nota de voz' }); } catch (e) { /* usuario canceló, no es error */ }
 }
 
 /* ---------- Web y Reasignados (comisiones del dueño por origen del lead) ----
