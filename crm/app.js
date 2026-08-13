@@ -6207,9 +6207,55 @@ function setupVozIA() {
     if (borrarHist) return vrBorrarHistorial(borrarHist.dataset.vrBorrarHistorial);
     const compartir = e.target.closest('[data-vr-compartir]');
     if (compartir) return vrCompartirAudio(compartir.dataset.vrCompartir);
+    const preset = e.target.closest('[data-vr-elegir-preset]');
+    if (preset) return vrElegirPresetDetalle(preset.dataset.vrElegirPreset);
+  });
+  // Cambiar la voz asignada invalida el preset elegido (los valores efectivos
+  // dependen de la voz, ver vrProsodiaEfectiva) -- sin esto se podría generar
+  // con un preset calibrado para OTRA voz sin darse cuenta.
+  document.getElementById('vr-vista-detalle')?.addEventListener('change', (e) => {
+    if (e.target.id === 'vr-detalle-voz') { vrPresetSeleccionadoDetalle = null; vrPintarChipsDetalle(); }
   });
   document.getElementById('vr-tutorial-abrir')?.addEventListener('click', () => vrToggleTutorial(true));
   document.getElementById('vr-tutorial-cerrar')?.addEventListener('click', () => vrToggleTutorial(false));
+
+  // ---- Buscador de Fish Audio -------------------------------------------
+  document.getElementById('vr-fish-buscar')?.addEventListener('click', () => vrFishBuscar());
+  document.getElementById('vr-fish-q')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') vrFishBuscar(); });
+  document.getElementById('vr-fish-resultados')?.addEventListener('click', (e) => {
+    const agregar = e.target.closest('[data-vr-fish-agregar]');
+    if (agregar) return vrFishAgregar(agregar.dataset.vrFishAgregar);
+  });
+
+  // ---- Presets globales ---------------------------------------------------
+  document.getElementById('vr-preset-nuevo')?.addEventListener('click', () => { vrEditandoPreset = 'nueva'; vrPintarPresets(); });
+  document.getElementById('vr-presets-lista')?.addEventListener('click', (e) => {
+    const editar = e.target.closest('[data-vr-preset-editar]');
+    if (editar) { vrEditandoPreset = editar.dataset.vrPresetEditar; return vrPintarPresets(); }
+    const cancelar = e.target.closest('[data-vr-preset-cancelar]');
+    if (cancelar) { vrEditandoPreset = null; return vrPintarPresets(); }
+    const guardar = e.target.closest('[data-vr-preset-guardar]');
+    if (guardar) return vrGuardarPreset(guardar.dataset.vrPresetGuardar);
+    const eliminar = e.target.closest('[data-vr-preset-eliminar]');
+    if (eliminar) return vrEliminarPreset(eliminar.dataset.vrPresetEliminar);
+  });
+
+  // ---- Panel "Ajustar presets" por voz + swatches de color/emoji del form -
+  document.getElementById('vr-voces-lista')?.addEventListener('click', (e) => {
+    const ajustar = e.target.closest('[data-vr-presets-voz]');
+    if (ajustar) return vrTogglePanelPresetsVoz(ajustar.dataset.vrPresetsVoz);
+    const guardarOv = e.target.closest('[data-vr-override-guardar]');
+    if (guardarOv) return vrGuardarOverride(guardarOv.dataset.vrOverrideGuardar);
+    const resetOv = e.target.closest('[data-vr-override-reset]');
+    if (resetOv) return vrResetOverride(resetOv.dataset.vrOverrideReset);
+    const swatch = e.target.closest('[data-vr-voz-color]');
+    if (swatch) return vrElegirColorVoz(swatch.closest('[data-vr-form-suf]').dataset.vrFormSuf, swatch.dataset.vrVozColor);
+    const emojiBtn = e.target.closest('[data-vr-voz-emoji-btn]');
+    if (emojiBtn) return vrToggleEmojiVoz(emojiBtn.dataset.vrVozEmojiBtn);
+    const emojiOp = e.target.closest('[data-vr-voz-emoji-elegir]');
+    if (emojiOp) return vrElegirEmojiVoz(emojiOp.closest('[data-vr-form-suf]').dataset.vrFormSuf, emojiOp.dataset.vrVozEmojiElegir);
+  });
+
   viActualizarSliderLabel();
   viCargarProsodia();
 }
@@ -6230,8 +6276,12 @@ function viCambiarTab(tab) {
     const detalle = document.getElementById('vr-vista-detalle');
     if (lista) lista.style.display = '';
     if (detalle) detalle.style.display = 'none';
-    vrCargarVoces();
-    vrCargarPerfiles();
+    // Secuencial, no en paralelo: vrTarjetaPerfil busca la voz asignada en
+    // VR_VOCES para pintar su color -- si vrCargarPerfiles ganara la carrera
+    // contra vrCargarVoces, todas las tarjetas de perfil quedarían con el
+    // color naranja por defecto (VR_VOCES vacío) sin que nada las repinte
+    // después.
+    vrCargarPresets().then(() => vrCargarVoces()).then(() => vrCargarPerfiles());
     if (!localStorage.getItem('vr_tutorial_visto')) vrToggleTutorial(true);
   }
 }
@@ -6466,6 +6516,44 @@ let vrTextoAntesDePuntuar = null; // texto previo a "Arreglar puntuación", null
 let VR_HISTORIAL = [];
 const VR_EMOJIS = ['🎙️','📸','🎬','✈️','🏖️','🌴','🗺️','📱','💬','🎉','😀','😎','🔥','💃','🕺','🎵','📺','🎥','⭐','🌟','🚀','🏝️','🍹','🧳'];
 
+// Paleta de acento por voz (2026-08-14, dirección visual armada con
+// google/gemini-3.7-flash vía OpenRouter -- ver plan
+// "en-voces-de-redes-quizzical-locket"). `naranja` es el color de marca,
+// el resto se eligió para leerse bien en fondo oscuro Y claro. Se aplica
+// como variable CSS inline (--v-rgb) en vez de una clase por color -- el
+// color vive en el dato (voces_catalogo.color), no hardcodeado en CSS.
+const VR_COLORES = {
+  naranja:   { nombre: 'Naranja',   rgb: '255,145,0' },
+  coral:     { nombre: 'Coral',     rgb: '255,51,102' },
+  cian:      { nombre: 'Cian',      rgb: '0,194,203' },
+  violeta:   { nombre: 'Violeta',   rgb: '139,92,246' },
+  esmeralda: { nombre: 'Esmeralda', rgb: '16,185,129' },
+  azul:      { nombre: 'Azul',      rgb: '59,130,246' },
+};
+function vrColorRgb(key) { return VR_COLORES[key]?.rgb || VR_COLORES.naranja.rgb; }
+
+let VR_PRESETS = [];    // [{id,nombre,emoji,descripcion,temperatura,top_p,velocidad,orden,activo}]
+let VR_OVERRIDES = [];  // [{voz_id,preset_id,temperatura,top_p,velocidad}]
+let vrPresetAbiertoVoz = null; // id de voz con el panel de "ajustar presets" abierto, o null
+let vrPresetSeleccionadoDetalle = null; // preset_id elegido en el detalle de perfil, o null (prosodia base)
+let vrEditandoPreset = null;   // null | 'nuevo' | "<id>"
+
+function vrOverrideDe(vozId, presetId) {
+  return VR_OVERRIDES.find(o => o.voz_id === vozId && o.preset_id === presetId) || null;
+}
+function vrProsodiaEfectiva(voz, presetId) {
+  if (!presetId) return { temperatura: voz.temperatura, top_p: voz.top_p, velocidad: voz.velocidad, nombre: null };
+  const preset = VR_PRESETS.find(p => p.id === presetId);
+  if (!preset) return { temperatura: voz.temperatura, top_p: voz.top_p, velocidad: voz.velocidad, nombre: null };
+  const ov = vrOverrideDe(voz.id, presetId);
+  return {
+    temperatura: ov?.temperatura ?? preset.temperatura,
+    top_p: ov?.top_p ?? preset.top_p,
+    velocidad: ov?.velocidad ?? preset.velocidad,
+    nombre: preset.nombre,
+  };
+}
+
 async function vrCargarVoces() {
   const { data, error } = await sb.rpc('voces_catalogo_listar');
   if (error || !data?.ok) { errToast('No se pudieron cargar las voces: ' + (error?.message || data?.error || '')); return; }
@@ -6477,27 +6565,61 @@ async function vrCargarVoces() {
 function vrAbrirVozNueva() { vrEditandoVoz = 'nueva'; vrPintarVoces(); }
 function vrAbrirVozEditar(id) { vrEditandoVoz = String(id); vrPintarVoces(); }
 
+function vrSwatchesColor(suf, colorSel) {
+  return Object.entries(VR_COLORES).map(([key, c]) =>
+    `<div class="vr-swatch${key === colorSel ? ' on' : ''}" style="--sw-rgb:${c.rgb}" data-vr-voz-color="${key}" title="${esc(c.nombre)}"></div>`
+  ).join('');
+}
+
 function vrFilaVozForm(voz) {
   const id = voz?.id ?? '';
   const suf = id || 'nueva';
+  const colorSel = voz?.color || 'naranja';
+  const emojiSel = voz?.emoji || '🎙️';
   return `
-    <div class="card" style="padding:12px">
-      <label class="ce-lbl">Nombre</label>
-      <input class="ei" id="vr-voz-nombre-${suf}" style="width:100%" value="${esc(voz?.nombre || '')}" placeholder="Ej: Valentina - cálida">
-      <label class="ce-lbl" style="margin-top:10px">ID de voz de Fish (reference_id)</label>
-      <input class="ei" id="vr-voz-fishid-${suf}" style="width:100%" value="${esc(voz?.fish_model_id || '')}" placeholder="Pegá el ID de la voz pública">
+    <div class="card" style="padding:12px" data-vr-form-suf="${suf}">
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <div style="text-align:center;flex-shrink:0">
+          <button class="dbtn gh" id="vr-voz-emoji-btn-${suf}" data-vr-voz-emoji-btn="${suf}" style="font-size:22px;padding:8px 12px;line-height:1">${esc(emojiSel)}</button>
+          <input type="hidden" id="vr-voz-emoji-${suf}" value="${esc(emojiSel)}">
+          <div id="vr-voz-emoji-picker-${suf}" style="display:none;margin-top:6px;position:absolute;z-index:5"></div>
+        </div>
+        <div style="flex:1;min-width:180px">
+          <label class="ce-lbl">Nombre</label>
+          <input class="ei" id="vr-voz-nombre-${suf}" style="width:100%" value="${esc(voz?.nombre || '')}" placeholder="Ej: Valentina - cálida">
+        </div>
+      </div>
+      <label class="ce-lbl" style="margin-top:10px">Descripción corta</label>
+      <input class="ei" id="vr-voz-descripcion-${suf}" style="width:100%" value="${esc(voz?.descripcion || '')}" placeholder="Ej: cálida y cercana, ideal para storytime">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div>
+          <label class="ce-lbl">Género</label>
+          <select class="ei" id="vr-voz-genero-${suf}" style="width:100%">
+            <option value="" ${!voz?.genero ? 'selected' : ''}>Sin especificar</option>
+            <option value="femenina" ${voz?.genero === 'femenina' ? 'selected' : ''}>Femenina</option>
+            <option value="masculina" ${voz?.genero === 'masculina' ? 'selected' : ''}>Masculina</option>
+          </select>
+        </div>
+        <div>
+          <label class="ce-lbl">ID de voz de Fish</label>
+          <input class="ei" id="vr-voz-fishid-${suf}" style="width:100%" value="${esc(voz?.fish_model_id || '')}" placeholder="reference_id">
+        </div>
+      </div>
+      <label class="ce-lbl" style="margin-top:10px">Color</label>
+      <input type="hidden" id="vr-voz-color-${suf}" value="${colorSel}">
+      <div class="vr-swatches">${vrSwatchesColor(suf, colorSel)}</div>
       <div style="margin-top:12px;display:grid;gap:10px">
         <div>
-          <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Expresividad</span><span id="vr-voz-temp-val-${suf}" class="muted">${Number(voz?.temperatura ?? 0.7).toFixed(2)}</span></label>
-          <input type="range" id="vr-voz-temp-${suf}" min="0" max="1" step="0.05" value="${voz?.temperatura ?? 0.7}" style="width:100%" oninput="document.getElementById('vr-voz-temp-val-${suf}').textContent=Number(this.value).toFixed(2)">
+          <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Expresividad</span><span id="vr-voz-temp-val-${suf}" class="muted">${Number(voz?.temperatura ?? 0.65).toFixed(2)}</span></label>
+          <input type="range" id="vr-voz-temp-${suf}" min="0" max="1" step="0.05" value="${voz?.temperatura ?? 0.65}" style="width:100%" oninput="document.getElementById('vr-voz-temp-val-${suf}').textContent=Number(this.value).toFixed(2)">
         </div>
         <div>
-          <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Variación</span><span id="vr-voz-topp-val-${suf}" class="muted">${Number(voz?.top_p ?? 0.7).toFixed(2)}</span></label>
-          <input type="range" id="vr-voz-topp-${suf}" min="0" max="1" step="0.05" value="${voz?.top_p ?? 0.7}" style="width:100%" oninput="document.getElementById('vr-voz-topp-val-${suf}').textContent=Number(this.value).toFixed(2)">
+          <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Variación</span><span id="vr-voz-topp-val-${suf}" class="muted">${Number(voz?.top_p ?? 0.75).toFixed(2)}</span></label>
+          <input type="range" id="vr-voz-topp-${suf}" min="0" max="1" step="0.05" value="${voz?.top_p ?? 0.75}" style="width:100%" oninput="document.getElementById('vr-voz-topp-val-${suf}').textContent=Number(this.value).toFixed(2)">
         </div>
         <div>
-          <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Velocidad</span><span id="vr-voz-vel-val-${suf}" class="muted">${Number(voz?.velocidad ?? 1).toFixed(2)}x</span></label>
-          <input type="range" id="vr-voz-vel-${suf}" min="0.5" max="2" step="0.05" value="${voz?.velocidad ?? 1}" style="width:100%" oninput="document.getElementById('vr-voz-vel-val-${suf}').textContent=Number(this.value).toFixed(2)+'x'">
+          <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Velocidad</span><span id="vr-voz-vel-val-${suf}" class="muted">${Number(voz?.velocidad ?? 1.08).toFixed(2)}x</span></label>
+          <input type="range" id="vr-voz-vel-${suf}" min="0.5" max="2" step="0.05" value="${voz?.velocidad ?? 1.08}" style="width:100%" oninput="document.getElementById('vr-voz-vel-val-${suf}').textContent=Number(this.value).toFixed(2)+'x'">
         </div>
       </div>
       <label style="margin-top:10px;display:flex;align-items:center;gap:6px;font-size:12.5px">
@@ -6510,28 +6632,50 @@ function vrFilaVozForm(voz) {
     </div>`;
 }
 
+// Chips de preset -- reutilizados en la tarjeta de "probar" de una voz y en
+// el detalle de perfil. `seleccionado` es el preset_id activo (o null =
+// prosodia base de la voz). Devuelve también el chip "Base" para volver.
+function vrChipsPresets(vozId, seleccionado, dataAttr) {
+  const voz = VR_VOCES.find(v => v.id === vozId);
+  const base = `<button type="button" class="vr-preset${seleccionado ? '' : ' on'}" ${dataAttr}="">Base</button>`;
+  const chips = VR_PRESETS.filter(p => p.activo).map(p =>
+    `<button type="button" class="vr-preset${seleccionado === p.id ? ' on' : ''}" ${dataAttr}="${p.id}">${esc(p.emoji)} ${esc(p.nombre)}</button>`
+  ).join('');
+  const efectiva = voz ? vrProsodiaEfectiva(voz, seleccionado) : null;
+  const valores = efectiva && seleccionado
+    ? `<div class="vr-preset-valores">Exp ${Number(efectiva.temperatura).toFixed(2)} · Var ${Number(efectiva.top_p).toFixed(2)} · Vel ${Number(efectiva.velocidad).toFixed(2)}x</div>`
+    : '';
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap">${base}${chips}</div>${valores}`;
+}
+
 function vrFilaVoz(voz) {
+  const rgb = vrColorRgb(voz.color);
+  const generoTxt = voz.genero === 'femenina' ? 'Femenina' : voz.genero === 'masculina' ? 'Masculina' : null;
   return `
-    <div class="card" style="padding:14px${voz.activo ? '' : ';opacity:.55'}">
-      <div style="display:flex;align-items:center;gap:9px">
-        <div style="font-size:19px;color:var(--accent)"><i class="fas fa-microphone-lines"></i></div>
+    <div class="vr-card" style="--v-rgb:${rgb};padding:14px${voz.activo ? '' : ';opacity:.55'}">
+      <div style="display:flex;align-items:center;gap:10px;position:relative">
+        <div class="vr-avatar">${esc(voz.emoji || '🎙️')}</div>
         <div style="flex:1;min-width:0">
           <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(voz.nombre)}</div>
-          <div class="muted" style="font-size:10.5px;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(voz.fish_model_id)}</div>
+          ${voz.descripcion ? `<div class="muted" style="font-size:11px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(voz.descripcion)}</div>` : ''}
         </div>
       </div>
-      ${voz.activo ? '' : '<div class="muted" style="font-size:10.5px;margin-top:4px">(inactiva)</div>'}
-      <div style="display:flex;gap:5px;margin-top:9px;flex-wrap:wrap">
-        <span class="muted" style="font-size:10px;border:1px solid var(--line);border-radius:20px;padding:2px 7px">Exp ${Number(voz.temperatura).toFixed(2)}</span>
-        <span class="muted" style="font-size:10px;border:1px solid var(--line);border-radius:20px;padding:2px 7px">Var ${Number(voz.top_p).toFixed(2)}</span>
-        <span class="muted" style="font-size:10px;border:1px solid var(--line);border-radius:20px;padding:2px 7px">Vel ${Number(voz.velocidad).toFixed(2)}x</span>
+      ${voz.activo ? '' : '<div class="muted" style="font-size:10.5px;margin-top:6px">(inactiva)</div>'}
+      <div style="display:flex;gap:5px;margin-top:10px;flex-wrap:wrap">
+        <span class="vr-chip vr-chip-color">${esc(VR_COLORES[voz.color]?.nombre || 'Naranja')}</span>
+        ${generoTxt ? `<span class="vr-chip">${generoTxt}</span>` : ''}
+        <span class="vr-chip">Exp ${Number(voz.temperatura).toFixed(2)}</span>
+        <span class="vr-chip">Var ${Number(voz.top_p).toFixed(2)}</span>
+        <span class="vr-chip">Vel ${Number(voz.velocidad).toFixed(2)}x</span>
       </div>
       <div style="display:flex;gap:6px;margin-top:10px">
         <button class="dbtn gh" style="padding:5px 9px;font-size:11.5px;flex:1" data-vr-probar-voz="${voz.id}" title="Probar"><i class="fas fa-play"></i></button>
         <button class="dbtn gh" style="padding:5px 9px;font-size:11.5px;flex:1" data-vr-editar-voz="${voz.id}" title="Editar"><i class="fas fa-pen"></i></button>
+        <button class="dbtn gh" style="padding:5px 9px;font-size:11.5px;flex:1" data-vr-presets-voz="${voz.id}" title="Ajustar presets"><i class="fas fa-sliders"></i></button>
         <button class="dbtn gh" style="padding:5px 9px;font-size:11.5px" data-vr-eliminar-voz="${voz.id}" title="Eliminar"><i class="fas fa-trash"></i></button>
       </div>
       <div id="vr-voz-probar-${voz.id}"></div>
+      <div id="vr-voz-presets-${voz.id}"></div>
     </div>`;
 }
 
@@ -6558,6 +6702,10 @@ async function vrGuardarVoz(id) {
     p_top_p: Number(document.getElementById(`vr-voz-topp-${suf}`).value),
     p_velocidad: Number(document.getElementById(`vr-voz-vel-${suf}`).value),
     p_activo: document.getElementById(`vr-voz-activo-${suf}`).checked,
+    p_descripcion: document.getElementById(`vr-voz-descripcion-${suf}`)?.value.trim() || null,
+    p_genero: document.getElementById(`vr-voz-genero-${suf}`)?.value || null,
+    p_emoji: document.getElementById(`vr-voz-emoji-${suf}`)?.value || null,
+    p_color: document.getElementById(`vr-voz-color-${suf}`)?.value || null,
   };
   const { data, error } = await sb.rpc('voces_catalogo_guardar', payload);
   if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
@@ -6570,25 +6718,69 @@ async function vrGuardarVoz(id) {
 }
 
 async function vrEliminarVoz(id) {
-  if (!confirm('¿Eliminar esta voz del catálogo?')) return;
-  const { data, error } = await sb.rpc('voces_catalogo_eliminar', { p_id: Number(id) });
+  const perfilesEnUso = VR_PERFILES.filter(p => p.voz_id === Number(id)).length;
+  const aviso = perfilesEnUso > 0
+    ? `${perfilesEnUso} perfil(es) tienen esta voz asignada -- van a quedar "sin voz". ¿Eliminar de todos modos?`
+    : '¿Eliminar esta voz del catálogo?';
+  if (!confirm(aviso)) return;
+  const { data, error } = await sb.rpc('voces_catalogo_eliminar', { p_id: Number(id), p_forzar: perfilesEnUso > 0 });
   if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (error?.message || data?.error || '')); return; }
   okToast('Voz eliminada');
   await vrCargarVoces();
   await vrCargarPerfiles();
 }
 
+function vrToggleEmojiVoz(suf) {
+  const cont = document.getElementById(`vr-voz-emoji-picker-${suf}`);
+  if (!cont) return;
+  const abrir = cont.style.display === 'none';
+  if (abrir) {
+    cont.innerHTML = `<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;background:var(--panel-solid);border:1px solid var(--line);border-radius:10px;padding:8px;max-width:210px;box-shadow:0 10px 30px rgba(0,0,0,.25)">${
+      VR_EMOJIS.map(e => `<button type="button" class="dbtn gh" style="padding:6px;font-size:17px" data-vr-voz-emoji-elegir="${e}">${e}</button>`).join('')
+    }</div>`;
+  }
+  cont.style.display = abrir ? '' : 'none';
+}
+function vrElegirEmojiVoz(suf, emoji) {
+  const hidden = document.getElementById(`vr-voz-emoji-${suf}`);
+  const btn = document.getElementById(`vr-voz-emoji-btn-${suf}`);
+  if (hidden) hidden.value = emoji;
+  if (btn) btn.textContent = emoji;
+  vrToggleEmojiVoz(suf);
+}
+function vrElegirColorVoz(suf, colorKey) {
+  const hidden = document.getElementById(`vr-voz-color-${suf}`);
+  if (hidden) hidden.value = colorKey;
+  document.querySelectorAll(`[data-vr-form-suf="${suf}"] .vr-swatch`).forEach(s => s.classList.toggle('on', s.dataset.vrVozColor === colorKey));
+}
+
+// ---- Probar una voz del catálogo (con selector de preset) ----------------
+
+let vrPresetProbar = {}; // { [vozId]: presetId|null } -- preset elegido en el mini panel "Probar" de cada voz
+
 async function vrProbarVoz(id) {
+  const vozId = Number(id);
   const cont = document.getElementById(`vr-voz-probar-${id}`);
   if (!cont) return;
   if (cont.dataset.abierto === '1') { cont.innerHTML = ''; cont.dataset.abierto = '0'; return; }
   cont.dataset.abierto = '1';
+  vrPresetProbar[vozId] = vrPresetProbar[vozId] ?? null;
   cont.innerHTML = `
-    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd,#e5e7eb)">
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
       <textarea class="ei" id="vr-probar-texto-${id}" rows="2" style="width:100%;resize:vertical" placeholder="Escribí un texto corto para escuchar esta voz..."></textarea>
+      <div id="vr-probar-presets-${id}" style="margin-top:8px" data-vr-probar-presets="${id}">${vrChipsPresets(vozId, vrPresetProbar[vozId], 'data-vr-probar-preset-el')}</div>
       <button class="dbtn gh" style="margin-top:8px;padding:6px 10px;font-size:12.5px" data-vr-probar-generar="${id}"><i class="fas fa-wand-magic-sparkles"></i> Generar</button>
       <div id="vr-probar-resultado-${id}" style="margin-top:8px"></div>
     </div>`;
+  // Delegación local: los chips de preset de ESTE panel viven dentro de
+  // `cont`, que se reescribe entero cada vez que se abre/cierra -- un
+  // listener por apertura no acumula (se pierde con el innerHTML de arriba).
+  cont.querySelector(`[data-vr-probar-presets="${id}"]`)?.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-vr-probar-preset-el]');
+    if (!chip) return;
+    vrPresetProbar[vozId] = chip.dataset.vrProbarPresetEl ? Number(chip.dataset.vrProbarPresetEl) : null;
+    document.getElementById(`vr-probar-presets-${id}`).innerHTML = vrChipsPresets(vozId, vrPresetProbar[vozId], 'data-vr-probar-preset-el');
+  });
 }
 
 async function vrGenerarPrueba(id) {
@@ -6596,11 +6788,213 @@ async function vrGenerarPrueba(id) {
   if (!texto) { errToast('Escribí un texto primero'); return; }
   const btn = document.querySelector(`[data-vr-probar-generar="${id}"]`);
   const out = document.getElementById(`vr-probar-resultado-${id}`);
-  btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
-  const { data, error } = await sb.functions.invoke('voz-perfil-probar', { body: { voz_id: Number(id), texto } });
+  btn.disabled = true; btn.innerHTML = `<span class="vr-wave"><span></span><span></span><span></span><span></span></span> Generando...`;
+  const presetId = vrPresetProbar[Number(id)];
+  const body = { voz_id: Number(id), texto };
+  if (presetId) body.preset_id = presetId;
+  const { data, error } = await sb.functions.invoke('voz-perfil-probar', { body });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Generar';
-  if (error || !data?.ok) { errToast('No se pudo generar: ' + (data?.error || error?.message || '')); return; }
-  out.innerHTML = `<audio controls style="width:100%" src="data:audio/mpeg;base64,${data.audio_base64}"></audio>`;
+  if (error || !data?.ok) { errToast('No se pudo generar: ' + (await msgErrorFn(error, data))); return; }
+  out.innerHTML = `<audio controls autoplay style="width:100%" src="${esc(data.audio_url)}"></audio>`;
+}
+
+// ---- Panel "Ajustar presets" por voz (override de prosodia) --------------
+
+function vrTogglePanelPresetsVoz(id) {
+  const vozId = Number(id);
+  const cont = document.getElementById(`vr-voz-presets-${id}`);
+  if (!cont) return;
+  if (vrPresetAbiertoVoz === vozId) { cont.innerHTML = ''; vrPresetAbiertoVoz = null; return; }
+  vrPresetAbiertoVoz = vozId;
+  document.querySelectorAll('[id^="vr-voz-presets-"]').forEach(c => { if (c !== cont) c.innerHTML = ''; });
+  cont.innerHTML = vrPanelPresetsVoz(vozId);
+}
+
+function vrPanelPresetsVoz(vozId) {
+  if (!VR_PRESETS.length) return `<div class="muted" style="font-size:12px;margin-top:10px">Todavía no hay presets creados.</div>`;
+  const filas = VR_PRESETS.filter(p => p.activo).map(p => {
+    const ov = vrOverrideDe(vozId, p.id);
+    const suf = `${vozId}-${p.id}`;
+    return `
+      <div style="border-top:1px solid var(--line);padding:8px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12.5px;font-weight:700">${esc(p.emoji)} ${esc(p.nombre)}${ov ? ' <span class="muted" style="font-weight:400">(calibrado)</span>' : ''}</span>
+          ${ov ? `<button class="dbtn gh" style="padding:2px 7px;font-size:10px" data-vr-override-reset="${vozId}:${p.id}">Restablecer</button>` : ''}
+        </div>
+        <div style="display:grid;gap:6px;margin-top:6px">
+          <div><label class="ce-lbl" style="display:flex;justify-content:space-between;font-size:10.5px"><span>Exp</span><span id="vr-ov-temp-val-${suf}">${Number(ov?.temperatura ?? p.temperatura).toFixed(2)}</span></label>
+            <input type="range" id="vr-ov-temp-${suf}" min="0" max="1" step="0.05" value="${ov?.temperatura ?? p.temperatura}" style="width:100%" oninput="document.getElementById('vr-ov-temp-val-${suf}').textContent=Number(this.value).toFixed(2)"></div>
+          <div><label class="ce-lbl" style="display:flex;justify-content:space-between;font-size:10.5px"><span>Var</span><span id="vr-ov-topp-val-${suf}">${Number(ov?.top_p ?? p.top_p).toFixed(2)}</span></label>
+            <input type="range" id="vr-ov-topp-${suf}" min="0" max="1" step="0.05" value="${ov?.top_p ?? p.top_p}" style="width:100%" oninput="document.getElementById('vr-ov-topp-val-${suf}').textContent=Number(this.value).toFixed(2)"></div>
+          <div><label class="ce-lbl" style="display:flex;justify-content:space-between;font-size:10.5px"><span>Vel</span><span id="vr-ov-vel-val-${suf}">${Number(ov?.velocidad ?? p.velocidad).toFixed(2)}x</span></label>
+            <input type="range" id="vr-ov-vel-${suf}" min="0.5" max="2" step="0.05" value="${ov?.velocidad ?? p.velocidad}" style="width:100%" oninput="document.getElementById('vr-ov-vel-val-${suf}').textContent=Number(this.value).toFixed(2)+'x'"></div>
+        </div>
+        <button class="dbtn gh" style="margin-top:6px;padding:4px 9px;font-size:11px" data-vr-override-guardar="${vozId}:${p.id}"><i class="fas fa-floppy-disk"></i> Guardar calibración</button>
+      </div>`;
+  }).join('');
+  return `<div style="margin-top:10px">${filas}</div>`;
+}
+
+async function vrGuardarOverride(claveCombinada) {
+  const [vozId, presetId] = claveCombinada.split(':').map(Number);
+  const suf = `${vozId}-${presetId}`;
+  const payload = {
+    p_voz_id: vozId, p_preset_id: presetId,
+    p_temperatura: Number(document.getElementById(`vr-ov-temp-${suf}`).value),
+    p_top_p: Number(document.getElementById(`vr-ov-topp-${suf}`).value),
+    p_velocidad: Number(document.getElementById(`vr-ov-vel-${suf}`).value),
+  };
+  const { data, error } = await sb.rpc('voz_preset_override_guardar', payload);
+  if (error || !data?.ok) { errToast('No se pudo guardar la calibración: ' + (error?.message || data?.error || '')); return; }
+  okToast('Calibración guardada para esta voz');
+  await vrCargarPresets();
+  vrRepintarPanelPresetsVoz(vozId);
+}
+
+async function vrResetOverride(claveCombinada) {
+  const [vozId, presetId] = claveCombinada.split(':').map(Number);
+  const { data, error } = await sb.rpc('voz_preset_override_guardar', { p_voz_id: vozId, p_preset_id: presetId, p_temperatura: null, p_top_p: null, p_velocidad: null });
+  if (error || !data?.ok) { errToast('No se pudo restablecer: ' + (error?.message || data?.error || '')); return; }
+  await vrCargarPresets();
+  vrRepintarPanelPresetsVoz(vozId);
+}
+
+// Repinta el panel de UNA voz directo, sin depender de vrPresetAbiertoVoz --
+// a diferencia de vrTogglePanelPresetsVoz (que abre/cierra), esto no le
+// importa si el panel estaba abierto de otra voz: siempre deja `vozId`
+// abierto con datos frescos.
+function vrRepintarPanelPresetsVoz(vozId) {
+  document.querySelectorAll('[id^="vr-voz-presets-"]').forEach(c => { c.innerHTML = ''; });
+  const cont = document.getElementById(`vr-voz-presets-${vozId}`);
+  if (!cont) return;
+  vrPresetAbiertoVoz = vozId;
+  cont.innerHTML = vrPanelPresetsVoz(vozId);
+}
+
+// ---- Presets globales (card "Presets") ------------------------------------
+
+async function vrCargarPresets() {
+  const { data, error } = await sb.rpc('voz_presets_listar');
+  if (error || !data?.ok) { errToast('No se pudieron cargar los presets: ' + (error?.message || data?.error || '')); return; }
+  VR_PRESETS = data.presets || [];
+  VR_OVERRIDES = data.overrides || [];
+  vrPintarPresets();
+}
+
+function vrFilaPresetForm(preset) {
+  const id = preset?.id ?? '';
+  const suf = id || 'nueva';
+  return `
+    <div class="card" style="padding:12px;width:100%">
+      <div style="display:flex;gap:8px">
+        <input class="ei" id="vr-preset-emoji-${suf}" style="width:56px;text-align:center;font-size:16px" value="${esc(preset?.emoji || '🎬')}" maxlength="4">
+        <input class="ei" id="vr-preset-nombre-${suf}" style="flex:1" value="${esc(preset?.nombre || '')}" placeholder="Ej: Reel enérgico">
+      </div>
+      <input class="ei" id="vr-preset-descripcion-${suf}" style="width:100%;margin-top:8px" value="${esc(preset?.descripcion || '')}" placeholder="Para qué sirve (opcional)">
+      <div style="display:grid;gap:8px;margin-top:8px">
+        <div><label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Expresividad</span><span id="vr-preset-temp-val-${suf}" class="muted">${Number(preset?.temperatura ?? 0.65).toFixed(2)}</span></label>
+          <input type="range" id="vr-preset-temp-${suf}" min="0" max="1" step="0.05" value="${preset?.temperatura ?? 0.65}" style="width:100%" oninput="document.getElementById('vr-preset-temp-val-${suf}').textContent=Number(this.value).toFixed(2)"></div>
+        <div><label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Variación</span><span id="vr-preset-topp-val-${suf}" class="muted">${Number(preset?.top_p ?? 0.75).toFixed(2)}</span></label>
+          <input type="range" id="vr-preset-topp-${suf}" min="0" max="1" step="0.05" value="${preset?.top_p ?? 0.75}" style="width:100%" oninput="document.getElementById('vr-preset-topp-val-${suf}').textContent=Number(this.value).toFixed(2)"></div>
+        <div><label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Velocidad</span><span id="vr-preset-vel-val-${suf}" class="muted">${Number(preset?.velocidad ?? 1.08).toFixed(2)}x</span></label>
+          <input type="range" id="vr-preset-vel-${suf}" min="0.5" max="2" step="0.05" value="${preset?.velocidad ?? 1.08}" style="width:100%" oninput="document.getElementById('vr-preset-vel-val-${suf}').textContent=Number(this.value).toFixed(2)+'x'"></div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button class="dbtn gh" data-vr-preset-guardar="${id}"><i class="fas fa-floppy-disk"></i> Guardar</button>
+        <button class="dbtn gh" data-vr-preset-cancelar><i class="fas fa-xmark"></i> Cancelar</button>
+      </div>
+    </div>`;
+}
+
+function vrChipPreset(preset) {
+  return `
+    <div class="vr-preset" style="cursor:default;flex-direction:column;align-items:flex-start;gap:2px" title="${esc(preset.descripcion || '')}">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span>${esc(preset.emoji)} ${esc(preset.nombre)}</span>
+        <button class="dbtn gh" style="padding:1px 6px;font-size:10px" data-vr-preset-editar="${preset.id}"><i class="fas fa-pen"></i></button>
+        <button class="dbtn gh" style="padding:1px 6px;font-size:10px" data-vr-preset-eliminar="${preset.id}"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>`;
+}
+
+function vrPintarPresets() {
+  const cont = document.getElementById('vr-presets-lista');
+  if (!cont) return;
+  let html = '';
+  if (vrEditandoPreset === 'nueva') html += vrFilaPresetForm(null);
+  html += VR_PRESETS.map(p => vrEditandoPreset === String(p.id) ? vrFilaPresetForm(p) : vrChipPreset(p)).join('');
+  cont.innerHTML = html || '<div class="muted" style="font-size:12.5px">Todavía no hay presets.</div>';
+}
+
+async function vrGuardarPreset(id) {
+  const suf = id || 'nueva';
+  const nombre = document.getElementById(`vr-preset-nombre-${suf}`)?.value.trim();
+  if (!nombre) { errToast('Ponele un nombre al preset'); return; }
+  const payload = {
+    p_id: id ? Number(id) : null,
+    p_nombre: nombre,
+    p_emoji: document.getElementById(`vr-preset-emoji-${suf}`)?.value.trim() || '🎬',
+    p_descripcion: document.getElementById(`vr-preset-descripcion-${suf}`)?.value.trim() || null,
+    p_temperatura: Number(document.getElementById(`vr-preset-temp-${suf}`).value),
+    p_top_p: Number(document.getElementById(`vr-preset-topp-${suf}`).value),
+    p_velocidad: Number(document.getElementById(`vr-preset-vel-${suf}`).value),
+    p_orden: 0,
+    p_activo: true,
+  };
+  const { data, error } = await sb.rpc('voz_presets_guardar', payload);
+  if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Preset guardado');
+  vrEditandoPreset = null;
+  await vrCargarPresets();
+}
+
+async function vrEliminarPreset(id) {
+  if (!confirm('¿Eliminar este preset?')) return;
+  const { data, error } = await sb.rpc('voz_presets_eliminar', { p_id: Number(id) });
+  if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Preset eliminado');
+  await vrCargarPresets();
+}
+
+// ---- Buscador de Fish Audio ------------------------------------------------
+
+let VR_FISH_RESULTADOS = [];
+
+async function vrFishBuscar() {
+  const q = document.getElementById('vr-fish-q')?.value.trim();
+  const cont = document.getElementById('vr-fish-resultados');
+  const btn = document.getElementById('vr-fish-buscar');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando...';
+  const { data, error } = await sb.functions.invoke('voz-fish-buscar', { body: { q } });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-magnifying-glass"></i> Buscar';
+  if (error || !data?.ok) { errToast('No se pudo buscar: ' + (await msgErrorFn(error, data))); return; }
+  VR_FISH_RESULTADOS = data.voces || [];
+  cont.innerHTML = VR_FISH_RESULTADOS.length
+    ? VR_FISH_RESULTADOS.map((v, i) => `
+        <div class="vr-fish-resultado">
+          <div style="font-weight:700;font-size:13px">${esc(v.titulo)}</div>
+          ${v.descripcion ? `<div class="muted" style="font-size:11px">${esc(v.descripcion.slice(0, 90))}</div>` : ''}
+          ${v.muestra_url ? `<audio controls style="width:100%;height:32px" src="${esc(v.muestra_url)}"></audio>` : '<div class="muted" style="font-size:11px">Sin muestra disponible</div>'}
+          <button class="dbtn gh" style="font-size:11.5px;padding:5px 9px" data-vr-fish-agregar="${i}"><i class="fas fa-plus"></i> Agregar al catálogo</button>
+        </div>`).join('')
+    : '<div class="muted" style="font-size:12.5px">Sin resultados -- probá con otro término.</div>';
+}
+
+function vrFishAgregar(indice) {
+  const v = VR_FISH_RESULTADOS[Number(indice)];
+  if (!v) return;
+  vrEditandoVoz = 'nueva';
+  vrPintarVoces();
+  // Precarga el nombre + ID de Fish en el form recién abierto -- el resto
+  // (color/emoji/prosodia) el admin lo elige a mano al confirmar.
+  const nombreInput = document.getElementById('vr-voz-nombre-nueva');
+  const fishInput = document.getElementById('vr-voz-fishid-nueva');
+  const descInput = document.getElementById('vr-voz-descripcion-nueva');
+  if (nombreInput) nombreInput.value = v.titulo;
+  if (fishInput) fishInput.value = v.fish_model_id;
+  if (descInput) descInput.value = v.descripcion || '';
+  document.getElementById('vr-voz-nueva')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  okToast('Precargado -- revisá color/emoji y guardá para agregarla al catálogo');
 }
 
 async function vrCargarPerfiles() {
@@ -6624,12 +7018,14 @@ function vrOpcionesVoces(vozIdSeleccionada) {
 // Tarjeta de perfil en la lista -- click en cualquier parte abre el detalle,
 // salvo el botón de basura (chequeado ANTES en la delegación, ver setupVozIA).
 function vrTarjetaPerfil(perfil) {
+  const voz = VR_VOCES.find(v => v.id === perfil.voz_id);
+  const rgb = vrColorRgb(voz?.color);
   return `
-    <div class="card" style="padding:14px;text-align:center;cursor:pointer;position:relative${perfil.activo ? '' : ';opacity:.55'}" data-vr-abrir-perfil="${perfil.id}">
+    <div class="vr-card" style="--v-rgb:${rgb};padding:14px;text-align:center;cursor:pointer;position:relative${perfil.activo ? '' : ';opacity:.55'}" data-vr-abrir-perfil="${perfil.id}">
       <button class="dbtn gh" style="position:absolute;top:8px;right:8px;padding:3px 7px;font-size:10.5px" data-vr-eliminar-perfil="${perfil.id}" title="Eliminar"><i class="fas fa-trash"></i></button>
       <div style="font-size:36px;line-height:1;margin-top:6px">${esc(perfil.avatar || '🎙️')}</div>
       <div style="margin-top:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(perfil.nombre)}</div>
-      <div class="muted" style="font-size:11px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${perfil.voz_nombre ? esc(perfil.voz_nombre) : 'Sin voz asignada'}</div>
+      <div class="vr-chip vr-chip-color" style="margin-top:6px;display:inline-flex">${perfil.voz_nombre ? esc(perfil.voz_nombre) : 'Sin voz asignada'}</div>
       ${perfil.activo ? '' : '<div class="muted" style="font-size:10px;margin-top:3px">(inactivo)</div>'}
     </div>`;
 }
@@ -6648,6 +7044,7 @@ function vrAbrirDetallePerfil(id) {
   const perfil = id === 'nuevo' ? null : VR_PERFILES.find(p => String(p.id) === String(id));
   vrPerfilDetalleAvatar = perfil?.avatar || '🎙️';
   vrTextoAntesDePuntuar = null;
+  vrPresetSeleccionadoDetalle = null;
   VR_HISTORIAL = [];
   document.getElementById('vr-vista-lista').style.display = 'none';
   document.getElementById('vr-vista-detalle').style.display = '';
@@ -6670,14 +7067,16 @@ function vrPintarDetalle() {
   const esNuevo = vrPerfilDetalleId === 'nuevo';
   const perfil = esNuevo ? null : VR_PERFILES.find(p => String(p.id) === vrPerfilDetalleId);
   if (!esNuevo && !perfil) { vrVolverALista(); return; } // se borró en otro lado mientras se miraba
+  const vozActual = VR_VOCES.find(v => v.id === perfil?.voz_id);
+  const rgb = vrColorRgb(vozActual?.color);
   cont.innerHTML = `
     <button class="dbtn gh" id="vr-detalle-volver" style="padding:6px 10px;font-size:12.5px;margin-bottom:14px"><i class="fas fa-arrow-left"></i> Perfiles</button>
-    <div class="card" style="padding:18px">
+    <div class="vr-hero" style="--v-rgb:${rgb}">
       <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
         <div style="text-align:center">
-          <button class="dbtn gh" id="vr-detalle-avatar-btn" style="font-size:38px;padding:10px 16px;line-height:1">${esc(vrPerfilDetalleAvatar)}</button>
+          <button class="dbtn gh vr-hero-avatar" id="vr-detalle-avatar-btn">${esc(vrPerfilDetalleAvatar)}</button>
           <div class="muted" style="font-size:11px;margin-top:5px">Cambiar ícono</div>
-          <div id="vr-emoji-picker" style="display:none;margin-top:8px"></div>
+          <div id="vr-emoji-picker" style="display:none;margin-top:8px;position:absolute;z-index:5"></div>
         </div>
         <div style="flex:1;min-width:220px">
           <label class="ce-lbl">Nombre del perfil</label>
@@ -6688,7 +7087,7 @@ function vrPintarDetalle() {
             <input type="checkbox" id="vr-detalle-activo" ${perfil?.activo !== false ? 'checked' : ''}> Activo
           </label>
           <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
-            <button class="dbtn gh" id="vr-detalle-guardar"><i class="fas fa-floppy-disk"></i> ${esNuevo ? 'Crear perfil' : 'Guardar cambios'}</button>
+            <button class="dbtn" id="vr-detalle-guardar" style="background:var(--accent);border-color:var(--accent);color:#1a1000"><i class="fas fa-floppy-disk"></i> ${esNuevo ? 'Crear perfil' : 'Guardar cambios'}</button>
             ${esNuevo ? '' : '<button class="dbtn gh" id="vr-detalle-eliminar"><i class="fas fa-trash"></i> Eliminar</button>'}
           </div>
         </div>
@@ -6699,10 +7098,11 @@ function vrPintarDetalle() {
       <b style="font-size:14px"><i class="fas fa-wand-magic-sparkles"></i> Generar voz en off</b>
       <div class="muted" style="font-size:12px;margin-top:4px">Sintetiza con la voz elegida arriba (guardada o no) -- probá antes de confirmar si querés.</div>
       <textarea class="ei" id="vr-detalle-texto" rows="3" style="width:100%;resize:vertical;margin-top:10px" placeholder="Escribí el guion del video..."></textarea>
+      <div id="vr-detalle-presets" style="margin-top:10px"></div>
       <div class="vr-accion-bar" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="dbtn gh" id="vr-detalle-puntuar" style="min-height:44px"><i class="fas fa-quote-right"></i> Arreglar puntuación</button>
         <button class="dbtn gh" id="vr-detalle-deshacer-puntuar" style="min-height:44px;display:none"><i class="fas fa-rotate-left"></i> Deshacer</button>
-        <button class="dbtn gh" id="vr-detalle-generar" style="min-height:44px"><i class="fas fa-play"></i> Generar audio</button>
+        <button class="dbtn" id="vr-detalle-generar" style="min-height:44px;background:var(--accent);border-color:var(--accent);color:#1a1000"><i class="fas fa-play"></i> Generar audio</button>
       </div>
       <div id="vr-detalle-audio" style="margin-top:10px"></div>
     </div>
@@ -6712,6 +7112,22 @@ function vrPintarDetalle() {
       <div class="muted" style="font-size:12px;margin-top:4px">Lo que ya generaste para este perfil -- reescuchá o descargá sin volver a generar.</div>
       <div id="vr-detalle-historial" style="margin-top:10px">${esNuevo ? '<div class="muted" style="font-size:12.5px">Guardá el perfil primero para que quede historial.</div>' : '<div class="muted" style="font-size:12.5px">Cargando...</div>'}</div>
     </div>`;
+  vrPintarChipsDetalle();
+}
+
+// Chips de preset de la card "Generar voz en off" -- separado de
+// vrPintarDetalle para poder refrescar solo esto cuando cambia la voz o el
+// preset elegido, sin repintar (y perder el foco de) el resto del detalle.
+function vrPintarChipsDetalle() {
+  const cont = document.getElementById('vr-detalle-presets');
+  if (!cont) return;
+  const vozId = Number(document.getElementById('vr-detalle-voz')?.value);
+  if (!vozId) { cont.innerHTML = ''; return; }
+  cont.innerHTML = vrChipsPresets(vozId, vrPresetSeleccionadoDetalle, 'data-vr-elegir-preset');
+}
+function vrElegirPresetDetalle(presetId) {
+  vrPresetSeleccionadoDetalle = presetId ? Number(presetId) : null;
+  vrPintarChipsDetalle();
 }
 
 function vrFilaHistorial(item) {
@@ -6722,7 +7138,7 @@ function vrFilaHistorial(item) {
   return `
     <div class="card" style="padding:10px 12px;margin-top:8px">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap">
-        <div style="font-size:12px;color:var(--muted)">${esc(fechaTxt)} · ${esc(item.voz_nombre)}</div>
+        <div style="font-size:12px;color:var(--muted)">${esc(fechaTxt)} · ${esc(item.voz_nombre)}${item.preset_nombre ? ` · <span class="vr-chip" style="padding:1px 7px">${esc(item.preset_nombre)}</span>` : ''}</div>
         <button class="dbtn gh" style="padding:3px 8px;font-size:11px" data-vr-borrar-historial="${item.id}"><i class="fas fa-trash"></i></button>
       </div>
       <div style="font-size:12.5px;margin-top:4px">${esc(previa)}</div>
@@ -6759,7 +7175,8 @@ async function vrArreglarPuntuacion() {
   btn.disabled = true; btn.innerHTML = 'Arreglando... <i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.functions.invoke('voz-texto-puntuar', { body: { texto } });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-quote-right"></i> Arreglar puntuación';
-  if (error || !data?.ok) { errToast('No se pudo arreglar la puntuación: ' + (data?.error || error?.message || '')); return; }
+  if (error || !data?.ok) { errToast('No se pudo arreglar la puntuación: ' + (await msgErrorFn(error, data))); return; }
+  if (data.sin_cambios) { okToast('El texto ya estaba bien puntuado, no hizo falta cambiar nada'); return; }
   vrTextoAntesDePuntuar = texto;
   textarea.value = data.texto_puntuado;
   document.getElementById('vr-detalle-deshacer-puntuar').style.display = '';
@@ -6844,14 +7261,16 @@ async function vrGenerarDetalle() {
   if (!texto) { errToast('Escribí un texto primero'); return; }
   const btn = document.getElementById('vr-detalle-generar');
   const out = document.getElementById('vr-detalle-audio');
-  btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
+  btn.disabled = true; btn.innerHTML = `<span class="vr-wave"><span></span><span></span><span></span><span></span></span> Generando...`;
   const body = { voz_id: Number(vozId), texto };
   if (vrPerfilDetalleId !== 'nuevo') body.p_perfil_id = Number(vrPerfilDetalleId);
+  if (vrPresetSeleccionadoDetalle) body.preset_id = vrPresetSeleccionadoDetalle;
   const { data, error } = await sb.functions.invoke('voz-perfil-probar', { body });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-play"></i> Generar audio';
-  if (error || !data?.ok) { errToast('No se pudo generar: ' + (data?.error || error?.message || '')); return; }
+  if (error || !data?.ok) { errToast('No se pudo generar: ' + (await msgErrorFn(error, data))); return; }
   out.innerHTML = `
-    <audio controls style="width:100%" src="${esc(data.audio_url)}"></audio>
+    <audio controls autoplay style="width:100%" src="${esc(data.audio_url)}"></audio>
+    ${data.preset_nombre ? `<div class="vr-chip" style="margin-top:8px;display:inline-flex">${esc(data.preset_nombre)}</div>` : ''}
     <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
       <a class="dbtn gh" style="padding:6px 10px;font-size:12.5px;min-height:44px" href="${esc(data.audio_url)}" download="voz-redes.mp3"><i class="fas fa-download"></i> Descargar</a>
       ${navigator.share ? `<button class="dbtn gh" style="padding:6px 10px;font-size:12.5px;min-height:44px" data-vr-compartir="${esc(data.audio_url)}"><i class="fas fa-share-nodes"></i> Compartir</button>` : ''}
@@ -10258,6 +10677,20 @@ function recibirLeadNuevoInbox(lead) {
 function toast(l) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-bolt"></i> <div><b>Nuevo lead en vivo</b><br>${esc(l.nombre)} · ${esc(l.destino || '')}</div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5200); }
 function okToast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-check"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500); }
 function errToast(msg) { const t = document.createElement('div'); t.className = 'toast toast-err'; t.innerHTML = `<i class="fas fa-triangle-exclamation"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5000); }
+
+// `sb.functions.invoke` con status != 2xx deja `data=null` y el cuerpo JSON
+// real (el { ok:false, error } que arma la Edge Function) adentro de
+// `error.context`, un Response sin leer -- sin esto, cualquier toast de
+// error de una función queda pelado ("No se pudo X: ") porque `data?.error`
+// es null. Lee el context si existe, si no cae al mensaje genérico de error.
+async function msgErrorFn(error, data) {
+  if (data?.error) return data.error;
+  const ctx = error?.context;
+  if (ctx && typeof ctx.json === 'function') {
+    try { const body = await ctx.clone().json(); if (body?.error) return body.error; } catch {}
+  }
+  return error?.message || 'error desconocido';
+}
 // Igual que okToast/errToast pero con HTML propio (nunca de input de usuario)
 // y más tiempo en pantalla -- para acciones que el asesor tiene que tocar,
 // como el link de WhatsApp cuando window.open() vuelve bloqueado.

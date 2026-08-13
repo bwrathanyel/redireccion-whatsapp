@@ -1850,6 +1850,66 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   .mfs-trigger.mfs-icon.con-filtros{border-color:rgba(245,158,11,.5);color:var(--accent)}
   .mfs-trigger.mfs-icon.con-filtros::after{content:'';position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--bg)}
 }
+
+/* ---------- Voces de Redes: paleta y vida (2026-08-14) -------------------
+   Antes todo era .card gris plana igual para cualquier voz. Cada voz del
+   catálogo elige un color de acento (voces_catalogo.color) de esta paleta
+   -- pensada para leerse bien en fondo oscuro Y claro (mismo criterio de
+   contraste que --accent). Se aplica vía variable inline (--v-col/--v-rgb)
+   en vez de una clase por color, así el color vive en los datos, no en 6
+   clases CSS distintas por hardcodear cada tarjeta. */
+:root{
+  --vr-naranja:255,145,0;   /* = --accent, la voz "default"/marca */
+  --vr-coral:255,51,102;
+  --vr-cian:0,194,203;
+  --vr-violeta:139,92,246;
+  --vr-esmeralda:16,185,129;
+  --vr-azul:59,130,246;
+}
+.vr-card{position:relative;border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden;transition:transform 160ms ease,box-shadow 160ms ease,border-color 160ms ease}
+.vr-card::before{content:'';position:absolute;inset:0;border-top:2px solid rgba(var(--v-rgb,var(--vr-naranja)),.9);background:radial-gradient(140px 90px at 88% -10%,rgba(var(--v-rgb,var(--vr-naranja)),.16),transparent 65%);pointer-events:none}
+.vr-card:hover{transform:translateY(-2px);border-color:rgba(var(--v-rgb,var(--vr-naranja)),.4);box-shadow:0 10px 26px -10px rgba(var(--v-rgb,var(--vr-naranja)),.28)}
+.vr-avatar{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0;background:rgba(var(--v-rgb,var(--vr-naranja)),.15);border:1px solid rgba(var(--v-rgb,var(--vr-naranja)),.35)}
+.vr-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;border:1px solid var(--line);border-radius:20px;padding:3px 8px;color:var(--muted)}
+.vr-chip.vr-chip-color{color:rgb(var(--v-rgb,var(--vr-naranja)));border-color:rgba(var(--v-rgb,var(--vr-naranja)),.35);background:rgba(var(--v-rgb,var(--vr-naranja)),.1)}
+.vr-swatches{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px}
+.vr-swatch{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;background:rgb(var(--sw-rgb));transition:transform 120ms ease,border-color 120ms ease}
+.vr-swatch:hover{transform:scale(1.12)}
+.vr-swatch.on{border-color:var(--txt);box-shadow:0 0 0 2px var(--bg)}
+
+/* Ecualizador CSS puro -- reemplaza el ícono de play mientras se genera o
+   reproduce audio. Delays escalonados en negativo para que arranque ya en
+   movimiento (sin el "salto" inicial de las 4 barras sincronizadas). */
+.vr-wave{display:inline-flex;align-items:flex-end;gap:2px;height:16px;flex-shrink:0}
+.vr-wave span{width:3px;height:100%;border-radius:99px;background:rgb(var(--v-rgb,var(--vr-naranja)));transform:scaleY(.2);animation:vr-eq .8s cubic-bezier(.4,0,.2,1) infinite alternate}
+.vr-wave span:nth-child(1){animation-delay:-.7s}
+.vr-wave span:nth-child(2){animation-delay:-.2s}
+.vr-wave span:nth-child(3){animation-delay:-.5s}
+.vr-wave span:nth-child(4){animation-delay:0s}
+@keyframes vr-eq{0%{transform:scaleY(.15)}100%{transform:scaleY(1)}}
+@media(prefers-reduced-motion:reduce){.vr-wave span{animation:none;transform:scaleY(.6)}}
+
+/* Chips de preset -- click aplica la prosodia sobre el guion a generar. */
+.vr-preset{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;border:1px solid var(--line);border-radius:20px;padding:6px 12px;background:var(--panel-solid);cursor:pointer;transition:border-color 120ms ease,background 120ms ease,transform 120ms ease}
+.vr-preset:hover{transform:translateY(-1px)}
+.vr-preset.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.vr-preset-valores{font-size:10.5px;color:var(--muted);margin-top:6px}
+
+/* Hero del detalle de perfil -- header sobre el color de su voz en vez de
+   una card gris más. */
+.vr-hero{position:relative;border-radius:16px;padding:20px;background:radial-gradient(320px 160px at 15% 0%,rgba(var(--v-rgb,var(--vr-naranja)),.18),var(--panel) 70%);border:1px solid rgba(var(--v-rgb,var(--vr-naranja)),.25)}
+.card[data-vr-form-suf]{position:relative}
+.vr-hero-avatar{width:56px;height:56px;border-radius:16px;font-size:30px;display:flex;align-items:center;justify-content:center;background:rgba(var(--v-rgb,var(--vr-naranja)),.16);border:1px solid rgb(var(--v-rgb,var(--vr-naranja)))}
+
+/* Barra de acciones pegajosa en mobile -- botones sueltos en fila se leían
+   apretados con 44px de alto mínimo (tamaño de toque estándar). */
+@media(max-width:760px){
+  .vr-accion-bar{position:sticky;bottom:0;background:var(--bg);padding:10px 0 4px;margin:10px -2px -2px;border-top:1px solid var(--line);z-index:2}
+}
+
+/* Buscador de Fish Audio -- resultados en grilla, cada uno con su muestra. */
+.vr-fish-resultado{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel-solid);display:flex;flex-direction:column;gap:8px}
+.vr-fish-resultado:hover{border-color:rgba(var(--vr-naranja),.4)}
 </style>
 </head>
 <body>
@@ -3455,13 +3515,34 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
               <button class="dbtn gh" id="vr-tutorial-cerrar" style="padding:4px 9px;font-size:12px"><i class="fas fa-xmark"></i></button>
             </div>
             <ol style="margin:12px 0 0 18px;padding:0;font-size:13px;line-height:1.7;color:var(--muted)">
-              <li><b>Catálogo de voces</b>: la lista de voces disponibles (ya vienen cargadas). Cada una tiene un ID de Fish Audio y tres perillas de prosodia.</li>
-              <li><b>Perfiles</b>: una tarjeta por cada cuenta de Instagram que manejás. Cada perfil tiene su propio ícono, nombre y voz asignada.</li>
-              <li>Tocá una tarjeta de perfil para entrar. Ahí podés cambiar el ícono, la voz, y escribir el guion.</li>
-              <li><b>Arreglar puntuación</b>: le agrega signos (¡!, ¿?, comas) al texto para que suene mejor narrado. Si no te gusta el resultado, "Deshacer" lo devuelve tal como estaba.</li>
-              <li><b>Generar audio</b>: sintetiza el guion con la voz elegida. Podés descargarlo o compartirlo directo desde el celular.</li>
-              <li><b>Historial</b>: abajo del todo queda guardado cada audio que generaste en ese perfil, para reescucharlo sin generar de nuevo.</li>
+              <li><b>Buscar voces en Fish Audio</b>: escribí un acento o estilo, escuchá la muestra y agregala al catálogo sin pegar IDs a mano.</li>
+              <li><b>Presets</b>: combos de prosodia ("Reel enérgico", "Storytime íntimo"...) que se aplican con un click al generar -- cada voz puede tener su propia calibración de un preset.</li>
+              <li><b>Catálogo de voces</b>: cada voz tiene su color, ícono, género y tres perillas de prosodia base.</li>
+              <li><b>Perfiles</b>: una tarjeta por cada cuenta de Instagram que manejás, con su propio ícono, nombre y voz asignada.</li>
+              <li>Tocá una tarjeta de perfil para entrar. Ahí cambiás el ícono, la voz, el preset y escribís el guion.</li>
+              <li><b>Arreglar puntuación</b>: le agrega signos (¡!, ¿?, comas) al texto para que suene mejor narrado. "Deshacer" lo devuelve tal como estaba.</li>
+              <li><b>Generar audio</b>: sintetiza el guion con la voz y preset elegidos. Podés descargarlo o compartirlo directo desde el celular.</li>
+              <li><b>Historial</b>: abajo del todo queda guardado cada audio que generaste en ese perfil, con el preset usado, para reescucharlo sin generar de nuevo.</li>
             </ol>
+          </div>
+
+          <div class="card" style="margin-top:14px;padding:16px">
+            <b style="font-size:14px"><i class="fas fa-magnifying-glass"></i> Buscar voces en Fish Audio</b>
+            <div class="muted" style="font-size:12px;margin-top:4px">Buscá por acento o estilo (ej. "venezolana", "caracas", "locutor"), escuchá la muestra y agregala al catálogo con un click -- sin pegar IDs a mano.</div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <input class="ei" id="vr-fish-q" style="flex:1" placeholder="Ej: venezolana" value="venezolana">
+              <button class="dbtn gh" id="vr-fish-buscar"><i class="fas fa-magnifying-glass"></i> Buscar</button>
+            </div>
+            <div id="vr-fish-resultados" style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px"></div>
+          </div>
+
+          <div class="card" style="margin-top:14px;padding:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <b style="font-size:14px"><i class="fas fa-wand-magic-sparkles"></i> Presets</b>
+              <button class="dbtn gh" id="vr-preset-nuevo" style="padding:6px 10px;font-size:12.5px"><i class="fas fa-plus"></i> Nuevo preset</button>
+            </div>
+            <div class="muted" style="font-size:12px;margin-top:4px">Combos de prosodia listos para aplicar con un click al generar. Se pueden calibrar distinto para cada voz desde su tarjeta.</div>
+            <div id="vr-presets-lista" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"></div>
           </div>
 
           <div class="card" style="margin-top:14px;padding:16px">
@@ -3469,7 +3550,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
               <b style="font-size:14px"><i class="fas fa-microphone"></i> Catálogo de voces</b>
               <button class="dbtn gh" id="vr-voz-nueva" style="padding:6px 10px;font-size:12.5px"><i class="fas fa-plus"></i> Nueva voz</button>
             </div>
-            <div id="vr-voces-lista" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px"></div>
+            <div id="vr-voces-lista" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px"></div>
           </div>
 
           <div class="card" style="margin-top:14px;padding:16px">
