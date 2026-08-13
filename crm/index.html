@@ -2001,7 +2001,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
       <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA</a>
       <a class="nav-item nav-admin-only" data-sec="consultor-ia"><i class="fas fa-user-tie"></i> Consultor IA</a>
-      <a class="nav-item nav-admin-only" data-sec="voz-ia"><i class="fas fa-microphone-lines"></i> Voz IA</a>
+      <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="voz-ia"><i class="fas fa-microphone-lines"></i> Voz IA</a>
       <a class="nav-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados</a>
       <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
       <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
@@ -3438,27 +3438,32 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       </div>
 
       <div class="ce-panel" data-vi-panel="redes" style="display:none">
-        <div class="ce-intro">
-          Voces de terceros (biblioteca pública de Fish Audio) para voz en off de videos de redes --
-          nada que ver con la voz clonada de arriba. Cargá el ID de una voz pública de Fish, probala,
-          y asignala como voz por defecto de un perfil (una cuenta de Instagram que manejás).
+        <div id="vr-vista-lista">
+          <div class="ce-intro">
+            Voces de terceros (biblioteca pública de Fish Audio) para voz en off de videos de redes --
+            nada que ver con la voz clonada de arriba. Cargá el ID de una voz pública de Fish, probala,
+            y asignala como voz por defecto de un perfil (una cuenta de Instagram que manejás). Click
+            en una tarjeta de perfil para entrar y generar audio con su voz.
+          </div>
+
+          <div class="card" style="margin-top:14px;padding:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <b style="font-size:14px"><i class="fas fa-microphone"></i> Catálogo de voces</b>
+              <button class="dbtn gh" id="vr-voz-nueva" style="padding:6px 10px;font-size:12.5px"><i class="fas fa-plus"></i> Nueva voz</button>
+            </div>
+            <div id="vr-voces-lista" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px"></div>
+          </div>
+
+          <div class="card" style="margin-top:14px;padding:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <b style="font-size:14px"><i class="fas fa-users"></i> Perfiles</b>
+              <button class="dbtn gh" id="vr-perfil-nuevo" style="padding:6px 10px;font-size:12.5px"><i class="fas fa-plus"></i> Nuevo perfil</button>
+            </div>
+            <div id="vr-perfiles-lista" style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px"></div>
+          </div>
         </div>
 
-        <div class="card" style="margin-top:14px;padding:16px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <b style="font-size:14px">Catálogo de voces</b>
-            <button class="dbtn gh" id="vr-voz-nueva" style="padding:6px 10px;font-size:12.5px"><i class="fas fa-plus"></i> Nueva voz</button>
-          </div>
-          <div id="vr-voces-lista" style="margin-top:12px;display:grid;gap:12px"></div>
-        </div>
-
-        <div class="card" style="margin-top:14px;padding:16px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <b style="font-size:14px">Perfiles</b>
-            <button class="dbtn gh" id="vr-perfil-nuevo" style="padding:6px 10px;font-size:12.5px"><i class="fas fa-plus"></i> Nuevo perfil</button>
-          </div>
-          <div id="vr-perfiles-lista" style="margin-top:12px;display:grid;gap:10px"></div>
-        </div>
+        <div id="vr-vista-detalle" style="display:none"></div>
       </div>
     </section>
 
@@ -3743,7 +3748,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <a class="sheet-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA <span class="si-sub">Ventas, calidad, errores y costos</span></a>
   <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA <span class="si-sub">Posadas que quieren el asistente</span></a>
   <a class="sheet-item nav-admin-only" data-sec="consultor-ia"><i class="fas fa-user-tie"></i> Consultor IA <span class="si-sub">Preguntale sobre el proyecto, sin gastar Claude Code</span></a>
-  <a class="sheet-item nav-admin-only" data-sec="voz-ia"><i class="fas fa-microphone-lines"></i> Voz IA <span class="si-sub">Probá la voz clonada y cambiá la muestra de referencia</span></a>
+  <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="voz-ia"><i class="fas fa-microphone-lines"></i> Voz IA <span class="si-sub">Probá la voz clonada y cambiá la muestra de referencia</span></a>
   <a class="sheet-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados <span class="si-sub">Los leads por los que cobrás comisión</span></a>
   <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
   <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
