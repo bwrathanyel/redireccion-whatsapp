@@ -6156,13 +6156,44 @@ function setupVozIA() {
     const guardar = e.target.closest('[data-vi-guardar-trans]');
     if (guardar) return viGuardarTranscripcion(guardar.dataset.viGuardarTrans);
   });
+  document.getElementById('vr-voz-nueva')?.addEventListener('click', () => vrAbrirVozNueva());
+  document.getElementById('vr-voces-lista')?.addEventListener('click', (e) => {
+    const editar = e.target.closest('[data-vr-editar-voz]');
+    if (editar) return vrAbrirVozEditar(editar.dataset.vrEditarVoz);
+    const cancelar = e.target.closest('[data-vr-cancelar-voz]');
+    if (cancelar) return vrCargarVoces();
+    const guardar = e.target.closest('[data-vr-guardar-voz]');
+    if (guardar) return vrGuardarVoz(guardar.dataset.vrGuardarVoz);
+    const eliminar = e.target.closest('[data-vr-eliminar-voz]');
+    if (eliminar) return vrEliminarVoz(eliminar.dataset.vrEliminarVoz);
+    const probar = e.target.closest('[data-vr-probar-voz]');
+    if (probar) return vrProbarVoz(probar.dataset.vrProbarVoz);
+    const generar = e.target.closest('[data-vr-probar-generar]');
+    if (generar) return vrGenerarPrueba(generar.dataset.vrProbarGenerar);
+  });
+  document.getElementById('vr-perfil-nuevo')?.addEventListener('click', () => vrAbrirPerfilNuevo());
+  document.getElementById('vr-perfiles-lista')?.addEventListener('click', (e) => {
+    const editar = e.target.closest('[data-vr-editar-perfil]');
+    if (editar) return vrAbrirPerfilEditar(editar.dataset.vrEditarPerfil);
+    const cancelar = e.target.closest('[data-vr-cancelar-perfil]');
+    if (cancelar) return vrCargarPerfiles();
+    const guardar = e.target.closest('[data-vr-guardar-perfil]');
+    if (guardar) return vrGuardarPerfil(guardar.dataset.vrGuardarPerfil);
+    const eliminar = e.target.closest('[data-vr-eliminar-perfil]');
+    if (eliminar) return vrEliminarPerfil(eliminar.dataset.vrEliminarPerfil);
+  });
   viActualizarSliderLabel();
   viCargarProsodia();
 }
 function viCambiarTab(tab) {
   document.querySelectorAll('#vi-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.viTab === tab));
   document.querySelectorAll('#sec-voz-ia .ce-panel').forEach(p => { p.style.display = p.dataset.viPanel === tab ? '' : 'none'; });
+  // El toggle mensajes/video no aplica a "Voces de Redes" -- son voces de
+  // terceros sin relación con esos dos modos clonados.
+  const modoGroup = document.getElementById('vi-modo');
+  if (modoGroup) modoGroup.style.display = tab === 'redes' ? 'none' : '';
   if (tab === 'referencia') viCargarReferencia();
+  else if (tab === 'redes') { vrCargarVoces(); vrCargarPerfiles(); }
 }
 function viActualizarSliderLabel() {
   document.getElementById('vi-sl-temp-val').textContent = Number(document.getElementById('vi-sl-temperatura').value).toFixed(2);
@@ -6376,6 +6407,235 @@ async function viEntrenar() {
   } finally {
     btn.disabled = false; btn.innerHTML = '<i class="fas fa-brain"></i> Entrenar voz con estas muestras';
   }
+}
+
+/* ---------- Voces de Redes (2026-08-13) ---------------------------------
+   Subsección de Voz IA: catálogo de voces de terceros (biblioteca pública de
+   Fish Audio, no clonadas) para voz en off de videos de redes, más perfiles
+   (una cuenta de Instagram que maneja la agencia) con una voz por defecto.
+   Sin relación con el toggle mensajes/video de arriba -- ver viCambiarTab. */
+let VR_VOCES = [];
+let VR_PERFILES = [];
+let vrEditandoVoz = null;    // null | 'nueva' | "<id>"
+let vrEditandoPerfil = null; // null | 'nuevo' | "<id>"
+
+async function vrCargarVoces() {
+  const { data, error } = await sb.rpc('voces_catalogo_listar');
+  if (error || !data?.ok) { errToast('No se pudieron cargar las voces: ' + (error?.message || data?.error || '')); return; }
+  VR_VOCES = data.voces || [];
+  vrEditandoVoz = null;
+  vrPintarVoces();
+}
+
+function vrAbrirVozNueva() { vrEditandoVoz = 'nueva'; vrPintarVoces(); }
+function vrAbrirVozEditar(id) { vrEditandoVoz = String(id); vrPintarVoces(); }
+
+function vrFilaVozForm(voz) {
+  const id = voz?.id ?? '';
+  const suf = id || 'nueva';
+  return `
+    <div class="card" style="padding:12px">
+      <label class="ce-lbl">Nombre</label>
+      <input class="ei" id="vr-voz-nombre-${suf}" style="width:100%" value="${esc(voz?.nombre || '')}" placeholder="Ej: Valentina - cálida">
+      <label class="ce-lbl" style="margin-top:10px">ID de voz de Fish (reference_id)</label>
+      <input class="ei" id="vr-voz-fishid-${suf}" style="width:100%" value="${esc(voz?.fish_model_id || '')}" placeholder="Pegá el ID de la voz pública">
+      <div style="margin-top:12px;display:grid;gap:10px">
+        <div>
+          <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Expresividad</span><span id="vr-voz-temp-val-${suf}" class="muted">${Number(voz?.temperatura ?? 0.7).toFixed(2)}</span></label>
+          <input type="range" id="vr-voz-temp-${suf}" min="0" max="1" step="0.05" value="${voz?.temperatura ?? 0.7}" style="width:100%" oninput="document.getElementById('vr-voz-temp-val-${suf}').textContent=Number(this.value).toFixed(2)">
+        </div>
+        <div>
+          <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Variación</span><span id="vr-voz-topp-val-${suf}" class="muted">${Number(voz?.top_p ?? 0.7).toFixed(2)}</span></label>
+          <input type="range" id="vr-voz-topp-${suf}" min="0" max="1" step="0.05" value="${voz?.top_p ?? 0.7}" style="width:100%" oninput="document.getElementById('vr-voz-topp-val-${suf}').textContent=Number(this.value).toFixed(2)">
+        </div>
+        <div>
+          <label class="ce-lbl" style="display:flex;justify-content:space-between"><span>Velocidad</span><span id="vr-voz-vel-val-${suf}" class="muted">${Number(voz?.velocidad ?? 1).toFixed(2)}x</span></label>
+          <input type="range" id="vr-voz-vel-${suf}" min="0.5" max="2" step="0.05" value="${voz?.velocidad ?? 1}" style="width:100%" oninput="document.getElementById('vr-voz-vel-val-${suf}').textContent=Number(this.value).toFixed(2)+'x'">
+        </div>
+      </div>
+      <label style="margin-top:10px;display:flex;align-items:center;gap:6px;font-size:12.5px">
+        <input type="checkbox" id="vr-voz-activo-${suf}" ${voz?.activo !== false ? 'checked' : ''}> Activa (visible para asignar a perfiles)
+      </label>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="dbtn gh" data-vr-guardar-voz="${id}"><i class="fas fa-floppy-disk"></i> Guardar</button>
+        <button class="dbtn gh" data-vr-cancelar-voz><i class="fas fa-xmark"></i> Cancelar</button>
+      </div>
+    </div>`;
+}
+
+function vrFilaVoz(voz) {
+  return `
+    <div class="card" style="padding:12px${voz.activo ? '' : ';opacity:.55'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div>
+          <b>${esc(voz.nombre)}</b> ${voz.activo ? '' : '<span class="muted" style="font-size:11px">(inactiva)</span>'}<br>
+          <span class="muted" style="font-size:11.5px;font-family:monospace">${esc(voz.fish_model_id)}</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="dbtn gh" style="padding:6px 10px;font-size:12.5px" data-vr-probar-voz="${voz.id}"><i class="fas fa-play"></i> Probar</button>
+          <button class="dbtn gh" style="padding:6px 10px;font-size:12.5px" data-vr-editar-voz="${voz.id}"><i class="fas fa-pen"></i> Editar</button>
+          <button class="dbtn gh" style="padding:6px 10px;font-size:12.5px" data-vr-eliminar-voz="${voz.id}"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>
+      <div id="vr-voz-probar-${voz.id}"></div>
+    </div>`;
+}
+
+function vrPintarVoces() {
+  const cont = document.getElementById('vr-voces-lista');
+  if (!cont) return;
+  let html = '';
+  if (vrEditandoVoz === 'nueva') html += vrFilaVozForm(null);
+  html += VR_VOCES.map(v => vrEditandoVoz === String(v.id) ? vrFilaVozForm(v) : vrFilaVoz(v)).join('');
+  cont.innerHTML = html || '<div class="muted" style="font-size:12.5px">Todavía no hay voces en el catálogo.</div>';
+}
+
+async function vrGuardarVoz(id) {
+  const suf = id || 'nueva';
+  const nombre = document.getElementById(`vr-voz-nombre-${suf}`)?.value.trim();
+  const fishId = document.getElementById(`vr-voz-fishid-${suf}`)?.value.trim();
+  if (!nombre) { errToast('Ponele un nombre a la voz'); return; }
+  if (!fishId) { errToast('Falta el ID de voz de Fish'); return; }
+  const payload = {
+    p_id: id ? Number(id) : null,
+    p_nombre: nombre,
+    p_fish_model_id: fishId,
+    p_temperatura: Number(document.getElementById(`vr-voz-temp-${suf}`).value),
+    p_top_p: Number(document.getElementById(`vr-voz-topp-${suf}`).value),
+    p_velocidad: Number(document.getElementById(`vr-voz-vel-${suf}`).value),
+    p_activo: document.getElementById(`vr-voz-activo-${suf}`).checked,
+  };
+  const { data, error } = await sb.rpc('voces_catalogo_guardar', payload);
+  if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Voz guardada');
+  await vrCargarVoces();
+  // perfiles_voz_listar denormaliza voz_nombre -- sin esto, renombrar una voz
+  // deja el nombre viejo pegado en la tarjeta del perfil hasta salir y volver
+  // a entrar a la pestaña.
+  await vrCargarPerfiles();
+}
+
+async function vrEliminarVoz(id) {
+  if (!confirm('¿Eliminar esta voz del catálogo?')) return;
+  const { data, error } = await sb.rpc('voces_catalogo_eliminar', { p_id: Number(id) });
+  if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Voz eliminada');
+  await vrCargarVoces();
+  await vrCargarPerfiles();
+}
+
+async function vrProbarVoz(id) {
+  const cont = document.getElementById(`vr-voz-probar-${id}`);
+  if (!cont) return;
+  if (cont.dataset.abierto === '1') { cont.innerHTML = ''; cont.dataset.abierto = '0'; return; }
+  cont.dataset.abierto = '1';
+  cont.innerHTML = `
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd,#e5e7eb)">
+      <textarea class="ei" id="vr-probar-texto-${id}" rows="2" style="width:100%;resize:vertical" placeholder="Escribí un texto corto para escuchar esta voz..."></textarea>
+      <button class="dbtn gh" style="margin-top:8px;padding:6px 10px;font-size:12.5px" data-vr-probar-generar="${id}"><i class="fas fa-wand-magic-sparkles"></i> Generar</button>
+      <div id="vr-probar-resultado-${id}" style="margin-top:8px"></div>
+    </div>`;
+}
+
+async function vrGenerarPrueba(id) {
+  const texto = document.getElementById(`vr-probar-texto-${id}`)?.value.trim();
+  if (!texto) { errToast('Escribí un texto primero'); return; }
+  const btn = document.querySelector(`[data-vr-probar-generar="${id}"]`);
+  const out = document.getElementById(`vr-probar-resultado-${id}`);
+  btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.functions.invoke('voz-perfil-probar', { body: { voz_id: Number(id), texto } });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Generar';
+  if (error || !data?.ok) { errToast('No se pudo generar: ' + (data?.error || error?.message || '')); return; }
+  out.innerHTML = `<audio controls style="width:100%" src="data:audio/mpeg;base64,${data.audio_base64}"></audio>`;
+}
+
+async function vrCargarPerfiles() {
+  const { data, error } = await sb.rpc('perfiles_voz_listar');
+  if (error || !data?.ok) { errToast('No se pudieron cargar los perfiles: ' + (error?.message || data?.error || '')); return; }
+  VR_PERFILES = data.perfiles || [];
+  vrEditandoPerfil = null;
+  vrPintarPerfiles();
+}
+
+function vrOpcionesVoces(vozIdSeleccionada) {
+  // La voz ya asignada se lista SIEMPRE, aunque esté inactiva -- si no, editar
+  // un perfil cuya voz se desactivó mostraría el select vacío y guardar sin
+  // querer le borraría la asignación (nadie tocó el select a propósito).
+  const idSel = Number(vozIdSeleccionada) || null;
+  const visibles = VR_VOCES.filter(v => v.activo || v.id === idSel);
+  return `<option value="">Sin voz asignada</option>` + visibles.map(v =>
+    `<option value="${v.id}" ${idSel === v.id ? 'selected' : ''}>${esc(v.nombre)}${v.activo ? '' : ' (inactiva)'}</option>`
+  ).join('');
+}
+
+function vrFilaPerfilForm(perfil) {
+  const id = perfil?.id ?? '';
+  const suf = id || 'nuevo';
+  return `
+    <div class="card" style="padding:12px">
+      <label class="ce-lbl">Nombre del perfil</label>
+      <input class="ei" id="vr-perfil-nombre-${suf}" style="width:100%" value="${esc(perfil?.nombre || '')}" placeholder="Ej: Cuenta Turismo Mérida">
+      <label class="ce-lbl" style="margin-top:10px">Voz por defecto</label>
+      <select class="ei" id="vr-perfil-voz-${suf}" style="width:100%">${vrOpcionesVoces(perfil?.voz_id)}</select>
+      <label style="margin-top:10px;display:flex;align-items:center;gap:6px;font-size:12.5px">
+        <input type="checkbox" id="vr-perfil-activo-${suf}" ${perfil?.activo !== false ? 'checked' : ''}> Activo
+      </label>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="dbtn gh" data-vr-guardar-perfil="${id}"><i class="fas fa-floppy-disk"></i> Guardar</button>
+        <button class="dbtn gh" data-vr-cancelar-perfil><i class="fas fa-xmark"></i> Cancelar</button>
+      </div>
+    </div>`;
+}
+
+function vrFilaPerfil(perfil) {
+  return `
+    <div class="card" style="padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap${perfil.activo ? '' : ';opacity:.55'}">
+      <div>
+        <b>${esc(perfil.nombre)}</b> ${perfil.activo ? '' : '<span class="muted" style="font-size:11px">(inactivo)</span>'}<br>
+        <span class="muted" style="font-size:12px">${perfil.voz_nombre ? 'Voz: ' + esc(perfil.voz_nombre) : 'Sin voz asignada'}</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="dbtn gh" style="padding:6px 10px;font-size:12.5px" data-vr-editar-perfil="${perfil.id}"><i class="fas fa-pen"></i> Editar</button>
+        <button class="dbtn gh" style="padding:6px 10px;font-size:12.5px" data-vr-eliminar-perfil="${perfil.id}"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>`;
+}
+
+function vrPintarPerfiles() {
+  const cont = document.getElementById('vr-perfiles-lista');
+  if (!cont) return;
+  let html = '';
+  if (vrEditandoPerfil === 'nuevo') html += vrFilaPerfilForm(null);
+  html += VR_PERFILES.map(p => vrEditandoPerfil === String(p.id) ? vrFilaPerfilForm(p) : vrFilaPerfil(p)).join('');
+  cont.innerHTML = html || '<div class="muted" style="font-size:12.5px">Todavía no hay perfiles.</div>';
+}
+
+function vrAbrirPerfilNuevo() { vrEditandoPerfil = 'nuevo'; vrPintarPerfiles(); }
+function vrAbrirPerfilEditar(id) { vrEditandoPerfil = String(id); vrPintarPerfiles(); }
+
+async function vrGuardarPerfil(id) {
+  const suf = id || 'nuevo';
+  const nombre = document.getElementById(`vr-perfil-nombre-${suf}`)?.value.trim();
+  if (!nombre) { errToast('Ponele un nombre al perfil'); return; }
+  const vozSel = document.getElementById(`vr-perfil-voz-${suf}`).value;
+  const payload = {
+    p_id: id ? Number(id) : null,
+    p_nombre: nombre,
+    p_voz_id: vozSel ? Number(vozSel) : null,
+    p_activo: document.getElementById(`vr-perfil-activo-${suf}`).checked,
+  };
+  const { data, error } = await sb.rpc('perfiles_voz_guardar', payload);
+  if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Perfil guardado');
+  await vrCargarPerfiles();
+}
+
+async function vrEliminarPerfil(id) {
+  if (!confirm('¿Eliminar este perfil?')) return;
+  const { data, error } = await sb.rpc('perfiles_voz_eliminar', { p_id: Number(id) });
+  if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Perfil eliminado');
+  await vrCargarPerfiles();
 }
 
 /* ---------- Web y Reasignados (comisiones del dueño por origen del lead) ----

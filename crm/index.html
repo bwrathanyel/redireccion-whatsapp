@@ -3380,6 +3380,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <div class="seg-group" id="vi-tabs" style="margin-top:10px">
         <button class="seg on" data-vi-tab="probar"><i class="fas fa-play"></i> Probar</button>
         <button class="seg" data-vi-tab="referencia"><i class="fas fa-microphone"></i> Muestra de referencia</button>
+        <button class="seg" data-vi-tab="redes"><i class="fas fa-hashtag"></i> Voces de Redes</button>
       </div>
 
       <div class="ce-panel" data-vi-panel="probar">
@@ -3433,6 +3434,30 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
             después de subir hay que apretar <b>"Entrenar voz con estas muestras"</b> para que el
             cambio se aplique.
           </div>
+        </div>
+      </div>
+
+      <div class="ce-panel" data-vi-panel="redes" style="display:none">
+        <div class="ce-intro">
+          Voces de terceros (biblioteca pública de Fish Audio) para voz en off de videos de redes --
+          nada que ver con la voz clonada de arriba. Cargá el ID de una voz pública de Fish, probala,
+          y asignala como voz por defecto de un perfil (una cuenta de Instagram que manejás).
+        </div>
+
+        <div class="card" style="margin-top:14px;padding:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <b style="font-size:14px">Catálogo de voces</b>
+            <button class="dbtn gh" id="vr-voz-nueva" style="padding:6px 10px;font-size:12.5px"><i class="fas fa-plus"></i> Nueva voz</button>
+          </div>
+          <div id="vr-voces-lista" style="margin-top:12px;display:grid;gap:12px"></div>
+        </div>
+
+        <div class="card" style="margin-top:14px;padding:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <b style="font-size:14px">Perfiles</b>
+            <button class="dbtn gh" id="vr-perfil-nuevo" style="padding:6px 10px;font-size:12.5px"><i class="fas fa-plus"></i> Nuevo perfil</button>
+          </div>
+          <div id="vr-perfiles-lista" style="margin-top:12px;display:grid;gap:10px"></div>
         </div>
       </div>
     </section>
