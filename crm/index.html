@@ -117,6 +117,8 @@ body::before{content:'';position:fixed;inset:0;background:
 .nav-item.active i{color:var(--accent)}
 .nav-item .badge{margin-left:auto;background:var(--accent);color:#221200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px}
 .side-foot{flex-shrink:0;padding:14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.side-foot-col{flex-direction:column;align-items:stretch}
+.side-foot-row{display:flex;align-items:center;gap:10px}
 /* Actualizar CRM: hace lo mismo que Ctrl+Shift+R (borra caché + Service Worker
    y recarga). Dos lugares porque el de arriba es el atajo a mano y el de abajo
    es el que se encuentra sin saber que existe. */
@@ -1249,18 +1251,21 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .rol-prueba .nav-item:not(.nav-prueba-ok),.rol-prueba .bn-item:not(.nav-prueba-ok),.rol-prueba .sheet-item:not(.nav-prueba-ok){display:none}
 .rol-asesor .admin-only,.rol-marketing .admin-only,.rol-boleteria .admin-only,.rol-prueba .admin-only{display:none}
 
-/* D4: botón de Boletería distinto de un nav-item normal, bordes azules. */
-.nav-boleteria-btn{border:1px solid rgba(74,158,255,.4);border-radius:10px;margin-top:6px;color:#4a9eff}
-.nav-boleteria-btn:hover{background:rgba(74,158,255,.12)}
-
-/* D4: tema azul eléctrico scopeado SOLO a #sec-boleteria. Tokens propios,
-   no se tocan los globales -- así el resto del CRM no se entera de que
-   esto existe. Por defecto sigue el modo oscuro de siempre; .bol-light lo
-   pasa a blanco (interruptor propio de la sección, sin persistir). */
-#sec-boleteria{--accent:#2e6bff;--accent-soft:rgba(46,107,255,.16);padding:18px;border-radius:18px;background:linear-gradient(180deg,rgba(46,107,255,.08),transparent 200px)}
-#sec-boleteria .seg.on{background:var(--accent-soft);color:#bcd4ff}
-#sec-boleteria .btn-sm:hover{border-color:rgba(46,107,255,.5)}
-#sec-boleteria.bol-light{--bg:#f4f7ff;--panel:rgba(255,255,255,.9);--panel-solid:#ffffff;--line:rgba(46,107,255,.14);--line2:rgba(46,107,255,.22);--txt:#0c1830;--muted:#4a5878;background:linear-gradient(180deg,rgba(46,107,255,.05),transparent 200px)}
+/* Modo Boletería: cambio de modo completo, no un tema scopeado a una
+   sección. body.modo-boleteria vive arriba de todo el árbol -- las
+   variables cascadean solas a cards, botones, chips, etc. sin tocar JS.
+   Cambio de clase pura = instantáneo, sin golpe de red. */
+body.modo-boleteria{--accent:#2e6bff;--accent-soft:rgba(46,107,255,.16);--bg:#070c1c;--bg2:#0b1330;--panel:rgba(18,28,58,.72);--panel-solid:#121c3a;--line:rgba(120,160,255,.12);--line2:rgba(120,160,255,.2);--txt:#eef2ff;--muted:#7c8ab8;--muted2:#6c7aae}
+body.modo-boleteria .sidebar{background:linear-gradient(180deg,rgba(10,16,40,.96),rgba(6,10,26,.98))}
+body.modo-boleteria .seg.on{color:#bcd4ff}
+/* Menú reemplazado entero, mismo mecanismo que rol-marketing/rol-boleteria/rol-prueba. */
+body.modo-boleteria .nav-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .bn-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .sheet-item:not(.nav-modo-boleteria-ok){display:none}
+.modo-boleteria-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(46,107,255,.14);border:1px solid rgba(74,158,255,.4);border-radius:10px;color:#7fb0ff;font-weight:600;font-size:12.5px;padding:9px 10px;cursor:pointer;font-family:inherit;margin-bottom:8px}
+.modo-boleteria-btn:hover{background:rgba(46,107,255,.24)}
+body.modo-boleteria #btn-entrar-modo-boleteria,body.modo-boleteria #sheet-entrar-modo-boleteria{display:none}
+body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
+.rol-boleteria #btn-entrar-modo-boleteria,.rol-boleteria #btn-salir-modo-boleteria,.rol-boleteria #sheet-entrar-modo-boleteria,.rol-boleteria #sheet-salir-modo-boleteria{display:none}
+.rol-marketing #btn-entrar-modo-boleteria,.rol-marketing #sheet-entrar-modo-boleteria{display:none}
 .bol-buscador{min-width:260px}
 .bol-tab-panel .card{margin-bottom:12px}
 .rol-asesor .nav-asesor-hide{display:none}
@@ -2194,21 +2199,21 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <div class="nav-label" data-label="principal">Principal</div>
       <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
       <a class="nav-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales</a>
       <a class="nav-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas <span class="badge" id="nav-tareas-count" style="display:none">0</span></a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
       <a class="nav-item nav-prueba-ok" data-sec="leads-prueba"><i class="fas fa-user-clock"></i> Mis leads</a>
       <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
       <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
-      <a class="nav-item nav-boleteria-ok solo-voucher" id="nav-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher <span class="badge" id="nav-voucher-count" style="display:none">0</span></a>
+      <a class="nav-item nav-boleteria-ok nav-modo-boleteria-ok solo-voucher" id="nav-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher <span class="badge" id="nav-voucher-count" style="display:none">0</span></a>
       <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
       <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
       <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
       <a class="nav-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
       <div class="nav-label" data-label="tarifario">Tarifario</div>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
       <a class="nav-item nav-marketing-ok nav-prueba-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
       <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
       <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA</a>
       <a class="nav-item nav-admin-only" data-sec="consultor-ia"><i class="fas fa-user-tie"></i> Consultor IA</a>
@@ -2219,14 +2224,18 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
       <a class="nav-item nav-admin-only solo-informe-diario" id="nav-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
       <div class="nav-label" data-label="ayuda">Ayuda</div>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
       <a class="nav-item nav-admin-only" data-sec="proyecto-constructor"><i class="fas fa-drafting-compass"></i> Proyecto Constructor</a>
-      <a class="nav-item nav-boleteria-ok nav-prueba-ok nav-boleteria-btn" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
+      <a class="nav-item nav-modo-boleteria-ok" id="nav-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
     </nav>
-    <div class="side-foot">
-      <button class="logout-btn logout-btn-lg" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
-      <button class="refresh-btn refresh-btn-lg" data-refresh title="Actualizar el CRM a la última versión"><i class="fas fa-rotate"></i> <span>Actualizar CRM</span></button>
+    <div class="side-foot side-foot-col">
+      <button class="modo-boleteria-btn" id="btn-entrar-modo-boleteria" type="button" title="Cambiar a modo Boletería"><i class="fas fa-plane-departure"></i> Boletería</button>
+      <button class="modo-boleteria-btn modo-boleteria-volver" id="btn-salir-modo-boleteria" type="button" title="Volver al modo normal"><i class="fas fa-arrow-left"></i> Volver a Hospedajes</button>
+      <div class="side-foot-row">
+        <button class="logout-btn logout-btn-lg" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
+        <button class="refresh-btn refresh-btn-lg" data-refresh title="Actualizar el CRM a la última versión"><i class="fas fa-rotate"></i> <span>Actualizar CRM</span></button>
+      </div>
     </div>
   </aside>
 
@@ -4037,10 +4046,9 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <!-- BOLETERÍA -- tema azul eléctrico scopeado a la sección (D4). El
          marco del CRM y las otras 25 secciones no se tocan: los tokens
          viven solo bajo #sec-boleteria. -->
-    <section class="section bol-theme" id="sec-boleteria">
+    <section class="section" id="sec-boleteria">
       <div class="tbar" style="margin-bottom:12px">
         <input class="flt bol-buscador" id="bol-buscador" type="text" placeholder="Buscar ruta, aerolínea o país (ej: margarita, PMV, porla)...">
-        <button class="btn-sm" id="bol-modo-oscuro" type="button" style="margin-left:auto"><i class="fas fa-moon"></i></button>
       </div>
       <div class="seg-group" id="bol-tabs">
         <button class="seg on" data-bol-tab="rutas">Rutas</button>
@@ -4091,8 +4099,8 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 <nav class="bottom-nav">
   <a class="bn-item active" data-sec="hoy"><i class="fas fa-house"></i> Hoy</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i><span class="bn-badge" id="nav-lead-count-m"></span> Leads</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
   <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" id="bn-more"><i class="fas fa-user"></i> Yo</a>
 </nav>
 
@@ -4115,10 +4123,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <button onclick="activarRecordatorios()">Activar</button>
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales <span class="si-sub">Disponibilidad de hoteles (BT Travel)</span></a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales <span class="si-sub">Disponibilidad de hoteles (BT Travel)</span></a>
   <a class="sheet-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas</a>
   <a class="sheet-item nav-marketing-ok nav-prueba-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA <span class="si-sub">Ventas, calidad, errores y costos</span></a>
   <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA <span class="si-sub">Posadas que quieren el asistente</span></a>
@@ -4132,11 +4140,13 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <a class="sheet-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
   <a class="sheet-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
   <a class="sheet-item nav-admin-only solo-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
-  <a class="sheet-item nav-boleteria-ok solo-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
+  <a class="sheet-item nav-boleteria-ok nav-modo-boleteria-ok solo-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
   <a class="sheet-item nav-admin-only" data-sec="proyecto-constructor"><i class="fas fa-drafting-compass"></i> Proyecto Constructor <span class="si-sub">Avance del CRM que se vende a otras empresas</span></a>
-  <a class="sheet-item nav-boleteria-ok nav-prueba-ok" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
+  <a class="sheet-item nav-modo-boleteria-ok" id="sheet-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
+  <a class="sheet-item" id="sheet-entrar-modo-boleteria"><i class="fas fa-plane-departure"></i> Boletería <span class="si-sub">Cambiar a modo Boletería</span></a>
+  <a class="sheet-item" id="sheet-salir-modo-boleteria"><i class="fas fa-arrow-left"></i> Volver a Hospedajes</a>
   <a class="sheet-item" data-refresh><i class="fas fa-rotate"></i> Actualizar CRM <span class="si-sub">Trae la última versión, igual que Ctrl+Shift+R</span></a>
   <a class="sheet-item nav-prueba-ok" id="sheet-item-logout" style="color:#ff6b6b"><i class="fas fa-right-from-bracket"></i> Cerrar sesión</a>
 </div>

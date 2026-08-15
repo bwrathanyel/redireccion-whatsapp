@@ -312,6 +312,9 @@ function entrarSegunRol() {
   document.body.classList.toggle('rol-prueba', ROL === 'asesor_prueba');
   document.body.classList.toggle('rol-marketing', ROL === 'marketing');
   document.body.classList.toggle('rol-boleteria', ROL === 'boleteria');
+  // Rol boleteria vive siempre en modo Boletería -- se aplica acá, antes de
+  // startApp(), para que no haya un parpadeo de colores normales al cargar.
+  if (ROL === 'boleteria') { modoBoleteria = true; document.body.classList.add('modo-boleteria'); }
   document.body.classList.toggle('es-freelancer', MI_ES_FREELANCER);
   pintarBannerVistaPrevia();
   overlay('login').classList.remove('show');
@@ -1825,7 +1828,7 @@ async function startApp() {
     activateSection('tarifario');
     return;
   }
-  if (ROL === 'boleteria') { activateSection('mensajes'); return; }
+  if (ROL === 'boleteria') { entrarModoBoleteria(); return; }
   if (ROL === 'asesor_prueba') {
     arrancar(setupBuscadorIATarifario, setupStopSales);
     activateSection('leads-prueba');
@@ -12336,11 +12339,38 @@ async function bolCancelar(id) {
   okToast('Solicitud cancelada'); loadColaBoleteria();
 }
 
+/* ---------- Modo Boletería -- cambio de modo completo, no una sección más.
+   body.modo-boleteria recolorea TODO el CRM (variables CSS en body, cascadean
+   solas) y reemplaza el menú entero por el set de Boletería (mismo mecanismo
+   que rol-marketing/rol-boleteria/rol-prueba, ver index.html:1247-1249).
+   Pedido del dueño tras ver la versión anterior (tema scopeado a la sección):
+   quería algo más contundente, con botón de volver. El rol `boleteria` entra
+   directo al modo desde entrarSegunRol() (sin flash: se aplica ahí, antes de
+   startApp) y no tiene botón de volver -- no tiene otro lado al que ir. */
+let modoBoleteria = false;
+let seccionAntesDeModoBoleteria = null;
+function entrarModoBoleteria() {
+  if (!modoBoleteria) seccionAntesDeModoBoleteria = currentSec;
+  modoBoleteria = true;
+  document.body.classList.add('modo-boleteria');
+  activateSection('boleteria');
+}
+function salirModoBoleteria() {
+  modoBoleteria = false;
+  document.body.classList.remove('modo-boleteria');
+  activateSection(seccionAntesDeModoBoleteria && document.getElementById('sec-' + seccionAntesDeModoBoleteria) ? seccionAntesDeModoBoleteria : (ROL === 'asesor' ? 'leads' : 'dashboard'));
+  seccionAntesDeModoBoleteria = null;
+}
+function irAColaBoleteria() {
+  if (!modoBoleteria) entrarModoBoleteria();
+  activateSection('leads');
+  document.querySelector('[data-leads-tab="boleteria"]')?.click();
+}
+
 /* ---------- Sección Boletería (D4) -- base de conocimiento de vuelos:
    rutas, aerolíneas, precios, requisitos por país y calendario de
    temporadas. Distinta de la cola de solicitudes de arriba (BOL_*), que
-   sigue funcionando igual. Tema azul scopeado vive en el CSS de
-   #sec-boleteria; acá solo la lógica. */
+   sigue funcionando igual. */
 let bolCatalogo = null;
 let bolTab = 'rutas';
 function setupBoleteriaSeccion() {
@@ -12351,14 +12381,17 @@ function setupBoleteriaSeccion() {
     renderBoleteriaTab();
   }));
   document.getElementById('bol-buscador')?.addEventListener('input', () => renderBoleteriaTab());
-  document.getElementById('bol-modo-oscuro')?.addEventListener('click', () => {
-    document.getElementById('sec-boleteria').classList.toggle('bol-light');
-  });
   document.getElementById('bol-ruta-nueva')?.addEventListener('click', nuevaRutaBoleteria);
   document.getElementById('bol-aerolinea-nueva')?.addEventListener('click', nuevaAerolineaBoleteria);
   document.getElementById('bol-precio-nuevo')?.addEventListener('click', nuevoPrecioBoleteria);
   document.getElementById('bol-requisito-nuevo')?.addEventListener('click', nuevoRequisitoBoleteria);
   document.getElementById('bol-temporada-nueva')?.addEventListener('click', nuevaTemporadaBoleteria);
+  document.getElementById('btn-entrar-modo-boleteria')?.addEventListener('click', entrarModoBoleteria);
+  document.getElementById('btn-salir-modo-boleteria')?.addEventListener('click', salirModoBoleteria);
+  document.getElementById('sheet-entrar-modo-boleteria')?.addEventListener('click', entrarModoBoleteria);
+  document.getElementById('sheet-salir-modo-boleteria')?.addEventListener('click', salirModoBoleteria);
+  document.getElementById('nav-cola-boleteria')?.addEventListener('click', irAColaBoleteria);
+  document.getElementById('sheet-cola-boleteria')?.addEventListener('click', irAColaBoleteria);
 }
 async function loadBoleteria() {
   const { data, error } = await sb.rpc('boleteria_catalogo');
@@ -12864,6 +12897,8 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-15', emoji: '✈️', titulo: 'Modo Boletería', texto: 'El botón "Boletería" (abajo del menú) cambia el CRM entero de color y de menú, como si fuera otra app: rutas, aerolíneas, precios de referencia, requisitos por país y calendario de temporadas, más la cola de solicitudes de siempre a mano. "Volver a Hospedajes" te devuelve todo como estaba.', roles: ['admin', 'asesor', 'asesor_prueba', 'boleteria'] },
+  { fecha: '2026-08-15', emoji: '🧑‍💼', titulo: 'Asesores de prueba: lotes y progreso', texto: 'En Gestión de Personal, pestaña "Asesores de prueba": asignale a un asesor nuevo un lote de leads viejos para que practique contactándolos, con conteo previo, fecha límite y seguimiento de contactados/pendientes/vencidos. Botón para promoverlo a asesor real cuando esté listo. También se puede editar usuario, permisos de voucher/informe diario y bloquear acceso sin dar de baja.', roles: ['admin'] },
   { fecha: '2026-08-15', emoji: '📱', titulo: 'El CRM en el celular se siente como una app', texto: 'Deslizá el dedo a los costados para cambiar de sección, deslizá hacia abajo arriba de todo para refrescar, y mantené el dedo sobre un lead para seleccionarlo sin tocar el chequeo chiquito. Las notificaciones ahora se ven con nuestro logo (antes salía el ícono genérico del navegador), y hay botón para instalar la app desde el celular. Los botones y filas son más fáciles de tocar, las tablas largas (Facturación, Vouchers, Postulaciones) se ven como tarjetas legibles en vez de una tabla achicada, y todo tiene animaciones más suaves.', roles: ROLES_TODOS },
   { fecha: '2026-08-15', emoji: '⚡', titulo: 'Leads en vivo más confiables', texto: 'La lista de Leads se actualiza sola cuando entra o cambia uno, sin parpadear entera ni perder tu lugar en el scroll. Si el teléfono se queda sin señal un rato, el CRM lo avisa (puntito gris junto a "Nuevo lead") y se reconecta solo al volver. Si dos personas editan el mismo lead a la vez, ahora avisa el conflicto en vez de que uno le pise el cambio al otro en silencio. La tarjeta de cada lead se reordenó: el nombre, destino y estado se ven primero, las acciones (WhatsApp, Facturar) quedan abajo.', roles: ROLES_TODOS },
   { fecha: '2026-08-13', emoji: '🔊', titulo: 'Voz IA: ya conectada al chat de la web (opcional)', texto: 'En Cerebro IA, arriba de las reglas, hay dos interruptores nuevos para prender las notas de voz en el chat de la página web y en Instagram/Facebook, por separado. Apagados por defecto: nada cambia hasta que los prendas a propósito. Cuando está prendido, al cotizar un precio la IA manda una nota de voz con la voz clonada en vez de texto. Se puede apagar en cualquier momento sin perder nada.', roles: ['admin'] },
