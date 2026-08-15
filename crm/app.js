@@ -128,6 +128,7 @@ const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.ch
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
 const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
   tareas: ['Tareas', 'Tus tareas activas'],
+  boleteria: ['Boletería', 'Rutas, aerolíneas, precios y requisitos de vuelo'],
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
   'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
   'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
@@ -250,8 +251,8 @@ async function cargarUsuario() {
   return data;
 }
 
-const VISTA_ROL_OPCIONES = ['admin', 'asesor', 'marketing', 'boleteria'];
-const VISTA_ROL_LABEL = { admin: 'Administrador', asesor: 'Asesor comercial', marketing: 'Marketing', boleteria: 'Boletería' };
+const VISTA_ROL_OPCIONES = ['admin', 'asesor', 'asesor_prueba', 'marketing', 'boleteria'];
+const VISTA_ROL_LABEL = { admin: 'Administrador', asesor: 'Asesor comercial', asesor_prueba: 'Asesor de prueba', marketing: 'Marketing', boleteria: 'Boletería' };
 
 /** Activa la vista previa de un rol y recarga -- recargar (en vez de mutar
  *  ROL en caliente) reusa TODO el flujo normal de login (los ~25 puntos del
@@ -308,13 +309,14 @@ async function afterLogin() {
 
 function entrarSegunRol() {
   document.body.classList.toggle('rol-asesor', ROL === 'asesor');
+  document.body.classList.toggle('rol-prueba', ROL === 'asesor_prueba');
   document.body.classList.toggle('rol-marketing', ROL === 'marketing');
   document.body.classList.toggle('rol-boleteria', ROL === 'boleteria');
   document.body.classList.toggle('es-freelancer', MI_ES_FREELANCER);
   pintarBannerVistaPrevia();
   overlay('login').classList.remove('show');
   overlay('setup').classList.remove('show');
-  const rolLabelUi = ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : 'Asesor comercial';
+  const rolLabelUi = ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : ROL === 'asesor_prueba' ? 'Asesor de prueba' : 'Asesor comercial';
   document.getElementById('side-un').textContent = MI_NOMBRE;
   document.getElementById('side-ue').textContent = rolLabelUi;
   pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
@@ -360,7 +362,7 @@ function openPerfilDrawer() {
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div class="dava" id="perfil-avatar-preview"></div>
       <div><div class="dn">${esc(MI_NOMBRE)}</div>
-      <div class="dm">${ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : 'Asesor comercial'} · @${esc(MI_USERNAME)}</div></div></div>
+      <div class="dm">${VISTA_ROL_LABEL[ROL] || 'Asesor comercial'} · @${esc(MI_USERNAME)}</div></div></div>
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-image"></i> Foto de perfil</div>
       <button class="dbtn gh" id="perfil-avatar-btn" type="button"><i class="fas fa-camera"></i> Cambiar foto</button>
@@ -1064,14 +1066,94 @@ function setupGestionPersonal() {
   document.getElementById('gp-personal-dias')?.addEventListener('change', () => loadPersonalTiempo(false));
   document.getElementById('gp-personal-nuevo')?.addEventListener('click', () => abrirAltaPersona(false));
   setupKPIsPersonal();
+  setupAsesoresPrueba();
 }
 function cargarTabGestionPersonal(tab) {
   if (tab === 'personal') { loadPersonalTiempo(false); loadAsistenciaExtras(); }
   else if (tab === 'asesores') loadAsesoresPeriodo();
+  else if (tab === 'prueba') loadAsesoresPruebaTab();
   else if (tab === 'freelancers') loadFreelancers();
   else if (tab === 'postulaciones') loadPostulaciones();
   else if (tab === 'reasignaciones') loadReasignaciones();
   else if (tab === 'metricas') loadMetricas();
+}
+
+/* ---------- Asesores de prueba (A4 + B1 + B2) ---------- */
+function setupAsesoresPrueba() {
+  const selEstados = document.getElementById('ap-estados');
+  if (selEstados) selEstados.innerHTML = ESTADOS_EDIT.map(e => `<option value="${esc(e)}" selected>${esc(e)}</option>`).join('');
+  document.getElementById('ap-contar')?.addEventListener('click', contarLotePrueba);
+  document.getElementById('ap-asignar')?.addEventListener('click', asignarLotePrueba);
+  ['ap-usuario', 'ap-antiguedad', 'ap-estados', 'ap-cantidad'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', () => {
+      document.getElementById('ap-asignar').disabled = true;
+      document.getElementById('ap-conteo').textContent = '';
+    });
+  });
+}
+async function loadAsesoresPruebaTab() {
+  const sel = document.getElementById('ap-usuario');
+  if (sel) {
+    const asesoresPrueba = personalCache.filter(u => u.rol === 'asesor_prueba');
+    sel.innerHTML = asesoresPrueba.length
+      ? asesoresPrueba.map(u => `<option value="${u.usuario_id}">${esc(u.nombre)} (@${esc(u.username || '')})</option>`).join('')
+      : '<option value="">No hay asesores de prueba dados de alta</option>';
+  }
+  await cargarProgresoLotesPrueba();
+}
+async function contarLotePrueba() {
+  const err = document.getElementById('ap-err'); err.textContent = '';
+  const antiguedad = parseInt(document.getElementById('ap-antiguedad').value, 10);
+  const estados = [...document.getElementById('ap-estados').selectedOptions].map(o => o.value);
+  if (!estados.length) { err.textContent = 'Elegí al menos un estado.'; return; }
+  const { data, error } = await sb.rpc('contar_lote_prueba', { p_usuario_id: document.getElementById('ap-usuario').value, p_antiguedad_dias: antiguedad, p_estados: estados });
+  if (error || !data?.ok) { err.textContent = error?.message || 'No se pudo contar.'; return; }
+  document.getElementById('ap-conteo').textContent = `${data.cantidad} lead(s) matchean el filtro.`;
+  document.getElementById('ap-asignar').disabled = data.cantidad < 1;
+}
+async function asignarLotePrueba() {
+  const err = document.getElementById('ap-err'); err.textContent = '';
+  const usuarioId = document.getElementById('ap-usuario').value;
+  const antiguedad = parseInt(document.getElementById('ap-antiguedad').value, 10);
+  const estados = [...document.getElementById('ap-estados').selectedOptions].map(o => o.value);
+  const cantidad = parseInt(document.getElementById('ap-cantidad').value, 10);
+  const venceLocal = document.getElementById('ap-vence').value;
+  if (!usuarioId) { err.textContent = 'Elegí un asesor de prueba.'; return; }
+  if (!venceLocal) { err.textContent = 'Elegí una fecha límite.'; return; }
+  if (!(await confirmarSheet({ titulo: '¿Asignar este lote?', detalle: `${cantidad} lead(s) pasan a ser del asesor elegido, con tarea de contacto por cada uno.`, textoOk: 'Asignar' }))) return;
+  const btn = document.getElementById('ap-asignar'); btn.disabled = true;
+  const { data, error } = await sb.rpc('asignar_lote_prueba', { p_usuario_id: usuarioId, p_cantidad: cantidad, p_antiguedad_dias: antiguedad, p_estados: estados, p_vence_at: new Date(venceLocal).toISOString() });
+  if (error || !data?.ok) { err.textContent = error?.message || data?.error || 'No se pudo asignar.'; btn.disabled = false; return; }
+  okToast(`Lote asignado: ${data.cantidad} lead(s)`);
+  document.getElementById('ap-conteo').textContent = '';
+  await cargarProgresoLotesPrueba();
+}
+async function cargarProgresoLotesPrueba() {
+  const wrap = document.getElementById('ap-progreso-wrap');
+  const { data, error } = await sb.rpc('resumen_lotes_prueba');
+  if (error || !wrap) return;
+  if (!data?.length) { wrap.innerHTML = '<div class="pc-vacio">Todavía no hay asesores de prueba con lotes.</div>'; return; }
+  wrap.innerHTML = data.map(r => `
+    <div class="card" style="margin-top:12px">
+      <div class="dhead"><div><div class="dn">${esc(r.nombre)}</div><div class="dm">@${esc(r.username || '')}</div></div>
+        <button class="btn-sm" data-promover="${r.usuario_id}"><i class="fas fa-arrow-up"></i> Promover a asesor</button></div>
+      <div class="pc-cifras" style="margin-top:10px">
+        <div class="pc-cifra"><span class="pc-cifra-v">${r.total}</span><span class="pc-cifra-t">Total</span></div>
+        <div class="pc-cifra"><span class="pc-cifra-v">${r.contactados}</span><span class="pc-cifra-t">Contactados</span></div>
+        <div class="pc-cifra"><span class="pc-cifra-v">${r.pendientes}</span><span class="pc-cifra-t">Pendientes</span></div>
+        <div class="pc-cifra"><span class="pc-cifra-v">${r.vencidos}</span><span class="pc-cifra-t">Vencidos</span></div>
+      </div>
+      ${r.ultimas_notas?.length ? '<div style="margin-top:10px;font-size:12px;color:var(--muted2)">' + r.ultimas_notas.map(n => `Lead #${n.lead_id}: ${esc(n.nota)}`).join('<br>') + '</div>' : ''}
+    </div>`).join('');
+  wrap.querySelectorAll('[data-promover]').forEach(b => b.addEventListener('click', () => promoverAsesorPrueba(b.dataset.promover)));
+}
+async function promoverAsesorPrueba(usuarioId) {
+  if (!(await confirmarSheet({ titulo: '¿Promover a asesor real?', detalle: 'Entra al reparto automático de leads nuevos. Los leads que ya tiene siguen siendo suyos.', textoOk: 'Promover' }))) return;
+  const { data, error } = await sb.rpc('promover_asesor_prueba', { p_usuario_id: usuarioId });
+  if (error || !data?.ok) { errToast(error?.message || data?.error || 'No se pudo promover.'); return; }
+  okToast('Asesor promovido');
+  loadPersonalTiempo(false);
+  await loadAsesoresPruebaTab();
 }
 async function loadGestionPersonal() {
   cargarResumenPersonalKPIs();
@@ -1322,16 +1404,29 @@ function abrirEditorPersona(usuarioId) {
       <div class="eb-title"><i class="fas fa-id-card"></i> Datos</div>
       <label class="fl">Nombre</label>
       <input id="pe-nombre" class="ei" type="text" value="${esc(u.nombre || '')}">
+      <label class="fl">Usuario (con el que inicia sesión)</label>
+      <input id="pe-username" class="ei" type="text" autocapitalize="off" autocorrect="off" value="${esc(u.username || '')}">
       <label class="fl">Cargo</label>
       <input id="pe-cargo" class="ei" type="text" placeholder="Ej: Ejecutivo de Boletería · Gerente Administrativo" value="${esc(u.cargo || '')}">
       <label class="fl">Rol</label>
       <select id="pe-rol" class="ei">
-        ${['asesor', 'admin', 'marketing', 'boleteria'].map(r => `<option value="${r}"${u.rol === r ? ' selected' : ''}>${ROL_LABEL_GP[r] || r}</option>`).join('')}
+        ${['asesor', 'asesor_prueba', 'admin', 'marketing', 'boleteria'].map(r => `<option value="${r}"${u.rol === r ? ' selected' : ''}>${VISTA_ROL_LABEL[r] || ROL_LABEL_GP[r] || r}</option>`).join('')}
       </select>
+      ${u.rol === 'asesor' || u.rol === 'asesor_prueba' ? `
+      <label class="fl">Teléfono</label>
+      <input id="pe-whatsapp" class="ei" type="tel" placeholder="Ej: +58 412 1234567" value="${esc(u.whatsapp || '')}">
+      <label class="fl">Grupo de Telegram</label>
+      <input id="pe-telegram" class="ei" type="text" placeholder="ID del grupo o chat" value="${esc(u.telegram_chat_id || '')}">` : ''}
       <label class="pe-check" style="margin-top:12px"><input type="checkbox" id="pe-freelancer"${u.es_freelancer ? ' checked' : ''}> Es freelancer (se bloquea a los 15 min sin actividad)</label>
       <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-boleteria"${u.es_boleteria ? ' checked' : ''}> Es agente de boletería (atiende la cola de solicitudes de vuelos)</label>
+      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-voucher"${u.ve_voucher ? ' checked' : ''}> Ve vouchers</label>
+      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-informe"${u.ve_informe_diario ? ' checked' : ''}> Ve informe diario</label>
+      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-bloqueado"${u.bloqueado ? ' checked' : ''}> Bloqueado (sin acceso, sin darlo de baja)</label>
       <div class="edit-err" id="pe-err"></div>
       <button class="dbtn save" id="pe-guardar" type="button"><i class="fas fa-check"></i> Guardar</button>
+      <label class="fl" style="margin-top:14px">Nueva contraseña (opcional)</label>
+      <input id="pe-password" class="ei" type="password" minlength="12" placeholder="Mínimo 12 caracteres">
+      <div class="form-hint">Si la dejás vacía, se genera una temporal y se pedirá cambiarla al entrar.</div>
       <button class="dbtn gh" id="pe-restablecer" type="button"><i class="fas fa-key"></i> Restablecer acceso</button>
       <button class="dbtn gh" id="pe-baja" type="button" style="color:#ef4444"><i class="fas fa-user-slash"></i> Dar de baja</button>
       <div style="font-size:11px;color:var(--muted2);margin-top:10px;line-height:1.5">Dar de baja le quita el acceso al instante y lo saca de las listas, pero <b>no borra su historial</b> de asistencia, leads ni comisiones. Se puede reactivar.</div>
@@ -1346,13 +1441,15 @@ function abrirEditorPersona(usuarioId) {
 
 async function restablecerAcceso(usuarioId) {
   const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
-  if (!u || !(await confirmarSheet({ titulo: `¿Restablecer el acceso de ${u.nombre}?`, detalle: 'Vas a recibir una contraseña temporal para pasársela una sola vez. La persona deberá cambiarla al entrar.', textoOk: 'Restablecer' }))) return;
-  const { data, error } = await sb.functions.invoke('restablecer-acceso', { body: { usuario_id: usuarioId } });
+  const password = val('pe-password');
+  if (password && password.length < 12) { document.getElementById('pe-err').textContent = 'La contraseña debe tener al menos 12 caracteres.'; return; }
+  if (!u || !(await confirmarSheet({ titulo: `¿Restablecer el acceso de ${u.nombre}?`, detalle: password ? 'La contraseña elegida por el administrador quedará activa de inmediato.' : 'Vas a recibir una contraseña temporal para pasársela una sola vez. La persona deberá cambiarla al entrar.', textoOk: 'Restablecer' }))) return;
+  const { data, error } = await sb.functions.invoke('restablecer-acceso', { body: { usuario_id: usuarioId, password: password || undefined } });
   if (error || !data?.ok) { errToast('No se pudo restablecer el acceso.'); return; }
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div><div class="dn">Acceso restablecido</div><div class="dm">${esc(u.nombre)}</div></div></div>
     <div class="edit-box" style="margin-top:16px;border-color:rgba(34,197,94,.4)">
-      <div style="font-size:13px;line-height:1.6">Pasale esta contraseña por un canal privado. <b>Se muestra una sola vez</b> y deberá cambiarla al iniciar sesión.</div>
+      <div style="font-size:13px;line-height:1.6">Pasale esta contraseña por un canal privado.${password ? ' Fue definida por el administrador.' : ' <b>Se muestra una sola vez</b> y deberá cambiarla al iniciar sesión.'}</div>
       <div class="pn-cred"><span>Usuario</span><b>${esc(data.username)}</b></div>
       <div class="pn-cred"><span>Contraseña temporal</span><b>${esc(data.password_temporal)}</b></div>
       <button class="dbtn gh" id="pe-copiar-reset" type="button"><i class="fas fa-copy"></i> Copiar</button>
@@ -1367,19 +1464,33 @@ async function guardarPersona(usuarioId) {
   const nombre = val('pe-nombre').trim();
   if (nombre.length < 3) { err.textContent = 'El nombre es muy corto.'; return; }
   btn.disabled = true;
+  const rol = val('pe-rol');
   const { data, error } = await sb.rpc('admin_actualizar_personal', {
     p_usuario_id: usuarioId,
     p_nombre: nombre,
     p_cargo: val('pe-cargo').trim(),
-    p_rol: val('pe-rol'),
+    p_rol: rol,
     p_es_freelancer: document.getElementById('pe-freelancer').checked,
     p_es_boleteria: document.getElementById('pe-boleteria').checked,
+    p_username: val('pe-username').trim() || null,
+    p_ve_voucher: document.getElementById('pe-voucher').checked,
+    p_ve_informe_diario: document.getElementById('pe-informe').checked,
+    p_bloqueado: document.getElementById('pe-bloqueado').checked,
   });
-  btn.disabled = false;
   if (error || !data?.ok) {
+    btn.disabled = false;
     err.textContent = ERR_PERSONAL[data?.error] || error?.message || 'No se pudo guardar.';
     return;
   }
+  if ((rol === 'asesor' || rol === 'asesor_prueba') && (document.getElementById('pe-whatsapp') || document.getElementById('pe-telegram'))) {
+    await sb.rpc('admin_vincular_asesor', {
+      p_usuario_id: usuarioId,
+      p_nombre: nombre,
+      p_whatsapp: val('pe-whatsapp').trim() || null,
+      p_telegram_chat_id: val('pe-telegram').trim() || null,
+    });
+  }
+  btn.disabled = false;
   window.closeDrawer();
   okToast('Datos actualizados');
   loadPersonalTiempo(personalSoloFreelancers);
@@ -1419,10 +1530,20 @@ function abrirAltaPersona(comoFreelancer) {
       <label class="fl">Rol</label>
       <select id="pn-rol" class="ei">
         <option value="asesor">Asesor</option>
+        <option value="asesor_prueba">Asesor de prueba</option>
         <option value="admin">Administrador</option>
         <option value="marketing">Marketing</option>
         <option value="boleteria">Boletería</option>
       </select>
+      <div id="pn-datos-asesor">
+        <label class="fl">Teléfono</label>
+        <input id="pn-whatsapp" class="ei" type="tel" placeholder="Ej: +58 412 1234567">
+        <label class="fl">Grupo de Telegram</label>
+        <input id="pn-telegram" class="ei" type="text" placeholder="ID del grupo o chat">
+        <label class="fl">Contraseña</label>
+        <input id="pn-password" class="ei" type="password" minlength="12" placeholder="Mínimo 12 caracteres">
+        <div class="form-hint">Si la dejás vacía se genera una temporal y se pide cambiarla al entrar.</div>
+      </div>
       <label class="pe-check" style="margin-top:12px"><input type="checkbox" id="pn-freelancer"${comoFreelancer ? ' checked' : ''}> Es freelancer (se bloquea a los 15 min sin actividad)</label>
       <div class="edit-err" id="pn-err"></div>
       <button class="dbtn save" id="pn-crear" type="button"><i class="fas fa-user-plus"></i> Crear cuenta</button>
@@ -1431,6 +1552,12 @@ function abrirAltaPersona(comoFreelancer) {
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
+  const ajustarDatosAsesor = () => {
+    const esAsesor = ['asesor', 'asesor_prueba'].includes(val('pn-rol'));
+    document.getElementById('pn-datos-asesor').style.display = esAsesor ? '' : 'none';
+  };
+  document.getElementById('pn-rol').onchange = ajustarDatosAsesor;
+  ajustarDatosAsesor();
   document.getElementById('pn-crear').onclick = crearPersona;
 }
 
@@ -1446,12 +1573,22 @@ async function crearPersona() {
       cargo: val('pn-cargo').trim(),
       rol: val('pn-rol'),
       es_freelancer: document.getElementById('pn-freelancer').checked,
+      password: val('pn-password'),
     },
   });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-user-plus"></i> Crear cuenta';
   if (error || !data?.ok) {
     err.textContent = ERR_PERSONAL[data?.error] || data?.detalle || error?.message || 'No se pudo crear la cuenta.';
     return;
+  }
+  if (['asesor', 'asesor_prueba'].includes(val('pn-rol'))) {
+    const { error: vinculoError } = await sb.rpc('admin_vincular_asesor', {
+      p_usuario_id: data.usuario_id,
+      p_nombre: val('pn-nombre').trim(),
+      p_whatsapp: val('pn-whatsapp').trim() || null,
+      p_telegram_chat_id: val('pn-telegram').trim() || null,
+    });
+    if (vinculoError) errToast('La cuenta se creó, pero falta vincularla al reparto: ' + vinculoError.message);
   }
   // La contraseña temporal se muestra UNA sola vez: no queda guardada en
   // ningún lado en texto plano, así que si se cierra sin copiarla hay que
@@ -1463,7 +1600,7 @@ async function crearPersona() {
       <div style="font-size:13px;line-height:1.6">Pasale estos datos por WhatsApp o Telegram. <b>La contraseña se muestra una sola vez</b> — si cerrás esta ventana sin copiarla, hay que resetearla.</div>
       <div class="pn-cred"><span>Usuario</span><b>${esc(data.username)}</b></div>
       <div class="pn-cred"><span>Contraseña temporal</span><b>${esc(data.password_temporal)}</b></div>
-      <div style="font-size:11.5px;color:var(--muted);margin-top:8px">Se la va a pedir cambiar en el primer ingreso.</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:8px">${val('pn-password') ? 'La contraseña fue definida por el administrador.' : 'Se la va a pedir cambiar en el primer ingreso.'}</div>
       <button class="dbtn gh" id="pn-copiar" type="button"><i class="fas fa-copy"></i> Copiar</button>
     </div>`;
   document.getElementById('pn-copiar').onclick = () => {
@@ -1674,7 +1811,7 @@ async function startApp() {
     aplicarOrdenSidebar, setupNav, renderBottomNav, setupSwipeSecciones, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa,
-    setupHoy, setupConsultorIA,
+    setupHoy, setupConsultorIA, setupBoleteriaSeccion,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -1689,6 +1826,11 @@ async function startApp() {
     return;
   }
   if (ROL === 'boleteria') { activateSection('mensajes'); return; }
+  if (ROL === 'asesor_prueba') {
+    arrancar(setupBuscadorIATarifario, setupStopSales);
+    activateSection('leads-prueba');
+    return;
+  }
   // Restaura la última sección visitada por este usuario (admin/asesor,
   // ver guardarUltimaSeccion) -- marketing/boleteria arriba se quedan
   // siempre en su única sección fija, no aplica. En mobile el punto de
@@ -2666,6 +2808,7 @@ function leadCardHtml(l) {
         <div class="ec-destino"><i class="fas fa-location-dot"></i> ${esc(l.destino) || 'Sin destino'}</div>
       </div>
     </div>
+    <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
     <div class="ec-estado-row">
       ${sinAtenderDatos ? `<span class="badge-st sin-atender-movil" style="color:var(--accent);background:var(--accent-soft)">Sin atender</span>` : ''}
       <span class="estado-stepper" data-id="${l.id}">
@@ -11232,6 +11375,24 @@ const SECCIONES_REUBICADAS = {
   'buscar-tarifario': 'tarifario',
   extractor: 'leads',
 };
+async function loadLeadsPrueba() {
+  const wrap = document.getElementById('leads-prueba-list');
+  if (!wrap) return;
+  const { data, error } = await sb.rpc('listar_mis_leads_prueba');
+  if (error) { wrap.innerHTML = '<div class="es-s">No se pudieron cargar tus leads.</div>'; return; }
+  const filas = data || [];
+  if (!filas.length) { wrap.innerHTML = '<div class="es-s">No tenés leads de práctica asignados.</div>'; return; }
+  wrap.innerHTML = filas.map(l => `<article class="entity-card"><div class="ec-head"><b>${esc(l.nombre || 'Sin nombre')}</b><span class="chip">${esc(l.estado || 'Sin estado')}</span></div><div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono || 'Sin teléfono')}</div><div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino || 'Sin destino')}</div><div class="ec-row"><i class="fas fa-clock"></i> ${l.vence_at ? esc(fmtFecha(l.vence_at)) : 'Sin plazo'}</div><div class="seg-group" style="margin-top:10px;flex-wrap:wrap"><button class="seg" data-r="no_contesta" data-task="${l.task_id}">No contesta</button><button class="seg" data-r="numero_equivocado" data-task="${l.task_id}">Número equivocado</button><button class="seg" data-r="no_interesa" data-task="${l.task_id}">No interesa</button><button class="seg" data-r="interesado" data-task="${l.task_id}">Interesado</button><button class="seg" data-r="ya_viajo" data-task="${l.task_id}">Ya viajó</button></div><textarea class="ei" data-nota placeholder="Nota del contacto (obligatoria)"></textarea><div style="display:flex;gap:8px;margin-top:8px"><a class="btn-sm" href="https://wa.me/${esc(String(l.telefono || '').replace(/\D/g,''))}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a><a class="btn-sm" href="tel:${esc(l.telefono || '')}"><i class="fas fa-phone"></i> Llamar</a></div></article>`).join('');
+  wrap.querySelectorAll('[data-r]').forEach(btn => btn.addEventListener('click', async () => {
+    const nota = btn.closest('.entity-card').querySelector('[data-nota]').value.trim();
+    if (!nota) { errToast('Dejá una nota antes de registrar el resultado.'); return; }
+    btn.disabled = true;
+    const { data: r, error: e } = await sb.rpc('registrar_contacto_lead', { p_task_id: Number(btn.dataset.task), p_resultado: btn.dataset.r, p_nota: nota });
+    if (e || !r?.ok) { errToast('No se pudo registrar el contacto.'); btn.disabled = false; return; }
+    okToast('Contacto registrado'); loadLeadsPrueba();
+  }));
+}
+
 function activateSection(sec, fromNav) {
   sec = SECCIONES_REUBICADAS[sec] || sec;
   if (!document.getElementById('sec-' + sec)) sec = 'hoy';
@@ -11261,6 +11422,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'informe-diario') loadInformeDiario();
   if (sec === 'hoy') renderHoy();
   if (sec === 'leads') { if (ROL === 'asesor') loadInboxLeads(); iniciarPollLeads(); }
+  if (sec === 'leads-prueba') loadLeadsPrueba();
   if (sec === 'tarifario') loadTarifario();
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'galeria') loadGaleria();
@@ -11271,6 +11433,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'stop-sales') { loadStopSalesVigentes(); ssCargarPdfActual(); }
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
+  if (sec === 'boleteria') loadBoleteria();
   if (sec === 'tareas') loadTareas();
   if (sec === 'manual') renderManual();
   if (sec === 'actualizaciones') renderActualizaciones();
@@ -11616,7 +11779,7 @@ window.addEventListener('resize', () => { clearTimeout(_resizeIndicadorT); _resi
 // que pide esta fase. Si se agrega una sección nueva con carga propia, hay
 // que sumarla en los dos lugares.
 const REFRESCAR_SECCION = {
-  leads: () => loadTable(), ranking: () => loadRanking(), facturacion: () => loadFacturacion(),
+  leads: () => loadTable(), 'leads-prueba': () => loadLeadsPrueba(), ranking: () => loadRanking(), facturacion: () => loadFacturacion(),
   'mis-comisiones': () => loadMisComisiones(), 'gestion-personal': () => loadGestionPersonal(),
   postventa: () => loadPostventa(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
@@ -11624,6 +11787,7 @@ const REFRESCAR_SECCION = {
   'ia-atencion': () => loadIaAtencion(), 'web-reasignados': () => loadWebReasignados(),
   'stop-sales': () => { loadStopSalesVigentes(); ssCargarPdfActual(); },
   redes: () => cargarRedActual(), voucher: () => loadVoucherSeccion(), tareas: () => loadTareas(),
+  boleteria: () => loadBoleteria(),
 };
 async function refrescarSeccionActual() {
   const tareas = [Promise.resolve(resyncTrasSegundoPlano())];
@@ -12170,6 +12334,171 @@ async function bolCancelar(id) {
   const { data, error } = await sb.rpc('cancelar_solicitud_boleteria', { p_id: Number(id) });
   if (error || !data?.ok) { errToast('No se pudo cancelar: ' + (BOL_ERR[data?.error] || error?.message || '')); return; }
   okToast('Solicitud cancelada'); loadColaBoleteria();
+}
+
+/* ---------- Sección Boletería (D4) -- base de conocimiento de vuelos:
+   rutas, aerolíneas, precios, requisitos por país y calendario de
+   temporadas. Distinta de la cola de solicitudes de arriba (BOL_*), que
+   sigue funcionando igual. Tema azul scopeado vive en el CSS de
+   #sec-boleteria; acá solo la lógica. */
+let bolCatalogo = null;
+let bolTab = 'rutas';
+function setupBoleteriaSeccion() {
+  document.querySelectorAll('#bol-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
+    bolTab = btn.dataset.bolTab;
+    document.querySelectorAll('#bol-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
+    document.querySelectorAll('.bol-tab-panel').forEach(p => p.style.display = p.dataset.bolPanel === bolTab ? '' : 'none');
+    renderBoleteriaTab();
+  }));
+  document.getElementById('bol-buscador')?.addEventListener('input', () => renderBoleteriaTab());
+  document.getElementById('bol-modo-oscuro')?.addEventListener('click', () => {
+    document.getElementById('sec-boleteria').classList.toggle('bol-light');
+  });
+  document.getElementById('bol-ruta-nueva')?.addEventListener('click', nuevaRutaBoleteria);
+  document.getElementById('bol-aerolinea-nueva')?.addEventListener('click', nuevaAerolineaBoleteria);
+  document.getElementById('bol-precio-nuevo')?.addEventListener('click', nuevoPrecioBoleteria);
+  document.getElementById('bol-requisito-nuevo')?.addEventListener('click', nuevoRequisitoBoleteria);
+  document.getElementById('bol-temporada-nueva')?.addEventListener('click', nuevaTemporadaBoleteria);
+}
+async function loadBoleteria() {
+  const { data, error } = await sb.rpc('boleteria_catalogo');
+  if (error) { console.error('boleteria_catalogo:', error); errToast('No se pudo cargar Boletería'); return; }
+  bolCatalogo = data;
+  renderBoleteriaTab();
+}
+function bolFiltro() { return (val('bol-buscador') || '').trim().toLowerCase(); }
+function bolMatch(texto, alias) {
+  const q = bolFiltro();
+  if (!q) return true;
+  if ((texto || '').toLowerCase().includes(q)) return true;
+  return (alias || []).some(a => (a || '').toLowerCase().includes(q));
+}
+function renderBoleteriaTab() {
+  if (!bolCatalogo) return;
+  if (bolTab === 'rutas') return renderBolRutas();
+  if (bolTab === 'aerolineas') return renderBolAerolineas();
+  if (bolTab === 'precios') return renderBolPrecios();
+  if (bolTab === 'requisitos') return renderBolRequisitos();
+  if (bolTab === 'calendario') return renderBolCalendario();
+}
+function bolNombreAerolinea(id) { return bolCatalogo.aerolineas.find(a => a.id === id)?.nombre || '—'; }
+function bolNombreRuta(id) { return bolCatalogo.rutas.find(r => r.id === id)?.nombre_natural || '—'; }
+function renderBolRutas() {
+  const wrap = document.getElementById('bol-rutas-wrap'); if (!wrap) return;
+  const rutas = bolCatalogo.rutas.filter(r => bolMatch(r.nombre_natural + ' ' + r.nombre_corto + ' ' + r.origen_iata + ' ' + r.destino_iata, r.alias));
+  wrap.innerHTML = rutas.length ? rutas.map(r => {
+    const aerolineas = bolCatalogo.ruta_aerolineas.filter(ra => ra.ruta_id === r.id).map(ra => bolNombreAerolinea(ra.aerolinea_id));
+    return `<div class="card"><h2>${esc(r.nombre_natural)}</h2><div class="csub">${esc(r.nombre_corto)}${r.es_internacional ? ' · Internacional' : ' · Nacional'}</div>
+      <div style="margin-top:8px;font-size:12.5px;color:var(--muted2)">${aerolineas.length ? 'Vuela: ' + esc(aerolineas.join(', ')) : 'Sin aerolíneas asignadas'}</div></div>`;
+  }).join('') : '<div class="pc-vacio">Sin rutas cargadas todavía.</div>';
+}
+function renderBolAerolineas() {
+  const wrap = document.getElementById('bol-aerolineas-wrap'); if (!wrap) return;
+  const aerolineas = bolCatalogo.aerolineas.filter(a => bolMatch(a.nombre + ' ' + (a.iata_code || '')));
+  wrap.innerHTML = aerolineas.length ? aerolineas.map(a => `
+    <div class="card"><h2>${esc(a.nombre)} ${a.por_verificar ? '<span class="chip" style="background:rgba(245,181,68,.18);color:#f5b544">Por verificar</span>' : ''}</h2>
+      <div class="csub">${esc(a.iata_code || 'Sin código IATA')}${a.operativa ? '' : ' · No operativa'}</div>
+      <div style="margin-top:8px;font-size:12.5px;color:var(--muted2)">
+        ${a.equipaje_bodega_kg ? 'Bodega: ' + a.equipaje_bodega_kg + 'kg · ' : ''}${a.equipaje_mano_kg ? 'Mano: ' + a.equipaje_mano_kg + 'kg' : ''}
+      </div>
+      ${a.contacto_whatsapp || a.contacto_oficina ? `<div style="margin-top:6px;font-size:12.5px">${esc(a.contacto_oficina || '')} ${esc(a.contacto_whatsapp || '')}</div>` : ''}
+      ${a.por_verificar ? `<button class="btn-sm" style="margin-top:8px" data-verificar="${a.id}">Marcar verificada</button>` : ''}
+    </div>`).join('') : '<div class="pc-vacio">Sin aerolíneas cargadas todavía.</div>';
+  wrap.querySelectorAll('[data-verificar]').forEach(b => b.addEventListener('click', async () => {
+    const a = bolCatalogo.aerolineas.find(x => x.id === Number(b.dataset.verificar));
+    await sb.rpc('boleteria_guardar_aerolinea', { p_id: a.id, p_nombre: a.nombre, p_iata: a.iata_code, p_operativa: a.operativa,
+      p_equipaje_bodega_kg: a.equipaje_bodega_kg, p_equipaje_mano_kg: a.equipaje_mano_kg, p_costo_maleta_extra: a.costo_maleta_extra,
+      p_contacto_oficina: a.contacto_oficina, p_contacto_whatsapp: a.contacto_whatsapp, p_contacto_email: a.contacto_email,
+      p_contacto_ejecutivo: a.contacto_ejecutivo, p_politica_cambio: a.politica_cambio, p_politica_cancelacion: a.politica_cancelacion,
+      p_marcar_verificada: true });
+    okToast('Marcada como verificada'); loadBoleteria();
+  }));
+}
+function renderBolPrecios() {
+  const wrap = document.getElementById('bol-precios-wrap'); if (!wrap) return;
+  const precios = bolCatalogo.precios.filter(p => bolMatch(bolNombreRuta(p.ruta_id) + ' ' + bolNombreAerolinea(p.aerolinea_id)));
+  wrap.innerHTML = `<div style="overflow-x:auto"><table><thead><tr><th>Ruta</th><th>Aerolínea</th><th>Tipo</th><th>Precio ref.</th><th>Vigencia</th></tr></thead><tbody>
+    ${precios.length ? precios.map(p => `<tr><td>${esc(bolNombreRuta(p.ruta_id))}</td><td>${esc(bolNombreAerolinea(p.aerolinea_id))}</td><td>${p.tipo === 'ida_vuelta' ? 'Ida y vuelta' : 'Ida'}</td><td>${p.moneda} ${p.precio}</td><td>${esc(fmtFechaSolo(p.vigente_desde))}${p.vigente_hasta ? ' – ' + esc(fmtFechaSolo(p.vigente_hasta)) : ''}</td></tr>`).join('') : '<tr><td colspan="5" class="muted">Sin precios cargados todavía -- los carga el equipo, ninguno viene sembrado.</td></tr>'}
+  </tbody></table></div>`;
+}
+function renderBolRequisitos() {
+  const wrap = document.getElementById('bol-requisitos-wrap'); if (!wrap) return;
+  const req = bolCatalogo.requisitos.filter(r => bolMatch(r.pais));
+  wrap.innerHTML = req.length ? req.map(r => `
+    <div class="card"><h2>${esc(r.pais)}</h2>
+      <div class="csub">${r.requiere_visa ? 'Requiere visa' : 'No requiere visa'}${r.acepta_cedula ? ' · Acepta cédula' : ''}</div>
+      ${r.vigencia_min_pasaporte_meses ? `<div style="margin-top:6px;font-size:12.5px;color:var(--muted2)">Pasaporte con al menos ${r.vigencia_min_pasaporte_meses} meses de vigencia</div>` : ''}
+      ${r.vacunas ? `<div style="margin-top:4px;font-size:12.5px;color:var(--muted2)">Vacunas: ${esc(r.vacunas)}</div>` : ''}
+      ${r.notas ? `<div style="margin-top:4px;font-size:12.5px">${esc(r.notas)}</div>` : ''}
+    </div>`).join('') : '<div class="pc-vacio">Sin requisitos cargados todavía.</div>';
+}
+function renderBolCalendario() {
+  const wrap = document.getElementById('bol-calendario-wrap'); if (!wrap) return;
+  const temporadas = bolCatalogo.temporadas.filter(t => bolMatch(t.nombre));
+  const nivelColor = { alta: '#ff5c8a', media: '#f5b544', baja: '#10b981' };
+  wrap.innerHTML = temporadas.length ? temporadas.map(t => `
+    <div class="card"><h2>${esc(t.nombre)} <span class="chip" style="background:${nivelColor[t.nivel]}22;color:${nivelColor[t.nivel]}">${t.nivel}</span></h2>
+      <div class="csub">${esc(fmtFechaSolo(t.fecha_inicio))} – ${esc(fmtFechaSolo(t.fecha_fin))} (${t.anio})</div></div>`).join('')
+    : '<div class="pc-vacio">Sin temporadas cargadas todavía. Carnaval y Semana Santa se mueven cada año -- cargalas por año, no quedan fijas.</div>';
+}
+
+/* Altas rápidas: formularios cortos vía prompt(), consistente con el resto
+   de altas puntuales de una sola línea en esta app (ver confirmarSheet para
+   flujos con más campos si hace falta ampliarlo más adelante). */
+async function nuevaRutaBoleteria() {
+  const origen = prompt('Código IATA de origen (ej: CCS):'); if (!origen) return;
+  const destino = prompt('Código IATA de destino (ej: MIA):'); if (!destino) return;
+  const natural = prompt('Nombre natural (ej: Caracas – Miami):'); if (!natural) return;
+  const corto = prompt('Nombre corto (ej: CCS–MIA):', `${origen.toUpperCase()}–${destino.toUpperCase()}`);
+  const alias = prompt('Otras formas de nombrarla, separadas por coma (opcional):', '');
+  const internacional = confirm('¿Es una ruta internacional?');
+  const { data, error } = await sb.rpc('boleteria_guardar_ruta', { p_id: null, p_origen_iata: origen, p_destino_iata: destino, p_nombre_natural: natural, p_nombre_corto: corto, p_alias: alias ? alias.split(',').map(s => s.trim()).filter(Boolean) : [], p_es_internacional: internacional });
+  if (error || !data?.ok) { errToast(error?.message || 'No se pudo crear la ruta (¿el aeropuerto existe?)'); return; }
+  okToast('Ruta creada'); loadBoleteria();
+}
+async function nuevaAerolineaBoleteria() {
+  const nombre = prompt('Nombre de la aerolínea:'); if (!nombre) return;
+  const iata = prompt('Código IATA (opcional):', '');
+  const { data, error } = await sb.rpc('boleteria_guardar_aerolinea', { p_id: null, p_nombre: nombre, p_iata: iata || null, p_operativa: true,
+    p_equipaje_bodega_kg: null, p_equipaje_mano_kg: null, p_costo_maleta_extra: null, p_contacto_oficina: null, p_contacto_whatsapp: null,
+    p_contacto_email: null, p_contacto_ejecutivo: null, p_politica_cambio: null, p_politica_cancelacion: null, p_marcar_verificada: false });
+  if (error || !data?.ok) { errToast(error?.message || 'No se pudo crear la aerolínea'); return; }
+  okToast('Aerolínea creada como "por verificar"'); loadBoleteria();
+}
+async function nuevoPrecioBoleteria() {
+  if (!bolCatalogo.rutas.length || !bolCatalogo.aerolineas.length) { errToast('Primero cargá al menos una ruta y una aerolínea'); return; }
+  const rutaTxt = bolCatalogo.rutas.map((r, i) => `${i + 1}) ${r.nombre_natural}`).join('\n');
+  const iRuta = parseInt(prompt(`Elegí la ruta (número):\n${rutaTxt}`), 10) - 1;
+  if (!(iRuta >= 0 && iRuta < bolCatalogo.rutas.length)) return;
+  const aerTxt = bolCatalogo.aerolineas.map((a, i) => `${i + 1}) ${a.nombre}`).join('\n');
+  const iAer = parseInt(prompt(`Elegí la aerolínea (número):\n${aerTxt}`), 10) - 1;
+  if (!(iAer >= 0 && iAer < bolCatalogo.aerolineas.length)) return;
+  const tipo = confirm('¿Es tarifa de ida y vuelta? (Cancelar = solo ida)') ? 'ida_vuelta' : 'ida';
+  const precio = parseFloat(prompt('Precio de referencia en USD:')); if (!(precio > 0)) return;
+  const { data, error } = await sb.rpc('boleteria_guardar_precio', { p_ruta_id: bolCatalogo.rutas[iRuta].id, p_aerolinea_id: bolCatalogo.aerolineas[iAer].id, p_temporada_id: null, p_tipo: tipo, p_precio: precio, p_moneda: 'USD', p_vigente_desde: null, p_vigente_hasta: null });
+  if (error || !data?.ok) { errToast(error?.message || 'No se pudo cargar el precio'); return; }
+  okToast('Precio cargado'); loadBoleteria();
+}
+async function nuevoRequisitoBoleteria() {
+  const pais = prompt('País:'); if (!pais) return;
+  const visa = confirm('¿Requiere visa?');
+  const cedula = confirm('¿Acepta cédula (sin pasaporte)?');
+  const meses = prompt('Vigencia mínima de pasaporte, en meses (opcional):', '');
+  const notas = prompt('Notas (opcional):', '');
+  const { data, error } = await sb.rpc('boleteria_guardar_requisito', { p_id: null, p_pais: pais, p_requiere_visa: visa, p_vigencia_min_pasaporte_meses: meses ? parseInt(meses, 10) : null, p_acepta_cedula: cedula, p_vacunas: null, p_notas: notas || null });
+  if (error || !data?.ok) { errToast(error?.message || 'No se pudo guardar'); return; }
+  okToast('Requisito guardado'); loadBoleteria();
+}
+async function nuevaTemporadaBoleteria() {
+  const nombre = prompt('Nombre de la temporada (ej: Carnaval 2027):'); if (!nombre) return;
+  const nivel = (prompt('Nivel (alta, media o baja):', 'alta') || '').trim().toLowerCase();
+  if (!['alta', 'media', 'baja'].includes(nivel)) { errToast('Nivel inválido'); return; }
+  const anio = parseInt(prompt('Año:', new Date().getFullYear()), 10);
+  const inicio = prompt('Fecha de inicio (AAAA-MM-DD):'); if (!inicio) return;
+  const fin = prompt('Fecha de fin (AAAA-MM-DD):'); if (!fin) return;
+  const { data, error } = await sb.rpc('boleteria_guardar_temporada', { p_id: null, p_nombre: nombre, p_nivel: nivel, p_anio: anio, p_fecha_inicio: inicio, p_fecha_fin: fin });
+  if (error || !data?.ok) { errToast(error?.message || 'No se pudo guardar la temporada'); return; }
+  okToast('Temporada guardada'); loadBoleteria();
 }
 
 /* ---------- Sub-pestaña "En facturación" de Leads ----------

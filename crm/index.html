@@ -936,10 +936,10 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .card-grid{display:none;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:2px}
 .card-grid.show{display:grid}
 .card-grid.fichas{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
-.entity-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;cursor:pointer;transition:.12s}
+.entity-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 16px;cursor:pointer;transition:.12s}
 .entity-card:hover{border-color:rgba(255,145,0,.3);transform:translateY(-2px)}
-.entity-card .ec-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.entity-card .ec-ava{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px}
+.entity-card .ec-top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.entity-card .ec-ava{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px}
 .entity-card .ec-nombre{font-size:14px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .entity-card .ec-row{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);margin-top:6px}
 .entity-card .ec-row i{width:13px;color:var(--muted2);font-size:11px}
@@ -1246,7 +1246,23 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .rol-asesor #f-asesor{display:none}
 .rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok),.rol-marketing .sheet-item:not(.nav-marketing-ok){display:none}
 .rol-boleteria .nav-item:not(.nav-boleteria-ok),.rol-boleteria .bn-item:not(.nav-boleteria-ok),.rol-boleteria .sheet-item:not(.nav-boleteria-ok){display:none}
-.rol-asesor .admin-only,.rol-marketing .admin-only,.rol-boleteria .admin-only{display:none}
+.rol-prueba .nav-item:not(.nav-prueba-ok),.rol-prueba .bn-item:not(.nav-prueba-ok),.rol-prueba .sheet-item:not(.nav-prueba-ok){display:none}
+.rol-asesor .admin-only,.rol-marketing .admin-only,.rol-boleteria .admin-only,.rol-prueba .admin-only{display:none}
+
+/* D4: botón de Boletería distinto de un nav-item normal, bordes azules. */
+.nav-boleteria-btn{border:1px solid rgba(74,158,255,.4);border-radius:10px;margin-top:6px;color:#4a9eff}
+.nav-boleteria-btn:hover{background:rgba(74,158,255,.12)}
+
+/* D4: tema azul eléctrico scopeado SOLO a #sec-boleteria. Tokens propios,
+   no se tocan los globales -- así el resto del CRM no se entera de que
+   esto existe. Por defecto sigue el modo oscuro de siempre; .bol-light lo
+   pasa a blanco (interruptor propio de la sección, sin persistir). */
+#sec-boleteria{--accent:#2e6bff;--accent-soft:rgba(46,107,255,.16);padding:18px;border-radius:18px;background:linear-gradient(180deg,rgba(46,107,255,.08),transparent 200px)}
+#sec-boleteria .seg.on{background:var(--accent-soft);color:#bcd4ff}
+#sec-boleteria .btn-sm:hover{border-color:rgba(46,107,255,.5)}
+#sec-boleteria.bol-light{--bg:#f4f7ff;--panel:rgba(255,255,255,.9);--panel-solid:#ffffff;--line:rgba(46,107,255,.14);--line2:rgba(46,107,255,.22);--txt:#0c1830;--muted:#4a5878;background:linear-gradient(180deg,rgba(46,107,255,.05),transparent 200px)}
+.bol-buscador{min-width:260px}
+.bol-tab-panel .card{margin-bottom:12px}
 .rol-asesor .nav-asesor-hide{display:none}
 /* Inverso de nav-asesor-hide: visible SOLO para rol asesor (en cualquiera de
    los 3 tipos de nav-item). Usado hoy por "Mis Comisiones" en el sidebar
@@ -2178,9 +2194,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <div class="nav-label" data-label="principal">Principal</div>
       <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
       <a class="nav-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales</a>
       <a class="nav-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas <span class="badge" id="nav-tareas-count" style="display:none">0</span></a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
+      <a class="nav-item nav-prueba-ok" data-sec="leads-prueba"><i class="fas fa-user-clock"></i> Mis leads</a>
       <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
       <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
       <a class="nav-item nav-boleteria-ok solo-voucher" id="nav-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher <span class="badge" id="nav-voucher-count" style="display:none">0</span></a>
@@ -2189,9 +2206,9 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
       <a class="nav-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
       <div class="nav-label" data-label="tarifario">Tarifario</div>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
-      <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
+      <a class="nav-item nav-marketing-ok nav-prueba-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
       <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
       <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA</a>
       <a class="nav-item nav-admin-only" data-sec="consultor-ia"><i class="fas fa-user-tie"></i> Consultor IA</a>
@@ -2202,9 +2219,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
       <a class="nav-item nav-admin-only solo-informe-diario" id="nav-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
       <div class="nav-label" data-label="ayuda">Ayuda</div>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
       <a class="nav-item nav-admin-only" data-sec="proyecto-constructor"><i class="fas fa-drafting-compass"></i> Proyecto Constructor</a>
+      <a class="nav-item nav-boleteria-ok nav-prueba-ok nav-boleteria-btn" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
     </nav>
     <div class="side-foot">
       <button class="logout-btn logout-btn-lg" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
@@ -2311,6 +2329,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     </section>
 
     <!-- LEADS -->
+    <section class="section" id="sec-leads-prueba">
+      <div class="card"><h2><i class="fas fa-user-clock"></i> Mis leads de práctica</h2><div class="csub">Registrá el resultado y una nota de cada contacto. Tu responsable revisa el progreso.</div><div id="leads-prueba-list" class="entity-grid" style="margin-top:14px"><div class="es-s">Cargando leads…</div></div></div>
+    </section>
+
     <section class="section" id="sec-leads">
       <div class="seg-group" id="leads-tabs">
         <button class="seg on" data-leads-tab="pipeline">Leads</button>
@@ -2621,6 +2643,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <div class="seg-group" id="gp-tabs">
         <button class="seg on" data-gp-tab="personal">Personal</button>
         <button class="seg" data-gp-tab="asesores">Asesores</button>
+        <button class="seg" data-gp-tab="prueba">Asesores de prueba</button>
         <button class="seg" data-gp-tab="freelancers">Freelancers</button>
         <button class="seg" data-gp-tab="postulaciones">Postulaciones <span class="badge" id="gp-postulaciones-count" style="display:none">0</span></button>
         <button class="seg" data-gp-tab="reasignaciones">Reasignaciones</button>
@@ -2698,6 +2721,36 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           <h2><i class="fas fa-gauge-high"></i> Rendimiento y tasa de respuesta</h2>
           <div class="csub">Leads asignados vs. perdidos por no responder a tiempo (timeout de reasignación)</div>
           <div class="adv" id="rendList"></div>
+        </div>
+      </div>
+
+      <!-- ASESORES DE PRUEBA -- alta de lotes de leads viejos (A4) y su
+           seguimiento (B1: progreso por asesor, B2: promover a asesor real). -->
+      <div class="gp-tab-panel" data-gp-panel="prueba" style="display:none">
+        <div class="card">
+          <h2><i class="fas fa-layer-group"></i> Asignar lote de práctica</h2>
+          <div class="csub">Leads viejos que el asesor de prueba tiene que contactar dejando nota y resultado por cada uno. El lead pasa a ser suyo.</div>
+          <label class="fl">Asesor de prueba</label>
+          <select id="ap-usuario" class="ei"></select>
+          <label class="fl">Antigüedad mínima (días)</label>
+          <input id="ap-antiguedad" class="ei" type="number" min="1" value="90">
+          <label class="fl">Estados a incluir</label>
+          <select id="ap-estados" class="ei" multiple size="6"></select>
+          <label class="fl">Cantidad</label>
+          <input id="ap-cantidad" class="ei" type="number" min="1" max="100" value="5">
+          <label class="fl">Fecha límite</label>
+          <input id="ap-vence" class="ei" type="datetime-local">
+          <div class="edit-err" id="ap-err"></div>
+          <div class="tbar" style="margin-top:12px">
+            <button class="btn-sm" id="ap-contar" type="button"><i class="fas fa-magnifying-glass"></i> Ver cuántos matchean</button>
+            <span id="ap-conteo" style="margin-left:10px;font-size:13px;color:var(--muted2)"></span>
+          </div>
+          <button class="dbtn save" id="ap-asignar" type="button" style="margin-top:12px" disabled><i class="fas fa-check"></i> Asignar lote</button>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h2><i class="fas fa-chart-simple"></i> Progreso por asesor de prueba</h2>
+          <div class="tbl-state skel-grid" id="ap-progreso-loading" style="display:none"><div class="skel-card"></div></div>
+          <div id="ap-progreso-wrap"></div>
         </div>
       </div>
 
@@ -3981,6 +4034,44 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       </div>
     </section>
 
+    <!-- BOLETERÍA -- tema azul eléctrico scopeado a la sección (D4). El
+         marco del CRM y las otras 25 secciones no se tocan: los tokens
+         viven solo bajo #sec-boleteria. -->
+    <section class="section bol-theme" id="sec-boleteria">
+      <div class="tbar" style="margin-bottom:12px">
+        <input class="flt bol-buscador" id="bol-buscador" type="text" placeholder="Buscar ruta, aerolínea o país (ej: margarita, PMV, porla)...">
+        <button class="btn-sm" id="bol-modo-oscuro" type="button" style="margin-left:auto"><i class="fas fa-moon"></i></button>
+      </div>
+      <div class="seg-group" id="bol-tabs">
+        <button class="seg on" data-bol-tab="rutas">Rutas</button>
+        <button class="seg" data-bol-tab="aerolineas">Aerolíneas</button>
+        <button class="seg" data-bol-tab="precios">Precios</button>
+        <button class="seg" data-bol-tab="requisitos">Requisitos</button>
+        <button class="seg" data-bol-tab="calendario">Calendario</button>
+      </div>
+
+      <div class="bol-tab-panel" data-bol-panel="rutas">
+        <div class="tbar" style="margin-bottom:12px"><button class="btn-sm" id="bol-ruta-nueva" type="button"><i class="fas fa-plus"></i> Nueva ruta</button></div>
+        <div id="bol-rutas-wrap" class="grid g-2b"></div>
+      </div>
+      <div class="bol-tab-panel" data-bol-panel="aerolineas" style="display:none">
+        <div class="tbar" style="margin-bottom:12px"><button class="btn-sm" id="bol-aerolinea-nueva" type="button"><i class="fas fa-plus"></i> Nueva aerolínea</button></div>
+        <div id="bol-aerolineas-wrap" class="grid g-2b"></div>
+      </div>
+      <div class="bol-tab-panel" data-bol-panel="precios" style="display:none">
+        <div class="tbar" style="margin-bottom:12px"><button class="btn-sm" id="bol-precio-nuevo" type="button"><i class="fas fa-plus"></i> Cargar precio</button></div>
+        <div id="bol-precios-wrap"></div>
+      </div>
+      <div class="bol-tab-panel" data-bol-panel="requisitos" style="display:none">
+        <div class="tbar" style="margin-bottom:12px"><button class="btn-sm" id="bol-requisito-nuevo" type="button"><i class="fas fa-plus"></i> Nuevo país</button></div>
+        <div id="bol-requisitos-wrap" class="grid g-2b"></div>
+      </div>
+      <div class="bol-tab-panel" data-bol-panel="calendario" style="display:none">
+        <div class="tbar" style="margin-bottom:12px"><button class="btn-sm" id="bol-temporada-nueva" type="button"><i class="fas fa-plus"></i> Nueva temporada</button></div>
+        <div id="bol-calendario-wrap" class="grid g-2b"></div>
+      </div>
+    </section>
+
     <div class="foot-note">Datos reales · Destino y Eventos Lotus 360 CRM</div>
   </main>
   <!-- Fondos de sheet/drawer viven ACÁ ADENTRO de .app (no como hermanos de
@@ -4000,16 +4091,16 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 <nav class="bottom-nav">
   <a class="bn-item active" data-sec="hoy"><i class="fas fa-house"></i> Hoy</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i><span class="bn-badge" id="nav-lead-count-m"></span> Leads</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok" id="bn-more"><i class="fas fa-user"></i> Yo</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" id="bn-more"><i class="fas fa-user"></i> Yo</a>
 </nav>
 
 <!-- Hoja "Más" (móvil) — resto de secciones, filtradas por rol igual que el sidebar -->
 <div class="sheet" id="more-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title">Yo</div>
-  <a class="sheet-perfil-card nav-marketing-ok nav-boleteria-ok" id="sheet-item-perfil">
+  <a class="sheet-perfil-card nav-marketing-ok nav-boleteria-ok nav-prueba-ok" id="sheet-item-perfil">
     <div class="avatar" id="side-avatar-m">·</div>
     <div style="flex:1;text-align:left"><div class="un" id="side-un-m">—</div><div class="ue" id="side-ue-m">—</div></div>
     <i class="fas fa-chevron-right" style="color:var(--muted2);font-size:12px"></i>
@@ -4024,10 +4115,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <button onclick="activarRecordatorios()">Activar</button>
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales <span class="si-sub">Disponibilidad de hoteles (BT Travel)</span></a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales <span class="si-sub">Disponibilidad de hoteles (BT Travel)</span></a>
   <a class="sheet-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas</a>
-  <a class="sheet-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+  <a class="sheet-item nav-marketing-ok nav-prueba-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA <span class="si-sub">Ventas, calidad, errores y costos</span></a>
   <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA <span class="si-sub">Posadas que quieren el asistente</span></a>
@@ -4042,11 +4133,12 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <a class="sheet-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
   <a class="sheet-item nav-admin-only solo-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
   <a class="sheet-item nav-boleteria-ok solo-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
   <a class="sheet-item nav-admin-only" data-sec="proyecto-constructor"><i class="fas fa-drafting-compass"></i> Proyecto Constructor <span class="si-sub">Avance del CRM que se vende a otras empresas</span></a>
+  <a class="sheet-item nav-boleteria-ok nav-prueba-ok" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
   <a class="sheet-item" data-refresh><i class="fas fa-rotate"></i> Actualizar CRM <span class="si-sub">Trae la última versión, igual que Ctrl+Shift+R</span></a>
-  <a class="sheet-item" id="sheet-item-logout" style="color:#ff6b6b"><i class="fas fa-right-from-bracket"></i> Cerrar sesión</a>
+  <a class="sheet-item nav-prueba-ok" id="sheet-item-logout" style="color:#ff6b6b"><i class="fas fa-right-from-bracket"></i> Cerrar sesión</a>
 </div>
 
 <!-- Tutorial: overlay del recorrido guiado -->
