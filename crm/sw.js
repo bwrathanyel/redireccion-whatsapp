@@ -10,7 +10,7 @@
 // apuntando a index.html) siempre pegaba ese camino roto; una pestaña normal
 // del navegador no, porque pedía '/' directo. Se cachea './' en vez de
 // './index.html' para no arrastrar el redirect.
-const CACHE_VERSION = 'lotus-crm-shell-v97';
+const CACHE_VERSION = 'lotus-crm-shell-v98';
 const SHELL_FILES = [
   './',
   './app.js',

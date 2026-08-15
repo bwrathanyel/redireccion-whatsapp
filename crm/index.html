@@ -1259,7 +1259,11 @@ body.modo-boleteria{--accent:#2e6bff;--accent-soft:rgba(46,107,255,.16);--bg:#07
 body.modo-boleteria .sidebar{background:linear-gradient(180deg,rgba(10,16,40,.96),rgba(6,10,26,.98))}
 body.modo-boleteria .seg.on{color:#bcd4ff}
 /* Menú reemplazado entero, mismo mecanismo que rol-marketing/rol-boleteria/rol-prueba. */
-body.modo-boleteria .nav-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .bn-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .sheet-item:not(.nav-modo-boleteria-ok){display:none}
+body.modo-boleteria .nav-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .bn-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .sheet-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .nav-label{display:none}
+/* Los ítems que SOLO existen dentro del modo (no son parte del menú normal
+   de nadie) tienen que estar ocultos fuera de él -- si no, se filtran al
+   menú normal para todos (bug real, visto en vivo). */
+body:not(.modo-boleteria) .nav-modo-boleteria-solo{display:none}
 .modo-boleteria-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(46,107,255,.14);border:1px solid rgba(74,158,255,.4);border-radius:10px;color:#7fb0ff;font-weight:600;font-size:12.5px;padding:9px 10px;cursor:pointer;font-family:inherit;margin-bottom:8px}
 .modo-boleteria-btn:hover{background:rgba(46,107,255,.24)}
 body.modo-boleteria #btn-entrar-modo-boleteria,body.modo-boleteria #sheet-entrar-modo-boleteria{display:none}
@@ -2197,6 +2201,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <div class="nav-label" data-label="principal">Principal</div>
+      <a class="nav-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="nav-boleteria-home" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
       <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
       <a class="nav-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA</a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales</a>
@@ -2227,7 +2232,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
       <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
       <a class="nav-item nav-admin-only" data-sec="proyecto-constructor"><i class="fas fa-drafting-compass"></i> Proyecto Constructor</a>
-      <a class="nav-item nav-modo-boleteria-ok" id="nav-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
+      <a class="nav-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="nav-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
     </nav>
     <div class="side-foot side-foot-col">
       <button class="modo-boleteria-btn" id="btn-entrar-modo-boleteria" type="button" title="Cambiar a modo Boletería"><i class="fas fa-plane-departure"></i> Boletería</button>
@@ -4144,7 +4149,8 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
   <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
   <a class="sheet-item nav-admin-only" data-sec="proyecto-constructor"><i class="fas fa-drafting-compass"></i> Proyecto Constructor <span class="si-sub">Avance del CRM que se vende a otras empresas</span></a>
-  <a class="sheet-item nav-modo-boleteria-ok" id="sheet-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
+  <a class="sheet-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="sheet-boleteria-home" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
+  <a class="sheet-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="sheet-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
   <a class="sheet-item" id="sheet-entrar-modo-boleteria"><i class="fas fa-plane-departure"></i> Boletería <span class="si-sub">Cambiar a modo Boletería</span></a>
   <a class="sheet-item" id="sheet-salir-modo-boleteria"><i class="fas fa-arrow-left"></i> Volver a Hospedajes</a>
   <a class="sheet-item" data-refresh><i class="fas fa-rotate"></i> Actualizar CRM <span class="si-sub">Trae la última versión, igual que Ctrl+Shift+R</span></a>
