@@ -48,6 +48,12 @@ try {
   --accent:#ff9100; --accent-soft:rgba(255,145,0,.14);
   --blue:#4a9eff; --green:#10b981; --purple:#a06bff; --amber:#f5b544; --pink:#ff5c8a; --wa:#25D366;
   --safe-b:env(safe-area-inset-bottom,0px);
+  /* Fase 6 -- escala de movimiento. El CSS no tenía una: cada transición
+     inventaba su propia duración (.24s acá, .3s allá). --ease-salida ya
+     se usaba hardcodeado en .sheet/.mfs/tour/drawer (5+ lugares); queda
+     como token para no seguir repitiendo el mismo cubic-bezier a mano. */
+  --ease-salida:cubic-bezier(.3,1,.4,1);
+  --dur-rapida:.18s; --dur-normal:.26s; --dur-hoja:.32s;
 }
 /* Tema claro (Bloque 8, opt-in en Mi Perfil -- por defecto sigue oscuro,
    que es como está diseñada la app desde siempre). Solo se pisan los
@@ -185,6 +191,11 @@ body:has(#vista-previa-banner){padding-top:36px}
 
 /* ---------- Bottom nav (mobile) ---------- */
 .bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:50;background:rgba(11,15,28,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line2);padding:6px 6px calc(10px + var(--safe-b));justify-content:space-around}
+/* Fase 5.2 -- barrita bajo el ítem activo. left/width los pone JS
+   (actualizarIndicadorSwipe/posicionarIndicadorActivo); sin transition a
+   propósito -- durante el drag tiene que seguir al dedo cuadro a cuadro,
+   una transition la dejaría siempre un paso atrás. */
+.bn-indicator{position:absolute;bottom:2px;height:3px;border-radius:2px;background:var(--accent);pointer-events:none}
 .bn-item{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px;min-height:48px;color:#d7dbe6;text-decoration:none;font-size:10.5px;font-weight:600;cursor:pointer;border-radius:12px;transition:color .15s;position:relative}
 .bn-item i{font-size:18px}
 /* El nombre en un blanco casi pleno: en var(--muted) apenas se leía sobre el
@@ -225,6 +236,12 @@ body:has(#vista-previa-banner){padding-top:36px}
    se registró, sin animar la sección entera (costoso y mareador). */
 @keyframes sw-izq{from{transform:translateX(26px);opacity:.55}to{transform:none;opacity:1}}
 @keyframes sw-der{from{transform:translateX(-26px);opacity:.55}to{transform:none;opacity:1}}
+/* Fase 6 -- entrada escalonada de listas. backwards, NUNCA both: both
+   dejaría el transform pegado para siempre después de terminar y volvería
+   a romper el containing block de position:fixed (mismo riesgo #1 que ya
+   se vio dos veces esta sesión con otras propiedades) -- ver comentario
+   de .section.active más abajo, es la misma lección. */
+@keyframes card-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 body.swipe-izq .section.active{animation:sw-izq .24s ease-out}
 body.swipe-der .section.active{animation:sw-der .24s ease-out}
 .mobile-brand{display:none}
@@ -242,6 +259,14 @@ body.swipe-der .section.active{animation:sw-der .24s ease-out}
 .sheet.open{transform:translateY(0);box-shadow:0 -20px 50px rgba(0,0,0,.4)}
 .sheet-handle{width:40px;height:4px;background:var(--line2);border-radius:3px;margin:6px auto 16px}
 .sheet-title{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+/* Fase 4.1 -- botón "Ordenar": segunda puerta de entrada, solo móvil (en
+   escritorio el thead con los .th-sort ya está visible). */
+.ordenar-trigger-movil{display:none}
+.ordenar-lista{display:flex;flex-direction:column;gap:6px;padding:4px 0 10px}
+.ordenar-op{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left;padding:12px 14px;border-radius:10px;border:1px solid var(--line2);background:var(--panel-solid);color:var(--txt);font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer}
+.ordenar-op.on{border-color:var(--accent);color:var(--accent)}
+.ordenar-op .oo-arrow{font-size:12px}
+@media(max-width:760px){.ordenar-trigger-movil{display:flex;align-items:center;gap:6px;min-height:44px}}
 .sheet-item{display:flex;align-items:center;gap:14px;min-height:52px;padding:0 6px;color:var(--txt);text-decoration:none;font-size:15px;font-weight:600;border-bottom:1px solid var(--line);cursor:pointer}
 .sheet-item:last-child{border-bottom:none}
 .sheet-perfil-card{display:flex;align-items:center;gap:12px;padding:10px 6px 16px;color:var(--txt);text-decoration:none;cursor:pointer}
@@ -415,6 +440,21 @@ select.flt:focus{border-color:var(--accent)}
 input.flt{background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:9px 12px;color:var(--txt);font-size:12.5px;font-family:inherit;outline:none}
 input.flt:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .tcount{margin-left:auto;font-size:12px;color:var(--muted)}
+/* Indicador de salud del canal en vivo -- solo Leads en móvil (ver bloque
+   @media(max-width:760px)). En escritorio queda oculto: Regla #1 del plan
+   de rediseño, el único cambio de escritorio autorizado es la tarjeta de
+   lead (Fase 2.6), esto no lo es. */
+.leads-pipeline-head{justify-content:flex-end}
+.live-indicator{display:none;align-items:center;gap:6px}
+.live-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--muted);transition:background .3s}
+.live-dot.vivo{background:#22c55e;box-shadow:0 0 0 3px #22c55e22}
+.live-dot.caido{background:#6b7280}
+.live-status{font-size:11.5px;color:var(--muted)}
+.live-status:empty{display:none}
+@media(max-width:760px){.live-indicator{display:flex}.leads-pipeline-head{justify-content:space-between}}
+.lead-conflict-bar{align-items:flex-start;gap:8px;background:#f59e0b14;border:1px solid #f59e0b33;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;line-height:1.5}
+.lead-conflict-bar i{color:#f59e0b;margin-top:1px;flex-shrink:0}
+.lead-conflict-bar b{color:#f59e0b}
 .drp{position:relative}
 .drp-btn{display:inline-flex;align-items:center;gap:8px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:9px 14px;color:var(--txt);font-size:12.5px;font-family:inherit;cursor:pointer;transition:border-color .15s}
 .drp-btn:hover{border-color:var(--accent)}
@@ -444,6 +484,7 @@ input.flt:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-sof
 table{width:100%;border-collapse:collapse}
 thead th{text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line)}
 tbody td{padding:12px 12px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+tbody td.td-acciones{display:flex;gap:6px}
 tbody tr{cursor:pointer;transition:.12s}
 tbody tr:hover{background:rgba(255,145,0,.05)}
 .lead-name{font-weight:600;display:flex;align-items:center;gap:10px}
@@ -580,12 +621,26 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 
 /* toasts */
 #toasts{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:10px;z-index:62}
+/* Fase 5.4 -- pull-to-refresh. left/transform los pone JS a partir del
+   arrastre; sin transition en el drag (mismo motivo que .bn-indicator:
+   tiene que seguir al dedo cuadro a cuadro). */
+.ptr-indicador{position:fixed;top:0;left:50%;width:38px;height:38px;border-radius:50%;background:var(--panel-solid);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;z-index:60;box-shadow:0 6px 16px rgba(0,0,0,.35);opacity:0;pointer-events:none;font-size:14px;color:var(--muted)}
+.ptr-indicador.show{opacity:1}
+.ptr-indicador.listo{color:var(--accent);border-color:rgba(255,145,0,.5)}
+.ptr-indicador.cargando i{animation:ptr-spin .7s linear infinite}
+@keyframes ptr-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.ptr-indicador.cargando i{animation:none}}
 .toast{display:flex;align-items:center;gap:12px;background:var(--panel-solid);border:1px solid rgba(37,211,102,.4);border-left:4px solid var(--green);border-radius:12px;padding:13px 16px;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.5);transform:translateX(130%);opacity:0;transition:.3s cubic-bezier(.3,1,.4,1);max-width:300px}
 .toast.show{transform:translateX(0);opacity:1}
 .toast i{color:var(--green);font-size:16px}.toast b{color:#fff;font-weight:700}
 .toast-err{border-color:rgba(239,68,68,.4);border-left-color:#ef4444}.toast-err i{color:#ef4444}
 
 .section{display:none}.section.active{display:block}
+/* Swipe entre secciones (Fase 5.2) -- la vecina se asoma superpuesta sobre
+   la activa mientras dura el gesto. .main pasa a position:relative SOLO
+   durante el gesto (setupSwipeSecciones lo agrega/saca por JS) para que
+   esto se posicione contra .main y no contra el viewport entero. */
+.section.swipe-peek{display:block;position:absolute;top:0;left:0;width:100%}
 /* formulario de edición (drawer) */
 .edit-box{background:rgba(255,145,0,.05);border:1px solid rgba(255,145,0,.18);border-radius:14px;padding:15px;margin-bottom:18px}
 .eb-title{font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:7px;margin-bottom:6px}
@@ -667,6 +722,14 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 @keyframes fadeSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .edit-err{color:#ff6b6b;font-size:12px;min-height:14px;margin:8px 0 2px}
 .dbtn.save{background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;width:100%;margin-top:10px}
+/* Fase 6 -- guardar -> check animado (guardarLead por ahora; el patrón
+   queda listo para sumar a otros botones .save si se quiere más adelante). */
+.dbtn.save.guardado-ok{background:linear-gradient(135deg,#10b981,#059669)}
+.dbtn.save.guardado-ok i{display:inline-block;animation:check-pop var(--dur-normal) var(--ease-salida)}
+@keyframes check-pop{from{transform:scale(0)}to{transform:scale(1)}}
+.dbtn.destructivo{background:#ef4444;color:#fff}
+.confirmar-sheet-detalle{font-size:13px;line-height:1.6;color:var(--muted);white-space:pre-line;margin-top:6px}
+.confirmar-sheet-detalle:empty{display:none}
 #vc-generar-btn{background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:12px;padding:15px 30px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:10px;transition:filter .15s,transform .15s,box-shadow .15s;box-shadow:0 10px 24px rgba(255,145,0,.32)}
 #vc-generar-btn i{font-size:16px}
 #vc-generar-btn:hover{filter:brightness(1.08);transform:translateY(-2px);box-shadow:0 14px 28px rgba(255,145,0,.42)}
@@ -890,7 +953,27 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
    largo no desborde la tarjeta. */
 .entity-card .ec-foot-cols{flex-direction:column;align-items:stretch;justify-content:flex-start;flex-wrap:nowrap}
 .entity-card .ec-badges{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
-.entity-card .ec-actions{display:flex;align-items:center;gap:8px}
+.entity-card .ec-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+/* Tarjeta de lead rediseñada (Fase 2.6): nombre+destino protagonistas,
+   estado arriba (no enterrado en el pie), contexto en una sola línea muted.
+   Única excepción autorizada a "no tocar escritorio" del plan de rediseño --
+   el resto de las reglas de acá abajo aplican en los dos anchos por diseño. */
+.entity-card .ec-headtext{flex:1;min-width:0}
+.entity-card .ec-destino{display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.entity-card .ec-destino i{color:var(--muted2);font-size:11px;flex-shrink:0}
+.entity-card .ec-estado-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.entity-card .ec-context{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:8px}
+.entity-card .ec-dot{color:var(--muted2)}
+/* Sin atender/Atender: dato calculado una vez en JS (rol+estado), pero la
+   VISIBILIDAD por ancho es puramente CSS -- antes se decidía con
+   matchMedia() al armar el HTML, así que una tarjeta ya impresa no
+   reaccionaba a rotar el teléfono hasta el próximo refresh. */
+.sin-atender-movil,.atender-movil{display:none}
+@media(max-width:760px){
+  .sin-atender-movil{display:inline-flex}
+  .atender-movil{display:block}
+  .entity-card.tiene-sin-atender .estado-stepper{display:none}
+}
 #tbl-wrap.hide,#rg-wrap.hide,#wr-tbl-wrap.hide{display:none}
 
 /* ---------- Personal (Gestión de Personal > tarjetas del equipo) ---------- */
@@ -1258,6 +1341,11 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
   tbody td.td-wa{padding-top:10px;margin-top:4px;border-top:1px solid var(--line)}
   tbody td.td-wa::before{content:'WhatsApp'}
   .wa-btn{width:44px;height:44px}
+  /* Fase 3.3 -- con botones de 44px, dos ya no entran alineados a la
+     derecha como en escritorio (ver regla base tbody td.td-acciones). */
+  tbody td.td-acciones{flex-direction:column;align-items:stretch;gap:8px;padding-top:10px;margin-top:4px;border-top:1px solid var(--line)}
+  tbody td.td-acciones::before{display:none}
+  tbody td.td-acciones .btn-sm{width:100%}
   /* área táctil mínima 44x44 (iOS) / 48x48 (Android) en controles chicos */
   .logout-btn{width:44px;height:44px}
   .cot-f-clear{width:44px;height:44px}
@@ -1266,6 +1354,43 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
   .fchip b{padding:6px}
   .drp-btn,.reload-btn,.tar-f-check,select.flt,#tar-f-precio,#cot-f-precio,.pager button,.clear-all{min-height:44px}
   .seg{min-height:44px}
+  /* Fase 3.2 -- targets dentro de filas de tabla, los más tocados y los que
+     quedaban afuera de la lista de arriba (medidos: .btn-sm ~28px/24 usos,
+     .ce-mini ~29px/13 usos, .estado-arrow ~17px, .fact-btn 34px, .refresh-btn
+     32px). Todo dentro de este bloque -- ninguna de estas reglas toca escritorio. */
+  .btn-sm,.ce-mini,.drp-presets button,.jornada-btn,.tfa-btn{min-height:44px;padding:11px 14px;font-size:13px}
+  .fact-btn,.refresh-btn,.pc-edit,.rb-close,.pf-cerrar{width:44px;height:44px}
+  .estado-arrow{min-width:44px;min-height:44px;padding:8px}
+  .peso-row button,.pc-cargo-edit{min-height:44px;min-width:44px}
+  .tar-info-box summary{padding:12px 0}
+  /* Fase 6 -- feedback táctil consistente. Ya había 7 selectores sueltos
+     con :active{transform:scale(...)} en distintos valores (.96/.97/.98,
+     ver .kpi/.reload-btn/.dbtn.save/etc); esos quedan como están, esta
+     regla suma los elementos que NO tenían ninguno -- tarjetas, filas,
+     botones chicos, ítems de la bottom-nav. Un solo valor (.97) para que
+     se sienta parejo en toda la app. */
+  .entity-card:active,.btn-sm:active,.post-card:active,.tarea-card:active,
+  tbody tr:active,.bn-item:active,.inbox-card:active,.wa-btn:active,.fact-btn:active{
+    transform:scale(.97);transition:transform var(--dur-rapida) var(--ease-salida);
+  }
+  /* Entrada escalonada (Fase 6) -- solo la carga inicial de la lista
+     (.entrada-lista, la agrega/saca loadTable() por JS), no cada parche en
+     vivo de un lead individual: si no, un lead actualizándose por Realtime
+     volvería a jugar esta animación en vez de solo el destello de
+     .lead-actualizado. Techo en los primeros 12 -- el resto entra sin delay. */
+  #leads-cards.entrada-lista>.entity-card{animation:card-in var(--dur-normal) var(--ease-salida) backwards}
+  #leads-cards.entrada-lista>.entity-card:nth-child(1){animation-delay:0ms}
+  #leads-cards.entrada-lista>.entity-card:nth-child(2){animation-delay:40ms}
+  #leads-cards.entrada-lista>.entity-card:nth-child(3){animation-delay:80ms}
+  #leads-cards.entrada-lista>.entity-card:nth-child(4){animation-delay:120ms}
+  #leads-cards.entrada-lista>.entity-card:nth-child(5){animation-delay:160ms}
+  #leads-cards.entrada-lista>.entity-card:nth-child(6){animation-delay:200ms}
+  #leads-cards.entrada-lista>.entity-card:nth-child(7){animation-delay:240ms}
+  #leads-cards.entrada-lista>.entity-card:nth-child(8){animation-delay:280ms}
+  #leads-cards.entrada-lista>.entity-card:nth-child(9){animation-delay:320ms}
+  #leads-cards.entrada-lista>.entity-card:nth-child(10){animation-delay:360ms}
+  #leads-cards.entrada-lista>.entity-card:nth-child(11){animation-delay:400ms}
+  #leads-cards.entrada-lista>.entity-card:nth-child(n+12){animation-delay:440ms}
   /* drawer -> hoja inferior */
   .drawer{top:auto;bottom:0;left:0;right:0;width:100%;max-width:100%;height:auto;max-height:90vh;border-left:none;border-top:1px solid var(--line2);border-radius:22px 22px 0 0;transform:translateY(100%);padding:22px 20px calc(22px + var(--safe-b))}
   .drawer.open{transform:translateY(0)}
@@ -2195,7 +2320,11 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       </div>
 
       <div class="leads-tab-panel" data-leads-panel="pipeline">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <div class="leads-pipeline-head" style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div class="live-indicator" id="leads-live-indicator">
+            <span class="live-dot" id="leads-live-dot" title="Conectado en vivo"></span>
+            <span class="live-status" id="leads-live-status"></span>
+          </div>
           <button class="dbtn save" id="nl-abrir-btn" type="button" style="width:auto;flex:none;padding:8px 14px"><i class="fas fa-user-plus"></i> Nuevo lead</button>
         </div>
         <div class="leads-inbox" id="leads-inbox">
@@ -2637,6 +2766,32 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 
       <!-- POSTULACIONES -->
       <div class="gp-tab-panel" data-gp-panel="postulaciones" style="display:none">
+        <!-- Trigger + panel fuera de .card -- ver comentario igual en el
+             panel de Ventas (backdrop-filter de .card rompe position:fixed). -->
+        <button class="mfs-trigger mfs-icon" data-mfs="post-filtros" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
+        <div class="mfs" id="post-filtros" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <select class="flt" id="post-f-modalidad">
+            <option value="">Todas las modalidades</option>
+            <option value="presencial">Presencial</option>
+            <option value="freelance">Freelance</option>
+          </select>
+          <select class="flt" id="post-f-llamada">
+            <option value="">Cualquier estado de llamada</option>
+            <option value="pendiente">Pendiente de llamar</option>
+            <option value="llamado">Llamado</option>
+          </select>
+          <select class="flt" id="post-f-calidad">
+            <option value="">Cualquier calificación</option>
+            <option value="sin_calificar">Sin calificar</option>
+            <option value="excelente">Excelente</option>
+            <option value="bueno">Bueno</option>
+            <option value="debil">Débil</option>
+            <option value="descartado">Descartado</option>
+          </select>
+          <label class="tar-f-check"><input type="checkbox" id="post-f-sin-revisar"> Solo sin revisar</label>
+          <button class="btn-sm" type="button" id="post-reanalizar-todas" style="margin-left:auto" title="Vuelve a evaluar todos los CVs guardados con el criterio actual. No toca los datos de contacto."><i class="fas fa-wand-magic-sparkles"></i> Re-analizar todas</button>
+          <button class="mfs-done" data-mfs="post-filtros" type="button">Listo</button>
+        </div>
         <div class="card">
           <div class="chead-row">
             <h2><i class="fas fa-address-card"></i> Postulaciones</h2>
@@ -2648,33 +2803,12 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
             </div>
           </div>
           <div class="csub">Candidatos de "Trabaja con nosotros" y CVs cargados a mano (los que llegan por correo)</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-            <select class="flt" id="post-f-modalidad">
-              <option value="">Todas las modalidades</option>
-              <option value="presencial">Presencial</option>
-              <option value="freelance">Freelance</option>
-            </select>
-            <select class="flt" id="post-f-llamada">
-              <option value="">Cualquier estado de llamada</option>
-              <option value="pendiente">Pendiente de llamar</option>
-              <option value="llamado">Llamado</option>
-            </select>
-            <select class="flt" id="post-f-calidad">
-              <option value="">Cualquier calificación</option>
-              <option value="sin_calificar">Sin calificar</option>
-              <option value="excelente">Excelente</option>
-              <option value="bueno">Bueno</option>
-              <option value="debil">Débil</option>
-              <option value="descartado">Descartado</option>
-            </select>
-            <label class="tar-f-check"><input type="checkbox" id="post-f-sin-revisar"> Solo sin revisar</label>
-            <button class="btn-sm" type="button" id="post-reanalizar-todas" style="margin-left:auto" title="Vuelve a evaluar todos los CVs guardados con el criterio actual. No toca los datos de contacto."><i class="fas fa-wand-magic-sparkles"></i> Re-analizar todas</button>
-          </div>
           <div class="bulk-bar" id="post-bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
             <span id="post-bulk-count" style="font-size:13.5px;font-weight:600"></span>
             <button class="dbtn" id="post-bulk-clear" type="button" style="width:auto;padding:6px 12px">Cancelar selección</button>
             <button class="dbtn" id="post-bulk-eliminar" type="button" style="width:auto;padding:6px 12px;background:#ef4444;color:#fff;margin-left:auto"><i class="fas fa-trash"></i> Eliminar seleccionados</button>
           </div>
+          <div class="tbl-state skel-grid" id="post-loading"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>
           <div style="overflow-x:auto" id="post-vista-lista">
             <table>
               <thead><tr>
@@ -2686,6 +2820,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           </div>
           <div id="post-vista-tarjetas" class="post-grid" style="display:none"></div>
           <div id="post-empty" class="tbl-state" style="display:none"><i class="fas fa-address-card"></i><div class="es-t">Sin postulaciones</div><div class="es-s">No hay candidatos con estos filtros</div></div>
+          <div class="pager" id="post-pager" style="display:none"><button id="post-cargar-mas-btn" class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasPostulaciones()">Cargar más</button></div>
         </div>
       </div>
       <!-- REASIGNACIONES (antes sección suelta del menú) -->
@@ -2787,10 +2922,32 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       </div>
 
       <div class="fact-tab-panel" data-fact-panel="ventas">
+        <!-- Trigger + panel fuera de .card a propósito: .card tiene
+             backdrop-filter (blur), que igual que un transform residual
+             crea containing block para position:fixed y manda la hoja
+             lejos del viewport (bug real, encontrado verificando esta
+             misma fase). El patrón que ya funciona en Leads (leads-tbar)
+             tampoco anida su .mfs dentro de .card -- por eso nunca lo pisó. -->
+        <button class="mfs-trigger mfs-icon" data-mfs="fact-ventas-filtros" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
+        <div class="mfs" id="fact-ventas-filtros" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <select class="flt" id="fact-estado">
+            <option value="">Todos los estados</option>
+            <option value="pagada">Pagada</option>
+            <option value="anulada">Anulada</option>
+          </select>
+          <select class="flt" id="fact-mes">
+            <option value="">Todos los meses</option>
+          </select>
+          <select class="flt" id="fact-asesor">
+            <option value="">Todos los asesores</option>
+          </select>
+          <button class="mfs-done" data-mfs="fact-ventas-filtros" type="button">Listo</button>
+        </div>
         <div class="card">
           <div class="chead-row">
             <h2><i class="fas fa-file-invoice-dollar"></i> Ventas</h2>
             <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="fact-ventas-search" placeholder="Buscar cliente o asesor..."></div>
+            <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('ventas')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
             <button class="btn-sm" id="fact-nuevo-cliente-btn"><i class="fas fa-user-plus"></i> Nuevo cliente</button>
             <div class="export-dd">
               <button class="btn-sm" onclick="toggleExportMenu(event,'ventas')"><i class="fas fa-download"></i> Exportar tabla</button>
@@ -2802,19 +2959,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
             </div>
           </div>
           <div class="csub">Precio de venta, costo neto (cargado en Postventa) y margen por venta · tocá un encabezado para ordenar</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-            <select class="flt" id="fact-estado">
-              <option value="">Todos los estados</option>
-              <option value="pagada">Pagada</option>
-              <option value="anulada">Anulada</option>
-            </select>
-            <select class="flt" id="fact-mes">
-              <option value="">Todos los meses</option>
-            </select>
-            <select class="flt" id="fact-asesor">
-              <option value="">Todos los asesores</option>
-            </select>
-          </div>
+          <div class="tbl-state skel" id="fact-ventas-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
           <div style="overflow-x:auto">
             <table>
               <thead><tr>
@@ -2833,6 +2978,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
               <tfoot><tr class="tfoot-sum"><td colspan="3">Totales</td><td id="fact-sum-venta">—</td><td id="fact-sum-costo">—</td><td id="fact-sum-margen">—</td><td colspan="4"></td></tr></tfoot>
             </table>
           </div>
+          <div class="pager" id="fact-ventas-pager" style="display:none"><button class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasVentas()">Cargar más</button></div>
         </div>
       </div>
 
@@ -2841,6 +2987,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           <div class="chead-row">
             <h2><i class="fas fa-sack-dollar"></i> Comisiones</h2>
             <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="fact-com-search" placeholder="Buscar asesor..."></div>
+            <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('comisiones')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
             <div class="export-dd">
               <button class="btn-sm" onclick="toggleExportMenu(event,'comisiones')"><i class="fas fa-download"></i> Exportar tabla</button>
               <div class="export-dd-menu" id="export-menu-comisiones">
@@ -2851,6 +2998,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
             </div>
           </div>
           <div class="csub">Tocá "Editar %" para pisar el % de una venta puntual · tocá un encabezado para ordenar</div>
+          <div class="tbl-state skel" id="fact-com-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
           <div style="overflow-x:auto">
             <table>
               <thead><tr>
@@ -2864,6 +3012,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
               <tbody id="fact-com-tbody"></tbody>
             </table>
           </div>
+          <div class="pager" id="fact-com-pager" style="display:none"><button class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasComisiones()">Cargar más</button></div>
         </div>
       </div>
 
@@ -2872,6 +3021,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           <div class="chead-row">
             <h2><i class="fas fa-file-invoice"></i> Cuentas por Pagar</h2>
             <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="cxp-search" placeholder="Buscar proveedor o cliente..."></div>
+            <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('cxp')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
             <div class="export-dd">
               <button class="btn-sm" onclick="toggleExportMenu(event,'cxp')"><i class="fas fa-download"></i> Exportar tabla</button>
               <div class="export-dd-menu" id="export-menu-cxp">
@@ -2882,6 +3032,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
             </div>
           </div>
           <div class="csub">Lo que le debemos a cada proveedor por reservas ya vendidas · tocá un encabezado para ordenar</div>
+          <div class="tbl-state skel" id="cxp-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
           <div style="overflow-x:auto">
             <table>
               <thead><tr>
@@ -2897,6 +3048,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
               <tfoot><tr class="tfoot-sum"><td colspan="2">Totales</td><td id="cxp-sum-transferir">—</td><td id="cxp-sum-abonado">—</td><td id="cxp-sum-saldo">—</td><td colspan="2"></td></tr></tfoot>
             </table>
           </div>
+          <div class="pager" id="cxp-pager" style="display:none"><button class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasCxp()">Cargar más</button></div>
         </div>
       </div>
 
@@ -2905,6 +3057,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           <div class="chead-row">
             <h2><i class="fas fa-percent"></i> Comisión por asesor</h2>
             <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="fact-asesores-search" placeholder="Buscar asesor..."></div>
+            <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('asesores')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
             <div class="export-dd">
               <button class="btn-sm" onclick="toggleExportMenu(event,'asesores')"><i class="fas fa-download"></i> Exportar tabla</button>
               <div class="export-dd-menu" id="export-menu-asesores">
@@ -2928,6 +3081,17 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         </div>
       </div>
     </section>
+
+    <!-- Hoja "Ordenar" (Fase 4.1) -- segunda puerta de entrada al MISMO
+         ordenamiento que ya viven los <th class="th-sort"> del thead, que
+         queda oculto en móvil. Las opciones se arman leyendo esos mismos
+         <th> en JS (abrirOrdenarSheet), no hay una lista duplicada acá. -->
+    <div class="sheet" id="ordenar-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Ordenar por</div>
+      <div id="ordenar-sheet-lista" class="ordenar-lista"></div>
+      <div style="padding:10px 6px 0"><button class="dbtn" type="button" onclick="closeSheet('ordenar-sheet')">Listo</button></div>
+    </div>
 
     <!-- Hoja genérica de un solo monto -- reusada por "Editar %" de comisión y
          "Registrar abono" de cuentas por pagar, para no abrir un drawer nuevo
@@ -3177,12 +3341,24 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <div style="margin-top:16px;display:flex;gap:10px">
           <button id="vc-generar-btn" onclick="generarVoucherPdf()"><i class="fas fa-file-pdf"></i> Generar PDF</button>
         </div>
-        <div class="csub" id="vc-historial-sub" style="margin-top:24px">Registro de vouchers generados</div>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px">
-          <div class="field" style="flex:2;min-width:220px"><label class="fl">Buscar (cliente o asesor)</label><input id="vc-buscar" class="ei" placeholder="Nombre..."></div>
-          <div class="field" style="flex:1;min-width:150px"><label class="fl">Desde</label><input id="vc-filtro-desde" class="ei" type="date"></div>
-          <div class="field" style="flex:1;min-width:150px"><label class="fl">Hasta</label><input id="vc-filtro-hasta" class="ei" type="date"></div>
-        </div>
+      </div>
+
+      <!-- Card aparte para el historial (antes compartía card con el
+           formulario de arriba). Trigger + panel de filtros fuera de .card
+           a propósito: .card tiene backdrop-filter (blur), que igual que un
+           transform residual crea containing block para position:fixed y
+           manda la hoja lejos del viewport (bug real, encontrado
+           verificando esta misma fase -- ver mismo comentario en Ventas). -->
+      <button class="mfs-trigger mfs-icon" data-mfs="vc-filtros" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
+      <div class="mfs" id="vc-filtros" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px">
+        <div class="field" style="flex:2;min-width:220px"><label class="fl">Buscar (cliente o asesor)</label><input id="vc-buscar" class="ei" placeholder="Nombre..."></div>
+        <div class="field" style="flex:1;min-width:150px"><label class="fl">Desde</label><input id="vc-filtro-desde" class="ei" type="date"></div>
+        <div class="field" style="flex:1;min-width:150px"><label class="fl">Hasta</label><input id="vc-filtro-hasta" class="ei" type="date"></div>
+        <button class="mfs-done" data-mfs="vc-filtros" type="button">Listo</button>
+      </div>
+      <div class="card">
+        <div class="csub" id="vc-historial-sub">Registro de vouchers generados</div>
+        <div class="tbl-state skel" id="vc-historial-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
         <div style="overflow-x:auto">
           <table>
             <thead><tr><th>N° factura</th><th>Fecha y hora</th><th>Asesor</th><th>Cliente</th><th>Destino</th><th>Total</th><th>PDF</th></tr></thead>
@@ -4225,12 +4401,40 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 <div class="preview-pill" id="preview-pill"></div>
 <!-- Toasts -->
 <div id="toasts"></div>
+<!-- Pull-to-refresh (Fase 5.4). A nivel body, no dentro de .app -- mismo
+     motivo que #confirmar-sheet (index.html ~4351): .app tiene
+     isolation:isolate y atraparía el z-index contra el bottom-nav. -->
+<div class="ptr-indicador" id="ptr-indicador"><i class="fas fa-arrow-rotate-right"></i></div>
 
 <!-- Drawer -->
 <aside class="drawer" id="drawer">
   <button class="dclose" id="dClose" title="Cerrar" aria-label="Cerrar"><i class="fas fa-times"></i></button>
   <div id="drawerContent"></div>
 </aside>
+
+<!-- Hoja de confirmación genérica (Fase 4.4) -- reemplaza confirm() nativo
+     en toda la app. Ver confirmarSheet()/resolverConfirmarSheet() en
+     app.js: Promise<boolean>, resuelve false si se cierra por cualquier
+     otra vía (fondo, atrás de Android).
+     A NIVEL BODY a propósito, NO dentro de .main/.app: .app tiene
+     isolation:isolate (index.html linea ~1365), que atrapa el z-index de
+     cualquier hijo suyo dentro de un contexto de apilamiento aislado. El
+     bottom-nav vive fuera de .app con z-index:50 explícito, así que le
+     gana a cualquier z-index (por alto que sea) de un .sheet anidado
+     adentro de .app -- bug real, encontrado porque esta hoja es corta y
+     su botón queda justo en la franja del bottom-nav (ordenar-sheet/
+     monto-sheet nunca lo mostraron por tener contenido más largo, pero
+     tienen el mismo problema latente). #drawer ya vive acá afuera por la
+     misma razón -- mismo patrón, no un caso nuevo. -->
+<div class="sheet" id="confirmar-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title" id="confirmar-sheet-titulo">¿Confirmar?</div>
+  <div id="confirmar-sheet-detalle" class="confirmar-sheet-detalle"></div>
+  <div style="display:flex;gap:10px;padding:14px 0 0">
+    <button class="dbtn" id="confirmar-sheet-cancelar" type="button" style="flex:1">Cancelar</button>
+    <button class="dbtn save" id="confirmar-sheet-ok" type="button" style="flex:1">Confirmar</button>
+  </div>
+</div>
 
 <!-- Lightbox de fotos -->
 <div class="lightbox" id="lightbox">

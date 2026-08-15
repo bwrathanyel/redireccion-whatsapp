@@ -10,7 +10,7 @@
 // apuntando a index.html) siempre pegaba ese camino roto; una pestaña normal
 // del navegador no, porque pedía '/' directo. Se cachea './' en vez de
 // './index.html' para no arrastrar el redirect.
-const CACHE_VERSION = 'lotus-crm-shell-v93';
+const CACHE_VERSION = 'lotus-crm-shell-v94';
 const SHELL_FILES = [
   './',
   './app.js',
@@ -21,6 +21,8 @@ const SHELL_FILES = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
+  './icons/icon-maskable-192.png',
+  './icons/badge-72.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -126,10 +128,16 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(data.title || 'Destino y Eventos Lotus 360 CRM', {
     body: data.body || '',
     icon: './icons/icon-192.png',
-    badge: './icons/icon-192.png',
+    badge: './icons/badge-72.png',
     data: { url: data.url || './?accion=marcar-asistencia' },
     tag: data.critico ? 'asistencia-critico' : (data.tag || 'asistencia'),
     requireInteraction: !!data.critico,
+    renotify: true,
+    vibrate: data.critico ? [120, 50, 120, 50, 120] : [80, 40, 80],
+    timestamp: data.timestamp || Date.now(),
+    lang: 'es',
+    dir: 'ltr',
+    silent: false,
     actions: data.actions || undefined,
   }));
 });
@@ -151,4 +159,8 @@ self.addEventListener('notificationclick', (event) => {
       return self.clients.openWindow(url);
     })
   );
+});
+
+self.addEventListener('notificationclose', (event) => {
+  console.info('Notificación descartada', event.notification.tag);
 });

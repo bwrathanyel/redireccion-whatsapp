@@ -1,4 +1,4 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/+esm';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -72,7 +72,7 @@ async function subirDerivados(storagePath, file) {
   } catch (e) { console.warn('derivados', e); }
 }
 const SUPABASE_KEY = 'sb_publishable_M7Ms9DLwpNSCXZNCDhYtbQ_LhMYeLxk';
-const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { realtime: { params: { eventsPerSecond: 40 } } });
 
 const fmt = n => (n ?? 0).toLocaleString('es-VE');
 const tiempoRelativo = iso => {
@@ -103,11 +103,13 @@ const fullMonth = k => { const [y, m] = k.split('-'); return MESL[+m - 1] + ' ' 
 const ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'PERDIDO', 'NUMERO INVALIDO', 'Sin gestionar'];
 const ESTADOS_EDIT = ESTADOS;
 const ESTADO_COLORS = { 'POR ATENDER': '#ff9100', 'ATENDIDO': '#4a9eff', 'CLIENTE CONTACTADO': '#4a9eff', 'COTIZACION ENVIADA': '#a06bff', 'EN ESPERA DE PAGO': '#f5b544', 'PAGO REALIZADO': '#10b981', 'PERDIDO': '#ef4444', 'NUMERO INVALIDO': '#94a3b8', 'Sin gestionar': '#5f677f' };
-const PRIORIDAD_IA_ICONOS = { alta: ['🔥', '#ef4444'], media: ['●', '#f59e0b'], baja: ['○', '#8b93ad'] };
+const PRIORIDAD_IA_ICONOS = { alta: '🔥', media: '●', baja: '○' };
+// Usa .chip-prioridad + .alta/.media/.baja (index.html:164-168) -- ya
+// existían en el CSS pero nadie las consumía, esto rendía un glyph con color
+// inline suelto en vez de la píldora.
 function badgePrioridadIA(l) {
   if (!l.prioridad_ia || !PRIORIDAD_IA_ICONOS[l.prioridad_ia]) return '';
-  const [icono, color] = PRIORIDAD_IA_ICONOS[l.prioridad_ia];
-  return ` <span style="color:${color}" title="${esc(l.prioridad_ia_razon || '')}">${icono}</span>`;
+  return ` <span class="chip-prioridad ${l.prioridad_ia}" title="${esc(l.prioridad_ia_razon || '')}">${PRIORIDAD_IA_ICONOS[l.prioridad_ia]}</span>`;
 }
 function badgeNombreDudoso(l) {
   if (!l.nombre_dudoso) return '';
@@ -170,8 +172,16 @@ const val = id => document.getElementById(id).value;
 const niceEstado = v => (v === (v || '').toUpperCase() && (v || '').includes(' ')) ? v.charAt(0) + v.slice(1).toLowerCase() : v;
 const sortEntries = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]);
 
-let STATS = {}, page = 1, PER = 25, totalFiltered = 0;
+let STATS = {}, page = 1, PER = 25, totalFiltered = 0, genCarga = 0;
 let activeMonth = null, activeDestino = null, currentLead = null;
+// Conflicto en el lead abierto (falla #4 del plan de rediseño): si otra
+// sesión edita el mismo lead mientras alguien lo tiene abierto acá, guardar
+// mandaba el formulario entero y "último que guarda gana" sin aviso.
+// camposSuciosLead trackea qué inputs tocó el usuario -- esos NO se
+// sobreescriben cuando llega un UPDATE ajeno, el resto sí se refresca solo.
+let camposSuciosLead = new Set(), conflictoLeadPendiente = false;
+const FIELD_IDS_LEAD = ['e-estado', 'e-asesor', 'e-servicio', 'e-monto', 'e-comprado', 'e-nombre', 'e-telefono', 'e-canal', 'e-destino', 'e-personas', 'e-fecha-estimada', 'e-destino-consulta', 'e-monto-completo', 'e-monto-inicial', 'e-restante-pago', 'e-fecha'];
+const FIELD_LABELS_LEAD = { 'e-estado': 'Estado', 'e-asesor': 'Asesor asignado', 'e-servicio': 'Servicio de interés', 'e-monto': 'Monto de la venta', 'e-comprado': 'Servicios comprados', 'e-nombre': 'Nombre', 'e-telefono': 'Teléfono', 'e-canal': 'Canal', 'e-destino': 'Destino de interés', 'e-personas': 'Personas', 'e-fecha-estimada': 'Fecha de viaje', 'e-destino-consulta': 'Consulta original', 'e-monto-completo': 'Monto completo', 'e-monto-inicial': 'Monto inicial', 'e-restante-pago': 'Restante de pago', 'e-fecha': 'Fecha de captación' };
 let SELECTED_LEADS = new Set(), deleteMode = 'single';
 let trendKeys = [], canalKeys = [], destKeys = [], trendMap = {};
 let previewSel = null, charts = {};
@@ -379,14 +389,25 @@ function openPerfilDrawer() {
       </div>
     </div>` : ''}
     ${bnEditorHtml()}
-    ${puedeActivarRecordatorios() ? `
+    ${puedeRecibirLeads() || puedeRecibirAsistencia() ? `
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-bell"></i> Notificaciones</div>
+      ${puedeRecibirLeads() ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:${puedeRecibirAsistencia() ? '12px' : '0'}">
+        <span style="font-size:13px">Leads nuevos<small style="display:block;color:var(--muted);margin-top:2px">Cuando te asignan un lead</small></span>
+        <button type="button" class="tas-toggle" id="perfil-notif-leads"></button>
+      </div>` : ''}
+      ${puedeRecibirAsistencia() ? `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <span style="font-size:13px">Recordatorios de asistencia</span>
-        <button type="button" class="tas-toggle" id="perfil-notif-toggle"></button>
+        <span style="font-size:13px">Recordatorios de asistencia<small style="display:block;color:var(--muted);margin-top:2px">Recordatorio de entrada y salida</small></span>
+        <button type="button" class="tas-toggle" id="perfil-notif-asistencia"></button>
       </div>
+      ` : ''}
     </div>` : ''}
+    <div class="edit-box" id="perfil-instalar-app" style="margin-top:16px;display:none">
+      <div class="eb-title"><i class="fas fa-mobile-screen-button"></i> App Lotus 360</div>
+      <div id="perfil-instalar-texto" style="font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:10px"></div>
+      <button class="dbtn gh" id="perfil-instalar-btn" type="button">Instalar la app</button>
+    </div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Solo tú puedes ver y editar tu propio perfil</div>`;
   // Avatar seteado vía DOM (pintarAvatar), no interpolado en el template de
   // innerHTML -- MI_AVATAR_URL termina en un style.backgroundImage por API,
@@ -401,7 +422,8 @@ function openPerfilDrawer() {
   document.querySelectorAll('#perfil-fuente button').forEach(b => b.onclick = () => guardarPreferencia('fuente', b.dataset.v, 'perfil-fuente'));
   document.querySelectorAll('#perfil-vista-rol button').forEach(b => b.onclick = () => activarVistaPreviaRol(b.dataset.v));
   bnEditorWire();
-  if (puedeActivarRecordatorios()) actualizarToggleNotif();
+  actualizarTogglesNotif();
+  renderInstalacionPwa();
 }
 function aplicarPreferencias() {
   document.documentElement.dataset.theme = MI_PREFERENCIAS.tema === 'light' ? 'light' : 'dark';
@@ -430,20 +452,29 @@ async function guardarPreferencia(clave, valor, grupoId) {
     errToast('No se pudo guardar: ' + error.message);
   }
 }
-async function actualizarToggleNotif() {
-  const btn = document.getElementById('perfil-notif-toggle');
-  if (!btn) return;
-  const { data, error } = await sb.rpc('mi_asistencia_hoy');
-  const activo = !error && data?.tiene_recordatorios;
-  btn.classList.toggle('on', !!activo);
-  btn.onclick = async () => {
-    btn.disabled = true;
-    if (activo) await desactivarRecordatorios(); else await window.activarRecordatorios();
-    btn.disabled = false;
-    actualizarToggleNotif();
-  };
+async function actualizarTogglesNotif() {
+  [['perfil-notif-leads', 'notificaciones_leads', 'Leads nuevos'], ['perfil-notif-asistencia', 'notificaciones_asistencia', 'Recordatorios']].forEach(([id, clave, nombre]) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const activo = MI_PREFERENCIAS[clave] !== false;
+    btn.classList.toggle('on', activo);
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const anterior = MI_PREFERENCIAS;
+      MI_PREFERENCIAS = { ...MI_PREFERENCIAS, [clave]: !activo };
+      const { error } = await sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS });
+      if (error) { MI_PREFERENCIAS = anterior; errToast('No se pudo guardar: ' + error.message); }
+      else if (!activo && !await activarNotificaciones(nombre)) {
+        MI_PREFERENCIAS = anterior;
+        await sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS });
+      }
+      else if (MI_PREFERENCIAS.notificaciones_leads === false && MI_PREFERENCIAS.notificaciones_asistencia === false) await desactivarSuscripcionPush();
+      btn.disabled = false;
+      actualizarTogglesNotif();
+    };
+  });
 }
-async function desactivarRecordatorios() {
+async function desactivarSuscripcionPush() {
   // Solo la suscripción web de ESTE navegador -- activarRecordatorios()
   // también es web-only (chequea 'serviceWorker' in navigator), mismo
   // alcance. Filtrar solo por usuario_id borraría la suscripción de
@@ -460,11 +491,11 @@ async function desactivarRecordatorios() {
       await sub.unsubscribe();
     }
   } catch (e) {
-    console.error('desactivarRecordatorios', e);
-    errToast('No se pudo desactivar los recordatorios');
+    console.error('desactivarSuscripcionPush', e);
+    errToast('No se pudieron desactivar las notificaciones');
     return;
   }
-  okToast('Recordatorios desactivados');
+  okToast('Notificaciones desactivadas');
   renderRecordatoriosUI();
 }
 async function subirAvatar(file) {
@@ -729,12 +760,12 @@ function renderTareasAdminTabla() {
     (!asesorSel || String(t.asesor_id) === asesorSel) && (!estadoSel || t.estado === estadoSel));
   document.getElementById('frl-tareas-tbody').innerHTML = filas.map(t => `
     <tr>
-      <td>${esc(t.asesor_nombre)}</td>
-      <td>${esc(t.titulo)}${t.reporte_abierto ? ' <i class="fas fa-flag" style="color:#ef4444" title="Reporte abierto"></i>' : ''}</td>
-      <td><span class="chip-prioridad ${esc(t.prioridad)}">${esc(t.prioridad)}</span></td>
-      <td><span class="chip">${esc(t.estado)}</span></td>
-      <td class="muted">${t.vence_at ? esc(fmtFechaHoraCaracas(t.vence_at)) : '—'}</td>
-      <td>${t.estado === 'en_revision' ? `<button class="btn-sm" onclick="aprobarTareaUI(${t.id})">Aprobar</button>` : ''}</td>
+      <td class="td-name">${esc(t.asesor_nombre)}</td>
+      <td data-label="Tarea">${esc(t.titulo)}${t.reporte_abierto ? ' <i class="fas fa-flag" style="color:#ef4444" title="Reporte abierto"></i>' : ''}</td>
+      <td data-label="Prioridad"><span class="chip-prioridad ${esc(t.prioridad)}">${esc(t.prioridad)}</span></td>
+      <td data-label="Estado"><span class="chip">${esc(t.estado)}</span></td>
+      <td data-label="Vence" class="muted">${t.vence_at ? esc(fmtFechaHoraCaracas(t.vence_at)) : '—'}</td>
+      <td class="td-acciones">${t.estado === 'en_revision' ? `<button class="btn-sm" onclick="aprobarTareaUI(${t.id})">Aprobar</button>` : ''}</td>
     </tr>`).join('') || '<tr><td colspan="6">Sin tareas</td></tr>';
 }
 window.aprobarTareaUI = async (taskId) => {
@@ -838,8 +869,36 @@ const GERENCIA_USERNAMES = ['luisrueda', 'andric'];
 // sentido ofrecerle un botón que nunca le va a disparar nada.
 const ASISTENCIA_USERNAMES_EXCLUIDOS = ['ambar'];
 
-function puedeActivarRecordatorios() {
+// Leads y asistencia comparten una suscripción push, pero no la preferencia:
+// una persona puede recibir leads aunque no participe del control de asistencia.
+function puedeRecibirLeads() {
+  return ROL === 'asesor' || ROL === 'admin';
+}
+function puedeRecibirAsistencia() {
   return (ROL === 'asesor' && !ASISTENCIA_USERNAMES_EXCLUIDOS.includes(MI_USERNAME)) || (ROL === 'admin' && GERENCIA_USERNAMES.includes(MI_USERNAME));
+}
+let instalacionPwaPendiente = null;
+const pwaInstalada = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+function setupInstalacionPwa() {
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instalacionPwaPendiente = e; renderInstalacionPwa(); });
+  window.addEventListener('appinstalled', () => { instalacionPwaPendiente = null; renderInstalacionPwa(); okToast('App instalada'); });
+}
+function renderInstalacionPwa() {
+  const box = document.getElementById('perfil-instalar-app'), texto = document.getElementById('perfil-instalar-texto'), btn = document.getElementById('perfil-instalar-btn');
+  if (!box || !texto || !btn) return;
+  if (pwaInstalada()) { box.style.display = 'none'; return; }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (!instalacionPwaPendiente && !ios) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  texto.textContent = ios ? 'En Safari: Compartir → Añadir a pantalla de inicio.' : 'Instalala para recibir notificaciones con la identidad de Lotus 360.';
+  btn.style.display = ios ? 'none' : '';
+  btn.onclick = async () => {
+    if (!instalacionPwaPendiente) return;
+    instalacionPwaPendiente.prompt();
+    await instalacionPwaPendiente.userChoice;
+    instalacionPwaPendiente = null;
+    renderInstalacionPwa();
+  };
 }
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -847,29 +906,39 @@ function urlBase64ToUint8Array(base64String) {
   const raw = atob(base64);
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
-window.activarRecordatorios = async () => {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) { errToast('Este navegador no soporta notificaciones push'); return; }
+async function activarNotificaciones(nombre) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) { errToast('Este navegador no soporta notificaciones push'); return false; }
   const permiso = await Notification.requestPermission();
-  if (permiso !== 'granted') { errToast('Permiso de notificaciones denegado'); return; }
+  if (permiso !== 'granted') { errToast('Permiso de notificaciones denegado'); return false; }
   try {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from('push_subscriptions').insert({ usuario_id: user.id, platform: 'web', subscription_json: sub.toJSON() });
-    if (error && error.code !== '23505') { errToast('No se pudo activar: ' + error.message); return; }
-    okToast('Recordatorios activados');
+    if (error && error.code !== '23505') { errToast('No se pudo activar: ' + error.message); return false; }
+    okToast(`${nombre} activados`);
   } catch (e) {
-    console.error('activarRecordatorios', e);
-    errToast('No se pudo activar los recordatorios');
+    console.error('activarNotificaciones', e);
+    errToast(`No se pudieron activar ${nombre.toLowerCase()}`); return false;
   }
   renderRecordatoriosUI();
+  return true;
+}
+window.activarRecordatorios = async () => {
+  if (MI_PREFERENCIAS.notificaciones_asistencia === false) {
+    const anterior = MI_PREFERENCIAS;
+    MI_PREFERENCIAS = { ...MI_PREFERENCIAS, notificaciones_asistencia: true };
+    const { error } = await sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS });
+    if (error) { MI_PREFERENCIAS = anterior; errToast('No se pudo guardar: ' + error.message); return false; }
+  }
+  return activarNotificaciones('Recordatorios');
 };
 window.ocultarRecordatoriosBanner = () => {
   sessionStorage.setItem('recordatorios_banner_oculto', '1');
   renderRecordatoriosUI();
 };
 async function renderRecordatoriosUI() {
-  if (!puedeActivarRecordatorios()) return;
+  if (!puedeRecibirAsistencia() || MI_PREFERENCIAS.notificaciones_asistencia === false) return;
   const { data, error } = await sb.rpc('mi_asistencia_hoy');
   if (error) return;
   const mostrar = data && !data.tiene_recordatorios && !sessionStorage.getItem('recordatorios_banner_oculto');
@@ -1277,7 +1346,7 @@ function abrirEditorPersona(usuarioId) {
 
 async function restablecerAcceso(usuarioId) {
   const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
-  if (!u || !confirm(`¿Restablecer el acceso de ${u.nombre}?\n\nVas a recibir una contraseña temporal para pasársela una sola vez. La persona deberá cambiarla al entrar.`)) return;
+  if (!u || !(await confirmarSheet({ titulo: `¿Restablecer el acceso de ${u.nombre}?`, detalle: 'Vas a recibir una contraseña temporal para pasársela una sola vez. La persona deberá cambiarla al entrar.', textoOk: 'Restablecer' }))) return;
   const { data, error } = await sb.functions.invoke('restablecer-acceso', { body: { usuario_id: usuarioId } });
   if (error || !data?.ok) { errToast('No se pudo restablecer el acceso.'); return; }
   document.getElementById('drawerContent').innerHTML = `
@@ -1329,7 +1398,7 @@ const ERR_PERSONAL = {
 
 async function bajaPersonal(usuarioId, reactivar) {
   const u = [...personalCache, ...personalBaja].find(x => String(x.usuario_id) === String(usuarioId));
-  if (!reactivar && !confirm(`¿Dar de baja a ${u?.nombre || 'esta persona'}?\n\nPierde el acceso al CRM al instante. Su historial de asistencia, leads y comisiones NO se borra, y podés reactivarla cuando quieras.`)) return;
+  if (!reactivar && !(await confirmarSheet({ titulo: `¿Dar de baja a ${u?.nombre || 'esta persona'}?`, detalle: 'Pierde el acceso al CRM al instante. Su historial de asistencia, leads y comisiones NO se borra, y podés reactivarla cuando quieras.', textoOk: 'Dar de baja', destructivo: true }))) return;
   const { data, error } = await sb.rpc('admin_baja_personal', { p_usuario_id: usuarioId, p_reactivar: !!reactivar });
   if (error || !data?.ok) { errToast(ERR_PERSONAL[data?.error] || error?.message || 'No se pudo aplicar'); return; }
   window.closeDrawer();
@@ -1602,9 +1671,9 @@ function arrancar(...pasos) {
 async function startApp() {
   if (booted) return; booted = true;
   arrancar(
-    aplicarOrdenSidebar, setupNav, renderBottomNav, setupSwipeSecciones,
+    aplicarOrdenSidebar, setupNav, renderBottomNav, setupSwipeSecciones, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupRedes,
-    setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso,
+    setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa,
     setupHoy, setupConsultorIA,
   );
   if (ROL === 'marketing') {
@@ -1674,9 +1743,38 @@ async function loadStats() {
 // prometer un click que no hace nada.
 // Ojo: <button> NO hereda el color del texto, hay que forzarlo -- lo hace
 // .kpi-btn en index.html. Sin eso el número sale negro sobre panel oscuro.
+// Fase 6 -- los KPIs cuentan hasta su valor la PRIMERA vez que se ven en la
+// sesión (una card ya vista no vuelve a contar en cada refresh, se pinta
+// directo). Clave = id del contenedor + título, no hay otro identificador
+// estable entre los ~15 lugares que llaman pintarKPIs.
+const KPIS_ANIMADOS = new Set();
+function contarKPI(el, valorFinal) {
+  // k.v ya viene formateado (fmt()/money(), con separadores y a veces "$" o
+  // texto alrededor) -- se anima solo la parte numérica y se reconstruye
+  // con el mismo prefijo/sufijo, no se reinventa el formato acá.
+  const m = String(valorFinal).match(/^(\D*)([\d.,]+)(\D*)$/);
+  if (!m || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) { el.textContent = valorFinal; return; }
+  const [, prefijo, numStr, sufijo] = m;
+  const num = parseFloat(numStr.replace(/\./g, '').replace(',', '.'));
+  if (!isFinite(num) || num <= 0) { el.textContent = valorFinal; return; }
+  const dur = 600, t0 = performance.now();
+  function cuadro(t) {
+    // Clamp de los dos lados -- el primer callback de requestAnimationFrame
+    // puede traer un timestamp apenas ANTERIOR al t0 capturado antes de
+    // pedirlo (orden de eventos del navegador, no un error nuestro), lo que
+    // daba p negativo y una cifra negativa de un frame antes de empezar a
+    // subir (bug real, visto en la verificación de esta misma fase).
+    const p = Math.max(0, Math.min(1, (t - t0) / dur));
+    const actual = Math.round(num * (1 - Math.pow(1 - p, 3)));
+    el.textContent = prefijo + fmt(actual) + sufijo;
+    if (p < 1) requestAnimationFrame(cuadro); else el.textContent = valorFinal;
+  }
+  requestAnimationFrame(cuadro);
+}
 function pintarKPIs(box, cards) {
   if (typeof box === 'string') box = document.getElementById(box);
   if (!box) return;
+  const boxId = box.id || '';
   box.innerHTML = cards.map(k => {
     const tag = k.go ? 'button' : 'div';
     // `key` es opcional: solo lo usan pantallas que necesitan resaltar cuál
@@ -1689,7 +1787,11 @@ function pintarKPIs(box, cards) {
       + (k.go ? '<i class="fas fa-arrow-right kgo"></i>' : '')
       + `</${tag}>`;
   }).join('');
-  [...box.children].forEach((el, i) => { if (cards[i].go) el.addEventListener('click', cards[i].go); });
+  [...box.children].forEach((el, i) => {
+    if (cards[i].go) el.addEventListener('click', cards[i].go);
+    const clave = boxId + '|' + cards[i].t;
+    if (!KPIS_ANIMADOS.has(clave)) { KPIS_ANIMADOS.add(clave); contarKPI(el.querySelector('.kv'), cards[i].v); }
+  });
 }
 function renderKPIs() {
   const thisMonth = new Date().toISOString().slice(0, 7);
@@ -2159,7 +2261,7 @@ function setupFilters() {
   ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
   let deb; document.getElementById('global-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => { page = 1; loadTable(); renderChips(); }, 300); });
   initDateRangePicker('f');
-  leadsView = initViewSwitcher('leads-view-switch', 'leads', window.innerWidth <= 760 ? 'tarjetas' : 'lista', v => { leadsView = v; applyLeadsView(); });
+  leadsView = initViewSwitcher('leads-view-switch', 'leads', 'tarjetas', v => { leadsView = v; applyLeadsView(); });
 }
 
 /* ---------- Selector de rango de fechas (Leads + Reasignaciones) ---------- */
@@ -2279,10 +2381,12 @@ function buildQuery(forCount) {
   return q;
 }
 async function loadTable() {
+  const gen = ++genCarga;
   const loading = document.getElementById('tbl-loading'), empty = document.getElementById('tbl-empty'), wrap = document.getElementById('tbl-wrap');
   empty.classList.remove('show'); loading.classList.add('show'); wrap.style.opacity = '.4';
   const from = (page - 1) * PER;
   const { data, count, error } = await buildQuery(true).order('fecha_creacion', { ascending: false, nullsFirst: false }).range(from, from + PER - 1);
+  if (gen !== genCarga) return;
   loading.classList.remove('show'); wrap.style.opacity = '1';
   if (error) { console.error(error); errToast('No se pudieron cargar los leads'); return; }
   totalFiltered = count ?? 0;
@@ -2303,7 +2407,15 @@ async function loadTable() {
     </tr>`;
   }).join('');
   [...document.querySelectorAll('#tbody tr')].forEach((tr, i) => tr.addEventListener('click', () => openDrawer(data[i])));
-  document.getElementById('leads-cards').innerHTML = data.map(leadCardHtml).join('');
+  const cardsEl = document.getElementById('leads-cards');
+  cardsEl.innerHTML = data.map(leadCardHtml).join('');
+  // Entrada escalonada (Fase 6) SOLO en esta carga completa -- se saca la
+  // clase después de que termina la última tarjeta con delay (12 * 40ms +
+  // duración) para que un parche en vivo posterior (parcharLeadLive) no la
+  // vuelva a disparar sobre una tarjeta que solo cambió de estado.
+  cardsEl.classList.add('entrada-lista');
+  clearTimeout(cardsEl._entradaLista);
+  cardsEl._entradaLista = setTimeout(() => cardsEl.classList.remove('entrada-lista'), 800);
   // Caché de la página para resolver el lead al soltarlo en una pestaña
   // (arrastrar-y-soltar). Se rearma en cada render.
   LEADS_PAGINA = {};
@@ -2329,6 +2441,132 @@ async function loadTable() {
   document.querySelectorAll('.solo-admin-borrar').forEach(el => el.style.display = ROL === 'admin' ? '' : 'none');
   applyLeadsView();
   renderPager(Math.max(Math.ceil(totalFiltered / PER), 1));
+}
+let colaLeadsLive = new Map(), timerLeadsLive = null, inicioLoteLeads = 0, loteLeadsEnCurso = Promise.resolve(), genLeadLive = new Map();
+function wireLeadCardLive(el, lead) {
+  el.addEventListener('click', () => openDrawer(lead));
+  if (window.matchMedia('(min-width:761px)').matches && (ROL === 'asesor' || ROL === 'admin')) wireLeadDrag(el, lead.id);
+  el.querySelectorAll('.estado-arrow').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); moverEstadoLead(lead, Number(btn.dataset.dir)); }));
+  el.querySelector('[data-atender-id]')?.addEventListener('click', e => { e.stopPropagation(); atenderInboxLead(lead); });
+  el.querySelector('[data-facturar-id]')?.addEventListener('click', e => { e.stopPropagation(); abrirEnviarFacturacionSheet(lead); });
+}
+function mostrarLeadsNuevos(n) {
+  if (!window.matchMedia('(max-width:760px)').matches) return;
+  let chip = document.getElementById('leads-live-chip');
+  if (!chip) {
+    chip = document.createElement('button'); chip.id = 'leads-live-chip'; chip.type = 'button';
+    chip.style.cssText = 'position:fixed;right:16px;bottom:76px;z-index:65;border:0;border-radius:999px;background:var(--accent);color:#fff;padding:11px 15px;font:600 13px inherit;box-shadow:0 8px 22px #0005';
+    chip.onclick = () => { chip.remove(); page = 1; loadTable(); };
+    document.body.appendChild(chip);
+  }
+  const total = Number(chip.dataset.n || 0) + n;
+  chip.dataset.n = String(total);
+  chip.textContent = `${total} lead${total === 1 ? '' : 's'} nuevo${total === 1 ? '' : 's'} — Ver`;
+}
+async function parcharLeadLive(evento) {
+  if (leadsView === 'lista') { await loadTable(); return; }
+  const gen = evento.gen;
+  const { data: lead, error } = await buildQuery(false).eq('id', evento.new.id).maybeSingle();
+  if (genLeadLive.get(evento.new.id) !== gen) return;
+  if (error) { console.error('parcharLeadLive', error); return; }
+  const cards = document.getElementById('leads-cards');
+  const card = cards?.querySelector(`[data-lead-id="${evento.new.id}"]`);
+  if (!lead) { if (card) { card.remove(); delete LEADS_PAGINA[evento.new.id]; totalFiltered = Math.max(0, totalFiltered - 1); document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`; renderPager(Math.max(Math.ceil(totalFiltered / PER), 1)); } return; }
+  if (!card && (page !== 1 || evento.eventType !== 'INSERT')) { if (evento.eventType === 'INSERT') mostrarLeadsNuevos(1); return; }
+  const tmp = document.createElement('div'); tmp.innerHTML = leadCardHtml(lead);
+  const nuevo = tmp.firstElementChild;
+  LEADS_PAGINA[lead.id] = lead;
+  if (card) card.replaceWith(nuevo); else { cards.prepend(nuevo); totalFiltered++; document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`; }
+  wireLeadCardLive(nuevo, lead);
+  nuevo.classList.add('lead-actualizado'); setTimeout(() => nuevo.classList.remove('lead-actualizado'), 1200);
+  if (currentLead?.id === lead.id) {
+    const drawerAbierto = document.getElementById('drawer')?.classList.contains('open') && document.getElementById('e-estado');
+    if (drawerAbierto) aplicarActualizacionLeadAbierto(lead); else currentLead = lead;
+  }
+}
+// Valor que iría en cada input del drawer para un lead dado -- usado SOLO
+// para comparar/refrescar campos no tocados cuando llega un UPDATE ajeno
+// mientras el drawer está abierto (openDrawer arma el HTML inicial por su
+// cuenta con la misma lógica; si se agrega un campo nuevo al drawer hay que
+// sumarlo acá también, no hay una única fuente de verdad para esto).
+function valorLeadParaCampo(id, l) {
+  switch (id) {
+    case 'e-estado': return ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER';
+    case 'e-asesor': return ROL === 'asesor' ? MI_NOMBRE : (ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar');
+    case 'e-servicio': return l.servicio || '';
+    case 'e-monto': return l.monto ?? '';
+    case 'e-comprado': return l.servicios_comprados || '';
+    case 'e-nombre': return l.nombre || '';
+    case 'e-telefono': return l.telefono || '';
+    case 'e-canal': return l.canal || '';
+    case 'e-destino': return l.destino || '';
+    case 'e-personas': return l.personas || '';
+    case 'e-fecha-estimada': return l.fecha_estimada || '';
+    case 'e-destino-consulta': return l.destino_consulta || '';
+    case 'e-monto-completo': return l.monto_completo ?? '';
+    case 'e-monto-inicial': return l.monto_inicial ?? '';
+    case 'e-restante-pago': return l.restante_pago ?? '';
+    case 'e-fecha': return l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : '';
+    default: return null;
+  }
+}
+// Aplica un UPDATE ajeno al drawer abierto: refresca los campos que el
+// usuario NO tocó, conserva tal cual los que sí (camposSuciosLead), y avisa.
+function aplicarActualizacionLeadAbierto(lead) {
+  const actualizados = [], conflictivos = [];
+  FIELD_IDS_LEAD.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.disabled) return;
+    const nuevo = valorLeadParaCampo(id, lead);
+    if (nuevo === null || String(el.value) === String(nuevo)) return;
+    if (camposSuciosLead.has(id)) { conflictivos.push(id); return; }
+    el.value = nuevo;
+    actualizados.push(id);
+  });
+  document.getElementById('venta-box')?.classList.toggle('show', document.getElementById('e-estado').value === VENTA);
+  currentLead = lead;
+  if (actualizados.length || conflictivos.length) mostrarConflictoLead(actualizados, conflictivos);
+}
+function mostrarConflictoLead(actualizados, conflictivos) {
+  const bar = document.getElementById('lead-conflict-bar');
+  if (!bar) return;
+  conflictoLeadPendiente = conflictivos.length > 0;
+  const nombres = ids => ids.map(id => FIELD_LABELS_LEAD[id]).join(', ');
+  bar.innerHTML = conflictivos.length
+    ? `<i class="fas fa-triangle-exclamation"></i> <span>Este lead cambió mientras lo editabas.${actualizados.length ? ' Se actualizaron solos: ' + esc(nombres(actualizados)) + '.' : ''} <b>Conflicto en: ${esc(nombres(conflictivos))}</b> — se conservó lo que escribiste, revisá antes de guardar.</span>`
+    : `<i class="fas fa-arrows-rotate"></i> <span>Este lead cambió mientras lo tenías abierto. Se actualizó solo: ${esc(nombres(actualizados))}.</span>`;
+  bar.style.display = 'flex';
+}
+function encolarLeadLive(evento) {
+  evento.gen = (genLeadLive.get(evento.new.id) || 0) + 1;
+  genLeadLive.set(evento.new.id, evento.gen);
+  colaLeadsLive.set(evento.new.id, evento);
+  if (!inicioLoteLeads) inicioLoteLeads = Date.now();
+  clearTimeout(timerLeadsLive);
+  const espera = Math.min(400, Math.max(0, 1000 - (Date.now() - inicioLoteLeads)));
+  timerLeadsLive = setTimeout(() => {
+    const lote = [...colaLeadsLive.values()]; colaLeadsLive.clear(); inicioLoteLeads = 0;
+    loteLeadsEnCurso = loteLeadsEnCurso.then(async () => { for (const e of lote) await parcharLeadLive(e); await reconciliarLoteLive(lote.map(e => e.new.id)); });
+  }, espera);
+}
+async function reconciliarLoteLive(ids) {
+  if (leadsView === 'lista') { await loadTable(); return; }
+  const { data, error } = await buildQuery(false).in('id', [...new Set(ids)]);
+  if (error) { console.error('reconciliarLoteLive', error); return; }
+  const recibidos = new Set((data || []).map(lead => String(lead.id)));
+  for (const id of new Set(ids.map(String))) {
+    if (recibidos.has(id)) continue;
+    const card = document.querySelector(`#leads-cards [data-lead-id="${id}"]`);
+    if (card) { card.remove(); delete LEADS_PAGINA[id]; totalFiltered = Math.max(0, totalFiltered - 1); document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`; renderPager(Math.max(Math.ceil(totalFiltered / PER), 1)); }
+  }
+  for (const lead of data || []) {
+    const card = document.querySelector(`#leads-cards [data-lead-id="${lead.id}"]`);
+    if (!card) continue;
+    const html = leadCardHtml(lead);
+    const tmp = document.createElement('div'); tmp.innerHTML = html;
+    if (card.outerHTML === tmp.firstElementChild.outerHTML) continue;
+    const nuevo = tmp.firstElementChild; LEADS_PAGINA[lead.id] = lead; card.replaceWith(nuevo); wireLeadCardLive(nuevo, lead);
+  }
 }
 /* ---------- Arrastrar un lead a una pestaña (solo escritorio) ----------
    Soltar una tarjeta sobre "Boletería" o "En facturación" abre el mismo
@@ -2399,40 +2637,53 @@ function leadCardHtml(l) {
   const detalle = leadsView === 'fichas' ? `
     <div class="ec-row"><i class="fas fa-comment-dots"></i> ${esc(l.destino_consulta || 'Sin consulta registrada')}</div>
     <div class="ec-row"><i class="fas fa-users"></i> ${esc(l.personas || '—')} persona(s)</div>` : '';
-  // "Sin atender"/"Atender" -- Fase 2 (Leads unificado), SOLO mobile: en
-  // desktop la tabla/tarjetas siguen exactamente igual que hoy (el inbox
-  // separado de arriba sigue siendo la señal de "sin atender" ahí).
-  const esMobile = window.matchMedia('(max-width:760px)').matches;
-  const sinAtender = esMobile && ROL === 'asesor' && l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
-  const estadoColor = ESTADO_COLORS[l.estado] || '#5f677f';
+  // "Sin atender" es dato (rol + estado + sin fecha_primer_contacto), no
+  // presentación -- antes se calculaba con matchMedia() EN EL MOMENTO DEL
+  // RENDER, así que si el teléfono rotaba después, la tarjeta ya impresa
+  // quedaba mostrando la versión vieja hasta el próximo refresh. Ahora la
+  // condición de datos siempre se evalúa igual, y es el CSS (.tiene-sin-atender
+  // dentro de @media(max-width:760px)) el que decide qué se ve -- reacciona
+  // solo a la rotación, sin volver a tocar el DOM.
+  const sinAtenderDatos = ROL === 'asesor' && l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
+  // Fallback único (antes #5f677f acá y #8b93ad en el badge -- mismo estado
+  // desconocido pintado de dos grises distintos en la misma tarjeta).
+  const FALLBACK_COLOR = '#8b93ad';
+  const estadoColor = ESTADO_COLORS[l.estado] || FALLBACK_COLOR;
   // Los botones se arman aparte para poder omitir el contenedor `.ec-actions`
-  // cuando no queda ninguno: un div vacío igual sumaría el gap de la columna y
-  // dejaría un hueco muerto abajo de la tarjeta.
+  // cuando no queda ninguno: un div vacío igual sumaría el borde y dejaría un
+  // hueco muerto abajo de la tarjeta.
   const acciones = [
     (ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado)
       ? `<button type="button" class="fact-btn" data-facturar-id="${l.id}" title="Enviar a facturación" aria-label="Enviar a facturación" onclick="event.stopPropagation()"><i class="fas fa-paper-plane"></i></button>` : '',
     wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : '',
   ].filter(Boolean).join('');
-  return `<div class="entity-card" style="position:relative;border-left:4px solid ${estadoColor}">
+  return `<div class="entity-card ${sinAtenderDatos ? 'tiene-sin-atender' : ''}" data-lead-id="${l.id}" style="position:relative;border-left:4px solid ${estadoColor}">
     <input type="checkbox" class="lead-check solo-admin-borrar" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''} style="position:absolute;top:10px;right:10px;width:18px;height:18px">
-    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}</div></div>
-    <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
-    <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
-    <div class="ec-row"><i class="fas fa-clock"></i> ${esc(fmtFechaHoraCaracas(l.fecha_creacion))}</div>
-    <div class="ec-row"><i class="fas fa-user-tie"></i> ${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</div>
-    ${detalle}
-    <div class="ec-foot ec-foot-cols">
-      <div class="ec-badges">
-        <span class="chip ${cc}">${esc(l.canal)}</span>
-        ${sinAtender ? `<span class="badge-st" style="color:var(--accent);background:var(--accent-soft)">Sin atender</span>` : `<span class="estado-stepper" data-id="${l.id}">
-          <button type="button" class="estado-arrow" data-dir="-1" title="Estado anterior" aria-label="Estado anterior"><i class="fas fa-chevron-left"></i></button>
-          <span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}2e">${esc(niceEstado(l.estado))}</span>
-          <button type="button" class="estado-arrow" data-dir="1" title="Siguiente estado" aria-label="Siguiente estado"><i class="fas fa-chevron-right"></i></button>
-        </span>`}
+    <div class="ec-top">
+      <div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
+      <div class="ec-headtext">
+        <div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div>
+        <div class="ec-destino"><i class="fas fa-location-dot"></i> ${esc(l.destino) || 'Sin destino'}</div>
       </div>
-      ${acciones ? `<div class="ec-actions">${acciones}</div>` : ''}
     </div>
-    ${sinAtender ? `<button type="button" class="inbox-btn atender" style="width:100%;margin-top:9px" data-atender-id="${l.id}"><i class="fas fa-check"></i> Atender</button>` : ''}
+    <div class="ec-estado-row">
+      ${sinAtenderDatos ? `<span class="badge-st sin-atender-movil" style="color:var(--accent);background:var(--accent-soft)">Sin atender</span>` : ''}
+      <span class="estado-stepper" data-id="${l.id}">
+        <button type="button" class="estado-arrow" data-dir="-1" title="Estado anterior" aria-label="Estado anterior"><i class="fas fa-chevron-left"></i></button>
+        <span class="badge-st" style="color:${estadoColor};background:${estadoColor}2e">${esc(niceEstado(l.estado))}</span>
+        <button type="button" class="estado-arrow" data-dir="1" title="Siguiente estado" aria-label="Siguiente estado"><i class="fas fa-chevron-right"></i></button>
+      </span>
+    </div>
+    <div class="ec-context">
+      <span class="chip ${cc}">${esc(l.canal)}</span>
+      <span class="ec-dot">·</span>
+      <span>${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</span>
+      <span class="ec-dot">·</span>
+      <span>${esc(tiempoRelativo(l.fecha_creacion))}</span>
+    </div>
+    ${detalle}
+    ${acciones ? `<div class="ec-foot"><div class="ec-actions">${acciones}</div></div>` : ''}
+    ${sinAtenderDatos ? `<button type="button" class="inbox-btn atender atender-movil" style="width:100%;margin-top:9px" data-atender-id="${l.id}"><i class="fas fa-check"></i> Atender</button>` : ''}
   </div>`;
 }
 // Flechitas del stepper de estado en la ficha del lead -- avanza/retrocede
@@ -2638,6 +2889,7 @@ function actualizarBadgeLeads(pendientes) {
 /* ---------- Drawer editable ---------- */
 function openDrawer(l) {
   currentLead = l;
+  camposSuciosLead = new Set(); conflictoLeadPendiente = false;
   CONV_CACHE = null; ACTIVIDAD_CACHE = null; // se recargan por lead, ver cargarConversacionLead/cargarActividadLead
   const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
   const av = clientAvatar(l);
@@ -2674,6 +2926,7 @@ function openDrawer(l) {
     </div>
 
     <div class="lead-tab-panel active" data-tab="resumen">
+    <div class="lead-conflict-bar" id="lead-conflict-bar" style="display:none"></div>
     ${seccion('gestion', 'fa-sliders', 'Gestión', `
       <div class="dgrid">
         ${campo('Estado', `<select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>`, true)}
@@ -2734,6 +2987,13 @@ function openDrawer(l) {
     </div>`;
 
   document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', e.target.value === VENTA);
+  FIELD_IDS_LEAD.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const marcar = () => camposSuciosLead.add(id);
+    el.addEventListener('input', marcar);
+    el.addEventListener('change', marcar);
+  });
   document.getElementById('e-save').onclick = guardarLead;
   document.getElementById('e-notas-save').onclick = guardarNotasLead;
   document.getElementById('e-servicio-ia').onclick = detectarServicioDelLead;
@@ -2847,6 +3107,11 @@ document.getElementById('th-select-all')?.addEventListener('change', e => {
 });
 async function guardarLead() {
   const btn = document.getElementById('e-save'), err = document.getElementById('edit-err');
+  // Conflicto real pendiente (falla #4): otra sesión cambió un campo que
+  // el usuario también está editando acá mismo. Se manda igual el
+  // formulario completo si confirma -- sus valores pisan los del servidor,
+  // como ya hacía el guardado normal, pero ahora al menos avisa antes.
+  if (conflictoLeadPendiente && !(await confirmarSheet({ titulo: 'Este lead cambió mientras lo editabas', detalle: 'Hay campos en conflicto. ¿Guardar igual con tus valores?', textoOk: 'Guardar igual' }))) return;
   // Vista previa de rol activa (admin real viendo como asesor): el select de
   // "Asesor asignado" queda deshabilitado con el NOMBRE DEL ADMIN adentro
   // (mismo render que ve un asesor real, ver campo() más arriba) -- sin este
@@ -2886,11 +3151,18 @@ async function guardarLead() {
     p_monto_inicial: montoInicialRaw ? parseFloat(montoInicialRaw) : null,
     p_restante_pago: restantePagoRaw ? parseFloat(restantePagoRaw) : null,
   });
-  btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios';
-  if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return; }
-  window.closeDrawer();
+  if (error || !data?.ok) {
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios';
+    err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return;
+  }
+  // Check animado (Fase 6) en vez de cerrar de una -- el botón muestra el
+  // éxito un instante antes de que el drawer desaparezca, no solo el toast
+  // que ya se lee después de que la pantalla cambió.
+  btn.classList.add('guardado-ok');
+  btn.innerHTML = '<i class="fas fa-check"></i> Guardado';
   okToast('Lead actualizado');
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
+  setTimeout(() => { btn.classList.remove('guardado-ok'); btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios'; window.closeDrawer(); }, 450);
 }
 
 /* ---------- Revisión de vigencias del tarifario (admin) ----------
@@ -3033,7 +3305,7 @@ async function retirarTodosLosVencidos() {
   const objetivo = VIG_FILAS.filter(f => (f.problema === 'vencida' || f.problema === 'venta_cerrada') && !f.deja_sin_precio);
   if (!objetivo.length) return;
   const detalle = objetivo.slice(0, 6).map(f => `• ${f.nombre}`).join('\n');
-  if (!confirm(`Vas a retirar ${objetivo.length} item(s) del catálogo:\n\n${detalle}${objetivo.length > 6 ? `\n• ...y ${objetivo.length - 6} más` : ''}\n\nDejan de verse en el CRM, en la web y para el bot. Se pueden volver a activar a mano.`)) return;
+  if (!(await confirmarSheet({ titulo: `Vas a retirar ${objetivo.length} item(s) del catálogo`, detalle: `${detalle}${objetivo.length > 6 ? `\n• ...y ${objetivo.length - 6} más` : ''}\n\nDejan de verse en el CRM, en la web y para el bot. Se pueden volver a activar a mano.`, textoOk: 'Retirar', destructivo: true }))) return;
   const btn = document.getElementById('vig-retirar-todo');
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Retirando...';
   const res = await Promise.all(objetivo.map(f => sb.rpc('retirar_item_tarifario', { p_tipo: f.tipo, p_id: f.item_id })));
@@ -3154,7 +3426,7 @@ async function actQuitar(clave, btn) {
   const { tipo, id } = actPartes(clave);
   const item = ACT_PENDIENTES.find(f => `${f.tipo}:${f.item_id}` === clave);
   if (tipo === 'producto') { errToast('Los productos se ocultan desde el panel de configuración del tarifario'); return; }
-  if (!confirm(`Quitar "${item?.nombre || 'este item'}" del catálogo.\n\nDeja de verse en el CRM, en la web y para el bot. Se puede volver a activar a mano.`)) return;
+  if (!(await confirmarSheet({ titulo: `Quitar "${item?.nombre || 'este item'}" del catálogo`, detalle: 'Deja de verse en el CRM, en la web y para el bot. Se puede volver a activar a mano.', textoOk: 'Quitar', destructivo: true }))) return;
   btn.disabled = true;
   const { data, error } = await sb.rpc('retirar_item_tarifario', { p_tipo: tipo, p_id: id });
   if (error || !data?.ok) { btn.disabled = false; errToast('No se pudo quitar: ' + (error?.message || data?.error || '')); return; }
@@ -3352,7 +3624,7 @@ async function ceGuardar(btn) {
   // Avisar, no bloquear: un destino nuevo puede ser legítimo (un producto que
   // se carga mañana), pero un typo silencioso deja la regla sin aplicarse nunca.
   if (ambito === 'destino' && CE_DESTINOS.length && !CE_DESTINOS.includes(destino)
-      && !confirm(`"${destino}" no coincide con ningún destino del tarifario.\n\nLa regla se guarda igual, pero no se va a aplicar hasta que exista un producto con ese destino escrito igual.\n\n¿Guardar de todos modos?`)) return;
+      && !(await confirmarSheet({ titulo: `"${destino}" no coincide con ningún destino del tarifario`, detalle: 'La regla se guarda igual, pero no se va a aplicar hasta que exista un producto con ese destino escrito igual.', textoOk: 'Guardar de todos modos' }))) return;
 
   btn.disabled = true;
   const { data, error } = await sb.rpc('regla_venta_guardar', {
@@ -3379,7 +3651,7 @@ async function ceToggle(id, btn) {
 
 async function ceBorrar(id, btn) {
   const r = CE_REGLAS.find(x => x.id === Number(id));
-  if (!confirm(`Borrar esta regla para siempre.\n\n"${(r?.texto || '').slice(0, 120)}…"\n\nSi solo querés que la IA deje de usarla, mejor apagala: así la podés volver a prender.`)) return;
+  if (!(await confirmarSheet({ titulo: 'Borrar esta regla para siempre', detalle: `"${(r?.texto || '').slice(0, 120)}…"\n\nSi solo querés que la IA deje de usarla, mejor apagala: así la podés volver a prender.`, textoOk: 'Borrar', destructivo: true }))) return;
   btn.disabled = true;
   const { data, error } = await sb.rpc('regla_venta_borrar', { p_id: Number(id) });
   btn.disabled = false;
@@ -3562,7 +3834,7 @@ async function flPublicar(btn) {
   const precio = document.getElementById('fl-precio').value.trim();
   if (!nombre) { errToast('Falta el nombre del hotel'); return; }
   if (!precio) { errToast('Falta el precio'); return; }
-  if (!confirm(`Publicar al tarifario:\n\n${nombre}\n${precio.slice(0, 140)}\n\nSe va a ver en la web y la IA lo va a poder cotizar. Queda marcado "por revisar" en el Actualizador.`)) return;
+  if (!(await confirmarSheet({ titulo: 'Publicar al tarifario', detalle: `${nombre}\n${precio.slice(0, 140)}\n\nSe va a ver en la web y la IA lo va a poder cotizar. Queda marcado "por revisar" en el Actualizador.`, textoOk: 'Publicar' }))) return;
 
   const vigencia = document.getElementById('fl-vigencia').value.trim() || null;
   const item = {
@@ -3688,7 +3960,7 @@ async function cbActivar(id, activo, btn) {
 
 async function cbBorrar(id, btn) {
   const nodo = CB_ARBOL.find(n => n.id === Number(id));
-  if (!confirm(`¿Borrar la rama "${nodo?.nombre ?? id}"? Solo se puede si nunca se le cargó catálogo.`)) return;
+  if (!(await confirmarSheet({ titulo: `¿Borrar la rama "${nodo?.nombre ?? id}"?`, detalle: 'Solo se puede si nunca se le cargó catálogo.', textoOk: 'Borrar', destructivo: true }))) return;
   btn.disabled = true;
   const { data, error } = await sb.rpc('borrar_rama_cerebro', { p_cerebro_id: Number(id) });
   btn.disabled = false;
@@ -4146,7 +4418,7 @@ async function iaConvertir(leadId, btn) {
   const nombre = (p?.nombre || '').trim();
   if (!nombre) { errToast('Esa solicitud no tiene nombre; creá la rama a mano desde Cerebro IA › Ramas'); return; }
   const slug = cbSlugificar(nombre);
-  if (!confirm(`¿Crear la rama de "${nombre}"?\n\nIdentificador: ${slug}\n\nHereda toda la Base y nace sin catálogo ni plan.`)) return;
+  if (!(await confirmarSheet({ titulo: `¿Crear la rama de "${nombre}"?`, detalle: `Identificador: ${slug}\n\nHereda toda la Base y nace sin catálogo ni plan.`, textoOk: 'Crear' }))) return;
   btn.disabled = true;
   const { data, error } = await sb.rpc('crear_rama_cerebro',
     { p_nombre: nombre, p_slug: slug, p_padre_id: null, p_lead_id: Number(leadId) });
@@ -4534,10 +4806,10 @@ async function actActivarCarga() {
   const d = ACT_PANEL_DATA;
   if (!d?.carga?.id) return;
   const puertasMal = (d.puertas || []).filter(p => !p.ok);
-  const aviso = puertasMal.length
-    ? `Hay ${puertasMal.length} puerta(s) sin pasar:\n\n${puertasMal.map(p => `• ${p.nombre}: ${p.detalle}`).join('\n')}\n\n¿Publicar igual?`
-    : '¿Publicar el tarifario nuevo ahora?';
-  if (!confirm(aviso)) return;
+  const detalleAviso = puertasMal.length
+    ? `Hay ${puertasMal.length} puerta(s) sin pasar:\n\n${puertasMal.map(p => `• ${p.nombre}: ${p.detalle}`).join('\n')}`
+    : '';
+  if (!(await confirmarSheet({ titulo: '¿Publicar el tarifario nuevo ahora?', detalle: detalleAviso, textoOk: 'Publicar' }))) return;
   const { data, error } = await sb.rpc('activar_carga_maestra', { p_carga_id: d.carga.id });
   if (error) return errToast(error.message);
   okToast(`Publicado: ${data?.tarifas_activadas ?? 0} precios nuevos`);
@@ -4548,7 +4820,7 @@ async function actActivarCarga() {
 async function actRevertirCarga() {
   const d = ACT_PANEL_DATA;
   if (!d?.carga?.id) return;
-  if (!confirm('¿Descartar el borrador? El catálogo queda como está ahora.')) return;
+  if (!(await confirmarSheet({ titulo: '¿Descartar el borrador?', detalle: 'El catálogo queda como está ahora.', textoOk: 'Descartar', destructivo: true }))) return;
   const { error } = await sb.rpc('revertir_carga_maestra', { p_carga_id: d.carga.id });
   if (error) return errToast(error.message);
   okToast('Borrador descartado');
@@ -5315,10 +5587,13 @@ const postFotoHtml = (p, clase) => {
 };
 const GENERO_LABEL = { femenino: 'Femenino', masculino: 'Masculino', otro: 'Otro' };
 async function loadPostulaciones() {
+  document.getElementById('post-loading')?.classList.add('show');
   const { data, error } = await sb.from('postulaciones_empleo').select('*').order('created_at', { ascending: false });
-  if (error) { console.error(error); errToast('No se pudo cargar Postulaciones'); return; }
+  if (error) { document.getElementById('post-loading')?.classList.remove('show'); console.error(error); errToast('No se pudo cargar Postulaciones'); return; }
   postCache = data || [];
+  postMostrar = TECHO_LISTA;
   await firmarFotosPostulaciones(postCache);
+  document.getElementById('post-loading')?.classList.remove('show');
   renderPostulaciones();
 }
 function postCardHtml(p) {
@@ -5346,6 +5621,15 @@ function postCardHtml(p) {
     </div>
   </div>`;
 }
+// Techo de filas visibles en el render (Fase 4 -- "100 facturas ≈ 1.000
+// filas visuales en móvil"). El FETCH sigue trayendo todo (postCache
+// completo) porque el filtro/búsqueda de arriba es 100% cliente -- pedirle
+// al backend solo una página rompería la búsqueda para cualquier registro
+// fuera de esa página, sin avisar. Solo se recorta lo que se pinta.
+const TECHO_LISTA = 50;
+let postMostrar = TECHO_LISTA;
+function cargarMasPostulaciones() { postMostrar += TECHO_LISTA; renderPostulaciones(); }
+window.cargarMasPostulaciones = cargarMasPostulaciones;
 function renderPostulaciones() {
   const q = val('post-search').trim().toLowerCase();
   const fModalidad = val('post-f-modalidad'), fLlamada = val('post-f-llamada'), fCalidad = val('post-f-calidad');
@@ -5360,7 +5644,10 @@ function renderPostulaciones() {
     return true;
   });
   document.getElementById('post-empty').classList.toggle('show', filtered.length === 0);
-  document.getElementById('post-tbody').innerHTML = filtered.map(p => `<tr data-id="${p.id}">
+  const visibles = filtered.slice(0, postMostrar);
+  const pager = document.getElementById('post-pager');
+  if (pager) pager.style.display = filtered.length > postMostrar ? '' : 'none';
+  document.getElementById('post-tbody').innerHTML = visibles.map(p => `<tr data-id="${p.id}">
     <td><input type="checkbox" class="post-check" data-id="${p.id}" ${SELECTED_POST.has(p.id) ? 'checked' : ''}></td>
     <td>${p.revisado ? '<i class="fas fa-circle-check" style="color:#22c55e" title="Revisado"></i>' : '<i class="fas fa-circle" style="color:#5f677f" title="Sin revisar"></i>'}</td>
     <td data-label="Nombre">${esc(p.nombre)}</td>
@@ -5372,7 +5659,7 @@ function renderPostulaciones() {
     <td data-label="Fecha" class="muted">${esc(fmtFechaHoraCaracas(p.created_at))}</td>
   </tr>`).join('');
   const grid = document.getElementById('post-vista-tarjetas');
-  grid.innerHTML = postView === 'tarjetas' ? filtered.map(postCardHtml).join('') : '';
+  grid.innerHTML = postView === 'tarjetas' ? visibles.map(postCardHtml).join('') : '';
   grid.style.display = postView === 'tarjetas' ? '' : 'none';
   document.getElementById('post-vista-lista').style.display = postView === 'tarjetas' ? 'none' : '';
 
@@ -5685,8 +5972,8 @@ async function verCVPostulacion(path) {
 }
 document.getElementById('post-reanalizar-todas')?.addEventListener('click', reanalizarTodasLasPostulaciones);
 postView = initViewSwitcher('post-view-switch', 'postulaciones', 'lista', v => { postView = v; renderPostulaciones(); }, ['tarjetas', 'lista']);
-document.getElementById('post-search')?.addEventListener('input', () => { clearTimeout(postSearchDeb); postSearchDeb = setTimeout(renderPostulaciones, 200); });
-document.querySelectorAll('#post-f-modalidad,#post-f-llamada,#post-f-calidad,#post-f-sin-revisar').forEach(el => el.addEventListener('change', renderPostulaciones));
+document.getElementById('post-search')?.addEventListener('input', () => { clearTimeout(postSearchDeb); postSearchDeb = setTimeout(() => { postMostrar = TECHO_LISTA; renderPostulaciones(); }, 200); });
+document.querySelectorAll('#post-f-modalidad,#post-f-llamada,#post-f-calidad,#post-f-sin-revisar').forEach(el => el.addEventListener('change', () => { postMostrar = TECHO_LISTA; renderPostulaciones(); }));
 
 /* ---------- Cargar un CV y analizarlo con IA ----------
    Para los CVs que llegan por correo (corporativo.lotus360@gmail.com está
@@ -5880,11 +6167,8 @@ async function reanalizarTodasLasPostulaciones() {
   const conCV = postCache.filter(p => p.cv_storage_path);
   const sinCV = postCache.length - conCV.length;
   if (!conCV.length) { errToast('Ninguna postulación tiene CV adjunto para re-analizar'); return; }
-  const aviso = `Se van a re-analizar ${conCV.length} postulacion(es) con el criterio actual.`
-    + (sinCV ? `\n${sinCV} se saltan por no tener CV adjunto.` : '')
-    + '\n\nEsto gasta créditos de IA (una llamada por CV) y sobrescribe la calificación anterior.'
-    + '\nLos datos de contacto no se tocan.\n\n¿Seguimos?';
-  if (!confirm(aviso)) return;
+  const detalleReanalisis = `${sinCV ? `${sinCV} se saltan por no tener CV adjunto.\n\n` : ''}Esto gasta créditos de IA (una llamada por CV) y sobrescribe la calificación anterior.\nLos datos de contacto no se tocan.`;
+  if (!(await confirmarSheet({ titulo: `Se van a re-analizar ${conCV.length} postulacion(es) con el criterio actual`, detalle: detalleReanalisis, textoOk: 'Re-analizar' }))) return;
 
   const btn = document.getElementById('post-reanalizar-todas');
   const original = btn?.innerHTML;
@@ -6508,11 +6792,11 @@ async function viSubirReferencia(file) {
     return;
   }
   if (duracion < VI_IDEAL_DURACION || bitrateKbps < VI_IDEAL_BITRATE) {
-    const seguir = confirm(
-      `Calidad ajustada: ${duracion.toFixed(1)}s a ${bitrateKbps.toFixed(0)} kbps. ` +
-      `Es probable que la voz clonada suene un poco metálica. Lo ideal es 25-60s y más de 64 kbps.\n\n` +
-      `¿Subir igual?`
-    );
+    const seguir = await confirmarSheet({
+      titulo: '¿Subir igual?',
+      detalle: `Calidad ajustada: ${duracion.toFixed(1)}s a ${bitrateKbps.toFixed(0)} kbps. Es probable que la voz clonada suene un poco metálica. Lo ideal es 25-60s y más de 64 kbps.`,
+      textoOk: 'Subir igual',
+    });
     if (!seguir) return;
   }
 
@@ -6541,7 +6825,7 @@ async function viSubirReferencia(file) {
   }
 }
 async function viBorrarMuestra(id) {
-  if (!confirm('¿Borrar esta muestra? Hay que entrenar de nuevo para que el cambio se aplique a la voz.')) return;
+  if (!(await confirmarSheet({ titulo: '¿Borrar esta muestra?', detalle: 'Hay que entrenar de nuevo para que el cambio se aplique a la voz.', textoOk: 'Borrar', destructivo: true }))) return;
   const { data: { session } } = await sb.auth.getSession();
   try {
     const res = await fetch(`${VOZ_IA_REF_FN}?modo=${viModo}&id=${id}`, {
@@ -6574,7 +6858,7 @@ async function viGuardarTranscripcion(id) {
   }
 }
 async function viEntrenar() {
-  if (!confirm(`Se va a entrenar la voz de "${viModo === 'mensajes' ? 'mensajes' : 'videos de Instagram'}" con todas las muestras cargadas. Puede tardar unos segundos. ¿Confirmás?`)) return;
+  if (!(await confirmarSheet({ titulo: `Se va a entrenar la voz de "${viModo === 'mensajes' ? 'mensajes' : 'videos de Instagram'}"`, detalle: 'Con todas las muestras cargadas. Puede tardar unos segundos.', textoOk: 'Entrenar' }))) return;
   const btn = document.getElementById('vi-ref-entrenar');
   btn.disabled = true; btn.innerHTML = 'Entrenando... <i class="fas fa-spinner fa-spin"></i>';
   const { data: { session } } = await sb.auth.getSession();
@@ -6814,10 +7098,11 @@ async function vrGuardarVoz(id) {
 
 async function vrEliminarVoz(id) {
   const perfilesEnUso = VR_PERFILES.filter(p => p.voz_id === Number(id)).length;
-  const aviso = perfilesEnUso > 0
-    ? `${perfilesEnUso} perfil(es) tienen esta voz asignada -- van a quedar "sin voz". ¿Eliminar de todos modos?`
-    : '¿Eliminar esta voz del catálogo?';
-  if (!confirm(aviso)) return;
+  if (!(await confirmarSheet({
+    titulo: perfilesEnUso > 0 ? '¿Eliminar de todos modos?' : '¿Eliminar esta voz del catálogo?',
+    detalle: perfilesEnUso > 0 ? `${perfilesEnUso} perfil(es) tienen esta voz asignada -- van a quedar "sin voz".` : '',
+    textoOk: 'Eliminar', destructivo: true,
+  }))) return;
   const { data, error } = await sb.rpc('voces_catalogo_eliminar', { p_id: Number(id), p_forzar: perfilesEnUso > 0 });
   if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (error?.message || data?.error || '')); return; }
   okToast('Voz eliminada');
@@ -7044,7 +7329,7 @@ async function vrGuardarPreset(id) {
 }
 
 async function vrEliminarPreset(id) {
-  if (!confirm('¿Eliminar este preset?')) return;
+  if (!(await confirmarSheet({ titulo: '¿Eliminar este preset?', textoOk: 'Eliminar', destructivo: true }))) return;
   const { data, error } = await sb.rpc('voz_presets_eliminar', { p_id: Number(id) });
   if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (error?.message || data?.error || '')); return; }
   okToast('Preset eliminado');
@@ -7334,7 +7619,7 @@ async function vrGuardarDetalle() {
 }
 
 async function vrEliminarDetalle() {
-  if (!confirm('¿Eliminar este perfil?')) return;
+  if (!(await confirmarSheet({ titulo: '¿Eliminar este perfil?', textoOk: 'Eliminar', destructivo: true }))) return;
   const { data, error } = await sb.rpc('perfiles_voz_eliminar', { p_id: Number(vrPerfilDetalleId) });
   if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (error?.message || data?.error || '')); return; }
   okToast('Perfil eliminado');
@@ -7342,7 +7627,7 @@ async function vrEliminarDetalle() {
 }
 
 async function vrEliminarPerfil(id) {
-  if (!confirm('¿Eliminar este perfil?')) return;
+  if (!(await confirmarSheet({ titulo: '¿Eliminar este perfil?', textoOk: 'Eliminar', destructivo: true }))) return;
   const { data, error } = await sb.rpc('perfiles_voz_eliminar', { p_id: Number(id) });
   if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (error?.message || data?.error || '')); return; }
   okToast('Perfil eliminado');
@@ -8242,9 +8527,7 @@ function abrirEditorReasignacion(id) {
 async function borrarReasignacion(id) {
   const r = REASIG_CACHE.find(x => x.id === id);
   const quien = r ? `${r.asesor_anterior || '—'} → ${r.asesor_nuevo || 'sin asesor'}` : 'este registro';
-  if (!confirm(`¿Eliminar la reasignación ${quien}?
-
-Es el historial de quién le pasó el cliente a quién. No se puede deshacer desde el CRM.`)) return;
+  if (!(await confirmarSheet({ titulo: `¿Eliminar la reasignación ${quien}?`, detalle: 'Es el historial de quién le pasó el cliente a quién. No se puede deshacer desde el CRM.', textoOk: 'Eliminar', destructivo: true }))) return;
   const { data, error } = await sb.rpc('admin_eliminar_reasignacion', { p_id: id });
   if (error || !data?.ok) { errToast(error?.message || 'No se pudo eliminar'); return; }
   window.closeDrawer(); okToast('Reasignación eliminada'); loadReasignaciones();
@@ -8398,10 +8681,47 @@ window.exportarPDF = (tabla, titulo) => {
   win.focus();
   win.print();
 };
+// Mismo motivo que postMostrar (ver comentario junto a TECHO_LISTA): las 3
+// RPC de Facturación devuelven jsonb_agg (un blob, no setof/table), así que
+// PostgREST no puede paginar con .range() -- habría que sumarles
+// p_limit/p_offset, que es tocar el esquema/RPC fuera de lo que autoriza
+// esta fase. Se recorta el render, no el fetch.
+let factVentasMostrar = TECHO_LISTA, factComMostrar = TECHO_LISTA, cxpMostrar = TECHO_LISTA;
 const FACT_SORT = {
   ventas: { col: 'numero_factura', dir: 1 }, comisiones: { col: null, dir: 1 },
   cxp: { col: null, dir: 1 }, asesores: { col: 'nombre', dir: 1 },
 };
+const FACT_RENDERERS = { ventas: renderVentas, comisiones: renderComisiones, cxp: renderCuentasPorPagar, asesores: renderAsesoresComision };
+// Único lugar que aplica un orden -- lo llaman tanto el click en <th
+// class="th-sort"> (thead, oculto en móvil) como la hoja "Ordenar" (Fase
+// 4.1, segunda puerta de entrada). Nunca duplicar esta lógica en el sheet.
+function aplicarOrdenTabla(tabla, col) {
+  const spec = FACT_SORT[tabla];
+  spec.dir = (spec.col === col) ? -spec.dir : 1;
+  spec.col = col;
+  document.querySelectorAll(`.th-sort[data-sort-tbl="${tabla}"]`).forEach(h => h.querySelector('.sort-arrow')?.remove());
+  document.querySelector(`.th-sort[data-sort-tbl="${tabla}"][data-sort-col="${col}"]`)
+    ?.insertAdjacentHTML('beforeend', `<span class="sort-arrow">${spec.dir === 1 ? '▲' : '▼'}</span>`);
+  FACT_RENDERERS[tabla]();
+}
+function abrirOrdenarSheet(tabla) {
+  const spec = FACT_SORT[tabla];
+  const ths = [...document.querySelectorAll(`.th-sort[data-sort-tbl="${tabla}"]`)];
+  document.getElementById('ordenar-sheet-lista').innerHTML = ths.map(th => {
+    const col = th.dataset.sortCol;
+    // childNodes[0] es el texto del encabezado -- childNodes[1] (si existe)
+    // es el <span class="sort-arrow"> que insertAdjacentHTML ya haya puesto.
+    const label = th.childNodes[0].textContent.trim();
+    const activo = spec.col === col;
+    return `<button type="button" class="ordenar-op ${activo ? 'on' : ''}" data-col="${col}">${esc(label)} <span class="oo-arrow">${activo ? (spec.dir === 1 ? '▲' : '▼') : ''}</span></button>`;
+  }).join('');
+  document.querySelectorAll('#ordenar-sheet-lista .ordenar-op').forEach(btn => btn.onclick = () => {
+    aplicarOrdenTabla(tabla, btn.dataset.col);
+    closeSheet('ordenar-sheet');
+  });
+  openSheet('ordenar-sheet');
+}
+window.abrirOrdenarSheet = abrirOrdenarSheet;
 function ordenarYFiltrar(cache, campos, searchVal, sortSpec) {
   let out = cache;
   if (searchVal && searchVal.trim()) {
@@ -8420,8 +8740,8 @@ function ordenarYFiltrar(cache, campos, searchVal, sortSpec) {
 }
 function setupFacturacion() {
   document.getElementById('fact-estado').addEventListener('change', loadFacturas);
-  document.getElementById('fact-mes').addEventListener('change', renderVentas);
-  document.getElementById('fact-asesor').addEventListener('change', renderVentas);
+  document.getElementById('fact-mes').addEventListener('change', () => { factVentasMostrar = TECHO_LISTA; renderVentas(); });
+  document.getElementById('fact-asesor').addEventListener('change', () => { factVentasMostrar = TECHO_LISTA; renderVentas(); });
   document.querySelectorAll('#fact-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
     factTab = btn.dataset.factTab;
     document.querySelectorAll('#fact-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
@@ -8429,17 +8749,10 @@ function setupFacturacion() {
     if (factTab === 'bandeja') loadBandejaFacturacion();
     if (factTab === 'verificar') loadVentasPendientesVerificar();
   }));
-  document.querySelectorAll('.th-sort').forEach(th => th.addEventListener('click', () => {
-    const tabla = th.dataset.sortTbl, col = th.dataset.sortCol, spec = FACT_SORT[tabla];
-    spec.dir = (spec.col === col) ? -spec.dir : 1;
-    spec.col = col;
-    document.querySelectorAll(`.th-sort[data-sort-tbl="${tabla}"]`).forEach(h => h.querySelector('.sort-arrow')?.remove());
-    th.insertAdjacentHTML('beforeend', `<span class="sort-arrow">${spec.dir === 1 ? '▲' : '▼'}</span>`);
-    ({ ventas: renderVentas, comisiones: renderComisiones, cxp: renderCuentasPorPagar, asesores: renderAsesoresComision })[tabla]();
-  }));
-  document.getElementById('fact-ventas-search').addEventListener('input', renderVentas);
-  document.getElementById('fact-com-search').addEventListener('input', renderComisiones);
-  document.getElementById('cxp-search').addEventListener('input', renderCuentasPorPagar);
+  document.querySelectorAll('.th-sort').forEach(th => th.addEventListener('click', () => aplicarOrdenTabla(th.dataset.sortTbl, th.dataset.sortCol)));
+  document.getElementById('fact-ventas-search').addEventListener('input', () => { factVentasMostrar = TECHO_LISTA; renderVentas(); });
+  document.getElementById('fact-com-search').addEventListener('input', () => { factComMostrar = TECHO_LISTA; renderComisiones(); });
+  document.getElementById('cxp-search').addEventListener('input', () => { cxpMostrar = TECHO_LISTA; renderCuentasPorPagar(); });
   document.getElementById('fact-asesores-search').addEventListener('input', renderAsesoresComision);
   document.getElementById('monto-sheet-cancelar').addEventListener('click', () => closeSheet('monto-sheet'));
   document.getElementById('monto-sheet-confirmar').addEventListener('click', confirmarMontoSheet);
@@ -8486,13 +8799,15 @@ function renderAsesoresComision() {
   FACT_LAST.asesores = filas;
   document.getElementById('fact-asesores-tbody').innerHTML = filas.map(a => `
     <tr>
-      <td>${esc(a.nombre)}</td>
-      <td>${a.porcentaje_comision != null ? a.porcentaje_comision + '%' : '<span class="asist-badge off">Sin configurar</span>'}</td>
-      <td><button class="btn-sm" onclick="editarPorcentajeComision(${a.id})">Editar %</button></td>
+      <td class="td-name">${esc(a.nombre)}</td>
+      <td data-label="% Comisión">${a.porcentaje_comision != null ? a.porcentaje_comision + '%' : '<span class="asist-badge off">Sin configurar</span>'}</td>
+      <td class="td-acciones"><button class="btn-sm" onclick="editarPorcentajeComision(${a.id})">Editar %</button></td>
     </tr>`).join('') || '<tr><td colspan="3">Sin asesores</td></tr>';
 }
 async function loadFacturas() {
+  document.getElementById('fact-ventas-loading')?.classList.add('show');
   const { data, error } = await sb.rpc('listar_facturas', { p_estado: val('fact-estado') || null });
+  document.getElementById('fact-ventas-loading')?.classList.remove('show');
   if (error) { errToast('No se pudieron cargar las facturas'); return; }
   const cxpPorLead = new Map(CXP_CACHE.map(c => [c.lead_id, c]));
   FACT_VENTAS_CACHE = (data || []).map(f => {
@@ -8501,6 +8816,7 @@ async function loadFacturas() {
     return { ...f, costo_neto, proveedor: cxp ? cxp.proveedor : null, margen: costo_neto != null ? f.monto_total - costo_neto : null };
   });
   poblarFiltrosVentas();
+  factVentasMostrar = TECHO_LISTA;
   renderVentas();
 }
 function poblarFiltrosVentas() {
@@ -8521,80 +8837,102 @@ function renderVentas() {
   if (asesor) base = base.filter(f => f.asesor === asesor);
   const filas = ordenarYFiltrar(base, ['cliente', 'asesor', 'proveedor'], val('fact-ventas-search'), FACT_SORT.ventas);
   FACT_LAST.ventas = filas;
+  // Los totales se calculan sobre TODAS las filas filtradas, no solo las
+  // visibles -- si no, "Total facturado" mentiría apenas hubiera más de
+  // TECHO_LISTA facturas (mostraría la suma de la página, no la real).
   let sumaVenta = 0, sumaCosto = 0, sumaMargen = 0;
-  document.getElementById('fact-tbody').innerHTML = filas.map(f => {
-    if (f.estado === 'pagada') { sumaVenta += f.monto_total; if (f.costo_neto != null) { sumaCosto += f.costo_neto; sumaMargen += f.margen; } }
-    return `<tr>
-      <td>${fmt(f.numero_factura)}</td>
-      <td>${esc(f.cliente || ('#' + fmt(f.lead_id)))}</td>
-      <td>${esc(f.asesor || 'Sin asesor')}</td>
-      <td>${money(f.monto_total)}</td>
-      <td>${f.costo_neto != null ? money(f.costo_neto) : '<span class="muted">Sin definir</span>'}</td>
-      <td>${f.margen != null ? money(f.margen) : '—'}</td>
-      <td>${f.proveedor ? esc(f.proveedor) : '<span class="muted">—</span>'}</td>
-      <td><span class="chip">${esc(f.estado)}</span></td>
-      <td class="muted">${esc(fmtFechaHoraCaracas(f.fecha_emision))}</td>
-      <td style="display:flex;gap:6px">
-        <button class="btn-sm" onclick="abrirClienteDesdeFacturacion(${f.lead_id})">Editar cliente</button>
-        ${f.estado === 'pagada' ? `<button class="btn-sm" onclick="anularFacturaUI(${f.id})">Anular</button>` : ''}
-      </td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="10">Sin facturas</td></tr>';
+  filas.forEach(f => { if (f.estado === 'pagada') { sumaVenta += f.monto_total; if (f.costo_neto != null) { sumaCosto += f.costo_neto; sumaMargen += f.margen; } } });
   document.getElementById('fact-sum-venta').textContent = money(sumaVenta);
   document.getElementById('fact-sum-costo').textContent = money(sumaCosto);
   document.getElementById('fact-sum-margen').textContent = money(sumaMargen);
+  const visibles = filas.slice(0, factVentasMostrar);
+  const pager = document.getElementById('fact-ventas-pager');
+  if (pager) pager.style.display = filas.length > factVentasMostrar ? '' : 'none';
+  document.getElementById('fact-tbody').innerHTML = visibles.map(f => `<tr>
+      <td data-label="N° Factura">${fmt(f.numero_factura)}</td>
+      <td class="td-name">${esc(f.cliente || ('#' + fmt(f.lead_id)))}</td>
+      <td data-label="Asesor">${esc(f.asesor || 'Sin asesor')}</td>
+      <td data-label="Monto">${money(f.monto_total)}</td>
+      <td data-label="Costo neto">${f.costo_neto != null ? money(f.costo_neto) : '<span class="muted">Sin definir</span>'}</td>
+      <td data-label="Margen">${f.margen != null ? money(f.margen) : '—'}</td>
+      <td data-label="Proveedor">${f.proveedor ? esc(f.proveedor) : '<span class="muted">—</span>'}</td>
+      <td data-label="Estado"><span class="chip">${esc(f.estado)}</span></td>
+      <td data-label="Fecha" class="muted">${esc(fmtFechaHoraCaracas(f.fecha_emision))}</td>
+      <td class="td-acciones">
+        <button class="btn-sm" onclick="abrirClienteDesdeFacturacion(${f.lead_id})">Editar cliente</button>
+        ${f.estado === 'pagada' ? `<button class="btn-sm" onclick="anularFacturaUI(${f.id})">Anular</button>` : ''}
+      </td>
+    </tr>`).join('') || '<tr><td colspan="10">Sin facturas</td></tr>';
 }
+function cargarMasVentas() { factVentasMostrar += TECHO_LISTA; renderVentas(); }
+window.cargarMasVentas = cargarMasVentas;
 async function loadComisionesAdmin() {
+  document.getElementById('fact-com-loading')?.classList.add('show');
   const { data, error } = await sb.rpc('listar_comisiones');
+  document.getElementById('fact-com-loading')?.classList.remove('show');
   if (error) { errToast('No se pudieron cargar las comisiones'); return; }
   FACT_COMISIONES_CACHE = data || [];
+  factComMostrar = TECHO_LISTA;
   renderComisiones();
 }
 function renderComisiones() {
   const filas = ordenarYFiltrar(FACT_COMISIONES_CACHE, ['asesor'], val('fact-com-search'), FACT_SORT.comisiones);
   FACT_LAST.comisiones = filas;
-  document.getElementById('fact-com-tbody').innerHTML = filas.map(c => `
+  const visibles = filas.slice(0, factComMostrar);
+  const pager = document.getElementById('fact-com-pager');
+  if (pager) pager.style.display = filas.length > factComMostrar ? '' : 'none';
+  document.getElementById('fact-com-tbody').innerHTML = visibles.map(c => `
     <tr>
-      <td>${esc(c.asesor)}</td>
-      <td>${money(c.monto_venta)}</td>
-      <td>${c.porcentaje != null ? c.porcentaje + '%' : '—'}</td>
-      <td>${c.monto_comision != null ? money(c.monto_comision) : '—'}</td>
-      <td><span class="chip">${esc(c.estado)}</span></td>
-      <td style="display:flex;gap:6px">
+      <td class="td-name">${esc(c.asesor)}</td>
+      <td data-label="Monto venta">${money(c.monto_venta)}</td>
+      <td data-label="%">${c.porcentaje != null ? c.porcentaje + '%' : '—'}</td>
+      <td data-label="Comisión">${c.monto_comision != null ? money(c.monto_comision) : '—'}</td>
+      <td data-label="Estado"><span class="chip">${esc(c.estado)}</span></td>
+      <td class="td-acciones">
         ${['sin_configurar', 'pendiente'].includes(c.estado) ? `<button class="btn-sm" onclick="abrirEditarComisionUI(${c.id}, ${c.porcentaje ?? 'null'})">Editar %</button>` : ''}
         ${c.estado === 'pendiente' ? `<button class="btn-sm" onclick="marcarComisionPagadaUI(${c.id})">Marcar pagada</button>` : ''}
       </td>
     </tr>`).join('') || '<tr><td colspan="6">Sin comisiones</td></tr>';
 }
+function cargarMasComisiones() { factComMostrar += TECHO_LISTA; renderComisiones(); }
+window.cargarMasComisiones = cargarMasComisiones;
 async function loadCuentasPorPagar() {
+  document.getElementById('cxp-loading')?.classList.add('show');
   const { data, error } = await sb.rpc('listar_cuentas_por_pagar');
+  document.getElementById('cxp-loading')?.classList.remove('show');
   if (error) { errToast('No se pudieron cargar las cuentas por pagar'); return; }
   CXP_CACHE = data || [];
+  cxpMostrar = TECHO_LISTA;
   renderCuentasPorPagar();
 }
 function renderCuentasPorPagar() {
   const filas = ordenarYFiltrar(CXP_CACHE, ['proveedor', 'cliente'], val('cxp-search'), FACT_SORT.cxp);
   FACT_LAST.cxp = filas;
+  // Igual que en Ventas: los totales suman TODAS las filas filtradas, el
+  // recorte de abajo es solo para lo que se pinta.
   let sumaTransferir = 0, sumaAbonado = 0, sumaSaldo = 0;
-  document.getElementById('cxp-tbody').innerHTML = filas.map(c => {
-    sumaTransferir += c.monto_a_transferir; sumaAbonado += c.monto_abonado; sumaSaldo += c.saldo_pendiente;
-    return `<tr>
-      <td>${esc(c.proveedor)}</td>
-      <td>${esc(c.cliente)}</td>
-      <td>${money(c.monto_a_transferir)}</td>
-      <td>${money(c.monto_abonado)}</td>
-      <td>${money(c.saldo_pendiente)}</td>
-      <td><span class="chip ${c.estado === 'pagado' ? 'ok' : ''}">${esc(c.estado)}</span></td>
-      <td style="display:flex;gap:6px">
-        <button class="btn-sm" onclick="abrirClienteDesdeFacturacion(${c.lead_id})">Editar cliente</button>
-        ${c.estado === 'pendiente' ? `<button class="btn-sm" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})">Registrar abono</button>` : ''}
-      </td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="7">Sin cuentas por pagar</td></tr>';
+  filas.forEach(c => { sumaTransferir += c.monto_a_transferir; sumaAbonado += c.monto_abonado; sumaSaldo += c.saldo_pendiente; });
   document.getElementById('cxp-sum-transferir').textContent = money(sumaTransferir);
   document.getElementById('cxp-sum-abonado').textContent = money(sumaAbonado);
   document.getElementById('cxp-sum-saldo').textContent = money(sumaSaldo);
+  const visibles = filas.slice(0, cxpMostrar);
+  const pager = document.getElementById('cxp-pager');
+  if (pager) pager.style.display = filas.length > cxpMostrar ? '' : 'none';
+  document.getElementById('cxp-tbody').innerHTML = visibles.map(c => `<tr>
+      <td class="td-name">${esc(c.proveedor)}</td>
+      <td data-label="Cliente">${esc(c.cliente)}</td>
+      <td data-label="A transferir">${money(c.monto_a_transferir)}</td>
+      <td data-label="Abonado">${money(c.monto_abonado)}</td>
+      <td data-label="Saldo">${money(c.saldo_pendiente)}</td>
+      <td data-label="Estado"><span class="chip ${c.estado === 'pagado' ? 'ok' : ''}">${esc(c.estado)}</span></td>
+      <td class="td-acciones">
+        <button class="btn-sm" onclick="abrirClienteDesdeFacturacion(${c.lead_id})">Editar cliente</button>
+        ${c.estado === 'pendiente' ? `<button class="btn-sm" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})">Registrar abono</button>` : ''}
+      </td>
+    </tr>`).join('') || '<tr><td colspan="7">Sin cuentas por pagar</td></tr>';
 }
+function cargarMasCxp() { cxpMostrar += TECHO_LISTA; renderCuentasPorPagar(); }
+window.cargarMasCxp = cargarMasCxp;
 
 /* ---------- Hoja genérica de un solo monto (reusada por Editar % de
    comisión y Registrar abono de cuentas por pagar) ---------- */
@@ -8662,7 +9000,7 @@ window.anularFacturaUI = async (facturaId) => {
   loadFacturas(); loadComisionesAdmin(); loadFacturacionKpis();
 };
 window.marcarComisionPagadaUI = async (comisionId) => {
-  if (!confirm('¿Marcar esta comisión como pagada?')) return;
+  if (!(await confirmarSheet({ titulo: '¿Marcar esta comisión como pagada?', textoOk: 'Marcar pagada' }))) return;
   const { error } = await sb.rpc('marcar_comision_pagada', { p_comision_id: comisionId });
   if (error) { errToast('No se pudo marcar como pagada: ' + error.message); return; }
   okToast('Comisión marcada como pagada');
@@ -8673,11 +9011,11 @@ async function loadMisComisiones() {
   if (error) { errToast('No se pudieron cargar tus comisiones'); return; }
   document.getElementById('miscom-tbody').innerHTML = (data || []).map(c => `
     <tr>
-      <td>${money(c.monto_venta)}</td>
-      <td>${c.porcentaje != null ? c.porcentaje + '%' : '—'}</td>
-      <td>${c.monto_comision != null ? money(c.monto_comision) : 'Sin configurar'}</td>
-      <td><span class="chip">${esc(c.estado)}</span></td>
-      <td class="muted">${esc(fmtFechaHoraCaracas(c.fecha_pago))}</td>
+      <td data-label="Monto venta">${money(c.monto_venta)}</td>
+      <td data-label="%">${c.porcentaje != null ? c.porcentaje + '%' : '—'}</td>
+      <td data-label="Comisión">${c.monto_comision != null ? money(c.monto_comision) : 'Sin configurar'}</td>
+      <td data-label="Estado"><span class="chip">${esc(c.estado)}</span></td>
+      <td data-label="Fecha de pago" class="muted">${esc(fmtFechaHoraCaracas(c.fecha_pago))}</td>
     </tr>`).join('') || '<tr><td colspan="5">Sin comisiones todavía</td></tr>';
 }
 
@@ -9642,7 +9980,7 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
   };
 }
 async function eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal) {
-  if (!confirm('¿Eliminar esta foto? No se puede deshacer desde aquí.')) return;
+  if (!(await confirmarSheet({ titulo: '¿Eliminar esta foto?', detalle: 'No se puede deshacer desde aquí.', textoOk: 'Eliminar', destructivo: true }))) return;
   const box = document.getElementById('tar-fotos-admin');
   box.style.opacity = '.5';
   // Baja lógica, mismo patrón que reemplazarFoto -- nunca se borra el
@@ -10503,18 +10841,23 @@ function vcQueryBase() {
 async function cargarHistorialVouchers(append) {
   const tbody = document.getElementById('vc-historial-tbody');
   const masBtn = document.getElementById('vc-cargar-mas-btn');
+  // Solo la carga inicial muestra el skeleton -- "Cargar más" (append=true)
+  // agrega filas al final de una lista que ya se ve, tapar todo con el
+  // skeleton ahí se vería como que se perdió lo que ya estaba.
+  if (!append) document.getElementById('vc-historial-loading')?.classList.add('show');
   const { data, error } = await vcQueryBase()
     .order('created_at', { ascending: false })
     .range(vcOffset, vcOffset + VC_PAGE_SIZE - 1);
+  document.getElementById('vc-historial-loading')?.classList.remove('show');
   if (error) { if (!append) tbody.innerHTML = ''; return; }
   const filas = (data || []).map(v => `<tr>
-    <td>${fmt(v.numero_factura)}</td>
-    <td class="muted">${esc((v.created_at || '').replace('T', ' ').slice(0, 16))}</td>
-    <td>${esc(v.asesor_nombre)}</td>
-    <td>${esc(v.cliente_nombre)}</td>
-    <td>${esc(v.destino_hospedaje || '—')}</td>
-    <td>${v.total_general != null ? '$' + fmt(v.total_general) : '—'}</td>
-    <td><button class="dbtn" type="button" style="width:auto;padding:4px 10px" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})">${v.pdf_path ? 'Ver PDF' : 'Reconstruir'}</button></td>
+    <td data-label="N° Factura">${fmt(v.numero_factura)}</td>
+    <td data-label="Fecha" class="muted">${esc((v.created_at || '').replace('T', ' ').slice(0, 16))}</td>
+    <td data-label="Asesor">${esc(v.asesor_nombre)}</td>
+    <td class="td-name">${esc(v.cliente_nombre)}</td>
+    <td data-label="Destino">${esc(v.destino_hospedaje || '—')}</td>
+    <td data-label="Total">${v.total_general != null ? '$' + fmt(v.total_general) : '—'}</td>
+    <td class="td-acciones"><button class="btn-sm" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})">${v.pdf_path ? 'Ver PDF' : 'Reconstruir'}</button></td>
   </tr>`).join('');
   tbody.innerHTML = append ? tbody.innerHTML + filas : filas;
   if (masBtn) masBtn.style.display = (data || []).length < VC_PAGE_SIZE ? 'none' : '';
@@ -10697,12 +11040,47 @@ async function construirVoucherPdf(v) {
 }
 
 /* ---------- Realtime ---------- */
+// Salud del canal (falla #2 del plan de rediseño): sin esto el websocket
+// puede morir en silencio y la interfaz sigue pareciendo viva. El indicador
+// (#leads-live-dot / #leads-live-status) es honesto: verde solo mientras el
+// canal está realmente SUBSCRIBED, gris con leyenda apenas se cae.
+let canalLeadsLive = null, intentosReconexionLive = 0, timerReconexionLive = null, cerrandoCanalIntencional = false;
+function marcarLeadsLiveVivo() {
+  intentosReconexionLive = 0;
+  clearTimeout(timerReconexionLive);
+  const dot = document.getElementById('leads-live-dot'), status = document.getElementById('leads-live-status');
+  if (dot) dot.className = 'live-dot vivo';
+  if (status) status.textContent = '';
+}
+function marcarLeadsLiveCaido() {
+  const dot = document.getElementById('leads-live-dot'), status = document.getElementById('leads-live-status');
+  if (dot) dot.className = 'live-dot caido';
+  if (status) status.textContent = 'Sin conexión en vivo';
+}
+function reconectarLeadsLive(inmediato = false) {
+  clearTimeout(timerReconexionLive);
+  const espera = inmediato ? 0 : Math.min(60000, 2000 * (2 ** intentosReconexionLive));
+  if (!inmediato) intentosReconexionLive++;
+  timerReconexionLive = setTimeout(() => {
+    cerrandoCanalIntencional = true;
+    if (canalLeadsLive) sb.removeChannel(canalLeadsLive);
+    cerrandoCanalIntencional = false;
+    subscribeRealtime();
+  }, espera);
+}
+window.addEventListener('online', () => { intentosReconexionLive = 0; reconectarLeadsLive(true); });
+window.addEventListener('offline', marcarLeadsLiveCaido);
+
 function subscribeRealtime() {
-  sb.channel('leads-live')
+  canalLeadsLive = sb.channel('leads-live')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, payload => {
-      toast(payload.new);
+      // Mismo criterio de visibilidad que buildQuery (:2334) -- si no, avisa
+      // de leads que el usuario nunca ve aparecer en la lista. Nota: buildQuery
+      // NO excluye es_prueba (esos leads sí aparecen, con su chip), así que acá
+      // tampoco se filtra por es_prueba -- solo lo que buildQuery de verdad excluye.
+      if (payload.new.servicio !== SERVICIO_POSADA_IA && !payload.new.eliminado_at) toast(payload.new);
       loadStats().then(() => { renderAll(); loadDestPeriodo(); });
-      if (page === 1 && document.getElementById('sec-leads').classList.contains('active')) loadTable();
+      if (page === 1 && document.getElementById('sec-leads')?.classList.contains('active')) encolarLeadLive(payload);
       // Solo empujar al inbox en vivo si el lead realmente llegó sin atender
       // -- un INSERT no siempre significa "nuevo por atender" (ej. import
       // masivo con estado ya PAGO REALIZADO, hallazgo real 2026-07-24: sin
@@ -10721,10 +11099,30 @@ function subscribeRealtime() {
       // fecha_creacion desc), un UPDATE puede tocar un lead de cualquier
       // página -- se refresca igual, loadTable() ya respeta filtros/página
       // actuales así que si el lead editado no está en la vista no cambia nada.
-      if (document.getElementById('sec-leads').classList.contains('active')) loadTable();
+      if (document.getElementById('sec-leads')?.classList.contains('active')) encolarLeadLive(payload);
     })
-    .subscribe();
+    .subscribe(estado => {
+      if (estado === 'SUBSCRIBED') { marcarLeadsLiveVivo(); return; }
+      if (cerrandoCanalIntencional) return;
+      if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(estado)) { marcarLeadsLiveCaido(); reconectarLeadsLive(); }
+    });
 }
+
+// Resync al volver de segundo plano (falla #3): el socket pudo morir sin
+// avisar mientras el teléfono estaba bloqueado, y Realtime no reenvía lo
+// perdido. Se refresca todo lo que dependía del canal caído -- KPIs/
+// pipeline, inbox+badge, la tabla si está a la vista -- y se reintenta la
+// suscripción de una vez, sin esperar a que algo falle para notarlo.
+// Función nombrada (antes vivía inline en el listener) para poder llamarla
+// también desde el pull-to-refresh (Fase 5.4) sin duplicar la lógica.
+function resyncTrasSegundoPlano() {
+  const p = loadStats().then(() => { renderAll(); loadDestPeriodo(); });
+  if (ROL === 'asesor') loadInboxLeads();
+  if (document.getElementById('sec-leads')?.classList.contains('active')) loadTable();
+  reconectarLeadsLive(true);
+  return p;
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) resyncTrasSegundoPlano(); });
 // Red de seguridad si el websocket de Realtime se cae y tarda en reconectar
 // -- refresco silencioso de la tabla mientras la sección Leads esté abierta,
 // se arranca/para desde activateSection() para no dejarlo corriendo en fondo.
@@ -10763,9 +11161,9 @@ function recibirLeadNuevoInbox(lead) {
   // directo tira "Illegal constructor" en Chrome/Android cuando corre como
   // PWA instalada (la forma en que la usan los asesores), no solo en sitios
   // sueltos de escritorio.
-  if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted' && navigator.serviceWorker) {
+  if (MI_PREFERENCIAS.notificaciones_leads !== false && document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted' && navigator.serviceWorker) {
     navigator.serviceWorker.ready.then(reg => reg.showNotification('Nuevo lead — ' + (lead.destino || 'sin destino'), {
-      body: `${lead.nombre} · ${lead.telefono || ''}`, icon: './icons/icon-192.png',
+      body: `${lead.nombre} · contacto disponible al tomarlo en el CRM`, icon: './icons/icon-192.png', badge: './icons/badge-72.png', tag: `lead-${lead.id}`,
     }));
   }
 }
@@ -10813,10 +11211,16 @@ window.addEventListener('popstate', () => {
   else if (top.type === 'msg-conv') cerrarConversacion(true);
   else if (top.type === 'section') activateSection(top.prevSec, true);
   else if (top.type === 'tour') volverAlMenuTutorial(true);
+  else if (top.type === 'seleccion') top.limpiar?.();
 });
 
 /* ---------- Nav ---------- */
 let currentSec = null;
+// Qué secciones pasaron por activateSection() al menos una vez -- el peek
+// del swipe (Fase 5.2) lo consulta para no asomar una sección que nunca
+// disparó su carga perezosa (loadTarifario, loadFacturacion, etc): montar
+// 500 filas a mitad de gesto se siente peor que no tener peek.
+const SECCIONES_CARGADAS = new Set();
 // Secciones que se retiraron del menú (2026-07-27) y a dónde fue su contenido.
 // Sin esto, quien tenía guardada una de ellas como última sección abría el CRM
 // contra un id que ya no existe y reventaba en el getElementById de abajo.
@@ -10835,6 +11239,7 @@ function activateSection(sec, fromNav) {
   if (!fromNav && currentSec !== null) navPush({ type: 'section', prevSec: currentSec });
   if (currentSec === 'leads' && sec !== 'leads') detenerPollLeads();
   currentSec = sec;
+  SECCIONES_CARGADAS.add(sec);
   guardarUltimaSeccion(sec);
   document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
   // La barra de abajo ya no tiene un set fijo: se marca "Yo" cuando la sección
@@ -10956,7 +11361,8 @@ function renderBottomNav() {
     const it = porSec[sec];
     const badge = BN_BADGES[sec] ? `<span class="bn-badge" id="${BN_BADGES[sec]}"></span>` : '';
     return `<a class="bn-item ${esc(it.clases || '')}" data-sec="${esc(sec)}"><i class="${esc(it.icono)}"></i>${badge}<span class="bn-t">${esc(it.label)}</span></a>`;
-  }).join('') + '<a class="bn-item" id="bn-more"><i class="fas fa-user"></i><span class="bn-t">Yo</span></a>';
+  }).join('') + '<a class="bn-item" id="bn-more"><i class="fas fa-user"></i><span class="bn-t">Yo</span></a>'
+    + '<div class="bn-indicator" id="bn-indicator"></div>';
   // El CSS achica la letra según cuántos entren, para que el nombre no se corte.
   nav.dataset.n = String(secs.length + 1);
 
@@ -10974,6 +11380,7 @@ function marcarBottomNavActivo(sec) {
   document.querySelectorAll('.bn-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
   const enBarra = bnSeleccion().includes(sec);
   document.getElementById('bn-more')?.classList.toggle('active', !enBarra);
+  posicionarIndicadorActivo();
 }
 
 /* ---------- Editor de la barra (dentro de Mi Perfil) ---------- */
@@ -11059,8 +11466,88 @@ function dentroDeScrollHorizontal(el) {
   return false;
 }
 
+// Píxeles reales del touch vs píxeles CSS: body{zoom:.9} (y .8/1.05 con
+// fsize-chico/grande, index.html:71) hace que 100px de dedo NO sean 100px
+// de translateX(). clientX del evento siempre viene en reales; esto lo
+// convierte antes de usarlo en cualquier transform.
+function zoomFactor() { return parseFloat(getComputedStyle(document.body).zoom) || 1; }
+
+// Barrita bajo el ítem activo de la bottom-nav -- se desliza proporcional al
+// arrastre mientras dura el swipe (progreso 0..1, hacia vecinaSec), y vuelve
+// a su lugar normal al terminar. Puramente visual (nunca toca transform de
+// una .section), así que no puede reintroducir el riesgo #1.
+function posicionarIndicadorActivo() { actualizarIndicadorSwipe(0, null); }
+function actualizarIndicadorSwipe(progreso, vecinaSecParam) {
+  const ind = document.getElementById('bn-indicator');
+  const activoEl = document.querySelector(`.bn-item[data-sec="${currentSec}"]`);
+  if (!ind || !activoEl) return;
+  const nav = activoEl.parentElement;
+  const navR = nav.getBoundingClientRect();
+  const rActivo = activoEl.getBoundingClientRect();
+  let left = rActivo.left - navR.left, width = rActivo.width;
+  const vecinaEl = vecinaSecParam ? document.querySelector(`.bn-item[data-sec="${vecinaSecParam}"]`) : null;
+  if (progreso && vecinaEl) {
+    const rVec = vecinaEl.getBoundingClientRect();
+    const t = Math.max(0, Math.min(1, progreso));
+    left += (rVec.left - navR.left - left) * t;
+    width += (rVec.width - width) * t;
+  }
+  ind.style.left = left + 'px';
+  ind.style.width = width + 'px';
+}
+
 function setupSwipeSecciones() {
-  let x0 = 0, y0 = 0, t0 = 0, activo = false;
+  let x0 = 0, y0 = 0, t0 = 0, activo = false, eje = null;
+  let elActual = null, elVecina = null, vecinaSec = null, dirVecina = 0, mainEl = null;
+
+  // RIESGO #1 del plan: un transform que se queda pegado en .section.active
+  // (o en cualquier sección) la convierte en bloque contenedor de sus hijos
+  // position:fixed -- las hojas de filtros (.mfs) se dibujan lejos del
+  // viewport en vez de pegadas abajo (bug real ya visto, ver comentario en
+  // index.html:1383-1387). limpiarGesto() es el único lugar que toca estos
+  // estilos para terminar un gesto, y se llama SIEMPRE -- éxito, cancelación
+  // y touchcancel -- nunca se deja en translateX(0), se borra el atributo.
+  function limpiarGesto() {
+    if (mainEl) mainEl.style.position = '';
+    if (elActual) elActual.style.transform = '';
+    if (elVecina) { elVecina.style.transform = ''; elVecina.classList.remove('swipe-peek'); }
+    elActual = null; elVecina = null; vecinaSec = null; dirVecina = 0; mainEl = null; eje = null; activo = false;
+    posicionarIndicadorActivo();
+  }
+
+  function iniciarGestoX(dxReal) {
+    elActual = document.getElementById('sec-' + currentSec);
+    if (!elActual) { eje = 'y'; return; }
+    const secs = bnSeleccion();
+    const i = secs.indexOf(currentSec);
+    // dedo hacia la izquierda -> avanza a la siguiente; hacia la derecha ->
+    // retrocede. Sin wrap: en los extremos no hay vecina (decisión del
+    // dueño, Fase 5.2) y el gesto solo amortigua.
+    dirVecina = dxReal < 0 ? 1 : -1;
+    vecinaSec = i < 0 ? null : secs[i + dirVecina];
+    const candidata = vecinaSec ? document.getElementById('sec-' + vecinaSec) : null;
+    elVecina = (candidata && SECCIONES_CARGADAS.has(vecinaSec)) ? candidata : null;
+    mainEl = document.querySelector('.main');
+    if (mainEl) mainEl.style.position = 'relative';
+    if (elVecina) elVecina.classList.add('swipe-peek');
+    actualizarIndicadorSwipe(0, null);
+  }
+
+  function aplicarArrastre(dxReal) {
+    const dx = dxReal / zoomFactor();
+    if (elVecina) {
+      const ancho = elActual.getBoundingClientRect().width || window.innerWidth;
+      elActual.style.transform = `translateX(${dx}px)`;
+      elVecina.style.transform = `translateX(${dx - dirVecina * ancho}px)`;
+    } else {
+      // Rebote en el extremo: sin vecina (no hay siguiente/anterior, o la
+      // vecina nunca cargó), el arrastre se amortigua en vez de no hacer nada.
+      elActual.style.transform = `translateX(${dx * 0.35}px)`;
+    }
+    const ancho = window.innerWidth || 1;
+    actualizarIndicadorSwipe(Math.abs(Math.max(-1, Math.min(1, dxReal / ancho))), vecinaSec);
+  }
+
   document.addEventListener('touchstart', e => {
     if (e.touches.length !== 1) { activo = false; return; }
     // Con una hoja, drawer, tour u overlay abierto el swipe es del contenido de
@@ -11071,31 +11558,188 @@ function setupSwipeSecciones() {
       || document.body.classList.contains('lb-lock')) { activo = false; return; }
     if (dentroDeScrollHorizontal(e.target)) { activo = false; return; }
     if (e.target.closest('input,textarea,select,canvas')) { activo = false; return; }
-    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); activo = true;
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+    activo = true; eje = null;
   }, { passive: true });
 
-  document.addEventListener('touchend', e => {
+  document.addEventListener('touchmove', e => {
     if (!activo) return;
-    activo = false;
-    if (Date.now() - t0 > SWIPE_MAX_MS) return;
+    const t = e.touches[0];
+    const dxReal = t.clientX - x0, dyReal = t.clientY - y0;
+    if (eje === null) {
+      // Bloqueo de eje: los primeros ~10px reales deciden si el gesto es
+      // horizontal o vertical, y esa decisión se mantiene hasta soltar --
+      // sin esto pelea con el scroll vertical de la página.
+      if (Math.abs(dxReal) < 10 && Math.abs(dyReal) < 10) return;
+      eje = Math.abs(dxReal) >= Math.abs(dyReal) * SWIPE_RATIO ? 'x' : 'y';
+      if (eje === 'x') iniciarGestoX(dxReal);
+    }
+    if (eje !== 'x' || !elActual) return;
+    e.preventDefault(); // solo si ganó horizontal -- necesita {passive:false}
+    aplicarArrastre(dxReal);
+  }, { passive: false });
+
+  document.addEventListener('touchend', e => {
+    if (!activo) { limpiarGesto(); return; }
+    if (eje !== 'x' || !elActual) { limpiarGesto(); return; }
     const t = e.changedTouches[0];
-    const dx = t.clientX - x0, dy = t.clientY - y0;
-    if (Math.abs(dx) < SWIPE_MIN_X) return;
-    if (Math.abs(dx) < Math.abs(dy) * SWIPE_RATIO) return;
-    const secs = bnSeleccion();
-    if (secs.length < 2) return;
-    const i = secs.indexOf(currentSec);
-    // Si estás en una sección que no está en la barra (llegaste desde "Yo"),
-    // el swipe te devuelve al principio en vez de no hacer nada.
-    const siguiente = i < 0
-      ? secs[0]
-      : secs[(i + (dx < 0 ? 1 : -1) + secs.length) % secs.length];
-    if (siguiente && siguiente !== currentSec) {
-      document.body.classList.add(dx < 0 ? 'swipe-izq' : 'swipe-der');
+    const dxReal = t.clientX - x0;
+    const dt = Math.max(1, Date.now() - t0);
+    const velocidadRealMs = Math.abs(dxReal) / dt; // px reales / ms, sin convertir por zoom
+    const pasaUmbral = Math.abs(dxReal) > window.innerWidth * 0.45 || velocidadRealMs > 0.5;
+    if (pasaUmbral && elVecina && vecinaSec) {
+      const destino = vecinaSec;
+      limpiarGesto();
+      document.body.classList.add(dxReal < 0 ? 'swipe-izq' : 'swipe-der');
       setTimeout(() => document.body.classList.remove('swipe-izq', 'swipe-der'), 260);
-      activateSection(siguiente);
+      activateSection(destino);
+    } else {
+      limpiarGesto();
     }
   }, { passive: true });
+
+  document.addEventListener('touchcancel', limpiarGesto, { passive: true });
+}
+let _resizeIndicadorT = null;
+window.addEventListener('resize', () => { clearTimeout(_resizeIndicadorT); _resizeIndicadorT = setTimeout(posicionarIndicadorActivo, 120); });
+
+/* ---------- Pull-to-refresh (Fase 5.4) ----------
+   <body> es el contenedor de scroll real, no <html> (index.html:78-89,
+   decisión de un bug de iOS del 2026-07-18 -- no tocar esa parte). El
+   gesto se engancha ahí y solo arranca con body.scrollTop === 0. Es un
+   atajo, no reemplaza los botones de refrescar que ya existen en cada
+   sección -- esos se quedan igual. */
+// Mismo mapeo de sección->recarga que ya usa activateSection() (app.js
+// ~11185), repetido acá a propósito: activateSection es un if-chain con un
+// guard de "no hacer nada si ya estás ahí" (no sirve para forzar un
+// refresco), y convertirlo en esta tabla es un refactor más grande que lo
+// que pide esta fase. Si se agrega una sección nueva con carga propia, hay
+// que sumarla en los dos lugares.
+const REFRESCAR_SECCION = {
+  leads: () => loadTable(), ranking: () => loadRanking(), facturacion: () => loadFacturacion(),
+  'mis-comisiones': () => loadMisComisiones(), 'gestion-personal': () => loadGestionPersonal(),
+  postventa: () => loadPostventa(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
+  tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
+  'cerebro-ia': () => loadCerebroIA(), 'rendimiento-ia': () => loadRendimientoIA(),
+  'ia-atencion': () => loadIaAtencion(), 'web-reasignados': () => loadWebReasignados(),
+  'stop-sales': () => { loadStopSalesVigentes(); ssCargarPdfActual(); },
+  redes: () => cargarRedActual(), voucher: () => loadVoucherSeccion(), tareas: () => loadTareas(),
+};
+async function refrescarSeccionActual() {
+  const tareas = [Promise.resolve(resyncTrasSegundoPlano())];
+  const fn = REFRESCAR_SECCION[currentSec];
+  if (fn) tareas.push(Promise.resolve(fn()));
+  await Promise.allSettled(tareas);
+}
+
+function mostrarIndicadorPTR(distancia, umbral) {
+  const el = document.getElementById('ptr-indicador');
+  if (!el) return;
+  el.classList.add('show');
+  el.classList.toggle('listo', distancia >= umbral);
+  el.style.transform = `translate(-50%, ${Math.min(distancia, umbral + 20) - 44}px)`;
+  el.querySelector('i').style.transform = `rotate(${Math.min(distancia / umbral, 1) * 200}deg)`;
+}
+function ocultarIndicadorPTR() {
+  const el = document.getElementById('ptr-indicador');
+  if (!el) return;
+  el.classList.remove('show', 'listo', 'cargando');
+  el.style.transform = '';
+  el.querySelector('i').style.transform = '';
+}
+async function dispararRefreshPTR() {
+  const el = document.getElementById('ptr-indicador');
+  if (!el) return;
+  el.classList.add('show', 'cargando');
+  el.style.transform = 'translate(-50%, 20px)';
+  el.querySelector('i').style.transform = '';
+  try { await refrescarSeccionActual(); } finally { setTimeout(ocultarIndicadorPTR, 350); }
+}
+
+function setupPullToRefresh() {
+  const UMBRAL = 70;
+  let y0 = 0, activo = false, distancia = 0;
+
+  document.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1 || document.body.scrollTop > 0) { activo = false; return; }
+    if (sheetAbierta
+      || document.getElementById('drawer')?.classList.contains('open')
+      || document.getElementById('tour-overlay')?.classList.contains('open')
+      || document.body.classList.contains('lb-lock')) { activo = false; return; }
+    if (e.target.closest('input,textarea,select,canvas')) { activo = false; return; }
+    y0 = e.touches[0].clientY; activo = true; distancia = 0;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!activo) return;
+    if (document.body.scrollTop > 0) { activo = false; distancia = 0; ocultarIndicadorPTR(); return; }
+    const dy = e.touches[0].clientY - y0;
+    if (dy <= 0) { distancia = 0; ocultarIndicadorPTR(); return; }
+    distancia = dy * 0.5; // resistencia
+    mostrarIndicadorPTR(distancia, UMBRAL);
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (!activo) return;
+    activo = false;
+    if (distancia >= UMBRAL) dispararRefreshPTR(); else ocultarIndicadorPTR();
+    distancia = 0;
+  }, { passive: true });
+
+  document.addEventListener('touchcancel', () => { activo = false; distancia = 0; ocultarIndicadorPTR(); }, { passive: true });
+}
+
+/* ---------- Long-press para selección múltiple (Fase 5.5) ----------
+   Reusa TAL CUAL la selección que ya existe (wireLeadChecks/SELECTED_LEADS/
+   updateBulkBar, ver app.js ~2573) -- el long-press solo hace lo mismo que
+   tocar el checkbox: lo tilda y dispara su propio 'change'. Cero lógica de
+   selección duplicada.
+   Solo tarjetas de Leads: los checkboxes son solo-admin-borrar (admin) y
+   el checkbox SOLO existe en leadCardHtml -- postCardHtml (vista tarjetas
+   de Postulaciones) no tiene uno, así que ahí no hay nada que long-press
+   pueda tildar. Sumarle uno es una ampliación de scope, no esta fase. */
+function setupLongPressSeleccion() {
+  const LONG_PRESS_MS = 500, UMBRAL_MOVIMIENTO = 10;
+  let timer = null, x0 = 0, y0 = 0, disparado = false;
+
+  document.addEventListener('touchstart', e => {
+    if (ROL !== 'admin') return;
+    if (e.target.closest('button,a,input,select,.estado-arrow')) return;
+    const tarjeta = e.target.closest('.entity-card[data-lead-id]');
+    if (!tarjeta) return;
+    const cb = tarjeta.querySelector('.lead-check');
+    if (!cb || getComputedStyle(cb).display === 'none') return;
+    const t = e.touches[0];
+    x0 = t.clientX; y0 = t.clientY;
+    timer = setTimeout(() => {
+      const habiaSeleccion = SELECTED_LEADS.size > 0;
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+      navigator.vibrate?.(10);
+      disparado = true;
+      // Solo se registra en NAV_STACK la PRIMERA selección de la racha --
+      // si ya había algo seleccionado, el atrás ya tiene su entrada.
+      if (!habiaSeleccion && cb.checked) navPush({ type: 'seleccion', limpiar: clearSelection });
+      timer = null;
+    }, LONG_PRESS_MS);
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!timer) return;
+    const t = e.touches[0];
+    if (Math.abs(t.clientX - x0) > UMBRAL_MOVIMIENTO || Math.abs(t.clientY - y0) > UMBRAL_MOVIMIENTO) { clearTimeout(timer); timer = null; }
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => { clearTimeout(timer); timer = null; }, { passive: true });
+  document.addEventListener('touchcancel', () => { clearTimeout(timer); timer = null; }, { passive: true });
+
+  // El navegador dispara un click sintético después de un touchend -- si el
+  // long-press ya disparó (tildó el checkbox), hay que tragarse ese click
+  // para que no ABRA TAMBIÉN el drawer del lead (el listener de click de la
+  // tarjeta vive en wireLeadCardLive). Captura, para interceptar antes.
+  document.addEventListener('click', e => {
+    if (disparado) { e.preventDefault(); e.stopPropagation(); disparado = false; }
+  }, true);
 }
 
 /* ---------- Orden de la sidebar a mano (drag & drop, guardado en
@@ -11465,7 +12109,7 @@ function cerrarDetalleBoleteria() {
 }
 
 async function bolEliminar(id) {
-  if (!confirm('¿Eliminar esta solicitud de la cola? Deja de verse para todos.')) return;
+  if (!(await confirmarSheet({ titulo: '¿Eliminar esta solicitud de la cola?', detalle: 'Deja de verse para todos.', textoOk: 'Eliminar', destructivo: true }))) return;
   const { data, error } = await sb.rpc('eliminar_solicitud_boleteria', { p_id: Number(id) });
   if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (BOL_ERR[data?.error] || error?.message || '')); return; }
   cerrarDetalleBoleteria();
@@ -11522,7 +12166,7 @@ async function cerrarSolicitudBoleteria() {
   closeSheet('bol-cerrar-sheet'); okToast('Solicitud resuelta'); BOL_CERRAR_ID = null; loadColaBoleteria();
 }
 async function bolCancelar(id) {
-  if (!confirm('¿Cancelar esta solicitud de boletería?')) return;
+  if (!(await confirmarSheet({ titulo: '¿Cancelar esta solicitud de boletería?', textoOk: 'Cancelar solicitud', destructivo: true }))) return;
   const { data, error } = await sb.rpc('cancelar_solicitud_boleteria', { p_id: Number(id) });
   if (error || !data?.ok) { errToast('No se pudo cancelar: ' + (BOL_ERR[data?.error] || error?.message || '')); return; }
   okToast('Solicitud cancelada'); loadColaBoleteria();
@@ -11691,9 +12335,43 @@ function closeSheet(id, fromNav) {
   document.getElementById(id)?.classList.remove('open');
   document.getElementById('sheet-bg')?.classList.remove('open');
   if (sheetAbierta === id) sheetAbierta = null;
+  // Si confirmar-sheet se cierra por cualquier via que NO sea sus propios
+  // botones (fondo, atras de Android, otra hoja que la reemplaza), la
+  // promesa de confirmarSheet() tiene que resolver igual -- si no, el
+  // await del que llamó queda colgado para siempre. resolverConfirmarSheet
+  // ya vacia confirmarSheetResolve ANTES de llegar acá, asi que esto nunca
+  // dispara dos veces para un mismo confirm.
+  if (id === 'confirmar-sheet' && confirmarSheetResolve) { const r = confirmarSheetResolve; confirmarSheetResolve = null; r(false); }
   if (!fromNav) navConsume();
 }
 document.getElementById('sheet-bg')?.addEventListener('click', () => { if (sheetAbierta) closeSheet(sheetAbierta); });
+
+// Hoja de confirmación genérica (Fase 4.4) -- reemplaza confirm() nativo.
+// Uso: if (!(await confirmarSheet({ titulo, detalle, textoOk, destructivo })))
+// return; -- misma forma que el confirm() que reemplaza, pero con Promise.
+let confirmarSheetResolve = null;
+function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Confirmar', textoCancelar = 'Cancelar', destructivo = false } = {}) {
+  return new Promise(resolve => {
+    confirmarSheetResolve = resolve;
+    document.getElementById('confirmar-sheet-titulo').textContent = titulo;
+    const det = document.getElementById('confirmar-sheet-detalle');
+    det.innerHTML = detalle ? esc(detalle).replace(/\n/g, '<br>') : '';
+    det.style.display = detalle ? '' : 'none';
+    const btnOk = document.getElementById('confirmar-sheet-ok');
+    btnOk.textContent = textoOk;
+    btnOk.classList.toggle('destructivo', !!destructivo);
+    document.getElementById('confirmar-sheet-cancelar').textContent = textoCancelar;
+    openSheet('confirmar-sheet');
+  });
+}
+function resolverConfirmarSheet(valor) {
+  const r = confirmarSheetResolve;
+  confirmarSheetResolve = null;
+  closeSheet('confirmar-sheet');
+  if (r) r(valor);
+}
+document.getElementById('confirmar-sheet-ok')?.addEventListener('click', () => resolverConfirmarSheet(true));
+document.getElementById('confirmar-sheet-cancelar')?.addEventListener('click', () => resolverConfirmarSheet(false));
 
 /* ---------- Tutorial guiado ---------- *
  * Motor de tour dirigido por datos: TOUR_CAPITULOS define contenido, el
@@ -11857,6 +12535,8 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-15', emoji: '📱', titulo: 'El CRM en el celular se siente como una app', texto: 'Deslizá el dedo a los costados para cambiar de sección, deslizá hacia abajo arriba de todo para refrescar, y mantené el dedo sobre un lead para seleccionarlo sin tocar el chequeo chiquito. Las notificaciones ahora se ven con nuestro logo (antes salía el ícono genérico del navegador), y hay botón para instalar la app desde el celular. Los botones y filas son más fáciles de tocar, las tablas largas (Facturación, Vouchers, Postulaciones) se ven como tarjetas legibles en vez de una tabla achicada, y todo tiene animaciones más suaves.', roles: ROLES_TODOS },
+  { fecha: '2026-08-15', emoji: '⚡', titulo: 'Leads en vivo más confiables', texto: 'La lista de Leads se actualiza sola cuando entra o cambia uno, sin parpadear entera ni perder tu lugar en el scroll. Si el teléfono se queda sin señal un rato, el CRM lo avisa (puntito gris junto a "Nuevo lead") y se reconecta solo al volver. Si dos personas editan el mismo lead a la vez, ahora avisa el conflicto en vez de que uno le pise el cambio al otro en silencio. La tarjeta de cada lead se reordenó: el nombre, destino y estado se ven primero, las acciones (WhatsApp, Facturar) quedan abajo.', roles: ROLES_TODOS },
   { fecha: '2026-08-13', emoji: '🔊', titulo: 'Voz IA: ya conectada al chat de la web (opcional)', texto: 'En Cerebro IA, arriba de las reglas, hay dos interruptores nuevos para prender las notas de voz en el chat de la página web y en Instagram/Facebook, por separado. Apagados por defecto: nada cambia hasta que los prendas a propósito. Cuando está prendido, al cotizar un precio la IA manda una nota de voz con la voz clonada en vez de texto. Se puede apagar en cualquier momento sin perder nada.', roles: ['admin'] },
   { fecha: '2026-08-12', emoji: '🎚️', titulo: 'Voz IA: sliders y varias muestras por voz', texto: 'La voz clonada sonaba un poco robótica porque la muestra era una locución de comercial, no una conversación. Ahora se pueden cargar VARIAS muestras por modo (una con buen timbre, otra con buen flow conversacional) y entrenarlas juntas en un solo botón "Entrenar voz". Se sumaron 3 sliders (Expresividad, Variación, Velocidad) para ajustar por oído cómo habla la IA, con un botón para guardarlos como predeterminados -- eso es lo que de verdad va a escuchar el cliente el día que se conecte a las conversaciones reales.', roles: ['admin'] },
   { fecha: '2026-08-12', emoji: '🎙️', titulo: 'Voz IA: control de calidad de la muestra', texto: 'La primera prueba sonó metálica porque la muestra de referencia era una nota de voz de WhatsApp (calidad muy comprimida). Ahora, al subir una muestra nueva, el panel mide su duración y calidad reales antes de subirla: bloquea las que son imposibles de usar bien y avisa cuando la calidad es apenas aceptable, con instrucciones de cómo grabar bien (app de notas de voz del teléfono, nunca por WhatsApp). También transcribe la muestra automáticamente para que la IA pronuncie mejor, con la transcripción editable por si se equivoca en algún nombre.', roles: ['admin'] },
