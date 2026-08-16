@@ -3609,6 +3609,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       </div>
       <div class="kpis" id="ria-kpis"></div>
       <div class="ria-grid">
+        <div class="ria-card"><h2><i class="fas fa-life-ring"></i> Reactivación de conversaciones</h2><div class="ria-sub">Seguimientos seguros, respuestas recuperadas y leads rescatados.</div><div id="ria-reactivacion"></div></div>
+        <div class="ria-card"><h2><i class="fas fa-satellite-dish"></i> Entrega y silencios</h2><div class="ria-sub">Distingue lo generado de lo que realmente continuó en ManyChat.</div><div id="ria-entrega"></div></div>
+      </div>
+      <div class="ria-grid">
         <div class="ria-card"><h2><i class="fas fa-filter"></i> Embudo comercial</h2><div class="ria-sub">En qué paso avanzan o se pierden las conversaciones.</div><div id="ria-embudo"></div></div>
         <div class="ria-card"><h2><i class="fas fa-handshake"></i> Resultado del negocio</h2><div class="ria-sub">Leads entregados, seguimiento y ventas atribuibles a la IA.</div><div id="ria-ventas"></div></div>
       </div>
@@ -3861,11 +3865,12 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <!-- WEB Y REASIGNADOS (comisiones del dueño por origen del lead) -->
     <section class="section" id="sec-web-reasignados">
       <div class="ce-intro">
-        Todos los leads que entraron <b>por la página web</b> o que en algún momento
-        <b>se reasignaron</b>, juntos en un solo lugar. Son los dos orígenes por los que
-        cobrás comisión.<br>
+        Todos los leads que entraron <b>por la página web</b>, que en algún momento
+        <b>se reasignaron</b> o que fueron <b>rescatados por la IA</b>, juntos en un solo lugar.
+        Los tres orígenes cuentan para comisión.<br>
         Un lead puede ser de los dos (entró por la web y después se reasignó): aparece
         una sola vez, marcado <b>Ambos</b>, para no contarlo doble.
+        <br><span class="muted"><i class="fas fa-life-ring"></i> <b>Lead rescatado:</b> respondió al seguimiento final de la IA, enviado antes de cerrar la ventana permitida, y compartió un teléfono válido dentro de las 24 horas siguientes.</span>
       </div>
 
       <div class="kpis" id="wr-kpis"></div>
@@ -3874,6 +3879,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <button class="ce-mini on" data-wr-filtro="todos">Todos</button>
         <button class="ce-mini" data-wr-filtro="web">Solo web</button>
         <button class="ce-mini" data-wr-filtro="reasignado">Solo reasignados</button>
+        <button class="ce-mini" data-wr-filtro="rescatados"><i class="fas fa-life-ring"></i> Solo rescatados</button>
         <button class="ce-mini" data-wr-filtro="vendidos">Vendidos</button>
         <button class="ce-mini" data-wr-filtro="comisiones"><i class="fas fa-star"></i> Comisiones Bwrathanyel</button>
         <span style="flex:1"></span>

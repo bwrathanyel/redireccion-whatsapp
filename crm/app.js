@@ -115,6 +115,10 @@ function badgeNombreDudoso(l) {
   if (!l.nombre_dudoso) return '';
   return ` <span style="color:#f59e0b" title="No parece un Nombre propio, cuando tengas su nombre, edítalo">❓</span>`;
 }
+function badgeLeadRescatado(l) {
+  if (!l.es_lead_rescatado) return '';
+  return ` <span class="badge-st" style="color:#2dd4bf;background:#0f766e2e" title="Respondió al seguimiento final de la IA y compartió un teléfono válido"><i class="fas fa-life-ring"></i> Rescatado</span>`;
+}
 // Ciclo de flechitas prev/next en la ficha del lead -- excluye 'Sin gestionar'
 // (fallback legacy, no es un paso real del pipeline al que se quiera navegar).
 const ESTADOS_CICLO = ESTADOS.filter(e => e !== 'Sin gestionar');
@@ -2541,7 +2545,7 @@ async function loadTable() {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
       <td class="solo-admin-borrar"><input type="checkbox" class="lead-check" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''}></td>
-      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div></td>
+      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div></td>
       <td data-label="Teléfono" class="muted">${esc(l.telefono) || '—'}${l.requiere_revision_telefono ? ' <i class="fas fa-flag" style="color:#ef4444" title="Número marcado para revisión"></i>' : ''}</td>
       <td data-label="Destino">${esc(l.destino)}</td>
       <td data-label="Canal"><span class="chip ${cc}">${esc(l.canal)}</span></td>
@@ -2807,7 +2811,7 @@ function leadCardHtml(l) {
     <div class="ec-top">
       <div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="ec-headtext">
-        <div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div>
+        <div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div>
         <div class="ec-destino"><i class="fas fa-location-dot"></i> ${esc(l.destino) || 'Sin destino'}</div>
       </div>
     </div>
@@ -3054,12 +3058,13 @@ function openDrawer(l) {
     <div class="dhead"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="dhead-info"><div class="dn">${esc(l.nombre)}</div>
       <div class="dm">${esc(l.telefono) || 'Sin teléfono'} · ${esc(l.canal)}</div>
-      <span class="badge-st" style="color:${estColor};background:${estColor}2e">${esc(niceEstado(l.estado))}</span></div></div>
+      <span class="badge-st" style="color:${estColor};background:${estColor}2e">${esc(niceEstado(l.estado))}</span>${badgeLeadRescatado(l)}</div></div>
 
     ${sinAtender ? `<button type="button" class="inbox-btn atender" id="e-a-atender" style="width:100%;margin-bottom:12px"><i class="fas fa-check"></i> Atender este lead</button>` : ''}
 
     <div class="dquick">
       ${wa ? `<a class="dq wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></a>` : ''}
+      ${(ROL === 'asesor' || ROL === 'asesor_prueba' || ROL === 'admin') && l.external_id ? `<button class="dq" id="e-a-tomar-ia" type="button"><i class="fas fa-hand"></i><span>Tomar conversación</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-boleteria" type="button"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
     </div>
@@ -3149,6 +3154,7 @@ function openDrawer(l) {
   };
   document.getElementById('e-a-atender')?.addEventListener('click', () => atenderInboxLead(l));
   document.getElementById('e-a-facturar')?.addEventListener('click', () => abrirEnviarFacturacionSheet(l));
+  document.getElementById('e-a-tomar-ia')?.addEventListener('click', () => tomarConversacionIA(l));
   document.getElementById('e-a-boleteria')?.addEventListener('click', () => { window.closeDrawer(); abrirSolicitudBoleteria(l); });
   document.querySelectorAll('.lead-tab-btn').forEach(btn => btn.addEventListener('click', () => {
     document.querySelectorAll('.lead-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
@@ -3159,6 +3165,25 @@ function openDrawer(l) {
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
+}
+
+async function tomarConversacionIA(l) {
+  const btn = document.getElementById('e-a-tomar-ia');
+  if (!btn || btn.disabled || !l?.id) return;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i><span>Tomando...</span>';
+  const { data, error } = await sb.rpc('tomar_conversacion_ia', {
+    p_lead_id: l.id,
+    p_motivo: 'intervencion_humana_crm',
+  });
+  if (error || !data?.ok) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-hand"></i><span>Tomar conversación</span>';
+    errToast(error?.message || data?.error || 'No se pudo tomar la conversación');
+    return;
+  }
+  btn.innerHTML = '<i class="fas fa-user-check"></i><span>Atención humana activa</span>';
+  okToast('La IA quedó silenciada y se cancelaron sus seguimientos pendientes');
 }
 
 /* ---------- Conversación/Actividad del registro de lead (Fase 3, tabs
@@ -4368,10 +4393,15 @@ async function riaConsultar(dias, forzar = false) {
   const guardado = RIA_CACHE.get(dias);
   if (!forzar && guardado && Date.now() - guardado.en < 60000) return guardado.data;
   const rango = riaRango(dias);
-  const { data, error } = await sb.rpc('panel_rendimiento_ia', {
-    p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta,
-  });
-  if (error) throw error;
+  const [general, reactivacion] = await Promise.all([
+    sb.rpc('panel_rendimiento_ia', {
+      p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta,
+    }),
+    sb.rpc('panel_reactivacion_ia', { p_desde: rango.desde, p_hasta: rango.hasta }),
+  ]);
+  if (general.error) throw general.error;
+  if (reactivacion.error) throw reactivacion.error;
+  const data = { ...general.data, reactivacion: reactivacion.data };
   RIA_CACHE.set(dias, { en: Date.now(), data });
   return data;
 }
@@ -4430,6 +4460,26 @@ function riaPintarPanel(data) {
     { t: 'Oportunidades sin lead', v: fmt(riaNum(r.oportunidades_sin_lead)), d: 'Teléfono + destino + intención', i: 'fa-triangle-exclamation', c: riaNum(r.oportunidades_sin_lead) ? '#ef4444' : 'var(--green)' },
     { t: 'Errores técnicos', v: fmt(riaNum(data.salud?.errores_tecnicos)), d: 'Fallos del modelo o proveedor', i: 'fa-plug-circle-xmark', c: riaNum(data.salud?.errores_tecnicos) ? '#ef4444' : 'var(--green)' },
   ]);
+
+  const reactivacion = data.reactivacion || {};
+  const gruposReactivacion = new Map((reactivacion.grupos || []).map(g => [g.grupo_experimental, g]));
+  const rg = gruposReactivacion.get('tratamiento') || {};
+  const entrega = reactivacion.entrega || {};
+  document.getElementById('ria-reactivacion').innerHTML = `<div class="ria-lista">
+    <div class="ria-fila"><span>Conversaciones elegibles</span><b>${fmt(riaNum(rg.elegibles))}</b></div>
+    <div class="ria-fila"><span>Seguimientos enviados</span><b>${fmt(riaNum(rg.enviadas))}</b></div>
+    <div class="ria-fila"><span>Clientes que volvieron</span><b>${fmt(riaNum(rg.respondidas))}</b></div>
+    <div class="ria-fila"><span>Leads rescatados</span><b class="${riaNum(rg.rescatadas) ? 'ria-bien' : ''}">${fmt(riaNum(rg.rescatadas))}</b></div>
+    <div class="ria-fila"><span>Cancelados por seguridad</span><b>${fmt(riaNum(rg.canceladas))}</b></div>
+    <div class="ria-fila"><span>Personas que pidieron no contacto</span><b>${fmt(riaNum(reactivacion.no_contactar))}</b></div>
+  </div>`;
+  const callbackPct = riaPct(entrega.callbacks, entrega.turnos);
+  document.getElementById('ria-entrega').innerHTML = `<div class="ria-lista">
+    <div class="ria-fila"><span>Respuestas con comprobante</span><b>${fmt(riaNum(entrega.turnos))}</b></div>
+    <div class="ria-fila"><span>Flujo confirmado</span><b class="${riaNum(entrega.turnos) && callbackPct < 99.5 ? 'ria-malo' : 'ria-bien'}">${callbackPct.toFixed(1)}%</b></div>
+    <div class="ria-fila"><span>Silencios reintentados</span><b>${fmt(riaNum(entrega.reintentos))}</b></div>
+    <div class="ria-fila"><span>Requieren atención humana</span><b class="${riaNum(entrega.requieren_atencion) ? 'ria-malo' : 'ria-bien'}">${fmt(riaNum(entrega.requieren_atencion))}</b></div>
+  </div><div class="ce-ayuda">El vigilante de silencios solo se activa cuando la confirmación del flujo supera 99,5%; así no duplica mensajes legítimos.</div>`;
 
   const pasos = [['Conversaciones', r.conversaciones], ['Destino', r.destinos], ['Teléfono', r.telefonos], ['Intención real', r.intenciones], ['Lead creado', r.leads_calificados]];
   document.getElementById('ria-embudo').innerHTML = `<div class="ria-funnel">${pasos.map(([n, v]) => `<div class="ria-paso"><span>${esc(n)}</span><div class="ria-bar"><i style="width:${Math.min(100, riaPct(v, r.conversaciones))}%"></i></div><b>${fmt(riaNum(v))}</b></div>`).join('')}</div>`;
@@ -7823,6 +7873,7 @@ const WR_ORIGEN = {
   web:        { txt: 'Web',       clase: 'ig' },
   reasignado: { txt: 'Reasignado', clase: 'fb' },
   ambos:      { txt: 'Ambos',     clase: 'am' },
+  rescatado:  { txt: 'Rescatado', clase: 'am' },
 };
 
 function setupWebReasignados() {
@@ -7871,7 +7922,8 @@ function wrFilasVisibles() {
       // por web quiere ver todo lo que entró por la web, no lo que entró por la
       // web y encima nunca se reasignó.
       : wrFiltro === 'web' ? (f.origen === 'web' || f.origen === 'ambos')
-      : (f.origen === 'reasignado' || f.origen === 'ambos');
+      : wrFiltro === 'reasignado' ? (f.origen === 'reasignado' || f.origen === 'ambos')
+      : f.rescatado === true;
     if (!pasaFiltro) return false;
     if (!q) return true;
     return (f.nombre || '').toLowerCase().includes(q) || (f.telefono || '').toLowerCase().includes(q);
@@ -7899,7 +7951,8 @@ async function loadWebReasignados() {
   // de arriba); "Vendido"/"Mi comisión" son montos, no un subconjunto propio
   // (son el mismo grupo que "Ya vendidos"), así que no tienen acción aparte.
   pintarKPIs('wr-kpis', [
-    { t: 'Leads en total', v: fmt(r.total || 0), d: `${fmt(r.web || 0)} web · ${fmt(r.reasignados || 0)} reasignados · ${fmt(r.ambos || 0)} ambos`, i: 'fa-users', c: 'var(--blue)', go: () => wrIrAFiltro('todos'), key: 'todos', on: wrFiltro === 'todos' },
+    { t: 'Leads en total', v: fmt(r.total || 0), d: `${fmt(r.web || 0)} web · ${fmt(r.reasignados || 0)} reasignados · ${fmt(r.rescatados || 0)} rescatados`, i: 'fa-users', c: 'var(--blue)', go: () => wrIrAFiltro('todos'), key: 'todos', on: wrFiltro === 'todos' },
+    { t: 'Rescatados por IA', v: fmt(r.rescatados || 0), d: 'Respondieron al seguimiento final con teléfono válido', i: 'fa-life-ring', c: '#14b8a6', go: () => wrIrAFiltro('rescatados'), key: 'rescatados', on: wrFiltro === 'rescatados' },
     { t: 'Ya vendidos', v: fmt(r.vendidos || 0), d: r.vendidos ? 'Con factura emitida' : 'Todavía ninguno cerró', i: 'fa-circle-check', c: 'var(--green)', go: () => wrIrAFiltro('vendidos'), key: 'vendidos', on: wrFiltro === 'vendidos' },
     { t: 'Vendido', v: '$' + fmt(r.monto_vendido || 0), d: 'Suma de las facturas', i: 'fa-receipt', c: 'var(--purple)' },
     { t: 'Mi comisión', v: '$' + fmt(r.mi_comision_total || 0), d: `Al ${data.pct}% de lo vendido`, i: 'fa-hand-holding-dollar', c: 'var(--accent)' },
@@ -7930,7 +7983,7 @@ function wrCardHtml(f) {
     <div class="ec-row"><i class="fas fa-flag"></i> ${esc(f.estado || '—')}</div>
     <div class="ec-foot ec-foot-cols">
       <div class="ec-badges">
-        <span class="chip ${o.clase}">${o.txt}</span>
+        <span class="chip ${o.clase}">${o.txt}</span>${f.rescatado ? ' <span class="badge-st" style="color:#2dd4bf;background:#0f766e2e" title="Respondió al seguimiento final de la IA y compartió un teléfono válido"><i class="fas fa-life-ring"></i> Lead rescatado</span>' : ''}
         ${vendido ? `<span class="badge-st" style="color:#10b981;background:#10b9812e">$${fmt(f.monto_total)} vendido</span>
           <span class="badge-st" style="color:var(--accent);background:var(--accent-soft)">$${fmt(f.mi_comision)} mi comisión</span>` : ''}
       </div>
@@ -7950,7 +8003,7 @@ function wrPintarTabla() {
   const filas = wrFilasVisibles();
 
   if (!filas.length) {
-    const vacio = todas.length ? 'Ningún lead con ese filtro/búsqueda.' : 'Todavía no hay leads de estos dos orígenes.';
+    const vacio = todas.length ? 'Ningún lead con ese filtro/búsqueda.' : 'Todavía no hay leads de estos orígenes.';
     body.innerHTML = `<tr><td colspan="8" class="muted">${vacio}</td></tr>`;
     cardsBox.innerHTML = `<div class="vig-vacio" style="grid-column:1/-1">${vacio}</div>`;
     wrActualizarBulkBar();
@@ -7963,7 +8016,7 @@ function wrPintarTabla() {
       <td><input type="checkbox" class="wr-check" data-id="${f.id}" ${WR_SELECTED.has(f.id) ? 'checked' : ''}></td>
       <td class="td-name" style="cursor:pointer">${esc(f.nombre || 'Sin nombre')}
         ${f.telefono ? `<small class="muted" style="display:block">${esc(f.telefono)}</small>` : ''}</td>
-      <td data-label="Origen"><span class="chip ${o.clase}">${o.txt}</span></td>
+      <td data-label="Origen"><span class="chip ${o.clase}">${o.txt}</span>${f.rescatado ? ' <span class="badge-st" style="color:#2dd4bf;background:#0f766e2e" title="Respondió al seguimiento final de la IA y compartió un teléfono válido">Rescatado</span>' : ''}</td>
       <td data-label="Destino" class="muted">${esc(f.destino || '—')}</td>
       <td data-label="Estado">${esc(f.estado || '—')}</td>
       <td data-label="Asesor" class="muted">${esc(f.asesor || '—')}</td>
@@ -12897,6 +12950,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-15', emoji: '🛟', titulo: 'Seguimientos seguros y leads rescatados', texto: 'La IA puede retomar conversaciones interesadas que se quedaron quietas, sin competir con un asesor ni insistir a quien pidió no contacto. Rendimiento IA ahora muestra reactivaciones y entrega confirmada. En Leads y Web y Reasignados aparece la etiqueta Rescatado cuando el cliente volvió tras el seguimiento final y dejó un teléfono válido. Desde la ficha también se puede tomar la conversación para silenciar la automatización.', roles: ['admin', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-08-15', emoji: '✈️', titulo: 'Modo Boletería', texto: 'El botón "Boletería" (abajo del menú) cambia el CRM entero de color y de menú, como si fuera otra app: rutas, aerolíneas, precios de referencia, requisitos por país y calendario de temporadas, más la cola de solicitudes de siempre a mano. "Volver a Hospedajes" te devuelve todo como estaba.', roles: ['admin', 'asesor', 'asesor_prueba', 'boleteria'] },
   { fecha: '2026-08-15', emoji: '🧑‍💼', titulo: 'Asesores de prueba: lotes y progreso', texto: 'En Gestión de Personal, pestaña "Asesores de prueba": asignale a un asesor nuevo un lote de leads viejos para que practique contactándolos, con conteo previo, fecha límite y seguimiento de contactados/pendientes/vencidos. Botón para promoverlo a asesor real cuando esté listo. También se puede editar usuario, permisos de voucher/informe diario y bloquear acceso sin dar de baja.', roles: ['admin'] },
   { fecha: '2026-08-15', emoji: '📱', titulo: 'El CRM en el celular se siente como una app', texto: 'Deslizá el dedo a los costados para cambiar de sección, deslizá hacia abajo arriba de todo para refrescar, y mantené el dedo sobre un lead para seleccionarlo sin tocar el chequeo chiquito. Las notificaciones ahora se ven con nuestro logo (antes salía el ícono genérico del navegador), y hay botón para instalar la app desde el celular. Los botones y filas son más fáciles de tocar, las tablas largas (Facturación, Vouchers, Postulaciones) se ven como tarjetas legibles en vez de una tabla achicada, y todo tiene animaciones más suaves.', roles: ROLES_TODOS },
