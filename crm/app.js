@@ -308,10 +308,10 @@ async function afterLogin() {
   MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
   MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado;
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
-  entrarSegunRol();
+  await entrarSegunRol();
 }
 
-function entrarSegunRol() {
+async function entrarSegunRol() {
   document.body.classList.toggle('rol-asesor', ROL === 'asesor');
   document.body.classList.toggle('rol-prueba', ROL === 'asesor_prueba');
   document.body.classList.toggle('rol-marketing', ROL === 'marketing');
@@ -338,7 +338,10 @@ function entrarSegunRol() {
   aplicarPreferencias();
   renderJornadaUI();
   handleCheckIn();
-  startApp();
+  // La navegación externa solo se procesa cuando ya terminó el arranque que
+  // aplica rol, módulos disponibles y sección inicial. Así `?seccion=` no
+  // puede adelantar ni anular los permisos del usuario autenticado.
+  await startApp();
   if (MI_ES_FREELANCER) {
     setupHeartbeatFreelancer();
     subscribeMiUsuarioLive();
@@ -977,14 +980,40 @@ function manejarDeepLinkAsistencia() {
   }
 }
 
-// Deep-link desde un app shortcut del manifest (?ir=leads|cotizador|tarifario)
-const IR_SECCIONES = ['leads', 'postventa', 'cotizador', 'tarifario'];
+// Puente de navegación para la beta. La lista es cerrada y no incluye
+// Proyecto Constructor: pertenece a plataforma-crm y jamás se comparte desde
+// Lotus. `ir` se conserva por compatibilidad con los shortcuts ya instalados.
+const IR_SECCIONES = [
+  'hoy', 'dashboard', 'leads', 'leads-prueba', 'pipeline', 'postventa',
+  'web-reasignados', 'cotizador', 'tarifario', 'galeria', 'stop-sales',
+  'facturacion', 'voucher', 'mis-comisiones', 'ranking', 'boleteria',
+  'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
+  'rendimiento-ia', 'ia-atencion', 'consultor-ia', 'voz-ia', 'redes',
+  'manual', 'actualizaciones'
+];
+function seccionInicialPermitida() {
+  if (ROL === 'marketing') return 'tarifario';
+  if (ROL === 'boleteria') return 'boleteria';
+  if (ROL === 'asesor_prueba') return 'leads-prueba';
+  return ROL === 'asesor' ? 'leads' : 'dashboard';
+}
+function usuarioPuedeAbrirSeccion(sec) {
+  if (sec === 'hoy') return true;
+  const item = document.querySelector(`#sidebar-nav > .nav-item[data-sec="${sec}"]`);
+  return !!item && getComputedStyle(item).display !== 'none';
+}
 function manejarDeepLinkSeccion() {
   const params = new URLSearchParams(location.search);
-  const ir = params.get('ir');
-  if (!IR_SECCIONES.includes(ir)) return;
-  history.replaceState(null, '', location.pathname);
-  activateSection(ir);
+  const seccion = params.get('seccion') || params.get('ir');
+  if (!seccion) return;
+  const destino = IR_SECCIONES.includes(seccion) && usuarioPuedeAbrirSeccion(seccion)
+    ? seccion
+    : seccionInicialPermitida();
+  params.delete('seccion');
+  params.delete('ir');
+  const queryRestante = params.toString();
+  history.replaceState(null, '', location.pathname + (queryRestante ? `?${queryRestante}` : ''));
+  activateSection(destino);
 }
 
 // Deep-link desde los botones de acción de la notificación push de "lead
@@ -1086,17 +1115,41 @@ function cargarTabGestionPersonal(tab) {
 }
 
 /* ---------- Asesores de prueba (A4 + B1 + B2) ---------- */
+let AP_CANDIDATOS_SEL = null;
+function apFiltros() {
+  const antiguedadRaw = document.getElementById('ap-antiguedad').value;
+  const desdeRaw = document.getElementById('ap-desde').value;
+  const hastaRaw = document.getElementById('ap-hasta').value;
+  return {
+    p_antiguedad_dias: antiguedadRaw ? parseInt(antiguedadRaw, 10) : null,
+    p_estados: [...document.getElementById('ap-estados').selectedOptions].map(o => o.value),
+    p_fecha_desde: desdeRaw ? new Date(desdeRaw + 'T00:00:00').toISOString() : null,
+    p_fecha_hasta: hastaRaw ? new Date(hastaRaw + 'T00:00:00').toISOString() : null,
+    p_destinos: [...document.getElementById('ap-destinos').selectedOptions].map(o => o.value)
+  };
+}
+function apInvalidar() {
+  document.getElementById('ap-asignar').disabled = true;
+  document.getElementById('ap-conteo').textContent = '';
+  document.getElementById('ap-preview-wrap').innerHTML = '';
+  AP_CANDIDATOS_SEL = null;
+}
 function setupAsesoresPrueba() {
   const selEstados = document.getElementById('ap-estados');
   if (selEstados) selEstados.innerHTML = ESTADOS_EDIT.map(e => `<option value="${esc(e)}" selected>${esc(e)}</option>`).join('');
   document.getElementById('ap-contar')?.addEventListener('click', contarLotePrueba);
+  document.getElementById('ap-preview-btn')?.addEventListener('click', previewLotePrueba);
   document.getElementById('ap-asignar')?.addEventListener('click', asignarLotePrueba);
-  ['ap-usuario', 'ap-antiguedad', 'ap-estados', 'ap-cantidad'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', () => {
-      document.getElementById('ap-asignar').disabled = true;
-      document.getElementById('ap-conteo').textContent = '';
-    });
+  ['ap-usuario', 'ap-antiguedad', 'ap-desde', 'ap-hasta', 'ap-estados', 'ap-destinos', 'ap-cantidad'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', apInvalidar);
   });
+}
+async function cargarDestinosLotePrueba() {
+  const sel = document.getElementById('ap-destinos');
+  if (!sel) return;
+  const { data, error } = await sb.rpc('top_destinos_periodo', {});
+  if (error) return;
+  sel.innerHTML = Object.keys(data || {}).sort().map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
 }
 async function loadAsesoresPruebaTab() {
   const sel = document.getElementById('ap-usuario');
@@ -1106,33 +1159,57 @@ async function loadAsesoresPruebaTab() {
       ? asesoresPrueba.map(u => `<option value="${u.usuario_id}">${esc(u.nombre)} (@${esc(u.username || '')})</option>`).join('')
       : '<option value="">No hay asesores de prueba dados de alta</option>';
   }
+  await cargarDestinosLotePrueba();
   await cargarProgresoLotesPrueba();
 }
 async function contarLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
-  const antiguedad = parseInt(document.getElementById('ap-antiguedad').value, 10);
-  const estados = [...document.getElementById('ap-estados').selectedOptions].map(o => o.value);
-  if (!estados.length) { err.textContent = 'Elegí al menos un estado.'; return; }
-  const { data, error } = await sb.rpc('contar_lote_prueba', { p_usuario_id: document.getElementById('ap-usuario').value, p_antiguedad_dias: antiguedad, p_estados: estados });
+  const f = apFiltros();
+  if (!f.p_estados.length) { err.textContent = 'Elegí al menos un estado.'; return; }
+  const { data, error } = await sb.rpc('contar_lote_prueba', { p_usuario_id: document.getElementById('ap-usuario').value, ...f, p_estados: f.p_estados, p_destinos: f.p_destinos.length ? f.p_destinos : null });
   if (error || !data?.ok) { err.textContent = error?.message || 'No se pudo contar.'; return; }
   document.getElementById('ap-conteo').textContent = `${data.cantidad} lead(s) matchean el filtro.`;
   document.getElementById('ap-asignar').disabled = data.cantidad < 1;
 }
+async function previewLotePrueba() {
+  const err = document.getElementById('ap-err'); err.textContent = '';
+  const f = apFiltros();
+  if (!f.p_estados.length) { err.textContent = 'Elegí al menos un estado.'; return; }
+  const { data, error } = await sb.rpc('listar_candidatos_lote_prueba', { ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null });
+  const wrap = document.getElementById('ap-preview-wrap');
+  if (error) { err.textContent = error.message || 'No se pudo listar.'; return; }
+  const leads = data || [];
+  if (!leads.length) { wrap.innerHTML = '<div class="pc-vacio">Ningún lead matchea el filtro.</div>'; document.getElementById('ap-asignar').disabled = true; return; }
+  wrap.innerHTML = `<div style="max-height:320px;overflow:auto;margin-top:10px"><table>
+    <thead><tr><th></th><th>Nombre</th><th>Destino</th><th>Estado</th><th>Fecha</th></tr></thead>
+    <tbody>${leads.map(l => `<tr>
+      <td><input type="checkbox" data-ap-lead="${l.id}" checked></td>
+      <td>${esc(l.nombre || '')}</td><td>${esc(l.destino || '')}</td><td>${esc(l.estado || '')}</td>
+      <td>${esc((l.fecha_creacion || '').slice(0, 10))}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+  AP_CANDIDATOS_SEL = leads.map(l => l.id);
+  document.getElementById('ap-conteo').textContent = `${leads.length} lead(s) en la lista (destildá los que no querés incluir).`;
+  document.getElementById('ap-asignar').disabled = false;
+}
 async function asignarLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
   const usuarioId = document.getElementById('ap-usuario').value;
-  const antiguedad = parseInt(document.getElementById('ap-antiguedad').value, 10);
-  const estados = [...document.getElementById('ap-estados').selectedOptions].map(o => o.value);
-  const cantidad = parseInt(document.getElementById('ap-cantidad').value, 10);
   const venceLocal = document.getElementById('ap-vence').value;
   if (!usuarioId) { err.textContent = 'Elegí un asesor de prueba.'; return; }
   if (!venceLocal) { err.textContent = 'Elegí una fecha límite.'; return; }
+  const idsSeleccionados = AP_CANDIDATOS_SEL
+    ? [...document.querySelectorAll('#ap-preview-wrap input[data-ap-lead]:checked')].map(c => Number(c.dataset.apLead))
+    : null;
+  if (idsSeleccionados && !idsSeleccionados.length) { err.textContent = 'No dejaste ningún lead tildado.'; return; }
+  const f = apFiltros();
+  const cantidad = idsSeleccionados ? idsSeleccionados.length : parseInt(document.getElementById('ap-cantidad').value, 10);
   if (!(await confirmarSheet({ titulo: '¿Asignar este lote?', detalle: `${cantidad} lead(s) pasan a ser del asesor elegido, con tarea de contacto por cada uno.`, textoOk: 'Asignar' }))) return;
   const btn = document.getElementById('ap-asignar'); btn.disabled = true;
-  const { data, error } = await sb.rpc('asignar_lote_prueba', { p_usuario_id: usuarioId, p_cantidad: cantidad, p_antiguedad_dias: antiguedad, p_estados: estados, p_vence_at: new Date(venceLocal).toISOString() });
+  const body = { p_usuario_id: usuarioId, p_cantidad: cantidad, ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null, p_vence_at: new Date(venceLocal).toISOString(), p_lead_ids: idsSeleccionados };
+  const { data, error } = await sb.rpc('asignar_lote_prueba', body);
   if (error || !data?.ok) { err.textContent = error?.message || data?.error || 'No se pudo asignar.'; btn.disabled = false; return; }
   okToast(`Lote asignado: ${data.cantidad} lead(s)`);
-  document.getElementById('ap-conteo').textContent = '';
+  apInvalidar();
   await cargarProgresoLotesPrueba();
 }
 async function cargarProgresoLotesPrueba() {
@@ -3066,6 +3143,7 @@ function openDrawer(l) {
       ${wa ? `<a class="dq wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></a>` : ''}
       ${(ROL === 'asesor' || ROL === 'asesor_prueba' || ROL === 'admin') && l.external_id ? `<button class="dq" id="e-a-tomar-ia" type="button"><i class="fas fa-hand"></i><span>Tomar conversación</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-boleteria" type="button"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
+      ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización'}</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
     </div>
 
@@ -3154,6 +3232,7 @@ function openDrawer(l) {
   };
   document.getElementById('e-a-atender')?.addEventListener('click', () => atenderInboxLead(l));
   document.getElementById('e-a-facturar')?.addEventListener('click', () => abrirEnviarFacturacionSheet(l));
+  document.getElementById('e-a-cotizacion')?.addEventListener('click', () => registrarCotizacionEnviada(l));
   document.getElementById('e-a-tomar-ia')?.addEventListener('click', () => tomarConversacionIA(l));
   document.getElementById('e-a-boleteria')?.addEventListener('click', () => { window.closeDrawer(); abrirSolicitudBoleteria(l); });
   document.querySelectorAll('.lead-tab-btn').forEach(btn => btn.addEventListener('click', () => {
@@ -3172,10 +3251,7 @@ async function tomarConversacionIA(l) {
   if (!btn || btn.disabled || !l?.id) return;
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i><span>Tomando...</span>';
-  const { data, error } = await sb.rpc('tomar_conversacion_ia', {
-    p_lead_id: l.id,
-    p_motivo: 'intervencion_humana_crm',
-  });
+  const { data, error } = await sb.rpc('tomar_conversacion_ia', { p_lead_id: l.id, p_motivo: 'intervencion_humana_crm' });
   if (error || !data?.ok) {
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-hand"></i><span>Tomar conversación</span>';
@@ -3184,6 +3260,27 @@ async function tomarConversacionIA(l) {
   }
   btn.innerHTML = '<i class="fas fa-user-check"></i><span>Atención humana activa</span>';
   okToast('La IA quedó silenciada y se cancelaron sus seguimientos pendientes');
+}
+
+async function registrarCotizacionEnviada(l) {
+  const btn = document.getElementById('e-a-cotizacion');
+  if (!btn || btn.disabled || !l?.id) return;
+  btn.disabled = true;
+  const anterior = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i><span>Registrando...</span>';
+  const { data, error } = await sb.rpc('registrar_cotizacion_enviada', { p_lead_id: l.id });
+  if (error || !data?.ok) {
+    btn.disabled = false; btn.innerHTML = anterior;
+    errToast(error?.message || data?.error || 'No se pudo registrar la cotización');
+    return;
+  }
+  l.estado = data.estado || 'COTIZACION ENVIADA';
+  l.fecha_cotizacion_enviada = data.fecha_cotizacion_enviada;
+  if (currentLead?.id === l.id) Object.assign(currentLead, l);
+  btn.innerHTML = '<i class="fas fa-file-circle-check"></i><span>Cotización registrada</span>';
+  ACTIVIDAD_CACHE = null;
+  okToast(data.ya_registrada ? 'La cotización ya estaba registrada' : 'Cotización enviada registrada');
+  await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
 }
 
 /* ---------- Conversación/Actividad del registro de lead (Fase 3, tabs
@@ -3216,6 +3313,8 @@ async function cargarActividadLead(l) {
     // acá, si no le queda invisible que el cliente insistió.
     ...(eventos.data || []).map(e => e.tipo === 'contacto_duplicado'
       ? { hora: e.created_at, texto: `🔁 Volvió a escribir por <b>${esc(e.detalle?.canal || 'otro canal')}</b>${e.detalle?.destino && e.detalle.destino !== e.detalle?.destino_previo ? `, preguntando por <b>${esc(e.detalle.destino)}</b>` : ''} — no se creó un lead nuevo` }
+      : e.tipo === 'cotizacion_enviada'
+      ? { hora: e.created_at, texto: `📄 ${e.asesor ? '<b>' + esc(e.asesor) + '</b> registró' : 'Se registró'} la cotización como enviada` }
       : { hora: e.created_at, texto: `${e.asesor ? esc(e.asesor) + ': ' : ''}cambió de <b>${esc(niceEstado(e.estado_de))}</b> a <b>${esc(niceEstado(e.estado_a))}</b>` }),
     // reasignaciones: RLS es admin-only -- para asesor esta consulta vuelve
     // vacía en silencio (no es un error), la Actividad les queda sin este
@@ -4393,15 +4492,15 @@ async function riaConsultar(dias, forzar = false) {
   const guardado = RIA_CACHE.get(dias);
   if (!forzar && guardado && Date.now() - guardado.en < 60000) return guardado.data;
   const rango = riaRango(dias);
-  const [general, reactivacion] = await Promise.all([
-    sb.rpc('panel_rendimiento_ia', {
-      p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta,
-    }),
+  const [general, piloto, reactivacion] = await Promise.all([
+    sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }),
+    sb.rpc('panel_piloto_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }),
     sb.rpc('panel_reactivacion_ia', { p_desde: rango.desde, p_hasta: rango.hasta }),
   ]);
   if (general.error) throw general.error;
+  if (piloto.error) throw piloto.error;
   if (reactivacion.error) throw reactivacion.error;
-  const data = { ...general.data, reactivacion: reactivacion.data };
+  const data = { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data };
   RIA_CACHE.set(dias, { en: Date.now(), data });
   return data;
 }
@@ -4453,13 +4552,13 @@ function riaPintarPanel(data) {
   document.getElementById('ria-estado-texto').innerHTML = `${esc(salud.texto)} <b>${esc(riaCambio(r.leads_calificados, ant.leads_calificados))}</b>`;
   document.getElementById('ria-actualizado').textContent = 'Actualizado ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
 
-  pintarKPIs('ria-kpis', [
-    { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: riaCambio(r.conversaciones, ant.conversaciones), i: 'fa-comments', c: 'var(--blue)' },
-    { t: 'Teléfonos', v: fmt(riaNum(r.telefonos)), d: `${riaPct(r.telefonos, r.conversaciones)}% de conversaciones`, i: 'fa-phone', c: 'var(--accent)' },
-    { t: 'Leads calificados', v: fmt(riaNum(r.leads_calificados)), d: `${riaPct(r.leads_calificados, r.conversaciones)}% de conversión`, i: 'fa-user-check', c: 'var(--green)' },
-    { t: 'Oportunidades sin lead', v: fmt(riaNum(r.oportunidades_sin_lead)), d: 'Teléfono + destino + intención', i: 'fa-triangle-exclamation', c: riaNum(r.oportunidades_sin_lead) ? '#ef4444' : 'var(--green)' },
-    { t: 'Errores técnicos', v: fmt(riaNum(data.salud?.errores_tecnicos)), d: 'Fallos del modelo o proveedor', i: 'fa-plug-circle-xmark', c: riaNum(data.salud?.errores_tecnicos) ? '#ef4444' : 'var(--green)' },
-  ]);
+  const gruposPiloto = new Map((data.piloto?.grupos || []).map(g => [g.experimento_grupo, g]));
+  const control = gruposPiloto.get('control') || {}, tratamiento = gruposPiloto.get('tratamiento') || {};
+  const delta = riaNum(tratamiento.conversion_telefono_pct) - riaNum(control.conversion_telefono_pct);
+  document.getElementById('ria-piloto').innerHTML = `<div class="ria-cal-head"><span>Grupo</span><span>Contactos</span><span>Teléfono</span></div>
+    ${[['Control 80%', control], ['Tratamiento 20%', tratamiento]].map(([n,g]) => `<div class="ria-cal-fila"><span>${n}</span><b>${fmt(riaNum(g.contactos))}</b><b>${riaNum(g.conversion_telefono_pct).toFixed(2)}%</b></div>`).join('')}
+    <div class="ria-lista" style="margin-top:10px"><div class="ria-fila"><span>Diferencia tratamiento vs. control</span><b class="${delta < -0.5 ? 'ria-malo' : 'ria-bien'}">${delta >= 0 ? '+' : ''}${delta.toFixed(2)} pp</b></div>
+    <div class="ria-fila"><span>Tratamiento con CTA ausente</span><b>${fmt(riaNum(tratamiento.con_cta_ausente))}</b></div><div class="ria-fila"><span>Tratamiento con fallo visible</span><b class="${riaNum(tratamiento.con_fallo_visible) ? 'ria-malo' : 'ria-bien'}">${fmt(riaNum(tratamiento.con_fallo_visible))}</b></div></div>`;
 
   const reactivacion = data.reactivacion || {};
   const gruposReactivacion = new Map((reactivacion.grupos || []).map(g => [g.grupo_experimental, g]));
@@ -4480,6 +4579,14 @@ function riaPintarPanel(data) {
     <div class="ria-fila"><span>Silencios reintentados</span><b>${fmt(riaNum(entrega.reintentos))}</b></div>
     <div class="ria-fila"><span>Requieren atención humana</span><b class="${riaNum(entrega.requieren_atencion) ? 'ria-malo' : 'ria-bien'}">${fmt(riaNum(entrega.requieren_atencion))}</b></div>
   </div><div class="ce-ayuda">El vigilante de silencios solo se activa cuando la confirmación del flujo supera 99,5%; así no duplica mensajes legítimos.</div>`;
+
+  pintarKPIs('ria-kpis', [
+    { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: riaCambio(r.conversaciones, ant.conversaciones), i: 'fa-comments', c: 'var(--blue)' },
+    { t: 'Teléfonos', v: fmt(riaNum(r.telefonos)), d: `${riaPct(r.telefonos, r.conversaciones)}% de conversaciones`, i: 'fa-phone', c: 'var(--accent)' },
+    { t: 'Leads calificados', v: fmt(riaNum(r.leads_calificados)), d: `${riaPct(r.leads_calificados, r.conversaciones)}% de conversión`, i: 'fa-user-check', c: 'var(--green)' },
+    { t: 'Oportunidades sin lead', v: fmt(riaNum(r.oportunidades_sin_lead)), d: 'Teléfono + destino + intención', i: 'fa-triangle-exclamation', c: riaNum(r.oportunidades_sin_lead) ? '#ef4444' : 'var(--green)' },
+    { t: 'Errores técnicos', v: fmt(riaNum(data.salud?.errores_tecnicos)), d: 'Fallos del modelo o proveedor', i: 'fa-plug-circle-xmark', c: riaNum(data.salud?.errores_tecnicos) ? '#ef4444' : 'var(--green)' },
+  ]);
 
   const pasos = [['Conversaciones', r.conversaciones], ['Destino', r.destinos], ['Teléfono', r.telefonos], ['Intención real', r.intenciones], ['Lead creado', r.leads_calificados]];
   document.getElementById('ria-embudo').innerHTML = `<div class="ria-funnel">${pasos.map(([n, v]) => `<div class="ria-paso"><span>${esc(n)}</span><div class="ria-bar"><i style="width:${Math.min(100, riaPct(v, r.conversaciones))}%"></i></div><b>${fmt(riaNum(v))}</b></div>`).join('')}</div>`;
@@ -8003,7 +8110,7 @@ function wrPintarTabla() {
   const filas = wrFilasVisibles();
 
   if (!filas.length) {
-    const vacio = todas.length ? 'Ningún lead con ese filtro/búsqueda.' : 'Todavía no hay leads de estos orígenes.';
+    const vacio = todas.length ? 'Ningún lead con ese filtro/búsqueda.' : 'Todavía no hay leads de estos dos orígenes.';
     body.innerHTML = `<tr><td colspan="8" class="muted">${vacio}</td></tr>`;
     cardsBox.innerHTML = `<div class="vig-vacio" style="grid-column:1/-1">${vacio}</div>`;
     wrActualizarBulkBar();
@@ -12950,7 +13057,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-08-15', emoji: '🛟', titulo: 'Seguimientos seguros y leads rescatados', texto: 'La IA puede retomar conversaciones interesadas que se quedaron quietas, sin competir con un asesor ni insistir a quien pidió no contacto. Rendimiento IA ahora muestra reactivaciones y entrega confirmada. En Leads y Web y Reasignados aparece la etiqueta Rescatado cuando el cliente volvió tras el seguimiento final y dejó un teléfono válido. Desde la ficha también se puede tomar la conversación para silenciar la automatización.', roles: ['admin', 'asesor', 'asesor_prueba'] },
+  { fecha: '2026-08-16', emoji: '🎯', titulo: 'Control total en lotes de práctica', texto: 'En Gestión de Personal → Asesores de prueba ya se puede filtrar por rango de fecha y por destino, y ver la lista real de leads antes de asignar el lote, tildando y destildando a mano cuáles entran. Además, crear una cuenta nueva ahora pide contraseña de 8 caracteres (antes 12) y la pregunta/respuesta de seguridad ya no tienen mínimo de letras.', roles: ['admin'] },
   { fecha: '2026-08-15', emoji: '✈️', titulo: 'Modo Boletería', texto: 'El botón "Boletería" (abajo del menú) cambia el CRM entero de color y de menú, como si fuera otra app: rutas, aerolíneas, precios de referencia, requisitos por país y calendario de temporadas, más la cola de solicitudes de siempre a mano. "Volver a Hospedajes" te devuelve todo como estaba.', roles: ['admin', 'asesor', 'asesor_prueba', 'boleteria'] },
   { fecha: '2026-08-15', emoji: '🧑‍💼', titulo: 'Asesores de prueba: lotes y progreso', texto: 'En Gestión de Personal, pestaña "Asesores de prueba": asignale a un asesor nuevo un lote de leads viejos para que practique contactándolos, con conteo previo, fecha límite y seguimiento de contactados/pendientes/vencidos. Botón para promoverlo a asesor real cuando esté listo. También se puede editar usuario, permisos de voucher/informe diario y bloquear acceso sin dar de baja.', roles: ['admin'] },
   { fecha: '2026-08-15', emoji: '📱', titulo: 'El CRM en el celular se siente como una app', texto: 'Deslizá el dedo a los costados para cambiar de sección, deslizá hacia abajo arriba de todo para refrescar, y mantené el dedo sobre un lead para seleccionarlo sin tocar el chequeo chiquito. Las notificaciones ahora se ven con nuestro logo (antes salía el ícono genérico del navegador), y hay botón para instalar la app desde el celular. Los botones y filas son más fáciles de tocar, las tablas largas (Facturación, Vouchers, Postulaciones) se ven como tarjetas legibles en vez de una tabla achicada, y todo tiene animaciones más suaves.', roles: ROLES_TODOS },
