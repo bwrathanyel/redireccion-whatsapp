@@ -1151,22 +1151,39 @@ async function cargarDestinosLotePrueba() {
   if (error) return;
   sel.innerHTML = Object.keys(data || {}).sort().map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
 }
+let asesorPruebaSeleccionado = null;
 async function loadAsesoresPruebaTab() {
-  const sel = document.getElementById('ap-usuario');
-  if (sel) {
+  const container = document.getElementById('ap-usuario-chips');
+  if (container) {
     const asesoresPrueba = personalCache.filter(u => u.rol === 'asesor_prueba');
-    sel.innerHTML = asesoresPrueba.length
-      ? asesoresPrueba.map(u => `<option value="${u.usuario_id}">${esc(u.nombre)} (@${esc(u.username || '')})</option>`).join('')
-      : '<option value="">No hay asesores de prueba dados de alta</option>';
+    if (asesoresPrueba.length) {
+      container.innerHTML = asesoresPrueba.map(u =>
+        `<button type="button" class="ap-chip" data-id="${u.usuario_id}" data-nombre="${esc(u.nombre)} (@${esc(u.username || '')})" title="${esc(u.nombre)} (@${esc(u.username || '')})">
+          ${esc(u.nombre)} (@${esc(u.username || '')})
+        </button>`
+      ).join('');
+      container.querySelectorAll('.ap-chip').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          container.querySelectorAll('.ap-chip').forEach(b => b.classList.remove('on'));
+          btn.classList.add('on');
+          asesorPruebaSeleccionado = btn.dataset.id;
+        });
+      });
+    } else {
+      container.innerHTML = '<span style="color:var(--muted);font-size:12px">No hay asesores de prueba dados de alta</span>';
+      asesorPruebaSeleccionado = null;
+    }
   }
   await cargarDestinosLotePrueba();
   await cargarProgresoLotesPrueba();
 }
 async function contarLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
+  if (!asesorPruebaSeleccionado) { err.textContent = 'Elegí un asesor de prueba.'; return; }
   const f = apFiltros();
   if (!f.p_estados.length) { err.textContent = 'Elegí al menos un estado.'; return; }
-  const { data, error } = await sb.rpc('contar_lote_prueba', { p_usuario_id: document.getElementById('ap-usuario').value, ...f, p_estados: f.p_estados, p_destinos: f.p_destinos.length ? f.p_destinos : null });
+  const { data, error } = await sb.rpc('contar_lote_prueba', { p_usuario_id: asesorPruebaSeleccionado, ...f, p_estados: f.p_estados, p_destinos: f.p_destinos.length ? f.p_destinos : null });
   if (error || !data?.ok) { err.textContent = error?.message || 'No se pudo contar.'; return; }
   document.getElementById('ap-conteo').textContent = `${data.cantidad} lead(s) matchean el filtro.`;
   document.getElementById('ap-asignar').disabled = data.cantidad < 1;
@@ -1193,19 +1210,15 @@ async function previewLotePrueba() {
 }
 async function asignarLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
-  const usuarioId = document.getElementById('ap-usuario').value;
+  if (!asesorPruebaSeleccionado) { err.textContent = 'Elegí un asesor de prueba.'; return; }
   const venceLocal = document.getElementById('ap-vence').value;
-  if (!usuarioId) { err.textContent = 'Elegí un asesor de prueba.'; return; }
   if (!venceLocal) { err.textContent = 'Elegí una fecha límite.'; return; }
-  const idsSeleccionados = AP_CANDIDATOS_SEL
-    ? [...document.querySelectorAll('#ap-preview-wrap input[data-ap-lead]:checked')].map(c => Number(c.dataset.apLead))
-    : null;
-  if (idsSeleccionados && !idsSeleccionados.length) { err.textContent = 'No dejaste ningún lead tildado.'; return; }
   const f = apFiltros();
-  const cantidad = idsSeleccionados ? idsSeleccionados.length : parseInt(document.getElementById('ap-cantidad').value, 10);
+  const cantidad = parseInt(document.getElementById('ap-cantidad').value, 10);
+  if (isNaN(cantidad) || cantidad < 1) { err.textContent = 'Elegí una cantidad válida (mínimo 1).'; return; }
   if (!(await confirmarSheet({ titulo: '¿Asignar este lote?', detalle: `${cantidad} lead(s) pasan a ser del asesor elegido, con tarea de contacto por cada uno.`, textoOk: 'Asignar' }))) return;
   const btn = document.getElementById('ap-asignar'); btn.disabled = true;
-  const body = { p_usuario_id: usuarioId, p_cantidad: cantidad, ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null, p_vence_at: new Date(venceLocal).toISOString(), p_lead_ids: idsSeleccionados };
+  const body = { p_usuario_id: asesorPruebaSeleccionado, p_cantidad: cantidad, ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null, p_vence_at: new Date(venceLocal).toISOString() };
   const { data, error } = await sb.rpc('asignar_lote_prueba', body);
   if (error || !data?.ok) { err.textContent = error?.message || data?.error || 'No se pudo asignar.'; btn.disabled = false; return; }
   okToast(`Lote asignado: ${data.cantidad} lead(s)`);
