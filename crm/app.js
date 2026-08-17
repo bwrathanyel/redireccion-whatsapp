@@ -1602,6 +1602,10 @@ const ERR_PERSONAL = {
   username_ocupado: 'Ese usuario ya está en uso.',
   username_invalido: 'El usuario solo puede tener letras, números, punto, guion y guion bajo (3 a 32).',
   nombre_invalido: 'El nombre es muy corto.',
+  password_invalido: 'La contraseña debe tener al menos 8 caracteres.',
+  no_autorizado: 'Tu sesión expiró. Recargá la página y volvé a entrar.',
+  no_se_pudo_crear_la_cuenta: 'No se pudo crear la cuenta de acceso. Reintentá en unos segundos.',
+  no_se_pudo_registrar_en_el_crm: 'La cuenta se creó pero no se pudo guardar en el CRM. Avisale a Sistemas.',
 };
 
 async function bajaPersonal(usuarioId, reactivar) {
@@ -1638,7 +1642,7 @@ function abrirAltaPersona(comoFreelancer) {
         <label class="fl">Grupo de Telegram</label>
         <input id="pn-telegram" class="ei" type="text" placeholder="ID del grupo o chat">
         <label class="fl">Contraseña</label>
-        <input id="pn-password" class="ei" type="password" minlength="12" placeholder="Mínimo 12 caracteres">
+        <input id="pn-password" class="ei" type="password" minlength="8" placeholder="Mínimo 8 caracteres">
         <div class="form-hint">Si la dejás vacía se genera una temporal y se pide cambiarla al entrar.</div>
       </div>
       <label class="pe-check" style="margin-top:12px"><input type="checkbox" id="pn-freelancer"${comoFreelancer ? ' checked' : ''}> Es freelancer (se bloquea a los 15 min sin actividad)</label>
