@@ -1667,6 +1667,40 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .act-panel{display:none}
 .act-panel.on{display:block;animation:section-in .2s ease}
 
+/* --- Pestaña "Cómo funciona": manual simple del tarifario automático --- */
+.act-guia{display:flex;flex-direction:column;gap:14px}
+.act-guia .guia-intro{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.65;color:var(--muted)}
+.act-guia .guia-intro b{color:var(--txt)}
+.act-guia .guia-bloque{border:1px solid var(--line);border-radius:16px;padding:16px;background:var(--panel)}
+.act-guia h4{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted2);margin:0 0 12px}
+.act-guia h4 i{color:var(--accent);font-size:13px}
+.act-guia .guia-pasos{display:flex;flex-direction:column;gap:10px}
+.act-guia .guia-paso{display:flex;gap:11px;align-items:flex-start}
+.act-guia .guia-paso .num{flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--accent-soft);color:var(--accent);font-weight:800;font-size:12.5px;display:flex;align-items:center;justify-content:center}
+.act-guia .guia-paso .tx{flex:1;min-width:0;font-size:13px;line-height:1.55;color:var(--muted)}
+.act-guia .guia-paso .tx b{color:var(--txt)}
+.act-guia .guia-ia{display:flex;flex-direction:column;gap:9px}
+.act-guia .guia-ia .fila{display:flex;gap:12px;align-items:center;border:1px solid var(--line2);border-radius:12px;padding:11px 13px;background:var(--panel-solid)}
+.act-guia .guia-ia .ico{flex:0 0 auto;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.act-guia .guia-ia .ico.lee{background:rgba(255,145,0,.14);color:var(--accent)}
+.act-guia .guia-ia .ico.rev{background:rgba(59,130,246,.14);color:#60a5fa}
+.act-guia .guia-ia .ico.res{background:rgba(168,85,247,.14);color:#c084fc}
+.act-guia .guia-ia .det{flex:1;min-width:0}
+.act-guia .guia-ia .nm{font-size:13.5px;font-weight:700;color:var(--txt)}
+.act-guia .guia-ia .rol{font-size:12px;color:var(--muted);margin-top:1px;line-height:1.45}
+.act-guia .guia-ia .tag{flex:0 0 auto;font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px}
+.act-guia .guia-ia .tag.hoy{background:var(--accent);color:#1a1005}
+.act-guia .guia-ia .tag.alt{background:var(--panel-solid);color:var(--muted);border:1px solid var(--line2)}
+.act-guia .guia-costos{display:flex;flex-direction:column;gap:9px}
+.act-guia .guia-costo{display:flex;align-items:center;gap:12px;border:1px solid var(--line2);border-radius:12px;padding:12px 14px;background:var(--panel-solid)}
+.act-guia .guia-costo .lab{flex:1;min-width:0;font-size:13px;color:var(--muted)}
+.act-guia .guia-costo .val{flex:0 0 auto;font-size:15px;font-weight:800;color:var(--accent)}
+.act-guia .guia-nota{font-size:11.5px;color:var(--muted2);line-height:1.5;margin-top:10px}
+.act-guia .guia-nota b{color:var(--muted)}
+.act-guia ul.guia-no{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+.act-guia ul.guia-no li{display:flex;gap:9px;font-size:13px;color:var(--muted);line-height:1.5;align-items:flex-start}
+.act-guia ul.guia-no li i{color:var(--green);margin-top:3px;font-size:12px}
+
 /* --- Pestaña Proceso: qué está haciendo la cadena automática ahora mismo --- */
 .act-pill-alerta{background:#ef4444 !important;color:#fff !important}
 /* ---------- Cerebro IA: reglas de venta ---------------------------------
@@ -4397,12 +4431,68 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <button class="act-tab" data-atab="portadas" type="button">Portadas<span class="act-pill" id="act-pill-port" hidden>0</span></button>
     <button class="act-tab" data-atab="correr" type="button">Actualizar</button>
     <button class="act-tab" data-atab="historial" type="button">Historial</button>
+    <button class="act-tab" data-atab="guia" type="button">Cómo funciona</button>
   </div>
   <div class="act-panel on" data-apanel="revisar" id="act-panel-revisar"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
   <div class="act-panel" data-apanel="proceso" id="act-panel-proceso"></div>
   <div class="act-panel" data-apanel="portadas" id="act-panel-portadas"></div>
   <div class="act-panel" data-apanel="correr" id="act-panel-correr"></div>
   <div class="act-panel" data-apanel="historial" id="act-panel-historial"></div>
+  <div class="act-panel" data-apanel="guia" id="act-panel-guia">
+    <div class="act-guia">
+      <div class="guia-intro"><b>Todo esto pasa solo.</b> BTTRAVEL sube el tarifario a la carpeta de Google Drive y el sistema se encarga de leerlo, publicarlo y revisarlo. Vos no tenés que tocar nada: esta pantalla solo te explica qué está pasando por detrás.</div>
+
+      <div class="guia-bloque">
+        <h4><i class="fas fa-arrows-rotate"></i> Cómo se actualiza solo</h4>
+        <div class="guia-pasos">
+          <div class="guia-paso"><div class="num">1</div><div class="tx"><b>Cada 30 minutos</b> mira la carpeta de Drive por si subieron algo nuevo.</div></div>
+          <div class="guia-paso"><div class="num">2</div><div class="tx"><b>Detecta el archivo nuevo</b> — por ejemplo “Tarifario nacional agosto 018”. Lo encuentra solo, sin que nadie avise.</div></div>
+          <div class="guia-paso"><div class="num">3</div><div class="tx"><b>La IA lo lee</b> y saca los hoteles, los precios, las promociones y las fechas de vigencia.</div></div>
+          <div class="guia-paso"><div class="num">4</div><div class="tx"><b>Lo publica y lo revisa:</b> queda en el catálogo (CRM y web) y una segunda IA mira si hay errores — una oferta vencida, un destino sin completar. Lo que puede, lo corrige sola; lo que no, lo deja anotado para que lo confirmes.</div></div>
+        </div>
+      </div>
+
+      <div class="guia-bloque">
+        <h4><i class="fas fa-robot"></i> Qué IA hace cada cosa</h4>
+        <div class="guia-ia">
+          <div class="fila">
+            <div class="ico lee"><i class="fas fa-book-open"></i></div>
+            <div class="det"><div class="nm">Qwen</div><div class="rol">Lee los archivos (PDF y fotos) y saca los datos.</div></div>
+            <span class="tag hoy">la que se usa</span>
+          </div>
+          <div class="fila">
+            <div class="ico rev"><i class="fas fa-magnifying-glass"></i></div>
+            <div class="det"><div class="nm">DeepSeek</div><div class="rol">Lee las tablas y es la revisora: retira ofertas vencidas y completa destinos.</div></div>
+            <span class="tag hoy">la que se usa</span>
+          </div>
+          <div class="fila">
+            <div class="ico res"><i class="fas fa-shield-halved"></i></div>
+            <div class="det"><div class="nm">Claude Sonnet</div><div class="rol">Respaldo. Es la más cara, por eso no es la principal.</div></div>
+            <span class="tag alt">respaldo</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="guia-bloque">
+        <h4><i class="fas fa-sack-dollar"></i> Cuánto cuesta cada actualización</h4>
+        <div class="guia-costos">
+          <div class="guia-costo"><span class="lab">Un archivo (un flyer o una ficha)</span><span class="val">≈ $0,001</span></div>
+          <div class="guia-costo"><span class="lab">El tarifario nacional completo</span><span class="val">≈ $0,03</span></div>
+          <div class="guia-costo"><span class="lab">La revisión diaria de errores</span><span class="val">≈ $0,001</span></div>
+        </div>
+        <div class="guia-nota">Valores <b>aproximados</b>: se calculan con el consumo real y el precio publicado de cada modelo. Se usa a propósito el modelo más barato.</div>
+      </div>
+
+      <div class="guia-bloque">
+        <h4><i class="fas fa-shield"></i> Qué NO hace la IA</h4>
+        <ul class="guia-no">
+          <li><i class="fas fa-circle-check"></i><span>No inventa precios ni fechas: todo sale del archivo que subió BTTRAVEL.</span></li>
+          <li><i class="fas fa-circle-check"></i><span>No borra nada a escondidas: si duda, lo deja visible para que lo confirmes.</span></li>
+          <li><i class="fas fa-circle-check"></i><span>No toca los precios ni los datos que ya están confirmados.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Detalle de una solicitud de boletería: se abre al tocar una tarjeta de la cola -->

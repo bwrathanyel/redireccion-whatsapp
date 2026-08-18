@@ -3628,7 +3628,8 @@ function actCambiarTab(clave) {
   else if (clave === 'proceso') cargarPanelProceso();
   else if (clave === 'portadas') cargarPanelPortadas();
   else if (clave === 'correr') cargarPanelCorrer();
-  else cargarHistorialTarifario();
+  else if (clave === 'historial') cargarHistorialTarifario();
+  // 'guia' es contenido estático ya pintado en index.html: no carga nada.
 }
 
 function actSkel(id) {
@@ -13074,6 +13075,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-18', emoji: '📖', titulo: 'Guía del tarifario automático', texto: 'En Tarifario → Actualizador hay una pestaña nueva "¿Cómo funciona?": explica en simple cómo se actualiza solo el tarifario, qué IA hace cada cosa y cuánto cuesta cada actualización.', roles: ['admin'] },
   { fecha: '2026-08-16', emoji: '🎯', titulo: 'Control total en lotes de práctica', texto: 'En Gestión de Personal → Asesores de prueba ya se puede filtrar por rango de fecha y por destino, y ver la lista real de leads antes de asignar el lote, tildando y destildando a mano cuáles entran. Además, crear una cuenta nueva ahora pide contraseña de 8 caracteres (antes 12) y la pregunta/respuesta de seguridad ya no tienen mínimo de letras.', roles: ['admin'] },
   { fecha: '2026-08-15', emoji: '✈️', titulo: 'Modo Boletería', texto: 'El botón "Boletería" (abajo del menú) cambia el CRM entero de color y de menú, como si fuera otra app: rutas, aerolíneas, precios de referencia, requisitos por país y calendario de temporadas, más la cola de solicitudes de siempre a mano. "Volver a Hospedajes" te devuelve todo como estaba.', roles: ['admin', 'asesor', 'asesor_prueba', 'boleteria'] },
   { fecha: '2026-08-15', emoji: '🧑‍💼', titulo: 'Asesores de prueba: lotes y progreso', texto: 'En Gestión de Personal, pestaña "Asesores de prueba": asignale a un asesor nuevo un lote de leads viejos para que practique contactándolos, con conteo previo, fecha límite y seguimiento de contactados/pendientes/vencidos. Botón para promoverlo a asesor real cuando esté listo. También se puede editar usuario, permisos de voucher/informe diario y bloquear acceso sin dar de baja.', roles: ['admin'] },
