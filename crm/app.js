@@ -4998,7 +4998,36 @@ async function cargarPanelProceso() {
 }
 
 function actProcesoHtml(d) {
-  return actCargaHtml(d) + actPuertasHtml(d) + actSaludHtml(d.salud || []) + actColaHtml(d);
+  return actBannerHtml(d) + actCargaHtml(d) + actPuertasHtml(d) + actSaludHtml(d.salud || []) + actColaHtml(d);
+}
+
+// Resumen de una línea arriba del panel: qué está pasando, sin leer el detalle.
+function actBannerHtml(d) {
+  const carga = d.carga;
+  const puertas = d.puertas || [];
+  const salud = d.salud || [];
+  const vivo = (d.ultimas_cargas || []).find(c => c.estado === 'activa');
+  const puertaMal = puertas.some(p => !p.ok);
+  const cronMal = salud.some(s => {
+    const esperado = ACT_ESPERADO[s.proceso] || 60;
+    const nuevo = s.minutos === null && s.activo;
+    const parado = !nuevo && (!s.activo || s.minutos === null || s.minutos > esperado * 3);
+    return parado || s.resultado_ok === false;
+  });
+  if (cronMal) {
+    return `<div class="act-banner mal"><i class="fas fa-triangle-exclamation"></i><div><b>Un proceso dejó de correr</b><div>Mirá "Procesos automáticos" abajo: hay algo en rojo.</div></div></div>`;
+  }
+  if (carga && ['extrayendo', 'verificando', 'lista'].includes(carga.estado)) {
+    return `<div class="act-banner curso"><i class="fas fa-arrows-rotate"></i><div><b>Actualizando el tarifario</b><div>${esc(carga.archivo)} — se publica solo al terminar.</div></div></div>`;
+  }
+  if (puertaMal) {
+    const primera = puertas.find(p => !p.ok);
+    return `<div class="act-banner aviso"><i class="fas fa-hand"></i><div><b>Frenado, esperando una persona</b><div>${esc(primera?.nombre || '')}: ${esc(primera?.detalle || '')}</div></div></div>`;
+  }
+  if (carga && carga.estado === 'borrador') {
+    return `<div class="act-banner ok"><i class="fas fa-rocket"></i><div><b>Tarifario nuevo listo</b><div>Pasó las tres puertas y se publica solo.</div></div></div>`;
+  }
+  return `<div class="act-banner ok"><i class="fas fa-circle-check"></i><div><b>Todo automático y al día</b><div>${vivo ? `Catálogo vivo: ${esc(vivo.archivo)}` : 'Sin cargas en curso ni nada que revisar.'}</div></div></div>`;
 }
 
 function actCargaHtml(d) {
@@ -5029,8 +5058,10 @@ function actCargaHtml(d) {
       <div class="act-est-nom">${esc(c.archivo)}</div>
       <span class="act-chip ${paso[1]}">${esc(paso[0])}</span>
     </div>
-    ${t.total ? `<div class="act-barra"><div class="act-barra-int" style="width:${pct}%"></div></div>
-      <div class="act-sub">${hechas} de ${t.total} tandas · ${c.paginas} páginas${t.error ? ` · <b style="color:#fca5a5">${t.error} con error</b>` : ''}</div>` : ''}
+    ${t.total ? `<div class="act-prog">
+      <div class="act-prog-top"><span class="act-prog-pct">${pct}%</span><span class="act-prog-sub">${hechas} de ${t.total} tandas · ${c.paginas} páginas${t.error ? ` · <b style="color:#fca5a5">${t.error} con error</b>` : ''}</span></div>
+      <div class="act-barra"><div class="act-barra-int" style="width:${pct}%"></div></div>
+    </div>` : ''}
     <div class="act-sub" style="margin-top:6px;color:var(--muted2)">Nada de esto se ve en el catálogo hasta que pase las tres puertas.</div>
   </div>`;
 }
@@ -5040,7 +5071,7 @@ function actPuertasHtml(d) {
   if (!p.length) return '';
   const todas = p.every(x => x.ok);
   const filas = p.map(x => `
-    <div class="act-puerta">
+    <div class="act-puerta ${x.ok ? '' : 'frenada'}">
       <div class="act-puerta-ico ${x.ok ? 'act-puerta-ok' : 'act-puerta-mal'}"><i class="fas fa-${x.ok ? 'circle-check' : 'circle-exclamation'}"></i></div>
       <div style="flex:1;min-width:0">
         <div class="act-puerta-nom">${esc(x.nombre)}</div>
