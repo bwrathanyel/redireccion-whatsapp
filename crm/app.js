@@ -4609,6 +4609,14 @@ function riaPintarPanel(data) {
   const pasos = [['Conversaciones', r.conversaciones], ['Destino', r.destinos], ['Teléfono', r.telefonos], ['Intención real', r.intenciones], ['Lead creado', r.leads_calificados]];
   document.getElementById('ria-embudo').innerHTML = `<div class="ria-funnel">${pasos.map(([n, v]) => `<div class="ria-paso"><span>${esc(n)}</span><div class="ria-bar"><i style="width:${Math.min(100, riaPct(v, r.conversaciones))}%"></i></div><b>${fmt(riaNum(v))}</b></div>`).join('')}</div>`;
 
+  const colabs = data.colaboraciones || {};
+  const porCampania = colabs.por_campania || [];
+  const nombreColab = c => c === 'vulcanost' ? 'Posada Vulcanost' : c === 'casa_playa_sur' ? 'Casa Vacacional Playa del Sur' : c;
+  document.getElementById('ria-colaboraciones').innerHTML = `<div class="ria-lista">
+    <div class="ria-fila"><span>Escaladas directo al colaborador</span><b>${fmt(riaNum(colabs.total))}</b></div>
+    ${porCampania.map(c => `<div class="ria-fila"><span>${esc(nombreColab(c.campania))}</span><b>${fmt(riaNum(c.conversaciones))}</b></div>`).join('')}
+  </div>${porCampania.length ? '' : '<div class="ria-vacio">Sin colaboraciones en este período.</div>'}`;
+
   document.getElementById('ria-ventas').innerHTML = `<div class="ria-lista">
     <div class="ria-fila"><span>Leads entregados</span><b>${fmt(riaNum(r.leads_calificados))}</b></div>
     <div class="ria-fila"><span>Esperando primer contacto</span><b class="${riaNum(ventas.esperando_primer_contacto) ? 'ria-malo' : 'ria-bien'}">${fmt(riaNum(ventas.esperando_primer_contacto))}</b></div>
