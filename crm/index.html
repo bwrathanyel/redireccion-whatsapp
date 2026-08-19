@@ -193,12 +193,17 @@ body:has(#vista-previa-banner){padding-top:36px}
 
 /* ---------- Bottom nav (mobile) ---------- */
 .bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:50;background:rgba(11,15,28,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line2);padding:6px 6px calc(10px + var(--safe-b));justify-content:space-around}
-/* Fase 5.2 -- barrita bajo el ítem activo. left/width los pone JS
-   (actualizarIndicadorSwipe/posicionarIndicadorActivo); sin transition a
-   propósito -- durante el drag tiene que seguir al dedo cuadro a cuadro,
-   una transition la dejaría siempre un paso atrás. */
-.bn-indicator{position:absolute;bottom:2px;height:3px;border-radius:2px;background:var(--accent);pointer-events:none}
-.bn-item{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px;min-height:48px;color:#d7dbe6;text-decoration:none;font-size:10.5px;font-weight:600;cursor:pointer;border-radius:12px;transition:color .15s;position:relative}
+/* Fase 5.2 -- barrita bajo el ítem activo, ÚNICA marca de "estás acá" desde
+   2026-08-19 (antes convivía con una pastilla ::before arriba del ícono, que
+   marcaba lo mismo dos veces). left/width/background los pone JS
+   (actualizarIndicadorSwipe/posicionarIndicadorActivo).
+   La transition es para el toque; durante el arrastre tiene que seguir al dedo
+   cuadro a cuadro, y ahí JS pone .dragging para anularla -- una transition viva
+   durante el drag la dejaría siempre un paso atrás. */
+.bn-indicator{position:absolute;bottom:2px;height:3px;border-radius:2px;background:var(--accent);pointer-events:none;transition:left .22s cubic-bezier(.3,1,.4,1),width .22s cubic-bezier(.3,1,.4,1),background-color .22s linear}
+.bn-indicator.dragging{transition:none}
+.bn-item{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px;min-height:48px;color:#d7dbe6;text-decoration:none;font-size:10.5px;font-weight:600;cursor:pointer;border-radius:12px;transition:color .15s;position:relative;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+.bn-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .bn-item i{font-size:18px}
 /* El nombre en un blanco casi pleno: en var(--muted) apenas se leía sobre el
    fondo oscuro de la barra (pedido del dueño, 2026-07-27). */
@@ -209,18 +214,22 @@ body:has(#vista-previa-banner){padding-top:36px}
 .bottom-nav[data-n="7"] .bn-item{font-size:9.5px;padding-left:1px;padding-right:1px}
 .bottom-nav[data-n="7"] .bn-item i{font-size:17px}
 /* Color del item activo por zona (data-sec) -- da vida a la barra en vez del
-   naranja único para todo; el texto activo va en negrita para leerse mejor. */
+   naranja único para todo; el texto activo va en negrita para leerse mejor.
+   La barrita de abajo copia este mismo color por JS (getComputedStyle().color
+   en actualizarIndicadorSwipe), así el mapa de colores vive en UN solo lado y
+   una sección nueva no puede quedar con el texto de un color y la barra de
+   otro -- que es lo que pasaba con las secciones sin regla propia. */
 .bn-item.active{color:var(--accent);font-weight:800}
-.bn-item.active::before{content:'';position:absolute;top:0;width:26px;height:3px;border-radius:3px;background:var(--accent)}
 .bn-item.active[data-sec="hoy"]{color:var(--amber)}
-.bn-item.active[data-sec="hoy"]::before{background:var(--amber)}
 .bn-item.active[data-sec="leads"]{color:var(--blue)}
-.bn-item.active[data-sec="leads"]::before{background:var(--blue)}
 .bn-item.active[data-sec="mensajes"]{color:var(--green)}
-.bn-item.active[data-sec="mensajes"]::before{background:var(--green)}
 .bn-item.active[data-sec="tarifario"]{color:var(--purple)}
-.bn-item.active[data-sec="tarifario"]::before{background:var(--purple)}
-.bn-badge{display:none;position:absolute;top:2px;right:calc(50% - 26px);background:var(--accent);color:#1a1000;font-size:9px;font-weight:800;min-width:15px;height:15px;line-height:15px;text-align:center;border-radius:20px;padding:0 3px}
+.bn-item.active[data-sec="stop-sales"]{color:#ff6b6b}
+.bn-item.active[data-sec="gestion-personal"]{color:var(--pink)}
+/* Pegado al ícono, no a un ancho fijo: el ícono mide 18px (17px con 7 ítems),
+   así que el badge se apoya sobre su esquina superior derecha en vez de
+   depender del ancho del ítem, que cambia con cuántos entren en la barra. */
+.bn-badge{display:none;position:absolute;top:2px;left:calc(50% + 5px);background:var(--accent);color:#1a1000;font-size:9px;font-weight:800;min-width:15px;height:15px;line-height:15px;text-align:center;border-radius:20px;padding:0 3px}
 .bn-badge.show{display:block}
 /* Editor de la barra de abajo (Mi Perfil) */
 .bn-cfg-count{font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
@@ -641,8 +650,18 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 /* Swipe entre secciones (Fase 5.2) -- la vecina se asoma superpuesta sobre
    la activa mientras dura el gesto. .main pasa a position:relative SOLO
    durante el gesto (setupSwipeSecciones lo agrega/saca por JS) para que
-   esto se posicione contra .main y no contra el viewport entero. */
-.section.swipe-peek{display:block;position:absolute;top:0;left:0;width:100%}
+   esto se posicione contra .main y no contra el viewport entero.
+   top/left/width NO van acá: el posicionamiento absoluto se resuelve contra la
+   caja de PADDING de .main, que en móvil tiene 14px de costado y arranca arriba
+   del topbar -- con left:0;width:100% la vecina salía 14px corrida, 28px más
+   ancha y tapando el encabezado. Los pone iniciarGestoX() copiando el rect real
+   de la sección activa, así queda exacto en cualquier breakpoint. */
+.section.swipe-peek{display:block;position:absolute}
+/* Transition puente para que soltar el dedo no corte de golpe -- se agrega
+   SOLO durante el settle final del gesto (setupSwipeSecciones), nunca en el
+   .main normal, para no interferir con aplicarArrastre() que necesita seguir
+   al dedo cuadro a cuadro sin transition. */
+.section.swipe-settling{transition:transform .22s cubic-bezier(.3,1,.4,1)}
 /* formulario de edición (drawer) */
 .edit-box{background:rgba(255,145,0,.05);border:1px solid rgba(255,145,0,.18);border-radius:14px;padding:15px;margin-bottom:18px}
 .eb-title{font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:7px;margin-bottom:6px}
@@ -1248,8 +1267,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .rol-asesor #f-asesor{display:none}
 .rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok),.rol-marketing .sheet-item:not(.nav-marketing-ok){display:none}
 .rol-boleteria .nav-item:not(.nav-boleteria-ok),.rol-boleteria .bn-item:not(.nav-boleteria-ok),.rol-boleteria .sheet-item:not(.nav-boleteria-ok){display:none}
-.rol-prueba .nav-item:not(.nav-prueba-ok),.rol-prueba .bn-item:not(.nav-prueba-ok),.rol-prueba .sheet-item:not(.nav-prueba-ok){display:none}
-.rol-asesor .admin-only,.rol-marketing .admin-only,.rol-boleteria .admin-only,.rol-prueba .admin-only{display:none}
+.rol-asesor .admin-only,.rol-marketing .admin-only,.rol-boleteria .admin-only{display:none}
 
 /* Modo Boletería: cambio de modo completo, no un tema scopeado a una
    sección. body.modo-boleteria vive arriba de todo el árbol -- las
@@ -1258,7 +1276,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 body.modo-boleteria{--accent:#2e6bff;--accent-soft:rgba(46,107,255,.16);--bg:#070c1c;--bg2:#0b1330;--panel:rgba(18,28,58,.72);--panel-solid:#121c3a;--line:rgba(120,160,255,.12);--line2:rgba(120,160,255,.2);--txt:#eef2ff;--muted:#7c8ab8;--muted2:#6c7aae}
 body.modo-boleteria .sidebar{background:linear-gradient(180deg,rgba(10,16,40,.96),rgba(6,10,26,.98))}
 body.modo-boleteria .seg.on{color:#bcd4ff}
-/* Menú reemplazado entero, mismo mecanismo que rol-marketing/rol-boleteria/rol-prueba. */
+/* Menú reemplazado entero, mismo mecanismo que rol-marketing/rol-boleteria. */
 body.modo-boleteria .nav-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .bn-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .sheet-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .nav-label{display:none}
 /* Los ítems que SOLO existen dentro del modo (no son parte del menú normal
    de nadie) tienen que estar ocultos fuera de él -- si no, se filtran al
@@ -1524,7 +1542,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .pv-grid{grid-template-columns:minmax(0,1fr);min-width:0}.pv-card{padding:15px;min-width:0}
   .pv-btn{min-height:44px}.pv-doc-grid{grid-template-columns:1fr}
 }
-@media(prefers-reduced-motion:reduce){.section.active{animation:none!important}}
+/* "Reducir movimiento": apaga TODA la animación de cambio de sección, no solo
+   section-in. Antes sw-izq/sw-der (el empujón del swipe) y card-in (entrada
+   escalonada de listas) seguían corriendo igual, que es justo lo que marea. */
+@media(prefers-reduced-motion:reduce){
+  .section.active,body.swipe-izq .section.active,body.swipe-der .section.active{animation:none!important}
+  #leads-cards.entrada-lista>.entity-card{animation:none!important}
+  .bn-indicator{transition:none!important}
+}
 
 /* ============ Ficha del lead — rediseño 2026-07-30 ============ */
 .dhead{align-items:flex-start;margin-bottom:14px}
@@ -1605,6 +1630,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ap-chip{display:inline-flex;align-items:center;background:rgba(255,145,0,.08);border:1px solid rgba(255,145,0,.25);color:var(--txt);font-family:inherit;font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;cursor:pointer;transition:background .15s,border-color .15s;white-space:nowrap}
 .ap-chip:hover{border-color:var(--accent);background:rgba(255,145,0,.14)}
 .ap-chip.on{background:var(--accent);border-color:var(--accent);color:#0a0a0a}
+.ap-chip-todos{background:none;border:0;color:var(--accent);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;padding:0 6px;text-decoration:underline}
+.ap-hint{color:var(--muted2);font-weight:400;font-size:11px;margin-left:4px}
+.chip-group:empty::after{content:"Cargando…";color:var(--muted2);font-size:12px}
+.tl-ev{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line2)}
+.tl-ev:last-child{border-bottom:0}
+.tl-ev-hora{flex:0 0 52px;color:var(--muted2);font-size:12px;font-variant-numeric:tabular-nums}
+.tl-ev-ico{flex:0 0 22px;color:var(--accent);text-align:center}
+.tl-ev-txt{flex:1;font-size:13px;line-height:1.4}
 .ss-cal-nav{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:12px}
 .ss-cal-nav b{font-size:13px;font-weight:800;letter-spacing:.3px;min-width:150px;text-align:center;text-transform:capitalize}
 .ss-nav-btn{background:transparent;border:1px solid var(--line2);color:var(--muted);width:30px;height:30px;border-radius:9px;cursor:pointer;font-family:inherit;font-size:14px;display:grid;place-items:center;transition:border-color .15s,color .15s}
@@ -2259,10 +2292,11 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="nav-boleteria-home" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
       <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
       <a class="nav-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales</a>
       <a class="nav-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas <span class="badge" id="nav-tareas-count" style="display:none">0</span></a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
-      <a class="nav-item nav-prueba-ok" data-sec="leads-prueba"><i class="fas fa-user-clock"></i> Mis leads</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
+      <a class="nav-item" data-sec="clientes-asignados"><i class="fas fa-user-clock"></i> Clientes Asignados</a>
+      <a class="nav-item" data-sec="mis-notas"><i class="fas fa-lightbulb"></i> Mis Notas <span class="badge" id="nav-notas-count" style="display:none">0</span></a>
       <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
       <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
       <a class="nav-item nav-boleteria-ok nav-modo-boleteria-ok solo-voucher" id="nav-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher <span class="badge" id="nav-voucher-count" style="display:none">0</span></a>
@@ -2271,9 +2305,9 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
       <a class="nav-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
       <div class="nav-label" data-label="tarifario">Tarifario</div>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
-      <a class="nav-item nav-marketing-ok nav-prueba-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
+      <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
       <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
       <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA</a>
       <a class="nav-item nav-admin-only" data-sec="consultor-ia"><i class="fas fa-user-tie"></i> Consultor IA</a>
@@ -2284,8 +2318,8 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <a class="nav-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
       <a class="nav-item nav-admin-only solo-informe-diario" id="nav-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
       <div class="nav-label" data-label="ayuda">Ayuda</div>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
+      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
       <a class="nav-item nav-admin-only" data-sec="proyecto-constructor"><i class="fas fa-drafting-compass"></i> Proyecto Constructor</a>
       <a class="nav-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="nav-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
     </nav>
@@ -2398,8 +2432,8 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     </section>
 
     <!-- LEADS -->
-    <section class="section" id="sec-leads-prueba">
-      <div class="card"><h2><i class="fas fa-user-clock"></i> Mis leads de práctica</h2><div class="csub">Registrá el resultado y una nota de cada contacto. Tu responsable revisa el progreso.</div><div id="leads-prueba-list" class="entity-grid" style="margin-top:14px"><div class="es-s">Cargando leads…</div></div></div>
+    <section class="section" id="sec-clientes-asignados">
+      <div class="card"><h2><i class="fas fa-user-clock"></i> Clientes Asignados</h2><div class="csub">Editá los datos del cliente, registrá si ya lo atendiste y dejá anotado qué te dijo.</div><div id="clientes-asignados-list" class="entity-grid" style="margin-top:14px"><div class="es-s">Cargando clientes…</div></div></div>
     </section>
 
     <section class="section" id="sec-leads">
@@ -2546,6 +2580,38 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     </section>
 
     <!-- TAREAS (freelancer) -->
+    <section class="section" id="sec-mis-notas">
+      <div class="card" id="notas-repaso-card" style="display:none">
+        <h2><i class="fas fa-rotate-right"></i> Para repasar hoy</h2>
+        <div class="csub">Leélo, tapá la respuesta y decidí con honestidad: si todavía te cuesta, vuelve mañana.</div>
+        <div id="notas-repaso-list" style="margin-top:14px"></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2><i class="fas fa-lightbulb"></i> Mis Notas</h2>
+        <div class="csub">Tu libreta privada: objeciones, tarifas, condiciones de un destino. Nadie más las edita.</div>
+        <button class="dbtn save" id="notas-nueva" type="button" style="margin-top:12px"><i class="fas fa-plus"></i> Nueva nota</button>
+        <div id="notas-editor" style="display:none;margin-top:12px">
+          <input type="hidden" id="nota-id">
+          <label class="fl">Título</label>
+          <input id="nota-titulo" class="ei" type="text" maxlength="200" placeholder="Ej: Objeción &quot;está muy caro&quot; en Margarita">
+          <label class="fl">Contenido</label>
+          <textarea id="nota-cuerpo" class="ei" rows="5" placeholder="Escribí acá lo que querés recordar, con tus palabras."></textarea>
+          <label class="fl">Etiquetas <span class="ap-hint">(separadas por coma, máximo 8)</span></label>
+          <input id="nota-etiquetas" class="ei" type="text" placeholder="objeciones, margarita">
+          <label class="tar-f-check" style="margin-top:10px"><input type="checkbox" id="nota-me-cuesta"> Esto me cuesta — recordámelo cada tanto</label>
+          <div class="edit-err" id="nota-err"></div>
+          <div class="tbar" style="margin-top:12px">
+            <button class="dbtn save" id="nota-guardar" type="button"><i class="fas fa-check"></i> Guardar</button>
+            <button class="btn-sm" id="nota-cancelar" type="button">Cancelar</button>
+          </div>
+        </div>
+        <label class="fl" style="margin-top:16px">Buscar</label>
+        <input id="notas-buscar" class="ei" type="search" placeholder="Buscá por título o contenido…">
+        <label class="fl">Filtrar por etiqueta</label>
+        <div id="notas-etiquetas-chips" class="chip-group"></div>
+        <div id="notas-list" class="entity-grid" style="margin-top:14px"><div class="es-s">Cargando notas…</div></div>
+      </div>
+    </section>
     <section class="section" id="sec-tareas">
       <div class="kpis" id="tareas-resumen"></div>
       <div class="tareas-board" id="tareas-board">
@@ -2712,7 +2778,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <div class="seg-group" id="gp-tabs">
         <button class="seg on" data-gp-tab="personal">Personal</button>
         <button class="seg" data-gp-tab="asesores">Asesores</button>
-        <button class="seg" data-gp-tab="prueba">Asesores de prueba</button>
+        <button class="seg" data-gp-tab="prueba">Asignación de lotes</button>
         <button class="seg" data-gp-tab="freelancers">Freelancers</button>
         <button class="seg" data-gp-tab="postulaciones">Postulaciones <span class="badge" id="gp-postulaciones-count" style="display:none">0</span></button>
         <button class="seg" data-gp-tab="reasignaciones">Reasignaciones</button>
@@ -2793,13 +2859,13 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         </div>
       </div>
 
-      <!-- ASESORES DE PRUEBA -- alta de lotes de leads viejos (A4) y su
-           seguimiento (B1: progreso por asesor, B2: promover a asesor real). -->
+      <!-- ASIGNACIÓN DE LOTES -- reparto manual de leads viejos a un asesor
+           comercial, más el seguimiento de su progreso. -->
       <div class="gp-tab-panel" data-gp-panel="prueba" style="display:none">
         <div class="card">
-          <h2><i class="fas fa-layer-group"></i> Asignar lote de práctica</h2>
-          <div class="csub">Leads viejos que el asesor de prueba tiene que contactar dejando nota y resultado por cada uno. El lead pasa a ser suyo.</div>
-          <label class="fl">Asesor de prueba</label>
+          <h2><i class="fas fa-layer-group"></i> Asignar lote de leads</h2>
+          <div class="csub">Leads viejos que el asesor tiene que contactar dejando nota y resultado por cada uno. El lead pasa a ser suyo.</div>
+          <label class="fl">Asesor</label>
           <div id="ap-usuario-chips" class="chip-group"></div>
           <label class="fl">Antigüedad mínima (días, opcional)</label>
           <input id="ap-antiguedad" class="ei" type="number" min="1" value="90">
@@ -2807,14 +2873,14 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           <input id="ap-desde" class="ei" type="date">
           <label class="fl">Fecha de creación hasta (opcional)</label>
           <input id="ap-hasta" class="ei" type="date">
-          <label class="fl">Estados a incluir</label>
-          <select id="ap-estados" class="ei" multiple size="6"></select>
-          <label class="fl">Destino (opcional, vacío = todos)</label>
-          <select id="ap-destinos" class="ei" multiple size="6"></select>
+          <label class="fl">Estados a incluir <button type="button" class="ap-chip-todos" data-chips-todos="ap-estados-chips">Todos</button><button type="button" class="ap-chip-todos" data-chips-ninguno="ap-estados-chips">Ninguno</button></label>
+          <div id="ap-estados-chips" class="chip-group"></div>
+          <label class="fl">Destino <span class="ap-hint">(ninguno marcado = todos)</span><button type="button" class="ap-chip-todos" data-chips-ninguno="ap-destinos-chips">Limpiar</button></label>
+          <div id="ap-destinos-chips" class="chip-group"></div>
           <label class="fl">Cantidad</label>
           <input id="ap-cantidad" class="ei" type="number" min="1" max="100" value="5">
-          <label class="fl">Fecha límite</label>
-          <input id="ap-vence" class="ei" type="datetime-local">
+          <label class="fl">Plazo para contactarlos</label>
+          <div id="ap-sla-chips" class="chip-group"></div>
           <div class="edit-err" id="ap-err"></div>
           <div class="tbar" style="margin-top:12px">
             <button class="btn-sm" id="ap-contar" type="button"><i class="fas fa-magnifying-glass"></i> Ver cuántos matchean</button>
@@ -2825,7 +2891,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           <button class="dbtn save" id="ap-asignar" type="button" style="margin-top:12px" disabled><i class="fas fa-check"></i> Asignar lote</button>
         </div>
         <div class="card" style="margin-top:16px">
-          <h2><i class="fas fa-chart-simple"></i> Progreso por asesor de prueba</h2>
+          <h2><i class="fas fa-chart-simple"></i> Progreso por asesor</h2>
           <div class="tbl-state skel-grid" id="ap-progreso-loading" style="display:none"><div class="skel-card"></div></div>
           <div id="ap-progreso-wrap"></div>
         </div>
@@ -4177,16 +4243,16 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 <nav class="bottom-nav">
   <a class="bn-item active" data-sec="hoy"><i class="fas fa-house"></i> Hoy</a>
   <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i><span class="bn-badge" id="nav-lead-count-m"></span> Leads</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-prueba-ok" id="bn-more"><i class="fas fa-user"></i> Yo</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
+  <a class="bn-item nav-marketing-ok nav-boleteria-ok" id="bn-more"><i class="fas fa-user"></i> Yo</a>
 </nav>
 
 <!-- Hoja "Más" (móvil) — resto de secciones, filtradas por rol igual que el sidebar -->
 <div class="sheet" id="more-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title">Yo</div>
-  <a class="sheet-perfil-card nav-marketing-ok nav-boleteria-ok nav-prueba-ok" id="sheet-item-perfil">
+  <a class="sheet-perfil-card nav-marketing-ok nav-boleteria-ok" id="sheet-item-perfil">
     <div class="avatar" id="side-avatar-m">·</div>
     <div style="flex:1;text-align:left"><div class="un" id="side-un-m">—</div><div class="ue" id="side-ue-m">—</div></div>
     <i class="fas fa-chevron-right" style="color:var(--muted2);font-size:12px"></i>
@@ -4201,10 +4267,11 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <button onclick="activarRecordatorios()">Activar</button>
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales <span class="si-sub">Disponibilidad de hoteles (BT Travel)</span></a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales <span class="si-sub">Disponibilidad de hoteles (BT Travel)</span></a>
+  <a class="sheet-item" data-sec="mis-notas"><i class="fas fa-lightbulb"></i> Mis Notas <span class="si-sub">Lo que te cuesta recordar, para repasar</span></a>
   <a class="sheet-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas</a>
-  <a class="sheet-item nav-marketing-ok nav-prueba-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
+  <a class="sheet-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
   <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
   <a class="sheet-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA <span class="si-sub">Ventas, calidad, errores y costos</span></a>
   <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA <span class="si-sub">Posadas que quieren el asistente</span></a>
@@ -4219,15 +4286,15 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <a class="sheet-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
   <a class="sheet-item nav-admin-only solo-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
   <a class="sheet-item nav-boleteria-ok nav-modo-boleteria-ok solo-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-prueba-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
+  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
   <a class="sheet-item nav-admin-only" data-sec="proyecto-constructor"><i class="fas fa-drafting-compass"></i> Proyecto Constructor <span class="si-sub">Avance del CRM que se vende a otras empresas</span></a>
   <a class="sheet-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="sheet-boleteria-home" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
   <a class="sheet-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="sheet-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
   <a class="sheet-item" id="sheet-entrar-modo-boleteria"><i class="fas fa-plane-departure"></i> Boletería <span class="si-sub">Cambiar a modo Boletería</span></a>
   <a class="sheet-item" id="sheet-salir-modo-boleteria"><i class="fas fa-arrow-left"></i> Volver a Hospedajes</a>
   <a class="sheet-item" data-refresh><i class="fas fa-rotate"></i> Actualizar CRM <span class="si-sub">Trae la última versión, igual que Ctrl+Shift+R</span></a>
-  <a class="sheet-item nav-prueba-ok" id="sheet-item-logout" style="color:#ff6b6b"><i class="fas fa-right-from-bracket"></i> Cerrar sesión</a>
+  <a class="sheet-item" id="sheet-item-logout" style="color:#ff6b6b"><i class="fas fa-right-from-bracket"></i> Cerrar sesión</a>
 </div>
 
 <!-- Tutorial: overlay del recorrido guiado -->
@@ -4266,12 +4333,33 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 <!-- Resumen de cierre de jornada (Bloque 14) — obligatorio para finalizar; si se
      cancela, la jornada sigue activa (agent_check_out exige p_resumen, ver
      migración 20260711020000). -->
+<div class="sheet" id="timeline-asesor-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-timeline"></i> <span id="timeline-titulo">Timeline</span></div>
+  <div style="padding:0 16px 4px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <input type="date" id="timeline-fecha" class="ei" style="width:auto">
+    <div id="timeline-resumen" class="chip-group" style="margin-bottom:0"></div>
+  </div>
+  <div id="timeline-list" style="padding:8px 16px 16px;max-height:60vh;overflow:auto"></div>
+  <div style="display:flex;gap:10px;padding:4px 16px 16px">
+    <button class="dbtn" id="timeline-cerrar" type="button" style="flex:1;background:var(--panel-solid);color:var(--txt);border:1px solid var(--line2)">Cerrar</button>
+  </div>
+</div>
+
 <div class="sheet" id="jornada-resumen-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title"><i class="fas fa-flag-checkered"></i> Resumen del día</div>
-  <p style="padding:0 16px 4px;color:var(--muted2);font-size:13.5px;line-height:1.5">Contanos brevemente qué hiciste hoy antes de cerrar tu jornada.</p>
-  <div style="padding:0 16px">
-    <textarea class="jornada-resumen-input" id="jornada-resumen-input" rows="5" placeholder="Ej: atendí 8 leads nuevos, cerré 2 ventas, seguimiento a cotizaciones pendientes..."></textarea>
+  <p style="padding:0 16px 4px;color:var(--muted2);font-size:13.5px;line-height:1.5">Cuatro preguntas antes de cerrar tu jornada. Las dos primeras son obligatorias.</p>
+  <div style="padding:0 16px;max-height:52vh;overflow:auto">
+    <label class="fl">¿Cómo te fue hoy?</label>
+    <textarea class="jornada-resumen-input" id="jornada-como-me-fue" rows="3" placeholder="Ej: atendí 8 leads nuevos, cerré 2 ventas, seguimiento a cotizaciones pendientes..."></textarea>
+    <label class="fl">¿Qué aprendiste?</label>
+    <textarea class="jornada-resumen-input" id="jornada-que-aprendi" rows="3" placeholder="Algo nuevo del destino, del tarifario, de cómo responder una objeción..."></textarea>
+    <label class="fl">¿Qué se te complicó? <span class="ap-hint">(opcional)</span></label>
+    <textarea class="jornada-resumen-input" id="jornada-que-se-complico" rows="2" placeholder="Lo que te costó y por qué."></textarea>
+    <label class="fl">Bloqueos <span class="ap-hint">(opcional)</span></label>
+    <textarea class="jornada-resumen-input" id="jornada-bloqueos" rows="2" placeholder="Algo que necesitás de otra persona para poder avanzar."></textarea>
+    <label class="tar-f-check" style="margin-top:10px"><input type="checkbox" id="jornada-guardar-nota" checked> Guardar lo que aprendí en Mis Notas</label>
   </div>
   <div style="display:flex;gap:10px;padding:4px 16px 4px">
     <button class="dbtn" id="jornada-resumen-cancelar" type="button" style="flex:1;background:var(--panel-solid);color:var(--txt);border:1px solid var(--line2)">Seguir trabajando</button>

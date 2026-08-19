@@ -130,7 +130,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
   tareas: ['Tareas', 'Tus tareas activas'],
   boleteria: ['Boletería', 'Rutas, aerolíneas, precios y requisitos de vuelo'],
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
@@ -255,8 +255,8 @@ async function cargarUsuario() {
   return data;
 }
 
-const VISTA_ROL_OPCIONES = ['admin', 'asesor', 'asesor_prueba', 'marketing', 'boleteria'];
-const VISTA_ROL_LABEL = { admin: 'Administrador', asesor: 'Asesor comercial', asesor_prueba: 'Asesor de prueba', marketing: 'Marketing', boleteria: 'Boletería' };
+const VISTA_ROL_OPCIONES = ['admin', 'asesor', 'marketing', 'boleteria'];
+const VISTA_ROL_LABEL = { admin: 'Administrador', asesor: 'Asesor comercial', marketing: 'Marketing', boleteria: 'Boletería' };
 
 /** Activa la vista previa de un rol y recarga -- recargar (en vez de mutar
  *  ROL en caliente) reusa TODO el flujo normal de login (los ~25 puntos del
@@ -313,7 +313,6 @@ async function afterLogin() {
 
 async function entrarSegunRol() {
   document.body.classList.toggle('rol-asesor', ROL === 'asesor');
-  document.body.classList.toggle('rol-prueba', ROL === 'asesor_prueba');
   document.body.classList.toggle('rol-marketing', ROL === 'marketing');
   document.body.classList.toggle('rol-boleteria', ROL === 'boleteria');
   // Rol boleteria vive siempre en modo Boletería -- se aplica acá, antes de
@@ -323,7 +322,7 @@ async function entrarSegunRol() {
   pintarBannerVistaPrevia();
   overlay('login').classList.remove('show');
   overlay('setup').classList.remove('show');
-  const rolLabelUi = ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : ROL === 'asesor_prueba' ? 'Asesor de prueba' : 'Asesor comercial';
+  const rolLabelUi = ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : 'Asesor comercial';
   document.getElementById('side-un').textContent = MI_NOMBRE;
   document.getElementById('side-ue').textContent = rolLabelUi;
   pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
@@ -833,15 +832,20 @@ async function handleCheckIn() {
 // cierra la sesión y guarda el informe en un único viaje transaccional, así
 // que si se cancela el sheet la jornada sigue activa (nunca queda cerrada
 // sin informe).
+const JORNADA_CAMPOS = ['jornada-como-me-fue', 'jornada-que-aprendi', 'jornada-que-se-complico', 'jornada-bloqueos'];
 function abrirResumenJornada() {
   if (ROL !== 'admin' && ROL !== 'asesor') return;
-  document.getElementById('jornada-resumen-input').value = '';
+  JORNADA_CAMPOS.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('jornada-resumen-ok').disabled = true;
   openSheet('jornada-resumen-sheet');
 }
-document.getElementById('jornada-resumen-input')?.addEventListener('input', (e) => {
-  document.getElementById('jornada-resumen-ok').disabled = !e.target.value.trim();
-});
+// Solo las dos primeras respuestas habilitan el cierre; las otras dos son opcionales.
+function validarResumenJornada() {
+  const ok = ['jornada-como-me-fue', 'jornada-que-aprendi']
+    .every(id => (document.getElementById(id)?.value || '').trim().length > 0);
+  document.getElementById('jornada-resumen-ok').disabled = !ok;
+}
+JORNADA_CAMPOS.forEach(id => document.getElementById(id)?.addEventListener('input', validarResumenJornada));
 document.getElementById('jornada-resumen-cancelar')?.addEventListener('click', (e) => {
   if (e.currentTarget.disabled) return; // envío en curso -- no se puede cancelar a mitad de camino
   closeSheet('jornada-resumen-sheet');
@@ -849,16 +853,30 @@ document.getElementById('jornada-resumen-cancelar')?.addEventListener('click', (
 document.getElementById('jornada-resumen-ok')?.addEventListener('click', async () => {
   const btn = document.getElementById('jornada-resumen-ok');
   const cancelarBtn = document.getElementById('jornada-resumen-cancelar');
-  const resumen = document.getElementById('jornada-resumen-input').value.trim();
-  if (!resumen) return;
+  const comoMeFue = document.getElementById('jornada-como-me-fue').value.trim();
+  const queAprendi = document.getElementById('jornada-que-aprendi').value.trim();
+  if (!comoMeFue || !queAprendi) return;
   btn.disabled = true; cancelarBtn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
-  const { error } = await sb.rpc('agent_check_out', { p_resumen: resumen });
+  const { error } = await sb.rpc('agent_check_out', {
+    p_como_me_fue: comoMeFue,
+    p_que_aprendi: queAprendi,
+    p_que_se_complico: document.getElementById('jornada-que-se-complico').value.trim() || null,
+    p_bloqueos: document.getElementById('jornada-bloqueos').value.trim() || null
+  });
   btn.innerHTML = '<i class="fas fa-check"></i> Finalizar jornada';
   cancelarBtn.disabled = false;
   if (error) { btn.disabled = false; errToast('No se pudo cerrar la jornada: ' + error.message); return; }
   JORNADA_ACTIVA = false;
   renderJornadaUI();
   closeSheet('jornada-resumen-sheet');
+  if (document.getElementById('jornada-guardar-nota')?.checked) {
+    const { error: eNota } = await sb.rpc('guardar_nota', {
+      p_id: null,
+      p_titulo: 'Aprendido el ' + new Date().toLocaleDateString('es-VE', { day: 'numeric', month: 'long' }),
+      p_cuerpo: queAprendi, p_etiquetas: ['aprendizajes'], p_me_cuesta: true
+    });
+    if (!eNota) okToast('Guardado también en Mis Notas'); else errToast('La jornada se cerró, pero la nota no se pudo guardar.');
+  }
   okToast('Jornada finalizada — informe enviado');
 });
 window.toggleJornada = async () => { JORNADA_ACTIVA ? abrirResumenJornada() : await handleCheckIn(); };
@@ -984,7 +1002,7 @@ function manejarDeepLinkAsistencia() {
 // Proyecto Constructor: pertenece a plataforma-crm y jamás se comparte desde
 // Lotus. `ir` se conserva por compatibilidad con los shortcuts ya instalados.
 const IR_SECCIONES = [
-  'hoy', 'dashboard', 'leads', 'leads-prueba', 'pipeline', 'postventa',
+  'hoy', 'dashboard', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'cotizador', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'voucher', 'mis-comisiones', 'ranking', 'boleteria',
   'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
@@ -994,7 +1012,6 @@ const IR_SECCIONES = [
 function seccionInicialPermitida() {
   if (ROL === 'marketing') return 'tarifario';
   if (ROL === 'boleteria') return 'boleteria';
-  if (ROL === 'asesor_prueba') return 'leads-prueba';
   return ROL === 'asesor' ? 'leads' : 'dashboard';
 }
 function usuarioPuedeAbrirSeccion(sec) {
@@ -1116,17 +1133,52 @@ function cargarTabGestionPersonal(tab) {
 
 /* ---------- Asesores de prueba (A4 + B1 + B2) ---------- */
 let AP_CANDIDATOS_SEL = null;
+// Grupo de etiquetas seleccionables. Un solo helper para los cuatro grupos del
+// panel (asesor, estados, destino, plazo): `multi` decide si conviven varias
+// marcadas o si marcar una desmarca al resto.
+function renderChipGroup(contenedorId, opciones, { multi = true, seleccion = [], onChange } = {}) {
+  const cont = document.getElementById(contenedorId);
+  if (!cont) return;
+  cont.innerHTML = opciones.map(o => {
+    const marcado = seleccion.includes(o.valor);
+    return `<button type="button" class="ap-chip${marcado ? ' on' : ''}" data-valor="${esc(o.valor)}" aria-pressed="${marcado}" title="${esc(o.titulo || o.etiqueta)}">${esc(o.etiqueta)}</button>`;
+  }).join('');
+  cont.querySelectorAll('.ap-chip').forEach(btn => btn.addEventListener('click', e => {
+    e.preventDefault();
+    if (multi) btn.classList.toggle('on');
+    else { cont.querySelectorAll('.ap-chip').forEach(b => { b.classList.remove('on'); b.setAttribute('aria-pressed', 'false'); }); btn.classList.add('on'); }
+    btn.setAttribute('aria-pressed', btn.classList.contains('on'));
+    onChange?.(chipGroupValores(contenedorId));
+  }));
+}
+function chipGroupValores(contenedorId) {
+  return [...(document.getElementById(contenedorId)?.querySelectorAll('.ap-chip.on') || [])].map(b => b.dataset.valor);
+}
 function apFiltros() {
   const antiguedadRaw = document.getElementById('ap-antiguedad').value;
   const desdeRaw = document.getElementById('ap-desde').value;
   const hastaRaw = document.getElementById('ap-hasta').value;
   return {
     p_antiguedad_dias: antiguedadRaw ? parseInt(antiguedadRaw, 10) : null,
-    p_estados: [...document.getElementById('ap-estados').selectedOptions].map(o => o.value),
+    p_estados: chipGroupValores('ap-estados-chips'),
     p_fecha_desde: desdeRaw ? new Date(desdeRaw + 'T00:00:00').toISOString() : null,
     p_fecha_hasta: hastaRaw ? new Date(hastaRaw + 'T00:00:00').toISOString() : null,
-    p_destinos: [...document.getElementById('ap-destinos').selectedOptions].map(o => o.value)
+    p_destinos: chipGroupValores('ap-destinos-chips')
   };
+}
+// El plazo se elige como etiqueta y se traduce a fecha recien al asignar.
+// "Sin limite" manda vence_at null, que el RPC ahora acepta a proposito.
+const AP_SLA_OPCIONES = [
+  { valor: '24h', etiqueta: 'Atender en 24 h', horas: 24 },
+  { valor: '48h', etiqueta: 'Atender en 48 h', horas: 48 },
+  { valor: '72h', etiqueta: 'Atender en 72 h', horas: 72 },
+  { valor: 'sin_limite', etiqueta: 'Sin límite', horas: null }
+];
+function apVenceAt() {
+  const sel = chipGroupValores('ap-sla-chips')[0];
+  if (!sel) return undefined; // nada elegido todavía
+  const horas = AP_SLA_OPCIONES.find(o => o.valor === sel)?.horas ?? null;
+  return horas ? new Date(Date.now() + horas * 3600 * 1000).toISOString() : null;
 }
 function apInvalidar() {
   document.getElementById('ap-asignar').disabled = true;
@@ -1135,43 +1187,45 @@ function apInvalidar() {
   AP_CANDIDATOS_SEL = null;
 }
 function setupAsesoresPrueba() {
-  const selEstados = document.getElementById('ap-estados');
-  if (selEstados) selEstados.innerHTML = ESTADOS_EDIT.map(e => `<option value="${esc(e)}" selected>${esc(e)}</option>`).join('');
+  renderChipGroup('ap-estados-chips', ESTADOS_EDIT.map(e => ({ valor: e, etiqueta: niceEstado(e) })),
+    { seleccion: [...ESTADOS_EDIT], onChange: apInvalidar });
+  renderChipGroup('ap-sla-chips', AP_SLA_OPCIONES.map(o => ({ valor: o.valor, etiqueta: o.etiqueta })),
+    { multi: false, seleccion: ['48h'] });
   document.getElementById('ap-contar')?.addEventListener('click', contarLotePrueba);
   document.getElementById('ap-preview-btn')?.addEventListener('click', previewLotePrueba);
   document.getElementById('ap-asignar')?.addEventListener('click', asignarLotePrueba);
-  ['ap-usuario', 'ap-antiguedad', 'ap-desde', 'ap-hasta', 'ap-estados', 'ap-destinos', 'ap-cantidad'].forEach(id => {
+  ['ap-antiguedad', 'ap-desde', 'ap-hasta', 'ap-cantidad'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', apInvalidar);
   });
+  document.querySelectorAll('[data-chips-todos],[data-chips-ninguno]').forEach(b => b.addEventListener('click', e => {
+    e.preventDefault();
+    const id = b.dataset.chipsTodos || b.dataset.chipsNinguno;
+    const encender = !!b.dataset.chipsTodos;
+    document.getElementById(id)?.querySelectorAll('.ap-chip').forEach(chip => {
+      chip.classList.toggle('on', encender);
+      chip.setAttribute('aria-pressed', encender);
+    });
+    apInvalidar();
+  }));
 }
 async function cargarDestinosLotePrueba() {
-  const sel = document.getElementById('ap-destinos');
-  if (!sel) return;
   const { data, error } = await sb.rpc('top_destinos_periodo', {});
   if (error) return;
-  sel.innerHTML = Object.keys(data || {}).sort().map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+  renderChipGroup('ap-destinos-chips', Object.keys(data || {}).sort().map(d => ({ valor: d, etiqueta: d })),
+    { onChange: apInvalidar });
 }
 let asesorPruebaSeleccionado = null;
 async function loadAsesoresPruebaTab() {
   const container = document.getElementById('ap-usuario-chips');
   if (container) {
-    const asesoresPrueba = personalCache.filter(u => u.rol === 'asesor_prueba');
-    if (asesoresPrueba.length) {
-      container.innerHTML = asesoresPrueba.map(u =>
-        `<button type="button" class="ap-chip" data-id="${u.usuario_id}" data-nombre="${esc(u.nombre)} (@${esc(u.username || '')})" title="${esc(u.nombre)} (@${esc(u.username || '')})">
-          ${esc(u.nombre)} (@${esc(u.username || '')})
-        </button>`
-      ).join('');
-      container.querySelectorAll('.ap-chip').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          container.querySelectorAll('.ap-chip').forEach(b => b.classList.remove('on'));
-          btn.classList.add('on');
-          asesorPruebaSeleccionado = btn.dataset.id;
-        });
-      });
+    const asesores = personalCache.filter(u => u.rol === 'asesor');
+    if (asesores.length) {
+      renderChipGroup('ap-usuario-chips',
+        asesores.map(u => ({ valor: String(u.usuario_id), etiqueta: `${u.nombre} (@${u.username || ''})` })),
+        { multi: false, onChange: vals => { asesorPruebaSeleccionado = vals[0] || null; apInvalidar(); } });
+      asesorPruebaSeleccionado = null;
     } else {
-      container.innerHTML = '<span style="color:var(--muted);font-size:12px">No hay asesores de prueba dados de alta</span>';
+      container.innerHTML = '<span style="color:var(--muted);font-size:12px">No hay asesores comerciales dados de alta</span>';
       asesorPruebaSeleccionado = null;
     }
   }
@@ -1180,7 +1234,7 @@ async function loadAsesoresPruebaTab() {
 }
 async function contarLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
-  if (!asesorPruebaSeleccionado) { err.textContent = 'Elegí un asesor de prueba.'; return; }
+  if (!asesorPruebaSeleccionado) { err.textContent = 'Elegí un asesor.'; return; }
   const f = apFiltros();
   if (!f.p_estados.length) { err.textContent = 'Elegí al menos un estado.'; return; }
   const { data, error } = await sb.rpc('contar_lote_prueba', { p_usuario_id: asesorPruebaSeleccionado, ...f, p_estados: f.p_estados, p_destinos: f.p_destinos.length ? f.p_destinos : null });
@@ -1210,15 +1264,15 @@ async function previewLotePrueba() {
 }
 async function asignarLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
-  if (!asesorPruebaSeleccionado) { err.textContent = 'Elegí un asesor de prueba.'; return; }
-  const venceLocal = document.getElementById('ap-vence').value;
-  if (!venceLocal) { err.textContent = 'Elegí una fecha límite.'; return; }
+  if (!asesorPruebaSeleccionado) { err.textContent = 'Elegí un asesor.'; return; }
+  const venceAt = apVenceAt();
+  if (venceAt === undefined) { err.textContent = 'Elegí el plazo para contactarlos.'; return; }
   const f = apFiltros();
   const cantidad = parseInt(document.getElementById('ap-cantidad').value, 10);
   if (isNaN(cantidad) || cantidad < 1) { err.textContent = 'Elegí una cantidad válida (mínimo 1).'; return; }
   if (!(await confirmarSheet({ titulo: '¿Asignar este lote?', detalle: `${cantidad} lead(s) pasan a ser del asesor elegido, con tarea de contacto por cada uno.`, textoOk: 'Asignar' }))) return;
   const btn = document.getElementById('ap-asignar'); btn.disabled = true;
-  const body = { p_usuario_id: asesorPruebaSeleccionado, p_cantidad: cantidad, ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null, p_vence_at: new Date(venceLocal).toISOString() };
+  const body = { p_usuario_id: asesorPruebaSeleccionado, p_cantidad: cantidad, ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null, p_vence_at: venceAt };
   const { data, error } = await sb.rpc('asignar_lote_prueba', body);
   if (error || !data?.ok) { err.textContent = error?.message || data?.error || 'No se pudo asignar.'; btn.disabled = false; return; }
   okToast(`Lote asignado: ${data.cantidad} lead(s)`);
@@ -1229,11 +1283,10 @@ async function cargarProgresoLotesPrueba() {
   const wrap = document.getElementById('ap-progreso-wrap');
   const { data, error } = await sb.rpc('resumen_lotes_prueba');
   if (error || !wrap) return;
-  if (!data?.length) { wrap.innerHTML = '<div class="pc-vacio">Todavía no hay asesores de prueba con lotes.</div>'; return; }
+  if (!data?.length) { wrap.innerHTML = '<div class="pc-vacio">Todavía no hay asesores con lotes asignados.</div>'; return; }
   wrap.innerHTML = data.map(r => `
     <div class="card" style="margin-top:12px">
-      <div class="dhead"><div><div class="dn">${esc(r.nombre)}</div><div class="dm">@${esc(r.username || '')}</div></div>
-        <button class="btn-sm" data-promover="${r.usuario_id}"><i class="fas fa-arrow-up"></i> Promover a asesor</button></div>
+      <div class="dhead"><div><div class="dn">${esc(r.nombre)}</div><div class="dm">@${esc(r.username || '')}</div></div></div>
       <div class="pc-cifras" style="margin-top:10px">
         <div class="pc-cifra"><span class="pc-cifra-v">${r.total}</span><span class="pc-cifra-t">Total</span></div>
         <div class="pc-cifra"><span class="pc-cifra-v">${r.contactados}</span><span class="pc-cifra-t">Contactados</span></div>
@@ -1242,15 +1295,6 @@ async function cargarProgresoLotesPrueba() {
       </div>
       ${r.ultimas_notas?.length ? '<div style="margin-top:10px;font-size:12px;color:var(--muted2)">' + r.ultimas_notas.map(n => `Lead #${n.lead_id}: ${esc(n.nota)}`).join('<br>') + '</div>' : ''}
     </div>`).join('');
-  wrap.querySelectorAll('[data-promover]').forEach(b => b.addEventListener('click', () => promoverAsesorPrueba(b.dataset.promover)));
-}
-async function promoverAsesorPrueba(usuarioId) {
-  if (!(await confirmarSheet({ titulo: '¿Promover a asesor real?', detalle: 'Entra al reparto automático de leads nuevos. Los leads que ya tiene siguen siendo suyos.', textoOk: 'Promover' }))) return;
-  const { data, error } = await sb.rpc('promover_asesor_prueba', { p_usuario_id: usuarioId });
-  if (error || !data?.ok) { errToast(error?.message || data?.error || 'No se pudo promover.'); return; }
-  okToast('Asesor promovido');
-  loadPersonalTiempo(false);
-  await loadAsesoresPruebaTab();
 }
 async function loadGestionPersonal() {
   cargarResumenPersonalKPIs();
@@ -1418,7 +1462,38 @@ function renderPersonalCards() {
   grid.querySelectorAll('[data-editar]').forEach(b => { b.onclick = () => abrirEditorPersona(b.dataset.editar); });
   grid.querySelectorAll('[data-desbloquear]').forEach(b => { b.onclick = () => desbloquearFreelancerUI(b.dataset.desbloquear); });
   grid.querySelectorAll('[data-exentar]').forEach(b => { b.onclick = () => exceptuarHoy(b.dataset.exentar); });
+  grid.querySelectorAll('[data-timeline]').forEach(b => { b.onclick = () => abrirTimelineAsesor(b.dataset.timeline, b.dataset.timelineNombre); });
 }
+
+/* ---------- Timeline del día por asesor (admin, Gestión de Personal) ---------- */
+const TIMELINE_ICONOS = { jornada: 'fa-right-to-bracket', lead: 'fa-arrow-right-arrow-left', tarea: 'fa-list-check', informe: 'fa-file-lines' };
+let timelineAsesorId = null;
+function abrirTimelineAsesor(usuarioId, nombre) {
+  timelineAsesorId = usuarioId;
+  document.getElementById('timeline-titulo').textContent = nombre || 'Timeline';
+  document.getElementById('timeline-fecha').value = hoyCaracas();
+  openSheet('timeline-asesor-sheet');
+  cargarTimelineAsesor();
+}
+async function cargarTimelineAsesor() {
+  const wrap = document.getElementById('timeline-list');
+  if (!wrap || !timelineAsesorId) return;
+  wrap.innerHTML = '<div class="es-s">Cargando…</div>';
+  const fecha = document.getElementById('timeline-fecha').value || hoyCaracas();
+  const { data, error } = await sb.rpc('timeline_asesor', { p_asesor_id: timelineAsesorId, p_dia: fecha });
+  if (error || !data?.ok) { wrap.innerHTML = '<div class="es-s">No se pudo cargar el timeline.</div>'; return; }
+  document.getElementById('timeline-resumen').innerHTML =
+    '<span class="chip">' + fmtMinutos(data.minutos_presencia) + ' de presencia</span>'
+    + (data.tiene_informe ? '<span class="chip ok">Dejó su informe</span>' : '<span class="chip am">Sin informe ese día</span>');
+  const eventos = data.eventos || [];
+  wrap.innerHTML = eventos.length
+    ? eventos.map(e => '<div class="tl-ev"><div class="tl-ev-hora">' + fmtHoraCaracas(e.en) + '</div>'
+        + '<div class="tl-ev-ico"><i class="fas ' + (e.icono || TIMELINE_ICONOS[e.tipo] || 'fa-circle-dot') + '"></i></div>'
+        + '<div class="tl-ev-txt">' + esc(e.texto) + '</div></div>').join('')
+    : '<div class="es-s">Sin actividad registrada ese día.</div>';
+}
+document.getElementById('timeline-fecha')?.addEventListener('change', cargarTimelineAsesor);
+document.getElementById('timeline-cerrar')?.addEventListener('click', () => closeSheet('timeline-asesor-sheet'));
 
 function cardPersonaHtml(u) {
   const ico = iconoDePersona(u);
@@ -1464,6 +1539,7 @@ function cardPersonaHtml(u) {
         + '<div class="pc-cargo">' + cargo + '</div>'
       + '</div>'
       + '<button class="pc-edit" type="button" data-editar="' + u.usuario_id + '" title="Editar"><i class="fas fa-pen"></i></button>'
+      + (u.rol === 'asesor' ? '<button class="pc-edit" type="button" data-timeline="' + u.usuario_id + '" data-timeline-nombre="' + esc(u.nombre || '') + '" title="Ver el día"><i class="fas fa-timeline"></i></button>' : '')
     + '</div>'
     + '<div class="pc-asist-row">' + asist + strikes + exentarBtn + '</div>'
     + '<div class="pc-cifras" title="Tiempo con el CRM abierto y a la vista. No cuenta la pestaña en segundo plano ni la jornada que quedó sin cerrar.">'
@@ -1507,9 +1583,9 @@ function abrirEditorPersona(usuarioId) {
       <input id="pe-cargo" class="ei" type="text" placeholder="Ej: Ejecutivo de Boletería · Gerente Administrativo" value="${esc(u.cargo || '')}">
       <label class="fl">Rol</label>
       <select id="pe-rol" class="ei">
-        ${['asesor', 'asesor_prueba', 'admin', 'marketing', 'boleteria'].map(r => `<option value="${r}"${u.rol === r ? ' selected' : ''}>${VISTA_ROL_LABEL[r] || ROL_LABEL_GP[r] || r}</option>`).join('')}
+        ${['asesor', 'admin', 'marketing', 'boleteria'].map(r => `<option value="${r}"${u.rol === r ? ' selected' : ''}>${VISTA_ROL_LABEL[r] || ROL_LABEL_GP[r] || r}</option>`).join('')}
       </select>
-      ${u.rol === 'asesor' || u.rol === 'asesor_prueba' ? `
+      ${u.rol === 'asesor' ? `
       <label class="fl">Teléfono</label>
       <input id="pe-whatsapp" class="ei" type="tel" placeholder="Ej: +58 412 1234567" value="${esc(u.whatsapp || '')}">
       <label class="fl">Grupo de Telegram</label>
@@ -1579,7 +1655,7 @@ async function guardarPersona(usuarioId) {
     err.textContent = ERR_PERSONAL[data?.error] || error?.message || 'No se pudo guardar.';
     return;
   }
-  if ((rol === 'asesor' || rol === 'asesor_prueba') && (document.getElementById('pe-whatsapp') || document.getElementById('pe-telegram'))) {
+  if (rol === 'asesor' && (document.getElementById('pe-whatsapp') || document.getElementById('pe-telegram'))) {
     await sb.rpc('admin_vincular_asesor', {
       p_usuario_id: usuarioId,
       p_nombre: nombre,
@@ -1631,7 +1707,6 @@ function abrirAltaPersona(comoFreelancer) {
       <label class="fl">Rol</label>
       <select id="pn-rol" class="ei">
         <option value="asesor">Asesor</option>
-        <option value="asesor_prueba">Asesor de prueba</option>
         <option value="admin">Administrador</option>
         <option value="marketing">Marketing</option>
         <option value="boleteria">Boletería</option>
@@ -1654,7 +1729,7 @@ function abrirAltaPersona(comoFreelancer) {
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
   const ajustarDatosAsesor = () => {
-    const esAsesor = ['asesor', 'asesor_prueba'].includes(val('pn-rol'));
+    const esAsesor = val('pn-rol') === 'asesor';
     document.getElementById('pn-datos-asesor').style.display = esAsesor ? '' : 'none';
   };
   document.getElementById('pn-rol').onchange = ajustarDatosAsesor;
@@ -1682,7 +1757,7 @@ async function crearPersona() {
     err.textContent = ERR_PERSONAL[data?.error] || data?.detalle || error?.message || 'No se pudo crear la cuenta.';
     return;
   }
-  if (['asesor', 'asesor_prueba'].includes(val('pn-rol'))) {
+  if (val('pn-rol') === 'asesor') {
     const { error: vinculoError } = await sb.rpc('admin_vincular_asesor', {
       p_usuario_id: data.usuario_id,
       p_nombre: val('pn-nombre').trim(),
@@ -1765,8 +1840,20 @@ async function loadInformeDiario() {
       <td data-label="Fecha" class="muted">${fmtFechaSolo(f.fecha)}</td>
       <td data-label="Asesor">${esc(f.nombre)}</td>
       <td data-label="Hora salida">${f.tiene_informe ? fmtHoraCaracas(f.hora_salida) : '<span class="asist-badge off">Sin informe</span>'}</td>
-      <td data-label="Resumen">${f.tiene_informe ? esc(f.resumen) : '—'}</td>
+      <td data-label="Resumen">${f.tiene_informe ? renderInformeCampos(f) : '—'}</td>
     </tr>`).join('') || '<tr><td colspan="4">Sin registros</td></tr>';
+}
+// Informes viejos (previos al 2026-08-19) solo tienen `resumen`; los nuevos
+// traen las cuatro respuestas separadas. Se muestran distinto sin romper el histórico.
+function renderInformeCampos(f) {
+  if (!f.como_me_fue && !f.que_aprendi) return esc(f.resumen || '—');
+  const bloque = (etiqueta, valor) => valor
+    ? `<div style="margin-bottom:6px"><b style="color:var(--muted2);font-size:11px;text-transform:uppercase">${etiqueta}</b><br>${esc(valor)}</div>`
+    : '';
+  return bloque('Cómo le fue', f.como_me_fue)
+    + bloque('Qué aprendió', f.que_aprendi)
+    + bloque('Qué se le complicó', f.que_se_complico)
+    + bloque('Bloqueos', f.bloqueos);
 }
 window.exceptuarHoy = async (asesorId) => {
   const motivo = prompt('Motivo (opcional):');
@@ -1912,7 +1999,7 @@ async function startApp() {
     aplicarOrdenSidebar, setupNav, renderBottomNav, setupSwipeSecciones, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa,
-    setupHoy, setupConsultorIA, setupBoleteriaSeccion,
+    setupHoy, setupConsultorIA, setupBoleteriaSeccion, setupMisNotas,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -1927,11 +2014,6 @@ async function startApp() {
     return;
   }
   if (ROL === 'boleteria') { entrarModoBoleteria(); return; }
-  if (ROL === 'asesor_prueba') {
-    arrancar(setupBuscadorIATarifario, setupStopSales);
-    activateSection('leads-prueba');
-    return;
-  }
   // Restaura la última sección visitada por este usuario (admin/asesor,
   // ver guardarUltimaSeccion) -- marketing/boleteria arriba se quedan
   // siempre en su única sección fija, no aplica. En mobile el punto de
@@ -1965,6 +2047,7 @@ async function startApp() {
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers,
+    cargarNotasRepaso,
     subscribeRealtime,
   );
 }
@@ -3158,7 +3241,7 @@ function openDrawer(l) {
 
     <div class="dquick">
       ${wa ? `<a class="dq wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></a>` : ''}
-      ${(ROL === 'asesor' || ROL === 'asesor_prueba' || ROL === 'admin') && l.external_id ? `<button class="dq" id="e-a-tomar-ia" type="button"><i class="fas fa-hand"></i><span>Tomar conversación</span></button>` : ''}
+      ${(ROL === 'asesor' || ROL === 'admin') && l.external_id ? `<button class="dq" id="e-a-tomar-ia" type="button"><i class="fas fa-hand"></i><span>Tomar conversación</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-boleteria" type="button"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización'}</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
@@ -11594,23 +11677,197 @@ const SECCIONES_REUBICADAS = {
   'leads-fallidos': 'gestion-personal',
   'buscar-tarifario': 'tarifario',
   extractor: 'leads',
+  // "Mis leads" del rol asesor_prueba, fusionado en asesor (2026-08-19).
+  'leads-prueba': 'clientes-asignados',
 };
-async function loadLeadsPrueba() {
-  const wrap = document.getElementById('leads-prueba-list');
+async function loadClientesAsignados() {
+  const wrap = document.getElementById('clientes-asignados-list');
   if (!wrap) return;
-  const { data, error } = await sb.rpc('listar_mis_leads_prueba');
-  if (error) { wrap.innerHTML = '<div class="es-s">No se pudieron cargar tus leads.</div>'; return; }
+  const { data, error } = await sb.rpc('listar_mis_clientes_asignados');
+  if (error) { wrap.innerHTML = '<div class="es-s">No se pudieron cargar tus clientes.</div>'; return; }
   const filas = data || [];
-  if (!filas.length) { wrap.innerHTML = '<div class="es-s">No tenés leads de práctica asignados.</div>'; return; }
-  wrap.innerHTML = filas.map(l => `<article class="entity-card"><div class="ec-head"><b>${esc(l.nombre || 'Sin nombre')}</b><span class="chip">${esc(l.estado || 'Sin estado')}</span></div><div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono || 'Sin teléfono')}</div><div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino || 'Sin destino')}</div><div class="ec-row"><i class="fas fa-clock"></i> ${l.vence_at ? esc(fmtFecha(l.vence_at)) : 'Sin plazo'}</div><div class="seg-group" style="margin-top:10px;flex-wrap:wrap"><button class="seg" data-r="no_contesta" data-task="${l.task_id}">No contesta</button><button class="seg" data-r="numero_equivocado" data-task="${l.task_id}">Número equivocado</button><button class="seg" data-r="no_interesa" data-task="${l.task_id}">No interesa</button><button class="seg" data-r="interesado" data-task="${l.task_id}">Interesado</button><button class="seg" data-r="ya_viajo" data-task="${l.task_id}">Ya viajó</button></div><textarea class="ei" data-nota placeholder="Nota del contacto (obligatoria)"></textarea><div style="display:flex;gap:8px;margin-top:8px"><a class="btn-sm" href="https://wa.me/${esc(String(l.telefono || '').replace(/\D/g,''))}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a><a class="btn-sm" href="tel:${esc(l.telefono || '')}"><i class="fas fa-phone"></i> Llamar</a></div></article>`).join('');
+  if (!filas.length) { wrap.innerHTML = '<div class="es-s">No tenés clientes asignados por ahora.</div>'; return; }
+  wrap.innerHTML = filas.map(l => `<article class="entity-card"><div class="ec-head"><b>${esc(l.nombre || 'Sin nombre')}</b><span class="chip">${esc(l.estado || 'Sin estado')}</span></div><div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono || 'Sin teléfono')}</div><div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino || 'Sin destino')}</div><div class="ec-row"><i class="fas fa-clock"></i> ${l.vence_at ? esc(fmtFecha(l.vence_at)) : 'Sin plazo'}</div>${l.notas ? `<div class="ec-row"><i class="fas fa-note-sticky"></i> ${esc(l.notas)}</div>` : ''}<div class="seg-group" style="margin-top:10px;flex-wrap:wrap"><button class="seg" data-r="no_contesta" data-task="${l.task_id}">No contesta</button><button class="seg" data-r="numero_equivocado" data-task="${l.task_id}">Número equivocado</button><button class="seg" data-r="no_interesa" data-task="${l.task_id}">No interesa</button><button class="seg" data-r="interesado" data-task="${l.task_id}">Interesado</button><button class="seg" data-r="ya_viajo" data-task="${l.task_id}">Ya viajó</button></div><textarea class="ei" data-nota placeholder="¿Qué te dijo el cliente? (obligatorio para registrar el resultado)"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn-sm" data-editar-lead="${l.lead_id}"><i class="fas fa-pen"></i> Editar datos</button><a class="btn-sm" href="https://wa.me/${esc(String(l.telefono || '').replace(/\D/g,''))}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a><a class="btn-sm" href="tel:${esc(l.telefono || '')}"><i class="fas fa-phone"></i> Llamar</a></div></article>`).join('');
   wrap.querySelectorAll('[data-r]').forEach(btn => btn.addEventListener('click', async () => {
     const nota = btn.closest('.entity-card').querySelector('[data-nota]').value.trim();
-    if (!nota) { errToast('Dejá una nota antes de registrar el resultado.'); return; }
+    if (!nota) { errToast('Contá qué te dijo el cliente antes de registrar el resultado.'); return; }
     btn.disabled = true;
     const { data: r, error: e } = await sb.rpc('registrar_contacto_lead', { p_task_id: Number(btn.dataset.task), p_resultado: btn.dataset.r, p_nota: nota });
     if (e || !r?.ok) { errToast('No se pudo registrar el contacto.'); btn.disabled = false; return; }
-    okToast('Contacto registrado'); loadLeadsPrueba();
+    okToast('Contacto registrado');
+    // Una objeción recién escuchada es justo lo que conviene guardar para
+    // repasar: se ofrece pasarla a Mis Notas sin volver a escribirla.
+    if (btn.dataset.r === 'no_interesa' && await confirmarSheet({
+      titulo: '¿Guardar esta objeción en Mis Notas?',
+      detalle: 'Te la vamos a recordar cada tanto para que tengas lista la respuesta.',
+      textoOk: 'Guardar nota'
+    })) { window.guardarComoNota('Objeción: ' + (btn.closest('.entity-card')?.querySelector('.ec-head b')?.textContent || 'cliente'), nota, ['objeciones']); return; }
+    loadClientesAsignados();
   }));
+  // Editar los datos del cliente reusa el MISMO drawer de la sección Leads
+  // (openDrawer/guardarLead) -- no hay un segundo formulario que mantener.
+  wrap.querySelectorAll('[data-editar-lead]').forEach(btn => btn.addEventListener('click', async () => {
+    const { data: lead, error: e } = await sb.from('leads').select('*').eq('id', Number(btn.dataset.editarLead)).single();
+    if (e || !lead) { errToast('No se pudo cargar el cliente'); return; }
+    openDrawer(lead);
+  }));
+}
+
+/* ---------- Mis Notas (libreta propia del asesor, con repaso espaciado) ---------- */
+// El repaso lo decide el backend (repasar_nota): acá solo se muestra y se
+// reporta si acertó o no. Los intervalos viven en la migración, no duplicados acá.
+let NOTAS_FILTRO_ETIQUETA = null;
+let NOTAS_BUSQUEDA = '';
+
+async function loadMisNotas() {
+  await Promise.all([cargarNotasRepaso(), cargarListaNotas()]);
+}
+
+async function cargarNotasRepaso() {
+  const card = document.getElementById('notas-repaso-card');
+  const wrap = document.getElementById('notas-repaso-list');
+  if (!card || !wrap) return;
+  const { data, error } = await sb.rpc('notas_para_repasar_hoy');
+  const pendientes = error ? [] : (data || []);
+  actualizarBadgeNotas(pendientes.length);
+  if (!pendientes.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  wrap.innerHTML = pendientes.map(n => `<article class="entity-card" data-nota-repaso="${n.id}">
+    <div class="ec-head"><b>${esc(n.titulo)}</b><span class="chip">Nivel ${n.nivel}</span></div>
+    <div class="ec-row nota-respuesta" style="display:none;white-space:pre-wrap">${esc(n.cuerpo)}</div>
+    <div class="tbar" style="margin-top:10px;flex-wrap:wrap">
+      <button class="btn-sm" data-nota-ver="${n.id}"><i class="fas fa-eye"></i> Ver respuesta</button>
+      <button class="btn-sm" data-nota-acerte="${n.id}"><i class="fas fa-check"></i> Ya me lo sé</button>
+      <button class="btn-sm" data-nota-falle="${n.id}"><i class="fas fa-rotate-left"></i> Todavía me cuesta</button>
+    </div>
+  </article>`).join('');
+  wrap.querySelectorAll('[data-nota-ver]').forEach(b => b.addEventListener('click', () => {
+    const cuerpo = b.closest('.entity-card').querySelector('.nota-respuesta');
+    cuerpo.style.display = cuerpo.style.display === 'none' ? '' : 'none';
+  }));
+  wrap.querySelectorAll('[data-nota-acerte],[data-nota-falle]').forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.notaAcerte || b.dataset.notaFalle;
+    b.disabled = true;
+    const { data: r, error: e } = await sb.rpc('repasar_nota', { p_id: id, p_acerte: !!b.dataset.notaAcerte });
+    if (e || !r?.ok) { errToast('No se pudo registrar el repaso.'); b.disabled = false; return; }
+    okToast(b.dataset.notaAcerte ? `Bien. Vuelve el ${fmtFechaCorta(r.proximo_repaso)}` : 'Listo, te lo repito mañana');
+    await loadMisNotas();
+  }));
+}
+
+const fmtFechaCorta = iso => { try { return new Date(iso + 'T12:00:00').toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }); } catch { return iso; } };
+
+async function cargarListaNotas() {
+  const wrap = document.getElementById('notas-list');
+  if (!wrap) return;
+  const { data, error } = await sb.rpc('listar_mis_notas', { p_etiqueta: NOTAS_FILTRO_ETIQUETA, p_busqueda: NOTAS_BUSQUEDA || null });
+  if (error) { wrap.innerHTML = '<div class="es-s">No se pudieron cargar tus notas.</div>'; return; }
+  const notas = data || [];
+  renderChipsEtiquetasNotas(notas);
+  if (!notas.length) {
+    wrap.innerHTML = (NOTAS_FILTRO_ETIQUETA || NOTAS_BUSQUEDA)
+      ? '<div class="es-s">Ninguna nota coincide con ese filtro.</div>'
+      : '<div class="es-s">Todavía no tenés notas. Empezá por eso que siempre se te olvida.</div>';
+    return;
+  }
+  wrap.innerHTML = notas.map(n => `<article class="entity-card">
+    <div class="ec-head"><b>${esc(n.titulo)}</b>${n.me_cuesta ? '<span class="chip am">Me cuesta</span>' : ''}</div>
+    <div class="ec-row" style="white-space:pre-wrap">${esc(n.cuerpo)}</div>
+    ${n.etiquetas?.length ? `<div class="chip-group" style="margin-top:8px">${n.etiquetas.map(e => `<span class="chip">${esc(e)}</span>`).join('')}</div>` : ''}
+    ${n.me_cuesta && n.proximo_repaso ? `<div class="ec-row"><i class="fas fa-rotate-right"></i> Próximo repaso: ${esc(fmtFechaCorta(n.proximo_repaso))}</div>` : ''}
+    <div class="tbar" style="margin-top:10px">
+      <button class="btn-sm" data-nota-editar="${n.id}"><i class="fas fa-pen"></i> Editar</button>
+      <button class="btn-sm" data-nota-borrar="${n.id}"><i class="fas fa-trash"></i> Borrar</button>
+    </div>
+  </article>`).join('');
+  wrap.querySelectorAll('[data-nota-editar]').forEach(b => b.addEventListener('click', () => {
+    abrirEditorNota(notas.find(n => n.id === b.dataset.notaEditar));
+  }));
+  wrap.querySelectorAll('[data-nota-borrar]').forEach(b => b.addEventListener('click', async () => {
+    if (!(await confirmarSheet({ titulo: '¿Borrar esta nota?', detalle: 'No se puede deshacer.', textoOk: 'Borrar' }))) return;
+    const { data: r, error: e } = await sb.rpc('borrar_nota', { p_id: b.dataset.notaBorrar });
+    if (e || !r?.ok) { errToast('No se pudo borrar.'); return; }
+    okToast('Nota borrada'); await loadMisNotas();
+  }));
+}
+
+// Las etiquetas del filtro salen de las notas ya cargadas: sin filtro activo la
+// lista es completa, así que sirve como universo. Con un filtro puesto se
+// conserva el chip activo aunque quede fuera del resultado.
+let NOTAS_ETIQUETAS_CONOCIDAS = [];
+function renderChipsEtiquetasNotas(notas) {
+  if (!NOTAS_FILTRO_ETIQUETA) {
+    NOTAS_ETIQUETAS_CONOCIDAS = [...new Set(notas.flatMap(n => n.etiquetas || []))].sort();
+  }
+  renderChipGroup('notas-etiquetas-chips',
+    NOTAS_ETIQUETAS_CONOCIDAS.map(e => ({ valor: e, etiqueta: e })),
+    {
+      multi: false,
+      seleccion: NOTAS_FILTRO_ETIQUETA ? [NOTAS_FILTRO_ETIQUETA] : [],
+      onChange: vals => { NOTAS_FILTRO_ETIQUETA = vals[0] || null; cargarListaNotas(); }
+    });
+}
+
+function abrirEditorNota(nota) {
+  const ed = document.getElementById('notas-editor');
+  if (!ed) return;
+  ed.style.display = '';
+  document.getElementById('nota-id').value = nota?.id || '';
+  document.getElementById('nota-titulo').value = nota?.titulo || '';
+  document.getElementById('nota-cuerpo').value = nota?.cuerpo || '';
+  document.getElementById('nota-etiquetas').value = (nota?.etiquetas || []).join(', ');
+  document.getElementById('nota-me-cuesta').checked = !!nota?.me_cuesta;
+  document.getElementById('nota-err').textContent = '';
+  document.getElementById('nota-titulo').focus();
+}
+
+function cerrarEditorNota() {
+  const ed = document.getElementById('notas-editor');
+  if (ed) ed.style.display = 'none';
+}
+
+async function guardarNotaDesdeEditor() {
+  const err = document.getElementById('nota-err'); err.textContent = '';
+  const titulo = document.getElementById('nota-titulo').value.trim();
+  const cuerpo = document.getElementById('nota-cuerpo').value.trim();
+  if (!titulo) { err.textContent = 'Ponele un título.'; return; }
+  if (!cuerpo) { err.textContent = 'Escribí el contenido de la nota.'; return; }
+  const etiquetas = document.getElementById('nota-etiquetas').value.split(',').map(e => e.trim()).filter(Boolean);
+  if (etiquetas.length > 8) { err.textContent = 'Máximo 8 etiquetas.'; return; }
+  const btn = document.getElementById('nota-guardar'); btn.disabled = true;
+  const { data, error } = await sb.rpc('guardar_nota', {
+    p_id: document.getElementById('nota-id').value || null,
+    p_titulo: titulo, p_cuerpo: cuerpo, p_etiquetas: etiquetas,
+    p_me_cuesta: document.getElementById('nota-me-cuesta').checked
+  });
+  btn.disabled = false;
+  if (error || !data?.ok) { err.textContent = error?.message || 'No se pudo guardar.'; return; }
+  okToast('Nota guardada'); cerrarEditorNota(); await loadMisNotas();
+}
+
+// Puente desde otras pantallas: convierte un texto ya escrito (el aprendizaje
+// del informe diario, la objeción de un cliente) en nota sin reescribirlo.
+window.guardarComoNota = (titulo, cuerpo, etiquetas) => {
+  activateSection('mis-notas');
+  abrirEditorNota({ titulo, cuerpo, etiquetas: etiquetas || [], me_cuesta: true });
+};
+
+function actualizarBadgeNotas(n) {
+  const badge = document.getElementById('nav-notas-count');
+  if (!badge) return;
+  badge.textContent = n;
+  badge.style.display = n > 0 ? '' : 'none';
+}
+
+function setupMisNotas() {
+  document.getElementById('notas-nueva')?.addEventListener('click', () => abrirEditorNota(null));
+  document.getElementById('nota-cancelar')?.addEventListener('click', cerrarEditorNota);
+  document.getElementById('nota-guardar')?.addEventListener('click', guardarNotaDesdeEditor);
+  let t = null;
+  document.getElementById('notas-buscar')?.addEventListener('input', e => {
+    clearTimeout(t);
+    t = setTimeout(() => { NOTAS_BUSQUEDA = e.target.value.trim(); cargarListaNotas(); }, 300);
+  });
 }
 
 function activateSection(sec, fromNav) {
@@ -11642,7 +11899,8 @@ function activateSection(sec, fromNav) {
   if (sec === 'informe-diario') loadInformeDiario();
   if (sec === 'hoy') renderHoy();
   if (sec === 'leads') { if (ROL === 'asesor') loadInboxLeads(); iniciarPollLeads(); }
-  if (sec === 'leads-prueba') loadLeadsPrueba();
+  if (sec === 'clientes-asignados') loadClientesAsignados();
+  if (sec === 'mis-notas') loadMisNotas();
   if (sec === 'tarifario') loadTarifario();
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'galeria') loadGaleria();
@@ -11703,7 +11961,15 @@ const BN_LABEL_CORTO = {
 // Badges que ya existían en la barra vieja y hay que preservar al reconstruirla.
 const BN_BADGES = { leads: 'nav-lead-count-m' };
 
+// Cache del catálogo/selección: bnCatalogo() recorre el sidebar entero con
+// getComputedStyle por ítem (forza layout), y bnSeleccion() lo llama de nuevo
+// arriba. Antes esto corría completo en CADA cambio de sección y en cada fin
+// de gesto de swipe -- ahora se calcula una vez y se invalida solo cuando algo
+// puede haber cambiado de verdad (renderBottomNav, que ya se llama al armar la
+// barra y al guardar el editor).
+let _bnCatalogoCache = null;
 function bnCatalogo() {
+  if (_bnCatalogoCache) return _bnCatalogoCache;
   const items = [BN_HOY];
   document.querySelectorAll('#sidebar-nav > .nav-item[data-sec]').forEach(el => {
     if (getComputedStyle(el).display === 'none') return;
@@ -11715,7 +11981,7 @@ function bnCatalogo() {
       || sec;
     items.push({ sec, icono, label, clases: [...el.classList].filter(c => c.startsWith('nav-')).join(' ') });
   });
-  return items;
+  return (_bnCatalogoCache = items);
 }
 
 // Secciones elegidas, saneadas: sin duplicados, sin las que este rol no puede
@@ -11737,20 +12003,22 @@ function bnSeleccion() {
 function renderBottomNav() {
   const nav = document.querySelector('.bottom-nav');
   if (!nav) return;
+  _bnCatalogoCache = null; // el sidebar pudo cambiar (rol, sección nueva) desde el último render
   const catalogo = bnCatalogo();
   const porSec = Object.fromEntries(catalogo.map(x => [x.sec, x]));
   const secs = bnSeleccion();
   nav.innerHTML = secs.map(sec => {
     const it = porSec[sec];
     const badge = BN_BADGES[sec] ? `<span class="bn-badge" id="${BN_BADGES[sec]}"></span>` : '';
-    return `<a class="bn-item ${esc(it.clases || '')}" data-sec="${esc(sec)}"><i class="${esc(it.icono)}"></i>${badge}<span class="bn-t">${esc(it.label)}</span></a>`;
-  }).join('') + '<a class="bn-item" id="bn-more"><i class="fas fa-user"></i><span class="bn-t">Yo</span></a>'
+    return `<a class="bn-item ${esc(it.clases || '')}" data-sec="${esc(sec)}" role="tab" tabindex="0"><i class="${esc(it.icono)}"></i>${badge}<span class="bn-t">${esc(it.label)}</span></a>`;
+  }).join('') + '<a class="bn-item" id="bn-more" role="tab" tabindex="0"><i class="fas fa-user"></i><span class="bn-t">Yo</span></a>'
     + '<div class="bn-indicator" id="bn-indicator"></div>';
   // El CSS achica la letra según cuántos entren, para que el nombre no se corte.
   nav.dataset.n = String(secs.length + 1);
 
   nav.querySelectorAll('.bn-item[data-sec]').forEach(el => {
     el.addEventListener('click', () => activateSection(el.dataset.sec));
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateSection(el.dataset.sec); } });
   });
   document.getElementById('bn-more').addEventListener('click', () => openSheet('more-sheet'));
   // El badge de leads se pinta aparte y ya pudo haber corrido antes de que la
@@ -11760,9 +12028,15 @@ function renderBottomNav() {
 }
 
 function marcarBottomNavActivo(sec) {
-  document.querySelectorAll('.bn-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
+  document.querySelectorAll('.bn-item').forEach(x => {
+    const on = x.dataset.sec === sec;
+    x.classList.toggle('active', on);
+    x.setAttribute('aria-selected', String(on));
+  });
   const enBarra = bnSeleccion().includes(sec);
-  document.getElementById('bn-more')?.classList.toggle('active', !enBarra);
+  const masBtn = document.getElementById('bn-more');
+  masBtn?.classList.toggle('active', !enBarra);
+  masBtn?.setAttribute('aria-selected', String(!enBarra));
   posicionarIndicadorActivo();
 }
 
@@ -11829,12 +12103,16 @@ function bnEditorWire() {
 }
 
 /* ---------- Swipe lateral entre secciones (móvil) ----------
-   Recorre las mismas secciones de la barra de abajo, en ese orden. Umbral
-   deliberadamente alto ("de forma pronunciada", pedido del dueño): un gesto
-   flojo o diagonal no cambia de pantalla sin querer mientras se scrollea. */
-const SWIPE_MIN_X = 90;      // px horizontales mínimos
-const SWIPE_RATIO = 2;       // cuánto más horizontal que vertical tiene que ser
-const SWIPE_MAX_MS = 700;    // más lento que esto es un arrastre, no un swipe
+   Recorre las mismas secciones de la barra de abajo, en ese orden.
+   Umbral bajado a 2026-08-19 a algo de app nativa de verdad: antes exigía
+   45% del ancho de pantalla (~170px en un teléfono de 380px) Y que la
+   sección vecina ya se hubiera visitado antes -- si no, el gesto no hacía
+   NADA, que era el motivo real de "el swipe no funciona". SWIPE_MIN_X y
+   SWIPE_MAX_MS ya existían pero nunca se leían; ahora sí se usan. */
+const SWIPE_MIN_X = 90;      // px horizontales mínimos para confirmar por distancia
+const SWIPE_RATIO = 1.3;     // cuánto más horizontal que vertical tiene que ser
+const SWIPE_MAX_MS = 700;    // ventana para que la velocidad cuente como "flick"
+const SWIPE_FLICK_VEL = 0.3; // px reales/ms para confirmar por velocidad aunque falte distancia
 
 // Un swipe NO debe robarle el gesto a algo que scrollea de costado (tablas,
 // carruseles del tarifario, filas de pestañas). Se busca hacia arriba desde el
@@ -11855,46 +12133,84 @@ function dentroDeScrollHorizontal(el) {
 // convierte antes de usarlo en cualquier transform.
 function zoomFactor() { return parseFloat(getComputedStyle(document.body).zoom) || 1; }
 
+// Color del ítem activo (index.html: .bn-item.active[data-sec=...]) -- se lee
+// del propio ítem en vez de duplicar el mapa acá, así el CSS sigue siendo la
+// única fuente de verdad y una sección nueva sin regla propia hereda el color
+// por defecto (--accent) en texto Y barrita a la vez, nunca desincronizados.
+function colorSeccionActiva(el) { return el ? getComputedStyle(el).color : ''; }
+
 // Barrita bajo el ítem activo de la bottom-nav -- se desliza proporcional al
 // arrastre mientras dura el swipe (progreso 0..1, hacia vecinaSec), y vuelve
 // a su lugar normal al terminar. Puramente visual (nunca toca transform de
 // una .section), así que no puede reintroducir el riesgo #1.
-function posicionarIndicadorActivo() { actualizarIndicadorSwipe(0, null); }
-function actualizarIndicadorSwipe(progreso, vecinaSecParam) {
+//
+// left/width se leen con getBoundingClientRect (píxeles REALES de pantalla,
+// ya escalados por body{zoom}) pero se escribían en style.left/width, que el
+// motor interpreta como píxeles CSS DENTRO del subárbol con zoom -- sin
+// dividir por zoomFactor() la barra quedaba corrida (y el error crecía con la
+// distancia al borde izquierdo). Bug real hasta 2026-08-19.
+function posicionarIndicadorActivo() {
+  document.getElementById('bn-indicator')?.classList.remove('dragging');
+  actualizarIndicadorSwipe(0, null);
+}
+function actualizarIndicadorSwipe(progreso, vecinaSecParam, rectsCache) {
   const ind = document.getElementById('bn-indicator');
-  const activoEl = document.querySelector(`.bn-item[data-sec="${currentSec}"]`);
-  if (!ind || !activoEl) return;
+  if (!ind) return;
+  // Si la sección abierta no está en la barra (se entró por la hoja "Yo"), no
+  // hay .bn-item con ese data-sec -- antes eso hacía return acá y la barrita
+  // quedaba pegada en el ítem anterior mientras "Yo" también se marcaba activo.
+  const activoEl = document.querySelector(`.bn-item[data-sec="${currentSec}"]`) || document.getElementById('bn-more');
+  if (!activoEl) return;
   const nav = activoEl.parentElement;
-  const navR = nav.getBoundingClientRect();
-  const rActivo = activoEl.getBoundingClientRect();
+  const zf = zoomFactor();
+  const navR = (rectsCache && rectsCache.navR) || nav.getBoundingClientRect();
+  const rActivo = (rectsCache && rectsCache.rActivo) || activoEl.getBoundingClientRect();
   let left = rActivo.left - navR.left, width = rActivo.width;
   const vecinaEl = vecinaSecParam ? document.querySelector(`.bn-item[data-sec="${vecinaSecParam}"]`) : null;
   if (progreso && vecinaEl) {
-    const rVec = vecinaEl.getBoundingClientRect();
+    const rVec = (rectsCache && rectsCache.rVec) || vecinaEl.getBoundingClientRect();
     const t = Math.max(0, Math.min(1, progreso));
     left += (rVec.left - navR.left - left) * t;
     width += (rVec.width - width) * t;
   }
-  ind.style.left = left + 'px';
-  ind.style.width = width + 'px';
+  ind.style.left = (left / zf) + 'px';
+  ind.style.width = (width / zf) + 'px';
+  ind.style.background = colorSeccionActiva(activoEl);
 }
+// El resize con debounce se quedaba corto justo al arrancar: renderBottomNav()
+// puede correr con Font Awesome sin cargar todavía (íconos a 0 ancho) o con la
+// barra en display:none en escritorio, y nada disparaba un resize después. Un
+// ResizeObserver sobre la barra recalcula apenas su layout real cambia, sin
+// esperar a que el usuario gire el teléfono.
+if ('ResizeObserver' in window) {
+  const bnRO = new ResizeObserver(() => posicionarIndicadorActivo());
+  document.addEventListener('DOMContentLoaded', () => {
+    const nav = document.querySelector('.bottom-nav');
+    if (nav) bnRO.observe(nav);
+  });
+}
+window.addEventListener('orientationchange', () => setTimeout(posicionarIndicadorActivo, 60));
 
 function setupSwipeSecciones() {
-  let x0 = 0, y0 = 0, t0 = 0, activo = false, eje = null;
+  let x0 = 0, y0 = 0, t0 = 0, activo = false, eje = null, resuelto = false, settleT = null;
   let elActual = null, elVecina = null, vecinaSec = null, dirVecina = 0, mainEl = null;
+  let rectsCache = null, ultimoDxReal = 0;
 
   // RIESGO #1 del plan: un transform que se queda pegado en .section.active
   // (o en cualquier sección) la convierte en bloque contenedor de sus hijos
   // position:fixed -- las hojas de filtros (.mfs) se dibujan lejos del
   // viewport en vez de pegadas abajo (bug real ya visto, ver comentario en
   // index.html:1383-1387). limpiarGesto() es el único lugar que toca estos
-  // estilos para terminar un gesto, y se llama SIEMPRE -- éxito, cancelación
-  // y touchcancel -- nunca se deja en translateX(0), se borra el atributo.
+  // estilos para terminar un gesto, y se llama SIEMPRE -- éxito (después del
+  // settle), cancelación (después del settle de vuelta) y touchcancel --
+  // nunca se deja en translateX(0), se borra el atributo. `resuelto` evita
+  // que el transitionend y el setTimeout de respaldo la llamen dos veces.
   function limpiarGesto() {
+    clearTimeout(settleT); settleT = null;
     if (mainEl) mainEl.style.position = '';
-    if (elActual) elActual.style.transform = '';
-    if (elVecina) { elVecina.style.transform = ''; elVecina.classList.remove('swipe-peek'); }
-    elActual = null; elVecina = null; vecinaSec = null; dirVecina = 0; mainEl = null; eje = null; activo = false;
+    if (elActual) { elActual.style.transform = ''; elActual.classList.remove('swipe-settling'); }
+    if (elVecina) { elVecina.style.transform = ''; elVecina.classList.remove('swipe-peek', 'swipe-settling'); elVecina.style.top = elVecina.style.left = elVecina.style.width = ''; }
+    elActual = null; elVecina = null; vecinaSec = null; dirVecina = 0; mainEl = null; eje = null; activo = false; rectsCache = null;
     posicionarIndicadorActivo();
   }
 
@@ -11908,15 +12224,37 @@ function setupSwipeSecciones() {
     // dueño, Fase 5.2) y el gesto solo amortigua.
     dirVecina = dxReal < 0 ? 1 : -1;
     vecinaSec = i < 0 ? null : secs[i + dirVecina];
+    // elVecina es solo el elemento a ASOMAR de fondo (si ya se cargó antes).
+    // Que no haya elemento para asomar ya NO bloquea la navegación -- eso era
+    // el bug principal, ver SWIPE_MIN_X arriba.
     const candidata = vecinaSec ? document.getElementById('sec-' + vecinaSec) : null;
     elVecina = (candidata && SECCIONES_CARGADAS.has(vecinaSec)) ? candidata : null;
     mainEl = document.querySelector('.main');
     if (mainEl) mainEl.style.position = 'relative';
-    if (elVecina) elVecina.classList.add('swipe-peek');
-    actualizarIndicadorSwipe(0, null);
+    if (elVecina) {
+      elVecina.classList.add('swipe-peek');
+      // El peek se posiciona absoluto contra .main -- sin copiar el rect de la
+      // sección activa quedaba pegado al borde de PADDING de .main en vez de
+      // alineado con lo que realmente se ve (index.html: .section.swipe-peek).
+      const r = elActual.getBoundingClientRect(), rMain = mainEl.getBoundingClientRect();
+      elVecina.style.top = (r.top - rMain.top) + 'px';
+      elVecina.style.left = (r.left - rMain.left) + 'px';
+      elVecina.style.width = r.width + 'px';
+    }
+    // Rects de la barra cacheados una sola vez por gesto: no cambian mientras
+    // dura (la barra es fixed, el eje ya quedó fijado en 'x'), así se evitan
+    // 3 getBoundingClientRect (forzados layout) por cada evento touchmove.
+    const activoEl = document.querySelector(`.bn-item[data-sec="${currentSec}"]`) || document.getElementById('bn-more');
+    const vecinaElBar = vecinaSec ? document.querySelector(`.bn-item[data-sec="${vecinaSec}"]`) : null;
+    if (activoEl) {
+      rectsCache = { navR: activoEl.parentElement.getBoundingClientRect(), rActivo: activoEl.getBoundingClientRect(), rVec: vecinaElBar && vecinaElBar.getBoundingClientRect() };
+    }
+    document.getElementById('bn-indicator')?.classList.add('dragging');
+    actualizarIndicadorSwipe(0, null, rectsCache);
   }
 
   function aplicarArrastre(dxReal) {
+    ultimoDxReal = dxReal;
     const dx = dxReal / zoomFactor();
     if (elVecina) {
       const ancho = elActual.getBoundingClientRect().width || window.innerWidth;
@@ -11928,7 +12266,36 @@ function setupSwipeSecciones() {
       elActual.style.transform = `translateX(${dx * 0.35}px)`;
     }
     const ancho = window.innerWidth || 1;
-    actualizarIndicadorSwipe(Math.abs(Math.max(-1, Math.min(1, dxReal / ancho))), vecinaSec);
+    actualizarIndicadorSwipe(Math.abs(Math.max(-1, Math.min(1, dxReal / ancho))), vecinaSec, rectsCache);
+  }
+
+  // Termina el gesto animando hasta el final en vez de saltar: la sección
+  // arrastrada sigue su camino hasta salir/entrar del todo y RECIÉN AHÍ se
+  // llama activateSection(). Antes limpiarGesto() cortaba el transform de
+  // golpe y la sección nueva entraba con un empujón de 26px aparte (sw-izq/
+  // sw-der) -- se sentía como un tirón, no como un deslizamiento continuo.
+  function resolverGesto(exito) {
+    if (resuelto) return;
+    resuelto = true;
+    const elA = elActual, elV = elVecina, destino = exito ? vecinaSec : null;
+    const dirSalida = ultimoDxReal < 0 ? -1 : 1;
+    const zf = zoomFactor();
+    const anchoCss = ((elA && elA.getBoundingClientRect().width) || window.innerWidth) / zf;
+    if (elA) {
+      elA.classList.add('swipe-settling');
+      elA.style.transform = exito ? `translateX(${dirSalida * anchoCss}px)` : 'translateX(0px)';
+    }
+    if (elV) {
+      elV.classList.add('swipe-settling');
+      elV.style.transform = exito ? 'translateX(0px)' : `translateX(${-dirVecina * anchoCss}px)`;
+    }
+    const terminar = () => {
+      if (elA) elA.removeEventListener('transitionend', terminar);
+      if (destino) activateSection(destino);
+      limpiarGesto();
+    };
+    if (elA) { elA.addEventListener('transitionend', terminar, { once: true }); settleT = setTimeout(terminar, 260); }
+    else terminar();
   }
 
   document.addEventListener('touchstart', e => {
@@ -11942,7 +12309,7 @@ function setupSwipeSecciones() {
     if (dentroDeScrollHorizontal(e.target)) { activo = false; return; }
     if (e.target.closest('input,textarea,select,canvas')) { activo = false; return; }
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
-    activo = true; eje = null;
+    activo = true; eje = null; resuelto = false;
   }, { passive: true });
 
   document.addEventListener('touchmove', e => {
@@ -11969,22 +12336,18 @@ function setupSwipeSecciones() {
     const dxReal = t.clientX - x0;
     const dt = Math.max(1, Date.now() - t0);
     const velocidadRealMs = Math.abs(dxReal) / dt; // px reales / ms, sin convertir por zoom
-    const pasaUmbral = Math.abs(dxReal) > window.innerWidth * 0.45 || velocidadRealMs > 0.5;
-    if (pasaUmbral && elVecina && vecinaSec) {
-      const destino = vecinaSec;
-      limpiarGesto();
-      document.body.classList.add(dxReal < 0 ? 'swipe-izq' : 'swipe-der');
-      setTimeout(() => document.body.classList.remove('swipe-izq', 'swipe-der'), 260);
-      activateSection(destino);
-    } else {
-      limpiarGesto();
-    }
+    // Umbral de app nativa: basta con SWIPE_MIN_X de distancia, o un flick
+    // rápido dentro de SWIPE_MAX_MS aunque el dedo haya viajado poco. Antes
+    // pedía 45% del ancho de pantalla (~170px) sin alternativa de velocidad.
+    const pasaUmbral = Math.abs(dxReal) > SWIPE_MIN_X || (velocidadRealMs > SWIPE_FLICK_VEL && dt <= SWIPE_MAX_MS);
+    // Ya no exige elVecina (el peek precargado): navega igual con vecinaSec
+    // aunque la sección vecina nunca se haya visitado -- eso era lo que hacía
+    // que el primer swipe a una sección nueva no hiciera nada.
+    resolverGesto(pasaUmbral && !!vecinaSec);
   }, { passive: true });
 
-  document.addEventListener('touchcancel', limpiarGesto, { passive: true });
+  document.addEventListener('touchcancel', () => resolverGesto(false), { passive: true });
 }
-let _resizeIndicadorT = null;
-window.addEventListener('resize', () => { clearTimeout(_resizeIndicadorT); _resizeIndicadorT = setTimeout(posicionarIndicadorActivo, 120); });
 
 /* ---------- Pull-to-refresh (Fase 5.4) ----------
    <body> es el contenedor de scroll real, no <html> (index.html:78-89,
@@ -11999,7 +12362,7 @@ window.addEventListener('resize', () => { clearTimeout(_resizeIndicadorT); _resi
 // que pide esta fase. Si se agrega una sección nueva con carga propia, hay
 // que sumarla en los dos lugares.
 const REFRESCAR_SECCION = {
-  leads: () => loadTable(), 'leads-prueba': () => loadLeadsPrueba(), ranking: () => loadRanking(), facturacion: () => loadFacturacion(),
+  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), facturacion: () => loadFacturacion(),
   'mis-comisiones': () => loadMisComisiones(), 'gestion-personal': () => loadGestionPersonal(),
   postventa: () => loadPostventa(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
@@ -12559,7 +12922,7 @@ async function bolCancelar(id) {
 /* ---------- Modo Boletería -- cambio de modo completo, no una sección más.
    body.modo-boleteria recolorea TODO el CRM (variables CSS en body, cascadean
    solas) y reemplaza el menú entero por el set de Boletería (mismo mecanismo
-   que rol-marketing/rol-boleteria/rol-prueba, ver index.html:1247-1249).
+   que rol-marketing/rol-boleteria, ver index.html:1247-1249).
    Pedido del dueño tras ver la versión anterior (tema scopeado a la sección):
    quería algo más contundente, con botón de volver. El rol `boleteria` entra
    directo al modo desde entrarSegunRol() (sin flash: se aplica ahí, antes de
@@ -13114,9 +13477,12 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-19', emoji: '👥', titulo: 'Clientes Asignados para todo asesor', texto: 'Cualquier asesor comercial puede recibir ahora un lote de clientes asignados (antes era exclusivo del rol de práctica): editá sus datos, marcá si ya lo atendiste, dejá nota de qué te dijo y por qué no le interesó. En Gestión de Personal, "Estados a incluir" y "Destino" del panel de asignación ahora son etiquetas para tocar en vez de listas, y el plazo se elige como "24h/48h/72h/Sin límite" en vez de fecha exacta.', roles: ROLES_TODOS },
+  { fecha: '2026-08-19', emoji: '💡', titulo: 'Mis Notas', texto: 'Sección nueva para guardar lo que se te complica recordar (objeciones, tarifas, condiciones de un destino). Lo que marqués como "me cuesta" vuelve a aparecer para repasar en intervalos cada vez más largos si vas acertando.', roles: ['asesor'] },
+  { fecha: '2026-08-19', emoji: '📝', titulo: 'Informe diario con 4 preguntas', texto: 'Al finalizar la jornada ahora se responde "¿Cómo te fue?", "¿Qué aprendiste?", "¿Qué se te complicó?" y "Bloqueos" en vez de un solo texto libre. Lo que aprendiste se puede guardar directo en Mis Notas.', roles: ROLES_TODOS },
   { fecha: '2026-08-18', emoji: '📖', titulo: 'Guía del tarifario automático', texto: 'En Tarifario → Actualizador hay una pestaña nueva "¿Cómo funciona?": explica en simple cómo se actualiza solo el tarifario, qué IA hace cada cosa y cuánto cuesta cada actualización.', roles: ['admin'] },
   { fecha: '2026-08-16', emoji: '🎯', titulo: 'Control total en lotes de práctica', texto: 'En Gestión de Personal → Asesores de prueba ya se puede filtrar por rango de fecha y por destino, y ver la lista real de leads antes de asignar el lote, tildando y destildando a mano cuáles entran. Además, crear una cuenta nueva ahora pide contraseña de 8 caracteres (antes 12) y la pregunta/respuesta de seguridad ya no tienen mínimo de letras.', roles: ['admin'] },
-  { fecha: '2026-08-15', emoji: '✈️', titulo: 'Modo Boletería', texto: 'El botón "Boletería" (abajo del menú) cambia el CRM entero de color y de menú, como si fuera otra app: rutas, aerolíneas, precios de referencia, requisitos por país y calendario de temporadas, más la cola de solicitudes de siempre a mano. "Volver a Hospedajes" te devuelve todo como estaba.', roles: ['admin', 'asesor', 'asesor_prueba', 'boleteria'] },
+  { fecha: '2026-08-15', emoji: '✈️', titulo: 'Modo Boletería', texto: 'El botón "Boletería" (abajo del menú) cambia el CRM entero de color y de menú, como si fuera otra app: rutas, aerolíneas, precios de referencia, requisitos por país y calendario de temporadas, más la cola de solicitudes de siempre a mano. "Volver a Hospedajes" te devuelve todo como estaba.', roles: ['admin', 'asesor', 'boleteria'] },
   { fecha: '2026-08-15', emoji: '🧑‍💼', titulo: 'Asesores de prueba: lotes y progreso', texto: 'En Gestión de Personal, pestaña "Asesores de prueba": asignale a un asesor nuevo un lote de leads viejos para que practique contactándolos, con conteo previo, fecha límite y seguimiento de contactados/pendientes/vencidos. Botón para promoverlo a asesor real cuando esté listo. También se puede editar usuario, permisos de voucher/informe diario y bloquear acceso sin dar de baja.', roles: ['admin'] },
   { fecha: '2026-08-15', emoji: '📱', titulo: 'El CRM en el celular se siente como una app', texto: 'Deslizá el dedo a los costados para cambiar de sección, deslizá hacia abajo arriba de todo para refrescar, y mantené el dedo sobre un lead para seleccionarlo sin tocar el chequeo chiquito. Las notificaciones ahora se ven con nuestro logo (antes salía el ícono genérico del navegador), y hay botón para instalar la app desde el celular. Los botones y filas son más fáciles de tocar, las tablas largas (Facturación, Vouchers, Postulaciones) se ven como tarjetas legibles en vez de una tabla achicada, y todo tiene animaciones más suaves.', roles: ROLES_TODOS },
   { fecha: '2026-08-15', emoji: '⚡', titulo: 'Leads en vivo más confiables', texto: 'La lista de Leads se actualiza sola cuando entra o cambia uno, sin parpadear entera ni perder tu lugar en el scroll. Si el teléfono se queda sin señal un rato, el CRM lo avisa (puntito gris junto a "Nuevo lead") y se reconecta solo al volver. Si dos personas editan el mismo lead a la vez, ahora avisa el conflicto en vez de que uno le pise el cambio al otro en silencio. La tarjeta de cada lead se reordenó: el nombre, destino y estado se ven primero, las acciones (WhatsApp, Facturar) quedan abajo.', roles: ROLES_TODOS },
