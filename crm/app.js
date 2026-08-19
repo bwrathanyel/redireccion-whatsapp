@@ -329,10 +329,6 @@ async function entrarSegunRol() {
   document.getElementById('side-un-m').textContent = MI_NOMBRE;
   document.getElementById('side-ue-m').textContent = rolLabelUi;
   pintarAvatar(document.getElementById('side-avatar-m'), MI_AVATAR_URL, MI_NOMBRE);
-  // nav-admin-only ya oculta esto para asesores/marketing vía CSS (.rol-asesor) --
-  // acá se ajusta el caso fino de que no todo admin ve Informe Diario, solo Luis Rueda.
-  document.querySelectorAll('.solo-informe-diario').forEach(el => el.style.display = MI_VE_INFORME_DIARIO ? '' : 'none');
-  document.querySelectorAll('.solo-voucher').forEach(el => el.style.display = (ROL === 'admin' || ROL === 'asesor') ? '' : 'none');
   document.querySelectorAll('.solo-admin-borrar').forEach(el => el.style.display = ROL === 'admin' ? '' : 'none');
   aplicarPreferencias();
   renderJornadaUI();
@@ -1834,7 +1830,7 @@ async function loadAsistenciaHistorial() {
 /* ---------- Informe Diario (Bloque 14 — solo Luis Rueda) ---------- */
 async function loadInformeDiario() {
   const { data, error } = await sb.rpc('informes_diarios_listado');
-  if (error) { errToast('No se pudo cargar el Informe Diario'); return; }
+  if (error) { console.error(error); errToast('No se pudo cargar el Informe Diario'); return; }
   document.getElementById('informe-diario-tbody').innerHTML = (data || []).map(f => `
     <tr>
       <td data-label="Fecha" class="muted">${fmtFechaSolo(f.fecha)}</td>
@@ -11769,7 +11765,7 @@ async function loadClientesAsignados() {
   const wrap = document.getElementById('clientes-asignados-list');
   if (!wrap) return;
   const { data, error } = await sb.rpc('listar_mis_clientes_asignados');
-  if (error) { wrap.innerHTML = '<div class="es-s">No se pudieron cargar tus clientes.</div>'; return; }
+  if (error) { console.error(error); wrap.innerHTML = '<div class="es-s">No se pudieron cargar tus clientes.</div>'; return; }
   const filas = data || [];
   if (!filas.length) { wrap.innerHTML = '<div class="es-s">No tenés clientes asignados por ahora.</div>'; return; }
   wrap.innerHTML = filas.map(l => `<article class="entity-card"><div class="ec-head"><b>${esc(l.nombre || 'Sin nombre')}</b><span class="chip">${esc(l.estado || 'Sin estado')}</span></div><div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono || 'Sin teléfono')}</div><div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino || 'Sin destino')}</div><div class="ec-row"><i class="fas fa-clock"></i> ${l.vence_at ? esc(fmtFecha(l.vence_at)) : 'Sin plazo'}</div>${l.notas ? `<div class="ec-row"><i class="fas fa-note-sticky"></i> ${esc(l.notas)}</div>` : ''}<div class="seg-group" style="margin-top:10px;flex-wrap:wrap"><button class="seg" data-r="no_contesta" data-task="${l.task_id}">No contesta</button><button class="seg" data-r="numero_equivocado" data-task="${l.task_id}">Número equivocado</button><button class="seg" data-r="no_interesa" data-task="${l.task_id}">No interesa</button><button class="seg" data-r="interesado" data-task="${l.task_id}">Interesado</button><button class="seg" data-r="ya_viajo" data-task="${l.task_id}">Ya viajó</button></div><textarea class="ei" data-nota placeholder="¿Qué te dijo el cliente? (obligatorio para registrar el resultado)"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn-sm" data-editar-lead="${l.lead_id}"><i class="fas fa-pen"></i> Editar datos</button><a class="btn-sm" href="https://wa.me/${esc(String(l.telefono || '').replace(/\D/g,''))}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a><a class="btn-sm" href="tel:${esc(l.telefono || '')}"><i class="fas fa-phone"></i> Llamar</a></div></article>`).join('');
@@ -11813,6 +11809,7 @@ async function cargarNotasRepaso() {
   const wrap = document.getElementById('notas-repaso-list');
   if (!card || !wrap) return;
   const { data, error } = await sb.rpc('notas_para_repasar_hoy');
+  if (error) console.error(error);
   const pendientes = error ? [] : (data || []);
   actualizarBadgeNotas(pendientes.length);
   if (!pendientes.length) { card.style.display = 'none'; return; }
@@ -11846,7 +11843,7 @@ async function cargarListaNotas() {
   const wrap = document.getElementById('notas-list');
   if (!wrap) return;
   const { data, error } = await sb.rpc('listar_mis_notas', { p_etiqueta: NOTAS_FILTRO_ETIQUETA, p_busqueda: NOTAS_BUSQUEDA || null });
-  if (error) { wrap.innerHTML = '<div class="es-s">No se pudieron cargar tus notas.</div>'; return; }
+  if (error) { console.error(error); wrap.innerHTML = '<div class="es-s">No se pudieron cargar tus notas.</div>'; return; }
   const notas = data || [];
   renderChipsEtiquetasNotas(notas);
   if (!notas.length) {
@@ -11965,7 +11962,7 @@ const NAV_ITEMS = [
   { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', grupo: 'principal', roles: 'nav-asesor-hide', excludeSheet: true },
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', grupo: 'principal', roles: '', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true, excludeSheet: true },
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', grupo: 'principal', roles: '' },
-  { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', grupo: 'principal', roles: '' },
+  { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', grupo: 'principal', roles: 'nav-asesor-only' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', grupo: 'principal', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', badge: 'nav-msg-count', badgeDefault: '—', excludeSheet: true },
   { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', grupo: 'principal', roles: 'nav-freelancer-only', badge: 'nav-tareas-count', badgeDefault: '0' },
   { sec: 'mis-notas', icon: 'fas fa-lightbulb', label: 'Mis Notas', grupo: 'principal', roles: '', badge: 'nav-notas-count', badgeDefault: '0', sub: 'Lo que te cuesta recordar, para repasar' },
@@ -12036,6 +12033,13 @@ function renderNavItems() {
     }).join('');
     ancoraSheet.insertAdjacentHTML('beforebegin', bloque);
   }
+  // nav-admin-only/nav-asesor-only etc. ya filtran por CSS (.rol-asesor) --
+  // estos dos casos necesitan el valor real del usuario (flag por persona,
+  // no por rol), así que se resuelven acá en JS, DESPUÉS de insertar el HTML
+  // de arriba: hacerlo antes (como vivía en entrarSegunRol) buscaba estas
+  // clases en un DOM que todavía no las tenía y no ocultaba nada.
+  document.querySelectorAll('.solo-informe-diario').forEach(el => el.style.display = MI_VE_INFORME_DIARIO ? '' : 'none');
+  document.querySelectorAll('.solo-voucher').forEach(el => el.style.display = (ROL === 'admin' || ROL === 'asesor') ? '' : 'none');
 }
 
 /* ---------- "Frecuentes": top de secciones más clickeadas ----------
