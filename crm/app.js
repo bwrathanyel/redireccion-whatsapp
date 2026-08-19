@@ -1996,7 +1996,7 @@ function arrancar(...pasos) {
 async function startApp() {
   if (booted) return; booted = true;
   arrancar(
-    renderNavItems, aplicarOrdenSidebar, renderFrecuentes, setupNav, renderBottomNav, setupSwipeSecciones, setupPullToRefresh, setupLongPressSeleccion,
+    renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, renderBottomNav, setupSwipeSecciones, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa,
     setupHoy, setupConsultorIA, setupBoleteriaSeccion, setupMisNotas,
@@ -12057,6 +12057,10 @@ function calcularFrecuentes() {
     .slice(0, FRECUENTES_N)
     .map(([sec]) => sec);
 }
+function ocultarHeadersVaciosMenu() {
+  ocultarHeadersVacios('sidebar-nav', '.nav-item', '.nav-label');
+  ocultarHeadersVacios('more-sheet', '.sheet-item', '.sheet-label');
+}
 function renderFrecuentes() {
   const top = calcularFrecuentes();
   [
@@ -12072,12 +12076,34 @@ function renderFrecuentes() {
     if (!primerHijo) return;
     primerHijo.insertAdjacentHTML('beforebegin', labelHtml);
     const marcador = cont.querySelector('[data-grupo-frec]');
-    top.forEach(sec => {
+    // .slice().reverse(): marcador.after(el) inserta cada uno pegado al
+    // marcador, empujando abajo al anterior -- sin invertir, el orden final
+    // queda al revés (el menos clickeado de los 6 primero).
+    top.slice().reverse().forEach(sec => {
       const el = cont.querySelector(`[data-sec="${sec}"]`);
       if (!el) return;
       el.classList.add(itemCls);
       marcador.after(el);
     });
+  });
+}
+
+/* ---------- Ocultar headers de grupo sin items visibles ----------
+   renderNavItems() imprime un header si el grupo tiene items DEFINIDOS en
+   NAV_ITEMS, no si tiene items VISIBLES para el rol actual -- esa parte la
+   decide CSS después, en el navegador. Sin este paso, un grupo donde el rol
+   actual no puede ver ningún item (ej. "Marketing" para un asesor) deja el
+   header flotando vacío. */
+function ocultarHeadersVacios(contId, itemSel, labelSel) {
+  const cont = document.getElementById(contId);
+  if (!cont) return;
+  cont.querySelectorAll(labelSel).forEach(label => {
+    let sib = label.nextElementSibling, tieneVisible = false;
+    while (sib && !sib.matches(labelSel)) {
+      if (sib.matches(itemSel) && getComputedStyle(sib).display !== 'none') tieneVisible = true;
+      sib = sib.nextElementSibling;
+    }
+    label.style.display = tieneVisible ? '' : 'none';
   });
 }
 
@@ -12113,15 +12139,14 @@ function setupNavBuscador() {
       t = setTimeout(() => {
         const q = input.value.trim().toLowerCase();
         const items = [...cont.querySelectorAll(itemSel)];
-        items.forEach(it => { it.style.display = !q || it.textContent.toLowerCase().includes(q) ? '' : 'none'; });
-        cont.querySelectorAll(labelSel).forEach(label => {
-          let sib = label.nextElementSibling, tieneVisible = false;
-          while (sib && !sib.matches(labelSel)) {
-            if (sib.matches(itemSel) && sib.style.display !== 'none' && getComputedStyle(sib).display !== 'none') tieneVisible = true;
-            sib = sib.nextElementSibling;
-          }
-          label.style.display = q && !tieneVisible ? 'none' : '';
+        // Buscando: el texto manda. Buscador vacío: la visibilidad por rol
+        // manda (no revive un item oculto por CSS de rol solo porque el
+        // buscador quedó en blanco).
+        items.forEach(it => {
+          if (q) it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none';
+          else it.style.removeProperty('display');
         });
+        ocultarHeadersVacios(contId, itemSel, labelSel);
       }, 150);
     });
   };
@@ -12788,8 +12813,8 @@ function setupSidebarReorder() {
 function guardarOrdenSidebar() {
   const orden = [...document.querySelectorAll('#sidebar-nav > .nav-item:not(.nav-freq), #sidebar-nav > .nav-label:not([data-grupo-frec])')]
     .map(el => el.classList.contains('nav-label') ? 'label:' + el.dataset.label : 'sec:' + el.dataset.sec);
-  if (JSON.stringify(orden) === JSON.stringify(MI_PREFERENCIAS.orden_sidebar || null)) return;
-  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, orden_sidebar: orden };
+  if (JSON.stringify(orden) === JSON.stringify(MI_PREFERENCIAS.orden_sidebar_v2 || null)) return;
+  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, orden_sidebar_v2: orden };
   // sb.rpc() devuelve un builder "thenable" de postgrest-js, no una Promise real:
   // tiene .then() pero NO .catch(). Llamar .catch() directo tira
   // "TypeError: sb.rpc(...).catch is not a function" y, al ocurrir dentro de
@@ -12798,7 +12823,12 @@ function guardarOrdenSidebar() {
   Promise.resolve(sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS })).catch(() => {});
 }
 function aplicarOrdenSidebar() {
-  const orden = MI_PREFERENCIAS.orden_sidebar;
+  // orden_sidebar (sin sufijo) es el guardado bajo el esquema VIEJO de 4
+  // grupos (principal/tarifario/gestion/ayuda) -- reproducirlo tal cual tras
+  // el regrupamiento a 7 grupos amontona los grupos nuevos (ventas/ia/
+  // marketing) al final, vacíos, porque no existen en ese array viejo.
+  // orden_sidebar_v2 arranca limpio para todos, sin migrar datos.
+  const orden = MI_PREFERENCIAS.orden_sidebar_v2;
   const nav = document.getElementById('sidebar-nav');
   if (!orden?.length || !nav) return;
   const hijos = [...nav.querySelectorAll(':scope > .nav-item, :scope > .nav-label')];
