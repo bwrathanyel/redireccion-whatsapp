@@ -2032,6 +2032,16 @@ async function startApp() {
   }
   await loadStats();
   ACTIVOS = Object.keys(STATS.by_advisor || {});
+  // by_advisor solo trae asesores que YA tienen leads; los recién agregados
+  // (ej. Luis Silva, Maryori Sandoval) no aparecen y quedaban fuera del selector
+  // de "Asesor asignado" y de los filtros. Se completa con listar_asesores_activos()
+  // (tabla `asesores` con activo=true), la fuente de verdad de quién puede recibir.
+  try {
+    const { data, error } = await sb.rpc('listar_asesores_activos');
+    if (!error && Array.isArray(data)) {
+      ACTIVOS = [...new Set([...ACTIVOS, ...data.map(a => a.nombre)])];
+    }
+  } catch (_) { /* sin permisos (asesor) o fallo de red: se conserva by_advisor */ }
   if (ROL === 'admin') activateSection(seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'dashboard'));
   renderHoy();
   renderAll();
