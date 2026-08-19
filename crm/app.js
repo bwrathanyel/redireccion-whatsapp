@@ -9611,6 +9611,41 @@ function actualizarVisibilidadFiltrosTarifario() {
     el.toggleAttribute('data-hidden', !el.dataset.tabs.split(',').includes(tarTab));
   });
 }
+
+/* Chips de filtros activos (2026-08-19). En móvil el botón de filtros pasó a ser
+   solo un ícono: sin estos chips no habría forma de saber qué filtros hay
+   puestos, ni de sacar uno suelto, sin abrir la hoja entera. Mismo patrón que
+   renderChips() en Leads, incluido el puntito naranja sobre el ícono. */
+function tarChips() {
+  const box = document.getElementById('tar-chips');
+  if (!box) return;
+  const g = id => document.getElementById(id);
+  // Cada filtro solo aplica a algunas pestañas (data-tabs); si está oculto para
+  // la pestaña abierta no debe contarse aunque tenga un valor viejo guardado.
+  const visible = id => { const el = g(id); if (!el) return false; const c = el.closest('[data-tabs]'); return !c || !c.hasAttribute('data-hidden'); };
+  const reset = (id, v) => { const el = g(id); if (!el) return; if (el.type === 'checkbox') el.checked = v; else el.value = v; renderTarifario(); };
+  const chips = [];
+  const push = (label, limpiar) => chips.push([label, limpiar]);
+  if (visible('tar-f-destino') && val('tar-f-destino')) push('Destino: ' + val('tar-f-destino'), () => reset('tar-f-destino', ''));
+  if (visible('tar-f-tipo') && val('tar-f-tipo')) push('Plan: ' + (TAG_LABEL[val('tar-f-tipo')] || val('tar-f-tipo')), () => reset('tar-f-tipo', ''));
+  if (visible('tar-f-mes') && val('tar-f-mes')) push('Mes: ' + (MESL[Number(val('tar-f-mes')) - 1] || val('tar-f-mes')), () => reset('tar-f-mes', ''));
+  if (visible('tar-f-precio') && val('tar-f-precio')) push('Hasta $' + val('tar-f-precio'), () => reset('tar-f-precio', ''));
+  if (visible('tar-f-ninos') && g('tar-f-ninos')?.checked) push('Con niños gratis', () => reset('tar-f-ninos', false));
+  // "Solo vigentes" viene marcado por defecto: lo que hay que avisar es cuando
+  // se DESmarcó, porque ahí la lista trae cosas vencidas sin que se note.
+  if (visible('tar-f-vigente') && g('tar-f-vigente') && !g('tar-f-vigente').checked) push('Incluye vencidas', () => reset('tar-f-vigente', true));
+  g('tar-mfs-trigger')?.classList.toggle('con-filtros', chips.length > 0);
+  if (!chips.length) { box.innerHTML = ''; return; }
+  box.innerHTML = chips.map((c, i) => `<span class="fchip">${esc(c[0])} <b data-ci="${i}">✕</b></span>`).join('')
+    + '<button class="clear-all" id="tar-chips-clear" type="button"><i class="fas fa-times"></i> Limpiar</button>';
+  chips.forEach((c, i) => { box.querySelector(`b[data-ci="${i}"]`).onclick = c[1]; });
+  g('tar-chips-clear').onclick = () => {
+    ['tar-f-destino', 'tar-f-tipo', 'tar-f-mes', 'tar-f-precio'].forEach(id => { const el = g(id); if (el) el.value = ''; });
+    const n = g('tar-f-ninos'); if (n) n.checked = false;
+    const v = g('tar-f-vigente'); if (v) v.checked = true;
+    renderTarifario();
+  };
+}
 async function loadTarifario() {
   loadTarifarioInfo();
   if (tarCache[tarTab]) { renderTarifario(); return; }
@@ -9886,6 +9921,7 @@ function renderTarifario() {
   if (tarTab === 'hotsale') filtered = promosHotSales(filtered);
 
   document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
+  tarChips();
   document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0);
   const grid = document.getElementById('tar-grid');
   if (tarTab === 'hotel') {
@@ -9998,11 +10034,45 @@ function tarRowHtml(x) {
     <i class="fas fa-chevron-right"></i>
   </div>`;
 }
-function tarCardThumbHtml(foto, esPromo) {
+function tarCardThumbHtml(foto, esPromo, destino) {
   const media = foto
     ? `<img class="tc-thumb" src="${esc(foto)}" alt="" loading="lazy">`
     : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`;
-  return `<div class="tc-media-wrap">${media}<div class="carrusel-dots"></div></div>`;
+  // El destino va como chip sobre la foto y no como renglón del cuerpo: libera
+  // una línea de texto y deja el dato donde el ojo ya está mirando.
+  const chip = destino ? `<div class="tc-destino-chip"><i class="fas fa-location-dot"></i>${esc(destino)}</div>` : '';
+  return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}<div class="carrusel-dots"></div></div>`;
+}
+
+/* vigencia_texto es prosa cargada a mano ("Fecha de venta 4 de Junio al 15 de
+   Septiembre; Fecha de disfrute 1 Agosto al 15 de Septiembre") y en la tarjeta
+   se comía tres renglones corridos. Se parte en sus dos mitades con el MISMO
+   criterio que ya usa fecha_venta_fin() en SQL (migración 20260730180000): el
+   tramo de venta llega hasta que el texto empieza a hablar de disfrute.
+   Si no se puede partir se devuelve tal cual -- nunca se pierde información por
+   no poder parsearla, solo se muestra sin etiquetas. */
+function vigenciaPartes(texto) {
+  if (!texto) return [];
+  const t = String(texto).trim();
+  if (!t) return [];
+  const corte = t.match(/(?:fechas?\s+de\s+|per[ií]odos?\s+de\s+)?disfrute\s*:?\s*/i);
+  if (!corte) return [['', t]];
+  const limpiar = s => s
+    .replace(/^(?:fechas?\s+de\s+|per[ií]odos?\s+de\s+)?venta\s*:?\s*/i, '')
+    .replace(/^[\s:;.,-]+|[\s;.,-]+$/g, '')
+    .trim();
+  const partes = [];
+  const venta = limpiar(t.slice(0, corte.index));
+  if (venta) partes.push(['Venta', venta]);
+  const disfrute = limpiar(t.slice(corte.index + corte[0].length));
+  if (disfrute) partes.push(['Disfrute', disfrute]);
+  return partes.length ? partes : [['', t]];
+}
+function vigenciaHtml(texto) {
+  const partes = vigenciaPartes(texto);
+  if (!partes.length) return '';
+  return `<div class="tc-fechas">${partes.map(([k, v]) =>
+    `<div class="tc-fecha${k ? '' : ' tcf-crudo'}">${k ? `<span class="tcf-k">${esc(k)}</span>` : ''}<span class="tcf-v">${esc(v)}</span></div>`).join('')}</div>`;
 }
 function tarCardHtml(x) {
   if (tarTab === 'promo' || tarTab === 'hotsale') {
@@ -10010,25 +10080,30 @@ function tarCardHtml(x) {
     // usa la web pública). Por diseño NUNCA contiene precios -- el precio real
     // sale siempre de precio_texto, tal cual está cargado.
     return `<div class="tar-item tar-card" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true)}
-      <div class="tc-top"><div class="tc-nombre">${esc(x.titulo)}</div></div>
-      ${x.resumen_ia ? `<div class="tc-resumen-ia">${esc(x.resumen_ia)}</div>` : ''}
+      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x))}
+      <div class="tc-body">
+        <div class="tc-nombre">${esc(x.titulo)}</div>
+        ${x.resumen_ia ? `<div class="tc-resumen-ia">${esc(x.resumen_ia)}</div>` : ''}
+      </div>
       <div class="tc-pie">
         ${x.precio_texto ? `<div class="tc-precio">${esc(x.precio_texto)}</div>` : ''}
-        ${x.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(x.vigencia_texto)}</div>` : ''}
+        ${vigenciaHtml(x.vigencia_texto)}
         ${tagsHtml(x.incluye_tags)}
       </div></div>`;
   }
   const tarifa = (x.tarifas || [])[0];
   const promos = x.promociones || [];
   const tagsHotel = [...new Set(promos.flatMap(p => p.incluye_tags || []))];
+  const bullets = resumenBullets(x.descripcion);
   return `<div class="tar-item tar-card" data-id="${x.id}">
-    ${tarCardThumbHtml(fotosDe(x, 256)[0], false)}
-    <div class="tc-top"><div><div class="tc-nombre">${esc(x.nombre)}</div>${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}</div></div>
-    <ul class="tc-resumen">${resumenBullets(x.descripcion).map(s => `<li>${esc(s)}</li>`).join('')}</ul>
+    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x))}
+    <div class="tc-body">
+      <div class="tc-nombre">${esc(x.nombre)}</div>
+      ${bullets.length ? `<ul class="tc-resumen">${bullets.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
+    </div>
     <div class="tc-pie">
       ${tarifa ? `<div class="tc-precio">${esc(tarifa.precio_texto)}</div>` : ''}
-      ${tarifa && tarifa.vigencia_texto ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(tarifa.vigencia_texto)}</div>` : ''}
+      ${vigenciaHtml(tarifa?.vigencia_texto)}
       ${promos.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promos.length} promoción${promos.length > 1 ? 'es' : ''} activa${promos.length > 1 ? 's' : ''}</div>` : ''}
       ${tagsHtml(tagsHotel)}
     </div></div>`;
@@ -10049,7 +10124,7 @@ function tarFichaHtml(x) {
       ${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}
       ${!esPromo && x.descripcion ? `<ul class="tc-resumen tc-resumen-ficha">${resumenBullets(x.descripcion).map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
       ${precio ? `<div class="tc-precio">${esc(precio)}</div>` : ''}
-      ${vigencia ? `<div class="tc-vigencia"><i class="fas fa-clock"></i> ${esc(vigencia)}</div>` : ''}
+      ${vigenciaHtml(vigencia)}
       ${promos.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promos.length} promoción${promos.length > 1 ? 'es' : ''} activa${promos.length > 1 ? 's' : ''}</div>` : ''}
       ${tagsHtml(tags)}
     </div>
@@ -13212,25 +13287,133 @@ async function loadLeadsEnFacturacion() {
    La IA solo produce PALABRAS DE BÚSQUEDA: los resultados salen tal cual de la
    base, así que no hay forma de que invente un precio. */
 let tarIABusy = false;
+/* Un solo campo para las dos búsquedas (2026-08-19). #tar-search filtra al
+   instante lo que ya está en pantalla (ese listener vive en setupTarifarioTabs);
+   acá se engancha la otra acción sobre EL MISMO campo: Enter o el botón de
+   varita mandan la frase a la IA, que consulta la base entera. Nunca automático
+   -- cada consulta es una llamada a la Edge Function y la pide el asesor. */
+let tarIAResultados = [], tarIAMeta = null, tarIAView = 'tarjetas';
 function setupBuscadorIATarifario() {
-  const input = document.getElementById('tar-ia-input');
+  const input = document.getElementById('tar-search');
   const btn = document.getElementById('tar-ia-btn');
   if (!input || !btn) return;
   btn.addEventListener('click', () => buscarTarifarioIA(input.value.trim()));
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') buscarTarifarioIA(input.value.trim()); });
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    buscarTarifarioIA(input.value.trim());
+  });
+  document.getElementById('tar-ia-cerrar')?.addEventListener('click', cerrarResultadosIA);
+  tarIAView = initViewSwitcher('tar-ia-view-switch', 'tarifario_ia', 'tarjetas',
+    v => { tarIAView = v; pintarResultadosIA(); }, ['tarjetas', 'lista']);
+}
+
+function cerrarResultadosIA() {
+  tarIAResultados = []; tarIAMeta = null;
+  const box = document.getElementById('tar-ia-box');
+  if (box) box.hidden = true;
+  const res = document.getElementById('tar-ia-resultados');
+  if (res) res.innerHTML = '';
+}
+
+/* Los resultados de la IA traen solo {tipo,id,titulo,destino,extracto}: sin
+   fotos, precio ni tags, que es justamente lo que hace a una tarjeta. Se
+   completan primero contra lo que ya está en memoria (tarCache, de cualquier
+   pestaña ya visitada) y lo que falte con UNA consulta por tabla, con el mismo
+   select que loadTarifario para que fotos y tarifas vengan igual.
+   Mismo criterio que ya usaba abrirDesdeBusquedaIA() para abrir uno suelto. */
+async function hidratarResultadosIA(res) {
+  const enMemoria = new Map();
+  for (const [tab, filas] of Object.entries(tarCache)) {
+    const clave = (tab === 'promo' || tab === 'hotsale') ? 'promocion' : 'producto';
+    for (const x of filas || []) enMemoria.set(clave + ':' + x.id, x);
+  }
+  const faltan = { promocion: [], producto: [] };
+  res.forEach(r => {
+    if (!enMemoria.has(r.tipo + ':' + r.id)) faltan[r.tipo === 'promocion' ? 'promocion' : 'producto'].push(r.id);
+  });
+  const selProductos = '*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad,resumen_ia), producto_fotos(storage_path,orden,es_principal,activo)';
+  const selPromos = '*, promocion_fotos(storage_path,orden,es_principal,activo), productos(nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))';
+  const pedidos = [];
+  if (faltan.promocion.length) pedidos.push(sb.from('promociones').select(selPromos).in('id', faltan.promocion).then(r => ['promocion', r]));
+  if (faltan.producto.length) pedidos.push(sb.from('productos').select(selProductos).in('id', faltan.producto).then(r => ['producto', r]));
+  for (const [clave, { data, error }] of await Promise.all(pedidos)) {
+    if (error) { console.error('hidratarResultadosIA:', error); continue; }
+    (data || []).forEach(x => enMemoria.set(clave + ':' + x.id, x));
+  }
+  // El ítem completo se cuelga del resultado; si no se pudo traer queda null y
+  // esa fila cae a la vista de lista, que solo necesita título y extracto.
+  return res.map(r => ({ ...r, item: enMemoria.get(r.tipo + ':' + r.id) || null }));
+}
+
+/* tarCardHtml/destinoDe/fotosDe leen el global tarTab para saber si el ítem es
+   promoción o producto. Los resultados de la IA pueden ser de varias pestañas a
+   la vez, así que cada uno se pinta con su tab puesto y se restaura al terminar.
+   Es seguro porque armar el HTML es 100% síncrono: nada más puede leer tarTab
+   en el medio. */
+function conTabTarifario(tab, fn) {
+  const previo = tarTab;
+  tarTab = tab;
+  try { return fn(); } finally { tarTab = previo; }
+}
+function tabDeResultadoIA(r) {
+  if (r.tipo === 'promocion') return 'promo';
+  return r.item?.tipo || 'hotel';
+}
+
+function pintarResultadosIA() {
+  const box = document.getElementById('tar-ia-resultados');
+  if (!box) return;
+  const res = tarIAResultados;
+  if (!res.length) { box.innerHTML = ''; return; }
+  if (tarIAView === 'lista') {
+    box.innerHTML = res.map(r => {
+      const ico = r.tipo === 'promocion' ? 'fa-tag' : 'fa-hotel';
+      const meta = [r.destino, r.extracto].filter(Boolean).join(' · ');
+      return `<div class="tia-row" data-tipo="${esc(r.tipo)}" data-id="${r.id}">`
+        + `<i class="fas ${ico}"></i>`
+        + `<div><div class="tia-n">${esc(r.titulo || 'Sin nombre')}</div>`
+        + `<div class="tia-m">${esc(meta)}</div></div></div>`;
+    }).join('');
+  } else {
+    // Las mismas tarjetas que la grilla: una tarjeta de la IA y una de la
+    // pestaña se ven idénticas, que es el punto de mostrarlas así.
+    const html = res.map(r => r.item
+      ? conTabTarifario(tabDeResultadoIA(r), () => tarCardHtml(r.item))
+      : `<div class="tia-row" data-tipo="${esc(r.tipo)}" data-id="${r.id}">`
+        + `<i class="fas ${r.tipo === 'promocion' ? 'fa-tag' : 'fa-hotel'}"></i>`
+        + `<div><div class="tia-n">${esc(r.titulo || 'Sin nombre')}</div>`
+        + `<div class="tia-m">${esc([r.destino, r.extracto].filter(Boolean).join(' · '))}</div></div></div>`
+    ).join('');
+    box.innerHTML = `<div class="tar-grid-sub">${html}</div>`;
+  }
+  const abrir = el => abrirDesdeBusquedaIA(el.dataset.tipo, Number(el.dataset.id));
+  box.querySelectorAll('.tia-row').forEach(row => { row.onclick = () => abrir(row); });
+  // Las .tar-card no llevan data-tipo: se resuelve por el id contra el propio
+  // resultado, que ya sabe de qué tabla salió.
+  box.querySelectorAll('.tar-card').forEach(card => {
+    const id = Number(card.dataset.id);
+    const r = res.find(x => Number(x.id) === id && x.item);
+    if (r) card.onclick = () => abrirDesdeBusquedaIA(r.tipo, id);
+  });
 }
 
 async function buscarTarifarioIA(consulta) {
   const estado = document.getElementById('tar-ia-estado');
-  const box = document.getElementById('tar-ia-resultados');
-  if (!estado || !box) return;
-  if (consulta.length < 2) { estado.textContent = 'Escribí qué estás buscando.'; box.innerHTML = ''; return; }
+  const caja = document.getElementById('tar-ia-box');
+  const btn = document.getElementById('tar-ia-btn');
+  if (!estado || !caja) return;
+  if (consulta.length < 2) { caja.hidden = false; estado.textContent = 'Escribí qué estás buscando.'; tarIAResultados = []; pintarResultadosIA(); return; }
   if (tarIABusy) return;
   tarIABusy = true;
+  btn?.classList.add('cargando');
+  caja.hidden = false;
   estado.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Buscando...';
-  box.innerHTML = '';
+  tarIAResultados = [];
+  pintarResultadosIA();
   const { data, error } = await sb.functions.invoke('buscar-tarifario-ia', { body: { consulta } });
   tarIABusy = false;
+  btn?.classList.remove('cargando');
   if (error || !data?.ok) {
     console.error('buscar-tarifario-ia:', error || data);
     estado.textContent = 'No se pudo buscar en este momento. Probá de nuevo.';
@@ -13246,18 +13429,13 @@ async function buscarTarifarioIA(consulta) {
   estado.innerHTML = (data.interpretacion ? '<b>Entendí:</b> ' + esc(data.interpretacion) + ' · ' : '')
     + res.length + (res.length === 1 ? ' resultado' : ' resultados')
     + (data.ia_disponible ? '' : ' (búsqueda literal: la IA no respondió)');
-  box.innerHTML = res.map(r => {
-    const ico = r.tipo === 'promocion' ? 'fa-tag' : 'fa-hotel';
-    const meta = [r.destino, r.extracto].filter(Boolean).join(' · ');
-    return '<div class="tia-row" data-tipo="' + esc(r.tipo) + '" data-id="' + r.id + '">'
-      + '<i class="fas ' + ico + '"></i>'
-      + '<div><div class="tia-n">' + esc(r.titulo || 'Sin nombre') + '</div>'
-      + '<div class="tia-m">' + esc(meta) + '</div></div>'
-    + '</div>';
-  }).join('');
-  box.querySelectorAll('.tia-row').forEach(row => {
-    row.onclick = () => abrirDesdeBusquedaIA(row.dataset.tipo, Number(row.dataset.id));
-  });
+  tarIAResultados = await hidratarResultadosIA(res);
+  tarIAMeta = data;
+  // Las promos de la IA no pasaron por renderTarifario(), que es donde se
+  // reparten las portadas: sin esto varias promos del mismo hotel muestran
+  // todas la misma foto.
+  asignarPortadas(tarIAResultados.map(r => r.item).filter(Boolean));
+  pintarResultadosIA();
 }
 
 // El buscador devuelve ids de productos/promociones. Si el item ya está en la
@@ -13378,7 +13556,7 @@ const TOUR_CAPITULOS = [
   ]},
   { id: 'tarifario', titulo: 'Tarifario', icono: 'fa-book-open', roles: ['admin', 'asesor', 'marketing'], seccion: 'tarifario', pasos: [
     { titulo: 'Catálogo de hoteles y paquetes', texto: 'Todos los precios y opciones que le puedes ofrecer a un cliente, con fotos.', selector: '#sec-tarifario' },
-    { titulo: 'Buscador con IA', texto: 'Escribí lo que busca el cliente en tus propias palabras ("playa para una pareja en diciembre") y la IA lo traduce a una búsqueda sobre todo el tarifario. Los precios que ves salen siempre de la ficha real, la IA nunca los inventa.', selector: '#tar-ia-input' },
+    { titulo: 'Buscador con IA', texto: 'El mismo campo hace dos cosas: mientras escribís filtra lo que ya tenés en pantalla, y si tocás la varita (o Enter) le pasa esa frase a la IA para que busque en todo el tarifario — "playa para una pareja en diciembre". Los precios que ves salen siempre de la ficha real, la IA nunca los inventa.', selector: '#tar-search' },
   ]},
   { id: 'cotizador', titulo: 'Cotizador IA', icono: 'fa-comments', roles: ['admin', 'asesor', 'marketing'], seccion: 'cotizador', pasos: [
     { titulo: 'Arma una cotización hablando', texto: 'Cuéntale a la IA qué busca el cliente (destino, presupuesto, fechas) y te arma opciones del Tarifario al toque.', selector: '#chat-input' },

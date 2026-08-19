@@ -781,52 +781,102 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 
 /* ---------- Tarifario ---------- */
 .tar-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
-.tar-search{position:relative;flex:1;min-width:200px}
-.tar-search input{width:100%;background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:10px 14px 10px 38px;color:var(--txt);font-size:13px;font-family:inherit;outline:none}
+/* Fila única de búsqueda (2026-08-19): campo + filtros + vista + contador.
+   El campo hace las dos cosas -- filtro local al tipear y consulta a la IA con
+   el botón de varita/Enter -- así que el botón vive DENTRO del input. */
+.tar-buscador{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.tar-search{position:relative;flex:1;min-width:0}
+.tar-search input{width:100%;background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:10px 46px 10px 38px;color:var(--txt);font-size:13px;font-family:inherit;outline:none}
 .tar-search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.tar-search i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+.tar-search > i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
+/* Botón de IA embebido: el mismo texto que ya escribiste se manda a la búsqueda
+   en lenguaje natural, sin tener que reescribirlo en otra caja. */
+.tar-ia-go{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:34px;height:34px;display:grid;place-items:center;background:transparent;border:none;border-radius:9px;color:var(--muted);font-size:14px;cursor:pointer;transition:color .15s,background .15s}
+.tar-ia-go:hover,.tar-ia-go.on{color:var(--accent);background:var(--accent-soft)}
+.tar-ia-go.cargando{color:var(--accent)}
 .tar-grid{display:block}
-/* flex + margin-top:auto en el pie: sin esto las tarjetas de una misma fila
-   estiran su alto pero el precio/vigencia queda a distinta altura en cada una. */
-.tar-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;backdrop-filter:blur(8px);cursor:pointer;transition:.12s;overflow:hidden;display:flex;flex-direction:column}
-.tar-card:hover{border-color:rgba(255,145,0,.3);transform:translateY(-2px)}
-.tc-pie{margin-top:auto}
+/* Tarjeta del Tarifario -- rediseño 2026-08-19.
+   Antes: foto de 120px, título del mismo peso visual que la descripción y un
+   pie donde precio (verde), vigencia (ámbar) y tags se apilaban sin jerarquía;
+   la vigencia, que es texto libre largo, se comía tres renglones.
+   Ahora: el padding se mudó de la tarjeta a .tc-body/.tc-pie para que la foto
+   llegue a los bordes sin el truco de márgenes negativos, el título es lo único
+   grande del cuerpo, y el pie separa precio / fechas / tags en bloques con peso
+   distinto. flex + margin-top:auto en el pie: sin eso las tarjetas de una misma
+   fila estiran su alto pero el precio queda a distinta altura en cada una. */
+.tar-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:0;backdrop-filter:blur(8px);cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s;overflow:hidden;display:flex;flex-direction:column}
+.tar-card:hover{border-color:rgba(255,145,0,.35);transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.32)}
+.tar-card .tc-body{padding:13px 15px 0}
+.tar-card .tc-pie{margin-top:auto;padding:11px 15px 14px}
 /* Descripción normalizada con IA (promociones.resumen_ia) -- misma que usa la
-   web pública. Alto fijo para que todas las tarjetas midan igual. */
-.tc-resumen-ia{font-size:12.5px;color:var(--muted);line-height:1.45;margin:8px 0 4px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:3.9em}
+   web pública. Sin min-height: el margin-top:auto del pie ya empareja los pies
+   de una fila, y el alto fijo dejaba un hueco vacío feo en las tarjetas que no
+   tienen descripción cargada. */
+.tc-resumen-ia{font-size:12.5px;color:var(--muted);line-height:1.5;margin:7px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 
 /* ---------- Buscador IA del Tarifario ---------- */
-.tar-ia-box{background:var(--panel);border:1px solid var(--line2);border-radius:14px;padding:12px 14px;margin-bottom:14px}
-.tar-ia-row{display:flex;align-items:center;gap:10px}
-.tar-ia-row > i{color:var(--accent);font-size:14px;flex-shrink:0}
-.tar-ia-row input{flex:1;min-width:0;background:var(--panel-solid);border:1px solid var(--line2);border-radius:11px;padding:10px 13px;color:var(--txt);font-size:13px;font-family:inherit;outline:none}
-.tar-ia-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.tar-ia-estado{font-size:11.5px;color:var(--muted);margin-top:8px;min-height:0}
-.tar-ia-estado:empty{display:none}
-.tar-ia-resultados{margin-top:10px}
+/* Resultados de la IA: bloque aparte de la grilla normal, con borde acentuado
+   para que se lea como "esto vino de una consulta", no como un filtro más. Se
+   muestra/oculta con el atributo hidden desde app.js. */
+.tar-ia-box{background:var(--panel);border:1px solid rgba(255,145,0,.28);border-left:3px solid var(--accent);border-radius:14px;padding:12px 14px;margin-bottom:14px}
+.tar-ia-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.tar-ia-estado{flex:1;min-width:0;font-size:11.5px;color:var(--muted);line-height:1.45}
+.tar-ia-cerrar{background:transparent;border:1px solid var(--line2);color:var(--muted);width:30px;height:30px;border-radius:9px;cursor:pointer;font-size:12px;flex-shrink:0}
+.tar-ia-cerrar:hover{color:var(--txt);border-color:var(--txt)}
+.view-switch-sm .vs-btn{padding:5px 9px;font-size:11.5px}
 .tar-ia-resultados:empty{display:none}
+/* Los resultados de la IA se pintan con las MISMAS tarjetas que la grilla
+   (tarCardHtml), así que heredan la grilla también -- una tarjeta de la IA y
+   una de la pestaña se ven idénticas, que es el punto. */
+.tar-ia-resultados .tar-grid-sub{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
 .tia-row{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer;background:var(--panel-solid)}
 .tia-row:hover{border-color:var(--accent)}
 .tia-row i{color:var(--accent);font-size:13px;margin-top:2px;flex-shrink:0}
 .tia-n{font-size:13.5px;font-weight:700;line-height:1.3}
 .tia-m{font-size:11.5px;color:var(--muted);margin-top:2px}
-.tc-media-wrap{position:relative;width:calc(100% + 36px);margin:-16px -18px 12px}
+/* .tc-media-wrap existe SOLO en las tarjetas del Tarifario (tarCardThumbHtml).
+   Las reglas base de .tc-thumb quedan intactas porque el cotizador
+   (.cot-card) las usa sueltas, sin este wrapper. */
+.tc-media-wrap{position:relative;width:100%;margin:0}
+.tc-media-wrap .tc-thumb{height:170px}
+.tc-media-wrap .tc-thumb.tc-thumb-vacio{width:100%;height:170px;margin:0;border-radius:0;border:none;border-bottom:1px solid var(--line2)}
+/* Degradado al pie de la foto: sostiene el chip de destino y evita que una foto
+   clara deje el borde de abajo lavado contra el cuerpo de la tarjeta. */
+.tc-media-scrim{position:absolute;inset:auto 0 0 0;height:64px;background:linear-gradient(to top,rgba(6,10,18,.88),rgba(6,10,18,0));pointer-events:none}
+/* max-width al 62%: los dots del carrusel van centrados abajo, así que un
+   destino largo no debe llegar hasta el medio de la foto. */
+.tc-destino-chip{position:absolute;left:10px;bottom:9px;display:inline-flex;align-items:center;gap:5px;max-width:62%;background:rgba(6,10,18,.7);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);color:#fff;font-size:11px;font-weight:600;border-radius:20px;padding:4px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc-destino-chip i{color:var(--accent);font-size:10px;flex-shrink:0}
 .tc-thumb{width:100%;height:120px;object-fit:cover;display:block;background:var(--panel-solid);transition:opacity .18s ease}
 .tc-thumb.tc-thumb-vacio{width:calc(100% - 36px);height:100px;margin:16px 18px 0;border-radius:10px;display:grid;place-items:center;color:var(--muted2);font-size:22px;border:1px dashed var(--line2)}
 .carrusel-dots{position:absolute;left:0;right:0;bottom:8px;display:flex;justify-content:center;gap:5px;pointer-events:none}
 .carrusel-dots:empty{display:none}
 .carrusel-dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.35);transition:.2s}
 .carrusel-dot.on{background:#fff;width:14px;border-radius:3px}
-.tar-card .tc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px}
-.tar-card .tc-nombre{font-size:14.5px;font-weight:700;line-height:1.3}
+/* El título es lo único grande del cuerpo: antes competía de igual a igual con
+   la descripción y había que leer las dos para saber qué era la tarjeta. */
+.tar-card .tc-nombre{font-size:15.5px;font-weight:750;line-height:1.28;letter-spacing:-.15px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .tar-card .tc-destino{font-size:11px;color:var(--muted);margin-top:3px}
 .tc-resumen{list-style:none;margin:8px 0 0;padding:0;font-size:12.5px;color:var(--muted);line-height:1.5}
 .tc-resumen li{position:relative;padding-left:13px;margin-bottom:3px}
 .tc-resumen li::before{content:"•";position:absolute;left:0;color:var(--accent)}
 .tar-card .tc-resumen{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .tc-resumen-ficha{-webkit-line-clamp:unset;display:block;overflow:visible}
-.tar-card .tc-precio{font-size:13px;font-weight:700;color:var(--green);margin-top:10px}
+/* El precio es el dato que más se busca de un vistazo: sube de tamaño y se
+   separa del resto con una línea, en vez de ser un renglón verde más. */
+.tar-card .tc-precio{font-size:14.5px;font-weight:800;color:var(--green);line-height:1.35;padding-top:11px;border-top:1px solid var(--line)}
 .tar-card .tc-vigencia{font-size:11px;color:var(--amber);margin-top:3px}
+/* vigencia_texto es prosa cargada a mano ("Fecha de venta ... ; Fecha de
+   disfrute ...") y se comía 3 renglones corridos. vigenciaPartes() en app.js la
+   parte en sus dos mitades y acá se muestran como filas etiquetadas, con la
+   etiqueta de ancho fijo para que las fechas queden alineadas entre sí. */
+.tc-fechas{margin-top:8px;display:flex;flex-direction:column;gap:3px}
+.tc-fecha{display:flex;gap:8px;font-size:11px;line-height:1.4}
+.tcf-k{flex:0 0 52px;color:var(--muted2);font-weight:700;text-transform:uppercase;letter-spacing:.4px;font-size:9.5px;padding-top:1px}
+.tcf-v{flex:1;min-width:0;color:var(--amber)}
+/* Sin etiqueta (no se pudo partir el texto): ocupa todo el ancho y se recorta a
+   2 renglones en vez de empujar la tarjeta -- el texto completo está en la ficha. */
+.tc-fecha.tcf-crudo .tcf-v{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .tar-info-box{margin-top:18px}
 .tar-info-box summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--muted);padding:4px 0;list-style:none}
 .tar-info-box summary::-webkit-details-marker{display:none}
@@ -1453,6 +1503,23 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
   .mfs.open{transform:translateY(0)}
   .mfs .flt,.mfs .tar-search,.mfs .tar-f-check,.mfs .cot-f-fecha,.mfs .drp,.mfs #tar-f-precio,.mfs #cot-f-precio{flex:1 1 100%;width:100%}
   .mfs .tcount{flex-basis:100%;text-align:left;margin:2px 0 0}
+
+  /* Tarifario en móvil (2026-08-19). El buscador, el botón de filtros y el
+     selector de vista entran en UNA fila: antes el botón "Buscar y filtrar"
+     ocupaba una fila entera propia debajo de la caja de IA, y entre las dos se
+     comían ~120px antes de la primera tarjeta. El contador cae solo a su
+     renglón porque es lo único que no se toca. */
+  .tar-buscador{flex-wrap:wrap;gap:8px}
+  .tar-buscador .mfs-trigger{margin-bottom:0}
+  .tar-buscador .tcount{flex-basis:100%;order:9;margin:0;font-size:11px}
+  .tar-search input{font-size:16px}  /* <16px hace que iOS haga zoom al enfocar */
+  /* Una sola columna en teléfono: la foto es el punto de la tarjeta y a dos
+     columnas queda de ~110px, que no se ve. Dos columnas vuelven solas apenas
+     hay ancho (tablet chica) por el auto-fill de .tar-grid-sub. */
+  .tar-grid-sub{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+  .tc-media-wrap .tc-thumb,.tc-media-wrap .tc-thumb.tc-thumb-vacio{height:160px}
+  .tar-ia-box{padding:11px 12px}
+  .tar-ia-resultados .tar-grid-sub{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
   .mfs-done{display:block;width:100%;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
@@ -2645,22 +2712,34 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <button class="tar-admin-btn admin-only" id="tar-vigencias-btn" type="button" title="Revisar vigencias"><i class="fas fa-calendar-check"></i></button>
         <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
       </div>
-      <!-- Buscador IA: reemplaza la sección suelta "Buscar Tarifario". El
-           #tar-search de abajo sigue siendo filtro de texto sobre lo que ya
-           está en pantalla; esto es una consulta en lenguaje natural que va a
-           la base entera. -->
-      <div class="tar-ia-box">
-        <div class="tar-ia-row">
-          <i class="fas fa-wand-magic-sparkles"></i>
-          <input id="tar-ia-input" type="text" autocomplete="off" placeholder="Preguntá en tus palabras: &quot;playa para una pareja en diciembre&quot;">
-          <button class="btn-sm" id="tar-ia-btn" type="button">Buscar</button>
+      <!-- Un solo buscador (2026-08-19). Antes eran DOS cajas apiladas: la de IA
+           acá arriba y #tar-search adentro de la barra de filtros -- juntas se
+           comían ~120px en móvil antes de la primera tarjeta, y no quedaba claro
+           cuál usar. Ahora es un campo único con dos acciones: tipear filtra al
+           instante lo que ya está en pantalla (lo de siempre), y el botón de
+           varita o Enter manda ESA MISMA frase a la IA, que consulta la base
+           entera. La IA nunca se dispara sola -- cada consulta es una llamada a
+           la Edge Function, así que la tiene que pedir el asesor. -->
+      <div class="tar-buscador">
+        <div class="tar-search">
+          <i class="fas fa-search"></i>
+          <input id="tar-search" type="text" autocomplete="off" placeholder="Buscar por nombre o destino...">
+          <button class="tar-ia-go" id="tar-ia-btn" type="button" title="Preguntar a la IA (Enter)" aria-label="Preguntar a la IA"><i class="fas fa-wand-magic-sparkles"></i></button>
         </div>
-        <div class="tar-ia-estado" id="tar-ia-estado"></div>
+        <button class="mfs-trigger mfs-icon" id="tar-mfs-trigger" data-mfs="tar-toolbar" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
+        <div class="view-switch" id="tar-view-switch"></div>
+        <span class="tcount" id="tar-count"></span>
+      </div>
+      <div class="chips-bar" id="tar-chips"></div>
+      <div class="tar-ia-box" id="tar-ia-box" hidden>
+        <div class="tar-ia-head">
+          <div class="tar-ia-estado" id="tar-ia-estado"></div>
+          <div class="view-switch view-switch-sm" id="tar-ia-view-switch"></div>
+          <button class="tar-ia-cerrar" id="tar-ia-cerrar" type="button" aria-label="Cerrar resultados de la IA" title="Cerrar"><i class="fas fa-times"></i></button>
+        </div>
         <div class="tar-ia-resultados" id="tar-ia-resultados"></div>
       </div>
-      <button class="mfs-trigger" data-mfs="tar-toolbar" type="button"><i class="fas fa-sliders"></i> Buscar y filtrar</button>
       <div class="tar-toolbar mfs" id="tar-toolbar">
-        <div class="tar-search"><i class="fas fa-search"></i><input id="tar-search" placeholder="Buscar por nombre o destino..."></div>
         <select class="flt tar-f" id="tar-f-destino" data-tabs="hotel,promo,paquete,hotsale"><option value="">Todos los destinos</option></select>
         <select class="flt tar-f" id="tar-f-tipo" data-tabs="hotel,promo">
           <option value="">Cualquier plan</option>
@@ -2675,8 +2754,6 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <input class="flt tar-f" id="tar-f-precio" data-tabs="hotel,promo,destino,paquete" type="number" min="0" placeholder="Precio máx. USD">
         <label class="tar-f-check" id="tar-f-ninos-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-ninos"> Con niños gratis</label>
         <label class="tar-f-check" id="tar-f-vigente-wrap" data-tabs="hotel,promo,hotsale"><input type="checkbox" class="tar-f" id="tar-f-vigente" checked> Solo vigentes</label>
-        <div class="view-switch" id="tar-view-switch"></div>
-        <span class="tcount" id="tar-count"></span>
         <button class="mfs-done" data-mfs="tar-toolbar" type="button">Listo</button>
       </div>
       <div class="tbl-state skel-grid" id="tar-loading"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>
