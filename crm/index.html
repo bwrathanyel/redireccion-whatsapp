@@ -116,6 +116,10 @@ body::before{content:'';position:fixed;inset:0;background:
 .nav-item.active{background:var(--accent-soft);color:#ffd8a8;border-color:rgba(255,145,0,.22)}
 .nav-item.active i{color:var(--accent)}
 .nav-item .badge{margin-left:auto;background:var(--accent);color:#221200;font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px}
+.nav-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.nav-item.nav-freq{background:rgba(255,145,0,.05)}
+.nav-buscar{width:100%;box-sizing:border-box;margin:2px 0 6px;padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--txt);font-size:12.5px;font-family:inherit}
+.nav-buscar::placeholder{color:var(--muted2)}
 .side-foot{flex-shrink:0;padding:14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
 .side-foot-col{flex-direction:column;align-items:stretch}
 .side-foot-row{display:flex;align-items:center;gap:10px}
@@ -285,6 +289,11 @@ body.swipe-der .section.active{animation:sw-der .24s ease-out}
 .sheet-item i{width:22px;text-align:center;color:var(--accent);font-size:16px}
 .sheet-item .si-sub{display:block;font-size:11.5px;font-weight:500;color:var(--muted);margin-top:2px}
 .sheet-item .si-t{flex:1}
+.sheet-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.sheet-item.freq{background:rgba(255,145,0,.05);margin:0 -6px;padding:0 12px;border-radius:10px}
+.sheet-label{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:1.4px;padding:12px 6px 4px;font-weight:700}
+.sheet-buscar{width:100%;box-sizing:border-box;margin:0 0 8px;padding:9px 12px;border-radius:10px;border:1px solid var(--line2);background:var(--panel-solid);color:var(--txt);font-size:14px;font-family:inherit}
+.sheet-buscar::placeholder{color:var(--muted2)}
 
 /* ---------- Tour guiado (tutorial) ---------- */
 #tour-overlay{position:fixed;inset:0;z-index:95;display:none}
@@ -2355,39 +2364,9 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       </div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
-      <div class="nav-label" data-label="principal">Principal</div>
+      <input class="nav-buscar" id="nav-buscar" type="text" placeholder="Buscar sección..." autocomplete="off">
       <a class="nav-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="nav-boleteria-home" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
-      <a class="nav-item active nav-asesor-hide" data-sec="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</a>
-      <a class="nav-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales</a>
-      <a class="nav-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas <span class="badge" id="nav-tareas-count" style="display:none">0</span></a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes <span class="badge" id="nav-msg-count" style="display:none">—</span></a>
-      <a class="nav-item" data-sec="clientes-asignados"><i class="fas fa-user-clock"></i> Clientes Asignados</a>
-      <a class="nav-item" data-sec="mis-notas"><i class="fas fa-lightbulb"></i> Mis Notas <span class="badge" id="nav-notas-count" style="display:none">0</span></a>
-      <a class="nav-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="badge" id="nav-postventa-count" style="display:none">0</span></a>
-      <a class="nav-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
-      <a class="nav-item nav-boleteria-ok nav-modo-boleteria-ok solo-voucher" id="nav-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher <span class="badge" id="nav-voucher-count" style="display:none">0</span></a>
-      <a class="nav-item" data-sec="leads"><i class="fas fa-users"></i> Leads <span class="badge" id="nav-lead-count">—</span></a>
-      <a class="nav-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
-      <a class="nav-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
-      <a class="nav-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
-      <div class="nav-label" data-label="tarifario">Tarifario</div>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
-      <a class="nav-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
-      <a class="nav-item nav-admin-only" data-sec="cerebro-ia"><i class="fas fa-brain"></i> Cerebro IA</a>
-      <a class="nav-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA</a>
-      <a class="nav-item nav-admin-only" data-sec="consultor-ia"><i class="fas fa-user-tie"></i> Consultor IA</a>
-      <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="voz-ia"><i class="fas fa-microphone-lines"></i> Voz IA</a>
-      <a class="nav-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados</a>
-      <a class="nav-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
-      <div class="nav-label nav-admin-only" data-label="gestion">Gestión</div>
-      <a class="nav-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
-      <a class="nav-item nav-admin-only solo-informe-diario" id="nav-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
-      <div class="nav-label" data-label="ayuda">Ayuda</div>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
-      <a class="nav-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
-      <a class="nav-item nav-admin-only" data-sec="proyecto-constructor"><i class="fas fa-drafting-compass"></i> Proyecto Constructor</a>
+      <template id="nav-items-anchor"></template>
       <a class="nav-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="nav-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
     </nav>
     <div class="side-foot side-foot-col">
@@ -4344,28 +4323,8 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <button onclick="activarRecordatorios()">Activar</button>
     <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="Cerrar">&times;</button>
   </div>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="stop-sales"><i class="fas fa-ban"></i> Stop Sales <span class="si-sub">Disponibilidad de hoteles (BT Travel)</span></a>
-  <a class="sheet-item" data-sec="mis-notas"><i class="fas fa-lightbulb"></i> Mis Notas <span class="si-sub">Lo que te cuesta recordar, para repasar</span></a>
-  <a class="sheet-item nav-freelancer-only" data-sec="tareas"><i class="fas fa-list-check"></i> Tareas</a>
-  <a class="sheet-item nav-marketing-ok" data-sec="cotizador"><i class="fas fa-comments"></i> Cotizador IA</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="galeria"><i class="fas fa-images"></i> Galería</a>
-  <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="redes"><i class="fa-brands fa-instagram"></i> Redes</a>
-  <a class="sheet-item nav-admin-only" data-sec="rendimiento-ia"><i class="fas fa-chart-line"></i> Rendimiento IA <span class="si-sub">Ventas, calidad, errores y costos</span></a>
-  <a class="sheet-item nav-admin-only" data-sec="ia-atencion"><i class="fas fa-headset"></i> Prospectos de IA <span class="si-sub">Posadas que quieren el asistente</span></a>
-  <a class="sheet-item nav-admin-only" data-sec="consultor-ia"><i class="fas fa-user-tie"></i> Consultor IA <span class="si-sub">Preguntale sobre el proyecto, sin gastar Claude Code</span></a>
-  <a class="sheet-item nav-admin-only nav-marketing-ok" data-sec="voz-ia"><i class="fas fa-microphone-lines"></i> Voz IA <span class="si-sub">Probá la voz clonada y cambiá la muestra de referencia</span></a>
-  <a class="sheet-item nav-admin-only" data-sec="web-reasignados"><i class="fas fa-hand-holding-dollar"></i> Web y Reasignados <span class="si-sub">Los leads por los que cobrás comisión</span></a>
-  <a class="sheet-item" data-sec="pipeline"><i class="fas fa-diagram-project"></i> Pipeline</a>
-  <a class="sheet-item" data-sec="postventa"><i class="fas fa-handshake-angle"></i> Postventa <span class="si-sub">Cobros, reservas y seguimiento del viaje</span></a>
-  <a class="sheet-item nav-asesor-only" data-sec="mis-comisiones"><i class="fas fa-sack-dollar"></i> Mis Comisiones</a>
-  <a class="sheet-item nav-admin-only" data-sec="ranking"><i class="fas fa-ranking-star"></i> Ranking</a>
-  <a class="sheet-item nav-admin-only" data-sec="gestion-personal"><i class="fas fa-people-group"></i> Gestión de Personal</a>
-  <a class="sheet-item nav-admin-only" data-sec="facturacion"><i class="fas fa-file-invoice-dollar"></i> Facturación</a>
-  <a class="sheet-item nav-admin-only solo-informe-diario" data-sec="informe-diario"><i class="fas fa-file-lines"></i> Informe Diario</a>
-  <a class="sheet-item nav-boleteria-ok nav-modo-boleteria-ok solo-voucher" data-sec="voucher"><i class="fas fa-file-invoice"></i> Voucher</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="manual"><i class="fas fa-book-open-reader"></i> Manual del CRM</a>
-  <a class="sheet-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="actualizaciones"><i class="fas fa-bullhorn"></i> Actualizaciones</a>
-  <a class="sheet-item nav-admin-only" data-sec="proyecto-constructor"><i class="fas fa-drafting-compass"></i> Proyecto Constructor <span class="si-sub">Avance del CRM que se vende a otras empresas</span></a>
+  <input class="sheet-buscar" id="sheet-buscar" type="text" placeholder="Buscar sección..." autocomplete="off">
+  <template id="sheet-items-anchor"></template>
   <a class="sheet-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="sheet-boleteria-home" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
   <a class="sheet-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="sheet-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
   <a class="sheet-item" id="sheet-entrar-modo-boleteria"><i class="fas fa-plane-departure"></i> Boletería <span class="si-sub">Cambiar a modo Boletería</span></a>

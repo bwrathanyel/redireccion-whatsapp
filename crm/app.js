@@ -1996,7 +1996,7 @@ function arrancar(...pasos) {
 async function startApp() {
   if (booted) return; booted = true;
   arrancar(
-    aplicarOrdenSidebar, setupNav, renderBottomNav, setupSwipeSecciones, setupPullToRefresh, setupLongPressSeleccion,
+    renderNavItems, aplicarOrdenSidebar, renderFrecuentes, setupNav, renderBottomNav, setupSwipeSecciones, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa,
     setupHoy, setupConsultorIA, setupBoleteriaSeccion, setupMisNotas,
@@ -11955,6 +11955,180 @@ function setupMisNotas() {
   });
 }
 
+/* ---------- Menú: fuente única de datos (sidebar desktop + sheet "Yo" móvil) ----------
+   Antes cada superficie tenía su propia lista de <a> hardcodeada en el HTML,
+   duplicada y desincronizada entre sí. Ahora un solo NAV_ITEMS alimenta ambas.
+   `roles` preserva LITERAL las clases nav-admin-only/nav-marketing-ok/etc. que
+   ya filtraban por CSS -- ese sistema no cambia, solo cambia dónde vive cada
+   <a> en el DOM. */
+const NAV_ITEMS = [
+  { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', grupo: 'principal', roles: 'nav-asesor-hide', excludeSheet: true },
+  { sec: 'leads', icon: 'fas fa-users', label: 'Leads', grupo: 'principal', roles: '', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true, excludeSheet: true },
+  { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', grupo: 'principal', roles: '' },
+  { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', grupo: 'principal', roles: '' },
+  { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', grupo: 'principal', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', badge: 'nav-msg-count', badgeDefault: '—', excludeSheet: true },
+  { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', grupo: 'principal', roles: 'nav-freelancer-only', badge: 'nav-tareas-count', badgeDefault: '0' },
+  { sec: 'mis-notas', icon: 'fas fa-lightbulb', label: 'Mis Notas', grupo: 'principal', roles: '', badge: 'nav-notas-count', badgeDefault: '0', sub: 'Lo que te cuesta recordar, para repasar' },
+  { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', grupo: 'ventas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
+  { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Postventa', grupo: 'ventas', roles: '', badge: 'nav-postventa-count', badgeDefault: '0', sub: 'Cobros, reservas y seguimiento del viaje' },
+  { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', grupo: 'ventas', roles: 'nav-admin-only' },
+  { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', grupo: 'ventas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
+  { sec: 'mis-comisiones', icon: 'fas fa-sack-dollar', label: 'Mis Comisiones', grupo: 'ventas', roles: 'nav-asesor-only' },
+  { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', grupo: 'ventas', roles: 'nav-admin-only' },
+  { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', grupo: 'tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', excludeSheet: true },
+  { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', grupo: 'tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'cotizador', icon: 'fas fa-comments', label: 'Cotizador IA', grupo: 'ia', roles: 'nav-marketing-ok' },
+  { sec: 'cerebro-ia', icon: 'fas fa-brain', label: 'Cerebro IA', grupo: 'ia', roles: 'nav-admin-only' },
+  { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', grupo: 'ia', roles: 'nav-admin-only', sub: 'Posadas que quieren el asistente' },
+  { sec: 'consultor-ia', icon: 'fas fa-user-tie', label: 'Consultor IA', grupo: 'ia', roles: 'nav-admin-only', sub: 'Preguntale sobre el proyecto, sin gastar Claude Code' },
+  { sec: 'voz-ia', icon: 'fas fa-microphone-lines', label: 'Voz IA', grupo: 'ia', roles: 'nav-admin-only nav-marketing-ok', sub: 'Probá la voz clonada y cambiá la muestra de referencia' },
+  { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', grupo: 'ia', roles: 'nav-admin-only', sub: 'Ventas, calidad, errores y costos' },
+  { sec: 'web-reasignados', icon: 'fas fa-hand-holding-dollar', label: 'Web y Reasignados', grupo: 'marketing', roles: 'nav-admin-only', sub: 'Los leads por los que cobrás comisión' },
+  { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', grupo: 'marketing', roles: 'nav-admin-only nav-marketing-ok' },
+  { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', grupo: 'gestion', roles: 'nav-admin-only' },
+  { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', grupo: 'gestion', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
+  { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Manual del CRM', grupo: 'ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'actualizaciones', icon: 'fas fa-bullhorn', label: 'Actualizaciones', grupo: 'ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'proyecto-constructor', icon: 'fas fa-drafting-compass', label: 'Proyecto Constructor', grupo: 'ayuda', roles: 'nav-admin-only', sub: 'Avance del CRM que se vende a otras empresas' },
+];
+const NAV_GRUPOS = [
+  { id: 'principal', label: 'Principal' },
+  { id: 'ventas', label: 'Ventas y Postventa' },
+  { id: 'tarifario', label: 'Tarifario' },
+  { id: 'ia', label: 'Herramientas IA' },
+  { id: 'marketing', label: 'Marketing' },
+  { id: 'gestion', label: 'Gestión', roles: 'nav-admin-only' },
+  { id: 'ayuda', label: 'Ayuda' },
+];
+
+function renderNavItems() {
+  const htmlDesktop = it => {
+    const cls = ['nav-item', it.roles].filter(Boolean).join(' ');
+    const idAttr = it.id ? ` id="${it.id}"` : '';
+    const titleAttr = it.sub ? ` title="${esc(it.sub)}"` : '';
+    const badge = it.badge ? ` <span class="badge" id="${it.badge}"${it.badgeVisible ? '' : ' style="display:none"'}>${esc(it.badgeDefault || '0')}</span>` : '';
+    return `<a class="${cls}"${idAttr} data-sec="${it.sec}"${titleAttr}><i class="${it.icon}"></i> ${esc(it.label)}${badge}</a>`;
+  };
+  const htmlSheet = it => {
+    const cls = ['sheet-item', it.roles].filter(Boolean).join(' ');
+    const sub = it.sub ? `<span class="si-sub">${esc(it.sub)}</span>` : '';
+    return `<a class="${cls}" data-sec="${it.sec}"><i class="${it.icon}"></i> ${esc(it.label)}${sub}</a>`;
+  };
+
+  const ancoraDesktop = document.getElementById('nav-items-anchor');
+  if (ancoraDesktop) {
+    const bloque = NAV_GRUPOS.map(g => {
+      const items = NAV_ITEMS.filter(it => it.grupo === g.id);
+      if (!items.length) return '';
+      const labelCls = ['nav-label', g.roles].filter(Boolean).join(' ');
+      return `<div class="${labelCls}" data-label="${g.id}">${esc(g.label)}</div>` + items.map(htmlDesktop).join('');
+    }).join('');
+    ancoraDesktop.insertAdjacentHTML('beforebegin', bloque);
+  }
+
+  const ancoraSheet = document.getElementById('sheet-items-anchor');
+  if (ancoraSheet) {
+    const bloque = NAV_GRUPOS.map(g => {
+      const items = NAV_ITEMS.filter(it => it.grupo === g.id && !it.excludeSheet);
+      if (!items.length) return '';
+      const labelCls = ['sheet-label', g.roles].filter(Boolean).join(' ');
+      return `<div class="${labelCls}">${esc(g.label)}</div>` + items.map(htmlSheet).join('');
+    }).join('');
+    ancoraSheet.insertAdjacentHTML('beforebegin', bloque);
+  }
+}
+
+/* ---------- "Frecuentes": top de secciones más clickeadas ----------
+   MI_PREFERENCIAS.uso_secciones = {sec: count}, incrementado solo en clic real
+   (ver delegación de click en setupNav). Se calcula UNA vez al arrancar, no en
+   vivo, para que el menú no "salte" mientras el usuario navega. Los items se
+   MUEVEN (no se clonan) para no duplicar data-sec y romper el Map de
+   guardarOrdenSidebar/aplicarOrdenSidebar. Por eso Frecuentes no es
+   arrastrable: setupSidebarReorder/guardarOrdenSidebar excluyen .nav-freq. */
+const FRECUENTES_N = 6;
+const FRECUENTES_MIN_CLICS = 8;
+function calcularFrecuentes() {
+  const uso = MI_PREFERENCIAS.uso_secciones || {};
+  const total = Object.values(uso).reduce((a, b) => a + b, 0);
+  if (total < FRECUENTES_MIN_CLICS) return [];
+  return Object.entries(uso)
+    .filter(([sec]) => document.getElementById('sec-' + sec))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, FRECUENTES_N)
+    .map(([sec]) => sec);
+}
+function renderFrecuentes() {
+  const top = calcularFrecuentes();
+  [
+    { contId: 'sidebar-nav', itemCls: 'nav-freq', labelHtml: '<div class="nav-label" data-label="frecuentes" data-grupo-frec>Frecuentes</div>' },
+    { contId: 'more-sheet', itemCls: 'freq', labelHtml: '<div class="sheet-label" data-grupo-frec>Frecuentes</div>' },
+  ].forEach(({ contId, itemCls, labelHtml }) => {
+    const cont = document.getElementById(contId);
+    if (!cont) return;
+    cont.querySelector('[data-grupo-frec]')?.remove();
+    cont.querySelectorAll('.' + itemCls).forEach(n => n.classList.remove(itemCls));
+    if (!top.length) return;
+    const primerHijo = cont.querySelector('.nav-item, .nav-label, .sheet-item, .sheet-label');
+    if (!primerHijo) return;
+    primerHijo.insertAdjacentHTML('beforebegin', labelHtml);
+    const marcador = cont.querySelector('[data-grupo-frec]');
+    top.forEach(sec => {
+      const el = cont.querySelector(`[data-sec="${sec}"]`);
+      if (!el) return;
+      el.classList.add(itemCls);
+      marcador.after(el);
+    });
+  });
+}
+
+/* ---------- Guardado throttleado de preferencias de navegación ----------
+   guardarUltimaSeccion() y incrementarUsoSeccion() comparten este debounce de
+   3s para no pegarle a actualizar_mi_perfil en cada clic. */
+let _navPrefsTimer = null;
+function guardarPreferenciasNavDebounced() {
+  clearTimeout(_navPrefsTimer);
+  _navPrefsTimer = setTimeout(() => {
+    Promise.resolve(sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS })).catch(() => {});
+  }, 3000);
+}
+function incrementarUsoSeccion(sec) {
+  if (!sec) return;
+  const uso = { ...(MI_PREFERENCIAS.uso_secciones || {}) };
+  uso[sec] = (uso[sec] || 0) + 1;
+  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, uso_secciones: uso };
+  guardarPreferenciasNavDebounced();
+}
+
+/* ---------- Buscador/quick-jump del menú (sidebar + sheet "Yo") ----------
+   ~28 secciones entre ambas listas, filtra por texto y oculta headers de
+   grupo que quedan vacíos tras filtrar. */
+function setupNavBuscador() {
+  const wire = (inputId, contId, itemSel, labelSel) => {
+    const input = document.getElementById(inputId);
+    const cont = document.getElementById(contId);
+    if (!input || !cont) return;
+    let t = null;
+    input.addEventListener('input', () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        const q = input.value.trim().toLowerCase();
+        const items = [...cont.querySelectorAll(itemSel)];
+        items.forEach(it => { it.style.display = !q || it.textContent.toLowerCase().includes(q) ? '' : 'none'; });
+        cont.querySelectorAll(labelSel).forEach(label => {
+          let sib = label.nextElementSibling, tieneVisible = false;
+          while (sib && !sib.matches(labelSel)) {
+            if (sib.matches(itemSel) && sib.style.display !== 'none' && getComputedStyle(sib).display !== 'none') tieneVisible = true;
+            sib = sib.nextElementSibling;
+          }
+          label.style.display = q && !tieneVisible ? 'none' : '';
+        });
+      }, 150);
+    });
+  };
+  wire('nav-buscar', 'sidebar-nav', '.nav-item', '.nav-label');
+  wire('sheet-buscar', 'more-sheet', '.sheet-item', '.sheet-label');
+}
+
 function activateSection(sec, fromNav) {
   sec = SECCIONES_REUBICADAS[sec] || sec;
   if (!document.getElementById('sec-' + sec)) sec = 'hoy';
@@ -12004,7 +12178,15 @@ function activateSection(sec, fromNav) {
   setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
 function setupNav() {
-  document.querySelectorAll('.nav-item,.bn-item,.sheet-item').forEach(n => n.addEventListener('click', () => { if (n.dataset.sec) activateSection(n.dataset.sec); }));
+  // Delegado (no querySelectorAll+forEach puntual): NAV_ITEMS regenera los
+  // .nav-item/.sheet-item dinámicamente (renderNavItems/renderFrecuentes), un
+  // binding hecho una sola vez al boot no los cubriría.
+  document.addEventListener('click', e => {
+    const n = e.target.closest('.nav-item[data-sec], .bn-item[data-sec], .sheet-item[data-sec]');
+    if (!n) return;
+    incrementarUsoSeccion(n.dataset.sec);
+    activateSection(n.dataset.sec);
+  });
   document.getElementById('bn-more')?.addEventListener('click', () => openSheet('more-sheet'));
   document.getElementById('side-foot-perfil')?.addEventListener('click', () => openPerfilDrawer());
   document.getElementById('sheet-item-perfil')?.addEventListener('click', () => { closeSheet('more-sheet', true); openPerfilDrawer(); });
@@ -12013,6 +12195,7 @@ function setupNav() {
     b.classList.contains('mfs-trigger') ? openSheet(id) : closeSheet(id);
   }));
   setupSidebarReorder();
+  setupNavBuscador();
 }
 
 /* ---------- Barra de abajo (móvil): configurable + swipe ----------
@@ -12583,7 +12766,7 @@ function setupSidebarReorder() {
   const nav = document.getElementById('sidebar-nav');
   if (!nav) return;
   let dragEl = null;
-  nav.querySelectorAll(':scope > .nav-item').forEach(item => {
+  nav.querySelectorAll(':scope > .nav-item:not(.nav-freq)').forEach(item => {
     item.draggable = true;
     item.addEventListener('dragstart', () => { dragEl = item; item.classList.add('dragging'); });
     item.addEventListener('dragend', () => {
@@ -12603,7 +12786,7 @@ function setupSidebarReorder() {
   });
 }
 function guardarOrdenSidebar() {
-  const orden = [...document.querySelectorAll('#sidebar-nav > .nav-item, #sidebar-nav > .nav-label')]
+  const orden = [...document.querySelectorAll('#sidebar-nav > .nav-item:not(.nav-freq), #sidebar-nav > .nav-label:not([data-grupo-frec])')]
     .map(el => el.classList.contains('nav-label') ? 'label:' + el.dataset.label : 'sec:' + el.dataset.sec);
   if (JSON.stringify(orden) === JSON.stringify(MI_PREFERENCIAS.orden_sidebar || null)) return;
   MI_PREFERENCIAS = { ...MI_PREFERENCIAS, orden_sidebar: orden };
@@ -12638,12 +12821,7 @@ function aplicarOrdenSidebar() {
 function guardarUltimaSeccion(sec) {
   if (MI_PREFERENCIAS.ultima_seccion === sec) return;
   MI_PREFERENCIAS = { ...MI_PREFERENCIAS, ultima_seccion: sec };
-  // sb.rpc() devuelve un builder "thenable" de postgrest-js, no una Promise real:
-  // tiene .then() pero NO .catch(). Llamar .catch() directo tira
-  // "TypeError: sb.rpc(...).catch is not a function" y, al ocurrir dentro de
-  // startApp, cortaba la inicialización entera (sin KPIs ni gráficas).
-  // Promise.resolve() lo normaliza a Promise real antes de encadenar .catch().
-  Promise.resolve(sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS })).catch(() => {});
+  guardarPreferenciasNavDebounced();
 }
 
 /* ---------- Leads: sub-pestañas (Leads / Colaboraciones) ----------
