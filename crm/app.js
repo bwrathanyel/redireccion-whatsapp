@@ -12035,11 +12035,13 @@ function renderNavItems() {
   }
   // nav-admin-only/nav-asesor-only etc. ya filtran por CSS (.rol-asesor) --
   // estos dos casos necesitan el valor real del usuario (flag por persona,
-  // no por rol), así que se resuelven acá en JS, DESPUÉS de insertar el HTML
-  // de arriba: hacerlo antes (como vivía en entrarSegunRol) buscaba estas
-  // clases en un DOM que todavía no las tenía y no ocultaba nada.
-  document.querySelectorAll('.solo-informe-diario').forEach(el => el.style.display = MI_VE_INFORME_DIARIO ? '' : 'none');
-  document.querySelectorAll('.solo-voucher').forEach(el => el.style.display = (ROL === 'admin' || ROL === 'asesor') ? '' : 'none');
+  // no por rol), así que se resuelven con clases en <body> + CSS (ver
+  // index.html), nunca con style.display inline en el item: el buscador del
+  // menú limpia el style.display de cualquier item que matchea el texto
+  // tipeado, y eso reaparecía el link aunque el usuario no tuviera permiso
+  // (bug real, visto en vivo 2026-08-19).
+  document.body.classList.toggle('ve-informe-diario', MI_VE_INFORME_DIARIO);
+  document.body.classList.toggle('puede-ver-voucher', ROL === 'admin' || ROL === 'asesor');
 }
 
 /* ---------- "Frecuentes": top de secciones más clickeadas ----------

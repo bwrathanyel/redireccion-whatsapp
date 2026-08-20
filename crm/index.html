@@ -1356,6 +1356,18 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
    accede a la sección equivalente desde su propio nav-item, no desde acá. */
 .nav-item.nav-asesor-only,.bn-item.nav-asesor-only,.sheet-item.nav-asesor-only{display:none}
 .rol-asesor .nav-item.nav-asesor-only,.rol-asesor .bn-item.nav-asesor-only,.rol-asesor .sheet-item.nav-asesor-only{display:flex}
+/* solo-informe-diario / solo-voucher: a diferencia de los de arriba, no dependen
+   del rol sino de un flag por usuario (ve_informe_diario) o de una combinación
+   rol+modo (voucher). Se ocultan/muestran por clase en <body> (ve-informe-diario /
+   puede-ver-voucher, ver renderNavItems en app.js) y NO por style.display inline
+   -- el buscador del menú limpia el style.display de cualquier item que matchea
+   el texto, así que un display:none puesto a mano en JS se pierde apenas alguien
+   busca "informe" o "voucher" (bug real, visto en vivo 2026-08-19). Con esto en
+   CSS, la búsqueda no tiene forma de pisarlo. */
+.nav-item.solo-informe-diario,.bn-item.solo-informe-diario,.sheet-item.solo-informe-diario{display:none}
+.ve-informe-diario .nav-item.solo-informe-diario,.ve-informe-diario .bn-item.solo-informe-diario,.ve-informe-diario .sheet-item.solo-informe-diario{display:flex}
+.nav-item.solo-voucher,.bn-item.solo-voucher,.sheet-item.solo-voucher{display:none}
+.puede-ver-voucher .nav-item.solo-voucher,.puede-ver-voucher .bn-item.solo-voucher,.puede-ver-voucher .sheet-item.solo-voucher{display:flex}
 .nav-item.nav-freelancer-only,.sheet-item.nav-freelancer-only{display:none}
 .es-freelancer .nav-item.nav-freelancer-only,.es-freelancer .sheet-item.nav-freelancer-only{display:flex}
 
