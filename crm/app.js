@@ -119,6 +119,18 @@ function badgeLeadRescatado(l) {
   if (!l.es_lead_rescatado) return '';
   return ` <span class="badge-st" style="color:#2dd4bf;background:#0f766e2e" title="Respondió al seguimiento final de la IA y compartió un teléfono válido"><i class="fas fa-life-ring"></i> Rescatado</span>`;
 }
+// Contacto directo (ver plan "ves-buena-idea-que-misty-wadler"): el lead pidió
+// el WhatsApp de su asesor en vez de dar el suyo -- sin teléfono a propósito,
+// no por un error. Sin este badge un "—" en la columna Teléfono se ve igual
+// que un dato faltante por fallo real.
+function badgeContactoDirecto(l) {
+  if (!l.contacto_directo_enviado_at) return '';
+  return ` <span class="badge-st" style="color:#a78bfa;background:#7c3aed2e" title="Se le entregó el WhatsApp del asesor -- sin teléfono propio hasta que la IA lo consiga"><i class="fas fa-share-square"></i> Contacto directo</span>`;
+}
+function textoTelefonoLead(l) {
+  if (l.telefono) return esc(l.telefono);
+  return l.contacto_directo_enviado_at ? 'Contacto directo (sin teléfono)' : 'Sin teléfono';
+}
 // Ciclo de flechitas prev/next en la ficha del lead -- excluye 'Sin gestionar'
 // (fallback legacy, no es un paso real del pipeline al que se quiera navegar).
 const ESTADOS_CICLO = ESTADOS.filter(e => e !== 'Sin gestionar');
@@ -2853,8 +2865,8 @@ async function loadTable() {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
       <td class="solo-admin-borrar"><input type="checkbox" class="lead-check" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''}></td>
-      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div></td>
-      <td data-label="Teléfono" class="muted">${esc(l.telefono) || '—'}${l.requiere_revision_telefono ? ' <i class="fas fa-flag" style="color:#ef4444" title="Número marcado para revisión"></i>' : ''}</td>
+      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div></td>
+      <td data-label="Teléfono" class="muted">${textoTelefonoLead(l)}${l.requiere_revision_telefono ? ' <i class="fas fa-flag" style="color:#ef4444" title="Número marcado para revisión"></i>' : ''}${l.telefono_colision_revision ? ' <i class="fas fa-triangle-exclamation" style="color:#f59e0b" title="Este teléfono coincide con otro lead abierto -- revisar antes de fusionar"></i>' : ''}</td>
       <td data-label="Destino">${esc(l.destino)}</td>
       <td data-label="Canal"><span class="chip ${cc}">${esc(l.canal)}</span></td>
       <td data-label="Asesor">${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</td>
@@ -3119,11 +3131,11 @@ function leadCardHtml(l) {
     <div class="ec-top">
       <div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="ec-headtext">
-        <div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div>
+        <div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div>
         <div class="ec-destino"><i class="fas fa-location-dot"></i> ${esc(l.destino) || 'Sin destino'}</div>
       </div>
     </div>
-    <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
+    <div class="ec-row"><i class="fas fa-phone"></i> ${textoTelefonoLead(l)}</div>
     <div class="ec-estado-row">
       ${sinAtenderDatos ? `<span class="badge-st sin-atender-movil" style="color:var(--accent);background:var(--accent-soft)">Sin atender</span>` : ''}
       <span class="estado-stepper" data-id="${l.id}">
@@ -3365,8 +3377,8 @@ function openDrawer(l) {
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="dhead-info"><div class="dn">${esc(l.nombre)}</div>
-      <div class="dm">${esc(l.telefono) || 'Sin teléfono'} · ${esc(l.canal)}</div>
-      <span class="badge-st" style="color:${estColor};background:${estColor}2e">${esc(niceEstado(l.estado))}</span>${badgeLeadRescatado(l)}</div></div>
+      <div class="dm">${textoTelefonoLead(l)} · ${esc(l.canal)}</div>
+      <span class="badge-st" style="color:${estColor};background:${estColor}2e">${esc(niceEstado(l.estado))}</span>${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}</div></div>
 
     ${sinAtender ? `<button type="button" class="inbox-btn atender" id="e-a-atender" style="width:100%;margin-bottom:12px"><i class="fas fa-check"></i> Atender este lead</button>` : ''}
 
@@ -14004,6 +14016,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-20', emoji: '📲', titulo: 'Contacto directo: leads sin teléfono, a propósito', texto: 'Cuando un cliente le pide a la IA el WhatsApp del equipo en vez de dar el suyo, ahora se le entrega el número de un asesor asignado por la rueda de reparto de siempre, y el lead queda registrado en el CRM sin teléfono. Vas a verlo marcado con la etiqueta "Contacto directo" en la lista y en la ficha -- no es un dato faltante por error, es que el cliente todavía no dejó su número. Si la IA logra que lo deje más adelante, el lead se completa solo y te llega el aviso a Telegram.', roles: ROLES_TODOS },
   { fecha: '2026-08-19', emoji: '👥', titulo: 'Clientes Asignados para todo asesor', texto: 'Cualquier asesor comercial puede recibir ahora un lote de clientes asignados (antes era exclusivo del rol de práctica): editá sus datos, marcá si ya lo atendiste, dejá nota de qué te dijo y por qué no le interesó. En Gestión de Personal, "Estados a incluir" y "Destino" del panel de asignación ahora son etiquetas para tocar en vez de listas, y el plazo se elige como "24h/48h/72h/Sin límite" en vez de fecha exacta.', roles: ROLES_TODOS },
   { fecha: '2026-08-19', emoji: '💡', titulo: 'Mis Notas', texto: 'Sección nueva para guardar lo que se te complica recordar (objeciones, tarifas, condiciones de un destino). Lo que marqués como "me cuesta" vuelve a aparecer para repasar en intervalos cada vez más largos si vas acertando.', roles: ['asesor'] },
   { fecha: '2026-08-19', emoji: '📝', titulo: 'Informe diario con 4 preguntas', texto: 'Al finalizar la jornada ahora se responde "¿Cómo te fue?", "¿Qué aprendiste?", "¿Qué se te complicó?" y "Bloqueos" en vez de un solo texto libre. Lo que aprendiste se puede guardar directo en Mis Notas.', roles: ROLES_TODOS },
