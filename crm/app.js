@@ -2007,7 +2007,7 @@ async function startApp() {
   if (booted) return; booted = true;
   arrancar(
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, renderBottomNav, setupSwipeSecciones, setupPullToRefresh, setupLongPressSeleccion,
-    setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupRedes,
+    setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa,
     setupHoy, setupConsultorIA, setupBoleteriaSeccion, setupMisNotas,
   );
@@ -3360,7 +3360,7 @@ function actualizarBadgeLeads(pendientes) {
 function openDrawer(l) {
   currentLead = l;
   camposSuciosLead = new Set(); conflictoLeadPendiente = false;
-  CONV_CACHE = null; ACTIVIDAD_CACHE = null; // se recargan por lead, ver cargarConversacionLead/cargarActividadLead
+  CONV_CACHE = null; ACTIVIDAD_CACHE = null; CORREO_LEAD_CACHE = null; // se recargan por lead, ver cargarConversacionLead/cargarActividadLead/cargarCorreoLead
   const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
   const av = clientAvatar(l);
   const sinAtender = l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
@@ -3394,6 +3394,7 @@ function openDrawer(l) {
       <button type="button" class="lead-tab-btn active" data-tab="resumen">Ficha</button>
       <button type="button" class="lead-tab-btn" data-tab="notas">Notas</button>
       <button type="button" class="lead-tab-btn" data-tab="conversacion">Chat</button>
+      <button type="button" class="lead-tab-btn" data-tab="correo">Correo</button>
       <button type="button" class="lead-tab-btn" data-tab="actividad">Actividad</button>
     </div>
 
@@ -3454,6 +3455,10 @@ function openDrawer(l) {
       <div id="conv-body"><i class="fas fa-circle-notch fa-spin"></i> Cargando conversación...</div>
     </div>
 
+    <div class="lead-tab-panel" data-tab="correo">
+      <div id="correo-lead-body"><i class="fas fa-circle-notch fa-spin"></i> Cargando correo...</div>
+    </div>
+
     <div class="lead-tab-panel" data-tab="actividad">
       <div id="act-body"><i class="fas fa-circle-notch fa-spin"></i> Cargando actividad...</div>
     </div>`;
@@ -3482,6 +3487,7 @@ function openDrawer(l) {
     document.querySelectorAll('.lead-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.lead-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === btn.dataset.tab));
     if (btn.dataset.tab === 'conversacion') cargarConversacionLead(l);
+    if (btn.dataset.tab === 'correo') cargarCorreoLead(l);
     if (btn.dataset.tab === 'actividad') cargarActividadLead(l);
   }));
   document.getElementById('drawer').classList.add('open');
@@ -3530,7 +3536,17 @@ async function registrarCotizacionEnviada(l) {
    mobile-only -- ver .lead-tabs en el CSS). Carga perezosa: solo se pide al
    backend la primera vez que se toca cada pestaña (en desktop, sin tab bar
    visible, nunca se llega a llamar esto). ---------- */
-let CONV_CACHE = null, ACTIVIDAD_CACHE = null;
+let CONV_CACHE = null, ACTIVIDAD_CACHE = null, CORREO_LEAD_CACHE = null;
+async function cargarCorreoLead(l) {
+  const box = document.getElementById('correo-lead-body');
+  if (!box) return;
+  if (CORREO_LEAD_CACHE) { box.innerHTML = CORREO_LEAD_CACHE; return; }
+  const { data, error } = await sb.from('gmail_correos').select('id,direccion,de,para,asunto,snippet,enviado_en').eq('lead_id', l.id).order('enviado_en', { ascending: true });
+  if (error) { box.innerHTML = '<div class="muted">No se pudo cargar el correo de este lead</div>'; return; }
+  if (!data.length) { CORREO_LEAD_CACHE = '<div class="muted">Sin correos vinculados a este lead todavía</div>'; box.innerHTML = CORREO_LEAD_CACHE; return; }
+  CORREO_LEAD_CACHE = data.map(c => `<div class="conv-msg ${c.direccion === 'saliente' ? 'ia' : 'lead'}"><div class="conv-who">${c.direccion === 'entrante' ? esc(c.de) : 'Nosotros'} · ${esc(fmtFechaHoraCaracas(c.enviado_en))}</div><b>${esc(c.asunto || '(sin asunto)')}</b><div>${esc(c.snippet || '')}</div></div>`).join('');
+  box.innerHTML = CORREO_LEAD_CACHE;
+}
 async function cargarConversacionLead(l) {
   const box = document.getElementById('conv-body');
   if (!box) return;
@@ -6905,6 +6921,105 @@ document.getElementById('post-cv-input')?.addEventListener('change', e => {
   e.target.value = '';
   if (f) cargarCVPostulacion(f);
 });
+
+/* ---------- Correo (Gmail vinculado a leads) ----------
+   OAuth por asesor (cada uno conecta su propia cuenta) -- gmail_iniciar_conexion()
+   solo devuelve el token de "state" (uuid de un solo uso, 10 min), la URL de
+   consentimiento se arma acá con el client_id público de Google (no es secreto,
+   va en la URL del navegador). Ver plan en
+   C:\Users\Usuario\.claude\plans\en-el-crm-se-compressed-conway.md */
+const GMAIL_CLIENT_ID = '16841972131-bk0p99ds2ntktd9cdbhdf3cbcnp94rio.apps.googleusercontent.com';
+const GMAIL_REDIRECT_URI = 'https://begbjhrdbsqftbbleecb.supabase.co/functions/v1/gmail-oauth-callback';
+const GMAIL_SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send';
+
+function setupCorreo() {
+  // Solo conecta el botón acá -- el estado y la bandeja se cargan recién
+  // cuando se activa la sección (ver activateSection), mismo patrón perezoso
+  // que el resto de las secciones (redes, mensajes, tarifario...): no tiene
+  // sentido gastar un round-trip a Supabase en cada login para quien nunca
+  // abre Correo.
+  document.getElementById('correo-banner-btn').onclick = conectarGmail;
+  // conectarGmail() abre el consentimiento de Google en pestaña nueva; al
+  // volver a esta pestaña (visibilitychange) se refresca el estado en vez de
+  // pedirle al asesor que recargue a mano.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && document.getElementById('sec-correo')?.classList.contains('active')) refrescarEstadoGmail();
+  });
+}
+function cargarCorreoSeccion() { refrescarEstadoGmail(); cargarBandejaCorreo(); }
+
+async function refrescarEstadoGmail() {
+  const banner = document.getElementById('correo-banner');
+  const txt = document.getElementById('correo-banner-txt');
+  const btn = document.getElementById('correo-banner-btn');
+  const badge = document.getElementById('correo-estado-badge');
+  const { data, error } = await sb.rpc('gmail_estado_conexion');
+  const estado = Array.isArray(data) ? data[0] : data;
+  if (error || !estado) { txt.textContent = 'No se pudo consultar el estado de Gmail.'; return; }
+
+  if (!estado.conectado) {
+    banner.style.display = 'flex';
+    banner.style.background = ''; banner.style.borderColor = '';
+    txt.textContent = 'Conectá tu Gmail para ver y enviar correo desde el CRM.';
+    btn.textContent = 'Conectar Gmail';
+    btn.style.display = '';
+    badge.style.display = 'none';
+    return;
+  }
+  if (estado.revocado) {
+    banner.style.display = 'flex';
+    banner.style.background = 'rgba(239,68,68,.1)';
+    banner.style.borderColor = 'rgba(239,68,68,.35)';
+    txt.textContent = `${estado.email_conectado} se desconectó — reautorizá el acceso, dejaste de recibir correo nuevo.`;
+    btn.textContent = 'Reconectar Gmail';
+    btn.style.display = '';
+    badge.style.display = 'none';
+    return;
+  }
+  banner.style.display = 'none';
+  badge.style.display = '';
+  badge.style.color = 'var(--green)'; badge.style.background = 'rgba(16,185,129,.18)';
+  badge.textContent = `Conectado: ${estado.email_conectado}`;
+}
+
+async function conectarGmail() {
+  const { data: state, error } = await sb.rpc('gmail_iniciar_conexion');
+  if (error || !state) { errToast('No fue posible iniciar la conexión con Gmail'); return; }
+  const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  url.searchParams.set('client_id', GMAIL_CLIENT_ID);
+  url.searchParams.set('redirect_uri', GMAIL_REDIRECT_URI);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope', GMAIL_SCOPES);
+  url.searchParams.set('access_type', 'offline');
+  url.searchParams.set('prompt', 'consent');
+  url.searchParams.set('state', state);
+  window.open(url.toString(), '_blank');
+}
+
+window.abrirLeadPorId = async (leadId) => {
+  const { data: l, error } = await sb.from('leads').select('*').eq('id', leadId).single();
+  if (error || !l) { errToast('No se pudo cargar ese lead'); return; }
+  openDrawer(l);
+};
+
+async function cargarBandejaCorreo() {
+  const box = document.getElementById('correo-lista');
+  // RLS de gmail_correos ya filtra por dueño o admin -- no hace falta repetir
+  // el filtro acá (ver policy gmail_correos_select_propio_o_admin).
+  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,direccion,de,para,asunto,snippet,enviado_en').order('enviado_en', { ascending: false }).limit(50);
+  if (error) { box.innerHTML = '<div class="muted">No se pudo cargar la bandeja</div>'; return; }
+  if (!data.length) { box.innerHTML = '<div class="muted">Todavía no hay correos sincronizados.</div>'; return; }
+  box.innerHTML = data.map(c => `
+    <div class="act-row" style="align-items:flex-start">
+      <div class="act-txt">
+        <b>${esc(c.asunto || '(sin asunto)')}</b><br>
+        <span class="muted" style="font-size:11px">${esc(c.direccion === 'entrante' ? c.de : (c.para || []).join(', '))}</span><br>
+        <span style="font-size:11.5px">${esc(c.snippet || '')}</span>
+        ${c.lead_id ? `<div style="margin-top:4px"><a href="#" onclick="abrirLeadPorId(${c.lead_id});return false" style="font-size:10.5px;color:var(--accent)"><i class="fas fa-user"></i> Lead #${c.lead_id}</a></div>` : '<div style="margin-top:4px;font-size:10.5px" class="muted">Sin vincular</div>'}
+      </div>
+      <div class="act-hora">${esc(fmtFechaHoraCaracas(c.enviado_en))}</div>
+    </div>`).join('');
+}
 
 /* ---------- Redes (Instagram + TikTok) ---------- */
 let redesPeriodo = '30d', redesRed = 'instagram', redesChatHistory = [];
@@ -12101,6 +12216,7 @@ const NAV_ITEMS = [
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', grupo: 'principal', roles: '' },
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', grupo: 'principal', roles: 'nav-asesor-only' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', grupo: 'principal', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', badge: 'nav-msg-count', badgeDefault: '—', excludeSheet: true },
+  { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', grupo: 'principal', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads' },
   { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', grupo: 'principal', roles: 'nav-freelancer-only', badge: 'nav-tareas-count', badgeDefault: '0' },
   { sec: 'mis-notas', icon: 'fas fa-lightbulb', label: 'Mis Notas', grupo: 'principal', roles: '', badge: 'nav-notas-count', badgeDefault: '0', sub: 'Lo que te cuesta recordar, para repasar' },
   { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', grupo: 'ventas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
@@ -12330,6 +12446,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'mis-notas') loadMisNotas();
   if (sec === 'tarifario') loadTarifario();
   if (sec === 'mensajes') cargarBandeja();
+  if (sec === 'correo') cargarCorreoSeccion();
   if (sec === 'galeria') loadGaleria();
   if (sec === 'cerebro-ia') loadCerebroIA();
   if (sec === 'rendimiento-ia') loadRendimientoIA();
