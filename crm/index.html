@@ -422,14 +422,35 @@ body.swipe-der .section.active{animation:sw-der .24s ease-out}
 .arow .op{font-size:11.5px;color:var(--muted);margin-top:4px}
 .arow .destchips{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
 .arow .destchip{font-size:10.5px;padding:2px 7px;border-radius:20px;background:rgba(255,255,255,.05);color:var(--muted)}
-.peso-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)}
-.peso-row:last-child{border-bottom:none}
-.peso-row .pn{flex:1;font-size:12.5px;font-weight:600}
-.peso-row input{width:64px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#fff;padding:5px 8px;font-size:12.5px;text-align:right}
-.peso-row input:focus{outline:none;border-color:var(--accent)}
-.peso-row button{background:transparent;border:none;color:var(--muted2);cursor:pointer;font-size:13px;padding:5px;transition:color .15s}
-.peso-row button:hover{color:var(--green)}
-.peso-row button:disabled{opacity:.4;cursor:default}
+.rep-total{margin-left:8px;font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(255,255,255,.06);color:var(--muted);vertical-align:middle}
+.rep-total.ok{background:color-mix(in srgb, var(--green) 20%, transparent);color:var(--green)}
+.rep-total.bad{background:color-mix(in srgb, #ef4444 20%, transparent);color:#ef4444}
+.rep-bar{display:flex;height:14px;border-radius:8px;overflow:hidden;margin:12px 0 14px;background:rgba(255,255,255,.05)}
+.rep-bar span{transition:flex-grow .18s ease;min-width:2px}
+.rep-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.rep-row:last-child{border-bottom:none}
+.rep-row .rep-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.rep-row .rep-nombre{width:120px;flex-shrink:0;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-row input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer}
+.rep-row input[type=range]:disabled{opacity:.35;cursor:default}
+.rep-row .rep-num{width:56px;flex-shrink:0;display:flex;align-items:center;gap:2px}
+.rep-row .rep-num input{width:44px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#fff;padding:5px 6px;font-size:12.5px;text-align:right}
+.rep-row .rep-num input:focus{outline:none;border-color:var(--accent)}
+.rep-row .rep-num input:disabled{opacity:.5}
+.rep-row .rep-pct{font-size:11.5px;color:var(--muted)}
+.rep-row button{background:transparent;border:none;color:var(--muted2);cursor:pointer;font-size:13px;padding:6px;transition:color .15s;flex-shrink:0}
+.rep-row button:hover{color:var(--accent)}
+.rep-row button.on{color:var(--accent)}
+.rep-row button.rep-quitar:hover{color:#ef4444}
+.rep-row button:disabled{opacity:.3;cursor:default}
+.rep-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap}
+.rep-actions select{background:var(--panel-solid);border:1px solid var(--line2);border-radius:8px;color:var(--txt);padding:7px 10px;font-size:12px;font-family:inherit}
+.rep-actions-save{display:flex;gap:8px}
+.btn-sec{background:transparent;border:1px solid var(--line2);border-radius:8px;padding:7px 13px;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit}
+.btn-sec:hover{color:var(--txt);border-color:var(--muted)}
+.btn-acc{background:var(--accent);border:none;border-radius:8px;padding:7px 13px;font-size:11.5px;font-weight:700;color:#1a1000;cursor:pointer;font-family:inherit}
+.btn-acc:hover{filter:brightness(1.08)}
+.btn-acc:disabled{opacity:.5;cursor:default}
 .dc-row{display:flex;align-items:center;gap:10px;padding:6px 0}
 .dc-row .dn{width:120px;font-size:12px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dc-row .track{flex:1;height:6px;background:rgba(255,255,255,.05);border-radius:10px;overflow:hidden}
@@ -775,6 +796,18 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .seg-group-sm{margin-bottom:0;padding:3px}
 .seg-group-sm .seg{padding:5px 10px;font-size:11px}
 @media(max-width:760px){.seg-group-sm{width:100%;justify-content:stretch}.seg-group-sm .seg{flex:1;padding:6px 4px}}
+@media(max-width:760px){
+  .rep-row{flex-wrap:wrap;padding:10px 0}
+  .rep-row .rep-nombre{width:auto;flex:1}
+  .rep-row .rep-actions-row{display:flex;align-items:center;gap:2px;flex-shrink:0}
+  .rep-row input[type=range]{flex:1 1 100%;order:4;height:32px}
+  .rep-row .rep-num input{width:52px;padding:8px 6px}
+  .rep-row button{min-width:44px;min-height:44px}
+  .rep-actions{flex-direction:column;align-items:stretch}
+  .rep-actions select{width:100%}
+  .rep-actions-save{width:100%}
+  .rep-actions-save button{flex:1;min-height:44px}
+}
 .tfoot-sum td{font-weight:700;color:var(--txt);border-top:2px solid var(--line2);padding-top:10px}
 .th-sort{cursor:pointer;user-select:none;white-space:nowrap}
 .th-sort:hover{color:var(--txt)}
@@ -1475,7 +1508,7 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
   .btn-sm,.ce-mini,.drp-presets button,.jornada-btn,.tfa-btn{min-height:44px;padding:11px 14px;font-size:13px}
   .fact-btn,.refresh-btn,.pc-edit,.rb-close,.pf-cerrar{width:44px;height:44px}
   .estado-arrow{min-width:44px;min-height:44px;padding:8px}
-  .peso-row button,.pc-cargo-edit{min-height:44px;min-width:44px}
+  .pc-cargo-edit{min-height:44px;min-width:44px}
   .tar-info-box summary{padding:12px 0}
   /* Fase 6 -- feedback táctil consistente. Ya había 7 selectores sueltos
      con :active{transform:scale(...)} en distintos valores (.96/.97/.98,
@@ -2918,7 +2951,23 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         </div>
         <div class="grid g-2b">
           <div class="card"><h2><i class="fas fa-user-tie"></i> Carga por asesor</h2><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
-          <div class="card"><h2><i class="fas fa-scale-balanced"></i> Reparto objetivo</h2><div class="csub">Ponderación del aleatorizador -- editable abajo</div><div class="chart-wrap" style="height:200px"><canvas id="chAssign"></canvas></div><div id="pesoEditable" style="margin-top:12px"></div></div>
+          <div class="card">
+            <h2><i class="fas fa-scale-balanced"></i> Reparto objetivo <span class="rep-total" id="repTotal">100%</span></h2>
+            <div class="csub">Cómo se sortean los leads nuevos entre asesores</div>
+            <div class="seg-group seg-group-sm" id="repPool">
+              <button class="seg on" data-pool="domestico">Nacional</button>
+              <button class="seg" data-pool="internacional">Internacional</button>
+            </div>
+            <div class="rep-bar" id="repBar"></div>
+            <div id="repRows"></div>
+            <div class="rep-actions">
+              <select id="repAgregar"><option value="">+ Añadir asesor…</option></select>
+              <div class="rep-actions-save" id="repGuardarWrap" style="display:none">
+                <button type="button" class="btn-sec" id="repDescartar">Descartar</button>
+                <button type="button" class="btn-acc" id="repGuardar">Guardar</button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="card" style="margin-top:16px">
           <h2><i class="fas fa-gauge-high"></i> Rendimiento y tasa de respuesta</h2>

@@ -1107,6 +1107,7 @@ const fmtFechaSolo = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m
 let gpTab = 'personal';
 function setupGestionPersonal() {
   document.querySelectorAll('#gp-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
+    if (gpTab === 'asesores' && btn.dataset.gpTab !== 'asesores' && (repartoDirty.domestico || repartoDirty.internacional) && !confirm('Hay cambios sin guardar en el reparto. ¿Salir de todas formas?')) return;
     gpTab = btn.dataset.gpTab;
     document.querySelectorAll('#gp-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
     document.querySelectorAll('.gp-tab-panel').forEach(p => p.style.display = p.dataset.gpPanel === gpTab ? '' : 'none');
@@ -1116,6 +1117,7 @@ function setupGestionPersonal() {
   document.getElementById('gp-personal-nuevo')?.addEventListener('click', () => abrirAltaPersona(false));
   setupKPIsPersonal();
   setupAsesoresPrueba();
+  setupReparto();
 }
 function cargarTabGestionPersonal(tab) {
   if (tab === 'personal') { loadPersonalTiempo(false); loadAsistenciaExtras(); }
@@ -2057,7 +2059,7 @@ async function startApp() {
     subscribeRealtime,
   );
 }
-async function renderAll() { renderKPIs(); renderPipe('pipe'); renderPipe('pipe2'); renderAdvisors(); await ensureChart(); renderTrend(); renderCanal(); renderAssign(); }
+async function renderAll() { renderKPIs(); renderPipe('pipe'); renderPipe('pipe2'); renderAdvisors(); await ensureChart(); renderTrend(); renderCanal(); }
 
 async function loadStats() {
   const { data, error } = await sb.rpc('dashboard_stats');
@@ -2218,10 +2220,6 @@ async function cargarConversionDestino(desde, hasta) {
     const c = colorPctConversion(v.pct);
     return `<div class="dc-row"><span class="dn" title="${esc(destino)}">${esc(destino)}</span><div class="track"><div class="fill" style="width:${Math.min(v.pct, 100)}%;background:${c}"></div></div><span class="dv">${v.pct}%</span></div>`;
   }).join('');
-}
-function renderAssign() {
-  const e = Object.entries(STATS.asignacion_objetivo || {}).sort((a, b) => b[1] - a[1]);
-  mk('chAssign', { type: 'bar', data: { labels: e.map(x => x[0].split(' ')[0]), datasets: [{ data: e.map(x => x[1]), backgroundColor: ADV_COLORS, borderRadius: 7, barThickness: 30 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.raw + '% de los leads' } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { callback: v => v + '%' }, beginAtZero: true } } } });
 }
 function renderPipe(id) {
   const be = STATS.by_estado || {}; const shown = ESTADOS.filter(k => (be[k] || 0) > 0 || ['POR ATENDER', 'PAGO REALIZADO'].includes(k));
@@ -2461,6 +2459,7 @@ async function renderAsesorLeads(panel, nombre) {
 let asePeriodo = 'semana';
 function setupAsesoresPeriodo() {
   document.querySelectorAll('#ase-periodo .seg').forEach(b => b.onclick = () => {
+    if ((repartoDirty.domestico || repartoDirty.internacional) && !confirm('Hay cambios sin guardar en el reparto. ¿Cambiar de periodo de todas formas?')) return;
     document.querySelectorAll('#ase-periodo .seg').forEach(x => x.classList.remove('on'));
     b.classList.add('on'); asePeriodo = b.dataset.p; loadAsesoresPeriodo();
   });
@@ -2474,7 +2473,7 @@ async function loadAsesoresPeriodo() {
     else renderAdvisors(data || {});
   }
   cargarRendimientoAsesores();
-  cargarPesoEditable();
+  cargarReparto();
 }
 
 /* ---------- Rendimiento por asesor: % perdido por timeout + opinión calculada ---------- */
@@ -2520,45 +2519,171 @@ function renderRendimiento(datos) {
   }).join('');
 }
 
-/* ---------- Edición manual de peso_asignacion/peso_internacional ---------- */
-// Sin autoajuste entre asesores -- pedido explícito del dueño: cada peso es
-// independiente, no tiene que sumar 100.
-let pesoAsesoresCache = [];
-async function cargarPesoEditable() {
-  const box = document.getElementById('pesoEditable');
+/* ---------- Reparto objetivo: editor de pesos que siempre suma 100% ----------
+   Dos pools independientes (domestico/internacional), auto-balance en vivo
+   (mover una barra reajusta proporcionalmente al resto, salvo los fijados con
+   candado), y guardado atómico vía admin_guardar_reparto -- reemplazó al
+   guardado de a uno (admin_actualizar_peso_asesor) porque no garantizaba que
+   la suma diera 100 ni reseteaba el estado del round-robin. */
+let repartoPool = 'domestico';
+let repartoAsesores = []; // todos los activos: {nombre, peso_asignacion, peso_internacional}
+let repartoDraft = { domestico: [], internacional: [] }; // [{nombre, peso, fijo}]
+let repartoDirty = { domestico: false, internacional: false };
+
+function draftDesdeAsesores(pool) {
+  const col = pool === 'domestico' ? 'peso_asignacion' : 'peso_internacional';
+  return repartoAsesores.filter(a => a[col] !== null).map(a => ({ nombre: a.nombre, peso: Number(a[col]), fijo: false }));
+}
+async function cargarReparto() {
+  const box = document.getElementById('repRows');
   if (!box) return;
   const { data, error } = await sb.from('asesores').select('nombre,peso_asignacion,peso_internacional').eq('activo', true).order('nombre');
   if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar</div>'; return; }
-  pesoAsesoresCache = data || [];
-  renderPesoEditable();
+  repartoAsesores = data || [];
+  repartoDraft.domestico = draftDesdeAsesores('domestico');
+  repartoDraft.internacional = draftDesdeAsesores('internacional');
+  repartoDirty.domestico = false; repartoDirty.internacional = false;
+  renderReparto();
 }
-function pesoRowHtml(nombre, pool, valor) {
-  return `<div class="peso-row" data-nombre="${esc(nombre)}" data-pool="${pool}"><span class="pn">${esc(nombre)}${pool === 'internacional' ? ' (intl)' : ''}</span><input type="number" min="0" step="1" value="${valor}"><button type="button" data-guardar-peso title="Guardar"><i class="fas fa-floppy-disk"></i></button></div>`;
+function repartoSuma(pool) { return repartoDraft[pool].reduce((s, a) => s + a.peso, 0); }
+
+// Auto-balance: clampea el valor editado al espacio libre (100 - fijados) y
+// reparte el resto proporcionalmente entre los no fijados distintos del
+// editado, redondeando por mayor residuo para que la suma quede exacta en 100.
+function rebalancear(pool, indice, nuevoValor) {
+  const filas = repartoDraft[pool];
+  const fila = filas[indice];
+  const sumaFijos = filas.reduce((s, a, i) => s + (i !== indice && a.fijo ? a.peso : 0), 0);
+  const libre = Math.max(0, 100 - sumaFijos);
+  const valor = Math.max(0, Math.min(nuevoValor, libre));
+  const ajustables = filas.map((a, i) => i).filter(i => i !== indice && !filas[i].fijo);
+  const restante = libre - valor;
+
+  if (!ajustables.length) { fila.peso = libre; return; }
+
+  const sumaAjustablesActual = ajustables.reduce((s, i) => s + filas[i].peso, 0);
+  const brutos = ajustables.map(i => {
+    const proporcion = sumaAjustablesActual > 0 ? filas[i].peso / sumaAjustablesActual : 1 / ajustables.length;
+    return { i, exacto: restante * proporcion };
+  });
+  let asignado = 0;
+  brutos.forEach(b => { const piso = Math.floor(b.exacto); filas[b.i].peso = piso; asignado += piso; });
+  let sobrante = restante - asignado;
+  brutos.sort((a, b) => (b.exacto - Math.floor(b.exacto)) - (a.exacto - Math.floor(a.exacto)));
+  for (const b of brutos) { if (sobrante <= 0) break; filas[b.i].peso += 1; sobrante--; }
+  fila.peso = valor;
 }
-function renderPesoEditable() {
-  const box = document.getElementById('pesoEditable');
-  if (!box) return;
-  box.innerHTML = pesoAsesoresCache.map(a => {
-    const filas = [];
-    if (a.peso_asignacion !== null) filas.push(pesoRowHtml(a.nombre, 'domestico', a.peso_asignacion));
-    if (a.peso_internacional !== null) filas.push(pesoRowHtml(a.nombre, 'internacional', a.peso_internacional));
-    return filas.join('');
-  }).join('') || '<div class="muted" style="font-size:12.5px">Sin asesores activos</div>';
-  box.querySelectorAll('[data-guardar-peso]').forEach(btn => btn.onclick = () => {
-    const row = btn.closest('.peso-row');
-    guardarPesoAsesor(row.dataset.nombre, row.dataset.pool, row.querySelector('input').value, btn);
+function repartoQuitar(pool, indice) {
+  const filas = repartoDraft[pool];
+  if (filas.length <= 1) { errToast('Un reparto no puede quedar vacío'); return; }
+  const liberado = filas[indice].peso;
+  filas.splice(indice, 1);
+  const destino = filas.findIndex(a => !a.fijo);
+  if (liberado > 0 && destino !== -1) rebalancear(pool, destino, filas[destino].peso + liberado);
+  repartoDirty[pool] = true;
+  renderReparto();
+}
+function repartoAgregar(pool, nombre) {
+  const filas = repartoDraft[pool];
+  if (!filas.length) { filas.push({ nombre, peso: 100, fijo: false }); }
+  else { filas.push({ nombre, peso: 0, fijo: false }); }
+  repartoDirty[pool] = true;
+  renderReparto();
+}
+function repartoBarHtml(pool) {
+  const filas = repartoDraft[pool];
+  return filas.map((a, i) => `<span style="flex-grow:${Math.max(a.peso, 0.01)};background:${ADV_COLORS[i % ADV_COLORS.length]}" title="${esc(a.nombre)}: ${a.peso}%"></span>`).join('');
+}
+function repartoRowHtml(pool, a, i) {
+  const c = ADV_COLORS[i % ADV_COLORS.length];
+  return `<div class="rep-row" data-i="${i}">
+    <span class="rep-dot" style="background:${c}"></span>
+    <span class="rep-nombre" title="${esc(a.nombre)}">${esc(a.nombre)}</span>
+    <input type="range" min="0" max="100" step="1" value="${a.peso}" ${a.fijo ? 'disabled' : ''} data-rep-slider>
+    <div class="rep-actions-row">
+      <span class="rep-num"><input type="number" min="0" max="100" step="1" value="${a.peso}" ${a.fijo ? 'disabled' : ''} data-rep-num><span class="rep-pct">%</span></span>
+      <button type="button" class="${a.fijo ? 'on' : ''}" data-rep-fijo title="${a.fijo ? 'Desbloquear' : 'Fijar (no se mueve al reajustar)'}"><i class="fas fa-${a.fijo ? 'lock' : 'lock-open'}"></i></button>
+      <button type="button" class="rep-quitar" data-rep-quitar title="Quitar del reparto"><i class="fas fa-xmark"></i></button>
+    </div>
+  </div>`;
+}
+function renderReparto() {
+  const rowsBox = document.getElementById('repRows');
+  const barBox = document.getElementById('repBar');
+  const totalChip = document.getElementById('repTotal');
+  const saveWrap = document.getElementById('repGuardarWrap');
+  const selectAgregar = document.getElementById('repAgregar');
+  if (!rowsBox) return;
+  const filas = repartoDraft[repartoPool];
+
+  rowsBox.innerHTML = filas.map((a, i) => repartoRowHtml(repartoPool, a, i)).join('') || '<div class="muted" style="font-size:12.5px">Sin asesores en este reparto</div>';
+  barBox.innerHTML = repartoBarHtml(repartoPool);
+  const total = repartoSuma(repartoPool);
+  totalChip.textContent = total + '%';
+  totalChip.className = 'rep-total ' + (total === 100 ? 'ok' : 'bad');
+  saveWrap.style.display = repartoDirty[repartoPool] ? 'flex' : 'none';
+
+  const col = repartoPool === 'domestico' ? 'peso_asignacion' : 'peso_internacional';
+  const enPool = new Set(filas.map(f => f.nombre));
+  const disponibles = repartoAsesores.filter(x => x[col] === null && !enPool.has(x.nombre));
+  selectAgregar.innerHTML = '<option value="">+ Añadir asesor…</option>' + disponibles.map(x => `<option value="${esc(x.nombre)}">${esc(x.nombre)}</option>`).join('');
+
+  rowsBox.querySelectorAll('[data-rep-slider]').forEach(el => el.oninput = () => {
+    const i = Number(el.closest('.rep-row').dataset.i);
+    rebalancear(repartoPool, i, Number(el.value));
+    repartoDirty[repartoPool] = true;
+    renderReparto();
+  });
+  rowsBox.querySelectorAll('[data-rep-num]').forEach(el => el.onchange = () => {
+    const i = Number(el.closest('.rep-row').dataset.i);
+    rebalancear(repartoPool, i, Number(el.value) || 0);
+    repartoDirty[repartoPool] = true;
+    renderReparto();
+  });
+  rowsBox.querySelectorAll('[data-rep-fijo]').forEach(el => el.onclick = () => {
+    const i = Number(el.closest('.rep-row').dataset.i);
+    repartoDraft[repartoPool][i].fijo = !repartoDraft[repartoPool][i].fijo;
+    renderReparto();
+  });
+  rowsBox.querySelectorAll('[data-rep-quitar]').forEach(el => el.onclick = () => {
+    const i = Number(el.closest('.rep-row').dataset.i);
+    repartoQuitar(repartoPool, i);
   });
 }
-async function guardarPesoAsesor(nombre, pool, valor, btn) {
-  const n = Number(valor);
-  if (!Number.isFinite(n) || n < 0) { errToast('Peso inválido'); return; }
+function setupReparto() {
+  document.querySelectorAll('#repPool .seg').forEach(b => b.onclick = () => {
+    if (repartoPool === b.dataset.pool) return;
+    if (repartoDirty[repartoPool] && !confirm('Hay cambios sin guardar en este reparto. ¿Cambiar de pestaña de todas formas?')) return;
+    repartoPool = b.dataset.pool;
+    document.querySelectorAll('#repPool .seg').forEach(x => x.classList.toggle('on', x === b));
+    renderReparto();
+  });
+  document.getElementById('repAgregar')?.addEventListener('change', e => {
+    if (e.target.value) { repartoAgregar(repartoPool, e.target.value); e.target.value = ''; }
+  });
+  document.getElementById('repDescartar')?.addEventListener('click', () => {
+    repartoDraft[repartoPool] = draftDesdeAsesores(repartoPool);
+    repartoDirty[repartoPool] = false;
+    renderReparto();
+  });
+  document.getElementById('repGuardar')?.addEventListener('click', guardarReparto);
+}
+async function guardarReparto() {
+  const pool = repartoPool;
+  const total = repartoSuma(pool);
+  if (total !== 100) { errToast('El reparto tiene que sumar 100% (va en ' + total + '%)'); return; }
+  const btn = document.getElementById('repGuardar');
   btn.disabled = true;
-  const { data, error } = await sb.rpc('admin_actualizar_peso_asesor', { p_nombre: nombre, p_pool: pool, p_peso: n });
+  const p_pesos = repartoDraft[pool].map(a => ({ nombre: a.nombre, peso: a.peso }));
+  const { data, error } = await sb.rpc('admin_guardar_reparto', { p_pool: pool, p_pesos });
   btn.disabled = false;
-  if (error || !data?.ok) { errToast('No se pudo guardar: ' + (data?.error || error?.message || '')); return; }
-  okToast('Peso actualizado');
-  await cargarPesoEditable();
-  if (pool === 'domestico') { await loadStats(); renderAssign(); }
+  if (error || !data?.ok) {
+    const msgs = { pool_vacio: 'El reparto no puede quedar vacío', suma_invalida: 'La suma no dio 100%', peso_invalido: 'Hay un peso inválido', no_existe: 'Algún asesor ya no existe o está inactivo', pool_invalido: 'Pool inválido' };
+    errToast('No se pudo guardar: ' + (msgs[data?.error] || data?.error || error?.message || ''));
+    return;
+  }
+  okToast('Reparto guardado');
+  await cargarReparto();
 }
 
 /* ---------- Preview + Drill ---------- */
