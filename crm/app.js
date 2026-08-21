@@ -1282,6 +1282,11 @@ async function manejarDeepLinkConversacion() {
   if (!Number.isFinite(conversacionId) || !puedeChatearInterno()) return;
   await cargarBandeja();
   const c = msgConversaciones.find(x => x.conversacion_id === conversacionId);
+  // Limpiar el deep-link de la URL para que no se reintente en cada reload/Actualizar CRM
+  params.delete('ir');
+  params.delete('conversacion');
+  const nuevaUrl = location.pathname + (params.toString() ? '?' + params.toString() : '') + location.hash;
+  history.replaceState(null, '', nuevaUrl);
   if (!c) { errToast('No se pudo abrir esa conversación'); return; }
   await abrirConversacion(c);
 }
