@@ -7431,6 +7431,7 @@ function setupCorreo() {
   // sentido gastar un round-trip a Supabase en cada login para quien nunca
   // abre Correo.
   document.getElementById('correo-banner-btn').onclick = conectarGmail;
+  document.getElementById('correo-detalle-back').onclick = cerrarHiloCorreo;
   // conectarGmail() abre el consentimiento de Google en pestaña nueva; al
   // volver a esta pestaña (visibilitychange) se refresca el estado en vez de
   // pedirle al asesor que recargue a mano.
@@ -7518,19 +7519,8 @@ function agruparPorHilo(data) {
     .map(msgs => msgs.sort((a, b) => new Date(a.enviado_en) - new Date(b.enviado_en)))
     .sort((a, b) => new Date(b[b.length - 1].enviado_en) - new Date(a[a.length - 1].enviado_en));
 }
-window.toggleHiloBandeja = (threadId, encoded) => {
-  const el = document.getElementById('hilo-body-' + encoded);
-  if (!el) return;
-  const abierto = el.style.display !== 'none';
-  if (abierto) { el.style.display = 'none'; return; }
-  if (!el.dataset.cargado) {
-    const msgs = HILOS_DATA.get(threadId) || [];
-    el.innerHTML = msgs.map(c => `<div class="conv-msg ${c.direccion === 'saliente' ? 'ia' : 'lead'}"><div class="conv-who">${c.direccion === 'entrante' ? esc(c.de) : 'Nosotros'} · ${esc(fmtFechaHoraCaracas(c.enviado_en))}</div><b>${esc(c.asunto || '(sin asunto)')}</b>${c.gmail_correo_adjuntos?.length ? ` <i class="fas fa-paperclip muted" title="${c.gmail_correo_adjuntos.length} adjunto(s)"></i>` : ''}<div>${esc(c.snippet || '')}</div>${botonVerCorreo(c.id)}${c.lead_id ? `<div style="margin-top:4px"><a href="#" onclick="abrirLeadPorId(${c.lead_id});return false" style="font-size:10.5px;color:var(--accent)"><i class="fas fa-user"></i> Lead #${c.lead_id}</a></div>` : ''}</div>`).join('');
-    el.dataset.cargado = '1';
-  }
-  el.style.display = '';
-};
 const HILOS_DATA = new Map();
+let CORREO_HILO_ABIERTO = null; // encoded del hilo abierto en el panel de lectura, o null
 function renderHilosBandeja(data) {
   const hilos = agruparPorHilo(data);
   return hilos.map(msgs => {
@@ -7541,17 +7531,72 @@ function renderHilosBandeja(data) {
     const remitente = ultimo.direccion === 'entrante' ? ultimo.de : (ultimo.para || []).join(', ');
     const inicial = (extraerEmailDeCabecera(remitente) || remitente || '?').trim().charAt(0).toUpperCase() || '?';
     return `
-    <div class="correo-row${noLeidos ? ' no-leido' : ''}" onclick="toggleHiloBandeja('${ultimo.gmail_thread_id.replace(/'/g, '')}','${encoded}')">
+    <div class="correo-row${noLeidos ? ' no-leido' : ''}${encoded === CORREO_HILO_ABIERTO ? ' active' : ''}" data-thread="${encoded}" onclick="abrirHiloCorreo('${ultimo.gmail_thread_id.replace(/'/g, '')}','${encoded}')">
       <span class="correo-row-avatar" data-dir="${ultimo.direccion}">${esc(inicial)}</span>
       <div class="correo-row-body">
         <div class="correo-row-top"><b>${esc(ultimo.asunto || '(sin asunto)')}</b><time>${esc(fmtFechaHoraCaracas(ultimo.enviado_en))}</time></div>
         <div class="correo-row-from">${esc(remitente)}${msgs.length > 1 ? ` · ${msgs.length} mensajes` : ''}${!ultimo.lead_id ? ' · <span class="correo-sinvincular">sin vincular</span>' : ''}</div>
         <div class="correo-row-snippet">${esc(ultimo.snippet || '')}</div>
-        <div id="hilo-body-${encoded}" class="correo-hilo" style="display:none" onclick="event.stopPropagation()"></div>
       </div>
       ${noLeidos ? `<span class="correo-unread-badge">${noLeidos}</span>` : ''}
     </div>`;
   }).join('');
+}
+
+/* ---------- Panel de lectura (split-view desktop / hoja deslizante mobile) ----------
+   Mismo mecanismo que .msg-conv de Mensajes (overlay absoluto dentro de un
+   contenedor position:relative;overflow:hidden, con .open corriendo el
+   transform) -- en desktop el media query lo convierte en columna estática
+   real en vez de overlay, ver CSS .correo-layout. */
+function renderLeadRow(correo) {
+  return correo.lead_id
+    ? `<div class="correo-lead-row"><a href="#" class="correo-lead-tag" onclick="abrirLeadPorId(${correo.lead_id});return false"><i class="fas fa-user"></i> Lead #${correo.lead_id}</a><button type="button" class="correo-lead-btn" onclick="desvincularHiloCorreo(${correo.id})"><i class="fas fa-link-slash"></i> Desvincular</button></div>`
+    : `<div class="correo-lead-row"><input type="number" class="correo-lead-input" id="correo-lead-input" placeholder="ID de lead"><button type="button" class="correo-lead-btn" onclick="vincularHiloCorreo(${correo.id})"><i class="fas fa-link"></i> Vincular</button></div>`;
+}
+window.abrirHiloCorreo = (threadId, encoded) => {
+  CORREO_HILO_ABIERTO = encoded;
+  document.querySelectorAll('#correo-lista .correo-row').forEach(r => r.classList.toggle('active', r.dataset.thread === encoded));
+  const msgs = HILOS_DATA.get(threadId) || [];
+  const ultimo = msgs[msgs.length - 1];
+  document.getElementById('correo-detalle-body').innerHTML = `
+    <div class="correo-detalle-head">
+      <h3>${esc(ultimo?.asunto || '(sin asunto)')}</h3>
+      <div class="correo-detalle-meta">${msgs.length} mensaje${msgs.length > 1 ? 's' : ''} · último ${esc(fmtFechaHoraCaracas(ultimo.enviado_en))}</div>
+      ${renderLeadRow(ultimo)}
+    </div>
+    <div class="correo-detalle-log">${msgs.map(c => `<div class="conv-msg ${c.direccion === 'saliente' ? 'ia' : 'lead'}"><div class="conv-who">${c.direccion === 'entrante' ? esc(c.de) : 'Nosotros'} · ${esc(fmtFechaHoraCaracas(c.enviado_en))}</div><b>${esc(c.asunto || '(sin asunto)')}</b>${c.gmail_correo_adjuntos?.length ? ` <i class="fas fa-paperclip muted" title="${c.gmail_correo_adjuntos.length} adjunto(s)"></i>` : ''}<div>${esc(c.snippet || '')}</div>${botonVerCorreo(c.id)}</div>`).join('')}</div>`;
+  document.getElementById('correo-detalle').classList.add('open');
+};
+window.cerrarHiloCorreo = () => {
+  document.getElementById('correo-detalle').classList.remove('open');
+};
+window.vincularHiloCorreo = async (correoId) => {
+  const input = document.getElementById('correo-lead-input');
+  const leadId = Number(input?.value);
+  if (!leadId) { errToast('Ingresá un ID de lead válido'); return; }
+  const { error } = await sb.rpc('vincular_correo_a_lead', { p_correo_id: correoId, p_lead_id: leadId });
+  if (error) { errToast('No se pudo vincular el correo'); return; }
+  actualizarLeadEnMemoria(correoId, leadId);
+  okToast('Correo vinculado al lead #' + leadId);
+};
+window.desvincularHiloCorreo = async (correoId) => {
+  const { error } = await sb.rpc('desvincular_correo', { p_correo_id: correoId });
+  if (error) { errToast('No se pudo desvincular el correo'); return; }
+  actualizarLeadEnMemoria(correoId, null);
+  okToast('Correo desvinculado');
+};
+function actualizarLeadEnMemoria(correoId, leadId) {
+  const enCache = CORREOS_DATA.get(correoId);
+  if (enCache) enCache.lead_id = leadId;
+  const enBandeja = CORREO_BANDEJA_DATA.find(c => c.id === correoId);
+  if (enBandeja) enBandeja.lead_id = leadId;
+  for (const msgs of HILOS_DATA.values()) {
+    const m = msgs.find(x => x.id === correoId);
+    if (m) m.lead_id = leadId;
+  }
+  renderBandejaCorreoFiltrada();
+  const leadRow = document.querySelector('#correo-detalle-body .correo-lead-row');
+  if (leadRow && enCache) leadRow.outerHTML = renderLeadRow(enCache);
 }
 
 async function cargarBandejaCorreo() {

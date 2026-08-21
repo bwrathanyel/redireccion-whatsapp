@@ -1311,6 +1311,59 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .msg-picker-rol{font-size:10.5px;color:var(--muted);text-transform:uppercase}
 @media(max-width:760px){.msg-img,.msg-video-wrap{max-width:200px}.msg-conv{padding:14px 16px}}
 
+/* ---------- Correo (Gmail) ----------
+   Mobile-first a propósito, como el resto del CRM (.app, .kpi-grid, etc.):
+   la base es el layout chico y @media(min-width:761px) lo convierte en
+   split-view real. El panel de lectura (.correo-detalle) usa el mismo
+   mecanismo que .msg-conv de Mensajes -- overlay absoluto dentro de un
+   contenedor position:relative;overflow:hidden que corre con transform,
+   mismos tokens de movimiento (--ease-salida) -- pero en desktop el media
+   query lo apaga (position:static) y lo deja fijo al lado de la lista en
+   vez de superpuesto. */
+.correo-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.correo-search{flex:1;min-width:180px}
+.correo-layout{position:relative;overflow:hidden;height:calc(100vh - 300px);min-height:420px}
+.correo-lista{height:100%;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
+.correo-row{display:flex;align-items:flex-start;gap:12px;padding:11px 10px;border:1px solid transparent;border-radius:12px;cursor:pointer;transition:background .15s,border-color .15s}
+.correo-row:hover{background:rgba(255,255,255,.04)}
+.correo-row.active{background:var(--accent-soft);border-color:rgba(255,145,0,.28)}
+.correo-row-avatar{display:grid;place-items:center;flex-shrink:0;width:34px;height:34px;margin-top:1px;border-radius:50%;font-size:13px;font-weight:800}
+.correo-row-avatar[data-dir="entrante"]{background:rgba(255,145,0,.16);color:var(--accent)}
+.correo-row-avatar[data-dir="saliente"]{background:rgba(16,185,129,.16);color:var(--green)}
+.correo-row-body{flex:1;min-width:0}
+.correo-row-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.correo-row-top b{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.correo-row.no-leido .correo-row-top b{font-weight:800;color:var(--txt)}
+.correo-row-top time{flex-shrink:0;font-size:10.5px;color:var(--muted2)}
+.correo-row-from{margin-top:2px;overflow:hidden;font-size:12px;color:var(--muted);text-overflow:ellipsis;white-space:nowrap}
+.correo-row-snippet{margin-top:2px;overflow:hidden;font-size:11.5px;color:var(--muted2);text-overflow:ellipsis;white-space:nowrap}
+.correo-sinvincular{color:var(--amber);font-weight:600}
+.correo-unread-badge{flex-shrink:0;margin-top:2px;background:var(--accent);color:#1a1000;border-radius:99px;padding:2px 7px;font-size:10px;font-weight:800}
+.correo-empty{display:grid;place-items:center;gap:8px;min-height:180px;color:var(--muted);font-size:12px;text-align:center}
+.correo-empty i{font-size:26px}
+
+.correo-detalle{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg2);border-radius:14px;padding:16px;transform:translateX(100%);transition:transform var(--dur-hoja,.32s) var(--ease-salida,ease)}
+.correo-detalle.open{transform:translateX(0)}
+.correo-detalle-back{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:34px;height:34px;margin-bottom:10px;border-radius:9px;background:var(--panel-solid);border:1px solid var(--line2);color:var(--txt);cursor:pointer}
+.correo-detalle-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto}
+.correo-detalle-empty{display:grid;flex:1;place-items:center;gap:8px;color:var(--muted);font-size:12px;text-align:center}
+.correo-detalle-empty i{font-size:28px}
+.correo-detalle-head h3{margin:0;font-size:16px;font-weight:700}
+.correo-detalle-meta{margin-top:4px;color:var(--muted);font-size:11px}
+.correo-lead-row{display:flex;align-items:center;gap:8px;margin-top:12px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.correo-lead-tag{display:flex;align-items:center;gap:6px;border-radius:999px;padding:5px 12px;background:var(--accent-soft);color:var(--accent);font-size:10.5px;font-weight:700}
+.correo-lead-input{width:100px;height:32px;border:1px solid var(--line2);border-radius:8px;padding:0 10px;background:var(--panel-solid);color:var(--txt);font-size:11px;font-family:inherit}
+.correo-lead-btn{border:1px solid var(--line2);border-radius:8px;padding:6px 12px;background:transparent;color:var(--muted);font-size:10.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.correo-lead-btn:hover{color:var(--txt)}
+.correo-detalle-log{flex:1;margin-top:12px}
+
+@media(min-width:761px){
+  .correo-layout{display:flex;gap:18px;overflow:visible;height:calc(100vh - 260px)}
+  .correo-lista{flex:0 0 340px;border-right:1px solid var(--line);padding-right:16px}
+  .correo-detalle{position:static;flex:1;min-width:0;transform:none;transition:none;background:transparent;border-radius:0;padding:0 0 0 4px}
+  .correo-detalle-back{display:none}
+}
+
 /* ---------- Galería ---------- */
 /* Carpetas desplegables por categoría (Bloque 6) -- <details> nativo: sin
    costo de JS para animar, y el contenido de una carpeta cerrada ni se
@@ -4315,7 +4368,23 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           <span class="badge-st" id="correo-estado-badge" style="display:none"></span>
         </div>
         <div class="csub">Correos sincronizados desde Gmail, vinculados a leads cuando el email coincide.</div>
-        <div id="correo-lista" style="margin-top:10px"><i class="fas fa-circle-notch fa-spin"></i> Cargando...</div>
+        <div class="correo-toolbar">
+          <input class="flt correo-search" id="correo-search" type="text" placeholder="Buscar por asunto, remitente...">
+          <div class="seg-group seg-group-sm" id="correo-filtros">
+            <button type="button" class="seg on" data-f="todos">Todos</button>
+            <button type="button" class="seg" data-f="no_leidos">Sin leer</button>
+            <button type="button" class="seg" data-f="sin_vincular">Sin vincular</button>
+          </div>
+        </div>
+        <div class="correo-layout" id="correo-layout">
+          <div class="correo-lista" id="correo-lista"><i class="fas fa-circle-notch fa-spin"></i> Cargando...</div>
+          <div class="correo-detalle" id="correo-detalle">
+            <button type="button" class="correo-detalle-back" id="correo-detalle-back" aria-label="Volver a la bandeja"><i class="fas fa-arrow-left"></i></button>
+            <div class="correo-detalle-body" id="correo-detalle-body">
+              <div class="correo-detalle-empty"><i class="fas fa-envelope-open-text"></i><p>Elegí un correo para leerlo.</p></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
