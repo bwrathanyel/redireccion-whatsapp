@@ -12261,6 +12261,15 @@ function subscribeRealtime() {
       if (cerrandoCanalIntencional) return;
       if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(estado)) { marcarLeadsLiveCaido(); reconectarLeadsLive(); }
     });
+
+  // Correo (Fase 1 del cliente Gmail): sin backoff propio como leads-live --
+  // canal chico, mismo criterio simple que mensajes-badge. RLS ya filtra qué
+  // correos llegan a este cliente. Refresca la bandeja si está a la vista, y
+  // la pestaña de correo del lead abierto si el correo nuevo es de ese lead.
+  sb.channel('gmail-correos-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gmail_correos' }, payload => {
+    if (document.getElementById('sec-correo')?.classList.contains('active')) cargarBandejaCorreo();
+    if (currentLead && payload.new.lead_id === currentLead.id) { CORREO_LEAD_CACHE = null; cargarCorreoLead(currentLead); }
+  }).subscribe();
 }
 
 // Resync al volver de segundo plano (falla #3): el socket pudo morir sin
