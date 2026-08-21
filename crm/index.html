@@ -2884,6 +2884,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <button class="seg" data-gp-tab="postulaciones">Postulaciones <span class="badge" id="gp-postulaciones-count" style="display:none">0</span></button>
         <button class="seg" data-gp-tab="reasignaciones">Reasignaciones</button>
         <button class="seg" data-gp-tab="metricas">Métricas</button>
+        <button class="seg" data-gp-tab="notificaciones">Notificaciones</button>
       </div>
 
       <!-- PERSONAL -- tarjetas con icono por rol, cargo editable y desglose
@@ -3193,6 +3194,26 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <div class="grid g-2b" style="margin-top:4px">
           <div class="card"><h2><i class="fas fa-chart-line"></i> Nuevos vs. Ventas</h2><div class="csub">Evolución en el periodo</div><div class="chart-wrap"><canvas id="chSerie"></canvas></div></div>
           <div class="card"><h2><i class="fas fa-suitcase-rolling"></i> Leads por servicio</h2><div class="csub">Interés por producto</div><div class="chart-wrap" style="position:relative"><canvas id="chServicio"></canvas><div class="tbl-state" id="met-servicio-empty" style="display:none;position:absolute;inset:0"><i class="fas fa-inbox"></i><div class="es-s">Aún sin servicios asignados</div></div></div></div>
+        </div>
+      </div>
+
+      <div class="gp-tab-panel" data-gp-panel="notificaciones" style="display:none">
+        <div class="leads-inbox" style="display:block">
+          <div class="leads-inbox-head">
+            <h2><i class="fas fa-bell"></i> Estado de las notificaciones push</h2>
+          </div>
+          <div class="csub">Un renglón por persona con avisos activados. "Visto hace" es la última vez que abrió el CRM con la suscripción viva; si quedó muy atrás, sus avisos probablemente no están llegando. Usa "Probar" para verificar un teléfono concreto sin esperar al recordatorio de mañana.</div>
+          <div class="tbl-state skel" id="push-diag-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="tbl-state" id="push-diag-empty" style="display:none"><i class="fas fa-bell-slash"></i><div class="es-t">Nadie tiene notificaciones activadas</div><div class="es-s">Se activan desde Perfil → Notificaciones, en el dispositivo de cada persona</div></div>
+          <div id="push-diag-wrap" style="overflow-x:auto;display:none">
+            <table>
+              <thead><tr>
+                <th>Persona</th><th>Dispositivos</th><th>Instalada</th><th>Visto hace</th>
+                <th>Último envío OK</th><th>7 días</th><th>Latencia</th><th></th>
+              </tr></thead>
+              <tbody id="push-diag-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 

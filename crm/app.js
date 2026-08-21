@@ -508,6 +508,9 @@ async function desactivarSuscripcionPush() {
       const { error } = await sb.from('push_subscriptions').delete().eq('usuario_id', user.id).eq('subscription_json->>endpoint', sub.endpoint);
       if (error) { errToast('No se pudo desactivar: ' + error.message); return; }
       await sub.unsubscribe();
+      // Si queda la identidad vieja, el service worker podría intentar rotar
+      // una suscripción que la persona acaba de apagar a propósito.
+      await caches.delete(CACHE_IDENTIDAD_PUSH).catch(() => {});
     }
   } catch (e) {
     console.error('desactivarSuscripcionPush', e);
@@ -917,6 +920,10 @@ function puedeRecibirAsistencia() {
 }
 let instalacionPwaPendiente = null;
 const pwaInstalada = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+// iPadOS 13+ se reporta como 'MacIntel' en vez de 'iPad', así que el user
+// agent solo no alcanza: un iPad quedaba tratado como escritorio y recibía el
+// mensaje equivocado sobre por qué no le llegan los avisos.
+const esIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 function setupInstalacionPwa() {
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); instalacionPwaPendiente = e; renderInstalacionPwa(); });
   window.addEventListener('appinstalled', () => { instalacionPwaPendiente = null; renderInstalacionPwa(); okToast('App instalada'); });
@@ -925,7 +932,7 @@ function renderInstalacionPwa() {
   const box = document.getElementById('perfil-instalar-app'), texto = document.getElementById('perfil-instalar-texto'), btn = document.getElementById('perfil-instalar-btn');
   if (!box || !texto || !btn) return;
   if (pwaInstalada()) { box.style.display = 'none'; return; }
-  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const ios = esIOS();
   if (!instalacionPwaPendiente && !ios) { box.style.display = 'none'; return; }
   box.style.display = '';
   texto.textContent = ios ? 'En Safari: Compartir → Añadir a pantalla de inicio.' : 'Instalala para recibir notificaciones con la identidad de Lotus 360.';
@@ -944,16 +951,58 @@ function urlBase64ToUint8Array(base64String) {
   const raw = atob(base64);
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
+// El service worker no puede leer la sesión de supabase-js (vive en
+// localStorage, que un worker no ve), y necesita el token de la fila para
+// poder rotar el endpoint cuando el navegador lo cambia. Cache Storage es el
+// único almacén que la página y el worker comparten.
+const CACHE_IDENTIDAD_PUSH = 'lotus-push-id';
+async function guardarIdentidadPush(sub, id, token) {
+  try {
+    const c = await caches.open(CACHE_IDENTIDAD_PUSH);
+    await c.put('/__identidad', new Response(JSON.stringify({ id, token, endpoint: sub.endpoint })));
+  } catch (e) { console.warn('guardarIdentidadPush', e); }
+}
+
+// Registra la suscripción de ESTE dispositivo. Pasa por el RPC y no por un
+// insert directo: el índice único es por endpoint, así que si el teléfono ya
+// estaba registrado a nombre de OTRA persona (celular que cambió de dueño,
+// alguien que se logueó en el equipo de un compañero), el insert chocaba con
+// un 23505 que el código ignoraba y la fila seguía apuntando al usuario viejo
+// -- los avisos se iban a la persona equivocada, en silencio. El RPC es
+// security definer justamente porque la policy own() impide desde el cliente
+// pisar esa fila ajena.
+async function registrarSuscripcionPush(sub) {
+  const { data, error } = await sb.rpc('mi_push_registrar', {
+    p_subscription: sub.toJSON(),
+    p_user_agent: navigator.userAgent.slice(0, 300),
+    p_display_mode: pwaInstalada() ? 'standalone' : 'browser',
+  });
+  if (error) return { error };
+  await guardarIdentidadPush(sub, data?.id, data?.token);
+  return { data };
+}
+
 async function activarNotificaciones(nombre) {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) { errToast('Este navegador no soporta notificaciones push'); return false; }
+  // En iPhone/iPad el Web Push existe SOLO con la app añadida a la pantalla de
+  // inicio (iOS 16.4+). En Safari suelto no hay PushManager, así que el mensaje
+  // genérico de "no soportado" era literalmente siempre falso y no ayudaba a
+  // nadie: lo que hace falta es decirle cómo instalarla.
+  if (esIOS() && !pwaInstalada()) {
+    renderInstalacionPwa();
+    errToast('En iPhone los avisos solo funcionan con la app instalada: Compartir → Añadir a pantalla de inicio, y actívalos desde ahí.');
+    return false;
+  }
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    errToast(esIOS() ? 'Actualiza el iPhone a iOS 16.4 o superior para recibir avisos.' : 'Este navegador no soporta notificaciones push');
+    return false;
+  }
   const permiso = await Notification.requestPermission();
   if (permiso !== 'granted') { errToast('Permiso de notificaciones denegado'); return false; }
   try {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
-    const { data: { user } } = await sb.auth.getUser();
-    const { error } = await sb.from('push_subscriptions').insert({ usuario_id: user.id, platform: 'web', subscription_json: sub.toJSON() });
-    if (error && error.code !== '23505') { errToast('No se pudo activar: ' + error.message); return false; }
+    const { error } = await registrarSuscripcionPush(sub);
+    if (error) { errToast('No se pudo activar: ' + error.message); return false; }
     okToast(`${nombre} activados`);
   } catch (e) {
     console.error('activarNotificaciones', e);
@@ -961,6 +1010,33 @@ async function activarNotificaciones(nombre) {
   }
   renderRecordatoriosUI();
   return true;
+}
+
+// Reconciliación en cada arranque. Es la red de seguridad real del sistema de
+// push: el handler `pushsubscriptionchange` del service worker no se dispara
+// de forma confiable (Chrome no lo emite en todas las expiraciones, Safari no
+// lo garantiza), así que sin esto una suscripción que muere mientras el CRM
+// está cerrado no vuelve nunca -- y esa es la causa principal de "me dejaron
+// de llegar las notificaciones".
+//
+// Nunca pide permiso: si la persona no lo dio, se respeta. Solo repara lo que
+// ya estaba activado. Va dentro de arrancar(...), así que un fallo acá no
+// puede tumbar el arranque del CRM.
+async function sincronizarSuscripcionPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  if (MI_PREFERENCIAS.notificaciones_leads === false && MI_PREFERENCIAS.notificaciones_asistencia === false) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    // Permiso concedido pero sin suscripción: el navegador la descartó por su
+    // cuenta. Se resucita sin molestar a nadie, no hace falta prompt.
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+    const { error } = await registrarSuscripcionPush(sub);
+    if (error) console.error('sincronizarSuscripcionPush', error.message);
+  } catch (e) {
+    console.error('sincronizarSuscripcionPush', e);
+  }
 }
 window.activarRecordatorios = async () => {
   if (MI_PREFERENCIAS.notificaciones_asistencia === false) {
@@ -1139,6 +1215,62 @@ function cargarTabGestionPersonal(tab) {
   else if (tab === 'postulaciones') loadPostulaciones();
   else if (tab === 'reasignaciones') loadReasignaciones();
   else if (tab === 'metricas') loadMetricas();
+  else if (tab === 'notificaciones') loadDiagnosticoPush();
+}
+
+/* ---------- Diagnóstico de notificaciones push ---------- */
+// Existe para poder responder "¿le llegó?" con un dato en vez de una
+// sensación. Antes de esto, "no me llegan las notificaciones" no era
+// diagnosticable: no había forma de distinguir a quien nunca las activó, de
+// quien tiene la suscripción vencida, de quien la tiene viva pero el teléfono
+// las está silenciando.
+function horasLegibles(h) {
+  if (h === null || h === undefined) return '—';
+  if (h < 1) return 'hace minutos';
+  if (h < 48) return `${Math.round(h)} h`;
+  return `${Math.round(h / 24)} días`;
+}
+
+async function loadDiagnosticoPush() {
+  const loading = document.getElementById('push-diag-loading');
+  const vacio = document.getElementById('push-diag-empty');
+  const wrap = document.getElementById('push-diag-wrap');
+  const body = document.getElementById('push-diag-body');
+  if (!body) return;
+  loading.style.display = ''; vacio.style.display = 'none'; wrap.style.display = 'none';
+
+  const { data, error } = await sb.rpc('diagnostico_push');
+  loading.style.display = 'none';
+  if (error) { errToast('No se pudo cargar el diagnóstico: ' + error.message); return; }
+  if (!data || !data.length) { vacio.style.display = ''; return; }
+
+  wrap.style.display = '';
+  body.innerHTML = data.map(f => {
+    // Sin dispositivos vivos no hay a quién mandarle: es el caso más común
+    // detrás de "no me llegan" y hasta ahora era invisible.
+    const sinVivos = f.dispositivos === 0;
+    const alerta = sinVivos || f.fallos_consecutivos >= 3 || (f.visto_hace_horas ?? 0) > 168;
+    return `<tr${alerta ? ' style="opacity:.85"' : ''}>
+      <td><b>${esc(f.nombre)}</b><div class="csub">${esc(f.rol)}</div></td>
+      <td>${f.dispositivos}${f.expiradas ? ` <span class="csub">(${f.expiradas} vencida${f.expiradas > 1 ? 's' : ''})</span>` : ''}<div class="csub">${esc(f.plataformas || '-')}</div></td>
+      <td>${f.instaladas > 0 ? `${f.instaladas} sí` : '<span class="csub">en navegador</span>'}</td>
+      <td>${horasLegibles(f.visto_hace_horas)}</td>
+      <td>${f.ultimo_ok_at ? esc(fmtFechaHoraCaracas(f.ultimo_ok_at)) : '—'}</td>
+      <td>${f.ok_7d} ok · ${f.fallo_7d} fallo${f.entregados_7d ? ` · ${f.entregados_7d} vistas` : ''}</td>
+      <td>${f.latencia_p50_s !== null && f.latencia_p50_s !== undefined ? `${f.latencia_p50_s}s` : '—'}</td>
+      <td><button class="btn-sm" data-push-prueba="${f.usuario_id}"${sinVivos ? ' disabled' : ''}>Probar</button></td>
+    </tr>`;
+  }).join('');
+
+  body.querySelectorAll('[data-push-prueba]').forEach(btn => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const { data: res, error: err } = await sb.functions.invoke('push-prueba', { body: { usuario_id: btn.dataset.pushPrueba } });
+      btn.disabled = false;
+      if (err) { errToast('No se pudo enviar: ' + (await msgErrorFn(err, res))); return; }
+      okToast(`Prueba enviada a ${res.enviados} de ${res.dispositivos} dispositivo(s)`);
+    };
+  });
 }
 
 /* ---------- Asesores de prueba (A4 + B1 + B2) ---------- */
@@ -2008,7 +2140,7 @@ async function startApp() {
   arrancar(
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, renderBottomNav, setupSwipeSecciones, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupCorreo, setupRedes,
-    setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa,
+    setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupHoy, setupConsultorIA, setupBoleteriaSeccion, setupMisNotas,
   );
   if (ROL === 'marketing') {
@@ -3537,14 +3669,92 @@ async function registrarCotizacionEnviada(l) {
    backend la primera vez que se toca cada pestaña (en desktop, sin tab bar
    visible, nunca se llega a llamar esto). ---------- */
 let CONV_CACHE = null, ACTIVIDAD_CACHE = null, CORREO_LEAD_CACHE = null;
+
+/* ---------- Viewer de correo completo (Fase 2 del cliente Gmail) ----------
+   El cuerpo (texto/html) ya viaja en el select -- guardarlo en un Map en vez
+   de re-pedirlo al backend al expandir, y renderizarlo recién al abrir (no
+   de una al cargar la lista, para no pintar N iframes de golpe).
+
+   HTML de remitentes externos -- NUNCA confiar en sanitizado por lista negra
+   (DOMPurify tiene bypasses históricos conocidos). Se aísla en un iframe
+   sandbox SIN allow-scripts NI allow-same-origin: corre en origen null, sin
+   acceso a cookies/localStorage/el cliente `sb` con la sesión del asesor.
+   Es el mismo mecanismo que usa Gmail real. */
+const CORREOS_DATA = new Map();
+function renderCuerpoCorreo(correo) {
+  if (correo.cuerpo_html) {
+    return `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(correo.cuerpo_html)}" style="width:100%;height:420px;border:0;border-radius:8px;background:#fff;margin-top:6px"></iframe>`;
+  }
+  return `<div style="white-space:pre-wrap;font-size:11.5px;margin-top:6px;background:rgba(255,255,255,.03);border-radius:8px;padding:10px">${esc(correo.cuerpo_texto || '(sin contenido)')}</div>`;
+}
+window.toggleCorreoBody = (id) => {
+  const el = document.getElementById('correo-body-' + id);
+  if (!el) return;
+  const abierto = el.style.display !== 'none';
+  if (abierto) { el.style.display = 'none'; return; }
+  if (!el.dataset.cargado) {
+    const correo = CORREOS_DATA.get(id);
+    const adjuntosHtml = correo?.gmail_correo_adjuntos?.length ? renderAdjuntosCorreo(id, correo.gmail_correo_adjuntos) : '';
+    el.innerHTML = (correo ? renderCuerpoCorreo(correo) : '<div class="muted">No se pudo cargar</div>') + adjuntosHtml;
+    el.dataset.cargado = '1';
+  }
+  el.style.display = '';
+};
+function botonVerCorreo(id) {
+  return `<button type="button" onclick="toggleCorreoBody(${id})" style="margin-top:6px;background:none;border:1px solid var(--line2,#2a3150);color:var(--accent);border-radius:7px;padding:4px 9px;font-size:10px;cursor:pointer"><i class="fas fa-envelope-open-text"></i> Ver correo completo</button><div id="correo-body-${id}" style="display:none"></div>`;
+}
+
+function fmtTamano(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+function renderAdjuntosCorreo(correoId, adjuntos) {
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${adjuntos.map(a => `
+    <button type="button" onclick="descargarAdjuntoCorreo(${correoId},${a.id},'${esc(a.filename || 'adjunto').replace(/'/g, '')}')" style="display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.04);border:1px solid var(--line2,#2a3150);border-radius:8px;padding:5px 10px;font-size:9.5px;color:var(--txt);cursor:pointer">
+      <i class="fas fa-paperclip"></i> ${esc(a.filename || 'adjunto')} <span class="muted">${fmtTamano(a.tamano_bytes)}</span>
+    </button>`).join('')}</div>`;
+}
+// Streaming directo desde gmail-adjunto-descargar -- nunca se cachea en
+// Storage (ver migración de gmail_correo_adjuntos). El JWT de sesión viaja a
+// mano porque necesitamos el response como blob binario, no JSON
+// (sb.functions.invoke parsea JSON por default).
+window.descargarAdjuntoCorreo = async (correoId, adjuntoId, filename) => {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session?.access_token) { errToast('Sesión expirada, recargá la página'); return; }
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-adjunto-descargar?correo_id=${correoId}&adjunto_id=${adjuntoId}`, {
+      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY },
+    });
+    if (!res.ok) { errToast('No se pudo descargar el adjunto'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch { errToast('No se pudo descargar el adjunto'); }
+};
+
 async function cargarCorreoLead(l) {
   const box = document.getElementById('correo-lead-body');
   if (!box) return;
   if (CORREO_LEAD_CACHE) { box.innerHTML = CORREO_LEAD_CACHE; return; }
-  const { data, error } = await sb.from('gmail_correos').select('id,direccion,de,para,asunto,snippet,enviado_en').eq('lead_id', l.id).order('enviado_en', { ascending: true });
+  const { data, error } = await sb.from('gmail_correos').select('id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').eq('lead_id', l.id).order('enviado_en', { ascending: true });
   if (error) { box.innerHTML = '<div class="muted">No se pudo cargar el correo de este lead</div>'; return; }
   if (!data.length) { CORREO_LEAD_CACHE = '<div class="muted">Sin correos vinculados a este lead todavía</div>'; box.innerHTML = CORREO_LEAD_CACHE; return; }
-  CORREO_LEAD_CACHE = data.map(c => `<div class="conv-msg ${c.direccion === 'saliente' ? 'ia' : 'lead'}"><div class="conv-who">${c.direccion === 'entrante' ? esc(c.de) : 'Nosotros'} · ${esc(fmtFechaHoraCaracas(c.enviado_en))}</div><b>${esc(c.asunto || '(sin asunto)')}</b><div>${esc(c.snippet || '')}</div></div>`).join('');
+  data.forEach(c => CORREOS_DATA.set(c.id, c));
+  // Un lead puede tener varios hilos si escribió por asuntos distintos --
+  // separador visual cuando cambia de hilo, sin perder el orden cronológico
+  // que ya tiene esta pestaña.
+  let hiloAnterior = null;
+  CORREO_LEAD_CACHE = data.map(c => {
+    const separador = c.gmail_thread_id !== hiloAnterior && hiloAnterior !== null
+      ? '<div class="muted" style="text-align:center;font-size:8.5px;margin:8px 0;opacity:.6">— nuevo hilo —</div>' : '';
+    hiloAnterior = c.gmail_thread_id;
+    return separador + `<div class="conv-msg ${c.direccion === 'saliente' ? 'ia' : 'lead'}"><div class="conv-who">${c.direccion === 'entrante' ? esc(c.de) : 'Nosotros'} · ${esc(fmtFechaHoraCaracas(c.enviado_en))}</div><b>${esc(c.asunto || '(sin asunto)')}</b>${c.gmail_correo_adjuntos?.length ? ` <i class="fas fa-paperclip muted" title="${c.gmail_correo_adjuntos.length} adjunto(s)"></i>` : ''}<div>${esc(c.snippet || '')}</div>${botonVerCorreo(c.id)}</div>`;
+  }).join('');
   box.innerHTML = CORREO_LEAD_CACHE;
 }
 async function cargarConversacionLead(l) {
@@ -7002,23 +7212,66 @@ window.abrirLeadPorId = async (leadId) => {
   openDrawer(l);
 };
 
+/* ---------- Hilos agrupados (Fase 4) ----------
+   Se agrupan client-side los correos ya traídos (los 50 más recientes en la
+   bandeja, o todos los del lead en la pestaña) por gmail_thread_id -- si un
+   hilo tiene mensajes más viejos fuera de ese límite no aparecen en el
+   resumen, aceptable para una vista de bandeja, no un backup de correo. */
+function agruparPorHilo(data) {
+  const hilos = new Map();
+  for (const c of data) {
+    if (!hilos.has(c.gmail_thread_id)) hilos.set(c.gmail_thread_id, []);
+    hilos.get(c.gmail_thread_id).push(c);
+  }
+  return [...hilos.values()]
+    .map(msgs => msgs.sort((a, b) => new Date(a.enviado_en) - new Date(b.enviado_en)))
+    .sort((a, b) => new Date(b[b.length - 1].enviado_en) - new Date(a[a.length - 1].enviado_en));
+}
+window.toggleHiloBandeja = (threadId, encoded) => {
+  const el = document.getElementById('hilo-body-' + encoded);
+  if (!el) return;
+  const abierto = el.style.display !== 'none';
+  if (abierto) { el.style.display = 'none'; return; }
+  if (!el.dataset.cargado) {
+    const msgs = HILOS_DATA.get(threadId) || [];
+    el.innerHTML = msgs.map(c => `<div class="conv-msg ${c.direccion === 'saliente' ? 'ia' : 'lead'}"><div class="conv-who">${c.direccion === 'entrante' ? esc(c.de) : 'Nosotros'} · ${esc(fmtFechaHoraCaracas(c.enviado_en))}</div><b>${esc(c.asunto || '(sin asunto)')}</b>${c.gmail_correo_adjuntos?.length ? ` <i class="fas fa-paperclip muted" title="${c.gmail_correo_adjuntos.length} adjunto(s)"></i>` : ''}<div>${esc(c.snippet || '')}</div>${botonVerCorreo(c.id)}${c.lead_id ? `<div style="margin-top:4px"><a href="#" onclick="abrirLeadPorId(${c.lead_id});return false" style="font-size:10.5px;color:var(--accent)"><i class="fas fa-user"></i> Lead #${c.lead_id}</a></div>` : ''}</div>`).join('');
+    el.dataset.cargado = '1';
+  }
+  el.style.display = '';
+};
+const HILOS_DATA = new Map();
+function renderHilosBandeja(data) {
+  const hilos = agruparPorHilo(data);
+  return hilos.map(msgs => {
+    const ultimo = msgs[msgs.length - 1];
+    HILOS_DATA.set(ultimo.gmail_thread_id, msgs);
+    const encoded = btoa(unescape(encodeURIComponent(ultimo.gmail_thread_id))).replace(/[^a-zA-Z0-9]/g, '');
+    const noLeidos = msgs.filter(m => !m.leido && m.direccion === 'entrante').length;
+    return `
+    <div class="act-row" style="align-items:flex-start;cursor:pointer" onclick="toggleHiloBandeja('${ultimo.gmail_thread_id.replace(/'/g, '')}','${encoded}')">
+      <div class="act-txt">
+        <b>${esc(ultimo.asunto || '(sin asunto)')}</b>
+        ${msgs.length > 1 ? `<span class="muted" style="font-size:9.5px"> · ${msgs.length} mensajes</span>` : ''}
+        ${noLeidos ? `<span style="background:var(--accent);color:#1a1000;border-radius:99px;padding:1px 6px;font-size:8px;font-weight:800;margin-left:5px">${noLeidos}</span>` : ''}
+        <br>
+        <span class="muted" style="font-size:11px">${esc(ultimo.direccion === 'entrante' ? ultimo.de : (ultimo.para || []).join(', '))}</span><br>
+        <span style="font-size:11.5px">${esc(ultimo.snippet || '')}</span>
+        <div id="hilo-body-${encoded}" style="display:none" onclick="event.stopPropagation()"></div>
+      </div>
+      <div class="act-hora">${esc(fmtFechaHoraCaracas(ultimo.enviado_en))}</div>
+    </div>`;
+  }).join('');
+}
+
 async function cargarBandejaCorreo() {
   const box = document.getElementById('correo-lista');
   // RLS de gmail_correos ya filtra por dueño o admin -- no hace falta repetir
   // el filtro acá (ver policy gmail_correos_select_propio_o_admin).
-  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,direccion,de,para,asunto,snippet,enviado_en').order('enviado_en', { ascending: false }).limit(50);
+  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').order('enviado_en', { ascending: false }).limit(50);
   if (error) { box.innerHTML = '<div class="muted">No se pudo cargar la bandeja</div>'; return; }
   if (!data.length) { box.innerHTML = '<div class="muted">Todavía no hay correos sincronizados.</div>'; return; }
-  box.innerHTML = data.map(c => `
-    <div class="act-row" style="align-items:flex-start">
-      <div class="act-txt">
-        <b>${esc(c.asunto || '(sin asunto)')}</b><br>
-        <span class="muted" style="font-size:11px">${esc(c.direccion === 'entrante' ? c.de : (c.para || []).join(', '))}</span><br>
-        <span style="font-size:11.5px">${esc(c.snippet || '')}</span>
-        ${c.lead_id ? `<div style="margin-top:4px"><a href="#" onclick="abrirLeadPorId(${c.lead_id});return false" style="font-size:10.5px;color:var(--accent)"><i class="fas fa-user"></i> Lead #${c.lead_id}</a></div>` : '<div style="margin-top:4px;font-size:10.5px" class="muted">Sin vincular</div>'}
-      </div>
-      <div class="act-hora">${esc(fmtFechaHoraCaracas(c.enviado_en))}</div>
-    </div>`).join('');
+  data.forEach(c => CORREOS_DATA.set(c.id, c));
+  box.innerHTML = renderHilosBandeja(data);
 }
 
 /* ---------- Redes (Instagram + TikTok) ---------- */
@@ -14133,6 +14386,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-20', emoji: '🔔', titulo: 'Notificaciones que ya no se pierden', texto: 'Si te dejaron de llegar los avisos del CRM sin que hicieras nada, esa era la falla: la suscripción de tu teléfono se vencía sola y nadie la renovaba. Ahora se repara sola cada vez que abres el CRM. Los avisos además salen con prioridad alta, así que llegan al instante aunque tengas la pantalla apagada, y los recordatorios de asistencia dicen directo qué tienes que hacer en vez de decir solo "Lotus 360 CRM". En iPhone, si todavía no agregaste la app a la pantalla de inicio, el CRM ahora te explica cómo hacerlo en vez de decir que tu teléfono no sirve.', roles: ROLES_TODOS },
   { fecha: '2026-08-20', emoji: '📲', titulo: 'Contacto directo: leads sin teléfono, a propósito', texto: 'Cuando un cliente le pide a la IA el WhatsApp del equipo en vez de dar el suyo, ahora se le entrega el número de un asesor asignado por la rueda de reparto de siempre, y el lead queda registrado en el CRM sin teléfono. Vas a verlo marcado con la etiqueta "Contacto directo" en la lista y en la ficha -- no es un dato faltante por error, es que el cliente todavía no dejó su número. Si la IA logra que lo deje más adelante, el lead se completa solo y te llega el aviso a Telegram.', roles: ROLES_TODOS },
   { fecha: '2026-08-19', emoji: '👥', titulo: 'Clientes Asignados para todo asesor', texto: 'Cualquier asesor comercial puede recibir ahora un lote de clientes asignados (antes era exclusivo del rol de práctica): editá sus datos, marcá si ya lo atendiste, dejá nota de qué te dijo y por qué no le interesó. En Gestión de Personal, "Estados a incluir" y "Destino" del panel de asignación ahora son etiquetas para tocar en vez de listas, y el plazo se elige como "24h/48h/72h/Sin límite" en vez de fecha exacta.', roles: ROLES_TODOS },
   { fecha: '2026-08-19', emoji: '💡', titulo: 'Mis Notas', texto: 'Sección nueva para guardar lo que se te complica recordar (objeciones, tarifas, condiciones de un destino). Lo que marqués como "me cuesta" vuelve a aparecer para repasar en intervalos cada vez más largos si vas acertando.', roles: ['asesor'] },
