@@ -10,7 +10,7 @@
 // apuntando a index.html) siempre pegaba ese camino roto; una pestaña normal
 // del navegador no, porque pedía '/' directo. Se cachea './' en vez de
 // './index.html' para no arrastrar el redirect.
-const CACHE_VERSION = 'lotus-crm-shell-v124';
+const CACHE_VERSION = 'lotus-crm-shell-v125';
 const SHELL_FILES = [
   './',
   './app.js',
@@ -174,32 +174,55 @@ self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data ? event.data.text() : '' }; }
   const envio = data.envio;
-  event.waitUntil(Promise.all([
-    self.registration.showNotification(data.title || 'Destino y Eventos Lotus 360 CRM', {
-      body: data.body || '',
-      icon: './icons/icon-192.png',
-      badge: './icons/badge-72.png',
-      data: { url: data.url || './?accion=marcar-asistencia', envio },
-      // Sin tag propio, todo caía en 'asistencia' y dos avisos distintos se
-      // pisaban entre sí en la bandeja del SO. El colapso ahora se pide
-      // explícito desde el backend (tag por lead, por fecha de asistencia);
-      // el default es único justamente para que NO colapse nada por accidente.
-      tag: data.critico ? 'asistencia-critico' : (data.tag || 'lotus-' + (data.timestamp || Date.now())),
-      // Un lead sin atender no debería desaparecer solo de la bandeja.
-      requireInteraction: !!data.critico || data.tipo === 'lead',
-      renotify: true,
-      vibrate: data.critico ? [120, 50, 120, 50, 120] : [80, 40, 80],
-      timestamp: data.timestamp || Date.now(),
-      lang: 'es',
-      dir: 'ltr',
-      silent: false,
-      actions: data.actions || undefined,
-    }),
-    // "El push service aceptó el mensaje" (201) no es lo mismo que "el teléfono
-    // lo mostró". Esta marca es la única que mide la latencia real de entrega,
-    // que es justo el número que dice si Urgency:high sirvió de algo.
-    envio ? sbRpc('marcar_push_evento', { p_id: envio.id, p_token: envio.token, p_evento: 'entregado' }) : null,
-  ]));
+  event.waitUntil((async () => {
+    // Mensajes del chat interno: si la persona ya tiene ESA conversación
+    // abierta y con foco, ya lo está viendo en vivo por el canal realtime
+    // (mensajes-badge, app.js) -- una notificación de sistema encima es
+    // ruido puro. Solo aplica a tipo 'mensaje': para lead/asistencia se
+    // mantiene el comportamiento de siempre (avisar igual).
+    let suprimir = false;
+    if (data.tipo === 'mensaje' && data.url) {
+      try {
+        const convId = new URL(data.url, self.location.origin).searchParams.get('conversacion');
+        if (convId) {
+          const clientes = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+          suprimir = clientes.some((c) => c.focused && new URL(c.url).searchParams.get('conversacion') === convId);
+        }
+      } catch (e) { console.warn('chequeo de foco de mensaje', e); }
+    }
+
+    const tareas = [];
+    if (!suprimir) {
+      tareas.push(self.registration.showNotification(data.title || 'Destino y Eventos Lotus 360 CRM', {
+        body: data.body || '',
+        icon: './icons/icon-192.png',
+        badge: './icons/badge-72.png',
+        data: { url: data.url || './?accion=marcar-asistencia', envio },
+        // Sin tag propio, todo caía en 'asistencia' y dos avisos distintos se
+        // pisaban entre sí en la bandeja del SO. El colapso ahora se pide
+        // explícito desde el backend (tag por lead, por fecha de asistencia);
+        // el default es único justamente para que NO colapse nada por accidente.
+        tag: data.critico ? 'asistencia-critico' : (data.tag || 'lotus-' + (data.timestamp || Date.now())),
+        // Un lead sin atender no debería desaparecer solo de la bandeja.
+        requireInteraction: !!data.critico || data.tipo === 'lead',
+        renotify: true,
+        vibrate: data.critico ? [120, 50, 120, 50, 120] : [80, 40, 80],
+        timestamp: data.timestamp || Date.now(),
+        lang: 'es',
+        dir: 'ltr',
+        silent: false,
+        actions: data.actions || undefined,
+      }));
+    }
+    // Se marca entregado aunque se haya suprimido la notificación visual: el
+    // push SÍ llegó y el service worker lo procesó -- lo que mide esta marca
+    // es que el dispositivo lo recibió, no que se haya dibujado un aviso del
+    // sistema. Sin esto, cada mensaje suprimido por foco sumaría un "ok sin
+    // entregar nunca" y el diagnóstico marcaría como fantasma una suscripción
+    // sana.
+    if (envio) tareas.push(sbRpc('marcar_push_evento', { p_id: envio.id, p_token: envio.token, p_evento: 'entregado' }));
+    await Promise.all(tareas);
+  })());
 });
 
 self.addEventListener('notificationclick', (event) => {

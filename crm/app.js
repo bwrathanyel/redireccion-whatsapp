@@ -364,6 +364,7 @@ async function entrarSegunRol() {
   // estaría en la URL para cuando se leyera acá).
   manejarDeepLinkLeadAccion();
   manejarDeepLinkSeccion();
+  manejarDeepLinkConversacion();
   registrarPushNativo();
   // Primera vez del usuario: se abre solo el menú de capítulos (no un
   // capítulo al azar) -- guardarPreferencia() marca tutorial_visto al
@@ -408,17 +409,23 @@ function openPerfilDrawer() {
       </div>
     </div>` : ''}
     ${bnEditorHtml()}
-    ${puedeRecibirLeads() || puedeRecibirAsistencia() ? `
+    ${puedeRecibirLeads() || puedeRecibirAsistencia() || puedeChatearInterno() ? `
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-bell"></i> Notificaciones</div>
-      ${puedeRecibirLeads() ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:${puedeRecibirAsistencia() ? '12px' : '0'}">
+      ${puedeRecibirLeads() ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
         <span style="font-size:13px">Leads nuevos<small style="display:block;color:var(--muted);margin-top:2px">Cuando te asignan un lead</small></span>
         <button type="button" class="tas-toggle" id="perfil-notif-leads"></button>
       </div>` : ''}
       ${puedeRecibirAsistencia() ? `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:${puedeChatearInterno() ? '12px' : '0'}">
         <span style="font-size:13px">Recordatorios de asistencia<small style="display:block;color:var(--muted);margin-top:2px">Recordatorio de entrada y salida</small></span>
         <button type="button" class="tas-toggle" id="perfil-notif-asistencia"></button>
+      </div>
+      ` : ''}
+      ${puedeChatearInterno() ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span style="font-size:13px">Mensajes<small style="display:block;color:var(--muted);margin-top:2px">Cuando te escriben en el chat interno</small></span>
+        <button type="button" class="tas-toggle" id="perfil-notif-mensajes"></button>
       </div>
       ` : ''}
     </div>` : ''}
@@ -477,7 +484,7 @@ async function actualizarTogglesNotif() {
   // suscripción viva es lo que hizo que nadie se enterara de que no le llegaba
   // nada. Ver estadoPushReal().
   const estado = await estadoPushReal();
-  [['perfil-notif-leads', 'notificaciones_leads', 'Leads nuevos'], ['perfil-notif-asistencia', 'notificaciones_asistencia', 'Recordatorios']].forEach(([id, clave, nombre]) => {
+  [['perfil-notif-leads', 'notificaciones_leads', 'Leads nuevos'], ['perfil-notif-asistencia', 'notificaciones_asistencia', 'Recordatorios'], ['perfil-notif-mensajes', 'notificaciones_mensajes', 'Mensajes']].forEach(([id, clave, nombre]) => {
     const btn = document.getElementById(id);
     if (!btn) return;
     const activo = MI_PREFERENCIAS[clave] !== false && estado.activo;
@@ -931,6 +938,12 @@ function puedeRecibirLeads() {
 function puedeRecibirAsistencia() {
   return (ROL === 'asesor' && !ASISTENCIA_USERNAMES_EXCLUIDOS.includes(MI_USERNAME)) || (ROL === 'admin' && GERENCIA_USERNAMES.includes(MI_USERNAME));
 }
+// Quién puede tener conversaciones 'directo' en el chat interno (ver
+// comentario de esquema en 20260710220000_chat_interno.sql): asesor/marketing
+// solo con un admin, admin con cualquiera.
+function puedeChatearInterno() {
+  return ROL === 'asesor' || ROL === 'admin' || ROL === 'marketing';
+}
 let instalacionPwaPendiente = null;
 const pwaInstalada = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 // iPadOS 13+ se reporta como 'MacIntel' en vez de 'iPad', así que el user
@@ -1250,6 +1263,19 @@ async function manejarDeepLinkLeadAccion() {
   const { data: l, error } = await sb.from('leads').select('*').eq('id', leadId).single();
   if (error || !l) { errToast('No se pudo cargar ese lead'); return; }
   if (accion === 'atender') await atenderInboxLead(l); else await noPuedoInboxLead(l);
+}
+
+// Deep-link desde un push de mensaje (?ir=mensajes&conversacion=<id>, ver
+// notificar-mensaje). manejarDeepLinkSeccion ya activó la sección Mensajes
+// para cuando esto corre; acá falta abrir la conversación puntual.
+async function manejarDeepLinkConversacion() {
+  const params = new URLSearchParams(location.search);
+  const conversacionId = Number(params.get('conversacion'));
+  if (!Number.isFinite(conversacionId) || !puedeChatearInterno()) return;
+  await cargarBandeja();
+  const c = msgConversaciones.find(x => x.conversacion_id === conversacionId);
+  if (!c) { errToast('No se pudo abrir esa conversación'); return; }
+  await abrirConversacion(c);
 }
 
 // Android nativo (Capacitor): sin import, el plugin se consume vía el
@@ -11882,6 +11908,10 @@ let msgAbrirGen = 0;
 async function abrirConversacion(c) {
   const miGen = ++msgAbrirGen;
   msgActual = c;
+  // El service worker usa este parámetro para saber si la pestaña YA está
+  // mirando esta conversación y así no duplicar el aviso de sistema con lo
+  // que el canal realtime ya muestra en vivo (ver sw.js, handler `push`).
+  history.replaceState(null, '', location.pathname + '?ir=mensajes&conversacion=' + c.conversacion_id);
   document.getElementById('msg-conv-titulo').textContent = c.nombre || 'Sin nombre';
   document.getElementById('msg-conv-sub').textContent = c.tipo === 'grupo' ? 'Grupo · todo el staff' : 'Chat individual';
   const soloLectura = c.tipo === 'grupo' && ROL !== 'admin';
@@ -11913,6 +11943,7 @@ function cerrarConversacion(fromNav) {
   document.getElementById('msg-conv').classList.remove('open');
   if (msgChannelConv) { sb.removeChannel(msgChannelConv); msgChannelConv = null; }
   msgActual = null;
+  history.replaceState(null, '', location.pathname);
   if (!fromNav) navConsume();
   cargarBandeja();
 }
