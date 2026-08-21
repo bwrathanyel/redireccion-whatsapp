@@ -7467,6 +7467,7 @@ function setupCorreo() {
   // abre Correo.
   document.getElementById('correo-banner-btn').onclick = conectarGmail;
   document.getElementById('correo-detalle-back').onclick = cerrarHiloCorreo;
+  document.getElementById('correo-sync-btn').onclick = sincronizarCorreoAhora;
   // conectarGmail() abre el consentimiento de Google en pestaña nueva; al
   // volver a esta pestaña (visibilitychange) se refresca el estado en vez de
   // pedirle al asesor que recargue a mano.
@@ -7485,11 +7486,23 @@ function setupCorreo() {
 }
 function cargarCorreoSeccion() { refrescarEstadoGmail(); cargarBandejaCorreo(); }
 
+function tiempoRelativoCorto(iso) {
+  if (!iso) return 'nunca';
+  const minutos = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (minutos < 1) return 'recién';
+  if (minutos < 60) return `hace ${minutos} min`;
+  const horas = Math.round(minutos / 60);
+  if (horas < 24) return `hace ${horas}h`;
+  return `hace ${Math.round(horas / 24)}d`;
+}
+
 async function refrescarEstadoGmail() {
   const banner = document.getElementById('correo-banner');
   const txt = document.getElementById('correo-banner-txt');
   const btn = document.getElementById('correo-banner-btn');
   const badge = document.getElementById('correo-estado-badge');
+  const syncBtn = document.getElementById('correo-sync-btn');
+  const syncTime = document.getElementById('correo-sync-time');
   const { data, error } = await sb.rpc('gmail_estado_conexion');
   const estado = Array.isArray(data) ? data[0] : data;
   if (error || !estado) { txt.textContent = 'No se pudo consultar el estado de Gmail.'; return; }
@@ -7501,6 +7514,8 @@ async function refrescarEstadoGmail() {
     btn.textContent = 'Conectar Gmail';
     btn.style.display = '';
     badge.style.display = 'none';
+    syncBtn.style.display = 'none';
+    syncTime.style.display = 'none';
     return;
   }
   if (estado.revocado) {
@@ -7511,12 +7526,46 @@ async function refrescarEstadoGmail() {
     btn.textContent = 'Reconectar Gmail';
     btn.style.display = '';
     badge.style.display = 'none';
+    syncBtn.style.display = 'none';
+    syncTime.style.display = 'none';
     return;
   }
   banner.style.display = 'none';
   badge.style.display = '';
   badge.style.color = 'var(--green)'; badge.style.background = 'rgba(16,185,129,.18)';
   badge.textContent = `Conectado: ${estado.email_conectado}`;
+  syncBtn.style.display = '';
+  syncTime.style.display = '';
+  syncTime.textContent = `Sincronizado ${tiempoRelativoCorto(estado.ultima_sync_en)}`;
+}
+
+async function sincronizarCorreoAhora() {
+  const btn = document.getElementById('correo-sync-btn');
+  const icon = btn.querySelector('i');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  icon.classList.add('girando');
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session?.access_token) { errToast('Sesión expirada, recargá la página'); return; }
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-sync-manual`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) {
+      errToast(data.error === 'gmail_revocado' ? 'Tu Gmail se desconectó, reautorizá el acceso' : 'No se pudo sincronizar ahora, se reintenta solo cada 20 min');
+      return;
+    }
+    okToast(data.nuevos > 0 ? `${data.nuevos} correo${data.nuevos > 1 ? 's' : ''} nuevo${data.nuevos > 1 ? 's' : ''}` : 'Ya estás al día');
+    await refrescarEstadoGmail();
+    await cargarBandejaCorreo();
+  } catch {
+    errToast('No se pudo sincronizar ahora');
+  } finally {
+    btn.disabled = false;
+    icon.classList.remove('girando');
+  }
 }
 
 async function conectarGmail() {
