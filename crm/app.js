@@ -6160,7 +6160,7 @@ window.abrirClienteDesdeFacturacion = async (leadId) => {
 // tenía que perseguir por chat cédula, qué se vendió, cuándo viaja y cuánto
 // pagó -- se piden acá, que es el momento en que el asesor los tiene a mano.
 let EF_LEAD_ACTUAL = null;
-let efTipo = 'hospedaje';
+let efTipos = new Set(['hospedaje']);
 
 const EF_ERRORES = {
   ya_facturado: 'Este cliente ya tiene una factura',
@@ -6173,6 +6173,7 @@ const EF_ERRORES = {
   falta_monto_pagado: 'Falta el monto que pagó',
   pagado_mayor_que_total: 'El monto pagado es mayor que el total de la venta',
   lead_no_disponible: 'Este lead ya no está disponible',
+  otro_no_combina: 'No se puede combinar "Otro" con otro tipo de venta',
 };
 
 async function abrirEnviarFacturacionSheet(l) {
@@ -6189,7 +6190,8 @@ async function abrirEnviarFacturacionSheet(l) {
   // El destino del lead suele ser la ciudad a la que viaja: sirve de arranque
   // para la ruta del vuelo, pero se deja editable porque no siempre coincide.
   if (l.destino) document.getElementById('ef-vuelo-destino').value = l.destino;
-  efSetTipo('hospedaje');
+  efTipos = new Set(['hospedaje']);
+  efPintarTipos();
 
   const sel = document.getElementById('ef-admin');
   sel.innerHTML = '<option value="">Luis Rueda (por defecto)</option>';
@@ -6202,15 +6204,27 @@ async function abrirEnviarFacturacionSheet(l) {
   openSheet('enviar-facturacion-sheet');
 }
 
+function efPintarTipos() {
+  document.querySelectorAll('#ef-tipos .ef-tipo').forEach(b => b.classList.toggle('on', efTipos.has(b.dataset.efTipo)));
+  // Hospedaje + boletería a la vez muestran ambos bloques de campos; "paquete"
+  // igual; "otro" no pide ninguno de los dos pero sigue exigiendo fecha, método y monto.
+  const hotel = efTipos.has('hospedaje') || efTipos.has('paquete');
+  const vuelo = efTipos.has('boleteria') || efTipos.has('paquete');
+  document.getElementById('ef-campo-hotel').style.display = hotel ? '' : 'none';
+  document.getElementById('ef-campo-vuelo').style.display = vuelo ? '' : 'none';
+  const soloHospedaje = efTipos.size === 1 && efTipos.has('hospedaje');
+  document.getElementById('ef-lbl-fecha').textContent = soloHospedaje ? 'Fecha de entrada' : 'Fecha del viaje';
+  document.getElementById('ef-lbl-regreso').innerHTML = (soloHospedaje ? 'Fecha de salida' : 'Fecha de regreso') + ' <span class="ef-opc">(opcional)</span>';
+}
+// "Otro" no combina con nada; el resto se puede marcar libremente entre sí.
 function efSetTipo(tipo) {
-  efTipo = tipo;
-  document.querySelectorAll('#ef-tipos .ef-tipo').forEach(b => b.classList.toggle('on', b.dataset.efTipo === tipo));
-  // Un paquete puede llevar hotel y vuelo a la vez; "otro" no pide ninguno de
-  // los dos pero sigue exigiendo fecha, método y monto.
-  document.getElementById('ef-campo-hotel').style.display = (tipo === 'hospedaje' || tipo === 'paquete') ? '' : 'none';
-  document.getElementById('ef-campo-vuelo').style.display = (tipo === 'boleteria' || tipo === 'paquete') ? '' : 'none';
-  document.getElementById('ef-lbl-fecha').textContent = tipo === 'hospedaje' ? 'Fecha de entrada' : 'Fecha del viaje';
-  document.getElementById('ef-lbl-regreso').innerHTML = (tipo === 'hospedaje' ? 'Fecha de salida' : 'Fecha de regreso') + ' <span class="ef-opc">(opcional)</span>';
+  if (tipo === 'otro') {
+    efTipos = efTipos.has('otro') ? new Set() : new Set(['otro']);
+  } else {
+    efTipos.delete('otro');
+    efTipos.has(tipo) ? efTipos.delete(tipo) : efTipos.add(tipo);
+  }
+  efPintarTipos();
 }
 document.getElementById('ef-tipos')?.addEventListener('click', e => {
   const b = e.target.closest('.ef-tipo'); if (b) efSetTipo(b.dataset.efTipo);
@@ -6243,12 +6257,14 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   const btn = document.getElementById('ef-enviar'), err = document.getElementById('ef-err');
   const num = id => { const v = parseFloat(val(id)); return Number.isFinite(v) ? v : null; };
   const ent = id => { const v = parseInt(val(id), 10); return Number.isFinite(v) ? v : null; };
-  err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
+  err.textContent = '';
+  if (efTipos.size === 0) { err.textContent = 'Elegí qué se vendió'; return; }
+  btn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.rpc('enviar_a_facturacion', {
     p_lead_id: EF_LEAD_ACTUAL.id,
     p_admin_destino_id: val('ef-admin') || null,
     p_cedula: val('ef-cedula'),
-    p_tipo_venta: efTipo,
+    p_tipo_venta: Array.from(efTipos),
     p_hotel_posada: val('ef-hotel'),
     p_vuelo_origen: val('ef-vuelo-origen'),
     p_vuelo_destino: val('ef-vuelo-destino'),
@@ -6288,8 +6304,9 @@ async function loadBandejaFacturacion() {
   grid.innerHTML = FACT_BANDEJA_CACHE.map(b => {
     // Los datos que cargó el asesor al enviar. Se muestran acá para no tener
     // que abrir el lead ni preguntarle nada por chat antes de facturar.
-    const meta = LF_TIPO[b.tipo_venta];
-    const queSeVendio = [meta?.t, lfDetalleVenta(b)].filter(Boolean).join(' · ');
+    const tipos = Array.isArray(b.tipo_venta) ? b.tipo_venta : [];
+    const queSeVendio = [tipos.map(t => LF_TIPO[t]?.t).filter(Boolean).join(' + '), lfDetalleVenta(b)].filter(Boolean).join(' · ');
+    const icono = tipos.length > 1 ? 'fa-layer-group' : (LF_TIPO[tipos[0]]?.i || 'fa-tag');
     const fechas = [b.fecha_viaje && fmtDiaCorto(b.fecha_viaje), b.fecha_regreso && fmtDiaCorto(b.fecha_regreso)]
       .filter(Boolean).join(' → ');
     const pagado = b.monto_pagado != null ? Number(b.monto_pagado) : null;
@@ -6300,7 +6317,7 @@ async function loadBandejaFacturacion() {
       <div class="ec-top"><div class="ec-nombre">${esc(b.nombre)}</div></div>
       <div class="ec-row"><i class="fas fa-phone"></i> ${esc(b.telefono) || 'Sin teléfono'}</div>
       ${fila('fa-id-card', esc(b.cedula || ''))}
-      ${queSeVendio ? fila(meta?.i || 'fa-tag', esc(queSeVendio)) : `<div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(b.destino) || '—'}</div>`}
+      ${queSeVendio ? fila(icono, esc(queSeVendio)) : `<div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(b.destino) || '—'}</div>`}
       ${fila('fa-calendar-day', esc(fechas) + (b.personas != null ? ` · ${b.personas} pers.` : ''))}
       ${fila('fa-dollar-sign', pagado != null ? `Pagó ${money(pagado)}${total != null ? ` de ${money(total)}` : ''}${(total != null && total > pagado) ? ` · <b style="color:var(--amber)">saldo ${money(total - pagado)}</b>` : ''}` : '')}
       ${fila('fa-credit-card', esc([b.metodo_pago, b.referencia_pago].filter(Boolean).join(' · ')))}
@@ -13038,6 +13055,10 @@ function activateSection(sec, fromNav) {
   if (currentSec === sec) return;
   if (!fromNav && currentSec !== null) navPush({ type: 'section', prevSec: currentSec });
   if (currentSec === 'leads' && sec !== 'leads') detenerPollLeads();
+  // Si hay un chat abierto y el usuario navega a otra sección sin cerrarlo,
+  // el ?conversacion= de la URL queda pegado ahí para siempre y reaparece en
+  // cada "Actualizar CRM" (location.replace conserva el query string actual).
+  if (msgActual && sec !== 'mensajes') cerrarConversacion(true);
   currentSec = sec;
   SECCIONES_CARGADAS.add(sec);
   guardarUltimaSeccion(sec);
@@ -14300,17 +14321,21 @@ const LF_TIPO = {
 // conserva lo que ya estaba), así que se filtra por tipo_venta al mostrar: si
 // no, una venta de hospedaje aparece con la ruta de vuelo de un envío viejo.
 function lfDetalleVenta(x) {
+  const tipos = Array.isArray(x.tipo_venta) ? x.tipo_venta : [];
   const partes = [];
-  if (x.hotel_posada && (x.tipo_venta === 'hospedaje' || x.tipo_venta === 'paquete')) partes.push(x.hotel_posada);
-  if ((x.vuelo_origen || x.vuelo_destino) && (x.tipo_venta === 'boleteria' || x.tipo_venta === 'paquete')) {
+  if (x.hotel_posada && (tipos.includes('hospedaje') || tipos.includes('paquete'))) partes.push(x.hotel_posada);
+  if ((x.vuelo_origen || x.vuelo_destino) && (tipos.includes('boleteria') || tipos.includes('paquete'))) {
     partes.push(`${x.vuelo_origen || '?'} → ${x.vuelo_destino || '?'}`);
   }
   return partes.join(' · ');
 }
 function lfQueSeVendio(x) {
-  const meta = LF_TIPO[x.tipo_venta] || { i: 'fa-tag', t: 'Sin especificar' };
+  const tipos = Array.isArray(x.tipo_venta) ? x.tipo_venta : [];
+  if (!tipos.length) return `<div class="lf-que"><i class="fas fa-tag"></i> <span>Sin especificar</span></div>`;
+  const icono = tipos.length > 1 ? 'fa-layer-group' : (LF_TIPO[tipos[0]]?.i || 'fa-tag');
+  const label = tipos.map(t => LF_TIPO[t]?.t || t).join(' + ');
   const detalle = lfDetalleVenta(x);
-  return `<div class="lf-que"><i class="fas ${meta.i}"></i> <span>${esc(meta.t)}${detalle ? ' — ' + esc(detalle) : ''}</span></div>`;
+  return `<div class="lf-que"><i class="fas ${icono}"></i> <span>${esc(label)}${detalle ? ' — ' + esc(detalle) : ''}</span></div>`;
 }
 function lfFila(k, v) { return v ? `<div class="lf-k">${esc(k)}</div><div class="lf-v">${v}</div>` : ''; }
 function lfCardHtml(x) {
@@ -14322,7 +14347,7 @@ function lfCardHtml(x) {
     .filter(Boolean).join(' → ');
   // Los envíos viejos (anteriores a esta pantalla) no tienen nada cargado: se
   // dice explícito en vez de mostrar una tarjeta vacía que parezca un bug.
-  const sinDatos = !x.tipo_venta && !x.cedula && pagado == null;
+  const sinDatos = !(x.tipo_venta && x.tipo_venta.length) && !x.cedula && pagado == null;
   return `<div class="lf-card${lista ? ' lf-lista' : ''}">
     <div class="lf-top">
       <div class="lf-nombre">${esc(x.nombre || 'Sin nombre')}</div>
@@ -14332,7 +14357,7 @@ function lfCardHtml(x) {
     <div class="lf-datos">
       ${lfFila('Teléfono', esc(x.telefono || ''))}
       ${lfFila('Cédula', esc(x.cedula || ''))}
-      ${lfFila(x.tipo_venta === 'hospedaje' ? 'Entrada/salida' : 'Viaje', esc(fechas))}
+      ${lfFila((Array.isArray(x.tipo_venta) && x.tipo_venta.length === 1 && x.tipo_venta[0] === 'hospedaje') ? 'Entrada/salida' : 'Viaje', esc(fechas))}
       ${lfFila('Personas', x.personas != null ? String(x.personas) : '')}
       ${lfFila('Pagó', pagado != null ? money(pagado) + (total != null ? ` de ${money(total)}` : '') : '')}
       ${lfFila('Método', esc([x.metodo_pago, x.referencia_pago].filter(Boolean).join(' · ')))}
