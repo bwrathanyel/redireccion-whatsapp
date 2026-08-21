@@ -1057,7 +1057,15 @@ async function activarNotificaciones(nombre) {
     // tiene que arreglarlo sabe qué pasó. Los errores de push son
     // específicos y accionables (permiso, push service caído, clave que no
     // coincide) y esconderlos costó una ronda entera de diagnóstico a ciegas.
-    errToast(`No se pudieron activar ${nombre.toLowerCase()}: ${e && (e.name || e.message) ? `${e.name || ''} ${e.message || ''}`.trim() : e}`);
+    // "Registration failed - push service error" es el error de Chromium
+    // cuando el navegador no puede hablar con el servicio de push de Google.
+    // En Brave viene DESACTIVADO de fábrica, así que le pasa a cualquiera del
+    // equipo que use Brave en escritorio, y el texto crudo no le dice nada a
+    // nadie: hay que nombrar el ajuste exacto.
+    const crudo = `${(e && e.name) || ''} ${(e && e.message) || e || ''}`.trim();
+    errToast(/push service error/i.test(crudo)
+      ? 'Tu navegador tiene bloqueado el servicio de push. En Brave: abrí brave://settings/privacy, activá "Usar los servicios de Google para la mensajería push" y reiniciá el navegador.'
+      : `No se pudieron activar ${nombre.toLowerCase()}: ${crudo}`);
     return false;
   }
   renderAvisosPushUI();
