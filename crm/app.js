@@ -355,7 +355,7 @@ async function entrarSegunRol() {
     if (MI_BLOQUEADO) mostrarBloqueoOverlay();
   }
   setupLatidoPresencia();
-  renderRecordatoriosUI();
+  renderAvisosPushUI();
   manejarDeepLinkAsistencia();
   // Antes de manejarDeepLinkSeccion: ese maneja "?ir=leads" con un
   // history.replaceState(null,'',location.pathname) que borra TODA la query
@@ -472,11 +472,24 @@ async function guardarPreferencia(clave, valor, grupoId) {
   }
 }
 async function actualizarTogglesNotif() {
+  // El toggle refleja la REALIDAD, no la preferencia sola: querer los avisos y
+  // poder recibirlos son dos cosas distintas, y mostrarlo encendido sin
+  // suscripción viva es lo que hizo que nadie se enterara de que no le llegaba
+  // nada. Ver estadoPushReal().
+  const estado = await estadoPushReal();
   [['perfil-notif-leads', 'notificaciones_leads', 'Leads nuevos'], ['perfil-notif-asistencia', 'notificaciones_asistencia', 'Recordatorios']].forEach(([id, clave, nombre]) => {
     const btn = document.getElementById(id);
     if (!btn) return;
-    const activo = MI_PREFERENCIAS[clave] !== false;
+    const activo = MI_PREFERENCIAS[clave] !== false && estado.activo;
     btn.classList.toggle('on', activo);
+    // Con el permiso denegado, requestPermission() ya no vuelve a preguntar:
+    // el botón no puede funcionar y ofrecerlo igual solo confunde (mismo
+    // criterio que la rama de iOS sin instalar, más abajo).
+    const bloqueado = estado.soportado && estado.permiso === 'denied';
+    btn.disabled = bloqueado;
+    btn.title = bloqueado
+      ? 'Bloqueado en el navegador: tocá el candado junto a la dirección y permití las notificaciones.'
+      : '';
     btn.onclick = async () => {
       btn.disabled = true;
       const anterior = MI_PREFERENCIAS;
@@ -518,7 +531,7 @@ async function desactivarSuscripcionPush() {
     return;
   }
   okToast('Notificaciones desactivadas');
-  renderRecordatoriosUI();
+  renderAvisosPushUI();
 }
 async function subirAvatar(file) {
   if (!AVATAR_MIME.includes(file.type)) { errToast('Formato no válido — solo PNG, JPG o WEBP'); return; }
@@ -956,6 +969,32 @@ function urlBase64ToUint8Array(base64String) {
 // poder rotar el endpoint cuando el navegador lo cambia. Cache Storage es el
 // único almacén que la página y el worker comparten.
 const CACHE_IDENTIDAD_PUSH = 'lotus-push-id';
+
+// Única fuente de verdad sobre si esta persona recibe push DE VERDAD, en este
+// navegador, ahora. Antes cada lugar decidía por su cuenta: el toggle miraba
+// solo la preferencia guardada, y como `undefined !== false`, se mostraba
+// encendido para todo el mundo -- incluida la gente que nunca lo tocó y por lo
+// tanto nunca dio permiso ni creó una suscripción. Resultado real medido el
+// 2026-08-20: 11 de 14 personas con el toggle en verde y CERO suscripciones.
+//
+// 'default' NO es una decisión: es que nunca se preguntó. Distinguirlo de
+// 'denied' es lo que separa "hay que invitarla a activar" de "dijo que no y hay
+// que respetarlo".
+async function estadoPushReal() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') {
+    return { soportado: false, permiso: 'no-soportado', sub: null, activo: false };
+  }
+  const permiso = Notification.permission; // 'default' | 'granted' | 'denied'
+  let sub = null;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    sub = await reg.pushManager.getSubscription();
+  } catch (e) {
+    console.warn('estadoPushReal', e);
+  }
+  return { soportado: true, permiso, sub, activo: permiso === 'granted' && !!sub };
+}
+
 async function guardarIdentidadPush(sub, id, token) {
   try {
     const c = await caches.open(CACHE_IDENTIDAD_PUSH);
@@ -1003,12 +1042,19 @@ async function activarNotificaciones(nombre) {
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
     const { error } = await registrarSuscripcionPush(sub);
     if (error) { errToast('No se pudo activar: ' + error.message); return false; }
+    // Si en algún momento dijo "no, gracias", activar ahora es cambiar de
+    // opinión: sin esto el banner quedaría escondido para siempre y no habría
+    // forma de recuperarlo el día que la suscripción se muera de verdad.
+    if (MI_PREFERENCIAS.push_rechazado) {
+      MI_PREFERENCIAS = { ...MI_PREFERENCIAS, push_rechazado: false };
+      await sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS });
+    }
     okToast(`${nombre} activados`);
   } catch (e) {
     console.error('activarNotificaciones', e);
     errToast(`No se pudieron activar ${nombre.toLowerCase()}`); return false;
   }
-  renderRecordatoriosUI();
+  renderAvisosPushUI();
   return true;
 }
 
@@ -1019,16 +1065,24 @@ async function activarNotificaciones(nombre) {
 // está cerrado no vuelve nunca -- y esa es la causa principal de "me dejaron
 // de llegar las notificaciones".
 //
-// Nunca pide permiso: si la persona no lo dio, se respeta. Solo repara lo que
-// ya estaba activado. Va dentro de arrancar(...), así que un fallo acá no
-// puede tumbar el arranque del CRM.
+// Nunca pide permiso desde acá: el navegador exige un gesto humano para el
+// prompt, así que pedirlo en el arranque no funcionaría aunque quisiéramos. Con
+// permiso 'default' (nunca se preguntó) el trabajo lo hace el banner, que sí
+// nace de un click -- ver renderAvisosPushUI(). Acá solo se repara lo que ya
+// estaba activado.
+//
+// Va dentro de arrancar(...), así que un fallo acá no puede tumbar el arranque.
 async function sincronizarSuscripcionPush() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  const estado = await estadoPushReal();
+  if (!estado.soportado) return;
+  // 'denied' se respeta; 'default' no se toca acá pero tampoco es una decisión
+  // -- el banner se encarga de invitarla, y sin esa distinción la
+  // reconciliación no podía ayudar justamente a quien nunca activó.
+  if (estado.permiso !== 'granted') { renderAvisosPushUI(); return; }
   if (MI_PREFERENCIAS.notificaciones_leads === false && MI_PREFERENCIAS.notificaciones_asistencia === false) return;
   try {
     const reg = await navigator.serviceWorker.ready;
-    let sub = await reg.pushManager.getSubscription();
+    let sub = estado.sub;
     // Permiso concedido pero sin suscripción: el navegador la descartó por su
     // cuenta. Se resucita sin molestar a nadie, no hace falta prompt.
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
@@ -1039,30 +1093,56 @@ async function sincronizarSuscripcionPush() {
   }
 }
 window.activarRecordatorios = async () => {
-  if (MI_PREFERENCIAS.notificaciones_asistencia === false) {
+  // El banner ya no es solo de asistencia: quien lo toca quiere recibir avisos,
+  // punto. Se habilita lo que corresponda a su rol y se pide el permiso.
+  const faltantes = {};
+  if (MI_PREFERENCIAS.notificaciones_leads === false) faltantes.notificaciones_leads = true;
+  if (puedeRecibirAsistencia() && MI_PREFERENCIAS.notificaciones_asistencia === false) faltantes.notificaciones_asistencia = true;
+  if (Object.keys(faltantes).length) {
     const anterior = MI_PREFERENCIAS;
-    MI_PREFERENCIAS = { ...MI_PREFERENCIAS, notificaciones_asistencia: true };
+    MI_PREFERENCIAS = { ...MI_PREFERENCIAS, ...faltantes };
     const { error } = await sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS });
     if (error) { MI_PREFERENCIAS = anterior; errToast('No se pudo guardar: ' + error.message); return false; }
   }
-  return activarNotificaciones('Recordatorios');
+  return activarNotificaciones(puedeRecibirAsistencia() ? 'Avisos' : 'Leads nuevos');
 };
-window.ocultarRecordatoriosBanner = () => {
-  sessionStorage.setItem('recordatorios_banner_oculto', '1');
-  renderRecordatoriosUI();
+// "No, gracias" es una decisión, no un "después lo veo": se guarda en el perfil
+// y no en sessionStorage. Antes el banner volvía en cada pestaña nueva, así que
+// cerrarlo no significaba nada y la gente aprendió a ignorarlo.
+window.ocultarRecordatoriosBanner = async () => {
+  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, push_rechazado: true };
+  await sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS });
+  renderAvisosPushUI();
 };
-async function renderRecordatoriosUI() {
-  if (!puedeRecibirAsistencia() || MI_PREFERENCIAS.notificaciones_asistencia === false) return;
-  const { data, error } = await sb.rpc('mi_asistencia_hoy');
-  if (error) return;
-  const mostrar = data && !data.tiene_recordatorios && !sessionStorage.getItem('recordatorios_banner_oculto');
-  const texto = ROL === 'admin' ? 'Activá los avisos de asistencia del equipo' : 'Activá los recordatorios de asistencia';
+// Un solo banner para todo el push. Antes solo hablaba de asistencia y vivía
+// detrás de puedeRecibirAsistencia(), así que los admin que no son gerencia y
+// los asesores exentos de asistencia -- que igual reciben LEADS -- nunca vieron
+// ninguna invitación a activar. Y se apoyaba en `tiene_recordatorios`, que
+// contaba también las filas expiradas: un dispositivo muerto bastaba para
+// esconderlo para siempre.
+async function renderAvisosPushUI() {
+  const puedeRecibirAlgo = ROL === 'asesor' || ROL === 'admin';
+  const estado = await estadoPushReal();
+  const rechazoTodo = MI_PREFERENCIAS.notificaciones_leads === false
+    && (!puedeRecibirAsistencia() || MI_PREFERENCIAS.notificaciones_asistencia === false);
+  const bloqueado = estado.soportado && estado.permiso === 'denied';
+  const mostrar = puedeRecibirAlgo && estado.soportado && !estado.activo
+    && !rechazoTodo && !MI_PREFERENCIAS.push_rechazado;
+  const texto = bloqueado
+    ? 'Los avisos están bloqueados en este navegador: tocá el candado junto a la dirección y permití las notificaciones.'
+    : (puedeRecibirAsistencia()
+      ? 'Activá los avisos de leads y asistencia -- ahora mismo no te llega ninguno.'
+      : 'Activá los avisos de leads nuevos -- ahora mismo no te llega ninguno.');
   ['-d', '-m'].forEach(sfx => {
     const el = document.getElementById('recordatorios-banner' + sfx);
     if (!el) return;
     el.style.display = mostrar ? 'flex' : 'none';
     const span = el.querySelector('span');
     if (span) span.textContent = texto;
+    // Con el permiso denegado no hay nada que el botón pueda hacer: el
+    // navegador no vuelve a preguntar. Queda solo la instrucción.
+    const btn = el.querySelector('button:not(.rb-close)');
+    if (btn) btn.style.display = bloqueado ? 'none' : '';
   });
 }
 
@@ -1249,11 +1329,15 @@ async function loadDiagnosticoPush() {
     // Sin dispositivos vivos no hay a quién mandarle: es el caso más común
     // detrás de "no me llegan" y hasta ahora era invisible.
     const sinVivos = f.dispositivos === 0;
-    const alerta = sinVivos || f.fallos_consecutivos >= 3 || (f.visto_hace_horas ?? 0) > 168;
+    // Un endpoint que acepta todo (201) pero del que el service worker nunca
+    // confirma la entrega es un fantasma: la instalación que lo creó ya no
+    // existe. Sin marcarlo, la pantalla informa "ok" sobre avisos que nadie ve.
+    const fantasma = (f.sospechosas ?? 0) > 0;
+    const alerta = sinVivos || fantasma || f.fallos_consecutivos >= 3 || (f.visto_hace_horas ?? 0) > 168;
     return `<tr${alerta ? ' style="opacity:.85"' : ''}>
       <td><b>${esc(f.nombre)}</b><div class="csub">${esc(f.rol)}</div></td>
-      <td>${f.dispositivos}${f.expiradas ? ` <span class="csub">(${f.expiradas} vencida${f.expiradas > 1 ? 's' : ''})</span>` : ''}<div class="csub">${esc(f.plataformas || '-')}</div></td>
-      <td>${f.instaladas > 0 ? `${f.instaladas} sí` : '<span class="csub">en navegador</span>'}</td>
+      <td>${f.dispositivos}${f.expiradas ? ` <span class="csub">(${f.expiradas} vencida${f.expiradas > 1 ? 's' : ''})</span>` : ''}<div class="csub">${esc(f.plataformas || '-')}</div>${fantasma ? `<div class="csub" style="color:var(--warn,#ff9100)">${f.sospechosas} sin entregar nunca</div>` : ''}</td>
+      <td>${sinVivos ? '—' : (f.instaladas > 0 ? `${f.instaladas} sí` : '<span class="csub">en navegador</span>')}</td>
       <td>${horasLegibles(f.visto_hace_horas)}</td>
       <td>${f.ultimo_ok_at ? esc(fmtFechaHoraCaracas(f.ultimo_ok_at)) : '—'}</td>
       <td>${f.ok_7d} ok · ${f.fallo_7d} fallo${f.entregados_7d ? ` · ${f.entregados_7d} vistas` : ''}</td>
