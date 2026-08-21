@@ -158,7 +158,13 @@ body:has(#vista-previa-banner){padding-top:36px}
 .recordatorios-banner span{flex:1;font-size:11.5px;color:var(--txt);font-weight:600}
 .recordatorios-banner button{background:var(--accent);color:#1a1000;border:none;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0}
 .recordatorios-banner .rb-close{background:transparent;color:var(--muted);font-size:11px;padding:6px 4px;font-weight:600;white-space:nowrap;text-decoration:underline}
-.recordatorios-banner-m{margin:0 0 12px}
+.recordatorios-banner-m{margin:10px 0 0}
+/* El banner -m se mudó de la hoja "Yo" al tope del área principal: adentro del
+   menú solo lo veía quien lo abriera, y los asesores entran desde el celular.
+   Ahora que vive en .main hay que esconderlo en escritorio o saldría duplicado
+   junto al del sidebar. !important porque renderAvisosPushUI escribe
+   display:flex inline. */
+@media(min-width:761px){.recordatorios-banner-m{display:none !important}}
 .asist-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:var(--panel-solid);color:var(--muted)}
 .asist-badge.on{background:rgba(16,185,129,.15);color:var(--green)}
 .asist-badge.off{background:rgba(239,68,68,.15);color:#ef4444}
@@ -2430,6 +2436,11 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
       <div><div class="mb-t">Destino y Eventos Lotus 360</div><div class="mb-s">CRM comercial</div></div>
       <button class="logout-btn m-logout" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
     </div>
+    <div class="recordatorios-banner recordatorios-banner-m" id="recordatorios-banner-m">
+      <span>Activá los recordatorios de asistencia</span>
+      <button onclick="activarRecordatorios()">Activar</button>
+      <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="No recibir avisos">No, gracias</button>
+    </div>
     <div class="topbar">
       <div>
         <h1 id="page-title">Dashboard</h1>
@@ -4415,11 +4426,6 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <span class="jornada-dot" id="jornada-dot-m"></span>
     <span class="jornada-text" id="jornada-text-m">Jornada inactiva</span>
     <button class="jornada-btn" id="jornada-btn-m" onclick="toggleJornada()">Comenzar</button>
-  </div>
-  <div class="recordatorios-banner recordatorios-banner-m" id="recordatorios-banner-m">
-    <span>Activá los recordatorios de asistencia</span>
-    <button onclick="activarRecordatorios()">Activar</button>
-    <button class="rb-close" onclick="ocultarRecordatoriosBanner()" aria-label="No recibir avisos">No, gracias</button>
   </div>
   <input class="sheet-buscar" id="sheet-buscar" type="text" placeholder="Buscar sección..." autocomplete="off">
   <template id="sheet-items-anchor"></template>

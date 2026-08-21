@@ -1157,23 +1157,31 @@ async function renderAvisosPushUI() {
   const rechazoTodo = MI_PREFERENCIAS.notificaciones_leads === false
     && (!puedeRecibirAsistencia() || MI_PREFERENCIAS.notificaciones_asistencia === false);
   const bloqueado = estado.soportado && estado.permiso === 'denied';
-  const mostrar = puedeRecibirAlgo && estado.soportado && !estado.activo
+  // En iPhone el Web Push no existe hasta que la app está en la pantalla de
+  // inicio (iOS 16.4+): sin PushManager no hay nada que activar. Ofrecer
+  // "Activar" ahí es mandar a la persona a un callejón sin salida -- toca,
+  // falla, y no se entera de que lo que faltaba era instalar.
+  const faltaInstalar = esIOS() && !pwaInstalada();
+  const mostrar = puedeRecibirAlgo && (estado.soportado || faltaInstalar) && !estado.activo
     && !rechazoTodo && !MI_PREFERENCIAS.push_rechazado;
-  const texto = bloqueado
-    ? 'Los avisos están bloqueados en este navegador: tocá el candado junto a la dirección y permití las notificaciones.'
-    : (puedeRecibirAsistencia()
-      ? 'Activá los avisos de leads y asistencia -- ahora mismo no te llega ninguno.'
-      : 'Activá los avisos de leads nuevos -- ahora mismo no te llega ninguno.');
+  const texto = faltaInstalar
+    ? 'Para recibir avisos en iPhone: tocá Compartir abajo y luego "Agregar a inicio". Después entrá desde ese ícono y activalos.'
+    : (bloqueado
+      ? 'Los avisos están bloqueados en este navegador: tocá el candado junto a la dirección y permití las notificaciones.'
+      : (puedeRecibirAsistencia()
+        ? 'Activá los avisos de leads y asistencia -- ahora mismo no te llega ninguno.'
+        : 'Activá los avisos de leads nuevos -- ahora mismo no te llega ninguno.'));
   ['-d', '-m'].forEach(sfx => {
     const el = document.getElementById('recordatorios-banner' + sfx);
     if (!el) return;
     el.style.display = mostrar ? 'flex' : 'none';
     const span = el.querySelector('span');
     if (span) span.textContent = texto;
-    // Con el permiso denegado no hay nada que el botón pueda hacer: el
-    // navegador no vuelve a preguntar. Queda solo la instrucción.
+    // Sin permiso (denegado) o sin app instalada en iPhone, el botón no puede
+    // hacer nada: el navegador no vuelve a preguntar y en iOS no hay
+    // PushManager. Queda solo la instrucción, que es lo accionable.
     const btn = el.querySelector('button:not(.rb-close)');
-    if (btn) btn.style.display = bloqueado ? 'none' : '';
+    if (btn) btn.style.display = (bloqueado || faltaInstalar) ? 'none' : '';
   });
 }
 
