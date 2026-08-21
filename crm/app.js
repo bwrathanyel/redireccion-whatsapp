@@ -1039,7 +1039,7 @@ async function activarNotificaciones(nombre) {
   if (permiso !== 'granted') { errToast('Permiso de notificaciones denegado'); return false; }
   try {
     const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+    const sub = await suscribirPush(reg);
     const { error } = await registrarSuscripcionPush(sub);
     if (error) { errToast('No se pudo activar: ' + error.message); return false; }
     // Si en algún momento dijo "no, gracias", activar ahora es cambiar de
@@ -1052,10 +1052,34 @@ async function activarNotificaciones(nombre) {
     okToast(`${nombre} activados`);
   } catch (e) {
     console.error('activarNotificaciones', e);
-    errToast(`No se pudieron activar ${nombre.toLowerCase()}`); return false;
+    // El mensaje real va al toast a propósito. El genérico ("no se pudieron
+    // activar") no le sirve a nadie: ni la persona sabe qué hacer, ni quien
+    // tiene que arreglarlo sabe qué pasó. Los errores de push son
+    // específicos y accionables (permiso, push service caído, clave que no
+    // coincide) y esconderlos costó una ronda entera de diagnóstico a ciegas.
+    errToast(`No se pudieron activar ${nombre.toLowerCase()}: ${e && (e.name || e.message) ? `${e.name || ''} ${e.message || ''}`.trim() : e}`);
+    return false;
   }
   renderAvisosPushUI();
   return true;
+}
+
+// Una suscripción vieja creada con OTRA applicationServerKey hace que
+// subscribe() tire InvalidStateError y no hay forma de arreglarlo sin
+// descartarla: el navegador solo admite una por registro de service worker.
+// Pasa después de rotar las claves VAPID, y deja a la persona sin poder
+// activar nunca más por más que toque el botón.
+async function suscribirPush(reg) {
+  const clave = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+  const existente = await reg.pushManager.getSubscription();
+  if (existente) {
+    const actual = existente.options && existente.options.applicationServerKey;
+    const iguales = actual && new Uint8Array(actual).length === clave.length
+      && new Uint8Array(actual).every((b, i) => b === clave[i]);
+    if (iguales) return existente;
+    await existente.unsubscribe().catch(() => {});
+  }
+  return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: clave });
 }
 
 // Reconciliación en cada arranque. Es la red de seguridad real del sistema de
@@ -1082,10 +1106,9 @@ async function sincronizarSuscripcionPush() {
   if (MI_PREFERENCIAS.notificaciones_leads === false && MI_PREFERENCIAS.notificaciones_asistencia === false) return;
   try {
     const reg = await navigator.serviceWorker.ready;
-    let sub = estado.sub;
-    // Permiso concedido pero sin suscripción: el navegador la descartó por su
-    // cuenta. Se resucita sin molestar a nadie, no hace falta prompt.
-    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+    // Permiso concedido pero sin suscripción (o con una de otra clave VAPID):
+    // se resucita sin molestar a nadie, no hace falta prompt.
+    const sub = await suscribirPush(reg);
     const { error } = await registrarSuscripcionPush(sub);
     if (error) console.error('sincronizarSuscripcionPush', error.message);
   } catch (e) {
