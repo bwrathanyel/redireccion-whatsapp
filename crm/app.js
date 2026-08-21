@@ -6183,7 +6183,7 @@ async function abrirEnviarFacturacionSheet(l) {
     `<i class="fas fa-user"></i> Facturando a <b>${esc(l.nombre || 'Sin nombre')}</b>${l.telefono ? ' · ' + esc(l.telefono) : ''}`;
 
   ['ef-cedula', 'ef-hotel', 'ef-vuelo-origen', 'ef-vuelo-destino', 'ef-fecha-viaje',
-   'ef-fecha-regreso', 'ef-personas', 'ef-referencia', 'ef-monto-pagado',
+   'ef-fecha-regreso', 'ef-adultos', 'ef-ninos', 'ef-infantes', 'ef-referencia', 'ef-monto-pagado',
    'ef-monto-total', 'ef-notas'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   document.getElementById('ef-metodo').value = '';
   document.getElementById('ef-abono').className = 'ef-abono';
@@ -6230,6 +6230,17 @@ document.getElementById('ef-tipos')?.addEventListener('click', e => {
   const b = e.target.closest('.ef-tipo'); if (b) efSetTipo(b.dataset.efTipo);
 });
 
+// "personas" (filas viejas) no dice si viajan con niños/infantes -- el desglose
+// nuevo sí, y hay que poder mostrar ambos según qué haya cargado cada envío.
+function paxTexto(x) {
+  const partes = [];
+  if (x.adultos)  partes.push(`${x.adultos} adulto${x.adultos === 1 ? '' : 's'}`);
+  if (x.ninos)    partes.push(`${x.ninos} niño${x.ninos === 1 ? '' : 's'}`);
+  if (x.infantes) partes.push(`${x.infantes} infante${x.infantes === 1 ? '' : 's'}`);
+  if (partes.length) return partes.join(', ');
+  return x.personas != null ? `${x.personas} pers.` : '';
+}
+
 // Aviso en vivo de abono vs total: que el asesor vea el saldo antes de mandar,
 // no que se entere el admin al facturar.
 function efPintarAbono() {
@@ -6270,7 +6281,9 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
     p_vuelo_destino: val('ef-vuelo-destino'),
     p_fecha_viaje: val('ef-fecha-viaje') || null,
     p_fecha_regreso: val('ef-fecha-regreso') || null,
-    p_personas: ent('ef-personas'),
+    p_adultos: ent('ef-adultos'),
+    p_ninos: ent('ef-ninos'),
+    p_infantes: ent('ef-infantes'),
     p_metodo_pago: val('ef-metodo'),
     p_referencia_pago: val('ef-referencia'),
     p_monto_pagado: num('ef-monto-pagado'),
@@ -6318,7 +6331,7 @@ async function loadBandejaFacturacion() {
       <div class="ec-row"><i class="fas fa-phone"></i> ${esc(b.telefono) || 'Sin teléfono'}</div>
       ${fila('fa-id-card', esc(b.cedula || ''))}
       ${queSeVendio ? fila(icono, esc(queSeVendio)) : `<div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(b.destino) || '—'}</div>`}
-      ${fila('fa-calendar-day', esc(fechas) + (b.personas != null ? ` · ${b.personas} pers.` : ''))}
+      ${fila('fa-calendar-day', esc(fechas) + (paxTexto(b) ? ' · ' + esc(paxTexto(b)) : ''))}
       ${fila('fa-dollar-sign', pagado != null ? `Pagó ${money(pagado)}${total != null ? ` de ${money(total)}` : ''}${(total != null && total > pagado) ? ` · <b style="color:var(--amber)">saldo ${money(total - pagado)}</b>` : ''}` : '')}
       ${fila('fa-credit-card', esc([b.metodo_pago, b.referencia_pago].filter(Boolean).join(' · ')))}
       ${fila('fa-note-sticky', esc(b.notas_venta || ''))}
@@ -14358,7 +14371,7 @@ function lfCardHtml(x) {
       ${lfFila('Teléfono', esc(x.telefono || ''))}
       ${lfFila('Cédula', esc(x.cedula || ''))}
       ${lfFila((Array.isArray(x.tipo_venta) && x.tipo_venta.length === 1 && x.tipo_venta[0] === 'hospedaje') ? 'Entrada/salida' : 'Viaje', esc(fechas))}
-      ${lfFila('Personas', x.personas != null ? String(x.personas) : '')}
+      ${lfFila('Personas', esc(paxTexto(x)))}
       ${lfFila('Pagó', pagado != null ? money(pagado) + (total != null ? ` de ${money(total)}` : '') : '')}
       ${lfFila('Método', esc([x.metodo_pago, x.referencia_pago].filter(Boolean).join(' · ')))}
       ${lfFila('Notas', esc(x.notas_venta || ''))}

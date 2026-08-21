@@ -718,6 +718,7 @@ input.ei[type=date]{color-scheme:dark}
 .ef-fila{display:flex;gap:10px}
 .ef-fila>*{min-width:0}
 .ef-opc{color:var(--muted2);font-weight:500;text-transform:none;letter-spacing:0}
+.fl-sub{display:block;font-size:10.5px;color:var(--muted2);font-weight:600;margin:0 0 4px;text-align:center}
 .ef-abono{display:none;font-size:12px;margin-top:7px;padding:8px 10px;border-radius:9px;background:rgba(74,158,255,.09);border:1px solid rgba(74,158,255,.25);color:#9ec5ff}
 .ef-abono.show{display:block}
 .ef-abono.malo{background:rgba(239,68,68,.09);border-color:rgba(239,68,68,.3);color:#ffa5a5}
@@ -4878,7 +4879,11 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     </div>
 
     <label class="fl">¿Cuántas personas? <span class="ef-opc">(opcional)</span></label>
-    <input id="ef-personas" class="ei" type="number" min="1" step="1" placeholder="2">
+    <div class="ef-fila">
+      <div style="flex:1"><label class="fl-sub">Adultos</label><input id="ef-adultos" class="ei" type="number" min="0" step="1" placeholder="2"></div>
+      <div style="flex:1"><label class="fl-sub">Niños</label><input id="ef-ninos" class="ei" type="number" min="0" step="1" placeholder="0"></div>
+      <div style="flex:1"><label class="fl-sub">Infantes</label><input id="ef-infantes" class="ei" type="number" min="0" step="1" placeholder="0"></div>
+    </div>
 
     <label class="fl">Método de pago</label>
     <select id="ef-metodo" class="ei">
