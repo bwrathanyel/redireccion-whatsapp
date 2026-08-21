@@ -415,6 +415,14 @@ function openPerfilDrawer() {
       ${puedeRecibirLeads() ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
         <span style="font-size:13px">Leads nuevos<small style="display:block;color:var(--muted);margin-top:2px">Cuando te asignan un lead</small></span>
         <button type="button" class="tas-toggle" id="perfil-notif-leads"></button>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+        <span style="font-size:13px">Correo<small style="display:block;color:var(--muted);margin-top:2px">Correo nuevo de un cliente (si tenés Gmail conectado)</small></span>
+        <button type="button" class="tas-toggle" id="perfil-notif-correo"></button>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span style="font-size:13px">Boletería<small style="display:block;color:var(--muted);margin-top:2px">Solicitudes de vuelo: nuevas, en revisión y listas</small></span>
+        <button type="button" class="tas-toggle" id="perfil-notif-boleteria"></button>
       </div>` : ''}
       ${puedeRecibirAsistencia() ? `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:${puedeChatearInterno() ? '12px' : '0'}">
@@ -484,7 +492,7 @@ async function actualizarTogglesNotif() {
   // suscripción viva es lo que hizo que nadie se enterara de que no le llegaba
   // nada. Ver estadoPushReal().
   const estado = await estadoPushReal();
-  [['perfil-notif-leads', 'notificaciones_leads', 'Leads nuevos'], ['perfil-notif-asistencia', 'notificaciones_asistencia', 'Recordatorios'], ['perfil-notif-mensajes', 'notificaciones_mensajes', 'Mensajes']].forEach(([id, clave, nombre]) => {
+  [['perfil-notif-leads', 'notificaciones_leads', 'Leads nuevos'], ['perfil-notif-asistencia', 'notificaciones_asistencia', 'Recordatorios'], ['perfil-notif-mensajes', 'notificaciones_mensajes', 'Mensajes'], ['perfil-notif-correo', 'notificaciones_correo', 'Correo'], ['perfil-notif-boleteria', 'notificaciones_boleteria', 'Boletería']].forEach(([id, clave, nombre]) => {
     const btn = document.getElementById(id);
     if (!btn) return;
     const activo = MI_PREFERENCIAS[clave] !== false && estado.activo;
