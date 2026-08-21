@@ -3964,6 +3964,7 @@ window.enviarRespuestaCorreo = async (correoId) => {
       headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         lead_id: correo.lead_id ?? null,
+        credencial_id: correo.credencial_id,
         para: [extraerEmailDeCabecera(correo.de)],
         asunto: correo.asunto?.startsWith('Re:') ? correo.asunto : `Re: ${correo.asunto || ''}`,
         cuerpo: texto,
@@ -4023,7 +4024,7 @@ async function cargarCorreoLead(l) {
   const box = document.getElementById('correo-lead-body');
   if (!box) return;
   if (CORREO_LEAD_CACHE) { box.innerHTML = CORREO_LEAD_CACHE; return; }
-  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,gmail_message_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').eq('lead_id', l.id).order('enviado_en', { ascending: true });
+  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,credencial_id,gmail_message_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').eq('lead_id', l.id).order('enviado_en', { ascending: true });
   if (error) { box.innerHTML = '<div class="muted">No se pudo cargar el correo de este lead</div>'; return; }
   if (!data.length) { CORREO_LEAD_CACHE = '<div class="muted">Sin correos vinculados a este lead todavía</div>'; box.innerHTML = CORREO_LEAD_CACHE; return; }
   data.forEach(c => CORREOS_DATA.set(c.id, c));
@@ -7459,6 +7460,8 @@ const GMAIL_SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www
 
 let CORREO_BANDEJA_DATA = [];
 let correoFiltro = 'todos';
+let CORREO_CUENTAS = []; // filas de gmail_estado_conexion() -- una por cuenta conectada
+let CORREO_CUENTA_ACTIVA = localStorage.getItem('correo_cuenta_activa') || null;
 function setupCorreo() {
   // Solo conecta el botón acá -- el estado y la bandeja se cargan recién
   // cuando se activa la sección (ver activateSection), mismo patrón perezoso
@@ -7468,6 +7471,12 @@ function setupCorreo() {
   document.getElementById('correo-banner-btn').onclick = conectarGmail;
   document.getElementById('correo-detalle-back').onclick = cerrarHiloCorreo;
   document.getElementById('correo-sync-btn').onclick = sincronizarCorreoAhora;
+  document.getElementById('correo-redactar-btn').onclick = abrirComposeNuevo;
+  document.getElementById('compose-cancelar').onclick = () => closeSheet('correo-compose-sheet');
+  document.getElementById('compose-enviar').onclick = enviarComposeNuevo;
+  document.getElementById('compose-adjuntar-input').addEventListener('change', (e) => { agregarAdjuntoCompose(e.target.files); e.target.value = ''; });
+  document.getElementById('correo-cuenta-btn').onclick = (e) => { e.stopPropagation(); toggleMenuCuentas(); };
+  document.addEventListener('click', () => document.getElementById('correo-cuenta-menu').style.display = 'none');
   // conectarGmail() abre el consentimiento de Google en pestaña nueva; al
   // volver a esta pestaña (visibilitychange) se refresca el estado en vez de
   // pedirle al asesor que recargue a mano.
@@ -7484,7 +7493,7 @@ function setupCorreo() {
     renderBandejaCorreoFiltrada();
   });
 }
-function cargarCorreoSeccion() { refrescarEstadoGmail(); cargarBandejaCorreo(); }
+function cargarCorreoSeccion() { refrescarEstadoGmail(); }
 
 function tiempoRelativoCorto(iso) {
   if (!iso) return 'nunca';
@@ -7496,48 +7505,90 @@ function tiempoRelativoCorto(iso) {
   return `hace ${Math.round(horas / 24)}d`;
 }
 
+/* ---------- Selector de cuentas Gmail (multi-cuenta) ----------
+   gmail_estado_conexion() devuelve una fila POR CADA cuenta conectada del
+   asesor (antes era una sola fila conectado/no). CORREO_CUENTA_ACTIVA decide
+   cuál bandeja se ve -- se guarda en localStorage para sobrevivir un
+   refresh, y si la cuenta guardada ya no existe (se desconectó en otra
+   sesión) se cae a la primera disponible. */
 async function refrescarEstadoGmail() {
   const banner = document.getElementById('correo-banner');
   const txt = document.getElementById('correo-banner-txt');
   const btn = document.getElementById('correo-banner-btn');
-  const badge = document.getElementById('correo-estado-badge');
+  const selector = document.getElementById('correo-cuenta-selector');
   const syncBtn = document.getElementById('correo-sync-btn');
   const syncTime = document.getElementById('correo-sync-time');
   const { data, error } = await sb.rpc('gmail_estado_conexion');
-  const estado = Array.isArray(data) ? data[0] : data;
-  if (error || !estado) { txt.textContent = 'No se pudo consultar el estado de Gmail.'; return; }
+  if (error) { txt.textContent = 'No se pudo consultar el estado de Gmail.'; return; }
+  CORREO_CUENTAS = data || [];
 
-  if (!estado.conectado) {
+  if (!CORREO_CUENTAS.length) {
     banner.style.display = 'flex';
     banner.style.background = ''; banner.style.borderColor = '';
     txt.textContent = 'Conectá tu Gmail para ver y enviar correo desde el CRM.';
     btn.textContent = 'Conectar Gmail';
     btn.style.display = '';
-    badge.style.display = 'none';
+    selector.style.display = 'none';
     syncBtn.style.display = 'none';
     syncTime.style.display = 'none';
+    CORREO_CUENTA_ACTIVA = null;
+    document.getElementById('correo-lista').innerHTML = '';
     return;
   }
-  if (estado.revocado) {
+
+  if (!CORREO_CUENTAS.some(c => String(c.credencial_id) === String(CORREO_CUENTA_ACTIVA))) {
+    CORREO_CUENTA_ACTIVA = String(CORREO_CUENTAS[0].credencial_id);
+    localStorage.setItem('correo_cuenta_activa', CORREO_CUENTA_ACTIVA);
+  }
+  const activa = CORREO_CUENTAS.find(c => String(c.credencial_id) === String(CORREO_CUENTA_ACTIVA));
+
+  if (activa.revocado) {
     banner.style.display = 'flex';
     banner.style.background = 'rgba(239,68,68,.1)';
     banner.style.borderColor = 'rgba(239,68,68,.35)';
-    txt.textContent = `${estado.email_conectado} se desconectó — reautorizá el acceso, dejaste de recibir correo nuevo.`;
+    txt.textContent = `${activa.email_conectado} se desconectó — reautorizá el acceso, dejaste de recibir correo nuevo.`;
     btn.textContent = 'Reconectar Gmail';
     btn.style.display = '';
-    badge.style.display = 'none';
-    syncBtn.style.display = 'none';
-    syncTime.style.display = 'none';
-    return;
+  } else {
+    banner.style.display = 'none';
   }
-  banner.style.display = 'none';
-  badge.style.display = '';
-  badge.style.color = 'var(--green)'; badge.style.background = 'rgba(16,185,129,.18)';
-  badge.textContent = `Conectado: ${estado.email_conectado}`;
-  syncBtn.style.display = '';
-  syncTime.style.display = '';
-  syncTime.textContent = `Sincronizado ${tiempoRelativoCorto(estado.ultima_sync_en)}`;
+
+  selector.style.display = CORREO_CUENTAS.length > 1 ? '' : 'none';
+  document.getElementById('correo-cuenta-actual').textContent = activa.email_conectado;
+  renderMenuCuentas();
+  syncBtn.style.display = activa.revocado ? 'none' : '';
+  syncTime.style.display = activa.revocado ? 'none' : '';
+  syncTime.textContent = `Sincronizado ${tiempoRelativoCorto(activa.ultima_sync_en)}`;
+  cargarBandejaCorreo();
 }
+
+function renderMenuCuentas() {
+  const menu = document.getElementById('correo-cuenta-menu');
+  menu.innerHTML = CORREO_CUENTAS.map(c => `
+    <button type="button" class="correo-cuenta-item${String(c.credencial_id) === String(CORREO_CUENTA_ACTIVA) ? ' activa' : ''}" onclick="elegirCuentaCorreo('${c.credencial_id}')">
+      <span class="cc-email">${esc(c.email_conectado)}</span>
+      ${c.revocado ? '<span class="cc-revocado">Reconectar</span>' : `<span class="correo-cuenta-desvincular" onclick="event.stopPropagation();desconectarCuentaCorreo('${c.credencial_id}','${esc(c.email_conectado).replace(/'/g, '')}')" title="Desconectar"><i class="fas fa-xmark"></i></span>`}
+    </button>`).join('') + `<button type="button" class="correo-cuenta-agregar" onclick="conectarGmail()"><i class="fas fa-plus"></i> Conectar otra cuenta</button>`;
+}
+function toggleMenuCuentas() {
+  const menu = document.getElementById('correo-cuenta-menu');
+  menu.style.display = menu.style.display === 'none' ? '' : 'none';
+}
+window.elegirCuentaCorreo = (credencialId) => {
+  CORREO_CUENTA_ACTIVA = String(credencialId);
+  localStorage.setItem('correo_cuenta_activa', CORREO_CUENTA_ACTIVA);
+  document.getElementById('correo-cuenta-menu').style.display = 'none';
+  cerrarHiloCorreo();
+  refrescarEstadoGmail();
+};
+window.desconectarCuentaCorreo = async (credencialId, email) => {
+  if (!confirm(`¿Desconectar ${email}? Dejás de recibir correo nuevo de esa cuenta en el CRM.`)) return;
+  const { error } = await sb.rpc('gmail_desconectar', { p_credencial_id: Number(credencialId) });
+  if (error) { errToast('No se pudo desconectar la cuenta'); return; }
+  if (String(credencialId) === CORREO_CUENTA_ACTIVA) { CORREO_CUENTA_ACTIVA = null; localStorage.removeItem('correo_cuenta_activa'); }
+  okToast('Cuenta desconectada');
+  refrescarEstadoGmail();
+};
 
 async function sincronizarCorreoAhora() {
   const btn = document.getElementById('correo-sync-btn');
@@ -7550,7 +7601,8 @@ async function sincronizarCorreoAhora() {
     if (!session?.access_token) { errToast('Sesión expirada, recargá la página'); return; }
     const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-sync-manual`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY },
+      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credencial_id: Number(CORREO_CUENTA_ACTIVA) }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) {
@@ -7559,7 +7611,6 @@ async function sincronizarCorreoAhora() {
     }
     okToast(data.nuevos > 0 ? `${data.nuevos} correo${data.nuevos > 1 ? 's' : ''} nuevo${data.nuevos > 1 ? 's' : ''}` : 'Ya estás al día');
     await refrescarEstadoGmail();
-    await cargarBandejaCorreo();
   } catch {
     errToast('No se pudo sincronizar ahora');
   } finally {
@@ -7569,6 +7620,7 @@ async function sincronizarCorreoAhora() {
 }
 
 async function conectarGmail() {
+  document.getElementById('correo-cuenta-menu').style.display = 'none';
   const { data: state, error } = await sb.rpc('gmail_iniciar_conexion');
   if (error || !state) { errToast('No fue posible iniciar la conexión con Gmail'); return; }
   const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
@@ -7580,6 +7632,69 @@ async function conectarGmail() {
   url.searchParams.set('prompt', 'consent');
   url.searchParams.set('state', state);
   window.open(url.toString(), '_blank');
+}
+
+/* ---------- Redactar correo nuevo (sin hilo/lead previo) ----------
+   Mismo composer contenteditable + adjuntos que la respuesta dentro de un
+   hilo (ver botonResponderCorreo/agregarAdjuntoComposer), pero en la hoja
+   .sheet-lateral genérica en vez de inline bajo una fila -- acá no hay fila
+   de la que colgar el formulario. */
+let COMPOSE_ADJUNTOS = [];
+function abrirComposeNuevo() {
+  if (!CORREO_CUENTA_ACTIVA) { errToast('Conectá un Gmail antes de redactar'); return; }
+  document.getElementById('compose-para').value = '';
+  document.getElementById('compose-cc').value = '';
+  document.getElementById('compose-asunto').value = '';
+  document.getElementById('compose-body').innerHTML = '';
+  COMPOSE_ADJUNTOS = [];
+  document.getElementById('compose-adjuntos').innerHTML = '';
+  openSheet('correo-compose-sheet');
+}
+window.agregarAdjuntoCompose = (files) => {
+  const total = [...COMPOSE_ADJUNTOS, ...files].reduce((acc, f) => acc + f.size, 0);
+  if (total > 25 * 1024 * 1024) { errToast('Los adjuntos superan 25 MB en total'); return; }
+  COMPOSE_ADJUNTOS.push(...files);
+  const box = document.getElementById('compose-adjuntos');
+  box.innerHTML = COMPOSE_ADJUNTOS.map((f, i) => `<span>${esc(f.name)} (${fmtTamano(f.size)}) <a href="#" onclick="event.preventDefault();quitarAdjuntoCompose(${i})" style="color:#f66">×</a></span>`).join('');
+};
+window.quitarAdjuntoCompose = (idx) => {
+  COMPOSE_ADJUNTOS.splice(idx, 1);
+  window.agregarAdjuntoCompose([]);
+};
+function parsearDirecciones(valor) {
+  return (valor || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+async function enviarComposeNuevo() {
+  const para = parsearDirecciones(document.getElementById('compose-para').value);
+  const cc = parsearDirecciones(document.getElementById('compose-cc').value);
+  const asunto = document.getElementById('compose-asunto').value.trim();
+  const bodyEl = document.getElementById('compose-body');
+  const texto = bodyEl.innerText.trim();
+  const html = bodyEl.innerHTML.trim();
+  if (!para.length) { errToast('Ingresá al menos un destinatario'); return; }
+  if (!asunto) { errToast('Ingresá un asunto'); return; }
+  if (!texto) { errToast('Escribí el cuerpo del correo'); return; }
+  const btn = document.getElementById('compose-enviar');
+  btn.disabled = true;
+  try {
+    const adjuntos = await Promise.all(COMPOSE_ADJUNTOS.map(async (f) => ({ filename: f.name, mime_type: f.type || 'application/octet-stream', contenido_base64: await fileABase64(f) })));
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session?.access_token) { errToast('Sesión expirada, recargá la página'); return; }
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-enviar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credencial_id: Number(CORREO_CUENTA_ACTIVA), para, cc, asunto, cuerpo: texto, cuerpo_html: html, adjuntos }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) { errToast(data.error === 'adjuntos_exceden_25mb' ? 'Los adjuntos superan 25 MB' : 'No se pudo enviar el correo'); return; }
+    okToast('Correo enviado');
+    closeSheet('correo-compose-sheet');
+    cargarBandejaCorreo();
+  } catch {
+    errToast('No se pudo enviar el correo');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 window.abrirLeadPorId = async (leadId) => {
@@ -7685,9 +7800,12 @@ function actualizarLeadEnMemoria(correoId, leadId) {
 
 async function cargarBandejaCorreo() {
   const box = document.getElementById('correo-lista');
+  if (!CORREO_CUENTA_ACTIVA) return;
   // RLS de gmail_correos ya filtra por dueño o admin -- no hace falta repetir
-  // el filtro acá (ver policy gmail_correos_select_propio_o_admin).
-  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,gmail_message_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').order('enviado_en', { ascending: false }).limit(50);
+  // el filtro acá (ver policy gmail_correos_select_propio_o_admin). El
+  // filtro por credencial_id sí hace falta -- selector de cuentas, cada
+  // cuenta muestra solo sus propios correos.
+  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,credencial_id,gmail_message_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').eq('credencial_id', CORREO_CUENTA_ACTIVA).order('enviado_en', { ascending: false }).limit(50);
   if (error) { box.innerHTML = '<div class="correo-empty"><i class="fas fa-triangle-exclamation"></i><p>No se pudo cargar la bandeja</p></div>'; return; }
   data.forEach(c => CORREOS_DATA.set(c.id, c));
   CORREO_BANDEJA_DATA = data;

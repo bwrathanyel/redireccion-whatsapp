@@ -1327,6 +1327,20 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-sync-btn:hover:not(:disabled){border-color:rgba(255,145,0,.4);color:var(--accent)}
 .correo-sync-btn:disabled{opacity:.6;cursor:default}
 .correo-sync-btn i.girando{animation:rb-spin .7s linear infinite}
+.correo-cuenta-selector{position:relative}
+.correo-cuenta-btn{display:flex;align-items:center;gap:7px;border:1px solid var(--line2);border-radius:8px;padding:6px 11px;background:var(--panel-solid);color:var(--txt);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;max-width:220px}
+.correo-cuenta-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.correo-cuenta-btn:hover{border-color:rgba(255,145,0,.4)}
+.correo-cuenta-menu{position:absolute;z-index:20;top:calc(100% + 6px);right:0;min-width:240px;border:1px solid var(--line2);border-radius:12px;padding:6px;background:var(--bg2);box-shadow:0 16px 40px rgba(0,0,0,.4)}
+.correo-cuenta-item{display:flex;align-items:center;gap:8px;width:100%;border:0;border-radius:8px;padding:9px 10px;background:transparent;color:var(--txt);font-size:11.5px;font-family:inherit;cursor:pointer;text-align:left}
+.correo-cuenta-item:hover{background:rgba(255,255,255,.05)}
+.correo-cuenta-item.activa{background:var(--accent-soft);color:var(--accent)}
+.correo-cuenta-item .cc-email{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.correo-cuenta-item .cc-revocado{color:#ef4444;font-size:9px;font-weight:800;text-transform:uppercase}
+.correo-cuenta-desvincular{background:transparent;border:0;color:var(--muted2);font-size:11px;cursor:pointer;padding:2px 4px}
+.correo-cuenta-desvincular:hover{color:#ef4444}
+.correo-cuenta-agregar{display:flex;align-items:center;gap:8px;width:100%;border:0;border-top:1px solid var(--line);margin-top:4px;padding:9px 10px 4px;background:transparent;color:var(--accent);font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;text-align:left}
+.correo-redactar-btn{display:flex;align-items:center;gap:7px;flex-shrink:0;border:0;border-radius:9px;padding:9px 14px;background:linear-gradient(135deg,var(--accent),#e0570a);color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
 .correo-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .correo-search{flex:1;min-width:180px}
 .correo-layout{position:relative;overflow:hidden;height:calc(100vh - 300px);min-height:420px}
@@ -1370,6 +1384,17 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
   .correo-detalle{position:static;flex:1;min-width:0;transform:none;transition:none;background:transparent;border-radius:0;padding:0 0 0 4px}
   .correo-detalle-back{display:none}
 }
+
+.correo-compose-form{display:flex;flex-direction:column;gap:5px;padding:4px 6px 14px}
+.correo-compose-form label{margin-top:8px;color:var(--muted);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.correo-compose-form input.flt{width:100%;box-sizing:border-box}
+.correo-compose-toolbar{display:flex;gap:6px;margin-top:10px}
+.correo-compose-toolbar button, .correo-compose-adjuntar{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--line2);border-radius:7px;background:transparent;color:var(--txt);cursor:pointer;font-family:inherit}
+.correo-compose-body{min-height:160px;margin-top:8px;border:1px solid var(--line2);border-radius:8px;padding:12px;background:#fff;color:#111;font-size:13px;line-height:1.5}
+.correo-compose-adjuntos{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.correo-compose-adjuntos span{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);border-radius:6px;padding:4px 9px;font-size:10.5px}
+.correo-compose-acciones{display:flex;gap:10px;margin-top:16px}
+.correo-compose-acciones .dbtn{flex:1}
 
 /* ---------- Galería ---------- */
 /* Carpetas desplegables por categoría (Bloque 6) -- <details> nativo: sin
@@ -4375,11 +4400,17 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           <div class="correo-sync-row">
             <span class="correo-sync-time" id="correo-sync-time" style="display:none"></span>
             <button type="button" class="correo-sync-btn" id="correo-sync-btn" style="display:none" title="Sincronizar ahora"><i class="fas fa-rotate"></i> Sincronizar</button>
-            <span class="badge-st" id="correo-estado-badge" style="display:none"></span>
+            <div class="correo-cuenta-selector" id="correo-cuenta-selector" style="display:none">
+              <button type="button" class="correo-cuenta-btn" id="correo-cuenta-btn">
+                <span id="correo-cuenta-actual"></span> <i class="fas fa-chevron-down"></i>
+              </button>
+              <div class="correo-cuenta-menu" id="correo-cuenta-menu" style="display:none"></div>
+            </div>
           </div>
         </div>
         <div class="csub">Correos sincronizados desde Gmail, vinculados a leads cuando el email coincide.</div>
         <div class="correo-toolbar">
+          <button type="button" class="correo-redactar-btn" id="correo-redactar-btn"><i class="fas fa-pen"></i> Redactar</button>
           <input class="flt correo-search" id="correo-search" type="text" placeholder="Buscar por asunto, remitente...">
           <div class="seg-group seg-group-sm" id="correo-filtros">
             <button type="button" class="seg on" data-f="todos">Todos</button>
@@ -4398,6 +4429,32 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         </div>
       </div>
     </section>
+
+    <!-- Hoja: redactar correo nuevo (sin hilo/lead previo) -->
+    <div class="sheet sheet-lateral" id="correo-compose-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title"><i class="fas fa-pen"></i> Redactar correo</div>
+      <div class="correo-compose-form">
+        <label>Para</label>
+        <input class="flt" id="compose-para" type="text" placeholder="destinatario@ejemplo.com, otro@ejemplo.com">
+        <label>CC (opcional)</label>
+        <input class="flt" id="compose-cc" type="text" placeholder="cc@ejemplo.com">
+        <label>Asunto</label>
+        <input class="flt" id="compose-asunto" type="text" placeholder="Asunto">
+        <div class="correo-compose-toolbar">
+          <button type="button" onclick="document.execCommand('bold')"><b>B</b></button>
+          <button type="button" onclick="document.execCommand('italic')"><i>I</i></button>
+          <button type="button" onclick="const u=prompt('URL del link:'); if(u) document.execCommand('createLink', false, u)"><i class="fas fa-link"></i></button>
+          <label class="correo-compose-adjuntar"><i class="fas fa-paperclip"></i><input type="file" multiple style="display:none" id="compose-adjuntar-input"></label>
+        </div>
+        <div id="compose-body" class="correo-compose-body" contenteditable="true"></div>
+        <div id="compose-adjuntos" class="correo-compose-adjuntos"></div>
+        <div class="correo-compose-acciones">
+          <button type="button" class="dbtn" id="compose-cancelar">Cancelar</button>
+          <button type="button" class="dbtn save" id="compose-enviar"><i class="fas fa-paper-plane"></i> Enviar</button>
+        </div>
+      </div>
+    </div>
 
     <!-- MANUAL DEL CRM -->
     <section class="section" id="sec-manual">
