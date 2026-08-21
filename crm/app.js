@@ -7422,6 +7422,8 @@ const GMAIL_REDIRECT_URI = 'https://begbjhrdbsqftbbleecb.supabase.co/functions/v
 // próxima vez que interactúen; no pierden datos, solo reautorizan.
 const GMAIL_SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify';
 
+let CORREO_BANDEJA_DATA = [];
+let correoFiltro = 'todos';
 function setupCorreo() {
   // Solo conecta el botón acá -- el estado y la bandeja se cargan recién
   // cuando se activa la sección (ver activateSection), mismo patrón perezoso
@@ -7434,6 +7436,15 @@ function setupCorreo() {
   // pedirle al asesor que recargue a mano.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && document.getElementById('sec-correo')?.classList.contains('active')) refrescarEstadoGmail();
+  });
+  // Búsqueda y filtro corren sobre los 50 correos ya traídos -- sin
+  // round-trip nuevo a Supabase por cada tecla o clic de chip.
+  document.getElementById('correo-search').addEventListener('input', renderBandejaCorreoFiltrada);
+  document.querySelectorAll('#correo-filtros .seg').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#correo-filtros .seg').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    correoFiltro = b.dataset.f;
+    renderBandejaCorreoFiltrada();
   });
 }
 function cargarCorreoSeccion() { refrescarEstadoGmail(); cargarBandejaCorreo(); }
@@ -7527,18 +7538,18 @@ function renderHilosBandeja(data) {
     HILOS_DATA.set(ultimo.gmail_thread_id, msgs);
     const encoded = btoa(unescape(encodeURIComponent(ultimo.gmail_thread_id))).replace(/[^a-zA-Z0-9]/g, '');
     const noLeidos = msgs.filter(m => !m.leido && m.direccion === 'entrante').length;
+    const remitente = ultimo.direccion === 'entrante' ? ultimo.de : (ultimo.para || []).join(', ');
+    const inicial = (extraerEmailDeCabecera(remitente) || remitente || '?').trim().charAt(0).toUpperCase() || '?';
     return `
-    <div class="act-row" style="align-items:flex-start;cursor:pointer" onclick="toggleHiloBandeja('${ultimo.gmail_thread_id.replace(/'/g, '')}','${encoded}')">
-      <div class="act-txt">
-        <b>${esc(ultimo.asunto || '(sin asunto)')}</b>
-        ${msgs.length > 1 ? `<span class="muted" style="font-size:9.5px"> · ${msgs.length} mensajes</span>` : ''}
-        ${noLeidos ? `<span style="background:var(--accent);color:#1a1000;border-radius:99px;padding:1px 6px;font-size:8px;font-weight:800;margin-left:5px">${noLeidos}</span>` : ''}
-        <br>
-        <span class="muted" style="font-size:11px">${esc(ultimo.direccion === 'entrante' ? ultimo.de : (ultimo.para || []).join(', '))}</span><br>
-        <span style="font-size:11.5px">${esc(ultimo.snippet || '')}</span>
-        <div id="hilo-body-${encoded}" style="display:none" onclick="event.stopPropagation()"></div>
+    <div class="correo-row${noLeidos ? ' no-leido' : ''}" onclick="toggleHiloBandeja('${ultimo.gmail_thread_id.replace(/'/g, '')}','${encoded}')">
+      <span class="correo-row-avatar" data-dir="${ultimo.direccion}">${esc(inicial)}</span>
+      <div class="correo-row-body">
+        <div class="correo-row-top"><b>${esc(ultimo.asunto || '(sin asunto)')}</b><time>${esc(fmtFechaHoraCaracas(ultimo.enviado_en))}</time></div>
+        <div class="correo-row-from">${esc(remitente)}${msgs.length > 1 ? ` · ${msgs.length} mensajes` : ''}${!ultimo.lead_id ? ' · <span class="correo-sinvincular">sin vincular</span>' : ''}</div>
+        <div class="correo-row-snippet">${esc(ultimo.snippet || '')}</div>
+        <div id="hilo-body-${encoded}" class="correo-hilo" style="display:none" onclick="event.stopPropagation()"></div>
       </div>
-      <div class="act-hora">${esc(fmtFechaHoraCaracas(ultimo.enviado_en))}</div>
+      ${noLeidos ? `<span class="correo-unread-badge">${noLeidos}</span>` : ''}
     </div>`;
   }).join('');
 }
@@ -7548,10 +7559,21 @@ async function cargarBandejaCorreo() {
   // RLS de gmail_correos ya filtra por dueño o admin -- no hace falta repetir
   // el filtro acá (ver policy gmail_correos_select_propio_o_admin).
   const { data, error } = await sb.from('gmail_correos').select('id,lead_id,gmail_message_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').order('enviado_en', { ascending: false }).limit(50);
-  if (error) { box.innerHTML = '<div class="muted">No se pudo cargar la bandeja</div>'; return; }
-  if (!data.length) { box.innerHTML = '<div class="muted">Todavía no hay correos sincronizados.</div>'; return; }
+  if (error) { box.innerHTML = '<div class="correo-empty"><i class="fas fa-triangle-exclamation"></i><p>No se pudo cargar la bandeja</p></div>'; return; }
   data.forEach(c => CORREOS_DATA.set(c.id, c));
-  box.innerHTML = renderHilosBandeja(data);
+  CORREO_BANDEJA_DATA = data;
+  renderBandejaCorreoFiltrada();
+}
+
+function renderBandejaCorreoFiltrada() {
+  const box = document.getElementById('correo-lista');
+  if (!CORREO_BANDEJA_DATA.length) { box.innerHTML = '<div class="correo-empty"><i class="fas fa-envelope-open-text"></i><p>Todavía no hay correos sincronizados.</p></div>'; return; }
+  let data = CORREO_BANDEJA_DATA;
+  if (correoFiltro === 'no_leidos') data = data.filter(c => !c.leido && c.direccion === 'entrante');
+  else if (correoFiltro === 'sin_vincular') data = data.filter(c => !c.lead_id);
+  const q = (document.getElementById('correo-search')?.value || '').trim().toLowerCase();
+  if (q) data = data.filter(c => [c.asunto, c.snippet, c.de, (c.para || []).join(' ')].some(v => (v || '').toLowerCase().includes(q)));
+  box.innerHTML = data.length ? renderHilosBandeja(data) : '<div class="correo-empty"><i class="fas fa-filter"></i><p>Ningún correo coincide con este filtro.</p></div>';
 }
 
 /* ---------- Redes (Instagram + TikTok) ---------- */
@@ -14680,6 +14702,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-21', emoji: '📬', titulo: 'Bandeja de Correo rediseñada', texto: 'La sección Correo tiene look nuevo: buscador y filtros (Todos / Sin leer / Sin vincular) arriba de la bandeja, remitente con avatar circular, y los correos sin leer se ven bien marcados en vez de perderse en la lista. Todo lo que ya hacía -- ver el hilo completo, responder con adjuntos, vincular a un lead -- sigue igual, solo que ahora se distingue de un vistazo.', roles: ['asesor', 'admin'] },
   { fecha: '2026-08-20', emoji: '🔔', titulo: 'Notificaciones que ya no se pierden', texto: 'Si te dejaron de llegar los avisos del CRM sin que hicieras nada, esa era la falla: la suscripción de tu teléfono se vencía sola y nadie la renovaba. Ahora se repara sola cada vez que abres el CRM. Los avisos además salen con prioridad alta, así que llegan al instante aunque tengas la pantalla apagada, y los recordatorios de asistencia dicen directo qué tienes que hacer en vez de decir solo "Lotus 360 CRM". En iPhone, si todavía no agregaste la app a la pantalla de inicio, el CRM ahora te explica cómo hacerlo en vez de decir que tu teléfono no sirve.', roles: ROLES_TODOS },
   { fecha: '2026-08-20', emoji: '📲', titulo: 'Contacto directo: leads sin teléfono, a propósito', texto: 'Cuando un cliente le pide a la IA el WhatsApp del equipo en vez de dar el suyo, ahora se le entrega el número de un asesor asignado por la rueda de reparto de siempre, y el lead queda registrado en el CRM sin teléfono. Vas a verlo marcado con la etiqueta "Contacto directo" en la lista y en la ficha -- no es un dato faltante por error, es que el cliente todavía no dejó su número. Si la IA logra que lo deje más adelante, el lead se completa solo y te llega el aviso a Telegram.', roles: ROLES_TODOS },
   { fecha: '2026-08-19', emoji: '👥', titulo: 'Clientes Asignados para todo asesor', texto: 'Cualquier asesor comercial puede recibir ahora un lote de clientes asignados (antes era exclusivo del rol de práctica): editá sus datos, marcá si ya lo atendiste, dejá nota de qué te dijo y por qué no le interesó. En Gestión de Personal, "Estados a incluir" y "Destino" del panel de asignación ahora son etiquetas para tocar en vez de listas, y el plazo se elige como "24h/48h/72h/Sin límite" en vez de fecha exacta.', roles: ROLES_TODOS },
