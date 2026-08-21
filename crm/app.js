@@ -3810,6 +3810,20 @@ function renderCuerpoCorreo(correo) {
   }
   return `<div style="white-space:pre-wrap;font-size:11.5px;margin-top:6px;background:rgba(255,255,255,.03);border-radius:8px;padding:10px">${esc(correo.cuerpo_texto || '(sin contenido)')}</div>`;
 }
+// Marca leído en el CRM Y en el Gmail real del asesor (Fase 5) -- best
+// effort, no bloquea la lectura del correo si falla (ej. asesor todavía no
+// reautorizó con el scope gmail.modify nuevo).
+async function marcarLeidoGmailReal(correoId) {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session?.access_token) return;
+    await fetch(`${SUPABASE_URL}/functions/v1/gmail-marcar-leido`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ correo_id: correoId, leido: true }),
+    });
+  } catch { /* best effort */ }
+}
 window.toggleCorreoBody = (id) => {
   const el = document.getElementById('correo-body-' + id);
   if (!el) return;
@@ -3818,13 +3832,119 @@ window.toggleCorreoBody = (id) => {
   if (!el.dataset.cargado) {
     const correo = CORREOS_DATA.get(id);
     const adjuntosHtml = correo?.gmail_correo_adjuntos?.length ? renderAdjuntosCorreo(id, correo.gmail_correo_adjuntos) : '';
-    el.innerHTML = (correo ? renderCuerpoCorreo(correo) : '<div class="muted">No se pudo cargar</div>') + adjuntosHtml;
+    const responderHtml = correo?.direccion === 'entrante' ? botonResponderCorreo(id) : '';
+    el.innerHTML = (correo ? renderCuerpoCorreo(correo) : '<div class="muted">No se pudo cargar</div>') + adjuntosHtml + responderHtml;
     el.dataset.cargado = '1';
+    if (correo && correo.direccion === 'entrante' && !correo.leido) {
+      correo.leido = true;
+      marcarLeidoGmailReal(id);
+    }
   }
   el.style.display = '';
 };
 function botonVerCorreo(id) {
   return `<button type="button" onclick="toggleCorreoBody(${id})" style="margin-top:6px;background:none;border:1px solid var(--line2,#2a3150);color:var(--accent);border-radius:7px;padding:4px 9px;font-size:10px;cursor:pointer"><i class="fas fa-envelope-open-text"></i> Ver correo completo</button><div id="correo-body-${id}" style="display:none"></div>`;
+}
+
+/* ---------- Compositor de respuesta (Fase 5) ----------
+   contenteditable con toolbar mínima (bold/italic/link vía execCommand,
+   suficiente para este caso, sin librería WYSIWYG) + adjuntos con límite
+   25 MB validado acá antes de mandar (el server valida de nuevo, esto es
+   solo para no hacer esperar al asesor para enterarse). El paste se
+   intercepta y se fuerza a texto plano -- es contenido del propio asesor en
+   su sesión, no de un remitente externo, no hace falta sanitizar como el
+   viewer del correo entrante. */
+const ADJUNTOS_PENDIENTES = new Map(); // correoId -> File[]
+function botonResponderCorreo(correoId) {
+  return `<button type="button" onclick="abrirComposerCorreo(${correoId})" style="margin-top:6px;margin-left:6px;background:none;border:1px solid var(--line2,#2a3150);color:var(--accent);border-radius:7px;padding:4px 9px;font-size:10px;cursor:pointer"><i class="fas fa-reply"></i> Responder</button><div id="composer-${correoId}" style="display:none"></div>`;
+}
+window.abrirComposerCorreo = (correoId) => {
+  const el = document.getElementById('composer-' + correoId);
+  if (!el) return;
+  if (el.style.display !== 'none' && el.dataset.armado) { el.style.display = 'none'; return; }
+  if (!el.dataset.armado) {
+    ADJUNTOS_PENDIENTES.set(correoId, []);
+    el.innerHTML = `
+      <div style="margin-top:8px;border:1px solid var(--line2,#2a3150);border-radius:8px;padding:8px;background:rgba(255,255,255,.03)">
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <button type="button" onclick="document.execCommand('bold')" style="width:26px;height:26px;border:1px solid var(--line2,#2a3150);background:none;color:var(--txt);border-radius:5px;cursor:pointer"><b>B</b></button>
+          <button type="button" onclick="document.execCommand('italic')" style="width:26px;height:26px;border:1px solid var(--line2,#2a3150);background:none;color:var(--txt);border-radius:5px;cursor:pointer"><i>I</i></button>
+          <button type="button" onclick="const u=prompt('URL del link:'); if(u) document.execCommand('createLink', false, u)" style="width:26px;height:26px;border:1px solid var(--line2,#2a3150);background:none;color:var(--txt);border-radius:5px;cursor:pointer"><i class="fas fa-link"></i></button>
+          <label style="width:26px;height:26px;border:1px solid var(--line2,#2a3150);background:none;color:var(--txt);border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center">
+            <i class="fas fa-paperclip"></i><input type="file" multiple style="display:none" onchange="agregarAdjuntoComposer(${correoId}, this.files)">
+          </label>
+        </div>
+        <div id="composer-body-${correoId}" contenteditable="true" style="min-height:70px;background:#fff;color:#111;border-radius:6px;padding:8px;font-size:12px" onpaste="event.preventDefault(); document.execCommand('insertText', false, (event.clipboardData||window.clipboardData).getData('text/plain'))"></div>
+        <div id="composer-adjuntos-${correoId}" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px"></div>
+        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px">
+          <button type="button" onclick="document.getElementById('composer-${correoId}').style.display='none'" style="background:none;border:none;color:var(--muted,#8a90a8);font-size:11px;cursor:pointer">Cancelar</button>
+          <button type="button" onclick="enviarRespuestaCorreo(${correoId})" style="background:var(--accent);border:none;color:#111;border-radius:7px;padding:6px 14px;font-size:11px;font-weight:600;cursor:pointer">Enviar</button>
+        </div>
+      </div>`;
+    el.dataset.armado = '1';
+  }
+  el.style.display = '';
+};
+window.agregarAdjuntoComposer = (correoId, files) => {
+  const lista = ADJUNTOS_PENDIENTES.get(correoId) || [];
+  const total = [...lista, ...files].reduce((acc, f) => acc + f.size, 0);
+  if (total > 25 * 1024 * 1024) { errToast('Los adjuntos superan 25 MB en total'); return; }
+  lista.push(...files);
+  ADJUNTOS_PENDIENTES.set(correoId, lista);
+  const box = document.getElementById('composer-adjuntos-' + correoId);
+  if (box) box.innerHTML = lista.map((f, i) => `<span style="background:rgba(255,255,255,.06);border-radius:6px;padding:3px 8px;font-size:9.5px">${esc(f.name)} (${fmtTamano(f.size)}) <a href="#" onclick="event.preventDefault();quitarAdjuntoComposer(${correoId},${i})" style="color:#f66">×</a></span>`).join('');
+};
+window.quitarAdjuntoComposer = (correoId, idx) => {
+  const lista = ADJUNTOS_PENDIENTES.get(correoId) || [];
+  lista.splice(idx, 1);
+  ADJUNTOS_PENDIENTES.set(correoId, lista);
+  window.agregarAdjuntoComposer(correoId, []);
+};
+function fileABase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+window.enviarRespuestaCorreo = async (correoId) => {
+  const correo = CORREOS_DATA.get(correoId);
+  const bodyEl = document.getElementById('composer-body-' + correoId);
+  if (!correo || !bodyEl) return;
+  const html = bodyEl.innerHTML.trim();
+  const texto = bodyEl.innerText.trim();
+  if (!texto) { errToast('Escribí una respuesta antes de enviar'); return; }
+  const archivos = ADJUNTOS_PENDIENTES.get(correoId) || [];
+  try {
+    const adjuntos = await Promise.all(archivos.map(async (f) => ({ filename: f.name, mime_type: f.type || 'application/octet-stream', contenido_base64: await fileABase64(f) })));
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session?.access_token) { errToast('Sesión expirada, recargá la página'); return; }
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-enviar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lead_id: correo.lead_id ?? null,
+        para: [extraerEmailDeCabecera(correo.de)],
+        asunto: correo.asunto?.startsWith('Re:') ? correo.asunto : `Re: ${correo.asunto || ''}`,
+        cuerpo: texto,
+        cuerpo_html: html,
+        adjuntos,
+        thread_id: correo.gmail_thread_id,
+        in_reply_to: correo.gmail_message_id,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) { errToast(data.error === 'adjuntos_exceden_25mb' ? 'Los adjuntos superan 25 MB' : 'No se pudo enviar la respuesta'); return; }
+    okToast('Respuesta enviada');
+    document.getElementById('composer-' + correoId).style.display = 'none';
+    CORREO_LEAD_CACHE = null;
+    if (currentLead) cargarCorreoLead(currentLead);
+  } catch { errToast('No se pudo enviar la respuesta'); }
+};
+function extraerEmailDeCabecera(direccion) {
+  const m = (direccion || '').match(/<([^>]+)>/);
+  return (m ? m[1] : direccion || '').trim();
 }
 
 function fmtTamano(bytes) {
@@ -3864,7 +3984,7 @@ async function cargarCorreoLead(l) {
   const box = document.getElementById('correo-lead-body');
   if (!box) return;
   if (CORREO_LEAD_CACHE) { box.innerHTML = CORREO_LEAD_CACHE; return; }
-  const { data, error } = await sb.from('gmail_correos').select('id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').eq('lead_id', l.id).order('enviado_en', { ascending: true });
+  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,gmail_message_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').eq('lead_id', l.id).order('enviado_en', { ascending: true });
   if (error) { box.innerHTML = '<div class="muted">No se pudo cargar el correo de este lead</div>'; return; }
   if (!data.length) { CORREO_LEAD_CACHE = '<div class="muted">Sin correos vinculados a este lead todavía</div>'; box.innerHTML = CORREO_LEAD_CACHE; return; }
   data.forEach(c => CORREOS_DATA.set(c.id, c));
@@ -7263,7 +7383,10 @@ document.getElementById('post-cv-input')?.addEventListener('change', e => {
    C:\Users\Usuario\.claude\plans\en-el-crm-se-compressed-conway.md */
 const GMAIL_CLIENT_ID = '16841972131-bk0p99ds2ntktd9cdbhdf3cbcnp94rio.apps.googleusercontent.com';
 const GMAIL_REDIRECT_URI = 'https://begbjhrdbsqftbbleecb.supabase.co/functions/v1/gmail-oauth-callback';
-const GMAIL_SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send';
+// gmail.modify (Fase 5, marcar leído sincronizado) -- los asesores ya
+// conectados con el scope viejo van a ver el consent screen de nuevo la
+// próxima vez que interactúen; no pierden datos, solo reautorizan.
+const GMAIL_SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify';
 
 function setupCorreo() {
   // Solo conecta el botón acá -- el estado y la bandeja se cargan recién
@@ -7390,7 +7513,7 @@ async function cargarBandejaCorreo() {
   const box = document.getElementById('correo-lista');
   // RLS de gmail_correos ya filtra por dueño o admin -- no hace falta repetir
   // el filtro acá (ver policy gmail_correos_select_propio_o_admin).
-  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').order('enviado_en', { ascending: false }).limit(50);
+  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,gmail_message_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').order('enviado_en', { ascending: false }).limit(50);
   if (error) { box.innerHTML = '<div class="muted">No se pudo cargar la bandeja</div>'; return; }
   if (!data.length) { box.innerHTML = '<div class="muted">Todavía no hay correos sincronizados.</div>'; return; }
   data.forEach(c => CORREOS_DATA.set(c.id, c));
