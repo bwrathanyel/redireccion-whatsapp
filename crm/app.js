@@ -14924,11 +14924,21 @@ async function actualizarCRM() {
   try {
     if (window.caches) {
       const claves = await caches.keys();
-      await Promise.all(claves.map(k => caches.delete(k)));
+      // CACHE_IDENTIDAD_PUSH nunca se borra acá: ahí vive el puente que el SW
+      // usa para rotar la suscripción push, y no hace falta destruirlo para
+      // traer la versión nueva.
+      await Promise.all(claves.filter(k => k !== CACHE_IDENTIDAD_PUSH).map(k => caches.delete(k)));
     }
     if (navigator.serviceWorker) {
+      // NO unregister(): eso invalida el PushManager de la registration, y el
+      // navegador genera un endpoint NUEVO al re-suscribir en vez de reactivar
+      // el existente -- cada "Actualizar CRM" duplicaba la fila en
+      // push_subscriptions (hallazgo real, 2026-08-21: 4 filas nuevas del
+      // mismo Chrome en 2 minutos). reg.update() alcanza: fuerza a buscar
+      // sw.js fresco, y el install/activate del SW (skipWaiting + clients.claim,
+      // ver sw.js) ya reemplaza el worker activo sin tocar la suscripción.
       const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.unregister()));
+      await Promise.all(regs.map(r => r.update().catch(() => {})));
     }
   } catch (err) {
     // Si falla el limpiado igual conviene recargar: peor caso, queda la versión
