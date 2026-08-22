@@ -3694,45 +3694,52 @@ function openDrawer(l) {
 
     <div class="lead-tab-panel active" data-tab="resumen">
     <div class="lead-conflict-bar" id="lead-conflict-bar" style="display:none"></div>
-    ${seccion('gestion', 'fa-sliders', 'Gestión', `
-      <div class="dgrid">
-        ${campo('Estado', `<select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>`, true)}
-        ${campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...ACTIVOS], ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar')}</select>`)}
-        ${campo('Servicio de interés', `<select id="e-servicio" class="ei"><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select>`)}
-        <div class="fcol f-full">
-          <button class="dbtn gh" id="e-servicio-ia" type="button" style="width:100%;padding:9px;font-size:12px;margin-top:9px"><i class="fas fa-wand-magic-sparkles"></i> Detectar servicio con IA</button>
-          <div class="e-servicio-razon" id="e-servicio-razon">${l.servicio_ia_razon ? '<i class="fas fa-robot"></i> ' + esc(l.servicio_ia_razon) : ''}</div>
-        </div>
+    <div class="dresumen-cols">
+      <div class="dquien-es">
+        <div class="dzone-label"><i class="fas fa-user"></i> Quién es</div>
+        ${seccion('datos', 'fa-user-pen', 'Datos del cliente', `
+          <div class="dgrid">
+            ${campo('Nombre', `<input id="e-nombre" class="ei" type="text" value="${esc(l.nombre || '')}">`, true)}
+            ${campo('Teléfono', `<input id="e-telefono" class="ei" type="text" value="${esc(l.telefono || '')}">`)}
+            ${campo('Canal', `<input id="e-canal" class="ei" type="text" value="${esc(l.canal || '')}">`)}
+            ${campo('Destino de interés', `<input id="e-destino" class="ei" type="text" value="${esc(l.destino || '')}">`)}
+            ${campo('Personas', `<input id="e-personas" class="ei" type="text" value="${esc(l.personas || '')}">`)}
+            ${campo('Fecha de viaje (aprox.)', `<input id="e-fecha-estimada" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09" value="${esc(l.fecha_estimada || '')}">`, true)}
+            ${campo('Consulta original', `<input id="e-destino-consulta" class="ei" type="text" value="${esc(l.destino_consulta || '')}">`, true)}
+          </div>`, true)}
       </div>
-      <div id="venta-box" class="venta-box ${l.estado === VENTA ? 'show' : ''}">
-        <div class="dgrid">
-          ${campo('Monto de la venta (USD)', `<input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}">`, true)}
-          ${campo('Servicios / paquetes comprados', `<input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}">`, true)}
-        </div>
-      </div>`, true)}
+      <div class="dhago">
+        <div class="dzone-label acc"><i class="fas fa-arrow-right-arrow-left"></i> Qué hago con él</div>
+        ${seccion('gestion', 'fa-sliders', 'Gestión', `
+          <div class="dgrid">
+            ${campo('Estado', `<select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>`, true)}
+            ${campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...ACTIVOS], ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar')}</select>`)}
+            ${campo('Servicio de interés', `<select id="e-servicio" class="ei"><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select>`)}
+            <div class="fcol f-full">
+              <button class="dbtn gh" id="e-servicio-ia" type="button" style="width:100%;padding:9px;font-size:12px;margin-top:9px"><i class="fas fa-wand-magic-sparkles"></i> Detectar servicio con IA</button>
+              <div class="e-servicio-razon" id="e-servicio-razon">${l.servicio_ia_razon ? '<i class="fas fa-robot"></i> ' + esc(l.servicio_ia_razon) : ''}</div>
+            </div>
+          </div>
+          <div id="venta-box" class="venta-box ${l.estado === VENTA ? 'show' : ''}">
+            <div class="dgrid">
+              ${campo('Monto de la venta (USD)', `<input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}">`, true)}
+              ${campo('Servicios / paquetes comprados', `<input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}">`, true)}
+            </div>
+          </div>`, true)}
 
-    ${seccion('datos', 'fa-user-pen', 'Datos del cliente', `
-      <div class="dgrid">
-        ${campo('Nombre', `<input id="e-nombre" class="ei" type="text" value="${esc(l.nombre || '')}">`, true)}
-        ${campo('Teléfono', `<input id="e-telefono" class="ei" type="text" value="${esc(l.telefono || '')}">`)}
-        ${campo('Canal', `<input id="e-canal" class="ei" type="text" value="${esc(l.canal || '')}">`)}
-        ${campo('Destino de interés', `<input id="e-destino" class="ei" type="text" value="${esc(l.destino || '')}">`)}
-        ${campo('Personas', `<input id="e-personas" class="ei" type="text" value="${esc(l.personas || '')}">`)}
-        ${campo('Fecha de viaje (aprox.)', `<input id="e-fecha-estimada" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09" value="${esc(l.fecha_estimada || '')}">`, true)}
-        ${campo('Consulta original', `<input id="e-destino-consulta" class="ei" type="text" value="${esc(l.destino_consulta || '')}">`, true)}
-      </div>`, true)}
+        ${seccion('pagos', 'fa-dollar-sign', 'Pagos y captación', `
+          <div class="dgrid">
+            ${campo('Monto completo (USD)', `<input id="e-monto-completo" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_completo ?? ''}">`)}
+            ${campo('Monto inicial (USD)', `<input id="e-monto-inicial" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_inicial ?? ''}">`)}
+            ${campo('Restante de pago (USD)', `<input id="e-restante-pago" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.restante_pago ?? ''}">`)}
+            ${campo('Fecha de captación', `<input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">`)}
+          </div>`, false)}
 
-    ${seccion('pagos', 'fa-dollar-sign', 'Pagos y captación', `
-      <div class="dgrid">
-        ${campo('Monto completo (USD)', `<input id="e-monto-completo" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_completo ?? ''}">`)}
-        ${campo('Monto inicial (USD)', `<input id="e-monto-inicial" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_inicial ?? ''}">`)}
-        ${campo('Restante de pago (USD)', `<input id="e-restante-pago" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.restante_pago ?? ''}">`)}
-        ${campo('Fecha de captación', `<input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">`)}
-      </div>`, false)}
-
-    <div class="edit-err" id="edit-err"></div>
-    <div class="dsave"><button class="dbtn save" id="e-save"><i class="fas fa-floppy-disk"></i> Guardar cambios</button></div>
-    <div class="did"><span>ID: ${esc(l.external_id || l.id)}</span><button type="button" id="e-copiar-id" title="Copiar ID"><i class="fas fa-copy"></i></button></div>
+        <div class="edit-err" id="edit-err"></div>
+        <div class="dsave"><button class="dbtn save" id="e-save"><i class="fas fa-floppy-disk"></i> Guardar cambios</button></div>
+        <div class="did"><span>ID: ${esc(l.external_id || l.id)}</span><button type="button" id="e-copiar-id" title="Copiar ID"><i class="fas fa-copy"></i></button></div>
+      </div>
+    </div>
     </div>
 
     <div class="lead-tab-panel" data-tab="notas">
@@ -14958,6 +14965,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-22', emoji: '📇', titulo: 'Ficha del lead en dos columnas', texto: 'En escritorio la pestaña "Ficha" ahora se ve en dos zonas lado a lado: "Quién es" (datos del cliente) a la izquierda y "Qué hago con él" (gestión, pagos, guardar) a la derecha. En el celular sigue igual, apilada.', roles: ROLES_TODOS },
   { fecha: '2026-08-21', emoji: '📬', titulo: 'Bandeja de Correo rediseñada', texto: 'La sección Correo tiene look nuevo: buscador y filtros (Todos / Sin leer / Sin vincular) arriba de la bandeja, remitente con avatar circular, y los correos sin leer se ven bien marcados en vez de perderse en la lista. Todo lo que ya hacía -- ver el hilo completo, responder con adjuntos, vincular a un lead -- sigue igual, solo que ahora se distingue de un vistazo.', roles: ['asesor', 'admin'] },
   { fecha: '2026-08-20', emoji: '🔔', titulo: 'Notificaciones que ya no se pierden', texto: 'Si te dejaron de llegar los avisos del CRM sin que hicieras nada, esa era la falla: la suscripción de tu teléfono se vencía sola y nadie la renovaba. Ahora se repara sola cada vez que abres el CRM. Los avisos además salen con prioridad alta, así que llegan al instante aunque tengas la pantalla apagada, y los recordatorios de asistencia dicen directo qué tienes que hacer en vez de decir solo "Lotus 360 CRM". En iPhone, si todavía no agregaste la app a la pantalla de inicio, el CRM ahora te explica cómo hacerlo en vez de decir que tu teléfono no sirve.', roles: ROLES_TODOS },
   { fecha: '2026-08-20', emoji: '📲', titulo: 'Contacto directo: leads sin teléfono, a propósito', texto: 'Cuando un cliente le pide a la IA el WhatsApp del equipo en vez de dar el suyo, ahora se le entrega el número de un asesor asignado por la rueda de reparto de siempre, y el lead queda registrado en el CRM sin teléfono. Vas a verlo marcado con la etiqueta "Contacto directo" en la lista y en la ficha -- no es un dato faltante por error, es que el cliente todavía no dejó su número. Si la IA logra que lo deje más adelante, el lead se completa solo y te llega el aviso a Telegram.', roles: ROLES_TODOS },
