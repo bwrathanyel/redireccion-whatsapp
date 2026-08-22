@@ -7553,7 +7553,7 @@ async function refrescarEstadoGmail() {
     banner.style.display = 'none';
   }
 
-  selector.style.display = CORREO_CUENTAS.length > 1 ? '' : 'none';
+  selector.style.display = '';
   document.getElementById('correo-cuenta-actual').textContent = activa.email_conectado;
   renderMenuCuentas();
   syncBtn.style.display = activa.revocado ? 'none' : '';
