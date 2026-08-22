@@ -7619,6 +7619,7 @@ async function sincronizarCorreoAhora() {
   }
 }
 
+window.conectarGmail = conectarGmail;
 async function conectarGmail() {
   document.getElementById('correo-cuenta-menu').style.display = 'none';
   const { data: state, error } = await sb.rpc('gmail_iniciar_conexion');
