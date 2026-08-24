@@ -11444,10 +11444,19 @@ async function loadTarifarioInfo() {
   box.style.display = '';
   list.innerHTML = data.map(x => `<div class="tar-info-item"><b>${esc(x.nombre)}</b>${esc(x.descripcion || '')}</div>`).join('');
 }
+function tarifaPrecioNumerico(precioTexto) {
+  const m = (precioTexto || '').match(/[\d][\d.,]*/);
+  return m ? parseFloat(m[0].replace(/\./g, '').replace(',', '.')) : Infinity;
+}
 function openProductoDrawer(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
   const nombre = esPromo ? x.titulo : x.nombre;
-  const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
+  // PostgREST no garantiza el orden de tarifas embebidas -- tomar [0] a
+  // ciegas mostraba cualquier línea (ej. una tarifa de temporada alta) en vez
+  // de la más barata, aunque hubiera una promo o tarifa más económica.
+  const tarifa = !esPromo
+    ? [...(x.tarifas || [])].sort((a, b) => tarifaPrecioNumerico(a.precio_texto) - tarifaPrecioNumerico(b.precio_texto))[0]
+    : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
   const fotos = fotosRotadas(x, 256);
