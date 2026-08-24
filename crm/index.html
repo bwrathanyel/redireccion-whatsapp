@@ -1800,6 +1800,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .dsec-body{padding:2px 12px 14px}
 }
 
+/* ============ Ficha del lead — dos zonas (2026-08-22) ============
+   "Quién es" (datos del cliente) a la izquierda, "Qué hago con él"
+   (gestión/pagos/guardar) a la derecha. Solo hay ancho para esto en
+   escritorio -- en mobile .dresumen-cols cae a una sola columna y las
+   dos zonas se leen apiladas, en el mismo orden que antes. */
+.dzone-label{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--blue);margin-bottom:12px}
+.dzone-label.acc{color:var(--accent)}
+@media(min-width:900px){
+  .drawer{width:720px}
+  .dresumen-cols{display:flex;align-items:flex-start;gap:28px}
+  .dquien-es{width:280px;flex-shrink:0}
+  .dhago{flex:1;min-width:0}
+}
+
 /* ============ Revisión de vigencias del tarifario ============ */
 .vig-resumen{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .vig-kpi{flex:1;min-width:96px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
@@ -3039,12 +3053,24 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 
       <!-- ASESORES -->
       <div class="gp-tab-panel" data-gp-panel="asesores" style="display:none">
-        <div class="seg-group" id="ase-periodo">
-          <button class="seg" data-p="hoy">Hoy</button>
-          <button class="seg on" data-p="semana">Semana</button>
-          <button class="seg" data-p="mes">Mes</button>
-          <button class="seg" data-p="anio">Año</button>
-          <button class="seg" data-p="historico">Histórico</button>
+        <div class="tbar" style="margin-bottom:12px">
+          <div class="drp" id="drp-ase">
+            <button type="button" class="flt drp-btn" id="drp-ase-btn"><i class="fas fa-calendar-days"></i> <span id="drp-ase-label">Rango de fechas</span></button>
+            <div class="drp-panel" id="drp-ase-panel">
+              <div class="drp-presets">
+                <button type="button" data-preset="hoy">Hoy</button>
+                <button type="button" data-preset="7d">7 días</button>
+                <button type="button" data-preset="mes">Este mes</button>
+                <button type="button" data-preset="anio">Este año</button>
+                <button type="button" data-preset="todo">Histórico</button>
+              </div>
+              <div class="drp-inputs">
+                <label>Desde <input type="date" id="ase-desde"></label>
+                <label>Hasta <input type="date" id="ase-hasta"></label>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="reload-btn" id="ase-ver-reasig" title="Ver reasignaciones de este periodo"><i class="fas fa-shuffle"></i> Reasignaciones <span id="ase-reasig-count"></span></button>
         </div>
         <div class="grid g-2b">
           <div class="card"><h2><i class="fas fa-user-tie"></i> Carga por asesor</h2><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
