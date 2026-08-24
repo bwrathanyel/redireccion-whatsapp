@@ -2735,13 +2735,11 @@ async function toggleAsesorLeads(rowEl, nombre) {
   rowEl.insertAdjacentElement('afterend', panel);
   await renderAsesorLeads(panel, nombre);
 }
-// Día/Semana: recién llegados primero (orden inverso). Mes/Año/Histórico: orden
-// cronológico normal — se piden los 40 más recientes y, en ese caso, se
-// invierten para mostrarlos del más viejo al más nuevo dentro de esa ventana.
 async function renderAsesorLeads(panel, nombre) {
   let q = sb.from('leads').select('id,nombre,telefono,fecha_creacion,estado,destino').eq('asesor', nombre).order('fecha_creacion', { ascending: false }).limit(40);
-  if (asePeriodo !== 'historico') {
-    const [d, h] = periodo(asePeriodo);
+  const fd = val('ase-desde'), fh = val('ase-hasta');
+  if (fd && fh) {
+    const [d, h] = aseRango(fd, fh);
     q = q.gte('fecha_creacion', iso(d)).lt('fecha_creacion', iso(h));
   }
   const { data, error } = await q;
@@ -2749,7 +2747,6 @@ async function renderAsesorLeads(panel, nombre) {
   if (error) { panel.innerHTML = '<div class="al-state">No se pudieron cargar los leads</div>'; return; }
   let rows = data || [];
   if (!rows.length) { panel.innerHTML = '<div class="al-state">Sin leads en este periodo</div>'; return; }
-  if (asePeriodo === 'mes' || asePeriodo === 'anio' || asePeriodo === 'historico') rows = rows.slice().reverse();
   panel.innerHTML = rows.map(l => {
     const av = clientAvatar(l);
     // Forzado a America/Caracas (no al huso horario del navegador/dispositivo)
@@ -2761,25 +2758,51 @@ async function renderAsesorLeads(panel, nombre) {
   panel.querySelector('.al-more').onclick = () => chartPreview('asesor', nombre, nombre, 'fa-user-tie', rows.length);
 }
 
-/* ---------- Filtros de periodo en Asesores ---------- */
-let asePeriodo = 'semana';
+/* ---------- Filtros de periodo en Asesores (mismo selector de rango que Leads/Reasignaciones) ---------- */
+const aseRango = (fd, fh) => { const d = new Date(fd + 'T00:00:00'); const h = addD(new Date(fh + 'T00:00:00'), 1); return [d, h]; };
 function setupAsesoresPeriodo() {
-  document.querySelectorAll('#ase-periodo .seg').forEach(b => b.onclick = () => {
+  const hoy = new Date(), isoD = d => d.toISOString().slice(0, 10);
+  document.getElementById('ase-desde').value = isoD(addD(hoy, -6));
+  document.getElementById('ase-hasta').value = isoD(hoy);
+  initDateRangePicker('ase');
+  ['ase-desde', 'ase-hasta'].forEach(id => document.getElementById(id).addEventListener('change', () => {
     if ((repartoDirty.domestico || repartoDirty.internacional) && !confirm('Hay cambios sin guardar en el reparto. ¿Cambiar de periodo de todas formas?')) return;
-    document.querySelectorAll('#ase-periodo .seg').forEach(x => x.classList.remove('on'));
-    b.classList.add('on'); asePeriodo = b.dataset.p; loadAsesoresPeriodo();
-  });
+    loadAsesoresPeriodo();
+  }));
+  document.getElementById('ase-ver-reasig').onclick = irAReasignacionesDesdeAsesores;
 }
 async function loadAsesoresPeriodo() {
-  if (asePeriodo === 'historico') { renderAdvisors(); }
+  const fd = val('ase-desde'), fh = val('ase-hasta');
+  if (!fd || !fh) { renderAdvisors(); }
   else {
-    const [d, h] = periodo(asePeriodo);
+    const [d, h] = aseRango(fd, fh);
     const { data, error } = await sb.rpc('carga_asesores', { p_desde: iso(d), p_hasta: iso(h) });
     if (error) { console.error(error); errToast('No se pudo cargar la carga por asesor'); }
     else renderAdvisors(data || {});
   }
   cargarRendimientoAsesores();
   cargarReparto();
+  cargarReasigCountAsesores();
+}
+async function cargarReasigCountAsesores() {
+  const el = document.getElementById('ase-reasig-count');
+  if (!el) return;
+  const fd = val('ase-desde'), fh = val('ase-hasta');
+  let q = sb.from('reasignaciones').select('id', { count: 'exact', head: true });
+  if (fd) q = q.gte('created_at', fd);
+  if (fh) q = q.lte('created_at', fh + 'T23:59:59');
+  const { count, error } = await q;
+  el.textContent = error ? '' : `(${count || 0})`;
+}
+function irAReasignacionesDesdeAsesores() {
+  const fd = val('ase-desde'), fh = val('ase-hasta');
+  document.querySelector('#gp-tabs [data-gp-tab="reasignaciones"]')?.click();
+  setTimeout(() => {
+    const de = document.getElementById('rg-desde'), ha = document.getElementById('rg-hasta');
+    if (!de || !ha) return;
+    de.value = fd || ''; ha.value = fh || '';
+    de.dispatchEvent(new Event('change'));
+  }, 0);
 }
 
 /* ---------- Rendimiento por asesor: % perdido por timeout + opinión calculada ---------- */
@@ -2801,7 +2824,8 @@ async function cargarRendimientoAsesores() {
   const box = document.getElementById('rendList');
   if (!box) return;
   let desde = null, hasta = null;
-  if (asePeriodo !== 'historico') { const [d, h] = periodo(asePeriodo); desde = iso(d); hasta = iso(h); }
+  const fd = val('ase-desde'), fh = val('ase-hasta');
+  if (fd && fh) { const [d, h] = aseRango(fd, fh); desde = iso(d); hasta = iso(h); }
   const { data, error } = await sb.rpc('rendimiento_asesores', { p_desde: desde, p_hasta: hasta });
   if (error) { console.error(error); box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar el rendimiento</div>'; return; }
   renderRendimiento(data || {});
@@ -14965,6 +14989,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-24', emoji: '📅', titulo: 'Rango de fechas libre en Asesores', texto: 'En Gestión de Personal → Asesores ya no hay solo Hoy/Semana/Mes/Año: hay un selector de fecha a fecha (igual al de Leads y Reasignaciones) para "Carga por asesor" y "Rendimiento". Al lado, un botón muestra cuántas reasignaciones hubo en ese mismo rango y lleva directo a la pestaña Reasignaciones con las fechas ya cargadas.', roles: ['admin'] },
   { fecha: '2026-08-22', emoji: '📇', titulo: 'Ficha del lead en dos columnas', texto: 'En escritorio la pestaña "Ficha" ahora se ve en dos zonas lado a lado: "Quién es" (datos del cliente) a la izquierda y "Qué hago con él" (gestión, pagos, guardar) a la derecha. En el celular sigue igual, apilada.', roles: ROLES_TODOS },
   { fecha: '2026-08-21', emoji: '📬', titulo: 'Bandeja de Correo rediseñada', texto: 'La sección Correo tiene look nuevo: buscador y filtros (Todos / Sin leer / Sin vincular) arriba de la bandeja, remitente con avatar circular, y los correos sin leer se ven bien marcados en vez de perderse en la lista. Todo lo que ya hacía -- ver el hilo completo, responder con adjuntos, vincular a un lead -- sigue igual, solo que ahora se distingue de un vistazo.', roles: ['asesor', 'admin'] },
   { fecha: '2026-08-20', emoji: '🔔', titulo: 'Notificaciones que ya no se pierden', texto: 'Si te dejaron de llegar los avisos del CRM sin que hicieras nada, esa era la falla: la suscripción de tu teléfono se vencía sola y nadie la renovaba. Ahora se repara sola cada vez que abres el CRM. Los avisos además salen con prioridad alta, así que llegan al instante aunque tengas la pantalla apagada, y los recordatorios de asistencia dicen directo qué tienes que hacer en vez de decir solo "Lotus 360 CRM". En iPhone, si todavía no agregaste la app a la pantalla de inicio, el CRM ahora te explica cómo hacerlo en vez de decir que tu teléfono no sirve.', roles: ROLES_TODOS },
