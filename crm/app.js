@@ -12074,6 +12074,7 @@ async function mensajeErrorCotizador(data, error) {
     error_ia: 'No se pudo conectar con la IA, intenta de nuevo en un momento.',
     error_tarifario: 'No se pudo consultar el tarifario, intenta de nuevo.',
     sin_respuesta: 'La IA no devolvió una respuesta, intenta de nuevo.',
+    respuesta_truncada: 'La respuesta de la IA quedó incompleta, intenta de nuevo.',
     no_autenticado: 'Tu sesión expiró, volvé a iniciar sesión.',
     no_configurado: 'El cotizador no está disponible en este momento.',
     body_invalido: 'Ocurrió un error inesperado, intenta de nuevo.',
@@ -12088,6 +12089,7 @@ function renderBotText(texto) {
   return esc(texto)
     .replace(/^#{1,6}\s*/gm, '')
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/(^|\s)\*([^*\n]+)\*/g, '$1<b>$2</b>')
     .replace(/^[*•]\s+/gm, '- ');
 }
 function addChatBubble(who, texto, loading) {
