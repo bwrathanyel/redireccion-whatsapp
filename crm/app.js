@@ -11178,7 +11178,7 @@ function tarCardHtml(x) {
         ${tagsHtml(x.incluye_tags)}
       </div></div>`;
   }
-  const tarifa = (x.tarifas || [])[0];
+  const tarifa = mejorPrecio(x);
   const promos = x.promociones || [];
   const tagsHotel = [...new Set(promos.flatMap(p => p.incluye_tags || []))];
   const bullets = resumenBullets(x.descripcion);
@@ -11199,7 +11199,7 @@ function tarFichaHtml(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
   const nombre = esPromo ? x.titulo : x.nombre;
   const foto = fotosRotadas(x, 256)[0];
-  const tarifa = !esPromo ? (x.tarifas || [])[0] : null;
+  const tarifa = !esPromo ? mejorPrecio(x) : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
   const promos = !esPromo ? (x.promociones || []) : [];
@@ -11455,15 +11455,21 @@ function tarifaPrecioNumerico(precioTexto) {
   const m = (precioTexto || '').match(/[$€]\s*([\d][\d.,]*)/);
   return m ? parseFloat(m[1].replace(/\./g, '').replace(',', '.')) : Infinity;
 }
+// El precio más barato de un hotel puede vivir en una tarifa base o en una
+// promoción activa -- mostrar solo tarifas ignoraba promos más baratas que
+// la tarifa base (ej. Gremary: tarifa base €322 vs promo €286).
+function mejorPrecio(x) {
+  const candidatos = [
+    ...(x.tarifas || []),
+    ...(x.promociones || []),
+  ];
+  if (!candidatos.length) return null;
+  return [...candidatos].sort((a, b) => tarifaPrecioNumerico(a.precio_texto) - tarifaPrecioNumerico(b.precio_texto))[0];
+}
 function openProductoDrawer(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
   const nombre = esPromo ? x.titulo : x.nombre;
-  // PostgREST no garantiza el orden de tarifas embebidas -- tomar [0] a
-  // ciegas mostraba cualquier línea (ej. una tarifa de temporada alta) en vez
-  // de la más barata, aunque hubiera una promo o tarifa más económica.
-  const tarifa = !esPromo
-    ? [...(x.tarifas || [])].sort((a, b) => tarifaPrecioNumerico(a.precio_texto) - tarifaPrecioNumerico(b.precio_texto))[0]
-    : null;
+  const tarifa = !esPromo ? mejorPrecio(x) : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
   const fotos = fotosRotadas(x, 256);
