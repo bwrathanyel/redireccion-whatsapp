@@ -11450,8 +11450,10 @@ async function loadTarifarioInfo() {
   list.innerHTML = data.map(x => `<div class="tar-info-item"><b>${esc(x.nombre)}</b>${esc(x.descripcion || '')}</div>`).join('');
 }
 function tarifaPrecioNumerico(precioTexto) {
-  const m = (precioTexto || '').match(/[\d][\d.,]*/);
-  return m ? parseFloat(m[0].replace(/\./g, '').replace(',', '.')) : Infinity;
+  // Anclado a $/€: un match sin ancla agarra el primer dígito de CUALQUIER
+  // texto (ej. "2 noches" antes del precio real), no el precio.
+  const m = (precioTexto || '').match(/[$€]\s*([\d][\d.,]*)/);
+  return m ? parseFloat(m[1].replace(/\./g, '').replace(',', '.')) : Infinity;
 }
 function openProductoDrawer(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
