@@ -4503,6 +4503,9 @@ async function actQuitar(clave, btn) {
 let CE_REGLAS = [];
 let CE_DESTINOS = [];
 let CE_EDITANDO = null;
+let AP_PROPUESTAS = [];
+let AP_ESTADO = 'pendiente';
+let AP_CARGADO = false;
 let CE_AUDIO_CANALES = [];
 
 async function loadCerebroIA() {
@@ -4712,6 +4715,97 @@ async function ceBorrar(id, btn) {
   if (error || !data?.ok) { errToast('No se pudo borrar: ' + (error?.message || data?.error || '')); return; }
   okToast('Regla borrada');
   await loadCerebroIA();
+}
+
+/* --- Propuestas del aprendiz de ventas -------------------------------------
+   El aprendiz (cron semanal) SOLO escribe filas en ia_aprendizaje_propuestas;
+   nunca toca reglas_venta ni cerebro_versiones. Aprobar acá es lo único que
+   las hace reales -- ver ia_aprendizaje_decidir. */
+async function loadPropuestas() {
+  AP_CARGADO = true;
+  const cont = document.getElementById('ap-lista');
+  cont.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  const { data, error } = await sb.rpc('ia_aprendizaje_listar', { p_estado: AP_ESTADO });
+  if (error) {
+    cont.innerHTML = `<div class="vig-vacio">No se pudieron cargar las propuestas: ${esc(error.message)}</div>`;
+    return;
+  }
+  AP_PROPUESTAS = data || [];
+  apPintarLista();
+  apActualizarBadge();
+}
+
+async function apActualizarBadge() {
+  if (AP_ESTADO === 'pendiente') { apPintarBadge(AP_PROPUESTAS.length); return; }
+  const { data, error } = await sb.rpc('ia_aprendizaje_listar', { p_estado: 'pendiente' });
+  if (!error) apPintarBadge((data || []).length);
+}
+
+function apPintarBadge(n) {
+  const b = document.getElementById('ap-badge');
+  if (!b) return;
+  b.textContent = n;
+  b.style.display = n ? '' : 'none';
+}
+
+function apPintarLista() {
+  const cont = document.getElementById('ap-lista');
+  if (!AP_PROPUESTAS.length) {
+    const texto = AP_ESTADO === 'pendiente' ? 'pendientes' : AP_ESTADO === 'aprobada' ? 'aprobadas' : 'rechazadas';
+    cont.innerHTML = `<div class="vig-vacio"><i class="fas fa-lightbulb"></i><b>No hay propuestas ${texto}</b>
+      <div style="font-size:12.5px;margin-top:6px">El aprendiz corre una vez por semana comparando conversaciones ganadas contra perdidas.</div></div>`;
+    return;
+  }
+  cont.innerHTML = AP_PROPUESTAS.map(apCardHtml).join('');
+}
+
+function apCardHtml(p) {
+  const ev = p.evidencia || {};
+  const cta = ev.cta_presente_pct || {};
+  const fallos = ev.fallos_visibles_pct || {};
+  const etiqueta = p.tipo === 'regla_venta'
+    ? (p.ambito === 'destino' ? `Regla para <span class="ce-dest">${esc(p.destino)}</span>` : 'Regla general')
+    : 'Cambio de estilo del cerebro';
+  const pie = p.estado === 'pendiente'
+    ? `<div class="ce-pie">
+        <span class="ce-vig eterna"><i class="fas fa-calendar-day"></i> Propuesta el ${fmtFechaSolo(p.creada_en)}</span>
+        <div class="ce-acc">
+          <button class="ce-mini peligro" data-ap-rechazar="${p.id}"><i class="fas fa-xmark"></i> Rechazar</button>
+          <button class="ce-mini on" data-ap-aprobar="${p.id}"><i class="fas fa-check"></i> Aprobar</button>
+        </div>
+      </div>`
+    : `<div class="ce-pie">
+        <span class="ce-vig${p.estado === 'rechazada' ? ' vencida' : ''}">
+          <i class="fas fa-${p.estado === 'aprobada' ? 'circle-check' : 'circle-xmark'}"></i>
+          ${p.estado === 'aprobada' ? 'Aprobada' : 'Rechazada'} el ${fmtFechaSolo(p.decidida_en)}</span>
+      </div>${p.nota_decision ? `<div class="ce-ayuda"><i class="fas fa-note-sticky"></i> ${esc(p.nota_decision)}</div>` : ''}`;
+  return `<div class="ce-card" data-ap-id="${p.id}">
+    <div class="ce-card-top">
+      <div class="ce-texto">
+        <div class="ce-vig eterna" style="margin-bottom:6px"><i class="fas fa-${p.tipo === 'regla_venta' ? 'list-check' : 'brain'}"></i> ${etiqueta}</div>
+        ${esc(p.texto_propuesto)}
+      </div>
+    </div>
+    <div class="ce-ayuda" style="margin-top:6px"><i class="fas fa-circle-info"></i> ${esc(p.justificacion)}</div>
+    <div class="ria-lista" style="margin-top:8px">
+      <div class="ria-fila"><span>Ganadas / perdidas comparadas</span><b>${fmt(ev.n_ganadas)} / ${fmt(ev.n_perdidas)}</b></div>
+      ${cta.ganadas != null ? `<div class="ria-fila"><span>Pidió el contacto (ganadas vs. perdidas)</span><b>${cta.ganadas}% / ${cta.perdidas}%</b></div>` : ''}
+      ${fallos.ganadas != null ? `<div class="ria-fila"><span>Con fallo visible (ganadas vs. perdidas)</span><b class="${fallos.ganadas > fallos.perdidas ? 'ria-malo' : ''}">${fallos.ganadas}% / ${fallos.perdidas}%</b></div>` : ''}
+      ${ev.pagados_pct != null ? `<div class="ria-fila"><span>Ganadas que ya pagaron</span><b>${ev.pagados_pct}%</b></div>` : ''}
+    </div>
+    ${pie}
+  </div>`;
+}
+
+async function apDecidir(id, decision) {
+  const nota = prompt(decision === 'aprobada' ? 'Nota al aprobar (opcional):' : 'Motivo del rechazo (opcional):');
+  if (nota === null) return; // canceló el prompt
+  const { data, error } = await sb.rpc('ia_aprendizaje_decidir', { p_id: Number(id), p_decision: decision, p_nota: nota });
+  if (error || !data?.ok) { errToast('No se pudo decidir: ' + (error?.message || data?.error || '')); return; }
+  okToast(decision === 'aprobada'
+    ? 'Propuesta aprobada -- ya está en Reglas de venta, vence en 30 días si nadie la revalida'
+    : 'Propuesta rechazada -- no se vuelve a proponer igual');
+  await loadPropuestas();
 }
 
 /* --- Probar: qué contestaría la IA -----------------------------------------
@@ -5163,6 +5257,7 @@ function cpCambiarTab(tab) {
   });
   if (tab === 'probar') { cpPintarSugerencias(); if (!CB_ARBOL.length) loadCerebroRamas(); }
   if (tab === 'ramas' && !CB_ARBOL.length) loadCerebroRamas();
+  if (tab === 'propuestas' && !AP_CARGADO) loadPropuestas();
 }
 
 function setupCerebroIA() {
@@ -5252,6 +5347,20 @@ function setupCerebroIA() {
     const t = e.target.closest('[data-audio-canal]');
     if (!t) return;
     toggleAudioCanal(t.dataset.audioCanal, t);
+  });
+  document.getElementById('ap-tabs')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ap-estado]');
+    if (!b) return;
+    AP_ESTADO = b.dataset.apEstado;
+    document.querySelectorAll('#ap-tabs .seg').forEach(x => x.classList.toggle('on', x === b));
+    loadPropuestas();
+  });
+  document.getElementById('ap-recargar')?.addEventListener('click', loadPropuestas);
+  document.getElementById('ap-lista')?.addEventListener('click', (e) => {
+    const ap = e.target.closest('[data-ap-aprobar]');
+    if (ap) return apDecidir(ap.dataset.apAprobar, 'aprobada');
+    const rc = e.target.closest('[data-ap-rechazar]');
+    if (rc) return apDecidir(rc.dataset.apRechazar, 'rechazada');
   });
 }
 
@@ -15016,6 +15125,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-26', emoji: '🎓', titulo: 'Aprendiz de ventas en Cerebro IA', texto: 'Nueva pestaña "Propuestas": una vez por semana la IA compara conversaciones que terminaron en lead contra las que se cortaron sin dejar teléfono, y propone cambios a las reglas de venta. Nunca aplica nada sola -- cada propuesta se aprueba o rechaza a mano, y una aprobada vence sola a los 30 días si nadie la revalida.', roles: ['admin'] },
   { fecha: '2026-08-24', emoji: '📅', titulo: 'Rango de fechas libre en Asesores', texto: 'En Gestión de Personal → Asesores ya no hay solo Hoy/Semana/Mes/Año: hay un selector de fecha a fecha (igual al de Leads y Reasignaciones) para "Carga por asesor" y "Rendimiento". Al lado, un botón muestra cuántas reasignaciones hubo en ese mismo rango y lleva directo a la pestaña Reasignaciones con las fechas ya cargadas.', roles: ['admin'] },
   { fecha: '2026-08-22', emoji: '📇', titulo: 'Ficha del lead en dos columnas', texto: 'En escritorio la pestaña "Ficha" ahora se ve en dos zonas lado a lado: "Quién es" (datos del cliente) a la izquierda y "Qué hago con él" (gestión, pagos, guardar) a la derecha. En el celular sigue igual, apilada.', roles: ROLES_TODOS },
   { fecha: '2026-08-21', emoji: '📬', titulo: 'Bandeja de Correo rediseñada', texto: 'La sección Correo tiene look nuevo: buscador y filtros (Todos / Sin leer / Sin vincular) arriba de la bandeja, remitente con avatar circular, y los correos sin leer se ven bien marcados en vez de perderse en la lista. Todo lo que ya hacía -- ver el hilo completo, responder con adjuntos, vincular a un lead -- sigue igual, solo que ahora se distingue de un vistazo.', roles: ['asesor', 'admin'] },

@@ -3855,6 +3855,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <button class="seg" data-ce-tab="probar"><i class="fas fa-comment-dots"></i> Probar</button>
         <button class="seg" data-ce-tab="ramas"><i class="fas fa-sitemap"></i> Ramas</button>
         <button class="seg" data-ce-tab="flyer"><i class="fas fa-image"></i> Cargar flyer</button>
+        <button class="seg" data-ce-tab="propuestas"><i class="fas fa-lightbulb"></i> Propuestas <span class="badge" id="ap-badge" style="display:none">0</span></button>
       </div>
 
       <div class="ce-panel" data-ce-panel="flyer" style="display:none">
@@ -3978,6 +3979,25 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <summary>Ver el texto exacto que recibe la IA</summary>
         <pre id="ce-previa-txt"></pre>
       </details>
+      </div>
+
+      <div class="ce-panel" data-ce-panel="propuestas" style="display:none">
+        <div class="ce-intro">
+          Cada semana el aprendiz compara conversaciones que <b>terminaron en lead</b> contra las que
+          se cortaron sin dejar teléfono ni destino, y propone acá qué cambiar. <b>Nunca aplica nada solo</b>:
+          aprobar una propuesta de regla la manda a Reglas de venta con vencimiento a 30 días — si nadie la
+          revalida antes, se apaga sola. Ninguna propuesta puede mencionar un precio: el tarifario es la única
+          fuente de precios.
+        </div>
+        <div class="ce-barra">
+          <div class="seg-group" id="ap-tabs">
+            <button class="seg on" data-ap-estado="pendiente">Pendientes</button>
+            <button class="seg" data-ap-estado="aprobada">Aprobadas</button>
+            <button class="seg" data-ap-estado="rechazada">Rechazadas</button>
+          </div>
+          <button class="ce-mini" id="ap-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+        </div>
+        <div id="ap-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
       </div>
     </section>
 
