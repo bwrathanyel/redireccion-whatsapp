@@ -11455,16 +11455,19 @@ function tarifaPrecioNumerico(precioTexto) {
   const m = (precioTexto || '').match(/[$€]\s*([\d][\d.,]*)/);
   return m ? parseFloat(m[1].replace(/\./g, '').replace(',', '.')) : Infinity;
 }
-// El precio más barato de un hotel puede vivir en una tarifa base o en una
-// promoción activa -- mostrar solo tarifas ignoraba promos más baratas que
-// la tarifa base (ej. Gremary: tarifa base €322 vs promo €286).
+// Ordenar TODAS las tarifas por precio numérico no sirve: mezclan precio real
+// (Sencilla/Doble/Triple) con líneas de niño y "noche adicional" -- esas
+// siempre ganan el mínimo sin ser un precio ofrecible. Y comparar tarifa vs
+// promo por número tampoco vale: son unidades distintas (por habitación vs
+// por persona, distinta cantidad de noches). La promo SIEMPRE es la oferta
+// vigente que el dueño quiere mostrar primero -- si existe, gana; si no, cae
+// a la primera tarifa embebida.
 function mejorPrecio(x) {
-  const candidatos = [
-    ...(x.tarifas || []),
-    ...(x.promociones || []),
-  ];
-  if (!candidatos.length) return null;
-  return [...candidatos].sort((a, b) => tarifaPrecioNumerico(a.precio_texto) - tarifaPrecioNumerico(b.precio_texto))[0];
+  const promos = x.promociones || [];
+  if (promos.length) {
+    return [...promos].sort((a, b) => tarifaPrecioNumerico(a.precio_texto) - tarifaPrecioNumerico(b.precio_texto))[0];
+  }
+  return (x.tarifas || [])[0] || null;
 }
 function openProductoDrawer(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
