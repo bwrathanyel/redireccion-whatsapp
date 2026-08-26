@@ -5348,6 +5348,9 @@ function riaPintarPanel(data) {
   const gruposReactivacion = new Map((reactivacion.grupos || []).map(g => [g.grupo_experimental, g]));
   const rg = gruposReactivacion.get('tratamiento') || {};
   const entrega = reactivacion.entrega || {};
+  const saludCron = reactivacion.salud_cron || {};
+  const okEn = saludCron.ultima_corrida_ok ? new Date(saludCron.ultima_corrida_ok).getTime() : 0;
+  const cronFrio = !okEn || Date.now() - okEn > 1800000;
   document.getElementById('ria-reactivacion').innerHTML = `<div class="ria-lista">
     <div class="ria-fila"><span>Conversaciones elegibles</span><b>${fmt(riaNum(rg.elegibles))}</b></div>
     <div class="ria-fila"><span>Seguimientos enviados</span><b>${fmt(riaNum(rg.enviadas))}</b></div>
@@ -5355,6 +5358,8 @@ function riaPintarPanel(data) {
     <div class="ria-fila"><span>Leads rescatados</span><b class="${riaNum(rg.rescatadas) ? 'ria-bien' : ''}">${fmt(riaNum(rg.rescatadas))}</b></div>
     <div class="ria-fila"><span>Cancelados por seguridad</span><b>${fmt(riaNum(rg.canceladas))}</b></div>
     <div class="ria-fila"><span>Personas que pidieron no contacto</span><b>${fmt(riaNum(reactivacion.no_contactar))}</b></div>
+    <div class="ria-fila"><span>Última corrida sin errores</span><b class="${cronFrio ? 'ria-malo' : 'ria-bien'}">${okEn ? riaHora(saludCron.ultima_corrida_ok) : 'Nunca'}</b></div>
+    ${saludCron.ultimo_error ? `<div class="ria-fila"><span>Último error (${esc(riaHora(saludCron.ultimo_error_en))})</span><b class="ria-malo">${esc(saludCron.ultimo_error)}</b></div>` : ''}
   </div>`;
   const callbackPct = riaPct(entrega.callbacks, entrega.turnos);
   document.getElementById('ria-entrega').innerHTML = `<div class="ria-lista">
