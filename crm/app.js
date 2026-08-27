@@ -5645,6 +5645,9 @@ function riaPintarPanel(data) {
   const reactivacion = data.reactivacion || {};
   const gruposReactivacion = new Map((reactivacion.grupos || []).map(g => [g.grupo_experimental, g]));
   const rg = gruposReactivacion.get('tratamiento') || {};
+  const gruposFoto = new Map((reactivacion.grupos_foto || []).map(g => [g.grupo_foto, g]));
+  const conFoto = gruposFoto.get('con_foto') || {}, sinFoto = gruposFoto.get('sin_foto') || {};
+  const deltaFoto = riaPct(conFoto.respondidas, conFoto.enviadas) - riaPct(sinFoto.respondidas, sinFoto.enviadas);
   const entrega = reactivacion.entrega || {};
   const saludCron = reactivacion.salud_cron || {};
   const okEn = saludCron.ultima_corrida_ok ? new Date(saludCron.ultima_corrida_ok).getTime() : 0;
@@ -5658,6 +5661,9 @@ function riaPintarPanel(data) {
     <div class="ria-fila"><span>Personas que pidieron no contacto</span><b>${fmt(riaNum(reactivacion.no_contactar))}</b></div>
     <div class="ria-fila"><span>Última corrida sin errores</span><b class="${cronFrio ? 'ria-malo' : 'ria-bien'}">${okEn ? riaHora(saludCron.ultima_corrida_ok) : 'Nunca'}</b></div>
     ${saludCron.ultimo_error ? `<div class="ria-fila"><span>Último error (${esc(riaHora(saludCron.ultimo_error_en))})</span><b class="ria-malo">${esc(saludCron.ultimo_error)}</b></div>` : ''}
+    <div class="ria-cal-head" style="margin-top:10px"><span>Foto en 1er seguimiento (A/B)</span><span>Enviados</span><span>Volvieron</span></div>
+    ${[['Con foto', conFoto], ['Sin foto', sinFoto]].map(([n, g]) => `<div class="ria-cal-fila"><span>${n}</span><b>${fmt(riaNum(g.enviadas))}</b><b>${riaPct(g.respondidas, g.enviadas)}%</b></div>`).join('')}
+    ${(riaNum(conFoto.enviadas) && riaNum(sinFoto.enviadas)) ? `<div class="ria-fila"><span>Diferencia con foto vs. sin foto</span><b class="${deltaFoto < -0.5 ? 'ria-malo' : 'ria-bien'}">${deltaFoto >= 0 ? '+' : ''}${deltaFoto.toFixed(1)} pp</b></div>` : ''}
   </div>`;
   const callbackPct = riaPct(entrega.callbacks, entrega.turnos);
   document.getElementById('ria-entrega').innerHTML = `<div class="ria-lista">
