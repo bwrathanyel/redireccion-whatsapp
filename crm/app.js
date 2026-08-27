@@ -127,6 +127,12 @@ function badgeContactoDirecto(l) {
   if (!l.contacto_directo_enviado_at) return '';
   return ` <span class="badge-st" style="color:#a78bfa;background:#7c3aed2e" title="Se le entregó el WhatsApp del asesor -- sin teléfono propio hasta que la IA lo consiga"><i class="fas fa-share-square"></i> Contacto directo</span>`;
 }
+// Un lead repartido en lote no llegó por el flujo normal del asesor: sin esta marca se ve
+// idéntico a cualquier otro. Es la misma columna que impide repartirlo dos veces.
+function badgeAsignadoEnLote(l) {
+  if (!l.lote_asignado_at) return '';
+  return ` <span class="badge-st" style="color:#60a5fa;background:#2563eb2e" title="Asignado en lote el ${l.lote_asignado_at.slice(0, 10)}"><i class="fas fa-layer-group"></i> Asignado en lote</span>`;
+}
 function textoTelefonoLead(l) {
   if (l.telefono) return esc(l.telefono);
   return l.contacto_directo_enviado_at ? 'Contacto directo (sin teléfono)' : 'Sin teléfono';
@@ -3186,7 +3192,7 @@ async function loadTable() {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
       <td class="solo-admin-borrar"><input type="checkbox" class="lead-check" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''}></td>
-      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div></td>
+      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div></td>
       <td data-label="Teléfono" class="muted">${textoTelefonoLead(l)}${l.requiere_revision_telefono ? ' <i class="fas fa-flag" style="color:#ef4444" title="Número marcado para revisión"></i>' : ''}${l.telefono_colision_revision ? ' <i class="fas fa-triangle-exclamation" style="color:#f59e0b" title="Este teléfono coincide con otro lead abierto -- revisar antes de fusionar"></i>' : ''}</td>
       <td data-label="Destino">${esc(l.destino)}</td>
       <td data-label="Canal"><span class="chip ${cc}">${esc(l.canal)}</span></td>
@@ -3452,7 +3458,7 @@ function leadCardHtml(l) {
     <div class="ec-top">
       <div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="ec-headtext">
-        <div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div>
+        <div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div>
         <div class="ec-destino"><i class="fas fa-location-dot"></i> ${esc(l.destino) || 'Sin destino'}</div>
       </div>
     </div>
@@ -3699,7 +3705,7 @@ function openDrawer(l) {
     <div class="dhead"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="dhead-info"><div class="dn">${esc(l.nombre)}</div>
       <div class="dm">${textoTelefonoLead(l)} · ${esc(l.canal)}</div>
-      <span class="badge-st" style="color:${estColor};background:${estColor}2e">${esc(niceEstado(l.estado))}</span>${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}</div></div>
+      <span class="badge-st" style="color:${estColor};background:${estColor}2e">${esc(niceEstado(l.estado))}</span>${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}</div></div>
 
     ${sinAtender ? `<button type="button" class="inbox-btn atender" id="e-a-atender" style="width:100%;margin-bottom:12px"><i class="fas fa-check"></i> Atender este lead</button>` : ''}
 
