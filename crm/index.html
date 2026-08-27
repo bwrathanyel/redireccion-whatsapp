@@ -681,6 +681,8 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .toast.show{transform:translateX(0);opacity:1}
 .toast i{color:var(--green);font-size:16px}.toast b{color:#fff;font-weight:700}
 .toast-err{border-color:rgba(239,68,68,.4);border-left-color:#ef4444}.toast-err i{color:#ef4444}
+.toast-undo{flex-shrink:0;background:transparent;border:1px solid var(--line2);color:var(--accent);font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:8px;cursor:pointer}
+.toast-undo:hover{border-color:var(--accent);background:var(--accent-soft)}
 
 .section{display:none}.section.active{display:block}
 /* Swipe entre secciones (Fase 5.2) -- la vecina se asoma superpuesta sobre
@@ -887,6 +889,13 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
    Las reglas base de .tc-thumb quedan intactas porque el cotizador
    (.cot-card) las usa sueltas, sin este wrapper. */
 .tc-media-wrap{position:relative;width:100%;margin:0}
+/* Botón de ocultar: invisible hasta pasar el mouse por la tarjeta -- en
+   pantalla táctil (hover:none) no hay "pasar el mouse", así que ahí queda
+   siempre visible o sería inalcanzable. */
+.tc-hide{position:absolute;top:8px;right:8px;z-index:3;width:30px;height:30px;display:grid;place-items:center;background:rgba(6,10,18,.7);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s,background .15s,color .15s}
+.tar-card:hover .tc-hide{opacity:1}
+.tc-hide:hover{background:#ef4444;border-color:#ef4444;color:#fff}
+@media (hover:none){.tc-hide{opacity:1}}
 .tc-media-wrap .tc-thumb{height:170px}
 .tc-media-wrap .tc-thumb.tc-thumb-vacio{width:100%;height:170px;margin:0;border-radius:0;border:none;border-bottom:1px solid var(--line2)}
 /* Degradado al pie de la foto: sostiene el chip de destino y evita que una foto
@@ -913,7 +922,11 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tc-resumen-ficha{-webkit-line-clamp:unset;display:block;overflow:visible}
 /* El precio es el dato que más se busca de un vistazo: sube de tamaño y se
    separa del resto con una línea, en vez de ser un renglón verde más. */
-.tar-card .tc-precio{font-size:14.5px;font-weight:800;color:var(--green);line-height:1.35;padding-top:11px;border-top:1px solid var(--line)}
+.tar-card .tc-precio{font-size:14.5px;font-weight:800;color:var(--green);line-height:1.35;padding-top:11px;border-top:1px solid var(--line);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tar-card .tc-precio.abierto{-webkit-line-clamp:unset;display:block;overflow:visible}
+/* Solo se agrega desde JS a las que de verdad desbordan -- un "ver más" en una
+   tarjeta de una línea es ruido. */
+.tc-precio-mas{background:transparent;border:none;color:var(--accent);font-size:11px;font-weight:700;padding:4px 0 0;cursor:pointer;display:block}
 .tar-card .tc-vigencia{font-size:11px;color:var(--amber);margin-top:3px}
 /* vigencia_texto es prosa cargada a mano ("Fecha de venta ... ; Fecha de
    disfrute ...") y se comía 3 renglones corridos. vigenciaPartes() en app.js la
@@ -1508,6 +1521,11 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .seg.tab-oculta{opacity:.45}
 .tar-oculto-admin{position:relative;opacity:.55}
 .tar-oculto-badge{position:absolute;top:6px;right:6px;background:#ef4444;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;z-index:2;text-transform:uppercase;letter-spacing:.4px;pointer-events:none}
+/* Distinta de .tar-oculto-badge (ese es "lo saqué del catálogo"): esta es
+   "sigue visible pero la fecha de venta ya pasó" -- pueden convivir en la
+   misma tarjeta, por eso van en esquinas opuestas. */
+.tar-vencido-admin{position:relative}
+.tar-vencido-badge{position:absolute;top:6px;left:6px;background:#7f1d1d;color:#fecaca;border:1px solid #ef4444;font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;z-index:2;text-transform:uppercase;letter-spacing:.4px;pointer-events:none}
 
 /* Panel de configuración de Tarifario (admin) */
 .tas-sub{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:16px 0 8px}
@@ -1954,6 +1972,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .act-guia .guia-costo{display:flex;align-items:center;gap:12px;border:1px solid var(--line2);border-radius:12px;padding:12px 14px;background:var(--panel-solid)}
 .act-guia .guia-costo .lab{flex:1;min-width:0;font-size:13px;color:var(--muted)}
 .act-guia .guia-costo .val{flex:0 0 auto;font-size:15px;font-weight:800;color:var(--accent)}
+/* Un tope no es un costo -- es el techo antes de que se frene solo. Ámbar
+   para distinguirlo de un costo real (naranja de marca). */
+.act-guia .guia-costo .val.tope{color:var(--amber)}
 .act-guia .guia-nota{font-size:11.5px;color:var(--muted2);line-height:1.5;margin-top:10px}
 .act-guia .guia-nota b{color:var(--muted)}
 .act-guia ul.guia-no{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
@@ -4848,6 +4869,17 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 <div class="sheet" id="vigencias-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title"><i class="fas fa-calendar-check"></i> Revisión de vigencias</div>
+
+  <!-- Comprobación manual de vencidas (regla estricta: fecha de VENTA, ver
+       tarifario_vencidos() / ocultar_vencidos_tarifario() en SQL). Corre la
+       MISMA regla que el cron nocturno, para verificarla o adelantarla a mano. -->
+  <div class="vig-grupo" style="margin-bottom:18px">
+    <div class="vig-grupo-t">Vencidas (fecha de venta)</div>
+    <div class="vig-grupo-d">Comprueba lo que el cron de las 2:15am retiraría hoy. Ocultar es apagar, no borrar: se puede volver a mostrar desde "Configurar visibilidad".</div>
+    <button class="dbtn gh" id="vc-comprobar-btn" type="button" style="width:100%;margin-top:8px"><i class="fas fa-magnifying-glass"></i> Comprobar vencidas ahora</button>
+    <div id="vc-resultado"></div>
+  </div>
+
   <div id="vig-cuerpo"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
 </div>
 
@@ -4877,9 +4909,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <h4><i class="fas fa-arrows-rotate"></i> Cómo se actualiza solo</h4>
         <div class="guia-pasos">
           <div class="guia-paso"><div class="num">1</div><div class="tx"><b>Cada 30 minutos</b> mira la carpeta de Drive por si subieron algo nuevo.</div></div>
-          <div class="guia-paso"><div class="num">2</div><div class="tx"><b>Detecta el archivo nuevo</b> — por ejemplo “Tarifario nacional agosto 018”. Lo encuentra solo, sin que nadie avise.</div></div>
-          <div class="guia-paso"><div class="num">3</div><div class="tx"><b>La IA lo lee</b> y saca los hoteles, los precios, las promociones y las fechas de vigencia.</div></div>
-          <div class="guia-paso"><div class="num">4</div><div class="tx"><b>Lo publica y lo revisa:</b> queda en el catálogo (CRM y web) y una segunda IA mira si hay errores — una oferta vencida, un destino sin completar. Lo que puede, lo corrige sola; lo que no, lo deja anotado para que lo confirmes.</div></div>
+          <div class="guia-paso"><div class="num">2</div><div class="tx"><b>Detecta el archivo nuevo</b> — por ejemplo "Tarifario nacional agosto 026". Lo encuentra solo, sin que nadie avise.</div></div>
+          <div class="guia-paso"><div class="num">3</div><div class="tx"><b>Lo parte por producto</b> y un <b>parser propio</b> resuelve la mayoría sin gastar un centavo — solo los segmentos dudosos van a un modelo de IA. Cada paso avanza uno cada 3 minutos, sin esperar a terminar el archivo entero.</div></div>
+          <div class="guia-paso"><div class="num">4</div><div class="tx"><b>Lo publica y se activa solo:</b> queda en el catálogo (CRM y web) apenas termina.</div></div>
+          <div class="guia-paso"><div class="num">5</div><div class="tx"><b>Si aparece un archivo más nuevo</b> mientras uno todavía se está procesando, el que está a medio camino se cancela — nunca se mezclan dos cargas.</div></div>
         </div>
       </div>
 
@@ -4887,31 +4920,48 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <h4><i class="fas fa-robot"></i> Qué IA hace cada cosa</h4>
         <div class="guia-ia">
           <div class="fila">
-            <div class="ico lee"><i class="fas fa-book-open"></i></div>
-            <div class="det"><div class="nm">Qwen</div><div class="rol">Lee los archivos (PDF y fotos) y saca los datos.</div></div>
-            <span class="tag hoy">la que se usa</span>
+            <div class="ico lee"><i class="fas fa-calculator"></i></div>
+            <div class="det"><div class="nm">Parser propio</div><div class="rol">Resuelve la mayoría de las tandas leyendo la tabla directo, sin modelo de por medio. Gratis.</div></div>
+            <span class="tag hoy">la que más trabaja</span>
           </div>
           <div class="fila">
             <div class="ico rev"><i class="fas fa-magnifying-glass"></i></div>
-            <div class="det"><div class="nm">DeepSeek</div><div class="rol">Lee las tablas y es la revisora: retira ofertas vencidas y completa destinos.</div></div>
+            <div class="det"><div class="nm">google/gemini-2.5-flash-lite (OpenRouter)</div><div class="rol">Solo entra en lo que el parser no pudo resolver solo — el borde dudoso, no el catálogo entero.</div></div>
             <span class="tag hoy">la que se usa</span>
           </div>
           <div class="fila">
-            <div class="ico res"><i class="fas fa-shield-halved"></i></div>
-            <div class="det"><div class="nm">Claude Sonnet</div><div class="rol">Respaldo. Es la más cara, por eso no es la principal.</div></div>
-            <span class="tag alt">respaldo</span>
+            <div class="ico res"><i class="fas fa-image"></i></div>
+            <div class="det"><div class="nm">Qwen3-VL</div><div class="rol">Sigue viva, pero para clasificar fotos (portadas, ambientes) — no lee precios.</div></div>
+            <span class="tag alt">otra tarea</span>
           </div>
         </div>
       </div>
 
       <div class="guia-bloque">
-        <h4><i class="fas fa-sack-dollar"></i> Cuánto cuesta cada actualización</h4>
+        <h4><i class="fas fa-sack-dollar"></i> Cuánto cuesta</h4>
         <div class="guia-costos">
-          <div class="guia-costo"><span class="lab">Un archivo (un flyer o una ficha)</span><span class="val">≈ $0,001</span></div>
-          <div class="guia-costo"><span class="lab">El tarifario nacional completo</span><span class="val">≈ $0,03</span></div>
-          <div class="guia-costo"><span class="lab">La revisión diaria de errores</span><span class="val">≈ $0,001</span></div>
+          <div class="guia-costo"><span class="lab">Tarifario nacional completo (128 páginas, 103 tandas)</span><span class="val">$0,03</span></div>
+          <div class="guia-costo"><span class="lab">Referencia histórica, cuando todo pasaba por el modelo</span><span class="val">$0,44</span></div>
         </div>
-        <div class="guia-nota">Valores <b>aproximados</b>: se calculan con el consumo real y el precio publicado de cada modelo. Se usa a propósito el modelo más barato.</div>
+        <div class="guia-nota">Números <b>medidos</b> sobre cargas reales, no estimados.</div>
+      </div>
+
+      <div class="guia-bloque">
+        <h4><i class="fas fa-flask"></i> Lo que costó llegar a ese precio</h4>
+        <div class="guia-costos">
+          <div class="guia-costo"><span class="lab">Gastado en total hasta dar con la receta</span><span class="val">$8,15</span></div>
+          <div class="guia-costo"><span class="lab">El día más caro de la búsqueda</span><span class="val">$1,76</span></div>
+        </div>
+        <div class="guia-nota">Los PDF del tarifario resultaron ser <b>texto</b>, no imágenes — los modelos de visión solo leían la primera página y se probaron sin necesitarlo. El parser propio se quedó con el grueso del trabajo y el modelo con los bordes. Antes de elegir <b>google/gemini-2.5-flash-lite</b> se compararon varios modelos por precio y acierto.</div>
+      </div>
+
+      <div class="guia-bloque">
+        <h4><i class="fas fa-gauge-high"></i> Qué pasa si se dispara el gasto</h4>
+        <div class="guia-costos">
+          <div class="guia-costo"><span class="lab">Tope por carga</span><span class="val tope">$1,35</span></div>
+          <div class="guia-costo"><span class="lab">Tope por día</span><span class="val tope">$2,00</span></div>
+        </div>
+        <div class="guia-nota">Si se cruza cualquiera de los dos, la carga <b>se frena sola</b>, no publica nada, y avisa por Telegram.</div>
       </div>
 
       <div class="guia-bloque">
@@ -4920,6 +4970,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           <li><i class="fas fa-circle-check"></i><span>No inventa precios ni fechas: todo sale del archivo que subió BTTRAVEL.</span></li>
           <li><i class="fas fa-circle-check"></i><span>No borra nada a escondidas: si duda, lo deja visible para que lo confirmes.</span></li>
           <li><i class="fas fa-circle-check"></i><span>No toca los precios ni los datos que ya están confirmados.</span></li>
+          <li><i class="fas fa-circle-check"></i><span>No oculta ni borra nada por su cuenta salvo lo vencido (fecha de venta pasada) — y eso queda registrado, nunca borrado.</span></li>
         </ul>
       </div>
     </div>
