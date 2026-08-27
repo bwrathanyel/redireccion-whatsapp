@@ -1526,6 +1526,7 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
    misma tarjeta, por eso van en esquinas opuestas. */
 .tar-vencido-admin{position:relative}
 .tar-vencido-badge{position:absolute;top:6px;left:6px;background:#7f1d1d;color:#fecaca;border:1px solid #ef4444;font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;z-index:2;text-transform:uppercase;letter-spacing:.4px;pointer-events:none}
+.tar-sin-hotel-badge{position:absolute;bottom:6px;left:6px;background:#78350f;color:#fde68a;border:1px solid var(--amber);font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;z-index:2;text-transform:uppercase;letter-spacing:.4px;cursor:pointer}
 
 /* Panel de configuración de Tarifario (admin) */
 .tas-sub{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:16px 0 8px}
@@ -2864,7 +2865,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           <button class="seg" data-tab="boleteria">Boletería</button>
         </div>
         <button class="tar-admin-btn admin-only" id="tar-actualizador-btn" type="button" title="Actualizador de Tarifario"><i class="fas fa-arrows-rotate"></i></button>
-        <button class="tar-admin-btn admin-only" id="tar-vigencias-btn" type="button" title="Revisar vigencias"><i class="fas fa-calendar-check"></i></button>
+        <button class="tar-admin-btn admin-only" id="tar-revision-btn" type="button" title="Revisión del tarifario"><i class="fas fa-clipboard-check"></i></button>
         <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
       </div>
       <!-- Un solo buscador (2026-08-19). Antes eran DOS cajas apiladas: la de IA
@@ -3667,6 +3668,11 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
           <label class="ce-lbl">Qué incluye</label>
           <input class="ei" id="tp-tags" type="text" placeholder="desayuno, piscina, niños gratis">
           <div class="ce-ayuda">Separado por comas. Son las etiquetas que se ven en la tarjeta y que la IA usa para comparar opciones.</div>
+        </div>
+        <div class="ce-campo">
+          <label class="ce-lbl">Hotel al que pertenece</label>
+          <select class="ei" id="tp-hotel"><option value="">— Sin hotel (sale suelta en el catálogo) —</option></select>
+          <div class="ce-ayuda">Si la vinculás, la promo aparece dentro del hotel y hereda sus fotos.</div>
         </div>
         <button class="dbtn save" id="tp-guardar">Guardar</button>
       </div>
@@ -4866,21 +4872,38 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 </div>
 
 <!-- Revisión de vigencias del tarifario (admin) -->
-<div class="sheet" id="vigencias-sheet">
+<!-- Revisión del tarifario: una sola sheet para "qué necesita mi atención".
+     Pestaña Vigencias = lo que antes era #vigencias-sheet, movido tal cual.
+     Pestaña Sin hotel = promociones sin producto_id vinculado
+     (promociones_sin_hotel() / vincular_promocion_producto() en SQL,
+     migración 20260827140000). -->
+<div class="sheet" id="tar-revision-sheet">
   <div class="sheet-handle"></div>
-  <div class="sheet-title"><i class="fas fa-calendar-check"></i> Revisión de vigencias</div>
-
-  <!-- Comprobación manual de vencidas (regla estricta: fecha de VENTA, ver
-       tarifario_vencidos() / ocultar_vencidos_tarifario() en SQL). Corre la
-       MISMA regla que el cron nocturno, para verificarla o adelantarla a mano. -->
-  <div class="vig-grupo" style="margin-bottom:18px">
-    <div class="vig-grupo-t">Vencidas (fecha de venta)</div>
-    <div class="vig-grupo-d">Comprueba lo que el cron de las 2:15am retiraría hoy. Ocultar es apagar, no borrar: se puede volver a mostrar desde "Configurar visibilidad".</div>
-    <button class="dbtn gh" id="vc-comprobar-btn" type="button" style="width:100%;margin-top:8px"><i class="fas fa-magnifying-glass"></i> Comprobar vencidas ahora</button>
-    <div id="vc-resultado"></div>
+  <div class="sheet-title"><i class="fas fa-clipboard-check"></i> Revisión del tarifario</div>
+  <div class="act-tabs" id="rev-tabs">
+    <button class="act-tab on" data-rtab="vigencias" type="button">Vigencias<span class="act-pill" id="rev-pill-vig" hidden>0</span></button>
+    <button class="act-tab" data-rtab="sinhotel" type="button">Sin hotel<span class="act-pill" id="rev-pill-sh" hidden>0</span></button>
   </div>
 
-  <div id="vig-cuerpo"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+  <div class="act-panel on" data-rpanel="vigencias">
+    <!-- Comprobación manual de vencidas (regla estricta: fecha de VENTA, ver
+         tarifario_vencidos() / ocultar_vencidos_tarifario() en SQL). Corre la
+         MISMA regla que el cron nocturno, para verificarla o adelantarla a mano. -->
+    <div class="vig-grupo" style="margin-bottom:18px">
+      <div class="vig-grupo-t">Vencidas (fecha de venta)</div>
+      <div class="vig-grupo-d">Comprueba lo que el cron de las 2:15am retiraría hoy. Ocultar es apagar, no borrar: se puede volver a mostrar desde "Configurar visibilidad".</div>
+      <button class="dbtn gh" id="vc-comprobar-btn" type="button" style="width:100%;margin-top:8px"><i class="fas fa-magnifying-glass"></i> Comprobar vencidas ahora</button>
+      <div id="vc-resultado"></div>
+    </div>
+
+    <div id="vig-cuerpo"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+  </div>
+
+  <div class="act-panel" data-rpanel="sinhotel">
+    <div class="vig-grupo-d" style="margin-bottom:4px">Promociones que no cuelgan de ningún hotel: no aparecen dentro del hotel, no heredan sus fotos y el dedup de Hot Sales las trata como sueltas. Vinculá cada una y se acomoda sola. "Recordar este nombre" evita que el mismo flyer vuelva a preguntar el mes que viene.</div>
+    <div class="vig-grupo-d" style="margin-bottom:12px">Ocultar una promoción la apaga en el CRM, la web y la IA. Se puede volver a mostrar.</div>
+    <div id="sh-cuerpo"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+  </div>
 </div>
 
 <!-- Actualizador de Tarifario: confirmar lo que la IA publicó, correr la

@@ -4241,8 +4241,19 @@ const VIG_GRUPOS = [
 ];
 let VIG_FILAS = [];
 
-async function abrirRevisionVigencias() {
-  openSheet('vigencias-sheet');
+async function abrirRevisionTarifario(tab = 'vigencias') {
+  openSheet('tar-revision-sheet');
+  revCambiarTab(tab);
+}
+
+function revCambiarTab(clave) {
+  document.querySelectorAll('#rev-tabs .act-tab').forEach(b => b.classList.toggle('on', b.dataset.rtab === clave));
+  document.querySelectorAll('#tar-revision-sheet .act-panel').forEach(p => p.classList.toggle('on', p.dataset.rpanel === clave));
+  if (clave === 'vigencias') cargarRevisionVigencias();
+  else if (clave === 'sinhotel') cargarSinHotel();
+}
+
+async function cargarRevisionVigencias() {
   const vcBtn = document.getElementById('vc-comprobar-btn');
   if (vcBtn) vcBtn.onclick = comprobarVencidasAhora;
   document.getElementById('vc-resultado').innerHTML = '';
@@ -4316,6 +4327,117 @@ async function ocultarVencidasIds(ids, btn) {
   okToast(`Ocultado(s) ${(data.tarifas_ocultas || 0) + (data.promociones_ocultas || 0)} ítem(s)`);
   tarCache = {};
   await comprobarVencidasAhora();
+}
+
+/* ---------- Pestaña "Sin hotel": promociones sin producto_id ----------
+   Backend: promociones_sin_hotel() (huérfanas + candidatos sugeridos, nunca
+   auto-aplica) y vincular_promocion_producto() (migración 20260827140000).
+   Molde de UI: renderVencidasAhora() + el <select> de candidatos de
+   ssPintarMapeo() (app.js). */
+let SH_HOTELES_CACHE = null;
+async function shHoteles() {
+  if (SH_HOTELES_CACHE) return SH_HOTELES_CACHE;
+  const { data, error } = await sb.from('productos')
+    .select('id,nombre,destino').in('tipo', ['hotel', 'paquete']).eq('activo', true).order('nombre');
+  if (error) { errToast('No se pudo cargar la lista de hoteles: ' + error.message); return []; }
+  SH_HOTELES_CACHE = data || [];
+  return SH_HOTELES_CACHE;
+}
+
+let SH_FILAS = [];
+async function cargarSinHotel() {
+  const cuerpo = document.getElementById('sh-cuerpo');
+  cuerpo.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  const [{ data, error }, hoteles] = await Promise.all([sb.rpc('promociones_sin_hotel'), shHoteles()]);
+  if (error) { cuerpo.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
+  SH_FILAS = data || [];
+  renderSinHotel(hoteles);
+}
+
+function shMotivo(cands) {
+  if (!cands.length) return 'sin candidato — elegilo vos';
+  if (cands.length === 1 && cands[0].confianza === 'alta') return 'coincide el nombre';
+  return `${cands.length} candidatos posibles`;
+}
+function shEsSegura(cands) { return cands.length === 1 && cands[0].confianza === 'alta'; }
+
+function renderSinHotel(hoteles) {
+  const cuerpo = document.getElementById('sh-cuerpo');
+  const pill = document.getElementById('rev-pill-sh');
+  if (pill) { pill.hidden = !SH_FILAS.length; pill.textContent = SH_FILAS.length; }
+  if (!SH_FILAS.length) {
+    cuerpo.innerHTML = '<div class="vig-vacio" style="padding:14px 0"><i class="fas fa-circle-check"></i> Todo vinculado.</div>';
+    return;
+  }
+  const opcionesHtml = cands => {
+    const idsC = new Set(cands.map(c => c.producto_id));
+    return [
+      '<option value="">— elegí un hotel —</option>',
+      ...cands.map(c => `<option value="${c.producto_id}">★ ${esc(c.nombre)}${c.destino ? ` (${esc(c.destino)})` : ''}</option>`),
+      cands.length ? '<option disabled>──────────</option>' : '',
+      ...hoteles.filter(h => !idsC.has(h.id)).map(h => `<option value="${h.id}">${esc(h.nombre)}${h.destino ? ` (${esc(h.destino)})` : ''}</option>`),
+    ].join('');
+  };
+  const fila = f => {
+    const cands = Array.isArray(f.candidatos) ? f.candidatos : [];
+    const sel = shEsSegura(cands) ? String(cands[0].producto_id) : '';
+    return `<div class="vig-item" data-sh-fila="${f.promocion_id}">
+      <div class="vig-top"><div class="vig-nombre">${esc(f.titulo)}</div><span class="vig-tipo">${esc(shMotivo(cands))}</span></div>
+      ${f.fuente_archivo ? `<div class="vig-texto" style="font-size:11px">${esc(f.fuente_archivo)}</div>` : ''}
+      <select class="ei sh-sel" style="margin-top:8px">${opcionesHtml(cands).replace(`value="${sel}"`, `value="${sel}" selected`)}</select>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px"><input type="checkbox" class="sh-alias" checked> Recordar este nombre para la próxima carga</label>
+      <div class="vig-acc"><button class="dbtn" data-sh-vincular="${f.promocion_id}"><i class="fas fa-link"></i> Vincular</button></div>
+    </div>`;
+  };
+  const seguras = SH_FILAS.filter(f => shEsSegura(Array.isArray(f.candidatos) ? f.candidatos : []));
+  const resto = SH_FILAS.filter(f => !shEsSegura(Array.isArray(f.candidatos) ? f.candidatos : []));
+  cuerpo.innerHTML = `
+    ${seguras.length ? `<div class="vig-grupo" style="margin-top:4px">
+      <div class="vig-grupo-t">Listas para vincular <span class="vig-tipo">${seguras.length}</span></div>
+      <div class="vig-grupo-d">Un solo hotel coincide con el nombre. Revisá y confirmá en bloque, o ajustá alguna antes.</div>
+      <button class="dbtn" id="sh-vincular-seguras" type="button" style="width:100%;margin:8px 0"><i class="fas fa-link"></i> Vincular las ${seguras.length} seguras</button>
+      ${seguras.map(fila).join('')}
+    </div>` : ''}
+    ${resto.length ? `<div class="vig-grupo" style="margin-top:12px">
+      <div class="vig-grupo-t">Necesitan tu criterio <span class="vig-tipo">${resto.length}</span></div>
+      <div class="vig-grupo-d">Varios hoteles posibles o ninguno claro: van de a una.</div>
+      ${resto.map(fila).join('')}
+    </div>` : ''}`;
+}
+
+async function vincularPromoHotel(promoId, btn) {
+  const wrap = document.querySelector(`[data-sh-fila="${promoId}"]`);
+  const productoId = Number(wrap?.querySelector('.sh-sel')?.value || 0);
+  if (!productoId) { errToast('Elegí un hotel primero'); return; }
+  const guardarAlias = !!wrap?.querySelector('.sh-alias')?.checked;
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.rpc('vincular_promocion_producto', {
+    p_promocion_id: promoId, p_producto_id: productoId, p_guardar_alias: guardarAlias,
+  });
+  if (error || !data?.ok) { errToast('No se pudo vincular: ' + (error?.message || data?.error || '')); btn.disabled = false; btn.innerHTML = '<i class="fas fa-link"></i> Vincular'; return; }
+  SH_HOTELES_CACHE = null;
+  undoToast(`Vinculada a ${data.hotel}`, async () => {
+    await sb.rpc('editar_promocion', { p_id: promoId, p_producto_id: 0 });
+    tarCache = {}; loadTarifario(); cargarSinHotel();
+  });
+  tarCache = {};
+  loadTarifario();
+  cargarSinHotel();
+}
+
+async function vincularSegurasSinHotel(btn) {
+  const seguras = SH_FILAS.filter(f => shEsSegura(Array.isArray(f.candidatos) ? f.candidatos : []));
+  if (!seguras.length) return;
+  if (!(await confirmarSheet({ titulo: `Vincular ${seguras.length} promoción(es)`, detalle: seguras.slice(0, 6).map(f => `• ${f.titulo} → ${f.candidatos[0].nombre}`).join('\n') + (seguras.length > 6 ? `\n• ...y ${seguras.length - 6} más` : ''), textoOk: 'Vincular todas' }))) return;
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Vinculando...';
+  const res = await Promise.all(seguras.map(f => sb.rpc('vincular_promocion_producto', {
+    p_promocion_id: f.promocion_id, p_producto_id: f.candidatos[0].producto_id, p_guardar_alias: true,
+  })));
+  const fallidos = res.filter(r => r.error || !r.data?.ok).length;
+  (fallidos ? errToast : okToast)(fallidos ? `${seguras.length - fallidos} vinculadas, ${fallidos} fallaron` : `${seguras.length} promociones vinculadas`);
+  SH_HOTELES_CACHE = null; tarCache = {};
+  loadTarifario();
+  cargarSinHotel();
 }
 
 function renderRevisionVigencias() {
@@ -4416,7 +4538,7 @@ async function fijarFechaVigencia(clave, btn) {
   btn.disabled = false;
   if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
   okToast('Fecha guardada');
-  abrirRevisionVigencias();
+  cargarRevisionVigencias();
 }
 
 async function retirarTodosLosVencidos() {
@@ -4431,7 +4553,7 @@ async function retirarTodosLosVencidos() {
   const res = await Promise.all(objetivo.map(f => sb.rpc('retirar_item_tarifario', { p_tipo: f.tipo, p_id: f.item_id })));
   const fallidos = res.filter(r => r.error || !r.data?.ok).length;
   (fallidos ? errToast : okToast)(fallidos ? `${objetivo.length - fallidos} retirados, ${fallidos} fallaron` : `${objetivo.length} retirados del catálogo`);
-  await abrirRevisionVigencias();
+  await cargarRevisionVigencias();
   loadTarifario();
 }
 
@@ -10802,8 +10924,18 @@ function setupTarAdmin() {
   const btn = document.getElementById('tar-admin-btn');
   if (!btn) return;
   btn.onclick = () => { openSheet('tar-admin-sheet'); renderTasTabs(); cargarTasItems(); };
-  document.getElementById('tar-vigencias-btn')?.addEventListener('click', abrirRevisionVigencias);
+  document.getElementById('tar-revision-btn')?.addEventListener('click', () => abrirRevisionTarifario('vigencias'));
   document.getElementById('tar-actualizador-btn')?.addEventListener('click', () => abrirActualizadorTarifario());
+  document.getElementById('rev-tabs')?.addEventListener('click', ev => {
+    const t = ev.target.closest('.act-tab');
+    if (t) revCambiarTab(t.dataset.rtab);
+  });
+  // Delegado: las filas de "Sin hotel" se repintan enteras en cada acción.
+  document.querySelector('#tar-revision-sheet [data-rpanel="sinhotel"]')?.addEventListener('click', ev => {
+    const uno = ev.target.closest('[data-sh-vincular]');
+    if (uno) return vincularPromoHotel(Number(uno.dataset.shVincular), uno);
+    if (ev.target.closest('#sh-vincular-seguras')) return vincularSegurasSinHotel(ev.target.closest('#sh-vincular-seguras'));
+  });
   document.getElementById('act-tabs')?.addEventListener('click', ev => {
     const t = ev.target.closest('.act-tab');
     if (t) actCambiarTab(t.dataset.atab);
@@ -11300,6 +11432,11 @@ function renderTarifario() {
       el.classList.add('tar-oculto-admin');
       el.insertAdjacentHTML('afterbegin', '<span class="tar-oculto-badge">Oculto</span>');
     }
+    // Promo sin hotel vinculado: dato faltante (ámbar), no error. Solo admin.
+    if (ROL === 'admin' && (tarTab === 'promo' || tarTab === 'hotsale') && !x.producto_id) {
+      el.insertAdjacentHTML('afterbegin', '<span class="tar-sin-hotel-badge" title="No cuelga de ningún hotel">Sin hotel</span>');
+      el.querySelector('.tar-sin-hotel-badge').onclick = e => { e.stopPropagation(); abrirRevisionTarifario('sinhotel'); };
+    }
     const hideBtn = el.querySelector('.tc-hide');
     if (hideBtn) hideBtn.onclick = e => { e.stopPropagation(); tcOcultarDesdeCard(hideBtn, el); };
     const fotos = fotosRotadas(x, 256);
@@ -11507,6 +11644,7 @@ function tarAbrirEditorPromo(id) {
   document.getElementById('tp-fecha-fin').value = p.fecha_fin_estimada || '';
   document.getElementById('tp-moneda').value = p.moneda || 'USD';
   document.getElementById('tp-tags').value = (p.incluye_tags || []).join(', ');
+  tpLlenarHoteles(p.producto_id);
   tpAvisoFecha();
   // El panel de detalle queda detrás mostrando los datos de antes: se cierra
   // para que no compitan en pantalla y para que al guardar no haya que cerrarlo.
@@ -11542,6 +11680,15 @@ function tpAvisoFecha() {
   }
 }
 
+async function tpLlenarHoteles(seleccionado) {
+  const sel = document.getElementById('tp-hotel');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Sin hotel (sale suelta en el catálogo) —</option>';
+  const hoteles = await shHoteles();
+  sel.insertAdjacentHTML('beforeend', hoteles.map(h => `<option value="${h.id}">${esc(h.nombre)}${h.destino ? ` (${esc(h.destino)})` : ''}</option>`).join(''));
+  sel.value = seleccionado ? String(seleccionado) : '';
+}
+
 async function tarGuardarPromo(btn) {
   const titulo = document.getElementById('tp-titulo').value.trim();
   const precio = document.getElementById('tp-precio').value.trim();
@@ -11559,6 +11706,8 @@ async function tarGuardarPromo(btn) {
     p_fecha_fin: document.getElementById('tp-fecha-fin').value,
     p_incluye_tags: tags,
     p_moneda: document.getElementById('tp-moneda').value,
+    // "" en el select = desvincular (0); el RPC distingue 0 de NULL ("no tocar").
+    p_producto_id: Number(document.getElementById('tp-hotel')?.value || 0),
   });
   btn.disabled = false;
   if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
@@ -15262,6 +15411,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-27', emoji: '🏨', titulo: 'Tarifario: promociones sin hotel', texto: 'El botón de vigencias del Tarifario ahora es "Revisión del tarifario": una sola pantalla con pestañas. La de siempre (Vigencias) más una nueva, "Sin hotel", que lista las promociones que no cuelgan de ningún hotel — no aparecen dentro del hotel ni heredan sus fotos. Cada una trae los hoteles candidatos sugeridos: confirmás y se acomoda sola, con opción de recordar el nombre para la próxima carga. Las que tienen un solo candidato claro se pueden vincular en bloque. En las tarjetas, chip ámbar "Sin hotel" (solo admin) que lleva directo a esa lista. El editor de promoción ya permite elegir o cambiar el hotel. Si una noche quedan demasiadas promos sin hotel, el sistema no oculta ninguna y avisa por Telegram.', roles: ['admin'] },
   { fecha: '2026-08-27', emoji: '📅', titulo: 'Tarifario: vencidas más claras y catálogo más parejo', texto: 'Las promos y tarifas cuya fecha de VENTA ya pasó salen del catálogo (CRM, web e IA) aunque el disfrute siga lejos, y el cron nocturno ya no perdona la última que quede. En Tarifario, "Revisión de vigencias" tiene un botón "Comprobar vencidas ahora" para adelantar ese barrido y ocultarlas en bloque. En las tarjetas: chip rojo "Vencida" para que las veas de un vistazo, botón de ocultar que aparece al pasar el mouse, y "Ver más" solo donde el precio de verdad no entra. La pestaña "¿Cómo funciona?" quedó reescrita con los datos y costos reales del actualizador.', roles: ['admin'] },
   { fecha: '2026-08-26', emoji: '🎓', titulo: 'Aprendiz de ventas en Cerebro IA', texto: 'Nueva pestaña "Propuestas": una vez por semana la IA compara conversaciones que terminaron en lead contra las que se cortaron sin dejar teléfono, y propone cambios a las reglas de venta. Nunca aplica nada sola -- cada propuesta se aprueba o rechaza a mano, y una aprobada vence sola a los 30 días si nadie la revalida.', roles: ['admin'] },
   { fecha: '2026-08-24', emoji: '📅', titulo: 'Rango de fechas libre en Asesores', texto: 'En Gestión de Personal → Asesores ya no hay solo Hoy/Semana/Mes/Año: hay un selector de fecha a fecha (igual al de Leads y Reasignaciones) para "Carga por asesor" y "Rendimiento". Al lado, un botón muestra cuántas reasignaciones hubo en ese mismo rango y lleva directo a la pestaña Reasignaciones con las fechas ya cargadas.', roles: ['admin'] },
