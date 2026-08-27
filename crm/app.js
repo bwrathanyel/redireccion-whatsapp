@@ -3029,7 +3029,7 @@ function chartPreview(type, key, label, icon, count) {
   if (type === 'month') renderTrend();
 }
 function enterDrill(type, key) { previewSel = null; document.getElementById('preview-pill').classList.remove('show'); ({ month: drillMonth, canal: drillCanal, estado: drillEstado, asesor: drillAsesor, destino: drillDestino }[type])(key); }
-function clearFiltersQuiet() { ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); document.getElementById('global-search').value = ''; activeMonth = null; activeDestino = null; }
+function clearFiltersQuiet() { ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-sin-telefono'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); document.getElementById('global-search').value = ''; activeMonth = null; activeDestino = null; }
 function drillTo(apply) { clearFiltersQuiet(); apply(); activateSection('leads'); page = 1; loadTable(); renderChips(); }
 const drillMonth = m => drillTo(() => { activeMonth = m; });
 const drillCanal = c => drillTo(() => { document.getElementById('f-canal').value = c; });
@@ -3046,7 +3046,7 @@ function setupFilters() {
   fill('f-asesor', ACTIVOS.concat(['Sin asignar']));
   fill('f-servicio', SERVICIOS);
   fill('f-anio', Object.keys(STATS.by_anio || {}).sort().reverse());
-  ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
+  ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta', 'f-sin-telefono'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
   let deb; document.getElementById('global-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => { page = 1; loadTable(); renderChips(); }, 300); });
   initDateRangePicker('f');
   leadsView = initViewSwitcher('leads-view-switch', 'leads', 'tarjetas', v => { leadsView = v; applyLeadsView(); });
@@ -3155,7 +3155,9 @@ function buildQuery(forCount) {
     // PostgREST usa como sintaxis dentro de un `or`. La rama `is.null` hace
     // falta porque `neq` sobre un NULL da NULL y escondería esos leads.
     .is('eliminado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
-  const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim();
+  const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim(), fst = val('f-sin-telefono');
+  if (fst === 'sin') q = q.is('telefono', null);
+  else if (fst === 'con') q = q.not('telefono', 'is', null);
   if (fc) q = q.eq('canal', fc);
   if (fe) q = q.eq('estado', fe);
   if (fa) q = q.eq('asesor', fa);
