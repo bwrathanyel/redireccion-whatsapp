@@ -1927,6 +1927,27 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 #sec-stop-sales .vig-item:hover{transform:translateY(-2px);border-color:rgba(255,145,0,.3)}
 #ss-calendario,#ss-hoteles{display:none}
 #ss-calendario.show,#ss-hoteles.show{display:block}
+/* --- Ranking de catálogo (Hot Sales por rendimiento medido) --- */
+.rk-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 4px}
+.rk-tools .ei{flex:1;min-width:140px}
+.rk-fila{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-top:8px;background:rgba(255,255,255,.02)}
+.rk-fila.fijada{border-color:rgba(255,145,0,.45)}
+.rk-nom{font-weight:800;font-size:13px;line-height:1.25}
+.rk-sub{font-size:10.5px;color:var(--muted2);margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.rk-tag{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:2px 6px;border-radius:6px;background:rgba(255,255,255,.06);color:var(--muted)}
+.rk-tag.promo{background:rgba(139,92,246,.18);color:#c4b5fd}
+.rk-tag.stop{background:rgba(239,68,68,.18);color:#fca5a5}
+.rk-tag.fijada{background:rgba(255,145,0,.18);color:#ffc077}
+.rk-stats{display:flex;gap:16px;flex-wrap:wrap;margin-top:9px}
+.rk-st{font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.4px}
+.rk-st b{display:block;font-size:14px;color:var(--txt);text-transform:none;letter-spacing:0}
+.rk-st b.buena{color:#4ade80}
+.rk-st b.mala{color:#fca5a5}
+.rk-ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.rk-ctrl .ei{width:78px}
+.rk-lbl{font-size:10.5px;color:var(--muted2);display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.rk-vacio{font-size:12px;color:var(--muted2);text-align:center;padding:22px 8px}
+@media(max-width:760px){.rk-fila{grid-template-columns:1fr}.rk-ctrl{justify-content:flex-start}}
 @media(max-width:760px){
   .ss-cal{gap:3px}
   .ss-dia{font-size:11px;border-radius:7px}
@@ -2866,6 +2887,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         </div>
         <button class="tar-admin-btn admin-only" id="tar-actualizador-btn" type="button" title="Actualizador de Tarifario"><i class="fas fa-arrows-rotate"></i></button>
         <button class="tar-admin-btn admin-only" id="tar-revision-btn" type="button" title="Revisión del tarifario"><i class="fas fa-clipboard-check"></i></button>
+        <button class="tar-admin-btn admin-only" id="tar-ranking-btn" type="button" title="Ranking de Hot Sales"><i class="fas fa-fire"></i></button>
         <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
       </div>
       <!-- Un solo buscador (2026-08-19). Antes eran DOS cajas apiladas: la de IA
@@ -4904,6 +4926,51 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <div class="vig-grupo-d" style="margin-bottom:12px">Ocultar una promoción la apaga en el CRM, la web y la IA. Se puede volver a mostrar.</div>
     <div id="sh-cuerpo"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
   </div>
+</div>
+
+<!-- Ranking de Hot Sales: qué opción del catálogo convierte de verdad.
+     Lee catalogo_ranking_listar() (métricas recalculadas por el cron
+     `catalogo-score`, 8:40am) y escribe el override manual con
+     catalogo_boost_guardar / catalogo_boost_borrar. -->
+<div class="sheet" id="tar-ranking-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-fire"></i> Ranking de Hot Sales</div>
+  <div class="ce-intro">
+    Ordena el catálogo por lo que <b>de verdad genera leads</b>, no por precio. La web
+    pública ya muestra primero lo que tiene más score; la IA de ventas todavía no.
+    <b>Boost</b> suma o resta puntos a mano (-100 a 100) y <b>fijar</b> manda la opción al
+    tope pase lo que pase. El recálculo corre solo cada mañana y también al guardar un boost.
+  </div>
+  <details class="tar-info-box" style="margin:10px 0">
+    <summary><i class="fas fa-circle-info"></i> Qué mide y qué NO mide este número</summary>
+    <div class="vig-grupo-d" style="margin-top:8px">
+      La conversión sale de <b>la última opción que la IA le mostró a cada contacto</b>
+      (<code>ultima_opcion</code>), no de todas las que vio. Y lo que la IA muestra ya viene
+      sesgado por las reglas de venta del Cerebro IA. O sea: esto mide <b>"de lo que se mostró,
+      qué terminó en lead"</b>, no demanda del mercado. Una opción que nunca se muestra no puede
+      convertir, y por eso las promos nuevas (menos de 15 impresiones y menos de 14 días)
+      arrancan con un bonus de exploración: sin eso el ranking se autoconfirma para siempre.
+      Las promos con poca historia heredan la conversión de su hotel.
+      <br><br>
+      Tampoco mide plata: hoy casi nadie marca <b>PAGO REALIZADO</b> en el CRM, así que la
+      señal es interés (mostrada → lead → cotización), no venta cerrada.
+      <br><br>
+      El aviso de <b>stop sale</b> es informativo: un bloqueo por rango de fechas no vuelve
+      invendible al hotel para otras fechas, así que no baja el score.
+    </div>
+  </details>
+  <div class="rk-tools">
+    <input type="text" class="ei" id="rk-buscar" placeholder="Buscar por nombre o destino...">
+    <select class="flt" id="rk-tipo">
+      <option value="">Todo</option>
+      <option value="promocion">Solo promociones</option>
+      <option value="producto">Solo hoteles/paquetes</option>
+      <option value="boost">Con boost o fijadas</option>
+    </select>
+    <button class="ce-mini" id="rk-recargar" type="button"><i class="fas fa-rotate"></i> Recargar</button>
+  </div>
+  <div class="muted" id="rk-resumen" style="font-size:11px;margin-bottom:4px"></div>
+  <div id="rk-cuerpo"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
 </div>
 
 <!-- Actualizador de Tarifario: confirmar lo que la IA publicó, correr la

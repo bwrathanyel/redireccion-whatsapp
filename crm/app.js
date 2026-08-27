@@ -2358,6 +2358,7 @@ async function startApp() {
     setupMetricas, setupRanking, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupGestionPersonal, setupLeadsTabs,
     setupBuscadorIATarifario, setupCerebroIA, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
+    setupRankingCatalogo,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers,
@@ -10895,6 +10896,156 @@ function setupTarifarioTabs() {
   document.getElementById('tp-guardar')?.addEventListener('click', (e) => tarGuardarPromo(e.currentTarget));
   document.getElementById('tp-fecha-fin')?.addEventListener('change', tpAvisoFecha);
   setupTarAdmin();
+}
+
+/* ---------- Ranking de Hot Sales (solo admin) ----------------------------
+   Panel de la Fase 4 del plan de score de catálogo. Todo el cálculo vive en
+   SQL (`recalcular_catalogo_score()`, cron `catalogo-score` 8:40am); acá solo
+   se lee el ranking y se escribe el override manual.
+
+   Sesgo conocido, documentado también dentro del panel para quien lo use:
+   `manychat_ia_sesiones.ultima_opcion` guarda la ÚLTIMA opción que la IA
+   mostró, no todas, y lo que la IA muestra ya viene sesgado por reglas_venta.
+   El score mide "de lo que se mostró, qué generó lead", no demanda de mercado. */
+let RK_FILAS = [], RK_CARGANDO = false;
+
+async function abrirRankingCatalogo() {
+  openSheet('tar-ranking-sheet');
+  if (!RK_FILAS.length) loadRankingCatalogo();
+}
+
+async function loadRankingCatalogo() {
+  if (RK_CARGANDO) return;
+  RK_CARGANDO = true;
+  const cuerpo = document.getElementById('rk-cuerpo');
+  cuerpo.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  const { data, error } = await sb.rpc('catalogo_ranking_listar');
+  RK_CARGANDO = false;
+  if (error || data?.ok === false) {
+    cuerpo.innerHTML = `<div class="rk-vacio">No se pudo cargar el ranking: ${esc(error?.message || data?.error || 'error desconocido')}</div>`;
+    return;
+  }
+  RK_FILAS = Array.isArray(data?.items) ? data.items : [];
+  rkPintar();
+}
+
+const rkNum = n => Number(n || 0);
+const rkPct = n => (rkNum(n) * 100).toFixed(1) + '%';
+
+function rkFiltradas() {
+  const q = (document.getElementById('rk-buscar')?.value || '').trim().toLowerCase();
+  const tipo = document.getElementById('rk-tipo')?.value || '';
+  return RK_FILAS.filter(f => {
+    if (tipo === 'boost' && !rkNum(f.boost) && !f.fijado) return false;
+    if ((tipo === 'promocion' || tipo === 'producto') && f.tipo !== tipo) return false;
+    if (!q) return true;
+    return `${f.nombre || ''} ${f.destino || ''}`.toLowerCase().includes(q);
+  });
+}
+
+function rkPintar() {
+  const filas = rkFiltradas();
+  const resumen = document.getElementById('rk-resumen');
+  const conBoost = RK_FILAS.filter(f => rkNum(f.boost) || f.fijado).length;
+  resumen.textContent = `${fmt(filas.length)} de ${fmt(RK_FILAS.length)} opciones · ${fmt(conBoost)} con ajuste manual`;
+  const cuerpo = document.getElementById('rk-cuerpo');
+  if (!filas.length) {
+    cuerpo.innerHTML = '<div class="rk-vacio">No hay opciones con este filtro.</div>';
+    return;
+  }
+  cuerpo.innerHTML = filas.map(rkFila).join('');
+}
+
+function rkFila(f) {
+  const clave = `${f.tipo}:${f.item_id}`;
+  // La conversión cruda solo se colorea con volumen suficiente: 1 lead sobre 3
+  // impresiones es 33% y no significa nada (por eso el score usa la suavizada).
+  const tasa = rkNum(f.tasa_lead);
+  const clase = rkNum(f.mostrada) >= 30 ? (tasa >= 0.15 ? 'buena' : (tasa < 0.06 ? 'mala' : '')) : '';
+  // Sin impresiones no hay tasa propia: el score la hereda del hotel (o de la
+  // tasa global). Mostrar "0,0%" ahí sería mentir sobre una opción sin medir.
+  const sinDatos = !rkNum(f.mostrada);
+  const tags = [
+    `<span class="rk-tag ${f.tipo === 'promocion' ? 'promo' : ''}">${f.tipo === 'promocion' ? 'Promoción' : 'Hotel/Paquete'}</span>`,
+    f.fijado ? '<span class="rk-tag fijada"><i class="fas fa-thumbtack"></i> Fijada al tope</span>' : '',
+    f.stop_sale_vigente ? '<span class="rk-tag stop"><i class="fas fa-calendar-xmark"></i> Stop sale hoy</span>' : '',
+    f.destino ? `<span>${esc(f.destino)}</span>` : '',
+    f.vence_el ? `<span>Boost hasta ${esc(f.vence_el)}</span>` : '',
+    f.nota ? `<span title="${esc(f.nota)}"><i class="fas fa-note-sticky"></i> ${esc(f.nota)}</span>` : '',
+  ].filter(Boolean).join('');
+  return `<div class="rk-fila ${f.fijado ? 'fijada' : ''}" data-rk-fila="${esc(clave)}">
+    <div>
+      <div class="rk-nom">${esc(f.nombre || '(sin nombre)')} <span class="muted" style="font-weight:600">#${f.item_id}</span></div>
+      <div class="rk-sub">${tags}</div>
+      <div class="rk-stats">
+        <div class="rk-st">Mostrada<b>${fmt(rkNum(f.mostrada))}</b></div>
+        <div class="rk-st">Leads<b>${fmt(rkNum(f.leads))}</b></div>
+        <div class="rk-st">Cotizaciones<b>${fmt(rkNum(f.cotizaciones))}</b></div>
+        <div class="rk-st">Conversión<b class="${clase}">${sinDatos ? '—' : rkPct(f.tasa_lead)}</b></div>
+        <div class="rk-st">Ajustada<b>${sinDatos ? 'Hereda del hotel' : rkPct(f.tasa_suavizada)}</b></div>
+        <div class="rk-st">Score<b>${rkNum(f.score).toFixed(1)}</b></div>
+      </div>
+    </div>
+    <div class="rk-ctrl">
+      <label class="rk-lbl">Boost
+        <input class="ei" type="number" min="-100" max="100" step="1" data-rk-boost="${esc(clave)}" value="${rkNum(f.boost)}">
+      </label>
+      <label class="rk-lbl"><input type="checkbox" data-rk-fijado="${esc(clave)}" ${f.fijado ? 'checked' : ''}> Fijar al tope</label>
+      <button class="ce-mini" type="button" data-rk-guardar="${esc(clave)}"><i class="fas fa-check"></i> Guardar</button>
+      ${(rkNum(f.boost) || f.fijado) ? `<button class="ce-mini" type="button" data-rk-quitar="${esc(clave)}"><i class="fas fa-eraser"></i> Quitar ajuste</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function rkPartes(clave) {
+  const [tipo, id] = String(clave).split(':');
+  return { tipo, id: Number(id) };
+}
+
+async function rkGuardar(clave, btn) {
+  const { tipo, id } = rkPartes(clave);
+  const boost = Number(document.querySelector(`[data-rk-boost="${CSS.escape(clave)}"]`)?.value || 0);
+  const fijado = !!document.querySelector(`[data-rk-fijado="${CSS.escape(clave)}"]`)?.checked;
+  if (!Number.isFinite(boost) || boost < -100 || boost > 100) { errToast('El boost va de -100 a 100'); return; }
+  const original = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  const fila = RK_FILAS.find(f => f.tipo === tipo && Number(f.item_id) === id);
+  const { data, error } = await sb.rpc('catalogo_boost_guardar', {
+    p_tipo: tipo, p_item_id: id, p_boost: boost, p_fijado: fijado,
+    p_nota: fila?.nota || null, p_vence_el: fila?.vence_el || null,
+  });
+  btn.disabled = false; btn.innerHTML = original;
+  if (error || data?.ok === false) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Ajuste guardado — ranking recalculado');
+  // El RPC recalcula el score de TODO el catálogo, así que se relee la lista
+  // entera: repintar solo esta fila dejaría los demás scores desactualizados.
+  await loadRankingCatalogo();
+}
+
+async function rkQuitar(clave, btn) {
+  const { tipo, id } = rkPartes(clave);
+  const original = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  const { data, error } = await sb.rpc('catalogo_boost_borrar', { p_tipo: tipo, p_item_id: id });
+  btn.disabled = false; btn.innerHTML = original;
+  if (error || data?.ok === false) { errToast('No se pudo quitar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Ajuste manual quitado');
+  await loadRankingCatalogo();
+}
+
+function setupRankingCatalogo() {
+  if (ROL !== 'admin') return;
+  document.getElementById('tar-ranking-btn')?.addEventListener('click', abrirRankingCatalogo);
+  document.getElementById('rk-recargar')?.addEventListener('click', loadRankingCatalogo);
+  document.getElementById('rk-buscar')?.addEventListener('input', rkPintar);
+  document.getElementById('rk-tipo')?.addEventListener('change', rkPintar);
+  // Delegado: la lista se repinta entera en cada guardado.
+  document.getElementById('rk-cuerpo')?.addEventListener('click', (e) => {
+    const g = e.target.closest('[data-rk-guardar]');
+    if (g) return rkGuardar(g.dataset.rkGuardar, g);
+    const q = e.target.closest('[data-rk-quitar]');
+    if (q) return rkQuitar(q.dataset.rkQuitar, q);
+  });
 }
 
 /* ---------- Configuración de visibilidad de Tarifario (solo admin) ---------- */
