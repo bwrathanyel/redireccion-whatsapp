@@ -4243,12 +4243,79 @@ let VIG_FILAS = [];
 
 async function abrirRevisionVigencias() {
   openSheet('vigencias-sheet');
+  const vcBtn = document.getElementById('vc-comprobar-btn');
+  if (vcBtn) vcBtn.onclick = comprobarVencidasAhora;
+  document.getElementById('vc-resultado').innerHTML = '';
   const cuerpo = document.getElementById('vig-cuerpo');
   cuerpo.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   const { data, error } = await sb.rpc('revisar_vigencias_tarifario', { p_dias_aviso: 7 });
   if (error) { cuerpo.innerHTML = `<div class="vig-vacio">No se pudo revisar: ${esc(error.message)}</div>`; return; }
   VIG_FILAS = data || [];
   renderRevisionVigencias();
+}
+
+/* ---------- Comprobación manual de vencidas (fecha de VENTA, regla estricta) ----------
+   Distinta de revisar_vigencias_tarifario (arriba): esa mira 7 problemas
+   distintos con margen de aviso; esta corre la MISMA regla exacta que el
+   cron `retirar_vencidos_tarifario` (columna fecha_venta_fin, sin la
+   excepción de "dejaría sin precio"), para que el admin pueda verificarla o
+   adelantarla sin esperar a las 2:15am. */
+async function comprobarVencidasAhora() {
+  const cont = document.getElementById('vc-resultado');
+  cont.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div></div>';
+  const { data, error } = await sb.rpc('tarifario_vencidos');
+  if (error) { cont.innerHTML = `<div class="vig-vacio">No se pudo comprobar: ${esc(error.message)}</div>`; return; }
+  renderVencidasAhora(data || []);
+}
+
+function renderVencidasAhora(filas) {
+  const cont = document.getElementById('vc-resultado');
+  const vencidas = filas.filter(f => f.grupo === 'vencida');
+  const sinFecha = filas.filter(f => f.grupo === 'sin_fecha_legible');
+  if (!filas.length) {
+    cont.innerHTML = '<div class="vig-vacio" style="padding:14px 0"><i class="fas fa-circle-check"></i> Nada vencido ahora mismo.</div>';
+    return;
+  }
+  const fila = (f, conCheckbox) => `<div class="vig-item">
+    <div class="vig-top">
+      ${conCheckbox ? `<label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><input type="checkbox" class="vc-chk" data-tipo="${f.tipo}" data-id="${f.item_id}" checked><span class="vig-nombre">${esc(f.nombre)}</span></label>` : `<div class="vig-nombre">${esc(f.nombre)}</div>`}
+      <span class="vig-tipo">${f.tipo === 'promocion' ? 'Promo' : 'Tarifa'}</span>
+    </div>
+    <div class="vig-texto">${esc(f.vigencia_texto || 'Sin vigencia_texto cargado')}</div>
+    ${f.fecha_venta_fin ? `<div class="vig-fechas">venta hasta ${esc(fmtDiaCorto(f.fecha_venta_fin))}</div>` : ''}
+    ${!conCheckbox ? `<div class="vig-acc"><button class="dbtn peligro vc-ocultar-una" data-tipo="${f.tipo}" data-id="${f.item_id}"><i class="fas fa-eye-slash"></i> Ocultar</button></div>` : ''}
+  </div>`;
+  cont.innerHTML = `
+    <div class="vig-grupo" style="margin-top:12px">
+      <div class="vig-grupo-t">Vencidas <span class="vig-tipo">${vencidas.length}</span></div>
+      ${vencidas.length ? `<button class="dbtn peligro" id="vc-ocultar-todas" type="button" style="width:100%;margin:8px 0"><i class="fas fa-eye-slash"></i> Ocultar todas las vencidas</button>${vencidas.map(f => fila(f, true)).join('')}` : '<div class="vig-vacio" style="padding:8px 0">Ninguna.</div>'}
+    </div>
+    ${sinFecha.length ? `<div class="vig-grupo" style="margin-top:12px">
+      <div class="vig-grupo-t">Sin fecha legible <span class="vig-tipo">${sinFecha.length}</span></div>
+      <div class="vig-grupo-d">El texto no se pudo parsear a fecha -- ocultarlas de golpe puede tumbar tarifas buenas, por eso van una por una.</div>
+      ${sinFecha.map(f => fila(f, false)).join('')}
+    </div>` : ''}`;
+  document.getElementById('vc-ocultar-todas')?.addEventListener('click', () => ocultarVencidasSeleccionadas(vencidas.length));
+  cont.querySelectorAll('.vc-ocultar-una').forEach(b => b.addEventListener('click', () => ocultarVencidasIds([{ tipo: b.dataset.tipo, id: Number(b.dataset.id) }], b)));
+}
+
+async function ocultarVencidasSeleccionadas(total) {
+  const ids = [...document.querySelectorAll('.vc-chk:checked')].map(c => ({ tipo: c.dataset.tipo, id: Number(c.dataset.id) }));
+  if (!ids.length) return;
+  const nP = ids.filter(i => i.tipo === 'promocion').length;
+  const nT = ids.length - nP;
+  const que = [nP && `${nP} promoción${nP > 1 ? 'es' : ''}`, nT && `${nT} tarifa${nT > 1 ? 's' : ''}`].filter(Boolean).join(' y ');
+  if (!(await confirmarSheet({ titulo: `Ocultar ${que}`, detalle: 'Se apagan (no se borran) en el CRM, la web y la IA. Se pueden volver a mostrar desde "Configurar visibilidad".', textoOk: 'Ocultar', destructivo: true }))) return;
+  await ocultarVencidasIds(ids, document.getElementById('vc-ocultar-todas'));
+}
+
+async function ocultarVencidasIds(ids, btn) {
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ocultando...'; }
+  const { data, error } = await sb.rpc('ocultar_vencidos_tarifario', { p_ids: ids });
+  if (error || !data?.ok) { errToast('No se pudo ocultar: ' + (error?.message || data?.error || '')); if (btn) btn.disabled = false; return; }
+  okToast(`Ocultado(s) ${(data.tarifas_ocultas || 0) + (data.promociones_ocultas || 0)} ítem(s)`);
+  tarCache = {};
+  await comprobarVencidasAhora();
 }
 
 function renderRevisionVigencias() {
@@ -10792,6 +10859,38 @@ function renderTasList() {
   document.getElementById('tas-list').innerHTML = items.map(x => `<div class="tas-row"><span class="tas-row-tipo">${esc(TAR_TAB_LABEL[x.tipo] || x.tipo)}</span><span class="tas-row-nombre${x.visible ? '' : ' oculto'}">${esc(x.nombre)}</span><button class="tas-toggle${x.visible ? ' on' : ''}" data-id="${x.id}" data-tabla="${x.tabla}" data-campo="${x.campo}"></button></div>`).join('');
   document.querySelectorAll('#tas-list .tas-toggle').forEach(b => b.onclick = () => toggleTasItem(b));
 }
+function undoToast(msg, onUndo) {
+  const t = document.createElement('div'); t.className = 'toast';
+  t.innerHTML = `<i class="fas fa-eye-slash"></i> <div style="flex:1"><b>${esc(msg)}</b></div><button class="toast-undo">Deshacer</button>`;
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(() => t.classList.add('show'), 30);
+  const cerrar = () => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); };
+  const timer = setTimeout(cerrar, 6000);
+  t.querySelector('.toast-undo').onclick = () => { clearTimeout(timer); cerrar(); onUndo(); };
+}
+// Ocultar desde la tarjeta (2026-08-27): mismo update de tabla/campo que
+// toggleTasItem, sin abrir "Configurar visibilidad". Saca la tarjeta del DOM
+// sin re-render completo del grid -- evita repintar #tar-grid entero por un
+// click, y deja un "Deshacer" por si fue sin querer (la tarjeta de al lado en
+// la web pública es del mismo tamaño, un click accidental sale caro).
+async function tcOcultarDesdeCard(btn, cardEl) {
+  const { id, tabla, campo } = btn.dataset;
+  btn.disabled = true;
+  const { error } = await sb.from(tabla).update({ [campo]: false }).eq('id', id);
+  if (error) { errToast('No se pudo ocultar'); btn.disabled = false; return; }
+  tarCache = {};
+  const item = (tasItemsCache || []).find(x => String(x.id) === id && x.tabla === tabla);
+  if (item) item.visible = false;
+  cardEl.remove();
+  undoToast('Ocultado del catálogo', async () => {
+    const { error: err2 } = await sb.from(tabla).update({ [campo]: true }).eq('id', id);
+    if (err2) { errToast('No se pudo deshacer'); return; }
+    tarCache = {};
+    if (item) item.visible = true;
+    okToast('Vuelto a mostrar');
+    loadTarifario();
+  });
+}
 async function toggleTasItem(btn) {
   const { id, tabla, campo } = btn.dataset;
   const item = tasItemsCache.find(x => String(x.id) === id && x.tabla === tabla);
@@ -10850,7 +10949,7 @@ async function loadTarifario() {
   // Boletería no es un `tipo`: los vuelos siguen siendo 'paquete' para que el
   // catálogo público los rutee igual. Se filtran por la bandera es_boleteria,
   // y por eso esta pestaña necesita su propio filtro en vez de .eq('tipo', ...).
-  const selProductos = '*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad,resumen_ia), producto_fotos(storage_path,orden,es_principal,activo)';
+  const selProductos = '*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,fecha_venta_fin,incluye_tags,ninos_gratis_cantidad,resumen_ia), producto_fotos(storage_path,orden,es_principal,activo)';
   const q = (tarTab === 'promo' || tarTab === 'hotsale')
     ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden,es_principal,activo), productos(nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))').order('titulo')
     : tarTab === 'boleteria'
@@ -11037,7 +11136,11 @@ function promosHotSales(promos) {
   return out;
 }
 const hoy = () => new Date().toISOString().slice(0, 10);
-const promoVigente = p => !p.fecha_fin_estimada || p.fecha_fin_estimada >= hoy();
+// La venta manda sobre el disfrute (ver plan "vencidas reglas estrictas"):
+// una promo con venta cerrada no es vigente aunque fecha_fin_estimada (el
+// disfrute) siga en el futuro.
+const promoVigente = p => (!p.fecha_fin_estimada || p.fecha_fin_estimada >= hoy())
+  && (!p.fecha_venta_fin || p.fecha_venta_fin >= hoy());
 // No hay fecha de INICIO de promo en el tarifario (solo fecha_fin_estimada) —
 // "disponible en el mes X" se interpreta igual que el filtro de fechas del
 // Cotizador: sigue vigente al menos hasta el primer día de ese mes. Sin fecha
@@ -11184,10 +11287,21 @@ function renderTarifario() {
     // La policy RLS deja al admin ver también lo que él mismo ocultó (para
     // poder revertirlo) — sin esta marca se vería idéntico a lo visible y
     // parecería que ocultar no hizo nada.
+    // La venta manda sobre el disfrute: al admin no se le esconde lo vencido
+    // (lo necesita para gestionarlo), pero tiene que notarlo de un vistazo,
+    // no leyendo la fecha entera del pie.
+    if (ROL === 'admin') {
+      const vencido = (tarTab === 'promo' || tarTab === 'hotsale')
+        ? !promoVigente(x)
+        : (mejorPrecio(x)?.fecha_venta_fin && mejorPrecio(x).fecha_venta_fin < hoy());
+      if (vencido) { el.classList.add('tar-vencido-admin'); el.insertAdjacentHTML('afterbegin', '<span class="tar-vencido-badge">Vencida</span>'); }
+    }
     if (ROL === 'admin' && ((tarTab === 'promo' || tarTab === 'hotsale') ? x.revisado === false : x.activo === false)) {
       el.classList.add('tar-oculto-admin');
       el.insertAdjacentHTML('afterbegin', '<span class="tar-oculto-badge">Oculto</span>');
     }
+    const hideBtn = el.querySelector('.tc-hide');
+    if (hideBtn) hideBtn.onclick = e => { e.stopPropagation(); tcOcultarDesdeCard(hideBtn, el); };
     const fotos = fotosRotadas(x, 256);
     if (tarView === 'fichas') {
       const media = el.querySelector('.tf-media');
@@ -11200,6 +11314,23 @@ function renderTarifario() {
       const media = el.querySelector('.thr-thumb');
       if (media && media.tagName === 'IMG') attachHoverCarousel(el, media, fotos, url => { media.src = url; });
     }
+  });
+  // "ver más" solo en el precio_texto que de verdad desborda (párrafo largo
+  // tipo Refugio Turístico Mifafi) -- no en el resto, que ya entra en 3 líneas.
+  // Pasada aparte y en dos tiempos (leer todos los scrollHeight, después
+  // insertar todos los botones) para no forzar un reflow por tarjeta.
+  const precios = [...document.querySelectorAll('#tar-grid .tar-item .tc-precio')];
+  const desbordan = precios.filter(p => p.scrollHeight > p.clientHeight + 1);
+  desbordan.forEach(precioEl => {
+    const mas = document.createElement('button');
+    mas.type = 'button'; mas.className = 'tc-precio-mas'; mas.textContent = 'Ver más';
+    mas.onclick = e => {
+      e.stopPropagation();
+      const abrir = !precioEl.classList.contains('abierto');
+      precioEl.classList.toggle('abierto', abrir);
+      mas.textContent = abrir ? 'Ver menos' : 'Ver más';
+    };
+    precioEl.insertAdjacentElement('afterend', mas);
   });
 }
 function tarItemsWrapHtml(items) {
@@ -11230,15 +11361,21 @@ function tarRowHtml(x) {
     <i class="fas fa-chevron-right"></i>
   </div>`;
 }
-function tarCardThumbHtml(foto, esPromo, destino) {
+function tarCardThumbHtml(foto, esPromo, destino, hideBtn) {
   const media = foto
     ? `<img class="tc-thumb" src="${esc(foto)}" alt="" loading="lazy">`
     : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`;
   // El destino va como chip sobre la foto y no como renglón del cuerpo: libera
   // una línea de texto y deja el dato donde el ojo ya está mirando.
   const chip = destino ? `<div class="tc-destino-chip"><i class="fas fa-location-dot"></i>${esc(destino)}</div>` : '';
-  return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}<div class="carrusel-dots"></div></div>`;
+  return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}<div class="carrusel-dots"></div>${hideBtn || ''}</div>`;
 }
+// Botón "ocultar" al pasar el mouse por la tarjeta (2026-08-27) -- antes había
+// que abrir el engranaje "Configurar visibilidad" y buscar en cientos. Mismo
+// par tabla/campo que ya usa toggleTasItem, así que reusa el mismo update y
+// queda protegido por la misma RLS de admin ya probada.
+const tcHideBtnHtml = (id, tabla, campo) =>
+  `<button class="tc-hide admin-only" data-id="${id}" data-tabla="${tabla}" data-campo="${campo}" title="Ocultar del catálogo"><i class="fas fa-eye-slash"></i></button>`;
 
 /* vigencia_texto es prosa cargada a mano ("Fecha de venta 4 de Junio al 15 de
    Septiembre; Fecha de disfrute 1 Agosto al 15 de Septiembre") y en la tarjeta
@@ -11276,7 +11413,7 @@ function tarCardHtml(x) {
     // usa la web pública). Por diseño NUNCA contiene precios -- el precio real
     // sale siempre de precio_texto, tal cual está cargado.
     return `<div class="tar-item tar-card" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x))}
+      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'promociones', 'revisado'))}
       <div class="tc-body">
         <div class="tc-nombre">${esc(x.titulo)}</div>
         ${x.resumen_ia ? `<div class="tc-resumen-ia">${esc(x.resumen_ia)}</div>` : ''}
@@ -11292,7 +11429,7 @@ function tarCardHtml(x) {
   const tagsHotel = [...new Set(promos.flatMap(p => p.incluye_tags || []))];
   const bullets = resumenBullets(x.descripcion);
   return `<div class="tar-item tar-card" data-id="${x.id}">
-    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x))}
+    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), tcHideBtnHtml(x.id, 'productos', 'activo'))}
     <div class="tc-body">
       <div class="tc-nombre">${esc(x.nombre)}</div>
       ${bullets.length ? `<ul class="tc-resumen">${bullets.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
@@ -14792,7 +14929,7 @@ async function hidratarResultadosIA(res) {
   res.forEach(r => {
     if (!enMemoria.has(r.tipo + ':' + r.id)) faltan[r.tipo === 'promocion' ? 'promocion' : 'producto'].push(r.id);
   });
-  const selProductos = '*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,incluye_tags,ninos_gratis_cantidad,resumen_ia), producto_fotos(storage_path,orden,es_principal,activo)';
+  const selProductos = '*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,fecha_venta_fin,incluye_tags,ninos_gratis_cantidad,resumen_ia), producto_fotos(storage_path,orden,es_principal,activo)';
   const selPromos = '*, promocion_fotos(storage_path,orden,es_principal,activo), productos(nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))';
   const pedidos = [];
   if (faltan.promocion.length) pedidos.push(sb.from('promociones').select(selPromos).in('id', faltan.promocion).then(r => ['promocion', r]));
@@ -15125,6 +15262,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-27', emoji: '📅', titulo: 'Tarifario: vencidas más claras y catálogo más parejo', texto: 'Las promos y tarifas cuya fecha de VENTA ya pasó salen del catálogo (CRM, web e IA) aunque el disfrute siga lejos, y el cron nocturno ya no perdona la última que quede. En Tarifario, "Revisión de vigencias" tiene un botón "Comprobar vencidas ahora" para adelantar ese barrido y ocultarlas en bloque. En las tarjetas: chip rojo "Vencida" para que las veas de un vistazo, botón de ocultar que aparece al pasar el mouse, y "Ver más" solo donde el precio de verdad no entra. La pestaña "¿Cómo funciona?" quedó reescrita con los datos y costos reales del actualizador.', roles: ['admin'] },
   { fecha: '2026-08-26', emoji: '🎓', titulo: 'Aprendiz de ventas en Cerebro IA', texto: 'Nueva pestaña "Propuestas": una vez por semana la IA compara conversaciones que terminaron en lead contra las que se cortaron sin dejar teléfono, y propone cambios a las reglas de venta. Nunca aplica nada sola -- cada propuesta se aprueba o rechaza a mano, y una aprobada vence sola a los 30 días si nadie la revalida.', roles: ['admin'] },
   { fecha: '2026-08-24', emoji: '📅', titulo: 'Rango de fechas libre en Asesores', texto: 'En Gestión de Personal → Asesores ya no hay solo Hoy/Semana/Mes/Año: hay un selector de fecha a fecha (igual al de Leads y Reasignaciones) para "Carga por asesor" y "Rendimiento". Al lado, un botón muestra cuántas reasignaciones hubo en ese mismo rango y lleva directo a la pestaña Reasignaciones con las fechas ya cargadas.', roles: ['admin'] },
   { fecha: '2026-08-22', emoji: '📇', titulo: 'Ficha del lead en dos columnas', texto: 'En escritorio la pestaña "Ficha" ahora se ve en dos zonas lado a lado: "Quién es" (datos del cliente) a la izquierda y "Qué hago con él" (gestión, pagos, guardar) a la derecha. En el celular sigue igual, apilada.', roles: ROLES_TODOS },
