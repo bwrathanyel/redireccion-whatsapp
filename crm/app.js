@@ -10933,6 +10933,8 @@ function setupTarifarioTabs() {
   // Delegado sobre el contenedor: las tarjetas se repintan en cada filtro, así
   // que engancharlas una por una las dejaría sin listener al primer render.
   document.getElementById('tf-guardar')?.addEventListener('click', (e) => tarGuardarFicha(e.currentTarget));
+  document.getElementById('tf-tarifa-add')?.addEventListener('click', tfAgregarFilaTarifa);
+  document.getElementById('tf-protegido')?.addEventListener('change', tfProtegidoAyuda);
   document.getElementById('tp-guardar')?.addEventListener('click', (e) => tarGuardarPromo(e.currentTarget));
   document.getElementById('tp-fecha-fin')?.addEventListener('change', tpAvisoFecha);
   setupTarAdmin();
@@ -11123,6 +11125,7 @@ function setupTarAdmin() {
   btn.onclick = () => { openSheet('tar-admin-sheet'); renderTasTabs(); cargarTasItems(); };
   document.getElementById('tar-revision-btn')?.addEventListener('click', () => abrirRevisionTarifario('vigencias'));
   document.getElementById('tar-actualizador-btn')?.addEventListener('click', () => abrirActualizadorTarifario());
+  document.getElementById('tar-nueva-promo-btn')?.addEventListener('click', () => tarAbrirNuevaPromo());
   document.getElementById('rev-tabs')?.addEventListener('click', ev => {
     const t = ev.target.closest('.act-tab');
     if (t) revCambiarTab(t.dataset.rtab);
@@ -11234,6 +11237,10 @@ function actualizarVisibilidadFiltrosTarifario() {
   document.querySelectorAll('[data-tabs]').forEach(el => {
     el.toggleAttribute('data-hidden', !el.dataset.tabs.split(',').includes(tarTab));
   });
+  // "Nueva promoción" solo tiene sentido en la pestaña de promos (crear_promocion
+  // no marca hotsale). El botón vive en la barra de tabs, con los demás de admin.
+  const np = document.getElementById('tar-nueva-promo-btn');
+  if (np) np.hidden = !(ROL === 'admin' && tarTab === 'promo');
 }
 
 /* Chips de filtros activos (2026-08-19). En móvil el botón de filtros pasó a ser
@@ -11883,21 +11890,148 @@ function tarFichaHtml(x) {
    Playa del Sur --que decía el nombre del propio hotel, y por eso no aparecía
    al filtrar por destino-- necesitó una migración a mano el 31/07/2026. Un
    error de tipeo no debería necesitar un programador.
-   No toca precios: esos siguen saliendo del tarifario cargado. */
-let TAR_EDIT_ID = null;
+   Desde la Fase 6 (plan glistening-pinwheel) también edita notas, las tarifas
+   fila por fila (crear_tarifa/editar_tarifa/retirar_tarifa) y el switch que
+   protege las tarifas del producto del tarifario automático. */
+let TAR_EDIT_ID = null, TAR_EDIT_PROD = null, TF_PROT_INICIAL = false;
+// El ítem que abrió el drawer. Al buscar por IA el producto no está en
+// tarCache[tarTab] (viene fresco de la base), así que los editores caen a este.
+let TAR_DRAWER_ITEM = null;
 
 function tarAbrirEditorFicha(id) {
-  const p = (tarCache[tarTab] || []).find(x => x.id === Number(id));
+  const p = (tarCache[tarTab] || []).find(x => x.id === Number(id))
+    || (TAR_DRAWER_ITEM && Number(TAR_DRAWER_ITEM.id) === Number(id) ? TAR_DRAWER_ITEM : null);
   if (!p) { errToast('No se encontró esa ficha'); return; }
   TAR_EDIT_ID = p.id;
+  TAR_EDIT_PROD = p;
   document.getElementById('tf-nombre').value = p.nombre || '';
   document.getElementById('tf-destino').value = p.destino || '';
   document.getElementById('tf-descripcion').value = p.descripcion || '';
+  document.getElementById('tf-notas').value = p.notas || '';
   document.getElementById('tf-destinos').innerHTML =
     [...new Set((tarCache[tarTab] || []).map(x => x.destino).filter(Boolean))].sort()
       .map(d => `<option value="${esc(d)}">`).join('');
+  tfRenderTarifas();
+  tfInitProtegido();
+  cargarFotosAdmin('producto_fotos', 'producto_id', p.id, 'hoteles', 'tf-fotos-admin');
   window.closeDrawer(true);
   openSheet('tar-ficha-sheet');
+}
+
+function tfVigentes() { return (TAR_EDIT_PROD?.tarifas || []).filter(t => t.vigente); }
+
+function tfRenderTarifas() {
+  const box = document.getElementById('tf-tarifas-box');
+  const vig = tfVigentes();
+  box.innerHTML = vig.length
+    ? vig.map(tfFilaHtml).join('')
+    : '<div class="muted" style="font-size:12.5px">Sin tarifas vigentes. Agregá una abajo.</div>';
+  box.querySelectorAll('.tf-tarifa').forEach(tfBindFila);
+}
+
+function tfFilaHtml(t) {
+  const nueva = !t || !t.id;
+  const mon = (t && t.moneda) || 'USD';
+  return `<div class="tf-tarifa" ${nueva ? 'data-nueva' : `data-id="${t.id}"`}>
+    <textarea class="ei tf-t-precio" rows="2" placeholder="Precio, tal cual se lo decís al cliente">${esc((t && t.precio_texto) || '')}</textarea>
+    <div class="tf-tarifa-calc"></div>
+    <input class="ei tf-t-vig" type="text" placeholder="Vigencia (texto para el cliente)" value="${esc((t && t.vigencia_texto) || '')}">
+    <div class="tf-tarifa-g2">
+      <select class="ei tf-t-moneda"><option value="USD"${mon === 'USD' ? ' selected' : ''}>USD</option><option value="EUR"${mon === 'EUR' ? ' selected' : ''}>EUR</option></select>
+      <input class="ei tf-t-fin" type="date" value="${(t && t.fecha_fin) || ''}">
+    </div>
+    <div class="tf-tarifa-acc">
+      <button type="button" class="dbtn gh tf-t-save"><i class="fas fa-floppy-disk"></i> ${nueva ? 'Crear' : 'Guardar'}</button>
+      ${nueva
+        ? '<button type="button" class="dbtn gh tf-t-cancel"><i class="fas fa-xmark"></i> Cancelar</button>'
+        : '<button type="button" class="dbtn gh tf-t-del"><i class="fas fa-ban"></i> Retirar</button>'}
+    </div>
+    ${nueva ? '' : `${t.protegido ? '' : '<div class="tf-tarifa-src">Viene del tarifario automático — guardar la pasa a manual y protegida.</div>'}<div class="tf-tarifa-src">${esc(t.fuente_archivo || '')}</div>`}
+  </div>`;
+}
+
+function tfBindFila(row) {
+  const precio = row.querySelector('.tf-t-precio');
+  const calc = row.querySelector('.tf-tarifa-calc');
+  const upd = () => {
+    const n = tarifaPrecioNumerico(precio.value);
+    calc.textContent = isFinite(n)
+      ? `≈ $${n} — así lo lee el catálogo para ordenar y filtrar`
+      : 'Sin precio numérico: el catálogo no puede ordenarla ni filtrarla por precio';
+  };
+  precio.addEventListener('input', upd); upd();
+  row.querySelector('.tf-t-save').onclick = () => tfGuardarFila(row);
+  row.querySelector('.tf-t-del')?.addEventListener('click', () => tfRetirarFila(row));
+  row.querySelector('.tf-t-cancel')?.addEventListener('click', () => { row.remove(); if (!document.querySelector('#tf-tarifas-box .tf-tarifa')) tfRenderTarifas(); });
+}
+
+function tfAgregarFilaTarifa() {
+  const box = document.getElementById('tf-tarifas-box');
+  const vacio = box.querySelector('.muted');
+  if (vacio) vacio.remove();
+  box.insertAdjacentHTML('beforeend', tfFilaHtml(null));
+  tfBindFila(box.lastElementChild);
+  box.lastElementChild.querySelector('.tf-t-precio').focus();
+}
+
+async function tfGuardarFila(row) {
+  const id = row.dataset.id ? Number(row.dataset.id) : null;
+  const precio = row.querySelector('.tf-t-precio').value.trim();
+  if (!precio) { errToast('El precio no puede quedar vacío'); return; }
+  const comun = {
+    p_precio_texto: precio,
+    p_vigencia_texto: row.querySelector('.tf-t-vig').value.trim(),
+    p_moneda: row.querySelector('.tf-t-moneda').value,
+    p_fecha_fin: row.querySelector('.tf-t-fin').value,
+  };
+  const btn = row.querySelector('.tf-t-save'); btn.disabled = true;
+  const { data, error } = id
+    ? await sb.rpc('editar_tarifa', { p_id: id, ...comun })
+    : await sb.rpc('crear_tarifa', { p_producto_id: TAR_EDIT_ID, ...comun });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo guardar la tarifa: ' + (error?.message || data?.error || '')); return; }
+  okToast(id ? 'Tarifa actualizada — protegida del tarifario automático' : 'Tarifa creada — protegida del tarifario automático');
+  await tfRecargarProducto();
+}
+
+async function tfRetirarFila(row) {
+  const id = Number(row.dataset.id);
+  const volver = sheetAbierta;
+  const seguir = await confirmarSheet({ titulo: '¿Retirar esta tarifa?', detalle: 'Deja de verse en la web y para la IA. Queda en el historial de precios — no se borra.', textoOk: 'Retirar', destructivo: true });
+  if (volver && sheetAbierta !== volver) openSheet(volver);
+  if (!seguir) return;
+  const { data, error } = await sb.rpc('retirar_tarifa', { p_id: id });
+  if (error || !data?.ok) { errToast('No se pudo retirar: ' + (error?.message || data?.error || '')); return; }
+  okToast('Tarifa retirada');
+  await tfRecargarProducto();
+}
+
+// Tras cada acción sobre una tarifa se relee el producto de la base para que la
+// tabla, el switch de protegido y el catálogo cacheado no queden desfasados.
+async function tfRecargarProducto() {
+  delete tarCache[tarTab];
+  const { data } = await sb.from('productos').select('id, notas, tarifas(*)').eq('id', TAR_EDIT_ID).single();
+  if (data && TAR_EDIT_PROD) { TAR_EDIT_PROD.tarifas = data.tarifas; TAR_EDIT_PROD.notas = data.notas; }
+  tfRenderTarifas();
+  tfInitProtegido();
+}
+
+function tfInitProtegido() {
+  const vig = tfVigentes();
+  TF_PROT_INICIAL = vig.length > 0 && vig.every(t => t.protegido);
+  const cb = document.getElementById('tf-protegido');
+  cb.checked = TF_PROT_INICIAL;
+  cb.disabled = vig.length === 0;
+  tfProtegidoAyuda();
+}
+
+function tfProtegidoAyuda() {
+  const el = document.getElementById('tf-protegido-ayuda');
+  const vig = tfVigentes();
+  if (!vig.length) { el.textContent = 'Sin tarifas vigentes que proteger.'; return; }
+  el.textContent = document.getElementById('tf-protegido').checked
+    ? `Al guardar, las ${vig.length} tarifas vigentes quedan protegidas: el tarifario automático no las pisa ni las retira.`
+    : 'Al guardar, las tarifas de este producto vuelven a estar sujetas al tarifario automático (se pisan y se retiran con cada PDF).';
 }
 
 /* ---------- Editar una promoción -------------------------------------------
@@ -11912,9 +12046,12 @@ function tarAbrirEditorFicha(id) {
 let TAR_PROMO_ID = null;
 
 function tarAbrirEditorPromo(id) {
-  const p = (tarCache[tarTab] || []).find(x => x.id === Number(id));
+  const p = (tarCache[tarTab] || []).find(x => x.id === Number(id))
+    || (TAR_DRAWER_ITEM && Number(TAR_DRAWER_ITEM.id) === Number(id) ? TAR_DRAWER_ITEM : null);
   if (!p) { errToast('No se encontró esa promoción'); return; }
   TAR_PROMO_ID = p.id;
+  document.getElementById('tp-sheet-title').innerHTML = '<i class="fas fa-tag"></i> Editar promoción';
+  document.getElementById('tp-guardar').textContent = 'Guardar';
   document.getElementById('tp-titulo').value = p.titulo || '';
   document.getElementById('tp-precio').value = p.precio_texto || '';
   document.getElementById('tp-vigencia').value = p.vigencia_texto || '';
@@ -11926,6 +12063,26 @@ function tarAbrirEditorPromo(id) {
   // El panel de detalle queda detrás mostrando los datos de antes: se cierra
   // para que no compitan en pantalla y para que al guardar no haya que cerrarlo.
   window.closeDrawer(true);
+  openSheet('tar-promo-sheet');
+}
+
+/* Alta manual de promoción (Fase 5 del plan glistening-pinwheel). Reusa el mismo
+   sheet en modo alta: TAR_PROMO_ID = null hace que tarGuardarPromo llame a
+   crear_promocion en vez de editar_promocion. El RPC fuerza fuente_archivo
+   'MANUAL — …' + protegido = true, así el retiro literal del tarifario nacional
+   nunca la toca. */
+function tarAbrirNuevaPromo() {
+  TAR_PROMO_ID = null;
+  document.getElementById('tp-sheet-title').innerHTML = '<i class="fas fa-plus"></i> Nueva promoción';
+  document.getElementById('tp-guardar').textContent = 'Crear promoción';
+  document.getElementById('tp-titulo').value = '';
+  document.getElementById('tp-precio').value = '';
+  document.getElementById('tp-vigencia').value = '';
+  document.getElementById('tp-fecha-fin').value = '';
+  document.getElementById('tp-moneda').value = 'USD';
+  document.getElementById('tp-tags').value = '';
+  tpLlenarHoteles(null);
+  tpAvisoFecha();
   openSheet('tar-promo-sheet');
 }
 
@@ -11973,22 +12130,39 @@ async function tarGuardarPromo(btn) {
   if (!precio) { errToast('El precio no puede quedar vacío'); return; }
   const tags = document.getElementById('tp-tags').value
     .split(',').map(s => s.trim()).filter(Boolean);
+  const hotel = Number(document.getElementById('tp-hotel')?.value || 0);
+  const fechaFin = document.getElementById('tp-fecha-fin').value;
+  const vigencia = document.getElementById('tp-vigencia').value.trim();
+  const moneda = document.getElementById('tp-moneda').value;
   btn.disabled = true;
-  const { data, error } = await sb.rpc('editar_promocion', {
-    p_id: TAR_PROMO_ID,
-    p_titulo: titulo,
-    p_precio_texto: precio,
-    p_vigencia_texto: document.getElementById('tp-vigencia').value.trim(),
-    // Cadena vacía = quitarle la fecha de fin; el RPC distingue eso de "no tocar".
-    p_fecha_fin: document.getElementById('tp-fecha-fin').value,
-    p_incluye_tags: tags,
-    p_moneda: document.getElementById('tp-moneda').value,
-    // "" en el select = desvincular (0); el RPC distingue 0 de NULL ("no tocar").
-    p_producto_id: Number(document.getElementById('tp-hotel')?.value || 0),
-  });
+  const alta = TAR_PROMO_ID === null;
+  const { data, error } = alta
+    ? await sb.rpc('crear_promocion', {
+        p_titulo: titulo,
+        p_precio_texto: precio,
+        p_vigencia_texto: vigencia,
+        p_fecha_fin: fechaFin,
+        p_incluye_tags: tags,
+        p_moneda: moneda,
+        p_producto_id: hotel,   // 0 = promo suelta
+      })
+    : await sb.rpc('editar_promocion', {
+        p_id: TAR_PROMO_ID,
+        p_titulo: titulo,
+        p_precio_texto: precio,
+        p_vigencia_texto: vigencia,
+        // Cadena vacía = quitarle la fecha de fin; el RPC distingue eso de "no tocar".
+        p_fecha_fin: fechaFin,
+        p_incluye_tags: tags,
+        p_moneda: moneda,
+        // "" en el select = desvincular (0); el RPC distingue 0 de NULL ("no tocar").
+        p_producto_id: hotel,
+      });
   btn.disabled = false;
   if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
-  okToast('Promoción actualizada — la IA la usa desde el próximo mensaje');
+  okToast(alta
+    ? 'Promoción creada — protegida del tarifario nacional, la IA la usa ya'
+    : 'Promoción actualizada — la IA la usa desde el próximo mensaje');
   closeSheet('tar-promo-sheet');
   delete tarCache[tarTab];
   loadTarifario();
@@ -11998,14 +12172,22 @@ async function tarGuardarFicha(btn) {
   const nombre = document.getElementById('tf-nombre').value.trim();
   if (!nombre) { errToast('El nombre no puede quedar vacío'); return; }
   btn.disabled = true;
+  // El switch solo se manda si cambió: null = "no tocar" (guardar textos sin
+  // mover la protección de las tarifas). Los cambios de fila ya se guardan solos.
+  const prot = document.getElementById('tf-protegido');
+  const pProtegido = (prot.checked === TF_PROT_INICIAL) ? null : prot.checked;
   const { data, error } = await sb.rpc('editar_ficha_producto', {
     p_id: TAR_EDIT_ID, p_nombre: nombre,
     p_destino: document.getElementById('tf-destino').value.trim(),
     p_descripcion: document.getElementById('tf-descripcion').value.trim(),
+    p_notas: document.getElementById('tf-notas').value.trim(),
+    p_protegido: pProtegido,
   });
   btn.disabled = false;
   if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
-  okToast('Ficha corregida — ya se ve así en la web y para la IA');
+  okToast(pProtegido === false
+    ? 'Ficha guardada — las tarifas vuelven al tarifario automático'
+    : 'Ficha guardada — ya se ve así en la web y para la IA');
   closeSheet('tar-ficha-sheet');
   // El tarifario se cachea por pestaña: sin invalidar, la tarjeta seguiría
   // mostrando el valor viejo aunque la base ya tenga el nuevo.
@@ -12141,8 +12323,11 @@ function mejorPrecio(x) {
   }
   return (x.tarifas || [])[0] || null;
 }
-function openProductoDrawer(x) {
-  const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
+function openProductoDrawer(x, tipoForzado = null) {
+  TAR_DRAWER_ITEM = x;
+  // Desde el buscador IA el resultado puede ser de otra pestaña que la abierta:
+  // el tipo real viene explícito para no pintar una promo como producto.
+  const esPromo = tipoForzado ? tipoForzado === 'promocion' : (tarTab === 'promo' || tarTab === 'hotsale');
   const nombre = esPromo ? x.titulo : x.nombre;
   const tarifa = !esPromo ? mejorPrecio(x) : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
@@ -12254,8 +12439,8 @@ const TAR_FOTOS_LIMITE = 5 * 1024 * 1024, TAR_FOTOS_MIME = ['image/png', 'image/
 function slugArchivo(nombre) {
   return nombre.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'foto';
 }
-async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
-  const box = document.getElementById('tar-fotos-admin');
+async function cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId = 'tar-fotos-admin') {
+  const box = document.getElementById(boxId);
   const { data, error } = await sb.from(tabla).select('id,storage_path,orden,es_principal,origen').eq(fk, entidadId).eq('activo', true).order('es_principal', { ascending: false }).order('orden');
   if (!box) return; // el drawer se pudo haber cerrado mientras esto cargaba
   if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudieron cargar las fotos</div>'; return; }
@@ -12275,27 +12460,31 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo) {
   box.innerHTML = `${grid}
     <button type="button" class="dbtn gh" id="tar-foto-agregar" style="margin-top:10px;width:100%"><i class="fas fa-plus"></i> Agregar foto</button>
     <input type="file" id="tar-foto-file" accept="image/png,image/jpeg,image/webp" style="display:none">`;
-  box.querySelectorAll('[data-accion="principal"]').forEach(btn => btn.onclick = () => marcarFotoPrincipal(tabla, fk, entidadId, +btn.closest('.tfa-item').dataset.fotoId, prefijo));
+  const input = box.querySelector('#tar-foto-file');
+  box.querySelectorAll('[data-accion="principal"]').forEach(btn => btn.onclick = () => marcarFotoPrincipal(tabla, fk, entidadId, +btn.closest('.tfa-item').dataset.fotoId, prefijo, boxId));
   box.querySelectorAll('[data-accion="reemplazar"]').forEach(btn => btn.onclick = () => {
     const fotoId = +btn.closest('.tfa-item').dataset.fotoId;
-    const input = document.getElementById('tar-foto-file');
-    input.onchange = () => { if (input.files[0]) reemplazarFoto(tabla, fk, entidadId, fotoId, prefijo, input.files[0]); input.value = ''; };
+    input.onchange = () => { if (input.files[0]) reemplazarFoto(tabla, fk, entidadId, fotoId, prefijo, input.files[0], boxId); input.value = ''; };
     input.click();
   });
   box.querySelectorAll('[data-accion="eliminar"]').forEach(btn => btn.onclick = () => {
     const fotoId = +btn.closest('.tfa-item').dataset.fotoId;
     const eraPrincipal = data.find(f => f.id === fotoId)?.es_principal ?? false;
-    eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal);
+    eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal, boxId);
   });
-  document.getElementById('tar-foto-agregar').onclick = () => {
-    const input = document.getElementById('tar-foto-file');
-    input.onchange = () => { if (input.files[0]) agregarFoto(tabla, fk, entidadId, prefijo, data.length, input.files[0]); input.value = ''; };
+  box.querySelector('#tar-foto-agregar').onclick = () => {
+    input.onchange = () => { if (input.files[0]) agregarFoto(tabla, fk, entidadId, prefijo, data.length, input.files[0], boxId); input.value = ''; };
     input.click();
   };
 }
-async function eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal) {
-  if (!(await confirmarSheet({ titulo: '¿Eliminar esta foto?', detalle: 'No se puede deshacer desde aquí.', textoOk: 'Eliminar', destructivo: true }))) return;
-  const box = document.getElementById('tar-fotos-admin');
+async function eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal, boxId = 'tar-fotos-admin') {
+  // confirmarSheet abre su propia hoja y openSheet cierra la que estuviera
+  // abierta (la de la ficha, si se llegó desde ahí): reabrirla al volver.
+  const volver = sheetAbierta;
+  const seguir = await confirmarSheet({ titulo: '¿Eliminar esta foto?', detalle: 'No se puede deshacer desde aquí.', textoOk: 'Eliminar', destructivo: true });
+  if (volver && sheetAbierta !== volver) openSheet(volver);
+  if (!seguir) return;
+  const box = document.getElementById(boxId);
   box.style.opacity = '.5';
   // Baja lógica, mismo patrón que reemplazarFoto -- nunca se borra el
   // archivo real de Storage, así que siempre queda forma de recuperarla a
@@ -12316,12 +12505,12 @@ async function eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal)
   box.style.opacity = '1';
   okToast('Foto eliminada');
   delete tarCache[tarTab];
-  cargarFotosAdmin(tabla, fk, entidadId, prefijo);
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId);
 }
-async function agregarFoto(tabla, fk, entidadId, prefijo, ordenSiguiente, file) {
+async function agregarFoto(tabla, fk, entidadId, prefijo, ordenSiguiente, file, boxId = 'tar-fotos-admin') {
   if (!TAR_FOTOS_MIME.includes(file.type)) { errToast('Formato no válido — solo PNG, JPG o WEBP'); return; }
   if (file.size > TAR_FOTOS_LIMITE) { errToast('La imagen pesa más de 5MB'); return; }
-  const box = document.getElementById('tar-fotos-admin');
+  const box = document.getElementById(boxId);
   box.style.opacity = '.5';
   const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '.jpg';
   const storagePath = `${prefijo}/${entidadId}/manual-${Date.now()}-${slugArchivo(file.name.replace(/\.[^.]+$/, ''))}${ext.toLowerCase()}`;
@@ -12340,10 +12529,10 @@ async function agregarFoto(tabla, fk, entidadId, prefijo, ordenSiguiente, file) 
   box.style.opacity = '1';
   okToast('Foto agregada');
   delete tarCache[tarTab];
-  cargarFotosAdmin(tabla, fk, entidadId, prefijo);
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId);
 }
-async function marcarFotoPrincipal(tabla, fk, entidadId, fotoId, prefijo) {
-  const box = document.getElementById('tar-fotos-admin');
+async function marcarFotoPrincipal(tabla, fk, entidadId, fotoId, prefijo, boxId = 'tar-fotos-admin') {
+  const box = document.getElementById(boxId);
   box.style.opacity = '.5';
   await sb.from(tabla).update({ es_principal: false }).eq(fk, entidadId).eq('es_principal', true);
   const { error } = await sb.from(tabla).update({ es_principal: true }).eq('id', fotoId);
@@ -12351,12 +12540,12 @@ async function marcarFotoPrincipal(tabla, fk, entidadId, fotoId, prefijo) {
   if (error) { errToast('No se pudo marcar como principal: ' + error.message); return; }
   okToast('Foto principal actualizada');
   delete tarCache[tarTab];
-  cargarFotosAdmin(tabla, fk, entidadId, prefijo);
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId);
 }
-async function reemplazarFoto(tabla, fk, entidadId, fotoIdViejo, prefijo, file) {
+async function reemplazarFoto(tabla, fk, entidadId, fotoIdViejo, prefijo, file, boxId = 'tar-fotos-admin') {
   if (!TAR_FOTOS_MIME.includes(file.type)) { errToast('Formato no válido — solo PNG, JPG o WEBP'); return; }
   if (file.size > TAR_FOTOS_LIMITE) { errToast('La imagen pesa más de 5MB'); return; }
-  const box = document.getElementById('tar-fotos-admin');
+  const box = document.getElementById(boxId);
   box.style.opacity = '.5';
   const { data: vieja, error: eVieja } = await sb.from(tabla).select('orden,es_principal').eq('id', fotoIdViejo).single();
   if (eVieja) { box.style.opacity = '1'; errToast('No se pudo leer la foto a reemplazar: ' + eVieja.message); return; }
@@ -12388,7 +12577,7 @@ async function reemplazarFoto(tabla, fk, entidadId, fotoIdViejo, prefijo, file) 
   box.style.opacity = '1';
   okToast('Foto reemplazada');
   delete tarCache[tarTab];
-  cargarFotosAdmin(tabla, fk, entidadId, prefijo);
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId);
 }
 // Deja al filtro "opción de Tarifario" del Cotizador ya elegida, con el
 // chat enfocado y un mensaje sugerido, para no obligar a re-seleccionar
@@ -15376,9 +15565,12 @@ async function abrirDesdeBusquedaIA(tipo, id) {
   const enCache = (tarCache[tarTab] || []).find(x => Number(x.id) === id);
   if (enCache) { openProductoDrawer(enCache); return; }
   const tabla = tipo === 'promocion' ? 'promociones' : 'productos';
-  const { data, error } = await sb.from(tabla).select('*').eq('id', id).maybeSingle();
+  // Los productos necesitan las tarifas embebidas: el drawer muestra el precio
+  // y el editor de ficha (tfRenderTarifas) las edita fila por fila.
+  const sel = tipo === 'promocion' ? '*' : '*, tarifas(*)';
+  const { data, error } = await sb.from(tabla).select(sel).eq('id', id).maybeSingle();
   if (error || !data) { errToast('No se pudo abrir ese ítem'); return; }
-  openProductoDrawer(data);
+  openProductoDrawer(data, tipo);
 }
 
 /* ---------- Hoja inferior genérica (más opciones del nav, filtros en móvil) — un solo backdrop compartido, una hoja abierta a la vez ---------- */
@@ -15692,6 +15884,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-28', emoji: '✍️', titulo: 'Tarifario: crear promociones y editar precios a mano', texto: 'Dos cosas nuevas en el Tarifario, solo para admin. (1) Botón "Nueva promoción" en la pestaña Promos: cargás una promo desde cero — título, precio, vigencia, fecha de fin, qué incluye y a qué hotel cuelga (o ninguno) — sin esperar a que la traiga un PDF. (2) La ficha de un hotel ahora se edita completa: además de nombre, destino y descripción, se agregan y corrigen las tarifas fila por fila (categoría, precio, vigencia, moneda), con el precio calculado a la vista mientras escribís, más las notas internas, el switch de "protegido" y las fotos con portada. Todo lo que cargues o edites a mano queda protegido: la próxima actualización automática del tarifario no lo pisa ni lo retira.', roles: ['admin'] },
   { fecha: '2026-08-28', emoji: '📱', titulo: 'El CRM en el celular, rediseñado de punta a punta', texto: 'Todo el CRM en el teléfono se rehízo para que se sienta una app y no una pantalla de computadora encogida. Los filtros de cada sección (Leads, Facturación, Post Venta, Tarifario) ahora son una fila de botones que se desliza al costado en vez de amontonarse. El estado de un lead se cambia con un toque que abre una lista, sin las flechitas. Las fichas y formularios van en una sola columna, con campos y botones grandes de tocar. Los menús que antes se salían de la pantalla ahora suben desde abajo como en una app. El Cotizador y Mensajes ocupan la pantalla completa, con la barra de escribir siempre visible sobre el teclado. En Facturación las tablas largas vuelven a mostrar bien sus totales, y en Correo la bandeja y el mensaje son dos pantallas. Se sumó también un filtro de Leads por "con / sin número de teléfono". En la computadora no cambia nada.', roles: ROLES_TODOS },
   { fecha: '2026-08-27', emoji: '🏨', titulo: 'Tarifario: promociones sin hotel', texto: 'El botón de vigencias del Tarifario ahora es "Revisión del tarifario": una sola pantalla con pestañas. La de siempre (Vigencias) más una nueva, "Sin hotel", que lista las promociones que no cuelgan de ningún hotel — no aparecen dentro del hotel ni heredan sus fotos. Cada una trae los hoteles candidatos sugeridos: confirmás y se acomoda sola, con opción de recordar el nombre para la próxima carga. Las que tienen un solo candidato claro se pueden vincular en bloque. En las tarjetas, chip ámbar "Sin hotel" (solo admin) que lleva directo a esa lista. El editor de promoción ya permite elegir o cambiar el hotel. Si una noche quedan demasiadas promos sin hotel, el sistema no oculta ninguna y avisa por Telegram.', roles: ['admin'] },
   { fecha: '2026-08-27', emoji: '📅', titulo: 'Tarifario: vencidas más claras y catálogo más parejo', texto: 'Las promos y tarifas cuya fecha de VENTA ya pasó salen del catálogo (CRM, web e IA) aunque el disfrute siga lejos, y el cron nocturno ya no perdona la última que quede. En Tarifario, "Revisión de vigencias" tiene un botón "Comprobar vencidas ahora" para adelantar ese barrido y ocultarlas en bloque. En las tarjetas: chip rojo "Vencida" para que las veas de un vistazo, botón de ocultar que aparece al pasar el mouse, y "Ver más" solo donde el precio de verdad no entra. La pestaña "¿Cómo funciona?" quedó reescrita con los datos y costos reales del actualizador.', roles: ['admin'] },
