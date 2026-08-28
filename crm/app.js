@@ -344,9 +344,6 @@ async function entrarSegunRol() {
   document.getElementById('side-un').textContent = MI_NOMBRE;
   document.getElementById('side-ue').textContent = rolLabelUi;
   pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
-  document.getElementById('side-un-m').textContent = MI_NOMBRE;
-  document.getElementById('side-ue-m').textContent = rolLabelUi;
-  pintarAvatar(document.getElementById('side-avatar-m'), MI_AVATAR_URL, MI_NOMBRE);
   document.querySelectorAll('.solo-admin-borrar').forEach(el => el.style.display = ROL === 'admin' ? '' : 'none');
   aplicarPreferencias();
   renderJornadaUI();
@@ -414,7 +411,6 @@ function openPerfilDrawer() {
         ${VISTA_ROL_OPCIONES.map(r => `<button type="button" data-v="${r}" class="seg${ROL === r ? ' on' : ''}">${esc(VISTA_ROL_LABEL[r])}</button>`).join('')}
       </div>
     </div>` : ''}
-    ${bnEditorHtml()}
     ${puedeRecibirLeads() || puedeRecibirAsistencia() || puedeChatearInterno() ? `
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-bell"></i> Notificaciones</div>
@@ -461,7 +457,6 @@ function openPerfilDrawer() {
   document.querySelectorAll('#perfil-tema button').forEach(b => b.onclick = () => guardarPreferencia('tema', b.dataset.v, 'perfil-tema'));
   document.querySelectorAll('#perfil-fuente button').forEach(b => b.onclick = () => guardarPreferencia('fuente', b.dataset.v, 'perfil-fuente'));
   document.querySelectorAll('#perfil-vista-rol button').forEach(b => b.onclick = () => activarVistaPreviaRol(b.dataset.v));
-  bnEditorWire();
   actualizarTogglesNotif();
   renderInstalacionPwa();
 }
@@ -571,7 +566,6 @@ async function subirAvatar(file) {
   const avatarViejo = MI_AVATAR_URL;
   MI_AVATAR_URL = nuevaUrl;
   pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
-  pintarAvatar(document.getElementById('side-avatar-m'), MI_AVATAR_URL, MI_NOMBRE);
   pintarAvatar(document.getElementById('perfil-avatar-preview'), MI_AVATAR_URL, MI_NOMBRE);
   okToast('Foto de perfil actualizada');
   // Limpieza del avatar viejo (misma carpeta propia, política avatar_delete_propio).
@@ -1213,15 +1207,14 @@ async function renderAvisosPushUI() {
 }
 
 // Deep-link desde el click de una notificación (?accion=marcar-asistencia):
-// en mobile el widget de Jornada vive dentro de la hoja "Más", así que hay
-// que abrirla; en desktop ya está siempre visible en el sidebar, solo se
-// resalta con un pulso breve.
+// el widget de Jornada vive en el sidebar, así que en móvil hay que abrir el
+// menú; en escritorio ya está siempre visible, solo se resalta con un pulso.
 function manejarDeepLinkAsistencia() {
   const params = new URLSearchParams(location.search);
   if (params.get('accion') !== 'marcar-asistencia') return;
   history.replaceState(null, '', location.pathname);
   if (window.matchMedia('(max-width:760px)').matches) {
-    openSheet('more-sheet');
+    abrirMenuMovil();
   } else {
     const w = document.getElementById('jornada-widget-d');
     if (w) { w.classList.add('jornada-pulse'); setTimeout(() => w.classList.remove('jornada-pulse'), 2400); }
@@ -1788,7 +1781,7 @@ function abrirTimelineAsesor(usuarioId, nombre) {
 async function cargarTimelineAsesor() {
   const wrap = document.getElementById('timeline-list');
   if (!wrap || !timelineAsesorId) return;
-  wrap.innerHTML = '<div class="es-s">Cargando…</div>';
+  wrap.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   const fecha = document.getElementById('timeline-fecha').value || hoyCaracas();
   const { data, error } = await sb.rpc('timeline_asesor', { p_asesor_id: timelineAsesorId, p_dia: fecha });
   if (error || !data?.ok) { wrap.innerHTML = '<div class="es-s">No se pudo cargar el timeline.</div>'; return; }
@@ -1801,6 +1794,7 @@ async function cargarTimelineAsesor() {
         + '<div class="tl-ev-ico"><i class="fas ' + (e.icono || TIMELINE_ICONOS[e.tipo] || 'fa-circle-dot') + '"></i></div>'
         + '<div class="tl-ev-txt">' + esc(e.texto) + '</div></div>').join('')
     : '<div class="es-s">Sin actividad registrada ese día.</div>';
+  if (eventos.length) entradaLista(wrap);
 }
 document.getElementById('timeline-fecha')?.addEventListener('change', cargarTimelineAsesor);
 document.getElementById('timeline-cerrar')?.addEventListener('click', () => closeSheet('timeline-asesor-sheet'));
@@ -2229,11 +2223,12 @@ document.getElementById('claimFormBack').addEventListener('click', e => { e.prev
 async function abrirListaClaim() {
   showOverlay('claim-list');
   const box = document.getElementById('claimListItems'), errEl = document.getElementById('claimListErr');
-  errEl.textContent = ''; box.innerHTML = '<div class="claim-empty">Cargando...</div>';
+  errEl.textContent = ''; box.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   const { data, error } = await sb.rpc('listar_usuarios_disponibles');
   if (error) { box.innerHTML = ''; errEl.textContent = 'No se pudo cargar la lista, intenta de nuevo'; return; }
   if (!data || !data.length) { box.innerHTML = '<div class="claim-empty">Todos los usuarios ya están configurados.</div>'; return; }
   box.innerHTML = data.map(u => `<div class="claim-item" data-u="${esc(u.username)}"><span class="cn">${esc(u.nombre)}</span><span class="cr">${ROL_LABEL[u.rol] || u.rol}</span></div>`).join('');
+  entradaLista(box);
   box.querySelectorAll('.claim-item').forEach(el => el.onclick = () => abrirFormClaim(el.dataset.u, el.querySelector('.cn').textContent));
 }
 
@@ -2306,7 +2301,7 @@ function arrancar(...pasos) {
 async function startApp() {
   if (booted) return; booted = true;
   arrancar(
-    renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, renderBottomNav, setupSwipeSecciones, setupPullToRefresh, setupLongPressSeleccion,
+    renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupHoy, setupConsultorIA, setupBoleteriaSeccion, setupMisNotas,
@@ -2572,7 +2567,7 @@ function setupPostventa() {
 async function loadPostventa() {
   const grid = document.getElementById('pv-grid');
   if (!grid || ROL === 'marketing') return;
-  grid.innerHTML = '<div class="pv-empty"><i class="fas fa-circle-notch fa-spin"></i>Cargando postventa...</div>';
+  grid.innerHTML = '<div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div>';
   const busqueda = document.getElementById('pv-search')?.value.trim() || null;
   const [resumen, bandeja] = await Promise.all([
     sb.rpc('postventa_resumen'),
@@ -2628,6 +2623,7 @@ function renderPostventa() {
   }).join('');
   grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => abrirPostventa(POSTVENTA.find(c => c.lead_id === Number(b.dataset.pvOpen))));
   grid.querySelectorAll('[data-pv-wa]').forEach(b => b.onclick = () => window.open(`https://wa.me/${b.dataset.pvWa}`, '_blank', 'noopener'));
+  entradaLista(grid);
 }
 function pvFecha(iso) {
   if (!iso) return '—';
@@ -2738,7 +2734,7 @@ async function toggleAsesorLeads(rowEl, nombre) {
   aseAbierto = rowEl;
   const panel = document.createElement('div');
   panel.className = 'al-panel';
-  panel.innerHTML = '<div class="al-state"><i class="fas fa-spinner fa-spin"></i> Cargando leads...</div>';
+  panel.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   rowEl.insertAdjacentElement('afterend', panel);
   await renderAsesorLeads(panel, nombre);
 }
@@ -2762,6 +2758,7 @@ async function renderAsesorLeads(panel, nombre) {
     const col = ESTADO_COLORS[l.estado] || '#5f677f';
     return `<div class="al-row"><div class="al-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="al-info"><div class="al-nombre">${esc(l.nombre)}</div><div class="al-meta">${esc(l.destino || 'Sin destino')}</div></div><div class="al-right"><span class="al-badge" style="background:${col}22;color:${col}">${esc(niceEstado(l.estado))}</span><div class="al-fecha">${fechaTxt}</div></div></div>`;
   }).join('') + `<a class="al-more">Ver todos en Leads <i class="fas fa-arrow-right"></i></a>`;
+  entradaLista(panel);
   panel.querySelector('.al-more').onclick = () => chartPreview('asesor', nombre, nombre, 'fa-user-tie', rows.length);
 }
 
@@ -3677,9 +3674,11 @@ async function guardarTelefonoIncorrecto(telefonoCorregido) {
 let BN_LEADS_PENDIENTES = 0;
 function actualizarBadgeLeads(pendientes) {
   BN_LEADS_PENDIENTES = pendientes || 0;
-  const d = document.getElementById('nav-lead-count'), m = document.getElementById('nav-lead-count-m');
+  const d = document.getElementById('nav-lead-count');
   if (d) d.textContent = pendientes > 0 ? String(pendientes) : '—';
-  if (m) { m.textContent = pendientes > 9 ? '9+' : String(pendientes); m.classList.toggle('show', pendientes > 0); }
+  // En móvil el menú está cerrado casi siempre: el pendiente se avisa con un
+  // punto sobre la hamburguesa, que es lo único visible en esa pantalla.
+  document.getElementById('menu-dot')?.classList.toggle('show', pendientes > 0);
   if ('setAppBadge' in navigator) { (pendientes > 0 ? navigator.setAppBadge(pendientes) : navigator.clearAppBadge()).catch(() => {}); }
 }
 
@@ -3786,15 +3785,15 @@ function openDrawer(l) {
       <div style="font-size:11px;color:var(--muted2);background:rgba(255,255,255,.03);border-radius:10px;padding:9px 11px;margin-bottom:12px;line-height:1.5">
         <i class="fas fa-paperclip"></i> Extracto de la conversación gestionada por la IA en ${esc(l.canal || 'el canal')} (ManyChat) — solo lectura.
       </div>
-      <div id="conv-body"><i class="fas fa-circle-notch fa-spin"></i> Cargando conversación...</div>
+      <div id="conv-body"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
     </div>
 
     <div class="lead-tab-panel" data-tab="correo">
-      <div id="correo-lead-body"><i class="fas fa-circle-notch fa-spin"></i> Cargando correo...</div>
+      <div id="correo-lead-body"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
     </div>
 
     <div class="lead-tab-panel" data-tab="actividad">
-      <div id="act-body"><i class="fas fa-circle-notch fa-spin"></i> Cargando actividad...</div>
+      <div id="act-body"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
     </div>`;
 
   document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', e.target.value === VENTA);
@@ -4079,6 +4078,7 @@ async function cargarCorreoLead(l) {
     return separador + `<div class="conv-msg ${c.direccion === 'saliente' ? 'ia' : 'lead'}"><div class="conv-who">${c.direccion === 'entrante' ? esc(c.de) : 'Nosotros'} · ${esc(fmtFechaHoraCaracas(c.enviado_en))}</div><b>${esc(c.asunto || '(sin asunto)')}</b>${c.gmail_correo_adjuntos?.length ? ` <i class="fas fa-paperclip muted" title="${c.gmail_correo_adjuntos.length} adjunto(s)"></i>` : ''}<div>${esc(c.snippet || '')}</div>${botonVerCorreo(c.id)}</div>`;
   }).join('');
   box.innerHTML = CORREO_LEAD_CACHE;
+  entradaLista(box);
 }
 async function cargarConversacionLead(l) {
   const box = document.getElementById('conv-body');
@@ -4090,6 +4090,7 @@ async function cargarConversacionLead(l) {
   if (!historial.length) { CONV_CACHE = '<div class="muted">Sin conversación registrada con la IA para este lead</div>'; box.innerHTML = CONV_CACHE; return; }
   CONV_CACHE = historial.map(m => `<div class="conv-msg ${m.rol === 'ia' ? 'ia' : 'lead'}"><div class="conv-who">${m.rol === 'ia' ? 'Lotus IA' : 'Cliente'}</div>${esc(m.texto)}</div>`).join('');
   box.innerHTML = CONV_CACHE;
+  entradaLista(box);
 }
 async function cargarActividadLead(l) {
   const box = document.getElementById('act-body');
@@ -4116,6 +4117,7 @@ async function cargarActividadLead(l) {
   ].filter(f => f.hora).sort((a, b) => new Date(b.hora) - new Date(a.hora));
   ACTIVIDAD_CACHE = filas.map(f => `<div class="act-row"><div class="act-txt">${f.texto}</div><div class="act-hora">${esc(fmtFechaHoraCaracas(f.hora))}</div></div>`).join('');
   box.innerHTML = ACTIVIDAD_CACHE;
+  entradaLista(box);
 }
 function abrirConfirmarEliminar(modo) {
   deleteMode = modo;
@@ -6696,6 +6698,7 @@ async function loadBandejaFacturacion() {
     const item = FACT_BANDEJA_CACHE.find(x => String(x.lead_id) === btn.dataset.bandejaLeadId);
     if (item) window.abrirNuevoClienteFacturacion(item);
   }));
+  entradaLista(grid);
 }
 
 /* ---------- Ventas por verificar (admin) -- ventas que un asesor cerró
@@ -6742,6 +6745,7 @@ async function loadVentasPendientesVerificar() {
     okToast('Venta rechazada -- vuelve a En espera de pago');
     loadVentasPendientesVerificar();
   }));
+  entradaLista(grid);
 }
 
 /* ---------- Nuevo lead manual (botón "Nuevo lead" en Leads, admin + asesor) /
@@ -9343,7 +9347,7 @@ function vrPintarDetalle() {
     <div class="card" style="padding:18px;margin-top:14px">
       <b style="font-size:14px"><i class="fas fa-clock-rotate-left"></i> Historial de audios</b>
       <div class="muted" style="font-size:12px;margin-top:4px">Lo que ya generaste para este perfil -- reescuchá o descargá sin volver a generar.</div>
-      <div id="vr-detalle-historial" style="margin-top:10px">${esNuevo ? '<div class="muted" style="font-size:12.5px">Guardá el perfil primero para que quede historial.</div>' : '<div class="muted" style="font-size:12.5px">Cargando...</div>'}</div>
+      <div id="vr-detalle-historial" style="margin-top:10px">${esNuevo ? '<div class="muted" style="font-size:12.5px">Guardá el perfil primero para que quede historial.</div>' : '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>'}</div>
     </div>`;
   vrPintarChipsDetalle();
 }
@@ -9392,6 +9396,7 @@ async function vrCargarHistorial() {
   cont.innerHTML = VR_HISTORIAL.length
     ? VR_HISTORIAL.map(vrFilaHistorial).join('')
     : '<div class="muted" style="font-size:12.5px">Todavía no generaste audio para este perfil.</div>';
+  if (VR_HISTORIAL.length) entradaLista(cont);
 }
 
 async function vrBorrarHistorial(id) {
@@ -9595,7 +9600,7 @@ function applyWrView() {
 
 async function loadWebReasignados() {
   const body = document.getElementById('wr-body');
-  body.innerHTML = '<tr><td colspan="8" class="muted">Cargando…</td></tr>';
+  body.innerHTML = '<tr><td colspan="8" style="padding:0"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></td></tr>';
   const { data, error } = await sb.rpc('comisiones_origen_panel');
   if (error || !data) {
     body.innerHTML = `<tr><td colspan="8" class="muted">No se pudo cargar: ${esc(error?.message || '')}</td></tr>`;
@@ -9685,6 +9690,7 @@ function wrPintarTabla() {
     </tr>`;
   }).join('');
   cardsBox.innerHTML = filas.map(wrCardHtml).join('');
+  entradaLista(body); entradaLista(cardsBox);
 
   // Abre la ficha completa del cliente, mismo drawer que usan Leads y
   // Facturación -- reusa abrirClienteDesdeFacturacion porque acá tampoco hay
@@ -10189,7 +10195,7 @@ function ssTarjetaVigente(g) {
 
 async function loadStopSalesVigentes() {
   const cont = document.getElementById('ss-vigentes');
-  cont.innerHTML = '<div class="muted" style="padding:14px 2px">Cargando…</div>';
+  cont.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   const { data, error } = await sb.rpc('stop_sales_vigentes');
   if (error) { cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
   SS_VIGENTES_DATA = data || [];
@@ -10674,6 +10680,7 @@ async function loadFacturas() {
   poblarFiltrosVentas();
   factVentasMostrar = TECHO_LISTA;
   renderVentas();
+  entradaLista(document.getElementById('fact-tbody'));
 }
 function poblarFiltrosVentas() {
   const selMes = document.getElementById('fact-mes'), selAsesor = document.getElementById('fact-asesor');
@@ -10730,6 +10737,7 @@ async function loadComisionesAdmin() {
   FACT_COMISIONES_CACHE = data || [];
   factComMostrar = TECHO_LISTA;
   renderComisiones();
+  entradaLista(document.getElementById('fact-com-tbody'));
 }
 function renderComisiones() {
   const filas = ordenarYFiltrar(FACT_COMISIONES_CACHE, ['asesor'], val('fact-com-search'), FACT_SORT.comisiones);
@@ -11373,14 +11381,90 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
     if (dotsEl) [...dotsEl.children].forEach((d, idx) => d.classList.toggle('on', idx === i));
   };
   if (esTouch) {
-    let startX = null;
-    mediaEl.addEventListener('touchstart', e => { precargarFotos(fotos); startX = e.touches[0].clientX; }, { passive: true });
-    mediaEl.addEventListener('touchend', e => {
-      if (startX == null) return;
-      const dx = e.changedTouches[0].clientX - startX;
-      if (Math.abs(dx) > 30) crossfade(i + (dx < 0 ? 1 : -1));
-      startX = null;
+    // El dedo arrastra las fotos de verdad. Antes solo se medía el gesto al
+    // soltar y se hacía un crossfade con un clon fijo en <body>: clonar el nodo
+    // y forzar dos reflows por cada pase, en una grilla de 50 tarjetas, era el
+    // "se corta al pasar las fotos" que reportó el dueño (2026-08-27).
+    const pane = (url, left) => {
+      const d = document.createElement('div');
+      Object.assign(d.style, { position: 'absolute', top: '0', bottom: '0', left, width: '100%', backgroundImage: `url('${url}')`, backgroundSize: 'cover', backgroundPosition: 'center' });
+      return d;
+    };
+    const vecino = dir => (i + dir + fotos.length) % fotos.length;
+    // film recorta (overflow:hidden y NO se mueve); pista es lo que se arrastra
+    // adentro. Si se moviera el que recorta, el recorte viajaría con las fotos
+    // y la vecina no entraría nunca.
+    let film = null, pista = null, startX = null, startY = null, eje = null, dx = 0, ancho = 1, dirActual = 0, animando = false, pintando = false;
+    const quitarFilm = () => { film?.remove(); film = null; pista = null; };
+    mediaEl.addEventListener('touchstart', e => {
+      if (animando || e.touches.length !== 1) return;
+      precargarFotos(fotos);
+      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+      eje = null; dx = 0; dirActual = 0;
+      ancho = mediaEl.clientWidth || 1;
     }, { passive: true });
+    mediaEl.addEventListener('touchmove', e => {
+      if (startX == null || animando) return;
+      const mx = e.touches[0].clientX - startX, my = e.touches[0].clientY - startY;
+      if (eje === null) {
+        if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+        // Vertical gana: la grilla del tarifario se scrollea con el dedo encima
+        // de las fotos, y robarle ese gesto haría la sección inusable.
+        eje = Math.abs(mx) >= Math.abs(my) * 1.4 ? 'x' : 'y';
+        if (eje !== 'x') { startX = null; return; }
+      }
+      e.preventDefault();
+      dx = mx / zoomFactor();
+      const dir = dx < 0 ? 1 : -1;
+      if (!film || dir !== dirActual) {
+        quitarFilm();
+        dirActual = dir;
+        film = document.createElement('div');
+        // mediaEl puede ser un <img> (tarjetas del Tarifario) o un <div> con
+        // background-image (fichas): en el primer caso el carril no puede ir
+        // adentro, va en el contenedor calcado sobre la caja de la imagen.
+        const enImg = mediaEl.tagName === 'IMG';
+        const host = enImg ? mediaEl.parentElement : mediaEl;
+        if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+        Object.assign(film.style, enImg
+          ? { position: 'absolute', left: mediaEl.offsetLeft + 'px', top: mediaEl.offsetTop + 'px', width: mediaEl.offsetWidth + 'px', height: mediaEl.offsetHeight + 'px', overflow: 'hidden', zIndex: '0', pointerEvents: 'none' }
+          : { position: 'absolute', inset: '0', overflow: 'hidden', zIndex: '0', pointerEvents: 'none' });
+        pista = document.createElement('div');
+        Object.assign(pista.style, { position: 'absolute', inset: '0', willChange: 'transform' });
+        pista.appendChild(pane(fotos[i], '0'));
+        pista.appendChild(pane(fotos[vecino(dir)], dir > 0 ? '100%' : '-100%'));
+        film.appendChild(pista);
+        host.prepend(film);
+      }
+      if (pintando) return;
+      pintando = true;
+      requestAnimationFrame(() => { pintando = false; if (pista) pista.style.transform = `translateX(${dx}px)`; });
+    }, { passive: false });
+    const soltarFoto = e => {
+      if (startX == null || eje !== 'x' || !pista) { startX = null; eje = null; quitarFilm(); return; }
+      const fin = e.changedTouches ? e.changedTouches[0].clientX - startX : 0;
+      const pasa = Math.abs(fin) > ancho * 0.22 || Math.abs(fin) > 55;
+      const destino = pasa ? -dirActual * ancho : 0;
+      animando = true;
+      const enMovimiento = pista;
+      enMovimiento.style.transition = 'transform .26s cubic-bezier(.3,1,.4,1)';
+      enMovimiento.style.transform = `translateX(${destino}px)`;
+      const cerrar = () => {
+        if (!animando) return;
+        animando = false;
+        if (pasa) {
+          i = vecino(dirActual);
+          setFoto(fotos[i]);
+          if (dotsEl) [...dotsEl.children].forEach((d, idx) => d.classList.toggle('on', idx === i));
+        }
+        quitarFilm();
+      };
+      enMovimiento.addEventListener('transitionend', cerrar, { once: true });
+      setTimeout(cerrar, 320);
+      startX = null; eje = null;
+    };
+    mediaEl.addEventListener('touchend', soltarFoto, { passive: true });
+    mediaEl.addEventListener('touchcancel', soltarFoto, { passive: true });
     return;
   }
   cardEl.addEventListener('mouseenter', () => {
@@ -11578,6 +11662,9 @@ function renderTarifario() {
   } else {
     grid.innerHTML = tarItemsWrapHtml(filtered);
   }
+  // Los contenedores reales de tarjetas son los sub-grids; #tar-grid puede
+  // tener encabezados de región/destino entre medio.
+  grid.querySelectorAll('.tar-grid-sub, .tar-fichas-grid, .tar-hotel-list').forEach(entradaLista);
   [...document.querySelectorAll('#tar-grid .tar-item')].forEach(el => {
     const x = filtered.find(x => String(x.id) === el.dataset.id);
     el.onclick = () => openProductoDrawer(x);
@@ -12057,10 +12144,10 @@ function openProductoDrawer(x) {
       <textarea id="tar-notas" class="ei" rows="3" placeholder="Notas propias, no vienen del tarifario automático..." data-original="${esc(x.notas || '')}">${esc(x.notas || '')}</textarea>
       <button class="dbtn save" id="tar-notas-save" type="button" style="margin-top:8px"><i class="fas fa-floppy-disk"></i> Guardar notas</button>
       <div class="eb-title" style="margin-top:16px"><i class="fas fa-images"></i> Fotos (solo admin)</div>
-      <div id="tar-fotos-admin"><div class="muted" style="font-size:12.5px">Cargando...</div></div>
+      <div id="tar-fotos-admin"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
       ${!esPromo ? `
       <div class="eb-title" style="margin-top:16px"><i class="fas fa-video"></i> Video (piloto, solo admin)</div>
-      <div id="tar-video-admin"><div class="muted" style="font-size:12.5px">Cargando...</div></div>` : ''}
+      <div id="tar-video-admin"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>` : ''}
       ${esPromo
         ? `<button class="dbtn gh" id="tar-editar-promo" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Editar esta promoción</button>`
         : `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>`}
@@ -12295,13 +12382,13 @@ function irAlCotizadorConOpcion(tabla, id, nombre) {
 }
 
 /* ---------- Lightbox de fotos (drawer de producto + Galería) ---------- */
-let lbFotos = [], lbIndex = 0, lbScale = 1, lbTX = 0, lbTY = 0;
+let lbFotos = [], lbIndex = 0, lbScale = 1, lbTX = 0, lbTY = 0, lbAnimando = false;
 const lbEl = () => document.getElementById('lightbox');
 const lbImgEl = () => document.getElementById('lbImg');
 function openLightbox(fotos, index) {
   if (!fotos || !fotos.length) return;
   lbFotos = fotos; lbIndex = Math.max(0, index);
-  lbScale = 1; lbTX = 0; lbTY = 0;
+  lbScale = 1; lbTX = 0; lbTY = 0; lbAnimando = false;
   renderLightbox();
   lbEl().classList.add('open');
   document.body.classList.add('lb-lock');
@@ -12312,25 +12399,91 @@ function closeLightbox(fromNav) {
   document.body.classList.remove('lb-lock');
   if (!fromNav) navConsume();
 }
+/* El visor pinta SIEMPRE tres fotos (anterior, actual, siguiente) en un carril
+   que se mueve entero. Antes había una sola <img> y pasar de foto cambiaba su
+   src: el navegador tenía que decodificar la imagen nueva antes de pintarla,
+   así que se veía un corte (a veces un cuadro en blanco) en vez de un
+   deslizamiento -- el "se cortan al pasar" que reportó el dueño (2026-08-27).
+   Como las vecinas ya están en el DOM, también quedan precargadas solas. */
+const lbTrackEl = () => document.getElementById('lbTrack');
+const lbFoto = i => lbFotos.length ? lbFotos[(i % lbFotos.length + lbFotos.length) % lbFotos.length] : '';
+function lbPintarSlot(id, url) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (url) { if (el.getAttribute('src') !== url) el.setAttribute('src', url); el.style.visibility = ''; }
+  else { el.removeAttribute('src'); el.style.visibility = 'hidden'; }
+}
+// Desplazamiento del carril: la base (-33.3333%) deja el hueco del medio a la
+// vista; `px` son píxeles CSS (ya convertidos desde los reales del dedo).
+function lbDesplazar(px) {
+  const t = lbTrackEl();
+  if (t) t.style.transform = px ? `translateX(calc(-33.3333% + ${px}px))` : 'translateX(-33.3333%)';
+}
 function renderLightbox() {
   const img = lbImgEl();
-  img.src = lbFotos[lbIndex];
+  const multi = lbFotos.length > 1;
+  lbPintarSlot('lbImg', lbFoto(lbIndex));
+  lbPintarSlot('lbImgPrev', multi ? lbFoto(lbIndex - 1) : '');
+  lbPintarSlot('lbImgNext', multi ? lbFoto(lbIndex + 1) : '');
   img.classList.toggle('zoomed', lbScale > 1);
   img.style.transform = `translate(${lbTX}px,${lbTY}px) scale(${lbScale})`;
-  const multi = lbFotos.length > 1;
+  // Quitar la transición ANTES de reponer el carril en su base, si no el salto
+  // de vuelta al centro se animaría y se vería como un rebote.
+  lbTrackEl()?.classList.remove('animando');
+  lbDesplazar(0);
   document.getElementById('lbCounter').textContent = multi ? `${lbIndex + 1} / ${lbFotos.length}` : '';
   document.getElementById('lbCounter').style.display = multi ? '' : 'none';
   document.getElementById('lbPrev').style.display = multi ? '' : 'none';
   document.getElementById('lbNext').style.display = multi ? '' : 'none';
 }
-function lbNext() { if (lbFotos.length < 2) return; lbIndex = (lbIndex + 1) % lbFotos.length; lbScale = 1; lbTX = 0; lbTY = 0; renderLightbox(); }
-function lbPrev() { if (lbFotos.length < 2) return; lbIndex = (lbIndex - 1 + lbFotos.length) % lbFotos.length; lbScale = 1; lbTX = 0; lbTY = 0; renderLightbox(); }
+// dir: 1 siguiente, -1 anterior. Termina el viaje del carril y recién ahí
+// mueve el índice, para que el cambio de src ocurra fuera de la vista.
+function lbIr(dir) {
+  const t = lbTrackEl();
+  if (lbFotos.length < 2 || lbAnimando || !t) return;
+  lbAnimando = true;
+  lbScale = 1; lbTX = 0; lbTY = 0;
+  let listo = false;
+  const fin = () => {
+    if (listo) return;
+    listo = true;
+    clearTimeout(tmr);
+    lbIndex = (lbIndex + dir + lbFotos.length) % lbFotos.length;
+    lbAnimando = false;
+    renderLightbox();
+  };
+  t.classList.add('animando');
+  t.style.transform = dir > 0 ? 'translateX(-66.6666%)' : 'translateX(0%)';
+  // Respaldo: si la transición no dispara (pestaña en segundo plano, movimiento
+  // reducido) el visor quedaría trabado en lbAnimando para siempre.
+  const tmr = setTimeout(fin, 340);
+  t.addEventListener('transitionend', fin, { once: true });
+}
+function lbNext() { lbIr(1); }
+function lbPrev() { lbIr(-1); }
+function lbVolverAlCentro() {
+  const t = lbTrackEl();
+  if (!t) return;
+  t.classList.add('animando');
+  lbDesplazar(0);
+  setTimeout(() => t.classList.remove('animando'), 300);
+}
 function setupLightbox() {
   const img = lbImgEl(), stage = document.getElementById('lbStage');
   document.getElementById('lbClose').onclick = () => closeLightbox();
   document.getElementById('lbNext').onclick = lbNext;
   document.getElementById('lbPrev').onclick = lbPrev;
-  stage.addEventListener('click', e => { if (e.target === stage) closeLightbox(); });
+  // El carril ahora tapa el escenario entero: tocar "el fondo" es tocar el
+  // carril o un hueco vacío, nunca el <div class="lb-stage"> en sí.
+  // El carril ahora tapa el escenario entero: tocar "el fondo" es tocar el
+  // carril o un hueco vacío, nunca el <div class="lb-stage"> en sí. El
+  // navegador dispara un click sintético después de cada arrastre, así que se
+  // ignoran los clicks que llegan pegados a uno (si no, pasar de foto cerraría
+  // el visor).
+  stage.addEventListener('click', e => {
+    if (Date.now() - ultimoArrastre < 400) return;
+    if (!e.target.closest('.lb-img')) closeLightbox();
+  });
   document.addEventListener('keydown', e => {
     if (!lbEl().classList.contains('open')) return;
     if (e.key === 'Escape') closeLightbox();
@@ -12365,16 +12518,28 @@ function setupLightbox() {
   });
   window.addEventListener('mouseup', () => { dragging = false; img.classList.remove('panning'); });
 
-  // Touch: 1 dedo sin zoom = swipe entre fotos; 1 dedo con zoom = paniar; 2 dedos = pinch-zoom
+  // Touch: 1 dedo sin zoom = arrastre del carril; 1 dedo con zoom = paniar;
+  // 2 dedos = pinch-zoom. El arrastre sigue al dedo cuadro a cuadro y al
+  // soltar termina el viaje solo -- antes el dedo no movía nada y la foto
+  // saltaba de golpe recién al superar 55px.
+  const SWIPE_FOTO_MIN = 60;    // px reales
+  const SWIPE_FOTO_VEL = 0.35;  // px reales/ms
   let touchMode = null, pinchStartDist = 0, pinchStartScale = 1, touchStartX = 0, touchStartY = 0, panStartTX = 0, panStartTY = 0;
+  let ejeFoto = null, dragT0 = 0, pintando = false, dragDx = 0, ultimoArrastre = 0;
   const dist = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+  const track = () => lbTrackEl();
   stage.addEventListener('touchstart', e => {
+    if (lbAnimando) { touchMode = null; return; }
     if (e.touches.length === 2) {
       touchMode = 'pinch'; pinchStartDist = dist(e.touches[0], e.touches[1]); pinchStartScale = lbScale;
+      img.classList.add('panning');
     } else if (e.touches.length === 1) {
       touchMode = lbScale > 1 ? 'pan' : 'swipe';
       panStartTX = lbTX; panStartTY = lbTY;
       touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
+      ejeFoto = null; dragDx = 0; dragT0 = Date.now();
+      if (touchMode === 'pan') img.classList.add('panning');
+      else track()?.classList.remove('animando');
     }
   }, { passive: true });
   stage.addEventListener('touchmove', e => {
@@ -12388,16 +12553,40 @@ function setupLightbox() {
       lbTX = panStartTX + (e.touches[0].clientX - touchStartX);
       lbTY = panStartTY + (e.touches[0].clientY - touchStartY);
       img.style.transform = `translate(${lbTX}px,${lbTY}px) scale(${lbScale})`;
+    } else if (touchMode === 'swipe' && e.touches.length === 1) {
+      const dx = e.touches[0].clientX - touchStartX, dy = e.touches[0].clientY - touchStartY;
+      if (ejeFoto === null) {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        ejeFoto = Math.abs(dx) >= Math.abs(dy) * 1.2 ? 'x' : 'y';
+      }
+      if (ejeFoto !== 'x') return;
+      e.preventDefault();
+      // Con una sola foto no hay a dónde ir: se amortigua para que el gesto
+      // igual responda en vez de sentirse muerto.
+      dragDx = lbFotos.length > 1 ? dx : dx * 0.3;
+      if (pintando) return;
+      pintando = true;
+      requestAnimationFrame(() => { pintando = false; if (touchMode === 'swipe') lbDesplazar(dragDx / zoomFactor()); });
     }
   }, { passive: false });
   stage.addEventListener('touchend', e => {
-    if (touchMode === 'swipe' && e.changedTouches.length === 1) {
-      const dx = e.changedTouches[0].clientX - touchStartX, dy = e.changedTouches[0].clientY - touchStartY;
-      if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.5) dx < 0 ? lbNext() : lbPrev();
+    img.classList.remove('panning');
+    if (touchMode === 'swipe') {
+      const dx = e.changedTouches.length ? e.changedTouches[0].clientX - touchStartX : 0;
+      const vel = Math.abs(dx) / Math.max(1, Date.now() - dragT0);
+      const pasa = lbFotos.length > 1 && ejeFoto === 'x' && (Math.abs(dx) > SWIPE_FOTO_MIN || vel > SWIPE_FOTO_VEL);
+      if (ejeFoto === 'x') ultimoArrastre = Date.now();
+      if (pasa) lbIr(dx < 0 ? 1 : -1);
+      else if (ejeFoto === 'x') lbVolverAlCentro();
     }
     if (touchMode === 'pinch' && lbScale <= 1.02) { lbScale = 1; lbTX = 0; lbTY = 0; renderLightbox(); }
-    touchMode = null;
+    touchMode = null; ejeFoto = null;
   });
+  stage.addEventListener('touchcancel', () => {
+    img.classList.remove('panning');
+    if (touchMode === 'swipe' && ejeFoto === 'x') lbVolverAlCentro();
+    touchMode = null; ejeFoto = null;
+  }, { passive: true });
 
   document.getElementById('drawerContent').addEventListener('click', e => {
     const a = e.target.closest('.dgallery a');
@@ -12500,7 +12689,7 @@ async function guardarChatIA() {
 }
 async function openChatsDrawer() {
   const box = document.getElementById('drawerContent');
-  box.innerHTML = `<div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent)"><i class="fas fa-clock-rotate-left"></i></div><div><div class="dn">Mis conversaciones</div><div class="dm">Cotizador IA</div></div></div><div id="chats-mine-list" class="es-s" style="padding:14px 0">Cargando...</div>`;
+  box.innerHTML = `<div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent)"><i class="fas fa-clock-rotate-left"></i></div><div><div class="dn">Mis conversaciones</div><div class="dm">Cotizador IA</div></div></div><div id="chats-mine-list"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
@@ -12510,6 +12699,7 @@ async function openChatsDrawer() {
   if (!data.length) { list.textContent = 'Todavía no guardaste ninguna conversación'; return; }
   list.className = '';
   list.innerHTML = data.map(c => `<div class="strike-row" data-id="${c.id}" style="cursor:pointer"><span>${esc(c.titulo || 'Conversación')}<br><span class="muted" style="font-size:11px">${esc(fmtFechaHoraCaracas(c.updated_at))}</span></span><i class="fas fa-chevron-right"></i></div>`).join('');
+  entradaLista(list);
   list.querySelectorAll('[data-id]').forEach(el => el.addEventListener('click', () => abrirChatGuardado(Number(el.dataset.id))));
 }
 async function abrirChatGuardado(id) {
@@ -12740,8 +12930,17 @@ async function cargarUsuariosStaff() {
 function nombreUsuario(id) { return (msgUsuariosStaff || []).find(u => u.id === id)?.nombre || 'Alguien'; }
 
 async function cargarBandeja(soloBadge) {
+  // Antes la bandeja quedaba en blanco hasta que volvía la RPC. Skeleton solo
+  // en la carga visible (soloBadge repinta el contador en segundo plano).
+  const inbox = document.getElementById('msg-inbox');
+  if (!soloBadge && inbox && !msgConversaciones.length) {
+    inbox.innerHTML = '<div class="tbl-state skel show" style="padding:8px 0"><div class="skel-bar" style="height:64px"></div><div class="skel-bar" style="height:64px"></div><div class="skel-bar" style="height:64px"></div><div class="skel-bar" style="height:64px"></div></div>';
+  }
   const { data, error } = await sb.rpc('mis_conversaciones');
-  if (error) { if (!soloBadge) errToast('No se pudieron cargar los mensajes'); return; }
+  if (error) {
+    if (!soloBadge) { errToast('No se pudieron cargar los mensajes'); if (inbox && !msgConversaciones.length) inbox.innerHTML = ''; }
+    return;
+  }
   msgConversaciones = data || [];
   const noLeidos = msgConversaciones.reduce((a, c) => a + (c.no_leidos || 0), 0);
   const badge = document.getElementById('nav-msg-count');
@@ -12775,6 +12974,7 @@ function renderBandeja() {
       ${c.no_leidos ? `<div class="msg-inbox-badge">${c.no_leidos}</div>` : ''}
     </div>`;
   }).join('');
+  entradaLista(cont);
   cont.querySelectorAll('.msg-inbox-row').forEach(row => row.addEventListener('click', () => {
     const c = msgConversaciones.find(x => x.conversacion_id === Number(row.dataset.conv));
     if (c) abrirConversacion(c);
@@ -13069,6 +13269,7 @@ async function cargarHistorialVouchers(append) {
     <td class="td-acciones"><button class="btn-sm" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})">${v.pdf_path ? 'Ver PDF' : 'Reconstruir'}</button></td>
   </tr>`).join('');
   tbody.innerHTML = append ? tbody.innerHTML + filas : filas;
+  if (!append) entradaLista(tbody);
   if (masBtn) masBtn.style.display = (data || []).length < VC_PAGE_SIZE ? 'none' : '';
   await actualizarBadgeVoucher();
 }
@@ -13429,6 +13630,7 @@ window.addEventListener('popstate', () => {
   else if (top.type === 'msg-conv') cerrarConversacion(true);
   else if (top.type === 'section') activateSection(top.prevSec, true);
   else if (top.type === 'tour') volverAlMenuTutorial(true);
+  else if (top.type === 'menu') cerrarMenuMovil('fromNav');
   else if (top.type === 'seleccion') top.limpiar?.();
 });
 
@@ -13483,6 +13685,7 @@ async function loadClientesAsignados() {
     if (e || !lead) { errToast('No se pudo cargar el cliente'); return; }
     openDrawer(lead);
   }));
+  entradaLista(wrap);
 }
 
 /* ---------- Mis Notas (libreta propia del asesor, con repaso espaciado) ---------- */
@@ -13514,6 +13717,7 @@ async function cargarNotasRepaso() {
       <button class="btn-sm" data-nota-falle="${n.id}"><i class="fas fa-rotate-left"></i> Todavía me cuesta</button>
     </div>
   </article>`).join('');
+  entradaLista(wrap);
   wrap.querySelectorAll('[data-nota-ver]').forEach(b => b.addEventListener('click', () => {
     const cuerpo = b.closest('.entity-card').querySelector('.nota-respuesta');
     cuerpo.style.display = cuerpo.style.display === 'none' ? '' : 'none';
@@ -13553,6 +13757,7 @@ async function cargarListaNotas() {
       <button class="btn-sm" data-nota-borrar="${n.id}"><i class="fas fa-trash"></i> Borrar</button>
     </div>
   </article>`).join('');
+  entradaLista(wrap);
   wrap.querySelectorAll('[data-nota-editar]').forEach(b => b.addEventListener('click', () => {
     abrirEditorNota(notas.find(n => n.id === b.dataset.notaEditar));
   }));
@@ -13698,12 +13903,6 @@ function renderNavItems() {
     const badge = it.badge ? ` <span class="badge" id="${it.badge}"${it.badgeVisible ? '' : ' style="display:none"'}>${esc(it.badgeDefault || '0')}</span>` : '';
     return `<a class="${cls}"${idAttr} data-sec="${it.sec}"${titleAttr}><i class="${it.icon}"></i> ${esc(it.label)}${badge}</a>`;
   };
-  const htmlSheet = it => {
-    const cls = ['sheet-item', it.roles].filter(Boolean).join(' ');
-    const sub = it.sub ? `<span class="si-sub">${esc(it.sub)}</span>` : '';
-    return `<a class="${cls}" data-sec="${it.sec}"><i class="${it.icon}"></i> ${esc(it.label)}${sub}</a>`;
-  };
-
   const ancoraDesktop = document.getElementById('nav-items-anchor');
   if (ancoraDesktop) {
     const bloque = NAV_GRUPOS.map(g => {
@@ -13715,16 +13914,6 @@ function renderNavItems() {
     ancoraDesktop.insertAdjacentHTML('beforebegin', bloque);
   }
 
-  const ancoraSheet = document.getElementById('sheet-items-anchor');
-  if (ancoraSheet) {
-    const bloque = NAV_GRUPOS.map(g => {
-      const items = NAV_ITEMS.filter(it => it.grupo === g.id && !it.excludeSheet);
-      if (!items.length) return '';
-      const labelCls = ['sheet-label', g.roles].filter(Boolean).join(' ');
-      return `<div class="${labelCls}">${esc(g.label)}</div>` + items.map(htmlSheet).join('');
-    }).join('');
-    ancoraSheet.insertAdjacentHTML('beforebegin', bloque);
-  }
   // nav-admin-only/nav-asesor-only etc. ya filtran por CSS (.rol-asesor) --
   // estos dos casos necesitan el valor real del usuario (flag por persona,
   // no por rol), así que se resuelven con clases en <body> + CSS (ver
@@ -13757,13 +13946,11 @@ function calcularFrecuentes() {
 }
 function ocultarHeadersVaciosMenu() {
   ocultarHeadersVacios('sidebar-nav', '.nav-item', '.nav-label');
-  ocultarHeadersVacios('more-sheet', '.sheet-item', '.sheet-label');
 }
 function renderFrecuentes() {
   const top = calcularFrecuentes();
   [
     { contId: 'sidebar-nav', itemCls: 'nav-freq', labelHtml: '<div class="nav-label" data-label="frecuentes" data-grupo-frec>Frecuentes</div>' },
-    { contId: 'more-sheet', itemCls: 'freq', labelHtml: '<div class="sheet-label" data-grupo-frec>Frecuentes</div>' },
   ].forEach(({ contId, itemCls, labelHtml }) => {
     const cont = document.getElementById(contId);
     if (!cont) return;
@@ -13849,13 +14036,15 @@ function setupNavBuscador() {
     });
   };
   wire('nav-buscar', 'sidebar-nav', '.nav-item', '.nav-label');
-  wire('sheet-buscar', 'more-sheet', '.sheet-item', '.sheet-label');
 }
 
 function activateSection(sec, fromNav) {
   sec = SECCIONES_REUBICADAS[sec] || sec;
   if (!document.getElementById('sec-' + sec)) sec = 'hoy';
-  if (currentSec === sec) return;
+  if (currentSec === sec) { cerrarMenuMovil(); return; }
+  // Antes del navPush de abajo: la entrada del menú se descarta a mano para
+  // que la de la sección quede arriba de todo en NAV_STACK.
+  cerrarMenuMovil('silencioso');
   if (!fromNav && currentSec !== null) navPush({ type: 'section', prevSec: currentSec });
   if (currentSec === 'leads' && sec !== 'leads') detenerPollLeads();
   // Si hay un chat abierto y el usuario navega a otra sección sin cerrarlo,
@@ -13866,17 +14055,30 @@ function activateSection(sec, fromNav) {
   SECCIONES_CARGADAS.add(sec);
   guardarUltimaSeccion(sec);
   document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
-  // La barra de abajo ya no tiene un set fijo: se marca "Yo" cuando la sección
-  // abierta no es ninguna de las que el usuario eligió tener a mano.
-  marcarBottomNavActivo(sec);
   if (sheetAbierta) closeSheet(sheetAbierta, true);
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.getElementById('sec-' + sec).classList.add('active');
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active', 'entrando'));
+  const secEl = document.getElementById('sec-' + sec);
+  secEl.classList.add('active');
+  // Entrada de la sección nueva. La clase se saca al terminar para que el
+  // transform de la animación no quede vivo más de lo necesario (ver
+  // .section.entrando en index.html).
+  requestAnimationFrame(() => {
+    secEl.classList.add('entrando');
+    secEl.addEventListener('animationend', () => secEl.classList.remove('entrando'), { once: true });
+  });
   document.querySelector('.topbar').classList.toggle('show-search', sec === 'leads');
   const t = TITLES[sec] || TITLES.dashboard;
   document.getElementById('page-title').textContent = t[0];
   document.getElementById('page-sub').textContent = t[1];
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Mismo título en la barra de arriba de móvil (en escritorio no existe).
+  const mbT = document.getElementById('mb-title'); if (mbT) mbT.textContent = t[0];
+  const mbS = document.getElementById('mb-sub'); if (mbS) mbS.textContent = t[1];
+  actualizarAccionAppBar(sec);
+  // Salto instantáneo, no 'smooth': el scroll suave de ~400ms se pisaba con la
+  // entrada de la sección y se veía como dos animaciones peleando.
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  document.body.scrollTop = 0;
+  document.body.classList.remove('appbar-oculta');
   if (sec === 'ranking') loadRanking();
   if (sec === 'facturacion') loadFacturacion();
   if (sec === 'mis-comisiones') loadMisComisiones();
@@ -13910,14 +14112,12 @@ function setupNav() {
   // .nav-item/.sheet-item dinámicamente (renderNavItems/renderFrecuentes), un
   // binding hecho una sola vez al boot no los cubriría.
   document.addEventListener('click', e => {
-    const n = e.target.closest('.nav-item[data-sec], .bn-item[data-sec], .sheet-item[data-sec]');
+    const n = e.target.closest('.nav-item[data-sec]');
     if (!n) return;
     incrementarUsoSeccion(n.dataset.sec);
     activateSection(n.dataset.sec);
   });
-  document.getElementById('bn-more')?.addEventListener('click', () => openSheet('more-sheet'));
-  document.getElementById('side-foot-perfil')?.addEventListener('click', () => openPerfilDrawer());
-  document.getElementById('sheet-item-perfil')?.addEventListener('click', () => { closeSheet('more-sheet', true); openPerfilDrawer(); });
+  document.getElementById('side-foot-perfil')?.addEventListener('click', () => { cerrarMenuMovil(); openPerfilDrawer(); });
   document.querySelectorAll('.mfs-trigger, .mfs-done').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.mfs;
     b.classList.contains('mfs-trigger') ? openSheet(id) : closeSheet(id);
@@ -13926,423 +14126,181 @@ function setupNav() {
   setupNavBuscador();
 }
 
-/* ---------- Barra de abajo (móvil): configurable + swipe ----------
-   Pedido del dueño (2026-07-27): poder elegir qué secciones aparecen abajo
-   (máximo 7 contando "Yo") y moverse entre ellas deslizando el dedo.
-
-   El catálogo NO se define acá a mano: se lee del sidebar, que ya tiene todas
-   las secciones y ya está filtrado por rol vía CSS. Se pregunta por
-   getComputedStyle porque el display calculado de cada .nav-item refleja las
-   reglas de rol aunque el sidebar entero esté oculto en móvil -- así esto no
-   se desincroniza cuando se agregue o saque una sección del menú. */
-const BN_MAX = 7;                                              // incluye "Yo"
-// stop-sales y gestion-personal sumados 2026-08-06: bnSeleccion() ya filtra
-// por lo que el rol puede ver (vía bnCatalogo/getComputedStyle), así que basta
-// con agregarlos acá una sola vez -- a un asesor/marketing/boleteria le queda
-// "stop-sales" (ahora visible para todo rol) y se le cae solo "gestion-personal"
-// (sigue nav-admin-only); a un admin le quedan las dos.
-const BN_DEFAULT = ['hoy', 'leads', 'mensajes', 'tarifario', 'stop-sales', 'gestion-personal'];
-// "Hoy" solo existe en móvil (no está en el sidebar), así que va a mano.
-const BN_HOY = { sec: 'hoy', icono: 'fas fa-house', label: 'Hoy', clases: 'nav-marketing-ok nav-boleteria-ok' };
-// Nombres cortos: en una barra de 7 no entra "Gestión de Personal".
-const BN_LABEL_CORTO = {
-  'gestion-personal': 'Personal',
-  'informe-diario': 'Informe',
-  'mis-comisiones': 'Comisiones',
-  'buscar-tarifario': 'Buscar',
-  actualizaciones: 'Novedades',
-  facturacion: 'Facturas',
-  cotizador: 'Cotizador',
-};
-// Badges que ya existían en la barra vieja y hay que preservar al reconstruirla.
-const BN_BADGES = { leads: 'nav-lead-count-m' };
-
-// Cache del catálogo/selección: bnCatalogo() recorre el sidebar entero con
-// getComputedStyle por ítem (forza layout), y bnSeleccion() lo llama de nuevo
-// arriba. Antes esto corría completo en CADA cambio de sección y en cada fin
-// de gesto de swipe -- ahora se calcula una vez y se invalida solo cuando algo
-// puede haber cambiado de verdad (renderBottomNav, que ya se llama al armar la
-// barra y al guardar el editor).
-let _bnCatalogoCache = null;
-function bnCatalogo() {
-  if (_bnCatalogoCache) return _bnCatalogoCache;
-  const items = [BN_HOY];
-  document.querySelectorAll('#sidebar-nav > .nav-item[data-sec]').forEach(el => {
-    if (getComputedStyle(el).display === 'none') return;
-    const sec = el.dataset.sec;
-    if (!sec || items.some(x => x.sec === sec)) return;
-    const icono = el.querySelector('i')?.className || 'fas fa-circle';
-    const label = BN_LABEL_CORTO[sec]
-      || [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim()
-      || sec;
-    items.push({ sec, icono, label, clases: [...el.classList].filter(c => c.startsWith('nav-')).join(' ') });
-  });
-  return (_bnCatalogoCache = items);
-}
-
-// Secciones elegidas, saneadas: sin duplicados, sin las que este rol no puede
-// ver (ej. quedó guardado "facturacion" y después lo pasaron a asesor), y
-// acotadas al máximo. Si queda vacío, vuelve al default.
-function bnSeleccion() {
-  const catalogo = bnCatalogo();
-  const validas = new Set(catalogo.map(x => x.sec));
-  const guardada = Array.isArray(MI_PREFERENCIAS.barra_mobile) ? MI_PREFERENCIAS.barra_mobile : BN_DEFAULT;
-  const out = [];
-  for (const sec of guardada) {
-    if (validas.has(sec) && !out.includes(sec)) out.push(sec);
-    if (out.length >= BN_MAX - 1) break;
-  }
-  if (!out.length) return BN_DEFAULT.filter(s => validas.has(s));
-  return out;
-}
-
-function renderBottomNav() {
-  const nav = document.querySelector('.bottom-nav');
-  if (!nav) return;
-  _bnCatalogoCache = null; // el sidebar pudo cambiar (rol, sección nueva) desde el último render
-  const catalogo = bnCatalogo();
-  const porSec = Object.fromEntries(catalogo.map(x => [x.sec, x]));
-  const secs = bnSeleccion();
-  nav.innerHTML = secs.map(sec => {
-    const it = porSec[sec];
-    const badge = BN_BADGES[sec] ? `<span class="bn-badge" id="${BN_BADGES[sec]}"></span>` : '';
-    return `<a class="bn-item ${esc(it.clases || '')}" data-sec="${esc(sec)}" role="tab" tabindex="0"><i class="${esc(it.icono)}"></i>${badge}<span class="bn-t">${esc(it.label)}</span></a>`;
-  }).join('') + '<a class="bn-item" id="bn-more" role="tab" tabindex="0"><i class="fas fa-user"></i><span class="bn-t">Yo</span></a>'
-    + '<div class="bn-indicator" id="bn-indicator"></div>';
-  // El CSS achica la letra según cuántos entren, para que el nombre no se corte.
-  nav.dataset.n = String(secs.length + 1);
-
-  nav.querySelectorAll('.bn-item[data-sec]').forEach(el => {
-    el.addEventListener('click', () => activateSection(el.dataset.sec));
-    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateSection(el.dataset.sec); } });
-  });
-  document.getElementById('bn-more').addEventListener('click', () => openSheet('more-sheet'));
-  // El badge de leads se pinta aparte y ya pudo haber corrido antes de que la
-  // barra existiera: se repinta con el último valor conocido.
-  actualizarBadgeLeads(BN_LEADS_PENDIENTES);
-  marcarBottomNavActivo(currentSec);
-}
-
-function marcarBottomNavActivo(sec) {
-  document.querySelectorAll('.bn-item').forEach(x => {
-    const on = x.dataset.sec === sec;
-    x.classList.toggle('active', on);
-    x.setAttribute('aria-selected', String(on));
-  });
-  const enBarra = bnSeleccion().includes(sec);
-  const masBtn = document.getElementById('bn-more');
-  masBtn?.classList.toggle('active', !enBarra);
-  masBtn?.setAttribute('aria-selected', String(!enBarra));
-  posicionarIndicadorActivo();
-}
-
-/* ---------- Editor de la barra (dentro de Mi Perfil) ---------- */
-function bnEditorHtml() {
-  const catalogo = bnCatalogo();
-  const sel = bnSeleccion();
-  const filas = catalogo.map(it => {
-    const on = sel.includes(it.sec);
-    const pos = on ? sel.indexOf(it.sec) + 1 : null;
-    return `<label class="bn-cfg-row${on ? ' on' : ''}">
-      <input type="checkbox" data-bn-sec="${esc(it.sec)}"${on ? ' checked' : ''}>
-      <i class="${esc(it.icono)}"></i>
-      <span class="bn-cfg-n">${esc(it.label)}</span>
-      <span class="bn-cfg-pos">${pos ? '#' + pos : ''}</span>
-    </label>`;
-  }).join('');
-  return `<div class="edit-box" style="margin-top:16px">
-    <div class="eb-title"><i class="fas fa-table-columns"></i> Barra de abajo (celular)</div>
-    <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:10px">
-      Elegí qué secciones querés tener a mano. Hasta ${BN_MAX - 1} más "Yo", que va siempre.
-      En el celular también podés deslizar el dedo a los costados para pasar de una a otra.
-    </div>
-    <div class="bn-cfg-count" id="bn-cfg-count"></div>
-    <div id="bn-cfg-list">${filas}</div>
-  </div>`;
-}
-
-function bnEditorWire() {
-  const lista = document.getElementById('bn-cfg-list');
-  if (!lista) return;
-  const pintarContador = () => {
-    const n = lista.querySelectorAll('input[data-bn-sec]:checked').length;
-    const c = document.getElementById('bn-cfg-count');
-    if (c) c.textContent = `${n + 1} de ${BN_MAX} usados (incluye "Yo")`;
-    // Deshabilitar lo no marcado al llegar al tope explica el límite mejor que
-    // dejar tocar y después rebotar con un error.
-    lista.querySelectorAll('input[data-bn-sec]').forEach(i => {
-      i.disabled = !i.checked && n >= BN_MAX - 1;
-      i.closest('.bn-cfg-row').classList.toggle('tope', i.disabled);
-    });
-  };
-  pintarContador();
-  lista.querySelectorAll('input[data-bn-sec]').forEach(inp => {
-    inp.addEventListener('change', async () => {
-      // Las que ya estaban conservan su posición y las nuevas se agregan al
-      // final: agregar una sección no debería reordenarle la barra a nadie.
-      const marcada = sec => !!lista.querySelector(`input[data-bn-sec="${sec}"]`)?.checked;
-      const elegidas = bnSeleccion().filter(marcada);
-      bnCatalogo().forEach(x => { if (marcada(x.sec) && !elegidas.includes(x.sec)) elegidas.push(x.sec); });
-      inp.closest('.bn-cfg-row').classList.toggle('on', inp.checked);
-      pintarContador();
-      await guardarPreferencia('barra_mobile', elegidas);
-      renderBottomNav();
-      // Repintar las posiciones (#1, #2...) sin recargar el drawer entero.
-      const sel = bnSeleccion();
-      lista.querySelectorAll('.bn-cfg-row').forEach(row => {
-        const sec = row.querySelector('input').dataset.bnSec;
-        const i = sel.indexOf(sec);
-        row.querySelector('.bn-cfg-pos').textContent = i >= 0 ? '#' + (i + 1) : '';
-      });
-    });
-  });
-}
-
-/* ---------- Swipe lateral entre secciones (móvil) ----------
-   Recorre las mismas secciones de la barra de abajo, en ese orden.
-   Umbral bajado a 2026-08-19 a algo de app nativa de verdad: antes exigía
-   45% del ancho de pantalla (~170px en un teléfono de 380px) Y que la
-   sección vecina ya se hubiera visitado antes -- si no, el gesto no hacía
-   NADA, que era el motivo real de "el swipe no funciona". SWIPE_MIN_X y
-   SWIPE_MAX_MS ya existían pero nunca se leían; ahora sí se usan. */
-const SWIPE_MIN_X = 90;      // px horizontales mínimos para confirmar por distancia
-const SWIPE_RATIO = 1.3;     // cuánto más horizontal que vertical tiene que ser
-const SWIPE_MAX_MS = 700;    // ventana para que la velocidad cuente como "flick"
-const SWIPE_FLICK_VEL = 0.3; // px reales/ms para confirmar por velocidad aunque falte distancia
-
-// Un swipe NO debe robarle el gesto a algo que scrollea de costado (tablas,
-// carruseles del tarifario, filas de pestañas). Se busca hacia arriba desde el
-// elemento tocado.
-function dentroDeScrollHorizontal(el) {
-  for (let n = el; n && n !== document.body; n = n.parentElement) {
-    if (n.scrollWidth - n.clientWidth > 12) {
-      const ov = getComputedStyle(n).overflowX;
-      if (ov === 'auto' || ov === 'scroll') return true;
-    }
-  }
-  return false;
-}
-
-// Píxeles reales del touch vs píxeles CSS: body{zoom:.9} (y .8/1.05 con
-// fsize-chico/grande, index.html:71) hace que 100px de dedo NO sean 100px
-// de translateX(). clientX del evento siempre viene en reales; esto lo
-// convierte antes de usarlo en cualquier transform.
+/* ---------- Menú lateral (móvil) ----------
+   Reemplaza a la bottom-nav configurable y al swipe entre secciones
+   (2026-08-27). El menú es el MISMO <aside class="sidebar"> del escritorio,
+   que en móvil pasa a position:fixed y se desliza desde la izquierda: no hay
+   una segunda lista de secciones que mantener sincronizada (era lo que hacían
+   bnCatalogo/renderBottomNav + la hoja "Yo").
+   Se abre con la hamburguesa o arrastrando desde el borde izquierdo, y se
+   cierra con la X, tocando el fondo, arrastrando hacia la izquierda o con el
+   atrás del sistema. */
+const MENU_MQ = matchMedia('(max-width:760px)');
+const MENU_BORDE = 26;   // px reales de zona sensible en el borde izquierdo
+const MENU_MIN = 55;     // px reales para confirmar por distancia
+const MENU_VEL = 0.35;   // px reales/ms para confirmar por velocidad
+function esMovil() { return MENU_MQ.matches; }
+// Píxeles reales del dedo vs píxeles CSS: body{zoom:.9} (index.html) hace que
+// 100px de dedo NO sean 100px de translateX.
 function zoomFactor() { return parseFloat(getComputedStyle(document.body).zoom) || 1; }
-
-// Color del ítem activo (index.html: .bn-item.active[data-sec=...]) -- se lee
-// del propio ítem en vez de duplicar el mapa acá, así el CSS sigue siendo la
-// única fuente de verdad y una sección nueva sin regla propia hereda el color
-// por defecto (--accent) en texto Y barrita a la vez, nunca desincronizados.
-function colorSeccionActiva(el) { return el ? getComputedStyle(el).color : ''; }
-
-// Barrita bajo el ítem activo de la bottom-nav -- se desliza proporcional al
-// arrastre mientras dura el swipe (progreso 0..1, hacia vecinaSec), y vuelve
-// a su lugar normal al terminar. Puramente visual (nunca toca transform de
-// una .section), así que no puede reintroducir el riesgo #1.
-//
-// left/width se leen con getBoundingClientRect (píxeles REALES de pantalla,
-// ya escalados por body{zoom}) pero se escribían en style.left/width, que el
-// motor interpreta como píxeles CSS DENTRO del subárbol con zoom -- sin
-// dividir por zoomFactor() la barra quedaba corrida (y el error crecía con la
-// distancia al borde izquierdo). Bug real hasta 2026-08-19.
-function posicionarIndicadorActivo() {
-  document.getElementById('bn-indicator')?.classList.remove('dragging');
-  actualizarIndicadorSwipe(0, null);
+function menuAbierto() { return document.body.classList.contains('menu-abierto'); }
+function hayOverlayAbierto() {
+  return !!sheetAbierta
+    || document.getElementById('drawer')?.classList.contains('open')
+    || document.getElementById('tour-overlay')?.classList.contains('open')
+    || document.body.classList.contains('lb-lock');
 }
-function actualizarIndicadorSwipe(progreso, vecinaSecParam, rectsCache) {
-  const ind = document.getElementById('bn-indicator');
-  if (!ind) return;
-  // Si la sección abierta no está en la barra (se entró por la hoja "Yo"), no
-  // hay .bn-item con ese data-sec -- antes eso hacía return acá y la barrita
-  // quedaba pegada en el ítem anterior mientras "Yo" también se marcaba activo.
-  const activoEl = document.querySelector(`.bn-item[data-sec="${currentSec}"]`) || document.getElementById('bn-more');
-  if (!activoEl) return;
-  const nav = activoEl.parentElement;
-  const zf = zoomFactor();
-  const navR = (rectsCache && rectsCache.navR) || nav.getBoundingClientRect();
-  const rActivo = (rectsCache && rectsCache.rActivo) || activoEl.getBoundingClientRect();
-  let left = rActivo.left - navR.left, width = rActivo.width;
-  const vecinaEl = vecinaSecParam ? document.querySelector(`.bn-item[data-sec="${vecinaSecParam}"]`) : null;
-  if (progreso && vecinaEl) {
-    const rVec = (rectsCache && rectsCache.rVec) || vecinaEl.getBoundingClientRect();
-    const t = Math.max(0, Math.min(1, progreso));
-    left += (rVec.left - navR.left - left) * t;
-    width += (rVec.width - width) * t;
-  }
-  ind.style.left = (left / zf) + 'px';
-  ind.style.width = (width / zf) + 'px';
-  ind.style.background = colorSeccionActiva(activoEl);
+function abrirMenuMovil() {
+  if (!esMovil() || menuAbierto()) return;
+  document.body.classList.add('menu-abierto');
+  document.getElementById('menu-btn')?.setAttribute('aria-expanded', 'true');
+  navPush({ type: 'menu' });
 }
-// El resize con debounce se quedaba corto justo al arrancar: renderBottomNav()
-// puede correr con Font Awesome sin cargar todavía (íconos a 0 ancho) o con la
-// barra en display:none en escritorio, y nada disparaba un resize después. Un
-// ResizeObserver sobre la barra recalcula apenas su layout real cambia, sin
-// esperar a que el usuario gire el teléfono.
-if ('ResizeObserver' in window) {
-  const bnRO = new ResizeObserver(() => posicionarIndicadorActivo());
-  document.addEventListener('DOMContentLoaded', () => {
-    const nav = document.querySelector('.bottom-nav');
-    if (nav) bnRO.observe(nav);
-  });
+// modo 'fromNav': lo cerró el popstate, la entrada de historial ya se consumió.
+// modo 'silencioso': se descarta la entrada a mano (mismo patrón que
+// cerrarDetalleBoleteria) -- lo usa activateSection, que empuja su propia
+// entrada justo después y no puede esperar al popstate asíncrono de un
+// history.back() para saber cuál se consumió.
+function cerrarMenuMovil(modo) {
+  if (!menuAbierto()) return;
+  document.body.classList.remove('menu-abierto');
+  document.getElementById('menu-btn')?.setAttribute('aria-expanded', 'false');
+  if (modo === 'fromNav') return;
+  if (modo === 'silencioso') { if (NAV_STACK[NAV_STACK.length - 1]?.type === 'menu') NAV_STACK.pop(); return; }
+  navConsume();
 }
-window.addEventListener('orientationchange', () => setTimeout(posicionarIndicadorActivo, 60));
 
-function setupSwipeSecciones() {
-  let x0 = 0, y0 = 0, t0 = 0, activo = false, eje = null, resuelto = false, settleT = null;
-  let elActual = null, elVecina = null, vecinaSec = null, dirVecina = 0, mainEl = null;
-  let rectsCache = null, ultimoDxReal = 0;
+/* Entrada escalonada de una lista recién pintada. La clase se saca sola: si
+   quedara puesta, cualquier repintado parcial posterior volvería a animar
+   tarjetas que solo cambiaron un dato (mismo criterio que #leads-cards). */
+function entradaLista(el) {
+  if (!el) return;
+  el.classList.add('entrada-lista');
+  clearTimeout(el._entradaLista);
+  el._entradaLista = setTimeout(() => el.classList.remove('entrada-lista'), 700);
+}
 
-  // RIESGO #1 del plan: un transform que se queda pegado en .section.active
-  // (o en cualquier sección) la convierte en bloque contenedor de sus hijos
-  // position:fixed -- las hojas de filtros (.mfs) se dibujan lejos del
-  // viewport en vez de pegadas abajo (bug real ya visto, ver comentario en
-  // index.html:1383-1387). limpiarGesto() es el único lugar que toca estos
-  // estilos para terminar un gesto, y se llama SIEMPRE -- éxito (después del
-  // settle), cancelación (después del settle de vuelta) y touchcancel --
-  // nunca se deja en translateX(0), se borra el atributo. `resuelto` evita
-  // que el transitionend y el setTimeout de respaldo la llamen dos veces.
-  function limpiarGesto() {
-    clearTimeout(settleT); settleT = null;
-    if (mainEl) mainEl.style.position = '';
-    if (elActual) { elActual.style.transform = ''; elActual.classList.remove('swipe-settling'); }
-    if (elVecina) { elVecina.style.transform = ''; elVecina.classList.remove('swipe-peek', 'swipe-settling'); elVecina.style.top = elVecina.style.left = elVecina.style.width = ''; }
-    elActual = null; elVecina = null; vecinaSec = null; dirVecina = 0; mainEl = null; eje = null; activo = false; rectsCache = null;
-    posicionarIndicadorActivo();
-  }
+// Buscador propio de cada sección: la lupa de la barra de arriba lleva al que
+// corresponde y desaparece donde no hay ninguno (mostrar un botón que no hace
+// nada es peor que no mostrarlo).
+const BUSCADOR_SECCION = { leads: 'global-search', tarifario: 'tar-search', galeria: 'gal-search' };
+function actualizarAccionAppBar(sec) {
+  const btn = document.getElementById('ab-buscar');
+  if (!btn) return;
+  const id = BUSCADOR_SECCION[sec];
+  btn.style.visibility = id && document.getElementById(id) ? '' : 'hidden';
+}
 
-  function iniciarGestoX(dxReal) {
-    elActual = document.getElementById('sec-' + currentSec);
-    if (!elActual) { eje = 'y'; return; }
-    const secs = bnSeleccion();
-    const i = secs.indexOf(currentSec);
-    // dedo hacia la izquierda -> avanza a la siguiente; hacia la derecha ->
-    // retrocede. Sin wrap: en los extremos no hay vecina (decisión del
-    // dueño, Fase 5.2) y el gesto solo amortigua.
-    dirVecina = dxReal < 0 ? 1 : -1;
-    vecinaSec = i < 0 ? null : secs[i + dirVecina];
-    // elVecina es solo el elemento a ASOMAR de fondo (si ya se cargó antes).
-    // Que no haya elemento para asomar ya NO bloquea la navegación -- eso era
-    // el bug principal, ver SWIPE_MIN_X arriba.
-    const candidata = vecinaSec ? document.getElementById('sec-' + vecinaSec) : null;
-    elVecina = (candidata && SECCIONES_CARGADAS.has(vecinaSec)) ? candidata : null;
-    mainEl = document.querySelector('.main');
-    if (mainEl) mainEl.style.position = 'relative';
-    if (elVecina) {
-      elVecina.classList.add('swipe-peek');
-      // El peek se posiciona absoluto contra .main -- sin copiar el rect de la
-      // sección activa quedaba pegado al borde de PADDING de .main en vez de
-      // alineado con lo que realmente se ve (index.html: .section.swipe-peek).
-      const r = elActual.getBoundingClientRect(), rMain = mainEl.getBoundingClientRect();
-      elVecina.style.top = (r.top - rMain.top) + 'px';
-      elVecina.style.left = (r.left - rMain.left) + 'px';
-      elVecina.style.width = r.width + 'px';
-    }
-    // Rects de la barra cacheados una sola vez por gesto: no cambian mientras
-    // dura (la barra es fixed, el eje ya quedó fijado en 'x'), así se evitan
-    // 3 getBoundingClientRect (forzados layout) por cada evento touchmove.
-    const activoEl = document.querySelector(`.bn-item[data-sec="${currentSec}"]`) || document.getElementById('bn-more');
-    const vecinaElBar = vecinaSec ? document.querySelector(`.bn-item[data-sec="${vecinaSec}"]`) : null;
-    if (activoEl) {
-      rectsCache = { navR: activoEl.parentElement.getBoundingClientRect(), rActivo: activoEl.getBoundingClientRect(), rVec: vecinaElBar && vecinaElBar.getBoundingClientRect() };
-    }
-    document.getElementById('bn-indicator')?.classList.add('dragging');
-    actualizarIndicadorSwipe(0, null, rectsCache);
-  }
+function setupMenuMovil() {
+  const aside = document.querySelector('.sidebar');
+  if (!aside) return;
+  document.getElementById('menu-btn')?.addEventListener('click', () => menuAbierto() ? cerrarMenuMovil() : abrirMenuMovil());
+  document.getElementById('side-cerrar')?.addEventListener('click', () => cerrarMenuMovil());
+  document.getElementById('side-scrim')?.addEventListener('click', () => cerrarMenuMovil());
 
-  function aplicarArrastre(dxReal) {
-    ultimoDxReal = dxReal;
-    const dx = dxReal / zoomFactor();
-    if (elVecina) {
-      const ancho = elActual.getBoundingClientRect().width || window.innerWidth;
-      elActual.style.transform = `translateX(${dx}px)`;
-      elVecina.style.transform = `translateX(${dx - dirVecina * ancho}px)`;
-    } else {
-      // Rebote en el extremo: sin vecina (no hay siguiente/anterior, o la
-      // vecina nunca cargó), el arrastre se amortigua en vez de no hacer nada.
-      elActual.style.transform = `translateX(${dx * 0.35}px)`;
-    }
-    const ancho = window.innerWidth || 1;
-    actualizarIndicadorSwipe(Math.abs(Math.max(-1, Math.min(1, dxReal / ancho))), vecinaSec, rectsCache);
-  }
-
-  // Termina el gesto animando hasta el final en vez de saltar: la sección
-  // arrastrada sigue su camino hasta salir/entrar del todo y RECIÉN AHÍ se
-  // llama activateSection(). Antes limpiarGesto() cortaba el transform de
-  // golpe y la sección nueva entraba con un empujón de 26px aparte (sw-izq/
-  // sw-der) -- se sentía como un tirón, no como un deslizamiento continuo.
-  function resolverGesto(exito) {
-    if (resuelto) return;
-    resuelto = true;
-    const elA = elActual, elV = elVecina, destino = exito ? vecinaSec : null;
-    const dirSalida = ultimoDxReal < 0 ? -1 : 1;
-    const zf = zoomFactor();
-    const anchoCss = ((elA && elA.getBoundingClientRect().width) || window.innerWidth) / zf;
-    if (elA) {
-      elA.classList.add('swipe-settling');
-      elA.style.transform = exito ? `translateX(${dirSalida * anchoCss}px)` : 'translateX(0px)';
-    }
-    if (elV) {
-      elV.classList.add('swipe-settling');
-      elV.style.transform = exito ? 'translateX(0px)' : `translateX(${-dirVecina * anchoCss}px)`;
-    }
-    const terminar = () => {
-      if (elA) elA.removeEventListener('transitionend', terminar);
-      if (destino) activateSection(destino);
-      limpiarGesto();
-    };
-    if (elA) { elA.addEventListener('transitionend', terminar, { once: true }); settleT = setTimeout(terminar, 260); }
-    else terminar();
-  }
-
+  // Arrastre: abrir desde el borde, cerrar desde adentro. Durante el gesto el
+  // aside sigue al dedo con transform (body.menu-arrastrando anula la
+  // transition, si no quedaría siempre un cuadro atrás), y al soltar se
+  // devuelve el control al CSS borrando el transform inline.
+  let activo = false, abriendo = false, x0 = 0, y0 = 0, t0 = 0, eje = null, ancho = 280;
+  // El orden importa: primero se decide el estado final (clase en <body>) y
+  // recién después se sueltan los estilos inline. Al revés, el aside saltaba a
+  // la posición cerrada un cuadro antes de animarse hacia la abierta.
+  const fin = () => {
+    document.body.classList.remove('menu-arrastrando');
+    aside.style.transform = '';
+    const scrim = document.getElementById('side-scrim');
+    if (scrim) { scrim.style.opacity = ''; scrim.style.pointerEvents = ''; }
+    activo = false; eje = null;
+  };
   document.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) { activo = false; return; }
-    // Con una hoja, drawer, tour u overlay abierto el swipe es del contenido de
-    // eso, no de la navegación de fondo.
-    if (sheetAbierta
-      || document.getElementById('drawer')?.classList.contains('open')
-      || document.getElementById('tour-overlay')?.classList.contains('open')
-      || document.body.classList.contains('lb-lock')) { activo = false; return; }
-    if (dentroDeScrollHorizontal(e.target)) { activo = false; return; }
-    if (e.target.closest('input,textarea,select,canvas')) { activo = false; return; }
-    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
-    activo = true; eje = null; resuelto = false;
+    activo = false;
+    if (!esMovil() || e.touches.length !== 1 || hayOverlayAbierto()) return;
+    const t = e.touches[0];
+    if (menuAbierto()) {
+      if (!e.target.closest('.sidebar')) return;   // el fondo ya cierra con click
+      abriendo = false;
+    } else {
+      if (t.clientX > MENU_BORDE) return;
+      abriendo = true;
+    }
+    ancho = aside.getBoundingClientRect().width || 280;
+    x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); activo = true; eje = null;
   }, { passive: true });
 
   document.addEventListener('touchmove', e => {
     if (!activo) return;
     const t = e.touches[0];
-    const dxReal = t.clientX - x0, dyReal = t.clientY - y0;
+    const dx = t.clientX - x0, dy = t.clientY - y0;
     if (eje === null) {
-      // Bloqueo de eje: los primeros ~10px reales deciden si el gesto es
-      // horizontal o vertical, y esa decisión se mantiene hasta soltar --
-      // sin esto pelea con el scroll vertical de la página.
-      if (Math.abs(dxReal) < 10 && Math.abs(dyReal) < 10) return;
-      eje = Math.abs(dxReal) >= Math.abs(dyReal) * SWIPE_RATIO ? 'x' : 'y';
-      if (eje === 'x') iniciarGestoX(dxReal);
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      // Un menú que se abre a medias porque el dedo iba a scrollear la lista de
+      // secciones es peor que no tener gesto: el eje se decide una vez.
+      eje = Math.abs(dx) >= Math.abs(dy) * 1.3 ? 'x' : 'y';
+      if (eje !== 'x') { activo = false; return; }
+      document.body.classList.add('menu-arrastrando');
     }
-    if (eje !== 'x' || !elActual) return;
-    e.preventDefault(); // solo si ganó horizontal -- necesita {passive:false}
-    aplicarArrastre(dxReal);
+    e.preventDefault();
+    const zf = zoomFactor();
+    const avance = abriendo
+      ? Math.max(-ancho, Math.min(0, -ancho + dx))
+      : Math.max(-ancho, Math.min(0, dx));
+    aside.style.transform = `translateX(${avance / zf}px)`;
+    const scrim = document.getElementById('side-scrim');
+    if (scrim) { scrim.style.opacity = String(1 + avance / ancho); scrim.style.pointerEvents = 'auto'; }
   }, { passive: false });
 
-  document.addEventListener('touchend', e => {
-    if (!activo) { limpiarGesto(); return; }
-    if (eje !== 'x' || !elActual) { limpiarGesto(); return; }
-    const t = e.changedTouches[0];
-    const dxReal = t.clientX - x0;
-    const dt = Math.max(1, Date.now() - t0);
-    const velocidadRealMs = Math.abs(dxReal) / dt; // px reales / ms, sin convertir por zoom
-    // Umbral de app nativa: basta con SWIPE_MIN_X de distancia, o un flick
-    // rápido dentro de SWIPE_MAX_MS aunque el dedo haya viajado poco. Antes
-    // pedía 45% del ancho de pantalla (~170px) sin alternativa de velocidad.
-    const pasaUmbral = Math.abs(dxReal) > SWIPE_MIN_X || (velocidadRealMs > SWIPE_FLICK_VEL && dt <= SWIPE_MAX_MS);
-    // Ya no exige elVecina (el peek precargado): navega igual con vecinaSec
-    // aunque la sección vecina nunca se haya visitado -- eso era lo que hacía
-    // que el primer swipe a una sección nueva no hiciera nada.
-    resolverGesto(pasaUmbral && !!vecinaSec);
-  }, { passive: true });
+  const soltar = e => {
+    if (!activo) return;
+    if (eje !== 'x') { fin(); return; }
+    const t = e.changedTouches ? e.changedTouches[0] : null;
+    const dx = t ? t.clientX - x0 : 0;
+    const vel = Math.abs(dx) / Math.max(1, Date.now() - t0);
+    const pasa = Math.abs(dx) > MENU_MIN || vel > MENU_VEL;
+    if (abriendo) { if (pasa && dx > 0) abrirMenuMovil(); }
+    else if (pasa && dx < 0) cerrarMenuMovil();
+    fin();
+  };
+  document.addEventListener('touchend', soltar, { passive: true });
+  document.addEventListener('touchcancel', () => { if (activo) fin(); }, { passive: true });
 
-  document.addEventListener('touchcancel', () => resolverGesto(false), { passive: true });
+  // Volver a escritorio con el menú abierto dejaría el <body> con la clase
+  // puesta y el fondo oscuro encima de todo.
+  MENU_MQ.addEventListener?.('change', () => { if (!esMovil()) cerrarMenuMovil('silencioso'); });
+}
+
+/* ---------- Barra superior (móvil) ----------
+   Se esconde al bajar y vuelve al subir, como una app nativa. Solo transform:
+   animar alto/padding forzaría layout en cada cuadro del scroll. */
+function setupAppBar() {
+  const buscar = document.getElementById('ab-buscar');
+  if (buscar) buscar.addEventListener('click', () => {
+    const campo = document.getElementById(BUSCADOR_SECCION[currentSec] || '');
+    if (!campo) return;
+    document.body.scrollTop = 0;
+    document.body.classList.remove('appbar-oculta');
+    campo.focus();
+  });
+  actualizarAccionAppBar(currentSec);
+  const t = TITLES[currentSec] || TITLES.dashboard;
+  const mbT = document.getElementById('mb-title'); if (mbT) mbT.textContent = t[0];
+  const mbS = document.getElementById('mb-sub'); if (mbS) mbS.textContent = t[1];
+
+  let ultimo = 0, pendiente = false;
+  document.addEventListener('scroll', () => {
+    if (pendiente) return;
+    pendiente = true;
+    requestAnimationFrame(() => {
+      pendiente = false;
+      const y = document.body.scrollTop;
+      // Umbral de 6px: sin él, el rebote de iOS y el propio recolocado de la
+      // barra hacen que aparezca y desaparezca sola con el dedo quieto.
+      if (Math.abs(y - ultimo) < 6) return;
+      const bajando = y > ultimo && y > 70;
+      document.body.classList.toggle('appbar-oculta', bajando && !menuAbierto());
+      ultimo = y;
+    });
+  }, { passive: true, capture: true });
 }
 
 /* ---------- Pull-to-refresh (Fase 5.4) ----------
@@ -14378,15 +14336,20 @@ async function refrescarSeccionActual() {
 function mostrarIndicadorPTR(distancia, umbral) {
   const el = document.getElementById('ptr-indicador');
   if (!el) return;
+  const p = Math.min(distancia / umbral, 1);
   el.classList.add('show');
   el.classList.toggle('listo', distancia >= umbral);
-  el.style.transform = `translate(-50%, ${Math.min(distancia, umbral + 20) - 44}px)`;
-  el.querySelector('i').style.transform = `rotate(${Math.min(distancia / umbral, 1) * 200}deg)`;
+  // Escala y opacidad acompañan al arrastre en vez de aparecer de golpe a
+  // tamaño completo: el indicador "nace" del borde mientras baja el dedo.
+  el.style.opacity = String(Math.min(1, .25 + p));
+  el.style.transform = `translate(-50%, ${Math.min(distancia, umbral + 20) - 44}px) scale(${.7 + p * .3})`;
+  el.querySelector('i').style.transform = `rotate(${p * 200}deg)`;
 }
 function ocultarIndicadorPTR() {
   const el = document.getElementById('ptr-indicador');
   if (!el) return;
   el.classList.remove('show', 'listo', 'cargando');
+  el.style.opacity = '';
   el.style.transform = '';
   el.querySelector('i').style.transform = '';
 }
@@ -14401,16 +14364,14 @@ async function dispararRefreshPTR() {
 
 function setupPullToRefresh() {
   const UMBRAL = 70;
-  let y0 = 0, activo = false, distancia = 0;
+  const TOPE = 130;
+  let y0 = 0, activo = false, distancia = 0, avisado = false, pendiente = false;
 
   document.addEventListener('touchstart', e => {
     if (e.touches.length !== 1 || document.body.scrollTop > 0) { activo = false; return; }
-    if (sheetAbierta
-      || document.getElementById('drawer')?.classList.contains('open')
-      || document.getElementById('tour-overlay')?.classList.contains('open')
-      || document.body.classList.contains('lb-lock')) { activo = false; return; }
+    if (hayOverlayAbierto() || menuAbierto()) { activo = false; return; }
     if (e.target.closest('input,textarea,select,canvas')) { activo = false; return; }
-    y0 = e.touches[0].clientY; activo = true; distancia = 0;
+    y0 = e.touches[0].clientY; activo = true; distancia = 0; avisado = false;
   }, { passive: true });
 
   document.addEventListener('touchmove', e => {
@@ -14418,8 +14379,17 @@ function setupPullToRefresh() {
     if (document.body.scrollTop > 0) { activo = false; distancia = 0; ocultarIndicadorPTR(); return; }
     const dy = e.touches[0].clientY - y0;
     if (dy <= 0) { distancia = 0; ocultarIndicadorPTR(); return; }
-    distancia = dy * 0.5; // resistencia
-    mostrarIndicadorPTR(distancia, UMBRAL);
+    // Resistencia elástica en vez del 0.5 lineal de antes: al principio sigue
+    // al dedo casi 1:1 y se va frenando contra TOPE, que es como se siente el
+    // gesto en una app nativa (antes había que arrastrar 140px para 70).
+    distancia = TOPE * (1 - Math.exp(-dy / TOPE));
+    if (!avisado && distancia >= UMBRAL) { avisado = true; navigator.vibrate?.(8); }
+    if (avisado && distancia < UMBRAL) avisado = false;
+    // El indicador se repinta una vez por cuadro: touchmove llega más seguido
+    // que los frames y escribir transform en cada evento es trabajo tirado.
+    if (pendiente) return;
+    pendiente = true;
+    requestAnimationFrame(() => { pendiente = false; if (activo) mostrarIndicadorPTR(distancia, UMBRAL); });
   }, { passive: true });
 
   document.addEventListener('touchend', () => {
@@ -14442,8 +14412,15 @@ function setupPullToRefresh() {
    de Postulaciones) no tiene uno, así que ahí no hay nada que long-press
    pueda tildar. Sumarle uno es una ampliación de scope, no esta fase. */
 function setupLongPressSeleccion() {
-  const LONG_PRESS_MS = 500, UMBRAL_MOVIMIENTO = 10;
-  let timer = null, x0 = 0, y0 = 0, disparado = false;
+  const LONG_PRESS_MS = 420, UMBRAL_MOVIMIENTO = 10;
+  let timer = null, x0 = 0, y0 = 0, disparado = false, tarjetaPress = null;
+  // Sin esto la tarjeta se queda hundida si el dedo se va sin soltar sobre
+  // ella (scroll, touchcancel del navegador, tarjeta repintada por realtime).
+  const soltarPress = () => {
+    if (!tarjetaPress) return;
+    tarjetaPress.classList.remove('lp-press');
+    tarjetaPress = null;
+  };
 
   document.addEventListener('touchstart', e => {
     if (ROL !== 'admin') return;
@@ -14454,11 +14431,16 @@ function setupLongPressSeleccion() {
     if (!cb || getComputedStyle(cb).display === 'none') return;
     const t = e.touches[0];
     x0 = t.clientX; y0 = t.clientY;
+    tarjetaPress = tarjeta;
+    tarjeta.classList.add('lp-press');
     timer = setTimeout(() => {
       const habiaSeleccion = SELECTED_LEADS.size > 0;
       cb.checked = !cb.checked;
       cb.dispatchEvent(new Event('change', { bubbles: true }));
       navigator.vibrate?.(10);
+      soltarPress();
+      tarjeta.classList.add('lp-hecho');
+      tarjeta.addEventListener('animationend', () => tarjeta.classList.remove('lp-hecho'), { once: true });
       disparado = true;
       // Solo se registra en NAV_STACK la PRIMERA selección de la racha --
       // si ya había algo seleccionado, el atrás ya tiene su entrada.
@@ -14470,11 +14452,11 @@ function setupLongPressSeleccion() {
   document.addEventListener('touchmove', e => {
     if (!timer) return;
     const t = e.touches[0];
-    if (Math.abs(t.clientX - x0) > UMBRAL_MOVIMIENTO || Math.abs(t.clientY - y0) > UMBRAL_MOVIMIENTO) { clearTimeout(timer); timer = null; }
+    if (Math.abs(t.clientX - x0) > UMBRAL_MOVIMIENTO || Math.abs(t.clientY - y0) > UMBRAL_MOVIMIENTO) { clearTimeout(timer); timer = null; soltarPress(); }
   }, { passive: true });
 
-  document.addEventListener('touchend', () => { clearTimeout(timer); timer = null; }, { passive: true });
-  document.addEventListener('touchcancel', () => { clearTimeout(timer); timer = null; }, { passive: true });
+  document.addEventListener('touchend', () => { clearTimeout(timer); timer = null; soltarPress(); }, { passive: true });
+  document.addEventListener('touchcancel', () => { clearTimeout(timer); timer = null; soltarPress(); }, { passive: true });
 
   // El navegador dispara un click sintético después de un touchend -- si el
   // long-press ya disparó (tildó el checkbox), hay que tragarse ese click
@@ -14954,7 +14936,7 @@ function setupBoleteriaSeccion() {
     bolTab = btn.dataset.bolTab;
     document.querySelectorAll('#bol-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
     document.querySelectorAll('.bol-tab-panel').forEach(p => p.style.display = p.dataset.bolPanel === bolTab ? '' : 'none');
-    renderBoleteriaTab();
+    renderBoleteriaTab(true);
   }));
   document.getElementById('bol-buscador')?.addEventListener('input', () => renderBoleteriaTab());
   document.getElementById('bol-ruta-nueva')?.addEventListener('click', nuevaRutaBoleteria);
@@ -14969,11 +14951,14 @@ function setupBoleteriaSeccion() {
   document.getElementById('nav-cola-boleteria')?.addEventListener('click', irAColaBoleteria);
   document.getElementById('sheet-cola-boleteria')?.addEventListener('click', irAColaBoleteria);
 }
+const BOL_WRAP = { rutas: 'bol-rutas-wrap', aerolineas: 'bol-aerolineas-wrap', precios: 'bol-precios-wrap', requisitos: 'bol-requisitos-wrap', calendario: 'bol-calendario-wrap' };
 async function loadBoleteria() {
+  const wrap0 = document.getElementById(BOL_WRAP[bolTab]);
+  if (wrap0 && !bolCatalogo) wrap0.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   const { data, error } = await sb.rpc('boleteria_catalogo');
   if (error) { console.error('boleteria_catalogo:', error); errToast('No se pudo cargar Boletería'); return; }
   bolCatalogo = data;
-  renderBoleteriaTab();
+  renderBoleteriaTab(true);
 }
 function bolFiltro() { return (val('bol-buscador') || '').trim().toLowerCase(); }
 function bolMatch(texto, alias) {
@@ -14982,13 +14967,14 @@ function bolMatch(texto, alias) {
   if ((texto || '').toLowerCase().includes(q)) return true;
   return (alias || []).some(a => (a || '').toLowerCase().includes(q));
 }
-function renderBoleteriaTab() {
+function renderBoleteriaTab(animar) {
   if (!bolCatalogo) return;
-  if (bolTab === 'rutas') return renderBolRutas();
-  if (bolTab === 'aerolineas') return renderBolAerolineas();
-  if (bolTab === 'precios') return renderBolPrecios();
-  if (bolTab === 'requisitos') return renderBolRequisitos();
-  if (bolTab === 'calendario') return renderBolCalendario();
+  if (bolTab === 'rutas') renderBolRutas();
+  else if (bolTab === 'aerolineas') renderBolAerolineas();
+  else if (bolTab === 'precios') renderBolPrecios();
+  else if (bolTab === 'requisitos') renderBolRequisitos();
+  else if (bolTab === 'calendario') renderBolCalendario();
+  if (animar) entradaLista(document.getElementById(BOL_WRAP[bolTab]));
 }
 function bolNombreAerolinea(id) { return bolCatalogo.aerolineas.find(a => a.id === id)?.nombre || '—'; }
 function bolNombreRuta(id) { return bolCatalogo.rutas.find(r => r.id === id)?.nombre_natural || '—'; }

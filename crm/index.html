@@ -93,7 +93,7 @@ body.fsize-grande{zoom:1.05}
    <body> pasa a ser el único contenedor de scroll real, explícito. */
 html{-webkit-text-size-adjust:100%;background:var(--bg);height:100%;overflow:hidden;overscroll-behavior-y:none}
 body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--txt);-webkit-font-smoothing:antialiased;height:100%;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:none}
-body.lb-lock{overflow:hidden}
+body.lb-lock,body.menu-abierto{overflow:hidden}
 body::before{content:'';position:fixed;inset:0;background:
   radial-gradient(900px 500px at 12% -8%,rgba(255,145,0,.10),transparent 60%),
   radial-gradient(1000px 600px at 110% 10%,rgba(74,158,255,.10),transparent 55%);z-index:-1;pointer-events:none}
@@ -201,70 +201,56 @@ body:has(#vista-previa-banner){padding-top:36px}
 .logout-btn{background:transparent;border:1px solid var(--line);color:var(--muted);width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:13px;flex-shrink:0;transition:color .15s,border-color .15s}
 .logout-btn:hover{color:#ff6b6b;border-color:rgba(255,107,107,.4)}
 
-/* ---------- Bottom nav (mobile) ---------- */
-.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:50;background:rgba(11,15,28,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line2);padding:6px 6px calc(10px + var(--safe-b));justify-content:space-around}
-/* Fase 5.2 -- barrita bajo el ítem activo, ÚNICA marca de "estás acá" desde
-   2026-08-19 (antes convivía con una pastilla ::before arriba del ícono, que
-   marcaba lo mismo dos veces). left/width/background los pone JS
-   (actualizarIndicadorSwipe/posicionarIndicadorActivo).
-   La transition es para el toque; durante el arrastre tiene que seguir al dedo
-   cuadro a cuadro, y ahí JS pone .dragging para anularla -- una transition viva
-   durante el drag la dejaría siempre un paso atrás. */
-.bn-indicator{position:absolute;bottom:2px;height:3px;border-radius:2px;background:var(--accent);pointer-events:none;transition:left .22s cubic-bezier(.3,1,.4,1),width .22s cubic-bezier(.3,1,.4,1),background-color .22s linear}
-.bn-indicator.dragging{transition:none}
-.bn-item{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px;min-height:48px;color:#d7dbe6;text-decoration:none;font-size:10.5px;font-weight:600;cursor:pointer;border-radius:12px;transition:color .15s;position:relative;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
-.bn-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.bn-item i{font-size:18px}
-/* El nombre en un blanco casi pleno: en var(--muted) apenas se leía sobre el
-   fondo oscuro de la barra (pedido del dueño, 2026-07-27). */
-.bn-t{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.1px}
-/* Con 7 items el ancho por item baja de ~54px: se achica la letra para que el
-   nombre siga entrando en vez de cortarse en la segunda letra. */
-.bottom-nav[data-n="6"] .bn-item{font-size:10px}
-.bottom-nav[data-n="7"] .bn-item{font-size:9.5px;padding-left:1px;padding-right:1px}
-.bottom-nav[data-n="7"] .bn-item i{font-size:17px}
-/* Color del item activo por zona (data-sec) -- da vida a la barra en vez del
-   naranja único para todo; el texto activo va en negrita para leerse mejor.
-   La barrita de abajo copia este mismo color por JS (getComputedStyle().color
-   en actualizarIndicadorSwipe), así el mapa de colores vive en UN solo lado y
-   una sección nueva no puede quedar con el texto de un color y la barra de
-   otro -- que es lo que pasaba con las secciones sin regla propia. */
-.bn-item.active{color:var(--accent);font-weight:800}
-.bn-item.active[data-sec="hoy"]{color:var(--amber)}
-.bn-item.active[data-sec="leads"]{color:var(--blue)}
-.bn-item.active[data-sec="mensajes"]{color:var(--green)}
-.bn-item.active[data-sec="tarifario"]{color:var(--purple)}
-.bn-item.active[data-sec="stop-sales"]{color:#ff6b6b}
-.bn-item.active[data-sec="gestion-personal"]{color:var(--pink)}
-/* Pegado al ícono, no a un ancho fijo: el ícono mide 18px (17px con 7 ítems),
-   así que el badge se apoya sobre su esquina superior derecha en vez de
-   depender del ancho del ítem, que cambia con cuántos entren en la barra. */
-.bn-badge{display:none;position:absolute;top:2px;left:calc(50% + 5px);background:var(--accent);color:#1a1000;font-size:9px;font-weight:800;min-width:15px;height:15px;line-height:15px;text-align:center;border-radius:20px;padding:0 3px}
-.bn-badge.show{display:block}
-/* Editor de la barra de abajo (Mi Perfil) */
-.bn-cfg-count{font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-.bn-cfg-row{display:flex;align-items:center;gap:11px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer;background:var(--panel-solid);transition:border-color .15s,opacity .15s}
-.bn-cfg-row.on{border-color:rgba(255,145,0,.4);background:var(--accent-soft)}
-.bn-cfg-row.tope{opacity:.45;cursor:default}
-.bn-cfg-row input{appearance:none;-webkit-appearance:none;width:20px;height:20px;border-radius:6px;border:1.5px solid var(--line2);background:var(--bg2);cursor:pointer;position:relative;flex-shrink:0;margin:0}
-.bn-cfg-row input:checked{background:var(--accent);border-color:var(--accent)}
-.bn-cfg-row input:checked::after{content:'';position:absolute;left:6px;top:2px;width:5px;height:10px;border:solid #1a1000;border-width:0 2px 2px 0;transform:rotate(45deg)}
-.bn-cfg-row input:disabled{cursor:default}
-.bn-cfg-row > i{width:17px;text-align:center;color:var(--accent);font-size:14px;flex-shrink:0}
-.bn-cfg-n{flex:1;min-width:0;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bn-cfg-pos{font-size:11px;font-weight:800;color:var(--accent);flex-shrink:0}
-/* Empujoncito visual al cambiar de sección con el dedo: confirma que el gesto
-   se registró, sin animar la sección entera (costoso y mareador). */
-@keyframes sw-izq{from{transform:translateX(26px);opacity:.55}to{transform:none;opacity:1}}
-@keyframes sw-der{from{transform:translateX(-26px);opacity:.55}to{transform:none;opacity:1}}
+/* ---------- Barra superior + menú lateral (móvil) ----------
+   Reemplaza a la bottom-nav + swipe entre secciones (2026-08-27). El menú NO
+   es un componente nuevo: es el MISMO <aside class="sidebar"> del escritorio,
+   que en móvil pasa a position:fixed y se desliza desde la izquierda. Así el
+   catálogo de secciones, el filtrado por rol, el buscador, "Frecuentes" y el
+   orden guardado siguen viviendo en un solo lugar.
+   Vive dentro de .app (que tiene isolation:isolate): no puede pintar por
+   encima de .sheet/#drawer/#lightbox, y no hace falta -- el menú se cierra
+   antes de abrir cualquiera de esos. */
+.side-scrim{position:fixed;inset:0;background:rgba(4,6,12,.55);opacity:0;pointer-events:none;transition:opacity var(--dur-normal) var(--ease-salida);z-index:64;will-change:opacity}
+body.menu-abierto .side-scrim{opacity:1;pointer-events:auto}
+body.menu-arrastrando .side-scrim{transition:none}
+.menu-btn{position:relative;width:42px;height:42px;flex-shrink:0;border-radius:12px;border:1px solid var(--line2);background:var(--panel-solid);color:var(--txt);font-size:16px;cursor:pointer;display:none;align-items:center;justify-content:center;transition:transform var(--dur-rapida) var(--ease-salida),border-color .15s}
+.menu-btn:active{transform:scale(.92)}
+.menu-dot{display:none;position:absolute;top:7px;right:7px;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--panel-solid)}
+.menu-dot.show{display:block}
+.ab-act{width:42px;height:42px;flex-shrink:0;border-radius:12px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-size:15px;cursor:pointer;display:none;align-items:center;justify-content:center;transition:transform var(--dur-rapida) var(--ease-salida),color .15s}
+.ab-act:active{transform:scale(.92)}
+.ab-act.on{color:var(--accent);border-color:rgba(255,145,0,.4)}
+.mb-tit{flex:1;min-width:0}
+/* Cerrar el menú desde adentro: el escritorio no lo necesita (siempre visible). */
+.side-cerrar{display:none;width:38px;height:38px;border-radius:11px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-size:15px;cursor:pointer;margin-left:auto}
+.nav-item.nav-solo-movil{display:none}
+/* Badge de leads sin atender: mismo id/clase que usaba la bottom-nav, ahora
+   dibujado sobre el botón de menú (.menu-dot lo acompaña como punto simple). */
+.bn-badge{display:none}
 /* Fase 6 -- entrada escalonada de listas. backwards, NUNCA both: both
    dejaría el transform pegado para siempre después de terminar y volvería
    a romper el containing block de position:fixed (mismo riesgo #1 que ya
    se vio dos veces esta sesión con otras propiedades) -- ver comentario
    de .section.active más abajo, es la misma lección. */
 @keyframes card-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-body.swipe-izq .section.active{animation:sw-izq .24s ease-out}
-body.swipe-der .section.active{animation:sw-der .24s ease-out}
+/* Entrada de sección: reemplaza al empujón de 26px del swipe. Sin fill-mode
+   (ni backwards ni forwards) -- el transform no puede quedar pegado y romper
+   el containing block de un position:fixed hijo (riesgo #1 del rediseño). */
+@keyframes sec-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.section.entrando{animation:sec-in var(--dur-normal) var(--ease-salida)}
+/* Entrada escalonada genérica (los dos anchos, no solo móvil): la agrega
+   entradaLista() por JS al pintar una lista completa y se saca sola. Igual que
+   la de #leads-cards: backwards, NUNCA both. */
+.entrada-lista>*{animation:card-in var(--dur-normal) var(--ease-salida) backwards}
+.entrada-lista>*:nth-child(1){animation-delay:0ms}
+.entrada-lista>*:nth-child(2){animation-delay:35ms}
+.entrada-lista>*:nth-child(3){animation-delay:70ms}
+.entrada-lista>*:nth-child(4){animation-delay:105ms}
+.entrada-lista>*:nth-child(5){animation-delay:140ms}
+.entrada-lista>*:nth-child(6){animation-delay:175ms}
+.entrada-lista>*:nth-child(7){animation-delay:210ms}
+.entrada-lista>*:nth-child(8){animation-delay:245ms}
+.entrada-lista>*:nth-child(n+9){animation-delay:280ms}
 .mobile-brand{display:none}
 
 /* ---------- Hoja inferior (bottom sheet) — más opciones del nav, filtros en móvil ---------- */
@@ -627,7 +613,14 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 /* Lightbox de fotos (hoteles/paquetes/promos/guías-tours + Galería) */
 .lightbox{position:fixed;inset:0;z-index:90;background:rgba(4,6,12,.92);opacity:0;pointer-events:none;transition:opacity .22s ease;display:flex;align-items:center;justify-content:center}
 .lightbox.open{opacity:1;pointer-events:auto}
-.lb-stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none}
+/* Carril de 3 huecos (anterior / actual / siguiente). El dedo arrastra el
+   carril entero y al soltar termina el viaje con una transición: cambiar el
+   src de una sola <img> al cruzar el umbral era lo que se veía como un corte
+   seco entre foto y foto (reporte del dueño, 2026-08-27). */
+.lb-stage{position:relative;width:100%;height:100%;overflow:hidden;touch-action:none}
+.lb-track{position:absolute;top:0;left:0;height:100%;width:300%;display:flex;transform:translateX(-33.3333%);will-change:transform}
+.lb-track.animando{transition:transform var(--dur-normal) var(--ease-salida)}
+.lb-slot{flex:0 0 33.3333%;height:100%;display:flex;align-items:center;justify-content:center}
 .lb-img{max-width:90vw;max-height:88vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.6);transform-origin:center center;transition:transform .18s ease,opacity .22s ease;opacity:0;cursor:zoom-in;user-select:none}
 .lightbox.open .lb-img{opacity:1}
 .lb-img.zoomed{cursor:grab}
@@ -671,7 +664,12 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 /* Fase 5.4 -- pull-to-refresh. left/transform los pone JS a partir del
    arrastre; sin transition en el drag (mismo motivo que .bn-indicator:
    tiene que seguir al dedo cuadro a cuadro). */
-.ptr-indicador{position:fixed;top:0;left:50%;width:38px;height:38px;border-radius:50%;background:var(--panel-solid);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;z-index:60;box-shadow:0 6px 16px rgba(0,0,0,.35);opacity:0;pointer-events:none;font-size:14px;color:var(--muted)}
+.ptr-indicador{position:fixed;top:0;left:50%;width:38px;height:38px;border-radius:50%;background:var(--panel-solid);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;z-index:60;box-shadow:0 6px 16px rgba(0,0,0,.35);opacity:0;pointer-events:none;font-size:14px;color:var(--muted);transition:opacity .18s linear;will-change:transform,opacity}
+/* Confirmación táctil del long-press: la tarjeta se hunde mientras se sostiene
+   y el pulso remata al dispararse la selección. */
+.entity-card.lp-press{transform:scale(.975);transition:transform .18s var(--ease-salida)}
+@keyframes lp-pulso{0%{transform:scale(.975)}45%{transform:scale(1.02)}100%{transform:none}}
+.entity-card.lp-hecho{animation:lp-pulso .32s var(--ease-salida)}
 .ptr-indicador.show{opacity:1}
 .ptr-indicador.listo{color:var(--accent);border-color:rgba(255,145,0,.5)}
 .ptr-indicador.cargando i{animation:ptr-spin .7s linear infinite}
@@ -1555,16 +1553,30 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
      .leads-inbox{display:block} en la hoja de estilos base). */
   .leads-inbox{display:none !important}
   .app{grid-template-columns:1fr}
-  .sidebar{display:none}
-  .bottom-nav{display:flex}
-  /* Alto real de la barra de abajo, para que lo que se pega al fondo de una
-     hoja no le quede encima. Medido: 59px + el área segura del teléfono. */
-  :root{--nav-h:calc(62px + var(--safe-b))}
-  .main{padding:14px 14px calc(86px + var(--safe-b))}
-  .mobile-brand{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-  .mobile-brand img{width:34px;height:34px;border-radius:9px;border:2px solid var(--accent);padding:2px;background:#fff}
-  .mobile-brand .mb-t{font-weight:800;font-size:15px}.mobile-brand .mb-s{font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
-  .mobile-brand .m-logout{margin-left:auto}
+  /* El menú es el MISMO aside del escritorio, fijo y deslizable desde la
+     izquierda. display:none lo dejaría fuera de getComputedStyle y rompería
+     ocultarHeadersVacios() -- por eso se esconde con transform, no ocultándolo. */
+  .sidebar{position:fixed;top:0;left:0;height:100%;width:min(286px,84vw);z-index:65;transform:translateX(-100%);transition:transform var(--dur-hoja) var(--ease-salida);background:var(--bg2);border-right:1px solid var(--line2);box-shadow:none;will-change:transform}
+  :root[data-theme="light"] .sidebar{background:var(--bg2)}
+  body.menu-abierto .sidebar{transform:none;box-shadow:24px 0 60px rgba(0,0,0,.45)}
+  body.menu-arrastrando .sidebar{transition:none}
+  .side-cerrar{display:grid;place-items:center}
+  .nav-item.nav-solo-movil{display:flex}
+  /* Ya no hay barra fija abajo: lo que se pegaba encima de ella solo necesita
+     respetar el área segura del teléfono. */
+  :root{--nav-h:var(--safe-b)}
+  .main{padding:0 14px calc(26px + var(--safe-b))}
+  /* Barra superior tipo app: hamburguesa + sección + acciones. Se esconde al
+     bajar y vuelve al subir, siempre con transform (nunca height/padding). */
+  .mobile-brand{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:30;margin:0 -14px 12px;padding:8px 14px;padding-top:calc(8px + env(safe-area-inset-top,0px));background:rgba(11,15,28,.9);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);transition:transform var(--dur-normal) var(--ease-salida)}
+  :root[data-theme="light"] .mobile-brand{background:rgba(244,245,249,.92)}
+  body.appbar-oculta .mobile-brand{transform:translateY(-101%)}
+  .mobile-brand img{display:none}
+  .menu-btn,.ab-act{display:flex}
+  .mobile-brand .mb-t{font-weight:800;font-size:16px;letter-spacing:-.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mobile-brand .mb-s{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+  /* El título vive en la barra de arriba: repetirlo en el topbar era ruido. */
+  .topbar h1,.topbar .sub{display:none}
   .topbar{flex-wrap:wrap;gap:10px;margin-bottom:16px}
   .topbar h1{font-size:20px}.topbar .sub{font-size:12px}
   .search{margin-left:0;width:100%;order:3}.search input{width:100%;font-size:16px}
@@ -1764,9 +1776,19 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 }
 @media(max-width:1100px){.pv-kpis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:760px){
-  .mobile-brand img{border-radius:50%;background:linear-gradient(145deg,#182332,#0b111a)}
-  .mobile-brand .mb-t{font-size:12.5px;max-width:230px;line-height:1.2}.mobile-brand .mb-s{color:#f6b94c}
-  .topbar h1{font-size:23px}.main{padding-top:12px}
+  /* El topbar de escritorio queda vacío en móvil (el título vive arriba, en la
+     barra de la app): solo se muestra donde tiene el buscador, que hoy es
+     Leads. Sin esto quedaba un botón de Manual flotando solo. */
+  .topbar{display:none}
+  .topbar.show-search{display:flex;margin-bottom:12px}
+  .topbar-help-btn{display:none}
+  /* Cabecera del cajón: el nombre largo de la marca partía en tres renglones
+     dentro de los 286px del menú. */
+  .sidebar .brand{padding:2px 4px 8px;gap:9px}
+  .sidebar .brand img{width:28px;height:28px}
+  .sidebar .brand .bt{font-size:13px;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .sidebar .brand .bs{font-size:9px;letter-spacing:1.4px}
+  .sidebar .brand .refresh-btn{display:none}
   .pv-toolbar{flex-wrap:nowrap;min-width:0;max-width:100%}.pv-search{min-width:0}.pv-refresh{flex:0 0 44px}
   .pv-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.pv-kpi{padding:12px;min-width:0}.pv-kpi .kt{white-space:normal;line-height:1.25}.pv-kpi .kv{font-size:21px}
   .pv-stagebar{width:100%;max-width:calc(100vw - 28px);min-width:0}
@@ -2533,11 +2555,14 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 </div>
 
 <div class="app">
-  <!-- Sidebar (desktop) -->
+  <!-- Fondo del menú lateral en móvil (en escritorio nunca se activa) -->
+  <div class="side-scrim" id="side-scrim"></div>
+  <!-- Sidebar: menú principal en escritorio, cajón deslizable en móvil -->
   <aside class="sidebar">
     <div class="sidebar-top">
       <div class="brand"><img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512"><div><div class="bt">Destino y Eventos Lotus 360</div><div class="bs">CRM comercial</div></div>
         <button class="refresh-btn" data-refresh title="Actualizar el CRM a la última versión" aria-label="Actualizar el CRM"><i class="fas fa-rotate"></i></button>
+        <button class="side-cerrar" id="side-cerrar" type="button" aria-label="Cerrar menú"><i class="fas fa-xmark"></i></button>
       </div>
       <div class="sidebar-perfil">
         <button class="side-foot-perfil" id="side-foot-perfil" title="Mi perfil" type="button">
@@ -2558,6 +2583,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <input class="nav-buscar" id="nav-buscar" type="text" placeholder="Buscar sección..." autocomplete="off">
+      <!-- "Hoy" existe solo en móvil (entraba por la bottom-nav; desde el
+           2026-08-27 entra por acá). En escritorio el punto de partida sigue
+           siendo Dashboard/Leads. -->
+      <a class="nav-item nav-solo-movil nav-marketing-ok nav-boleteria-ok" data-sec="hoy"><i class="fas fa-house"></i> Hoy</a>
       <a class="nav-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="nav-boleteria-home" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
       <template id="nav-items-anchor"></template>
       <a class="nav-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="nav-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
@@ -2574,9 +2603,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 
   <main class="main">
     <div class="mobile-brand">
+      <button class="menu-btn" id="menu-btn" type="button" aria-label="Abrir menú" aria-expanded="false"><i class="fas fa-bars"></i><span class="menu-dot" id="menu-dot"></span></button>
       <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
-      <div><div class="mb-t">Destino y Eventos Lotus 360</div><div class="mb-s">CRM comercial</div></div>
-      <button class="logout-btn m-logout" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
+      <div class="mb-tit"><div class="mb-t" id="mb-title">Dashboard</div><div class="mb-s" id="mb-sub">Resumen general</div></div>
+      <button class="ab-act" id="ab-buscar" type="button" aria-label="Buscar"><i class="fas fa-search"></i></button>
     </div>
     <div class="recordatorios-banner recordatorios-banner-m" id="recordatorios-banner-m">
       <span>Activá los recordatorios de asistencia</span>
@@ -2677,7 +2707,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 
     <!-- LEADS -->
     <section class="section" id="sec-clientes-asignados">
-      <div class="card"><h2><i class="fas fa-user-clock"></i> Clientes Asignados</h2><div class="csub">Editá los datos del cliente, registrá si ya lo atendiste y dejá anotado qué te dijo.</div><div id="clientes-asignados-list" class="entity-grid" style="margin-top:14px"><div class="es-s">Cargando clientes…</div></div></div>
+      <div class="card"><h2><i class="fas fa-user-clock"></i> Clientes Asignados</h2><div class="csub">Editá los datos del cliente, registrá si ya lo atendiste y dejá anotado qué te dijo.</div><div id="clientes-asignados-list" class="entity-grid" style="margin-top:14px"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div></div>
     </section>
 
     <section class="section" id="sec-leads">
@@ -2854,7 +2884,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <input id="notas-buscar" class="ei" type="search" placeholder="Buscá por título o contenido…">
         <label class="fl">Filtrar por etiqueta</label>
         <div id="notas-etiquetas-chips" class="chip-group"></div>
-        <div id="notas-list" class="entity-grid" style="margin-top:14px"><div class="es-s">Cargando notas…</div></div>
+        <div id="notas-list" class="entity-grid" style="margin-top:14px"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
       </div>
     </section>
     <section class="section" id="sec-tareas">
@@ -4637,38 +4667,9 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <div class="drawer-bg" id="drawerBg"></div>
 </div>
 
-<!-- Bottom nav (móvil) — máximo 5 ítems para que sea cómodo con el pulgar; el resto vive en la hoja "Más" -->
-<nav class="bottom-nav">
-  <a class="bn-item active" data-sec="hoy"><i class="fas fa-house"></i> Hoy</a>
-  <a class="bn-item" data-sec="leads"><i class="fas fa-users"></i><span class="bn-badge" id="nav-lead-count-m"></span> Leads</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="mensajes"><i class="fas fa-comment-dots"></i> Mensajes</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok" data-sec="tarifario"><i class="fas fa-book-open"></i> Tarifario</a>
-  <a class="bn-item nav-marketing-ok nav-boleteria-ok" id="bn-more"><i class="fas fa-user"></i> Yo</a>
-</nav>
-
-<!-- Hoja "Más" (móvil) — resto de secciones, filtradas por rol igual que el sidebar -->
-<div class="sheet" id="more-sheet">
-  <div class="sheet-handle"></div>
-  <div class="sheet-title">Yo</div>
-  <a class="sheet-perfil-card nav-marketing-ok nav-boleteria-ok" id="sheet-item-perfil">
-    <div class="avatar" id="side-avatar-m">·</div>
-    <div style="flex:1;text-align:left"><div class="un" id="side-un-m">—</div><div class="ue" id="side-ue-m">—</div></div>
-    <i class="fas fa-chevron-right" style="color:var(--muted2);font-size:12px"></i>
-  </a>
-  <div class="jornada-widget jornada-widget-m" id="jornada-widget-m">
-    <span class="jornada-dot" id="jornada-dot-m"></span>
-    <span class="jornada-text" id="jornada-text-m">Jornada inactiva</span>
-    <button class="jornada-btn" id="jornada-btn-m" onclick="toggleJornada()">Comenzar</button>
-  </div>
-  <input class="sheet-buscar" id="sheet-buscar" type="text" placeholder="Buscar sección..." autocomplete="off">
-  <template id="sheet-items-anchor"></template>
-  <a class="sheet-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="sheet-boleteria-home" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
-  <a class="sheet-item nav-modo-boleteria-ok nav-modo-boleteria-solo" id="sheet-cola-boleteria"><i class="fas fa-list-ol"></i> Cola de boletería</a>
-  <a class="sheet-item" id="sheet-entrar-modo-boleteria"><i class="fas fa-plane-departure"></i> Boletería <span class="si-sub">Cambiar a modo Boletería</span></a>
-  <a class="sheet-item" id="sheet-salir-modo-boleteria"><i class="fas fa-arrow-left"></i> Volver a Hospedajes</a>
-  <a class="sheet-item" data-refresh><i class="fas fa-rotate"></i> Actualizar CRM <span class="si-sub">Trae la última versión, igual que Ctrl+Shift+R</span></a>
-  <a class="sheet-item" id="sheet-item-logout" style="color:#ff6b6b"><i class="fas fa-right-from-bracket"></i> Cerrar sesión</a>
-</div>
+<!-- La bottom-nav y la hoja "Yo" se retiraron el 2026-08-27: el menú lateral
+     (el mismo <aside class="sidebar"> de arriba, deslizable en móvil) los
+     reemplaza a los dos. -->
 
 <!-- Tutorial: overlay del recorrido guiado -->
 <div id="tour-overlay">
@@ -5236,7 +5237,11 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
   <div class="lb-counter" id="lbCounter"></div>
   <button class="lb-arrow lb-prev" id="lbPrev" title="Foto anterior" aria-label="Foto anterior"><i class="fas fa-chevron-left"></i></button>
   <div class="lb-stage" id="lbStage">
-    <img class="lb-img" id="lbImg" alt="" draggable="false">
+    <div class="lb-track" id="lbTrack">
+      <div class="lb-slot"><img class="lb-img" id="lbImgPrev" alt="" draggable="false"></div>
+      <div class="lb-slot"><img class="lb-img" id="lbImg" alt="" draggable="false"></div>
+      <div class="lb-slot"><img class="lb-img" id="lbImgNext" alt="" draggable="false"></div>
+    </div>
   </div>
   <button class="lb-arrow lb-next" id="lbNext" title="Foto siguiente" aria-label="Foto siguiente"><i class="fas fa-chevron-right"></i></button>
 </div>
