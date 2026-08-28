@@ -1556,9 +1556,14 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
   /* El menú es el MISMO aside del escritorio, fijo y deslizable desde la
      izquierda. display:none lo dejaría fuera de getComputedStyle y rompería
      ocultarHeadersVacios() -- por eso se esconde con transform, no ocultándolo. */
-  .sidebar{position:fixed;top:0;left:0;height:100%;width:min(286px,84vw);z-index:65;transform:translateX(-100%);transition:transform var(--dur-hoja) var(--ease-salida);background:var(--bg2);border-right:1px solid var(--line2);box-shadow:none;will-change:transform}
+  /* Cajón flotante estilo Gemini: separado de los bordes, esquinas redondeadas
+     y alto acotado en vez de franja borde a borde. El translateX de cierre
+     descuenta el margen izquierdo + la sombra (~20px) para que no quede una
+     franja asomando; el gesto de arrastre usa la misma constante (MENU_OFF en
+     app.js). */
+  .sidebar{position:fixed;top:12px;left:12px;height:auto;max-height:calc(100% - 24px);width:min(300px,82vw);z-index:65;border:1px solid var(--line2);border-radius:20px;overflow:hidden;transform:translateX(calc(-100% - 20px));transition:transform var(--dur-hoja) var(--ease-salida);background:var(--bg2);box-shadow:none;will-change:transform}
   :root[data-theme="light"] .sidebar{background:var(--bg2)}
-  body.menu-abierto .sidebar{transform:none;box-shadow:24px 0 60px rgba(0,0,0,.45)}
+  body.menu-abierto .sidebar{transform:none;box-shadow:0 22px 60px rgba(0,0,0,.5)}
   body.menu-arrastrando .sidebar{transition:none}
   .side-cerrar{display:grid;place-items:center}
   .nav-item.nav-solo-movil{display:flex}

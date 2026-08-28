@@ -14136,6 +14136,7 @@ function setupNav() {
    cierra con la X, tocando el fondo, arrastrando hacia la izquierda o con el
    atrás del sistema. */
 const MENU_MQ = matchMedia('(max-width:760px)');
+const MENU_OFF = 20;     // px que el panel flotante queda fuera de pantalla (margen izq + sombra), debe coincidir con el translateX de cierre en index.html
 const MENU_BORDE = 26;   // px reales de zona sensible en el borde izquierdo
 const MENU_MIN = 55;     // px reales para confirmar por distancia
 const MENU_VEL = 0.35;   // px reales/ms para confirmar por velocidad
@@ -14242,12 +14243,15 @@ function setupMenuMovil() {
     }
     e.preventDefault();
     const zf = zoomFactor();
+    // El recorrido de cierre es el ancho del panel + lo que queda fuera de
+    // pantalla (margen + sombra): si no, arrastrar hasta el tope deja una franja.
+    const rec = ancho + MENU_OFF;
     const avance = abriendo
-      ? Math.max(-ancho, Math.min(0, -ancho + dx))
-      : Math.max(-ancho, Math.min(0, dx));
+      ? Math.max(-rec, Math.min(0, -rec + dx))
+      : Math.max(-rec, Math.min(0, dx));
     aside.style.transform = `translateX(${avance / zf}px)`;
     const scrim = document.getElementById('side-scrim');
-    if (scrim) { scrim.style.opacity = String(1 + avance / ancho); scrim.style.pointerEvents = 'auto'; }
+    if (scrim) { scrim.style.opacity = String(1 + avance / rec); scrim.style.pointerEvents = 'auto'; }
   }, { passive: false });
 
   const soltar = e => {
