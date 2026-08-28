@@ -191,7 +191,7 @@ function formatearTexto(texto) {
   if (oraciones.length <= 1) return `<p>${resaltarNumeros(esc(texto))}</p>`;
   return oraciones.map(o => `<p>${resaltarNumeros(esc(o))}</p>`).join('');
 }
-const val = id => document.getElementById(id).value;
+const val = id => document.getElementById(id)?.value ?? '';
 const niceEstado = v => (v === (v || '').toUpperCase() && (v || '').includes(' ')) ? v.charAt(0) + v.slice(1).toLowerCase() : v;
 const sortEntries = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]);
 
@@ -3221,6 +3221,7 @@ async function loadTable() {
       e.stopPropagation();
       moverEstadoLead(data[i], Number(btn.dataset.dir));
     }));
+    el.querySelector('[data-estado-chip]')?.addEventListener('click', e => { e.stopPropagation(); abrirEstadoLeadSheet(data[i]); });
     el.querySelector('[data-atender-id]')?.addEventListener('click', e => {
       e.stopPropagation();
       atenderInboxLead(data[i]);
@@ -3240,6 +3241,7 @@ function wireLeadCardLive(el, lead) {
   el.addEventListener('click', () => openDrawer(lead));
   if (window.matchMedia('(min-width:761px)').matches && (ROL === 'asesor' || ROL === 'admin')) wireLeadDrag(el, lead.id);
   el.querySelectorAll('.estado-arrow').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); moverEstadoLead(lead, Number(btn.dataset.dir)); }));
+  el.querySelector('[data-estado-chip]')?.addEventListener('click', e => { e.stopPropagation(); abrirEstadoLeadSheet(lead); });
   el.querySelector('[data-atender-id]')?.addEventListener('click', e => { e.stopPropagation(); atenderInboxLead(lead); });
   el.querySelector('[data-facturar-id]')?.addEventListener('click', e => { e.stopPropagation(); abrirEnviarFacturacionSheet(lead); });
 }
@@ -3455,7 +3457,7 @@ function leadCardHtml(l) {
     <div class="ec-top">
       <div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="ec-headtext">
-        <div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div>
+        <div class="ec-nombre"><span class="ec-estado-dot" style="background:${estadoColor}"></span>${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div>
         <div class="ec-destino"><i class="fas fa-location-dot"></i> ${esc(l.destino) || 'Sin destino'}</div>
       </div>
     </div>
@@ -3467,6 +3469,7 @@ function leadCardHtml(l) {
         <span class="badge-st" style="color:${estadoColor};background:${estadoColor}2e">${esc(niceEstado(l.estado))}</span>
         <button type="button" class="estado-arrow" data-dir="1" title="Siguiente estado" aria-label="Siguiente estado"><i class="fas fa-chevron-right"></i></button>
       </span>
+      <button type="button" class="chip-estado" data-estado-chip="${l.id}" style="color:${estadoColor};background:${estadoColor}2e" aria-label="Cambiar estado">${esc(niceEstado(l.estado))} <i class="fas fa-chevron-down"></i></button>
     </div>
     <div class="ec-context">
       <span class="chip ${cc}">${esc(l.canal)}</span>
@@ -3484,14 +3487,33 @@ function leadCardHtml(l) {
 // dentro de ESTADOS_CICLO sin abrir el drawer completo. Si el estado actual
 // es 'Sin gestionar' (legacy, fuera del ciclo), la flecha lo manda al primer
 // paso real del pipeline en vez de fallar.
+async function setEstadoLead(l, nuevo) {
+  if (!nuevo || nuevo === l.estado) return;
+  const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: nuevo });
+  if (error || !data?.ok) { errToast('No se pudo cambiar el estado: ' + (error?.message || data?.error || '')); return; }
+  l.estado = nuevo;
+  loadTable();
+}
 async function moverEstadoLead(l, dir) {
   const i = ESTADOS_CICLO.indexOf(l.estado);
   const siguiente = i === -1 ? ESTADOS_CICLO[0] : ESTADOS_CICLO[Math.min(ESTADOS_CICLO.length - 1, Math.max(0, i + dir))];
-  if (siguiente === l.estado) return;
-  const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: siguiente });
-  if (error || !data?.ok) { errToast('No se pudo cambiar el estado: ' + (error?.message || data?.error || '')); return; }
-  l.estado = siguiente;
-  loadTable();
+  await setEstadoLead(l, siguiente);
+}
+// Chip de estado (móvil): reemplaza el stepper < estado > por una hoja con
+// el ciclo completo. Mismo RPC que moverEstadoLead vía setEstadoLead.
+function abrirEstadoLeadSheet(l) {
+  const cont = document.getElementById('estado-lead-opciones');
+  if (!cont) return;
+  cont.innerHTML = ESTADOS_CICLO.map(e => {
+    const col = ESTADO_COLORS[e] || '#8b93ad', actual = e === l.estado;
+    return `<button type="button" class="estado-opt${actual ? ' actual' : ''}" data-estado="${esc(e)}"><span class="eo-dot" style="background:${col}"></span><span class="eo-txt">${esc(niceEstado(e))}</span>${actual ? '<i class="fas fa-check"></i>' : ''}</button>`;
+  }).join('');
+  cont.querySelectorAll('.estado-opt').forEach(b => b.addEventListener('click', () => {
+    const nuevo = b.dataset.estado;
+    closeSheet('estado-lead-sheet');
+    setEstadoLead(l, nuevo);
+  }));
+  openSheet('estado-lead-sheet');
 }
 function applyLeadsView() {
   const table = document.getElementById('tbl-wrap'), cards = document.getElementById('leads-cards');
@@ -7830,6 +7852,7 @@ function setupCorreo() {
   document.getElementById('compose-adjuntar-input').addEventListener('change', (e) => { agregarAdjuntoCompose(e.target.files); e.target.value = ''; });
   document.getElementById('correo-cuenta-btn').onclick = (e) => { e.stopPropagation(); toggleMenuCuentas(); };
   document.addEventListener('click', () => document.getElementById('correo-cuenta-menu').style.display = 'none');
+  popoverASheet('#correo-cuenta-menu', { abierto: n => n.style.display !== 'none', cerrar: n => { n.style.display = 'none'; } });
   // conectarGmail() abre el consentimiento de Google en pestaña nueva; al
   // volver a esta pestaña (visibilitychange) se refresca el estado en vez de
   // pedirle al asesor que recargue a mano.
@@ -7917,7 +7940,7 @@ async function refrescarEstadoGmail() {
 
 function renderMenuCuentas() {
   const menu = document.getElementById('correo-cuenta-menu');
-  menu.innerHTML = CORREO_CUENTAS.map(c => `
+  menu.innerHTML = (menu.classList.contains('sheet') ? '<div class="sheet-handle"></div>' : '') + CORREO_CUENTAS.map(c => `
     <button type="button" class="correo-cuenta-item${String(c.credencial_id) === String(CORREO_CUENTA_ACTIVA) ? ' activa' : ''}" onclick="elegirCuentaCorreo('${c.credencial_id}')">
       <span class="cc-email">${esc(c.email_conectado)}</span>
       ${c.revocado ? '<span class="cc-revocado">Reconectar</span>' : `<span class="correo-cuenta-desvincular" onclick="event.stopPropagation();desconectarCuentaCorreo('${c.credencial_id}','${esc(c.email_conectado).replace(/'/g, '')}')" title="Desconectar"><i class="fas fa-xmark"></i></span>`}
@@ -10612,6 +10635,7 @@ function setupFacturacion() {
     if (factTab === 'verificar') loadVentasPendientesVerificar();
   }));
   document.querySelectorAll('.th-sort').forEach(th => th.addEventListener('click', () => aplicarOrdenTabla(th.dataset.sortTbl, th.dataset.sortCol)));
+  document.querySelectorAll('.export-dd-menu').forEach(el => popoverASheet(el, { abierto: n => n.classList.contains('show'), cerrar: n => n.classList.remove('show') }));
   document.getElementById('fact-ventas-search').addEventListener('input', () => { factVentasMostrar = TECHO_LISTA; renderVentas(); });
   document.getElementById('fact-com-search').addEventListener('input', () => { factComMostrar = TECHO_LISTA; renderComisiones(); });
   document.getElementById('cxp-search').addEventListener('input', () => { cxpMostrar = TECHO_LISTA; renderCuentasPorPagar(); });
@@ -11750,14 +11774,15 @@ function tarRowHtml(x) {
     <i class="fas fa-chevron-right"></i>
   </div>`;
 }
-function tarCardThumbHtml(foto, esPromo, destino, hideBtn) {
+function tarCardThumbHtml(foto, esPromo, destino, hideBtn, precio) {
   const media = foto
     ? `<img class="tc-thumb" src="${esc(foto)}" alt="" loading="lazy">`
     : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`;
   // El destino va como chip sobre la foto y no como renglón del cuerpo: libera
   // una línea de texto y deja el dato donde el ojo ya está mirando.
   const chip = destino ? `<div class="tc-destino-chip"><i class="fas fa-location-dot"></i>${esc(destino)}</div>` : '';
-  return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}<div class="carrusel-dots"></div>${hideBtn || ''}</div>`;
+  const badge = precio ? `<div class="tc-precio-badge">${esc(String(precio).split(/[\n;]/)[0].trim())}</div>` : '';
+  return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}${badge}<div class="carrusel-dots"></div>${hideBtn || ''}</div>`;
 }
 // Botón "ocultar" al pasar el mouse por la tarjeta (2026-08-27) -- antes había
 // que abrir el engranaje "Configurar visibilidad" y buscar en cientos. Mismo
@@ -11802,7 +11827,7 @@ function tarCardHtml(x) {
     // usa la web pública). Por diseño NUNCA contiene precios -- el precio real
     // sale siempre de precio_texto, tal cual está cargado.
     return `<div class="tar-item tar-card" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'promociones', 'revisado'))}
+      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'promociones', 'revisado'), x.precio_texto)}
       <div class="tc-body">
         <div class="tc-nombre">${esc(x.titulo)}</div>
         ${x.resumen_ia ? `<div class="tc-resumen-ia">${esc(x.resumen_ia)}</div>` : ''}
@@ -11818,7 +11843,7 @@ function tarCardHtml(x) {
   const tagsHotel = [...new Set(promos.flatMap(p => p.incluye_tags || []))];
   const bullets = resumenBullets(x.descripcion);
   return `<div class="tar-item tar-card" data-id="${x.id}">
-    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), tcHideBtnHtml(x.id, 'productos', 'activo'))}
+    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), tcHideBtnHtml(x.id, 'productos', 'activo'), tarifa?.precio_texto)}
     <div class="tc-body">
       <div class="tc-nombre">${esc(x.nombre)}</div>
       ${bullets.length ? `<ul class="tc-resumen">${bullets.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
@@ -14074,6 +14099,7 @@ function activateSection(sec, fromNav) {
   const mbT = document.getElementById('mb-title'); if (mbT) mbT.textContent = t[0];
   const mbS = document.getElementById('mb-sub'); if (mbS) mbS.textContent = t[1];
   actualizarAccionAppBar(sec);
+  sincronizarFAB(sec);
   // Salto instantáneo, no 'smooth': el scroll suave de ~400ms se pisaba con la
   // entrada de la sección y se veía como dos animaciones peleando.
   window.scrollTo({ top: 0, behavior: 'auto' });
@@ -15377,9 +15403,105 @@ function closeSheet(id, fromNav) {
   // ya vacia confirmarSheetResolve ANTES de llegar acá, asi que esto nunca
   // dispara dos veces para un mismo confirm.
   if (id === 'confirmar-sheet' && confirmarSheetResolve) { const r = confirmarSheetResolve; confirmarSheetResolve = null; r(false); }
+  // Un popover legacy convertido a hoja sigue teniendo su propio estado
+  // abierto/cerrado (clase o style.display). Cerrar por el fondo o por el
+  // atrás del sistema tiene que apagar ese estado también, si no el toggle
+  // original queda creyendo que sigue abierto y el próximo click no hace nada.
+  const pop = document.getElementById(id);
+  if (pop && POPOVER_SHEETS.has(pop)) cerrarPopoverSheet(pop);
   if (!fromNav) navConsume();
 }
 document.getElementById('sheet-bg')?.addEventListener('click', () => { if (sheetAbierta) closeSheet(sheetAbierta); });
+
+/* ---------- Fase 0 del rediseño móvil: primitivas compartidas ----------
+   Tres helpers que consumen las fases 1-6. Todos son no-ops en escritorio
+   (Regla #1: el escritorio no cambia). */
+
+/* FAB: vive a nivel <body> a propósito -- .app tiene isolation:isolate y
+   .card backdrop-filter, y cualquiera de los dos convierte al ancestro en
+   containing block de un position:fixed anidado. Una sola instancia viva:
+   el router la monta al entrar a la sección y la desmonta al salir. */
+let fabActual = null;
+function montarFAB(sec, { icono, label, onClick }) {
+  desmontarFAB();
+  if (!esMovil()) return;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'mfab';
+  b.dataset.sec = sec;
+  b.setAttribute('aria-label', label);
+  b.title = label;
+  b.innerHTML = `<i class="${icono}"></i>`;
+  b.addEventListener('click', onClick);
+  document.body.appendChild(b);
+  fabActual = b;
+}
+function desmontarFAB() { fabActual?.remove(); fabActual = null; }
+
+// Registro sección -> FAB. Las fases siguientes agregan entradas acá; el
+// router llama a sincronizarFAB en cada cambio de sección.
+const FAB_POR_SECCION = {
+  leads: { icono: 'fas fa-user-plus', label: 'Nuevo lead', guard: () => !!document.getElementById('nl-abrir-btn'), onClick: () => document.getElementById('nl-abrir-btn')?.click() },
+  'mis-notas': { icono: 'fas fa-plus', label: 'Nueva nota', guard: () => !!document.getElementById('notas-nueva'), onClick: () => document.getElementById('notas-nueva')?.click() },
+};
+function sincronizarFAB(sec) {
+  const def = FAB_POR_SECCION[sec];
+  if (!def || !esMovil() || (def.guard && !def.guard())) { desmontarFAB(); return; }
+  montarFAB(sec, def);
+}
+MENU_MQ.addEventListener('change', () => { sincronizarFAB(currentSec); sincronizarPopoverSheets(); });
+
+/* Popover absoluto -> hoja inferior. Los tres popovers legacy
+   (.drp-panel, .export-dd-menu, .correo-cuenta-menu) se salen de pantalla
+   en 360px. En vez de reescribir sus toggles, se mueve el nodo a <body>,
+   se le agrega .sheet y se espeja su estado propio contra openSheet: un
+   MutationObserver mira el atributo que cada uno usa (class o style) sin
+   tocar una sola línea de los call sites originales. */
+const POPOVER_SHEETS = new Map();
+function popoverASheet(sel, { abierto, cerrar } = {}) {
+  const el = typeof sel === 'string' ? document.querySelector(sel) : sel;
+  if (!el) return;
+  if (!POPOVER_SHEETS.has(el)) {
+    if (!el.id) el.id = 'psheet-' + (POPOVER_SHEETS.size + 1);
+    const est = {
+      padre: el.parentNode, ref: el.nextSibling, montado: false, propio: false,
+      abierto: abierto || (n => n.classList.contains('open')),
+      cerrar: cerrar || (n => n.classList.remove('open')),
+    };
+    POPOVER_SHEETS.set(el, est);
+    new MutationObserver(() => {
+      if (!est.montado || est.propio) return;
+      if (est.abierto(el)) { if (sheetAbierta !== el.id) openSheet(el.id); }
+      else if (sheetAbierta === el.id) closeSheet(el.id);
+    }).observe(el, { attributes: true, attributeFilter: ['class', 'style'] });
+  }
+  sincronizarPopoverSheet(el);
+}
+function sincronizarPopoverSheet(el) {
+  const est = POPOVER_SHEETS.get(el); if (!est) return;
+  const debeEstar = esMovil();
+  if (debeEstar === est.montado) return;
+  est.propio = true;
+  if (debeEstar) {
+    if (!el.querySelector(':scope > .sheet-handle')) el.insertAdjacentHTML('afterbegin', '<div class="sheet-handle"></div>');
+    el.classList.add('sheet');
+    document.body.appendChild(el);
+  } else {
+    el.querySelector(':scope > .sheet-handle')?.remove();
+    el.classList.remove('sheet', 'open');
+    est.padre?.insertBefore(el, est.ref);
+  }
+  est.montado = debeEstar;
+  est.propio = false;
+}
+function cerrarPopoverSheet(el) {
+  const est = POPOVER_SHEETS.get(el); if (!est) return;
+  est.propio = true;
+  el.classList.remove('open');
+  est.cerrar(el);
+  est.propio = false;
+}
+function sincronizarPopoverSheets() { POPOVER_SHEETS.forEach((_, el) => sincronizarPopoverSheet(el)); }
 
 // Hoja de confirmación genérica (Fase 4.4) -- reemplaza confirm() nativo.
 // Uso: if (!(await confirmarSheet({ titulo, detalle, textoOk, destructivo })))
@@ -15570,6 +15692,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-28', emoji: '📱', titulo: 'El CRM en el celular, rediseñado de punta a punta', texto: 'Todo el CRM en el teléfono se rehízo para que se sienta una app y no una pantalla de computadora encogida. Los filtros de cada sección (Leads, Facturación, Post Venta, Tarifario) ahora son una fila de botones que se desliza al costado en vez de amontonarse. El estado de un lead se cambia con un toque que abre una lista, sin las flechitas. Las fichas y formularios van en una sola columna, con campos y botones grandes de tocar. Los menús que antes se salían de la pantalla ahora suben desde abajo como en una app. El Cotizador y Mensajes ocupan la pantalla completa, con la barra de escribir siempre visible sobre el teclado. En Facturación las tablas largas vuelven a mostrar bien sus totales, y en Correo la bandeja y el mensaje son dos pantallas. Se sumó también un filtro de Leads por "con / sin número de teléfono". En la computadora no cambia nada.', roles: ROLES_TODOS },
   { fecha: '2026-08-27', emoji: '🏨', titulo: 'Tarifario: promociones sin hotel', texto: 'El botón de vigencias del Tarifario ahora es "Revisión del tarifario": una sola pantalla con pestañas. La de siempre (Vigencias) más una nueva, "Sin hotel", que lista las promociones que no cuelgan de ningún hotel — no aparecen dentro del hotel ni heredan sus fotos. Cada una trae los hoteles candidatos sugeridos: confirmás y se acomoda sola, con opción de recordar el nombre para la próxima carga. Las que tienen un solo candidato claro se pueden vincular en bloque. En las tarjetas, chip ámbar "Sin hotel" (solo admin) que lleva directo a esa lista. El editor de promoción ya permite elegir o cambiar el hotel. Si una noche quedan demasiadas promos sin hotel, el sistema no oculta ninguna y avisa por Telegram.', roles: ['admin'] },
   { fecha: '2026-08-27', emoji: '📅', titulo: 'Tarifario: vencidas más claras y catálogo más parejo', texto: 'Las promos y tarifas cuya fecha de VENTA ya pasó salen del catálogo (CRM, web e IA) aunque el disfrute siga lejos, y el cron nocturno ya no perdona la última que quede. En Tarifario, "Revisión de vigencias" tiene un botón "Comprobar vencidas ahora" para adelantar ese barrido y ocultarlas en bloque. En las tarjetas: chip rojo "Vencida" para que las veas de un vistazo, botón de ocultar que aparece al pasar el mouse, y "Ver más" solo donde el precio de verdad no entra. La pestaña "¿Cómo funciona?" quedó reescrita con los datos y costos reales del actualizador.', roles: ['admin'] },
   { fecha: '2026-08-26', emoji: '🎓', titulo: 'Aprendiz de ventas en Cerebro IA', texto: 'Nueva pestaña "Propuestas": una vez por semana la IA compara conversaciones que terminaron en lead contra las que se cortaron sin dejar teléfono, y propone cambios a las reglas de venta. Nunca aplica nada sola -- cada propuesta se aprueba o rechaza a mano, y una aprobada vence sola a los 30 días si nadie la revalida.', roles: ['admin'] },

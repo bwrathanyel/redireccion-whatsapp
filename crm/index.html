@@ -346,6 +346,7 @@ body.menu-arrastrando .side-scrim{transition:none}
 .card h2 i{color:var(--accent);font-size:13px}
 .card .csub{font-size:11.5px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:6px}
 .chart-wrap{position:relative;height:230px}
+.chart-wrap-lg{height:250px}
 .chart-sm{position:relative;height:210px}
 
 /* Manual del CRM */
@@ -2129,8 +2130,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ria-cal-head,.ria-cal-fila{display:grid;grid-template-columns:minmax(130px,1fr) 90px 90px;gap:8px;align-items:center}.ria-cal-head{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2);padding-bottom:8px}
 .ria-cal-fila{font-size:12px;color:var(--muted);padding:8px 0;border-top:1px solid var(--line)}.ria-cal-fila b{text-align:center;color:var(--txt)}
 .ria-vacio{font-size:12.5px;color:var(--muted);padding:18px 0;text-align:center}
-@media(max-width:900px){.ria-dashboard{grid-template-columns:repeat(3,1fr)}.ria-db-title{grid-column:1/-1}.ria-grid{grid-template-columns:1fr}}
-@media(max-width:560px){.ria-dashboard{grid-template-columns:repeat(2,1fr)}.ria-dashboard .ria-db-m:last-child{display:none}.ria-paso{grid-template-columns:100px 1fr 38px}.ria-cal-head,.ria-cal-fila{grid-template-columns:minmax(115px,1fr) 62px 62px}}
+@media(max-width:760px){.ria-dashboard{grid-template-columns:repeat(2,1fr)}.ria-db-title{grid-column:1/-1}.ria-grid{grid-template-columns:1fr}.ria-paso{grid-template-columns:100px 1fr 38px}.ria-cal-head,.ria-cal-fila{grid-template-columns:minmax(115px,1fr) 62px 62px}}
 /* ---------- Clientes de la IA: consumo del mes -------------------------
    Dos barras y no una: la de mensajes es lo que le vendiste, la de contactos
    es lo que te cuesta. Se ven juntas porque la segunda es la que se pasa
@@ -2453,6 +2453,173 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 /* Buscador de Fish Audio -- resultados en grilla, cada uno con su muestra. */
 .vr-fish-resultado{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel-solid);display:flex;flex-direction:column;gap:8px}
 .vr-fish-resultado:hover{border-color:rgba(var(--vr-naranja),.4)}
+
+/* Hoy: hooks de clase para lo que antes era style= inline (escritorio igual). */
+.hoy-urgent-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.hoy-urgent-head strong{font-size:13.5px}
+.hoy-urgent-head strong i{color:var(--accent)}
+.hoy-stats{margin:18px 0}
+
+/* ================= Rediseño móvil — fundaciones (Fase 0) =================
+   Todo lo de acá abajo vive dentro de @media(max-width:760px) salvo los
+   tokens y el display:none de .mfab. Escritorio: sin cambios.
+
+   --tap: body{zoom:.9} hace que 44px CSS midan 39,6px reales. El token
+   devuelve los 44px REALES para cada escala de fuente (44/.9, 44/.8,
+   44/1.05) -- se usa solo en los controles que este rediseño toca. */
+:root{--tap:48.9px;--appbar-h:calc(56px + env(safe-area-inset-top,0px))}
+body.fsize-chico{--tap:55px}
+body.fsize-grande{--tap:41.9px}
+.mfab{display:none}
+
+@media(max-width:760px){
+  .chips-scroll{display:flex;flex-wrap:nowrap;align-items:center;overflow-x:auto;gap:7px;padding:3px 1px;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 12px,#000 calc(100% - 12px),transparent 100%);mask-image:linear-gradient(90deg,transparent 0,#000 12px,#000 calc(100% - 12px),transparent 100%)}
+  .chips-scroll::-webkit-scrollbar{display:none}
+  .chips-scroll>*{flex:0 0 auto;scroll-snap-align:start}
+  /* .seg-group base es inline-flex con caja propia; como chips el contenedor
+     desaparece y cada .seg pasa a ser la pastilla. */
+  .seg-group.chips-scroll{width:100%;background:transparent;border:none;border-radius:0;padding:0;margin-bottom:14px}
+  .seg-group.chips-scroll .seg{flex:0 0 auto;min-height:var(--tap);padding:0 15px;border-radius:999px;border:1px solid var(--line2);background:var(--panel-solid);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  .seg-group.chips-scroll .seg.on{border-color:var(--accent);background:var(--accent-soft)}
+
+  /* z-index 55: encima del contenido y del app bar (30), debajo del cajón
+     lateral (65), del drawer (60/61) y de la hoja (70/71). */
+  .mfab{display:flex;position:fixed;right:16px;bottom:calc(18px + var(--safe-b));width:56px;height:56px;align-items:center;justify-content:center;border:none;border-radius:50%;background:var(--accent);color:#141a30;font-size:20px;cursor:pointer;box-shadow:0 10px 26px -6px rgba(255,145,0,.5);z-index:55;transition:transform var(--dur-rapida) var(--ease-salida),opacity var(--dur-rapida) linear}
+  .mfab:active{transform:scale(.92)}
+  body.menu-abierto .mfab,body:has(.sheet.open) .mfab,body:has(.drawer.open) .mfab{opacity:0;pointer-events:none;transform:scale(.8)}
+
+  /* Popovers absolutos convertidos a hoja por popoverASheet(): el helper les
+     agrega .sheet, pero conservan su propio display legacy. */
+  .drp-panel.sheet,.export-dd-menu.sheet,.correo-cuenta-menu.sheet{display:block!important;position:fixed;top:auto;left:0;right:0;min-width:0}
+
+  /* Aplanado: tarjeta dentro de tarjeta pierde su caja. El "borde dentro de
+     borde" de Mis Notas, Facturación y Post Venta. */
+  .card .card{background:transparent;border:none;border-radius:0;padding-left:0;padding-right:0;backdrop-filter:none;-webkit-backdrop-filter:none}
+
+  .dgrid,.pf-datos{grid-template-columns:1fr}
+
+  /* Métricas en riel horizontal. Sangra hasta el borde de pantalla
+     (.main lleva 14px de padding lateral). */
+  .stat-scroll{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:11px;margin:0 -14px 14px;padding:0 14px 2px;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .stat-scroll::-webkit-scrollbar{display:none}
+  .stat-scroll>*{flex:0 0 46%;min-width:0;scroll-snap-align:start}
+
+  /* Shell de chat a pantalla completa: el alto lo fija el viewport, no el
+     contenido. min-height:0 es lo que deja al hijo scrollear en vez de
+     empujar la barra de entrada fuera de pantalla. */
+  .pantalla-chat{display:flex;flex-direction:column;height:calc(100dvh - var(--appbar-h));min-height:0;overflow:hidden}
+  .pantalla-chat>*{min-height:0}
+  .pantalla-chat .chat-inputbar,.pantalla-chat .msg-inputbar{position:sticky;bottom:0;flex-shrink:0;background:var(--bg);padding-bottom:calc(10px + var(--safe-b))}
+}
+@media(max-width:760px) and (prefers-reduced-motion:reduce){
+  .chips-scroll,.stat-scroll{scroll-snap-type:none;scroll-behavior:auto}
+}
+
+/* ================= Rediseño móvil — Leads (Fase 1) ================= */
+.chip-estado{display:none;align-items:center;gap:6px;min-height:var(--tap);padding:0 14px;border:none;border-radius:999px;font:inherit;font-size:11.5px;font-weight:700;line-height:1;white-space:nowrap;cursor:pointer}
+.chip-estado i{font-size:8px;opacity:.65}
+.entity-card .ec-estado-dot{display:none;width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-right:6px;vertical-align:middle}
+.estado-lead-opciones{display:flex;flex-direction:column;gap:2px}
+.estado-opt{display:flex;align-items:center;gap:12px;width:100%;min-height:var(--tap);padding:0 6px;background:transparent;border:none;border-bottom:1px solid var(--line);color:var(--txt);font:inherit;font-size:15px;font-weight:600;text-align:left;cursor:pointer}
+.estado-opt:last-child{border-bottom:none}
+.estado-opt.actual{color:var(--accent)}
+.estado-opt .eo-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.estado-opt .eo-txt{flex:1}
+.estado-opt:active{background:rgba(255,255,255,.05)}
+@media(max-width:760px){
+  .entity-card{border-left:0 !important}
+  .entity-card .ec-estado-dot{display:inline-block}
+  .entity-card .estado-stepper{display:none}
+  #nl-abrir-btn{display:none}
+  .entity-card .chip-estado{display:inline-flex}
+  .entity-card.tiene-sin-atender .chip-estado{display:none}
+  .entity-card .ec-actions .wa-btn,.entity-card .ec-actions .fact-btn{width:var(--tap);height:var(--tap);font-size:20px}
+}
+
+/* ================= Rediseño móvil — Fichas y formularios (Fase 2) ================= */
+.entity-grid{display:flex;flex-direction:column;gap:12px}
+.entity-card .ec-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.entity-card .ec-head b{font-size:14px;font-weight:700}
+.field{margin-bottom:12px}
+.form-hint{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.5}
+.timeline-list-box{padding:8px 16px 16px;max-height:60vh;overflow:auto}
+@media(max-width:760px){
+  .dquick{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:8px;scrollbar-width:none;margin-bottom:4px;padding-bottom:2px}
+  .dquick::-webkit-scrollbar{display:none}
+  .dquick>*{flex:0 0 auto;min-width:88px}
+  .lead-tabs{gap:7px;overflow-x:auto;scrollbar-width:none;margin:14px 0}
+  .lead-tabs::-webkit-scrollbar{display:none}
+  .lead-tab-btn{flex:0 0 auto;min-height:var(--tap);padding:0 16px;border-radius:999px}
+  .drawer .dsec{border:none;background:transparent;margin-bottom:4px}
+  .drawer .dsec>summary{padding:12px 2px}
+  .drawer .dsec-body{padding:2px 2px 12px}
+  .drawer .dsec[open]>summary{border-bottom:1px solid var(--line)}
+  .pe-check{min-height:var(--tap)}
+  .timeline-list-box{max-height:none;overflow:visible;padding:8px 2px 16px}
+}
+/* ================= Rediseño móvil — Tarifario (Fase 3) ================= */
+.tc-precio-badge{display:none}
+@media(max-width:760px){
+  .tc-media-wrap .tc-thumb,.tc-media-wrap .tc-thumb.tc-thumb-vacio{height:auto;aspect-ratio:16/9}
+  .tc-destino-chip{top:9px;bottom:auto;left:9px}
+  .tc-media-scrim{inset:0 0 auto 0;height:74px;background:linear-gradient(to bottom,rgba(6,10,18,.82),rgba(6,10,18,0))}
+  .tc-precio-badge{display:inline-block;position:absolute;right:9px;bottom:9px;z-index:3;max-width:72%;background:rgba(6,10,18,.72);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);color:var(--green);font-size:12px;font-weight:800;border-radius:12px;padding:5px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tc-hide{width:var(--tap);height:var(--tap)}
+}
+/* ================= Rediseño móvil — Cotizador y Mensajes (Fase 4) ================= */
+@media(max-width:760px){
+  #sec-cotizador .pantalla-chat{height:calc(100dvh - var(--appbar-h) - 60px)}
+  #sec-cotizador .chat-log{padding-left:0;padding-right:0}
+  #sec-cotizador .chat-row{max-width:100%}
+  #sec-cotizador .chat-msg.bot{background:transparent;border:none;border-radius:0;padding:2px 0}
+  #sec-cotizador .chat-msg.user{background:var(--accent-soft);color:var(--txt);max-width:85%}
+  #sec-cotizador .chat-inputbar{align-items:flex-end}
+  #sec-cotizador .chat-inputbar textarea{border-radius:22px}
+  #sec-cotizador .chat-send,#sec-cotizador .chat-inputbar .mic-btn{width:var(--tap);height:var(--tap);min-width:var(--tap);border-radius:50%}
+  #msg-inputbar .chat-send,#msg-inputbar .mic-btn,#msg-inputbar .msg-attach-btn{width:var(--tap);height:var(--tap);min-width:var(--tap);min-height:var(--tap)}
+  #sec-cotizador .cot-cards{flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+  #sec-cotizador .cot-cards::-webkit-scrollbar{display:none}
+  #sec-cotizador .cot-cards>*{scroll-snap-align:start}
+}
+@media(max-width:760px) and (prefers-reduced-motion:reduce){
+  #sec-cotizador .cot-cards{scroll-snap-type:none}
+}
+/* ================= Rediseño móvil — Dashboard/Hoy/Personal/IA (Fase 5) ================= */
+@media(max-width:760px){
+  .leads-inbox-grid{grid-template-columns:1fr}
+  .hoy-urgent-head{margin-bottom:12px}
+  .hoy-stats{margin:14px 0}
+}
+/* ================= Rediseño móvil — Correo/Notas/StopSales/Facturación/PostVenta (Fase 6) ================= */
+@media(max-width:760px){
+  .correo-layout{height:calc(100dvh - var(--appbar-h) - 185px)}
+  .correo-compose-body{background:var(--panel-solid);color:var(--txt)}
+
+  /* Facturación: el tfoot de totales no colapsa con la tabla (regla 1607 solo
+     toca tbody) -- sus colspan quedan como números sueltos. */
+  tfoot,.tfoot-sum,.tfoot-sum td{display:block;width:100%}
+  .tfoot-sum td{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0;text-align:right;border-top:none}
+  .tfoot-sum td::before{content:attr(data-label);color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;text-align:left}
+  .tfoot-sum td:first-child{border-top:1px solid var(--line2);padding-top:10px;margin-top:4px;justify-content:flex-start;font-weight:700}
+  .tfoot-sum td:first-child::before{display:none}
+  .tfoot-sum td:empty{display:none}
+
+  /* Stop Sales: la celda del día es la interacción principal y queda ~40px.
+     Cada columna a var(--tap); si las 7 no entran, el calendario scrollea. */
+  .ss-cal{max-width:100%;overflow-x:auto;scrollbar-width:none;grid-template-columns:repeat(7,minmax(var(--tap),1fr))}
+  .ss-cal::-webkit-scrollbar{display:none}
+  .ss-dia{aspect-ratio:auto;min-height:var(--tap)}
+  .fl-previa{flex-direction:column}
+  .fl-previa img{width:100%;max-width:190px}
+
+  /* Post Venta: la barra de etapas ya scrollea pero sin affordance; .chips-scroll
+     (markup) le da la máscara. Cada etapa a var(--tap). */
+  #pv-stagebar{max-width:100%}
+  #pv-stagebar .pv-stage{min-height:var(--tap)}
+
+  .export-dd-menu.sheet,.correo-cuenta-menu.sheet{padding-bottom:calc(6px + var(--safe-b))}
+  .export-dd-menu.sheet button,.correo-cuenta-menu.sheet button{min-height:var(--tap)}
+}
 </style>
 </head>
 <body>
@@ -2634,13 +2801,13 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <h2 id="hoy-saludo" style="margin-bottom:4px">Buen día</h2>
         <div class="sub" style="margin-bottom:16px" id="hoy-resumen">Cargando...</div>
 
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <strong style="font-size:13.5px"><i class="fas fa-fire" style="color:var(--accent)"></i> Necesitan tu atención</strong>
+        <div class="hoy-urgent-head">
+          <strong><i class="fas fa-fire"></i> Necesitan tu atención</strong>
           <span class="badge" id="hoy-urgent-count">0</span>
         </div>
         <div class="leads-inbox-grid" id="hoy-urgent"></div>
 
-        <div class="kpis" id="hoy-stats" style="margin:18px 0"></div>
+        <div class="kpis hoy-stats" id="hoy-stats"></div>
 
         <div class="grid g-2">
           <button class="dbtn save" id="hoy-nuevo-lead-btn" type="button"><i class="fas fa-user-plus"></i> Nuevo lead</button>
@@ -2703,7 +2870,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
             </div>
           </div>
           <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Toca un destino para ver su número</div>
-          <div class="chart-wrap" style="height:250px"><canvas id="chDest"></canvas></div>
+          <div class="chart-wrap chart-wrap-lg"><canvas id="chDest"></canvas></div>
           <div class="eb-title" style="margin-top:14px"><i class="fas fa-percent"></i> Conversión a venta por destino</div>
           <div id="destConversion"><div class="muted" style="font-size:12.5px">Cargando...</div></div>
         </div>
@@ -2716,7 +2883,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     </section>
 
     <section class="section" id="sec-leads">
-      <div class="seg-group" id="leads-tabs">
+      <div class="seg-group chips-scroll" id="leads-tabs">
         <button class="seg on" data-leads-tab="pipeline">Leads</button>
         <button class="seg" data-leads-tab="boleteria">Boletería <span class="lih-count" id="leads-bol-count">0</span></button>
         <button class="seg" data-leads-tab="facturacion">En facturación <span class="lih-count" id="leads-fact-count">0</span></button>
@@ -2846,7 +3013,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <button class="pv-refresh" id="pv-refresh" type="button" title="Actualizar" aria-label="Actualizar postventa"><i class="fas fa-rotate"></i></button>
       </div>
       <div class="kpis pv-kpis" id="pv-kpis"></div>
-      <div class="pv-stagebar" id="pv-stagebar">
+      <div class="pv-stagebar chips-scroll" id="pv-stagebar">
         <button class="pv-stage on" data-etapa="">Todos</button>
         <button class="pv-stage" data-etapa="COBRO_PENDIENTE">Cobro</button>
         <button class="pv-stage" data-etapa="CONFIRMACION_RESERVA">Reserva</button>
@@ -3007,7 +3174,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
         <button class="cot-f-clear" id="cot-f-clear" type="button" title="Limpiar filtros"><i class="fas fa-eraser"></i></button>
         <button class="mfs-done" data-mfs="cot-filtros" type="button">Listo</button>
       </div>
-      <div class="card chat-wrap">
+      <div class="card chat-wrap pantalla-chat">
         <div class="chat-toolbar">
           <button class="chat-tool-btn" id="chat-history-btn" type="button"><i class="fas fa-clock-rotate-left"></i> Mis chats</button>
           <button class="chat-tool-btn" id="chat-new-btn" type="button"><i class="fas fa-plus"></i> Nuevo</button>
@@ -3023,7 +3190,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 
     <!-- MENSAJES (chat interno del staff) -->
     <section class="section" id="sec-mensajes">
-      <div class="card chat-wrap msg-layout">
+      <div class="card chat-wrap msg-layout pantalla-chat">
         <div class="chat-toolbar" style="justify-content:space-between">
           <div class="eb-title" style="margin:0"><i class="fas fa-comment-dots"></i> Mensajes</div>
           <button class="chat-tool-btn" id="msg-nuevo-btn" type="button"><i class="fas fa-plus"></i> Nuevo chat</button>
@@ -3061,7 +3228,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <section class="section" id="sec-gestion-personal">
       <!-- Los tres son botones de filtro, no números decorativos: tocar uno
            filtra la lista de abajo (o salta a Postulaciones). -->
-      <div class="kpis" id="gp-kpis" style="margin-bottom:16px">
+      <div class="kpis kpis-3" id="gp-kpis" style="margin-bottom:16px">
         <button type="button" class="kpi kpi-btn" id="gp-kpi-card-conectados" title="Ver solo quién está conectado ahora"><div class="kt"><i class="fas fa-circle-dot"></i> Conectados ahora</div><div class="kv" id="gp-kpi-conectados">—</div></button>
         <button type="button" class="kpi kpi-btn kpi-on" id="gp-kpi-card-equipo" title="Ver todo el equipo"><div class="kt"><i class="fas fa-users"></i> Miembros de equipo</div><div class="kv" id="gp-kpi-equipo">—</div></button>
         <button type="button" class="kpi kpi-btn" id="gp-kpi-card-postulaciones" title="Ir a Postulaciones"><div class="kt"><i class="fas fa-address-card"></i> Postulaciones sin revisar</div><div class="kv" id="gp-kpi-postulaciones">—</div></button>
@@ -3425,7 +3592,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <section class="section" id="sec-facturacion">
       <div class="kpis" id="fact-kpis"></div>
 
-      <div class="seg-group" id="fact-tabs">
+      <div class="seg-group chips-scroll" id="fact-tabs">
         <button class="seg on" data-fact-tab="ventas">Ventas</button>
         <button class="seg" data-fact-tab="comisiones">Comisiones</button>
         <button class="seg" data-fact-tab="cxp">Cuentas por Pagar</button>
@@ -3511,7 +3678,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
                 <th></th>
               </tr></thead>
               <tbody id="fact-tbody"></tbody>
-              <tfoot><tr class="tfoot-sum"><td colspan="3">Totales</td><td id="fact-sum-venta">—</td><td id="fact-sum-costo">—</td><td id="fact-sum-margen">—</td><td colspan="4"></td></tr></tfoot>
+              <tfoot><tr class="tfoot-sum"><td colspan="3">Totales</td><td id="fact-sum-venta" data-label="Precio venta">—</td><td id="fact-sum-costo" data-label="Costo neto">—</td><td id="fact-sum-margen" data-label="Margen">—</td><td colspan="4"></td></tr></tfoot>
             </table>
           </div>
           <div class="pager" id="fact-ventas-pager" style="display:none"><button class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasVentas()">Cargar más</button></div>
@@ -3581,7 +3748,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
                 <th></th>
               </tr></thead>
               <tbody id="cxp-tbody"></tbody>
-              <tfoot><tr class="tfoot-sum"><td colspan="2">Totales</td><td id="cxp-sum-transferir">—</td><td id="cxp-sum-abonado">—</td><td id="cxp-sum-saldo">—</td><td colspan="2"></td></tr></tfoot>
+              <tfoot><tr class="tfoot-sum"><td colspan="2">Totales</td><td id="cxp-sum-transferir" data-label="A transferir">—</td><td id="cxp-sum-abonado" data-label="Abonado">—</td><td id="cxp-sum-saldo" data-label="Saldo">—</td><td colspan="2"></td></tr></tfoot>
             </table>
           </div>
           <div class="pager" id="cxp-pager" style="display:none"><button class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasCxp()">Cargar más</button></div>
@@ -4719,7 +4886,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <input type="date" id="timeline-fecha" class="ei" style="width:auto">
     <div id="timeline-resumen" class="chip-group" style="margin-bottom:0"></div>
   </div>
-  <div id="timeline-list" style="padding:8px 16px 16px;max-height:60vh;overflow:auto"></div>
+  <div id="timeline-list" class="timeline-list-box"></div>
   <div style="display:flex;gap:10px;padding:4px 16px 16px">
     <button class="dbtn" id="timeline-cerrar" type="button" style="flex:1;background:var(--panel-solid);color:var(--txt);border:1px solid var(--line2)">Cerrar</button>
   </div>
@@ -5234,6 +5401,12 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
     <button class="dbtn" id="confirmar-sheet-cancelar" type="button" style="flex:1">Cancelar</button>
     <button class="dbtn save" id="confirmar-sheet-ok" type="button" style="flex:1">Confirmar</button>
   </div>
+</div>
+
+<div class="sheet" id="estado-lead-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Cambiar estado</div>
+  <div id="estado-lead-opciones" class="estado-lead-opciones"></div>
 </div>
 
 <!-- Lightbox de fotos -->
