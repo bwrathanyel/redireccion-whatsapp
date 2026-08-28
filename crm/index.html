@@ -2577,6 +2577,23 @@ body.fsize-grande{--tap:41.9px}
   .tc-precio-badge{display:inline-block;position:absolute;right:9px;bottom:9px;z-index:3;max-width:72%;background:rgba(6,10,18,.72);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);color:var(--green);font-size:12px;font-weight:800;border-radius:12px;padding:5px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tc-hide{width:var(--tap);height:var(--tap)}
 }
+/* Rendimiento móvil del Tarifario — cambios invisibles.
+   - .tar-card: el backdrop-filter difumina el degradado fijo del body, que ya es
+     suave; con background:var(--panel) opaco encima no se nota la diferencia y se
+     sacan hasta N regiones de blur re-muestreadas por frame de scroll. Chip y
+     badge conservan su blur (van sobre la foto, ahí sí se ve).
+   - content-visibility:auto: no se paga layout/paint de tarjetas fuera de pantalla.
+     La palabra clave `auto` en contain-intrinsic-size hace que el navegador
+     recuerde el alto real tras el primer paint, así la barra de scroll no salta.
+   - .tf-media: la capa de composición forzada por tarjeta (translateZ/backface) es
+     para el crossfade con clon de la rama hover, que en móvil no corre. */
+@media(max-width:760px){
+  .tar-card{backdrop-filter:none;-webkit-backdrop-filter:none}
+  .tar-item.tar-card{content-visibility:auto;contain-intrinsic-size:auto 380px}
+  .tar-item.tar-ficha{content-visibility:auto;contain-intrinsic-size:auto 300px}
+  .tar-item.tar-hotel-row{content-visibility:auto;contain-intrinsic-size:auto 72px}
+  .tf-media{transform:none;backface-visibility:visible}
+}
 /* ================= Rediseño móvil — Cotizador y Mensajes (Fase 4) ================= */
 @media(max-width:760px){
   #sec-cotizador .pantalla-chat{height:calc(100dvh - var(--appbar-h) - 60px)}

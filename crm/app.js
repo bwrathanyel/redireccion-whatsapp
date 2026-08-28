@@ -10909,6 +10909,9 @@ async function loadMisComisiones() {
 
 /* ---------- Tarifario ---------- */
 let tarTab = 'hotsale', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
+// Contexto de la última animación de entrada de la grilla del Tarifario. Se
+// re-anima solo al cambiar de pestaña o tras cargar datos, no por tecla/filtro.
+let tarEntradaContexto = null;
 const tarDestinosAbiertos = new Set();
 const tarHotelesAbiertos = new Set();
 const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale', boleteria: 'Boletería' };
@@ -10926,8 +10929,15 @@ function setupTarifarioTabs() {
     loadTarifario();
   });
   actualizarVisibilidadFiltrosTarifario();
-  let deb; document.getElementById('tar-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(renderTarifario, 200); });
-  document.querySelectorAll('.tar-f').forEach(el => el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => renderTarifario()));
+  let deb; const debRender = () => { clearTimeout(deb); deb = setTimeout(renderTarifario, 200); };
+  document.getElementById('tar-search').addEventListener('input', debRender);
+  document.querySelectorAll('.tar-f').forEach(el => {
+    // Selects y checkboxes disparan una sola vez -> inmediato. El único filtro de
+    // escritura libre (tar-f-precio, type=number) pasa por el mismo debounce que
+    // el buscador: tipear "1500" ya no reconstruye la grilla 4 veces.
+    const inmediato = el.type === 'checkbox' || el.tagName === 'SELECT';
+    el.addEventListener(inmediato ? 'change' : 'input', inmediato ? () => renderTarifario() : debRender);
+  });
   tarView = initViewSwitcher('tar-view-switch', 'tarifario', 'tarjetas', v => { tarView = v; renderTarifario(); });
   tabsOcultasListo = cargarTabsOcultas();
   // Delegado sobre el contenedor: las tarjetas se repintan en cada filtro, así
@@ -11308,6 +11318,7 @@ async function loadTarifario() {
     }
   }
   tarCache[tarTab] = data;
+  tarEntradaContexto = null;
   renderTarifario();
 }
 const TAG_LABEL = { todo_incluido: 'Todo incluido', solo_desayuno: 'Solo desayuno', media_pension: 'Media pensión', pension_completa: 'Pensión completa', ninos_gratis: 'Niños gratis', '2x1': '2x1', descuento: 'Descuento' };
@@ -11323,12 +11334,33 @@ const ordenarFotos = arr => (arr || []).filter(f => f.activo !== false).slice()
 // Propias si tiene, si no hereda del hotel vinculado -- mismo fallback en
 // los dos casos reales (paquete/promo -> hotel), a diferencia de `a || b`
 // que NO sirve acá porque un array vacío es truthy en JS.
-const fotosRaw = x => {
+// fotosRaw hace filter+sort en cada llamada y renderTarifario lo pega ~3x por
+// tarjeta (builder + loop de carrusel + tieneFotoPrincipalPropia). Se memoiza
+// por ítem: loadTarifario crea objetos nuevos en cada refetch, así que la clave
+// WeakMap se invalida sola cuando los datos cambian. NO se memoiza fotosRotadas
+// (depende de _portadaIdx, que asignarPortadas recalcula según el filtro).
+const _fotosRawCache = new WeakMap();
+const _fotosRawCalc = x => {
   const propias = ordenarFotos(x.producto_fotos || x.promocion_fotos || []);
   if (propias.length) return propias;
   return ordenarFotos(x.productos?.producto_fotos || x.hotel?.producto_fotos || []);
 };
-const fotosDe = (x, ancho) => fotosRaw(x).map(f => ancho ? fotoMini(f.storage_path, ancho) : FOTOS_BASE + f.storage_path);
+const fotosRaw = x => {
+  if (!x || typeof x !== 'object') return _fotosRawCalc(x || {});
+  let v = _fotosRawCache.get(x);
+  if (v === undefined) { v = _fotosRawCalc(x); _fotosRawCache.set(x, v); }
+  return v;
+};
+const _fotosDeCache = new WeakMap();
+const fotosDe = (x, ancho) => {
+  const build = () => fotosRaw(x).map(f => ancho ? fotoMini(f.storage_path, ancho) : FOTOS_BASE + f.storage_path);
+  if (!x || typeof x !== 'object') return build();
+  let m = _fotosDeCache.get(x);
+  if (!m) { m = new Map(); _fotosDeCache.set(x, m); }
+  const k = ancho || 0;
+  if (!m.has(k)) m.set(k, build());
+  return m.get(k);
+};
 const tieneFotoPrincipalPropia = x => fotosRaw(x).some(f => f.es_principal);
 // Cuando un hotel tiene varias promos, todas partían del mismo set de fotos
 // en el mismo orden — se veían idénticas en portada. Se le asigna a cada
@@ -11427,6 +11459,11 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
     // y la vecina no entraría nunca.
     let film = null, pista = null, startX = null, startY = null, eje = null, dx = 0, ancho = 1, dirActual = 0, animando = false, pintando = false;
     const quitarFilm = () => { film?.remove(); film = null; pista = null; };
+    // pan-y: el navegador se queda el paneo vertical (scroll de la grilla) y nos
+    // deja a nosotros el horizontal (pasar fotos). Así el touchmove de abajo puede
+    // ser {passive:true} — sin listener no-pasivo sobre la foto, el scroll vertical
+    // vuelve al hilo del compositor y deja de esperar a JS en cada frame.
+    mediaEl.style.touchAction = 'pan-y';
     mediaEl.addEventListener('touchstart', e => {
       if (animando || e.touches.length !== 1) return;
       precargarFotos(fotos);
@@ -11444,7 +11481,8 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
         eje = Math.abs(mx) >= Math.abs(my) * 1.4 ? 'x' : 'y';
         if (eje !== 'x') { startX = null; return; }
       }
-      e.preventDefault();
+      // sin e.preventDefault(): touch-action:pan-y ya impide el paneo horizontal
+      // del navegador, y el listener es {passive:true}
       dx = mx / zoomFactor();
       const dir = dx < 0 ? 1 : -1;
       if (!film || dir !== dirActual) {
@@ -11470,7 +11508,7 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
       if (pintando) return;
       pintando = true;
       requestAnimationFrame(() => { pintando = false; if (pista) pista.style.transform = `translateX(${dx}px)`; });
-    }, { passive: false });
+    }, { passive: true });
     const soltarFoto = e => {
       if (startX == null || eje !== 'x' || !pista) { startX = null; eje = null; quitarFilm(); return; }
       const fin = e.changedTouches ? e.changedTouches[0].clientX - startX : 0;
@@ -11565,7 +11603,19 @@ function promoDisponibleEnMes(p, mesNum) {
 }
 
 // Para hoteles: agrega datos de sus promos vinculadas (precio mínimo, tags, niños gratis, vigencia).
+// Memoizado por ítem (WeakMap): renderTarifario lo llama en el predicado del
+// filtro y de nuevo en tarRowHtml. Depende solo de x.promociones y de hoy().
+const _agregarHotelCache = new WeakMap();
 function agregarHotel(x) {
+  if (x && typeof x === 'object') {
+    const c = _agregarHotelCache.get(x);
+    if (c) return c;
+  }
+  const r = _agregarHotelCalc(x);
+  if (x && typeof x === 'object') _agregarHotelCache.set(x, r);
+  return r;
+}
+function _agregarHotelCalc(x) {
   const promos = x.promociones || [];
   const precios = promos.map(p => p.precio_desde_usd).filter(v => v != null);
   return {
@@ -11695,9 +11745,18 @@ function renderTarifario() {
   }
   // Los contenedores reales de tarjetas son los sub-grids; #tar-grid puede
   // tener encabezados de región/destino entre medio.
-  grid.querySelectorAll('.tar-grid-sub, .tar-fichas-grid, .tar-hotel-list').forEach(entradaLista);
+  // La animación de entrada solo cuando cambia el contexto (pestaña o primer
+  // pintado tras cargar datos), no en cada tecla del buscador ni cambio de
+  // filtro — si no, re-dispara N animaciones por pulsación.
+  if (tarEntradaContexto !== tarTab) {
+    grid.querySelectorAll('.tar-grid-sub, .tar-fichas-grid, .tar-hotel-list').forEach(entradaLista);
+    tarEntradaContexto = tarTab;
+  }
+  const byId = new Map(filtered.map(x => [String(x.id), x]));
+  tarObserver.disconnect();
   [...document.querySelectorAll('#tar-grid .tar-item')].forEach(el => {
-    const x = filtered.find(x => String(x.id) === el.dataset.id);
+    const x = byId.get(el.dataset.id);
+    if (!x) return;
     el.onclick = () => openProductoDrawer(x);
     // La policy RLS deja al admin ver también lo que él mismo ocultó (para
     // poder revertirlo) — sin esta marca se vería idéntico a lo visible y
@@ -11722,26 +11781,43 @@ function renderTarifario() {
     }
     const hideBtn = el.querySelector('.tc-hide');
     if (hideBtn) hideBtn.onclick = e => { e.stopPropagation(); tcOcultarDesdeCard(hideBtn, el); };
-    const fotos = fotosRotadas(x, 256);
-    if (tarView === 'fichas') {
-      const media = el.querySelector('.tf-media');
-      if (media) attachHoverCarousel(el, media, fotos, url => { media.style.backgroundImage = `url('${url}')`; }, media.querySelector('.carrusel-dots'));
-    } else if (tarView === 'tarjetas') {
-      const media = el.querySelector('.tc-thumb');
-      const dots = el.querySelector('.carrusel-dots');
-      if (media && media.tagName === 'IMG') attachHoverCarousel(el, media, fotos, url => { media.src = url; }, dots);
-    } else {
-      const media = el.querySelector('.thr-thumb');
-      if (media && media.tagName === 'IMG') attachHoverCarousel(el, media, fotos, url => { media.src = url; });
-    }
+    // El carrusel táctil y la medición de desborde de "Ver más" se enganchan
+    // cuando la tarjeta se acerca a la pantalla, no a las N de una: baja el
+    // registro de listeners y saca del render la pasada de layout forzado sobre
+    // toda la grilla. De paso arregla el bug viejo (una tarjeta dentro de un
+    // <details> cerrado daba scrollHeight 0 y nunca recibía su botón).
+    el._tarItem = x;
+    tarObserver.observe(el);
   });
-  // "ver más" solo en el precio_texto que de verdad desborda (párrafo largo
+}
+// Un solo IntersectionObserver a nivel de módulo, reusado entre renders.
+const tarObserver = new IntersectionObserver((entries, obs) => {
+  for (const ent of entries) {
+    if (!ent.isIntersecting) continue;
+    const el = ent.target;
+    obs.unobserve(el);
+    tarHidratarTarjeta(el, el._tarItem);
+  }
+}, { rootMargin: '200px' });
+function tarHidratarTarjeta(el, x) {
+  if (!x) return;
+  const fotos = fotosRotadas(x, 256);
+  if (tarView === 'fichas') {
+    const media = el.querySelector('.tf-media');
+    if (media) attachHoverCarousel(el, media, fotos, url => { media.style.backgroundImage = `url('${url}')`; }, media.querySelector('.carrusel-dots'));
+  } else if (tarView === 'tarjetas') {
+    const media = el.querySelector('.tc-thumb');
+    const dots = el.querySelector('.carrusel-dots');
+    if (media && media.tagName === 'IMG') attachHoverCarousel(el, media, fotos, url => { media.src = url; }, dots);
+  } else {
+    const media = el.querySelector('.thr-thumb');
+    if (media && media.tagName === 'IMG') attachHoverCarousel(el, media, fotos, url => { media.src = url; });
+  }
+  // "Ver más" solo en el precio_texto que de verdad desborda (párrafo largo
   // tipo Refugio Turístico Mifafi) -- no en el resto, que ya entra en 3 líneas.
-  // Pasada aparte y en dos tiempos (leer todos los scrollHeight, después
-  // insertar todos los botones) para no forzar un reflow por tarjeta.
-  const precios = [...document.querySelectorAll('#tar-grid .tar-item .tc-precio')];
-  const desbordan = precios.filter(p => p.scrollHeight > p.clientHeight + 1);
-  desbordan.forEach(precioEl => {
+  const precioEl = el.querySelector('.tc-precio');
+  if (precioEl && !precioEl.nextElementSibling?.classList?.contains('tc-precio-mas')
+      && precioEl.scrollHeight > precioEl.clientHeight + 1) {
     const mas = document.createElement('button');
     mas.type = 'button'; mas.className = 'tc-precio-mas'; mas.textContent = 'Ver más';
     mas.onclick = e => {
@@ -11751,7 +11827,7 @@ function renderTarifario() {
       mas.textContent = abrir ? 'Ver menos' : 'Ver más';
     };
     precioEl.insertAdjacentElement('afterend', mas);
-  });
+  }
 }
 function tarItemsWrapHtml(items) {
   const html = items.map(x => tarView === 'lista' ? tarRowHtml(x) : tarView === 'fichas' ? tarFichaHtml(x) : tarCardHtml(x)).join('');
@@ -11773,7 +11849,7 @@ function tarRowHtml(x) {
     precioTxt = (x.tarifas || [])[0]?.precio_texto || null;
   }
   return `<div class="tar-item tar-hotel-row" data-id="${x.id}">
-    ${foto ? `<img class="thr-thumb" src="${esc(foto)}" alt="" loading="lazy">` : `<div class="thr-thumb thr-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`}
+    ${foto ? `<img class="thr-thumb" src="${esc(foto)}" alt="" loading="lazy" decoding="async">` : `<div class="thr-thumb thr-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`}
     <div class="thr-nombre">${esc(nombre)}</div>
     ${tags.length ? tagsHtml(tags) : '<span></span>'}
     ${promosCount ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promosCount} promo${promosCount > 1 ? 's' : ''}</div>` : ''}
@@ -11783,7 +11859,7 @@ function tarRowHtml(x) {
 }
 function tarCardThumbHtml(foto, esPromo, destino, hideBtn, precio) {
   const media = foto
-    ? `<img class="tc-thumb" src="${esc(foto)}" alt="" loading="lazy">`
+    ? `<img class="tc-thumb" src="${esc(foto)}" alt="" loading="lazy" decoding="async">`
     : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`;
   // El destino va como chip sobre la foto y no como renglón del cuerpo: libera
   // una línea de texto y deja el dato donde el ojo ya está mirando.
@@ -15884,6 +15960,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-28', emoji: '⚡', titulo: 'El Tarifario en el celular, sin trabas', texto: 'El Tarifario en el teléfono iba lento: al scrollear se trababa, y cada letra que escribías en el buscador o en el filtro de precio lo hacía pensar de nuevo. Ahora el scroll con el dedo es fluido incluso cuando arrancás encima de una foto, la lista se arma varias veces más rápido, y el filtro de precio espera a que termines de escribir en vez de recalcular por cada número. También se arregló un detalle viejo: dentro de los grupos plegados de Hoteles y Promociones, el botón "Ver más" no aparecía nunca aunque el precio no entrara; ahora sí. Se ve exactamente igual que antes — no cambió ni un color ni una tarjeta — y en la computadora no cambia nada.', roles: ROLES_TODOS },
   { fecha: '2026-08-28', emoji: '✍️', titulo: 'Tarifario: crear promociones y editar precios a mano', texto: 'Dos cosas nuevas en el Tarifario, solo para admin. (1) Botón "Nueva promoción" en la pestaña Promos: cargás una promo desde cero — título, precio, vigencia, fecha de fin, qué incluye y a qué hotel cuelga (o ninguno) — sin esperar a que la traiga un PDF. (2) La ficha de un hotel ahora se edita completa: además de nombre, destino y descripción, se agregan y corrigen las tarifas fila por fila (categoría, precio, vigencia, moneda), con el precio calculado a la vista mientras escribís, más las notas internas, el switch de "protegido" y las fotos con portada. Todo lo que cargues o edites a mano queda protegido: la próxima actualización automática del tarifario no lo pisa ni lo retira.', roles: ['admin'] },
   { fecha: '2026-08-28', emoji: '📱', titulo: 'El CRM en el celular, rediseñado de punta a punta', texto: 'Todo el CRM en el teléfono se rehízo para que se sienta una app y no una pantalla de computadora encogida. Los filtros de cada sección (Leads, Facturación, Post Venta, Tarifario) ahora son una fila de botones que se desliza al costado en vez de amontonarse. El estado de un lead se cambia con un toque que abre una lista, sin las flechitas. Las fichas y formularios van en una sola columna, con campos y botones grandes de tocar. Los menús que antes se salían de la pantalla ahora suben desde abajo como en una app. El Cotizador y Mensajes ocupan la pantalla completa, con la barra de escribir siempre visible sobre el teclado. En Facturación las tablas largas vuelven a mostrar bien sus totales, y en Correo la bandeja y el mensaje son dos pantallas. Se sumó también un filtro de Leads por "con / sin número de teléfono". En la computadora no cambia nada.', roles: ROLES_TODOS },
   { fecha: '2026-08-27', emoji: '🏨', titulo: 'Tarifario: promociones sin hotel', texto: 'El botón de vigencias del Tarifario ahora es "Revisión del tarifario": una sola pantalla con pestañas. La de siempre (Vigencias) más una nueva, "Sin hotel", que lista las promociones que no cuelgan de ningún hotel — no aparecen dentro del hotel ni heredan sus fotos. Cada una trae los hoteles candidatos sugeridos: confirmás y se acomoda sola, con opción de recordar el nombre para la próxima carga. Las que tienen un solo candidato claro se pueden vincular en bloque. En las tarjetas, chip ámbar "Sin hotel" (solo admin) que lleva directo a esa lista. El editor de promoción ya permite elegir o cambiar el hotel. Si una noche quedan demasiadas promos sin hotel, el sistema no oculta ninguna y avisa por Telegram.', roles: ['admin'] },
