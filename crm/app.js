@@ -14137,7 +14137,7 @@ function setupNav() {
    atrás del sistema. */
 const MENU_MQ = matchMedia('(max-width:760px)');
 const MENU_OFF = 20;     // px que el panel flotante queda fuera de pantalla (margen izq + sombra), debe coincidir con el translateX de cierre en index.html
-const MENU_BORDE = 90;   // px de zona sensible desde el borde izquierdo: ancho para que el dedo no tenga que rozar el borde exacto (ahí el gesto de "atrás" del sistema se come el swipe) y se pueda empezar el arrastre más hacia el centro
+const MENU_BORDE = 150;  // px de zona sensible desde el borde izquierdo: ancha a propósito para poder empezar el arrastre bien hacia el centro y esquivar el gesto de "atrás" del sistema en el borde exacto
 const MENU_MIN = 55;     // px reales para confirmar por distancia
 const MENU_VEL = 0.35;   // px reales/ms para confirmar por velocidad
 function esMovil() { return MENU_MQ.matches; }
