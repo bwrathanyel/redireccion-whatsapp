@@ -1561,7 +1561,7 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
      descuenta el margen izquierdo + la sombra (~20px) para que no quede una
      franja asomando; el gesto de arrastre usa la misma constante (MENU_OFF en
      app.js). */
-  .sidebar{position:fixed;top:12px;left:12px;height:auto;max-height:calc(100% - 24px);width:min(300px,82vw);z-index:65;border:1px solid var(--line2);border-radius:20px;overflow:hidden;transform:translateX(calc(-100% - 20px));transition:transform var(--dur-hoja) var(--ease-salida);background:var(--bg2);box-shadow:none;will-change:transform}
+  .sidebar{position:fixed;top:12px;bottom:12px;left:12px;height:auto;width:min(300px,82vw);z-index:65;border:1px solid var(--line2);border-radius:20px;overflow:hidden;transform:translateX(calc(-100% - 20px));transition:transform var(--dur-hoja) var(--ease-salida);background:var(--bg2);box-shadow:none;will-change:transform}
   :root[data-theme="light"] .sidebar{background:var(--bg2)}
   body.menu-abierto .sidebar{transform:none;box-shadow:0 22px 60px rgba(0,0,0,.5)}
   body.menu-arrastrando .sidebar{transition:none}
