@@ -1573,9 +1573,14 @@ async function asignarLotePrueba() {
   const f = apFiltros();
   const cantidad = parseInt(document.getElementById('ap-cantidad').value, 10);
   if (isNaN(cantidad) || cantidad < 1) { err.textContent = 'Elegí una cantidad válida (mínimo 1).'; return; }
-  if (!(await confirmarSheet({ titulo: '¿Asignar este lote?', detalle: `${cantidad} lead(s) pasan a ser del asesor elegido, con tarea de contacto por cada uno.`, textoOk: 'Asignar' }))) return;
+  // Los destildados de la vista previa viajan como p_lead_ids: sin esto la
+  // selección manual no salía del navegador y el RPC repartía los primeros
+  // `cantidad` del filtro, no los que quedaron tildados.
+  const seleccion = [...document.querySelectorAll('[data-ap-lead]:checked')].map(c => Number(c.dataset.apLead));
+  const aAsignar = seleccion.length ? Math.min(cantidad, seleccion.length) : cantidad;
+  if (!(await confirmarSheet({ titulo: '¿Asignar este lote?', detalle: `${aAsignar} lead(s) pasan a ser del asesor elegido, con tarea de contacto por cada uno. Vuelven a POR ATENDER si todavía no tenían venta en curso.`, textoOk: 'Asignar' }))) return;
   const btn = document.getElementById('ap-asignar'); btn.disabled = true;
-  const body = { p_usuario_id: asesorPruebaSeleccionado, p_cantidad: cantidad, ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null, p_vence_at: venceAt };
+  const body ={ p_usuario_id: asesorPruebaSeleccionado, p_cantidad: cantidad, ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null, p_vence_at: venceAt, p_lead_ids: seleccion.length ? seleccion : null };
   const { data, error } = await sb.rpc('asignar_lote_prueba', body);
   if (error || !data?.ok) { err.textContent = error?.message || data?.error || 'No se pudo asignar.'; btn.disabled = false; return; }
   okToast(`Lote asignado: ${data.cantidad} lead(s)`);
@@ -3173,6 +3178,30 @@ function buildQuery(forCount) {
   if (qs) { const qsSafe = qs.replace(/[,()%]/g, ''); q = q.or(`nombre.ilike.%${qsSafe}%,telefono.ilike.%${qsSafe}%`); }
   return q;
 }
+// Las tarjetas de lead viven en dos listas (el pipeline y la sub-pestaña
+// "Asignados en lote"). El wiring va acá una sola vez: duplicarlo dejaba la
+// segunda lista con tarjetas muertas al primer cambio en la primera.
+function wireLeadCards(contenedor, data, { drag = false } = {}) {
+  const dndDesktop = drag && window.matchMedia('(min-width:761px)').matches;
+  [...contenedor.querySelectorAll('.entity-card')].forEach((el, i) => {
+    el.addEventListener('click', () => openDrawer(data[i]));
+    if (dndDesktop && (ROL === 'asesor' || ROL === 'admin')) wireLeadDrag(el, data[i].id);
+    el.querySelectorAll('.estado-arrow').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      moverEstadoLead(data[i], Number(btn.dataset.dir));
+    }));
+    el.querySelector('[data-estado-chip]')?.addEventListener('click', e => { e.stopPropagation(); abrirEstadoLeadSheet(data[i]); });
+    el.querySelector('[data-atender-id]')?.addEventListener('click', e => {
+      e.stopPropagation();
+      atenderInboxLead(data[i]);
+    });
+    el.querySelector('[data-facturar-id]')?.addEventListener('click', e => {
+      e.stopPropagation();
+      abrirEnviarFacturacionSheet(data[i]);
+    });
+  });
+}
+
 async function loadTable() {
   const gen = ++genCarga;
   const loading = document.getElementById('tbl-loading'), empty = document.getElementById('tbl-empty'), wrap = document.getElementById('tbl-wrap');
@@ -3213,24 +3242,7 @@ async function loadTable() {
   // (arrastrar-y-soltar). Se rearma en cada render.
   LEADS_PAGINA = {};
   data.forEach(l => { LEADS_PAGINA[l.id] = l; });
-  const dndDesktop = window.matchMedia('(min-width:761px)').matches;
-  [...document.querySelectorAll('#leads-cards .entity-card')].forEach((el, i) => {
-    el.addEventListener('click', () => openDrawer(data[i]));
-    if (dndDesktop && (ROL === 'asesor' || ROL === 'admin')) wireLeadDrag(el, data[i].id);
-    el.querySelectorAll('.estado-arrow').forEach(btn => btn.addEventListener('click', e => {
-      e.stopPropagation();
-      moverEstadoLead(data[i], Number(btn.dataset.dir));
-    }));
-    el.querySelector('[data-estado-chip]')?.addEventListener('click', e => { e.stopPropagation(); abrirEstadoLeadSheet(data[i]); });
-    el.querySelector('[data-atender-id]')?.addEventListener('click', e => {
-      e.stopPropagation();
-      atenderInboxLead(data[i]);
-    });
-    el.querySelector('[data-facturar-id]')?.addEventListener('click', e => {
-      e.stopPropagation();
-      abrirEnviarFacturacionSheet(data[i]);
-    });
-  });
+  wireLeadCards(cardsEl, data, { drag: true });
   wireLeadChecks();
   document.querySelectorAll('.solo-admin-borrar').forEach(el => el.style.display = ROL === 'admin' ? '' : 'none');
   applyLeadsView();
@@ -14855,9 +14867,12 @@ function setupLeadsTabs() {
     if (leadsTab === 'colaboraciones') loadLeadsColaboraciones();
     if (leadsTab === 'facturacion') loadLeadsEnFacturacion();
     if (leadsTab === 'boleteria') loadColaBoleteria();
+    if (leadsTab === 'lote') loadLeadsAsignadosLote();
   }));
   document.getElementById('lf-refrescar')?.addEventListener('click', () => loadLeadsEnFacturacion());
+  document.getElementById('ll-refrescar')?.addEventListener('click', () => loadLeadsAsignadosLote());
   loadLeadsEnFacturacion(); // el contador de la pestaña tiene que estar antes de que la abran
+  loadLeadsAsignadosLote(); // idem: el badge de "Asignados en lote" cuenta pendientes
   setupBoleteria();
   loadColaBoleteria();
   setupLeadsDropTargets();
@@ -15483,6 +15498,34 @@ async function loadLeadsEnFacturacion() {
   grid.innerHTML = filas.map(lfCardHtml).join('');
 }
 
+/* ---------- Asignados en lote (sub-pestaña de Leads) ----------
+   Los leads que el admin repartió a mano no llegan por el flujo normal y sin
+   lista propia quedaban perdidos entre los 46k del pipeline. `lote_asignado_at`
+   ya es la marca permanente (la escribe asignar_lote_prueba) y la RLS ya limita
+   qué leads ve cada rol, así que alcanza con consultar la tabla directo. */
+async function loadLeadsAsignadosLote() {
+  const grid = document.getElementById('ll-grid');
+  if (!grid) return;
+  const loading = document.getElementById('ll-loading'), empty = document.getElementById('ll-empty');
+  loading?.classList.add('show');
+  const { data, error } = await sb.from('leads').select('*')
+    .is('eliminado_at', null)
+    .not('lote_asignado_at', 'is', null)
+    .order('lote_asignado_at', { ascending: false })
+    .limit(200);
+  loading?.classList.remove('show');
+  if (error) { console.error('leads_lote', error); errToast('No se pudieron cargar los asignados en lote'); return; }
+  const filas = data || [];
+  // El contador de la pestaña muestra lo que falta contactar, no el total: un
+  // lote viejo ya trabajado no es trabajo por hacer.
+  const pendientes = filas.filter(l => l.estado === 'POR ATENDER').length;
+  const badge = document.getElementById('leads-lote-count');
+  if (badge) { badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
+  empty?.classList.toggle('show', filas.length === 0);
+  grid.innerHTML = filas.map(leadCardHtml).join('');
+  wireLeadCards(grid, filas);
+}
+
 /* ---------- Tarifario: buscador con IA ----------
    Reemplaza la sección "Buscar Tarifario". El #tar-search de la barra sigue
    siendo un filtro de texto sobre lo que ya está en pantalla; esto manda la
@@ -15969,6 +16012,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-08-29', emoji: '📦', titulo: 'Leads en lote: llegan "Por atender", no "Atendido"', texto: 'Los clientes que el admin reparte por lote ya no aparecen marcados Atendido de entrada -- entran como Por Atender (salvo que ya tuvieran una venta en curso, esa etapa no se pisa). Además hay una sub-pestaña nueva "Asignados en lote" dentro de Leads con todos los repartidos así, y en la vista previa del panel de asignación destildar un lead ahora sí lo excluye.', roles: ['asesor', 'admin'] },
   { fecha: '2026-08-28', emoji: '⚡', titulo: 'El Tarifario en el celular, sin trabas', texto: 'El Tarifario en el teléfono iba lento: al scrollear se trababa, y cada letra que escribías en el buscador o en el filtro de precio lo hacía pensar de nuevo. Ahora el scroll con el dedo es fluido incluso cuando arrancás encima de una foto, la lista se arma varias veces más rápido, y el filtro de precio espera a que termines de escribir en vez de recalcular por cada número. También se arregló un detalle viejo: dentro de los grupos plegados de Hoteles y Promociones, el botón "Ver más" no aparecía nunca aunque el precio no entrara; ahora sí. Se ve exactamente igual que antes — no cambió ni un color ni una tarjeta — y en la computadora no cambia nada.', roles: ROLES_TODOS },
   { fecha: '2026-08-28', emoji: '✍️', titulo: 'Tarifario: crear promociones y editar precios a mano', texto: 'Dos cosas nuevas en el Tarifario, solo para admin. (1) Botón "Nueva promoción" en la pestaña Promos: cargás una promo desde cero — título, precio, vigencia, fecha de fin, qué incluye y a qué hotel cuelga (o ninguno) — sin esperar a que la traiga un PDF. (2) La ficha de un hotel ahora se edita completa: además de nombre, destino y descripción, se agregan y corrigen las tarifas fila por fila (categoría, precio, vigencia, moneda), con el precio calculado a la vista mientras escribís, más las notas internas, el switch de "protegido" y las fotos con portada. Todo lo que cargues o edites a mano queda protegido: la próxima actualización automática del tarifario no lo pisa ni lo retira.', roles: ['admin'] },
   { fecha: '2026-08-28', emoji: '📱', titulo: 'El CRM en el celular, rediseñado de punta a punta', texto: 'Todo el CRM en el teléfono se rehízo para que se sienta una app y no una pantalla de computadora encogida. Los filtros de cada sección (Leads, Facturación, Post Venta, Tarifario) ahora son una fila de botones que se desliza al costado en vez de amontonarse. El estado de un lead se cambia con un toque que abre una lista, sin las flechitas. Las fichas y formularios van en una sola columna, con campos y botones grandes de tocar. Los menús que antes se salían de la pantalla ahora suben desde abajo como en una app. El Cotizador y Mensajes ocupan la pantalla completa, con la barra de escribir siempre visible sobre el teclado. En Facturación las tablas largas vuelven a mostrar bien sus totales, y en Correo la bandeja y el mensaje son dos pantallas. Se sumó también un filtro de Leads por "con / sin número de teléfono". En la computadora no cambia nada.', roles: ROLES_TODOS },
