@@ -349,6 +349,20 @@ body.menu-arrastrando .side-scrim{transition:none}
 .chart-wrap-lg{height:250px}
 .chart-sm{position:relative;height:210px}
 
+/* Estadísticas */
+.est-plist{display:flex;flex-direction:column;gap:2px}
+.est-prow{display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px solid var(--line);font-size:12.5px}
+.est-prow:last-child{border-bottom:0}
+.est-prow span{color:var(--muted);display:flex;align-items:center;gap:8px}
+.est-prow span i{color:var(--accent);font-size:11px;width:14px;text-align:center}
+.est-prow b{font-size:13.5px}
+.est-ia-resumen{font-size:13px;line-height:1.55;margin:6px 0 14px}
+.est-ia-sec{margin-top:14px}
+.est-ia-sec h3{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.est-ia-sec h3 i{color:var(--accent);font-size:12px}
+.est-ia-sec ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:5px}
+.est-ia-sec li{font-size:12.5px;line-height:1.5}
+
 /* Manual del CRM */
 .manual-tema{border:1px solid var(--line2);border-radius:12px;margin-bottom:10px;overflow:hidden;background:var(--panel-solid)}
 .manual-tema summary{list-style:none;display:flex;align-items:center;gap:10px;padding:13px 16px;cursor:pointer;font-weight:700;font-size:13.5px;user-select:none}
@@ -1986,7 +2000,28 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .rk-ctrl .ei{width:78px}
 .rk-lbl{font-size:10.5px;color:var(--muted2);display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .rk-vacio{font-size:12px;color:var(--muted2);text-align:center;padding:22px 8px}
-@media(max-width:760px){.rk-fila{grid-template-columns:1fr}.rk-ctrl{justify-content:flex-start}}
+/* Segmentado Poner/Auto/Quitar: reemplaza el checkbox "Fijar al tope" para
+   promociones (eje manual de Hot Sales, separado del score). Mismo lenguaje
+   visual que .seg-group. */
+.rk-seg{display:inline-flex;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:3px;gap:2px}
+.rk-seg-b{background:transparent;border:0;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;padding:6px 12px;border-radius:7px;cursor:pointer;transition:background .15s,color .15s}
+.rk-seg-b:hover:not(.on){color:var(--txt)}
+.rk-seg-b.on{background:var(--accent-soft);color:#ffd8a8}
+.rk-seg-b[data-rk-hs="quitar"].on{background:rgba(239,68,68,.18);color:#fca5a5}
+.rk-tag.mano{background:rgba(74,222,128,.16);color:#4ade80}
+.rk-tag.excl{background:rgba(239,68,68,.18);color:#fca5a5}
+.rk-tag.auto{background:rgba(255,255,255,.06);color:var(--muted)}
+.rk-pub-aviso{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;color:#fca5a5;margin-top:6px}
+#rk-manual{border:1px solid rgba(74,222,128,.3);border-radius:12px;padding:10px 12px;margin:8px 0 4px;background:rgba(74,222,128,.05)}
+.rk-manual-t{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:8px}
+.rk-manual-fila{display:flex;align-items:center;gap:10px;padding:5px 0;border-top:1px solid var(--line)}
+.rk-manual-fila:first-of-type{border-top:0}
+.rk-manual-pos{font-variant-numeric:tabular-nums;font-weight:800;font-size:12px;color:var(--muted2);flex:none;width:28px}
+.rk-manual-nom{flex:1;font-size:12.5px;font-weight:700;line-height:1.25}
+.rk-manual-venc{font-size:9.5px;font-weight:800;text-transform:uppercase;color:#fca5a5;margin-left:5px}
+.rk-manual-mover{display:flex;gap:4px;flex:none}
+.rk-manual-mover .ce-mini{padding:4px 9px;font-size:13px;line-height:1}
+@media(max-width:760px){.rk-fila{grid-template-columns:1fr}.rk-ctrl{justify-content:flex-start}.rk-seg{width:100%}.rk-seg-b{flex:1}}
 @media(max-width:760px){
   .ss-cal{gap:3px}
   .ss-dia{font-size:11px;border-radius:7px}
@@ -2905,6 +2940,72 @@ body.fsize-grande{--tap:41.9px}
       </div>
     </section>
 
+    <!-- ESTADÍSTICAS -->
+    <section class="section" id="sec-estadisticas">
+      <div class="tbar" style="margin-bottom:14px">
+        <div class="drp" id="drp-est">
+          <button type="button" class="flt drp-btn" id="drp-est-btn"><i class="fas fa-calendar-days"></i> <span id="drp-est-label">Rango de fechas</span></button>
+          <div class="drp-panel" id="drp-est-panel">
+            <div class="drp-presets">
+              <button type="button" data-preset="7d">7 días</button>
+              <button type="button" data-preset="mes">Este mes</button>
+              <button type="button" data-preset="anio">Este año</button>
+              <button type="button" data-preset="todo">Últimos 90 días</button>
+            </div>
+            <div class="drp-inputs">
+              <label>Desde <input type="date" id="est-desde"></label>
+              <label>Hasta <input type="date" id="est-hasta"></label>
+            </div>
+          </div>
+        </div>
+        <select class="flt admin-only" id="est-asesor"><option value="">Elegí un asesor…</option></select>
+        <button type="button" class="reload-btn" id="est-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+      </div>
+
+      <div class="kpis" id="est-kpis"></div>
+
+      <div class="grid g-2" style="margin-bottom:12px">
+        <div class="card">
+          <h2><i class="fas fa-chart-line"></i> Tu tendencia (6 meses)</h2>
+          <div class="csub">Te comparás con vos mismo: la línea punteada es tu promedio de los meses previos</div>
+          <div class="chart-wrap"><canvas id="est-ch-serie"></canvas></div>
+          <div class="seg-group seg-group-sm" id="est-serie-metrica" style="margin-top:10px">
+            <button class="seg on" data-m="atendidos">Atendidos</button>
+            <button class="seg" data-m="ventas">Ventas</button>
+            <button class="seg" data-m="monto">Monto</button>
+            <button class="seg" data-m="horas_respuesta">Horas de respuesta</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2><i class="fas fa-filter"></i> Tu embudo del período</h2>
+          <div class="csub">De asignado a venta cerrada</div>
+          <div class="chart-wrap"><canvas id="est-ch-embudo"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid g-2b" style="margin-bottom:12px">
+        <div class="card">
+          <h2><i class="fas fa-location-dot"></i> Tus destinos</h2>
+          <div class="csub">Volumen del período y % que cerraste en venta</div>
+          <div id="est-destinos"><div class="muted" style="font-size:12.5px">Cargando…</div></div>
+        </div>
+        <div class="card">
+          <h2><i class="fas fa-user-clock"></i> Presencia y gestión</h2>
+          <div class="csub">Del período elegido</div>
+          <div id="est-presencia"><div class="muted" style="font-size:12.5px">Cargando…</div></div>
+        </div>
+      </div>
+
+      <div class="card" id="est-ia-card">
+        <div class="chead-row">
+          <h2><i class="fas fa-wand-magic-sparkles"></i> Análisis con IA</h2>
+          <button type="button" class="btn-sm" id="est-ia-regenerar"><i class="fas fa-rotate"></i> Regenerar</button>
+        </div>
+        <div class="csub" id="est-ia-fecha">—</div>
+        <div id="est-ia-cuerpo"><div class="muted" style="font-size:12.5px">Todavía no hay un análisis para este asesor.</div></div>
+      </div>
+    </section>
+
     <!-- LEADS -->
     <section class="section" id="sec-clientes-asignados">
       <div class="card"><h2><i class="fas fa-user-clock"></i> Clientes Asignados</h2><div class="csub">Editá los datos del cliente, registrá si ya lo atendiste y dejá anotado qué te dijo.</div><div id="clientes-asignados-list" class="entity-grid" style="margin-top:14px"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div></div>
@@ -2915,6 +3016,7 @@ body.fsize-grande{--tap:41.9px}
         <button class="seg on" data-leads-tab="pipeline">Leads</button>
         <button class="seg" data-leads-tab="boleteria">Boletería <span class="lih-count" id="leads-bol-count">0</span></button>
         <button class="seg" data-leads-tab="facturacion">En facturación <span class="lih-count" id="leads-fact-count">0</span></button>
+        <button class="seg" data-leads-tab="lote">Asignados en lote <span class="lih-count" id="leads-lote-count">0</span></button>
         <button class="seg nav-admin-only" data-leads-tab="colaboraciones">Colaboraciones</button>
       </div>
 
@@ -3025,6 +3127,22 @@ body.fsize-grande{--tap:41.9px}
               <tbody id="leads-colab-body"></tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <!-- Asignados en lote: los leads que el admin repartió a mano desde
+           Gestión de Personal. No llegan por el flujo normal, así que sin una
+           lista propia quedaban mezclados con los 46k del pipeline. -->
+      <div class="leads-tab-panel" data-leads-panel="lote" style="display:none">
+        <div class="card">
+          <div class="chead-row">
+            <h2><i class="fas fa-layer-group"></i> Asignados en lote</h2>
+            <button class="btn-sm" id="ll-refrescar" type="button"><i class="fas fa-rotate"></i> Actualizar</button>
+          </div>
+          <div class="csub">Leads repartidos a mano por el admin. Hay que contactarlos y registrar el resultado en la tarea.</div>
+          <div class="tbl-state skel" id="ll-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="tbl-state" id="ll-empty"><i class="fas fa-layer-group"></i><div class="es-t">Sin leads asignados en lote</div><div class="es-s">Cuando el admin te reparta un lote, los clientes aparecen acá listos para contactar</div></div>
+          <div id="ll-grid" class="card-grid show"></div>
         </div>
       </div>
     </section>
@@ -5159,10 +5277,12 @@ body.fsize-grande{--tap:41.9px}
   <div class="sheet-handle"></div>
   <div class="sheet-title"><i class="fas fa-fire"></i> Ranking de Hot Sales</div>
   <div class="ce-intro">
-    Ordena el catálogo por lo que <b>de verdad genera leads</b>, no por precio. La web
-    pública ya muestra primero lo que tiene más score; la IA de ventas todavía no.
-    <b>Boost</b> suma o resta puntos a mano (-100 a 100) y <b>fijar</b> manda la opción al
-    tope pase lo que pase. El recálculo corre solo cada mañana y también al guardar un boost.
+    Ordena el catálogo por lo que <b>de verdad genera leads</b>, no por precio. Para las
+    <b>promociones</b> vos decidís quién entra a Hot Sales: <b>Poner</b> la fuerza al pool
+    (y la ordenás con las flechas de "Fijadas a mano"), <b>Quitar</b> la excluye, <b>Auto</b>
+    deja que mande el ranking. <b>Boost</b> suma o resta puntos al score (-100 a 100) sin
+    cambiar la pertenencia; para hoteles/paquetes <b>fijar</b> sigue mandando la opción al tope.
+    Un cambio manual tarda <b>hasta 1 hora</b> en verse en la web pública (caché ISR).
   </div>
   <details class="tar-info-box" style="margin:10px 0">
     <summary><i class="fas fa-circle-info"></i> Qué mide y qué NO mide este número</summary>
@@ -5193,6 +5313,7 @@ body.fsize-grande{--tap:41.9px}
     <button class="ce-mini" id="rk-recargar" type="button"><i class="fas fa-rotate"></i> Recargar</button>
   </div>
   <div class="muted" id="rk-resumen" style="font-size:11px;margin-bottom:4px"></div>
+  <div id="rk-manual" hidden></div>
   <div id="rk-cuerpo"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
 </div>
 

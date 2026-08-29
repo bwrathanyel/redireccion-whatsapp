@@ -150,6 +150,7 @@ const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.ch
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
 const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Postventa', 'Cobros, reservas, documentos y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
   tareas: ['Tareas', 'Tus tareas activas'],
+  estadisticas: ['Estadísticas', 'Tu rendimiento, tu tendencia y consejos de la IA'],
   boleteria: ['Boletería', 'Rutas, aerolíneas, precios y requisitos de vuelo'],
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
   'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
@@ -2361,7 +2362,7 @@ async function startApp() {
   // (arriba, para asesor) ya la dispara; llamarla dos veces corría 2 fetches
   // del mismo query en paralelo sin orden garantizado de resolución.
   arrancar(
-    setupMetricas, setupRanking, setupReasignaciones, setupAsesoresPeriodo,
+    setupMetricas, setupRanking, setupEstadisticas, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupGestionPersonal, setupLeadsTabs,
     setupBuscadorIATarifario, setupCerebroIA, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
     setupRankingCatalogo,
@@ -2856,6 +2857,206 @@ function renderRendimiento(datos) {
       ${chips ? `<div class="destchips">${chips}</div>` : ''}
     </div></div>`;
   }).join('');
+}
+
+/* ---------- Estadísticas: panel de rendimiento por asesor + análisis IA ----------
+   Cada asesor ve lo suyo; el admin elige con #est-asesor. Toda la data sale de
+   la RPC estadisticas_asesor, que ya aísla (un asesor no puede pedir otro id).
+   La comparación numérica de la UI es contra el propio histórico
+   (serie_mensual); el "por debajo de la media del equipo" lo dice el análisis
+   IA, que recibe la distribución anónima del equipo aparte. */
+let EST_DATA = null;
+let estSerieMetrica = 'atendidos';
+const EST_METRICA_LABEL = { atendidos: 'Atendidos', ventas: 'Ventas', monto: 'Monto ($)', horas_respuesta: 'Horas de respuesta' };
+
+function setupEstadisticas() {
+  const hoy = new Date(), isoD = d => d.toISOString().slice(0, 10);
+  const d = document.getElementById('est-desde'), h = document.getElementById('est-hasta');
+  if (d && !d.value) d.value = isoD(addD(hoy, -89));
+  if (h && !h.value) h.value = isoD(hoy);
+  initDateRangePicker('est');
+  ['est-desde', 'est-hasta'].forEach(id => document.getElementById(id)?.addEventListener('change', loadEstadisticas));
+  document.getElementById('est-recargar')?.addEventListener('click', loadEstadisticas);
+  document.getElementById('est-ia-regenerar')?.addEventListener('click', regenerarAnalisisIA);
+  document.querySelectorAll('#est-serie-metrica .seg').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#est-serie-metrica .seg').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); estSerieMetrica = b.dataset.m; if (EST_DATA) renderEstSerie();
+  });
+  if (ROL === 'admin') {
+    const sel = document.getElementById('est-asesor');
+    sb.rpc('estadisticas_asesores_lista').then(({ data, error }) => {
+      if (error || !Array.isArray(data) || !sel) return;
+      sel.innerHTML = '<option value="">Elegí un asesor…</option>' +
+        data.map(a => `<option value="${a.asesor_id}">${esc(a.nombre)}${a.activo ? '' : ' (inactivo)'}</option>`).join('');
+    });
+    sel?.addEventListener('change', loadEstadisticas);
+  }
+}
+
+function estAsesorId() {
+  return ROL === 'admin' ? (document.getElementById('est-asesor')?.value || null) : null;
+}
+
+async function loadEstadisticas() {
+  if (!document.getElementById('sec-estadisticas')) return;
+  const p_asesor_id = estAsesorId();
+  const cuerpoIA = document.getElementById('est-ia-cuerpo');
+  if (ROL === 'admin' && !p_asesor_id) {
+    document.getElementById('est-kpis').innerHTML = '';
+    ['est-destinos', 'est-presencia'].forEach(id => { const e = document.getElementById(id); if (e) e.innerHTML = ''; });
+    if (cuerpoIA) cuerpoIA.innerHTML = '<div class="muted" style="font-size:12.5px">Elegí un asesor para ver sus estadísticas.</div>';
+    document.getElementById('est-ia-fecha').textContent = '—';
+    EST_DATA = null;
+    return;
+  }
+  const fd = val('est-desde'), fh = val('est-hasta');
+  const args = { p_asesor_id };
+  if (fd && fh) { args.p_desde = fd; args.p_hasta = fh; }
+  const { data, error } = await sb.rpc('estadisticas_asesor', args);
+  if (error || !data || data.ok === false) {
+    console.error('estadisticas_asesor', error || data);
+    errToast('No se pudieron cargar las estadísticas');
+    return;
+  }
+  EST_DATA = data;
+  await ensureChart();
+  renderEstadisticas(data);
+  loadAnalisisIA(data.asesor_id);
+}
+
+function renderEstadisticas(d) {
+  const e = d.embudo || {}, q = d.calidad || {};
+  const money = n => '$' + fmt(Math.round(n || 0));
+  pintarKPIs('est-kpis', [
+    { t: 'Leads atendidos', v: fmt(e.atendidos || 0), d: `${fmt(e.asignados || 0)} asignados`, i: 'fa-headset', c: 'var(--blue)' },
+    { t: 'Conversión', v: (e.conv_pct || 0) + '%', d: 'Atendidos que cerraron', i: 'fa-percent', c: 'var(--green)' },
+    { t: 'Ventas', v: fmt(e.ventas || 0), d: money(e.monto), i: 'fa-cart-shopping', c: 'var(--accent)' },
+    { t: 'Horas de respuesta', v: q.horas_respuesta == null ? '—' : q.horas_respuesta, d: 'Promedio al primer contacto', i: 'fa-stopwatch', c: 'var(--purple)' },
+    { t: 'Perdidos por timeout', v: (q.pct_perdido_timeout || 0) + '%', d: `${fmt(q.perdidos_timeout || 0)} leads`, i: 'fa-hourglass-end', c: 'var(--amber)' },
+    { t: 'Comisión del período', v: money(d.comisiones?.comision), d: money(d.comisiones?.facturado) + ' facturado', i: 'fa-sack-dollar', c: 'var(--pink)' },
+  ]);
+  renderEstSerie();
+  renderEstEmbudo(e);
+  renderEstDestinos(d.destinos || []);
+  renderEstPresencia(d);
+}
+
+function renderEstSerie() {
+  const serie = (EST_DATA?.serie_mensual || []);
+  const key = estSerieMetrica;
+  const vals = serie.map(m => Number(m[key] ?? 0));
+  const previos = vals.slice(0, -1);
+  const prom = previos.length ? previos.reduce((a, b) => a + b, 0) / previos.length : 0;
+  const labels = serie.map(m => { const [y, mm] = m.mes.split('-'); return MES3[+mm - 1] + " '" + y.slice(2); });
+  mk('est-ch-serie', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: EST_METRICA_LABEL[key], data: vals, borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.15)', fill: true, tension: .3, pointRadius: 3, pointBackgroundColor: '#4a9eff' },
+        { label: 'Tu promedio previo', data: labels.map(() => Math.round(prom * 10) / 10), borderColor: 'rgba(255,145,0,.9)', borderDash: [6, 4], pointRadius: 0, fill: false },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } },
+  });
+}
+
+function renderEstEmbudo(e) {
+  const pasos = [
+    ['Asignados', e.asignados || 0],
+    ['Atendidos', e.atendidos || 0],
+    ['Cotizados', EST_DATA?.cotizaciones_enviadas || 0],
+    ['Ventas', e.ventas || 0],
+  ];
+  mk('est-ch-embudo', {
+    type: 'bar',
+    data: { labels: pasos.map(p => p[0]), datasets: [{ data: pasos.map(p => p[1]), backgroundColor: ['rgba(74,158,255,.75)', 'rgba(160,107,255,.75)', 'rgba(245,181,68,.75)', 'rgba(16,185,129,.8)'], borderRadius: 6, barThickness: 22 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.raw) } } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } },
+  });
+}
+
+function renderEstDestinos(dest) {
+  const box = document.getElementById('est-destinos');
+  if (!box) return;
+  if (!dest.length) { box.innerHTML = '<div class="muted" style="font-size:12.5px">Sin destinos en el período</div>'; return; }
+  const max = Math.max(...dest.map(x => x.total));
+  box.innerHTML = dest.map(x => `<div class="arow"><div class="ai">
+    <div class="an"><span>${esc(x.destino)}</span><span class="anv">${x.total} leads · ${x.pct}% cerrado</span></div>
+    <div class="track"><div class="fill" style="width:${Math.max(4, Math.round(100 * x.total / max))}%;background:var(--blue)"></div></div>
+  </div></div>`).join('');
+}
+
+function renderEstPresencia(d) {
+  const box = document.getElementById('est-presencia');
+  if (!box) return;
+  const p = d.presencia || {}, q = d.calidad || {};
+  const horas = Math.round((p.minutos || 0) / 6) / 10;
+  const filas = [
+    ['fa-clock', 'Horas trabajadas', horas + ' h'],
+    ['fa-right-to-bracket', 'Jornadas fichadas', fmt(p.jornadas || 0)],
+    ['fa-file-lines', 'Informes diarios', fmt(p.informes || 0)],
+    ['fa-triangle-exclamation', 'Strikes de asistencia', fmt(p.strikes || 0)],
+    ['fa-user-plus', 'Reasignaciones recibidas', fmt(q.reasig_recibidas || 0)],
+    ['fa-user-minus', 'Leads que cediste', fmt(q.reasig_cedidas || 0)],
+  ];
+  box.innerHTML = `<div class="est-plist">${filas.map(f => `<div class="est-prow"><span><i class="fas ${f[0]}"></i> ${f[1]}</span><b>${f[2]}</b></div>`).join('')}</div>`;
+}
+
+async function loadAnalisisIA(asesorId) {
+  const cuerpo = document.getElementById('est-ia-cuerpo'), fecha = document.getElementById('est-ia-fecha');
+  if (!cuerpo || !asesorId) return;
+  const { data, error } = await sb.from('estadisticas_analisis_ia').select('*').eq('asesor_id', asesorId).order('generado_en', { ascending: false }).limit(1);
+  if (error) { cuerpo.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar el análisis.</div>'; return; }
+  const a = (data || [])[0];
+  if (!a) {
+    cuerpo.innerHTML = '<div class="muted" style="font-size:12.5px">Todavía no hay un análisis. Tocá "Regenerar" para pedirle uno a la IA.</div>';
+    fecha.textContent = '—';
+    return;
+  }
+  fecha.textContent = 'Generado el ' + new Date(a.generado_en).toLocaleDateString('es-VE', { day: 'numeric', month: 'long' }) + (a.generado_por === 'manual' ? ' · a pedido' : ' · automático');
+  cuerpo.innerHTML = renderAnalisisIA(a);
+}
+
+function renderAnalisisIA(a) {
+  const li = arr => (arr || []).map(x => `<li>${esc(typeof x === 'string' ? x : (x.tema ? x.tema + ': ' + x.detalle : ''))}</li>`).join('');
+  let html = '';
+  if (a.resumen) html += `<p class="est-ia-resumen">${esc(a.resumen)}</p>`;
+  if ((a.fortalezas || []).length) html += `<div class="est-ia-sec"><h3><i class="fas fa-thumbs-up"></i> Lo que estás haciendo bien</h3><ul>${li(a.fortalezas)}</ul></div>`;
+  if ((a.mejoras || []).length) html += `<div class="est-ia-sec"><h3><i class="fas fa-arrow-trend-down"></i> A mejorar</h3><ul>${li(a.mejoras)}</ul></div>`;
+  if ((a.consejos || []).length) html += `<div class="est-ia-sec"><h3><i class="fas fa-lightbulb"></i> Consejos para esta semana</h3><ul>${li(a.consejos)}</ul></div>`;
+  return html || '<div class="muted" style="font-size:12.5px">El análisis quedó vacío. Probá regenerarlo.</div>';
+}
+
+async function regenerarAnalisisIA() {
+  const btn = document.getElementById('est-ia-regenerar');
+  const asesorId = EST_DATA?.asesor_id;
+  if (!asesorId || !btn) return;
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session?.access_token) { errToast('Sesión expirada, recargá la página'); return; }
+  btn.disabled = true;
+  const original = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando…';
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/estadisticas-analista?asesor_id=${asesorId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+    });
+    const j = await res.json().catch(() => ({}));
+    if (res.status === 429 || j.error === 'limite_diario') {
+      errToast('Ya se regeneró en las últimas 24 h. Probá más tarde.');
+    } else if (!res.ok || j.ok === false) {
+      errToast('No se pudo generar el análisis');
+    } else {
+      okToast('Análisis actualizado');
+      loadAnalisisIA(asesorId);
+    }
+  } catch (err) {
+    console.error('regenerarAnalisisIA', err);
+    errToast('No se pudo generar el análisis');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
 }
 
 /* ---------- Reparto objetivo: editor de pesos que siempre suma 100% ----------
@@ -10972,6 +11173,10 @@ function setupTarifarioTabs() {
    mostró, no todas, y lo que la IA muestra ya viene sesgado por reglas_venta.
    El score mide "de lo que se mostró, qué generó lead", no demanda de mercado. */
 let RK_FILAS = [], RK_CARGANDO = false;
+// Fila (clave `promocion:<id>`) que el RPC rechazó por estar oculta y espera el
+// botón "Publicar y poner". Sobrevive a rkPintar (filtros); se limpia en cada
+// escritura y en cada recarga.
+let RK_PUB_PENDIENTE = null;
 
 async function abrirRankingCatalogo() {
   openSheet('tar-ranking-sheet');
@@ -10990,7 +11195,31 @@ async function loadRankingCatalogo() {
     return;
   }
   RK_FILAS = Array.isArray(data?.items) ? data.items : [];
+  RK_PUB_PENDIENTE = null;
   rkPintar();
+}
+
+// Replica el dedup por hotel de promosHotSales() sobre RK_FILAS (ya viene
+// ordenado por score desc) para saber qué promociones entran HOY a Hot Sales
+// por ranking automático -- el panel las etiqueta "En Hot Sales (auto)".
+// El Set de vistos arranca sembrado con los hoteles del bloque manual ('poner'
+// vigente + revisado), igual que la web y el CRM, para que un hotel forzado no
+// reentre por la puerta automática.
+function rkClaveHotel(f) { return f.producto_id != null ? `p:${f.producto_id}` : `promo:${f.item_id}`; }
+function rkEnHotSalesAuto(filas) {
+  const vistos = new Set(), auto = new Set();
+  filas.filter(f => f.tipo === 'promocion' && f.hot_sale === 'poner' && f.revisado !== false && f.vigente)
+       .forEach(f => vistos.add(rkClaveHotel(f)));
+  filas.forEach(f => {
+    if (f.tipo !== 'promocion') return;
+    if (f.hot_sale === 'poner' || f.hot_sale === 'quitar') return;
+    if (f.revisado === false || !f.vigente) return;
+    const c = rkClaveHotel(f);
+    if (vistos.has(c) || rkNum(f.fotos_n) < 2) return;
+    vistos.add(c);
+    auto.add(f.item_id);
+  });
+  return auto;
 }
 
 const rkNum = n => Number(n || 0);
@@ -11000,7 +11229,7 @@ function rkFiltradas() {
   const q = (document.getElementById('rk-buscar')?.value || '').trim().toLowerCase();
   const tipo = document.getElementById('rk-tipo')?.value || '';
   return RK_FILAS.filter(f => {
-    if (tipo === 'boost' && !rkNum(f.boost) && !f.fijado) return false;
+    if (tipo === 'boost' && !rkNum(f.boost) && !f.fijado && !f.hot_sale) return false;
     if ((tipo === 'promocion' || tipo === 'producto') && f.tipo !== tipo) return false;
     if (!q) return true;
     return `${f.nombre || ''} ${f.destino || ''}`.toLowerCase().includes(q);
@@ -11010,18 +11239,43 @@ function rkFiltradas() {
 function rkPintar() {
   const filas = rkFiltradas();
   const resumen = document.getElementById('rk-resumen');
-  const conBoost = RK_FILAS.filter(f => rkNum(f.boost) || f.fijado).length;
+  const conBoost = RK_FILAS.filter(f => rkNum(f.boost) || f.fijado || f.hot_sale).length;
   resumen.textContent = `${fmt(filas.length)} de ${fmt(RK_FILAS.length)} opciones · ${fmt(conBoost)} con ajuste manual`;
+
+  // Bloque "Fijadas a mano (N)": promociones en hot_sale='poner', en su orden
+  // manual, con flechas para reordenar. El orden #1..#N se muestra por posición
+  // (no por orden_manual crudo) para que se lea parejo aunque haya huecos.
+  const manual = RK_FILAS
+    .filter(f => f.tipo === 'promocion' && f.hot_sale === 'poner')
+    .sort((a, b) => (a.orden_manual ?? 1e9) - (b.orden_manual ?? 1e9));
+  const cont = document.getElementById('rk-manual');
+  if (!manual.length) {
+    cont.hidden = true; cont.innerHTML = '';
+  } else {
+    cont.hidden = false;
+    cont.innerHTML = `<div class="rk-manual-t">Fijadas a mano (${manual.length})</div>` + manual.map((f, i) => `
+      <div class="rk-manual-fila">
+        <span class="rk-manual-pos">#${i + 1}</span>
+        <span class="rk-manual-nom">${esc(f.nombre || '(sin nombre)')}${f.vigente ? '' : ' <span class="rk-manual-venc">vencida</span>'}</span>
+        <span class="rk-manual-mover">
+          <button class="ce-mini" type="button" data-rk-mover="${f.item_id}" data-rk-delta="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir">↑</button>
+          <button class="ce-mini" type="button" data-rk-mover="${f.item_id}" data-rk-delta="1" ${i === manual.length - 1 ? 'disabled' : ''} aria-label="Bajar">↓</button>
+        </span>
+      </div>`).join('');
+  }
+
   const cuerpo = document.getElementById('rk-cuerpo');
   if (!filas.length) {
     cuerpo.innerHTML = '<div class="rk-vacio">No hay opciones con este filtro.</div>';
     return;
   }
-  cuerpo.innerHTML = filas.map(rkFila).join('');
+  const autoSet = rkEnHotSalesAuto(RK_FILAS);
+  cuerpo.innerHTML = filas.map(f => rkFila(f, autoSet)).join('');
 }
 
-function rkFila(f) {
+function rkFila(f, autoSet) {
   const clave = `${f.tipo}:${f.item_id}`;
+  const esPromo = f.tipo === 'promocion';
   // La conversión cruda solo se colorea con volumen suficiente: 1 lead sobre 3
   // impresiones es 33% y no significa nada (por eso el score usa la suavizada).
   const tasa = rkNum(f.tasa_lead);
@@ -11029,15 +11283,34 @@ function rkFila(f) {
   // Sin impresiones no hay tasa propia: el score la hereda del hotel (o de la
   // tasa global). Mostrar "0,0%" ahí sería mentir sobre una opción sin medir.
   const sinDatos = !rkNum(f.mostrada);
+  const enAuto = !!autoSet && autoSet.has(f.item_id);
   const tags = [
-    `<span class="rk-tag ${f.tipo === 'promocion' ? 'promo' : ''}">${f.tipo === 'promocion' ? 'Promoción' : 'Hotel/Paquete'}</span>`,
+    `<span class="rk-tag ${esPromo ? 'promo' : ''}">${esPromo ? 'Promoción' : 'Hotel/Paquete'}</span>`,
+    (esPromo && f.hot_sale === 'poner') ? `<span class="rk-tag mano">A mano #${rkNum(f.orden_manual)}</span>` : '',
+    (esPromo && f.hot_sale === 'quitar') ? '<span class="rk-tag excl">Excluida a mano</span>' : '',
+    (esPromo && !f.hot_sale && enAuto) ? '<span class="rk-tag auto">En Hot Sales (auto)</span>' : '',
     f.fijado ? '<span class="rk-tag fijada"><i class="fas fa-thumbtack"></i> Fijada al tope</span>' : '',
     f.stop_sale_vigente ? '<span class="rk-tag stop"><i class="fas fa-calendar-xmark"></i> Stop sale hoy</span>' : '',
     f.destino ? `<span>${esc(f.destino)}</span>` : '',
     f.vence_el ? `<span>Boost hasta ${esc(f.vence_el)}</span>` : '',
     f.nota ? `<span title="${esc(f.nota)}"><i class="fas fa-note-sticky"></i> ${esc(f.nota)}</span>` : '',
   ].filter(Boolean).join('');
-  return `<div class="rk-fila ${f.fijado ? 'fijada' : ''}" data-rk-fila="${esc(clave)}">
+  // Promociones: segmentado Poner/Auto/Quitar (eje manual). Hoteles/paquetes:
+  // sigue el checkbox "Fijar al tope" (pin de ranking puro, no hay Hot Sales).
+  const hs = f.hot_sale === 'poner' ? 'poner' : f.hot_sale === 'quitar' ? 'quitar' : 'auto';
+  const ctrlPertenencia = esPromo
+    ? `<div class="rk-seg" role="group" aria-label="Hot Sales">
+        <button type="button" class="rk-seg-b ${hs === 'poner' ? 'on' : ''}" data-rk-hs="poner" data-rk-hs-clave="${esc(clave)}">Poner</button>
+        <button type="button" class="rk-seg-b ${hs === 'auto' ? 'on' : ''}" data-rk-hs="auto" data-rk-hs-clave="${esc(clave)}">Auto</button>
+        <button type="button" class="rk-seg-b ${hs === 'quitar' ? 'on' : ''}" data-rk-hs="quitar" data-rk-hs-clave="${esc(clave)}">Quitar</button>
+      </div>`
+    : `<label class="rk-lbl"><input type="checkbox" data-rk-fijado="${esc(clave)}" ${f.fijado ? 'checked' : ''}> Fijar al tope</label>`;
+  const avisoPub = (RK_PUB_PENDIENTE === clave)
+    ? `<div class="rk-pub-aviso">La promoción está oculta (sin revisar).
+        <button class="ce-mini" type="button" data-rk-publicar="${esc(clave)}"><i class="fas fa-eye"></i> Publicar y poner</button></div>`
+    : '';
+  const mostrarQuitarBoost = esPromo ? (rkNum(f.boost) && !f.hot_sale) : (rkNum(f.boost) || f.fijado);
+  return `<div class="rk-fila ${f.hot_sale === 'poner' || f.fijado ? 'fijada' : ''}" data-rk-fila="${esc(clave)}">
     <div>
       <div class="rk-nom">${esc(f.nombre || '(sin nombre)')} <span class="muted" style="font-weight:600">#${f.item_id}</span></div>
       <div class="rk-sub">${tags}</div>
@@ -11054,9 +11327,10 @@ function rkFila(f) {
       <label class="rk-lbl">Boost
         <input class="ei" type="number" min="-100" max="100" step="1" data-rk-boost="${esc(clave)}" value="${rkNum(f.boost)}">
       </label>
-      <label class="rk-lbl"><input type="checkbox" data-rk-fijado="${esc(clave)}" ${f.fijado ? 'checked' : ''}> Fijar al tope</label>
+      ${ctrlPertenencia}
       <button class="ce-mini" type="button" data-rk-guardar="${esc(clave)}"><i class="fas fa-check"></i> Guardar</button>
-      ${(rkNum(f.boost) || f.fijado) ? `<button class="ce-mini" type="button" data-rk-quitar="${esc(clave)}"><i class="fas fa-eraser"></i> Quitar ajuste</button>` : ''}
+      ${mostrarQuitarBoost ? `<button class="ce-mini" type="button" data-rk-quitar="${esc(clave)}"><i class="fas fa-eraser"></i> Quitar ajuste</button>` : ''}
+      ${avisoPub}
     </div>
   </div>`;
 }
@@ -11097,6 +11371,45 @@ async function rkQuitar(clave, btn) {
   await loadRankingCatalogo();
 }
 
+// Eje manual de Hot Sales (solo promociones). estado: 'poner' | 'quitar' | null (auto).
+// El RPC recalcula todo el catálogo, así que se relee la lista entera después.
+async function rkMarcar(clave, estado, publicar) {
+  const { id } = rkPartes(clave);
+  RK_PUB_PENDIENTE = null;
+  const { data, error } = await sb.rpc('catalogo_hot_sale_marcar', {
+    p_item_id: id, p_estado: estado, p_publicar: !!publicar,
+  });
+  if (error) { errToast('No se pudo: ' + error.message); return; }
+  if (data?.ok === false) {
+    if (data.necesita_publicar) { RK_PUB_PENDIENTE = clave; rkPintar(); return; }
+    errToast(data.error || 'No se pudo actualizar Hot Sales');
+    return;
+  }
+  okToast(estado === 'poner' ? 'Puesta en Hot Sales' : estado === 'quitar' ? 'Excluida de Hot Sales' : 'Vuelve al ranking automático');
+  await loadRankingCatalogo();
+}
+
+// Reordena las forzadas: arma el array de ids en el orden actual, mueve una
+// posición y manda la lista completa al RPC (idempotente, sin casos borde).
+async function rkMover(id, delta, btn) {
+  const orden = RK_FILAS
+    .filter(f => f.tipo === 'promocion' && f.hot_sale === 'poner')
+    .sort((a, b) => (a.orden_manual ?? 1e9) - (b.orden_manual ?? 1e9))
+    .map(f => Number(f.item_id));
+  const i = orden.indexOf(Number(id));
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= orden.length) return;
+  [orden[i], orden[j]] = [orden[j], orden[i]];
+  if (btn) btn.disabled = true;
+  const { data, error } = await sb.rpc('catalogo_hot_sale_ordenar', { p_ids: orden });
+  if (error || data?.ok === false) {
+    if (btn) btn.disabled = false;
+    errToast('No se pudo mover: ' + (error?.message || data?.error || ''));
+    return;
+  }
+  await loadRankingCatalogo();
+}
+
 function setupRankingCatalogo() {
   if (ROL !== 'admin') return;
   document.getElementById('tar-ranking-btn')?.addEventListener('click', abrirRankingCatalogo);
@@ -11109,6 +11422,15 @@ function setupRankingCatalogo() {
     if (g) return rkGuardar(g.dataset.rkGuardar, g);
     const q = e.target.closest('[data-rk-quitar]');
     if (q) return rkQuitar(q.dataset.rkQuitar, q);
+    const seg = e.target.closest('[data-rk-hs]');
+    if (seg) return rkMarcar(seg.dataset.rkHsClave, seg.dataset.rkHs === 'auto' ? null : seg.dataset.rkHs);
+    const pub = e.target.closest('[data-rk-publicar]');
+    if (pub) return rkMarcar(pub.dataset.rkPublicar, 'poner', true);
+  });
+  // Delegado del bloque "Fijadas a mano": flechas de reorden.
+  document.getElementById('rk-manual')?.addEventListener('click', (e) => {
+    const m = e.target.closest('[data-rk-mover]');
+    if (m) return rkMover(Number(m.dataset.rkMover), Number(m.dataset.rkDelta), m);
   });
 }
 
@@ -11580,16 +11902,34 @@ function destinoDe(x) {
 // un producto (hotel), usa su nombre; si no, cae al título de la propia
 // promo (única señal de "hotel" que tiene una promo suelta sin vínculo).
 function hotelDe(x) { return x.productos?.nombre || x.titulo || 'Otros'; }
-// Mismo criterio "Hot Sale" que la página web (lib/promociones/hotSales.ts):
-// entre las promos vigentes/revisadas, una por hotel (la más barata, porque
-// ya llegan ordenadas por precio) y que tenga al menos 2 fotos -- si no,
-// no hay material para destacarla. Nunca se inventa una etiqueta en la DB,
-// se deriva igual en los dos lados.
+// Mismo criterio "Hot Sale" que la página web (lib/promociones/hotSales.ts),
+// en dos bloques:
+//  1. Manuales: el dueño las forzó desde el panel de Ranking
+//     (hot_sale_estado==='poner', espejo de catalogo_boost). Van primero, en el
+//     orden que fijó (hot_sale_orden), sin dedup por hotel y sin mínimo de fotos
+//     -- el RPC catalogo_hot_sale_marcar ya exigió >=1 al ponerlas. Solo se pide
+//     que sigan vigentes: una promo que vence estando forzada cae sola del pool.
+//  2. Automáticas: las decide el ranking. Se descartan las excluidas a mano
+//     ('quitar') y las no vigentes, se exigen >=2 fotos y se dedup-ea por hotel
+//     -- `promos` ya llega ordenado por score, así que la primera de cada hotel
+//     es la de mejor rendimiento. El Set de vistos arranca sembrado con los
+//     hoteles del bloque manual, si no un hotel forzado reentraría por la puerta
+//     automática. `x.revisado !== false` cubre acá lo que en la web hace el
+//     .eq('revisado', true) de getPromociones().
 function promosHotSales(promos) {
   const vistos = new Set(), out = [];
+  const claveHotel = x => x.producto_id != null ? x.producto_id : `promo:${x.id}`;
+
+  promos
+    .filter(x => x.hot_sale_estado === 'poner' && x.revisado !== false && promoVigente(x))
+    .sort((a, b) => (a.hot_sale_orden ?? 1e9) - (b.hot_sale_orden ?? 1e9))
+    .forEach(x => { vistos.add(claveHotel(x)); out.push(x); });
+
   promos.forEach(x => {
+    if (x.hot_sale_estado === 'poner' || x.hot_sale_estado === 'quitar') return;
     if (x.revisado === false) return;
-    const clave = x.producto_id != null ? x.producto_id : `promo:${x.id}`;
+    if (!promoVigente(x)) return;
+    const clave = claveHotel(x);
     if (vistos.has(clave)) return;
     if (fotosDe(x).length < 2) return;
     vistos.add(clave);
@@ -14167,6 +14507,7 @@ function setupMisNotas() {
    <a> en el DOM. */
 const NAV_ITEMS = [
   { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', grupo: 'principal', roles: 'nav-asesor-hide', excludeSheet: true },
+  { sec: 'estadisticas', icon: 'fas fa-chart-column', label: 'Estadísticas', grupo: 'principal', roles: '', sub: 'Tu rendimiento, tu tendencia y un análisis con IA' },
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', grupo: 'principal', roles: '', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true, excludeSheet: true },
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', grupo: 'principal', roles: '' },
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', grupo: 'principal', roles: 'nav-asesor-only' },
@@ -14392,6 +14733,7 @@ function activateSection(sec, fromNav) {
   document.body.scrollTop = 0;
   document.body.classList.remove('appbar-oculta');
   if (sec === 'ranking') loadRanking();
+  if (sec === 'estadisticas') loadEstadisticas();
   if (sec === 'facturacion') loadFacturacion();
   if (sec === 'mis-comisiones') loadMisComisiones();
   if (sec === 'gestion-personal') loadGestionPersonal();
@@ -14632,7 +14974,7 @@ function setupAppBar() {
 // que pide esta fase. Si se agrega una sección nueva con carga propia, hay
 // que sumarla en los dos lugares.
 const REFRESCAR_SECCION = {
-  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), facturacion: () => loadFacturacion(),
+  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), estadisticas: () => loadEstadisticas(), facturacion: () => loadFacturacion(),
   'mis-comisiones': () => loadMisComisiones(), 'gestion-personal': () => loadGestionPersonal(),
   postventa: () => loadPostventa(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
