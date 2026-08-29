@@ -11671,12 +11671,21 @@ function renderTarifario() {
   // numérico parseado (solo texto libre tipo "Consultar") va al final, no
   // se le inventa un valor para ordenarlo.
   if (tarTab === 'promo' || tarTab === 'hotsale') {
-    filtered.sort((a, b) => {
+    const porPrecio = (a, b) => {
       if (a.precio_desde_usd == null && b.precio_desde_usd == null) return 0;
       if (a.precio_desde_usd == null) return 1;
       if (b.precio_desde_usd == null) return -1;
       return a.precio_desde_usd - b.precio_desde_usd;
-    });
+    };
+    // Hot Sales ordena por `score` (rendimiento medido, columna que recalcula
+    // el cron `catalogo-score`) con el precio de desempate -- mismo criterio
+    // que la web pública desde la Fase 3. Importa ANTES del dedup: promosHotSales
+    // se queda con la primera promo de cada hotel, así que este orden es el que
+    // decide cuál representa al hotel, y es lo que hace que el pin del panel de
+    // Ranking se vea también acá. Promociones sigue ordenando por precio.
+    filtered.sort(tarTab === 'hotsale'
+      ? (a, b) => (Number(b.score || 0) - Number(a.score || 0)) || porPrecio(a, b)
+      : porPrecio);
     asignarPortadas(filtered);
   }
   if (tarTab === 'hotsale') filtered = promosHotSales(filtered);
