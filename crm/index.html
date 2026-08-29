@@ -1540,8 +1540,96 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 /* Tarifario: fila de pestañas + botón de configuración (admin) */
 .tar-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
 .tar-tabs-row .seg-group{margin-bottom:0}
-.tar-admin-btn{width:38px;height:38px;border-radius:10px;background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted);cursor:pointer;flex-shrink:0;transition:color .15s,border-color .15s;font-size:14px}
-.tar-admin-btn:hover{color:var(--accent);border-color:rgba(255,145,0,.4)}
+.tar-admin-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(20, 26, 48, 0.6); /* --panel con transparencia */
+  border: 1px solid rgba(255, 255, 255, 0.12); /* --line2 */
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.tar-admin-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.18s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-size: 14px;
+}
+.tar-admin-btn:hover {
+  background: rgba(255, 145, 0, 0.14); /* --accent-soft */
+  color: var(--accent);
+  border-color: rgba(255, 145, 0, 0.3);
+}
+.tar-admin-btn:active {
+  transform: scale(0.95);
+}
+.tar-admin-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255,145,0,0), rgba(255,145,0,0.2), rgba(255,145,0,0));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.tar-admin-btn:hover::before {
+  background: linear-gradient(135deg, rgba(255,145,0,0), rgba(255,145,0,0.4), rgba(255,145,0,0));
+}
+/* Para el modo claro */
+:root[data-theme="light"] .tar-admin-actions {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(15, 23, 42, 0.16); /* --line2 light */
+  backdrop-filter: blur(10px);
+}
+:root[data-theme="light"] .tar-admin-btn {
+  color: var(--muted);
+}
+:root[data-theme="light"] .tar-admin-btn:hover {
+  background: rgba(255, 145, 0, 0.14); /* --accent-soft */
+  color: var(--accent);
+  border-color: rgba(255, 145, 0, 0.3);
+}
+/* Ajuste para móviles */
+@media (max-width: 768px) {
+  .tar-admin-actions {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+  .tar-admin-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+}
+/* Animación sutil para cuando aparecen */
+.tar-admin-actions {
+  animation: fadeInScale 0.3s ease-out;
+}
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
 .seg.tab-oculta{opacity:.45}
 .tar-oculto-admin{position:relative;opacity:.55}
 .tar-oculto-badge{position:absolute;top:6px;right:6px;background:#ef4444;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;z-index:2;text-transform:uppercase;letter-spacing:.4px;pointer-events:none}
@@ -3234,11 +3322,13 @@ body.fsize-grande{--tap:41.9px}
           <button class="seg" data-tab="paquete">Paquetes</button>
           <button class="seg" data-tab="boleteria">Boletería</button>
         </div>
-        <button class="tar-admin-btn admin-only" id="tar-nueva-promo-btn" type="button" title="Nueva promoción" hidden><i class="fas fa-plus"></i></button>
-        <button class="tar-admin-btn admin-only" id="tar-actualizador-btn" type="button" title="Actualizador de Tarifario"><i class="fas fa-arrows-rotate"></i></button>
-        <button class="tar-admin-btn admin-only" id="tar-revision-btn" type="button" title="Revisión del tarifario"><i class="fas fa-clipboard-check"></i></button>
-        <button class="tar-admin-btn admin-only" id="tar-ranking-btn" type="button" title="Ranking de Hot Sales"><i class="fas fa-fire"></i></button>
-        <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
+        <div class="tar-admin-actions">
+          <button class="tar-admin-btn admin-only" id="tar-nueva-promo-btn" type="button" title="Nueva promoción" hidden><i class="fas fa-plus"></i></button>
+          <button class="tar-admin-btn admin-only" id="tar-actualizador-btn" type="button" title="Actualizador de Tarifario"><i class="fas fa-arrows-rotate"></i></button>
+          <button class="tar-admin-btn admin-only" id="tar-revision-btn" type="button" title="Revisión del tarifario"><i class="fas fa-clipboard-check"></i></button>
+          <button class="tar-admin-btn admin-only" id="tar-ranking-btn" type="button" title="Ranking de Hot Sales"><i class="fas fa-fire"></i></button>
+          <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
+        </div>
       </div>
       <!-- Un solo buscador (2026-08-19). Antes eran DOS cajas apiladas: la de IA
            acá arriba y #tar-search adentro de la barra de filtros -- juntas se
