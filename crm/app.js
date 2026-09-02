@@ -4537,6 +4537,7 @@ function renderVencidasAhora(filas) {
     <div class="vig-top">
       ${conCheckbox ? `<label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><input type="checkbox" class="vc-chk" data-tipo="${f.tipo}" data-id="${f.item_id}" checked><span class="vig-nombre">${esc(f.nombre)}</span></label>` : `<div class="vig-nombre">${esc(f.nombre)}</div>`}
       <span class="vig-tipo">${f.tipo === 'promocion' ? 'Promo' : 'Tarifa'}</span>
+      ${f.protegido ? '<span class="vig-tipo" title="Protegida: la carga del PDF no la pisa. Protegida no es eterna — si la fecha de venta pasó, se retira igual.">Protegida</span>' : ''}
     </div>
     <div class="vig-texto">${esc(f.vigencia_texto || 'Sin vigencia_texto cargado')}</div>
     ${f.fecha_venta_fin ? `<div class="vig-fechas">venta hasta ${esc(fmtDiaCorto(f.fecha_venta_fin))}</div>` : ''}
@@ -11585,6 +11586,10 @@ function actualizarVisibilidadFiltrosTarifario() {
   // no marca hotsale). El botón vive en la barra de tabs, con los demás de admin.
   const np = document.getElementById('tar-nueva-promo-btn');
   if (np) np.hidden = !(ROL === 'admin' && tarTab === 'promo');
+  // "Ver ocultas" es solo para admin: es el único rol que las ve en la base
+  // (policy permisiva) y el único que puede volver a mostrarlas.
+  const oc = document.getElementById('tar-f-ocultas-wrap');
+  if (oc && ROL !== 'admin') { oc.setAttribute('data-hidden', ''); document.getElementById('tar-f-ocultas').checked = false; }
 }
 
 /* Chips de filtros activos (2026-08-19). En móvil el botón de filtros pasó a ser
@@ -11609,6 +11614,7 @@ function tarChips() {
   // "Solo vigentes" viene marcado por defecto: lo que hay que avisar es cuando
   // se DESmarcó, porque ahí la lista trae cosas vencidas sin que se note.
   if (visible('tar-f-vigente') && g('tar-f-vigente') && !g('tar-f-vigente').checked) push('Incluye vencidas', () => reset('tar-f-vigente', true));
+  if (visible('tar-f-ocultas') && g('tar-f-ocultas')?.checked) push('Con ocultas', () => reset('tar-f-ocultas', false));
   g('tar-mfs-trigger')?.classList.toggle('con-filtros', chips.length > 0);
   if (!chips.length) { box.innerHTML = ''; return; }
   box.innerHTML = chips.map((c, i) => `<span class="fchip">${esc(c[0])} <b data-ci="${i}">✕</b></span>`).join('')
@@ -11617,6 +11623,7 @@ function tarChips() {
   g('tar-chips-clear').onclick = () => {
     ['tar-f-destino', 'tar-f-tipo', 'tar-f-mes', 'tar-f-precio'].forEach(id => { const el = g(id); if (el) el.value = ''; });
     const n = g('tar-f-ninos'); if (n) n.checked = false;
+    const o = g('tar-f-ocultas'); if (o) o.checked = false;
     const v = g('tar-f-vigente'); if (v) v.checked = true;
     renderTarifario();
   };
@@ -11629,12 +11636,20 @@ async function loadTarifario() {
   // Boletería no es un `tipo`: los vuelos siguen siendo 'paquete' para que el
   // catálogo público los rutee igual. Se filtran por la bandera es_boleteria,
   // y por eso esta pestaña necesita su propio filtro en vez de .eq('tipo', ...).
-  const selProductos = '*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,fecha_venta_fin,incluye_tags,ninos_gratis_cantidad,resumen_ia), producto_fotos(storage_path,orden,es_principal,activo)';
+  const selProductos = '*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,fecha_venta_fin,incluye_tags,ninos_gratis_cantidad,resumen_ia,revisado), producto_fotos(storage_path,orden,es_principal,activo)';
+  // Los embeds se filtran EN EL SERVIDOR, igual que ventas-ia.ts. La policy de
+  // admin es permisiva a propósito (el admin tiene que poder ver lo que ocultó),
+  // así que sin esto el embed devolvía tarifas apagadas y promos retiradas: de
+  // ahí salían el "Desde $X", los tags y el conteo de promos de la tarjeta del
+  // hotel, con la promo vieja ganando por ser la más barata (mejorPrecio).
+  // Sin `!inner` a propósito: el hotel sigue apareciendo aunque no le quede
+  // ninguna promo vigente -- solo se le vacía el embed.
+  const soloVivos = qq => qq.eq('tarifas.vigente', true).eq('promociones.revisado', true);
   const q = (tarTab === 'promo' || tarTab === 'hotsale')
     ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden,es_principal,activo), productos(nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))').order('titulo')
     : tarTab === 'boleteria'
-    ? sb.from('productos').select(selProductos).eq('es_boleteria', true).order('nombre')
-    : sb.from('productos').select(selProductos).eq('tipo', tarTab).eq('es_boleteria', false).order('nombre');
+    ? soloVivos(sb.from('productos').select(selProductos).eq('es_boleteria', true)).order('nombre')
+    : soloVivos(sb.from('productos').select(selProductos).eq('tipo', tarTab).eq('es_boleteria', false)).order('nombre');
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
@@ -11941,8 +11956,12 @@ const hoy = () => new Date().toISOString().slice(0, 10);
 // La venta manda sobre el disfrute (ver plan "vencidas reglas estrictas"):
 // una promo con venta cerrada no es vigente aunque fecha_fin_estimada (el
 // disfrute) siga en el futuro.
-const promoVigente = p => (!p.fecha_fin_estimada || p.fecha_fin_estimada >= hoy())
+const promoFechaVigente = p => (!p.fecha_fin_estimada || p.fecha_fin_estimada >= hoy())
   && (!p.fecha_venta_fin || p.fecha_venta_fin >= hoy());
+// Retirada (revisado=false) NO es vigente: mirar solo las fechas dejaba pasar
+// las promos que el barrido ya apagó -- justo las que no tienen fecha legible,
+// que son las que un humano apagó a mano.
+const promoVigente = p => p.revisado !== false && promoFechaVigente(p);
 // No hay fecha de INICIO de promo en el tarifario (solo fecha_fin_estimada) —
 // "disponible en el mes X" se interpreta igual que el filtro de fechas del
 // Cotizador: sigue vigente al menos hasta el primer día de ese mes. Sin fecha
@@ -11987,6 +12006,7 @@ function renderTarifario() {
   const fMes = val('tar-f-mes') ? Number(val('tar-f-mes')) : null;
   const fNinos = document.getElementById('tar-f-ninos').checked;
   const fVigente = document.getElementById('tar-f-vigente').checked;
+  const fOcultas = ROL === 'admin' && !!document.getElementById('tar-f-ocultas')?.checked;
 
   let filtered = data.filter(x => {
     if (q && !(x.nombre || x.titulo || '').toLowerCase().includes(q) && !(x.destino || '').toLowerCase().includes(q)) return false;
@@ -11998,11 +12018,16 @@ function renderTarifario() {
       if (fNinos && ag.ninosMax < 1) return false;
       if (fVigente && !ag.algunaVigente) return false;
     } else if (tarTab === 'promo') {
+      // Las retiradas (revisado=false) salen SOLO con el chip "Ver ocultas".
+      // Desmarcar "Solo vigentes" era la puerta trasera por la que volvían a
+      // aparecer las promos de julio: ese filtro ahora habla de fechas, no de
+      // lo que el barrido ya apagó.
+      if (x.revisado === false) { if (!fOcultas) return false; }
+      else if (fVigente && !promoVigente(x)) return false;
       if (fDestino && destinoDe(x) !== fDestino) return false;
       if (fTipo && !(x.incluye_tags || []).includes(fTipo)) return false;
       if (fPrecio != null && x.precio_desde_usd != null && x.precio_desde_usd > fPrecio) return false;
       if (fNinos && !(x.ninos_gratis_cantidad > 0)) return false;
-      if (fVigente && !promoVigente(x)) return false;
       if (fMes != null && !promoDisponibleEnMes(x, fMes)) return false;
     } else if (tarTab === 'hotsale') {
       if (fDestino && destinoDe(x) !== fDestino) return false;
@@ -12127,7 +12152,7 @@ function renderTarifario() {
     // no leyendo la fecha entera del pie.
     if (ROL === 'admin') {
       const vencido = (tarTab === 'promo' || tarTab === 'hotsale')
-        ? !promoVigente(x)
+        ? !promoFechaVigente(x)
         : (mejorPrecio(x)?.fecha_venta_fin && mejorPrecio(x).fecha_venta_fin < hoy());
       if (vencido) { el.classList.add('tar-vencido-admin'); el.insertAdjacentHTML('afterbegin', '<span class="tar-vencido-badge">Vencida</span>'); }
     }
