@@ -4537,10 +4537,11 @@ function renderVencidasAhora(filas) {
     <div class="vig-top">
       ${conCheckbox ? `<label style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><input type="checkbox" class="vc-chk" data-tipo="${f.tipo}" data-id="${f.item_id}" checked><span class="vig-nombre">${esc(f.nombre)}</span></label>` : `<div class="vig-nombre">${esc(f.nombre)}</div>`}
       <span class="vig-tipo">${f.tipo === 'promocion' ? 'Promo' : 'Tarifa'}</span>
-      ${f.protegido ? '<span class="vig-tipo" title="Protegida: la carga del PDF no la pisa. Protegida no es eterna — si la fecha de venta pasó, se retira igual.">Protegida</span>' : ''}
+      ${f.protegido ? '<span class="vig-tipo" title="Protegida: la carga del PDF no la pisa. Protegida no es eterna — si pasó la fecha de venta o la de disfrute, se retira igual.">Protegida</span>' : ''}
     </div>
     <div class="vig-texto">${esc(f.vigencia_texto || 'Sin vigencia_texto cargado')}</div>
     ${f.fecha_venta_fin ? `<div class="vig-fechas">venta hasta ${esc(fmtDiaCorto(f.fecha_venta_fin))}</div>` : ''}
+    ${f.razon === 'disfrute' && f.fecha_limite ? `<div class="vig-fechas">disfrute hasta ${esc(fmtDiaCorto(f.fecha_limite))}</div>` : ''}
     ${!conCheckbox ? `<div class="vig-acc"><button class="dbtn peligro vc-ocultar-una" data-tipo="${f.tipo}" data-id="${f.item_id}"><i class="fas fa-eye-slash"></i> Ocultar</button></div>` : ''}
   </div>`;
   cont.innerHTML = `
@@ -4550,7 +4551,7 @@ function renderVencidasAhora(filas) {
     </div>
     ${sinFecha.length ? `<div class="vig-grupo" style="margin-top:12px">
       <div class="vig-grupo-t">Sin fecha legible <span class="vig-tipo">${sinFecha.length}</span></div>
-      <div class="vig-grupo-d">El texto no se pudo parsear a fecha -- ocultarlas de golpe puede tumbar tarifas buenas, por eso van una por una.</div>
+      <div class="vig-grupo-d">Sin fecha de venta ni de disfrute: ningún criterio automático las retira nunca, hay que decidirlas a mano. Ocultarlas de golpe puede tumbar tarifas buenas, por eso van una por una.</div>
       ${sinFecha.map(f => fila(f, false)).join('')}
     </div>` : ''}`;
   document.getElementById('vc-ocultar-todas')?.addEventListener('click', () => ocultarVencidasSeleccionadas(vencidas.length));
@@ -16379,6 +16380,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-02', emoji: '🗓️', titulo: 'El tarifario también se retira por fecha de disfrute', texto: 'Una tarifa o promoción sale de venta por una sola de estas tres razones, en este orden: que la hayan sacado o reemplazado en el PDF nuevo, que se le haya pasado la fecha límite de venta, o que se le haya pasado la fecha límite de disfrute. Esa tercera faltaba: una promo cuyo texto solo dice hasta cuándo se puede disfrutar (sin fecha de venta) se quedaba vendible para siempre. Ahora el barrido de la madrugada la retira sola el día después del último día de disfrute, y en "Comprobar vencidas ahora" cada ítem dice por qué está ahí. El grupo "Sin fecha legible" pasó a mostrar solo lo que no tiene NI fecha de venta NI de disfrute: eso es lo único que nadie va a retirar solo y hay que decidir a mano.', roles: ['admin'] },
   { fecha: '2026-08-29', emoji: '📦', titulo: 'Leads en lote: llegan "Por atender", no "Atendido"', texto: 'Los clientes que el admin reparte por lote ya no aparecen marcados Atendido de entrada -- entran como Por Atender (salvo que ya tuvieran una venta en curso, esa etapa no se pisa). Además hay una sub-pestaña nueva "Asignados en lote" dentro de Leads con todos los repartidos así, y en la vista previa del panel de asignación destildar un lead ahora sí lo excluye.', roles: ['asesor', 'admin'] },
   { fecha: '2026-08-28', emoji: '⚡', titulo: 'El Tarifario en el celular, sin trabas', texto: 'El Tarifario en el teléfono iba lento: al scrollear se trababa, y cada letra que escribías en el buscador o en el filtro de precio lo hacía pensar de nuevo. Ahora el scroll con el dedo es fluido incluso cuando arrancás encima de una foto, la lista se arma varias veces más rápido, y el filtro de precio espera a que termines de escribir en vez de recalcular por cada número. También se arregló un detalle viejo: dentro de los grupos plegados de Hoteles y Promociones, el botón "Ver más" no aparecía nunca aunque el precio no entrara; ahora sí. Se ve exactamente igual que antes — no cambió ni un color ni una tarjeta — y en la computadora no cambia nada.', roles: ROLES_TODOS },
   { fecha: '2026-08-28', emoji: '✍️', titulo: 'Tarifario: crear promociones y editar precios a mano', texto: 'Dos cosas nuevas en el Tarifario, solo para admin. (1) Botón "Nueva promoción" en la pestaña Promos: cargás una promo desde cero — título, precio, vigencia, fecha de fin, qué incluye y a qué hotel cuelga (o ninguno) — sin esperar a que la traiga un PDF. (2) La ficha de un hotel ahora se edita completa: además de nombre, destino y descripción, se agregan y corrigen las tarifas fila por fila (categoría, precio, vigencia, moneda), con el precio calculado a la vista mientras escribís, más las notas internas, el switch de "protegido" y las fotos con portada. Todo lo que cargues o edites a mano queda protegido: la próxima actualización automática del tarifario no lo pisa ni lo retira.', roles: ['admin'] },
