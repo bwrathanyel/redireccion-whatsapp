@@ -1488,6 +1488,12 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok),.rol-marketing .sheet-item:not(.nav-marketing-ok){display:none}
 .rol-boleteria .nav-item:not(.nav-boleteria-ok),.rol-boleteria .bn-item:not(.nav-boleteria-ok),.rol-boleteria .sheet-item:not(.nav-boleteria-ok){display:none}
 .rol-asesor .admin-only,.rol-marketing .admin-only,.rol-boleteria .admin-only{display:none}
+/* La fila del selector de asesor del sheet "Nuevo lead" llevaba display:flex
+   inline, que le ganaba en especificidad a .admin-only y dejaba el <select> +
+   "Aleatorio" visibles para el asesor (que no puede reasignar). El flex vive
+   acá para que .admin-only lo pueda tapar. */
+.nl-asesor-row{display:flex;gap:8px;align-items:center}
+.rol-asesor .nl-asesor-row,.rol-marketing .nl-asesor-row,.rol-boleteria .nl-asesor-row{display:none}
 
 /* Modo Boletería: cambio de modo completo, no un tema scopeado a una
    sección. body.modo-boleteria vive arriba de todo el árbol -- las
@@ -5243,7 +5249,7 @@ body.fsize-grande{--tap:41.9px}
     <label class="fl">Fecha estimada</label>
     <input id="nl-fecha" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09">
     <label class="fl admin-only">Asesor</label>
-    <div class="admin-only" style="display:flex;gap:8px;align-items:center">
+    <div class="admin-only nl-asesor-row">
       <select id="nl-asesor" class="ei" style="flex:1"><option value="">Sin asignar</option></select>
       <button class="dbtn" id="nl-aleatorio-btn" type="button" style="width:auto;white-space:nowrap;padding:8px 12px"><i class="fas fa-shuffle"></i> Aleatorio</button>
     </div>
