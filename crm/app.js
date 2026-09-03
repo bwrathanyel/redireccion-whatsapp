@@ -4431,8 +4431,16 @@ async function guardarLead() {
   const montoInicialRaw = val('e-monto-inicial').trim();
   const restantePagoRaw = val('e-restante-pago').trim();
   err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
+  // Bug real (2026-09-03): esto se mandaba SIEMPRE, aunque el usuario no
+  // hubiera tocado el <select id="e-estado">. Para un asesor que solo quería
+  // guardar montos/fecha en "Pagos y captación", mandar el estado actual del
+  // lead re-disparaba el guard anti-cierre de actualizar_lead ("cerrá la venta
+  // desde Postventa...") si ese lead ya estaba en PAGO REALIZADO. Mismo patrón
+  // que p_fecha_creacion abajo: solo se manda si el campo visible cambió; si no,
+  // null y el RPC (coalesce) deja el estado intacto.
+  const estadoParam = camposSuciosLead.has('e-estado') ? estado : null;
   const { data, error } = await sb.rpc('actualizar_lead', {
-    p_lead_id: currentLead.id, p_estado: estado, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado,
+    p_lead_id: currentLead.id, p_estado: estadoParam, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado,
     p_nombre: nombre, p_telefono: val('e-telefono').trim(), p_canal: val('e-canal').trim(),
     p_destino: val('e-destino').trim(), p_destino_consulta: val('e-destino-consulta').trim(), p_personas: val('e-personas').trim(),
     // Bug real (2026-07-21): esto se mandaba SIEMPRE que se guardaba el drawer,
@@ -16380,6 +16388,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-03', emoji: '💳', titulo: 'Los asesores ya pueden cerrar la venta', texto: 'Dos arreglos en "Pagos y captación" (ficha del lead). Antes: al guardar montos o fechas sin tocar el estado, saltaba un error rojo y no dejaba guardar. Ahora el guardado solo toca el estado si realmente cambiaste ese menú. Y además: un asesor ya puede marcar "PAGO REALIZADO" y que se genere la factura directo, sin esperar a que un admin lo confirme desde la cola de verificación.', roles: ['asesor', 'admin'] },
   { fecha: '2026-09-02', emoji: '🗓️', titulo: 'El tarifario también se retira por fecha de disfrute', texto: 'Una tarifa o promoción sale de venta por una sola de estas tres razones, en este orden: que la hayan sacado o reemplazado en el PDF nuevo, que se le haya pasado la fecha límite de venta, o que se le haya pasado la fecha límite de disfrute. Esa tercera faltaba: una promo cuyo texto solo dice hasta cuándo se puede disfrutar (sin fecha de venta) se quedaba vendible para siempre. Ahora el barrido de la madrugada la retira sola el día después del último día de disfrute, y en "Comprobar vencidas ahora" cada ítem dice por qué está ahí. El grupo "Sin fecha legible" pasó a mostrar solo lo que no tiene NI fecha de venta NI de disfrute: eso es lo único que nadie va a retirar solo y hay que decidir a mano.', roles: ['admin'] },
   { fecha: '2026-08-29', emoji: '📦', titulo: 'Leads en lote: llegan "Por atender", no "Atendido"', texto: 'Los clientes que el admin reparte por lote ya no aparecen marcados Atendido de entrada -- entran como Por Atender (salvo que ya tuvieran una venta en curso, esa etapa no se pisa). Además hay una sub-pestaña nueva "Asignados en lote" dentro de Leads con todos los repartidos así, y en la vista previa del panel de asignación destildar un lead ahora sí lo excluye.', roles: ['asesor', 'admin'] },
   { fecha: '2026-08-28', emoji: '⚡', titulo: 'El Tarifario en el celular, sin trabas', texto: 'El Tarifario en el teléfono iba lento: al scrollear se trababa, y cada letra que escribías en el buscador o en el filtro de precio lo hacía pensar de nuevo. Ahora el scroll con el dedo es fluido incluso cuando arrancás encima de una foto, la lista se arma varias veces más rápido, y el filtro de precio espera a que termines de escribir en vez de recalcular por cada número. También se arregló un detalle viejo: dentro de los grupos plegados de Hoteles y Promociones, el botón "Ver más" no aparecía nunca aunque el precio no entrara; ahora sí. Se ve exactamente igual que antes — no cambió ni un color ni una tarjeta — y en la computadora no cambia nada.', roles: ROLES_TODOS },
