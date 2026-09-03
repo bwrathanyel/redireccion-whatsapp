@@ -4491,7 +4491,12 @@ const VIG_GRUPOS = [
   { k: 'dos_ventanas', t: 'Dos temporadas en la misma vigencia', grave: false,
     d: 'El texto declara dos rangos y el campo guarda solo el último: el hueco del medio no lo filtra nadie.' },
   { k: 'sin_fecha', t: 'Sin fecha de fin', grave: false,
-    d: 'Se ofrecen para siempre. Puede estar bien (temporada abierta) o ser un olvido de carga.' },
+    d: 'Se ofrecen para siempre y nada las retira solas: son carga manual o no vienen del tarifario nacional. Ponerles fecha es la única forma de que dejen de ofrecerse.' },
+  // No es una fecha faltante: la hoja del hotel vale "hasta que mande otra".
+  // La activación de la próxima carga nacional hace retiro literal de todo lo
+  // anterior, así que estas se apagan solas. Van al final y solo informan.
+  { k: 'hoja_abierta', t: 'Hoja de tarifa abierta (atada al PDF)', grave: false,
+    d: 'El hotel no declara vigencia: su hoja vale hasta que mande otra. Se retiran solas cuando entra la próxima carga del tarifario nacional, así que no hace falta ponerles fecha.' },
 ];
 let VIG_FILAS = [];
 
@@ -4707,10 +4712,28 @@ function renderRevisionVigencias() {
   const urgentes = porGrupo('venta_cerrada').length + porGrupo('vencida').length;
   const huerfanos = porGrupo('venta_cerrada').concat(porGrupo('vencida')).filter(f => f.deja_sin_precio).length;
   const proximos = porGrupo('venta_cierra_pronto').length + porGrupo('vence_pronto').length;
+  // Dos números, no uno: lo que hay que decidir a mano y lo que se resuelve
+  // solo con la próxima carga. Juntarlos daba un "663" que asustaba sin decir
+  // qué hacer.
   const sinFecha = porGrupo('sin_fecha_con_pista').length + porGrupo('sin_fecha').length;
+  const hojaAbierta = porGrupo('hoja_abierta').length;
+  const masiva = productosSinFecha();
 
   const item = f => {
     const grave = f.problema === 'vencida' || f.problema === 'venta_cerrada';
+    if (f.problema === 'hoja_abierta') {
+      return `<div class="vig-item">
+        <div class="vig-top">
+          <div class="vig-nombre">${esc(f.nombre)}</div>
+          <span class="vig-tipo">${f.tipo === 'promocion' ? 'Promo' : 'Tarifa'}</span>
+        </div>
+        ${f.precio_texto ? `<div class="vig-texto">${esc(f.precio_texto)}</div>` : ''}
+        <div class="vig-fechas">${f.confirmada_en ? `confirmada en el PDF del ${esc(fmtDiaCorto(String(f.confirmada_en).slice(0, 10)))}` : 'sin carga registrada'}</div>
+        <div class="vig-acc">
+          <button class="dbtn peligro" data-vig-retirar="${f.tipo}:${f.item_id}"><i class="fas fa-eye-slash"></i> Retirar igual</button>
+        </div>
+      </div>`;
+    }
     // La fecha que ya viene en el texto se ofrece precargada: es el arreglo de
     // raíz (llenar el campo) en vez de solo retirar el item de hoy.
     const sugerida = f.problema === 'sin_fecha_con_pista' ? (fechaSugeridaDeTexto(f.vigencia_texto) || '') : '';
@@ -4740,7 +4763,19 @@ function renderRevisionVigencias() {
       <div class="vig-kpi ${urgentes ? 'grave' : ''}"><b>${urgentes}</b><span>Retirar ya</span></div>
       <div class="vig-kpi ${proximos ? 'aviso' : ''}"><b>${proximos}</b><span>Esta semana</span></div>
       <div class="vig-kpi"><b>${sinFecha}</b><span>Sin fecha</span></div>
+      <div class="vig-kpi"><b>${hojaAbierta}</b><span>Hoja abierta</span></div>
     </div>
+    ${masiva.length ? `<div class="vig-grupo" style="margin-bottom:16px">
+      <div class="vig-grupo-t">Ponerle fecha a un proveedor entero</div>
+      <div class="vig-grupo-d">Las ${sinFecha} sin fecha son de ${masiva.length} proveedor(es): casi siempre el mismo PDF partido en varios tramos. Elegí el hotel y la fecha una sola vez.</div>
+      <div class="vig-acc" style="margin-top:8px">
+        <select class="ei" id="vig-masiva-prod" style="flex:1;min-width:160px">
+          ${masiva.map(p => `<option value="${p.id}">${esc(p.nombre)} (${p.n})</option>`).join('')}
+        </select>
+        <input type="date" class="ei" id="vig-masiva-fecha">
+        <button class="dbtn gh" id="vig-masiva-btn" type="button"><i class="fas fa-calendar-day"></i> Poner fecha a todo</button>
+      </div>
+    </div>` : ''}
     ${paraRetirar.length ? `<button class="dbtn peligro" id="vig-retirar-todo" type="button" style="width:100%;margin-bottom:${huerfanos ? '6' : '16'}px"><i class="fas fa-eye-slash"></i> Retirar los ${paraRetirar.length} que ya no se venden</button>` : ''}
     ${huerfanos ? `<div class="vig-grupo-d" style="margin-bottom:16px"><i class="fas fa-triangle-exclamation" style="color:var(--accent)"></i> ${huerfanos} quedan afuera del retiro masivo porque son el único precio de su hotel — revisalos uno por uno más abajo.</div>` : ''}
     ${VIG_GRUPOS.map(g => {
@@ -4756,6 +4791,49 @@ function renderRevisionVigencias() {
   cuerpo.querySelectorAll('[data-vig-retirar]').forEach(b => b.addEventListener('click', () => retirarItemVigencia(b.dataset.vigRetirar, b)));
   cuerpo.querySelectorAll('[data-vig-fijar]').forEach(b => b.addEventListener('click', () => fijarFechaVigencia(b.dataset.vigFijar, b)));
   document.getElementById('vig-retirar-todo')?.addEventListener('click', retirarTodosLosVencidos);
+  document.getElementById('vig-masiva-btn')?.addEventListener('click', fijarFechaProducto);
+}
+
+/* Proveedores con filas sin fecha, ordenados por cuántas tienen. Sale de las
+   filas que ya están en pantalla: no hace falta traerse el catálogo entero
+   para armar el selector. `hoja_abierta` queda afuera a propósito -- esas no
+   necesitan fecha. */
+function productosSinFecha() {
+  const cuenta = new Map();
+  VIG_FILAS.filter(f => f.problema === 'sin_fecha' || f.problema === 'sin_fecha_con_pista')
+    .forEach(f => {
+      if (f.producto_id == null) return;
+      const p = cuenta.get(f.producto_id) || { id: f.producto_id, nombre: f.nombre, n: 0 };
+      p.n++; cuenta.set(f.producto_id, p);
+    });
+  return [...cuenta.values()].sort((a, b) => b.n - a.n || a.nombre.localeCompare(b.nombre));
+}
+
+async function fijarFechaProducto() {
+  const sel = document.getElementById('vig-masiva-prod');
+  const fecha = document.getElementById('vig-masiva-fecha')?.value;
+  const id = Number(sel?.value);
+  if (!fecha) { errToast('Elegí la fecha de fin primero'); return; }
+  if (!id) return;
+  const nombre = sel.options[sel.selectedIndex].text;
+  // El RPC toca TODOS los tramos vigentes del hotel, no solo los que están sin
+  // fecha. Decirlo acá evita la sorpresa; queda registrado y es reversible.
+  if (!(await confirmarSheet({
+    titulo: `Fin ${fmtDiaCorto(fecha)} para ${nombre}`,
+    detalle: 'Se le pone esa fecha de fin a TODOS los tramos vigentes de ese proveedor, no solo a los que están sin fecha. Queda registrado en el historial de revisión y se puede revertir.',
+    textoOk: 'Poner fecha',
+  }))) return;
+  const btn = document.getElementById('vig-masiva-btn');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+  const { data, error } = await sb.rpc('fijar_fecha_fin_producto', { p_producto_id: id, p_fecha: fecha });
+  if (error || !data?.ok) {
+    btn.disabled = false;
+    errToast('No se pudo guardar: ' + (error?.message || (data?.error === 'sin_tramos' ? 'ese proveedor ya tenía esa fecha' : data?.error) || ''));
+    return;
+  }
+  okToast(`${data.tramos} tramo(s) con fin ${fmtDiaCorto(fecha)}`);
+  await cargarRevisionVigencias();
+  loadTarifario();
 }
 
 // Primera fecha del texto que sea de hoy en adelante; si todas ya pasaron, la
