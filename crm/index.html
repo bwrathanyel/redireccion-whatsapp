@@ -619,6 +619,51 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .dfv-rich p{margin:0 0 8px}
 .dfv-rich p:last-child{margin-bottom:0}
 .dfv-num{color:var(--accent);font-weight:700}
+/* ---------- Tarifario: el hotel es una carpeta (Fase 4) ----------
+   Una tarjeta por promoción (una fila del PDF) dentro del drawer del hotel.
+   Reusa el lenguaje visual de .dfield/.dfv-rich: los mismos tokens y radios.
+   Sin media query a propósito: la grilla es auto-fill y en el ancho del drawer
+   (410px menos 48px de padding) ya cae a una sola columna, así que el móvil se
+   apila solo -- ningún breakpoint de escritorio se toca.
+   Prefijo `promo-` porque `pc-` ya es de la tarjeta de Personal. */
+.carpeta{margin-top:14px}
+.carpeta-titulo{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-bottom:11px}
+.carpeta-titulo i{color:var(--accent);margin-right:7px}
+.carpeta-plan{margin-bottom:14px}
+.carpeta-plan-titulo{margin:0 0 9px;font-size:12.5px;font-weight:800;color:var(--txt)}
+.promo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:9px}
+.promo-card{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:11px 14px}
+.promo-destacada{border-color:rgba(255,145,0,.35);background:var(--accent-soft)}
+.promo-apagada{opacity:.55}
+.promo-top{display:flex;align-items:flex-start;gap:7px;flex-wrap:wrap}
+.promo-titulo{font-size:13px;font-weight:800;flex:1;min-width:0;overflow-wrap:anywhere}
+.promo-badge{padding:2px 9px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.3px;background:var(--accent);color:#1a1000;white-space:nowrap}
+.promo-badge-off{background:transparent;border:1px solid var(--line2);color:var(--muted)}
+.promo-sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+.promo-precios{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:9px}
+.promo-precio{display:flex;align-items:baseline;gap:4px}
+.promo-pk{font-size:9.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+.promo-pv{font-size:13px;font-weight:800;color:var(--accent)}
+.promo-precio-texto{font-size:12.5px;margin-top:9px}
+.promo-datos{margin-top:9px;display:flex;flex-direction:column;gap:2px}
+.promo-dato{display:flex;gap:7px;font-size:11.5px}
+.promo-dk{flex:0 0 52px;color:var(--muted2);text-transform:uppercase;font-size:9.5px;font-weight:800;letter-spacing:.11em;padding-top:2px}
+.promo-dv{color:var(--txt);overflow-wrap:anywhere}
+.promo-cond{margin:9px 0 0;padding-left:14px;font-size:11.5px;color:var(--muted);line-height:1.45}
+.promo-cond li{margin-bottom:2px}
+.promo-cond-fuerte{color:var(--amber);font-weight:600}
+.cond-bloque{border:1px solid var(--line);border-radius:10px;margin-top:11px;background:var(--panel)}
+.cond-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:7px;padding:11px 14px;font-size:12px;font-weight:600;color:var(--txt);min-height:44px}
+.cond-sum::-webkit-details-marker{display:none}
+.cond-sum i:first-child{color:var(--accent)}
+.cond-caret{margin-left:auto;color:var(--muted);font-size:11px;transition:transform .16s}
+.cond-bloque[open] .cond-caret{transform:rotate(180deg)}
+.cond-cuerpo{padding:0 14px 11px;font-size:11.5px;color:var(--muted);line-height:1.5}
+.cond-fila{display:flex;gap:7px;padding:4px 0;border-top:1px solid var(--line)}
+.cond-k{flex:0 0 96px;color:var(--muted2);text-transform:uppercase;font-size:9.5px;font-weight:800;letter-spacing:.11em;padding-top:2px}
+.cond-v{color:var(--txt);overflow-wrap:anywhere}
+.cond-sups,.cond-otras{margin:0 0 7px;padding-left:14px}
+.cond-sups li,.cond-otras li{margin-bottom:2px}
 .dactions{display:flex;gap:10px;margin-top:22px}
 .dbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:12px;font-size:13px;font-weight:700;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:filter .15s,transform .15s}
 .dbtn:disabled{opacity:.45;cursor:not-allowed}
