@@ -4677,10 +4677,15 @@ async function vincularPromoHotel(promoId, btn) {
   });
   if (error || !data?.ok) { errToast('No se pudo vincular: ' + (error?.message || data?.error || '')); btn.disabled = false; btn.innerHTML = '<i class="fas fa-link"></i> Vincular'; return; }
   SH_HOTELES_CACHE = null;
-  undoToast(`Vinculada a ${data.hotel}`, async () => {
-    await sb.rpc('editar_promocion', { p_id: promoId, p_producto_id: 0 });
-    tarCache = {}; loadTarifario(); cargarSinHotel();
-  });
+  // Sin "Deshacer" desde la Fase 5 paso 4: vincular ya no es un UPDATE de
+  // producto_id, es una MUDANZA -- la fila sale de `promociones_huerfanas` y
+  // nace en `tarifas` con un id nuevo (el que devuelve el RPC), llevándose sus
+  // fotos. El viejo deshacer llamaba `editar_promocion(p_producto_id => 0)`,
+  // que hoy intentaría poner `tarifas.producto_id` en NULL sobre una columna
+  // NOT NULL: fallaba en silencio y dejaba creer que se había desvinculado.
+  // Desvincular necesita su propio RPC (mudanza inversa); mientras no exista,
+  // se corrige eligiendo el hotel correcto desde la promoción.
+  okToast(`Vinculada a ${data.hotel}`);
   tarCache = {};
   loadTarifario();
   cargarSinHotel();
@@ -11216,6 +11221,24 @@ let tarEntradaContexto = null;
 const tarDestinosAbiertos = new Set();
 const tarHotelesAbiertos = new Set();
 const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale', boleteria: 'Boletería' };
+/* Un solo select de productos para las tres puertas de entrada al drawer
+   (grilla del Tarifario, hidratación de la búsqueda IA y "abrir uno suelto"):
+   tenían tres copias distintas y el drawer abierto desde el buscador se quedaba
+   sin fotos ni destacada.
+   - `tarifa_destacada_id`: columna computada de PostgREST (migración
+     20260904160000). La BASE elige la promoción a destacar -- la más barata por
+     persona que se pueda vender hoy -- en la misma consulta que trae las
+     tarifas. Sin esto habría que recalcularla por fila en el navegador, y el
+     CRM, la web y el bot destacarían promociones distintas.
+   - `tarifario_bloques`: la sección azul del PDF (condiciones de ese hotel+plan,
+     con los suplementos obligatorios). Va embebida en cada tarifa por su
+     `bloque_id`; hoy la mayoría son NULL y la carpeta se dibuja igual sin ella.
+   - **Sin embed de `promociones`** (Fase 5, paso 4): los flyers dejaron de ser
+     una tabla aparte -- viven en `tarifas` con `origen = 'flyer'` y
+     `promociones` es una VISTA sobre esas mismas filas. Pedir las dos traía
+     cada flyer dos veces (tarjeta de promo + fila de la carpeta) y el conteo de
+     promociones del hotel salía inflado. Una sola fuente: `tarifas`. */
+const TAR_SEL_PRODUCTOS = '*, tarifa_destacada_id, tarifas(*, tarifario_bloques(*)), producto_fotos(storage_path,orden,es_principal,activo)';
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas']);
   const mesSel = document.getElementById('tar-f-mes');
@@ -11609,11 +11632,14 @@ let tasItemsCache = null;
 async function cargarTasItems() {
   const [{ data: prods }, { data: promos }] = await Promise.all([
     sb.from('productos').select('id,tipo,nombre,activo').neq('tipo', 'info').order('tipo').order('nombre'),
-    sb.from('promociones').select('id,titulo,revisado').order('titulo'),
+    // Las promociones son filas de `tarifas` con título (Fase 5 paso 4): el
+    // interruptor de visibilidad es `vigente`, no el `revisado` de la tabla
+    // vieja -- que ya no existe como columna propia.
+    sb.from('tarifas').select('id,titulo,vigente').not('titulo', 'is', null).order('titulo'),
   ]);
   tasItemsCache = [
     ...(prods || []).map(p => ({ id: p.id, tabla: 'productos', campo: 'activo', tipo: p.tipo, nombre: p.nombre, visible: p.activo })),
-    ...(promos || []).map(p => ({ id: p.id, tabla: 'promociones', campo: 'revisado', tipo: 'promo', nombre: p.titulo, visible: p.revisado })),
+    ...(promos || []).map(p => ({ id: p.id, tabla: 'tarifas', campo: 'vigente', tipo: 'promo', nombre: p.titulo, visible: p.vigente })),
   ];
   renderTasList();
 }
@@ -11723,7 +11749,7 @@ async function loadTarifario() {
   // Boletería no es un `tipo`: los vuelos siguen siendo 'paquete' para que el
   // catálogo público los rutee igual. Se filtran por la bandera es_boleteria,
   // y por eso esta pestaña necesita su propio filtro en vez de .eq('tipo', ...).
-  const selProductos = '*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,fecha_venta_fin,incluye_tags,ninos_gratis_cantidad,resumen_ia,revisado), producto_fotos(storage_path,orden,es_principal,activo)';
+  const selProductos = TAR_SEL_PRODUCTOS;
   // Los embeds se filtran EN EL SERVIDOR, igual que ventas-ia.ts. La policy de
   // admin es permisiva a propósito (el admin tiene que poder ver lo que ocultó),
   // así que sin esto el embed devolvía tarifas apagadas y promos retiradas: de
@@ -11731,9 +11757,16 @@ async function loadTarifario() {
   // hotel, con la promo vieja ganando por ser la más barata (mejorPrecio).
   // Sin `!inner` a propósito: el hotel sigue apareciendo aunque no le quede
   // ninguna promo vigente -- solo se le vacía el embed.
-  const soloVivos = qq => qq.eq('tarifas.vigente', true).eq('promociones.revisado', true);
+  // Un solo filtro desde la Fase 5 paso 4: `tarifas.vigente` cubre también a los
+  // flyers, que ahora son filas de `tarifas` (lo que era `promociones.revisado`).
+  const soloVivos = qq => qq.eq('tarifas.vigente', true);
+  // Promociones / Hot Sales leen `tarifas` directo (no la vista `promociones`):
+  // una fila con título ES una promoción, venga de un flyer (`origen='flyer'`) o
+  // de una línea del PDF. Leer las dos fuentes listaba cada flyer dos veces.
+  // `promocion_fotos` ya apunta a `tarifas` (la FK se repuntó en la migración
+  // 20260904210000), así que las fotos de los flyers siguen llegando igual.
   const q = (tarTab === 'promo' || tarTab === 'hotsale')
-    ? sb.from('promociones').select('*, promocion_fotos(storage_path,orden,es_principal,activo), productos(nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))').order('titulo')
+    ? sb.from('tarifas').select('*, tarifario_bloques(*), promocion_fotos(storage_path,orden,es_principal,activo), productos(id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))').not('titulo', 'is', null).order('titulo')
     : tarTab === 'boleteria'
     ? soloVivos(sb.from('productos').select(selProductos).eq('es_boleteria', true)).order('nombre')
     : soloVivos(sb.from('productos').select(selProductos).eq('tipo', tarTab).eq('es_boleteria', false)).order('nombre');
@@ -11753,7 +11786,11 @@ async function loadTarifario() {
       data.forEach(x => { if (x.hotel_id) x.hotel = porId[x.hotel_id]; });
     }
   }
-  tarCache[tarTab] = data;
+  // Las filas de `tarifas` se adaptan a la forma de promo (nombres legacy:
+  // revisado, fecha_fin_estimada) para que filtros, orden, agrupación por hotel
+  // y Hot Sales sigan hablando un solo idioma.
+  const filas = (tarTab === 'promo' || tarTab === 'hotsale') ? data.map(tarifaComoPromo) : data;
+  tarCache[tarTab] = filas;
   tarEntradaContexto = null;
   renderTarifario();
 }
@@ -12060,9 +12097,12 @@ function promoDisponibleEnMes(p, mesNum) {
   return p.fecha_fin_estimada >= primerDia;
 }
 
-// Para hoteles: agrega datos de sus promos vinculadas (precio mínimo, tags, niños gratis, vigencia).
+// Para hoteles: agrega datos de todas sus promociones (precio mínimo, tags,
+// niños gratis, vigencia). Desde la Fase 5 paso 4 la fuente es `x.tarifas`: los
+// flyers vinculados están ahí adentro con `origen='flyer'`, y el embed ya viene
+// filtrado por `vigente` desde el servidor.
 // Memoizado por ítem (WeakMap): renderTarifario lo llama en el predicado del
-// filtro y de nuevo en tarRowHtml. Depende solo de x.promociones y de hoy().
+// filtro y de nuevo en tarRowHtml. Depende solo de x.tarifas y de hoy().
 const _agregarHotelCache = new WeakMap();
 function agregarHotel(x) {
   if (x && typeof x === 'object') {
@@ -12074,13 +12114,20 @@ function agregarHotel(x) {
   return r;
 }
 function _agregarHotelCalc(x) {
-  const promos = x.promociones || [];
-  const precios = promos.map(p => p.precio_desde_usd).filter(v => v != null);
+  const promos = x.tarifas || [];
+  // Con `precios` estructurados gana el precio por persona (mismo criterio que
+  // `precio_por_persona()` en SQL); sin ellos, el `precio_desde_usd` legacy.
+  // El `precio_desde_usd` de una línea del PDF suele ser el precio de CHD:
+  // anunciarlo como "Desde" sería cotizar de menos. Solo se acepta el legacy de
+  // los flyers, que es el "desde" que el propio flyer publica.
+  const precios = promos.map(p => (p.precios ? tarPrecioPorPersona(p) : (p.origen === 'flyer' ? p.precio_desde_usd : null))).filter(v => v != null);
   return {
     tags: [...new Set(promos.flatMap(p => p.incluye_tags || []))],
-    precioMin: precios.length ? Math.min(...precios) : null,
+    precioMin: precios.length ? Math.round(Math.min(...precios) * 100) / 100 : null,
     ninosMax: Math.max(0, ...promos.map(p => p.ninos_gratis_cantidad || 0)),
-    algunaVigente: promos.length ? promos.some(promoVigente) : true,
+    // "Vendible hoy" en vez de las fechas de la promo vieja: mismo criterio que
+    // `tarifa_destacada()` en SQL (venta abierta + disfrute no vencido).
+    algunaVigente: promos.length ? promos.some(tarVendibleHoy) : true,
   };
 }
 
@@ -12122,11 +12169,13 @@ function renderTarifario() {
     } else if (tarTab === 'paquete') {
       if (fDestino && destinoDe(x) !== fDestino) return false;
       if (fPrecio != null) {
-        const precioTarifa = (x.tarifas || [])[0]?.precio_desde_usd;
+        // La destacada, no la primera fila: filtrar por "hasta $X" contra una
+        // fila cualquiera escondía productos que sí entran en el presupuesto.
+        const precioTarifa = tarifaDestacada(x)?.precio_desde_usd;
         if (precioTarifa != null && precioTarifa > fPrecio) return false;
       }
     } else if (fPrecio != null) {
-      const precioTarifa = (x.tarifas || [])[0]?.precio_desde_usd;
+      const precioTarifa = tarifaDestacada(x)?.precio_desde_usd;
       if (precioTarifa != null && precioTarifa > fPrecio) return false;
     }
     return true;
@@ -12230,7 +12279,10 @@ function renderTarifario() {
   [...document.querySelectorAll('#tar-grid .tar-item')].forEach(el => {
     const x = byId.get(el.dataset.id);
     if (!x) return;
-    el.onclick = () => openProductoDrawer(x);
+    // Una fila de `tarifas` listada en Promociones (Fase 4) NO abre un drawer de
+    // promoción: abre la carpeta de su hotel, que es donde vive con sus
+    // hermanas y sus condiciones.
+    el.onclick = () => x._tarifa && x._productoId ? abrirDesdeBusquedaIA('producto', x._productoId) : openProductoDrawer(x);
     // La policy RLS deja al admin ver también lo que él mismo ocultó (para
     // poder revertirlo) — sin esta marca se vería idéntico a lo visible y
     // parecería que ocultar no hizo nada.
@@ -12314,12 +12366,18 @@ function tarRowHtml(x) {
   let tags = [], precioTxt = null, promosCount = 0;
   if (tarTab === 'hotel') {
     const ag = agregarHotel(x);
-    tags = ag.tags; precioTxt = ag.precioMin != null ? `Desde $${ag.precioMin}` : null;
-    promosCount = x.promociones?.length || 0;
+    tags = ag.tags;
+    // Sin promo vinculada el hotel quedaba en "Consultar precio" aunque tuviera
+    // N tarifas. Con precios estructurados se muestra el "Desde $X p/p" de la
+    // destacada; sin ellos NO se cae a precio_texto: en esta vista de lista es
+    // una tabla entera pegada y desarma la fila.
+    const d = tarifaDestacada(x);
+    precioTxt = ag.precioMin != null ? `Desde $${ag.precioMin}` : (d?.precios ? tarBadgePrecio(d) : null);
+    promosCount = (x.tarifas || []).length;
   } else if (esPromo) {
     tags = x.incluye_tags || []; precioTxt = x.precio_texto || null;
   } else {
-    precioTxt = (x.tarifas || [])[0]?.precio_texto || null;
+    precioTxt = tarifaDestacada(x)?.precio_texto || null;
   }
   return `<div class="tar-item tar-hotel-row" data-id="${x.id}">
     ${foto ? `<img class="thr-thumb" src="${esc(foto)}" alt="" loading="lazy" decoding="async">` : `<div class="thr-thumb thr-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`}
@@ -12383,7 +12441,7 @@ function tarCardHtml(x) {
     // usa la web pública). Por diseño NUNCA contiene precios -- el precio real
     // sale siempre de precio_texto, tal cual está cargado.
     return `<div class="tar-item tar-card" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'promociones', 'revisado'), x.precio_texto)}
+      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'tarifas', 'vigente'), x._tarifa ? tarBadgePrecio(x._tarifa) : x.precio_texto)}
       <div class="tc-body">
         <div class="tc-nombre">${esc(x.titulo)}</div>
         ${x.resumen_ia ? `<div class="tc-resumen-ia">${esc(x.resumen_ia)}</div>` : ''}
@@ -12395,11 +12453,15 @@ function tarCardHtml(x) {
       </div></div>`;
   }
   const tarifa = mejorPrecio(x);
-  const promos = x.promociones || [];
-  const tagsHotel = [...new Set(promos.flatMap(p => p.incluye_tags || []))];
+  // Cuántas promociones tiene la carpeta del hotel: las filas de `tarifas`, que
+  // desde la Fase 5 paso 4 son TODAS -- las líneas del PDF y los flyers
+  // vinculados. Un solo conteo: cuando eran dos listas, el flyer se contaba dos
+  // veces (acá y en "N promociones activas").
+  const nTarifas = (x.tarifas || []).length;
+  const tagsHotel = agregarHotel(x).tags;
   const bullets = resumenBullets(x.descripcion);
   return `<div class="tar-item tar-card" data-id="${x.id}">
-    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), tcHideBtnHtml(x.id, 'productos', 'activo'), tarifa?.precio_texto)}
+    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), tcHideBtnHtml(x.id, 'productos', 'activo'), tarBadgePrecio(tarifa))}
     <div class="tc-body">
       <div class="tc-nombre">${esc(x.nombre)}</div>
       ${bullets.length ? `<ul class="tc-resumen">${bullets.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
@@ -12407,7 +12469,7 @@ function tarCardHtml(x) {
     <div class="tc-pie">
       ${tarifa ? `<div class="tc-precio">${esc(tarifa.precio_texto)}</div>` : ''}
       ${vigenciaHtml(tarifa?.vigencia_texto)}
-      ${promos.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promos.length} promoción${promos.length > 1 ? 'es' : ''} activa${promos.length > 1 ? 's' : ''}</div>` : ''}
+      ${nTarifas > 1 ? `<div class="tc-promos"><i class="fas fa-layer-group"></i> ${nTarifas} promociones</div>` : ''}
       ${tagsHtml(tagsHotel)}
     </div></div>`;
 }
@@ -12418,8 +12480,7 @@ function tarFichaHtml(x) {
   const tarifa = !esPromo ? mejorPrecio(x) : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
-  const promos = !esPromo ? (x.promociones || []) : [];
-  const tags = esPromo ? (x.incluye_tags || []) : [...new Set(promos.flatMap(p => p.incluye_tags || []))];
+  const tags = esPromo ? (x.incluye_tags || []) : agregarHotel(x).tags;
   return `<div class="tar-item tar-ficha" data-id="${x.id}">
     <div class="tf-media"${foto ? ` style="background-image:url('${esc(foto)}')"` : ''}>${!foto ? `<i class="fas fa-${esPromo ? 'tag' : 'image'}"></i>` : ''}<div class="carrusel-dots"></div></div>
     <div class="tf-body">
@@ -12428,7 +12489,7 @@ function tarFichaHtml(x) {
       ${!esPromo && x.descripcion ? `<ul class="tc-resumen tc-resumen-ficha">${resumenBullets(x.descripcion).map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
       ${precio ? `<div class="tc-precio">${esc(precio)}</div>` : ''}
       ${vigenciaHtml(vigencia)}
-      ${promos.length ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promos.length} promoción${promos.length > 1 ? 'es' : ''} activa${promos.length > 1 ? 's' : ''}</div>` : ''}
+      ${!esPromo && (x.tarifas || []).length > 1 ? `<div class="tc-promos"><i class="fas fa-layer-group"></i> ${x.tarifas.length} promociones</div>` : ''}
       ${tagsHtml(tags)}
     </div>
   </div>`;
@@ -12852,25 +12913,278 @@ async function loadTarifarioInfo() {
   box.style.display = '';
   list.innerHTML = data.map(x => `<div class="tar-info-item"><b>${esc(x.nombre)}</b>${esc(x.descripcion || '')}</div>`).join('');
 }
+/* ---------- Fase 4: el hotel es una carpeta ----------
+   Una fila de `tarifas` es UNA promoción del PDF (título, plan, habitación,
+   precios etiquetados por ocupación y sus ventanas de disfrute). Antes el
+   drawer mostraba `tarifas[0]` como si fuera "el precio del hotel": el asesor
+   no veía las otras N filas y cotizaba con la que hubiera llegado primero.
+   Los campos estructurados (`precios`, `ventanas`, `bloque_id`...) los escribe
+   la carga maestra de la Fase 2; mientras esa carga no corra vienen NULL, así
+   que todo lo de abajo cae a precio_texto/vigencia_texto y la pantalla sigue
+   funcionando igual que antes -- solo que con una tarjeta por fila. */
+const TAR_ETQ_ORDEN = ['sgl', 'dbl', 'tpl', 'cdp', 'qpl', 'pax_adic'];
+const tarSimbolo = m => String(m || 'USD').toUpperCase() === 'EUR' ? '€' : '$';
+const tarMonto = (n, m) => tarSimbolo(m) + (Number(n) % 1 === 0 ? String(Number(n)) : Number(n).toFixed(2));
+// chd_5_9 -> "CHD 5-9". El guion bajo ENTRE DÍGITOS es un rango de edad, no un
+// separador de palabras -- mismo criterio que precio_texto_desde() en SQL.
+const tarEtiquetaPrecio = k => String(k).replace(/(\d)_(\d)/g, '$1-$2').replace(/_/g, ' ').toUpperCase();
+const tarNorm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+// Las etiquetas salen de las CLAVES de `precios`, no de una lista fija: cada
+// hotel del PDF trae sus propias columnas (CHD 4-11 en uno, CHD 5-9 en otro) y
+// una lista cerrada las perdería en silencio. Solo se fija el ORDEN de las
+// conocidas; lo demás va detrás, alfabético.
+function tarPreciosLista(t) {
+  const p = t?.precios;
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return [];
+  const claves = Object.keys(p).filter(k => k !== 'base' && p[k] !== null && p[k] !== '' && !Number.isNaN(Number(p[k])));
+  claves.sort((a, b) => {
+    const ia = TAR_ETQ_ORDEN.indexOf(a), ib = TAR_ETQ_ORDEN.indexOf(b);
+    if (ia < 0 && ib < 0) return a.localeCompare(b, 'es');
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  return claves.map(k => ({ etq: tarEtiquetaPrecio(k), monto: tarMonto(p[k], t.moneda) }));
+}
+// Espejo en JS de precio_por_persona() (migración 20260904160000). La base
+// declarada gana; si no hay, dbl>sgl = por habitación; sin ninguna de las dos
+// señales NO divide (dividir de más es cotizar de menos). CHD y PAX ADIC nunca
+// compiten: son adicionales, no un precio ofrecible por sí solos.
+function tarPrecioPorPersona(t) {
+  const p = t?.precios;
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+  const num = k => { const v = Number(p[k]); return p[k] !== null && p[k] !== '' && p[k] !== undefined && !Number.isNaN(v) ? v : null; };
+  const sgl = num('sgl'), dbl = num('dbl');
+  const base = p.base === 'habitacion' || p.base === 'persona' ? p.base
+    : (dbl !== null && sgl !== null && dbl > sgl ? 'habitacion' : null);
+  const porHab = base === 'habitacion';
+  if (dbl !== null) return porHab ? dbl / 2 : dbl;
+  if (sgl !== null) return sgl;
+  if (!porHab) return null;
+  for (const [k, div] of [['tpl', 3], ['cdp', 4], ['qpl', 5]]) { const v = num(k); if (v !== null) return v / div; }
+  return null;
+}
+// Badge compacto de la tarjeta del listado. Con precios estructurados se anuncia
+// el precio POR PERSONA; sin ellos se mantiene el recorte de precio_texto de
+// siempre -- el `precio_desde_usd` legacy suele ser el precio de CHD (producto
+// 15: 28, con la fila diciendo $210/$130/$127/$65) y anunciarlo como "Desde"
+// sería cotizar de menos.
+function tarBadgePrecio(t) {
+  if (!t) return null;
+  const pp = t.precios ? tarPrecioPorPersona(t) : null;
+  if (pp !== null) return 'Desde ' + tarMonto(Math.round(pp * 100) / 100, t.moneda) + ' p/p';
+  return t.precio_texto || null;
+}
+// Todas las ventanas de disfrute, no solo la última: MALOKA REGULAR tiene 3 y
+// mostrar una sola hace perder dos temporadas vendibles.
+function tarVentanas(t) {
+  const v = Array.isArray(t?.ventanas) ? t.ventanas : [];
+  const filas = v.map(w => [w?.desde || null, w?.hasta || null]).filter(([a, b]) => a || b);
+  if (filas.length) return filas;
+  if (t?.disfrute_desde || t?.fecha_fin) return [[t.disfrute_desde || null, t.fecha_fin || null]];
+  return [];
+}
+const tarRango = ([a, b]) => a && b ? `${fmtFechaCorta(a)} — ${fmtFechaCorta(b)}`
+  : a ? `desde ${fmtFechaCorta(a)}` : b ? `hasta ${fmtFechaCorta(b)}` : '';
+// `fecha_venta_fin` es el puente con las filas viejas (las que todavía no pasaron
+// por la carga maestra): el dato estructurado gana cuando existe.
+const tarVentaHasta = t => t?.venta_hasta || t?.fecha_venta_fin || null;
+// Vendible hoy = venta abierta y disfrute no vencido. MISMO criterio que
+// tarifa_destacada() en SQL: si los dos lados no coinciden, el CRM marcaría
+// "Mejor precio hoy" en una promoción que la base ya considera muerta.
+function tarVendibleHoy(t) {
+  if (!t || t.vigente === false) return false;
+  const h = hoy(), vh = tarVentaHasta(t);
+  if (vh && vh < h) return false;
+  if (t.fecha_fin && t.fecha_fin < h) return false;
+  return true;
+}
+// El bloque azul del PDF (condiciones de ese hotel+plan). PostgREST devuelve la
+// relación muchos-a-uno como objeto, pero se acepta el array por si el embed
+// llega como lista.
+const tarBloque = t => { const b = t?.tarifario_bloques; return Array.isArray(b) ? (b[0] || null) : (b || null); };
+// Un suplemento aplica a ESTA tarjeta si no nombra temporada (vale para todas)
+// o si su temporada aparece en el título de la promoción. El suplemento de
+// Navidad no se le cuelga a la tarifa REGULAR.
+function tarSuplementosDe(t) {
+  const sups = tarBloque(t)?.suplementos;
+  if (!Array.isArray(sups) || !sups.length) return [];
+  const ctx = tarNorm([t.titulo, t.habitacion, t.plan].filter(Boolean).join(' '));
+  return sups.filter(s => s && (!s.temporada || ctx.includes(tarNorm(s.temporada))));
+}
+const tarSuplementoTexto = (s, moneda) => {
+  const montos = [s.adt != null ? 'ADT ' + tarMonto(s.adt, moneda) : null, s.chd != null ? 'CHD ' + tarMonto(s.chd, moneda) : null].filter(Boolean).join(' / ');
+  return [s.temporada, montos || s.texto].filter(Boolean).join(': ');
+};
+// Resumen de condiciones EN LA TARJETA: solo lo que cambia lo que paga el
+// cliente. Lo completo vive plegado en la cabecera de la carpeta.
+function tarCondicionesResumen(t) {
+  const b = tarBloque(t), out = [];
+  tarSuplementosDe(t).forEach(s => out.push({ txt: (s.obligatorio ? 'Suplemento obligatorio — ' : 'Suplemento — ') + tarSuplementoTexto(s, t.moneda), fuerte: !!s.obligatorio }));
+  const min = t.minimo_noches ?? (b?.minimo_noches && t.habitacion ? b.minimo_noches[t.habitacion] : null);
+  if (min) out.push({ txt: `Mínimo ${min} noche${min > 1 ? 's' : ''}`, fuerte: false });
+  const ocup = (b?.ocupacion?.lineas || []).filter(l => t.habitacion && tarNorm(l).includes(tarNorm(t.habitacion)));
+  ocup.forEach(l => out.push({ txt: l, fuerte: false }));
+  if (b?.impuestos?.igtf_pct != null) out.push({ txt: `Adicionar ${b.impuestos.igtf_pct}% IGTF`, fuerte: true });
+  return out;
+}
+/* Adapta una fila de `tarifas` a la forma de promo que hablan los filtros, el
+   orden, la agrupación por hotel y Hot Sales. Desde la Fase 5 paso 4 TODAS las
+   filas de la pestaña Promociones pasan por acá: los flyers también son filas de
+   `tarifas` (`origen='flyer'`), así que ya no hay dos fuentes ni ids que choquen
+   -- se conserva el id real, que es el que necesitan ocultar, editar y las fotos.
+   Dos cuidados:
+   - `_tarifa` solo para las filas del PDF: esas abren la CARPETA de su hotel,
+     donde viven con sus hermanas y sus condiciones. Un flyer sigue abriendo su
+     propio drawer de promoción (se edita, tiene fotos y notas propias).
+   - `precio_desde_usd` (lo que ordena la pestaña) sale del precio por persona
+     cuando hay precios estructurados; el legacy suele ser el precio de CHD. */
+function tarifaComoPromo(t) {
+  const pp = t.precios ? tarPrecioPorPersona(t) : null;
+  const esFlyer = t.origen === 'flyer';
+  return {
+    ...t,
+    _tarifa: esFlyer ? null : t,
+    _productoId: t.producto_id ?? null,
+    precio_texto: t.precio_texto || null,
+    precio_desde_usd: pp !== null ? Math.round(pp * 100) / 100 : (t.precio_desde_usd ?? null),
+    vigencia_texto: t.vigencia_texto || null,
+    incluye_tags: t.incluye_tags || [],
+    resumen_ia: t.resumen_ia || null,
+    revisado: t.vigente !== false,
+    fecha_fin_estimada: t.fecha_fin || null,
+    fecha_venta_fin: tarVentaHasta(t),
+    ninos_gratis_cantidad: t.ninos_gratis_cantidad || 0,
+    productos: t.productos || null,
+  };
+}
 function tarifaPrecioNumerico(precioTexto) {
   // Anclado a $/€: un match sin ancla agarra el primer dígito de CUALQUIER
   // texto (ej. "2 noches" antes del precio real), no el precio.
   const m = (precioTexto || '').match(/[$€]\s*([\d][\d.,]*)/);
   return m ? parseFloat(m[1].replace(/\./g, '').replace(',', '.')) : Infinity;
 }
-// Ordenar TODAS las tarifas por precio numérico no sirve: mezclan precio real
-// (Sencilla/Doble/Triple) con líneas de niño y "noche adicional" -- esas
-// siempre ganan el mínimo sin ser un precio ofrecible. Y comparar tarifa vs
-// promo por número tampoco vale: son unidades distintas (por habitación vs
-// por persona, distinta cantidad de noches). La promo SIEMPRE es la oferta
-// vigente que el dueño quiere mostrar primero -- si existe, gana; si no, cae
-// a la primera tarifa embebida.
+// Antes había que elegir entre dos tablas (la promo vinculada ganaba, si no la
+// primera tarifa) y se comparaban por precio de texto, que mezcla unidades
+// (por habitación vs por persona, distinta cantidad de noches). Desde la Fase 5
+// paso 4 hay UNA sola lista -- flyers y líneas del PDF son filas de `tarifas` --
+// y quién representa al hotel lo decide la base con `tarifa_destacada_id`.
 function mejorPrecio(x) {
-  const promos = x.promociones || [];
-  if (promos.length) {
-    return [...promos].sort((a, b) => tarifaPrecioNumerico(a.precio_texto) - tarifaPrecioNumerico(b.precio_texto))[0];
+  return tarifaDestacada(x);
+}
+// Cuál de las N filas del hotel se muestra como "la" promoción. La elige la
+// BASE, no el navegador: `tarifa_destacada_id` es una columna computada
+// (migración 20260904160000) = la más barata por persona que se pueda vender
+// hoy. Antes era `tarifas[0]`, el orden de llegada de PostgREST, y el CRM, la
+// web y el bot podían destacar promociones distintas del mismo hotel.
+function tarifaDestacada(x) {
+  const tarifas = x?.tarifas || [];
+  if (!tarifas.length) return null;
+  if (x.tarifa_destacada_id != null) {
+    const d = tarifas.find(t => t.id === x.tarifa_destacada_id);
+    if (d) return d;
   }
-  return (x.tarifas || [])[0] || null;
+  return tarifas[0];
+}
+// Una tarjeta = una promoción = una fila del PDF.
+function tarPromoCardHtml(t, destacadaId) {
+  const esDestacada = destacadaId != null && t.id === destacadaId;
+  const vendible = tarVendibleHoy(t);
+  const precios = tarPreciosLista(t);
+  const ventanas = tarVentanas(t);
+  const venta = [t.venta_desde || null, tarVentaHasta(t)];
+  const cond = tarCondicionesResumen(t);
+  const titulo = t.titulo || t.habitacion || t.plan || 'Tarifa';
+  // Prefijo `promo-` a propósito: `pc-` ya lo usa la tarjeta de Personal
+  // (.pc-top, .pc-nombre...) y reusarlo pintaría dos componentes distintos con
+  // el mismo CSS. Tampoco se usan prefijos fa/fab/fas/far (los reclama Font
+  // Awesome y una vez hizo desaparecer todos los iconos de marca).
+  return `<article class="promo-card${esDestacada ? ' promo-destacada' : ''}${vendible ? '' : ' promo-apagada'}">
+    <div class="promo-top">
+      <div class="promo-titulo">${esc(titulo)}</div>
+      ${esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
+      ${vendible ? '' : '<span class="promo-badge promo-badge-off">Ya no se vende</span>'}
+    </div>
+    ${t.habitacion && t.habitacion !== titulo ? `<div class="promo-sub">${esc(t.habitacion)}</div>` : ''}
+    ${precios.length
+      ? `<div class="promo-precios">${precios.map(p => `<div class="promo-precio"><span class="promo-pk">${esc(p.etq)}</span><span class="promo-pv">${esc(p.monto)}</span></div>`).join('')}</div>`
+      : t.precio_texto ? `<div class="promo-precio-texto dfv-rich">${formatearTexto(t.precio_texto)}</div>` : ''}
+    ${venta[0] || venta[1] || ventanas.length || t.vigencia_texto ? `<div class="promo-datos">
+      ${venta[0] || venta[1] ? `<div class="promo-dato"><span class="promo-dk">Venta</span><span class="promo-dv">${esc(tarRango(venta))}</span></div>` : ''}
+      ${ventanas.map((w, i) => `<div class="promo-dato"><span class="promo-dk">${i ? '' : 'Disfrute'}</span><span class="promo-dv">${esc(tarRango(w))}</span></div>`).join('')}
+      ${!venta[0] && !venta[1] && !ventanas.length && t.vigencia_texto ? `<div class="promo-dato"><span class="promo-dk">Vigencia</span><span class="promo-dv">${esc(t.vigencia_texto)}</span></div>` : ''}
+    </div>` : ''}
+    ${cond.length ? `<ul class="promo-cond">${cond.map(c => `<li${c.fuerte ? ' class="promo-cond-fuerte"' : ''}>${esc(c.txt)}</li>`).join('')}</ul>` : ''}
+  </article>`;
+}
+/* La carpeta: las N filas del hotel agrupadas por plan (Todo Incluido / Solo
+   Desayuno / ...). La destacada va primera y marcada; las que ya no se venden
+   se muestran APAGADAS, no escondidas -- el asesor tiene que poder ver por qué
+   una promoción dejó de estar, y el admin necesita verlas para gestionarlas. */
+function tarCarpetaHtml(x) {
+  const tarifas = x?.tarifas || [];
+  if (!tarifas.length) return '';
+  const destacadaId = tarifaDestacada(x)?.id ?? null;
+  const grupos = new Map();
+  tarifas.forEach(t => {
+    const k = t.plan || 'Sin plan indicado';
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(t);
+  });
+  for (const filas of grupos.values()) {
+    filas.sort((a, b) =>
+      (Number(b.id === destacadaId) - Number(a.id === destacadaId))
+      || (Number(tarVendibleHoy(b)) - Number(tarVendibleHoy(a)))
+      || ((a.orden_pdf ?? 0) - (b.orden_pdf ?? 0))
+      || (a.id - b.id));
+  }
+  const planes = [...grupos.keys()].sort((a, b) =>
+    (Number(grupos.get(b).some(t => t.id === destacadaId)) - Number(grupos.get(a).some(t => t.id === destacadaId)))
+    || a.localeCompare(b, 'es'));
+  return `<div class="carpeta">
+    <div class="carpeta-titulo"><i class="fas fa-layer-group"></i> ${tarifas.length} ${tarifas.length > 1 ? 'promociones' : 'promoción'}</div>
+    ${planes.map(p => `<section class="carpeta-plan">
+      ${grupos.size > 1 || p !== 'Sin plan indicado' ? `<h4 class="carpeta-plan-titulo">${esc(p)}</h4>` : ''}
+      <div class="promo-grid">${grupos.get(p).map(t => tarPromoCardHtml(t, destacadaId)).join('')}</div>
+    </section>`).join('')}
+  </div>`;
+}
+// Condiciones completas del bloque azul, plegadas en la cabecera de la carpeta.
+// Uno por plan del hotel. Nada de lo que el parser no supo clasificar se
+// descarta: `otras` se lista tal cual.
+function tarBloqueHtml(b) {
+  const filas = [];
+  if (b.base_precio) filas.push(['Precios', b.base_precio === 'habitacion' ? 'Por habitación' : 'Por persona']);
+  if (b.check_in || b.check_out) filas.push(['Check in / out', [b.check_in, b.check_out].filter(Boolean).join(' / ')]);
+  const min = b.minimo_noches && typeof b.minimo_noches === 'object'
+    ? Object.entries(b.minimo_noches).map(([k, v]) => `${k}: ${v} noche${v > 1 ? 's' : ''}`).join(' · ') : '';
+  if (min) filas.push(['Mínimo de noches', min]);
+  const ocup = (b.ocupacion?.lineas || []).join(' · ');
+  if (ocup) filas.push(['Ocupación máxima', ocup]);
+  const ninos = b.ninos ? [
+    b.ninos.politica,
+    b.ninos.gratis_hasta != null ? `Gratis hasta ${b.ninos.gratis_hasta} años` : null,
+    b.ninos.chd_desde != null || b.ninos.chd_hasta != null ? `CHD ${b.ninos.chd_desde ?? '?'}-${b.ninos.chd_hasta ?? '?'} años` : null,
+  ].filter(Boolean).join(' · ') : '';
+  if (ninos) filas.push(['Niños', ninos]);
+  const imp = b.impuestos ? [
+    b.impuestos.iva_incluido === true ? 'IVA incluido' : b.impuestos.iva_incluido === false ? 'IVA no incluido' : null,
+    b.impuestos.igtf_pct != null ? `Adicionar ${b.impuestos.igtf_pct}% IGTF` : null,
+  ].filter(Boolean).join(' · ') : '';
+  if (imp) filas.push(['Impuestos', imp]);
+  const sups = Array.isArray(b.suplementos) ? b.suplementos : [];
+  return `<details class="cond-bloque">
+    <summary class="cond-sum"><i class="fas fa-circle-info"></i> Condiciones${b.plan ? ' — ' + esc(b.plan) : ''}<i class="fas fa-chevron-down cond-caret"></i></summary>
+    <div class="cond-cuerpo">
+      ${sups.length ? `<ul class="cond-sups">${sups.map(s => `<li${s.obligatorio ? ' class="promo-cond-fuerte"' : ''}>${esc((s.obligatorio ? 'Obligatorio — ' : '') + tarSuplementoTexto(s, null))}</li>`).join('')}</ul>` : ''}
+      ${filas.map(([k, v]) => `<div class="cond-fila"><span class="cond-k">${esc(k)}</span><span class="cond-v">${esc(v)}</span></div>`).join('')}
+      ${(b.incluye || []).length ? `<div class="cond-fila"><span class="cond-k">Incluye</span><span class="cond-v">${esc(b.incluye.join(' · '))}</span></div>` : ''}
+      ${(b.otras || []).length ? `<ul class="cond-otras">${b.otras.map(o => `<li>${esc(o)}</li>`).join('')}</ul>` : ''}
+    </div>
+  </details>`;
+}
+function tarBloquesHtml(x) {
+  const vistos = new Map();
+  (x?.tarifas || []).forEach(t => { const b = tarBloque(t); if (b && b.id != null && !vistos.has(b.id)) vistos.set(b.id, b); });
+  return [...vistos.values()].map(tarBloqueHtml).join('');
 }
 function openProductoDrawer(x, tipoForzado = null) {
   TAR_DRAWER_ITEM = x;
@@ -12884,19 +13198,26 @@ function openProductoDrawer(x, tipoForzado = null) {
   // La tarifa de niño es un adicional, no un precio ofrecible por sí solo --
   // mostrarla aparte, nunca como el precio principal.
   const infantil = !esPromo ? (x.tarifas || []).find((t) => /ni[ñn]o/i.test(t.precio_texto || '')) : null;
+  // El hotel es una carpeta (Fase 4): en vez de UN precio suelto, la grilla con
+  // una tarjeta por promoción. Si el producto no tiene ninguna tarifa embebida
+  // (promos, boletería vieja, ficha suelta) `carpeta` queda vacía y el drawer
+  // cae a los campos Precio/Vigencia/Adicional por niño de siempre.
+  const carpeta = !esPromo ? tarCarpetaHtml(x) : '';
+  const bloques = !esPromo ? tarBloquesHtml(x) : '';
   const fotos = fotosRotadas(x, 256);
   const fotosOrig = fotosRotadas(x);
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead">${fotos[0] ? `<div class="dava" style="background-image:url('${esc(fotos[0])}')"></div>` : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
       <div class="dm">${esc(x.destino || TAR_TAB_LABEL[tarTab])}</div></div></div>
     ${fotos.length ? `<div class="dgallery">${fotos.map((f, i) => `<img src="${esc(f)}" alt="" loading="lazy" data-drawer-foto="${i}">`).join('')}</div>` : ''}
-    ${precio ? `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div><div class="dfv dfv-rich">${formatearTexto(precio)}</div></div></div>` : ''}
-    ${vigencia ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Vigencia</div><div class="dfv dfv-rich">${formatearTexto(vigencia)}</div></div></div>` : ''}
-    ${infantil ? `<div class="dfield"><div class="dfi"><i class="fas fa-child"></i></div><div><div class="dfl">Adicional por niño</div><div class="dfv dfv-rich">${formatearTexto(infantil.precio_texto)}</div></div></div>` : ''}
+    ${precio && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div><div class="dfv dfv-rich">${formatearTexto(precio)}</div></div></div>` : ''}
+    ${vigencia && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Vigencia</div><div class="dfv dfv-rich">${formatearTexto(vigencia)}</div></div></div>` : ''}
+    ${infantil && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-child"></i></div><div><div class="dfl">Adicional por niño</div><div class="dfv dfv-rich">${formatearTexto(infantil.precio_texto)}</div></div></div>` : ''}
     ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv dfv-rich">${formatearTexto(x.descripcion)}</div></div></div>` : ''}
     ${!esPromo && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv dfv-rich">${formatearTexto(x.requisitos)}</div></div></div>` : ''}
+    ${bloques}
+    ${carpeta}
     ${esPromo ? tagsHtml(x.incluye_tags) : ''}
-    ${!esPromo && (x.promociones || []).length ? `<div class="dfield"><div class="dfi"><i class="fas fa-gift"></i></div><div><div class="dfl">Promociones activas</div><div class="dfv" style="font-weight:500">${x.promociones.map(p => `<div style="margin-bottom:10px"><b>${esc(p.titulo)}</b>${p.precio_texto ? `<div class="dfv-rich" style="margin-top:4px">${formatearTexto(p.precio_texto)}</div>` : ''}${p.vigencia_texto ? `<div class="dfv-rich" style="margin-top:2px;color:var(--amber)">Vigencia: ${formatearTexto(p.vigencia_texto)}</div>` : ''}${tagsHtml(p.incluye_tags)}</div>`).join('')}</div></div></div>` : ''}
     ${ROL === 'admin' ? `
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-note-sticky"></i> Notas internas (solo admin)</div>
@@ -16034,7 +16355,7 @@ async function hidratarResultadosIA(res) {
   res.forEach(r => {
     if (!enMemoria.has(r.tipo + ':' + r.id)) faltan[r.tipo === 'promocion' ? 'promocion' : 'producto'].push(r.id);
   });
-  const selProductos = '*, tarifas(*), promociones(titulo,precio_texto,precio_desde_usd,vigencia_texto,fecha_fin_estimada,fecha_venta_fin,incluye_tags,ninos_gratis_cantidad,resumen_ia), producto_fotos(storage_path,orden,es_principal,activo)';
+  const selProductos = TAR_SEL_PRODUCTOS;
   const selPromos = '*, promocion_fotos(storage_path,orden,es_principal,activo), productos(nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))';
   const pedidos = [];
   if (faltan.promocion.length) pedidos.push(sb.from('promociones').select(selPromos).in('id', faltan.promocion).then(r => ['promocion', r]));
@@ -16147,9 +16468,11 @@ async function abrirDesdeBusquedaIA(tipo, id) {
   const enCache = (tarCache[tarTab] || []).find(x => Number(x.id) === id);
   if (enCache) { openProductoDrawer(enCache); return; }
   const tabla = tipo === 'promocion' ? 'promociones' : 'productos';
-  // Los productos necesitan las tarifas embebidas: el drawer muestra el precio
-  // y el editor de ficha (tfRenderTarifas) las edita fila por fila.
-  const sel = tipo === 'promocion' ? '*' : '*, tarifas(*)';
+  // Los productos necesitan las tarifas embebidas: el drawer dibuja la carpeta
+  // de promociones y el editor de ficha (tfRenderTarifas) las edita fila por
+  // fila. Mismo select que la grilla, si no el drawer abierto desde el buscador
+  // sale sin fotos, sin destacada y sin condiciones.
+  const sel = tipo === 'promocion' ? '*' : TAR_SEL_PRODUCTOS;
   const { data, error } = await sb.from(tabla).select(sel).eq('id', id).maybeSingle();
   if (error || !data) { errToast('No se pudo abrir ese ítem'); return; }
   openProductoDrawer(data, tipo);
@@ -16466,6 +16789,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-04', emoji: '🏨', titulo: 'Una promoción por línea del PDF, y el hotel como carpeta', texto: 'El tarifario dejó de guardar cada hotel como un bloque de texto: ahora cada fila del PDF es una tarifa propia, con su título, su habitación, su plan y sus precios separados por tipo de ocupación. El hotel pasa a ser la carpeta que las agrupa. Con eso, el "Desde $X" de cada tarjeta sale de la tabla real y no del monto más chico del texto (que casi siempre era la columna de niño o el pax adicional), y el bot de ventas dejó de prometer precios más bajos de los que se venden. Las 1.106 tarifas de PDF que están en venta hoy quedaron todas estructuradas.', roles: ROLES_TODOS },
   { fecha: '2026-09-03', emoji: '💳', titulo: 'Los asesores ya pueden cerrar la venta', texto: 'Dos arreglos en "Pagos y captación" (ficha del lead). Antes: al guardar montos o fechas sin tocar el estado, saltaba un error rojo y no dejaba guardar. Ahora el guardado solo toca el estado si realmente cambiaste ese menú. Y además: un asesor ya puede marcar "PAGO REALIZADO" y que se genere la factura directo, sin esperar a que un admin lo confirme desde la cola de verificación.', roles: ['asesor', 'admin'] },
   { fecha: '2026-09-02', emoji: '🗓️', titulo: 'El tarifario también se retira por fecha de disfrute', texto: 'Una tarifa o promoción sale de venta por una sola de estas tres razones, en este orden: que la hayan sacado o reemplazado en el PDF nuevo, que se le haya pasado la fecha límite de venta, o que se le haya pasado la fecha límite de disfrute. Esa tercera faltaba: una promo cuyo texto solo dice hasta cuándo se puede disfrutar (sin fecha de venta) se quedaba vendible para siempre. Ahora el barrido de la madrugada la retira sola el día después del último día de disfrute, y en "Comprobar vencidas ahora" cada ítem dice por qué está ahí. El grupo "Sin fecha legible" pasó a mostrar solo lo que no tiene NI fecha de venta NI de disfrute: eso es lo único que nadie va a retirar solo y hay que decidir a mano.', roles: ['admin'] },
   { fecha: '2026-08-29', emoji: '📦', titulo: 'Leads en lote: llegan "Por atender", no "Atendido"', texto: 'Los clientes que el admin reparte por lote ya no aparecen marcados Atendido de entrada -- entran como Por Atender (salvo que ya tuvieran una venta en curso, esa etapa no se pisa). Además hay una sub-pestaña nueva "Asignados en lote" dentro de Leads con todos los repartidos así, y en la vista previa del panel de asignación destildar un lead ahora sí lo excluye.', roles: ['asesor', 'admin'] },
