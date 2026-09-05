@@ -13034,10 +13034,16 @@ const tarSuplementoTexto = (s, moneda) => {
 };
 // Resumen de condiciones EN LA TARJETA: solo lo que cambia lo que paga el
 // cliente. Lo completo vive plegado en la cabecera de la carpeta.
+// El mínimo puede venir en la fila o en el bloque, indexado por habitación.
+// Una sola lectura para los dos lugares que lo muestran (tarjeta y comparador).
+const tarMinimoNoches = t => {
+  const b = tarBloque(t);
+  return t?.minimo_noches ?? (b?.minimo_noches && t?.habitacion ? b.minimo_noches[t.habitacion] : null) ?? null;
+};
 function tarCondicionesResumen(t) {
   const b = tarBloque(t), out = [];
   tarSuplementosDe(t).forEach(s => out.push({ txt: (s.obligatorio ? 'Suplemento obligatorio — ' : 'Suplemento — ') + tarSuplementoTexto(s, t.moneda), fuerte: !!s.obligatorio }));
-  const min = t.minimo_noches ?? (b?.minimo_noches && t.habitacion ? b.minimo_noches[t.habitacion] : null);
+  const min = tarMinimoNoches(t);
   if (min) out.push({ txt: `Mínimo ${min} noche${min > 1 ? 's' : ''}`, fuerte: false });
   const ocup = (b?.ocupacion?.lineas || []).filter(l => t.habitacion && tarNorm(l).includes(tarNorm(t.habitacion)));
   ocup.forEach(l => out.push({ txt: l, fuerte: false }));
@@ -13102,8 +13108,97 @@ function tarifaDestacada(x) {
   }
   return tarifas[0];
 }
+/* ---------- Por qué esta habitación cuesta más que la de al lado ----------
+   Un hotel muestra 9-18 tarjetas con precios distintos y el asesor no tiene con
+   qué explicar la diferencia. Las dos respuestas de abajo salen de datos que YA
+   están en la ficha: los tokens del nombre que escribió el PDF, y la resta
+   contra la habitación más barata del mismo plan. Nada se deduce ni se
+   completa: un nombre sin tokens conocidos no muestra nada. */
+const TAR_ATTR_TOKENS = [
+  ['vista al mar', 'Vista al mar'], ['vista mar', 'Vista al mar'],
+  ['frente al mar', 'Frente al mar'], ['ocean view', 'Vista al mar'],
+  ['vista a la piscina', 'Vista piscina'], ['vista piscina', 'Vista piscina'],
+  ['vista jardin', 'Vista jardín'], ['garden view', 'Vista jardín'],
+  ['vista montana', 'Vista montaña'],
+  ['presidencial', 'Presidencial'], ['junior suite', 'Junior suite'],
+  ['suite', 'Suite'], ['deluxe', 'Deluxe'], ['premium', 'Premium'],
+  ['superior', 'Superior'], ['estandar', 'Estándar'], ['economica', 'Económica'],
+  ['bungalow', 'Bungalow'], ['cabana', 'Cabaña'], ['villa', 'Villa'],
+  ['apartamento', 'Apartamento'], ['estudio', 'Estudio'], ['loft', 'Loft'],
+  ['matrimonial', 'Matrimonial'], ['familiar', 'Familiar'],
+  ['cuadruple', 'Cuádruple'], ['triple', 'Triple'],
+];
+/* Se busca por palabra COMPLETA: "villa" sin \b matchea dentro de "HOLIDAY
+   VILLAGE" y le inventa una categoría a la habitación más común del catálogo.
+   Y se prueba de token más largo a más corto tapando lo que ya matcheó, para
+   que "JUNIOR SUITE" no salga además como "Suite". */
+const TAR_ATTR_RX = TAR_ATTR_TOKENS
+  .map(([tok, etq], orden) => ({ orden, etq, rx: new RegExp('\\b' + tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b') }))
+  .sort((a, b) => b.rx.source.length - a.rx.source.length);
+function tarAtributosHabitacion(nombre) {
+  let hay = tarNorm(nombre);
+  if (!hay) return [];
+  const hits = [];
+  for (const { rx, etq, orden } of TAR_ATTR_RX) {
+    const m = hay.match(rx);
+    if (!m) continue;
+    if (!hits.some(h => h.etq === etq)) hits.push({ etq, orden });
+    hay = hay.slice(0, m.index) + ' '.repeat(m[0].length) + hay.slice(m.index + m[0].length);
+  }
+  return hits.sort((a, b) => a.orden - b.orden).map(h => h.etq);
+}
+const TAR_DELTA_CLAVES = ['dbl', 'sgl', 'tpl', 'cdp', 'qpl'];
+const tarNumPrecio = (t, k) => {
+  const v = t?.precios?.[k];
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isNaN(n) ? null : n;
+};
+const tarHabCorta = t => String(t?.habitacion || t?.titulo || '').replace(/^\s*habitaci[oó]n\s+/i, '').trim();
+/* Cuánto más cuesta cada habitación que la más barata de su plan.
+   Lo caro de esta cuenta es elegir mal el término de comparación: si una fila
+   cotiza DBL y la otra solo TPL, restarlas da un número que no significa nada.
+   Por eso la clave de referencia tiene que estar en TODAS las filas del grupo, y
+   si ninguna lo está el grupo entero no muestra delta. El orden de preferencia
+   es el de precio_por_persona() (migración 20260904160000): DBL manda porque es
+   la ocupación que el PDF siempre cotiza.
+   Devuelve Map<tarifa_id, {base, txt}>. */
+function tarDeltasDePlan(filas) {
+  const out = new Map();
+  if (!Array.isArray(filas) || filas.length < 2) return out;
+  // Monedas distintas no se restan: se compara solo dentro de la mayoritaria.
+  const conteo = new Map();
+  filas.forEach(t => { const m = String(t.moneda || 'USD').toUpperCase(); conteo.set(m, (conteo.get(m) || 0) + 1); });
+  const moneda = [...conteo.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+  const cand = filas.filter(t => String(t.moneda || 'USD').toUpperCase() === moneda
+    && t.precios && typeof t.precios === 'object' && !Array.isArray(t.precios));
+  if (cand.length < 2) return out;
+  const clave = TAR_DELTA_CLAVES.find(k => cand.every(t => tarNumPrecio(t, k) !== null));
+  if (!clave) return out;
+  // La base tiene que ser una que se pueda vender hoy: anclar la comparación en
+  // una tarifa muerta haría ver "+$20" en la única que el asesor puede ofrecer.
+  const vendibles = cand.filter(tarVendibleHoy);
+  const pool = vendibles.length ? vendibles : cand;
+  const base = pool.slice().sort((a, b) =>
+    (tarNumPrecio(a, clave) - tarNumPrecio(b, clave))
+    || ((a.orden_pdf ?? 0) - (b.orden_pdf ?? 0))
+    || (a.id - b.id))[0];
+  const pBase = tarNumPrecio(base, clave);
+  const etq = tarEtiquetaPrecio(clave);
+  const nombreBase = tarHabCorta(base) || 'la más barata';
+  cand.forEach(t => {
+    if (t.id === base.id) { out.set(t.id, { base: true, txt: 'Base del plan' }); return; }
+    const d = Math.round((tarNumPrecio(t, clave) - pBase) * 100) / 100;
+    out.set(t.id, {
+      base: false,
+      txt: d === 0 ? `Mismo precio que ${nombreBase}`
+        : `${d > 0 ? '+' : '-'}${tarMonto(Math.abs(d), moneda)} ${etq} vs ${nombreBase}`,
+    });
+  });
+  return out;
+}
 // Una tarjeta = una promoción = una fila del PDF.
-function tarPromoCardHtml(t, destacadaId) {
+function tarPromoCardHtml(t, destacadaId, delta) {
   const esDestacada = destacadaId != null && t.id === destacadaId;
   const vendible = tarVendibleHoy(t);
   const precios = tarPreciosLista(t);
@@ -13111,17 +13206,23 @@ function tarPromoCardHtml(t, destacadaId) {
   const venta = [t.venta_desde || null, tarVentaHasta(t)];
   const cond = tarCondicionesResumen(t);
   const titulo = t.titulo || t.habitacion || t.plan || 'Tarifa';
+  const attrs = tarAtributosHabitacion(t.habitacion || titulo);
   // Prefijo `promo-` a propósito: `pc-` ya lo usa la tarjeta de Personal
   // (.pc-top, .pc-nombre...) y reusarlo pintaría dos componentes distintos con
   // el mismo CSS. Tampoco se usan prefijos fa/fab/fas/far (los reclama Font
   // Awesome y una vez hizo desaparecer todos los iconos de marca).
-  return `<article class="promo-card${esDestacada ? ' promo-destacada' : ''}${vendible ? '' : ' promo-apagada'}">
+  return `<article class="promo-card${esDestacada ? ' promo-destacada' : ''}${vendible ? '' : ' promo-apagada'}" data-tarifa-id="${t.id}">
     <div class="promo-top">
+      <label class="promo-check"><input type="checkbox" data-tar-sel="${t.id}" aria-label="Seleccionar ${esc(titulo)}"></label>
       <div class="promo-titulo">${esc(titulo)}</div>
       ${esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
       ${vendible ? '' : '<span class="promo-badge promo-badge-off">Ya no se vende</span>'}
     </div>
     ${t.habitacion && t.habitacion !== titulo ? `<div class="promo-sub">${esc(t.habitacion)}</div>` : ''}
+    ${attrs.length || delta ? `<div class="promo-attr">
+      ${attrs.map(a => `<span class="promo-attr-chip">${esc(a)}</span>`).join('')}
+      ${delta ? `<span class="promo-delta${delta.base ? ' promo-delta-base' : ''}">${esc(delta.txt)}</span>` : ''}
+    </div>` : ''}
     ${precios.length
       ? `<div class="promo-precios">${precios.map(p => `<div class="promo-precio"><span class="promo-pk">${esc(p.etq)}</span><span class="promo-pv">${esc(p.monto)}</span></div>`).join('')}</div>`
       : t.precio_texto ? `<div class="promo-precio-texto dfv-rich">${formatearTexto(t.precio_texto)}</div>` : ''}
@@ -13154,6 +13255,12 @@ function tarCarpetaHtml(x) {
       || ((a.orden_pdf ?? 0) - (b.orden_pdf ?? 0))
       || (a.id - b.id));
   }
+  // El delta se calcula DENTRO de cada plan: restarle Solo Desayuno a Todo
+  // Incluido no explica nada de la habitación, que es lo que se quiere mostrar.
+  const deltas = new Map();
+  for (const filas of grupos.values()) {
+    for (const [id, d] of tarDeltasDePlan(filas)) deltas.set(id, d);
+  }
   const planes = [...grupos.keys()].sort((a, b) =>
     (Number(grupos.get(b).some(t => t.id === destacadaId)) - Number(grupos.get(a).some(t => t.id === destacadaId)))
     || a.localeCompare(b, 'es'));
@@ -13161,7 +13268,7 @@ function tarCarpetaHtml(x) {
     <div class="carpeta-titulo"><i class="fas fa-layer-group"></i> ${tarifas.length} ${tarifas.length > 1 ? 'promociones' : 'promoción'}</div>
     ${planes.map(p => `<section class="carpeta-plan">
       ${grupos.size > 1 || p !== 'Sin plan indicado' ? `<h4 class="carpeta-plan-titulo">${esc(p)}</h4>` : ''}
-      <div class="promo-grid">${grupos.get(p).map(t => tarPromoCardHtml(t, destacadaId)).join('')}</div>
+      <div class="promo-grid">${grupos.get(p).map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null)).join('')}</div>
     </section>`).join('')}
   </div>`;
 }
@@ -13204,8 +13311,272 @@ function tarBloquesHtml(x) {
   (x?.tarifas || []).forEach(t => { const b = tarBloque(t); if (b && b.id != null && !vistos.has(b.id)) vistos.set(b.id, b); });
   return [...vistos.values()].map(tarBloqueHtml).join('');
 }
+/* Fase 2.1 — selección de tarjetas.
+   El estado vive en un Set de módulo, no en el DOM: las acciones necesitan los
+   ids aunque la tarjeta esté fuera de pantalla, y el conteo tiene que sobrevivir
+   a que la barra se re-pinte. La tarjeta se emite SIEMPRE destildada porque el
+   único momento en que se arma la carpeta es al abrir el drawer, y ahí la
+   selección se vacía; si alguna fase futura re-pinta la carpeta con selección
+   viva, tiene que llamar a tarSincronizarBarra() para reponer los tildes. */
+const tarSeleccion = new Set();
+// Cada fase siguiente (comparar, copiar, cotizador, destacar) registra su
+// handler acá. Botón sin handler sale deshabilitado en vez de no hacer nada.
+const TAR_ACCIONES = {};
+// Qué tarifa fijó el admin a mano en ESTA ficha (productos.tarifa_destacada_manual_id).
+// Vive en el módulo y no se lee de TAR_DRAWER_ITEM para que la barra siga siendo
+// genérica; lo setea openProductoDrawer y lo actualiza tarDestacarTarifa.
+let tarDestacadaManual = null;
+function tarBarraSeleccionHtml() {
+  const btn = (a, ic, txt) => `<button type="button" class="tar-selbtn" data-tar-accion="${a}"><i class="fas ${ic}"></i> ${txt}</button>`;
+  return `<div class="tar-selbar" id="tar-selbar" hidden>
+    <span class="tar-selbar-n" id="tar-selbar-n"></span>
+    <div class="tar-selbar-btns">
+      ${btn('comparar', 'fa-table-columns', 'Comparar')}
+      ${btn('copiar', 'fa-copy', 'Copiar')}
+      ${btn('cotizador', 'fa-comments', 'Cotizador IA')}
+      ${ROL === 'admin' ? btn('destacar', 'fa-star', 'Destacar') : ''}
+      <button type="button" class="tar-selbtn tar-selbtn-x" data-tar-accion="limpiar"><i class="fas fa-xmark"></i> Quitar</button>
+    </div>
+  </div>`;
+}
+function tarSincronizarBarra() {
+  const bar = document.getElementById('tar-selbar');
+  if (!bar) return;
+  const n = tarSeleccion.size;
+  bar.hidden = n === 0;
+  document.getElementById('tar-selbar-n').textContent = n === 1 ? '1 seleccionada' : `${n} seleccionadas`;
+  bar.querySelectorAll('[data-tar-accion]').forEach(b => {
+    const a = b.dataset.tarAccion;
+    if (a === 'limpiar') return;
+    // Comparar una sola tarjeta no compara nada; destacar es una elección única.
+    const cantOk = a === 'comparar' ? n >= 2 : a === 'destacar' ? n === 1 : n >= 1;
+    b.disabled = !cantOk || typeof TAR_ACCIONES[a] !== 'function';
+    // Destacar es un interruptor: sobre la que YA está fijada a mano, el mismo
+    // botón la suelta. Sin cambiar el rótulo, el admin no tendría cómo volver a
+    // la automática y creería que la fijó dos veces.
+    if (a === 'destacar') {
+      const soltar = n === 1 && tarDestacadaManual != null && tarDestacadaManual === [...tarSeleccion][0];
+      b.innerHTML = soltar
+        ? '<i class="fas fa-star-half-stroke"></i> Quitar destacada'
+        : '<i class="fas fa-star"></i> Destacar';
+    }
+  });
+  document.querySelectorAll('#drawerContent .promo-card[data-tarifa-id]').forEach(c => {
+    const marcada = tarSeleccion.has(Number(c.dataset.tarifaId));
+    c.classList.toggle('promo-elegida', marcada);
+    const cb = c.querySelector('input[data-tar-sel]');
+    if (cb) cb.checked = marcada;
+  });
+}
+function tarLimpiarSeleccion() {
+  tarSeleccion.clear();
+  tarSincronizarBarra();
+}
+// Un solo listener delegado sobre la carpeta: un hotel trae 9-18 tarjetas y
+// engancharle un handler a cada checkbox multiplica por nada.
+function tarEngancharCarpeta() {
+  const carpeta = document.querySelector('#drawerContent .carpeta');
+  if (!carpeta) return;
+  carpeta.addEventListener('change', e => {
+    const cb = e.target.closest('input[data-tar-sel]');
+    if (!cb) return;
+    const id = Number(cb.dataset.tarSel);
+    if (cb.checked) tarSeleccion.add(id); else tarSeleccion.delete(id);
+    tarSincronizarBarra();
+  });
+}
+// Re-pintar la carpeta tira el nodo viejo y con él su listener; la barra NO se
+// re-pinta, así que su click no se vuelve a enganchar (engancharlo dos veces
+// dispararía cada acción dos veces).
+function tarRepintarCarpeta(x) {
+  const vieja = document.querySelector('#drawerContent .carpeta');
+  if (!vieja) return;
+  vieja.outerHTML = tarCarpetaHtml(x);
+  tarEngancharCarpeta();
+  // La selección sigue viva: sin esto las tarjetas nuevas nacen destildadas y la
+  // barra diría "2 seleccionadas" sobre tarjetas en blanco.
+  tarSincronizarBarra();
+}
+function tarActivarSeleccion() {
+  tarEngancharCarpeta();
+  document.getElementById('tar-selbar')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-tar-accion]');
+    if (!b || b.disabled) return;
+    if (b.dataset.tarAccion === 'limpiar') return tarLimpiarSeleccion();
+    TAR_ACCIONES[b.dataset.tarAccion]?.([...tarSeleccion]);
+  });
+  tarSincronizarBarra();
+}
+/* Fase 2.2 — comparar lado a lado.
+   Cliente puro: no consulta nada y no recalcula un solo monto; arma la tabla con
+   los MISMOS helpers que pintan la tarjeta, así lo comparado es exactamente lo
+   que el asesor tiene en pantalla. Se resalta únicamente lo que difiere: si las
+   dos filas dicen lo mismo, esa fila tiene que apagarse sola ante el ojo. */
+function tarFilasComparacion(tarifas) {
+  const filas = [];
+  const push = (k, vals, extra = {}) => {
+    if (vals.every(v => !v)) return; // vacía en todas: no aporta, no se muestra
+    filas.push({ k, vals, dif: new Set(vals.map(String)).size > 1, ...extra });
+  };
+  push('Habitación', tarifas.map(t => t.habitacion || t.titulo || ''));
+  push('Atributos', tarifas.map(t => tarAtributosHabitacion(t.habitacion || t.titulo).join(' · ')));
+  push('Plan', tarifas.map(t => t.plan || ''));
+  // Una fila por ocupación, con la unión de las etiquetas que existan en las
+  // elegidas: la lista sale de las claves reales de `precios` (tarPreciosLista),
+  // nunca de una lista fija, porque cada hotel del PDF trae las suyas.
+  const etqs = [];
+  const mapas = tarifas.map(t => {
+    const m = new Map();
+    tarPreciosLista(t).forEach(p => { m.set(p.etq, p.monto); if (!etqs.includes(p.etq)) etqs.push(p.etq); });
+    return m;
+  });
+  etqs.forEach(e => push(e, mapas.map(m => m.get(e) || ''), { precio: true }));
+  // Solo para las filas viejas que no pasaron por la carga maestra.
+  push('Precio (texto)', tarifas.map(t => tarPreciosLista(t).length ? '' : (t.precio_texto || '')));
+  push('Venta', tarifas.map(t => tarRango([t.venta_desde || null, tarVentaHasta(t)])));
+  push('Disfrute', tarifas.map(t => tarVentanas(t).map(tarRango).filter(Boolean).join(' · ')));
+  push('Mínimo de noches', tarifas.map(t => { const n = tarMinimoNoches(t); return n ? `${n} noche${n > 1 ? 's' : ''}` : ''; }));
+  push('Condiciones', tarifas.map(t => tarCondicionesResumen(t).map(c => c.txt).join('\n')), { multi: true });
+  push('Estado', tarifas.map(t => tarVendibleHoy(t) ? 'Se vende hoy' : 'Ya no se vende'));
+  return filas;
+}
+function tarComparadorHtml(tarifas) {
+  const celda = (f, v) => `<td class="${f.dif ? 'tarcmp-dif' : ''}${f.precio ? ' tarcmp-precio' : ''}">${
+    v ? (f.multi ? esc(v).replace(/\n/g, '<br>') : esc(v)) : '<span class="tarcmp-vacio">—</span>'}</td>`;
+  return `<div class="tarcmp-panel" role="dialog" aria-modal="true" aria-label="Comparar tarifas">
+    <div class="tarcmp-head">
+      <div class="tarcmp-t">Comparar ${tarifas.length} tarifas</div>
+      <button type="button" class="tarcmp-x" id="tarcmp-cerrar" aria-label="Cerrar"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="tarcmp-scroll">
+      <table class="tarcmp-tabla">
+        <thead><tr><th class="tarcmp-k"></th>${tarifas.map(t => `<th>${esc(tarHabCorta(t) || t.titulo || 'Tarifa')}</th>`).join('')}</tr></thead>
+        <tbody>${tarFilasComparacion(tarifas).map(f =>
+          `<tr><th class="tarcmp-k">${esc(f.k)}</th>${f.vals.map(v => celda(f, v)).join('')}</tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <div class="tarcmp-pie">Solo se resalta lo que cambia entre estas tarifas.</div>
+  </div>`;
+}
+function tarAbrirComparador(ids) {
+  // Se lee del item del drawer abierto, no de una copia: comparar tiene que
+  // mostrar la misma fila que pintó la tarjeta. Y se respeta el orden del
+  // producto, no el orden en que el asesor fue tildando.
+  const elegidas = (TAR_DRAWER_ITEM?.tarifas || []).filter(t => ids.includes(t.id));
+  if (elegidas.length < 2) return;
+  const el = document.getElementById('tarcmp');
+  if (!el) return;
+  el.innerHTML = tarComparadorHtml(elegidas);
+  el.classList.add('open');
+  document.getElementById('tarcmp-cerrar').onclick = () => tarCerrarComparador();
+  el.onclick = e => { if (e.target === el) tarCerrarComparador(); };
+  navPush({ type: 'tar-comparar' });
+}
+function tarCerrarComparador(fromNav) {
+  const el = document.getElementById('tarcmp');
+  if (!el) return;
+  el.classList.remove('open');
+  el.innerHTML = '';
+  if (!fromNav) navConsume();
+}
+TAR_ACCIONES.comparar = tarAbrirComparador;
+/* Fase 2.3 — copiar para WhatsApp.
+   Texto plano armado con los MISMOS helpers que la tarjeta: los montos salen ya
+   formateados de tarPreciosLista, así que acá no se redondea ni se recalcula
+   nada. El delta ("+$5 DBL vs Holiday Village") queda AFUERA a propósito: es una
+   resta contra otra tarjeta, y pegada sola en un chat compara contra una
+   habitación que el cliente no está viendo. */
+function tarTextoWhatsApp(tarifas, hotel) {
+  const planes = new Map();
+  tarifas.forEach(t => {
+    const k = t.plan || '';
+    if (!planes.has(k)) planes.set(k, []);
+    planes.get(k).push(t);
+  });
+  const partes = [`*${hotel || 'Tarifas'}*`];
+  for (const [plan, filas] of planes) {
+    if (plan) partes.push(plan.toUpperCase());
+    filas.forEach(t => {
+      const b = [`*${tarHabCorta(t) || t.titulo || 'Tarifa'}*`];
+      const attrs = tarAtributosHabitacion(t.habitacion || t.titulo);
+      if (attrs.length) b.push(attrs.join(' · '));
+      const precios = tarPreciosLista(t);
+      if (precios.length) b.push(precios.map(p => `${p.etq} ${p.monto}`).join(' · '));
+      else if (t.precio_texto) b.push(t.precio_texto);
+      const disfrute = tarVentanas(t).map(tarRango).filter(Boolean).join(' · ');
+      if (disfrute) b.push(`Disfrute: ${disfrute}`);
+      const venta = tarRango([t.venta_desde || null, tarVentaHasta(t)]);
+      if (venta) b.push(`Venta: ${venta}`);
+      // Ya trae el mínimo de noches, los suplementos y el IGTF.
+      tarCondicionesResumen(t).forEach(c => b.push(`- ${c.txt}`));
+      if (!tarVendibleHoy(t)) b.push('(ya no se vende)');
+      partes.push(b.join('\n'));
+    });
+  }
+  return partes.join('\n\n');
+}
+async function tarCopiarTarifas(ids) {
+  const elegidas = (TAR_DRAWER_ITEM?.tarifas || []).filter(t => ids.includes(t.id));
+  if (!elegidas.length) return;
+  const txt = tarTextoWhatsApp(elegidas, TAR_DRAWER_ITEM?.nombre || '');
+  try { await navigator.clipboard.writeText(txt); okToast(elegidas.length > 1 ? `${elegidas.length} tarifas copiadas` : 'Tarifa copiada'); }
+  catch { errToast('El navegador no dejó copiar'); }
+}
+TAR_ACCIONES.copiar = tarCopiarTarifas;
+/* Fase 2.4 — mandar la selección al Cotizador IA.
+   Acá no se arma ningún precio: solo se acota. El Cotizador ya baja habitacion,
+   plan y precios de cada tarifa (cotizador-chat/index.ts:118), así que alcanza
+   con decirle qué ids mirar dentro del hotel que el filtro ya eligió. */
+function tarMandarAlCotizador(ids) {
+  const elegidas = (TAR_DRAWER_ITEM?.tarifas || []).filter(t => ids.includes(t.id));
+  if (!elegidas.length) return;
+  const nombres = [...new Set(elegidas.map(t => tarHabCorta(t) || t.titulo).filter(Boolean))];
+  irAlCotizadorConTarifas(TAR_DRAWER_ITEM.id, TAR_DRAWER_ITEM.nombre || '', elegidas.map(t => t.id), nombres);
+}
+TAR_ACCIONES.cotizador = tarMandarAlCotizador;
+/* Fase 2.5 — fijar a mano cuál es la destacada.
+   `tarifa_destacada_id` no es una columna sino una función computada, así que no
+   se le puede hacer UPDATE: lo que se escribe es la preferencia
+   `productos.tarifa_destacada_manual_id` (migración 20260905000000) y la BASE
+   decide si esa preferencia todavía vale. Por eso, después de escribir, el
+   destacado se RELEE en vez de suponerse: si la elegida ya no se vende, la
+   función cae al automático y el badge no se mueve — mentirle al admin acá es
+   peor que no dejarlo elegir. */
+async function tarDestacarTarifa(ids) {
+  const x = TAR_DRAWER_ITEM;
+  if (ROL !== 'admin' || ids.length !== 1 || !x) return;
+  const id = ids[0];
+  const t = (x.tarifas || []).find(t => t.id === id);
+  if (!t) return;
+  const soltar = tarDestacadaManual === id;
+  // Mismo criterio que la rama manual del SQL: si no es vendible hoy, la base la
+  // va a ignorar igual. Avisar acá evita guardar un puntero muerto.
+  if (!soltar && !tarVendibleHoy(t)) { errToast('Esa tarifa ya no se vende: la destacada la sigue eligiendo la base'); return; }
+  const { error } = await sb.from('productos')
+    .update({ tarifa_destacada_manual_id: soltar ? null : id }).eq('id', x.id);
+  if (error) { errToast('No se pudo destacar: ' + error.message); return; }
+  tarDestacadaManual = soltar ? null : id;
+  x.tarifa_destacada_manual_id = tarDestacadaManual;
+  const { data, error: e2 } = await sb.from('productos')
+    .select('tarifa_destacada_id').eq('id', x.id).single();
+  if (e2) { errToast('Se guardó, pero no se pudo releer la destacada: ' + e2.message); return; }
+  // `x` es el mismo objeto que está en tarCache, así que el listado y el drawer
+  // quedan contando lo mismo sin recargar la pestaña.
+  x.tarifa_destacada_id = data?.tarifa_destacada_id ?? null;
+  tarRepintarCarpeta(x);
+  if (soltar) okToast('Destacada suelta: vuelve a la automática');
+  else if (x.tarifa_destacada_id === id) okToast('Destacada actualizada');
+  else errToast('La base mantuvo la automática: esa tarifa no es vendible hoy');
+}
+TAR_ACCIONES.destacar = tarDestacarTarifa;
 function openProductoDrawer(x, tipoForzado = null) {
   TAR_DRAWER_ITEM = x;
+  // Otra ficha, otra selección: arrastrar ids de un hotel a otro haría que las
+  // acciones operaran sobre tarifas que ya no están en pantalla.
+  tarSeleccion.clear();
+  // Y otra elección manual: si quedara la del hotel anterior, el botón diría
+  // "Quitar destacada" sobre una tarifa que nunca se fijó.
+  tarDestacadaManual = x?.tarifa_destacada_manual_id ?? null;
   // Desde el buscador IA el resultado puede ser de otra pestaña que la abierta:
   // el tipo real viene explícito para no pintar una promo como producto.
   const esPromo = tipoForzado ? tipoForzado === 'promocion' : (tarTab === 'promo' || tarTab === 'hotsale');
@@ -13250,6 +13621,7 @@ function openProductoDrawer(x, tipoForzado = null) {
         ? `<button class="dbtn gh" id="tar-editar-promo" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Editar esta promoción</button>`
         : `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>`}
     </div>` : ''}
+    ${carpeta ? tarBarraSeleccionHtml() : ''}
     <div class="dactions"><button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Ir al Cotizador</button></div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
@@ -13259,6 +13631,7 @@ function openProductoDrawer(x, tipoForzado = null) {
   document.getElementById('tar-editar-ficha')?.addEventListener('click', () => tarAbrirEditorFicha(x.id));
   document.getElementById('tar-editar-promo')?.addEventListener('click', () => tarAbrirEditorPromo(x.id));
   document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotosOrig, +el.dataset.drawerFoto)));
+  tarActivarSeleccion();
   if (ROL === 'admin') {
     document.getElementById('tar-notas-save').onclick = () => guardarNotasTarifario(esPromo ? 'promociones' : 'productos', x.id);
     cargarFotosAdmin(esPromo ? 'promocion_fotos' : 'producto_fotos', esPromo ? 'promocion_id' : 'producto_id', x.id, esPromo ? 'promos' : 'hoteles');
@@ -13479,6 +13852,27 @@ function irAlCotizadorConOpcion(tabla, id, nombre) {
   if (!aplicar()) cargarOpcionesTarifario().then(aplicar);
   const input = document.getElementById('chat-input');
   input.value = `Cuéntame más sobre ${nombre}`;
+  input.dispatchEvent(new Event('input'));
+  input.focus();
+}
+/* Tarifas puntuales que el asesor eligió en el Tarifario y con las que quiere
+   acotar el Cotizador. Se guardan JUNTO al valor de #cot-f-opcion con el que se
+   armaron: si ese valor deja de calzar (el usuario cambió el filtro a mano, lo
+   limpió, o volvió a elegir el mismo hotel después de irse), los ids se
+   descartan. Sin ese amarre el Cotizador quedaría acotado en silencio a
+   habitaciones de otro hotel y el asesor no vería por qué le faltan opciones. */
+let cotTarifas = { valor: null, ids: [] };
+function cotOlvidarTarifas() { cotTarifas = { valor: null, ids: [] }; }
+function irAlCotizadorConTarifas(productoId, nombre, tarifaIds, habitaciones) {
+  irAlCotizadorConOpcion('productos', productoId, nombre);
+  // Después de irAlCotizadorConOpcion: setear el select por código no dispara
+  // 'change', así que el amarre no se auto-borra al armarlo.
+  cotTarifas = { valor: `productos:${productoId}`, ids: tarifaIds };
+  const input = document.getElementById('chat-input');
+  const lista = habitaciones.length > 1
+    ? habitaciones.slice(0, -1).join(', ') + ' y ' + habitaciones[habitaciones.length - 1]
+    : habitaciones[0];
+  if (lista) input.value = `Cuéntame sobre ${lista} en ${nombre}`;
   input.dispatchEvent(new Event('input'));
   input.focus();
 }
@@ -13767,7 +14161,11 @@ function setupChat() {
   cargarOpcionesTarifario();
   document.getElementById('cot-f-clear').onclick = () => {
     ['cot-f-destino', 'cot-f-tipo', 'cot-f-plan', 'cot-f-opcion', 'cot-f-precio', 'cot-f-desde', 'cot-f-hasta'].forEach(id => { document.getElementById(id).value = ''; });
+    cotOlvidarTarifas();
   };
+  // Tocar la opción a mano descarta las habitaciones puntuales que trajo el
+  // Tarifario: reelegir el mismo hotel más tarde no debe re-armarlas sola.
+  document.getElementById('cot-f-opcion').addEventListener('change', cotOlvidarTarifas);
   document.getElementById('chat-history-btn').onclick = openChatsDrawer;
   document.getElementById('chat-new-btn').onclick = nuevoChat;
   if (!chatHistory.length) addChatBubble('bot', '¡Hola! Soy el Cotizador IA de Destino y Eventos Lotus 360. Estoy aquí para ayudarte con tus cotizaciones.');
@@ -13849,6 +14247,9 @@ function leerFiltrosCotizador() {
     plan: val('cot-f-plan') || null,
     opcionTabla: opcionTabla || null,
     opcionId: opcionId ? Number(opcionId) : null,
+    // Solo viajan si la opción sigue siendo exactamente la que las trajo: el
+    // amarre es lo que impide que queden acotando un hotel que ya no es este.
+    tarifaIds: (opcion && cotTarifas.valor === opcion && cotTarifas.ids.length) ? cotTarifas.ids : null,
     precioMax: val('cot-f-precio') ? Number(val('cot-f-precio')) : null,
     fechaDesde: val('cot-f-desde') || null,
     fechaHasta: val('cot-f-hasta') || null,
@@ -14728,6 +15129,7 @@ window.addEventListener('popstate', () => {
   const top = NAV_STACK.pop();
   if (top.type === 'drawer') window.closeDrawer(true);
   else if (top.type === 'lightbox') closeLightbox(true);
+  else if (top.type === 'tar-comparar') tarCerrarComparador(true);
   else if (top.type === 'sheet') closeSheet(top.id, true);
   else if (top.type === 'msg-conv') cerrarConversacion(true);
   else if (top.type === 'section') activateSection(top.prevSec, true);
@@ -16807,6 +17209,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-05', emoji: '🛏️', titulo: 'Las habitaciones ahora se explican solas (y se pueden accionar)', texto: 'En la carpeta de tarifas de un hotel, cada tarjeta muestra debajo del nombre lo que la distingue -- "Vista piscina · Premium" -- y cuánto cuesta de más que la habitación más barata del mismo plan ("+$5 DBL vs Holiday Village"). No es un precio nuevo: es la resta entre los precios que ya están en la ficha. Además cada tarjeta se puede tildar, y con una o más elegidas aparece abajo una barra para compararlas lado a lado, copiar el texto listo para WhatsApp, o mandarlas al Cotizador IA para que responda solo por esas habitaciones. Los admin pueden además fijar a mano cuál lleva el cartel de "Mejor precio hoy" (si esa tarifa deja de venderse, el cartel vuelve solo a la automática).', roles: ROLES_TODOS },
   { fecha: '2026-09-04', emoji: '🏨', titulo: 'Una promoción por línea del PDF, y el hotel como carpeta', texto: 'El tarifario dejó de guardar cada hotel como un bloque de texto: ahora cada fila del PDF es una tarifa propia, con su título, su habitación, su plan y sus precios separados por tipo de ocupación. El hotel pasa a ser la carpeta que las agrupa. Con eso, el "Desde $X" de cada tarjeta sale de la tabla real y no del monto más chico del texto (que casi siempre era la columna de niño o el pax adicional), y el bot de ventas dejó de prometer precios más bajos de los que se venden. Las 1.106 tarifas de PDF que están en venta hoy quedaron todas estructuradas.', roles: ROLES_TODOS },
   { fecha: '2026-09-03', emoji: '💳', titulo: 'Los asesores ya pueden cerrar la venta', texto: 'Dos arreglos en "Pagos y captación" (ficha del lead). Antes: al guardar montos o fechas sin tocar el estado, saltaba un error rojo y no dejaba guardar. Ahora el guardado solo toca el estado si realmente cambiaste ese menú. Y además: un asesor ya puede marcar "PAGO REALIZADO" y que se genere la factura directo, sin esperar a que un admin lo confirme desde la cola de verificación.', roles: ['asesor', 'admin'] },
   { fecha: '2026-09-02', emoji: '🗓️', titulo: 'El tarifario también se retira por fecha de disfrute', texto: 'Una tarifa o promoción sale de venta por una sola de estas tres razones, en este orden: que la hayan sacado o reemplazado en el PDF nuevo, que se le haya pasado la fecha límite de venta, o que se le haya pasado la fecha límite de disfrute. Esa tercera faltaba: una promo cuyo texto solo dice hasta cuándo se puede disfrutar (sin fecha de venta) se quedaba vendible para siempre. Ahora el barrido de la madrugada la retira sola el día después del último día de disfrute, y en "Comprobar vencidas ahora" cada ítem dice por qué está ahí. El grupo "Sin fecha legible" pasó a mostrar solo lo que no tiene NI fecha de venta NI de disfrute: eso es lo único que nadie va a retirar solo y hay que decidir a mano.', roles: ['admin'] },

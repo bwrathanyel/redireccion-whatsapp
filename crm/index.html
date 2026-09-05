@@ -640,6 +640,17 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .promo-badge{padding:2px 9px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.3px;background:var(--accent);color:#1a1000;white-space:nowrap}
 .promo-badge-off{background:transparent;border:1px solid var(--line2);color:var(--muted)}
 .promo-sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+/* Selección de tarjetas (Fase 2.1). El prefijo es `tar-`/`promo-`, nunca fa/fab/
+   fas/far: esos los reclama Font Awesome. */
+.promo-check{display:flex;align-items:center;justify-content:center;min-width:22px;min-height:22px;cursor:pointer;flex:0 0 auto}
+.promo-check input{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer}
+.promo-elegida{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+/* Por qué esta cuesta más: chips leídos del nombre + resta contra la base del
+   plan. Deliberadamente más apagado que .promo-pv -- es contexto, no precio. */
+.promo-attr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:6px}
+.promo-attr-chip{padding:1px 7px;border-radius:999px;border:1px solid var(--line2);font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
+.promo-delta{font-size:10.5px;font-weight:700;color:var(--amber);overflow-wrap:anywhere}
+.promo-delta-base{color:var(--muted2);font-weight:600}
 .promo-precios{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:9px}
 .promo-precio{display:flex;align-items:baseline;gap:4px}
 .promo-pk{font-size:9.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
@@ -664,6 +675,35 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .cond-v{color:var(--txt);overflow-wrap:anywhere}
 .cond-sups,.cond-otras{margin:0 0 7px;padding-left:14px}
 .cond-sups li,.cond-otras li{margin-bottom:2px}
+/* Barra de acciones de la selección: pegada al pie del drawer mientras se
+   scrollea la carpeta, oculta con 0 tarjetas elegidas. */
+.tar-selbar{position:sticky;bottom:0;z-index:3;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;padding:10px 12px;border:1px solid var(--line2);border-radius:12px;background:var(--panel)}
+.tar-selbar[hidden]{display:none}
+.tar-selbar-n{font-size:11.5px;font-weight:800;color:var(--txt);white-space:nowrap}
+.tar-selbar-btns{display:flex;gap:7px;flex-wrap:wrap;margin-left:auto}
+.tar-selbtn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:9px 12px;border-radius:10px;border:1px solid var(--line2);background:rgba(255,255,255,.06);color:var(--txt);font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer}
+.tar-selbtn:disabled{opacity:.4;cursor:not-allowed}
+.tar-selbtn-x{border-color:transparent;background:transparent;color:var(--muted)}
+/* Comparador lado a lado (Fase 2.2). Va por encima del drawer (61) y por debajo
+   del lightbox (90), que puede abrirse desde la misma ficha. */
+.tarcmp{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(4,6,12,.72);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .2s ease}
+.tarcmp.open{opacity:1;pointer-events:auto}
+.tarcmp-panel{display:flex;flex-direction:column;width:min(880px,100%);max-height:88vh;border:1px solid var(--line2);border-radius:14px;background:var(--bg2);overflow:hidden}
+.tarcmp-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
+.tarcmp-t{font-size:13px;font-weight:800;color:var(--txt)}
+.tarcmp-x{margin-left:auto;width:36px;height:36px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--muted);cursor:pointer;font-size:14px}
+.tarcmp-scroll{overflow:auto;-webkit-overflow-scrolling:touch}
+.tarcmp-tabla{border-collapse:collapse;width:100%;font-size:11.5px}
+.tarcmp-tabla th,.tarcmp-tabla td{border-bottom:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top;color:var(--txt);overflow-wrap:anywhere}
+.tarcmp-tabla thead th{position:sticky;top:0;z-index:1;background:var(--panel);font-size:11px;font-weight:800}
+.tarcmp-k{position:sticky;left:0;z-index:2;background:var(--bg2);min-width:104px;color:var(--muted2);text-transform:uppercase;font-size:9.5px;font-weight:800;letter-spacing:.11em;white-space:nowrap}
+.tarcmp-tabla thead .tarcmp-k{z-index:3;background:var(--panel)}
+.tarcmp-precio{font-weight:800;color:var(--accent)}
+/* Lo único resaltado es lo que difiere: si todas las columnas dicen lo mismo,
+   la fila queda plana a propósito. */
+.tarcmp-dif{background:var(--accent-soft)}
+.tarcmp-vacio{color:var(--muted2)}
+.tarcmp-pie{padding:10px 16px;border-top:1px solid var(--line);font-size:10.5px;color:var(--muted2)}
 .dactions{display:flex;gap:10px;margin-top:22px}
 .dbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:12px;font-size:13px;font-weight:700;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:filter .15s,transform .15s}
 .dbtn:disabled{opacity:.45;cursor:not-allowed}
@@ -5744,6 +5784,10 @@ body.fsize-grande{--tap:41.9px}
   </div>
   <button class="lb-arrow lb-next" id="lbNext" title="Foto siguiente" aria-label="Foto siguiente"><i class="fas fa-chevron-right"></i></button>
 </div>
+
+<!-- Comparador de tarifas (Fase 2.2). Contenedor vacío: lo llena
+     tarAbrirComparador() con las tarifas elegidas y se vacía al cerrar. -->
+<div class="tarcmp" id="tarcmp"></div>
 
 <script type="module" src="app.js"></script>
 </body>
