@@ -11736,6 +11736,7 @@ function tarChips() {
   if (visible('tar-f-tipo') && val('tar-f-tipo')) push('Plan: ' + (TAG_LABEL[val('tar-f-tipo')] || val('tar-f-tipo')), () => reset('tar-f-tipo', ''));
   if (visible('tar-f-mes') && val('tar-f-mes')) push('Mes: ' + (MESL[Number(val('tar-f-mes')) - 1] || val('tar-f-mes')), () => reset('tar-f-mes', ''));
   if (visible('tar-f-precio') && val('tar-f-precio')) push('Hasta $' + val('tar-f-precio'), () => reset('tar-f-precio', ''));
+  if (visible('tar-f-grupo') && tarGrupoFiltro()) push('Somos ' + tarGrupoFiltro(), () => reset('tar-f-grupo', ''));
   if (visible('tar-f-ninos') && g('tar-f-ninos')?.checked) push('Con niños gratis', () => reset('tar-f-ninos', false));
   // "Solo vigentes" viene marcado por defecto: lo que hay que avisar es cuando
   // se DESmarcó, porque ahí la lista trae cosas vencidas sin que se note.
@@ -11748,7 +11749,7 @@ function tarChips() {
     + '<button class="clear-all" id="tar-chips-clear" type="button"><i class="fas fa-times"></i> Limpiar</button>';
   chips.forEach((c, i) => { box.querySelector(`b[data-ci="${i}"]`).onclick = c[1]; });
   g('tar-chips-clear').onclick = () => {
-    ['tar-f-destino', 'tar-f-tipo', 'tar-f-mes', 'tar-f-precio'].forEach(id => { const el = g(id); if (el) el.value = ''; });
+    ['tar-f-destino', 'tar-f-tipo', 'tar-f-mes', 'tar-f-precio', 'tar-f-grupo'].forEach(id => { const el = g(id); if (el) el.value = ''; });
     const n = g('tar-f-ninos'); if (n) n.checked = false;
     const o = g('tar-f-ocultas'); if (o) o.checked = false;
     const v = g('tar-f-vigente'); if (v) v.checked = true;
@@ -12143,6 +12144,19 @@ function _agregarHotelCalc(x) {
     // "Vendible hoy" en vez de las fechas de la promo vieja: mismo criterio que
     // `tarifa_destacada()` en SQL (venta abierta + disfrute no vencido).
     algunaVigente: promos.length ? promos.some(tarVendibleHoy) : true,
+    // Fase 4 -- lo mide solo sobre lo VENDIBLE HOY: una quíntuple que ya no se
+    // vende no hace que el hotel entre en el filtro de "somos 5".
+    ...(() => {
+      const vend = promos.filter(tarVendibleHoy);
+      const caps = vend.map(tarCapacidadVendible);
+      return {
+        capacidadMax: caps.reduce((m, c) => c && c.max > m ? c.max : m, 0),
+        // Con una sola tarifa vendible que no declare ocupación el hotel no se
+        // puede descartar: no sabemos que NO entren, y esconder inventario
+        // vendible por un dato que el PDF no trae es peor que mostrarlo de más.
+        capacidadDesconocida: caps.some(c => c === null),
+      };
+    })(),
   };
 }
 
@@ -12153,6 +12167,7 @@ function renderTarifario() {
   const fDestino = val('tar-f-destino'), fTipo = val('tar-f-tipo');
   const fPrecio = val('tar-f-precio') ? Number(val('tar-f-precio')) : null;
   const fMes = val('tar-f-mes') ? Number(val('tar-f-mes')) : null;
+  const fGrupo = tarGrupoFiltro();
   const fNinos = document.getElementById('tar-f-ninos').checked;
   const fVigente = document.getElementById('tar-f-vigente').checked;
   const fOcultas = ROL === 'admin' && !!document.getElementById('tar-f-ocultas')?.checked;
@@ -12168,6 +12183,7 @@ function renderTarifario() {
       if (fNinos && ag.ninosMax < 1) return false;
       if (fVigente && !ag.algunaVigente) return false;
       if (fOcultarOcultos && x.activo === false) return false;
+      if (fGrupo && !ag.capacidadDesconocida && ag.capacidadMax < fGrupo) return false;
     } else if (tarTab === 'promo') {
       // Las retiradas (revisado=false) salen SOLO con el chip "Ver ocultas".
       // Desmarcar "Solo vigentes" era la puerta trasera por la que volvían a
@@ -13147,6 +13163,54 @@ function tarAtributosHabitacion(nombre) {
   }
   return hits.sort((a, b) => a.orden - b.orden).map(h => h.etq);
 }
+/* Fase 4 -- capacidad VENDIBLE: hasta cuántos adultos cotiza el proveedor.
+   Sale de las claves de `precios`, que son las columnas del PDF. Hay otras dos
+   fuentes de capacidad y mezclarlas es el error caro: `tarifario_bloques
+   .ocupacion` es prosa del PDF por PLAN (incluye niños y camas extra) y
+   `producto_habitaciones.capacidad_max` viene de la web del hotel. Solo esta
+   dice qué se puede vender.
+   La lista es CERRADA a propósito. `precios` también trae claves que parecen
+   capacidad y no lo son -- `4_a_10_pasajeros`, `pax_6`, `11_a_12_personas`
+   (traslados y lanchas), `temporada_alta`, `chd_5_9` --: buscar "el número más
+   grande" diría que un traslado aloja 27 personas. Lo que no está acá no cuenta
+   y no se adivina. Las variantes salen de las claves reales de producción
+   (scripts/fixtures_precios_claves.json), no de una tabla inventada: `cdl` es
+   cuádruple, confirmado en la serie "SGL $100 / DBL $70 / TPL $70 / CDL $70".
+   `pax_adic` y sus variantes NO suben el máximo: son el precio de un agregado,
+   no una ocupación que el PDF cotice. */
+const TAR_OCUPACION = new Map([
+  ['sgl', 1], ['sencilla', 1], ['hab_sgl', 1], ['1_persona', 1],
+  ['dbl', 2], ['doble', 2], ['hab_dbl', 2], ['dbl_pax', 2],
+  ['tpl', 3], ['triple', 3],
+  ['cdp', 4], ['cpl', 4], ['cdl', 4], ['cdpl', 4], ['cua', 4], ['cuad', 4], ['cuadruple', 4], ['cpl_cua', 4],
+  ['qpl', 5], ['quin', 5], ['quint', 5], ['qtp', 5], ['qtpl', 5], ['qui', 5], ['qpl_qui', 5],
+  ['sext', 6], ['sex', 6],
+  ['sept', 7],
+  ['octpl', 8],
+]);
+// Devuelve {max, claves} o null. Null es "no lo declara", NUNCA 0 ni un 2 por
+// defecto: 122 de las 992 tarifas vigentes de hotel solo traen temporada_alta o
+// chd_*, y ponerles un número inventado es peor que no decir nada.
+function tarCapacidadVendible(t) {
+  const p = t?.precios;
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+  // tarNumPrecio filtra la clave presente con monto null: la columna existe en
+  // la tabla del PDF pero ese hotel no cotiza esa ocupación.
+  const hits = [...TAR_OCUPACION.keys()]
+    .filter(k => tarNumPrecio(t, k) !== null)
+    .map(k => ({ k, n: TAR_OCUPACION.get(k) }))
+    .sort((a, b) => a.n - b.n);
+  if (!hits.length) return null;
+  return { max: hits[hits.length - 1].n, claves: hits.map(h => tarEtiquetaPrecio(h.k)) };
+}
+// Tamaño de grupo del filtro de la toolbar, o 0. Un solo lector para que la
+// grilla (renderTarifario) y la carpeta del drawer nunca discrepen. Vive acá,
+// dentro del bloque del Tarifario, porque es lo que recortan los verif.
+function tarGrupoFiltro() {
+  const el = typeof document !== 'undefined' ? document.getElementById('tar-f-grupo') : null;
+  const v = Number(el?.value);
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+}
 const TAR_DELTA_CLAVES = ['dbl', 'sgl', 'tpl', 'cdp', 'qpl'];
 const tarNumPrecio = (t, k) => {
   const v = t?.precios?.[k];
@@ -13223,23 +13287,33 @@ function tarHabsPorNombre(x) {
   (x?.habitaciones || []).forEach(h => { if (h.revisado && h.nombre_norm) m.set(h.nombre_norm, h); });
   return m;
 }
-// Lo que explica la habitación, en el orden en que se lee: tamaño, camas,
-// cuánta gente entra, qué se ve. Nunca un monto, una fecha ni disponibilidad --
-// la tabla no tiene columnas para eso y los CHECK rechazan el texto que las traiga.
+// Lo que explica la habitación, en el orden en que se lee: tamaño, camas, qué
+// se ve. Nunca un monto, una fecha ni disponibilidad -- la tabla no tiene
+// columnas para eso y los CHECK rechazan el texto que las traiga.
+// `capacidad_max` SALIÓ de esta línea en la Fase 4. Antes se emitía como
+// "hasta 5" sin decir de dónde salía, y sale de la WEB del hotel: es
+// descriptiva. La que se puede vender la da tarCapacidadVendible desde
+// `precios`, y va como chip arriba. Dos números de capacidad sin rótulo en la
+// misma tarjeta se leen como una contradicción del sistema, así que la de la
+// web pasa al title y a la vista queda una sola.
 function tarHabDatos(h) {
   const out = [];
   if (h.metros2 != null) out.push(`${Number(h.metros2)} m²`);
   if (h.camas) out.push(h.camas);
-  if (h.capacidad_max != null) out.push(`hasta ${h.capacidad_max}`);
   if (h.vista) out.push(h.vista);
   return out;
 }
+const tarHabTip = h => [
+  h.capacidad_max != null ? `Capacidad según la web del hotel: ${h.capacidad_max}` : '',
+  h.descripcion || '',
+].filter(Boolean).join('\n');
 function tarHabLineaHtml(h) {
   const datos = tarHabDatos(h);
   if (!datos.length) return '';
   // La descripción va al title y no a la tarjeta: son 600 caracteres y la
   // tarjeta tiene que entrar de un vistazo al lado del precio.
-  return `<div class="hab-linea"${h.descripcion ? ` title="${esc(h.descripcion)}"` : ''}><i class="fas fa-bed"></i>${datos.map(d => `<span>${esc(d)}</span>`).join('')}</div>`;
+  const tip = tarHabTip(h);
+  return `<div class="hab-linea"${tip ? ` title="${esc(tip)}"` : ''}><i class="fas fa-bed"></i>${datos.map(d => `<span>${esc(d)}</span>`).join('')}</div>`;
 }
 /* Lo que ofrece la habitación, en la tarjeta. Los amenities SÍ van a la vista
    (es lo que el asesor le lee al cliente), acotados a los primeros TAR_HAB_AMEN
@@ -13251,14 +13325,23 @@ function tarHabHtml(h) {
   const amen = h.amenities || [];
   if (!amen.length) return linea;
   const visibles = amen.slice(0, TAR_HAB_AMEN), resto = amen.length - visibles.length;
-  return linea + `<div class="hab-amen"${h.descripcion || resto ? ` title="${esc([h.descripcion, resto ? amen.join(' · ') : ''].filter(Boolean).join('\n'))}"` : ''}>${
+  // Si no hubo línea compacta (una fila que solo trae capacidad y amenities),
+  // el title de los chips es el único lugar donde queda el dato de la web.
+  const tip = [linea ? '' : tarHabTip(h), linea ? h.descripcion || '' : '', resto ? amen.join(' · ') : ''].filter(Boolean).join('\n');
+  return linea + `<div class="hab-amen"${tip ? ` title="${esc(tip)}"` : ''}>${
     visibles.map(a => `<span class="hab-chip">${esc(a)}</span>`).join('')
   }${resto ? `<span class="hab-chip hab-chip-mas">+${resto}</span>` : ''}</div>`;
 }
 // Una tarjeta = una promoción = una fila del PDF.
-function tarPromoCardHtml(t, destacadaId, delta, hab) {
+function tarPromoCardHtml(t, destacadaId, delta, hab, grupo) {
   const esDestacada = destacadaId != null && t.id === destacadaId;
   const vendible = tarVendibleHoy(t);
+  // Capacidad vendible: la que el proveedor cotiza. Sin claves de ocupación no
+  // se emite chip -- silencio, no un valor por defecto.
+  const cap = tarCapacidadVendible(t);
+  // Una tarifa que no declara capacidad NUNCA se apaga por el filtro de grupo:
+  // apagarla sería esconder inventario vendible por un dato que el PDF no trae.
+  const noEntran = grupo > 0 && cap != null && cap.max < grupo;
   const precios = tarPreciosLista(t);
   const ventanas = tarVentanas(t);
   const venta = [t.venta_desde || null, tarVentaHasta(t)];
@@ -13269,16 +13352,18 @@ function tarPromoCardHtml(t, destacadaId, delta, hab) {
   // (.pc-top, .pc-nombre...) y reusarlo pintaría dos componentes distintos con
   // el mismo CSS. Tampoco se usan prefijos fa/fab/fas/far (los reclama Font
   // Awesome y una vez hizo desaparecer todos los iconos de marca).
-  return `<article class="promo-card${esDestacada ? ' promo-destacada' : ''}${vendible ? '' : ' promo-apagada'}" data-tarifa-id="${t.id}">
+  return `<article class="promo-card${esDestacada ? ' promo-destacada' : ''}${vendible && !noEntran ? '' : ' promo-apagada'}" data-tarifa-id="${t.id}">
     <div class="promo-top">
       <label class="promo-check"><input type="checkbox" data-tar-sel="${t.id}" aria-label="Seleccionar ${esc(titulo)}"></label>
       <div class="promo-titulo">${esc(titulo)}</div>
       ${esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
       ${vendible ? '' : '<span class="promo-badge promo-badge-off">Ya no se vende</span>'}
+      ${noEntran ? `<span class="promo-badge promo-badge-off">No entran ${grupo}</span>` : ''}
     </div>
     ${t.habitacion && t.habitacion !== titulo ? `<div class="promo-sub">${esc(t.habitacion)}</div>` : ''}
-    ${attrs.length || delta ? `<div class="promo-attr">
+    ${attrs.length || delta || cap ? `<div class="promo-attr">
       ${attrs.map(a => `<span class="promo-attr-chip">${esc(a)}</span>`).join('')}
+      ${cap ? `<span class="promo-cap" title="Ocupaciones que cotiza el proveedor: ${esc(cap.claves.join(' · '))}"><i class="fas fa-user-group"></i>Hasta ${cap.max} adulto${cap.max > 1 ? 's' : ''}</span>` : ''}
       ${delta ? `<span class="promo-delta${delta.base ? ' promo-delta-base' : ''}">${esc(delta.txt)}</span>` : ''}
     </div>` : ''}
     ${hab ? tarHabHtml(hab) : ''}
@@ -13324,6 +13409,9 @@ function tarCarpetaHtml(x) {
   // al abrir el drawer y las habitaciones llegan después (tarCargarHabitaciones
   // re-pinta). Sin ellas la tarjeta queda igual que en la Fase 1.
   const habs = tarHabsPorNombre(x);
+  // El filtro "Somos N" de la toolbar no esconde tarjetas: las apaga. El asesor
+  // tiene que poder ver que la habitación existe y por qué no la puede ofrecer.
+  const grupoTam = tarGrupoFiltro();
   const planes = [...grupos.keys()].sort((a, b) =>
     (Number(grupos.get(b).some(t => t.id === destacadaId)) - Number(grupos.get(a).some(t => t.id === destacadaId)))
     || a.localeCompare(b, 'es'));
@@ -13331,7 +13419,7 @@ function tarCarpetaHtml(x) {
     <div class="carpeta-titulo"><i class="fas fa-layer-group"></i> ${tarifas.length} ${tarifas.length > 1 ? 'promociones' : 'promoción'}</div>
     ${planes.map(p => `<section class="carpeta-plan">
       ${grupos.size > 1 || p !== 'Sin plan indicado' ? `<h4 class="carpeta-plan-titulo">${esc(p)}</h4>` : ''}
-      <div class="promo-grid">${grupos.get(p).map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null, habs.get(tarNombreNorm(t.habitacion)) || null)).join('')}</div>
+      <div class="promo-grid">${grupos.get(p).map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null, habs.get(tarNombreNorm(t.habitacion)) || null, grupoTam)).join('')}</div>
     </section>`).join('')}
   </div>`;
 }
@@ -13345,8 +13433,12 @@ function tarBloqueHtml(b) {
   const min = b.minimo_noches && typeof b.minimo_noches === 'object'
     ? Object.entries(b.minimo_noches).map(([k, v]) => `${k}: ${v} noche${v > 1 ? 's' : ''}`).join(' · ') : '';
   if (min) filas.push(['Mínimo de noches', min]);
+  // Rotulada con su origen: es prosa del PDF, por PLAN y contando niños y camas
+  // extra, así que casi siempre da un número mayor que el "Hasta N adultos" de
+  // la tarjeta, que es lo que el proveedor cotiza. Sin el rótulo, las dos cifras
+  // se leen como una contradicción.
   const ocup = (b.ocupacion?.lineas || []).join(' · ');
-  if (ocup) filas.push(['Ocupación máxima', ocup]);
+  if (ocup) filas.push(['Ocupación máxima (según el PDF)', ocup]);
   const ninos = b.ninos ? [
     b.ninos.politica,
     b.ninos.gratis_hasta != null ? `Gratis hasta ${b.ninos.gratis_hasta} años` : null,
@@ -13475,15 +13567,36 @@ function tarActivarSeleccion() {
    los MISMOS helpers que pintan la tarjeta, así lo comparado es exactamente lo
    que el asesor tiene en pantalla. Se resalta únicamente lo que difiere: si las
    dos filas dicen lo mismo, esa fila tiene que apagarse sola ante el ojo. */
-function tarFilasComparacion(tarifas) {
+function tarFilasComparacion(tarifas, habs = new Map()) {
   const filas = [];
   const push = (k, vals, extra = {}) => {
     if (vals.every(v => !v)) return; // vacía en todas: no aporta, no se muestra
     filas.push({ k, vals, dif: new Set(vals.map(String)).size > 1, ...extra });
   };
+  // La fila de producto_habitaciones que matchea esta tarifa, o null. Mismo
+  // criterio que la tarjeta: por nombre_norm y solo revisadas (tarHabsPorNombre).
+  const habDe = t => habs.get(tarNombreNorm(t?.habitacion || '')) || null;
   push('Habitación', tarifas.map(t => t.habitacion || t.titulo || ''));
   push('Atributos', tarifas.map(t => tarAtributosHabitacion(t.habitacion || t.titulo).join(' · ')));
   push('Plan', tarifas.map(t => t.plan || ''));
+  // Capacidad VENDIBLE primero, y con las columnas del PDF a la vista: es la
+  // única de las tres fuentes con la que se puede cotizar.
+  push('Hasta cuántos adultos', tarifas.map(t => {
+    const c = tarCapacidadVendible(t);
+    return c ? `${c.max} (${c.claves.join('·')})` : '';
+  }));
+  // Lo que dice la web del hotel. Va rotulado con su origen, SIEMPRE: sin el
+  // rótulo, un 5 descriptivo al lado de un 4 vendible se lee como una
+  // contradicción del sistema en vez de como dos cosas distintas.
+  push('Tamaño', tarifas.map(t => { const h = habDe(t); return h?.metros2 != null ? `${Number(h.metros2)} m²` : ''; }));
+  push('Camas', tarifas.map(t => habDe(t)?.camas || ''));
+  push('Vista', tarifas.map(t => habDe(t)?.vista || ''));
+  push('Capacidad según la web del hotel', tarifas.map(t => {
+    const h = habDe(t);
+    return h?.capacidad_max != null ? String(h.capacidad_max) : '';
+  }));
+  push('Amenities', tarifas.map(t => (habDe(t)?.amenities || []).join('\n')), { multi: true });
+  push('Descripción', tarifas.map(t => habDe(t)?.descripcion || ''), { multi: true });
   // Una fila por ocupación, con la unión de las etiquetas que existan en las
   // elegidas: la lista sale de las claves reales de `precios` (tarPreciosLista),
   // nunca de una lista fija, porque cada hotel del PDF trae las suyas.
@@ -13503,9 +13616,25 @@ function tarFilasComparacion(tarifas) {
   push('Estado', tarifas.map(t => tarVendibleHoy(t) ? 'Se vende hoy' : 'Ya no se vende'));
   return filas;
 }
-function tarComparadorHtml(tarifas) {
+/* Dos temporadas de la MISMA habitación rotulaban las dos columnas igual
+   (BASIC / BASIC) y lo único que las distinguía eran las filas Venta y
+   Disfrute. tarHabCorta no miente -- el que no ayuda es el encabezado. Solo se
+   desambigua cuando hay choque: una comparación entre habitaciones distintas
+   queda exactamente igual que antes. */
+function tarTitulosComparacion(tarifas) {
+  const base = tarifas.map(t => tarHabCorta(t) || t.titulo || 'Tarifa');
+  const veces = new Map();
+  base.forEach(b => veces.set(b, (veces.get(b) || 0) + 1));
+  return base.map((b, i) => {
+    if (veces.get(b) < 2) return b;
+    const w = tarVentanas(tarifas[i]).map(tarRango).filter(Boolean).join(' · ');
+    return w ? `${b} (${w})` : b;
+  });
+}
+function tarComparadorHtml(tarifas, habs = new Map()) {
   const celda = (f, v) => `<td class="${f.dif ? 'tarcmp-dif' : ''}${f.precio ? ' tarcmp-precio' : ''}">${
     v ? (f.multi ? esc(v).replace(/\n/g, '<br>') : esc(v)) : '<span class="tarcmp-vacio">—</span>'}</td>`;
+  const titulos = tarTitulosComparacion(tarifas);
   return `<div class="tarcmp-panel" role="dialog" aria-modal="true" aria-label="Comparar tarifas">
     <div class="tarcmp-head">
       <div class="tarcmp-t">Comparar ${tarifas.length} tarifas</div>
@@ -13513,8 +13642,8 @@ function tarComparadorHtml(tarifas) {
     </div>
     <div class="tarcmp-scroll">
       <table class="tarcmp-tabla">
-        <thead><tr><th class="tarcmp-k"></th>${tarifas.map(t => `<th>${esc(tarHabCorta(t) || t.titulo || 'Tarifa')}</th>`).join('')}</tr></thead>
-        <tbody>${tarFilasComparacion(tarifas).map(f =>
+        <thead><tr><th class="tarcmp-k"></th>${titulos.map(n => `<th>${esc(n)}</th>`).join('')}</tr></thead>
+        <tbody>${tarFilasComparacion(tarifas, habs).map(f =>
           `<tr><th class="tarcmp-k">${esc(f.k)}</th>${f.vals.map(v => celda(f, v)).join('')}</tr>`).join('')}</tbody>
       </table>
     </div>
@@ -13529,7 +13658,10 @@ function tarAbrirComparador(ids) {
   if (elegidas.length < 2) return;
   const el = document.getElementById('tarcmp');
   if (!el) return;
-  el.innerHTML = tarComparadorHtml(elegidas);
+  // Mismo Map que usa la carpeta: las habitaciones ya están en TAR_DRAWER_ITEM
+  // si tarCargarHabitaciones volvió. Si todavía no, el comparador simplemente
+  // no emite esas filas -- no consulta nada por su cuenta.
+  el.innerHTML = tarComparadorHtml(elegidas, tarHabsPorNombre(TAR_DRAWER_ITEM));
   el.classList.add('open');
   document.getElementById('tarcmp-cerrar').onclick = () => tarCerrarComparador();
   el.onclick = e => { if (e.target === el) tarCerrarComparador(); };
@@ -17366,6 +17498,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-05', emoji: '👥', titulo: 'Cuánta gente entra en cada habitación', texto: 'Cada tarjeta de tarifa dice ahora "Hasta N adultos": es hasta cuántos cotiza el proveedor en el PDF (las columnas SGL/DBL/TPL/CDP de esa fila), o sea lo que de verdad se puede vender. Arriba, en los filtros del Tarifario, hay un campo "Somos..." para escribir el tamaño del grupo: los hoteles donde no entran desaparecen de la lista, y dentro del hotel las habitaciones que quedan chicas se ven apagadas con el cartel "No entran N". Una tarifa cuyo PDF no trae columnas por ocupación no se esconde nunca: no sabemos que no entren. El comparador suma las filas de la habitación (tamaño, camas, vista, amenities) y, cuando comparás la misma habitación en dos temporadas, ya no rotula las dos columnas igual. Ojo con una distinción que ahora está a la vista: "Hasta N adultos" es lo vendible, mientras que "Capacidad según la web del hotel" y "Ocupación máxima (según el PDF)" son descriptivas y casi siempre dan un número mayor porque cuentan niños y camas extra. El Cotizador IA usa solo la vendible, y si el grupo no entra en una habitación reparte en varias y muestra cómo quedan. Con niños: el tarifario no dice en ningún lado cuántos niños entran por habitación (las líneas CHD son precio por edad, no cupo), así que la IA reparte y el sistema controla que la cuenta cierre, pero no afirma cupos de niños: si hace falta te va a pedir las edades y aclarar que eso lo confirma el hotel.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '📐', titulo: 'Cuánto mide la habitación, qué camas tiene y qué se ve', texto: 'Debajo del nombre de cada habitación, en la carpeta de tarifas de un hotel, ahora puede aparecer una línea con los metros cuadrados, las camas, cuánta gente entra y la vista. Ese dato se busca en la web del hotel, pero NO se publica solo: cada habitación la tiene que aprobar un admin desde la ficha del hotel (bloque "Habitaciones", abajo de todo), donde se ve la fuente de donde salió y se puede aprobar, descartar u ocultar. Hasta que alguien la apruebe, no la ve nadie. Los hoteles que no tengan nada publicado en internet se quedan como están hoy. Nunca trae precios, fechas ni disponibilidad: eso sigue saliendo únicamente del tarifario.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '🛏️', titulo: 'Las habitaciones ahora se explican solas (y se pueden accionar)', texto: 'En la carpeta de tarifas de un hotel, cada tarjeta muestra debajo del nombre lo que la distingue -- "Vista piscina · Premium" -- y cuánto cuesta de más que la habitación más barata del mismo plan ("+$5 DBL vs Holiday Village"). No es un precio nuevo: es la resta entre los precios que ya están en la ficha. Además cada tarjeta se puede tildar, y con una o más elegidas aparece abajo una barra para compararlas lado a lado, copiar el texto listo para WhatsApp, o mandarlas al Cotizador IA para que responda solo por esas habitaciones. Los admin pueden además fijar a mano cuál lleva el cartel de "Mejor precio hoy" (si esa tarifa deja de venderse, el cartel vuelve solo a la automática).', roles: ROLES_TODOS },
   { fecha: '2026-09-04', emoji: '🏨', titulo: 'Una promoción por línea del PDF, y el hotel como carpeta', texto: 'El tarifario dejó de guardar cada hotel como un bloque de texto: ahora cada fila del PDF es una tarifa propia, con su título, su habitación, su plan y sus precios separados por tipo de ocupación. El hotel pasa a ser la carpeta que las agrupa. Con eso, el "Desde $X" de cada tarjeta sale de la tabla real y no del monto más chico del texto (que casi siempre era la columna de niño o el pax adicional), y el bot de ventas dejó de prometer precios más bajos de los que se venden. Las 1.106 tarifas de PDF que están en venta hoy quedaron todas estructuradas.', roles: ROLES_TODOS },

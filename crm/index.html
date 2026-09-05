@@ -649,6 +649,11 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
    plan. Deliberadamente más apagado que .promo-pv -- es contexto, no precio. */
 .promo-attr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:6px}
 .promo-attr-chip{padding:1px 7px;border-radius:999px;border:1px solid var(--line2);font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
+/* Fase 4 -- capacidad VENDIBLE (claves de `precios`). Mismo registro apagado que
+   los chips de atributos: es contexto de la habitación, no un precio. Clase
+   propia sin prefijo fa/fab/fas/far -- esos los reclama Font Awesome. */
+.promo-cap{display:inline-flex;align-items:center;gap:5px;padding:1px 7px;border-radius:999px;border:1px solid var(--line2);font-size:10px;font-weight:700;color:var(--muted);white-space:nowrap}
+.promo-cap i{font-size:9px;opacity:.75}
 .promo-delta{font-size:10.5px;font-weight:700;color:var(--amber);overflow-wrap:anywhere}
 .promo-delta-base{color:var(--muted2);font-weight:600}
 /* Fase 3.3 -- qué ES la habitación (producto_habitaciones, solo revisado=true).
@@ -1144,6 +1149,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tar-f-check:has(input:checked){color:var(--txt);border-color:var(--accent)}
 .tar-f-check input{accent-color:var(--accent);cursor:pointer}
 #tar-f-precio{width:150px}
+#tar-f-grupo{width:160px}
 .tar-f[data-hidden]{display:none}
 .tar-f-check[data-hidden]{display:none}
 /* ---------- Hoteles: lista ordenada en vez de cards sueltas ---------- */
@@ -1831,7 +1837,7 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
   .tbar{gap:8px}
   select.flt{flex:1 1 44%;font-size:16px;padding:11px 30px 11px 12px}
   /* 16px minimo en inputs para que iOS Safari no haga zoom automatico al enfocar */
-  input.flt,#tar-f-precio,#cot-f-precio,.ei,.cot-f-fecha input,.drp-inputs input{font-size:16px!important}
+  input.flt,#tar-f-precio,#tar-f-grupo,#cot-f-precio,.ei,.cot-f-fecha input,.drp-inputs input{font-size:16px!important}
   input.flt{padding:11px 12px}
   .tcount{flex-basis:100%;order:6;margin-left:0;text-align:right}
   /* tabla -> tarjetas */
@@ -1858,7 +1864,7 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
   .vs-btn{padding:11px 13px;min-height:44px;min-width:44px}
   .drawer .dclose{width:44px;height:44px}
   .fchip b{padding:6px}
-  .drp-btn,.reload-btn,.tar-f-check,select.flt,#tar-f-precio,#cot-f-precio,.pager button,.clear-all{min-height:44px}
+  .drp-btn,.reload-btn,.tar-f-check,select.flt,#tar-f-precio,#tar-f-grupo,#cot-f-precio,.pager button,.clear-all{min-height:44px}
   .seg{min-height:44px}
   /* Fase 3.2 -- targets dentro de filas de tabla, los más tocados y los que
      quedaban afuera de la lista de arriba (medidos: .btn-sm ~28px/24 usos,
@@ -1914,7 +1920,7 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
      botón "Listo" queda justo debajo de ella y no se puede tocar. */
   .mfs{position:fixed;left:0;right:0;bottom:0;z-index:71;background:var(--bg2);border:1px solid var(--line2);border-bottom:none;border-radius:20px 20px 0 0;padding:18px 18px calc(80px + var(--safe-b));max-height:82vh;overflow-y:auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.3,1,.4,1);box-shadow:0 -20px 50px rgba(0,0,0,.45);margin-bottom:0}
   .mfs.open{transform:translateY(0)}
-  .mfs .flt,.mfs .tar-search,.mfs .tar-f-check,.mfs .cot-f-fecha,.mfs .drp,.mfs #tar-f-precio,.mfs #cot-f-precio{flex:1 1 100%;width:100%}
+  .mfs .flt,.mfs .tar-search,.mfs .tar-f-check,.mfs .cot-f-fecha,.mfs .drp,.mfs #tar-f-precio,.mfs #tar-f-grupo,.mfs #cot-f-precio{flex:1 1 100%;width:100%}
   .mfs .tcount{flex-basis:100%;text-align:left;margin:2px 0 0}
 
   /* Tarifario en móvil (2026-08-19). El buscador, el botón de filtros y el
@@ -3488,6 +3494,9 @@ body.fsize-grande{--tap:41.9px}
         </select>
         <select class="flt tar-f" id="tar-f-mes" data-tabs="promo"><option value="">Cualquier mes</option></select>
         <input class="flt tar-f" id="tar-f-precio" data-tabs="hotel,promo,destino,paquete" type="number" min="0" placeholder="Precio máx. USD">
+        <!-- Fase 4. Solo en Hoteles: la capacidad vendible sale de las claves de
+             `precios` de cada tarifa, y las otras pestañas no las tienen. -->
+        <input class="flt tar-f" id="tar-f-grupo" data-tabs="hotel" type="number" min="1" step="1" placeholder="Somos... (adultos)">
         <label class="tar-f-check" id="tar-f-ninos-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-ninos"> Con niños gratis</label>
         <label class="tar-f-check" id="tar-f-vigente-wrap" data-tabs="hotel,promo,hotsale"><input type="checkbox" class="tar-f" id="tar-f-vigente" checked> Solo vigentes</label>
         <label class="tar-f-check" id="tar-f-ocultar-ocultos-wrap" data-tabs="hotel"><input type="checkbox" class="tar-f" id="tar-f-ocultar-ocultos" checked> Ocultar ocultos</label>
