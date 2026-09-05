@@ -12469,7 +12469,7 @@ function tarItemsWrapHtml(items) {
 }
 function tarRowHtml(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
-  const nombre = esPromo ? x.titulo : x.nombre;
+  const nombre = esPromo ? tarNombrePromo(x) : x.nombre;
   const foto = fotosRotadas(x, 256)[0];
   let tags = [], precioTxt = null, promosCount = 0;
   if (tarTab === 'hotel') {
@@ -12552,7 +12552,7 @@ function tarCardHtml(x) {
       ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'tarifas', 'vigente'), x._tarifa ? tarBadgePrecio(x._tarifa) : x.precio_texto, tcHsBtnHtml(x))}
       <div class="tc-body">
         ${x.producto_id ? `<button type="button" class="tc-hotel-chip" data-abrir-hotel="${x.producto_id}"><i class="fas fa-hotel"></i> ${esc(x.productos?.nombre || '')}</button>` : ''}
-        <div class="tc-nombre">${esc(x.titulo || x.habitacion || x.plan || 'Promoción')}</div>
+        <div class="tc-nombre">${esc(tarNombrePromo(x))}</div>
         ${x.resumen_ia ? `<div class="tc-resumen-ia">${esc(x.resumen_ia)}</div>` : ''}
       </div>
       <div class="tc-pie">
@@ -12585,7 +12585,7 @@ function tarCardHtml(x) {
 }
 function tarFichaHtml(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
-  const nombre = esPromo ? x.titulo : x.nombre;
+  const nombre = esPromo ? tarNombrePromo(x) : x.nombre;
   const foto = fotosRotadas(x, 256)[0];
   const tarifa = !esPromo ? mejorPrecio(x) : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
@@ -13267,6 +13267,15 @@ function tarifaComoPromo(t) {
     ninos_gratis_cantidad: t.ninos_gratis_cantidad || 0,
     productos: t.productos || null,
   };
+}
+// Nombre visible de una promo = "Hotel · Título". El `titulo` guardado no se
+// toca; solo la vista antepone el hotel cuando el título no lo nombra ya (dedup
+// por substring normalizado, mismo criterio que la web y buscar_tarifario).
+function tarNombrePromo(t) {
+  const hotel = t?.productos?.nombre || '';
+  const titulo = t?.titulo || t?.habitacion || t?.plan || 'Promoción';
+  if (hotel && !tarNorm(titulo).includes(tarNorm(hotel))) return `${hotel} · ${titulo}`;
+  return titulo;
 }
 function tarifaPrecioNumerico(precioTexto) {
   // Anclado a $/€: un match sin ancla agarra el primer dígito de CUALQUIER
@@ -14049,7 +14058,7 @@ function openProductoDrawer(x, tipoForzado = null) {
   // Desde el buscador IA el resultado puede ser de otra pestaña que la abierta:
   // el tipo real viene explícito para no pintar una promo como producto.
   const esPromo = tipoForzado ? tipoForzado === 'promocion' : (tarTab === 'promo' || tarTab === 'hotsale');
-  const nombre = esPromo ? x.titulo : x.nombre;
+  const nombre = esPromo ? tarNombrePromo(x) : x.nombre;
   const tarifa = !esPromo ? mejorPrecio(x) : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
@@ -14068,9 +14077,25 @@ function openProductoDrawer(x, tipoForzado = null) {
     <div class="dhead">${fotos[0] ? `<div class="dava" style="background-image:url('${esc(fotos[0])}')"></div>` : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
       <div class="dm">${esc(x.destino || TAR_TAB_LABEL[tarTab])}</div></div></div>
     ${fotos.length ? `<div class="dgallery">${fotos.map((f, i) => `<img src="${esc(f)}" alt="" loading="lazy" data-drawer-foto="${i}">`).join('')}</div>` : ''}
-    ${precio && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div><div class="dfv dfv-rich">${formatearTexto(precio)}</div></div></div>` : ''}
+    ${(() => {
+      // Promo con grilla `precios`: el DBL por persona en grande (igual que la
+      // card), el resto de las ocupaciones en una fila chica. Sin grilla cae al
+      // dfield Precio de precio_texto de siempre.
+      if (esPromo) {
+        const hero = x.precios ? tarPrecioDobleHero(x) : null;
+        if (hero) {
+          const resto = tarPreciosLista(x).filter(p => p.etq !== 'DBL');
+          return `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div>
+            <div class="promo-precio-hero"><span class="pph-monto">${esc(hero.monto)}</span><span class="pph-nota">${esc(hero.nota)}</span></div>
+            ${resto.length ? `<div class="promo-precios promo-precios-sec">${resto.map(p => `<div class="promo-precio"><span class="promo-pk">${esc(p.etq)}</span><span class="promo-pv">${esc(p.monto)}</span></div>`).join('')}</div>` : ''}
+          </div></div>`;
+        }
+      }
+      return precio && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div><div class="dfv dfv-rich">${formatearTexto(precio)}</div></div></div>` : '';
+    })()}
     ${vigencia && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Vigencia</div><div class="dfv dfv-rich">${formatearTexto(vigencia)}</div></div></div>` : ''}
     ${infantil && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-child"></i></div><div><div class="dfl">Adicional por niño</div><div class="dfv dfv-rich">${formatearTexto(infantil.precio_texto)}</div></div></div>` : ''}
+    ${esPromo && x.resumen_ia ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv dfv-rich">${esc(x.resumen_ia)}</div></div></div>` : ''}
     ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv dfv-rich">${formatearTexto(x.descripcion)}</div></div></div>` : ''}
     ${!esPromo && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv dfv-rich">${formatearTexto(x.requisitos)}</div></div></div>` : ''}
     ${bloques}
