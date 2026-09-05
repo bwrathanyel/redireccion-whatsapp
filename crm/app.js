@@ -13197,8 +13197,53 @@ function tarDeltasDePlan(filas) {
   });
   return out;
 }
+/* Fase 3.3 -- habitaciones enriquecidas desde la web (producto_habitaciones).
+   La tarjeta pinta SOLO filas con revisado = true: la RLS ni siquiera baja el
+   resto salvo para admin, que las ve en el panel de revisión del drawer. Un
+   hotel sin nada publicado se queda con lo de la Fase 1 y está bien.
+   El match con `tarifas.habitacion` es por nombre_norm, así que esta
+   normalización tiene que dar EXACTAMENTE lo mismo que public._norm_tar_txt
+   (20260827140000:48-55): si divergen, el match falla en silencio y la tarjeta
+   se queda muda sin que nadie sepa por qué. Por eso la columna nombre_norm es
+   generada en la base y acá se replica el mismo algoritmo, no uno parecido. */
+const TAR_NORM_ACENTOS = 'áàäâãéèëêíìïîóòöôõúùüûñÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑ';
+const TAR_NORM_LLANAS = 'aaaaaeeeeiiiiooooouuuun' + 'aaaaaeeeeiiiiooooouuuun';
+function tarNombreNorm(s) {
+  let out = '';
+  for (const ch of String(s ?? '')) {
+    const i = TAR_NORM_ACENTOS.indexOf(ch);
+    out += i >= 0 ? TAR_NORM_LLANAS[i] : ch;
+  }
+  return out.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+// Mapa nombre_norm -> habitación revisada. Se arma una vez por carpeta en vez de
+// un find() por tarjeta: un hotel trae 9-18 filas.
+function tarHabsPorNombre(x) {
+  const m = new Map();
+  (x?.habitaciones || []).forEach(h => { if (h.revisado && h.nombre_norm) m.set(h.nombre_norm, h); });
+  return m;
+}
+// Lo que explica la habitación, en el orden en que se lee: tamaño, camas,
+// cuánta gente entra, qué se ve. Nunca un monto, una fecha ni disponibilidad --
+// la tabla no tiene columnas para eso y los CHECK rechazan el texto que las traiga.
+function tarHabDatos(h) {
+  const out = [];
+  if (h.metros2 != null) out.push(`${Number(h.metros2)} m²`);
+  if (h.camas) out.push(h.camas);
+  if (h.capacidad_max != null) out.push(`hasta ${h.capacidad_max}`);
+  if (h.vista) out.push(h.vista);
+  return out;
+}
+function tarHabLineaHtml(h) {
+  const datos = tarHabDatos(h);
+  if (!datos.length) return '';
+  // Descripción y amenities van al title y no a la tarjeta: la línea tiene que
+  // entrar de un vistazo al lado del precio, no competir con él.
+  const tip = [h.descripcion, (h.amenities || []).join(' · ')].filter(Boolean).join('\n');
+  return `<div class="hab-linea"${tip ? ` title="${esc(tip)}"` : ''}><i class="fas fa-bed"></i>${datos.map(d => `<span>${esc(d)}</span>`).join('')}</div>`;
+}
 // Una tarjeta = una promoción = una fila del PDF.
-function tarPromoCardHtml(t, destacadaId, delta) {
+function tarPromoCardHtml(t, destacadaId, delta, hab) {
   const esDestacada = destacadaId != null && t.id === destacadaId;
   const vendible = tarVendibleHoy(t);
   const precios = tarPreciosLista(t);
@@ -13223,6 +13268,7 @@ function tarPromoCardHtml(t, destacadaId, delta) {
       ${attrs.map(a => `<span class="promo-attr-chip">${esc(a)}</span>`).join('')}
       ${delta ? `<span class="promo-delta${delta.base ? ' promo-delta-base' : ''}">${esc(delta.txt)}</span>` : ''}
     </div>` : ''}
+    ${hab ? tarHabLineaHtml(hab) : ''}
     ${precios.length
       ? `<div class="promo-precios">${precios.map(p => `<div class="promo-precio"><span class="promo-pk">${esc(p.etq)}</span><span class="promo-pv">${esc(p.monto)}</span></div>`).join('')}</div>`
       : t.precio_texto ? `<div class="promo-precio-texto dfv-rich">${formatearTexto(t.precio_texto)}</div>` : ''}
@@ -13261,6 +13307,10 @@ function tarCarpetaHtml(x) {
   for (const filas of grupos.values()) {
     for (const [id, d] of tarDeltasDePlan(filas)) deltas.set(id, d);
   }
+  // Solo las revisadas, y solo si ya se bajaron: la carpeta se pinta sincrónica
+  // al abrir el drawer y las habitaciones llegan después (tarCargarHabitaciones
+  // re-pinta). Sin ellas la tarjeta queda igual que en la Fase 1.
+  const habs = tarHabsPorNombre(x);
   const planes = [...grupos.keys()].sort((a, b) =>
     (Number(grupos.get(b).some(t => t.id === destacadaId)) - Number(grupos.get(a).some(t => t.id === destacadaId)))
     || a.localeCompare(b, 'es'));
@@ -13268,7 +13318,7 @@ function tarCarpetaHtml(x) {
     <div class="carpeta-titulo"><i class="fas fa-layer-group"></i> ${tarifas.length} ${tarifas.length > 1 ? 'promociones' : 'promoción'}</div>
     ${planes.map(p => `<section class="carpeta-plan">
       ${grupos.size > 1 || p !== 'Sin plan indicado' ? `<h4 class="carpeta-plan-titulo">${esc(p)}</h4>` : ''}
-      <div class="promo-grid">${grupos.get(p).map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null)).join('')}</div>
+      <div class="promo-grid">${grupos.get(p).map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null, habs.get(tarNombreNorm(t.habitacion)) || null)).join('')}</div>
     </section>`).join('')}
   </div>`;
 }
@@ -13568,6 +13618,92 @@ async function tarDestacarTarifa(ids) {
   else if (x.tarifa_destacada_id === id) okToast('Destacada actualizada');
   else errToast('La base mantuvo la automática: esa tarifa no es vendible hoy');
 }
+/* Fase 3.3 -- carga y revisión de las habitaciones enriquecidas.
+   Se bajan aparte del listado a propósito: TAR_SEL_PRODUCTOS trae los ~115
+   hoteles de la pestaña de una, y colgarle las habitaciones a todos sería
+   arrastrar texto descriptivo que solo se mira de a un hotel por vez. */
+async function tarCargarHabitaciones(x) {
+  const { data, error } = await sb.from('producto_habitaciones')
+    .select('id,nombre,nombre_norm,metros2,camas,capacidad_max,vista,amenities,descripcion,fuente_url,revisado')
+    .eq('producto_id', x.id).order('nombre');
+  // Sin habitaciones la tarjeta funciona igual (Fase 1): un error acá se avisa
+  // por consola y no rompe el drawer.
+  if (error) { console.warn('producto_habitaciones:', error.message); return; }
+  x.habitaciones = data || [];
+  // El drawer pudo cerrarse o cambiar de ficha mientras volvía la consulta.
+  if (TAR_DRAWER_ITEM !== x) return;
+  if (x.habitaciones.some(h => h.revisado)) tarRepintarCarpeta(x);
+  tarPintarRevisionHabs(x);
+}
+function tarHabDominio(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+}
+function tarHabRevItemHtml(h) {
+  const datos = tarHabDatos(h);
+  return `<div class="hab-item" data-hab-id="${h.id}">
+    <div class="hab-item-nom">${esc(h.nombre)}</div>
+    ${datos.length
+      ? `<div class="hab-item-datos">${datos.map(d => `<span>${esc(d)}</span>`).join('')}</div>`
+      : `<div class="hab-item-datos hab-vacia">Solo el nombre: aprobarla no agrega nada a la tarjeta</div>`}
+    ${(h.amenities || []).length ? `<div class="hab-item-amen">${h.amenities.map(a => `<span class="hab-chip">${esc(a)}</span>`).join('')}</div>` : ''}
+    ${h.descripcion ? `<div class="hab-item-desc">${esc(h.descripcion)}</div>` : ''}
+    <a class="hab-fuente" href="${esc(h.fuente_url)}" target="_blank" rel="noopener noreferrer"><i class="fas fa-link"></i> ${esc(tarHabDominio(h.fuente_url))}</a>
+    <div class="hab-btns">
+      ${h.revisado
+        ? `<button type="button" class="hab-btn" data-hab-accion="ocultar"><i class="fas fa-eye-slash"></i> Ocultar</button>`
+        : `<button type="button" class="hab-btn hab-btn-ok" data-hab-accion="aprobar"><i class="fas fa-check"></i> Aprobar</button>
+           <button type="button" class="hab-btn hab-btn-no" data-hab-accion="descartar"><i class="fas fa-trash"></i> Descartar</button>`}
+    </div>
+  </div>`;
+}
+/* El panel existe solo para admin (el contenedor no se emite para el resto), y
+   es el ÚNICO camino para que una habitación llegue a la tarjeta: sin él las
+   filas quedan en la base invisibles para siempre. */
+function tarPintarRevisionHabs(x) {
+  const box = document.getElementById('hab-rev');
+  if (!box) return;
+  const habs = x.habitaciones || [];
+  const pend = habs.filter(h => !h.revisado), pub = habs.filter(h => h.revisado);
+  box.innerHTML = !habs.length
+    ? `<div class="muted" style="font-size:12.5px">Este hotel todavía no tiene habitaciones enriquecidas.</div>`
+    : `${pend.length ? `<div class="hab-grupo-t">${pend.length} sin revisar — no las ve nadie</div>${pend.map(tarHabRevItemHtml).join('')}` : ''}
+       ${pub.length ? `<div class="hab-grupo-t">${pub.length} publicada${pub.length > 1 ? 's' : ''} en las tarjetas</div>${pub.map(tarHabRevItemHtml).join('')}` : ''}`;
+  // El contenedor se re-pinta por dentro pero el nodo sobrevive, así que el
+  // listener se engancha una sola vez por apertura del drawer: dos veces
+  // aprobaría dos veces por cada click.
+  if (box.dataset.enganchado) return;
+  box.dataset.enganchado = '1';
+  box.addEventListener('click', e => {
+    const b = e.target.closest('[data-hab-accion]');
+    if (!b || b.disabled) return;
+    const id = Number(b.closest('[data-hab-id]').dataset.habId);
+    if (b.dataset.habAccion === 'descartar') tarDescartarHabitacion(x, id);
+    else tarRevisarHabitacion(x, id, b.dataset.habAccion === 'aprobar');
+  });
+}
+async function tarRevisarHabitacion(x, id, ok) {
+  const { error } = await sb.rpc('revisar_habitacion', { p_id: id, p_revisado: ok });
+  if (error) { errToast(`No se pudo ${ok ? 'aprobar' : 'ocultar'}: ` + error.message); return; }
+  const h = (x.habitaciones || []).find(h => h.id === id);
+  if (h) h.revisado = ok;
+  tarPintarRevisionHabs(x);
+  tarRepintarCarpeta(x);
+  okToast(ok ? 'Habitación publicada en la tarjeta' : 'Habitación oculta otra vez');
+}
+async function tarDescartarHabitacion(x, id) {
+  const h = (x.habitaciones || []).find(h => h.id === id);
+  if (!h) return;
+  // Borrar y no dejarla en revisado=false: una fila mal traída que se queda
+  // pendiente vuelve a aparecer en el panel cada vez que se abre el hotel. Ojo
+  // que al quedar el hotel sin filas vuelve a ser candidato del enriquecimiento.
+  if (!confirm(`¿Descartar "${h.nombre}"? Se borra la fila. Una corrida futura del enriquecimiento puede volver a traerla.`)) return;
+  const { error } = await sb.from('producto_habitaciones').delete().eq('id', id);
+  if (error) { errToast('No se pudo descartar: ' + error.message); return; }
+  x.habitaciones = (x.habitaciones || []).filter(h => h.id !== id);
+  tarPintarRevisionHabs(x);
+  tarRepintarCarpeta(x);
+  okToast('Habitación descartada');
+}
 TAR_ACCIONES.destacar = tarDestacarTarifa;
 function openProductoDrawer(x, tipoForzado = null) {
   TAR_DRAWER_ITEM = x;
@@ -13616,7 +13752,9 @@ function openProductoDrawer(x, tipoForzado = null) {
       <div id="tar-fotos-admin"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
       ${!esPromo ? `
       <div class="eb-title" style="margin-top:16px"><i class="fas fa-video"></i> Video (piloto, solo admin)</div>
-      <div id="tar-video-admin"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>` : ''}
+      <div id="tar-video-admin"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+      <div class="eb-title" style="margin-top:16px"><i class="fas fa-bed"></i> Habitaciones (solo admin)</div>
+      <div id="hab-rev"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>` : ''}
       ${esPromo
         ? `<button class="dbtn gh" id="tar-editar-promo" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Editar esta promoción</button>`
         : `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>`}
@@ -13632,6 +13770,12 @@ function openProductoDrawer(x, tipoForzado = null) {
   document.getElementById('tar-editar-promo')?.addEventListener('click', () => tarAbrirEditorPromo(x.id));
   document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotosOrig, +el.dataset.drawerFoto)));
   tarActivarSeleccion();
+  // Las habitaciones se piden para todos los roles (la RLS le da al no-admin
+  // solo las revisadas, que son las que pinta la tarjeta); el panel de revisión
+  // solo existe si el contenedor #hab-rev se emitió, o sea para admin.
+  if (!esPromo && carpeta) {
+    if (x.habitaciones) tarPintarRevisionHabs(x); else tarCargarHabitaciones(x);
+  }
   if (ROL === 'admin') {
     document.getElementById('tar-notas-save').onclick = () => guardarNotasTarifario(esPromo ? 'promociones' : 'productos', x.id);
     cargarFotosAdmin(esPromo ? 'promocion_fotos' : 'producto_fotos', esPromo ? 'promocion_id' : 'producto_id', x.id, esPromo ? 'promos' : 'hoteles');
@@ -17209,6 +17353,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-05', emoji: '📐', titulo: 'Cuánto mide la habitación, qué camas tiene y qué se ve', texto: 'Debajo del nombre de cada habitación, en la carpeta de tarifas de un hotel, ahora puede aparecer una línea con los metros cuadrados, las camas, cuánta gente entra y la vista. Ese dato se busca en la web del hotel, pero NO se publica solo: cada habitación la tiene que aprobar un admin desde la ficha del hotel (bloque "Habitaciones", abajo de todo), donde se ve la fuente de donde salió y se puede aprobar, descartar u ocultar. Hasta que alguien la apruebe, no la ve nadie. Los hoteles que no tengan nada publicado en internet se quedan como están hoy. Nunca trae precios, fechas ni disponibilidad: eso sigue saliendo únicamente del tarifario.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '🛏️', titulo: 'Las habitaciones ahora se explican solas (y se pueden accionar)', texto: 'En la carpeta de tarifas de un hotel, cada tarjeta muestra debajo del nombre lo que la distingue -- "Vista piscina · Premium" -- y cuánto cuesta de más que la habitación más barata del mismo plan ("+$5 DBL vs Holiday Village"). No es un precio nuevo: es la resta entre los precios que ya están en la ficha. Además cada tarjeta se puede tildar, y con una o más elegidas aparece abajo una barra para compararlas lado a lado, copiar el texto listo para WhatsApp, o mandarlas al Cotizador IA para que responda solo por esas habitaciones. Los admin pueden además fijar a mano cuál lleva el cartel de "Mejor precio hoy" (si esa tarifa deja de venderse, el cartel vuelve solo a la automática).', roles: ROLES_TODOS },
   { fecha: '2026-09-04', emoji: '🏨', titulo: 'Una promoción por línea del PDF, y el hotel como carpeta', texto: 'El tarifario dejó de guardar cada hotel como un bloque de texto: ahora cada fila del PDF es una tarifa propia, con su título, su habitación, su plan y sus precios separados por tipo de ocupación. El hotel pasa a ser la carpeta que las agrupa. Con eso, el "Desde $X" de cada tarjeta sale de la tabla real y no del monto más chico del texto (que casi siempre era la columna de niño o el pax adicional), y el bot de ventas dejó de prometer precios más bajos de los que se venden. Las 1.106 tarifas de PDF que están en venta hoy quedaron todas estructuradas.', roles: ROLES_TODOS },
   { fecha: '2026-09-03', emoji: '💳', titulo: 'Los asesores ya pueden cerrar la venta', texto: 'Dos arreglos en "Pagos y captación" (ficha del lead). Antes: al guardar montos o fechas sin tocar el estado, saltaba un error rojo y no dejaba guardar. Ahora el guardado solo toca el estado si realmente cambiaste ese menú. Y además: un asesor ya puede marcar "PAGO REALIZADO" y que se genere la factura directo, sin esperar a que un admin lo confirme desde la cola de verificación.', roles: ['asesor', 'admin'] },
