@@ -10296,9 +10296,16 @@ function ssPintarPreview() {
   const hotelesStop = grupos.filter((g) => g.peor === 'stop_sale').length;
   const hotelesOnRequest = grupos.length - hotelesStop;
 
+  const mesesVistos = new Set();
+  const meses = SS_DATA.paginas
+    .filter((p) => { const k = `${p.mes}-${p.anio}`; if (mesesVistos.has(k)) return false; mesesVistos.add(k); return true; })
+    .map((p) => { const nombre = SS_MESES[p.mes - 1]; return `${nombre[0].toUpperCase()}${nombre.slice(1)} ${p.anio}`; })
+    .join(' · ');
+
   box.innerHTML = `<div class="card" style="margin-top:12px">
     <h2><i class="fas fa-table-cells"></i> Lo que se leyó del PDF</h2>
     <div class="csub">Compará contra el PDF original antes de confirmar. Tocá un hotel para ver sus fechas.</div>
+    <div class="csub"><b>Meses leídos:</b> ${esc(meses)}</div>
     <div class="vig-resumen" style="margin-top:12px">
       <div class="vig-kpi"><b>${filas.length}</b><span>Bloqueo(s)</span></div>
       <div class="vig-kpi ${hotelesStop ? 'grave' : ''}"><b>${hotelesStop}</b><span>Hoteles en stop sale</span></div>
