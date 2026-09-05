@@ -7094,6 +7094,7 @@ function resetSheetNuevoCliente() {
   document.getElementById('nl-telefono').value = '';
   document.getElementById('nl-telefono').readOnly = false;
   document.getElementById('nl-destino').value = '';
+  document.getElementById('nl-canal').value = '';
   document.getElementById('nl-personas').value = '';
   document.getElementById('nl-fecha').value = '';
   document.getElementById('nl-es-prueba').checked = false;
@@ -7231,7 +7232,7 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
     const { data, error } = await sb.rpc('crear_lead_manual', {
       p_nombre: nombre, p_telefono: val('nl-telefono').trim(), p_destino: val('nl-destino').trim(),
       p_personas: val('nl-personas').trim(), p_asesor: ROL === 'admin' ? (val('nl-asesor') || null) : null,
-      p_fecha_estimada: val('nl-fecha').trim(),
+      p_fecha_estimada: val('nl-fecha').trim(), p_canal: val('nl-canal').trim(),
       p_es_prueba: document.getElementById('nl-es-prueba').checked,
     });
     btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Crear lead';
@@ -7260,7 +7261,7 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
   if (!leadId) {
     const { data, error } = await sb.rpc('crear_lead_manual', {
       p_nombre: nombre, p_telefono: val('nl-telefono').trim(), p_destino: val('nl-destino').trim(),
-      p_personas: val('nl-personas').trim(), p_asesor: asesorSel,
+      p_personas: val('nl-personas').trim(), p_asesor: asesorSel, p_canal: val('nl-canal').trim(),
     });
     if (error || !data?.ok) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar'; err.textContent = 'No se pudo crear el cliente: ' + (error?.message || data?.error || ''); return; }
     leadId = data.lead_id;
