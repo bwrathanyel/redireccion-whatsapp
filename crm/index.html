@@ -963,6 +963,8 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
    destino largo no debe llegar hasta el medio de la foto. */
 .tc-destino-chip{position:absolute;left:10px;bottom:9px;display:inline-flex;align-items:center;gap:5px;max-width:62%;background:rgba(6,10,18,.7);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);color:#fff;font-size:11px;font-weight:600;border-radius:20px;padding:4px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tc-destino-chip i{color:var(--accent);font-size:10px;flex-shrink:0}
+.tc-hotel-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted);font-size:11px;font-weight:600;border-radius:20px;padding:3px 9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px}
+.tc-hotel-chip i{color:var(--accent);font-size:10px;flex-shrink:0}
 .tc-thumb{width:100%;height:120px;object-fit:cover;display:block;background:var(--panel-solid);transition:opacity .18s ease}
 .tc-thumb.tc-thumb-vacio{width:calc(100% - 36px);height:100px;margin:16px 18px 0;border-radius:10px;display:grid;place-items:center;color:var(--muted2);font-size:22px;border:1px dashed var(--line2)}
 .carrusel-dots{position:absolute;left:0;right:0;bottom:8px;display:flex;justify-content:center;gap:5px;pointer-events:none}
@@ -3423,6 +3425,7 @@ body.fsize-grande{--tap:41.9px}
         <input class="flt tar-f" id="tar-f-precio" data-tabs="hotel,promo,destino,paquete" type="number" min="0" placeholder="Precio máx. USD">
         <label class="tar-f-check" id="tar-f-ninos-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-ninos"> Con niños gratis</label>
         <label class="tar-f-check" id="tar-f-vigente-wrap" data-tabs="hotel,promo,hotsale"><input type="checkbox" class="tar-f" id="tar-f-vigente" checked> Solo vigentes</label>
+        <label class="tar-f-check" id="tar-f-ocultar-ocultos-wrap" data-tabs="hotel"><input type="checkbox" class="tar-f" id="tar-f-ocultar-ocultos" checked> Ocultar ocultos</label>
         <label class="tar-f-check" id="tar-f-ocultas-wrap" data-tabs="promo" data-hidden><input type="checkbox" class="tar-f" id="tar-f-ocultas"> Ver ocultas</label>
         <button class="mfs-done" data-mfs="tar-toolbar" type="button">Listo</button>
       </div>

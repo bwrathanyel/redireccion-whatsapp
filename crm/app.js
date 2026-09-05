@@ -1287,7 +1287,12 @@ async function manejarDeepLinkConversacion() {
   params.delete('conversacion');
   const nuevaUrl = location.pathname + (params.toString() ? '?' + params.toString() : '') + location.hash;
   history.replaceState(null, '', nuevaUrl);
-  if (!c) { errToast('No se pudo abrir esa conversación'); return; }
+  // Silencioso a propósito: este deep-link es best-effort (viene de un push
+  // viejo, un acceso directo o bookmark que no se actualiza solo). Si la
+  // conversación ya no está en la bandeja -- cerrada, resuelta por otro
+  // asesor, notificación vieja -- no hay nada que el usuario pueda hacer con
+  // un error, y mostrarlo repite el aviso cada vez que se reabre ese link.
+  if (!c) { console.warn('deep-link a conversación no encontrada en la bandeja:', conversacionId); return; }
   await abrirConversacion(c);
 }
 
@@ -11736,6 +11741,7 @@ function tarChips() {
   // se DESmarcó, porque ahí la lista trae cosas vencidas sin que se note.
   if (visible('tar-f-vigente') && g('tar-f-vigente') && !g('tar-f-vigente').checked) push('Incluye vencidas', () => reset('tar-f-vigente', true));
   if (visible('tar-f-ocultas') && g('tar-f-ocultas')?.checked) push('Con ocultas', () => reset('tar-f-ocultas', false));
+  if (visible('tar-f-ocultar-ocultos') && g('tar-f-ocultar-ocultos') && !g('tar-f-ocultar-ocultos').checked) push('Incluye ocultos', () => reset('tar-f-ocultar-ocultos', true));
   g('tar-mfs-trigger')?.classList.toggle('con-filtros', chips.length > 0);
   if (!chips.length) { box.innerHTML = ''; return; }
   box.innerHTML = chips.map((c, i) => `<span class="fchip">${esc(c[0])} <b data-ci="${i}">✕</b></span>`).join('')
@@ -11746,6 +11752,7 @@ function tarChips() {
     const n = g('tar-f-ninos'); if (n) n.checked = false;
     const o = g('tar-f-ocultas'); if (o) o.checked = false;
     const v = g('tar-f-vigente'); if (v) v.checked = true;
+    const oo = g('tar-f-ocultar-ocultos'); if (oo) oo.checked = true;
     renderTarifario();
   };
 }
@@ -12149,6 +12156,7 @@ function renderTarifario() {
   const fNinos = document.getElementById('tar-f-ninos').checked;
   const fVigente = document.getElementById('tar-f-vigente').checked;
   const fOcultas = ROL === 'admin' && !!document.getElementById('tar-f-ocultas')?.checked;
+  const fOcultarOcultos = !!document.getElementById('tar-f-ocultar-ocultos')?.checked;
 
   let filtered = data.filter(x => {
     if (q && !(x.nombre || x.titulo || '').toLowerCase().includes(q) && !(x.destino || '').toLowerCase().includes(q)) return false;
@@ -12159,6 +12167,7 @@ function renderTarifario() {
       if (fPrecio != null && ag.precioMin != null && ag.precioMin > fPrecio) return false;
       if (fNinos && ag.ninosMax < 1) return false;
       if (fVigente && !ag.algunaVigente) return false;
+      if (fOcultarOcultos && x.activo === false) return false;
     } else if (tarTab === 'promo') {
       // Las retiradas (revisado=false) salen SOLO con el chip "Ver ocultas".
       // Desmarcar "Solo vigentes" era la puerta trasera por la que volvían a
@@ -12451,6 +12460,7 @@ function tarCardHtml(x) {
     return `<div class="tar-item tar-card" data-id="${x.id}">
       ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'tarifas', 'vigente'), x._tarifa ? tarBadgePrecio(x._tarifa) : x.precio_texto)}
       <div class="tc-body">
+        ${x.producto_id ? `<div class="tc-hotel-chip"><i class="fas fa-hotel"></i> ${esc(x.productos?.nombre || '')}</div>` : ''}
         <div class="tc-nombre">${esc(x.titulo)}</div>
         ${x.resumen_ia ? `<div class="tc-resumen-ia">${esc(x.resumen_ia)}</div>` : ''}
       </div>
