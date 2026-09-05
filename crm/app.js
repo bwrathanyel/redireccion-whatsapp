@@ -13237,10 +13237,23 @@ function tarHabDatos(h) {
 function tarHabLineaHtml(h) {
   const datos = tarHabDatos(h);
   if (!datos.length) return '';
-  // Descripción y amenities van al title y no a la tarjeta: la línea tiene que
-  // entrar de un vistazo al lado del precio, no competir con él.
-  const tip = [h.descripcion, (h.amenities || []).join(' · ')].filter(Boolean).join('\n');
-  return `<div class="hab-linea"${tip ? ` title="${esc(tip)}"` : ''}><i class="fas fa-bed"></i>${datos.map(d => `<span>${esc(d)}</span>`).join('')}</div>`;
+  // La descripción va al title y no a la tarjeta: son 600 caracteres y la
+  // tarjeta tiene que entrar de un vistazo al lado del precio.
+  return `<div class="hab-linea"${h.descripcion ? ` title="${esc(h.descripcion)}"` : ''}><i class="fas fa-bed"></i>${datos.map(d => `<span>${esc(d)}</span>`).join('')}</div>`;
+}
+/* Lo que ofrece la habitación, en la tarjeta. Los amenities SÍ van a la vista
+   (es lo que el asesor le lee al cliente), acotados a los primeros TAR_HAB_AMEN
+   para que un hotel que publica 12 no tape el precio; el resto queda en el
+   title, que ya lleva la descripción. */
+const TAR_HAB_AMEN = 5;
+function tarHabHtml(h) {
+  const linea = tarHabLineaHtml(h);
+  const amen = h.amenities || [];
+  if (!amen.length) return linea;
+  const visibles = amen.slice(0, TAR_HAB_AMEN), resto = amen.length - visibles.length;
+  return linea + `<div class="hab-amen"${h.descripcion || resto ? ` title="${esc([h.descripcion, resto ? amen.join(' · ') : ''].filter(Boolean).join('\n'))}"` : ''}>${
+    visibles.map(a => `<span class="hab-chip">${esc(a)}</span>`).join('')
+  }${resto ? `<span class="hab-chip hab-chip-mas">+${resto}</span>` : ''}</div>`;
 }
 // Una tarjeta = una promoción = una fila del PDF.
 function tarPromoCardHtml(t, destacadaId, delta, hab) {
@@ -13268,7 +13281,7 @@ function tarPromoCardHtml(t, destacadaId, delta, hab) {
       ${attrs.map(a => `<span class="promo-attr-chip">${esc(a)}</span>`).join('')}
       ${delta ? `<span class="promo-delta${delta.base ? ' promo-delta-base' : ''}">${esc(delta.txt)}</span>` : ''}
     </div>` : ''}
-    ${hab ? tarHabLineaHtml(hab) : ''}
+    ${hab ? tarHabHtml(hab) : ''}
     ${precios.length
       ? `<div class="promo-precios">${precios.map(p => `<div class="promo-precio"><span class="promo-pk">${esc(p.etq)}</span><span class="promo-pv">${esc(p.monto)}</span></div>`).join('')}</div>`
       : t.precio_texto ? `<div class="promo-precio-texto dfv-rich">${formatearTexto(t.precio_texto)}</div>` : ''}
