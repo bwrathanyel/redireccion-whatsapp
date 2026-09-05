@@ -233,7 +233,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false;
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false, MI_ES_SUPERADMIN = false;
 // Rol REAL del usuario logueado -- distinto de ROL cuando hay una vista
 // previa activa (ver "Vista previa de rol" más abajo). ROL_REAL nunca
 // cambia con la vista previa: el switcher lo usa para decidir si mostrarse
@@ -257,6 +257,7 @@ async function cargarUsuariosLogin() {
 }
 
 initAuth();
+arrancar(montarOjosLogin);
 async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) await afterLogin(); else showOverlay('login');
@@ -264,7 +265,7 @@ async function initAuth() {
 
 async function cargarUsuario() {
   const { data: { user } } = await sb.auth.getUser();
-  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,es_freelancer,bloqueado').eq('id', user?.id).single();
+  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,es_freelancer,bloqueado,es_superadmin').eq('id', user?.id).single();
   if (error || !data) {
     await sb.auth.signOut();
     showOverlay('login');
@@ -325,7 +326,7 @@ async function afterLogin() {
   MI_NOMBRE = u.nombre; ROL = (u.rol === 'admin' && VISTA_ROL_OPCIONES.includes(previa)) ? previa : u.rol;
   MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
   MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
-  MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado;
+  MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado; MI_ES_SUPERADMIN = !!u.es_superadmin;
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   await entrarSegunRol();
 }
@@ -1913,9 +1914,11 @@ function abrirEditorPersona(usuarioId) {
       <div class="edit-err" id="pe-err"></div>
       <button class="dbtn save" id="pe-guardar" type="button"><i class="fas fa-check"></i> Guardar</button>
       <label class="fl" style="margin-top:14px">Nueva contraseña (opcional)</label>
-      <input id="pe-password" class="ei" type="password" minlength="12" placeholder="Mínimo 12 caracteres">
-      <div class="form-hint">Si la dejás vacía, se genera una temporal y se pedirá cambiarla al entrar.</div>
+      <div class="ei-clave"><input id="pe-password" class="ei" type="password" minlength="12" placeholder="Mínimo 12 caracteres"></div>
+      <button class="dbtn save" id="pe-guardar-clave" type="button"><i class="fas fa-check"></i> Guardar contraseña</button>
+      <div class="form-hint">Queda activa de inmediato, sin pedirle cambiarla al entrar.</div>
       <button class="dbtn gh" id="pe-restablecer" type="button"><i class="fas fa-key"></i> Restablecer acceso</button>
+      <div class="form-hint">Genera una contraseña temporal para pasársela una sola vez; la persona la cambia al entrar.</div>
       <button class="dbtn gh" id="pe-baja" type="button" style="color:#ef4444"><i class="fas fa-user-slash"></i> Dar de baja</button>
       <div style="font-size:11px;color:var(--muted2);margin-top:10px;line-height:1.5">Dar de baja le quita el acceso al instante y lo saca de las listas, pero <b>no borra su historial</b> de asistencia, leads ni comisiones. Se puede reactivar.</div>
     </div>`;
@@ -1923,8 +1926,10 @@ function abrirEditorPersona(usuarioId) {
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
   document.getElementById('pe-guardar').onclick = () => guardarPersona(usuarioId);
+  document.getElementById('pe-guardar-clave').onclick = () => guardarClavePersona(usuarioId);
   document.getElementById('pe-restablecer').onclick = () => restablecerAcceso(usuarioId);
   document.getElementById('pe-baja').onclick = () => bajaPersonal(usuarioId, false);
+  montarOjo(document.getElementById('pe-password'));
 }
 
 async function restablecerAcceso(usuarioId) {
@@ -1944,6 +1949,22 @@ async function restablecerAcceso(usuarioId) {
     </div>`;
   document.getElementById('pe-copiar-reset').onclick = () => navigator.clipboard.writeText(`Usuario: ${data.username}\nContraseña temporal: ${data.password_temporal}`)
     .then(() => okToast('Copiado')).catch(() => errToast('No se pudo copiar'));
+}
+
+async function guardarClavePersona(usuarioId) {
+  const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
+  const err = document.getElementById('pe-err');
+  const password = val('pe-password');
+  err.textContent = '';
+  if (!password || password.length < 12) { err.textContent = 'La contraseña debe tener al menos 12 caracteres.'; return; }
+  if (!u || !(await confirmarSheet({ titulo: `¿Guardar la contraseña de ${u.nombre}?`, detalle: 'Queda activa de inmediato. No se le pide cambiarla al entrar y no se toca su pregunta de seguridad.', textoOk: 'Guardar contraseña' }))) return;
+  const btn = document.getElementById('pe-guardar-clave');
+  btn.disabled = true;
+  const { data, error } = await sb.functions.invoke('restablecer-acceso', { body: { usuario_id: usuarioId, password, modo: 'fijar' } });
+  btn.disabled = false;
+  if (error || !data?.ok) { err.textContent = ERR_PERSONAL[data?.error] || 'No se pudo actualizar la contraseña.'; return; }
+  document.getElementById('pe-password').value = '';
+  okToast('Contraseña actualizada');
 }
 
 async function guardarPersona(usuarioId) {
@@ -1978,9 +1999,17 @@ async function guardarPersona(usuarioId) {
       p_telegram_chat_id: val('pe-telegram').trim() || null,
     });
   }
+  const clave = val('pe-password');
+  let toast = 'Datos actualizados';
+  if (clave) {
+    if (clave.length < 12) { btn.disabled = false; err.textContent = 'La contraseña debe tener al menos 12 caracteres.'; return; }
+    const r = await sb.functions.invoke('restablecer-acceso', { body: { usuario_id: usuarioId, password: clave, modo: 'fijar' } });
+    if (r.error || !r.data?.ok) { btn.disabled = false; err.textContent = ERR_PERSONAL[r.data?.error] || 'Se guardaron los datos pero no la contraseña.'; return; }
+    toast = 'Datos y contraseña actualizados';
+  }
   btn.disabled = false;
   window.closeDrawer();
-  okToast('Datos actualizados');
+  okToast(toast);
   loadPersonalTiempo(personalSoloFreelancers);
 }
 
@@ -1997,11 +2026,17 @@ const ERR_PERSONAL = {
   no_autorizado: 'Tu sesión expiró. Recargá la página y volvé a entrar.',
   no_se_pudo_crear_la_cuenta: 'No se pudo crear la cuenta de acceso. Reintentá en unos segundos.',
   no_se_pudo_registrar_en_el_crm: 'La cuenta se creó pero no se pudo guardar en el CRM. Avisale a Sistemas.',
+  password_requerido: 'Escribí una contraseña antes de guardarla.',
+  no_se_pudo_restablecer: 'No se pudo aplicar la contraseña. Reintentá en unos segundos.',
 };
 
 async function bajaPersonal(usuarioId, reactivar) {
   const u = [...personalCache, ...personalBaja].find(x => String(x.usuario_id) === String(usuarioId));
-  if (!reactivar && !(await confirmarSheet({ titulo: `¿Dar de baja a ${u?.nombre || 'esta persona'}?`, detalle: 'Pierde el acceso al CRM al instante. Su historial de asistencia, leads y comisiones NO se borra, y podés reactivarla cuando quieras.', textoOk: 'Dar de baja', destructivo: true }))) return;
+  const esYoMismo = String(usuarioId) === String(MI_USUARIO_ID);
+  const detalleBaja = esYoMismo
+    ? 'Te estás dando de baja a vos mismo: perdés el acceso al CRM al instante y solo se puede reponer por SQL, no desde acá. Tu historial no se borra.'
+    : 'Pierde el acceso al CRM al instante. Su historial de asistencia, leads y comisiones NO se borra, y podés reactivarla cuando quieras.';
+  if (!reactivar && !(await confirmarSheet({ titulo: `¿Dar de baja a ${u?.nombre || 'esta persona'}?`, detalle: detalleBaja, textoOk: 'Dar de baja', destructivo: true }))) return;
   const { data, error } = await sb.rpc('admin_baja_personal', { p_usuario_id: usuarioId, p_reactivar: !!reactivar });
   if (error || !data?.ok) { errToast(ERR_PERSONAL[data?.error] || error?.message || 'No se pudo aplicar'); return; }
   window.closeDrawer();
@@ -2032,7 +2067,7 @@ function abrirAltaPersona(comoFreelancer) {
         <label class="fl">Grupo de Telegram</label>
         <input id="pn-telegram" class="ei" type="text" placeholder="ID del grupo o chat">
         <label class="fl">Contraseña</label>
-        <input id="pn-password" class="ei" type="password" minlength="8" placeholder="Mínimo 8 caracteres">
+        <div class="ei-clave"><input id="pn-password" class="ei" type="password" minlength="8" placeholder="Mínimo 8 caracteres"></div>
         <div class="form-hint">Si la dejás vacía se genera una temporal y se pide cambiarla al entrar.</div>
       </div>
       <label class="pe-check" style="margin-top:12px"><input type="checkbox" id="pn-freelancer"${comoFreelancer ? ' checked' : ''}> Es freelancer (se bloquea a los 15 min sin actividad)</label>
@@ -2050,6 +2085,7 @@ function abrirAltaPersona(comoFreelancer) {
   document.getElementById('pn-rol').onchange = ajustarDatosAsesor;
   ajustarDatosAsesor();
   document.getElementById('pn-crear').onclick = crearPersona;
+  montarOjo(document.getElementById('pn-password'));
 }
 
 async function crearPersona() {
@@ -2215,6 +2251,7 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   ROL_REAL = u.rol; // ver afterLogin -- sin esto, un admin recién configurado pierde el switcher de vista previa hasta refrescar
   MI_NOMBRE = u.nombre; ROL = u.rol; MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
   MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
+  MI_ES_SUPERADMIN = !!u.es_superadmin;
   entrarSegunRol();
 });
 
@@ -2302,6 +2339,38 @@ window.cerrarSesion = async () => {
    La causa de fondo (el shell mezclado) está arreglada en sw.js; esto es la
    segunda línea de defensa: que un solo elemento faltante nunca más pueda
    apagar funciones que no tienen nada que ver. */
+/* Cuelga un botón "ojito" del contenedor del input para alternar
+   password/text. Idempotente: si el input ya tiene ojito, no hace nada.
+   El input debe estar dentro de un contenedor con position:relative
+   (.login-field o .ei-clave). */
+function montarOjo(input) {
+  if (!input || !input.parentElement) return;
+  if (input.parentElement.querySelector('.ojo-clave')) return;
+  input.classList.add('con-ojo');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ojo-clave';
+  btn.setAttribute('aria-label', 'Mostrar contraseña');
+  btn.setAttribute('aria-pressed', 'false');
+  btn.innerHTML = '<i class="fas fa-eye"></i>';
+  btn.addEventListener('click', () => {
+    const verAhora = input.type === 'password';
+    input.type = verAhora ? 'text' : 'password';
+    btn.querySelector('i').className = verAhora ? 'fas fa-eye-slash' : 'fas fa-eye';
+    btn.setAttribute('aria-label', verAhora ? 'Ocultar contraseña' : 'Mostrar contraseña');
+    btn.setAttribute('aria-pressed', verAhora ? 'true' : 'false');
+    input.focus();
+    const n = input.value.length;
+    try { input.setSelectionRange(n, n); } catch (_e) {}
+  });
+  input.parentElement.appendChild(btn);
+}
+
+function montarOjosLogin() {
+  ['loginPwd', 'setupPwd', 'setupPwd2', 'claimPwd', 'claimPwd2', 'forgotPwd']
+    .forEach(id => montarOjo(document.getElementById(id)));
+}
+
 function arrancar(...pasos) {
   for (const paso of pasos) {
     try { paso(); }
@@ -11782,7 +11851,7 @@ async function loadTarifario() {
   // `promocion_fotos` ya apunta a `tarifas` (la FK se repuntó en la migración
   // 20260904210000), así que las fotos de los flyers siguen llegando igual.
   const q = (tarTab === 'promo' || tarTab === 'hotsale')
-    ? sb.from('tarifas').select('*, tarifario_bloques(*), promocion_fotos(storage_path,orden,es_principal,activo), productos(id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))').not('titulo', 'is', null).order('titulo')
+    ? sb.from('tarifas').select('*, tarifario_bloques(*), promocion_fotos(storage_path,orden,es_principal,activo), productos(id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))').or('titulo.not.is.null,hot_sale_estado.eq.poner').order('titulo')
     : tarTab === 'boleteria'
     ? soloVivos(sb.from('productos').select(selProductos).eq('es_boleteria', true)).order('nombre')
     : soloVivos(sb.from('productos').select(selProductos).eq('tipo', tarTab).eq('es_boleteria', false)).order('nombre');
@@ -12339,6 +12408,12 @@ function renderTarifario() {
     }
     const hideBtn = el.querySelector('.tc-hide');
     if (hideBtn) hideBtn.onclick = e => { e.stopPropagation(); tcOcultarDesdeCard(hideBtn, el); };
+    const hsBtn = el.querySelector('[data-hs-toggle]');
+    if (hsBtn) hsBtn.onclick = e => { e.stopPropagation(); hsToggleTarifa(Number(hsBtn.dataset.hsToggle), hsBtn.dataset.hsOn !== '1', hsBtn); };
+    const hotelChip = el.querySelector('[data-abrir-hotel]');
+    if (hotelChip) hotelChip.onclick = e => { e.stopPropagation(); abrirDesdeBusquedaIA('producto', Number(hotelChip.dataset.abrirHotel)); };
+    const retBtn = el.querySelector('[data-retirar-tarifa]');
+    if (retBtn) retBtn.onclick = e => { e.stopPropagation(); retirarTarifaVieja(Number(retBtn.dataset.retirarTarifa), retBtn); };
     // El carrusel táctil y la medición de desborde de "Ver más" se enganchan
     // cuando la tarjeta se acerca a la pantalla, no a las N de una: baja el
     // registro de listeners y saca del render la pasada de layout forzado sobre
@@ -12421,7 +12496,7 @@ function tarRowHtml(x) {
     <i class="fas fa-chevron-right"></i>
   </div>`;
 }
-function tarCardThumbHtml(foto, esPromo, destino, hideBtn, precio) {
+function tarCardThumbHtml(foto, esPromo, destino, hideBtn, precio, extraBtns) {
   const media = foto
     ? `<img class="tc-thumb" src="${esc(foto)}" alt="" loading="lazy" decoding="async">`
     : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`;
@@ -12429,7 +12504,7 @@ function tarCardThumbHtml(foto, esPromo, destino, hideBtn, precio) {
   // una línea de texto y deja el dato donde el ojo ya está mirando.
   const chip = destino ? `<div class="tc-destino-chip"><i class="fas fa-location-dot"></i>${esc(destino)}</div>` : '';
   const badge = precio ? `<div class="tc-precio-badge">${esc(String(precio).split(/[\n;]/)[0].trim())}</div>` : '';
-  return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}${badge}<div class="carrusel-dots"></div>${hideBtn || ''}</div>`;
+  return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}${badge}<div class="carrusel-dots"></div>${hideBtn || ''}${extraBtns || ''}</div>`;
 }
 // Botón "ocultar" al pasar el mouse por la tarjeta (2026-08-27) -- antes había
 // que abrir el engranaje "Configurar visibilidad" y buscar en cientos. Mismo
@@ -12474,16 +12549,17 @@ function tarCardHtml(x) {
     // usa la web pública). Por diseño NUNCA contiene precios -- el precio real
     // sale siempre de precio_texto, tal cual está cargado.
     return `<div class="tar-item tar-card" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'tarifas', 'vigente'), x._tarifa ? tarBadgePrecio(x._tarifa) : x.precio_texto)}
+      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'tarifas', 'vigente'), x._tarifa ? tarBadgePrecio(x._tarifa) : x.precio_texto, tcHsBtnHtml(x))}
       <div class="tc-body">
-        ${x.producto_id ? `<div class="tc-hotel-chip"><i class="fas fa-hotel"></i> ${esc(x.productos?.nombre || '')}</div>` : ''}
-        <div class="tc-nombre">${esc(x.titulo)}</div>
+        ${x.producto_id ? `<button type="button" class="tc-hotel-chip" data-abrir-hotel="${x.producto_id}"><i class="fas fa-hotel"></i> ${esc(x.productos?.nombre || '')}</button>` : ''}
+        <div class="tc-nombre">${esc(x.titulo || x.habitacion || x.plan || 'Promoción')}</div>
         ${x.resumen_ia ? `<div class="tc-resumen-ia">${esc(x.resumen_ia)}</div>` : ''}
       </div>
       <div class="tc-pie">
         ${x.precio_texto ? `<div class="tc-precio">${esc(x.precio_texto)}</div>` : ''}
         ${vigenciaHtml(x.vigencia_texto)}
         ${tagsHtml(x.incluye_tags)}
+        ${tarPuedeRetirar(x, x.productos?.nombre, destinoDe(x)) ? `<button type="button" class="promo-retirar" data-retirar-tarifa="${x.id}"><i class="fas fa-box-archive"></i> Retirar del catálogo</button>` : ''}
       </div></div>`;
   }
   const tarifa = mejorPrecio(x);
@@ -13007,6 +13083,102 @@ function tarBadgePrecio(t) {
   if (pp !== null) return 'Desde ' + tarMonto(Math.round(pp * 100) / 100, t.moneda) + ' p/p';
   return t.precio_texto || null;
 }
+// DBL en grande: el precio titular tal como se promociona en redes ("$75 por
+// persona / noche, ocupación doble"). Solo si `precios` trae la clave `dbl`.
+// Misma señal por-habitación que tarPrecioPorPersona: base declarada, o dbl>sgl.
+function tarPrecioDobleHero(t) {
+  const p = t?.precios;
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+  const num = k => { const v = Number(p[k]); return p[k] !== null && p[k] !== '' && p[k] !== undefined && !Number.isNaN(v) ? v : null; };
+  const dbl = num('dbl');
+  if (dbl === null) return null;
+  const sgl = num('sgl');
+  const porHab = p.base === 'habitacion' ? true
+    : p.base === 'persona' ? false
+    : (sgl !== null && dbl > sgl);
+  const monto = porHab ? dbl / 2 : dbl;
+  return { monto: tarMonto(Math.round(monto * 100) / 100, t.moneda), nota: 'por persona / noche · ocupación doble' };
+}
+// Botón de Hot Sales en la card (solo admin). Binario: si está `poner` el click
+// quita, si no pone. `cls` cambia el molde (.tc-hs flota sobre la foto en el
+// listado; .promo-hs va en la fila de título de la carpeta). Prefijo propio,
+// nunca fa/fab/fas/far (los reclama Font Awesome).
+function tcHsBtnHtml(t, cls = 'tc-hs') {
+  if (ROL !== 'admin') return '';
+  const on = t.hot_sale_estado === 'poner';
+  return `<button type="button" class="${cls} admin-only${on ? ' is-on' : ''}" data-hs-toggle="${t.id}" data-hs-on="${on ? 1 : 0}" aria-pressed="${on}" title="${on ? 'Quitar de Hot Sales' : 'Poner en Hot Sales'}"><i class="fas fa-fire"></i><span class="hs-lbl">${on ? 'En Hot Sales' : 'Hot Sales'}</span></button>`;
+}
+// Retirar del catálogo las promos viejas de "precio suelto" (sin grilla
+// SGL/DBL/TPL, solo precio_texto) de antes del repaso del tarifario. Excepto los
+// hoteles que SOLO tienen promos de precio suelto: retirarlas los deja sin nada.
+const TAR_RETIRAR_EXCLUIR = ['chichiriviche', 'mifafi', 'gremary', 'heidelberg'];
+function tarPuedeRetirar(t, prodNombre, destino) {
+  if (ROL !== 'admin' || !t || tarPreciosLista(t).length) return false;
+  const ctx = tarNorm(`${prodNombre ?? TAR_DRAWER_ITEM?.nombre ?? ''} ${destino ?? TAR_DRAWER_ITEM?.destino ?? ''}`);
+  return !TAR_RETIRAR_EXCLUIR.some(w => ctx.includes(w));
+}
+// Toggle binario de Hot Sales desde la card (admin). Espejo de rkMarcar del
+// panel Ranking: al volver el RPC ya recalculó el score en la base, así que solo
+// se actualiza el objeto en memoria (compartido con tarCache y el drawer) y se
+// re-pinta. Flujo `necesita_publicar` igual que rkMarcar.
+async function hsToggleTarifa(id, poner, btn) {
+  if (ROL !== 'admin') return;
+  const estado = poner ? 'poner' : 'quitar';
+  const prev = btn ? btn.innerHTML : null;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+  const call = pub => sb.rpc('catalogo_hot_sale_marcar', pub
+    ? { p_item_id: id, p_estado: estado, p_publicar: true }
+    : { p_item_id: id, p_estado: estado });
+  let { data, error } = await call(false);
+  if (!error && data && data.ok === false && data.necesita_publicar) {
+    if (!confirm('La promoción está oculta (sin revisar). ¿Publicarla y ponerla en Hot Sales?')) {
+      if (btn) { btn.disabled = false; btn.innerHTML = prev; }
+      return;
+    }
+    ({ data, error } = await call(true));
+  }
+  if (btn) { btn.disabled = false; btn.innerHTML = prev; }
+  if (error || !data || data.ok === false) {
+    errToast('No se pudo: ' + (error?.message || data?.error || 'Hot Sales'));
+    return;
+  }
+  hsAplicarEstadoLocal(id, estado);
+  okToast(poner ? 'Puesta en Hot Sales' : 'Excluida de Hot Sales');
+}
+function hsAplicarEstadoLocal(id, estado) {
+  const marca = t => {
+    if (!t || Number(t.id) !== Number(id)) return;
+    t.hot_sale_estado = estado;
+    if (estado === 'poner') { t.vigente = true; t.revisado = true; }
+  };
+  (tarCache.promo || []).forEach(marca);
+  (tarCache.hotsale || []).forEach(marca);
+  (TAR_DRAWER_ITEM?.tarifas || []).forEach(marca);
+  if (TAR_DRAWER_ITEM && document.querySelector(`#drawerContent .promo-card[data-tarifa-id="${id}"]`)) {
+    tarRepintarCarpeta(TAR_DRAWER_ITEM);
+  }
+  if (tarTab === 'promo' || tarTab === 'hotsale') renderTarifario();
+}
+async function retirarTarifaVieja(id, btn) {
+  if (ROL !== 'admin') return;
+  if (!confirm('¿Retirar esta promoción del catálogo? Sale de la web y de Hot Sales, se puede revertir.')) return;
+  const prev = btn ? btn.innerHTML : null;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+  const { data, error } = await sb.rpc('retirar_item_tarifario', { p_tipo: 'tarifa', p_id: id });
+  if (error || !data?.ok) {
+    if (btn) { btn.disabled = false; btn.innerHTML = prev; }
+    errToast('No se pudo retirar: ' + (error?.message || data?.error || ''));
+    return;
+  }
+  ['promo', 'hotsale'].forEach(k => { if (tarCache[k]) tarCache[k] = tarCache[k].filter(x => Number(x.id) !== Number(id)); });
+  if (TAR_DRAWER_ITEM?.tarifas) {
+    TAR_DRAWER_ITEM.tarifas = TAR_DRAWER_ITEM.tarifas.filter(t => Number(t.id) !== Number(id));
+    if (document.querySelector('#drawerContent .carpeta')) tarRepintarCarpeta(TAR_DRAWER_ITEM);
+  }
+  document.querySelector(`#tar-grid .tar-item[data-id="${id}"]`)?.remove();
+  if (tarTab === 'promo' || tarTab === 'hotsale') renderTarifario();
+  okToast('Retirada del catálogo');
+}
 // Todas las ventanas de disfrute, no solo la última: MALOKA REGULAR tiene 3 y
 // mostrar una sola hace perder dos temporadas vendibles.
 function tarVentanas(t) {
@@ -13356,6 +13528,7 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo) {
     <div class="promo-top">
       <label class="promo-check"><input type="checkbox" data-tar-sel="${t.id}" aria-label="Seleccionar ${esc(titulo)}"></label>
       <div class="promo-titulo">${esc(titulo)}</div>
+      ${tcHsBtnHtml(t, 'promo-hs')}
       ${esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
       ${vendible ? '' : '<span class="promo-badge promo-badge-off">Ya no se vende</span>'}
       ${noEntran ? `<span class="promo-badge promo-badge-off">No entran ${grupo}</span>` : ''}
@@ -13367,15 +13540,24 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo) {
       ${delta ? `<span class="promo-delta${delta.base ? ' promo-delta-base' : ''}">${esc(delta.txt)}</span>` : ''}
     </div>` : ''}
     ${hab ? tarHabHtml(hab) : ''}
-    ${precios.length
-      ? `<div class="promo-precios">${precios.map(p => `<div class="promo-precio"><span class="promo-pk">${esc(p.etq)}</span><span class="promo-pv">${esc(p.monto)}</span></div>`).join('')}</div>`
-      : t.precio_texto ? `<div class="promo-precio-texto dfv-rich">${formatearTexto(t.precio_texto)}</div>` : ''}
+    ${(() => {
+      const hero = precios.length ? tarPrecioDobleHero(t) : null;
+      const fila = (lista, cls) => `<div class="promo-precios${cls}">${lista.map(p => `<div class="promo-precio"><span class="promo-pk">${esc(p.etq)}</span><span class="promo-pv">${esc(p.monto)}</span></div>`).join('')}</div>`;
+      if (hero) {
+        const resto = precios.filter(p => p.etq !== 'DBL');
+        return `<div class="promo-precio-hero"><span class="pph-monto">${esc(hero.monto)}</span><span class="pph-nota">${esc(hero.nota)}</span></div>`
+          + (resto.length ? fila(resto, ' promo-precios-sec') : '');
+      }
+      return precios.length ? fila(precios, '')
+        : t.precio_texto ? `<div class="promo-precio-texto dfv-rich">${formatearTexto(t.precio_texto)}</div>` : '';
+    })()}
     ${venta[0] || venta[1] || ventanas.length || t.vigencia_texto ? `<div class="promo-datos">
       ${venta[0] || venta[1] ? `<div class="promo-dato"><span class="promo-dk">Venta</span><span class="promo-dv">${esc(tarRango(venta))}</span></div>` : ''}
       ${ventanas.map((w, i) => `<div class="promo-dato"><span class="promo-dk">${i ? '' : 'Disfrute'}</span><span class="promo-dv">${esc(tarRango(w))}</span></div>`).join('')}
       ${!venta[0] && !venta[1] && !ventanas.length && t.vigencia_texto ? `<div class="promo-dato"><span class="promo-dk">Vigencia</span><span class="promo-dv">${esc(t.vigencia_texto)}</span></div>` : ''}
     </div>` : ''}
     ${cond.length ? `<ul class="promo-cond">${cond.map(c => `<li${c.fuerte ? ' class="promo-cond-fuerte"' : ''}>${esc(c.txt)}</li>`).join('')}</ul>` : ''}
+    ${tarPuedeRetirar(t) ? `<div class="promo-pie"><button type="button" class="promo-retirar" data-retirar-tarifa="${t.id}"><i class="fas fa-box-archive"></i> Retirar del catálogo</button></div>` : ''}
   </article>`;
 }
 /* La carpeta: las N filas del hotel agrupadas por plan (Todo Incluido / Solo
@@ -13538,6 +13720,12 @@ function tarEngancharCarpeta() {
     const id = Number(cb.dataset.tarSel);
     if (cb.checked) tarSeleccion.add(id); else tarSeleccion.delete(id);
     tarSincronizarBarra();
+  });
+  carpeta.addEventListener('click', e => {
+    const hs = e.target.closest('[data-hs-toggle]');
+    if (hs) { e.stopPropagation(); hsToggleTarifa(Number(hs.dataset.hsToggle), hs.dataset.hsOn !== '1', hs); return; }
+    const ret = e.target.closest('[data-retirar-tarifa]');
+    if (ret) { e.stopPropagation(); retirarTarifaVieja(Number(ret.dataset.retirarTarifa), ret); return; }
   });
 }
 // Re-pintar la carpeta tira el nodo viejo y con él su listener; la barra NO se
@@ -17174,8 +17362,13 @@ async function buscarTarifarioIA(consulta) {
 // pestaña abierta se usa esa fila (viene con fotos y tarifas embebidas); si no,
 // se trae de la base para poder abrir la ficha igual.
 async function abrirDesdeBusquedaIA(tipo, id) {
-  const enCache = (tarCache[tarTab] || []).find(x => Number(x.id) === id);
-  if (enCache) { openProductoDrawer(enCache); return; }
+  // El id de tarifas y el de productos son secuencias independientes: sin filtrar
+  // por tipo, abrir un hotel desde una card de promo podía enganchar una tarifa
+  // cuyo id coincidía con el product_id y abrirla como promoción ajena.
+  const esPromo = tipo === 'promocion';
+  const enCache = (tarCache[tarTab] || []).find(x =>
+    Number(x.id) === id && (esPromo ? x.origen != null : x.origen == null));
+  if (enCache) { openProductoDrawer(enCache, tipo); return; }
   const tabla = tipo === 'promocion' ? 'promociones' : 'productos';
   // Los productos necesitan las tarifas embebidas: el drawer dibuja la carpeta
   // de promociones y el editor de ficha (tfRenderTarifas) las edita fila por
@@ -17498,6 +17691,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-05', emoji: '🔥', titulo: 'Hot Sales desde la tarjeta, hotel con un toque y el precio doble en grande', texto: 'Tres cambios en el Tarifario. (1) El nombre del hotel arriba de cada tarjeta de promoción ahora es un botón: lo tocás y se abre la ficha del hotel, sin buscarlo. (2) Cuando una tarifa tiene precios por ocupación (SGL/DBL/TPL...), la tarjeta muestra el precio DOBLE en grande como titular -- "$75 por persona / noche · ocupación doble", que es como se promociona en redes -- y el resto de las columnas abajo en chico. Las tarjetas sin grilla de precios no cambian. (3) Solo admin: cada promoción tiene un botón de fuego para ponerla o sacarla de Hot Sales sin entrar al panel de Ranking, y funciona igual para los flyers y para las líneas sueltas del PDF. Las promociones viejas de "precio suelto" (un solo monto de texto, sin grilla, de antes del repaso del tarifario) tienen además un botón "Retirar del catálogo" que las saca de la web y de Hot Sales -- es reversible. Ese botón no aparece en Chichiriviche, Mifafi, Gremary ni Heidelberg, que solo tienen ese tipo de promo.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '👥', titulo: 'Cuánta gente entra en cada habitación', texto: 'Cada tarjeta de tarifa dice ahora "Hasta N adultos": es hasta cuántos cotiza el proveedor en el PDF (las columnas SGL/DBL/TPL/CDP de esa fila), o sea lo que de verdad se puede vender. Arriba, en los filtros del Tarifario, hay un campo "Somos..." para escribir el tamaño del grupo: los hoteles donde no entran desaparecen de la lista, y dentro del hotel las habitaciones que quedan chicas se ven apagadas con el cartel "No entran N". Una tarifa cuyo PDF no trae columnas por ocupación no se esconde nunca: no sabemos que no entren. El comparador suma las filas de la habitación (tamaño, camas, vista, amenities) y, cuando comparás la misma habitación en dos temporadas, ya no rotula las dos columnas igual. Ojo con una distinción que ahora está a la vista: "Hasta N adultos" es lo vendible, mientras que "Capacidad según la web del hotel" y "Ocupación máxima (según el PDF)" son descriptivas y casi siempre dan un número mayor porque cuentan niños y camas extra. El Cotizador IA usa solo la vendible, y si el grupo no entra en una habitación reparte en varias y muestra cómo quedan. Con niños: el tarifario no dice en ningún lado cuántos niños entran por habitación (las líneas CHD son precio por edad, no cupo), así que la IA reparte y el sistema controla que la cuenta cierre, pero no afirma cupos de niños: si hace falta te va a pedir las edades y aclarar que eso lo confirma el hotel.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '📐', titulo: 'Cuánto mide la habitación, qué camas tiene y qué se ve', texto: 'Debajo del nombre de cada habitación, en la carpeta de tarifas de un hotel, ahora puede aparecer una línea con los metros cuadrados, las camas, cuánta gente entra y la vista. Ese dato se busca en la web del hotel, pero NO se publica solo: cada habitación la tiene que aprobar un admin desde la ficha del hotel (bloque "Habitaciones", abajo de todo), donde se ve la fuente de donde salió y se puede aprobar, descartar u ocultar. Hasta que alguien la apruebe, no la ve nadie. Los hoteles que no tengan nada publicado en internet se quedan como están hoy. Nunca trae precios, fechas ni disponibilidad: eso sigue saliendo únicamente del tarifario.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '🛏️', titulo: 'Las habitaciones ahora se explican solas (y se pueden accionar)', texto: 'En la carpeta de tarifas de un hotel, cada tarjeta muestra debajo del nombre lo que la distingue -- "Vista piscina · Premium" -- y cuánto cuesta de más que la habitación más barata del mismo plan ("+$5 DBL vs Holiday Village"). No es un precio nuevo: es la resta entre los precios que ya están en la ficha. Además cada tarjeta se puede tildar, y con una o más elegidas aparece abajo una barra para compararlas lado a lado, copiar el texto listo para WhatsApp, o mandarlas al Cotizador IA para que responda solo por esas habitaciones. Los admin pueden además fijar a mano cuál lleva el cartel de "Mejor precio hoy" (si esa tarifa deja de venderse, el cartel vuelve solo a la automática).', roles: ROLES_TODOS },

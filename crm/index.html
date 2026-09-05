@@ -693,6 +693,24 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .promo-cond{margin:9px 0 0;padding-left:14px;font-size:11.5px;color:var(--muted);line-height:1.45}
 .promo-cond li{margin-bottom:2px}
 .promo-cond-fuerte{color:var(--amber);font-weight:600}
+/* DBL en grande (B3): el precio titular como se promociona en redes. El resto de
+   las ocupaciones (SGL/TPL/CHD...) baja a una fila secundaria chica -- nunca se
+   pierde una clave. */
+.promo-precio-hero{display:flex;flex-direction:column;gap:1px;margin-top:9px}
+.pph-monto{font-size:22px;font-weight:800;color:var(--accent);line-height:1.1}
+.pph-nota{font-size:10.5px;font-weight:600;color:var(--muted2)}
+.promo-precios-sec{margin-top:6px}
+.promo-precios-sec .promo-precio .promo-pv{font-size:11px;opacity:.75}
+/* Toggle Hot Sales en la fila de título de la carpeta (B1). Prefijo propio,
+   nunca fa/fab/fas/far. */
+.promo-hs{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-family:inherit;font-size:10px;font-weight:800;letter-spacing:.3px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
+.promo-hs i{font-size:9px}
+.promo-hs.is-on{border-color:var(--accent);background:var(--accent);color:#1a1000}
+.promo-hs:disabled{opacity:.5;cursor:progress}
+.promo-pie{margin-top:11px}
+.promo-retirar{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
+.promo-retirar:hover{border-color:#ef4444;color:#ef4444}
+.promo-retirar:disabled{opacity:.5;cursor:progress}
 .cond-bloque{border:1px solid var(--line);border-radius:10px;margin-top:11px;background:var(--panel)}
 .cond-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:7px;padding:11px 14px;font-size:12px;font-weight:600;color:var(--txt);min-height:44px}
 .cond-sum::-webkit-details-marker{display:none}
@@ -1024,6 +1042,16 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tar-card:hover .tc-hide{opacity:1}
 .tc-hide:hover{background:#ef4444;border-color:#ef4444;color:#fff}
 @media (hover:none){.tc-hide{opacity:1}}
+/* Toggle Hot Sales flotando sobre la foto (B1), gemelo de .tc-hide pero a la
+   izquierda. El rótulo se oculta acá (solo la llama); en .promo-hs sí se ve. */
+.tc-hs{position:absolute;top:8px;left:8px;z-index:3;height:30px;display:inline-flex;align-items:center;gap:0;padding:0 9px;background:rgba(6,10,18,.7);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s,background .15s,color .15s}
+.tc-hs .hs-lbl{display:none}
+.tar-card:hover .tc-hs{opacity:1}
+.tc-hs.is-on{opacity:1;background:var(--accent);border-color:var(--accent);color:#1a1000}
+.tc-hs:disabled{cursor:progress}
+@media (hover:none){.tc-hs{opacity:1}}
+.tc-hotel-chip{cursor:pointer;font-family:inherit}
+.tc-hotel-chip:hover{border-color:var(--accent);color:var(--txt)}
 .tc-media-wrap .tc-thumb{height:170px}
 .tc-media-wrap .tc-thumb.tc-thumb-vacio{width:100%;height:170px;margin:0;border-radius:0;border:none;border-bottom:1px solid var(--line2)}
 /* Degradado al pie de la foto: sostiene el chip de destino y evita que una foto
@@ -1593,6 +1621,11 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .login-field i{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
 .login-field input{width:100%;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:12px;padding:14px 14px 14px 40px;color:var(--txt);font-size:16px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
 .login-field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.login-field input.con-ojo,.ei.con-ojo{padding-right:42px}
+.ei-clave{position:relative}
+.ojo-clave{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--muted);cursor:pointer;padding:8px;font-size:13px;line-height:1;z-index:2}
+.ojo-clave:hover{color:var(--txt)}
+.ojo-clave i{position:static;left:auto;top:auto;transform:none;color:inherit;font-size:inherit}
 .login-field select.login-select{width:100%;appearance:none;-webkit-appearance:none;background:rgba(10,12,28,.7) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b93ad' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 15px center;border:1.5px solid var(--line2);border-radius:12px;padding:14px 34px 14px 40px;color:var(--txt);font-size:16px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;cursor:pointer}
 .login-field select.login-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .login-field select.login-select option{background:#141a30;color:var(--txt)}
