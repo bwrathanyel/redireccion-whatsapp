@@ -13514,7 +13514,7 @@ function tarHabHtml(h) {
   }${resto ? `<span class="hab-chip hab-chip-mas">+${resto}</span>` : ''}</div>`;
 }
 // Una tarjeta = una promoción = una fila del PDF.
-function tarPromoCardHtml(t, destacadaId, delta, hab, grupo) {
+function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false) {
   const esDestacada = destacadaId != null && t.id === destacadaId;
   const vendible = tarVendibleHoy(t);
   // Capacidad vendible: la que el proveedor cotiza. Sin claves de ocupación no
@@ -13539,7 +13539,7 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo) {
       <div class="promo-titulo">${esc(titulo)}</div>
       ${tcHsBtnHtml(t, 'promo-hs')}
       ${esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
-      ${vendible ? '' : '<span class="promo-badge promo-badge-off">Ya no se vende</span>'}
+      ${vendible || enHistorico ? '' : '<span class="promo-badge promo-badge-off">Ya no se vende</span>'}
       ${noEntran ? `<span class="promo-badge promo-badge-off">No entran ${grupo}</span>` : ''}
     </div>
     ${t.habitacion && t.habitacion !== titulo ? `<div class="promo-sub">${esc(t.habitacion)}</div>` : ''}
@@ -13576,9 +13576,14 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo) {
 function tarCarpetaHtml(x) {
   const tarifas = x?.tarifas || [];
   if (!tarifas.length) return '';
+  // Vivas arriba, agrupadas por plan como siempre. Las retiradas bajan a un
+  // solo <details> "Ver histórico" al final -- el asesor no las lee, el admin
+  // las gestiona desde ahí.
+  const vivas = tarifas.filter(tarVendibleHoy);
+  const historicas = tarifas.filter(t => !tarVendibleHoy(t));
   const destacadaId = tarifaDestacada(x)?.id ?? null;
   const grupos = new Map();
-  tarifas.forEach(t => {
+  vivas.forEach(t => {
     const k = t.plan || 'Sin plan indicado';
     if (!grupos.has(k)) grupos.set(k, []);
     grupos.get(k).push(t);
@@ -13606,12 +13611,22 @@ function tarCarpetaHtml(x) {
   const planes = [...grupos.keys()].sort((a, b) =>
     (Number(grupos.get(b).some(t => t.id === destacadaId)) - Number(grupos.get(a).some(t => t.id === destacadaId)))
     || a.localeCompare(b, 'es'));
+  const tituloCarpeta = vivas.length
+    ? `${vivas.length} ${vivas.length > 1 ? 'promociones' : 'promoción'}`
+    : 'Sin promociones vigentes';
   return `<div class="carpeta">
-    <div class="carpeta-titulo"><i class="fas fa-layer-group"></i> ${tarifas.length} ${tarifas.length > 1 ? 'promociones' : 'promoción'}</div>
+    <div class="carpeta-titulo"><i class="fas fa-layer-group"></i> ${tituloCarpeta}</div>
     ${planes.map(p => `<section class="carpeta-plan">
       ${grupos.size > 1 || p !== 'Sin plan indicado' ? `<h4 class="carpeta-plan-titulo">${esc(p)}</h4>` : ''}
       <div class="promo-grid">${grupos.get(p).map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null, habs.get(tarNombreNorm(t.habitacion)) || null, grupoTam)).join('')}</div>
     </section>`).join('')}
+    ${historicas.length ? `<details class="carpeta-historico">
+      <summary>Ver histórico (${historicas.length})</summary>
+      <div class="promo-grid">${historicas
+        .slice()
+        .sort((a, b) => (a.plan || '').localeCompare(b.plan || '', 'es') || (a.id - b.id))
+        .map(t => tarPromoCardHtml(t, null, null, null, 0, true)).join('')}</div>
+    </details>` : ''}
   </div>`;
 }
 // Condiciones completas del bloque azul, plegadas en la cabecera de la carpeta.
@@ -17716,6 +17731,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-06', emoji: '🗂️', titulo: 'Las promociones retiradas ya no ensucian la ficha del hotel', texto: 'En la carpeta de tarifas de un hotel, las promociones que ya no se venden (retiradas del PDF, con la fecha de venta o de disfrute pasada) dejan de amontonarse con el cartel rojo "Ya no se vende". Ahora las vivas se ven arriba como siempre y las retiradas se guardan en un desplegable "Ver histórico (N)" al final, cerrado por defecto. El título de la carpeta cuenta solo las que se venden -- si no queda ninguna viva dice "Sin promociones vigentes". Abriendo el histórico están todas, atenuadas, con los botones de admin (Hot Sales, Retirar del catálogo) intactos: no se borró nada, solo se corrió de lugar.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '🔥', titulo: 'Hot Sales desde la tarjeta, hotel con un toque y el precio doble en grande', texto: 'Tres cambios en el Tarifario. (1) El nombre del hotel arriba de cada tarjeta de promoción ahora es un botón: lo tocás y se abre la ficha del hotel, sin buscarlo. (2) Cuando una tarifa tiene precios por ocupación (SGL/DBL/TPL...), la tarjeta muestra el precio DOBLE en grande como titular -- "$75 por persona / noche · ocupación doble", que es como se promociona en redes -- y el resto de las columnas abajo en chico. Las tarjetas sin grilla de precios no cambian. (3) Solo admin: cada promoción tiene un botón de fuego para ponerla o sacarla de Hot Sales sin entrar al panel de Ranking, y funciona igual para los flyers y para las líneas sueltas del PDF. Las promociones viejas de "precio suelto" (un solo monto de texto, sin grilla, de antes del repaso del tarifario) tienen además un botón "Retirar del catálogo" que las saca de la web y de Hot Sales -- es reversible. Ese botón no aparece en Chichiriviche, Mifafi, Gremary ni Heidelberg, que solo tienen ese tipo de promo.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '👥', titulo: 'Cuánta gente entra en cada habitación', texto: 'Cada tarjeta de tarifa dice ahora "Hasta N adultos": es hasta cuántos cotiza el proveedor en el PDF (las columnas SGL/DBL/TPL/CDP de esa fila), o sea lo que de verdad se puede vender. Arriba, en los filtros del Tarifario, hay un campo "Somos..." para escribir el tamaño del grupo: los hoteles donde no entran desaparecen de la lista, y dentro del hotel las habitaciones que quedan chicas se ven apagadas con el cartel "No entran N". Una tarifa cuyo PDF no trae columnas por ocupación no se esconde nunca: no sabemos que no entren. El comparador suma las filas de la habitación (tamaño, camas, vista, amenities) y, cuando comparás la misma habitación en dos temporadas, ya no rotula las dos columnas igual. Ojo con una distinción que ahora está a la vista: "Hasta N adultos" es lo vendible, mientras que "Capacidad según la web del hotel" y "Ocupación máxima (según el PDF)" son descriptivas y casi siempre dan un número mayor porque cuentan niños y camas extra. El Cotizador IA usa solo la vendible, y si el grupo no entra en una habitación reparte en varias y muestra cómo quedan. Con niños: el tarifario no dice en ningún lado cuántos niños entran por habitación (las líneas CHD son precio por edad, no cupo), así que la IA reparte y el sistema controla que la cuenta cierre, pero no afirma cupos de niños: si hace falta te va a pedir las edades y aclarar que eso lo confirma el hotel.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '📐', titulo: 'Cuánto mide la habitación, qué camas tiene y qué se ve', texto: 'Debajo del nombre de cada habitación, en la carpeta de tarifas de un hotel, ahora puede aparecer una línea con los metros cuadrados, las camas, cuánta gente entra y la vista. Ese dato se busca en la web del hotel, pero NO se publica solo: cada habitación la tiene que aprobar un admin desde la ficha del hotel (bloque "Habitaciones", abajo de todo), donde se ve la fuente de donde salió y se puede aprobar, descartar u ocultar. Hasta que alguien la apruebe, no la ve nadie. Los hoteles que no tengan nada publicado en internet se quedan como están hoy. Nunca trae precios, fechas ni disponibilidad: eso sigue saliendo únicamente del tarifario.', roles: ROLES_TODOS },
