@@ -12549,7 +12549,7 @@ function tarCardHtml(x) {
     // usa la web pública). Por diseño NUNCA contiene precios -- el precio real
     // sale siempre de precio_texto, tal cual está cargado.
     return `<div class="tar-item tar-card" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'tarifas', 'vigente'), x._tarifa ? tarBadgePrecio(x._tarifa) : x.precio_texto, tcHsBtnHtml(x))}
+      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'tarifas', 'vigente'), x._tarifa ? tarBadgePrecio(x._tarifa) : x.precio_texto, tcHsBtnHtml(x, 'tc-hs', tarTab === 'hotsale'))}
       <div class="tc-body">
         ${x.producto_id ? `<button type="button" class="tc-hotel-chip" data-abrir-hotel="${x.producto_id}"><i class="fas fa-hotel"></i> ${esc(x.productos?.nombre || '')}</button>` : ''}
         <div class="tc-nombre">${esc(tarNombrePromo(x))}</div>
@@ -13103,9 +13103,12 @@ function tarPrecioDobleHero(t) {
 // quita, si no pone. `cls` cambia el molde (.tc-hs flota sobre la foto en el
 // listado; .promo-hs va en la fila de título de la carpeta). Prefijo propio,
 // nunca fa/fab/fas/far (los reclama Font Awesome).
-function tcHsBtnHtml(t, cls = 'tc-hs') {
+function tcHsBtnHtml(t, cls = 'tc-hs', enHotSales = false) {
   if (ROL !== 'admin') return '';
-  const on = t.hot_sale_estado === 'poner';
+  // En la pestaña Hot Sales todo lo que se ve YA está en Hot Sales (forzado a
+  // mano o por ranking automático). El botón tiene que salir activo igual, para
+  // que un click lo excluya (`quitar`) sin importar cómo entró.
+  const on = t.hot_sale_estado === 'poner' || enHotSales;
   return `<button type="button" class="${cls} admin-only${on ? ' is-on' : ''}" data-hs-toggle="${t.id}" data-hs-on="${on ? 1 : 0}" aria-pressed="${on}" title="${on ? 'Quitar de Hot Sales' : 'Poner en Hot Sales'}"><i class="fas fa-fire"></i><span class="hs-lbl">${on ? 'En Hot Sales' : 'Hot Sales'}</span></button>`;
 }
 // Retirar del catálogo las promos viejas de "precio suelto" (sin grilla
