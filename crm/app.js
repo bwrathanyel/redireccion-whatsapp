@@ -11844,7 +11844,10 @@ function iaPromoElegible(p) {
   if (p.ia_estado === 'quitar') return false;
   if (!iaPromoOfrecible(p)) return false;
   if (p.ia_estado === 'poner') return true;
-  return p.revisado !== false;
+  // Auto: solo los flyers entran por `revisado` (son las promos que el bot ya
+  // lee de la vista `promociones`). Una línea de PDF con título nunca entra sola
+  // -- necesita un 'poner' explícito. Igual que hará Fase C en ventas-ia.ts.
+  return p.origen === 'flyer' && p.revisado !== false;
 }
 // Estimación cliente sobre los mismos campos que emite el prompt del bot
 // (titulo/precio_texto/vigencia_texto/incluye_tags), ~4 caracteres por token.
@@ -11859,9 +11862,11 @@ function renderTarifarioIA() {
   const cont = document.getElementById('tar-grid');
   if (ROL !== 'admin') { cont.innerHTML = '<div class="rk-vacio">Solo un admin puede curar las promociones de la IA.</div>'; return; }
   const q = val('tar-search').trim().toLowerCase();
-  // Solo flyers: el bot y el RPC trabajan sobre la vista `promociones`
-  // (origen='flyer'). Las líneas de PDF con título no son promociones de flyer.
-  const promos = (tarCache.ia || []).filter(p => p.origen === 'flyer' && (
+  // Desde 2026-09-10 la curación de IA aplica sobre cualquier tarifa con título,
+  // no solo flyers (migración 20260910160000): mismo universo que las pestañas
+  // Promociones / Hot Sales. Se pide título para no listar líneas de tarifa
+  // puras (una fila con título ES una promoción, venga de flyer o de PDF).
+  const promos = (tarCache.ia || []).filter(p => (p.titulo || '').trim() && (
     !q || (p.titulo || '').toLowerCase().includes(q)
        || (p.productos?.nombre || '').toLowerCase().includes(q)
        || (p.destino || '').toLowerCase().includes(q)));
@@ -11944,15 +11949,19 @@ function iaFilaHtml(p, pos, ponerIds) {
 function iaPromoActivaBoton(t) {
   if (t.ia_estado === 'poner') return true;
   if (t.ia_estado === 'quitar') return false;
-  return t.revisado !== false && promoFechaVigente(t);
+  // Auto: un no-flyer nunca lo ofrece la IA sin un 'poner' explícito (espejo de
+  // iaPromoElegible / Fase C).
+  return t.origen === 'flyer' && t.revisado !== false && promoFechaVigente(t);
 }
-// Botón robot en toda tarjeta/fila/ficha/carpeta de promoción (solo admin, solo
-// flyers -- el RPC rechaza el resto). Marcado = la IA la ofrece hoy (por
-// `revisado` automático o por override 'poner'); desmarcado = no. Click: marcado
-// -> 'quitar', desmarcado -> 'poner'. Vencida: deshabilitado (no se puede
-// ofrecer). El tri-estado con Auto sigue en la pestaña IA. Prefijo propio, nunca fa*.
+// Botón robot en toda tarjeta/fila/ficha/carpeta de promoción (solo admin).
+// Desde 2026-09-10 aplica a CUALQUIER tarifa con título, no solo flyers: líneas
+// de PDF y tarifas embebidas de la ficha (pedido del dueño; migración
+// 20260910160000). Marcado = la IA la ofrece hoy (por `revisado` automático o
+// por override 'poner'); desmarcado = no. Click: marcado -> 'quitar', desmarcado
+// -> 'poner'. Vencida: deshabilitado (no se puede ofrecer). El tri-estado con
+// Auto sigue en la pestaña IA. Prefijo propio, nunca fa*.
 function tcIaBtnHtml(t, cls = 'tc-ia') {
-  if (ROL !== 'admin' || t.origen !== 'flyer') return '';
+  if (ROL !== 'admin') return '';
   const on = iaPromoActivaBoton(t);
   const vencida = !on && !promoFechaVigente(t);
   const forzada = t.ia_estado === 'poner' || t.ia_estado === 'quitar';
@@ -12252,24 +12261,19 @@ async function loadTarifario() {
   // 20260904210000), así que las fotos de los flyers siguen llegando igual.
   const TAR_PROMO_SEL = '*, tarifario_bloques(*), promocion_fotos(storage_path,orden,es_principal,activo), productos(id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))';
   let q, data, error;
-  if (tarTab === 'ia') {
-    // La pestaña IA cura SOLO flyers (el RPC rechaza el resto), así que se filtra
-    // por `origen` EN EL SERVIDOR, no solo en el cliente. `tarifas` tiene ~6,6k
-    // líneas de PDF con título y PostgREST corta la respuesta en 1000 filas:
-    // ordenando por `titulo`, los flyers que caían pasada la fila 1000 (Margarita,
-    // Mérida, y ~80 más) no llegaban nunca al navegador -- la lista mostraba 31 de
-    // 111. Con el filtro son 111 filas, bien debajo del tope.
-    q = sb.from('tarifas').select(TAR_PROMO_SEL).eq('origen', 'flyer').order('titulo');
-  } else if (tarTab === 'promo' || tarTab === 'hotsale') {
-    // `tarifas` tiene ~6,6k líneas de PDF con título y PostgREST corta la
-    // respuesta en 1000 filas: ordenando por `titulo`, los flyers que caían
-    // pasada la fila 1000 (Margarita, Mérida, y ~80 más) no llegaban nunca.
-    // Se traen los flyers en una query aparte (~111 filas) para garantizarlos;
-    // las líneas de PDF quedan best-effort bajo el tope, igual que antes. Merge
-    // por `id` (un flyer no puede aparecer en las dos listas).
+  if (tarTab === 'promo' || tarTab === 'hotsale' || tarTab === 'ia') {
+    // Desde 2026-09-10 la pestaña IA cura CUALQUIER tarifa, no solo flyers
+    // (migración 20260910160000), así que ya no vale el atajo
+    // `.eq('origen','flyer')`. `tarifas` tiene ~6,6k líneas de PDF con título y
+    // PostgREST corta la respuesta en 1000 filas: ordenando por `titulo`, los
+    // flyers que caían pasada la fila 1000 (Margarita, Mérida, y ~80 más) no
+    // llegaban nunca. Se traen los flyers en una query aparte (~111 filas) para
+    // garantizarlos; las líneas de PDF quedan best-effort bajo el tope, igual que
+    // antes. La segunda query también trae lo forzado a mano (hot sale o IA) para
+    // que un override sobre una fila sin título no se pierda. Merge por `id`.
     const [rf, rp] = await Promise.all([
       sb.from('tarifas').select(TAR_PROMO_SEL).eq('origen', 'flyer').order('titulo'),
-      sb.from('tarifas').select(TAR_PROMO_SEL).or('titulo.not.is.null,hot_sale_estado.eq.poner').order('titulo'),
+      sb.from('tarifas').select(TAR_PROMO_SEL).or('titulo.not.is.null,hot_sale_estado.eq.poner,ia_estado.eq.poner').order('titulo'),
     ]);
     error = rf.error || rp.error;
     if (!error) {
@@ -18221,6 +18225,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-10', emoji: '🤖', titulo: 'La curación de la IA ya no es solo para flyers', texto: 'Solo admin. La pestaña "IA" y el botón morado del robot cubrían únicamente las promociones que venían de un flyer. Ahora aplican a CUALQUIER tarifa con título -- las líneas sueltas del PDF y las tarifas cargadas a mano dentro de la ficha de un hotel también se pueden marcar para que el bot las ofrezca. Diferencia importante: una línea de PDF nunca entra sola, hay que activarla a mano con "Ofrecer"; los flyers siguen entrando automáticamente si están publicados. El bot todavía no lee estas marcas para los no-flyers, eso llega en un despliegue aparte.', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'Botón de la IA en todas las promociones del Tarifario', texto: 'Solo admin. El botón morado del robot -- el que decide si el bot de ventas puede ofrecer una promoción -- ahora aparece en TODAS las promociones: en las tarjetas, en la vista de lista, en las fichas y dentro de la carpeta de tarifas de cada hotel, no solo en la pestaña "IA". Sale marcado en las que la IA ya ofrece hoy y desmarcado en las que no; le das click para activar o desactivar cada una. Las vencidas salen en gris y no se pueden activar. El ajuste fino (dejar en "Auto", ordenar, ver el tope de 25) sigue estando solo en la pestaña "IA".', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'Pestaña "IA" del Tarifario: precio de cada promo y sin vencidas de relleno', texto: 'Solo admin. Cada fila de la pestaña "IA" ahora muestra debajo del nombre el precio de la promoción y las primeras etiquetas de qué incluye, para marcar y ordenar sin abrir cada tarjeta. Además, en el bloque "La IA no las ofrece hoy" ya no se listan las promociones vencidas que no tengan una marca manual -- eran ruido muerto; el encabezado del bloque dice cuántas se ocultaron. Las vencidas que alguien haya marcado a mano siguen visibles para poder limpiarles la marca.', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🏷️', titulo: 'Promociones y Hot Sales: también salían recortadas', texto: 'El mismo problema que se arregló en la pestaña "IA" estaba en las pestañas "Promociones" y "Hot Sales": ordenadas por título, los flyers que caían después de cierto punto (Margarita, Mérida y varios más) no aparecían. Ahora los flyers se traen aparte y se garantizan completos; el resto de las líneas del tarifario se sigue viendo igual que antes.', roles: ROLES_TODOS },
