@@ -11703,7 +11703,12 @@ function renderTarifarioIA() {
     .sort((a, b) => (a.ia_orden ?? 1e9) - (b.ia_orden ?? 1e9) || a.id - b.id);
   const alPrompt = elegibles.slice(0, IA_PROMOS_MAX);
   const enBanca = elegibles.slice(IA_PROMOS_MAX);
-  const fuera = promos.filter(p => !iaPromoElegible(p))
+  // "Ya no se ven": se ocultan las vencidas sin marca manual (ruido muerto). Las
+  // marcadas a mano se dejan para poder limpiar la marca.
+  const fueraAll = promos.filter(p => !iaPromoElegible(p));
+  const ocultaVencida = p => !promoFechaVigente(p) && !p.ia_estado;
+  const vencidasOcultas = fueraAll.filter(ocultaVencida).length;
+  const fuera = fueraAll.filter(p => !ocultaVencida(p))
     .sort((a, b) => tarNombrePromo(a).localeCompare(tarNombrePromo(b), 'es'));
   // Las 'poner' van primero (tienen ia_orden 1..k); son las únicas reordenables.
   const ponerIds = elegibles.filter(p => p.ia_estado === 'poner').map(p => p.id);
@@ -11718,8 +11723,8 @@ function renderTarifarioIA() {
   alPrompt.forEach((p, i) => filas.push(iaFilaHtml(p, i + 1, ponerIds)));
   filas.push(`<div class="ia-corte">— corte: de acá para abajo la IA no las ve (tope ${IA_PROMOS_MAX}) —</div>`);
   enBanca.forEach((p, i) => filas.push(iaFilaHtml(p, IA_PROMOS_MAX + i + 1, ponerIds)));
-  if (fuera.length) {
-    filas.push(`<div class="ia-sep">La IA no las ofrece hoy (${fuera.length}) — marcá <b>Ofrecer</b> para sumarlas</div>`);
+  if (fuera.length || vencidasOcultas) {
+    filas.push(`<div class="ia-sep">La IA no las ofrece hoy (${fuera.length}) — marcá <b>Ofrecer</b> para sumarlas${vencidasOcultas ? ` · ${vencidasOcultas} vencida${vencidasOcultas === 1 ? '' : 's'} oculta${vencidasOcultas === 1 ? '' : 's'}` : ''}</div>`);
     fuera.forEach(p => filas.push(iaFilaHtml(p, null, ponerIds)));
   }
   cont.innerHTML = head + `<div class="ia-list">${filas.join('')}</div>`;
@@ -11735,10 +11740,18 @@ function iaFilaHtml(p, pos, ponerIds) {
     (p.producto_id && iaTopIds && iaTopIds.size && !iaTopIds.has(p.producto_id)) ? '<span class="ia-b ia-b-top">Fuera de TOP IA</span>' : '',
     !p.producto_id ? '<span class="ia-b ia-b-gen">Genérica</span>' : '',
   ].filter(Boolean).join('');
+  // Precio + especificación breve: para no marcar/ordenar a ciegas. precio_texto
+  // puede ser un párrafo largo -> se recorta; tags dan el "qué incluye".
+  const precio = (p.precio_texto || '').replace(/\s+/g, ' ').trim();
+  const spec = [
+    precio ? `<b>${esc(precio.slice(0, 140))}${precio.length > 140 ? '…' : ''}</b>` : '',
+    (p.incluye_tags || []).slice(0, 4).map(esc).join(' · '),
+  ].filter(Boolean).join(' — ');
   return `<div class="ia-fila ia-est-${est}" data-ia-fila="${p.id}">
     <span class="ia-pos">${pos != null ? '#' + pos : ''}</span>
     <div class="ia-fila-main">
       <div class="ia-fila-nom">${esc(tarNombrePromo(p))} <span class="muted">#${p.id}</span></div>
+      ${spec ? `<div class="ia-fila-spec">${spec}</div>` : ''}
       ${badges ? `<div class="ia-fila-badges">${badges}</div>` : ''}
     </div>
     ${i >= 0 ? `<span class="ia-mover">
@@ -18011,6 +18024,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-10', emoji: '🤖', titulo: 'Pestaña "IA" del Tarifario: precio de cada promo y sin vencidas de relleno', texto: 'Solo admin. Cada fila de la pestaña "IA" ahora muestra debajo del nombre el precio de la promoción y las primeras etiquetas de qué incluye, para marcar y ordenar sin abrir cada tarjeta. Además, en el bloque "La IA no las ofrece hoy" ya no se listan las promociones vencidas que no tengan una marca manual -- eran ruido muerto; el encabezado del bloque dice cuántas se ocultaron. Las vencidas que alguien haya marcado a mano siguen visibles para poder limpiarles la marca.', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🏷️', titulo: 'Promociones y Hot Sales: también salían recortadas', texto: 'El mismo problema que se arregló en la pestaña "IA" estaba en las pestañas "Promociones" y "Hot Sales": ordenadas por título, los flyers que caían después de cierto punto (Margarita, Mérida y varios más) no aparecían. Ahora los flyers se traen aparte y se garantizan completos; el resto de las líneas del tarifario se sigue viendo igual que antes.', roles: ROLES_TODOS },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'Pestaña "IA" del Tarifario: ahora salen TODAS las promociones', texto: 'Solo admin. La pestaña "IA" (la que decide qué promociones puede ofrecer el bot de ventas) mostraba solo 31 de las 111 promociones -- faltaban hoteles enteros (Margarita, Mérida y muchos más). Ya se ven las 111: las que el bot ofrece hoy arriba, con una línea de corte, y el resto abajo en "La IA no las ofrece hoy". A cualquiera de las de abajo le podés dar "Ofrecer" para sumarla. Recordá: el bot todavía no lee estas marcas, eso llega en un despliegue aparte.', roles: ['admin'] },
   { fecha: '2026-09-06', emoji: '🗂️', titulo: 'Las promociones retiradas ya no ensucian la ficha del hotel', texto: 'En la carpeta de tarifas de un hotel, las promociones que ya no se venden (retiradas del PDF, con la fecha de venta o de disfrute pasada) dejan de amontonarse con el cartel rojo "Ya no se vende". Ahora las vivas se ven arriba como siempre y las retiradas se guardan en un desplegable "Ver histórico (N)" al final, cerrado por defecto. El título de la carpeta cuenta solo las que se venden -- si no queda ninguna viva dice "Sin promociones vigentes". Abriendo el histórico están todas, atenuadas, con los botones de admin (Hot Sales, Retirar del catálogo) intactos: no se borró nada, solo se corrió de lugar.', roles: ROLES_TODOS },
