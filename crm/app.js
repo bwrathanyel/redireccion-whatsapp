@@ -12048,7 +12048,7 @@ async function loadTarifario() {
   // `promocion_fotos` ya apunta a `tarifas` (la FK se repuntó en la migración
   // 20260904210000), así que las fotos de los flyers siguen llegando igual.
   const TAR_PROMO_SEL = '*, tarifario_bloques(*), promocion_fotos(storage_path,orden,es_principal,activo), productos(id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))';
-  let q;
+  let q, data, error;
   if (tarTab === 'ia') {
     // La pestaña IA cura SOLO flyers (el RPC rechaza el resto), así que se filtra
     // por `origen` EN EL SERVIDOR, no solo en el cliente. `tarifas` tiene ~6,6k
@@ -12058,13 +12058,27 @@ async function loadTarifario() {
     // 111. Con el filtro son 111 filas, bien debajo del tope.
     q = sb.from('tarifas').select(TAR_PROMO_SEL).eq('origen', 'flyer').order('titulo');
   } else if (tarTab === 'promo' || tarTab === 'hotsale') {
-    q = sb.from('tarifas').select(TAR_PROMO_SEL).or('titulo.not.is.null,hot_sale_estado.eq.poner').order('titulo');
+    // `tarifas` tiene ~6,6k líneas de PDF con título y PostgREST corta la
+    // respuesta en 1000 filas: ordenando por `titulo`, los flyers que caían
+    // pasada la fila 1000 (Margarita, Mérida, y ~80 más) no llegaban nunca.
+    // Se traen los flyers en una query aparte (~111 filas) para garantizarlos;
+    // las líneas de PDF quedan best-effort bajo el tope, igual que antes. Merge
+    // por `id` (un flyer no puede aparecer en las dos listas).
+    const [rf, rp] = await Promise.all([
+      sb.from('tarifas').select(TAR_PROMO_SEL).eq('origen', 'flyer').order('titulo'),
+      sb.from('tarifas').select(TAR_PROMO_SEL).or('titulo.not.is.null,hot_sale_estado.eq.poner').order('titulo'),
+    ]);
+    error = rf.error || rp.error;
+    if (!error) {
+      const vistos = new Set((rf.data || []).map(x => x.id));
+      data = [...(rf.data || []), ...(rp.data || []).filter(x => !vistos.has(x.id))];
+    }
   } else if (tarTab === 'boleteria') {
     q = soloVivos(sb.from('productos').select(selProductos).eq('es_boleteria', true)).order('nombre');
   } else {
     q = soloVivos(sb.from('productos').select(selProductos).eq('tipo', tarTab).eq('es_boleteria', false)).order('nombre');
   }
-  const { data, error } = await q;
+  if (q) ({ data, error } = await q);
   loading.classList.remove('show'); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
   // Un paquete puede heredar las fotos de su hotel vinculado (productos.hotel_id)
@@ -17997,6 +18011,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-10', emoji: '🏷️', titulo: 'Promociones y Hot Sales: también salían recortadas', texto: 'El mismo problema que se arregló en la pestaña "IA" estaba en las pestañas "Promociones" y "Hot Sales": ordenadas por título, los flyers que caían después de cierto punto (Margarita, Mérida y varios más) no aparecían. Ahora los flyers se traen aparte y se garantizan completos; el resto de las líneas del tarifario se sigue viendo igual que antes.', roles: ROLES_TODOS },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'Pestaña "IA" del Tarifario: ahora salen TODAS las promociones', texto: 'Solo admin. La pestaña "IA" (la que decide qué promociones puede ofrecer el bot de ventas) mostraba solo 31 de las 111 promociones -- faltaban hoteles enteros (Margarita, Mérida y muchos más). Ya se ven las 111: las que el bot ofrece hoy arriba, con una línea de corte, y el resto abajo en "La IA no las ofrece hoy". A cualquiera de las de abajo le podés dar "Ofrecer" para sumarla. Recordá: el bot todavía no lee estas marcas, eso llega en un despliegue aparte.', roles: ['admin'] },
   { fecha: '2026-09-06', emoji: '🗂️', titulo: 'Las promociones retiradas ya no ensucian la ficha del hotel', texto: 'En la carpeta de tarifas de un hotel, las promociones que ya no se venden (retiradas del PDF, con la fecha de venta o de disfrute pasada) dejan de amontonarse con el cartel rojo "Ya no se vende". Ahora las vivas se ven arriba como siempre y las retiradas se guardan en un desplegable "Ver histórico (N)" al final, cerrado por defecto. El título de la carpeta cuenta solo las que se venden -- si no queda ninguna viva dice "Sin promociones vigentes". Abriendo el histórico están todas, atenuadas, con los botones de admin (Hot Sales, Retirar del catálogo) intactos: no se borró nada, solo se corrió de lugar.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '🔥', titulo: 'Hot Sales desde la tarjeta, hotel con un toque y el precio doble en grande', texto: 'Tres cambios en el Tarifario. (1) El nombre del hotel arriba de cada tarjeta de promoción ahora es un botón: lo tocás y se abre la ficha del hotel, sin buscarlo. (2) Cuando una tarifa tiene precios por ocupación (SGL/DBL/TPL...), la tarjeta muestra el precio DOBLE en grande como titular -- "$75 por persona / noche · ocupación doble", que es como se promociona en redes -- y el resto de las columnas abajo en chico. Las tarjetas sin grilla de precios no cambian. (3) Solo admin: cada promoción tiene un botón de fuego para ponerla o sacarla de Hot Sales sin entrar al panel de Ranking, y funciona igual para los flyers y para las líneas sueltas del PDF. Las promociones viejas de "precio suelto" (un solo monto de texto, sin grilla, de antes del repaso del tarifario) tienen además un botón "Retirar del catálogo" que las saca de la web y de Hot Sales -- es reversible. Ese botón no aparece en Chichiriviche, Mifafi, Gremary ni Heidelberg, que solo tienen ese tipo de promo.', roles: ROLES_TODOS },
