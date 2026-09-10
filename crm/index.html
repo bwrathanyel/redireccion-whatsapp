@@ -708,12 +708,19 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .pph-nota{font-size:10.5px;font-weight:600;color:var(--muted2)}
 .promo-precios-sec{margin-top:6px}
 .promo-precios-sec .promo-precio .promo-pv{font-size:11px;opacity:.75}
-/* Toggle Hot Sales en la fila de título de la carpeta (B1). Prefijo propio,
-   nunca fa/fab/fas/far. */
-.promo-hs{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-family:inherit;font-size:10px;font-weight:800;letter-spacing:.3px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
-.promo-hs i{font-size:9px}
-.promo-hs.is-on{border-color:var(--accent);background:var(--accent);color:#1a1000}
-.promo-hs:disabled{opacity:.5;cursor:progress}
+/* Tri-estado Fijar/Auto/Excluir en la fila de título de la carpeta (fix bug
+   2026-09-09, reemplaza el binario .promo-hs viejo): el binario solo sabía
+   leer/escribir 'poner', así que una promo automática (hot_sale_estado NULL)
+   salía siempre gris acá aunque estuviera naranja en la pestaña Hot Sales -- la
+   ficha no puede recalcular el pool completo (dedup por hotel) para saber si
+   "está adentro hoy", así que en vez de adivinar muestra el eje manual real,
+   igual que el panel Ranking. Ver app.js tcHsSegHtml/hsMarcarEstado. */
+.promo-hs-seg{display:inline-flex;background:var(--panel-solid);border:1px solid var(--line2);border-radius:8px;padding:2px;gap:1px;flex:0 0 auto}
+.promo-hs-seg-b{background:transparent;border:0;color:var(--muted);font-family:inherit;font-size:9.5px;font-weight:800;letter-spacing:.2px;padding:3px 7px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s}
+.promo-hs-seg-b:hover:not(.on){color:var(--txt)}
+.promo-hs-seg-b.on{background:var(--accent);color:#1a1000}
+.promo-hs-seg-b[data-hs-set="quitar"].on{background:rgba(239,68,68,.18);color:#fca5a5}
+.promo-hs-seg-b:disabled{opacity:.5;cursor:progress}
 .promo-pie{margin-top:11px}
 .promo-retirar{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
 .promo-retirar:hover{border-color:#ef4444;color:#ef4444}
@@ -1050,13 +1057,24 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tc-hide:hover{background:#ef4444;border-color:#ef4444;color:#fff}
 @media (hover:none){.tc-hide{opacity:1}}
 /* Toggle Hot Sales flotando sobre la foto (B1), gemelo de .tc-hide pero a la
-   izquierda. El rótulo se oculta acá (solo la llama); en .promo-hs sí se ve. */
+   izquierda. El rótulo se oculta acá (solo la llama); .promo-hs-seg sí lo muestra. */
 .tc-hs{position:absolute;top:8px;left:8px;z-index:3;height:30px;display:inline-flex;align-items:center;gap:0;padding:0 9px;background:rgba(6,10,18,.7);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s,background .15s,color .15s}
 .tc-hs .hs-lbl{display:none}
 .tar-card:hover .tc-hs{opacity:1}
 .tc-hs.is-on{opacity:1;background:var(--accent);border-color:var(--accent);color:#1a1000}
 .tc-hs:disabled{cursor:progress}
 @media (hover:none){.tc-hs{opacity:1}}
+/* Toggle "Ofrecer con la IA" sobre la foto (pestaña IA / curación del bot de
+   ventas). Gemelo de .tc-hs pero MORADO: el naranja es Hot Sales (curación de
+   la web) y son ejes distintos -- confundirlos sería el bug obvio. Va debajo de
+   .tc-hs para no pisarlo. Prefijo propio, nunca fa/fab/fas/far. */
+.tc-ia{position:absolute;top:44px;left:8px;z-index:3;height:30px;display:inline-flex;align-items:center;gap:0;padding:0 9px;background:rgba(6,10,18,.7);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s,background .15s,color .15s}
+.tc-ia .ia-lbl{display:none}
+.tar-card:hover .tc-ia{opacity:1}
+.tc-ia.is-on{opacity:1;background:var(--purple);border-color:var(--purple);color:#fff}
+.tc-ia.is-off{opacity:1;background:rgba(239,68,68,.85);border-color:transparent;color:#fff}
+.tc-ia:disabled{cursor:progress}
+@media (hover:none){.tc-ia{opacity:1}}
 .tc-hotel-chip{cursor:pointer;font-family:inherit}
 .tc-hotel-chip:hover{border-color:var(--accent);color:var(--txt)}
 .tc-media-wrap .tc-thumb{height:170px}
@@ -2274,6 +2292,39 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .rk-manual-mover{display:flex;gap:4px;flex:none}
 .rk-manual-mover .ce-mini{padding:4px 9px;font-size:13px;line-height:1}
 @media(max-width:760px){.rk-fila{grid-template-columns:1fr}.rk-ctrl{justify-content:flex-start}.rk-seg{width:100%}.rk-seg-b{flex:1}}
+/* Pestaña IA del tarifario: curación manual de qué promociones ve el bot de
+   ventas. Morada (--purple): eje separado de Hot Sales (naranja, curación de la
+   web). La cabecera muestra el costo real -- cuántas promos y ~cuántos tokens
+   entran a cada conversación -- y la línea de corte marca el tope blando. */
+.ia-head{background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:12px 14px;margin:2px 0 10px}
+.ia-head-n{font-size:14px;font-weight:700;color:var(--txt)}
+.ia-head-n b{color:var(--purple);font-size:18px;font-variant-numeric:tabular-nums}
+.ia-head-sub{font-size:11px;color:var(--muted);margin-top:3px}
+.ia-list{display:flex;flex-direction:column;gap:6px}
+.ia-fila{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line2);border-radius:10px;background:var(--panel)}
+.ia-fila.ia-est-poner{border-color:rgba(160,107,255,.5);background:rgba(160,107,255,.06)}
+.ia-fila.ia-est-quitar{opacity:.6}
+.ia-pos{font-variant-numeric:tabular-nums;font-weight:800;font-size:12px;color:var(--muted2);flex:none;width:34px}
+.ia-fila-main{flex:1;min-width:0}
+.ia-fila-nom{font-size:12.5px;font-weight:700;line-height:1.25}
+.ia-fila-nom .muted{font-weight:600;color:var(--muted)}
+.ia-fila-badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.ia-b{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;padding:2px 6px;border-radius:999px;border:1px solid currentColor}
+.ia-b-venc{color:#fca5a5}
+.ia-b-pv{color:var(--amber)}
+.ia-b-web{color:var(--blue)}
+.ia-b-top{color:var(--amber)}
+.ia-b-gen{color:var(--muted)}
+.ia-mover{display:flex;gap:4px;flex:none}
+.ia-mover .ce-mini{padding:4px 9px;font-size:13px;line-height:1}
+.ia-seg{display:inline-flex;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:3px;gap:2px;flex:none}
+.ia-seg-b{background:transparent;border:0;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;cursor:pointer;transition:background .15s,color .15s}
+.ia-seg-b:hover:not(.on){color:var(--txt)}
+.ia-seg-b.on{background:rgba(160,107,255,.22);color:#e9ddff}
+.ia-seg-b[data-ia-set="quitar"].on{background:rgba(239,68,68,.18);color:#fca5a5}
+.ia-corte{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);text-align:center;padding:8px;border-top:1px dashed var(--line2);border-bottom:1px dashed var(--line2);margin:4px 0}
+.ia-sep{font-size:11px;font-weight:700;color:var(--muted);margin:14px 0 2px}
+@media(max-width:760px){.ia-fila{flex-wrap:wrap}.ia-pos{width:auto}.ia-seg{width:100%}.ia-seg-b{flex:1}}
 @media(max-width:760px){
   .ss-cal{gap:3px}
   .ss-dia{font-size:11px;border-radius:7px}
@@ -3480,6 +3531,7 @@ body.fsize-grande{--tap:41.9px}
       <div class="tar-tabs-row">
         <div class="seg-group" id="tar-tabs">
           <button class="seg on" data-tab="hotsale">🔥 Hot Sales</button>
+          <button class="seg admin-only" data-tab="ia">🤖 IA</button>
           <button class="seg" data-tab="promo">Promociones</button>
           <button class="seg" data-tab="destino">Guías/Tours</button>
           <button class="seg" data-tab="hotel">Hoteles</button>
