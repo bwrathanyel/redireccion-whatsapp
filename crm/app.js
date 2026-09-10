@@ -11766,14 +11766,30 @@ function iaFilaHtml(p, pos, ponerIds) {
   </div>`;
 }
 
-// Botón binario en la card (auto <-> ofrecer), clon de tcHsBtnHtml. Solo flyers
-// (el RPC rechaza el resto). Morado, ícono robot. Prefijo propio, nunca fa*.
+// Estado visible del botón robot en las cards/filas/fichas/carpetas: "la IA la
+// muestra hoy". Usa el vencimiento REAL (promoFechaVigente), no el margen de 7
+// días de la pestaña IA -- así marcar 'poner' enciende el botón de una vez. El
+// detalle del margen y del tope (25) vive solo en la pestaña IA.
+function iaPromoActivaBoton(t) {
+  if (t.ia_estado === 'poner') return true;
+  if (t.ia_estado === 'quitar') return false;
+  return t.revisado !== false && promoFechaVigente(t);
+}
+// Botón robot en toda tarjeta/fila/ficha/carpeta de promoción (solo admin, solo
+// flyers -- el RPC rechaza el resto). Marcado = la IA la ofrece hoy (por
+// `revisado` automático o por override 'poner'); desmarcado = no. Click: marcado
+// -> 'quitar', desmarcado -> 'poner'. Vencida: deshabilitado (no se puede
+// ofrecer). El tri-estado con Auto sigue en la pestaña IA. Prefijo propio, nunca fa*.
 function tcIaBtnHtml(t, cls = 'tc-ia') {
   if (ROL !== 'admin' || t.origen !== 'flyer') return '';
-  const on = t.ia_estado === 'poner';
-  const off = t.ia_estado === 'quitar';
-  const lbl = on ? 'IA la ofrece' : off ? 'IA excluida' : 'Ofrecer IA';
-  return `<button type="button" class="${cls} admin-only${on ? ' is-on' : ''}${off ? ' is-off' : ''}" data-ia-toggle="${t.id}" data-ia-on="${on ? 1 : 0}" aria-pressed="${on}" title="${on ? 'La IA la ofrece (click: volver a auto)' : 'Forzar que la IA la ofrezca'}"><i class="fas fa-robot"></i><span class="ia-lbl">${lbl}</span></button>`;
+  const on = iaPromoActivaBoton(t);
+  const vencida = !on && !promoFechaVigente(t);
+  const forzada = t.ia_estado === 'poner' || t.ia_estado === 'quitar';
+  const lbl = on ? 'IA la ofrece' : vencida ? 'Vencida' : 'IA no la ofrece';
+  const title = vencida ? 'Promoción vencida: la IA no puede ofrecerla'
+    : on ? (t.ia_estado === 'poner' ? 'La IA la ofrece (forzada a mano). Click para excluirla' : 'La IA la ofrece. Click para excluirla')
+    : (t.ia_estado === 'quitar' ? 'Excluida a mano. Click para que la IA la ofrezca' : 'La IA no la ofrece. Click para forzar que la ofrezca');
+  return `<button type="button" class="${cls} admin-only${on ? ' is-on' : ' is-off'}${forzada ? ' is-forzada' : ''}"${vencida ? ' disabled' : ''} data-ia-toggle="${t.id}" data-ia-on="${on ? 1 : 0}" aria-pressed="${on}" title="${esc(title)}"><i class="fas fa-robot"></i><span class="ia-lbl">${lbl}</span></button>`;
 }
 
 // Marca una promo para la IA. estado: 'poner' | 'quitar' | null (auto).
@@ -11802,6 +11818,9 @@ function iaAplicarEstadoLocal(id, estado, orden) {
   (tarCache.promo || []).forEach(marca);
   (tarCache.hotsale || []).forEach(marca);
   (TAR_DRAWER_ITEM?.tarifas || []).forEach(marca);
+  if (TAR_DRAWER_ITEM && document.querySelector(`#drawerContent .promo-card[data-tarifa-id="${id}"]`)) {
+    tarRepintarCarpeta(TAR_DRAWER_ITEM);
+  }
   if (tarTab === 'ia') renderTarifarioIA();
   else if (tarTab === 'promo' || tarTab === 'hotsale') renderTarifario();
 }
@@ -12651,7 +12670,7 @@ function renderTarifario() {
     const hsBtn = el.querySelector('[data-hs-toggle]');
     if (hsBtn) hsBtn.onclick = e => { e.stopPropagation(); hsToggleTarifa(Number(hsBtn.dataset.hsToggle), hsBtn.dataset.hsOn !== '1', hsBtn); };
     const iaBtn = el.querySelector('[data-ia-toggle]');
-    if (iaBtn) iaBtn.onclick = e => { e.stopPropagation(); iaMarcar(Number(iaBtn.dataset.iaToggle), iaBtn.dataset.iaOn === '1' ? null : 'poner', iaBtn); };
+    if (iaBtn) iaBtn.onclick = e => { e.stopPropagation(); iaMarcar(Number(iaBtn.dataset.iaToggle), iaBtn.dataset.iaOn === '1' ? 'quitar' : 'poner', iaBtn); };
     const hotelChip = el.querySelector('[data-abrir-hotel]');
     if (hotelChip) hotelChip.onclick = e => { e.stopPropagation(); abrirDesdeBusquedaIA('producto', Number(hotelChip.dataset.abrirHotel)); };
     const retBtn = el.querySelector('[data-retirar-tarifa]');
@@ -12735,6 +12754,7 @@ function tarRowHtml(x) {
     ${tags.length ? tagsHtml(tags) : '<span></span>'}
     ${promosCount ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promosCount} promo${promosCount > 1 ? 's' : ''}</div>` : ''}
     <div class="thr-precio${precioTxt == null ? ' sin-precio' : ''}">${precioTxt != null ? esc(precioTxt) : 'Consultar precio'}</div>
+    ${esPromo ? tcIaBtnHtml(x, 'tar-ia-inline') : ''}
     <i class="fas fa-chevron-right"></i>
   </div>`;
 }
@@ -12843,6 +12863,7 @@ function tarFichaHtml(x) {
       ${vigenciaHtml(vigencia)}
       ${!esPromo && (x.tarifas || []).length > 1 ? `<div class="tc-promos"><i class="fas fa-layer-group"></i> ${x.tarifas.length} promociones</div>` : ''}
       ${tagsHtml(tags)}
+      ${esPromo ? tcIaBtnHtml(x, 'tar-ia-inline') : ''}
     </div>
   </div>`;
 }
@@ -13831,6 +13852,7 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
       <label class="promo-check"><input type="checkbox" data-tar-sel="${t.id}" aria-label="Seleccionar ${esc(titulo)}"></label>
       <div class="promo-titulo">${esc(titulo)}</div>
       ${tcHsSegHtml(t)}
+      ${tcIaBtnHtml(tarifaComoPromo(t), 'tar-ia-inline')}
       ${esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
       ${vendible || enHistorico ? '' : '<span class="promo-badge promo-badge-off">Ya no se vende</span>'}
       ${noEntran ? `<span class="promo-badge promo-badge-off">No entran ${grupo}</span>` : ''}
@@ -14041,6 +14063,8 @@ function tarEngancharCarpeta() {
   carpeta.addEventListener('click', e => {
     const hsSeg = e.target.closest('[data-hs-set]');
     if (hsSeg) { e.stopPropagation(); hsMarcarEstado(hsSeg.dataset.hsSetId, hsSeg.dataset.hsSet, hsSeg); return; }
+    const iaBtn = e.target.closest('[data-ia-toggle]');
+    if (iaBtn) { e.stopPropagation(); iaMarcar(Number(iaBtn.dataset.iaToggle), iaBtn.dataset.iaOn === '1' ? 'quitar' : 'poner', iaBtn); return; }
     const ret = e.target.closest('[data-retirar-tarifa]');
     if (ret) { e.stopPropagation(); retirarTarifaVieja(Number(ret.dataset.retirarTarifa), ret); return; }
   });
@@ -18024,6 +18048,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-10', emoji: '🤖', titulo: 'Botón de la IA en todas las promociones del Tarifario', texto: 'Solo admin. El botón morado del robot -- el que decide si el bot de ventas puede ofrecer una promoción -- ahora aparece en TODAS las promociones: en las tarjetas, en la vista de lista, en las fichas y dentro de la carpeta de tarifas de cada hotel, no solo en la pestaña "IA". Sale marcado en las que la IA ya ofrece hoy y desmarcado en las que no; le das click para activar o desactivar cada una. Las vencidas salen en gris y no se pueden activar. El ajuste fino (dejar en "Auto", ordenar, ver el tope de 25) sigue estando solo en la pestaña "IA".', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'Pestaña "IA" del Tarifario: precio de cada promo y sin vencidas de relleno', texto: 'Solo admin. Cada fila de la pestaña "IA" ahora muestra debajo del nombre el precio de la promoción y las primeras etiquetas de qué incluye, para marcar y ordenar sin abrir cada tarjeta. Además, en el bloque "La IA no las ofrece hoy" ya no se listan las promociones vencidas que no tengan una marca manual -- eran ruido muerto; el encabezado del bloque dice cuántas se ocultaron. Las vencidas que alguien haya marcado a mano siguen visibles para poder limpiarles la marca.', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🏷️', titulo: 'Promociones y Hot Sales: también salían recortadas', texto: 'El mismo problema que se arregló en la pestaña "IA" estaba en las pestañas "Promociones" y "Hot Sales": ordenadas por título, los flyers que caían después de cierto punto (Margarita, Mérida y varios más) no aparecían. Ahora los flyers se traen aparte y se garantizan completos; el resto de las líneas del tarifario se sigue viendo igual que antes.', roles: ROLES_TODOS },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'Pestaña "IA" del Tarifario: ahora salen TODAS las promociones', texto: 'Solo admin. La pestaña "IA" (la que decide qué promociones puede ofrecer el bot de ventas) mostraba solo 31 de las 111 promociones -- faltaban hoteles enteros (Margarita, Mérida y muchos más). Ya se ven las 111: las que el bot ofrece hoy arriba, con una línea de corte, y el resto abajo en "La IA no las ofrece hoy". A cualquiera de las de abajo le podés dar "Ofrecer" para sumarla. Recordá: el bot todavía no lee estas marcas, eso llega en un despliegue aparte.', roles: ['admin'] },

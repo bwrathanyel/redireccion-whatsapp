@@ -1068,13 +1068,22 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
    ventas). Gemelo de .tc-hs pero MORADO: el naranja es Hot Sales (curación de
    la web) y son ejes distintos -- confundirlos sería el bug obvio. Va debajo de
    .tc-hs para no pisarlo. Prefijo propio, nunca fa/fab/fas/far. */
-.tc-ia{position:absolute;top:44px;left:8px;z-index:3;height:30px;display:inline-flex;align-items:center;gap:0;padding:0 9px;background:rgba(6,10,18,.7);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s,background .15s,color .15s}
+/* Siempre visible (ya no solo al hover): es un control de curación, no un
+   adorno. Marcado = la IA la ofrece (morado lleno). Desmarcado = neutro
+   translúcido. Excluida a mano = borde rojo. Vencida = deshabilitado. */
+.tc-ia{position:absolute;top:44px;left:8px;z-index:3;height:30px;display:inline-flex;align-items:center;gap:0;padding:0 9px;background:rgba(6,10,18,.7);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:1;transition:opacity .15s,background .15s,color .15s,border-color .15s}
 .tc-ia .ia-lbl{display:none}
-.tar-card:hover .tc-ia{opacity:1}
-.tc-ia.is-on{opacity:1;background:var(--purple);border-color:var(--purple);color:#fff}
-.tc-ia.is-off{opacity:1;background:rgba(239,68,68,.85);border-color:transparent;color:#fff}
-.tc-ia:disabled{cursor:progress}
-@media (hover:none){.tc-ia{opacity:1}}
+.tc-ia.is-on{background:var(--purple);border-color:var(--purple);color:#fff}
+.tc-ia.is-off.is-forzada{border-color:rgba(239,68,68,.85)}
+.tc-ia:disabled{opacity:.55;cursor:not-allowed}
+/* Variante en línea (fila de lista, ficha, fila de título de la carpeta) --
+   sin position:absolute, con rótulo visible. */
+.tar-ia-inline{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted);border-radius:999px;cursor:pointer;font-family:inherit;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;flex:0 0 auto;transition:background .15s,color .15s,border-color .15s}
+.tar-ia-inline:hover:not(.is-on):not(:disabled){color:var(--txt)}
+.tar-ia-inline.is-on{background:var(--purple);border-color:var(--purple);color:#fff}
+.tar-ia-inline.is-off.is-forzada{border-color:rgba(239,68,68,.5);color:#fca5a5}
+.tar-ia-inline:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:760px){.tar-hotel-row .tar-ia-inline .ia-lbl{display:none}.tar-hotel-row .tar-ia-inline{gap:0;padding:0 8px}}
 .tc-hotel-chip{cursor:pointer;font-family:inherit}
 .tc-hotel-chip:hover{border-color:var(--accent);color:var(--txt)}
 .tc-media-wrap .tc-thumb{height:170px}
