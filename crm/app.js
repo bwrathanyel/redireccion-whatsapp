@@ -11302,7 +11302,7 @@ let tarTab = 'hotsale', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 let tarEntradaContexto = null;
 const tarDestinosAbiertos = new Set();
 const tarHotelesAbiertos = new Set();
-const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale', boleteria: 'Boletería' };
+const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale', ia: 'IA', boleteria: 'Boletería' };
 /* Un solo select de productos para las tres puertas de entrada al drawer
    (grilla del Tarifario, hidratación de la búsqueda IA y "abrir uno suelto"):
    tenían tres copias distintas y el drawer abierto desde el buscador se quedaba
@@ -11353,6 +11353,15 @@ function setupTarifarioTabs() {
   document.getElementById('tf-protegido')?.addEventListener('change', tfProtegidoAyuda);
   document.getElementById('tp-guardar')?.addEventListener('click', (e) => tarGuardarPromo(e.currentTarget));
   document.getElementById('tp-fecha-fin')?.addEventListener('change', tpAvisoFecha);
+  // Delegado sobre #tar-grid para la pestaña IA (se re-pinta entera en cada
+  // marca). Additivo al onclick por tarjeta que pone renderTarifario -- solo
+  // dispara sobre los controles [data-ia-*] de la pestaña IA.
+  document.getElementById('tar-grid').addEventListener('click', (e) => {
+    const set = e.target.closest('[data-ia-set]');
+    if (set) return iaMarcar(Number(set.dataset.iaId), set.dataset.iaSet === 'auto' ? null : set.dataset.iaSet, set);
+    const mov = e.target.closest('[data-ia-mover]');
+    if (mov) return iaMover(Number(mov.dataset.iaMover), Number(mov.dataset.iaDelta), mov);
+  });
   setupTarAdmin();
 }
 
@@ -11627,9 +11636,190 @@ function setupRankingCatalogo() {
   });
 }
 
+/* ---------- Pestaña IA: curación de promociones para el bot de ventas --------
+   Eje NUEVO y separado de Hot Sales (ese es curación de la WEB). `ia_estado`:
+     'poner'  -> la IA la ofrece aunque no esté publicada en la web
+     'quitar' -> la IA NO la ofrece aunque sí lo esté
+     NULL     -> auto: manda `revisado` (= publicada en la web), como hasta hoy
+   Sin ninguna marca la IA ve exactamente lo de hoy. El bot corta en las primeras
+   IA_PROMOS_MAX por `ia_orden`; el resto queda en banca. Esta pantalla es el
+   espejo cliente de la Fase C de ventas-ia.ts -- la línea de corte de acá tiene
+   que dar el mismo conjunto que el prompt. RPC de Fase A:
+   catalogo_ia_promo_marcar / catalogo_ia_promo_ordenar (security definer,
+   assert_rol(['admin']), solo filas origen='flyer'). */
+const IA_PROMOS_MAX = 25;
+let iaTopIds = null;
+
+// El bot deja de ofrecer una promo cuando le quedan MARGEN_DIAS_ANTES_DE_VENCER
+// días o menos (ventas-ia.ts:595, pedido del dueño 2026-07-19), y mide el día en
+// hora Venezuela (UTC-4). `promoFechaVigente` de este archivo corta recién el día
+// del vencimiento: usarlo acá contaba como "va al prompt" promos que el bot ya no
+// ofrece, justo lo que la línea de corte tiene que no mentir.
+const IA_MARGEN_DIAS = 7;
+const iaFechaTope = () => {
+  const d = new Date(Date.now() - 4 * 3600_000);
+  d.setUTCDate(d.getUTCDate() + IA_MARGEN_DIAS);
+  return d.toISOString().slice(0, 10);
+};
+const iaPromoOfrecible = p => {
+  const tope = iaFechaTope();
+  return (!p.fecha_fin_estimada || p.fecha_fin_estimada >= tope)
+    && (!p.fecha_venta_fin || p.fecha_venta_fin >= tope);
+};
+// Espejo del post-filtro del bot: 'quitar' fuera, vencidas fuera, y 'auto' manda
+// `revisado`. 'poner' entra aunque no esté publicada, pero NO si venció (el bot
+// la filtra igual por fecha; el RPC ya rechaza marcar 'poner' una vencida).
+function iaPromoElegible(p) {
+  if (p.ia_estado === 'quitar') return false;
+  if (!iaPromoOfrecible(p)) return false;
+  if (p.ia_estado === 'poner') return true;
+  return p.revisado !== false;
+}
+// Estimación cliente sobre los mismos campos que emite el prompt del bot
+// (titulo/precio_texto/vigencia_texto/incluye_tags), ~4 caracteres por token.
+function iaPromoTokensEstim(p) {
+  const txt = [p.titulo, p.precio_texto, p.vigencia_texto, (p.incluye_tags || []).join(' ')]
+    .filter(Boolean).join(' ');
+  return Math.ceil(txt.length / 4);
+}
+const iaEstadoDe = p => p.ia_estado === 'poner' ? 'poner' : p.ia_estado === 'quitar' ? 'quitar' : 'auto';
+
+function renderTarifarioIA() {
+  const cont = document.getElementById('tar-grid');
+  if (ROL !== 'admin') { cont.innerHTML = '<div class="rk-vacio">Solo un admin puede curar las promociones de la IA.</div>'; return; }
+  const q = val('tar-search').trim().toLowerCase();
+  // Solo flyers: el bot y el RPC trabajan sobre la vista `promociones`
+  // (origen='flyer'). Las líneas de PDF con título no son promociones de flyer.
+  const promos = (tarCache.ia || []).filter(p => p.origen === 'flyer' && (
+    !q || (p.titulo || '').toLowerCase().includes(q)
+       || (p.productos?.nombre || '').toLowerCase().includes(q)
+       || (p.destino || '').toLowerCase().includes(q)));
+
+  document.getElementById('tar-count').textContent = `${fmt(promos.length)} promociones`;
+  document.getElementById('tar-empty').classList.toggle('show', promos.length === 0);
+  document.getElementById('tar-chips').innerHTML = '';
+
+  const elegibles = promos.filter(iaPromoElegible)
+    .sort((a, b) => (a.ia_orden ?? 1e9) - (b.ia_orden ?? 1e9) || a.id - b.id);
+  const alPrompt = elegibles.slice(0, IA_PROMOS_MAX);
+  const enBanca = elegibles.slice(IA_PROMOS_MAX);
+  const fuera = promos.filter(p => !iaPromoElegible(p))
+    .sort((a, b) => tarNombrePromo(a).localeCompare(tarNombrePromo(b), 'es'));
+  // Las 'poner' van primero (tienen ia_orden 1..k); son las únicas reordenables.
+  const ponerIds = elegibles.filter(p => p.ia_estado === 'poner').map(p => p.id);
+
+  const tokens = alPrompt.reduce((s, p) => s + iaPromoTokensEstim(p), 0);
+  const head = `<div class="ia-head">
+    <div class="ia-head-n"><b>${fmt(alPrompt.length)}</b> promo${alPrompt.length === 1 ? '' : 's'} ${alPrompt.length === 1 ? 'va' : 'van'} al prompt de la IA</div>
+    <div class="ia-head-sub">~${fmt(tokens)} tokens en cada conversación · estimado${ponerIds.length ? ` · ${ponerIds.length} forzada${ponerIds.length === 1 ? '' : 's'} a mano` : ''}${enBanca.length ? ` · ${fmt(enBanca.length)} en banca (fuera del tope ${IA_PROMOS_MAX})` : ''}</div>
+  </div>`;
+
+  const filas = [];
+  alPrompt.forEach((p, i) => filas.push(iaFilaHtml(p, i + 1, ponerIds)));
+  filas.push(`<div class="ia-corte">— corte: de acá para abajo la IA no las ve (tope ${IA_PROMOS_MAX}) —</div>`);
+  enBanca.forEach((p, i) => filas.push(iaFilaHtml(p, IA_PROMOS_MAX + i + 1, ponerIds)));
+  if (fuera.length) {
+    filas.push(`<div class="ia-sep">La IA no las ofrece hoy (${fuera.length}) — marcá <b>Ofrecer</b> para sumarlas</div>`);
+    fuera.forEach(p => filas.push(iaFilaHtml(p, null, ponerIds)));
+  }
+  cont.innerHTML = head + `<div class="ia-list">${filas.join('')}</div>`;
+}
+
+function iaFilaHtml(p, pos, ponerIds) {
+  const est = iaEstadoDe(p);
+  const i = est === 'poner' ? ponerIds.indexOf(p.id) : -1;
+  const badges = [
+    !promoFechaVigente(p) ? '<span class="ia-b ia-b-venc">Vencida</span>'
+      : !iaPromoOfrecible(p) ? `<span class="ia-b ia-b-pv">Vence en ≤${IA_MARGEN_DIAS} días</span>` : '',
+    p.revisado === false ? '<span class="ia-b ia-b-web">Sin publicar en web</span>' : '',
+    (p.producto_id && iaTopIds && iaTopIds.size && !iaTopIds.has(p.producto_id)) ? '<span class="ia-b ia-b-top">Fuera de TOP IA</span>' : '',
+    !p.producto_id ? '<span class="ia-b ia-b-gen">Genérica</span>' : '',
+  ].filter(Boolean).join('');
+  return `<div class="ia-fila ia-est-${est}" data-ia-fila="${p.id}">
+    <span class="ia-pos">${pos != null ? '#' + pos : ''}</span>
+    <div class="ia-fila-main">
+      <div class="ia-fila-nom">${esc(tarNombrePromo(p))} <span class="muted">#${p.id}</span></div>
+      ${badges ? `<div class="ia-fila-badges">${badges}</div>` : ''}
+    </div>
+    ${i >= 0 ? `<span class="ia-mover">
+      <button class="ce-mini" type="button" data-ia-mover="${p.id}" data-ia-delta="-1"${i === 0 ? ' disabled' : ''} aria-label="Subir">↑</button>
+      <button class="ce-mini" type="button" data-ia-mover="${p.id}" data-ia-delta="1"${i === ponerIds.length - 1 ? ' disabled' : ''} aria-label="Bajar">↓</button>
+    </span>` : ''}
+    <div class="ia-seg" role="group" aria-label="Curación IA">
+      <button type="button" class="ia-seg-b ${est === 'poner' ? 'on' : ''}" data-ia-set="poner" data-ia-id="${p.id}">Ofrecer</button>
+      <button type="button" class="ia-seg-b ${est === 'auto' ? 'on' : ''}" data-ia-set="auto" data-ia-id="${p.id}">Auto</button>
+      <button type="button" class="ia-seg-b ${est === 'quitar' ? 'on' : ''}" data-ia-set="quitar" data-ia-id="${p.id}">No ofrecer</button>
+    </div>
+  </div>`;
+}
+
+// Botón binario en la card (auto <-> ofrecer), clon de tcHsBtnHtml. Solo flyers
+// (el RPC rechaza el resto). Morado, ícono robot. Prefijo propio, nunca fa*.
+function tcIaBtnHtml(t, cls = 'tc-ia') {
+  if (ROL !== 'admin' || t.origen !== 'flyer') return '';
+  const on = t.ia_estado === 'poner';
+  const off = t.ia_estado === 'quitar';
+  const lbl = on ? 'IA la ofrece' : off ? 'IA excluida' : 'Ofrecer IA';
+  return `<button type="button" class="${cls} admin-only${on ? ' is-on' : ''}${off ? ' is-off' : ''}" data-ia-toggle="${t.id}" data-ia-on="${on ? 1 : 0}" aria-pressed="${on}" title="${on ? 'La IA la ofrece (click: volver a auto)' : 'Forzar que la IA la ofrezca'}"><i class="fas fa-robot"></i><span class="ia-lbl">${lbl}</span></button>`;
+}
+
+// Marca una promo para la IA. estado: 'poner' | 'quitar' | null (auto).
+async function iaMarcar(id, estado, btn) {
+  if (ROL !== 'admin') return;
+  const prev = btn ? btn.innerHTML : null;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+  const { data, error } = await sb.rpc('catalogo_ia_promo_marcar', { p_item_id: id, p_estado: estado });
+  if (btn) { btn.disabled = false; btn.innerHTML = prev; }
+  if (error || !data || data.ok === false) {
+    errToast('No se pudo: ' + (error?.message || data?.error || 'curación IA'));
+    return;
+  }
+  iaAplicarEstadoLocal(id, estado, data.ia_orden ?? null);
+  okToast(estado === 'poner' ? 'La IA la va a ofrecer' : estado === 'quitar' ? 'La IA no la va a ofrecer' : 'Vuelve a automático');
+}
+
+// No setea vigente/revisado (ese es el punto de todo esto). Solo el eje IA.
+function iaAplicarEstadoLocal(id, estado, orden) {
+  const marca = t => {
+    if (!t || Number(t.id) !== Number(id)) return;
+    t.ia_estado = estado;
+    t.ia_orden = estado === 'poner' ? orden : null;
+  };
+  (tarCache.ia || []).forEach(marca);
+  (tarCache.promo || []).forEach(marca);
+  (tarCache.hotsale || []).forEach(marca);
+  (TAR_DRAWER_ITEM?.tarifas || []).forEach(marca);
+  if (tarTab === 'ia') renderTarifarioIA();
+  else if (tarTab === 'promo' || tarTab === 'hotsale') renderTarifario();
+}
+
+// Reordena las 'poner': arma el array en el orden actual, mueve una y manda la
+// lista completa al RPC (renumera 1..n TODAS las 'poner', idempotente).
+async function iaMover(id, delta, btn) {
+  if (ROL !== 'admin') return;
+  const orden = (tarCache.ia || [])
+    .filter(p => p.ia_estado === 'poner')
+    .sort((a, b) => (a.ia_orden ?? 1e9) - (b.ia_orden ?? 1e9) || a.id - b.id)
+    .map(p => Number(p.id));
+  const i = orden.indexOf(Number(id));
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= orden.length) return;
+  [orden[i], orden[j]] = [orden[j], orden[i]];
+  if (btn) btn.disabled = true;
+  const { data, error } = await sb.rpc('catalogo_ia_promo_ordenar', { p_ids: orden });
+  if (error || !data || data.ok === false) {
+    if (btn) btn.disabled = false;
+    errToast('No se pudo reordenar: ' + (error?.message || data?.error || ''));
+    return;
+  }
+  orden.forEach((pid, k) => (tarCache.ia || []).forEach(p => { if (Number(p.id) === pid) p.ia_orden = k + 1; }));
+  renderTarifarioIA();
+}
+
 /* ---------- Configuración de visibilidad de Tarifario (solo admin) ---------- */
 const TAR_TAB_META = [
   { key: 'hotsale', label: 'Hot Sales' },
+  { key: 'ia', label: 'IA (curación)' },
   { key: 'promo', label: 'Promociones' },
   { key: 'destino', label: 'Guías/Tours' },
   { key: 'hotel', label: 'Hoteles' },
@@ -11828,6 +12018,13 @@ function tarChips() {
 }
 async function loadTarifario() {
   loadTarifarioInfo();
+  // TOP IA: la lista corta que el bot recorta (ia_top_productos). Solo se usa
+  // para el badge informativo "Fuera de TOP IA" de la pestaña IA -- se trae una
+  // vez y no bloquea nada si falla.
+  if (tarTab === 'ia' && iaTopIds === null) {
+    const { data: top } = await sb.from('ia_top_productos').select('producto_id').eq('activo', true);
+    iaTopIds = new Set((top || []).map(r => Number(r.producto_id)));
+  }
   if (tarCache[tarTab]) { renderTarifario(); return; }
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
   empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
@@ -11850,7 +12047,7 @@ async function loadTarifario() {
   // de una línea del PDF. Leer las dos fuentes listaba cada flyer dos veces.
   // `promocion_fotos` ya apunta a `tarifas` (la FK se repuntó en la migración
   // 20260904210000), así que las fotos de los flyers siguen llegando igual.
-  const q = (tarTab === 'promo' || tarTab === 'hotsale')
+  const q = (tarTab === 'promo' || tarTab === 'hotsale' || tarTab === 'ia')
     ? sb.from('tarifas').select('*, tarifario_bloques(*), promocion_fotos(storage_path,orden,es_principal,activo), productos(id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))').or('titulo.not.is.null,hot_sale_estado.eq.poner').order('titulo')
     : tarTab === 'boleteria'
     ? soloVivos(sb.from('productos').select(selProductos).eq('es_boleteria', true)).order('nombre')
@@ -11874,7 +12071,7 @@ async function loadTarifario() {
   // Las filas de `tarifas` se adaptan a la forma de promo (nombres legacy:
   // revisado, fecha_fin_estimada) para que filtros, orden, agrupación por hotel
   // y Hot Sales sigan hablando un solo idioma.
-  const filas = (tarTab === 'promo' || tarTab === 'hotsale') ? data.map(tarifaComoPromo) : data;
+  const filas = (tarTab === 'promo' || tarTab === 'hotsale' || tarTab === 'ia') ? data.map(tarifaComoPromo) : data;
   tarCache[tarTab] = filas;
   tarEntradaContexto = null;
   renderTarifario();
@@ -12231,6 +12428,10 @@ function _agregarHotelCalc(x) {
 
 function renderTarifario() {
   detenerCarruseles();
+  // La pestaña IA no es una grilla de tarjetas: es una lista curada (tri-estado
+  // + orden + línea de corte). Rama propia, temprano.
+  document.getElementById('tar-grid').style.display = tarTab === 'ia' ? 'block' : 'grid';
+  if (tarTab === 'ia') { renderTarifarioIA(); return; }
   const q = val('tar-search').trim().toLowerCase();
   const data = tarCache[tarTab] || [];
   const fDestino = val('tar-f-destino'), fTipo = val('tar-f-tipo');
@@ -12410,6 +12611,8 @@ function renderTarifario() {
     if (hideBtn) hideBtn.onclick = e => { e.stopPropagation(); tcOcultarDesdeCard(hideBtn, el); };
     const hsBtn = el.querySelector('[data-hs-toggle]');
     if (hsBtn) hsBtn.onclick = e => { e.stopPropagation(); hsToggleTarifa(Number(hsBtn.dataset.hsToggle), hsBtn.dataset.hsOn !== '1', hsBtn); };
+    const iaBtn = el.querySelector('[data-ia-toggle]');
+    if (iaBtn) iaBtn.onclick = e => { e.stopPropagation(); iaMarcar(Number(iaBtn.dataset.iaToggle), iaBtn.dataset.iaOn === '1' ? null : 'poner', iaBtn); };
     const hotelChip = el.querySelector('[data-abrir-hotel]');
     if (hotelChip) hotelChip.onclick = e => { e.stopPropagation(); abrirDesdeBusquedaIA('producto', Number(hotelChip.dataset.abrirHotel)); };
     const retBtn = el.querySelector('[data-retirar-tarifa]');
@@ -12549,7 +12752,7 @@ function tarCardHtml(x) {
     // usa la web pública). Por diseño NUNCA contiene precios -- el precio real
     // sale siempre de precio_texto, tal cual está cargado.
     return `<div class="tar-item tar-card" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'tarifas', 'vigente'), x._tarifa ? tarBadgePrecio(x._tarifa) : x.precio_texto, tcHsBtnHtml(x, 'tc-hs', tarTab === 'hotsale'))}
+      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'tarifas', 'vigente'), x._tarifa ? tarBadgePrecio(x._tarifa) : x.precio_texto, tcHsBtnHtml(x, 'tc-hs', tarTab === 'hotsale') + tcIaBtnHtml(x))}
       <div class="tc-body">
         ${x.producto_id ? `<button type="button" class="tc-hotel-chip" data-abrir-hotel="${x.producto_id}"><i class="fas fa-hotel"></i> ${esc(x.productos?.nombre || '')}</button>` : ''}
         <div class="tc-nombre">${esc(tarNombrePromo(x))}</div>
@@ -13101,8 +13304,8 @@ function tarPrecioDobleHero(t) {
 }
 // Botón de Hot Sales en la card (solo admin). Binario: si está `poner` el click
 // quita, si no pone. `cls` cambia el molde (.tc-hs flota sobre la foto en el
-// listado; .promo-hs va en la fila de título de la carpeta). Prefijo propio,
-// nunca fa/fab/fas/far (los reclama Font Awesome).
+// listado; la fila de título de la carpeta usa tcHsSegHtml, tri-estado, ver
+// abajo). Prefijo propio, nunca fa/fab/fas/far (los reclama Font Awesome).
 function tcHsBtnHtml(t, cls = 'tc-hs', enHotSales = false) {
   if (ROL !== 'admin') return '';
   // En la pestaña Hot Sales todo lo que se ve YA está en Hot Sales (forzado a
@@ -13153,6 +13356,10 @@ function hsAplicarEstadoLocal(id, estado) {
     if (!t || Number(t.id) !== Number(id)) return;
     t.hot_sale_estado = estado;
     if (estado === 'poner') { t.vigente = true; t.revisado = true; }
+    // Auto/quitar limpian el orden manual en la base (paso 5 de
+    // recalcular_catalogo_score) -- se espeja acá para que un re-render
+    // inmediato no ordene con un hot_sale_orden viejo que ya no aplica.
+    else t.hot_sale_orden = null;
   };
   (tarCache.promo || []).forEach(marca);
   (tarCache.hotsale || []).forEach(marca);
@@ -13161,6 +13368,50 @@ function hsAplicarEstadoLocal(id, estado) {
     tarRepintarCarpeta(TAR_DRAWER_ITEM);
   }
   if (tarTab === 'promo' || tarTab === 'hotsale') renderTarifario();
+}
+// Tri-estado Fijar/Auto/Excluir para la fila de título de la carpeta. Lee
+// t.hot_sale_estado DIRECTO (el eje manual persistido) -- nunca intenta
+// adivinar si la tarifa está hoy en el pool de Hot Sales, porque eso depende
+// del dedup por hotel de promosHotSales() sobre TODAS las promos, dato que la
+// ficha de un solo hotel no tiene. Antes de este fix (2026-09-09) el botón
+// binario mostraba `on = hot_sale_estado === 'poner'` sin más: una promo que
+// entraba a Hot Sales por ranking automático (estado NULL) salía gris acá
+// aunque estuviera naranja en la pestaña Hot Sales -- no era bug de escritura
+// (el RPC sí llegaba a la base), era la UI mintiendo sobre el estado real.
+function tcHsSegHtml(t) {
+  if (ROL !== 'admin') return '';
+  const est = t.hot_sale_estado === 'poner' ? 'poner' : t.hot_sale_estado === 'quitar' ? 'quitar' : 'auto';
+  const btn = (v, lbl) => `<button type="button" class="promo-hs-seg-b${est === v ? ' on' : ''}" data-hs-set="${v}" data-hs-set-id="${t.id}">${lbl}</button>`;
+  return `<div class="promo-hs-seg admin-only" role="group" aria-label="Hot Sales" title="Eje manual de Hot Sales">${btn('poner', 'Fijar')}${btn('auto', 'Auto')}${btn('quitar', 'Excluir')}</div>`;
+}
+// RPC de la fila de título. Mismo molde que hsToggleTarifa (confirm de
+// necesita_publicar incluido) pero tri-estado: acepta 'auto' además de
+// poner/quitar, y por eso puede EXCLUIR desde acá -- el binario viejo nunca
+// mandaba 'quitar' porque nunca leía 'on' sobre algo automático.
+async function hsMarcarEstado(idRaw, estadoUi, btn) {
+  if (ROL !== 'admin') return;
+  const id = Number(idRaw);
+  const estado = estadoUi === 'auto' ? null : estadoUi;
+  const grupo = btn?.closest('.promo-hs-seg');
+  if (grupo) grupo.querySelectorAll('button').forEach(b => b.disabled = true);
+  const call = pub => sb.rpc('catalogo_hot_sale_marcar', pub
+    ? { p_item_id: id, p_estado: estado, p_publicar: true }
+    : { p_item_id: id, p_estado: estado });
+  let { data, error } = await call(false);
+  if (!error && data && data.ok === false && data.necesita_publicar) {
+    if (!confirm('La promoción está oculta (sin revisar). ¿Publicarla y fijarla en Hot Sales?')) {
+      if (grupo) grupo.querySelectorAll('button').forEach(b => b.disabled = false);
+      return;
+    }
+    ({ data, error } = await call(true));
+  }
+  if (grupo) grupo.querySelectorAll('button').forEach(b => b.disabled = false);
+  if (error || !data || data.ok === false) {
+    errToast('No se pudo: ' + (error?.message || data?.error || 'Hot Sales'));
+    return;
+  }
+  hsAplicarEstadoLocal(id, estado);
+  okToast(estado === 'poner' ? 'Fijada en Hot Sales' : estado === 'quitar' ? 'Excluida de Hot Sales' : 'Vuelta a automático');
 }
 async function retirarTarifaVieja(id, btn) {
   if (ROL !== 'admin') return;
@@ -13540,7 +13791,7 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
     <div class="promo-top">
       <label class="promo-check"><input type="checkbox" data-tar-sel="${t.id}" aria-label="Seleccionar ${esc(titulo)}"></label>
       <div class="promo-titulo">${esc(titulo)}</div>
-      ${tcHsBtnHtml(t, 'promo-hs')}
+      ${tcHsSegHtml(t)}
       ${esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
       ${vendible || enHistorico ? '' : '<span class="promo-badge promo-badge-off">Ya no se vende</span>'}
       ${noEntran ? `<span class="promo-badge promo-badge-off">No entran ${grupo}</span>` : ''}
@@ -13749,8 +14000,8 @@ function tarEngancharCarpeta() {
     tarSincronizarBarra();
   });
   carpeta.addEventListener('click', e => {
-    const hs = e.target.closest('[data-hs-toggle]');
-    if (hs) { e.stopPropagation(); hsToggleTarifa(Number(hs.dataset.hsToggle), hs.dataset.hsOn !== '1', hs); return; }
+    const hsSeg = e.target.closest('[data-hs-set]');
+    if (hsSeg) { e.stopPropagation(); hsMarcarEstado(hsSeg.dataset.hsSetId, hsSeg.dataset.hsSet, hsSeg); return; }
     const ret = e.target.closest('[data-retirar-tarifa]');
     if (ret) { e.stopPropagation(); retirarTarifaVieja(Number(ret.dataset.retirarTarifa), ret); return; }
   });
@@ -17734,6 +17985,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-09', emoji: '🤖', titulo: 'Nueva pestaña "IA" en el Tarifario: qué promociones ofrece el bot', texto: 'Solo admin. En el Tarifario hay una pestaña "IA" al lado de Hot Sale que muestra, ordenadas, las promociones que la IA de ventas puede ofrecer en cada conversación, con una línea de corte explícita: de ahí para abajo el bot no las ve. Cada fila tiene su estado tri-estado (Ofrecer / No ofrecer / Auto) y badges de aviso (Vencida, Vence en ≤7 días, Sin publicar en web, Fuera de TOP IA, Genérica). "Ofrecer" fuerza una promo aunque no esté publicada en la web; "No ofrecer" saca una que sí lo está; "Auto" (por defecto, en todas hoy) deja el comportamiento actual sin cambios. La cabecera estima cuántos tokens agrega la lista a cada conversación. Se puede reordenar arrastrando. Esta pantalla solo marca y ordena: nunca edita el texto ni el precio de una promo. El bot todavía no lee estas marcas -- eso llega en un despliegue aparte.', roles: ['admin'] },
   { fecha: '2026-09-06', emoji: '🗂️', titulo: 'Las promociones retiradas ya no ensucian la ficha del hotel', texto: 'En la carpeta de tarifas de un hotel, las promociones que ya no se venden (retiradas del PDF, con la fecha de venta o de disfrute pasada) dejan de amontonarse con el cartel rojo "Ya no se vende". Ahora las vivas se ven arriba como siempre y las retiradas se guardan en un desplegable "Ver histórico (N)" al final, cerrado por defecto. El título de la carpeta cuenta solo las que se venden -- si no queda ninguna viva dice "Sin promociones vigentes". Abriendo el histórico están todas, atenuadas, con los botones de admin (Hot Sales, Retirar del catálogo) intactos: no se borró nada, solo se corrió de lugar.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '🔥', titulo: 'Hot Sales desde la tarjeta, hotel con un toque y el precio doble en grande', texto: 'Tres cambios en el Tarifario. (1) El nombre del hotel arriba de cada tarjeta de promoción ahora es un botón: lo tocás y se abre la ficha del hotel, sin buscarlo. (2) Cuando una tarifa tiene precios por ocupación (SGL/DBL/TPL...), la tarjeta muestra el precio DOBLE en grande como titular -- "$75 por persona / noche · ocupación doble", que es como se promociona en redes -- y el resto de las columnas abajo en chico. Las tarjetas sin grilla de precios no cambian. (3) Solo admin: cada promoción tiene un botón de fuego para ponerla o sacarla de Hot Sales sin entrar al panel de Ranking, y funciona igual para los flyers y para las líneas sueltas del PDF. Las promociones viejas de "precio suelto" (un solo monto de texto, sin grilla, de antes del repaso del tarifario) tienen además un botón "Retirar del catálogo" que las saca de la web y de Hot Sales -- es reversible. Ese botón no aparece en Chichiriviche, Mifafi, Gremary ni Heidelberg, que solo tienen ese tipo de promo.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '👥', titulo: 'Cuánta gente entra en cada habitación', texto: 'Cada tarjeta de tarifa dice ahora "Hasta N adultos": es hasta cuántos cotiza el proveedor en el PDF (las columnas SGL/DBL/TPL/CDP de esa fila), o sea lo que de verdad se puede vender. Arriba, en los filtros del Tarifario, hay un campo "Somos..." para escribir el tamaño del grupo: los hoteles donde no entran desaparecen de la lista, y dentro del hotel las habitaciones que quedan chicas se ven apagadas con el cartel "No entran N". Una tarifa cuyo PDF no trae columnas por ocupación no se esconde nunca: no sabemos que no entren. El comparador suma las filas de la habitación (tamaño, camas, vista, amenities) y, cuando comparás la misma habitación en dos temporadas, ya no rotula las dos columnas igual. Ojo con una distinción que ahora está a la vista: "Hasta N adultos" es lo vendible, mientras que "Capacidad según la web del hotel" y "Ocupación máxima (según el PDF)" son descriptivas y casi siempre dan un número mayor porque cuentan niños y camas extra. El Cotizador IA usa solo la vendible, y si el grupo no entra en una habitación reparte en varias y muestra cómo quedan. Con niños: el tarifario no dice en ningún lado cuántos niños entran por habitación (las líneas CHD son precio por edad, no cupo), así que la IA reparte y el sistema controla que la cuenta cierre, pero no afirma cupos de niños: si hace falta te va a pedir las edades y aclarar que eso lo confirma el hotel.', roles: ROLES_TODOS },
