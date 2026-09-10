@@ -161,7 +161,8 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
   'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles que manda BT Travel -- cargá el PDF y confirmá antes de publicar'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
-  actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'] };
+  actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'],
+  pagos: ['Pagos por verificar', 'Links de pago que un cliente declaró como pagados -- verificá el comprobante antes de aprobar'] };
 const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
@@ -1229,7 +1230,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'cotizador', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'voucher', 'mis-comisiones', 'ranking', 'boleteria',
+  'facturacion', 'pagos', 'voucher', 'mis-comisiones', 'ranking', 'boleteria',
   'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
   'rendimiento-ia', 'ia-atencion', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
@@ -2437,7 +2438,7 @@ async function startApp() {
   // del mismo query en paralelo sin orden garantizado de resolución.
   arrancar(
     setupMetricas, setupRanking, setupEstadisticas, setupReasignaciones, setupAsesoresPeriodo,
-    setupFacturacion, setupGestionPersonal, setupLeadsTabs,
+    setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs,
     setupBuscadorIATarifario, setupCerebroIA, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
     setupRankingCatalogo,
     setupDestPeriodo, loadDestPeriodo,
@@ -4076,6 +4077,19 @@ function openDrawer(l) {
             ${campo('Fecha de captación', `<input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">`)}
           </div>`, false)}
 
+        ${seccion('link-pago', 'fa-link', 'Link de pago', `
+          <div class="csub" style="margin-bottom:8px">Emitís un link para que el cliente pague y suba el comprobante. El monto lo fijás vos; queda pendiente hasta que un admin lo verifique.</div>
+          <div class="dgrid">
+            ${campo('Tipo', `<select id="lp-tipo" class="ei"><option value="abono">Abono / reserva</option><option value="total">Pago total</option></select>`)}
+            ${campo('Riel', `<select id="lp-riel" class="ei"><option value="pago_movil">Pago Móvil</option><option value="c2p">C2P</option><option value="zelle">Zelle</option><option value="binance">Binance (USDT)</option><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option></select>`)}
+            ${campo('Moneda', `<select id="lp-moneda" class="ei"><option value="USD">USD</option><option value="VES">Bs (VES)</option><option value="USDT">USDT</option></select>`)}
+            ${campo('Monto', `<input id="lp-monto" class="ei" type="number" min="0" step="0.01" placeholder="0.00">`)}
+            ${campo('Tasa Bs/USD (solo si cobrás en Bs)', `<input id="lp-tasa" class="ei" type="number" min="0" step="0.01" placeholder="Ej: 40.50">`, true)}
+          </div>
+          <div class="edit-err" id="lp-err"></div>
+          <button class="dbtn save" id="e-emitir-pago" type="button" style="width:100%"><i class="fas fa-link"></i> Emitir link de pago</button>
+          <div id="lp-resultado" style="display:none;margin-top:10px"></div>`, false)}
+
         <div class="edit-err" id="edit-err"></div>
         <div class="dsave"><button class="dbtn save" id="e-save"><i class="fas fa-floppy-disk"></i> Guardar cambios</button></div>
         <div class="did"><span>ID: ${esc(l.external_id || l.id)}</span><button type="button" id="e-copiar-id" title="Copiar ID"><i class="fas fa-copy"></i></button></div>
@@ -4125,6 +4139,7 @@ function openDrawer(l) {
   document.getElementById('e-a-cotizacion')?.addEventListener('click', () => registrarCotizacionEnviada(l));
   document.getElementById('e-a-tomar-ia')?.addEventListener('click', () => tomarConversacionIA(l));
   document.getElementById('e-a-boleteria')?.addEventListener('click', () => { window.closeDrawer(); abrirSolicitudBoleteria(l); });
+  document.getElementById('e-emitir-pago')?.addEventListener('click', () => emitirLinkPago(l));
   document.querySelectorAll('.lead-tab-btn').forEach(btn => btn.addEventListener('click', () => {
     document.querySelectorAll('.lead-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.lead-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === btn.dataset.tab));
@@ -7148,6 +7163,162 @@ async function loadVentasPendientesVerificar() {
     loadVentasPendientesVerificar();
   }));
   entradaLista(grid);
+}
+
+/* ==========================================================================
+   PAGOS -- link de pago (Fase 1B). Emisión desde el drawer del lead
+   (emitir_pago) y bandeja de verificación admin (listar_pagos / verificar_pago).
+   El monto lo fija el asesor pero el servidor lo congela; la tasa Bs/USD se
+   fija al emitir y el link vence. Comprobante en bucket privado, signed URL.
+   ========================================================================== */
+let PAGOS_CACHE = [];
+const PAGO_RIEL_LABEL = {
+  pago_movil: 'Pago Móvil', c2p: 'C2P', zelle: 'Zelle', binance: 'Binance USDT',
+  tarjeta: 'Tarjeta', efectivo: 'Efectivo', transferencia: 'Transferencia',
+};
+const MSG_EMITIR_PAGO = {
+  lead_no_disponible: 'El lead no está disponible.',
+  monto_invalido: 'El monto no es válido.',
+  falta_tasa: 'Para cobrar en Bs necesitás la tasa Bs/USD del día.',
+  monto_ves_muy_bajo: 'Ese monto en Bs equivale a menos de un centavo de dólar. Revisalo.',
+};
+const MSG_VERIFICAR_PAGO = {
+  pago_no_existe: 'El pago ya no existe.',
+  estado_final: 'Este pago ya fue procesado.',
+  excede_total_factura: 'El pago supera el total de la factura asociada. Revisá antes de aprobar.',
+  factura_no_existe: 'La factura asociada no existe.',
+  factura_de_otro_lead: 'La factura asociada es de otro lead.',
+  pago_ya_conciliado: 'El pago ya quedó conciliado con otra factura.',
+};
+
+// "Bs 4.000,00 · ~$98,77 (tasa 40,50)" para VES; "$98,77" / "USDT 98,77" para el resto.
+function pagoMontoTexto(p) {
+  const dec = n => (Number(n) / 100).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (p.moneda === 'VES') {
+    return `Bs ${dec(p.monto_centavos)} · ~$${dec(p.monto_usd_centavos || 0)} (tasa ${p.tasa_usd_ves})`;
+  }
+  return `${p.moneda === 'USDT' ? 'USDT ' : '$'}${dec(p.monto_centavos)}`;
+}
+
+async function emitirLinkPago(l) {
+  const btn = document.getElementById('e-emitir-pago');
+  const err = document.getElementById('lp-err');
+  const out = document.getElementById('lp-resultado');
+  if (!btn || !l?.id) return;
+  err.textContent = ''; err.style.display = 'none';
+  const tipo = val('lp-tipo'), riel = val('lp-riel'), moneda = val('lp-moneda');
+  const monto = parseFloat(val('lp-monto'));
+  const tasa = parseFloat(val('lp-tasa'));
+  if (!Number.isFinite(monto) || monto <= 0) {
+    err.textContent = 'Poné un monto mayor a 0.'; err.style.display = 'block'; return;
+  }
+  if (moneda === 'VES' && (!Number.isFinite(tasa) || tasa <= 0)) {
+    err.textContent = 'Para cobrar en Bs necesitás la tasa Bs/USD del día.'; err.style.display = 'block'; return;
+  }
+  const centavos = Math.round(monto * 100);
+  btn.disabled = true;
+  const antes = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Emitiendo...';
+  const { data, error } = await sb.rpc('emitir_pago', {
+    p_lead_id: l.id, p_tipo: tipo, p_monto_centavos: centavos, p_moneda: moneda,
+    p_riel: riel, p_tasa_usd_ves: moneda === 'VES' ? tasa : null,
+  });
+  btn.disabled = false; btn.innerHTML = antes;
+  if (error || !data?.ok) {
+    err.textContent = MSG_EMITIR_PAGO[data?.error] || error?.message || data?.error || 'No se pudo emitir el link.';
+    err.style.display = 'block';
+    return;
+  }
+  const url = `https://destinoyeventoslotus360.com/pagar/${data.token}`;
+  out.style.display = 'block';
+  out.innerHTML = `
+    <div class="csub" style="margin-bottom:6px"><i class="fas fa-circle-check" style="color:var(--green)"></i> Link listo. Vence el ${esc(fmtFechaHoraCaracas(data.expira_en))}.</div>
+    <div style="display:flex;gap:8px">
+      <input class="ei" id="lp-url" type="text" readonly value="${esc(url)}" style="flex:1">
+      <button type="button" class="dbtn" id="lp-copiar" style="white-space:nowrap"><i class="fas fa-copy"></i> Copiar</button>
+    </div>`;
+  document.getElementById('lp-copiar').onclick = async () => {
+    try { await navigator.clipboard.writeText(url); okToast('Link copiado'); }
+    catch { errToast('El navegador no dejó copiar'); }
+  };
+  ACTIVIDAD_CACHE = null;
+}
+
+async function loadPagos() {
+  const loading = document.getElementById('pagos-loading');
+  const empty = document.getElementById('pagos-empty');
+  const lista = document.getElementById('pagos-lista');
+  if (!lista) return;
+  loading.classList.add('show'); empty.classList.remove('show'); lista.innerHTML = '';
+  const { data, error } = await sb.rpc('listar_pagos', { p_estado: 'pendiente_verificacion' });
+  loading.classList.remove('show');
+  if (error || !data?.ok) {
+    errToast(error?.message || data?.error || 'No se pudieron cargar los pagos');
+    return;
+  }
+  PAGOS_CACHE = data.pagos || [];
+  if (!PAGOS_CACHE.length) { empty.classList.add('show'); return; }
+  lista.innerHTML = PAGOS_CACHE.map(p => `
+    <div class="entity-card inbox-card" data-pago="${p.id}">
+      <div class="ec-top"><div class="ec-nombre">${esc(p.lead_nombre || 'Sin nombre')}</div></div>
+      <div class="ec-row"><i class="fas fa-tag"></i> ${esc(p.tipo === 'abono' ? 'Abono / reserva' : 'Pago total')} · ${esc(PAGO_RIEL_LABEL[p.riel] || p.riel)}</div>
+      <div class="ec-row"><i class="fas fa-dollar-sign"></i> ${esc(pagoMontoTexto(p))}</div>
+      <div class="ec-row"><i class="fas fa-hashtag"></i> Ref: ${esc(p.referencia_declarada || '—')}</div>
+      <div class="ec-row"><i class="fas fa-user"></i> ${esc(p.asesor || 'Sin asignar')}${p.lead_telefono ? ' · ' + esc(p.lead_telefono) : ''}</div>
+      <div class="ec-row"><i class="fas fa-clock"></i> ${esc(tiempoRelativo(p.created_at))}</div>
+      <div class="inbox-actions">
+        ${p.comprobante_path ? `<button type="button" class="inbox-btn" data-pago-comprobante="${p.id}"><i class="fas fa-receipt"></i> Comprobante</button>` : '<span class="ec-row" style="color:var(--amber)"><i class="fas fa-triangle-exclamation"></i> Sin comprobante</span>'}
+        <button type="button" class="inbox-btn atender" data-pago-aprobar="${p.id}"><i class="fas fa-check"></i> Aprobar</button>
+        <button type="button" class="inbox-btn nopuedo" data-pago-rechazar="${p.id}"><i class="fas fa-xmark"></i> Rechazar</button>
+      </div>
+    </div>`).join('');
+  entradaLista(lista);
+}
+
+async function abrirComprobantePago(id) {
+  const p = PAGOS_CACHE.find(x => x.id === id);
+  if (!p?.comprobante_path) return;
+  const { data, error } = await sb.storage.from('comprobantes-pago').createSignedUrl(p.comprobante_path, 300);
+  if (error || !data?.signedUrl) { errToast('No se pudo abrir el comprobante'); return; }
+  window.open(data.signedUrl, '_blank', 'noopener');
+}
+
+async function verificarPagoAccion(id, aprobar, btn) {
+  const p = PAGOS_CACHE.find(x => x.id === id);
+  if (!p) return;
+  let motivo = null;
+  if (aprobar) {
+    if (!confirm(`¿Aprobar este pago de ${pagoMontoTexto(p)}? Confirmá solo si ya comprobaste el monto y la referencia contra el banco.`)) return;
+  } else {
+    motivo = prompt('Motivo del rechazo (obligatorio):');
+    if (motivo === null) return;
+    if (!motivo.trim()) { errToast('Escribí el motivo del rechazo'); return; }
+  }
+  if (btn) btn.disabled = true;
+  const params = { p_pago_id: id, p_aprobar: aprobar };
+  if (motivo) params.p_motivo = motivo.trim();
+  const { data, error } = await sb.rpc('verificar_pago', params);
+  if (error || !data?.ok) {
+    if (btn) btn.disabled = false;
+    errToast(MSG_VERIFICAR_PAGO[data?.error] || error?.message || data?.error || 'No se pudo procesar el pago');
+    return;
+  }
+  okToast(aprobar ? 'Pago aprobado' : 'Pago rechazado');
+  loadPagos();
+  if (currentSec === 'facturacion') loadFacturacion();
+}
+
+function setupPagos() {
+  const lista = document.getElementById('pagos-lista');
+  if (!lista) return;
+  lista.addEventListener('click', e => {
+    const ver = e.target.closest('[data-pago-comprobante]');
+    if (ver) return abrirComprobantePago(Number(ver.dataset.pagoComprobante));
+    const apr = e.target.closest('[data-pago-aprobar]');
+    if (apr) return verificarPagoAccion(Number(apr.dataset.pagoAprobar), true, apr);
+    const rec = e.target.closest('[data-pago-rechazar]');
+    if (rec) return verificarPagoAccion(Number(rec.dataset.pagoRechazar), false, rec);
+  });
 }
 
 /* ---------- Nuevo lead manual (botón "Nuevo lead" en Leads, admin + asesor) /
@@ -16205,6 +16376,7 @@ const NAV_ITEMS = [
   { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', grupo: 'ventas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Postventa', grupo: 'ventas', roles: '', badge: 'nav-postventa-count', badgeDefault: '0', sub: 'Cobros, reservas y seguimiento del viaje' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', grupo: 'ventas', roles: 'nav-admin-only' },
+  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', grupo: 'ventas', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar' },
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', grupo: 'ventas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'mis-comisiones', icon: 'fas fa-sack-dollar', label: 'Mis Comisiones', grupo: 'ventas', roles: 'nav-asesor-only' },
   { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', grupo: 'ventas', roles: 'nav-admin-only' },
@@ -16422,6 +16594,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'ranking') loadRanking();
   if (sec === 'estadisticas') loadEstadisticas();
   if (sec === 'facturacion') loadFacturacion();
+  if (sec === 'pagos') loadPagos();
   if (sec === 'mis-comisiones') loadMisComisiones();
   if (sec === 'gestion-personal') loadGestionPersonal();
   if (sec === 'postventa') loadPostventa();
@@ -16661,7 +16834,7 @@ function setupAppBar() {
 // que pide esta fase. Si se agrega una sección nueva con carga propia, hay
 // que sumarla en los dos lugares.
 const REFRESCAR_SECCION = {
-  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), estadisticas: () => loadEstadisticas(), facturacion: () => loadFacturacion(),
+  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), estadisticas: () => loadEstadisticas(), facturacion: () => loadFacturacion(), pagos: () => loadPagos(),
   'mis-comisiones': () => loadMisComisiones(), 'gestion-personal': () => loadGestionPersonal(),
   postventa: () => loadPostventa(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),

@@ -4254,6 +4254,17 @@ body.fsize-grande{--tap:41.9px}
       </div>
     </section>
 
+    <!-- PAGOS POR VERIFICAR (Fase 1B -- link de pago; solo admin, ver verificar_pago) -->
+    <section class="section" id="sec-pagos">
+      <div class="card">
+        <h2><i class="fas fa-money-check-dollar"></i> Pagos por verificar</h2>
+        <div class="csub">Links de pago que un cliente declaró como pagados. Abrí el comprobante y comprobá el monto y la referencia contra el banco antes de aprobar.</div>
+        <div class="tbl-state skel" id="pagos-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
+        <div class="tbl-state" id="pagos-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No hay pagos pendientes de verificar</div></div>
+        <div class="leads-inbox-grid" id="pagos-lista"></div>
+      </div>
+    </section>
+
     <!-- Hoja "Ordenar" (Fase 4.1) -- segunda puerta de entrada al MISMO
          ordenamiento que ya viven los <th class="th-sort"> del thead, que
          queda oculto en móvil. Las opciones se arman leyendo esos mismos
