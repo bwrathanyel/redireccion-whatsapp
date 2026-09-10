@@ -12047,11 +12047,23 @@ async function loadTarifario() {
   // de una línea del PDF. Leer las dos fuentes listaba cada flyer dos veces.
   // `promocion_fotos` ya apunta a `tarifas` (la FK se repuntó en la migración
   // 20260904210000), así que las fotos de los flyers siguen llegando igual.
-  const q = (tarTab === 'promo' || tarTab === 'hotsale' || tarTab === 'ia')
-    ? sb.from('tarifas').select('*, tarifario_bloques(*), promocion_fotos(storage_path,orden,es_principal,activo), productos(id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))').or('titulo.not.is.null,hot_sale_estado.eq.poner').order('titulo')
-    : tarTab === 'boleteria'
-    ? soloVivos(sb.from('productos').select(selProductos).eq('es_boleteria', true)).order('nombre')
-    : soloVivos(sb.from('productos').select(selProductos).eq('tipo', tarTab).eq('es_boleteria', false)).order('nombre');
+  const TAR_PROMO_SEL = '*, tarifario_bloques(*), promocion_fotos(storage_path,orden,es_principal,activo), productos(id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))';
+  let q;
+  if (tarTab === 'ia') {
+    // La pestaña IA cura SOLO flyers (el RPC rechaza el resto), así que se filtra
+    // por `origen` EN EL SERVIDOR, no solo en el cliente. `tarifas` tiene ~6,6k
+    // líneas de PDF con título y PostgREST corta la respuesta en 1000 filas:
+    // ordenando por `titulo`, los flyers que caían pasada la fila 1000 (Margarita,
+    // Mérida, y ~80 más) no llegaban nunca al navegador -- la lista mostraba 31 de
+    // 111. Con el filtro son 111 filas, bien debajo del tope.
+    q = sb.from('tarifas').select(TAR_PROMO_SEL).eq('origen', 'flyer').order('titulo');
+  } else if (tarTab === 'promo' || tarTab === 'hotsale') {
+    q = sb.from('tarifas').select(TAR_PROMO_SEL).or('titulo.not.is.null,hot_sale_estado.eq.poner').order('titulo');
+  } else if (tarTab === 'boleteria') {
+    q = soloVivos(sb.from('productos').select(selProductos).eq('es_boleteria', true)).order('nombre');
+  } else {
+    q = soloVivos(sb.from('productos').select(selProductos).eq('tipo', tarTab).eq('es_boleteria', false)).order('nombre');
+  }
   const { data, error } = await q;
   loading.classList.remove('show'); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
@@ -17985,7 +17997,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-09-09', emoji: '🤖', titulo: 'Nueva pestaña "IA" en el Tarifario: qué promociones ofrece el bot', texto: 'Solo admin. En el Tarifario hay una pestaña "IA" al lado de Hot Sale que muestra, ordenadas, las promociones que la IA de ventas puede ofrecer en cada conversación, con una línea de corte explícita: de ahí para abajo el bot no las ve. Cada fila tiene su estado tri-estado (Ofrecer / No ofrecer / Auto) y badges de aviso (Vencida, Vence en ≤7 días, Sin publicar en web, Fuera de TOP IA, Genérica). "Ofrecer" fuerza una promo aunque no esté publicada en la web; "No ofrecer" saca una que sí lo está; "Auto" (por defecto, en todas hoy) deja el comportamiento actual sin cambios. La cabecera estima cuántos tokens agrega la lista a cada conversación. Se puede reordenar arrastrando. Esta pantalla solo marca y ordena: nunca edita el texto ni el precio de una promo. El bot todavía no lee estas marcas -- eso llega en un despliegue aparte.', roles: ['admin'] },
+  { fecha: '2026-09-10', emoji: '🤖', titulo: 'Pestaña "IA" del Tarifario: ahora salen TODAS las promociones', texto: 'Solo admin. La pestaña "IA" (la que decide qué promociones puede ofrecer el bot de ventas) mostraba solo 31 de las 111 promociones -- faltaban hoteles enteros (Margarita, Mérida y muchos más). Ya se ven las 111: las que el bot ofrece hoy arriba, con una línea de corte, y el resto abajo en "La IA no las ofrece hoy". A cualquiera de las de abajo le podés dar "Ofrecer" para sumarla. Recordá: el bot todavía no lee estas marcas, eso llega en un despliegue aparte.', roles: ['admin'] },
   { fecha: '2026-09-06', emoji: '🗂️', titulo: 'Las promociones retiradas ya no ensucian la ficha del hotel', texto: 'En la carpeta de tarifas de un hotel, las promociones que ya no se venden (retiradas del PDF, con la fecha de venta o de disfrute pasada) dejan de amontonarse con el cartel rojo "Ya no se vende". Ahora las vivas se ven arriba como siempre y las retiradas se guardan en un desplegable "Ver histórico (N)" al final, cerrado por defecto. El título de la carpeta cuenta solo las que se venden -- si no queda ninguna viva dice "Sin promociones vigentes". Abriendo el histórico están todas, atenuadas, con los botones de admin (Hot Sales, Retirar del catálogo) intactos: no se borró nada, solo se corrió de lugar.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '🔥', titulo: 'Hot Sales desde la tarjeta, hotel con un toque y el precio doble en grande', texto: 'Tres cambios en el Tarifario. (1) El nombre del hotel arriba de cada tarjeta de promoción ahora es un botón: lo tocás y se abre la ficha del hotel, sin buscarlo. (2) Cuando una tarifa tiene precios por ocupación (SGL/DBL/TPL...), la tarjeta muestra el precio DOBLE en grande como titular -- "$75 por persona / noche · ocupación doble", que es como se promociona en redes -- y el resto de las columnas abajo en chico. Las tarjetas sin grilla de precios no cambian. (3) Solo admin: cada promoción tiene un botón de fuego para ponerla o sacarla de Hot Sales sin entrar al panel de Ranking, y funciona igual para los flyers y para las líneas sueltas del PDF. Las promociones viejas de "precio suelto" (un solo monto de texto, sin grilla, de antes del repaso del tarifario) tienen además un botón "Retirar del catálogo" que las saca de la web y de Hot Sales -- es reversible. Ese botón no aparece en Chichiriviche, Mifafi, Gremary ni Heidelberg, que solo tienen ese tipo de promo.', roles: ROLES_TODOS },
   { fecha: '2026-09-05', emoji: '👥', titulo: 'Cuánta gente entra en cada habitación', texto: 'Cada tarjeta de tarifa dice ahora "Hasta N adultos": es hasta cuántos cotiza el proveedor en el PDF (las columnas SGL/DBL/TPL/CDP de esa fila), o sea lo que de verdad se puede vender. Arriba, en los filtros del Tarifario, hay un campo "Somos..." para escribir el tamaño del grupo: los hoteles donde no entran desaparecen de la lista, y dentro del hotel las habitaciones que quedan chicas se ven apagadas con el cartel "No entran N". Una tarifa cuyo PDF no trae columnas por ocupación no se esconde nunca: no sabemos que no entren. El comparador suma las filas de la habitación (tamaño, camas, vista, amenities) y, cuando comparás la misma habitación en dos temporadas, ya no rotula las dos columnas igual. Ojo con una distinción que ahora está a la vista: "Hasta N adultos" es lo vendible, mientras que "Capacidad según la web del hotel" y "Ocupación máxima (según el PDF)" son descriptivas y casi siempre dan un número mayor porque cuentan niños y camas extra. El Cotizador IA usa solo la vendible, y si el grupo no entra en una habitación reparte en varias y muestra cómo quedan. Con niños: el tarifario no dice en ningún lado cuántos niños entran por habitación (las líneas CHD son precio por edad, no cupo), así que la IA reparte y el sistema controla que la cuenta cierre, pero no afirma cupos de niños: si hace falta te va a pedir las edades y aclarar que eso lo confirma el hotel.', roles: ROLES_TODOS },
