@@ -12265,15 +12265,31 @@ async function loadTarifario() {
     // Desde 2026-09-10 la pestaña IA cura CUALQUIER tarifa, no solo flyers
     // (migración 20260910160000), así que ya no vale el atajo
     // `.eq('origen','flyer')`. `tarifas` tiene ~6,6k líneas de PDF con título y
-    // PostgREST corta la respuesta en 1000 filas: ordenando por `titulo`, los
-    // flyers que caían pasada la fila 1000 (Margarita, Mérida, y ~80 más) no
-    // llegaban nunca. Se traen los flyers en una query aparte (~111 filas) para
-    // garantizarlos; las líneas de PDF quedan best-effort bajo el tope, igual que
-    // antes. La segunda query también trae lo forzado a mano (hot sale o IA) para
+    // PostgREST corta la respuesta en 1000 filas: ordenando por `titulo`, todo
+    // lo que caía pasada esa fila (flyers Margarita/Mérida, y las líneas de PDF
+    // "SOLO DESAYUNO"/"SOLO ALOJAMIENTO" con títulos tardíos tipo "Temporada
+    // Baja"/"VACACIONES") no llegaba nunca. Ahora la 2da query se pagina por
+    // rango hasta agotar; la de flyers queda aparte (~111) para no depender de
+    // la paginación en el caso crítico. Orden por `id` (estable, sin empates
+    // que rompan el rango) -- renderTarifario re-ordena promo/hotsale por
+    // precio y renderTarifarioIA por `ia_orden`, así que el orden de fetch da
+    // igual. La 2da query también trae lo forzado a mano (hot sale o IA) para
     // que un override sobre una fila sin título no se pierda. Merge por `id`.
+    const PAGINA_TARIFAS = 1000;
+    const traerTarifasPaginado = async (nuevaQuery) => {
+      const acc = [];
+      for (let desde = 0; ; desde += PAGINA_TARIFAS) {
+        const { data: d, error: e } = await nuevaQuery().range(desde, desde + PAGINA_TARIFAS - 1);
+        if (e) return { data: null, error: e };
+        acc.push(...(d || []));
+        if (!d || d.length < PAGINA_TARIFAS) break;
+      }
+      return { data: acc, error: null };
+    };
     const [rf, rp] = await Promise.all([
-      sb.from('tarifas').select(TAR_PROMO_SEL).eq('origen', 'flyer').order('titulo'),
-      sb.from('tarifas').select(TAR_PROMO_SEL).or('titulo.not.is.null,hot_sale_estado.eq.poner,ia_estado.eq.poner').order('titulo'),
+      sb.from('tarifas').select(TAR_PROMO_SEL).eq('origen', 'flyer').order('id'),
+      traerTarifasPaginado(() => sb.from('tarifas').select(TAR_PROMO_SEL)
+        .or('titulo.not.is.null,hot_sale_estado.eq.poner,ia_estado.eq.poner').order('id')),
     ]);
     error = rf.error || rp.error;
     if (!error) {
@@ -18225,6 +18241,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-10', emoji: '🏷️', titulo: 'Promociones y Hot Sales: volvieron las tarifas "solo desayuno" y "solo alojamiento"', texto: 'Las pestañas "Promociones" y "Hot Sales" traían el listado del tarifario cortado en 1000 filas: las tarifas cuyo título cae tarde en el abecedario ("Temporada Baja", "Vacaciones", "Fin de Año"...) no aparecían -- entre ellas casi todas las de régimen "solo desayuno" y "solo alojamiento". Ahora el listado se trae completo en tandas, así que se ven todas. Puede tardar un par de segundos más la primera vez que entrás a esas pestañas.', roles: ROLES_TODOS },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'La curación de la IA ya no es solo para flyers', texto: 'Solo admin. La pestaña "IA" y el botón morado del robot cubrían únicamente las promociones que venían de un flyer. Ahora aplican a CUALQUIER tarifa con título -- las líneas sueltas del PDF y las tarifas cargadas a mano dentro de la ficha de un hotel también se pueden marcar para que el bot las ofrezca. Diferencia importante: una línea de PDF nunca entra sola, hay que activarla a mano con "Ofrecer"; los flyers siguen entrando automáticamente si están publicados. El bot todavía no lee estas marcas para los no-flyers, eso llega en un despliegue aparte.', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'Botón de la IA en todas las promociones del Tarifario', texto: 'Solo admin. El botón morado del robot -- el que decide si el bot de ventas puede ofrecer una promoción -- ahora aparece en TODAS las promociones: en las tarjetas, en la vista de lista, en las fichas y dentro de la carpeta de tarifas de cada hotel, no solo en la pestaña "IA". Sale marcado en las que la IA ya ofrece hoy y desmarcado en las que no; le das click para activar o desactivar cada una. Las vencidas salen en gris y no se pueden activar. El ajuste fino (dejar en "Auto", ordenar, ver el tope de 25) sigue estando solo en la pestaña "IA".', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'Pestaña "IA" del Tarifario: precio de cada promo y sin vencidas de relleno', texto: 'Solo admin. Cada fila de la pestaña "IA" ahora muestra debajo del nombre el precio de la promoción y las primeras etiquetas de qué incluye, para marcar y ordenar sin abrir cada tarjeta. Además, en el bloque "La IA no las ofrece hoy" ya no se listan las promociones vencidas que no tengan una marca manual -- eran ruido muerto; el encabezado del bloque dice cuántas se ocultaron. Las vencidas que alguien haya marcado a mano siguen visibles para poder limpiarles la marca.', roles: ['admin'] },
