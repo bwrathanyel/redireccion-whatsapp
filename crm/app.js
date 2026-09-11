@@ -6535,8 +6535,14 @@ function actBannerHtml(d) {
     const primera = puertas.find(p => !p.ok);
     return `<div class="act-banner aviso"><i class="fas fa-hand"></i><div><b>Frenado, esperando una persona</b><div>${esc(primera?.nombre || '')}: ${esc(primera?.detalle || '')}</div></div></div>`;
   }
+  if (carga && carga.estado === 'borrador' && d.publicacion?.frenado_en) {
+    return `<div class="act-banner aviso"><i class="fas fa-hand"></i><div><b>Frenado por tope de gasto</b><div>${esc(d.publicacion.motivo_freno || 'La carga superó el límite de gasto del día.')}</div></div></div>`;
+  }
+  if (carga && carga.estado === 'borrador' && d.publicacion?.auto_activar === false) {
+    return `<div class="act-banner aviso"><i class="fas fa-hand"></i><div><b>Publicación automática apagada</b><div>El borrador está listo pero alguien apagó el interruptor. Usá "Publicar ahora" o volvé a prenderlo.</div></div></div>`;
+  }
   if (carga && carga.estado === 'borrador') {
-    return `<div class="act-banner ok"><i class="fas fa-rocket"></i><div><b>Tarifario nuevo listo</b><div>Pasó las tres puertas y se publica solo.</div></div></div>`;
+    return `<div class="act-banner ok"><i class="fas fa-rocket"></i><div><b>Tarifario nuevo listo</b><div>Pasó la verificación y se publica solo.</div></div></div>`;
   }
   return `<div class="act-banner ok"><i class="fas fa-circle-check"></i><div><b>Todo automático y al día</b><div>${vivo ? `Catálogo vivo: ${esc(vivo.archivo)}` : 'Sin cargas en curso ni nada que revisar.'}</div></div></div>`;
 }
@@ -6580,21 +6586,41 @@ function actCargaHtml(d) {
 function actPuertasHtml(d) {
   const p = d.puertas || [];
   if (!p.length) return '';
+  // `puertas` ahora trae una sola entrada real: la que de verdad decide si el
+  // cron publica. Lo que antes eran "puertas" y no frenaban (movimiento de
+  // precios, duplicados de nombre) va en `avisos`, aparte y nunca en rojo.
   const todas = p.every(x => x.ok);
+  const avisos = d.avisos || [];
+  const autoOff = d.publicacion?.auto_activar === false;
+  const frenado = !!d.publicacion?.frenado_en;
+
   const filas = p.map(x => `
     <div class="act-puerta ${x.ok ? '' : 'frenada'}">
       <div class="act-puerta-ico ${x.ok ? 'act-puerta-ok' : 'act-puerta-mal'}"><i class="fas fa-${x.ok ? 'circle-check' : 'circle-exclamation'}"></i></div>
       <div style="flex:1;min-width:0">
         <div class="act-puerta-nom">${esc(x.nombre)}</div>
         <div class="act-puerta-det">${esc(x.detalle || '')}</div>
-        ${(x.pares || []).length ? `<div class="act-puerta-det" style="margin-top:4px;color:#ffd595">${(x.pares || []).map(q => esc(`${q.a} ↔ ${q.b}`)).join('<br>')}</div>` : ''}
+      </div>
+    </div>`).join('');
+
+  const avisosHtml = avisos.map(x => `
+    <div class="act-puerta">
+      <div class="act-puerta-ico" style="color:var(--muted2)"><i class="fas fa-circle-info"></i></div>
+      <div style="flex:1;min-width:0">
+        <div class="act-puerta-nom">${esc(x.nombre)}</div>
+        <div class="act-puerta-det">${esc(x.detalle || '')}</div>
+        ${(x.pares || []).map(q => `<div class="act-puerta-det" style="margin-top:5px;display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+          <span style="color:#ffd595">${esc(q.a)} ↔ ${esc(q.b)}</span>
+          <button class="btn-sm" type="button" data-act-nodup-a="${esc(q.a)}" data-act-nodup-b="${esc(q.b)}">No son el mismo</button>
+        </div>`).join('')}
       </div>
     </div>`).join('');
 
   const mov = ((d.carga?.informe?.precios || {}).saltos_fuertes || []).slice(0, 8);
   return `<div class="act-blk">
-    <div class="act-blk-t">Puertas para publicar</div>
+    <div class="act-blk-t">Para publicar</div>
     ${filas}
+    ${avisosHtml ? `<div class="act-blk-t" style="margin:13px 0 7px">Para mirar (no frena)</div>${avisosHtml}` : ''}
     ${mov.length ? `<div class="act-blk-t" style="margin:13px 0 7px">Los que más se mueven</div>
       ${mov.map(m => `<div class="act-mov">
         <div class="act-mov-nom">${esc(m.hotel)}</div>
@@ -6607,9 +6633,15 @@ function actPuertasHtml(d) {
       <button class="dbtn" id="act-revertir" type="button" style="flex:none;width:auto;padding:9px 14px;font-size:12.5px">
         <i class="fas fa-rotate-left"></i> Descartar borrador</button>
     </div>
-    ${todas ? '<div class="act-sub" style="margin-top:8px">Pasó las tres. Se publica sola en la próxima corrida; el botón solo la adelanta.</div>'
-            : '<div class="act-sub" style="margin-top:8px;color:#ffd595">No se va a publicar sola hasta que resuelvas lo de arriba.</div>'}
+    ${actPuertasNota(todas, autoOff, frenado, d.publicacion?.motivo_freno)}
   </div>`;
+}
+
+function actPuertasNota(todas, autoOff, frenado, motivo) {
+  if (!todas) return '<div class="act-sub" style="margin-top:8px;color:#ffd595">La verificación no pasó: no se publica sola hasta resolverlo.</div>';
+  if (frenado) return `<div class="act-sub" style="margin-top:8px;color:#ffd595">Frenada por tope de gasto${motivo ? ': ' + esc(motivo) : ''}. El botón la publica igual.</div>`;
+  if (autoOff) return '<div class="act-sub" style="margin-top:8px;color:#ffd595">Lista, pero la publicación automática está apagada. El botón la publica ahora.</div>';
+  return '<div class="act-sub" style="margin-top:8px">Verificación en orden. Se publica sola en la próxima corrida; el botón solo la adelanta.</div>';
 }
 
 function actSaludHtml(salud) {
@@ -6678,6 +6710,15 @@ async function actActivarCarga() {
   okToast(`Publicado: ${data?.tarifas_activadas ?? 0} precios nuevos`);
   cargarPanelProceso();
   loadTarifario();
+}
+
+async function actMarcarNoDup(a, b) {
+  if (!(await confirmarSheet({ titulo: '¿No son el mismo?', detalle: `"${a}"\ny\n"${b}"\n\nDejan de aparecer como posible duplicado, para siempre.`, textoOk: 'No son el mismo' }))) return;
+  const { data, error } = await sb.rpc('marcar_no_duplicados', { p_a: a, p_b: b });
+  if (error) return errToast(error.message);
+  if (data && data.ok === false) return errToast(data.error || 'No se pudo guardar');
+  okToast('Anotado');
+  cargarPanelProceso();
 }
 
 async function actRevertirCarga() {
@@ -12094,6 +12135,8 @@ function setupTarAdmin() {
     if (det) det.classList.toggle('abierto');
     if (ev.target.closest('#act-activar')) return actActivarCarga();
     if (ev.target.closest('#act-revertir')) return actRevertirCarga();
+    const nodup = ev.target.closest('[data-act-nodup-a]');
+    if (nodup) return actMarcarNoDup(nodup.dataset.actNodupA, nodup.dataset.actNodupB);
   });
   document.getElementById('tas-close').onclick = () => closeSheet('tar-admin-sheet');
   let debTas; document.getElementById('tas-search').addEventListener('input', () => { clearTimeout(debTas); debTas = setTimeout(renderTasList, 200); });
@@ -18241,6 +18284,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-11', emoji: '🚦', titulo: 'Panel del tarifario: el semáforo ya dice la verdad', texto: 'Solo admin. "Actualización automática" tenía tres "puertas" pintadas de rojo aunque solo una frenaba de verdad la publicación -- los "Duplicados de nombre" y el "Movimiento de precios" ya no bloqueaban nada hace semanas, pero el panel seguía mostrando "Frenado, esperando una persona" igual. Ahora solo queda una puerta real ("Verificación"); duplicados y movimiento de precios pasan a un bloque informativo "Para mirar (no frena)" debajo. Se agregó un botón "No son el mismo" en cada par de duplicados para sacarlos de la lista sin tocar la base a mano, y el banner ahora distingue si lo que frena es un bloqueo real, el tope de gasto del día, o que alguien apagó el interruptor de publicación automática (que estaba apagado desde el 27-ago -- ya se prendió). De yapa, un par de duplicados que salía dos veces (A↔B y B↔A) ahora sale una sola vez.', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🏷️', titulo: 'Promociones y Hot Sales: volvieron las tarifas "solo desayuno" y "solo alojamiento"', texto: 'Las pestañas "Promociones" y "Hot Sales" traían el listado del tarifario cortado en 1000 filas: las tarifas cuyo título cae tarde en el abecedario ("Temporada Baja", "Vacaciones", "Fin de Año"...) no aparecían -- entre ellas casi todas las de régimen "solo desayuno" y "solo alojamiento". Ahora el listado se trae completo en tandas, así que se ven todas. Puede tardar un par de segundos más la primera vez que entrás a esas pestañas.', roles: ROLES_TODOS },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'La curación de la IA ya no es solo para flyers', texto: 'Solo admin. La pestaña "IA" y el botón morado del robot cubrían únicamente las promociones que venían de un flyer. Ahora aplican a CUALQUIER tarifa con título -- las líneas sueltas del PDF y las tarifas cargadas a mano dentro de la ficha de un hotel también se pueden marcar para que el bot las ofrezca. Diferencia importante: una línea de PDF nunca entra sola, hay que activarla a mano con "Ofrecer"; los flyers siguen entrando automáticamente si están publicados. El bot todavía no lee estas marcas para los no-flyers, eso llega en un despliegue aparte.', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'Botón de la IA en todas las promociones del Tarifario', texto: 'Solo admin. El botón morado del robot -- el que decide si el bot de ventas puede ofrecer una promoción -- ahora aparece en TODAS las promociones: en las tarjetas, en la vista de lista, en las fichas y dentro de la carpeta de tarifas de cada hotel, no solo en la pestaña "IA". Sale marcado en las que la IA ya ofrece hoy y desmarcado en las que no; le das click para activar o desactivar cada una. Las vencidas salen en gris y no se pueden activar. El ajuste fino (dejar en "Auto", ordenar, ver el tope de 25) sigue estando solo en la pestaña "IA".', roles: ['admin'] },
