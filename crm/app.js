@@ -2438,7 +2438,7 @@ async function startApp() {
   // del mismo query en paralelo sin orden garantizado de resolución.
   arrancar(
     setupMetricas, setupRanking, setupEstadisticas, setupReasignaciones, setupAsesoresPeriodo,
-    setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs,
+    setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
     setupBuscadorIATarifario, setupCerebroIA, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
     setupRankingCatalogo,
     setupDestPeriodo, loadDestPeriodo,
@@ -7448,6 +7448,26 @@ window.abrirNuevoClienteFacturacion = async (bandejaItem) => {
 
 document.getElementById('fact-nuevo-cliente-btn')?.addEventListener('click', () => window.abrirNuevoClienteFacturacion());
 
+// Conciliación manual: conciliar_pago_factura existe desde Fase 0 pero nunca
+// tuvo botón -- la única forma de pegar un pago verificado a una factura era
+// SQL directo. Con webhooks (Fase 2/3) esto se automatiza; hasta entonces,
+// un pago Zelle/Pago Móvil declarado y aprobado necesita quedar asociado a
+// su factura a mano para que el asesor vea la venta completa.
+document.getElementById('fact-vincular-pago-btn')?.addEventListener('click', async () => {
+  const pagoId = parseInt(prompt('ID del pago (verificado) a vincular:') || '', 10);
+  if (!pagoId) return;
+  const facturaId = parseInt(prompt('ID de la factura a la que se vincula:') || '', 10);
+  if (!facturaId) return;
+  if (!confirm(`¿Vincular el pago #${pagoId} a la factura #${facturaId}?`)) return;
+  const { data, error } = await sb.rpc('conciliar_pago_factura', { p_pago_id: pagoId, p_factura_id: facturaId });
+  if (error || !data?.ok) {
+    errToast(MSG_VERIFICAR_PAGO[data?.error] || error?.message || data?.error || 'No se pudo vincular');
+    return;
+  }
+  okToast(`Pago #${pagoId} vinculado a la factura #${facturaId}`);
+  loadFacturacion();
+});
+
 document.getElementById('nl-buscar-cliente')?.addEventListener('input', (e) => {
   clearTimeout(NL_BUSCAR_DEBOUNCE);
   const q = e.target.value.trim();
@@ -11505,6 +11525,182 @@ async function loadMisComisiones() {
       <td data-label="Estado"><span class="chip">${esc(c.estado)}</span></td>
       <td data-label="Fecha de pago" class="muted">${esc(fmtFechaHoraCaracas(c.fecha_pago))}</td>
     </tr>`).join('') || '<tr><td colspan="5">Sin comisiones todavía</td></tr>';
+}
+
+/* ---------- Importar vouchers ----------
+   Sube vouchers PDF y los carga como venta reusando las RPCs del cierre normal
+   (crear_lead_manual / actualizar_lead / guardar_postventa). Dos pasos a
+   propósito: primero la Edge Function `voucher-a-venta` LEE cada PDF y muestra la
+   tabla editable; recién al confirmar se escribe. Se factura lo COBRADO (suma de
+   abonos); el total y el saldo van a Postventa. */
+let IV_FILAS = [];
+let IV_SEQ = 0;
+
+function setupImportarVouchers() {
+  const input = document.getElementById('iv-file');
+  const drop = document.getElementById('iv-drop');
+  if (!input || input._wired) return;
+  input._wired = true;
+  input.addEventListener('change', () => { if (input.files?.length) ivLeerArchivos([...input.files]); input.value = ''; });
+  document.getElementById('iv-importar-btn')?.addEventListener('click', ivImportar);
+  document.getElementById('iv-limpiar-btn')?.addEventListener('click', () => { IV_FILAS = []; ivRender(); document.getElementById('iv-resultado').innerHTML = ''; });
+  drop?.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('cargando'); });
+  drop?.addEventListener('dragleave', () => drop.classList.remove('cargando'));
+  drop?.addEventListener('drop', e => {
+    e.preventDefault(); drop.classList.remove('cargando');
+    const pdfs = [...(e.dataTransfer?.files || [])].filter(f => f.type === 'application/pdf');
+    if (pdfs.length) ivLeerArchivos(pdfs);
+  });
+}
+
+function ivArchivoABase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1]);
+    r.onerror = () => reject(new Error('No se pudo leer el archivo'));
+    r.readAsDataURL(file);
+  });
+}
+async function ivHash(b64) {
+  try {
+    const bin = atob(b64); const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const buf = await crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch { return null; }
+}
+
+async function ivLeerArchivos(files) {
+  const drop = document.getElementById('iv-drop');
+  drop?.classList.add('cargando');
+  for (const file of files) {
+    if (file.type !== 'application/pdf') { errToast(`${file.name}: no es PDF`); continue; }
+    const fila = { id: ++IV_SEQ, nombre: file.name, datos: null, pdf_b64: null, hash: null,
+      lead_id: null, crear_lead: false, reasignar: false, estado: 'leyendo', sel: true, candidatos: [], resultado: null };
+    IV_FILAS.push(fila); ivRender();
+    try {
+      fila.pdf_b64 = await ivArchivoABase64(file);
+      fila.hash = await ivHash(fila.pdf_b64);
+      const { data, error } = await sb.functions.invoke('voucher-a-venta', {
+        body: { accion: 'leer', pdf_base64: fila.pdf_b64, nombre_archivo: file.name },
+      });
+      if (error || !data?.ok) { fila.estado = 'error'; fila.resultado = data?.detalle || data?.error || error?.message || 'no se pudo leer'; ivRender(); continue; }
+      fila.datos = data.datos;
+      fila.estado = data.datos.necesita_revision ? 'revisar' : 'ok';
+      fila.candidatos = await ivBuscarLeads(data.datos);
+      fila.lead_id = ivElegirLeadInicial(fila);
+      ivRender();
+    } catch (e) { fila.estado = 'error'; fila.resultado = e.message; ivRender(); }
+  }
+  drop?.classList.remove('cargando');
+}
+
+async function ivBuscarLeads(d) {
+  const digitos = String(d.telefono || '').replace(/\D/g, '');
+  const cola = digitos.slice(-7);
+  const primerNombre = String(d.cliente_nombre || '').trim().split(/\s+/)[0] || '';
+  const ors = [];
+  if (cola.length >= 6) ors.push(`telefono.ilike.*${cola}*`);
+  if (primerNombre.length >= 3) ors.push(`nombre.ilike.*${primerNombre}*`);
+  if (!ors.length) return [];
+  const { data, error } = await sb.from('leads')
+    .select('id,nombre,telefono,asesor,estado')
+    .or(ors.join(','))
+    .is('eliminado_at', null)
+    .limit(8);
+  return error ? [] : (data || []);
+}
+function ivNorm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim(); }
+function ivElegirLeadInicial(fila) {
+  const d = fila.datos, cands = fila.candidatos;
+  if (!cands.length) { fila.crear_lead = true; return null; }
+  const nom = ivNorm(d.cliente_nombre), asesorPdf = ivNorm(d.asesor_pdf);
+  const exacto = cands.find(c => ivNorm(c.nombre) === nom && ivNorm(c.asesor) === asesorPdf)
+    || cands.find(c => ivNorm(c.nombre).includes(nom) || nom.includes(ivNorm(c.nombre)));
+  if (!exacto) { fila.crear_lead = true; return null; }
+  if (asesorPdf && ivNorm(exacto.asesor) !== asesorPdf) { fila.crear_lead = true; return exacto.id; }
+  fila.crear_lead = false;
+  return exacto.id;
+}
+
+function ivMoney(n) { return n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+function ivRender() {
+  const cont = document.getElementById('iv-lista');
+  const barra = document.getElementById('iv-barra');
+  if (!cont) return;
+  if (!IV_FILAS.length) { cont.innerHTML = ''; if (barra) barra.style.display = 'none'; return; }
+  const esAdmin = ROL === 'admin';
+  const filas = IV_FILAS.map(f => {
+    const d = f.datos || {};
+    const cls = f.estado === 'hecho' ? 'iv-fila-hecho' : f.estado === 'error' ? 'iv-fila-error'
+      : f.estado === 'duplicado' ? 'iv-fila-duplicado' : f.estado === 'revisar' ? 'iv-fila-revisar'
+      : f.estado === 'ok' ? 'iv-fila-ok' : '';
+    if (f.estado === 'leyendo') return `<tr><td colspan="9"><i class="fas fa-circle-notch fa-spin"></i> Leyendo ${esc(f.nombre)}…</td></tr>`;
+    if (f.estado === 'error' && !d.numero_voucher) return `<tr class="iv-fila-error"><td colspan="9">${esc(f.nombre)}: ${esc(f.resultado || 'no se pudo leer')}</td></tr>`;
+    const cand = (f.candidatos || []).find(c => c.id === f.lead_id);
+    const opciones = [`<option value="">➕ Crear lead nuevo</option>`].concat(
+      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}</option>`)
+    ).join('');
+    const mismatch = cand && !f.crear_lead && cand.asesor && ivNorm(cand.asesor) !== ivNorm(d.asesor_pdf);
+    return `<tr class="${cls}" data-fid="${f.id}">
+      <td>${['hecho', 'error', 'duplicado'].includes(f.estado) ? '' : `<input type="checkbox" class="iv-sel" ${f.sel ? 'checked' : ''}>`}</td>
+      <td>${esc(String(d.numero_voucher ?? '?'))}<div class="muted" style="font-size:10.5px">${esc(f.nombre)}</div></td>
+      <td><input type="text" class="iv-in" data-k="cliente_nombre" value="${esc(d.cliente_nombre || '')}"></td>
+      <td><input type="text" class="iv-in" data-k="telefono" value="${esc(d.telefono || '')}"></td>
+      <td><input type="text" class="iv-in" data-k="asesor_pdf" value="${esc(d.asesor_pdf || '')}"></td>
+      <td><input type="text" class="iv-in" data-k="destino" value="${esc(d.destino || '')}"></td>
+      <td>${ivMoney(d.total_general)}</td>
+      <td><input type="number" step="0.01" class="iv-in" data-k="total_cobrado" value="${d.total_cobrado ?? ''}"></td>
+      <td>
+        <select class="iv-lead">${opciones}</select>
+        ${mismatch ? `<div class="iv-nota">El lead es de ${esc(cand.asesor)}, el voucher dice ${esc(d.asesor_pdf)}.${esAdmin ? ` <label><input type="checkbox" class="iv-reasignar" ${f.reasignar ? 'checked' : ''}> reasignar</label>` : ''}</div>` : ''}
+        ${f.resultado && f.estado !== 'hecho' ? `<div class="iv-nota">${esc(f.resultado)}</div>` : ''}
+        ${d.nota_revision && !f.resultado ? `<div class="iv-nota">${esc(d.nota_revision)}</div>` : ''}
+        ${f.estado === 'hecho' ? `<span class="iv-tag">Facturado ${ivMoney(f.resultado_monto)}</span> <span class="muted" style="font-size:10.5px">${esc(f.resultado || '')}</span>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+  cont.innerHTML = `<div class="iv-tabla-wrap"><table class="iv-tabla">
+    <thead><tr><th></th><th>N°</th><th>Cliente</th><th>Teléfono</th><th>Asesor (PDF)</th><th>Hotel</th><th>Total</th><th>Cobrado</th><th>Lead</th></tr></thead>
+    <tbody>${filas}</tbody></table></div>`;
+  if (barra) barra.style.display = IV_FILAS.some(f => ['ok', 'revisar'].includes(f.estado)) ? 'flex' : 'none';
+  cont.querySelectorAll('tr[data-fid]').forEach(tr => {
+    const f = IV_FILAS.find(x => x.id === +tr.dataset.fid); if (!f) return;
+    tr.querySelector('.iv-sel')?.addEventListener('change', e => f.sel = e.target.checked);
+    tr.querySelector('.iv-lead')?.addEventListener('change', e => { f.lead_id = e.target.value ? +e.target.value : null; f.crear_lead = !e.target.value; ivRender(); });
+    tr.querySelector('.iv-reasignar')?.addEventListener('change', e => f.reasignar = e.target.checked);
+    tr.querySelectorAll('.iv-in').forEach(inp => inp.addEventListener('change', e => {
+      const k = e.target.dataset.k;
+      f.datos[k] = k === 'total_cobrado' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value;
+    }));
+  });
+}
+
+async function ivImportar() {
+  const pend = IV_FILAS.filter(f => f.sel && f.datos && ['ok', 'revisar'].includes(f.estado));
+  if (!pend.length) { errToast('No hay filas para importar'); return; }
+  const btn = document.getElementById('iv-importar-btn');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Importando…';
+  const filas = pend.map(f => ({
+    datos: f.datos, lead_id: f.crear_lead ? null : f.lead_id, crear_lead: f.crear_lead,
+    reasignar: f.reasignar, pdf_base64: f.pdf_b64, archivo_hash: f.hash,
+  }));
+  const { data, error } = await sb.functions.invoke('voucher-a-venta', { body: { accion: 'importar', filas } });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-import"></i> Importar seleccionados';
+  if (error || !data?.ok) { errToast('Falló la importación: ' + (data?.error || error?.message || '')); return; }
+  const porNum = {};
+  (data.resultados || []).forEach(r => { porNum[r.numero_voucher] = r; });
+  pend.forEach(f => {
+    const r = porNum[f.datos.numero_voucher]; if (!r) return;
+    if (r.estado === 'importado') { f.estado = 'hecho'; f.resultado = 'Lead #' + r.lead_id + (r.factura_id ? ' · factura #' + r.factura_id : ''); f.resultado_monto = r.monto_facturado; f.sel = false; }
+    else if (r.estado === 'ya_facturado') { f.estado = 'duplicado'; f.resultado = 'El lead ya tenía factura'; f.sel = false; }
+    else if (r.estado === 'duplicado') { f.estado = 'duplicado'; f.resultado = 'Voucher ya importado antes'; f.sel = false; }
+    else { f.estado = 'error'; f.resultado = r.error || 'error'; }
+  });
+  const ok = (data.resultados || []).filter(r => r.estado === 'importado').length;
+  if (ok) okToast(`${ok} voucher${ok > 1 ? 's' : ''} importado${ok > 1 ? 's' : ''}`);
+  ivRender();
 }
 
 /* ---------- Tarifario ---------- */
@@ -16442,6 +16638,7 @@ const NAV_ITEMS = [
   { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', grupo: 'ventas', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar' },
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', grupo: 'ventas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'mis-comisiones', icon: 'fas fa-sack-dollar', label: 'Mis Comisiones', grupo: 'ventas', roles: 'nav-asesor-only' },
+  { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', grupo: 'ventas', roles: '', sub: 'Cargá vouchers PDF como venta' },
   { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', grupo: 'ventas', roles: 'nav-admin-only' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', grupo: 'tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', excludeSheet: true },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', grupo: 'tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
@@ -18284,6 +18481,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-12', emoji: '🔗', titulo: 'Facturación: botón para vincular un pago a una factura', texto: 'Solo admin. Un pago de la pasarela (Zelle, Pago Móvil...) ya aprobado se podía verificar, pero no había forma de pegarlo a su factura sin tocar la base a mano. Nuevo botón "Vincular pago a factura" en Facturación pide el ID del pago y el de la factura y usa la misma validación de siempre (no deja pasarse del total ni re-pegar un pago que ya estaba vinculado a otra).', roles: ['admin'] },
   { fecha: '2026-09-11', emoji: '🚦', titulo: 'Panel del tarifario: el semáforo ya dice la verdad', texto: 'Solo admin. "Actualización automática" tenía tres "puertas" pintadas de rojo aunque solo una frenaba de verdad la publicación -- los "Duplicados de nombre" y el "Movimiento de precios" ya no bloqueaban nada hace semanas, pero el panel seguía mostrando "Frenado, esperando una persona" igual. Ahora solo queda una puerta real ("Verificación"); duplicados y movimiento de precios pasan a un bloque informativo "Para mirar (no frena)" debajo. Se agregó un botón "No son el mismo" en cada par de duplicados para sacarlos de la lista sin tocar la base a mano, y el banner ahora distingue si lo que frena es un bloqueo real, el tope de gasto del día, o que alguien apagó el interruptor de publicación automática (que estaba apagado desde el 27-ago -- ya se prendió). De yapa, un par de duplicados que salía dos veces (A↔B y B↔A) ahora sale una sola vez.', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🏷️', titulo: 'Promociones y Hot Sales: volvieron las tarifas "solo desayuno" y "solo alojamiento"', texto: 'Las pestañas "Promociones" y "Hot Sales" traían el listado del tarifario cortado en 1000 filas: las tarifas cuyo título cae tarde en el abecedario ("Temporada Baja", "Vacaciones", "Fin de Año"...) no aparecían -- entre ellas casi todas las de régimen "solo desayuno" y "solo alojamiento". Ahora el listado se trae completo en tandas, así que se ven todas. Puede tardar un par de segundos más la primera vez que entrás a esas pestañas.', roles: ROLES_TODOS },
   { fecha: '2026-09-10', emoji: '🤖', titulo: 'La curación de la IA ya no es solo para flyers', texto: 'Solo admin. La pestaña "IA" y el botón morado del robot cubrían únicamente las promociones que venían de un flyer. Ahora aplican a CUALQUIER tarifa con título -- las líneas sueltas del PDF y las tarifas cargadas a mano dentro de la ficha de un hotel también se pueden marcar para que el bot las ofrezca. Diferencia importante: una línea de PDF nunca entra sola, hay que activarla a mano con "Ofrecer"; los flyers siguen entrando automáticamente si están publicados. El bot todavía no lee estas marcas para los no-flyers, eso llega en un despliegue aparte.', roles: ['admin'] },

@@ -2596,6 +2596,23 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(255,145,0,.4)}
 .fl-drop i{font-size:26px;color:var(--accent)}
 .fl-drop b{font-size:13.5px}
 .fl-drop span{font-size:11.5px;color:var(--muted2)}
+/* Importar vouchers */
+.iv-barra{display:flex;gap:9px;margin-top:14px;flex-wrap:wrap}
+.iv-tabla-wrap{overflow-x:auto;margin-top:16px;border:1px solid var(--line);border-radius:14px}
+.iv-tabla{width:100%;border-collapse:collapse;font-size:12.5px;min-width:760px}
+.iv-tabla th{text-align:left;padding:9px 10px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--muted2);border-bottom:1px solid var(--line);white-space:nowrap;background:var(--panel)}
+.iv-tabla td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.iv-tabla tr:last-child td{border-bottom:0}
+.iv-tabla input[type=text],.iv-tabla input[type=number],.iv-tabla select{width:100%;min-width:90px;
+  background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:5px 7px;color:var(--txt);font-size:12px}
+.iv-fila-ok td{background:rgba(74,222,128,.05)}
+.iv-fila-revisar td{background:rgba(245,181,68,.09)}
+.iv-fila-error td,.iv-fila-duplicado td{background:rgba(248,113,113,.09)}
+.iv-fila-hecho td{background:rgba(74,222,128,.13)}
+.iv-tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  padding:2px 7px;border-radius:999px;background:var(--panel);border:1px solid var(--line2);color:var(--muted2)}
+.iv-nota{font-size:11px;color:var(--amber);margin-top:3px;line-height:1.4}
 .fl-previa{display:flex;gap:14px;align-items:flex-start;margin-top:16px}
 .fl-previa img{width:130px;border-radius:12px;border:1px solid var(--line2);flex:0 0 auto}
 .fl-campos{flex:1;min-width:0}
@@ -4126,6 +4143,7 @@ body.fsize-grande{--tap:41.9px}
             <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="fact-ventas-search" placeholder="Buscar cliente o asesor..."></div>
             <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('ventas')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
             <button class="btn-sm" id="fact-nuevo-cliente-btn"><i class="fas fa-user-plus"></i> Nuevo cliente</button>
+            <button class="btn-sm" id="fact-vincular-pago-btn"><i class="fas fa-link"></i> Vincular pago a factura</button>
             <div class="export-dd">
               <button class="btn-sm" onclick="toggleExportMenu(event,'ventas')"><i class="fas fa-download"></i> Exportar tabla</button>
               <div class="export-dd-menu" id="export-menu-ventas">
@@ -4582,6 +4600,27 @@ body.fsize-grande{--tap:41.9px}
           <button id="vc-cargar-mas-btn" class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasVouchers()">Cargar más</button>
         </div>
       </div>
+    </section>
+
+    <!-- IMPORTAR VOUCHERS -->
+    <section class="section" id="sec-importar-vouchers">
+      <div class="ce-intro">
+        Subí uno o varios vouchers en PDF y la IA lee cliente, teléfono, asesor, hotel y montos.
+        <b>No se crea ninguna venta hasta que lo confirmes</b>: primero revisás la tabla de abajo.
+        Se factura <b>lo cobrado</b> (la suma de los abonos); el total y el saldo quedan en Postventa.
+      </div>
+      <label class="fl-drop" id="iv-drop">
+        <input type="file" id="iv-file" accept="application/pdf" multiple hidden>
+        <i class="fas fa-cloud-arrow-up"></i>
+        <b>Elegí los vouchers (PDF)</b>
+        <span>Se leen de a uno · el número de factura del voucher no se puede repetir</span>
+      </label>
+      <div id="iv-lista"></div>
+      <div class="iv-barra" id="iv-barra" style="display:none">
+        <button class="dbtn primary" id="iv-importar-btn" type="button"><i class="fas fa-file-import"></i> Importar seleccionados</button>
+        <button class="dbtn" id="iv-limpiar-btn" type="button">Limpiar</button>
+      </div>
+      <div id="iv-resultado"></div>
     </section>
 
     <!-- MÉTRICAS -->
