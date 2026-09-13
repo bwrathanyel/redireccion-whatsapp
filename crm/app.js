@@ -14257,6 +14257,15 @@ function tarHabHtml(h) {
     visibles.map(a => `<span class="hab-chip">${esc(a)}</span>`).join('')
   }${resto ? `<span class="hab-chip hab-chip-mas">+${resto}</span>` : ''}</div>`;
 }
+// Solo admin (el asesor ve el badge). Encendido = lo que la base devuelve hoy,
+// sea fijado a mano o automático; el tooltip dice cuál de los dos es.
+function tarMejorPrecioBtnHtml(t, esDestacada, vendible) {
+  const tip = !vendible ? 'Ya no se vende: no puede ser mejor precio'
+    : esDestacada && tarDestacadaManual === t.id ? 'Fijado a mano · click para volver al automático'
+    : esDestacada ? 'Elegido automático (más barato) · click para fijarlo'
+    : 'Marcar como mejor precio';
+  return `<button type="button" class="promo-mp-btn${esDestacada ? ' on' : ''}" data-mp-set="${t.id}" title="${tip}"${vendible ? '' : ' disabled'}>★ Mejor precio</button>`;
+}
 // Una tarjeta = una promoción = una fila del PDF.
 function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false) {
   const esDestacada = destacadaId != null && t.id === destacadaId;
@@ -14283,7 +14292,8 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
       <div class="promo-titulo">${esc(titulo)}</div>
       ${tcHsSegHtml(t)}
       ${tcIaBtnHtml(tarifaComoPromo(t), 'tar-ia-inline')}
-      ${esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
+      ${ROL === 'admin' && !enHistorico ? tarMejorPrecioBtnHtml(t, esDestacada, vendible)
+        : esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
       ${vendible || enHistorico ? '' : '<span class="promo-badge promo-badge-off">Ya no se vende</span>'}
       ${noEntran ? `<span class="promo-badge promo-badge-off">No entran ${grupo}</span>` : ''}
     </div>
@@ -14429,8 +14439,8 @@ const tarSeleccion = new Set();
 // handler acá. Botón sin handler sale deshabilitado en vez de no hacer nada.
 const TAR_ACCIONES = {};
 // Qué tarifa fijó el admin a mano en ESTA ficha (productos.tarifa_destacada_manual_id).
-// Vive en el módulo y no se lee de TAR_DRAWER_ITEM para que la barra siga siendo
-// genérica; lo setea openProductoDrawer y lo actualiza tarDestacarTarifa.
+// Lo setea openProductoDrawer y lo actualiza tarDestacarTarifa; el botón
+// "Mejor precio" lo lee para saber si la encendida se suelta o se fija.
 let tarDestacadaManual = null;
 function tarBarraSeleccionHtml() {
   const btn = (a, ic, txt) => `<button type="button" class="tar-selbtn" data-tar-accion="${a}"><i class="fas ${ic}"></i> ${txt}</button>`;
@@ -14440,7 +14450,6 @@ function tarBarraSeleccionHtml() {
       ${btn('comparar', 'fa-table-columns', 'Comparar')}
       ${btn('copiar', 'fa-copy', 'Copiar')}
       ${btn('cotizador', 'fa-comments', 'Cotizador IA')}
-      ${ROL === 'admin' ? btn('destacar', 'fa-star', 'Destacar') : ''}
       <button type="button" class="tar-selbtn tar-selbtn-x" data-tar-accion="limpiar"><i class="fas fa-xmark"></i> Quitar</button>
     </div>
   </div>`;
@@ -14454,18 +14463,9 @@ function tarSincronizarBarra() {
   bar.querySelectorAll('[data-tar-accion]').forEach(b => {
     const a = b.dataset.tarAccion;
     if (a === 'limpiar') return;
-    // Comparar una sola tarjeta no compara nada; destacar es una elección única.
-    const cantOk = a === 'comparar' ? n >= 2 : a === 'destacar' ? n === 1 : n >= 1;
+    // Comparar una sola tarjeta no compara nada.
+    const cantOk = a === 'comparar' ? n >= 2 : n >= 1;
     b.disabled = !cantOk || typeof TAR_ACCIONES[a] !== 'function';
-    // Destacar es un interruptor: sobre la que YA está fijada a mano, el mismo
-    // botón la suelta. Sin cambiar el rótulo, el admin no tendría cómo volver a
-    // la automática y creería que la fijó dos veces.
-    if (a === 'destacar') {
-      const soltar = n === 1 && tarDestacadaManual != null && tarDestacadaManual === [...tarSeleccion][0];
-      b.innerHTML = soltar
-        ? '<i class="fas fa-star-half-stroke"></i> Quitar destacada'
-        : '<i class="fas fa-star"></i> Destacar';
-    }
   });
   document.querySelectorAll('#drawerContent .promo-card[data-tarifa-id]').forEach(c => {
     const marcada = tarSeleccion.has(Number(c.dataset.tarifaId));
@@ -14493,6 +14493,8 @@ function tarEngancharCarpeta() {
   carpeta.addEventListener('click', e => {
     const hsSeg = e.target.closest('[data-hs-set]');
     if (hsSeg) { e.stopPropagation(); hsMarcarEstado(hsSeg.dataset.hsSetId, hsSeg.dataset.hsSet, hsSeg); return; }
+    const mp = e.target.closest('[data-mp-set]');
+    if (mp) { e.stopPropagation(); if (!mp.disabled) tarDestacarTarifa(Number(mp.dataset.mpSet)); return; }
     const iaBtn = e.target.closest('[data-ia-toggle]');
     if (iaBtn) { e.stopPropagation(); iaMarcar(Number(iaBtn.dataset.iaToggle), iaBtn.dataset.iaOn === '1' ? 'quitar' : 'poner', iaBtn); return; }
     const ret = e.target.closest('[data-retirar-tarifa]');
@@ -14688,36 +14690,36 @@ function tarMandarAlCotizador(ids) {
   irAlCotizadorConTarifas(TAR_DRAWER_ITEM.id, TAR_DRAWER_ITEM.nombre || '', elegidas.map(t => t.id), nombres);
 }
 TAR_ACCIONES.cotizador = tarMandarAlCotizador;
-/* Fase 2.5 — fijar a mano cuál es la destacada.
-   `tarifa_destacada_id` no es una columna sino una función computada, así que no
-   se le puede hacer UPDATE: lo que se escribe es la preferencia
-   `productos.tarifa_destacada_manual_id` (migración 20260905000000) y la BASE
-   decide si esa preferencia todavía vale. Por eso, después de escribir, el
-   destacado se RELEE en vez de suponerse: si la elegida ya no se vende, la
-   función cae al automático y el badge no se mueve — mentirle al admin acá es
-   peor que no dejarlo elegir. */
-async function tarDestacarTarifa(ids) {
+/* Botón "Mejor precio" — fijar a mano cuál es la destacada.
+   `tarifa_destacada_id` es una función computada, no una columna: se escribe la
+   preferencia vía RPC `fijar_tarifa_destacada` (migración 20260912220000, guarda
+   id + clave estable para sobrevivir a la próxima carga del PDF) y la BASE
+   devuelve la destacada resultante. Se usa esa respuesta en vez de suponerla: si
+   la elegida ya no se vende, la función cae al automático y el botón no se
+   enciende — mentirle al admin acá es peor que no dejarlo elegir. */
+async function tarDestacarTarifa(id) {
   const x = TAR_DRAWER_ITEM;
-  if (ROL !== 'admin' || ids.length !== 1 || !x) return;
-  const id = ids[0];
+  if (ROL !== 'admin' || !x) return;
   const t = (x.tarifas || []).find(t => t.id === id);
   if (!t) return;
-  const soltar = tarDestacadaManual === id;
-  // Mismo criterio que la rama manual del SQL: si no es vendible hoy, la base la
-  // va a ignorar igual. Avisar acá evita guardar un puntero muerto.
+  // Encendida y fijada a mano: el mismo botón la suelta. Encendida por el
+  // automático, o apagada: se fija esta (la anterior se apaga al repintar).
+  const soltar = x.tarifa_destacada_id === id && tarDestacadaManual === id;
   if (!soltar && !tarVendibleHoy(t)) { errToast('Esa tarifa ya no se vende: la destacada la sigue eligiendo la base'); return; }
-  const { error } = await sb.from('productos')
-    .update({ tarifa_destacada_manual_id: soltar ? null : id }).eq('id', x.id);
-  if (error) { errToast('No se pudo destacar: ' + error.message); return; }
-  tarDestacadaManual = soltar ? null : id;
-  x.tarifa_destacada_manual_id = tarDestacadaManual;
-  const { data, error: e2 } = await sb.from('productos')
-    .select('tarifa_destacada_id').eq('id', x.id).single();
-  if (e2) { errToast('Se guardó, pero no se pudo releer la destacada: ' + e2.message); return; }
+  document.querySelectorAll('#drawerContent [data-mp-set]').forEach(b => { b.disabled = true; });
+  const { data, error } = await sb.rpc('fijar_tarifa_destacada', { p_producto_id: x.id, p_tarifa_id: soltar ? null : id });
+  // Mientras corría, el admin pudo abrir otra ficha: no pintar esta encima.
+  const sigue = TAR_DRAWER_ITEM === x;
+  if (error) {
+    if (sigue) tarRepintarCarpeta(x);
+    errToast(/no_vendible/.test(error.message) ? 'Esa tarifa ya no se vende: la destacada la sigue eligiendo la base' : 'No se pudo fijar el mejor precio: ' + error.message);
+    return;
+  }
   // `x` es el mismo objeto que está en tarCache, así que el listado y el drawer
   // quedan contando lo mismo sin recargar la pestaña.
-  x.tarifa_destacada_id = data?.tarifa_destacada_id ?? null;
-  tarRepintarCarpeta(x);
+  x.tarifa_destacada_id = data?.destacada_id ?? null;
+  x.tarifa_destacada_manual_id = data?.manual_id ?? null;
+  if (sigue) { tarDestacadaManual = x.tarifa_destacada_manual_id; tarRepintarCarpeta(x); }
   if (soltar) okToast('Destacada suelta: vuelve a la automática');
   else if (x.tarifa_destacada_id === id) okToast('Destacada actualizada');
   else errToast('La base mantuvo la automática: esa tarifa no es vendible hoy');
@@ -14808,14 +14810,13 @@ async function tarDescartarHabitacion(x, id) {
   tarRepintarCarpeta(x);
   okToast('Habitación descartada');
 }
-TAR_ACCIONES.destacar = tarDestacarTarifa;
 function openProductoDrawer(x, tipoForzado = null) {
   TAR_DRAWER_ITEM = x;
   // Otra ficha, otra selección: arrastrar ids de un hotel a otro haría que las
   // acciones operaran sobre tarifas que ya no están en pantalla.
   tarSeleccion.clear();
-  // Y otra elección manual: si quedara la del hotel anterior, el botón diría
-  // "Quitar destacada" sobre una tarifa que nunca se fijó.
+  // Y otra elección manual: si quedara la del hotel anterior, el botón "Mejor
+  // precio" soltaría una tarifa que nunca se fijó.
   tarDestacadaManual = x?.tarifa_destacada_manual_id ?? null;
   // Desde el buscador IA el resultado puede ser de otra pestaña que la abierta:
   // el tipo real viene explícito para no pintar una promo como producto.

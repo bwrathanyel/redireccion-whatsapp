@@ -726,6 +726,10 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .promo-hs-seg-b.on{background:var(--accent);color:#1a1000}
 .promo-hs-seg-b[data-hs-set="quitar"].on{background:rgba(239,68,68,.18);color:#fca5a5}
 .promo-hs-seg-b:disabled{opacity:.5;cursor:progress}
+.promo-mp-btn{background:transparent;border:1px solid var(--line2);color:var(--muted);font-family:inherit;font-size:10px;font-weight:800;letter-spacing:.3px;padding:2px 9px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s,border-color .15s}
+.promo-mp-btn:hover:not(.on):not(:disabled){color:var(--txt);border-color:var(--accent)}
+.promo-mp-btn.on{background:var(--accent);border-color:var(--accent);color:#1a1000}
+.promo-mp-btn:disabled{opacity:.5;cursor:not-allowed}
 .promo-pie{margin-top:11px}
 .promo-retirar{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
 .promo-retirar:hover{border-color:#ef4444;color:#ef4444}
