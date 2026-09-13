@@ -14343,9 +14343,13 @@ function tarCarpetaHtml(x) {
     if (!grupos.has(k)) grupos.set(k, []);
     grupos.get(k).push(t);
   });
+  // El botón "Mejor precio" congela el orden (x._mpOrdenId): si la nueva
+  // destacada saltara al primer lugar, las tarjetas se intercambian bajo el
+  // cursor, la pantalla se ve igual que antes y el segundo click re-fija la vieja.
+  const ordenId = x._mpOrdenId !== undefined ? x._mpOrdenId : destacadaId;
   for (const filas of grupos.values()) {
     filas.sort((a, b) =>
-      (Number(b.id === destacadaId) - Number(a.id === destacadaId))
+      (Number(b.id === ordenId) - Number(a.id === ordenId))
       || (Number(tarVendibleHoy(b)) - Number(tarVendibleHoy(a)))
       || ((a.orden_pdf ?? 0) - (b.orden_pdf ?? 0))
       || (a.id - b.id));
@@ -14706,6 +14710,7 @@ async function tarDestacarTarifa(id) {
   // automático, o apagada: se fija esta (la anterior se apaga al repintar).
   const soltar = x.tarifa_destacada_id === id && tarDestacadaManual === id;
   if (!soltar && !tarVendibleHoy(t)) { errToast('Esa tarifa ya no se vende: la destacada la sigue eligiendo la base'); return; }
+  if (x._mpOrdenId === undefined) x._mpOrdenId = tarifaDestacada(x)?.id ?? null;
   document.querySelectorAll('#drawerContent [data-mp-set]').forEach(b => { b.disabled = true; });
   const { data, error } = await sb.rpc('fijar_tarifa_destacada', { p_producto_id: x.id, p_tarifa_id: soltar ? null : id });
   // Mientras corría, el admin pudo abrir otra ficha: no pintar esta encima.
@@ -14812,6 +14817,8 @@ async function tarDescartarHabitacion(x, id) {
 }
 function openProductoDrawer(x, tipoForzado = null) {
   TAR_DRAWER_ITEM = x;
+  // Al reabrir la ficha la destacada vuelve a ir primera.
+  if (x) delete x._mpOrdenId;
   // Otra ficha, otra selección: arrastrar ids de un hotel a otro haría que las
   // acciones operaran sobre tarifas que ya no están en pantalla.
   tarSeleccion.clear();
