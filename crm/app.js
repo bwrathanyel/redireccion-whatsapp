@@ -13789,10 +13789,12 @@ function tarPrecioDobleHero(t) {
   const porHab = p.base === 'habitacion' ? true
     : p.base === 'persona' ? false
     : (sgl !== null && dbl > sgl);
-  const monto = porHab ? dbl / 2 : dbl;
-  return { monto: tarMonto(Math.round(monto * 100) / 100, t.moneda), nota: 'por persona / noche · ocupación doble', porHab };
+  // Por habitación: el DBL del PDF va en grande (azul en CSS) y el p/p debajo.
+  if (porHab) return { monto: tarMonto(dbl, t.moneda), nota: 'por habitación / noche · doble', pp: tarMonto(Math.round(dbl / 2 * 100) / 100, t.moneda), porHab };
+  return { monto: tarMonto(Math.round(dbl * 100) / 100, t.moneda), nota: 'por persona / noche · ocupación doble', porHab };
 }
 const TAR_NOTA_POR_HAB = '<div class="pph-nota pph-hab">Grilla del proveedor: precio por habitación / noche</div>';
+const tarHeroHtml = h => `<div class="promo-precio-hero${h.porHab ? ' pph-hab-hero' : ''}"><span class="pph-monto">${esc(h.monto)}</span><span class="pph-nota">${esc(h.nota)}</span>${h.porHab ? `<span class="pph-pp">${esc(h.pp)} por persona</span>` : ''}</div>`;
 // Botón de Hot Sales en la card (solo admin). Binario: si está `poner` el click
 // quita, si no pone. `cls` cambia el molde (.tc-hs flota sobre la foto en el
 // listado; la fila de título de la carpeta usa tcHsSegHtml, tri-estado, ver
@@ -14309,14 +14311,10 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
       const hero = precios.length ? tarPrecioDobleHero(t) : null;
       const fila = (lista, cls) => `<div class="promo-precios${cls}">${lista.map(p => `<div class="promo-precio"><span class="promo-pk">${esc(p.etq)}</span><span class="promo-pv">${esc(p.monto)}</span></div>`).join('')}</div>`;
       if (hero) {
-        // Grilla por habitación (Venetur SD: 55/65/75/85): el hero es DBL÷2, así que
-        // la fila chica conserva el DBL del PDF y avisa la unidad para que cuadre.
-        const resto = hero.porHab ? precios : precios.filter(p => p.etq !== 'DBL');
-        return `<div class="promo-precio-hero"><span class="pph-monto">${esc(hero.monto)}</span><span class="pph-nota">${esc(hero.nota)}</span></div>`
-          + (resto.length ? fila(resto, ' promo-precios-sec') : '')
-          + (hero.porHab ? TAR_NOTA_POR_HAB : '');
+        const resto = precios.filter(p => p.etq !== 'DBL');
+        return tarHeroHtml(hero) + (resto.length ? fila(resto, ' promo-precios-sec') : '');
       }
-      return precios.length ? fila(precios, '')
+      return precios.length ? (t.precios.base === 'habitacion' ? TAR_NOTA_POR_HAB : '') + fila(precios, '')
         : t.precio_texto ? `<div class="promo-precio-texto dfv-rich">${formatearTexto(t.precio_texto)}</div>` : '';
     })()}
     ${venta[0] || venta[1] || ventanas.length || t.vigencia_texto ? `<div class="promo-datos">
@@ -14858,11 +14856,10 @@ function openProductoDrawer(x, tipoForzado = null) {
       if (esPromo) {
         const hero = x.precios ? tarPrecioDobleHero(x) : null;
         if (hero) {
-          const resto = tarPreciosLista(x).filter(p => hero.porHab || p.etq !== 'DBL');
+          const resto = tarPreciosLista(x).filter(p => p.etq !== 'DBL');
           return `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div>
-            <div class="promo-precio-hero"><span class="pph-monto">${esc(hero.monto)}</span><span class="pph-nota">${esc(hero.nota)}</span></div>
+            ${tarHeroHtml(hero)}
             ${resto.length ? `<div class="promo-precios promo-precios-sec">${resto.map(p => `<div class="promo-precio"><span class="promo-pk">${esc(p.etq)}</span><span class="promo-pv">${esc(p.monto)}</span></div>`).join('')}</div>` : ''}
-            ${hero.porHab ? TAR_NOTA_POR_HAB : ''}
           </div></div>`;
         }
       }

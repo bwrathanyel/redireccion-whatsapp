@@ -46,7 +46,7 @@ try {
   --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
   --txt:#eef1f8; --muted:#8b93ad; --muted2:#7981a8;
   --accent:#ff9100; --accent-soft:rgba(255,145,0,.14);
-  --blue:#4a9eff; --green:#10b981; --purple:#a06bff; --amber:#f5b544; --pink:#ff5c8a; --wa:#25D366;
+  --blue:#4a9eff; --pph-hab:var(--blue); --green:#10b981; --purple:#a06bff; --amber:#f5b544; --pink:#ff5c8a; --wa:#25D366;
   --safe-b:env(safe-area-inset-bottom,0px);
   /* Fase 6 -- escala de movimiento. El CSS no tenía una: cada transición
      inventaba su propia duración (.24s acá, .3s allá). --ease-salida ya
@@ -61,6 +61,7 @@ try {
    blue, green, etc.) se mantienen, ya dan contraste aceptable sobre
    blanco también. */
 :root[data-theme="light"]{
+  --pph-hab:#2563eb;
   --bg:#f4f5f9; --bg2:#e9ebf2; --panel:rgba(255,255,255,.85); --panel-solid:#ffffff;
   --line:rgba(15,23,42,.09); --line2:rgba(15,23,42,.16);
   --txt:#12172a; --muted:#5b6478; --muted2:#3f4658;
@@ -713,7 +714,10 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .pph-nota{font-size:10.5px;font-weight:600;color:var(--muted2)}
 .promo-precios-sec{margin-top:6px}
 .promo-precios-sec .promo-precio .promo-pv{font-size:11px;opacity:.75}
-.pph-hab{display:block;margin-top:4px}
+.pph-hab{display:block;margin-bottom:4px;color:var(--pph-hab);font-weight:700}
+.pph-hab-hero .pph-monto{color:var(--pph-hab)}
+.pph-hab-hero .pph-nota{color:var(--pph-hab);text-transform:uppercase;letter-spacing:.3px}
+.pph-pp{font-size:11px;font-weight:600;color:var(--muted)}
 /* Tri-estado Fijar/Auto/Excluir en la fila de título de la carpeta (fix bug
    2026-09-09, reemplaza el binario .promo-hs viejo): el binario solo sabía
    leer/escribir 'poner', así que una promo automática (hot_sale_estado NULL)
