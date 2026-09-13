@@ -14248,15 +14248,30 @@ function tarHabLineaHtml(h) {
    para que un hotel que publica 12 no tape el precio; el resto queda en el
    title, que ya lleva la descripción. */
 const TAR_HAB_AMEN = 5;
+// Miniaturas (256) de las fotos propias de la habitación (producto_fotos.habitacion_id).
+// Clic abre el lightbox con las fotos EN ORIGINAL de esa habitación sola, no las
+// del hotel entero -- mismo criterio de fotoMini()/Worker que el resto del CRM.
+function tarHabFotosHtml(h) {
+  const fotos = ordenarFotos(h.producto_fotos);
+  if (!fotos.length) return '';
+  return `<div class="hab-fotos">${fotos.map((f, i) =>
+    `<img class="hab-foto" src="${esc(fotoMini(f.storage_path, 256))}" alt="" loading="lazy" data-hab-foto-id="${h.id}" data-hab-foto-idx="${i}">`).join('')}</div>`;
+}
+function tarAbrirLightboxHabitacion(habId, idx) {
+  const h = (TAR_DRAWER_ITEM?.habitaciones || []).find(hh => hh.id === habId);
+  const fotos = ordenarFotos(h?.producto_fotos).map(f => FOTOS_BASE + f.storage_path);
+  openLightbox(fotos, idx);
+}
 function tarHabHtml(h) {
   const linea = tarHabLineaHtml(h);
+  const fotos = tarHabFotosHtml(h);
   const amen = h.amenities || [];
-  if (!amen.length) return linea;
+  if (!amen.length) return linea + fotos;
   const visibles = amen.slice(0, TAR_HAB_AMEN), resto = amen.length - visibles.length;
   // Si no hubo línea compacta (una fila que solo trae capacidad y amenities),
   // el title de los chips es el único lugar donde queda el dato de la web.
   const tip = [linea ? '' : tarHabTip(h), linea ? h.descripcion || '' : '', resto ? amen.join(' · ') : ''].filter(Boolean).join('\n');
-  return linea + `<div class="hab-amen"${tip ? ` title="${esc(tip)}"` : ''}>${
+  return linea + fotos + `<div class="hab-amen"${tip ? ` title="${esc(tip)}"` : ''}>${
     visibles.map(a => `<span class="hab-chip">${esc(a)}</span>`).join('')
   }${resto ? `<span class="hab-chip hab-chip-mas">+${resto}</span>` : ''}</div>`;
 }
@@ -14497,6 +14512,8 @@ function tarEngancharCarpeta() {
     tarSincronizarBarra();
   });
   carpeta.addEventListener('click', e => {
+    const habFoto = e.target.closest('[data-hab-foto-id]');
+    if (habFoto) { e.stopPropagation(); tarAbrirLightboxHabitacion(Number(habFoto.dataset.habFotoId), Number(habFoto.dataset.habFotoIdx)); return; }
     const hsSeg = e.target.closest('[data-hs-set]');
     if (hsSeg) { e.stopPropagation(); hsMarcarEstado(hsSeg.dataset.hsSetId, hsSeg.dataset.hsSet, hsSeg); return; }
     const mp = e.target.closest('[data-mp-set]');
@@ -14564,6 +14581,13 @@ function tarFilasComparacion(tarifas, habs = new Map()) {
   }));
   push('Amenities', tarifas.map(t => (habDe(t)?.amenities || []).join('\n')), { multi: true });
   push('Descripción', tarifas.map(t => habDe(t)?.descripcion || ''), { multi: true });
+  // Miniaturas de la habitación, mismo criterio que la tarjeta (tarHabFotosHtml):
+  // sin `dif` -- casi siempre van a ser distintas y resaltarlas no aporta nada.
+  push('Fotos', tarifas.map(t => {
+    const h = habDe(t);
+    return h ? ordenarFotos(h.producto_fotos).map((f, i) =>
+      `<img class="tarcmp-foto" src="${esc(fotoMini(f.storage_path, 256))}" alt="" loading="lazy" data-hab-foto-id="${h.id}" data-hab-foto-idx="${i}">`).join('') : '';
+  }), { html: true, dif: false });
   // Una fila por ocupación, con la unión de las etiquetas que existan en las
   // elegidas: la lista sale de las claves reales de `precios` (tarPreciosLista),
   // nunca de una lista fija, porque cada hotel del PDF trae las suyas.
@@ -14600,7 +14624,7 @@ function tarTitulosComparacion(tarifas) {
 }
 function tarComparadorHtml(tarifas, habs = new Map()) {
   const celda = (f, v) => `<td class="${f.dif ? 'tarcmp-dif' : ''}${f.precio ? ' tarcmp-precio' : ''}">${
-    v ? (f.multi ? esc(v).replace(/\n/g, '<br>') : esc(v)) : '<span class="tarcmp-vacio">—</span>'}</td>`;
+    v ? (f.html ? `<div class="tarcmp-fotos">${v}</div>` : f.multi ? esc(v).replace(/\n/g, '<br>') : esc(v)) : '<span class="tarcmp-vacio">—</span>'}</td>`;
   const titulos = tarTitulosComparacion(tarifas);
   return `<div class="tarcmp-panel" role="dialog" aria-modal="true" aria-label="Comparar tarifas">
     <div class="tarcmp-head">
@@ -14631,6 +14655,10 @@ function tarAbrirComparador(ids) {
   el.innerHTML = tarComparadorHtml(elegidas, tarHabsPorNombre(TAR_DRAWER_ITEM));
   el.classList.add('open');
   document.getElementById('tarcmp-cerrar').onclick = () => tarCerrarComparador();
+  el.querySelectorAll('[data-hab-foto-id]').forEach(img => img.onclick = e => {
+    e.stopPropagation();
+    tarAbrirLightboxHabitacion(Number(img.dataset.habFotoId), Number(img.dataset.habFotoIdx));
+  });
   el.onclick = e => { if (e.target === el) tarCerrarComparador(); };
   navPush({ type: 'tar-comparar' });
 }
@@ -14736,17 +14764,26 @@ async function tarDestacarTarifa(id) {
    hoteles de la pestaña de una, y colgarle las habitaciones a todos sería
    arrastrar texto descriptivo que solo se mira de a un hotel por vez. */
 async function tarCargarHabitaciones(x) {
+  // producto_fotos embebido acá (no en TAR_SEL_PRODUCTOS): la única vista que
+  // agrupa fotos por habitación es esta -- carpeta y comparador leen del mismo
+  // x.habitaciones, así que un solo fetch alcanza para las dos.
   const { data, error } = await sb.from('producto_habitaciones')
-    .select('id,nombre,nombre_norm,metros2,camas,capacidad_max,vista,amenities,descripcion,fuente_url,revisado')
+    .select('id,nombre,nombre_norm,metros2,camas,capacidad_max,vista,amenities,descripcion,fuente_url,revisado,producto_fotos(storage_path,orden,es_principal,activo)')
     .eq('producto_id', x.id).order('nombre');
   // Sin habitaciones la tarjeta funciona igual (Fase 1): un error acá se avisa
-  // por consola y no rompe el drawer.
-  if (error) { console.warn('producto_habitaciones:', error.message); return; }
+  // por consola y no rompe el drawer. El admin de fotos se pinta igual (sin
+  // selector): si no, un hotel quedaría sin poder gestionar sus fotos.
+  if (error) { console.warn('producto_habitaciones:', error.message); if (ROL === 'admin' && TAR_DRAWER_ITEM === x) cargarFotosAdmin('producto_fotos', 'producto_id', x.id, 'hoteles'); return; }
   x.habitaciones = data || [];
   // El drawer pudo cerrarse o cambiar de ficha mientras volvía la consulta.
   if (TAR_DRAWER_ITEM !== x) return;
   if (x.habitaciones.some(h => h.revisado)) tarRepintarCarpeta(x);
   tarPintarRevisionHabs(x);
+  // El selector de habitación del admin de fotos necesita esta lista: se pinta
+  // acá (no en openProductoDrawer) para no correr dos fetch de producto_fotos en
+  // paralelo pisándose el box -- ver openProductoDrawer, que solo llama a
+  // cargarFotosAdmin directo si x.habitaciones ya estaba en caché.
+  if (ROL === 'admin') cargarFotosAdmin('producto_fotos', 'producto_id', x.id, 'hoteles', 'tar-fotos-admin', x.habitaciones);
 }
 function tarHabDominio(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
@@ -14908,7 +14945,12 @@ function openProductoDrawer(x, tipoForzado = null) {
   }
   if (ROL === 'admin') {
     document.getElementById('tar-notas-save').onclick = () => guardarNotasTarifario(esPromo ? 'promociones' : 'productos', x.id);
-    cargarFotosAdmin(esPromo ? 'promocion_fotos' : 'producto_fotos', esPromo ? 'promocion_id' : 'producto_id', x.id, esPromo ? 'promos' : 'hoteles');
+    if (esPromo) cargarFotosAdmin('promocion_fotos', 'promocion_id', x.id, 'promos');
+    // !esPromo: si x.habitaciones ya está en caché se pinta acá con el selector
+    // de habitación listo; si no, tarCargarHabitaciones (arriba) la trae y pinta
+    // el box ella misma -- dos cargarFotosAdmin en paralelo se pisarían el box.
+    // Sin carpeta (hotel sin tarifas) no se piden habitaciones: se pinta acá.
+    else if (x.habitaciones || !carpeta) cargarFotosAdmin('producto_fotos', 'producto_id', x.id, 'hoteles', 'tar-fotos-admin', x.habitaciones || null);
     if (!esPromo) cargarVideoAdmin(x.id, x.video_url || null);
   }
 }
@@ -14974,9 +15016,13 @@ const TAR_FOTOS_LIMITE = 5 * 1024 * 1024, TAR_FOTOS_MIME = ['image/png', 'image/
 function slugArchivo(nombre) {
   return nombre.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'foto';
 }
-async function cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId = 'tar-fotos-admin') {
+async function cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId = 'tar-fotos-admin', habitaciones = null) {
   const box = document.getElementById(boxId);
-  const { data, error } = await sb.from(tabla).select('id,storage_path,orden,es_principal,origen').eq(fk, entidadId).eq('activo', true).order('es_principal', { ascending: false }).order('orden');
+  // habitacion_id solo existe en producto_fotos (migración 20260913150000) --
+  // pedirlo sobre promocion_fotos tira columna inexistente.
+  const conSelector = tabla === 'producto_fotos' && Array.isArray(habitaciones) && habitaciones.length > 0;
+  const campos = conSelector ? 'id,storage_path,orden,es_principal,origen,habitacion_id' : 'id,storage_path,orden,es_principal,origen';
+  const { data, error } = await sb.from(tabla).select(campos).eq(fk, entidadId).eq('activo', true).order('es_principal', { ascending: false }).order('orden');
   if (!box) return; // el drawer se pudo haber cerrado mientras esto cargaba
   if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudieron cargar las fotos</div>'; return; }
   // Antes, si la opción no tenía NINGUNA foto todavía, esto cortaba acá con
@@ -14991,28 +15037,48 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId = 'tar-foto
         <button type="button" class="tfa-btn" data-accion="reemplazar" title="Reemplazar imagen"><i class="fas fa-rotate"></i></button>
         <button type="button" class="tfa-btn" data-accion="eliminar" title="Eliminar foto"><i class="fas fa-trash"></i></button>
       </div>
+      ${conSelector ? `<select class="tfa-hab-sel" data-foto-id="${f.id}" title="Habitación a la que pertenece esta foto">
+        <option value="">Sin habitación asignada</option>
+        ${habitaciones.map(h => `<option value="${h.id}"${f.habitacion_id === h.id ? ' selected' : ''}>${esc(h.nombre)}</option>`).join('')}
+      </select>` : ''}
     </div>`).join('')}</div>` : `<div class="muted" style="font-size:12.5px">${tabla === 'promocion_fotos' ? 'Esta promoción no tiene fotos propias — arriba se muestran las del hotel vinculado.' : 'Esta opción no tiene fotos cargadas todavía.'}</div>`;
   box.innerHTML = `${grid}
     <button type="button" class="dbtn gh" id="tar-foto-agregar" style="margin-top:10px;width:100%"><i class="fas fa-plus"></i> Agregar foto</button>
     <input type="file" id="tar-foto-file" accept="image/png,image/jpeg,image/webp" style="display:none">`;
   const input = box.querySelector('#tar-foto-file');
-  box.querySelectorAll('[data-accion="principal"]').forEach(btn => btn.onclick = () => marcarFotoPrincipal(tabla, fk, entidadId, +btn.closest('.tfa-item').dataset.fotoId, prefijo, boxId));
+  // Update directo: la RLS producto_fotos_write_admin ya limita esto a admin,
+  // no hace falta pasar por un RPC.
+  box.querySelectorAll('.tfa-hab-sel').forEach(sel => sel.onchange = async () => {
+    const val = sel.value ? Number(sel.value) : null;
+    sel.disabled = true;
+    const { error: eHab } = await sb.from('producto_fotos').update({ habitacion_id: val }).eq('id', Number(sel.dataset.fotoId));
+    sel.disabled = false;
+    if (eHab) { errToast('No se pudo asignar la habitación: ' + eHab.message); return; }
+    okToast('Habitación actualizada');
+    delete tarCache[tarTab];
+    // Refresca x.habitaciones (con las fotos ya agrupadas) para que la tarjeta
+    // y el comparador vean el cambio sin tener que cerrar y reabrir el drawer.
+    if (TAR_DRAWER_ITEM) tarCargarHabitaciones(TAR_DRAWER_ITEM);
+  });
+  box.querySelectorAll('[data-accion="principal"]').forEach(btn => btn.onclick = () => marcarFotoPrincipal(tabla, fk, entidadId, +btn.closest('.tfa-item').dataset.fotoId, prefijo, boxId, habitaciones));
   box.querySelectorAll('[data-accion="reemplazar"]').forEach(btn => btn.onclick = () => {
     const fotoId = +btn.closest('.tfa-item').dataset.fotoId;
-    input.onchange = () => { if (input.files[0]) reemplazarFoto(tabla, fk, entidadId, fotoId, prefijo, input.files[0], boxId); input.value = ''; };
+    input.onchange = () => { if (input.files[0]) reemplazarFoto(tabla, fk, entidadId, fotoId, prefijo, input.files[0], boxId, habitaciones); input.value = ''; };
     input.click();
   });
   box.querySelectorAll('[data-accion="eliminar"]').forEach(btn => btn.onclick = () => {
     const fotoId = +btn.closest('.tfa-item').dataset.fotoId;
     const eraPrincipal = data.find(f => f.id === fotoId)?.es_principal ?? false;
-    eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal, boxId);
+    eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal, boxId, habitaciones);
   });
   box.querySelector('#tar-foto-agregar').onclick = () => {
-    input.onchange = () => { if (input.files[0]) agregarFoto(tabla, fk, entidadId, prefijo, data.length, input.files[0], boxId); input.value = ''; };
+    input.onchange = () => { if (input.files[0]) agregarFoto(tabla, fk, entidadId, prefijo, data.length, input.files[0], boxId, habitaciones); input.value = ''; };
     input.click();
   };
 }
-async function eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal, boxId = 'tar-fotos-admin') {
+// `habitaciones` solo se re-pasa para que el repintado final (cargarFotosAdmin)
+// no pierda el selector de habitación -- estas cuatro funciones no lo usan.
+async function eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal, boxId = 'tar-fotos-admin', habitaciones = null) {
   // confirmarSheet abre su propia hoja y openSheet cierra la que estuviera
   // abierta (la de la ficha, si se llegó desde ahí): reabrirla al volver.
   const volver = sheetAbierta;
@@ -15040,9 +15106,9 @@ async function eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal,
   box.style.opacity = '1';
   okToast('Foto eliminada');
   delete tarCache[tarTab];
-  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId);
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId, habitaciones);
 }
-async function agregarFoto(tabla, fk, entidadId, prefijo, ordenSiguiente, file, boxId = 'tar-fotos-admin') {
+async function agregarFoto(tabla, fk, entidadId, prefijo, ordenSiguiente, file, boxId = 'tar-fotos-admin', habitaciones = null) {
   if (!TAR_FOTOS_MIME.includes(file.type)) { errToast('Formato no válido — solo PNG, JPG o WEBP'); return; }
   if (file.size > TAR_FOTOS_LIMITE) { errToast('La imagen pesa más de 5MB'); return; }
   const box = document.getElementById(boxId);
@@ -15064,9 +15130,9 @@ async function agregarFoto(tabla, fk, entidadId, prefijo, ordenSiguiente, file, 
   box.style.opacity = '1';
   okToast('Foto agregada');
   delete tarCache[tarTab];
-  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId);
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId, habitaciones);
 }
-async function marcarFotoPrincipal(tabla, fk, entidadId, fotoId, prefijo, boxId = 'tar-fotos-admin') {
+async function marcarFotoPrincipal(tabla, fk, entidadId, fotoId, prefijo, boxId = 'tar-fotos-admin', habitaciones = null) {
   const box = document.getElementById(boxId);
   box.style.opacity = '.5';
   await sb.from(tabla).update({ es_principal: false }).eq(fk, entidadId).eq('es_principal', true);
@@ -15075,9 +15141,9 @@ async function marcarFotoPrincipal(tabla, fk, entidadId, fotoId, prefijo, boxId 
   if (error) { errToast('No se pudo marcar como principal: ' + error.message); return; }
   okToast('Foto principal actualizada');
   delete tarCache[tarTab];
-  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId);
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId, habitaciones);
 }
-async function reemplazarFoto(tabla, fk, entidadId, fotoIdViejo, prefijo, file, boxId = 'tar-fotos-admin') {
+async function reemplazarFoto(tabla, fk, entidadId, fotoIdViejo, prefijo, file, boxId = 'tar-fotos-admin', habitaciones = null) {
   if (!TAR_FOTOS_MIME.includes(file.type)) { errToast('Formato no válido — solo PNG, JPG o WEBP'); return; }
   if (file.size > TAR_FOTOS_LIMITE) { errToast('La imagen pesa más de 5MB'); return; }
   const box = document.getElementById(boxId);
@@ -15112,7 +15178,7 @@ async function reemplazarFoto(tabla, fk, entidadId, fotoIdViejo, prefijo, file, 
   box.style.opacity = '1';
   okToast('Foto reemplazada');
   delete tarCache[tarTab];
-  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId);
+  cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId, habitaciones);
 }
 // Deja al filtro "opción de Tarifario" del Cotizador ya elegida, con el
 // chat enfocado y un mensaje sugerido, para no obligar a re-seleccionar
@@ -18491,6 +18557,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-13', emoji: '🛏️', titulo: 'Tarifario: fotos de cada habitación', texto: 'En la ficha del hotel, cada habitación muestra ahora sus propias fotos (tocalas para verlas en grande), y el comparador de tarifas suma una fila "Fotos" para ver lado a lado cómo es cada una. Arranca con Venetur Margarita. Admin: en las fotos del hotel hay un selector para indicar a qué habitación pertenece cada foto.', roles: ['asesor', 'admin'] },
   { fecha: '2026-09-12', emoji: '🔗', titulo: 'Facturación: botón para vincular un pago a una factura', texto: 'Solo admin. Un pago de la pasarela (Zelle, Pago Móvil...) ya aprobado se podía verificar, pero no había forma de pegarlo a su factura sin tocar la base a mano. Nuevo botón "Vincular pago a factura" en Facturación pide el ID del pago y el de la factura y usa la misma validación de siempre (no deja pasarse del total ni re-pegar un pago que ya estaba vinculado a otra).', roles: ['admin'] },
   { fecha: '2026-09-11', emoji: '🚦', titulo: 'Panel del tarifario: el semáforo ya dice la verdad', texto: 'Solo admin. "Actualización automática" tenía tres "puertas" pintadas de rojo aunque solo una frenaba de verdad la publicación -- los "Duplicados de nombre" y el "Movimiento de precios" ya no bloqueaban nada hace semanas, pero el panel seguía mostrando "Frenado, esperando una persona" igual. Ahora solo queda una puerta real ("Verificación"); duplicados y movimiento de precios pasan a un bloque informativo "Para mirar (no frena)" debajo. Se agregó un botón "No son el mismo" en cada par de duplicados para sacarlos de la lista sin tocar la base a mano, y el banner ahora distingue si lo que frena es un bloqueo real, el tope de gasto del día, o que alguien apagó el interruptor de publicación automática (que estaba apagado desde el 27-ago -- ya se prendió). De yapa, un par de duplicados que salía dos veces (A↔B y B↔A) ahora sale una sola vez.', roles: ['admin'] },
   { fecha: '2026-09-10', emoji: '🏷️', titulo: 'Promociones y Hot Sales: volvieron las tarifas "solo desayuno" y "solo alojamiento"', texto: 'Las pestañas "Promociones" y "Hot Sales" traían el listado del tarifario cortado en 1000 filas: las tarifas cuyo título cae tarde en el abecedario ("Temporada Baja", "Vacaciones", "Fin de Año"...) no aparecían -- entre ellas casi todas las de régimen "solo desayuno" y "solo alojamiento". Ahora el listado se trae completo en tandas, así que se ven todas. Puede tardar un par de segundos más la primera vez que entrás a esas pestañas.', roles: ROLES_TODOS },

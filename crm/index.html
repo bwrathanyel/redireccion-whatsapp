@@ -677,6 +677,11 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .hab-linea span:not(:first-of-type)::before{content:'· ';color:var(--muted2)}
 .hab-amen{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
 .hab-chip-mas{color:var(--muted2)}
+/* Fotos por habitación (producto_fotos.habitacion_id) -- miniaturas 256, clic
+   abre el lightbox con las de esa habitación sola. Mismo tamaño en tarjeta y
+   comparador para que sea el mismo componente visual en las dos vistas. */
+.hab-fotos,.tarcmp-fotos{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.hab-foto,.tarcmp-foto{width:52px;height:52px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0}
 /* Panel de revisión del drawer (solo admin): lo no revisado no lo ve nadie más,
    así que este panel es el ÚNICO camino para publicar una habitación. */
 .hab-grupo-t{margin:12px 0 6px;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2)}
@@ -1263,6 +1268,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tfa-btn{flex:1;background:var(--line);border:none;border-radius:6px;color:var(--txt);font-size:11px;padding:5px 0;cursor:pointer}
 .tfa-btn:hover{background:var(--line2)}
 .tfa-btn[data-accion="eliminar"]:hover{background:#c0392b;color:#fff}
+.tfa-hab-sel{width:100%;background:var(--line);border:none;border-top:1px solid var(--line2);color:var(--txt);font-family:inherit;font-size:10.5px;padding:4px 6px;cursor:pointer}
 @media(max-width:760px){.tar-hotel-row{flex-wrap:wrap;row-gap:8px}.tar-hotel-row .thr-nombre{flex:1 1 100%;max-width:none}.tar-hotel-row .thr-precio{margin-left:auto}}
 
 /* ---------- Vista fichas de Tarifario (foto grande + info completa) ---------- */
