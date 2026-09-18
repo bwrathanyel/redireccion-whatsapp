@@ -711,6 +711,12 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .promo-cond{margin:9px 0 0;padding-left:14px;font-size:11.5px;color:var(--muted);line-height:1.45}
 .promo-cond li{margin-bottom:2px}
 .promo-cond-fuerte{color:var(--amber);font-weight:600}
+/* Niño gratis: el dueño lo pidió "importantísimo" -- franja llena, no chip. */
+.promo-card.promo-con-ninos{border-color:var(--pink)}
+.promo-ninos{display:flex;align-items:flex-start;gap:9px;margin:7px 0 4px;padding:9px 11px;border-radius:10px;background:var(--pink);color:#1a1000}
+.promo-ninos>i{font-size:16px;margin-top:1px}
+.promo-ninos-t{font-size:13px;font-weight:800;letter-spacing:.3px;text-transform:uppercase}
+.promo-ninos-d{font-size:11.5px;font-weight:600;margin-top:2px}
 /* DBL en grande (B3): el precio titular como se promociona en redes. El resto de
    las ocupaciones (SGL/TPL/CHD...) baja a una fila secundaria chica -- nunca se
    pierde una clave. */
@@ -740,10 +746,11 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .promo-mp-btn:hover:not(.on):not(:disabled){color:var(--txt);border-color:var(--accent)}
 .promo-mp-btn.on{background:var(--accent);border-color:var(--accent);color:#1a1000}
 .promo-mp-btn:disabled{opacity:.5;cursor:not-allowed}
-.promo-pie{margin-top:11px}
-.promo-retirar{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer}
+.promo-pie{margin-top:11px;display:flex;flex-wrap:wrap;gap:6px}
+.promo-retirar,.promo-juntar{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;max-width:100%;text-align:left}
 .promo-retirar:hover{border-color:#ef4444;color:#ef4444}
-.promo-retirar:disabled{opacity:.5;cursor:progress}
+.promo-juntar:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.promo-retirar:disabled,.promo-juntar:disabled{opacity:.5;cursor:progress}
 .cond-bloque{border:1px solid var(--line);border-radius:10px;margin-top:11px;background:var(--panel)}
 .cond-sum{list-style:none;cursor:pointer;display:flex;align-items:center;gap:7px;padding:11px 14px;font-size:12px;font-weight:600;color:var(--txt);min-height:44px}
 .cond-sum::-webkit-details-marker{display:none}
@@ -1226,6 +1233,10 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tar-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .tar-tag{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:20px;background:rgba(16,185,129,.14);color:#34d399}
 .tc-promos{font-size:11.5px;color:var(--amber);margin-top:8px;font-weight:600}
+.tar-card.tc-con-ninos{border-color:var(--pink)}
+.tc-ninos{display:flex;align-items:center;gap:7px;padding:7px 14px;background:var(--pink);color:#1a1000;font-size:11.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase}
+.tf-ninos{margin:7px 0;border-radius:10px}
+.thr-ninos{display:inline-flex;align-items:center;gap:4px;margin-right:7px;padding:1px 7px;border-radius:999px;background:var(--pink);color:#1a1000;font-size:10px;font-weight:800;vertical-align:middle;white-space:nowrap}
 .tar-f-check{display:inline-flex;align-items:center;gap:7px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:9px 12px;color:var(--muted);font-size:12.5px;cursor:pointer;user-select:none;white-space:nowrap}
 .tar-f-check:has(input:checked){color:var(--txt);border-color:var(--accent)}
 .tar-f-check input{accent-color:var(--accent);cursor:pointer}
@@ -2455,6 +2466,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ce-mini:hover{color:var(--txt);border-color:var(--line2);background:rgba(255,255,255,.09)}
 .ce-mini.on{color:var(--accent);border-color:rgba(255,145,0,.4)}
 .ce-mini.peligro:hover{color:#fca5a5;border-color:rgba(239,68,68,.4)}
+/* ---------- Clientes Eventos: registrados del QR y sus premios del stand ---------- */
+@media(min-width:761px){#cev-kpis{grid-template-columns:repeat(5,1fr)}}
+.cev-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.cev-nom{flex:1;min-width:0;font-size:14px;font-weight:700;overflow-wrap:anywhere}
+.cev-cod{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:700;letter-spacing:.08em;
+  color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:3px 9px}
+.cev-prems{display:flex;flex-direction:column;gap:9px;margin-top:11px;padding-top:11px;border-top:1px solid var(--line)}
+.cev-prem{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:12.5px}
+.cev-prem>i{flex:0 0 auto;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
+  background:var(--accent-soft);color:var(--accent);font-size:12px}
+.cev-prem.ok>i{background:color-mix(in srgb,var(--green) 14%,transparent);color:var(--green)}
+.cev-prem-t{flex:1;min-width:160px;display:flex;flex-direction:column;gap:2px;overflow-wrap:anywhere}
+.cev-prem-t span{color:var(--muted);font-size:11.5px}
+.cev-cupon{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:700;user-select:all;
+  border:1px dashed var(--line2);border-radius:8px;padding:3px 9px}
+.cev-nada{margin-top:9px;font-size:12px;color:var(--muted2)}
 /* ---------- Cerebro IA: ramas ------------------------------------------
    El punto de esta pantalla es que se VEA de dónde sale cada pedazo del texto
    que recibe el modelo. El color no es decoración: es la única forma de notar
@@ -3963,6 +3990,7 @@ body.fsize-grande{--tap:41.9px}
             <option value="">Todas las modalidades</option>
             <option value="presencial">Presencial</option>
             <option value="freelance">Freelance</option>
+            <option value="formacion">Formación Asesor Integral</option>
           </select>
           <select class="flt" id="post-f-llamada">
             <option value="">Cualquier estado de llamada</option>
@@ -4885,6 +4913,35 @@ body.fsize-grande{--tap:41.9px}
         </div>
         <div id="cl-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
       </div>
+    </section>
+
+    <!-- CLIENTES EVENTOS: quienes se registraron con el QR del stand (/juega) y los
+         premios que ganaron. La laptop de juegos no usa internet: al cerrar se
+         descarga un archivo y un admin lo sube acá (RPC importar_premios_evento). -->
+    <section class="section" id="sec-clientes-eventos">
+      <div class="ce-intro">
+        Quienes se registraron con el <b>QR del stand</b> y los premios y cupones que ganaron en los juegos.<br>
+        La laptop del stand no usa internet: al cerrar el evento, en su admin tocá <b>Descargar para el CRM</b>
+        y subí ese archivo acá. Subirlo dos veces no duplica nada. Solo lo ven los admin.
+      </div>
+      <div class="ce-barra">
+        <select class="ei" id="cev-evento" style="max-width:320px" aria-label="Evento"></select>
+        <button class="ce-mini" id="cev-recargar" type="button"><i class="fas fa-rotate"></i> Actualizar</button>
+        <button class="dbtn save" id="cev-importar" type="button" style="width:auto;flex:none;margin-top:0;padding:8px 14px"><i class="fas fa-file-import"></i> Importar archivo del stand</button>
+        <input type="file" id="cev-archivo" accept=".json,application/json" hidden>
+      </div>
+      <div id="cev-resumen"></div>
+      <div class="kpis" id="cev-kpis"></div>
+      <div class="ce-barra">
+        <input class="ei" type="search" id="cev-buscar" placeholder="Buscar nombre, teléfono, código o cupón" aria-label="Buscar" style="max-width:320px">
+        <select class="ei" id="cev-filtro" style="max-width:240px" aria-label="Filtrar">
+          <option value="todos">Todos</option>
+          <option value="jugaron">Jugaron</option>
+          <option value="sin-jugar">No jugaron</option>
+          <option value="pendientes">Con premio por entregar</option>
+        </select>
+      </div>
+      <div id="cev-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
     </section>
 
     <!-- CONSULTOR IA: chat de solo consulta (arquitectura/decisiones/estado en

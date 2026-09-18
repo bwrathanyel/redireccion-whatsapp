@@ -2422,12 +2422,14 @@ async function startApp() {
   // (ej. Luis Silva, Maryori Sandoval) no aparecen y quedaban fuera del selector
   // de "Asesor asignado" y de los filtros. Se completa con listar_asesores_activos()
   // (tabla `asesores` con activo=true), la fuente de verdad de quién puede recibir.
-  try {
+  // Solo admin: la RPC hace assert_rol(['admin']) y a un asesor le devuelve 403
+  // en cada carga (~13/h en los logs del 2026-09-18).
+  if (ROL === 'admin') try {
     const { data, error } = await sb.rpc('listar_asesores_activos');
     if (!error && Array.isArray(data)) {
       ACTIVOS = [...new Set([...ACTIVOS, ...data.map(a => a.nombre)])];
     }
-  } catch (_) { /* sin permisos (asesor) o fallo de red: se conserva by_advisor */ }
+  } catch (_) { /* fallo de red: se conserva by_advisor */ }
   if (ROL === 'admin') activateSection(seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'dashboard'));
   renderHoy();
   renderAll();
@@ -6102,7 +6104,7 @@ function riaPintarPanel(data) {
   </div><div class="ce-ayuda">El vigilante de silencios solo se activa cuando la confirmación del flujo supera 99,5%; así no duplica mensajes legítimos.</div>`;
 
   pintarKPIs('ria-kpis', [
-    { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: riaCambio(r.conversaciones, ant.conversaciones), i: 'fa-comments', c: 'var(--blue)' },
+    { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: `${riaCambio(r.conversaciones, ant.conversaciones)}${riaNum(r.solo_boton) ? ` · ${fmt(riaNum(r.solo_boton))} solo tocaron botón` : ''}`, i: 'fa-comments', c: 'var(--blue)' },
     { t: 'Teléfonos', v: fmt(riaNum(r.telefonos)), d: `${riaPct(r.telefonos, r.conversaciones)}% de conversaciones`, i: 'fa-phone', c: 'var(--accent)' },
     { t: 'Leads calificados', v: fmt(riaNum(r.leads_calificados)), d: `${riaPct(r.leads_calificados, r.conversaciones)}% de conversión`, i: 'fa-user-check', c: 'var(--green)' },
     { t: 'Oportunidades sin lead', v: fmt(riaNum(r.oportunidades_sin_lead)), d: 'Teléfono + destino + intención', i: 'fa-triangle-exclamation', c: riaNum(r.oportunidades_sin_lead) ? '#ef4444' : 'var(--green)' },
@@ -7699,6 +7701,20 @@ const postFotoHtml = (p, clase) => {
     : `<div class="${clase} post-foto-vacia"><i class="fas fa-user"></i></div>`;
 };
 const GENERO_LABEL = { femenino: 'Femenino', masculino: 'Masculino', otro: 'Otro' };
+const MODALIDAD_LABEL = { presencial: 'Presencial', freelance: 'Freelance', formacion: 'Formación Asesor Integral' };
+const modalidadTexto = m => MODALIDAD_LABEL[m] || 'Freelance';
+// Campaña "Asesor Integral de Viajes": el bot envía el Google Form de
+// Consultouring. "fallo" es lo único accionable: cargarlo a mano con el resumen.
+const FORM_ESTADO = {
+  enviado: ['Form enviado por IA', '#22c55e'],
+  pendiente: ['Entrevista en curso', '#f59e0b'],
+  fallo: ['Form falló: cargar a mano', '#ef4444'],
+  link: ['Llena el form por su cuenta', '#a855f7'],
+};
+const formEstadoBadge = p => {
+  const e = FORM_ESTADO[p.formulario_estado];
+  return e ? `<span class="badge-st" style="color:${e[1]};background:${e[1]}2e">${e[0]}</span>` : '';
+};
 async function loadPostulaciones() {
   document.getElementById('post-loading')?.classList.add('show');
   const { data, error } = await sb.from('postulaciones_empleo').select('*').order('created_at', { ascending: false });
@@ -7720,7 +7736,7 @@ function postCardHtml(p) {
       ${postFotoHtml(p, 'post-foto')}
       <div style="min-width:0;flex:1">
         <div style="font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis">${esc(p.nombre)}</div>
-        <div class="muted" style="font-size:12.5px">${esc(p.rol_interes || (p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'))}</div>
+        <div class="muted" style="font-size:12.5px">${esc(p.rol_interes || modalidadTexto(p.modalidad))}</div>
         <div class="muted" style="font-size:12px;margin-top:2px">${esc(p.telefono)}</div>
       </div>
       ${p.revisado ? '<i class="fas fa-circle-check" style="color:#22c55e" title="Revisado"></i>' : ''}
@@ -7731,6 +7747,7 @@ function postCardHtml(p) {
       ${p.calidad_prospecto ? `<span class="badge-st" style="color:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]};background:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]}2e">${CALIDAD_PROSPECTO_LABEL[p.calidad_prospecto]}</span>` : '<span class="muted" style="font-size:12px">Sin calificar</span>'}
       <span class="badge-st" style="color:${p.estado_llamada === 'llamado' ? '#22c55e' : '#e0a030'};background:${p.estado_llamada === 'llamado' ? '#22c55e2e' : '#e0a0302e'}">${p.estado_llamada === 'llamado' ? 'Llamado' : 'Pendiente'}</span>
       ${p.cv_storage_path ? '<span class="post-dato"><i class="fas fa-file-pdf"></i> CV</span>' : ''}
+      ${formEstadoBadge(p)}
     </div>
   </div>`;
 }
@@ -7764,7 +7781,7 @@ function renderPostulaciones() {
     <td><input type="checkbox" class="post-check" data-id="${p.id}" ${SELECTED_POST.has(p.id) ? 'checked' : ''}></td>
     <td>${p.revisado ? '<i class="fas fa-circle-check" style="color:#22c55e" title="Revisado"></i>' : '<i class="fas fa-circle" style="color:#5f677f" title="Sin revisar"></i>'}</td>
     <td data-label="Nombre">${esc(p.nombre)}</td>
-    <td data-label="Modalidad"><span class="chip">${p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'}</span></td>
+    <td data-label="Modalidad"><span class="chip">${modalidadTexto(p.modalidad)}</span>${p.formulario_estado === 'fallo' ? ' ' + formEstadoBadge(p) : ''}</td>
     <td data-label="Rol" class="muted">${esc(p.rol_interes || '—')}</td>
     <td data-label="Teléfono" class="muted">${esc(p.telefono)}</td>
     <td data-label="Llamada"><span class="badge-st" style="color:${p.estado_llamada === 'llamado' ? '#22c55e' : '#e0a030'};background:${p.estado_llamada === 'llamado' ? '#22c55e2e' : '#e0a0302e'}">${p.estado_llamada === 'llamado' ? 'Llamado' : 'Pendiente'}</span></td>
@@ -7880,11 +7897,12 @@ function abrirPostulacionDrawer(p, tab) {
       ${postFotoHtml(p, 'post-foto-ficha')}
       <div class="pf-head-txt">
         <div class="pf-nombre">${esc(p.nombre)}</div>
-        <div class="pf-rol">${p.modalidad === 'presencial' ? 'Presencial' : 'Freelance'}${p.rol_interes ? ' · ' + esc(p.rol_interes) : ''}</div>
+        <div class="pf-rol">${modalidadTexto(p.modalidad)}${p.rol_interes ? ' · ' + esc(p.rol_interes) : ''}</div>
         <div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
           ${cal ? `<span class="badge-st" style="color:${CALIDAD_PROSPECTO_COLOR[cal]};background:${CALIDAD_PROSPECTO_COLOR[cal]}2e">${CALIDAD_PROSPECTO_LABEL[cal]}</span>` : ''}
           <span class="badge-st" style="color:${p.estado_llamada === 'llamado' ? '#22c55e' : '#e0a030'};background:${p.estado_llamada === 'llamado' ? '#22c55e2e' : '#e0a0302e'}">${p.estado_llamada === 'llamado' ? 'Llamado' : 'Pendiente'}</span>
           ${p.revisado ? '<span class="badge-st" style="color:#22c55e;background:#22c55e2e">Revisado</span>' : ''}
+          ${formEstadoBadge(p)}
         </div>
       </div>
       <button class="pf-cerrar" type="button" id="pf-cerrar" title="Cerrar"><i class="fas fa-xmark"></i></button>
@@ -7916,7 +7934,7 @@ function abrirPostulacionDrawer(p, tab) {
           <input type="file" id="post-d-cv-input" accept="application/pdf" style="display:none">
           <input type="file" id="post-d-foto-input" accept="image/jpeg,image/png" style="display:none">
         </div>
-        ${p.mensaje ? `<div class="pf-bloque"><label class="fl">Mensaje del candidato</label><div class="dfv" style="white-space:pre-wrap">${esc(p.mensaje)}</div></div>` : ''}
+        ${p.mensaje ? `<div class="pf-bloque"><label class="fl">${p.modalidad === 'formacion' ? 'Respuestas de la entrevista' : 'Mensaje del candidato'}</label><div class="dfv" style="white-space:pre-wrap">${esc(p.mensaje)}</div></div>` : ''}
         <details style="border:1px solid var(--line2);border-radius:12px;padding:9px 11px">
           <summary style="cursor:pointer;font-size:13px;font-weight:600">Corregir datos</summary>
           <div style="margin-top:10px">
@@ -12514,14 +12532,19 @@ async function loadTarifario() {
     // precio y renderTarifarioIA por `ia_orden`, así que el orden de fetch da
     // igual. La 2da query también trae lo forzado a mano (hot sale o IA) para
     // que un override sobre una fila sin título no se pierda. Merge por `id`.
+    // Keyset (`id > último`) y no offset/range: con OFFSET Postgres arma las ~5k
+    // filas completas con sus embeds, las ordena en disco y recién ahí corta, en
+    // CADA página (0,5-2,5 s c/u medido 2026-09-16). Sumado a las otras cargas del
+    // arranque pasaba el statement_timeout de 8 s (57014) y el tarifario quedaba vacío.
     const PAGINA_TARIFAS = 1000;
     const traerTarifasPaginado = async (nuevaQuery) => {
       const acc = [];
-      for (let desde = 0; ; desde += PAGINA_TARIFAS) {
-        const { data: d, error: e } = await nuevaQuery().range(desde, desde + PAGINA_TARIFAS - 1);
+      for (let ultimo = 0; ;) {
+        const { data: d, error: e } = await nuevaQuery().gt('id', ultimo).limit(PAGINA_TARIFAS);
         if (e) return { data: null, error: e };
         acc.push(...(d || []));
         if (!d || d.length < PAGINA_TARIFAS) break;
+        ultimo = d[d.length - 1].id;
       }
       return { data: acc, error: null };
     };
@@ -12894,7 +12917,7 @@ function _agregarHotelCalc(x) {
   return {
     tags: [...new Set(promos.flatMap(p => p.incluye_tags || []))],
     precioMin: precios.length ? Math.round(Math.min(...precios) * 100) / 100 : null,
-    ninosMax: Math.max(0, ...promos.map(p => p.ninos_gratis_cantidad || 0)),
+    ninosMax: tarNinoGratisHotel(x)?.cantidad || 0,
     // "Vendible hoy" en vez de las fechas de la promo vieja: mismo criterio que
     // `tarifa_destacada()` en SQL (venta abierta + disfrute no vencido).
     algunaVigente: promos.length ? promos.some(tarVendibleHoy) : true,
@@ -13180,7 +13203,7 @@ function tarRowHtml(x) {
   }
   return `<div class="tar-item tar-hotel-row" data-id="${x.id}">
     ${foto ? `<img class="thr-thumb" src="${esc(foto)}" alt="" loading="lazy" decoding="async">` : `<div class="thr-thumb thr-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`}
-    <div class="thr-nombre">${esc(nombre)}</div>
+    <div class="thr-nombre">${tarNinosHtml(esPromo ? tarNinoGratis(x) : tarNinoGratisHotel(x), 'thr-ninos')}${esc(nombre)}</div>
     ${tags.length ? tagsHtml(tags) : '<span></span>'}
     ${promosCount ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promosCount} promo${promosCount > 1 ? 's' : ''}</div>` : ''}
     <div class="thr-precio${precioTxt == null ? ' sin-precio' : ''}">${precioTxt != null ? esc(precioTxt) : 'Consultar precio'}</div>
@@ -13240,8 +13263,10 @@ function tarCardHtml(x) {
     // resumen_ia: descripción normalizada al mismo largo por IA (la misma que
     // usa la web pública). Por diseño NUNCA contiene precios -- el precio real
     // sale siempre de precio_texto, tal cual está cargado.
-    return `<div class="tar-item tar-card" data-id="${x.id}">
+    const nino = tarNinoGratis(x);
+    return `<div class="tar-item tar-card${nino ? ' tc-con-ninos' : ''}" data-id="${x.id}">
       ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'tarifas', 'vigente'), x._tarifa ? tarBadgePrecio(x._tarifa) : x.precio_texto, tcHsBtnHtml(x, 'tc-hs', tarTab === 'hotsale') + tcIaBtnHtml(x))}
+      ${tarNinosHtml(nino, 'tc-ninos')}
       <div class="tc-body">
         ${x.producto_id ? `<button type="button" class="tc-hotel-chip" data-abrir-hotel="${x.producto_id}"><i class="fas fa-hotel"></i> ${esc(x.productos?.nombre || '')}</button>` : ''}
         <div class="tc-nombre">${esc(tarNombrePromo(x))}</div>
@@ -13262,8 +13287,10 @@ function tarCardHtml(x) {
   const nTarifas = (x.tarifas || []).length;
   const tagsHotel = agregarHotel(x).tags;
   const bullets = resumenBullets(x.descripcion);
-  return `<div class="tar-item tar-card" data-id="${x.id}">
+  const nino = tarNinoGratisHotel(x);
+  return `<div class="tar-item tar-card${nino ? ' tc-con-ninos' : ''}" data-id="${x.id}">
     ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), tcHideBtnHtml(x.id, 'productos', 'activo'), tarBadgePrecio(tarifa))}
+    ${tarNinosHtml(nino, 'tc-ninos')}
     <div class="tc-body">
       <div class="tc-nombre">${esc(x.nombre)}</div>
       ${bullets.length ? `<ul class="tc-resumen">${bullets.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
@@ -13287,6 +13314,7 @@ function tarFichaHtml(x) {
     <div class="tf-media"${foto ? ` style="background-image:url('${esc(foto)}')"` : ''}>${!foto ? `<i class="fas fa-${esPromo ? 'tag' : 'image'}"></i>` : ''}<div class="carrusel-dots"></div></div>
     <div class="tf-body">
       <div class="tc-nombre">${esc(nombre)}</div>
+      ${tarNinosHtml(esPromo ? tarNinoGratis(x) : tarNinoGratisHotel(x), 'tc-ninos tf-ninos')}
       ${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}
       ${!esPromo && x.descripcion ? `<ul class="tc-resumen tc-resumen-ficha">${resumenBullets(x.descripcion).map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
       ${precio ? `<div class="tc-precio">${esc(precio)}</div>` : ''}
@@ -13975,6 +14003,35 @@ const tarMinimoNoches = t => {
   const b = tarBloque(t);
   return t?.minimo_noches ?? (b?.minimo_noches && t?.habitacion ? b.minimo_noches[t.habitacion] : null) ?? null;
 };
+// Niño gratis. El PDF lo trae como texto en `condiciones` ("(1) NIÑO GRATIS
+// (5-10)") y nunca llena `ninos_gratis_cantidad` (solo lo llena el flyer): por
+// eso el filtro daba siempre "Sin resultados". Regex estricto a propósito:
+// "Niños $50 / Infantes GRATIS" de los full days es la política de infantes, no
+// una promo. Fecha límite: la que anotó Juntar ("solo reservando hasta el
+// DD/MM/YYYY"); si no, el fin de venta de la tarifa. Pasada esa fecha no cuenta:
+// la tarifa puede seguir a la venta sin el regalo.
+const RE_NINO_GRATIS = /(?:^|[^a-zñ])ni[nñ][oa]s?\s+(?:de\s+)?gratis/i;
+function tarNinoGratis(t) {
+  if (!t) return null;
+  const txt = [...(t.condiciones || []), t.titulo, t.vigencia_texto, t.notas, t.precio_texto].find(s => s && RE_NINO_GRATIS.test(s));
+  if (!txt && !(t.ninos_gratis_cantidad > 0)) return null;
+  const s = txt || '';
+  const dmy = re => { const m = re.exec(s); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
+  const hasta = dmy(/reservando hasta el (\d{2})\/(\d{2})\/(\d{4})/i) || dmy(/viajando del \d{2}\/\d{2}\/\d{4} al (\d{2})\/(\d{2})\/(\d{4})/i) || tarVentaHasta(t);
+  if (hasta && hasta < hoy()) return null;
+  const cantidad = Number((/(?:^|\()\s*(\d+)\s*\)?\s*ni[nñ]/i.exec(s) || [])[1]) || t.ninos_gratis_cantidad || 1;
+  const edades = (/\((\d+\s*-\s*\d+)\)/.exec(s) || [])[1] || null;
+  const label = `${cantidad > 1 ? `${cantidad} niños gratis` : 'Niño gratis'}${edades ? ` (${edades.replace(/\s/g, '')})` : ''}${hasta ? ` hasta ${hasta.slice(8, 10)}/${hasta.slice(5, 7)}` : ''}`;
+  const detalle = (/—\s*solo\s+(.+)$/i.exec(s) || [])[1] || null;
+  return { cantidad, hasta, label, detalle: detalle && detalle[0].toUpperCase() + detalle.slice(1), txt: txt || label };
+}
+// El del hotel: entre sus tarifas vendibles hoy, la que regala por más tiempo
+// (sin fecha = abierta, gana).
+function tarNinoGratisHotel(x) {
+  const ns = (x.tarifas || []).filter(tarVendibleHoy).map(tarNinoGratis).filter(Boolean);
+  return ns.sort((a, b) => (b.hasta || '9999') > (a.hasta || '9999') ? 1 : -1)[0] || null;
+}
+const tarNinosHtml = (n, cls) => n ? `<div class="${cls}" title="${esc(n.txt)}"><i class="fas fa-child"></i><span>${esc(n.label)}</span></div>` : '';
 function tarCondicionesResumen(t) {
   const b = tarBloque(t), out = [];
   tarSuplementosDe(t).forEach(s => out.push({ txt: (s.obligatorio ? 'Suplemento obligatorio — ' : 'Suplemento — ') + tarSuplementoTexto(s, t.moneda), fuerte: !!s.obligatorio }));
@@ -14011,7 +14068,7 @@ function tarifaComoPromo(t) {
     revisado: t.vigente !== false,
     fecha_fin_estimada: t.fecha_fin || null,
     fecha_venta_fin: tarVentaHasta(t),
-    ninos_gratis_cantidad: t.ninos_gratis_cantidad || 0,
+    ninos_gratis_cantidad: tarNinoGratis(t)?.cantidad || 0,
     productos: t.productos || null,
   };
 }
@@ -14285,7 +14342,7 @@ function tarMejorPrecioBtnHtml(t, esDestacada, vendible) {
   return `<button type="button" class="promo-mp-btn${esDestacada ? ' on' : ''}" data-mp-set="${t.id}" title="${tip}"${vendible ? '' : ' disabled'}>★ Mejor precio</button>`;
 }
 // Una tarjeta = una promoción = una fila del PDF.
-function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false) {
+function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false, juntarCon = null) {
   const esDestacada = destacadaId != null && t.id === destacadaId;
   const vendible = tarVendibleHoy(t);
   // Capacidad vendible: la que el proveedor cotiza. Sin claves de ocupación no
@@ -14300,11 +14357,12 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
   const cond = tarCondicionesResumen(t);
   const titulo = t.titulo || t.habitacion || t.plan || 'Tarifa';
   const attrs = tarAtributosHabitacion(t.habitacion || titulo);
+  const nino = tarNinoGratis(t);
   // Prefijo `promo-` a propósito: `pc-` ya lo usa la tarjeta de Personal
   // (.pc-top, .pc-nombre...) y reusarlo pintaría dos componentes distintos con
   // el mismo CSS. Tampoco se usan prefijos fa/fab/fas/far (los reclama Font
   // Awesome y una vez hizo desaparecer todos los iconos de marca).
-  return `<article class="promo-card${esDestacada ? ' promo-destacada' : ''}${vendible && !noEntran ? '' : ' promo-apagada'}" data-tarifa-id="${t.id}">
+  return `<article class="promo-card${esDestacada ? ' promo-destacada' : ''}${nino ? ' promo-con-ninos' : ''}${vendible && !noEntran ? '' : ' promo-apagada'}" data-tarifa-id="${t.id}">
     <div class="promo-top">
       <label class="promo-check"><input type="checkbox" data-tar-sel="${t.id}" aria-label="Seleccionar ${esc(titulo)}"></label>
       <div class="promo-titulo">${esc(titulo)}</div>
@@ -14316,6 +14374,7 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
       ${noEntran ? `<span class="promo-badge promo-badge-off">No entran ${grupo}</span>` : ''}
     </div>
     ${t.habitacion && t.habitacion !== titulo ? `<div class="promo-sub">${esc(t.habitacion)}</div>` : ''}
+    ${nino ? `<div class="promo-ninos" title="${esc(nino.txt)}"><i class="fas fa-child"></i><div><div class="promo-ninos-t">${esc(nino.label)}</div>${nino.detalle ? `<div class="promo-ninos-d">${esc(nino.detalle)}</div>` : ''}</div></div>` : ''}
     ${attrs.length || delta || cap ? `<div class="promo-attr">
       ${attrs.map(a => `<span class="promo-attr-chip">${esc(a)}</span>`).join('')}
       ${cap ? `<span class="promo-cap" title="Ocupaciones que cotiza el proveedor: ${esc(cap.claves.join(' · '))}"><i class="fas fa-user-group"></i>Hasta ${cap.max} adulto${cap.max > 1 ? 's' : ''}</span>` : ''}
@@ -14338,8 +14397,67 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
       ${!venta[0] && !venta[1] && !ventanas.length && t.vigencia_texto ? `<div class="promo-dato"><span class="promo-dk">Vigencia</span><span class="promo-dv">${esc(t.vigencia_texto)}</span></div>` : ''}
     </div>` : ''}
     ${cond.length ? `<ul class="promo-cond">${cond.map(c => `<li${c.fuerte ? ' class="promo-cond-fuerte"' : ''}>${esc(c.txt)}</li>`).join('')}</ul>` : ''}
-    ${tarPuedeRetirar(t) ? `<div class="promo-pie"><button type="button" class="promo-retirar" data-retirar-tarifa="${t.id}"><i class="fas fa-box-archive"></i> Retirar del catálogo</button></div>` : ''}
+    ${tarPuedeRetirar(t) || juntarCon ? `<div class="promo-pie">
+      ${juntarCon ? `<button type="button" class="promo-juntar" data-juntar-queda="${t.id}" data-juntar-sale="${juntarCon.id}" title="Mismo precio y fechas pegadas: queda esta tarjeta con las dos fechas unidas y la otra se retira"><i class="fas fa-object-group"></i> Juntar con «${esc(juntarCon.titulo || juntarCon.habitacion || 'Tarifa')}»</button>` : ''}
+      ${tarPuedeRetirar(t) ? `<button type="button" class="promo-retirar" data-retirar-tarifa="${t.id}"><i class="fas fa-box-archive"></i> Retirar del catálogo</button>` : ''}
+    </div>` : ''}
   </article>`;
+}
+// Pares que el botón "Juntar" puede unir: mismo plan y habitación, mismo precio
+// y mínimo de noches, una ventana cada una, y el disfrute de una empieza el día
+// siguiente al fin de la otra. Espejo de tarifario_juntar_tarifas_nucleo (la RPC
+// re-valida). No se juntan solos: hay pares así que son promos distintas
+// (TEMP. BAJA -> PRE VENTA NAVIDAD); decide el admin.
+function tarParesJuntables(filas) {
+  const pares = new Map();
+  if (ROL !== 'admin') return pares;
+  const canon = v => JSON.stringify(v && typeof v === 'object' ? Object.keys(v).sort().map(k => [k, v[k]]) : v ?? null);
+  const diaSig = iso => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
+  const simple = t => t.precios && t.disfrute_desde && t.fecha_fin && (t.ventanas || []).length <= 1;
+  for (const a of filas) for (const b of filas) {
+    if (a === b || pares.has(a.id) || !simple(a) || !simple(b)) continue;
+    if ((a.plan || '') !== (b.plan || '') || (a.habitacion || '') !== (b.habitacion || '')) continue;
+    if (canon(a.precios) !== canon(b.precios) || a.moneda !== b.moneda || (a.minimo_noches ?? null) !== (b.minimo_noches ?? null)) continue;
+    if (diaSig(a.fecha_fin) === b.disfrute_desde || diaSig(b.fecha_fin) === a.disfrute_desde) pares.set(a.id, b);
+  }
+  return pares;
+}
+const TAR_JUNTAR_ERR = {
+  no_existe_o_retirada: 'una de las dos ya no está vigente',
+  otra_habitacion: 'no son la misma habitación',
+  precio_distinto: 'los precios no son iguales',
+  minimo_noches_distinto: 'el mínimo de noches no es igual',
+  ventanas_no_simples: 'alguna tiene más de una ventana de fechas',
+  fechas_no_contiguas: 'las fechas no están pegadas',
+};
+async function tarJuntarTarifas(queda, sale, btn) {
+  if (ROL !== 'admin' || !TAR_DRAWER_ITEM?.tarifas) return;
+  const q = TAR_DRAWER_ITEM.tarifas.find(t => Number(t.id) === queda);
+  const s = TAR_DRAWER_ITEM.tarifas.find(t => Number(t.id) === sale);
+  if (!q || !s) return;
+  const nom = t => t.titulo || t.habitacion || 'Tarifa';
+  const rango = [[q.disfrute_desde, s.disfrute_desde].sort()[0], [q.fecha_fin, s.fecha_fin].sort()[1]];
+  if (!confirm(`Queda «${nom(q)}» con disfrute ${tarRango(rango)} y «${nom(s)}» se retira del catálogo.\n\nLas condiciones que traía solo una se conservan con su fecha original (ej. un niño gratis que valía hasta cierto día no se extiende).\n\nQueda recordado: cada carga nueva del tarifario las vuelve a juntar mientras sigan con el mismo precio y fechas pegadas.\n\n¿Juntarlas?`)) return;
+  const prev = btn ? btn.innerHTML : null;
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+  const { data, error } = await sb.rpc('tarifario_juntar_tarifas', { p_queda: queda, p_sale: sale });
+  if (error || !data?.ok) {
+    if (btn) { btn.disabled = false; btn.innerHTML = prev; }
+    errToast('No se pudo juntar: ' + (error?.message || TAR_JUNTAR_ERR[data?.error] || data?.error || ''));
+    return;
+  }
+  const aplicar = t => { if (t && Number(t.id) === queda) Object.assign(t, data.tarifa); };
+  TAR_DRAWER_ITEM.tarifas = TAR_DRAWER_ITEM.tarifas.filter(t => Number(t.id) !== sale);
+  TAR_DRAWER_ITEM.tarifas.forEach(aplicar);
+  if (Number(TAR_DRAWER_ITEM.tarifa_destacada_id) === sale) TAR_DRAWER_ITEM.tarifa_destacada_id = queda;
+  ['promo', 'hotsale', 'ia'].forEach(k => {
+    if (!tarCache[k]) return;
+    tarCache[k] = tarCache[k].filter(x => Number(x.id) !== sale);
+    tarCache[k].forEach(aplicar);
+  });
+  if (document.querySelector('#drawerContent .carpeta')) tarRepintarCarpeta(TAR_DRAWER_ITEM);
+  if (tarTab === 'promo' || tarTab === 'hotsale' || tarTab === 'ia') renderTarifario();
+  okToast('Promociones unidas');
 }
 /* La carpeta: las N filas del hotel agrupadas por plan (Todo Incluido / Solo
    Desayuno / ...). La destacada va primera y marcada; las que ya no se venden
@@ -14384,6 +14502,7 @@ function tarCarpetaHtml(x) {
   // El filtro "Somos N" de la toolbar no esconde tarjetas: las apaga. El asesor
   // tiene que poder ver que la habitación existe y por qué no la puede ofrecer.
   const grupoTam = tarGrupoFiltro();
+  const juntables = tarParesJuntables(vivas);
   const planes = [...grupos.keys()].sort((a, b) =>
     (Number(grupos.get(b).some(t => t.id === destacadaId)) - Number(grupos.get(a).some(t => t.id === destacadaId)))
     || a.localeCompare(b, 'es'));
@@ -14394,7 +14513,7 @@ function tarCarpetaHtml(x) {
     <div class="carpeta-titulo"><i class="fas fa-layer-group"></i> ${tituloCarpeta}</div>
     ${planes.map(p => `<section class="carpeta-plan">
       ${grupos.size > 1 || p !== 'Sin plan indicado' ? `<h4 class="carpeta-plan-titulo">${esc(p)}</h4>` : ''}
-      <div class="promo-grid">${grupos.get(p).map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null, habs.get(tarNombreNorm(t.habitacion)) || null, grupoTam)).join('')}</div>
+      <div class="promo-grid">${grupos.get(p).map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null, habs.get(tarNombreNorm(t.habitacion)) || null, grupoTam, false, juntables.get(t.id) || null)).join('')}</div>
     </section>`).join('')}
     ${historicas.length ? `<details class="carpeta-historico">
       <summary>Ver histórico (${historicas.length})</summary>
@@ -14522,6 +14641,8 @@ function tarEngancharCarpeta() {
     if (iaBtn) { e.stopPropagation(); iaMarcar(Number(iaBtn.dataset.iaToggle), iaBtn.dataset.iaOn === '1' ? 'quitar' : 'poner', iaBtn); return; }
     const ret = e.target.closest('[data-retirar-tarifa]');
     if (ret) { e.stopPropagation(); retirarTarifaVieja(Number(ret.dataset.retirarTarifa), ret); return; }
+    const jun = e.target.closest('[data-juntar-queda]');
+    if (jun) { e.stopPropagation(); tarJuntarTarifas(Number(jun.dataset.juntarQueda), Number(jun.dataset.juntarSale), jun); return; }
   });
 }
 // Re-pintar la carpeta tira el nodo viejo y con él su listener; la barra NO se
@@ -18557,6 +18678,8 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-18', emoji: '🧒', titulo: 'Tarifario: niños gratis bien a la vista', texto: 'Toda tarifa o promo con niño gratis lleva ahora una franja rosa bien visible (en la carpeta del hotel, la grilla, la ficha y la lista), con la edad y hasta qué fecha hay que reservar para aprovecharlo. Y el filtro "Con niños gratis" de la pestaña Hoteles, que daba "Sin resultados", ya funciona.', roles: ['asesor', 'admin'] },
+  { fecha: '2026-09-18', emoji: '🔗', titulo: 'Tarifario: juntar dos tarifas iguales', texto: 'En la carpeta del hotel, cuando dos tarifas son idénticas (plan, habitación, precios y mínimo de noches) y sus fechas se tocan, aparece el botón "Juntar con…" para dejarlas en una sola. La unión se recuerda: si llega una carga nueva del mismo hotel, se vuelve a aplicar sola.', roles: ['admin'] },
   { fecha: '2026-09-13', emoji: '🛏️', titulo: 'Tarifario: fotos de cada habitación', texto: 'En la ficha del hotel, cada habitación muestra ahora sus propias fotos (tocalas para verlas en grande), y el comparador de tarifas suma una fila "Fotos" para ver lado a lado cómo es cada una. Arranca con Venetur Margarita. Admin: en las fotos del hotel hay un selector para indicar a qué habitación pertenece cada foto.', roles: ['asesor', 'admin'] },
   { fecha: '2026-09-12', emoji: '🔗', titulo: 'Facturación: botón para vincular un pago a una factura', texto: 'Solo admin. Un pago de la pasarela (Zelle, Pago Móvil...) ya aprobado se podía verificar, pero no había forma de pegarlo a su factura sin tocar la base a mano. Nuevo botón "Vincular pago a factura" en Facturación pide el ID del pago y el de la factura y usa la misma validación de siempre (no deja pasarse del total ni re-pegar un pago que ya estaba vinculado a otra).', roles: ['admin'] },
   { fecha: '2026-09-11', emoji: '🚦', titulo: 'Panel del tarifario: el semáforo ya dice la verdad', texto: 'Solo admin. "Actualización automática" tenía tres "puertas" pintadas de rojo aunque solo una frenaba de verdad la publicación -- los "Duplicados de nombre" y el "Movimiento de precios" ya no bloqueaban nada hace semanas, pero el panel seguía mostrando "Frenado, esperando una persona" igual. Ahora solo queda una puerta real ("Verificación"); duplicados y movimiento de precios pasan a un bloque informativo "Para mirar (no frena)" debajo. Se agregó un botón "No son el mismo" en cada par de duplicados para sacarlos de la lista sin tocar la base a mano, y el banner ahora distingue si lo que frena es un bloqueo real, el tope de gasto del día, o que alguien apagó el interruptor de publicación automática (que estaba apagado desde el 27-ago -- ya se prendió). De yapa, un par de duplicados que salía dos veces (A↔B y B↔A) ahora sale una sola vez.', roles: ['admin'] },
