@@ -156,6 +156,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
   'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
+  'clientes-eventos': ['Clientes Eventos', 'Quienes se registraron con el QR del stand y los premios que ganaron'],
   'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
   'voz-ia': ['Voz IA', 'Probá la voz clonada de la jefa y controlá la muestra de referencia que usa la IA'],
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
@@ -2442,7 +2443,7 @@ async function startApp() {
     setupMetricas, setupRanking, setupEstadisticas, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
     setupBuscadorIATarifario, setupCerebroIA, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
-    setupRankingCatalogo,
+    setupRankingCatalogo, setupClientesEventos,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers,
@@ -6184,6 +6185,240 @@ function setupRendimientoIA() {
    armaron el asistente y dejaron sus datos. Viven en `leads` pero sin asesor y
    con `servicio = 'Asistente IA (posada)'` -- eso es lo que las mantiene fuera
    de la vista de los asesores, y `posadas_interesadas` exige rol admin. */
+/* ---------- Clientes Eventos ----------
+   Registrados con el QR del stand (clientes_eventos, 1 fila por teléfono) y
+   los premios que ganaron en los juegos (clientes_eventos_premios, varios por
+   persona). La laptop del stand no usa internet: sus premios llegan solo
+   cuando un admin sube acá el archivo que descarga al cerrar el evento. Las
+   columnas premio_* / entregado_* de clientes_eventos son de la versión del
+   16-sep y no se usan: el control de entregas vive en la tabla de premios. */
+const CEV_INTERES = { playa: 'Playa', montana: 'Montaña', internacional: 'Internacional' };
+const CEV_ORIGEN = { brujula: 'Brújula', consuelo: 'Giro de consuelo', plantado: 'Al plantarse', cima: 'Cima', conserva: 'Conservado de N1' };
+const CEV_JUEGO = { brujula: 'Brújula', memoria: 'Memoria', rompecabezas: 'Rompecabezas', corte: 'Corte tropical', torre: 'Torre', maleta: 'Sigue tu maleta', aterriza: 'Aterriza' };
+const CEV_ICONO = { big: 'fa-plane', coupon: 'fa-ticket', small: 'fa-gift', cima: 'fa-mountain-sun' };
+let CEV_EVENTO = null, CEV_REGS = [], CEV_PREMIOS = [], CEV_FILTRO = 'todos';
+
+// PostgREST corta en 1000 filas por pedido y un evento grande las pasa.
+async function cevTraerTodo(armar) {
+  const filas = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await armar().range(desde, desde + 999);
+    if (error) throw error;
+    filas.push(...data);
+    if (data.length < 1000) return filas;
+  }
+}
+const cevAgrupar = (m, k, v) => { if (!m.has(k)) m.set(k, []); m.get(k).push(v); };
+function cevFechaHora(iso) {
+  const d = new Date(iso);
+  return !iso || Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+// 'naguanagua-akapellah-2026-09-18' -> 'naguanagua akapellah · 18 sept 2026'
+function cevNombreEvento(ev) {
+  const m = /^(.*?)-?(\d{4}-\d{2}-\d{2})$/.exec(ev);
+  return m ? [m[1].replace(/-/g, ' '), pvFecha(m[2])].filter(Boolean).join(' · ') : ev.replace(/-/g, ' ');
+}
+
+async function loadClientesEventos() {
+  const sel = document.getElementById('cev-evento'), cont = document.getElementById('cev-lista');
+  let regs, prems;
+  try {
+    [regs, prems] = await Promise.all([
+      cevTraerTodo(() => sb.from('clientes_eventos').select('evento,creado_en').order('id')),
+      cevTraerTodo(() => sb.from('clientes_eventos_premios').select('evento,ganado_en').order('id')),
+    ]);
+  } catch (e) { cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(e.message || '')}</div>`; return; }
+  // Evento más reciente primero, por su último registro o premio.
+  const ultimo = new Map();
+  [...regs.map(r => [r.evento, r.creado_en]), ...prems.map(p => [p.evento, p.ganado_en])]
+    .forEach(([ev, ts]) => { if (!(ultimo.get(ev) > ts)) ultimo.set(ev, ts); });
+  const eventos = [...ultimo].sort((a, b) => (a[1] < b[1] ? 1 : -1)).map(([ev]) => ev);
+  if (!eventos.includes(CEV_EVENTO)) CEV_EVENTO = eventos[0] || null;
+  sel.innerHTML = eventos.map(ev => `<option value="${esc(ev)}"${ev === CEV_EVENTO ? ' selected' : ''}>${esc(cevNombreEvento(ev))}</option>`).join('');
+  sel.disabled = !eventos.length;
+  await cevCargarEvento();
+}
+
+async function cevCargarEvento() {
+  const cont = document.getElementById('cev-lista'), ev = CEV_EVENTO;
+  if (!ev) { CEV_REGS = []; CEV_PREMIOS = []; cevPintar(); return; }
+  cont.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  let regs, prems;
+  try {
+    [regs, prems] = await Promise.all([
+      cevTraerTodo(() => sb.from('clientes_eventos')
+        .select('id,nombre,telefono,telefono_norm,instagram,interes,codigo,acepta_promos,creado_en,jugado_en').eq('evento', ev).order('id')),
+      cevTraerTodo(() => sb.from('clientes_eventos_premios')
+        .select('id,codigo,telefono,cliente_evento_id,nombre,juego,nivel,origen,premio_label,premio_tier,cupon_codigo,ganado_en,entregado_en,entregado_por')
+        .eq('evento', ev).order('ganado_en').order('id')),
+    ]);
+  } catch (e) { if (ev === CEV_EVENTO) cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(e.message || '')}</div>`; return; }
+  if (ev !== CEV_EVENTO) return;   // cambiaron de evento mientras cargaba
+  CEV_REGS = regs; CEV_PREMIOS = prems;
+  cevPintar();
+}
+
+function cevIrAFiltro(f) {
+  CEV_FILTRO = f;
+  document.getElementById('cev-filtro').value = f;
+  cevPintar();
+}
+
+function cevPintar() {
+  const cont = document.getElementById('cev-lista');
+  const porReg = new Map(), sinReg = new Map();
+  // Sin registro web: se agrupan por código (o teléfono) para ver juntos los
+  // premios de una misma persona.
+  CEV_PREMIOS.forEach(p => p.cliente_evento_id
+    ? cevAgrupar(porReg, p.cliente_evento_id, p)
+    : cevAgrupar(sinReg, p.codigo || p.telefono || 'premio-' + p.id, p));
+  const jugo = r => !!r.jugado_en || porReg.has(r.id);
+  const pendiente = ps => ps.some(p => !p.entregado_en);
+  const entregados = CEV_PREMIOS.filter(p => p.entregado_en).length;
+  pintarKPIs('cev-kpis', [
+    { t: 'Registrados', v: fmt(CEV_REGS.length), d: `${fmt(CEV_REGS.filter(r => r.acepta_promos).length)} aceptan promos`, i: 'fa-qrcode', c: 'var(--blue)', go: () => cevIrAFiltro('todos'), key: 'todos', on: CEV_FILTRO === 'todos' },
+    { t: 'Jugaron', v: fmt(CEV_REGS.filter(jugo).length), d: sinReg.size ? `+ ${fmt(sinReg.size)} sin registro web` : 'Con premio en el archivo del stand', i: 'fa-gamepad', c: 'var(--green)', go: () => cevIrAFiltro('jugaron'), key: 'jugaron', on: CEV_FILTRO === 'jugaron' },
+    { t: 'Premios', v: fmt(CEV_PREMIOS.length), d: `${fmt(porReg.size + sinReg.size)} personas`, i: 'fa-gift', c: 'var(--accent)' },
+    { t: 'Cupones', v: fmt(CEV_PREMIOS.filter(p => p.cupon_codigo).length), d: 'Con código para canjear', i: 'fa-ticket', c: 'var(--purple)' },
+    { t: 'Entregados', v: fmt(entregados), d: `${fmt(CEV_PREMIOS.length - entregados)} por entregar`, i: 'fa-circle-check', c: 'var(--amber)', go: () => cevIrAFiltro('pendientes'), key: 'pendientes', on: CEV_FILTRO === 'pendientes' },
+  ]);
+  if (!CEV_EVENTO) {
+    cont.innerHTML = `<div class="vig-vacio"><i class="fas fa-qrcode"></i><b>Todavía no hay eventos</b>
+      <div style="font-size:12.5px;margin-top:6px">Acá aparecen quienes se registren con el QR del stand y, después de subir el archivo de la laptop, sus premios.</div></div>`;
+    return;
+  }
+  const q = document.getElementById('cev-buscar').value.trim().toLowerCase(), qd = q.replace(/\D/g, '');
+  const coincide = (textos, tels) => !q
+    || textos.some(t => t && String(t).toLowerCase().includes(q))
+    || (qd.length >= 3 && tels.some(t => t && String(t).replace(/\D/g, '').includes(qd)));
+  const pasaFiltro = (ps, jugado) => CEV_FILTRO === 'todos' || (CEV_FILTRO === 'jugaron' && jugado)
+    || (CEV_FILTRO === 'sin-jugar' && !jugado) || (CEV_FILTRO === 'pendientes' && pendiente(ps));
+  const regs = CEV_REGS
+    .filter(r => { const ps = porReg.get(r.id) || []; return pasaFiltro(ps, jugo(r)) && coincide([r.nombre, r.codigo, r.instagram, ...ps.map(p => p.cupon_codigo)], [r.telefono, r.telefono_norm]); })
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const sueltos = [...sinReg.values()]
+    .filter(ps => pasaFiltro(ps, true) && coincide([...ps.map(p => p.nombre), ...ps.map(p => p.codigo), ...ps.map(p => p.cupon_codigo)], ps.map(p => p.telefono)));
+  if (!regs.length && !sueltos.length) {
+    cont.innerHTML = `<div class="vig-vacio">${CEV_REGS.length || CEV_PREMIOS.length ? 'Nadie coincide con la búsqueda o el filtro' : 'Este evento todavía no tiene registros'}</div>`;
+    return;
+  }
+  cont.innerHTML = (regs.length ? `<div class="ce-grupo"><div class="ce-grupo-t">Registrados con el QR <span class="ce-dest">${fmt(regs.length)}</span></div>
+      ${regs.map(r => cevCardReg(r, porReg.get(r.id) || [])).join('')}</div>` : '')
+    + (sueltos.length ? `<div class="ce-grupo"><div class="ce-grupo-t">Sin registro web <span class="ce-dest">${fmt(sueltos.length)}</span></div>
+      <div class="ce-intro">Jugaron en el stand con un código que no coincide con un único registro de este evento, o se anotaron ahí sin el QR.
+        Sus premios se guardan igual para controlar la entrega.</div>
+      ${sueltos.map(cevCardSuelto).join('')}</div>` : '');
+}
+
+function cevCardReg(r, prems) {
+  const wa = String(r.telefono_norm || '').replace(/\D/g, '');
+  const ig = String(r.instagram || '').trim().replace(/^@+/, '');
+  return `<div class="ce-card">
+    <div class="cev-top">
+      <div class="cev-nom">${esc(r.nombre)}</div>
+      ${r.codigo ? `<span class="cev-cod" title="Código del registro">${esc(r.codigo)}</span>` : ''}
+    </div>
+    <div class="ia-datos">
+      ${wa ? `<a class="ia-dato" href="https://wa.me/${wa}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> ${esc(r.telefono)}</a>` : ''}
+      ${ig ? `<a class="ia-dato" href="https://instagram.com/${encodeURIComponent(ig)}" target="_blank" rel="noopener"><i class="fab fa-instagram"></i> @${esc(ig)}</a>` : ''}
+      ${r.interes ? `<span class="ia-dato"><i class="fas fa-compass"></i> ${esc(CEV_INTERES[r.interes] || r.interes)}</span>` : ''}
+      <span class="ia-dato" title="Fecha del registro"><i class="fas fa-calendar-check"></i> ${cevFechaHora(r.creado_en)}</span>
+      ${r.acepta_promos ? '<span class="ia-dato"><i class="fas fa-bullhorn"></i> Acepta promos</span>' : ''}
+    </div>
+    ${prems.length ? `<div class="cev-prems">${prems.map(cevPremio).join('')}</div>`
+      : `<div class="cev-nada">${CEV_PREMIOS.length ? 'Sin premios en el archivo del stand' : 'Sin premios todavía: falta subir el archivo del stand'}</div>`}
+  </div>`;
+}
+
+function cevCardSuelto(prems) {
+  const p0 = prems[0], nombre = prems.map(p => p.nombre).find(Boolean);
+  const tel = prems.map(p => p.telefono).find(Boolean), wa = String(tel || '').replace(/\D/g, '');
+  return `<div class="ce-card">
+    <div class="cev-top">
+      <div class="cev-nom">${esc(nombre || 'Sin nombre')}</div>
+      ${p0.codigo ? `<span class="cev-cod" title="Código con el que jugó">${esc(p0.codigo)}</span>` : ''}
+    </div>
+    ${wa ? `<div class="ia-datos"><a class="ia-dato" href="https://wa.me/${wa}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> ${esc(tel)}</a></div>` : ''}
+    <div class="cev-prems">${prems.map(cevPremio).join('')}</div>
+  </div>`;
+}
+
+function cevPremio(p) {
+  const ok = !!p.entregado_en;
+  const juego = p.juego && p.juego !== p.origen ? (CEV_JUEGO[p.juego] || p.juego.charAt(0).toUpperCase() + p.juego.slice(1).replace(/[-_]/g, ' ')) : '';
+  const meta = [CEV_ORIGEN[p.origen] || p.origen, [juego, p.nivel ? 'N' + p.nivel : ''].filter(Boolean).join(' '), cevFechaHora(p.ganado_en)].filter(Boolean).join(' · ');
+  return `<div class="cev-prem${ok ? ' ok' : ''}">
+    <i class="fas ${ok ? 'fa-circle-check' : CEV_ICONO[p.premio_tier] || 'fa-gift'}"></i>
+    <div class="cev-prem-t"><b>${esc(p.premio_label || p.premio_tier)}</b><span>${esc(meta)}</span></div>
+    ${p.cupon_codigo ? `<span class="cev-cupon" title="Cupón">${esc(p.cupon_codigo)}</span>` : ''}
+    ${ok ? `<span class="ce-vig"><i class="fas fa-circle-check"></i> Entregado ${cevFechaHora(p.entregado_en)}${p.entregado_por ? ' · ' + esc(p.entregado_por) : ''}</span>
+         <button class="ce-mini" type="button" data-cev-deshacer="${p.id}">Deshacer</button>`
+      : `<button class="ce-mini on" type="button" data-cev-entregar="${p.id}">Marcar entregado</button>`}
+  </div>`;
+}
+
+// Filtro por el estado anterior: si otro admin ya lo cambió, no se pisa su
+// fecha ni su nombre, se avisa y se recarga.
+async function cevEntregar(id, btn, entregar) {
+  if (!entregar && !(await confirmarSheet({ titulo: '¿Deshacer la entrega?', detalle: 'El premio vuelve a quedar por entregar.', textoOk: 'Deshacer' }))) return;
+  btn.disabled = true;
+  const cambio = entregar ? { entregado_en: new Date().toISOString(), entregado_por: MI_NOMBRE || MI_USERNAME || null } : { entregado_en: null, entregado_por: null };
+  let q = sb.from('clientes_eventos_premios').update(cambio).eq('id', id);
+  q = entregar ? q.is('entregado_en', null) : q.not('entregado_en', 'is', null);
+  const { data, error } = await q.select('id,entregado_en,entregado_por');
+  btn.disabled = false;
+  if (error) { errToast('No se pudo guardar: ' + (error.message || '')); return; }
+  if (!data?.length) { errToast('Otro admin ya lo había cambiado: se recarga la lista'); await cevCargarEvento(); return; }
+  const p = CEV_PREMIOS.find(x => x.id === id);
+  if (p) Object.assign(p, data[0]);
+  if (entregar) okToast('Premio marcado como entregado');
+  cevPintar();
+}
+
+async function cevImportar(file) {
+  let p;
+  try { p = JSON.parse(await file.text()); } catch (_) { errToast('El archivo no es un JSON válido'); return; }
+  if (p?.formato !== 'lotus-crm-premios/1') { errToast('Ese no es el archivo de "Descargar para el CRM" de la laptop del stand'); return; }
+  if (p.modo !== 'real') { errToast(`El archivo es del modo "${p.modo}": solo se importa el modo real`); return; }
+  const n = Array.isArray(p.premios) ? p.premios.length : 0;
+  // Sin borrado desde el CRM: lo que entra a un evento equivocado queda ahí,
+  // por eso se muestra el evento antes de importar.
+  if (!(await confirmarSheet({
+    titulo: `¿Importar ${n} ${n === 1 ? 'premio' : 'premios'}?`,
+    detalle: `Evento: ${cevNombreEvento(String(p.evento || ''))}\nArchivo generado: ${cevFechaHora(p.generado)}\n\nLos que ya estaban no se duplican.`,
+    textoOk: 'Importar',
+  }))) return;
+  const btn = document.getElementById('cev-importar');
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('importar_premios_evento', { p });
+  btn.disabled = false;
+  if (error) { errToast(error.code === '42501' ? 'Solo un admin puede importar el archivo' : 'No se pudo importar: ' + (error.message || '')); return; }
+  document.getElementById('cev-resumen').innerHTML = `<div class="ce-intro"><i class="fas fa-circle-check" style="color:var(--green)"></i>
+    Archivo importado en <b>${esc(cevNombreEvento(data.evento))}</b>: ${fmt(data.total)} premios en el archivo —
+    <b>${fmt(data.nuevos)} nuevos</b>, ${fmt(data.repetidos)} ya estaban. De los del archivo, ${fmt(data.sin_registro)} sin registro web.</div>`;
+  okToast(`${fmt(data.nuevos)} premios nuevos importados`);
+  CEV_EVENTO = data.evento;
+  await loadClientesEventos();
+}
+
+function setupClientesEventos() {
+  const archivo = document.getElementById('cev-archivo');
+  document.getElementById('cev-importar').addEventListener('click', () => archivo.click());
+  archivo.addEventListener('change', () => { const f = archivo.files[0]; archivo.value = ''; if (f) cevImportar(f); });
+  document.getElementById('cev-recargar').addEventListener('click', loadClientesEventos);
+  document.getElementById('cev-evento').addEventListener('change', e => {
+    CEV_EVENTO = e.target.value;
+    document.getElementById('cev-resumen').innerHTML = '';
+    cevCargarEvento();
+  });
+  document.getElementById('cev-buscar').addEventListener('input', cevPintar);
+  document.getElementById('cev-filtro').addEventListener('change', e => cevIrAFiltro(e.target.value));
+  document.getElementById('cev-lista').addEventListener('click', e => {
+    const b = e.target.closest('[data-cev-entregar],[data-cev-deshacer]');
+    if (b) cevEntregar(Number(b.dataset.cevEntregar || b.dataset.cevDeshacer), b, 'cevEntregar' in b.dataset);
+  });
+}
+
 async function loadIaAtencion() {
   const cont = document.getElementById('ia-lista');
   const { data, error } = await sb.rpc('posadas_interesadas');
@@ -16847,6 +17082,7 @@ const NAV_ITEMS = [
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', grupo: 'ia', roles: 'nav-admin-only', sub: 'Ventas, calidad, errores y costos' },
   { sec: 'web-reasignados', icon: 'fas fa-hand-holding-dollar', label: 'Web y Reasignados', grupo: 'marketing', roles: 'nav-admin-only', sub: 'Los leads por los que cobrás comisión' },
   { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', grupo: 'marketing', roles: 'nav-admin-only nav-marketing-ok' },
+  { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', grupo: 'marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
   { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', grupo: 'gestion', roles: 'nav-admin-only' },
   { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', grupo: 'gestion', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
   { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Manual del CRM', grupo: 'ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
@@ -17067,6 +17303,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'cerebro-ia') loadCerebroIA();
   if (sec === 'rendimiento-ia') loadRendimientoIA();
   if (sec === 'ia-atencion') loadIaAtencion();
+  if (sec === 'clientes-eventos') loadClientesEventos();
   if (sec === 'web-reasignados') loadWebReasignados();
   if (sec === 'stop-sales') { loadStopSalesVigentes(); ssCargarPdfActual(); }
   if (sec === 'redes') cargarRedActual();
@@ -17297,6 +17534,7 @@ const REFRESCAR_SECCION = {
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
   'cerebro-ia': () => loadCerebroIA(), 'rendimiento-ia': () => loadRendimientoIA(),
   'ia-atencion': () => loadIaAtencion(), 'web-reasignados': () => loadWebReasignados(),
+  'clientes-eventos': () => loadClientesEventos(),
   'stop-sales': () => { loadStopSalesVigentes(); ssCargarPdfActual(); },
   redes: () => cargarRedActual(), voucher: () => loadVoucherSeccion(), tareas: () => loadTareas(),
   boleteria: () => loadBoleteria(),
