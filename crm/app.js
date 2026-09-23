@@ -11,7 +11,9 @@ const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
 // gratis. Las fotos nuevas se siguen SUBIENDO a Supabase -- el Worker las copia
 // sola la primera vez que alguien las mira.
 const CDN_FOTOS = 'https://fotos.destinoyeventoslotus360.com/';
-const DERIVADOS_ANCHOS = [256, 384, 640, 1280];
+const DERIVADOS_ANCHOS = [256, 384, 640, 1280, 2048];
+// Igual que CALIDAD_POR_ANCHO de scripts/generar_derivados_fotos.py.
+const calidadDerivado = ancho => ancho === 2048 ? 0.86 : 0.78;
 const rutaDerivado = (storagePath, ancho) => `_d/${ancho}/${storagePath}.jpg`;
 // Las miniaturas se sirven con `max-age=31536000, immutable`, así que cambiar el
 // archivo en el origen NO alcanza: el navegador que ya lo tiene no vuelve a
@@ -24,6 +26,9 @@ const rutaDerivado = (storagePath, ancho) => `_d/${ancho}/${storagePath}.jpg`;
 // solo mira el pathname -- así que no invalida la caché del servidor.
 const FOTOS_VERSION = '?v=2';
 const fotoMini = (storagePath, ancho) => CDN_FOTOS + rutaDerivado(storagePath, ancho) + FOTOS_VERSION;
+// Lightbox y galerías: resolución original (q86) servida por R2 en vez del
+// original de Supabase. Casi ningún original pasa de 2048 de ancho.
+const fotoGrande = storagePath => fotoMini(storagePath, 2048);
 // Los consumidores piden el derivado sin fallback, así que una foto sin sus
 // miniaturas se ve rota. Se generan acá, en el navegador, al subir una foto
 // nueva, porque Canvas decodifica WebP y la librería del backend
@@ -52,7 +57,8 @@ async function generarDerivados(file) {
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, anchoFinal, altoFinal);
         ctx.drawImage(origen, 0, 0, anchoFinal, altoFinal);
-        const blob = canvas.convertToBlob ? await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.78 }) : await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.78));
+        const calidad = calidadDerivado(ancho);
+        const blob = canvas.convertToBlob ? await canvas.convertToBlob({ type: 'image/jpeg', quality: calidad }) : await new Promise(res => canvas.toBlob(res, 'image/jpeg', calidad));
         if (blob) salidas.push({ ancho, blob });
       } catch (e) { /* un tamaño fallido no debe tumbar los demás */ }
     }
@@ -12854,7 +12860,7 @@ const fotosRaw = x => {
 };
 const _fotosDeCache = new WeakMap();
 const fotosDe = (x, ancho) => {
-  const build = () => fotosRaw(x).map(f => ancho ? fotoMini(f.storage_path, ancho) : FOTOS_BASE + f.storage_path);
+  const build = () => fotosRaw(x).map(f => ancho ? fotoMini(f.storage_path, ancho) : fotoGrande(f.storage_path));
   if (!x || typeof x !== 'object') return build();
   let m = _fotosDeCache.get(x);
   if (!m) { m = new Map(); _fotosDeCache.set(x, m); }
@@ -13960,7 +13966,7 @@ async function cargarGaleriaCategoria(key, append) {
     const fotos = fotosRaw(x);
     return `<div class="gal-hotel"><h2><i class="fas ${GAL_ICONS[key]}"></i> ${esc(nombreDe(x))}</h2>
       <div class="gal-masonry">${fotos.map(f => {
-        const url = FOTOS_BASE + f.storage_path;
+        const url = fotoGrande(f.storage_path);
         const thumbUrl = fotoMini(f.storage_path, 640);
         const dims = f.width && f.height ? ` width="${f.width}" height="${f.height}"` : '';
         return `<a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(thumbUrl)}" alt="${esc(nombreDe(x))}" loading="lazy"${dims}></a>`;
@@ -14551,7 +14557,7 @@ function tarHabFotosHtml(h) {
 }
 function tarAbrirLightboxHabitacion(habId, idx) {
   const h = (TAR_DRAWER_ITEM?.habitaciones || []).find(hh => hh.id === habId);
-  const fotos = ordenarFotos(h?.producto_fotos).map(f => FOTOS_BASE + f.storage_path);
+  const fotos = ordenarFotos(h?.producto_fotos).map(f => fotoGrande(f.storage_path));
   openLightbox(fotos, idx);
 }
 function tarHabHtml(h) {
