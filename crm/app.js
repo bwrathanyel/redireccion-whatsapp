@@ -2702,17 +2702,17 @@ function renderPostventa() {
     const docs = c.documentos || {}, docsListos = Object.keys(PV_DOCS).filter(k => docs[k] === true).length;
     const vencido = c.proximo_seguimiento_at && new Date(c.proximo_seguimiento_at).getTime() < ahora && c.etapa !== 'CERRADO';
     const wa = String(c.telefono || '').replace(/\D/g, '');
-    return `<article class="pv-card" data-id="${c.lead_id}">
+    return `<article class="pv-card" data-id="${c.id}">
       <div class="pv-card-top"><span class="pv-chip"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span><span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span></div>
-      <div class="pv-name">${esc(c.nombre || 'Sin nombre')}</div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}</div>
+      <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span style="font-size:10.5px;font-weight:500;color:var(--muted2)">${esc(c.codigo || '')}${c.principal === false ? ' · adicional' : ''}</span></div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}</div>
       <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>Saldo <b>${money(c.saldo_pendiente)}</b></span></div>
       <div class="pv-progress"><span style="width:${pct}%"></span></div>
       <div class="pv-meta"><span><i class="fas fa-calendar"></i>${c.fecha_viaje_inicio ? pvFecha(c.fecha_viaje_inicio) : 'Viaje sin fecha'}</span><span class="pv-docs"><i class="fas fa-file-circle-check"></i>${docsListos}/6 docs</span></div>
       <div class="pv-meta"><span class="${vencido ? 'overdue' : ''}"><i class="fas fa-bell"></i>${tiempoSeguimiento(c.proximo_seguimiento_at)}</span>${c.incidencia_abierta ? '<span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span>' : ''}</div>
-      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button"><i class="fab fa-whatsapp"></i> WhatsApp</button>` : '<span></span>'}<button class="pv-btn primary" data-pv-open="${c.lead_id}" type="button">Gestionar <i class="fas fa-arrow-right"></i></button></div>
+      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button"><i class="fab fa-whatsapp"></i> WhatsApp</button>` : '<span></span>'}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar <i class="fas fa-arrow-right"></i></button></div>
     </article>`;
   }).join('');
-  grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => abrirPostventa(POSTVENTA.find(c => c.lead_id === Number(b.dataset.pvOpen))));
+  grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => abrirPostventa(POSTVENTA.find(c => c.id === Number(b.dataset.pvOpen))));
   grid.querySelectorAll('[data-pv-wa]').forEach(b => b.onclick = () => window.open(`https://wa.me/${b.dataset.pvWa}`, '_blank', 'noopener'));
   entradaLista(grid);
 }
@@ -2731,7 +2731,7 @@ function abrirPostventa(c) {
   const opt = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
   const docs = c.documentos || {};
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent)"><i class="fas fa-handshake-angle"></i></div><div><div class="dn">${esc(c.nombre)}</div><div class="dm">${esc(c.destino || c.servicio || 'Postventa')} · ${esc(c.asesor || 'Sin asignar')}</div></div></div>
+    <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent)"><i class="fas fa-handshake-angle"></i></div><div><div class="dn">${esc(c.nombre)}</div><div class="dm">${esc(c.codigo || '')}${c.principal === false ? ' (adicional)' : ''} · ${esc(c.destino || c.servicio || 'Postventa')} · ${esc(c.asesor || 'Sin asignar')}</div></div></div>
     <div class="edit-box"><div class="eb-title"><i class="fas fa-route"></i> Operación</div>
       <label class="fl">Etapa</label><select class="ei" id="pv-e-etapa">${opt(PV_ETAPAS, c.etapa)}</select>
       <label class="fl">Prioridad</label><select class="ei" id="pv-e-prioridad">${opt({ BAJA:'Baja', NORMAL:'Normal', ALTA:'Alta', URGENTE:'Urgente' }, c.prioridad)}</select>
@@ -2753,14 +2753,16 @@ function abrirPostventa(c) {
       <label class="fl">Notas internas</label><textarea class="ei" id="pv-e-notas" rows="4" placeholder="Acuerdos, pendientes y próximo paso...">${esc(c.notas || '')}</textarea>
       <div class="edit-err" id="pv-e-error"></div>
       <button class="dbtn save" id="pv-e-guardar" type="button"><i class="fas fa-floppy-disk"></i> Guardar postventa</button>
-      ${c.estado_lead !== 'PAGO REALIZADO' ? '<button class="dbtn gh" id="pv-e-pago" type="button" style="margin-top:9px"><i class="fas fa-circle-check"></i> Registrar pago completo</button>' : ''}
+      ${(c.principal === false ? !c.factura_id : c.estado_lead !== 'PAGO REALIZADO') ? '<button class="dbtn gh" id="pv-e-pago" type="button" style="margin-top:9px"><i class="fas fa-circle-check"></i> Registrar pago completo</button>' : ''}
     </div>`;
   document.getElementById('pv-e-guardar').onclick = () => guardarPostventa(false);
   document.getElementById('pv-e-pago')?.addEventListener('click', () => {
     document.getElementById('pv-e-pagado').value = document.getElementById('pv-e-total').value;
     guardarPostventa(true);
   });
-  document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); navPush({ type: 'drawer' });
+  // Desde la ficha del lead el cajón ya está abierto: no empujar otra entrada de historial.
+  const yaAbierto = document.getElementById('drawer').classList.contains('open');
+  document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!yaAbierto) navPush({ type: 'drawer' });
 }
 async function guardarPostventa(marcarPagado) {
   if (!PV_ACTUAL) return;
@@ -2784,10 +2786,10 @@ async function guardarPostventa(marcarPagado) {
     p_documentos: documentos, p_proximo_seguimiento_at: seguimiento ? new Date(seguimiento).toISOString() : null,
     p_notas: val('pv-e-notas').trim() || null, p_incidencia_abierta: document.getElementById('pv-e-incidencia').checked,
     p_satisfaccion: val('pv-e-satisfaccion') ? Number(val('pv-e-satisfaccion')) : null, p_marcar_pagado: marcarPagado,
-    p_costo_neto: costoNeto,
+    p_costo_neto: costoNeto, p_reserva_id: PV_ACTUAL.id,
   });
   btn.disabled = false; btn.innerHTML = previo;
-  if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || 'error desconocido'); return; }
+  if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (errReserva(error, data) || 'error desconocido'); return; }
   window.closeDrawer();
   // Si lo cerró un asesor, guardar_postventa lo manda a verificación en vez
   // de a PAGO REALIZADO directo (ver 20260728000000_blindar_cierre_venta.sql)
@@ -4087,6 +4089,12 @@ function openDrawer(l) {
             ${campo('Fecha de captación', `<input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">`)}
           </div>`, false)}
 
+        ${(ROL === 'asesor' || ROL === 'admin') && ['EN ESPERA DE PAGO', 'PAGO REALIZADO'].includes(l.estado) ? seccion('reservas', 'fa-suitcase-rolling', 'Reservas del cliente', `
+          <div class="csub" style="margin-bottom:8px">Cada viaje del cliente es una reserva. La primera se cierra con el lead; las adicionales se facturan aparte.</div>
+          <div id="res-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+          <div class="edit-err" id="res-err"></div>
+          <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, l.estado === 'PAGO REALIZADO') : ''}
+
         ${seccion('link-pago', 'fa-link', 'Link de pago', `
           <div class="csub" style="margin-bottom:8px">Emitís un link para que el cliente pague y suba el comprobante. El monto lo fijás vos; queda pendiente hasta que un admin lo verifique.</div>
           <div class="dgrid">
@@ -4150,6 +4158,10 @@ function openDrawer(l) {
   document.getElementById('e-a-tomar-ia')?.addEventListener('click', () => tomarConversacionIA(l));
   document.getElementById('e-a-boleteria')?.addEventListener('click', () => { window.closeDrawer(); abrirSolicitudBoleteria(l); });
   document.getElementById('e-emitir-pago')?.addEventListener('click', () => emitirLinkPago(l));
+  if (document.getElementById('res-lista')) {
+    document.getElementById('res-nueva').onclick = () => crearReservaLead(l);
+    cargarReservasLead(l);
+  }
   document.querySelectorAll('.lead-tab-btn').forEach(btn => btn.addEventListener('click', () => {
     document.querySelectorAll('.lead-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.lead-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === btn.dataset.tab));
@@ -4160,6 +4172,72 @@ function openDrawer(l) {
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
+}
+
+/* ---------- Reservas del lead (varias por cliente, ver migración 20260924110000) ---------- */
+const RES_ERRORES = {
+  lead_fuera_de_postventa: 'El lead tiene que estar en espera de pago o pago realizado',
+  lead_no_disponible: 'El lead ya no está disponible',
+  reserva_no_existe: 'La reserva no existe',
+  reserva_principal_se_cierra_con_el_lead: 'La reserva principal se cierra con el lead',
+  monto_invalido: 'El monto tiene que ser mayor a cero',
+  ya_facturada: 'Esa reserva ya está facturada',
+  lead_sin_asesor: 'Asigná un asesor al lead antes de facturar',
+  factura_anulada: 'La factura de esta reserva está anulada: emití una factura manual desde Facturación',
+  reserva_inactiva: 'La reserva no está activa: el lead salió de espera de pago / pago realizado',
+};
+// guardar_postventa levanta excepciones (error.message = código); crear/cerrar_reserva devuelven {ok:false,error}.
+const errReserva = (error, data) => RES_ERRORES[error?.message] || error?.message || RES_ERRORES[data?.error] || data?.error || '';
+async function cargarReservasLead(l) {
+  const box = document.getElementById('res-lista'); if (!box) return;
+  const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: l.id });
+  if (!box.isConnected) return;
+  if (error || !data?.ok) { console.error('reservas_de_lead', error || data); box.innerHTML = '<div class="csub">No se pudieron cargar las reservas</div>'; return; }
+  const rs = data.reservas || [];
+  box.innerHTML = rs.length ? rs.map(r => {
+    const total = Number(r.monto_total || 0), pagado = Number(r.monto_pagado || 0);
+    const factura = r.factura_id ? `Factura ${esc(r.numero_factura || r.factura_id)}${r.factura_estado === 'anulada' ? ' (anulada)' : ''}` : 'Sin facturar';
+    return `<div style="border:1px solid var(--line2,#2a3150);border-radius:10px;padding:9px 11px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(r.codigo)}</b><span class="csub">${r.principal ? 'Principal' : 'Adicional'} · ${esc((PV_ETAPAS[r.etapa] || [r.etapa])[0])}${r.activo ? '' : ' · inactiva'}</span></div>
+      <div class="csub" style="margin:3px 0 7px">${money(pagado)} de ${money(total)} · ${factura}${r.fecha_viaje_inicio ? ' · ' + pvFecha(r.fecha_viaje_inicio) : ''}</div>
+      <div style="display:flex;gap:7px">
+        ${r.activo ? `<button class="dbtn gh" type="button" style="flex:1;padding:7px" data-res-gestionar="${r.id}" data-cod="${esc(r.codigo)}">Gestionar</button>` : ''}
+        ${!r.principal && !r.factura_id && pagado > 0 ? `<button class="dbtn gh" type="button" style="flex:1;padding:7px" data-res-facturar="${r.id}" data-cod="${esc(r.codigo)}" data-monto="${pagado}">Facturar lo cobrado</button>` : ''}
+      </div></div>`;
+  }).join('') : '<div class="csub">Todavía no hay reservas</div>';
+  box.querySelectorAll('[data-res-gestionar]').forEach(b => b.onclick = () => abrirReservaDeLead(Number(b.dataset.resGestionar), b.dataset.cod, b));
+  box.querySelectorAll('[data-res-facturar]').forEach(b => b.onclick = () => facturarReservaLead(l, Number(b.dataset.resFacturar), b));
+}
+// El código (R-000057) es único y la bandeja lo busca (migración B2): un solo resultado exacto.
+async function abrirReservaDeLead(reservaId, codigo, btn) {
+  if (btn) btn.disabled = true;
+  const { data, error } = await sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: codigo });
+  if (btn) btn.disabled = false;
+  const c = (data || []).find(x => x.id === reservaId);
+  if (error || !c) { errToast(error ? 'No se pudo abrir la reserva' : 'La reserva no está activa en Postventa'); return; }
+  abrirPostventa(c);
+}
+async function crearReservaLead(l) {
+  const btn = document.getElementById('res-nueva'), err = document.getElementById('res-err');
+  err.textContent = ''; btn.disabled = true; const previo = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando...';
+  const { data, error } = await sb.rpc('crear_reserva', { p_lead_id: l.id });
+  btn.disabled = false; btn.innerHTML = previo;
+  if (error || !data?.ok) { err.textContent = 'No se pudo crear: ' + errReserva(error, data); return; }
+  okToast('Reserva ' + (data.caso?.codigo || '') + ' creada');
+  // Abre su ficha de postventa para cargar montos, viaje y proveedor.
+  const { data: bandeja } = await sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: data.caso?.codigo });
+  const c = (bandeja || []).find(x => x.id === data.caso?.id);
+  if (c) abrirPostventa(c); else cargarReservasLead(l);
+  loadPostventa();
+}
+async function facturarReservaLead(l, reservaId, btn) {
+  const monto = Number(btn.dataset.monto || 0);
+  if (!confirm(`Facturar ${btn.dataset.cod} por ${money(monto)} (lo cobrado hasta ahora). Se genera la factura, la comisión y la cuenta por pagar. ¿Seguir?`)) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('cerrar_reserva', { p_reserva_id: reservaId, p_monto: monto });
+  if (error || !data?.ok) { btn.disabled = false; const e = document.getElementById('res-err'); if (e) e.textContent = 'No se pudo facturar: ' + errReserva(error, data); else errToast('No se pudo facturar: ' + errReserva(error, data)); return; }
+  okToast('Reserva facturada');
+  await Promise.all([cargarReservasLead(l), loadStats()]); renderAll();
 }
 
 async function tomarConversacionIA(l) {
