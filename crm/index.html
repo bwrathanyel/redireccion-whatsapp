@@ -907,6 +907,7 @@ input.ei[type=date]{color-scheme:dark}
 .ef-fila>*{min-width:0}
 .ef-opc{color:var(--muted2);font-weight:500;text-transform:none;letter-spacing:0}
 .fl-sub{display:block;font-size:10.5px;color:var(--muted2);font-weight:600;margin:0 0 4px;text-align:center}
+#proveedor-sheet .fl-sub{text-align:left;margin-top:7px}
 .ef-abono{display:none;font-size:12px;margin-top:7px;padding:8px 10px;border-radius:9px;background:rgba(74,158,255,.09);border:1px solid rgba(74,158,255,.25);color:#9ec5ff}
 .ef-abono.show{display:block}
 .ef-abono.malo{background:rgba(239,68,68,.09);border-color:rgba(239,68,68,.3);color:#ffa5a5}
@@ -4331,6 +4332,39 @@ body.fsize-grande{--tap:41.9px}
       </div>
     </section>
 
+    <!-- PROVEEDORES (reservas y finanzas, Fase 1; solo admin, ver listar_proveedores / guardar_proveedor) -->
+    <section class="section" id="sec-proveedores">
+      <div class="card">
+        <div class="chead-row">
+          <h2><i class="fas fa-truck-field"></i> Proveedores</h2>
+          <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="prov-search" placeholder="Buscar nombre, RIF o contacto..."></div>
+          <select class="ei" id="prov-filtro" aria-label="Filtrar por estado" style="width:auto;max-width:160px">
+            <option value="activos">Activos</option>
+            <option value="inactivos">Inactivos</option>
+            <option value="todos">Todos</option>
+          </select>
+          <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('proveedores')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
+          <button class="btn-sm" id="prov-nuevo" type="button"><i class="fas fa-plus"></i> Nuevo proveedor</button>
+        </div>
+        <div class="csub">Hoteles, posadas, aerolíneas y operadores a los que Lotus les compra · tocá un proveedor para ver o editar su ficha</div>
+        <div class="tbl-state skel" id="prov-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="nombre">Proveedor</th>
+              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="servicios">Servicios</th>
+              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="contacto">Contacto</th>
+              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="moneda_habitual">Moneda</th>
+              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="dias_credito">Crédito</th>
+              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="activo">Estado</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="prov-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- Hoja "Ordenar" (Fase 4.1) -- segunda puerta de entrada al MISMO
          ordenamiento que ya viven los <th class="th-sort"> del thead, que
          queda oculto en móvil. Las opciones se arman leyendo esos mismos
@@ -4356,6 +4390,60 @@ body.fsize-grande{--tap:41.9px}
       <div style="display:flex;gap:10px;padding:0 6px">
         <button class="dbtn" id="monto-sheet-cancelar" type="button" style="flex:1">Cancelar</button>
         <button class="dbtn save" id="monto-sheet-confirmar" type="button" style="flex:1">Guardar</button>
+      </div>
+    </div>
+
+    <!-- Ficha de proveedor (alta y edición, solo admin) -->
+    <div class="sheet" id="proveedor-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="prov-sheet-title"><i class="fas fa-truck-field"></i> Nuevo proveedor</div>
+      <div class="edit-box" style="margin-top:4px">
+        <label class="fl" for="prov-nombre">Nombre</label>
+        <input id="prov-nombre" class="ei" maxlength="120" placeholder="Ej. Posada Casa Sol" autocomplete="off">
+
+        <label class="fl">Servicios que ofrece</label>
+        <div class="ef-tipos" id="prov-tipos"></div>
+
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl" for="prov-rif">RIF <span class="ef-opc">(opcional)</span></label><input id="prov-rif" class="ei" maxlength="30" placeholder="J-12345678-9" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl" for="prov-contacto">Persona de contacto <span class="ef-opc">(opcional)</span></label><input id="prov-contacto" class="ei" maxlength="120" autocomplete="off"></div>
+        </div>
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl" for="prov-telefono">Teléfono <span class="ef-opc">(opcional)</span></label><input id="prov-telefono" class="ei" type="tel" maxlength="40" placeholder="+58 412 1234567" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl" for="prov-email">Email <span class="ef-opc">(opcional)</span></label><input id="prov-email" class="ei" type="email" maxlength="120" autocomplete="off"></div>
+        </div>
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl" for="prov-moneda">Moneda habitual</label>
+            <select id="prov-moneda" class="ei"><option>USD</option><option>VES</option><option>EUR</option><option>USDT</option><option>COP</option></select></div>
+          <div style="flex:1"><label class="fl" for="prov-dias">Días de crédito</label><input id="prov-dias" class="ei" type="number" min="0" max="365" step="1" placeholder="0"></div>
+          <div style="flex:1"><label class="fl" for="prov-activo">Estado</label>
+            <select id="prov-activo" class="ei"><option value="1">Activo</option><option value="0">Inactivo</option></select></div>
+        </div>
+
+        <label class="fl">Datos de pago <span class="ef-opc">(opcional, para transferirle)</span></label>
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl-sub" for="prov-pago-banco">Banco</label><input id="prov-pago-banco" class="ei" maxlength="80" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl-sub" for="prov-pago-cuenta">N° de cuenta</label><input id="prov-pago-cuenta" class="ei" maxlength="40" autocomplete="off"></div>
+        </div>
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl-sub" for="prov-pago-titular">Titular y cédula/RIF</label><input id="prov-pago-titular" class="ei" maxlength="120" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl-sub" for="prov-pago-movil">Pago móvil</label><input id="prov-pago-movil" class="ei" maxlength="80" placeholder="Banco, teléfono, cédula" autocomplete="off"></div>
+        </div>
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl-sub" for="prov-pago-zelle">Zelle</label><input id="prov-pago-zelle" class="ei" maxlength="120" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl-sub" for="prov-pago-binance">Binance / USDT</label><input id="prov-pago-binance" class="ei" maxlength="120" autocomplete="off"></div>
+        </div>
+        <label class="fl-sub" for="prov-pago-otros">Otros datos de pago</label>
+        <textarea id="prov-pago-otros" class="ei" rows="2" maxlength="600"></textarea>
+
+        <label class="fl" for="prov-notas">Notas <span class="ef-opc">(opcional)</span></label>
+        <textarea id="prov-notas" class="ei" rows="2" maxlength="2000" placeholder="Condiciones, temporadas, con quién negociar..."></textarea>
+
+        <div class="edit-err" id="prov-err"></div>
+      </div>
+      <div style="display:flex;gap:10px;padding:14px 16px 4px">
+        <button class="dbtn" id="prov-cancelar" type="button" style="flex:1">Cancelar</button>
+        <button class="dbtn save" id="prov-guardar" type="button" style="flex:1">Guardar</button>
       </div>
     </div>
 

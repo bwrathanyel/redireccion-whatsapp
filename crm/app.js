@@ -163,6 +163,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
   'clientes-eventos': ['Clientes Eventos', 'Quienes se registraron con el QR del stand y los premios que ganaron'],
+  proveedores: ['Proveedores', 'A quién le compra Lotus: servicios, contacto, crédito y datos de pago'],
   'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
   'voz-ia': ['Voz IA', 'Probá la voz clonada de la jefa y controlá la muestra de referencia que usa la IA'],
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
@@ -1237,7 +1238,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'cotizador', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'voucher', 'mis-comisiones', 'ranking', 'boleteria',
+  'facturacion', 'pagos', 'proveedores', 'voucher', 'mis-comisiones', 'ranking', 'boleteria',
   'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
   'rendimiento-ia', 'ia-atencion', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
@@ -2449,7 +2450,7 @@ async function startApp() {
     setupMetricas, setupRanking, setupEstadisticas, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
     setupBuscadorIATarifario, setupCerebroIA, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
-    setupRankingCatalogo, setupClientesEventos,
+    setupRankingCatalogo, setupClientesEventos, setupProveedores,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers,
@@ -11453,9 +11454,9 @@ window.exportarPDF = (tabla, titulo) => {
 let factVentasMostrar = TECHO_LISTA, factComMostrar = TECHO_LISTA, cxpMostrar = TECHO_LISTA;
 const FACT_SORT = {
   ventas: { col: 'numero_factura', dir: 1 }, comisiones: { col: null, dir: 1 },
-  cxp: { col: null, dir: 1 }, asesores: { col: 'nombre', dir: 1 },
+  cxp: { col: null, dir: 1 }, asesores: { col: 'nombre', dir: 1 }, proveedores: { col: 'nombre', dir: 1 },
 };
-const FACT_RENDERERS = { ventas: renderVentas, comisiones: renderComisiones, cxp: renderCuentasPorPagar, asesores: renderAsesoresComision };
+const FACT_RENDERERS = { ventas: renderVentas, comisiones: renderComisiones, cxp: renderCuentasPorPagar, asesores: renderAsesoresComision, proveedores: renderProveedores };
 // Único lugar que aplica un orden -- lo llaman tanto el click en <th
 // class="th-sort"> (thead, oculto en móvil) como la hoja "Ordenar" (Fase
 // 4.1, segunda puerta de entrada). Nunca duplicar esta lógica en el sheet.
@@ -11773,6 +11774,124 @@ window.marcarComisionPagadaUI = async (comisionId) => {
   okToast('Comisión marcada como pagada');
   loadComisionesAdmin(); loadFacturacionKpis();
 };
+
+/* ---------- Proveedores (reservas y finanzas, Fase 1; solo admin) ----------
+   La tabla no tiene grants para authenticated: todo pasa por
+   listar_proveedores / guardar_proveedor. El orden por encabezado reusa
+   FACT_SORT/aplicarOrdenTabla, y setupFacturacion ya engancha sus .th-sort. */
+const PROV_TIPOS = [
+  ['boleto_aereo', 'Boleto aéreo', 'fa-plane'], ['hospedaje', 'Hospedaje', 'fa-bed'],
+  ['traslado_terrestre', 'Traslado terrestre', 'fa-van-shuttle'], ['traslado_maritimo', 'Traslado marítimo', 'fa-ship'],
+  ['full_day', 'Full day', 'fa-sun'], ['seguro', 'Seguro', 'fa-shield-heart'], ['otro', 'Otro', 'fa-ellipsis'],
+];
+const PROV_TIPO_LABEL = Object.fromEntries(PROV_TIPOS.map(([k, l]) => [k, l]));
+// Claves de datos_pago que edita la ficha. Cualquier otra que ya tenga el
+// jsonb se conserva al guardar.
+const PROV_PAGO_CAMPOS = { banco: 'prov-pago-banco', cuenta: 'prov-pago-cuenta', titular: 'prov-pago-titular', pago_movil: 'prov-pago-movil', zelle: 'prov-pago-zelle', binance: 'prov-pago-binance', otros: 'prov-pago-otros' };
+// guardar_proveedor devuelve los errores de negocio como {ok:false,error}, no como excepción.
+const PROV_ERRORES = {
+  nombre_requerido: 'Poné el nombre del proveedor.',
+  nombre_duplicado: 'Ya hay un proveedor con ese nombre.',
+  tipos_invalidos: 'Algún servicio marcado no es válido.',
+  moneda_invalida: 'La moneda no es válida.',
+  dias_credito_invalidos: 'Los días de crédito van de 0 a 365.',
+  datos_pago_invalidos: 'Los datos de pago no son válidos.',
+  datos_invalidos: 'Los datos no son válidos.',
+  dato_invalido: 'Algún dato no es válido o es demasiado largo.',
+  no_existe: 'Ese proveedor ya no existe: se recargó la lista.',
+};
+let PROV_CACHE = [], PROV_EDITANDO = null;
+async function loadProveedores() {
+  if (ROL !== 'admin') return;
+  const cargando = document.getElementById('prov-loading');
+  cargando?.classList.add('show');
+  const { data, error } = await sb.rpc('listar_proveedores', { p_solo_activos: false });
+  cargando?.classList.remove('show');
+  if (error) { errToast('No se pudieron cargar los proveedores'); return; }
+  PROV_CACHE = (data || []).map(p => ({ ...p, servicios: (p.tipos || []).map(t => PROV_TIPO_LABEL[t] || t).join(', ') }));
+  renderProveedores();
+}
+function renderProveedores() {
+  const filtro = val('prov-filtro') || 'activos';
+  const base = filtro === 'todos' ? PROV_CACHE : PROV_CACHE.filter(p => !!p.activo === (filtro === 'activos'));
+  const filas = ordenarYFiltrar(base, ['nombre', 'rif', 'contacto', 'telefono', 'email', 'servicios'], val('prov-search'), FACT_SORT.proveedores);
+  document.getElementById('prov-tbody').innerHTML = filas.map(p => `
+    <tr data-prov-id="${p.id}" style="cursor:pointer">
+      <td class="td-name">${esc(p.nombre)}</td>
+      <td data-label="Servicios">${esc(p.servicios) || '—'}</td>
+      <td data-label="Contacto">${esc([p.contacto, p.telefono].filter(Boolean).join(' · ')) || '—'}</td>
+      <td data-label="Moneda">${esc(p.moneda_habitual)}</td>
+      <td data-label="Crédito">${p.dias_credito ? fmt(p.dias_credito) + ' días' : 'Contado'}</td>
+      <td data-label="Estado"><span class="asist-badge ${p.activo ? 'on' : 'off'}">${p.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td class="td-acciones"><button class="btn-sm" type="button" data-prov-id="${p.id}">Ver ficha</button></td>
+    </tr>`).join('') || `<tr><td colspan="7">${PROV_CACHE.length ? 'Ningún proveedor coincide con la búsqueda o el filtro' : 'Todavía no hay proveedores cargados'}</td></tr>`;
+}
+function abrirProveedorSheet(id = null) {
+  const p = id == null ? null : PROV_CACHE.find(x => x.id === id);
+  if (id != null && !p) return;
+  PROV_EDITANDO = p;
+  document.getElementById('prov-sheet-title').innerHTML = `<i class="fas fa-truck-field"></i> ${p ? esc(p.nombre) : 'Nuevo proveedor'}`;
+  const tipos = new Set(p?.tipos || []);
+  document.getElementById('prov-tipos').innerHTML = PROV_TIPOS.map(([k, l, i]) =>
+    `<button type="button" class="ef-tipo${tipos.has(k) ? ' on' : ''}" data-prov-tipo="${k}" aria-pressed="${tipos.has(k)}"><i class="fas ${i}"></i> ${l}</button>`).join('');
+  const poner = (elId, v) => { document.getElementById(elId).value = v ?? ''; };
+  poner('prov-nombre', p?.nombre); poner('prov-rif', p?.rif); poner('prov-contacto', p?.contacto);
+  poner('prov-telefono', p?.telefono); poner('prov-email', p?.email); poner('prov-notas', p?.notas);
+  poner('prov-moneda', p?.moneda_habitual || 'USD'); poner('prov-dias', p?.dias_credito);
+  poner('prov-activo', p && !p.activo ? '0' : '1');
+  const pago = p?.datos_pago || {};
+  Object.entries(PROV_PAGO_CAMPOS).forEach(([k, elId]) => poner(elId, pago[k] == null ? '' : String(pago[k])));
+  document.getElementById('prov-err').textContent = '';
+  openSheet('proveedor-sheet');
+}
+async function guardarProveedor() {
+  const err = document.getElementById('prov-err'), btn = document.getElementById('prov-guardar');
+  err.textContent = '';
+  const nombre = val('prov-nombre').trim();
+  if (!nombre) { err.textContent = PROV_ERRORES.nombre_requerido; return; }
+  // Un number con texto ilegible ("30e") llega vacío: sin badInput se guardaría como 0 = contado.
+  const diasTxt = val('prov-dias').trim(), dias = diasTxt === '' ? 0 : Number(diasTxt);
+  if (document.getElementById('prov-dias').validity.badInput || !Number.isInteger(dias) || dias < 0 || dias > 365) { err.textContent = PROV_ERRORES.dias_credito_invalidos; return; }
+  const datosPago = { ...(PROV_EDITANDO?.datos_pago || {}) };
+  Object.entries(PROV_PAGO_CAMPOS).forEach(([k, elId]) => { const v = val(elId).trim(); if (v) datosPago[k] = v; else delete datosPago[k]; });
+  const editando = PROV_EDITANDO;
+  const datos = {
+    nombre, tipos: [...document.querySelectorAll('#prov-tipos .ef-tipo.on')].map(b => b.dataset.provTipo),
+    rif: val('prov-rif'), contacto: val('prov-contacto'), telefono: val('prov-telefono'), email: val('prov-email'),
+    moneda_habitual: val('prov-moneda'), dias_credito: dias, activo: val('prov-activo') === '1',
+    datos_pago: datosPago, notas: val('prov-notas'),
+  };
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('guardar_proveedor', { p_id: editando?.id ?? null, p_datos: datos });
+  btn.disabled = false;
+  if (error) { err.textContent = error.code === '42501' ? 'Solo un admin puede guardar proveedores.' : 'No se pudo guardar: ' + (error.message || ''); return; }
+  if (!data?.ok) {
+    err.textContent = PROV_ERRORES[data?.error] || 'No se pudo guardar: ' + (data?.error || '');
+    if (data?.error === 'no_existe') loadProveedores();
+    return;
+  }
+  closeSheet('proveedor-sheet');
+  okToast(editando ? 'Proveedor actualizado' : 'Proveedor creado');
+  PROV_EDITANDO = null;
+  loadProveedores();
+}
+function setupProveedores() {
+  document.getElementById('prov-search').addEventListener('input', renderProveedores);
+  document.getElementById('prov-filtro').addEventListener('change', renderProveedores);
+  document.getElementById('prov-nuevo').addEventListener('click', () => abrirProveedorSheet());
+  document.getElementById('prov-tbody').addEventListener('click', e => {
+    const fila = e.target.closest('[data-prov-id]');
+    if (fila) abrirProveedorSheet(Number(fila.dataset.provId));
+  });
+  document.getElementById('prov-tipos').addEventListener('click', e => {
+    const b = e.target.closest('.ef-tipo');
+    if (!b) return;
+    b.classList.toggle('on');
+    b.setAttribute('aria-pressed', b.classList.contains('on'));
+  });
+  document.getElementById('prov-cancelar').addEventListener('click', () => closeSheet('proveedor-sheet'));
+  document.getElementById('prov-guardar').addEventListener('click', guardarProveedor);
+}
 async function loadMisComisiones() {
   const { data, error } = await sb.rpc('listar_comisiones');
   if (error) { errToast('No se pudieron cargar tus comisiones'); return; }
@@ -17077,6 +17196,7 @@ const NAV_ITEMS = [
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Postventa', grupo: 'ventas', roles: '', badge: 'nav-postventa-count', badgeDefault: '0', sub: 'Cobros, reservas y seguimiento del viaje' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', grupo: 'ventas', roles: 'nav-admin-only' },
   { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', grupo: 'ventas', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar' },
+  { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', grupo: 'ventas', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', grupo: 'ventas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'mis-comisiones', icon: 'fas fa-sack-dollar', label: 'Mis Comisiones', grupo: 'ventas', roles: 'nav-asesor-only' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', grupo: 'ventas', roles: '', sub: 'Cargá vouchers PDF como venta' },
@@ -17297,6 +17417,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'estadisticas') loadEstadisticas();
   if (sec === 'facturacion') loadFacturacion();
   if (sec === 'pagos') loadPagos();
+  if (sec === 'proveedores') loadProveedores();
   if (sec === 'mis-comisiones') loadMisComisiones();
   if (sec === 'gestion-personal') loadGestionPersonal();
   if (sec === 'postventa') loadPostventa();
@@ -17537,7 +17658,7 @@ function setupAppBar() {
 // que pide esta fase. Si se agrega una sección nueva con carga propia, hay
 // que sumarla en los dos lugares.
 const REFRESCAR_SECCION = {
-  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), estadisticas: () => loadEstadisticas(), facturacion: () => loadFacturacion(), pagos: () => loadPagos(),
+  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), estadisticas: () => loadEstadisticas(), facturacion: () => loadFacturacion(), pagos: () => loadPagos(), proveedores: () => loadProveedores(),
   'mis-comisiones': () => loadMisComisiones(), 'gestion-personal': () => loadGestionPersonal(),
   postventa: () => loadPostventa(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
@@ -18925,6 +19046,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-24', emoji: '🚚', titulo: 'Proveedores: catálogo con ficha', texto: 'Nueva sección "Proveedores" (Ventas y Postventa): la lista de hoteles, posadas y operadores a los que les compramos, con su ficha de servicios, contacto, moneda, días de crédito y datos de pago. Es la base de las próximas pantallas de reservas, cuentas por pagar y márgenes.', roles: ['admin'] },
   { fecha: '2026-09-18', emoji: '🧒', titulo: 'Tarifario: niños gratis bien a la vista', texto: 'Toda tarifa o promo con niño gratis lleva ahora una franja rosa bien visible (en la carpeta del hotel, la grilla, la ficha y la lista), con la edad y hasta qué fecha hay que reservar para aprovecharlo. Y el filtro "Con niños gratis" de la pestaña Hoteles, que daba "Sin resultados", ya funciona.', roles: ['asesor', 'admin'] },
   { fecha: '2026-09-18', emoji: '🔗', titulo: 'Tarifario: juntar dos tarifas iguales', texto: 'En la carpeta del hotel, cuando dos tarifas son idénticas (plan, habitación, precios y mínimo de noches) y sus fechas se tocan, aparece el botón "Juntar con…" para dejarlas en una sola. La unión se recuerda: si llega una carga nueva del mismo hotel, se vuelve a aplicar sola.', roles: ['admin'] },
   { fecha: '2026-09-13', emoji: '🛏️', titulo: 'Tarifario: fotos de cada habitación', texto: 'En la ficha del hotel, cada habitación muestra ahora sus propias fotos (tocalas para verlas en grande), y el comparador de tarifas suma una fila "Fotos" para ver lado a lado cómo es cada una. Arranca con Venetur Margarita. Admin: en las fotos del hotel hay un selector para indicar a qué habitación pertenece cada foto.', roles: ['asesor', 'admin'] },
