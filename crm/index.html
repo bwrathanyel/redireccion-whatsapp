@@ -809,7 +809,7 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
 .lb-track{position:absolute;top:0;left:0;height:100%;width:300%;display:flex;transform:translateX(-33.3333%);will-change:transform}
 .lb-track.animando{transition:transform var(--dur-normal) var(--ease-salida)}
 .lb-slot{flex:0 0 33.3333%;height:100%;display:flex;align-items:center;justify-content:center}
-.lb-img{max-width:90vw;max-height:88vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.6);transform-origin:center center;transition:transform .18s ease,opacity .22s ease;opacity:0;cursor:zoom-in;user-select:none}
+.lb-img{width:min(90vw,calc(88vh * var(--ar,1.5)));height:auto;max-width:90vw;max-height:88vh;object-fit:contain;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.6);transform-origin:center center;transition:transform .18s ease,opacity .22s ease;opacity:0;cursor:zoom-in;user-select:none}
 .lightbox.open .lb-img{opacity:1}
 .lb-img.zoomed{cursor:grab}
 .lb-img.panning{cursor:grabbing;transition:none}
@@ -826,7 +826,7 @@ tbody tr:hover{background:rgba(255,145,0,.05)}
   .lb-arrow.lb-prev{left:8px}.lb-arrow.lb-next{right:8px}
   .lb-close{top:calc(12px + var(--safe-b,0px));right:12px;width:44px;height:44px}
   .lb-counter{top:calc(16px + var(--safe-b,0px));left:12px}
-  .lb-img{max-width:96vw;max-height:82vh}
+  .lb-img{width:min(96vw,calc(82vh * var(--ar,1.5)));max-width:96vw;max-height:82vh}
 }
 
 /* preview pill (ver número antes de entrar) */

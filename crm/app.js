@@ -15608,6 +15608,9 @@ const lbFoto = i => lbFotos.length ? lbFotos[(i % lbFotos.length + lbFotos.lengt
 function lbPintarSlot(id, url) {
   const el = document.getElementById(id);
   if (!el) return;
+  // Todas las fotos llenan el mismo espacio (sin recortar), aunque el original
+  // sea chico: el ancho sale de la proporción real, que recién se sabe al cargar.
+  el.onload = () => { if (el.naturalHeight) el.style.setProperty('--ar', el.naturalWidth / el.naturalHeight); };
   if (url) { if (el.getAttribute('src') !== url) el.setAttribute('src', url); el.style.visibility = ''; }
   else { el.removeAttribute('src'); el.style.visibility = 'hidden'; }
 }
