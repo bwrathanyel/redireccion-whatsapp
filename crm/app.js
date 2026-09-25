@@ -12903,6 +12903,9 @@ async function cmGenerarInvoice(e) {
   CM_CFG = null;
   okToast(`Invoice #${data.numero} generado: ${ivMoney(data.total)}`);
   cmLoadVerificar();
+  // El PDF se arma acá y lo guarda la EF; si falla, queda el botón "Generar PDF" en Invoices.
+  const pdf = await cmSubirInvoicePdf(data.id);
+  if (!pdf?.ok) errToast('El invoice se generó pero el PDF no se pudo guardar. Reintentá desde la pestaña Invoices.');
 }
 
 async function cmLoadInvoices() {
@@ -12917,10 +12920,115 @@ async function cmLoadInvoices() {
       <td data-label="Ventas">${l.ventas}</td>
       <td data-label="Total"><b>${ivMoney(l.total)}</b></td>
       <td data-label="Estado">${cmChip(l.estado)}</td>
-      <td>${esAdmin && l.estado === 'emitida' ? `<button class="dbtn save" type="button" data-cm-pagar="${l.id}">Marcar pagado</button> <button class="dbtn" type="button" data-cm-anular="${l.id}">Anular</button>` : ''}</td>
+      <td>${l.pdf_path ? `<button class="dbtn" type="button" data-cm-pdf="${l.id}"><i class="fas fa-file-pdf"></i> Ver</button>`
+        : esAdmin && l.estado !== 'anulada' ? `<button class="dbtn" type="button" data-cm-regen="${l.id}">Generar PDF</button>` : ''}
+        ${esAdmin && l.pdf_path && l.estado !== 'anulada' ? `<button class="dbtn" type="button" data-cm-enviar="${l.id}" data-cm-num="${l.numero}" data-cm-vend="${esc(l.vendedor)}"><i class="fas fa-paper-plane"></i> Enviar</button>` : ''}
+        ${esAdmin && l.estado === 'emitida' ? `<button class="dbtn save" type="button" data-cm-pagar="${l.id}">Marcar pagado</button> <button class="dbtn" type="button" data-cm-anular="${l.id}">Anular</button>` : ''}
+        ${l.enviada_telegram_en || l.enviada_correo_en ? `<div class="muted" style="font-size:11px">Enviado:${l.enviada_telegram_en ? ' Telegram' : ''}${l.enviada_correo_en ? ' Correo' : ''}</div>` : ''}</td>
     </tr>`).join('') || '<tr><td colspan="7">Todavía no hay invoices</td></tr>';
 }
+// La EF responde errores de negocio con 4xx: supabase-js los deja en error.context.
+async function cmEf(body) {
+  const { data, error } = await sb.functions.invoke('comision-invoice-enviar', { body });
+  if (!error) return data;
+  try { return await error.context.json(); } catch (_e) { return { ok: false, error: 'error_red' }; }
+}
+async function cmSubirInvoicePdf(id) {
+  try {
+    const { data, error } = await sb.rpc('comision_liquidacion_detalle', { p_id: id });
+    if (error || !data?.ok) return { ok: false };
+    await ensureVoucherLibs();
+    const bytes = await construirInvoiceComisionPdf(data.liquidacion, data.ventas || []);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return await cmEf({ accion: 'subir', liquidacion_id: id, pdf_base64: btoa(bin) });
+  } catch (e) {
+    console.error('cmSubirInvoicePdf', e);
+    return { ok: false };
+  }
+}
+// Copia el diseño del Invoice #24 que el gerente armaba a mano (Desktop/Invoice 24.pdf).
+async function construirInvoiceComisionPdf(l, ventas) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const us = n => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' US$';
+  const fch = d => new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' });
+  const gris = () => doc.setTextColor(120, 120, 120), negro = () => doc.setTextColor(40, 40, 40);
+  try {
+    doc.addImage(await cargarImagenBase64('logolotus.png'), 'PNG', 30, 8, 104, 104);
+  } catch (_e) { /* sin logo el invoice igual sale */ }
+  negro(); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+  doc.text(['DESTINO Y', 'EVENTOS', 'LOTUS 360'], 122, 52);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(30); doc.setTextColor(60, 60, 60);
+  doc.text('FACTURA', 576, 50, { align: 'right' });
+  doc.setFontSize(11); gris(); doc.text(`# ${l.numero}`, 576, 68, { align: 'right' });
+
+  doc.setFontSize(9.5);
+  [['Fecha:', fch(l.creada_en)], ['Condiciones de pago:', l.condiciones || ''], ['Fecha de vencimiento:', fch(l.pago_el)]]
+    .forEach(([k, v], i) => { gris(); doc.text(k, 464, 118 + i * 21, { align: 'right' }); negro(); doc.text(v, 569, 118 + i * 21, { align: 'right' }); });
+  doc.setFillColor(244, 244, 244); doc.roundedRect(318, 171, 270, 26, 3, 3, 'F');
+  negro(); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+  doc.text('Saldo Adeudado:', 464, 188, { align: 'right' }); doc.text(us(l.total), 569, 188, { align: 'right' });
+
+  doc.setFontSize(9); doc.text('DESTINOS Y EVENTOS LOTUS 360', 48, 138);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); gris();
+  doc.text('Cobrar a:', 48, 164); doc.text('Enviar a:', 183, 164);
+  negro(); doc.setFont('helvetica', 'bold');
+  doc.text(doc.splitTextToSize('DPTO CUENTAS POR PAGAR', 110), 48, 178);
+  doc.text(doc.splitTextToSize(String(l.vendedor || '').toUpperCase(), 130), 183, 178);
+
+  doc.setFillColor(51, 51, 51); doc.roundedRect(29, 241, 555, 21, 3, 3, 'F');
+  doc.setFont('helvetica', 'normal'); doc.setTextColor(255, 255, 255);
+  doc.text('Artículo', 44, 255); doc.text('Cantidad', 374, 255);
+  doc.text('Tasa', 493, 255, { align: 'right' }); doc.text('Cantidad', 569, 255, { align: 'right' });
+
+  let y = 280;
+  negro();
+  ventas.forEach(v => {
+    const item = doc.splitTextToSize(`VENTA ${v.cliente_nombre || ''} ${v.destino || ''}`.trim().toUpperCase(), 315);
+    if (y + item.length * 12 > 700) { doc.addPage(); y = 60; }
+    doc.setFont('helvetica', 'bold'); doc.text(item, 44, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text('1', 374, y); doc.text(us(v.comision_total), 493, y, { align: 'right' }); doc.text(us(v.comision_total), 569, y, { align: 'right' });
+    y += item.length * 12 + 10;
+  });
+
+  y = Math.max(y + 45, 340);
+  if (y > 640) { doc.addPage(); y = 60; }
+  [['Subtotal:', us(l.total)], ['Impuesto (0%):', us(0)], ['Total:', us(l.total)]]
+    .forEach(([k, v], i) => { gris(); doc.text(k, 464, y + i * 22, { align: 'right' }); negro(); doc.text(v, 569, y + i * 22, { align: 'right' }); });
+  y += 100;
+  if (l.terminos) {
+    gris(); doc.text('Términos:', 48, y);
+    negro(); doc.text(doc.splitTextToSize(l.terminos, 500), 48, y + 16);
+  }
+  return new Uint8Array(doc.output('arraybuffer'));
+}
 async function cmAccionInvoice(e) {
+  const ver = e.target.closest('[data-cm-pdf]'), regen = e.target.closest('[data-cm-regen]'), enviar = e.target.closest('[data-cm-enviar]');
+  if (ver) {
+    const r = await cmEf({ accion: 'ver', liquidacion_id: Number(ver.dataset.cmPdf) });
+    if (r?.ok && r.url) window.open(r.url, '_blank'); else errToast('No se pudo abrir el PDF');
+    return;
+  }
+  if (regen) {
+    regen.disabled = true;
+    const r = await cmSubirInvoicePdf(Number(regen.dataset.cmRegen));
+    if (r?.ok) { okToast('PDF generado'); cmLoadInvoices(); } else { regen.disabled = false; errToast('No se pudo generar el PDF'); }
+    return;
+  }
+  if (enviar) {
+    if (!confirm(`¿Enviar el invoice #${enviar.dataset.cmNum} a ${enviar.dataset.cmVend} por Telegram y correo?`)) return;
+    enviar.disabled = true;
+    const r = await cmEf({ accion: 'enviar', liquidacion_id: Number(enviar.dataset.cmEnviar) });
+    enviar.disabled = false;
+    const txt = s => s === 'enviado' ? 'enviado' : ({ vendedor_sin_telegram: 'no tiene Telegram vinculado', vendedor_sin_correo: 'no tiene correo',
+      remitente_sin_gmail: 'la cuenta corporativa no tiene Gmail conectado', sin_remitente_configurado: 'falta configurar la cuenta remitente' })[s] || 'falló';
+    if (!r?.telegram) { errToast(r?.error === 'sin_pdf' ? 'Primero generá el PDF' : 'No se pudo enviar'); return; }
+    (r.ok ? okToast : errToast)(`Telegram: ${txt(r.telegram)} · Correo: ${txt(r.correo)}`);
+    cmLoadInvoices();
+    return;
+  }
   const pagar = e.target.closest('[data-cm-pagar]'), anular = e.target.closest('[data-cm-anular]');
   if (!pagar && !anular) return;
   if (anular && !confirm('¿Anular este invoice? Sus ventas vuelven a "verificada" y el número no se reutiliza.')) return;
