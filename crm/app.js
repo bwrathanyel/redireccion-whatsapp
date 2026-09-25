@@ -9763,7 +9763,7 @@ const ASIS_ERRORES = {
 const ASIS_HERRAMIENTAS = {
   guardar_servicio: ['fa-suitcase', 'Servicio guardado'], guardar_pasajero: ['fa-user-plus', 'Pasajero guardado'],
   nota_reserva: ['fa-note-sticky', 'Nota en la reserva'], correo_proveedor: ['fa-envelope', 'Correo a proveedor'],
-  deshacer_accion: ['fa-rotate-left', 'Acción deshecha'],
+  adjuntar_documento: ['fa-paperclip', 'Documento adjunto'], asignar_proveedor_reserva: ['fa-handshake', 'Proveedor de la reserva'], deshacer_accion: ['fa-rotate-left', 'Acción deshecha'],
 };
 function setupAsistente() {
   const input = document.getElementById('asis-chat-input');
