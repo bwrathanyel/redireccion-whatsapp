@@ -222,7 +222,7 @@ let previewSel = null, charts = {};
 let ACTIVOS = [];
 let leadsView = 'lista', rgView = 'lista';
 let INBOX_LEADS = [], INBOX_TEL_LEAD_ID = null;
-let POSTVENTA = [], PV_ACTUAL = null, PV_ETAPA = '', PV_SEARCH_TIMER = null;
+let POSTVENTA = [], PV_ACTUAL = null, PV_ETAPA = '', PV_GRUPO = '', PV_SEARCH_TIMER = null;
 let RV_DET = null, RV_RESERVA_ID = null, RV_FORM = null, RV_DESTINOS = null, RV_PROVEEDORES = null;
 
 /* ---------- Periodos ---------- */
@@ -1240,7 +1240,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'cotizador', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'voucher', 'mis-comisiones', 'ranking', 'boleteria',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'voucher', 'mis-comisiones', 'ranking', 'boleteria',
   'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
@@ -2452,7 +2452,7 @@ async function startApp() {
     setupMetricas, setupRanking, setupEstadisticas, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
     setupBuscadorIATarifario, setupCerebroIA, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
-    setupRankingCatalogo, setupClientesEventos, setupProveedores,
+    setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers,
@@ -2652,6 +2652,10 @@ function setupPostventa() {
     document.querySelectorAll('#pv-stagebar .pv-stage').forEach(x => x.classList.remove('on'));
     b.classList.add('on'); PV_ETAPA = b.dataset.etapa || ''; loadPostventa();
   }));
+  document.getElementById('pv-grupos')?.addEventListener('click', e => {
+    const b = e.target.closest('.pv-stage');
+    if (b) { PV_GRUPO = b.dataset.grupo; renderPostventa(); }
+  });
   document.getElementById('pv-refresh')?.addEventListener('click', loadPostventa);
   document.getElementById('pv-search')?.addEventListener('input', () => {
     clearTimeout(PV_SEARCH_TIMER); PV_SEARCH_TIMER = setTimeout(loadPostventa, 280);
@@ -2673,6 +2677,10 @@ async function loadPostventa() {
     return;
   }
   POSTVENTA = bandeja.data || [];
+  if (!RV_DESTINOS && (ROL === 'admin' || ROL === 'asesor')) {
+    const d = await sb.rpc('listar_destinos', { p_solo_activos: true });
+    if (!d.error) RV_DESTINOS = d.data || [];
+  }
   renderPostventaKPIs(resumen.data || {});
   renderPostventa();
   const badge = document.getElementById('nav-postventa-count');
@@ -2690,14 +2698,30 @@ function renderPostventaKPIs(r) {
   ];
   document.getElementById('pv-kpis').innerHTML = cards.map(c => `<div class="kpi pv-kpi" style="--kc:${c[3]}"><div class="kt"><i class="fas ${c[2]}"></i>${c[0]}</div><div class="kv">${c[1]}</div></div>`).join('');
 }
+function pvGrupoDe(c) {
+  return (RV_DESTINOS || []).find(d => d.id === c.destino_id)?.grupo || 'Sin destino';
+}
+function renderPvGrupos() {
+  const bar = document.getElementById('pv-grupos');
+  if (!bar) return;
+  const cuenta = new Map();
+  POSTVENTA.forEach(c => { const g = pvGrupoDe(c); cuenta.set(g, (cuenta.get(g) || 0) + 1); });
+  const orden = [...DEST_GRUPOS, ...[...cuenta.keys()].filter(g => !DEST_GRUPOS.includes(g) && g !== 'Sin destino'), 'Sin destino'].filter(g => cuenta.has(g));
+  if (PV_GRUPO && !cuenta.has(PV_GRUPO)) PV_GRUPO = '';
+  bar.hidden = !RV_DESTINOS || orden.length < 2;
+  bar.innerHTML = [['', 'Todos los destinos', POSTVENTA.length], ...orden.map(g => [g, g, cuenta.get(g)])]
+    .map(([k, l, n]) => `<button class="pv-stage${k === PV_GRUPO ? ' on' : ''}" type="button" data-grupo="${esc(k)}" aria-pressed="${k === PV_GRUPO}">${esc(l)} · ${n}</button>`).join('');
+}
 function renderPostventa() {
   const grid = document.getElementById('pv-grid');
-  if (!POSTVENTA.length) {
+  renderPvGrupos();
+  const casos = PV_GRUPO ? POSTVENTA.filter(c => pvGrupoDe(c) === PV_GRUPO) : POSTVENTA;
+  if (!casos.length) {
     grid.innerHTML = '<div class="pv-empty"><i class="fas fa-circle-check"></i><b>Todo al día</b><br>No hay casos con este filtro</div>';
     return;
   }
   const ahora = Date.now();
-  grid.innerHTML = POSTVENTA.map(c => {
+  grid.innerHTML = casos.map(c => {
     const etapa = PV_ETAPAS[c.etapa] || [c.etapa, 'fa-circle'];
     const total = Number(c.monto_total || 0), pagado = Number(c.monto_pagado || 0);
     const pct = total > 0 ? Math.min(100, Math.round(pagado / total * 100)) : 0;
@@ -2883,6 +2907,13 @@ function rvAbrirReserva(reservaId, titulo, sub) {
   document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!yaAbierto) navPush({ type: 'drawer' });
   rvIniciar(reservaId, 'servicios');
 }
+// Grupos de destinos.grupo (Etapa D): los propios primero, el resto en el orden en que aparezcan.
+const DEST_GRUPOS = ['Isla de Margarita', 'Los Roques', 'Canaima', 'Mérida', 'Otros nacionales', 'Corporativo', 'Internacional'];
+function destinosPorGrupo(lista) {
+  const m = new Map(DEST_GRUPOS.map(g => [g, []]));
+  lista.forEach(d => { const g = d.grupo || 'Otros nacionales'; if (!m.has(g)) m.set(g, []); m.get(g).push(d); });
+  return [...m].filter(([, ds]) => ds.length);
+}
 async function rvCargar() {
   const id = RV_RESERVA_ID;
   const { data, error } = await sb.rpc('reserva_detalle', { p_reserva_id: id });
@@ -3021,7 +3052,7 @@ function rvFormServicio(p) {
       ${rvBotones('guardar-servicio')}</div>`;
     return;
   }
-  const destinos = (RV_DESTINOS || []).map(d => `<option value="${d.id}" ${d.id === s?.destino_id ? 'selected' : ''}>${esc(d.nombre)}</option>`).join('');
+  const destinos = destinosPorGrupo(RV_DESTINOS || []).map(([g, ds]) => `<optgroup label="${esc(g)}">${ds.map(d => `<option value="${d.id}" ${d.id === s?.destino_id ? 'selected' : ''}>${esc(d.nombre)}</option>`).join('')}</optgroup>`).join('');
   const sinCatalogo = s?.destino_id && !(RV_DESTINOS || []).some(d => d.id === s.destino_id) ? `<option value="${s.destino_id}" selected>${esc(s.destino || 'Destino ' + s.destino_id)}</option>` : '';
   p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-suitcase-rolling"></i> ${s ? 'Editar servicio' : 'Nuevo servicio'}</div>
     <label class="fl">Tipo</label><select class="ei" id="rv-s-tipo">${rvOpts(RV_TIPOS, s?.tipo || 'hospedaje')}</select>
@@ -9763,7 +9794,8 @@ const ASIS_ERRORES = {
 const ASIS_HERRAMIENTAS = {
   guardar_servicio: ['fa-suitcase', 'Servicio guardado'], guardar_pasajero: ['fa-user-plus', 'Pasajero guardado'],
   nota_reserva: ['fa-note-sticky', 'Nota en la reserva'], correo_proveedor: ['fa-envelope', 'Correo a proveedor'],
-  adjuntar_documento: ['fa-paperclip', 'Documento adjunto'], asignar_proveedor_reserva: ['fa-handshake', 'Proveedor de la reserva'], deshacer_accion: ['fa-rotate-left', 'Acción deshecha'],
+  adjuntar_documento: ['fa-paperclip', 'Documento adjunto'], asignar_proveedor_reserva: ['fa-handshake', 'Proveedor de la reserva'],
+  correo_empresa: ['fa-building', 'Correo a empresa'], asignar_empresa_reserva: ['fa-building-circle-check', 'Empresa de la reserva'], deshacer_accion: ['fa-rotate-left', 'Acción deshecha'],
 };
 function setupAsistente() {
   const input = document.getElementById('asis-chat-input');
@@ -12522,6 +12554,115 @@ function setupProveedores() {
   });
   document.getElementById('prov-cancelar').addEventListener('click', () => closeSheet('proveedor-sheet'));
   document.getElementById('prov-guardar').addEventListener('click', guardarProveedor);
+}
+
+/* ---------- Empresas (Etapa D; solo admin) ----------
+   Agencias, operadores, corporativos y alianzas con crédito propio. Todo pasa
+   por listar_empresas_cliente / guardar_empresa_cliente; la lista trae las
+   últimas 30 reservas enlazadas (el enlace lo hace el asistente por ahora). */
+const EMP_TIPOS = { agencia: 'Agencia', operador: 'Operador', corporativa: 'Corporativa', alianza: 'Alianza' };
+const EMP_ERRORES = {
+  nombre_requerido: 'Poné el nombre de la empresa.',
+  nombre_duplicado: 'Ya hay una empresa con ese nombre.',
+  tipo_invalido: 'Elegí el tipo de empresa.',
+  modalidad_invalida: 'La modalidad de precio no es válida.',
+  comision_requerida: 'Con modalidad "comisión" hay que poner el %.',
+  email_invalido: 'El email no es válido.',
+  datos_invalidos: 'Los datos no son válidos.',
+  dato_invalido: 'Algún dato no es válido o es demasiado largo.',
+  no_existe: 'Esa empresa ya no existe: se recargó la lista.',
+};
+let EMP_CACHE = [], EMP_EDITANDO = null;
+async function loadEmpresas() {
+  if (ROL !== 'admin') return;
+  const cargando = document.getElementById('emp-loading');
+  cargando?.classList.add('show');
+  const { data, error } = await sb.rpc('listar_empresas_cliente', { p_solo_activos: false });
+  cargando?.classList.remove('show');
+  if (error) { errToast('No se pudieron cargar las empresas'); return; }
+  EMP_CACHE = data || [];
+  renderEmpresas();
+}
+function renderEmpresas() {
+  const filtro = val('emp-filtro') || 'activos', q = val('emp-search').trim().toLowerCase();
+  const filas = EMP_CACHE
+    .filter(e => filtro === 'todos' || (filtro === 'fijos' ? e.cliente_fijo && e.activo : !!e.activo === (filtro === 'activos')))
+    .filter(e => !q || [e.nombre, e.rif, e.contacto, e.email, EMP_TIPOS[e.tipo]].some(v => String(v || '').toLowerCase().includes(q)));
+  document.getElementById('emp-tbody').innerHTML = filas.map(e => `
+    <tr data-emp-id="${e.id}" style="cursor:pointer">
+      <td class="td-name">${esc(e.nombre)}${e.cliente_fijo ? ' <span class="asist-badge on">Fijo</span>' : ''}</td>
+      <td data-label="Tipo">${esc(EMP_TIPOS[e.tipo] || e.tipo)}</td>
+      <td data-label="Contacto">${esc([e.contacto, e.telefono].filter(Boolean).join(' · ')) || '—'}</td>
+      <td data-label="Crédito">${e.dias_credito ? fmt(e.dias_credito) + ' días' : 'Contado'}</td>
+      <td data-label="Precio">${e.modalidad_precio === 'comision' ? `Comisión ${esc(e.comision_pct)}%` : 'Neto'}</td>
+      <td data-label="Reservas">${fmt((e.reservas || []).length)}</td>
+      <td data-label="Estado"><span class="asist-badge ${e.activo ? 'on' : 'off'}">${e.activo ? 'Activa' : 'Inactiva'}</span></td>
+      <td class="td-acciones"><button class="btn-sm" type="button" data-emp-id="${e.id}">Ver ficha</button></td>
+    </tr>`).join('') || `<tr><td colspan="8">${EMP_CACHE.length ? 'Ninguna empresa coincide con la búsqueda o el filtro' : 'Todavía no hay empresas cargadas'}</td></tr>`;
+}
+function empModalidadVisible() {
+  document.getElementById('emp-comision-box').hidden = val('emp-modalidad') !== 'comision';
+}
+function abrirEmpresaSheet(id = null) {
+  const e = id == null ? null : EMP_CACHE.find(x => x.id === id);
+  if (id != null && !e) return;
+  EMP_EDITANDO = e;
+  document.getElementById('emp-sheet-title').innerHTML = `<i class="fas fa-building"></i> ${e ? esc(e.nombre) : 'Nueva empresa'}`;
+  const poner = (elId, v) => { document.getElementById(elId).value = v ?? ''; };
+  poner('emp-nombre', e?.nombre); poner('emp-tipo', e?.tipo || 'corporativa'); poner('emp-rif', e?.rif);
+  poner('emp-contacto', e?.contacto); poner('emp-telefono', e?.telefono); poner('emp-email', e?.email);
+  poner('emp-dias', e?.dias_credito); poner('emp-modalidad', e?.modalidad_precio || 'neto'); poner('emp-comision', e?.comision_pct);
+  poner('emp-fijo', e?.cliente_fijo ? '1' : '0'); poner('emp-activo', e && !e.activo ? '0' : '1'); poner('emp-notas', e?.notas);
+  empModalidadVisible();
+  const reservas = e?.reservas || [];
+  document.getElementById('emp-reservas').innerHTML = !e ? '' : reservas.length
+    ? reservas.map(r => `<div class="emp-res"><b>${esc(r.codigo || '#' + r.id)}</b> · ${esc((PV_ETAPAS[r.etapa] || [r.etapa])[0])}${r.referencia ? ' · ref. ' + esc(r.referencia) : ''}<span>${r.fecha_viaje_inicio ? pvFecha(r.fecha_viaje_inicio) : 'Sin fecha'}</span></div>`).join('')
+    : '<div class="emp-res">Sin reservas enlazadas. Pedíselo al asistente: "enlazá la reserva N a esta empresa".</div>';
+  document.getElementById('emp-reservas-box').hidden = !e;
+  document.getElementById('emp-err').textContent = '';
+  openSheet('empresa-sheet');
+}
+async function guardarEmpresa() {
+  const err = document.getElementById('emp-err'), btn = document.getElementById('emp-guardar');
+  err.textContent = '';
+  const nombre = val('emp-nombre').trim();
+  if (!nombre) { err.textContent = EMP_ERRORES.nombre_requerido; return; }
+  const diasTxt = val('emp-dias').trim(), dias = diasTxt === '' ? 0 : Number(diasTxt);
+  if (document.getElementById('emp-dias').validity.badInput || !Number.isInteger(dias) || dias < 0 || dias > 365) { err.textContent = 'Los días de crédito van de 0 a 365.'; return; }
+  const modalidad = val('emp-modalidad'), pctTxt = val('emp-comision').trim(), pct = Number(pctTxt);
+  if (modalidad === 'comision' && (pctTxt === '' || !(pct >= 0 && pct <= 100))) { err.textContent = EMP_ERRORES.comision_requerida + ' (0 a 100)'; return; }
+  const editando = EMP_EDITANDO;
+  const datos = {
+    nombre, tipo: val('emp-tipo'), rif: val('emp-rif'), contacto: val('emp-contacto'), telefono: val('emp-telefono'),
+    email: val('emp-email'), dias_credito: dias, modalidad_precio: modalidad, cliente_fijo: val('emp-fijo') === '1',
+    activo: val('emp-activo') === '1', notas: val('emp-notas'),
+  };
+  if (modalidad === 'comision') datos.comision_pct = pct;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('guardar_empresa_cliente', { p_id: editando?.id ?? null, p_datos: datos });
+  btn.disabled = false;
+  if (error) { err.textContent = error.code === '42501' ? 'Solo un admin puede guardar empresas.' : 'No se pudo guardar: ' + (error.message || ''); return; }
+  if (!data?.ok) {
+    err.textContent = EMP_ERRORES[data?.error] || 'No se pudo guardar: ' + (data?.error || '');
+    if (data?.error === 'no_existe') loadEmpresas();
+    return;
+  }
+  closeSheet('empresa-sheet');
+  okToast(editando ? 'Empresa actualizada' : 'Empresa creada');
+  EMP_EDITANDO = null;
+  loadEmpresas();
+}
+function setupEmpresas() {
+  document.getElementById('emp-search').addEventListener('input', renderEmpresas);
+  document.getElementById('emp-filtro').addEventListener('change', renderEmpresas);
+  document.getElementById('emp-nuevo').addEventListener('click', () => abrirEmpresaSheet());
+  document.getElementById('emp-tbody').addEventListener('click', e => {
+    const fila = e.target.closest('[data-emp-id]');
+    if (fila) abrirEmpresaSheet(Number(fila.dataset.empId));
+  });
+  document.getElementById('emp-modalidad').addEventListener('change', empModalidadVisible);
+  document.getElementById('emp-cancelar').addEventListener('click', () => closeSheet('empresa-sheet'));
+  document.getElementById('emp-guardar').addEventListener('click', guardarEmpresa);
 }
 async function loadMisComisiones() {
   const { data, error } = await sb.rpc('listar_comisiones');
@@ -17848,6 +17989,7 @@ const NAV_ITEMS = [
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', grupo: 'ventas', roles: 'nav-admin-only' },
   { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', grupo: 'ventas', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar' },
   { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', grupo: 'ventas', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
+  { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', grupo: 'ventas', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', grupo: 'ventas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'mis-comisiones', icon: 'fas fa-sack-dollar', label: 'Mis Comisiones', grupo: 'ventas', roles: 'nav-asesor-only' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', grupo: 'ventas', roles: '', sub: 'Cargá vouchers PDF como venta' },
@@ -18070,6 +18212,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'facturacion') loadFacturacion();
   if (sec === 'pagos') loadPagos();
   if (sec === 'proveedores') loadProveedores();
+  if (sec === 'empresas') loadEmpresas();
   if (sec === 'asistente') loadAsistente();
   if (sec === 'mis-comisiones') loadMisComisiones();
   if (sec === 'gestion-personal') loadGestionPersonal();
