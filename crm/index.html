@@ -1740,6 +1740,14 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
    accede a la sección equivalente desde su propio nav-item, no desde acá. */
 .nav-item.nav-asesor-only,.bn-item.nav-asesor-only,.sheet-item.nav-asesor-only{display:none}
 .rol-asesor .nav-item.nav-asesor-only,.rol-asesor .bn-item.nav-asesor-only,.rol-asesor .sheet-item.nav-asesor-only{display:flex}
+.cm-reservas{display:flex;flex-direction:column;gap:6px;margin-top:8px;max-height:220px;overflow-y:auto}
+.cm-res{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:9px 11px;border:1px solid var(--line2);border-radius:10px;background:transparent;color:var(--txt);text-align:left;cursor:pointer;font:inherit}
+.cm-res:hover:not(:disabled),.cm-res.on{border-color:var(--accent);background:var(--accent-soft)}
+.cm-res:disabled{opacity:.5;cursor:not-allowed}
+.cm-res small{color:var(--muted);display:block}
+.cm-resumen{margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--accent-soft);font-size:13px;line-height:1.5}
+.cm-reglas input{width:72px;padding:6px 8px}
+.cm-reglas input::placeholder{color:var(--muted2);opacity:.8}
 /* solo-informe-diario / solo-voucher: a diferencia de los de arriba, no dependen
    del rol sino de un flag por usuario (ve_informe_diario) o de una combinación
    rol+modo (voucher). Se ocultan/muestran por clase en <body> (ve-informe-diario /
@@ -4774,6 +4782,130 @@ body.fsize-grande{--tap:41.9px}
         </div>
       </div>
     </section>
+
+    <!-- COMISIONES POR CORTE (asesor/freelancer carga ventas; admin verifica, emite invoice y configura %) -->
+    <section class="section" id="sec-comisiones">
+      <div class="seg-group chips-scroll" id="cm-tabs">
+        <button class="seg" data-cm-tab="mias" data-cm-rol="asesor">Mis ventas</button>
+        <button class="seg" data-cm-tab="verificar" data-cm-rol="admin">Ventas por verificar <span class="lih-count" id="cm-pend-count">0</span></button>
+        <button class="seg" data-cm-tab="invoices">Invoices</button>
+        <button class="seg" data-cm-tab="config" data-cm-rol="admin">Configuración</button>
+      </div>
+
+      <div class="cm-panel" data-cm-panel="mias" style="display:none">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+            <h2 style="margin:0"><i class="fas fa-sack-dollar"></i> Mis ventas</h2>
+            <button class="dbtn save" id="cm-cargar-btn" type="button" style="flex:0 0 auto;width:auto"><i class="fas fa-plus"></i> Cargar venta</button>
+          </div>
+          <div class="csub" id="cm-aviso-corte" style="display:block"></div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Cliente</th><th>Reserva</th><th>Monto</th><th>Comisión</th><th>Se paga el</th><th>Estado</th></tr></thead>
+              <tbody id="cm-mias-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="cm-panel" data-cm-panel="verificar" style="display:none">
+        <div class="card">
+          <h2><i class="fas fa-clipboard-check"></i> Ventas por verificar</h2>
+          <div class="csub">Revisá cada venta contra la reserva. Las verificadas de un corte se agrupan en un invoice por vendedor.</div>
+          <div class="ef-fila">
+            <div style="flex:1"><label class="fl" for="cm-f-corte">Corte (día de pago)</label><select id="cm-f-corte" class="ei"></select></div>
+            <div style="flex:1"><label class="fl" for="cm-f-vendedor">Vendedor</label><select id="cm-f-vendedor" class="ei"></select></div>
+            <div style="flex:1"><label class="fl" for="cm-f-estado">Estado</label>
+              <select id="cm-f-estado" class="ei"><option value="enviada">Por verificar</option><option value="verificada">Verificadas</option><option value="rechazada">Rechazadas</option><option value="liquidada">Liquidadas</option><option value="">Todas</option></select></div>
+          </div>
+          <div id="cm-invoice-bar"></div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Vendedor</th><th>Cliente</th><th>Reserva</th><th>Montos</th><th>Comisión</th><th>Se paga el</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="cm-ver-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="cm-panel" data-cm-panel="invoices" style="display:none">
+        <div class="card">
+          <h2><i class="fas fa-file-invoice-dollar"></i> Invoices de comisión</h2>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr><th>N°</th><th>Vendedor</th><th>Se paga el</th><th>Ventas</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="cm-inv-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="cm-panel" data-cm-panel="config" style="display:none">
+        <div class="card">
+          <h2><i class="fas fa-sliders"></i> Configuración de comisiones</h2>
+          <div class="csub" style="display:block;line-height:1.5">
+            La comisión de una venta es la suma de cada monto por su porcentaje. Ejemplo: boletos $200 al 5% + hospedaje $400 al 10% = $10 + $40 = <b>$50</b>.
+            La fila <b>General</b> vale para todos; una celda vacía en la fila de una persona usa el % general (se ve en gris).
+            El cambio aplica a las ventas que se carguen desde ahora; las ya cargadas conservan su %.
+          </div>
+          <div style="overflow-x:auto">
+            <table class="cm-reglas">
+              <thead><tr><th>Persona</th><th>Boletos</th><th>Traslado</th><th>Hospedaje</th><th>Paquete</th></tr></thead>
+              <tbody id="cm-reglas-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <h2><i class="fas fa-file-lines"></i> Datos del invoice</h2>
+          <div class="ef-fila">
+            <div style="flex:1"><label class="fl" for="cm-cfg-numero">Próximo número de invoice</label><input id="cm-cfg-numero" class="ei" type="number" min="1" step="1"></div>
+            <div style="flex:2"><label class="fl" for="cm-cfg-condiciones">Condiciones de pago</label><input id="cm-cfg-condiciones" class="ei" maxlength="200"></div>
+          </div>
+          <div><label class="fl" for="cm-cfg-terminos">Términos</label><textarea id="cm-cfg-terminos" class="ei" rows="2" maxlength="1000"></textarea></div>
+          <div style="margin-top:10px"><button class="dbtn save" id="cm-cfg-guardar" type="button">Guardar datos del invoice</button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cargar venta para comisión -->
+    <div class="sheet" id="cm-venta-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title"><i class="fas fa-sack-dollar"></i> Cargar venta</div>
+      <div class="edit-box" style="margin-top:4px">
+        <label class="fl" for="cm-buscar">1. Buscá la reserva por nombre o teléfono del cliente</label>
+        <input id="cm-buscar" class="ei" placeholder="Ej. Luisa Montilva o 0412…" autocomplete="off">
+        <div id="cm-reservas" class="cm-reservas"></div>
+        <div id="cm-form" style="display:none">
+          <div class="fl" style="margin-top:12px">2. Datos del cliente</div>
+          <div class="ef-fila">
+            <div style="flex:2"><label class="fl" for="cm-nombre">Nombre y apellido</label><input id="cm-nombre" class="ei" maxlength="120" autocomplete="off"></div>
+            <div style="flex:1"><label class="fl" for="cm-cedula">Cédula</label><input id="cm-cedula" class="ei" maxlength="20" autocomplete="off"></div>
+          </div>
+          <div class="ef-fila">
+            <div style="flex:1"><label class="fl" for="cm-telefono">Teléfono</label><input id="cm-telefono" class="ei" type="tel" maxlength="30" autocomplete="off"></div>
+            <div style="flex:1"><label class="fl" for="cm-correo">Correo <span class="ef-opc">(opcional)</span></label><input id="cm-correo" class="ei" type="email" maxlength="120" autocomplete="off"></div>
+          </div>
+          <div class="ef-fila">
+            <div style="flex:1"><label class="fl" for="cm-destino">Destino</label><select id="cm-destino" class="ei"></select></div>
+            <div style="flex:1"><label class="fl" for="cm-modalidad">Modalidad</label><input id="cm-modalidad" class="ei" maxlength="60" placeholder="Todo incluido, solo alojamiento…"></div>
+          </div>
+          <div class="fl" style="margin-top:12px">3. Montos vendidos (US$) — dejá en 0 lo que no aplique</div>
+          <div class="ef-fila">
+            <div style="flex:1"><label class="fl" for="cm-m-boletos">Boletos <span class="ef-opc" id="cm-p-boletos"></span></label><input id="cm-m-boletos" class="ei cm-monto" type="number" min="0" step="0.01" value="0"></div>
+            <div style="flex:1"><label class="fl" for="cm-m-traslado">Traslado <span class="ef-opc" id="cm-p-traslado"></span></label><input id="cm-m-traslado" class="ei cm-monto" type="number" min="0" step="0.01" value="0"></div>
+          </div>
+          <div class="ef-fila">
+            <div style="flex:1"><label class="fl" for="cm-m-hospedaje">Hospedaje <span class="ef-opc" id="cm-p-hospedaje"></span></label><input id="cm-m-hospedaje" class="ei cm-monto" type="number" min="0" step="0.01" value="0"></div>
+            <div style="flex:1"><label class="fl" for="cm-m-paquete">Paquete general <span class="ef-opc" id="cm-p-paquete"></span></label><input id="cm-m-paquete" class="ei cm-monto" type="number" min="0" step="0.01" value="0"></div>
+          </div>
+          <div class="cm-resumen" id="cm-resumen"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;padding:0 6px">
+        <button class="dbtn" id="cm-cancelar" type="button" style="flex:1">Cancelar</button>
+        <button class="dbtn save" id="cm-enviar" type="button" style="flex:1" disabled>Enviar al gerente</button>
+      </div>
+    </div>
 
     <!-- INFORME DIARIO (Bloque 14 — solo Luis Rueda, gate por MI_VE_INFORME_DIARIO) -->
     <section class="section" id="sec-informe-diario">

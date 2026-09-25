@@ -156,6 +156,7 @@ const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.ch
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
 const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
   tareas: ['Tareas', 'Tus tareas activas'],
+  comisiones: ['Comisiones por corte', 'Ventas pagadas, verificación e invoices · pagos el 5 y el 20'],
   estadisticas: ['Estadísticas', 'Tu rendimiento, tu tendencia y consejos de la IA'],
   boleteria: ['Boletería', 'Rutas, aerolíneas, precios y requisitos de vuelo'],
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
@@ -1240,7 +1241,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'cotizador', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'voucher', 'mis-comisiones', 'ranking', 'boleteria',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'voucher', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
   'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
@@ -2455,7 +2456,7 @@ async function startApp() {
     setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
-    setupTareas, setupFreelancers,
+    setupTareas, setupFreelancers, setupComisiones,
     cargarNotasRepaso,
     subscribeRealtime,
   );
@@ -12677,6 +12678,301 @@ async function loadMisComisiones() {
     </tr>`).join('') || '<tr><td colspan="5">Sin comisiones todavía</td></tr>';
 }
 
+/* ---------- Comisiones por corte ----------
+   Todo pasa por RPC comision_* (las tablas no tienen policies). El corte (pago_el)
+   y el % los decide el servidor con su propio reloj; acá solo se muestran. */
+let CM_TAB = null, CM_VENTAS = [], CM_CTX = null, CM_RESERVA = null, CM_CFG = null;
+const CM_TIPOS = ['boletos', 'traslado', 'hospedaje', 'paquete'];
+const CM_ESTADO = { enviada: 'Por verificar', verificada: 'Verificada', rechazada: 'Rechazada', liquidada: 'En invoice', emitida: 'Emitido', pagada: 'Pagado', anulada: 'Anulado' };
+const CM_ERR = {
+  vendedor_invalido: 'Tu usuario no está habilitado como vendedor', reserva_no_existe: 'La reserva no existe',
+  reserva_inactiva: 'La reserva está inactiva', reserva_ya_comisionada: 'Esa reserva ya fue cargada para comisión',
+  montos_invalidos: 'Cargá al menos un monto mayor a 0', sin_regla_de_comision: 'Falta configurar el % de comisión para uno de los montos; avisale al gerente',
+  no_esta_enviada: 'La venta ya no está por verificar', no_se_puede_rechazar: 'La venta ya no se puede rechazar',
+  motivo_requerido: 'Escribí el motivo del rechazo', sin_ventas_verificadas: 'No hay ventas verificadas de ese vendedor en ese corte',
+  no_esta_emitida: 'El invoice ya no está emitido', tipo_invalido: 'Tipo de servicio inválido',
+  porcentaje_invalido: 'El % tiene que estar entre 0 y 100', texto_invalido: 'Condiciones y términos no pueden quedar vacíos',
+};
+const cmFecha = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '—';
+const cmErr = (data, error, def) => error ? (error.code === '42501' ? 'No tenés permiso para esto' : def)
+  : data?.error === 'reserva_no_pagada' ? `La reserva no está pagada completa: falta cobrar ${ivMoney(data.falta)}`
+  : data?.error === 'numero_invalido' ? `El número tiene que ser ${data.minimo} o mayor (ya hay invoices emitidos)`
+  : CM_ERR[data?.error] || def;
+const cmChip = e => `<span class="chip">${esc(CM_ESTADO[e] || e)}</span>`;
+
+function setupComisiones() {
+  const tabs = document.getElementById('cm-tabs');
+  if (!tabs || tabs._wired) return;
+  tabs._wired = true;
+  tabs.querySelectorAll('[data-cm-rol]').forEach(b => { if (b.dataset.cmRol !== ROL) b.style.display = 'none'; });
+  tabs.addEventListener('click', e => { const b = e.target.closest('[data-cm-tab]'); if (b) cmTab(b.dataset.cmTab); });
+  document.getElementById('cm-cargar-btn').addEventListener('click', cmAbrirCarga);
+  document.getElementById('cm-cancelar').addEventListener('click', () => closeSheet('cm-venta-sheet'));
+  document.getElementById('cm-enviar').addEventListener('click', cmEnviarVenta);
+  let t = null;
+  document.getElementById('cm-buscar').addEventListener('input', e => { clearTimeout(t); t = setTimeout(() => cmBuscarReservas(e.target.value.trim()), 300); });
+  document.getElementById('cm-reservas').addEventListener('click', e => { const b = e.target.closest('[data-res]'); if (b && !b.disabled) cmElegirReserva(Number(b.dataset.res)); });
+  document.querySelectorAll('#cm-venta-sheet .cm-monto').forEach(i => i.addEventListener('input', cmResumen));
+  ['cm-f-corte', 'cm-f-vendedor', 'cm-f-estado'].forEach(id => document.getElementById(id).addEventListener('change', cmRenderVerificar));
+  document.getElementById('cm-ver-tbody').addEventListener('click', cmAccionVenta);
+  document.getElementById('cm-invoice-bar').addEventListener('click', cmGenerarInvoice);
+  document.getElementById('cm-inv-tbody').addEventListener('click', cmAccionInvoice);
+  document.getElementById('cm-reglas-tbody').addEventListener('change', cmGuardarRegla);
+  document.getElementById('cm-cfg-guardar').addEventListener('click', cmGuardarConfig);
+}
+function cmTab(tab) {
+  CM_TAB = tab;
+  document.querySelectorAll('#cm-tabs [data-cm-tab]').forEach(b => b.classList.toggle('on', b.dataset.cmTab === tab));
+  document.querySelectorAll('#sec-comisiones [data-cm-panel]').forEach(p => { p.style.display = p.dataset.cmPanel === tab ? '' : 'none'; });
+  ({ mias: cmLoadMias, verificar: cmLoadVerificar, invoices: cmLoadInvoices, config: cmLoadConfig })[tab]?.();
+}
+function loadComisiones() { cmTab(CM_TAB || (ROL === 'admin' ? 'verificar' : 'mias')); }
+
+async function cmLoadContexto() {
+  const { data, error } = await sb.rpc('comision_contexto');
+  if (error) { console.error('comision_contexto', error); return null; }
+  CM_CTX = data;
+  return data;
+}
+const cmAvisoCorte = c => c ? `Lo que cargues ahora entra en el pago del <b>${cmFecha(c.pago_el)}</b> (ese corte cierra el ${esc(fmtFechaHoraCaracas(c.cierra_en))}).` : '';
+
+async function cmLoadMias() {
+  const tb = document.getElementById('cm-mias-tbody');
+  const [ctx, { data, error }] = await Promise.all([cmLoadContexto(), sb.rpc('comision_ventas_listar')]);
+  document.getElementById('cm-aviso-corte').innerHTML = cmAvisoCorte(ctx);
+  if (error) { errToast('No se pudieron cargar tus ventas'); return; }
+  tb.innerHTML = (data || []).map(v => `
+    <tr>
+      <td data-label="Cliente">${esc(v.cliente_nombre)}<div class="muted" style="font-size:11px">${esc(v.destino || '')}</div></td>
+      <td data-label="Reserva">${esc(v.reserva_codigo || '—')}</td>
+      <td data-label="Monto">${ivMoney(CM_TIPOS.reduce((s, k) => s + Number(v['monto_' + k] || 0), 0))}</td>
+      <td data-label="Comisión"><b>${ivMoney(v.comision_total)}</b></td>
+      <td data-label="Se paga el">${cmFecha(v.pago_el)}</td>
+      <td data-label="Estado">${cmChip(v.estado)}${v.estado === 'rechazada' && v.motivo_rechazo ? `<div class="muted" style="font-size:11px">${esc(v.motivo_rechazo)}</div>` : ''}${v.liquidacion_numero ? `<div class="muted" style="font-size:11px">Invoice #${v.liquidacion_numero}</div>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="6">Todavía no cargaste ventas. Tocá "Cargar venta" cuando una reserva esté pagada completa.</td></tr>';
+}
+
+async function cmAbrirCarga() {
+  CM_RESERVA = null;
+  document.getElementById('cm-buscar').value = '';
+  document.getElementById('cm-reservas').innerHTML = '';
+  document.getElementById('cm-form').style.display = 'none';
+  document.getElementById('cm-enviar').disabled = true;
+  openSheet('cm-venta-sheet');
+  await cmLoadContexto();
+  CM_TIPOS.forEach(k => { const p = CM_CTX?.porcentajes?.[k]; document.getElementById('cm-p-' + k).textContent = p == null ? '(sin %)' : `(${p}%)`; });
+  if (!RV_DESTINOS) { const d = await sb.rpc('listar_destinos', { p_solo_activos: true }); if (!d.error) RV_DESTINOS = d.data || []; }
+  document.getElementById('cm-destino').innerHTML = '<option value="">— Elegí —</option>' + (RV_DESTINOS || []).map(d => `<option value="${d.id}">${esc(d.nombre)}</option>`).join('');
+  cmBuscarReservas('');
+}
+async function cmBuscarReservas(q) {
+  const cont = document.getElementById('cm-reservas');
+  cont.innerHTML = '<div class="muted"><i class="fas fa-circle-notch fa-spin"></i> Buscando…</div>';
+  const [{ data, error }, ya] = await Promise.all([
+    sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: q || null }),
+    sb.rpc('comision_ventas_listar'),
+  ]);
+  if (error) { cont.innerHTML = '<div class="muted">No se pudieron cargar tus reservas</div>'; return; }
+  const cargadas = new Set((ya.data || []).filter(v => v.estado !== 'rechazada').map(v => v.reserva_id));
+  const filas = (data || []).slice(0, 30);
+  cont._filas = filas;
+  cont.innerHTML = filas.map(r => {
+    const falta = Math.max(Number(r.monto_total || 0) - Number(r.monto_pagado || 0), 0);
+    const bloqueo = cargadas.has(r.id) ? 'Ya cargada' : Number(r.monto_total || 0) <= 0 ? 'Sin monto total' : falta > 0 ? `Falta cobrar ${ivMoney(falta)}` : '';
+    return `<button type="button" class="cm-res${CM_RESERVA?.id === r.id ? ' on' : ''}" data-res="${r.id}" ${bloqueo ? 'disabled' : ''}>
+      <span>${esc(r.nombre)} · ${esc(r.codigo || '')}<small>${esc([r.destino || 'Sin destino', r.telefono].filter(Boolean).join(' · '))}</small></span>
+      <span style="text-align:right">${ivMoney(r.monto_total)}<small>${bloqueo ? esc(bloqueo) : 'Pagada completa'}</small></span>
+    </button>`;
+  }).join('') || `<div class="muted">${q ? 'No hay reservas tuyas con esa búsqueda' : 'No tenés reservas activas'}</div>`;
+}
+function cmElegirReserva(id) {
+  const r = (document.getElementById('cm-reservas')._filas || []).find(x => x.id === id);
+  if (!r) return;
+  CM_RESERVA = r;
+  document.querySelectorAll('#cm-reservas .cm-res').forEach(b => b.classList.toggle('on', Number(b.dataset.res) === id));
+  document.getElementById('cm-form').style.display = '';
+  document.getElementById('cm-nombre').value = r.nombre || '';
+  document.getElementById('cm-telefono').value = r.telefono || '';
+  document.getElementById('cm-destino').value = r.destino_id || '';
+  document.getElementById('cm-m-paquete').value = r.monto_total || 0;
+  cmResumen();
+}
+function cmResumen() {
+  const el = document.getElementById('cm-resumen');
+  const pct = CM_CTX?.porcentajes || {};
+  let com = 0, faltaRegla = false, total = 0;
+  CM_TIPOS.forEach(k => {
+    const m = Number(document.getElementById('cm-m-' + k).value) || 0;
+    total += m;
+    if (m > 0 && pct[k] == null) faltaRegla = true;
+    com += m * (Number(pct[k]) || 0) / 100;
+  });
+  el.innerHTML = faltaRegla ? '<i class="fas fa-triangle-exclamation"></i> Uno de los montos no tiene % configurado. Pedile al gerente que lo configure antes de cargar.'
+    : `Comisión estimada: <b>${ivMoney(Math.round(com * 100) / 100)}</b> sobre ${ivMoney(total)}.<br>${cmAvisoCorte(CM_CTX)}`;
+  document.getElementById('cm-enviar').disabled = !CM_RESERVA || faltaRegla || total <= 0;
+}
+async function cmEnviarVenta() {
+  const v = id => document.getElementById(id).value.trim();
+  if (!CM_RESERVA) return;
+  if (v('cm-nombre').length < 2 || v('cm-telefono').length < 5 || v('cm-cedula').length < 4 || v('cm-modalidad').length < 2) {
+    errToast('Completá nombre, teléfono, cédula y modalidad'); return;
+  }
+  const btn = document.getElementById('cm-enviar');
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('comision_venta_cargar', {
+    p_reserva_id: CM_RESERVA.id, p_cliente_nombre: v('cm-nombre'), p_cliente_telefono: v('cm-telefono'),
+    p_cliente_cedula: v('cm-cedula'), p_modalidad: v('cm-modalidad'),
+    p_monto_boletos: Number(v('cm-m-boletos')) || 0, p_monto_traslado: Number(v('cm-m-traslado')) || 0,
+    p_monto_hospedaje: Number(v('cm-m-hospedaje')) || 0, p_monto_paquete: Number(v('cm-m-paquete')) || 0,
+    p_cliente_correo: v('cm-correo') || null, p_destino_id: Number(v('cm-destino')) || null,
+  });
+  if (error || !data?.ok) { btn.disabled = false; errToast(cmErr(data, error, 'No se pudo cargar la venta')); return; }
+  closeSheet('cm-venta-sheet');
+  okToast(`Venta enviada: ${ivMoney(data.comision_total)} para el pago del ${cmFecha(data.pago_el)}`);
+  cmLoadMias();
+}
+
+async function cmLoadVerificar() {
+  const { data, error } = await sb.rpc('comision_ventas_listar');
+  if (error) { errToast('No se pudieron cargar las ventas'); return; }
+  CM_VENTAS = data || [];
+  const selCorte = document.getElementById('cm-f-corte'), selVend = document.getElementById('cm-f-vendedor');
+  const cortes = [...new Set(CM_VENTAS.map(v => v.pago_el))].sort().reverse();
+  const prevCorte = selCorte.value, prevVend = selVend.value;
+  selCorte.innerHTML = '<option value="">Todos</option>' + cortes.map(c => `<option value="${c}">Pago del ${cmFecha(c)}</option>`).join('');
+  const vends = [...new Map(CM_VENTAS.map(v => [v.usuario_id, v.vendedor])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+  selVend.innerHTML = '<option value="">Todos</option>' + vends.map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('');
+  if (cortes.includes(prevCorte)) selCorte.value = prevCorte;
+  if (vends.some(([id]) => id === prevVend)) selVend.value = prevVend;
+  const pend = CM_VENTAS.filter(v => v.estado === 'enviada').length;
+  const badge = document.getElementById('cm-pend-count');
+  if (badge) badge.textContent = pend;
+  cmRenderVerificar();
+}
+function cmRenderVerificar() {
+  const corte = document.getElementById('cm-f-corte').value, vend = document.getElementById('cm-f-vendedor').value, est = document.getElementById('cm-f-estado').value;
+  const filas = CM_VENTAS.filter(v => (!corte || v.pago_el === corte) && (!vend || v.usuario_id === vend) && (!est || v.estado === est));
+  document.getElementById('cm-ver-tbody').innerHTML = filas.map(v => {
+    const montos = CM_TIPOS.filter(k => Number(v['monto_' + k]) > 0).map(k => `${k[0].toUpperCase() + k.slice(1)} ${ivMoney(v['monto_' + k])} · ${v['pct_' + k]}%`).join('<br>');
+    const acc = v.estado === 'enviada' ? `<button class="dbtn save" data-cm-ver="${v.id}" type="button">Verificar</button> <button class="dbtn" data-cm-rech="${v.id}" type="button">Rechazar</button>`
+      : v.estado === 'verificada' ? `<button class="dbtn" data-cm-rech="${v.id}" type="button">Rechazar</button>` : '';
+    return `<tr>
+      <td data-label="Vendedor">${esc(v.vendedor)}</td>
+      <td data-label="Cliente">${esc(v.cliente_nombre)}<div class="muted" style="font-size:11px">C.I. ${esc(v.cliente_cedula)} · ${esc(v.cliente_telefono)}${v.cliente_correo ? ' · ' + esc(v.cliente_correo) : ''}</div><div class="muted" style="font-size:11px">${esc(v.destino || '')} · ${esc(v.modalidad)}</div></td>
+      <td data-label="Reserva">${esc(v.reserva_codigo || '—')}</td>
+      <td data-label="Montos" style="font-size:12px">${montos}</td>
+      <td data-label="Comisión"><b>${ivMoney(v.comision_total)}</b></td>
+      <td data-label="Se paga el">${cmFecha(v.pago_el)}<div class="muted" style="font-size:11px">Cargada ${esc(fmtFechaHoraCaracas(v.cargada_en))}</div></td>
+      <td data-label="Estado">${cmChip(v.estado)}${v.motivo_rechazo ? `<div class="muted" style="font-size:11px">${esc(v.motivo_rechazo)}</div>` : ''}${v.liquidacion_numero ? `<div class="muted" style="font-size:11px">Invoice #${v.liquidacion_numero}</div>` : ''}</td>
+      <td>${acc}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8">No hay ventas con estos filtros</td></tr>';
+  const grupos = new Map();
+  CM_VENTAS.filter(v => v.estado === 'verificada' && (!corte || v.pago_el === corte) && (!vend || v.usuario_id === vend)).forEach(v => {
+    const k = v.usuario_id + '|' + v.pago_el;
+    const g = grupos.get(k) || { usuario_id: v.usuario_id, vendedor: v.vendedor, pago_el: v.pago_el, n: 0, total: 0 };
+    g.n++; g.total += Number(v.comision_total || 0); grupos.set(k, g);
+  });
+  document.getElementById('cm-invoice-bar').innerHTML = [...grupos.values()].map(g => `
+    <div class="cm-resumen" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0">
+      <span><b>${esc(g.vendedor)}</b> · pago del ${cmFecha(g.pago_el)} · ${g.n} venta${g.n === 1 ? '' : 's'} verificada${g.n === 1 ? '' : 's'} · <b>${ivMoney(g.total)}</b></span>
+      <button class="dbtn save" type="button" data-cm-inv-vend="${g.usuario_id}" data-cm-inv-pago="${g.pago_el}"><i class="fas fa-file-invoice-dollar"></i> Generar invoice</button>
+    </div>`).join('');
+}
+async function cmAccionVenta(e) {
+  const ver = e.target.closest('[data-cm-ver]'), rech = e.target.closest('[data-cm-rech]');
+  if (!ver && !rech) return;
+  let res;
+  if (ver) res = await sb.rpc('comision_venta_verificar', { p_id: Number(ver.dataset.cmVer) });
+  else {
+    const motivo = prompt('¿Por qué se rechaza esta venta? El vendedor verá este motivo.');
+    if (motivo == null) return;
+    res = await sb.rpc('comision_venta_rechazar', { p_id: Number(rech.dataset.cmRech), p_motivo: motivo });
+  }
+  if (res.error || !res.data?.ok) { errToast(cmErr(res.data, res.error, 'No se pudo actualizar la venta')); return; }
+  okToast(ver ? 'Venta verificada' : 'Venta rechazada');
+  cmLoadVerificar();
+}
+async function cmGenerarInvoice(e) {
+  const b = e.target.closest('[data-cm-inv-vend]');
+  if (!b) return;
+  if (!confirm(`¿Generar el invoice con las ventas verificadas del pago del ${cmFecha(b.dataset.cmInvPago)}? Se le asigna el próximo número.`)) return;
+  b.disabled = true;
+  const { data, error } = await sb.rpc('comision_liquidacion_crear', { p_vendedor: b.dataset.cmInvVend, p_pago_el: b.dataset.cmInvPago });
+  if (error || !data?.ok) { b.disabled = false; errToast(cmErr(data, error, 'No se pudo generar el invoice')); return; }
+  CM_CFG = null;
+  okToast(`Invoice #${data.numero} generado: ${ivMoney(data.total)}`);
+  cmLoadVerificar();
+}
+
+async function cmLoadInvoices() {
+  const { data, error } = await sb.rpc('comision_liquidaciones_listar');
+  if (error) { errToast('No se pudieron cargar los invoices'); return; }
+  const esAdmin = ROL === 'admin';
+  document.getElementById('cm-inv-tbody').innerHTML = (data || []).map(l => `
+    <tr>
+      <td data-label="N°"><b>#${l.numero}</b></td>
+      <td data-label="Vendedor">${esc(l.vendedor)}</td>
+      <td data-label="Se paga el">${cmFecha(l.pago_el)}</td>
+      <td data-label="Ventas">${l.ventas}</td>
+      <td data-label="Total"><b>${ivMoney(l.total)}</b></td>
+      <td data-label="Estado">${cmChip(l.estado)}</td>
+      <td>${esAdmin && l.estado === 'emitida' ? `<button class="dbtn save" type="button" data-cm-pagar="${l.id}">Marcar pagado</button> <button class="dbtn" type="button" data-cm-anular="${l.id}">Anular</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="7">Todavía no hay invoices</td></tr>';
+}
+async function cmAccionInvoice(e) {
+  const pagar = e.target.closest('[data-cm-pagar]'), anular = e.target.closest('[data-cm-anular]');
+  if (!pagar && !anular) return;
+  if (anular && !confirm('¿Anular este invoice? Sus ventas vuelven a "verificada" y el número no se reutiliza.')) return;
+  const { data, error } = pagar
+    ? await sb.rpc('comision_liquidacion_marcar_pagada', { p_id: Number(pagar.dataset.cmPagar) })
+    : await sb.rpc('comision_liquidacion_anular', { p_id: Number(anular.dataset.cmAnular) });
+  if (error || !data?.ok) { errToast(cmErr(data, error, 'No se pudo actualizar el invoice')); return; }
+  okToast(pagar ? 'Invoice marcado como pagado' : 'Invoice anulado');
+  cmLoadInvoices();
+}
+
+async function cmLoadConfig() {
+  const { data, error } = await sb.rpc('comision_reglas_listar');
+  if (error) { errToast('No se pudo cargar la configuración'); return; }
+  CM_CFG = data;
+  const reglas = data.reglas || [];
+  const pct = (u, k) => reglas.find(r => (r.usuario_id || null) === u && r.tipo === k)?.porcentaje;
+  const celda = (u, k) => {
+    const propio = pct(u, k), general = pct(null, k);
+    return `<td data-label="${k}"><input class="ei" type="number" min="0" max="100" step="0.01" data-cm-u="${u || ''}" data-cm-k="${k}"
+      value="${propio ?? ''}" placeholder="${u && general != null ? general : ''}">%</td>`;
+  };
+  const fila = (u, nombre, sub) => `<tr><td data-label="Persona"><b>${esc(nombre)}</b>${sub ? `<div class="muted" style="font-size:11px">${esc(sub)}</div>` : ''}</td>${CM_TIPOS.map(k => celda(u, k)).join('')}</tr>`;
+  document.getElementById('cm-reglas-tbody').innerHTML = fila(null, 'General (todos)', 'Se usa cuando la persona no tiene % propio')
+    + (data.vendedores || []).map(v => fila(v.id, v.nombre, v.es_freelancer ? 'Freelancer' : v.rol === 'admin' ? 'Admin' : 'Asesor')).join('');
+  const c = data.config || {};
+  document.getElementById('cm-cfg-numero').value = c.proximo_numero ?? '';
+  document.getElementById('cm-cfg-condiciones').value = c.condiciones || '';
+  document.getElementById('cm-cfg-terminos').value = c.terminos || '';
+}
+async function cmGuardarRegla(e) {
+  const i = e.target.closest('[data-cm-k]');
+  if (!i) return;
+  const raw = i.value.trim(), n = raw === '' ? null : Number(raw);
+  if (n != null && (!isFinite(n) || n < 0 || n > 100)) { errToast('El % tiene que estar entre 0 y 100'); return; }
+  const { data, error } = await sb.rpc('comision_regla_guardar', { p_usuario: i.dataset.cmU || null, p_tipo: i.dataset.cmK, p_porcentaje: n });
+  if (error || data?.ok === false) { errToast(cmErr(data, error, 'No se pudo guardar el %')); return; }
+  okToast(n == null ? 'Se usará el % general' : `Guardado: ${n}%`);
+  cmLoadConfig();
+}
+async function cmGuardarConfig() {
+  const num = Number(document.getElementById('cm-cfg-numero').value);
+  if (!Number.isInteger(num) || num < 1) { errToast('El número de invoice tiene que ser un entero positivo'); return; }
+  const { data, error } = await sb.rpc('comision_config_guardar', {
+    p_proximo_numero: num,
+    p_condiciones: document.getElementById('cm-cfg-condiciones').value.trim(),
+    p_terminos: document.getElementById('cm-cfg-terminos').value.trim(),
+  });
+  if (error || data?.ok === false) { errToast(cmErr(data, error, 'No se pudo guardar')); return; }
+  okToast('Datos del invoice guardados');
+}
+
 /* ---------- Importar vouchers ----------
    Sube vouchers PDF y los carga como venta reusando las RPCs del cierre normal
    (crear_lead_manual / actualizar_lead / guardar_postventa). Dos pasos a
@@ -17992,6 +18288,7 @@ const NAV_ITEMS = [
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', grupo: 'ventas', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', grupo: 'ventas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'mis-comisiones', icon: 'fas fa-sack-dollar', label: 'Mis Comisiones', grupo: 'ventas', roles: 'nav-asesor-only' },
+  { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones por corte', grupo: 'ventas', roles: '', sub: 'Cargá tus ventas pagadas; pagos el 5 y el 20' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', grupo: 'ventas', roles: '', sub: 'Cargá vouchers PDF como venta' },
   { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', grupo: 'ventas', roles: 'nav-admin-only' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', grupo: 'tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', excludeSheet: true },
@@ -18215,6 +18512,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'empresas') loadEmpresas();
   if (sec === 'asistente') loadAsistente();
   if (sec === 'mis-comisiones') loadMisComisiones();
+  if (sec === 'comisiones') loadComisiones();
   if (sec === 'gestion-personal') loadGestionPersonal();
   if (sec === 'postventa') loadPostventa();
   if (sec === 'informe-diario') loadInformeDiario();
@@ -18455,7 +18753,7 @@ function setupAppBar() {
 // que sumarla en los dos lugares.
 const REFRESCAR_SECCION = {
   leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), estadisticas: () => loadEstadisticas(), facturacion: () => loadFacturacion(), pagos: () => loadPagos(), proveedores: () => loadProveedores(),
-  'mis-comisiones': () => loadMisComisiones(), 'gestion-personal': () => loadGestionPersonal(),
+  'mis-comisiones': () => loadMisComisiones(), comisiones: () => loadComisiones(), 'gestion-personal': () => loadGestionPersonal(),
   postventa: () => loadPostventa(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
   'cerebro-ia': () => loadCerebroIA(), 'rendimiento-ia': () => loadRendimientoIA(),
