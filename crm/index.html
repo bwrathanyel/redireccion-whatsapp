@@ -2099,6 +2099,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .rv-check-t{width:100%;font-weight:700;color:var(--txt)}.rv-check-t i{color:var(--accent);margin-right:5px}
 .rv-check-i{border:1px solid var(--line2);border-radius:999px;padding:3px 9px}
 .rv-check.ok{background:rgba(34,197,94,.06);border-color:rgba(34,197,94,.16)}.rv-check.ok i{color:var(--green);margin-right:5px}
+.asis-vinc{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;font-size:12.5px;color:var(--muted)}
+.asis-vinc b{color:var(--txt)}
+.asis-codigo{font:700 18px/1 ui-monospace,Consolas,monospace;letter-spacing:3px;color:var(--txt);border:1px dashed var(--line2);border-radius:10px;padding:8px 12px;user-select:all}
+.asis-acc{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line2);font-size:12.5px}
+.asis-acc:first-child{border-top:0}
+.asis-acc-i{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none;background:rgba(245,158,11,.1);color:var(--accent)}
+.asis-acc-i.err{background:rgba(239,68,68,.1);color:var(--red,#ef4444)}
+.asis-acc-b{flex:1;min-width:0}.asis-acc-b small{display:block;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.asis-acc.deshecha .asis-acc-b b{text-decoration:line-through;color:var(--muted)}
 .rv-item{border:1px solid var(--line2);border-radius:12px;padding:11px 12px;margin-bottom:9px;background:var(--panel)}
 .rv-item.rv-anulado{opacity:.55}
 .rv-item-top{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
@@ -5081,6 +5090,38 @@ body.fsize-grande{--tap:41.9px}
           <textarea id="consultor-chat-input" rows="1" placeholder="Preguntá sobre el proyecto o el estado de ahora mismo"></textarea>
           <button class="chat-send" id="consultor-chat-send" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
         </div>
+      </div>
+    </section>
+
+    <!-- ASISTENTE: asistente administrativo (EF asistente-admin). Actúa con los
+         permisos de quien le habla; cada escritura queda en asistente_acciones. -->
+    <section class="section" id="sec-asistente">
+      <div class="ce-intro">
+        Pedile que revise una reserva, cargue un servicio o un pasajero, deje una nota o le escriba a un
+        proveedor. Trabaja con <b>tus mismos permisos</b> y todo lo que cambia queda abajo, con botón para deshacer.
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div class="chead-row">
+          <h2><i class="fa-brands fa-telegram"></i> Telegram</h2>
+          <button class="btn-sm" id="asis-codigo-btn" type="button"><i class="fas fa-key"></i> Generar código</button>
+        </div>
+        <div class="asis-vinc" id="asis-vinc">Cargando…</div>
+      </div>
+      <div class="card chat-wrap" style="margin-top:14px">
+        <div class="chat-toolbar"><div class="eb-title" style="margin:0"><i class="fas fa-robot"></i> Asistente</div></div>
+        <div class="chat-log" id="asis-chat-log"></div>
+        <div class="chat-inputbar">
+          <textarea id="asis-chat-input" rows="1" placeholder="Ej: ¿qué le falta a la reserva de Pérez?"></textarea>
+          <button class="chat-send" id="asis-chat-send" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div class="chead-row">
+          <h2><i class="fas fa-clock-rotate-left"></i> Acciones del asistente</h2>
+          <button class="btn-sm" id="asis-acc-recargar" type="button"><i class="fas fa-rotate"></i> Actualizar</button>
+        </div>
+        <div class="csub" id="asis-acc-sub">Lo que cambió el asistente, del más reciente al más viejo</div>
+        <div id="asis-acc-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
       </div>
     </section>
 

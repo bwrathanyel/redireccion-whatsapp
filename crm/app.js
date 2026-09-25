@@ -164,6 +164,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
   'clientes-eventos': ['Clientes Eventos', 'Quienes se registraron con el QR del stand y los premios que ganaron'],
   proveedores: ['Proveedores', 'A quién le compra Lotus: servicios, contacto, crédito y datos de pago'],
+  asistente: ['Asistente', 'Revisa reservas, carga servicios y pasajeros, deja notas y escribe a proveedores -- con tus permisos'],
   'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
   'voz-ia': ['Voz IA', 'Probá la voz clonada de la jefa y controlá la muestra de referencia que usa la IA'],
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
@@ -1241,7 +1242,7 @@ const IR_SECCIONES = [
   'web-reasignados', 'cotizador', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'voucher', 'mis-comisiones', 'ranking', 'boleteria',
   'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
-  'rendimiento-ia', 'ia-atencion', 'consultor-ia', 'voz-ia', 'redes',
+  'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
 ];
 function seccionInicialPermitida() {
@@ -2394,7 +2395,7 @@ async function startApp() {
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
-    setupHoy, setupConsultorIA, setupBoleteriaSeccion, setupMisNotas,
+    setupHoy, setupConsultorIA, setupAsistente, setupBoleteriaSeccion, setupMisNotas,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -9745,6 +9746,125 @@ function addChatBubbleConsultor(who, texto, loading) {
   }
   log.scrollTop = log.scrollHeight;
   return el;
+}
+
+/* ---------- Asistente administrativo (2026-09-25, Etapa C3) ----------------
+   Chat contra la EF asistente-admin, que llama RPCs con el JWT de quien
+   escribe (nunca service role), así que ve y toca lo mismo que el usuario.
+   El código de /vincular une el chat privado de Telegram con este usuario.
+   Deshacer pasa por la EF (asistente_acciones solo la escribe ella). */
+let asisChatHistory = [];
+const ASIS_ERRORES = {
+  asistente_apagado: 'El asistente está apagado por ahora.',
+  no_autorizado: 'Tu usuario no tiene acceso al asistente.',
+  no_deshacible: 'Esa acción ya no se puede deshacer.',
+  accion_no_existe: 'No encontré esa acción.',
+};
+const ASIS_HERRAMIENTAS = {
+  guardar_servicio: ['fa-suitcase', 'Servicio guardado'], guardar_pasajero: ['fa-user-plus', 'Pasajero guardado'],
+  nota_reserva: ['fa-note-sticky', 'Nota en la reserva'], correo_proveedor: ['fa-envelope', 'Correo a proveedor'],
+  deshacer_accion: ['fa-rotate-left', 'Acción deshecha'],
+};
+function setupAsistente() {
+  const input = document.getElementById('asis-chat-input');
+  document.getElementById('asis-chat-send').onclick = enviarChatAsistente;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatAsistente(); } });
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  document.getElementById('asis-codigo-btn').onclick = generarCodigoAsistente;
+  document.getElementById('asis-acc-recargar').onclick = cargarAccionesAsistente;
+  document.getElementById('asis-acc-lista').addEventListener('click', e => {
+    const b = e.target.closest('[data-asis-deshacer]');
+    if (b) deshacerAccionAsistente(Number(b.dataset.asisDeshacer), b);
+  });
+  if (!asisChatHistory.length) addChatBubbleAsistente('bot', 'Hola, soy el asistente administrativo. Puedo revisar qué le falta a una reserva, cargar servicios y pasajeros, dejar notas o escribirle a un proveedor. ¿Qué necesitás?');
+}
+function loadAsistente() { cargarVinculoAsistente(); cargarAccionesAsistente(); }
+async function cargarVinculoAsistente() {
+  const box = document.getElementById('asis-vinc');
+  const { data, error } = await sb.rpc('asistente_mi_vinculo');
+  if (error) { box.textContent = 'No se pudo consultar el vínculo con Telegram.'; return; }
+  box.innerHTML = data?.vinculado
+    ? `<span><i class="fas fa-circle-check" style="color:var(--green)"></i> Tu Telegram está vinculado desde el <b>${esc(new Date(data.vinculado_en).toLocaleDateString('es-VE'))}</b>. Escribile al bot por privado.</span>`
+    : '<span>Para usarlo desde Telegram: tocá <b>Generar código</b> y mandale al bot, por privado, <b>/vincular CÓDIGO</b>. El código vence en 10 minutos.</span>';
+}
+async function generarCodigoAsistente() {
+  const btn = document.getElementById('asis-codigo-btn'), box = document.getElementById('asis-vinc');
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('asistente_generar_codigo');
+  btn.disabled = false;
+  if (error || !data?.codigo) { box.textContent = 'No se pudo generar el código, probá de nuevo.'; return; }
+  box.innerHTML = `<span class="asis-codigo">${esc(data.codigo)}</span><span>Mandale al bot, por privado: <b>/vincular ${esc(data.codigo)}</b> · vence a las ${esc(new Date(data.expira_en).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }))}</span>`;
+}
+async function enviarChatAsistente() {
+  const input = document.getElementById('asis-chat-input'), btn = document.getElementById('asis-chat-send');
+  const texto = input.value.trim();
+  if (!texto || btn.disabled) return;
+  addChatBubbleAsistente('user', texto);
+  asisChatHistory.push({ role: 'user', content: texto });
+  input.value = ''; input.style.height = 'auto';
+  btn.disabled = true;
+  const loadingEl = addChatBubbleAsistente('bot', 'Trabajando...', true);
+  const { data, error } = await sb.functions.invoke('asistente-admin', { body: { messages: asisChatHistory } });
+  loadingEl.remove();
+  btn.disabled = false;
+  if (error || !data?.respuesta) {
+    let cod = data?.error;
+    try { cod = cod || (await error?.context?.json?.())?.error; } catch (_) { /* cuerpo no JSON */ }
+    asisChatHistory.pop();
+    addChatBubbleAsistente('bot', ASIS_ERRORES[cod] || 'No pude conectar con el asistente, intentá de nuevo en un momento.');
+    return;
+  }
+  addChatBubbleAsistente('bot', data.respuesta);
+  asisChatHistory.push({ role: 'assistant', content: data.respuesta });
+  cargarAccionesAsistente();
+}
+function addChatBubbleAsistente(who, texto, loading) {
+  const log = document.getElementById('asis-chat-log');
+  const div = document.createElement('div');
+  div.className = `chat-msg ${who}${loading ? ' loading' : ''}`;
+  if (who === 'bot' && !loading) div.innerHTML = renderBotText(texto);
+  else div.textContent = texto;
+  let el = div;
+  if (who === 'bot') {
+    el = document.createElement('div');
+    el.className = 'chat-row';
+    el.innerHTML = '<span class="chat-avatar"><i class="fas fa-robot"></i></span>';
+    el.appendChild(div);
+  }
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+async function cargarAccionesAsistente() {
+  const cont = document.getElementById('asis-acc-lista');
+  const { data, error } = await sb.rpc('asistente_acciones_listar', { p_limite: 50 });
+  if (error) { cont.innerHTML = '<div class="csub">No se pudieron cargar las acciones.</div>'; return; }
+  const filas = (data || []).filter(a => a.escritura);
+  if (!filas.length) { cont.innerHTML = '<div class="csub">Todavía no hay cambios hechos por el asistente.</div>'; return; }
+  cont.innerHTML = filas.map(a => {
+    const [icono, titulo] = ASIS_HERRAMIENTAS[a.herramienta] || ['fa-gear', a.herramienta];
+    const cuando = new Date(a.created_at).toLocaleString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const detalle = [a.reserva_id ? `Reserva #${a.reserva_id}` : '', a.canal === 'telegram' ? 'Telegram' : 'CRM', ROL === 'admin' ? a.usuario : '', cuando]
+      .filter(Boolean).join(' · ');
+    const estado = a.ok === false ? ' · <b>falló</b>' : a.ok === null ? ' · en curso' : a.deshecha_en ? ' · deshecha' : '';
+    const boton = a.deshacible && a.ok ? `<button class="btn-sm" type="button" data-asis-deshacer="${a.id}"><i class="fas fa-rotate-left"></i> Deshacer</button>` : '';
+    return `<div class="asis-acc${a.deshecha_en ? ' deshecha' : ''}"><span class="asis-acc-i${a.ok === false ? ' err' : ''}"><i class="fas ${icono}"></i></span>`
+      + `<div class="asis-acc-b"><b>${esc(titulo)}</b><small>${esc(detalle)}${estado}</small></div>${boton}</div>`;
+  }).join('');
+}
+async function deshacerAccionAsistente(id, btn) {
+  if (!Number.isSafeInteger(id)) return;
+  const ok = await confirmarSheet({ titulo: '¿Deshacer esta acción?', detalle: 'Se revierte el cambio que hizo el asistente.', textoOk: 'Deshacer', destructivo: true });
+  if (!ok) return;
+  btn.disabled = true;
+  const { data, error } = await sb.functions.invoke('asistente-admin', { body: { deshacer_accion_id: id } });
+  if (error || !data?.ok) {
+    btn.disabled = false;
+    document.getElementById('asis-acc-sub').textContent = ASIS_ERRORES[data?.error] || 'No se pudo deshacer, probá de nuevo.';
+    return;
+  }
+  document.getElementById('asis-acc-sub').textContent = 'Acción deshecha.';
+  cargarAccionesAsistente();
 }
 
 /* ---------- Voz IA (2026-08-12, ver plan "vamos-a-empezar-a-unified-kay") ---
@@ -17737,6 +17857,7 @@ const NAV_ITEMS = [
   { sec: 'cotizador', icon: 'fas fa-comments', label: 'Cotizador IA', grupo: 'ia', roles: 'nav-marketing-ok' },
   { sec: 'cerebro-ia', icon: 'fas fa-brain', label: 'Cerebro IA', grupo: 'ia', roles: 'nav-admin-only' },
   { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', grupo: 'ia', roles: 'nav-admin-only', sub: 'Posadas que quieren el asistente' },
+  { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', grupo: 'ia', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Revisa reservas, carga datos y escribe a proveedores' },
   { sec: 'consultor-ia', icon: 'fas fa-user-tie', label: 'Consultor IA', grupo: 'ia', roles: 'nav-admin-only', sub: 'Preguntale sobre el proyecto, sin gastar Claude Code' },
   { sec: 'voz-ia', icon: 'fas fa-microphone-lines', label: 'Voz IA', grupo: 'ia', roles: 'nav-admin-only nav-marketing-ok', sub: 'Probá la voz clonada y cambiá la muestra de referencia' },
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', grupo: 'ia', roles: 'nav-admin-only', sub: 'Ventas, calidad, errores y costos' },
@@ -17949,6 +18070,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'facturacion') loadFacturacion();
   if (sec === 'pagos') loadPagos();
   if (sec === 'proveedores') loadProveedores();
+  if (sec === 'asistente') loadAsistente();
   if (sec === 'mis-comisiones') loadMisComisiones();
   if (sec === 'gestion-personal') loadGestionPersonal();
   if (sec === 'postventa') loadPostventa();
