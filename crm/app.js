@@ -2733,6 +2733,7 @@ function abrirPostventa(c) {
   const docs = c.documentos || {};
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent)"><i class="fas fa-handshake-angle"></i></div><div><div class="dn">${esc(c.nombre)}</div><div class="dm">${esc(c.codigo || '')}${c.principal === false ? ' (adicional)' : ''} · ${esc(c.destino || c.servicio || 'Postventa')} · ${esc(c.asesor || 'Sin asignar')}</div></div></div>
+    <div data-rv-check></div>
     <div class="seg-group seg-group-sm rv-tabs">${rvTabsHtml(true)}</div>
     <div data-rv-panel="resumen"><div class="edit-box"><div class="eb-title"><i class="fas fa-route"></i> Operación</div>
       <label class="fl">Etapa</label><select class="ei" id="pv-e-etapa">${opt(PV_ETAPAS, c.etapa)}</select>
@@ -2907,9 +2908,23 @@ function rvRender() {
   const n = { servicios: servicios.filter(s => !s.anulado_en).length, pasajeros: pasajeros.length, documentos: documentos.length };
   document.querySelectorAll('#drawerContent [data-rv-n]').forEach(x => x.textContent = n[x.dataset.rvN] || '');
   rvResumenTotal(reserva || {});
+  rvChecklist();
   rvRenderServicios(true); rvRenderPasajeros(true); rvRenderDocumentos(true);
 }
 // suave = recarga de fondo (rvCargar): no pisar un formulario abierto ni un archivo ya elegido.
+// Mismos faltantes que avisa el cron alertas-admin (migración 20260924170000), pero sin ventana de fechas.
+async function rvChecklist() {
+  const box = document.querySelector('#drawerContent [data-rv-check]');
+  if (!box || !rvPuedeEditar()) return;
+  const id = RV_RESERVA_ID;
+  const { data, error } = await sb.rpc('reserva_checklist', { p_reserva_id: id });
+  if (id !== RV_RESERVA_ID) return;
+  if (error || !data?.ok) { box.innerHTML = ''; if (error) console.error('reserva_checklist', error); return; }
+  const f = data.faltantes || [];
+  box.innerHTML = data.completa
+    ? '<div class="rv-check ok"><i class="fas fa-circle-check"></i> Reserva completa: nada pendiente</div>'
+    : `<div class="rv-check"><div class="rv-check-t"><i class="fas fa-list-check"></i> Falta (${f.length})</div>${f.map(x => `<span class="rv-check-i">${esc(x.texto)}</span>`).join('')}</div>`;
+}
 const rvFormAbierto = (p, suave) => suave && RV_FORM && p.querySelector('.rv-form[data-rv-form]');
 // Con servicios el total lo calcula el trigger recalcular_total_reserva y guardar_postventa ignora p_monto_total.
 function rvResumenTotal(r) {
