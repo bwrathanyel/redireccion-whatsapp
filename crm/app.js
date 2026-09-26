@@ -12287,15 +12287,49 @@ async function loadAsesoresComision() {
   FACT_ASESORES_CACHE = data || [];
   renderAsesoresComision();
 }
+let factAseFiltro = '';
+const FACT_ASE_KPI_FILTRO = { sin: a => a.porcentaje_comision == null, con: a => a.porcentaje_comision != null };
+function filtrarAsesoresKpi(clave) {
+  factAseFiltro = factAseFiltro === clave ? '' : clave;
+  renderAsesoresComision();
+}
 function renderAsesoresComision() {
-  const filas = ordenarYFiltrar(FACT_ASESORES_CACHE, ['nombre'], val('fact-asesores-search'), FACT_SORT.asesores);
+  const buscadas = ordenarYFiltrar(FACT_ASESORES_CACHE, ['nombre'], val('fact-asesores-search'), FACT_SORT.asesores);
+  const filas = factAseFiltro ? buscadas.filter(FACT_ASE_KPI_FILTRO[factAseFiltro]) : buscadas;
   FACT_LAST.asesores = filas;
-  document.getElementById('fact-asesores-tbody').innerHTML = filas.map(a => `
-    <tr>
-      <td class="td-name">${esc(a.nombre)}</td>
-      <td data-label="% Comisión">${a.porcentaje_comision != null ? a.porcentaje_comision + '%' : '<span class="asist-badge off">Sin configurar</span>'}</td>
-      <td class="td-acciones"><button class="btn-sm" onclick="editarPorcentajeComision(${a.id})">Editar %</button></td>
-    </tr>`).join('') || '<tr><td colspan="3">Sin asesores</td></tr>';
+  const nSin = buscadas.filter(FACT_ASE_KPI_FILTRO.sin).length;
+  pintarKPIs('fact-asesores-kpis', [
+    { key: '', t: 'Asesores', v: fmt(buscadas.length), d: 'ver todos', i: 'fa-user-tie', c: 'var(--blue)', on: factAseFiltro === '', go: () => filtrarAsesoresKpi('') },
+    { key: 'sin', t: 'Sin configurar', v: fmt(nSin), d: 'falta definir su %', i: 'fa-triangle-exclamation', c: nSin > 0 ? 'var(--pink)' : 'var(--green)', on: factAseFiltro === 'sin', go: () => filtrarAsesoresKpi('sin') },
+    { key: 'con', t: 'Con % definido', v: fmt(buscadas.length - nSin), d: 'se aplica solo a cada venta pagada', i: 'fa-circle-check', c: 'var(--green)', on: factAseFiltro === 'con', go: () => filtrarAsesoresKpi('con') },
+  ]);
+  // Por pagar/pagado salen de las comisiones ya cargadas (se cruzan por nombre:
+  // listar_comisiones no trae asesor_id). Hasta que llegan se muestra "—".
+  const hayCom = FACT_COMISIONES_CACHE.length > 0, tot = {};
+  FACT_COMISIONES_CACHE.forEach(c => {
+    if (c.estado === 'anulada') return;
+    const t = tot[c.asesor] ||= { n: 0, pend: 0, pag: 0 };
+    t.n++;
+    if (c.estado === 'pendiente') t.pend += c.monto_comision || 0; else if (c.estado === 'pagada') t.pag += c.monto_comision || 0;
+  });
+  document.getElementById('fact-asesores-tbody').innerHTML = filas.map((a, i) => {
+    const sinPct = a.porcentaje_comision == null, t = tot[a.nombre] || { n: 0, pend: 0, pag: 0 };
+    return `<article class="lt-card" style="--i:${Math.min(i, 20)}">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit" title="${esc(a.nombre || '')}">${esc(a.nombre || 'Sin nombre')}</div>
+        <span class="bt-tag" style="--c:${sinPct ? 'var(--pink)' : 'var(--green)'}">${sinPct ? 'Sin configurar' : 'Configurado'}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-receipt"></i>${hayCom ? `${fmt(t.n)} ${t.n === 1 ? 'venta' : 'ventas'} con comisión` : 'Cargando comisiones…'}</div>
+      <div class="lt-cifras">
+        <div><span>Comisión</span><b class="${sinPct ? 'lt-debe' : ''}">${sinPct ? 'Sin definir' : a.porcentaje_comision + '%'}</b></div>
+        <div><span>Por pagar</span><b>${hayCom ? money(t.pend) : '—'}</b></div>
+        <div><span>Pagado</span><b class="${t.pag > 0 ? 'lt-ok' : ''}">${hayCom ? money(t.pag) : '—'}</b></div>
+      </div>
+      <div class="lt-card-pie">
+        <button class="btn-sm${sinPct ? ' lt-primario' : ''}" type="button" onclick="editarPorcentajeComision(${a.id})"><i class="fas fa-percent"></i> ${sinPct ? 'Definir %' : 'Editar %'}</button>
+      </div>
+    </article>`;
+  }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${factAseFiltro || val('fact-asesores-search') ? 'Nada coincide con el filtro' : 'Sin asesores'}</div>`;
 }
 async function loadFacturas() {
   document.getElementById('fact-ventas-loading')?.classList.add('show');
@@ -12311,6 +12345,7 @@ async function loadFacturas() {
   poblarFiltrosVentas();
   factVentasMostrar = TECHO_LISTA;
   renderVentas();
+  if (FACT_COMISIONES_CACHE.length) renderComisiones(); // las tarjetas de comisión toman N° y cliente de esta caché
   entradaLista(document.getElementById('fact-tbody'));
 }
 function poblarFiltrosVentas() {
@@ -12392,26 +12427,65 @@ async function loadComisionesAdmin() {
   FACT_COMISIONES_CACHE = data || [];
   factComMostrar = TECHO_LISTA;
   renderComisiones();
+  renderAsesoresComision();
   entradaLista(document.getElementById('fact-com-tbody'));
 }
+// Filtro por estado que ponen los KPIs ('' = todas); mismo criterio que CxP:
+// los KPIs cuentan sobre la búsqueda, no sobre este filtro.
+let factComFiltro = '';
+function filtrarComisionesEstado(estado) {
+  factComFiltro = factComFiltro === estado ? '' : estado;
+  factComMostrar = TECHO_LISTA;
+  renderComisiones();
+}
+const COM_ESTADO = {
+  sin_configurar: { t: 'Sin configurar', c: 'var(--pink)' }, pendiente: { t: 'Pendiente', c: 'var(--amber)' },
+  pagada: { t: 'Pagada', c: 'var(--green)' }, anulada: { t: 'Anulada', c: 'var(--muted)' },
+};
 function renderComisiones() {
-  const filas = ordenarYFiltrar(FACT_COMISIONES_CACHE, ['asesor'], val('fact-com-search'), FACT_SORT.comisiones);
+  const buscadas = ordenarYFiltrar(FACT_COMISIONES_CACHE, ['asesor'], val('fact-com-search'), FACT_SORT.comisiones);
+  const filas = factComFiltro ? buscadas.filter(c => c.estado === factComFiltro) : buscadas;
   FACT_LAST.comisiones = filas;
+  let sumaTotal = 0, sumaPend = 0, sumaPag = 0, nVig = 0, nSin = 0, nPend = 0, nPag = 0;
+  buscadas.forEach(c => {
+    if (c.estado === 'anulada') return;
+    nVig++; sumaTotal += c.monto_comision || 0;
+    if (c.estado === 'sin_configurar') nSin++;
+    else if (c.estado === 'pendiente') { nPend++; sumaPend += c.monto_comision || 0; }
+    else if (c.estado === 'pagada') { nPag++; sumaPag += c.monto_comision || 0; }
+  });
+  pintarKPIs('fact-com-kpis', [
+    { key: '', t: 'Comisiones', v: money(sumaTotal), d: `${fmt(nVig)} vigentes · ver todas`, i: 'fa-sack-dollar', c: 'var(--blue)', on: factComFiltro === '', go: () => filtrarComisionesEstado('') },
+    { key: 'sin_configurar', t: 'Sin configurar', v: fmt(nSin), d: 'falta definir el %', i: 'fa-triangle-exclamation', c: nSin > 0 ? 'var(--pink)' : 'var(--green)', on: factComFiltro === 'sin_configurar', go: () => filtrarComisionesEstado('sin_configurar') },
+    { key: 'pendiente', t: 'Por pagar', v: money(sumaPend), d: `${fmt(nPend)} pendientes`, i: 'fa-hourglass-half', c: 'var(--amber)', on: factComFiltro === 'pendiente', go: () => filtrarComisionesEstado('pendiente') },
+    { key: 'pagada', t: 'Pagadas', v: money(sumaPag), d: `${fmt(nPag)} comisiones`, i: 'fa-circle-check', c: 'var(--green)', on: factComFiltro === 'pagada', go: () => filtrarComisionesEstado('pagada') },
+  ]);
   const visibles = filas.slice(0, factComMostrar);
   const pager = document.getElementById('fact-com-pager');
   if (pager) pager.style.display = filas.length > factComMostrar ? '' : 'none';
-  document.getElementById('fact-com-tbody').innerHTML = visibles.map(c => `
-    <tr>
-      <td class="td-name">${esc(c.asesor)}</td>
-      <td data-label="Monto venta">${money(c.monto_venta)}</td>
-      <td data-label="%">${c.porcentaje != null ? c.porcentaje + '%' : '—'}</td>
-      <td data-label="Comisión">${c.monto_comision != null ? money(c.monto_comision) : '—'}</td>
-      <td data-label="Estado"><span class="chip">${esc(c.estado)}</span></td>
-      <td class="td-acciones">
-        ${['sin_configurar', 'pendiente'].includes(c.estado) ? `<button class="btn-sm" onclick="abrirEditarComisionUI(${c.id}, ${c.porcentaje ?? 'null'})">Editar %</button>` : ''}
-        ${c.estado === 'pendiente' ? `<button class="btn-sm" onclick="marcarComisionPagadaUI(${c.id})">Marcar pagada</button>` : ''}
-      </td>
-    </tr>`).join('') || '<tr><td colspan="6">Sin comisiones</td></tr>';
+  document.getElementById('fact-com-tbody').innerHTML = visibles.map((c, i) => {
+    const est = COM_ESTADO[c.estado] || { t: c.estado, c: 'var(--muted)' };
+    const hecha = c.estado === 'pagada' || c.estado === 'anulada';
+    const fac = FACT_VENTAS_CACHE.find(f => f.id === c.factura_id);
+    return `<article class="lt-card${hecha ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit" title="${esc(c.asesor || '')}">${esc(c.asesor || 'Sin asesor')}</div>
+        <span class="bt-tag" style="--c:${est.c}">${esc(est.t)}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-hashtag"></i>${fac ? fmt(fac.numero_factura) : 'Factura ' + fmt(c.factura_id)} · ${esc(fmtFechaHoraCaracas(c.created_at))}</div>
+      ${fac?.cliente ? `<div class="lt-card-meta"><i class="fas fa-user"></i>${esc(fac.cliente)}</div>` : ''}
+      ${c.fecha_pago ? `<div class="lt-card-meta"><i class="fas fa-circle-check"></i>Pagada el ${esc(fmtFechaHoraCaracas(c.fecha_pago))}</div>` : ''}
+      <div class="lt-cifras">
+        <div><span>Venta</span><b>${money(c.monto_venta)}</b></div>
+        <div><span>%</span><b class="${c.porcentaje != null ? '' : 'lt-debe'}">${c.porcentaje != null ? c.porcentaje + '%' : 'Sin definir'}</b></div>
+        <div><span>Comisión</span><b class="${c.estado === 'pagada' ? 'lt-ok' : ''}">${c.monto_comision != null ? money(c.monto_comision) : '—'}</b></div>
+      </div>
+      ${['sin_configurar', 'pendiente'].includes(c.estado) ? `<div class="lt-card-pie">
+        <button class="btn-sm${c.estado === 'sin_configurar' ? ' lt-primario' : ''}" type="button" onclick="abrirEditarComisionUI(${c.id}, ${c.porcentaje ?? 'null'})"><i class="fas fa-percent"></i> Editar %</button>
+        ${c.estado === 'pendiente' ? `<button class="btn-sm lt-primario" type="button" onclick="marcarComisionPagadaUI(${c.id})"><i class="fas fa-circle-check"></i> Marcar pagada</button>` : ''}
+      </div>` : ''}
+    </article>`;
+  }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${factComFiltro || val('fact-com-search') ? 'Nada coincide con el filtro' : 'Sin comisiones'}</div>`;
 }
 function cargarMasComisiones() { factComMostrar += TECHO_LISTA; renderComisiones(); }
 window.cargarMasComisiones = cargarMasComisiones;
@@ -12585,20 +12659,35 @@ async function loadProveedores() {
   PROV_CACHE = (data || []).map(p => ({ ...p, servicios: (p.tipos || []).map(t => PROV_TIPO_LABEL[t] || t).join(', ') }));
   renderProveedores();
 }
+// Los KPIs escriben en el <select> (ahora oculto) para que el resto del código
+// que lee val('prov-filtro') / val('emp-filtro') siga igual.
+function filtrarPorSelect(id, valor, render) { document.getElementById(id).value = valor; render(); }
 function renderProveedores() {
   const filtro = val('prov-filtro') || 'activos';
-  const base = filtro === 'todos' ? PROV_CACHE : PROV_CACHE.filter(p => !!p.activo === (filtro === 'activos'));
-  const filas = ordenarYFiltrar(base, ['nombre', 'rif', 'contacto', 'telefono', 'email', 'servicios'], val('prov-search'), FACT_SORT.proveedores);
-  document.getElementById('prov-tbody').innerHTML = filas.map(p => `
-    <tr data-prov-id="${p.id}" style="cursor:pointer">
-      <td class="td-name">${esc(p.nombre)}</td>
-      <td data-label="Servicios">${esc(p.servicios) || '—'}</td>
-      <td data-label="Contacto">${esc([p.contacto, p.telefono].filter(Boolean).join(' · ')) || '—'}</td>
-      <td data-label="Moneda">${esc(p.moneda_habitual)}</td>
-      <td data-label="Crédito">${p.dias_credito ? fmt(p.dias_credito) + ' días' : 'Contado'}</td>
-      <td data-label="Estado"><span class="asist-badge ${p.activo ? 'on' : 'off'}">${p.activo ? 'Activo' : 'Inactivo'}</span></td>
-      <td class="td-acciones"><button class="btn-sm" type="button" data-prov-id="${p.id}">Ver ficha</button></td>
-    </tr>`).join('') || `<tr><td colspan="7">${PROV_CACHE.length ? 'Ningún proveedor coincide con la búsqueda o el filtro' : 'Todavía no hay proveedores cargados'}</td></tr>`;
+  const buscadas = ordenarYFiltrar(PROV_CACHE, ['nombre', 'rif', 'contacto', 'telefono', 'email', 'servicios'], val('prov-search'), FACT_SORT.proveedores);
+  const filas = filtro === 'todos' ? buscadas : buscadas.filter(p => !!p.activo === (filtro === 'activos'));
+  const nAct = buscadas.filter(p => p.activo).length;
+  const ir = v => () => filtrarPorSelect('prov-filtro', v, renderProveedores);
+  pintarKPIs('prov-kpis', [
+    { key: 'activos', t: 'Activos', v: fmt(nAct), d: 'a los que les compramos hoy', i: 'fa-truck-field', c: 'var(--green)', on: filtro === 'activos', go: ir('activos') },
+    { key: 'inactivos', t: 'Inactivos', v: fmt(buscadas.length - nAct), d: 'dados de baja', i: 'fa-circle-pause', c: 'var(--muted)', on: filtro === 'inactivos', go: ir('inactivos') },
+    { key: 'todos', t: 'Todos', v: fmt(buscadas.length), d: 'ver todos', i: 'fa-list', c: 'var(--blue)', on: filtro === 'todos', go: ir('todos') },
+  ]);
+  document.getElementById('prov-tbody').innerHTML = filas.map((p, i) => `
+    <article class="lt-card${p.activo ? '' : ' lt-card-hecha'}" data-prov-id="${p.id}" style="--i:${Math.min(i, 20)};cursor:pointer">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit" title="${esc(p.nombre || '')}">${esc(p.nombre)}</div>
+        <span class="bt-tag" style="--c:${p.activo ? 'var(--green)' : 'var(--muted)'}">${p.activo ? 'Activo' : 'Inactivo'}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-concierge-bell"></i>${esc(p.servicios) || 'Sin servicios cargados'}</div>
+      <div class="lt-card-meta"><i class="fas fa-user"></i>${esc([p.contacto, p.telefono].filter(Boolean).join(' · ')) || 'Sin contacto'}</div>
+      <div class="lt-cifras">
+        <div><span>Moneda</span><b>${esc(p.moneda_habitual) || '—'}</b></div>
+        <div><span>Crédito</span><b>${p.dias_credito ? fmt(p.dias_credito) + ' días' : 'Contado'}</b></div>
+        <div><span>RIF</span><b>${esc(p.rif) || '—'}</b></div>
+      </div>
+      <div class="lt-card-pie"><button class="btn-sm" type="button" data-prov-id="${p.id}"><i class="fas fa-id-card"></i> Ver ficha</button></div>
+    </article>`).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${PROV_CACHE.length ? 'Ningún proveedor coincide con la búsqueda o el filtro' : 'Todavía no hay proveedores cargados'}</div>`;
 }
 function abrirProveedorSheet(id = null) {
   const p = id == null ? null : PROV_CACHE.find(x => x.id === id);
@@ -12909,19 +12998,32 @@ async function loadEmpresas() {
 }
 function renderEmpresas() {
   const filtro = val('emp-filtro') || 'activos', q = val('emp-search').trim().toLowerCase();
-  const filas = EMP_CACHE
-    .filter(e => filtro === 'todos' || (filtro === 'fijos' ? e.cliente_fijo && e.activo : !!e.activo === (filtro === 'activos')))
-    .filter(e => !q || [e.nombre, e.rif, e.contacto, e.email, EMP_TIPOS[e.tipo]].some(v => String(v || '').toLowerCase().includes(q)));
-  document.getElementById('emp-tbody').innerHTML = filas.map(e => `
-    <tr data-emp-id="${e.id}" style="cursor:pointer">
-      <td class="td-name">${esc(e.nombre)}${e.cliente_fijo ? ' <span class="asist-badge on">Fijo</span>' : ''}</td>
-      <td data-label="Tipo">${esc(EMP_TIPOS[e.tipo] || e.tipo)}</td>
-      <td data-label="Contacto">${esc([e.contacto, e.telefono].filter(Boolean).join(' · ')) || '—'}</td>
-      <td data-label="Crédito">${e.dias_credito ? fmt(e.dias_credito) + ' días' : 'Contado'}</td>
-      <td data-label="Reservas">${fmt((e.reservas || []).length)}</td>
-      <td data-label="Estado"><span class="asist-badge ${e.activo ? 'on' : 'off'}">${e.activo ? 'Activa' : 'Inactiva'}</span></td>
-      <td class="td-acciones"><button class="btn-sm" type="button" data-emp-id="${e.id}">Ver ficha</button></td>
-    </tr>`).join('') || `<tr><td colspan="7">${EMP_CACHE.length ? 'Ninguna empresa coincide con la búsqueda o el filtro' : 'Todavía no hay empresas cargadas'}</td></tr>`;
+  const buscadas = EMP_CACHE.filter(e => !q || [e.nombre, e.rif, e.contacto, e.email, EMP_TIPOS[e.tipo]].some(v => String(v || '').toLowerCase().includes(q)));
+  const filas = buscadas.filter(e => filtro === 'todos' || (filtro === 'fijos' ? e.cliente_fijo && e.activo : !!e.activo === (filtro === 'activos')));
+  const nAct = buscadas.filter(e => e.activo).length, nFijo = buscadas.filter(e => e.cliente_fijo && e.activo).length;
+  const ir = v => () => filtrarPorSelect('emp-filtro', v, renderEmpresas);
+  pintarKPIs('emp-kpis', [
+    { key: 'activos', t: 'Activas', v: fmt(nAct), d: 'con las que trabajamos hoy', i: 'fa-building', c: 'var(--green)', on: filtro === 'activos', go: ir('activos') },
+    { key: 'fijos', t: 'Clientes fijos', v: fmt(nFijo), d: 'compran seguido', i: 'fa-star', c: 'var(--amber)', on: filtro === 'fijos', go: ir('fijos') },
+    { key: 'inactivos', t: 'Inactivas', v: fmt(buscadas.length - nAct), d: 'dadas de baja', i: 'fa-circle-pause', c: 'var(--muted)', on: filtro === 'inactivos', go: ir('inactivos') },
+    { key: 'todos', t: 'Todas', v: fmt(buscadas.length), d: 'ver todas', i: 'fa-list', c: 'var(--blue)', on: filtro === 'todos', go: ir('todos') },
+  ]);
+  document.getElementById('emp-tbody').innerHTML = filas.map((e, i) => `
+    <article class="lt-card${e.activo ? '' : ' lt-card-hecha'}" data-emp-id="${e.id}" style="--i:${Math.min(i, 20)};cursor:pointer">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit" title="${esc(e.nombre || '')}">${esc(e.nombre)}</div>
+        ${e.cliente_fijo ? '<span class="bt-tag" style="--c:var(--amber)">Fijo</span>' : ''}
+        <span class="bt-tag" style="--c:${e.activo ? 'var(--green)' : 'var(--muted)'}">${e.activo ? 'Activa' : 'Inactiva'}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-tag"></i>${esc(EMP_TIPOS[e.tipo] || e.tipo || 'Sin tipo')}</div>
+      <div class="lt-card-meta"><i class="fas fa-user"></i>${esc([e.contacto, e.telefono].filter(Boolean).join(' · ')) || 'Sin contacto'}</div>
+      <div class="lt-cifras">
+        <div><span>Crédito</span><b>${e.dias_credito ? fmt(e.dias_credito) + ' días' : 'Contado'}</b></div>
+        <div><span>Reservas</span><b>${fmt((e.reservas || []).length)}</b></div>
+        <div><span>RIF</span><b>${esc(e.rif) || '—'}</b></div>
+      </div>
+      <div class="lt-card-pie"><button class="btn-sm" type="button" data-emp-id="${e.id}"><i class="fas fa-id-card"></i> Ver ficha</button></div>
+    </article>`).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${EMP_CACHE.length ? 'Ninguna empresa coincide con la búsqueda o el filtro' : 'Todavía no hay empresas cargadas'}</div>`;
 }
 function abrirEmpresaSheet(id = null) {
   const e = id == null ? null : EMP_CACHE.find(x => x.id === id);
@@ -20642,6 +20744,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-26', emoji: '🗂️', titulo: 'Comisiones, Asesores, Proveedores y Empresas en tarjetas', texto: 'Cuatro listas más pasan a tarjetas. En Cobros > Facturación > Comisiones cada comisión muestra asesor, N° de factura, cliente, venta, % y comisión, con "Editar %" y "Marcar pagada"; arriba filtran Comisiones, Sin configurar, Por pagar y Pagadas. En Asesores cada tarjeta muestra el % de comisión y cuánto tiene por pagar y pagado, con "Definir %" destacado si falta. En Corporativo, Proveedores y Empresas muestran servicios o tipo, contacto, crédito y RIF, con cifras arriba (Activos, Inactivos, Todos; en Empresas también Clientes fijos) que filtran al tocarlas; tocar la tarjeta abre la ficha. Los buscadores, que no se veían, ya aparecen.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '💳', titulo: 'Ventas ahora en tarjetas', texto: 'En Cobros > Facturación > Ventas, cada factura es una tarjeta con el cliente, el número, el asesor, la fecha, el proveedor, y la venta, el costo neto y el margen con una barra del % ganado. Los botones "Editar cliente" y "Anular" quedan a mano. Arriba, tres cifras que filtran al tocarlas: Vendido, Margen y Sin costo neto (ventas pagadas a las que todavía les falta cargar el costo en Postventa). Los filtros por estado, mes y asesor siguen igual, y el buscador, que no se veía, ya aparece.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '🧾', titulo: 'Cuentas por Pagar ahora en tarjetas', texto: 'En Cobros > Facturación > Cuentas por Pagar, cada deuda con un proveedor es una tarjeta con cliente, lo que hay que transferir, lo abonado, el saldo y una barra de avance, con los botones "Editar cliente" y "Registrar abono" a mano. Arriba, tres cifras que filtran al tocarlas (Todas, Saldo pendiente, Pagadas) y botones para ordenar. El buscador, que no se veía, ya aparece. Arranca mostrando primero el saldo más alto.', roles: ['admin'] },
   { fecha: '2026-09-25', emoji: '🏝️', titulo: 'Corporativo: pestaña BT Travel', texto: 'Nueva pestaña "BT Travel" en Corporativo, junto a Proveedores y Empresas. Reúne todo lo del mayorista: hoteles todo incluido activos, tarifas por vencer, hoteles en stop sale hoy, bloqueos de los próximos 7 días, reservas del mes y lo que falta pagarle. Cada número filtra la grilla de hoteles o te lleva a su pantalla. Tocar un hotel lo abre en el tarifario o, si está bloqueado, en su calendario de Stop Sales.', roles: ['admin'] },

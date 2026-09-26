@@ -3172,6 +3172,7 @@ body.fsize-grande{--tap:41.9px}
    Los botones de orden llevan .th-sort a propósito: así reusan aplicarOrdenTabla
    y la hoja "Ordenar" de móvil sin duplicar lógica. */
 .lt-kpis{margin:14px 0 12px}
+.kpis.bt-kpis.lt-kpis-4{grid-template-columns:repeat(4,1fr)}
 .lt-orden{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:4px}
 .lt-orden-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-right:2px}
 .lt-orden-op{font:inherit;font-size:12px;font-weight:600;color:var(--muted);background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer;transition:border-color var(--dur-rapida),color var(--dur-rapida)}
@@ -3202,6 +3203,7 @@ body.fsize-grande{--tap:41.9px}
 @media(prefers-reduced-motion:reduce){.lt-card{animation:none}}
 @media(max-width:760px){
   .lt-orden{display:none}
+  .kpis.bt-kpis.lt-kpis-4{grid-template-columns:repeat(2,1fr)}
   .lt-kpis .kpi:nth-child(odd):last-child{grid-column:1/-1}
   .lt-grid{grid-template-columns:1fr}
   .lt-card-pie .btn-sm{flex:1;justify-content:center;min-height:44px}
@@ -4372,7 +4374,7 @@ body.fsize-grande{--tap:41.9px}
         <div class="card">
           <div class="chead-row">
             <h2><i class="fas fa-sack-dollar"></i> Comisiones</h2>
-            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="fact-com-search" placeholder="Buscar asesor..."></div>
+            <input class="ei bt-buscar" id="fact-com-search" type="search" placeholder="Buscar asesor..." aria-label="Buscar asesor">
             <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('comisiones')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
             <div class="export-dd">
               <button class="btn-sm" onclick="toggleExportMenu(event,'comisiones')"><i class="fas fa-download"></i> Exportar tabla</button>
@@ -4383,21 +4385,18 @@ body.fsize-grande{--tap:41.9px}
               </div>
             </div>
           </div>
-          <div class="csub">Tocá "Editar %" para pisar el % de una venta puntual · tocá un encabezado para ordenar</div>
-          <div class="tbl-state skel" id="fact-com-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
-          <div style="overflow-x:auto">
-            <table>
-              <thead><tr>
-                <th class="th-sort" data-sort-tbl="comisiones" data-sort-col="asesor">Asesor</th>
-                <th class="th-sort" data-sort-tbl="comisiones" data-sort-col="monto_venta">Monto venta</th>
-                <th class="th-sort" data-sort-tbl="comisiones" data-sort-col="porcentaje">%</th>
-                <th class="th-sort" data-sort-tbl="comisiones" data-sort-col="monto_comision">Comisión</th>
-                <th class="th-sort" data-sort-tbl="comisiones" data-sort-col="estado">Estado</th>
-                <th></th>
-              </tr></thead>
-              <tbody id="fact-com-tbody"></tbody>
-            </table>
+          <div class="csub">Tocá "Editar %" para pisar el % de una venta puntual · tocá una cifra de arriba para filtrar</div>
+          <div class="kpis bt-kpis lt-kpis lt-kpis-4" id="fact-com-kpis"></div>
+          <div class="lt-orden" role="group" aria-label="Ordenar por">
+            <span class="lt-orden-lbl">Ordenar</span>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="comisiones" data-sort-col="monto_comision">Comisión</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="comisiones" data-sort-col="monto_venta">Monto venta</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="comisiones" data-sort-col="porcentaje">%</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="comisiones" data-sort-col="asesor">Asesor</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="comisiones" data-sort-col="estado">Estado</button>
           </div>
+          <div class="tbl-state skel" id="fact-com-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="lt-grid" id="fact-com-tbody"></div>
           <div class="pager" id="fact-com-pager" style="display:none"><button class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasComisiones()">Cargar más</button></div>
         </div>
       </div>
@@ -4438,7 +4437,7 @@ body.fsize-grande{--tap:41.9px}
         <div class="card">
           <div class="chead-row">
             <h2><i class="fas fa-percent"></i> Comisión por asesor</h2>
-            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="fact-asesores-search" placeholder="Buscar asesor..."></div>
+            <input class="ei bt-buscar" id="fact-asesores-search" type="search" placeholder="Buscar asesor..." aria-label="Buscar asesor">
             <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('asesores')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
             <div class="export-dd">
               <button class="btn-sm" onclick="toggleExportMenu(event,'asesores')"><i class="fas fa-download"></i> Exportar tabla</button>
@@ -4449,17 +4448,14 @@ body.fsize-grande{--tap:41.9px}
               </div>
             </div>
           </div>
-          <div class="csub">% que se aplica automáticamente sobre cada venta pagada · tocá un encabezado para ordenar</div>
-          <div style="overflow-x:auto">
-            <table>
-              <thead><tr>
-                <th class="th-sort" data-sort-tbl="asesores" data-sort-col="nombre">Asesor</th>
-                <th class="th-sort" data-sort-tbl="asesores" data-sort-col="porcentaje_comision">% Comisión</th>
-                <th></th>
-              </tr></thead>
-              <tbody id="fact-asesores-tbody"></tbody>
-            </table>
+          <div class="csub">% que se aplica automáticamente sobre cada venta pagada · tocá una cifra de arriba para filtrar</div>
+          <div class="kpis bt-kpis lt-kpis" id="fact-asesores-kpis"></div>
+          <div class="lt-orden" role="group" aria-label="Ordenar por">
+            <span class="lt-orden-lbl">Ordenar</span>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="asesores" data-sort-col="nombre">Asesor</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="asesores" data-sort-col="porcentaje_comision">% Comisión</button>
           </div>
+          <div class="lt-grid" id="fact-asesores-tbody"></div>
         </div>
       </div>
     </section>
@@ -4480,8 +4476,8 @@ body.fsize-grande{--tap:41.9px}
       <div class="card">
         <div class="chead-row">
           <h2><i class="fas fa-truck-field"></i> Proveedores</h2>
-          <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="prov-search" placeholder="Buscar nombre, RIF o contacto..."></div>
-          <select class="ei" id="prov-filtro" aria-label="Filtrar por estado" style="width:auto;max-width:160px">
+          <input class="ei bt-buscar" id="prov-search" type="search" placeholder="Buscar nombre, RIF o contacto..." aria-label="Buscar proveedor">
+          <select class="ei" id="prov-filtro" aria-label="Filtrar por estado" style="display:none">
             <option value="activos">Activos</option>
             <option value="inactivos">Inactivos</option>
             <option value="todos">Todos</option>
@@ -4490,21 +4486,18 @@ body.fsize-grande{--tap:41.9px}
           <button class="btn-sm" id="prov-nuevo" type="button"><i class="fas fa-plus"></i> Nuevo proveedor</button>
         </div>
         <div class="csub">Hoteles, posadas, aerolíneas y operadores a los que Lotus les compra · tocá un proveedor para ver o editar su ficha</div>
-        <div class="tbl-state skel" id="prov-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr>
-              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="nombre">Proveedor</th>
-              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="servicios">Servicios</th>
-              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="contacto">Contacto</th>
-              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="moneda_habitual">Moneda</th>
-              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="dias_credito">Crédito</th>
-              <th class="th-sort" data-sort-tbl="proveedores" data-sort-col="activo">Estado</th>
-              <th></th>
-            </tr></thead>
-            <tbody id="prov-tbody"></tbody>
-          </table>
+        <div class="kpis bt-kpis lt-kpis" id="prov-kpis"></div>
+        <div class="lt-orden" role="group" aria-label="Ordenar por">
+          <span class="lt-orden-lbl">Ordenar</span>
+          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="nombre">Proveedor</button>
+          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="servicios">Servicios</button>
+          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="contacto">Contacto</button>
+          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="moneda_habitual">Moneda</button>
+          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="dias_credito">Crédito</button>
+          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="activo">Estado</button>
         </div>
+        <div class="tbl-state skel" id="prov-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+        <div class="lt-grid" id="prov-tbody"></div>
       </div>
     </section>
 
@@ -4540,8 +4533,8 @@ body.fsize-grande{--tap:41.9px}
       <div class="card">
         <div class="chead-row">
           <h2><i class="fas fa-building"></i> Empresas</h2>
-          <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="emp-search" placeholder="Buscar nombre, RIF o contacto..."></div>
-          <select class="ei" id="emp-filtro" aria-label="Filtrar empresas" style="width:auto;max-width:160px">
+          <input class="ei bt-buscar" id="emp-search" type="search" placeholder="Buscar nombre, RIF o contacto..." aria-label="Buscar empresa">
+          <select class="ei" id="emp-filtro" aria-label="Filtrar empresas" style="display:none">
             <option value="activos">Activas</option>
             <option value="fijos">Clientes fijos</option>
             <option value="inactivos">Inactivas</option>
@@ -4550,13 +4543,9 @@ body.fsize-grande{--tap:41.9px}
           <button class="btn-sm" id="emp-nuevo" type="button"><i class="fas fa-plus"></i> Nueva empresa</button>
         </div>
         <div class="csub">Agencias, operadores, corporativos y alianzas comerciales con crédito propio · tocá una empresa para ver su ficha y sus reservas</div>
+        <div class="kpis bt-kpis lt-kpis lt-kpis-4" id="emp-kpis"></div>
         <div class="tbl-state skel" id="emp-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr><th>Empresa</th><th>Tipo</th><th>Contacto</th><th>Crédito</th><th>Reservas</th><th>Estado</th><th></th></tr></thead>
-            <tbody id="emp-tbody"></tbody>
-          </table>
-        </div>
+        <div class="lt-grid" id="emp-tbody"></div>
       </div>
     </section>
 
