@@ -2198,20 +2198,39 @@ async function loadAsistenciaHistorial() {
 async function loadInformeDiario() {
   const { data, error } = await sb.rpc('informes_diarios_listado');
   if (error) { console.error(error); errToast('No se pudo cargar el Informe Diario'); return; }
-  document.getElementById('informe-diario-tbody').innerHTML = (data || []).map(f => `
-    <tr>
-      <td data-label="Fecha" class="muted">${fmtFechaSolo(f.fecha)}</td>
-      <td data-label="Asesor">${esc(f.nombre)}</td>
-      <td data-label="Hora salida">${f.tiene_informe ? fmtHoraCaracas(f.hora_salida) : '<span class="asist-badge off">Sin informe</span>'}</td>
-      <td data-label="Resumen">${f.tiene_informe ? renderInformeCampos(f) : '—'}</td>
-    </tr>`).join('') || '<tr><td colspan="4">Sin registros</td></tr>';
+  INFORME_CACHE = data || [];
+  renderInformeDiario();
+}
+// KPIs = filtro (mismo patrón que Cuentas por Pagar): tocar uno filtra, tocarlo de nuevo lo quita.
+let INFORME_CACHE = [], informeFiltro = '';
+function filtrarInformeEstado(estado) {
+  informeFiltro = informeFiltro === estado ? '' : estado;
+  renderInformeDiario();
+}
+function renderInformeDiario() {
+  const con = INFORME_CACHE.filter(f => f.tiene_informe).length, sin = INFORME_CACHE.length - con;
+  pintarKPIs('informe-diario-kpis', [
+    { key: '', t: 'Jornadas', v: fmt(INFORME_CACHE.length), d: 'últimos 14 días · ver todas', i: 'fa-calendar-days', c: 'var(--blue)', on: informeFiltro === '', go: () => filtrarInformeEstado('') },
+    { key: 'con', t: 'Con informe', v: fmt(con), d: 'cierre de jornada entregado', i: 'fa-circle-check', c: 'var(--green)', on: informeFiltro === 'con', go: () => filtrarInformeEstado('con') },
+    { key: 'sin', t: 'Sin informe', v: fmt(sin), d: 'falta el cierre', i: 'fa-hourglass-half', c: 'var(--amber)', on: informeFiltro === 'sin', go: () => filtrarInformeEstado('sin') },
+  ]);
+  const filas = INFORME_CACHE.filter(f => !informeFiltro || (informeFiltro === 'con') === !!f.tiene_informe);
+  document.getElementById('informe-diario-tbody').innerHTML = filas.map((f, i) => `
+    <article class="lt-card${f.tiene_informe ? '' : ' lt-card-hecha'}" style="--i:${Math.min(i, 20)}">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit" title="${esc(f.nombre)}">${esc(f.nombre)}</div>
+        <span class="bt-tag" style="--c:${f.tiene_informe ? 'var(--green)' : 'var(--amber)'}">${f.tiene_informe ? 'Con informe' : 'Sin informe'}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-calendar-day"></i> ${fmtFechaSolo(f.fecha)}${f.tiene_informe ? ` · <i class="fas fa-door-open"></i> salió ${fmtHoraCaracas(f.hora_salida)}` : ''}</div>
+      ${f.tiene_informe ? `<div class="lt-texto">${renderInformeCampos(f)}</div>` : ''}
+    </article>`).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${informeFiltro ? 'Nada coincide con el filtro' : 'Sin registros'}</div>`;
 }
 // Informes viejos (previos al 2026-08-19) solo tienen `resumen`; los nuevos
 // traen las cuatro respuestas separadas. Se muestran distinto sin romper el histórico.
 function renderInformeCampos(f) {
   if (!f.como_me_fue && !f.que_aprendi) return esc(f.resumen || '—');
   const bloque = (etiqueta, valor) => valor
-    ? `<div style="margin-bottom:6px"><b style="color:var(--muted2);font-size:11px;text-transform:uppercase">${etiqueta}</b><br>${esc(valor)}</div>`
+    ? `<div><b>${etiqueta}</b>${esc(valor)}</div>`
     : '';
   return bloque('Cómo le fue', f.como_me_fue)
     + bloque('Qué aprendió', f.que_aprendi)
@@ -18196,16 +18215,22 @@ async function cargarHistorialVouchers(append) {
     .range(vcOffset, vcOffset + VC_PAGE_SIZE - 1);
   document.getElementById('vc-historial-loading')?.classList.remove('show');
   if (error) { if (!append) tbody.innerHTML = ''; return; }
-  const filas = (data || []).map(v => `<tr>
-    <td data-label="N° Factura">${fmt(v.numero_factura)}</td>
-    <td data-label="Fecha" class="muted">${esc((v.created_at || '').replace('T', ' ').slice(0, 16))}</td>
-    <td data-label="Asesor">${esc(v.asesor_nombre)}</td>
-    <td class="td-name">${esc(v.cliente_nombre)}</td>
-    <td data-label="Destino">${esc(v.destino_hospedaje || '—')}</td>
-    <td data-label="Total">${v.total_general != null ? '$' + fmt(v.total_general) : '—'}</td>
-    <td class="td-acciones"><button class="btn-sm" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})">${v.pdf_path ? 'Ver PDF' : 'Reconstruir'}</button></td>
-  </tr>`).join('');
-  tbody.innerHTML = append ? tbody.innerHTML + filas : filas;
+  const filas = (data || []).map((v, i) => `<article class="lt-card" style="--i:${Math.min(i, 20)}">
+    <div class="lt-card-cab">
+      <div class="lt-card-tit" title="${esc(v.cliente_nombre)}">${esc(v.cliente_nombre)}</div>
+      <span class="bt-tag" style="--c:var(--blue)">N° ${fmt(v.numero_factura)}</span>
+    </div>
+    <div class="lt-card-meta"><i class="fas fa-user"></i> ${esc(v.asesor_nombre)} · ${esc((v.created_at || '').replace('T', ' ').slice(0, 16))}</div>
+    <div class="lt-cifras" style="grid-template-columns:2fr 1fr">
+      <div><span>Destino</span><b title="${esc(v.destino_hospedaje || '')}">${esc(v.destino_hospedaje || '—')}</b></div>
+      <div><span>Total</span><b>${v.total_general != null ? '$' + fmt(v.total_general) : '—'}</b></div>
+    </div>
+    <div class="lt-card-pie">
+      <button class="btn-sm${v.pdf_path ? ' lt-primario' : ''}" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})"><i class="fas ${v.pdf_path ? 'fa-file-pdf' : 'fa-rotate'}"></i> ${v.pdf_path ? 'Ver PDF' : 'Reconstruir'}</button>
+    </div>
+  </article>`).join('');
+  if (!append && !filas) tbody.innerHTML = '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin vouchers</div>';
+  else tbody.innerHTML = append ? tbody.innerHTML + filas : filas;
   if (!append) entradaLista(tbody);
   if (masBtn) masBtn.style.display = (data || []).length < VC_PAGE_SIZE ? 'none' : '';
   await actualizarBadgeVoucher();
@@ -20728,6 +20753,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-26', emoji: '📋', titulo: 'Informe Diario y Voucher en tarjetas', texto: 'El Informe Diario ahora son tarjetas por asesor y jornada, con contadores arriba (Jornadas / Con informe / Sin informe) que también filtran. El historial de Voucher muestra cada voucher como tarjeta con cliente, N° de factura, destino y total, y un botón claro para ver el PDF o reconstruirlo.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '🔀', titulo: 'Reasignaciones y Postulaciones en tarjetas', texto: 'En Gestión de Personal, Reasignaciones y Postulaciones pasan a tarjetas. Cada reasignación muestra cliente, motivo, de qué asesor a cuál pasó y cuánto esperó, con "Editar" y "Eliminar"; los KPIs de arriba filtran por motivo. Cada postulación muestra rol, teléfono, si ya se llamó, si se revisó y la calificación, con "Ver ficha" y "Llamar"; arriba filtran Todas, Sin revisar, Por llamar y Sin calificar. La casilla de cada tarjeta sigue sirviendo para eliminar varias a la vez, y el buscador de Postulaciones ahora se ve.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '🗂️', titulo: 'Comisiones, Asesores, Proveedores y Empresas en tarjetas', texto: 'Cuatro listas más pasan a tarjetas. En Cobros > Facturación > Comisiones cada comisión muestra asesor, N° de factura, cliente, venta, % y comisión, con "Editar %" y "Marcar pagada"; arriba filtran Comisiones, Sin configurar, Por pagar y Pagadas. En Asesores cada tarjeta muestra el % de comisión y cuánto tiene por pagar y pagado, con "Definir %" destacado si falta. En Corporativo, Proveedores y Empresas muestran servicios o tipo, contacto, crédito y RIF, con cifras arriba (Activos, Inactivos, Todos; en Empresas también Clientes fijos) que filtran al tocarlas; tocar la tarjeta abre la ficha. Los buscadores, que no se veían, ya aparecen.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '💳', titulo: 'Ventas ahora en tarjetas', texto: 'En Cobros > Facturación > Ventas, cada factura es una tarjeta con el cliente, el número, el asesor, la fecha, el proveedor, y la venta, el costo neto y el margen con una barra del % ganado. Los botones "Editar cliente" y "Anular" quedan a mano. Arriba, tres cifras que filtran al tocarlas: Vendido, Margen y Sin costo neto (ventas pagadas a las que todavía les falta cargar el costo en Postventa). Los filtros por estado, mes y asesor siguen igual, y el buscador, que no se veía, ya aparece.', roles: ['admin'] },
