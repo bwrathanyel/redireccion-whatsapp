@@ -3196,10 +3196,17 @@ body.fsize-grande{--tap:41.9px}
 .lt-card-pie{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto}
 .lt-card-pie .btn-sm{display:inline-flex;align-items:center;gap:6px}
 .lt-card-pie .btn-sm i{font-size:11px;opacity:.85}
+.lt-card-pie a.btn-sm{text-decoration:none}
 .lt-primario{color:var(--accent);background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
 .lt-primario:hover{border-color:var(--accent)}
 .lt-vacio{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;padding:28px 0}
 .lt-vacio i{margin-right:6px}
+.lt-chips{display:flex;flex-wrap:wrap;gap:6px}
+.lt-card .post-foto{width:40px;height:40px;border-radius:10px;font-size:15px}
+.lt-check{display:grid;place-items:center;flex-shrink:0;cursor:pointer}
+.lt-check input{width:17px;height:17px;accent-color:var(--accent);cursor:pointer}
+.lt-selec{display:inline-flex;margin-top:4px}
+.lt-card-sel{border-color:var(--accent)}
 @media(prefers-reduced-motion:reduce){.lt-card{animation:none}}
 @media(max-width:760px){
   .lt-orden{display:none}
@@ -3207,6 +3214,7 @@ body.fsize-grande{--tap:41.9px}
   .lt-kpis .kpi:nth-child(odd):last-child{grid-column:1/-1}
   .lt-grid{grid-template-columns:1fr}
   .lt-card-pie .btn-sm{flex:1;justify-content:center;min-height:44px}
+  .lt-check{min-width:44px;min-height:44px;margin:-12px -6px -12px -12px}
 }
 </style>
 </head>
@@ -4167,36 +4175,28 @@ body.fsize-grande{--tap:41.9px}
           <div class="chead-row">
             <h2><i class="fas fa-address-card"></i> Postulaciones</h2>
             <div style="display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap">
-              <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="post-search" placeholder="Buscar nombre o teléfono..."></div>
-              <div class="view-switch" id="post-view-switch"></div>
+              <input class="ei bt-buscar" id="post-search" type="search" style="max-width:240px" placeholder="Buscar nombre o teléfono..." aria-label="Buscar postulación">
               <button class="btn-sm" type="button" id="post-cargar-cv"><i class="fas fa-file-arrow-up"></i> Cargar CV</button>
               <input type="file" id="post-cv-input" accept="application/pdf" style="display:none">
             </div>
           </div>
           <div class="csub">Candidatos de "Trabaja con nosotros" y CVs cargados a mano (los que llegan por correo)</div>
+          <div class="kpis bt-kpis lt-kpis lt-kpis-4" id="post-kpis"></div>
+          <label class="tar-f-check lt-selec"><input type="checkbox" id="post-th-select-all"> Seleccionar las visibles</label>
           <div class="bulk-bar" id="post-bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
             <span id="post-bulk-count" style="font-size:13.5px;font-weight:600"></span>
             <button class="dbtn" id="post-bulk-clear" type="button" style="width:auto;padding:6px 12px">Cancelar selección</button>
             <button class="dbtn" id="post-bulk-eliminar" type="button" style="width:auto;padding:6px 12px;background:#ef4444;color:#fff;margin-left:auto"><i class="fas fa-trash"></i> Eliminar seleccionados</button>
           </div>
           <div class="tbl-state skel-grid" id="post-loading"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>
-          <div style="overflow-x:auto" id="post-vista-lista">
-            <table>
-              <thead><tr>
-                <th style="width:34px"><input type="checkbox" id="post-th-select-all"></th><th></th><th>Nombre</th><th>Modalidad</th><th>Rol de interés</th><th>Teléfono</th>
-                <th>Llamada</th><th>Prospecto</th><th>Fecha</th>
-              </tr></thead>
-              <tbody id="post-tbody"></tbody>
-            </table>
-          </div>
-          <div id="post-vista-tarjetas" class="post-grid" style="display:none"></div>
-          <div id="post-empty" class="tbl-state" style="display:none"><i class="fas fa-address-card"></i><div class="es-t">Sin postulaciones</div><div class="es-s">No hay candidatos con estos filtros</div></div>
+          <div id="post-tbody" class="lt-grid"></div>
+          <div id="post-empty" class="tbl-state"><i class="fas fa-address-card"></i><div class="es-t">Sin postulaciones</div><div class="es-s">No hay candidatos con estos filtros</div></div>
           <div class="pager" id="post-pager" style="display:none"><button id="post-cargar-mas-btn" class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasPostulaciones()">Cargar más</button></div>
         </div>
       </div>
       <!-- REASIGNACIONES (antes sección suelta del menú) -->
       <div class="gp-tab-panel" data-gp-panel="reasignaciones" style="display:none">
-        <div class="kpis" id="reasig-kpis"></div>
+        <div class="kpis bt-kpis lt-kpis lt-kpis-4" id="reasig-kpis"></div>
         <button class="mfs-trigger mfs-icon" data-mfs="rg-tbar" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
         <div class="tbar mfs" id="rg-tbar">
             <select class="flt" id="rg-asesor"><option value="">Todos los asesores</option></select>
@@ -4221,20 +4221,13 @@ body.fsize-grande{--tap:41.9px}
                 </div>
               </div>
             </div>
-            <div class="view-switch" id="rg-view-switch"></div>
             <span class="tcount" id="rg-count"></span>
             <button class="mfs-done" data-mfs="rg-tbar" type="button">Listo</button>
         </div>
         <div class="card">
           <div class="tbl-state skel" id="rg-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
           <div class="tbl-state" id="rg-empty"><i class="fas fa-shuffle"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay reasignaciones con estos filtros</div></div>
-          <div id="rg-wrap" style="overflow-x:auto">
-            <table>
-              <thead><tr><th>Cliente</th><th>Teléfono</th><th>Destino</th><th>De &rarr; A</th><th>Motivo</th><th>Tiempo</th><th>Fecha</th><th></th></tr></thead>
-              <tbody id="rg-tbody"></tbody>
-            </table>
-          </div>
-          <div id="rg-cards" class="card-grid"></div>
+          <div id="rg-tbody" class="lt-grid"></div>
           <div class="pager" id="rg-pager"></div>
         </div>
       </div>

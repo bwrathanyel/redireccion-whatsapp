@@ -222,7 +222,7 @@ let SELECTED_LEADS = new Set(), deleteMode = 'single';
 let trendKeys = [], canalKeys = [], destKeys = [], trendMap = {};
 let previewSel = null, charts = {};
 let ACTIVOS = [];
-let leadsView = 'lista', rgView = 'lista';
+let leadsView = 'lista';
 let INBOX_LEADS = [], INBOX_TEL_LEAD_ID = null;
 let POSTVENTA = [], PV_ACTUAL = null, PV_ETAPA = '', PV_GRUPO = '', PV_SEARCH_TIMER = null;
 let RV_DET = null, RV_RESERVA_ID = null, RV_FORM = null, RV_DESTINOS = null, RV_PROVEEDORES = null;
@@ -8531,7 +8531,7 @@ async function loadLeadsColaboraciones() {
 // dropdown de la ficha y el orden de la tabla, así que no reordenar sin querer.
 const CALIDAD_PROSPECTO_LABEL = { excelente: 'Excelente', bueno: 'Bueno', debil: 'Débil', descartado: 'Descartado' };
 const CALIDAD_PROSPECTO_COLOR = { excelente: '#a855f7', bueno: '#22c55e', debil: '#f59e0b', descartado: '#ef4444' };
-let postCache = [], postDrawerActual = null, postSearchDeb, postView = 'lista';
+let postCache = [], postDrawerActual = null, postSearchDeb;
 const SELECTED_POST = new Set();
 // Las fotos viven en un bucket privado (son dato personal), así que hay que
 // firmar cada URL. Se firman TODAS de una en vez de una por tarjeta, y se
@@ -8574,31 +8574,36 @@ async function loadPostulaciones() {
   document.getElementById('post-loading')?.classList.remove('show');
   renderPostulaciones();
 }
-function postCardHtml(p) {
+function postCardHtml(p, i = 0) {
   const datos = [
     p.edad ? `${p.edad} años` : null,
     p.genero ? GENERO_LABEL[p.genero] : null,
     p.anios_experiencia != null ? `${p.anios_experiencia} años de exp.` : null,
   ].filter(Boolean);
-  return `<div class="post-card" data-id="${p.id}">
-    <div class="post-card-top">
+  const llamado = p.estado_llamada === 'llamado', sel = SELECTED_POST.has(p.id), mod = modalidadTexto(p.modalidad);
+  const rol = [p.rol_interes, (p.rol_interes || '').toLowerCase().includes(String(mod).toLowerCase()) ? '' : mod].filter(Boolean).join(' · ');
+  return `<article class="lt-card${sel ? ' lt-card-sel' : ''}" data-id="${p.id}" style="--i:${Math.min(i, 20)};cursor:pointer">
+    <div class="lt-card-cab">
+      <label class="lt-check" title="Seleccionar"><input type="checkbox" class="post-check" data-id="${p.id}" aria-label="Seleccionar ${esc(p.nombre)}"${sel ? ' checked' : ''}></label>
       ${postFotoHtml(p, 'post-foto')}
-      <div style="min-width:0;flex:1">
-        <div style="font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis">${esc(p.nombre)}</div>
-        <div class="muted" style="font-size:12.5px">${esc(p.rol_interes || modalidadTexto(p.modalidad))}</div>
-        <div class="muted" style="font-size:12px;margin-top:2px">${esc(p.telefono)}</div>
-      </div>
-      ${p.revisado ? '<i class="fas fa-circle-check" style="color:#22c55e" title="Revisado"></i>' : ''}
+      <div class="lt-card-tit" title="${esc(p.nombre)}">${esc(p.nombre)}</div>
+      ${p.calidad_prospecto ? `<span class="bt-tag" style="--c:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]}">${CALIDAD_PROSPECTO_LABEL[p.calidad_prospecto]}</span>` : '<span class="bt-tag" style="--c:var(--muted)">Sin calificar</span>'}
     </div>
-    ${datos.length ? `<div class="post-card-datos">${datos.map(d => `<span class="post-dato">${esc(d)}</span>`).join('')}</div>` : ''}
-    ${p.estudios ? `<div class="muted" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><i class="fas fa-graduation-cap"></i> ${esc(p.estudios)}</div>` : ''}
-    <div style="display:flex;gap:6px;align-items:center;margin-top:auto;flex-wrap:wrap">
-      ${p.calidad_prospecto ? `<span class="badge-st" style="color:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]};background:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]}2e">${CALIDAD_PROSPECTO_LABEL[p.calidad_prospecto]}</span>` : '<span class="muted" style="font-size:12px">Sin calificar</span>'}
-      <span class="badge-st" style="color:${p.estado_llamada === 'llamado' ? '#22c55e' : '#e0a030'};background:${p.estado_llamada === 'llamado' ? '#22c55e2e' : '#e0a0302e'}">${p.estado_llamada === 'llamado' ? 'Llamado' : 'Pendiente'}</span>
+    <div class="lt-card-meta"><i class="fas fa-briefcase"></i>${esc(rol)}</div>
+    <div class="lt-card-meta"><i class="fas fa-phone"></i>${esc(p.telefono) || 'Sin teléfono'} · ${esc(fmtFechaHoraCaracas(p.created_at))}</div>
+    <div class="lt-chips">
+      <span class="bt-tag" style="--c:${llamado ? 'var(--green)' : 'var(--amber)'}">${llamado ? 'Llamado' : 'Por llamar'}</span>
+      <span class="bt-tag" style="--c:${p.revisado ? 'var(--green)' : 'var(--muted)'}">${p.revisado ? 'Revisado' : 'Sin revisar'}</span>
       ${p.cv_storage_path ? '<span class="post-dato"><i class="fas fa-file-pdf"></i> CV</span>' : ''}
       ${formEstadoBadge(p)}
     </div>
-  </div>`;
+    ${datos.length ? `<div class="lt-chips">${datos.map(d => `<span class="post-dato">${esc(d)}</span>`).join('')}</div>` : ''}
+    ${p.estudios ? `<div class="lt-card-meta" title="${esc(p.estudios)}"><i class="fas fa-graduation-cap"></i>${esc(p.estudios)}</div>` : ''}
+    <div class="lt-card-pie">
+      <button class="btn-sm${p.revisado ? '' : ' lt-primario'}" type="button"><i class="fas fa-id-card"></i> Ver ficha</button>
+      ${p.telefono ? `<a class="btn-sm" href="tel:${esc(String(p.telefono).replace(/[^\d+]/g, ''))}" data-post-tel><i class="fas fa-phone"></i> Llamar</a>` : ''}
+    </div>
+  </article>`;
 }
 // Techo de filas visibles en el render (Fase 4 -- "100 facturas ≈ 1.000
 // filas visuales en móvil"). El FETCH sigue trayendo todo (postCache
@@ -8612,10 +8617,20 @@ window.cargarMasPostulaciones = cargarMasPostulaciones;
 function renderPostulaciones() {
   const q = val('post-search').trim().toLowerCase();
   const fModalidad = val('post-f-modalidad'), fLlamada = val('post-f-llamada'), fCalidad = val('post-f-calidad');
-  const soloSinRevisar = document.getElementById('post-f-sin-revisar').checked;
-  const filtered = postCache.filter(p => {
-    if (q && !(p.nombre || '').toLowerCase().includes(q) && !(p.telefono || '').toLowerCase().includes(q)) return false;
-    if (fModalidad && p.modalidad !== fModalidad) return false;
+  const chkSinRevisar = document.getElementById('post-f-sin-revisar'), soloSinRevisar = chkSinRevisar.checked;
+  // KPIs cuentan sobre búsqueda + modalidad, sin los filtros que ellos mismos activan.
+  const base = postCache.filter(p => (!q || (p.nombre || '').toLowerCase().includes(q) || (p.telefono || '').toLowerCase().includes(q)) && (!fModalidad || p.modalidad === fModalidad));
+  const kpiIr = (llamada, calidad, sinRev) => () => {
+    document.getElementById('post-f-llamada').value = llamada; document.getElementById('post-f-calidad').value = calidad; chkSinRevisar.checked = sinRev;
+    postMostrar = TECHO_LISTA; renderPostulaciones();
+  };
+  pintarKPIs('post-kpis', [
+    { key: 'todas', t: 'Postulaciones', v: fmt(base.length), d: 'ver todas', i: 'fa-address-card', c: 'var(--blue)', on: !fLlamada && !fCalidad && !soloSinRevisar, go: kpiIr('', '', false) },
+    { key: 'sin_revisar', t: 'Sin revisar', v: fmt(base.filter(p => !p.revisado).length), d: 'nadie abrió la ficha', i: 'fa-eye-slash', c: 'var(--accent)', on: soloSinRevisar && !fLlamada && !fCalidad, go: kpiIr('', '', true) },
+    { key: 'por_llamar', t: 'Por llamar', v: fmt(base.filter(p => p.estado_llamada === 'pendiente').length), d: 'pendientes de contacto', i: 'fa-phone', c: 'var(--amber)', on: fLlamada === 'pendiente' && !fCalidad && !soloSinRevisar, go: kpiIr('pendiente', '', false) },
+    { key: 'sin_calificar', t: 'Sin calificar', v: fmt(base.filter(p => !p.calidad_prospecto).length), d: 'falta evaluar el CV', i: 'fa-star-half-stroke', c: 'var(--purple)', on: fCalidad === 'sin_calificar' && !fLlamada && !soloSinRevisar, go: kpiIr('', 'sin_calificar', false) },
+  ]);
+  const filtered = base.filter(p => {
     if (fLlamada && p.estado_llamada !== fLlamada) return false;
     if (fCalidad === 'sin_calificar' && p.calidad_prospecto) return false;
     if (fCalidad && fCalidad !== 'sin_calificar' && p.calidad_prospecto !== fCalidad) return false;
@@ -8626,26 +8641,13 @@ function renderPostulaciones() {
   const visibles = filtered.slice(0, postMostrar);
   const pager = document.getElementById('post-pager');
   if (pager) pager.style.display = filtered.length > postMostrar ? '' : 'none';
-  document.getElementById('post-tbody').innerHTML = visibles.map(p => `<tr data-id="${p.id}">
-    <td><input type="checkbox" class="post-check" data-id="${p.id}" ${SELECTED_POST.has(p.id) ? 'checked' : ''}></td>
-    <td>${p.revisado ? '<i class="fas fa-circle-check" style="color:#22c55e" title="Revisado"></i>' : '<i class="fas fa-circle" style="color:#5f677f" title="Sin revisar"></i>'}</td>
-    <td data-label="Nombre">${esc(p.nombre)}</td>
-    <td data-label="Modalidad"><span class="chip">${modalidadTexto(p.modalidad)}</span>${p.formulario_estado === 'fallo' ? ' ' + formEstadoBadge(p) : ''}</td>
-    <td data-label="Rol" class="muted">${esc(p.rol_interes || '—')}</td>
-    <td data-label="Teléfono" class="muted">${esc(p.telefono)}</td>
-    <td data-label="Llamada"><span class="badge-st" style="color:${p.estado_llamada === 'llamado' ? '#22c55e' : '#e0a030'};background:${p.estado_llamada === 'llamado' ? '#22c55e2e' : '#e0a0302e'}">${p.estado_llamada === 'llamado' ? 'Llamado' : 'Pendiente'}</span></td>
-    <td data-label="Prospecto">${p.calidad_prospecto ? `<span class="badge-st" style="color:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]};background:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]}2e">${CALIDAD_PROSPECTO_LABEL[p.calidad_prospecto]}</span>` : '<span class="muted">Sin calificar</span>'}</td>
-    <td data-label="Fecha" class="muted">${esc(fmtFechaHoraCaracas(p.created_at))}</td>
-  </tr>`).join('');
-  const grid = document.getElementById('post-vista-tarjetas');
-  grid.innerHTML = postView === 'tarjetas' ? visibles.map(postCardHtml).join('') : '';
-  grid.style.display = postView === 'tarjetas' ? '' : 'none';
-  document.getElementById('post-vista-lista').style.display = postView === 'tarjetas' ? 'none' : '';
-
-  document.querySelectorAll('#post-tbody tr, #post-vista-tarjetas .post-card').forEach(el => el.onclick = () => {
+  const grid = document.getElementById('post-tbody');
+  grid.innerHTML = visibles.map(postCardHtml).join('');
+  grid.querySelectorAll('.lt-card').forEach(el => el.onclick = () => {
     const p = postCache.find(x => String(x.id) === el.dataset.id);
     if (p) abrirPostulacionDrawer(p);
   });
+  grid.querySelectorAll('.lt-check, [data-post-tel]').forEach(el => el.addEventListener('click', e => e.stopPropagation()));
   wirePostChecks();
   const pendientes = postCache.filter(p => !p.revisado).length;
   const badge = document.getElementById('gp-postulaciones-count');
@@ -8670,6 +8672,7 @@ function updatePostBulkBar() {
   const ids = [...document.querySelectorAll('.post-check')].map(cb => +cb.dataset.id);
   const selectAll = document.getElementById('post-th-select-all');
   if (selectAll) selectAll.checked = ids.length > 0 && ids.every(id => SELECTED_POST.has(id));
+  document.querySelectorAll('#post-tbody .lt-card').forEach(c => c.classList.toggle('lt-card-sel', SELECTED_POST.has(+c.dataset.id)));
 }
 function clearPostSelection() { SELECTED_POST.clear(); updatePostBulkBar(); document.querySelectorAll('.post-check').forEach(cb => cb.checked = false); }
 document.getElementById('post-th-select-all')?.addEventListener('change', e => {
@@ -8951,7 +8954,6 @@ async function verCVPostulacion(path) {
   window.open(data.signedUrl, '_blank');
 }
 document.getElementById('post-reanalizar-todas')?.addEventListener('click', reanalizarTodasLasPostulaciones);
-postView = initViewSwitcher('post-view-switch', 'postulaciones', 'lista', v => { postView = v; renderPostulaciones(); }, ['tarjetas', 'lista']);
 document.getElementById('post-search')?.addEventListener('input', () => { clearTimeout(postSearchDeb); postSearchDeb = setTimeout(() => { postMostrar = TECHO_LISTA; renderPostulaciones(); }, 200); });
 document.querySelectorAll('#post-f-modalidad,#post-f-llamada,#post-f-calidad,#post-f-sin-revisar').forEach(el => el.addEventListener('change', () => { postMostrar = TECHO_LISTA; renderPostulaciones(); }));
 
@@ -11943,12 +11945,12 @@ function ssRenderVigentes() {
 
 /* ---------- Reasignaciones ---------- */
 let rgPage = 1;
-const MOTIVO_LABEL = { timeout_no_respuesta: 'Timeout', manual_no_puedo: 'No puedo' };
+const MOTIVO_LABEL = { timeout_no_respuesta: 'Timeout', manual_no_puedo: 'No puedo', correccion_admin: 'Corrección' };
+const MOTIVO_COLOR = { timeout_no_respuesta: 'var(--blue)', manual_no_puedo: 'var(--purple)' };
 function setupReasignaciones() {
   fill('rg-asesor', ACTIVOS);
   ['rg-asesor', 'rg-motivo', 'rg-desde', 'rg-hasta'].forEach(id => document.getElementById(id).addEventListener('change', () => { rgPage = 1; loadReasignaciones(); }));
   initDateRangePicker('rg');
-  rgView = initViewSwitcher('rg-view-switch', 'reasignaciones', 'lista', v => { rgView = v; applyRgView(); });
 }
 function filtrarReasigPorMotivo(motivo) {
   const sel = document.getElementById('rg-motivo');
@@ -12026,7 +12028,7 @@ async function borrarReasignacion(id) {
 }
 
 async function loadReasignaciones() {
-  const loading = document.getElementById('rg-loading'), empty = document.getElementById('rg-empty'), wrap = document.getElementById('rg-wrap');
+  const loading = document.getElementById('rg-loading'), empty = document.getElementById('rg-empty'), wrap = document.getElementById('rg-tbody');
   empty.classList.remove('show'); loading.classList.add('show'); wrap.style.opacity = '.4';
   const from = (rgPage - 1) * PER;
   const fa = val('rg-asesor') || null, fd = val('rg-desde') || null, fh = val('rg-hasta') ? val('rg-hasta') + 'T23:59:59' : null;
@@ -12040,59 +12042,41 @@ async function loadReasignaciones() {
   const total = count ?? 0;
   document.getElementById('rg-count').textContent = `${fmt(total)} reasignaciones`;
   const kpi = kpis || {};
-  const kAgotados = kpi.agotados ?? 0;
+  const kAgotados = kpi.agotados ?? 0, fm = val('rg-motivo');
   pintarKPIs('reasig-kpis', [
-    { t: 'Total reasignaciones', v: fmt(total), i: 'fa-shuffle', c: 'var(--accent)', tt: 'Quitar el filtro de motivo', go: () => filtrarReasigPorMotivo('') },
-    { t: 'Por timeout', v: fmt(kpi.timeout ?? 0), i: 'fa-clock', c: 'var(--blue)', tt: 'Ver solo las reasignadas por timeout', go: () => filtrarReasigPorMotivo('timeout_no_respuesta') },
-    { t: 'Manual (No puedo)', v: fmt(kpi.manual ?? 0), i: 'fa-hand', c: 'var(--purple)', tt: 'Ver solo las reasignadas a mano', go: () => filtrarReasigPorMotivo('manual_no_puedo') },
+    { key: '', t: 'Total reasignaciones', v: fmt(total), d: 'quitar filtro de motivo', i: 'fa-shuffle', c: 'var(--accent)', on: !fm, tt: 'Quitar el filtro de motivo', go: () => filtrarReasigPorMotivo('') },
+    { key: 'timeout_no_respuesta', t: 'Por timeout', v: fmt(kpi.timeout ?? 0), d: 'el asesor no respondió', i: 'fa-clock', c: 'var(--blue)', on: fm === 'timeout_no_respuesta', tt: 'Ver solo las reasignadas por timeout', go: () => filtrarReasigPorMotivo('timeout_no_respuesta') },
+    { key: 'manual_no_puedo', t: 'Manual (No puedo)', v: fmt(kpi.manual ?? 0), d: 'el asesor la soltó', i: 'fa-hand', c: 'var(--purple)', on: fm === 'manual_no_puedo', tt: 'Ver solo las reasignadas a mano', go: () => filtrarReasigPorMotivo('manual_no_puedo') },
     // "Sin asesor disponible" no es un motivo, es el resultado de no encontrar a
     // quién pasársela: no hay filtro que lo aísle, así que no se hace clickeable.
-    { t: 'Sin asesor disponible', v: fmt(kAgotados), i: 'fa-triangle-exclamation', c: kAgotados > 0 ? '#ef4444' : 'var(--green)' },
+    { t: 'Sin asesor disponible', v: fmt(kAgotados), d: 'nadie la pudo tomar', i: 'fa-triangle-exclamation', c: kAgotados > 0 ? 'var(--pink)' : 'var(--green)' },
   ]);
-  if (!data.length) { empty.classList.add('show'); document.getElementById('rg-tbody').innerHTML = ''; document.getElementById('rg-cards').innerHTML = ''; document.getElementById('rg-pager').innerHTML = ''; return; }
-  document.getElementById('rg-tbody').innerHTML = data.map(r => {
-    const l = r.leads || {}, av = clientAvatar({ id: r.lead_id, telefono: l.telefono, nombre: l.nombre });
-    const sinAsesor = !r.asesor_nuevo;
-    return `<tr${sinAsesor ? ' style="background:rgba(239,68,68,.06)"' : ''}>
-      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre || 'Sin nombre')}</div></td>
-      <td data-label="Teléfono" class="muted">${esc(l.telefono) || '—'}</td>
-      <td data-label="Destino">${esc(l.destino) || '—'}</td>
-      <td data-label="De → A"><span class="rg-flujo"><b>${esc(r.asesor_anterior || '—')}</b><i class="fas fa-arrow-right"></i>${sinAsesor ? '<span style="color:#ef4444">Sin asesor disponible</span>' : `<b>${esc(r.asesor_nuevo)}</b>`}</span></td>
-      <td data-label="Motivo"><span class="chip">${MOTIVO_LABEL[r.motivo] || esc(r.motivo)}</span></td>
-      <td data-label="Tiempo" class="muted">${r.minutos_transcurridos != null ? r.minutos_transcurridos + ' min' : '—'}</td>
-      <td data-label="Fecha" class="muted">${esc(fmtFechaHoraCaracas(r.created_at))}</td>
-      <td class="rg-acc"><button class="btn-sm" data-rg-editar="${r.id}" title="Editar"><i class="fas fa-pen"></i></button><button class="btn-sm" data-rg-borrar="${r.id}" title="Eliminar"><i class="fas fa-trash"></i></button></td>
-    </tr>`;
-  }).join('');
-  document.getElementById('rg-cards').innerHTML = data.map(reasignCardHtml).join('');
+  const grid = document.getElementById('rg-tbody');
   REASIG_CACHE = data;
-  document.querySelectorAll('#rg-tbody [data-rg-editar]').forEach(b => { b.onclick = () => abrirEditorReasignacion(Number(b.dataset.rgEditar)); });
-  document.querySelectorAll('#rg-tbody [data-rg-borrar]').forEach(b => { b.onclick = () => borrarReasignacion(Number(b.dataset.rgBorrar)); });
-  applyRgView();
+  if (!data.length) { empty.classList.add('show'); grid.innerHTML = ''; document.getElementById('rg-pager').innerHTML = ''; return; }
+  grid.innerHTML = data.map((r, i) => {
+    const l = r.leads || {}, sinAsesor = !r.asesor_nuevo;
+    return `<article class="lt-card" style="--i:${Math.min(i, 20)}${sinAsesor ? ';border-color:color-mix(in srgb,var(--pink) 45%,transparent)' : ''}">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit" title="${esc(l.nombre || '')}">${esc(l.nombre || 'Sin nombre')}</div>
+        <span class="bt-tag" style="--c:${MOTIVO_COLOR[r.motivo] || 'var(--muted)'}">${MOTIVO_LABEL[r.motivo] || esc(r.motivo)}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-location-dot"></i>${esc([l.destino, l.telefono].filter(Boolean).join(' · ')) || 'Sin destino ni teléfono'}</div>
+      <div class="lt-card-meta"><i class="fas fa-calendar"></i>${esc(fmtFechaHoraCaracas(r.created_at))}</div>
+      <div class="lt-cifras">
+        <div><span>De</span><b title="${esc(r.asesor_anterior || '')}">${esc(r.asesor_anterior || '—')}</b></div>
+        <div><span>A</span><b${sinAsesor ? ' style="color:var(--pink)"' : ''} title="${esc(r.asesor_nuevo || 'Sin asesor disponible')}">${sinAsesor ? 'Sin asesor' : esc(r.asesor_nuevo)}</b></div>
+        <div><span>Esperó</span><b>${r.minutos_transcurridos != null ? fmt(r.minutos_transcurridos) + ' min' : '—'}</b></div>
+      </div>
+      <div class="lt-card-pie">
+        <button class="btn-sm" type="button" data-rg-editar="${r.id}"><i class="fas fa-pen"></i> Editar</button>
+        <button class="btn-sm" type="button" data-rg-borrar="${r.id}"><i class="fas fa-trash"></i> Eliminar</button>
+      </div>
+    </article>`;
+  }).join('');
+  grid.querySelectorAll('[data-rg-editar]').forEach(b => { b.onclick = () => abrirEditorReasignacion(Number(b.dataset.rgEditar)); });
+  grid.querySelectorAll('[data-rg-borrar]').forEach(b => { b.onclick = () => borrarReasignacion(Number(b.dataset.rgBorrar)); });
   renderReasignPager(Math.max(Math.ceil(total / PER), 1));
-}
-function reasignCardHtml(r) {
-  const l = r.leads || {}, av = clientAvatar({ id: r.lead_id, telefono: l.telefono, nombre: l.nombre });
-  const sinAsesor = !r.asesor_nuevo;
-  const detalle = rgView === 'fichas' ? `
-    <div class="ec-row"><i class="fas fa-arrow-right-arrow-left"></i> ${esc(r.asesor_anterior)} → ${sinAsesor ? '<span style="color:#ef4444">sin asesor disponible</span>' : esc(r.asesor_nuevo)}</div>
-    <div class="ec-row"><i class="fas fa-clock"></i> ${r.minutos_transcurridos != null ? r.minutos_transcurridos + ' min transcurridos' : 'Sin dato de tiempo'}</div>` : '';
-  return `<div class="entity-card">
-    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre || 'Sin nombre')}</div></div>
-    <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || '—'}</div>
-    <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
-    ${detalle}
-    <div class="ec-foot">
-      <span class="chip">${MOTIVO_LABEL[r.motivo] || esc(r.motivo)}</span>
-      <span class="muted" style="font-size:11px">${esc(fmtFechaHoraCaracas(r.created_at))}</span>
-    </div>
-  </div>`;
-}
-function applyRgView() {
-  const table = document.getElementById('rg-wrap'), cards = document.getElementById('rg-cards');
-  table.classList.toggle('hide', rgView !== 'lista');
-  cards.classList.toggle('show', rgView !== 'lista');
-  cards.classList.toggle('fichas', rgView === 'fichas');
 }
 function renderReasignPager(pages) {
   document.getElementById('rg-pager').innerHTML = `<button ${rgPage <= 1 ? 'disabled' : ''} id="rgprev"><i class="fas fa-chevron-left"></i></button><span class="pinfo">Página ${fmt(rgPage)} de ${fmt(pages)}</span><button ${rgPage >= pages ? 'disabled' : ''} id="rgnext"><i class="fas fa-chevron-right"></i></button>`;
@@ -20744,6 +20728,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-26', emoji: '🔀', titulo: 'Reasignaciones y Postulaciones en tarjetas', texto: 'En Gestión de Personal, Reasignaciones y Postulaciones pasan a tarjetas. Cada reasignación muestra cliente, motivo, de qué asesor a cuál pasó y cuánto esperó, con "Editar" y "Eliminar"; los KPIs de arriba filtran por motivo. Cada postulación muestra rol, teléfono, si ya se llamó, si se revisó y la calificación, con "Ver ficha" y "Llamar"; arriba filtran Todas, Sin revisar, Por llamar y Sin calificar. La casilla de cada tarjeta sigue sirviendo para eliminar varias a la vez, y el buscador de Postulaciones ahora se ve.' },
   { fecha: '2026-09-26', emoji: '🗂️', titulo: 'Comisiones, Asesores, Proveedores y Empresas en tarjetas', texto: 'Cuatro listas más pasan a tarjetas. En Cobros > Facturación > Comisiones cada comisión muestra asesor, N° de factura, cliente, venta, % y comisión, con "Editar %" y "Marcar pagada"; arriba filtran Comisiones, Sin configurar, Por pagar y Pagadas. En Asesores cada tarjeta muestra el % de comisión y cuánto tiene por pagar y pagado, con "Definir %" destacado si falta. En Corporativo, Proveedores y Empresas muestran servicios o tipo, contacto, crédito y RIF, con cifras arriba (Activos, Inactivos, Todos; en Empresas también Clientes fijos) que filtran al tocarlas; tocar la tarjeta abre la ficha. Los buscadores, que no se veían, ya aparecen.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '💳', titulo: 'Ventas ahora en tarjetas', texto: 'En Cobros > Facturación > Ventas, cada factura es una tarjeta con el cliente, el número, el asesor, la fecha, el proveedor, y la venta, el costo neto y el margen con una barra del % ganado. Los botones "Editar cliente" y "Anular" quedan a mano. Arriba, tres cifras que filtran al tocarlas: Vendido, Margen y Sin costo neto (ventas pagadas a las que todavía les falta cargar el costo en Postventa). Los filtros por estado, mes y asesor siguen igual, y el buscador, que no se veía, ya aparece.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '🧾', titulo: 'Cuentas por Pagar ahora en tarjetas', texto: 'En Cobros > Facturación > Cuentas por Pagar, cada deuda con un proveedor es una tarjeta con cliente, lo que hay que transferir, lo abonado, el saldo y una barra de avance, con los botones "Editar cliente" y "Registrar abono" a mano. Arriba, tres cifras que filtran al tocarlas (Todas, Saldo pendiente, Pagadas) y botones para ordenar. El buscador, que no se veía, ya aparece. Arranca mostrando primero el saldo más alto.', roles: ['admin'] },
