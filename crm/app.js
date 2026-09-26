@@ -1421,7 +1421,7 @@ async function loadDiagnosticoPush() {
   if (!data || !data.length) { vacio.style.display = ''; return; }
 
   wrap.style.display = '';
-  body.innerHTML = data.map(f => {
+  body.innerHTML = data.map((f, i) => {
     // Sin dispositivos vivos no hay a quién mandarle: es el caso más común
     // detrás de "no me llegan" y hasta ahora era invisible.
     const sinVivos = f.dispositivos === 0;
@@ -1429,17 +1429,35 @@ async function loadDiagnosticoPush() {
     // confirma la entrega es un fantasma: la instalación que lo creó ya no
     // existe. Sin marcarlo, la pantalla informa "ok" sobre avisos que nadie ve.
     const fantasma = (f.sospechosas ?? 0) > 0;
-    const alerta = sinVivos || fantasma || f.fallos_consecutivos >= 3 || (f.visto_hace_horas ?? 0) > 168;
-    return `<tr${alerta ? ' style="opacity:.85"' : ''}>
-      <td><b>${esc(f.nombre)}</b><div class="csub">${esc(f.rol)}</div></td>
-      <td>${f.dispositivos}${f.expiradas ? ` <span class="csub">(${f.expiradas} vencida${f.expiradas > 1 ? 's' : ''})</span>` : ''}<div class="csub">${esc(f.plataformas || '-')}</div>${fantasma ? `<div class="csub" style="color:var(--warn,#ff9100)">${f.sospechosas} sin entregar nunca</div>` : ''}</td>
-      <td>${sinVivos ? '—' : (f.instaladas > 0 ? `${f.instaladas} sí` : '<span class="csub">en navegador</span>')}</td>
-      <td>${horasLegibles(f.visto_hace_horas)}</td>
-      <td>${f.ultimo_ok_at ? esc(fmtFechaHoraCaracas(f.ultimo_ok_at)) : '—'}</td>
-      <td>${f.ok_7d} ok · ${f.fallo_7d} fallo${f.entregados_7d ? ` · ${f.entregados_7d} vistas` : ''}</td>
-      <td>${f.latencia_p50_s !== null && f.latencia_p50_s !== undefined ? `${f.latencia_p50_s}s` : '—'}</td>
-      <td><button class="btn-sm" data-push-prueba="${f.usuario_id}"${sinVivos ? ' disabled' : ''}>Probar</button></td>
-    </tr>`;
+    const fallando = f.fallos_consecutivos >= 3;
+    const inactivo = (f.visto_hace_horas ?? 0) > 168;
+    const estado = sinVivos ? ['Sin dispositivos', 'var(--pink)']
+      : fantasma ? ['Sin entregar', 'var(--pink)']
+      : fallando ? ['Fallando', 'var(--pink)']
+      : inactivo ? ['Inactivo', 'var(--amber)']
+      : ['Al día', 'var(--green)'];
+    const alerta = sinVivos || fantasma || fallando || inactivo;
+    return `<article class="lt-card${alerta ? '' : ' lt-card-hecha'}" style="--i:${Math.min(i, 20)}">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit" title="${esc(f.nombre)}">${esc(f.nombre)}</div>
+        <span class="bt-tag" style="--c:${estado[1]}">${estado[0]}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-user-tag"></i>${esc(f.rol)} · <i class="fas fa-mobile-screen"></i>${esc(f.plataformas || '-')}</div>
+      <div class="lt-cifras">
+        <div><span>Dispositivos</span><b>${f.dispositivos}${f.expiradas ? ` <small class="lt-debe">(${f.expiradas} vencida${f.expiradas > 1 ? 's' : ''})</small>` : ''}</b></div>
+        <div><span>Visto hace</span><b>${horasLegibles(f.visto_hace_horas)}</b></div>
+        <div><span>Latencia</span><b>${f.latencia_p50_s !== null && f.latencia_p50_s !== undefined ? `${f.latencia_p50_s}s` : '—'}</b></div>
+      </div>
+      <div class="lt-cifras">
+        <div><span>Instalada</span><b>${sinVivos ? '—' : (f.instaladas > 0 ? `${f.instaladas} sí` : 'en navegador')}</b></div>
+        <div><span>Último OK</span><b>${f.ultimo_ok_at ? esc(fmtFechaHoraCaracas(f.ultimo_ok_at)) : '—'}</b></div>
+        <div><span>7 días</span><b title="${f.ok_7d} ok · ${f.fallo_7d} fallo${f.entregados_7d ? ` · ${f.entregados_7d} vistas` : ''}">${f.ok_7d} ok · ${f.fallo_7d} fallo</b></div>
+      </div>
+      ${fantasma ? `<div class="lt-card-meta lt-debe"><i class="fas fa-ghost"></i>${f.sospechosas} sin entregar nunca</div>` : ''}
+      <div class="lt-card-pie">
+        <button class="btn-sm lt-primario" data-push-prueba="${f.usuario_id}"${sinVivos ? ' disabled' : ''}><i class="fas fa-paper-plane"></i> Probar</button>
+      </div>
+    </article>`;
   }).join('');
 
   body.querySelectorAll('[data-push-prueba]').forEach(btn => {
@@ -2184,14 +2202,46 @@ async function loadAsistenciaHistorial() {
   const fa = val('asist-hist-asesor') || null, fd = val('asist-hist-desde') || null, fh = val('asist-hist-hasta') || null;
   const { data, error } = await sb.rpc('asistencia_historial', { p_asesor_id: fa, p_desde: fd, p_hasta: fh });
   if (error) { errToast('No se pudo cargar el historial de asistencia'); return; }
+  ASIST_HIST_DATA = data || [];
+  asistHistMostrar = ASIST_HIST_PAGINA;
+  pintarAsistenciaHistorial();
+}
+// ~570 jornadas: se pintan de a ASIST_HIST_PAGINA y "Ver más" agrega otra
+// tanda (mismo patrón que Web-reasignados).
+const ASIST_HIST_PAGINA = 40;
+let ASIST_HIST_DATA = [], asistHistMostrar = ASIST_HIST_PAGINA;
+function pintarAsistenciaHistorial() {
   const fmtFecha = iso => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(new Date(iso));
-  document.getElementById('asist-hist-tbody').innerHTML = (data || []).map(s => `
-    <tr>
-      <td data-label="Asesor">${esc(s.nombre)}</td>
-      <td data-label="Fecha" class="muted">${fmtFecha(s.hora_entrada)}</td>
-      <td data-label="Entrada">${fmtHoraCaracas(s.hora_entrada)}</td>
-      <td data-label="Salida" class="muted">${fmtHoraCaracas(s.hora_salida)}</td>
-    </tr>`).join('') || '<tr><td colspan="4">Sin registros</td></tr>';
+  const body = document.getElementById('asist-hist-tbody');
+  const mas = document.getElementById('asist-hist-mas');
+  if (!ASIST_HIST_DATA.length) {
+    body.innerHTML = '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin registros</div>';
+    mas.innerHTML = '';
+    return;
+  }
+  const pintadas = ASIST_HIST_DATA.slice(0, asistHistMostrar);
+  body.innerHTML = pintadas.map((s, i) => {
+    const enCurso = !s.hora_salida;
+    const min = enCurso ? null : Math.round((new Date(s.hora_salida) - new Date(s.hora_entrada)) / 60000);
+    const dur = min === null || min < 0 ? '—' : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min`;
+    return `<article class="lt-card" style="--i:${Math.min(i, 20)}">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit" title="${esc(s.nombre)}">${esc(s.nombre)}</div>
+        <span class="bt-tag" style="--c:${enCurso ? 'var(--amber)' : 'var(--green)'}">${enCurso ? 'En curso' : 'Completa'}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-calendar-day"></i> ${fmtFecha(s.hora_entrada)}</div>
+      <div class="lt-cifras">
+        <div><span>Entrada</span><b>${fmtHoraCaracas(s.hora_entrada)}</b></div>
+        <div><span>Salida</span><b>${enCurso ? '—' : fmtHoraCaracas(s.hora_salida)}</b></div>
+        <div><span>Duración</span><b>${dur}</b></div>
+      </div>
+    </article>`;
+  }).join('');
+  const resto = ASIST_HIST_DATA.length - pintadas.length;
+  mas.innerHTML = resto > 0
+    ? `<button type="button" class="btn-sm lt-primario" id="asist-hist-ver-mas"><i class="fas fa-angles-down"></i> Ver más (${fmt(resto)} restantes de ${fmt(ASIST_HIST_DATA.length)})</button>`
+    : `<span class="muted" style="font-size:12px">Mostrando ${fmt(ASIST_HIST_DATA.length)} de ${fmt(ASIST_HIST_DATA.length)}</span>`;
+  document.getElementById('asist-hist-ver-mas')?.addEventListener('click', () => { asistHistMostrar += ASIST_HIST_PAGINA; pintarAsistenciaHistorial(); });
 }
 
 /* ---------- Informe Diario (Bloque 14 — solo Luis Rueda) ---------- */
@@ -8517,15 +8567,22 @@ async function loadRanking() {
   if (error) { console.error(error); errToast('No se pudo cargar el ranking'); return; }
   const rows = (data || []).slice().sort((a, b) => (b[rankSort] || 0) - (a[rankSort] || 0));
   const medal = ['🥇', '🥈', '🥉'];
+  const maxVentas = Math.max(1, ...rows.map(r => +r.ventas || 0));
   document.getElementById('rank-body').innerHTML = rows.map((r, i) => `
-    <tr>
-      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${ADV_COLORS[i % ADV_COLORS.length]};color:#0a0a0a">${initials(r.asesor)}</div>${i < 3 ? medal[i] + ' ' : ''}${esc(r.asesor)}</div></td>
-      <td data-label="Nuevos" class="muted">${fmt(r.nuevos)}</td>
-      <td data-label="Atendidos">${fmt(r.atendidos)}</td>
-      <td data-label="Ventas"><b style="color:var(--green)">${fmt(r.ventas)}</b></td>
-      <td data-label="Ingresos"><b>${money(r.monto)}</b></td>
-      <td data-label="Resp. prom." class="muted">${r.horas_respuesta != null ? r.horas_respuesta + 'h' : '—'}</td>
-    </tr>`).join('');
+    <article class="lt-card" style="--i:${Math.min(i, 20)}">
+      <div class="lt-card-cab">
+        <div class="ln-ava" style="background:${ADV_COLORS[i % ADV_COLORS.length]};color:#0a0a0a">${initials(r.asesor)}</div>
+        <div class="lt-card-tit" title="${esc(r.asesor)}">${esc(r.asesor)}</div>
+        <span class="bt-tag" style="--c:${i < 3 ? 'var(--amber)' : 'var(--muted)'}">${i < 3 ? medal[i] + ' ' : ''}#${i + 1}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-user-plus"></i>${fmt(r.nuevos)} nuevos · <i class="fas fa-stopwatch"></i>resp. prom. ${r.horas_respuesta != null ? r.horas_respuesta + 'h' : '—'}</div>
+      <div class="lt-cifras">
+        <div><span>Ventas</span><b class="lt-ok">${fmt(r.ventas)}</b></div>
+        <div><span>Ingresos</span><b>${money(r.monto)}</b></div>
+        <div><span>Atendidos</span><b>${fmt(r.atendidos)}</b></div>
+      </div>
+      <div class="lt-barra" title="${fmt(r.ventas)} de ${fmt(maxVentas)} ventas del líder"><i style="width:${Math.round((+r.ventas || 0) / maxVentas * 100)}%"></i></div>
+    </article>`).join('') || '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin datos en el período</div>';
   const tot = rows.reduce((a, r) => ({ ventas: a.ventas + (+r.ventas || 0), monto: a.monto + (+r.monto || 0), atendidos: a.atendidos + (+r.atendidos || 0) }), { ventas: 0, monto: 0, atendidos: 0 });
   document.getElementById('rank-tot').innerHTML = `<span>${fmt(tot.atendidos)} atendidos</span><span>${fmt(tot.ventas)} ventas</span><span>${money(tot.monto)} en ingresos</span>`;
 }
@@ -9738,13 +9795,19 @@ async function loadRedes() {
   const te = sortEntries(data.por_tipo);
   mk('chTipoRedes', { type: 'bar', data: { labels: te.map(x => x[0]), datasets: [{ data: te.map(x => x[1]), backgroundColor: '#a06bff', borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } } });
   const top = data.top_posts || [];
-  document.getElementById('redes-top-body').innerHTML = top.length ? top.map(p => `
-    <tr>
-      <td class="td-name">${p.permalink ? `<a href="${esc(p.permalink)}" target="_blank" rel="noopener">${esc(p.caption || p.id)}</a>` : esc(p.caption || p.id)}</td>
-      <td data-label="Tipo" class="muted">${esc(p.tipo)}</td>
-      <td data-label="Alcance">${fmt(p.reach)}</td>
-      <td data-label="Interacciones">${fmt(p.interacciones)}</td>
-    </tr>`).join('') : '<tr><td colspan="4" class="muted">Sin publicaciones en este período</td></tr>';
+  document.getElementById('redes-top-body').innerHTML = top.length ? top.map((p, i) => `
+    <article class="lt-card" style="--i:${Math.min(i, 20)}">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit" title="${esc(p.caption || p.id)}">${esc(p.caption || p.id)}</div>
+        <span class="bt-tag" style="--c:var(--accent)">${esc(p.tipo)}</span>
+      </div>
+      <div class="lt-cifras">
+        <div><span>Alcance</span><b>${fmt(p.reach)}</b></div>
+        <div><span>Interacciones</span><b>${fmt(p.interacciones)}</b></div>
+        <div><span>Tasa</span><b>${p.reach > 0 ? (p.interacciones / p.reach * 100).toFixed(1) + '%' : '—'}</b></div>
+      </div>
+      ${p.permalink ? `<div class="lt-card-pie"><a class="btn-sm lt-primario" href="${esc(p.permalink)}" target="_blank" rel="noopener"><i class="fa-brands fa-instagram"></i> Ver publicación</a></div>` : ''}
+    </article>`).join('') : '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin publicaciones en este período</div>';
 }
 async function loadRedesTikTok() {
   await ensureChart();
@@ -9760,17 +9823,19 @@ async function loadRedesTikTok() {
   const s = data.serie || [];
   mk('chSerieRedesTikTok', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Vistas', data: s.map(x => x.reach), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
   const top = data.top_posts || [];
-  document.getElementById('redes-tiktok-top-body').innerHTML = top.length ? top.map(p => `
-    <tr>
-      <td class="td-name">
-        <div class="tt-row">
-          <img class="tt-thumb" src="https://begbjhrdbsqftbbleecb.functions.supabase.co/redes-tiktok-cover?id=${encodeURIComponent(p.id)}" alt="" loading="lazy" onerror="this.style.display='none'">
-          <div class="tt-title">${p.share_url ? `<a href="${esc(p.share_url)}" target="_blank" rel="noopener">${esc(p.titulo || p.id)}</a>` : esc(p.titulo || p.id)}</div>
-        </div>
-      </td>
-      <td data-label="Vistas">${fmt(p.reach)}</td>
-      <td data-label="Interacciones">${fmt(p.interacciones)}</td>
-    </tr>`).join('') : '<tr><td colspan="3" class="muted">Sin videos en este período</td></tr>';
+  document.getElementById('redes-tiktok-top-body').innerHTML = top.length ? top.map((p, i) => `
+    <article class="lt-card" style="--i:${Math.min(i, 20)}">
+      <div class="tt-row">
+        <img class="tt-thumb" src="https://begbjhrdbsqftbbleecb.functions.supabase.co/redes-tiktok-cover?id=${encodeURIComponent(p.id)}" alt="" loading="lazy" onerror="this.style.display='none'">
+        <div class="tt-title">${esc(p.titulo || p.id)}</div>
+      </div>
+      <div class="lt-cifras">
+        <div><span>Vistas</span><b>${fmt(p.reach)}</b></div>
+        <div><span>Interacciones</span><b>${fmt(p.interacciones)}</b></div>
+        <div><span>Tasa</span><b>${p.reach > 0 ? (p.interacciones / p.reach * 100).toFixed(1) + '%' : '—'}</b></div>
+      </div>
+      ${p.share_url ? `<div class="lt-card-pie"><a class="btn-sm lt-primario" href="${esc(p.share_url)}" target="_blank" rel="noopener"><i class="fa-brands fa-tiktok"></i> Ver video</a></div>` : ''}
+    </article>`).join('') : '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin videos en este período</div>';
 }
 async function enviarChatRedes() {
   const input = document.getElementById('redes-chat-input'), btn = document.getElementById('redes-chat-send');
@@ -20721,6 +20786,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-26', emoji: '🗃️', titulo: 'Últimas tablas pasan a tarjetas', texto: 'Diagnóstico de notificaciones push, Ranking de asesores, Top de publicaciones en Redes (Instagram y TikTok) y el Historial de asistencia ahora son tarjetas con chips de estado y cifras claras. El historial de asistencia (más de 570 jornadas) se muestra de a 40 con "Ver más" y suma la duración de cada jornada.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '🌐', titulo: 'Web y Reasignados en tarjetas', texto: 'Los leads de Web y Reasignados ahora son tarjetas con origen, destino, asesor, estado y, si hubo venta, monto y tu comisión. Cada tarjeta trae el botón para mandar (o sacar) de Comisiones Bwrathanyel. Como son más de 1.700, se muestran de a 40 con un botón "Ver más"; los contadores de arriba siguen filtrando y la búsqueda mira todos.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '📋', titulo: 'Informe Diario y Voucher en tarjetas', texto: 'El Informe Diario ahora son tarjetas por asesor y jornada, con contadores arriba (Jornadas / Con informe / Sin informe) que también filtran. El historial de Voucher muestra cada voucher como tarjeta con cliente, N° de factura, destino y total, y un botón claro para ver el PDF o reconstruirlo.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '🔀', titulo: 'Reasignaciones y Postulaciones en tarjetas', texto: 'En Gestión de Personal, Reasignaciones y Postulaciones pasan a tarjetas. Cada reasignación muestra cliente, motivo, de qué asesor a cuál pasó y cuánto esperó, con "Editar" y "Eliminar"; los KPIs de arriba filtran por motivo. Cada postulación muestra rol, teléfono, si ya se llamó, si se revisó y la calificación, con "Ver ficha" y "Llamar"; arriba filtran Todas, Sin revisar, Por llamar y Sin calificar. La casilla de cada tarjeta sigue sirviendo para eliminar varias a la vez, y el buscador de Postulaciones ahora se ve.', roles: ['admin'] },
