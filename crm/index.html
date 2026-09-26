@@ -5609,7 +5609,7 @@ body.fsize-grande{--tap:41.9px}
         <br><span class="muted"><i class="fas fa-life-ring"></i> <b>Lead rescatado:</b> respondió al seguimiento final de la IA, enviado antes de cerrar la ventana permitida, y compartió un teléfono válido dentro de las 24 horas siguientes.</span>
       </div>
 
-      <div class="kpis" id="wr-kpis"></div>
+      <div class="kpis bt-kpis lt-kpis" id="wr-kpis"></div>
 
       <div class="ce-barra">
         <button class="ce-mini on" data-wr-filtro="todos">Todos</button>
@@ -5627,13 +5627,10 @@ body.fsize-grande{--tap:41.9px}
       </div>
 
       <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
-        <input class="ei" id="wr-buscar" type="text" placeholder="Buscar por nombre o teléfono..." style="max-width:320px;flex:1;min-width:180px">
-        <div class="view-switch" id="wr-view-switch"></div>
+        <input class="ei bt-buscar" id="wr-buscar" type="search" placeholder="Buscar por nombre o teléfono..." aria-label="Buscar lead" style="max-width:320px;flex:1;min-width:180px">
       </div>
 
-      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer;margin-top:12px;width:fit-content">
-        <input type="checkbox" id="wr-select-all"> Seleccionar todos los visibles
-      </label>
+      <label class="tar-f-check lt-selec"><input type="checkbox" id="wr-select-all"> Seleccionar los que se ven</label>
 
       <div class="bulk-bar" id="wr-bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin:8px 0 0;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
         <span id="wr-bulk-count" style="font-size:13.5px;font-weight:600"></span>
@@ -5642,19 +5639,8 @@ body.fsize-grande{--tap:41.9px}
         <button class="dbtn gh" id="wr-bulk-quitar" type="button" style="width:auto;padding:6px 12px;display:none"><i class="fas fa-star-half-stroke"></i> Sacar de Comisiones Bwrathanyel</button>
       </div>
 
-      <div class="card" id="wr-tbl-wrap" style="margin-top:12px">
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr>
-              <th style="width:36px"></th>
-              <th>Cliente</th><th>Origen</th><th>Destino</th><th>Estado</th>
-              <th>Asesor</th><th>Venta</th><th>Mi comisión</th><th></th>
-            </tr></thead>
-            <tbody id="wr-body"></tbody>
-          </table>
-        </div>
-      </div>
-      <div id="wr-cards" class="card-grid"></div>
+      <div class="lt-grid" id="wr-body"></div>
+      <div id="wr-mas" style="text-align:center;margin-top:14px"></div>
     </section>
 
     <!-- STOP SALES (BT Travel: disponibilidad de hoteles). Lectura ("Bloqueos

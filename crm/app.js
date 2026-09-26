@@ -11168,7 +11168,11 @@ async function vrCompartirAudio(url) {
    Los dos orígenes por los que cobra comisión, juntos. Un lead que entró por la
    web Y además se reasignó aparece UNA vez marcado "Ambos": contarlo en las dos
    listas inflaría el total justo en la pantalla que se usa para cobrar. */
-let WR_DATOS = null, wrFiltro = 'todos', wrBusqueda = '', wrView = 'lista';
+let WR_DATOS = null, wrFiltro = 'todos', wrBusqueda = '';
+// La lista trae ~1.700 filas: se pinta de a WR_PAGINA y "Ver más" agrega otra
+// tanda. Filtro/búsqueda siguen corriendo sobre TODO (cliente), solo se recorta lo pintado.
+const WR_PAGINA = 40;
+let wrMostrar = WR_PAGINA;
 // Selección para el marcado masivo -- Set aparte de SELECTED_LEADS (la de
 // Leads) porque son dos pantallas y dos acciones distintas conviviendo en el
 // mismo momento no deberían pisarse. Compartida entre las dos vistas (tabla y
@@ -11188,16 +11192,11 @@ function setupWebReasignados() {
   document.querySelectorAll('[data-wr-filtro]').forEach(b => b.onclick = () => wrIrAFiltro(b.dataset.wrFiltro));
   document.getElementById('wr-buscar').addEventListener('input', e => {
     wrBusqueda = e.target.value.trim().toLowerCase();
+    wrMostrar = WR_PAGINA;
     wrPintarTabla();
   });
-  // Móvil arranca en tarjetas (mismo criterio que Leads: una tabla angosta a
-  // fuerza de columnas apretadas se lee peor que una ficha por cliente).
-  wrView = initViewSwitcher('wr-view-switch', 'web-reasignados', window.innerWidth <= 760 ? 'tarjetas' : 'lista', v => {
-    wrView = v;
-    applyWrView();
-  }, ['tarjetas', 'lista']);
   document.getElementById('wr-select-all').addEventListener('change', e => {
-    const visibles = wrFilasVisibles().map(f => f.id);
+    const visibles = wrFilasVisibles().slice(0, wrMostrar).map(f => f.id);
     visibles.forEach(id => e.target.checked ? WR_SELECTED.add(id) : WR_SELECTED.delete(id));
     wrPintarTabla();
   });
@@ -11212,8 +11211,9 @@ function wrIrAFiltro(clave) {
   document.querySelectorAll('[data-wr-filtro]').forEach(x => x.classList.toggle('on', x.dataset.wrFiltro === clave));
   document.querySelectorAll('#wr-kpis [data-kpi-key]').forEach(x => x.classList.toggle('kpi-on', x.dataset.kpiKey === clave));
   wrFiltro = clave;
+  wrMostrar = WR_PAGINA;
   wrPintarTabla();
-  document.getElementById('wr-tbl-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('wr-body')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function wrFilasVisibles() {
@@ -11236,18 +11236,12 @@ function wrFilasVisibles() {
   });
 }
 
-function applyWrView() {
-  const tabla = document.getElementById('wr-tbl-wrap'), cards = document.getElementById('wr-cards');
-  tabla.classList.toggle('hide', wrView !== 'lista');
-  cards.classList.toggle('show', wrView !== 'lista');
-}
-
 async function loadWebReasignados() {
   const body = document.getElementById('wr-body');
-  body.innerHTML = '<tr><td colspan="8" style="padding:0"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></td></tr>';
+  if (!WR_DATOS) body.innerHTML = '<div class="lt-vacio"><i class="fas fa-spinner fa-spin"></i> Cargando...</div>';
   const { data, error } = await sb.rpc('comisiones_origen_panel');
   if (error || !data) {
-    body.innerHTML = `<tr><td colspan="8" class="muted">No se pudo cargar: ${esc(error?.message || '')}</td></tr>`;
+    body.innerHTML = `<div class="lt-vacio">No se pudo cargar: ${esc(error?.message || '')}</div>`;
     return;
   }
   WR_DATOS = data;
@@ -11271,99 +11265,73 @@ async function loadWebReasignados() {
   wrPintarTabla();
 }
 
-// Tarjeta para la vista "tarjetas" -- mismo lenguaje visual que las fichas de
-// Leads (.entity-card/.ec-*), pensado para mobile: toda la info del cliente
-// en un bloque solo, sin scroll horizontal ni columnas apretadas. El checkbox
-// y la estrella cortan la propagación del click para no abrir la ficha por
-// error al tildar/marcar.
-function wrCardHtml(f) {
+const WR_ORIGEN_COLOR = { web: 'var(--blue)', reasignado: 'var(--purple)', ambos: 'var(--amber)', rescatado: 'var(--amber)' };
+
+function wrCardHtml(f, i = 0) {
   const o = WR_ORIGEN[f.origen] || WR_ORIGEN.web;
-  const vendido = f.monto_total != null;
-  return `<div class="entity-card wr-card" data-wr-id="${f.id}" style="position:relative">
-    <input type="checkbox" class="wr-check" data-id="${f.id}" ${WR_SELECTED.has(f.id) ? 'checked' : ''}
-      style="position:absolute;top:12px;right:12px;width:18px;height:18px" onclick="event.stopPropagation()">
-    <div class="ec-top"><div class="ec-nombre">${esc(f.nombre || 'Sin nombre')}</div></div>
-    ${f.telefono ? `<div class="ec-row"><i class="fas fa-phone"></i> ${esc(f.telefono)}</div>` : ''}
-    <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(f.destino || '—')}</div>
-    <div class="ec-row"><i class="fas fa-user-tie"></i> ${esc(f.asesor || '—')}</div>
-    <div class="ec-row"><i class="fas fa-flag"></i> ${esc(f.estado || '—')}</div>
-    <div class="ec-foot ec-foot-cols">
-      <div class="ec-badges">
-        <span class="chip ${o.clase}">${o.txt}</span>${f.rescatado ? ' <span class="badge-st" style="color:#2dd4bf;background:#0f766e2e" title="Respondió al seguimiento final de la IA y compartió un teléfono válido"><i class="fas fa-life-ring"></i> Lead rescatado</span>' : ''}
-        ${vendido ? `<span class="badge-st" style="color:#10b981;background:#10b9812e">$${fmt(f.monto_total)} vendido</span>
-          <span class="badge-st" style="color:var(--accent);background:var(--accent-soft)">$${fmt(f.mi_comision)} mi comisión</span>` : ''}
-      </div>
-      <div class="ec-actions" style="align-self:flex-end">
-        <button type="button" class="ce-mini wr-marcar" data-id="${f.id}" data-en="${f.en_manual ? '1' : '0'}" onclick="event.stopPropagation()"
-          title="${f.en_manual ? 'Sacar de Comisiones Bwrathanyel' : 'Mandar a Comisiones Bwrathanyel'}">
-          <i class="fas ${f.en_manual ? 'fa-star' : 'fa-star-half-stroke'}"></i></button>
-      </div>
+  const vendido = f.monto_total != null, sel = WR_SELECTED.has(f.id);
+  return `<article class="lt-card wr-card${sel ? ' lt-card-sel' : ''}" data-wr-id="${f.id}" style="--i:${Math.min(i, 20)};cursor:pointer">
+    <div class="lt-card-cab">
+      <label class="lt-check" title="Seleccionar"><input type="checkbox" class="wr-check" data-id="${f.id}" aria-label="Seleccionar ${esc(f.nombre || 'lead')}"${sel ? ' checked' : ''}></label>
+      <div class="lt-card-tit" title="${esc(f.nombre || 'Sin nombre')}">${esc(f.nombre || 'Sin nombre')}</div>
+      <span class="bt-tag" style="--c:${WR_ORIGEN_COLOR[f.origen] || 'var(--blue)'}">${o.txt}</span>
     </div>
-  </div>`;
+    <div class="lt-card-meta"><i class="fas fa-phone"></i>${esc(f.telefono) || 'Sin teléfono'}</div>
+    <div class="lt-card-meta"><i class="fas fa-location-dot"></i>${esc(f.destino || '—')} · <i class="fas fa-user-tie"></i>${esc(f.asesor || '—')}</div>
+    <div class="lt-chips">
+      <span class="bt-tag" style="--c:var(--muted)">${esc(f.estado || '—')}</span>
+      ${f.rescatado ? '<span class="bt-tag" style="--c:#14b8a6" title="Respondió al seguimiento final de la IA y compartió un teléfono válido"><i class="fas fa-life-ring"></i> Rescatado</span>' : ''}
+      ${f.en_manual ? '<span class="bt-tag" style="--c:var(--amber)"><i class="fas fa-star"></i> Comisiones Bwrathanyel</span>' : ''}
+    </div>
+    ${vendido ? `<div class="lt-cifras"><div><span>Venta</span><b>$${fmt(f.monto_total)}</b></div><div><span>Mi comisión</span><b class="lt-ok">$${fmt(f.mi_comision)}</b></div></div>` : ''}
+    <div class="lt-card-pie">
+      <button type="button" class="btn-sm${f.en_manual ? '' : ' lt-primario'} wr-marcar" data-id="${f.id}" data-en="${f.en_manual ? '1' : '0'}">
+        <i class="fas ${f.en_manual ? 'fa-star' : 'fa-star-half-stroke'}"></i> ${f.en_manual ? 'Sacar de Comisiones' : 'Mandar a Comisiones'}</button>
+      <button type="button" class="btn-sm wr-ficha"><i class="fas fa-id-card"></i> Ver ficha</button>
+    </div>
+  </article>`;
 }
 
 function wrPintarTabla() {
   const body = document.getElementById('wr-body');
-  const cardsBox = document.getElementById('wr-cards');
+  const mas = document.getElementById('wr-mas');
   const todas = WR_DATOS?.filas || [];
   const filas = wrFilasVisibles();
 
   if (!filas.length) {
-    const vacio = todas.length ? 'Ningún lead con ese filtro/búsqueda.' : 'Todavía no hay leads de estos dos orígenes.';
-    body.innerHTML = `<tr><td colspan="8" class="muted">${vacio}</td></tr>`;
-    cardsBox.innerHTML = `<div class="vig-vacio" style="grid-column:1/-1">${vacio}</div>`;
+    body.innerHTML = `<div class="lt-vacio"><i class="fas fa-inbox"></i>${todas.length ? 'Ningún lead con ese filtro/búsqueda.' : 'Todavía no hay leads de estos dos orígenes.'}</div>`;
+    mas.innerHTML = '';
     wrActualizarBulkBar();
     return;
   }
-  body.innerHTML = filas.map(f => {
-    const o = WR_ORIGEN[f.origen] || WR_ORIGEN.web;
-    const vendido = f.monto_total != null;
-    return `<tr class="wr-row" data-wr-id="${f.id}">
-      <td><input type="checkbox" class="wr-check" data-id="${f.id}" ${WR_SELECTED.has(f.id) ? 'checked' : ''}></td>
-      <td class="td-name" style="cursor:pointer">${esc(f.nombre || 'Sin nombre')}
-        ${f.telefono ? `<small class="muted" style="display:block">${esc(f.telefono)}</small>` : ''}</td>
-      <td data-label="Origen"><span class="chip ${o.clase}">${o.txt}</span>${f.rescatado ? ' <span class="badge-st" style="color:#2dd4bf;background:#0f766e2e" title="Respondió al seguimiento final de la IA y compartió un teléfono válido">Rescatado</span>' : ''}</td>
-      <td data-label="Destino" class="muted">${esc(f.destino || '—')}</td>
-      <td data-label="Estado">${esc(f.estado || '—')}</td>
-      <td data-label="Asesor" class="muted">${esc(f.asesor || '—')}</td>
-      <td data-label="Venta">${vendido ? '$' + fmt(f.monto_total) : '<span class="muted">—</span>'}</td>
-      <td data-label="Mi comisión">${vendido ? `<b>$${fmt(f.mi_comision)}</b>` : '<span class="muted">—</span>'}</td>
-      <td><button type="button" class="ce-mini wr-marcar" data-id="${f.id}" data-en="${f.en_manual ? '1' : '0'}"
-        title="${f.en_manual ? 'Sacar de Comisiones Bwrathanyel' : 'Mandar a Comisiones Bwrathanyel'}">
-        <i class="fas ${f.en_manual ? 'fa-star' : 'fa-star-half-stroke'}"></i></button></td>
-    </tr>`;
-  }).join('');
-  cardsBox.innerHTML = filas.map(wrCardHtml).join('');
-  entradaLista(body); entradaLista(cardsBox);
+  const pintadas = filas.slice(0, wrMostrar);
+  body.innerHTML = pintadas.map(wrCardHtml).join('');
+  const resto = filas.length - pintadas.length;
+  mas.innerHTML = resto > 0
+    ? `<button type="button" class="btn-sm lt-primario" id="wr-ver-mas"><i class="fas fa-angles-down"></i> Ver más (${fmt(resto)} restantes de ${fmt(filas.length)})</button>`
+    : `<span class="muted" style="font-size:12px">Mostrando ${fmt(filas.length)} de ${fmt(filas.length)}</span>`;
+  document.getElementById('wr-ver-mas')?.addEventListener('click', () => { wrMostrar += WR_PAGINA; wrPintarTabla(); });
 
-  // Abre la ficha completa del cliente, mismo drawer que usan Leads y
-  // Facturación -- reusa abrirClienteDesdeFacturacion porque acá tampoco hay
-  // ya cargada la fila completa de `leads` (comisiones_origen_panel solo trae
-  // los campos que necesita el panel, no la ficha entera). En la tabla, solo
-  // la celda del nombre abre la ficha; en la tarjeta, toda la tarjeta (el
-  // checkbox y la estrella cortan la propagación en su propio onclick).
-  document.querySelectorAll('#wr-body .wr-row .td-name').forEach(td => {
-    td.addEventListener('click', () => window.abrirClienteDesdeFacturacion(Number(td.closest('tr').dataset.wrId)));
+  // Abre la ficha completa (mismo drawer que Leads/Facturación): comisiones_origen_panel
+  // no trae la fila entera de leads. Checkbox y botones cortan la propagación.
+  body.querySelectorAll('.wr-card').forEach(card => {
+    card.addEventListener('click', e => {
+      if (e.target.closest('.lt-check, .wr-marcar')) return;
+      window.abrirClienteDesdeFacturacion(Number(card.dataset.wrId));
+    });
   });
-  document.querySelectorAll('#wr-cards .wr-card').forEach(card => {
-    card.addEventListener('click', () => window.abrirClienteDesdeFacturacion(Number(card.dataset.wrId)));
-  });
-  document.querySelectorAll('#wr-body .wr-check, #wr-cards .wr-check').forEach(cb => {
+  body.querySelectorAll('.wr-check').forEach(cb => {
     cb.addEventListener('change', () => {
       const id = Number(cb.dataset.id);
       if (cb.checked) WR_SELECTED.add(id); else WR_SELECTED.delete(id);
-      // Las dos vistas comparten la misma selección: si el mismo id aparece en
-      // ambas (tabla oculta + tarjeta visible), la casilla gemela tiene que
-      // reflejar el cambio aunque no esté a la vista ahora mismo.
-      document.querySelectorAll(`[data-id="${id}"].wr-check`).forEach(otro => { otro.checked = cb.checked; });
+      cb.closest('.lt-card')?.classList.toggle('lt-card-sel', cb.checked);
       wrActualizarBulkBar();
     });
   });
-  document.querySelectorAll('#wr-body .wr-marcar, #wr-cards .wr-marcar').forEach(btn => {
+  body.querySelectorAll('.wr-marcar').forEach(btn => {
     btn.addEventListener('click', () => wrMarcar([Number(btn.dataset.id)], btn.dataset.en !== '1'));
   });
   wrActualizarBulkBar();
-  applyWrView();
 }
 
 function wrActualizarBulkBar() {
@@ -11376,7 +11344,7 @@ function wrActualizarBulkBar() {
   // pestaña es al revés.
   document.getElementById('wr-bulk-agregar').style.display = wrFiltro === 'comisiones' ? 'none' : '';
   document.getElementById('wr-bulk-quitar').style.display = wrFiltro === 'comisiones' ? '' : 'none';
-  const ids = wrFilasVisibles().map(f => f.id);
+  const ids = wrFilasVisibles().slice(0, wrMostrar).map(f => f.id);
   const selectAll = document.getElementById('wr-select-all');
   if (selectAll) selectAll.checked = ids.length > 0 && ids.every(id => WR_SELECTED.has(id));
 }
@@ -20753,6 +20721,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-26', emoji: '🌐', titulo: 'Web y Reasignados en tarjetas', texto: 'Los leads de Web y Reasignados ahora son tarjetas con origen, destino, asesor, estado y, si hubo venta, monto y tu comisión. Cada tarjeta trae el botón para mandar (o sacar) de Comisiones Bwrathanyel. Como son más de 1.700, se muestran de a 40 con un botón "Ver más"; los contadores de arriba siguen filtrando y la búsqueda mira todos.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '📋', titulo: 'Informe Diario y Voucher en tarjetas', texto: 'El Informe Diario ahora son tarjetas por asesor y jornada, con contadores arriba (Jornadas / Con informe / Sin informe) que también filtran. El historial de Voucher muestra cada voucher como tarjeta con cliente, N° de factura, destino y total, y un botón claro para ver el PDF o reconstruirlo.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '🔀', titulo: 'Reasignaciones y Postulaciones en tarjetas', texto: 'En Gestión de Personal, Reasignaciones y Postulaciones pasan a tarjetas. Cada reasignación muestra cliente, motivo, de qué asesor a cuál pasó y cuánto esperó, con "Editar" y "Eliminar"; los KPIs de arriba filtran por motivo. Cada postulación muestra rol, teléfono, si ya se llamó, si se revisó y la calificación, con "Ver ficha" y "Llamar"; arriba filtran Todas, Sin revisar, Por llamar y Sin calificar. La casilla de cada tarjeta sigue sirviendo para eliminar varias a la vez, y el buscador de Postulaciones ahora se ve.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '🗂️', titulo: 'Comisiones, Asesores, Proveedores y Empresas en tarjetas', texto: 'Cuatro listas más pasan a tarjetas. En Cobros > Facturación > Comisiones cada comisión muestra asesor, N° de factura, cliente, venta, % y comisión, con "Editar %" y "Marcar pagada"; arriba filtran Comisiones, Sin configurar, Por pagar y Pagadas. En Asesores cada tarjeta muestra el % de comisión y cuánto tiene por pagar y pagado, con "Definir %" destacado si falta. En Corporativo, Proveedores y Empresas muestran servicios o tipo, contacto, crédito y RIF, con cifras arriba (Activos, Inactivos, Todos; en Empresas también Clientes fijos) que filtran al tocarlas; tocar la tarjeta abre la ficha. Los buscadores, que no se veían, ya aparecen.', roles: ['admin'] },
