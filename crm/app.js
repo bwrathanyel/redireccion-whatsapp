@@ -2721,8 +2721,16 @@ function renderPostventa() {
     grid.innerHTML = '<div class="pv-empty"><i class="fas fa-circle-check"></i><b>Todo al día</b><br>No hay casos con este filtro</div>';
     return;
   }
-  const ahora = Date.now();
-  grid.innerHTML = casos.map(c => {
+  grid.innerHTML = casos.map(c => pvCardHtml(c)).join('');
+  pvWire(grid, POSTVENTA);
+  entradaLista(grid);
+}
+function pvWire(grid, lista, antes = () => {}) {
+  grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => { antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvOpen))); });
+  grid.querySelectorAll('[data-pv-wa]').forEach(b => b.onclick = () => window.open(`https://wa.me/${b.dataset.pvWa}`, '_blank', 'noopener'));
+}
+function pvCardHtml(c, extra = '') {
+    const ahora = Date.now();
     const etapa = PV_ETAPAS[c.etapa] || [c.etapa, 'fa-circle'];
     const total = Number(c.monto_total || 0), pagado = Number(c.monto_pagado || 0);
     const pct = total > 0 ? Math.min(100, Math.round(pagado / total * 100)) : 0;
@@ -2731,17 +2739,37 @@ function renderPostventa() {
     const wa = String(c.telefono || '').replace(/\D/g, '');
     return `<article class="pv-card" data-id="${c.id}">
       <div class="pv-card-top"><span class="pv-chip"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span><span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span></div>
-      <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span style="font-size:10.5px;font-weight:500;color:var(--muted2)">${esc(c.codigo || '')}${c.principal === false ? ' · adicional' : ''}</span></div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}</div>
+      <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span style="font-size:10.5px;font-weight:500;color:var(--muted2)">${esc(c.codigo || '')}${c.principal === false ? ' · adicional' : ''}</span></div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}</div>${extra}
       <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>Saldo <b>${money(c.saldo_pendiente)}</b></span></div>
       <div class="pv-progress"><span style="width:${pct}%"></span></div>
       <div class="pv-meta"><span><i class="fas fa-calendar"></i>${c.fecha_viaje_inicio ? pvFecha(c.fecha_viaje_inicio) : 'Viaje sin fecha'}</span><span class="pv-docs"><i class="fas fa-file-circle-check"></i>${docsListos}/6 docs</span></div>
       <div class="pv-meta"><span class="${vencido ? 'overdue' : ''}"><i class="fas fa-bell"></i>${tiempoSeguimiento(c.proximo_seguimiento_at)}</span>${c.incidencia_abierta ? '<span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span>' : ''}</div>
       <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button"><i class="fab fa-whatsapp"></i> WhatsApp</button>` : '<span></span>'}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar <i class="fas fa-arrow-right"></i></button></div>
     </article>`;
-  }).join('');
-  grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => abrirPostventa(POSTVENTA.find(c => c.id === Number(b.dataset.pvOpen))));
-  grid.querySelectorAll('[data-pv-wa]').forEach(b => b.onclick = () => window.open(`https://wa.me/${b.dataset.pvWa}`, '_blank', 'noopener'));
-  entradaLista(grid);
+}
+// Tarjetas de reservas fuera de la bandeja (fichas de proveedor y empresa): la bandeja completa,
+// sin filtro de etapa, es la misma fuente que pinta Reservas.
+async function pvBandejaCompleta() {
+  const { data, error } = await sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: null });
+  if (error) { console.error('postventa_bandeja', error); return null; }
+  if (!RV_DESTINOS) { const d = await sb.rpc('listar_destinos', { p_solo_activos: true }); if (!d.error) RV_DESTINOS = d.data || []; }
+  return data || [];
+}
+// items: [{ reserva, grupo, extra }]. Chips por grupo + grilla de tarjetas; sheetId se cierra al gestionar.
+function pvGruposGrid(cont, items, sheetId, vacio) {
+  if (!items.length) { cont.innerHTML = `<div class="pv-empty" style="padding:18px">${vacio}</div>`; return; }
+  const cuenta = new Map();
+  items.forEach(i => cuenta.set(i.grupo, (cuenta.get(i.grupo) || 0) + 1));
+  let sel = '';
+  const pintar = () => {
+    const vis = sel ? items.filter(i => i.grupo === sel) : items;
+    cont.innerHTML = (cuenta.size > 1 ? `<div class="pv-stagebar" style="margin:6px 0 10px">${[['', 'Todos', items.length], ...[...cuenta].map(([g, n]) => [g, g, n])]
+      .map(([k, l, n]) => `<button class="pv-stage${k === sel ? ' on' : ''}" type="button" data-grp="${esc(k)}">${esc(l)} · ${n}</button>`).join('')}</div>` : '')
+      + `<div class="pv-grid pv-grid-sheet">${vis.map(i => pvCardHtml(i.reserva, i.extra)).join('')}</div>`;
+    cont.querySelectorAll('[data-grp]').forEach(b => b.onclick = () => { sel = b.dataset.grp; pintar(); });
+    pvWire(cont, items.map(i => i.reserva), () => closeSheet(sheetId));
+  };
+  pintar();
 }
 function pvFecha(iso) {
   if (!iso) return '—';
@@ -12506,7 +12534,63 @@ function abrirProveedorSheet(id = null) {
   const pago = p?.datos_pago || {};
   Object.entries(PROV_PAGO_CAMPOS).forEach(([k, elId]) => poner(elId, pago[k] == null ? '' : String(pago[k])));
   document.getElementById('prov-err').textContent = '';
+  provTab('ficha');
+  document.getElementById('prov-tabs').hidden = !p;
+  if (p) provCargarReservas(p);
   openSheet('proveedor-sheet');
+}
+let PROV_RES = null, PROV_TAB = 'ficha';
+function provTab(tab) {
+  PROV_TAB = tab;
+  document.getElementById('prov-ficha').hidden = tab !== 'ficha';
+  document.getElementById('prov-reservas-box').hidden = tab === 'ficha';
+  document.querySelectorAll('#prov-tabs [data-prov-tab]').forEach(b => b.classList.toggle('on', b.dataset.provTab === tab));
+  if (tab !== 'ficha') provPintarReservas(tab);
+}
+function provServExtra(s) {
+  const d = s.detalle || {}, pax = (s.pax_adultos || 0) + (s.pax_ninos || 0);
+  const partes = [
+    s.tipo ? `<b>${esc((RV_TIPOS[s.tipo] || [s.tipo])[0])}</b>` : '<b>Sin servicio cargado</b>',
+    d.hotel && esc(d.hotel), d.ruta && esc(d.ruta), d.aerolinea && esc(d.aerolinea),
+    s.localizador && `Loc. <b>${esc(s.localizador)}</b>`,
+    s.estado && esc(s.estado === 'emitido' ? 'Emitido' : s.estado),
+    s.tipo === 'boleto_aereo' && s.pasajeros != null && `${s.pasajeros} pasajero(s)`,
+    s.tipo !== 'boleto_aereo' && pax && `${pax} pax`,
+    s.fecha_inicio && pvFecha(s.fecha_inicio),
+  ].filter(Boolean);
+  return `<div class="pv-serv">${partes.map(x => `<span>${x}</span>`).join('')}</div>`;
+}
+async function provCargarReservas(p) {
+  const tabs = document.getElementById('prov-tabs');
+  const pintarTabs = cuenta => {
+    tabs.innerHTML = [['ficha', 'Ficha'], ['todas', 'Todas las reservas'], ...(p.tipos || []).map(t => [t, PROV_TIPO_LABEL[t] || t])]
+      .map(([k, l]) => `<button class="pv-stage${k === PROV_TAB ? ' on' : ''}" type="button" data-prov-tab="${k}">${esc(l)}${k !== 'ficha' && cuenta ? ' · ' + (cuenta[k] || 0) : ''}</button>`).join('');
+    tabs.querySelectorAll('[data-prov-tab]').forEach(b => b.onclick = () => provTab(b.dataset.provTab));
+  };
+  PROV_RES = null;
+  pintarTabs(null);
+  const [r, bandeja] = await Promise.all([sb.rpc('listar_reservas_proveedor', { p_proveedor_id: p.id }), pvBandejaCompleta()]);
+  if (PROV_EDITANDO?.id !== p.id) return;
+  if (r.error || !r.data?.ok || !bandeja) {
+    console.error('listar_reservas_proveedor', r.error || r.data);
+    PROV_RES = []; errToast('No se pudieron cargar las reservas del proveedor'); provTab(PROV_TAB); return;
+  }
+  const porId = new Map(bandeja.map(c => [c.id, c]));
+  PROV_RES = (r.data.servicios || []).filter(s => porId.has(s.reserva_id)).map(s => ({ ...s, reserva: porId.get(s.reserva_id) }));
+  const cuenta = { todas: new Set(PROV_RES.map(s => s.reserva_id)).size };
+  PROV_RES.forEach(s => { if (s.tipo) cuenta[s.tipo] = (cuenta[s.tipo] || 0) + 1; });
+  pintarTabs(cuenta);
+  provTab(PROV_TAB);
+}
+function provPintarReservas(tab) {
+  const cont = document.getElementById('prov-reservas-box');
+  if (!PROV_RES) { cont.innerHTML = '<div class="pv-empty" style="padding:18px">Cargando reservas…</div>'; return; }
+  const lista = tab === 'todas' ? PROV_RES : PROV_RES.filter(s => s.tipo === tab);
+  const grupo = s => tab === 'hospedaje' ? (s.detalle?.hotel || 'Sin hotel')
+    : tab === 'todas' ? (s.tipo ? (RV_TIPOS[s.tipo] || [s.tipo])[0] : 'Sin servicio cargado')
+    : pvGrupoDe(s.reserva);
+  pvGruposGrid(cont, lista.map(s => ({ reserva: s.reserva, grupo: grupo(s), extra: provServExtra(s) })), 'proveedor-sheet',
+    'Sin reservas con este proveedor. Se enlazan al asignarle proveedor a un servicio de la reserva.');
 }
 async function guardarProveedor() {
   const err = document.getElementById('prov-err'), btn = document.getElementById('prov-guardar');
@@ -12595,14 +12679,10 @@ function renderEmpresas() {
       <td data-label="Tipo">${esc(EMP_TIPOS[e.tipo] || e.tipo)}</td>
       <td data-label="Contacto">${esc([e.contacto, e.telefono].filter(Boolean).join(' · ')) || '—'}</td>
       <td data-label="Crédito">${e.dias_credito ? fmt(e.dias_credito) + ' días' : 'Contado'}</td>
-      <td data-label="Precio">${e.modalidad_precio === 'comision' ? `Comisión ${esc(e.comision_pct)}%` : 'Neto'}</td>
       <td data-label="Reservas">${fmt((e.reservas || []).length)}</td>
       <td data-label="Estado"><span class="asist-badge ${e.activo ? 'on' : 'off'}">${e.activo ? 'Activa' : 'Inactiva'}</span></td>
       <td class="td-acciones"><button class="btn-sm" type="button" data-emp-id="${e.id}">Ver ficha</button></td>
-    </tr>`).join('') || `<tr><td colspan="8">${EMP_CACHE.length ? 'Ninguna empresa coincide con la búsqueda o el filtro' : 'Todavía no hay empresas cargadas'}</td></tr>`;
-}
-function empModalidadVisible() {
-  document.getElementById('emp-comision-box').hidden = val('emp-modalidad') !== 'comision';
+    </tr>`).join('') || `<tr><td colspan="7">${EMP_CACHE.length ? 'Ninguna empresa coincide con la búsqueda o el filtro' : 'Todavía no hay empresas cargadas'}</td></tr>`;
 }
 function abrirEmpresaSheet(id = null) {
   const e = id == null ? null : EMP_CACHE.find(x => x.id === id);
@@ -12612,16 +12692,27 @@ function abrirEmpresaSheet(id = null) {
   const poner = (elId, v) => { document.getElementById(elId).value = v ?? ''; };
   poner('emp-nombre', e?.nombre); poner('emp-tipo', e?.tipo || 'corporativa'); poner('emp-rif', e?.rif);
   poner('emp-contacto', e?.contacto); poner('emp-telefono', e?.telefono); poner('emp-email', e?.email);
-  poner('emp-dias', e?.dias_credito); poner('emp-modalidad', e?.modalidad_precio || 'neto'); poner('emp-comision', e?.comision_pct);
+  poner('emp-dias', e?.dias_credito);
   poner('emp-fijo', e?.cliente_fijo ? '1' : '0'); poner('emp-activo', e && !e.activo ? '0' : '1'); poner('emp-notas', e?.notas);
-  empModalidadVisible();
   const reservas = e?.reservas || [];
   document.getElementById('emp-reservas').innerHTML = !e ? '' : reservas.length
     ? reservas.map(r => `<div class="emp-res"><b>${esc(r.codigo || '#' + r.id)}</b> · ${esc((PV_ETAPAS[r.etapa] || [r.etapa])[0])}${r.referencia ? ' · ref. ' + esc(r.referencia) : ''}<span>${r.fecha_viaje_inicio ? pvFecha(r.fecha_viaje_inicio) : 'Sin fecha'}</span></div>`).join('')
     : '<div class="emp-res">Sin reservas enlazadas. Pedíselo al asistente: "enlazá la reserva N a esta empresa".</div>';
   document.getElementById('emp-reservas-box').hidden = !e;
+  if (e && reservas.length) empCargarReservas(e);
   document.getElementById('emp-err').textContent = '';
   openSheet('empresa-sheet');
+}
+async function empCargarReservas(e) {
+  const bandeja = await pvBandejaCompleta();
+  if (!bandeja || EMP_EDITANDO?.id !== e.id) return;
+  const porId = new Map(bandeja.map(c => [c.id, c]));
+  const items = e.reservas.filter(r => porId.has(r.id)).map(r => {
+    const c = porId.get(r.id);
+    return { reserva: c, grupo: (RV_DESTINOS || []).find(d => d.id === c.destino_id)?.nombre || c.destino || 'Sin destino',
+      extra: r.referencia ? `<div class="pv-serv"><span>Ref. <b>${esc(r.referencia)}</b></span></div>` : '' };
+  });
+  if (items.length) pvGruposGrid(document.getElementById('emp-reservas'), items, 'empresa-sheet', '');
 }
 async function guardarEmpresa() {
   const err = document.getElementById('emp-err'), btn = document.getElementById('emp-guardar');
@@ -12630,9 +12721,8 @@ async function guardarEmpresa() {
   if (!nombre) { err.textContent = EMP_ERRORES.nombre_requerido; return; }
   const diasTxt = val('emp-dias').trim(), dias = diasTxt === '' ? 0 : Number(diasTxt);
   if (document.getElementById('emp-dias').validity.badInput || !Number.isInteger(dias) || dias < 0 || dias > 365) { err.textContent = 'Los días de crédito van de 0 a 365.'; return; }
-  const modalidad = val('emp-modalidad'), pctTxt = val('emp-comision').trim(), pct = Number(pctTxt);
-  if (modalidad === 'comision' && (pctTxt === '' || !(pct >= 0 && pct <= 100))) { err.textContent = EMP_ERRORES.comision_requerida + ' (0 a 100)'; return; }
   const editando = EMP_EDITANDO;
+  const modalidad = editando?.modalidad_precio || 'neto', pct = editando?.comision_pct;
   const datos = {
     nombre, tipo: val('emp-tipo'), rif: val('emp-rif'), contacto: val('emp-contacto'), telefono: val('emp-telefono'),
     email: val('emp-email'), dias_credito: dias, modalidad_precio: modalidad, cliente_fijo: val('emp-fijo') === '1',
@@ -12661,7 +12751,6 @@ function setupEmpresas() {
     const fila = e.target.closest('[data-emp-id]');
     if (fila) abrirEmpresaSheet(Number(fila.dataset.empId));
   });
-  document.getElementById('emp-modalidad').addEventListener('change', empModalidadVisible);
   document.getElementById('emp-cancelar').addEventListener('click', () => closeSheet('empresa-sheet'));
   document.getElementById('emp-guardar').addEventListener('click', guardarEmpresa);
 }
