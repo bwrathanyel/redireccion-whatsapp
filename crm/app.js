@@ -12324,39 +12324,63 @@ function poblarFiltrosVentas() {
   selMes.value = meses.includes(mesPrevio) ? mesPrevio : '';
   selAsesor.value = asesores.includes(asesorPrevio) ? asesorPrevio : '';
 }
+// Filtro que ponen los KPIs de Ventas ('' = todas). Igual que en CxP, los
+// KPIs cuentan sobre los demás filtros pero no sobre este.
+let factVentasFiltro = '';
+const FACT_VENTAS_KPI_FILTRO = { con_costo: f => f.costo_neto != null, sin_costo: f => f.estado === 'pagada' && f.costo_neto == null };
+function filtrarVentasKpi(clave) {
+  factVentasFiltro = factVentasFiltro === clave ? '' : clave;
+  factVentasMostrar = TECHO_LISTA;
+  renderVentas();
+}
 function renderVentas() {
   const mes = val('fact-mes'), asesor = val('fact-asesor');
   let base = FACT_VENTAS_CACHE;
   if (mes) base = base.filter(f => (f.fecha_emision || '').slice(0, 7) === mes);
   if (asesor) base = base.filter(f => f.asesor === asesor);
-  const filas = ordenarYFiltrar(base, ['cliente', 'asesor', 'proveedor'], val('fact-ventas-search'), FACT_SORT.ventas);
+  const buscadas = ordenarYFiltrar(base, ['cliente', 'asesor', 'proveedor'], val('fact-ventas-search'), FACT_SORT.ventas);
+  const filas = factVentasFiltro ? buscadas.filter(FACT_VENTAS_KPI_FILTRO[factVentasFiltro]) : buscadas;
   FACT_LAST.ventas = filas;
   // Los totales se calculan sobre TODAS las filas filtradas, no solo las
   // visibles -- si no, "Total facturado" mentiría apenas hubiera más de
   // TECHO_LISTA facturas (mostraría la suma de la página, no la real).
-  let sumaVenta = 0, sumaCosto = 0, sumaMargen = 0;
-  filas.forEach(f => { if (f.estado === 'pagada') { sumaVenta += f.monto_total; if (f.costo_neto != null) { sumaCosto += f.costo_neto; sumaMargen += f.margen; } } });
-  document.getElementById('fact-sum-venta').textContent = money(sumaVenta);
-  document.getElementById('fact-sum-costo').textContent = money(sumaCosto);
-  document.getElementById('fact-sum-margen').textContent = money(sumaMargen);
+  let sumaVenta = 0, sumaCosto = 0, sumaMargen = 0, ventaConCosto = 0, nPag = 0, nSinCosto = 0;
+  buscadas.forEach(f => {
+    if (f.estado !== 'pagada') return;
+    nPag++; sumaVenta += f.monto_total;
+    if (f.costo_neto != null) { sumaCosto += f.costo_neto; sumaMargen += f.margen; ventaConCosto += f.monto_total; } else nSinCosto++;
+  });
+  const pctMargen = ventaConCosto > 0 ? Math.round(sumaMargen / ventaConCosto * 100) : 0;
+  pintarKPIs('fact-ventas-kpis', [
+    { key: '', t: 'Vendido', v: money(sumaVenta), d: `${fmt(nPag)} pagadas · ver todas`, i: 'fa-sack-dollar', c: 'var(--green)', on: factVentasFiltro === '', go: () => filtrarVentasKpi('') },
+    { key: 'con_costo', t: 'Margen', v: money(sumaMargen), d: `${pctMargen}% · costo neto ${money(sumaCosto)}`, i: 'fa-chart-line', c: 'var(--accent)', on: factVentasFiltro === 'con_costo', go: () => filtrarVentasKpi('con_costo') },
+    { key: 'sin_costo', t: 'Sin costo neto', v: fmt(nSinCosto), d: 'pagadas sin costo cargado en Postventa', i: 'fa-triangle-exclamation', c: nSinCosto > 0 ? 'var(--amber)' : 'var(--green)', on: factVentasFiltro === 'sin_costo', go: () => filtrarVentasKpi('sin_costo') },
+  ]);
   const visibles = filas.slice(0, factVentasMostrar);
   const pager = document.getElementById('fact-ventas-pager');
   if (pager) pager.style.display = filas.length > factVentasMostrar ? '' : 'none';
-  document.getElementById('fact-tbody').innerHTML = visibles.map(f => `<tr>
-      <td data-label="N° Factura">${fmt(f.numero_factura)}</td>
-      <td class="td-name">${esc(f.cliente || ('#' + fmt(f.lead_id)))}</td>
-      <td data-label="Asesor">${esc(f.asesor || 'Sin asesor')}</td>
-      <td data-label="Monto">${money(f.monto_total)}</td>
-      <td data-label="Costo neto">${f.costo_neto != null ? money(f.costo_neto) : '<span class="muted">Sin definir</span>'}</td>
-      <td data-label="Margen">${f.margen != null ? money(f.margen) : '—'}</td>
-      <td data-label="Proveedor">${f.proveedor ? esc(f.proveedor) : '<span class="muted">—</span>'}</td>
-      <td data-label="Estado"><span class="chip">${esc(f.estado)}</span></td>
-      <td data-label="Fecha" class="muted">${esc(fmtFechaHoraCaracas(f.fecha_emision))}</td>
-      <td class="td-acciones">
-        <button class="btn-sm" onclick="abrirClienteDesdeFacturacion(${f.lead_id})">Editar cliente</button>
-        ${f.estado === 'pagada' ? `<button class="btn-sm" onclick="anularFacturaUI(${f.id})">Anular</button>` : ''}
-      </td>
-    </tr>`).join('') || '<tr><td colspan="10">Sin facturas</td></tr>';
+  document.getElementById('fact-tbody').innerHTML = visibles.map((f, i) => {
+    const anulada = f.estado === 'anulada', conCosto = f.costo_neto != null;
+    const pct = conCosto && f.monto_total > 0 ? Math.max(0, Math.min(100, Math.round(f.margen / f.monto_total * 100))) : 0;
+    return `<article class="lt-card${anulada ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit" title="${esc(f.cliente || '')}">${esc(f.cliente || ('#' + fmt(f.lead_id)))}</div>
+        <span class="bt-tag" style="--c:${f.estado === 'pagada' ? 'var(--green)' : 'var(--muted)'}">${f.estado === 'pagada' ? 'Pagada' : anulada ? 'Anulada' : esc(f.estado)}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-hashtag"></i>${fmt(f.numero_factura)} · <i class="fas fa-user-tie"></i>${esc(f.asesor || 'Sin asesor')} · ${esc(fmtFechaHoraCaracas(f.fecha_emision))}</div>
+      <div class="lt-card-meta"><i class="fas fa-building"></i>${f.proveedor ? esc(f.proveedor) : 'Sin proveedor'}</div>
+      <div class="lt-cifras">
+        <div><span>Venta</span><b>${money(f.monto_total)}</b></div>
+        <div><span>Costo neto</span><b class="${conCosto ? '' : 'lt-debe'}">${conCosto ? money(f.costo_neto) : 'Sin definir'}</b></div>
+        <div><span>Margen</span><b class="${!conCosto ? '' : f.margen >= 0 ? 'lt-ok' : 'lt-debe'}">${conCosto ? money(f.margen) : '—'}</b></div>
+      </div>
+      ${conCosto ? `<div class="lt-barra" role="progressbar" aria-label="Margen sobre la venta" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" title="Margen ${pct}% de la venta"><i style="width:${pct}%"></i></div>` : ''}
+      <div class="lt-card-pie">
+        <button class="btn-sm" type="button" onclick="abrirClienteDesdeFacturacion(${f.lead_id})"><i class="fas fa-user-pen"></i> Editar cliente</button>
+        ${f.estado === 'pagada' ? `<button class="btn-sm" type="button" onclick="anularFacturaUI(${f.id})"><i class="fas fa-ban"></i> Anular</button>` : ''}
+      </div>
+    </article>`;
+  }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${factVentasFiltro || mes || asesor || val('fact-ventas-search') ? 'Nada coincide con el filtro' : 'Sin facturas'}</div>`;
 }
 function cargarMasVentas() { factVentasMostrar += TECHO_LISTA; renderVentas(); }
 window.cargarMasVentas = cargarMasVentas;
@@ -20618,6 +20642,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-26', emoji: '💳', titulo: 'Ventas ahora en tarjetas', texto: 'En Cobros > Facturación > Ventas, cada factura es una tarjeta con el cliente, el número, el asesor, la fecha, el proveedor, y la venta, el costo neto y el margen con una barra del % ganado. Los botones "Editar cliente" y "Anular" quedan a mano. Arriba, tres cifras que filtran al tocarlas: Vendido, Margen y Sin costo neto (ventas pagadas a las que todavía les falta cargar el costo en Postventa). Los filtros por estado, mes y asesor siguen igual, y el buscador, que no se veía, ya aparece.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '🧾', titulo: 'Cuentas por Pagar ahora en tarjetas', texto: 'En Cobros > Facturación > Cuentas por Pagar, cada deuda con un proveedor es una tarjeta con cliente, lo que hay que transferir, lo abonado, el saldo y una barra de avance, con los botones "Editar cliente" y "Registrar abono" a mano. Arriba, tres cifras que filtran al tocarlas (Todas, Saldo pendiente, Pagadas) y botones para ordenar. El buscador, que no se veía, ya aparece. Arranca mostrando primero el saldo más alto.', roles: ['admin'] },
   { fecha: '2026-09-25', emoji: '🏝️', titulo: 'Corporativo: pestaña BT Travel', texto: 'Nueva pestaña "BT Travel" en Corporativo, junto a Proveedores y Empresas. Reúne todo lo del mayorista: hoteles todo incluido activos, tarifas por vencer, hoteles en stop sale hoy, bloqueos de los próximos 7 días, reservas del mes y lo que falta pagarle. Cada número filtra la grilla de hoteles o te lleva a su pantalla. Tocar un hotel lo abre en el tarifario o, si está bloqueado, en su calendario de Stop Sales.', roles: ['admin'] },
   { fecha: '2026-09-25', emoji: '🗂️', titulo: 'Menú más corto: 12 entradas con pestañas', texto: 'El menú lateral pasó de 37 secciones a 12 entradas (Inicio, Leads, Mensajes, Tarifario, Stop Sales, Reservas, Cobros, Corporativo, IA, Marketing, Equipo y Ayuda). Cada una abre la última pestaña que usaste, y arriba de la sección están las pestañas para saltar entre sus partes. El buscador del menú sigue encontrando cualquier sección por su nombre.', roles: ['asesor', 'admin'] },

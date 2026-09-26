@@ -4335,7 +4335,7 @@ body.fsize-grande{--tap:41.9px}
         <div class="card">
           <div class="chead-row">
             <h2><i class="fas fa-file-invoice-dollar"></i> Ventas</h2>
-            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="fact-ventas-search" placeholder="Buscar cliente o asesor..."></div>
+            <input class="ei bt-buscar" id="fact-ventas-search" type="search" placeholder="Buscar cliente, asesor..." aria-label="Buscar cliente, asesor o proveedor">
             <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('ventas')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
             <button class="btn-sm" id="fact-nuevo-cliente-btn"><i class="fas fa-user-plus"></i> Nuevo cliente</button>
             <button class="btn-sm" id="fact-vincular-pago-btn"><i class="fas fa-link"></i> Vincular pago a factura</button>
@@ -4348,26 +4348,22 @@ body.fsize-grande{--tap:41.9px}
               </div>
             </div>
           </div>
-          <div class="csub">Precio de venta, costo neto (cargado en Postventa) y margen por venta · tocá un encabezado para ordenar</div>
-          <div class="tbl-state skel" id="fact-ventas-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
-          <div style="overflow-x:auto">
-            <table>
-              <thead><tr>
-                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="numero_factura">N°</th>
-                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="cliente">Cliente</th>
-                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="asesor">Asesor</th>
-                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="monto_total">Precio venta</th>
-                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="costo_neto">Costo neto</th>
-                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="margen">Margen</th>
-                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="proveedor">Proveedor</th>
-                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="estado">Estado</th>
-                <th class="th-sort" data-sort-tbl="ventas" data-sort-col="fecha_emision">Fecha</th>
-                <th></th>
-              </tr></thead>
-              <tbody id="fact-tbody"></tbody>
-              <tfoot><tr class="tfoot-sum"><td colspan="3">Totales</td><td id="fact-sum-venta" data-label="Precio venta">—</td><td id="fact-sum-costo" data-label="Costo neto">—</td><td id="fact-sum-margen" data-label="Margen">—</td><td colspan="4"></td></tr></tfoot>
-            </table>
+          <div class="csub">Precio de venta, costo neto (cargado en Postventa) y margen por venta · tocá una cifra de arriba para filtrar</div>
+          <div class="kpis bt-kpis lt-kpis" id="fact-ventas-kpis"></div>
+          <div class="lt-orden" role="group" aria-label="Ordenar por">
+            <span class="lt-orden-lbl">Ordenar</span>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="ventas" data-sort-col="numero_factura">N°</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="ventas" data-sort-col="fecha_emision">Fecha</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="ventas" data-sort-col="cliente">Cliente</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="ventas" data-sort-col="asesor">Asesor</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="ventas" data-sort-col="monto_total">Precio venta</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="ventas" data-sort-col="costo_neto">Costo neto</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="ventas" data-sort-col="margen">Margen</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="ventas" data-sort-col="proveedor">Proveedor</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="ventas" data-sort-col="estado">Estado</button>
           </div>
+          <div class="tbl-state skel" id="fact-ventas-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="lt-grid" id="fact-tbody"></div>
           <div class="pager" id="fact-ventas-pager" style="display:none"><button class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasVentas()">Cargar más</button></div>
         </div>
       </div>
