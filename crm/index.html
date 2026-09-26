@@ -3168,6 +3168,44 @@ body.fsize-grande{--tap:41.9px}
   .bt-grid{grid-template-columns:1fr}
   .bt-buscar{flex:1 1 100%;font-size:16px}
 }
+/* Patrón .lt-card: listas de gestión como tarjetas (Cuentas por Pagar primero).
+   Los botones de orden llevan .th-sort a propósito: así reusan aplicarOrdenTabla
+   y la hoja "Ordenar" de móvil sin duplicar lógica. */
+.lt-kpis{margin:14px 0 12px}
+.lt-orden{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:4px}
+.lt-orden-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600;margin-right:2px}
+.lt-orden-op{font:inherit;font-size:12px;font-weight:600;color:var(--muted);background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer;transition:border-color var(--dur-rapida),color var(--dur-rapida)}
+.lt-orden-op:hover{color:var(--txt);border-color:var(--line2)}
+.lt-orden-op:has(.sort-arrow){color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.lt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;margin-top:14px}
+.lt-card{display:flex;flex-direction:column;gap:10px;background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:14px;animation:bt-sube .4s var(--ease-salida) both;animation-delay:calc(var(--i,0) * 25ms);transition:transform var(--dur-rapida),border-color var(--dur-rapida)}
+.lt-card:hover{transform:translateY(-2px);border-color:var(--line2)}
+.lt-card-hecha{opacity:.72}
+.lt-card-cab{display:flex;align-items:center;gap:8px}
+.lt-card-tit{flex:1;min-width:0;font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lt-card-meta{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lt-card-meta i{color:var(--accent);margin-right:4px}
+.lt-cifras{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.lt-cifras div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.lt-cifras span{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)}
+.lt-cifras b{font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lt-debe{color:var(--amber)}.lt-ok{color:var(--green)}
+.lt-barra{height:5px;border-radius:999px;background:var(--line2);overflow:hidden}
+.lt-barra i{display:block;height:100%;border-radius:inherit;background:var(--green);transition:width .4s var(--ease-salida)}
+.lt-card-pie{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto}
+.lt-card-pie .btn-sm{display:inline-flex;align-items:center;gap:6px}
+.lt-card-pie .btn-sm i{font-size:11px;opacity:.85}
+.lt-primario{color:var(--accent);background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.lt-primario:hover{border-color:var(--accent)}
+.lt-vacio{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;padding:28px 0}
+.lt-vacio i{margin-right:6px}
+@media(prefers-reduced-motion:reduce){.lt-card{animation:none}}
+@media(max-width:760px){
+  .lt-orden{display:none}
+  .lt-kpis .kpi:nth-child(odd):last-child{grid-column:1/-1}
+  .lt-grid{grid-template-columns:1fr}
+  .lt-card-pie .btn-sm{flex:1;justify-content:center;min-height:44px}
+}
 </style>
 </head>
 <body>
@@ -4372,7 +4410,7 @@ body.fsize-grande{--tap:41.9px}
         <div class="card">
           <div class="chead-row">
             <h2><i class="fas fa-file-invoice"></i> Cuentas por Pagar</h2>
-            <div class="search" style="margin-left:0;max-width:260px"><i class="fas fa-search"></i><input id="cxp-search" placeholder="Buscar proveedor o cliente..."></div>
+            <input class="ei bt-buscar" id="cxp-search" type="search" placeholder="Buscar proveedor o cliente..." aria-label="Buscar proveedor o cliente">
             <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('cxp')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
             <div class="export-dd">
               <button class="btn-sm" onclick="toggleExportMenu(event,'cxp')"><i class="fas fa-download"></i> Exportar tabla</button>
@@ -4383,23 +4421,19 @@ body.fsize-grande{--tap:41.9px}
               </div>
             </div>
           </div>
-          <div class="csub">Lo que le debemos a cada proveedor por reservas ya vendidas · tocá un encabezado para ordenar</div>
-          <div class="tbl-state skel" id="cxp-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
-          <div style="overflow-x:auto">
-            <table>
-              <thead><tr>
-                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="proveedor">Proveedor</th>
-                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="cliente">Cliente</th>
-                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="monto_a_transferir">A transferir</th>
-                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="monto_abonado">Abonado</th>
-                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="saldo_pendiente">Saldo</th>
-                <th class="th-sort" data-sort-tbl="cxp" data-sort-col="estado">Estado</th>
-                <th></th>
-              </tr></thead>
-              <tbody id="cxp-tbody"></tbody>
-              <tfoot><tr class="tfoot-sum"><td colspan="2">Totales</td><td id="cxp-sum-transferir" data-label="A transferir">—</td><td id="cxp-sum-abonado" data-label="Abonado">—</td><td id="cxp-sum-saldo" data-label="Saldo">—</td><td colspan="2"></td></tr></tfoot>
-            </table>
+          <div class="csub">Lo que le debemos a cada proveedor por reservas ya vendidas · tocá una cifra de arriba para filtrar</div>
+          <div class="kpis bt-kpis lt-kpis" id="cxp-kpis"></div>
+          <div class="lt-orden" role="group" aria-label="Ordenar por">
+            <span class="lt-orden-lbl">Ordenar</span>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="saldo_pendiente">Saldo</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="monto_a_transferir">A transferir</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="monto_abonado">Abonado</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="proveedor">Proveedor</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="cliente">Cliente</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="estado">Estado</button>
           </div>
+          <div class="tbl-state skel" id="cxp-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="lt-grid" id="cxp-tbody"></div>
           <div class="pager" id="cxp-pager" style="display:none"><button class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasCxp()">Cargar más</button></div>
         </div>
       </div>

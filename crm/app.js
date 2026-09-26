@@ -12181,7 +12181,7 @@ window.exportarPDF = (tabla, titulo) => {
 let factVentasMostrar = TECHO_LISTA, factComMostrar = TECHO_LISTA, cxpMostrar = TECHO_LISTA;
 const FACT_SORT = {
   ventas: { col: 'numero_factura', dir: 1 }, comisiones: { col: null, dir: 1 },
-  cxp: { col: null, dir: 1 }, asesores: { col: 'nombre', dir: 1 }, proveedores: { col: 'nombre', dir: 1 },
+  cxp: { col: 'saldo_pendiente', dir: -1 }, asesores: { col: 'nombre', dir: 1 }, proveedores: { col: 'nombre', dir: 1 },
 };
 const FACT_RENDERERS = { ventas: renderVentas, comisiones: renderComisiones, cxp: renderCuentasPorPagar, asesores: renderAsesoresComision, proveedores: renderProveedores };
 // Único lugar que aplica un orden -- lo llaman tanto el click en <th
@@ -12400,31 +12400,54 @@ async function loadCuentasPorPagar() {
   cxpMostrar = TECHO_LISTA;
   renderCuentasPorPagar();
 }
+// Filtro por estado que ponen los KPIs ('' = todas). Los KPIs cuentan sobre
+// la búsqueda pero NO sobre este filtro: si no, al tocar "Pagadas" el KPI de
+// pendientes quedaría en 0 y no habría forma de volver a verlo.
+let cxpFiltroEstado = '';
+function filtrarCxpEstado(estado) {
+  cxpFiltroEstado = cxpFiltroEstado === estado ? '' : estado;
+  cxpMostrar = TECHO_LISTA;
+  renderCuentasPorPagar();
+}
 function renderCuentasPorPagar() {
-  const filas = ordenarYFiltrar(CXP_CACHE, ['proveedor', 'cliente'], val('cxp-search'), FACT_SORT.cxp);
+  const buscadas = ordenarYFiltrar(CXP_CACHE, ['proveedor', 'cliente'], val('cxp-search'), FACT_SORT.cxp);
+  const filas = cxpFiltroEstado ? buscadas.filter(c => c.estado === cxpFiltroEstado) : buscadas;
   FACT_LAST.cxp = filas;
-  // Igual que en Ventas: los totales suman TODAS las filas filtradas, el
-  // recorte de abajo es solo para lo que se pinta.
-  let sumaTransferir = 0, sumaAbonado = 0, sumaSaldo = 0;
-  filas.forEach(c => { sumaTransferir += c.monto_a_transferir; sumaAbonado += c.monto_abonado; sumaSaldo += c.saldo_pendiente; });
-  document.getElementById('cxp-sum-transferir').textContent = money(sumaTransferir);
-  document.getElementById('cxp-sum-abonado').textContent = money(sumaAbonado);
-  document.getElementById('cxp-sum-saldo').textContent = money(sumaSaldo);
+  let sumaTransferir = 0, sumaAbonado = 0, sumaSaldo = 0, nPend = 0, nPag = 0;
+  buscadas.forEach(c => {
+    sumaTransferir += c.monto_a_transferir; sumaAbonado += c.monto_abonado; sumaSaldo += c.saldo_pendiente;
+    if (c.estado === 'pendiente') nPend++; else if (c.estado === 'pagado') nPag++;
+  });
+  const pctAbonado = sumaTransferir > 0 ? Math.round(sumaAbonado / sumaTransferir * 100) : 0;
+  pintarKPIs('cxp-kpis', [
+    { key: '', t: 'A transferir', v: money(sumaTransferir), d: `${fmt(buscadas.length)} cuentas · ver todas`, i: 'fa-file-invoice-dollar', c: 'var(--blue)', on: cxpFiltroEstado === '', go: () => filtrarCxpEstado('') },
+    { key: 'pendiente', t: 'Saldo pendiente', v: money(sumaSaldo), d: `${fmt(nPend)} por pagar · ${pctAbonado}% ya abonado`, i: 'fa-hourglass-half', c: 'var(--amber)', on: cxpFiltroEstado === 'pendiente', go: () => filtrarCxpEstado('pendiente') },
+    { key: 'pagado', t: 'Pagadas', v: fmt(nPag), d: `${money(sumaAbonado)} abonado en total`, i: 'fa-circle-check', c: 'var(--green)', on: cxpFiltroEstado === 'pagado', go: () => filtrarCxpEstado('pagado') },
+  ]);
   const visibles = filas.slice(0, cxpMostrar);
   const pager = document.getElementById('cxp-pager');
   if (pager) pager.style.display = filas.length > cxpMostrar ? '' : 'none';
-  document.getElementById('cxp-tbody').innerHTML = visibles.map(c => `<tr>
-      <td class="td-name">${esc(c.proveedor)}</td>
-      <td data-label="Cliente">${esc(c.cliente)}</td>
-      <td data-label="A transferir">${money(c.monto_a_transferir)}</td>
-      <td data-label="Abonado">${money(c.monto_abonado)}</td>
-      <td data-label="Saldo">${money(c.saldo_pendiente)}</td>
-      <td data-label="Estado"><span class="chip ${c.estado === 'pagado' ? 'ok' : ''}">${esc(c.estado)}</span></td>
-      <td class="td-acciones">
-        <button class="btn-sm" onclick="abrirClienteDesdeFacturacion(${c.lead_id})">Editar cliente</button>
-        ${c.estado === 'pendiente' ? `<button class="btn-sm" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})">Registrar abono</button>` : ''}
-      </td>
-    </tr>`).join('') || '<tr><td colspan="7">Sin cuentas por pagar</td></tr>';
+  document.getElementById('cxp-tbody').innerHTML = visibles.map((c, i) => {
+    const pagado = c.estado === 'pagado';
+    const pct = c.monto_a_transferir > 0 ? Math.min(100, Math.round(c.monto_abonado / c.monto_a_transferir * 100)) : (pagado ? 100 : 0);
+    return `<article class="lt-card${pagado ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit" title="${esc(c.proveedor)}">${esc(c.proveedor)}</div>
+        <span class="bt-tag" style="--c:${pagado ? 'var(--green)' : 'var(--amber)'}">${pagado ? 'Pagado' : esc(c.estado === 'pendiente' ? 'Pendiente' : c.estado)}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-user"></i> ${esc(c.cliente || 'Sin cliente')}</div>
+      <div class="lt-cifras">
+        <div><span>A transferir</span><b>${money(c.monto_a_transferir)}</b></div>
+        <div><span>Abonado</span><b>${money(c.monto_abonado)}</b></div>
+        <div><span>Saldo</span><b class="${c.saldo_pendiente > 0 ? 'lt-debe' : 'lt-ok'}">${money(c.saldo_pendiente)}</b></div>
+      </div>
+      <div class="lt-barra" role="progressbar" aria-label="Abonado" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
+      <div class="lt-card-pie">
+        <button class="btn-sm" type="button" onclick="abrirClienteDesdeFacturacion(${c.lead_id})"><i class="fas fa-user-pen"></i> Editar cliente</button>
+        ${c.estado === 'pendiente' ? `<button class="btn-sm lt-primario" type="button" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})"><i class="fas fa-hand-holding-dollar"></i> Registrar abono</button>` : ''}
+      </div>
+    </article>`;
+  }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${cxpFiltroEstado || val('cxp-search') ? 'Nada coincide con el filtro' : 'Sin cuentas por pagar'}</div>`;
 }
 function cargarMasCxp() { cxpMostrar += TECHO_LISTA; renderCuentasPorPagar(); }
 window.cargarMasCxp = cargarMasCxp;
@@ -20595,6 +20618,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-26', emoji: '🧾', titulo: 'Cuentas por Pagar ahora en tarjetas', texto: 'En Cobros > Facturación > Cuentas por Pagar, cada deuda con un proveedor es una tarjeta con cliente, lo que hay que transferir, lo abonado, el saldo y una barra de avance, con los botones "Editar cliente" y "Registrar abono" a mano. Arriba, tres cifras que filtran al tocarlas (Todas, Saldo pendiente, Pagadas) y botones para ordenar. El buscador, que no se veía, ya aparece. Arranca mostrando primero el saldo más alto.', roles: ['admin'] },
   { fecha: '2026-09-25', emoji: '🏝️', titulo: 'Corporativo: pestaña BT Travel', texto: 'Nueva pestaña "BT Travel" en Corporativo, junto a Proveedores y Empresas. Reúne todo lo del mayorista: hoteles todo incluido activos, tarifas por vencer, hoteles en stop sale hoy, bloqueos de los próximos 7 días, reservas del mes y lo que falta pagarle. Cada número filtra la grilla de hoteles o te lleva a su pantalla. Tocar un hotel lo abre en el tarifario o, si está bloqueado, en su calendario de Stop Sales.', roles: ['admin'] },
   { fecha: '2026-09-25', emoji: '🗂️', titulo: 'Menú más corto: 12 entradas con pestañas', texto: 'El menú lateral pasó de 37 secciones a 12 entradas (Inicio, Leads, Mensajes, Tarifario, Stop Sales, Reservas, Cobros, Corporativo, IA, Marketing, Equipo y Ayuda). Cada una abre la última pestaña que usaste, y arriba de la sección están las pestañas para saltar entre sus partes. El buscador del menú sigue encontrando cualquier sección por su nombre.', roles: ['asesor', 'admin'] },
   { fecha: '2026-09-24', emoji: '🧳', titulo: 'Reservas: servicios, pasajeros y documentos', texto: 'Postventa ahora se llama "Reservas". Al gestionar una reserva hay pestañas nuevas: Servicios (boletos, traslados, full days, hospedaje, seguros, cada uno con su precio y moneda; el total de la reserva se calcula solo), Pasajeros (datos y documento de cada viajero) y Documentos (subí vouchers, boletos y comprobantes en PDF o foto). Boletería ve la lista de boletos por emitir.', roles: ['asesor', 'admin', 'boleteria'] },
