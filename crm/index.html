@@ -1762,6 +1762,15 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .puede-ver-voucher .nav-item.solo-voucher,.puede-ver-voucher .bn-item.solo-voucher,.puede-ver-voucher .sheet-item.solo-voucher{display:flex}
 .nav-item.nav-freelancer-only,.sheet-item.nav-freelancer-only{display:none}
 .es-freelancer .nav-item.nav-freelancer-only,.es-freelancer .sheet-item.nav-freelancer-only{display:flex}
+/* Menú agrupado (2026-09-25): las hijas se abren desde las pestañas de su
+   padre. Siguen en el DOM para el buscador (body.nav-buscando) y para el
+   sondeo de permisos por rol (body.nav-sondeo, ver conSondeoNav en app.js). */
+body:not(.nav-buscando):not(.nav-sondeo) #sidebar-nav > .nav-hijo{display:none}
+#sidebar-nav > .nav-padre-vacio{display:none}
+.nav-tabs-sec{max-width:100%;overflow-x:auto;scrollbar-width:none}
+.nav-tabs-sec .seg{white-space:nowrap}
+.nav-tabs-sec .seg i{margin-right:4px;opacity:.8}
+@media(max-width:760px){.nav-tabs-sec .seg{flex:0 0 auto}}
 
 /* Sidebar reordenable a mano (drag & drop, orden guardado por-usuario) */
 .sidebar-nav .nav-item{cursor:grab}

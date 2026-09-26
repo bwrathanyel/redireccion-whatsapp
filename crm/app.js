@@ -1253,8 +1253,7 @@ function seccionInicialPermitida() {
 }
 function usuarioPuedeAbrirSeccion(sec) {
   if (sec === 'hoy') return true;
-  const item = document.querySelector(`#sidebar-nav > .nav-item[data-sec="${sec}"]`);
-  return !!item && getComputedStyle(item).display !== 'none';
+  return navVisiblePorRol(navItemDe(sec));
 }
 function manejarDeepLinkSeccion() {
   const params = new URLSearchParams(location.search);
@@ -2418,7 +2417,9 @@ async function startApp() {
   // sigue entrando por leads/dashboard como siempre, sin cambios.
   const esMobile = window.matchMedia('(max-width:760px)').matches;
   const seccionGuardada = MI_PREFERENCIAS.ultima_seccion;
-  const seccionValida = seccionGuardada && document.getElementById('sec-' + seccionGuardada);
+  // usuarioPuedeAbrirSeccion y no solo que exista #sec-*: las secciones que
+  // salieron del menú (Mis Notas, Cerebro IA...) conservan su HTML.
+  const seccionValida = seccionGuardada && document.getElementById('sec-' + seccionGuardada) && usuarioPuedeAbrirSeccion(seccionGuardada);
   if (ROL === 'asesor') {
     const destino = seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'leads');
     activateSection(destino);
@@ -2799,7 +2800,9 @@ function abrirPostventa(c) {
       <label class="fl">Inicio del viaje</label><input class="ei" id="pv-e-inicio" type="date" value="${esc(c.fecha_viaje_inicio || '')}">
       <label class="fl">Fin del viaje</label><input class="ei" id="pv-e-fin" type="date" value="${esc(c.fecha_viaje_fin || '')}">
       ${ROL === 'admin' ? `<label class="fl">Proveedor</label><input class="ei" id="pv-e-proveedor" value="${esc(c.proveedor || '')}" placeholder="Hotel, aerolínea u operador">
-      <label class="fl">Costo neto (USD) <span style="font-weight:400;color:var(--muted2)">— lo que le pagamos al proveedor</span></label><input class="ei" id="pv-e-costo-neto" type="number" min="0" step="0.01" value="${c.costo_neto ?? ''}" placeholder="Sin definir">` : ''}
+      <label class="fl">Costo neto (USD) <span style="font-weight:400;color:var(--muted2)">— lo que le pagamos al proveedor</span></label><input class="ei" id="pv-e-costo-neto" type="number" min="0" step="0.01" value="${c.costo_neto ?? ''}" placeholder="Sin definir">
+      <label class="fl">Empresa <span style="font-weight:400;color:var(--muted2)">— agencia o corporativo que la pidió</span></label><select class="ei" id="pv-e-empresa" disabled><option value="">Cargando…</option></select>
+      <label class="fl">Referencia de la empresa</label><input class="ei" id="pv-e-empresa-ref" maxlength="120" value="${esc(c.referencia_empresa || '')}" placeholder="Orden de compra, file, etc." disabled>` : ''}
       <label class="fl">Localizador / reserva</label><input class="ei" id="pv-e-localizador" value="${esc(c.localizador_reserva || '')}" placeholder="Código de confirmación">
       <div class="eb-title" style="margin-top:17px"><i class="fas fa-list-check"></i> Checklist de documentos</div>
       <div class="pv-doc-grid">${Object.entries(PV_DOCS).map(([k, t]) => `<label class="pv-doc"><input type="checkbox" data-pv-doc="${k}" ${docs[k] === true ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div>
@@ -2822,6 +2825,35 @@ function abrirPostventa(c) {
   const yaAbierto = document.getElementById('drawer').classList.contains('open');
   document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!yaAbierto) navPush({ type: 'drawer' });
   rvIniciar(c.id, 'resumen');
+  if (ROL === 'admin') pvCargarEmpresas(c);
+}
+// Sin empresa_id en la bandeja (migración 20260925190000 sin aplicar) se deduce de las reservas de cada empresa.
+let PV_EMPRESA_PREVIA = null;
+async function pvCargarEmpresas(c) {
+  PV_EMPRESA_PREVIA = null;
+  const { data, error } = await sb.rpc('listar_empresas_cliente', { p_solo_activos: false });
+  const sel = document.getElementById('pv-e-empresa'), ref = document.getElementById('pv-e-empresa-ref');
+  if (!sel || PV_ACTUAL?.id !== c.id) return;
+  if (error) { sel.innerHTML = '<option value="">No se pudieron cargar</option>'; return; }
+  const lista = data || [];
+  const actual = 'empresa_id' in c ? c.empresa_id : lista.find(e => (e.reservas || []).some(r => r.id === c.id))?.id ?? null;
+  const refActual = 'referencia_empresa' in c ? c.referencia_empresa : lista.find(e => e.id === actual)?.reservas?.find(r => r.id === c.id)?.referencia;
+  PV_EMPRESA_PREVIA = { id: actual ?? null, ref: refActual || '' };
+  sel.innerHTML = '<option value="">Sin empresa (cliente particular)</option>' + lista.filter(e => e.activo || e.id === actual)
+    .map(e => `<option value="${e.id}" ${e.id === actual ? 'selected' : ''}>${esc(e.nombre)}${e.activo ? '' : ' (inactiva)'}</option>`).join('');
+  ref.value = PV_EMPRESA_PREVIA.ref;
+  const sync = () => { ref.disabled = !sel.value; };
+  sel.disabled = false; sel.onchange = sync; sync();
+}
+async function pvGuardarEmpresa() {
+  const sel = document.getElementById('pv-e-empresa');
+  if (!sel || sel.disabled || !PV_EMPRESA_PREVIA) return null;
+  const id = sel.value ? Number(sel.value) : null, ref = id ? val('pv-e-empresa-ref').trim() : '';
+  if (id === PV_EMPRESA_PREVIA.id && ref === PV_EMPRESA_PREVIA.ref) return null;
+  const { data, error } = await sb.rpc('asistente_reserva_empresa', { p_reserva_id: PV_ACTUAL.id, p_empresa_id: id, p_referencia: ref || null });
+  if (error || !data?.ok) return error?.message || { reserva_no_existe: 'La reserva ya no existe.', empresa_no_registrada: 'Esa empresa ya no está activa.' }[data?.error] || data?.error || 'error desconocido';
+  PV_EMPRESA_PREVIA = { id, ref };
+  return null;
 }
 async function guardarPostventa(marcarPagado) {
   if (!PV_ACTUAL) return;
@@ -2847,8 +2879,10 @@ async function guardarPostventa(marcarPagado) {
     p_satisfaccion: val('pv-e-satisfaccion') ? Number(val('pv-e-satisfaccion')) : null, p_marcar_pagado: marcarPagado,
     p_costo_neto: costoNeto, p_reserva_id: PV_ACTUAL.id,
   });
+  if (error || !data?.ok) { btn.disabled = false; btn.innerHTML = previo; err.textContent = 'No se pudo guardar: ' + (errReserva(error, data) || 'error desconocido'); return; }
+  const errEmpresa = await pvGuardarEmpresa();
   btn.disabled = false; btn.innerHTML = previo;
-  if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (errReserva(error, data) || 'error desconocido'); return; }
+  if (errEmpresa) { err.textContent = 'La postventa se guardó, pero no la empresa: ' + errEmpresa; return; }
   window.closeDrawer();
   // Si lo cerró un asesor, guardar_postventa lo manda a verificación en vez
   // de a PAGO REALIZADO directo (ver 20260728000000_blindar_cierre_venta.sql)
@@ -12586,8 +12620,11 @@ function provPintarReservas(tab) {
   const cont = document.getElementById('prov-reservas-box');
   if (!PROV_RES) { cont.innerHTML = '<div class="pv-empty" style="padding:18px">Cargando reservas…</div>'; return; }
   const lista = tab === 'todas' ? PROV_RES : PROV_RES.filter(s => s.tipo === tab);
+  // Reservas viejas enlazadas solo por texto: el destino ("BT TRAVEL COSTA CARIBE") nombra el hotel.
+  const prefijo = new RegExp('^' + (PROV_EDITANDO?.nombre || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+') + '\\s*[-–:·]?\\s*', 'i');
+  const hotelDe = c => { const d = String(c?.destino || '').trim(), h = d.replace(prefijo, '').trim() || d; return h ? h.toLowerCase().replace(/(^|\s)\S/g, m => m.toUpperCase()) : 'Sin servicio cargado'; };
   const grupo = s => tab === 'hospedaje' ? (s.detalle?.hotel || 'Sin hotel')
-    : tab === 'todas' ? (s.tipo ? (RV_TIPOS[s.tipo] || [s.tipo])[0] : 'Sin servicio cargado')
+    : tab === 'todas' ? (s.tipo ? (RV_TIPOS[s.tipo] || [s.tipo])[0] : hotelDe(s.reserva))
     : pvGrupoDe(s.reserva);
   pvGruposGrid(cont, lista.map(s => ({ reserva: s.reserva, grupo: grupo(s), extra: provServExtra(s) })), 'proveedor-sheet',
     'Sin reservas con este proveedor. Se enlazan al asignarle proveedor a un servicio de la reserva.');
@@ -12697,7 +12734,7 @@ function abrirEmpresaSheet(id = null) {
   const reservas = e?.reservas || [];
   document.getElementById('emp-reservas').innerHTML = !e ? '' : reservas.length
     ? reservas.map(r => `<div class="emp-res"><b>${esc(r.codigo || '#' + r.id)}</b> · ${esc((PV_ETAPAS[r.etapa] || [r.etapa])[0])}${r.referencia ? ' · ref. ' + esc(r.referencia) : ''}<span>${r.fecha_viaje_inicio ? pvFecha(r.fecha_viaje_inicio) : 'Sin fecha'}</span></div>`).join('')
-    : '<div class="emp-res">Sin reservas enlazadas. Pedíselo al asistente: "enlazá la reserva N a esta empresa".</div>';
+    : '<div class="emp-res">Sin reservas enlazadas. Se enlazan desde la reserva (campo Empresa) o con el asistente.</div>';
   document.getElementById('emp-reservas-box').hidden = !e;
   if (e && reservas.length) empCargarReservas(e);
   document.getElementById('emp-err').textContent = '';
@@ -18467,70 +18504,85 @@ function setupMisNotas() {
    `roles` preserva LITERAL las clases nav-admin-only/nav-marketing-ok/etc. que
    ya filtraban por CSS -- ese sistema no cambia, solo cambia dónde vive cada
    <a> en el DOM. */
+// Menú agrupado (2026-09-25): 12 entradas, cada una con sus secciones como
+// pestañas arriba (pintarPestanasNav). Las hijas siguen en el DOM como
+// .nav-item.nav-hijo ocultas: usuarioPuedeAbrirSeccion y el buscador del menú
+// las necesitan. Mis Notas, Cerebro IA, Voz IA y Consultor IA salieron del
+// menú por falta de uso; su HTML y sus setup* siguen intactos.
 const NAV_ITEMS = [
-  { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', grupo: 'principal', roles: 'nav-asesor-hide', excludeSheet: true },
-  { sec: 'estadisticas', icon: 'fas fa-chart-column', label: 'Estadísticas', grupo: 'principal', roles: '', sub: 'Tu rendimiento, tu tendencia y un análisis con IA' },
-  { sec: 'leads', icon: 'fas fa-users', label: 'Leads', grupo: 'principal', roles: '', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true, excludeSheet: true },
-  { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', grupo: 'principal', roles: '' },
-  { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', grupo: 'principal', roles: 'nav-asesor-only' },
-  { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', grupo: 'principal', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', badge: 'nav-msg-count', badgeDefault: '—', excludeSheet: true },
-  { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', grupo: 'principal', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads' },
-  { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', grupo: 'principal', roles: 'nav-freelancer-only', badge: 'nav-tareas-count', badgeDefault: '0' },
-  { sec: 'mis-notas', icon: 'fas fa-lightbulb', label: 'Mis Notas', grupo: 'principal', roles: '', badge: 'nav-notas-count', badgeDefault: '0', sub: 'Lo que te cuesta recordar, para repasar' },
-  { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', grupo: 'ventas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
-  { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Reservas', grupo: 'ventas', roles: '', badge: 'nav-postventa-count', badgeDefault: '0', sub: 'Servicios, pasajeros, documentos y cobros' },
-  { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', grupo: 'ventas', roles: 'nav-admin-only' },
-  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', grupo: 'ventas', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar' },
-  { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', grupo: 'ventas', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
-  { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', grupo: 'ventas', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
-  { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', grupo: 'ventas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
-  { sec: 'mis-comisiones', icon: 'fas fa-sack-dollar', label: 'Mis Comisiones', grupo: 'ventas', roles: 'nav-asesor-only' },
-  { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones por corte', grupo: 'ventas', roles: '', sub: 'Cargá tus ventas pagadas; pagos el 5 y el 20' },
-  { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', grupo: 'ventas', roles: '', sub: 'Cargá vouchers PDF como venta' },
-  { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', grupo: 'ventas', roles: 'nav-admin-only' },
-  { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', grupo: 'tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', excludeSheet: true },
-  { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', grupo: 'tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
-  { sec: 'cotizador', icon: 'fas fa-comments', label: 'Cotizador IA', grupo: 'ia', roles: 'nav-marketing-ok' },
-  { sec: 'cerebro-ia', icon: 'fas fa-brain', label: 'Cerebro IA', grupo: 'ia', roles: 'nav-admin-only' },
-  { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', grupo: 'ia', roles: 'nav-admin-only', sub: 'Posadas que quieren el asistente' },
-  { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', grupo: 'ia', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Revisa reservas, carga datos y escribe a proveedores' },
-  { sec: 'consultor-ia', icon: 'fas fa-user-tie', label: 'Consultor IA', grupo: 'ia', roles: 'nav-admin-only', sub: 'Preguntale sobre el proyecto, sin gastar Claude Code' },
-  { sec: 'voz-ia', icon: 'fas fa-microphone-lines', label: 'Voz IA', grupo: 'ia', roles: 'nav-admin-only nav-marketing-ok', sub: 'Probá la voz clonada y cambiá la muestra de referencia' },
-  { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', grupo: 'ia', roles: 'nav-admin-only', sub: 'Ventas, calidad, errores y costos' },
-  { sec: 'web-reasignados', icon: 'fas fa-hand-holding-dollar', label: 'Web y Reasignados', grupo: 'marketing', roles: 'nav-admin-only', sub: 'Los leads por los que cobrás comisión' },
-  { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', grupo: 'marketing', roles: 'nav-admin-only nav-marketing-ok' },
-  { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', grupo: 'marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
-  { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', grupo: 'gestion', roles: 'nav-admin-only' },
-  { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', grupo: 'gestion', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
-  { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Manual del CRM', grupo: 'ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
-  { sec: 'actualizaciones', icon: 'fas fa-bullhorn', label: 'Actualizaciones', grupo: 'ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
-  { sec: 'proyecto-constructor', icon: 'fas fa-drafting-compass', label: 'Proyecto Constructor', grupo: 'ayuda', roles: 'nav-admin-only', sub: 'Avance del CRM que se vende a otras empresas' },
+  { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide' },
+  { sec: 'estadisticas', icon: 'fas fa-chart-column', label: 'Estadísticas', padre: 'grp-inicio', roles: '', sub: 'Tu rendimiento, tu tendencia y un análisis con IA' },
+  { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', padre: 'grp-inicio', roles: 'nav-admin-only' },
+  { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
+  { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: '' },
+  { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: '' },
+  { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
+  { sec: 'web-reasignados', icon: 'fas fa-hand-holding-dollar', label: 'Web y Reasignados', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Los leads por los que cobrás comisión' },
+  { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', padre: 'grp-mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-mensajes', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads' },
+  { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
+  { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Reservas', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
+  { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
+  { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
+  { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
+  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', padre: 'grp-cobros', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar' },
+  { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones por corte', padre: 'grp-cobros', roles: '', sub: 'Cargá tus ventas pagadas; pagos el 5 y el 20' },
+  { sec: 'mis-comisiones', icon: 'fas fa-sack-dollar', label: 'Mis Comisiones', padre: 'grp-cobros', roles: 'nav-asesor-only' },
+  { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
+  { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
+  { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only', sub: 'Ventas, calidad, errores y costos' },
+  { sec: 'cotizador', icon: 'fas fa-comments', label: 'Cotizador IA', padre: 'grp-ia', roles: 'nav-marketing-ok' },
+  { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', padre: 'grp-ia', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Revisa reservas, carga datos y escribe a proveedores' },
+  { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', padre: 'grp-ia', roles: 'nav-admin-only', sub: 'Posadas que quieren el asistente' },
+  { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok' },
+  { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
+  { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only' },
+  { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', padre: 'grp-equipo', roles: 'nav-freelancer-only' },
+  { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Manual del CRM', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'actualizaciones', icon: 'fas fa-bullhorn', label: 'Actualizaciones', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'proyecto-constructor', icon: 'fas fa-drafting-compass', label: 'Proyecto Constructor', padre: 'grp-ayuda', roles: 'nav-admin-only', sub: 'Avance del CRM que se vende a otras empresas' },
 ];
-const NAV_GRUPOS = [
-  { id: 'principal', label: 'Principal' },
-  { id: 'ventas', label: 'Ventas y Postventa' },
-  { id: 'tarifario', label: 'Tarifario' },
-  { id: 'ia', label: 'Herramientas IA' },
-  { id: 'marketing', label: 'Marketing' },
-  { id: 'gestion', label: 'Gestión', roles: 'nav-admin-only' },
-  { id: 'ayuda', label: 'Ayuda' },
+// Orden del menú. `hoja`: entrada sin pestañas, es la sección misma. Los
+// badges viven en el padre porque la hija está oculta.
+const NAV_PADRES = [
+  { sec: 'grp-inicio', icon: 'fas fa-chart-pie', label: 'Inicio' },
+  { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
+  { sec: 'grp-mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', badge: 'nav-msg-count', badgeDefault: '—' },
+  { sec: 'grp-tarifario', icon: 'fas fa-book-open', label: 'Tarifario' },
+  { sec: 'stop-sales', hoja: true },
+  { sec: 'grp-reservas', icon: 'fas fa-handshake-angle', label: 'Reservas', badge: 'nav-postventa-count', badgeDefault: '0' },
+  { sec: 'grp-cobros', icon: 'fas fa-file-invoice-dollar', label: 'Cobros' },
+  { sec: 'grp-directorio', icon: 'fas fa-address-book', label: 'Directorio' },
+  { sec: 'grp-ia', icon: 'fas fa-robot', label: 'IA' },
+  { sec: 'grp-marketing', icon: 'fas fa-bullseye', label: 'Marketing' },
+  { sec: 'grp-equipo', icon: 'fas fa-people-group', label: 'Equipo', badge: 'nav-tareas-count', badgeDefault: '0' },
+  { sec: 'grp-ayuda', icon: 'fas fa-circle-question', label: 'Ayuda' },
 ];
+const PADRE_DE = Object.fromEntries(NAV_ITEMS.filter(it => it.padre).map(it => [it.sec, it.padre]));
+// Clases de rol que HABILITAN un item (marketing/boletería solo ven lo que
+// las lleva): el padre hereda la unión de las de sus hijas. Las que ocultan
+// (nav-admin-only, solo-voucher...) no se heredan; eso lo resuelve
+// actualizarPadresNav mirando si alguna hija quedó visible.
+const NAV_ROLES_HABILITAN = ['nav-marketing-ok', 'nav-boleteria-ok', 'nav-modo-boleteria-ok'];
 
 function renderNavItems() {
-  const htmlDesktop = it => {
-    const cls = ['nav-item', it.roles].filter(Boolean).join(' ');
+  const htmlDesktop = (it, extra, padre) => {
+    const cls = ['nav-item', extra, it.roles].filter(Boolean).join(' ');
     const idAttr = it.id ? ` id="${it.id}"` : '';
+    const padreAttr = padre ? ` data-padre="${padre}"` : '';
     const titleAttr = it.sub ? ` title="${esc(it.sub)}"` : '';
     const badge = it.badge ? ` <span class="badge" id="${it.badge}"${it.badgeVisible ? '' : ' style="display:none"'}>${esc(it.badgeDefault || '0')}</span>` : '';
-    return `<a class="${cls}"${idAttr} data-sec="${it.sec}"${titleAttr}><i class="${it.icon}"></i> ${esc(it.label)}${badge}</a>`;
+    return `<a class="${cls}"${idAttr} data-sec="${it.sec}"${padreAttr}${titleAttr}><i class="${it.icon}"></i> ${esc(it.label)}${badge}</a>`;
   };
   const ancoraDesktop = document.getElementById('nav-items-anchor');
   if (ancoraDesktop) {
-    const bloque = NAV_GRUPOS.map(g => {
-      const items = NAV_ITEMS.filter(it => it.grupo === g.id);
-      if (!items.length) return '';
-      const labelCls = ['nav-label', g.roles].filter(Boolean).join(' ');
-      return `<div class="${labelCls}" data-label="${g.id}">${esc(g.label)}</div>` + items.map(htmlDesktop).join('');
+    const bloque = '<div class="nav-label" data-label="secciones">Secciones</div>' + NAV_PADRES.map(p => {
+      if (p.hoja) return htmlDesktop(NAV_ITEMS.find(it => it.sec === p.sec), 'nav-top');
+      const hijas = NAV_ITEMS.filter(it => it.padre === p.sec);
+      const roles = [...new Set(hijas.flatMap(h => h.roles.split(' ')))].filter(c => NAV_ROLES_HABILITAN.includes(c)).join(' ');
+      return htmlDesktop({ ...p, roles }, 'nav-top nav-padre') + hijas.map(h => htmlDesktop(h, 'nav-hijo', p.sec)).join('');
     }).join('');
     ancoraDesktop.insertAdjacentHTML('beforebegin', bloque);
   }
@@ -18559,14 +18611,58 @@ function calcularFrecuentes() {
   const uso = MI_PREFERENCIAS.uso_secciones || {};
   const total = Object.values(uso).reduce((a, b) => a + b, 0);
   if (total < FRECUENTES_MIN_CLICS) return [];
-  return Object.entries(uso)
-    .filter(([sec]) => document.getElementById('sec-' + sec))
+  // Los clics de una hija suman a su entrada del menú.
+  const porEntrada = {};
+  Object.entries(uso).forEach(([sec, n]) => { const k = PADRE_DE[sec] || sec; porEntrada[k] = (porEntrada[k] || 0) + n; });
+  return Object.entries(porEntrada)
+    .filter(([sec]) => document.querySelector(`#sidebar-nav > .nav-item:not(.nav-hijo)[data-sec="${sec}"]`))
     .sort((a, b) => b[1] - a[1])
     .slice(0, FRECUENTES_N)
     .map(([sec]) => sec);
 }
 function ocultarHeadersVaciosMenu() {
+  actualizarPadresNav();
   ocultarHeadersVacios('sidebar-nav', '.nav-item', '.nav-label');
+}
+
+/* ---------- Menú agrupado: padres, hijas y pestañas ----------
+   Las hijas (.nav-hijo) están ocultas por CSS salvo con body.nav-sondeo o
+   body.nav-buscando (index.html). El sondeo prende esa clase un instante para
+   preguntarle a getComputedStyle si el ROL deja ver una hija, sin duplicar en
+   JS las reglas de rol que ya viven en el CSS. */
+function navItemDe(sec) { return document.querySelector(`#sidebar-nav > .nav-item[data-sec="${sec}"]`); }
+function conSondeoNav(fn) {
+  const ya = document.body.classList.contains('nav-sondeo');
+  document.body.classList.add('nav-sondeo');
+  try { return fn(); } finally { if (!ya) document.body.classList.remove('nav-sondeo'); }
+}
+function navVisiblePorRol(el) { return !!el && conSondeoNav(() => getComputedStyle(el).display !== 'none'); }
+function hijasVisibles(padre) { return conSondeoNav(() => NAV_ITEMS.filter(it => it.padre === padre && navVisiblePorRol(navItemDe(it.sec)))); }
+function actualizarPadresNav() {
+  document.querySelectorAll('#sidebar-nav > .nav-padre').forEach(p => p.classList.toggle('nav-padre-vacio', !hijasVisibles(p.dataset.sec).length));
+}
+// Clic en un padre: la última hija que se usó de ese grupo, o la primera visible.
+function destinoDePadre(padre) {
+  const vis = hijasVisibles(padre).map(it => it.sec);
+  const ultima = (MI_PREFERENCIAS.ultima_hija || {})[padre];
+  return vis.includes(ultima) ? ultima : (vis[0] || 'hoy');
+}
+function pintarPestanasNav(sec, secEl) {
+  document.querySelectorAll('.nav-tabs-sec').forEach(n => n.remove());
+  const padre = PADRE_DE[sec];
+  if (!padre) return;
+  const hermanas = hijasVisibles(padre);
+  if (hermanas.length < 2) return;
+  secEl.insertAdjacentHTML('afterbegin', `<div class="seg-group nav-tabs-sec" role="tablist">${hermanas.map(it =>
+    `<button type="button" class="seg${it.sec === sec ? ' on' : ''}" role="tab" aria-selected="${it.sec === sec}" data-nav-tab="${it.sec}"><i class="${it.icon}"></i> ${esc(it.label)}</button>`).join('')}</div>`);
+}
+// Tras reordenar los padres, cada hija vuelve pegada a su padre (así el
+// buscador las muestra en su lugar).
+function acomodarHijasNav() {
+  document.querySelectorAll('#sidebar-nav > .nav-padre').forEach(p => {
+    let ref = p;
+    document.querySelectorAll(`#sidebar-nav > .nav-hijo[data-padre="${p.dataset.sec}"]`).forEach(h => { ref.after(h); ref = h; });
+  });
 }
 function renderFrecuentes() {
   const top = calcularFrecuentes();
@@ -18644,6 +18740,8 @@ function setupNavBuscador() {
       clearTimeout(t);
       t = setTimeout(() => {
         const q = input.value.trim().toLowerCase();
+        // Buscando, las hijas ocultas del menú agrupado también compiten.
+        document.body.classList.toggle('nav-buscando', !!q);
         const items = [...cont.querySelectorAll(itemSel)];
         // Buscando: el texto manda. Buscador vacío: la visibilidad por rol
         // manda (no revive un item oculto por CSS de rol solo porque el
@@ -18660,6 +18758,7 @@ function setupNavBuscador() {
 }
 
 function activateSection(sec, fromNav) {
+  if (sec?.startsWith('grp-')) sec = destinoDePadre(sec);
   sec = SECCIONES_REUBICADAS[sec] || sec;
   if (!document.getElementById('sec-' + sec)) sec = 'hoy';
   if (currentSec === sec) { cerrarMenuMovil(); return; }
@@ -18675,11 +18774,12 @@ function activateSection(sec, fromNav) {
   currentSec = sec;
   SECCIONES_CARGADAS.add(sec);
   guardarUltimaSeccion(sec);
-  document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec));
+  document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec || x.dataset.sec === PADRE_DE[sec]));
   if (sheetAbierta) closeSheet(sheetAbierta, true);
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active', 'entrando'));
   const secEl = document.getElementById('sec-' + sec);
   secEl.classList.add('active');
+  pintarPestanasNav(sec, secEl);
   // Entrada de la sección nueva. La clase se saca al terminar para que el
   // transform de la animación no quede vivo más de lo necesario (ver
   // .section.entrando en index.html).
@@ -18741,10 +18841,11 @@ function setupNav() {
   // .nav-item/.sheet-item dinámicamente (renderNavItems/renderFrecuentes), un
   // binding hecho una sola vez al boot no los cubriría.
   document.addEventListener('click', e => {
-    const n = e.target.closest('.nav-item[data-sec]');
+    const n = e.target.closest('.nav-item[data-sec], .nav-tabs-sec [data-nav-tab]');
     if (!n) return;
-    incrementarUsoSeccion(n.dataset.sec);
-    activateSection(n.dataset.sec);
+    const sec = n.dataset.navTab || (n.dataset.sec.startsWith('grp-') ? destinoDePadre(n.dataset.sec) : n.dataset.sec);
+    incrementarUsoSeccion(sec);
+    activateSection(sec);
   });
   document.getElementById('side-foot-perfil')?.addEventListener('click', () => { cerrarMenuMovil(); openPerfilDrawer(); });
   document.querySelectorAll('.mfs-trigger, .mfs-done').forEach(b => b.addEventListener('click', () => {
@@ -19110,13 +19211,14 @@ function setupSidebarReorder() {
   const nav = document.getElementById('sidebar-nav');
   if (!nav) return;
   let dragEl = null;
-  nav.querySelectorAll(':scope > .nav-item:not(.nav-freq)').forEach(item => {
+  nav.querySelectorAll(':scope > .nav-top:not(.nav-freq)').forEach(item => {
     item.draggable = true;
     item.addEventListener('dragstart', () => { dragEl = item; item.classList.add('dragging'); });
     item.addEventListener('dragend', () => {
       item.classList.remove('dragging');
       nav.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
       dragEl = null;
+      acomodarHijasNav();
       guardarOrdenSidebar();
     });
     item.addEventListener('dragover', e => {
@@ -19130,10 +19232,9 @@ function setupSidebarReorder() {
   });
 }
 function guardarOrdenSidebar() {
-  const orden = [...document.querySelectorAll('#sidebar-nav > .nav-item:not(.nav-freq), #sidebar-nav > .nav-label:not([data-grupo-frec])')]
-    .map(el => el.classList.contains('nav-label') ? 'label:' + el.dataset.label : 'sec:' + el.dataset.sec);
-  if (JSON.stringify(orden) === JSON.stringify(MI_PREFERENCIAS.orden_sidebar_v2 || null)) return;
-  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, orden_sidebar_v2: orden };
+  const orden = [...document.querySelectorAll('#sidebar-nav > .nav-top:not(.nav-freq)')].map(el => 'sec:' + el.dataset.sec);
+  if (JSON.stringify(orden) === JSON.stringify(MI_PREFERENCIAS.orden_sidebar_v3 || null)) return;
+  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, orden_sidebar_v3: orden };
   // sb.rpc() devuelve un builder "thenable" de postgrest-js, no una Promise real:
   // tiene .then() pero NO .catch(). Llamar .catch() directo tira
   // "TypeError: sb.rpc(...).catch is not a function" y, al ocurrir dentro de
@@ -19146,21 +19247,19 @@ function aplicarOrdenSidebar() {
   // grupos (principal/tarifario/gestion/ayuda) -- reproducirlo tal cual tras
   // el regrupamiento a 7 grupos amontona los grupos nuevos (ventas/ia/
   // marketing) al final, vacíos, porque no existen en ese array viejo.
-  // orden_sidebar_v2 arranca limpio para todos, sin migrar datos.
-  const orden = MI_PREFERENCIAS.orden_sidebar_v2;
+  // orden_sidebar_v2 fue el de 7 grupos; con el menú agrupado (2026-09-25)
+  // v3 ordena solo las 12 entradas y arranca limpio para todos.
+  const orden = MI_PREFERENCIAS.orden_sidebar_v3;
   const nav = document.getElementById('sidebar-nav');
   if (!orden?.length || !nav) return;
-  const hijos = [...nav.querySelectorAll(':scope > .nav-item, :scope > .nav-label')];
-  const idDe = el => el.classList.contains('nav-label') ? 'label:' + el.dataset.label : 'sec:' + el.dataset.sec;
-  const mapa = new Map(hijos.map(el => [idDe(el), el]));
-  // Los que no estén en el orden guardado (secciones nuevas agregadas después
-  // de que el usuario guardó su orden) quedan al final, en su posición
-  // original entre sí.
-  const usados = new Set();
-  const final = [];
-  orden.forEach(id => { const el = mapa.get(id); if (el) { final.push(el); usados.add(el); } });
-  hijos.forEach(el => { if (!usados.has(el)) final.push(el); });
-  final.forEach(el => nav.appendChild(el));
+  // Las entradas que no estén en el orden guardado (nuevas) quedan al
+  // final, en su posición original entre sí.
+  const pos = el => { const i = orden.indexOf('sec:' + el.dataset.sec); return i < 0 ? Infinity : i; };
+  const ancla = document.getElementById('nav-items-anchor');
+  [...nav.querySelectorAll(':scope > .nav-top')].map((el, i) => [el, i])
+    .sort((a, b) => (pos(a[0]) - pos(b[0])) || (a[1] - b[1]))
+    .forEach(([el]) => nav.insertBefore(el, ancla));
+  acomodarHijasNav();
 }
 
 /* ---------- Recordar la última sección visitada (preferencias.ultima_seccion) ----------
@@ -19168,8 +19267,9 @@ function aplicarOrdenSidebar() {
    asesor -- marketing y boleteria arrancan siempre en su única sección fija
    (ver startApp), no tiene sentido restaurarles nada ahí. */
 function guardarUltimaSeccion(sec) {
-  if (MI_PREFERENCIAS.ultima_seccion === sec) return;
-  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, ultima_seccion: sec };
+  const padre = PADRE_DE[sec], ultimaHija = MI_PREFERENCIAS.ultima_hija || {};
+  if (MI_PREFERENCIAS.ultima_seccion === sec && (!padre || ultimaHija[padre] === sec)) return;
+  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, ultima_seccion: sec, ...(padre ? { ultima_hija: { ...ultimaHija, [padre]: sec } } : {}) };
   guardarPreferenciasNavDebounced();
 }
 
