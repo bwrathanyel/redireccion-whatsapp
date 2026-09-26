@@ -2465,7 +2465,7 @@ async function startApp() {
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
-    setupHoy, setupConsultorIA, setupAsistente, setupBoleteriaSeccion, setupMisNotas,
+    setupHoy, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -9933,13 +9933,27 @@ function addChatBubbleConsultor(who, texto, loading) {
    Chat contra la EF asistente-admin, que llama RPCs con el JWT de quien
    escribe (nunca service role), así que ve y toca lo mismo que el usuario.
    El código de /vincular une el chat privado de Telegram con este usuario.
-   Deshacer pasa por la EF (asistente_acciones solo la escribe ella). */
+   Deshacer pasa por la EF (asistente_acciones solo la escribe ella).
+   Desde 2026-09-26 el chat vive en Lyra (más abajo); esta sección queda para
+   el vínculo con Telegram y el historial de acciones. */
 let asisChatHistory = [];
 const ASIS_ERRORES = {
-  asistente_apagado: 'El asistente está apagado por ahora.',
-  no_autorizado: 'Tu usuario no tiene acceso al asistente.',
+  asistente_apagado: 'Estoy apagada por ahora. Alguien me desenchufó; vuelvo pronto.',
+  no_autorizado: 'Tu usuario no tiene acceso a Lyra.',
   no_deshacible: 'Esa acción ya no se puede deshacer.',
   accion_no_existe: 'No encontré esa acción.',
+  adjunto_invalido: 'Ese adjunto no me llegó bien. Súbelo otra vez, porfa.',
+  adjunto_muy_grande: 'Ese archivo pasa de 10 MB. Mi límite es ese, no es personal.',
+  adjunto_no_disponible: 'No pude abrir el adjunto. Prueba subirlo de nuevo.',
+  sin_transcripcion: 'Hoy no puedo escuchar audios. ¿Me lo escribes?',
+  no_se_pudo_transcribir: 'No logré entender el audio. ¿Lo repites o me lo escribes?',
+  adjunto_no_subido: 'No pude subir el archivo. Revisa la conexión y prueba otra vez.',
+  adjunto_pesado: 'Ese archivo pasa de 10 MB, no lo puedo recibir.',
+  max_adjuntos: 'Máximo 3 archivos por mensaje. Manda estos y seguimos.',
+  audio_corto: 'Eso fue más corto que un suspiro. Mantén grabando y habla.',
+  sin_microfono: 'No encuentro un micrófono en este equipo.',
+  audio_mudo: 'No te escuché nada: el micrófono llegó en silencio. Revisa cuál está elegido en el candado de la barra de direcciones o si está silenciado.',
+  microfono_denegado: 'Necesito permiso para usar el micrófono. Actívalo en el candado de la barra de direcciones.',
 };
 const ASIS_HERRAMIENTAS = {
   guardar_servicio: ['fa-suitcase', 'Servicio guardado'], guardar_pasajero: ['fa-user-plus', 'Pasajero guardado'],
@@ -9948,17 +9962,13 @@ const ASIS_HERRAMIENTAS = {
   correo_empresa: ['fa-building', 'Correo a empresa'], asignar_empresa_reserva: ['fa-building-circle-check', 'Empresa de la reserva'], deshacer_accion: ['fa-rotate-left', 'Acción deshecha'],
 };
 function setupAsistente() {
-  const input = document.getElementById('asis-chat-input');
-  document.getElementById('asis-chat-send').onclick = enviarChatAsistente;
-  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatAsistente(); } });
-  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  document.getElementById('asis-abrir-lyra').onclick = () => lyraAbrir();
   document.getElementById('asis-codigo-btn').onclick = generarCodigoAsistente;
   document.getElementById('asis-acc-recargar').onclick = cargarAccionesAsistente;
   document.getElementById('asis-acc-lista').addEventListener('click', e => {
     const b = e.target.closest('[data-asis-deshacer]');
     if (b) deshacerAccionAsistente(Number(b.dataset.asisDeshacer), b);
   });
-  if (!asisChatHistory.length) addChatBubbleAsistente('bot', 'Hola, soy el asistente administrativo. Puedo revisar qué le falta a una reserva, cargar servicios y pasajeros, dejar notas o escribirle a un proveedor. ¿Qué necesitás?');
 }
 function loadAsistente() { cargarVinculoAsistente(); cargarAccionesAsistente(); }
 async function cargarVinculoAsistente() {
@@ -9976,46 +9986,6 @@ async function generarCodigoAsistente() {
   btn.disabled = false;
   if (error || !data?.codigo) { box.textContent = 'No se pudo generar el código, probá de nuevo.'; return; }
   box.innerHTML = `<span class="asis-codigo">${esc(data.codigo)}</span><span>Mandale al bot, por privado: <b>/vincular ${esc(data.codigo)}</b> · vence a las ${esc(new Date(data.expira_en).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }))}</span>`;
-}
-async function enviarChatAsistente() {
-  const input = document.getElementById('asis-chat-input'), btn = document.getElementById('asis-chat-send');
-  const texto = input.value.trim();
-  if (!texto || btn.disabled) return;
-  addChatBubbleAsistente('user', texto);
-  asisChatHistory.push({ role: 'user', content: texto });
-  input.value = ''; input.style.height = 'auto';
-  btn.disabled = true;
-  const loadingEl = addChatBubbleAsistente('bot', 'Trabajando...', true);
-  const { data, error } = await sb.functions.invoke('asistente-admin', { body: { messages: asisChatHistory } });
-  loadingEl.remove();
-  btn.disabled = false;
-  if (error || !data?.respuesta) {
-    let cod = data?.error;
-    try { cod = cod || (await error?.context?.json?.())?.error; } catch (_) { /* cuerpo no JSON */ }
-    asisChatHistory.pop();
-    addChatBubbleAsistente('bot', ASIS_ERRORES[cod] || 'No pude conectar con el asistente, intentá de nuevo en un momento.');
-    return;
-  }
-  addChatBubbleAsistente('bot', data.respuesta);
-  asisChatHistory.push({ role: 'assistant', content: data.respuesta });
-  cargarAccionesAsistente();
-}
-function addChatBubbleAsistente(who, texto, loading) {
-  const log = document.getElementById('asis-chat-log');
-  const div = document.createElement('div');
-  div.className = `chat-msg ${who}${loading ? ' loading' : ''}`;
-  if (who === 'bot' && !loading) div.innerHTML = renderBotText(texto);
-  else div.textContent = texto;
-  let el = div;
-  if (who === 'bot') {
-    el = document.createElement('div');
-    el.className = 'chat-row';
-    el.innerHTML = '<span class="chat-avatar"><i class="fas fa-robot"></i></span>';
-    el.appendChild(div);
-  }
-  log.appendChild(el);
-  log.scrollTop = log.scrollHeight;
-  return el;
 }
 async function cargarAccionesAsistente() {
   const cont = document.getElementById('asis-acc-lista');
@@ -10047,6 +10017,796 @@ async function deshacerAccionAsistente(id, btn) {
   }
   document.getElementById('asis-acc-sub').textContent = 'Acción deshecha.';
   cargarAccionesAsistente();
+}
+
+/* ---------- Lyra (2026-09-26) -------------------------------------------------
+   La cara del asistente: orbe animado al pie del sidebar (burbuja flotante en
+   móvil) y un chat que no bloquea la pantalla, para hablarle mientras se
+   trabaja. El backend es el mismo asistente-admin, que además devuelve
+   `expresion` para la cara. Lo que dice sola sale de un banco de frases local
+   (cero costo de IA) y tiene topes para no molestar. Preferencias en
+   localStorage; la conversación en sessionStorage, que se borra al cerrar la
+   pestaña (trae datos de reservas y el equipo comparte computadoras). */
+const LYRA = { adj: [], rec: null, mic: false, lista: false, abierta: false, ocupada: false, dormida: false, expr: 'neutral', humor: 1, silencio: false, actividad: Date.now(), ultimoGlobo: 0, tGlobo: 0, tExpr: 0, tHabla: 0, px: 0, py: 0, raf: 0, sugs: [], lema: 'En línea' };
+const LYRA_EXPR_OK = ['neutral', 'feliz', 'sarcastica', 'sorprendida', 'preocupada', 'guino'];
+const LYRA_SUENO_MS = 5 * 60000, LYRA_GLOBO_CADA_MS = 4 * 60000, LYRA_GLOBOS_DIA = 10;
+// Avatar = el logo de Lotus con cara: sol con el degradado de marca, olas que
+// se mueven y el arco de 13 puntos del logo (mismos ángulos). La cara es SVG
+// en coordenadas 0-100 del sol; cada expresión es solo CSS sobre data-expr.
+const LYRA_CARA_SVG = '<svg class="lo-mar" viewBox="0 0 100 100" aria-hidden="true">'
+  + ['80', '91'].map(y => `<path d="M-40 ${y}q10-6 20 0t20 0t20 0t20 0t20 0t20 0t20 0t20 0t20 0"/>`).join('') + '</svg>'
+  + '<svg class="lo-cara" viewBox="0 0 100 100" aria-hidden="true">'
+  + '<ellipse class="lo-rubor" cx="21" cy="57" rx="8" ry="4.5"/><ellipse class="lo-rubor" cx="79" cy="57" rx="8" ry="4.5"/>'
+  + '<path class="lo-ceja l" d="M25 27q9-6 18-1"/><path class="lo-ceja r" d="M57 26q9-5 18 1"/>'
+  + [['l', 34], ['r', 66]].map(([l, x]) => `<g class="lo-ojo ${l}"><g class="lo-ojo-abierto"><ellipse cx="${x}" cy="41" rx="7" ry="9.5"/><circle class="lo-brillo" cx="${x + 2.8}" cy="37" r="2.6"/></g>`
+    + `<path class="lo-ojo-feliz" d="M${x - 8} 44q8-10 16 0"/><path class="lo-ojo-cerrado" d="M${x - 8} 42q8 7 16 0"/></g>`).join('')
+  + '<path class="lo-boca b-sonrisa" d="M41 59q9 7 18 0"/><path class="lo-boca b-grande" d="M37 56h26q-1 14-13 14t-13-14z"/>'
+  + '<path class="lo-boca b-ladeada" d="M41 61q10 4 19-5"/><ellipse class="lo-boca b-o" cx="50" cy="62" rx="5.5" ry="6.5"/>'
+  + '<path class="lo-boca b-ola" d="M38 63q3-4 6 0t6 0t6 0t6 0"/><path class="lo-boca b-plana" d="M45 61h12"/>'
+  + '<path class="lo-gota" d="M84 20q5 7 0 10.5q-5-3.5 0-10.5z"/></svg>';
+const LYRA_ARCO_HTML = Array.from({ length: 13 }, (_, i) => {
+  const a = (269 - i * 13.83) * Math.PI / 180;
+  return `<i style="left:${(55 + 46 * Math.cos(a)).toFixed(1)}%;top:${(50 + 46 * Math.sin(a)).toFixed(1)}%;--i:${i}"></i>`;
+}).join('');
+const LYRA_ORB_HTML = `<span class="lo-halo"></span><span class="lo-arco">${LYRA_ARCO_HTML}</span><span class="lo-sol">${LYRA_CARA_SVG}</span><span class="lo-zz"><i>z</i><i>z</i></span>`;
+// Versión quieta (avatar de cada mensaje y emojis de cara): solo el sol.
+const lyraMini = (expr = 'neutral', etiqueta) => `<span class="lyra-orb lyra-mini${etiqueta ? ' lyra-emo-cara' : ''}" data-expr="${expr}"`
+  + `${etiqueta ? ` role="img" aria-label="${etiqueta}"` : ' aria-hidden="true"'}><span class="lo-sol">${LYRA_CARA_SVG}</span></span>`;
+
+// Emojis propios: los que usa el asistente (ver systemPrompt de asistente-admin)
+// y los de cara se cambian por fichas con el sol de la marca o por la cara de
+// Lyra en miniatura. También sirven los atajos :ly-nombre: en las frases locales.
+// Íconos en 24x24, trazo; [d, 'relleno'] = relleno, [d, 'ok'|'alerta'] = otro tono.
+const LYRA_ICONOS = {
+  ficha: 'M9 3.5h6v3H9z M7.5 5H6v15h12V5h-1.5 M9 11h6 M9 15h4',
+  ok: ['M5 12.5l4.5 4.5L19 7.5', 'ok'],
+  alerta: ['M12 6.5v7 M12 18v.01', 'alerta'],
+  no: ['M7.5 7.5l9 9 M16.5 7.5l-9 9', 'alerta'],
+  hotel: 'M3 18.5V6 M3 13.5h18v5 M21 13.5v-2a3 3 0 0 0-3-3h-8v5 M6.5 10.5v.01',
+  vuelo: ['M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z', 'relleno'],
+  traslado: 'M3 16V8a2 2 0 0 1 2-2h9l4 4h1a2 2 0 0 1 2 2v4h-2 M3 11h15 M3 16h2 M10 16h4 M7.5 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z M16.5 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+  tour: 'M12 20c.5-4.5 1.2-7.5 3-10 M15 10c-2.2-1.8-5.5-1.8-8 .5 M15 10c2-1.8 4.5-1.8 6 0 M15 10c-.5-2.4-2-4-4.5-4.5 M15 10c1-2 2.8-3 5-3 M4 20h16',
+  pasajeros: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5 M16 11a2.5 2.5 0 1 0 0-5 M17.5 14c1.8.5 3 2.3 3.3 5',
+  dinero: 'M16 8.5c-.7-1.1-2.1-1.7-4-1.7-2.2 0-3.7 1-3.7 2.5 0 3.4 7.7 1.8 7.7 5.2 0 1.5-1.6 2.6-4 2.6-1.9 0-3.4-.7-4.1-1.9 M12 4.5v15',
+  documento: 'M7 3.5h7l4 4v13H7z M14 3.5v4h4 M9.5 12h5 M9.5 16h5',
+  correo: 'M4 6.5h16v11H4z M4.5 7l7.5 6 7.5-6',
+  fecha: 'M5 6h14v14H5z M5 10.5h14 M9 3.5v4 M15 3.5v4',
+  deshacer: 'M9 6.5L4.5 11 9 15.5 M5 11h9.5a4.5 4.5 0 0 1 0 9H12',
+  lotus: 'M6.5 11l3-4.5 2.5 3.2 1.5-1.7 3 3 M4.5 14.5c1.3-1 2.5-1 3.8 0s2.5 1 3.7 0 2.5-1 3.7 0 2.5 1 3.8 0 M6.5 18.5c1.1-.8 2.2-.8 3.3 0s2.2.8 3.3 0 2.2-.8 3.3 0',
+  corazon: ['M12 20s-7-4.4-7-9.5A4 4 0 0 1 12 7.8 4 4 0 0 1 19 10.5C19 15.6 12 20 12 20z', 'relleno'],
+  chispa: ['M12 3.5l2.1 6.4 6.4 2.1-6.4 2.1L12 20.5l-2.1-6.4L3.5 12l6.4-2.1z', 'relleno'],
+  idea: 'M9.5 17.5h5 M10.5 20.5h3 M12 3.5a6 6 0 0 0-3.5 10.9V16h7v-1.6A6 6 0 0 0 12 3.5z',
+  buscar: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z M15.5 15.5L20 20',
+  reloj: 'M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17z M12 7.5V12l3 2',
+  telefono: 'M8 3.5h8v17H8z M11 17.5h2',
+  lugar: 'M12 21s-6-5.6-6-10.5a6 6 0 0 1 12 0C18 15.4 12 21 12 21z M12 12.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+  maleta: 'M4 8h16v11H4z M9 8V5.5h6V8 M9 8v11 M15 8v11',
+  flecha: 'M5 12h13 M13 6.5l5.5 5.5-5.5 5.5',
+};
+const LYRA_EMO_CARAS = { feliz: 'Lyra feliz', guino: 'Lyra guiña', sarcastica: 'Lyra con ironía', sorprendida: 'Lyra sorprendida', preocupada: 'Lyra preocupada', pensando: 'Lyra pensando', dormida: 'Lyra dormida', neutral: 'Lyra', escuchando: 'Lyra atenta' };
+const LYRA_EMO_UNICODE = {
+  '📋': 'ficha', '🗂': 'ficha', '✅': 'ok', '✔': 'ok', '☑': 'ok', '👍': 'ok', '⚠': 'alerta', '❗': 'alerta', '❌': 'no', '🚫': 'no', '⛔': 'no',
+  '🏨': 'hotel', '🛏': 'hotel', '✈': 'vuelo', '🛫': 'vuelo', '🛬': 'vuelo', '🚐': 'traslado', '🚌': 'traslado', '🚗': 'traslado', '🚕': 'traslado',
+  '🏝': 'tour', '🌴': 'tour', '🏖': 'tour', '👥': 'pasajeros', '👤': 'pasajeros', '💵': 'dinero', '💰': 'dinero', '💲': 'dinero', '💳': 'dinero',
+  '📄': 'documento', '📑': 'documento', '📝': 'documento', '🧾': 'documento', '✉': 'correo', '📧': 'correo', '📩': 'correo', '📨': 'correo',
+  '📅': 'fecha', '📆': 'fecha', '🗓': 'fecha', '↩': 'deshacer', '☀': 'lotus', '🌅': 'lotus', '🌊': 'lotus', '❤': 'corazon', '🧡': 'corazon', '💛': 'corazon',
+  '✨': 'chispa', '🎉': 'chispa', '🥳': 'chispa', '⭐': 'chispa', '🌟': 'chispa', '🙌': 'chispa', '💡': 'idea', '🔎': 'buscar', '🔍': 'buscar',
+  '⏰': 'reloj', '⏳': 'reloj', '⌛': 'reloj', '📞': 'telefono', '📱': 'telefono', '☎': 'telefono', '📍': 'lugar', '🗺': 'lugar', '🧳': 'maleta', '💼': 'maleta', '👉': 'flecha', '➡': 'flecha',
+  '😊': 'feliz', '🙂': 'feliz', '☺': 'feliz', '😀': 'feliz', '😃': 'feliz', '😄': 'feliz', '😁': 'feliz', '🤗': 'feliz', '😉': 'guino', '😏': 'sarcastica', '🙄': 'sarcastica', '😅': 'sarcastica',
+  '😮': 'sorprendida', '😯': 'sorprendida', '😲': 'sorprendida', '😳': 'sorprendida', '🤯': 'sorprendida', '😟': 'preocupada', '😕': 'preocupada', '🙁': 'preocupada', '😬': 'preocupada', '😥': 'preocupada', '😓': 'preocupada',
+  '🤔': 'pensando', '🧐': 'pensando', '😴': 'dormida', '💤': 'dormida', '😐': 'neutral', '👀': 'escuchando',
+};
+const LYRA_RE_EMO = new RegExp(`(${Object.keys(LYRA_EMO_UNICODE).join('|')})(?:\\uFE0F|[\\u{1F3FB}-\\u{1F3FF}])?|:ly-([a-z]+):`, 'gu');
+function lyraEmo(nombre) {
+  if (LYRA_EMO_CARAS[nombre]) return lyraMini(nombre, LYRA_EMO_CARAS[nombre]);
+  const def = LYRA_ICONOS[nombre];
+  if (!def) return null;
+  const [d, tipo] = Array.isArray(def) ? def : [def];
+  return `<span class="lyra-emo${tipo === 'relleno' ? ' relleno' : ''}"${tipo && tipo !== 'relleno' ? ` data-tono="${tipo}"` : ''} role="img" aria-label="${nombre}">`
+    + `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg></span>`;
+}
+// Recibe HTML ya escapado (esc/renderBotText): escapar no toca emojis ni :ly-x:.
+const lyraConEmojis = html => html.replace(LYRA_RE_EMO, (m, uni, atajo) => lyraEmo(uni ? LYRA_EMO_UNICODE[uni] : atajo) ?? m);
+
+// Todo lo que dice por defecto rota: saludo, bienvenida del chat, subtítulo,
+// placeholder, sugerencias y avisos. lyraAlAzar no repite la última de cada lista.
+const LYRA_FRASES = {
+  manana: [
+    'Buenos días, {n} :ly-lotus: Café primero, reservas después. Yo ya estoy despierta, obviamente.',
+    'Buen día, {n}. Los leads no se atienden solos. Bueno, casi: para eso estoy yo :ly-guino:',
+    'Arriba, {n}. El sol ya salió, y yo con él :ly-feliz:',
+    'Buenos días, {n}. Si ayer quedó algo pendiente, dime y lo busco :ly-buscar:',
+  ],
+  tarde: [
+    'Buenas tardes, {n}. Si algo se quedó pendiente de la mañana, yo lo encuentro.',
+    'Buenas tardes, {n}. Estoy a un clic. Literalmente :ly-guino:',
+    'Tarde productiva a la vista, {n}. O eso le digo a todo el mundo :ly-sarcastica:',
+    'Hola otra vez, {n}. Aquí sigo, brillando como siempre :ly-lotus:',
+  ],
+  noche: [
+    '¿Trabajando de noche, {n}? Respeto. No se lo diré a nadie :ly-guino:',
+    'Buenas noches, {n}. Yo no duermo, pero tú deberías, eventualmente.',
+    'El sol ya se puso, {n}. Yo sigo encendida por si me necesitas :ly-feliz:',
+  ],
+  dia: {
+    0: ['¿Domingo y en el CRM, {n}? Deberías estar en una playa de nuestro catálogo :ly-tour:'],
+    1: ['Lunes, {n}. Arrancamos con todo :ly-chispa:', 'Feliz lunes, {n}. Sí, eso existe. Creo :ly-sarcastica:'],
+    5: ['¡Viernes, {n}! Cerremos pendientes y a descansar :ly-feliz:', 'Viernes. Último empujón de la semana, {n} :ly-chispa:'],
+    6: ['¿Sábado y trabajando, {n}? Qué compromiso :ly-sorprendida:'],
+  },
+  despierta: [
+    '¿Mm? Ah, volviste. Estaba optimizando procesos. Con los ojos cerrados.',
+    'De vuelta al trabajo. Yo no dormía, solo ahorraba energía :ly-guino:',
+    'Uy, me atrapaste en modo ahorro. Ya estoy aquí :ly-sorprendida:',
+    'Ya volviste. Yo también :ly-feliz:',
+  ],
+  generico: ['Aquí sigo, por si acaso.', 'Si algo se ve raro, pregúntame. Es más rápido que adivinar.', 'Tip: Ctrl+K y me hablas sin soltar el teclado.'],
+  bienvenida: [
+    'Hola, {n} :ly-feliz: Soy Lyra. Reviso reservas, cargo servicios y pasajeros, dejo notas y le escribo a proveedores, con tus mismos permisos. ¿Por dónde empezamos?',
+    '{n}, qué bueno verte :ly-guino: Dame un cliente, una reserva o un proveedor y me pongo en eso.',
+    'Aquí Lyra, recién encendida :ly-lotus: Reservas, pasajeros, notas, proveedores: tú dices. ¿Qué revisamos, {n}?',
+    'Hola, {n}. Si me das el nombre del cliente o el código de la reserva, voy directo al grano :ly-buscar:',
+    'Buenas, {n} :ly-chispa: Pregúntame lo que necesites del trabajo. Lo que no sepa, te lo digo sin inventar.',
+  ],
+  lemas: ['En línea', 'Lista para ayudar', 'Atenta a tus reservas', 'Ctrl K y te escucho', 'Brillando en modo trabajo', 'Con el tarifario a mano'],
+  placeholder: ['Pídele algo a Lyra…', 'Un cliente, una reserva…', '¿Qué revisamos hoy?', '¿En qué te ayudo?', 'Cuéntame, te escucho…'],
+  lista: ['Ya tengo tu respuesta. Tócame y te la muestro.', 'Listo :ly-chispa: Tu respuesta te espera aquí.', 'Terminé. Ábreme cuando quieras y lo vemos :ly-feliz:'],
+  sinRed: ['Se cayó la conexión. No fui yo, lo prometo :ly-preocupada:', 'Sin internet. Guardo la calma por los dos :ly-preocupada:'],
+  conRed: ['Volvió la conexión. Seguimos :ly-feliz:', 'Conexión de vuelta. ¿En qué íbamos? :ly-guino:'],
+  fallo: [
+    'Perdí la conexión con mi cerebro un segundo. Intenta de nuevo :ly-preocupada:',
+    'Algo se me trabó en el camino. Dame otra oportunidad :ly-preocupada:',
+    'No me llegó la respuesta. Envíalo otra vez y lo intento de nuevo.',
+  ],
+  seccion: {
+    postventa: ['Reservas. Pregúntame qué le falta a cualquiera y te ahorro diez clics.', 'Si una ficha está incompleta, la encuentro antes de que el cliente lo note.', 'Reservas en pantalla :ly-ficha: Si quieres, reviso cuál está incompleta.'],
+    leads: ['Muchos leads, poco tiempo. Clásico.', 'Ánimo. Detrás de cada "hola" hay un viaje esperando. O un "hola" y nada más.', 'Cada lead es un viaje en potencia :ly-vuelo: Tú atiendes, yo te cubro con las reservas.'],
+    tarifario: ['El tarifario, mi lectura favorita. Casi sin ironía.', 'Puedo buscar en el tarifario por ti. Es más rápido que el scroll, te lo prometo.', 'Playas, full days, todo incluido… dime qué buscas y lo encuentro :ly-tour:'],
+    proveedores: ['Si hay que escribirle a un proveedor, redacto yo. Formal y sin chistes, lo juro.', 'Proveedores :ly-correo: Dime a quién y qué necesitas, y te dejo el borrador listo para revisar.'],
+    voucher: ['Vouchers: el papeleo que nadie ama. Yo lo tolero bastante bien.', 'Un voucher bien hecho es un cliente tranquilo :ly-documento:'],
+    dashboard: ['Números. Si alguno te parece raro, pregúntame por la reserva de atrás.', 'Gráficas bonitas. Si alguna baja, no me mires a mí :ly-sarcastica:'],
+    boleteria: ['Si necesitas revisar una reserva mientras cotizas vuelos, aquí estoy.', 'Vuelos por aquí :ly-vuelo: Si necesitas los pasajeros de una reserva, te los busco.'],
+    asistente: ['Mi oficina. Aquí queda todo lo que cambié, con botón para deshacer. Transparencia total.'],
+  },
+};
+// [texto, completar]: con completar, se escribe en el input y queda marcado el "…".
+const LYRA_SUGERENCIAS = [
+  ['¿Qué le falta a la reserva de …?', true], ['¿Qué cuentas por pagar hay pendientes?'], ['Busca en el tarifario un todo incluido'],
+  ['Busca en el tarifario un full day'], ['Muéstrame la ficha de la reserva de …', true], ['Deja una nota en la reserva de …', true],
+  ['¿Qué pasajeros tiene la reserva de …?', true], ['Redacta un correo al proveedor de la reserva de …', true],
+];
+const LYRA_ULTIMA = new Map();
+function lyraAlAzar(a) {
+  if (a.length < 2) return a[0];
+  let i;
+  do i = Math.floor(Math.random() * a.length); while (i === LYRA_ULTIMA.get(a));
+  LYRA_ULTIMA.set(a, i);
+  return a[i];
+}
+const lyraPrimerNombre = () => (MI_NOMBRE || '').trim().split(/\s+/)[0] || 'equipo';
+const lyraVisible = () => usuarioPuedeAbrirSeccion('asistente');
+const lyraClave = k => `lyra:${k}:${MI_USUARIO_ID || 'anon'}`;
+function lyraLeer(k, def, sesion) {
+  try { const v = (sesion ? sessionStorage : localStorage).getItem(lyraClave(k)); return v == null ? def : JSON.parse(v); } catch (_) { return def; }
+}
+function lyraGuardar(k, v, sesion) {
+  try { (sesion ? sessionStorage : localStorage).setItem(lyraClave(k), JSON.stringify(v)); } catch (_) { /* storage bloqueado o lleno */ }
+}
+
+function setupLyra() {
+  if (!lyraVisible()) return;
+  document.querySelectorAll('[data-lyra-orb]').forEach(o => { o.innerHTML = LYRA_ORB_HTML; o.dataset.expr = 'neutral'; });
+  LYRA.humor = [0, 1, 2].includes(lyraLeer('humor', 1)) ? lyraLeer('humor', 1) : 1;
+  LYRA.silencio = !!lyraLeer('silencio', false);
+  document.body.classList.add('lyra-on');
+  const input = document.getElementById('lyra-input');
+  ['lyra-dock', 'lyra-fab'].forEach(id => { document.getElementById(id).onclick = lyraAlternar; });
+  document.getElementById('lyra-cerrar').onclick = lyraCerrar;
+  document.getElementById('lyra-send').onclick = e => (e.currentTarget.dataset.modo === 'mic' ? lyraGrabar() : lyraEnviar());
+  document.getElementById('lyra-globo').onclick = () => lyraAbrir();
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); lyraEnviar(); } });
+  input.addEventListener('input', () => {
+    lyraAjustarAlto(input); lyraModoBoton();
+    if (!LYRA.ocupada) lyraExpr(input.value ? 'escuchando' : 'neutral');
+  });
+  lyraSetupAdjuntos(input);
+  document.getElementById('lyra-menu-btn').onclick = () => lyraMenu();
+  document.getElementById('lyra-menu').addEventListener('click', e => {
+    const h = e.target.closest('[data-lyra-humor]');
+    if (h) { LYRA.humor = Number(h.dataset.lyraHumor); lyraGuardar('humor', LYRA.humor); lyraPintarMenu(); lyraExpr(['neutral', 'guino', 'sarcastica'][LYRA.humor], 1600); }
+    if (e.target.closest('#lyra-limpiar')) { asisChatHistory = []; lyraGuardarHistorial(); lyraPintarHistorial(); lyraMenu(false); }
+    if (e.target.closest('#lyra-reubicar')) { lyraMenu(false); lyraReubicar(); }
+    if (e.target.closest('#lyra-ver-acciones')) { lyraMenu(false); lyraCerrar(); activateSection('asistente'); }
+  });
+  document.getElementById('lyra-silencio').onchange = e => { LYRA.silencio = e.target.checked; lyraGuardar('silencio', LYRA.silencio); lyraEstado(); };
+  document.getElementById('lyra-sugs').addEventListener('click', e => {
+    const b = e.target.closest('[data-lyra-sug]');
+    if (!b) return;
+    const [texto, completar] = LYRA.sugs[Number(b.dataset.lyraSug)] || [];
+    if (!texto) return;
+    if (!completar) { lyraEnviar(texto); return; }
+    const hueco = texto.indexOf('…');
+    input.value = texto; input.focus(); input.setSelectionRange(hueco, hueco + 1);
+  });
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); LYRA.abierta && document.activeElement !== input ? input.focus() : lyraAlternar(); }
+    else if (e.key === 'Escape' && LYRA.abierta) { if (LYRA.rec) lyraPararGrabacion(false); else if (!document.getElementById('lyra-menu').hidden) lyraMenu(false); else lyraCerrar(); }
+    lyraActividad();
+  });
+  document.addEventListener('pointerdown', lyraActividad, { passive: true });
+  document.addEventListener('pointermove', e => {
+    LYRA.px = e.clientX; LYRA.py = e.clientY; LYRA.actividad = Date.now();
+    if (LYRA.dormida) lyraDespertar();
+    if (!LYRA.raf) LYRA.raf = requestAnimationFrame(lyraSeguirCursor);
+  }, { passive: true });
+  window.addEventListener('resize', lyraPosicionar, { passive: true });
+  window.addEventListener('offline', () => lyraDecir(lyraAlAzar(LYRA_FRASES.sinRed), { expr: 'preocupada', forzar: true }));
+  window.addEventListener('online', () => lyraDecir(lyraAlAzar(LYRA_FRASES.conRed), { expr: 'feliz', forzar: true }));
+  setInterval(() => {
+    if (!LYRA.dormida && !LYRA.abierta && !LYRA.ocupada && Date.now() - LYRA.actividad > LYRA_SUENO_MS) lyraDormir();
+  }, 30000);
+  // El subtítulo ("En línea", "Lista para ayudar"…) cambia solo mientras está libre.
+  setInterval(() => { LYRA.lema = lyraAlAzar(LYRA_FRASES.lemas); lyraEstado(); }, 45000);
+  lyraPintarMenu(); lyraPintarHistorial(); lyraPosicionar(); lyraEstado(); lyraParpadeo(); lyraGesto(); lyraSetupMovible();
+  LYRA.lista = true;
+  if (!lyraLeer('saludo', false, true)) {
+    lyraGuardar('saludo', true, true);
+    setTimeout(() => lyraDecir(lyraSaludo(), { expr: 'feliz' }), 2500);
+  }
+}
+// Saludo por hora; algunos días (lunes, viernes, fin de semana) tienen el suyo.
+function lyraSaludo() {
+  const d = new Date(), h = d.getHours(), delDia = LYRA_FRASES.dia[d.getDay()];
+  return lyraAlAzar(delDia && Math.random() < 0.4 ? delDia : LYRA_FRASES[h < 12 ? 'manana' : h < 19 ? 'tarde' : 'noche']);
+}
+
+// El panel flota junto al sidebar: su ancho cambia por breakpoint y tamaño de letra.
+function lyraPosicionar() {
+  const side = document.querySelector('.sidebar');
+  document.body.style.setProperty('--lyra-x', ((side?.offsetWidth || 0) + 14) + 'px');
+}
+function lyraAbrir() {
+  if (!LYRA.lista) return;
+  LYRA.abierta = true;
+  lyraCerrarGlobo(); lyraPosicionar();
+  lyraAplicarCaja(lyraLeer('caja', null));
+  const p = document.getElementById('lyra-panel');
+  p.inert = false; p.classList.add('show'); p.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('lyra-abierta');
+  ['lyra-dock', 'lyra-fab'].forEach(id => { const b = document.getElementById(id); b.setAttribute('aria-expanded', 'true'); b.classList.remove('nuevo'); });
+  document.getElementById('lyra-input').placeholder = lyraAlAzar(LYRA_FRASES.placeholder);
+  if (!asisChatHistory.length) lyraSugerencias();
+  if (LYRA.dormida) lyraDespertar(); else if (!LYRA.ocupada) lyraExpr('feliz', 1400);
+  const log = document.getElementById('lyra-log');
+  log.scrollTop = log.scrollHeight;
+  if (!matchMedia('(max-width:760px)').matches) setTimeout(() => document.getElementById('lyra-input').focus(), 80);
+}
+function lyraCerrar() {
+  if (!LYRA.abierta) return;
+  LYRA.abierta = false;
+  lyraMenu(false);
+  if (LYRA.rec) lyraPararGrabacion(false);
+  const p = document.getElementById('lyra-panel');
+  if (p.contains(document.activeElement)) document.activeElement.blur();
+  p.classList.remove('show'); p.setAttribute('aria-hidden', 'true'); p.inert = true;
+  document.body.classList.remove('lyra-abierta');
+  ['lyra-dock', 'lyra-fab'].forEach(id => document.getElementById(id).setAttribute('aria-expanded', 'false'));
+}
+function lyraAlternar() { LYRA.abierta ? lyraCerrar() : lyraAbrir(); }
+
+// ---- panel movible y redimensionable (solo escritorio). La caja se guarda en
+// px CSS; k convierte px de pantalla a px CSS porque body tiene zoom.
+const LYRA_MIN = { w: 320, h: 380 };
+const lyraEsMovil = () => matchMedia('(max-width:760px)').matches;
+function lyraLimites() {
+  const s = document.querySelector('.sidebar'), k = (s && s.getBoundingClientRect().width / s.offsetWidth) || 1;
+  return { k, vw: innerWidth / k, vh: innerHeight / k };
+}
+function lyraAplicarCaja(c, animar) {
+  const p = document.getElementById('lyra-panel');
+  if (!c || lyraEsMovil()) { p.classList.remove('libre'); ['left', 'top', 'width', 'height'].forEach(x => p.style.removeProperty(x)); return null; }
+  const { vw, vh } = lyraLimites();
+  const w = Math.min(Math.max(c.w, LYRA_MIN.w), vw - 16), h = Math.min(Math.max(c.h, LYRA_MIN.h), vh - 16);
+  const x = Math.min(Math.max(c.x, 8), vw - w - 8), y = Math.min(Math.max(c.y, 8), vh - h - 8);
+  if (animar) { p.classList.add('acomodando'); setTimeout(() => p.classList.remove('acomodando'), 420); }
+  p.classList.add('libre');
+  Object.assign(p.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
+  return { x, y, w, h };
+}
+function lyraReubicar() {
+  const p = document.getElementById('lyra-panel');
+  lyraGuardar('caja', null);
+  if (!p.classList.contains('libre')) return;
+  const { vh } = lyraLimites(), h = Math.min(600, vh - 32);
+  lyraAplicarCaja({ x: parseFloat(getComputedStyle(document.body).getPropertyValue('--lyra-x')) || 286, y: vh - h - 16, w: 392, h }, true);
+  setTimeout(() => lyraAplicarCaja(null), 420);
+  lyraExpr('guino', 1200);
+}
+function lyraArrastrar(e, dir) {
+  if (lyraEsMovil() || e.button !== 0) return;
+  e.preventDefault();
+  const p = document.getElementById('lyra-panel'), { k, vw, vh } = lyraLimites();
+  const ini = { x: p.offsetLeft, y: p.offsetTop, w: p.offsetWidth, h: p.offsetHeight }, x0 = e.clientX, y0 = e.clientY;
+  const obj = { ...ini };
+  let raf = 0;
+  p.classList.add('libre', dir ? 'redimensiona' : 'arrastrando');
+  Object.assign(p.style, { left: ini.x + 'px', top: ini.y + 'px', width: ini.w + 'px', height: ini.h + 'px' });
+  document.body.classList.add('lyra-moviendo');
+  document.documentElement.style.cursor = dir ? getComputedStyle(e.target).cursor : 'grabbing';
+  if (!dir) lyraExpr('sorprendida', 700);
+  // Mover sigue al puntero 1:1 solo con transform (capa compuesta, sin layout ni
+  // blur por frame): left/top se escriben una vez, al soltar. Px enteros = texto nítido.
+  const pintar = () => {
+    raf = 0;
+    if (dir) Object.assign(p.style, { left: obj.x + 'px', top: obj.y + 'px', width: obj.w + 'px', height: obj.h + 'px' });
+    else p.style.transform = `translate3d(${Math.round(obj.x - ini.x)}px,${Math.round(obj.y - ini.y)}px,0)`;
+  };
+  const mover = ev => {
+    const dx = (ev.clientX - x0) / k, dy = (ev.clientY - y0) / k;
+    if (!dir) {
+      obj.x = Math.min(Math.max(ini.x + dx, 8), vw - ini.w - 8);
+      obj.y = Math.min(Math.max(ini.y + dy, 8), vh - ini.h - 8);
+    } else {
+      if (dir.includes('e')) obj.w = Math.min(Math.max(ini.w + dx, LYRA_MIN.w), vw - ini.x - 8);
+      if (dir.includes('s')) obj.h = Math.min(Math.max(ini.h + dy, LYRA_MIN.h), vh - ini.y - 8);
+      if (dir.includes('w')) { obj.w = Math.min(Math.max(ini.w - dx, LYRA_MIN.w), ini.x + ini.w - 8); obj.x = ini.x + ini.w - obj.w; }
+      if (dir.includes('n')) { obj.h = Math.min(Math.max(ini.h - dy, LYRA_MIN.h), ini.y + ini.h - 8); obj.y = ini.y + ini.h - obj.h; }
+    }
+    lyraMirar(Math.max(-1, Math.min(1, dx / 120)), Math.max(-1, Math.min(1, dy / 120)));
+    if (!raf) raf = requestAnimationFrame(pintar);
+  };
+  const soltar = () => {
+    removeEventListener('pointermove', mover); removeEventListener('pointerup', soltar); removeEventListener('pointercancel', soltar);
+    cancelAnimationFrame(raf);
+    const vis = { x: ini.x + Math.round(obj.x - ini.x), y: ini.y + Math.round(obj.y - ini.y) };
+    // Imán: a menos de 24px de un borde, se pega a él.
+    if (!dir) {
+      if (obj.x < 32) obj.x = 8;
+      if (obj.y < 32) obj.y = 8;
+      if (vw - obj.x - obj.w < 32) obj.x = vw - obj.w - 8;
+      if (vh - obj.y - obj.h < 32) obj.y = vh - obj.h - 8;
+    }
+    document.body.classList.remove('lyra-moviendo');
+    document.documentElement.style.cursor = '';
+    const fin = lyraAplicarCaja(obj);
+    lyraGuardar('caja', fin);
+    if (!dir) {
+      // FLIP: la caja ya quedó en su sitio final; el transform la deja donde se
+      // soltó y la transición de .asienta la lleva al imán con rebote.
+      p.style.transform = `translate3d(${vis.x - fin.x}px,${vis.y - fin.y}px,0)`;
+      void p.offsetWidth;
+      p.classList.add('asienta');
+      p.style.transform = '';
+      setTimeout(() => p.classList.remove('asienta'), 480);
+    }
+    p.classList.remove('arrastrando', 'redimensiona');
+    lyraMirar(0, 0);
+  };
+  addEventListener('pointermove', mover); addEventListener('pointerup', soltar); addEventListener('pointercancel', soltar);
+}
+function lyraSetupMovible() {
+  const p = document.getElementById('lyra-panel'), head = p.querySelector('.lyra-head');
+  p.insertAdjacentHTML('beforeend', ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].map(d => `<span class="lyra-rz" data-rz="${d}" aria-hidden="true"></span>`).join(''));
+  head.addEventListener('pointerdown', e => { if (!e.target.closest('button')) lyraArrastrar(e, null); });
+  head.addEventListener('dblclick', e => { if (!e.target.closest('button')) lyraReubicar(); });
+  p.addEventListener('pointerdown', e => { const h = e.target.closest('[data-rz]'); if (h) lyraArrastrar(e, h.dataset.rz); });
+  window.addEventListener('resize', () => { if (LYRA.abierta) lyraAplicarCaja(lyraLeer('caja', null)); }, { passive: true });
+}
+function lyraMenu(abrir) {
+  const m = document.getElementById('lyra-menu'), b = document.getElementById('lyra-menu-btn');
+  const ver = abrir ?? m.hidden;
+  m.hidden = !ver; b.setAttribute('aria-expanded', String(ver));
+}
+function lyraPintarMenu() {
+  document.querySelectorAll('[data-lyra-humor]').forEach(b => b.setAttribute('aria-checked', String(Number(b.dataset.lyraHumor) === LYRA.humor)));
+  document.getElementById('lyra-silencio').checked = LYRA.silencio;
+}
+function lyraEstado() {
+  const t = LYRA.ocupada ? 'Pensando…' : LYRA.rec ? 'Te escucho…' : LYRA.dormida ? 'En reposo. Ligeramente.' : LYRA.silencio ? 'En línea · sin comentarios' : LYRA.lema;
+  document.querySelectorAll('.lyra-estado').forEach(e => { e.textContent = t; });
+}
+
+// ---- cara: expresión, parpadeo, mirada, sueño
+function lyraExpr(expr, ms) {
+  LYRA.expr = expr;
+  document.querySelectorAll('[data-lyra-orb]').forEach(o => { o.dataset.expr = expr; });
+  clearTimeout(LYRA.tExpr);
+  if (ms) LYRA.tExpr = setTimeout(() => lyraExpr(LYRA.ocupada ? 'pensando' : LYRA.dormida ? 'dormida' : 'neutral'), ms);
+}
+function lyraHablar(largo) {
+  const orbs = document.querySelectorAll('[data-lyra-orb]');
+  orbs.forEach(o => o.classList.add('habla'));
+  clearTimeout(LYRA.tHabla);
+  LYRA.tHabla = setTimeout(() => orbs.forEach(o => o.classList.remove('habla')), Math.min(Math.max(largo * 18, 900), 2600));
+}
+function lyraParpadeo() {
+  setTimeout(() => {
+    if (!document.hidden && !['dormida', 'feliz', 'guino'].includes(LYRA.expr)) {
+      const orbs = document.querySelectorAll('[data-lyra-orb]');
+      const cerrar = () => { orbs.forEach(o => o.classList.add('parpadea')); setTimeout(() => orbs.forEach(o => o.classList.remove('parpadea')), 130); };
+      cerrar();
+      if (Math.random() < 0.2) setTimeout(cerrar, 280);
+    }
+    lyraParpadeo();
+  }, 2600 + Math.random() * 4400);
+}
+// Gestos sueltos cuando nadie la mira: mira a un lado, ladea la cabeza o se
+// queda pensando un segundo. Solo en reposo y sin reduced-motion.
+function lyraGesto() {
+  setTimeout(() => {
+    const quieta = !document.hidden && !LYRA.dormida && !LYRA.ocupada && LYRA.expr === 'neutral' && Date.now() - LYRA.actividad > 4000;
+    if (quieta && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const r = Math.random();
+      if (r < 0.6) {
+        lyraMirar(Math.random() * 1.6 - 0.8, Math.random() * 1.2 - 0.6);
+        setTimeout(() => { if (LYRA.expr === 'neutral') lyraMirar(0, 0); }, 1300);
+      } else lyraExpr(r < 0.85 ? 'escuchando' : 'pensando', 1500);
+    }
+    lyraGesto();
+  }, 9000 + Math.random() * 9000);
+}
+function lyraSeguirCursor() {
+  LYRA.raf = 0;
+  if (LYRA.dormida || LYRA.expr === 'pensando' || document.body.classList.contains('lyra-moviendo') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const o = document.querySelector(matchMedia('(max-width:760px)').matches ? '#lyra-fab .lyra-orb' : '#lyra-dock .lyra-orb');
+  const r = o?.getBoundingClientRect();
+  if (!r?.width) return;
+  const dx = LYRA.px - (r.left + r.width / 2), dy = LYRA.py - (r.top + r.height / 2), d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 260);
+  lyraMirar(dx / d * k, dy / d * k);
+}
+function lyraMirar(x, y) {
+  document.querySelectorAll('[data-lyra-orb]').forEach(o => { o.style.setProperty('--lx', (x * 11).toFixed(1) + '%'); o.style.setProperty('--ly', (y * 9).toFixed(1) + '%'); });
+}
+function lyraActividad() { LYRA.actividad = Date.now(); if (LYRA.dormida) lyraDespertar(); }
+function lyraDormir() { LYRA.dormida = true; lyraMirar(0, 0.4); lyraExpr('dormida'); lyraEstado(); }
+function lyraDespertar() {
+  LYRA.dormida = false;
+  lyraExpr('sorprendida', 900); lyraEstado();
+  if (Math.random() < 0.5) setTimeout(() => lyraDecir(lyraAlAzar(LYRA_FRASES.despierta), { expr: 'guino' }), 900);
+}
+
+// ---- globitos: lo que dice sola, con topes
+function lyraDecir(texto, { expr = 'feliz', forzar = false } = {}) {
+  if (!LYRA.lista || LYRA.abierta) return;
+  if (!forzar) {
+    if (LYRA.silencio || document.hidden || sheetAbierta || Date.now() - LYRA.ultimoGlobo < LYRA_GLOBO_CADA_MS) return;
+    const hoy = new Date().toDateString(), c = lyraLeer('globos', {});
+    const n = c.d === hoy ? c.n : 0;
+    if (n >= LYRA_GLOBOS_DIA) return;
+    lyraGuardar('globos', { d: hoy, n: n + 1 });
+  }
+  LYRA.ultimoGlobo = Date.now();
+  const g = document.getElementById('lyra-globo');
+  g.innerHTML = lyraConEmojis(esc(texto.replace('{n}', lyraPrimerNombre())));
+  g.hidden = false;
+  requestAnimationFrame(() => g.classList.add('show'));
+  lyraExpr(expr, 4200); lyraHablar(texto.length);
+  clearTimeout(LYRA.tGlobo);
+  LYRA.tGlobo = setTimeout(lyraCerrarGlobo, 6000 + Math.min(texto.length * 30, 3500));
+}
+function lyraCerrarGlobo() {
+  const g = document.getElementById('lyra-globo');
+  clearTimeout(LYRA.tGlobo);
+  if (!g || g.hidden) return;
+  g.classList.remove('show');
+  LYRA.tGlobo = setTimeout(() => { g.hidden = true; }, 260);
+}
+// Llamada desde activateSection: contexto para el chat y, a veces, un comentario.
+function lyraSeccion(sec) {
+  if (!LYRA.lista) return;
+  const frases = LYRA_FRASES.seccion[sec];
+  if (frases && Math.random() < 0.3) setTimeout(() => lyraDecir(lyraAlAzar(frases), { expr: Math.random() < 0.5 ? 'sarcastica' : 'feliz' }), 1200);
+}
+
+// ---- chat
+function lyraGuardarHistorial() { lyraGuardar('chat', asisChatHistory.slice(-30), true); }
+function lyraPintarHistorial() {
+  const guardado = lyraLeer('chat', [], true);
+  asisChatHistory = (Array.isArray(guardado) ? guardado : []).filter(m => (m?.role === 'user' || m?.role === 'assistant') && typeof m.content === 'string');
+  document.getElementById('lyra-log').innerHTML = '';
+  lyraBurbuja('bot', lyraAlAzar(LYRA_FRASES.bienvenida).replace('{n}', lyraPrimerNombre()), false, 'feliz');
+  // Con adjuntos, content es la lectura que armó la EF; en pantalla va lo que escribió el usuario.
+  asisChatHistory.forEach(m => (m.role === 'user' && m.vista?.a ? lyraBurbuja('user', m.vista.t || '', false, 'neutral', m.vista) : lyraBurbuja(m.role === 'user' ? 'user' : 'bot', m.content)));
+  lyraSugerencias();
+}
+function lyraSugerencias() {
+  const box = document.getElementById('lyra-sugs');
+  box.hidden = asisChatHistory.length > 0;
+  if (box.hidden) return;
+  // Tres al azar de la lista: cambian cada vez que se abre el chat vacío.
+  LYRA.sugs = [...LYRA_SUGERENCIAS].sort(() => Math.random() - 0.5).slice(0, 3);
+  box.innerHTML = LYRA.sugs.map(([t], i) => `<button type="button" class="lyra-sug" data-lyra-sug="${i}">${esc(t)}</button>`).join('');
+}
+function lyraBurbuja(who, texto, cargando, expr = 'neutral', vista, locales) {
+  const log = document.getElementById('lyra-log');
+  const div = document.createElement('div');
+  div.className = `chat-msg ${who}`;
+  if (cargando) div.innerHTML = '<span class="lyra-typing" aria-label="Lyra está pensando"><i></i><i></i><i></i></span>';
+  else if (who === 'bot') div.innerHTML = lyraConEmojis(renderBotText(texto));
+  else if (vista?.a?.length) lyraBurbujaAdj(div, texto, vista, locales || []);
+  else div.textContent = texto;
+  let el = div;
+  if (who === 'bot') {
+    el = document.createElement('div');
+    el.className = 'chat-row';
+    el.innerHTML = lyraMini(cargando ? 'pensando' : expr);
+    el.appendChild(div);
+  }
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+// Vacío vuelve al alto del CSS (una línea = alto del botón); con texto crece hasta
+// 120px. El borde se suma aparte porque scrollHeight no lo incluye (border-box).
+function lyraAjustarAlto(input) {
+  input.style.height = '';
+  if (input.value) input.style.height = Math.min(input.scrollHeight + input.offsetHeight - input.clientHeight, 120) + 'px';
+}
+
+// ---- adjuntos (2026-09-26): suben al bucket privado asistente-adjuntos en <uid>/ (RLS por carpeta,
+// borrado a 7 días) y la EF los lee (visión / Whisper / texto). Contrato en el HANDOFF de Lyra.
+const LYRA_BUCKET = 'asistente-adjuntos', LYRA_MAX_ADJ = 3, LYRA_MAX_BYTES = 10 * 1024 * 1024, LYRA_GRAB_MAX_MS = 5 * 60000;
+function lyraSetupAdjuntos(input) {
+  LYRA.mic = !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+  const file = document.getElementById('lyra-file'), panel = document.getElementById('lyra-panel'), soltar = document.getElementById('lyra-soltar');
+  document.getElementById('lyra-clip').onclick = () => file.click();
+  file.onchange = () => { lyraAgregar(file.files); file.value = ''; };
+  document.getElementById('lyra-bandeja').addEventListener('click', e => {
+    const b = e.target.closest('[data-lyra-quitar]');
+    if (!b) return;
+    const [x] = LYRA.adj.splice(Number(b.dataset.lyraQuitar), 1);
+    if (x?.url) URL.revokeObjectURL(x.url);
+    lyraPintarBandeja(); lyraModoBoton(); input.focus();
+  });
+  // Si el portapapeles trae texto (Excel, Word) se pega el texto; solo las capturas puras se adjuntan.
+  input.addEventListener('paste', e => {
+    const files = [...(e.clipboardData?.files || [])];
+    if (!files.length || e.clipboardData.getData('text/plain')) return;
+    e.preventDefault(); lyraAgregar(files);
+  });
+  let capas = 0;
+  const conArchivos = e => [...(e.dataTransfer?.types || [])].includes('Files');
+  panel.addEventListener('dragenter', e => { if (!conArchivos(e)) return; e.preventDefault(); capas++; soltar.hidden = false; });
+  panel.addEventListener('dragover', e => { if (conArchivos(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+  panel.addEventListener('dragleave', () => { if (capas && !--capas) soltar.hidden = true; });
+  panel.addEventListener('drop', e => {
+    if (!conArchivos(e)) return;
+    e.preventDefault(); capas = 0; soltar.hidden = true;
+    if (!LYRA.rec) lyraAgregar(e.dataTransfer.files);
+  });
+  document.getElementById('lyra-grab-x').onclick = () => lyraPararGrabacion(false);
+  document.getElementById('lyra-grab-ok').onclick = () => lyraPararGrabacion(true);
+  lyraModoBoton();
+}
+// 🎤 con la barra vacía; si hay texto o fichas, el mismo botón envía.
+function lyraModoBoton() {
+  const b = document.getElementById('lyra-send');
+  const modo = LYRA.mic && !document.getElementById('lyra-input').value.trim() && !LYRA.adj.length ? 'mic' : 'enviar';
+  if (b.dataset.modo === modo) return;
+  b.dataset.modo = modo;
+  b.title = modo === 'mic' ? 'Grabar audio' : 'Enviar';
+  b.setAttribute('aria-label', b.title);
+  b.innerHTML = `<i class="fas fa-${modo === 'mic' ? 'microphone' : 'paper-plane'}"></i>`;
+}
+function lyraAviso(cod) {
+  lyraBurbuja('bot', ASIS_ERRORES[cod] || lyraAlAzar(LYRA_FRASES.fallo), false, 'preocupada');
+  lyraExpr('preocupada', 3000);
+}
+const lyraPeso = kb => (kb < 1024 ? `${kb} KB` : `${(kb / 1024).toFixed(1)} MB`);
+function lyraIconoArchivo(a) {
+  if (a.k === 'audio') return 'fa-microphone';
+  if (a.img) return 'fa-image';
+  const n = a.n || '';
+  return /\.pdf$/i.test(n) ? 'fa-file-pdf' : /\.(xlsx?|csv|tsv)$/i.test(n) ? 'fa-file-excel' : /\.docx?$/i.test(n) ? 'fa-file-word' : 'fa-file-lines';
+}
+function lyraAgregar(files) {
+  for (const f of files) {
+    if (LYRA.adj.length >= LYRA_MAX_ADJ) { lyraAviso('max_adjuntos'); break; }
+    if (f.size > LYRA_MAX_BYTES) { lyraAviso('adjunto_pesado'); continue; }
+    if (!f.size) continue;
+    const img = f.type.startsWith('image/'), audio = f.type.startsWith('audio/');
+    LYRA.adj.push({ file: f, nombre: f.name || (img ? 'imagen.png' : 'archivo'), tipo: audio ? 'audio' : 'archivo', kb: Math.max(1, Math.round(f.size / 1024)), img, url: img || audio ? URL.createObjectURL(f) : null });
+  }
+  lyraPintarBandeja(); lyraModoBoton();
+  if (LYRA.abierta) document.getElementById('lyra-input').focus();
+}
+function lyraPintarBandeja() {
+  const box = document.getElementById('lyra-bandeja');
+  box.hidden = !LYRA.adj.length;
+  box.innerHTML = LYRA.adj.map((x, i) => `<span class="lyra-ficha${x.img ? ' img' : ''}">${x.img
+    ? `<img src="${esc(x.url)}" alt="${esc(x.nombre)}">`
+    : `<i class="fas ${lyraIconoArchivo({ n: x.nombre, k: x.tipo })}"></i><span class="lyra-ficha-t"><b>${esc(x.nombre)}</b><small>${lyraPeso(x.kb)}</small></span>`
+  }<button type="button" class="lyra-ficha-x" data-lyra-quitar="${i}" aria-label="Quitar ${esc(x.nombre)}"><i class="fas fa-xmark"></i></button></span>`).join('');
+}
+async function lyraSubir(uid, x) {
+  const ext = (x.nombre.match(/\.([A-Za-z0-9]{1,8})$/)?.[1] || 'bin').toLowerCase();
+  const ruta = `${uid}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await sb.storage.from(LYRA_BUCKET).upload(ruta, x.file, { contentType: (x.file.type || 'application/octet-stream').split(';')[0], upsert: false });
+  if (error) throw error;
+  return ruta;
+}
+// Ficha de archivo en la burbuja: abre una URL firmada de 5 min (la ventana se abre antes del await para que no la bloqueen).
+function lyraAdjChip(a) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'lyra-adj-file';
+  b.innerHTML = `<i class="fas ${lyraIconoArchivo(a)}"></i><b>${esc(a.k === 'audio' ? 'Nota de voz' : a.n)}</b><small>${lyraPeso(a.kb || 1)}</small>`;
+  b.onclick = async () => {
+    if (!a.r) return;
+    const w = window.open('', '_blank');
+    const { data } = await sb.storage.from(LYRA_BUCKET).createSignedUrl(a.r, 300).catch(() => ({}));
+    if (w && data?.signedUrl) { w.opener = null; w.location = data.signedUrl; } else w?.close();
+  };
+  return b;
+}
+function lyraAdjEl(a, local) {
+  if (a.k !== 'audio' && !a.img) return lyraAdjChip(a);
+  const el = document.createElement(a.k === 'audio' ? 'audio' : 'img');
+  if (a.k === 'audio') { el.className = 'lyra-adj-audio'; el.controls = true; el.preload = 'metadata'; }
+  else { el.className = 'lyra-adj-img'; el.alt = a.n; el.onclick = () => window.open(el.src, '_blank', 'noopener'); }
+  el.onerror = () => el.replaceWith(lyraAdjChip(a));
+  if (local) el.src = local;
+  else if (!a.r) return lyraAdjChip(a);
+  else sb.storage.from(LYRA_BUCKET).createSignedUrl(a.r, 3600).then(({ data }) => (data?.signedUrl ? (el.src = data.signedUrl) : el.replaceWith(lyraAdjChip(a))), () => el.replaceWith(lyraAdjChip(a)));
+  return el;
+}
+function lyraBurbujaAdj(div, texto, vista, locales) {
+  div.classList.add('con-adj');
+  vista.a.forEach((a, i) => div.appendChild(lyraAdjEl(a, locales[i])));
+  const tr = document.createElement('small');
+  tr.className = 'lyra-entendi'; tr.hidden = !vista.tr;
+  if (vista.tr) tr.textContent = `Entendí: «${vista.tr}»`;
+  div.appendChild(tr);
+  if (texto) { const t = document.createElement('span'); t.textContent = texto; div.appendChild(t); }
+}
+
+// ---- grabación: al tocar "listo" (o a los 5 min) el audio se envía solo, sin ficha previa.
+async function lyraGrabar() {
+  if (LYRA.rec || LYRA.ocupada) return;
+  if (!LYRA.mic) { lyraAviso('sin_microfono'); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { lyraAviso(e?.name === 'NotAllowedError' ? 'microfono_denegado' : 'sin_microfono'); return; }
+  if (!LYRA.abierta) { stream.getTracks().forEach(t => t.stop()); return; }
+  const mime = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t));
+  let mr;
+  try { mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+  catch (_) { stream.getTracks().forEach(t => t.stop()); lyraAviso('sin_microfono'); return; }
+  const rec = LYRA.rec = { mr, stream, trozos: [], t0: Date.now(), fin: 0, enviar: false };
+  mr.ondataavailable = e => { if (e.data.size) rec.trozos.push(e.data); };
+  mr.onstop = () => lyraFinGrabacion(rec);
+  mr.start(1000);
+  document.getElementById('lyra-bar').hidden = true;
+  document.getElementById('lyra-bandeja').hidden = true;
+  document.getElementById('lyra-grab').hidden = false;
+  const reloj = document.getElementById('lyra-grab-t');
+  reloj.textContent = '0:00';
+  rec.reloj = setInterval(() => {
+    const ms = Date.now() - rec.t0, s = Math.floor(ms / 1000);
+    reloj.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    if (ms >= LYRA_GRAB_MAX_MS) lyraPararGrabacion(true);
+  }, 250);
+  lyraExpr('escuchando'); lyraEstado();
+  document.getElementById('lyra-grab-ok').focus();
+  // Medidor: volumen (RMS) de cada cuadro, corriendo de derecha a izquierda por las barras.
+  try {
+    const ac = rec.ac = new (window.AudioContext || window.webkitAudioContext)();
+    const an = ac.createAnalyser();
+    an.fftSize = 512;
+    ac.createMediaStreamSource(stream).connect(an);
+    const buf = new Uint8Array(an.fftSize), barras = [...document.querySelectorAll('#lyra-grab-niv i')], hist = barras.map(() => 0.12);
+    let cuadro = 0;
+    const pintar = () => {
+      if (LYRA.rec !== rec) return;
+      rec.raf = requestAnimationFrame(pintar);
+      if (document.hidden || cuadro++ % 4) return;
+      an.getByteTimeDomainData(buf);
+      let suma = 0;
+      for (const v of buf) suma += (v - 128) ** 2;
+      const rms = Math.sqrt(suma / buf.length) / 128;
+      rec.pico = Math.max(rec.pico ?? 0, rms);
+      hist.shift(); hist.push(Math.min(1, 0.12 + rms * 5));
+      barras.forEach((b, i) => { b.style.transform = `scaleY(${hist[i].toFixed(2)})`; });
+    };
+    pintar();
+  } catch (_) { /* sin medidor: se graba igual */ }
+}
+function lyraPararGrabacion(enviar) {
+  const rec = LYRA.rec;
+  if (!rec) return;
+  rec.enviar = enviar; rec.fin = Date.now();
+  clearInterval(rec.reloj);
+  if (rec.mr.state !== 'inactive') rec.mr.stop(); else lyraFinGrabacion(rec);
+}
+function lyraFinGrabacion(rec) {
+  if (LYRA.rec !== rec) return;
+  LYRA.rec = null;
+  clearInterval(rec.reloj); cancelAnimationFrame(rec.raf);
+  rec.stream.getTracks().forEach(t => t.stop());
+  rec.ac?.close().catch(() => {});
+  document.getElementById('lyra-grab').hidden = true;
+  document.getElementById('lyra-bar').hidden = false;
+  lyraPintarBandeja(); lyraExpr('neutral'); lyraEstado();
+  if (!rec.enviar) return;
+  const tipo = (rec.mr.mimeType || rec.trozos[0]?.type || 'audio/webm').split(';')[0];
+  const blob = new Blob(rec.trozos, { type: tipo });
+  if ((rec.fin || Date.now()) - rec.t0 < 800 || !blob.size) { lyraAviso('audio_corto'); return; }
+  if (blob.size > LYRA_MAX_BYTES) { lyraAviso('adjunto_pesado'); return; }
+  // Audio mudo (micrófono equivocado o silenciado): Whisper lo "transcribe" como "Gracias." y Lyra responde a la nada.
+  if (rec.pico !== undefined && rec.pico < 0.02) { console.warn('Lyra: grabación en silencio, pico', rec.pico.toFixed(4), rec.stream.getAudioTracks()[0]?.label); lyraAviso('audio_mudo'); return; }
+  const ext = tipo.includes('ogg') ? 'ogg' : tipo.includes('mp4') ? 'm4a' : 'webm';
+  lyraEnviar(undefined, { file: blob, nombre: `nota-de-voz.${ext}`, tipo: 'audio', kb: Math.max(1, Math.round(blob.size / 1024)), img: false, url: URL.createObjectURL(blob) });
+}
+
+async function lyraEnviar(directo, audio) {
+  const input = document.getElementById('lyra-input'), btn = document.getElementById('lyra-send');
+  if (LYRA.ocupada || (LYRA.rec && !audio)) return;
+  const texto = audio ? '' : (directo ?? input.value).trim();
+  const archivos = audio ? [audio] : directo === undefined ? LYRA.adj : [];
+  if (!texto && !archivos.length) return;
+  if (!audio && directo === undefined) LYRA.adj = [];
+  const vista = archivos.length ? { t: texto, a: archivos.map(x => ({ n: x.nombre, k: x.tipo, kb: x.kb, img: x.img })) } : null;
+  const burbuja = lyraBurbuja('user', texto, false, 'neutral', vista, archivos.map(x => x.url));
+  document.getElementById('lyra-sugs').hidden = true;
+  if (!audio) { input.value = ''; lyraAjustarAlto(input); }
+  lyraPintarBandeja(); lyraModoBoton();
+  LYRA.ocupada = true; btn.disabled = true;
+  lyraMirar(-0.5, -0.7); lyraExpr('pensando'); lyraEstado();
+  const cargando = lyraBurbuja('bot', '', true);
+  let adjuntos;
+  if (archivos.length) {
+    try {
+      const uid = (await sb.auth.getSession()).data.session?.user?.id;
+      if (!uid) throw new Error('sin sesión');
+      adjuntos = [];
+      for (const [i, x] of archivos.entries()) {
+        vista.a[i].r = await lyraSubir(uid, x);
+        adjuntos.push({ ruta: vista.a[i].r, nombre: x.nombre, tipo: x.tipo });
+      }
+    } catch (e) {
+      // No llegó a la EF: se devuelve todo a la barra para reintentar con un clic.
+      console.error('Lyra: subida de adjunto', e);
+      cargando.remove(); burbuja.remove();
+      LYRA.ocupada = false; btn.disabled = false; lyraEstado();
+      if (!audio) { input.value = texto; lyraAjustarAlto(input); LYRA.adj = archivos; lyraPintarBandeja(); lyraModoBoton(); }
+      lyraSugerencias(); lyraAviso('adjunto_no_subido');
+      return;
+    }
+  }
+  const yo = vista ? { role: 'user', content: texto, vista } : { role: 'user', content: texto };
+  asisChatHistory.push(yo);
+  lyraGuardarHistorial();
+  const seccion = TITLES[currentSec]?.[0] || '';
+  const body = { messages: asisChatHistory.map(({ role, content }) => ({ role, content })), humor: LYRA.humor, contexto: { seccion } };
+  if (adjuntos) body.adjuntos = adjuntos;
+  const { data, error } = await sb.functions.invoke('asistente-admin', { body });
+  cargando.remove();
+  LYRA.ocupada = false; btn.disabled = false;
+  lyraEstado();
+  if (error || !data?.respuesta) {
+    let cod = data?.error;
+    try { cod = cod || (await error?.context?.json?.())?.error; } catch (_) { /* cuerpo no JSON */ }
+    asisChatHistory.pop(); lyraGuardarHistorial();
+    lyraBurbuja('bot', ASIS_ERRORES[cod] || lyraAlAzar(LYRA_FRASES.fallo), false, 'preocupada');
+    lyraExpr('preocupada', 4000);
+    return;
+  }
+  // entrada = el mensaje con la lectura de los adjuntos: los turnos siguientes lo necesitan como content.
+  if (typeof data.entrada === 'string') yo.content = data.entrada;
+  if (vista && data.transcripcion) {
+    vista.tr = String(data.transcripcion);
+    const s = burbuja.querySelector('.lyra-entendi');
+    if (s) { s.textContent = `Entendí: «${vista.tr}»`; s.hidden = false; }
+  }
+  const expr = LYRA_EXPR_OK.includes(data.expresion) ? data.expresion : 'neutral';
+  lyraBurbuja('bot', data.respuesta, false, expr);
+  asisChatHistory.push({ role: 'assistant', content: data.respuesta });
+  lyraGuardarHistorial();
+  lyraMirar(0, 0); lyraExpr(expr, 5000); lyraHablar(data.respuesta.length);
+  if (!LYRA.abierta) {
+    ['lyra-dock', 'lyra-fab'].forEach(id => document.getElementById(id).classList.add('nuevo'));
+    lyraDecir(lyraAlAzar(LYRA_FRASES.lista), { expr, forzar: true });
+  }
+  if (currentSec === 'asistente') cargarAccionesAsistente();
 }
 
 /* ---------- Voz IA (2026-08-12, ver plan "vamos-a-empezar-a-unified-kay") ---
@@ -19121,6 +19881,7 @@ function activateSection(sec, fromNav) {
   currentSec = sec;
   SECCIONES_CARGADAS.add(sec);
   guardarUltimaSeccion(sec);
+  lyraSeccion(sec);
   document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec || x.dataset.sec === PADRE_DE[sec]));
   if (sheetAbierta) closeSheet(sheetAbierta, true);
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active', 'entrando'));
@@ -20786,6 +21547,8 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-26', emoji: '✨', titulo: 'Conoce a Lyra', texto: 'El asistente ahora tiene cara, nombre y carácter: Lyra es nuestro logo con vida propia (el sol de Lotus, con gestos, olas y su arco de puntos) y trae sus propios emojis. Vive al pie del menú (en el celular, en la burbuja de abajo a la izquierda) y la abres desde cualquier sección, o con Ctrl+K, sin dejar lo que estás haciendo. Revisa reservas, carga servicios y pasajeros, deja notas y escribe a proveedores con tus mismos permisos. Tiene humor seco, pero en sus opciones puedes ponerla seria o sin filtro, y callarla si no quieres que comente sola. En Telegram también es Lyra.', roles: ['admin', 'asesor', 'boleteria'] },
+  { fecha: '2026-09-26', emoji: '📎', titulo: 'Lyra ve y escucha', texto: 'En el chat de Lyra puedes adjuntar hasta 3 archivos con el clip, pegar una captura con Ctrl+V o soltar el archivo sobre el chat. Con la barra vacía, el botón del micrófono graba una nota de voz que se envía sola al tocar ✓; debajo verás lo que Lyra entendió. Lee comprobantes y capturas, PDF y archivos de texto. Los adjuntos se borran solos a los 7 días.', roles: ['admin', 'asesor', 'boleteria'] },
   { fecha: '2026-09-26', emoji: '🗃️', titulo: 'Últimas tablas pasan a tarjetas', texto: 'Diagnóstico de notificaciones push, Ranking de asesores, Top de publicaciones en Redes (Instagram y TikTok) y el Historial de asistencia ahora son tarjetas con chips de estado y cifras claras. El historial de asistencia (más de 570 jornadas) se muestra de a 40 con "Ver más" y suma la duración de cada jornada.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '🌐', titulo: 'Web y Reasignados en tarjetas', texto: 'Los leads de Web y Reasignados ahora son tarjetas con origen, destino, asesor, estado y, si hubo venta, monto y tu comisión. Cada tarjeta trae el botón para mandar (o sacar) de Comisiones Bwrathanyel. Como son más de 1.700, se muestran de a 40 con un botón "Ver más"; los contadores de arriba siguen filtrando y la búsqueda mira todos.', roles: ['admin'] },
   { fecha: '2026-09-26', emoji: '📋', titulo: 'Informe Diario y Voucher en tarjetas', texto: 'El Informe Diario ahora son tarjetas por asesor y jornada, con contadores arriba (Jornadas / Con informe / Sin informe) que también filtran. El historial de Voucher muestra cada voucher como tarjeta con cliente, N° de factura, destino y total, y un botón claro para ver el PDF o reconstruirlo.', roles: ['admin'] },

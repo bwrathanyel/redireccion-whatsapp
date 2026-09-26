@@ -3218,6 +3218,285 @@ body.fsize-grande{--tap:41.9px}
   .lt-card-pie .btn-sm{flex:1;justify-content:center;min-height:44px}
   .lt-check{min-width:44px;min-height:44px;margin:-12px -6px -12px -12px}
 }
+
+/* ================= Lyra (2026-09-26) =================
+   Con body{zoom} Chromium escala también las unidades vh: height:100vh dejaba
+   el sidebar al 90% del alto y un hueco vacío abajo. --zoom lo compensa.
+   Avatar: el logo de Lotus con cara. Sol con el degradado de marca de la web
+   (--color-coral-bright → --color-gold), olas blancas del logo que se mueven y
+   el arco de puntos que titila (y corre cuando piensa). Tinta de la cara =
+   --color-btn-ink de la web. El sol no sigue --accent (es la marca); el cromo
+   del panel sí. JS pone la expresión en data-expr y la mirada en --lx/--ly.
+   Solo se anima transform/opacity. */
+body{--zoom:.9}
+body.fsize-chico{--zoom:.8}
+body.fsize-grande{--zoom:1.05}
+@media(min-width:761px){.sidebar{height:calc(100vh / var(--zoom))}}
+:root{--lyra-sol-a:#FC7300;--lyra-sol-b:#FBC000;--lyra-tinta:#3a1505;--lyra-brillo:#fff6e6;--lyra-rubor:var(--pink);--lyra-rec:var(--pink);--lyra-marca:linear-gradient(90deg,var(--lyra-sol-a),var(--lyra-sol-b))}
+
+.lyra-orb{--s:48px;--lx:0%;--ly:0%;--inclina:0deg;position:relative;display:inline-block;flex-shrink:0;width:var(--s);height:var(--s)}
+.lyra-orb>span{position:absolute;pointer-events:none}
+.lo-halo{left:2%;top:-3%;width:106%;height:106%;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--lyra-sol-a) 38%,transparent) 0,transparent 64%);animation:lyra-halo 4.2s ease-in-out infinite}
+.lo-arco{inset:0}
+.lo-arco i{position:absolute;width:7.5%;height:7.5%;translate:-50% -50%;border-radius:50%;background:var(--lyra-sol-a);background:color-mix(in srgb,var(--lyra-sol-a),var(--lyra-sol-b) calc(var(--i) * 8.3%));animation:lyra-luz 3.2s ease-in-out calc(var(--i) * .1s) infinite}
+.lo-sol{left:22%;top:17%;width:66%;height:66%;border-radius:50%;overflow:hidden;rotate:var(--inclina);
+  background:radial-gradient(circle at 32% 24%,color-mix(in srgb,var(--lyra-brillo) 42%,transparent) 0,transparent 40%),linear-gradient(180deg,var(--lyra-sol-a) 10%,var(--lyra-sol-b));
+  box-shadow:0 0 calc(var(--s) * .22) color-mix(in srgb,var(--lyra-sol-a) 50%,transparent),inset 0 calc(var(--s) * -.05) calc(var(--s) * .1) color-mix(in srgb,var(--lyra-tinta) 22%,transparent);
+  animation:lyra-respira 4.2s ease-in-out infinite;transition:rotate .5s var(--ease-salida),filter .4s}
+.lo-sol svg{position:absolute;inset:0;width:100%;height:100%}
+.lo-mar{fill:none;stroke:var(--lyra-brillo);stroke-width:5;stroke-linecap:round;opacity:.92}
+.lo-mar path{animation:lyra-mar 5s linear infinite}
+.lo-mar path+path{animation-duration:7s;animation-direction:reverse}
+.lo-cara{transform:translate(var(--lx),var(--ly));transition:transform .35s var(--ease-salida);fill:none;stroke:var(--lyra-tinta);stroke-width:4.4;stroke-linecap:round;stroke-linejoin:round}
+.lo-cara *{transform-box:fill-box;transform-origin:center;transition:opacity .16s,transform .24s var(--ease-salida)}
+.lo-ojo-abierto ellipse,.b-grande,.b-o{fill:var(--lyra-tinta)}
+.lo-ojo-abierto ellipse,.lo-brillo,.lo-rubor,.lo-gota{stroke:none}
+.lo-brillo{fill:var(--lyra-brillo)}
+.lo-ceja{stroke-width:3.8}
+.lo-rubor{fill:var(--lyra-rubor);opacity:0}
+.lo-gota{fill:var(--blue);opacity:0}
+.b-grande{transform-origin:50% 0}
+.lo-ojo-feliz,.lo-ojo-cerrado,.lo-boca{opacity:0}
+.lo-zz{top:-12%;right:-8%;width:40%;height:40%;opacity:0;color:var(--lyra-sol-a);font-weight:800;font-size:calc(var(--s) * .17);transition:opacity .3s}
+.lo-zz i{position:absolute;left:0;bottom:0;font-style:normal;line-height:1;animation:lyra-z 2.8s ease-in infinite}
+.lo-zz i+i{animation-delay:1.4s;font-size:.7em}
+
+/* Expresiones. Parpadeo y "habla" los pone JS encima de cualquiera. */
+.lyra-orb[data-expr=neutral] .b-sonrisa,.lyra-orb[data-expr=escuchando] .b-sonrisa{opacity:1}
+.lyra-orb.parpadea .lo-ojo-abierto{transform:scaleY(.1)!important;transition-duration:.08s}
+.lyra-orb.habla:is([data-expr=neutral],[data-expr=escuchando]) .b-sonrisa{opacity:0}
+.lyra-orb.habla:is([data-expr=neutral],[data-expr=escuchando]) .b-grande{opacity:1}
+.lyra-orb.habla .lo-boca{animation:lyra-habla .19s ease-in-out infinite alternate}
+.lyra-orb[data-expr=feliz] .lo-ojo-abierto,.lyra-orb[data-expr=guino] .lo-ojo.r .lo-ojo-abierto,.lyra-orb[data-expr=dormida] .lo-ojo-abierto{opacity:0}
+.lyra-orb[data-expr=feliz] .lo-ojo-feliz,.lyra-orb[data-expr=guino] .lo-ojo.r .lo-ojo-feliz,.lyra-orb[data-expr=dormida] .lo-ojo-cerrado{opacity:1}
+
+.lyra-orb[data-expr=feliz]{--inclina:-4deg}
+.lyra-orb[data-expr=feliz] .b-grande{opacity:1}
+.lyra-orb[data-expr=feliz] .lo-rubor{opacity:.55}
+.lyra-orb[data-expr=feliz] .lo-ceja{transform:translateY(-3px)}
+.lyra-orb[data-expr=feliz] .lo-arco i{animation-duration:1.8s}
+
+.lyra-orb[data-expr=guino]{--inclina:6deg}
+.lyra-orb[data-expr=guino] .b-ladeada,.lyra-orb[data-expr=sarcastica] .b-ladeada{opacity:1}
+.lyra-orb[data-expr=guino] .lo-rubor{opacity:.4}
+.lyra-orb[data-expr=guino] .lo-ceja.l{transform:translateY(-3px) rotate(-6deg)}
+.lyra-orb[data-expr=guino] .lo-ceja.r{transform:translateY(3px)}
+
+.lyra-orb[data-expr=sarcastica]{--inclina:-5deg}
+.lyra-orb[data-expr=sarcastica] .lo-ojo-abierto{transform:translateX(3px)}
+.lyra-orb[data-expr=sarcastica] .lo-ojo.l .lo-ojo-abierto{transform-origin:50% 100%;transform:translateX(3px) scaleY(.5)}
+.lyra-orb[data-expr=sarcastica] .lo-ceja.l{transform:translateY(7px) rotate(5deg)}
+.lyra-orb[data-expr=sarcastica] .lo-ceja.r{transform:translateY(-5px) rotate(-10deg)}
+
+.lyra-orb[data-expr=sorprendida] .lo-ojo-abierto{transform:scale(1.2)}
+.lyra-orb[data-expr=sorprendida] .lo-ceja{transform:translateY(-6px)}
+.lyra-orb[data-expr=sorprendida] .b-o{opacity:1}
+
+.lyra-orb[data-expr=preocupada]{--inclina:3deg}
+.lyra-orb[data-expr=preocupada] .lo-ceja.l{transform:translateY(-2px) rotate(-16deg)}
+.lyra-orb[data-expr=preocupada] .lo-ceja.r{transform:translateY(-2px) rotate(16deg)}
+.lyra-orb[data-expr=preocupada] .lo-ojo-abierto{transform:scaleY(.85)}
+.lyra-orb[data-expr=preocupada] .b-ola{opacity:1}
+.lyra-orb[data-expr=preocupada] .lo-gota{opacity:.9;animation:lyra-gota 1.6s ease-in infinite}
+
+.lyra-orb[data-expr=pensando]{--inclina:7deg}
+.lyra-orb[data-expr=pensando] .lo-ojo-abierto{transform:translate(3px,-4px)}
+.lyra-orb[data-expr=pensando] .lo-ceja.l{transform:translateY(2px)}
+.lyra-orb[data-expr=pensando] .lo-ceja.r{transform:translateY(-5px) rotate(-6deg)}
+.lyra-orb[data-expr=pensando] .b-plana{opacity:1;transform:translateX(5px) rotate(-10deg)}
+.lyra-orb[data-expr=pensando] .lo-arco i{animation-duration:.9s}
+.lyra-orb[data-expr=pensando] .lo-halo{animation-duration:1.3s}
+
+.lyra-orb[data-expr=escuchando]{--inclina:-7deg}
+.lyra-orb[data-expr=escuchando] .lo-ojo-abierto{transform:scale(1.08)}
+.lyra-orb[data-expr=escuchando] .lo-ceja{transform:translateY(-3px)}
+.lyra-orb[data-expr=escuchando] .lo-rubor{opacity:.22}
+.lyra-orb[data-expr=escuchando] .lo-halo{animation-duration:2s}
+
+.lyra-orb[data-expr=dormida]{--inclina:-10deg}
+.lyra-orb[data-expr=dormida] .lo-ceja{transform:translateY(3px)}
+.lyra-orb[data-expr=dormida] .b-o{opacity:1;transform:scale(.5)}
+.lyra-orb[data-expr=dormida] .lo-arco i{animation:none;opacity:.3}
+.lyra-orb[data-expr=dormida] .lo-halo{opacity:.3;animation-duration:7s}
+.lyra-orb[data-expr=dormida] .lo-sol{animation-duration:7s;filter:saturate(.6) brightness(.85)}
+.lyra-orb[data-expr=dormida] .lo-mar path{animation-duration:14s}
+.lyra-orb[data-expr=dormida] .lo-zz{opacity:1}
+
+/* Versión quieta: avatar de cada mensaje y emojis de cara. Solo el sol. */
+.lyra-mini{--s:26px}
+.lyra-mini .lo-sol{left:0;top:0;width:100%;height:100%;animation:none;box-shadow:0 0 calc(var(--s) * .2) color-mix(in srgb,var(--lyra-sol-a) 40%,transparent)}
+.lyra-mini .lo-mar path{animation:none}
+.lyra-mini .lo-cara{transform:none}
+.lyra-emo-cara{--s:19px;margin:0 2px;vertical-align:-5px}
+/* Emojis propios: ficha redonda con el sol de la marca y el ícono en tinta. */
+.lyra-emo{display:inline-grid;place-items:center;width:19px;height:19px;margin:0 2px;vertical-align:-5px;border-radius:50%;background:linear-gradient(180deg,var(--lyra-sol-a),var(--lyra-sol-b));color:var(--lyra-tinta);box-shadow:0 0 6px color-mix(in srgb,var(--lyra-sol-a) 35%,transparent)}
+.lyra-emo svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.lyra-emo.relleno svg{fill:currentColor;stroke:none}
+.lyra-emo[data-tono=alerta]{background:var(--lyra-tinta);color:var(--lyra-sol-b);box-shadow:inset 0 0 0 1.5px var(--lyra-sol-b)}
+.lyra-emo[data-tono=ok]{background:var(--green);color:var(--lyra-brillo);box-shadow:none}
+
+@keyframes lyra-respira{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+@keyframes lyra-halo{0%,100%{opacity:.55;transform:scale(.94)}50%{opacity:1;transform:scale(1.06)}}
+@keyframes lyra-luz{0%,100%{opacity:.5;transform:scale(.85)}18%{opacity:1;transform:scale(1.25)}}
+@keyframes lyra-mar{to{transform:translateX(-40px)}}
+@keyframes lyra-gota{0%{opacity:0;transform:translateY(-2px)}30%{opacity:.9}100%{opacity:0;transform:translateY(8px)}}
+@keyframes lyra-z{0%{opacity:0;transform:translate(0,0) scale(.6)}30%{opacity:1}100%{opacity:0;transform:translate(.7em,-1.5em) scale(1.1)}}
+@keyframes lyra-habla{from{transform:scaleY(.4)}to{transform:scaleY(1.1)}}
+@keyframes lyra-flota{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+@keyframes lyra-punto{0%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+
+/* Dock: al pie del sidebar, en el hueco que dejaba el vh. */
+.lyra-dock,.lyra-fab{display:none}
+body.lyra-on .lyra-dock{display:flex}
+.lyra-dock{position:relative;align-items:center;gap:12px;width:100%;padding:8px 12px 8px 8px;border-radius:16px;border:1px solid color-mix(in srgb,var(--accent) 22%,var(--line2));background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 11%,transparent),transparent 70%),var(--panel-solid);color:var(--txt);font-family:inherit;text-align:left;cursor:pointer;transition:border-color var(--dur-rapida),box-shadow var(--dur-rapida),transform var(--dur-rapida) var(--ease-salida)}
+.lyra-dock:hover,.lyra-dock[aria-expanded=true]{border-color:color-mix(in srgb,var(--accent) 55%,transparent);box-shadow:0 10px 28px -12px color-mix(in srgb,var(--accent) 70%,transparent)}
+.lyra-dock:active{transform:scale(.98)}
+.lyra-dock:focus-visible,.lyra-fab:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.lyra-dock .lyra-orb{--s:50px;animation:lyra-flota 5s ease-in-out infinite}
+.lyra-dock-t{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.lyra-dock-t b{font-size:14.5px;letter-spacing:.3px}
+.lyra-dock-t small,.lyra-head-t small{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lyra-dock-t small::before,.lyra-head-t small::before{content:'';display:inline-block;width:6px;height:6px;margin:0 5px 1px 0;border-radius:50%;background:var(--green,#10b981);box-shadow:0 0 6px var(--green,#10b981)}
+.lyra-dock-k{font-size:10px;color:var(--muted2);border:1px solid var(--line2);border-radius:6px;padding:2px 5px;white-space:nowrap}
+.lyra-dock.nuevo::after,.lyra-fab.nuevo::after{content:'';position:absolute;top:8px;left:50px;width:11px;height:11px;border-radius:50%;background:var(--green,#10b981);box-shadow:0 0 0 2px var(--bg2)}
+
+.lyra-globo{position:fixed;left:var(--lyra-x,286px);bottom:22px;z-index:62;max-width:300px;padding:10px 14px 11px;border-radius:16px 16px 16px 4px;background:var(--panel-solid);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line2));box-shadow:0 18px 40px -12px rgba(0,0,0,.55);color:var(--txt);font-size:13px;line-height:1.45;cursor:pointer;opacity:0;transform:translateX(-8px) scale(.96);transform-origin:left bottom;transition:opacity .22s,transform .3s var(--ease-salida)}
+.lyra-globo.show{opacity:1;transform:none}
+.lyra-globo::before{content:'Lyra';display:block;margin-bottom:2px;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--accent)}
+
+/* Panel: flota junto al sidebar, sin fondo que tape: se sigue trabajando detrás. */
+.lyra-panel{position:fixed;left:var(--lyra-x,286px);bottom:16px;z-index:62;width:392px;height:600px;max-height:calc(100vh / var(--zoom,1) - 32px);display:flex;flex-direction:column;overflow:hidden;background:color-mix(in srgb,var(--bg2) 95%,transparent);backdrop-filter:blur(18px);border:1px solid color-mix(in srgb,var(--accent) 28%,var(--line2));border-radius:22px;box-shadow:0 30px 80px -20px rgba(0,0,0,.65),0 0 44px -20px color-mix(in srgb,var(--accent) 65%,transparent);opacity:0;visibility:hidden;transform:translateX(-14px) scale(.97);transform-origin:left bottom;transition:opacity .2s,transform .32s var(--ease-salida),visibility 0s .32s}
+.lyra-panel.show{opacity:1;visibility:visible;transform:none;transition:opacity .2s,transform .32s var(--ease-salida),visibility 0s}
+.lyra-panel:not(.show) .lyra-orb *{animation-play-state:paused}
+/* Canto con el degradado del logo, como la franja de marca de la web. */
+.lyra-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--lyra-marca);pointer-events:none;z-index:4}
+/* Movible: la cabecera arrastra (1:1 con el puntero), los bordes y esquinas
+   redimensionan; al soltar se asienta con un rebote hacia el imán. */
+.lyra-panel.libre{bottom:auto;max-height:none}
+.lyra-panel.acomodando{transition:left .4s var(--ease-salida),top .4s var(--ease-salida),width .4s var(--ease-salida),height .4s var(--ease-salida),opacity .2s,transform .32s var(--ease-salida)}
+/* Mientras se mueve: sin blur de fondo (se re-rasterizaba en cada frame = borroso y
+   lento) y fondo opaco para que no se note la diferencia. */
+.lyra-panel.arrastrando,.lyra-panel.redimensiona{backdrop-filter:none;background:var(--bg2)}
+.lyra-panel.arrastrando{transition:none;will-change:transform;box-shadow:0 44px 100px -24px rgba(0,0,0,.75),0 0 60px -18px color-mix(in srgb,var(--accent) 75%,transparent)}
+.lyra-panel.redimensiona{border-color:color-mix(in srgb,var(--accent) 70%,transparent);box-shadow:0 30px 80px -20px rgba(0,0,0,.65),0 0 0 3px var(--accent-soft),0 0 50px -16px color-mix(in srgb,var(--accent) 75%,transparent)}
+.lyra-panel.asienta{transition:transform .42s cubic-bezier(.34,1.56,.64,1),box-shadow .3s,opacity .2s}
+.lyra-head{cursor:grab;touch-action:none;user-select:none}
+.lyra-head .lyra-ib{cursor:pointer}
+body.lyra-moviendo{user-select:none}
+body.lyra-moviendo *{cursor:inherit!important}
+body.lyra-moviendo iframe{pointer-events:none}
+.lyra-rz{position:absolute;z-index:3}
+.lyra-rz[data-rz=n],.lyra-rz[data-rz=s]{left:16px;right:16px;height:7px;cursor:ns-resize}
+.lyra-rz[data-rz=n]{top:0}
+.lyra-rz[data-rz=s]{bottom:0}
+.lyra-rz[data-rz=e],.lyra-rz[data-rz=w]{top:16px;bottom:16px;width:7px;cursor:ew-resize}
+.lyra-rz[data-rz=e]{right:0}
+.lyra-rz[data-rz=w]{left:0}
+.lyra-rz[data-rz$=e]:not([data-rz=e]),.lyra-rz[data-rz$=w]:not([data-rz=w]){width:18px;height:18px}
+.lyra-rz[data-rz=ne]{top:0;right:0;cursor:nesw-resize}
+.lyra-rz[data-rz=sw]{bottom:0;left:0;cursor:nesw-resize}
+.lyra-rz[data-rz=nw]{top:0;left:0;cursor:nwse-resize}
+.lyra-rz[data-rz=se]{bottom:0;right:0;cursor:nwse-resize}
+.lyra-rz[data-rz=se]::after{content:'';position:absolute;right:6px;bottom:6px;width:8px;height:8px;border-right:2px solid var(--muted2);border-bottom:2px solid var(--muted2);border-radius:0 0 4px 0;opacity:0;transition:opacity .2s}
+.lyra-panel:hover .lyra-rz[data-rz=se]::after,.lyra-panel.redimensiona .lyra-rz[data-rz=se]::after{opacity:.8}
+.lyra-head{position:relative;display:flex;align-items:center;gap:11px;padding:12px 10px 12px 14px;background:linear-gradient(180deg,color-mix(in srgb,var(--lyra-sol-a) 10%,transparent),transparent)}
+/* Borde de puntos como el arco del logo (y el talón perforado de la web). */
+.lyra-head::after{content:'';position:absolute;left:14px;right:14px;bottom:-1px;height:2px;background:radial-gradient(circle,var(--line2) 1px,transparent 1.5px) 0 0/8px 2px repeat-x;pointer-events:none}
+.lyra-head .lyra-orb{--s:46px}
+.lyra-head-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.lyra-head-t b{font-size:15px;letter-spacing:.3px}
+.lyra-ib{width:34px;height:34px;flex-shrink:0;border-radius:10px;border:1px solid transparent;background:transparent;color:var(--muted);font-size:14px;cursor:pointer}
+.lyra-ib:hover,.lyra-ib[aria-expanded=true]{background:var(--panel-solid);border-color:var(--line2);color:var(--txt)}
+.lyra-menu{display:flex;flex-direction:column;gap:9px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--panel-solid)}
+.lyra-menu[hidden]{display:none}
+.lyra-menu-t{font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)}
+.lyra-humor{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:3px;border-radius:12px;background:var(--bg2);border:1px solid var(--line)}
+.lyra-humor button{border:0;border-radius:9px;padding:8px 4px;background:transparent;color:var(--muted);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.lyra-humor button[aria-checked=true]{background:var(--accent-soft);color:var(--accent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
+.lyra-sw{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.lyra-sw input{width:16px;height:16px;accent-color:var(--accent)}
+.lyra-menu-item{display:flex;align-items:center;gap:9px;padding:5px 0;border:0;background:transparent;color:var(--txt);font-family:inherit;font-size:13px;text-align:left;cursor:pointer}
+.lyra-menu-item i{width:16px;color:var(--muted)}
+.lyra-menu-item:hover{color:var(--accent)}
+.lyra-log{padding:14px 14px 8px}
+.lyra-log .chat-row{max-width:94%}
+.lyra-log .chat-msg.user{max-width:85%}
+.lyra-log .chat-row>.lyra-mini{--s:24px;margin-top:3px}
+.lyra-typing{display:inline-flex;gap:4px;padding:4px 0}
+.lyra-typing i{width:6px;height:6px;border-radius:50%;background:var(--lyra-sol-a);animation:lyra-punto 1s ease-in-out infinite}
+.lyra-typing i:nth-child(2){animation-delay:.15s;background:color-mix(in srgb,var(--lyra-sol-a),var(--lyra-sol-b))}
+.lyra-typing i:nth-child(3){animation-delay:.3s;background:var(--lyra-sol-b)}
+.lyra-sugs{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}
+.lyra-sugs[hidden]{display:none}
+.lyra-sug{padding:6px 11px;border-radius:999px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line2));background:var(--accent-soft);color:var(--txt);font-family:inherit;font-size:12px;text-align:left;cursor:pointer}
+.lyra-sug:hover{border-color:var(--accent)}
+/* Una línea = 44px, igual que el botón; al crecer, el botón queda abajo. */
+.lyra-inputbar{gap:8px;padding:10px 12px 12px;align-items:flex-end}
+.lyra-inputbar textarea{box-sizing:border-box;min-height:44px;padding:10px 12px;font-size:13.5px;line-height:21px}
+.lyra-inputbar textarea::placeholder{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lyra-inputbar .chat-send{width:44px;height:44px;border:0;background:var(--lyra-marca);color:var(--lyra-tinta)}
+.lyra-inputbar[hidden]{display:none}
+.lyra-clip{width:36px;height:44px;margin-right:-4px;font-size:16px}
+/* Adjuntos: bandeja de fichas sobre la barra, grabación y "Suelta aquí". */
+.lyra-bandeja{display:flex;gap:8px;padding:10px 12px 0;overflow-x:auto;border-top:1px solid var(--line)}
+.lyra-bandeja[hidden]{display:none}
+.lyra-bandeja+.lyra-inputbar{border-top:0}
+.lyra-ficha{position:relative;flex-shrink:0;display:flex;align-items:center;gap:8px;max-width:190px;height:52px;padding:0 12px 0 10px;border-radius:12px;background:var(--panel-solid);border:1px solid var(--line2);font-size:12px}
+.lyra-ficha.img{width:52px;padding:0}
+.lyra-ficha img{width:100%;height:100%;object-fit:cover;border-radius:11px}
+.lyra-ficha>i{font-size:18px;color:var(--accent)}
+.lyra-ficha-t{min-width:0;display:flex;flex-direction:column}
+.lyra-ficha-t b{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
+.lyra-ficha-t small{color:var(--muted)}
+.lyra-ficha-x{position:absolute;top:-6px;right:-6px;width:20px;height:20px;padding:0;border-radius:50%;border:1px solid var(--line2);background:var(--bg2);color:var(--txt);font-size:10px;cursor:pointer}
+.lyra-ficha-x:hover{border-color:var(--accent);color:var(--accent)}
+.lyra-grab{display:flex;align-items:center;gap:10px;padding:10px 12px 12px;border-top:1px solid var(--line)}
+.lyra-grab[hidden]{display:none}
+.lyra-grab-punto{width:10px;height:10px;flex-shrink:0;border-radius:50%;background:var(--lyra-rec);animation:lyra-rec 1s ease-in-out infinite}
+@keyframes lyra-rec{50%{opacity:.25}}
+.lyra-grab-t{min-width:36px;font-size:13px;font-variant-numeric:tabular-nums;color:var(--txt)}
+.lyra-grab-niv{flex:1;display:flex;align-items:center;gap:3px;height:28px;overflow:hidden}
+.lyra-grab-niv i{flex:1;max-width:4px;height:100%;border-radius:2px;background:var(--lyra-marca);transform:scaleY(.12);transition:transform .08s linear}
+.lyra-grab .chat-send{width:44px;height:44px;border:0;background:var(--lyra-marca);color:var(--lyra-tinta)}
+.lyra-soltar{position:absolute;inset:8px;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:2px dashed var(--accent);border-radius:18px;background:color-mix(in srgb,var(--bg2) 90%,transparent);color:var(--accent);font-size:15px;font-weight:600;pointer-events:none}
+.lyra-soltar[hidden]{display:none}
+.lyra-soltar i{font-size:30px}
+.lyra-log .chat-msg.user.con-adj{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.lyra-adj-img{display:block;max-width:220px;max-height:220px;border-radius:12px;object-fit:cover;cursor:zoom-in}
+.lyra-adj-audio{display:block;width:240px;max-width:100%;height:38px}
+.lyra-adj-file{display:inline-flex;align-items:center;gap:8px;max-width:240px;padding:8px 10px;border:0;border-radius:10px;background:color-mix(in srgb,var(--lyra-tinta) 22%,transparent);color:inherit;font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+.lyra-adj-file b{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
+.lyra-adj-file small{opacity:.8;white-space:nowrap}
+.lyra-entendi{font-size:12px;font-style:italic;opacity:.9}
+.lyra-entendi[hidden]{display:none}
+
+.lyra-cta{display:flex;align-items:center;gap:14px}
+.lyra-cta-orb{--s:44px}
+.lyra-cta-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.lyra-cta-t small{font-size:12.5px;color:var(--muted)}
+
+@media(max-width:760px){
+  body.lyra-on .lyra-dock{display:none}
+  body.lyra-on .lyra-fab{display:flex}
+  .lyra-fab{position:fixed;left:14px;bottom:calc(16px + var(--safe-b));z-index:55;width:60px;height:60px;padding:0;align-items:center;justify-content:center;border:0;border-radius:50%;background:transparent;cursor:pointer;transition:opacity var(--dur-rapida),transform var(--dur-rapida) var(--ease-salida)}
+  .lyra-fab:active{transform:scale(.92)}
+  .lyra-fab .lyra-orb{--s:56px}
+  .lyra-fab.nuevo::after{top:4px;left:46px}
+  body.lyra-abierta .lyra-fab{opacity:0;pointer-events:none}
+  .lyra-globo{left:14px;right:84px;bottom:calc(90px + var(--safe-b));max-width:none}
+  .lyra-panel{left:0;right:0;top:calc(var(--appbar-h) + 10px);bottom:0;width:auto;height:auto;max-height:none;padding-bottom:var(--safe-b);border-bottom:0;border-radius:22px 22px 0 0;transform:translateY(28px);transform-origin:center bottom}
+  .lyra-panel.show{transform:none}
+  .lyra-inputbar textarea{font-size:16px}
+  .lyra-adj-img{max-width:190px;max-height:190px}
+  .lyra-ficha{max-width:160px}
+  .lyra-dock-k{display:none}
+  .lyra-rz{display:none}
+  .lyra-head{cursor:auto}
+}
+@media(prefers-reduced-motion:reduce){
+  .lyra-orb,.lyra-orb *,.lyra-orb *::before,.lyra-orb *::after,.lyra-typing i,.lyra-grab-punto{animation:none!important}
+  .lyra-grab-niv i{transition:none}
+}
 </style>
 </head>
 <body>
@@ -3368,8 +3647,57 @@ body.fsize-grande{--tap:41.9px}
         <button class="logout-btn logout-btn-lg" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
         <button class="refresh-btn refresh-btn-lg" data-refresh title="Actualizar el CRM a la última versión"><i class="fas fa-rotate"></i> <span>Actualizar CRM</span></button>
       </div>
+      <!-- Lyra (2026-09-26): la cara del asistente. Solo se ve con body.lyra-on
+           (rol con acceso a la sección Asistente); el chat es #lyra-panel. -->
+      <button class="lyra-dock" id="lyra-dock" type="button" aria-controls="lyra-panel" aria-expanded="false" title="Hablar con Lyra (Ctrl+K)">
+        <span class="lyra-orb" data-lyra-orb aria-hidden="true"></span>
+        <span class="lyra-dock-t"><b>Lyra</b><small class="lyra-estado">En línea</small></span>
+        <span class="lyra-dock-k" aria-hidden="true">Ctrl K</span>
+      </button>
     </div>
   </aside>
+
+  <button class="lyra-fab" id="lyra-fab" type="button" aria-controls="lyra-panel" aria-expanded="false" aria-label="Hablar con Lyra">
+    <span class="lyra-orb" data-lyra-orb aria-hidden="true"></span>
+  </button>
+  <div class="lyra-globo" id="lyra-globo" role="status" aria-live="polite" hidden></div>
+  <section class="lyra-panel" id="lyra-panel" role="dialog" aria-label="Chat con Lyra" aria-hidden="true" inert>
+    <header class="lyra-head" title="Arrástrame donde quieras · doble clic para volver a mi lugar">
+      <span class="lyra-orb" data-lyra-orb aria-hidden="true"></span>
+      <div class="lyra-head-t"><b>Lyra</b><small class="lyra-estado">En línea</small></div>
+      <button class="lyra-ib" id="lyra-menu-btn" type="button" aria-label="Opciones de Lyra" aria-haspopup="true" aria-expanded="false"><i class="fas fa-sliders"></i></button>
+      <button class="lyra-ib" id="lyra-cerrar" type="button" aria-label="Cerrar el chat"><i class="fas fa-xmark"></i></button>
+    </header>
+    <div class="lyra-menu" id="lyra-menu" hidden>
+      <div class="lyra-menu-t">Humor</div>
+      <div class="lyra-humor" role="radiogroup" aria-label="Nivel de humor">
+        <button type="button" role="radio" data-lyra-humor="0">Seria</button>
+        <button type="button" role="radio" data-lyra-humor="1">Normal</button>
+        <button type="button" role="radio" data-lyra-humor="2">Sin filtro</button>
+      </div>
+      <label class="lyra-sw"><input type="checkbox" id="lyra-silencio"> <span>Que no hable sola</span></label>
+      <button type="button" class="lyra-menu-item" id="lyra-limpiar"><i class="fas fa-broom"></i> Empezar de cero</button>
+      <button type="button" class="lyra-menu-item" id="lyra-reubicar"><i class="fas fa-arrows-to-dot"></i> Volver a su lugar</button>
+      <button type="button" class="lyra-menu-item" id="lyra-ver-acciones"><i class="fas fa-clock-rotate-left"></i> Ver acciones y deshacer</button>
+    </div>
+    <div class="chat-log lyra-log" id="lyra-log"></div>
+    <div class="lyra-sugs" id="lyra-sugs"></div>
+    <div class="lyra-bandeja" id="lyra-bandeja" hidden></div>
+    <div class="chat-inputbar lyra-inputbar" id="lyra-bar">
+      <button class="lyra-ib lyra-clip" id="lyra-clip" type="button" title="Adjuntar archivo" aria-label="Adjuntar archivo"><i class="fas fa-paperclip"></i></button>
+      <input type="file" id="lyra-file" multiple hidden>
+      <textarea id="lyra-input" rows="1" placeholder="Pídele algo a Lyra…" aria-label="Mensaje para Lyra"></textarea>
+      <button class="chat-send" id="lyra-send" type="button" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
+    </div>
+    <div class="lyra-grab" id="lyra-grab" role="status" aria-label="Grabando audio" hidden>
+      <span class="lyra-grab-punto" aria-hidden="true"></span>
+      <span class="lyra-grab-t" id="lyra-grab-t">0:00</span>
+      <span class="lyra-grab-niv" id="lyra-grab-niv" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <button class="lyra-ib" id="lyra-grab-x" type="button" title="Descartar" aria-label="Descartar grabación"><i class="fas fa-trash-can"></i></button>
+      <button class="chat-send" id="lyra-grab-ok" type="button" title="Enviar audio" aria-label="Enviar audio"><i class="fas fa-check"></i></button>
+    </div>
+    <div class="lyra-soltar" id="lyra-soltar" hidden><i class="fas fa-file-arrow-up"></i><span>Suelta aquí</span></div>
+  </section>
 
   <main class="main">
     <div class="mobile-brand">
@@ -5386,13 +5714,10 @@ body.fsize-grande{--tap:41.9px}
         </div>
         <div class="asis-vinc" id="asis-vinc">Cargando…</div>
       </div>
-      <div class="card chat-wrap" style="margin-top:14px">
-        <div class="chat-toolbar"><div class="eb-title" style="margin:0"><i class="fas fa-robot"></i> Asistente</div></div>
-        <div class="chat-log" id="asis-chat-log"></div>
-        <div class="chat-inputbar">
-          <textarea id="asis-chat-input" rows="1" placeholder="Ej: ¿qué le falta a la reserva de Pérez?"></textarea>
-          <button class="chat-send" id="asis-chat-send" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
-        </div>
+      <div class="card lyra-cta" style="margin-top:14px">
+        <span class="lyra-orb lyra-cta-orb" data-lyra-orb aria-hidden="true"></span>
+        <div class="lyra-cta-t"><b>El chat ahora es Lyra</b><small>Vive al pie del menú y te acompaña en cualquier sección. Atajo: Ctrl+K.</small></div>
+        <button class="btn-sm" id="asis-abrir-lyra" type="button"><i class="fas fa-comment-dots"></i> Hablar con Lyra</button>
       </div>
       <div class="card" style="margin-top:14px">
         <div class="chead-row">
