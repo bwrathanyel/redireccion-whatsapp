@@ -164,7 +164,8 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
   'clientes-eventos': ['Clientes Eventos', 'Quienes se registraron con el QR del stand y los premios que ganaron'],
-  proveedores: ['Proveedores', 'A quién le compra Lotus: servicios, contacto, crédito y datos de pago'],
+  'bt-travel': ['BT Travel', 'Hoteles todo incluido, disponibilidad, reservas y pagos del mayorista'],
+  proveedores: ['Proveedores','A quién le compra Lotus: servicios, contacto, crédito y datos de pago'],
   asistente: ['Asistente', 'Revisa reservas, carga servicios y pasajeros, deja notas y escribe a proveedores -- con tus permisos'],
   'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
   'voz-ia': ['Voz IA', 'Probá la voz clonada de la jefa y controlá la muestra de referencia que usa la IA'],
@@ -1241,7 +1242,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'cotizador', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'voucher', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
   'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
@@ -2454,7 +2455,7 @@ async function startApp() {
     setupMetricas, setupRanking, setupEstadisticas, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
     setupBuscadorIATarifario, setupCerebroIA, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
-    setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas,
+    setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas, setupBtTravel,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers, setupComisiones,
@@ -12629,6 +12630,160 @@ function provPintarReservas(tab) {
   pvGruposGrid(cont, lista.map(s => ({ reserva: s.reserva, grupo: grupo(s), extra: provServExtra(s) })), 'proveedor-sheet',
     'Sin reservas con este proveedor. Se enlazan al asignarle proveedor a un servicio de la reserva.');
 }
+/* ---------- BT Travel (Corporativo, 2026-09-25) ----------
+   "De BT" = hotel con alguna tarifa de tag todo_incluido (decisión del dueño:
+   productos no tiene columna de proveedor). Las filas del PDF lo dicen en
+   `plan` y los flyers en `incluye_tags`: se aceptan las dos. El embed !inner
+   deja en cada hotel SOLO sus tarifas TI, así la vigencia es la de esas. */
+const BT_NOMBRE_RE = /\bbt\s*travel\b/i, BT_DIAS_VENCE = 15, BT_DIAS_BLOQUEO = 7;
+let BT_DATA = null, btFiltro = null;
+const btNorm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const btFinTarifa = t => [tarVentaHasta(t), t.fecha_fin].filter(Boolean).sort()[0] || null;
+const btSumarDias = n => { const d = new Date(hoy() + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+async function loadBtTravel() {
+  if (ROL !== 'admin') return;
+  const cargando = document.getElementById('bt-loading');
+  if (!BT_DATA) cargando?.classList.add('show');
+  if (!PROV_CACHE.length) await loadProveedores();
+  const bt = PROV_CACHE.find(p => BT_NOMBRE_RE.test(p.nombre)) || null;
+  const [rh, rs, rpdf, rcxp, rres] = await Promise.all([
+    sb.from('productos').select('id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo),tarifas!inner(id,plan,vigente,fecha_fin,venta_hasta,fecha_venta_fin,incluye_tags,updated_at)')
+      .eq('tipo', 'hotel').eq('activo', true).or('incluye_tags.cs.{todo_incluido},plan.ilike.*todo incluido*', { referencedTable: 'tarifas' }).order('nombre'),
+    sb.rpc('stop_sales_vigentes'),
+    sb.rpc('stop_sales_pdf_actual'),
+    sb.rpc('listar_cuentas_por_pagar'),
+    bt ? sb.rpc('listar_reservas_proveedor', { p_proveedor_id: bt.id }) : null,
+  ]);
+  cargando?.classList.remove('show');
+  if (rh.error) { errToast('No se pudieron cargar los hoteles de BT Travel'); console.error('bt hoteles', rh.error); return; }
+  const h = hoy(), limVence = btSumarDias(BT_DIAS_VENCE), limBloqueo = btSumarDias(BT_DIAS_BLOQUEO);
+  const stops = rs.error ? [] : (rs.data || []);
+  const servicios = rres && !rres.error && rres.data?.ok ? (rres.data.servicios || []) : [];
+  const hoteles = (rh.data || []).map(p => {
+    const vend = p.tarifas.filter(tarVendibleHoy);
+    const fines = vend.map(btFinTarifa).filter(Boolean).sort();
+    const ss = stops.filter(s => s.producto_id === p.id);
+    const hoySS = ss.find(s => s.fecha_desde <= h && s.fecha_hasta >= h);
+    const prox = ss.filter(s => s.fecha_desde > h && s.fecha_desde <= limBloqueo).sort((a, b) => a.fecha_desde.localeCompare(b.fecha_desde))[0];
+    const n = btNorm(p.nombre);
+    const reservas = new Set(servicios.filter(s => {
+      const m = btNorm(s.detalle?.hotel || s.descripcion);
+      return m.length > 3 && (m.includes(n) || n.includes(m));
+    }).map(s => s.reserva_id)).size;
+    return {
+      ...p, activo: vend.length > 0, porVencer: vend.filter(t => { const f = btFinTarifa(t); return f && f <= limVence; }).length,
+      proxFin: fines.find(f => f <= limVence) || null, ultimoFin: fines[fines.length - 1] || null,
+      hoySS: hoySS || null, prox: prox || null, reservas,
+    };
+  }).sort((a, b) => (b.activo - a.activo) || a.nombre.localeCompare(b.nombre));
+  const mes = h.slice(0, 7);
+  const cxp = rcxp.error ? [] : (rcxp.data || []).filter(c => BT_NOMBRE_RE.test(c.proveedor || '') && c.estado !== 'pagado');
+  BT_DATA = {
+    bt, hoteles, pdf: !rpdf.error && Array.isArray(rpdf.data) ? rpdf.data[0] || null : null,
+    reservasMes: new Set(servicios.filter(s => String(s.fecha_inicio || '').startsWith(mes)).map(s => s.reserva_id)).size,
+    porPagar: cxp.reduce((a, c) => a + (Number(c.saldo_pendiente) || 0), 0), cxpN: cxp.length,
+    ultimaCarga: (rh.data || []).flatMap(p => p.tarifas.map(t => t.updated_at)).filter(Boolean).sort().pop() || null,
+  };
+  btPintarCabecera(); btPintarKpis(); btPintarGrid(); btPintarPie();
+}
+function btPintarCabecera() {
+  const bt = BT_DATA.bt, box = document.getElementById('bt-datos'), btn = document.getElementById('bt-ver-ficha');
+  btn.disabled = !bt;
+  if (!bt) { box.innerHTML = '<span class="bt-dato"><i class="fas fa-circle-info"></i> BT Travel todavía no está cargado en Proveedores</span>'; return; }
+  const tel = String(bt.telefono || '').replace(/[^\d+]/g, '');
+  box.innerHTML = [
+    bt.contacto && `<span class="bt-dato"><i class="fas fa-user"></i> ${esc(bt.contacto)}</span>`,
+    bt.telefono && `<span class="bt-dato"><i class="fas fa-phone"></i> <a href="tel:${esc(tel)}">${esc(bt.telefono)}</a></span>`,
+    bt.email && `<span class="bt-dato"><i class="fas fa-envelope"></i> <a href="mailto:${esc(bt.email)}">${esc(bt.email)}</a></span>`,
+    `<span class="bt-dato"><i class="fas fa-hourglass-half"></i> ${bt.dias_credito ? fmt(bt.dias_credito) + ' días de crédito' : 'Contado'}</span>`,
+    bt.moneda_habitual && `<span class="bt-dato"><i class="fas fa-coins"></i> ${esc(bt.moneda_habitual)}</span>`,
+  ].filter(Boolean).join('');
+}
+function btIrAFiltro(clave) { btFiltro = btFiltro === clave ? null : clave; btPintarKpis(); btPintarGrid(); }
+function btPintarKpis() {
+  const d = BT_DATA, hs = d.hoteles;
+  const nSS = hs.filter(x => x.hoySS).length, nProx = hs.filter(x => x.prox).length;
+  const venc = hs.reduce((a, x) => a + (x.activo ? x.porVencer : 0), 0);
+  pintarKPIs('bt-kpis', [
+    { key: 'activos', t: 'Hoteles TI activos', v: fmt(hs.filter(x => x.activo).length), d: `de ${fmt(hs.length)} con tarifa todo incluido`, i: 'fa-hotel', c: 'var(--accent)', tt: 'Ver solo los que se venden hoy', go: () => btIrAFiltro('activos') },
+    { key: 'vence', t: `Tarifas por vencer ≤${BT_DIAS_VENCE}d`, v: fmt(venc), d: 'Pedir la renovación a BT', i: 'fa-hourglass-end', c: 'var(--amber)', tt: 'Ver los hoteles con tarifas por vencer', go: () => btIrAFiltro('vence') },
+    { key: 'stop', t: 'En Stop Sale hoy', v: fmt(nSS), d: 'Sin cupo o a confirmar hoy', i: 'fa-ban', c: 'var(--pink)', tt: 'Ver los hoteles bloqueados hoy', go: () => btIrAFiltro('stop') },
+    { key: 'bloqueo', t: `Bloqueos próx. ${BT_DIAS_BLOQUEO}d`, v: fmt(nProx), d: 'Empiezan esta semana', i: 'fa-calendar-xmark', c: 'var(--purple)', tt: 'Ver los hoteles con bloqueo próximo', go: () => btIrAFiltro('bloqueo') },
+    { t: 'Reservas con BT (mes)', v: fmt(d.reservasMes), d: fullMonth(hoy().slice(0, 7)), i: 'fa-suitcase-rolling', c: 'var(--blue)', tt: 'Ver las reservas de BT Travel', go: () => btAbrirFicha('todas') },
+    { t: 'Por pagar a BT', v: money(d.porPagar), d: d.cxpN ? `${fmt(d.cxpN)} cuenta(s) pendiente(s)` : 'Al día', i: 'fa-money-bill-transfer', c: 'var(--green)', tt: 'Ver en Cuentas por Pagar', go: btIrACxp },
+  ].map(k => ({ ...k, on: !!k.key && k.key === btFiltro })));
+}
+function btPintarGrid() {
+  const q = btNorm(val('bt-search'));
+  const lista = BT_DATA.hoteles.filter(x => {
+    if (q && !btNorm(x.nombre + ' ' + (x.destino || '')).includes(q)) return false;
+    if (btFiltro === 'activos') return x.activo;
+    if (btFiltro === 'vence') return x.activo && x.porVencer > 0;
+    if (btFiltro === 'stop') return !!x.hoySS;
+    if (btFiltro === 'bloqueo') return !!x.prox;
+    return true;
+  });
+  const chip = document.getElementById('bt-filtro-chip');
+  const etiquetas = { activos: 'Activos', vence: 'Por vencer', stop: 'En stop sale hoy', bloqueo: 'Bloqueo próximo' };
+  chip.hidden = !btFiltro;
+  chip.innerHTML = btFiltro ? `${etiquetas[btFiltro]} · ${fmt(lista.length)} <i class="fas fa-xmark"></i>` : '';
+  const tag = (txt, c) => `<span class="bt-tag" style="--c:${c}">${txt}</span>`;
+  document.getElementById('bt-grid').innerHTML = lista.map((x, i) => {
+    const foto = ordenarFotos(x.producto_fotos)[0];
+    const estado = x.hoySS ? tag(x.hoySS.estado === 'on_request' ? 'On request hoy' : 'Stop sale hoy', x.hoySS.estado === 'on_request' ? 'var(--amber)' : 'var(--pink)')
+      : x.prox ? tag(`Bloqueo ${fmtFechaCorta(x.prox.fecha_desde)}`, 'var(--purple)')
+      : x.activo ? tag('Disponible', 'var(--green)') : '';
+    const vig = !x.activo ? tag('Sin tarifa vendible', 'var(--muted)')
+      : x.proxFin ? tag(`Vence ${fmtFechaCorta(x.proxFin)}`, 'var(--amber)')
+      : x.ultimoFin ? tag(`Hasta ${fmtFechaCorta(x.ultimoFin)}`, 'var(--muted)') : '';
+    return `<button type="button" class="bt-hotel${x.activo ? '' : ' apagado'}" style="--i:${Math.min(i, 24)}" data-bt-hotel="${x.id}">
+      <span class="bt-foto"${foto ? ` style="background-image:url('${fotoMini(foto.storage_path, 256)}')"` : ''}>${foto ? '' : '<i class="fas fa-hotel"></i>'}</span>
+      <span class="bt-hotel-info">
+        <span class="bt-hotel-nom">${esc(x.nombre)}</span>
+        <span class="bt-hotel-dest">${esc(x.destino || '—')}</span>
+        <span class="bt-hotel-fila">${estado}${vig}${x.reservas ? tag(`${fmt(x.reservas)} reserva(s)`, 'var(--blue)') : ''}</span>
+      </span>
+    </button>`;
+  }).join('') || `<div class="pv-empty" style="padding:18px">${BT_DATA.hoteles.length ? 'Ningún hotel coincide con la búsqueda o el filtro' : 'No hay hoteles con tarifa todo incluido en el tarifario'}</div>`;
+}
+function btPintarPie() {
+  const d = BT_DATA;
+  document.getElementById('bt-pie').innerHTML = [
+    `<span><i class="fas fa-book-open"></i>Última carga del tarifario TI: ${d.ultimaCarga ? fmtDiaCorto(d.ultimaCarga.slice(0, 10)) : '—'}</span>`,
+    `<span><i class="fas fa-file-pdf"></i>Último PDF de stop sales: ${d.pdf ? fmtDiaCorto(d.pdf.creado_en.slice(0, 10)) : 'ninguno'}</span>`,
+  ].join('');
+}
+function btAbrirFicha(tab) {
+  const bt = BT_DATA?.bt;
+  if (!bt) { errToast('BT Travel no está cargado en Proveedores'); return; }
+  abrirProveedorSheet(bt.id);
+  if (tab) provTab(tab);
+}
+function btIrACxp() {
+  activateSection('facturacion');
+  document.querySelector('#fact-tabs .seg[data-fact-tab="cxp"]')?.click();
+  const inp = document.getElementById('cxp-search');
+  if (inp) { inp.value = 'BT'; inp.dispatchEvent(new Event('input', { bubbles: true })); }
+}
+function btAbrirHotel(id) {
+  const x = BT_DATA?.hoteles.find(h => h.id === id);
+  if (!x) return;
+  // Un hotel bloqueado lleva a su calendario de stop sales; el resto, al tarifario.
+  if (x.hoySS || x.prox) { ssHotelSel = x.nombre; ssFiltro = 'todos'; activateSection('stop-sales'); return; }
+  const inp = document.getElementById('tar-search');
+  if (inp) inp.value = x.nombre;
+  activateSection('tarifario');
+  inp?.dispatchEvent(new Event('input', { bubbles: true }));
+}
+function setupBtTravel() {
+  document.getElementById('bt-search').addEventListener('input', () => BT_DATA && btPintarGrid());
+  document.getElementById('bt-filtro-chip').addEventListener('click', () => btIrAFiltro(btFiltro));
+  document.getElementById('bt-ver-ficha').addEventListener('click', () => btAbrirFicha());
+  document.getElementById('bt-grid').addEventListener('click', e => {
+    const b = e.target.closest('[data-bt-hotel]');
+    if (b) btAbrirHotel(Number(b.dataset.btHotel));
+  });
+}
 async function guardarProveedor() {
   const err = document.getElementById('prov-err'), btn = document.getElementById('prov-guardar');
   err.textContent = '';
@@ -18532,6 +18687,7 @@ const NAV_ITEMS = [
   { sec: 'mis-comisiones', icon: 'fas fa-sack-dollar', label: 'Mis Comisiones', padre: 'grp-cobros', roles: 'nav-asesor-only' },
   { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
+  { sec: 'bt-travel', icon: 'fas fa-umbrella-beach', label: 'BT Travel', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles todo incluido, stop sales, reservas y pagos' },
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only', sub: 'Ventas, calidad, errores y costos' },
   { sec: 'cotizador', icon: 'fas fa-comments', label: 'Cotizador IA', padre: 'grp-ia', roles: 'nav-marketing-ok' },
   { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', padre: 'grp-ia', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Revisa reservas, carga datos y escribe a proveedores' },
@@ -18807,6 +18963,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'pagos') loadPagos();
   if (sec === 'proveedores') loadProveedores();
   if (sec === 'empresas') loadEmpresas();
+  if (sec === 'bt-travel') loadBtTravel();
   if (sec === 'asistente') loadAsistente();
   if (sec === 'mis-comisiones') loadMisComisiones();
   if (sec === 'comisiones') loadComisiones();
@@ -20438,6 +20595,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-25', emoji: '🏝️', titulo: 'Corporativo: pestaña BT Travel', texto: 'Nueva pestaña "BT Travel" en Corporativo, junto a Proveedores y Empresas. Reúne todo lo del mayorista: hoteles todo incluido activos, tarifas por vencer, hoteles en stop sale hoy, bloqueos de los próximos 7 días, reservas del mes y lo que falta pagarle. Cada número filtra la grilla de hoteles o te lleva a su pantalla. Tocar un hotel lo abre en el tarifario o, si está bloqueado, en su calendario de Stop Sales.', roles: ['admin'] },
   { fecha: '2026-09-25', emoji: '🗂️', titulo: 'Menú más corto: 12 entradas con pestañas', texto: 'El menú lateral pasó de 37 secciones a 12 entradas (Inicio, Leads, Mensajes, Tarifario, Stop Sales, Reservas, Cobros, Corporativo, IA, Marketing, Equipo y Ayuda). Cada una abre la última pestaña que usaste, y arriba de la sección están las pestañas para saltar entre sus partes. El buscador del menú sigue encontrando cualquier sección por su nombre.', roles: ['asesor', 'admin'] },
   { fecha: '2026-09-24', emoji: '🧳', titulo: 'Reservas: servicios, pasajeros y documentos', texto: 'Postventa ahora se llama "Reservas". Al gestionar una reserva hay pestañas nuevas: Servicios (boletos, traslados, full days, hospedaje, seguros, cada uno con su precio y moneda; el total de la reserva se calcula solo), Pasajeros (datos y documento de cada viajero) y Documentos (subí vouchers, boletos y comprobantes en PDF o foto). Boletería ve la lista de boletos por emitir.', roles: ['asesor', 'admin', 'boleteria'] },
   { fecha: '2026-09-24', emoji: '🚚', titulo: 'Proveedores: catálogo con ficha', texto: 'Nueva sección "Proveedores" (Ventas y Postventa): la lista de hoteles, posadas y operadores a los que les compramos, con su ficha de servicios, contacto, moneda, días de crédito y datos de pago. Es la base de las próximas pantallas de reservas, cuentas por pagar y márgenes.', roles: ['admin'] },

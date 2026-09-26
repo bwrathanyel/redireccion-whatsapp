@@ -3121,6 +3121,53 @@ body.fsize-grande{--tap:41.9px}
   .export-dd-menu.sheet,.correo-cuenta-menu.sheet{padding-bottom:calc(6px + var(--safe-b))}
   .export-dd-menu.sheet button,.correo-cuenta-menu.sheet button{min-height:var(--tap)}
 }
+
+/* BT Travel (Corporativo, 2026-09-25). El logo es el de BT redibujado en SVG
+   con los colores del CRM: los cuadros B/T en acento y la franja TRAVEL en
+   acento suave, así sigue al tema claro/oscuro sin un archivo de imagen. */
+.bt-head{display:flex;align-items:center;gap:18px;margin-bottom:16px}
+.bt-logo{width:84px;height:84px;flex:none;border-radius:16px;overflow:hidden;animation:bt-logo-in .5s var(--ease-salida) both}
+.bt-logo svg{display:block;width:100%;height:100%}
+.bt-logo .bt-cuadro{fill:var(--accent)}
+.bt-logo .bt-franja{fill:var(--accent-soft)}
+.bt-logo .bt-letra{fill:var(--bg);font-weight:800;font-family:inherit}
+.bt-logo .bt-palabra{fill:var(--accent);font-weight:800;font-family:inherit;letter-spacing:3px}
+.bt-head-txt{flex:1;min-width:0}
+.bt-head-txt h2{margin:0}
+.bt-datos{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.bt-dato{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+.bt-dato i{color:var(--accent)}
+.bt-dato a{color:inherit;text-decoration:none}
+.kpis.bt-kpis{grid-template-columns:repeat(3,1fr)}
+.bt-kpis .kpi{animation:bt-sube .45s var(--ease-salida) both}
+.bt-kpis .kpi:nth-child(2){animation-delay:.05s}.bt-kpis .kpi:nth-child(3){animation-delay:.1s}
+.bt-kpis .kpi:nth-child(4){animation-delay:.15s}.bt-kpis .kpi:nth-child(5){animation-delay:.2s}.bt-kpis .kpi:nth-child(6){animation-delay:.25s}
+.bt-kpis .kpi.kpi-on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.bt-buscar{width:auto;flex:0 1 260px;min-width:150px}
+.bt-filtro-chip[hidden]{display:none}
+.bt-filtro-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);border:0;border-radius:999px;padding:6px 12px;cursor:pointer}
+.bt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-top:14px}
+.bt-hotel{display:flex;gap:12px;align-items:stretch;text-align:left;color:var(--txt);background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:10px;cursor:pointer;font:inherit;animation:bt-sube .4s var(--ease-salida) both;animation-delay:calc(var(--i,0) * 25ms);transition:transform var(--dur-rapida),border-color var(--dur-rapida)}
+.bt-hotel:hover{transform:translateY(-2px);border-color:var(--line2)}
+.bt-hotel.apagado{opacity:.55}
+.bt-foto{width:64px;height:64px;flex:none;border-radius:10px;background:var(--panel-solid) center/cover no-repeat;display:grid;place-items:center;color:var(--muted2)}
+.bt-hotel-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.bt-hotel-nom{font-weight:700;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-hotel-dest{font-size:11.5px;color:var(--muted)}
+.bt-hotel-fila{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto}
+.bt-tag{font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;background:color-mix(in srgb,var(--c) 16%,transparent);color:var(--c)}
+.bt-pie{display:flex;flex-wrap:wrap;gap:8px 18px;justify-content:center;font-size:11.5px;color:var(--muted);margin:14px 0 4px}
+.bt-pie i{color:var(--accent);margin-right:5px}
+@keyframes bt-sube{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes bt-logo-in{from{opacity:0;transform:scale(.85) rotate(-4deg)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.bt-logo,.bt-kpis .kpi,.bt-hotel{animation:none}}
+@media(max-width:760px){
+  .bt-head{gap:12px;flex-wrap:wrap}
+  .bt-logo{width:60px;height:60px;border-radius:12px}
+  .kpis.bt-kpis{grid-template-columns:repeat(2,1fr)}
+  .bt-grid{grid-template-columns:1fr}
+  .bt-buscar{flex:1 1 100%;font-size:16px}
+}
 </style>
 </head>
 <body>
@@ -4429,6 +4476,33 @@ body.fsize-grande{--tap:41.9px}
           </table>
         </div>
       </div>
+    </section>
+
+    <!-- BT TRAVEL (2026-09-25; solo admin): hoteles todo incluido del tarifario, stop sales, reservas y CxP del proveedor -->
+    <section class="section" id="sec-bt-travel">
+      <div class="card bt-head">
+        <div class="bt-logo" aria-hidden="true">
+          <svg viewBox="0 0 100 100"><rect class="bt-cuadro" width="47" height="47"/><rect class="bt-cuadro" x="53" width="47" height="47"/><rect class="bt-franja" y="53" width="100" height="47"/><text class="bt-letra" x="23.5" y="35" font-size="30" text-anchor="middle">B</text><text class="bt-letra" x="76.5" y="35" font-size="30" text-anchor="middle">T</text><text class="bt-palabra" x="51.5" y="83" font-size="15" text-anchor="middle">TRAVEL</text></svg>
+        </div>
+        <div class="bt-head-txt">
+          <h2>BT Travel</h2>
+          <div class="csub">Mayorista de los hoteles todo incluido del tarifario y fuente del stop sales</div>
+          <div class="bt-datos" id="bt-datos"></div>
+        </div>
+        <button class="btn-sm" id="bt-ver-ficha" type="button" disabled><i class="fas fa-id-card"></i> Ver ficha</button>
+      </div>
+      <div class="kpis bt-kpis" id="bt-kpis"></div>
+      <div class="card">
+        <div class="chead-row">
+          <h2><i class="fas fa-umbrella-beach"></i> Hoteles todo incluido</h2>
+          <input type="text" class="ei bt-buscar" id="bt-search" placeholder="Buscar hotel o destino..." autocomplete="off">
+          <button class="bt-filtro-chip" id="bt-filtro-chip" type="button" hidden></button>
+        </div>
+        <div class="csub" id="bt-grid-sub">Tocá un hotel para abrirlo en el tarifario</div>
+        <div class="tbl-state skel" id="bt-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+        <div class="bt-grid" id="bt-grid"></div>
+      </div>
+      <div class="bt-pie" id="bt-pie"></div>
     </section>
 
     <!-- EMPRESAS (Etapa D; solo admin, ver listar_empresas_cliente / guardar_empresa_cliente) -->
