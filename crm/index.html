@@ -3249,7 +3249,7 @@ body.fsize-grande{--zoom:1.05}
 .lo-mar path+path{animation-duration:7s;animation-direction:reverse}
 .lo-cara{transform:translate(var(--lx),var(--ly));transition:transform .35s var(--ease-salida);fill:none;stroke:var(--lyra-tinta);stroke-width:4.4;stroke-linecap:round;stroke-linejoin:round}
 .lo-cara *{transform-box:fill-box;transform-origin:center;transition:opacity .16s,transform .24s var(--ease-salida)}
-.lo-ojo-abierto ellipse,.b-grande,.b-o{fill:var(--lyra-tinta)}
+.lo-ojo-abierto ellipse,.b-grande,.b-o,.b-h1,.b-h2{fill:var(--lyra-tinta)}
 .lo-ojo-abierto ellipse,.lo-brillo,.lo-rubor,.lo-gota{stroke:none}
 .lo-brillo{fill:var(--lyra-brillo)}
 .lo-ceja{stroke-width:3.8}
@@ -3312,6 +3312,15 @@ body.fsize-grande{--zoom:1.05}
 .lyra-orb[data-expr=escuchando] .lo-ceja{transform:translateY(-3px)}
 .lyra-orb[data-expr=escuchando] .lo-rubor{opacity:.22}
 .lyra-orb[data-expr=escuchando] .lo-halo{animation-duration:2s}
+
+/* hablando: la boca la mueve la amplitud del audio (data-boca 0-3, lyraHablar). */
+.lyra-orb[data-expr=hablando]{--inclina:-3deg}
+.lyra-orb[data-expr=hablando] .lo-ceja{transform:translateY(-2px)}
+.lyra-orb[data-expr=hablando] .lo-rubor{opacity:.25}
+.lyra-orb[data-expr=hablando] .lo-boca{transition-duration:.05s}
+.lyra-orb[data-expr=hablando]:not([data-boca]) .b-sonrisa,.lyra-orb[data-expr=hablando][data-boca="0"] .b-sonrisa,
+.lyra-orb[data-expr=hablando][data-boca="1"] .b-h1,.lyra-orb[data-expr=hablando][data-boca="2"] .b-h2,
+.lyra-orb[data-expr=hablando][data-boca="3"] .b-grande{opacity:1}
 
 .lyra-orb[data-expr=dormida]{--inclina:-10deg}
 .lyra-orb[data-expr=dormida] .lo-ceja{transform:translateY(3px)}
@@ -3415,6 +3424,15 @@ body.lyra-moviendo iframe{pointer-events:none}
 .lyra-humor button[aria-checked=true]{background:var(--accent-soft);color:var(--accent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
 .lyra-sw{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
 .lyra-sw input{width:16px;height:16px;accent-color:var(--accent)}
+.lyra-menu-nota{display:none;margin-top:-4px;font-size:11.5px;color:var(--muted)}
+/* Escucha activa: indicador de micrófono fijo, halo que respira lento; al oír voz, halo rápido; en la
+   ventana de 8 s tras hablar, anillo acelerado (no hace falta repetir "Lyra"). */
+.lyra-mic{display:none;align-items:center;justify-content:center;width:22px;height:22px;flex-shrink:0;border-radius:50%;font-size:10px;color:var(--lyra-tinta);background:var(--lyra-marca)}
+body.lyra-escucha .lyra-mic{display:inline-flex}
+.lyra-fab .lyra-mic{position:absolute;right:0;bottom:0;box-shadow:0 0 0 2px var(--lyra-brillo)}
+body.lyra-escucha .lyra-orb[data-expr=neutral] .lo-halo{animation-duration:6s}
+body.lyra-oyendo .lyra-orb .lo-halo{animation-duration:1.2s}
+body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 .lyra-menu-item{display:flex;align-items:center;gap:9px;padding:5px 0;border:0;background:transparent;color:var(--txt);font-family:inherit;font-size:13px;text-align:left;cursor:pointer}
 .lyra-menu-item i{width:16px;color:var(--muted)}
 .lyra-menu-item:hover{color:var(--accent)}
@@ -3422,6 +3440,9 @@ body.lyra-moviendo iframe{pointer-events:none}
 .lyra-log .chat-row{max-width:94%}
 .lyra-log .chat-msg.user{max-width:85%}
 .lyra-log .chat-row>.lyra-mini{--s:24px;margin-top:3px}
+.lyra-oir{flex:none;align-self:flex-end;display:grid;place-items:center;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--muted);font-size:11px;cursor:pointer;opacity:.55;transition:opacity .15s,color .15s,background .15s}
+.lyra-oir:hover,.lyra-oir:focus-visible,.lyra-oir.on{opacity:1;color:var(--lyra-sol-a);background:color-mix(in srgb,var(--lyra-sol-a) 12%,transparent)}
+.lyra-oir.cargando i{animation:lyra-punto 1s ease-in-out infinite}
 .lyra-typing{display:inline-flex;gap:4px;padding:4px 0}
 .lyra-typing i{width:6px;height:6px;border-radius:50%;background:var(--lyra-sol-a);animation:lyra-punto 1s ease-in-out infinite}
 .lyra-typing i:nth-child(2){animation-delay:.15s;background:color-mix(in srgb,var(--lyra-sol-a),var(--lyra-sol-b))}
@@ -3484,6 +3505,7 @@ body.lyra-moviendo iframe{pointer-events:none}
   .lyra-fab.nuevo::after{top:4px;left:46px}
   body.lyra-abierta .lyra-fab{opacity:0;pointer-events:none}
   .lyra-globo{left:14px;right:84px;bottom:calc(90px + var(--safe-b));max-width:none}
+  .lyra-oir{width:34px;height:34px;font-size:13px;opacity:.75}
   .lyra-panel{left:0;right:0;top:calc(var(--appbar-h) + 10px);bottom:0;width:auto;height:auto;max-height:none;padding-bottom:var(--safe-b);border-bottom:0;border-radius:22px 22px 0 0;transform:translateY(28px);transform-origin:center bottom}
   .lyra-panel.show{transform:none}
   .lyra-inputbar textarea{font-size:16px}
@@ -3492,6 +3514,7 @@ body.lyra-moviendo iframe{pointer-events:none}
   .lyra-dock-k{display:none}
   .lyra-rz{display:none}
   .lyra-head{cursor:auto}
+  .lyra-menu-nota{display:block}
 }
 @media(prefers-reduced-motion:reduce){
   .lyra-orb,.lyra-orb *,.lyra-orb *::before,.lyra-orb *::after,.lyra-typing i,.lyra-grab-punto{animation:none!important}
@@ -3652,6 +3675,7 @@ body.lyra-moviendo iframe{pointer-events:none}
       <button class="lyra-dock" id="lyra-dock" type="button" aria-controls="lyra-panel" aria-expanded="false" title="Hablar con Lyra (Ctrl+K)">
         <span class="lyra-orb" data-lyra-orb aria-hidden="true"></span>
         <span class="lyra-dock-t"><b>Lyra</b><small class="lyra-estado">En línea</small></span>
+        <span class="lyra-mic" title="Escucha activa: el micrófono está abierto" aria-hidden="true"><i class="fas fa-microphone"></i></span>
         <span class="lyra-dock-k" aria-hidden="true">Ctrl K</span>
       </button>
     </div>
@@ -3659,6 +3683,7 @@ body.lyra-moviendo iframe{pointer-events:none}
 
   <button class="lyra-fab" id="lyra-fab" type="button" aria-controls="lyra-panel" aria-expanded="false" aria-label="Hablar con Lyra">
     <span class="lyra-orb" data-lyra-orb aria-hidden="true"></span>
+    <span class="lyra-mic" aria-hidden="true"><i class="fas fa-microphone"></i></span>
   </button>
   <div class="lyra-globo" id="lyra-globo" role="status" aria-live="polite" hidden></div>
   <section class="lyra-panel" id="lyra-panel" role="dialog" aria-label="Chat con Lyra" aria-hidden="true" inert>
@@ -3676,9 +3701,12 @@ body.lyra-moviendo iframe{pointer-events:none}
         <button type="button" role="radio" data-lyra-humor="2">Sin filtro</button>
       </div>
       <label class="lyra-sw"><input type="checkbox" id="lyra-silencio"> <span>Que no hable sola</span></label>
+      <label class="lyra-sw"><input type="checkbox" id="lyra-escucha"> <span>Escucha activa: di «Lyra»</span></label>
+      <small class="lyra-menu-nota">En el celular solo escucha con la pantalla encendida y el CRM abierto.</small>
       <button type="button" class="lyra-menu-item" id="lyra-limpiar"><i class="fas fa-broom"></i> Empezar de cero</button>
       <button type="button" class="lyra-menu-item" id="lyra-reubicar"><i class="fas fa-arrows-to-dot"></i> Volver a su lugar</button>
       <button type="button" class="lyra-menu-item" id="lyra-ver-acciones"><i class="fas fa-clock-rotate-left"></i> Ver acciones y deshacer</button>
+      <button type="button" class="lyra-menu-item" id="lyra-ver-memoria"><i class="fas fa-brain"></i> Lo que Lyra sabe de ti</button>
     </div>
     <div class="chat-log lyra-log" id="lyra-log"></div>
     <div class="lyra-sugs" id="lyra-sugs"></div>
@@ -5727,6 +5755,14 @@ body.lyra-moviendo iframe{pointer-events:none}
         <div class="csub" id="asis-acc-sub">Lo que cambió el asistente, del más reciente al más viejo</div>
         <div id="asis-acc-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
       </div>
+      <div class="card" style="margin-top:14px" id="asis-mem">
+        <div class="chead-row">
+          <h2><i class="fas fa-brain"></i> Lo que Lyra sabe de ti</h2>
+          <select class="ei" id="asis-mem-usuario" aria-label="Ver la memoria de otro usuario" hidden></select>
+        </div>
+        <div class="csub" id="asis-mem-sub">Lo que le contaste y el hábito que saca de tu uso del CRM. Tocá ✕ para que lo olvide.</div>
+        <div id="asis-mem-lista"></div>
+      </div>
     </section>
 
     <!-- VOZ IA: pantalla para probar la voz clonada de la jefa y controlar la
@@ -5740,6 +5776,7 @@ body.lyra-moviendo iframe{pointer-events:none}
       <div class="seg-group" id="vi-modo" style="display:none">
         <button class="seg on" data-vi-modo="mensajes"><i class="fas fa-comment"></i> Voz para mensajes</button>
         <button class="seg" data-vi-modo="video"><i class="fas fa-video"></i> Voz para videos de Instagram</button>
+        <button class="seg" data-vi-modo="lyra"><i class="fas fa-sun"></i> Voz de Lyra</button>
       </div>
       <div class="seg-group" id="vi-tabs" style="margin-top:10px">
         <button class="seg" data-vi-tab="probar"><i class="fas fa-play"></i> Probar</button>

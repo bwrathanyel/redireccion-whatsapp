@@ -9941,6 +9941,7 @@ const ASIS_ERRORES = {
   asistente_apagado: 'Estoy apagada por ahora. Alguien me desenchufó; vuelvo pronto.',
   no_autorizado: 'Tu usuario no tiene acceso a Lyra.',
   no_deshacible: 'Esa acción ya no se puede deshacer.',
+  voz_fallo: 'Se me fue la voz esta vez. El texto sigue arriba, intacto.',
   accion_no_existe: 'No encontré esa acción.',
   adjunto_invalido: 'Ese adjunto no me llegó bien. Súbelo otra vez, porfa.',
   adjunto_muy_grande: 'Ese archivo pasa de 10 MB. Mi límite es ese, no es personal.',
@@ -9954,6 +9955,7 @@ const ASIS_ERRORES = {
   sin_microfono: 'No encuentro un micrófono en este equipo.',
   audio_mudo: 'No te escuché nada: el micrófono llegó en silencio. Revisa cuál está elegido en el candado de la barra de direcciones o si está silenciado.',
   microfono_denegado: 'Necesito permiso para usar el micrófono. Actívalo en el candado de la barra de direcciones.',
+  escucha_no_disponible: 'No pude activar la escucha en este navegador. Sigo por escrito.',
 };
 const ASIS_HERRAMIENTAS = {
   guardar_servicio: ['fa-suitcase', 'Servicio guardado'], guardar_pasajero: ['fa-user-plus', 'Pasajero guardado'],
@@ -9969,8 +9971,9 @@ function setupAsistente() {
     const b = e.target.closest('[data-asis-deshacer]');
     if (b) deshacerAccionAsistente(Number(b.dataset.asisDeshacer), b);
   });
+  setupMemoriaLyra();
 }
-function loadAsistente() { cargarVinculoAsistente(); cargarAccionesAsistente(); }
+function loadAsistente() { cargarVinculoAsistente(); cargarAccionesAsistente(); cargarMemoriaLyra(); }
 async function cargarVinculoAsistente() {
   const box = document.getElementById('asis-vinc');
   const { data, error } = await sb.rpc('asistente_mi_vinculo');
@@ -10019,6 +10022,85 @@ async function deshacerAccionAsistente(id, btn) {
   cargarAccionesAsistente();
 }
 
+// Memoria de Lyra: cada uno ve y borra lo suyo; el admin elige usuario y además corrige.
+function setupMemoriaLyra() {
+  const sel = document.getElementById('asis-mem-usuario'), lista = document.getElementById('asis-mem-lista');
+  sel.onchange = cargarMemoriaLyra;
+  lista.addEventListener('click', e => {
+    const x = e.target.closest('[data-mem-borrar]'), ed = e.target.closest('[data-mem-editar]');
+    if (x) borrarMemoriaLyra(Number(x.dataset.memBorrar), x);
+    else if (ed) editarMemoriaLyra(ed.closest('.asis-acc'), Number(ed.dataset.memEditar));
+  });
+}
+async function cargarMemoriaLyra() {
+  const sel = document.getElementById('asis-mem-usuario'), cont = document.getElementById('asis-mem-lista');
+  if (ROL === 'admin' && !sel.options.length) {
+    const { data } = await sb.rpc('lyra_memoria_usuarios');
+    if (Array.isArray(data) && data.length) {
+      sel.innerHTML = data.map(u => `<option value="${esc(u.id)}">${esc(u.nombre || 'Sin nombre')}${u.cuantas ? ` (${u.cuantas})` : ''}</option>`).join('');
+      sel.value = MI_USUARIO_ID; sel.hidden = false;
+    }
+  }
+  const otro = ROL === 'admin' && sel.value && sel.value !== MI_USUARIO_ID ? sel.value : null;
+  const { data, error } = await sb.rpc('lyra_memoria_listar', otro ? { p_usuario: otro } : {});
+  if (error) { cont.innerHTML = '<div class="csub">No se pudo cargar la memoria de Lyra.</div>'; return; }
+  if (!data?.length) { cont.innerHTML = `<div class="csub">${otro ? 'Lyra todavía no sabe nada de esta persona.' : 'Todavía no sabe nada de ti. Dile «Lyra, recuerda que…» y lo anota.'}</div>`; return; }
+  cont.innerHTML = data.map(m => {
+    const cuando = new Date(m.actualizado).toLocaleDateString('es-VE', { day: '2-digit', month: 'short' });
+    const editar = ROL === 'admin' ? `<button class="btn-sm" type="button" data-mem-editar="${m.id}" aria-label="Corregir"><i class="fas fa-pen"></i></button>` : '';
+    return `<div class="asis-acc"><span class="asis-acc-i"><i class="fas ${m.tipo === 'habito' ? 'fa-chart-simple' : 'fa-bookmark'}"></i></span>`
+      + `<div class="asis-acc-b"><b data-mem-texto>${esc(m.texto)}</b><small>${m.tipo === 'habito' ? 'Hábito (se recalcula cada noche)' : 'Dato'} · ${esc(cuando)}</small></div>`
+      + `${editar}<button class="btn-sm" type="button" data-mem-borrar="${m.id}" aria-label="Olvidar"><i class="fas fa-xmark"></i></button></div>`;
+  }).join('');
+}
+async function borrarMemoriaLyra(id, btn) {
+  if (!Number.isSafeInteger(id)) return;
+  const ok = await confirmarSheet({ titulo: '¿Que Lyra lo olvide?', detalle: 'Se borra de su memoria.', textoOk: 'Olvidar', destructivo: true });
+  if (!ok) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('lyra_memoria_borrar', { p_id: id });
+  document.getElementById('asis-mem-sub').textContent = error || !data ? 'No se pudo borrar, probá de nuevo.' : 'Listo, lo olvidó.';
+  cargarMemoriaLyra();
+}
+function editarMemoriaLyra(fila, id) {
+  const b = fila?.querySelector('[data-mem-texto]');
+  if (!b || !Number.isSafeInteger(id) || fila.querySelector('input')) return;
+  const inp = document.createElement('input');
+  inp.className = 'ei'; inp.maxLength = 300; inp.value = b.textContent; inp.style.width = '100%';
+  b.replaceWith(inp); inp.focus();
+  let hecho = false;
+  const guardar = async ok => {
+    if (hecho) return; hecho = true;
+    const t = inp.value.trim();
+    if (ok && t && t !== b.textContent) {
+      const { data, error } = await sb.rpc('lyra_memoria_editar', { p_id: id, p_texto: t });
+      document.getElementById('asis-mem-sub').textContent = error || !data ? 'No se pudo guardar la corrección.' : 'Corregido.';
+    }
+    cargarMemoriaLyra();
+  };
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') guardar(true); else if (e.key === 'Escape') guardar(false); });
+  inp.addEventListener('blur', () => guardar(true));
+}
+
+// Uso para los hábitos: secciones abiertas y horas con actividad (una marca cada 10 min), se vuelca cada 10 min.
+const LYRA_USO_CADA_MS = 10 * 60000;
+function lyraUsoMarcar(sec) {
+  const u = LYRA.uso;
+  if (!u) return;
+  if (sec) u.secciones[sec] = (u.secciones[sec] || 0) + 1;
+  if (Date.now() - u.tHora < LYRA_USO_CADA_MS) return;
+  u.tHora = Date.now();
+  const h = String(Number(new Date().toLocaleString('en-US', { timeZone: 'America/Caracas', hour: 'numeric', hour12: false })) % 24);
+  u.horas[h] = (u.horas[h] || 0) + 1;
+}
+function lyraUsoVolcar() {
+  const u = LYRA.uso;
+  if (!u || (!Object.keys(u.secciones).length && !Object.keys(u.horas).length)) return;
+  const conteos = { secciones: u.secciones, horas: u.horas };
+  u.secciones = {}; u.horas = {};
+  sb.rpc('lyra_uso_sumar', { p_conteos: conteos }).then(({ error }) => { if (error) console.warn('Lyra: uso no guardado', error.message); });
+}
+
 /* ---------- Lyra (2026-09-26) -------------------------------------------------
    La cara del asistente: orbe animado al pie del sidebar (burbuja flotante en
    móvil) y un chat que no bloquea la pantalla, para hablarle mientras se
@@ -10027,7 +10109,7 @@ async function deshacerAccionAsistente(id, btn) {
    (cero costo de IA) y tiene topes para no molestar. Preferencias en
    localStorage; la conversación en sessionStorage, que se borra al cerrar la
    pestaña (trae datos de reservas y el equipo comparte computadoras). */
-const LYRA = { adj: [], rec: null, mic: false, lista: false, abierta: false, ocupada: false, dormida: false, expr: 'neutral', humor: 1, silencio: false, actividad: Date.now(), ultimoGlobo: 0, tGlobo: 0, tExpr: 0, tHabla: 0, px: 0, py: 0, raf: 0, sugs: [], lema: 'En línea' };
+const LYRA = { adj: [], rec: null, mic: false, lista: false, abierta: false, ocupada: false, dormida: false, expr: 'neutral', humor: 1, silencio: false, actividad: Date.now(), ultimoGlobo: 0, tGlobo: 0, tExpr: 0, tHabla: 0, px: 0, py: 0, raf: 0, sugs: [], lema: 'En línea', uso: { secciones: {}, horas: {}, tHora: 0 } };
 const LYRA_EXPR_OK = ['neutral', 'feliz', 'sarcastica', 'sorprendida', 'preocupada', 'guino'];
 const LYRA_SUENO_MS = 5 * 60000, LYRA_GLOBO_CADA_MS = 4 * 60000, LYRA_GLOBOS_DIA = 10;
 // Avatar = el logo de Lotus con cara: sol con el degradado de marca, olas que
@@ -10043,6 +10125,7 @@ const LYRA_CARA_SVG = '<svg class="lo-mar" viewBox="0 0 100 100" aria-hidden="tr
   + '<path class="lo-boca b-sonrisa" d="M41 59q9 7 18 0"/><path class="lo-boca b-grande" d="M37 56h26q-1 14-13 14t-13-14z"/>'
   + '<path class="lo-boca b-ladeada" d="M41 61q10 4 19-5"/><ellipse class="lo-boca b-o" cx="50" cy="62" rx="5.5" ry="6.5"/>'
   + '<path class="lo-boca b-ola" d="M38 63q3-4 6 0t6 0t6 0t6 0"/><path class="lo-boca b-plana" d="M45 61h12"/>'
+  + '<path class="lo-boca b-h1" d="M43 58h14q-1 6-7 6t-7-6z"/><path class="lo-boca b-h2" d="M40 57h20q-1 10-10 10t-10-10z"/>'
   + '<path class="lo-gota" d="M84 20q5 7 0 10.5q-5-3.5 0-10.5z"/></svg>';
 const LYRA_ARCO_HTML = Array.from({ length: 13 }, (_, i) => {
   const a = (269 - i * 13.83) * Math.PI / 180;
@@ -10168,7 +10251,35 @@ const LYRA_FRASES = {
     boleteria: ['Si necesitas revisar una reserva mientras cotizas vuelos, aquí estoy.', 'Vuelos por aquí :ly-vuelo: Si necesitas los pasajeros de una reserva, te los busco.'],
     asistente: ['Mi oficina. Aquí queda todo lo que cambié, con botón para deshacer. Transparencia total.'],
   },
+  // voz*: se dicen en voz alta y ya están pregrabadas en R2 (audio/lyra/<hash del texto>.mp3).
+  // Texto plano, sin {n} ni :ly-*:. Si se agrega o cambia una, correr scripts/lyra-frases-voz.mjs.
+  vozSaludo: ['¿Sí? Aquí estoy.', 'Dime, te escucho.', 'Aquí estoy. ¿Qué necesitas?', 'Hola. ¿En qué te ayudo?', 'Presente. ¿Qué revisamos?', 'Te escucho.', 'Aquí Lyra. Cuéntame.', 'Hola, hola. ¿Qué hacemos hoy?'],
+  vozSaludoHumor: [
+    '¿Me llamaste? Justo estaba pensando en ti. Bueno, en tus reservas.',
+    'Aquí estoy. Siempre estoy, es parte del encanto.',
+    '¿Sí? Dime que es algo interesante.',
+    'Presente. Brillando, como de costumbre.',
+    'Hola. Te juro que no estaba dormida.',
+    'Lyra reportándose. Lista y con café virtual.',
+    'Me llamaste. Me encanta cuando pasa eso.',
+    '¿Sí? Mis oídos, que no tengo, son todos tuyos.',
+  ],
+  vozEspera: ['Mmm, déjame ver.', 'Dame un segundo.', 'Un momento, lo busco.', 'A ver…', 'Revisando.', 'Déjame buscarlo.', 'Ya casi.', 'Un segundito.'],
+  vozAnotado: ['Anotado.', 'Listo, lo recuerdo.', 'Anotado. No se me olvida.', 'Hecho, queda guardado.'],
+  vozListo: ['Listo.', 'Hecho.', 'Ya está.'],
+  vozNoEntendi: ['No te escuché bien. ¿Me lo repites?', 'Perdón, se me escapó. ¿Otra vez?', 'No capté eso. ¿Lo dices de nuevo?', 'Hubo ruido. ¿Me repites?'],
+  vozError: [
+    'Algo falló de mi lado. Inténtalo otra vez.',
+    'No pude completar eso. Prueba de nuevo en un momento.',
+    'Se me trabó la respuesta. ¿Lo intentamos otra vez?',
+    'Perdí la conexión un segundo. Repíteme, por favor.',
+  ],
+  vozTope: ['Llegamos al límite de órdenes por esta hora. Sigo por escrito.'],
+  vozEscuchaOn: ['Escucha activa. Di Lyra cuando me necesites.'],
+  vozEscuchaOff: ['Dejo de escuchar. Aquí sigo por escrito.'],
+  vozGracias: ['De nada. Aquí estaré.', 'Cuando quieras.'],
 };
+const LYRA_VOZ_BANCO = new Set(Object.keys(LYRA_FRASES).filter(k => k.startsWith('voz')).flatMap(k => LYRA_FRASES[k]));
 // [texto, completar]: con completar, se escribe en el input y queda marcado el "…".
 const LYRA_SUGERENCIAS = [
   ['¿Qué le falta a la reserva de …?', true], ['¿Qué cuentas por pagar hay pendientes?'], ['Busca en el tarifario un todo incluido'],
@@ -10200,7 +10311,8 @@ function setupLyra() {
   LYRA.silencio = !!lyraLeer('silencio', false);
   document.body.classList.add('lyra-on');
   const input = document.getElementById('lyra-input');
-  ['lyra-dock', 'lyra-fab'].forEach(id => { document.getElementById(id).onclick = lyraAlternar; });
+  // Mientras habla, un clic en el orbe la calla en vez de abrir/cerrar el chat.
+  ['lyra-dock', 'lyra-fab'].forEach(id => { document.getElementById(id).onclick = () => (LYRA.voz || LYRA.cadena ? lyraCortar() : lyraAlternar()); });
   document.getElementById('lyra-cerrar').onclick = lyraCerrar;
   document.getElementById('lyra-send').onclick = e => (e.currentTarget.dataset.modo === 'mic' ? lyraGrabar() : lyraEnviar());
   document.getElementById('lyra-globo').onclick = () => lyraAbrir();
@@ -10217,8 +10329,22 @@ function setupLyra() {
     if (e.target.closest('#lyra-limpiar')) { asisChatHistory = []; lyraGuardarHistorial(); lyraPintarHistorial(); lyraMenu(false); }
     if (e.target.closest('#lyra-reubicar')) { lyraMenu(false); lyraReubicar(); }
     if (e.target.closest('#lyra-ver-acciones')) { lyraMenu(false); lyraCerrar(); activateSection('asistente'); }
+    if (e.target.closest('#lyra-ver-memoria')) { lyraMenu(false); lyraCerrar(); activateSection('asistente'); document.getElementById('asis-mem')?.scrollIntoView({ block: 'start' }); }
   });
   document.getElementById('lyra-silencio').onchange = e => { LYRA.silencio = e.target.checked; lyraGuardar('silencio', LYRA.silencio); lyraEstado(); };
+  LYRA.escuchaOn = LYRA.mic && lyraLeer('escucha', false) === true;
+  document.getElementById('lyra-escucha').disabled = !LYRA.mic;
+  document.getElementById('lyra-escucha').onchange = e => lyraEscuchaPref(e.target.checked, true);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) lyraEscuchaDetener(); else lyraEscuchaIniciar(); });
+  window.addEventListener('pagehide', lyraEscuchaDetener);
+  window.addEventListener('pagehide', lyraUsoVolcar);
+  setInterval(lyraUsoVolcar, LYRA_USO_CADA_MS);
+  document.getElementById('lyra-log').addEventListener('click', e => {
+    const b = e.target.closest('[data-lyra-oir]');
+    if (!b) return;
+    if (b.classList.contains('on')) { lyraCallar(); return; }
+    lyraHablar(b.closest('.chat-row')?.querySelector('.chat-msg')?.dataset.hablar, b);
+  });
   document.getElementById('lyra-sugs').addEventListener('click', e => {
     const b = e.target.closest('[data-lyra-sug]');
     if (!b) return;
@@ -10249,6 +10375,7 @@ function setupLyra() {
   setInterval(() => { LYRA.lema = lyraAlAzar(LYRA_FRASES.lemas); lyraEstado(); }, 45000);
   lyraPintarMenu(); lyraPintarHistorial(); lyraPosicionar(); lyraEstado(); lyraParpadeo(); lyraGesto(); lyraSetupMovible();
   LYRA.lista = true;
+  lyraEscuchaIniciar();
   if (!lyraLeer('saludo', false, true)) {
     lyraGuardar('saludo', true, true);
     setTimeout(() => lyraDecir(lyraSaludo(), { expr: 'feliz' }), 2500);
@@ -10400,9 +10527,10 @@ function lyraMenu(abrir) {
 function lyraPintarMenu() {
   document.querySelectorAll('[data-lyra-humor]').forEach(b => b.setAttribute('aria-checked', String(Number(b.dataset.lyraHumor) === LYRA.humor)));
   document.getElementById('lyra-silencio').checked = LYRA.silencio;
+  document.getElementById('lyra-escucha').checked = !!LYRA.escuchaOn;
 }
 function lyraEstado() {
-  const t = LYRA.ocupada ? 'Pensando…' : LYRA.rec ? 'Te escucho…' : LYRA.dormida ? 'En reposo. Ligeramente.' : LYRA.silencio ? 'En línea · sin comentarios' : LYRA.lema;
+  const t = LYRA.ocupada ? 'Pensando…' : LYRA.rec ? 'Te escucho…' : LYRA.dormida ? 'En reposo. Ligeramente.' : LYRA.escucha?.vad ? 'Escucha activa · di «Lyra»' : LYRA.silencio ? 'En línea · sin comentarios' : LYRA.lema;
   document.querySelectorAll('.lyra-estado').forEach(e => { e.textContent = t; });
 }
 
@@ -10413,12 +10541,155 @@ function lyraExpr(expr, ms) {
   clearTimeout(LYRA.tExpr);
   if (ms) LYRA.tExpr = setTimeout(() => lyraExpr(LYRA.ocupada ? 'pensando' : LYRA.dormida ? 'dormida' : 'neutral'), ms);
 }
-function lyraHablar(largo) {
+// Boca de texto (globos y respuestas sin audio): se mueve un rato según el largo.
+function lyraMoverBoca(largo) {
+  if (LYRA.voz) return;
   const orbs = document.querySelectorAll('[data-lyra-orb]');
   orbs.forEach(o => o.classList.add('habla'));
   clearTimeout(LYRA.tHabla);
   LYRA.tHabla = setTimeout(() => orbs.forEach(o => o.classList.remove('habla')), Math.min(Math.max(largo * 18, 900), 2600));
 }
+
+// ---- voz: mp3 de la accion "voz" de asistente-admin. Se cachea por hash del texto
+// (Cache API) para que lo repetido cueste una sola vez. Subir LYRA_VOZ_CACHE si cambia la voz.
+const LYRA_VOZ_CACHE = 'lyra-voz-v1', LYRA_VOZ_MAX = 200;
+async function lyraAudioDe(texto) {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
+  const hash = [...new Uint8Array(h)].slice(0, 16).map(x => x.toString(16).padStart(2, '0')).join('');
+  const clave = `/lyra-voz/${hash}.mp3`;
+  let cache = null;
+  try {
+    cache = await caches.open(LYRA_VOZ_CACHE);
+    const hit = await cache.match(clave);
+    if (hit) return await hit.arrayBuffer();
+  } catch (_) { cache = null; }
+  // Frase del banco: mp3 pregrabado en R2, $0. Si no está subido todavía, cae a la síntesis normal.
+  let bytes = null;
+  if (LYRA_VOZ_BANCO.has(texto)) {
+    const r = await fetch(`${CDN_FOTOS}audio/lyra/${hash}.mp3`).catch(() => null);
+    if (r?.ok) bytes = new Uint8Array(await r.arrayBuffer());
+  }
+  if (!bytes) {
+    const { data, error } = await sb.functions.invoke('asistente-admin', { body: { accion: 'voz', texto } });
+    if (error || !data?.ok || !data.audio) {
+      let cod = data?.error;
+      try { cod = cod || (await error?.context?.json?.())?.error; } catch (_) { /* cuerpo no JSON */ }
+      throw new Error(cod || 'voz_fallo');
+    }
+    bytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
+  }
+  try {
+    await cache?.put(clave, new Response(bytes, { headers: { 'content-type': 'audio/mpeg' } }));
+    const claves = await cache?.keys();
+    if (claves?.length > LYRA_VOZ_MAX) await Promise.all(claves.slice(0, claves.length - LYRA_VOZ_MAX).map(k => cache.delete(k)));
+  } catch (_) { /* sin cuota o modo privado: solo se pierde el caché */ }
+  return bytes.buffer;
+}
+// Reproduce con AudioContext + AnalyserNode: la amplitud (RMS) elige una de las 3 aperturas de boca.
+// La promesa se resuelve cuando termina de sonar (o se corta). audioPromesa: mp3 ya pedido (lyraHablarFrases).
+async function lyraHablar(texto, boton, audioPromesa) {
+  lyraCallar();
+  const t = (texto || '').trim();
+  if (!t) return;
+  const turno = LYRA.vozTurno;
+  // El contexto se crea/reanuda antes del primer await: Safari solo lo deja sonar dentro del gesto del usuario.
+  let ctx;
+  try {
+    ctx = lyraAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  } catch (e) { console.error('Lyra: AudioContext', e); return; }
+  boton?.classList.add('cargando', 'on');
+  let buf;
+  try {
+    buf = await (audioPromesa || lyraAudioDe(t));
+    if (!buf) throw new Error('voz_fallo');
+  } catch (e) {
+    boton?.classList.remove('cargando', 'on');
+    if (turno === LYRA.vozTurno) { console.error('Lyra: voz', e); lyraAviso(e.message); }
+    return;
+  }
+  boton?.classList.remove('cargando');
+  if (turno !== LYRA.vozTurno) { boton?.classList.remove('on'); return; }
+  try {
+    // Sin gesto del usuario resume() puede quedar pendiente para siempre: eso colgaba la cadena y con ella la escucha.
+    if (ctx.state === 'suspended') await Promise.race([ctx.resume(), new Promise(r => setTimeout(r, 1500))]);
+    if (ctx.state !== 'running') throw new Error('audio_bloqueado');
+    const audio = await ctx.decodeAudioData(buf.slice(0));
+    if (turno !== LYRA.vozTurno) { boton?.classList.remove('on'); return; }
+    const src = ctx.createBufferSource(), an = ctx.createAnalyser();
+    an.fftSize = 512;
+    src.buffer = audio;
+    src.connect(an); an.connect(ctx.destination);
+    const voz = LYRA.voz = { src, boton, fin: null };
+    const fin = new Promise(res => { voz.fin = res; });
+    lyraEscuchaSync();
+    const muestras = new Uint8Array(an.fftSize);
+    const orbs = document.querySelectorAll('[data-lyra-orb]');
+    orbs.forEach(o => o.classList.remove('habla'));
+    lyraExpr('hablando');
+    const paso = () => {
+      if (LYRA.voz?.src !== src) return;
+      an.getByteTimeDomainData(muestras);
+      let s = 0;
+      for (const v of muestras) s += ((v - 128) / 128) ** 2;
+      const rms = Math.sqrt(s / muestras.length);
+      const boca = rms < 0.02 ? '0' : rms < 0.07 ? '1' : rms < 0.14 ? '2' : '3';
+      orbs.forEach(o => { if (o.dataset.boca !== boca) o.dataset.boca = boca; });
+      LYRA.vozRaf = requestAnimationFrame(paso);
+    };
+    src.onended = () => { if (LYRA.voz?.src === src) lyraCallar(); };
+    // Red de seguridad por si onended no llega (contexto interrumpido por el sistema).
+    setTimeout(() => { if (LYRA.voz?.src === src) lyraCallar(); }, (audio.duration + 2) * 1000);
+    src.start();
+    paso();
+    await fin;
+  } catch (e) {
+    console.error('Lyra: reproducir voz', e);
+    lyraCallar();
+  }
+}
+function lyraCallar() {
+  LYRA.vozTurno = (LYRA.vozTurno || 0) + 1;
+  const v = LYRA.voz;
+  LYRA.voz = null;
+  cancelAnimationFrame(LYRA.vozRaf);
+  try { v?.src.stop(); } catch (_) { /* ya terminó */ }
+  v?.boton?.classList.remove('on', 'cargando');
+  v?.fin?.();
+  document.querySelectorAll('[data-lyra-orb]').forEach(o => { delete o.dataset.boca; });
+  if (LYRA.expr === 'hablando') lyraExpr('neutral');
+  lyraEscuchaSync();
+}
+// Un solo AudioContext para la voz y la escucha: así un toque en la página basta para destrabar los dos.
+function lyraAudioCtx() { return LYRA.audioCtx ||= new (window.AudioContext || window.webkitAudioContext)(); }
+// Respuesta hablada por partes: la primera frase se pide sola (corta, llega rápido) y el resto a la vez;
+// suenan en cadena. Las frases del banco van enteras, si no el hash no coincide con el mp3 de R2.
+// primera: {texto, promesa} con el mp3 de la 1ª frase que ya viene en el stream de "escucha" (promesa -> ArrayBuffer
+// o null); se usa solo si su texto coincide con la 1ª parte, y si llega null se sintetiza como siempre.
+async function lyraHablarFrases(texto, primera) {
+  const t = (texto || '').trim();
+  if (!t) return;
+  const p0 = LYRA_VOZ_BANCO.has(t) ? t : lyraPrimeraParte(t);
+  const resto = t.slice(t.indexOf(p0) + p0.length).trim();
+  // El resto va por frases, todas pedidas a la vez: cada una tarda menos que un bloque largo y no quedan huecos.
+  const partes = [p0, ...(resto.match(/[^.!?…]+(?:[.!?…]+|$)/g) || []).map(s => s.trim()).filter(Boolean)];
+  const cadena = LYRA.cadena = {};
+  const audios = partes.map((p, i) => (i === 0 && primera?.texto === p ? primera.promesa.then(b => b || lyraAudioDe(p)) : lyraAudioDe(p))
+    .catch(e => { console.error('Lyra: voz', e); return null; }));
+  for (const [i, p] of partes.entries()) {
+    if (LYRA.cadena !== cadena) return;
+    await lyraHablar(p, null, audios[i]);
+  }
+  if (LYRA.cadena === cadena) { LYRA.cadena = null; lyraEscuchaSync(); }
+}
+// 1ª frase; si es larga (Fish tarda según el largo) se corta en la última coma antes de 70 caracteres.
+// Igual que primeraFrase() de asistente-admin: el audio adelantado de "escucha" se reconoce por este texto.
+function lyraPrimeraParte(t) {
+  const f = ((t || '').trim().match(/[^.!?…]+(?:[.!?…]+|$)/g) || [t || ''])[0].trim();
+  const coma = f.length > 70 ? f.lastIndexOf(', ', 70) : -1;
+  return coma >= 20 ? f.slice(0, coma + 1) : f;
+}
+function lyraCortar() { LYRA.cadena = null; lyraCallar(); }
 function lyraParpadeo() {
   setTimeout(() => {
     if (!document.hidden && !['dormida', 'feliz', 'guino'].includes(LYRA.expr)) {
@@ -10457,7 +10728,12 @@ function lyraSeguirCursor() {
 function lyraMirar(x, y) {
   document.querySelectorAll('[data-lyra-orb]').forEach(o => { o.style.setProperty('--lx', (x * 11).toFixed(1) + '%'); o.style.setProperty('--ly', (y * 9).toFixed(1) + '%'); });
 }
-function lyraActividad() { LYRA.actividad = Date.now(); if (LYRA.dormida) lyraDespertar(); }
+function lyraActividad() {
+  LYRA.actividad = Date.now();
+  if (LYRA.dormida) lyraDespertar();
+  // Con la escucha restaurada al cargar, el AudioContext nace suspendido hasta el primer gesto.
+  if (LYRA.audioCtx?.state === 'suspended') LYRA.audioCtx.resume().catch(() => {});
+}
 function lyraDormir() { LYRA.dormida = true; lyraMirar(0, 0.4); lyraExpr('dormida'); lyraEstado(); }
 function lyraDespertar() {
   LYRA.dormida = false;
@@ -10480,7 +10756,7 @@ function lyraDecir(texto, { expr = 'feliz', forzar = false } = {}) {
   g.innerHTML = lyraConEmojis(esc(texto.replace('{n}', lyraPrimerNombre())));
   g.hidden = false;
   requestAnimationFrame(() => g.classList.add('show'));
-  lyraExpr(expr, 4200); lyraHablar(texto.length);
+  lyraExpr(expr, 4200); lyraMoverBoca(texto.length);
   clearTimeout(LYRA.tGlobo);
   LYRA.tGlobo = setTimeout(lyraCerrarGlobo, 6000 + Math.min(texto.length * 30, 3500));
 }
@@ -10493,6 +10769,7 @@ function lyraCerrarGlobo() {
 }
 // Llamada desde activateSection: contexto para el chat y, a veces, un comentario.
 function lyraSeccion(sec) {
+  lyraUsoMarcar(sec);
   if (!LYRA.lista) return;
   const frases = LYRA_FRASES.seccion[sec];
   if (frases && Math.random() < 0.3) setTimeout(() => lyraDecir(lyraAlAzar(frases), { expr: Math.random() < 0.5 ? 'sarcastica' : 'feliz' }), 1200);
@@ -10531,6 +10808,10 @@ function lyraBurbuja(who, texto, cargando, expr = 'neutral', vista, locales) {
     el.className = 'chat-row';
     el.innerHTML = lyraMini(cargando ? 'pensando' : expr);
     el.appendChild(div);
+    if (!cargando && texto) {
+      div.dataset.hablar = texto.replace(/:ly-[\w-]+:/g, '');
+      el.insertAdjacentHTML('beforeend', '<button type="button" class="lyra-oir" data-lyra-oir title="Escuchar" aria-label="Escuchar"><i class="fas fa-volume-up"></i></button>');
+    }
   }
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
@@ -10675,6 +10956,7 @@ async function lyraGrabar() {
   mr.ondataavailable = e => { if (e.data.size) rec.trozos.push(e.data); };
   mr.onstop = () => lyraFinGrabacion(rec);
   mr.start(1000);
+  lyraEscuchaSync();
   document.getElementById('lyra-bar').hidden = true;
   document.getElementById('lyra-bandeja').hidden = true;
   document.getElementById('lyra-grab').hidden = false;
@@ -10720,6 +11002,7 @@ function lyraPararGrabacion(enviar) {
 function lyraFinGrabacion(rec) {
   if (LYRA.rec !== rec) return;
   LYRA.rec = null;
+  lyraEscuchaSync();
   clearInterval(rec.reloj); cancelAnimationFrame(rec.raf);
   rec.stream.getTracks().forEach(t => t.stop());
   rec.ac?.close().catch(() => {});
@@ -10798,15 +11081,238 @@ async function lyraEnviar(directo, audio) {
     if (s) { s.textContent = `Entendí: «${vista.tr}»`; s.hidden = false; }
   }
   const expr = LYRA_EXPR_OK.includes(data.expresion) ? data.expresion : 'neutral';
-  lyraBurbuja('bot', data.respuesta, false, expr);
+  const fila = lyraBurbuja('bot', data.respuesta, false, expr);
+  // Modo voz: el 🔊 dice el resumen corto que armó el modelo, no la respuesta entera.
+  if (typeof data.hablado === 'string' && data.hablado.trim()) fila.querySelector('.chat-msg').dataset.hablar = data.hablado;
   asisChatHistory.push({ role: 'assistant', content: data.respuesta });
   lyraGuardarHistorial();
-  lyraMirar(0, 0); lyraExpr(expr, 5000); lyraHablar(data.respuesta.length);
+  lyraMirar(0, 0); lyraExpr(expr, 5000); lyraMoverBoca(data.respuesta.length);
   if (!LYRA.abierta) {
     ['lyra-dock', 'lyra-fab'].forEach(id => document.getElementById(id).classList.add('nuevo'));
     lyraDecir(lyraAlAzar(LYRA_FRASES.lista), { expr, forzar: true });
   }
   if (currentSec === 'asistente') cargarAccionesAsistente();
+}
+
+// ---- escucha: "Lyra, …" sin tocar nada (Fase 2, plan B). Silero VAD corre en el navegador y corta cada
+// frase; solo esas frases viajan a la acción "escucha" de la EF, que transcribe con Groq y descarta lo que no
+// empiece con "Lyra" (salvo en la ventana de 8 s después de que ella habla). Tope por hora en la EF.
+// El modelo propio de openWakeWord ("Lyra" detectada en el equipo) entraría en lyraEscuchaFrase sin cambiar el resto.
+const LYRA_ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
+const LYRA_VAD_BASE = 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.31/dist/';
+const LYRA_VENTANA_MS = 8000, LYRA_FRASE_MAX_S = 15, LYRA_FRASE_MIN_S = 0.35;
+let lyraVadCarga = null;
+function lyraCargarVad() {
+  const cargar = src => new Promise((ok, mal) => {
+    const s = document.createElement('script');
+    s.src = src; s.crossOrigin = 'anonymous'; s.onload = ok; s.onerror = () => mal(new Error(`no cargó ${src}`));
+    document.head.appendChild(s);
+  });
+  // Solo se baja al activar la escucha (ort ~11 MB de wasm, queda en la caché del navegador).
+  return lyraVadCarga ||= cargar(`${LYRA_ORT_BASE}ort.wasm.min.js`).then(() => cargar(`${LYRA_VAD_BASE}bundle.min.js`)).catch(e => { lyraVadCarga = null; throw e; });
+}
+function lyraEscuchaPref(on, avisar) {
+  LYRA.escuchaOn = on;
+  lyraGuardar('escucha', on);
+  lyraPintarMenu();
+  if (!on) { lyraEscuchaDetener(); if (avisar) lyraHablar(LYRA_FRASES.vozEscuchaOff[0]); return; }
+  lyraEscuchaIniciar().then(() => { if (avisar && LYRA.escucha?.vad) lyraHablar(LYRA_FRASES.vozEscuchaOn[0]); });
+}
+async function lyraEscuchaIniciar() {
+  if (LYRA.escucha || !LYRA.escuchaOn || !LYRA.lista || document.hidden) return;
+  const E = LYRA.escucha = { vad: null, stream: null, enviando: false, inicio: 0, tSync: 0 };
+  try {
+    await lyraCargarVad();
+    // pauseStream/resumeStream no tocan el micrófono: pausar (mientras ella habla o se graba un audio)
+    // solo deja de procesar cuadros. Apagarla de verdad es lyraEscuchaDetener, que suelta las pistas.
+    const vad = await window.vad.MicVAD.new({
+      model: 'v5', startOnLoad: false, audioContext: lyraAudioCtx(),
+      baseAssetPath: LYRA_VAD_BASE, onnxWASMBasePath: LYRA_ORT_BASE,
+      ortConfig: ort => { ort.env.wasm.numThreads = 1; },
+      redemptionMs: 700, preSpeechPadMs: 300, minSpeechMs: 300,
+      getStream: async () => (E.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } })),
+      pauseStream: async () => {}, resumeStream: async s => s,
+      onSpeechStart: () => { E.inicio = Date.now(); document.body.classList.add('lyra-oyendo'); },
+      onVADMisfire: () => document.body.classList.remove('lyra-oyendo'),
+      onSpeechEnd: audio => { document.body.classList.remove('lyra-oyendo'); lyraEscuchaFrase(E, audio, E.inicio <= (LYRA.ventanaHasta || 0)); },
+    });
+    E.vad = vad;
+    if (LYRA.escucha !== E) { lyraEscuchaSoltar(E); return; }
+    await vad.start();
+    if (LYRA.escucha !== E) { lyraEscuchaSoltar(E); return; }
+    document.body.classList.add('lyra-escucha');
+    lyraEstado(); lyraEscuchaSync();
+  } catch (e) {
+    console.error('Lyra: escucha', e);
+    lyraEscuchaSoltar(E);
+    if (LYRA.escucha !== E) return;
+    LYRA.escucha = null;
+    lyraEscuchaPref(false);
+    lyraAviso(e?.name === 'NotAllowedError' ? 'microfono_denegado' : 'escucha_no_disponible');
+  }
+}
+function lyraEscuchaSoltar(E) {
+  clearTimeout(E.tSync);
+  E.vad?.destroy().catch(() => {});
+  E.stream?.getTracks().forEach(t => t.stop());
+}
+function lyraEscuchaDetener() {
+  const E = LYRA.escucha;
+  if (!E) return;
+  LYRA.escucha = null; LYRA.ventanaHasta = 0;
+  lyraEscuchaSoltar(E);
+  document.body.classList.remove('lyra-escucha', 'lyra-oyendo', 'lyra-ventana');
+  lyraEstado();
+}
+// El VAD se pausa mientras Lyra habla (no se oye a sí misma) o se graba un audio adjunto; vuelve con un
+// respiro para que no entre la cola del eco.
+function lyraEscuchaSync() {
+  const E = LYRA.escucha;
+  if (!E?.vad) return;
+  clearTimeout(E.tSync);
+  const libre = () => !LYRA.voz && !LYRA.cadena && !LYRA.rec;
+  if (!libre()) { if (E.vad.listening) E.vad.pause(); document.body.classList.remove('lyra-oyendo'); return; }
+  if (!E.vad.listening) E.tSync = setTimeout(() => { if (LYRA.escucha === E && libre()) E.vad.start().catch(e => console.error('Lyra: reanudar escucha', e)); }, 350);
+}
+function lyraEscuchaVentana() {
+  if (!LYRA.escucha) return;
+  LYRA.ventanaHasta = Date.now() + LYRA_VENTANA_MS;
+  document.body.classList.add('lyra-ventana');
+  clearTimeout(LYRA.tVentana);
+  LYRA.tVentana = setTimeout(() => document.body.classList.remove('lyra-ventana'), LYRA_VENTANA_MS);
+}
+function lyraEscuchaOyo() {
+  lyraActividad();
+  document.body.classList.remove('lyra-ventana');
+  LYRA.ventanaHasta = 0;
+  lyraMirar(0, 0); lyraExpr('escuchando');
+}
+function lyraWavB64(f32) {
+  const n = f32.length, v = new DataView(new ArrayBuffer(44 + n * 2));
+  const txt = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  txt(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); txt(8, 'WAVE'); txt(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 16000, true);
+  v.setUint32(28, 32000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); txt(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, f32[i])) * 0x7fff, true);
+  const u = new Uint8Array(v.buffer);
+  let s = '';
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+// NDJSON de la EF (o un JSON suelto cuando responde de una: ignorado, solo_nombre o error).
+async function* lyraLineas(r) {
+  const rd = r.body.getReader(), dec = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { value, done } = await rd.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const l = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (l) yield JSON.parse(l);
+    }
+  }
+  if (buf.trim()) yield JSON.parse(buf);
+}
+// Pase lo que pase con el audio, la escucha se libera: si la respuesta hablada se cuelga más de 90 s, se corta.
+function lyraConTope(p) {
+  let t;
+  return Promise.race([p, new Promise(r => { t = setTimeout(() => { console.warn('Lyra: voz colgada, se corta'); lyraCortar(); r(); }, 90000); })])
+    .finally(() => clearTimeout(t));
+}
+async function lyraEscuchaFrase(E, audio, ventana) {
+  if (LYRA.escucha !== E || E.enviando || LYRA.ocupada || LYRA.rec || audio.length < 16000 * LYRA_FRASE_MIN_S) return;
+  E.enviando = true;
+  let yo = null, cargando = null, relleno = null, tRelleno = 0, primera = null, hablar = null;
+  const fallo = cod => {
+    if (cod === 'tope') { lyraEscuchaPref(false); lyraHablar(LYRA_FRASES.vozTope[0]); return; }
+    if (['no_autorizado', 'asistente_apagado', 'no_configurado'].includes(cod)) { lyraEscuchaPref(false); lyraAviso(cod); return; }
+    // Sin orden todavía (charla que no se pudo transcribir): solo se avisa si ella esperaba respuesta.
+    if (!yo) { if (ventana) lyraHablar(lyraAlAzar(LYRA_FRASES.vozNoEntendi)); return; }
+    asisChatHistory.splice(asisChatHistory.indexOf(yo), 1); lyraGuardarHistorial();
+    lyraAviso(cod);
+    lyraHablar(lyraAlAzar(LYRA_FRASES.vozError));
+  };
+  try {
+    const token = (await sb.auth.getSession()).data.session?.access_token;
+    if (!token) return;
+    const body = {
+      accion: 'escucha', audio: lyraWavB64(audio.subarray(0, 16000 * LYRA_FRASE_MAX_S)), ventana,
+      messages: asisChatHistory.slice(-7).map(({ role, content }) => ({ role, content })),
+      humor: LYRA.humor, contexto: { seccion: TITLES[currentSec]?.[0] || '' },
+    };
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/asistente-admin`, {
+      method: 'POST', body: JSON.stringify(body), signal: AbortSignal.timeout(90000),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, apikey: SUPABASE_KEY },
+    });
+    for await (const d of lyraLineas(r)) {
+      if (d.ignorado) return;
+      if (d.ok === false) { fallo(d.error); return; }
+      if (d.solo_nombre) {
+        lyraEscuchaOyo();
+        const saludo = lyraAlAzar(LYRA_FRASES[LYRA.humor ? 'vozSaludoHumor' : 'vozSaludo']);
+        lyraDecir(saludo, { expr: 'feliz', forzar: true });
+        lyraExpr('feliz');
+        await lyraHablarFrases(saludo);
+        lyraEscuchaVentana();
+        return;
+      }
+      if (d.fase === 'orden') {
+        lyraEscuchaOyo();
+        yo = { role: 'user', content: String(d.transcripcion || '') };
+        asisChatHistory.push(yo); lyraGuardarHistorial();
+        lyraBurbuja('user', yo.content);
+        document.getElementById('lyra-sugs').hidden = true;
+        LYRA.ocupada = true; document.getElementById('lyra-send').disabled = true;
+        lyraDecir(`«${yo.content}»`, { expr: 'escuchando', forzar: true });
+        lyraExpr('pensando'); lyraEstado();
+        cargando = lyraBurbuja('bot', '', true);
+        // Relleno pregrabado solo si DeepSeek tarda: lo rápido no necesita "mmm".
+        tRelleno = setTimeout(() => { relleno = lyraHablar(lyraAlAzar(LYRA_FRASES.vozEspera)); }, 1200);
+        continue;
+      }
+      if (d.fase === 'audio') {
+        if (primera && d.texto === primera.texto && d.audio) primera.listo(Uint8Array.from(atob(d.audio), c => c.charCodeAt(0)).buffer);
+        continue;
+      }
+      if (d.fase !== 'respuesta' || hablar) continue;
+      clearTimeout(tRelleno);
+      cargando?.remove(); cargando = null;
+      LYRA.ocupada = false; document.getElementById('lyra-send').disabled = false; lyraEstado();
+      if (!d.respuesta) { fallo(d.error); return; }
+      const expr = LYRA_EXPR_OK.includes(d.expresion) ? d.expresion : 'neutral';
+      const hablado = typeof d.hablado === 'string' && d.hablado.trim() ? d.hablado : d.respuesta;
+      const fila = lyraBurbuja('bot', d.respuesta, false, expr);
+      fila.querySelector('.chat-msg').dataset.hablar = hablado;
+      asisChatHistory.push({ role: 'assistant', content: d.respuesta }); lyraGuardarHistorial();
+      if (currentSec === 'asistente') cargarAccionesAsistente();
+      // La EF manda después {fase:"audio"} con la 1ª frase ya sintetizada: se sigue leyendo el stream mientras
+      // se piden las demás frases y suena el relleno.
+      primera = { texto: lyraPrimeraParte(hablado) };
+      primera.promesa = new Promise(res => { primera.listo = res; });
+      hablar = (async () => {
+        if (relleno) await relleno;
+        if (LYRA.escucha !== E) return;
+        lyraDecir(hablado, { expr, forzar: true });
+        await lyraHablarFrases(hablado, primera);
+        lyraExpr(expr, 3000);
+        lyraEscuchaVentana();
+      })();
+    }
+    if (hablar) { primera.listo(null); await lyraConTope(hablar); return; }
+    if (yo) fallo('fallo');
+  } catch (e) {
+    console.error('Lyra: escucha', e);
+    // Si se cortó después de la respuesta solo se pierde el mp3 adelantado: la voz sigue por la vía normal.
+    if (hablar) { primera.listo(null); await lyraConTope(hablar); } else fallo('fallo');
+  } finally {
+    clearTimeout(tRelleno);
+    cargando?.remove();
+    if (yo && LYRA.ocupada) { LYRA.ocupada = false; document.getElementById('lyra-send').disabled = false; lyraEstado(); }
+    E.enviando = false;
+  }
 }
 
 /* ---------- Voz IA (2026-08-12, ver plan "vamos-a-empezar-a-unified-kay") ---
@@ -10818,6 +11324,7 @@ async function lyraEnviar(directo, audio) {
 const VOZ_IA_REF_FN = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/voz-ia-referencia';
 const VI_TIPOS_OK = ['audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/webm'];
 const VI_MAX_BYTES = 20 * 1024 * 1024;
+const VI_MODO_NOMBRE = { mensajes: 'mensajes', video: 'videos de Instagram', lyra: 'Lyra' };
 // Pisos de calidad (2026-08-12 -- diagnóstico de la primera prueba robótica:
 // era una nota de WhatsApp, 10,8s a 18 kbps, sin nada arriba de 8 kHz).
 // Debajo del mínimo se bloquea, entre mínimo e ideal se deja subir con
@@ -11067,7 +11574,7 @@ async function viCargarReferencia() {
       ? `<i class="fas fa-circle-check" style="color:var(--ok,#10b981)"></i> Voz entrenada con ${out.muestras.length} muestra(s)`
       : `<i class="fas fa-triangle-exclamation" style="color:var(--warn,#f5b544)"></i> Todavía sin entrenar -- las muestras de abajo no afectan la voz hasta apretar "Entrenar"`;
     if (!out.muestras.length) {
-      lista.innerHTML = `<div class="muted" style="font-size:12.5px">Todavía no hay muestras para ${viModo === 'mensajes' ? 'mensajes' : 'videos de Instagram'}.</div>`;
+      lista.innerHTML = `<div class="muted" style="font-size:12.5px">Todavía no hay muestras para ${VI_MODO_NOMBRE[viModo]}.</div>`;
       return;
     }
     lista.innerHTML = out.muestras.map(m => `
@@ -11184,7 +11691,7 @@ async function viGuardarTranscripcion(id) {
   }
 }
 async function viEntrenar() {
-  if (!(await confirmarSheet({ titulo: `Se va a entrenar la voz de "${viModo === 'mensajes' ? 'mensajes' : 'videos de Instagram'}"`, detalle: 'Con todas las muestras cargadas. Puede tardar unos segundos.', textoOk: 'Entrenar' }))) return;
+  if (!(await confirmarSheet({ titulo: `Se va a entrenar la voz de "${VI_MODO_NOMBRE[viModo]}"`, detalle: 'Con todas las muestras cargadas. Puede tardar unos segundos.', textoOk: 'Entrenar' }))) return;
   const btn = document.getElementById('vi-ref-entrenar');
   btn.disabled = true; btn.innerHTML = 'Entrenando... <i class="fas fa-spinner fa-spin"></i>';
   const { data: { session } } = await sb.auth.getSession();
@@ -21547,6 +22054,10 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-27', emoji: '👁️', titulo: 'Admin: memoria de todo el equipo', texto: 'En IA → Asistente hay un selector para ver, corregir o borrar la memoria que Lyra guardó de cualquier usuario del equipo.', roles: ['admin'] },
+  { fecha: '2026-09-27', emoji: '🧠', titulo: 'Lyra te va conociendo', texto: 'Contale a Lyra cómo te gusta trabajar ("Lyra, recuerda que...") y lo va a tener en cuenta en tus próximas conversaciones. Revisá o borrá lo que sabe de ti en el menú, en "Lo que Lyra sabe de ti". Nunca guarda datos de clientes ni opiniones sobre personas, solo tus preferencias y forma de trabajar.', roles: ['admin', 'asesor', 'boleteria'] },
+  { fecha: '2026-09-27', emoji: '🎙️', titulo: 'Dile "Lyra" y te escucha', texto: 'Activa "Escucha activa" en el menú de Lyra y podrás hablarle sin escribir: decí "Lyra" y, cuando el orbe se ponga atento, decí tu pedido. Se apaga solo si cambiás de pestaña o si el micrófono lo está usando otra cosa (como una nota de voz). Por ahora solo funciona con la pantalla activa; en el celular se apaga en segundo plano.', roles: ['admin', 'asesor', 'boleteria'] },
+  { fecha: '2026-09-27', emoji: '🔊', titulo: 'Lyra ya habla', texto: 'Cada respuesta de Lyra trae un botón 🔊 para escucharla con su propia voz. Mientras habla, su boca se mueve en el orbe siguiendo el audio. Si prefieres solo texto, no hace falta tocar nada — el botón queda ahí para cuando quieras.', roles: ['admin', 'asesor', 'boleteria'] },
   { fecha: '2026-09-26', emoji: '✨', titulo: 'Conoce a Lyra', texto: 'El asistente ahora tiene cara, nombre y carácter: Lyra es nuestro logo con vida propia (el sol de Lotus, con gestos, olas y su arco de puntos) y trae sus propios emojis. Vive al pie del menú (en el celular, en la burbuja de abajo a la izquierda) y la abres desde cualquier sección, o con Ctrl+K, sin dejar lo que estás haciendo. Revisa reservas, carga servicios y pasajeros, deja notas y escribe a proveedores con tus mismos permisos. Tiene humor seco, pero en sus opciones puedes ponerla seria o sin filtro, y callarla si no quieres que comente sola. En Telegram también es Lyra.', roles: ['admin', 'asesor', 'boleteria'] },
   { fecha: '2026-09-26', emoji: '📎', titulo: 'Lyra ve y escucha', texto: 'En el chat de Lyra puedes adjuntar hasta 3 archivos con el clip, pegar una captura con Ctrl+V o soltar el archivo sobre el chat. Con la barra vacía, el botón del micrófono graba una nota de voz que se envía sola al tocar ✓; debajo verás lo que Lyra entendió. Lee comprobantes y capturas, PDF y archivos de texto. Los adjuntos se borran solos a los 7 días.', roles: ['admin', 'asesor', 'boleteria'] },
   { fecha: '2026-09-26', emoji: '🗃️', titulo: 'Últimas tablas pasan a tarjetas', texto: 'Diagnóstico de notificaciones push, Ranking de asesores, Top de publicaciones en Redes (Instagram y TikTok) y el Historial de asistencia ahora son tarjetas con chips de estado y cifras claras. El historial de asistencia (más de 570 jornadas) se muestra de a 40 con "Ver más" y suma la duración de cada jornada.', roles: ['admin'] },
