@@ -3688,7 +3688,7 @@ function renderEstadisticas(d) {
     { t: 'Leads atendidos', v: fmt(e.atendidos || 0), d: `${fmt(e.asignados || 0)} asignados`, i: 'fa-headset', c: 'var(--blue)' },
     { t: 'Conversión', v: (e.conv_pct || 0) + '%', d: 'Atendidos que cerraron', i: 'fa-percent', c: 'var(--green)' },
     { t: 'Ventas', v: fmt(e.ventas || 0), d: money(e.monto), i: 'fa-cart-shopping', c: 'var(--accent)' },
-    { t: 'Horas de respuesta', v: q.horas_respuesta == null ? '—' : q.horas_respuesta, d: 'Promedio al primer contacto', i: 'fa-stopwatch', c: 'var(--purple)' },
+    { t: 'Horas de respuesta', v: q.horas_respuesta == null ? '—' : q.horas_respuesta, d: 'Promedio al primer contacto (sin lotes)', i: 'fa-stopwatch', c: 'var(--purple)' },
     { t: 'Perdidos por timeout', v: (q.pct_perdido_timeout || 0) + '%', d: `${fmt(q.perdidos_timeout || 0)} leads`, i: 'fa-hourglass-end', c: 'var(--amber)' },
     { t: 'Comisión del período', v: money(d.comisiones?.comision), d: money(d.comisiones?.facturado) + ' facturado', i: 'fa-sack-dollar', c: 'var(--pink)' },
   ]);
@@ -5160,6 +5160,25 @@ async function cargarCorreoLead(l) {
     return separador + `<div class="conv-msg ${c.direccion === 'saliente' ? 'ia' : 'lead'}"><div class="conv-who">${c.direccion === 'entrante' ? esc(c.de) : 'Nosotros'} · ${esc(fmtFechaHoraCaracas(c.enviado_en))}</div><b>${esc(c.asunto || '(sin asunto)')}</b>${c.gmail_correo_adjuntos?.length ? ` <i class="fas fa-paperclip muted" title="${c.gmail_correo_adjuntos.length} adjunto(s)"></i>` : ''}<div>${esc(c.snippet || '')}</div>${botonVerCorreo(c.id)}</div>`;
   }).join('');
   box.innerHTML = CORREO_LEAD_CACHE;
+  entradaLista(box);
+}
+async function cargarCorreoProveedor(p) {
+  const wrap = document.getElementById('prov-correos-wrap');
+  const box = document.getElementById('prov-correos-box');
+  if (!wrap || !box) return;
+  wrap.hidden = false;
+  box.textContent = 'Cargando…';
+  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,credencial_id,gmail_message_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').eq('proveedor_id', p.id).order('enviado_en', { ascending: true });
+  if (error) { box.innerHTML = '<div class="muted">No se pudo cargar el correo de este proveedor</div>'; return; }
+  if (!data.length) { box.innerHTML = '<div class="muted">Sin correos con este proveedor todavía</div>'; return; }
+  data.forEach(c => CORREOS_DATA.set(c.id, c));
+  let hiloAnterior = null;
+  box.innerHTML = data.map(c => {
+    const separador = c.gmail_thread_id !== hiloAnterior && hiloAnterior !== null
+      ? '<div class="muted" style="text-align:center;font-size:8.5px;margin:8px 0;opacity:.6">— nuevo hilo —</div>' : '';
+    hiloAnterior = c.gmail_thread_id;
+    return separador + `<div class="conv-msg ${c.direccion === 'saliente' ? 'ia' : 'lead'}"><div class="conv-who">${c.direccion === 'entrante' ? esc(c.de) : 'Nosotros'} · ${esc(fmtFechaHoraCaracas(c.enviado_en))}</div><b>${esc(c.asunto || '(sin asunto)')}</b>${c.gmail_correo_adjuntos?.length ? ` <i class="fas fa-paperclip muted" title="${c.gmail_correo_adjuntos.length} adjunto(s)"></i>` : ''}<div>${esc(c.snippet || '')}</div>${botonVerCorreo(c.id)}</div>`;
+  }).join('');
   entradaLista(box);
 }
 async function cargarConversacionLead(l) {
@@ -14082,7 +14101,8 @@ function abrirProveedorSheet(id = null) {
   document.getElementById('prov-err').textContent = '';
   provTab('ficha');
   document.getElementById('prov-tabs').hidden = !p;
-  if (p) provCargarReservas(p);
+  document.getElementById('prov-correos-wrap').hidden = !p;
+  if (p) { provCargarReservas(p); cargarCorreoProveedor(p); }
   openSheet('proveedor-sheet');
 }
 let PROV_RES = null, PROV_TAB = 'ficha';
