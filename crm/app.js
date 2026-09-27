@@ -1925,6 +1925,8 @@ function abrirEditorPersona(usuarioId) {
       <input id="pe-nombre" class="ei" type="text" value="${esc(u.nombre || '')}">
       <label class="fl">Usuario (con el que inicia sesión)</label>
       <input id="pe-username" class="ei" type="text" autocapitalize="off" autocorrect="off" value="${esc(u.username || '')}">
+      <label class="fl">Correo</label>
+      <input id="pe-correo" class="ei" type="email" autocapitalize="off" autocorrect="off" placeholder="nombre@ejemplo.com" value="${esc(u.correo || '')}">
       <label class="fl">Cargo</label>
       <input id="pe-cargo" class="ei" type="text" placeholder="Ej: Ejecutivo de Boletería · Gerente Administrativo" value="${esc(u.cargo || '')}">
       <label class="fl">Rol</label>
@@ -2015,6 +2017,7 @@ async function guardarPersona(usuarioId) {
     p_ve_voucher: document.getElementById('pe-voucher').checked,
     p_ve_informe_diario: document.getElementById('pe-informe').checked,
     p_bloqueado: document.getElementById('pe-bloqueado').checked,
+    p_correo: val('pe-correo').trim(),
   });
   if (error || !data?.ok) {
     btn.disabled = false;
@@ -2044,6 +2047,7 @@ async function guardarPersona(usuarioId) {
 }
 
 const ERR_PERSONAL = {
+  correo_invalido: 'El correo no es válido.',
   no_podes_cambiar_tu_propio_rol: 'No podés cambiarte el rol a vos mismo — pedíselo a otro admin.',
   no_podes_darte_de_baja_a_vos_mismo: 'No podés darte de baja a vos mismo.',
   es_el_ultimo_admin: 'Es el único admin que queda. Nombrá otro antes de darlo de baja.',
@@ -2336,10 +2340,78 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   entrarSegunRol();
 });
 
-document.getElementById('forgotLink').addEventListener('click', e => {
+/* ---------- Recuperar contraseña: código al correo (EF recuperar-acceso) ---------- */
+// La respuesta de "solicitar" es siempre la misma: no revela si el usuario existe
+// ni si tiene correo cargado. Los ids del paso 2 se buscan recién al usarlos, así
+// un index.html viejo cacheado junto a este app.js no tumba el arranque.
+let forgotPaso = 1, forgotOcupado = false;
+const FORGOT_BTN = { 1: 'Enviar código', 2: 'Cambiar contraseña' };
+function forgotIrPaso(n) {
+  forgotPaso = n;
+  const $ = id => document.getElementById(id);
+  $('forgotPaso2').style.display = n === 2 ? '' : 'none';
+  $('forgotReenviarWrap').style.display = n === 2 ? '' : 'none';
+  $('forgotUser').disabled = n === 2;
+  $('forgotErr').textContent = '';
+  $('forgotBtn').innerHTML = FORGOT_BTN[n] + ' <i class="fas fa-arrow-right"></i>';
+  $('forgotMsg').textContent = n === 2 ? 'Si tu usuario tiene correo cargado, te llegó un código (revisa también spam). Vence en 10 minutos.' : 'Elige tu usuario y te enviaremos un código a tu correo';
+  ['forgotCodigo', 'forgotPwd', 'forgotPwd2'].forEach(id => $(id).value = '');
+  (n === 2 ? $('forgotCodigo') : $('forgotUser')).focus();
+}
+async function errorDeFuncion(error) { try { return (await error?.context?.json())?.error || null; } catch { return null; } }
+const bytesUtf8 = s => new TextEncoder().encode(s).length;
+
+function montarRecuperacion() {
+  document.getElementById('forgotLink').addEventListener('click', e => {
+    e.preventDefault();
+    // index.html viejo (cacheado por el SW) todavía con la pregunta de seguridad
+    if (!document.getElementById('forgotPaso2')) { errToast('Actualiza la página (Ctrl+Shift+R) para recuperar tu contraseña.'); return; }
+    const sel = document.getElementById('forgotUser');
+    sel.innerHTML = document.getElementById('loginUser').innerHTML;
+    sel.value = val('loginUser');
+    showOverlay('forgot'); forgotIrPaso(1);
+  });
+  document.getElementById('backToLogin').addEventListener('click', e => { e.preventDefault(); if (!forgotOcupado) showOverlay('login'); });
+  document.getElementById('forgotReenviar')?.addEventListener('click', e => { e.preventDefault(); if (!forgotOcupado) forgotIrPaso(1); });
+  document.getElementById('forgotForm').addEventListener('submit', enviarRecuperacion);
+}
+arrancar(montarRecuperacion);
+
+async function enviarRecuperacion(e) {
   e.preventDefault();
-  errToast('Pedile a un administrador que restablezca tu acceso desde Gestión de Personal.');
-});
+  if (forgotOcupado) return;
+  const btn = document.getElementById('forgotBtn'), errEl = document.getElementById('forgotErr');
+  const username = val('forgotUser').trim().toLowerCase();
+  errEl.textContent = '';
+  if (!username) { errEl.textContent = 'Selecciona tu usuario'; return; }
+  const ocupado = (on, texto) => { forgotOcupado = on; btn.disabled = on; btn.innerHTML = on ? texto + ' <i class="fas fa-spinner fa-spin"></i>' : FORGOT_BTN[forgotPaso] + ' <i class="fas fa-arrow-right"></i>'; };
+  if (forgotPaso === 1) {
+    ocupado(true, 'Enviando...');
+    const { error } = await sb.functions.invoke('recuperar-acceso', { body: { accion: 'solicitar', username } });
+    ocupado(false);
+    if (error) { errEl.textContent = 'No se pudo enviar el código, intenta de nuevo en un momento'; return; }
+    forgotIrPaso(2); return;
+  }
+  const codigo = val('forgotCodigo').trim(), p1 = val('forgotPwd'), p2 = val('forgotPwd2');
+  if (!/^\d{6}$/.test(codigo)) { errEl.textContent = 'El código tiene 6 dígitos'; return; }
+  // bcrypt corta a 72 bytes: con tildes/ñ el límite en caracteres queda más bajo
+  if (p1.length < 12 || bytesUtf8(p1) > 72) { errEl.textContent = 'La contraseña debe tener entre 12 y 72 caracteres (menos si lleva tildes o ñ)'; return; }
+  if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
+  ocupado(true, 'Guardando...');
+  const { data, error } = await sb.functions.invoke('recuperar-acceso', { body: { accion: 'confirmar', username, codigo, password: p1 } });
+  ocupado(false);
+  if (error || !data?.ok) {
+    const cod = await errorDeFuncion(error);
+    errEl.textContent = cod === 'codigo_invalido' ? 'Código incorrecto o vencido. Revisa el correo o pide otro código.'
+      : cod === 'password_invalido' ? 'La contraseña debe tener entre 12 y 72 caracteres'
+      : 'No se pudo guardar la contraseña. Pide otro código y prueba con una contraseña distinta.';
+    return;
+  }
+  document.getElementById('loginUser').value = username;
+  document.getElementById('loginPwd').value = '';
+  showOverlay('login');
+  okToast('Contraseña actualizada. Ya puedes entrar.');
+}
 
 /* ---------- Configurar usuario (reclamar cuenta, sin contraseña previa) ---------- */
 const ROL_LABEL = { admin: 'Admin', asesor: 'Asesor', marketing: 'Marketing', boleteria: 'Boletería' };
@@ -2448,7 +2520,7 @@ function montarOjo(input) {
 }
 
 function montarOjosLogin() {
-  ['loginPwd', 'setupPwd', 'setupPwd2', 'claimPwd', 'claimPwd2', 'forgotPwd']
+  ['loginPwd', 'setupPwd', 'setupPwd2', 'claimPwd', 'claimPwd2', 'forgotPwd', 'forgotPwd2']
     .forEach(id => montarOjo(document.getElementById(id)));
 }
 

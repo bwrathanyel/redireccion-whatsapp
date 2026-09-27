@@ -3535,7 +3535,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <input id="loginPwd" type="password" placeholder="Contraseña" autocomplete="current-password" aria-label="Contraseña"></div>
     <div class="login-err" id="loginErr"></div>
     <button type="submit" id="loginBtn">Entrar <i class="fas fa-arrow-right"></i></button>
-    <div class="login-foot"><a href="#" id="forgotLink">¿Olvidaste tu contraseña? Pedile ayuda a un admin</a></div>
+    <div class="login-foot"><a href="#" id="forgotLink">¿Olvidaste tu contraseña?</a></div>
     <div class="login-foot"><a href="#" id="claimLink">¿Primera vez? Configura tu usuario</a></div>
   </form>
 </div>
@@ -3599,20 +3599,23 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 </div>
 
 <div id="forgot">
-  <form id="forgotForm" class="login-card">
+  <form id="forgotForm" class="login-card" novalidate>
     <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
     <h1>Recuperar contraseña</h1>
-    <p>Escribe tu usuario para ver tu pregunta de seguridad</p>
+    <p id="forgotMsg">Escribe tu usuario y te enviaremos un código a tu correo</p>
     <div class="login-field"><i class="fas fa-user"></i>
-      <input id="forgotUser" type="text" placeholder="Usuario" autocomplete="username" autocapitalize="off" autocorrect="off"></div>
-    <div class="login-field" id="forgotQWrap" style="display:none"><i class="fas fa-circle-question"></i>
-      <input id="forgotQ" type="text" disabled></div>
-    <div class="login-field" id="forgotAWrap" style="display:none"><i class="fas fa-key"></i>
-      <input id="forgotA" type="text" placeholder="Tu respuesta" autocomplete="off"></div>
-    <div class="login-field" id="forgotPwdWrap" style="display:none"><i class="fas fa-lock"></i>
-      <input id="forgotPwd" type="password" placeholder="Contraseña nueva" autocomplete="new-password"></div>
-    <div class="login-err" id="forgotErr"></div>
-    <button type="submit" id="forgotBtn">Continuar <i class="fas fa-arrow-right"></i></button>
+      <select id="forgotUser" class="login-select" aria-label="Usuario"><option value="">Selecciona tu usuario</option></select></div>
+    <div id="forgotPaso2" style="display:none">
+      <div class="login-field"><i class="fas fa-key"></i>
+        <input id="forgotCodigo" type="text" inputmode="numeric" maxlength="6" placeholder="Código de 6 dígitos" autocomplete="one-time-code" aria-label="Código"></div>
+      <div class="login-field"><i class="fas fa-lock"></i>
+        <input id="forgotPwd" type="password" placeholder="Contraseña nueva (mín. 12)" autocomplete="new-password" aria-label="Contraseña nueva"></div>
+      <div class="login-field"><i class="fas fa-lock"></i>
+        <input id="forgotPwd2" type="password" placeholder="Repite la contraseña" autocomplete="new-password" aria-label="Repite la contraseña"></div>
+    </div>
+    <div class="login-err" id="forgotErr" aria-live="polite"></div>
+    <button type="submit" id="forgotBtn">Enviar código <i class="fas fa-arrow-right"></i></button>
+    <div class="login-foot" id="forgotReenviarWrap" style="display:none"><a href="#" id="forgotReenviar">¿No te llegó? Pedir otro código</a></div>
     <div class="login-foot"><a href="#" id="backToLogin">Volver al login</a></div>
   </form>
 </div>
