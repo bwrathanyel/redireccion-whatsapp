@@ -350,20 +350,6 @@ body.menu-arrastrando .side-scrim{transition:none}
 .chart-wrap-lg{height:250px}
 .chart-sm{position:relative;height:210px}
 
-/* Estadísticas */
-.est-plist{display:flex;flex-direction:column;gap:2px}
-.est-prow{display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px solid var(--line);font-size:12.5px}
-.est-prow:last-child{border-bottom:0}
-.est-prow span{color:var(--muted);display:flex;align-items:center;gap:8px}
-.est-prow span i{color:var(--accent);font-size:11px;width:14px;text-align:center}
-.est-prow b{font-size:13.5px}
-.est-ia-resumen{font-size:13px;line-height:1.55;margin:6px 0 14px}
-.est-ia-sec{margin-top:14px}
-.est-ia-sec h3{font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:7px}
-.est-ia-sec h3 i{color:var(--accent);font-size:12px}
-.est-ia-sec ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:5px}
-.est-ia-sec li{font-size:12.5px;line-height:1.5}
-
 /* Manual del CRM */
 .manual-tema{border:1px solid var(--line2);border-radius:12px;margin-bottom:10px;overflow:hidden;background:var(--panel-solid)}
 .manual-tema summary{list-style:none;display:flex;align-items:center;gap:10px;padding:13px 16px;cursor:pointer;font-weight:700;font-size:13.5px;user-select:none}
@@ -3209,7 +3195,9 @@ body.fsize-grande{--tap:41.9px}
 .lt-card-sel{border-color:var(--accent)}
 .lt-texto{font-size:13px;line-height:1.45;display:flex;flex-direction:column;gap:6px;overflow-wrap:anywhere}
 .lt-texto b{display:block;color:var(--muted2);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-@media(prefers-reduced-motion:reduce){.lt-card{animation:none}}
+@keyframes mv-celebrar{0%{box-shadow:0 0 0 0 rgba(16,185,129,.45)}50%{transform:scale(1.015);box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
+.mv-celebra{animation:mv-celebrar .6s var(--ease-salida)}
+@media(prefers-reduced-motion:reduce){.lt-card{animation:none}.mv-celebra{animation:none}}
 @media(max-width:760px){
   .lt-orden{display:none}
   .kpis.bt-kpis.lt-kpis-4{grid-template-columns:repeat(2,1fr)}
@@ -3835,68 +3823,74 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     </section>
 
     <!-- ESTADÍSTICAS -->
-    <section class="section" id="sec-estadisticas">
-      <div class="tbar" style="margin-bottom:14px">
-        <div class="drp" id="drp-est">
-          <button type="button" class="flt drp-btn" id="drp-est-btn"><i class="fas fa-calendar-days"></i> <span id="drp-est-label">Rango de fechas</span></button>
-          <div class="drp-panel" id="drp-est-panel">
-            <div class="drp-presets">
-              <button type="button" data-preset="7d">7 días</button>
-              <button type="button" data-preset="mes">Este mes</button>
-              <button type="button" data-preset="anio">Este año</button>
-              <button type="button" data-preset="todo">Últimos 90 días</button>
-            </div>
-            <div class="drp-inputs">
-              <label>Desde <input type="date" id="est-desde"></label>
-              <label>Hasta <input type="date" id="est-hasta"></label>
-            </div>
-          </div>
+    <section class="section" id="sec-mis-ventas">
+      <div class="tbar" style="margin-bottom:14px;justify-content:space-between">
+        <div class="seg-group chips-scroll" id="mv-tabs">
+          <button class="seg on" type="button" data-mv-tab="ventas">Ventas</button>
+          <button class="seg" type="button" data-mv-tab="estadisticas">Estadísticas</button>
         </div>
         <select class="flt admin-only" id="est-asesor"><option value="">Elegí un asesor…</option></select>
-        <button type="button" class="reload-btn" id="est-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
       </div>
 
-      <div class="kpis" id="est-kpis"></div>
+      <div class="mv-tab-panel" data-mv-panel="ventas">
+        <div class="tbar" style="margin-bottom:12px">
+          <div class="seg-group" id="mv-filtro">
+            <button class="seg on" type="button" data-mv-filtro="todas">Todas</button>
+            <button class="seg" type="button" data-mv-filtro="parcial">Pago parcial</button>
+            <button class="seg" type="button" data-mv-filtro="completa">Completas</button>
+          </div>
+          <button type="button" class="reload-btn" id="mv-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+        </div>
+        <div class="kpis" id="mv-kpis"></div>
+        <div class="lt-grid" id="mv-cards"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+      </div>
 
-      <div class="grid g-2" style="margin-bottom:12px">
-        <div class="card">
-          <h2><i class="fas fa-chart-line"></i> Tu tendencia (6 meses)</h2>
-          <div class="csub">Te comparás con vos mismo: la línea punteada es tu promedio de los meses previos</div>
-          <div class="chart-wrap"><canvas id="est-ch-serie"></canvas></div>
-          <div class="seg-group seg-group-sm" id="est-serie-metrica" style="margin-top:10px">
-            <button class="seg on" data-m="atendidos">Atendidos</button>
-            <button class="seg" data-m="ventas">Ventas</button>
-            <button class="seg" data-m="monto">Monto</button>
-            <button class="seg" data-m="horas_respuesta">Horas de respuesta</button>
+      <div class="mv-tab-panel" data-mv-panel="estadisticas" style="display:none">
+        <div class="tbar" style="margin-bottom:14px">
+          <div class="drp" id="drp-est">
+            <button type="button" class="flt drp-btn" id="drp-est-btn"><i class="fas fa-calendar-days"></i> <span id="drp-est-label">Rango de fechas</span></button>
+            <div class="drp-panel" id="drp-est-panel">
+              <div class="drp-presets">
+                <button type="button" data-preset="7d">7 días</button>
+                <button type="button" data-preset="mes">Este mes</button>
+                <button type="button" data-preset="anio">Este año</button>
+                <button type="button" data-preset="todo">Últimos 90 días</button>
+              </div>
+              <div class="drp-inputs">
+                <label>Desde <input type="date" id="est-desde"></label>
+                <label>Hasta <input type="date" id="est-hasta"></label>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="reload-btn" id="est-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+        </div>
+
+        <div class="kpis" id="est-kpis"></div>
+
+        <div class="grid g-2" style="margin-bottom:12px">
+          <div class="card">
+            <h2><i class="fas fa-chart-line"></i> Tu tendencia (6 meses)</h2>
+            <div class="csub">Te comparás con vos mismo: la línea punteada es tu promedio de los meses previos</div>
+            <div class="chart-wrap"><canvas id="est-ch-serie"></canvas></div>
+            <div class="seg-group seg-group-sm" id="est-serie-metrica" style="margin-top:10px">
+              <button class="seg on" data-m="atendidos">Atendidos</button>
+              <button class="seg" data-m="ventas">Ventas</button>
+              <button class="seg" data-m="monto">Monto</button>
+              <button class="seg" data-m="horas_respuesta">Horas de respuesta</button>
+            </div>
+          </div>
+          <div class="card">
+            <h2><i class="fas fa-filter"></i> Tu embudo del período</h2>
+            <div class="csub">De asignado a venta cerrada</div>
+            <div class="chart-wrap"><canvas id="est-ch-embudo"></canvas></div>
           </div>
         </div>
-        <div class="card">
-          <h2><i class="fas fa-filter"></i> Tu embudo del período</h2>
-          <div class="csub">De asignado a venta cerrada</div>
-          <div class="chart-wrap"><canvas id="est-ch-embudo"></canvas></div>
-        </div>
-      </div>
 
-      <div class="grid g-2b" style="margin-bottom:12px">
-        <div class="card">
+        <div class="card" style="margin-bottom:12px">
           <h2><i class="fas fa-location-dot"></i> Tus destinos</h2>
           <div class="csub">Volumen del período y % que cerraste en venta</div>
           <div id="est-destinos"><div class="muted" style="font-size:12.5px">Cargando…</div></div>
         </div>
-        <div class="card">
-          <h2><i class="fas fa-user-clock"></i> Presencia y gestión</h2>
-          <div class="csub">Del período elegido</div>
-          <div id="est-presencia"><div class="muted" style="font-size:12.5px">Cargando…</div></div>
-        </div>
-      </div>
-
-      <div class="card" id="est-ia-card">
-        <div class="chead-row">
-          <h2><i class="fas fa-wand-magic-sparkles"></i> Análisis con IA</h2>
-          <button type="button" class="btn-sm" id="est-ia-regenerar"><i class="fas fa-rotate"></i> Regenerar</button>
-        </div>
-        <div class="csub" id="est-ia-fecha">—</div>
-        <div id="est-ia-cuerpo"><div class="muted" style="font-size:12.5px">Todavía no hay un análisis para este asesor.</div></div>
       </div>
     </section>
 

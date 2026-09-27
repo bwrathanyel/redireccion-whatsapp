@@ -106,9 +106,9 @@ const money = n => '$' + (Number(n) || 0).toLocaleString('es-VE', { minimumFract
 const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const fullMonth = k => { const [y, m] = k.split('-'); return MESL[+m - 1] + ' ' + y; };
-const ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'PERDIDO', 'NUMERO INVALIDO', 'Sin gestionar'];
+const ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'PAGO REALIZADO', 'VENTA COMPLETA', 'PERDIDO', 'NUMERO INVALIDO'];
 const ESTADOS_EDIT = ESTADOS;
-const ESTADO_COLORS = { 'POR ATENDER': '#ff9100', 'ATENDIDO': '#4a9eff', 'CLIENTE CONTACTADO': '#4a9eff', 'COTIZACION ENVIADA': '#a06bff', 'EN ESPERA DE PAGO': '#f5b544', 'PAGO REALIZADO': '#10b981', 'PERDIDO': '#ef4444', 'NUMERO INVALIDO': '#94a3b8', 'Sin gestionar': '#5f677f' };
+const ESTADO_COLORS = { 'POR ATENDER': '#ff9100', 'ATENDIDO': '#4a9eff', 'CLIENTE CONTACTADO': '#4a9eff', 'COTIZACION ENVIADA': '#a06bff', 'PAGO REALIZADO': '#10b981', 'VENTA COMPLETA': '#f5b544', 'PERDIDO': '#ef4444', 'NUMERO INVALIDO': '#94a3b8' };
 const PRIORIDAD_IA_ICONOS = { alta: '🔥', media: '●', baja: '○' };
 // Usa .chip-prioridad + .alta/.media/.baja (index.html:164-168) -- ya
 // existían en el CSS pero nadie las consumía, esto rendía un glyph con color
@@ -143,11 +143,10 @@ function textoTelefonoLead(l) {
   if (l.telefono) return esc(l.telefono);
   return l.contacto_directo_enviado_at ? 'Contacto directo (sin teléfono)' : 'Sin teléfono';
 }
-// Ciclo de flechitas prev/next en la ficha del lead -- excluye 'Sin gestionar'
-// (fallback legacy, no es un paso real del pipeline al que se quiera navegar).
-const ESTADOS_CICLO = ESTADOS.filter(e => e !== 'Sin gestionar');
+// Ciclo de flechitas prev/next en la ficha del lead.
+const ESTADOS_CICLO = ESTADOS;
 const SERVICIOS = ['Vuelos', 'Full Day', 'Hospedaje', 'Paquete Todo Incluido', 'Hotel', 'Tour', 'Evento', 'Otro'];
-const VENTA = 'PAGO REALIZADO';
+const VENTA = ['PAGO REALIZADO', 'VENTA COMPLETA'];
 const CANAL_CLASS = { 'Instagram': 'ig', 'Facebook': 'fb', 'Ambos': 'am', 'Desconocido': '' };
 const ADV_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a'];
 const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-rolling', 'fa-compass', 'fa-earth-americas', 'fa-camera-retro', 'fa-map-location-dot', 'fa-sun', 'fa-water', 'fa-mountain-sun', 'fa-passport', 'fa-glasses'];
@@ -157,7 +156,7 @@ const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); 
 const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
   tareas: ['Tareas', 'Tus tareas activas'],
   comisiones: ['Comisiones por corte', 'Ventas pagadas, verificación e invoices · pagos el 5 y el 20'],
-  estadisticas: ['Estadísticas', 'Tu rendimiento, tu tendencia y consejos de la IA'],
+  'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
   boleteria: ['Boletería', 'Rutas, aerolíneas, precios y requisitos de vuelo'],
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
   'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
@@ -1240,7 +1239,7 @@ function manejarDeepLinkAsistencia() {
 // Proyecto Constructor: pertenece a plataforma-crm y jamás se comparte desde
 // Lotus. `ir` se conserva por compatibilidad con los shortcuts ya instalados.
 const IR_SECCIONES = [
-  'hoy', 'dashboard', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
+  'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'cotizador', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
   'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
@@ -2593,7 +2592,7 @@ async function startApp() {
   // (arriba, para asesor) ya la dispara; llamarla dos veces corría 2 fetches
   // del mismo query en paralelo sin orden garantizado de resolución.
   arrancar(
-    setupMetricas, setupRanking, setupEstadisticas, setupReasignaciones, setupAsesoresPeriodo,
+    setupMetricas, setupRanking, setupMisVentas, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
     setupBuscadorIATarifario, setupCerebroIA, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
     setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas, setupBtTravel,
@@ -2767,7 +2766,7 @@ async function cargarConversionDestino(desde, hasta) {
   }).join('');
 }
 function renderPipe(id) {
-  const be = STATS.by_estado || {}; const shown = ESTADOS.filter(k => (be[k] || 0) > 0 || ['POR ATENDER', 'PAGO REALIZADO'].includes(k));
+  const be = STATS.by_estado || {}; const shown = ESTADOS.filter(k => (be[k] || 0) > 0 || ['POR ATENDER', 'PAGO REALIZADO', 'VENTA COMPLETA'].includes(k));
   const max = Math.max(...shown.map(k => be[k] || 0), 1);
   document.getElementById(id).innerHTML = shown.map(k => {
     const v = be[k] || 0, w = Math.max((v / max) * 100, 2);
@@ -2955,7 +2954,7 @@ function abrirPostventa(c) {
       <label class="fl">Notas internas</label><textarea class="ei" id="pv-e-notas" rows="4" placeholder="Acuerdos, pendientes y próximo paso...">${esc(c.notas || '')}</textarea>
       <div class="edit-err" id="pv-e-error"></div>
       <button class="dbtn save" id="pv-e-guardar" type="button"><i class="fas fa-floppy-disk"></i> Guardar postventa</button>
-      ${(c.principal === false ? !c.factura_id : c.estado_lead !== 'PAGO REALIZADO') ? '<button class="dbtn gh" id="pv-e-pago" type="button" style="margin-top:9px"><i class="fas fa-circle-check"></i> Registrar pago completo</button>' : ''}
+      ${(c.principal === false ? !c.factura_id : !VENTA.includes(c.estado_lead)) ? '<button class="dbtn gh" id="pv-e-pago" type="button" style="margin-top:9px"><i class="fas fa-circle-check"></i> Registrar pago completo</button>' : ''}
     </div></div>
     <div data-rv-panel="servicios" hidden></div><div data-rv-panel="pasajeros" hidden></div><div data-rv-panel="documentos" hidden></div>`;
   document.getElementById('pv-e-guardar').onclick = () => guardarPostventa(false);
@@ -3616,6 +3615,126 @@ function renderRendimiento(datos) {
   }).join('');
 }
 
+/* ---------- Mis Ventas: leads en PAGO REALIZADO/VENTA COMPLETA con lo cobrado ----------
+   Sección con dos pestañas (#mv-tabs, mismo patrón que #leads-tabs): "Ventas"
+   (esto) y "Estadísticas" (setupEstadisticas/loadEstadisticas, más abajo).
+   Comparten el selector de asesor admin (#est-asesor, montado por
+   setupEstadisticas) porque es la misma persona en las dos vistas -- por eso
+   ese selector dispara loadMisVentasSeccion() y no loadEstadisticas() directo.
+   Fuente: RPC mis_ventas (ya aísla asesor->si mismo, ver migración
+   20260927190000). Sin RPC de comisión por asesor_id (listar_comisiones usa
+   otro espacio de ids, bigint de usuarios, no uuid de asesores) -- por eso no
+   hay KPI de comisión acá, queda en la pestaña Estadísticas. */
+let misVentasTab = 'ventas';
+let MV_DATA = [];
+let mvFiltro = 'todas';
+const MV_FILTROS = { todas: () => true, parcial: r => r.estado === 'PAGO REALIZADO', completa: r => r.estado === 'VENTA COMPLETA' };
+function setupMisVentas() {
+  document.querySelectorAll('#mv-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
+    misVentasTab = btn.dataset.mvTab;
+    document.querySelectorAll('#mv-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
+    document.querySelectorAll('.mv-tab-panel').forEach(p => p.style.display = p.dataset.mvPanel === misVentasTab ? '' : 'none');
+    loadMisVentasSeccion();
+  }));
+  document.querySelectorAll('#mv-filtro .seg').forEach(btn => btn.addEventListener('click', () => {
+    mvFiltro = btn.dataset.mvFiltro;
+    document.querySelectorAll('#mv-filtro .seg').forEach(b => b.classList.toggle('on', b === btn));
+    renderMisVentasCards();
+  }));
+  document.getElementById('mv-recargar')?.addEventListener('click', () => loadMisVentasSeccion());
+  setupEstadisticas();
+}
+function loadMisVentasSeccion() {
+  if (misVentasTab === 'estadisticas') loadEstadisticas(); else loadMisVentasVentas();
+}
+async function loadMisVentasVentas() {
+  if (!document.getElementById('sec-mis-ventas')) return;
+  const p_asesor_id = estAsesorId();
+  const cards = document.getElementById('mv-cards');
+  if (ROL === 'admin' && !p_asesor_id) {
+    document.getElementById('mv-kpis').innerHTML = '';
+    if (cards) cards.innerHTML = '<div class="muted" style="font-size:12.5px">Elegí un asesor para ver sus ventas.</div>';
+    MV_DATA = [];
+    return;
+  }
+  const { data, error } = await sb.rpc('mis_ventas', { p_asesor_id });
+  if (error) { console.error('mis_ventas', error); errToast('No se pudieron cargar tus ventas'); return; }
+  MV_DATA = data || [];
+  renderMisVentasKPIs();
+  renderMisVentasCards();
+}
+function renderMisVentasKPIs() {
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const delMes = MV_DATA.filter(r => (r.fecha_cierre || '').slice(0, 7) === thisMonth);
+  const facturado = MV_DATA.reduce((s, r) => s + Number(r.monto_total || 0), 0);
+  const cobrado = MV_DATA.reduce((s, r) => s + Number(r.monto_pagado || 0), 0);
+  const porCobrar = MV_DATA.reduce((s, r) => s + Number(r.saldo || 0), 0);
+  const completas = MV_DATA.filter(r => r.estado === 'VENTA COMPLETA').length;
+  pintarKPIs('mv-kpis', [
+    { t: 'Ventas del mes', v: fmt(delMes.length), d: fullMonth(thisMonth), i: 'fa-cart-shopping', c: 'var(--accent)' },
+    { t: 'Facturado', v: money(facturado), d: `${fmt(MV_DATA.length)} ventas en total`, i: 'fa-file-invoice-dollar', c: 'var(--blue)' },
+    { t: 'Cobrado', v: money(cobrado), d: porCobrar > 0 ? `${money(porCobrar)} por cobrar` : 'Todo cobrado', i: 'fa-hand-holding-dollar', c: 'var(--green)' },
+    { t: 'Ventas completas', v: fmt(completas), d: `${fmt(MV_DATA.length - completas)} con saldo pendiente`, i: 'fa-circle-check', c: 'var(--amber)' },
+  ]);
+}
+function renderMisVentasCards() {
+  const box = document.getElementById('mv-cards');
+  if (!box) return;
+  const filas = MV_DATA.filter(MV_FILTROS[mvFiltro] || MV_FILTROS.todas);
+  if (!filas.length) { box.innerHTML = '<div class="lt-vacio"><i class="fas fa-cart-shopping"></i> Sin ventas para este filtro</div>'; return; }
+  box.innerHTML = filas.map(r => {
+    const completa = r.estado === 'VENTA COMPLETA';
+    const c = ESTADO_COLORS[r.estado] || '#8b93ad';
+    const pct = Math.min(100, Number(r.porcentaje_pagado) || 0);
+    return `<article class="lt-card" data-mv-id="${r.lead_id}">
+      <div class="lt-card-cab">
+        <div class="lt-card-tit">${esc(r.cliente || 'Sin nombre')}</div>
+        <span class="badge-st" style="color:${c};background:${c}2e">${esc(niceEstado(r.estado))}</span>
+      </div>
+      <div class="lt-card-meta"><i class="fas fa-location-dot"></i> ${esc(r.destino) || 'Sin destino'} · ${esc(fmtFechaHoraCaracas(r.fecha_cierre))}</div>
+      <div class="lt-cifras">
+        <div><span>Total</span><b>${money(r.monto_total)}</b></div>
+        <div><span>Pagado</span><b class="lt-ok">${money(r.monto_pagado)}</b></div>
+        <div><span>Saldo</span><b class="${r.saldo > 0 ? 'lt-debe' : 'lt-ok'}">${money(r.saldo)}</b></div>
+      </div>
+      <div class="lt-barra" role="progressbar" aria-label="Pagado" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%;background:${completa ? 'var(--green)' : 'var(--amber)'}"></i></div>
+      <div class="lt-card-pie">
+        ${!completa ? `<button class="btn-sm lt-primario" type="button" data-mv-abono="${r.lead_id}"><i class="fas fa-hand-holding-dollar"></i> Registrar abono</button>` : ''}
+        ${!completa ? `<button class="btn-sm" type="button" data-mv-completar="${r.lead_id}"><i class="fas fa-circle-check"></i> Marcar completa</button>` : ''}
+      </div>
+    </article>`;
+  }).join('');
+  box.querySelectorAll('[data-mv-id]').forEach(el => el.addEventListener('click', e => {
+    if (e.target.closest('button')) return;
+    abrirLeadDesdeMisVentas(Number(el.dataset.mvId));
+  }));
+  box.querySelectorAll('[data-mv-abono]').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const fila = MV_DATA.find(r => r.lead_id === Number(btn.dataset.mvAbono));
+    if (fila) window.abrirRegistrarAbonoVentaUI(fila.lead_id, fila.saldo);
+  }));
+  box.querySelectorAll('[data-mv-completar]').forEach(btn => btn.addEventListener('click', async e => {
+    e.stopPropagation();
+    const id = Number(btn.dataset.mvCompletar);
+    if (!await confirmarSheet({ titulo: '¿Marcar venta como completa?', detalle: 'El lead va a pasar a VENTA COMPLETA.', textoOk: 'Marcar completa' })) return;
+    const card = btn.closest('.lt-card');
+    const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: id, p_estado: 'VENTA COMPLETA' });
+    if (error || !data?.ok) { errToast('No se pudo marcar la venta: ' + (error?.message || data?.error || '')); return; }
+    okToast('Venta completada');
+    if (card && !window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
+      card.classList.add('mv-celebra');
+      setTimeout(loadMisVentasVentas, 650);
+    } else {
+      loadMisVentasVentas();
+    }
+  }));
+}
+async function abrirLeadDesdeMisVentas(id) {
+  const { data: lead, error } = await sb.from('leads').select('*').eq('id', id).single();
+  if (error || !lead) { errToast('No se pudo cargar el cliente'); return; }
+  openDrawer(lead);
+}
+
 /* ---------- Estadísticas: panel de rendimiento por asesor + análisis IA ----------
    Cada asesor ve lo suyo; el admin elige con #est-asesor. Toda la data sale de
    la RPC estadisticas_asesor, que ya aísla (un asesor no puede pedir otro id).
@@ -3625,6 +3744,7 @@ function renderRendimiento(datos) {
 let EST_DATA = null;
 let estSerieMetrica = 'atendidos';
 const EST_METRICA_LABEL = { atendidos: 'Atendidos', ventas: 'Ventas', monto: 'Monto ($)', horas_respuesta: 'Horas de respuesta' };
+const fmtHorasResp = h => h == null ? '—' : (h < 1 ? Math.round(h * 60) + ' min' : (Math.round(h * 10) / 10) + ' h');
 
 function setupEstadisticas() {
   const hoy = new Date(), isoD = d => d.toISOString().slice(0, 10);
@@ -3634,7 +3754,6 @@ function setupEstadisticas() {
   initDateRangePicker('est');
   ['est-desde', 'est-hasta'].forEach(id => document.getElementById(id)?.addEventListener('change', loadEstadisticas));
   document.getElementById('est-recargar')?.addEventListener('click', loadEstadisticas);
-  document.getElementById('est-ia-regenerar')?.addEventListener('click', regenerarAnalisisIA);
   document.querySelectorAll('#est-serie-metrica .seg').forEach(b => b.onclick = () => {
     document.querySelectorAll('#est-serie-metrica .seg').forEach(x => x.classList.remove('on'));
     b.classList.add('on'); estSerieMetrica = b.dataset.m; if (EST_DATA) renderEstSerie();
@@ -3646,7 +3765,7 @@ function setupEstadisticas() {
       sel.innerHTML = '<option value="">Elegí un asesor…</option>' +
         data.map(a => `<option value="${a.asesor_id}">${esc(a.nombre)}${a.activo ? '' : ' (inactivo)'}</option>`).join('');
     });
-    sel?.addEventListener('change', loadEstadisticas);
+    sel?.addEventListener('change', loadMisVentasSeccion);
   }
 }
 
@@ -3655,14 +3774,12 @@ function estAsesorId() {
 }
 
 async function loadEstadisticas() {
-  if (!document.getElementById('sec-estadisticas')) return;
+  if (!document.getElementById('sec-mis-ventas')) return;
   const p_asesor_id = estAsesorId();
-  const cuerpoIA = document.getElementById('est-ia-cuerpo');
   if (ROL === 'admin' && !p_asesor_id) {
     document.getElementById('est-kpis').innerHTML = '';
-    ['est-destinos', 'est-presencia'].forEach(id => { const e = document.getElementById(id); if (e) e.innerHTML = ''; });
-    if (cuerpoIA) cuerpoIA.innerHTML = '<div class="muted" style="font-size:12.5px">Elegí un asesor para ver sus estadísticas.</div>';
-    document.getElementById('est-ia-fecha').textContent = '—';
+    const destinos = document.getElementById('est-destinos');
+    if (destinos) destinos.innerHTML = '<div class="muted" style="font-size:12.5px">Elegí un asesor para ver sus estadísticas.</div>';
     EST_DATA = null;
     return;
   }
@@ -3678,24 +3795,20 @@ async function loadEstadisticas() {
   EST_DATA = data;
   await ensureChart();
   renderEstadisticas(data);
-  loadAnalisisIA(data.asesor_id);
 }
 
 function renderEstadisticas(d) {
   const e = d.embudo || {}, q = d.calidad || {};
   const money = n => '$' + fmt(Math.round(n || 0));
   pintarKPIs('est-kpis', [
-    { t: 'Leads atendidos', v: fmt(e.atendidos || 0), d: `${fmt(e.asignados || 0)} asignados`, i: 'fa-headset', c: 'var(--blue)' },
-    { t: 'Conversión', v: (e.conv_pct || 0) + '%', d: 'Atendidos que cerraron', i: 'fa-percent', c: 'var(--green)' },
-    { t: 'Ventas', v: fmt(e.ventas || 0), d: money(e.monto), i: 'fa-cart-shopping', c: 'var(--accent)' },
-    { t: 'Horas de respuesta', v: q.horas_respuesta == null ? '—' : q.horas_respuesta, d: 'Promedio al primer contacto (sin lotes)', i: 'fa-stopwatch', c: 'var(--purple)' },
-    { t: 'Perdidos por timeout', v: (q.pct_perdido_timeout || 0) + '%', d: `${fmt(q.perdidos_timeout || 0)} leads`, i: 'fa-hourglass-end', c: 'var(--amber)' },
-    { t: 'Comisión del período', v: money(d.comisiones?.comision), d: money(d.comisiones?.facturado) + ' facturado', i: 'fa-sack-dollar', c: 'var(--pink)' },
+    { t: 'Ventas', v: fmt(e.ventas || 0), d: `${fmt(e.atendidos || 0)} atendidos`, i: 'fa-cart-shopping', c: 'var(--accent)' },
+    { t: 'Monto', v: money(e.monto), d: `${fmt(e.ventas || 0)} ventas cerradas`, i: 'fa-sack-dollar', c: 'var(--green)' },
+    { t: 'Conversión', v: (e.conv_pct || 0) + '%', d: 'Atendidos que cerraron', i: 'fa-percent', c: 'var(--blue)' },
+    { t: 'Respuesta', v: fmtHorasResp(q.horas_respuesta), d: 'Promedio al primer contacto', i: 'fa-stopwatch', c: 'var(--purple)' },
   ]);
   renderEstSerie();
   renderEstEmbudo(e);
   renderEstDestinos(d.destinos || []);
-  renderEstPresencia(d);
 }
 
 function renderEstSerie() {
@@ -3741,79 +3854,6 @@ function renderEstDestinos(dest) {
     <div class="an"><span>${esc(x.destino)}</span><span class="anv">${x.total} leads · ${x.pct}% cerrado</span></div>
     <div class="track"><div class="fill" style="width:${Math.max(4, Math.round(100 * x.total / max))}%;background:var(--blue)"></div></div>
   </div></div>`).join('');
-}
-
-function renderEstPresencia(d) {
-  const box = document.getElementById('est-presencia');
-  if (!box) return;
-  const p = d.presencia || {}, q = d.calidad || {};
-  const horas = Math.round((p.minutos || 0) / 6) / 10;
-  const filas = [
-    ['fa-clock', 'Horas trabajadas', horas + ' h'],
-    ['fa-right-to-bracket', 'Jornadas fichadas', fmt(p.jornadas || 0)],
-    ['fa-file-lines', 'Informes diarios', fmt(p.informes || 0)],
-    ['fa-triangle-exclamation', 'Strikes de asistencia', fmt(p.strikes || 0)],
-    ['fa-user-plus', 'Reasignaciones recibidas', fmt(q.reasig_recibidas || 0)],
-    ['fa-user-minus', 'Leads que cediste', fmt(q.reasig_cedidas || 0)],
-  ];
-  box.innerHTML = `<div class="est-plist">${filas.map(f => `<div class="est-prow"><span><i class="fas ${f[0]}"></i> ${f[1]}</span><b>${f[2]}</b></div>`).join('')}</div>`;
-}
-
-async function loadAnalisisIA(asesorId) {
-  const cuerpo = document.getElementById('est-ia-cuerpo'), fecha = document.getElementById('est-ia-fecha');
-  if (!cuerpo || !asesorId) return;
-  const { data, error } = await sb.from('estadisticas_analisis_ia').select('*').eq('asesor_id', asesorId).order('generado_en', { ascending: false }).limit(1);
-  if (error) { cuerpo.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar el análisis.</div>'; return; }
-  const a = (data || [])[0];
-  if (!a) {
-    cuerpo.innerHTML = '<div class="muted" style="font-size:12.5px">Todavía no hay un análisis. Tocá "Regenerar" para pedirle uno a la IA.</div>';
-    fecha.textContent = '—';
-    return;
-  }
-  fecha.textContent = 'Generado el ' + new Date(a.generado_en).toLocaleDateString('es-VE', { day: 'numeric', month: 'long' }) + (a.generado_por === 'manual' ? ' · a pedido' : ' · automático');
-  cuerpo.innerHTML = renderAnalisisIA(a);
-}
-
-function renderAnalisisIA(a) {
-  const li = arr => (arr || []).map(x => `<li>${esc(typeof x === 'string' ? x : (x.tema ? x.tema + ': ' + x.detalle : ''))}</li>`).join('');
-  let html = '';
-  if (a.resumen) html += `<p class="est-ia-resumen">${esc(a.resumen)}</p>`;
-  if ((a.fortalezas || []).length) html += `<div class="est-ia-sec"><h3><i class="fas fa-thumbs-up"></i> Lo que estás haciendo bien</h3><ul>${li(a.fortalezas)}</ul></div>`;
-  if ((a.mejoras || []).length) html += `<div class="est-ia-sec"><h3><i class="fas fa-arrow-trend-down"></i> A mejorar</h3><ul>${li(a.mejoras)}</ul></div>`;
-  if ((a.consejos || []).length) html += `<div class="est-ia-sec"><h3><i class="fas fa-lightbulb"></i> Consejos para esta semana</h3><ul>${li(a.consejos)}</ul></div>`;
-  return html || '<div class="muted" style="font-size:12.5px">El análisis quedó vacío. Probá regenerarlo.</div>';
-}
-
-async function regenerarAnalisisIA() {
-  const btn = document.getElementById('est-ia-regenerar');
-  const asesorId = EST_DATA?.asesor_id;
-  if (!asesorId || !btn) return;
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session?.access_token) { errToast('Sesión expirada, recargá la página'); return; }
-  btn.disabled = true;
-  const original = btn.innerHTML;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando…';
-  try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/estadisticas-analista?asesor_id=${asesorId}`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
-    });
-    const j = await res.json().catch(() => ({}));
-    if (res.status === 429 || j.error === 'limite_diario') {
-      errToast('Ya se regeneró en las últimas 24 h. Probá más tarde.');
-    } else if (!res.ok || j.ok === false) {
-      errToast('No se pudo generar el análisis');
-    } else {
-      okToast('Análisis actualizado');
-      loadAnalisisIA(asesorId);
-    }
-  } catch (err) {
-    console.error('regenerarAnalisisIA', err);
-    errToast('No se pudo generar el análisis');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = original;
-  }
 }
 
 /* ---------- Reparto objetivo: editor de pesos que siempre suma 100% ----------
@@ -4288,7 +4328,7 @@ function aplicarActualizacionLeadAbierto(lead) {
     el.value = nuevo;
     actualizados.push(id);
   });
-  document.getElementById('venta-box')?.classList.toggle('show', document.getElementById('e-estado').value === VENTA);
+  document.getElementById('venta-box')?.classList.toggle('show', VENTA.includes(document.getElementById('e-estado').value));
   currentLead = lead;
   if (actualizados.length || conflictivos.length) mostrarConflictoLead(actualizados, conflictivos);
 }
@@ -4418,7 +4458,7 @@ function leadCardHtml(l) {
   // cuando no queda ninguno: un div vacío igual sumaría el borde y dejaría un
   // hueco muerto abajo de la tarjeta.
   const acciones = [
-    (ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado)
+    (ROL === 'asesor' || ROL === 'admin') && !VENTA.includes(l.estado)
       ? `<button type="button" class="fact-btn" data-facturar-id="${l.id}" title="Enviar a facturación" aria-label="Enviar a facturación" onclick="event.stopPropagation()"><i class="fas fa-paper-plane"></i></button>` : '',
     wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : '',
   ].filter(Boolean).join('');
@@ -4455,8 +4495,8 @@ function leadCardHtml(l) {
 }
 // Flechitas del stepper de estado en la ficha del lead -- avanza/retrocede
 // dentro de ESTADOS_CICLO sin abrir el drawer completo. Si el estado actual
-// es 'Sin gestionar' (legacy, fuera del ciclo), la flecha lo manda al primer
-// paso real del pipeline en vez de fallar.
+// no está en el ciclo (dato legacy), la flecha lo manda al primer paso real
+// del pipeline en vez de fallar.
 async function setEstadoLead(l, nuevo) {
   if (!nuevo || nuevo === l.estado) return;
   const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: nuevo });
@@ -4705,7 +4745,7 @@ function openDrawer(l) {
       ${(ROL === 'asesor' || ROL === 'admin') && l.external_id ? `<button class="dq" id="e-a-tomar-ia" type="button"><i class="fas fa-hand"></i><span>Tomar conversación</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-boleteria" type="button"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización'}</span></button>` : ''}
-      ${(ROL === 'asesor' || ROL === 'admin') && !['PAGO REALIZADO', 'VENTA PENDIENTE DE VERIFICAR'].includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
+      ${(ROL === 'asesor' || ROL === 'admin') && !VENTA.includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
     </div>
 
     <div class="lead-tabs">
@@ -4744,7 +4784,7 @@ function openDrawer(l) {
               <div class="e-servicio-razon" id="e-servicio-razon">${l.servicio_ia_razon ? '<i class="fas fa-robot"></i> ' + esc(l.servicio_ia_razon) : ''}</div>
             </div>
           </div>
-          <div id="venta-box" class="venta-box ${l.estado === VENTA ? 'show' : ''}">
+          <div id="venta-box" class="venta-box ${VENTA.includes(l.estado) ? 'show' : ''}">
             <div class="dgrid">
               ${campo('Monto de la venta (USD)', `<input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}">`, true)}
               ${campo('Servicios / paquetes comprados', `<input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}">`, true)}
@@ -4759,11 +4799,11 @@ function openDrawer(l) {
             ${campo('Fecha de captación', `<input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">`)}
           </div>`, false)}
 
-        ${(ROL === 'asesor' || ROL === 'admin') && ['EN ESPERA DE PAGO', 'PAGO REALIZADO'].includes(l.estado) ? seccion('reservas', 'fa-suitcase-rolling', 'Reservas del cliente', `
+        ${(ROL === 'asesor' || ROL === 'admin') && VENTA.includes(l.estado) ? seccion('reservas', 'fa-suitcase-rolling', 'Reservas del cliente', `
           <div class="csub" style="margin-bottom:8px">Cada viaje del cliente es una reserva. La primera se cierra con el lead; las adicionales se facturan aparte.</div>
           <div id="res-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
           <div class="edit-err" id="res-err"></div>
-          <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, l.estado === 'PAGO REALIZADO') : ''}
+          <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, VENTA.includes(l.estado)) : ''}
 
         ${seccion('link-pago', 'fa-link', 'Link de pago', `
           <div class="csub" style="margin-bottom:8px">Emitís un link para que el cliente pague y suba el comprobante. El monto lo fijás vos; queda pendiente hasta que un admin lo verifique.</div>
@@ -4807,7 +4847,7 @@ function openDrawer(l) {
       <div id="act-body"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
     </div>`;
 
-  document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', e.target.value === VENTA);
+  document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', VENTA.includes(e.target.value));
   FIELD_IDS_LEAD.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -5287,11 +5327,11 @@ async function guardarLead() {
   const enVistaPreviaNoAdmin = ROL_REAL === 'admin' && ROL !== ROL_REAL;
   const estado = val('e-estado'), asesor = enVistaPreviaNoAdmin ? currentLead.asesor : val('e-asesor'), servicio = val('e-servicio');
   const montoRaw = val('e-monto').trim();
-  if (estado === VENTA && (!montoRaw || !(parseFloat(montoRaw) > 0))) { err.textContent = 'Ingresa el monto de la venta (debe ser mayor a 0)'; return; }
+  if (VENTA.includes(estado) && (!montoRaw || !(parseFloat(montoRaw) > 0))) { err.textContent = 'Ingresa el monto de la venta (debe ser mayor a 0)'; return; }
   const nombre = val('e-nombre').trim();
   if (!nombre) { err.textContent = 'El nombre no puede quedar vacío'; return; }
-  const monto = estado === VENTA ? parseFloat(montoRaw) : null;
-  const comprado = estado === VENTA ? val('e-comprado').trim() : null;
+  const monto = VENTA.includes(estado) ? parseFloat(montoRaw) : null;
+  const comprado = VENTA.includes(estado) ? val('e-comprado').trim() : null;
   const fechaVal = val('e-fecha');
   const montoCompletoRaw = val('e-monto-completo').trim();
   const montoInicialRaw = val('e-monto-inicial').trim();
@@ -8584,7 +8624,7 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
     leadId = data.lead_id;
   }
 
-  const upd = await sb.rpc('actualizar_lead', { p_lead_id: leadId, p_estado: 'EN ESPERA DE PAGO', p_asesor: asesorSel, p_monto: precioVenta });
+  const upd = await sb.rpc('actualizar_lead', { p_lead_id: leadId, p_estado: 'COTIZACION ENVIADA', p_asesor: asesorSel, p_monto: precioVenta });
   if (upd.error || !upd.data?.ok) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar'; err.textContent = 'No se pudo actualizar el lead: ' + (upd.error?.message || upd.data?.error || ''); return; }
 
   const pv = await sb.rpc('guardar_postventa', {
@@ -13976,6 +14016,9 @@ async function confirmarMontoSheet() {
   if (MONTO_SHEET_ACCION.tipo === 'comision') {
     if (valor > 100) { err.textContent = 'El porcentaje no puede superar 100.'; btn.disabled = false; btn.innerHTML = previo; return; }
     resultado = await sb.rpc('editar_comision_manual', { p_comision_id: MONTO_SHEET_ACCION.id, p_porcentaje: valor });
+  } else if (MONTO_SHEET_ACCION.tipo === 'venta') {
+    if (valor > MONTO_SHEET_ACCION.saldoPendiente) { err.textContent = 'El abono no puede superar el saldo.'; btn.disabled = false; btn.innerHTML = previo; return; }
+    resultado = await sb.rpc('registrar_abono_venta', { p_lead_id: MONTO_SHEET_ACCION.id, p_monto: valor });
   } else {
     if (valor > MONTO_SHEET_ACCION.saldoPendiente) { err.textContent = 'El abono no puede superar el saldo pendiente.'; btn.disabled = false; btn.innerHTML = previo; return; }
     resultado = await sb.rpc('registrar_abono_proveedor', { p_cxp_id: MONTO_SHEET_ACCION.id, p_monto: valor });
@@ -13986,9 +14029,19 @@ async function confirmarMontoSheet() {
   closeSheet('monto-sheet');
   okToast('Guardado');
   if (MONTO_SHEET_ACCION.tipo === 'comision') { loadComisionesAdmin(); loadFacturacionKpis(); }
+  else if (MONTO_SHEET_ACCION.tipo === 'venta') { loadMisVentasVentas(); }
   else { await loadCuentasPorPagar(); loadFacturacionKpis(); }
   MONTO_SHEET_ACCION = null;
 }
+window.abrirRegistrarAbonoVentaUI = (leadId, saldoPendiente) => {
+  MONTO_SHEET_ACCION = { tipo: 'venta', id: leadId, saldoPendiente };
+  document.getElementById('monto-sheet-title').textContent = 'Registrar abono de esta venta';
+  document.getElementById('monto-sheet-label').textContent = `Monto abonado (saldo: ${money(saldoPendiente)})`;
+  const input = document.getElementById('monto-sheet-input');
+  input.min = 0; input.max = saldoPendiente; input.step = 0.01; input.value = '';
+  document.getElementById('monto-sheet-error').textContent = '';
+  openSheet('monto-sheet');
+};
 window.editarPorcentajeComision = async (asesorId) => {
   const a = FACT_ASESORES_CACHE.find(x => x.id === asesorId);
   if (!a) return;
@@ -20216,7 +20269,7 @@ function setupMisNotas() {
 // menú por falta de uso; su HTML y sus setup* siguen intactos.
 const NAV_ITEMS = [
   { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide' },
-  { sec: 'estadisticas', icon: 'fas fa-chart-column', label: 'Estadísticas', padre: 'grp-inicio', roles: '', sub: 'Tu rendimiento, tu tendencia y un análisis con IA' },
+  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
   { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', padre: 'grp-inicio', roles: 'nav-admin-only' },
   { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: '' },
@@ -20509,7 +20562,7 @@ function activateSection(sec, fromNav) {
   document.body.scrollTop = 0;
   document.body.classList.remove('appbar-oculta');
   if (sec === 'ranking') loadRanking();
-  if (sec === 'estadisticas') loadEstadisticas();
+  if (sec === 'mis-ventas') loadMisVentasSeccion();
   if (sec === 'facturacion') loadFacturacion();
   if (sec === 'pagos') loadPagos();
   if (sec === 'proveedores') loadProveedores();
@@ -20758,7 +20811,7 @@ function setupAppBar() {
 // que pide esta fase. Si se agrega una sección nueva con carga propia, hay
 // que sumarla en los dos lugares.
 const REFRESCAR_SECCION = {
-  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), estadisticas: () => loadEstadisticas(), facturacion: () => loadFacturacion(), pagos: () => loadPagos(), proveedores: () => loadProveedores(),
+  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), 'mis-ventas': () => loadMisVentasSeccion(), facturacion: () => loadFacturacion(), pagos: () => loadPagos(), proveedores: () => loadProveedores(),
   'mis-comisiones': () => loadMisComisiones(), comisiones: () => loadComisiones(), 'gestion-personal': () => loadGestionPersonal(),
   postventa: () => loadPostventa(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
