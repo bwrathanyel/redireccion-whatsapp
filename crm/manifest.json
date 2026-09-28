@@ -20,7 +20,7 @@
   "shortcuts": [
     { "name": "Leads", "url": "./?ir=leads", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Postventa", "url": "./?ir=postventa", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Cotizador IA", "url": "./?ir=cotizador", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Cotizar con Lyra", "url": "./?ir=cotizador", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Tarifario", "url": "./?ir=tarifario", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ],
   "screenshots": [

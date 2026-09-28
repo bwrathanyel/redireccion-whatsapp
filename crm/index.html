@@ -1219,6 +1219,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .pf-bloque > .fl{margin-bottom:6px}
 .tar-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .tar-tag{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:20px;background:rgba(16,185,129,.14);color:#34d399}
+.tar-tag-mas{background:rgba(255,255,255,.08);color:var(--muted)}
 .tc-promos{font-size:11.5px;color:var(--amber);margin-top:8px;font-weight:600}
 .tar-card.tc-con-ninos{border-color:var(--pink)}
 .tc-ninos{display:flex;align-items:center;gap:7px;padding:7px 14px;background:var(--pink);color:#1a1000;font-size:11.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase}
@@ -1450,19 +1451,6 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .sheet-input:focus{border-color:var(--accent)}
 @media(max-width:760px){.inbox-btn{min-height:44px;font-size:12px}}
 
-/* ---------- Filtros estructurados del Cotizador IA (van ANTES del texto libre) ---------- */
-.cot-filtros{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-.cot-f-fecha{display:inline-flex;align-items:center;gap:7px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:7px 12px;color:var(--muted);font-size:12px;white-space:nowrap}
-.cot-f-fecha input{background:transparent;border:none;color:var(--txt);font-family:inherit;font-size:12.5px;outline:none;color-scheme:dark;cursor:pointer}
-#cot-f-precio{width:140px}
-.cot-f-clear{background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;width:36px;height:36px;color:var(--muted);cursor:pointer;transition:color .15s,border-color .15s;flex-shrink:0}
-.cot-f-clear:hover{color:#ef4444;border-color:#ef4444}
-@media(max-width:760px){.cot-filtros{width:100%}.cot-filtros .flt,.cot-f-fecha{flex:1 1 45%}}
-@media(min-width:761px){
-  #sec-cotizador .mfs-trigger{display:flex;align-items:center;justify-content:center;gap:9px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:0 16px;height:38px;color:var(--txt);font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;margin-bottom:14px}
-  #sec-cotizador .cot-filtros{display:none;position:absolute;z-index:75;margin-top:44px;background:var(--bg2);border:1px solid var(--line2);border-radius:14px;padding:16px;box-shadow:0 20px 50px rgba(0,0,0,.45);width:340px}
-  #sec-cotizador .cot-filtros.open{display:flex;flex-direction:column}
-}
 
 /* ---------- Cotizador IA ---------- */
 .chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);height:calc(100dvh - 180px);min-height:420px}
@@ -3078,24 +3066,15 @@ body.fsize-grande{--tap:41.9px}
   .tar-item.tar-hotel-row{content-visibility:auto;contain-intrinsic-size:auto 72px}
   .tf-media{transform:none;backface-visibility:visible}
 }
-/* ================= Rediseño móvil — Cotizador y Mensajes (Fase 4) ================= */
+/* ================= Rediseño móvil — Mensajes (Fase 4) ================= */
 @media(max-width:760px){
-  #sec-cotizador .pantalla-chat{height:calc(100dvh - var(--appbar-h) - 60px)}
-  #sec-cotizador .chat-log{padding-left:0;padding-right:0}
-  #sec-cotizador .chat-row{max-width:100%}
-  #sec-cotizador .chat-msg.bot{background:transparent;border:none;border-radius:0;padding:2px 0}
-  #sec-cotizador .chat-msg.user{background:var(--accent-soft);color:var(--txt);max-width:85%}
-  #sec-cotizador .chat-inputbar{align-items:flex-end}
-  #sec-cotizador .chat-inputbar textarea{border-radius:22px}
-  #sec-cotizador .chat-send,#sec-cotizador .chat-inputbar .mic-btn{width:var(--tap);height:var(--tap);min-width:var(--tap);border-radius:50%}
   #msg-inputbar .chat-send,#msg-inputbar .mic-btn,#msg-inputbar .msg-attach-btn{width:var(--tap);height:var(--tap);min-width:var(--tap);min-height:var(--tap)}
-  #sec-cotizador .cot-cards{flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
-  #sec-cotizador .cot-cards::-webkit-scrollbar{display:none}
-  #sec-cotizador .cot-cards>*{scroll-snap-align:start}
 }
-@media(max-width:760px) and (prefers-reduced-motion:reduce){
-  #sec-cotizador .cot-cards{scroll-snap-type:none}
-}
+/* Tarjetas de la cotización dentro del chat de Lyra (panel angosto a cualquier ancho). */
+#lyra-log .cot-cards{flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+#lyra-log .cot-cards::-webkit-scrollbar{display:none}
+#lyra-log .cot-cards>*{scroll-snap-align:start}
+@media(prefers-reduced-motion:reduce){#lyra-log .cot-cards{scroll-snap-type:none}}
 /* ================= Rediseño móvil — Dashboard/Hoy/Personal/IA (Fase 5) ================= */
 @media(max-width:760px){
   .leads-inbox-grid{grid-template-columns:1fr}
@@ -3781,7 +3760,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 
         <div class="grid g-2">
           <button class="dbtn save" id="hoy-nuevo-lead-btn" type="button"><i class="fas fa-user-plus"></i> Nuevo lead</button>
-          <button class="dbtn" id="hoy-cotizador-btn" type="button"><i class="fas fa-comments"></i> Cotizador IA</button>
+          <button class="dbtn" id="hoy-cotizador-btn" type="button"><i class="fas fa-comments"></i> Cotizar con Lyra</button>
         </div>
       </div>
 
@@ -4219,48 +4198,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <summary><i class="fas fa-circle-info"></i> Normativas y horarios importantes</summary>
         <div id="tar-info-list"></div>
       </details>
-    </section>
-
-    <!-- COTIZADOR IA -->
-    <section class="section" id="sec-cotizador">
-      <button class="mfs-trigger" data-mfs="cot-filtros" type="button"><i class="fas fa-sliders"></i> Filtros</button>
-      <div class="cot-filtros mfs" id="cot-filtros">
-        <select class="flt" id="cot-f-destino"><option value="">Cualquier destino</option></select>
-        <select class="flt" id="cot-f-tipo">
-          <option value="">Cualquier categoría</option>
-          <option value="hotel">Hotel</option>
-          <option value="paquete">Paquete/tour</option>
-          <option value="destino">Guías/Tours</option>
-        </select>
-        <select class="flt" id="cot-f-plan">
-          <option value="">Cualquier tipo de plan</option>
-          <option value="todo_incluido">Todo incluido</option>
-          <option value="solo_desayuno">Solo desayuno</option>
-          <option value="media_pension">Media pensión</option>
-          <option value="pension_completa">Pensión completa</option>
-          <option value="ninos_gratis">Niños gratis</option>
-          <option value="2x1">2x1</option>
-          <option value="descuento">Con descuento</option>
-        </select>
-        <select class="flt" id="cot-f-opcion"><option value="">Cualquier opción de Tarifario</option></select>
-        <input class="flt" id="cot-f-precio" type="number" min="0" placeholder="Precio máx. USD">
-        <label class="cot-f-fecha">Desde <input class="fdate" id="cot-f-desde" type="date"></label>
-        <label class="cot-f-fecha">Hasta <input class="fdate" id="cot-f-hasta" type="date"></label>
-        <button class="cot-f-clear" id="cot-f-clear" type="button" title="Limpiar filtros"><i class="fas fa-eraser"></i></button>
-        <button class="mfs-done" data-mfs="cot-filtros" type="button">Listo</button>
-      </div>
-      <div class="card chat-wrap pantalla-chat">
-        <div class="chat-toolbar">
-          <button class="chat-tool-btn" id="chat-history-btn" type="button"><i class="fas fa-clock-rotate-left"></i> Mis chats</button>
-          <button class="chat-tool-btn" id="chat-new-btn" type="button"><i class="fas fa-plus"></i> Nuevo</button>
-        </div>
-        <div class="chat-log" id="chat-log"></div>
-        <div class="chat-inputbar">
-          <textarea id="chat-input" rows="1" placeholder="Preguntame por un destino, hotel o paquete"></textarea>
-          <button class="mic-btn" id="chat-mic-btn" type="button" title="Dictar por voz" aria-label="Dictar por voz"><i class="fas fa-microphone"></i></button>
-          <button class="chat-send" id="chat-send" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
-        </div>
-      </div>
     </section>
 
     <!-- MENSAJES (chat interno del staff) -->

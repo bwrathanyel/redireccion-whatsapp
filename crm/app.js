@@ -153,7 +153,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], cotizador: ['Cotizador IA', 'Cotiza con el tarifario vigente como base'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
   tareas: ['Tareas', 'Tus tareas activas'],
   comisiones: ['Comisiones por corte', 'Ventas pagadas, verificación e invoices · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
@@ -1244,7 +1244,7 @@ function manejarDeepLinkAsistencia() {
 // Lotus. `ir` se conserva por compatibilidad con los shortcuts ya instalados.
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
-  'web-reasignados', 'cotizador', 'tarifario', 'galeria', 'stop-sales',
+  'web-reasignados', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
   'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
@@ -1270,6 +1270,8 @@ function manejarDeepLinkSeccion() {
   params.delete('ir');
   const queryRestante = params.toString();
   history.replaceState(null, '', location.pathname + (queryRestante ? `?${queryRestante}` : ''));
+  // El atajo de la PWA instalada sigue apuntando a ?ir=cotizador: ahora cotiza Lyra.
+  if (seccion === 'cotizador' && LYRA.lista) { lyraCotizar(null, 'Cotízame '); return; }
   activateSection(destino);
 }
 
@@ -2538,7 +2540,7 @@ async function startApp() {
   if (booted) return; booted = true;
   arrancar(
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupPullToRefresh, setupLongPressSeleccion,
-    setupTarifarioTabs, setupLightbox, setupChat, setupMensajes, setupCorreo, setupRedes,
+    setupTarifarioTabs, setupLightbox, setupMensajes, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupHoy, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas,
   );
@@ -4657,7 +4659,7 @@ function renderHoyAdmin() {
 }
 function setupHoy() {
   document.getElementById('hoy-nuevo-lead-btn')?.addEventListener('click', () => document.getElementById('nl-abrir-btn')?.click());
-  document.getElementById('hoy-cotizador-btn')?.addEventListener('click', () => activateSection('cotizador'));
+  document.getElementById('hoy-cotizador-btn')?.addEventListener('click', () => lyraCotizar(null, 'Cotízame '));
   document.getElementById('hoy-ver-dashboard-btn')?.addEventListener('click', () => activateSection('dashboard'));
 }
 async function noPuedoInboxLead(l) {
@@ -10918,7 +10920,11 @@ function lyraPintarHistorial() {
   document.getElementById('lyra-log').innerHTML = '';
   lyraBurbuja('bot', lyraAlAzar(LYRA_FRASES.bienvenida).replace('{n}', lyraPrimerNombre()), false, 'feliz');
   // Con adjuntos, content es la lectura que armó la EF; en pantalla va lo que escribió el usuario.
-  asisChatHistory.forEach(m => (m.role === 'user' && m.vista?.a ? lyraBurbuja('user', m.vista.t || '', false, 'neutral', m.vista) : lyraBurbuja(m.role === 'user' ? 'user' : 'bot', m.content)));
+  asisChatHistory.forEach(m => {
+    if (m.role === 'user' && m.vista?.a) lyraBurbuja('user', m.vista.t || '', false, 'neutral', m.vista);
+    else if (m.role === 'assistant' && Array.isArray(m.cot) && typeof m.r === 'string') { lyraBurbuja('bot', m.r); m.cot.forEach(lyraPintarCotizacion); }
+    else lyraBurbuja(m.role === 'user' ? 'user' : 'bot', m.content);
+  });
   lyraSugerencias();
 }
 function lyraSugerencias() {
@@ -10951,6 +10957,54 @@ function lyraBurbuja(who, texto, cargando, expr = 'neutral', vista, locales) {
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
   return el;
+}
+// ---- cotizar (2026-09-27): Lyra absorbió el Cotizador IA. La cotización llega aparte del texto de Lyra
+// (data.bloques): texto para WhatsApp partido por ---BLOQUE---, hasta 2 tarjetas con foto y, si el
+// cliente ya cerró, los datos para prellenar el Voucher.
+function lyraCotizar(opcion, texto) {
+  window.closeDrawer?.(true);
+  if (!LYRA.lista) { errToast('Lyra no está disponible para tu usuario'); return; }
+  LYRA.cotizar = opcion || null;
+  lyraAbrir();
+  const input = document.getElementById('lyra-input');
+  input.value = texto || '';
+  input.dispatchEvent(new Event('input'));
+  input.focus();
+}
+function lyraPintarCotizacion(b) {
+  const partes = String(b.texto || '').split('---BLOQUE---').map(p => p.trim()).filter(Boolean);
+  partes.forEach(p => lyraBurbuja('bot', p, false, 'neutral'));
+  const log = document.getElementById('lyra-log');
+  const fila = (hijo) => { const row = document.createElement('div'); row.className = 'chat-row'; row.innerHTML = lyraMini('neutral'); row.appendChild(hijo); log.appendChild(row); };
+  if (Array.isArray(b.opciones) && b.opciones.length) {
+    const wrap = document.createElement('div');
+    wrap.className = 'cot-cards';
+    wrap.innerHTML = b.opciones.map(op => {
+      // op.foto llega como URL al original: se reescribe al derivado chico del Worker de fotos.
+      const mini = op.foto && op.foto.startsWith(FOTOS_BASE) ? fotoMini(op.foto.slice(FOTOS_BASE.length), 256) : op.foto;
+      return `<div class="cot-card">
+        ${mini ? `<img class="tc-thumb" src="${esc(mini)}" alt="" loading="lazy">` : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${op.tipo === 'promocion' ? 'tag' : 'image'}"></i></div>`}
+        <div class="tc-nombre">${esc(op.titulo)}</div>
+        ${op.precio_texto ? `<div class="tc-precio">${esc(op.precio_texto)}</div>` : ''}
+      </div>`;
+    }).join('');
+    fila(wrap);
+  }
+  if (b.voucher_datos && typeof b.voucher_datos === 'object') {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn-sm';
+    btn.innerHTML = '<i class="fas fa-file-pdf"></i> Prellenar Voucher';
+    btn.onclick = () => { lyraCerrar(); prellenarVoucherDesdeChat(b.voucher_datos); };
+    fila(btn);
+  }
+  log.scrollTop = log.scrollHeight;
+}
+// En el historial va el texto de la cotización (la EF lo necesita en los turnos siguientes) y los bloques para repintar.
+function lyraTurnoAsistente(respuesta, bloques) {
+  const cot = Array.isArray(bloques) ? bloques.filter(b => b?.tipo === 'cotizacion') : [];
+  if (!cot.length) return { role: 'assistant', content: respuesta };
+  cot.forEach(lyraPintarCotizacion);
+  return { role: 'assistant', content: [respuesta, ...cot.map(b => String(b.texto || '').replaceAll('---BLOQUE---', '\n\n'))].join('\n\n'), r: respuesta, cot };
 }
 // Vacío vuelve al alto del CSS (una línea = alto del botón); con texto crece hasta
 // 120px. El borde se suma aparte porque scrollHeight no lo incluye (border-box).
@@ -11194,8 +11248,10 @@ async function lyraEnviar(directo, audio) {
   asisChatHistory.push(yo);
   lyraGuardarHistorial();
   const seccion = TITLES[currentSec]?.[0] || '';
-  const body = { messages: asisChatHistory.map(({ role, content }) => ({ role, content })), humor: LYRA.humor, contexto: { seccion } };
+  const body = { messages: asisChatHistory.map(({ role, content }) => ({ role, content })), humor: LYRA.humor, contexto: { seccion }, acepta_bloques: true };
   if (adjuntos) body.adjuntos = adjuntos;
+  // La opción del tarifario desde la que se abrió Lyra solo acompaña al primer mensaje.
+  if (LYRA.cotizar) { body.contexto.cotizacion = LYRA.cotizar; LYRA.cotizar = null; }
   const { data, error } = await sb.functions.invoke('asistente-admin', { body });
   cargando.remove();
   LYRA.ocupada = false; btn.disabled = false;
@@ -11219,7 +11275,7 @@ async function lyraEnviar(directo, audio) {
   const fila = lyraBurbuja('bot', data.respuesta, false, expr);
   // Modo voz: el 🔊 dice el resumen corto que armó el modelo, no la respuesta entera.
   if (typeof data.hablado === 'string' && data.hablado.trim()) fila.querySelector('.chat-msg').dataset.hablar = data.hablado;
-  asisChatHistory.push({ role: 'assistant', content: data.respuesta });
+  asisChatHistory.push(lyraTurnoAsistente(data.respuesta, data.bloques));
   lyraGuardarHistorial();
   lyraMirar(0, 0); lyraExpr(expr, 5000); lyraMoverBoca(data.respuesta.length);
   if (!LYRA.abierta) {
@@ -11374,7 +11430,7 @@ async function lyraEscuchaFrase(E, audio, ventana) {
     const token = (await sb.auth.getSession()).data.session?.access_token;
     if (!token) return;
     const body = {
-      accion: 'escucha', audio: lyraWavB64(audio.subarray(0, 16000 * LYRA_FRASE_MAX_S)), ventana,
+      accion: 'escucha', audio: lyraWavB64(audio.subarray(0, 16000 * LYRA_FRASE_MAX_S)), ventana, acepta_bloques: true,
       messages: asisChatHistory.slice(-7).map(({ role, content }) => ({ role, content })),
       humor: LYRA.humor, contexto: { seccion: TITLES[currentSec]?.[0] || '' },
     };
@@ -11421,7 +11477,7 @@ async function lyraEscuchaFrase(E, audio, ventana) {
       const hablado = typeof d.hablado === 'string' && d.hablado.trim() ? d.hablado : d.respuesta;
       const fila = lyraBurbuja('bot', d.respuesta, false, expr);
       fila.querySelector('.chat-msg').dataset.hablar = hablado;
-      asisChatHistory.push({ role: 'assistant', content: d.respuesta }); lyraGuardarHistorial();
+      asisChatHistory.push(lyraTurnoAsistente(d.respuesta, d.bloques)); lyraGuardarHistorial();
       if (currentSec === 'asistente') cargarAccionesAsistente();
       // La EF manda después {fase:"audio"} con la 1ª frase ya sintetizada: se sigue leyendo el stream mientras
       // se piden las demás frases y suena el relleno.
@@ -16031,10 +16087,13 @@ function tarIncluyeSplit(tags) {
   });
   return { plan, si, no };
 }
-const tagsHtml = tags => {
+const tagsHtml = (tags, limite) => {
   const { plan, si } = tarIncluyeSplit(tags);
   const v = [...plan, ...si];
-  return v.length ? `<div class="tar-tags">${v.map(t => `<span class="tar-tag">${esc(t)}</span>`).join('')}</div>` : '';
+  if (!v.length) return '';
+  const mostrar = limite ? v.slice(0, limite) : v;
+  const resto = v.length - mostrar.length;
+  return `<div class="tar-tags">${mostrar.map(t => `<span class="tar-tag">${esc(t)}</span>`).join('')}${resto > 0 ? `<span class="tar-tag tar-tag-mas">+${resto}</span>` : ''}</div>`;
 };
 // Ficha: plan como chips, y lo incluido / no incluido como listas con ícono.
 function tarIncluyeHtml(tags) {
@@ -16760,7 +16819,7 @@ function tarCardHtml(x) {
       <div class="tc-pie">
         ${x.precio_texto ? `<div class="tc-precio">${esc(x.precio_texto)}</div>` : ''}
         ${vigenciaHtml(x.vigencia_texto)}
-        ${tagsHtml(x.incluye_tags)}
+        ${tagsHtml(x.incluye_tags, 4)}
         ${tarPuedeRetirar(x, x.productos?.nombre, destinoDe(x)) ? `<button type="button" class="promo-retirar" data-retirar-tarifa="${x.id}"><i class="fas fa-box-archive"></i> Retirar del catálogo</button>` : ''}
       </div></div>`;
   }
@@ -16784,7 +16843,7 @@ function tarCardHtml(x) {
       ${tarifa ? `<div class="tc-precio">${esc(tarifa.precio_texto)}</div>` : ''}
       ${vigenciaHtml(tarifa?.vigencia_texto)}
       ${nTarifas > 1 ? `<div class="tc-promos"><i class="fas fa-layer-group"></i> ${nTarifas} promociones</div>` : ''}
-      ${tagsHtml(tagsHotel)}
+      ${tagsHtml(tagsHotel, 4)}
     </div></div>`;
 }
 function tarFichaHtml(x) {
@@ -16805,7 +16864,7 @@ function tarFichaHtml(x) {
       ${precio ? `<div class="tc-precio">${esc(precio)}</div>` : ''}
       ${vigenciaHtml(vigencia)}
       ${!esPromo && (x.tarifas || []).length > 1 ? `<div class="tc-promos"><i class="fas fa-layer-group"></i> ${x.tarifas.length} promociones</div>` : ''}
-      ${tagsHtml(tags)}
+      ${tagsHtml(tags, 4)}
       ${esPromo ? tcIaBtnHtml(x, 'tar-ia-inline') : ''}
     </div>
   </div>`;
@@ -18083,7 +18142,7 @@ function tarBarraSeleccionHtml() {
     <div class="tar-selbar-btns">
       ${btn('comparar', 'fa-table-columns', 'Comparar')}
       ${btn('copiar', 'fa-copy', 'Copiar')}
-      ${btn('cotizador', 'fa-comments', 'Cotizador IA')}
+      ${btn('cotizador', 'fa-comments', 'Cotizar con Lyra')}
       <button type="button" class="tar-selbtn tar-selbtn-x" data-tar-accion="limpiar"><i class="fas fa-xmark"></i> Quitar</button>
     </div>
   </div>`;
@@ -18328,15 +18387,18 @@ async function tarCopiarTarifas(ids) {
   catch { errToast('El navegador no dejó copiar'); }
 }
 TAR_ACCIONES.copiar = tarCopiarTarifas;
-/* Fase 2.4 — mandar la selección al Cotizador IA.
-   Acá no se arma ningún precio: solo se acota. El Cotizador ya baja habitacion,
-   plan y precios de cada tarifa (cotizador-chat/index.ts:118), así que alcanza
-   con decirle qué ids mirar dentro del hotel que el filtro ya eligió. */
+/* Fase 2.4 — mandar la selección a Lyra para cotizar.
+   Acá no se arma ningún precio: solo se acota. El motor de cotizar (cotizador-chat)
+   ya baja habitacion, plan y precios de cada tarifa, así que alcanza con decirle
+   qué ids mirar dentro del hotel. */
 function tarMandarAlCotizador(ids) {
   const elegidas = (TAR_DRAWER_ITEM?.tarifas || []).filter(t => ids.includes(t.id));
   if (!elegidas.length) return;
   const nombres = [...new Set(elegidas.map(t => tarHabCorta(t) || t.titulo).filter(Boolean))];
-  irAlCotizadorConTarifas(TAR_DRAWER_ITEM.id, TAR_DRAWER_ITEM.nombre || '', elegidas.map(t => t.id), nombres);
+  const nombre = TAR_DRAWER_ITEM.nombre || '';
+  const lista = nombres.length > 1 ? nombres.slice(0, -1).join(', ') + ' y ' + nombres[nombres.length - 1] : nombres[0];
+  lyraCotizar({ opcion_tabla: 'productos', opcion_id: TAR_DRAWER_ITEM.id, tarifa_ids: elegidas.map(t => t.id), nombre },
+    lista ? `Cotízame ${lista} en ${nombre}: ` : `Cotízame ${nombre}: `);
 }
 TAR_ACCIONES.cotizador = tarMandarAlCotizador;
 /* Botón "Mejor precio" — fijar a mano cuál es la destacada.
@@ -18550,12 +18612,13 @@ function openProductoDrawer(x, tipoForzado = null) {
         : `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>`}
     </div>` : ''}
     ${carpeta ? tarBarraSeleccionHtml() : ''}
-    <div class="dactions"><button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Ir al Cotizador</button></div>
+    <div class="dactions"><button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Cotizar con Lyra</button></div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
-  document.getElementById('dCotizador').onclick = () => irAlCotizadorConOpcion(esPromo ? 'promociones' : 'productos', x.id, nombre);
+  document.getElementById('dCotizador').onclick = () =>
+    lyraCotizar({ opcion_tabla: esPromo ? 'promociones' : 'productos', opcion_id: x.id, nombre }, `Cotízame ${nombre}: `);
   document.getElementById('tar-editar-ficha')?.addEventListener('click', () => tarAbrirEditorFicha(x.id));
   document.getElementById('tar-editar-promo')?.addEventListener('click', () => tarAbrirEditorPromo(x.id));
   document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotosOrig, +el.dataset.drawerFoto)));
@@ -18803,43 +18866,6 @@ async function reemplazarFoto(tabla, fk, entidadId, fotoIdViejo, prefijo, file, 
   delete tarCache[tarTab];
   cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId, habitaciones);
 }
-// Deja al filtro "opción de Tarifario" del Cotizador ya elegida, con el
-// chat enfocado y un mensaje sugerido, para no obligar a re-seleccionar
-// lo mismo que ya se estaba viendo en el drawer del Tarifario.
-function irAlCotizadorConOpcion(tabla, id, nombre) {
-  window.closeDrawer(true);
-  activateSection('cotizador');
-  const sel = document.getElementById('cot-f-opcion');
-  const valor = `${tabla}:${id}`;
-  const aplicar = () => { if ([...sel.options].some(o => o.value === valor)) { sel.value = valor; return true; } return false; };
-  if (!aplicar()) cargarOpcionesTarifario().then(aplicar);
-  const input = document.getElementById('chat-input');
-  input.value = `Cuéntame más sobre ${nombre}`;
-  input.dispatchEvent(new Event('input'));
-  input.focus();
-}
-/* Tarifas puntuales que el asesor eligió en el Tarifario y con las que quiere
-   acotar el Cotizador. Se guardan JUNTO al valor de #cot-f-opcion con el que se
-   armaron: si ese valor deja de calzar (el usuario cambió el filtro a mano, lo
-   limpió, o volvió a elegir el mismo hotel después de irse), los ids se
-   descartan. Sin ese amarre el Cotizador quedaría acotado en silencio a
-   habitaciones de otro hotel y el asesor no vería por qué le faltan opciones. */
-let cotTarifas = { valor: null, ids: [] };
-function cotOlvidarTarifas() { cotTarifas = { valor: null, ids: [] }; }
-function irAlCotizadorConTarifas(productoId, nombre, tarifaIds, habitaciones) {
-  irAlCotizadorConOpcion('productos', productoId, nombre);
-  // Después de irAlCotizadorConOpcion: setear el select por código no dispara
-  // 'change', así que el amarre no se auto-borra al armarlo.
-  cotTarifas = { valor: `productos:${productoId}`, ids: tarifaIds };
-  const input = document.getElementById('chat-input');
-  const lista = habitaciones.length > 1
-    ? habitaciones.slice(0, -1).join(', ') + ' y ' + habitaciones[habitaciones.length - 1]
-    : habitaciones[0];
-  if (lista) input.value = `Cuéntame sobre ${lista} en ${nombre}`;
-  input.dispatchEvent(new Event('input'));
-  input.focus();
-}
-
 /* ---------- Lightbox de fotos (drawer de producto + Galería) ---------- */
 let lbFotos = [], lbIndex = 0, lbScale = 1, lbTX = 0, lbTY = 0, lbAnimando = false;
 const lbEl = () => document.getElementById('lightbox');
@@ -19115,160 +19141,9 @@ function attachVoiceInput(btn, campo) {
   };
 }
 
-/* ---------- Cotizador IA ---------- */
-let chatHistory = [], chatActualId = null;
-function setupChat() {
-  const input = document.getElementById('chat-input');
-  document.getElementById('chat-send').onclick = enviarChat;
-  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChat(); } });
-  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
-  attachVoiceInput(document.getElementById('chat-mic-btn'), input);
-  fill('cot-f-destino', DESTINO_ORDEN);
-  cargarOpcionesTarifario();
-  document.getElementById('cot-f-clear').onclick = () => {
-    ['cot-f-destino', 'cot-f-tipo', 'cot-f-plan', 'cot-f-opcion', 'cot-f-precio', 'cot-f-desde', 'cot-f-hasta'].forEach(id => { document.getElementById(id).value = ''; });
-    cotOlvidarTarifas();
-  };
-  // Tocar la opción a mano descarta las habitaciones puntuales que trajo el
-  // Tarifario: reelegir el mismo hotel más tarde no debe re-armarlas sola.
-  document.getElementById('cot-f-opcion').addEventListener('change', cotOlvidarTarifas);
-  document.getElementById('chat-history-btn').onclick = openChatsDrawer;
-  document.getElementById('chat-new-btn').onclick = nuevoChat;
-  if (!chatHistory.length) addChatBubble('bot', '¡Hola! Soy el Cotizador IA de Destino y Eventos Lotus 360. Estoy aquí para ayudarte con tus cotizaciones.');
-}
-function nuevoChat() {
-  chatHistory = []; chatActualId = null;
-  document.getElementById('chat-log').innerHTML = '';
-  addChatBubble('bot', '¡Hola! Soy el Cotizador IA de Destino y Eventos Lotus 360. Estoy aquí para ayudarte con tus cotizaciones.');
-}
-/* ---------- Chats guardados del Cotizador IA (mis conversaciones) ---------- */
-async function guardarChatIA() {
-  if (chatActualId) {
-    const { error } = await sb.from('chats_ia').update({ mensajes: chatHistory, updated_at: new Date().toISOString() }).eq('id', chatActualId);
-    if (error) console.error('guardarChatIA update', error);
-    return;
-  }
-  const primerMensaje = chatHistory.find(m => m.role === 'user')?.content || 'Conversación';
-  const titulo = primerMensaje.length > 40 ? primerMensaje.slice(0, 40) + '…' : primerMensaje;
-  const { data, error } = await sb.from('chats_ia').insert({ usuario_id: MI_USUARIO_ID, titulo, mensajes: chatHistory }).select('id').single();
-  if (!error && data) chatActualId = data.id;
-}
-async function openChatsDrawer() {
-  const box = document.getElementById('drawerContent');
-  box.innerHTML = `<div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent)"><i class="fas fa-clock-rotate-left"></i></div><div><div class="dn">Mis conversaciones</div><div class="dm">Cotizador IA</div></div></div><div id="chats-mine-list"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>`;
-  document.getElementById('drawer').classList.add('open');
-  document.getElementById('drawerBg').classList.add('open');
-  navPush({ type: 'drawer' });
-  const { data, error } = await sb.from('chats_ia').select('id,titulo,updated_at').eq('usuario_id', MI_USUARIO_ID).order('updated_at', { ascending: false });
-  const list = document.getElementById('chats-mine-list');
-  if (error) { list.textContent = 'No se pudieron cargar tus conversaciones'; return; }
-  if (!data.length) { list.textContent = 'Todavía no guardaste ninguna conversación'; return; }
-  list.className = '';
-  list.innerHTML = data.map(c => `<div class="strike-row" data-id="${c.id}" style="cursor:pointer"><span>${esc(c.titulo || 'Conversación')}<br><span class="muted" style="font-size:11px">${esc(fmtFechaHoraCaracas(c.updated_at))}</span></span><i class="fas fa-chevron-right"></i></div>`).join('');
-  entradaLista(list);
-  list.querySelectorAll('[data-id]').forEach(el => el.addEventListener('click', () => abrirChatGuardado(Number(el.dataset.id))));
-}
-async function abrirChatGuardado(id) {
-  const { data, error } = await sb.from('chats_ia').select('id,mensajes').eq('id', id).single();
-  if (error || !data) { errToast('No se pudo abrir esa conversación'); return; }
-  chatActualId = data.id;
-  chatHistory = data.mensajes || [];
-  const log = document.getElementById('chat-log');
-  log.innerHTML = '';
-  chatHistory.forEach(m => addChatBubble(m.role === 'user' ? 'user' : 'bot', m.content));
-  window.closeDrawer(true);
-  activateSection('cotizador');
-}
-// Lista de cada hotel/paquete/promo/guía-tour individual, agrupada por
-// categoría, para el filtro "opción de Tarifario" del Cotizador. Solo
-// ítems visibles (activo/revisado) — un ítem que el admin ocultó no
-// debe poder pedirse ni desde acá aunque el rol pueda verlo en Tarifario.
-async function cargarOpcionesTarifario() {
-  const sel = document.getElementById('cot-f-opcion');
-  if (!sel) return;
-  const [{ data: prods }, { data: promos }] = await Promise.all([
-    sb.from('productos').select('id,tipo,nombre').neq('tipo', 'info').eq('activo', true).order('nombre'),
-    sb.from('promociones').select('id,titulo').eq('revisado', true).order('titulo'),
-  ]);
-  const grupos = { promo: [], destino: [], hotel: [], paquete: [] };
-  (prods || []).forEach(p => grupos[p.tipo]?.push({ value: `productos:${p.id}`, label: p.nombre }));
-  (promos || []).forEach(p => grupos.promo.push({ value: `promociones:${p.id}`, label: p.titulo }));
-  const previo = sel.value;
-  // "Hot Sales" (TAR_TAB_META) no es una categoría propia de la DB -- es un
-  // subconjunto derivado de promociones (ver promosHotSales) -- no tiene
-  // bucket en `grupos`, se salta con optional chaining en vez de agregarle
-  // un grupo fantasma vacío al Cotizador.
-  sel.innerHTML = '<option value="">Cualquier opción de Tarifario</option>' + TAR_TAB_META.map(t => grupos[t.key]?.length ? `<optgroup label="${esc(t.label)}">${grupos[t.key].map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}</optgroup>` : '').join('');
-  if (previo && [...sel.options].some(o => o.value === previo)) sel.value = previo;
-}
-// Filtros elegidos en la interfaz (no en texto libre) — se mandan como
-// parámetros estructurados al Cotizador, que los aplica ANTES de dejar que
-// la IA razone sobre el pedido en lenguaje natural del cliente.
-function leerFiltrosCotizador() {
-  const opcion = val('cot-f-opcion');
-  const [opcionTabla, opcionId] = opcion ? opcion.split(':') : [null, null];
-  return {
-    destino: val('cot-f-destino') || null,
-    tipo: val('cot-f-tipo') || null,
-    plan: val('cot-f-plan') || null,
-    opcionTabla: opcionTabla || null,
-    opcionId: opcionId ? Number(opcionId) : null,
-    // Solo viajan si la opción sigue siendo exactamente la que las trajo: el
-    // amarre es lo que impide que queden acotando un hotel que ya no es este.
-    tarifaIds: (opcion && cotTarifas.valor === opcion && cotTarifas.ids.length) ? cotTarifas.ids : null,
-    precioMax: val('cot-f-precio') ? Number(val('cot-f-precio')) : null,
-    fechaDesde: val('cot-f-desde') || null,
-    fechaHasta: val('cot-f-hasta') || null,
-  };
-}
-async function enviarChat() {
-  const input = document.getElementById('chat-input'), btn = document.getElementById('chat-send');
-  const histBtn = document.getElementById('chat-history-btn'), newBtn = document.getElementById('chat-new-btn');
-  const texto = input.value.trim();
-  if (!texto || btn.disabled) return;
-  addChatBubble('user', texto);
-  chatHistory.push({ role: 'user', content: texto });
-  input.value = ''; input.style.height = 'auto';
-  // Bloquea "Mis chats"/"Nuevo chat" mientras se espera la respuesta: si el
-  // usuario cambia de conversación a mitad de una espera, chatHistory se
-  // reasigna por debajo y la respuesta que llega después se cuelga en el
-  // chat equivocado (o corrompe uno guardado que ni siquiera es este).
-  btn.disabled = true; histBtn.disabled = true; newBtn.disabled = true;
-  const loadingEl = addChatBubble('bot', 'Pensando...', true);
-  const { data, error } = await sb.functions.invoke('cotizador-chat', { body: { messages: chatHistory, filtros: leerFiltrosCotizador() } });
-  loadingEl.remove();
-  btn.disabled = false; histBtn.disabled = false; newBtn.disabled = false;
-  if (error || !data?.respuesta) { addChatBubble('bot', await mensajeErrorCotizador(data, error)); return; }
-  // El prompt puede pedirle al modelo separar una intro corta de un bloque
-  // de datos con "---BLOQUE---" (ver REGLA DURA #3 en cotizador-chat) --
-  // cada parte se muestra como su propia burbuja en vez de un solo mensaje
-  // largo, sin necesitar tool-calling ni turnos extra del modelo.
-  const partes = data.respuesta.split('---BLOQUE---').map(p => p.trim()).filter(Boolean);
-  (partes.length ? partes : [data.respuesta]).forEach(parte => addChatBubble('bot', parte));
-  if (data.opciones?.length) addChatOpcionesCards(data.opciones);
-  if (data.voucher_datos) addChatVoucherSuggestion(data.voucher_datos);
-  chatHistory.push({ role: 'assistant', content: data.respuesta });
-  await guardarChatIA();
-}
-// Botón que aparece cuando el Cotizador IA ya tiene los datos principales del
-// cliente y el asesor confirmó que cerró (ver REGLA DURA #4 en cotizador-chat)
+// Botón que Lyra agrega cuando la cotización ya trae los datos del cliente que cerró
 // -- prellena el formulario de Voucher ya existente, el asesor completa lo
 // que falte (documento, forma de pago) y genera el PDF con el flujo de siempre.
-function addChatVoucherSuggestion(datos) {
-  const log = document.getElementById('chat-log');
-  const row = document.createElement('div');
-  row.className = 'chat-row';
-  row.innerHTML = '<span class="chat-avatar"><i class="fas fa-wand-magic-sparkles"></i></span>';
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'btn-sm';
-  btn.style.marginLeft = '8px';
-  btn.innerHTML = '<i class="fas fa-file-pdf"></i> Prellenar Voucher';
-  btn.onclick = () => prellenarVoucherDesdeChat(datos);
-  row.appendChild(btn);
-  log.appendChild(row);
-  log.scrollTop = log.scrollHeight;
-}
 function prellenarVoucherDesdeChat(datos) {
   activateSection('voucher');
   const MAPA = {
@@ -19283,53 +19158,6 @@ function prellenarVoucherDesdeChat(datos) {
   }
   okToast('Voucher prellenado, revisá y completá lo que falte');
 }
-// Tarjetas de comparación (máx 2, hoteles distintos -- ver
-// fotosParaOpcionesComparadas en cotizador-chat) con foto real del tarifario,
-// mismas clases visuales que la grilla del Tarifario (tc-thumb/tc-nombre/tc-precio).
-function addChatOpcionesCards(opciones) {
-  const log = document.getElementById('chat-log');
-  const row = document.createElement('div');
-  row.className = 'chat-row';
-  row.innerHTML = '<span class="chat-avatar"><i class="fas fa-wand-magic-sparkles"></i></span>';
-  const wrap = document.createElement('div');
-  wrap.className = 'cot-cards';
-  wrap.innerHTML = opciones.map(op => {
-    // op.foto llega de cotizador-chat (edge function) como URL completa al
-    // original (FOTOS_BASE + storage_path) -- se reescribe acá al derivado
-    // chico en vez de tocar esa función, mismo motivo que fotoMini arriba.
-    const fotoMiniOp = op.foto && op.foto.startsWith(FOTOS_BASE) ? fotoMini(op.foto.slice(FOTOS_BASE.length), 256) : op.foto;
-    return `
-    <div class="cot-card">
-      ${fotoMiniOp ? `<img class="tc-thumb" src="${esc(fotoMiniOp)}" alt="" loading="lazy">` : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${op.tipo === 'promocion' ? 'tag' : 'image'}"></i></div>`}
-      <div class="tc-nombre">${esc(op.titulo)}</div>
-      ${op.precio_texto ? `<div class="tc-precio">${esc(op.precio_texto)}</div>` : ''}
-    </div>
-  `;
-  }).join('');
-  row.appendChild(wrap);
-  log.appendChild(row);
-  log.scrollTop = log.scrollHeight;
-}
-// Cuando el status no es 2xx, supabase-js deja `data` en null y el body real
-// queda en `error.context`.
-async function mensajeErrorCotizador(data, error) {
-  let code = data?.error;
-  if (!code && error?.context?.json) {
-    try { code = (await error.context.json())?.error; } catch { /* body no era JSON, se usa el mensaje genérico */ }
-  }
-  const MSG = {
-    timeout_ia: 'El cotizador tardó demasiado en responder, intenta de nuevo.',
-    error_ia: 'No se pudo conectar con la IA, intenta de nuevo en un momento.',
-    error_tarifario: 'No se pudo consultar el tarifario, intenta de nuevo.',
-    sin_respuesta: 'La IA no devolvió una respuesta, intenta de nuevo.',
-    respuesta_truncada: 'La respuesta de la IA quedó incompleta, intenta de nuevo.',
-    no_autenticado: 'Tu sesión expiró, volvé a iniciar sesión.',
-    no_configurado: 'El cotizador no está disponible en este momento.',
-    body_invalido: 'Ocurrió un error inesperado, intenta de nuevo.',
-    sin_mensajes: 'Escribe un mensaje antes de enviar.',
-  };
-  return MSG[code] || 'No pude conectar con el cotizador, intenta de nuevo en un momento.';
-}
 // Red de seguridad visual: aunque el prompt le pide a Gemini no usar markdown
 // pesado, a veces igual manda **negritas** o encabezados con #. En vez de
 // mostrarlos literales (feo, símbolos sueltos), se limpian/convierten acá.
@@ -19339,26 +19167,6 @@ function renderBotText(texto) {
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
     .replace(/(^|\s)\*([^*\n]+)\*/g, '$1<b>$2</b>')
     .replace(/^[*•]\s+/gm, '- ');
-}
-function addChatBubble(who, texto, loading) {
-  const log = document.getElementById('chat-log');
-  const div = document.createElement('div');
-  div.className = `chat-msg ${who}${loading ? ' loading' : ''}`;
-  if (who === 'bot' && !loading) div.innerHTML = renderBotText(texto);
-  else div.textContent = texto;
-  let el = div;
-  if (who === 'bot') {
-    const row = document.createElement('div');
-    row.className = 'chat-row';
-    row.innerHTML = '<span class="chat-avatar"><i class="fas fa-wand-magic-sparkles"></i></span>';
-    row.appendChild(div);
-    log.appendChild(row);
-    el = row;
-  } else {
-    log.appendChild(div);
-  }
-  log.scrollTop = log.scrollHeight;
-  return el;
 }
 
 /* ---------- Mensajes (chat interno del staff) ---------- */
@@ -20360,8 +20168,7 @@ const NAV_ITEMS = [
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
   { sec: 'bt-travel', icon: 'fas fa-umbrella-beach', label: 'BT Travel', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles todo incluido, stop sales, reservas y pagos' },
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only', sub: 'Ventas, calidad, errores y costos' },
-  { sec: 'cotizador', icon: 'fas fa-comments', label: 'Cotizador IA', padre: 'grp-ia', roles: 'nav-marketing-ok' },
-  { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', padre: 'grp-ia', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Revisa reservas, carga datos y escribe a proveedores' },
+  { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', padre: 'grp-ia', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-marketing-ok', sub: 'Lyra: cotiza, revisa reservas, busca en la web y escribe a proveedores' },
   { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', padre: 'grp-ia', roles: 'nav-admin-only', sub: 'Posadas que quieren el asistente' },
   { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok' },
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
@@ -22159,9 +21966,6 @@ const TOUR_CAPITULOS = [
   { id: 'tarifario', titulo: 'Tarifario', icono: 'fa-book-open', roles: ['admin', 'asesor', 'marketing'], seccion: 'tarifario', pasos: [
     { titulo: 'Catálogo de hoteles y paquetes', texto: 'Todos los precios y opciones que le puedes ofrecer a un cliente, con fotos.', selector: '#sec-tarifario' },
     { titulo: 'Buscador con IA', texto: 'El mismo campo hace dos cosas: mientras escribís filtra lo que ya tenés en pantalla, y si tocás la varita (o Enter) le pasa esa frase a la IA para que busque en todo el tarifario — "playa para una pareja en diciembre". Los precios que ves salen siempre de la ficha real, la IA nunca los inventa.', selector: '#tar-search' },
-  ]},
-  { id: 'cotizador', titulo: 'Cotizador IA', icono: 'fa-comments', roles: ['admin', 'asesor', 'marketing'], seccion: 'cotizador', pasos: [
-    { titulo: 'Arma una cotización hablando', texto: 'Cuéntale a la IA qué busca el cliente (destino, presupuesto, fechas) y te arma opciones del Tarifario al toque.', selector: '#chat-input' },
   ]},
   { id: 'galeria', titulo: 'Galería', icono: 'fa-images', roles: ['admin', 'asesor', 'marketing'], seccion: 'galeria', pasos: [
     { titulo: 'Fotos para mandar al cliente', texto: 'Fotos reales de hoteles y paquetes, listas para compartir por WhatsApp.', selector: '#sec-galeria' },
