@@ -2542,7 +2542,7 @@ async function startApp() {
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
-    setupHoy, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas,
+    setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -2605,6 +2605,7 @@ async function startApp() {
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers, setupComisiones,
+    setupBioReparto, setupHorarioSheet,
     cargarNotasRepaso,
     subscribeRealtime,
   );
@@ -3554,6 +3555,7 @@ async function loadAsesoresPeriodo() {
   }
   cargarRendimientoAsesores();
   cargarReparto();
+  cargarBioReparto();
   cargarReasigCountAsesores();
 }
 async function cargarReasigCountAsesores() {
@@ -4027,6 +4029,115 @@ async function guardarReparto() {
   }
   okToast('Reparto guardado');
   await cargarReparto();
+}
+
+/* ---------- Reparto de redes (bio): guardia/tope + horario + tarjeta "hoy" ----------
+   Todo admin-only. Horario va por PATCH directo a `asesores` (RLS admin-all,
+   ver HANDOFF-reparto-bio-v2.md) -- guardia/tope pasan por bio_config_set
+   porque app_config también guarda el secret de ingest_lead y no debe
+   quedar expuesta como tabla completa. */
+function setupBioReparto() {
+  document.getElementById('bio-config-guardar')?.addEventListener('click', guardarBioConfig);
+}
+async function cargarBioReparto() {
+  const box = document.getElementById('bio-horario-list');
+  if (!box) return; // panel no montado (rol sin acceso)
+  const activos = [...ACTIVOS].sort();
+  renderBioGuardiaSelect(activos);
+  renderBioHorarioList(activos);
+  const [{ data: cfg, error: eCfg }, { data: turno, error: eTurno }, { data: hoy, error: eHoy }] = await Promise.all([
+    sb.rpc('bio_config_get'), sb.rpc('listar_turno_actual'), sb.rpc('reparto_bio_hoy'),
+  ]);
+  if (!eCfg && cfg) {
+    document.getElementById('bio-tope').value = cfg.bio_max_por_30min || 4;
+    document.getElementById('bio-guardia').value = cfg.bio_guardia_nocturna || '';
+  }
+  if (!eTurno) renderBioTurno(turno || []);
+  if (!eHoy) renderBioHoy(hoy || []);
+}
+function renderBioGuardiaSelect(activos) {
+  const sel = document.getElementById('bio-guardia');
+  if (!sel) return;
+  const actual = sel.value;
+  sel.innerHTML = '<option value="">Sin guardia</option>' + activos.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.value = actual;
+}
+function renderBioHorarioList(activos) {
+  const box = document.getElementById('bio-horario-list');
+  if (!box) return;
+  box.innerHTML = activos.map(n => `<div class="rep-row"><span class="rep-nombre" title="${esc(n)}">${esc(n)}</span><button type="button" class="btn-sec" data-horario-editar="${esc(n)}">Horario</button></div>`).join('') || '<div class="muted" style="font-size:12.5px">Sin asesores activos</div>';
+  box.querySelectorAll('[data-horario-editar]').forEach(btn => btn.onclick = () => abrirHorarioSheet(btn.dataset.horarioEditar));
+}
+function renderBioTurno(lista) {
+  const box = document.getElementById('bio-turno-list');
+  if (!box) return;
+  box.innerHTML = lista.map(a => {
+    const enPausa = a.pausa_hasta && new Date(a.pausa_hasta) > new Date();
+    return `<span class="chip ${a.en_turno ? 'ok' : ''}" style="display:inline-block;margin:0 6px 6px 0">${esc(a.nombre)}${enPausa ? ' (pausa)' : ''}</span>`;
+  }).join('') || '<div class="muted" style="font-size:12.5px">Sin asesores activos</div>';
+}
+function renderBioHoy(lista) {
+  const box = document.getElementById('bio-hoy-list');
+  if (!box) return;
+  if (!lista.length) { box.innerHTML = '<div class="muted" style="font-size:12.5px">Sin clics todavía hoy</div>'; return; }
+  box.innerHTML = lista.map(x => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12.5px">
+    <span>${esc(x.asesor)} <span class="muted">· ${esc(x.canal)}${x.origen ? ' · ' + esc(x.origen) : ''}</span></span>
+    <span style="font-weight:700">${x.clics}</span>
+  </div>`).join('');
+}
+async function guardarBioConfig() {
+  const tope = Number(val('bio-tope')) || null;
+  const guardia = document.getElementById('bio-guardia').value;
+  const btn = document.getElementById('bio-config-guardar');
+  btn.disabled = true;
+  const { error } = await sb.rpc('bio_config_set', { p_tope: tope, p_guardia: guardia });
+  btn.disabled = false;
+  if (error) { errToast('No se pudo guardar: ' + error.message); return; }
+  okToast('Configuración guardada');
+}
+
+/* ---------- Horario semanal de un asesor (sheet) ---------- */
+const DIAS_HORARIO = [['lun', 'Lunes'], ['mar', 'Martes'], ['mie', 'Miércoles'], ['jue', 'Jueves'], ['vie', 'Viernes'], ['sab', 'Sábado'], ['dom', 'Domingo']];
+let HORARIO_NOMBRE = null;
+async function abrirHorarioSheet(nombre) {
+  HORARIO_NOMBRE = nombre;
+  document.getElementById('horario-sheet-title').textContent = 'Horario · ' + nombre;
+  const box = document.getElementById('horario-dias');
+  box.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  openSheet('horario-sheet');
+  const { data, error } = await sb.from('asesores').select('horario').eq('nombre', nombre).single();
+  if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar</div>'; return; }
+  const horario = data.horario || {};
+  box.innerHTML = DIAS_HORARIO.map(([k, label]) => {
+    const v = horario[k];
+    return `<div class="rep-row" data-dia="${k}">
+      <label style="display:flex;align-items:center;gap:6px;width:110px;flex-shrink:0"><input type="checkbox" data-hd-on ${v ? 'checked' : ''}> ${label}</label>
+      <input class="ei" type="time" data-hd-inicio value="${v?.inicio || '09:00'}" style="flex:1" ${v ? '' : 'disabled'}>
+      <input class="ei" type="time" data-hd-fin value="${v?.fin || '21:00'}" style="flex:1" ${v ? '' : 'disabled'}>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('[data-hd-on]').forEach(cb => cb.onchange = () => {
+    cb.closest('[data-dia]').querySelectorAll('input[type=time]').forEach(i => i.disabled = !cb.checked);
+  });
+}
+async function guardarHorarioSheet() {
+  if (!HORARIO_NOMBRE) return;
+  const horario = {};
+  document.querySelectorAll('#horario-dias [data-dia]').forEach(row => {
+    const on = row.querySelector('[data-hd-on]').checked;
+    horario[row.dataset.dia] = on ? { inicio: row.querySelector('[data-hd-inicio]').value, fin: row.querySelector('[data-hd-fin]').value } : null;
+  });
+  const btn = document.getElementById('horario-sheet-confirmar');
+  btn.disabled = true;
+  const { error } = await sb.from('asesores').update({ horario }).eq('nombre', HORARIO_NOMBRE);
+  btn.disabled = false;
+  if (error) { errToast('No se pudo guardar el horario: ' + error.message); return; }
+  okToast('Horario guardado');
+  closeSheet('horario-sheet');
+}
+function setupHorarioSheet() {
+  document.getElementById('horario-sheet-cancelar')?.addEventListener('click', () => closeSheet('horario-sheet'));
+  document.getElementById('horario-sheet-confirmar')?.addEventListener('click', guardarHorarioSheet);
 }
 
 /* ---------- Preview + Drill ---------- */
@@ -4661,6 +4772,30 @@ function setupHoy() {
   document.getElementById('hoy-nuevo-lead-btn')?.addEventListener('click', () => document.getElementById('nl-abrir-btn')?.click());
   document.getElementById('hoy-cotizador-btn')?.addEventListener('click', () => lyraCotizar(null, 'Cotízame '));
   document.getElementById('hoy-ver-dashboard-btn')?.addEventListener('click', () => activateSection('dashboard'));
+}
+/* ---------- Pausa del asesor (reparto de redes/bio) ---------- */
+// No hay lectura barata del pausa_hasta propio al cargar (asesores es
+// admin-only en RLS, sin RPC de "mi estado") -- el pill arranca en "En turno"
+// y solo refleja el estado real después de tocar un botón acá.
+function setupPausaAsesor() {
+  document.querySelectorAll('#hoy-pausa-btns [data-pausa]').forEach(btn => btn.onclick = () => pausaAsesorClick(btn.dataset.pausa, btn));
+}
+async function pausaAsesorClick(modo, btn) {
+  if (btn) btn.disabled = true;
+  const { data, error } = await sb.rpc('set_pausa_asesor', { p_modo: modo });
+  if (btn) btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo actualizar: ' + (error?.message || 'error')); return; }
+  renderPausaAsesor(data.pausa_hasta);
+  okToast(modo === 'volver' ? 'De vuelta en turno' : 'Pausa activada');
+}
+function renderPausaAsesor(pausaHasta) {
+  const txt = document.getElementById('hoy-pausa-txt');
+  if (!txt) return;
+  const enPausa = pausaHasta && new Date(pausaHasta) > new Date();
+  txt.textContent = enPausa ? 'En pausa hasta ' + new Date(pausaHasta).toLocaleString('es-VE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'En turno';
+  document.getElementById('hoy-pausa-pill')?.querySelector('.dot')?.style.setProperty('background', enPausa ? '#ef4444' : '');
+  const volverBtn = document.getElementById('hoy-pausa-volver-btn');
+  if (volverBtn) volverBtn.style.display = enPausa ? '' : 'none';
 }
 async function noPuedoInboxLead(l) {
   // Vía Edge Function reasignar-lead (no RPC directo): además de reasignar
@@ -10099,6 +10234,9 @@ const ASIS_HERRAMIENTAS = {
   nota_reserva: ['fa-note-sticky', 'Nota en la reserva'], correo_proveedor: ['fa-envelope', 'Correo a proveedor'],
   adjuntar_documento: ['fa-paperclip', 'Documento adjunto'], asignar_proveedor_reserva: ['fa-handshake', 'Proveedor de la reserva'],
   correo_empresa: ['fa-building', 'Correo a empresa'], asignar_empresa_reserva: ['fa-building-circle-check', 'Empresa de la reserva'], deshacer_accion: ['fa-rotate-left', 'Acción deshecha'],
+  mover_etapa_lead: ['fa-arrow-right-arrow-left', 'Etapa del lead'], nota_lead: ['fa-note-sticky', 'Nota del lead'],
+  reasignar_lead: ['fa-user-check', 'Lead reasignado'], registrar_contacto_lead: ['fa-phone', 'Contacto registrado'],
+  declarar_pago: ['fa-money-bill-wave', 'Pago declarado'], verificar_pago: ['fa-check-double', 'Pago verificado'],
 };
 function setupAsistente() {
   document.getElementById('asis-abrir-lyra').onclick = () => lyraAbrir();
@@ -10922,7 +11060,7 @@ function lyraPintarHistorial() {
   // Con adjuntos, content es la lectura que armó la EF; en pantalla va lo que escribió el usuario.
   asisChatHistory.forEach(m => {
     if (m.role === 'user' && m.vista?.a) lyraBurbuja('user', m.vista.t || '', false, 'neutral', m.vista);
-    else if (m.role === 'assistant' && Array.isArray(m.cot) && typeof m.r === 'string') { lyraBurbuja('bot', m.r); m.cot.forEach(lyraPintarCotizacion); }
+    else if (m.role === 'assistant' && Array.isArray(m.cot) && typeof m.r === 'string') { lyraBurbuja('bot', m.r); m.cot.forEach(lyraPintarCotizacion); if (LYRA_STICKERS.includes(m.st)) lyraPintarSticker(m.st); }
     else lyraBurbuja(m.role === 'user' ? 'user' : 'bot', m.content);
   });
   lyraSugerencias();
@@ -10972,8 +11110,7 @@ function lyraCotizar(opcion, texto) {
   input.focus();
 }
 function lyraPintarCotizacion(b) {
-  const partes = String(b.texto || '').split('---BLOQUE---').map(p => p.trim()).filter(Boolean);
-  partes.forEach(p => lyraBurbuja('bot', p, false, 'neutral'));
+  const texto = String(b.texto || '').replaceAll('---BLOQUE---', '\n\n').trim();
   const log = document.getElementById('lyra-log');
   const fila = (hijo) => { const row = document.createElement('div'); row.className = 'chat-row'; row.innerHTML = lyraMini('neutral'); row.appendChild(hijo); log.appendChild(row); };
   if (Array.isArray(b.opciones) && b.opciones.length) {
@@ -10990,6 +11127,13 @@ function lyraPintarCotizacion(b) {
     }).join('');
     fila(wrap);
   }
+  if (texto) {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn-sm';
+    btn.innerHTML = '<i class="fas fa-copy"></i> Texto para el cliente';
+    btn.onclick = async () => { try { await navigator.clipboard.writeText(texto); okToast('Texto copiado'); } catch { errToast('El navegador no dejó copiar'); } };
+    fila(btn);
+  }
   if (b.voucher_datos && typeof b.voucher_datos === 'object') {
     const btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'btn-sm';
@@ -11000,11 +11144,24 @@ function lyraPintarCotizacion(b) {
   log.scrollTop = log.scrollHeight;
 }
 // En el historial va el texto de la cotización (la EF lo necesita en los turnos siguientes) y los bloques para repintar.
-function lyraTurnoAsistente(respuesta, bloques) {
+// Sticker de Lyra: el orbe grande con el gesto de .lyra-sticker, la misma regla de la que salen los WEBM de Telegram.
+const LYRA_STICKERS = ['feliz', 'guino', 'sarcastica', 'sorprendida', 'preocupada', 'pensando', 'dormida'];
+function lyraPintarSticker(nombre) {
+  const log = document.getElementById('lyra-log'), row = document.createElement('div');
+  row.className = 'chat-row lyra-sticker-fila';
+  row.innerHTML = `<span class="lyra-orb lyra-sticker" data-expr="${nombre}" role="img" aria-label="${LYRA_EMO_CARAS[nombre]}">${LYRA_ORB_HTML}</span>`;
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+}
+// La etiqueta [sticker:x] queda al final del content: la EF la mira para no mandar dos seguidos.
+function lyraTurnoAsistente(respuesta, bloques, sticker) {
   const cot = Array.isArray(bloques) ? bloques.filter(b => b?.tipo === 'cotizacion') : [];
-  if (!cot.length) return { role: 'assistant', content: respuesta };
+  const st = LYRA_STICKERS.includes(sticker) ? sticker : '';
+  if (!cot.length && !st) return { role: 'assistant', content: respuesta };
   cot.forEach(lyraPintarCotizacion);
-  return { role: 'assistant', content: [respuesta, ...cot.map(b => String(b.texto || '').replaceAll('---BLOQUE---', '\n\n'))].join('\n\n'), r: respuesta, cot };
+  if (st) lyraPintarSticker(st);
+  const content = [respuesta, ...cot.map(b => String(b.texto || '').replaceAll('---BLOQUE---', '\n\n'))].join('\n\n') + (st ? `\n[sticker:${st}]` : '');
+  return st ? { role: 'assistant', content, r: respuesta, cot, st } : { role: 'assistant', content, r: respuesta, cot };
 }
 // Vacío vuelve al alto del CSS (una línea = alto del botón); con texto crece hasta
 // 120px. El borde se suma aparte porque scrollHeight no lo incluye (border-box).
@@ -11248,7 +11405,7 @@ async function lyraEnviar(directo, audio) {
   asisChatHistory.push(yo);
   lyraGuardarHistorial();
   const seccion = TITLES[currentSec]?.[0] || '';
-  const body = { messages: asisChatHistory.map(({ role, content }) => ({ role, content })), humor: LYRA.humor, contexto: { seccion }, acepta_bloques: true };
+  const body = { messages: asisChatHistory.map(({ role, content }) => ({ role, content })), humor: LYRA.humor, contexto: { seccion }, acepta_bloques: true, acepta_stickers: true };
   if (adjuntos) body.adjuntos = adjuntos;
   // La opción del tarifario desde la que se abrió Lyra solo acompaña al primer mensaje.
   if (LYRA.cotizar) { body.contexto.cotizacion = LYRA.cotizar; LYRA.cotizar = null; }
@@ -11275,7 +11432,7 @@ async function lyraEnviar(directo, audio) {
   const fila = lyraBurbuja('bot', data.respuesta, false, expr);
   // Modo voz: el 🔊 dice el resumen corto que armó el modelo, no la respuesta entera.
   if (typeof data.hablado === 'string' && data.hablado.trim()) fila.querySelector('.chat-msg').dataset.hablar = data.hablado;
-  asisChatHistory.push(lyraTurnoAsistente(data.respuesta, data.bloques));
+  asisChatHistory.push(lyraTurnoAsistente(data.respuesta, data.bloques, data.sticker));
   lyraGuardarHistorial();
   lyraMirar(0, 0); lyraExpr(expr, 5000); lyraMoverBoca(data.respuesta.length);
   if (!LYRA.abierta) {
@@ -22071,6 +22228,8 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-28', emoji: '🔀', titulo: 'Reparto inteligente de los links de redes', texto: 'Los links de WhatsApp de la bio (IG/FB/TikTok) ya reparten según quién está en turno, evitan ráfagas y reconocen al cliente que vuelve. En "Hoy" tenés un botón de Pausa (30 min / 1 h / hasta mañana) para cuando no puedas atender. Admin: en Gestión de personal → Asesores, horario semanal por asesor, guardia nocturna, tope de ráfaga y la tarjeta "Reparto redes hoy".', roles: ['admin', 'asesor'] },
+  { fecha: '2026-09-28', emoji: '📋', titulo: 'Lyra: el copy del cliente ahora va detrás de un botón', texto: 'Cuando Lyra cotiza, ya no imprime el texto crudo para el cliente directo en el chat -- ese copy vive detrás de un botón "Texto para el cliente" que lo copia al portapapeles cuando lo necesitás.', roles: ['asesor', 'admin'] },
   { fecha: '2026-09-27', emoji: '👁️', titulo: 'Admin: memoria de todo el equipo', texto: 'En IA → Asistente hay un selector para ver, corregir o borrar la memoria que Lyra guardó de cualquier usuario del equipo.', roles: ['admin'] },
   { fecha: '2026-09-27', emoji: '🧠', titulo: 'Lyra te va conociendo', texto: 'Contale a Lyra cómo te gusta trabajar ("Lyra, recuerda que...") y lo va a tener en cuenta en tus próximas conversaciones. Revisá o borrá lo que sabe de ti en el menú, en "Lo que Lyra sabe de ti". Nunca guarda datos de clientes ni opiniones sobre personas, solo tus preferencias y forma de trabajar.', roles: ['admin', 'asesor', 'boleteria'] },
   { fecha: '2026-09-27', emoji: '🎙️', titulo: 'Dile "Lyra" y te escucha', texto: 'Activa "Escucha activa" en el menú de Lyra y podrás hablarle sin escribir: decí "Lyra" y, cuando el orbe se ponga atento, decí tu pedido. Se apaga solo si cambiás de pestaña o si el micrófono lo está usando otra cosa (como una nota de voz). Por ahora solo funciona con la pantalla activa; en el celular se apaga en segundo plano.', roles: ['admin', 'asesor', 'boleteria'] },

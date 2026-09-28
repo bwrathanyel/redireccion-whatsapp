@@ -3349,6 +3349,35 @@ body.fsize-grande{--zoom:1.05}
 @keyframes lyra-flota{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
 @keyframes lyra-punto{0%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
 
+/* Stickers de Lyra: el orbe grande con un gesto por expresión. Los WEBM de Telegram se
+   graban de esta misma regla (scripts/lyra-stickers.py), así que todo ciclo divide 3s. */
+.lyra-sticker{--s:120px;margin:4px 0 2px;animation:3s ease-in-out infinite}
+.lyra-sticker .lo-halo,.lyra-sticker .lo-sol,.lyra-sticker .lo-arco i,.lyra-sticker .lo-mar path{animation-duration:3s}
+.lyra-sticker .lo-zz i{animation-duration:3s}.lyra-sticker .lo-zz i+i{animation-delay:1.5s}
+.lyra-sticker[data-expr] .lo-gota{animation-duration:1.5s}
+.lyra-sticker[data-expr=feliz] .lo-arco i{animation-duration:1.5s}
+.lyra-sticker[data-expr=pensando] .lo-arco i{animation-duration:1s}
+.lyra-sticker[data-expr=pensando] .lo-halo{animation-duration:1.5s}
+.lyra-sticker[data-expr=dormida] .lo-halo{animation-duration:3s}
+.lyra-sticker[data-expr=dormida] .lo-zz{opacity:1}
+.lyra-sticker:not([data-expr=feliz],[data-expr=dormida]) .lo-ojo-abierto{animation:lyra-st-parpadeo 3s linear infinite}
+.lyra-sticker[data-expr=guino] .lo-ojo.l .lo-ojo-abierto{animation:none}
+.lyra-sticker[data-expr=feliz]{animation-name:lyra-st-salta}
+.lyra-sticker[data-expr=guino]{animation-name:lyra-st-mece}
+.lyra-sticker[data-expr=sarcastica]{animation-name:lyra-st-rueda}
+.lyra-sticker[data-expr=sorprendida]{animation-name:lyra-st-brinco}
+.lyra-sticker[data-expr=preocupada]{animation-name:lyra-st-tiembla}
+.lyra-sticker[data-expr=pensando]{animation-name:lyra-st-ladea}
+.lyra-sticker[data-expr=dormida]{animation-name:lyra-st-cabecea}
+@keyframes lyra-st-parpadeo{0%,62%,70%,100%{scale:1 1}66%{scale:1 .1}}
+@keyframes lyra-st-salta{0%,50%,100%{transform:translateY(0) scale(1,1)}20%,70%{transform:translateY(-9%) scale(.97,1.03)}44%,94%{transform:translateY(0) scale(1.04,.96)}}
+@keyframes lyra-st-mece{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(5deg)}}
+@keyframes lyra-st-rueda{0%,100%{transform:rotate(0) translateX(0)}30%,60%{transform:rotate(-6deg) translateX(-2%)}}
+@keyframes lyra-st-brinco{0%,40%,100%{transform:translateY(0) scale(1)}8%{transform:translateY(-10%) scale(1.08)}18%{transform:translateY(1%) scale(.97)}26%{transform:translateY(0) scale(1.01)}}
+@keyframes lyra-st-tiembla{0%,30%,100%{transform:translateX(0)}5%,15%,25%{transform:translateX(-2.5%)}10%,20%{transform:translateX(2.5%)}}
+@keyframes lyra-st-ladea{0%,100%{transform:rotate(0)}40%,70%{transform:rotate(6deg) translateY(-2%)}}
+@keyframes lyra-st-cabecea{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(3%) rotate(-3deg)}}
+
 /* Dock: al pie del sidebar, en el hueco que dejaba el vh. */
 .lyra-dock,.lyra-fab{display:none}
 body.lyra-on .lyra-dock{display:flex}
@@ -3752,6 +3781,14 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div id="hoy-asesor">
         <h2 id="hoy-saludo" style="margin-bottom:4px">Buen día</h2>
         <div class="sub" style="margin-bottom:16px" id="hoy-resumen">Cargando...</div>
+
+        <div class="pill" id="hoy-pausa-pill" style="margin-bottom:10px"><span class="dot"></span><span id="hoy-pausa-txt">En turno</span></div>
+        <div class="grid g-2" style="margin-bottom:16px" id="hoy-pausa-btns">
+          <button class="btn-sec" type="button" data-pausa="30min">Pausa 30 min</button>
+          <button class="btn-sec" type="button" data-pausa="1h">Pausa 1 h</button>
+          <button class="btn-sec" type="button" data-pausa="manana">Pausa hasta mañana</button>
+          <button class="btn-acc" type="button" data-pausa="volver" id="hoy-pausa-volver-btn" style="display:none">Volver a turno</button>
+        </div>
 
         <div class="hoy-urgent-head">
           <strong><i class="fas fa-fire"></i> Necesitan tu atención</strong>
@@ -4357,6 +4394,29 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="csub">Leads asignados vs. perdidos por no responder a tiempo (timeout de reasignación)</div>
           <div class="adv" id="rendList"></div>
         </div>
+
+        <div class="card" style="margin-top:16px">
+          <h2><i class="fas fa-share-nodes"></i> Reparto de redes (bio)</h2>
+          <div class="csub">Turnos, guardia nocturna y tope de ráfaga para los links rotativos de IG/FB/TikTok</div>
+          <div class="grid g-2" style="margin-bottom:4px">
+            <label class="fl">Guardia nocturna
+              <select class="ei" id="bio-guardia"><option value="">Sin guardia</option></select>
+            </label>
+            <label class="fl">Tope de clics por 30 min
+              <input class="ei" type="number" id="bio-tope" min="1" max="100" step="1">
+            </label>
+          </div>
+          <button type="button" class="btn-acc" id="bio-config-guardar" style="margin-top:6px">Guardar</button>
+          <div class="csub" style="margin-top:18px">Horario por asesor</div>
+          <div id="bio-horario-list"></div>
+        </div>
+
+        <div class="card" style="margin-top:16px">
+          <h2><i class="fas fa-clock"></i> Reparto redes hoy</h2>
+          <div class="csub">Quién está en turno ahora y clics de hoy por asesor, canal y origen</div>
+          <div id="bio-turno-list" style="margin-bottom:12px"></div>
+          <div id="bio-hoy-list"></div>
+        </div>
       </div>
 
       <!-- ASIGNACIÓN DE LOTES -- reparto manual de leads viejos a un asesor
@@ -4879,6 +4939,17 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div style="display:flex;gap:10px;padding:0 6px">
         <button class="dbtn" id="monto-sheet-cancelar" type="button" style="flex:1">Cancelar</button>
         <button class="dbtn save" id="monto-sheet-confirmar" type="button" style="flex:1">Guardar</button>
+      </div>
+    </div>
+
+    <!-- Horario semanal de un asesor (reparto de redes, solo admin) -->
+    <div class="sheet" id="horario-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="horario-sheet-title">Horario</div>
+      <div style="padding:4px 6px 14px" id="horario-dias"></div>
+      <div style="display:flex;gap:10px;padding:0 6px">
+        <button class="dbtn" id="horario-sheet-cancelar" type="button" style="flex:1">Cancelar</button>
+        <button class="dbtn save" id="horario-sheet-confirmar" type="button" style="flex:1">Guardar</button>
       </div>
     </div>
 
