@@ -187,19 +187,23 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 // corte falso) para que se lea como líneas cortas en vez de un bloque, y se
 // resaltan montos/porcentajes ya presentes en el texto. Cero información
 // nueva, cero texto perdido — mismo contenido, mejor separado.
-const resaltarNumeros = textoEscapado => textoEscapado.replace(/(?:USD|US\$|EUR|\$)\s?[\d.,]+|\b\d+(?:[.,]\d+)?%/g, m => `<b class="dfv-num">${m}</b>`);
+const resaltarNumeros = textoEscapado => textoEscapado.replace(/(?:USD|US\$|EUR|€|\$)\s?\d[\d.,]*|\b\d+(?:[.,]\d+)?%/g, m => `<b class="dfv-num">${m}</b>`);
 // Abreviaturas comunes en el tarifario que terminan en "." pero NO cierran
 // oración (ej. "aprox. 230 USD", "Edo. Miranda") — sin esto el corte por
 // oración las trataba como fin de frase real.
 const ABREV_RE = /\b(?:aprox|Edo|Sr|Sra|Dr|Dra|Ing|Lic|Av|Cra|etc|núm|art|pág|No|Nro)\.$/i;
-function formatearTexto(texto) {
-  if (!texto) return '';
-  const partes = String(texto).split(/(?<=[.;])\s+(?=[A-ZÁÉÍÓÚÑÜ0-9])/).map(s => s.trim()).filter(Boolean);
+function partirOraciones(texto) {
+  const partes = String(texto || '').split(/(?<=[.;])\s+(?=[A-ZÁÉÍÓÚÑÜ0-9€$])|\n+/).map(s => s.trim()).filter(Boolean);
   const oraciones = [];
   for (const parte of partes) {
     if (oraciones.length && ABREV_RE.test(oraciones[oraciones.length - 1])) oraciones[oraciones.length - 1] += ' ' + parte;
     else oraciones.push(parte);
   }
+  return oraciones;
+}
+function formatearTexto(texto) {
+  if (!texto) return '';
+  const oraciones = partirOraciones(texto);
   if (oraciones.length <= 1) return `<p>${resaltarNumeros(esc(texto))}</p>`;
   return oraciones.map(o => `<p>${resaltarNumeros(esc(o))}</p>`).join('');
 }
@@ -16010,7 +16014,59 @@ async function loadTarifario() {
   renderTarifario();
 }
 const TAG_LABEL = { todo_incluido: 'Todo incluido', solo_desayuno: 'Solo desayuno', media_pension: 'Media pensión', pension_completa: 'Pensión completa', ninos_gratis: 'Niños gratis', '2x1': '2x1', descuento: 'Descuento' };
-const tagsHtml = tags => (tags || []).length ? `<div class="tar-tags">${tags.map(t => `<span class="tar-tag">${esc(TAG_LABEL[t] || t)}</span>`).join('')}</div>` : '';
+// incluye_tags cargados a mano traen exclusiones partidas por coma ("no incluye
+// boletos", "ni la entrada al parque") que se pintaban como chips verdes de
+// incluido. Se separan por prefijo: plan (claves de TAG_LABEL) / incluye / no incluye.
+const RE_NO_INCLUYE = /^\s*(?:no\s+incluye\s*:?|ni)\s+/i;
+const tarCap = s => s ? s.charAt(0).toLocaleUpperCase('es') + s.slice(1) : s;
+function tarIncluyeSplit(tags) {
+  const plan = [], si = [], no = [];
+  (tags || []).forEach(t => {
+    const s = String(t || '').trim();
+    if (!s) return;
+    if (TAG_LABEL[s]) plan.push(TAG_LABEL[s]);
+    else if (RE_NO_INCLUYE.test(s)) s.replace(RE_NO_INCLUYE, '').split(/\s*,\s*|\s+ni\s+/i)
+      .map(p => p.replace(/^(?:el|la|los|las)\s+/i, '').trim()).filter(Boolean).forEach(p => no.push(tarCap(p)));
+    else si.push(tarCap(s));
+  });
+  return { plan, si, no };
+}
+const tagsHtml = tags => {
+  const { plan, si } = tarIncluyeSplit(tags);
+  const v = [...plan, ...si];
+  return v.length ? `<div class="tar-tags">${v.map(t => `<span class="tar-tag">${esc(t)}</span>`).join('')}</div>` : '';
+};
+// Ficha: plan como chips, y lo incluido / no incluido como listas con ícono.
+function tarIncluyeHtml(tags) {
+  const { plan, si, no } = tarIncluyeSplit(tags);
+  if (!plan.length && !si.length && !no.length) return '';
+  const lista = (arr, cls, ic) => `<ul class="dincl dincl-${cls}">${arr.map(t => `<li><i class="fas ${ic}"></i><span>${esc(t)}</span></li>`).join('')}</ul>`;
+  return `<div class="dfield"><div class="dfi"><i class="fas fa-suitcase-rolling"></i></div><div class="dfbody">
+    ${plan.length ? `<div class="tar-tags dincl-plan">${plan.map(t => `<span class="tar-tag">${esc(t)}</span>`).join('')}</div>` : ''}
+    ${si.length ? `<div class="dfl">Incluye</div>${lista(si, 'si', 'fa-check')}` : ''}
+    ${no.length ? `<div class="dfl dincl-sep">No incluye</div>${lista(no, 'no', 'fa-xmark')}` : ''}
+  </div></div>`;
+}
+// precio_texto / vigencia_texto de una promo son párrafos corridos. Cada
+// oración pasa a una fila: "Etiqueta: valor" en dos niveles, lo que va entre
+// paréntesis a una nota chica, y con `heroe` la primera oración sin etiqueta
+// es el precio en grande. Mismo texto, nada inventado ni perdido.
+function tarTextoRico(texto, heroe = false) {
+  const oraciones = partirOraciones(texto);
+  if (!oraciones.length) return '';
+  const nota = arr => arr.length ? `<div class="drico-nota">${arr.map(n => esc(tarCap(n))).join(' · ')}</div>` : '';
+  return oraciones.map((o, i) => {
+    const notas = [];
+    const limpio = o.replace(/\.$/, '').replace(/\s*\(([^()]*)\)/g, (_, n) => { notas.push(n.trim()); return ''; }).trim();
+    const kv = limpio.match(/^([^:]{2,48}):\s+(.+)$/);
+    if (heroe && i === 0 && !kv) {
+      const m = limpio.match(/^((?:USD|US\$|EUR|€|\$)\s?\d[\d.,]*)\s*(.*)$/);
+      return `<div class="drico-heroe">${m ? `<span class="drico-monto">${esc(m[1])}</span> <span class="drico-unidad">${esc(m[2])}</span>` : esc(limpio)}</div>${nota(notas)}`;
+    }
+    const valor = (kv ? kv[2] : limpio).split(/;\s*/).map(v => `<div>${resaltarNumeros(esc(tarCap(v)))}</div>`).join('');
+    return `<div class="drico-fila">${kv ? `<div class="drico-k">${esc(kv[1])}</div>` : ''}<div class="drico-v">${valor}</div>${nota(notas)}</div>`;
+  }).join('');
+}
 // Fotos propias del ítem; si no tiene, hereda las de su hotel vinculado
 // (promociones.producto_id o productos.hotel_id, ver push_to_supabase.py
 // HOTEL_ALIASES) — nunca se inventa una foto para algo sin vínculo real.
@@ -17512,7 +17568,11 @@ function tarifaComoPromo(t) {
 function tarNombrePromo(t) {
   const hotel = t?.productos?.nombre || '';
   const titulo = t?.titulo || t?.habitacion || t?.plan || 'Promoción';
-  if (hotel && !tarNorm(titulo).includes(tarNorm(hotel))) return `${hotel} · ${titulo}`;
+  // "Gremary (Posada Gremary)": el título suele nombrar al hotel por una sola de
+  // sus dos formas, y sin esto salía "Gremary (Posada Gremary) · … - Posada Gremary".
+  const formas = [hotel, hotel.replace(/\s*\([^)]*\)/g, ''), ...[...hotel.matchAll(/\(([^)]+)\)/g)].map(m => m[1])]
+    .map(f => tarNorm(f).trim()).filter(f => f.length >= 5 && !/^(hotel|posada|resort|hostal|club|campamento)$/.test(f));
+  if (hotel && !formas.some(f => tarNorm(titulo).includes(f))) return `${hotel} · ${titulo}`;
   return titulo;
 }
 function tarifaPrecioNumerico(precioTexto) {
@@ -18437,10 +18497,17 @@ function openProductoDrawer(x, tipoForzado = null) {
   const bloques = !esPromo ? tarBloquesHtml(x) : '';
   const fotos = fotosRotadas(x, 256);
   const fotosOrig = fotosRotadas(x);
+  // Portada grande + tira de miniaturas: con 1 sola fila de 90px las fotos no
+  // se veían y el drawer arrancaba directo en texto.
+  const portada = fotos.length ? fotosRotadas(x, 640)[0] : null;
+  const subtitulo = esPromo ? [TAR_TAB_LABEL[tarTab], x.productos?.destino].filter(Boolean).join(' · ') : (x.destino || TAR_TAB_LABEL[tarTab]);
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead">${fotos[0] ? `<div class="dava" style="background-image:url('${esc(fotos[0])}')"></div>` : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
-      <div class="dm">${esc(x.destino || TAR_TAB_LABEL[tarTab])}</div></div></div>
-    ${fotos.length ? `<div class="dgallery">${fotos.map((f, i) => `<img src="${esc(f)}" alt="" loading="lazy" data-drawer-foto="${i}">`).join('')}</div>` : ''}
+      <div class="dm">${esc(subtitulo)}</div></div></div>
+    ${portada ? `<div class="dgaleria">
+      <img class="dportada" src="${esc(portada)}" alt="" data-drawer-foto="0">
+      ${fotos.length > 1 ? `<div class="dgallery">${fotos.slice(1).map((f, i) => `<img src="${esc(f)}" alt="" loading="lazy" data-drawer-foto="${i + 1}">`).join('')}</div>` : ''}
+    </div>` : ''}
     ${(() => {
       // Promo con grilla `precios`: el DBL por persona en grande (igual que la
       // card), el resto de las ocupaciones en una fila chica. Sin grilla cae al
@@ -18455,16 +18522,17 @@ function openProductoDrawer(x, tipoForzado = null) {
           </div></div>`;
         }
       }
+      if (esPromo && precio) return `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div class="dfbody"><div class="dfl">Precio</div><div class="drico">${tarTextoRico(precio, true)}</div></div></div>`;
       return precio && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-tag"></i></div><div><div class="dfl">Precio</div><div class="dfv dfv-rich">${formatearTexto(precio)}</div></div></div>` : '';
     })()}
-    ${vigencia && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div><div class="dfl">Vigencia</div><div class="dfv dfv-rich">${formatearTexto(vigencia)}</div></div></div>` : ''}
+    ${vigencia && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div class="dfbody"><div class="dfl">Vigencia</div>${esPromo ? `<div class="drico">${tarTextoRico(vigencia)}</div>` : `<div class="dfv dfv-rich">${formatearTexto(vigencia)}</div>`}</div></div>` : ''}
     ${infantil && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-child"></i></div><div><div class="dfl">Adicional por niño</div><div class="dfv dfv-rich">${formatearTexto(infantil.precio_texto)}</div></div></div>` : ''}
-    ${esPromo && x.resumen_ia ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv dfv-rich">${esc(x.resumen_ia)}</div></div></div>` : ''}
+    ${esPromo && x.resumen_ia ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div class="dfbody"><div class="dfl">Descripción</div><div class="dfv dfv-rich dfv-lead">${esc(x.resumen_ia)}</div></div></div>` : ''}
     ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv dfv-rich">${formatearTexto(x.descripcion)}</div></div></div>` : ''}
     ${!esPromo && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv dfv-rich">${formatearTexto(x.requisitos)}</div></div></div>` : ''}
     ${bloques}
     ${carpeta}
-    ${esPromo ? tagsHtml(x.incluye_tags) : ''}
+    ${esPromo ? tarIncluyeHtml(x.incluye_tags) : ''}
     ${ROL === 'admin' ? `
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-note-sticky"></i> Notas internas (solo admin)</div>

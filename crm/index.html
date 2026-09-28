@@ -1246,6 +1246,31 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .dgallery{display:flex;gap:8px;overflow-x:auto;margin:14px 0 4px;padding-bottom:4px;scrollbar-width:thin}
 .dgallery img{height:90px;width:auto;display:block;border-radius:10px;transition:opacity .15s;flex-shrink:0;cursor:pointer}
 .dgallery img:hover{opacity:.85}
+.dgaleria{margin:0 0 9px}
+.dgaleria .dportada{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;border-radius:14px;cursor:pointer;background:var(--bg2);transition:opacity .16s}
+.dgaleria .dportada:hover{opacity:.92}
+.dgaleria .dgallery{margin:9px 0 0}
+.dgaleria .dgallery img{height:62px;width:84px;object-fit:cover}
+.dfield .dfbody{flex:1;min-width:0}
+.dfv-lead{font-size:14px;color:var(--txt)}
+.drico{margin-top:7px}
+.drico-heroe{display:flex;align-items:baseline;flex-wrap:wrap;gap:7px;line-height:1.1}
+.drico-monto{font-size:28px;font-weight:800;letter-spacing:-.02em;color:var(--accent)}
+.drico-unidad{font-size:13px;font-weight:600;color:var(--muted)}
+.drico-nota{font-size:12px;color:var(--muted);line-height:1.45;margin-top:4px}
+.drico-fila{padding-top:9px;margin-top:9px;border-top:1px dashed var(--line2)}
+.drico>.drico-fila:first-child{border-top:0;margin-top:0;padding-top:0}
+.drico-k{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.2px;margin-bottom:2px}
+.drico-v{font-size:14px;font-weight:600;line-height:1.45}
+.dincl{list-style:none;margin:7px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 14px}
+.dincl li{display:flex;gap:7px;align-items:flex-start;font-size:13px;line-height:1.4}
+.dincl li i{font-size:11px;margin-top:3px;width:14px;flex-shrink:0;text-align:center}
+.dincl-si li i{color:var(--green)}
+.dincl-no li{color:var(--muted)}
+.dincl-no li i{color:var(--pink)}
+.dincl-plan{margin:0 0 11px}
+.dincl-sep{margin-top:14px}
+@media (max-width:480px){.dincl{grid-template-columns:1fr}}
 /* ---------- Editor de ficha: tarifas fila por fila (Fase 6) ---------- */
 .tf-sec{margin-top:18px;padding-top:14px;border-top:1px solid var(--linea,rgba(255,255,255,.09))}
 .tf-sec-t{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;margin-bottom:8px}
