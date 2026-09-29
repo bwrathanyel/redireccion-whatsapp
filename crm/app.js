@@ -8887,28 +8887,29 @@ async function loadLeadsColaboraciones() {
 async function loadContactosDirectos() {
   const body = document.getElementById('contactos-directos-body');
   if (!body) return;
-  const { data, error } = await sb.from('leads').select('id,nombre,canal,estado,asesor,fecha_creacion')
+  const { data, error } = await sb.from('leads').select('*')
     .not('contacto_directo_enviado_at', 'is', null).is('eliminado_at', null)
     .order('fecha_creacion', { ascending: false, nullsFirst: false });
   if (error) { console.error(error); errToast('No se pudieron cargar los contactos directos'); return; }
   const leads = data || [];
   document.getElementById('cd-count').textContent = leads.length ? `${fmt(leads.length)} contactos directos` : '';
-  if (!leads.length) { body.innerHTML = `<tr><td colspan="6" class="muted">Todavía no hay contactos directos.</td></tr>`; return; }
+  if (!leads.length) { body.innerHTML = `<div class="muted">Todavía no hay contactos directos.</div>`; return; }
   // El origen (post/story/reel/live/bio/jefa) solo existe para los leads de
   // bio-redes (lead_eventos.tipo='clic_bio_whatsapp'); los de IA no dejan ese
   // evento y quedan sin origen, como anticipa el spec.
   const { data: eventos } = await sb.from('lead_eventos').select('lead_id,detalle')
     .eq('tipo', 'clic_bio_whatsapp').in('lead_id', leads.map(l => l.id));
   const origenPorLead = new Map((eventos || []).map(e => [e.lead_id, e.detalle?.origen]));
-  body.innerHTML = leads.map(l => `
-    <tr>
-      <td data-label="Nombre">${esc(l.nombre || 'Sin nombre')}</td>
-      <td data-label="Canal"><span class="chip ${CANAL_CLASS[l.canal] ?? ''}">${esc(l.canal || '—')}</span></td>
-      <td data-label="Origen" class="muted">${esc(origenPorLead.get(l.id) || '—')}</td>
-      <td data-label="Fecha" class="muted">${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : '—'}</td>
-      <td data-label="Estado"><span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}2e">${esc(niceEstado(l.estado))}</span></td>
-      <td data-label="Asesor" class="muted">${esc(l.asesor || '—')}</td>
-    </tr>`).join('');
+  // Misma tarjeta que Leads (leadCardHtml) para que se lean igual; el origen
+  // de bio-redes se agrega como fila extra y sin checkbox de borrado masivo
+  // (no hay barra bulk en esta sección).
+  body.innerHTML = leads.map(leadCardHtml).join('');
+  [...body.querySelectorAll('.entity-card')].forEach((el, i) => {
+    el.querySelector('.lead-check')?.remove();
+    const origen = origenPorLead.get(leads[i].id);
+    if (origen) el.querySelector('.ec-context')?.insertAdjacentHTML('afterend', `<div class="ec-row"><i class="fas fa-link"></i> Origen: ${esc(origen)}</div>`);
+  });
+  wireLeadCards(body, leads);
 }
 function setupContactosDirectos() {
   document.getElementById('cd-recargar')?.addEventListener('click', loadContactosDirectos);
@@ -11510,7 +11511,7 @@ function lyraEscuchaPref(on, avisar) {
 }
 async function lyraEscuchaIniciar() {
   if (LYRA.escucha || !LYRA.escuchaOn || !LYRA.lista || document.hidden) return;
-  const E = LYRA.escucha = { vad: null, stream: null, enviando: false, inicio: 0, tSync: 0 };
+  const E = LYRA.escucha = { vad: null, stream: null, enviando: false, pendiente: null, inicio: 0, tSync: 0 };
   try {
     await lyraCargarVad();
     // pauseStream/resumeStream no tocan el micrófono: pausar (mientras ella habla o se graba un audio)
@@ -11613,7 +11614,11 @@ function lyraConTope(p) {
     .finally(() => clearTimeout(t));
 }
 async function lyraEscuchaFrase(E, audio, ventana) {
-  if (LYRA.escucha !== E || E.enviando || LYRA.ocupada || LYRA.rec || audio.length < 16000 * LYRA_FRASE_MIN_S) return;
+  if (LYRA.escucha !== E || LYRA.ocupada || LYRA.rec || audio.length < 16000 * LYRA_FRASE_MIN_S) return;
+  // Si llega mientras el turno anterior sigue en vuelo (Groq/DeepSeek/hablando), no se tira: se
+  // guarda solo la más nueva y se procesa apenas termine ese turno -- antes se perdía en silencio
+  // y era la causa real de "hay que decirle Lyra varias veces" (pausa tras el nombre = 2 frases VAD).
+  if (E.enviando) { E.pendiente = { audio, ventana }; return; }
   E.enviando = true;
   let yo = null, cargando = null, relleno = null, tRelleno = 0, primera = null, hablar = null;
   const fallo = cod => {
@@ -11702,6 +11707,8 @@ async function lyraEscuchaFrase(E, audio, ventana) {
     cargando?.remove();
     if (yo && LYRA.ocupada) { LYRA.ocupada = false; document.getElementById('lyra-send').disabled = false; lyraEstado(); }
     E.enviando = false;
+    const pendiente = E.pendiente; E.pendiente = null;
+    if (pendiente && LYRA.escucha === E) lyraEscuchaFrase(E, pendiente.audio, pendiente.ventana);
   }
 }
 
