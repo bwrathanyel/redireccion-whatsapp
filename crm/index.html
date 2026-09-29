@@ -3999,6 +3999,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         </div>
         <div class="card">
           <div id="active-filters" class="chips-bar"></div>
+          <div class="csub" id="cd-aviso-cc" style="display:none">Los contactos directos (bio-redes, IA) no aparecen acá — están en Contactos directos.</div>
           <div class="bulk-bar" id="bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
             <span id="bulk-count" style="font-size:13.5px;font-weight:600"></span>
             <button class="dbtn" id="bulk-clear" type="button" style="width:auto;padding:6px 12px">Cancelar selección</button>
@@ -6028,6 +6029,27 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 
       <div class="lt-grid" id="wr-body"></div>
       <div id="wr-mas" style="text-align:center;margin-top:14px"></div>
+    </section>
+
+    <!-- CONTACTOS DIRECTOS: el cliente le escribió directo al WhatsApp del
+         asesor (bot IA de IG/FB/web o links de bio-redes), sin pasar por el
+         CRM primero. Solo registro -- sin drag/drop ni botones de gestión. -->
+    <section class="section" id="sec-contactos-directos">
+      <div class="ce-intro">
+        Leads que escribieron <b>directo al WhatsApp del asesor</b>, sin pasar por el
+        CRM primero -- por el bot de IA (Instagram/Facebook/web) o por los links de
+        bio de redes. Es registro: no se gestionan desde acá.
+      </div>
+      <div class="ce-barra">
+        <button class="ce-mini" id="cd-recargar" type="button"><i class="fas fa-rotate"></i> Actualizar</button>
+        <span class="ce-vig" id="cd-count"></span>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Nombre</th><th>Canal</th><th>Origen</th><th>Fecha</th><th>Estado</th><th>Asesor</th></tr></thead>
+          <tbody id="contactos-directos-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- STOP SALES (BT Travel: disponibilidad de hoteles). Lectura ("Bloqueos

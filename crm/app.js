@@ -169,6 +169,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
   'voz-ia': ['Voz IA', 'Probá la voz clonada de la jefa y controlá la muestra de referencia que usa la IA'],
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
+  'contactos-directos': ['Contactos directos', 'Escribieron directo por WhatsApp (bio-redes, IA) -- registro, no se gestionan desde acá'],
   'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles que manda BT Travel -- cargá el PDF y confirmá antes de publicar'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'],
@@ -1244,7 +1245,7 @@ function manejarDeepLinkAsistencia() {
 // Lotus. `ir` se conserva por compatibilidad con los shortcuts ya instalados.
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
-  'web-reasignados', 'tarifario', 'galeria', 'stop-sales',
+  'web-reasignados', 'contactos-directos', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
   'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
@@ -2542,7 +2543,7 @@ async function startApp() {
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
-    setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas,
+    setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -4252,6 +4253,10 @@ function renderChips() {
   // En móvil el botón de filtros es solo un ícono: sin este puntito no habría
   // forma de saber que hay filtros puestos sin abrir la hoja.
   document.getElementById('leads-mfs-trigger')?.classList.toggle('con-filtros', chips.length > 0);
+  // Aviso de que los contactos directos viven aparte -- solo texto, sin lógica
+  // nueva (ver spec "Contactos directos" sección 5).
+  const avisoCD = document.getElementById('cd-aviso-cc');
+  if (avisoCD) avisoCD.style.display = val('f-estado') === 'CLIENTE CONTACTADO' ? '' : 'none';
   if (!chips.length) { box.innerHTML = ''; return; }
   box.innerHTML = `<span class="chips-label">Filtros:</span>` + chips.map((c, i) => `<span class="fchip">${esc(c[0])} <b data-ci="${i}">✕</b></span>`).join('') + `<button class="clear-all" id="clearAll"><i class="fas fa-times"></i> Limpiar</button>`;
   chips.forEach((c, i) => box.querySelector(`b[data-ci="${i}"]`).onclick = c[1]);
@@ -4277,7 +4282,7 @@ function buildQuery(forCount) {
     // El valor va entre comillas porque tiene paréntesis y espacios, que
     // PostgREST usa como sintaxis dentro de un `or`. La rama `is.null` hace
     // falta porque `neq` sobre un NULL da NULL y escondería esos leads.
-    .is('eliminado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
+    .is('eliminado_at', null).is('contacto_directo_enviado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
   const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim(), fst = val('f-sin-telefono');
   if (fst === 'sin') q = q.is('telefono', null);
   else if (fst === 'con') q = q.not('telefono', 'is', null);
@@ -8874,6 +8879,41 @@ async function loadLeadsColaboraciones() {
     </tr>`).join('') || `<tr><td colspan="7" class="muted">Sin leads de colaboraciones todavía.</td></tr>`;
 }
 
+// Leads de contacto directo (bot IA de IG/FB/web + links de bio-redes): el
+// cliente le escribió directo al WhatsApp del asesor sin pasar por el CRM
+// primero. Comparten tabla `leads` con los calificados pero buildQuery() ya
+// los excluye de Leads/Pipeline -- acá es el único lugar donde se ven, solo
+// como registro (sin drag/drop ni botones de gestión de estado).
+async function loadContactosDirectos() {
+  const body = document.getElementById('contactos-directos-body');
+  if (!body) return;
+  const { data, error } = await sb.from('leads').select('id,nombre,canal,estado,asesor,fecha_creacion')
+    .not('contacto_directo_enviado_at', 'is', null).is('eliminado_at', null)
+    .order('fecha_creacion', { ascending: false, nullsFirst: false });
+  if (error) { console.error(error); errToast('No se pudieron cargar los contactos directos'); return; }
+  const leads = data || [];
+  document.getElementById('cd-count').textContent = leads.length ? `${fmt(leads.length)} contactos directos` : '';
+  if (!leads.length) { body.innerHTML = `<tr><td colspan="6" class="muted">Todavía no hay contactos directos.</td></tr>`; return; }
+  // El origen (post/story/reel/live/bio/jefa) solo existe para los leads de
+  // bio-redes (lead_eventos.tipo='clic_bio_whatsapp'); los de IA no dejan ese
+  // evento y quedan sin origen, como anticipa el spec.
+  const { data: eventos } = await sb.from('lead_eventos').select('lead_id,detalle')
+    .eq('tipo', 'clic_bio_whatsapp').in('lead_id', leads.map(l => l.id));
+  const origenPorLead = new Map((eventos || []).map(e => [e.lead_id, e.detalle?.origen]));
+  body.innerHTML = leads.map(l => `
+    <tr>
+      <td data-label="Nombre">${esc(l.nombre || 'Sin nombre')}</td>
+      <td data-label="Canal"><span class="chip ${CANAL_CLASS[l.canal] ?? ''}">${esc(l.canal || '—')}</span></td>
+      <td data-label="Origen" class="muted">${esc(origenPorLead.get(l.id) || '—')}</td>
+      <td data-label="Fecha" class="muted">${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : '—'}</td>
+      <td data-label="Estado"><span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}2e">${esc(niceEstado(l.estado))}</span></td>
+      <td data-label="Asesor" class="muted">${esc(l.asesor || '—')}</td>
+    </tr>`).join('');
+}
+function setupContactosDirectos() {
+  document.getElementById('cd-recargar')?.addEventListener('click', loadContactosDirectos);
+}
+
 /* ---------- Postulaciones (candidatos de "Trabaja con nosotros", solo admin) ---------- */
 // Cuatro niveles, de mayor a menor. El orden de las claves es el que usan el
 // dropdown de la ficha y el orden de la tabla, así que no reordenar sin querer.
@@ -10237,6 +10277,8 @@ const ASIS_HERRAMIENTAS = {
   mover_etapa_lead: ['fa-arrow-right-arrow-left', 'Etapa del lead'], nota_lead: ['fa-note-sticky', 'Nota del lead'],
   reasignar_lead: ['fa-user-check', 'Lead reasignado'], registrar_contacto_lead: ['fa-phone', 'Contacto registrado'],
   declarar_pago: ['fa-money-bill-wave', 'Pago declarado'], verificar_pago: ['fa-check-double', 'Pago verificado'],
+  editar_tarifa: ['fa-tag', 'Tarifa editada'], crear_tarifa: ['fa-tag', 'Tarifa creada'],
+  retirar_tarifa: ['fa-tag', 'Tarifa retirada'], corregir_precio_tarifario: ['fa-tag', 'Precio corregido'],
 };
 function setupAsistente() {
   document.getElementById('asis-abrir-lyra').onclick = () => lyraAbrir();
@@ -19928,7 +19970,7 @@ function subscribeRealtime() {
       // de leads que el usuario nunca ve aparecer en la lista. Nota: buildQuery
       // NO excluye es_prueba (esos leads sí aparecen, con su chip), así que acá
       // tampoco se filtra por es_prueba -- solo lo que buildQuery de verdad excluye.
-      if (payload.new.servicio !== SERVICIO_POSADA_IA && !payload.new.eliminado_at) toast(payload.new);
+      if (payload.new.servicio !== SERVICIO_POSADA_IA && !payload.new.eliminado_at && !payload.new.contacto_directo_enviado_at) toast(payload.new);
       loadStats().then(() => { renderAll(); loadDestPeriodo(); });
       if (page === 1 && document.getElementById('sec-leads')?.classList.contains('active')) encolarLeadLive(payload);
       // Solo empujar al inbox en vivo si el lead realmente llegó sin atender
@@ -19936,7 +19978,7 @@ function subscribeRealtime() {
       // masivo con estado ya PAGO REALIZADO, hallazgo real 2026-07-24: sin
       // este chequeo, cualquier INSERT terminaba en el inbox del asesor con
       // botón Atender aunque la venta ya estuviera cerrada).
-      if (ROL === 'asesor' && payload.new.estado === 'POR ATENDER' && !payload.new.fecha_primer_contacto) recibirLeadNuevoInbox(payload.new);
+      if (ROL === 'asesor' && payload.new.estado === 'POR ATENDER' && !payload.new.fecha_primer_contacto && !payload.new.contacto_directo_enviado_at) recibirLeadNuevoInbox(payload.new);
     })
     // RLS ya filtra este evento a leads propios -- si uno deja de estar
     // pendiente por otra vía (ej. lo editan a mano en el drawer/tabla), sale
@@ -20309,6 +20351,7 @@ const NAV_ITEMS = [
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: '' },
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
   { sec: 'web-reasignados', icon: 'fas fa-hand-holding-dollar', label: 'Web y Reasignados', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Los leads por los que cobrás comisión' },
+  { sec: 'contactos-directos', icon: 'fas fa-comment-sms', label: 'Contactos directos', padre: 'grp-leads', roles: '', sub: 'Escribieron directo por WhatsApp (bio-redes, IA) -- no se gestionan desde acá' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', padre: 'grp-mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-mensajes', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
@@ -20619,6 +20662,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'ia-atencion') loadIaAtencion();
   if (sec === 'clientes-eventos') loadClientesEventos();
   if (sec === 'web-reasignados') loadWebReasignados();
+  if (sec === 'contactos-directos') loadContactosDirectos();
   if (sec === 'stop-sales') { loadStopSalesVigentes(); ssCargarPdfActual(); }
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
@@ -20848,7 +20892,7 @@ const REFRESCAR_SECCION = {
   postventa: () => loadPostventa(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
   'cerebro-ia': () => loadCerebroIA(), 'rendimiento-ia': () => loadRendimientoIA(),
-  'ia-atencion': () => loadIaAtencion(), 'web-reasignados': () => loadWebReasignados(),
+  'ia-atencion': () => loadIaAtencion(), 'web-reasignados': () => loadWebReasignados(), 'contactos-directos': () => loadContactosDirectos(),
   'clientes-eventos': () => loadClientesEventos(),
   'stop-sales': () => { loadStopSalesVigentes(); ssCargarPdfActual(); },
   redes: () => cargarRedActual(), voucher: () => loadVoucherSeccion(), tareas: () => loadTareas(),
