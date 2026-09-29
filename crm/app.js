@@ -4190,8 +4190,9 @@ function initDateRangePicker(prefix) {
     else if (hasta.value) label.textContent = `Hasta ${fmtCorta(hasta.value)}`;
     else label.textContent = 'Rango de fechas';
   };
+  if (!btn.closest('.sheet, .mfs')) popoverASheet(panel);
   btn.onclick = e => { e.stopPropagation(); panel.classList.toggle('open'); };
-  document.addEventListener('click', e => { if (!panel.contains(e.target) && e.target !== btn) panel.classList.remove('open'); });
+  document.addEventListener('click', e => { if (!panel.contains(e.target) && !btn.contains(e.target)) panel.classList.remove('open'); });
   [desde, hasta].forEach(el => el.addEventListener('change', updateLabel));
   panel.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => {
     const hoy = new Date(); const iso = d => d.toISOString().slice(0, 10);
