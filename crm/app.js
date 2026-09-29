@@ -11509,6 +11509,10 @@ function lyraEscuchaPref(on, avisar) {
   if (!on) { lyraEscuchaDetener(); if (avisar) lyraHablar(LYRA_FRASES.vozEscuchaOff[0]); return; }
   lyraEscuchaIniciar().then(() => { if (avisar && LYRA.escucha?.vad) lyraHablar(LYRA_FRASES.vozEscuchaOn[0]); });
 }
+// Baja al caché local los saludos de "Lyra" (mp3 del banco en R2) para que al decir solo su nombre suene sin viaje de red.
+async function lyraPrecalentarSaludos() {
+  for (const f of [...LYRA_FRASES.vozSaludo, ...LYRA_FRASES.vozSaludoHumor]) await lyraAudioDe(f).catch(() => {});
+}
 async function lyraEscuchaIniciar() {
   if (LYRA.escucha || !LYRA.escuchaOn || !LYRA.lista || document.hidden) return;
   const E = LYRA.escucha = { vad: null, stream: null, enviando: false, pendiente: null, inicio: 0, tSync: 0 };
@@ -11533,6 +11537,7 @@ async function lyraEscuchaIniciar() {
     if (LYRA.escucha !== E) { lyraEscuchaSoltar(E); return; }
     document.body.classList.add('lyra-escucha');
     lyraEstado(); lyraEscuchaSync();
+    lyraPrecalentarSaludos();
   } catch (e) {
     console.error('Lyra: escucha', e);
     lyraEscuchaSoltar(E);
