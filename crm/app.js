@@ -170,6 +170,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'voz-ia': ['Voz IA', 'Probá la voz clonada de la jefa y controlá la muestra de referencia que usa la IA'],
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
   'contactos-directos': ['Contactos directos', 'Escribieron directo por WhatsApp (bio-redes, IA) -- registro, no se gestionan desde acá'],
+  repartir: ['Repartir números', 'Pegá números o capturas de clientes que te escribieron directo y repartilos entre los asesores'],
   'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles que manda BT Travel -- cargá el PDF y confirmá antes de publicar'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'],
@@ -1245,7 +1246,7 @@ function manejarDeepLinkAsistencia() {
 // Lotus. `ir` se conserva por compatibilidad con los shortcuts ya instalados.
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
-  'web-reasignados', 'contactos-directos', 'tarifario', 'galeria', 'stop-sales',
+  'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
   'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
@@ -2565,7 +2566,7 @@ async function startApp() {
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
-    setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos,
+    setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -8936,6 +8937,130 @@ async function loadContactosDirectos() {
 }
 function setupContactosDirectos() {
   document.getElementById('cd-recargar')?.addEventListener('click', loadContactosDirectos);
+}
+
+/* --- Repartir números ------------------------------------------------------
+   La jefa recibe clientes directo y se los pasaba a mano a cada asesor. Dos pasos
+   SIEMPRE: detectar (texto o capturas, la IA puede leer mal un dígito) y, tras
+   revisar, repartir. El reparto lo hace ingest_lead_v2 desde la Edge Function. */
+let REP_IMGS = [], REP_NUMS = [];
+const REP_MAX_IMGS = 6;
+const repEl = id => document.getElementById(id);
+
+async function repPoblarAsesores() {
+  const sel = repEl('rep-asesor');
+  if (!sel || sel.options.length > 1) return;
+  const { data, error } = await sb.rpc('listar_asesores_activos');
+  if (!error && data) sel.innerHTML += data.map(a => `<option value="${esc(a.nombre)}">${esc(a.nombre)}</option>`).join('');
+}
+
+function repRenderPrevias() {
+  repEl('rep-previas').innerHTML = REP_IMGS.map((u, i) => `<div class="rep-mini"><img src="${u}" alt=""><button type="button" data-i="${i}" aria-label="Quitar captura">✕</button></div>`).join('');
+}
+
+async function repAgregarArchivos(files) {
+  const imgs = [...files].filter(f => f.type.startsWith('image/'));
+  for (const f of imgs) {
+    if (REP_IMGS.length >= REP_MAX_IMGS) { errToast(`Máximo ${REP_MAX_IMGS} capturas por vez`); break; }
+    try { REP_IMGS.push(await flAchicar(f, 1600)); }
+    catch (e) { errToast(e.message); }
+  }
+  repRenderPrevias();
+}
+
+function repRenderRevision() {
+  const ok = REP_NUMS.filter(n => n.incluir).length;
+  repEl('rep-resumen').textContent = `${fmt(REP_NUMS.length)} número${REP_NUMS.length === 1 ? '' : 's'} detectado${REP_NUMS.length === 1 ? '' : 's'} · ${fmt(ok)} a repartir`;
+  repEl('rep-repartir').disabled = !ok;
+  repEl('rep-repartir').innerHTML = `<i class="fas fa-share-nodes"></i> Repartir ${ok || ''}`;
+  repEl('rep-tbody').innerHTML = REP_NUMS.map((n, i) => {
+    const estado = n.duplicado
+      ? `<span class="rep-tag warn">Ya es cliente${n.duplicado.asesor ? ' de ' + esc(n.duplicado.asesor) : ''}</span>`
+      : n.ambiguo ? `<span class="rep-tag warn">País dudoso</span>` : `<span class="rep-tag ok">Nuevo</span>`;
+    return `<tr>
+      <td><input type="checkbox" class="lead-check rep-inc" data-i="${i}" ${n.incluir ? 'checked' : ''} aria-label="Incluir"></td>
+      <td data-label="Teléfono"><input class="ei rep-tel" data-i="${i}" value="${esc(n.telefono)}"></td>
+      <td data-label="Nombre"><input class="ei rep-nom" data-i="${i}" value="${esc(n.nombre || '')}" placeholder="Sin nombre"></td>
+      <td data-label="Estado">${estado}</td></tr>`;
+  }).join('');
+}
+
+async function repDetectar() {
+  const texto = repEl('rep-texto').value;
+  if (!texto.trim() && !REP_IMGS.length) { errToast('Pegá números o subí una captura'); return; }
+  const btn = repEl('rep-detectar');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Leyendo…';
+  const { data, error } = await sb.functions.invoke('repartir-numeros', {
+    body: { accion: 'extraer', texto, imagenes: REP_IMGS.map(u => ({ mime_type: 'image/jpeg', imagen_base64: u.split(',')[1] })) },
+  });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-magnifying-glass"></i> Detectar números';
+  if (error || !data?.ok) { console.error(error, data); errToast(data?.error || error?.message || 'No se pudieron leer los números'); return; }
+  REP_NUMS = data.numeros.map(n => ({ ...n, incluir: !n.duplicado }));
+  repEl('rep-resultado').style.display = 'none';
+  repEl('rep-avisos').textContent = (data.avisos || []).join(' · ');
+  if (!REP_NUMS.length) { repEl('rep-revision').style.display = 'none'; errToast('No se detectó ningún número válido'); return; }
+  repEl('rep-revision').style.display = '';
+  repRenderRevision();
+}
+
+async function repRepartir() {
+  const lista = REP_NUMS.filter(n => n.incluir).map(n => ({ telefono: n.telefono, nombre: n.nombre }));
+  if (!lista.length) return;
+  const asesor = repEl('rep-asesor').value;
+  const cuando = asesor ? `todos a ${asesor}` : 'con el reparto automático';
+  if (!confirm(`¿Repartir ${lista.length} número${lista.length === 1 ? '' : 's'} ${cuando}? Cada asesor recibe su aviso.`)) return;
+  const btn = repEl('rep-repartir');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Repartiendo…';
+  const { data, error } = await sb.functions.invoke('repartir-numeros', { body: { accion: 'repartir', numeros: lista, asesor: asesor || undefined } });
+  if (error || !data?.ok) { console.error(error, data); errToast(data?.error || error?.message || 'No se pudo repartir'); repRenderRevision(); return; }
+  const res = data.resultados || [];
+  const etiqueta = { asignado: ['ok', 'Asignado'], duplicado: ['warn', 'Ya era cliente'], repetido_en_la_tanda: ['warn', 'Repetido'], invalido: ['mal', 'Número inválido'], error: ['mal', 'Error'] };
+  repEl('rep-resultado').innerHTML = `<b>${fmt(res.filter(r => r.estado === 'asignado').length)} de ${fmt(res.length)} repartidos</b>
+    <table class="rep-tabla"><tbody>${res.map(r => { const [cls, txt] = etiqueta[r.estado] || ['', r.estado]; return `<tr>
+      <td data-label="Teléfono">${esc(r.telefono)}</td><td data-label="Estado"><span class="rep-tag ${cls}">${txt}</span></td>
+      <td data-label="Asesor">${esc(r.asesor || (r.detalle ? r.detalle : '—'))}</td></tr>`; }).join('')}</tbody></table>`;
+  repEl('rep-resultado').style.display = '';
+  repEl('rep-revision').style.display = 'none';
+  REP_NUMS = [];
+}
+
+function repLimpiar() {
+  REP_IMGS = []; REP_NUMS = [];
+  repEl('rep-texto').value = '';
+  repRenderPrevias();
+  repEl('rep-revision').style.display = 'none';
+  repEl('rep-resultado').style.display = 'none';
+}
+
+function setupRepartir() {
+  const sec = repEl('sec-repartir');
+  if (!sec) return;
+  repEl('rep-file').addEventListener('change', e => { repAgregarArchivos(e.target.files); e.target.value = ''; });
+  const drop = repEl('rep-drop');
+  ['dragover', 'dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.style.borderColor = 'var(--accent)'; }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.style.borderColor = ''; }));
+  drop.addEventListener('drop', e => repAgregarArchivos(e.dataTransfer.files));
+  document.addEventListener('paste', e => {
+    if (!sec.classList.contains('active')) return;
+    const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+    if (files.length) { e.preventDefault(); repAgregarArchivos(files); }
+  });
+  repEl('rep-previas').addEventListener('click', e => {
+    const i = e.target.closest('button[data-i]')?.dataset.i;
+    if (i === undefined) return;
+    REP_IMGS.splice(+i, 1); repRenderPrevias();
+  });
+  repEl('rep-tbody').addEventListener('change', e => {
+    const i = e.target.dataset.i;
+    if (i === undefined) return;
+    if (e.target.classList.contains('rep-inc')) REP_NUMS[i].incluir = e.target.checked;
+    else if (e.target.classList.contains('rep-tel')) REP_NUMS[i].telefono = e.target.value.trim();
+    else if (e.target.classList.contains('rep-nom')) REP_NUMS[i].nombre = e.target.value.trim();
+    if (e.target.classList.contains('rep-inc')) repRenderRevision();
+  });
+  repEl('rep-detectar').addEventListener('click', repDetectar);
+  repEl('rep-repartir').addEventListener('click', repRepartir);
+  repEl('rep-limpiar').addEventListener('click', repLimpiar);
 }
 
 /* ---------- Postulaciones (candidatos de "Trabaja con nosotros", solo admin) ---------- */
@@ -20399,6 +20524,7 @@ const NAV_ITEMS = [
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
   { sec: 'web-reasignados', icon: 'fas fa-hand-holding-dollar', label: 'Web y Reasignados', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Los leads por los que cobrás comisión' },
   { sec: 'contactos-directos', icon: 'fas fa-comment-sms', label: 'Contactos directos', padre: 'grp-leads', roles: '', sub: 'Escribieron directo por WhatsApp (bio-redes, IA) -- no se gestionan desde acá' },
+  { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Pegá números o capturas y se reparten entre los asesores' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', padre: 'grp-mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-mensajes', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
@@ -20710,6 +20836,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'clientes-eventos') loadClientesEventos();
   if (sec === 'web-reasignados') loadWebReasignados();
   if (sec === 'contactos-directos') loadContactosDirectos();
+  if (sec === 'repartir') repPoblarAsesores();
   if (sec === 'stop-sales') { loadStopSalesVigentes(); ssCargarPdfActual(); }
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
@@ -22319,6 +22446,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-29', emoji: '📲', titulo: 'Repartir números: de la jefa a los asesores en un paso', texto: 'Nueva sección Leads → "Repartir números". Pegá los números que te escribieron directo (o subí capturas de pantalla), revisá los que detectó y, al confirmar, se reparten entre los asesores con el reparto de siempre. Cada asesor recibe su aviso y su lead queda en el CRM.', roles: ['admin'] },
   { fecha: '2026-09-28', emoji: '🔀', titulo: 'Reparto inteligente de los links de redes', texto: 'Los links de WhatsApp de la bio (IG/FB/TikTok) ya reparten según quién está en turno, evitan ráfagas y reconocen al cliente que vuelve. En "Hoy" tenés un botón de Pausa (30 min / 1 h / hasta mañana) para cuando no puedas atender. Admin: en Gestión de personal → Asesores, horario semanal por asesor, guardia nocturna, tope de ráfaga y la tarjeta "Reparto redes hoy".', roles: ['admin', 'asesor'] },
   { fecha: '2026-09-28', emoji: '📋', titulo: 'Lyra: el copy del cliente ahora va detrás de un botón', texto: 'Cuando Lyra cotiza, ya no imprime el texto crudo para el cliente directo en el chat -- ese copy vive detrás de un botón "Texto para el cliente" que lo copia al portapapeles cuando lo necesitás.', roles: ['asesor', 'admin'] },
   { fecha: '2026-09-27', emoji: '👁️', titulo: 'Admin: memoria de todo el equipo', texto: 'En IA → Asistente hay un selector para ver, corregir o borrar la memoria que Lyra guardó de cualquier usuario del equipo.', roles: ['admin'] },
