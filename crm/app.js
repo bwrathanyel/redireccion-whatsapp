@@ -14998,16 +14998,19 @@ const CM_ERR = {
   reserva_inactiva: 'La reserva está inactiva', reserva_ya_comisionada: 'Esa reserva ya fue cargada para comisión',
   montos_invalidos: 'Cargá al menos un monto mayor a 0', sin_regla_de_comision: 'Falta configurar el % de comisión para uno de los montos; avisale al gerente',
   no_esta_enviada: 'La venta ya no está por verificar', no_se_puede_rechazar: 'La venta ya no se puede rechazar',
+  invoice_cerrado: 'Ese invoice ya está pagado o enviado: el PDF no se puede cambiar',
   motivo_requerido: 'Escribí el motivo del rechazo', sin_ventas_verificadas: 'No hay ventas verificadas de ese vendedor en ese corte',
   no_esta_emitida: 'El invoice ya no está emitido', tipo_invalido: 'Tipo de servicio inválido',
   porcentaje_invalido: 'El % tiene que estar entre 0 y 100', texto_invalido: 'Condiciones y términos no pueden quedar vacíos',
+  umbral_invalido: 'El umbral tiene que estar entre 0 y 100.000', umbral_requerido: 'Para activar la verificación automática indicá un umbral mayor a 0',
 };
 const cmFecha = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '—';
 const cmErr = (data, error, def) => error ? (error.code === '42501' ? 'No tenés permiso para esto' : def)
   : data?.error === 'reserva_no_pagada' ? `La reserva no está pagada completa: falta cobrar ${ivMoney(data.falta)}`
+  : data?.error === 'corte_abierto' ? `El corte todavía está abierto: podés generar tu invoice desde el ${fmtFechaHoraCaracas(data.cierra_en)}`
   : data?.error === 'numero_invalido' ? `El número tiene que ser ${data.minimo} o mayor (ya hay invoices emitidos)`
   : CM_ERR[data?.error] || def;
-const cmChip = e => `<span class="chip">${esc(CM_ESTADO[e] || e)}</span>`;
+const cmChip = (e, auto) => `<span class="chip">${esc(CM_ESTADO[e] || e)}</span>${auto ? ' <span class="chip" title="Verificada automáticamente por la regla del umbral">Auto</span>' : ''}`;
 
 function setupComisiones() {
   const tabs = document.getElementById('cm-tabs');
@@ -15025,9 +15028,11 @@ function setupComisiones() {
   ['cm-f-corte', 'cm-f-vendedor', 'cm-f-estado'].forEach(id => document.getElementById(id).addEventListener('change', cmRenderVerificar));
   document.getElementById('cm-ver-tbody').addEventListener('click', cmAccionVenta);
   document.getElementById('cm-invoice-bar').addEventListener('click', cmGenerarInvoice);
+  document.getElementById('cm-mias-invoice-bar').addEventListener('click', cmGenerarInvoice);
   document.getElementById('cm-inv-tbody').addEventListener('click', cmAccionInvoice);
   document.getElementById('cm-reglas-tbody').addEventListener('change', cmGuardarRegla);
   document.getElementById('cm-cfg-guardar').addEventListener('click', cmGuardarConfig);
+  document.getElementById('cm-auto-guardar').addEventListener('click', cmGuardarAutoverif);
 }
 function cmTab(tab) {
   CM_TAB = tab;
@@ -15057,8 +15062,14 @@ async function cmLoadMias() {
       <td data-label="Monto">${ivMoney(CM_TIPOS.reduce((s, k) => s + Number(v['monto_' + k] || 0), 0))}</td>
       <td data-label="Comisión"><b>${ivMoney(v.comision_total)}</b></td>
       <td data-label="Se paga el">${cmFecha(v.pago_el)}</td>
-      <td data-label="Estado">${cmChip(v.estado)}${v.estado === 'rechazada' && v.motivo_rechazo ? `<div class="muted" style="font-size:11px">${esc(v.motivo_rechazo)}</div>` : ''}${v.liquidacion_numero ? `<div class="muted" style="font-size:11px">Invoice #${v.liquidacion_numero}</div>` : ''}</td>
+      <td data-label="Estado">${cmChip(v.estado, v.auto_verificada)}${v.estado === 'rechazada' && v.motivo_rechazo ? `<div class="muted" style="font-size:11px">${esc(v.motivo_rechazo)}</div>` : ''}${v.liquidacion_numero ? `<div class="muted" style="font-size:11px">Invoice #${v.liquidacion_numero}</div>` : ''}</td>
     </tr>`).join('') || '<tr><td colspan="6">Todavía no cargaste ventas. Tocá "Cargar venta" cuando una reserva esté pagada completa.</td></tr>';
+  const grupos = new Map();
+  (data || []).filter(v => v.estado === 'verificada').forEach(v => {
+    const g = grupos.get(v.pago_el) || { usuario_id: v.usuario_id, vendedor: v.vendedor, pago_el: v.pago_el, n: 0, total: 0 };
+    g.n++; g.total += Number(v.comision_total || 0); grupos.set(v.pago_el, g);
+  });
+  document.getElementById('cm-mias-invoice-bar').innerHTML = cmInvoiceBarHtml([...grupos.values()]);
 }
 
 async function cmAbrirCarga() {
@@ -15137,7 +15148,7 @@ async function cmEnviarVenta() {
   });
   if (error || !data?.ok) { btn.disabled = false; errToast(cmErr(data, error, 'No se pudo cargar la venta')); return; }
   closeSheet('cm-venta-sheet');
-  okToast(`Venta enviada: ${ivMoney(data.comision_total)} para el pago del ${cmFecha(data.pago_el)}`);
+  okToast(`Venta ${data.auto_verificada ? 'enviada y verificada' : 'enviada'}: ${ivMoney(data.comision_total)} para el pago del ${cmFecha(data.pago_el)}`);
   cmLoadMias();
 }
 
@@ -15172,7 +15183,7 @@ function cmRenderVerificar() {
       <td data-label="Montos" style="font-size:12px">${montos}</td>
       <td data-label="Comisión"><b>${ivMoney(v.comision_total)}</b></td>
       <td data-label="Se paga el">${cmFecha(v.pago_el)}<div class="muted" style="font-size:11px">Cargada ${esc(fmtFechaHoraCaracas(v.cargada_en))}</div></td>
-      <td data-label="Estado">${cmChip(v.estado)}${v.motivo_rechazo ? `<div class="muted" style="font-size:11px">${esc(v.motivo_rechazo)}</div>` : ''}${v.liquidacion_numero ? `<div class="muted" style="font-size:11px">Invoice #${v.liquidacion_numero}</div>` : ''}</td>
+      <td data-label="Estado">${cmChip(v.estado, v.auto_verificada)}${v.motivo_rechazo ? `<div class="muted" style="font-size:11px">${esc(v.motivo_rechazo)}</div>` : ''}${v.liquidacion_numero ? `<div class="muted" style="font-size:11px">Invoice #${v.liquidacion_numero}</div>` : ''}</td>
       <td>${acc}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="8">No hay ventas con estos filtros</td></tr>';
@@ -15182,12 +15193,13 @@ function cmRenderVerificar() {
     const g = grupos.get(k) || { usuario_id: v.usuario_id, vendedor: v.vendedor, pago_el: v.pago_el, n: 0, total: 0 };
     g.n++; g.total += Number(v.comision_total || 0); grupos.set(k, g);
   });
-  document.getElementById('cm-invoice-bar').innerHTML = [...grupos.values()].map(g => `
+  document.getElementById('cm-invoice-bar').innerHTML = cmInvoiceBarHtml([...grupos.values()]);
+}
+const cmInvoiceBarHtml = grupos => grupos.map(g => `
     <div class="cm-resumen" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0">
       <span><b>${esc(g.vendedor)}</b> · pago del ${cmFecha(g.pago_el)} · ${g.n} venta${g.n === 1 ? '' : 's'} verificada${g.n === 1 ? '' : 's'} · <b>${ivMoney(g.total)}</b></span>
       <button class="dbtn save" type="button" data-cm-inv-vend="${g.usuario_id}" data-cm-inv-pago="${g.pago_el}"><i class="fas fa-file-invoice-dollar"></i> Generar invoice</button>
     </div>`).join('');
-}
 async function cmAccionVenta(e) {
   const ver = e.target.closest('[data-cm-ver]'), rech = e.target.closest('[data-cm-rech]');
   if (!ver && !rech) return;
@@ -15211,7 +15223,7 @@ async function cmGenerarInvoice(e) {
   if (error || !data?.ok) { b.disabled = false; errToast(cmErr(data, error, 'No se pudo generar el invoice')); return; }
   CM_CFG = null;
   okToast(`Invoice #${data.numero} generado: ${ivMoney(data.total)}`);
-  cmLoadVerificar();
+  if (CM_TAB === 'mias') cmLoadMias(); else cmLoadVerificar();
   // El PDF se arma acá y lo guarda la EF; si falla, queda el botón "Generar PDF" en Invoices.
   const pdf = await cmSubirInvoicePdf(data.id);
   if (!pdf?.ok) errToast('El invoice se generó pero el PDF no se pudo guardar. Reintentá desde la pestaña Invoices.');
@@ -15230,7 +15242,7 @@ async function cmLoadInvoices() {
       <td data-label="Total"><b>${ivMoney(l.total)}</b></td>
       <td data-label="Estado">${cmChip(l.estado)}</td>
       <td>${l.pdf_path ? `<button class="dbtn" type="button" data-cm-pdf="${l.id}"><i class="fas fa-file-pdf"></i> Ver</button>`
-        : esAdmin && l.estado !== 'anulada' ? `<button class="dbtn" type="button" data-cm-regen="${l.id}">Generar PDF</button>` : ''}
+        : l.estado !== 'anulada' ? `<button class="dbtn" type="button" data-cm-regen="${l.id}">Generar PDF</button>` : ''}
         ${esAdmin && l.pdf_path && l.estado !== 'anulada' ? `<button class="dbtn" type="button" data-cm-enviar="${l.id}" data-cm-num="${l.numero}" data-cm-vend="${esc(l.vendedor)}"><i class="fas fa-paper-plane"></i> Enviar</button>` : ''}
         ${esAdmin && l.estado === 'emitida' ? `<button class="dbtn save" type="button" data-cm-pagar="${l.id}">Marcar pagado</button> <button class="dbtn" type="button" data-cm-anular="${l.id}">Anular</button>` : ''}
         ${l.enviada_telegram_en || l.enviada_correo_en ? `<div class="muted" style="font-size:11px">Enviado:${l.enviada_telegram_en ? ' Telegram' : ''}${l.enviada_correo_en ? ' Correo' : ''}</div>` : ''}</td>
@@ -15367,6 +15379,15 @@ async function cmLoadConfig() {
   document.getElementById('cm-cfg-numero').value = c.proximo_numero ?? '';
   document.getElementById('cm-cfg-condiciones').value = c.condiciones || '';
   document.getElementById('cm-cfg-terminos').value = c.terminos || '';
+  document.getElementById('cm-auto-activa').checked = !!c.autoverif_activa;
+  document.getElementById('cm-auto-umbral').value = c.autoverif_umbral > 0 ? c.autoverif_umbral : '';
+}
+async function cmGuardarAutoverif() {
+  const umbral = Number(document.getElementById('cm-auto-umbral').value) || 0;
+  const { data, error } = await sb.rpc('comision_autoverif_guardar', { p_activa: document.getElementById('cm-auto-activa').checked, p_umbral: umbral });
+  if (error || data?.ok === false) { errToast(cmErr(data, error, 'No se pudo guardar')); return; }
+  okToast('Verificación automática guardada');
+  cmLoadConfig();
 }
 async function cmGuardarRegla(e) {
   const i = e.target.closest('[data-cm-k]');

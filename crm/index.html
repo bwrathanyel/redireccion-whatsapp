@@ -5305,6 +5305,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             <button class="dbtn save" id="cm-cargar-btn" type="button" style="flex:0 0 auto;width:auto"><i class="fas fa-plus"></i> Cargar venta</button>
           </div>
           <div class="csub" id="cm-aviso-corte" style="display:block"></div>
+          <div id="cm-mias-invoice-bar"></div>
           <div style="overflow-x:auto">
             <table>
               <thead><tr><th>Cliente</th><th>Reserva</th><th>Monto</th><th>Comisión</th><th>Se paga el</th><th>Estado</th></tr></thead>
@@ -5369,6 +5370,19 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           </div>
           <div><label class="fl" for="cm-cfg-terminos">Términos</label><textarea id="cm-cfg-terminos" class="ei" rows="2" maxlength="1000"></textarea></div>
           <div style="margin-top:10px"><button class="dbtn save" id="cm-cfg-guardar" type="button">Guardar datos del invoice</button></div>
+        </div>
+        <div class="card">
+          <h2><i class="fas fa-bolt"></i> Verificación automática</h2>
+          <div class="csub" style="display:block;line-height:1.5">
+            Apagada por defecto. Si la activás, una venta se verifica sola cuando la reserva está pagada completa, su comisión es igual o menor al umbral,
+            los montos no superan lo cobrado y el vendedor no tuvo ventas rechazadas en los últimos 60 días. Lo demás sigue llegando a "Ventas por verificar".
+            Las automáticas se marcan con <b>Auto</b> y podés rechazarlas mientras no estén en un invoice.
+          </div>
+          <div class="ef-fila">
+            <div style="flex:1"><label class="fl" for="cm-auto-umbral">Umbral de comisión por venta (US$)</label><input id="cm-auto-umbral" class="ei" type="number" min="0" max="100000" step="0.01"></div>
+            <div style="flex:1;display:flex;align-items:flex-end"><label style="display:flex;gap:8px;align-items:center"><input id="cm-auto-activa" type="checkbox"> Activar verificación automática</label></div>
+          </div>
+          <div style="margin-top:10px"><button class="dbtn save" id="cm-auto-guardar" type="button">Guardar</button></div>
         </div>
       </div>
     </section>
