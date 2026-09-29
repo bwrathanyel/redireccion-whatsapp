@@ -1375,7 +1375,28 @@ const fmtFechaSolo = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m
    date pickers, listeners de periodo) sigue corriendo en startApp; acá solo
    cambió dónde vive su DOM. */
 let gpTab = 'personal';
+// El táctil ya desliza solo; con mouse (ventana angosta en escritorio) no hay
+// scrollbar visible ni gesto, así que se habilita arrastrar y la rueda.
+function habilitarArrastreHorizontal(el) {
+  if (!el || el.dataset.arrastre) return;
+  el.dataset.arrastre = '1';
+  let x0 = 0, s0 = 0, activo = false, movio = false;
+  el.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' || e.button !== 0) return; activo = true; movio = false; x0 = e.clientX; s0 = el.scrollLeft; });
+  document.addEventListener('pointermove', e => {
+    if (!activo) return;
+    const dx = e.clientX - x0;
+    if (!movio && Math.abs(dx) > 5) { movio = true; el.style.scrollSnapType = 'none'; el.style.cursor = 'grabbing'; }
+    if (movio) el.scrollLeft = s0 - dx;
+  });
+  document.addEventListener('pointerup', () => { if (!activo) return; activo = false; el.style.scrollSnapType = ''; el.style.cursor = ''; });
+  el.addEventListener('click', e => { if (movio) { e.stopPropagation(); e.preventDefault(); movio = false; } }, true);
+  el.addEventListener('wheel', e => {
+    if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    el.scrollLeft += e.deltaY; e.preventDefault();
+  }, { passive: false });
+}
 function setupGestionPersonal() {
+  habilitarArrastreHorizontal(document.getElementById('gp-tabs'));
   document.querySelectorAll('#gp-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
     if (gpTab === 'asesores' && btn.dataset.gpTab !== 'asesores' && (repartoDirty.domestico || repartoDirty.internacional) && !confirm('Hay cambios sin guardar en el reparto. ¿Salir de todas formas?')) return;
     gpTab = btn.dataset.gpTab;
