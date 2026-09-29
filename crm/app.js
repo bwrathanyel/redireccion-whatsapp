@@ -1380,6 +1380,7 @@ function setupGestionPersonal() {
     if (gpTab === 'asesores' && btn.dataset.gpTab !== 'asesores' && (repartoDirty.domestico || repartoDirty.internacional) && !confirm('Hay cambios sin guardar en el reparto. ¿Salir de todas formas?')) return;
     gpTab = btn.dataset.gpTab;
     document.querySelectorAll('#gp-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
+    btn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
     document.querySelectorAll('.gp-tab-panel').forEach(p => p.style.display = p.dataset.gpPanel === gpTab ? '' : 'none');
     cargarTabGestionPersonal(gpTab);
   }));
@@ -11514,6 +11515,17 @@ function lyraEscuchaPref(on, avisar) {
 async function lyraPrecalentarSaludos() {
   for (const f of [...LYRA_FRASES.vozSaludo, ...LYRA_FRASES.vozSaludoHumor]) await lyraAudioDe(f).catch(() => {});
 }
+// POST vacío al activar la escucha: calienta isolate, TLS, caché de preflight y autorización, para que la 1ª frase no pague el arranque en frío.
+async function lyraCalentarEscucha() {
+  try {
+    const token = (await sb.auth.getSession()).data.session?.access_token;
+    if (!token) return;
+    await fetch(`${SUPABASE_URL}/functions/v1/asistente-admin`, {
+      method: 'POST', body: JSON.stringify({ accion: 'escucha', calentar: true }), signal: AbortSignal.timeout(15000),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, apikey: SUPABASE_KEY },
+    });
+  } catch {}
+}
 async function lyraEscuchaIniciar() {
   if (LYRA.escucha || !LYRA.escuchaOn || !LYRA.lista || document.hidden) return;
   const E = LYRA.escucha = { vad: null, stream: null, enviando: false, pendiente: null, inicio: 0, tSync: 0 };
@@ -11539,6 +11551,7 @@ async function lyraEscuchaIniciar() {
     document.body.classList.add('lyra-escucha');
     lyraEstado(); lyraEscuchaSync();
     lyraPrecalentarSaludos();
+    lyraCalentarEscucha();
   } catch (e) {
     console.error('Lyra: escucha', e);
     lyraEscuchaSoltar(E);
