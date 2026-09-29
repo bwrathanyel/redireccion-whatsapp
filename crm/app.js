@@ -131,6 +131,7 @@ function badgeLeadRescatado(l) {
 // que un dato faltante por fallo real.
 function badgeContactoDirecto(l) {
   if (!l.contacto_directo_enviado_at) return '';
+  if (l.asignado_por) return ` <span class="badge-st" style="color:#f59e0b;background:#f59e0b2e" title="${esc(l.asignado_por)} le pasó este cliente al asesor. No se reasigna."><i class="fas fa-user-check"></i> Asignado por ${esc(l.asignado_por)}</span>`;
   return ` <span class="badge-st" style="color:#a78bfa;background:#7c3aed2e" title="Se le entregó el WhatsApp del asesor -- sin teléfono propio hasta que la IA lo consiga"><i class="fas fa-share-square"></i> Contacto directo</span>`;
 }
 // Un lead repartido en lote no llegó por el flujo normal del asesor: sin esta marca se ve
@@ -169,7 +170,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
   'voz-ia': ['Voz IA', 'Probá la voz clonada de la jefa y controlá la muestra de referencia que usa la IA'],
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
-  'contactos-directos': ['Contactos directos', 'Escribieron directo por WhatsApp (bio-redes, IA) -- registro, no se gestionan desde acá'],
+  'contactos-directos': ['Contactos directos', 'Escribieron directo por WhatsApp (bio-redes, IA) o los asignó Karlys Corro -- registro, no se gestionan desde acá'],
   repartir: ['Repartir números', 'Pegá números o capturas de clientes que te escribieron directo y repartilos entre los asesores'],
   'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles que manda BT Travel -- cargá el PDF y confirmá antes de publicar'],
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
@@ -9008,10 +9009,11 @@ async function repRepartir() {
   if (!lista.length) return;
   const asesor = repEl('rep-asesor').value;
   const cuando = asesor ? `todos a ${asesor}` : 'con el reparto automático';
-  if (!confirm(`¿Repartir ${lista.length} número${lista.length === 1 ? '' : 's'} ${cuando}? Cada asesor recibe su aviso.`)) return;
+  const avisar = repEl('rep-avisar').checked;
+  if (!confirm(`¿Repartir ${lista.length} número${lista.length === 1 ? '' : 's'} ${cuando}? Quedan como "Asignado por Karlys Corro" en Contactos directos, sin reasignación, y ${avisar ? 'cada asesor recibe su aviso' : 'NO se avisa a nadie (ni Telegram ni notificaciones)'}.`)) return;
   const btn = repEl('rep-repartir');
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Repartiendo…';
-  const { data, error } = await sb.functions.invoke('repartir-numeros', { body: { accion: 'repartir', numeros: lista, asesor: asesor || undefined } });
+  const { data, error } = await sb.functions.invoke('repartir-numeros', { body: { accion: 'repartir', numeros: lista, asesor: asesor || undefined, avisar } });
   if (error || !data?.ok) { console.error(error, data); errToast(data?.error || error?.message || 'No se pudo repartir'); repRenderRevision(); return; }
   const res = data.resultados || [];
   const etiqueta = { asignado: ['ok', 'Asignado'], duplicado: ['warn', 'Ya era cliente'], repetido_en_la_tanda: ['warn', 'Repetido'], invalido: ['mal', 'Número inválido'], error: ['mal', 'Error'] };
@@ -20544,7 +20546,7 @@ const NAV_ITEMS = [
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: '' },
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
   { sec: 'web-reasignados', icon: 'fas fa-hand-holding-dollar', label: 'Web y Reasignados', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Los leads por los que cobrás comisión' },
-  { sec: 'contactos-directos', icon: 'fas fa-comment-sms', label: 'Contactos directos', padre: 'grp-leads', roles: '', sub: 'Escribieron directo por WhatsApp (bio-redes, IA) -- no se gestionan desde acá' },
+  { sec: 'contactos-directos', icon: 'fas fa-comment-sms', label: 'Contactos directos', padre: 'grp-leads', roles: '', sub: 'Escribieron directo por WhatsApp (bio-redes, IA) o los asignó Karlys Corro -- no se gestionan desde acá' },
   { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Pegá números o capturas y se reparten entre los asesores' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', padre: 'grp-mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-mensajes', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads' },

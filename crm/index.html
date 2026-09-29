@@ -6091,6 +6091,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         Pegá los números que te escribieron directo (texto copiado) o subí <b>capturas de pantalla</b>
         (también podés pegarlas con Ctrl+V). Primero se detectan y los revisás; recién al confirmar
         se reparten entre los asesores con <b>el reparto de siempre</b> y a cada uno le llega su aviso.
+        Quedan en <b>Contactos directos</b> como <b>Asignado por Karlys Corro</b> y <b>no se reasignan</b>.
       </div>
       <div class="card rep-card">
         <label class="fl" for="rep-texto">Números o mensajes copiados</label>
@@ -6102,6 +6103,11 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <span>Hasta 6 · también Ctrl+V · se achican solas antes de subirse</span>
         </label>
         <div id="rep-previas" class="rep-previas"></div>
+        <div class="rep-asesor-fijo" style="margin:14px 0 0">
+          <label class="fl" for="rep-asesor" style="margin:0">Asignar</label>
+          <select id="rep-asesor" class="ei"><option value="">Repartir automático (reparto de siempre)</option></select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rep-avisar" checked> Avisar por Telegram y notificaciones del CRM</label>
+        </div>
         <div class="ce-barra" style="margin:14px 0 0">
           <button class="btn-acc" id="rep-detectar" type="button"><i class="fas fa-magnifying-glass"></i> Detectar números</button>
           <button class="btn-sec" id="rep-limpiar" type="button">Limpiar todo</button>
@@ -6110,10 +6116,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div id="rep-revision" class="card rep-card" style="display:none">
         <div class="rep-cab">
           <b id="rep-resumen"></b>
-          <span class="rep-asesor-fijo">
-            <label class="fl" for="rep-asesor" style="margin:0">Asignar</label>
-            <select id="rep-asesor" class="ei"><option value="">Repartir automático (reparto de siempre)</option></select>
-          </span>
         </div>
         <div id="rep-avisos" class="muted" style="font-size:12px"></div>
         <table class="rep-tabla"><thead><tr><th></th><th>Teléfono</th><th>Nombre</th><th>Estado</th></tr></thead><tbody id="rep-tbody"></tbody></table>
