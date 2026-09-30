@@ -9660,10 +9660,9 @@ async function reanalizarUnaPostulacion(p) {
   const previo = p.calidad_prospecto;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analizando...'; }
   try {
-    const { analisis, error } = await analizarCVGuardado(p);
-    if (error) { errToast('No se pudo re-analizar: ' + error); return; }
-    const { error: eDb, nivel } = await guardarReanalisis(p, analisis);
-    if (eDb) { errToast('Se analizó, pero no se pudo guardar: ' + eDb); return; }
+    const r = await reanalizarEnServidor(p.id);
+    if (!r.ok) { errToast('No se pudo re-analizar: ' + r.error); return; }
+    const nivel = r.ahora;
     const antes = CALIDAD_PROSPECTO_LABEL[previo] || 'Sin calificar';
     const ahora = CALIDAD_PROSPECTO_LABEL[nivel] || 'Sin calificar';
     okToast(antes === ahora ? `Re-analizado: sigue en ${ahora}` : `Re-analizado: ${antes} → ${ahora}`);
@@ -9686,31 +9685,52 @@ async function reanalizarUnaPostulacion(p) {
  *  pedidos en paralelo que igual se cobran. */
 async function reanalizarTodasLasPostulaciones() {
   const conCV = postCache.filter(p => p.cv_storage_path);
-  const sinCV = postCache.length - conCV.length;
-  if (!conCV.length) { errToast('Ninguna postulación tiene CV adjunto para re-analizar'); return; }
-  const detalleReanalisis = `${sinCV ? `${sinCV} se saltan por no tener CV adjunto.\n\n` : ''}Esto gasta créditos de IA (una llamada por CV) y sobrescribe la calificación anterior.\nLos datos de contacto no se tocan.`;
-  if (!(await confirmarSheet({ titulo: `Se van a re-analizar ${conCV.length} postulacion(es) con el criterio actual`, detalle: detalleReanalisis, textoOk: 'Re-analizar' }))) return;
+  const sinCV = postCache.filter(p => !p.cv_storage_path);
+  const detalleReanalisis = `${sinCV.length ? `${sinCV.length} postulación(es) SIN CV se van a ELIMINAR (no se puede deshacer).\n\n` : ''}Cada CV se lee en el servidor, se le pone la foto del CV si no tiene, y se vuelve a calificar con el criterio actual.\nGasta créditos de IA (una llamada por CV). Los datos de contacto no se tocan.`;
+  if (!(await confirmarSheet({ titulo: `Re-analizar ${conCV.length} postulacion(es)${sinCV.length ? ` y eliminar ${sinCV.length} sin CV` : ''}`, detalle: detalleReanalisis, textoOk: 'Re-analizar' }))) return;
 
   const btn = document.getElementById('post-reanalizar-todas');
   const original = btn?.innerHTML;
-  let ok = 0, fallos = [], cambios = 0;
+  if (btn) btn.disabled = true;
+  let ok = 0, fallos = [], cambios = 0, fotos = 0, borradas = 0;
+  if (sinCV.length) {
+    const { error } = await sb.from('postulaciones_empleo').delete().in('id', sinCV.map(p => p.id));
+    if (error) fallos.push(`eliminar sin CV: ${error.message}`); else borradas = sinCV.length;
+  }
   for (let i = 0; i < conCV.length; i++) {
     const p = conCV[i];
     if (btn) btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${i + 1} de ${conCV.length}...`;
-    const { analisis, error } = await analizarCVGuardado(p);
-    if (error) { fallos.push(`${p.nombre}: ${error}`); continue; }
-    const { error: eDb, nivel } = await guardarReanalisis(p, analisis);
-    if (eDb) { fallos.push(`${p.nombre}: ${eDb}`); continue; }
+    const r = await reanalizarEnServidor(p.id);
+    if (r.foto === 'nueva') fotos++;
+    if (!r.ok) { fallos.push(`${p.nombre}: ${r.error}`); continue; }
     ok++;
-    if (nivel !== p.calidad_prospecto) cambios++;
+    if (r.ahora !== p.calidad_prospecto) cambios++;
   }
   if (btn) { btn.disabled = false; btn.innerHTML = original; }
   await loadPostulaciones();
+  const resumen = `${ok} re-analizadas (${cambios} cambiaron de nivel), ${fotos} fotos nuevas${borradas ? `, ${borradas} sin CV eliminadas` : ''}.`;
   if (fallos.length) {
     console.warn('re-analisis masivo, fallos:', fallos);
-    errToast(`${ok} re-analizadas (${cambios} cambiaron de nivel). ${fallos.length} fallaron -- detalle en la consola.`);
+    errToast(`${resumen} ${fallos.length} fallaron -- detalle en la consola.`);
   } else {
-    okToast(`${ok} re-analizadas, ${cambios} cambiaron de nivel.`);
+    okToast(resumen);
+  }
+}
+
+/** Re-análisis en el servidor: lee el CV guardado (PDF por columnas o DOCX),
+ *  extrae la foto si falta y pisa solo la calificación. */
+async function reanalizarEnServidor(id) {
+  const { data: { session } } = await sb.auth.getSession();
+  try {
+    const res = await fetch(CV_ANALISIS_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}`, apikey: SUPABASE_KEY },
+      body: JSON.stringify({ postulacion_id: id }),
+    });
+    const r = await res.json().catch(() => ({}));
+    return { ...r, ok: !!r.ok, error: r.error || (res.ok ? null : `HTTP ${res.status}`) };
+  } catch (e) {
+    return { ok: false, error: e.message };
   }
 }
 
@@ -22469,6 +22489,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-30', emoji: '🧑‍💼', titulo: 'Postulaciones: "Re-analizar todas" de verdad', texto: 'El botón ahora re-lee cada CV en el servidor uno por uno, le pone la foto sacada del CV si no tenía y lo vuelve a calificar con el criterio nuevo: pesan las habilidades y la capacidad de trabajo, no el diseño del CV ni fechas desordenadas. Las postulaciones sin CV se eliminan al correrlo.', roles: ['admin'] },
   { fecha: '2026-09-29', emoji: '📲', titulo: 'Repartir números: de la jefa a los asesores en un paso', texto: 'Nueva sección Leads → "Repartir números". Pegá los números que te escribieron directo (o subí capturas de pantalla), revisá los que detectó y, al confirmar, se reparten entre los asesores con el reparto de siempre. Cada asesor recibe su aviso y su lead queda en el CRM.', roles: ['admin'] },
   { fecha: '2026-09-28', emoji: '🔀', titulo: 'Reparto inteligente de los links de redes', texto: 'Los links de WhatsApp de la bio (IG/FB/TikTok) ya reparten según quién está en turno, evitan ráfagas y reconocen al cliente que vuelve. En "Hoy" tenés un botón de Pausa (30 min / 1 h / hasta mañana) para cuando no puedas atender. Admin: en Gestión de personal → Asesores, horario semanal por asesor, guardia nocturna, tope de ráfaga y la tarjeta "Reparto redes hoy".', roles: ['admin', 'asesor'] },
   { fecha: '2026-09-28', emoji: '📋', titulo: 'Lyra: el copy del cliente ahora va detrás de un botón', texto: 'Cuando Lyra cotiza, ya no imprime el texto crudo para el cliente directo en el chat -- ese copy vive detrás de un botón "Texto para el cliente" que lo copia al portapapeles cuando lo necesitás.', roles: ['asesor', 'admin'] },
