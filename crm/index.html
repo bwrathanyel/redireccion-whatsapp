@@ -46,7 +46,7 @@ try {
   --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.12);
   --txt:#eef1f8; --muted:#8b93ad; --muted2:#7981a8;
   --accent:#ff9100; --accent-soft:rgba(255,145,0,.14);
-  --blue:#4a9eff; --pph-hab:var(--blue); --green:#10b981; --purple:#a06bff; --amber:#f5b544; --pink:#ff5c8a; --wa:#25D366;
+  --blue:#4a9eff; --pph-hab:var(--blue); --green:#10b981; --purple:#a06bff; --amber:#f5b544; --pink:#ff5c8a; --danger:#ef4444; --wa:#25D366;
   --safe-b:env(safe-area-inset-bottom,0px);
   /* Fase 6 -- escala de movimiento. El CSS no tenía una: cada transición
      inventaba su propia duración (.24s acá, .3s allá). --ease-salida ya
@@ -3227,6 +3227,41 @@ body.fsize-grande{--tap:41.9px}
 @keyframes mv-celebrar{0%{box-shadow:0 0 0 0 rgba(16,185,129,.45)}50%{transform:scale(1.015);box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
 .mv-celebra{animation:mv-celebrar .6s var(--ease-salida)}
 @media(prefers-reduced-motion:reduce){.lt-card{animation:none}.mv-celebra{animation:none}}
+/* Postulaciones: la calificación manda. Franja izquierda del color del nivel,
+   foto grande y un solo estado por tarjeta. */
+.post-card{border-left:3px solid var(--cal);gap:9px}
+.post-card-top{display:flex;align-items:flex-start;gap:11px}
+.lt-card.post-card .post-foto{width:64px;height:64px;border-radius:12px;font-size:22px}
+.post-card-id{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.post-card-nombre{font-weight:700;font-size:14px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.post-card-cargo{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.post-cal{display:inline-flex;align-items:center;gap:7px;align-self:flex-start;font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--cal)}
+.post-cal-punto{width:9px;height:9px;border-radius:999px;background:var(--cal);flex-shrink:0}
+.post-card-linea{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.post-card-linea.vacio{color:var(--muted2);font-style:italic}
+.post-card-estado{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.post-card-fecha{margin-left:auto;font-size:11px;color:var(--muted2);white-space:nowrap}
+.post-grupo{grid-column:1/-1;display:flex;align-items:center;gap:9px;margin:14px 0 2px;font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+.post-grupo:first-child{margin-top:0}
+.post-grupo b{font-size:11px;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.post-grupo::after{content:"";flex:1;height:1px;background:var(--line)}
+.post-filtros{align-items:center}
+.post-filtros-sep{width:1px;align-self:stretch;background:var(--line2)}
+.post-edad{display:inline-flex;align-items:center;gap:4px}
+.post-edad-lbl{font-size:12px;color:var(--muted)}
+.post-edad .flt{width:78px}
+#post-f-limpiar:disabled{opacity:.5;cursor:default}
+/* Ficha: acciones de contacto fijas bajo el nombre (la cabecera ya es sticky). */
+#post-d-body .pf-head{flex-wrap:wrap}
+.post-d-rapidas{flex-basis:100%;display:flex;gap:7px;flex-wrap:wrap;padding-bottom:11px}
+.post-d-rapidas .btn-sm{display:inline-flex;align-items:center;gap:7px;text-decoration:none}
+.post-d-rapidas .fa-whatsapp{color:var(--wa)}
+.post-veredicto{border:1px solid var(--line);border-left:3px solid var(--cal);border-radius:12px;padding:11px 14px;margin-bottom:14px;background:var(--panel-solid)}
+.post-veredicto-cab{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:7px}
+.post-veredicto-lbl{font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted2)}
+.post-veredicto-txt{font-size:13px;line-height:1.5;margin-bottom:7px}
+.post-veredicto-mas{background:none;border:0;padding:4px 0;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.post-veredicto-mas:hover{text-decoration:underline}
 @media(max-width:760px){
   .lt-orden{display:none}
   .kpis.bt-kpis.lt-kpis-4{grid-template-columns:repeat(2,1fr)}
@@ -4548,7 +4583,33 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <!-- Trigger + panel fuera de .card -- ver comentario igual en el
              panel de Ventas (backdrop-filter de .card rompe position:fixed). -->
         <button class="mfs-trigger mfs-icon" data-mfs="post-filtros" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
-        <div class="mfs" id="post-filtros" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <div class="mfs post-filtros" id="post-filtros" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <select class="flt" id="post-orden" aria-label="Ordenar">
+            <option value="calificacion">Orden: mejor calificación</option>
+            <option value="reciente">Orden: más recientes</option>
+            <option value="antigua">Orden: más antiguas</option>
+            <option value="experiencia">Orden: más experiencia</option>
+          </select>
+          <label class="tar-f-check"><input type="checkbox" id="post-agrupar"> Agrupar por cargo</label>
+          <span class="post-filtros-sep" aria-hidden="true"></span>
+          <select class="flt" id="post-f-cargo" aria-label="Cargo"><option value="">Todos los cargos</option></select>
+          <select class="flt" id="post-f-genero" aria-label="Género">
+            <option value="">Cualquier género</option>
+            <option value="femenino">Femenino</option>
+            <option value="masculino">Masculino</option>
+            <option value="otro">Otro</option>
+            <option value="sin_dato">Sin dato</option>
+          </select>
+          <span class="post-edad" role="group" aria-label="Rango de edad">
+            <span class="post-edad-lbl">Edad</span>
+            <input class="flt" id="post-f-edad-min" type="number" min="14" max="99" placeholder="desde" aria-label="Edad desde">
+            <input class="flt" id="post-f-edad-max" type="number" min="14" max="99" placeholder="hasta" aria-label="Edad hasta">
+          </span>
+          <select class="flt" id="post-f-foto" aria-label="Foto">
+            <option value="">Con y sin foto</option>
+            <option value="con">Con foto</option>
+            <option value="sin">Sin foto</option>
+          </select>
           <select class="flt" id="post-f-modalidad">
             <option value="">Todas las modalidades</option>
             <option value="presencial">Presencial</option>
@@ -4569,6 +4630,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             <option value="descartado">Descartado</option>
           </select>
           <label class="tar-f-check"><input type="checkbox" id="post-f-sin-revisar"> Solo sin revisar</label>
+          <button class="btn-sm" type="button" id="post-f-limpiar" disabled>Sin filtros</button>
           <button class="btn-sm" type="button" id="post-reanalizar-todas" style="margin-left:auto" title="Vuelve a evaluar todos los CVs guardados con el criterio actual. No toca los datos de contacto."><i class="fas fa-wand-magic-sparkles"></i> Re-analizar todas</button>
           <button class="mfs-done" data-mfs="post-filtros" type="button">Listo</button>
         </div>
@@ -4581,7 +4643,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
               <input type="file" id="post-cv-input" accept="application/pdf" style="display:none">
             </div>
           </div>
-          <div class="csub">Candidatos de "Trabaja con nosotros" y CVs cargados a mano (los que llegan por correo)</div>
+          <div class="csub">Candidatos de "Trabaja con nosotros" y CVs cargados a mano (los que llegan por correo) · <span id="post-resumen"></span></div>
           <div class="kpis bt-kpis lt-kpis lt-kpis-4" id="post-kpis"></div>
           <label class="tar-f-check lt-selec"><input type="checkbox" id="post-th-select-all"> Seleccionar las visibles</label>
           <div class="bulk-bar" id="post-bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">

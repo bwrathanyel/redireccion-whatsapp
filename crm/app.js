@@ -2629,7 +2629,7 @@ async function startApp() {
     setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas, setupBtTravel,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
-    setupTareas, setupFreelancers, setupComisiones,
+    setupTareas, setupFreelancers, setupComisiones, setupFiltrosPostulaciones,
     setupBioReparto, setupHorarioSheet,
     cargarNotasRepaso,
     subscribeRealtime,
@@ -9109,40 +9109,99 @@ async function loadPostulaciones() {
   if (error) { document.getElementById('post-loading')?.classList.remove('show'); console.error(error); errToast('No se pudo cargar Postulaciones'); return; }
   postCache = data || [];
   postMostrar = TECHO_LISTA;
+  poblarCargosPost();
   await firmarFotosPostulaciones(postCache);
   document.getElementById('post-loading')?.classList.remove('show');
   renderPostulaciones();
 }
+// Color por calificación con tokens (la tarjeta pinta su franja con --cal). El
+// mapa hex de arriba se queda para los badge-st de la ficha, que le concatenan alfa.
+const CALIDAD_VAR = { excelente: 'var(--purple)', bueno: 'var(--green)', debil: 'var(--amber)', descartado: 'var(--danger)' };
+const CALIDAD_ORDEN = { excelente: 0, bueno: 1, debil: 2, descartado: 4 };
+// La experiencia también viaja dentro de analisis_ia: fichas viejas la tienen
+// ahí aunque la columna haya quedado vacía.
+const postExp = p => p.anios_experiencia ?? p.analisis_ia?.anios_experiencia ?? null;
+const postCargo = p => (p.rol_interes || '').trim() || modalidadTexto(p.modalidad);
+const postLineaPerfil = p => [p.edad ? `${p.edad} años` : null, postExp(p) != null ? `${postExp(p)} años de exp.` : null, p.estudios].filter(Boolean).join(' · ');
+// Teléfonos venezolanos cargados en formato local (0414..., 414...) -> 58414...
+const postWa = t => { const d = String(t || '').replace(/\D/g, ''); return d.length === 11 && d[0] === '0' ? '58' + d.slice(1) : d.length === 10 && d[0] === '4' ? '58' + d : d.length >= 10 ? d : ''; };
+const postTel = t => String(t || '').replace(/[^\d+]/g, '');
+// Un solo estado por tarjeta, el que pide acción: repetir "Por llamar · Sin
+// revisar" en todas era ruido.
+const postEstado = p => !p.revisado ? ['Nuevo', 'var(--accent)'] : p.estado_llamada === 'llamado' ? ['Llamado', 'var(--green)'] : ['Por llamar', 'var(--amber)'];
+const postContactoHtml = (p, clase = 'btn-sm') => {
+  const wa = postWa(p.telefono);
+  return wa ? `<a class="${clase}" href="tel:${esc(postTel(p.telefono))}" data-post-tel><i class="fas fa-phone"></i> Llamar</a>
+    <a class="${clase}" href="https://wa.me/${wa}" target="_blank" rel="noopener" data-post-tel><i class="fab fa-whatsapp"></i> WhatsApp</a>` : '';
+};
 function postCardHtml(p, i = 0) {
-  const datos = [
-    p.edad ? `${p.edad} años` : null,
-    p.genero ? GENERO_LABEL[p.genero] : null,
-    p.anios_experiencia != null ? `${p.anios_experiencia} años de exp.` : null,
-  ].filter(Boolean);
-  const llamado = p.estado_llamada === 'llamado', sel = SELECTED_POST.has(p.id), mod = modalidadTexto(p.modalidad);
-  const rol = [p.rol_interes, (p.rol_interes || '').toLowerCase().includes(String(mod).toLowerCase()) ? '' : mod].filter(Boolean).join(' · ');
-  return `<article class="lt-card${sel ? ' lt-card-sel' : ''}" data-id="${p.id}" style="--i:${Math.min(i, 20)};cursor:pointer">
-    <div class="lt-card-cab">
+  const sel = SELECTED_POST.has(p.id), cal = p.calidad_prospecto, [est, estC] = postEstado(p), linea = postLineaPerfil(p);
+  const cargo = postCargo(p), mod = modalidadTexto(p.modalidad);
+  const cargoTxt = cargo.toLowerCase().includes(mod.toLowerCase()) ? cargo : `${cargo} · ${mod}`;
+  return `<article class="lt-card post-card${sel ? ' lt-card-sel' : ''}" data-id="${p.id}" style="--i:${Math.min(i, 20)};--cal:${CALIDAD_VAR[cal] || 'var(--muted2)'};cursor:pointer">
+    <div class="post-card-top">
       <label class="lt-check" title="Seleccionar"><input type="checkbox" class="post-check" data-id="${p.id}" aria-label="Seleccionar ${esc(p.nombre)}"${sel ? ' checked' : ''}></label>
       ${postFotoHtml(p, 'post-foto')}
-      <div class="lt-card-tit" title="${esc(p.nombre)}">${esc(p.nombre)}</div>
-      ${p.calidad_prospecto ? `<span class="bt-tag" style="--c:${CALIDAD_PROSPECTO_COLOR[p.calidad_prospecto]}">${CALIDAD_PROSPECTO_LABEL[p.calidad_prospecto]}</span>` : '<span class="bt-tag" style="--c:var(--muted)">Sin calificar</span>'}
+      <div class="post-card-id">
+        <div class="post-card-nombre" title="${esc(p.nombre)}">${esc(p.nombre)}</div>
+        <div class="post-card-cargo" title="${esc(cargoTxt)}">${esc(cargoTxt)}</div>
+        <div class="post-cal"><span class="post-cal-punto"></span>${cal ? CALIDAD_PROSPECTO_LABEL[cal] : 'Sin calificar'}</div>
+      </div>
     </div>
-    <div class="lt-card-meta"><i class="fas fa-briefcase"></i>${esc(rol)}</div>
-    <div class="lt-card-meta"><i class="fas fa-phone"></i>${esc(p.telefono) || 'Sin teléfono'} · ${esc(fmtFechaHoraCaracas(p.created_at))}</div>
-    <div class="lt-chips">
-      <span class="bt-tag" style="--c:${llamado ? 'var(--green)' : 'var(--amber)'}">${llamado ? 'Llamado' : 'Por llamar'}</span>
-      <span class="bt-tag" style="--c:${p.revisado ? 'var(--green)' : 'var(--muted)'}">${p.revisado ? 'Revisado' : 'Sin revisar'}</span>
-      ${p.cv_storage_path ? '<span class="post-dato"><i class="fas fa-file-pdf"></i> CV</span>' : ''}
+    <div class="post-card-linea${linea ? '' : ' vacio'}" title="${esc(linea)}">${linea ? esc(linea) : 'Sin edad, experiencia ni estudios'}</div>
+    <div class="post-card-estado">
+      <span class="bt-tag" style="--c:${estC}">${est}</span>
+      ${p.cv_storage_path ? '' : '<span class="bt-tag" style="--c:var(--muted)">Sin CV</span>'}
       ${formEstadoBadge(p)}
+      <span class="post-card-fecha">${esc(fmtFechaHoraCaracas(p.created_at))}</span>
     </div>
-    ${datos.length ? `<div class="lt-chips">${datos.map(d => `<span class="post-dato">${esc(d)}</span>`).join('')}</div>` : ''}
-    ${p.estudios ? `<div class="lt-card-meta" title="${esc(p.estudios)}"><i class="fas fa-graduation-cap"></i>${esc(p.estudios)}</div>` : ''}
     <div class="lt-card-pie">
-      <button class="btn-sm${p.revisado ? '' : ' lt-primario'}" type="button"><i class="fas fa-id-card"></i> Ver ficha</button>
-      ${p.telefono ? `<a class="btn-sm" href="tel:${esc(String(p.telefono).replace(/[^\d+]/g, ''))}" data-post-tel><i class="fas fa-phone"></i> Llamar</a>` : ''}
+      <button class="btn-sm${p.revisado ? '' : ' lt-primario'}" type="button"><i class="fas fa-id-card"></i> Ficha</button>
+      ${postContactoHtml(p)}
     </div>
   </article>`;
+}
+// Opciones de cargo según lo que hay cargado; conserva la elegida.
+function poblarCargosPost() {
+  const sel = document.getElementById('post-f-cargo');
+  if (!sel) return;
+  const actual = sel.value, cuenta = {};
+  postCache.forEach(p => { const c = postCargo(p); cuenta[c] = (cuenta[c] || 0) + 1; });
+  sel.innerHTML = '<option value="">Todos los cargos</option>' + Object.entries(cuenta).sort((a, b) => b[1] - a[1])
+    .map(([c, n]) => `<option value="${esc(c)}"${c === actual ? ' selected' : ''}>${esc(c)} (${n})</option>`).join('');
+}
+const POST_ORDEN = {
+  calificacion: (a, b) => (CALIDAD_ORDEN[a.calidad_prospecto] ?? 3) - (CALIDAD_ORDEN[b.calidad_prospecto] ?? 3) || String(b.created_at).localeCompare(String(a.created_at)),
+  reciente: (a, b) => String(b.created_at).localeCompare(String(a.created_at)),
+  antigua: (a, b) => String(a.created_at).localeCompare(String(b.created_at)),
+  experiencia: (a, b) => (postExp(b) ?? -1) - (postExp(a) ?? -1),
+};
+const numOVacio = id => { const v = val(id).trim(); return v === '' ? null : Number(v); };
+// Edad y género filtran la LISTA por decisión humana del dueño; la nota de la
+// IA no los usa nunca (cv_analisis.ts lo prohíbe, LOTTT art. 21).
+function postPasaFiltrosBase(p, f) {
+  if (f.q && !(p.nombre || '').toLowerCase().includes(f.q) && !(p.telefono || '').toLowerCase().includes(f.q)) return false;
+  if (f.modalidad && p.modalidad !== f.modalidad) return false;
+  if (f.cargo && postCargo(p) !== f.cargo) return false;
+  if (f.genero === 'sin_dato' ? p.genero : f.genero && p.genero !== f.genero) return false;
+  if ((f.edadMin != null || f.edadMax != null) && (p.edad == null || (f.edadMin != null && p.edad < f.edadMin) || (f.edadMax != null && p.edad > f.edadMax))) return false;
+  if (f.foto === 'con' && !p.foto_storage_path) return false;
+  if (f.foto === 'sin' && p.foto_storage_path) return false;
+  return true;
+}
+function limpiarFiltrosPost() {
+  ['post-search', 'post-f-modalidad', 'post-f-llamada', 'post-f-calidad', 'post-f-cargo', 'post-f-genero', 'post-f-foto', 'post-f-edad-min', 'post-f-edad-max']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const chk = document.getElementById('post-f-sin-revisar'); if (chk) chk.checked = false;
+  postMostrar = TECHO_LISTA; renderPostulaciones();
+}
+function setupFiltrosPostulaciones() {
+  const rerender = () => { postMostrar = TECHO_LISTA; renderPostulaciones(); };
+  document.getElementById('post-search').addEventListener('input', () => { clearTimeout(postSearchDeb); postSearchDeb = setTimeout(rerender, 200); });
+  document.querySelectorAll('#post-f-modalidad,#post-f-llamada,#post-f-calidad,#post-f-sin-revisar,#post-f-cargo,#post-f-genero,#post-f-foto,#post-orden,#post-agrupar')
+    .forEach(el => el.addEventListener('change', rerender));
+  document.querySelectorAll('#post-f-edad-min,#post-f-edad-max').forEach(el => el.addEventListener('input', () => { clearTimeout(postSearchDeb); postSearchDeb = setTimeout(rerender, 300); }));
+  document.getElementById('post-f-limpiar').addEventListener('click', limpiarFiltrosPost);
 }
 // Techo de filas visibles en el render (Fase 4 -- "100 facturas ≈ 1.000
 // filas visuales en móvil"). El FETCH sigue trayendo todo (postCache
@@ -9154,11 +9213,14 @@ let postMostrar = TECHO_LISTA;
 function cargarMasPostulaciones() { postMostrar += TECHO_LISTA; renderPostulaciones(); }
 window.cargarMasPostulaciones = cargarMasPostulaciones;
 function renderPostulaciones() {
-  const q = val('post-search').trim().toLowerCase();
-  const fModalidad = val('post-f-modalidad'), fLlamada = val('post-f-llamada'), fCalidad = val('post-f-calidad');
+  const f = {
+    q: val('post-search').trim().toLowerCase(), modalidad: val('post-f-modalidad'), cargo: val('post-f-cargo'),
+    genero: val('post-f-genero'), foto: val('post-f-foto'), edadMin: numOVacio('post-f-edad-min'), edadMax: numOVacio('post-f-edad-max'),
+  };
+  const fLlamada = val('post-f-llamada'), fCalidad = val('post-f-calidad');
   const chkSinRevisar = document.getElementById('post-f-sin-revisar'), soloSinRevisar = chkSinRevisar.checked;
-  // KPIs cuentan sobre búsqueda + modalidad, sin los filtros que ellos mismos activan.
-  const base = postCache.filter(p => (!q || (p.nombre || '').toLowerCase().includes(q) || (p.telefono || '').toLowerCase().includes(q)) && (!fModalidad || p.modalidad === fModalidad));
+  // KPIs cuentan sobre los filtros de perfil, sin los filtros que ellos mismos activan.
+  const base = postCache.filter(p => postPasaFiltrosBase(p, f));
   const kpiIr = (llamada, calidad, sinRev) => () => {
     document.getElementById('post-f-llamada').value = llamada; document.getElementById('post-f-calidad').value = calidad; chkSinRevisar.checked = sinRev;
     postMostrar = TECHO_LISTA; renderPostulaciones();
@@ -9176,12 +9238,31 @@ function renderPostulaciones() {
     if (soloSinRevisar && p.revisado) return false;
     return true;
   });
+  const orden = POST_ORDEN[val('post-orden')] || POST_ORDEN.calificacion;
+  filtered.sort(orden);
+  // Agrupado: los cargos con más candidatos primero; dentro, el orden elegido.
+  const agrupar = document.getElementById('post-agrupar')?.checked;
+  const porCargo = {};
+  if (agrupar) {
+    filtered.forEach(p => { const c = postCargo(p); porCargo[c] = (porCargo[c] || 0) + 1; });
+    filtered.sort((a, b) => (porCargo[postCargo(b)] - porCargo[postCargo(a)]) || postCargo(a).localeCompare(postCargo(b)) || orden(a, b));
+  }
+  const activos = [f.q, f.modalidad, f.cargo, f.genero, f.foto, f.edadMin, f.edadMax, fLlamada, fCalidad, soloSinRevisar || null].filter(x => x != null && x !== '').length;
+  const limpiar = document.getElementById('post-f-limpiar');
+  if (limpiar) { limpiar.disabled = !activos; limpiar.textContent = activos ? `Limpiar filtros (${activos})` : 'Sin filtros'; }
+  const resumen = document.getElementById('post-resumen');
+  if (resumen) resumen.textContent = `${fmt(filtered.length)} de ${fmt(postCache.length)} candidatos`;
   document.getElementById('post-empty').classList.toggle('show', filtered.length === 0);
   const visibles = filtered.slice(0, postMostrar);
   const pager = document.getElementById('post-pager');
   if (pager) pager.style.display = filtered.length > postMostrar ? '' : 'none';
   const grid = document.getElementById('post-tbody');
-  grid.innerHTML = visibles.map(postCardHtml).join('');
+  let grupo = null;
+  grid.innerHTML = visibles.map((p, i) => {
+    const c = postCargo(p), cab = agrupar && c !== grupo ? `<div class="post-grupo"><span>${esc(c)}</span><b>${porCargo[c]}</b></div>` : '';
+    grupo = c;
+    return cab + postCardHtml(p, i);
+  }).join('');
   grid.querySelectorAll('.lt-card').forEach(el => el.onclick = () => {
     const p = postCache.find(x => String(x.id) === el.dataset.id);
     if (p) abrirPostulacionDrawer(p);
@@ -9270,6 +9351,19 @@ function analisisPanelHtml(a) {
     ${a.banderas?.length ? `<div class="pf-bloque"><label class="fl">Para mirar con lupa</label>${listaHtml(a.banderas, '#ef4444')}</div>` : ''}
     <div class="muted" style="font-size:11.5px;margin-top:6px">Generado por IA a partir del CV. Revisá antes de decidir.</div>`;
 }
+// Lo primero que se lee al abrir la ficha: nivel + por qué, en 10 segundos.
+// El informe entero sigue en la pestaña Análisis IA.
+function veredictoHtml(p) {
+  const a = p.analisis_ia, cal = p.calidad_prospecto;
+  if (!a?.resumen) return '';
+  return `<div class="post-veredicto" style="--cal:${CALIDAD_VAR[cal] || 'var(--muted2)'}">
+    <div class="post-veredicto-cab"><span class="post-cal"><span class="post-cal-punto"></span>${cal ? CALIDAD_PROSPECTO_LABEL[cal] : 'Sin calificar'}</span><span class="post-veredicto-lbl">Veredicto IA</span></div>
+    <div class="post-veredicto-txt">${esc(a.resumen)}</div>
+    ${a.fortalezas?.length ? listaHtml(a.fortalezas.slice(0, 3), '#22c55e') : ''}
+    ${a.debilidades?.length ? listaHtml(a.debilidades.slice(0, 2), '#e0a030') : ''}
+    <button class="post-veredicto-mas" type="button" data-ir-tab="analisis">Ver análisis completo <i class="fas fa-arrow-right"></i></button>
+  </div>`;
+}
 function abrirPostulacionDrawer(p, tab) {
   postDrawerActual = p;
   const pestana = tab || 'perfil';
@@ -9297,6 +9391,10 @@ function abrirPostulacionDrawer(p, tab) {
         </div>
       </div>
       <button class="pf-cerrar" type="button" id="pf-cerrar" title="Cerrar"><i class="fas fa-xmark"></i></button>
+      <div class="post-d-rapidas">
+        ${postContactoHtml(p)}
+        ${p.cv_storage_path ? '<button class="btn-sm" type="button" id="post-d-ver-cv"><i class="fas fa-file-pdf"></i> Ver CV</button>' : ''}
+      </div>
     </div>
 
     <div class="pf-tabs">
@@ -9307,16 +9405,16 @@ function abrirPostulacionDrawer(p, tab) {
 
     <div class="pf-cuerpo">
       <div class="pf-panel" data-panel="perfil" style="display:${pestana === 'perfil' ? '' : 'none'}">
+        ${veredictoHtml(p)}
         <div class="pf-datos">
           ${dato('Edad', p.edad ? p.edad + ' años' : null)}
           ${dato('Género', p.genero ? GENERO_LABEL[p.genero] : null)}
-          ${dato('Experiencia', p.anios_experiencia != null ? p.anios_experiencia + ' años' : null)}
+          ${dato('Experiencia', postExp(p) != null ? postExp(p) + ' años' : null)}
           ${dato('Teléfono', p.telefono)}
           ${dato('Email', p.email, true)}
           ${dato('Estudios', p.estudios, true)}
         </div>
         <div class="pf-acciones">
-          ${p.cv_storage_path ? '<button class="btn-sm" type="button" id="post-d-ver-cv"><i class="fas fa-file-pdf"></i> Ver CV</button>' : ''}
           ${p.cv_storage_path
             ? '<button class="btn-sm" type="button" id="post-d-reanalizar" title="Vuelve a evaluar el CV con el criterio actual. No toca el nombre, teléfono ni email."><i class="fas fa-wand-magic-sparkles"></i> Re-analizar CV</button>'
             : '<button class="btn-sm" type="button" disabled title="Hace falta un CV adjunto para poder re-analizar"><i class="fas fa-wand-magic-sparkles"></i> Re-analizar CV</button>'}
@@ -9382,6 +9480,8 @@ function abrirPostulacionDrawer(p, tab) {
     });
   });
 
+  document.querySelector('#post-d-body [data-ir-tab]')?.addEventListener('click', e =>
+    document.querySelector(`#post-d-body .pf-tab[data-tab="${e.currentTarget.dataset.irTab}"]`)?.click());
   document.getElementById('pf-cerrar').onclick = () => closeSheet('post-drawer-sheet');
   document.getElementById('post-d-save').onclick = guardarPostulacion;
   document.getElementById('post-d-ver-cv')?.addEventListener('click', () => verCVPostulacion(p.cv_storage_path));
@@ -9493,8 +9593,6 @@ async function verCVPostulacion(path) {
   window.open(data.signedUrl, '_blank');
 }
 document.getElementById('post-reanalizar-todas')?.addEventListener('click', reanalizarTodasLasPostulaciones);
-document.getElementById('post-search')?.addEventListener('input', () => { clearTimeout(postSearchDeb); postSearchDeb = setTimeout(() => { postMostrar = TECHO_LISTA; renderPostulaciones(); }, 200); });
-document.querySelectorAll('#post-f-modalidad,#post-f-llamada,#post-f-calidad,#post-f-sin-revisar').forEach(el => el.addEventListener('change', () => { postMostrar = TECHO_LISTA; renderPostulaciones(); }));
 
 /* ---------- Cargar un CV y analizarlo con IA ----------
    Para los CVs que llegan por correo (corporativo.lotus360@gmail.com está
@@ -22489,6 +22587,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-09-30', emoji: '🗂️', titulo: 'Postulaciones más fáciles de revisar', texto: 'Tarjetas nuevas: foto grande, calificación con color, cargo y una línea con edad, experiencia y estudios. Ordená por calificación, fecha o experiencia, agrupá por cargo y filtrá por cargo, género, rango de edad, foto, modalidad, estado y calificación. En la ficha, el veredicto de la IA está arriba en Perfil y Llamar / WhatsApp / Ver CV quedan fijos. Al re-analizar, la edad, género, estudios y experiencia vacíos se completan desde el CV.', roles: ['admin'] },
   { fecha: '2026-09-30', emoji: '🧑‍💼', titulo: 'Postulaciones: "Re-analizar todas" de verdad', texto: 'El botón ahora re-lee cada CV en el servidor uno por uno, le pone la foto sacada del CV si no tenía y lo vuelve a calificar con el criterio nuevo: pesan las habilidades y la capacidad de trabajo, no el diseño del CV ni fechas desordenadas. Las postulaciones sin CV se eliminan al correrlo.', roles: ['admin'] },
   { fecha: '2026-09-29', emoji: '📲', titulo: 'Repartir números: de la jefa a los asesores en un paso', texto: 'Nueva sección Leads → "Repartir números". Pegá los números que te escribieron directo (o subí capturas de pantalla), revisá los que detectó y, al confirmar, se reparten entre los asesores con el reparto de siempre. Cada asesor recibe su aviso y su lead queda en el CRM.', roles: ['admin'] },
   { fecha: '2026-09-28', emoji: '🔀', titulo: 'Reparto inteligente de los links de redes', texto: 'Los links de WhatsApp de la bio (IG/FB/TikTok) ya reparten según quién está en turno, evitan ráfagas y reconocen al cliente que vuelve. En "Hoy" tenés un botón de Pausa (30 min / 1 h / hasta mañana) para cuando no puedas atender. Admin: en Gestión de personal → Asesores, horario semanal por asesor, guardia nocturna, tope de ráfaga y la tarjeta "Reparto redes hoy".', roles: ['admin', 'asesor'] },
