@@ -148,6 +148,19 @@ function textoTelefonoLead(l) {
 const ESTADOS_CICLO = ESTADOS;
 const SERVICIOS = ['Vuelos', 'Full Day', 'Hospedaje', 'Paquete Todo Incluido', 'Hotel', 'Tour', 'Evento', 'Otro'];
 const VENTA = ['PAGO REALIZADO', 'VENTA COMPLETA'];
+// Próxima acción (leads.proxima_accion_*): los leads cerrados no cuentan como seguimiento.
+const ESTADOS_SIN_SEGUIMIENTO = [...VENTA, 'PERDIDO'];
+const FILTRO_SIN_SEGUIMIENTO = `(${ESTADOS_SIN_SEGUIMIENTO.map(e => `"${e}"`).join(',')})`;
+const finDelDia = () => { const d = new Date(); d.setHours(23, 59, 59, 999); return d; };
+const inicioDelDia = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const aInputLocal = iso => {
+  const d = new Date(iso); if (Number.isNaN(d.getTime())) return '';
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const seguimientoActivo = l => !!l.proxima_accion_at && !ESTADOS_SIN_SEGUIMIENTO.includes(l.estado);
+const chipSeguimiento = l => seguimientoActivo(l)
+  ? `<span class="chip-seg ${new Date(l.proxima_accion_at) < new Date() ? 'vence' : ''}" title="${esc(l.proxima_accion_nota || 'Próxima acción')}"><i class="fas fa-calendar-check"></i> ${esc(tiempoSeguimiento(l.proxima_accion_at))}</span>` : '';
 const CANAL_CLASS = { 'Instagram': 'ig', 'Facebook': 'fb', 'Ambos': 'am', 'Desconocido': '' };
 const ADV_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a'];
 const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-rolling', 'fa-compass', 'fa-earth-americas', 'fa-camera-retro', 'fa-map-location-dot', 'fa-sun', 'fa-water', 'fa-mountain-sun', 'fa-passport', 'fa-glasses'];
@@ -160,7 +173,6 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
   boleteria: ['Boletería', 'Rutas, aerolíneas, precios y requisitos de vuelo'],
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
-  'cerebro-ia': ['Cerebro IA', 'Las reglas que la IA obedece al vender -- valen para Instagram, Facebook y la web'],
   'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
   'clientes-eventos': ['Clientes Eventos', 'Quienes se registraron con el QR del stand y los premios que ganaron'],
@@ -176,7 +188,9 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'],
   pagos: ['Pagos por verificar', 'Links de pago que un cliente declaró como pagados -- verificá el comprobante antes de aprobar'] };
-const initials = s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+// Sección sin entrada en TITLES: usa label/sub de NAV_ITEMS antes de caer en Dashboard.
+const tituloSeccion = sec => { if (TITLES[sec]) return TITLES[sec]; const n = NAV_ITEMS.find(it => it.sec === sec); return n ? [n.label, n.sub || ''] : TITLES.dashboard; };
+const initials =s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
   if (url) { el.style.backgroundImage = `url('${url}')`; el.textContent = ''; }
@@ -211,9 +225,12 @@ function formatearTexto(texto) {
   return oraciones.map(o => `<p>${resaltarNumeros(esc(o))}</p>`).join('');
 }
 const val = id => document.getElementById(id)?.value ?? '';
-const niceEstado = v => (v === (v || '').toUpperCase() && (v || '').includes(' ')) ? v.charAt(0) + v.slice(1).toLowerCase() : v;
+// Solo rótulo: el valor guardado en la base sigue sin tildes.
+const ESTADO_ROTULO = { 'COTIZACION ENVIADA': 'Cotización enviada', 'NUMERO INVALIDO': 'Número inválido' };
+const niceEstado = v => ESTADO_ROTULO[v] || ((v === (v || '').toUpperCase() && (v || '').includes(' ')) ? v.charAt(0) + v.slice(1).toLowerCase() : v);
 const sortEntries = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]);
 
+let HOY_KPIS_ASESOR = null, HOY_SEG_ASESOR = [], hoyKpisBusy = false, hoyKpisRepetir = false;
 let STATS = {}, page = 1, PER = 25, totalFiltered = 0, genCarga = 0;
 let activeMonth = null, activeDestino = null, currentLead = null;
 // Conflicto en el lead abierto (falla #4 del plan de rediseño): si otra
@@ -388,6 +405,8 @@ async function entrarSegunRol() {
   // estaría en la URL para cuando se leyera acá).
   manejarDeepLinkLeadAccion();
   manejarDeepLinkSeccion();
+  // Antes de Conversacion: esa lee la query, espera la bandeja y la reescribe con lo que leyó.
+  manejarDeepLinkAbrirLead();
   manejarDeepLinkConversacion();
   registrarPushNativo();
   // Primera vez del usuario: se abre solo el menú de capítulos (no un
@@ -1207,18 +1226,20 @@ async function renderAvisosPushUI() {
   const mostrar = puedeRecibirAlgo && (estado.soportado || faltaInstalar) && !estado.activo
     && !rechazoTodo && !MI_PREFERENCIAS.push_rechazado;
   const texto = faltaInstalar
-    ? 'Para recibir avisos en iPhone: tocá Compartir abajo y luego "Agregar a inicio". Después entrá desde ese ícono y activalos.'
+    ? 'En iPhone: tocá Compartir y "Agregar a inicio"; activalos desde ese ícono.'
     : (bloqueado
-      ? 'Los avisos están bloqueados en este navegador: tocá el candado junto a la dirección y permití las notificaciones.'
+      ? 'Avisos bloqueados: permitilos desde el candado junto a la dirección.'
       : (puedeRecibirAsistencia()
-        ? 'Activá los avisos de leads y asistencia -- ahora mismo no te llega ninguno.'
-        : 'Activá los avisos de leads nuevos -- ahora mismo no te llega ninguno.'));
+        ? 'Activá los avisos de leads y asistencia.'
+        : 'Activá los avisos de leads nuevos.'));
   ['-d', '-m'].forEach(sfx => {
     const el = document.getElementById('recordatorios-banner' + sfx);
     if (!el) return;
     el.style.display = mostrar ? 'flex' : 'none';
     const span = el.querySelector('span');
     if (span) span.textContent = texto;
+    const cerrar = el.querySelector('.rb-close');
+    if (cerrar) cerrar.textContent = (bloqueado || faltaInstalar) ? 'Cerrar' : 'No, gracias';
     // Sin permiso (denegado) o sin app instalada en iPhone, el botón no puede
     // hacer nada: el navegador no vuelve a preguntar y en iOS no hay
     // PushManager. Queda solo la instrucción, que es lo accionable.
@@ -1248,8 +1269,8 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
-  'mensajes', 'tareas', 'gestion-personal', 'informe-diario', 'cerebro-ia',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'importar-vouchers', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
+  'mensajes', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
 ];
@@ -1292,6 +1313,22 @@ async function manejarDeepLinkLeadAccion() {
   const { data: l, error } = await sb.from('leads').select('*').eq('id', leadId).single();
   if (error || !l) { errToast('No se pudo cargar ese lead'); return; }
   if (accion === 'atender') await atenderInboxLead(l); else await noPuedoInboxLead(l);
+}
+
+// Deep-link desde el push de seguimiento (?ir=leads&abrir_lead=<id>, ver
+// seguimiento-lead): abre la ficha en la pestaña Ficha. Param propio para no
+// cambiar lo que hace el toque en los pushes de lead nuevo (?lead=<id>).
+async function manejarDeepLinkAbrirLead() {
+  const params = new URLSearchParams(location.search);
+  const leadId = Number(params.get('abrir_lead'));
+  if (!params.has('abrir_lead')) return;
+  params.delete('abrir_lead');
+  const resto = params.toString();
+  history.replaceState(null, '', location.pathname + (resto ? `?${resto}` : ''));
+  if (!Number.isInteger(leadId) || leadId <= 0) return;
+  const { data: l, error } = await sb.from('leads').select('*').eq('id', leadId).maybeSingle();
+  if (error || !l || l.eliminado_at) { errToast('No se pudo abrir ese lead'); return; }
+  openDrawer(l);
 }
 
 // Deep-link desde un push de mensaje (?ir=mensajes&conversacion=<id>, ver
@@ -1399,8 +1436,8 @@ function habilitarArrastreHorizontal(el) {
 }
 function setupGestionPersonal() {
   habilitarArrastreHorizontal(document.getElementById('gp-tabs'));
-  document.querySelectorAll('#gp-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
-    if (gpTab === 'asesores' && btn.dataset.gpTab !== 'asesores' && (repartoDirty.domestico || repartoDirty.internacional) && !confirm('Hay cambios sin guardar en el reparto. ¿Salir de todas formas?')) return;
+  document.querySelectorAll('#gp-tabs .seg').forEach(btn => btn.addEventListener('click', async () => {
+    if (gpTab === 'asesores' && btn.dataset.gpTab !== 'asesores' && (repartoDirty.domestico || repartoDirty.internacional) && !(await confirmarSheet({ titulo: '¿Salir sin guardar?', detalle: 'Hay cambios sin guardar en el reparto.', textoOk: 'Salir', destructivo: true }))) return;
     gpTab = btn.dataset.gpTab;
     document.querySelectorAll('#gp-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
     btn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
@@ -2322,15 +2359,16 @@ function renderInformeCampos(f) {
     + bloque('Bloqueos', f.bloqueos);
 }
 window.exceptuarHoy = async (asesorId) => {
-  const motivo = prompt('Motivo (opcional):');
+  const motivo = await pedirTexto({ titulo: 'Exceptuar hoy', label: 'Motivo', textoOk: 'Exceptuar' });
+  if (motivo === null) return;
   const { error } = await sb.rpc('exceptuar_asistencia', { p_asesor_id: asesorId, p_fecha: hoyCaracas(), p_motivo: motivo || null });
   if (error) { errToast('No se pudo exceptuar: ' + error.message); return; }
   okToast('Asesor exceptuado hoy');
   loadPersonalTiempo(personalSoloFreelancers);
 };
 window.anularStrikeUI = async (strikeId) => {
-  const motivo = prompt('Motivo de la anulación (obligatorio):');
-  if (!motivo || !motivo.trim()) return;
+  const motivo = await pedirTexto({ titulo: 'Anular strike', label: 'Motivo de la anulación', requerido: true, textoOk: 'Anular', destructivo: true });
+  if (!motivo) return;
   const { error } = await sb.rpc('anular_strike', { p_strike_id: strikeId, p_motivo: motivo.trim() });
   if (error) { errToast('No se pudo anular: ' + error.message); return; }
   okToast('Strike anulado');
@@ -2590,7 +2628,7 @@ async function startApp() {
   const esMobile = window.matchMedia('(max-width:760px)').matches;
   const seccionGuardada = MI_PREFERENCIAS.ultima_seccion;
   // usuarioPuedeAbrirSeccion y no solo que exista #sec-*: las secciones que
-  // salieron del menú (Mis Notas, Cerebro IA...) conservan su HTML.
+  // salieron del menú (Mis Notas, Voz IA...) conservan su HTML.
   const seccionValida = seccionGuardada && document.getElementById('sec-' + seccionGuardada) && usuarioPuedeAbrirSeccion(seccionGuardada);
   if (ROL === 'asesor') {
     const destino = seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'leads');
@@ -2625,7 +2663,7 @@ async function startApp() {
   arrancar(
     setupMetricas, setupRanking, setupMisVentas, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
-    setupBuscadorIATarifario, setupCerebroIA, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
+    setupBuscadorIATarifario, setupIaAtencion, setupCerrarSheets, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
     setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas, setupBtTravel,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
@@ -2750,7 +2788,9 @@ function renderTrend() {
 }
 function renderCanal() {
   const e = sortEntries(STATS.by_canal); canalKeys = e.map(x => x[0]);
-  mk('chCanal', { type: 'doughnut', data: { labels: canalKeys, datasets: [{ data: e.map(x => x[1]), backgroundColor: ['#ff5c8a', '#a06bff', '#4a9eff', '#5f677f'], borderColor: '#0d1224', borderWidth: 3, hoverOffset: 8 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '64%', onClick: (e, el) => { if (el.length) { const k = canalKeys[el[0].index]; chartPreview('canal', k, k, 'fa-share-nodes', STATS.by_canal[k]); } }, onHover: pointer, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 14, font: { size: 12 } } }, tooltip: { callbacks: { label: c => c.label + ': ' + fmt(c.raw) } } } } });
+  const tot = e.reduce((s, x) => s + x[1], 0) || 1, cols = ['#ff5c8a', '#a06bff', '#4a9eff', '#5f677f'];
+  // Barras con número y % en la etiqueta: la dona no dejaba leer las porciones chicas.
+  mk('chCanal', { type: 'bar', data: { labels: e.map(x => `${x[0]} · ${fmt(x[1])} (${Math.round(x[1] / tot * 100)}%)`), datasets: [{ data: e.map(x => x[1]), backgroundColor: e.map((x, i) => cols[i % cols.length]), borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (ev, el) => { if (el.length) { const k = canalKeys[el[0].index]; chartPreview('canal', k, k, 'fa-share-nodes', STATS.by_canal[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => canalKeys[it[0].dataIndex], label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true, ticks: { maxTicksLimit: 4 } }, y: { grid: { display: false } } } } });
 }
 function renderDest(datosPeriodo) {
   const src = datosPeriodo || STATS.top_destinos;
@@ -2801,8 +2841,8 @@ function renderPipe(id) {
   const be = STATS.by_estado || {}; const shown = ESTADOS.filter(k => (be[k] || 0) > 0 || ['POR ATENDER', 'PAGO REALIZADO', 'VENTA COMPLETA'].includes(k));
   const max = Math.max(...shown.map(k => be[k] || 0), 1);
   document.getElementById(id).innerHTML = shown.map(k => {
-    const v = be[k] || 0, w = Math.max((v / max) * 100, 2);
-    return `<div class="pstep" data-est="${k}"><div class="pl">${niceEstado(k)}</div><div class="pbar"><div class="pfill" style="width:${w}%;background:${ESTADO_COLORS[k] || '#5f677f'}">${v > max * 0.12 ? fmt(v) : ''}</div></div><div class="pv">${fmt(v)}</div></div>`;
+    const v = be[k] || 0, w = Math.max(Math.sqrt(v / max) * 100, 2);
+    return `<div class="pstep" data-est="${k}"><div class="pl">${niceEstado(k)}</div><div class="pbar"><div class="pfill" style="width:${w}%;background:${ESTADO_COLORS[k] || '#5f677f'}">${w > 22 ? fmt(v) : ''}</div></div><div class="pv">${fmt(v)}</div></div>`;
   }).join('');
   document.querySelectorAll('#' + id + ' .pstep').forEach(el => el.onclick = () => { const k = el.dataset.est; chartPreview('estado', k, niceEstado(k), 'fa-diagram-project', be[k] || 0); });
 }
@@ -3563,8 +3603,8 @@ function setupAsesoresPeriodo() {
   document.getElementById('ase-desde').value = isoD(addD(hoy, -6));
   document.getElementById('ase-hasta').value = isoD(hoy);
   initDateRangePicker('ase');
-  ['ase-desde', 'ase-hasta'].forEach(id => document.getElementById(id).addEventListener('change', () => {
-    if ((repartoDirty.domestico || repartoDirty.internacional) && !confirm('Hay cambios sin guardar en el reparto. ¿Cambiar de periodo de todas formas?')) return;
+  ['ase-desde', 'ase-hasta'].forEach(id => document.getElementById(id).addEventListener('change', async () => {
+    if ((repartoDirty.domestico || repartoDirty.internacional) && !(await confirmarSheet({ titulo: '¿Cambiar de periodo sin guardar?', detalle: 'Hay cambios sin guardar en el reparto.', textoOk: 'Cambiar', destructivo: true }))) return;
     loadAsesoresPeriodo();
   }));
   document.getElementById('ase-ver-reasig').onclick = irAReasignacionesDesdeAsesores;
@@ -4021,9 +4061,9 @@ function renderReparto() {
   });
 }
 function setupReparto() {
-  document.querySelectorAll('#repPool .seg').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#repPool .seg').forEach(b => b.onclick = async () => {
     if (repartoPool === b.dataset.pool) return;
-    if (repartoDirty[repartoPool] && !confirm('Hay cambios sin guardar en este reparto. ¿Cambiar de pestaña de todas formas?')) return;
+    if (repartoDirty[repartoPool] && !(await confirmarSheet({ titulo: '¿Cambiar de pestaña sin guardar?', detalle: 'Hay cambios sin guardar en este reparto.', textoOk: 'Cambiar', destructivo: true }))) return;
     repartoPool = b.dataset.pool;
     document.querySelectorAll('#repPool .seg').forEach(x => x.classList.toggle('on', x === b));
     renderReparto();
@@ -4177,7 +4217,7 @@ function chartPreview(type, key, label, icon, count) {
   if (type === 'month') renderTrend();
 }
 function enterDrill(type, key) { previewSel = null; document.getElementById('preview-pill').classList.remove('show'); ({ month: drillMonth, canal: drillCanal, estado: drillEstado, asesor: drillAsesor, destino: drillDestino }[type])(key); }
-function clearFiltersQuiet() { ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-sin-telefono'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); document.getElementById('global-search').value = ''; activeMonth = null; activeDestino = null; }
+function clearFiltersQuiet() { ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-sin-telefono', 'f-seguimiento'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); document.getElementById('global-search').value = ''; activeMonth = null; activeDestino = null; }
 function drillTo(apply) { clearFiltersQuiet(); apply(); activateSection('leads'); page = 1; loadTable(); renderChips(); }
 const drillMonth = m => drillTo(() => { activeMonth = m; });
 const drillCanal = c => drillTo(() => { document.getElementById('f-canal').value = c; });
@@ -4186,6 +4226,7 @@ const drillAsesor = a => drillTo(() => { document.getElementById('f-asesor').val
 const drillDestino = d => drillTo(() => { activeDestino = d; });
 const drillAnio = y => drillTo(() => { document.getElementById('f-anio').value = y; });
 const drillClear = () => drillTo(() => { });
+const drillSeguimiento = f => drillTo(() => { document.getElementById('f-seguimiento').value = f; });
 
 /* ---------- Filtros + Tabla ---------- */
 function setupFilters() {
@@ -4194,7 +4235,7 @@ function setupFilters() {
   fill('f-asesor', ACTIVOS.concat(['Sin asignar']));
   fill('f-servicio', SERVICIOS);
   fill('f-anio', Object.keys(STATS.by_anio || {}).sort().reverse());
-  ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta', 'f-sin-telefono'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
+  ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta', 'f-sin-telefono', 'f-seguimiento'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
   let deb; document.getElementById('global-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => { page = 1; loadTable(); renderChips(); }, 300); });
   initDateRangePicker('f');
   leadsView = initViewSwitcher('leads-view-switch', 'leads', 'tarjetas', v => { leadsView = v; applyLeadsView(); });
@@ -4265,6 +4306,7 @@ function renderChips() {
   const box = document.getElementById('active-filters'); if (!box) return;
   const chips = [];
   const push = (label, clr) => chips.push([label, clr]);
+  if (val('f-seguimiento')) push('Seguimiento: ' + ({ pendiente: 'vencidos y de hoy', vencidos: 'vencidos', hoy: 'hoy', proximos: 'próximos' }[val('f-seguimiento')] || ''), () => setDrop('f-seguimiento', ''));
   if (val('f-canal')) push('Canal: ' + val('f-canal'), () => setDrop('f-canal', ''));
   if (val('f-estado')) push('Estado: ' + niceEstado(val('f-estado')), () => setDrop('f-estado', ''));
   if (val('f-asesor')) push('Asesor: ' + val('f-asesor'), () => setDrop('f-asesor', ''));
@@ -4311,6 +4353,15 @@ function buildQuery(forCount) {
   const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim(), fst = val('f-sin-telefono');
   if (fst === 'sin') q = q.is('telefono', null);
   else if (fst === 'con') q = q.not('telefono', 'is', null);
+  const fseg = val('f-seguimiento');
+  if (fseg) {
+    q = q.not('proxima_accion_at', 'is', null).not('estado', 'in', FILTRO_SIN_SEGUIMIENTO);
+    const ahora = new Date().toISOString();
+    if (fseg === 'pendiente') q = q.lte('proxima_accion_at', finDelDia().toISOString());
+    else if (fseg === 'vencidos') q = q.lt('proxima_accion_at', ahora);
+    else if (fseg === 'hoy') q = q.gte('proxima_accion_at', inicioDelDia().toISOString()).lte('proxima_accion_at', finDelDia().toISOString());
+    else if (fseg === 'proximos') q = q.gt('proxima_accion_at', finDelDia().toISOString());
+  }
   if (fc) q = q.eq('canal', fc);
   if (fe) q = q.eq('estado', fe);
   if (fa) q = q.eq('asesor', fa);
@@ -4352,7 +4403,10 @@ async function loadTable() {
   const loading = document.getElementById('tbl-loading'), empty = document.getElementById('tbl-empty'), wrap = document.getElementById('tbl-wrap');
   empty.classList.remove('show'); loading.classList.add('show'); wrap.style.opacity = '.4';
   const from = (page - 1) * PER;
-  const { data, count, error } = await buildQuery(true).order('fecha_creacion', { ascending: false, nullsFirst: false }).range(from, from + PER - 1);
+  const porSeguimiento = !!val('f-seguimiento'); // con el filtro, lo más urgente primero
+  let qTabla = buildQuery(true).order(porSeguimiento ? 'proxima_accion_at' : 'fecha_creacion', { ascending: porSeguimiento, nullsFirst: false });
+  if (porSeguimiento) qTabla = qTabla.order('id'); // los atajos repiten la hora exacta: sin desempate .range() pagina inestable
+  const { data, count, error } = await qTabla.range(from, from + PER - 1);
   if (gen !== genCarga) return;
   loading.classList.remove('show'); wrap.style.opacity = '1';
   if (error) { console.error(error); errToast('No se pudieron cargar los leads'); return; }
@@ -4619,6 +4673,7 @@ function leadCardHtml(l) {
       </div>
     </div>
     <div class="ec-row"><i class="fas fa-phone"></i> ${textoTelefonoLead(l)}</div>
+    ${seguimientoActivo(l) ? `<div class="ec-row">${chipSeguimiento(l)}</div>` : ''}
     <div class="ec-estado-row">
       ${sinAtenderDatos ? `<span class="badge-st sin-atender-movil" style="color:var(--accent);background:var(--accent-soft)">Sin atender</span>` : ''}
       <span class="estado-stepper" data-id="${l.id}">
@@ -4700,6 +4755,7 @@ async function loadInboxLeads() {
   INBOX_LEADS = data || [];
   renderInbox();
   renderHoyAsesor();
+  refrescarKpisHoyAsesor();
 }
 function renderInbox() {
   const grid = document.getElementById('inbox-grid'), empty = document.getElementById('inbox-empty');
@@ -4758,7 +4814,7 @@ function renderHoy() {
   const esAsesor = ROL === 'asesor';
   document.getElementById('hoy-asesor').style.display = esAsesor ? '' : 'none';
   document.getElementById('hoy-admin').style.display = esAsesor ? 'none' : '';
-  if (esAsesor) renderHoyAsesor(); else renderHoyAdmin();
+  if (esAsesor) { renderHoyAsesor(); refrescarKpisHoyAsesor(); } else renderHoyAdmin();
 }
 function renderHoyAsesor() {
   const saludo = document.getElementById('hoy-saludo');
@@ -4777,14 +4833,72 @@ function renderHoyAsesor() {
     el.querySelector('.inbox-btn.nopuedo')?.addEventListener('click', e => { e.stopPropagation(); noPuedoInboxLead(l); });
     el.querySelector('.inbox-btn.avisar').addEventListener('click', e => { e.stopPropagation(); abrirAvisarTelefono(l); });
   });
-  const stats = document.getElementById('hoy-stats');
-  if (STATS && Object.keys(STATS).length) {
-    const mes = new Date().toISOString().slice(0, 7);
-    pintarKPIs(stats, [
-      { t: 'Por atender', v: fmt(STATS.por_atender), i: 'fa-bell', c: 'var(--amber)', tt: 'Ver los leads por atender', go: () => drillEstado('POR ATENDER') },
-      { t: 'Nuevos este mes', v: fmt(STATS.mes_actual), i: 'fa-bolt', c: 'var(--green)', tt: 'Ver los leads de este mes', go: () => drillMonth(mes) },
-      { t: 'Leads totales', v: fmt(STATS.total), i: 'fa-users', c: 'var(--accent)', tt: 'Ver todos los leads, sin filtros', go: () => drillClear() },
+  pintarKpisHoyAsesor();
+}
+// dashboard_stats() es global (total/por_atender/mes_actual de toda la empresa),
+// así que Hoy del asesor NO lo usa: cuenta por REST y la RLS (asesor_leads_select_own)
+// limita a sus leads. Mismos filtros base que buildQuery(), para que la cifra
+// coincida con la lista a la que lleva el toque.
+function pintarKpisHoyAsesor() {
+  const k = HOY_KPIS_ASESOR;
+  if (!k) return;
+  const mes = new Date().toISOString().slice(0, 7);
+  pintarKPIs(document.getElementById('hoy-stats'), [
+    { t: 'Por atender', v: fmt(k.por_atender), i: 'fa-bell', c: 'var(--amber)', tt: 'Ver tus leads por atender', go: () => drillEstado('POR ATENDER') },
+    { t: 'Nuevos este mes', v: fmt(k.mes), i: 'fa-bolt', c: 'var(--green)', tt: 'Ver tus leads de este mes', go: () => drillMonth(mes) },
+    { t: 'Mis leads', v: fmt(k.total), i: 'fa-users', c: 'var(--accent)', tt: 'Ver todos tus leads, sin filtros', go: () => drillClear() },
+    { t: 'Seguimientos', v: fmt(k.seg), i: 'fa-calendar-check', c: 'var(--blue, var(--accent))', tt: 'Ver tus seguimientos vencidos y de hoy', go: () => drillSeguimiento('pendiente') },
+  ]);
+  pintarSeguimientosHoyAsesor();
+}
+// Tarjeta "Seguimientos de hoy": vencidos + de hoy (máx 5, el resto en Leads). Solo aparece si hay alguno.
+function pintarSeguimientosHoyAsesor() {
+  const wrap = document.getElementById('hoy-seg-wrap'), box = document.getElementById('hoy-seg');
+  if (!wrap || !box) return;
+  const k = HOY_KPIS_ASESOR, filas = HOY_SEG_ASESOR || [];
+  wrap.style.display = filas.length ? '' : 'none';
+  if (!filas.length) return;
+  document.getElementById('hoy-seg-count').textContent = k?.seg ?? filas.length;
+  box.innerHTML = filas.map(l => `<div class="seg-card" role="button" tabindex="0" data-lead-id="${l.id}">
+    <div class="seg-top"><b>${esc(l.nombre)}</b>${chipSeguimiento(l)}</div>
+    <div class="seg-sub">${esc(l.proxima_accion_nota || l.destino || 'Sin detalle')}</div></div>`).join('')
+    + ((k?.seg ?? 0) > filas.length ? `<button type="button" class="seg-mas" id="hoy-seg-mas">Ver los ${fmt(k.seg)} en Leads</button>` : '');
+  [...box.querySelectorAll('.seg-card')].forEach((el, i) => {
+    const abrir = () => openDrawer(filas[i]);
+    el.addEventListener('click', abrir);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } });
+  });
+  document.getElementById('hoy-seg-mas')?.addEventListener('click', () => drillSeguimiento('pendiente'));
+}
+async function refrescarKpisHoyAsesor() {
+  if (ROL !== 'asesor') return;
+  if (hoyKpisBusy) { hoyKpisRepetir = true; return; }
+  hoyKpisBusy = true;
+  try {
+    const mes = new Date().toISOString().slice(0, 7), [y, m] = mes.split('-').map(Number);
+    const sig = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+    const base = () => sb.from('leads').select('id', { count: 'exact', head: true })
+      .is('eliminado_at', null).is('contacto_directo_enviado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
+    // Mismos filtros base que buildQuery: el KPI tiene que coincidir con la lista de Leads a la que lleva.
+    const [pa, mm, tot, seg] = await Promise.all([
+      base().eq('estado', 'POR ATENDER'),
+      base().gte('fecha_creacion', mes + '-01').lt('fecha_creacion', sig + '-01'),
+      base(),
+      sb.from('leads').select('*', { count: 'exact' }).is('eliminado_at', null).is('contacto_directo_enviado_at', null)
+        .or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`).not('proxima_accion_at', 'is', null)
+        .not('estado', 'in', FILTRO_SIN_SEGUIMIENTO).lte('proxima_accion_at', finDelDia().toISOString())
+        .order('proxima_accion_at', { ascending: true }).order('id').limit(5),
     ]);
+    const err = pa.error || mm.error || tot.error;
+    if (err) { console.error('hoy kpis', err.message || err); return; }
+    // Si falla solo la consulta de seguimientos, los otros 3 KPIs se pintan igual y se conserva lo último conocido.
+    if (seg.error) console.error('hoy seguimientos', seg.error.message || seg.error);
+    HOY_KPIS_ASESOR = { por_atender: pa.count ?? 0, mes: mm.count ?? 0, total: tot.count ?? 0, seg: seg.error ? (HOY_KPIS_ASESOR?.seg ?? 0) : (seg.count ?? 0) };
+    if (!seg.error) HOY_SEG_ASESOR = seg.data || [];
+    pintarKpisHoyAsesor();
+  } finally {
+    hoyKpisBusy = false;
+    if (hoyKpisRepetir) { hoyKpisRepetir = false; refrescarKpisHoyAsesor(); }
   }
 }
 function renderHoyAdmin() {
@@ -4845,6 +4959,7 @@ function quitarDeInbox(leadId) {
   INBOX_LEADS = INBOX_LEADS.filter(x => x.id !== leadId);
   renderInbox();
   renderHoyAsesor();
+  refrescarKpisHoyAsesor();
 }
 function abrirAvisarTelefono(l) {
   INBOX_TEL_LEAD_ID = l.id;
@@ -4914,6 +5029,7 @@ function openDrawer(l) {
     <div class="dquick">
       ${wa ? `<a class="dq wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></a>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') && l.external_id ? `<button class="dq" id="e-a-tomar-ia" type="button"><i class="fas fa-hand"></i><span>Tomar conversación</span></button>` : ''}
+      ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-seguimiento" type="button"><i class="fas fa-calendar-check"></i><span>Seguimiento</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-boleteria" type="button"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización'}</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') && !VENTA.includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
@@ -4945,6 +5061,22 @@ function openDrawer(l) {
       </div>
       <div class="dhago">
         <div class="dzone-label acc"><i class="fas fa-arrow-right-arrow-left"></i> Qué hago con él</div>
+        ${(ROL === 'asesor' || ROL === 'admin') ? seccion('proxima', 'fa-calendar-check', 'Próxima acción', `
+          <div class="pa-estado" id="pa-estado"></div>
+          <div class="dgrid">
+            ${campo('Cuándo', `<input id="pa-at" class="ei" type="datetime-local" value="${l.proxima_accion_at ? aInputLocal(l.proxima_accion_at) : ''}">`, true)}
+            ${campo('Qué toca hacer', `<input id="pa-nota" class="ei" type="text" maxlength="200" placeholder="Ej: llamar con la cotización" value="${esc(l.proxima_accion_nota || '')}">`, true)}
+          </div>
+          <div class="pa-atajos">
+            <button type="button" class="dbtn gh" data-pa="manana">Mañana 9:00</button>
+            <button type="button" class="dbtn gh" data-pa="3dias">En 3 días</button>
+            <button type="button" class="dbtn gh" data-pa="lunes">Próx. lunes</button>
+          </div>
+          <div class="edit-err" id="pa-err"></div>
+          <div class="pa-acciones">
+            <button class="dbtn save" id="pa-guardar" type="button"><i class="fas fa-calendar-check"></i> Fijar seguimiento</button>
+            <button class="dbtn gh" id="pa-quitar" type="button">Hecho / quitar</button>
+          </div>`, !!l.proxima_accion_at) : ''}
         ${seccion('gestion', 'fa-sliders', 'Gestión', `
           <div class="dgrid">
             ${campo('Estado', `<select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>`, true)}
@@ -5038,6 +5170,7 @@ function openDrawer(l) {
   document.getElementById('e-a-cotizacion')?.addEventListener('click', () => registrarCotizacionEnviada(l));
   document.getElementById('e-a-tomar-ia')?.addEventListener('click', () => tomarConversacionIA(l));
   document.getElementById('e-a-boleteria')?.addEventListener('click', () => { window.closeDrawer(); abrirSolicitudBoleteria(l); });
+  if (document.getElementById('pa-at')) setupProximaAccion(l);
   document.getElementById('e-emitir-pago')?.addEventListener('click', () => emitirLinkPago(l));
   if (document.getElementById('res-lista')) {
     document.getElementById('res-nueva').onclick = () => crearReservaLead(l);
@@ -5113,7 +5246,7 @@ async function crearReservaLead(l) {
 }
 async function facturarReservaLead(l, reservaId, btn) {
   const monto = Number(btn.dataset.monto || 0);
-  if (!confirm(`Facturar ${btn.dataset.cod} por ${money(monto)} (lo cobrado hasta ahora). Se genera la factura, la comisión y la cuenta por pagar. ¿Seguir?`)) return;
+  if (!(await confirmarSheet({ titulo: `¿Facturar ${btn.dataset.cod} por ${money(monto)}?`, detalle: 'Es lo cobrado hasta ahora. Se genera la factura, la comisión y la cuenta por pagar.', textoOk: 'Facturar' }))) return;
   btn.disabled = true;
   const { data, error } = await sb.rpc('cerrar_reserva', { p_reserva_id: reservaId, p_monto: monto });
   if (error || !data?.ok) { btn.disabled = false; const e = document.getElementById('res-err'); if (e) e.textContent = 'No se pudo facturar: ' + errReserva(error, data); else errToast('No se pudo facturar: ' + errReserva(error, data)); return; }
@@ -5137,6 +5270,73 @@ async function tomarConversacionIA(l) {
   okToast('La IA quedó silenciada y se cancelaron sus seguimientos pendientes');
 }
 
+/* ---------- Próxima acción del lead (RPC fijar_proxima_accion; una sola por lead) ---------- */
+function pintarEstadoProximaAccion(l) {
+  const el = document.getElementById('pa-estado'); if (!el) return;
+  const cerrado = ESTADOS_SIN_SEGUIMIENTO.includes(l.estado);
+  el.innerHTML = l.proxima_accion_at
+    ? `<i class="fas fa-calendar-day"></i> ${esc(fmtFechaHoraCaracas(l.proxima_accion_at))} · <b class="${new Date(l.proxima_accion_at) < new Date() ? 'vence' : ''}">${esc(tiempoSeguimiento(l.proxima_accion_at))}</b>${cerrado ? '<div class="csub">Lead cerrado: no aparece en Seguimientos.</div>' : ''}`
+    : 'Sin próxima acción definida';
+  const q = document.getElementById('pa-quitar'); if (q) q.disabled = !l.proxima_accion_at;
+  const chip = document.getElementById('e-a-seguimiento');
+  if (chip) chip.classList.toggle('dq-alerta', seguimientoActivo(l) && new Date(l.proxima_accion_at) < new Date());
+}
+async function fijarProximaAccion(l, at, nota) {
+  const err = document.getElementById('pa-err'), botones = ['pa-guardar', 'pa-quitar'].map(id => document.getElementById(id));
+  err.textContent = '';
+  botones.forEach(b => { if (b) b.disabled = true; });
+  const { data, error } = await sb.rpc('fijar_proxima_accion', { p_lead_id: l.id, p_at: at, p_nota: nota });
+  botones.forEach(b => { if (b) b.disabled = false; });
+  // La ficha pudo cerrarse o pasar a otro lead mientras la RPC respondía: no pintar en la ficha equivocada.
+  const enFicha = currentLead?.id === l.id && !!document.getElementById('pa-estado');
+  if (error || !data?.ok) {
+    const msg = /fuera de rango/.test(error?.message || '') ? 'La fecha tiene que ser desde ayer hasta dentro de 2 años.'
+      : /demasiado larga/.test(error?.message || '') ? 'La nota admite hasta 200 caracteres.'
+      : error?.message || (data?.error === 'lead_eliminado' ? 'Ese lead ya fue eliminado' : 'No se pudo guardar el seguimiento');
+    if (enFicha) { err.textContent = msg; pintarEstadoProximaAccion(l); } else errToast(msg);
+    return false;
+  }
+  l.proxima_accion_at = data.proxima_accion_at ?? null; l.proxima_accion_nota = data.proxima_accion_nota ?? null;
+  if (!data.sin_cambios) l.proxima_accion_aviso_at = null;
+  if (currentLead?.id === l.id) Object.assign(currentLead, l);
+  if (enFicha) {
+    if (!l.proxima_accion_at) { document.getElementById('pa-at').value = ''; document.getElementById('pa-nota').value = ''; }
+    pintarEstadoProximaAccion(l);
+  }
+  ACTIVIDAD_CACHE = null;
+  okToast(l.proxima_accion_at ? 'Seguimiento fijado' : 'Seguimiento quitado');
+  loadTable(); refrescarKpisHoyAsesor();
+  return true;
+}
+function setupProximaAccion(l) {
+  pintarEstadoProximaAccion(l);
+  const at = document.getElementById('pa-at');
+  // 9:00 del día pedido, en la hora del equipo del usuario (el equipo trabaja en VET)
+  const a9 = d => { d.setHours(9, 0, 0, 0); at.value = aInputLocal(d.toISOString()); };
+  document.querySelectorAll('[data-pa]').forEach(b => b.addEventListener('click', () => {
+    const d = new Date();
+    if (b.dataset.pa === 'manana') d.setDate(d.getDate() + 1);
+    else if (b.dataset.pa === '3dias') d.setDate(d.getDate() + 3);
+    else d.setDate(d.getDate() + (((8 - d.getDay()) % 7) || 7));
+    a9(d);
+  }));
+  document.getElementById('pa-guardar').onclick = () => {
+    if (!at.value) { document.getElementById('pa-err').textContent = 'Elegí fecha y hora, o usá "Hecho / quitar".'; return; }
+    const f = new Date(at.value);
+    if (Number.isNaN(f.getTime())) { document.getElementById('pa-err').textContent = 'La fecha no es válida.'; return; }
+    // La RPC rechaza fechas de más de 1 día atrás: un seguimiento muy vencido no se puede re-guardar con la misma fecha.
+    if (f < new Date(Date.now() - 864e5)) { document.getElementById('pa-err').textContent = 'Esa fecha ya pasó hace más de un día: elegí una nueva o usá "Hecho / quitar".'; return; }
+    fijarProximaAccion(l, f.toISOString(), document.getElementById('pa-nota').value.trim() || null);
+  };
+  document.getElementById('pa-quitar').onclick = () => fijarProximaAccion(l, null, null);
+  document.getElementById('e-a-seguimiento')?.addEventListener('click', () => {
+    document.querySelector('.lead-tab-btn[data-tab="resumen"]')?.click();
+    const sec = document.querySelector('[data-dsec="proxima"]');
+    if (sec) sec.open = true;
+    sec?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => at.focus({ preventScroll: true }), 250);
+  });
+}
 async function registrarCotizacionEnviada(l) {
   const btn = document.getElementById('e-a-cotizacion');
   if (!btn || btn.disabled || !l?.id) return;
@@ -5229,6 +5429,34 @@ const ADJUNTOS_PENDIENTES = new Map(); // correoId -> File[]
 function botonResponderCorreo(correoId) {
   return `<button type="button" onclick="abrirComposerCorreo(${correoId})" style="margin-top:6px;margin-left:6px;background:none;border:1px solid var(--line2,#2a3150);color:var(--accent);border-radius:7px;padding:4px 9px;font-size:10px;cursor:pointer"><i class="fas fa-reply"></i> Responder</button><div id="composer-${correoId}" style="display:none"></div>`;
 }
+// createLink necesita la selección del editor: se guarda antes de mostrar la
+// fila de URL (en línea, no una hoja: el redactor nuevo YA es una hoja y
+// openSheet cierra la que estuviera abierta) y se restaura al insertar.
+window.insertarLinkEditor = (bodyId, btn) => {
+  const body = document.getElementById(bodyId), barra = btn?.parentElement;
+  if (!body || !barra) return;
+  const previa = barra.nextElementSibling;
+  if (previa?.classList.contains('link-fila')) { previa.remove(); return; }
+  const sel = window.getSelection();
+  const rango = sel.rangeCount && body.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null;
+  const fila = document.createElement('div');
+  fila.className = 'link-fila';
+  fila.style.cssText = 'display:flex;gap:6px;margin:6px 0';
+  fila.innerHTML = '<input type="url" class="ei" placeholder="https://..." aria-label="URL del link" style="flex:1;min-width:0;padding:7px 10px;font-size:14px"><button type="button" class="dbtn save" style="flex:none;width:auto;margin:0;padding:7px 14px">Insertar</button>';
+  barra.after(fila);
+  const inp = fila.querySelector('input');
+  const insertar = () => {
+    const url = inp.value.trim();
+    fila.remove();
+    if (!url) return;
+    body.focus();
+    if (rango) { sel.removeAllRanges(); sel.addRange(rango); }
+    document.execCommand('createLink', false, url);
+  };
+  fila.querySelector('button').onclick = insertar;
+  inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); insertar(); } else if (e.key === 'Escape') fila.remove(); };
+  inp.focus();
+};
 window.abrirComposerCorreo = (correoId) => {
   const el = document.getElementById('composer-' + correoId);
   if (!el) return;
@@ -5240,7 +5468,7 @@ window.abrirComposerCorreo = (correoId) => {
         <div style="display:flex;gap:6px;margin-bottom:6px">
           <button type="button" onclick="document.execCommand('bold')" style="width:26px;height:26px;border:1px solid var(--line2,#2a3150);background:none;color:var(--txt);border-radius:5px;cursor:pointer"><b>B</b></button>
           <button type="button" onclick="document.execCommand('italic')" style="width:26px;height:26px;border:1px solid var(--line2,#2a3150);background:none;color:var(--txt);border-radius:5px;cursor:pointer"><i>I</i></button>
-          <button type="button" onclick="const u=prompt('URL del link:'); if(u) document.execCommand('createLink', false, u)" style="width:26px;height:26px;border:1px solid var(--line2,#2a3150);background:none;color:var(--txt);border-radius:5px;cursor:pointer"><i class="fas fa-link"></i></button>
+          <button type="button" onclick="insertarLinkEditor('composer-body-${correoId}', this)" style="width:26px;height:26px;border:1px solid var(--line2,#2a3150);background:none;color:var(--txt);border-radius:5px;cursor:pointer"><i class="fas fa-link"></i></button>
           <label style="width:26px;height:26px;border:1px solid var(--line2,#2a3150);background:none;color:var(--txt);border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center">
             <i class="fas fa-paperclip"></i><input type="file" multiple style="display:none" onchange="agregarAdjuntoComposer(${correoId}, this.files)">
           </label>
@@ -5420,6 +5648,8 @@ async function cargarActividadLead(l) {
       ? { hora: e.created_at, texto: `🔁 Volvió a escribir por <b>${esc(e.detalle?.canal || 'otro canal')}</b>${e.detalle?.destino && e.detalle.destino !== e.detalle?.destino_previo ? `, preguntando por <b>${esc(e.detalle.destino)}</b>` : ''} — no se creó un lead nuevo` }
       : e.tipo === 'cotizacion_enviada'
       ? { hora: e.created_at, texto: `📄 ${e.asesor ? '<b>' + esc(e.asesor) + '</b> registró' : 'Se registró'} la cotización como enviada` }
+      : e.tipo === 'proxima_accion'
+      ? { hora: e.created_at, texto: `📅 <b>${esc(e.detalle?.por || 'Sistema')}</b> ${e.detalle?.accion === 'quitada' ? 'quitó la próxima acción' : `fijó la próxima acción para <b>${esc(fmtFechaHoraCaracas(e.detalle?.at))}</b>${e.detalle?.nota ? ' — ' + esc(e.detalle.nota) : ''}`}` }
       : { hora: e.created_at, texto: `${e.asesor ? esc(e.asesor) + ': ' : ''}cambió de <b>${esc(niceEstado(e.estado_de))}</b> a <b>${esc(niceEstado(e.estado_a))}</b>` }),
     // reasignaciones: RLS es admin-only -- para asesor esta consulta vuelve
     // vacía en silencio (no es un error), la Actividad les queda sin este
@@ -6094,881 +6324,6 @@ async function actQuitar(clave, btn) {
   loadTarifario();
 }
 
-/* ================= CEREBRO IA: las reglas de venta =========================
-   Hasta el 01/08/2026, "para Madrid ofrecé primero el vuelo de $999" era una
-   línea escrita a mano dentro de un prompt de 1.500 líneas: cada cambio pedía
-   una sesión de programación. Peor: el prompt estaba duplicado entre Instagram
-   y la web, así que una regla podía quedar aplicada en un canal y no en el otro
-   sin que nada avisara. Acá son datos, y valen para los 3 canales a la vez.
-
-   La regla se guarda como TEXTO libre, no como una lista ordenada de hoteles,
-   porque las reglas reales tienen matices que una lista no aguanta ("solo si el
-   lead deja claro que quiere un hotel de verdad, no cabañas"). El editor
-   redacta el caso simple por vos e inserta la marca [hotel#N] con un botón. */
-let CE_REGLAS = [];
-let CE_DESTINOS = [];
-let CE_EDITANDO = null;
-let AP_PROPUESTAS = [];
-let AP_ESTADO = 'pendiente';
-let AP_CARGADO = false;
-let CE_AUDIO_CANALES = [];
-
-async function loadCerebroIA() {
-  const cont = document.getElementById('ce-lista');
-  const { data, error } = await sb.rpc('reglas_venta_listar');
-  if (error || !data?.ok) {
-    cont.innerHTML = `<div class="vig-vacio">No se pudieron cargar las reglas: ${esc(error?.message || data?.error || '')}</div>`;
-    return;
-  }
-  CE_REGLAS = data.reglas || [];
-  CE_DESTINOS = data.destinos || [];
-  document.getElementById('ce-destinos').innerHTML =
-    CE_DESTINOS.map(d => `<option value="${esc(d)}">`).join('');
-  cePintarLista();
-  cePintarPrevia();
-  await cargarAudioCanales();
-}
-
-async function cargarAudioCanales() {
-  const { data, error } = await sb.rpc('config_audio_canal_listar');
-  if (error || !data?.ok) return;
-  CE_AUDIO_CANALES = data.canales || [];
-  cePintarAudioCanales();
-}
-
-const AUDIO_CANAL_LABEL = { web: 'Web', manychat: 'Instagram/Facebook' };
-
-function cePintarAudioCanales() {
-  document.querySelectorAll('#ce-audio-canales [data-audio-canal]').forEach(btn => {
-    const canal = btn.dataset.audioCanal;
-    const fila = CE_AUDIO_CANALES.find(c => c.canal === canal);
-    const activo = !!fila?.activo;
-    btn.classList.toggle('on', activo);
-    btn.innerHTML = `<i class="fas fa-toggle-${activo ? 'on' : 'off'}"></i> ${AUDIO_CANAL_LABEL[canal] || canal}`;
-  });
-}
-
-async function toggleAudioCanal(canal, btn) {
-  const fila = CE_AUDIO_CANALES.find(c => c.canal === canal);
-  const activoNuevo = !fila?.activo;
-  btn.disabled = true;
-  const { data, error } = await sb.rpc('config_audio_canal_set', { p_canal: canal, p_activo: activoNuevo });
-  btn.disabled = false;
-  if (error || !data?.ok) { errToast('No se pudo cambiar: ' + (error?.message || data?.error || '')); return; }
-  okToast(activoNuevo ? 'Notas de voz activadas para ese canal' : 'Notas de voz apagadas para ese canal');
-  await cargarAudioCanales();
-}
-
-function cePintarLista() {
-  const cont = document.getElementById('ce-lista');
-  if (!CE_REGLAS.length) {
-    cont.innerHTML = `<div class="vig-vacio"><i class="fas fa-brain"></i><b>Todavía no hay reglas</b>
-      <div style="font-size:12.5px;margin-top:6px">La IA vende con su criterio general: primero la promo más económica, después todo incluido.</div></div>`;
-    return;
-  }
-  // Agrupadas igual que como las lee la IA: primero las que valen siempre,
-  // después cada destino. El orden de la pantalla ES el orden del prompt.
-  const generales = CE_REGLAS.filter(r => r.ambito === 'general');
-  const porDestino = new Map();
-  for (const r of CE_REGLAS.filter(r => r.ambito === 'destino')) {
-    if (!porDestino.has(r.destino)) porDestino.set(r.destino, []);
-    porDestino.get(r.destino).push(r);
-  }
-  const grupo = (titulo, reglas, icono) => `
-    <div class="ce-grupo">
-      <div class="ce-grupo-t"><i class="fas fa-${icono}"></i> ${titulo}</div>
-      ${reglas.map(ceCardHtml).join('')}
-    </div>`;
-  cont.innerHTML =
-    (generales.length ? grupo('Siempre, en cualquier destino', generales, 'globe') : '') +
-    [...porDestino.entries()].map(([d, rs]) =>
-      grupo(`Solo para <span class="ce-dest">${esc(d)}</span>`, rs, 'location-dot')).join('');
-}
-
-function ceCardHtml(r, i) {
-  const prods = (r.productos || []).map(p => p.foto
-    ? `<span class="ce-prod${p.activo ? '' : ' roto'}"><img src="${esc(fotoMini(p.foto, 256))}" alt="" loading="lazy"><span>${esc(p.nombre)}</span></span>`
-    : `<span class="ce-prod${p.activo ? '' : ' roto'}"><span class="ce-prod-sf"><i class="fas fa-hotel"></i></span><span>${esc(p.nombre)}</span></span>`).join('');
-  // Un hotel nombrado que ya no está en el catálogo hace que la regla mande a
-  // ofrecer algo que no existe. Se avisa acá y no en la vista previa, que casi
-  // nadie abre.
-  const rotos = (r.productos || []).filter(p => !p.activo).length;
-  const vig = r.vence_el
-    ? `<span class="ce-vig${r.vencida ? ' vencida' : ''}"><i class="fas fa-${r.vencida ? 'circle-xmark' : 'calendar-day'}"></i>
-        ${r.vencida ? 'Venció el' : 'Hasta el'} ${fmtFechaSolo(r.vence_el)}${r.vencida ? ' — la IA ya no la usa' : ''}</span>`
-    : `<span class="ce-vig eterna"><i class="fas fa-infinity"></i> Sin fecha de fin</span>`;
-  return `<div class="ce-card${r.activa && !r.vencida ? '' : ' apagada'}" data-ce-id="${r.id}">
-    <div class="ce-card-top">
-      <div class="ce-orden">${i + 1}</div>
-      <div class="ce-texto">${esc(r.texto)}</div>
-    </div>
-    ${prods ? `<div class="ce-prods">${prods}</div>` : ''}
-    ${rotos ? `<div class="ce-ayuda" style="color:#fca5a5"><i class="fas fa-triangle-exclamation"></i>
-       ${rotos === 1 ? 'Un hotel que nombra esta regla ya no está en el catálogo' : `${rotos} hoteles que nombra esta regla ya no están en el catálogo`}: la IA va a ofrecer algo que no existe.</div>` : ''}
-    <div class="ce-pie">
-      ${vig}
-      <div class="ce-acc">
-        <button class="ce-mini${r.activa ? ' on' : ''}" data-ce-toggle="${r.id}">
-          <i class="fas fa-${r.activa ? 'toggle-on' : 'toggle-off'}"></i> ${r.activa ? 'Activa' : 'Apagada'}</button>
-        <button class="ce-mini" data-ce-editar="${r.id}"><i class="fas fa-pen"></i> Editar</button>
-        <button class="ce-mini peligro" data-ce-borrar="${r.id}"><i class="fas fa-trash"></i></button>
-      </div>
-    </div>
-  </div>`;
-}
-
-// La vista previa se arma en el navegador con las MISMAS reglas que devolvió el
-// RPC, no con otra consulta: si mostrara algo distinto a lo que se acaba de
-// editar, sería peor que no mostrar nada.
-function cePintarPrevia() {
-  const hoy = new Date().toISOString().slice(0, 10);
-  const vivas = CE_REGLAS
-    .filter(r => r.activa && (!r.vence_el || r.vence_el >= hoy))
-    .sort((a, b) => (a.ambito === 'general' ? 0 : 1) - (b.ambito === 'general' ? 0 : 1)
-      || a.orden - b.orden || a.id - b.id);
-  document.getElementById('ce-previa-txt').textContent =
-    vivas.map(r => r.texto).join('\n') || '(sin reglas activas)';
-}
-
-function ceAbrirEditor(regla) {
-  CE_EDITANDO = regla;
-  document.getElementById('ce-editor-titulo').innerHTML =
-    `<i class="fas fa-brain"></i> ${regla ? 'Editar regla' : 'Nueva regla'}`;
-  document.getElementById('ce-ambito').value = regla?.ambito || 'destino';
-  document.getElementById('ce-destino').value = regla?.destino || '';
-  document.getElementById('ce-texto').value = regla?.texto || '';
-  document.getElementById('ce-vence').value = regla?.vence_el || '';
-  ceMostrarCampoDestino();
-  ceLlenarSelectorProductos();
-  openSheet('ce-editor-sheet');
-}
-
-function ceMostrarCampoDestino() {
-  const esDestino = document.getElementById('ce-ambito').value === 'destino';
-  document.getElementById('ce-campo-destino').style.display = esDestino ? '' : 'none';
-}
-
-// El selector se llena del tarifario ya cargado. Si el usuario entró directo a
-// esta sección sin pasar por Tarifario, se pide una vez.
-async function ceLlenarSelectorProductos() {
-  const sel = document.getElementById('ce-prod-sel');
-  if (sel.dataset.lleno) return;
-  const { data } = await sb.from('productos').select('id,nombre,destino')
-    .eq('activo', true).order('destino').order('nombre');
-  sel.innerHTML = '<option value="">Nombrar un hotel…</option>' +
-    (data || []).map(p => `<option value="${p.id}">${esc(p.nombre)}${p.destino ? ` — ${esc(p.destino)}` : ''}</option>`).join('');
-  sel.dataset.lleno = '1';
-}
-
-function ceInsertarProducto() {
-  const sel = document.getElementById('ce-prod-sel');
-  if (!sel.value) { errToast('Elegí un hotel de la lista'); return; }
-  const nombre = sel.options[sel.selectedIndex].text.split(' — ')[0];
-  const ta = document.getElementById('ce-texto');
-  // Se inserta donde está el cursor, no al final: la referencia casi siempre va
-  // en medio de la frase ("ofrecé primero el X porque...").
-  const ini = ta.selectionStart ?? ta.value.length;
-  const fin = ta.selectionEnd ?? ta.value.length;
-  const marca = `${nombre} [hotel#${sel.value}]`;
-  ta.value = ta.value.slice(0, ini) + marca + ta.value.slice(fin);
-  ta.focus();
-  ta.selectionStart = ta.selectionEnd = ini + marca.length;
-  sel.value = '';
-}
-
-async function ceGuardar(btn) {
-  const ambito = document.getElementById('ce-ambito').value;
-  const destino = document.getElementById('ce-destino').value.trim();
-  const texto = document.getElementById('ce-texto').value.trim();
-  const vence = document.getElementById('ce-vence').value || null;
-  if (!texto) { errToast('Escribí la instrucción'); return; }
-  if (ambito === 'destino' && !destino) { errToast('Elegí el destino'); return; }
-  // Avisar, no bloquear: un destino nuevo puede ser legítimo (un producto que
-  // se carga mañana), pero un typo silencioso deja la regla sin aplicarse nunca.
-  if (ambito === 'destino' && CE_DESTINOS.length && !CE_DESTINOS.includes(destino)
-      && !(await confirmarSheet({ titulo: `"${destino}" no coincide con ningún destino del tarifario`, detalle: 'La regla se guarda igual, pero no se va a aplicar hasta que exista un producto con ese destino escrito igual.', textoOk: 'Guardar de todos modos' }))) return;
-
-  btn.disabled = true;
-  const { data, error } = await sb.rpc('regla_venta_guardar', {
-    p_id: CE_EDITANDO?.id ?? null, p_ambito: ambito,
-    p_destino: ambito === 'destino' ? destino : null,
-    p_texto: texto, p_orden: CE_EDITANDO?.orden ?? 100, p_vence_el: vence,
-  });
-  btn.disabled = false;
-  if (error || !data?.ok) { errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
-  okToast(CE_EDITANDO ? 'Regla actualizada' : 'Regla creada');
-  closeSheet('ce-editor-sheet');
-  await loadCerebroIA();
-}
-
-async function ceToggle(id, btn) {
-  const r = CE_REGLAS.find(x => x.id === Number(id));
-  btn.disabled = true;
-  const { data, error } = await sb.rpc('regla_venta_activar', { p_id: Number(id), p_activa: !r.activa });
-  btn.disabled = false;
-  if (error || !data?.ok) { errToast('No se pudo cambiar: ' + (error?.message || data?.error || '')); return; }
-  okToast(r.activa ? 'Regla apagada — la IA deja de usarla' : 'Regla activa — la IA ya la está usando');
-  await loadCerebroIA();
-}
-
-async function ceBorrar(id, btn) {
-  const r = CE_REGLAS.find(x => x.id === Number(id));
-  if (!(await confirmarSheet({ titulo: 'Borrar esta regla para siempre', detalle: `"${(r?.texto || '').slice(0, 120)}…"\n\nSi solo querés que la IA deje de usarla, mejor apagala: así la podés volver a prender.`, textoOk: 'Borrar', destructivo: true }))) return;
-  btn.disabled = true;
-  const { data, error } = await sb.rpc('regla_venta_borrar', { p_id: Number(id) });
-  btn.disabled = false;
-  if (error || !data?.ok) { errToast('No se pudo borrar: ' + (error?.message || data?.error || '')); return; }
-  okToast('Regla borrada');
-  await loadCerebroIA();
-}
-
-/* --- Propuestas del aprendiz de ventas -------------------------------------
-   El aprendiz (cron semanal) SOLO escribe filas en ia_aprendizaje_propuestas;
-   nunca toca reglas_venta ni cerebro_versiones. Aprobar acá es lo único que
-   las hace reales -- ver ia_aprendizaje_decidir. */
-async function loadPropuestas() {
-  AP_CARGADO = true;
-  const cont = document.getElementById('ap-lista');
-  cont.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
-  const { data, error } = await sb.rpc('ia_aprendizaje_listar', { p_estado: AP_ESTADO });
-  if (error) {
-    cont.innerHTML = `<div class="vig-vacio">No se pudieron cargar las propuestas: ${esc(error.message)}</div>`;
-    return;
-  }
-  AP_PROPUESTAS = data || [];
-  apPintarLista();
-  apActualizarBadge();
-}
-
-async function apActualizarBadge() {
-  if (AP_ESTADO === 'pendiente') { apPintarBadge(AP_PROPUESTAS.length); return; }
-  const { data, error } = await sb.rpc('ia_aprendizaje_listar', { p_estado: 'pendiente' });
-  if (!error) apPintarBadge((data || []).length);
-}
-
-function apPintarBadge(n) {
-  const b = document.getElementById('ap-badge');
-  if (!b) return;
-  b.textContent = n;
-  b.style.display = n ? '' : 'none';
-}
-
-function apPintarLista() {
-  const cont = document.getElementById('ap-lista');
-  if (!AP_PROPUESTAS.length) {
-    const texto = AP_ESTADO === 'pendiente' ? 'pendientes' : AP_ESTADO === 'aprobada' ? 'aprobadas' : 'rechazadas';
-    cont.innerHTML = `<div class="vig-vacio"><i class="fas fa-lightbulb"></i><b>No hay propuestas ${texto}</b>
-      <div style="font-size:12.5px;margin-top:6px">El aprendiz corre una vez por semana comparando conversaciones ganadas contra perdidas.</div></div>`;
-    return;
-  }
-  cont.innerHTML = AP_PROPUESTAS.map(apCardHtml).join('');
-}
-
-function apCardHtml(p) {
-  const ev = p.evidencia || {};
-  const cta = ev.cta_presente_pct || {};
-  const fallos = ev.fallos_visibles_pct || {};
-  const etiqueta = p.tipo === 'regla_venta'
-    ? (p.ambito === 'destino' ? `Regla para <span class="ce-dest">${esc(p.destino)}</span>` : 'Regla general')
-    : 'Cambio de estilo del cerebro';
-  const pie = p.estado === 'pendiente'
-    ? `<div class="ce-pie">
-        <span class="ce-vig eterna"><i class="fas fa-calendar-day"></i> Propuesta el ${fmtFechaSolo(p.creada_en)}</span>
-        <div class="ce-acc">
-          <button class="ce-mini peligro" data-ap-rechazar="${p.id}"><i class="fas fa-xmark"></i> Rechazar</button>
-          <button class="ce-mini on" data-ap-aprobar="${p.id}"><i class="fas fa-check"></i> Aprobar</button>
-        </div>
-      </div>`
-    : `<div class="ce-pie">
-        <span class="ce-vig${p.estado === 'rechazada' ? ' vencida' : ''}">
-          <i class="fas fa-${p.estado === 'aprobada' ? 'circle-check' : 'circle-xmark'}"></i>
-          ${p.estado === 'aprobada' ? 'Aprobada' : 'Rechazada'} el ${fmtFechaSolo(p.decidida_en)}</span>
-      </div>${p.nota_decision ? `<div class="ce-ayuda"><i class="fas fa-note-sticky"></i> ${esc(p.nota_decision)}</div>` : ''}`;
-  return `<div class="ce-card" data-ap-id="${p.id}">
-    <div class="ce-card-top">
-      <div class="ce-texto">
-        <div class="ce-vig eterna" style="margin-bottom:6px"><i class="fas fa-${p.tipo === 'regla_venta' ? 'list-check' : 'brain'}"></i> ${etiqueta}</div>
-        ${esc(p.texto_propuesto)}
-      </div>
-    </div>
-    <div class="ce-ayuda" style="margin-top:6px"><i class="fas fa-circle-info"></i> ${esc(p.justificacion)}</div>
-    <div class="ria-lista" style="margin-top:8px">
-      <div class="ria-fila"><span>Ganadas / perdidas comparadas</span><b>${fmt(ev.n_ganadas)} / ${fmt(ev.n_perdidas)}</b></div>
-      ${cta.ganadas != null ? `<div class="ria-fila"><span>Pidió el contacto (ganadas vs. perdidas)</span><b>${cta.ganadas}% / ${cta.perdidas}%</b></div>` : ''}
-      ${fallos.ganadas != null ? `<div class="ria-fila"><span>Con fallo visible (ganadas vs. perdidas)</span><b class="${fallos.ganadas > fallos.perdidas ? 'ria-malo' : ''}">${fallos.ganadas}% / ${fallos.perdidas}%</b></div>` : ''}
-      ${ev.pagados_pct != null ? `<div class="ria-fila"><span>Ganadas que ya pagaron</span><b>${ev.pagados_pct}%</b></div>` : ''}
-    </div>
-    ${pie}
-  </div>`;
-}
-
-async function apDecidir(id, decision) {
-  const nota = prompt(decision === 'aprobada' ? 'Nota al aprobar (opcional):' : 'Motivo del rechazo (opcional):');
-  if (nota === null) return; // canceló el prompt
-  const { data, error } = await sb.rpc('ia_aprendizaje_decidir', { p_id: Number(id), p_decision: decision, p_nota: nota });
-  if (error || !data?.ok) { errToast('No se pudo decidir: ' + (error?.message || data?.error || '')); return; }
-  okToast(decision === 'aprobada'
-    ? 'Propuesta aprobada -- ya está en Reglas de venta, vence en 30 días si nadie la revalida'
-    : 'Propuesta rechazada -- no se vuelve a proponer igual');
-  await loadPropuestas();
-}
-
-/* --- Probar: qué contestaría la IA -----------------------------------------
-   Antes de esto, probar un cambio en cómo vende la IA era desplegar una función
-   descartable, llamarla, leer el JSON crudo y borrarla -- lo podía hacer una
-   sola persona. Acá lo hace cualquier admin en el momento de escribir la regla.
-   La función de atrás NO escribe nada: ni leads, ni sesiones, ni avisos. */
-const CP_SUGERENCIAS = [
-  'hola, cuánto sale ir a Margarita en agosto para 2 personas?',
-  'quiero ir a Madrid, qué tienen?',
-  'vi un reel de ustedes con otro precio, por qué me lo cambian?',
-  'info de Canaima porfa',
-  'están contratando?',
-];
-
-function cpPintarSugerencias() {
-  const cont = document.getElementById('cp-sugerencias');
-  if (!cont || cont.dataset.pintado) return;
-  cont.innerHTML = CP_SUGERENCIAS.map(s => `<button class="ce-sug" type="button" data-cp-sug="${esc(s)}">${esc(s)}</button>`).join('');
-  cont.dataset.pintado = '1';
-}
-
-async function cpProbar(btn) {
-  const mensaje = document.getElementById('cp-mensaje').value.trim();
-  if (!mensaje) { errToast('Escribí el mensaje del cliente'); return; }
-  const canal = document.getElementById('cp-canal').value;
-  const salida = document.getElementById('cp-resultado');
-  btn.disabled = true;
-  salida.innerHTML = `<div class="cp-pensando"><i class="fas fa-circle-notch fa-spin"></i> Preguntándole a la IA con el tarifario de este momento…</div>`;
-
-  const cerebro_id = Number(document.getElementById('cp-cerebro')?.value) || null;
-  const { data, error } = await sb.functions.invoke('probar-cerebro-ia', { body: { mensaje, canal, cerebro_id } });
-  btn.disabled = false;
-
-  if (error || !data?.ok) {
-    // El detalle del modelo importa: un timeout y una regla mal escrita se
-    // arreglan de formas muy distintas.
-    const motivo = data?.detalle || data?.error || error?.message || 'error desconocido';
-    salida.innerHTML = `<div class="vig-vacio" style="text-align:left">
-      <b>No se pudo probar.</b><div style="font-size:12.5px;margin-top:6px">${esc(motivo)}</div></div>`;
-    return;
-  }
-
-  const c = data.contexto || {};
-  const precio = data.precio_citado;
-  salida.innerHTML = `
-    <div class="cp-chat">
-      <div class="cp-burbuja cp-cliente"><div class="cp-quien">El cliente</div>${esc(mensaje)}</div>
-      <div class="cp-burbuja cp-ia"><div class="cp-quien">La IA responde</div>${esc(data.respuesta || '(vacío)')}</div>
-    </div>
-    <div class="cp-meta">
-      ${precio ? `<span class="cp-tag precio"><i class="fas fa-tag"></i> Cotizó $${esc(String(precio.monto))}</span>` : ''}
-      <span class="cp-tag">${c.reglas_aplicadas || 0} línea(s) de reglas</span>
-      <span class="cp-tag">${c.productos || 0} hoteles · ${c.promociones || 0} promos</span>
-      ${c.cerebro_id ? `<span class="cp-tag"><i class="fas fa-sitemap"></i> ${esc(CB_ARBOL.find(n => n.id === c.cerebro_id)?.nombre || '')}</span>` : ''}
-    </div>
-    ${data.verificacion ? `<details class="cp-verif"><summary>Por qué contestó eso</summary><p>${esc(data.verificacion)}</p></details>` : ''}`;
-}
-
-/* --- Cargar flyer: de la captura al tarifario -------------------------------
-   Dos pasos SIEMPRE, nunca uno: la IA lee y muestra, la persona corrige y
-   confirma. El 31/07/2026 el modelo leyó bien un flyer de Chichiriviche y la
-   respuesta al cliente igual salió mal, porque el precio quedó enterrado al
-   final de una línea larga -- leer bien no alcanza, hay que ver cómo queda. */
-let FL_ITEM = null, FL_NOMBRE = '';
-
-// La imagen se achica acá y no en el servidor: subir 4 MB de captura para que
-// el modelo mire 1280px es pagar egress y esperar por nada.
-function flAchicar(file, maxLado = 1280) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const escala = Math.min(1, maxLado / Math.max(img.width, img.height));
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.width * escala);
-      c.height = Math.round(img.height * escala);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(img.src);
-      // JPEG siempre: el modelo no gana nada con PNG y pesa el triple.
-      resolve(c.toDataURL('image/jpeg', 0.85));
-    };
-    img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('No se pudo abrir la imagen')); };
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-async function flLeer(file) {
-  const drop = document.getElementById('fl-drop');
-  const salida = document.getElementById('fl-resultado');
-  FL_NOMBRE = file.name || 'flyer';
-  drop.classList.add('cargando');
-  salida.innerHTML = `<div class="cp-pensando"><i class="fas fa-circle-notch fa-spin"></i> Leyendo el flyer…</div>`;
-
-  let dataUrl;
-  try { dataUrl = await flAchicar(file); }
-  catch (e) { drop.classList.remove('cargando'); salida.innerHTML = ''; errToast(e.message); return; }
-  document.getElementById('fl-previa').innerHTML = `<img class="fl-mini" src="${dataUrl}" alt="" style="width:120px;border-radius:12px;border:1px solid var(--line2);margin-top:14px">`;
-
-  const { data, error } = await sb.functions.invoke('flyer-a-tarifario', {
-    body: { accion: 'leer', imagen_base64: dataUrl.split(',')[1], mime_type: 'image/jpeg', nombre_archivo: FL_NOMBRE },
-  });
-  drop.classList.remove('cargando');
-  if (error || !data?.ok) {
-    salida.innerHTML = `<div class="vig-vacio" style="text-align:left"><b>No se pudo leer el flyer.</b>
-      <div style="font-size:12.5px;margin-top:6px">${esc(data?.detalle || data?.error || error?.message || '')}</div></div>`;
-    return;
-  }
-  FL_ITEM = data.item;
-  flPintarRevision(data.modelo);
-}
-
-function flPintarRevision(modelo) {
-  const it = FL_ITEM || {};
-  const esPromo = it.clase === 'promocion';
-  const tarifa = (it.tarifas || [])[0] || {};
-  const precio = esPromo ? (it.promocion?.precio_texto || '') : (tarifa.precio_texto || '');
-  const vigencia = esPromo ? (it.promocion?.vigencia_texto || '') : (tarifa.vigencia_texto || '');
-  document.getElementById('fl-resultado').innerHTML = `
-    <div class="fl-rev">
-      <div class="fl-rev-t"><i class="fas fa-eye"></i> Esto entendió — corregilo antes de publicar</div>
-      ${it.clase === 'no_aplica' ? `<div class="fl-alerta"><i class="fas fa-triangle-exclamation"></i>
-        La IA no reconoció una promoción en esta imagen. Si igual querés cargarla, completá los campos a mano.</div>` : ''}
-      ${it.nota_revision ? `<div class="fl-alerta"><i class="fas fa-circle-info"></i> ${esc(it.nota_revision)}</div>` : ''}
-      <div class="ce-campo">
-        <label class="ce-lbl">¿Qué es?</label>
-        <select class="ei" id="fl-clase">
-          <option value="promocion"${esPromo ? ' selected' : ''}>Una promoción de un hotel que ya existe</option>
-          <option value="producto"${!esPromo ? ' selected' : ''}>Un hotel o paquete nuevo</option>
-        </select>
-      </div>
-      <div class="ce-campo">
-        <label class="ce-lbl">Nombre del hotel</label>
-        <input class="ei" id="fl-nombre" type="text" value="${esc(it.nombre || '')}">
-        <div class="ce-ayuda">Si el hotel ya existe, escribilo IGUAL que en el tarifario: así la promo se le engancha en vez de crear uno repetido.</div>
-      </div>
-      <div class="ce-campo">
-        <label class="ce-lbl">Destino</label>
-        <input class="ei" id="fl-destino" type="text" value="${esc(it.destino || '')}">
-      </div>
-      <div class="ce-campo">
-        <label class="ce-lbl">Precio, tal cual se lo va a decir al cliente</label>
-        <textarea class="ei" id="fl-precio" rows="3">${esc(precio)}</textarea>
-        <div class="ce-ayuda">Poné adelante el dato que el cliente vio en la publicación. Si el reel dice "$18 por persona",
-          que esa frase esté al principio y no al final: la IA lee de arriba hacia abajo y lo que queda enterrado lo pasa por alto.</div>
-      </div>
-      <div class="ce-campo">
-        <label class="ce-lbl">Vigencia</label>
-        <input class="ei" id="fl-vigencia" type="text" value="${esc(vigencia)}" placeholder="Ej. Del 01/08 al 15/09">
-      </div>
-      <div class="ce-campo">
-        <label class="ce-lbl">Qué incluye / descripción</label>
-        <textarea class="ei" id="fl-descripcion" rows="3">${esc(it.descripcion || '')}</textarea>
-      </div>
-      <div class="fl-acc">
-        <button class="dbtn gh" id="fl-cancelar">Descartar</button>
-        <button class="dbtn primary" id="fl-publicar"><i class="fas fa-check"></i> Publicar al tarifario</button>
-      </div>
-      ${modelo ? `<div style="font-size:11px;color:var(--muted2);margin-top:12px;text-align:center">Leído con ${esc(modelo)}</div>` : ''}
-    </div>`;
-  document.getElementById('fl-publicar').addEventListener('click', (e) => flPublicar(e.currentTarget));
-  document.getElementById('fl-cancelar').addEventListener('click', flLimpiar);
-}
-
-function flLimpiar() {
-  FL_ITEM = null;
-  document.getElementById('fl-resultado').innerHTML = '';
-  document.getElementById('fl-previa').innerHTML = '';
-  document.getElementById('fl-file').value = '';
-}
-
-async function flPublicar(btn) {
-  const clase = document.getElementById('fl-clase').value;
-  const nombre = document.getElementById('fl-nombre').value.trim();
-  const precio = document.getElementById('fl-precio').value.trim();
-  if (!nombre) { errToast('Falta el nombre del hotel'); return; }
-  if (!precio) { errToast('Falta el precio'); return; }
-  if (!(await confirmarSheet({ titulo: 'Publicar al tarifario', detalle: `${nombre}\n${precio.slice(0, 140)}\n\nSe va a ver en la web y la IA lo va a poder cotizar. Queda marcado "por revisar" en el Actualizador.`, textoOk: 'Publicar' }))) return;
-
-  const vigencia = document.getElementById('fl-vigencia').value.trim() || null;
-  const item = {
-    clase,
-    tipo_producto: clase === 'producto' ? (FL_ITEM?.tipo_producto || 'hotel') : null,
-    nombre,
-    destino: document.getElementById('fl-destino').value.trim() || null,
-    descripcion: document.getElementById('fl-descripcion').value.trim() || null,
-    requisitos: FL_ITEM?.requisitos || null,
-    tarifas: clase === 'producto' ? [{ precio_texto: precio, vigencia_texto: vigencia, moneda: 'USD' }] : [],
-    promocion: clase === 'promocion' ? { precio_texto: precio, vigencia_texto: vigencia, moneda: 'USD' } : null,
-    nota_revision: 'Cargado a mano desde un flyer en el CRM.',
-  };
-  btn.disabled = true;
-  const { data, error } = await sb.functions.invoke('flyer-a-tarifario', {
-    body: { accion: 'publicar', item, nombre_archivo: FL_NOMBRE },
-  });
-  btn.disabled = false;
-  if (error || !data?.ok) { errToast('No se pudo publicar: ' + (data?.error || error?.message || '')); return; }
-
-  // El salto de precio contra lo que ya había es la señal más útil de que el
-  // modelo leyó mal un número. Se avisa fuerte, no en un toast que se va solo.
-  if (data.precio_alerta) {
-    document.getElementById('fl-resultado').innerHTML = `<div class="fl-rev">
-      <div class="fl-alerta"><i class="fas fa-triangle-exclamation"></i>
-        <b>Publicado, pero revisalo.</b> El precio quedó ${data.precio_delta_pct > 0 ? 'un ' + Math.round(data.precio_delta_pct) + '% más alto' : 'un ' + Math.abs(Math.round(data.precio_delta_pct)) + '% más bajo'}
-        que el que había para este hotel. Si el flyer decía otra cosa, corregilo en el Actualizador.</div></div>`;
-  } else {
-    okToast('Publicado al tarifario — quedó marcado por revisar');
-    flLimpiar();
-  }
-  delete tarCache[tarTab];
-}
-
-/* --- Ramas del cerebro: ver de dónde sale cada pedazo del prompt ------------
-   Esta pantalla existe por un incidente concreto: el 01/08 el prompt terminó
-   duplicado y la IA sirvió 2.693 precios retirados durante un día. Nadie lo vio
-   leyendo el código -- se vio comparando el texto GENERADO. Así que acá se
-   muestra el texto generado, no las tablas que lo arman, y cada edición
-   contesta primero "qué cambió" antes de guardarse. */
-let CB_ARBOL = [], CB_SEL = null, CB_BLOQUES = [], CB_PROMPT = '';
-
-const cbCanal = () => document.getElementById('cb-canal')?.value || 'instagram';
-const cbTexto = () => CB_BLOQUES.map(b => b.texto).join('\n');
-
-async function loadCerebroRamas() {
-  const cont = document.getElementById('cb-arbol');
-  const { data, error } = await sb.rpc('cerebro_arbol');
-  if (error) {
-    cont.innerHTML = `<div class="vig-vacio">No se pudo cargar el árbol: ${esc(error.message)}</div>`;
-    return;
-  }
-  CB_ARBOL = data || [];
-  if (!CB_SEL || !CB_ARBOL.some(n => n.id === CB_SEL)) {
-    CB_SEL = (CB_ARBOL.find(n => !n.padre_id) || CB_ARBOL[0])?.id ?? null;
-  }
-  cbPintarArbol();
-  cbPintarSelectorPrueba();
-  await cbCargarBloques();
-}
-
-function cbPintarArbol() {
-  document.getElementById('cb-arbol').innerHTML = CB_ARBOL.map(n => {
-    const esBase = !n.padre_id;
-    const sub = esBase
-      ? 'Personalidad, honestidad y escalada. La heredan todas las ramas.'
-      : `${n.productos} hotel(es) propios · ${n.catalogo_publico ? 'catálogo publicado en la web' : 'catálogo privado'}`;
-    // Las acciones van fuera del botón del nodo: un <button> dentro de otro no
-    // es HTML válido y el navegador lo desarma por su cuenta.
-    return `<div class="cb-fila ${esBase ? '' : 'hijo'}">
-      <button class="cb-nodo ${n.id === CB_SEL ? 'on' : ''}" data-cb-nodo="${n.id}">
-        <span class="cb-ico"><i class="fas ${esBase ? 'fa-brain' : 'fa-store'}"></i></span>
-        <span class="cb-nom">${esc(n.nombre)}${n.activo ? '' : ' (apagada)'}
-          <div class="cb-sub">${esc(sub)} · ${n.bloques_propios} bloque(s) propios</div></span>
-      </button>
-      ${esBase ? '' : `<span class="cb-acc">
-        <button class="ce-mini" data-cb-activar="${n.id}" data-cb-a="${n.activo ? '0' : '1'}">${n.activo ? 'Apagar' : 'Prender'}</button>
-        <button class="ce-mini peligro" data-cb-borrar="${n.id}">Borrar</button>
-      </span>`}
-    </div>`;
-  }).join('');
-}
-
-function cbFormAlta(abrir) {
-  const caja = document.getElementById('cb-alta');
-  caja.style.display = abrir ? '' : 'none';
-  if (!abrir) return;
-  document.getElementById('cb-nombre').value = '';
-  document.getElementById('cb-slug').value = '';
-  document.getElementById('cb-padre').innerHTML = CB_ARBOL.filter(n => n.activo)
-    .map(n => `<option value="${n.id}"${n.padre_id ? '' : ' selected'}>${esc(n.nombre)}${n.padre_id ? '' : ' (la Base)'}</option>`).join('');
-  document.getElementById('cb-nombre').focus();
-}
-
-// El identificador se propone solo a partir del nombre, pero se puede corregir:
-// escribirlo a mano es la parte más fácil de equivocar y la más cara de cambiar
-// después (queda enganchado al enrutado de los mensajes).
-const cbSlugificar = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
-
-async function cbCrear(btn) {
-  const nombre = document.getElementById('cb-nombre').value.trim();
-  const slug = document.getElementById('cb-slug').value.trim();
-  const padre = Number(document.getElementById('cb-padre').value) || null;
-  if (!nombre) { errToast('Ponele el nombre de la posada'); return; }
-  btn.disabled = true;
-  const { data, error } = await sb.rpc('crear_rama_cerebro', { p_nombre: nombre, p_slug: slug || cbSlugificar(nombre), p_padre_id: padre });
-  btn.disabled = false;
-  if (error || !data?.ok) { errToast(data?.error || error?.message || 'No se pudo crear'); return; }
-  okToast(`Rama "${nombre}" creada. Hereda todo lo de la Base y todavía no tiene catálogo.`);
-  CB_SEL = data.cerebro_id;
-  cbFormAlta(false);
-  await loadCerebroRamas();
-}
-
-async function cbActivar(id, activo, btn) {
-  btn.disabled = true;
-  const { data, error } = await sb.rpc('activar_rama_cerebro', { p_cerebro_id: Number(id), p_activo: activo });
-  btn.disabled = false;
-  if (error || !data?.ok) { errToast(data?.error || error?.message || 'No se pudo cambiar'); return; }
-  await loadCerebroRamas();
-}
-
-async function cbBorrar(id, btn) {
-  const nodo = CB_ARBOL.find(n => n.id === Number(id));
-  if (!(await confirmarSheet({ titulo: `¿Borrar la rama "${nodo?.nombre ?? id}"?`, detalle: 'Solo se puede si nunca se le cargó catálogo.', textoOk: 'Borrar', destructivo: true }))) return;
-  btn.disabled = true;
-  const { data, error } = await sb.rpc('borrar_rama_cerebro', { p_cerebro_id: Number(id) });
-  btn.disabled = false;
-  if (error || !data?.ok) { errToast(data?.error || error?.message || 'No se pudo borrar'); return; }
-  okToast('Rama borrada.');
-  CB_SEL = null;
-  await loadCerebroRamas();
-}
-
-function cbPintarSelectorPrueba() {
-  const sel = document.getElementById('cp-cerebro');
-  if (!sel) return;
-  const previo = sel.value;
-  sel.innerHTML = CB_ARBOL.map(n =>
-    `<option value="${n.id}">${esc(n.nombre)}${n.padre_id ? '' : ' (lienzo en blanco)'}</option>`).join('');
-  if (previo && CB_ARBOL.some(n => String(n.id) === previo)) sel.value = previo;
-  else sel.value = String(CB_ARBOL.find(n => n.padre_id)?.id ?? CB_ARBOL[0]?.id ?? '');
-}
-
-async function cbCargarBloques() {
-  const cont = document.getElementById('cb-prompt');
-  cont.innerHTML = `<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>`;
-  const { data, error } = await sb.rpc('cerebro_bloques_resueltos', { p_cerebro_id: CB_SEL, p_canal: cbCanal() });
-  if (error) {
-    cont.innerHTML = `<div class="vig-vacio">No se pudo componer el prompt: ${esc(error.message)}</div>`;
-    return;
-  }
-  CB_BLOQUES = data || [];
-  CB_PROMPT = cbTexto();
-  cbPintarBloques();
-}
-
-function cbPintarBloques() {
-  const propios = CB_BLOQUES.filter(b => b.propio).length;
-  const anulan = CB_BLOQUES.filter(b => b.anula).length;
-  const cont = document.getElementById('cb-prompt');
-  cont.innerHTML = `<div class="cb-resumen">
-      El modelo recibe <b>${CB_BLOQUES.length} bloque(s)</b> · <b>${(CB_PROMPT.length).toLocaleString('es')}</b> caracteres.
-      ${propios} de esta rama, ${CB_BLOQUES.length - propios} heredados${anulan ? `, ${anulan} reemplazan uno de la Base` : ''}.
-    </div>` + CB_BLOQUES.map(b => {
-    const marca = b.tipo !== 'texto';
-    const clase = marca ? 'marca' : b.anula ? 'anula' : b.propio ? 'propio' : 'heredado';
-    const etiqueta = marca ? 'Se rellena con su catálogo'
-      : b.anula ? 'Reemplaza lo de la Base' : b.propio ? 'De esta rama' : 'Heredado';
-    return `<div class="cb-bloque ${clase}" data-cb-bloque="${b.bloque_id}">
-      <div class="cb-cab">
-        <span>${esc(b.clave)}</span>
-        <span class="cb-chip cb-${clase}">${etiqueta}</span>
-        <span class="cb-de">viene de ${esc(b.origen_nombre)}</span>
-        ${marca ? '' : `<button class="ce-mini" style="margin-left:auto" data-cb-editar="${b.bloque_id}">
-          ${b.propio ? 'Editar' : 'Cambiar solo acá'}</button>`}
-      </div>
-      <div class="cb-txt">${esc(marca ? `(acá entra el catálogo del cliente de esta rama, al momento de responder)` : b.texto)}</div>
-    </div>`;
-  }).join('');
-}
-
-/* Diff por líneas del prompt COMPLETO, no del bloque editado: el modo de falla
-   que importa es que un cambio chico mueva o duplique algo lejos de donde se
-   estaba mirando. LCS clásica -- el prompt ronda las 900 líneas, así que la
-   tabla cuadrática es irrelevante en tiempo. */
-function cbDiffLineas(antes, despues) {
-  const a = antes.split('\n'), b = despues.split('\n');
-  const n = a.length, m = b.length;
-  const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
-  for (let i = n - 1; i >= 0; i--)
-    for (let j = m - 1; j >= 0; j--)
-      L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
-  const out = [];
-  let i = 0, j = 0;
-  while (i < n && j < m) {
-    if (a[i] === b[j]) { out.push(['=', a[i]]); i++; j++; }
-    else if (L[i + 1][j] >= L[i][j + 1]) { out.push(['-', a[i]]); i++; }
-    else { out.push(['+', b[j]]); j++; }
-  }
-  while (i < n) out.push(['-', a[i++]]);
-  while (j < m) out.push(['+', b[j++]]);
-  return out.filter(([s]) => s !== '=');
-}
-
-function cbAbrirEditor(bloqueId) {
-  const b = CB_BLOQUES.find(x => String(x.bloque_id) === String(bloqueId));
-  if (!b) return;
-  const caja = document.querySelector(`[data-cb-bloque="${bloqueId}"]`);
-  if (!caja || caja.querySelector('textarea')) return;
-  const aviso = b.propio
-    ? 'Se guarda en esta rama. Antes de guardar vas a ver qué cambia en el texto completo.'
-    : `Este bloque hoy lo hereda de <b>${esc(b.origen_nombre)}</b>. Al guardarlo se crea una versión propia de esta rama que lo reemplaza — la Base no se toca.`;
-  caja.insertAdjacentHTML('beforeend', `<div class="ce-campo" style="margin-top:11px">
-      <div class="ce-ayuda" style="margin-bottom:7px">${aviso}</div>
-      <textarea class="ei" rows="8" data-cb-txt>${esc(b.texto)}</textarea>
-      <div class="ce-barra" style="margin:10px 0 0">
-        <button class="dbtn save" data-cb-guardar="${bloqueId}">Ver qué cambia y guardar</button>
-        <button class="ce-mini" data-cb-cancelar>Cancelar</button>
-      </div>
-      <div data-cb-diff></div>
-    </div>`);
-}
-
-async function cbGuardar(bloqueId, btn) {
-  const b = CB_BLOQUES.find(x => String(x.bloque_id) === String(bloqueId));
-  const caja = document.querySelector(`[data-cb-bloque="${bloqueId}"]`);
-  const nuevo = caja.querySelector('[data-cb-txt]').value;
-  if (!b || nuevo === b.texto) { errToast('No cambiaste nada'); return; }
-
-  // El diff se calcula ANTES de escribir, contra el prompt que el modelo está
-  // recibiendo en este momento, y hay que confirmarlo. Guardar primero y
-  // mostrar después sería contar lo que ya pasó.
-  const antes = CB_PROMPT;
-  const despues = CB_BLOQUES.map(x => x.bloque_id === b.bloque_id ? nuevo : x.texto).join('\n');
-  const cambios = cbDiffLineas(antes, despues);
-  const caja2 = caja.querySelector('[data-cb-diff]');
-  if (!caja2.dataset.confirmado) {
-    caja2.dataset.confirmado = '1';
-    caja2.innerHTML = `<div class="cb-resumen" style="margin-top:12px">
-        Cambian <b>${cambios.length}</b> línea(s) del texto que recibe el modelo
-        (${antes.length.toLocaleString('es')} → ${despues.length.toLocaleString('es')} caracteres).
-        Volvé a tocar el botón para guardar.</div>
-      <pre style="max-height:280px;overflow:auto;font-size:11.5px;line-height:1.5">${cambios.slice(0, 200).map(([s, t]) =>
-        `<span style="color:${s === '+' ? '#86efac' : '#fca5a5'}">${s} ${esc(t)}</span>`).join('\n')}</pre>`;
-    return;
-  }
-
-  btn.disabled = true;
-  let error;
-  if (b.propio) {
-    ({ error } = await sb.from('cerebro_bloques').update({ texto: nuevo }).eq('id', b.bloque_id));
-  } else {
-    // Anular un heredado = declarar uno propio con la MISMA clave y el mismo
-    // orden: así queda donde estaba y no se mueve de lugar en el prompt.
-    ({ error } = await sb.from('cerebro_bloques').insert({
-      cerebro_id: CB_SEL, clave: b.clave, orden: b.orden, tipo: b.tipo,
-      canales: b.canales, texto: nuevo,
-    }));
-  }
-  btn.disabled = false;
-  if (error) { errToast('No se pudo guardar: ' + error.message); return; }
-  okToast('Guardado. La IA lo usa en el próximo mensaje que le llegue.');
-  await loadCerebroRamas();
-}
-
-function cpCambiarTab(tab) {
-  document.querySelectorAll('#ce-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.ceTab === tab));
-  document.querySelectorAll('#sec-cerebro-ia .ce-panel').forEach(p => {
-    p.style.display = p.dataset.cePanel === tab ? '' : 'none';
-  });
-  if (tab === 'probar') { cpPintarSugerencias(); if (!CB_ARBOL.length) loadCerebroRamas(); }
-  if (tab === 'ramas' && !CB_ARBOL.length) loadCerebroRamas();
-  if (tab === 'propuestas' && !AP_CARGADO) loadPropuestas();
-}
-
-function setupCerebroIA() {
-  document.getElementById('ce-tabs')?.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-ce-tab]');
-    if (b) cpCambiarTab(b.dataset.ceTab);
-  });
-  document.getElementById('cp-enviar')?.addEventListener('click', (e) => cpProbar(e.currentTarget));
-  document.getElementById('fl-file')?.addEventListener('change', (e) => {
-    const f = e.target.files?.[0];
-    if (f) flLeer(f);
-  });
-  document.getElementById('cp-sugerencias')?.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-cp-sug]');
-    if (b) document.getElementById('cp-mensaje').value = b.dataset.cpSug;
-  });
-  document.getElementById('cb-recargar')?.addEventListener('click', loadCerebroRamas);
-  document.getElementById('cb-canal')?.addEventListener('change', cbCargarBloques);
-  document.getElementById('cb-arbol')?.addEventListener('click', (e) => {
-    const act = e.target.closest('[data-cb-activar]');
-    if (act) return cbActivar(act.dataset.cbActivar, act.dataset.cbA === '1', act);
-    const bor = e.target.closest('[data-cb-borrar]');
-    if (bor) return cbBorrar(bor.dataset.cbBorrar, bor);
-    const b = e.target.closest('[data-cb-nodo]');
-    if (!b) return;
-    CB_SEL = Number(b.dataset.cbNodo);
-    cbPintarArbol();
-    cbCargarBloques();
-  });
-  document.getElementById('cb-nueva')?.addEventListener('click', () => cbFormAlta(true));
-  document.getElementById('cb-cancelar-alta')?.addEventListener('click', () => cbFormAlta(false));
-  document.getElementById('cb-crear')?.addEventListener('click', (e) => cbCrear(e.currentTarget));
-  document.getElementById('cb-nombre')?.addEventListener('input', (e) => {
-    const slug = document.getElementById('cb-slug');
-    if (!slug.dataset.tocado) slug.value = cbSlugificar(e.target.value);
-  });
-  document.getElementById('cb-slug')?.addEventListener('input', (e) => { e.target.dataset.tocado = '1'; });
-  document.getElementById('cb-prompt')?.addEventListener('click', (e) => {
-    const ed = e.target.closest('[data-cb-editar]');
-    if (ed) return cbAbrirEditor(ed.dataset.cbEditar);
-    const gu = e.target.closest('[data-cb-guardar]');
-    if (gu) return cbGuardar(gu.dataset.cbGuardar, gu);
-    if (e.target.closest('[data-cb-cancelar]')) cbPintarBloques();
-  });
-  document.getElementById('ia-recargar')?.addEventListener('click', loadIaAtencion);
-  document.getElementById('ia-tabs')?.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-ia-tab]');
-    if (b) iaCambiarTab(b.dataset.iaTab);
-  });
-  document.getElementById('ia-lista')?.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-ia-convertir]');
-    if (b) iaConvertir(b.dataset.iaConvertir, b);
-  });
-  document.getElementById('cl-recargar')?.addEventListener('click', loadClientesIA);
-  document.getElementById('cl-periodo')?.addEventListener('change', loadClientesIA);
-  document.getElementById('cl-lista')?.addEventListener('click', (e) => {
-    const p = e.target.closest('[data-cl-plan]');
-    if (p) return clAbrirPlan(p.dataset.clPlan);
-    const co = e.target.closest('[data-cl-cobro]');
-    if (co) return clMarcarCobro(co.dataset.clCobro, co.dataset.clPagado === '1', co);
-  });
-  document.getElementById('cl-plan')?.addEventListener('change', (e) => {
-    clPintarTiers(e.target.value, Number(document.getElementById('cl-tier').value));
-    const sug = clPrecioSugerido();
-    if (sug != null) document.getElementById('cl-precio').value = sug;
-  });
-  document.getElementById('cl-tier')?.addEventListener('change', () => {
-    const sug = clPrecioSugerido();
-    if (sug != null) document.getElementById('cl-precio').value = sug;
-  });
-  document.getElementById('cl-guardar')?.addEventListener('click', (e) => clGuardarPlan(e.currentTarget));
-  document.querySelectorAll('[data-cerrar-sheet]').forEach(b =>
-    b.addEventListener('click', () => closeSheet(b.dataset.cerrarSheet)));
-  document.getElementById('ce-nueva')?.addEventListener('click', () => ceAbrirEditor(null));
-  document.getElementById('ce-recargar')?.addEventListener('click', loadCerebroIA);
-  document.getElementById('ce-ambito')?.addEventListener('change', ceMostrarCampoDestino);
-  document.getElementById('ce-prod-insertar')?.addEventListener('click', ceInsertarProducto);
-  document.getElementById('ce-guardar')?.addEventListener('click', (e) => ceGuardar(e.currentTarget));
-  document.getElementById('ce-lista')?.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-ce-toggle],[data-ce-editar],[data-ce-borrar]');
-    if (!t) return;
-    if (t.dataset.ceToggle) return ceToggle(t.dataset.ceToggle, t);
-    if (t.dataset.ceBorrar) return ceBorrar(t.dataset.ceBorrar, t);
-    ceAbrirEditor(CE_REGLAS.find(x => x.id === Number(t.dataset.ceEditar)));
-  });
-  document.getElementById('ce-audio-canales')?.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-audio-canal]');
-    if (!t) return;
-    toggleAudioCanal(t.dataset.audioCanal, t);
-  });
-  document.getElementById('ap-tabs')?.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-ap-estado]');
-    if (!b) return;
-    AP_ESTADO = b.dataset.apEstado;
-    document.querySelectorAll('#ap-tabs .seg').forEach(x => x.classList.toggle('on', x === b));
-    loadPropuestas();
-  });
-  document.getElementById('ap-recargar')?.addEventListener('click', loadPropuestas);
-  document.getElementById('ap-lista')?.addEventListener('click', (e) => {
-    const ap = e.target.closest('[data-ap-aprobar]');
-    if (ap) return apDecidir(ap.dataset.apAprobar, 'aprobada');
-    const rc = e.target.closest('[data-ap-rechazar]');
-    if (rc) return apDecidir(rc.dataset.apRechazar, 'rechazada');
-  });
-}
-
 /* --- Rendimiento de la IA comercial -------------------------------------
    El panel consume exclusivamente agregados admin-only. Los hashes de contacto
    no salen de la RPC y el navegador nunca recibe chats, nombres o telÃ©fonos. */
@@ -7464,13 +6819,56 @@ function iaCard(p) {
 
 let IA_CONVERTIDOS = new Map();
 
+/* Listeners de IA Atención y Clientes de la IA. */
+function setupIaAtencion() {
+  document.getElementById('ia-recargar')?.addEventListener('click', loadIaAtencion);
+  document.getElementById('ia-tabs')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ia-tab]');
+    if (b) iaCambiarTab(b.dataset.iaTab);
+  });
+  document.getElementById('ia-lista')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ia-convertir]');
+    if (b) iaConvertir(b.dataset.iaConvertir, b);
+  });
+  document.getElementById('cl-recargar')?.addEventListener('click', loadClientesIA);
+  document.getElementById('cl-periodo')?.addEventListener('change', loadClientesIA);
+  document.getElementById('cl-lista')?.addEventListener('click', (e) => {
+    const p = e.target.closest('[data-cl-plan]');
+    if (p) return clAbrirPlan(p.dataset.clPlan);
+    const co = e.target.closest('[data-cl-cobro]');
+    if (co) return clMarcarCobro(co.dataset.clCobro, co.dataset.clPagado === '1', co);
+  });
+  document.getElementById('cl-plan')?.addEventListener('change', (e) => {
+    clPintarTiers(e.target.value, Number(document.getElementById('cl-tier').value));
+    const sug = clPrecioSugerido();
+    if (sug != null) document.getElementById('cl-precio').value = sug;
+  });
+  document.getElementById('cl-tier')?.addEventListener('change', () => {
+    const sug = clPrecioSugerido();
+    if (sug != null) document.getElementById('cl-precio').value = sug;
+  });
+  document.getElementById('cl-guardar')?.addEventListener('click', (e) => clGuardarPlan(e.currentTarget));
+}
+
+// Cierre genérico de hojas: cualquier botón [data-cerrar-sheet="id"].
+function setupCerrarSheets() {
+  document.querySelectorAll('[data-cerrar-sheet]').forEach(b =>
+    b.addEventListener('click', () => closeSheet(b.dataset.cerrarSheet)));
+}
+
+// El identificador se propone solo a partir del nombre, pero se puede corregir:
+// escribirlo a mano es la parte más fácil de equivocar y la más cara de cambiar
+// después (queda enganchado al enrutado de los mensajes).
+const cbSlugificar = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+
 /* Convertir una solicitud en cliente: crea su rama del cerebro heredando la
    Base y deja anotado de qué solicitud salió. No le pone plan ni precio -- eso
    se carga después desde la pestaña Clientes, cuando se sepa qué contrató. */
 async function iaConvertir(leadId, btn) {
   const p = (window.__iaPosadas || []).find(x => String(x.id) === String(leadId));
   const nombre = (p?.nombre || '').trim();
-  if (!nombre) { errToast('Esa solicitud no tiene nombre; creá la rama a mano desde Cerebro IA › Ramas'); return; }
+  if (!nombre) { errToast('Esa solicitud no tiene nombre; no se puede crear la rama'); return; }
   const slug = cbSlugificar(nombre);
   if (!(await confirmarSheet({ titulo: `¿Crear la rama de "${nombre}"?`, detalle: `Identificador: ${slug}\n\nHereda toda la Base y nace sin catálogo ni plan.`, textoOk: 'Crear' }))) return;
   btn.disabled = true;
@@ -7479,7 +6877,6 @@ async function iaConvertir(leadId, btn) {
   btn.disabled = false;
   if (error || !data?.ok) { errToast(data?.error || error?.message || 'No se pudo crear'); return; }
   okToast(`Rama de "${nombre}" creada. Cargale el plan en la pestaña Clientes.`);
-  CB_ARBOL = [];
   await loadIaAtencion();
 }
 
@@ -7531,7 +6928,7 @@ async function loadClientesIA() {
   cont.innerHTML = CL_DATOS.length
     ? CL_DATOS.map(clCard).join('')
     : `<div class="vig-vacio"><i class="fas fa-store"></i><b>Todavía no hay clientes</b>
-       <div style="font-size:12.5px;margin-top:6px">Cuando le crees la rama a una posada en Cerebro IA › Ramas, aparece acá.</div></div>`;
+       <div style="font-size:12.5px;margin-top:6px">Cuando conviertas una solicitud en cliente, aparece acá.</div></div>`;
 }
 
 function clCard(c) {
@@ -8417,8 +7814,8 @@ async function loadVentasPendientesVerificar() {
     loadFacturas();
   }));
   grid.querySelectorAll('[data-rechazar-lead-id]').forEach(btn => btn.addEventListener('click', async () => {
-    const motivo = prompt('Motivo del rechazo (opcional):');
-    if (motivo === null) return; // canceló el prompt
+    const motivo = await pedirTexto({ titulo: 'Rechazar venta', label: 'Motivo del rechazo', tipo: 'textarea', textoOk: 'Rechazar', destructivo: true });
+    if (motivo === null) return; // canceló
     btn.disabled = true;
     const { data, error } = await sb.rpc('rechazar_venta', { p_lead_id: Number(btn.dataset.rechazarLeadId), p_motivo: motivo });
     if (error || !data?.ok) { errToast('No se pudo rechazar: ' + (error?.message || data?.error || '')); btn.disabled = false; return; }
@@ -8551,11 +7948,10 @@ async function verificarPagoAccion(id, aprobar, btn) {
   if (!p) return;
   let motivo = null;
   if (aprobar) {
-    if (!confirm(`¿Aprobar este pago de ${pagoMontoTexto(p)}? Confirmá solo si ya comprobaste el monto y la referencia contra el banco.`)) return;
+    if (!(await confirmarSheet({ titulo: `¿Aprobar este pago de ${pagoMontoTexto(p)}?`, detalle: 'Confirmá solo si ya comprobaste el monto y la referencia contra el banco.', textoOk: 'Aprobar' }))) return;
   } else {
-    motivo = prompt('Motivo del rechazo (obligatorio):');
+    motivo = await pedirTexto({ titulo: 'Rechazar pago', detalle: `Pago de ${pagoMontoTexto(p)}. El motivo queda registrado.`, label: 'Motivo del rechazo', tipo: 'textarea', requerido: true, textoOk: 'Rechazar', destructivo: true });
     if (motivo === null) return;
-    if (!motivo.trim()) { errToast('Escribí el motivo del rechazo'); return; }
   }
   if (btn) btn.disabled = true;
   const params = { p_pago_id: id, p_aprobar: aprobar };
@@ -8676,11 +8072,12 @@ document.getElementById('fact-nuevo-cliente-btn')?.addEventListener('click', () 
 // un pago Zelle/Pago Móvil declarado y aprobado necesita quedar asociado a
 // su factura a mano para que el asesor vea la venta completa.
 document.getElementById('fact-vincular-pago-btn')?.addEventListener('click', async () => {
-  const pagoId = parseInt(prompt('ID del pago (verificado) a vincular:') || '', 10);
-  if (!pagoId) return;
-  const facturaId = parseInt(prompt('ID de la factura a la que se vincula:') || '', 10);
-  if (!facturaId) return;
-  if (!confirm(`¿Vincular el pago #${pagoId} a la factura #${facturaId}?`)) return;
+  const f = await confirmarSheet({ titulo: 'Vincular pago a factura', detalle: 'El pago tiene que estar verificado.', textoOk: 'Vincular', campos: [
+    { id: 'pago', label: 'ID del pago', tipo: 'number', step: 1, min: 1, requerido: true },
+    { id: 'factura', label: 'ID de la factura', tipo: 'number', step: 1, min: 1, requerido: true }] });
+  if (!f) return;
+  const pagoId = parseInt(f.pago, 10), facturaId = parseInt(f.factura, 10);
+  if (!pagoId || !facturaId) { errToast('Los IDs tienen que ser números'); return; }
   const { data, error } = await sb.rpc('conciliar_pago_factura', { p_pago_id: pagoId, p_factura_id: facturaId });
   if (error || !data?.ok) {
     errToast(MSG_VERIFICAR_PAGO[data?.error] || error?.message || data?.error || 'No se pudo vincular');
@@ -8823,8 +8220,12 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
 });
 window.closeDrawer = (fromNav) => {
   const notas = document.getElementById('tar-notas');
-  if (notas && notas.value.trim() !== (notas.dataset.original || '').trim() && !confirm('Hay notas sin guardar. ¿Cerrar de todas formas?')) return;
-  document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume();
+  const cerrar = () => { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume(); };
+  if (notas && notas.value.trim() !== (notas.dataset.original || '').trim()) {
+    confirmarSheet({ titulo: '¿Cerrar sin guardar?', detalle: 'Hay notas sin guardar.', textoOk: 'Cerrar', destructivo: true }).then(ok => { if (ok) cerrar(); });
+    return;
+  }
+  cerrar();
 };
 document.getElementById('dClose').onclick = () => window.closeDrawer();
 document.getElementById('drawerBg').onclick = () => window.closeDrawer();
@@ -8940,6 +8341,26 @@ function setupContactosDirectos() {
   document.getElementById('cd-recargar')?.addEventListener('click', loadContactosDirectos);
 }
 
+// La imagen se achica acá y no en el servidor: subir 4 MB de captura para que
+// el modelo mire 1280px es pagar egress y esperar por nada.
+function flAchicar(file, maxLado = 1280) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const escala = Math.min(1, maxLado / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * escala);
+      c.height = Math.round(img.height * escala);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      // JPEG siempre: el modelo no gana nada con PNG y pesa el triple.
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('No se pudo abrir la imagen')); };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 /* --- Repartir números ------------------------------------------------------
    La jefa recibe clientes directo y se los pasaba a mano a cada asesor. Dos pasos
    SIEMPRE: detectar (texto o capturas, la IA puede leer mal un dígito) y, tras
@@ -8982,6 +8403,9 @@ function repRenderRevision() {
       <td><input type="checkbox" class="lead-check rep-inc" data-i="${i}" ${n.incluir ? 'checked' : ''} aria-label="Incluir"></td>
       <td data-label="Teléfono"><input class="ei rep-tel" data-i="${i}" value="${esc(n.telefono)}"></td>
       <td data-label="Nombre"><input class="ei rep-nom" data-i="${i}" value="${esc(n.nombre || '')}" placeholder="Sin nombre"></td>
+      <td data-label="Destino"><input class="ei rep-dest" data-i="${i}" value="${esc(n.destino || '')}" placeholder="Opcional"></td>
+      <td data-label="Fecha de viaje"><input class="ei rep-fec" data-i="${i}" value="${esc(n.fecha_viaje || '')}" placeholder="Opcional"></td>
+      <td data-label="Personas"><input class="ei rep-per" data-i="${i}" value="${esc(n.personas || '')}" placeholder="Opcional"></td>
       <td data-label="Estado">${estado}</td></tr>`;
   }).join('');
 }
@@ -9005,12 +8429,12 @@ async function repDetectar() {
 }
 
 async function repRepartir() {
-  const lista = REP_NUMS.filter(n => n.incluir).map(n => ({ telefono: n.telefono, nombre: n.nombre }));
+  const lista = REP_NUMS.filter(n => n.incluir).map(n => ({ telefono: n.telefono, nombre: n.nombre, destino: n.destino, fecha_viaje: n.fecha_viaje, personas: n.personas }));
   if (!lista.length) return;
   const asesor = repEl('rep-asesor').value;
   const cuando = asesor ? `todos a ${asesor}` : 'con el reparto automático';
   const avisar = repEl('rep-avisar').checked;
-  if (!confirm(`¿Repartir ${lista.length} número${lista.length === 1 ? '' : 's'} ${cuando}? Quedan como "Asignado por Karlys Corro" en Contactos directos, sin reasignación, y ${avisar ? 'cada asesor recibe su aviso' : 'NO se avisa a nadie (ni Telegram ni notificaciones)'}.`)) return;
+  if (!(await confirmarSheet({ titulo: `¿Repartir ${lista.length} número${lista.length === 1 ? '' : 's'} ${cuando}?`, detalle: `Quedan como "Asignado por Karlys Corro" en Contactos directos, sin reasignación, y ${avisar ? 'cada asesor recibe su aviso' : 'NO se avisa a nadie (ni Telegram ni notificaciones)'}.`, textoOk: 'Repartir' }))) return;
   const btn = repEl('rep-repartir');
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Repartiendo…';
   const { data, error } = await sb.functions.invoke('repartir-numeros', { body: { accion: 'repartir', numeros: lista, asesor: asesor || undefined, avisar } });
@@ -9058,6 +8482,9 @@ function setupRepartir() {
     if (e.target.classList.contains('rep-inc')) REP_NUMS[i].incluir = e.target.checked;
     else if (e.target.classList.contains('rep-tel')) REP_NUMS[i].telefono = e.target.value.trim();
     else if (e.target.classList.contains('rep-nom')) REP_NUMS[i].nombre = e.target.value.trim();
+    else if (e.target.classList.contains('rep-dest')) REP_NUMS[i].destino = e.target.value.trim();
+    else if (e.target.classList.contains('rep-fec')) REP_NUMS[i].fecha_viaje = e.target.value.trim();
+    else if (e.target.classList.contains('rep-per')) REP_NUMS[i].personas = e.target.value.trim();
     if (e.target.classList.contains('rep-inc')) repRenderRevision();
   });
   repEl('rep-detectar').addEventListener('click', repDetectar);
@@ -10037,17 +9464,15 @@ async function refrescarEstadoGmail() {
   if (error) { txt.textContent = 'No se pudo consultar el estado de Gmail.'; return; }
   CORREO_CUENTAS = data || [];
 
+  const layout = document.getElementById('correo-layout');
+  layout.classList.toggle('sin-cuenta', !CORREO_CUENTAS.length);
   if (!CORREO_CUENTAS.length) {
-    banner.style.display = 'flex';
-    banner.style.background = ''; banner.style.borderColor = '';
-    txt.textContent = 'Conectá tu Gmail para ver y enviar correo desde el CRM.';
-    btn.textContent = 'Conectar Gmail';
-    btn.style.display = '';
+    banner.style.display = 'none';
     selector.style.display = 'none';
     syncBtn.style.display = 'none';
     syncTime.style.display = 'none';
     CORREO_CUENTA_ACTIVA = null;
-    document.getElementById('correo-lista').innerHTML = '';
+    document.getElementById('correo-lista').innerHTML = '<div class="correo-empty"><i class="fas fa-envelope"></i><p>Conectá tu Gmail para ver y enviar correo desde el CRM.</p><button type="button" class="dbtn save" onclick="conectarGmail()"><i class="fas fa-plug"></i> Conectar Gmail</button></div>';
     return;
   }
 
@@ -10097,7 +9522,7 @@ window.elegirCuentaCorreo = (credencialId) => {
   refrescarEstadoGmail();
 };
 window.desconectarCuentaCorreo = async (credencialId, email) => {
-  if (!confirm(`¿Desconectar ${email}? Dejás de recibir correo nuevo de esa cuenta en el CRM.`)) return;
+  if (!(await confirmarSheet({ titulo: `¿Desconectar ${email}?`, detalle: 'Dejás de recibir correo nuevo de esa cuenta en el CRM.', textoOk: 'Desconectar', destructivo: true }))) return;
   const { error } = await sb.rpc('gmail_desconectar', { p_credencial_id: Number(credencialId) });
   if (error) { errToast('No se pudo desconectar la cuenta'); return; }
   if (String(credencialId) === CORREO_CUENTA_ACTIVA) { CORREO_CUENTA_ACTIVA = null; localStorage.removeItem('correo_cuenta_activa'); }
@@ -10358,6 +9783,15 @@ function setupRedes() {
   addChatBubbleRedes('bot', 'Hola, soy el analista de redes. Preguntame sobre el alcance, los posts con mejor desempeño o las historias del período seleccionado.');
 }
 function cargarRedActual() { redesRed === 'tiktok' ? loadRedesTikTok() : loadRedes(); }
+// Con todo en 0 Chart.js dibuja un eje 0,0–1,0 sin sentido: se cambia por un aviso.
+function chartVacio(id, hayDatos, msg) {
+  const cv = document.getElementById(id); if (!cv) return;
+  const wrap = cv.parentElement; let v = wrap.querySelector('.chart-vacio');
+  cv.style.display = hayDatos ? '' : 'none';
+  if (hayDatos) { v?.remove(); return; }
+  if (!v) { v = document.createElement('div'); v.className = 'lt-vacio chart-vacio'; wrap.appendChild(v); }
+  v.innerHTML = '<i class="fas fa-inbox"></i> ' + msg;
+}
 async function loadRedes() {
   await ensureChart();
   const [d, h] = periodo(redesPeriodo);
@@ -10373,8 +9807,10 @@ async function loadRedes() {
   pintarKPIs('redes-kpis', cards);
   const s = data.serie || [];
   mk('chSerieRedes', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Alcance', data: s.map(x => x.reach), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
+  chartVacio('chSerieRedes', s.some(x => x.reach > 0), 'Sin datos en este período: falta cargar las métricas de Instagram.');
   const te = sortEntries(data.por_tipo);
   mk('chTipoRedes', { type: 'bar', data: { labels: te.map(x => x[0]), datasets: [{ data: te.map(x => x[1]), backgroundColor: '#a06bff', borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } } });
+  chartVacio('chTipoRedes', te.some(x => x[1] > 0), 'Sin publicaciones en este período.');
   const top = data.top_posts || [];
   document.getElementById('redes-top-body').innerHTML = top.length ? top.map((p, i) => `
     <article class="lt-card" style="--i:${Math.min(i, 20)}">
@@ -10403,6 +9839,7 @@ async function loadRedesTikTok() {
   pintarKPIs('redes-tiktok-kpis', cards);
   const s = data.serie || [];
   mk('chSerieRedesTikTok', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Vistas', data: s.map(x => x.reach), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
+  chartVacio('chSerieRedesTikTok', s.some(x => x.reach > 0), 'Sin datos en este período: falta cargar las métricas de TikTok.');
   const top = data.top_posts || [];
   document.getElementById('redes-tiktok-top-body').innerHTML = top.length ? top.map((p, i) => `
     <article class="lt-card" style="--i:${Math.min(i, 20)}">
@@ -10866,7 +10303,8 @@ const LYRA_FRASES = {
   vozGracias: ['De nada. Aquí estaré.', 'Cuando quieras.'],
 };
 const LYRA_VOZ_BANCO = new Set(Object.keys(LYRA_FRASES).filter(k => k.startsWith('voz')).flatMap(k => LYRA_FRASES[k]));
-// [texto, completar]: con completar, se escribe en el input y queda marcado el "…".
+// [texto, completar]: con completar, se escribe en el input y queda marcado el hueco ("…" en el banco, LYRA_HUECO en pantalla).
+const LYRA_HUECO = '[cliente]';
 const LYRA_SUGERENCIAS = [
   ['¿Qué le falta a la reserva de …?', true], ['¿Qué cuentas por pagar hay pendientes?'], ['Busca en el tarifario un todo incluido'],
   ['Busca en el tarifario un full day'], ['Muéstrame la ficha de la reserva de …', true], ['Deja una nota en la reserva de …', true],
@@ -10937,8 +10375,8 @@ function setupLyra() {
     const [texto, completar] = LYRA.sugs[Number(b.dataset.lyraSug)] || [];
     if (!texto) return;
     if (!completar) { lyraEnviar(texto); return; }
-    const hueco = texto.indexOf('…');
-    input.value = texto; input.focus(); input.setSelectionRange(hueco, hueco + 1);
+    const t = texto.replace('…', LYRA_HUECO), hueco = t.indexOf(LYRA_HUECO);
+    input.value = t; input.focus(); input.setSelectionRange(hueco, hueco + LYRA_HUECO.length);
   });
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); LYRA.abierta && document.activeElement !== input ? input.focus() : lyraAlternar(); }
@@ -11382,7 +10820,7 @@ function lyraSugerencias() {
   if (box.hidden) return;
   // Tres al azar de la lista: cambian cada vez que se abre el chat vacío.
   LYRA.sugs = [...LYRA_SUGERENCIAS].sort(() => Math.random() - 0.5).slice(0, 3);
-  box.innerHTML = LYRA.sugs.map(([t], i) => `<button type="button" class="lyra-sug" data-lyra-sug="${i}">${esc(t)}</button>`).join('');
+  box.innerHTML = LYRA.sugs.map(([t], i) => `<button type="button" class="lyra-sug" data-lyra-sug="${i}">${esc(t.replace('…', LYRA_HUECO))}</button>`).join('');
 }
 function lyraBurbuja(who, texto, cargando, expr = 'neutral', vista, locales) {
   const log = document.getElementById('lyra-log');
@@ -14596,7 +14034,7 @@ window.abrirRegistrarAbonoVentaUI = (leadId, saldoPendiente) => {
 window.editarPorcentajeComision = async (asesorId) => {
   const a = FACT_ASESORES_CACHE.find(x => x.id === asesorId);
   if (!a) return;
-  const input = prompt(`% de comisión para ${a.nombre} (0-100):`, a.porcentaje_comision ?? '');
+  const input = await pedirTexto({ titulo: `Comisión de ${a.nombre}`, label: '% de comisión (0-100)', tipo: 'number', valor: a.porcentaje_comision ?? '', requerido: true, textoOk: 'Guardar' });
   if (input === null) return;
   const porcentaje = Number(input);
   if (!Number.isFinite(porcentaje) || porcentaje < 0 || porcentaje > 100) { errToast('Porcentaje inválido'); return; }
@@ -14606,8 +14044,8 @@ window.editarPorcentajeComision = async (asesorId) => {
   loadAsesoresComision(); loadComisionesAdmin(); loadFacturacionKpis();
 };
 window.anularFacturaUI = async (facturaId) => {
-  const motivo = prompt('Motivo de la anulación (obligatorio):');
-  if (!motivo || !motivo.trim()) return;
+  const motivo = await pedirTexto({ titulo: 'Anular factura', label: 'Motivo de la anulación', tipo: 'textarea', requerido: true, textoOk: 'Anular', destructivo: true });
+  if (!motivo) return;
   const { error } = await sb.rpc('anular_factura', { p_factura_id: facturaId, p_motivo: motivo.trim() });
   if (error) { errToast('No se pudo anular: ' + error.message); return; }
   okToast('Factura anulada');
@@ -15326,7 +14764,7 @@ async function cmAccionVenta(e) {
   let res;
   if (ver) res = await sb.rpc('comision_venta_verificar', { p_id: Number(ver.dataset.cmVer) });
   else {
-    const motivo = prompt('¿Por qué se rechaza esta venta? El vendedor verá este motivo.');
+    const motivo = await pedirTexto({ titulo: 'Rechazar venta', detalle: 'El vendedor verá este motivo.', label: '¿Por qué se rechaza?', tipo: 'textarea', textoOk: 'Rechazar', destructivo: true });
     if (motivo == null) return;
     res = await sb.rpc('comision_venta_rechazar', { p_id: Number(rech.dataset.cmRech), p_motivo: motivo });
   }
@@ -15337,7 +14775,7 @@ async function cmAccionVenta(e) {
 async function cmGenerarInvoice(e) {
   const b = e.target.closest('[data-cm-inv-vend]');
   if (!b) return;
-  if (!confirm(`¿Generar el invoice con las ventas verificadas del pago del ${cmFecha(b.dataset.cmInvPago)}? Se le asigna el próximo número.`)) return;
+  if (!(await confirmarSheet({ titulo: `¿Generar el invoice del pago del ${cmFecha(b.dataset.cmInvPago)}?`, detalle: 'Incluye las ventas verificadas de ese pago. Se le asigna el próximo número.', textoOk: 'Generar' }))) return;
   b.disabled = true;
   const { data, error } = await sb.rpc('comision_liquidacion_crear', { p_vendedor: b.dataset.cmInvVend, p_pago_el: b.dataset.cmInvPago });
   if (error || !data?.ok) { b.disabled = false; errToast(cmErr(data, error, 'No se pudo generar el invoice')); return; }
@@ -15459,7 +14897,7 @@ async function cmAccionInvoice(e) {
     return;
   }
   if (enviar) {
-    if (!confirm(`¿Enviar el invoice #${enviar.dataset.cmNum} a ${enviar.dataset.cmVend} por Telegram y correo?`)) return;
+    if (!(await confirmarSheet({ titulo: `¿Enviar el invoice #${enviar.dataset.cmNum}?`, detalle: `Va a ${enviar.dataset.cmVend} por Telegram y correo.`, textoOk: 'Enviar' }))) return;
     enviar.disabled = true;
     const r = await cmEf({ accion: 'enviar', liquidacion_id: Number(enviar.dataset.cmEnviar) });
     enviar.disabled = false;
@@ -15472,7 +14910,7 @@ async function cmAccionInvoice(e) {
   }
   const pagar = e.target.closest('[data-cm-pagar]'), anular = e.target.closest('[data-cm-anular]');
   if (!pagar && !anular) return;
-  if (anular && !confirm('¿Anular este invoice? Sus ventas vuelven a "verificada" y el número no se reutiliza.')) return;
+  if (anular && !(await confirmarSheet({ titulo: '¿Anular este invoice?', detalle: 'Sus ventas vuelven a "verificada" y el número no se reutiliza.', textoOk: 'Anular', destructivo: true }))) return;
   const { data, error } = pagar
     ? await sb.rpc('comision_liquidacion_marcar_pagada', { p_id: Number(pagar.dataset.cmPagar) })
     : await sb.rpc('comision_liquidacion_anular', { p_id: Number(anular.dataset.cmAnular) });
@@ -16523,7 +15961,29 @@ async function loadTarifario() {
     // CADA página (0,5-2,5 s c/u medido 2026-09-16). Sumado a las otras cargas del
     // arranque pasaba el statement_timeout de 8 s (57014) y el tarifario quedaba vacío.
     const PAGINA_TARIFAS = 1000;
+    // Ventanas de id acotadas en paralelo: (a, a+1000] tiene a lo sumo 1000 filas
+    // (ids enteros únicos), así que PostgREST nunca trunca y cada ventana cuesta lo
+    // mismo que una página keyset, pero ya no se esperan una detrás de otra (7-13 s
+    // seguidos en el tarifario, medido 2026-09-30). Tope de 4 pedidos a la vez por
+    // el statement_timeout de 8 s. Si algo falla, cae al keyset secuencial de abajo.
+    const traerTarifasVentanas = async (nuevaQuery) => {
+      const { data: mx, error: em } = await sb.from('tarifas').select('id').order('id', { ascending: false }).limit(1);
+      if (em || !mx?.length) return null;
+      const desde = [];
+      for (let a = 0; a < mx[0].id; a += PAGINA_TARIFAS) desde.push(a);
+      const partes = new Array(desde.length); let sig = 0, fallo = false;
+      await Promise.all(Array.from({ length: Math.min(4, desde.length) }, async () => {
+        for (let k; !fallo && (k = sig++) < desde.length;) {
+          const { data: d, error: e } = await nuevaQuery().gt('id', desde[k]).lte('id', desde[k] + PAGINA_TARIFAS);
+          if (e) { fallo = true; return; }
+          partes[k] = d || [];
+        }
+      }));
+      return fallo ? null : partes.flat();
+    };
     const traerTarifasPaginado = async (nuevaQuery) => {
+      const paralelo = await traerTarifasVentanas(nuevaQuery).catch(() => null);
+      if (paralelo) return { data: paralelo, error: null };
       const acc = [];
       for (let ultimo = 0; ;) {
         const { data: d, error: e } = await nuevaQuery().gt('id', ultimo).limit(PAGINA_TARIFAS);
@@ -17274,7 +16734,9 @@ function tarCardThumbHtml(foto, esPromo, destino, hideBtn, precio, extraBtns) {
   // El destino va como chip sobre la foto y no como renglón del cuerpo: libera
   // una línea de texto y deja el dato donde el ojo ya está mirando.
   const chip = destino ? `<div class="tc-destino-chip"><i class="fas fa-location-dot"></i>${esc(destino)}</div>` : '';
-  const badge = precio ? `<div class="tc-precio-badge">${esc(String(precio).split(/[\n;]/)[0].trim())}</div>` : '';
+  // Un precio en prosa larga no entra en la pastilla (quedaba recortado) y se repite en el cuerpo de la tarjeta.
+  const precioCorto = precio ? String(precio).split(/[\n;]/)[0].trim() : '';
+  const badge = precioCorto && precioCorto.length <= 26 ? `<div class="tc-precio-badge">${esc(precioCorto)}</div>` : '';
   return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}${badge}<div class="carrusel-dots"></div>${hideBtn || ''}${extraBtns || ''}</div>`;
 }
 // Botón "ocultar" al pasar el mouse por la tarjeta (2026-08-27) -- antes había
@@ -17914,7 +17376,7 @@ async function hsToggleTarifa(id, poner, btn) {
     : { p_item_id: id, p_estado: estado });
   let { data, error } = await call(false);
   if (!error && data && data.ok === false && data.necesita_publicar) {
-    if (!confirm('La promoción está oculta (sin revisar). ¿Publicarla y ponerla en Hot Sales?')) {
+    if (!(await confirmarSheet({ titulo: '¿Publicarla y ponerla en Hot Sales?', detalle: 'La promoción está oculta (sin revisar).', textoOk: 'Publicar' }))) {
       if (btn) { btn.disabled = false; btn.innerHTML = prev; }
       return;
     }
@@ -17981,7 +17443,7 @@ async function hsMarcarEstado(idRaw, estadoUi, btn) {
     : { p_item_id: id, p_estado: estado });
   let { data, error } = await call(false);
   if (!error && data && data.ok === false && data.necesita_publicar) {
-    if (!confirm('La promoción está oculta (sin revisar). ¿Publicarla y fijarla en Hot Sales?')) {
+    if (!(await confirmarSheet({ titulo: '¿Publicarla y fijarla en Hot Sales?', detalle: 'La promoción está oculta (sin revisar).', textoOk: 'Publicar' }))) {
       if (grupo) grupo.querySelectorAll('button').forEach(b => b.disabled = false);
       return;
     }
@@ -17997,7 +17459,7 @@ async function hsMarcarEstado(idRaw, estadoUi, btn) {
 }
 async function retirarTarifaVieja(id, btn) {
   if (ROL !== 'admin') return;
-  if (!confirm('¿Retirar esta promoción del catálogo? Sale de la web y de Hot Sales, se puede revertir.')) return;
+  if (!(await confirmarSheet({ titulo: '¿Retirar esta promoción del catálogo?', detalle: 'Sale de la web y de Hot Sales, se puede revertir.', textoOk: 'Retirar', destructivo: true }))) return;
   const prev = btn ? btn.innerHTML : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
   const { data, error } = await sb.rpc('retirar_item_tarifario', { p_tipo: 'tarifa', p_id: id });
@@ -18502,7 +17964,7 @@ async function tarJuntarTarifas(queda, sale, btn) {
   if (!q || !s) return;
   const nom = t => t.titulo || t.habitacion || 'Tarifa';
   const rango = [[q.disfrute_desde, s.disfrute_desde].sort()[0], [q.fecha_fin, s.fecha_fin].sort()[1]];
-  if (!confirm(`Queda «${nom(q)}» con disfrute ${tarRango(rango)} y «${nom(s)}» se retira del catálogo.\n\nLas condiciones que traía solo una se conservan con su fecha original (ej. un niño gratis que valía hasta cierto día no se extiende).\n\nQueda recordado: cada carga nueva del tarifario las vuelve a juntar mientras sigan con el mismo precio y fechas pegadas.\n\n¿Juntarlas?`)) return;
+  if (!(await confirmarSheet({ titulo: '¿Juntar estas tarifas?', detalle: `Queda «${nom(q)}» con disfrute ${tarRango(rango)} y «${nom(s)}» se retira del catálogo.\n\nLas condiciones que traía solo una se conservan con su fecha original (ej. un niño gratis que valía hasta cierto día no se extiende).\n\nQueda recordado: cada carga nueva del tarifario las vuelve a juntar mientras sigan con el mismo precio y fechas pegadas.`, textoOk: 'Juntar' }))) return;
   const prev = btn ? btn.innerHTML : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
   const { data, error } = await sb.rpc('tarifario_juntar_tarifas', { p_queda: queda, p_sale: sale });
@@ -19035,7 +18497,7 @@ async function tarDescartarHabitacion(x, id) {
   // Borrar y no dejarla en revisado=false: una fila mal traída que se queda
   // pendiente vuelve a aparecer en el panel cada vez que se abre el hotel. Ojo
   // que al quedar el hotel sin filas vuelve a ser candidato del enriquecimiento.
-  if (!confirm(`¿Descartar "${h.nombre}"? Se borra la fila. Una corrida futura del enriquecimiento puede volver a traerla.`)) return;
+  if (!(await confirmarSheet({ titulo: `¿Descartar "${h.nombre}"?`, detalle: 'Se borra la fila. Una corrida futura del enriquecimiento puede volver a traerla.', textoOk: 'Descartar', destructivo: true }))) return;
   const { error } = await sb.from('producto_habitaciones').delete().eq('id', id);
   if (error) { errToast('No se pudo descartar: ' + error.message); return; }
   x.habitaciones = (x.habitaciones || []).filter(h => h.id !== id);
@@ -20653,7 +20115,7 @@ function setupMisNotas() {
 // Menú agrupado (2026-09-25): 12 entradas, cada una con sus secciones como
 // pestañas arriba (pintarPestanasNav). Las hijas siguen en el DOM como
 // .nav-item.nav-hijo ocultas: usuarioPuedeAbrirSeccion y el buscador del menú
-// las necesitan. Mis Notas, Cerebro IA, Voz IA y Consultor IA salieron del
+// las necesitan. Mis Notas, Voz IA y Consultor IA salieron del
 // menú por falta de uso; su HTML y sus setup* siguen intactos.
 const NAV_ITEMS = [
   { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide' },
@@ -20682,7 +20144,7 @@ const NAV_ITEMS = [
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
   { sec: 'bt-travel', icon: 'fas fa-umbrella-beach', label: 'BT Travel', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles todo incluido, stop sales, reservas y pagos' },
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only', sub: 'Ventas, calidad, errores y costos' },
-  { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', padre: 'grp-ia', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-marketing-ok', sub: 'Lyra: cotiza, revisa reservas, busca en la web y escribe a proveedores' },
+  { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', padre: 'grp-ia', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Lyra: cotiza, revisa reservas, busca en la web y escribe a proveedores' },
   { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', padre: 'grp-ia', roles: 'nav-admin-only', sub: 'Posadas que quieren el asistente' },
   { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok' },
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
@@ -20937,7 +20399,7 @@ function activateSection(sec, fromNav) {
     secEl.addEventListener('animationend', () => secEl.classList.remove('entrando'), { once: true });
   });
   document.querySelector('.topbar').classList.toggle('show-search', sec === 'leads');
-  const t = TITLES[sec] || TITLES.dashboard;
+  const t = tituloSeccion(sec);
   document.getElementById('page-title').textContent = t[0];
   document.getElementById('page-sub').textContent = t[1];
   // Mismo título en la barra de arriba de móvil (en escritorio no existe).
@@ -20971,7 +20433,6 @@ function activateSection(sec, fromNav) {
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'correo') cargarCorreoSeccion();
   if (sec === 'galeria') loadGaleria();
-  if (sec === 'cerebro-ia') loadCerebroIA();
   if (sec === 'rendimiento-ia') loadRendimientoIA();
   if (sec === 'ia-atencion') loadIaAtencion();
   if (sec === 'clientes-eventos') loadClientesEventos();
@@ -21168,7 +20629,7 @@ function setupAppBar() {
     campo.focus();
   });
   actualizarAccionAppBar(currentSec);
-  const t = TITLES[currentSec] || TITLES.dashboard;
+  const t = tituloSeccion(currentSec);
   const mbT = document.getElementById('mb-title'); if (mbT) mbT.textContent = t[0];
   const mbS = document.getElementById('mb-sub'); if (mbS) mbS.textContent = t[1];
 
@@ -21206,7 +20667,7 @@ const REFRESCAR_SECCION = {
   'mis-comisiones': () => loadMisComisiones(), comisiones: () => loadComisiones(), 'gestion-personal': () => loadGestionPersonal(),
   postventa: () => loadPostventa(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
-  'cerebro-ia': () => loadCerebroIA(), 'rendimiento-ia': () => loadRendimientoIA(),
+  'rendimiento-ia': () => loadRendimientoIA(),
   'ia-atencion': () => loadIaAtencion(), 'web-reasignados': () => loadWebReasignados(), 'contactos-directos': () => loadContactosDirectos(),
   'clientes-eventos': () => loadClientesEventos(),
   'stop-sales': () => { loadStopSalesVigentes(); ssCargarPdfActual(); },
@@ -21927,24 +21388,27 @@ function renderBolCalendario() {
     : '<div class="pc-vacio">Sin temporadas cargadas todavía. Carnaval y Semana Santa se mueven cada año -- cargalas por año, no quedan fijas.</div>';
 }
 
-/* Altas rápidas: formularios cortos vía prompt(), consistente con el resto
-   de altas puntuales de una sola línea en esta app (ver confirmarSheet para
-   flujos con más campos si hace falta ampliarlo más adelante). */
+/* Altas rápidas: formularios cortos en la hoja de confirmarSheet (campos). */
 async function nuevaRutaBoleteria() {
-  const origen = prompt('Código IATA de origen (ej: CCS):'); if (!origen) return;
-  const destino = prompt('Código IATA de destino (ej: MIA):'); if (!destino) return;
-  const natural = prompt('Nombre natural (ej: Caracas – Miami):'); if (!natural) return;
-  const corto = prompt('Nombre corto (ej: CCS–MIA):', `${origen.toUpperCase()}–${destino.toUpperCase()}`);
-  const alias = prompt('Otras formas de nombrarla, separadas por coma (opcional):', '');
-  const internacional = confirm('¿Es una ruta internacional?');
-  const { data, error } = await sb.rpc('boleteria_guardar_ruta', { p_id: null, p_origen_iata: origen, p_destino_iata: destino, p_nombre_natural: natural, p_nombre_corto: corto, p_alias: alias ? alias.split(',').map(s => s.trim()).filter(Boolean) : [], p_es_internacional: internacional });
+  const f = await confirmarSheet({ titulo: 'Nueva ruta', textoOk: 'Crear ruta', campos: [
+    { id: 'origen', label: 'Código IATA de origen (ej: CCS)', requerido: true },
+    { id: 'destino', label: 'Código IATA de destino (ej: MIA)', requerido: true },
+    { id: 'natural', label: 'Nombre natural (ej: Caracas – Miami)', requerido: true },
+    { id: 'corto', label: 'Nombre corto (ej: CCS–MIA)' },
+    { id: 'alias', label: 'Otras formas de nombrarla, separadas por coma' },
+    { id: 'internacional', label: 'Es una ruta internacional', tipo: 'check' }] });
+  if (!f) return;
+  const corto = f.corto || `${f.origen.toUpperCase()}–${f.destino.toUpperCase()}`;
+  const { data, error } = await sb.rpc('boleteria_guardar_ruta', { p_id: null, p_origen_iata: f.origen, p_destino_iata: f.destino, p_nombre_natural: f.natural, p_nombre_corto: corto, p_alias: f.alias ? f.alias.split(',').map(s => s.trim()).filter(Boolean) : [], p_es_internacional: f.internacional });
   if (error || !data?.ok) { errToast(error?.message || 'No se pudo crear la ruta (¿el aeropuerto existe?)'); return; }
   okToast('Ruta creada'); loadBoleteria();
 }
 async function nuevaAerolineaBoleteria() {
-  const nombre = prompt('Nombre de la aerolínea:'); if (!nombre) return;
-  const iata = prompt('Código IATA (opcional):', '');
-  const { data, error } = await sb.rpc('boleteria_guardar_aerolinea', { p_id: null, p_nombre: nombre, p_iata: iata || null, p_operativa: true,
+  const f = await confirmarSheet({ titulo: 'Nueva aerolínea', textoOk: 'Crear aerolínea', campos: [
+    { id: 'nombre', label: 'Nombre de la aerolínea', requerido: true },
+    { id: 'iata', label: 'Código IATA' }] });
+  if (!f) return;
+  const { data, error } = await sb.rpc('boleteria_guardar_aerolinea', { p_id: null, p_nombre: f.nombre, p_iata: f.iata || null, p_operativa: true,
     p_equipaje_bodega_kg: null, p_equipaje_mano_kg: null, p_costo_maleta_extra: null, p_contacto_oficina: null, p_contacto_whatsapp: null,
     p_contacto_email: null, p_contacto_ejecutivo: null, p_politica_cambio: null, p_politica_cancelacion: null, p_marcar_verificada: false });
   if (error || !data?.ok) { errToast(error?.message || 'No se pudo crear la aerolínea'); return; }
@@ -21952,36 +21416,41 @@ async function nuevaAerolineaBoleteria() {
 }
 async function nuevoPrecioBoleteria() {
   if (!bolCatalogo.rutas.length || !bolCatalogo.aerolineas.length) { errToast('Primero cargá al menos una ruta y una aerolínea'); return; }
-  const rutaTxt = bolCatalogo.rutas.map((r, i) => `${i + 1}) ${r.nombre_natural}`).join('\n');
-  const iRuta = parseInt(prompt(`Elegí la ruta (número):\n${rutaTxt}`), 10) - 1;
-  if (!(iRuta >= 0 && iRuta < bolCatalogo.rutas.length)) return;
-  const aerTxt = bolCatalogo.aerolineas.map((a, i) => `${i + 1}) ${a.nombre}`).join('\n');
-  const iAer = parseInt(prompt(`Elegí la aerolínea (número):\n${aerTxt}`), 10) - 1;
-  if (!(iAer >= 0 && iAer < bolCatalogo.aerolineas.length)) return;
-  const tipo = confirm('¿Es tarifa de ida y vuelta? (Cancelar = solo ida)') ? 'ida_vuelta' : 'ida';
-  const precio = parseFloat(prompt('Precio de referencia en USD:')); if (!(precio > 0)) return;
-  const { data, error } = await sb.rpc('boleteria_guardar_precio', { p_ruta_id: bolCatalogo.rutas[iRuta].id, p_aerolinea_id: bolCatalogo.aerolineas[iAer].id, p_temporada_id: null, p_tipo: tipo, p_precio: precio, p_moneda: 'USD', p_vigente_desde: null, p_vigente_hasta: null });
+  const f = await confirmarSheet({ titulo: 'Nuevo precio de referencia', textoOk: 'Cargar precio', campos: [
+    { id: 'ruta', label: 'Ruta', tipo: 'select', opciones: bolCatalogo.rutas.map((r, i) => ({ v: i, t: r.nombre_natural })) },
+    { id: 'aerolinea', label: 'Aerolínea', tipo: 'select', opciones: bolCatalogo.aerolineas.map((a, i) => ({ v: i, t: a.nombre })) },
+    { id: 'tipo', label: 'Tipo de tarifa', tipo: 'select', valor: 'ida_vuelta', opciones: [{ v: 'ida_vuelta', t: 'Ida y vuelta' }, { v: 'ida', t: 'Solo ida' }] },
+    { id: 'precio', label: 'Precio de referencia en USD', tipo: 'number', min: 0, requerido: true }] });
+  if (!f) return;
+  const iRuta = parseInt(f.ruta, 10), iAer = parseInt(f.aerolinea, 10), precio = parseFloat(f.precio);
+  if (!bolCatalogo.rutas[iRuta] || !bolCatalogo.aerolineas[iAer] || !(precio > 0)) { errToast('Revisá el precio: tiene que ser mayor a 0'); return; }
+  const { data, error } = await sb.rpc('boleteria_guardar_precio', { p_ruta_id: bolCatalogo.rutas[iRuta].id, p_aerolinea_id: bolCatalogo.aerolineas[iAer].id, p_temporada_id: null, p_tipo: f.tipo, p_precio: precio, p_moneda: 'USD', p_vigente_desde: null, p_vigente_hasta: null });
   if (error || !data?.ok) { errToast(error?.message || 'No se pudo cargar el precio'); return; }
   okToast('Precio cargado'); loadBoleteria();
 }
 async function nuevoRequisitoBoleteria() {
-  const pais = prompt('País:'); if (!pais) return;
-  const visa = confirm('¿Requiere visa?');
-  const cedula = confirm('¿Acepta cédula (sin pasaporte)?');
-  const meses = prompt('Vigencia mínima de pasaporte, en meses (opcional):', '');
-  const notas = prompt('Notas (opcional):', '');
-  const { data, error } = await sb.rpc('boleteria_guardar_requisito', { p_id: null, p_pais: pais, p_requiere_visa: visa, p_vigencia_min_pasaporte_meses: meses ? parseInt(meses, 10) : null, p_acepta_cedula: cedula, p_vacunas: null, p_notas: notas || null });
+  const f = await confirmarSheet({ titulo: 'Nuevo requisito de viaje', textoOk: 'Guardar', campos: [
+    { id: 'pais', label: 'País', requerido: true },
+    { id: 'visa', label: 'Requiere visa', tipo: 'check' },
+    { id: 'cedula', label: 'Acepta cédula (sin pasaporte)', tipo: 'check' },
+    { id: 'meses', label: 'Vigencia mínima de pasaporte, en meses', tipo: 'number', min: 0, step: 1 },
+    { id: 'notas', label: 'Notas', tipo: 'textarea' }] });
+  if (!f) return;
+  const { data, error } = await sb.rpc('boleteria_guardar_requisito', { p_id: null, p_pais: f.pais, p_requiere_visa: f.visa, p_vigencia_min_pasaporte_meses: f.meses ? parseInt(f.meses, 10) : null, p_acepta_cedula: f.cedula, p_vacunas: null, p_notas: f.notas || null });
   if (error || !data?.ok) { errToast(error?.message || 'No se pudo guardar'); return; }
   okToast('Requisito guardado'); loadBoleteria();
 }
 async function nuevaTemporadaBoleteria() {
-  const nombre = prompt('Nombre de la temporada (ej: Carnaval 2027):'); if (!nombre) return;
-  const nivel = (prompt('Nivel (alta, media o baja):', 'alta') || '').trim().toLowerCase();
-  if (!['alta', 'media', 'baja'].includes(nivel)) { errToast('Nivel inválido'); return; }
-  const anio = parseInt(prompt('Año:', new Date().getFullYear()), 10);
-  const inicio = prompt('Fecha de inicio (AAAA-MM-DD):'); if (!inicio) return;
-  const fin = prompt('Fecha de fin (AAAA-MM-DD):'); if (!fin) return;
-  const { data, error } = await sb.rpc('boleteria_guardar_temporada', { p_id: null, p_nombre: nombre, p_nivel: nivel, p_anio: anio, p_fecha_inicio: inicio, p_fecha_fin: fin });
+  const f = await confirmarSheet({ titulo: 'Nueva temporada', textoOk: 'Guardar', campos: [
+    { id: 'nombre', label: 'Nombre de la temporada (ej: Carnaval 2027)', requerido: true },
+    { id: 'nivel', label: 'Nivel', tipo: 'select', valor: 'alta', opciones: [{ v: 'alta', t: 'Alta' }, { v: 'media', t: 'Media' }, { v: 'baja', t: 'Baja' }] },
+    { id: 'anio', label: 'Año', tipo: 'number', step: 1, valor: new Date().getFullYear(), requerido: true },
+    { id: 'inicio', label: 'Fecha de inicio', tipo: 'date', requerido: true },
+    { id: 'fin', label: 'Fecha de fin', tipo: 'date', requerido: true }] });
+  if (!f) return;
+  const anio = parseInt(f.anio, 10);
+  if (!anio) { errToast('Año inválido'); return; }
+  const { data, error } = await sb.rpc('boleteria_guardar_temporada', { p_id: null, p_nombre: f.nombre, p_nivel: f.nivel, p_anio: anio, p_fecha_inicio: f.inicio, p_fecha_fin: f.fin });
   if (error || !data?.ok) { errToast(error?.message || 'No se pudo guardar la temporada'); return; }
   okToast('Temporada guardada'); loadBoleteria();
 }
@@ -22343,11 +21812,34 @@ const FAB_POR_SECCION = {
   'mis-notas': { icono: 'fas fa-plus', label: 'Nueva nota', guard: () => !!document.getElementById('notas-nueva'), onClick: () => document.getElementById('notas-nueva')?.click() },
 };
 function sincronizarFAB(sec) {
+  document.body.classList.remove('fabs-ocultos');
   const def = FAB_POR_SECCION[sec];
   if (!def || !esMovil() || (def.guard && !def.guard())) { desmontarFAB(); return; }
   montarFAB(sec, def);
 }
 MENU_MQ.addEventListener('change', () => { sincronizarFAB(currentSec); sincronizarPopoverSheets(); });
+
+/* P1-2: al bajar, los FABs (Lyra y "+") se apartan para no tapar lo que se
+   está leyendo; vuelven al subir o al llegar al final, donde .main ya les
+   reserva el alto. En captura porque en móvil scrollea la ventana y también
+   contenedores propios; el umbral acumula para que un arrastre lento cuente. */
+const FAB_SCROLL_Y = new WeakMap();
+document.addEventListener('scroll', e => {
+  if (!esMovil()) return;
+  const t = e.target === document ? document.scrollingElement : e.target;
+  if (!t || t.closest?.('.sheet,.drawer,.lyra-panel')) return;
+  const y = t.scrollTop, prev = FAB_SCROLL_Y.get(t);
+  if (prev === undefined) { FAB_SCROLL_Y.set(t, y); return; }
+  if (Math.abs(y - prev) < 8) return;
+  FAB_SCROLL_Y.set(t, y);
+  const ocultar = y > prev && y > 40 && y + t.clientHeight < t.scrollHeight - 4;
+  document.body.classList.toggle('fabs-ocultos', ocultar);
+  lyraCerrarGlobo();
+}, { capture: true, passive: true });
+// El globo de Lyra tapa lo que tiene debajo: cualquier toque fuera lo cierra.
+document.addEventListener('pointerdown', e => {
+  if (esMovil() && !e.target.closest?.('#lyra-globo,#lyra-fab')) lyraCerrarGlobo();
+}, { capture: true, passive: true });
 
 /* Popover absoluto -> hoja inferior. Los tres popovers legacy
    (.drp-panel, .export-dd-menu, .correo-cuenta-menu) se salen de pantalla
@@ -22404,10 +21896,16 @@ function sincronizarPopoverSheets() { POPOVER_SHEETS.forEach((_, el) => sincroni
 // Hoja de confirmación genérica (Fase 4.4) -- reemplaza confirm() nativo.
 // Uso: if (!(await confirmarSheet({ titulo, detalle, textoOk, destructivo })))
 // return; -- misma forma que el confirm() que reemplaza, pero con Promise.
+// Con `campos` la misma hoja hace de prompt(): resuelve { [id]: valor } al
+// aceptar y null al cancelar (fondo, atrás de Android). Cada campo:
+// { id, label, tipo: text|number|textarea|date|select|check, valor,
+//   placeholder, requerido, opciones: [{ v, t }], min, max, step }.
 let confirmarSheetResolve = null;
-function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Confirmar', textoCancelar = 'Cancelar', destructivo = false } = {}) {
+let confirmarSheetCampos = null;
+function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Confirmar', textoCancelar = 'Cancelar', destructivo = false, campos = null } = {}) {
   return new Promise(resolve => {
     confirmarSheetResolve = resolve;
+    confirmarSheetCampos = campos && campos.length ? campos : null;
     document.getElementById('confirmar-sheet-titulo').textContent = titulo;
     const det = document.getElementById('confirmar-sheet-detalle');
     det.innerHTML = detalle ? esc(detalle).replace(/\n/g, '<br>') : '';
@@ -22416,17 +21914,56 @@ function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Conf
     btnOk.textContent = textoOk;
     btnOk.classList.toggle('destructivo', !!destructivo);
     document.getElementById('confirmar-sheet-cancelar').textContent = textoCancelar;
+    const cont = document.getElementById('confirmar-sheet-campos');
+    cont.innerHTML = confirmarSheetCampos ? confirmarSheetCampos.map((c, i) => {
+      const idc = `csc-${i}`, val = c.valor ?? '';
+      if (c.tipo === 'check') return `<label class="csc-check"><input type="checkbox" id="${idc}"${c.valor ? ' checked' : ''}> ${esc(c.label)}</label>`;
+      const lab = c.label ? `<label class="fl" for="${idc}">${esc(c.label)}${c.requerido ? '' : ' <span style="font-weight:400">(opcional)</span>'}</label>` : '';
+      if (c.tipo === 'select') return `${lab}<select class="ei" id="${idc}">${(c.opciones || []).map(o => `<option value="${esc(o.v)}"${String(o.v) === String(val) ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select>`;
+      if (c.tipo === 'textarea') return `${lab}<textarea class="ei" id="${idc}" placeholder="${esc(c.placeholder || '')}">${esc(val)}</textarea>`;
+      const extra = c.tipo === 'number' ? ` inputmode="decimal" step="${c.step ?? 'any'}"${c.min != null ? ` min="${c.min}"` : ''}${c.max != null ? ` max="${c.max}"` : ''}` : '';
+      return `${lab}<input class="ei" id="${idc}" type="${c.tipo || 'text'}" value="${esc(val)}" placeholder="${esc(c.placeholder || '')}"${extra}>`;
+    }).join('') : '';
+    const err = document.getElementById('confirmar-sheet-error');
+    err.textContent = ''; err.style.display = 'none';
+    document.getElementById('confirmar-sheet-acciones').classList.toggle('sheet-acciones', !!confirmarSheetCampos);
     openSheet('confirmar-sheet');
+    if (confirmarSheetCampos) setTimeout(() => cont.querySelector('input:not([type=checkbox]),textarea,select')?.focus(), 60);
   });
 }
 function resolverConfirmarSheet(valor) {
+  const campos = confirmarSheetCampos;
+  if (campos && valor) {
+    const out = {};
+    let falta = null;
+    campos.forEach((c, i) => {
+      const el = document.getElementById(`csc-${i}`);
+      const v = c.tipo === 'check' ? !!el?.checked : (el?.value ?? '').trim();
+      if (c.requerido && c.tipo !== 'check' && !v && !falta) falta = c;
+      out[c.id ?? i] = v;
+    });
+    if (falta) {
+      const err = document.getElementById('confirmar-sheet-error');
+      err.textContent = `Falta: ${falta.label || 'un dato'}.`; err.style.display = '';
+      document.getElementById(`csc-${campos.indexOf(falta)}`)?.focus();
+      return;
+    }
+    valor = out;
+  } else if (campos) valor = null;
   const r = confirmarSheetResolve;
   confirmarSheetResolve = null;
+  confirmarSheetCampos = null;
   closeSheet('confirmar-sheet');
   if (r) r(valor);
 }
 document.getElementById('confirmar-sheet-ok')?.addEventListener('click', () => resolverConfirmarSheet(true));
 document.getElementById('confirmar-sheet-cancelar')?.addEventListener('click', () => resolverConfirmarSheet(false));
+document.getElementById('confirmar-sheet-campos')?.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') { e.preventDefault(); resolverConfirmarSheet(true); } });
+// prompt() de un solo campo: devuelve el texto (trim) o null si se cancela.
+async function pedirTexto({ titulo, detalle = '', label = '', tipo = 'text', valor = '', placeholder = '', requerido = false, textoOk = 'Aceptar', destructivo = false } = {}) {
+  const r = await confirmarSheet({ titulo, detalle, textoOk, destructivo, campos: [{ id: 'v', label, tipo, valor, placeholder, requerido }] });
+  return r ? r.v : null;
+}
 
 /* ---------- Tutorial guiado ---------- *
  * Motor de tour dirigido por datos: TOUR_CAPITULOS define contenido, el
