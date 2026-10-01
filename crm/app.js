@@ -20577,7 +20577,7 @@ function setupNav() {
     incrementarUsoSeccion(sec);
     activateSection(sec);
   });
-  document.getElementById('side-foot-perfil')?.addEventListener('click', () => { cerrarMenuMovil(); openPerfilDrawer(); });
+  document.getElementById('side-foot-perfil')?.addEventListener('click', () => { cerrarMenuMovil('silencioso'); openPerfilDrawer(); });
   document.querySelectorAll('.mfs-trigger, .mfs-done').forEach(b => b.addEventListener('click', () => {
     const id = b.dataset.mfs;
     b.classList.contains('mfs-trigger') ? openSheet(id) : closeSheet(id);
