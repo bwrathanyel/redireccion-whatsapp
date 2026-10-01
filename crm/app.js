@@ -432,9 +432,12 @@ function openPerfilDrawer() {
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-sliders"></i> Personalización</div>
       <label class="fl">Tema</label>
-      <div class="seg-group" id="perfil-tema" style="margin-bottom:0">
-        <button type="button" data-v="dark" class="seg${(MI_PREFERENCIAS.tema || 'dark') === 'dark' ? ' on' : ''}"><i class="fas fa-moon"></i> Oscuro</button>
-        <button type="button" data-v="light" class="seg${MI_PREFERENCIAS.tema === 'light' ? ' on' : ''}"><i class="fas fa-sun"></i> Claro</button>
+      <div class="tema-grid" id="perfil-tema">
+        ${Object.entries(PALETAS).map(([id, p]) => `<button type="button" data-v="${id}" class="tema-card${temaActual() === id ? ' on' : ''}" aria-pressed="${temaActual() === id}">
+          <span class="tema-muestra" style="background:${p.muestra[0]}"><i style="background:${p.muestra[1]}"></i><i style="background:${p.muestra[2]}"></i></span>
+          <span class="tema-nombre"><i class="fas ${p.icono}"></i> ${p.nombre}</span>
+          <span class="tema-desc">${p.desc}</span>
+        </button>`).join('')}
       </div>
       <label class="fl" style="margin-top:12px">Tamaño de letra</label>
       <div class="seg-group" id="perfil-fuente" style="margin-bottom:0">
@@ -500,9 +503,29 @@ function openPerfilDrawer() {
   actualizarTogglesNotif();
   renderInstalacionPwa();
 }
+// Temas de Mi Perfil. base = claro/oscuro (data-theme), el resto de ids
+// además setean data-paleta (tokens en index.html). Si se agrega uno,
+// sumarlo también al mapa del script pre-paint de index.html.
+const PALETAS = {
+  dark:       { base: 'dark',  color: '#080b16', nombre: 'Oscuro',     icono: 'fa-moon',       desc: 'El clásico de Lotus',                     muestra: ['#080b16', '#ff9100', '#4a9eff'] },
+  light:      { base: 'light', color: '#e2d7ca', nombre: 'Claro',      icono: 'fa-sun',        desc: 'Arena cálida con ámbar Lotus, sin blanco que encandile', muestra: ['#e2d7ca', '#df9b3b', '#2e5483'] },
+  sereno:     { base: 'light', color: '#ded8cf', nombre: 'Sereno',     icono: 'fa-glasses',    desc: 'Papel crema mate, lectura cómoda. Ideal con letra Grande', muestra: ['#ded8cf', '#a14e2b', '#325178'] },
+  oceano:     { base: 'dark',  color: '#061219', nombre: 'Océano',     icono: 'fa-water',      desc: 'Azul profundo y turquesa',                muestra: ['#061219', '#2ec4b6', '#4a9eff'] },
+  bosque:     { base: 'dark',  color: '#0b130e', nombre: 'Bosque',     icono: 'fa-leaf',       desc: 'Verdes tierra con dorado',                muestra: ['#0b130e', '#d9a441', '#7fb77e'] },
+  medianoche: { base: 'dark',  color: '#000000', nombre: 'Medianoche', icono: 'fa-star',       desc: 'Negro puro, ahorra batería en el celular', muestra: ['#000000', '#a78bfa', '#f472b6'] },
+  lavanda:    { base: 'light', color: '#dbd6e7', nombre: 'Lavanda',    icono: 'fa-spa',        desc: 'Degradado lila a rosa, suave y tranquilo', muestra: ['#dbd6e7', '#725abd', '#a4587d'] },
+};
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const accentRgb = () => cssVar('--accent-rgb') || '255,145,0';
+// Chart.js no entiende var(): la grilla y los textos se leen del tema vigente.
+const gridColor = () => `rgba(${cssVar('--ink-rgb') || '255,255,255'},.07)`;
+const temaActual = () => PALETAS[MI_PREFERENCIAS.tema] ? MI_PREFERENCIAS.tema : 'dark';
 function aplicarPreferencias() {
-  document.documentElement.dataset.theme = MI_PREFERENCIAS.tema === 'light' ? 'light' : 'dark';
-  document.querySelector('meta[name="theme-color"]').setAttribute('content', MI_PREFERENCIAS.tema === 'light' ? '#f4f5f9' : '#080b16');
+  const id = temaActual(), p = PALETAS[id], root = document.documentElement;
+  root.dataset.theme = p.base;
+  if (id === 'dark' || id === 'light') delete root.dataset.paleta; else root.dataset.paleta = id;
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', p.color);
+  if (window.Chart) Chart.defaults.color = cssVar('--muted') || '#8b93ad';
   document.body.classList.toggle('fsize-chico', MI_PREFERENCIAS.fuente === 'chico');
   document.body.classList.toggle('fsize-grande', MI_PREFERENCIAS.fuente === 'grande');
   // Cache local para que el script inline en <head> (ver index.html) pueda
@@ -2603,9 +2626,9 @@ function arrancar(...pasos) {
 async function startApp() {
   if (booted) return; booted = true;
   arrancar(
-    renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupPullToRefresh, setupLongPressSeleccion,
+    renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupCorreo, setupRedes,
-    setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
+    setupPostventa, setupTutorial, setupManual, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes,
   );
   if (ROL === 'marketing') {
@@ -2767,7 +2790,7 @@ function ensureChart() {
     const s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
     s.onload = () => {
-      Chart.defaults.color = '#8b93ad'; Chart.defaults.font.family = 'Inter'; Chart.defaults.font.size = 11;
+      Chart.defaults.color = cssVar('--muted') || '#8b93ad'; Chart.defaults.font.family = 'Inter'; Chart.defaults.font.size = 11;
       resolve();
     };
     s.onerror = reject;
@@ -2775,7 +2798,24 @@ function ensureChart() {
   });
   return chartLoadPromise;
 }
-function mk(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), cfg); }
+// En temas claros los colores de dato (neón pensados para fondo oscuro) se
+// traducen a los tonos apagados --tn-*-bar del tema; se conserva el alpha.
+const TN_CHART = { '255,145,0': 'orange', '74,158,255': 'blue', '16,185,129': 'green', '160,107,255': 'purple', '245,181,68': 'amber', '255,92,138': 'pink', '239,68,68': 'red', '148,163,184': 'slate', '95,103,127': 'slate', '34,193,195': 'teal', '124,147,255': 'indigo' };
+const rgbDe = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)).join(',');
+function tonoChart(c) {
+  if (typeof c !== 'string') return c;
+  const r = c.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/);
+  const [rgb, alpha] = /^#[0-9a-f]{6}$/i.test(c) ? [rgbDe(c), 1] : r ? [r.slice(1, 4).join(','), r[4] ?? 1] : [];
+  if (!rgb) return c;
+  const tono = rgb === '255,194,102' ? '--tn-acc-fg' : rgb === accentRgb().replace(/\s/g, '') ? '--tn-acc-bar' : TN_CHART[rgb] && `--tn-${TN_CHART[rgb]}-bar`;
+  const hex = tono && cssVar(tono);
+  return /^#[0-9a-f]{6}$/i.test(hex || '') ? `rgba(${rgbDe(hex)},${alpha})` : c;
+}
+function mk(id, cfg) {
+  if (charts[id]) charts[id].destroy();
+  if (document.documentElement.dataset.theme === 'light') (cfg.data?.datasets || []).forEach(d => ['backgroundColor', 'borderColor', 'pointBackgroundColor', 'hoverBackgroundColor'].forEach(k => { if (d[k]) d[k] = Array.isArray(d[k]) ? d[k].map(tonoChart) : tonoChart(d[k]); }));
+  charts[id] = new Chart(document.getElementById(id), cfg);
+}
 const pointer = (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; };
 
 function renderTrend() {
@@ -2783,20 +2823,20 @@ function renderTrend() {
   trendKeys = t.map(x => x.mes);
   const labels = t.map(x => { const [y, m] = x.mes.split('-'); return MES3[+m - 1] + " '" + y.slice(2); });
   mk('chTrend', {
-    type: 'bar', data: { labels, datasets: [{ data: t.map(x => x.total), backgroundColor: t.map(x => x.mes === activeMonth ? '#ffc266' : 'rgba(255,145,0,.72)'), hoverBackgroundColor: '#ffc266', borderRadius: 5, maxBarThickness: 30 }] },
-    options: { responsive: true, maintainAspectRatio: false, onClick: (e, el) => { if (el.length) { const k = trendKeys[el[0].index]; chartPreview('month', k, fullMonth(k), 'fa-calendar-day', trendMap[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => fullMonth(trendKeys[it[0].dataIndex]), label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } }
+    type: 'bar', data: { labels, datasets: [{ data: t.map(x => x.total), backgroundColor: t.map(x => x.mes === activeMonth ? '#ffc266' : `rgba(${accentRgb()},.72)`), hoverBackgroundColor: '#ffc266', borderRadius: 5, maxBarThickness: 30 }] },
+    options: { responsive: true, maintainAspectRatio: false, onClick: (e, el) => { if (el.length) { const k = trendKeys[el[0].index]; chartPreview('month', k, fullMonth(k), 'fa-calendar-day', trendMap[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => fullMonth(trendKeys[it[0].dataIndex]), label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } }, y: { grid: { color: gridColor() }, beginAtZero: true } } }
   });
 }
 function renderCanal() {
   const e = sortEntries(STATS.by_canal); canalKeys = e.map(x => x[0]);
   const tot = e.reduce((s, x) => s + x[1], 0) || 1, cols = ['#ff5c8a', '#a06bff', '#4a9eff', '#5f677f'];
   // Barras con número y % en la etiqueta: la dona no dejaba leer las porciones chicas.
-  mk('chCanal', { type: 'bar', data: { labels: e.map(x => `${x[0]} · ${fmt(x[1])} (${Math.round(x[1] / tot * 100)}%)`), datasets: [{ data: e.map(x => x[1]), backgroundColor: e.map((x, i) => cols[i % cols.length]), borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (ev, el) => { if (el.length) { const k = canalKeys[el[0].index]; chartPreview('canal', k, k, 'fa-share-nodes', STATS.by_canal[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => canalKeys[it[0].dataIndex], label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true, ticks: { maxTicksLimit: 4 } }, y: { grid: { display: false } } } } });
+  mk('chCanal', { type: 'bar', data: { labels: e.map(x => `${x[0]} · ${fmt(x[1])} (${Math.round(x[1] / tot * 100)}%)`), datasets: [{ data: e.map(x => x[1]), backgroundColor: e.map((x, i) => cols[i % cols.length]), borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (ev, el) => { if (el.length) { const k = canalKeys[el[0].index]; chartPreview('canal', k, k, 'fa-share-nodes', STATS.by_canal[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => canalKeys[it[0].dataIndex], label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: gridColor() }, beginAtZero: true, ticks: { maxTicksLimit: 4 } }, y: { grid: { display: false } } } } });
 }
 function renderDest(datosPeriodo) {
   const src = datosPeriodo || STATS.top_destinos;
   const e = sortEntries(src).slice(0, 8); destKeys = e.map(x => x[0]);
-  mk('chDest', { type: 'bar', data: { labels: destKeys, datasets: [{ data: e.map(x => x[1]), backgroundColor: 'rgba(74,158,255,.75)', hoverBackgroundColor: '#4a9eff', borderRadius: 6, barThickness: 16 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (e, el) => { if (el.length) { const k = destKeys[el[0].index]; chartPreview('destino', k, k, 'fa-location-dot', src[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } } });
+  mk('chDest', { type: 'bar', data: { labels: destKeys, datasets: [{ data: e.map(x => x[1]), backgroundColor: 'rgba(74,158,255,.75)', hoverBackgroundColor: '#4a9eff', borderRadius: 6, barThickness: 16 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (e, el) => { if (el.length) { const k = destKeys[el[0].index]; chartPreview('destino', k, k, 'fa-location-dot', src[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: gridColor() }, beginAtZero: true }, y: { grid: { display: false } } } } });
 }
 
 /* ---------- Filtro de periodo en Destinos más solicitados ---------- */
@@ -3001,7 +3041,7 @@ function abrirPostventa(c) {
   const opt = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
   const docs = c.documentos || {};
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent)"><i class="fas fa-handshake-angle"></i></div><div><div class="dn">${esc(c.nombre)}</div><div class="dm">${esc(c.codigo || '')}${c.principal === false ? ' (adicional)' : ''} · ${esc(c.destino || c.servicio || 'Postventa')} · ${esc(c.asesor || 'Sin asignar')}</div></div></div>
+    <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent-ink)"><i class="fas fa-handshake-angle"></i></div><div><div class="dn">${esc(c.nombre)}</div><div class="dm">${esc(c.codigo || '')}${c.principal === false ? ' (adicional)' : ''} · ${esc(c.destino || c.servicio || 'Postventa')} · ${esc(c.asesor || 'Sin asignar')}</div></div></div>
     <div data-rv-check></div>
     <div class="seg-group seg-group-sm rv-tabs">${rvTabsHtml(true)}</div>
     <div data-rv-panel="resumen"><div class="edit-box"><div class="eb-title"><i class="fas fa-route"></i> Operación</div>
@@ -3177,7 +3217,7 @@ function rvIniciar(reservaId, tab) {
 function rvAbrirReserva(reservaId, titulo, sub) {
   PV_ACTUAL = null;
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent)"><i class="fas fa-ticket"></i></div><div><div class="dn">${esc(titulo || 'Reserva')}</div><div class="dm">${esc(sub || '')}</div></div></div>
+    <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent-ink)"><i class="fas fa-ticket"></i></div><div><div class="dn">${esc(titulo || 'Reserva')}</div><div class="dm">${esc(sub || '')}</div></div></div>
     <div class="seg-group seg-group-sm rv-tabs">${rvTabsHtml(false)}</div>
     <div data-rv-panel="servicios"></div><div data-rv-panel="pasajeros" hidden></div><div data-rv-panel="documentos" hidden></div>`;
   const yaAbierto = document.getElementById('drawer').classList.contains('open');
@@ -3898,10 +3938,10 @@ function renderEstSerie() {
       labels,
       datasets: [
         { label: EST_METRICA_LABEL[key], data: vals, borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.15)', fill: true, tension: .3, pointRadius: 3, pointBackgroundColor: '#4a9eff' },
-        { label: 'Tu promedio previo', data: labels.map(() => Math.round(prom * 10) / 10), borderColor: 'rgba(255,145,0,.9)', borderDash: [6, 4], pointRadius: 0, fill: false },
+        { label: 'Tu promedio previo', data: labels.map(() => Math.round(prom * 10) / 10), borderColor: `rgba(${accentRgb()},.9)`, borderDash: [6, 4], pointRadius: 0, fill: false },
       ],
     },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { x: { grid: { display: false } }, y: { grid: { color: gridColor() }, beginAtZero: true } } },
   });
 }
 
@@ -3915,7 +3955,7 @@ function renderEstEmbudo(e) {
   mk('est-ch-embudo', {
     type: 'bar',
     data: { labels: pasos.map(p => p[0]), datasets: [{ data: pasos.map(p => p[1]), backgroundColor: ['rgba(74,158,255,.75)', 'rgba(160,107,255,.75)', 'rgba(245,181,68,.75)', 'rgba(16,185,129,.8)'], borderRadius: 6, barThickness: 22 }] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.raw) } } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.raw) } } }, scales: { x: { grid: { color: gridColor() }, beginAtZero: true }, y: { grid: { display: false } } } },
   });
 }
 
@@ -4146,7 +4186,7 @@ function renderBioHoy(lista) {
   const box = document.getElementById('bio-hoy-list');
   if (!box) return;
   if (!lista.length) { box.innerHTML = '<div class="muted" style="font-size:12.5px">Sin clics todavía hoy</div>'; return; }
-  box.innerHTML = lista.map(x => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12.5px">
+  box.innerHTML = lista.map(x => `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid rgba(var(--ink-rgb),.05);font-size:12.5px">
     <span>${esc(x.asesor)} <span class="muted">· ${esc(x.canal)}${x.origen ? ' · ' + esc(x.origen) : ''}</span></span>
     <span style="font-weight:700">${x.clics}</span>
   </div>`).join('');
@@ -4676,7 +4716,7 @@ function leadCardHtml(l) {
     <div class="ec-row"><i class="fas fa-phone"></i> ${textoTelefonoLead(l)}</div>
     ${seguimientoActivo(l) ? `<div class="ec-row">${chipSeguimiento(l)}</div>` : ''}
     <div class="ec-estado-row">
-      ${sinAtenderDatos ? `<span class="badge-st sin-atender-movil" style="color:var(--accent);background:var(--accent-soft)">Sin atender</span>` : ''}
+      ${sinAtenderDatos ? `<span class="badge-st sin-atender-movil" style="color:var(--accent-ink);background:var(--accent-soft)">Sin atender</span>` : ''}
       <span class="estado-stepper" data-id="${l.id}">
         <button type="button" class="estado-arrow" data-dir="-1" title="Estado anterior" aria-label="Estado anterior"><i class="fas fa-chevron-left"></i></button>
         <span class="badge-st" style="color:${estadoColor};background:${estadoColor}2e">${esc(niceEstado(l.estado))}</span>
@@ -5137,7 +5177,7 @@ function openDrawer(l) {
     </div>
 
     <div class="lead-tab-panel" data-tab="conversacion">
-      <div style="font-size:11px;color:var(--muted2);background:rgba(255,255,255,.03);border-radius:10px;padding:9px 11px;margin-bottom:12px;line-height:1.5">
+      <div style="font-size:11px;color:var(--muted2);background:rgba(var(--ink-rgb),.03);border-radius:10px;padding:9px 11px;margin-bottom:12px;line-height:1.5">
         <i class="fas fa-paperclip"></i> Extracto de la conversación gestionada por la IA en ${esc(l.canal || 'el canal')} (ManyChat) — solo lectura.
       </div>
       <div id="conv-body"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
@@ -5380,7 +5420,7 @@ function renderCuerpoCorreo(correo) {
   if (correo.cuerpo_html) {
     return `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(correo.cuerpo_html)}" style="width:100%;height:420px;border:0;border-radius:8px;background:#fff;margin-top:6px"></iframe>`;
   }
-  return `<div style="white-space:pre-wrap;font-size:11.5px;margin-top:6px;background:rgba(255,255,255,.03);border-radius:8px;padding:10px">${esc(correo.cuerpo_texto || '(sin contenido)')}</div>`;
+  return `<div style="white-space:pre-wrap;font-size:11.5px;margin-top:6px;background:rgba(var(--ink-rgb),.03);border-radius:8px;padding:10px">${esc(correo.cuerpo_texto || '(sin contenido)')}</div>`;
 }
 // Marca leído en el CRM Y en el Gmail real del asesor (Fase 5) -- best
 // effort, no bloquea la lectura del correo si falla (ej. asesor todavía no
@@ -5415,7 +5455,7 @@ window.toggleCorreoBody = (id) => {
   el.style.display = '';
 };
 function botonVerCorreo(id) {
-  return `<button type="button" onclick="toggleCorreoBody(${id})" style="margin-top:6px;background:none;border:1px solid var(--line2,#2a3150);color:var(--accent);border-radius:7px;padding:4px 9px;font-size:10px;cursor:pointer"><i class="fas fa-envelope-open-text"></i> Ver correo completo</button><div id="correo-body-${id}" style="display:none"></div>`;
+  return `<button type="button" onclick="toggleCorreoBody(${id})" style="margin-top:6px;background:none;border:1px solid var(--line2,#2a3150);color:var(--accent-ink);border-radius:7px;padding:4px 9px;font-size:10px;cursor:pointer"><i class="fas fa-envelope-open-text"></i> Ver correo completo</button><div id="correo-body-${id}" style="display:none"></div>`;
 }
 
 /* ---------- Compositor de respuesta (Fase 5) ----------
@@ -5428,7 +5468,7 @@ function botonVerCorreo(id) {
    viewer del correo entrante. */
 const ADJUNTOS_PENDIENTES = new Map(); // correoId -> File[]
 function botonResponderCorreo(correoId) {
-  return `<button type="button" onclick="abrirComposerCorreo(${correoId})" style="margin-top:6px;margin-left:6px;background:none;border:1px solid var(--line2,#2a3150);color:var(--accent);border-radius:7px;padding:4px 9px;font-size:10px;cursor:pointer"><i class="fas fa-reply"></i> Responder</button><div id="composer-${correoId}" style="display:none"></div>`;
+  return `<button type="button" onclick="abrirComposerCorreo(${correoId})" style="margin-top:6px;margin-left:6px;background:none;border:1px solid var(--line2,#2a3150);color:var(--accent-ink);border-radius:7px;padding:4px 9px;font-size:10px;cursor:pointer"><i class="fas fa-reply"></i> Responder</button><div id="composer-${correoId}" style="display:none"></div>`;
 }
 // createLink necesita la selección del editor: se guarda antes de mostrar la
 // fila de URL (en línea, no una hoja: el redactor nuevo YA es una hoja y
@@ -5465,7 +5505,7 @@ window.abrirComposerCorreo = (correoId) => {
   if (!el.dataset.armado) {
     ADJUNTOS_PENDIENTES.set(correoId, []);
     el.innerHTML = `
-      <div style="margin-top:8px;border:1px solid var(--line2,#2a3150);border-radius:8px;padding:8px;background:rgba(255,255,255,.03)">
+      <div style="margin-top:8px;border:1px solid var(--line2,#2a3150);border-radius:8px;padding:8px;background:rgba(var(--ink-rgb),.03)">
         <div style="display:flex;gap:6px;margin-bottom:6px">
           <button type="button" onclick="document.execCommand('bold')" style="width:26px;height:26px;border:1px solid var(--line2,#2a3150);background:none;color:var(--txt);border-radius:5px;cursor:pointer"><b>B</b></button>
           <button type="button" onclick="document.execCommand('italic')" style="width:26px;height:26px;border:1px solid var(--line2,#2a3150);background:none;color:var(--txt);border-radius:5px;cursor:pointer"><i>I</i></button>
@@ -5492,7 +5532,7 @@ window.agregarAdjuntoComposer = (correoId, files) => {
   lista.push(...files);
   ADJUNTOS_PENDIENTES.set(correoId, lista);
   const box = document.getElementById('composer-adjuntos-' + correoId);
-  if (box) box.innerHTML = lista.map((f, i) => `<span style="background:rgba(255,255,255,.06);border-radius:6px;padding:3px 8px;font-size:9.5px">${esc(f.name)} (${fmtTamano(f.size)}) <a href="#" onclick="event.preventDefault();quitarAdjuntoComposer(${correoId},${i})" style="color:#f66">×</a></span>`).join('');
+  if (box) box.innerHTML = lista.map((f, i) => `<span style="background:rgba(var(--ink-rgb),.06);border-radius:6px;padding:3px 8px;font-size:9.5px">${esc(f.name)} (${fmtTamano(f.size)}) <a href="#" onclick="event.preventDefault();quitarAdjuntoComposer(${correoId},${i})" style="color:#f66">×</a></span>`).join('');
 };
 window.quitarAdjuntoComposer = (correoId, idx) => {
   const lista = ADJUNTOS_PENDIENTES.get(correoId) || [];
@@ -5556,7 +5596,7 @@ function fmtTamano(bytes) {
 }
 function renderAdjuntosCorreo(correoId, adjuntos) {
   return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${adjuntos.map(a => `
-    <button type="button" onclick="descargarAdjuntoCorreo(${correoId},${a.id},'${esc(a.filename || 'adjunto').replace(/'/g, '')}')" style="display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.04);border:1px solid var(--line2,#2a3150);border-radius:8px;padding:5px 10px;font-size:9.5px;color:var(--txt);cursor:pointer">
+    <button type="button" onclick="descargarAdjuntoCorreo(${correoId},${a.id},'${esc(a.filename || 'adjunto').replace(/'/g, '')}')" style="display:flex;align-items:center;gap:5px;background:rgba(var(--ink-rgb),.04);border:1px solid var(--line2,#2a3150);border-radius:8px;padding:5px 10px;font-size:9.5px;color:var(--txt);cursor:pointer">
       <i class="fas fa-paperclip"></i> ${esc(a.filename || 'adjunto')} <span class="muted">${fmtTamano(a.tamano_bytes)}</span>
     </button>`).join('')}</div>`;
 }
@@ -6090,7 +6130,7 @@ function renderRevisionVigencias() {
       </div>
     </div>` : ''}
     ${paraRetirar.length ? `<button class="dbtn peligro" id="vig-retirar-todo" type="button" style="width:100%;margin-bottom:${huerfanos ? '6' : '16'}px"><i class="fas fa-eye-slash"></i> Retirar los ${paraRetirar.length} que ya no se venden</button>` : ''}
-    ${huerfanos ? `<div class="vig-grupo-d" style="margin-bottom:16px"><i class="fas fa-triangle-exclamation" style="color:var(--accent)"></i> ${huerfanos} quedan afuera del retiro masivo porque son el único precio de su hotel — revisalos uno por uno más abajo.</div>` : ''}
+    ${huerfanos ? `<div class="vig-grupo-d" style="margin-bottom:16px"><i class="fas fa-triangle-exclamation" style="color:var(--accent-ink)"></i> ${huerfanos} quedan afuera del retiro masivo porque son el único precio de su hotel — revisalos uno por uno más abajo.</div>` : ''}
     ${VIG_GRUPOS.map(g => {
       const filas = porGrupo(g.k);
       if (!filas.length) return '';
@@ -8258,9 +8298,9 @@ async function loadMetricas() {
   // sin mostrar un conjunto distinto al que dice la tarjeta.
   pintarKPIs('met-kpis', cards);
   const s = data.serie || [];
-  mk('chSerie', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Nuevos', data: s.map(x => x.nuevos), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }, { label: 'Ventas', data: s.map(x => x.ventas), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.12)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
+  mk('chSerie', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Nuevos', data: s.map(x => x.nuevos), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }, { label: 'Ventas', data: s.map(x => x.ventas), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,.12)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', padding: 12 } } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: gridColor() }, beginAtZero: true } } } });
   const se = sortEntries(data.por_servicio);
-  mk('chServicio', { type: 'bar', data: { labels: se.map(x => x[0]), datasets: [{ data: se.map(x => x[1]), backgroundColor: '#a06bff', borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } } });
+  mk('chServicio', { type: 'bar', data: { labels: se.map(x => x[0]), datasets: [{ data: se.map(x => x[1]), backgroundColor: '#a06bff', borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: gridColor() }, beginAtZero: true }, y: { grid: { display: false } } } } });
   document.getElementById('met-servicio-empty').style.display = se.length ? 'none' : 'flex';
 }
 
@@ -9812,10 +9852,10 @@ async function loadRedes() {
   ];
   pintarKPIs('redes-kpis', cards);
   const s = data.serie || [];
-  mk('chSerieRedes', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Alcance', data: s.map(x => x.reach), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
+  mk('chSerieRedes', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Alcance', data: s.map(x => x.reach), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: gridColor() }, beginAtZero: true } } } });
   chartVacio('chSerieRedes', s.some(x => x.reach > 0), 'Sin datos en este período: falta cargar las métricas de Instagram.');
   const te = sortEntries(data.por_tipo);
-  mk('chTipoRedes', { type: 'bar', data: { labels: te.map(x => x[0]), datasets: [{ data: te.map(x => x[1]), backgroundColor: '#a06bff', borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }, y: { grid: { display: false } } } } });
+  mk('chTipoRedes', { type: 'bar', data: { labels: te.map(x => x[0]), datasets: [{ data: te.map(x => x[1]), backgroundColor: '#a06bff', borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: gridColor() }, beginAtZero: true }, y: { grid: { display: false } } } } });
   chartVacio('chTipoRedes', te.some(x => x[1] > 0), 'Sin publicaciones en este período.');
   const top = data.top_posts || [];
   document.getElementById('redes-top-body').innerHTML = top.length ? top.map((p, i) => `
@@ -9844,7 +9884,7 @@ async function loadRedesTikTok() {
   ];
   pintarKPIs('redes-tiktok-kpis', cards);
   const s = data.serie || [];
-  mk('chSerieRedesTikTok', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Vistas', data: s.map(x => x.reach), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true } } } });
+  mk('chSerieRedesTikTok', { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: 'Vistas', data: s.map(x => x.reach), borderColor: '#4a9eff', backgroundColor: 'rgba(74,158,255,.1)', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: gridColor() }, beginAtZero: true } } } });
   chartVacio('chSerieRedesTikTok', s.some(x => x.reach > 0), 'Sin datos en este período: falta cargar las métricas de TikTok.');
   const top = data.top_posts || [];
   document.getElementById('redes-tiktok-top-body').innerHTML = top.length ? top.map((p, i) => `
@@ -10252,7 +10292,7 @@ const LYRA_FRASES = {
     'Uy, me atrapaste en modo ahorro. Ya estoy aquí :ly-sorprendida:',
     'Ya volviste. Yo también :ly-feliz:',
   ],
-  generico: ['Aquí sigo, por si acaso.', 'Si algo se ve raro, pregúntame. Es más rápido que adivinar.', 'Tip: Ctrl+K y me hablas sin soltar el teclado.'],
+  generico: ['Aquí sigo, por si acaso.', 'Si algo se ve raro, pregúntame. Es más rápido que adivinar.', 'Tip: Ctrl+Z y me hablas sin soltar el teclado.'],
   bienvenida: [
     'Hola, {n} :ly-feliz: Soy Lyra. Reviso reservas, cargo servicios y pasajeros, dejo notas y le escribo a proveedores, con tus mismos permisos. ¿Por dónde empezamos?',
     '{n}, qué bueno verte :ly-guino: Dame un cliente, una reserva o un proveedor y me pongo en eso.',
@@ -10385,7 +10425,9 @@ function setupLyra() {
     input.value = t; input.focus(); input.setSelectionRange(hueco, hueco + LYRA_HUECO.length);
   });
   document.addEventListener('keydown', e => {
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); LYRA.abierta && document.activeElement !== input ? input.focus() : lyraAlternar(); }
+    // Ctrl+Z es "deshacer" del navegador: dentro de un campo editable no se toca.
+    const editando = e.target.closest?.('input,textarea,select,[contenteditable="true"]');
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z' && !editando) { e.preventDefault(); LYRA.abierta && document.activeElement !== input ? input.focus() : lyraAlternar(); }
     else if (e.key === 'Escape' && LYRA.abierta) { if (LYRA.rec) lyraPararGrabacion(false); else if (!document.getElementById('lyra-menu').hidden) lyraMenu(false); else lyraCerrar(); }
     lyraActividad();
   });
@@ -19957,6 +19999,7 @@ window.addEventListener('popstate', () => {
   const top = NAV_STACK.pop();
   if (top.type === 'drawer') window.closeDrawer(true);
   else if (top.type === 'lightbox') closeLightbox(true);
+  else if (top.type === 'tutorial') cerrarTutorial(true);
   else if (top.type === 'tar-comparar') tarCerrarComparador(true);
   else if (top.type === 'sheet') closeSheet(top.id, true);
   else if (top.type === 'msg-conv') cerrarConversacion(true);
@@ -19993,7 +20036,7 @@ async function loadClientesAsignados() {
   if (error) { console.error(error); wrap.innerHTML = '<div class="es-s">No se pudieron cargar tus clientes.</div>'; return; }
   const filas = data || [];
   if (!filas.length) { wrap.innerHTML = '<div class="es-s">No tenés clientes asignados por ahora.</div>'; return; }
-  wrap.innerHTML = filas.map(l => `<article class="entity-card"><div class="ec-head"><b>${esc(l.nombre || 'Sin nombre')}</b><span class="chip">${esc(l.estado || 'Sin estado')}</span></div><div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono || 'Sin teléfono')}</div><div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino || 'Sin destino')}</div><div class="ec-row"><i class="fas fa-clock"></i> ${l.vence_at ? esc(fmtFecha(l.vence_at)) : 'Sin plazo'}</div>${l.notas ? `<div class="ec-row"><i class="fas fa-note-sticky"></i> ${esc(l.notas)}</div>` : ''}<div class="seg-group" style="margin-top:10px;flex-wrap:wrap"><button class="seg" data-r="no_contesta" data-task="${l.task_id}">No contesta</button><button class="seg" data-r="numero_equivocado" data-task="${l.task_id}">Número equivocado</button><button class="seg" data-r="no_interesa" data-task="${l.task_id}">No interesa</button><button class="seg" data-r="interesado" data-task="${l.task_id}">Interesado</button><button class="seg" data-r="ya_viajo" data-task="${l.task_id}">Ya viajó</button></div><textarea class="ei" data-nota placeholder="¿Qué te dijo el cliente? (obligatorio para registrar el resultado)"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn-sm" data-editar-lead="${l.lead_id}"><i class="fas fa-pen"></i> Editar datos</button><a class="btn-sm" href="https://wa.me/${esc(String(l.telefono || '').replace(/\D/g,''))}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a><a class="btn-sm" href="tel:${esc(l.telefono || '')}"><i class="fas fa-phone"></i> Llamar</a></div></article>`).join('');
+  wrap.innerHTML = filas.map(l => `<article class="entity-card"><div class="ec-head"><b>${esc(l.nombre || 'Sin nombre')}</b><span class="chip">${esc(l.estado || 'Sin estado')}</span></div><div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono || 'Sin teléfono')}</div><div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino || 'Sin destino')}</div><div class="ec-row"><i class="fas fa-clock"></i> ${l.vence_at ? esc(fmtFechaHoraCaracas(l.vence_at)) : 'Sin plazo'}</div>${l.notas ? `<div class="ec-row"><i class="fas fa-note-sticky"></i> ${esc(l.notas)}</div>` : ''}<div class="seg-group" style="margin-top:10px;flex-wrap:wrap"><button class="seg" data-r="no_contesta" data-task="${l.task_id}">No contesta</button><button class="seg" data-r="numero_equivocado" data-task="${l.task_id}">Número equivocado</button><button class="seg" data-r="no_interesa" data-task="${l.task_id}">No interesa</button><button class="seg" data-r="interesado" data-task="${l.task_id}">Interesado</button><button class="seg" data-r="ya_viajo" data-task="${l.task_id}">Ya viajó</button></div><textarea class="ei" data-nota placeholder="¿Qué te dijo el cliente? (obligatorio para registrar el resultado)"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn-sm" data-editar-lead="${l.lead_id}"><i class="fas fa-pen"></i> Editar datos</button><a class="btn-sm" href="https://wa.me/${esc(String(l.telefono || '').replace(/\D/g,''))}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a><a class="btn-sm" href="tel:${esc(l.telefono || '')}"><i class="fas fa-phone"></i> Llamar</a></div></article>`).join('');
   wrap.querySelectorAll('[data-r]').forEach(btn => btn.addEventListener('click', async () => {
     const nota = btn.closest('.entity-card').querySelector('[data-nota]').value.trim();
     if (!nota) { errToast('Contá qué te dijo el cliente antes de registrar el resultado.'); return; }
@@ -20479,8 +20522,8 @@ function activateSection(sec, fromNav) {
   // Mismo título en la barra de arriba de móvil (en escritorio no existe).
   const mbT = document.getElementById('mb-title'); if (mbT) mbT.textContent = t[0];
   const mbS = document.getElementById('mb-sub'); if (mbS) mbS.textContent = t[1];
-  actualizarAccionAppBar(sec);
   sincronizarFAB(sec);
+  sincronizarBotonTutorial(sec);
   // Salto instantáneo, no 'smooth': el scroll suave de ~400ms se pisaba con la
   // entrada de la sección y se veía como dos animaciones peleando.
   window.scrollTo({ top: 0, behavior: 'auto' });
@@ -20602,11 +20645,87 @@ function entradaLista(el) {
 // corresponde y desaparece donde no hay ninguno (mostrar un botón que no hace
 // nada es peor que no mostrarlo).
 const BUSCADOR_SECCION = { leads: 'global-search', tarifario: 'tar-search', galeria: 'gal-search' };
-function actualizarAccionAppBar(sec) {
-  const btn = document.getElementById('ab-buscar');
-  if (!btn) return;
-  const id = BUSCADOR_SECCION[sec];
-  btn.style.visibility = id && document.getElementById(id) ? '' : 'hidden';
+
+/* ---------- Búsqueda global (P3-4 F1) ----------
+   Hoja con un solo campo que consulta en paralelo lo que el rol ya puede leer:
+   leads (RLS), reservas (postventa_bandeja, ya filtrada por rol) y secciones
+   del menú visibles. Sin RPC nuevo: no puede mostrar más de lo que cada
+   sección ya muestra. Atajo: Ctrl+B (Lyra usa Ctrl+Z fuera de campos de texto). */
+let BG_SEQ = 0, BG_DEB = null;
+function abrirBusquedaGlobal() {
+  const inp = document.getElementById('bg-input');
+  if (!inp) return;
+  if (sheetAbierta !== 'busqueda-sheet') openSheet('busqueda-sheet');
+  inp.value = ''; bgPintar(null);
+  setTimeout(() => inp.focus(), 60);
+}
+// closeSheet devuelve la entrada de historial con history.back() (asíncrono):
+// abrir un drawer en el acto dejaría ese popstate cerrándolo. Se espera al popstate.
+function bgCerrarYAbrir(fn) {
+  if (sheetAbierta !== 'busqueda-sheet') { fn(); return; }
+  let hecho = false;
+  const ir = () => { if (hecho) return; hecho = true; fn(); };
+  window.addEventListener('popstate', ir, { once: true });
+  setTimeout(ir, 400);
+  closeSheet('busqueda-sheet');
+}
+function bgSeccionesVisibles(q) {
+  const n = q.toLowerCase();
+  return NAV_ITEMS.filter(it => {
+    return (it.label + ' ' + (it.sub || '')).toLowerCase().includes(n) && navVisiblePorRol(navItemDe(it.sec));
+  }).slice(0, 5);
+}
+async function bgBuscar(q) {
+  const seq = ++BG_SEQ, safe = q.replace(/[,()%*]/g, ''), dig = q.replace(/\D/g, '');
+  const filtros = [`nombre.ilike.%${safe}%`];
+  if (dig.length >= 3) filtros.push(`telefono.ilike.%${dig}%`);
+  const [leads, res] = await Promise.all([
+    sb.from('leads').select('id,nombre,telefono,estado,destino,asesor').is('eliminado_at', null).or(filtros.join(',')).order('fecha_creacion', { ascending: false }).limit(5),
+    sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: q }),
+  ]);
+  if (seq !== BG_SEQ) return;
+  bgPintar({
+    q,
+    secciones: bgSeccionesVisibles(q),
+    leads: leads.error ? null : leads.data || [],
+    reservas: res.error ? null : (res.data || []).slice(0, 5),
+  });
+}
+function bgPintar(r) {
+  const box = document.getElementById('bg-res');
+  if (!box) return;
+  if (!r) { box.innerHTML = '<div class="bg-vacio">Escribí un nombre, teléfono, código de reserva o el nombre de una sección.</div>'; return; }
+  const grupo = (titulo, icono, filas) => filas ? `<div class="bg-grupo"><i class="${icono}"></i> ${titulo}</div>${filas}` : '';
+  const fila = (attr, tit, sub) => `<button type="button" class="bg-fila" ${attr}><b>${esc(tit)}</b><span>${esc(sub)}</span></button>`;
+  const html = [
+    grupo('Secciones', 'fas fa-compass', r.secciones.map(s => fila(`data-bg-sec="${s.sec}"`, s.label, s.sub || '')).join('')),
+    grupo('Leads', 'fas fa-users', (r.leads || []).map(l => fila(`data-bg-lead="${l.id}"`, l.nombre || 'Sin nombre', [l.telefono, l.estado, l.destino, l.asesor].filter(Boolean).join(' · '))).join('')),
+    grupo('Reservas', 'fas fa-handshake-angle', (r.reservas || []).map((c, i) => fila(`data-bg-res="${i}"`, c.nombre || 'Sin nombre', [c.codigo, c.destino || c.servicio, c.etapa].filter(Boolean).join(' · '))).join('')),
+  ].join('');
+  const fallo = r.leads === null || r.reservas === null ? '<div class="bg-vacio">Una de las búsquedas falló; los resultados pueden estar incompletos.</div>' : '';
+  box.innerHTML = (html || '<div class="bg-vacio">Sin resultados para «' + esc(r.q) + '»</div>') + fallo;
+  box.querySelectorAll('[data-bg-sec]').forEach(b => b.onclick = () => bgCerrarYAbrir(() => activateSection(b.dataset.bgSec)));
+  box.querySelectorAll('[data-bg-lead]').forEach(b => b.onclick = async () => {
+    const { data: l, error } = await sb.from('leads').select('*').eq('id', Number(b.dataset.bgLead)).maybeSingle();
+    if (error || !l) { errToast('No se pudo abrir ese lead'); return; }
+    bgCerrarYAbrir(() => openDrawer(l));
+  });
+  box.querySelectorAll('[data-bg-res]').forEach(b => b.onclick = () => bgCerrarYAbrir(() => abrirPostventa(r.reservas[Number(b.dataset.bgRes)])));
+}
+function setupBusquedaGlobal() {
+  const inp = document.getElementById('bg-input');
+  if (!inp) return;
+  inp.addEventListener('input', () => {
+    clearTimeout(BG_DEB);
+    const q = inp.value.trim();
+    if (q.length < 2) { BG_SEQ++; bgPintar(null); return; }
+    BG_DEB = setTimeout(() => bgBuscar(q), 250);
+  });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') document.querySelector('#bg-res .bg-fila')?.click(); });
+  document.getElementById('topbar-buscar-btn')?.addEventListener('click', abrirBusquedaGlobal);
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') { e.preventDefault(); abrirBusquedaGlobal(); }
+  });
 }
 
 function setupMenuMovil() {
@@ -20697,12 +20816,11 @@ function setupAppBar() {
   const buscar = document.getElementById('ab-buscar');
   if (buscar) buscar.addEventListener('click', () => {
     const campo = document.getElementById(BUSCADOR_SECCION[currentSec] || '');
-    if (!campo) return;
+    if (!campo) { abrirBusquedaGlobal(); return; }
     document.body.scrollTop = 0;
     document.body.classList.remove('appbar-oculta');
     campo.focus();
   });
-  actualizarAccionAppBar(currentSec);
   const t = tituloSeccion(currentSec);
   const mbT = document.getElementById('mb-title'); if (mbT) mbT.textContent = t[0];
   const mbS = document.getElementById('mb-sub'); if (mbS) mbS.textContent = t[1];
@@ -22088,7 +22206,7 @@ const TOUR_CAPITULOS = [
     { titulo: 'Ranking de asesores', texto: 'Compara el desempeño de cada asesor: cuántos leads atendió, cuántos cerró, tiempo de respuesta.', selector: '#sec-ranking' },
   ]},
   { id: 'pipeline', titulo: 'Pipeline', icono: 'fa-diagram-project', roles: ['admin', 'asesor'], seccion: 'pipeline', pasos: [
-    { titulo: 'El camino de un cliente', texto: 'Acá ves en qué etapa está cada cliente: Atendido → Cotización enviada → Esperando pago → Pago realizado.', selector: '#sec-pipeline' },
+    { titulo: 'El camino de un cliente', texto: 'Acá ves en qué etapa está cada cliente: Atendido → Cliente contactado → Cotización enviada → Pago realizado → Venta completa.', selector: '#sec-pipeline' },
   ]},
   { id: 'tarifario', titulo: 'Tarifario', icono: 'fa-book-open', roles: ['admin', 'asesor', 'marketing'], seccion: 'tarifario', pasos: [
     { titulo: 'Catálogo de hoteles y paquetes', texto: 'Todos los precios y opciones que le puedes ofrecer a un cliente, con fotos.', selector: '#sec-tarifario' },
@@ -22168,6 +22286,7 @@ function temasManualVisibles() {
   return [...deTour, ...extra.filter(t => !vistos.has(t.id))];
 }
 function renderManual() {
+  renderGaleriaTutoriales();
   const temas = temasManualVisibles();
   document.getElementById('manual-list').innerHTML = temas.map(t => `
     <details class="manual-tema" id="manual-${t.id}">
@@ -22191,6 +22310,123 @@ function setupManual() {
   document.getElementById('manual-collapse-all')?.addEventListener('click', () => document.querySelectorAll('#manual-list details').forEach(d => d.open = false));
 }
 
+/* ---------- Videotutoriales narrados por Lyra (2026-10-01) ----------
+   Los videos viven en el bucket privado `tutoriales` de Supabase Storage, no en
+   Cloudflare Pages (tope de 25MB por archivo y cada publicación los volvería a
+   subir): {pc|movil}/<id>.mp4 y poster/<id>.jpg, leídos con URL firmada. Los
+   subtítulos van quemados en el video. `seg` es la duración de la versión PC. */
+const TUTORIALES = [
+  { id: '01-mapa-hoy', titulo: 'Mapa del CRM y tu pantalla de inicio', rol: 'asesor', seg: 79, secciones: ['hoy', 'leads'] },
+  { id: '02-bandeja', titulo: 'Tu bandeja: Atender, No puedo y número inválido', rol: 'asesor', seg: 120, secciones: ['hoy', 'leads'] },
+  { id: '03-ficha-pipeline', titulo: 'La ficha del lead, los estados y el Pipeline', rol: 'asesor', seg: 109, secciones: ['leads', 'pipeline'] },
+  { id: '04-cotizar', titulo: 'Cotizar: Tarifario, Galería y Stop Sales', rol: 'asesor', seg: 98, secciones: ['tarifario', 'galeria', 'stop-sales'] },
+  { id: '05-cerrar-venta', titulo: 'Cerrar venta: Link de pago y Facturación', rol: 'asesor', seg: 98, secciones: ['leads'] },
+  { id: '06-mis-ventas', titulo: 'Mis Ventas: saldos, abonos y venta completa', rol: 'asesor', seg: 78, secciones: ['mis-ventas'] },
+  { id: '07-reservas', titulo: 'Reservas y postventa', rol: 'asesor', seg: 95, secciones: ['postventa'] },
+  { id: '08-comisiones', titulo: 'Mis Comisiones y cortes del 5 y del 20', rol: 'asesor', seg: 64, secciones: ['comisiones', 'mis-comisiones'] },
+  { id: '09-asistente', titulo: 'Pedirle ayuda a Lyra', rol: 'asesor', seg: 74, secciones: ['asistente'] },
+  { id: '10-caso-completo', titulo: 'Caso completo: la venta de María de principio a fin', rol: 'asesor', seg: 180, secciones: ['hoy', 'leads'] },
+  { id: '11-dashboard', titulo: 'Dashboard, Ranking e Informe diario', rol: 'admin', seg: 82, secciones: ['dashboard', 'ranking', 'informe-diario'] },
+  { id: '12-repartir-web', titulo: 'Repartir números, Web y Reasignados', rol: 'admin', seg: 100, secciones: ['repartir', 'web-reasignados'] },
+  { id: '13-pagos', titulo: 'Pagos por verificar', rol: 'admin', seg: 81, secciones: ['pagos'] },
+  { id: '14-facturacion', titulo: 'Facturación', rol: 'admin', seg: 188, secciones: ['facturacion'] },
+  { id: '15-comisiones-admin', titulo: 'Comisiones por corte y liquidaciones', rol: 'admin', seg: 160, secciones: ['comisiones'] },
+  { id: '16-gestion-personal', titulo: 'Gestión de Personal', rol: 'admin', seg: 177, secciones: ['gestion-personal'] },
+];
+// El admin ve también los del asesor (para formar al equipo), con los suyos primero.
+const tutorialesVisibles = () => TUTORIALES.filter(t => ROL === 'admin' || (ROL === 'asesor' && t.rol === 'asesor')).sort((a, b) => (b.rol === ROL) - (a.rol === ROL));
+const tutorialesDeSeccion = sec => tutorialesVisibles().filter(t => t.secciones.includes(sec));
+const fmtDuracion = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+const TUT_URLS = new Map();
+async function urlsTutoriales(rutas) {
+  const ahora = Date.now();
+  const faltan = rutas.filter(r => !(TUT_URLS.get(r)?.vence > ahora));
+  if (faltan.length) {
+    const { data, error } = await sb.storage.from('tutoriales').createSignedUrls(faltan, 6 * 3600);
+    if (error) throw error;
+    data.forEach(d => { if (d.signedUrl) TUT_URLS.set(d.path, { url: d.signedUrl, vence: ahora + 5 * 3600e3 }); });
+  }
+  return rutas.map(r => TUT_URLS.get(r)?.url || null);
+}
+const tutVistos = () => { try { return new Set(JSON.parse(localStorage.getItem('tut-vistos') || '[]')); } catch { return new Set(); } };
+function marcarTutVisto(id) { try { const v = tutVistos(); if (v.has(id)) return; v.add(id); localStorage.setItem('tut-vistos', JSON.stringify([...v])); } catch {} }
+function sincronizarBotonTutorial(sec) {
+  const hay = tutorialesDeSeccion(sec).length > 0;
+  ['topbar-tutorial-btn', 'ab-tutorial'].forEach(id => { const b = document.getElementById(id); if (b) b.hidden = !hay; });
+}
+let tutLista = [], tutActual = null;
+async function abrirTutorial(id, lista) {
+  const modal = document.getElementById('tut-modal'), video = document.getElementById('tut-video');
+  const t = TUTORIALES.find(x => x.id === id);
+  if (!modal || !t) return;
+  tutActual = t;
+  tutLista = lista?.length ? lista : [t];
+  const formato = matchMedia('(max-width: 760px)').matches ? 'movil' : 'pc';
+  modal.classList.toggle('movil', formato === 'movil');
+  document.getElementById('tut-titulo').textContent = t.titulo;
+  document.getElementById('tut-lista').innerHTML = tutLista.length > 1 ? tutLista.map(x => `<button type="button" class="tut-chip${x.id === id ? ' on' : ''}" data-tut="${x.id}">${esc(x.titulo)}</button>`).join('') : '';
+  document.getElementById('tut-error').hidden = true;
+  if (!modal.classList.contains('open')) { modal.classList.add('open'); navPush({ type: 'tutorial' }); }
+  video.pause(); video.removeAttribute('src'); video.removeAttribute('poster'); video.load();
+  try {
+    const [src, poster] = await urlsTutoriales([`${formato}/${id}.mp4`, `poster/${id}.jpg`]);
+    if (tutActual !== t) return;
+    if (!src) throw new Error(`sin video ${formato}/${id}`);
+    if (formato === 'pc' && poster) video.poster = poster;
+    video.src = src;
+    video.play().catch(() => {});
+  } catch (e) {
+    console.warn('[tutoriales]', e);
+    if (tutActual === t) document.getElementById('tut-error').hidden = false;
+  }
+}
+function cerrarTutorial(fromNav) {
+  const modal = document.getElementById('tut-modal');
+  if (!modal?.classList.contains('open')) return;
+  const video = document.getElementById('tut-video');
+  video.pause(); video.removeAttribute('src'); video.load();
+  modal.classList.remove('open');
+  tutActual = null;
+  if (!fromNav) navConsume();
+  if (currentSec === 'manual') renderGaleriaTutoriales();
+}
+async function renderGaleriaTutoriales() {
+  const card = document.getElementById('tut-galeria-card'), cont = document.getElementById('tut-galeria');
+  if (!card || !cont) return;
+  const lista = tutorialesVisibles();
+  card.hidden = !lista.length;
+  if (!lista.length) return;
+  const vistos = tutVistos();
+  cont.innerHTML = lista.map(t => `
+    <button type="button" class="tut-card" data-tut="${t.id}">
+      <span class="tut-thumb"><img alt="" loading="lazy" data-poster="${t.id}"><i class="fas fa-play"></i><span class="tut-dur">${fmtDuracion(t.seg)}</span></span>
+      <span class="tut-card-t">${esc(t.titulo)}</span>
+      <span class="tut-card-m">${ROL === 'admin' ? `${t.rol === 'admin' ? 'Admin' : 'Asesor'} · ` : ''}${vistos.has(t.id) ? '<i class="fas fa-check"></i> Visto' : 'Sin ver'}</span>
+    </button>`).join('');
+  cont.querySelectorAll('.tut-card').forEach(b => { b.onclick = () => abrirTutorial(b.dataset.tut); });
+  try {
+    const urls = await urlsTutoriales(lista.map(t => `poster/${t.id}.jpg`));
+    cont.querySelectorAll('img[data-poster]').forEach((img, i) => { if (urls[i]) img.src = urls[i]; });
+  } catch (e) { console.warn('[tutoriales]', e); }
+}
+function setupTutoriales() {
+  const abrirDeSeccion = () => { const l = tutorialesDeSeccion(currentSec); if (l.length) abrirTutorial(l[0].id, l); };
+  document.getElementById('topbar-tutorial-btn')?.addEventListener('click', abrirDeSeccion);
+  document.getElementById('ab-tutorial')?.addEventListener('click', abrirDeSeccion);
+  const modal = document.getElementById('tut-modal');
+  if (!modal) return;
+  document.getElementById('tut-close').onclick = () => cerrarTutorial();
+  modal.addEventListener('click', e => {
+    if (e.target === modal) return cerrarTutorial();
+    const b = e.target.closest('#tut-lista [data-tut]');
+    if (b && b.dataset.tut !== tutActual?.id) abrirTutorial(b.dataset.tut, tutLista);
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('open')) cerrarTutorial(); });
+  const video = document.getElementById('tut-video');
+  video.addEventListener('timeupdate', () => { if (tutActual && video.duration && video.currentTime / video.duration > .9) marcarTutVisto(tutActual.id); });
+  sincronizarBotonTutorial(currentSec);
+}
+
 /* ---------- Actualizaciones (changelog del CRM, pedido del dueño 2026-07-26) ----------
    Curado a mano a partir del historial real de commits de lotus-crm-preview y
    redireccion-whatsapp/crm -- traducido a lenguaje de usuario final, no mensajes de commit
@@ -22198,6 +22434,7 @@ function setupManual() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-01', emoji: '🎬', titulo: 'Videotutoriales con Lyra', texto: 'Lyra te explica el CRM en videos cortos, con datos de ejemplo. Arriba de cada sección que tiene uno aparece "Ver tutorial" (en el celular, el botón ▶ de la barra de arriba), y en Ayuda → Manual están todos juntos, marcados como vistos cuando los terminás. En el celular se ven en vertical y en la computadora en horizontal.', roles: ['admin', 'asesor'] },
   { fecha: '2026-09-30', emoji: '🗂️', titulo: 'Postulaciones más fáciles de revisar', texto: 'Tarjetas nuevas: foto grande, calificación con color, cargo y una línea con edad, experiencia y estudios. Ordená por calificación, fecha o experiencia, agrupá por cargo y filtrá por cargo, género, rango de edad, foto, modalidad, estado y calificación. En la ficha, el veredicto de la IA está arriba en Perfil y Llamar / WhatsApp / Ver CV quedan fijos. Al re-analizar, la edad, género, estudios y experiencia vacíos se completan desde el CV.', roles: ['admin'] },
   { fecha: '2026-09-30', emoji: '🧑‍💼', titulo: 'Postulaciones: "Re-analizar todas" de verdad', texto: 'El botón ahora re-lee cada CV en el servidor uno por uno, le pone la foto sacada del CV si no tenía y lo vuelve a calificar con el criterio nuevo: pesan las habilidades y la capacidad de trabajo, no el diseño del CV ni fechas desordenadas. Las postulaciones sin CV se eliminan al correrlo.', roles: ['admin'] },
   { fecha: '2026-09-29', emoji: '📲', titulo: 'Repartir números: de la jefa a los asesores en un paso', texto: 'Nueva sección Leads → "Repartir números". Pegá los números que te escribieron directo (o subí capturas de pantalla), revisá los que detectó y, al confirmar, se reparten entre los asesores con el reparto de siempre. Cada asesor recibe su aviso y su lead queda en el CRM.', roles: ['admin'] },
