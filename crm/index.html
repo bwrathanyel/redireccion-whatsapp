@@ -190,6 +190,7 @@ body:has(#vista-previa-banner){padding-top:36px}
 .export-dd{position:relative;display:inline-block}
 .export-dd-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--bg2);border:1px solid var(--line2);border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.4);z-index:20;min-width:150px;overflow:hidden}
 .export-dd-menu.show{display:block}
+.exp-fila{display:flex;justify-content:flex-end;margin:4px 0 10px}
 .export-dd-menu button{display:flex;align-items:center;gap:9px;width:100%;padding:10px 14px;background:transparent;border:none;color:var(--txt);font-size:12.5px;font-family:inherit;cursor:pointer;text-align:left}
 .export-dd-menu button:hover{background:rgba(255,255,255,.06)}
 .btn-sm:hover{border-color:var(--accent)}
@@ -4037,6 +4038,13 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             <div class="view-switch" id="leads-view-switch"></div>
             <button class="reload-btn" id="leads-reload-btn" type="button" title="Recargar leads"><i class="fas fa-rotate"></i> Recargar</button>
             <span class="tcount" id="t-count"></span>
+            <div class="export-dd solo-admin-borrar">
+              <button class="reload-btn" type="button" onclick="toggleExportMenu(event,'leads')" title="Exportar los leads del filtro activo"><i class="fas fa-download"></i> Exportar</button>
+              <div class="export-dd-menu" id="export-menu-leads">
+                <button onclick="exportarCSV('leads')"><i class="fas fa-file-csv"></i> CSV</button>
+                <button onclick="exportarXLSX('leads','Leads')"><i class="fas fa-file-excel"></i> XLSX</button>
+              </div>
+            </div>
             <button class="mfs-done" data-mfs="leads-tbar" type="button">Listo</button>
         </div>
         <div class="card">
@@ -4900,6 +4908,14 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="card">
         <h2><i class="fas fa-money-check-dollar"></i> Pagos por verificar</h2>
         <div class="csub">Links de pago que un cliente declaró como pagados. Abrí el comprobante y comprobá el monto y la referencia contra el banco antes de aprobar.</div>
+        <div class="exp-fila"><div class="export-dd">
+          <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'pagos')"><i class="fas fa-download"></i> Exportar</button>
+          <div class="export-dd-menu" id="export-menu-pagos">
+            <button onclick="exportarPDF('pagos','Pagos por verificar')"><i class="fas fa-file-pdf"></i> PDF</button>
+            <button onclick="exportarCSV('pagos')"><i class="fas fa-file-csv"></i> CSV</button>
+            <button onclick="exportarXLSX('pagos','Pagos por verificar')"><i class="fas fa-file-excel"></i> XLSX</button>
+          </div>
+        </div></div>
         <div class="tbl-state skel" id="pagos-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
         <div class="tbl-state" id="pagos-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No hay pagos pendientes de verificar</div></div>
         <div class="leads-inbox-grid" id="pagos-lista"></div>
@@ -5444,6 +5460,14 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="card">
         <h2><i class="fas fa-file-lines"></i> Informe Diario</h2>
         <div class="csub">Resumen de cierre de jornada de cada asesor · últimos 14 días, más reciente primero</div>
+        <div class="exp-fila"><div class="export-dd">
+          <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'informe')"><i class="fas fa-download"></i> Exportar</button>
+          <div class="export-dd-menu" id="export-menu-informe">
+            <button onclick="exportarPDF('informe','Informe diario')"><i class="fas fa-file-pdf"></i> PDF</button>
+            <button onclick="exportarCSV('informe')"><i class="fas fa-file-csv"></i> CSV</button>
+            <button onclick="exportarXLSX('informe','Informe diario')"><i class="fas fa-file-excel"></i> XLSX</button>
+          </div>
+        </div></div>
         <div class="kpis bt-kpis lt-kpis" id="informe-diario-kpis"></div>
         <div id="informe-diario-tbody" class="lt-grid"></div>
       </div>
@@ -5533,6 +5557,14 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
       <div class="card">
         <h2><i class="fas fa-ranking-star"></i> Ranking de asesores</h2>
+        <div class="exp-fila"><div class="export-dd">
+          <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'ranking')"><i class="fas fa-download"></i> Exportar</button>
+          <div class="export-dd-menu" id="export-menu-ranking">
+            <button onclick="exportarPDF('ranking','Ranking de asesores')"><i class="fas fa-file-pdf"></i> PDF</button>
+            <button onclick="exportarCSV('ranking')"><i class="fas fa-file-csv"></i> CSV</button>
+            <button onclick="exportarXLSX('ranking','Ranking de asesores')"><i class="fas fa-file-excel"></i> XLSX</button>
+          </div>
+        </div></div>
         <div class="csub" id="rank-tot"></div>
         <div class="lt-grid" id="rank-body"></div>
       </div>
@@ -5638,6 +5670,14 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <option value="sin-jugar">No jugaron</option>
           <option value="pendientes">Con premio por entregar</option>
         </select>
+        <div class="export-dd">
+          <button class="ce-mini" type="button" onclick="toggleExportMenu(event,'cev')"><i class="fas fa-download"></i> Exportar</button>
+          <div class="export-dd-menu" id="export-menu-cev">
+            <button onclick="exportarPDF('cev','Clientes del evento')"><i class="fas fa-file-pdf"></i> PDF</button>
+            <button onclick="exportarCSV('cev')"><i class="fas fa-file-csv"></i> CSV</button>
+            <button onclick="exportarXLSX('cev','Clientes del evento')"><i class="fas fa-file-excel"></i> XLSX</button>
+          </div>
+        </div>
       </div>
       <div id="cev-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
     </section>

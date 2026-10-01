@@ -2336,6 +2336,7 @@ function renderInformeDiario() {
     { key: 'sin', t: 'Sin informe', v: fmt(sin), d: 'falta el cierre', i: 'fa-hourglass-half', c: 'var(--amber)', on: informeFiltro === 'sin', go: () => filtrarInformeEstado('sin') },
   ]);
   const filas = INFORME_CACHE.filter(f => !informeFiltro || (informeFiltro === 'con') === !!f.tiene_informe);
+  INFORME_LAST = filas;
   document.getElementById('informe-diario-tbody').innerHTML = filas.map((f, i) => `
     <article class="lt-card${f.tiene_informe ? '' : ' lt-card-hecha'}" style="--i:${Math.min(i, 20)}">
       <div class="lt-card-cab">
@@ -2605,7 +2606,7 @@ async function startApp() {
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupManual, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
-    setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir,
+    setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -6606,6 +6607,7 @@ function cevIrAFiltro(f) {
 
 function cevPintar() {
   const cont = document.getElementById('cev-lista');
+  CEV_LAST = [];
   const porReg = new Map(), sinReg = new Map();
   // Sin registro web: se agrupan por código (o teléfono) para ver juntos los
   // premios de una misma persona.
@@ -6638,6 +6640,9 @@ function cevPintar() {
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const sueltos = [...sinReg.values()]
     .filter(ps => pasaFiltro(ps, true) && coincide([...ps.map(p => p.nombre), ...ps.map(p => p.codigo), ...ps.map(p => p.cupon_codigo)], ps.map(p => p.telefono)));
+  const resumenPremios = ps => ({ premios: ps.length, cupones: ps.map(p => p.cupon_codigo).filter(Boolean).join(', '), por_entregar: ps.filter(p => !p.entregado_en).length });
+  CEV_LAST = [...regs.map(r => ({ ...r, ...resumenPremios(porReg.get(r.id) || []) })),
+    ...sueltos.map(ps => ({ nombre: ps[0].nombre, telefono: ps[0].telefono, codigo: ps[0].codigo, ...resumenPremios(ps) }))];
   if (!regs.length && !sueltos.length) {
     cont.innerHTML = `<div class="vig-vacio">${CEV_REGS.length || CEV_PREMIOS.length ? 'Nadie coincide con la búsqueda o el filtro' : 'Este evento todavía no tiene registros'}</div>`;
     return;
@@ -8269,6 +8274,7 @@ async function loadRanking() {
   const { data, error } = await sb.rpc('ranking_asesores', { p_desde: iso(d), p_hasta: iso(h) });
   if (error) { console.error(error); errToast('No se pudo cargar el ranking'); return; }
   const rows = (data || []).slice().sort((a, b) => (b[rankSort] || 0) - (a[rankSort] || 0));
+  RANK_LAST = rows;
   const medal = ['🥇', '🥈', '🥉'];
   const maxVentas = Math.max(1, ...rows.map(r => +r.ventas || 0));
   document.getElementById('rank-body').innerHTML = rows.map((r, i) => `
@@ -13544,11 +13550,26 @@ function formatCeldaExport(col, row) {
   if (col === 'porcentaje' || col === 'porcentaje_comision') return v + '%';
   return String(v);
 }
-window.exportarCSV = (tabla) => {
-  const filas = FACT_LAST[tabla] || [];
-  const cols = FACT_COLS[tabla];
-  const lineas = [cols.map(c => c[1]), ...filas.map(f => cols.map(c => formatCeldaExport(c[0], f)))];
-  const csv = lineas.map(fila => fila.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+// Cada tabla exportable declara columnas [clave, encabezado], de dónde salen sus
+// filas (lo filtrado en pantalla) y, si hace falta, cómo formatear cada celda.
+// `filas` puede ser async y devolver null para cancelar (ej. Leads pide confirmación).
+const EXPORTABLES = {};
+Object.keys(FACT_COLS).forEach(t => { EXPORTABLES[t] = { cols: FACT_COLS[t], filas: () => FACT_LAST[t] || [], celda: formatCeldaExport }; });
+const TOPE_PDF_EXPORT = 2000;
+async function datosExport(tabla, formato) {
+  const def = EXPORTABLES[tabla];
+  if (!def) return null;
+  let filas;
+  try { filas = await def.filas(formato); } catch (e) { console.error(e); errToast('No se pudieron preparar los datos para exportar'); return null; }
+  if (!filas) return null;
+  if (formato === 'pdf' && filas.length > TOPE_PDF_EXPORT) { errToast(`Son ${fmt(filas.length)} filas: para más de ${fmt(TOPE_PDF_EXPORT)} usá CSV o XLSX`); return null; }
+  const celda = def.celda || ((c, r) => r[c] == null ? '' : String(r[c]));
+  return { cols: def.cols, aoa: [def.cols.map(c => c[1]), ...filas.map(f => def.cols.map(c => celda(c[0], f)))] };
+}
+window.exportarCSV = async (tabla) => {
+  const d = await datosExport(tabla, 'csv');
+  if (!d) return;
+  const csv = d.aoa.map(fila => fila.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -13564,21 +13585,23 @@ window.toggleExportMenu = (ev, tabla) => {
   if (!abierto) menu.classList.add('show');
 };
 document.addEventListener('click', () => document.querySelectorAll('.export-dd-menu.show').forEach(m => m.classList.remove('show')));
-window.exportarXLSX = (tabla, titulo) => {
+window.exportarXLSX = async (tabla, titulo) => {
   if (typeof XLSX === 'undefined') { errToast('La librería de Excel no cargó todavía, probá de nuevo en un segundo'); return; }
-  const filas = FACT_LAST[tabla] || [];
-  const cols = FACT_COLS[tabla];
-  const aoa = [cols.map(c => c[1]), ...filas.map(f => cols.map(c => formatCeldaExport(c[0], f)))];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const d = await datosExport(tabla, 'xlsx');
+  if (!d) return;
+  const ws = XLSX.utils.aoa_to_sheet(d.aoa);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, titulo.slice(0, 31));
   XLSX.writeFile(wb, `${tabla}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 };
-window.exportarPDF = (tabla, titulo) => {
-  const filas = FACT_LAST[tabla] || [];
-  const cols = FACT_COLS[tabla];
-  const filasHtml = filas.map(f => `<tr>${cols.map(c => `<td>${esc(String(formatCeldaExport(c[0], f)))}</td>`).join('')}</tr>`).join('');
+window.exportarPDF = async (tabla, titulo) => {
+  // La ventana se abre ANTES del await: abierta después de una espera, el
+  // navegador ya no la considera un clic del usuario y la bloquea.
   const win = window.open('', '_blank');
+  const d = await datosExport(tabla, 'pdf');
+  if (!d) { win?.close(); return; }
+  const cols = d.cols;
+  const filasHtml = d.aoa.slice(1).map(f => `<tr>${f.map(v => `<td>${esc(String(v))}</td>`).join('')}</tr>`).join('');
   if (!win) { errToast('El navegador bloqueó la ventana de impresión'); return; }
   win.document.write(`<html><head><title>${esc(titulo)}</title><style>
     body{font-family:Arial,sans-serif;padding:20px}
@@ -13596,6 +13619,57 @@ window.exportarPDF = (tabla, titulo) => {
   win.focus();
   win.print();
 };
+// Leads: la tabla pagina en el servidor, así que se traen todas las filas del
+// filtro activo en tandas de 1000 (tope de PostgREST). Solo admin: es la base
+// de clientes con teléfonos; el botón también se oculta con .solo-admin-borrar.
+const TOPE_EXPORT_LEADS = 10000;
+async function filasExportLeads() {
+  if (ROL !== 'admin') return null;
+  const { count: n, error: errCount } = await buildQuery(true).limit(1);
+  if (errCount) throw errCount;
+  if (!n) { errToast('No hay leads con estos filtros'); return null; }
+  if (n > TOPE_EXPORT_LEADS) { errToast(`Son ${fmt(n)} leads: el máximo por archivo es ${fmt(TOPE_EXPORT_LEADS)}. Acotá con filtros o fechas.`); return null; }
+  const ok = await confirmarSheet({ titulo: `¿Exportar ${fmt(n)} leads?`, detalle: 'Se descargan con los filtros activos, con nombre y teléfono. Es información de clientes: no la compartas fuera de la empresa.', textoOk: 'Exportar' });
+  if (!ok) return null;
+  const filas = [];
+  for (let desde = 0; desde < n; desde += 1000) {
+    const { data, error } = await buildQuery(false).order('fecha_creacion', { ascending: false }).order('id').range(desde, desde + 999);
+    if (error) throw error;
+    filas.push(...data);
+    if (data.length < 1000) break;
+  }
+  return filas;
+}
+const siNo = v => v ? 'Sí' : 'No';
+EXPORTABLES.leads = {
+  cols: [['nombre', 'Cliente'], ['telefono', 'Teléfono'], ['destino', 'Destino'], ['servicio', 'Servicio'], ['canal', 'Canal'], ['asesor', 'Asesor'], ['estado', 'Estado'], ['fecha_creacion', 'Fecha'], ['proxima_accion_at', 'Próxima acción']],
+  filas: filasExportLeads,
+  celda: (c, r) => r[c] == null ? '' : c === 'estado' ? niceEstado(r[c]) : c === 'fecha_creacion' ? String(r[c]).slice(0, 10) : c === 'proxima_accion_at' ? fmtFechaHoraCaracas(r[c]) : String(r[c]),
+};
+let RANK_LAST = [], INFORME_LAST = [], CEV_LAST = [];
+EXPORTABLES.ranking = {
+  cols: [['asesor', 'Asesor'], ['nuevos', 'Nuevos'], ['atendidos', 'Atendidos'], ['ventas', 'Ventas'], ['monto', 'Ingresos'], ['horas_respuesta', 'Resp. prom. (h)']],
+  filas: () => RANK_LAST,
+  celda: (c, r) => r[c] == null ? '' : c === 'monto' ? money(r[c]) : String(r[c]),
+};
+EXPORTABLES.informe = {
+  cols: [['fecha', 'Fecha'], ['nombre', 'Asesor'], ['tiene_informe', 'Informe'], ['hora_salida', 'Salida'], ['como_me_fue', 'Cómo le fue'], ['que_aprendi', 'Qué aprendió'], ['que_se_complico', 'Qué se le complicó'], ['bloqueos', 'Bloqueos'], ['resumen', 'Resumen']],
+  filas: () => INFORME_LAST,
+  celda: (c, r) => c === 'tiene_informe' ? siNo(r[c]) : r[c] == null ? '' : c === 'fecha' ? fmtFechaSolo(r[c]) : c === 'hora_salida' ? fmtHoraCaracas(r[c]) : String(r[c]),
+};
+EXPORTABLES.pagos = {
+  cols: [['lead_nombre', 'Cliente'], ['lead_telefono', 'Teléfono'], ['asesor', 'Asesor'], ['tipo', 'Tipo'], ['riel', 'Medio'], ['monto', 'Monto'], ['referencia_declarada', 'Referencia'], ['comprobante_path', 'Comprobante'], ['created_at', 'Declarado']],
+  filas: () => PAGOS_CACHE,
+  celda: (c, r) => c === 'monto' ? pagoMontoTexto(r) : c === 'comprobante_path' ? siNo(r[c]) : r[c] == null ? '' : c === 'tipo' ? (r[c] === 'abono' ? 'Abono / reserva' : 'Pago total') : c === 'riel' ? (PAGO_RIEL_LABEL[r[c]] || r[c]) : c === 'created_at' ? fmtFechaHoraCaracas(r[c]) : String(r[c]),
+};
+EXPORTABLES.cev = {
+  cols: [['nombre', 'Nombre'], ['telefono', 'Teléfono'], ['instagram', 'Instagram'], ['codigo', 'Código'], ['interes', 'Interés'], ['acepta_promos', 'Acepta promos'], ['creado_en', 'Registro'], ['premios', 'Premios'], ['cupones', 'Cupones'], ['por_entregar', 'Por entregar']],
+  filas: () => CEV_LAST,
+  celda: (c, r) => c === 'acepta_promos' ? siNo(r[c]) : r[c] == null ? '' : c === 'interes' ? (CEV_INTERES[r[c]] || r[c]) : c === 'creado_en' ? fmtFechaHoraCaracas(r[c]) : String(r[c]),
+};
+function setupExportes() {
+  document.querySelectorAll('.export-dd-menu').forEach(el => popoverASheet(el, { abierto: n => n.classList.contains('show'), cerrar: n => n.classList.remove('show') }));
+}
 // Mismo motivo que postMostrar (ver comentario junto a TECHO_LISTA): las 3
 // RPC de Facturación devuelven jsonb_agg (un blob, no setof/table), así que
 // PostgREST no puede paginar con .range() -- habría que sumarles
