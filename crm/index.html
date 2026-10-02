@@ -4744,6 +4744,19 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="pv-grid" id="pv-grid"><div class="pv-empty"><i class="fas fa-circle-notch fa-spin"></i>Cargando postventa...</div></div>
     </section>
 
+    <!-- RESERVAS DE EMPRESAS (pestaña de Reservas; solo admin): reservas y cotizaciones de clientes empresariales, filtradas por empresa -->
+    <section class="section" id="sec-reservas-empresas">
+      <div class="pv-toolbar">
+        <div class="pv-search"><i class="fas fa-search"></i><input id="re-search" type="search" placeholder="Buscar cliente, destino, empresa o localizador..."></div>
+        <button class="btn-sm" id="re-nuevo" type="button"><i class="fas fa-plus"></i> Nuevo lead de empresa</button>
+        <button class="pv-refresh" id="re-refresh" type="button" title="Actualizar" aria-label="Actualizar reservas de empresas"><i class="fas fa-rotate"></i></button>
+      </div>
+      <div class="kpis pv-kpis" id="re-kpis"></div>
+      <div class="pv-stagebar chips-scroll" id="re-vistas" aria-label="Reservas o cotizaciones"></div>
+      <div class="pv-stagebar chips-scroll" id="re-empresas" aria-label="Filtrar por empresa"></div>
+      <div class="pv-grid" id="re-grid"><div class="pv-empty"><i class="fas fa-circle-notch fa-spin"></i>Cargando reservas de empresas...</div></div>
+    </section>
+
     <!-- TAREAS (freelancer) -->
     <section class="section" id="sec-mis-notas">
       <div class="card" id="notas-repaso-card" style="display:none">
@@ -6992,6 +7005,10 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     <datalist id="nl-canal-opciones">
       <option value="Instagram"><option value="Facebook"><option value="Ambos">
     </datalist>
+    <div class="admin-only">
+      <label class="fl">Empresa <span style="font-weight:400;color:var(--muted2)">— vacío = cliente particular</span></label>
+      <select id="nl-empresa" class="ei"><option value="">Cliente particular</option></select>
+    </div>
     <label class="fl">Personas</label>
     <input id="nl-personas" class="ei" type="text">
     <label class="fl">Fecha estimada</label>

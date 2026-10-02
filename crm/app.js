@@ -1292,7 +1292,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'importar-vouchers', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'importar-vouchers', 'reservas-empresas', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
   'mensajes', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
@@ -2688,7 +2688,7 @@ async function startApp() {
     setupMetricas, setupRanking, setupMisVentas, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
     setupBuscadorIATarifario, setupIaAtencion, setupCerrarSheets, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
-    setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas, setupBtTravel,
+    setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas, setupReservasEmpresas, setupBtTravel,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers, setupComisiones, setupFiltrosPostulaciones,
@@ -3144,6 +3144,7 @@ async function guardarPostventa(marcarPagado) {
   const pendienteVerificar = data.estado_lead === 'VENTA PENDIENTE DE VERIFICAR';
   okToast(!marcarPagado ? 'Postventa actualizada' : pendienteVerificar ? 'Enviado a verificar -- un admin tiene que confirmarlo' : 'Pago registrado y postventa actualizada');
   await Promise.all([loadPostventa(), loadStats()]); renderAll();
+  if (currentSec === 'reservas-empresas') loadReservasEmpresas();
 }
 
 /* ---------- Reservas: servicios, pasajeros y documentos (migración 20260924130000) ----------
@@ -3288,6 +3289,7 @@ function rvForm(f) { RV_FORM = f; rvRenderServicios(); rvRenderPasajeros(); }
 function rvTrasCambio() {
   rvCargar();
   if (currentSec === 'postventa' && (ROL === 'admin' || ROL === 'asesor')) loadPostventa();
+  if (currentSec === 'reservas-empresas') loadReservasEmpresas();
   if (document.getElementById('rv-bol-box')?.hidden === false) loadBoletosPorEmitir();
 }
 function rvAccion(accion, id, btn) {
@@ -8044,6 +8046,7 @@ function resetSheetNuevoCliente() {
   document.getElementById('nl-telefono').readOnly = false;
   document.getElementById('nl-destino').value = '';
   document.getElementById('nl-canal').value = '';
+  const nlEmpresa = document.getElementById('nl-empresa'); if (nlEmpresa) nlEmpresa.value = '';
   document.getElementById('nl-personas').value = '';
   document.getElementById('nl-fecha').value = '';
   document.getElementById('nl-es-prueba').checked = false;
@@ -8058,7 +8061,25 @@ function resetSheetNuevoCliente() {
   document.getElementById('nl-err').textContent = '';
 }
 
-document.getElementById('nl-abrir-btn')?.addEventListener('click', async () => {
+// Empresas activas para el selector del sheet (solo admin: listar_empresas_cliente lo exige).
+async function poblarEmpresasSheetNuevoLead(preseleccion = null) {
+  const sel = document.getElementById('nl-empresa');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Cliente particular</option>';
+  if (ROL !== 'admin') return;
+  const { data, error } = await sb.rpc('listar_empresas_cliente', { p_solo_activos: true });
+  if (!error && data) sel.innerHTML += data.map(e => `<option value="${e.id}">${esc(e.nombre)}</option>`).join('');
+  if (preseleccion != null) sel.value = String(preseleccion);
+}
+// El lead ya existe: si falla la empresa no se revierte, solo se avisa (se corrige desde la pestaña Empresas).
+async function nlAsignarEmpresa(leadId) {
+  const empresa = val('nl-empresa');
+  if (!empresa || !leadId) return true;
+  const { data, error } = await sb.rpc('asignar_empresa_lead', { p_lead_id: leadId, p_empresa_id: Number(empresa) });
+  if (error || !data?.ok) { errToast('El lead se creó, pero no se pudo asignar la empresa'); return false; }
+  return true;
+}
+async function abrirNuevoLead(empresaId = null) {
   resetSheetNuevoCliente();
   NL_MODO_FACTURACION = false; NL_BANDEJA_LEAD_ID = null;
   document.getElementById('nl-titulo').innerHTML = '<i class="fas fa-user-plus"></i> Nuevo lead';
@@ -8066,9 +8087,10 @@ document.getElementById('nl-abrir-btn')?.addEventListener('click', async () => {
   document.getElementById('nl-buscar-box').style.display = 'none';
   document.getElementById('nl-fact-box').style.display = 'none';
   document.getElementById('nl-prueba-label').style.display = '';
-  if (ROL === 'admin') await poblarAsesoresSheetNuevoLead();
+  if (ROL === 'admin') await Promise.all([poblarAsesoresSheetNuevoLead(), poblarEmpresasSheetNuevoLead(empresaId)]);
   openSheet('nuevo-lead-sheet');
-});
+}
+document.getElementById('nl-abrir-btn')?.addEventListener('click', () => abrirNuevoLead());
 
 // Abre el mismo sheet en modo "Nuevo cliente" de Facturación -- con datos de
 // venta (precio/costo/proveedor) y buscador de clientes existentes. Si viene
@@ -8083,7 +8105,7 @@ window.abrirNuevoClienteFacturacion = async (bandejaItem) => {
   document.getElementById('nl-crear').innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar';
   document.getElementById('nl-fact-box').style.display = '';
   document.getElementById('nl-prueba-label').style.display = 'none';
-  await poblarAsesoresSheetNuevoLead();
+  await Promise.all([poblarAsesoresSheetNuevoLead(), poblarEmpresasSheetNuevoLead()]);
   if (bandejaItem) {
     document.getElementById('nl-buscar-box').style.display = '';
     document.getElementById('nl-buscar-cliente').style.display = 'none';
@@ -8207,8 +8229,10 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
     });
     btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Crear lead';
     if (error || !data?.ok) { err.textContent = 'No se pudo crear: ' + (error?.message || data?.error || ''); return; }
+    await nlAsignarEmpresa(data.lead_id);
     closeSheet('nuevo-lead-sheet');
     okToast('Lead creado');
+    if (currentSec === 'reservas-empresas') loadReservasEmpresas();
     // El INSERT ya dispara el canal 'leads-live' (subscribeRealtime) que
     // refresca stats/tabla/inbox solo -- no hace falta duplicar esa recarga acá.
     return;
@@ -8236,6 +8260,7 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
     if (error || !data?.ok) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar'; err.textContent = 'No se pudo crear el cliente: ' + (error?.message || data?.error || ''); return; }
     leadId = data.lead_id;
   }
+  await nlAsignarEmpresa(leadId);
 
   const upd = await sb.rpc('actualizar_lead', { p_lead_id: leadId, p_estado: 'COTIZACION ENVIADA', p_asesor: asesorSel, p_monto: precioVenta });
   if (upd.error || !upd.data?.ok) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar'; err.textContent = 'No se pudo actualizar el lead: ' + (upd.error?.message || upd.data?.error || ''); return; }
@@ -14648,6 +14673,94 @@ function setupEmpresas() {
   document.getElementById('emp-cancelar').addEventListener('click', () => closeSheet('empresa-sheet'));
   document.getElementById('emp-guardar').addEventListener('click', guardarEmpresa);
 }
+/* ---------- Reservas de empresas (pestaña de Reservas; solo admin) ----------
+   Reservas y cotizaciones de los clientes empresariales, con la empresa como
+   filtro principal (igual que el canal en Leads). El lead nace con su empresa
+   (leads.empresa_id) y la reserva la hereda; todo lo que muestra sale de
+   postventa_bandeja + listar_leads_empresas, sin tablas nuevas en pantalla. */
+let RE_EMPRESAS = [], RE_RESERVAS = [], RE_LEADS = [], RE_EMPRESA = '', RE_VISTA = 'reservas', RE_BUSCAR = '';
+async function loadReservasEmpresas() {
+  const grid = document.getElementById('re-grid');
+  if (!grid || ROL !== 'admin') return;
+  grid.innerHTML = '<div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div>';
+  const [emp, bandeja, leads] = await Promise.all([
+    sb.rpc('listar_empresas_cliente', { p_solo_activos: false }), pvBandejaCompleta(), sb.rpc('listar_leads_empresas'),
+  ]);
+  if (emp.error || !bandeja || leads.error) {
+    console.error('reservas-empresas', emp.error || leads.error);
+    grid.innerHTML = '<div class="pv-empty"><i class="fas fa-triangle-exclamation"></i>No se pudieron cargar las reservas de empresas</div>';
+    errToast('No se pudieron cargar las reservas de empresas');
+    return;
+  }
+  RE_EMPRESAS = emp.data || [];
+  const enlace = new Map(RE_EMPRESAS.flatMap(e => (e.reservas || []).map(r => [r.id, e.id])));
+  RE_RESERVAS = bandeja.map(c => ({ ...c, empresa_id: c.empresa_id ?? enlace.get(c.id) ?? null })).filter(c => c.empresa_id != null);
+  RE_LEADS = leads.data || [];
+  renderReservasEmpresas();
+}
+const reNombreEmpresa = id => RE_EMPRESAS.find(e => e.id === id)?.nombre || 'Empresa';
+const reCoincide = (txt, q) => !q || txt.some(v => String(v || '').toLowerCase().includes(q));
+function renderReservasEmpresas() {
+  const grid = document.getElementById('re-grid');
+  if (!grid) return;
+  const q = RE_BUSCAR.trim().toLowerCase();
+  const reservas = RE_RESERVAS.filter(c => reCoincide([c.nombre, c.destino, c.codigo, c.localizador_reserva, reNombreEmpresa(c.empresa_id)], q));
+  const leads = RE_LEADS.filter(l => !l.con_reserva && reCoincide([l.nombre, l.destino, l.telefono, reNombreEmpresa(l.empresa_id)], q));
+  const cuenta = (lista, e) => lista.filter(x => x.empresa_id === e).length;
+  const activas = RE_EMPRESAS.filter(e => e.activo || cuenta(reservas, e.id) || cuenta(leads, e.id));
+  if (RE_EMPRESA && !activas.some(e => String(e.id) === RE_EMPRESA)) RE_EMPRESA = '';
+  const delaEmpresa = x => !RE_EMPRESA || String(x.empresa_id) === RE_EMPRESA;
+  const verReservas = reservas.filter(delaEmpresa), verLeads = leads.filter(delaEmpresa);
+  const ahora = Date.now(), en14 = ahora + 14 * 864e5;
+  const viajes = verReservas.filter(c => c.etapa !== 'CERRADO' && c.fecha_viaje_inicio && new Date(c.fecha_viaje_inicio).getTime() >= ahora - 864e5 && new Date(c.fecha_viaje_inicio).getTime() <= en14).length;
+  document.getElementById('re-kpis').innerHTML = [
+    ['Reservas de empresas', fmt(verReservas.length), 'fa-building', 'var(--blue)'],
+    ['Cotizaciones en curso', fmt(verLeads.length), 'fa-file-invoice-dollar', 'var(--purple)'],
+    ['Cobros pendientes', fmt(verReservas.filter(c => c.etapa === 'COBRO_PENDIENTE').length), 'fa-wallet', 'var(--amber)'],
+    ['Viajes en 14 días', fmt(viajes), 'fa-plane-departure', 'var(--green)'],
+    ['Saldo por cobrar', money(verReservas.reduce((s, c) => s + Number(c.saldo_pendiente || 0), 0)), 'fa-coins', 'var(--accent)'],
+  ].map(c => `<div class="kpi pv-kpi" style="--kc:${c[3]}"><div class="kt"><i class="fas ${c[2]}"></i>${c[0]}</div><div class="kv">${c[1]}</div></div>`).join('');
+  const chip = (attr, k, l, n, on) => `<button class="pv-stage${on ? ' on' : ''}" type="button" ${attr}="${esc(k)}" aria-pressed="${on}">${esc(l)} · ${n}</button>`;
+  document.getElementById('re-vistas').innerHTML = chip('data-re-vista', 'reservas', 'Reservas', reservas.filter(delaEmpresa).length, RE_VISTA === 'reservas')
+    + chip('data-re-vista', 'cotizaciones', 'Cotizaciones', leads.filter(delaEmpresa).length, RE_VISTA === 'cotizaciones');
+  const base = RE_VISTA === 'reservas' ? reservas : leads;
+  document.getElementById('re-empresas').innerHTML = chip('data-re-empresa', '', 'Todas las empresas', base.length, !RE_EMPRESA)
+    + activas.map(e => chip('data-re-empresa', e.id, e.nombre, cuenta(base, e.id), RE_EMPRESA === String(e.id))).join('');
+  if (!activas.length) { grid.innerHTML = '<div class="pv-empty"><i class="fas fa-building"></i><b>Todavía no hay empresas</b><br>Creá una desde Corporativo › Empresas</div>'; return; }
+  const lista = RE_VISTA === 'reservas' ? verReservas : verLeads;
+  if (!lista.length) {
+    grid.innerHTML = `<div class="pv-empty"><i class="fas fa-inbox"></i><b>${RE_VISTA === 'reservas' ? 'Sin reservas' : 'Sin cotizaciones en curso'}</b><br>${RE_EMPRESA ? 'Esta empresa todavía no tiene ninguna' : 'Creá un lead de empresa con el botón de arriba'}</div>`;
+    return;
+  }
+  grid.innerHTML = RE_VISTA === 'reservas'
+    ? verReservas.map(c => pvCardHtml(c, `<div class="pv-serv"><span><i class="fas fa-building"></i> <b>${esc(reNombreEmpresa(c.empresa_id))}</b>${reRefDe(c) ? ' · ref. ' + esc(reRefDe(c)) : ''}</span></div>`)).join('')
+    : verLeads.map(reLeadCardHtml).join('');
+  pvWire(grid, RE_RESERVAS);
+  grid.querySelectorAll('[data-re-lead]').forEach(b => b.onclick = () => window.abrirLeadPorId(Number(b.dataset.reLead)));
+  entradaLista(grid);
+}
+const reRefDe = c => c.referencia_empresa || (RE_EMPRESAS.find(e => e.id === c.empresa_id)?.reservas || []).find(r => r.id === c.id)?.referencia || '';
+function reLeadCardHtml(l) {
+  const wa = String(l.telefono || '').replace(/\D/g, '');
+  return `<article class="pv-card" data-id="${l.id}">
+      <div class="pv-card-top"><span class="pv-chip"><i class="fas fa-file-invoice-dollar"></i>${esc(niceEstado(l.estado))}</span></div>
+      <div class="pv-name">${esc(l.nombre || 'Sin nombre')}</div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(l.destino || 'Destino sin definir')}</div>
+      <div class="pv-serv"><span><i class="fas fa-building"></i> <b>${esc(reNombreEmpresa(l.empresa_id))}</b></span></div>
+      <div class="pv-meta"><span><i class="fas fa-calendar"></i>${pvFecha(l.fecha_creacion)}</span><span><i class="fas fa-user"></i>${esc(l.asesor || 'Sin asignar')}</span></div>
+      ${Number(l.monto) > 0 ? `<div class="pv-money-row"><span>Monto <b>${money(l.monto)}</b></span></div>` : ''}
+      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button"><i class="fab fa-whatsapp"></i> WhatsApp</button>` : '<span></span>'}<button class="pv-btn primary" data-re-lead="${l.id}" type="button">Abrir <i class="fas fa-arrow-right"></i></button></div>
+    </article>`;
+}
+function setupReservasEmpresas() {
+  const marca = (id, attr, fn) => document.getElementById(id)?.addEventListener('click', e => {
+    const b = e.target.closest(`[${attr}]`); if (b) { fn(b.getAttribute(attr)); renderReservasEmpresas(); }
+  });
+  marca('re-vistas', 'data-re-vista', v => { RE_VISTA = v; });
+  marca('re-empresas', 'data-re-empresa', v => { RE_EMPRESA = v; });
+  document.getElementById('re-refresh')?.addEventListener('click', loadReservasEmpresas);
+  document.getElementById('re-search')?.addEventListener('input', e => { RE_BUSCAR = e.target.value; renderReservasEmpresas(); });
+  document.getElementById('re-nuevo')?.addEventListener('click', () => abrirNuevoLead(RE_EMPRESA ? Number(RE_EMPRESA) : null));
+}
 async function loadMisComisiones() {
   const { data, error } = await sb.rpc('listar_comisiones');
   if (error) { errToast('No se pudieron cargar tus comisiones'); return; }
@@ -20253,6 +20366,7 @@ const NAV_ITEMS = [
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Reservas', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
+  { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
   { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', padre: 'grp-cobros', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar' },
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones por corte', padre: 'grp-cobros', roles: '', sub: 'Cargá tus ventas pagadas; pagos el 5 y el 20' },
@@ -20535,6 +20649,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'pagos') loadPagos();
   if (sec === 'proveedores') loadProveedores();
   if (sec === 'empresas') loadEmpresas();
+  if (sec === 'reservas-empresas') loadReservasEmpresas();
   if (sec === 'bt-travel') loadBtTravel();
   if (sec === 'asistente') loadAsistente();
   if (sec === 'mis-comisiones') loadMisComisiones();
@@ -20857,7 +20972,7 @@ function setupAppBar() {
 const REFRESCAR_SECCION = {
   leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), 'mis-ventas': () => loadMisVentasSeccion(), facturacion: () => loadFacturacion(), pagos: () => loadPagos(), proveedores: () => loadProveedores(),
   'mis-comisiones': () => loadMisComisiones(), comisiones: () => loadComisiones(), 'gestion-personal': () => loadGestionPersonal(),
-  postventa: () => loadPostventa(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
+  postventa: () => loadPostventa(), 'reservas-empresas': () => loadReservasEmpresas(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
   'rendimiento-ia': () => loadRendimientoIA(),
   'ia-atencion': () => loadIaAtencion(), 'web-reasignados': () => loadWebReasignados(), 'contactos-directos': () => loadContactosDirectos(),
