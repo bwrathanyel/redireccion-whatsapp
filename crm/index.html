@@ -454,12 +454,19 @@ body.menu-arrastrando .side-scrim{transition:none}
 .chart-wrap-lg{height:250px}
 .chart-sm{position:relative;height:210px}
 
-/* Manual del CRM */
-.manual-tema{border:1px solid var(--line2);border-radius:12px;margin-bottom:10px;overflow:hidden;background:var(--panel-solid)}
-/* Videotutoriales: galería en Manual + modal "Ver tutorial" (2026-10-01). El
+/* Videotutoriales: galería (sección Videotutoriales) + modal "Ver tutorial" (2026-10-01). El
    modal va siempre sobre velo oscuro, como el lightbox: por eso el blanco fijo. */
 .ab-act[hidden],.topbar-help-btn[hidden],#tut-galeria-card[hidden]{display:none!important}
-.tut-galeria{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:14px}
+.tut-galeria{margin-top:6px}
+.tut-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.tut-cat{margin-top:22px}
+.tut-cat-t{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--txt)}
+.tut-cat-t>i{color:var(--accent-ink);font-size:13px;width:16px;text-align:center}
+.tut-cat-n{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0;text-transform:none}
+.tut-cat-n::before{content:"· "}
+.tut-pill{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:2px 9px;border-radius:999px;color:var(--accent-ink);background:rgba(var(--accent-rgb),.14);border:1px solid rgba(var(--accent-rgb),.4)}
+.tut-cat-admin{padding:14px 14px 16px;border:1px dashed rgba(var(--accent-rgb),.45);border-radius:14px;background:rgba(var(--accent-rgb),.04)}
+.tut-adm{position:absolute;left:8px;top:8px;display:inline-flex;align-items:center;gap:4px;background:rgba(var(--accent-rgb),.92);color:var(--on-accent);font-size:10.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;border-radius:6px;padding:2px 7px}
 .tut-card{display:flex;flex-direction:column;gap:6px;text-align:left;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:0 0 12px;overflow:hidden;cursor:pointer;color:var(--txt);font:inherit;transition:border-color .15s,transform .15s}
 .tut-card:hover{border-color:rgba(var(--accent-rgb),.5);transform:translateY(-2px)}
 .tut-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -486,17 +493,7 @@ body.menu-arrastrando .side-scrim{transition:none}
 .tut-modal.movil{padding:0}
 .tut-modal.movil .tut-box{width:100%;height:100%;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 12px)}
 .tut-modal.movil video{flex:1;min-height:0;max-height:none;aspect-ratio:auto;object-fit:contain;border-radius:0}
-.manual-tema summary{list-style:none;display:flex;align-items:center;gap:10px;padding:13px 16px;cursor:pointer;font-weight:700;font-size:13.5px;user-select:none}
-.manual-tema summary::-webkit-details-marker{display:none}
-.manual-tema summary i:first-child{color:var(--accent-ink);font-size:13px;width:16px;text-align:center}
-.manual-tema summary span{flex:1}
-.manual-chev{font-size:11px;color:var(--muted2);transition:transform .18s}
-.manual-tema[open] .manual-chev{transform:rotate(180deg)}
-.manual-body{padding:0 16px 14px 42px;display:flex;flex-direction:column;gap:12px}
 .manual-shot{width:100%;border-radius:10px;border:1px solid var(--line2);display:block;margin-bottom:2px}
-.manual-ver-btn{align-self:flex-start}
-.manual-paso .mp-t{font-size:12.5px;font-weight:700;margin-bottom:3px}
-.manual-paso .mp-x{font-size:12.5px;color:var(--muted);line-height:1.5}
 
 /* Actualizaciones */
 .act-mes{margin-bottom:22px}
@@ -4391,7 +4388,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="search"><i class="fas fa-search"></i><input id="global-search" placeholder="Buscar por nombre o teléfono..."></div>
       <button type="button" class="topbar-help-btn" id="topbar-tutorial-btn" title="Ver el videotutorial de esta sección" hidden><i class="fas fa-circle-play"></i> <span>Ver tutorial</span></button>
       <button type="button" class="topbar-help-btn" id="topbar-buscar-btn" title="Buscar en todo el CRM (Ctrl+B)"><i class="fas fa-magnifying-glass"></i> <span>Buscar</span></button>
-      <button type="button" class="topbar-help-btn" id="topbar-manual-btn" title="Manual del CRM"><i class="fas fa-book-open-reader"></i> <span>Manual</span></button>
+      <button type="button" class="topbar-help-btn" id="topbar-manual-btn" title="Videotutoriales"><i class="fas fa-book-open-reader"></i> <span>Tutoriales</span></button>
       <div class="pill"><span class="dot"></span> En vivo</div>
     </div>
 
@@ -6774,16 +6771,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div class="csub">Lyra te muestra cada parte del CRM paso a paso, con datos de ejemplo. También los abrís con "Ver tutorial" arriba de cada sección.</div>
         <div class="tut-galeria" id="tut-galeria"></div>
       </div>
-      <div class="card">
-        <div class="chead-row">
-          <h2><i class="fas fa-book-open-reader"></i> Manual del CRM</h2>
-          <div style="display:flex;gap:8px">
-            <button type="button" class="dbtn gh" id="manual-expand-all" style="width:auto;padding:8px 14px"><i class="fas fa-expand"></i> Ver todo</button>
-            <button type="button" class="dbtn gh" id="manual-collapse-all" style="width:auto;padding:8px 14px"><i class="fas fa-list"></i> Por secciones</button>
-          </div>
-        </div>
-        <div class="csub" id="manual-count">Guía completa, sección por sección -- tocá cualquier título para abrirlo</div>
-        <div id="manual-list"></div>
+      <div class="card" id="tut-vacio" hidden>
+        <div class="csub">Todavía no hay videotutoriales para tu rol.</div>
       </div>
     </section>
 

@@ -185,7 +185,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'contactos-directos': ['Contactos directos', 'Escribieron directo por WhatsApp (bio-redes, IA) o los asignó Karlys Corro -- registro, no se gestionan desde acá'],
   repartir: ['Repartir números', 'Pegá números o capturas de clientes que te escribieron directo y repartilos entre los asesores'],
   'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles que manda BT Travel -- cargá el PDF y confirmá antes de publicar'],
-  manual: ['Manual del CRM', 'Guía completa, por secciones -- cómo usar cada parte del sistema'],
+  manual: ['Videotutoriales', 'Lyra te explica cada parte del CRM, paso a paso'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'],
   pagos: ['Pagos por verificar', 'Links de pago que un cliente declaró como pagados -- verificá el comprobante antes de aprobar'] };
 // Sección sin entrada en TITLES: usa label/sub de NAV_ITEMS antes de caer en Dashboard.
@@ -2628,7 +2628,7 @@ async function startApp() {
   arrancar(
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupCorreo, setupRedes,
-    setupPostventa, setupTutorial, setupManual, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
+    setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes,
   );
   if (ROL === 'marketing') {
@@ -20267,7 +20267,7 @@ const NAV_ITEMS = [
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
   { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only' },
   { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', padre: 'grp-equipo', roles: 'nav-freelancer-only' },
-  { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Manual del CRM', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Videotutoriales', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'actualizaciones', icon: 'fas fa-bullhorn', label: 'Actualizaciones', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'proyecto-constructor', icon: 'fas fa-drafting-compass', label: 'Proyecto Constructor', padre: 'grp-ayuda', roles: 'nav-admin-only', sub: 'Avance del CRM que se vende a otras empresas' },
 ];
@@ -22234,80 +22234,12 @@ const TOUR_CAPITULOS = [
   ]},
 ];
 
-/* ---------- Manual del CRM (sección estática con capturas, complementa el tour) ----------
-   Reusa el contenido de TOUR_CAPITULOS (para no mantener el mismo texto dos veces) y lo
-   completa con MANUAL_EXTRA para las secciones que el tour todavía no cubre. Pedido del
-   dueño (2026-07-26): manual completo con capturas, accesible por sección o de corrido,
-   más visible que el tour de bienvenida (botón propio en el topbar). */
-const MANUAL_EXTRA = [
-  { id: 'hoy', titulo: 'Hoy', icono: 'fa-sun', roles: ['admin', 'asesor', 'marketing', 'boleteria'], pasos: [
-    { titulo: 'Tu resumen del día', texto: 'La pantalla con la que arrancás: leads nuevos, pendientes por atender y tu jornada, todo en un vistazo.' },
-  ]},
-  { id: 'postventa', titulo: 'Reservas', icono: 'fa-handshake-angle', roles: ['admin', 'asesor'], pasos: [
-    { titulo: 'Después de la venta', texto: 'Cobros pendientes, reservas confirmadas, documentos del cliente y seguimiento del viaje una vez que ya pagó -- para no perder el hilo después del cierre.' },
-  ]},
-  { id: 'facturacion', titulo: 'Facturación', icono: 'fa-file-invoice-dollar', roles: ['admin'], pasos: [
-    { titulo: 'Facturas y comisiones', texto: 'Creá o buscá el cliente, registrá la venta con su costo neto y proveedor, y el sistema calcula la comisión de cada asesor automáticamente.' },
-    { titulo: 'Cuentas por pagar', texto: 'Lo que se le debe a cada proveedor queda registrado acá, separado de la comisión del asesor.' },
-  ]},
-  { id: 'mis-comisiones', titulo: 'Mis Comisiones', icono: 'fa-sack-dollar', roles: ['asesor'], pasos: [
-    { titulo: 'Lo que ganaste', texto: 'Tus comisiones sobre las ventas ya pagadas, con filtro por mes.' },
-  ]},
-  { id: 'gestion-personal', titulo: 'Gestión de Personal', icono: 'fa-people-group', roles: ['admin'], pasos: [
-    { titulo: 'Personal', texto: 'Una tarjeta por persona, con su icono según el cargo, el tiempo que tuvo el CRM abierto en el período y el detalle día por día: a qué hora entró y a qué hora salió.' },
-    { titulo: 'Asistencia', texto: 'Quién marcó entrada/salida cada día, strikes del mes e historial completo.' },
-    { titulo: 'Asesores', texto: 'Alta/baja de tu equipo y el peso de cada uno en el sorteo automático de leads nuevos.' },
-    { titulo: 'Freelancers', texto: 'Jornadas, tareas asignadas y cumplimiento de cada asesor freelance, aparte del equipo presencial.' },
-    { titulo: 'Postulaciones', texto: 'Candidatos que aplicaron desde "Trabaja con nosotros" en la web (o le contaron a la IA por Instagram/Facebook) -- presencial y freelance, con su CV. Marcá si ya revisaste el perfil, si es buen prospecto, y si ya lo llamaste.' },
-  ]},
-  { id: 'tareas', titulo: 'Tareas', icono: 'fa-list-check', roles: ['admin', 'asesor'], pasos: [
-    { titulo: 'Lo que tenés pendiente', texto: 'Tareas que te asignó administración, con su estado -- para no perder de vista pendientes que no son un lead.' },
-  ]},
-  { id: 'voucher', titulo: 'Voucher', icono: 'fa-file-invoice', roles: ['admin', 'asesor'], pasos: [
-    { titulo: 'Genera el voucher', texto: 'Arma el voucher de hospedaje en PDF para el cliente, con los datos de la reserva ya cargados.' },
-  ]},
-  { id: 'leads-colaboraciones', titulo: 'Colaboraciones (dentro de Leads)', icono: 'fa-handshake', roles: ['admin'], pasos: [
-    { titulo: 'Campañas pagas con colaboradores', texto: 'Es una pestaña dentro de Leads. Estos leads van directo al WhatsApp del colaborador (no a un asesor) -- acá queda el registro de esa campaña.' },
-  ]},
-  { id: 'perfil', titulo: 'Mi Perfil', icono: 'fa-user-gear', roles: ['admin', 'asesor', 'marketing', 'boleteria'], pasos: [
-    { titulo: 'Personalizá tu CRM', texto: 'Foto de perfil, tema claro/oscuro, tamaño de letra y recordatorios de asistencia -- todo desde tu avatar arriba a la derecha.' },
-  ]},
-];
-const MANUAL_IMG = {
-  leads: 'leads.png', mensajes: 'mensajes.png', tarifario: 'tarifario.png', facturacion: 'facturacion.png',
-  postulaciones: 'postulaciones.png', redes: 'redes.png', asistencia: 'asistencia.png', reasignaciones: 'reasignaciones.png',
-};
-function temasManualVisibles() {
-  // tour:true marca los temas que además se pueden REPRODUCIR sobre la pantalla
-  // real (botón "Ver en pantalla"): son los que vienen de TOUR_CAPITULOS.
-  const deTour = capitulosVisiblesTour().map(c => ({ id: c.id, titulo: c.titulo, icono: c.icono, pasos: pasosVisiblesCapitulo(c), tour: true }));
-  const extra = MANUAL_EXTRA.filter(t => t.roles.includes(ROL));
-  const vistos = new Set(deTour.map(t => t.id));
-  return [...deTour, ...extra.filter(t => !vistos.has(t.id))];
-}
+/* ---------- Sección "Videotutoriales" (id interno: manual) ----------
+   Reemplaza al Manual escrito + capturas (retirado 2026-10-02): la galería de
+   videos (renderGaleriaTutoriales, más abajo) es todo el contenido. */
 function renderManual() {
   renderGaleriaTutoriales();
-  const temas = temasManualVisibles();
-  document.getElementById('manual-list').innerHTML = temas.map(t => `
-    <details class="manual-tema" id="manual-${t.id}">
-      <summary><i class="fas ${t.icono}"></i> <span>${esc(t.titulo)}</span><i class="fas fa-chevron-down manual-chev"></i></summary>
-      <div class="manual-body">${t.tour ? `<button class="btn-sm manual-ver-btn" type="button" data-tour="${t.id}"><i class="fas fa-play"></i> Ver en pantalla</button>` : ''}${MANUAL_IMG[t.id] ? `<img class="manual-shot" src="img/manual/${MANUAL_IMG[t.id]}" alt="Captura de ${esc(t.titulo)}" loading="lazy">` : ''}${t.pasos.map(p => `
-        <div class="manual-paso">
-          <div class="mp-t">${esc(p.titulo)}</div>
-          <div class="mp-x">${esc(typeof p.texto === 'function' ? p.texto() : p.texto)}</div>
-        </div>`).join('')}
-      </div>
-    </details>`).join('');
-  document.getElementById('manual-count').textContent = `${temas.length} secciones`;
-  // El recorrido guiado dejó de tener menú propio: se arranca desde acá.
-  document.querySelectorAll('#manual-list .manual-ver-btn').forEach(btn => {
-    btn.onclick = e => { e.preventDefault(); iniciarCapituloTour(btn.dataset.tour); };
-  });
   marcarTutorialVisto();
-}
-function setupManual() {
-  document.getElementById('manual-expand-all')?.addEventListener('click', () => document.querySelectorAll('#manual-list details').forEach(d => d.open = true));
-  document.getElementById('manual-collapse-all')?.addEventListener('click', () => document.querySelectorAll('#manual-list details').forEach(d => d.open = false));
 }
 
 /* ---------- Videotutoriales narrados por Lyra (2026-10-01) ----------
@@ -22334,7 +22266,16 @@ const TUTORIALES = [
   { id: '16-gestion-personal', titulo: 'Gestión de Personal', rol: 'admin', seg: 177, secciones: ['gestion-personal'] },
 ];
 // El admin ve también los del asesor (para formar al equipo), con los suyos primero.
-const tutorialesVisibles = () => TUTORIALES.filter(t => ROL === 'admin' || (ROL === 'asesor' && t.rol === 'asesor')).sort((a, b) => (b.rol === ROL) - (a.rol === ROL));
+// Categorías de la galería, en orden de aprendizaje. `admin` = exclusivas de administración (el asesor no las ve).
+const TUT_CATEGORIAS = [
+  { titulo: 'Empieza por aquí', icono: 'fa-flag-checkered', ids: ['01-mapa-hoy', '10-caso-completo', '09-asistente'] },
+  { titulo: 'Leads y seguimiento', icono: 'fa-users', ids: ['02-bandeja', '03-ficha-pipeline'] },
+  { titulo: 'Cotizar y cerrar la venta', icono: 'fa-file-invoice-dollar', ids: ['04-cotizar', '05-cerrar-venta'] },
+  { titulo: 'Cobros, reservas y comisiones', icono: 'fa-sack-dollar', ids: ['06-mis-ventas', '07-reservas', '08-comisiones'] },
+  { titulo: 'Administración', icono: 'fa-user-shield', admin: true, ids: ['11-dashboard', '12-repartir-web', '13-pagos', '14-facturacion', '15-comisiones-admin', '16-gestion-personal'] },
+];
+const tutCategoriaDe = id => TUT_CATEGORIAS.findIndex(c => c.ids.includes(id));
+const tutorialesVisibles = () => TUTORIALES.filter(t => ROL === 'admin' || (ROL === 'asesor' && t.rol === 'asesor')).sort((a, b) => tutCategoriaDe(a.id) - tutCategoriaDe(b.id) || a.id.localeCompare(b.id));
 const tutorialesDeSeccion = sec => tutorialesVisibles().filter(t => t.secciones.includes(sec));
 const fmtDuracion = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 const TUT_URLS = new Map();
@@ -22395,14 +22336,24 @@ async function renderGaleriaTutoriales() {
   if (!card || !cont) return;
   const lista = tutorialesVisibles();
   card.hidden = !lista.length;
+  const vacio = document.getElementById('tut-vacio');
+  if (vacio) vacio.hidden = !!lista.length;
   if (!lista.length) return;
   const vistos = tutVistos();
-  cont.innerHTML = lista.map(t => `
+  const tarjeta = t => `
     <button type="button" class="tut-card" data-tut="${t.id}">
-      <span class="tut-thumb"><img alt="" loading="lazy" data-poster="${t.id}"><i class="fas fa-play"></i><span class="tut-dur">${fmtDuracion(t.seg)}</span></span>
+      <span class="tut-thumb"><img alt="" loading="lazy" data-poster="${t.id}"><i class="fas fa-play"></i><span class="tut-dur">${fmtDuracion(t.seg)}</span>${t.rol === 'admin' ? '<span class="tut-adm"><i class="fas fa-lock"></i> Admin</span>' : ''}</span>
       <span class="tut-card-t">${esc(t.titulo)}</span>
-      <span class="tut-card-m">${ROL === 'admin' ? `${t.rol === 'admin' ? 'Admin' : 'Asesor'} · ` : ''}${vistos.has(t.id) ? '<i class="fas fa-check"></i> Visto' : 'Sin ver'}</span>
-    </button>`).join('');
+      <span class="tut-card-m">${vistos.has(t.id) ? '<i class="fas fa-check"></i> Visto' : 'Sin ver'}</span>
+    </button>`;
+  cont.innerHTML = TUT_CATEGORIAS.map(c => {
+    const items = lista.filter(t => c.ids.includes(t.id));
+    if (!items.length) return '';
+    return `<div class="tut-cat${c.admin ? ' tut-cat-admin' : ''}">
+      <h3 class="tut-cat-t"><i class="fas ${c.icono}"></i> ${c.titulo}${c.admin ? '<span class="tut-pill"><i class="fas fa-lock"></i> Solo administración</span>' : ''}<span class="tut-cat-n">${items.length}</span></h3>
+      <div class="tut-grid">${items.map(tarjeta).join('')}</div>
+    </div>`;
+  }).join('');
   cont.querySelectorAll('.tut-card').forEach(b => { b.onclick = () => abrirTutorial(b.dataset.tut); });
   try {
     const urls = await urlsTutoriales(lista.map(t => `poster/${t.id}.jpg`));
@@ -22434,7 +22385,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-10-01', emoji: '🎬', titulo: 'Videotutoriales con Lyra', texto: 'Lyra te explica el CRM en videos cortos, con datos de ejemplo. Arriba de cada sección que tiene uno aparece "Ver tutorial" (en el celular, el botón ▶ de la barra de arriba), y en Ayuda → Manual están todos juntos, marcados como vistos cuando los terminás. En el celular se ven en vertical y en la computadora en horizontal.', roles: ['admin', 'asesor'] },
+  { fecha: '2026-10-01', emoji: '🎬', titulo: 'Videotutoriales con Lyra', texto: 'Lyra te explica el CRM en videos cortos, con datos de ejemplo. Arriba de cada sección que tiene uno aparece "Ver tutorial" (en el celular, el botón ▶ de la barra de arriba), y en Ayuda → Videotutoriales están todos juntos, marcados como vistos cuando los terminás. En el celular se ven en vertical y en la computadora en horizontal.', roles: ['admin', 'asesor'] },
   { fecha: '2026-09-30', emoji: '🗂️', titulo: 'Postulaciones más fáciles de revisar', texto: 'Tarjetas nuevas: foto grande, calificación con color, cargo y una línea con edad, experiencia y estudios. Ordená por calificación, fecha o experiencia, agrupá por cargo y filtrá por cargo, género, rango de edad, foto, modalidad, estado y calificación. En la ficha, el veredicto de la IA está arriba en Perfil y Llamar / WhatsApp / Ver CV quedan fijos. Al re-analizar, la edad, género, estudios y experiencia vacíos se completan desde el CV.', roles: ['admin'] },
   { fecha: '2026-09-30', emoji: '🧑‍💼', titulo: 'Postulaciones: "Re-analizar todas" de verdad', texto: 'El botón ahora re-lee cada CV en el servidor uno por uno, le pone la foto sacada del CV si no tenía y lo vuelve a calificar con el criterio nuevo: pesan las habilidades y la capacidad de trabajo, no el diseño del CV ni fechas desordenadas. Las postulaciones sin CV se eliminan al correrlo.', roles: ['admin'] },
   { fecha: '2026-09-29', emoji: '📲', titulo: 'Repartir números: de la jefa a los asesores en un paso', texto: 'Nueva sección Leads → "Repartir números". Pegá los números que te escribieron directo (o subí capturas de pantalla), revisá los que detectó y, al confirmar, se reparten entre los asesores con el reparto de siempre. Cada asesor recibe su aviso y su lead queda en el CRM.', roles: ['admin'] },
