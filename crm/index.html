@@ -1788,7 +1788,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-wrap{container:correo/inline-size}
 @container correo (min-width:720px){
   .correo-layout{display:flex;gap:20px;overflow:visible;height:calc(100vh - 260px)}
-  .correo-col{flex:0 0 clamp(300px,36%,420px);border-right:1px solid var(--line);padding-right:16px}
+  .correo-col{flex:0 0 clamp(300px,36%,420px);min-width:0;box-sizing:border-box;border-right:1px solid var(--line);padding-right:16px}
   .correo-col .correo-lista{flex:1;min-height:0;height:auto}
   .correo-detalle{position:static;flex:1;min-width:0;transform:none;transition:none;background:transparent;border-radius:0;padding:0 6px 0 4px}
   .correo-detalle-back{display:none}
