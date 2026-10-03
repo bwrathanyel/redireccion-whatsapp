@@ -1811,7 +1811,8 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-compose-acciones .dbtn:not(.save){background:transparent;border:1px solid var(--line2);color:var(--txt)}
 .correo-compose-acciones .dbtn:not(.save):hover{background:rgba(255,255,255,.05)}
 .correo-compose-acciones .dbtn.save{flex:1.5;width:auto;margin-top:0}
-.correo-compose-de{padding:7px 10px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:12px}
+.correo-compose-form select.correo-compose-de{width:100%;box-sizing:border-box}
+.correo-compose-de:disabled{opacity:1;cursor:default}
 .correo-campo-dir{position:relative}
 .correo-cco-toggle{margin-left:8px;border:0;background:transparent;color:var(--accent-ink);font-size:10.5px;font-weight:700;cursor:pointer;font-family:inherit;text-transform:none;letter-spacing:0}
 .correo-cco-toggle[hidden]{display:none}
@@ -6861,7 +6862,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="sheet-title"><i class="fas fa-pen"></i> <span id="compose-titulo">Redactar correo</span></div>
       <div class="correo-compose-form">
         <label>De</label>
-        <div class="correo-compose-de" id="compose-de"></div>
+        <select class="flt correo-compose-de" id="compose-de" aria-label="Enviar desde"></select>
         <label>Para</label>
         <div class="correo-campo-dir">
           <input class="flt" id="compose-para" type="text" placeholder="destinatario@ejemplo.com, otro@ejemplo.com" autocomplete="off">
@@ -7228,6 +7229,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
   <div class="act-tabs" id="rev-tabs">
     <button class="act-tab on" data-rtab="vigencias" type="button">Vigencias<span class="act-pill" id="rev-pill-vig" hidden>0</span></button>
     <button class="act-tab" data-rtab="sinhotel" type="button">Sin hotel<span class="act-pill" id="rev-pill-sh" hidden>0</span></button>
+    <button class="act-tab" data-rtab="porconfirmar" type="button">Por confirmar<span class="act-pill" id="rev-pill-pc" hidden>0</span></button>
   </div>
 
   <div class="act-panel on" data-rpanel="vigencias">
@@ -7248,6 +7250,12 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     <div class="vig-grupo-d" style="margin-bottom:4px">Promociones que no cuelgan de ningún hotel: no aparecen dentro del hotel, no heredan sus fotos y el dedup de Hot Sales las trata como sueltas. Vinculá cada una y se acomoda sola. "Recordar este nombre" evita que el mismo flyer vuelva a preguntar el mes que viene.</div>
     <div class="vig-grupo-d" style="margin-bottom:12px">Ocultar una promoción la apaga en el CRM, la web y la IA. Se puede volver a mostrar.</div>
     <div id="sh-cuerpo"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+  </div>
+
+  <div class="act-panel" data-rpanel="porconfirmar">
+    <div class="vig-grupo-d" style="margin-bottom:4px">Tarifas sin fecha de fin que el PDF mensual no renueva (carga manual, flyers, protegidas). Se ofrecen mientras nadie las retire, así que cada 30 días hay que confirmarlas: "Sigue" las deja 30 días más, "Sale de venta" las apaga.</div>
+    <div class="vig-grupo-d" style="margin-bottom:12px">Nada se retira solo. Los lunes llega un aviso por Telegram si hay alguna por vencer.</div>
+    <div id="pc-cuerpo"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
   </div>
 </div>
 

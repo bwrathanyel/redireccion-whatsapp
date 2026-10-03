@@ -5878,6 +5878,7 @@ function revCambiarTab(clave) {
   document.querySelectorAll('#tar-revision-sheet .act-panel').forEach(p => p.classList.toggle('on', p.dataset.rpanel === clave));
   if (clave === 'vigencias') cargarRevisionVigencias();
   else if (clave === 'sinhotel') cargarSinHotel();
+  else if (clave === 'porconfirmar') cargarPorConfirmar();
 }
 
 async function cargarRevisionVigencias() {
@@ -5956,6 +5957,79 @@ async function ocultarVencidasIds(ids, btn) {
   okToast(`Ocultado(s) ${(data.tarifas_ocultas || 0) + (data.promociones_ocultas || 0)} ítem(s)`);
   tarCache = {};
   await comprobarVencidasAhora();
+}
+
+/* ---------- Pestaña "Por confirmar": revisión cada 30 días, nunca retiro automático ----------
+   Backend: tarifas_por_confirmar() / confirmar_tarifas_sigue() / retirar_tarifas_por_confirmar()
+   (migración 20261003160000). "Sigue" = confirmar_antes +30 días; "Sale de venta" = vigente=false. */
+let PC_FILAS = [];
+async function cargarPorConfirmar() {
+  const cuerpo = document.getElementById('pc-cuerpo');
+  cuerpo.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  const { data, error } = await sb.rpc('tarifas_por_confirmar');
+  if (error) { cuerpo.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
+  PC_FILAS = data || [];
+  renderPorConfirmar();
+}
+
+function renderPorConfirmar() {
+  const cuerpo = document.getElementById('pc-cuerpo');
+  const pill = document.getElementById('rev-pill-pc');
+  const vencidas = PC_FILAS.filter(f => f.dias <= 0);
+  if (pill) { pill.hidden = !vencidas.length; pill.textContent = vencidas.length; }
+  if (!PC_FILAS.length) {
+    cuerpo.innerHTML = '<div class="vig-vacio" style="padding:14px 0"><i class="fas fa-circle-check"></i> Nada por confirmar.</div>';
+    return;
+  }
+  const motivo = f => f.motivo === 'protegida_duplicada' ? 'Protegida y también viene en el PDF' : (f.protegido ? 'Protegida, sin fecha de fin' : 'Sin fecha de fin');
+  const cuando = f => f.dias < 0 ? `venció hace ${-f.dias} día${f.dias === -1 ? '' : 's'}` : f.dias === 0 ? 'vence hoy' : `confirmar antes del ${fmtDiaCorto(f.confirmar_antes)} (${f.dias} día${f.dias === 1 ? '' : 's'})`;
+  const fila = f => `<div class="vig-item">
+    <div class="vig-top">
+      <div class="vig-nombre">${esc(f.nombre)}</div>
+      <span class="vig-tipo">${f.origen === 'flyer' ? 'Promo' : 'Tarifa'}</span>
+      <span class="vig-tipo">${esc(motivo(f))}</span>
+    </div>
+    ${f.detalle ? `<div class="vig-texto">${esc(f.detalle)}</div>` : ''}
+    <div class="vig-texto">${esc([f.precio_texto, f.vigencia_texto].filter(Boolean).join(' · ') || 'Sin precio ni vigencia cargados')}</div>
+    <div class="vig-fechas">${esc(cuando(f))}${f.fuente_archivo ? ' · ' + esc(f.fuente_archivo) : ''}</div>
+    <div class="vig-acc">
+      <button class="dbtn gh pc-sigue" data-id="${f.id}" type="button"><i class="fas fa-check"></i> Sigue</button>
+      <button class="dbtn peligro pc-sale" data-id="${f.id}" type="button"><i class="fas fa-eye-slash"></i> Sale de venta</button>
+    </div>
+  </div>`;
+  const proximas = PC_FILAS.filter(f => f.dias > 0);
+  cuerpo.innerHTML = `
+    <div class="vig-grupo">
+      <div class="vig-grupo-t">Para confirmar ya <span class="vig-tipo">${vencidas.length}</span></div>
+      ${vencidas.length ? `<button class="dbtn gh" id="pc-sigue-todas" type="button" style="width:100%;margin:8px 0"><i class="fas fa-check-double"></i> Sigue todas (+30 días)</button>${vencidas.map(fila).join('')}` : '<div class="vig-vacio" style="padding:8px 0">Ninguna por ahora.</div>'}
+    </div>
+    ${proximas.length ? `<div class="vig-grupo" style="margin-top:12px">
+      <div class="vig-grupo-t">Próximas <span class="vig-tipo">${proximas.length}</span></div>
+      ${proximas.map(fila).join('')}
+    </div>` : ''}`;
+  document.getElementById('pc-sigue-todas')?.addEventListener('click', e => pcSigue(vencidas.map(f => f.id), e.currentTarget));
+  cuerpo.querySelectorAll('.pc-sigue').forEach(b => b.addEventListener('click', () => pcSigue([Number(b.dataset.id)], b)));
+  cuerpo.querySelectorAll('.pc-sale').forEach(b => b.addEventListener('click', () => pcSale(Number(b.dataset.id), b)));
+}
+
+async function pcSigue(ids, btn) {
+  if (!ids.length) return;
+  if (btn) btn.disabled = true;
+  const { data, error } = await sb.rpc('confirmar_tarifas_sigue', { p_ids: ids });
+  if (error || !data?.ok) { errToast('No se pudo confirmar: ' + (error?.message || data?.error || '')); if (btn) btn.disabled = false; return; }
+  okToast(`Confirmada(s) ${data.confirmadas} tarifa(s): se revisan de nuevo en 30 días`);
+  await cargarPorConfirmar();
+}
+
+async function pcSale(id, btn) {
+  const f = PC_FILAS.find(x => x.id === id);
+  if (!(await confirmarSheet({ titulo: `Sacar de venta: ${f?.nombre || 'tarifa'}`, detalle: 'Se apaga en el CRM, la web y la IA. Queda registrado en el historial de cambios del tarifario.', textoOk: 'Sale de venta', destructivo: true }))) return;
+  if (btn) btn.disabled = true;
+  const { data, error } = await sb.rpc('retirar_tarifas_por_confirmar', { p_ids: [id] });
+  if (error || !data?.ok) { errToast('No se pudo retirar: ' + (error?.message || data?.error || '')); if (btn) btn.disabled = false; return; }
+  okToast('Tarifa fuera de venta');
+  tarCache = {};
+  await cargarPorConfirmar();
 }
 
 /* ---------- Pestaña "Sin hotel": promociones sin producto_id ----------
@@ -9524,6 +9598,12 @@ function setupCorreo() {
   document.getElementById('compose-enviar').onclick = enviarCompose;
   document.getElementById('compose-adjuntar-input').addEventListener('change', (e) => { agregarAdjuntoCompose(e.target.files); e.target.value = ''; });
   document.getElementById('compose-cco-toggle').onclick = () => mostrarCcoCompose(true);
+  document.getElementById('compose-de').addEventListener('change', (e) => {
+    COMPOSE.credencialId = e.target.value;
+    aplicarFirmaCompose(true);
+    cargarFirmaEnCompose();
+    guardarBorradorCompose();
+  });
   ['compose-para', 'compose-cc', 'compose-cco'].forEach(conectarAutocompletarDireccion);
   ['compose-para', 'compose-cc', 'compose-cco', 'compose-asunto', 'compose-body'].forEach(id => document.getElementById(id).addEventListener('input', guardarBorradorCompose));
   document.getElementById('correo-cuenta-btn').onclick = (e) => { e.stopPropagation(); toggleMenuCuentas(); };
@@ -9645,6 +9725,7 @@ async function refrescarEstadoGmail() {
   const { data, error } = await sb.rpc('gmail_cuentas');
   if (error) { txt.textContent = 'No se pudo consultar el estado de Gmail.'; return; }
   CORREO_CUENTAS = data || [];
+  CORREO_CUENTAS.filter(c => !c.revocado).forEach(c => cargarFirmaGmail(c.credencial_id));
   actualizarBadgeCorreo();
 
   const layout = document.getElementById('correo-layout');
@@ -9727,7 +9808,7 @@ window.editarFirmaCorreo = async () => {
   document.getElementById('correo-cuenta-menu').style.display = 'none';
   const c = cuentaCorreoActiva();
   if (!c) return;
-  const v = await pedirTexto({ titulo: 'Firma de ' + c.email_conectado, detalle: 'Se agrega al final de cada correo que escribas desde esta cuenta.', label: 'Firma', tipo: 'textarea', valor: c.firma_texto || '', placeholder: 'Tu nombre\nDestino y Eventos Lotus 360\nWhatsApp +58 ...', textoOk: 'Guardar' });
+  const v = await pedirTexto({ titulo: 'Firma de ' + c.email_conectado, detalle: 'Se agrega al final de cada correo que escribas desde esta cuenta. Si la dejás vacía se usa la firma que tenés en Gmail.', label: 'Firma', tipo: 'textarea', valor: c.firma_texto || '', placeholder: 'Tu nombre\nDestino y Eventos Lotus 360\nWhatsApp +58 ...', textoOk: 'Guardar' });
   if (v === null) return;
   const { error } = await sb.rpc('gmail_guardar_firma', { p_credencial_id: Number(c.credencial_id), p_firma: v });
   if (error) { errToast('No se pudo guardar la firma'); return; }
@@ -9840,9 +9921,53 @@ async function conectarGmail() {
 let COMPOSE = { modo: 'nuevo', correoId: null, adjuntos: [], reenviarDe: null };
 const COMPOSE_TITULOS = { nuevo: 'Redactar correo', responder: 'Responder', todos: 'Responder a todos', reenviar: 'Reenviar' };
 const claveBorradorCorreo = () => 'correo_borrador_' + CORREO_CUENTA_ACTIVA;
+/* Firma: la que el asesor escribió a mano en el CRM manda; si no hay, la que
+   tiene en Gmail (Edge gmail-firma, la API de envío no la agrega sola). */
+const CORREO_FIRMAS = new Map(); // credencial_id -> { html saneado, en }
+const CORREO_FIRMAS_EN_CURSO = new Map();
+function sanitizarFirmaHtml(html) {
+  const doc = new DOMParser().parseFromString(html || '', 'text/html');
+  doc.querySelectorAll('script,style,iframe,object,embed,link,meta,base,form,input,button,textarea,select,svg,math,noscript').forEach(n => n.remove());
+  doc.body.querySelectorAll('*').forEach(el => [...el.attributes].forEach(a => {
+    const n = a.name.toLowerCase(), v = a.value.trim();
+    if (n.startsWith('on') || (n === 'src' && !/^(https?:|data:image\/)/i.test(v)) || (['href', 'action', 'formaction', 'background', 'xlink:href'].includes(n) && !/^(https?:|mailto:|tel:)/i.test(v))) el.removeAttribute(a.name);
+  }));
+  return doc.body.innerHTML.trim();
+}
+async function cargarFirmaGmail(credId) {
+  const k = String(credId), previa = CORREO_FIRMAS.get(k);
+  if (previa && Date.now() - previa.en < 600000) return previa.html;
+  if (!CORREO_FIRMAS_EN_CURSO.has(k)) {
+    CORREO_FIRMAS_EN_CURSO.set(k, llamarFuncionCorreo('gmail-firma', { credencial_id: Number(credId) })
+      .then(d => { const html = sanitizarFirmaHtml(d.firma_html); CORREO_FIRMAS.set(k, { html, en: Date.now() }); return html; })
+      .catch(() => previa?.html || '')
+      .finally(() => CORREO_FIRMAS_EN_CURSO.delete(k)));
+  }
+  return CORREO_FIRMAS_EN_CURSO.get(k);
+}
 function firmaCorreoHtml() {
-  const f = cuentaCorreoActiva()?.firma_texto;
-  return f ? `<div class="correo-firma">-- <br>${esc(f).replace(/\n/g, '<br>')}</div>` : '';
+  const k = String(COMPOSE.credencialId);
+  const manual = CORREO_CUENTAS.find(c => String(c.credencial_id) === k)?.firma_texto;
+  if (manual) return `<div class="correo-firma">-- <br>${esc(manual).replace(/\n/g, '<br>')}</div>`;
+  const gmail = CORREO_FIRMAS.get(k)?.html;
+  return gmail ? `<div class="correo-firma">${gmail}</div>` : '';
+}
+// reemplazar=true al cambiar de cuenta (el bloque es de la otra); false cuando
+// la firma de Gmail llega tarde y no hay que pisar lo que el asesor ya editó.
+function aplicarFirmaCompose(reemplazar) {
+  const body = document.getElementById('compose-body');
+  const nueva = firmaCorreoHtml();
+  const actual = body.querySelector('.correo-firma');
+  if (actual) { if (!reemplazar) return; if (nueva) actual.outerHTML = nueva; else actual.remove(); return; }
+  if (!nueva) return;
+  const t = document.createElement('template');
+  t.innerHTML = nueva;
+  const cita = body.querySelector('.correo-cita');
+  if (cita) cita.before(t.content); else body.append(t.content);
+}
+function cargarFirmaEnCompose() {
+  const estado = COMPOSE, cred = estado.credencialId;
+  cargarFirmaGmail(cred).then(() => { if (COMPOSE === estado && estado.credencialId === cred) aplicarFirmaCompose(false); });
 }
 function textoOriginalCorreo(c) {
   return esc(c.cuerpo_texto || textoDeHtml(c.cuerpo_html) || c.snippet || '').replace(/\n/g, '<br>');
@@ -9857,14 +9982,14 @@ function leerBorradorCompose() {
 }
 function guardarBorradorCompose() {
   if (COMPOSE.modo !== 'nuevo') return;
-  try { localStorage.setItem(claveBorradorCorreo(), JSON.stringify({ para: val('compose-para'), cc: val('compose-cc'), cco: val('compose-cco'), asunto: val('compose-asunto'), cuerpo: document.getElementById('compose-body').innerHTML })); } catch { /* sin storage */ }
+  try { localStorage.setItem(claveBorradorCorreo(), JSON.stringify({ para: val('compose-para'), cc: val('compose-cc'), cco: val('compose-cco'), asunto: val('compose-asunto'), de: COMPOSE.credencialId, cuerpo: document.getElementById('compose-body').innerHTML })); } catch { /* sin storage */ }
 }
 function abrirCompose({ modo = 'nuevo', correoId = null, para = '' } = {}) {
   if (!CORREO_CUENTA_ACTIVA) { errToast('Conectá un Gmail antes de redactar'); return; }
   const c = correoId ? CORREOS_DATA.get(correoId) : null;
   const yo = (cuentaCorreoActiva()?.email_conectado || '').toLowerCase();
   const emailDe = d => extraerEmailDeCabecera(d).toLowerCase();
-  COMPOSE = { modo, correoId, adjuntos: [], reenviarDe: modo === 'reenviar' ? correoId : null };
+  COMPOSE = { modo, correoId, adjuntos: [], reenviarDe: modo === 'reenviar' ? correoId : null, credencialId: String(CORREO_CUENTA_ACTIVA) };
   let vPara = para, vCc = '', vCco = '', asunto = '', cuerpo = '<br>' + firmaCorreoHtml();
   if (c && modo !== 'reenviar') {
     const destino = c.direccion === 'saliente' ? (c.para || []) : [c.de];
@@ -9881,10 +10006,19 @@ function abrirCompose({ modo = 'nuevo', correoId = null, para = '' } = {}) {
     cuerpo += `<br><div class="correo-cita">---------- Mensaje reenviado ----------<br>De: ${esc(c.de)}<br>Fecha: ${esc(fmtFechaHoraCaracas(c.enviado_en))}<br>Asunto: ${esc(c.asunto || '')}<br>Para: ${esc((c.para || []).join(', '))}<br><br>${textoOriginalCorreo(c)}</div>`;
   } else if (modo === 'nuevo' && !para) {
     const b = leerBorradorCompose();
-    if (b) { vPara = b.para || ''; vCc = b.cc || ''; vCco = b.cco || ''; asunto = b.asunto || ''; cuerpo = b.cuerpo || cuerpo; }
+    if (b) {
+      vPara = b.para || ''; vCc = b.cc || ''; vCco = b.cco || ''; asunto = b.asunto || ''; cuerpo = b.cuerpo || cuerpo;
+      if (b.de && CORREO_CUENTAS.some(x => !x.revocado && String(x.credencial_id) === String(b.de))) COMPOSE.credencialId = String(b.de);
+    }
   }
   document.getElementById('compose-titulo').textContent = COMPOSE_TITULOS[modo] || COMPOSE_TITULOS.nuevo;
-  document.getElementById('compose-de').textContent = cuentaCorreoActiva()?.email_conectado || '';
+  // Responder/reenviar quedan en la cuenta dueña del hilo: otra no tiene ese
+  // Message-ID ni puede traer los adjuntos del original.
+  const selDe = document.getElementById('compose-de');
+  const cuentasDe = CORREO_CUENTAS.filter(x => !x.revocado || String(x.credencial_id) === COMPOSE.credencialId);
+  selDe.innerHTML = cuentasDe.map(x => `<option value="${esc(x.credencial_id)}">${esc(x.email_conectado)}</option>`).join('');
+  selDe.value = COMPOSE.credencialId;
+  selDe.disabled = modo !== 'nuevo' || cuentasDe.length < 2;
   document.getElementById('compose-para').value = vPara;
   document.getElementById('compose-cc').value = vCc;
   document.getElementById('compose-cco').value = vCco;
@@ -9894,6 +10028,7 @@ function abrirCompose({ modo = 'nuevo', correoId = null, para = '' } = {}) {
   document.getElementById('compose-descartar').hidden = modo !== 'nuevo';
   pintarAdjuntosCompose();
   openSheet('correo-compose-sheet');
+  cargarFirmaEnCompose();
   setTimeout(() => {
     const body = document.getElementById('compose-body');
     if (!vPara) { document.getElementById('compose-para').focus(); return; }
@@ -9942,18 +10077,20 @@ async function enviarCompose() {
   const bodyEl = document.getElementById('compose-body');
   const texto = bodyEl.innerText.trim();
   const html = bodyEl.innerHTML.trim();
+  const sinFirma = bodyEl.cloneNode(true);
+  sinFirma.querySelectorAll('.correo-firma').forEach(n => n.remove());
   if (!para.length) { errToast('Ingresá al menos un destinatario'); return; }
   const mala = [...para, ...cc, ...bcc].find(d => !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(extraerEmailDeCabecera(d)));
   if (mala) { errToast(`Revisá esta dirección: ${mala}`); return; }
   if (!asunto) { errToast('Ingresá un asunto'); return; }
-  if (!texto) { errToast('Escribí el cuerpo del correo'); return; }
+  if (!sinFirma.textContent.trim()) { errToast('Escribí el cuerpo del correo'); return; }
   const btn = document.getElementById('compose-enviar');
   btn.disabled = true;
   const original = COMPOSE.correoId ? CORREOS_DATA.get(COMPOSE.correoId) : null;
   try {
     const adjuntos = await Promise.all(COMPOSE.adjuntos.map(async (f) => ({ filename: f.name, mime_type: f.type || 'application/octet-stream', contenido_base64: await fileABase64(f) })));
     await llamarFuncionCorreo('gmail-enviar', {
-      credencial_id: Number(CORREO_CUENTA_ACTIVA), lead_id: original?.lead_id ?? null,
+      credencial_id: Number(COMPOSE.credencialId), lead_id: original?.lead_id ?? null,
       para, cc, bcc, asunto, cuerpo: texto, cuerpo_html: html, adjuntos,
       responde_a: ['responder', 'todos'].includes(COMPOSE.modo) ? COMPOSE.correoId : undefined,
       reenviar_de: COMPOSE.reenviarDe || undefined,
