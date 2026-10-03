@@ -5420,9 +5420,14 @@ let CONV_CACHE = null, ACTIVIDAD_CACHE = null, CORREO_LEAD_CACHE = null;
 const CORREOS_DATA = new Map();
 function renderCuerpoCorreo(correo) {
   if (correo.cuerpo_html) {
-    return `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(correo.cuerpo_html)}" style="width:100%;height:420px;border:0;border-radius:8px;background:#fff;margin-top:6px"></iframe>`;
+    return `<iframe class="correo-msg-iframe" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(correo.cuerpo_html)}"></iframe>`;
   }
-  return `<div style="white-space:pre-wrap;font-size:11.5px;margin-top:6px;background:rgba(var(--ink-rgb),.03);border-radius:8px;padding:10px">${esc(correo.cuerpo_texto || '(sin contenido)')}</div>`;
+  const texto = esc(correo.cuerpo_texto || '(sin contenido)').replace(/https?:\/\/(?:(?!&quot;|&gt;|&#39;)[^\s<])+/g, u => {
+    const fin = (u.match(/[.,;:!?)]+$/) || [''])[0];
+    const url = u.slice(0, u.length - fin.length);
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${fin}`;
+  });
+  return `<div class="correo-msg-texto">${texto}</div>`;
 }
 // Marca leído en el CRM Y en el Gmail real del asesor (Fase 5) -- best
 // effort, no bloquea la lectura del correo si falla (ej. asesor todavía no
@@ -5575,6 +5580,7 @@ window.enviarRespuestaCorreo = async (correoId) => {
         adjuntos,
         thread_id: correo.gmail_thread_id,
         in_reply_to: correo.gmail_message_id,
+        responde_a: correoId,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -9462,7 +9468,12 @@ document.getElementById('post-cv-input')?.addEventListener('change', e => {
    solo devuelve el token de "state" (uuid de un solo uso, 10 min), la URL de
    consentimiento se arma acá con el client_id público de Google (no es secreto,
    va en la URL del navegador). Ver plan en
-   C:\Users\Usuario\.claude\plans\en-el-crm-se-compressed-conway.md */
+   C:\Users\Usuario\.claude\plans\en-el-crm-se-compressed-conway.md
+   2026-10-02 (plan correo-crm-gmail.md): carpetas y pestañas con las etiquetas
+   reales de Gmail, consulta y búsqueda en el servidor con paginación, hilo
+   completo en el lector, acciones (archivar, papelera, destacar, no leído,
+   spam) aplicadas también en Gmail, responder a todos / reenviar, contactos
+   derivados del correo, firma por cuenta y backfill de días anteriores. */
 const GMAIL_CLIENT_ID = '16841972131-bk0p99ds2ntktd9cdbhdf3cbcnp94rio.apps.googleusercontent.com';
 const GMAIL_REDIRECT_URI = 'https://begbjhrdbsqftbbleecb.supabase.co/functions/v1/gmail-oauth-callback';
 // gmail.modify (Fase 5, marcar leído sincronizado) -- los asesores ya
@@ -9472,21 +9483,37 @@ const GMAIL_SCOPES = 'https://www.googleapis.com/auth/gmail.readonly https://www
 
 let CORREO_BANDEJA_DATA = [];
 let correoFiltro = 'todos';
-let CORREO_CUENTAS = []; // filas de gmail_estado_conexion() -- una por cuenta conectada
+let CORREO_CUENTAS = []; // filas de gmail_cuentas() -- una por cuenta conectada
 let CORREO_CUENTA_ACTIVA = localStorage.getItem('correo_cuenta_activa') || null;
+let CORREO_CARPETA = 'recibidos', CORREO_CATEGORIA = 'principal';
+let CORREO_HAY_MAS = false, CORREO_CARGANDO_MAS = false, CORREO_PEDIDO = 0;
+let CORREO_BACKFILL = null; // credencial_id con un backfill en curso
+const CORREO_PAGINA = 60;
+const CORREO_CATEGORIAS = ['CATEGORY_PROMOTIONS', 'CATEGORY_SOCIAL', 'CATEGORY_UPDATES', 'CATEGORY_FORUMS'];
+// La lista no trae cuerpos (pesan): se piden al abrir el hilo.
+const CORREO_SELECT = 'id,lead_id,credencial_id,gmail_message_id,gmail_thread_id,direccion,de,para,cc,asunto,snippet,enviado_en,leido,etiquetas,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)';
+const CORREO_SELECT_HILO = 'id,lead_id,credencial_id,gmail_message_id,gmail_thread_id,direccion,de,para,cc,bcc,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,etiquetas,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)';
+const correoSeccionActiva = () => document.getElementById('sec-correo')?.classList.contains('active');
+const idHiloSeguro = id => String(id || '').replace(/[^\w-]/g, '');
+const terminoBusquedaCorreo = () => (document.getElementById('correo-search')?.value || '').replace(/[,()*%\\:"']/g, ' ').trim();
+const cuentaCorreoActiva = () => CORREO_CUENTAS.find(c => String(c.credencial_id) === String(CORREO_CUENTA_ACTIVA));
+
 function setupCorreo() {
-  // Solo conecta el botón acá -- el estado y la bandeja se cargan recién
+  // Solo conecta los botones acá -- el estado y la bandeja se cargan recién
   // cuando se activa la sección (ver activateSection), mismo patrón perezoso
-  // que el resto de las secciones (redes, mensajes, tarifario...): no tiene
-  // sentido gastar un round-trip a Supabase en cada login para quien nunca
-  // abre Correo.
+  // que el resto de las secciones. La excepción es el badge del menú: una
+  // sola RPC liviana para que el asesor vea que tiene correo sin entrar.
   document.getElementById('correo-banner-btn').onclick = conectarGmail;
   document.getElementById('correo-detalle-back').onclick = cerrarHiloCorreo;
   document.getElementById('correo-sync-btn').onclick = sincronizarCorreoAhora;
-  document.getElementById('correo-redactar-btn').onclick = abrirComposeNuevo;
-  document.getElementById('compose-cancelar').onclick = () => closeSheet('correo-compose-sheet');
-  document.getElementById('compose-enviar').onclick = enviarComposeNuevo;
+  document.getElementById('correo-redactar-btn').onclick = () => abrirCompose({ modo: 'nuevo' });
+  document.getElementById('compose-cancelar').onclick = cerrarCompose;
+  document.getElementById('compose-descartar').onclick = descartarCompose;
+  document.getElementById('compose-enviar').onclick = enviarCompose;
   document.getElementById('compose-adjuntar-input').addEventListener('change', (e) => { agregarAdjuntoCompose(e.target.files); e.target.value = ''; });
+  document.getElementById('compose-cco-toggle').onclick = () => mostrarCcoCompose(true);
+  ['compose-para', 'compose-cc', 'compose-cco'].forEach(conectarAutocompletarDireccion);
+  ['compose-para', 'compose-cc', 'compose-cco', 'compose-asunto', 'compose-body'].forEach(id => document.getElementById(id).addEventListener('input', guardarBorradorCompose));
   document.getElementById('correo-cuenta-btn').onclick = (e) => { e.stopPropagation(); toggleMenuCuentas(); };
   document.addEventListener('click', () => document.getElementById('correo-cuenta-menu').style.display = 'none');
   popoverASheet('#correo-cuenta-menu', { abierto: n => n.style.display !== 'none', cerrar: n => { n.style.display = 'none'; } });
@@ -9494,17 +9521,34 @@ function setupCorreo() {
   // volver a esta pestaña (visibilitychange) se refresca el estado en vez de
   // pedirle al asesor que recargue a mano.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && document.getElementById('sec-correo')?.classList.contains('active')) refrescarEstadoGmail();
+    if (document.visibilityState === 'visible' && correoSeccionActiva()) refrescarEstadoGmail();
   });
-  // Búsqueda y filtro corren sobre los 50 correos ya traídos -- sin
-  // round-trip nuevo a Supabase por cada tecla o clic de chip.
-  document.getElementById('correo-search').addEventListener('input', renderBandejaCorreoFiltrada);
+  // Búsqueda en el servidor (asunto, remitente, resumen y cuerpo), con
+  // debounce para no pedir por cada tecla.
+  let t = null;
+  document.getElementById('correo-search').addEventListener('input', () => {
+    clearTimeout(t);
+    t = setTimeout(() => CORREO_CARPETA === 'contactos' ? cargarContactosCorreo() : cargarBandejaCorreo(), 300);
+  });
   document.querySelectorAll('#correo-filtros .seg').forEach(b => b.onclick = () => {
     document.querySelectorAll('#correo-filtros .seg').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     correoFiltro = b.dataset.f;
-    renderBandejaCorreoFiltrada();
+    cargarBandejaCorreo();
   });
+  document.querySelectorAll('#correo-carpetas .correo-carpeta').forEach(b => b.onclick = () => elegirCarpetaCorreo(b.dataset.carpeta));
+  document.querySelectorAll('#correo-tabs .correo-tab').forEach(b => b.onclick = () => {
+    CORREO_CATEGORIA = b.dataset.cat;
+    document.querySelectorAll('#correo-tabs .correo-tab').forEach(x => x.classList.toggle('on', x === b));
+    cerrarHiloCorreo();
+    cargarBandejaCorreo();
+  });
+  document.getElementById('correo-lista').addEventListener('scroll', e => {
+    const el = e.currentTarget;
+    if (CORREO_HAY_MAS && !CORREO_CARGANDO_MAS && el.scrollTop + el.clientHeight > el.scrollHeight - 240) cargarBandejaCorreo('mas');
+  });
+  document.addEventListener('keydown', atajosCorreo);
+  refrescarBadgeCorreo();
 }
 function cargarCorreoSeccion() { refrescarEstadoGmail(); }
 
@@ -9517,13 +9561,68 @@ function tiempoRelativoCorto(iso) {
   if (horas < 24) return `hace ${horas}h`;
   return `hace ${Math.round(horas / 24)}d`;
 }
+// Igual que la lista de Gmail: hoy = hora, este año = "2 oct", antes = fecha corta.
+function fmtFechaCorreo(iso) {
+  const d = new Date(iso), ahora = new Date(), tz = { timeZone: 'America/Caracas' };
+  const dia = x => x.toLocaleDateString('es-VE', { ...tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+  if (dia(d) === dia(ahora)) return d.toLocaleTimeString('es-VE', { ...tz, hour: 'numeric', minute: '2-digit' });
+  const anio = x => x.toLocaleDateString('es-VE', { ...tz, year: 'numeric' });
+  return d.toLocaleDateString('es-VE', anio(d) === anio(ahora) ? { ...tz, day: 'numeric', month: 'short' } : { ...tz, day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+function nombreDeCabecera(dir) {
+  const m = (dir || '').match(/^\s*"?([^"<]*?)"?\s*<[^>]+>/);
+  return (m && m[1].trim()) || extraerEmailDeCabecera(dir) || '';
+}
+function avatarCorreo(dir) {
+  const email = extraerEmailDeCabecera(dir).toLowerCase();
+  const inicial = (nombreDeCabecera(dir) || email || '?').trim().charAt(0).toUpperCase() || '?';
+  return `<span class="correo-row-avatar" style="--c:${CLIENT_COLORS[seedHash(email) % CLIENT_COLORS.length]}">${esc(inicial)}</span>`;
+}
+function textoDeHtml(html) {
+  // DOMParser no ejecuta scripts ni carga recursos del documento parseado.
+  try { return new DOMParser().parseFromString(html || '', 'text/html').body.textContent.replace(/\n{3,}/g, '\n\n').trim(); } catch { return ''; }
+}
+
+/* ---------- Badge del menú y contadores por carpeta ---------- */
+async function refrescarBadgeCorreo() {
+  const { data } = await sb.rpc('gmail_cuentas');
+  if (!data) return;
+  CORREO_CUENTAS = data;
+  actualizarBadgeCorreo();
+}
+function actualizarBadgeCorreo() {
+  const b = document.getElementById('nav-correo-count');
+  if (!b) return;
+  const n = CORREO_CUENTAS.filter(c => !c.revocado).reduce((a, c) => a + (c.no_leidos || 0), 0);
+  b.textContent = n > 99 ? '99+' : String(n);
+  b.style.display = n ? '' : 'none';
+}
+async function cargarContadoresCorreo() {
+  if (!CORREO_CUENTA_ACTIVA) return;
+  const { data } = await sb.rpc('gmail_contadores', { p_credencial_id: Number(CORREO_CUENTA_ACTIVA) });
+  const c = data || {};
+  const pintar = (sel, n) => { const el = document.querySelector(sel); if (el) { el.textContent = n > 99 ? '99+' : String(n || ''); el.hidden = !n; } };
+  pintar('#correo-carpetas [data-carpeta="recibidos"] .n', c.principal);
+  pintar('#correo-carpetas [data-carpeta="spam"] .n', c.spam);
+  ['principal', 'promociones', 'social', 'notificaciones'].forEach(k => pintar(`#correo-tabs [data-cat="${k}"] .n`, c[k]));
+}
+// Realtime (gmail-correos-live): durante un backfill llegan cientos de
+// eventos seguidos, por eso se agrupan en una sola recarga.
+let CORREO_RECARGA_T = null;
+function programarRecargaCorreo() {
+  clearTimeout(CORREO_RECARGA_T);
+  CORREO_RECARGA_T = setTimeout(() => {
+    if (CORREO_BACKFILL) return;
+    refrescarBadgeCorreo();
+    if (correoSeccionActiva() && CORREO_CARPETA !== 'contactos') { cargarBandejaCorreo('refrescar'); cargarContadoresCorreo(); }
+  }, 1500);
+}
 
 /* ---------- Selector de cuentas Gmail (multi-cuenta) ----------
-   gmail_estado_conexion() devuelve una fila POR CADA cuenta conectada del
-   asesor (antes era una sola fila conectado/no). CORREO_CUENTA_ACTIVA decide
-   cuál bandeja se ve -- se guarda en localStorage para sobrevivir un
-   refresh, y si la cuenta guardada ya no existe (se desconectó en otra
-   sesión) se cae a la primera disponible. */
+   gmail_cuentas() devuelve una fila POR CADA cuenta conectada del asesor.
+   CORREO_CUENTA_ACTIVA decide cuál bandeja se ve -- se guarda en
+   localStorage para sobrevivir un refresh, y si la cuenta guardada ya no
+   existe (se desconectó en otra sesión) se cae a la primera disponible. */
 async function refrescarEstadoGmail() {
   const banner = document.getElementById('correo-banner');
   const txt = document.getElementById('correo-banner-txt');
@@ -9531,9 +9630,10 @@ async function refrescarEstadoGmail() {
   const selector = document.getElementById('correo-cuenta-selector');
   const syncBtn = document.getElementById('correo-sync-btn');
   const syncTime = document.getElementById('correo-sync-time');
-  const { data, error } = await sb.rpc('gmail_estado_conexion');
+  const { data, error } = await sb.rpc('gmail_cuentas');
   if (error) { txt.textContent = 'No se pudo consultar el estado de Gmail.'; return; }
   CORREO_CUENTAS = data || [];
+  actualizarBadgeCorreo();
 
   const layout = document.getElementById('correo-layout');
   layout.classList.toggle('sin-cuenta', !CORREO_CUENTAS.length);
@@ -9551,7 +9651,7 @@ async function refrescarEstadoGmail() {
     CORREO_CUENTA_ACTIVA = String(CORREO_CUENTAS[0].credencial_id);
     localStorage.setItem('correo_cuenta_activa', CORREO_CUENTA_ACTIVA);
   }
-  const activa = CORREO_CUENTAS.find(c => String(c.credencial_id) === String(CORREO_CUENTA_ACTIVA));
+  const activa = cuentaCorreoActiva();
 
   if (activa.revocado) {
     banner.style.display = 'flex';
@@ -9570,16 +9670,26 @@ async function refrescarEstadoGmail() {
   syncBtn.style.display = activa.revocado ? 'none' : '';
   syncTime.style.display = activa.revocado ? 'none' : '';
   syncTime.textContent = `Sincronizado ${tiempoRelativoCorto(activa.ultima_sync_en)}`;
-  cargarBandejaCorreo();
+  if (CORREO_CARPETA === 'contactos') cargarContactosCorreo(); else cargarBandejaCorreo(CORREO_BANDEJA_DATA.length ? 'refrescar' : 'nuevo');
+  cargarContadoresCorreo();
+  // Primera vez que se abre una cuenta: se traen los últimos 7 días de Gmail
+  // (antes solo llegaban los 50 más recientes al conectar).
+  if (!activa.revocado && !activa.backfill_desde && !CORREO_BACKFILL) traerCorreosAnteriores(7);
 }
 
 function renderMenuCuentas() {
   const menu = document.getElementById('correo-cuenta-menu');
+  const activa = cuentaCorreoActiva();
+  const ops = activa && !activa.revocado ? `
+    <div class="correo-cuenta-sep"></div>
+    ${[7, 30, 90].map(d => `<button type="button" class="correo-cuenta-op" onclick="traerCorreosAnteriores(${d})"><i class="fas fa-clock-rotate-left"></i> Traer últimos ${d} días</button>`).join('')}
+    <button type="button" class="correo-cuenta-op" onclick="editarFirmaCorreo()"><i class="fas fa-signature"></i> Firma de esta cuenta</button>` : '';
   menu.innerHTML = (menu.classList.contains('sheet') ? '<div class="sheet-handle"></div>' : '') + CORREO_CUENTAS.map(c => `
     <button type="button" class="correo-cuenta-item${String(c.credencial_id) === String(CORREO_CUENTA_ACTIVA) ? ' activa' : ''}" onclick="elegirCuentaCorreo('${c.credencial_id}')">
       <span class="cc-email">${esc(c.email_conectado)}</span>
+      ${c.no_leidos && !c.revocado ? `<span class="correo-unread-badge">${c.no_leidos}</span>` : ''}
       ${c.revocado ? '<span class="cc-revocado">Reconectar</span>' : `<span class="correo-cuenta-desvincular" onclick="event.stopPropagation();desconectarCuentaCorreo('${c.credencial_id}','${esc(c.email_conectado).replace(/'/g, '')}')" title="Desconectar"><i class="fas fa-xmark"></i></span>`}
-    </button>`).join('') + `<button type="button" class="correo-cuenta-agregar" onclick="conectarGmail()"><i class="fas fa-plus"></i> Conectar otra cuenta</button>`;
+    </button>`).join('') + ops + `<button type="button" class="correo-cuenta-agregar" onclick="conectarGmail()"><i class="fas fa-plus"></i> Conectar otra cuenta</button>`;
 }
 function toggleMenuCuentas() {
   const menu = document.getElementById('correo-cuenta-menu');
@@ -9590,6 +9700,7 @@ window.elegirCuentaCorreo = (credencialId) => {
   localStorage.setItem('correo_cuenta_activa', CORREO_CUENTA_ACTIVA);
   document.getElementById('correo-cuenta-menu').style.display = 'none';
   cerrarHiloCorreo();
+  CORREO_BANDEJA_DATA = [];
   refrescarEstadoGmail();
 };
 window.desconectarCuentaCorreo = async (credencialId, email) => {
@@ -9600,6 +9711,30 @@ window.desconectarCuentaCorreo = async (credencialId, email) => {
   okToast('Cuenta desconectada');
   refrescarEstadoGmail();
 };
+window.editarFirmaCorreo = async () => {
+  document.getElementById('correo-cuenta-menu').style.display = 'none';
+  const c = cuentaCorreoActiva();
+  if (!c) return;
+  const v = await pedirTexto({ titulo: 'Firma de ' + c.email_conectado, detalle: 'Se agrega al final de cada correo que escribas desde esta cuenta.', label: 'Firma', tipo: 'textarea', valor: c.firma_texto || '', placeholder: 'Tu nombre\nDestino y Eventos Lotus 360\nWhatsApp +58 ...', textoOk: 'Guardar' });
+  if (v === null) return;
+  const { error } = await sb.rpc('gmail_guardar_firma', { p_credencial_id: Number(c.credencial_id), p_firma: v });
+  if (error) { errToast('No se pudo guardar la firma'); return; }
+  c.firma_texto = v.trim() || null;
+  okToast('Firma guardada');
+};
+
+async function llamarFuncionCorreo(nombre, body) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session?.access_token) throw new Error('sesion');
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/${nombre}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || 'error');
+  return data;
+}
 
 async function sincronizarCorreoAhora() {
   const btn = document.getElementById('correo-sync-btn');
@@ -9608,27 +9743,55 @@ async function sincronizarCorreoAhora() {
   btn.disabled = true;
   icon.classList.add('girando');
   try {
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session?.access_token) { errToast('Sesión expirada, recargá la página'); return; }
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-sync-manual`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credencial_id: Number(CORREO_CUENTA_ACTIVA) }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) {
-      errToast(data.error === 'gmail_revocado' ? 'Tu Gmail se desconectó, reautorizá el acceso' : 'No se pudo sincronizar ahora, se reintenta solo cada 20 min');
-      return;
-    }
+    const data = await llamarFuncionCorreo('gmail-sync-manual', { credencial_id: Number(CORREO_CUENTA_ACTIVA) });
     okToast(data.nuevos > 0 ? `${data.nuevos} correo${data.nuevos > 1 ? 's' : ''} nuevo${data.nuevos > 1 ? 's' : ''}` : 'Ya estás al día');
     await refrescarEstadoGmail();
-  } catch {
-    errToast('No se pudo sincronizar ahora');
+  } catch (e) {
+    errToast(e.message === 'sesion' ? 'Sesión expirada, recargá la página' : e.message === 'gmail_revocado' ? 'Tu Gmail se desconectó, reautorizá el acceso' : 'No se pudo sincronizar ahora, se reintenta solo cada 20 min');
   } finally {
     btn.disabled = false;
     icon.classList.remove('girando');
   }
 }
+
+// Trae de Gmail los correos de los últimos `dias` (y pone al día leído,
+// estrella, archivado de los que ya estaban). gmail-sync-manual corta cada
+// ~80 s y devuelve page_token; se repite hasta terminar.
+window.traerCorreosAnteriores = async (dias) => {
+  document.getElementById('correo-cuenta-menu').style.display = 'none';
+  if (CORREO_BACKFILL) { errToast('Ya se están trayendo correos, esperá a que termine'); return; }
+  const cred = CORREO_CUENTA_ACTIVA;
+  if (!cred) return;
+  CORREO_BACKFILL = cred;
+  const caja = document.getElementById('correo-backfill');
+  let nuevos = 0, actualizados = 0, token = null, ok = true, vueltas = 0;
+  const pintar = () => {
+    caja.hidden = false;
+    caja.innerHTML = `<i class="fas fa-cloud-arrow-down"></i><span>Trayendo tus correos de los últimos ${dias} días… ${nuevos} nuevo${nuevos === 1 ? '' : 's'}${actualizados ? `, ${actualizados} puestos al día` : ''}</span><div class="bar"><i></i></div>`;
+  };
+  pintar();
+  try {
+    do {
+      const data = await llamarFuncionCorreo('gmail-sync-manual', { credencial_id: Number(cred), backfill_dias: dias, page_token: token });
+      nuevos += data.nuevos || 0;
+      actualizados += data.actualizados || 0;
+      token = data.page_token;
+      pintar();
+      if (String(CORREO_CUENTA_ACTIVA) === String(cred) && data.nuevos && correoSeccionActiva()) cargarBandejaCorreo('refrescar');
+    } while (token && ++vueltas < 60);
+  } catch { ok = false; }
+  CORREO_BACKFILL = null;
+  if (ok) {
+    caja.hidden = true;
+    const c = CORREO_CUENTAS.find(x => String(x.credencial_id) === String(cred));
+    if (c) c.backfill_desde = new Date(Date.now() - dias * 864e5).toISOString();
+    okToast(nuevos ? `Listo: ${nuevos} correo${nuevos === 1 ? '' : 's'} de los últimos ${dias} días` : `Tu bandeja ya tenía los últimos ${dias} días`);
+  } else {
+    caja.innerHTML = `<i class="fas fa-triangle-exclamation"></i><span>No se pudieron traer todos los correos anteriores (${nuevos} llegaron).</span><button type="button" class="correo-sync-btn" onclick="traerCorreosAnteriores(${dias})">Reintentar</button>`;
+  }
+  if (String(CORREO_CUENTA_ACTIVA) === String(cred) && correoSeccionActiva()) { cargarBandejaCorreo('refrescar'); cargarContadoresCorreo(); }
+  refrescarBadgeCorreo();
+};
 
 window.conectarGmail = conectarGmail;
 async function conectarGmail() {
@@ -9646,67 +9809,186 @@ async function conectarGmail() {
   window.open(url.toString(), '_blank');
 }
 
-/* ---------- Redactar correo nuevo (sin hilo/lead previo) ----------
-   Mismo composer contenteditable + adjuntos que la respuesta dentro de un
-   hilo (ver botonResponderCorreo/agregarAdjuntoComposer), pero en la hoja
-   .sheet-lateral genérica en vez de inline bajo una fila -- acá no hay fila
-   de la que colgar el formulario. */
-let COMPOSE_ADJUNTOS = [];
-function abrirComposeNuevo() {
-  if (!CORREO_CUENTA_ACTIVA) { errToast('Conectá un Gmail antes de redactar'); return; }
-  document.getElementById('compose-para').value = '';
-  document.getElementById('compose-cc').value = '';
-  document.getElementById('compose-asunto').value = '';
-  document.getElementById('compose-body').innerHTML = '';
-  COMPOSE_ADJUNTOS = [];
-  document.getElementById('compose-adjuntos').innerHTML = '';
-  openSheet('correo-compose-sheet');
+/* ---------- Redactor (nuevo, responder, responder a todos, reenviar) ----------
+   Una sola hoja lateral para los cuatro modos. Responder y reenviar mandan el
+   id de la fila original (responde_a / reenviar_de): gmail-enviar saca de ahí
+   el Message-ID real, el hilo y, al reenviar, los adjuntos originales. El
+   borrador de un correo nuevo se guarda en localStorage por cuenta. */
+let COMPOSE = { modo: 'nuevo', correoId: null, adjuntos: [], reenviarDe: null };
+const COMPOSE_TITULOS = { nuevo: 'Redactar correo', responder: 'Responder', todos: 'Responder a todos', reenviar: 'Reenviar' };
+const claveBorradorCorreo = () => 'correo_borrador_' + CORREO_CUENTA_ACTIVA;
+function firmaCorreoHtml() {
+  const f = cuentaCorreoActiva()?.firma_texto;
+  return f ? `<div class="correo-firma">-- <br>${esc(f).replace(/\n/g, '<br>')}</div>` : '';
 }
+function textoOriginalCorreo(c) {
+  return esc(c.cuerpo_texto || textoDeHtml(c.cuerpo_html) || c.snippet || '').replace(/\n/g, '<br>');
+}
+function mostrarCcoCompose(mostrar) {
+  document.getElementById('compose-cco-wrap').hidden = !mostrar;
+  document.getElementById('compose-cco-toggle').hidden = mostrar;
+  if (mostrar) document.getElementById('compose-cco').focus();
+}
+function leerBorradorCompose() {
+  try { const b = JSON.parse(localStorage.getItem(claveBorradorCorreo()) || 'null'); return b && (b.para || b.asunto || textoDeHtml(b.cuerpo)) ? b : null; } catch { return null; }
+}
+function guardarBorradorCompose() {
+  if (COMPOSE.modo !== 'nuevo') return;
+  try { localStorage.setItem(claveBorradorCorreo(), JSON.stringify({ para: val('compose-para'), cc: val('compose-cc'), cco: val('compose-cco'), asunto: val('compose-asunto'), cuerpo: document.getElementById('compose-body').innerHTML })); } catch { /* sin storage */ }
+}
+function abrirCompose({ modo = 'nuevo', correoId = null, para = '' } = {}) {
+  if (!CORREO_CUENTA_ACTIVA) { errToast('Conectá un Gmail antes de redactar'); return; }
+  const c = correoId ? CORREOS_DATA.get(correoId) : null;
+  const yo = (cuentaCorreoActiva()?.email_conectado || '').toLowerCase();
+  const emailDe = d => extraerEmailDeCabecera(d).toLowerCase();
+  COMPOSE = { modo, correoId, adjuntos: [], reenviarDe: modo === 'reenviar' ? correoId : null };
+  let vPara = para, vCc = '', vCco = '', asunto = '', cuerpo = '<br>' + firmaCorreoHtml();
+  if (c && modo !== 'reenviar') {
+    const destino = c.direccion === 'saliente' ? (c.para || []) : [c.de];
+    vPara = destino.join(', ');
+    if (modo === 'todos') {
+      const yaEstan = new Set([yo, ...destino.map(emailDe)]);
+      vCc = [...(c.direccion === 'saliente' ? [] : (c.para || [])), ...(c.cc || [])].filter(d => { const e = emailDe(d); return e && !yaEstan.has(e) && yaEstan.add(e); }).join(', ');
+    }
+    asunto = /^re:/i.test(c.asunto || '') ? c.asunto : `Re: ${c.asunto || ''}`;
+    const quien = c.direccion === 'saliente' ? yo : c.de;
+    cuerpo += `<br><div class="correo-cita">El ${esc(fmtFechaHoraCaracas(c.enviado_en))}, ${esc(quien)} escribió:<blockquote>${textoOriginalCorreo(c)}</blockquote></div>`;
+  } else if (c) {
+    asunto = /^(fwd?|rv):/i.test(c.asunto || '') ? c.asunto : `Fwd: ${c.asunto || ''}`;
+    cuerpo += `<br><div class="correo-cita">---------- Mensaje reenviado ----------<br>De: ${esc(c.de)}<br>Fecha: ${esc(fmtFechaHoraCaracas(c.enviado_en))}<br>Asunto: ${esc(c.asunto || '')}<br>Para: ${esc((c.para || []).join(', '))}<br><br>${textoOriginalCorreo(c)}</div>`;
+  } else if (modo === 'nuevo' && !para) {
+    const b = leerBorradorCompose();
+    if (b) { vPara = b.para || ''; vCc = b.cc || ''; vCco = b.cco || ''; asunto = b.asunto || ''; cuerpo = b.cuerpo || cuerpo; }
+  }
+  document.getElementById('compose-titulo').textContent = COMPOSE_TITULOS[modo] || COMPOSE_TITULOS.nuevo;
+  document.getElementById('compose-de').textContent = cuentaCorreoActiva()?.email_conectado || '';
+  document.getElementById('compose-para').value = vPara;
+  document.getElementById('compose-cc').value = vCc;
+  document.getElementById('compose-cco').value = vCco;
+  mostrarCcoCompose(!!vCco);
+  document.getElementById('compose-asunto').value = asunto;
+  document.getElementById('compose-body').innerHTML = cuerpo;
+  document.getElementById('compose-descartar').hidden = modo !== 'nuevo';
+  pintarAdjuntosCompose();
+  openSheet('correo-compose-sheet');
+  setTimeout(() => {
+    const body = document.getElementById('compose-body');
+    if (!vPara) { document.getElementById('compose-para').focus(); return; }
+    body.focus();
+    const r = document.createRange(); r.setStart(body, 0); r.collapse(true);
+    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  }, 60);
+}
+window.abrirCompose = abrirCompose;
+window.responderCorreo = (correoId, modo) => abrirCompose({ modo, correoId });
+function cerrarCompose() {
+  const habiaTexto = COMPOSE.modo === 'nuevo' && leerBorradorCompose();
+  closeSheet('correo-compose-sheet');
+  if (habiaTexto) okToast('Borrador guardado');
+}
+function descartarCompose() {
+  try { localStorage.removeItem(claveBorradorCorreo()); } catch { /* sin storage */ }
+  closeSheet('correo-compose-sheet');
+}
+function pintarAdjuntosCompose() {
+  const orig = COMPOSE.reenviarDe ? (CORREOS_DATA.get(COMPOSE.reenviarDe)?.gmail_correo_adjuntos || []) : [];
+  document.getElementById('compose-adjuntos').innerHTML =
+    orig.map(a => `<span><i class="fas fa-paperclip"></i> ${esc(a.filename || 'adjunto')} <small class="muted">del original</small></span>`).join('') +
+    (orig.length ? '<a href="#" class="correo-quitar-orig" onclick="event.preventDefault();quitarAdjuntosOriginal()">Quitar adjuntos del original</a>' : '') +
+    COMPOSE.adjuntos.map((f, i) => `<span>${esc(f.name)} (${fmtTamano(f.size)}) <a href="#" onclick="event.preventDefault();quitarAdjuntoCompose(${i})" style="color:#f66">×</a></span>`).join('');
+}
+window.quitarAdjuntosOriginal = () => { COMPOSE.reenviarDe = null; pintarAdjuntosCompose(); };
 window.agregarAdjuntoCompose = (files) => {
-  const total = [...COMPOSE_ADJUNTOS, ...files].reduce((acc, f) => acc + f.size, 0);
+  const total = [...COMPOSE.adjuntos, ...files].reduce((acc, f) => acc + f.size, 0);
   if (total > 25 * 1024 * 1024) { errToast('Los adjuntos superan 25 MB en total'); return; }
-  COMPOSE_ADJUNTOS.push(...files);
-  const box = document.getElementById('compose-adjuntos');
-  box.innerHTML = COMPOSE_ADJUNTOS.map((f, i) => `<span>${esc(f.name)} (${fmtTamano(f.size)}) <a href="#" onclick="event.preventDefault();quitarAdjuntoCompose(${i})" style="color:#f66">×</a></span>`).join('');
+  COMPOSE.adjuntos.push(...files);
+  pintarAdjuntosCompose();
 };
 window.quitarAdjuntoCompose = (idx) => {
-  COMPOSE_ADJUNTOS.splice(idx, 1);
-  window.agregarAdjuntoCompose([]);
+  COMPOSE.adjuntos.splice(idx, 1);
+  pintarAdjuntosCompose();
 };
 function parsearDirecciones(valor) {
   return (valor || '').split(',').map(s => s.trim()).filter(Boolean);
 }
-async function enviarComposeNuevo() {
-  const para = parsearDirecciones(document.getElementById('compose-para').value);
-  const cc = parsearDirecciones(document.getElementById('compose-cc').value);
-  const asunto = document.getElementById('compose-asunto').value.trim();
+async function enviarCompose() {
+  const para = parsearDirecciones(val('compose-para'));
+  const cc = parsearDirecciones(val('compose-cc'));
+  const bcc = parsearDirecciones(val('compose-cco'));
+  const asunto = val('compose-asunto').trim();
   const bodyEl = document.getElementById('compose-body');
   const texto = bodyEl.innerText.trim();
   const html = bodyEl.innerHTML.trim();
   if (!para.length) { errToast('Ingresá al menos un destinatario'); return; }
+  const mala = [...para, ...cc, ...bcc].find(d => !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(extraerEmailDeCabecera(d)));
+  if (mala) { errToast(`Revisá esta dirección: ${mala}`); return; }
   if (!asunto) { errToast('Ingresá un asunto'); return; }
   if (!texto) { errToast('Escribí el cuerpo del correo'); return; }
   const btn = document.getElementById('compose-enviar');
   btn.disabled = true;
+  const original = COMPOSE.correoId ? CORREOS_DATA.get(COMPOSE.correoId) : null;
   try {
-    const adjuntos = await Promise.all(COMPOSE_ADJUNTOS.map(async (f) => ({ filename: f.name, mime_type: f.type || 'application/octet-stream', contenido_base64: await fileABase64(f) })));
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session?.access_token) { errToast('Sesión expirada, recargá la página'); return; }
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-enviar`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ credencial_id: Number(CORREO_CUENTA_ACTIVA), para, cc, asunto, cuerpo: texto, cuerpo_html: html, adjuntos }),
+    const adjuntos = await Promise.all(COMPOSE.adjuntos.map(async (f) => ({ filename: f.name, mime_type: f.type || 'application/octet-stream', contenido_base64: await fileABase64(f) })));
+    await llamarFuncionCorreo('gmail-enviar', {
+      credencial_id: Number(CORREO_CUENTA_ACTIVA), lead_id: original?.lead_id ?? null,
+      para, cc, bcc, asunto, cuerpo: texto, cuerpo_html: html, adjuntos,
+      responde_a: ['responder', 'todos'].includes(COMPOSE.modo) ? COMPOSE.correoId : undefined,
+      reenviar_de: COMPOSE.reenviarDe || undefined,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) { errToast(data.error === 'adjuntos_exceden_25mb' ? 'Los adjuntos superan 25 MB' : 'No se pudo enviar el correo'); return; }
     okToast('Correo enviado');
+    if (COMPOSE.modo === 'nuevo') { try { localStorage.removeItem(claveBorradorCorreo()); } catch { /* sin storage */ } }
     closeSheet('correo-compose-sheet');
-    cargarBandejaCorreo();
-  } catch {
-    errToast('No se pudo enviar el correo');
+    if (CORREO_CARPETA !== 'contactos') cargarBandejaCorreo('refrescar');
+    if (original && CORREO_HILO_ABIERTO === idHiloSeguro(original.gmail_thread_id)) abrirHiloCorreo(CORREO_HILO_ABIERTO);
+  } catch (e) {
+    errToast(e.message === 'adjuntos_exceden_25mb' ? 'Los adjuntos superan 25 MB' : e.message === 'sesion' ? 'Sesión expirada, recargá la página' : 'No se pudo enviar el correo');
   } finally {
     btn.disabled = false;
   }
+}
+
+// Autocompletado de Para/CC/CCO: contactos del propio correo + leads con email.
+function conectarAutocompletarDireccion(inputId) {
+  const input = document.getElementById(inputId), sug = document.getElementById(inputId + '-sug');
+  let t = null, items = [], sel = -1;
+  const termino = () => input.value.slice(input.value.lastIndexOf(',') + 1).trim();
+  const cerrar = () => { sug.hidden = true; items = []; sel = -1; };
+  const elegir = (i) => {
+    const it = items[i];
+    if (!it) return;
+    const previos = input.value.slice(0, input.value.lastIndexOf(',') + 1).trim();
+    const dir = it.nombre ? `${it.nombre.replace(/[",<>]/g, '')} <${it.email}>` : it.email;
+    input.value = (previos ? previos + ' ' : '') + dir + ', ';
+    cerrar();
+    input.focus();
+    guardarBorradorCompose();
+  };
+  input.addEventListener('input', () => {
+    clearTimeout(t);
+    const q = termino();
+    if (!q) { cerrar(); return; }
+    t = setTimeout(async () => {
+      const { data } = await sb.rpc('gmail_buscar_contactos', { p_q: q, p_limite: 8 });
+      if (termino() !== q) return;
+      const vistos = new Set();
+      items = (data || []).filter(x => !vistos.has(x.email) && vistos.add(x.email));
+      if (!items.length) { cerrar(); return; }
+      sel = 0;
+      sug.innerHTML = items.map((x, i) => `<button type="button" class="correo-sug-item${i === 0 ? ' on' : ''}" data-i="${i}"><b>${esc(x.nombre || x.email)}</b>${x.origen === 'lead' ? ` <span class="correo-chip lead">Lead #${x.lead_id}</span>` : ''}<small>${esc(x.email)}</small></button>`).join('');
+      sug.hidden = false;
+    }, 200);
+  });
+  sug.addEventListener('mousedown', e => { const b = e.target.closest('[data-i]'); if (b) { e.preventDefault(); elegir(Number(b.dataset.i)); } });
+  input.addEventListener('keydown', e => {
+    if (sug.hidden || !items.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      sug.querySelectorAll('[data-i]').forEach((b, i) => b.classList.toggle('on', i === sel));
+    } else if ((e.key === 'Enter' || e.key === 'Tab') && sel >= 0) { e.preventDefault(); elegir(sel); }
+    else if (e.key === 'Escape') cerrar();
+  });
+  input.addEventListener('blur', () => setTimeout(cerrar, 150));
 }
 
 window.abrirLeadPorId = async (leadId) => {
@@ -9715,11 +9997,96 @@ window.abrirLeadPorId = async (leadId) => {
   openDrawer(l);
 };
 
-/* ---------- Hilos agrupados (Fase 4) ----------
-   Se agrupan client-side los correos ya traídos (los 50 más recientes en la
-   bandeja, o todos los del lead en la pestaña) por gmail_thread_id -- si un
-   hilo tiene mensajes más viejos fuera de ese límite no aparecen en el
-   resumen, aceptable para una vista de bandeja, no un backup de correo. */
+/* ---------- Bandeja: carpetas, consulta paginada e hilos ----------
+   Cada carpeta es un filtro sobre gmail_correos.etiquetas (los labelIds de
+   Gmail): Recibidos = INBOX, con las mismas pestañas que Gmail (Principal =
+   INBOX sin categoría). Los hilos se arman client-side con lo traído; al
+   abrir uno se pide el hilo completo. */
+function elegirCarpetaCorreo(carpeta) {
+  CORREO_CARPETA = carpeta;
+  document.querySelectorAll('#correo-carpetas .correo-carpeta').forEach(b => b.classList.toggle('on', b.dataset.carpeta === carpeta));
+  document.getElementById('correo-tabs').hidden = carpeta !== 'recibidos';
+  document.getElementById('correo-filtros').hidden = carpeta === 'contactos';
+  cerrarHiloCorreo();
+  if (carpeta === 'contactos') cargarContactosCorreo(); else cargarBandejaCorreo();
+}
+window.elegirCarpetaCorreo = elegirCarpetaCorreo;
+function consultaCorreos(desde, hasta) {
+  const conAdjuntos = correoFiltro === 'adjuntos';
+  let q = sb.from('gmail_correos').select(conAdjuntos ? CORREO_SELECT.replace('gmail_correo_adjuntos(', 'gmail_correo_adjuntos!inner(') : CORREO_SELECT)
+    .eq('credencial_id', CORREO_CUENTA_ACTIVA).is('eliminado_en', null);
+  const basura = '{TRASH,SPAM,DRAFT}';
+  if (CORREO_CARPETA === 'recibidos') {
+    q = q.contains('etiquetas', ['INBOX']).not('etiquetas', 'ov', basura);
+    if (CORREO_CATEGORIA === 'principal') q = q.not('etiquetas', 'ov', `{${CORREO_CATEGORIAS}}`);
+    else if (CORREO_CATEGORIA === 'promociones') q = q.contains('etiquetas', ['CATEGORY_PROMOTIONS']);
+    else if (CORREO_CATEGORIA === 'social') q = q.contains('etiquetas', ['CATEGORY_SOCIAL']);
+    else q = q.overlaps('etiquetas', ['CATEGORY_UPDATES', 'CATEGORY_FORUMS']);
+  } else if (CORREO_CARPETA === 'destacados') q = q.contains('etiquetas', ['STARRED']).not('etiquetas', 'ov', basura);
+  else if (CORREO_CARPETA === 'enviados') q = q.contains('etiquetas', ['SENT']).not('etiquetas', 'ov', basura);
+  else if (CORREO_CARPETA === 'spam') q = q.contains('etiquetas', ['SPAM']);
+  else if (CORREO_CARPETA === 'papelera') q = q.contains('etiquetas', ['TRASH']);
+  else q = q.not('etiquetas', 'ov', basura);
+  if (correoFiltro === 'no_leidos') q = q.eq('leido', false).eq('direccion', 'entrante');
+  else if (correoFiltro === 'sin_vincular') q = q.is('lead_id', null);
+  const t = terminoBusquedaCorreo();
+  if (t) q = q.or(['asunto', 'de', 'snippet', 'cuerpo_texto'].map(c => `${c}.ilike.*${t}*`).join(','));
+  return q.order('enviado_en', { ascending: false }).range(desde, hasta);
+}
+// Mismo criterio que consultaCorreos, para sacar de la lista lo que una
+// acción (archivar, papelera...) movió a otra carpeta sin volver a pedir.
+function correoEnCarpeta(m) {
+  const e = m.etiquetas || [], tiene = x => e.includes(x);
+  const basura = tiene('TRASH') || tiene('SPAM') || tiene('DRAFT');
+  if (CORREO_CARPETA === 'recibidos') return tiene('INBOX') && !basura;
+  if (CORREO_CARPETA === 'destacados') return tiene('STARRED') && !basura;
+  if (CORREO_CARPETA === 'enviados') return tiene('SENT') && !basura;
+  if (CORREO_CARPETA === 'spam') return tiene('SPAM');
+  if (CORREO_CARPETA === 'papelera') return tiene('TRASH');
+  return !basura;
+}
+// modo: 'nuevo' (cambió carpeta/filtro/búsqueda), 'mas' (scroll infinito),
+// 'refrescar' (mismo tamaño, sin perder el scroll: realtime, acciones).
+async function cargarBandejaCorreo(modo = 'nuevo') {
+  const box = document.getElementById('correo-lista');
+  if (!CORREO_CUENTA_ACTIVA || CORREO_CARPETA === 'contactos') return;
+  if (modo === 'mas' && (CORREO_CARGANDO_MAS || !CORREO_HAY_MAS)) return;
+  const pedido = ++CORREO_PEDIDO;
+  const desde = modo === 'mas' ? CORREO_BANDEJA_DATA.length : 0;
+  const hasta = modo === 'refrescar' ? Math.max(CORREO_BANDEJA_DATA.length, CORREO_PAGINA) - 1 : desde + CORREO_PAGINA - 1;
+  if (modo === 'nuevo') box.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  CORREO_CARGANDO_MAS = modo === 'mas';
+  const { data, error } = await consultaCorreos(desde, hasta);
+  CORREO_CARGANDO_MAS = false;
+  if (pedido !== CORREO_PEDIDO) return;
+  if (error) {
+    if (modo !== 'mas') box.innerHTML = '<div class="correo-empty"><i class="fas fa-triangle-exclamation"></i><p>No se pudo cargar la bandeja</p></div>';
+    return;
+  }
+  data.forEach(c => { if (!CORREOS_DATA.get(c.id)?.cuerpo_html && !CORREOS_DATA.get(c.id)?.cuerpo_texto) CORREOS_DATA.set(c.id, c); });
+  CORREO_BANDEJA_DATA = modo === 'mas' ? [...CORREO_BANDEJA_DATA, ...data] : data;
+  CORREO_HAY_MAS = data.length === hasta - desde + 1;
+  const scroll = box.scrollTop;
+  renderBandejaCorreo();
+  if (modo !== 'nuevo') box.scrollTop = scroll;
+}
+window.cargarBandejaCorreo = cargarBandejaCorreo;
+const CORREO_VACIOS = {
+  recibidos: ['fa-inbox', 'No hay correos en esta pestaña.'], destacados: ['fa-star', 'Todavía no destacaste ningún correo.'],
+  enviados: ['fa-paper-plane', 'No hay correos enviados en lo sincronizado.'], todos: ['fa-envelope-open-text', 'Todavía no hay correos sincronizados.'],
+  spam: ['fa-circle-check', 'No hay spam. ¡Bien!'], papelera: ['fa-trash', 'La papelera está vacía.'],
+};
+function renderBandejaCorreo() {
+  const box = document.getElementById('correo-lista');
+  if (!CORREO_BANDEJA_DATA.length) {
+    const filtrado = terminoBusquedaCorreo() || correoFiltro !== 'todos';
+    const [icono, texto] = filtrado ? ['fa-filter', 'Ningún correo coincide con la búsqueda o el filtro.'] : (CORREO_VACIOS[CORREO_CARPETA] || CORREO_VACIOS.todos);
+    box.innerHTML = `<div class="correo-empty"><i class="fas ${icono}"></i><p>${texto}</p>${!filtrado && cuentaCorreoActiva()?.backfill_desde ? '' : ''}</div>`;
+    return;
+  }
+  box.innerHTML = renderHilosBandeja(CORREO_BANDEJA_DATA) + (CORREO_HAY_MAS ? '<div class="correo-mas"><button type="button" class="correo-sync-btn" onclick="cargarBandejaCorreo(\'mas\')">Cargar más</button></div>' : '');
+}
+
 function agruparPorHilo(data) {
   const hilos = new Map();
   for (const c of data) {
@@ -9730,109 +10097,277 @@ function agruparPorHilo(data) {
     .map(msgs => msgs.sort((a, b) => new Date(a.enviado_en) - new Date(b.enviado_en)))
     .sort((a, b) => new Date(b[b.length - 1].enviado_en) - new Date(a[a.length - 1].enviado_en));
 }
-const HILOS_DATA = new Map();
-let CORREO_HILO_ABIERTO = null; // encoded del hilo abierto en el panel de lectura, o null
+const HILOS_DATA = new Map(); // id de hilo -> mensajes (de la lista, o el hilo completo si se abrió)
+let CORREO_HILO_ABIERTO = null;
 function renderHilosBandeja(data) {
-  const hilos = agruparPorHilo(data);
-  return hilos.map(msgs => {
+  return agruparPorHilo(data).map(msgs => {
     const ultimo = msgs[msgs.length - 1];
-    HILOS_DATA.set(ultimo.gmail_thread_id, msgs);
-    const encoded = btoa(unescape(encodeURIComponent(ultimo.gmail_thread_id))).replace(/[^a-zA-Z0-9]/g, '');
+    const id = idHiloSeguro(ultimo.gmail_thread_id);
+    if (!HILOS_DATA.has(id) || CORREO_HILO_ABIERTO !== id) HILOS_DATA.set(id, msgs);
     const noLeidos = msgs.filter(m => !m.leido && m.direccion === 'entrante').length;
-    const remitente = ultimo.direccion === 'entrante' ? ultimo.de : (ultimo.para || []).join(', ');
-    const inicial = (extraerEmailDeCabecera(remitente) || remitente || '?').trim().charAt(0).toUpperCase() || '?';
+    const saliente = CORREO_CARPETA === 'enviados' || ultimo.direccion === 'saliente';
+    const remitente = saliente ? 'Para: ' + (ultimo.para || []).map(nombreDeCabecera).join(', ') : nombreDeCabecera(ultimo.de);
+    const destacado = msgs.some(m => (m.etiquetas || []).includes('STARRED'));
+    const conAdjunto = msgs.some(m => m.gmail_correo_adjuntos?.length);
+    const leadId = msgs.find(m => m.lead_id)?.lead_id;
     return `
-    <div class="correo-row${noLeidos ? ' no-leido' : ''}${encoded === CORREO_HILO_ABIERTO ? ' active' : ''}" data-thread="${encoded}" onclick="abrirHiloCorreo('${ultimo.gmail_thread_id.replace(/'/g, '')}','${encoded}')">
-      <span class="correo-row-avatar" data-dir="${ultimo.direccion}">${esc(inicial)}</span>
+    <div class="correo-row${noLeidos ? ' no-leido' : ''}${id === CORREO_HILO_ABIERTO ? ' active' : ''}" data-thread="${id}" onclick="abrirHiloCorreo('${id}')">
+      ${avatarCorreo(saliente ? (ultimo.para || [])[0] : ultimo.de)}
       <div class="correo-row-body">
-        <div class="correo-row-top"><b>${esc(ultimo.asunto || '(sin asunto)')}</b><time>${esc(fmtFechaHoraCaracas(ultimo.enviado_en))}</time></div>
-        <div class="correo-row-from">${esc(remitente)}${msgs.length > 1 ? ` · ${msgs.length} mensajes` : ''}${!ultimo.lead_id ? ' · <span class="correo-sinvincular">sin vincular</span>' : ''}</div>
+        <div class="correo-row-top"><b>${esc(remitente)}${msgs.length > 1 ? ` <span class="correo-row-n">${msgs.length}</span>` : ''}</b><time>${esc(fmtFechaCorreo(ultimo.enviado_en))}</time></div>
+        <div class="correo-row-asunto">${esc(ultimo.asunto || '(sin asunto)')}</div>
         <div class="correo-row-snippet">${esc(ultimo.snippet || '')}</div>
+        ${leadId || conAdjunto ? `<div class="correo-row-chips">${leadId ? `<span class="correo-chip lead"><i class="fas fa-user"></i> Lead #${leadId}</span>` : ''}${conAdjunto ? '<span class="correo-chip"><i class="fas fa-paperclip"></i> Adjunto</span>' : ''}</div>` : ''}
       </div>
-      ${noLeidos ? `<span class="correo-unread-badge">${noLeidos}</span>` : ''}
+      <div class="correo-row-meta">
+        <button type="button" class="correo-row-star${destacado ? ' on' : ''}" title="${destacado ? 'Quitar destacado' : 'Destacar'}" aria-label="${destacado ? 'Quitar destacado' : 'Destacar'}" onclick="event.stopPropagation();accionCorreo('${id}','${destacado ? 'quitar_destacado' : 'destacar'}')"><i class="${destacado ? 'fas' : 'far'} fa-star"></i></button>
+        ${noLeidos ? `<span class="correo-unread-badge">${noLeidos}</span>` : ''}
+      </div>
     </div>`;
   }).join('');
 }
 
-/* ---------- Panel de lectura (split-view desktop / hoja deslizante mobile) ----------
-   Mismo mecanismo que .msg-conv de Mensajes (overlay absoluto dentro de un
-   contenedor position:relative;overflow:hidden, con .open corriendo el
-   transform) -- en desktop el media query lo convierte en columna estática
-   real en vez de overlay, ver CSS .correo-layout. */
-function renderLeadRow(correo) {
-  return correo.lead_id
-    ? `<div class="correo-lead-row"><a href="#" class="correo-lead-tag" onclick="abrirLeadPorId(${correo.lead_id});return false"><i class="fas fa-user"></i> Lead #${correo.lead_id}</a><button type="button" class="correo-lead-btn" onclick="desvincularHiloCorreo(${correo.id})"><i class="fas fa-link-slash"></i> Desvincular</button></div>`
-    : `<div class="correo-lead-row"><input type="number" class="correo-lead-input" id="correo-lead-input" placeholder="ID de lead"><button type="button" class="correo-lead-btn" onclick="vincularHiloCorreo(${correo.id})"><i class="fas fa-link"></i> Vincular</button></div>`;
-}
-window.abrirHiloCorreo = (threadId, encoded) => {
-  CORREO_HILO_ABIERTO = encoded;
-  document.querySelectorAll('#correo-lista .correo-row').forEach(r => r.classList.toggle('active', r.dataset.thread === encoded));
-  const msgs = HILOS_DATA.get(threadId) || [];
-  const ultimo = msgs[msgs.length - 1];
-  document.getElementById('correo-detalle-body').innerHTML = `
-    <div class="correo-detalle-head">
-      <h3>${esc(ultimo?.asunto || '(sin asunto)')}</h3>
-      <div class="correo-detalle-meta">${msgs.length} mensaje${msgs.length > 1 ? 's' : ''} · último ${esc(fmtFechaHoraCaracas(ultimo.enviado_en))}</div>
-      ${renderLeadRow(ultimo)}
-    </div>
-    <div class="correo-detalle-log">${msgs.map(c => `<div class="conv-msg ${c.direccion === 'saliente' ? 'ia' : 'lead'}"><div class="conv-who">${c.direccion === 'entrante' ? esc(c.de) : 'Nosotros'} · ${esc(fmtFechaHoraCaracas(c.enviado_en))}</div><b>${esc(c.asunto || '(sin asunto)')}</b>${c.gmail_correo_adjuntos?.length ? ` <i class="fas fa-paperclip muted" title="${c.gmail_correo_adjuntos.length} adjunto(s)"></i>` : ''}<div>${esc(c.snippet || '')}</div>${botonVerCorreo(c.id)}</div>`).join('')}</div>`;
-  document.getElementById('correo-detalle').classList.add('open');
-};
-window.cerrarHiloCorreo = () => {
-  document.getElementById('correo-detalle').classList.remove('open');
-};
-window.vincularHiloCorreo = async (correoId) => {
-  const input = document.getElementById('correo-lead-input');
-  const leadId = Number(input?.value);
-  if (!leadId) { errToast('Ingresá un ID de lead válido'); return; }
-  const { error } = await sb.rpc('vincular_correo_a_lead', { p_correo_id: correoId, p_lead_id: leadId });
-  if (error) { errToast('No se pudo vincular el correo'); return; }
-  actualizarLeadEnMemoria(correoId, leadId);
-  okToast('Correo vinculado al lead #' + leadId);
-};
-window.desvincularHiloCorreo = async (correoId) => {
-  const { error } = await sb.rpc('desvincular_correo', { p_correo_id: correoId });
-  if (error) { errToast('No se pudo desvincular el correo'); return; }
-  actualizarLeadEnMemoria(correoId, null);
-  okToast('Correo desvinculado');
-};
-function actualizarLeadEnMemoria(correoId, leadId) {
-  const enCache = CORREOS_DATA.get(correoId);
-  if (enCache) enCache.lead_id = leadId;
-  const enBandeja = CORREO_BANDEJA_DATA.find(c => c.id === correoId);
-  if (enBandeja) enBandeja.lead_id = leadId;
-  for (const msgs of HILOS_DATA.values()) {
-    const m = msgs.find(x => x.id === correoId);
-    if (m) m.lead_id = leadId;
-  }
-  renderBandejaCorreoFiltrada();
-  const leadRow = document.querySelector('#correo-detalle-body .correo-lead-row');
-  if (leadRow && enCache) leadRow.outerHTML = renderLeadRow(enCache);
-}
-
-async function cargarBandejaCorreo() {
+/* ---------- Contactos (derivados de lo que entra y sale del correo) ---------- */
+async function cargarContactosCorreo() {
   const box = document.getElementById('correo-lista');
   if (!CORREO_CUENTA_ACTIVA) return;
-  // RLS de gmail_correos ya filtra por dueño o admin -- no hace falta repetir
-  // el filtro acá (ver policy gmail_correos_select_propio_o_admin). El
-  // filtro por credencial_id sí hace falta -- selector de cuentas, cada
-  // cuenta muestra solo sus propios correos.
-  const { data, error } = await sb.from('gmail_correos').select('id,lead_id,credencial_id,gmail_message_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').eq('credencial_id', CORREO_CUENTA_ACTIVA).order('enviado_en', { ascending: false }).limit(50);
-  if (error) { box.innerHTML = '<div class="correo-empty"><i class="fas fa-triangle-exclamation"></i><p>No se pudo cargar la bandeja</p></div>'; return; }
-  data.forEach(c => CORREOS_DATA.set(c.id, c));
-  CORREO_BANDEJA_DATA = data;
-  renderBandejaCorreoFiltrada();
+  const pedido = ++CORREO_PEDIDO;
+  box.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  let q = sb.from('gmail_contactos_v').select('email,nombre,veces,enviados,ultimo_en').eq('credencial_id', CORREO_CUENTA_ACTIVA)
+    .not('email', 'ilike', '%noreply%').not('email', 'ilike', '%no-reply%');
+  const t = terminoBusquedaCorreo();
+  if (t) q = q.or(`email.ilike.*${t}*,nombre.ilike.*${t}*`);
+  const { data, error } = await q.order('enviados', { ascending: false }).order('veces', { ascending: false }).limit(300);
+  if (pedido !== CORREO_PEDIDO) return;
+  if (error) { box.innerHTML = '<div class="correo-empty"><i class="fas fa-triangle-exclamation"></i><p>No se pudieron cargar los contactos</p></div>'; return; }
+  CORREO_HAY_MAS = false;
+  box.innerHTML = data.length ? data.map(c => {
+    const dir = c.nombre ? `${c.nombre.replace(/[",<>]/g, '')} <${c.email}>` : c.email;
+    const dirAttr = esc(dir).replace(/'/g, '&#39;');
+    return `
+    <div class="correo-row correo-contacto">
+      ${avatarCorreo(dir)}
+      <div class="correo-row-body">
+        <div class="correo-row-top"><b>${esc(c.nombre || c.email)}</b><time>${esc(fmtFechaCorreo(c.ultimo_en))}</time></div>
+        <div class="correo-row-asunto">${esc(c.email)}</div>
+        <div class="correo-row-snippet">${c.veces} correo${c.veces === 1 ? '' : 's'}${c.enviados ? ` · le escribiste ${c.enviados}` : ''}</div>
+      </div>
+      <div class="correo-row-meta correo-contacto-acc">
+        <button type="button" class="correo-accion" title="Escribir" aria-label="Escribir a ${esc(c.email)}" data-dir="${dirAttr}" onclick="abrirCompose({ modo: 'nuevo', para: this.dataset.dir + ', ' })"><i class="fas fa-pen"></i></button>
+        <button type="button" class="correo-accion" title="Ver correos" aria-label="Ver correos con ${esc(c.email)}" data-email="${esc(c.email)}" onclick="verCorreosDeContacto(this.dataset.email)"><i class="fas fa-envelope-open-text"></i></button>
+      </div>
+    </div>`;
+  }).join('') : `<div class="correo-empty"><i class="fas fa-address-book"></i><p>${t ? 'Ningún contacto coincide.' : 'Tus contactos aparecen acá a medida que escribís y recibís correo.'}</p></div>`;
 }
+window.verCorreosDeContacto = (email) => {
+  document.getElementById('correo-search').value = email;
+  elegirCarpetaCorreo('todos');
+};
 
-function renderBandejaCorreoFiltrada() {
-  const box = document.getElementById('correo-lista');
-  if (!CORREO_BANDEJA_DATA.length) { box.innerHTML = '<div class="correo-empty"><i class="fas fa-envelope-open-text"></i><p>Todavía no hay correos sincronizados.</p></div>'; return; }
-  let data = CORREO_BANDEJA_DATA;
-  if (correoFiltro === 'no_leidos') data = data.filter(c => !c.leido && c.direccion === 'entrante');
-  else if (correoFiltro === 'sin_vincular') data = data.filter(c => !c.lead_id);
-  const q = (document.getElementById('correo-search')?.value || '').trim().toLowerCase();
-  if (q) data = data.filter(c => [c.asunto, c.snippet, c.de, (c.para || []).join(' ')].some(v => (v || '').toLowerCase().includes(q)));
-  box.innerHTML = data.length ? renderHilosBandeja(data) : '<div class="correo-empty"><i class="fas fa-filter"></i><p>Ningún correo coincide con este filtro.</p></div>';
+/* ---------- Lector de hilo (split-view desktop / hoja deslizante mobile) ----------
+   Mismo mecanismo que .msg-conv de Mensajes (overlay absoluto dentro de un
+   contenedor position:relative;overflow:hidden, con .open corriendo el
+   transform) -- en desktop el media query lo convierte en columna estática.
+   Se abren el último mensaje y los no leídos, como Gmail; el resto queda
+   plegado y su iframe se arma recién al expandirlo. */
+const CORREO_ETIQUETAS_VISIBLES = { INBOX: 'Recibidos', SENT: 'Enviado', STARRED: 'Destacado', IMPORTANT: 'Importante', SPAM: 'Spam', TRASH: 'Papelera', CATEGORY_PROMOTIONS: 'Promociones', CATEGORY_SOCIAL: 'Social', CATEGORY_UPDATES: 'Notificaciones', CATEGORY_FORUMS: 'Foros' };
+window.abrirHiloCorreo = async (threadId) => {
+  threadId = idHiloSeguro(threadId);
+  CORREO_HILO_ABIERTO = threadId;
+  document.querySelectorAll('#correo-lista .correo-row').forEach(r => r.classList.toggle('active', r.dataset.thread === threadId));
+  document.getElementById('correo-detalle-body').innerHTML = '<div class="correo-detalle-empty"><i class="fas fa-circle-notch fa-spin"></i></div>';
+  document.getElementById('correo-detalle').classList.add('open');
+  const { data, error } = await sb.from('gmail_correos').select(CORREO_SELECT_HILO).eq('credencial_id', CORREO_CUENTA_ACTIVA).eq('gmail_thread_id', threadId).is('eliminado_en', null).order('enviado_en');
+  if (CORREO_HILO_ABIERTO !== threadId) return;
+  if (error || !data?.length) {
+    document.getElementById('correo-detalle-body').innerHTML = '<div class="correo-detalle-empty"><i class="fas fa-triangle-exclamation"></i><p>No se pudo abrir esta conversación.</p></div>';
+    return;
+  }
+  data.forEach(c => CORREOS_DATA.set(c.id, c));
+  HILOS_DATA.set(threadId, data);
+  pintarHiloCorreo(threadId);
+  if (data.some(m => !m.leido && m.direccion === 'entrante')) accionCorreo(threadId, 'leido', { silencioso: true });
+};
+window.cerrarHiloCorreo = () => {
+  CORREO_HILO_ABIERTO = null;
+  document.querySelectorAll('#correo-lista .correo-row.active').forEach(r => r.classList.remove('active'));
+  document.getElementById('correo-detalle').classList.remove('open');
+  document.getElementById('correo-detalle-body').innerHTML = '<div class="correo-detalle-empty"><i class="fas fa-envelope-open-text"></i><p>Elegí un correo para leerlo.</p></div>';
+};
+function accionesHiloHtml(threadId) {
+  const msgs = HILOS_DATA.get(threadId) || [];
+  const et = new Set(msgs.flatMap(m => m.etiquetas || []));
+  const destacado = et.has('STARRED'), papelera = et.has('TRASH'), spam = et.has('SPAM');
+  const b = (accion, icono, titulo, extra = '') => `<button type="button" class="correo-accion${extra}" title="${titulo}" aria-label="${titulo}" onclick="accionCorreo('${threadId}','${accion}')"><i class="${icono}"></i></button>`;
+  return [
+    et.has('INBOX') ? b('archivar', 'fas fa-box-archive', 'Archivar (e)') : (!papelera && !spam ? b('mover_bandeja', 'fas fa-inbox', 'Mover a Recibidos') : ''),
+    papelera ? b('restaurar', 'fas fa-trash-arrow-up', 'Sacar de la papelera') : b('papelera', 'fas fa-trash', 'Mover a la papelera (#)'),
+    spam ? b('no_spam', 'fas fa-circle-check', 'No es spam') : b('spam', 'fas fa-circle-exclamation', 'Marcar como spam'),
+    b('no_leido', 'fas fa-envelope', 'Marcar como no leído (Shift+U)'),
+    b(destacado ? 'quitar_destacado' : 'destacar', `${destacado ? 'fas' : 'far'} fa-star`, destacado ? 'Quitar destacado (s)' : 'Destacar (s)', destacado ? ' on' : ''),
+  ].join('');
+}
+function pintarHiloCorreo(threadId) {
+  const msgs = HILOS_DATA.get(threadId) || [];
+  const ultimo = msgs[msgs.length - 1];
+  if (!ultimo) return;
+  const et = [...new Set(msgs.flatMap(m => m.etiquetas || []))].filter(e => CORREO_ETIQUETAS_VISIBLES[e]);
+  const leadId = msgs.find(m => m.lead_id)?.lead_id;
+  document.getElementById('correo-detalle-body').innerHTML = `
+    <div class="correo-detalle-head">
+      <div class="correo-hilo-acciones" id="correo-hilo-acciones">${accionesHiloHtml(threadId)}</div>
+      <h3>${esc(ultimo.asunto || '(sin asunto)')}</h3>
+      <div class="correo-etiquetas">${et.map(e => `<span class="correo-chip">${CORREO_ETIQUETAS_VISIBLES[e]}</span>`).join('')}<span class="correo-detalle-meta">${msgs.length} mensaje${msgs.length > 1 ? 's' : ''}</span></div>
+      ${leadId
+        ? `<div class="correo-lead-row"><a href="#" class="correo-lead-tag" onclick="abrirLeadPorId(${leadId});return false"><i class="fas fa-user"></i> <span id="correo-lead-nombre">Lead #${leadId}</span></a><button type="button" class="correo-lead-btn" onclick="vincularHiloCorreo(${ultimo.id}, null)"><i class="fas fa-link-slash"></i> Desvincular</button></div>`
+        : `<div class="correo-lead-row"><div class="correo-lead-buscar"><i class="fas fa-link"></i><input type="search" class="correo-lead-input" id="correo-lead-input" placeholder="Vincular a un lead: nombre, teléfono, email o #ID" autocomplete="off" oninput="buscarLeadParaCorreo(this.value, ${ultimo.id})"><div class="correo-lead-sug" id="correo-lead-sug" hidden></div></div></div>`}
+    </div>
+    <div class="correo-detalle-log">${msgs.map((c, i) => renderMensajeHilo(c, i === msgs.length - 1 || (!c.leido && c.direccion === 'entrante'))).join('')}</div>
+    <div class="correo-responder-bar">
+      <button type="button" class="correo-sync-btn" onclick="responderCorreo(${ultimo.id},'responder')"><i class="fas fa-reply"></i> Responder</button>
+      <button type="button" class="correo-sync-btn" onclick="responderCorreo(${ultimo.id},'todos')"><i class="fas fa-reply-all"></i> Responder a todos</button>
+      <button type="button" class="correo-sync-btn" onclick="responderCorreo(${ultimo.id},'reenviar')"><i class="fas fa-share"></i> Reenviar</button>
+    </div>`;
+  if (leadId) sb.from('leads').select('nombre').eq('id', leadId).maybeSingle().then(({ data }) => {
+    const el = document.getElementById('correo-lead-nombre');
+    if (el && data?.nombre && CORREO_HILO_ABIERTO === threadId) el.textContent = `${data.nombre} · #${leadId}`;
+  });
+}
+function renderMensajeHilo(c, abierto) {
+  const para = [...(c.para || []), ...(c.cc || [])].map(nombreDeCabecera).join(', ');
+  return `<article class="correo-msg${abierto ? ' abierto' : ''}" id="correo-msg-${c.id}">
+    <div class="correo-msg-head" onclick="toggleMensajeHilo(${c.id})">
+      ${avatarCorreo(c.de)}
+      <div class="correo-msg-quien">
+        <div><b>${esc(c.direccion === 'saliente' ? 'Yo' : nombreDeCabecera(c.de))}</b><span class="em">${esc(extraerEmailDeCabecera(c.de))}</span></div>
+        <div class="correo-msg-para">para ${esc(para || '—')}${c.bcc?.length ? ` · CCO: ${esc(c.bcc.map(nombreDeCabecera).join(', '))}` : ''}</div>
+        <div class="correo-msg-snip">${esc(c.snippet || '')}</div>
+      </div>
+      <div class="correo-msg-fecha">${c.gmail_correo_adjuntos?.length ? '<i class="fas fa-paperclip"></i> ' : ''}<time title="${esc(fmtFechaHoraCaracas(c.enviado_en))}">${esc(fmtFechaCorreo(c.enviado_en))}</time></div>
+    </div>
+    <div class="correo-msg-body">${abierto ? cuerpoMensajeHilo(c) : ''}</div>
+  </article>`;
+}
+function cuerpoMensajeHilo(c) {
+  if (!c) return '';
+  return renderCuerpoCorreo(c) + (c.gmail_correo_adjuntos?.length ? renderAdjuntosCorreo(c.id, c.gmail_correo_adjuntos) : '') + `
+    <div class="correo-msg-btns">
+      <button type="button" class="correo-accion" onclick="responderCorreo(${c.id},'responder')"><i class="fas fa-reply"></i> Responder</button>
+      <button type="button" class="correo-accion" onclick="responderCorreo(${c.id},'todos')"><i class="fas fa-reply-all"></i> A todos</button>
+      <button type="button" class="correo-accion" onclick="responderCorreo(${c.id},'reenviar')"><i class="fas fa-share"></i> Reenviar</button>
+    </div>`;
+}
+window.toggleMensajeHilo = (id) => {
+  const art = document.getElementById('correo-msg-' + id);
+  if (!art) return;
+  const abrir = !art.classList.contains('abierto');
+  art.classList.toggle('abierto', abrir);
+  const body = art.querySelector('.correo-msg-body');
+  if (abrir && !body.innerHTML.trim()) body.innerHTML = cuerpoMensajeHilo(CORREOS_DATA.get(id));
+};
+
+let CORREO_LEAD_T = null;
+window.buscarLeadParaCorreo = (valor, correoId) => {
+  clearTimeout(CORREO_LEAD_T);
+  const sug = document.getElementById('correo-lead-sug');
+  const t = String(valor || '').replace(/[,()*%\\:"']/g, ' ').trim();
+  if (t.length < 2) { sug.hidden = true; return; }
+  CORREO_LEAD_T = setTimeout(async () => {
+    const n = Number(t.replace(/^#/, ''));
+    const filtros = ['nombre', 'telefono', 'email'].map(c => `${c}.ilike.*${t}*`);
+    if (Number.isInteger(n) && n > 0) filtros.push(`id.eq.${n}`);
+    const { data } = await sb.from('leads').select('id,nombre,telefono,email,estado').or(filtros.join(',')).order('id', { ascending: false }).limit(8);
+    if (document.getElementById('correo-lead-input')?.value !== valor) return;
+    sug.innerHTML = (data || []).length
+      ? data.map(l => `<button type="button" class="correo-sug-item" onclick="vincularHiloCorreo(${correoId}, ${l.id})"><b>${esc(l.nombre || 'Sin nombre')}</b> <span class="muted">#${l.id}</span><small>${esc([l.telefono, l.email, l.estado].filter(Boolean).join(' · '))}</small></button>`).join('')
+      : '<div class="correo-sug-item muted">Ningún lead coincide</div>';
+    sug.hidden = false;
+  }, 250);
+};
+// Vincula o desvincula el HILO entero (antes solo el último mensaje).
+window.vincularHiloCorreo = async (correoId, leadId) => {
+  const { error } = await sb.rpc('gmail_vincular_hilo', { p_correo_id: correoId, p_lead_id: leadId });
+  if (error) { errToast(leadId ? 'No se pudo vincular el correo' : 'No se pudo desvincular el correo'); return; }
+  const hilo = idHiloSeguro(CORREOS_DATA.get(correoId)?.gmail_thread_id);
+  for (const m of HILOS_DATA.get(hilo) || []) m.lead_id = leadId;
+  CORREO_BANDEJA_DATA.forEach(m => { if (idHiloSeguro(m.gmail_thread_id) === hilo) m.lead_id = leadId; });
+  okToast(leadId ? `Conversación vinculada al lead #${leadId}` : 'Conversación desvinculada');
+  renderBandejaCorreo();
+  if (CORREO_HILO_ABIERTO === hilo) pintarHiloCorreo(hilo);
+};
+
+/* ---------- Acciones sobre el hilo (se aplican en Gmail vía gmail-modificar) ----------
+   Optimistas: se pintan ya y se corrigen con las etiquetas reales que
+   devuelve Gmail; si falla, se recarga la lista. */
+const ACCION_CORREO_TEXTO = { archivar: 'Conversación archivada', papelera: 'Movida a la papelera', restaurar: 'Sacada de la papelera', spam: 'Marcada como spam', no_spam: 'Movida a Recibidos', mover_bandeja: 'Movida a Recibidos', no_leido: 'Marcada como no leída' };
+const ACCIONES_QUE_MUEVEN = ['archivar', 'papelera', 'restaurar', 'spam', 'no_spam', 'mover_bandeja'];
+function aplicarAccionLocal(msgs, accion) {
+  const quitar = (m, x) => { m.etiquetas = (m.etiquetas || []).filter(e => e !== x); };
+  const poner = (m, x) => { if (!(m.etiquetas || []).includes(x)) m.etiquetas = [...(m.etiquetas || []), x]; };
+  const ultimo = msgs[msgs.length - 1];
+  const ultimoEntrante = [...msgs].reverse().find(m => m.direccion === 'entrante');
+  if (accion === 'leido') msgs.forEach(m => { quitar(m, 'UNREAD'); m.leido = true; });
+  else if (accion === 'no_leido' && ultimoEntrante) { poner(ultimoEntrante, 'UNREAD'); ultimoEntrante.leido = false; }
+  else if (accion === 'destacar' && ultimo) poner(ultimo, 'STARRED');
+  else if (accion === 'quitar_destacado') msgs.forEach(m => quitar(m, 'STARRED'));
+  else if (accion === 'archivar') msgs.forEach(m => quitar(m, 'INBOX'));
+  else if (accion === 'mover_bandeja') msgs.forEach(m => poner(m, 'INBOX'));
+  else if (accion === 'papelera') msgs.forEach(m => { poner(m, 'TRASH'); quitar(m, 'INBOX'); });
+  else if (accion === 'restaurar') msgs.forEach(m => quitar(m, 'TRASH'));
+  else if (accion === 'spam') msgs.forEach(m => { poner(m, 'SPAM'); quitar(m, 'INBOX'); });
+  else if (accion === 'no_spam') msgs.forEach(m => { quitar(m, 'SPAM'); poner(m, 'INBOX'); });
+}
+window.accionCorreo = async (threadId, accion, { silencioso = false } = {}) => {
+  const enLista = CORREO_BANDEJA_DATA.filter(m => idHiloSeguro(m.gmail_thread_id) === threadId);
+  const enHilo = HILOS_DATA.get(threadId) || [];
+  const ref = (enHilo.length ? enHilo : enLista).slice(-1)[0];
+  if (!ref) return;
+  aplicarAccionLocal(enLista, accion);
+  if (enHilo !== enLista) aplicarAccionLocal(enHilo.filter(m => !enLista.includes(m)), accion);
+  const mueve = ACCIONES_QUE_MUEVEN.includes(accion);
+  if (mueve) CORREO_BANDEJA_DATA = CORREO_BANDEJA_DATA.filter(m => idHiloSeguro(m.gmail_thread_id) !== threadId || correoEnCarpeta(m));
+  if ((mueve || accion === 'no_leido') && CORREO_HILO_ABIERTO === threadId) cerrarHiloCorreo();
+  renderBandejaCorreo();
+  const barra = CORREO_HILO_ABIERTO === threadId && document.getElementById('correo-hilo-acciones');
+  if (barra) barra.innerHTML = accionesHiloHtml(threadId);
+  try {
+    const data = await llamarFuncionCorreo('gmail-modificar', { correo_id: ref.id, accion });
+    for (const m of [...CORREO_BANDEJA_DATA, ...(HILOS_DATA.get(threadId) || [])]) {
+      const e = data.etiquetas?.[m.gmail_message_id];
+      if (e) { m.etiquetas = e; m.leido = !e.includes('UNREAD'); }
+    }
+    if (!silencioso && ACCION_CORREO_TEXTO[accion]) okToast(ACCION_CORREO_TEXTO[accion]);
+    cargarContadoresCorreo();
+    refrescarBadgeCorreo();
+  } catch (e) {
+    errToast(e.message === 'gmail_revocado' ? 'Tu Gmail se desconectó, reconectalo' : 'No se pudo aplicar el cambio en Gmail');
+    cargarBandejaCorreo('refrescar');
+  }
+};
+
+// Atajos tipo Gmail. Nunca mientras se escribe ni con una hoja abierta.
+function atajosCorreo(e) {
+  if (!correoSeccionActiva() || e.ctrlKey || e.metaKey || e.altKey || sheetAbierta) return;
+  if (e.target.closest?.('input,textarea,select,[contenteditable="true"]')) return;
+  const hilo = CORREO_HILO_ABIERTO, k = e.key;
+  const ultimoId = () => (HILOS_DATA.get(hilo) || []).slice(-1)[0]?.id;
+  let hecho = true;
+  if (k === 'c') abrirCompose({ modo: 'nuevo' });
+  else if (k === '/') document.getElementById('correo-search').focus();
+  else if (k === 'j' || k === 'k') {
+    const filas = [...document.querySelectorAll('#correo-lista .correo-row[data-thread]')];
+    const idx = filas.findIndex(r => r.dataset.thread === hilo);
+    const f = filas[Math.min(Math.max(idx + (k === 'j' ? 1 : -1), 0), filas.length - 1)];
+    if (f) { abrirHiloCorreo(f.dataset.thread); f.scrollIntoView({ block: 'nearest' }); }
+  } else if (!hilo) hecho = false;
+  else if (k === 'e') accionCorreo(hilo, 'archivar');
+  else if (k === '#') accionCorreo(hilo, 'papelera');
+  else if (k === 's') accionCorreo(hilo, (HILOS_DATA.get(hilo) || []).some(m => (m.etiquetas || []).includes('STARRED')) ? 'quitar_destacado' : 'destacar');
+  else if (k === 'r' || k === 'a' || k === 'f') { const id = ultimoId(); if (id) abrirCompose({ modo: { r: 'responder', a: 'todos', f: 'reenviar' }[k], correoId: id }); }
+  else if (k === 'U') accionCorreo(hilo, 'no_leido');
+  else if (k === 'u' || k === 'Escape') cerrarHiloCorreo();
+  else hecho = false;
+  if (hecho) e.preventDefault();
 }
 
 /* ---------- Redes (Instagram + TikTok) ---------- */
@@ -20007,9 +20542,9 @@ function subscribeRealtime() {
   // canal chico, mismo criterio simple que mensajes-badge. RLS ya filtra qué
   // correos llegan a este cliente. Refresca la bandeja si está a la vista, y
   // la pestaña de correo del lead abierto si el correo nuevo es de ese lead.
-  sb.channel('gmail-correos-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gmail_correos' }, payload => {
-    if (document.getElementById('sec-correo')?.classList.contains('active')) cargarBandejaCorreo();
-    if (currentLead && payload.new.lead_id === currentLead.id) { CORREO_LEAD_CACHE = null; cargarCorreoLead(currentLead); }
+  sb.channel('gmail-correos-live').on('postgres_changes', { event: '*', schema: 'public', table: 'gmail_correos' }, payload => {
+    programarRecargaCorreo();
+    if (currentLead && payload.new?.lead_id === currentLead.id) { CORREO_LEAD_CACHE = null; cargarCorreoLead(currentLead); }
   }).subscribe();
 }
 
@@ -20359,7 +20894,7 @@ const NAV_ITEMS = [
   { sec: 'contactos-directos', icon: 'fas fa-comment-sms', label: 'Contactos directos', padre: 'grp-leads', roles: '', sub: 'Escribieron directo por WhatsApp (bio-redes, IA) o los asignó Karlys Corro -- no se gestionan desde acá' },
   { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Pegá números o capturas y se reparten entre los asesores' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', padre: 'grp-mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
-  { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-mensajes', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads' },
+  { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
@@ -20391,6 +20926,7 @@ const NAV_PADRES = [
   { sec: 'grp-inicio', icon: 'fas fa-chart-pie', label: 'Inicio' },
   { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
   { sec: 'grp-mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', badge: 'nav-msg-count', badgeDefault: '—' },
+  { sec: 'correo', hoja: true },
   { sec: 'grp-tarifario', icon: 'fas fa-book-open', label: 'Tarifario' },
   { sec: 'stop-sales', hoja: true },
   { sec: 'grp-reservas', icon: 'fas fa-handshake-angle', label: 'Reservas', badge: 'nav-postventa-count', badgeDefault: '0' },
@@ -22500,6 +23036,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-02', emoji: '✉️', titulo: 'Correo: ahora es como Gmail', texto: 'Correo tiene su propia entrada en el menú, con el contador de no leídos. Carpetas (Recibidos con pestañas Principal/Promociones/Social/Notificaciones, Destacados, Enviados, Todos, Spam, Papelera y Contactos), búsqueda en todo tu correo, hilos completos, estrella, archivar, papelera y no leído (se reflejan en tu Gmail real). Podés responder, responder a todos y reenviar con adjuntos, usar CCO, firma por cuenta y autocompletar contactos. Al conectar una cuenta trae los últimos 7 días; desde el selector de cuenta podés traer 30 o 90. Atajos: c redactar, / buscar, j/k moverse, e archivar, # papelera, s destacar, r responder.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-01', emoji: '🎬', titulo: 'Videotutoriales con Lyra', texto: 'Lyra te explica el CRM en videos cortos, con datos de ejemplo. Arriba de cada sección que tiene uno aparece "Ver tutorial" (en el celular, el botón ▶ de la barra de arriba), y en Ayuda → Videotutoriales están todos juntos, marcados como vistos cuando los terminás. En el celular se ven en vertical y en la computadora en horizontal.', roles: ['admin', 'asesor'] },
   { fecha: '2026-09-30', emoji: '🗂️', titulo: 'Postulaciones más fáciles de revisar', texto: 'Tarjetas nuevas: foto grande, calificación con color, cargo y una línea con edad, experiencia y estudios. Ordená por calificación, fecha o experiencia, agrupá por cargo y filtrá por cargo, género, rango de edad, foto, modalidad, estado y calificación. En la ficha, el veredicto de la IA está arriba en Perfil y Llamar / WhatsApp / Ver CV quedan fijos. Al re-analizar, la edad, género, estudios y experiencia vacíos se completan desde el CV.', roles: ['admin'] },
   { fecha: '2026-09-30', emoji: '🧑‍💼', titulo: 'Postulaciones: "Re-analizar todas" de verdad', texto: 'El botón ahora re-lee cada CV en el servidor uno por uno, le pone la foto sacada del CV si no tenía y lo vuelve a calificar con el criterio nuevo: pesan las habilidades y la capacidad de trabajo, no el diseño del CV ni fechas desordenadas. Las postulaciones sin CV se eliminan al correrlo.', roles: ['admin'] },

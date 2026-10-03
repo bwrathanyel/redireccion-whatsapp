@@ -1742,7 +1742,8 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .correo-search{flex:1;min-width:180px}
 .correo-layout{position:relative;overflow:hidden;height:calc(100vh - 300px);min-height:420px}
-.correo-lista{height:100%;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
+.correo-col{display:flex;flex-direction:column;height:100%;min-height:0}
+.correo-lista{flex:1;min-height:0;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
 .correo-row{display:flex;align-items:flex-start;gap:12px;padding:11px 10px;border:1px solid transparent;border-radius:12px;cursor:pointer;transition:background .15s,border-color .15s}
 .correo-row:hover{background:rgba(255,255,255,.04)}
 .correo-row.active{background:var(--accent-soft);border-color:rgba(var(--accent-rgb),.28)}
@@ -1762,9 +1763,10 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-empty i{font-size:26px}
 .correo-layout.sin-cuenta{height:auto!important;min-height:0}
 .correo-layout.sin-cuenta .correo-detalle{display:none}
-.correo-layout.sin-cuenta .correo-lista{flex:1 1 auto;border-right:0;padding-right:0}
+.correo-layout.sin-cuenta .correo-col{flex:1 1 auto;border-right:0;padding-right:0}
+.correo-layout.sin-cuenta .correo-tabs{display:none}
 .correo-layout.sin-cuenta .correo-empty{min-height:220px;font-size:13px}
-.card:has(.correo-layout.sin-cuenta) .correo-toolbar{display:none}
+.card:has(.correo-layout.sin-cuenta) :is(.correo-toolbar,.correo-carpetas){display:none}
 
 .correo-detalle{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg2);border-radius:14px;padding:16px;transform:translateX(100%);transition:transform var(--dur-hoja,.32s) var(--ease-salida,ease)}
 .correo-detalle.open{transform:translateX(0)}
@@ -1783,7 +1785,8 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 
 @media(min-width:761px){
   .correo-layout{display:flex;gap:18px;overflow:visible;height:calc(100vh - 260px)}
-  .correo-lista{flex:0 0 340px;border-right:1px solid var(--line);padding-right:16px}
+  .correo-col{flex:0 0 340px;border-right:1px solid var(--line);padding-right:16px}
+  .correo-col .correo-lista{flex:1;min-height:0;height:auto}
   .correo-detalle{position:static;flex:1;min-width:0;transform:none;transition:none;background:transparent;border-radius:0;padding:0 0 0 4px}
   .correo-detalle-back{display:none}
 }
@@ -1798,6 +1801,76 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-compose-adjuntos span{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);border-radius:6px;padding:4px 9px;font-size:10.5px}
 .correo-compose-acciones{display:flex;gap:10px;margin-top:16px}
 .correo-compose-acciones .dbtn{flex:1}
+.correo-compose-de{padding:7px 10px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:12px}
+.correo-campo-dir{position:relative}
+.correo-cco-toggle{margin-left:8px;border:0;background:transparent;color:var(--accent-ink);font-size:10.5px;font-weight:700;cursor:pointer;font-family:inherit;text-transform:none;letter-spacing:0}
+.correo-cco-toggle[hidden]{display:none}
+.correo-quitar-orig{display:inline-block;margin-top:6px;color:var(--muted);font-size:11px}
+.correo-firma{color:var(--muted2);font-size:12px}
+.correo-cita{margin-top:6px;color:var(--muted2);font-size:12px}
+.correo-cita blockquote{margin:6px 0 0;padding-left:10px;border-left:2px solid var(--line2)}
+.correo-lead-buscar{position:relative;display:flex;align-items:center;gap:8px;flex:1;color:var(--muted)}
+.correo-lead-buscar .correo-lead-input{flex:1;width:auto}
+.correo-lead-sug{position:absolute;z-index:25;top:calc(100% + 4px);left:0;right:0;max-height:240px;overflow-y:auto;border:1px solid var(--line2);border-radius:10px;padding:4px;background:var(--bg2);box-shadow:0 16px 40px rgba(0,0,0,.4)}
+.correo-lead-sug[hidden]{display:none}
+.correo-sug-item{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;width:100%;border:0;border-radius:7px;padding:7px 10px;background:transparent;color:var(--txt);font-size:12px;font-family:inherit;text-align:left;cursor:pointer}
+.correo-sug-item small{flex-basis:100%;color:var(--muted);font-size:10.5px}
+.correo-sug-item:hover,.correo-sug-item.on{background:var(--accent-soft)}
+.correo-carpetas{display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;scrollbar-width:none}
+.correo-carpeta{display:flex;align-items:center;gap:6px;flex-shrink:0;border:1px solid var(--line2);border-radius:999px;padding:6px 12px;background:transparent;color:var(--muted);font-size:11.5px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap}
+.correo-carpeta:hover{color:var(--txt)}
+.correo-carpeta.on{background:var(--accent-soft);border-color:rgba(var(--accent-rgb),.35);color:var(--accent-ink)}
+.correo-carpeta .n,.correo-tab .n{border-radius:99px;padding:1px 6px;background:var(--accent);color:var(--on-accent);font-size:9.5px;font-weight:800}
+.correo-carpeta .n[hidden],.correo-tab .n[hidden]{display:none}
+.correo-tabs{display:flex;gap:2px;flex-shrink:0;margin-bottom:6px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.correo-tab{display:flex;align-items:center;gap:5px;flex-shrink:0;border:0;border-bottom:2px solid transparent;padding:7px 10px;background:transparent;color:var(--muted);font-size:11.5px;font-weight:600;font-family:inherit;cursor:pointer}
+.correo-tab:hover{color:var(--txt)}
+.correo-tab.on{border-bottom-color:var(--accent);color:var(--accent-ink)}
+.correo-row-avatar{background:color-mix(in srgb,var(--c,var(--accent)) 18%,transparent);color:var(--c,var(--accent-ink))}
+.correo-row-asunto{margin-top:2px;overflow:hidden;font-size:12px;color:var(--txt);text-overflow:ellipsis;white-space:nowrap}
+.correo-row.no-leido .correo-row-asunto{font-weight:700}
+.correo-row-n{margin-left:4px;color:var(--muted2);font-size:11px;font-weight:600}
+.correo-row-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.correo-chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 8px;background:rgba(255,255,255,.07);color:var(--muted);font-size:10px;font-weight:600}
+.correo-chip.lead{background:var(--accent-soft);color:var(--accent-ink)}
+.correo-row-meta{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
+.correo-row-star{border:0;background:transparent;color:var(--muted2);font-size:13px;cursor:pointer;padding:2px}
+.correo-row-star:hover{color:var(--amber)}
+.correo-row-star.on{color:var(--amber)}
+.correo-mas{display:flex;justify-content:center;padding:10px 0}
+.correo-contacto{cursor:default}
+.correo-contacto-acc{flex-direction:row}
+.correo-cuenta-sep{height:1px;margin:4px 0;background:var(--line)}
+.correo-cuenta-op{display:flex;align-items:center;gap:8px;width:100%;border:0;border-radius:8px;padding:8px 10px;background:transparent;color:var(--txt);font-size:11.5px;font-family:inherit;cursor:pointer;text-align:left}
+.correo-cuenta-op:hover{background:rgba(255,255,255,.05)}
+.correo-backfill{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;border:1px solid rgba(var(--accent-rgb),.28);border-radius:10px;padding:9px 12px;background:var(--accent-soft);color:var(--accent-ink);font-size:11.5px}
+.correo-backfill[hidden]{display:none}
+.correo-backfill span{flex:1;min-width:0}
+.correo-backfill .bar{flex-basis:100%;height:3px;overflow:hidden;border-radius:2px;background:rgba(var(--accent-rgb),.2)}
+.correo-backfill .bar i{display:block;width:35%;height:100%;border-radius:2px;background:var(--accent);animation:correo-barra 1.2s ease-in-out infinite}
+@keyframes correo-barra{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+.correo-hilo-acciones{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.correo-accion{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:8px;padding:6px 10px;background:transparent;color:var(--txt);font-size:11px;font-weight:600;font-family:inherit;cursor:pointer}
+.correo-accion:hover{border-color:rgba(var(--accent-rgb),.4);color:var(--accent-ink)}
+.correo-accion.on{background:var(--accent-soft);border-color:rgba(var(--accent-rgb),.35);color:var(--accent-ink)}
+.correo-etiquetas{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}
+.correo-etiquetas .correo-detalle-meta{margin-top:0}
+.correo-msg{border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden}
+.correo-msg.abierto{border-color:var(--line2)}
+.correo-msg-head{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;cursor:pointer}
+.correo-msg-quien{flex:1;min-width:0;font-size:12.5px}
+.correo-msg-quien .em{margin-left:6px;color:var(--muted2);font-size:11px}
+.correo-msg-para{overflow:hidden;color:var(--muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.correo-msg-snip{overflow:hidden;color:var(--muted2);font-size:11.5px;text-overflow:ellipsis;white-space:nowrap}
+.correo-msg.abierto .correo-msg-snip{display:none}
+.correo-msg-fecha{flex-shrink:0;color:var(--muted2);font-size:10.5px;white-space:nowrap}
+.correo-msg-body{display:none;padding:0 12px 12px}
+.correo-msg.abierto .correo-msg-body{display:block}
+.correo-msg-iframe{display:block;width:100%;height:min(62vh,560px);border:0;border-radius:8px;background:#fff}
+.correo-msg-texto{margin:0;font:inherit;font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.correo-msg-texto a{color:var(--accent-ink)}
+.correo-msg-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.correo-responder-bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;padding:10px 0 4px}
 
 /* ---------- Galería ---------- */
 /* Carpetas desplegables por categoría (Bloque 6) -- <details> nativo: sin
@@ -6729,7 +6802,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             </div>
           </div>
         </div>
-        <div class="csub">Correos sincronizados desde Gmail, vinculados a leads cuando el email coincide.</div>
+        <div class="csub">Correos sincronizados desde Gmail, vinculados a leads cuando el email coincide. Atajos: c redactar, / buscar, j/k moverse, e archivar, # papelera, s destacar, r responder.</div>
+        <div class="correo-backfill" id="correo-backfill" hidden></div>
         <div class="correo-toolbar">
           <button type="button" class="correo-redactar-btn" id="correo-redactar-btn"><i class="fas fa-pen"></i> Redactar</button>
           <input class="flt correo-search" id="correo-search" type="text" placeholder="Buscar por asunto, remitente...">
@@ -6737,10 +6811,28 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             <button type="button" class="seg on" data-f="todos">Todos</button>
             <button type="button" class="seg" data-f="no_leidos">Sin leer</button>
             <button type="button" class="seg" data-f="sin_vincular">Sin vincular</button>
+            <button type="button" class="seg" data-f="adjuntos">Con adjuntos</button>
           </div>
         </div>
+        <div class="correo-carpetas" id="correo-carpetas">
+          <button type="button" class="correo-carpeta on" data-carpeta="recibidos"><i class="fas fa-inbox"></i> Recibidos <span class="n" hidden></span></button>
+          <button type="button" class="correo-carpeta" data-carpeta="destacados"><i class="fas fa-star"></i> Destacados <span class="n" hidden></span></button>
+          <button type="button" class="correo-carpeta" data-carpeta="enviados"><i class="fas fa-paper-plane"></i> Enviados <span class="n" hidden></span></button>
+          <button type="button" class="correo-carpeta" data-carpeta="todos"><i class="fas fa-envelopes-bulk"></i> Todos <span class="n" hidden></span></button>
+          <button type="button" class="correo-carpeta" data-carpeta="spam"><i class="fas fa-ban"></i> Spam <span class="n" hidden></span></button>
+          <button type="button" class="correo-carpeta" data-carpeta="papelera"><i class="fas fa-trash"></i> Papelera <span class="n" hidden></span></button>
+          <button type="button" class="correo-carpeta" data-carpeta="contactos"><i class="fas fa-address-book"></i> Contactos <span class="n" hidden></span></button>
+        </div>
         <div class="correo-layout" id="correo-layout">
-          <div class="correo-lista" id="correo-lista"><i class="fas fa-circle-notch fa-spin"></i> Cargando...</div>
+          <div class="correo-col">
+            <div class="correo-tabs" id="correo-tabs">
+              <button type="button" class="correo-tab on" data-cat="principal">Principal <span class="n" hidden></span></button>
+              <button type="button" class="correo-tab" data-cat="promociones">Promociones <span class="n" hidden></span></button>
+              <button type="button" class="correo-tab" data-cat="social">Social <span class="n" hidden></span></button>
+              <button type="button" class="correo-tab" data-cat="notificaciones">Notificaciones <span class="n" hidden></span></button>
+            </div>
+            <div class="correo-lista" id="correo-lista"><i class="fas fa-circle-notch fa-spin"></i> Cargando...</div>
+          </div>
           <div class="correo-detalle" id="correo-detalle">
             <button type="button" class="correo-detalle-back" id="correo-detalle-back" aria-label="Volver a la bandeja"><i class="fas fa-arrow-left"></i></button>
             <div class="correo-detalle-body" id="correo-detalle-body">
@@ -6754,12 +6846,27 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     <!-- Hoja: redactar correo nuevo (sin hilo/lead previo) -->
     <div class="sheet sheet-lateral" id="correo-compose-sheet">
       <div class="sheet-handle"></div>
-      <div class="sheet-title"><i class="fas fa-pen"></i> Redactar correo</div>
+      <div class="sheet-title"><i class="fas fa-pen"></i> <span id="compose-titulo">Redactar correo</span></div>
       <div class="correo-compose-form">
+        <label>De</label>
+        <div class="correo-compose-de" id="compose-de"></div>
         <label>Para</label>
-        <input class="flt" id="compose-para" type="text" placeholder="destinatario@ejemplo.com, otro@ejemplo.com">
-        <label>CC (opcional)</label>
-        <input class="flt" id="compose-cc" type="text" placeholder="cc@ejemplo.com">
+        <div class="correo-campo-dir">
+          <input class="flt" id="compose-para" type="text" placeholder="destinatario@ejemplo.com, otro@ejemplo.com" autocomplete="off">
+          <div class="correo-lead-sug" id="compose-para-sug" hidden></div>
+        </div>
+        <label>CC (opcional) <button type="button" class="correo-cco-toggle" id="compose-cco-toggle">+ CCO</button></label>
+        <div class="correo-campo-dir">
+          <input class="flt" id="compose-cc" type="text" placeholder="cc@ejemplo.com" autocomplete="off">
+          <div class="correo-lead-sug" id="compose-cc-sug" hidden></div>
+        </div>
+        <div id="compose-cco-wrap" hidden>
+          <label>CCO</label>
+          <div class="correo-campo-dir">
+            <input class="flt" id="compose-cco" type="text" placeholder="cco@ejemplo.com" autocomplete="off">
+            <div class="correo-lead-sug" id="compose-cco-sug" hidden></div>
+          </div>
+        </div>
         <label>Asunto</label>
         <input class="flt" id="compose-asunto" type="text" placeholder="Asunto">
         <div class="correo-compose-toolbar">
@@ -6771,6 +6878,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div id="compose-body" class="correo-compose-body" contenteditable="true"></div>
         <div id="compose-adjuntos" class="correo-compose-adjuntos"></div>
         <div class="correo-compose-acciones">
+          <button type="button" class="dbtn" id="compose-descartar" hidden>Descartar</button>
           <button type="button" class="dbtn" id="compose-cancelar">Cancelar</button>
           <button type="button" class="dbtn save" id="compose-enviar"><i class="fas fa-paper-plane"></i> Enviar</button>
         </div>
