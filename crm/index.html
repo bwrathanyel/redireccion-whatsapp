@@ -1797,13 +1797,20 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-compose-form{display:flex;flex-direction:column;gap:5px;padding:4px 6px 14px}
 .correo-compose-form label{margin-top:8px;color:var(--muted);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
 .correo-compose-form input.flt{width:100%;box-sizing:border-box}
-.correo-compose-toolbar{display:flex;gap:6px;margin-top:10px}
-.correo-compose-toolbar button, .correo-compose-adjuntar{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--line2);border-radius:7px;background:transparent;color:var(--txt);cursor:pointer;font-family:inherit}
-.correo-compose-body{min-height:160px;margin-top:8px;border:1px solid var(--line2);border-radius:8px;padding:12px;background:#fff;color:#111;font-size:13px;line-height:1.5}
+.correo-compose-toolbar{display:flex;gap:4px;margin-top:12px;padding:5px 6px;border:1px solid var(--line2);border-bottom:0;border-radius:10px 10px 0 0;background:rgba(255,255,255,.04)}
+.correo-compose-toolbar button, .correo-compose-adjuntar{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit;transition:background .15s,color .15s}
+.correo-compose-toolbar button:hover, .correo-compose-adjuntar:hover{background:var(--accent-soft);color:var(--accent-ink)}
+.correo-compose-body{min-height:clamp(200px,32vh,340px);max-height:55vh;overflow-y:auto;overflow-wrap:anywhere;border:1px solid var(--line2);border-radius:0 0 10px 10px;padding:14px 16px;background:var(--panel-solid);color:var(--txt);font-size:14px;line-height:1.6;outline:none;transition:border-color .15s,box-shadow .15s}
+.correo-compose-body:focus{border-color:rgba(var(--accent-rgb),.55);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.14)}
+.correo-compose-body:empty::before{content:attr(data-placeholder);color:var(--muted2);pointer-events:none}
+.correo-compose-body a{color:var(--accent-ink)}
 .correo-compose-adjuntos{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .correo-compose-adjuntos span{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);border-radius:6px;padding:4px 9px;font-size:10.5px}
 .correo-compose-acciones{display:flex;gap:10px;margin-top:16px}
-.correo-compose-acciones .dbtn{flex:1}
+.correo-compose-acciones .dbtn{flex:1;padding:12px}
+.correo-compose-acciones .dbtn:not(.save){background:transparent;border:1px solid var(--line2);color:var(--txt)}
+.correo-compose-acciones .dbtn:not(.save):hover{background:rgba(255,255,255,.05)}
+.correo-compose-acciones .dbtn.save{flex:1.5;width:auto;margin-top:0}
 .correo-compose-de{padding:7px 10px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:12px}
 .correo-campo-dir{position:relative}
 .correo-cco-toggle{margin-left:8px;border:0;background:transparent;color:var(--accent-ink);font-size:10.5px;font-weight:700;cursor:pointer;font-family:inherit;text-transform:none;letter-spacing:0}
@@ -6880,7 +6887,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <button type="button" onclick="insertarLinkEditor('compose-body', this)"><i class="fas fa-link"></i></button>
           <label class="correo-compose-adjuntar"><i class="fas fa-paperclip"></i><input type="file" multiple style="display:none" id="compose-adjuntar-input"></label>
         </div>
-        <div id="compose-body" class="correo-compose-body" contenteditable="true"></div>
+        <div id="compose-body" class="correo-compose-body" contenteditable="true" data-placeholder="Escribí tu mensaje..." role="textbox" aria-multiline="true" aria-label="Mensaje"></div>
         <div id="compose-adjuntos" class="correo-compose-adjuntos"></div>
         <div class="correo-compose-acciones">
           <button type="button" class="dbtn" id="compose-descartar" hidden>Descartar</button>
