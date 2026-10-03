@@ -5414,13 +5414,25 @@ let CONV_CACHE = null, ACTIVIDAD_CACHE = null, CORREO_LEAD_CACHE = null;
 
    HTML de remitentes externos -- NUNCA confiar en sanitizado por lista negra
    (DOMPurify tiene bypasses históricos conocidos). Se aísla en un iframe
-   sandbox SIN allow-scripts NI allow-same-origin: corre en origen null, sin
-   acceso a cookies/localStorage/el cliente `sb` con la sesión del asesor.
-   Es el mismo mecanismo que usa Gmail real. */
+   sandbox SIN allow-scripts: ningún script del correo corre (ni handlers
+   inline), no hay formularios ni navegación del top. allow-same-origin se
+   agrega solo para que el CRM pueda medir el alto del documento y ajustar el
+   iframe (sin él el correo quedaba en una ventana fija con scroll propio);
+   es inocuo mientras allow-scripts siga ausente -- NO sumar ambos flags. */
 const CORREOS_DATA = new Map();
+const CORREO_IFRAME_BASE = '<base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:#fff}body{margin:0;padding:16px 20px;color:#202124;font:14px/1.6 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;overflow-wrap:break-word}img{max-width:100%!important;height:auto!important}table{max-width:100%}a{color:#1a73e8}pre{white-space:pre-wrap}blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #dadce0;color:#5f6368}</style>';
+window.ajustarIframeCorreo = (f) => {
+  try {
+    const d = f.contentDocument;
+    const medir = () => { f.style.height = Math.max(80, Math.ceil(d.documentElement.getBoundingClientRect().height)) + 'px'; };
+    medir();
+    d.querySelectorAll('img').forEach(i => { if (!i.complete) i.addEventListener('load', medir, { once: true }); });
+    if (window.ResizeObserver) new ResizeObserver(medir).observe(d.documentElement);
+  } catch { /* sin acceso al documento: queda el alto base */ }
+};
 function renderCuerpoCorreo(correo) {
   if (correo.cuerpo_html) {
-    return `<iframe class="correo-msg-iframe" sandbox="allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(correo.cuerpo_html)}"></iframe>`;
+    return `<iframe class="correo-msg-iframe" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" onload="ajustarIframeCorreo(this)" srcdoc="${esc(CORREO_IFRAME_BASE + correo.cuerpo_html)}"></iframe>`;
   }
   const texto = esc(correo.cuerpo_texto || '(sin contenido)').replace(/https?:\/\/(?:(?!&quot;|&gt;|&#39;)[^\s<])+/g, u => {
     const fin = (u.match(/[.,;:!?)]+$/) || [''])[0];
@@ -9485,7 +9497,7 @@ let CORREO_BANDEJA_DATA = [];
 let correoFiltro = 'todos';
 let CORREO_CUENTAS = []; // filas de gmail_cuentas() -- una por cuenta conectada
 let CORREO_CUENTA_ACTIVA = localStorage.getItem('correo_cuenta_activa') || null;
-let CORREO_CARPETA = 'recibidos', CORREO_CATEGORIA = 'principal';
+let CORREO_CARPETA = 'recibidos', CORREO_CATEGORIA = 'notificaciones';
 let CORREO_HAY_MAS = false, CORREO_CARGANDO_MAS = false, CORREO_PEDIDO = 0;
 let CORREO_BACKFILL = null; // credencial_id con un backfill en curso
 const CORREO_PAGINA = 60;
@@ -9602,9 +9614,9 @@ async function cargarContadoresCorreo() {
   const { data } = await sb.rpc('gmail_contadores', { p_credencial_id: Number(CORREO_CUENTA_ACTIVA) });
   const c = data || {};
   const pintar = (sel, n) => { const el = document.querySelector(sel); if (el) { el.textContent = n > 99 ? '99+' : String(n || ''); el.hidden = !n; } };
-  pintar('#correo-carpetas [data-carpeta="recibidos"] .n', c.principal);
+  pintar('#correo-carpetas [data-carpeta="recibidos"] .n', (c.notificaciones || 0) + (c.principal || 0));
   pintar('#correo-carpetas [data-carpeta="spam"] .n', c.spam);
-  ['principal', 'promociones', 'social', 'notificaciones'].forEach(k => pintar(`#correo-tabs [data-cat="${k}"] .n`, c[k]));
+  ['notificaciones', 'principal', 'promociones', 'social'].forEach(k => pintar(`#correo-tabs [data-cat="${k}"] .n`, c[k]));
 }
 // Realtime (gmail-correos-live): durante un backfill llegan cientos de
 // eventos seguidos, por eso se agrupan en una sola recarga.

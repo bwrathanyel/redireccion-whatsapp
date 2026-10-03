@@ -1774,7 +1774,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-detalle-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto}
 .correo-detalle-empty{display:grid;flex:1;place-items:center;gap:8px;color:var(--muted);font-size:12px;text-align:center}
 .correo-detalle-empty i{font-size:28px}
-.correo-detalle-head h3{margin:0;font-size:16px;font-weight:700}
+.correo-detalle-head h3{margin:0;font-size:19px;font-weight:700;line-height:1.3;overflow-wrap:anywhere}
 .correo-detalle-meta{margin-top:4px;color:var(--muted);font-size:11px}
 .correo-lead-row{display:flex;align-items:center;gap:8px;margin-top:12px;padding-bottom:14px;border-bottom:1px solid var(--line)}
 .correo-lead-tag{display:flex;align-items:center;gap:6px;border-radius:999px;padding:5px 12px;background:var(--accent-soft);color:var(--accent-ink);font-size:10.5px;font-weight:700}
@@ -1783,11 +1783,14 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-lead-btn:hover{color:var(--txt)}
 .correo-detalle-log{flex:1;margin-top:12px}
 
-@media(min-width:761px){
-  .correo-layout{display:flex;gap:18px;overflow:visible;height:calc(100vh - 260px)}
-  .correo-col{flex:0 0 340px;border-right:1px solid var(--line);padding-right:16px}
+/* Split-view según el ancho real de la tarjeta (no del viewport): con el menú
+   lateral abierto la tarjeta es bastante más angosta que la ventana. */
+.correo-wrap{container:correo/inline-size}
+@container correo (min-width:720px){
+  .correo-layout{display:flex;gap:20px;overflow:visible;height:calc(100vh - 260px)}
+  .correo-col{flex:0 0 clamp(300px,36%,420px);border-right:1px solid var(--line);padding-right:16px}
   .correo-col .correo-lista{flex:1;min-height:0;height:auto}
-  .correo-detalle{position:static;flex:1;min-width:0;transform:none;transition:none;background:transparent;border-radius:0;padding:0 0 0 4px}
+  .correo-detalle{position:static;flex:1;min-width:0;transform:none;transition:none;background:transparent;border-radius:0;padding:0 6px 0 4px}
   .correo-detalle-back{display:none}
 }
 
@@ -1866,8 +1869,8 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-msg-fecha{flex-shrink:0;color:var(--muted2);font-size:10.5px;white-space:nowrap}
 .correo-msg-body{display:none;padding:0 12px 12px}
 .correo-msg.abierto .correo-msg-body{display:block}
-.correo-msg-iframe{display:block;width:100%;height:min(62vh,560px);border:0;border-radius:8px;background:#fff}
-.correo-msg-texto{margin:0;font:inherit;font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.correo-msg-iframe{display:block;width:100%;height:320px;border:0;border-radius:8px;background:#fff}
+.correo-msg-texto{margin:0;padding:6px 2px;font:inherit;font-size:14px;line-height:1.65;white-space:pre-wrap;overflow-wrap:break-word}
 .correo-msg-texto a{color:var(--accent-ink)}
 .correo-msg-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .correo-responder-bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;padding:10px 0 4px}
@@ -6823,13 +6826,14 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <button type="button" class="correo-carpeta" data-carpeta="papelera"><i class="fas fa-trash"></i> Papelera <span class="n" hidden></span></button>
           <button type="button" class="correo-carpeta" data-carpeta="contactos"><i class="fas fa-address-book"></i> Contactos <span class="n" hidden></span></button>
         </div>
+        <div class="correo-wrap">
         <div class="correo-layout" id="correo-layout">
           <div class="correo-col">
             <div class="correo-tabs" id="correo-tabs">
-              <button type="button" class="correo-tab on" data-cat="principal">Principal <span class="n" hidden></span></button>
+              <button type="button" class="correo-tab on" data-cat="notificaciones">Notificaciones <span class="n" hidden></span></button>
+              <button type="button" class="correo-tab" data-cat="principal">Principal <span class="n" hidden></span></button>
               <button type="button" class="correo-tab" data-cat="promociones">Promociones <span class="n" hidden></span></button>
               <button type="button" class="correo-tab" data-cat="social">Social <span class="n" hidden></span></button>
-              <button type="button" class="correo-tab" data-cat="notificaciones">Notificaciones <span class="n" hidden></span></button>
             </div>
             <div class="correo-lista" id="correo-lista"><i class="fas fa-circle-notch fa-spin"></i> Cargando...</div>
           </div>
@@ -6839,6 +6843,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
               <div class="correo-detalle-empty"><i class="fas fa-envelope-open-text"></i><p>Elegí un correo para leerlo.</p></div>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </section>
