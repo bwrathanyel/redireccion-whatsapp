@@ -9764,21 +9764,32 @@ window.traerCorreosAnteriores = async (dias) => {
   if (!cred) return;
   CORREO_BACKFILL = cred;
   const caja = document.getElementById('correo-backfill');
-  let nuevos = 0, actualizados = 0, token = null, ok = true, vueltas = 0;
+  let nuevos = 0, actualizados = 0, token = null, ok = true, vueltas = 0, fallidos = 0, pasadas = 0;
   const pintar = () => {
     caja.hidden = false;
     caja.innerHTML = `<i class="fas fa-cloud-arrow-down"></i><span>Trayendo tus correos de los últimos ${dias} días… ${nuevos} nuevo${nuevos === 1 ? '' : 's'}${actualizados ? `, ${actualizados} puestos al día` : ''}</span><div class="bar"><i></i></div>`;
   };
   pintar();
   try {
+    // Una pasada recorre todas las páginas; si algún correo falló (límite de
+    // Gmail, red) se repite entera: los ya guardados se saltean, solo se
+    // reintentan los que faltaban. Termina solo con una pasada sin fallos.
+    let terminado = false;
     do {
       const data = await llamarFuncionCorreo('gmail-sync-manual', { credencial_id: Number(cred), backfill_dias: dias, page_token: token });
       nuevos += data.nuevos || 0;
       actualizados += data.actualizados || 0;
+      fallidos += data.fallidos || 0;
       token = data.page_token;
       pintar();
       if (String(CORREO_CUENTA_ACTIVA) === String(cred) && data.nuevos && correoSeccionActiva()) cargarBandejaCorreo('refrescar');
-    } while (token && ++vueltas < 60);
+      if (!token) {
+        terminado = !fallidos;
+        if (!terminado && ++pasadas < 4) fallidos = 0;
+        else if (!terminado) throw new Error('backfill incompleto');
+      }
+    } while ((token || !terminado) && ++vueltas < 120);
+    if (!terminado) ok = false;
   } catch { ok = false; }
   CORREO_BACKFILL = null;
   if (ok) {
