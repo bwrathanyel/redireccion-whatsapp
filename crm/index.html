@@ -1670,6 +1670,17 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .msg-conv-log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:14px 2px}
 .msg-readonly-note{display:flex;align-items:center;gap:8px;justify-content:center;padding:12px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);flex-shrink:0}
 
+/* WhatsApp (Zernio): reutiliza la bandeja y las burbujas de Mensajes */
+.wa-filtros{display:flex;gap:8px;padding:0 0 10px;flex-shrink:0}
+.wa-filtros select,.wa-filtros input{flex:1;min-width:0;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;color:var(--txt);padding:8px 10px;font:inherit;font-size:13px}
+.wa-avatar{background:linear-gradient(135deg,#25d366,#128c7e);overflow:hidden}
+.wa-avatar img{width:100%;height:100%;object-fit:cover}
+.wa-lead-linea{font-size:11px;color:var(--muted2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wa-lead-linea i{color:var(--accent-ink)}
+.wa-mas{align-self:center;margin:8px auto;background:var(--panel-solid);border:1px solid var(--line2);border-radius:20px;color:var(--txt);font:inherit;font-size:12px;padding:6px 14px;cursor:pointer}
+.wa-audio{display:block;width:240px;max-width:100%}
+@media(max-width:760px){.wa-filtros{flex-direction:column}}
+
 /* Separador de fecha sticky */
 .msg-date-chip{position:sticky;top:4px;align-self:center;background:rgba(20,26,48,.85);backdrop-filter:blur(6px);border:1px solid var(--line2);color:var(--muted);font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;margin:10px 0;z-index:2}
 
@@ -5022,6 +5033,34 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             <button class="chat-send" id="msg-send-btn" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
           </div>
           <div class="msg-readonly-note" id="msg-readonly-note" style="display:none"><i class="fas fa-lock"></i> Solo lectura — únicamente los admins escriben acá</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHATSAPP (chats del bot por número, vía Zernio; solo admins, solo lectura) -->
+    <section class="section" id="sec-whatsapp">
+      <div class="card chat-wrap msg-layout pantalla-chat">
+        <div class="chat-toolbar" style="justify-content:space-between">
+          <div class="eb-title" style="margin:0"><i class="fa-brands fa-whatsapp"></i> WhatsApp</div>
+          <button class="chat-tool-btn" id="wa-recargar" type="button"><i class="fas fa-rotate"></i> Actualizar</button>
+        </div>
+        <div class="wa-filtros">
+          <select id="wa-numero" aria-label="Número de WhatsApp"><option value="">Cargando números…</option></select>
+          <input id="wa-buscar" type="search" placeholder="Buscar nombre o teléfono" aria-label="Buscar chat">
+        </div>
+        <div class="msg-inbox" id="wa-inbox" style="flex:1;overflow-y:auto"></div>
+
+        <div class="msg-conv" id="wa-conv">
+          <div class="msg-conv-head">
+            <button class="msg-conv-back" id="wa-conv-back" type="button" aria-label="Volver"><i class="fas fa-arrow-left"></i></button>
+            <div style="flex:1;min-width:0">
+              <div class="msg-conv-titulo" id="wa-conv-titulo"></div>
+              <div class="msg-conv-sub" id="wa-conv-sub"></div>
+            </div>
+            <button class="chat-tool-btn" id="wa-ver-lead" type="button"><i class="fas fa-user"></i> Ver lead</button>
+          </div>
+          <div class="msg-conv-log" id="wa-conv-log"></div>
+          <div class="msg-readonly-note"><i class="fas fa-lock"></i> Solo lectura — el bot responde aquí; el asesor atiende por su WhatsApp</div>
         </div>
       </div>
     </section>

@@ -167,7 +167,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
   tareas: ['Tareas', 'Tus tareas activas'],
   comisiones: ['Comisiones por corte', 'Ventas pagadas, verificación e invoices · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
@@ -1293,7 +1293,7 @@ const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'importar-vouchers', 'reservas-empresas', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
-  'mensajes', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
+  'mensajes', 'whatsapp', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
 ];
@@ -2627,7 +2627,7 @@ async function startApp() {
   if (booted) return; booted = true;
   arrancar(
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
-    setupTarifarioTabs, setupLightbox, setupMensajes, setupCorreo, setupRedes,
+    setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes,
   );
@@ -16839,6 +16839,19 @@ function tarChips() {
     renderTarifario();
   };
 }
+// Pestaña oculta un rato y vuelta a mostrar: el catálogo en memoria puede ser de antes de una
+// carga o edición de otra persona (Fase 6, "Tarifario sin errores"). Menos de 2 min no se toca.
+function montarTarRefrescoAlVolver() {
+  let oculto = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { oculto = Date.now(); return; }
+    if (!oculto || Date.now() - oculto < 120000) return;
+    oculto = 0;
+    tarCache = {};
+    if (document.getElementById('sec-tarifario')?.classList.contains('active')) loadTarifario();
+  });
+}
+arrancar(montarTarRefrescoAlVolver);
 async function loadTarifario() {
   loadTarifarioInfo();
   // TOP IA: la lista corta que el bot recorta (ia_top_productos). Solo se usa
@@ -20086,6 +20099,184 @@ function renderBotText(texto) {
     .replace(/^[*•]\s+/gm, '- ');
 }
 
+/* ---------- WhatsApp (Zernio): chats del bot por número, solo admins, solo lectura ----------
+   Todo pasa por la EF whatsapp-inbox: la key de Zernio no baja al navegador.
+   Los adjuntos que manda el cliente viven en Zernio (piden Bearer) y se bajan
+   por la EF como Blob; las fotos que manda el bot son públicas (Worker de fotos). */
+const WA_POLL_MS = 20000;
+const WA_URL_PUBLICA = /^https:\/\/(?!(?:api\.)?zernio\.com\/)/i;
+let waNumeros = null, waCuenta = null, waChats = [], waChatsCursor = null, waActual = null, waMensajes = [], waMsgCursor = null, waPoll = null, waAbrirGen = 0;
+const waMedia = new Map();
+
+async function waInvocar(body) {
+  const { data, error } = await sb.functions.invoke('whatsapp-inbox', { body });
+  if (error || !data?.ok) throw new Error(data?.error || error?.message || 'error');
+  return data;
+}
+function setupWhatsapp() {
+  document.getElementById('wa-numero').addEventListener('change', e => {
+    waCuenta = e.target.value; waChats = []; waChatsCursor = null;
+    try { localStorage.setItem('wa-numero', waCuenta); } catch {}
+    waCargarChats();
+  });
+  document.getElementById('wa-buscar').addEventListener('input', waRenderChats);
+  document.getElementById('wa-recargar').addEventListener('click', () => waCargarChats());
+  document.getElementById('wa-conv-back').addEventListener('click', () => waCerrarChat());
+  document.getElementById('wa-ver-lead').addEventListener('click', () => { if (waActual?.lead) abrirLeadDesdeMisVentas(waActual.lead.id); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && currentSec === 'whatsapp') waTick(); });
+}
+async function loadWhatsapp() {
+  if (ROL !== 'admin') return;
+  if (!waNumeros) {
+    try { waNumeros = (await waInvocar({ accion: 'numeros' })).numeros; } catch { errToast('No se pudo conectar con WhatsApp'); return; }
+    let guardado = null;
+    try { guardado = localStorage.getItem('wa-numero'); } catch {}
+    waCuenta = waNumeros.find(n => n.id === guardado)?.id || waNumeros[0]?.id || null;
+    const sel = document.getElementById('wa-numero');
+    sel.innerHTML = waNumeros.map(n => `<option value="${esc(n.id)}">${esc(n.telefono)}${n.nombre ? ' · ' + esc(n.nombre) : ''}${n.activo ? '' : ' (desconectado)'}</option>`).join('') || '<option value="">Sin números conectados</option>';
+    if (waCuenta) sel.value = waCuenta;
+  }
+  await waCargarChats();
+  clearInterval(waPoll); waPoll = setInterval(waTick, WA_POLL_MS);
+}
+function waDetenerPoll() { clearInterval(waPoll); waPoll = null; }
+function waTick() {
+  if (currentSec !== 'whatsapp') { waDetenerPoll(); return; }
+  if (document.visibilityState !== 'visible') return;
+  waActual ? waRefrescarChat() : waCargarChats(true);
+}
+async function waCargarChats(silencioso, cursor) {
+  const cont = document.getElementById('wa-inbox');
+  if (!waCuenta) { cont.innerHTML = '<div class="msg-empty"><i class="fa-brands fa-whatsapp"></i><br>No hay números de WhatsApp conectados</div>'; return; }
+  if (!silencioso && !cursor && !waChats.length) cont.innerHTML = '<div class="msg-empty"><i class="fas fa-spinner fa-spin"></i></div>';
+  const cuenta = waCuenta;
+  let r;
+  try { r = await waInvocar({ accion: 'chats', accountId: cuenta, cursor }); } catch {
+    if (!silencioso) { errToast('No se pudieron cargar los chats de WhatsApp'); if (!waChats.length) cont.innerHTML = ''; }
+    return;
+  }
+  if (cuenta !== waCuenta) return;
+  // Página siguiente: se suma al final. Refresco: la primera página manda y se
+  // conservan los chats de páginas ya cargadas que no vinieron en ella.
+  if (cursor) waChats = [...waChats, ...r.chats.filter(c => !waChats.some(x => x.id === c.id))];
+  else waChats = [...r.chats, ...(silencioso ? waChats.filter(c => !r.chats.some(n => n.id === c.id)) : [])];
+  if (cursor || !silencioso || waChatsCursor === null) waChatsCursor = r.cursor;
+  waRenderChats();
+}
+function waRenderChats() {
+  const cont = document.getElementById('wa-inbox');
+  const q = document.getElementById('wa-buscar').value.trim().toLowerCase();
+  const lista = q ? waChats.filter(c => `${c.nombre || ''} ${c.telefono} ${c.lead?.nombre || ''}`.toLowerCase().includes(q)) : waChats;
+  if (!lista.length) { cont.innerHTML = `<div class="msg-empty"><i class="fa-brands fa-whatsapp"></i><br>${q ? 'Sin resultados' : 'Sin chats todavía'}</div>`; return; }
+  cont.innerHTML = lista.map(c => `
+    <div class="msg-inbox-row" data-wa="${esc(c.id)}">
+      <div class="msg-avatar wa-avatar">${c.foto ? `<img src="${esc(c.foto)}" alt="">` : esc(initials(c.nombre || '#'))}</div>
+      <div class="msg-inbox-body">
+        <div class="msg-inbox-top">
+          <div class="msg-inbox-nombre">${esc(c.nombre || c.telefono)}</div>
+          ${c.fecha ? `<div class="msg-inbox-hora">${fmtHoraMsg(c.fecha)}</div>` : ''}
+        </div>
+        <div class="msg-inbox-preview"><span>${esc(c.ultimo || '')}</span></div>
+        <div class="wa-lead-linea">${c.lead ? `<i class="fas fa-user-check"></i> ${esc(c.lead.estado || 'Lead')}${c.lead.asesor ? ' · ' + esc(c.lead.asesor) : ''}` : `${esc(c.telefono)} · sin lead`}</div>
+      </div>
+    </div>`).join('') + (waChatsCursor && !q ? '<button type="button" class="wa-mas" id="wa-mas-chats">Ver más chats</button>' : '');
+  cont.querySelectorAll('[data-wa]').forEach(row => row.addEventListener('click', () => {
+    const c = waChats.find(x => x.id === row.dataset.wa);
+    if (c) waAbrirChat(c);
+  }));
+  document.getElementById('wa-mas-chats')?.addEventListener('click', () => waCargarChats(false, waChatsCursor));
+}
+async function waAbrirChat(c) {
+  const miGen = ++waAbrirGen;
+  waActual = c; waMensajes = []; waMsgCursor = null;
+  document.getElementById('wa-conv-titulo').textContent = c.nombre || c.telefono;
+  document.getElementById('wa-conv-sub').textContent = c.lead ? `${c.telefono} · ${c.lead.estado || 'Lead'}${c.lead.asesor ? ' · ' + c.lead.asesor : ''}` : `${c.telefono} · sin lead en el CRM`;
+  document.getElementById('wa-ver-lead').style.display = c.lead ? '' : 'none';
+  document.getElementById('wa-conv-log').innerHTML = '<div class="msg-empty"><i class="fas fa-spinner fa-spin"></i></div>';
+  document.getElementById('wa-conv').classList.add('open');
+  navPush({ type: 'wa-conv' });
+  let r;
+  try { r = await waInvocar({ accion: 'mensajes', accountId: waCuenta, conversationId: c.id }); } catch {
+    if (miGen === waAbrirGen) { errToast('No se pudieron cargar los mensajes'); document.getElementById('wa-conv-log').innerHTML = ''; }
+    return;
+  }
+  if (miGen !== waAbrirGen) return;
+  waMensajes = r.mensajes; waMsgCursor = r.cursor;
+  waRenderMensajes(true);
+}
+async function waRefrescarChat() {
+  const gen = waAbrirGen;
+  let r;
+  try { r = await waInvocar({ accion: 'mensajes', accountId: waCuenta, conversationId: waActual.id }); } catch { return; }
+  if (gen !== waAbrirGen) return;
+  const nuevos = r.mensajes.filter(m => !waMensajes.some(x => x.id === m.id));
+  if (!nuevos.length) return;
+  waMensajes = [...waMensajes, ...nuevos].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+  waRenderMensajes();
+}
+async function waCargarAnteriores() {
+  if (!waMsgCursor) return;
+  const gen = waAbrirGen, log = document.getElementById('wa-conv-log'), alto = log.scrollHeight;
+  let r;
+  try { r = await waInvocar({ accion: 'mensajes', accountId: waCuenta, conversationId: waActual.id, cursor: waMsgCursor }); } catch { errToast('No se pudieron cargar los mensajes anteriores'); return; }
+  if (gen !== waAbrirGen) return;
+  waMensajes = [...r.mensajes.filter(m => !waMensajes.some(x => x.id === m.id)), ...waMensajes]; waMsgCursor = r.cursor;
+  waRenderMensajes();
+  log.scrollTop = log.scrollHeight - alto;
+}
+function waCerrarChat(fromNav, sinRecarga) {
+  waAbrirGen++;
+  document.getElementById('wa-conv').classList.remove('open');
+  waActual = null; waMensajes = [];
+  waMedia.forEach(p => p.then(u => u && URL.revokeObjectURL(u)));
+  waMedia.clear();
+  if (!fromNav) navConsume();
+  if (!sinRecarga && currentSec === 'whatsapp') waCargarChats(true);
+}
+const WA_TICK = { sent: '✓', delivered: '✓✓', read: '✓✓', failed: '!' };
+function waAdjuntoHtml(a) {
+  const publica = WA_URL_PUBLICA.test(a.url);
+  const fuente = publica ? `src="${esc(a.url)}"` : `data-wa-media="${esc(a.url)}" data-wa-mime="${esc(a.mime || '')}"`;
+  if (a.tipo === 'image' || a.tipo === 'sticker') return `<img class="msg-img" ${fuente}${publica ? ` data-img="${esc(a.url)}"` : ''} alt="Foto">`;
+  if (a.tipo === 'audio' || a.tipo === 'voice') return `<audio class="wa-audio" controls preload="none" ${fuente}></audio>`;
+  if (a.tipo === 'video') return `<video class="msg-img" controls preload="metadata" ${fuente}></video>`;
+  return `<div class="msg-doc" ${publica ? `data-doc="${esc(a.url)}"` : fuente}><i class="fas fa-file"></i><div><div class="msg-doc-nombre">${esc(a.mime || 'Archivo')}</div></div></div>`;
+}
+function waRenderMensajes(alFinal) {
+  const log = document.getElementById('wa-conv-log');
+  const abajo = alFinal || log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+  let html = waMsgCursor ? '<button type="button" class="wa-mas" id="wa-anteriores">Cargar mensajes anteriores</button>' : '', dia = null;
+  waMensajes.forEach((m, i) => {
+    const f = new Date(m.fecha), key = f.toDateString(), prev = waMensajes[i - 1], sig = waMensajes[i + 1];
+    if (key !== dia) { html += `<div class="msg-date-chip">${etiquetaDia(f)}</div>`; dia = key; }
+    const agrupado = prev && prev.saliente === m.saliente && new Date(prev.fecha).toDateString() === key;
+    const cola = !sig || sig.saliente !== m.saliente || new Date(sig.fecha).toDateString() !== key;
+    const meta = cola ? `<div class="msg-meta">${m.saliente ? `<span>${m.bot ? 'Bot' : 'Lotus'}</span>` : ''}<span>${fmtHoraChat(m.fecha)}</span>${m.saliente && WA_TICK[m.estado] ? `<span class="msg-tick${m.estado === 'read' ? ' leido' : ''}">${WA_TICK[m.estado]}</span>` : ''}</div>` : '';
+    const adj = m.adjuntos.map(waAdjuntoHtml).join('');
+    html += `<div class="chat-msg ${m.saliente ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${cola ? ' tail' : ''}${adj ? ' adjunto' : ''}">${adj}${m.texto ? `<div>${textoConEnlaces(m.texto)}</div>` : ''}${meta}</div>`;
+  });
+  log.innerHTML = html || '<div class="msg-empty">Sin mensajes</div>';
+  document.getElementById('wa-anteriores')?.addEventListener('click', waCargarAnteriores);
+  log.querySelectorAll('[data-img]').forEach(el => el.addEventListener('click', () => openLightbox([el.dataset.img], 0)));
+  log.querySelectorAll('[data-doc]').forEach(el => el.addEventListener('click', () => window.open(el.dataset.doc, '_blank', 'noopener')));
+  log.querySelectorAll('[data-wa-media]').forEach(waCargarMedia);
+  if (abajo) log.scrollTop = log.scrollHeight;
+}
+function waBlobUrl(url, mime) {
+  if (!waMedia.has(url)) waMedia.set(url, sb.functions.invoke('whatsapp-inbox', { body: { accion: 'media', url } })
+    .then(({ data, error }) => !error && data instanceof Blob ? URL.createObjectURL(mime ? new Blob([data], { type: mime }) : data) : null)
+    .catch(() => null));
+  return waMedia.get(url);
+}
+async function waCargarMedia(el) {
+  const u = await waBlobUrl(el.dataset.waMedia, el.dataset.waMime);
+  if (!el.isConnected) return;
+  if (!u) { el.outerHTML = '<div class="msg-doc"><i class="fas fa-triangle-exclamation"></i><div class="msg-doc-peso">No se pudo cargar el adjunto</div></div>'; return; }
+  if (el.tagName === 'IMG') { el.src = u; el.addEventListener('click', () => openLightbox([u], 0)); }
+  else if (el.tagName === 'AUDIO' || el.tagName === 'VIDEO') el.src = u;
+  else el.addEventListener('click', () => window.open(u, '_blank', 'noopener'));
+}
+
 /* ---------- Mensajes (chat interno del staff) ---------- */
 const ADJUNTO_LIMITE = 20 * 1024 * 1024;
 const ICONO_EXT = { pdf: 'fa-file-pdf', doc: 'fa-file-word', docx: 'fa-file-word', xls: 'fa-file-excel', xlsx: 'fa-file-excel', ppt: 'fa-file-powerpoint', pptx: 'fa-file-powerpoint', zip: 'fa-file-zipper', rar: 'fa-file-zipper' };
@@ -20848,6 +21039,7 @@ window.addEventListener('popstate', () => {
   else if (top.type === 'tar-comparar') tarCerrarComparador(true);
   else if (top.type === 'sheet') closeSheet(top.id, true);
   else if (top.type === 'msg-conv') cerrarConversacion(true);
+  else if (top.type === 'wa-conv') waCerrarChat(true);
   else if (top.type === 'section') activateSection(top.prevSec, true);
   else if (top.type === 'tour') volverAlMenuTutorial(true);
   else if (top.type === 'menu') cerrarMenuMovil('fromNav');
@@ -21091,6 +21283,7 @@ const NAV_ITEMS = [
   { sec: 'contactos-directos', icon: 'fas fa-comment-sms', label: 'Contactos directos', padre: 'grp-leads', roles: '', sub: 'Escribieron directo por WhatsApp (bio-redes, IA) o los asignó Karlys Corro -- no se gestionan desde acá' },
   { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Pegá números o capturas y se reparten entre los asesores' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', padre: 'grp-mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'whatsapp', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp', padre: 'grp-mensajes', roles: 'nav-admin-only', sub: 'Chats del bot de ventas, por número' },
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
@@ -21345,6 +21538,7 @@ function activateSection(sec, fromNav) {
   // el ?conversacion= de la URL queda pegado ahí para siempre y reaparece en
   // cada "Actualizar CRM" (location.replace conserva el query string actual).
   if (msgActual && sec !== 'mensajes') cerrarConversacion(true);
+  if (currentSec === 'whatsapp' && sec !== 'whatsapp') { waDetenerPoll(); if (waActual) waCerrarChat(true, true); }
   currentSec = sec;
   SECCIONES_CARGADAS.add(sec);
   guardarUltimaSeccion(sec);
@@ -21396,6 +21590,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'mis-notas') loadMisNotas();
   if (sec === 'tarifario') loadTarifario();
   if (sec === 'mensajes') cargarBandeja();
+  if (sec === 'whatsapp') loadWhatsapp();
   if (sec === 'correo') cargarCorreoSeccion();
   if (sec === 'galeria') loadGaleria();
   if (sec === 'rendimiento-ia') loadRendimientoIA();
@@ -23233,6 +23428,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-04', emoji: '💬', titulo: 'WhatsApp en el CRM', texto: 'Nueva sección Mensajes → WhatsApp: todos los chats del bot de ventas, con fotos y notas de voz, y el botón "Ver lead" cuando el número ya está en el CRM. Arriba se elige el número de WhatsApp (cuando haya más de uno). Es solo para ver: el bot responde ahí y el asesor sigue atendiendo por su WhatsApp.', roles: ['admin'] },
   { fecha: '2026-10-02', emoji: '✉️', titulo: 'Correo: ahora es como Gmail', texto: 'Correo tiene su propia entrada en el menú, con el contador de no leídos. Carpetas (Recibidos con pestañas Principal/Promociones/Social/Notificaciones, Destacados, Enviados, Todos, Spam, Papelera y Contactos), búsqueda en todo tu correo, hilos completos, estrella, archivar, papelera y no leído (se reflejan en tu Gmail real). Podés responder, responder a todos y reenviar con adjuntos, usar CCO, firma por cuenta y autocompletar contactos. Al conectar una cuenta trae los últimos 7 días; desde el selector de cuenta podés traer 30 o 90. Atajos: c redactar, / buscar, j/k moverse, e archivar, # papelera, s destacar, r responder.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-01', emoji: '🎬', titulo: 'Videotutoriales con Lyra', texto: 'Lyra te explica el CRM en videos cortos, con datos de ejemplo. Arriba de cada sección que tiene uno aparece "Ver tutorial" (en el celular, el botón ▶ de la barra de arriba), y en Ayuda → Videotutoriales están todos juntos, marcados como vistos cuando los terminás. En el celular se ven en vertical y en la computadora en horizontal.', roles: ['admin', 'asesor'] },
   { fecha: '2026-09-30', emoji: '🗂️', titulo: 'Postulaciones más fáciles de revisar', texto: 'Tarjetas nuevas: foto grande, calificación con color, cargo y una línea con edad, experiencia y estudios. Ordená por calificación, fecha o experiencia, agrupá por cargo y filtrá por cargo, género, rango de edad, foto, modalidad, estado y calificación. En la ficha, el veredicto de la IA está arriba en Perfil y Llamar / WhatsApp / Ver CV quedan fijos. Al re-analizar, la edad, género, estudios y experiencia vacíos se completan desde el CV.', roles: ['admin'] },
