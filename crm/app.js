@@ -17423,7 +17423,7 @@ function renderTarifario() {
       else if (fVigente && !promoVigente(x)) return false;
       if (fDestino && destinoDe(x) !== fDestino) return false;
       if (fTipo && !(x.incluye_tags || []).includes(fTipo)) return false;
-      if (fPrecio != null && x.precio_desde_usd != null && x.precio_desde_usd > fPrecio) return false;
+      if (fPrecio != null && tarSuperaPrecioMax(x.precio_desde_usd, x.moneda, fPrecio)) return false;
       if (fNinos && !(x.ninos_gratis_cantidad > 0)) return false;
       if (fMes != null && !promoDisponibleEnMes(x, fMes)) return false;
     } else if (tarTab === 'hotsale') {
@@ -17434,12 +17434,12 @@ function renderTarifario() {
       if (fPrecio != null) {
         // La destacada, no la primera fila: filtrar por "hasta $X" contra una
         // fila cualquiera escondía productos que sí entran en el presupuesto.
-        const precioTarifa = tarifaDestacada(x)?.precio_desde_usd;
-        if (precioTarifa != null && precioTarifa > fPrecio) return false;
+        const td = tarifaDestacada(x);
+        if (tarSuperaPrecioMax(td?.precio_desde_usd, td?.moneda, fPrecio)) return false;
       }
     } else if (fPrecio != null) {
-      const precioTarifa = tarifaDestacada(x)?.precio_desde_usd;
-      if (precioTarifa != null && precioTarifa > fPrecio) return false;
+      const td = tarifaDestacada(x);
+      if (tarSuperaPrecioMax(td?.precio_desde_usd, td?.moneda, fPrecio)) return false;
     }
     return true;
   });
@@ -18229,6 +18229,12 @@ function tarPreciosLista(t) {
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
   return claves.map(k => ({ etq: tarEtiquetaPrecio(k), monto: tarMonto(p[k], t.moneda) }));
+}
+// `precio_desde_usd` guarda euros en ~300 filas (moneda='EUR'): el tope "hasta $X" es
+// en dólares, así que un monto en otra moneda no se compara (mejor mostrar de más que
+// esconder una opción real; igual que precioPasaFiltro del Cotizador).
+function tarSuperaPrecioMax(monto, moneda, max) {
+  return monto != null && String(moneda || 'USD').toUpperCase() === 'USD' && monto > max;
 }
 // Espejo en JS de precio_por_persona() (migración 20260904160000). La base
 // declarada gana; si no hay, dbl>sgl = por habitación; sin ninguna de las dos
