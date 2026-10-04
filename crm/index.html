@@ -1719,14 +1719,16 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
    mismos tokens de movimiento (--ease-salida) -- pero en desktop el media
    query lo apaga (position:static) y lo deja fijo al lado de la lista en
    vez de superpuesto. */
-.correo-sync-row{display:flex;align-items:center;gap:10px}
-.correo-sync-time{color:var(--muted);font-size:10px;white-space:nowrap}
+.correo-sync-time{flex-shrink:0;margin-left:auto;padding-left:8px;color:var(--muted);font-size:10px;white-space:nowrap}
+.correo-sync-ico{justify-content:center;flex-shrink:0;width:32px;height:32px;padding:0}
+.correo-atajos{display:grid;place-items:center;flex-shrink:0;width:28px;height:28px;border-radius:8px;color:var(--muted2);font-size:13px;cursor:help}
+.correo-atajos:hover,.correo-atajos:focus-visible{background:rgba(255,255,255,.06);color:var(--txt);outline:none}
 .correo-sync-btn{display:flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:8px;padding:6px 11px;background:var(--panel-solid);color:var(--txt);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
 .correo-sync-btn:hover:not(:disabled){border-color:rgba(var(--accent-rgb),.4);color:var(--accent-ink)}
 .correo-sync-btn:disabled{opacity:.6;cursor:default}
 .correo-sync-btn i.girando{animation:rb-spin .7s linear infinite}
 .correo-cuenta-selector{position:relative}
-.correo-cuenta-btn{display:flex;align-items:center;gap:7px;border:1px solid var(--line2);border-radius:8px;padding:6px 11px;background:var(--panel-solid);color:var(--txt);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;max-width:220px}
+.correo-cuenta-btn{display:flex;align-items:center;gap:7px;border:1px solid var(--line2);border-radius:8px;padding:6px 11px;background:var(--panel-solid);color:var(--txt);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;max-width:170px}
 .correo-cuenta-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .correo-cuenta-btn:hover{border-color:rgba(var(--accent-rgb),.4)}
 .correo-cuenta-menu{position:absolute;z-index:20;top:calc(100% + 6px);right:0;min-width:240px;border:1px solid var(--line2);border-radius:12px;padding:6px;background:var(--bg2);box-shadow:0 16px 40px rgba(0,0,0,.4)}
@@ -1739,9 +1741,9 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-cuenta-desvincular:hover{color:#ef4444}
 .correo-cuenta-agregar{display:flex;align-items:center;gap:8px;width:100%;border:0;border-top:1px solid var(--line);margin-top:4px;padding:9px 10px 4px;background:transparent;color:var(--accent-ink);font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;text-align:left}
 .correo-redactar-btn{display:flex;align-items:center;gap:7px;flex-shrink:0;border:0;border-radius:9px;padding:9px 14px;background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
-.correo-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
-.correo-search{flex:1;min-width:180px}
-.correo-layout{position:relative;overflow:hidden;height:calc(100vh - 300px);min-height:420px}
+.correo-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.correo-search{flex:1;min-width:140px}
+.correo-layout{position:relative;overflow:hidden;height:calc(100vh - 216px);min-height:420px}
 .correo-col{display:flex;flex-direction:column;height:100%;min-height:0}
 .correo-lista{flex:1;min-height:0;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
 .correo-row{display:flex;align-items:flex-start;gap:12px;padding:11px 10px;border:1px solid transparent;border-radius:12px;cursor:pointer;transition:background .15s,border-color .15s}
@@ -1790,11 +1792,26 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
    lateral abierto la tarjeta es bastante más angosta que la ventana. */
 .correo-wrap{container:correo/inline-size}
 @container correo (min-width:720px){
-  .correo-layout{display:flex;gap:20px;overflow:visible;height:calc(100vh - 260px)}
+  .correo-layout{display:flex;gap:20px;overflow:visible;height:calc(100vh - 176px)}
   .correo-col{flex:0 0 clamp(300px,36%,420px);min-width:0;box-sizing:border-box;border-right:1px solid var(--line);padding-right:16px}
   .correo-col .correo-lista{flex:1;min-height:0;height:auto}
   .correo-detalle{position:static;flex:1;min-width:0;transform:none;transition:none;background:transparent;border-radius:0;padding:0 6px 0 4px}
   .correo-detalle-back{display:none}
+}
+
+/* Escritorio: la cabecera global y la tarjeta se compactan SOLO con Correo
+   activo (:has sobre .main) para que la bandeja gane alto sin tocar las demás
+   secciones. El alto de .correo-layout (calc(100vh - Npx)) descuenta este
+   stack: padding main + topbar + padding card + toolbar + carpetas. */
+@media(min-width:761px){
+  .main:has(#sec-correo.active){padding:12px 20px 10px}
+  .main:has(#sec-correo.active) .topbar{gap:12px;margin:-4px 0 8px;padding:4px 0 6px}
+  .main:has(#sec-correo.active) .topbar>div:first-child{display:flex;align-items:baseline;flex:0 1 auto;gap:10px;min-width:0}
+  .main:has(#sec-correo.active) .topbar h1{font-size:20px;letter-spacing:-.4px;white-space:nowrap}
+  .main:has(#sec-correo.active) .topbar .sub{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .main:has(#sec-correo.active) .topbar-help-btn{padding:6px 12px;border-radius:9px;font-size:12px;box-shadow:none}
+  .main:has(#sec-correo.active) .pill{padding:6px 11px;border-radius:9px;font-size:12px}
+  #sec-correo>.card{padding:12px 14px}
 }
 
 .correo-compose-form{display:flex;flex-direction:column;gap:5px;padding:4px 6px 14px}
@@ -1830,14 +1847,14 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-sug-item{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;width:100%;border:0;border-radius:7px;padding:7px 10px;background:transparent;color:var(--txt);font-size:12px;font-family:inherit;text-align:left;cursor:pointer}
 .correo-sug-item small{flex-basis:100%;color:var(--muted);font-size:10.5px}
 .correo-sug-item:hover,.correo-sug-item.on{background:var(--accent-soft)}
-.correo-carpetas{display:flex;gap:6px;margin-bottom:10px;overflow-x:auto;scrollbar-width:none}
-.correo-carpeta{display:flex;align-items:center;gap:6px;flex-shrink:0;border:1px solid var(--line2);border-radius:999px;padding:6px 12px;background:transparent;color:var(--muted);font-size:11.5px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap}
+.correo-carpetas{display:flex;align-items:center;gap:6px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none}
+.correo-carpeta{display:flex;align-items:center;gap:6px;flex-shrink:0;border:1px solid var(--line2);border-radius:999px;padding:4px 11px;background:transparent;color:var(--muted);font-size:11.5px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap}
 .correo-carpeta:hover{color:var(--txt)}
 .correo-carpeta.on{background:var(--accent-soft);border-color:rgba(var(--accent-rgb),.35);color:var(--accent-ink)}
 .correo-carpeta .n,.correo-tab .n{border-radius:99px;padding:1px 6px;background:var(--accent);color:var(--on-accent);font-size:9.5px;font-weight:800}
 .correo-carpeta .n[hidden],.correo-tab .n[hidden]{display:none}
-.correo-tabs{display:flex;gap:2px;flex-shrink:0;margin-bottom:6px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
-.correo-tab{display:flex;align-items:center;gap:5px;flex-shrink:0;border:0;border-bottom:2px solid transparent;padding:7px 10px;background:transparent;color:var(--muted);font-size:11.5px;font-weight:600;font-family:inherit;cursor:pointer}
+.correo-tabs{display:flex;gap:0;flex-shrink:0;margin-bottom:4px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.correo-tab{display:flex;align-items:center;justify-content:center;gap:4px;flex:1 0 auto;border:0;border-bottom:2px solid transparent;padding:6px 7px;background:transparent;color:var(--muted);font-size:11px;font-weight:600;font-family:inherit;cursor:pointer}
 .correo-tab:hover{color:var(--txt)}
 .correo-tab.on{border-bottom-color:var(--accent);color:var(--accent-ink)}
 .correo-row-avatar{background:color-mix(in srgb,var(--c,var(--accent)) 18%,transparent);color:var(--c,var(--accent-ink))}
@@ -3290,7 +3307,8 @@ body.fsize-grande{--tap:41.9px}
 }
 /* ================= Rediseño móvil — Correo/Notas/StopSales/Facturación/PostVenta (Fase 6) ================= */
 @media(max-width:760px){
-  .correo-layout{height:calc(100dvh - var(--appbar-h) - 185px)}
+  .correo-layout{height:calc(100dvh - var(--appbar-h) - 150px)}
+  .correo-atajos{display:none}
   .correo-compose-body{background:var(--panel-solid);color:var(--txt)}
 
   /* Facturación: el tfoot de totales no colapsa con la tabla (regla 1607 solo
@@ -6799,25 +6817,11 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 
     <!-- CORREO (Gmail vinculado a leads, conexión por asesor) -->
     <section class="section" id="sec-correo">
-      <div class="recordatorios-banner" id="correo-banner" style="display:flex;margin:0 0 14px">
+      <div class="recordatorios-banner" id="correo-banner" style="display:flex;margin:0 0 8px">
         <span id="correo-banner-txt">Cargando estado de tu Gmail...</span>
         <button id="correo-banner-btn" style="display:none">Conectar Gmail</button>
       </div>
       <div class="card">
-        <div class="chead-row">
-          <h2><i class="fas fa-envelope"></i> Bandeja de correo</h2>
-          <div class="correo-sync-row">
-            <span class="correo-sync-time" id="correo-sync-time" style="display:none"></span>
-            <button type="button" class="correo-sync-btn" id="correo-sync-btn" style="display:none" title="Sincronizar ahora"><i class="fas fa-rotate"></i> Sincronizar</button>
-            <div class="correo-cuenta-selector" id="correo-cuenta-selector" style="display:none">
-              <button type="button" class="correo-cuenta-btn" id="correo-cuenta-btn">
-                <span id="correo-cuenta-actual"></span> <i class="fas fa-chevron-down"></i>
-              </button>
-              <div class="correo-cuenta-menu" id="correo-cuenta-menu" style="display:none"></div>
-            </div>
-          </div>
-        </div>
-        <div class="csub">Correos sincronizados desde Gmail, vinculados a leads cuando el email coincide. Atajos: c redactar, / buscar, j/k moverse, e archivar, # papelera, s destacar, r responder.</div>
         <div class="correo-backfill" id="correo-backfill" hidden></div>
         <div class="correo-toolbar">
           <button type="button" class="correo-redactar-btn" id="correo-redactar-btn"><i class="fas fa-pen"></i> Redactar</button>
@@ -6828,6 +6832,14 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             <button type="button" class="seg" data-f="sin_vincular">Sin vincular</button>
             <button type="button" class="seg" data-f="adjuntos">Con adjuntos</button>
           </div>
+          <button type="button" class="correo-sync-btn correo-sync-ico" id="correo-sync-btn" style="display:none" title="Sincronizar ahora" aria-label="Sincronizar ahora"><i class="fas fa-rotate"></i></button>
+          <div class="correo-cuenta-selector" id="correo-cuenta-selector" style="display:none">
+            <button type="button" class="correo-cuenta-btn" id="correo-cuenta-btn">
+              <span id="correo-cuenta-actual"></span> <i class="fas fa-chevron-down"></i>
+            </button>
+            <div class="correo-cuenta-menu" id="correo-cuenta-menu" style="display:none"></div>
+          </div>
+          <span class="correo-atajos" tabindex="0" role="img" aria-label="Atajos de teclado" title="Correos sincronizados desde Gmail, vinculados a leads cuando el email coincide.&#10;Atajos: c redactar, / buscar, j/k moverse, e archivar, # papelera, s destacar, r responder."><i class="fas fa-keyboard"></i></span>
         </div>
         <div class="correo-carpetas" id="correo-carpetas">
           <button type="button" class="correo-carpeta on" data-carpeta="recibidos"><i class="fas fa-inbox"></i> Recibidos <span class="n" hidden></span></button>
@@ -6837,6 +6849,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <button type="button" class="correo-carpeta" data-carpeta="spam"><i class="fas fa-ban"></i> Spam <span class="n" hidden></span></button>
           <button type="button" class="correo-carpeta" data-carpeta="papelera"><i class="fas fa-trash"></i> Papelera <span class="n" hidden></span></button>
           <button type="button" class="correo-carpeta" data-carpeta="contactos"><i class="fas fa-address-book"></i> Contactos <span class="n" hidden></span></button>
+          <span class="correo-sync-time" id="correo-sync-time" style="display:none"></span>
         </div>
         <div class="correo-wrap">
         <div class="correo-layout" id="correo-layout">
