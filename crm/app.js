@@ -5420,7 +5420,7 @@ let CONV_CACHE = null, ACTIVIDAD_CACHE = null, CORREO_LEAD_CACHE = null;
    iframe (sin él el correo quedaba en una ventana fija con scroll propio);
    es inocuo mientras allow-scripts siga ausente -- NO sumar ambos flags. */
 const CORREOS_DATA = new Map();
-const CORREO_IFRAME_BASE = '<base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:#fff}body{margin:0;padding:16px 20px;color:#202124;font:14px/1.6 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;overflow-wrap:break-word}img{max-width:100%!important;height:auto!important}table{max-width:100%}a{color:#1a73e8}pre{white-space:pre-wrap}blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #dadce0;color:#5f6368}</style>';
+const CORREO_IFRAME_BASE = '<base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:#fff}body{margin:0;padding:8px 12px;color:#202124;font:14px/1.6 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;overflow-wrap:break-word}img{max-width:100%!important;height:auto!important}table{max-width:100%}a{color:#1a73e8}pre{white-space:pre-wrap}blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #dadce0;color:#5f6368}</style>';
 window.ajustarIframeCorreo = (f) => {
   try {
     const d = f.contentDocument;
@@ -10375,12 +10375,16 @@ function pintarHiloCorreo(threadId) {
   const leadId = msgs.find(m => m.lead_id)?.lead_id;
   document.getElementById('correo-detalle-body').innerHTML = `
     <div class="correo-detalle-head">
-      <div class="correo-hilo-acciones" id="correo-hilo-acciones">${accionesHiloHtml(threadId)}</div>
-      <h3>${esc(ultimo.asunto || '(sin asunto)')}</h3>
+      <div class="correo-head-fila">
+        <h3>${esc(ultimo.asunto || '(sin asunto)')}</h3>
+        <div class="correo-hilo-acciones" id="correo-hilo-acciones">${accionesHiloHtml(threadId)}</div>
+      </div>
+      <div class="correo-head-fila2">
       <div class="correo-etiquetas">${et.map(e => `<span class="correo-chip">${CORREO_ETIQUETAS_VISIBLES[e]}</span>`).join('')}<span class="correo-detalle-meta">${msgs.length} mensaje${msgs.length > 1 ? 's' : ''}</span></div>
       ${leadId
         ? `<div class="correo-lead-row"><a href="#" class="correo-lead-tag" onclick="abrirLeadPorId(${leadId});return false"><i class="fas fa-user"></i> <span id="correo-lead-nombre">Lead #${leadId}</span></a><button type="button" class="correo-lead-btn" onclick="vincularHiloCorreo(${ultimo.id}, null)"><i class="fas fa-link-slash"></i> Desvincular</button></div>`
         : `<div class="correo-lead-row"><div class="correo-lead-buscar"><i class="fas fa-link"></i><input type="search" class="correo-lead-input" id="correo-lead-input" placeholder="Vincular a un lead: nombre, teléfono, email o #ID" autocomplete="off" oninput="buscarLeadParaCorreo(this.value, ${ultimo.id})"><div class="correo-lead-sug" id="correo-lead-sug" hidden></div></div></div>`}
+      </div>
     </div>
     <div class="correo-detalle-log">${msgs.map((c, i) => renderMensajeHilo(c, i === msgs.length - 1 || (!c.leido && c.direccion === 'entrante'))).join('')}</div>
     <div class="correo-responder-bar">

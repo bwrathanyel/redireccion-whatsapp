@@ -1774,14 +1774,17 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-detalle-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto}
 .correo-detalle-empty{display:grid;flex:1;place-items:center;gap:8px;color:var(--muted);font-size:12px;text-align:center}
 .correo-detalle-empty i{font-size:28px}
-.correo-detalle-head h3{margin:0;font-size:19px;font-weight:700;line-height:1.3;overflow-wrap:anywhere}
+.correo-detalle-head{padding-bottom:8px;border-bottom:1px solid var(--line)}
+.correo-head-fila{display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 12px}
+.correo-head-fila2{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:8px}
+.correo-detalle-head h3{flex:1 1 220px;min-width:0;margin:0;font-size:17px;font-weight:700;line-height:1.3;overflow-wrap:anywhere}
 .correo-detalle-meta{margin-top:4px;color:var(--muted);font-size:11px}
-.correo-lead-row{display:flex;align-items:center;gap:8px;margin-top:12px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.correo-lead-row{display:flex;flex:1 1 240px;align-items:center;gap:8px;margin:0;padding:0;border:0}
 .correo-lead-tag{display:flex;align-items:center;gap:6px;border-radius:999px;padding:5px 12px;background:var(--accent-soft);color:var(--accent-ink);font-size:10.5px;font-weight:700}
-.correo-lead-input{width:100px;height:32px;border:1px solid var(--line2);border-radius:8px;padding:0 10px;background:var(--panel-solid);color:var(--txt);font-size:11px;font-family:inherit}
+.correo-lead-input{width:100px;height:30px;border:1px solid var(--line2);border-radius:8px;padding:0 10px;background:var(--panel-solid);color:var(--txt);font-size:11px;font-family:inherit}
 .correo-lead-btn{border:1px solid var(--line2);border-radius:8px;padding:6px 12px;background:transparent;color:var(--muted);font-size:10.5px;font-weight:700;cursor:pointer;font-family:inherit}
 .correo-lead-btn:hover{color:var(--txt)}
-.correo-detalle-log{flex:1;margin-top:12px}
+.correo-detalle-log{flex:1;margin-top:8px}
 
 /* Split-view según el ancho real de la tarjeta (no del viewport): con el menú
    lateral abierto la tarjeta es bastante más angosta que la ventana. */
@@ -1860,11 +1863,11 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-backfill .bar{flex-basis:100%;height:3px;overflow:hidden;border-radius:2px;background:rgba(var(--accent-rgb),.2)}
 .correo-backfill .bar i{display:block;width:35%;height:100%;border-radius:2px;background:var(--accent);animation:correo-barra 1.2s ease-in-out infinite}
 @keyframes correo-barra{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
-.correo-hilo-acciones{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.correo-hilo-acciones{display:flex;flex:0 0 auto;flex-wrap:wrap;gap:6px}
 .correo-accion{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:8px;padding:6px 10px;background:transparent;color:var(--txt);font-size:11px;font-weight:600;font-family:inherit;cursor:pointer}
 .correo-accion:hover{border-color:rgba(var(--accent-rgb),.4);color:var(--accent-ink)}
 .correo-accion.on{background:var(--accent-soft);border-color:rgba(var(--accent-rgb),.35);color:var(--accent-ink)}
-.correo-etiquetas{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}
+.correo-etiquetas{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .correo-etiquetas .correo-detalle-meta{margin-top:0}
 .correo-msg{border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden}
 .correo-msg.abierto{border-color:var(--line2)}
@@ -1875,13 +1878,14 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .correo-msg-snip{overflow:hidden;color:var(--muted2);font-size:11.5px;text-overflow:ellipsis;white-space:nowrap}
 .correo-msg.abierto .correo-msg-snip{display:none}
 .correo-msg-fecha{flex-shrink:0;color:var(--muted2);font-size:10.5px;white-space:nowrap}
-.correo-msg-body{display:none;padding:0 12px 12px}
+.correo-msg-body{display:none;padding:0 6px 6px}
 .correo-msg.abierto .correo-msg-body{display:block}
 .correo-msg-iframe{display:block;width:100%;height:320px;border:0;border-radius:8px;background:#fff}
-.correo-msg-texto{margin:0;padding:6px 2px;font:inherit;font-size:14px;line-height:1.65;white-space:pre-wrap;overflow-wrap:break-word}
+.correo-msg-texto{margin:0;padding:6px 8px 8px;font:inherit;font-size:14px;line-height:1.65;white-space:pre-wrap;overflow-wrap:break-word}
 .correo-msg-texto a{color:var(--accent-ink)}
 .correo-msg-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.correo-responder-bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;padding:10px 0 4px}
+.correo-responder-bar{position:sticky;bottom:0;z-index:2;display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;padding:8px 0 4px;background:var(--panel-solid);border-top:1px solid var(--line)}
+.correo-detalle-log .correo-msg:last-child .correo-msg-btns{display:none}
 
 /* ---------- Galería ---------- */
 /* Carpetas desplegables por categoría (Bloque 6) -- <details> nativo: sin
