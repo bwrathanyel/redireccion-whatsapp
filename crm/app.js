@@ -10709,7 +10709,7 @@ function fbPintar(data, plat = 'facebook') {
   const avisos = [], conAddon = Object.keys(e).filter(k => e[k].motivo === 'addon'), conError = Object.keys(e).filter(k => e[k].motivo !== 'addon');
   if (conAddon.length) avisos.push(fbAviso('fa-lock', `Zernio no entrega ${conAddon.map(k => FB_BLOQUES[k] || k).join(', ')} sin el <b>add-on Analytics</b>. Actívalo en Zernio (tiene costo) y aparecerán aquí.`));
   if (conError.length) avisos.push(fbAviso('fa-triangle-exclamation', `No se pudo cargar ${conError.map(k => `${FB_BLOQUES[k] || k}${e[k].estado ? ' (error ' + e[k].estado + (e[k].detalle ? ': ' + esc(e[k].detalle) : '') + ')' : ''}`).join(', ')}.`));
-  if (data.rango?.insights_recortado) avisos.push(fbAviso('fa-circle-info', `Meta limita las métricas de la página a 88 días: se muestra del ${fmtFechaSolo(data.rango.insights_desde)} al ${fmtFechaSolo(data.rango.hasta)}.`));
+  if (data.rango?.insights_recortado) avisos.push(fbAviso('fa-circle-info', `Meta limita las métricas de la cuenta a ${data.rango.insights_max_dias || 88} días: se muestra del ${fmtFechaSolo(data.rango.insights_desde)} al ${fmtFechaSolo(data.rango.hasta)}.`));
   if (pg?.retraso) avisos.push(fbAviso('fa-clock', `Meta publica las métricas de la página con retraso (${esc(pg.retraso)}).`));
   document.getElementById('redes-fb-avisos').innerHTML = avisos.join('');
 
