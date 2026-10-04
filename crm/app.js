@@ -10543,9 +10543,7 @@ function setupRedes() {
     document.querySelectorAll('#redes-red-tabs .seg').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     redesRed = b.dataset.red;
-    document.getElementById('redes-ig-panel').style.display = redesRed === 'instagram' ? '' : 'none';
-    document.getElementById('redes-tiktok-panel').style.display = redesRed === 'tiktok' ? '' : 'none';
-    document.getElementById('redes-fb-panel').style.display = redesRed === 'facebook' ? '' : 'none';
+    redesPanelesVista(true);
     cargarRedActual();
   });
   document.querySelectorAll('#redes-periodo .seg').forEach(b => b.onclick = () => { document.querySelectorAll('#redes-periodo .seg').forEach(x => x.classList.remove('on')); b.classList.add('on'); redesPeriodo = b.dataset.p; cargarRedActual(); });
@@ -10555,7 +10553,7 @@ function setupRedes() {
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
   addChatBubbleRedes('bot', 'Hola, soy el analista de redes. Preguntame sobre el alcance, los posts con mejor desempeño o las historias del período seleccionado.');
 }
-function cargarRedActual() { redesRed === 'tiktok' ? loadRedesTikTok() : redesRed === 'facebook' ? loadRedesFacebook() : loadRedes(); }
+function cargarRedActual() { loadRedesZernio(redesRed); }
 // Con todo en 0 Chart.js dibuja un eje 0,0–1,0 sin sentido: se cambia por un aviso.
 function chartVacio(id, hayDatos, msg) {
   const cv = document.getElementById(id); if (!cv) return;
@@ -10630,7 +10628,8 @@ async function loadRedesTikTok() {
 }
 /* Facebook: todo llega de Zernio por la EF redes-facebook-zernio (la key no baja al navegador).
    Cada bloque puede faltar (`errores`): el add-on Analytics de Zernio es de pago y se avisa en pantalla. */
-let redesFbCuentas = null, redesFbCuenta = null, redesFbGen = 0;
+let redesFbCuentas = {}, redesFbCuenta = {}, redesFbGen = 0;
+const FB_RED = { facebook: { nombre: 'Facebook', icono: 'fa-facebook', seccion: 'Página' }, instagram: { nombre: 'Instagram', icono: 'fa-instagram', seccion: 'Cuenta' }, tiktok: { nombre: 'TikTok', icono: 'fa-tiktok', seccion: 'Cuenta' } };
 const redesFbCache = new Map(), REDES_FB_CACHE_MS = 5 * 60 * 1000;
 const FB_BLOQUES = { pagina: 'las métricas de la página', seguidores: 'los seguidores', posts: 'las publicaciones', horas: 'los mejores horarios', reacciones: 'las reacciones' };
 const FB_TIPOS = { image: 'Foto', photo: 'Foto', video: 'Video', reel: 'Reel', carousel: 'Carrusel', album: 'Álbum', link: 'Enlace', text: 'Texto', texto: 'Texto', story: 'Historia' };
@@ -10647,36 +10646,48 @@ async function redesFbInvocar(body) {
   if (error || !data?.ok) throw new Error(data?.error || error?.message || 'error');
   return data;
 }
-function fbPintarCuentas() {
-  const box = document.getElementById('redes-fb-cuentas');
-  box.style.display = redesFbCuentas.length > 1 ? '' : 'none';
-  box.innerHTML = redesFbCuentas.map(c => `<button class="seg${c.id === redesFbCuenta ? ' on' : ''}" data-id="${esc(c.id)}">${esc(c.nombre)}</button>`).join('');
-  box.querySelectorAll('.seg').forEach(b => b.onclick = () => { redesFbCuenta = b.dataset.id; fbPintarCuentas(); loadRedesFacebook(); });
+function fbPintarCuentas(plat) {
+  const box = document.getElementById('redes-fb-cuentas'), cs = redesFbCuentas[plat] || [];
+  box.style.display = cs.length > 1 ? '' : 'none';
+  box.innerHTML = cs.map(c => `<button class="seg${c.id === redesFbCuenta[plat] ? ' on' : ''}" data-id="${esc(c.id)}">${esc(c.nombre)}</button>`).join('');
+  box.querySelectorAll('.seg').forEach(b => b.onclick = () => { redesFbCuenta[plat] = b.dataset.id; fbPintarCuentas(plat); loadRedesZernio(plat); });
 }
-async function loadRedesFacebook() {
+// Facebook, Instagram y TikTok comparten panel. Con rol marketing (la EF es solo admin)
+// Instagram y TikTok caen a sus paneles de siempre, alimentados desde Supabase.
+function redesPanelesVista(zernio) {
+  document.getElementById('redes-ig-panel').style.display = !zernio && redesRed === 'instagram' ? '' : 'none';
+  document.getElementById('redes-tiktok-panel').style.display = !zernio && redesRed === 'tiktok' ? '' : 'none';
+  document.getElementById('redes-fb-panel').style.display = zernio ? '' : 'none';
+}
+const loadRedesFacebook = () => loadRedesZernio('facebook');
+async function loadRedesZernio(plat) {
   await ensureChart();
-  const gen = ++redesFbGen, avisos = document.getElementById('redes-fb-avisos');
-  avisos.innerHTML = fbAviso('fa-spinner fa-spin', 'Cargando métricas de Facebook desde Zernio...');
+  const R = FB_RED[plat], gen = ++redesFbGen, avisos = document.getElementById('redes-fb-avisos');
+  redesPanelesVista(true);
+  document.getElementById('redes-fb-seccion').innerHTML = `<i class="fa-brands ${R.icono}"></i> ${R.seccion}`;
+  document.getElementById('redes-fb-card-reac').style.display = plat === 'facebook' ? '' : 'none';
+  avisos.innerHTML = fbAviso('fa-spinner fa-spin', `Cargando métricas de ${R.nombre} desde Zernio...`);
   try {
-    if (!redesFbCuentas) {
-      redesFbCuentas = (await redesFbInvocar({ accion: 'cuentas' })).cuentas.filter(c => c.activo);
-      redesFbCuenta = redesFbCuentas[0]?.id || null;
-      fbPintarCuentas();
+    if (!redesFbCuentas[plat]) {
+      redesFbCuentas[plat] = (await redesFbInvocar({ accion: 'cuentas', plataforma: plat })).cuentas.filter(c => c.activo);
+      redesFbCuenta[plat] = redesFbCuentas[plat][0]?.id || null;
     }
-    if (!redesFbCuenta) { avisos.innerHTML = fbAviso('fa-circle-info', 'No hay páginas de Facebook conectadas en Zernio.'); return; }
+    fbPintarCuentas(plat);
+    if (!redesFbCuenta[plat]) { avisos.innerHTML = fbAviso('fa-circle-info', `No hay cuentas de ${R.nombre} conectadas en Zernio.`); return; }
     const [d, h] = periodo(redesPeriodo), fin = addD(h, -1), hoy = new Date();
-    const desde = fbYmd(d), hasta = fbYmd(fin > hoy ? hoy : fin), clave = `${redesFbCuenta}|${desde}|${hasta}`;
+    const desde = fbYmd(d), hasta = fbYmd(fin > hoy ? hoy : fin), clave = `${plat}|${redesFbCuenta[plat]}|${desde}|${hasta}`;
     let hit = redesFbCache.get(clave);
     if (!hit || Date.now() - hit.t > REDES_FB_CACHE_MS) {
-      hit = { t: Date.now(), data: await redesFbInvocar({ accion: 'resumen', accountId: redesFbCuenta, desde, hasta }) };
+      hit = { t: Date.now(), data: await redesFbInvocar({ accion: 'resumen', plataforma: plat, accountId: redesFbCuenta[plat], desde, hasta }) };
       redesFbCache.set(clave, hit);
     }
-    if (gen === redesFbGen) fbPintar(hit.data);
+    if (gen === redesFbGen) fbPintar(hit.data, plat);
   } catch (e) {
     console.error(e);
     if (gen !== redesFbGen) return;
-    avisos.innerHTML = fbAviso('fa-triangle-exclamation', 'No se pudieron cargar las métricas de Facebook. Intenta de nuevo en un momento.');
-    errToast('No se pudieron cargar las métricas de Facebook');
+    if (plat !== 'facebook') { redesPanelesVista(false); plat === 'tiktok' ? loadRedesTikTok() : loadRedes(); return; }
+    avisos.innerHTML = fbAviso('fa-triangle-exclamation', `No se pudieron cargar las métricas de ${R.nombre}. Intenta de nuevo en un momento.`);
+    errToast(`No se pudieron cargar las métricas de ${R.nombre}`);
   }
 }
 function fbLinea(id, serie, etiqueta, color, vacio, desdeCero = true) {
@@ -10688,7 +10699,11 @@ function fbBarras(id, etiquetas, datos, colores, vacio, horizontal = true) {
   mk(id, { type: 'bar', data: { labels: etiquetas, datasets: [{ data: datos, backgroundColor: colores, borderRadius: 6, barThickness: horizontal ? 18 : undefined, maxBarThickness: 34 }] }, options: { indexAxis: horizontal ? 'y' : 'x', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: horizontal ? gridColor() : 'transparent' }, beginAtZero: true }, y: { grid: { color: horizontal ? 'transparent' : gridColor() }, beginAtZero: true } } } });
   chartVacio(id, datos.some(v => v > 0), vacio);
 }
-function fbPintar(data) {
+const FB_METRICAS_ETIQ = { reach: 'Alcance', views: 'Vistas', accounts_engaged: 'Cuentas que interactuaron', total_interactions: 'Interacciones', profile_views: 'Visitas al perfil', likes_count: 'Me gusta totales', video_count: 'Videos', video_views: 'Reproducciones', impressions: 'Impresiones', likes: 'Me gusta', comments: 'Comentarios', shares: 'Compartidos' };
+const fbEtiqueta = k => FB_METRICAS_ETIQ[k] || k.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+const FB_ICONOS = ['fa-eye', 'fa-arrow-pointer', 'fa-heart', 'fa-circle-play', 'fa-hand-pointer', 'fa-chart-simple'];
+const FB_COLORES = ['var(--accent)', 'var(--purple)', '#ff5c8a', '#34d399', '#ffb347', 'var(--blue)'];
+function fbPintar(data, plat = 'facebook') {
   const e = data.errores || {}, pg = data.pagina, sg = data.seguidores, ps = data.posts, rc = data.reacciones, hr = data.horas;
   const sin = (k, normal) => !e[k] ? normal : e[k].motivo === 'addon' ? 'Requiere el add-on Analytics de Zernio.' : 'No se pudo cargar este bloque.';
   const avisos = [], conAddon = Object.keys(e).filter(k => e[k].motivo === 'addon'), conError = Object.keys(e).filter(k => e[k].motivo !== 'addon');
@@ -10700,29 +10715,44 @@ function fbPintar(data) {
 
   const t = pg?.totales, serie = pg?.series || {};
   const crec = sg ? `${sg.crecimiento > 0 ? '+' : ''}${fbNum(sg.crecimiento)} (${fbDec(sg.porcentaje || 0)}%) en el período` : null;
-  pintarKPIs('redes-fb-kpis-pagina', [
+  // Meta no entrega ganados/perdidos por día: si la métrica viene vacía se derivan de la serie de seguidores.
+  const gp = sg?.ganados_perdidos || [];
+  const ganDer = gp.map(x => ({ dia: x.dia, v: x.ganados })), perDer = gp.map(x => ({ dia: x.dia, v: x.perdidos }));
+  const gan = serie.followers_gained?.some(x => x.v > 0) ? serie.followers_gained : ganDer;
+  const per = serie.followers_lost?.some(x => x.v > 0) ? serie.followers_lost : perDer;
+  const sum = xs => xs.reduce((a, x) => a + x.v, 0);
+  const kpiSeg = [
     { t: 'Seguidores', v: fbNum(sg?.actual ?? t?.page_follows), d: crec, i: 'fa-users', c: 'var(--blue)' },
-    { t: 'Seguidores ganados', v: fbNum(t?.followers_gained), i: 'fa-user-plus', c: '#34d399' },
-    { t: 'Seguidores perdidos', v: fbNum(t?.followers_lost), i: 'fa-user-minus', c: '#ff6b6b' },
+    { t: 'Seguidores ganados', v: fbNum(gan.length ? sum(gan) : t?.followers_gained), i: 'fa-user-plus', c: '#34d399' },
+    { t: 'Seguidores perdidos', v: fbNum(per.length ? sum(per) : t?.followers_lost), i: 'fa-user-minus', c: '#ff6b6b' },
+  ];
+  const kpiPlat = plat === 'facebook' ? [
     { t: 'Vistas de contenido', v: fbNum(t?.page_media_view), i: 'fa-eye', c: 'var(--accent)' },
     { t: 'Visitas a la página', v: fbNum(t?.page_views_total), i: 'fa-arrow-pointer', c: 'var(--purple)' },
     { t: 'Interacciones', v: fbNum(t?.page_post_engagements), i: 'fa-heart', c: '#ff5c8a' },
     { t: 'Reproducciones de video', v: fbNum(t?.page_video_views), i: 'fa-circle-play', c: '#34d399' },
     { t: 'Tiempo de video', v: fbDuracion(t?.page_video_view_time), i: 'fa-hourglass-half', c: '#ffb347' },
-  ]);
+  ] : Object.keys(t || {}).filter(k => !/follow|gained|lost/i.test(k) || /views/.test(k)).slice(0, 6)
+    .map((k, i) => ({ t: fbEtiqueta(k), v: fbNum(t[k]), i: FB_ICONOS[i % 6], c: FB_COLORES[i % 6] }));
+  pintarKPIs('redes-fb-kpis-pagina', [...kpiSeg, ...kpiPlat]);
   const segSerie = sg?.serie?.length ? sg.serie : serie.page_follows;
   fbLinea('chFbSeguidores', segSerie, 'Seguidores', '#4a9eff', sin('seguidores', 'Sin datos de seguidores en este período.'), false);
-  const gan = serie.followers_gained || [], per = serie.followers_lost || [];
   const dias = [...new Set([...gan, ...per].map(x => x.dia))].sort();
   mk('chFbGanPer', { type: 'bar', data: { labels: dias.map(d => d.slice(8) + '/' + d.slice(5, 7)), datasets: [
     { label: 'Ganados', data: dias.map(d => gan.find(x => x.dia === d)?.v || 0), backgroundColor: '#34d399', borderRadius: 4, maxBarThickness: 14 },
     { label: 'Perdidos', data: dias.map(d => per.find(x => x.dia === d)?.v || 0), backgroundColor: '#ff6b6b', borderRadius: 4, maxBarThickness: 14 },
   ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { boxWidth: 10 } } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: gridColor() }, beginAtZero: true } } } });
   chartVacio('chFbGanPer', dias.length > 0 && [...gan, ...per].some(x => x.v > 0), sin('pagina', 'Sin movimiento de seguidores en este período.'));
-  fbLinea('chFbVistas', serie.page_media_view, 'Vistas', '#4a9eff', sin('pagina', 'Sin datos en este período.'));
-  fbLinea('chFbInter', serie.page_post_engagements, 'Interacciones', '#ff5c8a', sin('pagina', 'Sin datos en este período.'));
+  const pd2 = ps?.por_dia || [], nfb = plat === 'facebook';
+  const alc = serie.reach?.length ? serie.reach : pd2.map(x => ({ dia: x.dia, v: x.alcance }));
+  const t1 = nfb ? ['Vistas de contenido', 'Diarias, de toda la página'] : serie.reach?.length ? ['Alcance de la cuenta', 'Diario, de toda la cuenta'] : ['Alcance por publicación', 'Suma por día de publicación'];
+  document.getElementById('redes-fb-t1').textContent = t1[0]; document.getElementById('redes-fb-s1').textContent = t1[1];
+  document.getElementById('redes-fb-t2').textContent = nfb ? 'Interacciones con publicaciones' : 'Interacciones por publicación';
+  document.getElementById('redes-fb-s2').textContent = nfb ? 'Diarias, de toda la página' : 'Suma por día de publicación';
+  fbLinea('chFbVistas', nfb ? serie.page_media_view : alc, 'Alcance', '#4a9eff', sin(nfb ? 'pagina' : 'posts', 'Sin datos en este período.'));
+  fbLinea('chFbInter', nfb ? serie.page_post_engagements : pd2.map(x => ({ dia: x.dia, v: x.interacciones })), 'Interacciones', '#ff5c8a', sin(nfb ? 'pagina' : 'posts', 'Sin datos en este período.'));
 
-  const tp = ps?.totales, base = tp ? (tp.alcance || tp.impresiones) : 0;
+  const tp = ps?.totales, base = tp ? (tp.alcance || tp.impresiones || tp.vistas) : 0;
   pintarKPIs('redes-fb-kpis-posts', [
     { t: 'Publicaciones', v: fbNum(tp?.publicaciones), i: 'fa-images', c: 'var(--blue)' },
     { t: 'Impresiones', v: fbNum(tp?.impresiones), i: 'fa-chart-simple', c: 'var(--purple)' },
@@ -10748,7 +10778,7 @@ function fbPintar(data) {
   const top = ps?.top || [];
   document.getElementById('redes-fb-top-body').innerHTML = top.length ? top.map((p, i) => {
     const r = rc?.por_post?.[p.idPlataforma], url = fbHttps(p.url), mini = fbHttps(p.miniatura);
-    const tasa = p.alcance || p.impresiones;
+    const tasa = p.alcance || p.impresiones || p.vistas;
     const chips = r ? FB_REACCIONES.filter(x => r[x[0]] > 0).map(x => `<span class="bt-tag" style="--c:${x[2]}">${x[1]} ${fmt(r[x[0]])}</span>`).join('') : '';
     return `<article class="lt-card" style="--i:${Math.min(i, 20)}">
       <div class="tt-row">
@@ -10770,7 +10800,7 @@ function fbPintar(data) {
       ${chips ? `<div class="lt-card-pie">${chips}</div>` : ''}
       <div class="lt-card-pie">
         ${p.fecha ? `<span class="csub" style="margin:0 auto 0 0">${esc(fmtFechaSolo(p.fecha.slice(0, 10)))}</span>` : ''}
-        ${url ? `<a class="btn-sm lt-primario" href="${esc(url)}" target="_blank" rel="noopener"><i class="fa-brands fa-facebook"></i> Ver publicación</a>` : ''}
+        ${url ? `<a class="btn-sm lt-primario" href="${esc(url)}" target="_blank" rel="noopener"><i class="fa-brands ${FB_RED[plat].icono}"></i> Ver publicación</a>` : ''}
       </div>
     </article>`;
   }).join('') : `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${sin('posts', 'Sin publicaciones en este período')}</div>`;
