@@ -17353,10 +17353,17 @@ function _agregarHotelCalc(x) {
   // El `precio_desde_usd` de una línea del PDF suele ser el precio de CHD:
   // anunciarlo como "Desde" sería cotizar de menos. Solo se acepta el legacy de
   // los flyers, que es el "desde" que el propio flyer publica.
-  const precios = promos.map(p => (p.precios ? tarPrecioPorPersona(p) : (p.origen === 'flyer' ? p.precio_desde_usd : null))).filter(v => v != null);
+  // Solo sobre lo VENDIBLE HOY (mismo criterio que `tarifa_ofrecible()` en SQL): el
+  // "Desde" de una tarifa ya vencida cotizaba un precio que no se puede dar. Cada
+  // precio viaja con SU moneda: mezclar EUR y USD en un mínimo daría un número sin sentido.
+  const precios = promos.filter(tarVendibleHoy)
+    .map(p => ({ v: p.precios ? tarPrecioPorPersona(p) : (p.origen === 'flyer' ? p.precio_desde_usd : null), moneda: String(p.moneda || 'USD').toUpperCase() }))
+    .filter(e => e.v != null);
+  const menor = precios.reduce((m, e) => (!m || e.v < m.v ? e : m), null);
   return {
     tags: [...new Set(promos.flatMap(p => p.incluye_tags || []))],
-    precioMin: precios.length ? Math.round(Math.min(...precios) * 100) / 100 : null,
+    precioMin: menor ? Math.round(menor.v * 100) / 100 : null,
+    precioMinMoneda: menor ? menor.moneda : null,
     ninosMax: tarNinoGratisHotel(x)?.cantidad || 0,
     // "Vendible hoy" en vez de las fechas de la promo vieja: mismo criterio que
     // `tarifa_destacada()` en SQL (venta abierta + disfrute no vencido).
@@ -17400,7 +17407,7 @@ function renderTarifario() {
       if (fDestino && x.destino !== fDestino) return false;
       const ag = agregarHotel(x);
       if (fTipo && !ag.tags.includes(fTipo)) return false;
-      if (fPrecio != null && ag.precioMin != null && ag.precioMin > fPrecio) return false;
+      if (fPrecio != null && ag.precioMin != null && ag.precioMinMoneda === 'USD' && ag.precioMin > fPrecio) return false;
       if (fNinos && ag.ninosMax < 1) return false;
       if (fVigente && !ag.algunaVigente) return false;
       if (fOcultarOcultos && x.activo === false) return false;
@@ -17638,7 +17645,7 @@ function tarRowHtml(x) {
     // destacada; sin ellos NO se cae a precio_texto: en esta vista de lista es
     // una tabla entera pegada y desarma la fila.
     const d = tarifaDestacada(x);
-    precioTxt = ag.precioMin != null ? `Desde $${ag.precioMin}` : (d?.precios ? tarBadgePrecio(d) : null);
+    precioTxt = ag.precioMin != null ? `Desde ${tarMonto(ag.precioMin, ag.precioMinMoneda)}` : (d?.precios ? tarBadgePrecio(d) : null);
     promosCount = (x.tarifas || []).length;
   } else if (esPromo) {
     tags = x.incluye_tags || []; precioTxt = x.precio_texto || null;
