@@ -5430,16 +5430,18 @@ window.ajustarIframeCorreo = (f) => {
     if (window.ResizeObserver) new ResizeObserver(medir).observe(d.documentElement);
   } catch { /* sin acceso al documento: queda el alto base */ }
 };
-function renderCuerpoCorreo(correo) {
-  if (correo.cuerpo_html) {
-    return `<iframe class="correo-msg-iframe" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" onload="ajustarIframeCorreo(this)" srcdoc="${esc(CORREO_IFRAME_BASE + correo.cuerpo_html)}"></iframe>`;
-  }
-  const texto = esc(correo.cuerpo_texto || '(sin contenido)').replace(/https?:\/\/(?:(?!&quot;|&gt;|&#39;)[^\s<])+/g, u => {
+function textoConEnlaces(s) {
+  return esc(s).replace(/https?:\/\/(?:(?!&quot;|&gt;|&#39;)[^\s<])+/g, u => {
     const fin = (u.match(/[.,;:!?)]+$/) || [''])[0];
     const url = u.slice(0, u.length - fin.length);
     return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${fin}`;
   });
-  return `<div class="correo-msg-texto">${texto}</div>`;
+}
+function renderCuerpoCorreo(correo) {
+  if (correo.cuerpo_html) {
+    return `<iframe class="correo-msg-iframe" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" onload="ajustarIframeCorreo(this)" srcdoc="${esc(CORREO_IFRAME_BASE + correo.cuerpo_html)}"></iframe>`;
+  }
+  return `<div class="correo-msg-texto">${textoConEnlaces(correo.cuerpo_texto || '(sin contenido)')}</div>`;
 }
 // Marca leído en el CRM Y en el Gmail real del asesor (Fase 5) -- best
 // effort, no bloquea la lectura del correo si falla (ej. asesor todavía no
@@ -20307,8 +20309,25 @@ function renderBurbuja(m, esMio, agrupado, esUltimoDelGrupo, todosLeyeron, nombr
   else if (m.tipo === 'imagen') cuerpo = `${sender}<img class="msg-img" src="${esc(url)}" data-img="${esc(url)}">${m.contenido ? `<div style="padding:4px 4px 0">${esc(m.contenido)}</div>` : ''}${meta}`;
   else if (m.tipo === 'video') cuerpo = `${sender}<div class="msg-video-wrap" data-video><video src="${esc(url)}" preload="metadata"></video><div class="msg-video-play"><i class="fas fa-play"></i></div></div>${meta}`;
   else if (m.tipo === 'documento') cuerpo = `${sender}<div class="msg-doc" data-doc="${esc(url)}"><i class="fas ${iconoPorExtension(m.nombre_archivo)}"></i><div><div class="msg-doc-nombre">${esc(m.nombre_archivo || 'Archivo')}</div><div class="msg-doc-peso">${formatBytes(m.peso_bytes)}</div></div></div>${meta}`;
-  else cuerpo = `${sender}<div>${esc(m.contenido || '')}</div>${meta}`;
+  else cuerpo = `${sender}${cuerpoTextoChat(m.contenido || '')}${meta}`;
   return `<div class="${clases}">${cuerpo}</div>`;
+}
+// Tarjeta con acciones: las últimas líneas "[[Etiqueta|https://… | adjunto:<ruta del bucket>]]" se dibujan como botones (sin columna nueva en mensajes).
+const RE_ACCION_CHAT = /^\[\[([^|\]]{1,30})\|((?:https?:\/\/|adjunto:)[^\]\s]+)\]\]$/;
+function cuerpoTextoChat(texto) {
+  const lineas = texto.split('\n'), acciones = [];
+  while (lineas.length && RE_ACCION_CHAT.test(lineas[lineas.length - 1].trim())) acciones.unshift(RE_ACCION_CHAT.exec(lineas.pop().trim()));
+  if (!acciones.length) return `<div>${textoConEnlaces(texto)}</div>`;
+  const [titulo, ...resto] = lineas;
+  const botones = acciones.map(([, et, dest]) => dest.startsWith('adjunto:')
+    ? `<button type="button" class="msg-accion" data-adjunto-path="${esc(dest.slice(8))}">${esc(et)}</button>`
+    : `<a class="msg-accion" href="${esc(dest)}" target="_blank" rel="noopener noreferrer">${esc(et)}</a>`).join('');
+  return `<div><strong>${esc(titulo)}</strong>${resto.length ? '\n' + textoConEnlaces(resto.join('\n')) : ''}</div><div class="msg-acciones">${botones}</div>`;
+}
+async function abrirAdjuntoChat(path) {
+  const { data, error } = await sb.storage.from('chat-interno-adjuntos').createSignedUrl(path, 300);
+  if (error || !data?.signedUrl) { errToast('No se pudo abrir el CV'); return; }
+  window.open(data.signedUrl, '_blank', 'noopener');
 }
 function renderConversacion() {
   const log = document.getElementById('msg-conv-log');
@@ -20333,6 +20352,7 @@ function renderConversacion() {
   log.querySelectorAll('[data-img]').forEach(el => el.addEventListener('click', () => openLightbox([el.dataset.img], 0)));
   log.querySelectorAll('[data-video]').forEach(el => el.addEventListener('click', () => reproducirVideo(el)));
   log.querySelectorAll('[data-doc]').forEach(el => el.addEventListener('click', () => window.open(el.dataset.doc, '_blank')));
+  log.querySelectorAll('[data-adjunto-path]').forEach(el => el.addEventListener('click', () => abrirAdjuntoChat(el.dataset.adjuntoPath)));
   if (scrollAbajo) log.scrollTop = log.scrollHeight;
 }
 

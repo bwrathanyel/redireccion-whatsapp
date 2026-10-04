@@ -1610,6 +1610,10 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .chat-tool-btn:disabled{opacity:.5;cursor:default;pointer-events:none}
 .chat-log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:6px 2px 16px}
 .chat-msg{max-width:70%;padding:9px 13px;border-radius:16px;font-size:13px;line-height:1.45;white-space:pre-wrap}
+.chat-msg a{color:inherit;text-decoration:underline;word-break:break-all}
+.msg-acciones{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chat-msg .msg-accion{display:inline-flex;align-items:center;padding:5px 11px;border-radius:8px;border:1px solid color-mix(in srgb,currentColor 35%,transparent);background:color-mix(in srgb,currentColor 10%,transparent);color:inherit;font-size:11.5px;font-weight:600;line-height:1.2;font-family:inherit;text-decoration:none;cursor:pointer}
+.chat-msg .msg-accion:hover{background:color-mix(in srgb,currentColor 20%,transparent)}
 .chat-msg.user{align-self:flex-end;background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;border-bottom-right-radius:5px}
 .chat-msg.bot{max-width:none;min-width:0;background:var(--panel-solid);border:1px solid var(--line2);border-bottom-left-radius:5px}
 .chat-msg.bot.loading{color:var(--muted);font-style:italic}
