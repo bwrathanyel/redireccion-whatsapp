@@ -6818,6 +6818,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="seg-group" id="redes-red-tabs">
         <button class="seg on" data-red="instagram"><i class="fa-brands fa-instagram"></i> Instagram</button>
         <button class="seg" data-red="tiktok"><i class="fa-brands fa-tiktok"></i> TikTok</button>
+        <button class="seg" data-red="facebook"><i class="fa-brands fa-facebook"></i> Facebook</button>
       </div>
       <div class="seg-group" id="redes-periodo" style="margin-top:8px">
         <button class="seg" data-p="7d">7 días</button>
@@ -6855,6 +6856,35 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div class="card" style="margin-top:14px">
           <h2><i class="fas fa-ranking-star"></i> Top videos por vistas</h2>
           <div class="lt-grid" id="redes-tiktok-top-body"></div>
+        </div>
+      </div>
+
+      <div id="redes-fb-panel" style="display:none">
+        <div class="seg-group" id="redes-fb-cuentas" style="display:none;margin:8px 0 0"></div>
+        <div id="redes-fb-avisos" style="margin-top:12px"></div>
+        <div class="csub" style="margin:14px 0 10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:10.5px"><i class="fa-brands fa-facebook"></i> Página</div>
+        <div class="kpis" id="redes-fb-kpis-pagina"></div>
+        <div class="grid g-2b" style="margin-top:4px">
+          <div class="card"><h2><i class="fas fa-users"></i> Seguidores</h2><div class="csub">Evolución en el período</div><div class="chart-wrap"><canvas id="chFbSeguidores"></canvas></div></div>
+          <div class="card"><h2><i class="fas fa-user-plus"></i> Ganados y perdidos</h2><div class="csub">Seguidores por día</div><div class="chart-wrap"><canvas id="chFbGanPer"></canvas></div></div>
+        </div>
+        <div class="grid g-2b" style="margin-top:14px">
+          <div class="card"><h2><i class="fas fa-eye"></i> Vistas de contenido</h2><div class="csub">Diarias, de toda la página</div><div class="chart-wrap"><canvas id="chFbVistas"></canvas></div></div>
+          <div class="card"><h2><i class="fas fa-heart"></i> Interacciones con publicaciones</h2><div class="csub">Diarias, de toda la página</div><div class="chart-wrap"><canvas id="chFbInter"></canvas></div></div>
+        </div>
+        <div class="csub" style="margin:22px 0 10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:10.5px"><i class="fas fa-images"></i> Publicaciones del período</div>
+        <div class="kpis kpis-5" id="redes-fb-kpis-posts"></div>
+        <div class="grid g-2b" style="margin-top:4px">
+          <div class="card"><h2><i class="fas fa-chart-pie"></i> Por tipo de contenido</h2><div class="csub">Publicaciones del período</div><div class="chart-wrap"><canvas id="chFbTipo"></canvas></div></div>
+          <div class="card"><h2><i class="fas fa-face-smile"></i> Reacciones</h2><div class="csub">Suma de los mejores posts</div><div class="chart-wrap"><canvas id="chFbReacciones"></canvas></div></div>
+        </div>
+        <div class="grid g-2b" style="margin-top:14px">
+          <div class="card"><h2><i class="fas fa-calendar-week"></i> Mejor día para publicar</h2><div class="csub">Interacción promedio por publicación · hora de Caracas</div><div class="chart-wrap"><canvas id="chFbDia"></canvas></div></div>
+          <div class="card"><h2><i class="fas fa-clock"></i> Mejores horarios</h2><div class="csub">Ventanas con más interacción · hora de Caracas</div><div id="redes-fb-horas"></div></div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h2><i class="fas fa-ranking-star"></i> Top publicaciones por alcance</h2>
+          <div class="lt-grid" id="redes-fb-top-body"></div>
         </div>
       </div>
     </section>

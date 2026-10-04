@@ -10536,7 +10536,7 @@ function atajosCorreo(e) {
   if (hecho) e.preventDefault();
 }
 
-/* ---------- Redes (Instagram + TikTok) ---------- */
+/* ---------- Redes (Instagram + TikTok + Facebook) ---------- */
 let redesPeriodo = '30d', redesRed = 'instagram', redesChatHistory = [];
 function setupRedes() {
   document.querySelectorAll('#redes-red-tabs .seg').forEach(b => b.onclick = () => {
@@ -10545,6 +10545,7 @@ function setupRedes() {
     redesRed = b.dataset.red;
     document.getElementById('redes-ig-panel').style.display = redesRed === 'instagram' ? '' : 'none';
     document.getElementById('redes-tiktok-panel').style.display = redesRed === 'tiktok' ? '' : 'none';
+    document.getElementById('redes-fb-panel').style.display = redesRed === 'facebook' ? '' : 'none';
     cargarRedActual();
   });
   document.querySelectorAll('#redes-periodo .seg').forEach(b => b.onclick = () => { document.querySelectorAll('#redes-periodo .seg').forEach(x => x.classList.remove('on')); b.classList.add('on'); redesPeriodo = b.dataset.p; cargarRedActual(); });
@@ -10554,7 +10555,7 @@ function setupRedes() {
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
   addChatBubbleRedes('bot', 'Hola, soy el analista de redes. Preguntame sobre el alcance, los posts con mejor desempeño o las historias del período seleccionado.');
 }
-function cargarRedActual() { redesRed === 'tiktok' ? loadRedesTikTok() : loadRedes(); }
+function cargarRedActual() { redesRed === 'tiktok' ? loadRedesTikTok() : redesRed === 'facebook' ? loadRedesFacebook() : loadRedes(); }
 // Con todo en 0 Chart.js dibuja un eje 0,0–1,0 sin sentido: se cambia por un aviso.
 function chartVacio(id, hayDatos, msg) {
   const cv = document.getElementById(id); if (!cv) return;
@@ -10626,6 +10627,153 @@ async function loadRedesTikTok() {
       </div>
       ${p.share_url ? `<div class="lt-card-pie"><a class="btn-sm lt-primario" href="${esc(p.share_url)}" target="_blank" rel="noopener"><i class="fa-brands fa-tiktok"></i> Ver video</a></div>` : ''}
     </article>`).join('') : '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin videos en este período</div>';
+}
+/* Facebook: todo llega de Zernio por la EF redes-facebook-zernio (la key no baja al navegador).
+   Cada bloque puede faltar (`errores`): el add-on Analytics de Zernio es de pago y se avisa en pantalla. */
+let redesFbCuentas = null, redesFbCuenta = null, redesFbGen = 0;
+const redesFbCache = new Map(), REDES_FB_CACHE_MS = 5 * 60 * 1000;
+const FB_BLOQUES = { pagina: 'las métricas de la página', seguidores: 'los seguidores', posts: 'las publicaciones', horas: 'los mejores horarios', reacciones: 'las reacciones' };
+const FB_TIPOS = { image: 'Foto', photo: 'Foto', video: 'Video', reel: 'Reel', carousel: 'Carrusel', album: 'Álbum', link: 'Enlace', text: 'Texto', texto: 'Texto', story: 'Historia' };
+const FB_REACCIONES = [['like', 'Me gusta', '#4a9eff'], ['love', 'Me encanta', '#ff5c8a'], ['care', 'Me importa', '#ffb347'], ['haha', 'Jaja', '#ffd23f'], ['wow', 'Asombro', '#a06bff'], ['sad', 'Tristeza', '#7a8aa0'], ['angry', 'Enojo', '#ff6b4a']];
+const FB_DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const fbYmd = dt => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+const fbNum = v => v == null ? '—' : fmt(Math.round(v));
+const fbDec = (v, d = 1) => v.toFixed(d).replace('.', ',');
+const fbDuracion = ms => ms == null ? '—' : ms >= 3600000 ? fmt(Math.round(ms / 3600000)) + ' h' : fmt(Math.round(ms / 60000)) + ' min';
+const fbHttps = u => /^https:\/\//i.test(u || '') ? u : '';
+const fbAviso = (ic, msg) => `<div class="recordatorios-banner" style="display:flex;margin:0 0 8px"><i class="fas ${ic}"></i><span>${msg}</span></div>`;
+async function redesFbInvocar(body) {
+  const { data, error } = await sb.functions.invoke('redes-facebook-zernio', { body });
+  if (error || !data?.ok) throw new Error(data?.error || error?.message || 'error');
+  return data;
+}
+function fbPintarCuentas() {
+  const box = document.getElementById('redes-fb-cuentas');
+  box.style.display = redesFbCuentas.length > 1 ? '' : 'none';
+  box.innerHTML = redesFbCuentas.map(c => `<button class="seg${c.id === redesFbCuenta ? ' on' : ''}" data-id="${esc(c.id)}">${esc(c.nombre)}</button>`).join('');
+  box.querySelectorAll('.seg').forEach(b => b.onclick = () => { redesFbCuenta = b.dataset.id; fbPintarCuentas(); loadRedesFacebook(); });
+}
+async function loadRedesFacebook() {
+  await ensureChart();
+  const gen = ++redesFbGen, avisos = document.getElementById('redes-fb-avisos');
+  avisos.innerHTML = fbAviso('fa-spinner fa-spin', 'Cargando métricas de Facebook desde Zernio...');
+  try {
+    if (!redesFbCuentas) {
+      redesFbCuentas = (await redesFbInvocar({ accion: 'cuentas' })).cuentas.filter(c => c.activo);
+      redesFbCuenta = redesFbCuentas[0]?.id || null;
+      fbPintarCuentas();
+    }
+    if (!redesFbCuenta) { avisos.innerHTML = fbAviso('fa-circle-info', 'No hay páginas de Facebook conectadas en Zernio.'); return; }
+    const [d, h] = periodo(redesPeriodo), fin = addD(h, -1), hoy = new Date();
+    const desde = fbYmd(d), hasta = fbYmd(fin > hoy ? hoy : fin), clave = `${redesFbCuenta}|${desde}|${hasta}`;
+    let hit = redesFbCache.get(clave);
+    if (!hit || Date.now() - hit.t > REDES_FB_CACHE_MS) {
+      hit = { t: Date.now(), data: await redesFbInvocar({ accion: 'resumen', accountId: redesFbCuenta, desde, hasta }) };
+      redesFbCache.set(clave, hit);
+    }
+    if (gen === redesFbGen) fbPintar(hit.data);
+  } catch (e) {
+    console.error(e);
+    if (gen !== redesFbGen) return;
+    avisos.innerHTML = fbAviso('fa-triangle-exclamation', 'No se pudieron cargar las métricas de Facebook. Intenta de nuevo en un momento.');
+    errToast('No se pudieron cargar las métricas de Facebook');
+  }
+}
+function fbLinea(id, serie, etiqueta, color, vacio, desdeCero = true) {
+  const s = serie || [];
+  mk(id, { type: 'line', data: { labels: s.map(x => x.dia.slice(8) + '/' + x.dia.slice(5, 7)), datasets: [{ label: etiqueta, data: s.map(x => x.v), borderColor: color, backgroundColor: color + '1a', fill: true, tension: .35, borderWidth: 2, pointRadius: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: gridColor() }, beginAtZero: desdeCero } } } });
+  chartVacio(id, s.length > 0 && (!desdeCero || s.some(x => x.v > 0)), vacio);
+}
+function fbBarras(id, etiquetas, datos, colores, vacio, horizontal = true) {
+  mk(id, { type: 'bar', data: { labels: etiquetas, datasets: [{ data: datos, backgroundColor: colores, borderRadius: 6, barThickness: horizontal ? 18 : undefined, maxBarThickness: 34 }] }, options: { indexAxis: horizontal ? 'y' : 'x', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: horizontal ? gridColor() : 'transparent' }, beginAtZero: true }, y: { grid: { color: horizontal ? 'transparent' : gridColor() }, beginAtZero: true } } } });
+  chartVacio(id, datos.some(v => v > 0), vacio);
+}
+function fbPintar(data) {
+  const e = data.errores || {}, pg = data.pagina, sg = data.seguidores, ps = data.posts, rc = data.reacciones, hr = data.horas;
+  const sin = (k, normal) => !e[k] ? normal : e[k].motivo === 'addon' ? 'Requiere el add-on Analytics de Zernio.' : 'No se pudo cargar este bloque.';
+  const avisos = [], conAddon = Object.keys(e).filter(k => e[k].motivo === 'addon'), conError = Object.keys(e).filter(k => e[k].motivo !== 'addon');
+  if (conAddon.length) avisos.push(fbAviso('fa-lock', `Zernio no entrega ${conAddon.map(k => FB_BLOQUES[k] || k).join(', ')} sin el <b>add-on Analytics</b>. Actívalo en Zernio (tiene costo) y aparecerán aquí.`));
+  if (conError.length) avisos.push(fbAviso('fa-triangle-exclamation', `No se pudo cargar ${conError.map(k => `${FB_BLOQUES[k] || k}${e[k].estado ? ' (error ' + e[k].estado + ')' : ''}`).join(', ')}.`));
+  if (data.rango?.insights_recortado) avisos.push(fbAviso('fa-circle-info', `Meta limita las métricas de la página a 88 días: se muestra del ${fmtFechaSolo(data.rango.insights_desde)} al ${fmtFechaSolo(data.rango.hasta)}.`));
+  if (pg?.retraso) avisos.push(fbAviso('fa-clock', `Meta publica las métricas de la página con retraso (${esc(pg.retraso)}).`));
+  document.getElementById('redes-fb-avisos').innerHTML = avisos.join('');
+
+  const t = pg?.totales, serie = pg?.series || {};
+  const crec = sg ? `${sg.crecimiento > 0 ? '+' : ''}${fbNum(sg.crecimiento)} (${fbDec(sg.porcentaje || 0)}%) en el período` : null;
+  pintarKPIs('redes-fb-kpis-pagina', [
+    { t: 'Seguidores', v: fbNum(sg?.actual ?? t?.page_follows), d: crec, i: 'fa-users', c: 'var(--blue)' },
+    { t: 'Seguidores ganados', v: fbNum(t?.followers_gained), i: 'fa-user-plus', c: '#34d399' },
+    { t: 'Seguidores perdidos', v: fbNum(t?.followers_lost), i: 'fa-user-minus', c: '#ff6b6b' },
+    { t: 'Vistas de contenido', v: fbNum(t?.page_media_view), i: 'fa-eye', c: 'var(--accent)' },
+    { t: 'Visitas a la página', v: fbNum(t?.page_views_total), i: 'fa-arrow-pointer', c: 'var(--purple)' },
+    { t: 'Interacciones', v: fbNum(t?.page_post_engagements), i: 'fa-heart', c: '#ff5c8a' },
+    { t: 'Reproducciones de video', v: fbNum(t?.page_video_views), i: 'fa-circle-play', c: '#34d399' },
+    { t: 'Tiempo de video', v: fbDuracion(t?.page_video_view_time), i: 'fa-hourglass-half', c: '#ffb347' },
+  ]);
+  const segSerie = sg?.serie?.length ? sg.serie : serie.page_follows;
+  fbLinea('chFbSeguidores', segSerie, 'Seguidores', '#4a9eff', sin('seguidores', 'Sin datos de seguidores en este período.'), false);
+  const gan = serie.followers_gained || [], per = serie.followers_lost || [];
+  const dias = [...new Set([...gan, ...per].map(x => x.dia))].sort();
+  mk('chFbGanPer', { type: 'bar', data: { labels: dias.map(d => d.slice(8) + '/' + d.slice(5, 7)), datasets: [
+    { label: 'Ganados', data: dias.map(d => gan.find(x => x.dia === d)?.v || 0), backgroundColor: '#34d399', borderRadius: 4, maxBarThickness: 14 },
+    { label: 'Perdidos', data: dias.map(d => per.find(x => x.dia === d)?.v || 0), backgroundColor: '#ff6b6b', borderRadius: 4, maxBarThickness: 14 },
+  ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { boxWidth: 10 } } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } }, y: { grid: { color: gridColor() }, beginAtZero: true } } } });
+  chartVacio('chFbGanPer', dias.length > 0 && [...gan, ...per].some(x => x.v > 0), sin('pagina', 'Sin movimiento de seguidores en este período.'));
+  fbLinea('chFbVistas', serie.page_media_view, 'Vistas', '#4a9eff', sin('pagina', 'Sin datos en este período.'));
+  fbLinea('chFbInter', serie.page_post_engagements, 'Interacciones', '#ff5c8a', sin('pagina', 'Sin datos en este período.'));
+
+  const tp = ps?.totales, base = tp ? (tp.alcance || tp.impresiones) : 0;
+  pintarKPIs('redes-fb-kpis-posts', [
+    { t: 'Publicaciones', v: fbNum(tp?.publicaciones), i: 'fa-images', c: 'var(--blue)' },
+    { t: 'Impresiones', v: fbNum(tp?.impresiones), i: 'fa-chart-simple', c: 'var(--purple)' },
+    { t: 'Alcance', v: fbNum(tp?.alcance), i: 'fa-eye', c: 'var(--accent)' },
+    { t: 'Vistas de video', v: fbNum(tp?.vistas), i: 'fa-circle-play', c: '#34d399' },
+    { t: 'Clics', v: fbNum(tp?.clics), i: 'fa-hand-pointer', c: '#ffb347' },
+    { t: 'Me gusta', v: fbNum(tp?.likes), i: 'fa-thumbs-up', c: '#4a9eff' },
+    { t: 'Comentarios', v: fbNum(tp?.comentarios), i: 'fa-comment', c: 'var(--purple)' },
+    { t: 'Compartidos', v: fbNum(tp?.compartidos), i: 'fa-share', c: '#34d399' },
+    { t: 'Interacciones', v: fbNum(tp?.interacciones), i: 'fa-heart', c: '#ff5c8a' },
+    { t: 'Tasa de interacción', v: tp && base ? fbDec(tp.interacciones / base * 100) + '%' : '—', i: 'fa-percent', c: 'var(--accent)' },
+  ]);
+  const tipos = ps?.por_tipo || [];
+  fbBarras('chFbTipo', tipos.map(x => FB_TIPOS[x.tipo] || x.tipo), tipos.map(x => x.publicaciones), '#a06bff', sin('posts', 'Sin publicaciones en este período.'));
+  const reac = rc?.total || {};
+  fbBarras('chFbReacciones', FB_REACCIONES.map(r => r[1]), FB_REACCIONES.map(r => reac[r[0]] || 0), FB_REACCIONES.map(r => r[2]), sin('reacciones', 'Sin reacciones en los mejores posts.'));
+  const orden = [1, 2, 3, 4, 5, 6, 0], pd = hr?.por_dia || [];
+  fbBarras('chFbDia', orden.map(d => FB_DIAS[d]), orden.map(d => +(pd.find(x => x.dia === d)?.engagement || 0).toFixed(1)), '#4a9eff', sin('horas', 'Aún no hay suficientes publicaciones para calcularlo.'), false);
+  document.getElementById('redes-fb-horas').innerHTML = hr?.mejores?.length
+    ? `<div style="display:flex;flex-direction:column;gap:10px">${hr.mejores.map((s, i) => `<div style="display:flex;align-items:center;gap:10px"><span class="bt-tag" style="--c:var(--accent)">${i + 1}</span><b>${FB_DIAS[s.dia]} ${String(s.hora).padStart(2, '0')}:00</b><span style="margin-left:auto;color:var(--muted);font-size:12.5px">${fbDec(s.engagement)} interacciones · ${fmt(s.publicaciones)} pub.</span></div>`).join('')}</div>`
+    : `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${sin('horas', 'Aún no hay suficientes publicaciones para calcularlo.')}</div>`;
+
+  const top = ps?.top || [];
+  document.getElementById('redes-fb-top-body').innerHTML = top.length ? top.map((p, i) => {
+    const r = rc?.por_post?.[p.idPlataforma], url = fbHttps(p.url), mini = fbHttps(p.miniatura);
+    const tasa = p.alcance || p.impresiones;
+    const chips = r ? FB_REACCIONES.filter(x => r[x[0]] > 0).map(x => `<span class="bt-tag" style="--c:${x[2]}">${x[1]} ${fmt(r[x[0]])}</span>`).join('') : '';
+    return `<article class="lt-card" style="--i:${Math.min(i, 20)}">
+      <div class="tt-row">
+        ${mini ? `<img class="tt-thumb" style="width:62px;height:62px" src="${esc(mini)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : ''}
+        <div class="tt-title" title="${esc(p.texto)}">${esc(p.texto || 'Sin texto')}</div>
+        <span class="bt-tag" style="--c:var(--accent)">${esc(FB_TIPOS[p.tipo] || p.tipo)}</span>
+      </div>
+      <div class="lt-cifras">
+        <div><span>Alcance</span><b>${fbNum(p.alcance)}</b></div>
+        <div><span>Impresiones</span><b>${fbNum(p.impresiones)}</b></div>
+        <div><span>Vistas</span><b>${fbNum(p.vistas)}</b></div>
+        <div><span>Me gusta</span><b>${fbNum(p.likes)}</b></div>
+        <div><span>Comentarios</span><b>${fbNum(p.comentarios)}</b></div>
+        <div><span>Compartidos</span><b>${fbNum(p.compartidos)}</b></div>
+        <div><span>Clics</span><b>${fbNum(p.clics)}</b></div>
+        <div><span>Interacciones</span><b>${fbNum(p.interacciones)}</b></div>
+        <div><span>Tasa</span><b>${tasa > 0 ? fbDec(p.interacciones / tasa * 100) + '%' : '—'}</b></div>
+      </div>
+      ${chips ? `<div class="lt-card-pie">${chips}</div>` : ''}
+      <div class="lt-card-pie">
+        ${p.fecha ? `<span class="csub" style="margin:0 auto 0 0">${esc(fmtFechaSolo(p.fecha.slice(0, 10)))}</span>` : ''}
+        ${url ? `<a class="btn-sm lt-primario" href="${esc(url)}" target="_blank" rel="noopener"><i class="fa-brands fa-facebook"></i> Ver publicación</a>` : ''}
+      </div>
+    </article>`;
+  }).join('') : `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${sin('posts', 'Sin publicaciones en este período')}</div>`;
 }
 async function enviarChatRedes() {
   const input = document.getElementById('redes-chat-input'), btn = document.getElementById('redes-chat-send');
@@ -23428,6 +23576,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-04', emoji: '📘', titulo: 'Facebook en Redes', texto: 'Marketing → Redes tiene una pestaña nueva de Facebook, con datos de Zernio: seguidores (ganados y perdidos), vistas e interacciones de la página, métricas de cada publicación, reacciones, los mejores días y horarios para publicar y el top de publicaciones. Usa el mismo selector de período que Instagram y TikTok.', roles: ['admin'] },
   { fecha: '2026-10-04', emoji: '💬', titulo: 'WhatsApp en el CRM', texto: 'Nueva sección Mensajes → WhatsApp: todos los chats del bot de ventas, con fotos y notas de voz, y el botón "Ver lead" cuando el número ya está en el CRM. Arriba se elige el número de WhatsApp (cuando haya más de uno). Es solo para ver: el bot responde ahí y el asesor sigue atendiendo por su WhatsApp.', roles: ['admin'] },
   { fecha: '2026-10-02', emoji: '✉️', titulo: 'Correo: ahora es como Gmail', texto: 'Correo tiene su propia entrada en el menú, con el contador de no leídos. Carpetas (Recibidos con pestañas Principal/Promociones/Social/Notificaciones, Destacados, Enviados, Todos, Spam, Papelera y Contactos), búsqueda en todo tu correo, hilos completos, estrella, archivar, papelera y no leído (se reflejan en tu Gmail real). Podés responder, responder a todos y reenviar con adjuntos, usar CCO, firma por cuenta y autocompletar contactos. Al conectar una cuenta trae los últimos 7 días; desde el selector de cuenta podés traer 30 o 90. Atajos: c redactar, / buscar, j/k moverse, e archivar, # papelera, s destacar, r responder.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-01', emoji: '🎬', titulo: 'Videotutoriales con Lyra', texto: 'Lyra te explica el CRM en videos cortos, con datos de ejemplo. Arriba de cada sección que tiene uno aparece "Ver tutorial" (en el celular, el botón ▶ de la barra de arriba), y en Ayuda → Videotutoriales están todos juntos, marcados como vistos cuando los terminás. En el celular se ven en vertical y en la computadora en horizontal.', roles: ['admin', 'asesor'] },
