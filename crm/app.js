@@ -14794,7 +14794,7 @@ async function loadFacturas() {
     const costo_neto = cxp ? cxp.monto_a_transferir : null;
     const abonado = abonadoPorLead.get(f.lead_id) || 0;
     const venta_total = Math.max(montoPorLead.get(f.lead_id) || 0, abonado);
-    return { ...f, costo_neto, proveedor: cxp ? cxp.proveedor : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null };
+    return { ...f, costo_neto, proveedor: cxp ? cxp.proveedor : null, proveedor_pagado: cxp ? cxp.monto_abonado : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null };
   });
   poblarFiltrosVentas();
   factVentasMostrar = TECHO_LISTA;
@@ -14948,38 +14948,78 @@ async function exportarVentaPdf(id) {
       font('semibold', 11.5, C.txt); doc.text(doc.splitTextToSize(String(v), 240)[0], x, yy + 16);
     });
 
-  // Resumen en tres tarjetas + barra de cobro
+  // Resumen: dos paneles con nombre -- lo que entra del cliente y lo que sale al
+  // proveedor -- + barra de cobro. Ocupa la misma altura que las tres tarjetas
+  // viejas, así el PDF sigue saliendo en una sola página.
   y = 290;
   seccion('Resumen', y);
-  const bw = (W - 24) / 3;
-  [['Precio de venta', us(venta), C.txt, 'Monto total acordado'],
-   ['Abonado', us(abonado), C.verde, `${pctCobro}% cobrado`],
-   ['Saldo pendiente', us(saldo), saldo > 0 ? C.naranja : C.verde, saldo > 0 ? 'Por cobrar al cliente' : 'Pagado completo']]
-    .forEach(([k, v, rgb, sub], i) => {
-      const x = X0 + i * (bw + 12);
-      doc.setFillColor(...C.suave); doc.setDrawColor(...C.linea); doc.roundedRect(x, y + 16, bw, 72, 8, 8, 'FD');
-      doc.setFillColor(...rgb); doc.roundedRect(x, y + 16, 4, 72, 2, 2, 'F');
-      font('medium', 7.5, C.gris); doc.text(k.toUpperCase(), x + 16, y + 38, { charSpace: 0.6 });
-      font('bold', 17, rgb); doc.text(v, x + 16, y + 62);
-      font('normal', 8, C.gris); doc.text(sub, x + 16, y + 78);
+  const pw = (W - 12) / 2, py = y + 16, ph = 79, hh = 32;
+  // El costo del proveedor reparte el abono con el mismo porcentaje que el margen
+  // (costo/venta): de cada peso cobrado, esa parte es del proveedor y el resto es margen.
+  const ratioProv = conCosto && venta > 0 ? f.costo_neto / venta : null;
+  const pct2 = r => (r * 100).toFixed(2).replace('.', ',');
+  const alProv = ratioProv != null ? abonado * ratioProv : null;
+  const panelResumen = (x, rgb, titulo, nombre, tag, filas) => {
+    doc.setFillColor(...C.suave); doc.setDrawColor(...C.linea); doc.setLineWidth(0.8);
+    doc.roundedRect(x, py, pw, ph, 8, 8, 'FD');
+    doc.setFillColor(...rgb); doc.roundedRect(x, py, 4, ph, 2, 2, 'F');
+    // Franja de cabecera: redondeada arriba, recta abajo (el rect tapa las esquinas de abajo).
+    doc.roundedRect(x, py, pw, hh, 8, 8, 'F'); doc.rect(x, py + 16, pw, hh - 16, 'F');
+    font('semibold', 7.5, C.blanco); doc.text(titulo.toUpperCase(), x + 12, py + 13, { charSpace: 0.6 });
+    font('semibold', 9, C.blanco); doc.text(doc.splitTextToSize(String(nombre), pw - 24)[0], x + 12, py + 25);
+    font('normal', 7.5, C.blanco); doc.text(tag, x + pw - 12, py + 13, { align: 'right' });
+    filas.forEach(([k, v, rgbV, sizeV, total], i) => {
+      const ry = py + hh + i * 15, bs = ry + (total ? 12 : 11);
+      if (total) { doc.setDrawColor(...C.linea); doc.line(x, ry, x + pw, ry); }
+      font(total ? 'bold' : 'semibold', sizeV, rgbV);
+      const vw = doc.getTextWidth(v);
+      font(total ? 'semibold' : 'normal', 9.5, total ? C.txt : C.gris);
+      doc.text(doc.splitTextToSize(k, pw - 24 - vw - 8)[0], x + 12, bs);
+      font(total ? 'bold' : 'semibold', sizeV, rgbV);
+      doc.text(v, x + pw - 12, bs, { align: 'right' });
     });
-  doc.setFillColor(...C.linea); doc.roundedRect(X0, y + 102, W, 6, 3, 3, 'F');
-  if (pctCobro > 0) { doc.setFillColor(...C.verde); doc.roundedRect(X0, y + 102, Math.max(6, W * pctCobro / 100), 6, 3, 3, 'F'); }
-  font('normal', 8, C.gris); doc.text(`Cobrado ${us(abonado)} de ${us(venta)}`, X0, y + 122);
-  font('semibold', 8, C.txt); doc.text(`${pctCobro}%`, X1, y + 122, { align: 'right' });
+  };
+  panelResumen(X0, C.verde, 'Cobro al cliente', f.cliente || ('#' + f.lead_id), `${pctCobro} % cobrado`, [
+    ['Precio de venta', us(venta), C.txt, 9.5, false],
+    ['Pagó el cliente (abonado)', us(abonado), C.verde, 9.5, false],
+    ['Falta cobrarle al cliente', us(saldo), saldo > 0 ? C.naranja : C.verde, 11.5, true],
+  ]);
+  panelResumen(X0 + pw + 12, C.navy, 'Pago al proveedor', f.proveedor || 'Sin proveedor',
+    f.proveedor_pagado != null ? `Pagado ${us(f.proveedor_pagado)}` : 'Sin dato', [
+      ['Costo al proveedor', conCosto ? us(f.costo_neto) : 'Sin definir', conCosto ? C.txt : C.naranja, 9.5, false],
+      [`Cubierto por el abono${ratioProv != null ? ' · ' + pct2(ratioProv) + ' %' : ''}`, alProv != null ? us(alProv) : '—', C.verde, 9.5, false],
+      ['Por cubrir con el saldo', alProv != null ? us(f.costo_neto - alProv) : '—', C.navy, 11.5, true],
+    ]);
+  doc.setFillColor(...C.linea); doc.roundedRect(X0, py + ph + 5, W, 6, 3, 3, 'F');
+  if (pctCobro > 0) { doc.setFillColor(...C.verde); doc.roundedRect(X0, py + ph + 5, Math.max(6, W * pctCobro / 100), 6, 3, 3, 'F'); }
+  font('normal', 8, C.gris); doc.text(`Cobrado ${us(abonado)} de ${us(venta)}`, X0, py + ph + 23);
+  font('semibold', 8, C.txt); doc.text(`${pctCobro}%`, X1, py + ph + 23, { align: 'right' });
+  // Reparto del abono: qué parte de lo cobrado le toca al proveedor y qué parte es margen.
+  if (ratioProv != null) {
+    let cx = X0;
+    [['Del abono de ' + us(abonado) + ': ', C.gris, 'normal'],
+     [us(alProv) + ' (' + pct2(ratioProv) + ' %)', C.navy, 'semibold'],
+     [' cubren al proveedor y ', C.gris, 'normal'],
+     [us(abonado - alProv) + ' (' + pct2(1 - ratioProv) + ' %)', C.verde, 'semibold'],
+     [' son margen.', C.gris, 'normal']]
+      .forEach(([t, rgb, estilo]) => { font(estilo, 8, rgb); doc.text(t, cx, py + ph + 36); cx += doc.getTextWidth(t); });
+  }
 
   // Detalle financiero
   y = 448;
   seccion('Detalle financiero', y);
   const filas = [
-    ['Precio de venta', us(venta), C.txt], ['Abonado', us(abonado), C.verde], ['Saldo pendiente', us(saldo), saldo > 0 ? C.naranja : C.txt],
-    ['Costo neto (proveedor)', conCosto ? us(f.costo_neto) : 'Sin definir', conCosto ? C.txt : C.naranja],
-    ['Margen sobre la venta', pctMargen != null ? `${pctMargen}%` : '—', C.txt],
+    ['Precio de venta', us(venta), C.txt, false],
+    ['Pagado por el cliente', us(abonado), C.verde, false],
+    ['Falta por cobrarle al cliente', us(saldo), saldo > 0 ? C.naranja : C.txt, false],
+    [`Por pagar a ${f.proveedor || 'el proveedor'}`, conCosto ? us(f.costo_neto) : 'Sin definir', conCosto ? C.txt : C.naranja, true],
+    ['Margen sobre la venta', pctMargen != null ? `${pctMargen}%` : '—', C.txt, false],
   ];
   y += 16;
-  filas.forEach(([k, v, rgb], i) => {
+  filas.forEach(([k, v, rgb, destaca], i) => {
     if (i % 2 === 0) { doc.setFillColor(...C.suave); doc.rect(X0, y, W, 24, 'F'); }
-    font('normal', 10, C.gris); doc.text(k, X0 + 12, y + 16);
+    font(destaca ? 'semibold' : 'normal', 10, destaca ? C.navy : C.gris);
+    doc.text(destaca ? doc.splitTextToSize(k, 400)[0] : k, X0 + 12, y + 16);
     font('semibold', 10, rgb); doc.text(v, X1 - 12, y + 16, { align: 'right' });
     y += 24;
   });
@@ -14992,7 +15032,7 @@ async function exportarVentaPdf(id) {
   // Abonos registrados del mismo cliente
   const abonos = FACT_VENTAS_CACHE.filter(x => x.lead_id === f.lead_id && x.estado === 'pagada')
     .sort((a, b) => String(a.fecha_emision).localeCompare(String(b.fecha_emision)));
-  seccion('Abonos registrados', y);
+  seccion('Abonos del cliente', y);
   y += 16;
   doc.setFillColor(...C.navy); doc.roundedRect(X0, y, W, 22, 4, 4, 'F');
   font('semibold', 8, C.blanco);
@@ -23768,6 +23808,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-05', emoji: '🧾', titulo: 'El PDF de la venta ahora separa cliente y proveedor', texto: 'Al tocar el botón PDF en Facturación → Ventas, el comprobante sale con dos bloques con nombre en vez de las tres cifras del cliente sueltas: el verde dice qué se le cobra al cliente (venta, abonado y lo que falta cobrar) y el azul, qué se le paga al proveedor (su costo, cuánto de eso ya cubre el abono y cuánto falta cubrir), con el nombre del proveedor escrito tal cual. Debajo de la barra de avance se ve el reparto del abono: qué parte le corresponde al proveedor y qué parte es margen. El detalle financiero y la tabla de abonos ahora aclaran a quién pertenece cada cifra: lo que pagó el cliente, lo que hay que transferirle al proveedor y los abonos del cliente.', roles: ['admin'] },
   { fecha: '2026-10-04', emoji: '📘', titulo: 'Facebook en Redes', texto: 'Marketing → Redes tiene una pestaña nueva de Facebook, con datos de Zernio: seguidores (ganados y perdidos), vistas e interacciones de la página, métricas de cada publicación, reacciones, los mejores días y horarios para publicar y el top de publicaciones. Usa el mismo selector de período que Instagram y TikTok.', roles: ['admin'] },
   { fecha: '2026-10-04', emoji: '💬', titulo: 'WhatsApp en el CRM', texto: 'Nueva sección Mensajes → WhatsApp: todos los chats del bot de ventas, con fotos y notas de voz, y el botón "Ver lead" cuando el número ya está en el CRM. Arriba se elige el número de WhatsApp (cuando haya más de uno). Es solo para ver: el bot responde ahí y el asesor sigue atendiendo por su WhatsApp.', roles: ['admin'] },
   { fecha: '2026-10-02', emoji: '✉️', titulo: 'Correo: ahora es como Gmail', texto: 'Correo tiene su propia entrada en el menú, con el contador de no leídos. Carpetas (Recibidos con pestañas Principal/Promociones/Social/Notificaciones, Destacados, Enviados, Todos, Spam, Papelera y Contactos), búsqueda en todo tu correo, hilos completos, estrella, archivar, papelera y no leído (se reflejan en tu Gmail real). Podés responder, responder a todos y reenviar con adjuntos, usar CCO, firma por cuenta y autocompletar contactos. Al conectar una cuenta trae los últimos 7 días; desde el selector de cuenta podés traer 30 o 90. Atajos: c redactar, / buscar, j/k moverse, e archivar, # papelera, s destacar, r responder.', roles: ['admin', 'asesor'] },
