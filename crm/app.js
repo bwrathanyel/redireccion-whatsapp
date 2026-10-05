@@ -14482,12 +14482,12 @@ function renderReasignPager(pages) {
 let FACT_ASESORES_CACHE = [], CXP_CACHE = [], FACT_VENTAS_CACHE = [], FACT_COMISIONES_CACHE = [], factTab = 'ventas';
 const FACT_LAST = {}; // últimas filas renderizadas (post filtro/búsqueda/orden) por tabla -- exportar CSV/PDF usa esto, así "exportar por cliente" es solo filtrar y exportar
 const FACT_COLS = {
-  ventas: [['numero_factura', 'N°'], ['cliente', 'Cliente'], ['asesor', 'Asesor'], ['monto_total', 'Precio venta'], ['costo_neto', 'Costo neto'], ['margen', 'Margen'], ['proveedor', 'Proveedor'], ['estado', 'Estado'], ['fecha_emision', 'Fecha']],
+  ventas: [['numero_factura', 'N°'], ['cliente', 'Cliente'], ['asesor', 'Asesor'], ['venta_total', 'Precio venta'], ['abonado', 'Abonado'], ['costo_neto', 'Costo neto'], ['margen', 'Margen'], ['proveedor', 'Proveedor'], ['estado', 'Estado'], ['fecha_emision', 'Fecha']],
   comisiones: [['asesor', 'Asesor'], ['monto_venta', 'Monto venta'], ['porcentaje', '%'], ['monto_comision', 'Comisión'], ['estado', 'Estado']],
   cxp: [['proveedor', 'Proveedor'], ['cliente', 'Cliente'], ['monto_a_transferir', 'A transferir'], ['monto_abonado', 'Abonado'], ['saldo_pendiente', 'Saldo'], ['estado', 'Estado']],
   asesores: [['nombre', 'Asesor'], ['porcentaje_comision', '% Comisión']],
 };
-const FACT_MONEY_COLS = new Set(['monto_total', 'costo_neto', 'margen', 'monto_venta', 'monto_comision', 'monto_a_transferir', 'monto_abonado', 'saldo_pendiente']);
+const FACT_MONEY_COLS = new Set(['monto_total', 'venta_total', 'abonado', 'costo_neto', 'margen', 'monto_venta', 'monto_comision', 'monto_a_transferir', 'monto_abonado', 'saldo_pendiente']);
 function formatCeldaExport(col, row) {
   const v = row[col];
   if (v == null) return '';
@@ -14780,10 +14780,21 @@ async function loadFacturas() {
   document.getElementById('fact-ventas-loading')?.classList.remove('show');
   if (error) { errToast('No se pudieron cargar las facturas'); return; }
   const cxpPorLead = new Map(CXP_CACHE.map(c => [c.lead_id, c]));
+  // La factura es lo COBRADO (abono); el precio total de la venta vive en leads.monto.
+  const abonadoPorLead = new Map();
+  (data || []).forEach(f => { if (f.estado === 'pagada') abonadoPorLead.set(f.lead_id, (abonadoPorLead.get(f.lead_id) || 0) + Number(f.monto_total || 0)); });
+  const montoPorLead = new Map();
+  const ids = [...new Set((data || []).map(f => f.lead_id))];
+  for (let i = 0; i < ids.length; i += 150) {
+    const { data: ls } = await sb.from('leads').select('id,monto').in('id', ids.slice(i, i + 150));
+    (ls || []).forEach(l => montoPorLead.set(l.id, Number(l.monto) || 0));
+  }
   FACT_VENTAS_CACHE = (data || []).map(f => {
     const cxp = cxpPorLead.get(f.lead_id);
     const costo_neto = cxp ? cxp.monto_a_transferir : null;
-    return { ...f, costo_neto, proveedor: cxp ? cxp.proveedor : null, margen: costo_neto != null ? f.monto_total - costo_neto : null };
+    const abonado = abonadoPorLead.get(f.lead_id) || 0;
+    const venta_total = Math.max(montoPorLead.get(f.lead_id) || 0, abonado);
+    return { ...f, costo_neto, proveedor: cxp ? cxp.proveedor : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null };
   });
   poblarFiltrosVentas();
   factVentasMostrar = TECHO_LISTA;
@@ -14823,10 +14834,14 @@ function renderVentas() {
   // visibles -- si no, "Total facturado" mentiría apenas hubiera más de
   // TECHO_LISTA facturas (mostraría la suma de la página, no la real).
   let sumaVenta = 0, sumaCosto = 0, sumaMargen = 0, ventaConCosto = 0, nPag = 0, nSinCosto = 0;
+  const leadsVistos = new Set(); // una venta puede tener varias facturas (abonos): contarla una vez
   buscadas.forEach(f => {
     if (f.estado !== 'pagada') return;
-    nPag++; sumaVenta += f.monto_total;
-    if (f.costo_neto != null) { sumaCosto += f.costo_neto; sumaMargen += f.margen; ventaConCosto += f.monto_total; } else nSinCosto++;
+    nPag++;
+    if (leadsVistos.has(f.lead_id)) return;
+    leadsVistos.add(f.lead_id);
+    sumaVenta += f.venta_total;
+    if (f.costo_neto != null) { sumaCosto += f.costo_neto; sumaMargen += f.margen; ventaConCosto += f.venta_total; } else nSinCosto++;
   });
   const pctMargen = ventaConCosto > 0 ? Math.round(sumaMargen / ventaConCosto * 100) : 0;
   pintarKPIs('fact-ventas-kpis', [
@@ -14839,7 +14854,7 @@ function renderVentas() {
   if (pager) pager.style.display = filas.length > factVentasMostrar ? '' : 'none';
   document.getElementById('fact-tbody').innerHTML = visibles.map((f, i) => {
     const anulada = f.estado === 'anulada', conCosto = f.costo_neto != null;
-    const pct = conCosto && f.monto_total > 0 ? Math.max(0, Math.min(100, Math.round(f.margen / f.monto_total * 100))) : 0;
+    const pct = conCosto && f.venta_total > 0 ? Math.max(0, Math.min(100, Math.round(f.margen / f.venta_total * 100))) : 0;
     return `<article class="lt-card${anulada ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}">
       <div class="lt-card-cab">
         <div class="lt-card-tit" title="${esc(f.cliente || '')}">${esc(f.cliente || ('#' + fmt(f.lead_id)))}</div>
@@ -14847,8 +14862,9 @@ function renderVentas() {
       </div>
       <div class="lt-card-meta"><i class="fas fa-hashtag"></i>${fmt(f.numero_factura)} · <i class="fas fa-user-tie"></i>${esc(f.asesor || 'Sin asesor')} · ${esc(fmtFechaHoraCaracas(f.fecha_emision))}</div>
       <div class="lt-card-meta"><i class="fas fa-building"></i>${f.proveedor ? esc(f.proveedor) : 'Sin proveedor'}</div>
-      <div class="lt-cifras">
-        <div><span>Venta</span><b>${money(f.monto_total)}</b></div>
+      <div class="lt-cifras" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+        <div><span>Venta</span><b>${money(f.venta_total)}</b></div>
+        <div><span>Abonado</span><b class="${f.abonado >= f.venta_total ? 'lt-ok' : ''}">${money(f.abonado)}</b></div>
         <div><span>Costo neto</span><b class="${conCosto ? '' : 'lt-debe'}">${conCosto ? money(f.costo_neto) : 'Sin definir'}</b></div>
         <div><span>Margen</span><b class="${!conCosto ? '' : f.margen >= 0 ? 'lt-ok' : 'lt-debe'}">${conCosto ? money(f.margen) : '—'}</b></div>
       </div>
@@ -14877,10 +14893,7 @@ async function exportarVentaPdf(id) {
   doc.text('VENTA', 576, 50, { align: 'right' });
   doc.setFontSize(11); gris(); doc.text(`# ${f.numero_factura}`, 576, 68, { align: 'right' });
   const conCosto = f.costo_neto != null;
-  // La factura es lo COBRADO (abono); el precio de venta total vive en leads.monto.
-  const { data: lead } = await sb.from('leads').select('monto').eq('id', f.lead_id).maybeSingle();
-  const abonado = FACT_VENTAS_CACHE.filter(x => x.lead_id === f.lead_id && x.estado === 'pagada').reduce((s, x) => s + Number(x.monto_total || 0), 0);
-  const venta = Number(lead?.monto) > 0 ? Number(lead.monto) : abonado;
+  const abonado = f.abonado, venta = f.venta_total;
   const filas = [
     ['Cliente', f.cliente || ('#' + f.lead_id)], ['Asesor', f.asesor || 'Sin asesor'], ['Fecha', fmtFechaHoraCaracas(f.fecha_emision)],
     ['Proveedor', f.proveedor || 'Sin proveedor'], ['Estado', f.estado === 'pagada' ? 'Pagada' : f.estado === 'anulada' ? 'Anulada' : String(f.estado || '')],
