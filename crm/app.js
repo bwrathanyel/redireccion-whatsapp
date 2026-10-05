@@ -14877,35 +14877,148 @@ function renderVentas() {
     </article>`;
   }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${factVentasFiltro || mes || asesor || val('fact-ventas-search') ? 'Nada coincide con el filtro' : 'Sin facturas'}</div>`;
 }
+// Poppins estática (jsPDF no maneja fuentes variables). Se baja una vez por sesión;
+// si el CDN falla, el PDF sale igual en Helvetica.
+const PDF_FUENTES = [['Poppins-Regular.ttf', 'normal'], ['Poppins-Medium.ttf', 'medium'], ['Poppins-SemiBold.ttf', 'semibold'], ['Poppins-Bold.ttf', 'bold']];
+let pdfFuentesPromise = null;
+function cargarFuentesPdf() {
+  if (!pdfFuentesPromise) pdfFuentesPromise = Promise.all(PDF_FUENTES.map(async ([arch, estilo]) => {
+    const r = await fetch('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poppins/' + arch);
+    if (!r.ok) throw new Error(arch);
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return [arch, estilo, btoa(bin)];
+  })).catch(e => { pdfFuentesPromise = null; throw e; });
+  return pdfFuentesPromise;
+}
 async function exportarVentaPdf(id) {
   const f = FACT_VENTAS_CACHE.find(x => x.id === id);
   if (!f) return;
   try { await ensureVoucherLibs(); } catch (_e) { errToast('No se pudo cargar el generador de PDF'); return; }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  let F = 'helvetica', st = s => (s === 'normal' ? 'normal' : 'bold');
+  try {
+    (await cargarFuentesPdf()).forEach(([a, e, b]) => { doc.addFileToVFS(a, b); doc.addFont(a, 'Poppins', e); });
+    F = 'Poppins'; st = s => s;
+  } catch (_e) { /* sin Poppins sale en Helvetica */ }
+  const C = { navy: [15, 23, 36], naranja: [240, 128, 30], ambar: [251, 191, 36], txt: [17, 24, 39], gris: [107, 114, 128], claro: [148, 163, 184], linea: [229, 231, 235], suave: [248, 250, 252], verde: [22, 163, 74], rojo: [220, 38, 38], blanco: [255, 255, 255] };
+  const font = (s, size, rgb) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...rgb); };
   const us = n => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' US$';
-  const gris = () => doc.setTextColor(120, 120, 120), negro = () => doc.setTextColor(40, 40, 40);
-  try { doc.addImage(await cargarImagenBase64('logolotus-integrado.png'), 'PNG', 36, 14, 100, 100); } catch (_e) { /* sin logo igual sale */ }
-  negro(); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
-  doc.text(['DESTINO Y', 'EVENTOS', 'LOTUS 360'], 148, 58);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(26); doc.setTextColor(60, 60, 60);
-  doc.text('VENTA', 576, 50, { align: 'right' });
-  doc.setFontSize(11); gris(); doc.text(`# ${f.numero_factura}`, 576, 68, { align: 'right' });
-  const conCosto = f.costo_neto != null;
-  const abonado = f.abonado, venta = f.venta_total;
+  const X0 = 40, X1 = 572, W = X1 - X0;
+
+  const venta = f.venta_total, abonado = f.abonado, saldo = Math.max(0, venta - abonado);
+  const conCosto = f.costo_neto != null, margen = conCosto ? venta - f.costo_neto : null;
+  const pctCobro = venta > 0 ? Math.min(100, Math.round(abonado / venta * 100)) : 0;
+  const pctMargen = conCosto && venta > 0 ? Math.round(margen / venta * 100) : null;
+
+  // Cabecera oscura con el mismo logo del CRM
+  doc.setFillColor(...C.navy); doc.rect(0, 0, 612, 128, 'F');
+  doc.setFillColor(...C.naranja); doc.rect(0, 128, 612, 4, 'F');
+  doc.setFillColor(...C.ambar); doc.rect(0, 128, 190, 4, 'F');
+  try { doc.addImage(await cargarImagenBase64('logolotus-integrado.png'), 'PNG', X0, 24, 80, 80); } catch (_e) { /* sin logo igual sale */ }
+  font('bold', 16, C.blanco); doc.text('Destino y Eventos', 134, 58);
+  font('bold', 16, C.naranja); doc.text('Lotus 360', 134, 78);
+  font('normal', 8.5, C.claro); doc.text('Agencia de viajes · destinoyeventoslotus360.com', 134, 96);
+  font('medium', 8, C.claro); doc.text('COMPROBANTE DE VENTA', X1, 48, { align: 'right', charSpace: 1.2 });
+  font('bold', 26, C.blanco); doc.text(`N° ${f.numero_factura}`, X1, 80, { align: 'right' });
+  font('normal', 8.5, C.claro); doc.text(`Emitida el ${fmtFechaHoraCaracas(f.fecha_emision)}`, X1, 98, { align: 'right' });
+
+  const seccion = (t, y) => {
+    font('semibold', 8.5, C.naranja); doc.text(t.toUpperCase(), X0, y, { charSpace: 1 });
+    doc.setDrawColor(...C.linea); doc.setLineWidth(0.8); doc.line(X0, y + 7, X1, y + 7);
+  };
+  const pill = (t, xDer, y, rgb) => {
+    font('semibold', 8, rgb);
+    const w = doc.getTextWidth(t) + 18;
+    doc.setFillColor(...rgb.map(c => Math.round(c + (255 - c) * 0.88))); doc.roundedRect(xDer - w, y - 11, w, 16, 8, 8, 'F');
+    doc.text(t, xDer - w / 2, y, { align: 'center' });
+  };
+
+  // Datos de la venta
+  let y = 168;
+  seccion('Datos de la venta', y);
+  const anulada = f.estado === 'anulada';
+  pill(f.estado === 'pagada' ? 'Pagada' : anulada ? 'Anulada' : String(f.estado || ''), X1, y, anulada ? C.rojo : f.estado === 'pagada' ? C.verde : C.gris);
+  [['Cliente', f.cliente || ('#' + f.lead_id)], ['Asesor', f.asesor || 'Sin asesor'], ['Proveedor', f.proveedor || 'Sin proveedor'], ['Forma de pago', f.forma_pago || '—']]
+    .forEach(([k, v], i) => {
+      const x = i % 2 ? 316 : X0, yy = y + 30 + Math.floor(i / 2) * 42;
+      font('medium', 7.5, C.gris); doc.text(k.toUpperCase(), x, yy, { charSpace: 0.6 });
+      font('semibold', 11.5, C.txt); doc.text(doc.splitTextToSize(String(v), 240)[0], x, yy + 16);
+    });
+
+  // Resumen en tres tarjetas + barra de cobro
+  y = 290;
+  seccion('Resumen', y);
+  const bw = (W - 24) / 3;
+  [['Precio de venta', us(venta), C.txt, 'Monto total acordado'],
+   ['Abonado', us(abonado), C.verde, `${pctCobro}% cobrado`],
+   ['Saldo pendiente', us(saldo), saldo > 0 ? C.naranja : C.verde, saldo > 0 ? 'Por cobrar al cliente' : 'Pagado completo']]
+    .forEach(([k, v, rgb, sub], i) => {
+      const x = X0 + i * (bw + 12);
+      doc.setFillColor(...C.suave); doc.setDrawColor(...C.linea); doc.roundedRect(x, y + 16, bw, 72, 8, 8, 'FD');
+      doc.setFillColor(...rgb); doc.roundedRect(x, y + 16, 4, 72, 2, 2, 'F');
+      font('medium', 7.5, C.gris); doc.text(k.toUpperCase(), x + 16, y + 38, { charSpace: 0.6 });
+      font('bold', 17, rgb); doc.text(v, x + 16, y + 62);
+      font('normal', 8, C.gris); doc.text(sub, x + 16, y + 78);
+    });
+  doc.setFillColor(...C.linea); doc.roundedRect(X0, y + 102, W, 6, 3, 3, 'F');
+  if (pctCobro > 0) { doc.setFillColor(...C.verde); doc.roundedRect(X0, y + 102, Math.max(6, W * pctCobro / 100), 6, 3, 3, 'F'); }
+  font('normal', 8, C.gris); doc.text(`Cobrado ${us(abonado)} de ${us(venta)}`, X0, y + 122);
+  font('semibold', 8, C.txt); doc.text(`${pctCobro}%`, X1, y + 122, { align: 'right' });
+
+  // Detalle financiero
+  y = 448;
+  seccion('Detalle financiero', y);
   const filas = [
-    ['Cliente', f.cliente || ('#' + f.lead_id)], ['Asesor', f.asesor || 'Sin asesor'], ['Fecha', fmtFechaHoraCaracas(f.fecha_emision)],
-    ['Proveedor', f.proveedor || 'Sin proveedor'], ['Estado', f.estado === 'pagada' ? 'Pagada' : f.estado === 'anulada' ? 'Anulada' : String(f.estado || '')],
-    ['Precio de venta', us(venta)], ['Abonado', us(abonado)], ['Saldo pendiente', us(Math.max(0, venta - abonado))],
-    ['Costo neto', conCosto ? us(f.costo_neto) : 'Sin definir'], ['Margen', conCosto ? us(venta - f.costo_neto) : '—'],
+    ['Precio de venta', us(venta), C.txt], ['Abonado', us(abonado), C.verde], ['Saldo pendiente', us(saldo), saldo > 0 ? C.naranja : C.txt],
+    ['Costo neto (proveedor)', conCosto ? us(f.costo_neto) : 'Sin definir', conCosto ? C.txt : C.naranja],
+    ['Margen sobre la venta', pctMargen != null ? `${pctMargen}%` : '—', C.txt],
   ];
-  let y = 150;
-  filas.forEach(([k, v], i) => {
-    if (i === 5) { doc.setDrawColor(220, 220, 220); doc.line(48, y - 12, 564, y - 12); y += 6; }
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); gris(); doc.text(k, 48, y);
-    doc.setFont('helvetica', 'bold'); negro(); doc.text(doc.splitTextToSize(String(v), 340), 564, y, { align: 'right' });
-    y += 26;
+  y += 16;
+  filas.forEach(([k, v, rgb], i) => {
+    if (i % 2 === 0) { doc.setFillColor(...C.suave); doc.rect(X0, y, W, 24, 'F'); }
+    font('normal', 10, C.gris); doc.text(k, X0 + 12, y + 16);
+    font('semibold', 10, rgb); doc.text(v, X1 - 12, y + 16, { align: 'right' });
+    y += 24;
   });
+  doc.setFillColor(255, 247, 237); doc.roundedRect(X0, y + 4, W, 32, 6, 6, 'F');
+  font('bold', 11, C.txt); doc.text('Margen bruto', X0 + 12, y + 25);
+  font('bold', 13, !conCosto ? C.gris : margen >= 0 ? C.verde : C.rojo);
+  doc.text(conCosto ? us(margen) : '—', X1 - 12, y + 25, { align: 'right' });
+  y += 64;
+
+  // Abonos registrados del mismo cliente
+  const abonos = FACT_VENTAS_CACHE.filter(x => x.lead_id === f.lead_id && x.estado === 'pagada')
+    .sort((a, b) => String(a.fecha_emision).localeCompare(String(b.fecha_emision)));
+  seccion('Abonos registrados', y);
+  y += 16;
+  doc.setFillColor(...C.navy); doc.roundedRect(X0, y, W, 22, 4, 4, 'F');
+  font('semibold', 8, C.blanco);
+  doc.text('FACTURA', X0 + 12, y + 14); doc.text('FECHA', X0 + 110, y + 14); doc.text('FORMA DE PAGO', X0 + 280, y + 14); doc.text('MONTO', X1 - 12, y + 14, { align: 'right' });
+  y += 22;
+  abonos.forEach((a, i) => {
+    if (y > 710) { doc.addPage(); y = 60; }
+    if (i % 2) { doc.setFillColor(...C.suave); doc.rect(X0, y, W, 22, 'F'); }
+    font(a.id === f.id ? 'semibold' : 'normal', 9, C.txt);
+    doc.text(`N° ${a.numero_factura}`, X0 + 12, y + 15); doc.text(fmtFechaHoraCaracas(a.fecha_emision), X0 + 110, y + 15);
+    doc.text(a.forma_pago || '—', X0 + 280, y + 15); doc.text(us(a.monto_total), X1 - 12, y + 15, { align: 'right' });
+    y += 22;
+  });
+  doc.setDrawColor(...C.linea); doc.line(X0, y, X1, y);
+  font('semibold', 9, C.txt); doc.text('Total abonado', X0 + 12, y + 16);
+  doc.text(us(abonado), X1 - 12, y + 16, { align: 'right' });
+
+  // Pie en todas las páginas
+  const n = doc.getNumberOfPages(), generado = new Date().toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' });
+  for (let p = 1; p <= n; p++) {
+    doc.setPage(p);
+    doc.setDrawColor(...C.linea); doc.line(X0, 752, X1, 752);
+    font('normal', 7.5, C.claro);
+    doc.text('Destino y Eventos Lotus 360 · Documento de uso interno', X0, 766);
+    doc.text(`Generado el ${generado} · Página ${p} de ${n}`, X1, 766, { align: 'right' });
+  }
   doc.save(`venta-${f.numero_factura}-${String(f.cliente || f.lead_id).replace(/[^\w]+/g, '_')}.pdf`);
 }
 window.exportarVentaPdf = exportarVentaPdf;
