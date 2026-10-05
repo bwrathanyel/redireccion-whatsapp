@@ -1830,6 +1830,29 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
   .main:has(#sec-correo.active) .foot-note{display:none}
 }
 
+/* Facturación aprovecha la ventana como Correo: cabecera compacta, sin tope de
+   ancho, KPIs globales en una sola fila baja y más columnas de tarjetas. */
+@media(min-width:761px){
+  .main:has(#sec-facturacion.active){padding:12px 20px 10px;max-width:none}
+  .main:has(#sec-facturacion.active) .topbar{gap:12px;margin:-4px 0 8px;padding:4px 0 6px}
+  .main:has(#sec-facturacion.active) .topbar>div:first-child{display:flex;align-items:baseline;flex:0 1 auto;gap:10px;min-width:0}
+  .main:has(#sec-facturacion.active) .topbar h1{font-size:20px;letter-spacing:-.4px;white-space:nowrap}
+  .main:has(#sec-facturacion.active) .topbar .sub{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .main:has(#sec-facturacion.active) .topbar-help-btn{padding:6px 12px;border-radius:9px;font-size:12px;box-shadow:none}
+  .main:has(#sec-facturacion.active) .pill{padding:6px 11px;border-radius:9px;font-size:12px}
+  .main:has(#sec-facturacion.active) .foot-note{display:none}
+  #sec-facturacion #fact-kpis{grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:10px}
+  #sec-facturacion #fact-kpis .kpi{padding:10px 12px;border-radius:12px}
+  #sec-facturacion #fact-kpis .kpi .kt{font-size:10px;letter-spacing:.4px;gap:6px}
+  #sec-facturacion #fact-kpis .kpi .kt i{width:20px;height:20px;border-radius:6px;font-size:10px}
+  #sec-facturacion #fact-kpis .kpi .kv{font-size:20px;margin-top:6px}
+  #sec-facturacion #fact-kpis .kpi .kd{margin-top:2px}
+  #sec-facturacion .lt-kpis{gap:10px;margin-bottom:8px}
+  #sec-facturacion .lt-kpis .kpi{padding:10px 14px}
+  #sec-facturacion .lt-kpis .kpi .kv{font-size:22px;margin-top:6px}
+  #sec-facturacion .lt-grid{grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;margin-top:10px}
+}
+
 .correo-compose-form{display:flex;flex-direction:column;gap:5px;padding:4px 6px 14px}
 .correo-compose-form label{margin-top:8px;color:var(--muted);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
 .correo-compose-form input.flt{width:100%;box-sizing:border-box}
