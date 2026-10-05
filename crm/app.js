@@ -1424,6 +1424,8 @@ const fmtFechaHoraCaracas = iso => {
   const hora = new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(d);
   return `${fecha} ${hora}`;
 };
+// timestamptz -> "dd/mm/aaaa" en hora de Caracas (misma trampa UTC que la de arriba).
+const fmtFechaCaracas = iso => iso ? new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso)) : '—';
 // `date` de Postgres (ej. "2026-07-11", SIN hora/offset) -- a propósito no pasa por
 // Date()/timeZone: un date puro interpretado como hora local del navegador puede
 // correrse un día en timezones lejanos a Caracas (ej. UTC+9 lo lee como el día
@@ -14783,18 +14785,18 @@ async function loadFacturas() {
   // La factura es lo COBRADO (abono); el precio total de la venta vive en leads.monto.
   const abonadoPorLead = new Map();
   (data || []).forEach(f => { if (f.estado === 'pagada') abonadoPorLead.set(f.lead_id, (abonadoPorLead.get(f.lead_id) || 0) + Number(f.monto_total || 0)); });
-  const montoPorLead = new Map();
+  const montoPorLead = new Map(), entradaPorLead = new Map();
   const ids = [...new Set((data || []).map(f => f.lead_id))];
   for (let i = 0; i < ids.length; i += 150) {
-    const { data: ls } = await sb.from('leads').select('id,monto').in('id', ids.slice(i, i + 150));
-    (ls || []).forEach(l => montoPorLead.set(l.id, Number(l.monto) || 0));
+    const { data: ls } = await sb.from('leads').select('id,monto,fecha_creacion').in('id', ids.slice(i, i + 150));
+    (ls || []).forEach(l => { montoPorLead.set(l.id, Number(l.monto) || 0); entradaPorLead.set(l.id, l.fecha_creacion || null); });
   }
   FACT_VENTAS_CACHE = (data || []).map(f => {
     const cxp = cxpPorLead.get(f.lead_id);
     const costo_neto = cxp ? cxp.monto_a_transferir : null;
     const abonado = abonadoPorLead.get(f.lead_id) || 0;
     const venta_total = Math.max(montoPorLead.get(f.lead_id) || 0, abonado);
-    return { ...f, costo_neto, proveedor: cxp ? cxp.proveedor : null, proveedor_pagado: cxp ? cxp.monto_abonado : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null };
+    return { ...f, costo_neto, proveedor: cxp ? cxp.proveedor : null, proveedor_pagado: cxp ? cxp.monto_abonado : null, lead_entrada: entradaPorLead.get(f.lead_id) || null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null };
   });
   poblarFiltrosVentas();
   factVentasMostrar = TECHO_LISTA;
@@ -14941,11 +14943,15 @@ async function exportarVentaPdf(id) {
   seccion('Datos de la venta', y);
   const anulada = f.estado === 'anulada';
   pill(f.estado === 'pagada' ? 'Pagada' : anulada ? 'Anulada' : String(f.estado || ''), X1, y, anulada ? C.rojo : f.estado === 'pagada' ? C.verde : C.gris);
-  [['Cliente', f.cliente || ('#' + f.lead_id)], ['Asesor', f.asesor || 'Sin asesor'], ['Proveedor', f.proveedor || 'Sin proveedor'], ['Forma de pago', f.forma_pago || '—']]
-    .forEach(([k, v], i) => {
+  [['Cliente', f.cliente || ('#' + f.lead_id), f.lead_entrada ? 'Cliente desde el ' + fmtFechaCaracas(f.lead_entrada) : null],
+   ['Asesor', f.asesor || 'Sin asesor'], ['Proveedor', f.proveedor || 'Sin proveedor'], ['Forma de pago', f.forma_pago || '—']]
+    .forEach(([k, v, sub], i) => {
       const x = i % 2 ? 316 : X0, yy = y + 30 + Math.floor(i / 2) * 42;
       font('medium', 7.5, C.gris); doc.text(k.toUpperCase(), x, yy, { charSpace: 0.6 });
       font('semibold', 11.5, C.txt); doc.text(doc.splitTextToSize(String(v), 240)[0], x, yy + 16);
+      // Alta del cliente en el CRM (leads.fecha_creacion), debajo del nombre: el bloque de datos
+      // son 2 filas fijas y el resumen arranca en y=290, no entra un campo más sin mover el resto.
+      if (sub) { font('normal', 7.5, C.claro); doc.text(sub, x, yy + 29); }
     });
 
   // Resumen: dos paneles con nombre -- lo que entra del cliente y lo que sale al
@@ -23808,7 +23814,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-10-05', emoji: '🧾', titulo: 'El PDF de la venta ahora separa cliente y proveedor', texto: 'Al tocar el botón PDF en Facturación → Ventas, el comprobante sale con dos bloques con nombre en vez de las tres cifras del cliente sueltas: el verde dice qué se le cobra al cliente (venta, abonado y lo que falta cobrar) y el azul, qué se le paga al proveedor (su costo, cuánto de eso ya cubre el abono y cuánto falta cubrir), con el nombre del proveedor escrito tal cual. Debajo de la barra de avance se ve el reparto del abono: qué parte le corresponde al proveedor y qué parte es margen. El detalle financiero y la tabla de abonos ahora aclaran a quién pertenece cada cifra: lo que pagó el cliente, lo que hay que transferirle al proveedor y los abonos del cliente.', roles: ['admin'] },
+  { fecha: '2026-10-05', emoji: '🧾', titulo: 'El PDF de la venta ahora separa cliente y proveedor', texto: 'Al tocar el botón PDF en Facturación → Ventas, el comprobante sale con dos bloques con nombre en vez de las tres cifras del cliente sueltas: el verde dice qué se le cobra al cliente (venta, abonado y lo que falta cobrar) y el azul, qué se le paga al proveedor (su costo, cuánto de eso ya cubre el abono y cuánto falta cubrir), con el nombre del proveedor escrito tal cual. Debajo de la barra de avance se ve el reparto del abono: qué parte le corresponde al proveedor y qué parte es margen. El detalle financiero y la tabla de abonos ahora aclaran a quién pertenece cada cifra: lo que pagó el cliente, lo que hay que transferirle al proveedor y los abonos del cliente. Debajo del nombre del cliente ahora figura la fecha en que entró al CRM ("Cliente desde el ..."), para ubicarlo de un vistazo.', roles: ['admin'] },
   { fecha: '2026-10-04', emoji: '📘', titulo: 'Facebook en Redes', texto: 'Marketing → Redes tiene una pestaña nueva de Facebook, con datos de Zernio: seguidores (ganados y perdidos), vistas e interacciones de la página, métricas de cada publicación, reacciones, los mejores días y horarios para publicar y el top de publicaciones. Usa el mismo selector de período que Instagram y TikTok.', roles: ['admin'] },
   { fecha: '2026-10-04', emoji: '💬', titulo: 'WhatsApp en el CRM', texto: 'Nueva sección Mensajes → WhatsApp: todos los chats del bot de ventas, con fotos y notas de voz, y el botón "Ver lead" cuando el número ya está en el CRM. Arriba se elige el número de WhatsApp (cuando haya más de uno). Es solo para ver: el bot responde ahí y el asesor sigue atendiendo por su WhatsApp.', roles: ['admin'] },
   { fecha: '2026-10-02', emoji: '✉️', titulo: 'Correo: ahora es como Gmail', texto: 'Correo tiene su propia entrada en el menú, con el contador de no leídos. Carpetas (Recibidos con pestañas Principal/Promociones/Social/Notificaciones, Destacados, Enviados, Todos, Spam, Papelera y Contactos), búsqueda en todo tu correo, hilos completos, estrella, archivar, papelera y no leído (se reflejan en tu Gmail real). Podés responder, responder a todos y reenviar con adjuntos, usar CCO, firma por cuenta y autocompletar contactos. Al conectar una cuenta trae los últimos 7 días; desde el selector de cuenta podés traer 30 o 90. Atajos: c redactar, / buscar, j/k moverse, e archivar, # papelera, s destacar, r responder.', roles: ['admin', 'asesor'] },
