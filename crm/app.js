@@ -14623,7 +14623,7 @@ function setupExportes() {
 // esta fase. Se recorta el render, no el fetch.
 let factVentasMostrar = TECHO_LISTA, factComMostrar = TECHO_LISTA, cxpMostrar = TECHO_LISTA;
 const FACT_SORT = {
-  ventas: { col: 'numero_factura', dir: 1 }, comisiones: { col: null, dir: 1 },
+  ventas: { col: 'fecha_emision', dir: -1 }, comisiones: { col: null, dir: 1 },
   cxp: { col: 'saldo_pendiente', dir: -1 }, asesores: { col: 'nombre', dir: 1 }, proveedores: { col: 'nombre', dir: 1 },
 };
 const FACT_RENDERERS = { ventas: renderVentas, comisiones: renderComisiones, cxp: renderCuentasPorPagar, asesores: renderAsesoresComision, proveedores: renderProveedores };
@@ -14692,7 +14692,7 @@ function setupFacturacion() {
   document.getElementById('fact-asesores-search').addEventListener('input', renderAsesoresComision);
   document.getElementById('monto-sheet-cancelar').addEventListener('click', () => closeSheet('monto-sheet'));
   document.getElementById('monto-sheet-confirmar').addEventListener('click', confirmarMontoSheet);
-  // Flechita del orden por defecto (numero_factura asc en Ventas) visible
+  // Flechita del orden por defecto (fecha_emision desc en Ventas) visible
   // desde el primer render, no solo después de tocar un encabezado.
   Object.entries(FACT_SORT).forEach(([tabla, spec]) => {
     if (!spec.col) return;
@@ -14855,11 +14855,42 @@ function renderVentas() {
       ${conCosto ? `<div class="lt-barra" role="progressbar" aria-label="Margen sobre la venta" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" title="Margen ${pct}% de la venta"><i style="width:${pct}%"></i></div>` : ''}
       <div class="lt-card-pie">
         <button class="btn-sm" type="button" onclick="abrirClienteDesdeFacturacion(${f.lead_id})"><i class="fas fa-user-pen"></i> Editar cliente</button>
+        <button class="btn-sm" type="button" onclick="exportarVentaPdf(${f.id})"><i class="fas fa-file-pdf"></i> PDF</button>
         ${f.estado === 'pagada' ? `<button class="btn-sm" type="button" onclick="anularFacturaUI(${f.id})"><i class="fas fa-ban"></i> Anular</button>` : ''}
       </div>
     </article>`;
   }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${factVentasFiltro || mes || asesor || val('fact-ventas-search') ? 'Nada coincide con el filtro' : 'Sin facturas'}</div>`;
 }
+async function exportarVentaPdf(id) {
+  const f = FACT_VENTAS_CACHE.find(x => x.id === id);
+  if (!f) return;
+  try { await ensureVoucherLibs(); } catch (_e) { errToast('No se pudo cargar el generador de PDF'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const us = n => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' US$';
+  const gris = () => doc.setTextColor(120, 120, 120), negro = () => doc.setTextColor(40, 40, 40);
+  try { doc.addImage(await cargarImagenBase64('logolotus.png'), 'PNG', 30, 8, 104, 104); } catch (_e) { /* sin logo igual sale */ }
+  negro(); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+  doc.text(['DESTINO Y', 'EVENTOS', 'LOTUS 360'], 122, 52);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(26); doc.setTextColor(60, 60, 60);
+  doc.text('VENTA', 576, 50, { align: 'right' });
+  doc.setFontSize(11); gris(); doc.text(`# ${f.numero_factura}`, 576, 68, { align: 'right' });
+  const conCosto = f.costo_neto != null;
+  const filas = [
+    ['Cliente', f.cliente || ('#' + f.lead_id)], ['Asesor', f.asesor || 'Sin asesor'], ['Fecha', fmtFechaHoraCaracas(f.fecha_emision)],
+    ['Proveedor', f.proveedor || 'Sin proveedor'], ['Estado', f.estado === 'pagada' ? 'Pagada' : f.estado === 'anulada' ? 'Anulada' : String(f.estado || '')],
+    ['Precio de venta', us(f.monto_total)], ['Costo neto', conCosto ? us(f.costo_neto) : 'Sin definir'], ['Margen', conCosto ? us(f.margen) : '—'],
+  ];
+  let y = 150;
+  filas.forEach(([k, v], i) => {
+    if (i === 5) { doc.setDrawColor(220, 220, 220); doc.line(48, y - 12, 564, y - 12); y += 6; }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); gris(); doc.text(k, 48, y);
+    doc.setFont('helvetica', 'bold'); negro(); doc.text(doc.splitTextToSize(String(v), 340), 564, y, { align: 'right' });
+    y += 26;
+  });
+  doc.save(`venta-${f.numero_factura}-${String(f.cliente || f.lead_id).replace(/[^\w]+/g, '_')}.pdf`);
+}
+window.exportarVentaPdf = exportarVentaPdf;
 function cargarMasVentas() { factVentasMostrar += TECHO_LISTA; renderVentas(); }
 window.cargarMasVentas = cargarMasVentas;
 async function loadComisionesAdmin() {
