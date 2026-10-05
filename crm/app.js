@@ -14876,10 +14876,15 @@ async function exportarVentaPdf(id) {
   doc.text('VENTA', 576, 50, { align: 'right' });
   doc.setFontSize(11); gris(); doc.text(`# ${f.numero_factura}`, 576, 68, { align: 'right' });
   const conCosto = f.costo_neto != null;
+  // La factura es lo COBRADO (abono); el precio de venta total vive en leads.monto.
+  const { data: lead } = await sb.from('leads').select('monto').eq('id', f.lead_id).maybeSingle();
+  const abonado = FACT_VENTAS_CACHE.filter(x => x.lead_id === f.lead_id && x.estado === 'pagada').reduce((s, x) => s + Number(x.monto_total || 0), 0);
+  const venta = Number(lead?.monto) > 0 ? Number(lead.monto) : abonado;
   const filas = [
     ['Cliente', f.cliente || ('#' + f.lead_id)], ['Asesor', f.asesor || 'Sin asesor'], ['Fecha', fmtFechaHoraCaracas(f.fecha_emision)],
     ['Proveedor', f.proveedor || 'Sin proveedor'], ['Estado', f.estado === 'pagada' ? 'Pagada' : f.estado === 'anulada' ? 'Anulada' : String(f.estado || '')],
-    ['Precio de venta', us(f.monto_total)], ['Costo neto', conCosto ? us(f.costo_neto) : 'Sin definir'], ['Margen', conCosto ? us(f.margen) : '—'],
+    ['Precio de venta', us(venta)], ['Abonado', us(abonado)], ['Saldo pendiente', us(Math.max(0, venta - abonado))],
+    ['Costo neto', conCosto ? us(f.costo_neto) : 'Sin definir'], ['Margen', conCosto ? us(venta - f.costo_neto) : '—'],
   ];
   let y = 150;
   filas.forEach(([k, v], i) => {
