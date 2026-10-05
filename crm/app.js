@@ -14869,9 +14869,10 @@ async function exportarVentaPdf(id) {
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
   const us = n => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' US$';
   const gris = () => doc.setTextColor(120, 120, 120), negro = () => doc.setTextColor(40, 40, 40);
-  try { doc.addImage(await cargarImagenBase64('logolotus.png'), 'PNG', 30, 8, 104, 104); } catch (_e) { /* sin logo igual sale */ }
+  doc.setFillColor(15, 23, 36); doc.roundedRect(36, 14, 100, 100, 10, 10, 'F');
+  try { doc.addImage(await cargarImagenBase64('logolotus.png'), 'PNG', 42, 20, 88, 88); } catch (_e) { /* sin logo igual sale */ }
   negro(); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
-  doc.text(['DESTINO Y', 'EVENTOS', 'LOTUS 360'], 122, 52);
+  doc.text(['DESTINO Y', 'EVENTOS', 'LOTUS 360'], 148, 58);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(26); doc.setTextColor(60, 60, 60);
   doc.text('VENTA', 576, 50, { align: 'right' });
   doc.setFontSize(11); gris(); doc.text(`# ${f.numero_factura}`, 576, 68, { align: 'right' });
