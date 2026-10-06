@@ -14914,6 +14914,15 @@ async function exportarVentaPdf(id) {
   const conCosto = f.costo_neto != null, margen = conCosto ? venta - f.costo_neto : null;
   const pctCobro = venta > 0 ? Math.min(100, Math.round(abonado / venta * 100)) : 0;
   const pctMargen = conCosto && venta > 0 ? Math.round(margen / venta * 100) : null;
+  // Fechas del viaje: cuelgan de la reserva de la factura (`postventa_casos`, que ahora devuelve
+  // `listar_facturas`). Son `date` puros -> fmtFechaSolo, que a propósito no pasa por Date() (ver
+  // su comentario: reinterpretarlos como hora local corre un día). Va bajo el proveedor, que es
+  // quien presta el viaje, y bajo el nombre del cliente queda su fecha de alta en el CRM.
+  const viaje = f.viaje_inicio
+    ? (f.viaje_fin && f.viaje_fin !== f.viaje_inicio
+      ? `Viaja del ${fmtFechaSolo(f.viaje_inicio)} al ${fmtFechaSolo(f.viaje_fin)}`
+      : `Viaja el ${fmtFechaSolo(f.viaje_inicio)}`)
+    : null;
 
   // Cabecera oscura con el mismo logo del CRM
   doc.setFillColor(...C.navy); doc.rect(0, 0, 612, 128, 'F');
@@ -14944,7 +14953,7 @@ async function exportarVentaPdf(id) {
   const anulada = f.estado === 'anulada';
   pill(f.estado === 'pagada' ? 'Pagada' : anulada ? 'Anulada' : String(f.estado || ''), X1, y, anulada ? C.rojo : f.estado === 'pagada' ? C.verde : C.gris);
   [['Cliente', f.cliente || ('#' + f.lead_id), f.lead_entrada ? 'Cliente desde el ' + fmtFechaCaracas(f.lead_entrada) : null],
-   ['Asesor', f.asesor || 'Sin asesor'], ['Proveedor', f.proveedor || 'Sin proveedor'], ['Forma de pago', f.forma_pago || '—']]
+   ['Asesor', f.asesor || 'Sin asesor'], ['Proveedor', f.proveedor || 'Sin proveedor', viaje], ['Forma de pago', f.forma_pago || '—']]
     .forEach(([k, v, sub], i) => {
       const x = i % 2 ? 316 : X0, yy = y + 30 + Math.floor(i / 2) * 42;
       font('medium', 7.5, C.gris); doc.text(k.toUpperCase(), x, yy, { charSpace: 0.6 });
@@ -23814,7 +23823,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-10-05', emoji: '🧾', titulo: 'El PDF de la venta ahora separa cliente y proveedor', texto: 'Al tocar el botón PDF en Facturación → Ventas, el comprobante sale con dos bloques con nombre en vez de las tres cifras del cliente sueltas: el verde dice qué se le cobra al cliente (venta, abonado y lo que falta cobrar) y el azul, qué se le paga al proveedor (su costo, cuánto de eso ya cubre el abono y cuánto falta cubrir), con el nombre del proveedor escrito tal cual. Debajo de la barra de avance se ve el reparto del abono: qué parte le corresponde al proveedor y qué parte es margen. El detalle financiero y la tabla de abonos ahora aclaran a quién pertenece cada cifra: lo que pagó el cliente, lo que hay que transferirle al proveedor y los abonos del cliente. Debajo del nombre del cliente ahora figura la fecha en que entró al CRM ("Cliente desde el ..."), para ubicarlo de un vistazo.', roles: ['admin'] },
+  { fecha: '2026-10-05', emoji: '🧾', titulo: 'El PDF de la venta ahora separa cliente y proveedor', texto: 'Al tocar el botón PDF en Facturación → Ventas, el comprobante sale con dos bloques con nombre en vez de las tres cifras del cliente sueltas: el verde dice qué se le cobra al cliente (venta, abonado y lo que falta cobrar) y el azul, qué se le paga al proveedor (su costo, cuánto de eso ya cubre el abono y cuánto falta cubrir), con el nombre del proveedor escrito tal cual. Debajo de la barra de avance se ve el reparto del abono: qué parte le corresponde al proveedor y qué parte es margen. El detalle financiero y la tabla de abonos ahora aclaran a quién pertenece cada cifra: lo que pagó el cliente, lo que hay que transferirle al proveedor y los abonos del cliente. Debajo del nombre del cliente ahora figura la fecha en que entró al CRM ("Cliente desde el ...") y debajo del proveedor, las fechas del viaje ("Viaja del ... al ..."), que salen de la reserva de la venta.', roles: ['admin'] },
   { fecha: '2026-10-04', emoji: '📘', titulo: 'Facebook en Redes', texto: 'Marketing → Redes tiene una pestaña nueva de Facebook, con datos de Zernio: seguidores (ganados y perdidos), vistas e interacciones de la página, métricas de cada publicación, reacciones, los mejores días y horarios para publicar y el top de publicaciones. Usa el mismo selector de período que Instagram y TikTok.', roles: ['admin'] },
   { fecha: '2026-10-04', emoji: '💬', titulo: 'WhatsApp en el CRM', texto: 'Nueva sección Mensajes → WhatsApp: todos los chats del bot de ventas, con fotos y notas de voz, y el botón "Ver lead" cuando el número ya está en el CRM. Arriba se elige el número de WhatsApp (cuando haya más de uno). Es solo para ver: el bot responde ahí y el asesor sigue atendiendo por su WhatsApp.', roles: ['admin'] },
   { fecha: '2026-10-02', emoji: '✉️', titulo: 'Correo: ahora es como Gmail', texto: 'Correo tiene su propia entrada en el menú, con el contador de no leídos. Carpetas (Recibidos con pestañas Principal/Promociones/Social/Notificaciones, Destacados, Enviados, Todos, Spam, Papelera y Contactos), búsqueda en todo tu correo, hilos completos, estrella, archivar, papelera y no leído (se reflejan en tu Gmail real). Podés responder, responder a todos y reenviar con adjuntos, usar CCO, firma por cuenta y autocompletar contactos. Al conectar una cuenta trae los últimos 7 días; desde el selector de cuenta podés traer 30 o 90. Atajos: c redactar, / buscar, j/k moverse, e archivar, # papelera, s destacar, r responder.', roles: ['admin', 'asesor'] },
