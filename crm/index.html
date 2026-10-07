@@ -2965,6 +2965,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ria-cal-head,.ria-cal-fila{display:grid;grid-template-columns:minmax(130px,1fr) 90px 90px;gap:8px;align-items:center}.ria-cal-head{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2);padding-bottom:8px}
 .ria-cal-fila{font-size:12px;color:var(--muted);padding:8px 0;border-top:1px solid var(--line)}.ria-cal-fila b{text-align:center;color:var(--txt)}
 .ria-vacio{font-size:12.5px;color:var(--muted);padding:18px 0;text-align:center}
+.ria-tend{display:flex;align-items:stretch;gap:3px;height:132px}.ria-tend-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px}
+.ria-tend-bar{flex:1;width:100%;display:flex;align-items:flex-end}.ria-tend-c{display:flex;flex-direction:column;justify-content:flex-end;width:100%;border-radius:4px 4px 0 0;background:rgba(var(--accent-rgb),.3);overflow:hidden}.ria-tend-l{display:block;width:100%;background:var(--accent)}
+.ria-tend-col span{font-size:9px;color:var(--muted2);line-height:1}
+.ria-detalles{margin-bottom:12px}.ria-detalles>summary{cursor:pointer;list-style:none;font-size:12.5px;font-weight:800;color:var(--muted);padding:10px 2px}.ria-detalles>summary::-webkit-details-marker{display:none}.ria-detalles>summary::before{content:"▸ ";display:inline-block;transition:transform .15s}.ria-detalles[open]>summary{color:var(--txt)}.ria-detalles[open]>summary::before{transform:rotate(90deg)}
 @media(max-width:760px){.ria-dashboard{grid-template-columns:repeat(2,1fr)}.ria-db-title{grid-column:1/-1}.ria-grid{grid-template-columns:1fr}.ria-paso{grid-template-columns:100px 1fr 38px}.ria-cal-head,.ria-cal-fila{grid-template-columns:minmax(115px,1fr) 62px 62px}}
 /* ---------- Clientes de la IA: consumo del mes -------------------------
    Dos barras y no una: la de mensajes es lo que le vendiste, la de contactos
@@ -6498,26 +6502,30 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div class="ria-texto" id="ria-estado-texto">Consultando la telemetría privada de la IA…</div>
       </div>
       <div class="kpis" id="ria-kpis"></div>
-      <div class="ria-card" style="margin-bottom:14px"><h2><i class="fas fa-flask"></i> Piloto Instagram 20/80</h2><div class="ria-sub">Conversión a teléfono, CTA y entrega comparadas sin mover contactos entre grupos.</div><div id="ria-piloto"></div></div>
-      <div class="ria-grid">
-        <div class="ria-card"><h2><i class="fas fa-life-ring"></i> Reactivación de conversaciones</h2><div class="ria-sub">Seguimientos seguros, respuestas recuperadas y leads rescatados.</div><div id="ria-reactivacion"></div></div>
-        <div class="ria-card"><h2><i class="fas fa-satellite-dish"></i> Entrega y silencios</h2><div class="ria-sub">Distingue lo generado de lo que realmente continuó en ManyChat.</div><div id="ria-entrega"></div></div>
-      </div>
       <div class="ria-grid">
         <div class="ria-card"><h2><i class="fas fa-filter"></i> Embudo comercial</h2><div class="ria-sub">En qué paso avanzan o se pierden las conversaciones.</div><div id="ria-embudo"></div></div>
         <div class="ria-card"><h2><i class="fas fa-handshake"></i> Resultado del negocio</h2><div class="ria-sub">Leads entregados, seguimiento y ventas atribuibles a la IA.</div><div id="ria-ventas"></div></div>
       </div>
       <div class="ria-grid">
-        <div class="ria-card"><h2><i class="fas fa-handshake-angle"></i> Colaboraciones (fuera del embudo)</h2><div class="ria-sub">Conversaciones que escalan directo al WhatsApp del anfitrión, sin teléfono ni pipeline. No cuentan en el embudo global.</div><div id="ria-colaboraciones"></div></div>
+        <div class="ria-card"><h2><i class="fas fa-chart-column"></i> Tendencia diaria</h2><div class="ria-sub">Conversaciones por día y cuántas llegaron a lead.</div><div id="ria-tendencia"></div></div>
+        <div class="ria-card"><h2><i class="fas fa-share-nodes"></i> Canales</h2><div class="ria-sub">Todos los canales con la misma definición, de mayor a menor volumen.</div><div id="ria-canales"></div></div>
       </div>
+      <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-life-ring"></i> Seguimiento a conversaciones</h2><div class="ria-sub">Mensajes de seguimiento a quien dejó la conversación a medias: cuántos vuelven, cuántos se vuelven lead y qué habría pasado sin el mensaje.</div><div id="ria-reactivacion"></div></div>
       <div class="ria-grid">
         <div class="ria-card"><h2><i class="fas fa-shield-heart"></i> Calidad de las respuestas</h2><div class="ria-sub">Separa lo que intentó el modelo de lo que realmente recibió el cliente.</div><div id="ria-calidad"></div></div>
-        <div class="ria-card"><h2><i class="fas fa-share-nodes"></i> Canales</h2><div class="ria-sub">Instagram y web comparados con la misma definición.</div><div id="ria-canales"></div></div>
+        <div class="ria-card"><h2><i class="fas fa-gauge-high"></i> Funcionamiento y costo</h2><div class="ria-sub">Velocidad, errores y consumo real de tokens.</div><div id="ria-operacion"></div></div>
       </div>
       <div class="ria-grid">
-        <div class="ria-card"><h2><i class="fas fa-gauge-high"></i> Funcionamiento y costo</h2><div class="ria-sub">Velocidad, errores y consumo real de tokens.</div><div id="ria-operacion"></div></div>
-        <div class="ria-card"><h2><i class="fas fa-code-branch"></i> Versiones activas</h2><div class="ria-sub">Resultados separados por cerebro y motor para comparar cambios.</div><div id="ria-versiones"></div></div>
+        <div class="ria-card"><h2><i class="fas fa-flask"></i> Piloto Instagram 20/80</h2><div class="ria-sub">Conversión a teléfono, CTA y entrega comparadas sin mover contactos entre grupos.</div><div id="ria-piloto"></div></div>
+        <div class="ria-card"><h2><i class="fas fa-handshake-angle"></i> Colaboraciones (fuera del embudo)</h2><div class="ria-sub">Conversaciones que escalan directo al WhatsApp del anfitrión, sin teléfono ni pipeline. No cuentan en el embudo global.</div><div id="ria-colaboraciones"></div></div>
       </div>
+      <details class="ria-detalles">
+        <summary>Detalles técnicos: entrega de mensajes y versiones del cerebro</summary>
+        <div class="ria-grid">
+          <div class="ria-card"><h2><i class="fas fa-satellite-dish"></i> Entrega y silencios</h2><div class="ria-sub">Distingue lo generado de lo que realmente continuó en ManyChat.</div><div id="ria-entrega"></div></div>
+          <div class="ria-card"><h2><i class="fas fa-code-branch"></i> Versiones activas</h2><div class="ria-sub">Resultados separados por cerebro y motor para comparar cambios.</div><div id="ria-versiones"></div></div>
+        </div>
+      </details>
       <div class="ce-ayuda"><i class="fas fa-lock"></i> Este panel usa agregados y hashes. No almacena ni muestra chats, teléfonos o nombres de clientes.</div>
     </section>
 

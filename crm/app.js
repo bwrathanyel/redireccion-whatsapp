@@ -6465,7 +6465,7 @@ async function actQuitar(clave, btn) {
 
 /* --- Rendimiento de la IA comercial -------------------------------------
    El panel consume exclusivamente agregados admin-only. Los hashes de contacto
-   no salen de la RPC y el navegador nunca recibe chats, nombres o telÃ©fonos. */
+   no salen de la RPC y el navegador nunca recibe chats, nombres o teléfonos. */
 let RIA_DIAS = 7;
 const RIA_CACHE = new Map();
 const RIA_COSTO_ENTRADA = 0.14 / 1e6;
@@ -6480,20 +6480,22 @@ function riaRango(dias) {
   return { desde: desde.toISOString(), hasta: hasta.toISOString() };
 }
 
-async function riaConsultar(dias, forzar = false) {
+// completo=false: solo la RPC general (el widget del inicio muestra 5 números y no
+// necesita el piloto ni el seguimiento, que son las dos RPC pesadas).
+async function riaConsultar(dias, forzar = false, completo = true) {
   const guardado = RIA_CACHE.get(dias);
-  if (!forzar && guardado && Date.now() - guardado.en < 60000) return guardado.data;
+  if (!forzar && guardado && Date.now() - guardado.en < 60000 && (guardado.completo || !completo)) return guardado.data;
   const rango = riaRango(dias);
   const [general, piloto, reactivacion] = await Promise.all([
     sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }),
-    sb.rpc('panel_piloto_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }),
-    sb.rpc('panel_reactivacion_ia', { p_desde: rango.desde, p_hasta: rango.hasta }),
+    completo ? sb.rpc('panel_piloto_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
+    completo ? sb.rpc('panel_reactivacion_ia', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
   ]);
   if (general.error) throw general.error;
-  if (piloto.error) throw piloto.error;
-  if (reactivacion.error) throw reactivacion.error;
-  const data = { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data };
-  RIA_CACHE.set(dias, { en: Date.now(), data });
+  if (completo && piloto.error) throw piloto.error;
+  if (completo && reactivacion.error) throw reactivacion.error;
+  const data = completo ? { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data } : general.data;
+  RIA_CACHE.set(dias, { en: Date.now(), data, completo });
   return data;
 }
 
@@ -6530,7 +6532,7 @@ function riaPintarDashboard(data) {
 
 async function loadResumenIADashboard(forzar = false) {
   if (ROL !== 'admin' || !document.getElementById('ria-dashboard')) return;
-  try { riaPintarDashboard(await riaConsultar(1, forzar)); }
+  try { riaPintarDashboard(await riaConsultar(1, forzar, false)); }
   catch (e) {
     console.error('rendimiento IA dashboard', e);
     document.getElementById('ria-db-estado').textContent = 'No se pudo cargar el resumen';
@@ -6539,7 +6541,17 @@ async function loadResumenIADashboard(forzar = false) {
 
 // Control vs. tratamiento con todas las filas asignadas (no solo las enviadas): ver
 // migración 20261007180000_medicion_seguimiento_leads.
-const RIA_CANALES = { facebook: 'Facebook', instagram: 'Instagram', whatsapp: 'WhatsApp' };
+const RIA_CANALES = { instagram: 'Instagram', facebook: 'Facebook', whatsapp: 'WhatsApp', web: 'Web', tiktok: 'TikTok' };
+
+function riaTendencia(porDia) {
+  if (porDia.length < 2) return '<div class="ria-vacio">La tendencia aparece cuando hay 2 o más días en el período.</div>';
+  const max = Math.max(1, ...porDia.map(d => riaNum(d.conversaciones)));
+  const cols = porDia.map(d => {
+    const c = riaNum(d.conversaciones), l = riaNum(d.leads_calificados);
+    return `<div class="ria-tend-col" title="${esc(d.dia)}: ${fmt(c)} conversaciones · ${fmt(l)} leads"><div class="ria-tend-bar"><div class="ria-tend-c" style="height:${c ? Math.max(4, c * 100 / max) : 0}%"><i class="ria-tend-l" style="height:${c ? l * 100 / c : 0}%"></i></div></div><span>${esc(String(d.dia).slice(8, 10))}</span></div>`;
+  }).join('');
+  return `<div class="ria-tend">${cols}</div><div class="ce-ayuda">Cada barra es un día (número = día del mes). La parte oscura son las conversaciones que llegaron a lead.</div>`;
+}
 function riaComparacionSeguimiento(reactivacion) {
   const comp = reactivacion.comparacion || [], intentos = reactivacion.intentos || [];
   if (!comp.length && !intentos.length) return '';
@@ -6593,18 +6605,20 @@ function riaPintarPanel(data) {
     <div class="ria-fila"><span>Personas que pidieron no contacto</span><b>${fmt(riaNum(reactivacion.no_contactar))}</b></div>
     <div class="ria-fila"><span>Última corrida sin errores</span><b class="${cronFrio ? 'ria-malo' : 'ria-bien'}">${okEn ? riaHora(saludCron.ultima_corrida_ok) : 'Nunca'}</b></div>
     ${saludCron.ultimo_error ? `<div class="ria-fila"><span>Último error (${esc(riaHora(saludCron.ultimo_error_en))})</span><b class="ria-malo">${esc(saludCron.ultimo_error)}</b></div>` : ''}
-    <div class="ria-cal-head" style="margin-top:10px"><span>Foto en 1er seguimiento (A/B)</span><span>Enviados</span><span>Volvieron</span></div>
-    ${[['Con foto', conFoto], ['Sin foto', sinFoto]].map(([n, g]) => `<div class="ria-cal-fila"><span>${n}</span><b>${fmt(riaNum(g.enviadas))}</b><b>${riaPct(g.respondidas, g.enviadas)}%</b></div>`).join('')}
-    ${(riaNum(conFoto.enviadas) && riaNum(sinFoto.enviadas)) ? `<div class="ria-fila"><span>Diferencia con foto vs. sin foto</span><b class="${deltaFoto < -0.5 ? 'ria-malo' : 'ria-bien'}">${deltaFoto >= 0 ? '+' : ''}${deltaFoto.toFixed(1)} pp</b></div>` : ''}
     ${riaComparacionSeguimiento(reactivacion)}
+    <div class="ria-cal-head" style="margin-top:10px"><span>Prueba: foto en el 1er seguimiento</span><span>Enviados</span><span>Volvieron</span></div>
+    ${[['Con foto', conFoto], ['Sin foto', sinFoto]].map(([n, g]) => `<div class="ria-cal-fila"><span>${n}</span><b>${fmt(riaNum(g.enviadas))}</b><b>${riaPct(g.respondidas, g.enviadas)}%</b></div>`).join('')}
+    ${(riaNum(conFoto.enviadas) && riaNum(sinFoto.enviadas)) ? `<div class="ria-fila"><span>Diferencia con foto vs. sin foto</span><b class="${deltaFoto < -0.5 ? 'ria-malo' : deltaFoto > 0.5 ? 'ria-bien' : ''}">${deltaFoto >= 0 ? '+' : ''}${deltaFoto.toFixed(1)} pp</b></div>` : ''}
   </div>`;
   const callbackPct = riaPct(entrega.callbacks, entrega.turnos);
+  const entregaOk = !riaNum(entrega.turnos) || callbackPct >= 99.5;
   document.getElementById('ria-entrega').innerHTML = `<div class="ria-lista">
     <div class="ria-fila"><span>Respuestas con comprobante</span><b>${fmt(riaNum(entrega.turnos))}</b></div>
-    <div class="ria-fila"><span>Flujo confirmado</span><b class="${riaNum(entrega.turnos) && callbackPct < 99.5 ? 'ria-malo' : 'ria-bien'}">${callbackPct.toFixed(1)}%</b></div>
-    <div class="ria-fila"><span>Silencios reintentados</span><b>${fmt(riaNum(entrega.reintentos))}</b></div>
-    <div class="ria-fila"><span>Requieren atención humana</span><b class="${riaNum(entrega.requieren_atencion) ? 'ria-malo' : 'ria-bien'}">${fmt(riaNum(entrega.requieren_atencion))}</b></div>
-  </div><div class="ce-ayuda">El vigilante de silencios solo se activa cuando la confirmación del flujo supera 99,5%; así no duplica mensajes legítimos.</div>`;
+    <div class="ria-fila"><span>Flujo confirmado</span><b class="${entregaOk ? 'ria-bien' : 'ria-malo'}">${callbackPct.toFixed(1)}%</b></div>
+    <div class="ria-fila"><span>Sin confirmación</span><b>${fmt(Math.max(0, riaNum(entrega.turnos) - riaNum(entrega.callbacks) - riaNum(entrega.reintentos) - riaNum(entrega.requieren_atencion)))}</b></div>
+    ${riaNum(entrega.reintentos) ? `<div class="ria-fila"><span>Silencios reintentados</span><b>${fmt(riaNum(entrega.reintentos))}</b></div>` : ''}
+    ${riaNum(entrega.requieren_atencion) ? `<div class="ria-fila"><span>Requieren atención humana</span><b class="ria-malo">${fmt(riaNum(entrega.requieren_atencion))}</b></div>` : ''}
+  </div><div class="ce-ayuda">${entregaOk ? 'El vigilante de silencios puede actuar: la confirmación del flujo supera 99,5%.' : 'El vigilante de silencios no actúa mientras la confirmación del flujo esté por debajo de 99,5%; así no duplica mensajes legítimos. “Sin confirmación” son turnos sin aviso de vuelta de ManyChat; no prueba por sí solo que el mensaje no llegara.'}</div>`;
 
   pintarKPIs('ria-kpis', [
     { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: `${riaCambio(r.conversaciones, ant.conversaciones)}${riaNum(r.solo_boton) ? ` · ${fmt(riaNum(r.solo_boton))} solo tocaron botón` : ''}`, i: 'fa-comments', c: 'var(--blue)' },
@@ -6638,8 +6652,10 @@ function riaPintarPanel(data) {
   const fallos = [['Precio sin respaldo', 'precio_invalido'], ['Dato inventado', 'dato_inventado'], ['Pregunta repetida', 'pregunta_repetida'], ['Teléfono perdido', 'telefono_perdido'], ['Mala interpretación', 'mala_interpretacion'], ['Respuesta extensa', 'respuesta_extensa'], ['Escalamiento tardío', 'escalamiento_tardio']];
   document.getElementById('ria-calidad').innerHTML = `<div class="ria-cal-head"><span>Control</span><span>Intentos</span><span>Visible</span></div>${fallos.map(([n, k]) => `<div class="ria-cal-fila"><span>${esc(n)}</span><b>${fmt(riaNum(modelo[k]))}</b><b class="${riaNum(visible[k]) ? 'ria-malo' : 'ria-bien'}">${salidaMedida ? fmt(riaNum(visible[k])) : '—'}</b></div>`).join('')}<div class="ce-ayuda">${salidaMedida ? `${fmt(op.salidas_finales_medidas)} respuestas finales medidas.` : 'La medición de salida visible comienza con esta versión; el historial anterior no se presenta como cero.'}</div>`;
 
-  const canales = data.por_canal || [];
-  document.getElementById('ria-canales').innerHTML = canales.length ? `<div class="ria-lista">${canales.map(c => `<div class="ria-fila"><span><b>${c.canal === 'instagram' ? 'Instagram' : 'Web'}</b><br>${fmt(riaNum(c.telefonos))} teléfonos · ${fmt(riaNum(c.leads_calificados))} leads</span><b>${fmt(riaNum(c.conversaciones))}<small style="display:block;color:var(--muted);font-weight:500">${riaNum(c.latencia_promedio_ms) ? (riaNum(c.latencia_promedio_ms) / 1000).toFixed(1) + ' s' : '—'}</small></b></div>`).join('')}</div>` : '<div class="ria-vacio">Sin actividad por canal en este período.</div>';
+  document.getElementById('ria-tendencia').innerHTML = riaTendencia(data.por_dia || []);
+
+  const canales = [...(data.por_canal || [])].sort((a, b) => riaNum(b.conversaciones) - riaNum(a.conversaciones));
+  document.getElementById('ria-canales').innerHTML = canales.length ? `<div class="ria-lista">${canales.map(c => `<div class="ria-fila"><span><b>${esc(RIA_CANALES[c.canal] || c.canal)}</b><br>${fmt(riaNum(c.telefonos))} teléfonos · ${fmt(riaNum(c.leads_calificados))} leads (${riaPct(c.leads_calificados, c.conversaciones)}%)</span><b>${fmt(riaNum(c.conversaciones))}<small style="display:block;color:var(--muted);font-weight:500">${riaNum(c.latencia_promedio_ms) ? (riaNum(c.latencia_promedio_ms) / 1000).toFixed(1) + ' s' : '—'}</small></b></div>`).join('')}</div>` : '<div class="ria-vacio">Sin actividad por canal en este período.</div>';
 
   const sinCache = Math.max(0, riaNum(op.tokens_entrada) - riaNum(op.tokens_cache));
   const costo = sinCache * RIA_COSTO_ENTRADA + riaNum(op.tokens_cache) * RIA_COSTO_CACHE + riaNum(op.tokens_salida) * RIA_COSTO_SALIDA;
