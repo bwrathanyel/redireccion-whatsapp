@@ -1293,7 +1293,7 @@ const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'importar-vouchers', 'reservas-empresas', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
-  'mensajes', 'whatsapp', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
+  'mensajes', 'whatsapp', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
 ];
@@ -2629,7 +2629,7 @@ async function startApp() {
   if (booted) return; booted = true;
   arrancar(
     renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
-    setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupCorreo, setupRedes,
+    setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes,
   );
@@ -20508,6 +20508,223 @@ async function waInvocar(body) {
   if (error || !data?.ok) throw new Error(data?.error || error?.message || 'error');
   return data;
 }
+/* ---------- DMs Instagram / Facebook ----------
+   Fuente: manychat_ia_sesiones (una fila por conversación, historial jsonb sin
+   hora por mensaje). Los cambios llegan por Realtime (postgres_changes): la
+   tabla está en supabase_realtime desde 20261007160000 y el RLS existente
+   filtra cada evento (admin todo, asesor solo sesiones de sus leads). El canal
+   viene escrito de varias formas ("Instagram", "instagram", "../Facebook"). */
+const DM_PAGINA = 50;
+const DM_COLS = 'external_id,nombre_ig,campos,lead_creado,lead_creado_en,lead_id,asesor_asignado,created_at,updated_at,historial';
+const DM_CAMPOS = [
+  { label: 'Nombre', ico: 'fas fa-user', val: c => c.nombre },
+  { label: 'Teléfono', ico: 'fas fa-phone', val: c => c.telefono || c.telefono_del_chat },
+  { label: 'Destino', ico: 'fas fa-location-dot', val: c => c.destino || c.destino_consulta },
+  { label: 'Fechas', ico: 'fas fa-calendar-days', val: c => c.fecha_estimada },
+  { label: 'Personas', ico: 'fas fa-user-group', val: c => c.personas },
+  { label: 'Presupuesto', ico: 'fas fa-wallet', val: c => c.presupuesto },
+];
+let dmCanal = 'instagram', dmCanalLeido = false, dmFiltro = 'todos', dmSesiones = [], dmMas = false, dmActual = null, dmLive = null, dmGen = 0, dmBuscarT = null, dmNav = false;
+const dmNuevos = new Set(), dmPendientes = { instagram: new Set(), facebook: new Set() };
+const dmCanalDe = s => String(s.campos?.canal || '').replace(/^.*\//, '').toLowerCase();
+const dmValor = (s, f) => { const v = f.val(dmCamposVista(s)); return v == null ? '' : String(v).trim(); };
+const dmProgreso = s => s.lead_creado ? 100 : Math.round(DM_CAMPOS.filter(f => dmValor(s, f)).length / DM_CAMPOS.length * 100);
+// En Instagram nombre_ig es el @usuario; en Facebook es el nombre visible del perfil.
+const dmUsuario = s => s.nombre_ig ? (dmCanalDe(s) === 'instagram' ? '@' : '') + s.nombre_ig : '';
+// Lead ya creado: lo que el bot no guardó en campos se completa con la fila de leads.
+const dmLeads = new Map();
+const dmCamposVista = s => { const l = s.lead_id && dmLeads.get(s.lead_id); return l ? { telefono: l.telefono, ...s.campos, nombre: s.campos?.nombre || l.nombre } : (s.campos || {}); };
+const dmNombre = s => dmValor(s, DM_CAMPOS[0]) || dmUsuario(s) || 'Sin nombre';
+const dmHistorial = s => Array.isArray(s.historial) ? s.historial : [];
+const dmIcoCanal = canal => canal === 'facebook' ? 'fa-facebook-messenger' : 'fa-instagram';
+const dmAvatar = s => `<div class="msg-avatar dm-avatar" data-canal="${esc(dmCanalDe(s))}">${esc(initials(dmValor(s, DM_CAMPOS[0]) || s.nombre_ig || '?'))}<span class="dm-avatar-red"><i class="fa-brands ${dmIcoCanal(dmCanalDe(s))}"></i></span></div>`;
+const dmBusqueda = () => document.getElementById('dm-buscar').value.trim();
+
+function setupDms() {
+  document.querySelectorAll('#dm-canales .dm-canal').forEach(b => b.addEventListener('click', () => dmElegirCanal(b.dataset.canal)));
+  document.querySelectorAll('#dm-filtros .dm-filtro').forEach(b => b.addEventListener('click', () => {
+    dmFiltro = b.dataset.f;
+    document.querySelectorAll('#dm-filtros .dm-filtro').forEach(x => x.classList.toggle('on', x === b));
+    dmCargar();
+  }));
+  document.getElementById('dm-buscar').addEventListener('input', () => { clearTimeout(dmBuscarT); dmBuscarT = setTimeout(() => dmCargar(), 300); });
+  const inbox = document.getElementById('dm-inbox');
+  inbox.addEventListener('click', e => {
+    if (e.target.closest('#dm-mas')) { dmCargar(true); return; }
+    const row = e.target.closest('[data-dm]'); if (row) dmAbrir(row.dataset.dm);
+  });
+  inbox.addEventListener('keydown', e => { const row = e.target.closest('[data-dm]'); if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); dmAbrir(row.dataset.dm); } });
+  document.getElementById('dm-back').addEventListener('click', () => dmCerrarChat());
+  document.getElementById('dm-btn-perfil').addEventListener('click', () => document.getElementById('dm-shell').classList.add('ver-perfil'));
+  document.getElementById('dm-perfil-cerrar').addEventListener('click', () => document.getElementById('dm-shell').classList.remove('ver-perfil'));
+  document.getElementById('dm-perfil-body').addEventListener('click', e => { const b = e.target.closest('[data-dm-lead]'); if (b) abrirLeadDesdeMisVentas(+b.dataset.dmLead); });
+}
+async function loadDms() {
+  if (!dmCanalLeido) { try { const g = localStorage.getItem('dm-canal'); if (g === 'instagram' || g === 'facebook') dmCanal = g; } catch {} dmCanalLeido = true; }
+  dmPintarCanales();
+  dmSuscribir();
+  dmContar();
+  await dmCargar();
+}
+function dmElegirCanal(canal) {
+  if (canal === dmCanal) return;
+  dmCanal = canal; dmPendientes[canal].clear();
+  try { localStorage.setItem('dm-canal', canal); } catch {}
+  dmPintarCanales();
+  dmCargar();
+}
+function dmPintarCanales() {
+  document.querySelectorAll('#dm-canales .dm-canal').forEach(b => { const on = b.dataset.canal === dmCanal; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+  for (const c of ['instagram', 'facebook']) {
+    const el = document.getElementById('dm-nuevo-' + c), n = dmPendientes[c].size;
+    el.hidden = !n; el.textContent = n > 9 ? '9+' : String(n);
+  }
+}
+async function dmContar() {
+  await Promise.all(['instagram', 'facebook'].map(async c => {
+    const { count } = await sb.from('manychat_ia_sesiones').select('external_id', { count: 'exact', head: true }).ilike('campos->>canal', '%' + c);
+    document.getElementById('dm-n-' + c).textContent = count ? count.toLocaleString('es-VE') : '';
+  }));
+}
+function dmQuery() {
+  let q = sb.from('manychat_ia_sesiones').select(DM_COLS).ilike('campos->>canal', '%' + dmCanal).order('updated_at', { ascending: false }).limit(DM_PAGINA + 1);
+  if (dmFiltro === 'conv') q = q.eq('lead_creado', false);
+  if (dmFiltro === 'lead') q = q.eq('lead_creado', true);
+  const t = dmBusqueda().replace(/[,()*%"\\]/g, ' ').trim();
+  if (t) q = q.or(['nombre_ig', 'campos->>nombre', 'campos->>telefono'].map(c => `${c}.ilike."*${t}*"`).join(','));
+  return q;
+}
+async function dmCargar(mas) {
+  const gen = ++dmGen, cont = document.getElementById('dm-inbox');
+  if (!mas) cont.innerHTML = '<div class="msg-empty"><i class="fas fa-spinner fa-spin"></i></div>';
+  let q = dmQuery();
+  if (mas && dmSesiones.length) q = q.lt('updated_at', dmSesiones[dmSesiones.length - 1].updated_at);
+  const { data, error } = await q;
+  if (gen !== dmGen) return;
+  if (error) { errToast('No se pudieron cargar los DMs'); cont.innerHTML = ''; return; }
+  dmMas = data.length > DM_PAGINA;
+  const filas = data.slice(0, DM_PAGINA);
+  dmSesiones = mas ? [...dmSesiones, ...filas.filter(s => !dmSesiones.some(x => x.external_id === s.external_id))] : filas;
+  dmRenderLista();
+}
+function dmFila(s) {
+  const h = dmHistorial(s), u = h[h.length - 1], p = dmProgreso(s), id = s.external_id;
+  return `<div class="msg-inbox-row${dmActual?.external_id === id ? ' on' : ''}${dmNuevos.has(id) ? ' nuevo' : ''}" data-dm="${esc(id)}" role="button" tabindex="0">
+    ${dmAvatar(s)}
+    <div class="msg-inbox-body">
+      <div class="msg-inbox-top"><div class="msg-inbox-nombre">${esc(dmNombre(s))}</div><div class="msg-inbox-hora">${fmtHoraMsg(s.updated_at)}</div></div>
+      <div class="msg-inbox-preview"><span>${u ? (u.rol === 'ia' ? '<i class="fas fa-robot"></i> ' : '') + esc(u.texto || '') : 'Sin mensajes'}</span></div>
+      <div class="dm-fila-meta"><div class="dm-mini-barra${s.lead_creado ? ' completa' : ''}"><span style="width:${p}%"></span></div><span class="dm-etq${s.lead_creado ? ' lead' : ''}">${s.lead_creado ? '<i class="fas fa-circle-check"></i> Lead' : p + '%'}</span></div>
+    </div>
+  </div>`;
+}
+function dmRenderLista() {
+  const cont = document.getElementById('dm-inbox');
+  if (!dmSesiones.length) { cont.innerHTML = `<div class="dm-vacio"><i class="fa-brands ${dmIcoCanal(dmCanal)}"></i><div>${dmBusqueda() ? 'Sin resultados' : 'Sin conversaciones'}</div></div>`; return; }
+  cont.innerHTML = dmSesiones.map(dmFila).join('') + (dmMas ? '<button type="button" class="wa-mas" id="dm-mas">Ver más</button>' : '');
+}
+function dmAbrir(id) {
+  const s = dmSesiones.find(x => x.external_id === id); if (!s) return;
+  dmActual = s; dmNuevos.delete(id);
+  document.getElementById('dm-chat-vacio').hidden = true;
+  ['dm-chat-head', 'dm-log', 'dm-nota'].forEach(k => { document.getElementById(k).hidden = false; });
+  dmPintarHead(); dmPintarLog(true); dmPintarPerfil();
+  document.querySelectorAll('#dm-inbox [data-dm]').forEach(r => { r.classList.toggle('on', r.dataset.dm === id); if (r.dataset.dm === id) r.classList.remove('nuevo'); });
+  const shell = document.getElementById('dm-shell');
+  shell.classList.remove('ver-perfil');
+  if (!shell.classList.contains('ver-chat')) {
+    shell.classList.add('ver-chat');
+    if (matchMedia('(max-width:760px)').matches) { dmNav = true; navPush({ type: 'dm-conv' }); }
+  }
+}
+function dmCerrarChat(fromNav) {
+  document.getElementById('dm-shell').classList.remove('ver-chat', 'ver-perfil');
+  if (!fromNav && dmNav) navConsume();
+  dmNav = false;
+}
+function dmPintarHead() {
+  const s = dmActual, canal = dmCanalDe(s);
+  document.getElementById('dm-chat-avatar').outerHTML = dmAvatar(s).replace('class="msg-avatar dm-avatar"', 'class="msg-avatar dm-avatar" id="dm-chat-avatar"');
+  document.getElementById('dm-chat-titulo').textContent = dmNombre(s);
+  document.getElementById('dm-chat-sub').textContent = [dmUsuario(s) !== dmNombre(s) ? dmUsuario(s) : '', canal === 'facebook' ? 'Facebook' : 'Instagram', 'activo ' + fmtHoraMsg(s.updated_at)].filter(Boolean).join(' · ');
+}
+// previos: cuántos mensajes ya estaban pintados; los siguientes entran animados.
+function dmPintarLog(inicio, previos = 0) {
+  const log = document.getElementById('dm-log'), h = dmHistorial(dmActual);
+  const pegado = inicio || log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  log.innerHTML = h.length ? h.map((m, i) => {
+    const ia = m.rol === 'ia';
+    return `<div class="chat-msg ${ia ? 'mine' : 'other'}${!inicio && i >= previos ? ' msg-new' : ''}">${ia ? '<div class="dm-burbuja-ia"><i class="fas fa-robot"></i> Bot</div>' : ''}${esc(m.texto || '')}</div>`;
+  }).join('') : '<div class="msg-empty">Sin mensajes todavía</div>';
+  if (pegado) log.scrollTop = log.scrollHeight;
+}
+// antes: versión previa de la sesión, para resaltar lo recién llenado y animar la barra.
+function dmPintarPerfil(antes) {
+  const s = dmActual, p = dmProgreso(s), canal = dmCanalDe(s);
+  const campos = DM_CAMPOS.map(f => {
+    const v = dmValor(s, f), recien = antes && v && !dmValor(antes, f);
+    return `<li class="dm-campo${v ? ' ok' : ''}${recien ? ' recien' : ''}"><span class="dm-campo-ico"><i class="${f.ico}"></i></span><div class="dm-campo-txt"><div class="dm-label">${f.label}</div><div class="dm-campo-val">${v ? esc(v) : 'Pendiente'}</div></div><i class="dm-campo-check ${v ? 'fas fa-circle-check' : 'fa-regular fa-circle'}"></i></li>`;
+  }).join('');
+  const l = s.lead_id && dmLeads.get(s.lead_id), asesor = l?.asesor || s.asesor_asignado;
+  if (s.lead_id && !dmLeads.has(s.lead_id)) dmCargarLead(s.lead_id);
+  const lead = s.lead_creado
+    ? `<div class="dm-lead-box"><div class="dm-lead-tit"><i class="fas fa-circle-check"></i> Lead creado${l?.estado ? ' · ' + esc(l.estado) : ''}</div><div class="dm-lead-sub">${!s.lead_id ? 'Derivado sin ficha en el CRM (contacto directo o colaborador)' : asesor ? 'Asignado a ' + esc(asesor) : 'Asignación en curso'}${s.lead_creado_en ? ' · ' + fmtHoraMsg(s.lead_creado_en) : ''}</div>${s.lead_id ? `<button type="button" class="dm-btn-lead" data-dm-lead="${s.lead_id}"><i class="fas fa-user"></i> Ver ficha del lead</button>` : ''}</div>`
+    : '<div class="dm-lead-box pend"><div class="dm-lead-tit"><i class="fas fa-hourglass-half"></i> Todavía no es lead</div><div class="dm-lead-sub">El bot crea el lead cuando tiene los datos para cotizar.</div></div>';
+  const ancho = antes ? dmProgreso(antes) : p;
+  document.getElementById('dm-perfil-body').innerHTML = `
+    <div class="dm-ficha-top">${dmAvatar(s)}<div class="dm-ficha-nombre">${esc(dmNombre(s))}</div><div class="dm-ficha-user">${dmUsuario(s) && dmUsuario(s) !== dmNombre(s) ? esc(dmUsuario(s)) + ' · ' : ''}${canal === 'facebook' ? 'Facebook' : 'Instagram'}</div></div>
+    <div class="dm-progreso${p === 100 ? ' completo' : ''}"><div class="dm-progreso-top"><span class="dm-label">${s.lead_creado ? 'Convertido en lead' : 'Camino a lead'}</span><span class="dm-progreso-pct">${p}%</span></div><div class="dm-barra" role="progressbar" aria-label="Avance hacia lead" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100"><span style="width:${ancho}%"></span></div></div>
+    <ul class="dm-campos">${campos}</ul>${lead}
+    <div class="dm-ficha-pie">Primer mensaje ${fmtHoraMsg(s.created_at)}</div>`;
+  if (ancho !== p) requestAnimationFrame(() => requestAnimationFrame(() => { const b = document.querySelector('#dm-perfil-body .dm-barra span'); if (b) b.style.width = p + '%'; }));
+}
+async function dmCargarLead(id) {
+  dmLeads.set(id, null);
+  const { data } = await sb.from('leads').select('nombre,telefono,estado,asesor').eq('id', id).maybeSingle();
+  if (!data) { dmLeads.delete(id); return; }
+  dmLeads.set(id, data);
+  if (dmActual?.lead_id === id) { dmPintarHead(); dmPintarPerfil(); }
+}
+function dmSuscribir() {
+  if (dmLive) return;
+  const vivo = document.getElementById('dm-vivo');
+  dmLive = sb.channel('dms-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'manychat_ia_sesiones' }, p => dmCambio(p.new))
+    .subscribe(st => vivo.classList.toggle('on', st === 'SUBSCRIBED'));
+}
+function dmDesuscribir() {
+  if (!dmLive) return;
+  sb.removeChannel(dmLive); dmLive = null;
+  document.getElementById('dm-vivo').classList.remove('on');
+}
+function dmPasaFiltro(s) {
+  if (dmFiltro === 'conv' && s.lead_creado) return false;
+  if (dmFiltro === 'lead' && !s.lead_creado) return false;
+  const t = dmBusqueda().toLowerCase();
+  return !t || `${s.nombre_ig || ''} ${s.campos?.nombre || ''} ${s.campos?.telefono || ''}`.toLowerCase().includes(t);
+}
+function dmCambio(s) {
+  if (currentSec !== 'dms') { dmDesuscribir(); return; }
+  if (!s?.external_id) return;
+  const canal = dmCanalDe(s), id = s.external_id;
+  if (canal !== 'instagram' && canal !== 'facebook') return;
+  const previo = dmSesiones.find(x => x.external_id === id);
+  // Un jsonb TOAST que no cambió puede llegar ausente en el evento: se conserva el que había.
+  if (previo) for (const k in previo) if (s[k] === undefined) s[k] = previo[k];
+  const escribio = dmHistorial(s).length > (previo ? dmHistorial(previo).length : 0);
+  if (canal !== dmCanal) { if (escribio) { dmPendientes[canal].add(id); dmPintarCanales(); } return; }
+  if (!dmPasaFiltro(s)) { if (previo) { dmSesiones = dmSesiones.filter(x => x !== previo); dmRenderLista(); } return; }
+  dmSesiones = [s, ...dmSesiones.filter(x => x.external_id !== id)];
+  if (escribio && dmActual?.external_id !== id) dmNuevos.add(id);
+  dmRenderLista();
+  if (escribio) document.querySelector(`#dm-inbox [data-dm="${CSS.escape(id)}"]`)?.classList.add('llego');
+  if (dmActual?.external_id === id) {
+    const antes = dmActual;
+    dmActual = s;
+    dmPintarHead(); dmPintarLog(false, dmHistorial(antes).length); dmPintarPerfil(antes);
+  }
+}
+
 function setupWhatsapp() {
   document.getElementById('wa-numero').addEventListener('change', e => {
     waCuenta = e.target.value; waChats = []; waChatsCursor = null;
@@ -21435,6 +21652,7 @@ window.addEventListener('popstate', () => {
   else if (top.type === 'sheet') closeSheet(top.id, true);
   else if (top.type === 'msg-conv') cerrarConversacion(true);
   else if (top.type === 'wa-conv') waCerrarChat(true);
+  else if (top.type === 'dm-conv') dmCerrarChat(true);
   else if (top.type === 'section') activateSection(top.prevSec, true);
   else if (top.type === 'tour') volverAlMenuTutorial(true);
   else if (top.type === 'menu') cerrarMenuMovil('fromNav');
@@ -21679,6 +21897,7 @@ const NAV_ITEMS = [
   { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Pegá números o capturas y se reparten entre los asesores' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', padre: 'grp-mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'whatsapp', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp', padre: 'grp-mensajes', roles: 'nav-admin-only', sub: 'Chats del bot de ventas, por número' },
+  { sec: 'dms', icon: 'fas fa-inbox', label: 'DMs Instagram y Facebook', padre: 'grp-mensajes', roles: '', sub: 'Chats del bot en vivo, con la ficha del cliente camino a lead' },
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
@@ -21986,6 +22205,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'tarifario') loadTarifario();
   if (sec === 'mensajes') cargarBandeja();
   if (sec === 'whatsapp') loadWhatsapp();
+  if (sec === 'dms') loadDms();
   if (sec === 'correo') cargarCorreoSeccion();
   if (sec === 'galeria') loadGaleria();
   if (sec === 'rendimiento-ia') loadRendimientoIA();

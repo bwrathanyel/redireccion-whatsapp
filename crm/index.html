@@ -1681,6 +1681,109 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .wa-audio{display:block;width:240px;max-width:100%}
 @media(max-width:760px){.wa-filtros{flex-direction:column}}
 
+/* DMs Instagram / Facebook: lista | chat | ficha (3 columnas en escritorio) */
+.dm-shell{--dm-ig:var(--pink);--dm-fb:var(--blue);--dm-canal:var(--dm-ig);position:relative;display:grid;grid-template-columns:320px minmax(0,1fr) 300px;gap:14px;height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:520px}
+.dm-avatar[data-canal="facebook"]{--dm-canal:var(--dm-fb)}
+.dm-shell [hidden]{display:none!important}
+.dm-shell>.card{padding:14px;display:flex;flex-direction:column;min-height:0;overflow:hidden;margin:0}
+.dm-canales{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:4px;flex-shrink:0}
+.dm-canal{position:relative;display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;border:none;border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;transition:background .16s,color .16s}
+.dm-canal i{font-size:16px}
+.dm-canal:hover:not(.on){color:var(--txt)}
+.dm-canal.on[data-canal="instagram"]{background:color-mix(in srgb,var(--dm-ig) 16%,transparent);color:var(--txt)}
+.dm-canal.on[data-canal="instagram"] i{color:var(--dm-ig)}
+.dm-canal.on[data-canal="facebook"]{background:color-mix(in srgb,var(--dm-fb) 16%,transparent);color:var(--txt)}
+.dm-canal.on[data-canal="facebook"] i{color:var(--dm-fb)}
+.dm-canal-n{font-size:10.5px;font-weight:600;color:var(--muted2)}
+.dm-canal-nuevo{position:absolute;top:4px;right:7px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.dm-buscar{margin-top:11px;flex-shrink:0;height:44px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;color:var(--txt);padding:0 11px;font:inherit;font-size:13px;outline:none;transition:border-color .16s,box-shadow .16s}
+.dm-buscar:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.dm-filtros{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:9px 0 7px;flex-shrink:0}
+.dm-filtro{border:1px solid var(--line2);background:transparent;color:var(--muted);border-radius:999px;padding:4px 11px;min-height:30px;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;transition:background .16s,color .16s,border-color .16s}
+.dm-filtro.on{background:var(--accent-soft);border-color:transparent;color:var(--accent-txt)}
+.dm-vivo{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+.dm-vivo-punto{width:7px;height:7px;border-radius:50%;background:var(--muted2)}
+.dm-vivo.on{color:var(--green)}
+.dm-vivo.on .dm-vivo-punto{background:var(--green);animation:dm-latido 2s ease-in-out infinite}
+@keyframes dm-latido{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 55%,transparent)}50%{box-shadow:0 0 0 5px transparent}}
+.dm-inbox{flex:1;min-height:0;overflow-y:auto;margin:0 -4px;padding:0 4px}
+.dm-inbox .msg-inbox-row{position:relative;padding:9px 7px}
+.dm-inbox .msg-inbox-row.on{background:var(--accent-soft)}
+.dm-inbox .msg-inbox-row.nuevo .msg-inbox-nombre::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-left:7px;vertical-align:middle}
+.dm-inbox .msg-inbox-row.llego{animation:dm-llego .9s ease}
+@keyframes dm-llego{from{background:color-mix(in srgb,var(--accent) 22%,transparent)}}
+.dm-avatar{background:var(--panel-solid);color:var(--txt);box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--dm-canal);position:relative}
+.dm-avatar .dm-avatar-red{position:absolute;right:-4px;bottom:-4px;width:18px;height:18px;border-radius:50%;background:var(--dm-canal);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--bg)}
+.dm-fila-meta{display:flex;align-items:center;gap:7px;margin-top:4px}
+.dm-mini-barra{flex:1;height:4px;border-radius:999px;background:var(--line2);overflow:hidden;max-width:110px}
+.dm-mini-barra span{display:block;height:100%;border-radius:999px;background:var(--accent);transition:width .4s ease}
+.dm-mini-barra.completa span{background:var(--green)}
+.dm-etq{font-size:10px;font-weight:700;color:var(--muted2);white-space:nowrap}
+.dm-etq.lead{color:var(--green)}
+.dm-chat{position:relative}
+.dm-chat-head{display:flex;align-items:center;gap:11px;padding:0 0 11px;border-bottom:1px solid var(--line);flex-shrink:0}
+.dm-chat-head .dm-avatar{width:40px;height:40px;font-size:14px}
+.dm-chat-titulos{flex:1;min-width:0}
+.dm-chat-titulos .msg-conv-titulo,.dm-chat-titulos .msg-conv-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dm-log{padding:14px 4px}
+.dm-burbuja-ia{display:flex;align-items:center;gap:4px;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;opacity:.8;margin-bottom:2px}
+.dm-log .chat-msg{max-width:78%;margin-top:4px;word-break:break-word}
+.dm-vacio{margin:auto;text-align:center;color:var(--muted);font-size:13px;padding:28px 14px;display:flex;flex-direction:column;align-items:center;gap:7px}
+.dm-vacio i{font-size:28px;color:var(--muted2);margin-bottom:4px}
+.dm-vacio-sub{font-size:11.5px;color:var(--muted2);max-width:260px;line-height:1.45}
+.dm-btn-perfil,.dm-perfil-cerrar,.dm-solo-movil{display:none}
+.dm-perfil{overflow-y:auto}
+#dm-perfil-body{display:flex;flex-direction:column;flex:1}
+.dm-ficha-top{display:flex;flex-direction:column;align-items:center;text-align:center;gap:7px;padding:7px 0 14px;border-bottom:1px solid var(--line)}
+.dm-ficha-top .dm-avatar{width:64px;height:64px;font-size:22px}
+.dm-ficha-nombre{font-size:15px;font-weight:800;letter-spacing:-.01em}
+.dm-ficha-user{font-size:11.5px;color:var(--muted)}
+.dm-progreso{padding:14px 0 11px}
+.dm-progreso-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+.dm-label{font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+.dm-progreso-pct{font-size:13px;font-weight:800;color:var(--accent-ink)}
+.dm-progreso.completo .dm-progreso-pct{color:var(--green)}
+.dm-barra{height:8px;border-radius:999px;background:var(--line2);overflow:hidden}
+.dm-barra span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--accent-deep));transition:width .6s cubic-bezier(.3,1,.4,1)}
+.dm-progreso.completo .dm-barra span{background:var(--green)}
+.dm-campos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.dm-campo{display:flex;align-items:center;gap:11px;padding:9px;border-radius:10px;border:1px solid var(--line)}
+.dm-campo-ico{width:30px;height:30px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--panel-solid);color:var(--muted2);font-size:12px;transition:background .16s,color .16s}
+.dm-campo.ok .dm-campo-ico{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}
+.dm-campo-txt{flex:1;min-width:0}
+.dm-campo-val{font-size:12.5px;font-weight:600;color:var(--txt);overflow-wrap:anywhere}
+.dm-campo:not(.ok) .dm-campo-val{color:var(--muted2);font-weight:500;font-style:italic}
+.dm-campo-check{color:var(--muted2);font-size:13px}
+.dm-campo.ok .dm-campo-check{color:var(--green)}
+.dm-campo.recien{animation:dm-recien 1.4s ease}
+@keyframes dm-recien{0%{background:color-mix(in srgb,var(--green) 26%,transparent);transform:scale(1.02)}100%{background:transparent;transform:none}}
+.dm-lead-box{margin-top:14px;padding:11px;border-radius:12px;border:1px solid color-mix(in srgb,var(--green) 40%,transparent);background:color-mix(in srgb,var(--green) 10%,transparent);display:flex;flex-direction:column;gap:7px}
+.dm-lead-box.pend{border-color:var(--line2);background:transparent}
+.dm-lead-tit{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:800;color:var(--green)}
+.dm-lead-box.pend .dm-lead-tit{color:var(--muted)}
+.dm-lead-sub{font-size:11.5px;color:var(--muted);line-height:1.45}
+.dm-btn-lead{min-height:44px;border:none;border-radius:10px;padding:0 16px;font:inherit;font-size:13px;font-weight:800;color:var(--on-accent);background:linear-gradient(135deg,var(--accent),var(--accent-deep));box-shadow:0 10px 22px rgba(var(--accent-rgb),.22);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
+.dm-ficha-pie{margin-top:auto;padding-top:14px;font-size:10.5px;color:var(--muted2);text-align:center}
+@media(prefers-reduced-motion:reduce){.dm-vivo.on .dm-vivo-punto,.dm-campo.recien,.dm-inbox .msg-inbox-row.llego{animation:none}}
+/* Tablet: la ficha pasa a panel deslizable sobre el chat */
+@media(max-width:1179px){
+  .dm-shell{grid-template-columns:300px minmax(0,1fr)}
+  .dm-perfil{position:absolute;top:0;right:0;bottom:0;width:min(320px,100%);z-index:6;background:var(--panel-solid);transform:translateX(calc(100% + 22px));transition:transform .25s cubic-bezier(.3,1,.4,1);box-shadow:0 20px 60px rgba(0,0,0,.45)}
+  .dm-shell.ver-perfil .dm-perfil{transform:none}
+  .dm-btn-perfil,.dm-perfil-cerrar{display:inline-flex;align-items:center;gap:7px}
+  .dm-perfil-cerrar{position:absolute;top:11px;right:11px;justify-content:center;z-index:1}
+}
+/* Móvil: una columna, lista → chat → ficha */
+@media(max-width:760px){
+  .dm-shell{grid-template-columns:minmax(0,1fr);height:calc(100vh - 190px);height:calc(100dvh - 190px);min-height:420px}
+  .dm-chat{display:none}
+  .dm-shell.ver-chat .dm-lista{display:none}
+  .dm-shell.ver-chat .dm-chat{display:flex}
+  .dm-solo-movil{display:inline-block}
+  .dm-perfil{width:100%}
+  .dm-log .chat-msg{max-width:88%}
+}
+
 /* Separador de fecha sticky */
 .msg-date-chip{position:sticky;top:4px;align-self:center;background:rgba(20,26,48,.85);backdrop-filter:blur(6px);border:1px solid var(--line2);color:var(--muted);font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;margin:10px 0;z-index:2}
 
@@ -5085,6 +5188,46 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="msg-conv-log" id="wa-conv-log"></div>
           <div class="msg-readonly-note"><i class="fas fa-lock"></i> Solo lectura — el bot responde aquí; el asesor atiende por su WhatsApp</div>
         </div>
+      </div>
+    </section>
+
+    <!-- DMs de Instagram / Facebook (manychat_ia_sesiones, en vivo por Realtime) -->
+    <section class="section" id="sec-dms">
+      <div class="dm-shell" id="dm-shell">
+        <aside class="card dm-lista" aria-label="Conversaciones">
+          <div class="dm-canales" id="dm-canales" role="tablist">
+            <button class="dm-canal on" type="button" role="tab" aria-selected="true" data-canal="instagram"><i class="fa-brands fa-instagram"></i> Instagram <span class="dm-canal-n" id="dm-n-instagram"></span><span class="dm-canal-nuevo" id="dm-nuevo-instagram" hidden></span></button>
+            <button class="dm-canal" type="button" role="tab" aria-selected="false" data-canal="facebook"><i class="fa-brands fa-facebook-messenger"></i> Facebook <span class="dm-canal-n" id="dm-n-facebook"></span><span class="dm-canal-nuevo" id="dm-nuevo-facebook" hidden></span></button>
+          </div>
+          <input class="dm-buscar" id="dm-buscar" type="search" placeholder="Buscar @usuario, nombre o teléfono" aria-label="Buscar conversación">
+          <div class="dm-filtros" id="dm-filtros">
+            <button class="dm-filtro on" type="button" data-f="todos">Todos</button>
+            <button class="dm-filtro" type="button" data-f="conv">En conversación</button>
+            <button class="dm-filtro" type="button" data-f="lead">Lead creado</button>
+            <span class="dm-vivo" id="dm-vivo" title="Conectado en tiempo real"><span class="dm-vivo-punto"></span> En vivo</span>
+          </div>
+          <div class="msg-inbox dm-inbox" id="dm-inbox"></div>
+        </aside>
+
+        <div class="card dm-chat" id="dm-chat">
+          <div class="dm-vacio" id="dm-chat-vacio"><i class="fas fa-comments"></i><div>Elija una conversación</div><div class="dm-vacio-sub">Los mensajes y la ficha se actualizan solos mientras el cliente escribe</div></div>
+          <div class="dm-chat-head" id="dm-chat-head" hidden>
+            <button class="msg-conv-back dm-solo-movil" id="dm-back" type="button" aria-label="Volver a la lista"><i class="fas fa-arrow-left"></i></button>
+            <div class="msg-avatar dm-avatar" id="dm-chat-avatar"></div>
+            <div class="dm-chat-titulos">
+              <div class="msg-conv-titulo" id="dm-chat-titulo"></div>
+              <div class="msg-conv-sub" id="dm-chat-sub"></div>
+            </div>
+            <button class="chat-tool-btn dm-btn-perfil" id="dm-btn-perfil" type="button"><i class="fas fa-id-card"></i> Perfil</button>
+          </div>
+          <div class="msg-conv-log dm-log" id="dm-log" hidden></div>
+          <div class="msg-readonly-note" id="dm-nota" hidden><i class="fas fa-robot"></i> Solo lectura — responde el bot de ventas</div>
+        </div>
+
+        <aside class="card dm-perfil" id="dm-perfil" aria-label="Ficha del cliente">
+          <button class="msg-conv-back dm-perfil-cerrar" id="dm-perfil-cerrar" type="button" aria-label="Cerrar ficha"><i class="fas fa-xmark"></i></button>
+          <div id="dm-perfil-body"><div class="dm-vacio"><i class="fas fa-id-card"></i><div>Ficha del cliente</div><div class="dm-vacio-sub">Se llena en vivo con lo que el bot va averiguando</div></div></div>
+        </aside>
       </div>
     </section>
 
