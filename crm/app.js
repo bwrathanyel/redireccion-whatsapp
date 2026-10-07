@@ -161,7 +161,7 @@ const aInputLocal = iso => {
 const seguimientoActivo = l => !!l.proxima_accion_at && !ESTADOS_SIN_SEGUIMIENTO.includes(l.estado);
 const chipSeguimiento = l => seguimientoActivo(l)
   ? `<span class="chip-seg ${new Date(l.proxima_accion_at) < new Date() ? 'vence' : ''}" title="${esc(l.proxima_accion_nota || 'Próxima acción')}"><i class="fas fa-calendar-check"></i> ${esc(tiempoSeguimiento(l.proxima_accion_at))}</span>` : '';
-const CANAL_CLASS = { 'Instagram': 'ig', 'Facebook': 'fb', 'Ambos': 'am', 'Desconocido': '' };
+const CANAL_CLASS = { 'Instagram': 'ig', 'Facebook': 'fb', 'WhatsApp': 'wa', 'Ambos': 'am', 'Desconocido': '' };
 const ADV_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a'];
 const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-rolling', 'fa-compass', 'fa-earth-americas', 'fa-camera-retro', 'fa-map-location-dot', 'fa-sun', 'fa-water', 'fa-mountain-sun', 'fa-passport', 'fa-glasses'];
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
