@@ -6537,6 +6537,28 @@ async function loadResumenIADashboard(forzar = false) {
   }
 }
 
+// Control vs. tratamiento con todas las filas asignadas (no solo las enviadas): ver
+// migración 20261007180000_medicion_seguimiento_leads.
+const RIA_CANALES = { facebook: 'Facebook', instagram: 'Instagram', whatsapp: 'WhatsApp' };
+function riaComparacionSeguimiento(reactivacion) {
+  const comp = reactivacion.comparacion || [], intentos = reactivacion.intentos || [];
+  if (!comp.length && !intentos.length) return '';
+  const canales = [...new Set(comp.map(c => c.canal))];
+  const filas = canales.map(canal => {
+    const g = n => comp.find(c => c.canal === canal && c.grupo === n) || {};
+    const t = g('tratamiento'), c = g('control');
+    const dv = riaPct(t.volvieron, t.asignadas) - riaPct(c.volvieron, c.asignadas);
+    const dl = riaPct(t.leads, t.asignadas) - riaPct(c.leads, c.asignadas);
+    const nt = riaNum(t.asignadas), nc = riaNum(c.asignadas);
+    const pp = d => nc ? `<b class="${d < -0.5 ? 'ria-malo' : d > 0.5 ? 'ria-bien' : ''}">${d >= 0 ? '+' : ''}${d.toFixed(1)} pp</b>` : '<b>Sin control</b>';
+    return `<div class="ria-cal-fila"><span>${esc(RIA_CANALES[canal] || canal)} · con / sin (n ${fmt(nt)} / ${fmt(nc)})</span><b>${riaPct(t.volvieron, nt)}% / ${riaPct(c.volvieron, nc)}%</b><b>${riaPct(t.leads, nt)}% / ${riaPct(c.leads, nc)}%</b></div>
+      <div class="ria-fila"><span>Efecto del seguimiento (volvieron · leads) · ventas ${riaPct(t.ventas, nt)}% vs ${riaPct(c.ventas, nc)}%${nc && nc < 30 ? ' · muestra baja' : ''}</span><span>${pp(dv)} · ${pp(dl)}</span></div>`;
+  }).join('');
+  return `<div class="ria-cal-head" style="margin-top:10px"><span>Con seguimiento vs. sin (control)</span><span>Volvieron</span><span>Lead</span></div>${filas}
+    <div class="ria-cal-head" style="margin-top:10px"><span>Por intento</span><span>Respondieron</span><span>Mediana resp.</span></div>
+    ${intentos.map(i => `<div class="ria-cal-fila"><span>${esc(RIA_CANALES[i.canal] || i.canal)} · intento ${i.intento} (${fmt(riaNum(i.enviadas))})</span><b>${riaPct(i.respondidas, i.enviadas)}%</b><b>${i.mediana_min_respuesta == null ? '—' : fmt(Math.round(riaNum(i.mediana_min_respuesta))) + ' min'}</b></div>`).join('')}`;
+}
+
 function riaPintarPanel(data) {
   const r = data.resumen || {}, ant = data.anterior || {}, op = data.operacion || {}, ventas = data.ventas || {};
   const salud = riaEstadoInfo(data), estado = document.getElementById('ria-estado');
@@ -6574,6 +6596,7 @@ function riaPintarPanel(data) {
     <div class="ria-cal-head" style="margin-top:10px"><span>Foto en 1er seguimiento (A/B)</span><span>Enviados</span><span>Volvieron</span></div>
     ${[['Con foto', conFoto], ['Sin foto', sinFoto]].map(([n, g]) => `<div class="ria-cal-fila"><span>${n}</span><b>${fmt(riaNum(g.enviadas))}</b><b>${riaPct(g.respondidas, g.enviadas)}%</b></div>`).join('')}
     ${(riaNum(conFoto.enviadas) && riaNum(sinFoto.enviadas)) ? `<div class="ria-fila"><span>Diferencia con foto vs. sin foto</span><b class="${deltaFoto < -0.5 ? 'ria-malo' : 'ria-bien'}">${deltaFoto >= 0 ? '+' : ''}${deltaFoto.toFixed(1)} pp</b></div>` : ''}
+    ${riaComparacionSeguimiento(reactivacion)}
   </div>`;
   const callbackPct = riaPct(entrega.callbacks, entrega.turnos);
   document.getElementById('ria-entrega').innerHTML = `<div class="ria-lista">
