@@ -1023,7 +1023,34 @@ input.ei[type=date]{color-scheme:dark}
 .ef-tipo i{font-size:12px}
 .ef-tipo:hover{border-color:rgba(var(--accent-rgb),.45)}
 .ef-tipo.on{border-color:var(--accent);color:var(--txt);background:var(--accent-soft)}
-#sec-apartamentos [hidden],#apto-sheet [hidden]{display:none!important}
+#sec-apartamentos [hidden],#apto-sheet [hidden],#apto-bloq-sheet [hidden]{display:none!important}
+.apto-tabs{display:flex;gap:8px;margin-bottom:12px}
+.apto-tab{flex:0 0 auto;display:flex;align-items:center;gap:7px;background:var(--bg2);border:1.5px solid var(--line2);border-radius:10px;padding:8px 14px;color:var(--muted);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.apto-tab.on{border-color:var(--accent);color:var(--txt);background:var(--accent-soft)}
+.disp-barra{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;margin:10px 0}
+.disp-barra .ei{width:auto;min-width:0}
+.disp-mes{display:flex;align-items:center;gap:8px;font-weight:700;text-transform:capitalize}
+.disp-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;padding:6px 0}
+.disp-fila{display:grid;grid-template-columns:168px repeat(var(--n),26px);width:max-content;align-items:stretch}
+.disp-nom{position:sticky;left:0;z-index:2;background:var(--bg2);padding:6px 10px;font-size:12.5px;line-height:1.25;border-right:1px solid var(--line)}
+.disp-nom small{display:block;color:var(--muted);font-size:11px}
+.disp-nom .disp-est{display:inline-block;margin-top:2px;font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 6px}
+.disp-est.si{background:rgba(34,197,94,.18);color:#22c55e}
+.disp-est.no{background:rgba(148,163,184,.18);color:var(--muted)}
+.disp-fila.apagada .disp-c{opacity:.45}
+.disp-grupo{position:sticky;left:0;width:max-content;padding:8px 10px 4px;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.disp-dh{font-size:10.5px;color:var(--muted);text-align:center;padding:2px 0;font-variant-numeric:tabular-nums}
+.disp-dh.fin{color:var(--txt)}
+.disp-dh.hoy{color:var(--accent);font-weight:800}
+.disp-c{height:34px;border-left:1px solid var(--line);border-top:1px solid var(--line);background:rgba(255,255,255,.02)}
+.disp-c.hoy{box-shadow:inset 0 0 0 1.5px var(--accent)}
+.disp-c.b-ocupado{background:rgba(239,68,68,.55)}
+.disp-c.b-mantenimiento{background:rgba(224,160,48,.55)}
+.disp-c.b-uso_propietario{background:rgba(139,92,246,.55)}
+.disp-admin .disp-c{cursor:pointer}
+.disp-admin .disp-c:hover{border-color:var(--accent)}
+.disp-leyenda{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:12px;color:var(--muted)}
+.disp-leyenda i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .apt-hab{display:flex;align-items:center;gap:10px;width:100%;text-align:left;color:var(--txt);background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-top:6px;font:inherit;font-size:12.5px;cursor:pointer}
 .apt-hab:hover{border-color:var(--line2)}
 .apt-hab.on{border-color:var(--accent)}
@@ -5926,6 +5953,36 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     <!-- APARTAMENTOS (2026-10-07; Fase 1 catálogo, solo admin): proveedor > apartamento > habitación > fotos.
          Vinculado al producto del Tarifario sin tocarlo. RPC listar_apto_proveedores / listar_apartamentos / guardar_apto_*. -->
     <section class="section" id="sec-apartamentos">
+      <div class="apto-tabs" id="apto-tabs" role="tablist">
+        <button class="apto-tab on" type="button" data-apto-tab="prov" role="tab"><i class="fas fa-house-chimney"></i> Proveedores</button>
+        <button class="apto-tab" type="button" data-apto-tab="disp" role="tab"><i class="fas fa-calendar-days"></i> Disponibilidad</button>
+      </div>
+      <div class="card" id="apto-vista-disp" hidden>
+        <div class="chead-row">
+          <h2><i class="fas fa-calendar-days"></i> Disponibilidad</h2>
+        </div>
+        <div class="csub" id="disp-sub">Cada columna es una noche. La noche del día de salida queda libre.</div>
+        <div class="disp-barra">
+          <div class="disp-mes">
+            <button class="btn-sm" id="disp-prev" type="button" aria-label="Mes anterior"><i class="fas fa-chevron-left"></i></button>
+            <span id="disp-mes"></span>
+            <button class="btn-sm" id="disp-next" type="button" aria-label="Mes siguiente"><i class="fas fa-chevron-right"></i></button>
+            <button class="btn-sm" id="disp-hoy" type="button">Hoy</button>
+          </div>
+          <div><label class="fl-sub" for="disp-f-desde">Llegada</label><input id="disp-f-desde" class="ei" type="date"></div>
+          <div><label class="fl-sub" for="disp-f-hasta">Salida</label><input id="disp-f-hasta" class="ei" type="date"></div>
+          <div><label class="fl-sub" for="disp-f-pers">Personas</label><input id="disp-f-pers" class="ei" type="number" min="1" max="60" step="1" style="width:84px"></div>
+          <button class="btn-sm" id="disp-limpiar" type="button">Limpiar filtro</button>
+        </div>
+        <div class="tbl-state skel" id="disp-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+        <div class="disp-wrap" id="disp-grid"></div>
+        <div class="disp-leyenda">
+          <span><i style="background:rgba(239,68,68,.55)"></i>Ocupado</span>
+          <span><i style="background:rgba(224,160,48,.55)"></i>Mantenimiento</span>
+          <span><i style="background:rgba(139,92,246,.55)"></i>Uso del propietario</span>
+          <span id="disp-ayuda-admin" hidden>Tocá un día para bloquear fechas o un bloque para editarlo.</span>
+        </div>
+      </div>
       <div class="card" id="apto-vista-lista">
         <div class="chead-row">
           <h2><i class="fas fa-house-chimney"></i> Apartamentos</h2>
@@ -6051,6 +6108,32 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     </div>
 
     <!-- Ficha de proveedor de Apartamentos (alta y edición, solo admin) -->
+    <div class="sheet" id="apto-bloq-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="bl-titulo"><i class="fas fa-calendar-xmark"></i> Bloquear fechas</div>
+      <div class="edit-box" style="margin-top:4px">
+        <div class="ef-cliente"><span>Apartamento: <b id="bl-apto"></b></span></div>
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl" for="bl-desde">Llegada</label><input id="bl-desde" class="ei" type="date"></div>
+          <div style="flex:1"><label class="fl" for="bl-hasta">Salida</label><input id="bl-hasta" class="ei" type="date"></div>
+        </div>
+        <label class="fl" for="bl-tipo">Motivo</label>
+        <select id="bl-tipo" class="ei">
+          <option value="ocupado">Ocupado</option>
+          <option value="mantenimiento">Mantenimiento</option>
+          <option value="uso_propietario">Uso del propietario</option>
+        </select>
+        <label class="fl" for="bl-nota">Nota interna <span class="ef-opc">(opcional, los asesores no la ven)</span></label>
+        <textarea id="bl-nota" class="ei" rows="2" maxlength="500"></textarea>
+        <div class="edit-err" id="bl-err"></div>
+      </div>
+      <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
+        <button class="dbtn" id="bl-eliminar" type="button" hidden>Eliminar</button>
+        <button class="dbtn" id="bl-cancelar" type="button" style="flex:1">Cancelar</button>
+        <button class="dbtn save" id="bl-guardar" type="button" style="flex:1">Guardar</button>
+      </div>
+    </div>
+
     <div class="sheet" id="apto-prov-sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="apv-sheet-title"><i class="fas fa-house-chimney"></i> Nuevo proveedor</div>

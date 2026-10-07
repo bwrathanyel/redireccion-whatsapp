@@ -15715,8 +15715,18 @@ function aptoNum(id, min, max) {
   if (el.validity.badInput || !Number.isInteger(n) || n < min || n > max) return { err: true };
   return { v: n };
 }
+let APTO_TAB = 'prov';
+function aptoTab(t) {
+  APTO_TAB = t;
+  document.querySelectorAll('#apto-tabs .apto-tab').forEach(b => b.classList.toggle('on', b.dataset.aptoTab === t));
+  if (t === 'disp') loadDisponibilidad();
+  aptoPintar();
+}
 async function loadApartamentos() {
-  if (ROL !== 'admin') return;
+  const esAdmin = ROL === 'admin';
+  aptoEl('apto-tabs').hidden = !esAdmin;
+  if (!esAdmin) { if (APTO_TAB !== 'disp') aptoTab('disp'); else loadDisponibilidad(); return; }
+  if (APTO_TAB === 'disp') loadDisponibilidad();
   const cargando = aptoEl('apto-loading');
   if (!APTO_PROVS.length) cargando?.classList.add('show');
   const [rp, ra] = await Promise.all([sb.rpc('listar_apto_proveedores'), sb.rpc('listar_apartamentos')]);
@@ -15729,6 +15739,9 @@ async function loadApartamentos() {
   aptoPintar();
 }
 function aptoPintar() {
+  const enDisp = APTO_TAB === 'disp';
+  aptoEl('apto-vista-disp').hidden = !enDisp;
+  if (enDisp) { aptoEl('apto-vista-lista').hidden = true; aptoEl('apto-vista-det').hidden = true; return; }
   const p = APTO_PROV_SEL != null ? aptoProv(APTO_PROV_SEL) : null;
   aptoEl('apto-vista-lista').hidden = !!p;
   aptoEl('apto-vista-det').hidden = !p;
@@ -15971,6 +15984,164 @@ function setupApartamentos() {
   // se recarga para que los contadores y la foto de portada de las tarjetas queden al día.
   const hoja = aptoEl('apto-sheet');
   new MutationObserver(() => { if (!hoja.classList.contains('open') && APTO_EDIT) loadApartamentos(); }).observe(hoja, { attributes: true, attributeFilter: ['class'] });
+  setupDisponibilidad();
+}
+
+/* Apartamentos: disponibilidad (Fase 2). Noches: fecha_hasta es la salida y esa noche queda libre.
+   Admin crea/edita bloqueos; el asesor solo mira (las RPCs lo imponen, la nota interna ni le llega). */
+const DISP_TIPOS = { ocupado: 'Ocupado', mantenimiento: 'Mantenimiento', uso_propietario: 'Uso del propietario' };
+const DISP_ERRORES = {
+  ventana_invalida: 'El rango de fechas no es válido (máximo 400 días).',
+  fechas_invalidas: 'Revisá las fechas: la salida tiene que ser después de la llegada.',
+  tipo_invalido: 'Elegí el motivo del bloqueo.',
+  apartamento_invalido: 'El apartamento ya no existe: se recargó la lista.',
+  datos_invalidos: 'Los datos no son válidos.',
+  dato_invalido: 'Algún dato no es válido o es demasiado largo.',
+  no_existe: 'Ese bloqueo ya no existe: se recargó la lista.',
+  es_reserva: 'Ese bloqueo viene de una reserva y no se edita desde acá.',
+};
+let DISP_MES = null, DISP_DATA = [], DISP_ADMIN = false, DISP_EDIT = null, DISP_UNIT = null, DISP_REQ = 0;
+const dispMsg = d => d?.error === 'solapa' && d.conflicto
+  ? `Choca con otro bloqueo (${fmtDiaCorto(d.conflicto.fecha_desde)} → ${fmtDiaCorto(d.conflicto.fecha_hasta)}).`
+  : (DISP_ERRORES[d?.error] || 'No se pudo guardar: ' + (d?.error || ''));
+function dispFiltro() {
+  const desde = val('disp-f-desde'), hasta = val('disp-f-hasta');
+  return { activo: !!(desde && hasta && hasta > desde), desde, hasta, pers: Number(val('disp-f-pers')) || 0 };
+}
+function dispVentana() {
+  const [a, m] = DISP_MES.split('-').map(Number);
+  let desde = `${DISP_MES}-01`, hasta = ssISO(new Date(a, m, 1));
+  const f = dispFiltro();
+  if (f.activo) { if (f.desde < desde) desde = f.desde; if (f.hasta > hasta) hasta = f.hasta; }
+  return { desde, hasta };
+}
+async function loadDisponibilidad() {
+  if (!DISP_MES) DISP_MES = ssISO(new Date()).slice(0, 7);
+  const req = ++DISP_REQ;
+  aptoEl('disp-loading').classList.add('show');
+  const { desde, hasta } = dispVentana();
+  const { data, error } = await sb.rpc('apto_disponibilidad', { p_desde: desde, p_hasta: hasta });
+  if (req !== DISP_REQ) return;
+  aptoEl('disp-loading').classList.remove('show');
+  if (error || !data?.ok) {
+    console.error('disponibilidad', error || data);
+    errToast(data?.error === 'ventana_invalida' ? DISP_ERRORES.ventana_invalida : 'No se pudo cargar la disponibilidad');
+    return;
+  }
+  DISP_DATA = data.unidades || [];
+  DISP_ADMIN = !!data.es_admin;
+  dispPintar();
+}
+function dispPintar() {
+  const [a, m] = DISP_MES.split('-').map(Number);
+  const n = new Date(a, m, 0).getDate();
+  const hoy = ssISO(new Date());
+  const f = dispFiltro();
+  const iso = d => `${DISP_MES}-${String(d).padStart(2, '0')}`;
+  aptoEl('disp-mes').textContent = `${SS_MESES[m - 1]} ${a}`;
+  aptoEl('disp-ayuda-admin').hidden = !DISP_ADMIN;
+  const grid = aptoEl('disp-grid');
+  grid.classList.toggle('disp-admin', DISP_ADMIN);
+  if (!DISP_DATA.length) { grid.innerHTML = '<div class="pv-empty" style="padding:18px">Todavía no hay apartamentos activos</div>'; return; }
+
+  const dow = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+  let html = `<div class="disp-fila" style="--n:${n}"><div class="disp-nom" style="border-right:1px solid var(--line)"></div>${
+    Array.from({ length: n }, (_, i) => {
+      const d = i + 1, wd = new Date(a, m - 1, d).getDay();
+      return `<div class="disp-dh${wd === 0 || wd === 6 ? ' fin' : ''}${iso(d) === hoy ? ' hoy' : ''}">${d}<br>${dow[wd]}</div>`;
+    }).join('')}</div>`;
+  let grupo = null;
+  for (const u of DISP_DATA) {
+    if (u.proveedor !== grupo) { grupo = u.proveedor; html += `<div class="disp-grupo">${esc(grupo)}</div>`; }
+    const porDia = new Map();
+    for (const b of u.bloqueos) {
+      for (const d = ssFecha(b.fecha_desde), fin = ssFecha(b.fecha_hasta); d < fin; d.setDate(d.getDate() + 1)) porDia.set(ssISO(d), b);
+    }
+    let est = '', apagada = false;
+    if (f.activo) {
+      const choca = u.bloqueos.some(b => b.fecha_desde < f.hasta && b.fecha_hasta > f.desde);
+      const cabe = !f.pers || !u.capacidad_max || u.capacidad_max >= f.pers;
+      if (choca || !cabe) { apagada = true; est = `<span class="disp-est no">${choca ? 'No disponible' : 'No alcanza la capacidad'}</span>`; }
+      else est = '<span class="disp-est si">Libre</span>';
+    }
+    const celdas = Array.from({ length: n }, (_, i) => {
+      const dia = iso(i + 1), b = porDia.get(dia);
+      const tip = b ? `${DISP_TIPOS[b.tipo] || b.tipo}: ${fmtDiaCorto(b.fecha_desde)} → ${fmtDiaCorto(b.fecha_hasta)} (sale)${b.nota ? ' · ' + esc(b.nota) : ''}` : fmtDiaCorto(dia);
+      return `<div class="disp-c${b ? ' b-' + b.tipo : ''}${dia === hoy ? ' hoy' : ''}" data-u="${u.id}" data-d="${dia}"${b ? ` data-b="${b.id}"` : ''} title="${tip}"></div>`;
+    }).join('');
+    html += `<div class="disp-fila${apagada ? ' apagada' : ''}" style="--n:${n}"><div class="disp-nom">${esc(u.nombre)}<small>${u.capacidad_max ? u.capacidad_max + ' personas' : 'capacidad sin cargar'}</small>${est}</div>${celdas}</div>`;
+  }
+  grid.innerHTML = html;
+}
+function dispAbrirBloqueo(unidadId, dia, bloqueoId) {
+  const u = DISP_DATA.find(x => x.id === unidadId);
+  if (!u) return;
+  const b = bloqueoId ? u.bloqueos.find(x => x.id === bloqueoId) : null;
+  DISP_UNIT = unidadId; DISP_EDIT = b;
+  aptoEl('bl-apto').textContent = `${u.nombre} · ${u.proveedor}`;
+  aptoEl('bl-titulo').innerHTML = `<i class="fas fa-calendar-xmark"></i> ${b ? 'Editar bloqueo' : 'Bloquear fechas'}`;
+  aptoPoner('bl-desde', b ? b.fecha_desde : dia);
+  const sig = ssFecha(dia); sig.setDate(sig.getDate() + 1);
+  aptoPoner('bl-hasta', b ? b.fecha_hasta : ssISO(sig));
+  aptoPoner('bl-tipo', b ? b.tipo : 'ocupado');
+  aptoPoner('bl-nota', b?.nota);
+  aptoEl('bl-eliminar').hidden = !b;
+  aptoEl('bl-err').textContent = '';
+  openSheet('apto-bloq-sheet');
+}
+async function dispGuardar() {
+  const err = aptoEl('bl-err'), btn = aptoEl('bl-guardar');
+  err.textContent = '';
+  const datos = { fecha_desde: val('bl-desde'), fecha_hasta: val('bl-hasta'), tipo: val('bl-tipo'), nota: val('bl-nota') };
+  if (!DISP_EDIT) datos.apartamento_id = DISP_UNIT;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('guardar_apto_bloqueo', { p_id: DISP_EDIT?.id ?? null, p_datos: datos });
+  btn.disabled = false;
+  if (error) { console.error('guardar_apto_bloqueo', error); err.textContent = 'No se pudo guardar. Probá de nuevo.'; return; }
+  if (!data?.ok) { err.textContent = dispMsg(data); if (data?.error === 'no_existe' || data?.error === 'apartamento_invalido') loadDisponibilidad(); return; }
+  closeSheet('apto-bloq-sheet');
+  okToast('Bloqueo guardado');
+  loadDisponibilidad();
+}
+async function dispEliminar() {
+  if (!DISP_EDIT) return;
+  if (!(await confirmarSheet({ titulo: '¿Eliminar este bloqueo?', detalle: 'Las fechas vuelven a quedar libres.', textoOk: 'Eliminar', destructivo: true }))) return;
+  const { data, error } = await sb.rpc('eliminar_apto_bloqueo', { p_id: DISP_EDIT.id });
+  if (error || !data?.ok) { console.error('eliminar_apto_bloqueo', error || data); aptoEl('bl-err').textContent = error ? 'No se pudo eliminar. Probá de nuevo.' : dispMsg(data); if (data?.error === 'no_existe') loadDisponibilidad(); return; }
+  closeSheet('apto-bloq-sheet');
+  okToast('Bloqueo eliminado');
+  loadDisponibilidad();
+}
+function setupDisponibilidad() {
+  aptoEl('apto-tabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-apto-tab]');
+    if (b) aptoTab(b.dataset.aptoTab);
+  });
+  const moverMes = delta => {
+    const [a, m] = DISP_MES.split('-').map(Number);
+    DISP_MES = ssISO(new Date(a, m - 1 + delta, 1)).slice(0, 7);
+    loadDisponibilidad();
+  };
+  aptoEl('disp-prev').addEventListener('click', () => moverMes(-1));
+  aptoEl('disp-next').addEventListener('click', () => moverMes(1));
+  aptoEl('disp-hoy').addEventListener('click', () => { DISP_MES = ssISO(new Date()).slice(0, 7); loadDisponibilidad(); });
+  ['disp-f-desde', 'disp-f-hasta'].forEach(id => aptoEl(id).addEventListener('change', () => {
+    const d = val('disp-f-desde');
+    if (d && id === 'disp-f-desde') DISP_MES = d.slice(0, 7);
+    loadDisponibilidad();
+  }));
+  aptoEl('disp-f-pers').addEventListener('input', () => { if (DISP_MES) dispPintar(); });
+  aptoEl('disp-limpiar').addEventListener('click', () => {
+    ['disp-f-desde', 'disp-f-hasta', 'disp-f-pers'].forEach(id => { aptoEl(id).value = ''; });
+    loadDisponibilidad();
+  });
+  aptoEl('disp-grid').addEventListener('click', e => {
+    const c = e.target.closest('.disp-c');
+    if (c && DISP_ADMIN) dispAbrirBloqueo(Number(c.dataset.u), c.dataset.d, c.dataset.b ? Number(c.dataset.b) : null);
+  });
+  aptoEl('bl-cancelar').addEventListener('click', () => closeSheet('apto-bloq-sheet'));
+  aptoEl('bl-guardar').addEventListener('click', dispGuardar);
+  aptoEl('bl-eliminar').addEventListener('click', dispEliminar);
 }
 
 /* ---------- Empresas (Etapa D; solo admin) ----------
@@ -22233,7 +22404,7 @@ const NAV_ITEMS = [
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
-  { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', roles: 'nav-admin-only', sub: 'Casas y posadas con apartamentos: unidades, habitaciones y fotos' },
+  { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', roles: '', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
   { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
@@ -24377,6 +24548,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-07', emoji: '📅', titulo: 'Apartamentos: disponibilidad', texto: 'En Apartamentos hay una pestaña nueva, Disponibilidad: un calendario por mes con cada apartamento en su fila, para ver qué noches están ocupadas, en mantenimiento o reservadas por el propietario. Filtrá por llegada, salida y personas para ver cuáles están libres. El admin toca un día para bloquear fechas o edita un bloque; los asesores solo consultan. La noche del día de salida queda libre.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-07', emoji: '🏡', titulo: 'Sección Apartamentos', texto: 'Nueva sección Apartamentos, solo para admins: cada casa o posada (Casa Vacacional Playa del Sur, Vulcanost y Paikla) es un proveedor con sus apartamentos, la distribución por habitación (camas y personas), las comodidades y las fotos de cada espacio, más las de las áreas comunes (fachada, piscina, estacionamiento). Los precios, el bot y la web siguen funcionando igual desde el Tarifario. Vulcanost y Paikla quedaron con una unidad provisional por completar.', roles: ['admin'] },
   { fecha: '2026-10-05', emoji: '🧾', titulo: 'El PDF de la venta ahora separa cliente y proveedor', texto: 'Al tocar el botón PDF en Facturación → Ventas, el comprobante sale con dos bloques con nombre en vez de las tres cifras del cliente sueltas: el verde dice qué se le cobra al cliente (venta, abonado y lo que falta cobrar) y el azul, qué se le paga al proveedor (su costo, cuánto de eso ya cubre el abono y cuánto falta cubrir), con el nombre del proveedor escrito tal cual. Debajo de la barra de avance se ve el reparto del abono: qué parte le corresponde al proveedor y qué parte es margen. El detalle financiero y la tabla de abonos ahora aclaran a quién pertenece cada cifra: lo que pagó el cliente, lo que hay que transferirle al proveedor y los abonos del cliente. Debajo del nombre del cliente ahora figura la fecha en que entró al CRM ("Cliente desde el ...") y debajo del proveedor, las fechas del viaje ("Viaja del ... al ..."), que salen de la reserva de la venta.', roles: ['admin'] },
   { fecha: '2026-10-04', emoji: '📘', titulo: 'Facebook en Redes', texto: 'Marketing → Redes tiene una pestaña nueva de Facebook, con datos de Zernio: seguidores (ganados y perdidos), vistas e interacciones de la página, métricas de cada publicación, reacciones, los mejores días y horarios para publicar y el top de publicaciones. Usa el mismo selector de período que Instagram y TikTok.', roles: ['admin'] },
