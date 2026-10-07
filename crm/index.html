@@ -1023,6 +1023,13 @@ input.ei[type=date]{color-scheme:dark}
 .ef-tipo i{font-size:12px}
 .ef-tipo:hover{border-color:rgba(var(--accent-rgb),.45)}
 .ef-tipo.on{border-color:var(--accent);color:var(--txt);background:var(--accent-soft)}
+#sec-apartamentos [hidden],#apto-sheet [hidden]{display:none!important}
+.apt-hab{display:flex;align-items:center;gap:10px;width:100%;text-align:left;color:var(--txt);background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-top:6px;font:inherit;font-size:12.5px;cursor:pointer}
+.apt-hab:hover{border-color:var(--line2)}
+.apt-hab.on{border-color:var(--accent)}
+.apt-hab.off{opacity:.5}
+.apt-hab span{color:var(--muted);font-size:11.5px}
+.apt-hab i{color:var(--accent-ink)}
 .ef-fila{display:flex;gap:10px}
 .ef-fila>*{min-width:0}
 .ef-opc{color:var(--muted2);font-weight:500;text-transform:none;letter-spacing:0}
@@ -5916,6 +5923,33 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
     </section>
 
+    <!-- APARTAMENTOS (2026-10-07; Fase 1 catálogo, solo admin): proveedor > apartamento > habitación > fotos.
+         Vinculado al producto del Tarifario sin tocarlo. RPC listar_apto_proveedores / listar_apartamentos / guardar_apto_*. -->
+    <section class="section" id="sec-apartamentos">
+      <div class="card" id="apto-vista-lista">
+        <div class="chead-row">
+          <h2><i class="fas fa-house-chimney"></i> Apartamentos</h2>
+          <input class="ei bt-buscar" id="apto-search" type="search" placeholder="Buscar proveedor o ubicación..." aria-label="Buscar proveedor de apartamentos" autocomplete="off">
+          <button class="btn-sm" id="apto-nuevo-prov" type="button"><i class="fas fa-plus"></i> Nuevo proveedor</button>
+        </div>
+        <div class="csub">Casas y posadas con apartamentos propios: unidades, habitaciones y fotos · tocá un proveedor para gestionar sus apartamentos</div>
+        <div class="kpis bt-kpis lt-kpis" id="apto-kpis"></div>
+        <div class="tbl-state skel" id="apto-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+        <div class="bt-grid" id="apto-prov-grid"></div>
+      </div>
+      <div class="card" id="apto-vista-det" hidden>
+        <div class="chead-row">
+          <button class="btn-sm" id="apto-volver" type="button"><i class="fas fa-arrow-left"></i> Proveedores</button>
+          <h2 id="apto-det-titulo"><i class="fas fa-house-chimney"></i></h2>
+          <button class="btn-sm" id="apto-editar-prov" type="button"><i class="fas fa-id-card"></i> Ficha del proveedor</button>
+          <button class="btn-sm" id="apto-nuevo-apto" type="button"><i class="fas fa-plus"></i> Nuevo apartamento</button>
+        </div>
+        <div class="bt-datos" id="apto-det-datos"></div>
+        <div class="csub" style="margin-top:12px">Tocá un apartamento para editar su distribución, habitaciones y fotos</div>
+        <div class="bt-grid" id="apto-grid"></div>
+      </div>
+    </section>
+
     <!-- Hoja "Ordenar" (Fase 4.1) -- segunda puerta de entrada al MISMO
          ordenamiento que ya viven los <th class="th-sort"> del thead, que
          queda oculto en móvil. Las opciones se arman leyendo esos mismos
@@ -6013,6 +6047,132 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
         <button class="dbtn" id="prov-cancelar" type="button" style="flex:1">Cancelar</button>
         <button class="dbtn save" id="prov-guardar" type="button" style="flex:1">Guardar</button>
+      </div>
+    </div>
+
+    <!-- Ficha de proveedor de Apartamentos (alta y edición, solo admin) -->
+    <div class="sheet" id="apto-prov-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="apv-sheet-title"><i class="fas fa-house-chimney"></i> Nuevo proveedor</div>
+      <div class="edit-box" style="margin-top:4px">
+        <label class="fl" for="apv-nombre">Nombre</label>
+        <input id="apv-nombre" class="ei" maxlength="120" placeholder="Ej. Casa Vacacional Playa del Sur" autocomplete="off">
+
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl" for="apv-ubicacion">Ubicación <span class="ef-opc">(opcional)</span></label><input id="apv-ubicacion" class="ei" maxlength="160" placeholder="Chichiriviche" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl" for="apv-estado">Estado</label>
+            <select id="apv-estado" class="ei"><option value="1">Activo</option><option value="0">Inactivo</option></select></div>
+        </div>
+
+        <label class="fl" for="apv-producto">Hotel vinculado en el Tarifario <span class="ef-opc">(precios, bot y web siguen allí)</span></label>
+        <select id="apv-producto" class="ei"><option value="">Sin vínculo</option></select>
+
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl" for="apv-rif">RIF <span class="ef-opc">(opcional)</span></label><input id="apv-rif" class="ei" maxlength="30" placeholder="J-12345678-9" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl" for="apv-contacto">Persona de contacto <span class="ef-opc">(opcional)</span></label><input id="apv-contacto" class="ei" maxlength="120" autocomplete="off"></div>
+        </div>
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl" for="apv-telefono">Teléfono <span class="ef-opc">(opcional)</span></label><input id="apv-telefono" class="ei" type="tel" maxlength="40" placeholder="+58 412 1234567" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl" for="apv-email">Email <span class="ef-opc">(opcional)</span></label><input id="apv-email" class="ei" type="email" maxlength="120" autocomplete="off"></div>
+        </div>
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl" for="apv-moneda">Moneda habitual</label>
+            <select id="apv-moneda" class="ei"><option>USD</option><option>VES</option><option>EUR</option><option>USDT</option><option>COP</option></select></div>
+          <div style="flex:1"><label class="fl" for="apv-dias">Días de crédito</label><input id="apv-dias" class="ei" type="number" min="0" max="365" step="1" placeholder="0"></div>
+        </div>
+
+        <label class="fl">Datos de pago <span class="ef-opc">(opcional, para pagarle al proveedor)</span></label>
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl-sub" for="apv-pago-banco">Banco</label><input id="apv-pago-banco" class="ei" maxlength="80" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl-sub" for="apv-pago-cuenta">N° de cuenta</label><input id="apv-pago-cuenta" class="ei" maxlength="40" autocomplete="off"></div>
+        </div>
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl-sub" for="apv-pago-titular">Titular y cédula/RIF</label><input id="apv-pago-titular" class="ei" maxlength="120" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl-sub" for="apv-pago-movil">Pago móvil</label><input id="apv-pago-movil" class="ei" maxlength="80" placeholder="Banco, teléfono, cédula" autocomplete="off"></div>
+        </div>
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl-sub" for="apv-pago-zelle">Zelle</label><input id="apv-pago-zelle" class="ei" maxlength="120" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl-sub" for="apv-pago-binance">Binance / USDT</label><input id="apv-pago-binance" class="ei" maxlength="120" autocomplete="off"></div>
+        </div>
+        <label class="fl-sub" for="apv-pago-otros">Otros datos de pago</label>
+        <textarea id="apv-pago-otros" class="ei" rows="2" maxlength="600"></textarea>
+
+        <label class="fl" for="apv-notas">Notas del proveedor <span class="ef-opc">(opcional)</span></label>
+        <textarea id="apv-notas" class="ei" rows="2" maxlength="2000" placeholder="Condiciones, temporadas, con quién negociar..."></textarea>
+        <label class="fl" for="apv-notas-int">Notas internas de Apartamentos <span class="ef-opc">(opcional)</span></label>
+        <textarea id="apv-notas-int" class="ei" rows="2" maxlength="2000" placeholder="Reglas de la casa, llaves, horarios de check-in..."></textarea>
+
+        <div class="edit-err" id="apv-err"></div>
+      </div>
+      <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
+        <button class="dbtn" id="apv-cancelar" type="button" style="flex:1">Cancelar</button>
+        <button class="dbtn save" id="apv-guardar" type="button" style="flex:1">Guardar</button>
+      </div>
+    </div>
+
+    <!-- Ficha de apartamento: datos, habitaciones y fotos (alta y edición, solo admin) -->
+    <div class="sheet" id="apto-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="apt-sheet-title"><i class="fas fa-house-chimney"></i> Nuevo apartamento</div>
+      <div class="edit-box" style="margin-top:4px">
+        <label class="fl" for="apt-nombre">Nombre</label>
+        <input id="apt-nombre" class="ei" maxlength="120" placeholder="Ej. Apartamento Amplio" autocomplete="off">
+
+        <div class="ef-fila">
+          <div style="flex:1"><label class="fl" for="apt-tipo">Tipo</label>
+            <select id="apt-tipo" class="ei">
+              <option value="habitacion">Habitación</option>
+              <option value="estudio">Estudio</option>
+              <option value="apartamento" selected>Apartamento</option>
+              <option value="townhouse">Townhouse</option>
+              <option value="casa">Casa</option>
+            </select></div>
+          <div style="flex:1"><label class="fl" for="apt-estado">Estado</label>
+            <select id="apt-estado" class="ei"><option value="1">Activo</option><option value="0">Inactivo</option></select></div>
+        </div>
+        <div id="apt-medidas" class="ef-fila">
+          <div style="flex:1"><label class="fl" for="apt-capacidad">Capacidad máx.</label><input id="apt-capacidad" class="ei" type="number" min="1" max="60" step="1" placeholder="Personas"></div>
+          <div style="flex:1"><label class="fl" for="apt-habs">Habitaciones</label><input id="apt-habs" class="ei" type="number" min="0" max="30" step="1"></div>
+          <div style="flex:1"><label class="fl" for="apt-banos">Baños</label><input id="apt-banos" class="ei" type="number" min="0" max="20" step="1"></div>
+        </div>
+        <label class="fl" for="apt-amenidades">Comodidades <span class="ef-opc">(separadas por coma)</span></label>
+        <input id="apt-amenidades" class="ei" maxlength="600" placeholder="Aire acondicionado, cocina equipada, parrillera..." autocomplete="off">
+        <label class="fl" for="apt-descripcion">Descripción <span class="ef-opc">(opcional)</span></label>
+        <textarea id="apt-descripcion" class="ei" rows="2" maxlength="2000" placeholder="Distribución, literas, vista, reglas..."></textarea>
+        <div class="edit-err" id="apt-err"></div>
+
+        <div id="apt-habs-wrap" hidden>
+          <label class="fl" style="margin-top:14px">Distribución por habitación</label>
+          <div id="apt-habs-lista"></div>
+          <div class="ef-fila" style="margin-top:8px">
+            <div style="flex:2"><label class="fl-sub" for="aph-nombre">Espacio</label><input id="aph-nombre" class="ei" maxlength="120" placeholder="Dormitorio principal" autocomplete="off"></div>
+            <div style="flex:1.2"><label class="fl-sub" for="aph-tipo">Tipo</label>
+              <select id="aph-tipo" class="ei">
+                <option value="dormitorio">Dormitorio</option><option value="sala">Sala</option><option value="cocina">Cocina</option>
+                <option value="bano">Baño</option><option value="exterior">Exterior</option><option value="otro">Otro</option>
+              </select></div>
+          </div>
+          <div class="ef-fila" style="margin-top:6px">
+            <div style="flex:2"><label class="fl-sub" for="aph-camas">Camas</label><input id="aph-camas" class="ei" maxlength="160" placeholder="1 matrimonial + 1 litera" autocomplete="off"></div>
+            <div style="flex:1"><label class="fl-sub" for="aph-capacidad">Personas</label><input id="aph-capacidad" class="ei" type="number" min="0" max="30" step="1"></div>
+          </div>
+          <div class="edit-err" id="aph-err"></div>
+          <div class="ef-fila" style="margin-top:6px">
+            <button class="dbtn gh" id="aph-cancelar" type="button" style="flex:1" hidden>Cancelar edición</button>
+            <button class="dbtn gh" id="aph-estado" type="button" style="flex:1" hidden></button>
+            <button class="dbtn gh" id="aph-guardar" type="button" style="flex:1"><i class="fas fa-plus"></i> Agregar espacio</button>
+          </div>
+        </div>
+
+        <div id="apt-fotos-wrap" hidden>
+          <label class="fl" style="margin-top:14px" id="apt-fotos-titulo">Fotos</label>
+          <div id="apto-fotos-admin"></div>
+        </div>
+        <div class="csub" id="apt-nuevo-aviso" style="margin-top:12px" hidden>Guardá el apartamento para cargar sus habitaciones y fotos.</div>
+      </div>
+      <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
+        <button class="dbtn" id="apt-cancelar" type="button" style="flex:1">Cerrar</button>
+        <button class="dbtn save" id="apt-guardar" type="button" style="flex:1">Guardar</button>
       </div>
     </div>
 

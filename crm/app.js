@@ -177,6 +177,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
   'clientes-eventos': ['Clientes Eventos', 'Quienes se registraron con el QR del stand y los premios que ganaron'],
   'bt-travel': ['BT Travel', 'Hoteles todo incluido, disponibilidad, reservas y pagos del mayorista'],
+  apartamentos: ['Apartamentos', 'Casas y posadas con apartamentos propios: unidades, habitaciones y fotos'],
   proveedores: ['Proveedores','A quién le compra Lotus: servicios, contacto, crédito y datos de pago'],
   asistente: ['Asistente', 'Revisa reservas, carga servicios y pasajeros, deja notas y escribe a proveedores -- con tus permisos'],
   'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
@@ -1292,7 +1293,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'voucher', 'importar-vouchers', 'reservas-empresas', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
   'mensajes', 'whatsapp', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
@@ -2690,7 +2691,7 @@ async function startApp() {
     setupMetricas, setupRanking, setupMisVentas, setupReasignaciones, setupAsesoresPeriodo,
     setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
     setupBuscadorIATarifario, setupIaAtencion, setupCerrarSheets, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
-    setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas, setupReservasEmpresas, setupBtTravel,
+    setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas, setupReservasEmpresas, setupBtTravel, setupApartamentos,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers, setupComisiones, setupFiltrosPostulaciones,
@@ -15676,6 +15677,302 @@ function setupProveedores() {
   document.getElementById('prov-guardar').addEventListener('click', guardarProveedor);
 }
 
+/* ---------- Apartamentos (Fase 1 catálogo, 2026-10-07; solo admin) ----------
+   proveedor > apartamento > habitación > fotos. El proveedor es una fila de
+   `proveedores` + apto_proveedor_cfg (vínculo con el producto del Tarifario, que
+   NO se toca: precios, bot y web siguen allí). La unidad especial `areas_comunes`
+   guarda las fotos de fachada, piscina, etc. Todo por RPC admin; las fotos usan
+   los helpers genéricos de cargarFotosAdmin sobre apto_fotos. */
+const APTO_TIPOS = { habitacion: 'Habitación', estudio: 'Estudio', apartamento: 'Apartamento', townhouse: 'Townhouse', casa: 'Casa', areas_comunes: 'Áreas comunes' };
+const APTO_HAB_TIPOS = { dormitorio: 'Dormitorio', sala: 'Sala', cocina: 'Cocina', bano: 'Baño', exterior: 'Exterior', otro: 'Otro' };
+const APTO_PAGO_CAMPOS = { banco: 'apv-pago-banco', cuenta: 'apv-pago-cuenta', titular: 'apv-pago-titular', pago_movil: 'apv-pago-movil', zelle: 'apv-pago-zelle', binance: 'apv-pago-binance', otros: 'apv-pago-otros' };
+const APTO_ERRORES = {
+  nombre_requerido: 'Poné el nombre.',
+  nombre_duplicado: 'Ya hay uno con ese nombre.',
+  producto_ya_vinculado: 'Ese hotel del Tarifario ya está vinculado a otro proveedor de Apartamentos.',
+  producto_invalido: 'El hotel del Tarifario elegido ya no existe.',
+  moneda_invalida: 'La moneda no es válida.',
+  dias_credito_invalidos: 'Los días de crédito van de 0 a 365.',
+  datos_pago_invalidos: 'Los datos de pago no son válidos.',
+  tipo_invalido: 'El tipo no es válido.',
+  areas_comunes_duplicada: 'Ese proveedor ya tiene sus áreas comunes.',
+  amenidades_invalidas: 'Las comodidades no son válidas.',
+  proveedor_invalido: 'El proveedor ya no existe: se recargó la lista.',
+  apartamento_invalido: 'El apartamento ya no existe: se recargó la lista.',
+  datos_invalidos: 'Los datos no son válidos.',
+  dato_invalido: 'Algún dato no es válido o es demasiado largo.',
+  no_existe: 'Ya no existe: se recargó la lista.',
+};
+let APTO_PROVS = [], APTO_APTOS = [], APTO_PROV_SEL = null, APTO_PROV_EDIT = null, APTO_EDIT = null, APTO_HAB_EDIT = null, APTO_PRODUCTOS = null;
+const aptoProv = id => APTO_PROVS.find(p => p.id === id) || null;
+const aptoMsg = data => APTO_ERRORES[data?.error] || 'No se pudo guardar: ' + (data?.error || '');
+const aptoEl = id => document.getElementById(id);
+const aptoPoner = (id, v) => { aptoEl(id).value = v ?? ''; };
+function aptoNum(id, min, max) {
+  const el = aptoEl(id), t = el.value.trim();
+  if (t === '') return { v: null };
+  const n = Number(t);
+  if (el.validity.badInput || !Number.isInteger(n) || n < min || n > max) return { err: true };
+  return { v: n };
+}
+async function loadApartamentos() {
+  if (ROL !== 'admin') return;
+  const cargando = aptoEl('apto-loading');
+  if (!APTO_PROVS.length) cargando?.classList.add('show');
+  const [rp, ra] = await Promise.all([sb.rpc('listar_apto_proveedores'), sb.rpc('listar_apartamentos')]);
+  cargando?.classList.remove('show');
+  if (rp.error || ra.error) { console.error('apartamentos', rp.error || ra.error); errToast('No se pudieron cargar los apartamentos'); return; }
+  APTO_PROVS = rp.data || [];
+  APTO_APTOS = ra.data || [];
+  if (APTO_PROV_SEL != null && !aptoProv(APTO_PROV_SEL)) APTO_PROV_SEL = null;
+  if (APTO_EDIT) APTO_EDIT = APTO_APTOS.find(a => a.id === APTO_EDIT.id) || null;
+  aptoPintar();
+}
+function aptoPintar() {
+  const p = APTO_PROV_SEL != null ? aptoProv(APTO_PROV_SEL) : null;
+  aptoEl('apto-vista-lista').hidden = !!p;
+  aptoEl('apto-vista-det').hidden = !p;
+  if (p) aptoPintarDetalle(p); else aptoPintarLista();
+}
+function aptoPintarLista() {
+  const q = btNorm(val('apto-search'));
+  const unidades = APTO_APTOS.filter(a => a.activo && a.tipo !== 'areas_comunes');
+  pintarKPIs('apto-kpis', [
+    { t: 'Proveedores', v: fmt(APTO_PROVS.filter(p => p.activo).length), d: 'activos con apartamentos', i: 'fa-house-chimney', c: 'var(--accent)' },
+    { t: 'Apartamentos', v: fmt(unidades.length), d: 'unidades activas', i: 'fa-door-open', c: 'var(--green)' },
+    { t: 'Por completar', v: fmt(unidades.filter(a => !a.capacidad_max).length), d: 'sin capacidad cargada', i: 'fa-pen-to-square', c: 'var(--amber)' },
+    { t: 'Fotos', v: fmt(APTO_PROVS.reduce((s, p) => s + (p.num_fotos || 0), 0)), d: 'unidades y áreas comunes', i: 'fa-images', c: 'var(--blue)' },
+  ]);
+  const lista = APTO_PROVS.filter(p => !q || btNorm([p.nombre, p.ubicacion, p.contacto].join(' ')).includes(q));
+  const tag = (txt, c) => `<span class="bt-tag" style="--c:${c}">${txt}</span>`;
+  aptoEl('apto-prov-grid').innerHTML = lista.map((p, i) => {
+    const mias = APTO_APTOS.filter(a => a.proveedor_id === p.id);
+    const foto = (mias.find(a => a.tipo === 'areas_comunes' && a.foto_principal) || mias.find(a => a.foto_principal))?.foto_principal;
+    return `<button type="button" class="bt-hotel${p.activo ? '' : ' apagado'}" style="--i:${Math.min(i, 24)}" data-apto-prov="${p.id}">
+      <span class="bt-foto"${foto ? ` style="background-image:url('${fotoMini(foto, 256)}')"` : ''}>${foto ? '' : '<i class="fas fa-house-chimney"></i>'}</span>
+      <span class="bt-hotel-info">
+        <span class="bt-hotel-nom">${esc(p.nombre)}</span>
+        <span class="bt-hotel-dest">${esc(p.ubicacion || '—')}</span>
+        <span class="bt-hotel-fila">${tag(`${fmt(p.num_apartamentos)} apartamento(s)`, 'var(--green)')}${tag(`${fmt(p.num_fotos)} foto(s)`, 'var(--blue)')}${p.activo ? '' : tag('Inactivo', 'var(--muted)')}</span>
+      </span>
+    </button>`;
+  }).join('') || `<div class="pv-empty" style="padding:18px">${APTO_PROVS.length ? 'Ningún proveedor coincide con la búsqueda' : 'Todavía no hay proveedores de apartamentos'}</div>`;
+}
+function aptoPintarDetalle(p) {
+  aptoEl('apto-det-titulo').innerHTML = `<i class="fas fa-house-chimney"></i> ${esc(p.nombre)}${p.activo ? '' : ' <span class="bt-tag" style="--c:var(--muted)">Inactivo</span>'}`;
+  const tel = String(p.telefono || '').replace(/[^\d+]/g, '');
+  aptoEl('apto-det-datos').innerHTML = [
+    p.ubicacion && `<span class="bt-dato"><i class="fas fa-location-dot"></i> ${esc(p.ubicacion)}</span>`,
+    p.contacto && `<span class="bt-dato"><i class="fas fa-user"></i> ${esc(p.contacto)}</span>`,
+    p.telefono && `<span class="bt-dato"><i class="fas fa-phone"></i> <a href="tel:${esc(tel)}">${esc(p.telefono)}</a></span>`,
+    p.email && `<span class="bt-dato"><i class="fas fa-envelope"></i> <a href="mailto:${esc(p.email)}">${esc(p.email)}</a></span>`,
+    `<span class="bt-dato"><i class="fas fa-hourglass-half"></i> ${p.dias_credito ? fmt(p.dias_credito) + ' días de crédito' : 'Contado'}${p.moneda_habitual ? ' · ' + esc(p.moneda_habitual) : ''}</span>`,
+    p.producto_nombre && `<span class="bt-dato"><i class="fas fa-link"></i> Tarifario: ${esc(p.producto_nombre)}</span>`,
+  ].filter(Boolean).join('');
+  const tag = (txt, c) => `<span class="bt-tag" style="--c:${c}">${txt}</span>`;
+  aptoEl('apto-grid').innerHTML = APTO_APTOS.filter(a => a.proveedor_id === p.id).map((a, i) => {
+    const areas = a.tipo === 'areas_comunes', habs = (a.habitaciones || []).filter(h => h.activo).length;
+    return `<button type="button" class="bt-hotel${a.activo ? '' : ' apagado'}" style="--i:${Math.min(i, 24)}" data-apto-id="${a.id}">
+      <span class="bt-foto"${a.foto_principal ? ` style="background-image:url('${fotoMini(a.foto_principal, 256)}')"` : ''}>${a.foto_principal ? '' : `<i class="fas ${areas ? 'fa-tree' : 'fa-door-open'}"></i>`}</span>
+      <span class="bt-hotel-info">
+        <span class="bt-hotel-nom">${esc(a.nombre)}</span>
+        <span class="bt-hotel-dest">${esc(APTO_TIPOS[a.tipo] || a.tipo)}${a.capacidad_max ? ` · hasta ${fmt(a.capacidad_max)} personas` : ''}</span>
+        <span class="bt-hotel-fila">${!areas && !a.capacidad_max ? tag('Falta capacidad', 'var(--amber)') : ''}${areas ? '' : tag(`${fmt(habs)} espacio(s)`, 'var(--purple)')}${a.num_fotos ? tag(`${fmt(a.num_fotos)} foto(s)`, 'var(--blue)') : tag('Sin fotos', 'var(--amber)')}${a.activo ? '' : tag('Inactivo', 'var(--muted)')}</span>
+      </span>
+    </button>`;
+  }).join('') || '<div class="pv-empty" style="padding:18px">Este proveedor todavía no tiene apartamentos</div>';
+}
+async function aptoPoblarProductos(actual, actualNombre) {
+  const sel = aptoEl('apv-producto');
+  const pintar = (lista, valor) => {
+    const l = actual != null && !lista.some(x => x.id === actual) ? [{ id: actual, nombre: actualNombre || 'Producto #' + actual }, ...lista] : lista;
+    sel.innerHTML = '<option value="">Sin vínculo</option>' + l.map(x => `<option value="${x.id}">${esc(x.nombre)}${x.destino ? ' · ' + esc(x.destino) : ''}${x.activo === false ? ' (inactivo)' : ''}</option>`).join('');
+    sel.value = valor;
+  };
+  pintar(APTO_PRODUCTOS || [], actual == null ? '' : String(actual));
+  if (APTO_PRODUCTOS) return;
+  const { data, error } = await sb.from('productos').select('id,nombre,destino,activo').eq('tipo', 'hotel').order('nombre');
+  if (error) { console.warn('apto productos', error.message); return; }
+  APTO_PRODUCTOS = data || [];
+  pintar(APTO_PRODUCTOS, sel.value);
+}
+function abrirAptoProvSheet(id = null) {
+  const p = id == null ? null : aptoProv(id);
+  if (id != null && !p) return;
+  APTO_PROV_EDIT = p;
+  aptoEl('apv-sheet-title').innerHTML = `<i class="fas fa-house-chimney"></i> ${p ? esc(p.nombre) : 'Nuevo proveedor'}`;
+  aptoPoner('apv-nombre', p?.nombre); aptoPoner('apv-ubicacion', p?.ubicacion); aptoPoner('apv-estado', p && !p.activo ? '0' : '1');
+  aptoPoner('apv-rif', p?.rif); aptoPoner('apv-contacto', p?.contacto); aptoPoner('apv-telefono', p?.telefono); aptoPoner('apv-email', p?.email);
+  aptoPoner('apv-moneda', p?.moneda_habitual || 'USD'); aptoPoner('apv-dias', p?.dias_credito);
+  aptoPoner('apv-notas', p?.notas); aptoPoner('apv-notas-int', p?.notas_internas);
+  const pago = p?.datos_pago || {};
+  Object.entries(APTO_PAGO_CAMPOS).forEach(([k, elId]) => aptoPoner(elId, pago[k] == null ? '' : String(pago[k])));
+  aptoEl('apv-err').textContent = '';
+  aptoPoblarProductos(p?.producto_id ?? null, p?.producto_nombre);
+  openSheet('apto-prov-sheet');
+}
+async function guardarAptoProv() {
+  const err = aptoEl('apv-err'), btn = aptoEl('apv-guardar');
+  err.textContent = '';
+  const nombre = val('apv-nombre').trim();
+  if (!nombre) { err.textContent = APTO_ERRORES.nombre_requerido; return; }
+  const dias = aptoNum('apv-dias', 0, 365);
+  if (dias.err) { err.textContent = APTO_ERRORES.dias_credito_invalidos; return; }
+  const datosPago = { ...(APTO_PROV_EDIT?.datos_pago || {}) };
+  Object.entries(APTO_PAGO_CAMPOS).forEach(([k, elId]) => { const v = val(elId).trim(); if (v) datosPago[k] = v; else delete datosPago[k]; });
+  const editando = APTO_PROV_EDIT;
+  const datos = {
+    nombre, ubicacion: val('apv-ubicacion'), producto_id: val('apv-producto') ? Number(val('apv-producto')) : null,
+    rif: val('apv-rif'), contacto: val('apv-contacto'), telefono: val('apv-telefono'), email: val('apv-email'),
+    moneda_habitual: val('apv-moneda'), dias_credito: dias.v ?? 0, activo: val('apv-estado') === '1',
+    datos_pago: datosPago, notas: val('apv-notas'), notas_internas: val('apv-notas-int'),
+  };
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('guardar_apto_proveedor', { p_id: editando?.id ?? null, p_datos: datos });
+  btn.disabled = false;
+  if (error) { err.textContent = error.code === '42501' ? 'Solo un admin puede guardar proveedores.' : 'No se pudo guardar: ' + (error.message || ''); return; }
+  if (!data?.ok) { err.textContent = aptoMsg(data); if (data?.error === 'no_existe') loadApartamentos(); return; }
+  closeSheet('apto-prov-sheet');
+  okToast(editando ? 'Proveedor actualizado' : 'Proveedor creado');
+  APTO_PROV_EDIT = null;
+  if (!editando) APTO_PROV_SEL = data.id;
+  loadApartamentos();
+}
+function abrirAptoSheet(id = null) {
+  if (aptoLlenarSheet(id)) openSheet('apto-sheet');
+}
+function aptoLlenarSheet(id) {
+  const a = id == null ? null : APTO_APTOS.find(x => x.id === id);
+  if (id != null && !a) return false;
+  if (!a && APTO_PROV_SEL == null) return false;
+  APTO_EDIT = a; APTO_HAB_EDIT = null;
+  const areas = a?.tipo === 'areas_comunes';
+  aptoEl('apt-sheet-title').innerHTML = `<i class="fas ${areas ? 'fa-tree' : 'fa-house-chimney'}"></i> ${a ? esc(a.nombre) : 'Nuevo apartamento'}`;
+  const selTipo = aptoEl('apt-tipo');
+  [...selTipo.options].forEach(o => { if (o.value === 'areas_comunes') o.remove(); });
+  if (areas) selTipo.add(new Option('Áreas comunes', 'areas_comunes'));
+  selTipo.value = a?.tipo || 'apartamento'; selTipo.disabled = areas;
+  aptoPoner('apt-nombre', a?.nombre); aptoPoner('apt-estado', a && !a.activo ? '0' : '1');
+  aptoPoner('apt-capacidad', a?.capacidad_max); aptoPoner('apt-habs', a?.num_habitaciones); aptoPoner('apt-banos', a?.num_banos);
+  aptoPoner('apt-amenidades', (a?.amenidades || []).join(', ')); aptoPoner('apt-descripcion', a?.descripcion);
+  aptoEl('apt-err').textContent = '';
+  aptoEl('apt-medidas').hidden = areas;
+  aptoEl('apt-habs-wrap').hidden = !a || areas;
+  aptoEl('apt-fotos-wrap').hidden = !a;
+  aptoEl('apt-nuevo-aviso').hidden = !!a;
+  aptoHabLimpiar();
+  if (a) { aptoPintarHabs(); aptoCargarFotos(); }
+  return true;
+}
+function aptoCargarFotos() {
+  const a = APTO_EDIT;
+  if (!a) return;
+  aptoEl('apt-fotos-titulo').textContent = a.tipo === 'areas_comunes' ? 'Fotos de las áreas comunes (fachada, piscina, estacionamiento...)' : 'Fotos (asigná cada una a su habitación)';
+  const habs = (a.habitaciones || []).filter(h => h.activo).map(h => ({ id: h.id, nombre: h.nombre }));
+  cargarFotosAdmin('apto_fotos', 'apartamento_id', a.id, 'apartamentos', 'apto-fotos-admin', habs);
+}
+function aptoPintarHabs() {
+  const hs = APTO_EDIT?.habitaciones || [];
+  aptoEl('apt-habs-lista').innerHTML = hs.map(h => `<button type="button" class="apt-hab${h.activo ? '' : ' off'}${APTO_HAB_EDIT?.id === h.id ? ' on' : ''}" data-hab-id="${h.id}">
+      <i class="fas fa-bed"></i><b>${esc(h.nombre)}</b><span>${esc(APTO_HAB_TIPOS[h.tipo] || h.tipo)}${h.camas ? ' · ' + esc(h.camas) : ''}${h.capacidad ? ' · ' + fmt(h.capacidad) + ' pers.' : ''}${h.activo ? '' : ' · inactiva'}</span>
+    </button>`).join('') || '<div class="muted" style="font-size:12.5px">Todavía no hay espacios cargados (dormitorios, sala, cocina...).</div>';
+}
+function aptoHabLimpiar() {
+  APTO_HAB_EDIT = null;
+  ['aph-nombre', 'aph-camas', 'aph-capacidad'].forEach(id => aptoPoner(id, ''));
+  aptoPoner('aph-tipo', 'dormitorio');
+  aptoEl('aph-err').textContent = '';
+  aptoEl('aph-cancelar').hidden = true; aptoEl('aph-estado').hidden = true;
+  aptoEl('aph-guardar').innerHTML = '<i class="fas fa-plus"></i> Agregar espacio';
+}
+function aptoHabEditar(id) {
+  const h = (APTO_EDIT?.habitaciones || []).find(x => x.id === id);
+  if (!h) return;
+  APTO_HAB_EDIT = h;
+  aptoPoner('aph-nombre', h.nombre); aptoPoner('aph-tipo', h.tipo); aptoPoner('aph-camas', h.camas); aptoPoner('aph-capacidad', h.capacidad);
+  aptoEl('aph-err').textContent = '';
+  aptoEl('aph-cancelar').hidden = false; aptoEl('aph-estado').hidden = false;
+  aptoEl('aph-estado').textContent = h.activo ? 'Desactivar' : 'Activar';
+  aptoEl('aph-guardar').innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios';
+  aptoPintarHabs();
+}
+async function aptoGuardarHab(activo = null) {
+  const err = aptoEl('aph-err'), a = APTO_EDIT, editando = APTO_HAB_EDIT;
+  err.textContent = '';
+  if (!a) return;
+  const nombre = val('aph-nombre').trim();
+  if (!nombre) { err.textContent = APTO_ERRORES.nombre_requerido; return; }
+  const cap = aptoNum('aph-capacidad', 0, 30);
+  if (cap.err) { err.textContent = 'Las personas van de 0 a 30.'; return; }
+  const datos = { nombre, tipo: val('aph-tipo'), camas: val('aph-camas'), capacidad: cap.v };
+  if (editando) datos.activo = activo ?? editando.activo; else datos.apartamento_id = a.id;
+  const { data, error } = await sb.rpc('guardar_apto_habitacion', { p_id: editando?.id ?? null, p_datos: datos });
+  if (error) { err.textContent = error.code === '42501' ? 'Solo un admin puede guardar.' : 'No se pudo guardar: ' + (error.message || ''); return; }
+  if (!data?.ok) { err.textContent = aptoMsg(data); return; }
+  okToast(editando ? 'Espacio actualizado' : 'Espacio agregado');
+  aptoHabLimpiar();
+  await loadApartamentos();
+  aptoPintarHabs();
+  aptoCargarFotos();
+}
+async function guardarApto() {
+  const err = aptoEl('apt-err'), btn = aptoEl('apt-guardar');
+  err.textContent = '';
+  const nombre = val('apt-nombre').trim();
+  if (!nombre) { err.textContent = APTO_ERRORES.nombre_requerido; return; }
+  const cap = aptoNum('apt-capacidad', 1, 60), habs = aptoNum('apt-habs', 0, 30), banos = aptoNum('apt-banos', 0, 20);
+  if (cap.err || habs.err || banos.err) { err.textContent = 'Capacidad 1-60, habitaciones 0-30 y baños 0-20.'; return; }
+  const editando = APTO_EDIT;
+  const datos = {
+    nombre, tipo: editando?.tipo === 'areas_comunes' ? 'areas_comunes' : val('apt-tipo'),
+    capacidad_max: cap.v, num_habitaciones: habs.v, num_banos: banos.v,
+    amenidades: val('apt-amenidades').split(',').map(s => s.trim()).filter(Boolean),
+    descripcion: val('apt-descripcion'), activo: val('apt-estado') === '1',
+  };
+  if (!editando) datos.proveedor_id = APTO_PROV_SEL;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('guardar_apartamento', { p_id: editando?.id ?? null, p_datos: datos });
+  btn.disabled = false;
+  if (error) { err.textContent = error.code === '42501' ? 'Solo un admin puede guardar.' : 'No se pudo guardar: ' + (error.message || ''); return; }
+  if (!data?.ok) { err.textContent = aptoMsg(data); if (data?.error === 'no_existe') loadApartamentos(); return; }
+  okToast(editando ? 'Apartamento actualizado' : 'Apartamento creado');
+  await loadApartamentos();
+  // Recién creado: se reabre en modo edición para cargar de una vez sus espacios y fotos.
+  if (!editando) { aptoLlenarSheet(data.apartamento.id); return; }
+  APTO_EDIT = null; // ya se recargó arriba: evita que el observer repita la carga al cerrar
+  closeSheet('apto-sheet');
+}
+function setupApartamentos() {
+  aptoEl('apto-search').addEventListener('input', () => { if (APTO_PROVS.length) aptoPintarLista(); });
+  aptoEl('apto-nuevo-prov').addEventListener('click', () => abrirAptoProvSheet());
+  aptoEl('apto-prov-grid').addEventListener('click', e => {
+    const b = e.target.closest('[data-apto-prov]');
+    if (b) { APTO_PROV_SEL = Number(b.dataset.aptoProv); aptoPintar(); }
+  });
+  aptoEl('apto-volver').addEventListener('click', () => { APTO_PROV_SEL = null; aptoPintar(); });
+  aptoEl('apto-editar-prov').addEventListener('click', () => abrirAptoProvSheet(APTO_PROV_SEL));
+  aptoEl('apto-nuevo-apto').addEventListener('click', () => abrirAptoSheet());
+  aptoEl('apto-grid').addEventListener('click', e => {
+    const b = e.target.closest('[data-apto-id]');
+    if (b) abrirAptoSheet(Number(b.dataset.aptoId));
+  });
+  aptoEl('apv-cancelar').addEventListener('click', () => closeSheet('apto-prov-sheet'));
+  aptoEl('apv-guardar').addEventListener('click', guardarAptoProv);
+  aptoEl('apt-cancelar').addEventListener('click', () => closeSheet('apto-sheet'));
+  aptoEl('apt-guardar').addEventListener('click', guardarApto);
+  aptoEl('apt-habs-lista').addEventListener('click', e => {
+    const b = e.target.closest('[data-hab-id]');
+    if (b) aptoHabEditar(Number(b.dataset.habId));
+  });
+  aptoEl('aph-guardar').addEventListener('click', () => aptoGuardarHab());
+  aptoEl('aph-cancelar').addEventListener('click', () => { aptoHabLimpiar(); aptoPintarHabs(); });
+  aptoEl('aph-estado').addEventListener('click', () => { if (APTO_HAB_EDIT) aptoGuardarHab(!APTO_HAB_EDIT.activo); });
+  // Las fotos se editan directo en apto_fotos (sin RPC): al cerrar la ficha por cualquier vía
+  // se recarga para que los contadores y la foto de portada de las tarjetas queden al día.
+  const hoja = aptoEl('apto-sheet');
+  new MutationObserver(() => { if (!hoja.classList.contains('open') && APTO_EDIT) loadApartamentos(); }).observe(hoja, { attributes: true, attributeFilter: ['class'] });
+}
+
 /* ---------- Empresas (Etapa D; solo admin) ----------
    Agencias, operadores, corporativos y alianzas con crédito propio. Todo pasa
    por listar_empresas_cliente / guardar_empresa_cliente; la lista trae las
@@ -20064,7 +20361,7 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId = 'tar-foto
   const box = document.getElementById(boxId);
   // habitacion_id solo existe en producto_fotos (migración 20260913150000) --
   // pedirlo sobre promocion_fotos tira columna inexistente.
-  const conSelector = tabla === 'producto_fotos' && Array.isArray(habitaciones) && habitaciones.length > 0;
+  const conSelector = (tabla === 'producto_fotos' || tabla === 'apto_fotos') && Array.isArray(habitaciones) && habitaciones.length > 0;
   const campos = conSelector ? 'id,storage_path,orden,es_principal,origen,habitacion_id' : 'id,storage_path,orden,es_principal,origen';
   const { data, error } = await sb.from(tabla).select(campos).eq(fk, entidadId).eq('activo', true).order('es_principal', { ascending: false }).order('orden');
   if (!box) return; // el drawer se pudo haber cerrado mientras esto cargaba
@@ -20085,7 +20382,7 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId = 'tar-foto
         <option value="">Sin habitación asignada</option>
         ${habitaciones.map(h => `<option value="${h.id}"${f.habitacion_id === h.id ? ' selected' : ''}>${esc(h.nombre)}</option>`).join('')}
       </select>` : ''}
-    </div>`).join('')}</div>` : `<div class="muted" style="font-size:12.5px">${tabla === 'promocion_fotos' ? 'Esta promoción no tiene fotos propias — arriba se muestran las del hotel vinculado.' : 'Esta opción no tiene fotos cargadas todavía.'}</div>`;
+    </div>`).join('')}</div>` : `<div class="muted" style="font-size:12.5px">${tabla === 'promocion_fotos' ? 'Esta promoción no tiene fotos propias — arriba se muestran las del hotel vinculado.' : tabla === 'apto_fotos' ? 'Todavía no hay fotos cargadas aquí.' : 'Esta opción no tiene fotos cargadas todavía.'}</div>`;
   box.innerHTML = `${grid}
     <button type="button" class="dbtn gh" id="tar-foto-agregar" style="margin-top:10px;width:100%"><i class="fas fa-plus"></i> Agregar foto</button>
     <input type="file" id="tar-foto-file" accept="image/png,image/jpeg,image/webp" style="display:none">`;
@@ -20095,10 +20392,11 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId = 'tar-foto
   box.querySelectorAll('.tfa-hab-sel').forEach(sel => sel.onchange = async () => {
     const val = sel.value ? Number(sel.value) : null;
     sel.disabled = true;
-    const { error: eHab } = await sb.from('producto_fotos').update({ habitacion_id: val }).eq('id', Number(sel.dataset.fotoId));
+    const { error: eHab } = await sb.from(tabla).update({ habitacion_id: val }).eq('id', Number(sel.dataset.fotoId));
     sel.disabled = false;
     if (eHab) { errToast('No se pudo asignar la habitación: ' + eHab.message); return; }
     okToast('Habitación actualizada');
+    if (tabla === 'apto_fotos') return;
     delete tarCache[tarTab];
     // Refresca x.habitaciones (con las fotos ya agrupadas) para que la tarjeta
     // y el comparador vean el cambio sin tener que cerrar y reabrir el drawer.
@@ -21935,6 +22233,7 @@ const NAV_ITEMS = [
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
+  { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', roles: 'nav-admin-only', sub: 'Casas y posadas con apartamentos: unidades, habitaciones y fotos' },
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
   { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
@@ -21966,6 +22265,7 @@ const NAV_PADRES = [
   { sec: 'correo', hoja: true },
   { sec: 'grp-tarifario', icon: 'fas fa-book-open', label: 'Tarifario' },
   { sec: 'stop-sales', hoja: true },
+  { sec: 'apartamentos', hoja: true },
   { sec: 'grp-reservas', icon: 'fas fa-handshake-angle', label: 'Reservas', badge: 'nav-postventa-count', badgeDefault: '0' },
   { sec: 'grp-cobros', icon: 'fas fa-file-invoice-dollar', label: 'Cobros' },
   { sec: 'grp-directorio', icon: 'fas fa-briefcase', label: 'Corporativo' },
@@ -22225,6 +22525,7 @@ function activateSection(sec, fromNav) {
   if (sec === 'empresas') loadEmpresas();
   if (sec === 'reservas-empresas') loadReservasEmpresas();
   if (sec === 'bt-travel') loadBtTravel();
+  if (sec === 'apartamentos') loadApartamentos();
   if (sec === 'asistente') loadAsistente();
   if (sec === 'mis-comisiones') loadMisComisiones();
   if (sec === 'comisiones') loadComisiones();
@@ -22546,7 +22847,7 @@ function setupAppBar() {
 // que pide esta fase. Si se agrega una sección nueva con carga propia, hay
 // que sumarla en los dos lugares.
 const REFRESCAR_SECCION = {
-  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), 'mis-ventas': () => loadMisVentasSeccion(), facturacion: () => loadFacturacion(), pagos: () => loadPagos(), proveedores: () => loadProveedores(),
+  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), 'mis-ventas': () => loadMisVentasSeccion(), facturacion: () => loadFacturacion(), pagos: () => loadPagos(), proveedores: () => loadProveedores(), apartamentos: () => loadApartamentos(),
   'mis-comisiones': () => loadMisComisiones(), comisiones: () => loadComisiones(), 'gestion-personal': () => loadGestionPersonal(),
   postventa: () => loadPostventa(), 'reservas-empresas': () => loadReservasEmpresas(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
@@ -24076,6 +24377,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-07', emoji: '🏡', titulo: 'Sección Apartamentos', texto: 'Nueva sección Apartamentos, solo para admins: cada casa o posada (Casa Vacacional Playa del Sur, Vulcanost y Paikla) es un proveedor con sus apartamentos, la distribución por habitación (camas y personas), las comodidades y las fotos de cada espacio, más las de las áreas comunes (fachada, piscina, estacionamiento). Los precios, el bot y la web siguen funcionando igual desde el Tarifario. Vulcanost y Paikla quedaron con una unidad provisional por completar.', roles: ['admin'] },
   { fecha: '2026-10-05', emoji: '🧾', titulo: 'El PDF de la venta ahora separa cliente y proveedor', texto: 'Al tocar el botón PDF en Facturación → Ventas, el comprobante sale con dos bloques con nombre en vez de las tres cifras del cliente sueltas: el verde dice qué se le cobra al cliente (venta, abonado y lo que falta cobrar) y el azul, qué se le paga al proveedor (su costo, cuánto de eso ya cubre el abono y cuánto falta cubrir), con el nombre del proveedor escrito tal cual. Debajo de la barra de avance se ve el reparto del abono: qué parte le corresponde al proveedor y qué parte es margen. El detalle financiero y la tabla de abonos ahora aclaran a quién pertenece cada cifra: lo que pagó el cliente, lo que hay que transferirle al proveedor y los abonos del cliente. Debajo del nombre del cliente ahora figura la fecha en que entró al CRM ("Cliente desde el ...") y debajo del proveedor, las fechas del viaje ("Viaja del ... al ..."), que salen de la reserva de la venta.', roles: ['admin'] },
   { fecha: '2026-10-04', emoji: '📘', titulo: 'Facebook en Redes', texto: 'Marketing → Redes tiene una pestaña nueva de Facebook, con datos de Zernio: seguidores (ganados y perdidos), vistas e interacciones de la página, métricas de cada publicación, reacciones, los mejores días y horarios para publicar y el top de publicaciones. Usa el mismo selector de período que Instagram y TikTok.', roles: ['admin'] },
   { fecha: '2026-10-04', emoji: '💬', titulo: 'WhatsApp en el CRM', texto: 'Nueva sección Mensajes → WhatsApp: todos los chats del bot de ventas, con fotos y notas de voz, y el botón "Ver lead" cuando el número ya está en el CRM. Arriba se elige el número de WhatsApp (cuando haya más de uno). Es solo para ver: el bot responde ahí y el asesor sigue atendiendo por su WhatsApp.', roles: ['admin'] },
