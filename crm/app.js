@@ -14905,7 +14905,8 @@ async function exportarVentaPdf(id) {
     (await cargarFuentesPdf()).forEach(([a, e, b]) => { doc.addFileToVFS(a, b); doc.addFont(a, 'Poppins', e); });
     F = 'Poppins'; st = s => s;
   } catch (_e) { /* sin Poppins sale en Helvetica */ }
-  const C = { navy: [15, 23, 36], naranja: [240, 128, 30], ambar: [251, 191, 36], txt: [17, 24, 39], gris: [107, 114, 128], claro: [148, 163, 184], linea: [229, 231, 235], suave: [248, 250, 252], verde: [22, 163, 74], rojo: [220, 38, 38], blanco: [255, 255, 255] };
+  const C = { navy: [15, 23, 42], naranja: [234, 118, 22], ambar: [245, 158, 11], ambarOsc: [180, 83, 9], txt: [15, 23, 42], gris: [100, 116, 139], claro: [148, 163, 184], linea: [226, 232, 240], suave: [248, 250, 252], verde: [21, 128, 61], rojo: [220, 38, 38], blanco: [255, 255, 255] };
+  const tinte = (rgb, k) => rgb.map(c => Math.round(c + (255 - c) * k));
   const font = (s, size, rgb) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...rgb); };
   const us = n => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' US$';
   const X0 = 40, X1 = 572, W = X1 - X0;
@@ -14914,27 +14915,31 @@ async function exportarVentaPdf(id) {
   const conCosto = f.costo_neto != null, margen = conCosto ? venta - f.costo_neto : null;
   const pctCobro = venta > 0 ? Math.min(100, Math.round(abonado / venta * 100)) : 0;
   const pctMargen = conCosto && venta > 0 ? Math.round(margen / venta * 100) : null;
-  // Fechas del viaje: cuelgan de la reserva de la factura (`postventa_casos`, que ahora devuelve
-  // `listar_facturas`). Son `date` puros -> fmtFechaSolo, que a propósito no pasa por Date() (ver
-  // su comentario: reinterpretarlos como hora local corre un día). Va bajo el proveedor, que es
-  // quien presta el viaje, y bajo el nombre del cliente queda su fecha de alta en el CRM.
+  // Lo que falta pagarle al proveedor sale de lo ya pagado en cuentas por pagar
+  // (`proveedor_pagado`), no de repartir el abono con el porcentaje del costo.
+  const provPagado = f.proveedor_pagado != null ? Number(f.proveedor_pagado) : null;
+  const faltaProv = conCosto ? Math.max(0, f.costo_neto - (provPagado || 0)) : null;
+  const pctProv = conCosto && f.costo_neto > 0 ? Math.min(100, Math.round((provPagado || 0) / f.costo_neto * 100)) : 0;
+  const enCaja = abonado - (provPagado || 0);
+  const anulada = f.estado === 'anulada';
+  const emitida = new Date(f.fecha_emision).toLocaleString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  // Fechas del viaje: `date` puros de la reserva -> fmtFechaSolo (no pasa por Date(), que corre un día).
   const viaje = f.viaje_inicio
-    ? (f.viaje_fin && f.viaje_fin !== f.viaje_inicio
-      ? `Viaja del ${fmtFechaSolo(f.viaje_inicio)} al ${fmtFechaSolo(f.viaje_fin)}`
-      : `Viaja el ${fmtFechaSolo(f.viaje_inicio)}`)
-    : null;
+    ? (f.viaje_fin && f.viaje_fin !== f.viaje_inicio ? `${fmtFechaSolo(f.viaje_inicio)} – ${fmtFechaSolo(f.viaje_fin)}` : fmtFechaSolo(f.viaje_inicio))
+    : 'Sin fechas';
+  const noches = f.viaje_inicio && f.viaje_fin ? Math.round((Date.parse(f.viaje_fin) - Date.parse(f.viaje_inicio)) / 864e5) : 0;
 
   // Cabecera oscura con el mismo logo del CRM
-  doc.setFillColor(...C.navy); doc.rect(0, 0, 612, 128, 'F');
-  doc.setFillColor(...C.naranja); doc.rect(0, 128, 612, 4, 'F');
-  doc.setFillColor(...C.ambar); doc.rect(0, 128, 190, 4, 'F');
-  try { doc.addImage(await cargarImagenBase64('logolotus-integrado.png'), 'PNG', X0, 24, 80, 80); } catch (_e) { /* sin logo igual sale */ }
-  font('bold', 16, C.blanco); doc.text('Destino y Eventos', 134, 58);
-  font('bold', 16, C.naranja); doc.text('Lotus 360', 134, 78);
-  font('normal', 8.5, C.claro); doc.text('Agencia de viajes · destinoyeventoslotus360.com', 134, 96);
-  font('medium', 8, C.claro); doc.text('COMPROBANTE DE VENTA', X1, 48, { align: 'right', charSpace: 1.2 });
-  font('bold', 26, C.blanco); doc.text(`N° ${f.numero_factura}`, X1, 80, { align: 'right' });
-  font('normal', 8.5, C.claro); doc.text(`Emitida el ${fmtFechaHoraCaracas(f.fecha_emision)}`, X1, 98, { align: 'right' });
+  doc.setFillColor(...C.navy); doc.rect(0, 0, 612, 120, 'F');
+  doc.setFillColor(...C.naranja); doc.rect(0, 120, 612, 3, 'F');
+  doc.setFillColor(...C.ambar); doc.rect(0, 120, 190, 3, 'F');
+  try { doc.addImage(await cargarImagenBase64('logolotus-integrado.png'), 'PNG', X0, 22, 76, 76); } catch (_e) { /* sin logo igual sale */ }
+  font('bold', 16, C.blanco); doc.text('Destino y Eventos', 130, 54);
+  font('bold', 16, C.naranja); doc.text('Lotus 360', 130, 74);
+  font('normal', 8.5, C.claro); doc.text('Agencia de viajes · destinoyeventoslotus360.com', 130, 91);
+  font('medium', 7.5, C.claro); doc.text('COMPROBANTE DE VENTA', X1, 46, { align: 'right', charSpace: 1.4 });
+  font('bold', 28, C.blanco); doc.text(`N° ${f.numero_factura}`, X1, 78, { align: 'right' });
+  font('normal', 8.5, C.claro); doc.text(`Emitida el ${emitida}`, X1, 95, { align: 'right' });
 
   const seccion = (t, y) => {
     font('semibold', 8.5, C.naranja); doc.text(t.toUpperCase(), X0, y, { charSpace: 1 });
@@ -14943,46 +14948,39 @@ async function exportarVentaPdf(id) {
   const pill = (t, xDer, y, rgb) => {
     font('semibold', 8, rgb);
     const w = doc.getTextWidth(t) + 18;
-    doc.setFillColor(...rgb.map(c => Math.round(c + (255 - c) * 0.88))); doc.roundedRect(xDer - w, y - 11, w, 16, 8, 8, 'F');
+    doc.setFillColor(...tinte(rgb, 0.88)); doc.roundedRect(xDer - w, y - 11, w, 16, 8, 8, 'F');
     doc.text(t, xDer - w / 2, y, { align: 'center' });
   };
 
-  // Datos de la venta
-  let y = 168;
+  // Datos de la venta. El estado dice cómo va el cobro: "Pagada" con 40 % cobrado confundía.
+  let y = 160;
   seccion('Datos de la venta', y);
-  const anulada = f.estado === 'anulada';
-  pill(f.estado === 'pagada' ? 'Pagada' : anulada ? 'Anulada' : String(f.estado || ''), X1, y, anulada ? C.rojo : f.estado === 'pagada' ? C.verde : C.gris);
-  [['Cliente', f.cliente || ('#' + f.lead_id), f.lead_entrada ? 'Cliente desde el ' + fmtFechaCaracas(f.lead_entrada) : null],
-   ['Asesor', f.asesor || 'Sin asesor'], ['Proveedor', f.proveedor || 'Sin proveedor', viaje], ['Forma de pago', f.forma_pago || '—']]
-    .forEach(([k, v, sub], i) => {
-      const x = i % 2 ? 316 : X0, yy = y + 30 + Math.floor(i / 2) * 42;
+  const [estadoTxt, estadoRgb] = anulada ? ['Anulada', C.rojo] : f.estado !== 'pagada' ? [String(f.estado || '—'), C.gris]
+    : saldo > 0 ? ['Abono parcial', C.ambarOsc] : ['Pagada completa', C.verde];
+  pill(estadoTxt, X1, y, estadoRgb);
+  [[X0, 180, 'Cliente', f.cliente || ('#' + f.lead_id), f.lead_entrada ? 'Cliente desde el ' + fmtFechaCaracas(f.lead_entrada) : null],
+   [232, 170, 'Asesor', f.asesor || 'Sin asesor'], [412, 160, 'Forma de pago', f.forma_pago || '—'],
+   [X0, 360, 'Proveedor', f.proveedor || 'Sin proveedor'],
+   [412, 160, 'Fechas del viaje', viaje, noches > 0 ? `${noches} noche${noches === 1 ? '' : 's'}` : null]]
+    .forEach(([x, w, k, v, sub], i) => {
+      const yy = y + 30 + (i > 2 ? 46 : 0);
       font('medium', 7.5, C.gris); doc.text(k.toUpperCase(), x, yy, { charSpace: 0.6 });
-      font('semibold', 11.5, C.txt); doc.text(doc.splitTextToSize(String(v), 240)[0], x, yy + 16);
-      // Alta del cliente en el CRM (leads.fecha_creacion), debajo del nombre: el bloque de datos
-      // son 2 filas fijas y el resumen arranca en y=290, no entra un campo más sin mover el resto.
+      font('semibold', 11.5, C.txt); doc.text(doc.splitTextToSize(String(v), w)[0], x, yy + 16);
       if (sub) { font('normal', 7.5, C.claro); doc.text(sub, x, yy + 29); }
     });
 
-  // Resumen: dos paneles con nombre -- lo que entra del cliente y lo que sale al
-  // proveedor -- + barra de cobro. Ocupa la misma altura que las tres tarjetas
-  // viejas, así el PDF sigue saliendo en una sola página.
+  // Resumen: lo que entra del cliente y lo que sale al proveedor, cada uno con su barra.
   y = 290;
   seccion('Resumen', y);
-  const pw = (W - 12) / 2, py = y + 16, ph = 79, hh = 32;
-  // El costo del proveedor reparte el abono con el mismo porcentaje que el margen
-  // (costo/venta): de cada peso cobrado, esa parte es del proveedor y el resto es margen.
-  const ratioProv = conCosto && venta > 0 ? f.costo_neto / venta : null;
-  const pct2 = r => (r * 100).toFixed(2).replace('.', ',');
-  const alProv = ratioProv != null ? abonado * ratioProv : null;
-  const panelResumen = (x, rgb, titulo, nombre, tag, filas) => {
+  const pw = (W - 12) / 2, py = y + 16, ph = 98, hh = 32;
+  const panelResumen = (x, rgb, titulo, nombre, tag, filas, pct) => {
     doc.setFillColor(...C.suave); doc.setDrawColor(...C.linea); doc.setLineWidth(0.8);
     doc.roundedRect(x, py, pw, ph, 8, 8, 'FD');
-    doc.setFillColor(...rgb); doc.roundedRect(x, py, 4, ph, 2, 2, 'F');
     // Franja de cabecera: redondeada arriba, recta abajo (el rect tapa las esquinas de abajo).
-    doc.roundedRect(x, py, pw, hh, 8, 8, 'F'); doc.rect(x, py + 16, pw, hh - 16, 'F');
+    doc.setFillColor(...rgb); doc.roundedRect(x, py, pw, hh, 8, 8, 'F'); doc.rect(x, py + 16, pw, hh - 16, 'F');
     font('semibold', 7.5, C.blanco); doc.text(titulo.toUpperCase(), x + 12, py + 13, { charSpace: 0.6 });
     font('semibold', 9, C.blanco); doc.text(doc.splitTextToSize(String(nombre), pw - 24)[0], x + 12, py + 25);
-    font('normal', 7.5, C.blanco); doc.text(tag, x + pw - 12, py + 13, { align: 'right' });
+    font('medium', 7.5, C.blanco); doc.text(tag, x + pw - 12, py + 13, { align: 'right' });
     filas.forEach(([k, v, rgbV, sizeV, total], i) => {
       const ry = py + hh + i * 15, bs = ry + (total ? 12 : 11);
       if (total) { doc.setDrawColor(...C.linea); doc.line(x, ry, x + pw, ry); }
@@ -14993,56 +14991,51 @@ async function exportarVentaPdf(id) {
       font(total ? 'bold' : 'semibold', sizeV, rgbV);
       doc.text(v, x + pw - 12, bs, { align: 'right' });
     });
+    const by = py + ph - 13;
+    doc.setFillColor(...C.linea); doc.roundedRect(x + 12, by, pw - 24, 5, 2.5, 2.5, 'F');
+    if (pct > 0) { doc.setFillColor(...rgb); doc.roundedRect(x + 12, by, Math.max(5, (pw - 24) * pct / 100), 5, 2.5, 2.5, 'F'); }
   };
   panelResumen(X0, C.verde, 'Cobro al cliente', f.cliente || ('#' + f.lead_id), `${pctCobro} % cobrado`, [
     ['Precio de venta', us(venta), C.txt, 9.5, false],
     ['Pagó el cliente (abonado)', us(abonado), C.verde, 9.5, false],
     ['Falta cobrarle al cliente', us(saldo), saldo > 0 ? C.naranja : C.verde, 11.5, true],
-  ]);
-  panelResumen(X0 + pw + 12, C.navy, 'Pago al proveedor', f.proveedor || 'Sin proveedor',
-    f.proveedor_pagado != null ? `Pagado ${us(f.proveedor_pagado)}` : 'Sin dato', [
-      ['Costo al proveedor', conCosto ? us(f.costo_neto) : 'Sin definir', conCosto ? C.txt : C.naranja, 9.5, false],
-      [`Cubierto por el abono${ratioProv != null ? ' · ' + pct2(ratioProv) + ' %' : ''}`, alProv != null ? us(alProv) : '—', C.verde, 9.5, false],
-      ['Por cubrir con el saldo', alProv != null ? us(f.costo_neto - alProv) : '—', C.navy, 11.5, true],
-    ]);
-  doc.setFillColor(...C.linea); doc.roundedRect(X0, py + ph + 5, W, 6, 3, 3, 'F');
-  if (pctCobro > 0) { doc.setFillColor(...C.verde); doc.roundedRect(X0, py + ph + 5, Math.max(6, W * pctCobro / 100), 6, 3, 3, 'F'); }
-  font('normal', 8, C.gris); doc.text(`Cobrado ${us(abonado)} de ${us(venta)}`, X0, py + ph + 23);
-  font('semibold', 8, C.txt); doc.text(`${pctCobro}%`, X1, py + ph + 23, { align: 'right' });
-  // Reparto del abono: qué parte de lo cobrado le toca al proveedor y qué parte es margen.
-  if (ratioProv != null) {
-    let cx = X0;
-    [['Del abono de ' + us(abonado) + ': ', C.gris, 'normal'],
-     [us(alProv) + ' (' + pct2(ratioProv) + ' %)', C.navy, 'semibold'],
-     [' cubren al proveedor y ', C.gris, 'normal'],
-     [us(abonado - alProv) + ' (' + pct2(1 - ratioProv) + ' %)', C.verde, 'semibold'],
-     [' son margen.', C.gris, 'normal']]
-      .forEach(([t, rgb, estilo]) => { font(estilo, 8, rgb); doc.text(t, cx, py + ph + 36); cx += doc.getTextWidth(t); });
-  }
+  ], pctCobro);
+  panelResumen(X0 + pw + 12, C.navy, 'Pago al proveedor', f.proveedor || 'Sin proveedor', conCosto ? `${pctProv} % pagado` : 'Sin costo', [
+    ['Costo al proveedor', conCosto ? us(f.costo_neto) : 'Sin definir', conCosto ? C.txt : C.naranja, 9.5, false],
+    ['Pagado al proveedor', provPagado != null ? us(provPagado) : 'Sin registro', C.txt, 9.5, false],
+    ['Falta pagarle al proveedor', faltaProv != null ? us(faltaProv) : '—', faltaProv > 0 ? C.naranja : C.verde, 11.5, true],
+  ], pctProv);
 
-  // Detalle financiero
-  y = 448;
-  seccion('Detalle financiero', y);
-  const filas = [
-    ['Precio de venta', us(venta), C.txt, false],
-    ['Pagado por el cliente', us(abonado), C.verde, false],
-    ['Falta por cobrarle al cliente', us(saldo), saldo > 0 ? C.naranja : C.txt, false],
-    [`Por pagar a ${f.proveedor || 'el proveedor'}`, conCosto ? us(f.costo_neto) : 'Sin definir', conCosto ? C.txt : C.naranja, true],
-    ['Margen sobre la venta', pctMargen != null ? `${pctMargen}%` : '—', C.txt, false],
-  ];
+  // Caja de la venta: cobrado - pagado al proveedor = lo que hoy queda en mano.
+  const cy = py + ph + 12, ch = 46, col = W / 3;
+  doc.setFillColor(...tinte(C.naranja, 0.93)); doc.roundedRect(X0, cy, W, ch, 8, 8, 'F');
+  [['Cobrado al cliente', us(abonado), C.verde], ['Pagado al proveedor', us(provPagado || 0), C.txt],
+   [enCaja >= 0 ? 'Queda en caja' : 'Adelantado al proveedor', us(Math.abs(enCaja)), enCaja >= 0 ? C.verde : C.rojo]]
+    .forEach(([k, v, rgb], i) => {
+      const cx = X0 + i * col + 18;
+      font('medium', 7, C.gris); doc.text(k.toUpperCase(), cx, cy + 18, { charSpace: 0.5 });
+      font('bold', 12.5, rgb); doc.text(v, cx, cy + 35);
+      if (i) { font('bold', 14, C.claro); doc.text(i === 1 ? '–' : '=', X0 + i * col, cy + 31, { align: 'center' }); }
+    });
+
+  // Rentabilidad: solo lo que el resumen no dice ya.
+  y = cy + ch + 32;
+  seccion('Rentabilidad', y);
   y += 16;
-  filas.forEach(([k, v, rgb, destaca], i) => {
-    if (i % 2 === 0) { doc.setFillColor(...C.suave); doc.rect(X0, y, W, 24, 'F'); }
-    font(destaca ? 'semibold' : 'normal', 10, destaca ? C.navy : C.gris);
-    doc.text(destaca ? doc.splitTextToSize(k, 400)[0] : k, X0 + 12, y + 16);
-    font('semibold', 10, rgb); doc.text(v, X1 - 12, y + 16, { align: 'right' });
-    y += 24;
-  });
-  doc.setFillColor(255, 247, 237); doc.roundedRect(X0, y + 4, W, 32, 6, 6, 'F');
+  [['Precio de venta', us(venta), C.txt], ['Costo al proveedor', conCosto ? '– ' + us(f.costo_neto) : 'Sin definir', conCosto ? C.txt : C.naranja]]
+    .forEach(([k, v, rgb], i) => {
+      if (i % 2 === 0) { doc.setFillColor(...C.suave); doc.rect(X0, y, W, 24, 'F'); }
+      font('normal', 10, C.gris); doc.text(k, X0 + 12, y + 16);
+      font('semibold', 10, rgb); doc.text(v, X1 - 12, y + 16, { align: 'right' });
+      y += 24;
+    });
+  const rgbMargen = !conCosto ? C.gris : margen >= 0 ? C.verde : C.rojo;
+  doc.setFillColor(...tinte(rgbMargen, 0.92)); doc.roundedRect(X0, y + 4, W, 32, 6, 6, 'F');
   font('bold', 11, C.txt); doc.text('Margen bruto', X0 + 12, y + 25);
-  font('bold', 13, !conCosto ? C.gris : margen >= 0 ? C.verde : C.rojo);
-  doc.text(conCosto ? us(margen) : '—', X1 - 12, y + 25, { align: 'right' });
-  y += 64;
+  const mw = doc.getTextWidth('Margen bruto');
+  if (pctMargen != null) { font('semibold', 8.5, rgbMargen); doc.text(`· ${pctMargen} % de la venta`, X0 + 18 + mw, y + 25); }
+  font('bold', 13, rgbMargen); doc.text(conCosto ? us(margen) : '—', X1 - 12, y + 25, { align: 'right' });
+  y += 66;
 
   // Abonos registrados del mismo cliente
   const abonos = FACT_VENTAS_CACHE.filter(x => x.lead_id === f.lead_id && x.estado === 'pagada')
@@ -15050,12 +15043,13 @@ async function exportarVentaPdf(id) {
   seccion('Abonos del cliente', y);
   y += 16;
   doc.setFillColor(...C.navy); doc.roundedRect(X0, y, W, 22, 4, 4, 'F');
-  font('semibold', 8, C.blanco);
-  doc.text('FACTURA', X0 + 12, y + 14); doc.text('FECHA', X0 + 110, y + 14); doc.text('FORMA DE PAGO', X0 + 280, y + 14); doc.text('MONTO', X1 - 12, y + 14, { align: 'right' });
+  font('semibold', 7.5, C.blanco);
+  doc.text('FACTURA', X0 + 12, y + 14, { charSpace: 0.5 }); doc.text('FECHA', X0 + 110, y + 14, { charSpace: 0.5 }); doc.text('FORMA DE PAGO', X0 + 280, y + 14, { charSpace: 0.5 }); doc.text('MONTO', X1 - 12, y + 14, { align: 'right', charSpace: 0.5 });
   y += 22;
   abonos.forEach((a, i) => {
     if (y > 710) { doc.addPage(); y = 60; }
     if (i % 2) { doc.setFillColor(...C.suave); doc.rect(X0, y, W, 22, 'F'); }
+    if (a.id === f.id) { doc.setFillColor(...C.naranja); doc.rect(X0, y + 4, 2.5, 14, 'F'); }
     font(a.id === f.id ? 'semibold' : 'normal', 9, C.txt);
     doc.text(`N° ${a.numero_factura}`, X0 + 12, y + 15); doc.text(fmtFechaHoraCaracas(a.fecha_emision), X0 + 110, y + 15);
     doc.text(a.forma_pago || '—', X0 + 280, y + 15); doc.text(us(a.monto_total), X1 - 12, y + 15, { align: 'right' });
@@ -15063,7 +15057,7 @@ async function exportarVentaPdf(id) {
   });
   doc.setDrawColor(...C.linea); doc.line(X0, y, X1, y);
   font('semibold', 9, C.txt); doc.text('Total abonado', X0 + 12, y + 16);
-  doc.text(us(abonado), X1 - 12, y + 16, { align: 'right' });
+  font('bold', 9.5, C.verde); doc.text(us(abonado), X1 - 12, y + 16, { align: 'right' });
 
   // Pie en todas las páginas
   const n = doc.getNumberOfPages(), generado = new Date().toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' });
@@ -15071,7 +15065,7 @@ async function exportarVentaPdf(id) {
     doc.setPage(p);
     doc.setDrawColor(...C.linea); doc.line(X0, 752, X1, 752);
     font('normal', 7.5, C.claro);
-    doc.text('Destino y Eventos Lotus 360 · Documento de uso interno', X0, 766);
+    doc.text('Destino y Eventos Lotus 360 · Documento de uso interno · Montos en US$', X0, 766);
     doc.text(`Generado el ${generado} · Página ${p} de ${n}`, X1, 766, { align: 'right' });
   }
   doc.save(`venta-${f.numero_factura}-${String(f.cliente || f.lead_id).replace(/[^\w]+/g, '_')}.pdf`);
