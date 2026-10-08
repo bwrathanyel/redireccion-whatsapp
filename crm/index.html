@@ -1047,6 +1047,9 @@ input.ei[type=date]{color-scheme:dark}
 .disp-c.b-ocupado{background:rgba(239,68,68,.55)}
 .disp-c.b-mantenimiento{background:rgba(224,160,48,.55)}
 .disp-c.b-uso_propietario{background:rgba(139,92,246,.55)}
+.disp-c.b-reserva{background:rgba(74,158,255,.6)}
+.disp-c.b-reserva.por-confirmar,.disp-leyenda i.ley-pc{background:repeating-linear-gradient(135deg,rgba(74,158,255,.6) 0 4px,rgba(74,158,255,.15) 4px 8px)}
+.disp-c.ver-reserva{cursor:pointer}
 .disp-admin .disp-c{cursor:pointer}
 .disp-admin .disp-c:hover{border-color:var(--accent)}
 .disp-leyenda{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:12px;color:var(--muted)}
@@ -1715,26 +1718,39 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .wa-audio{display:block;width:240px;max-width:100%}
 @media(max-width:760px){.wa-filtros{flex-direction:column}}
 
-/* DMs Instagram / Facebook: lista | chat | ficha (3 columnas en escritorio) */
-.dm-shell{--dm-ig:var(--pink);--dm-fb:var(--blue);--dm-canal:var(--dm-ig);position:relative;display:grid;grid-template-columns:320px minmax(0,1fr) 300px;gap:14px;height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:520px}
-.dm-avatar[data-canal="facebook"]{--dm-canal:var(--dm-fb)}
+/* Meta DM (Instagram / Facebook / WhatsApp): lista | chat | ficha (3 columnas en escritorio).
+   Los colores de cada app son marca ajena: viven como tokens de este bloque, con
+   su variante clara, y solo se usan en pestañas, avatares, barra y área de chat. */
+.dm-shell{position:relative;display:grid;grid-template-columns:320px minmax(0,1fr) 300px;gap:14px;height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:520px;
+  --ig-degradado:linear-gradient(135deg,#7638fa,#d300c5 52%,#ff0069); --ig:#d300c5; --ig-ajena:#262626;
+  --fb:#0866ff; --fb-burbuja:linear-gradient(160deg,#00b2ff,#006aff); --fb-ajena:#303030;
+  --ajena-txt:#f5f5f5;
+  --wa:#25d366; --wa-mia:#005c4b; --wa-mia-txt:#e9edef; --wa-ajena:#202c33; --wa-ajena-txt:#e9edef; --wa-fondo:#0b141a; --wa-meta:rgba(233,237,239,.62); --wa-leido:#53bdeb; --wa-trama:rgba(233,237,239,.045);
+  --dm-canal:var(--ig); --dm-marca:var(--ig-degradado)}
+:root[data-theme="light"] .dm-shell{--ig-ajena:#efefef; --fb-ajena:#f0f0f0; --ajena-txt:#050505;
+  --wa-mia:#d9fdd3; --wa-mia-txt:#111b21; --wa-ajena:#fff; --wa-ajena-txt:#111b21; --wa-fondo:#efeae2; --wa-meta:#667781; --wa-trama:rgba(17,27,33,.05)}
+:is(.dm-shell,.dm-avatar,.dm-canal)[data-canal="instagram"]{--dm-canal:var(--ig);--dm-marca:var(--ig-degradado)}
+:is(.dm-shell,.dm-avatar,.dm-canal)[data-canal="facebook"]{--dm-canal:var(--fb);--dm-marca:var(--fb)}
+:is(.dm-shell,.dm-avatar,.dm-canal)[data-canal="whatsapp"]{--dm-canal:var(--wa);--dm-marca:var(--wa)}
 .dm-shell [hidden]{display:none!important}
 .dm-shell>.card{padding:14px;display:flex;flex-direction:column;min-height:0;overflow:hidden;margin:0}
-.dm-canales{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:4px;flex-shrink:0}
-.dm-canal{position:relative;display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;border:none;border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;transition:background .16s,color .16s}
-.dm-canal i{font-size:16px}
+.dm-canales{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:4px;flex-shrink:0}
+.dm-canal{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:58px;padding:7px 4px;border:none;border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:700;cursor:pointer;overflow:hidden;transition:background .16s,color .16s}
+.dm-canal i{font-size:17px;margin-bottom:2px;transition:color .16s}
 .dm-canal:hover:not(.on){color:var(--txt)}
-.dm-canal.on[data-canal="instagram"]{background:color-mix(in srgb,var(--dm-ig) 16%,transparent);color:var(--txt)}
-.dm-canal.on[data-canal="instagram"] i{color:var(--dm-ig)}
-.dm-canal.on[data-canal="facebook"]{background:color-mix(in srgb,var(--dm-fb) 16%,transparent);color:var(--txt)}
-.dm-canal.on[data-canal="facebook"] i{color:var(--dm-fb)}
-.dm-canal-n{font-size:10.5px;font-weight:600;color:var(--muted2)}
-.dm-canal-nuevo{position:absolute;top:4px;right:7px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.dm-canal:hover:not(.on) i{color:var(--dm-canal)}
+.dm-canal.on{background:color-mix(in srgb,var(--dm-canal) 15%,transparent);color:var(--txt)}
+.dm-canal.on i{color:var(--dm-canal)}
+.dm-canal.on[data-canal="instagram"] i{background:var(--ig-degradado);-webkit-background-clip:text;background-clip:text;color:transparent}
+.dm-canal::after{content:"";position:absolute;left:22%;right:22%;bottom:0;height:2px;border-radius:999px;background:var(--dm-marca);transform:scaleX(0);transition:transform var(--dur-normal) var(--ease-salida)}
+.dm-canal.on::after{transform:scaleX(1)}
+.dm-canal-n{font-size:10px;font-weight:600;color:var(--muted2);min-height:12px;line-height:12px}
+.dm-canal-nuevo{position:absolute;top:4px;right:7px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:var(--dm-marca);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .dm-buscar{margin-top:11px;flex-shrink:0;height:44px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;color:var(--txt);padding:0 11px;font:inherit;font-size:13px;outline:none;transition:border-color .16s,box-shadow .16s}
-.dm-buscar:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.dm-buscar:focus{border-color:var(--dm-canal);box-shadow:0 0 0 3px color-mix(in srgb,var(--dm-canal) 18%,transparent)}
 .dm-filtros{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:9px 0 7px;flex-shrink:0}
 .dm-filtro{border:1px solid var(--line2);background:transparent;color:var(--muted);border-radius:999px;padding:4px 11px;min-height:30px;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;transition:background .16s,color .16s,border-color .16s}
-.dm-filtro.on{background:var(--accent-soft);border-color:transparent;color:var(--accent-txt)}
+.dm-filtro.on{background:color-mix(in srgb,var(--dm-canal) 15%,transparent);border-color:transparent;color:var(--txt)}
 .dm-vivo{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
 .dm-vivo-punto{width:7px;height:7px;border-radius:50%;background:var(--muted2)}
 .dm-vivo.on{color:var(--green)}
@@ -1742,15 +1758,16 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 @keyframes dm-latido{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 55%,transparent)}50%{box-shadow:0 0 0 5px transparent}}
 .dm-inbox{flex:1;min-height:0;overflow-y:auto;margin:0 -4px;padding:0 4px}
 .dm-inbox .msg-inbox-row{position:relative;padding:9px 7px}
-.dm-inbox .msg-inbox-row.on{background:var(--accent-soft)}
-.dm-inbox .msg-inbox-row.nuevo .msg-inbox-nombre::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-left:7px;vertical-align:middle}
+.dm-inbox .msg-inbox-row.on{background:color-mix(in srgb,var(--dm-canal) 12%,transparent)}
+.dm-inbox .msg-inbox-row.nuevo .msg-inbox-nombre::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dm-canal);margin-left:7px;vertical-align:middle}
 .dm-inbox .msg-inbox-row.llego{animation:dm-llego .9s ease}
-@keyframes dm-llego{from{background:color-mix(in srgb,var(--accent) 22%,transparent)}}
-.dm-avatar{background:var(--panel-solid);color:var(--txt);box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--dm-canal);position:relative}
-.dm-avatar .dm-avatar-red{position:absolute;right:-4px;bottom:-4px;width:18px;height:18px;border-radius:50%;background:var(--dm-canal);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--bg)}
+@keyframes dm-llego{from{background:color-mix(in srgb,var(--dm-canal) 22%,transparent)}}
+/* Anillo tipo historia: el borde lleva el color (o degradado) de la app y la sombra interna deja el hueco. */
+.dm-avatar{position:relative;overflow:visible;color:var(--txt);border:2px solid transparent;background:linear-gradient(var(--panel-solid),var(--panel-solid)) padding-box,var(--dm-marca) border-box;box-shadow:inset 0 0 0 2px var(--bg)}
+.dm-avatar .dm-avatar-red{position:absolute;right:-5px;bottom:-5px;width:18px;height:18px;border-radius:50%;background:var(--dm-marca);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--bg)}
 .dm-fila-meta{display:flex;align-items:center;gap:7px;margin-top:4px}
 .dm-mini-barra{flex:1;height:4px;border-radius:999px;background:var(--line2);overflow:hidden;max-width:110px}
-.dm-mini-barra span{display:block;height:100%;border-radius:999px;background:var(--accent);transition:width .4s ease}
+.dm-mini-barra span{display:block;height:100%;border-radius:999px;background:var(--dm-marca);transition:width .4s ease}
 .dm-mini-barra.completa span{background:var(--green)}
 .dm-etq{font-size:10px;font-weight:700;color:var(--muted2);white-space:nowrap}
 .dm-etq.lead{color:var(--green)}
@@ -1775,10 +1792,10 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .dm-progreso{padding:14px 0 11px}
 .dm-progreso-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
 .dm-label{font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
-.dm-progreso-pct{font-size:13px;font-weight:800;color:var(--accent-ink)}
+.dm-progreso-pct{font-size:13px;font-weight:800;color:var(--txt)}
 .dm-progreso.completo .dm-progreso-pct{color:var(--green)}
 .dm-barra{height:8px;border-radius:999px;background:var(--line2);overflow:hidden}
-.dm-barra span{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--accent-deep));transition:width .6s cubic-bezier(.3,1,.4,1)}
+.dm-barra span{display:block;height:100%;border-radius:999px;background:var(--dm-marca);transition:width .6s var(--ease-salida)}
 .dm-progreso.completo .dm-barra span{background:var(--green)}
 .dm-campos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .dm-campo{display:flex;align-items:center;gap:11px;padding:9px;border-radius:10px;border:1px solid var(--line)}
@@ -1798,7 +1815,48 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .dm-lead-sub{font-size:11.5px;color:var(--muted);line-height:1.45}
 .dm-btn-lead{min-height:44px;border:none;border-radius:10px;padding:0 16px;font:inherit;font-size:13px;font-weight:800;color:var(--on-accent);background:linear-gradient(135deg,var(--accent),var(--accent-deep));box-shadow:0 10px 22px rgba(var(--accent-rgb),.22);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
 .dm-ficha-pie{margin-top:auto;padding-top:14px;font-size:10.5px;color:var(--muted2);text-align:center}
-@media(prefers-reduced-motion:reduce){.dm-vivo.on .dm-vivo-punto,.dm-campo.recien,.dm-inbox .msg-inbox-row.llego{animation:none}}
+.dm-wa-todos{margin-top:7px;flex-shrink:0;min-height:44px;border:1px dashed var(--line2);border-radius:10px;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:color .16s,border-color .16s}
+.dm-wa-todos:hover{color:var(--txt);border-color:var(--dm-canal)}
+.dm-app-chip{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 11px;border-radius:999px;flex-shrink:0;font-size:11.5px;font-weight:700;color:var(--txt);background:color-mix(in srgb,var(--dm-canal) 14%,transparent)}
+.dm-app-chip i{font-size:14px;color:var(--dm-canal)}
+.dm-shell[data-canal="instagram"] .dm-app-chip i{background:var(--ig-degradado);-webkit-background-clip:text;background-clip:text;color:transparent}
+.dm-chat .dm-vacio>i{color:var(--dm-canal);opacity:.75}
+.dm-log{transition:background-color var(--dur-normal)}
+
+/* Burbujas Instagram y Messenger: pastillas muy redondas; en una racha del mismo
+   lado se achican las esquinas que se tocan, como en las apps. */
+.dm-shell[data-canal="instagram"]{--b-r:22px;--b-r-junta:4px}
+.dm-shell[data-canal="facebook"]{--b-r:18px;--b-r-junta:4px}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg{border:none;border-radius:var(--b-r);padding:9px 14px;margin-top:2px}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg:not(.grouped){margin-top:9px}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg.mine:not(.tail){border-bottom-right-radius:var(--b-r-junta)}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg.mine.grouped{border-top-right-radius:var(--b-r-junta)}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg.other:not(.tail){border-bottom-left-radius:var(--b-r-junta)}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg.other.grouped{border-top-left-radius:var(--b-r-junta)}
+.dm-shell[data-canal="instagram"] .dm-log .chat-msg.mine{background:var(--ig-degradado);background-attachment:fixed;color:#fff}
+.dm-shell[data-canal="instagram"] .dm-log .chat-msg.other{background:var(--ig-ajena);color:var(--ajena-txt)}
+.dm-shell[data-canal="facebook"] .dm-log .chat-msg.mine{background:var(--fb-burbuja);color:#fff}
+.dm-shell[data-canal="facebook"] .dm-log .chat-msg.other{background:var(--fb-ajena);color:var(--ajena-txt)}
+
+/* Burbujas WhatsApp: fondo con trama, radio 8px, colita en la primera de cada
+   racha, hora y ticks dentro de la burbuja. */
+.dm-shell[data-canal="whatsapp"] .dm-log{background-color:var(--wa-fondo);background-image:radial-gradient(var(--wa-trama) 1.2px,transparent 1.6px);background-size:22px 22px;border-radius:12px;padding:11px 14px}
+.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg{position:relative;border:none;border-radius:8px;padding:6px 9px 7px;margin-top:2px;max-width:72%;box-shadow:0 1px .5px rgba(11,20,26,.13)}
+.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg:not(.grouped){margin-top:9px}
+.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.adjunto{padding:3px}
+.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.adjunto .msg-meta{padding:0 6px 2px}
+.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.mine{background:var(--wa-mia);color:var(--wa-mia-txt);margin-right:7px}
+.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.other{background:var(--wa-ajena);color:var(--wa-ajena-txt);margin-left:7px}
+.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.mine:not(.grouped){border-top-right-radius:0}
+.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.other:not(.grouped){border-top-left-radius:0}
+.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg:not(.grouped)::before{content:"";position:absolute;top:0;width:8px;height:13px}
+.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.mine:not(.grouped)::before{right:-8px;background:var(--wa-mia);clip-path:polygon(0 0,100% 0,0 100%)}
+.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.other:not(.grouped)::before{left:-8px;background:var(--wa-ajena);clip-path:polygon(0 0,100% 0,100% 100%)}
+.dm-shell[data-canal="whatsapp"] .dm-log .msg-meta,.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.other .msg-meta{color:var(--wa-meta);margin-top:2px}
+.dm-shell[data-canal="whatsapp"] .dm-log .msg-tick.leido{color:var(--wa-leido)}
+.dm-shell[data-canal="whatsapp"] .dm-log .msg-date-chip{background:var(--wa-ajena);color:var(--wa-meta);border:none;border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);text-transform:uppercase;letter-spacing:.04em;font-size:10.5px}
+.dm-shell[data-canal="whatsapp"] .dm-log .msg-doc i{background:color-mix(in srgb,currentColor 10%,transparent);color:inherit}
+@media(prefers-reduced-motion:reduce){.dm-vivo.on .dm-vivo-punto,.dm-campo.recien,.dm-inbox .msg-inbox-row.llego{animation:none}.dm-canal::after,.dm-log{transition:none}}
 /* Tablet: la ficha pasa a panel deslizable sobre el chat */
 @media(max-width:1179px){
   .dm-shell{grid-template-columns:300px minmax(0,1fr)}
@@ -1816,6 +1874,10 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
   .dm-solo-movil{display:inline-block}
   .dm-perfil{width:100%}
   .dm-log .chat-msg{max-width:88%}
+  .dm-shell[data-canal="whatsapp"] .dm-log .chat-msg{max-width:84%}
+  .dm-shell[data-canal="whatsapp"] .dm-log{padding:9px 9px}
+  .dm-app-chip{padding:0 9px}
+  .dm-app-chip span{display:none}
 }
 
 /* Separador de fecha sticky */
@@ -3002,6 +3064,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ria-tend{display:flex;align-items:stretch;gap:3px;height:132px}.ria-tend-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px}
 .ria-tend-bar{flex:1;width:100%;display:flex;align-items:flex-end}.ria-tend-c{display:flex;flex-direction:column;justify-content:flex-end;width:100%;border-radius:4px 4px 0 0;background:rgba(var(--accent-rgb),.3);overflow:hidden}.ria-tend-l{display:block;width:100%;background:var(--accent)}
 .ria-tend-col span{font-size:9px;color:var(--muted2);line-height:1}
+.pv-wa-motivos{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}.pv-wa-motivos span{font-size:11.5px;padding:4px 9px;border-radius:999px;background:var(--line2);color:var(--muted)}.pv-wa-motivos b{color:var(--txt)}
+.pv-wa-dias{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:12px}.pv-wa-dias input{width:64px}
+.pv-wa-fila{display:grid;grid-template-columns:minmax(120px,1.4fr) minmax(90px,1fr) minmax(110px,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}.pv-wa-fila b{color:var(--txt)}.pv-wa-fila button{font-size:11px;padding:4px 9px}
+@media(max-width:700px){.pv-wa-fila{grid-template-columns:1fr auto}}
 .ria-detalles{margin-bottom:12px}.ria-detalles>summary{cursor:pointer;list-style:none;font-size:12.5px;font-weight:800;color:var(--muted);padding:10px 2px}.ria-detalles>summary::-webkit-details-marker{display:none}.ria-detalles>summary::before{content:"▸ ";display:inline-block;transition:transform .15s}.ria-detalles[open]>summary{color:var(--txt)}.ria-detalles[open]>summary::before{transform:rotate(90deg)}
 @media(max-width:760px){.ria-dashboard{grid-template-columns:repeat(2,1fr)}.ria-db-title{grid-column:1/-1}.ria-grid{grid-template-columns:1fr}.ria-paso{grid-template-columns:100px 1fr 38px}.ria-cal-head,.ria-cal-fila{grid-template-columns:minmax(115px,1fr) 62px 62px}}
 /* ---------- Clientes de la IA: consumo del mes -------------------------
@@ -5016,6 +5082,10 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <button class="pv-refresh" id="pv-refresh" type="button" title="Actualizar" aria-label="Actualizar postventa"><i class="fas fa-rotate"></i></button>
       </div>
       <div class="kpis pv-kpis" id="pv-kpis"></div>
+      <details class="ria-detalles pv-wa" id="pv-wa" hidden>
+        <summary>Campaña WhatsApp a clientes con venta (solo administradores)</summary>
+        <div class="ria-card" id="pv-wa-body"><div class="ria-sub">Cargando...</div></div>
+      </details>
       <div class="pv-stagebar chips-scroll" id="pv-stagebar">
         <button class="pv-stage on" data-etapa="">Todos</button>
         <button class="pv-stage" data-etapa="COBRO_PENDIENTE">Cobro</button>
@@ -5230,13 +5300,14 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
     </section>
 
-    <!-- DMs de Instagram / Facebook (manychat_ia_sesiones, en vivo por Realtime) -->
+    <!-- META DM: chats del bot en Instagram / Facebook / WhatsApp (manychat_ia_sesiones, en vivo por Realtime) -->
     <section class="section" id="sec-dms">
-      <div class="dm-shell" id="dm-shell">
+      <div class="dm-shell" id="dm-shell" data-canal="instagram">
         <aside class="card dm-lista" aria-label="Conversaciones">
           <div class="dm-canales" id="dm-canales" role="tablist">
             <button class="dm-canal on" type="button" role="tab" aria-selected="true" data-canal="instagram"><i class="fa-brands fa-instagram"></i> Instagram <span class="dm-canal-n" id="dm-n-instagram"></span><span class="dm-canal-nuevo" id="dm-nuevo-instagram" hidden></span></button>
             <button class="dm-canal" type="button" role="tab" aria-selected="false" data-canal="facebook"><i class="fa-brands fa-facebook-messenger"></i> Facebook <span class="dm-canal-n" id="dm-n-facebook"></span><span class="dm-canal-nuevo" id="dm-nuevo-facebook" hidden></span></button>
+            <button class="dm-canal" type="button" role="tab" aria-selected="false" data-canal="whatsapp"><i class="fa-brands fa-whatsapp"></i> WhatsApp <span class="dm-canal-n" id="dm-n-whatsapp"></span><span class="dm-canal-nuevo" id="dm-nuevo-whatsapp" hidden></span></button>
           </div>
           <input class="dm-buscar" id="dm-buscar" type="search" placeholder="Buscar @usuario, nombre o teléfono" aria-label="Buscar conversación">
           <div class="dm-filtros" id="dm-filtros">
@@ -5246,6 +5317,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             <span class="dm-vivo" id="dm-vivo" title="Conectado en tiempo real"><span class="dm-vivo-punto"></span> En vivo</span>
           </div>
           <div class="msg-inbox dm-inbox" id="dm-inbox"></div>
+          <button class="dm-wa-todos" id="dm-wa-todos" type="button" hidden><i class="fas fa-list"></i> Ver todos los chats del número</button>
         </aside>
 
         <div class="card dm-chat" id="dm-chat">
@@ -5257,6 +5329,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
               <div class="msg-conv-titulo" id="dm-chat-titulo"></div>
               <div class="msg-conv-sub" id="dm-chat-sub"></div>
             </div>
+            <span class="dm-app-chip" id="dm-app-chip"></span>
             <button class="chat-tool-btn dm-btn-perfil" id="dm-btn-perfil" type="button"><i class="fas fa-id-card"></i> Perfil</button>
           </div>
           <div class="msg-conv-log dm-log" id="dm-log" hidden></div>
@@ -5980,6 +6053,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <span><i style="background:rgba(239,68,68,.55)"></i>Ocupado</span>
           <span><i style="background:rgba(224,160,48,.55)"></i>Mantenimiento</span>
           <span><i style="background:rgba(139,92,246,.55)"></i>Uso del propietario</span>
+          <span><i style="background:rgba(74,158,255,.6)"></i>Reservado</span>
+          <span><i class="ley-pc"></i>Por confirmar</span>
           <span id="disp-ayuda-admin" hidden>Tocá un día para bloquear fechas o un bloque para editarlo.</span>
         </div>
       </div>
@@ -7151,7 +7226,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         Pegá los números que te escribieron directo (texto copiado) o subí <b>capturas de pantalla</b>
         (también podés pegarlas con Ctrl+V). Primero se detectan y los revisás; recién al confirmar
         se reparten entre los asesores con <b>el reparto de siempre</b> y a cada uno le llega su aviso.
-        Quedan en <b>Contactos directos</b> como <b>Asignado por Karlys Corro</b> y <b>no se reasignan</b>.
+        Quedan en <b>Leads</b> como <b>Asignado por Karlys Corro</b>, con la reasignación de siempre si nadie los atiende.
       </div>
       <div class="card rep-card">
         <label class="fl" for="rep-texto">Números o mensajes copiados</label>

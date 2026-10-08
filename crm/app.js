@@ -130,8 +130,8 @@ function badgeLeadRescatado(l) {
 // no por un error. Sin este badge un "—" en la columna Teléfono se ve igual
 // que un dato faltante por fallo real.
 function badgeContactoDirecto(l) {
+  if (l.asignado_por) return ` <span class="badge-st" style="color:#f59e0b;background:#f59e0b2e" title="${esc(l.asignado_por)} le pasó este cliente al asesor."><i class="fas fa-user-check"></i> Asignado por ${esc(l.asignado_por)}</span>`;
   if (!l.contacto_directo_enviado_at) return '';
-  if (l.asignado_por) return ` <span class="badge-st" style="color:#f59e0b;background:#f59e0b2e" title="${esc(l.asignado_por)} le pasó este cliente al asesor. No se reasigna."><i class="fas fa-user-check"></i> Asignado por ${esc(l.asignado_por)}</span>`;
   return ` <span class="badge-st" style="color:#a78bfa;background:#7c3aed2e" title="Se le entregó el WhatsApp del asesor -- sin teléfono propio hasta que la IA lo consiga"><i class="fas fa-share-square"></i> Contacto directo</span>`;
 }
 // Un lead repartido en lote no llegó por el flujo normal del asesor: sin esta marca se ve
@@ -183,7 +183,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
   'voz-ia': ['Voz IA', 'Probá la voz clonada de la jefa y controlá la muestra de referencia que usa la IA'],
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
-  'contactos-directos': ['Contactos directos', 'Escribieron directo por WhatsApp (bio-redes, IA) o los asignó Karlys Corro -- registro, no se gestionan desde acá'],
+  'contactos-directos': ['Contactos directos', 'Escribieron directo por WhatsApp (bio-redes, IA) -- registro, no se gestionan desde acá'],
   repartir: ['Repartir números', 'Pegá números o capturas de clientes que te escribieron directo y repartilos entre los asesores'],
   'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles que manda BT Travel -- cargá el PDF y confirmá antes de publicar'],
   manual: ['Videotutoriales', 'Lyra te explica cada parte del CRM, paso a paso'],
@@ -249,7 +249,7 @@ let ACTIVOS = [];
 let leadsView = 'lista';
 let INBOX_LEADS = [], INBOX_TEL_LEAD_ID = null;
 let POSTVENTA = [], PV_ACTUAL = null, PV_ETAPA = '', PV_GRUPO = '', PV_SEARCH_TIMER = null;
-let RV_DET = null, RV_RESERVA_ID = null, RV_FORM = null, RV_DESTINOS = null, RV_PROVEEDORES = null;
+let RV_DET = null, RV_RESERVA_ID = null, RV_FORM = null, RV_DESTINOS = null, RV_PROVEEDORES = null, RV_APTOS = {}, RV_APTO_UNI = [], RV_APTO_REQ = 0;
 
 /* ---------- Periodos ---------- */
 function periodo(kind) {
@@ -2919,10 +2919,62 @@ function setupPostventa() {
   document.getElementById('pv-search')?.addEventListener('input', () => {
     clearTimeout(PV_SEARCH_TIMER); PV_SEARCH_TIMER = setTimeout(loadPostventa, 280);
   });
+  const wa = document.getElementById('pv-wa');
+  wa?.addEventListener('toggle', () => { if (wa.open) pvWhatsappCargar(); });
+  document.getElementById('pv-wa-body')?.addEventListener('click', async e => {
+    const b = e.target.closest('button[data-wa-lead]');
+    if (!b) return;
+    b.disabled = true;
+    const { error } = await sb.rpc('postventa_marcar_whatsapp', {
+      p_lead_id: Number(b.dataset.waLead), p_no_contactar: b.dataset.waBaja === '1', p_motivo: b.dataset.waBaja === '1' ? 'marcado desde el CRM' : null,
+    });
+    if (error) { console.error('postventa_marcar_whatsapp', error); errToast('No se pudo guardar el cambio'); b.disabled = false; return; }
+    okToast(b.dataset.waBaja === '1' ? 'Cliente marcado como "no contactar"' : 'Cliente habilitado de nuevo');
+    pvWhatsappCargar();
+  });
+  document.getElementById('pv-wa-body')?.addEventListener('change', e => {
+    if (e.target.id !== 'pv-wa-dias') return;
+    PV_WA_DIAS = Math.min(365, Math.max(0, Number(e.target.value) || 0));
+    pvWhatsappCargar();
+  });
+}
+const PV_WA_MOTIVOS = {
+  sin_telefono: 'Sin teléfono', telefono_no_valido: 'Teléfono no válido', no_contactar: 'Pidió no ser contactado',
+  incidencia_abierta: 'Incidencia abierta', viaje_pendiente: 'Viaje aún sin terminar', sin_fecha: 'Sin fecha de referencia',
+  muy_reciente: 'Compró hace poco', contactado_hace_poco: 'Contactado hace poco',
+};
+let PV_WA_DIAS = 30;
+async function pvWhatsappCargar() {
+  const body = document.getElementById('pv-wa-body');
+  if (!body) return;
+  const { data, error } = await sb.rpc('postventa_segmento_whatsapp', { p_dias_minimos: PV_WA_DIAS });
+  if (error) { console.error('postventa_segmento_whatsapp', error); body.innerHTML = '<div class="ria-sub">No se pudo cargar el segmento.</div>'; return; }
+  const r = data?.resumen || {};
+  const excl = Object.entries(r.excluidos || {}).sort((a, b) => b[1] - a[1]);
+  const lista = data?.lista || [];
+  const fecha = f => f ? f.split('-').reverse().join('/') : 'sin fecha';
+  const MAX = 60;
+  body.innerHTML = `
+    <h2>${fmt(r.elegibles || 0)} elegibles de ${fmt(r.vendidos || 0)} clientes con venta</h2>
+    <div class="ria-sub">Todavía no se envía nada: falta aprobar las plantillas en Meta. Elegible = teléfono válido, viaje terminado hace al menos los días indicados, sin incidencia abierta, sin contacto reciente y sin haber pedido que no lo contacten.</div>
+    <label class="pv-wa-dias">Días mínimos desde el viaje (o desde el cierre si no hay fecha de viaje)
+      <input id="pv-wa-dias" type="number" min="0" max="365" value="${PV_WA_DIAS}"></label>
+    <div class="pv-wa-motivos">${excl.length ? excl.map(([k, n]) => `<span>${esc(PV_WA_MOTIVOS[k] || k)}: <b>${fmt(n)}</b></span>`).join('') : '<span>Nadie excluido</span>'}</div>
+    <div>${lista.slice(0, MAX).map(c => `<div class="pv-wa-fila">
+      <div><b>${esc(c.nombre)}</b><br>${esc(c.destino || 'Sin destino')}</div>
+      <div>${esc(c.asesor || 'Sin asesor')}<br>${esc(fecha(c.referencia))}</div>
+      <div>${c.motivo_exclusion ? `<span class="${c.motivo_exclusion === 'no_contactar' ? 'ria-malo' : ''}">${esc(PV_WA_MOTIVOS[c.motivo_exclusion] || c.motivo_exclusion)}</span>` : '<span class="ria-bien">Elegible</span>'}<br>${esc(c.telefono_whatsapp || c.telefono || '')}</div>
+      <div>${c.motivo_exclusion === 'no_contactar'
+        ? `<button class="btn-sm" type="button" data-wa-lead="${c.lead_id}" data-wa-baja="0">Habilitar</button>`
+        : (c.telefono_whatsapp ? `<button class="btn-sm" type="button" data-wa-lead="${c.lead_id}" data-wa-baja="1">No contactar</button>` : '')}</div>
+    </div>`).join('') || '<div class="ria-sub">No hay clientes con venta cerrada.</div>'}</div>
+    ${lista.length > MAX ? `<div class="ria-sub">Mostrando ${MAX} de ${fmt(lista.length)}.</div>` : ''}`;
 }
 async function loadPostventa() {
   const grid = document.getElementById('pv-grid');
   if (!grid || ROL === 'marketing') return;
+  const waPanel = document.getElementById('pv-wa');
+  if (waPanel) { waPanel.hidden = ROL !== 'admin'; if (waPanel.open) pvWhatsappCargar(); }
   grid.innerHTML = '<div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div>';
   const busqueda = document.getElementById('pv-search')?.value.trim() || null;
   const [resumen, bandeja] = await Promise.all([
@@ -3207,7 +3259,7 @@ function rvTab(k) {
   document.querySelectorAll('#drawerContent [data-rv-panel]').forEach(p => p.hidden = p.dataset.rvPanel !== k);
 }
 function rvIniciar(reservaId, tab) {
-  RV_RESERVA_ID = reservaId; RV_DET = null; RV_FORM = null;
+  RV_RESERVA_ID = reservaId; RV_DET = null; RV_FORM = null; RV_APTOS = {};
   document.querySelectorAll('#drawerContent [data-rv-tab]').forEach(b => b.onclick = () => rvTab(b.dataset.rvTab));
   ['servicios', 'pasajeros', 'documentos'].forEach(k => {
     const p = rvPanel(k); if (!p) return;
@@ -3252,7 +3304,14 @@ async function rvCargar() {
     const p = await sb.rpc('listar_proveedores', { p_solo_activos: false });
     if (!p.error) RV_PROVEEDORES = p.data || [];
   }
+  let aptos = {};
+  if (data.vista === 'admin' || data.vista === 'asesor') {
+    const a = await sb.rpc('apto_asignaciones_reserva', { p_reserva_id: id });
+    if (a.error || !a.data?.ok) console.error('apto_asignaciones_reserva', a.error || a.data);
+    else (a.data.asignaciones || []).forEach(x => { aptos[x.servicio_id] = x; });
+  }
   if (id !== RV_RESERVA_ID || !rvPanel('servicios')) return;
+  RV_APTOS = aptos;
   RV_DET = data;
   rvRender();
 }
@@ -3293,6 +3352,7 @@ function rvTrasCambio() {
   rvCargar();
   if (currentSec === 'postventa' && (ROL === 'admin' || ROL === 'asesor')) loadPostventa();
   if (currentSec === 'reservas-empresas') loadReservasEmpresas();
+  if (currentSec === 'apartamentos' && APTO_TAB === 'disp') loadDisponibilidad();
   if (document.getElementById('rv-bol-box')?.hidden === false) loadBoletosPorEmitir();
 }
 function rvAccion(accion, id, btn) {
@@ -3358,7 +3418,7 @@ function rvServicioHtml(s, vista) {
   return `<div class="rv-item${anulado ? ' rv-anulado' : ''}">
     <div class="rv-item-top"><b><i class="fas ${t[1]}"></i> ${esc(t[0])}</b><span class="rv-estado rv-e-${anulado ? 'cancelado' : esc(s.estado)}">${anulado ? 'Anulado' : esc(RV_ESTADOS[s.estado] || s.estado)}</span></div>
     ${s.descripcion ? `<div class="rv-desc">${esc(s.descripcion)}</div>` : ''}
-    <div class="rv-meta"><span><i class="fas fa-calendar"></i>${fechas}</span>${s.destino ? `<span><i class="fas fa-location-dot"></i>${esc(s.destino)}</span>` : ''}${pax ? `<span><i class="fas fa-user-group"></i>${pax}</span>` : ''}${s.localizador ? `<span><i class="fas fa-barcode"></i>${esc(s.localizador)}</span>` : ''}</div>
+    <div class="rv-meta"><span><i class="fas fa-calendar"></i>${fechas}</span>${s.destino ? `<span><i class="fas fa-location-dot"></i>${esc(s.destino)}</span>` : ''}${pax ? `<span><i class="fas fa-user-group"></i>${pax}</span>` : ''}${s.localizador ? `<span><i class="fas fa-barcode"></i>${esc(s.localizador)}</span>` : ''}${!anulado && RV_APTOS[s.id] ? `<span><i class="fas fa-building"></i>${esc(RV_APTOS[s.id].apartamento)}${RV_APTOS[s.id].proveedor ? ' · ' + esc(RV_APTOS[s.id].proveedor) : ''}</span>` : ''}</div>
     ${det ? `<div class="rv-det">${det}</div>` : ''}${precio}${costo}
     ${anulado && s.anulado_motivo ? `<div class="rv-det">Motivo: ${esc(s.anulado_motivo)}</div>` : ''}
     ${acciones ? `<div class="rv-acciones">${acciones}</div>` : ''}
@@ -3381,6 +3441,7 @@ function rvFormServicio(p) {
     <label class="fl">Descripción</label><input class="ei" id="rv-s-desc" maxlength="300" value="${esc(s?.descripcion || '')}" placeholder="Ej.: 3 noches en Los Roques, todo incluido">
     <label class="fl">Destino</label><select class="ei" id="rv-s-destino"><option value="">Sin destino</option>${sinCatalogo}${destinos}</select>
     <div class="rv-2"><div><label class="fl">Desde</label><input class="ei" id="rv-s-inicio" type="date" value="${esc(s?.fecha_inicio || '')}"></div><div><label class="fl">Hasta</label><input class="ei" id="rv-s-fin" type="date" value="${esc(s?.fecha_fin || '')}"></div></div>
+    <div id="rv-s-apto"></div>
     <div class="rv-3"><div><label class="fl">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div><div><label class="fl">Adultos</label><input class="ei" id="rv-s-adultos" type="number" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl">Niños</label><input class="ei" id="rv-s-ninos" type="number" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div></div>
     <div class="rv-2"><div><label class="fl">Localizador</label><input class="ei" id="rv-s-localizador" maxlength="60" value="${esc(s?.localizador || '')}"></div><div><label class="fl">Estado</label><select class="ei" id="rv-s-estado">${rvOpts(RV_ESTADOS, s?.estado || 'cotizado')}</select></div></div>
     <div id="rv-s-detalle"></div>
@@ -3388,8 +3449,56 @@ function rvFormServicio(p) {
     <div class="rv-3"><div><label class="fl">Monto</label><input class="ei" id="rv-s-precio" type="number" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
     ${rvBotones('guardar-servicio')}</div>`;
   rvDetalleCampos(s?.detalle || {});
-  document.getElementById('rv-s-tipo').onchange = () => rvDetalleCampos(rvLeerDetalle());
+  document.getElementById('rv-s-tipo').onchange = () => { rvDetalleCampos(rvLeerDetalle()); rvAptoCampo(); };
+  ['rv-s-inicio', 'rv-s-fin'].forEach(k => { document.getElementById(k).onchange = rvAptoCampo; });
+  ['rv-s-adultos', 'rv-s-ninos'].forEach(k => { document.getElementById(k).oninput = rvAptoAviso; });
   rvTasaVisible('rv-s');
+  rvAptoCampo();
+}
+// Apartamento del hospedaje (Fase 3): unidades libres en esas fechas según apto_disponibilidad.
+// La unidad que ya tiene este servicio cuenta como libre para sí misma; las ocupadas salen deshabilitadas.
+const RV_APTO_ERR = {
+  solapa: 'ya está ocupado en esas fechas', servicio_invalido: 'el servicio ya no es un hospedaje activo',
+  fechas_invalidas: 'faltan la llegada y la salida', apartamento_invalido: 'ese apartamento ya no está disponible',
+};
+async function rvAptoCampo() {
+  const box = document.getElementById('rv-s-apto'); if (!box) return;
+  const titulo = '<label class="fl">Apartamento</label>';
+  if (!rvPuedeEditar() || val('rv-s-tipo') !== 'hospedaje') { box.innerHTML = ''; RV_APTO_UNI = []; return; }
+  const actual = RV_FORM?.id ? RV_APTOS[RV_FORM.id] : null, propio = RV_FORM?.id || null;
+  const previo = document.getElementById('rv-s-apto-sel')?.value ?? (actual ? String(actual.apartamento_id) : '');
+  const ini = val('rv-s-inicio'), fin = val('rv-s-fin');
+  if (!ini || !fin || fin <= ini) { RV_APTO_UNI = []; box.innerHTML = titulo + '<div class="csub">Elegí llegada y salida para ver qué apartamentos están libres.</div>'; return; }
+  const req = ++RV_APTO_REQ;
+  box.innerHTML = titulo + '<div class="csub"><i class="fas fa-spinner fa-spin"></i> Buscando apartamentos libres...</div>';
+  const { data, error } = await sb.rpc('apto_disponibilidad', { p_desde: ini, p_hasta: fin });
+  if (req !== RV_APTO_REQ || !document.getElementById('rv-s-apto')) return;
+  if (error || !data?.ok) {
+    console.error('apto_disponibilidad', error || data); RV_APTO_UNI = [];
+    box.innerHTML = titulo + `<div class="csub">${data?.error === 'ventana_invalida' ? 'El rango de fechas es demasiado largo para buscar apartamentos.' : 'No se pudo consultar la disponibilidad.'}</div>`;
+    return;
+  }
+  RV_APTO_UNI = (data.unidades || []).map(u => ({ ...u, libre: !u.bloqueos.some(b => b.servicio_id !== propio) }));
+  const suyo = actual ? String(actual.apartamento_id) : '';
+  let grupo = null, opts = '';
+  for (const u of RV_APTO_UNI) {
+    if (u.proveedor !== grupo) { if (grupo !== null) opts += '</optgroup>'; grupo = u.proveedor; opts += `<optgroup label="${esc(grupo)}">`; }
+    const ocupado = !u.libre, bloqueada = ocupado && String(u.id) !== suyo;
+    opts += `<option value="${u.id}" ${String(u.id) === previo ? 'selected' : ''} ${bloqueada ? 'disabled' : ''}>${esc(u.nombre)}${u.capacidad_max ? ` · ${u.capacidad_max} personas` : ''}${ocupado ? ' · ocupado en esas fechas' : ''}</option>`;
+  }
+  if (grupo !== null) opts += '</optgroup>';
+  const hayLibre = RV_APTO_UNI.some(u => u.libre);
+  box.innerHTML = titulo + `<select class="ei" id="rv-s-apto-sel"><option value="">Sin asignar</option>${opts}</select>`
+    + (hayLibre ? '' : '<div class="csub">No queda ningún apartamento libre en esas fechas.</div>') + '<div class="csub" id="rv-s-apto-aviso"></div>';
+  document.getElementById('rv-s-apto-sel').onchange = rvAptoAviso;
+  rvAptoAviso();
+}
+function rvAptoAviso() {
+  const el = document.getElementById('rv-s-apto-aviso'), sel = document.getElementById('rv-s-apto-sel'); if (!el || !sel) return;
+  const u = RV_APTO_UNI.find(x => String(x.id) === sel.value), pax = Number(val('rv-s-adultos') || 0) + Number(val('rv-s-ninos') || 0);
+  const choca = u && !u.libre;
+  el.textContent = choca ? 'Ese apartamento está ocupado en estas fechas: al guardar se rechaza. Elegí otras fechas u otro apartamento.'
+    : u && u.capacidad_max && pax > u.capacidad_max ? `Ojo: son ${pax} personas y este apartamento admite ${u.capacidad_max}. Se puede guardar igual.` : '';
 }
 // La tasa solo aplica a monedas distintas de USD; vacía = la del día (tasa_por_usd en la base).
 function rvTasaVisible(pre) {
@@ -3428,8 +3537,33 @@ async function rvGuardarServicio(btn) {
     };
     if (datos.precio_moneda !== 'USD' && val('rv-s-tasa') !== '') datos.precio_tasa = Number(val('rv-s-tasa'));
   }
-  if (!(await rvEnviar(btn, sb.rpc('guardar_servicio', { p_reserva_id: RV_RESERVA_ID, p_servicio_id: id, p_datos: datos })))) return;
-  RV_FORM = null; okToast(id ? 'Servicio actualizado' : 'Servicio agregado'); rvTrasCambio();
+  // Apartamento: solo si el selector está en pantalla (si no cargó, no se toca lo asignado).
+  const selApto = rvVista() !== 'boleteria' && datos.tipo === 'hospedaje' ? document.getElementById('rv-s-apto-sel') : null;
+  const tenia = id ? RV_APTOS[id] : null, quiere = selApto?.value || '';
+  const cambia = !!(tenia && selApto && quiere !== String(tenia.apartamento_id));
+  // Si cambia o quita el apartamento, se libera antes: así el trigger no rechaza las fechas nuevas por chocar en el apartamento viejo.
+  if (cambia) {
+    const l = await sb.rpc('liberar_apartamento', { p_servicio_id: id });
+    if (l.error || !l.data?.ok) { err.textContent = 'No se pudo liberar el apartamento: ' + rvErr(l.error, l.data); return; }
+  }
+  let res;
+  const ok = await rvEnviar(btn, sb.rpc('guardar_servicio', { p_reserva_id: RV_RESERVA_ID, p_servicio_id: id, p_datos: datos }).then(r => { res = r.data; return r; }));
+  if (!ok) {
+    if (cambia) await sb.rpc('asignar_apartamento', { p_servicio_id: id, p_apartamento_id: tenia.apartamento_id });
+    return;
+  }
+  const sid = id || res?.servicio?.id;
+  let aviso = '', falla = '';
+  if (selApto && sid && quiere && (!tenia || cambia)) {
+    const a = await sb.rpc('asignar_apartamento', { p_servicio_id: sid, p_apartamento_id: Number(quiere) });
+    if (a.error || !a.data?.ok) falla = a.data?.error === 'solapa' && a.data.conflicto
+      ? `ya está ocupado del ${fmtDiaCorto(a.data.conflicto.fecha_desde)} al ${fmtDiaCorto(a.data.conflicto.fecha_hasta)}`
+      : RV_APTO_ERR[a.data?.error] || a.error?.message || 'error desconocido';
+    else if (a.data.aviso === 'capacidad') aviso = ' · Ojo: supera la capacidad del apartamento';
+  }
+  RV_FORM = null; rvTrasCambio();
+  if (falla) errToast(`${id ? 'Servicio actualizado' : 'Servicio agregado'}, pero el apartamento no se asignó: ${falla}`);
+  else okToast((id ? 'Servicio actualizado' : 'Servicio agregado') + aviso);
 }
 function rvFormCosto(p) {
   const s = (RV_DET.servicios || []).find(x => x.id === RV_FORM.id);
@@ -8641,7 +8775,7 @@ async function repRepartir() {
   const asesor = repEl('rep-asesor').value;
   const cuando = asesor ? `todos a ${asesor}` : 'con el reparto automático';
   const avisar = repEl('rep-avisar').checked;
-  if (!(await confirmarSheet({ titulo: `¿Repartir ${lista.length} número${lista.length === 1 ? '' : 's'} ${cuando}?`, detalle: `Quedan como "Asignado por Karlys Corro" en Contactos directos, sin reasignación, y ${avisar ? 'cada asesor recibe su aviso' : 'NO se avisa a nadie (ni Telegram ni notificaciones)'}.`, textoOk: 'Repartir' }))) return;
+  if (!(await confirmarSheet({ titulo: `¿Repartir ${lista.length} número${lista.length === 1 ? '' : 's'} ${cuando}?`, detalle: `Quedan en Leads como "Asignado por Karlys Corro", ${avisar ? 'con la reasignación de siempre si nadie los atiende, y cada asesor recibe su aviso' : 'sin reasignación automática y SIN avisar a nadie (ni Telegram ni notificaciones)'}.`, textoOk: 'Repartir' }))) return;
   const btn = repEl('rep-repartir');
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Repartiendo…';
   const { data, error } = await sb.functions.invoke('repartir-numeros', { body: { accion: 'repartir', numeros: lista, asesor: asesor || undefined, avisar } });
@@ -15989,7 +16123,9 @@ function setupApartamentos() {
 
 /* Apartamentos: disponibilidad (Fase 2). Noches: fecha_hasta es la salida y esa noche queda libre.
    Admin crea/edita bloqueos; el asesor solo mira (las RPCs lo imponen, la nota interna ni le llega). */
-const DISP_TIPOS = { ocupado: 'Ocupado', mantenimiento: 'Mantenimiento', uso_propietario: 'Uso del propietario' };
+const DISP_TIPOS = { ocupado: 'Ocupado', mantenimiento: 'Mantenimiento', uso_propietario: 'Uso del propietario', reserva: 'Reserva' };
+// Los bloqueos de reserva vienen de un servicio de hospedaje: cotizado/solicitado = por confirmar; confirmado o emitido = reservado.
+const dispEtiqueta = b => b.tipo === 'reserva' ? (b.estado === 'por_confirmar' ? 'Por confirmar' : 'Reservado') : (DISP_TIPOS[b.tipo] || b.tipo);
 const DISP_ERRORES = {
   ventana_invalida: 'El rango de fechas no es válido (máximo 400 días).',
   fechas_invalidas: 'Revisá las fechas: la salida tiene que ser después de la llegada.',
@@ -16066,8 +16202,9 @@ function dispPintar() {
     }
     const celdas = Array.from({ length: n }, (_, i) => {
       const dia = iso(i + 1), b = porDia.get(dia);
-      const tip = b ? `${DISP_TIPOS[b.tipo] || b.tipo}: ${fmtDiaCorto(b.fecha_desde)} → ${fmtDiaCorto(b.fecha_hasta)} (sale)${b.nota ? ' · ' + esc(b.nota) : ''}` : fmtDiaCorto(dia);
-      return `<div class="disp-c${b ? ' b-' + b.tipo : ''}${dia === hoy ? ' hoy' : ''}" data-u="${u.id}" data-d="${dia}"${b ? ` data-b="${b.id}"` : ''} title="${tip}"></div>`;
+      const tip = b ? `${dispEtiqueta(b)}: ${fmtDiaCorto(b.fecha_desde)} → ${fmtDiaCorto(b.fecha_hasta)} (sale)${b.codigo ? ' · ' + esc(b.codigo) : ''}${b.nota ? ' · ' + esc(b.nota) : ''}` : fmtDiaCorto(dia);
+      const clase = b ? ` b-${b.tipo}${b.estado === 'por_confirmar' ? ' por-confirmar' : ''}${b.reserva_id ? ' ver-reserva' : ''}` : '';
+      return `<div class="disp-c${clase}${dia === hoy ? ' hoy' : ''}" data-u="${u.id}" data-d="${dia}"${b ? ` data-b="${b.id}"` : ''} title="${tip}"></div>`;
     }).join('');
     html += `<div class="disp-fila${apagada ? ' apagada' : ''}" style="--n:${n}"><div class="disp-nom">${esc(u.nombre)}<small>${u.capacidad_max ? u.capacidad_max + ' personas' : 'capacidad sin cargar'}</small>${est}</div>${celdas}</div>`;
   }
@@ -16077,6 +16214,7 @@ function dispAbrirBloqueo(unidadId, dia, bloqueoId) {
   const u = DISP_DATA.find(x => x.id === unidadId);
   if (!u) return;
   const b = bloqueoId ? u.bloqueos.find(x => x.id === bloqueoId) : null;
+  if (b?.tipo === 'reserva') return;
   DISP_UNIT = unidadId; DISP_EDIT = b;
   aptoEl('bl-apto').textContent = `${u.nombre} · ${u.proveedor}`;
   aptoEl('bl-titulo').innerHTML = `<i class="fas fa-calendar-xmark"></i> ${b ? 'Editar bloqueo' : 'Bloquear fechas'}`;
@@ -16137,7 +16275,15 @@ function setupDisponibilidad() {
   });
   aptoEl('disp-grid').addEventListener('click', e => {
     const c = e.target.closest('.disp-c');
-    if (c && DISP_ADMIN) dispAbrirBloqueo(Number(c.dataset.u), c.dataset.d, c.dataset.b ? Number(c.dataset.b) : null);
+    if (!c) return;
+    const unidadId = Number(c.dataset.u), bloqueoId = c.dataset.b ? Number(c.dataset.b) : null;
+    const u = DISP_DATA.find(x => x.id === unidadId), b = bloqueoId ? u?.bloqueos.find(x => x.id === bloqueoId) : null;
+    // Un bloqueo de reserva no se edita acá: lo maneja el servicio. Solo se abre la reserva si el servidor mandó reserva_id (admin y asesor dueño).
+    if (b?.tipo === 'reserva') {
+      if (b.reserva_id) rvAbrirReserva(b.reserva_id, 'Reserva' + (b.codigo ? ' ' + b.codigo : ''), `${u.nombre} · ${fmtDiaCorto(b.fecha_desde)} → ${fmtDiaCorto(b.fecha_hasta)}`);
+      return;
+    }
+    if (DISP_ADMIN) dispAbrirBloqueo(unidadId, c.dataset.d, bloqueoId);
   });
   aptoEl('bl-cancelar').addEventListener('click', () => closeSheet('apto-bloq-sheet'));
   aptoEl('bl-guardar').addEventListener('click', dispGuardar);
@@ -21010,12 +21156,22 @@ async function waInvocar(body) {
   if (error || !data?.ok) throw new Error(data?.error || error?.message || 'error');
   return data;
 }
-/* ---------- DMs Instagram / Facebook ----------
+/* ---------- Meta DM: chats del bot en Instagram, Facebook y WhatsApp ----------
    Fuente: manychat_ia_sesiones (una fila por conversación, historial jsonb sin
-   hora por mensaje). Los cambios llegan por Realtime (postgres_changes): la
-   tabla está en supabase_realtime desde 20261007160000 y el RLS existente
-   filtra cada evento (admin todo, asesor solo sesiones de sus leads). El canal
-   viene escrito de varias formas ("Instagram", "instagram", "../Facebook"). */
+   hora por mensaje). WhatsApp pasa por el mismo cerebro, así que también vive
+   acá, con external_id = teléfono. Los cambios llegan por Realtime
+   (postgres_changes): la tabla está en supabase_realtime desde 20261007160000 y
+   el RLS existente filtra cada evento (admin todo, asesor solo sesiones de sus
+   leads). El canal viene escrito de varias formas ("Instagram", "instagram",
+   "../Facebook", "WhatsApp"). El chat de WhatsApp se pinta con los mensajes de
+   Zernio (whatsapp-inbox, acción conversacion: adjuntos, horas y ticks); si ese
+   cliente no tiene conversación registrada, con el historial como los demás. */
+const DM_CANALES = {
+  instagram: { label: 'Instagram', ico: 'fa-instagram' },
+  facebook: { label: 'Facebook', ico: 'fa-facebook-messenger' },
+  whatsapp: { label: 'WhatsApp', ico: 'fa-whatsapp' },
+};
+const DM_WA_POLL_MS = 30000;
 const DM_PAGINA = 50;
 const DM_COLS = 'external_id,nombre_ig,campos,lead_creado,lead_creado_en,lead_id,asesor_asignado,created_at,updated_at,historial';
 const DM_CAMPOS = [
@@ -21027,18 +21183,30 @@ const DM_CAMPOS = [
   { label: 'Presupuesto', ico: 'fas fa-wallet', val: c => c.presupuesto },
 ];
 let dmCanal = 'instagram', dmCanalLeido = false, dmFiltro = 'todos', dmSesiones = [], dmMas = false, dmActual = null, dmLive = null, dmGen = 0, dmBuscarT = null, dmNav = false;
-const dmNuevos = new Set(), dmPendientes = { instagram: new Set(), facebook: new Set() };
+// Chat de WhatsApp abierto: { id, mensajes, cursor, sinZernio } (null mientras carga o en otro canal).
+let dmWa = null, dmWaGen = 0, dmWaPoll = null, dmPerfilVacio = '';
+const dmNuevos = new Set(), dmPendientes = Object.fromEntries(Object.keys(DM_CANALES).map(c => [c, new Set()]));
 const dmCanalDe = s => String(s.campos?.canal || '').replace(/^.*\//, '').toLowerCase();
 const dmValor = (s, f) => { const v = f.val(dmCamposVista(s)); return v == null ? '' : String(v).trim(); };
 const dmProgreso = s => s.lead_creado ? 100 : Math.round(DM_CAMPOS.filter(f => dmValor(s, f)).length / DM_CAMPOS.length * 100);
-// En Instagram nombre_ig es el @usuario; en Facebook es el nombre visible del perfil.
-const dmUsuario = s => s.nombre_ig ? (dmCanalDe(s) === 'instagram' ? '@' : '') + s.nombre_ig : '';
+const dmTelefonoWa = s => /^\+?\d{8,15}$/.test(s.external_id || '') ? '+' + s.external_id.replace(/^\+/, '') : '';
+// En Instagram nombre_ig es el @usuario; en Facebook es el nombre visible del
+// perfil; en WhatsApp es un apodo, así que se identifica por el teléfono.
+const dmUsuario = s => {
+  const canal = dmCanalDe(s);
+  if (canal === 'whatsapp') return dmTelefonoWa(s);
+  return s.nombre_ig ? (canal === 'instagram' ? '@' : '') + s.nombre_ig : '';
+};
 // Lead ya creado: lo que el bot no guardó en campos se completa con la fila de leads.
 const dmLeads = new Map();
-const dmCamposVista = s => { const l = s.lead_id && dmLeads.get(s.lead_id); return l ? { telefono: l.telefono, ...s.campos, nombre: s.campos?.nombre || l.nombre } : (s.campos || {}); };
-const dmNombre = s => dmValor(s, DM_CAMPOS[0]) || dmUsuario(s) || 'Sin nombre';
+const dmCamposVista = s => {
+  const l = s.lead_id && dmLeads.get(s.lead_id), base = dmCanalDe(s) === 'whatsapp' ? { telefono: dmTelefonoWa(s) || undefined } : {};
+  return l ? { ...base, telefono: l.telefono || base.telefono, ...s.campos, nombre: s.campos?.nombre || l.nombre } : { ...base, ...s.campos };
+};
+const dmNombre = s => dmValor(s, DM_CAMPOS[0]) || (dmCanalDe(s) === 'whatsapp' && s.nombre_ig) || dmUsuario(s) || 'Sin nombre';
 const dmHistorial = s => Array.isArray(s.historial) ? s.historial : [];
-const dmIcoCanal = canal => canal === 'facebook' ? 'fa-facebook-messenger' : 'fa-instagram';
+const dmIcoCanal = canal => DM_CANALES[canal]?.ico || 'fa-comment';
+const dmLabelCanal = canal => DM_CANALES[canal]?.label || 'Chat';
 const dmAvatar = s => `<div class="msg-avatar dm-avatar" data-canal="${esc(dmCanalDe(s))}">${esc(initials(dmValor(s, DM_CAMPOS[0]) || s.nombre_ig || '?'))}<span class="dm-avatar-red"><i class="fa-brands ${dmIcoCanal(dmCanalDe(s))}"></i></span></div>`;
 const dmBusqueda = () => document.getElementById('dm-buscar').value.trim();
 
@@ -21060,30 +21228,41 @@ function setupDms() {
   document.getElementById('dm-btn-perfil').addEventListener('click', () => document.getElementById('dm-shell').classList.add('ver-perfil'));
   document.getElementById('dm-perfil-cerrar').addEventListener('click', () => document.getElementById('dm-shell').classList.remove('ver-perfil'));
   document.getElementById('dm-perfil-body').addEventListener('click', e => { const b = e.target.closest('[data-dm-lead]'); if (b) abrirLeadDesdeMisVentas(+b.dataset.dmLead); });
+  document.getElementById('dm-wa-todos').addEventListener('click', () => activateSection('whatsapp'));
+  document.getElementById('dm-log').addEventListener('click', e => { if (e.target.closest('#dm-wa-anteriores')) dmWaAnteriores(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && currentSec === 'dms' && dmWa) dmWaRefrescar(); });
+  dmPerfilVacio = document.getElementById('dm-perfil-body').innerHTML;
 }
 async function loadDms() {
-  if (!dmCanalLeido) { try { const g = localStorage.getItem('dm-canal'); if (g === 'instagram' || g === 'facebook') dmCanal = g; } catch {} dmCanalLeido = true; }
+  if (!dmCanalLeido) { try { const g = localStorage.getItem('dm-canal'); if (DM_CANALES[g]) dmCanal = g; } catch {} dmCanalLeido = true; }
   dmPintarCanales();
   dmSuscribir();
   dmContar();
+  // Al salir de la sección se cortó el refresco del chat de WhatsApp abierto.
+  if (dmActual && dmCanalDe(dmActual) === 'whatsapp' && !dmWa) dmWaAbrir();
   await dmCargar();
 }
 function dmElegirCanal(canal) {
-  if (canal === dmCanal) return;
+  if (canal === dmCanal || !DM_CANALES[canal]) return;
   dmCanal = canal; dmPendientes[canal].clear();
   try { localStorage.setItem('dm-canal', canal); } catch {}
+  // El chat abierto es de otro canal: se cierra para que el tema nuevo no lo pinte.
+  dmLimpiarChat();
   dmPintarCanales();
   dmCargar();
 }
 function dmPintarCanales() {
+  document.getElementById('dm-shell').dataset.canal = dmCanal;
   document.querySelectorAll('#dm-canales .dm-canal').forEach(b => { const on = b.dataset.canal === dmCanal; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
-  for (const c of ['instagram', 'facebook']) {
+  for (const c of Object.keys(DM_CANALES)) {
     const el = document.getElementById('dm-nuevo-' + c), n = dmPendientes[c].size;
     el.hidden = !n; el.textContent = n > 9 ? '9+' : String(n);
   }
+  document.getElementById('dm-wa-todos').hidden = !(dmCanal === 'whatsapp' && ROL === 'admin');
+  document.getElementById('dm-buscar').placeholder = dmCanal === 'whatsapp' ? 'Buscar nombre o teléfono' : dmCanal === 'instagram' ? 'Buscar @usuario, nombre o teléfono' : 'Buscar perfil, nombre o teléfono';
 }
 async function dmContar() {
-  await Promise.all(['instagram', 'facebook'].map(async c => {
+  await Promise.all(Object.keys(DM_CANALES).map(async c => {
     const { count } = await sb.from('manychat_ia_sesiones').select('external_id', { count: 'exact', head: true }).ilike('campos->>canal', '%' + c);
     document.getElementById('dm-n-' + c).textContent = count ? count.toLocaleString('es-VE') : '';
   }));
@@ -21093,7 +21272,13 @@ function dmQuery() {
   if (dmFiltro === 'conv') q = q.eq('lead_creado', false);
   if (dmFiltro === 'lead') q = q.eq('lead_creado', true);
   const t = dmBusqueda().replace(/[,()*%"\\]/g, ' ').trim();
-  if (t) q = q.or(['nombre_ig', 'campos->>nombre', 'campos->>telefono'].map(c => `${c}.ilike."*${t}*"`).join(','));
+  if (t) {
+    const cond = ['nombre_ig', 'campos->>nombre', 'campos->>telefono'].map(c => `${c}.ilike."*${t}*"`);
+    // En WhatsApp el external_id es el teléfono, sin "+".
+    const dig = t.replace(/\D/g, '');
+    if (dmCanal === 'whatsapp' && dig.length >= 3) cond.push(`external_id.ilike."*${dig}*"`);
+    q = q.or(cond.join(','));
+  }
   return q;
 }
 async function dmCargar(mas) {
@@ -21127,10 +21312,12 @@ function dmRenderLista() {
 }
 function dmAbrir(id) {
   const s = dmSesiones.find(x => x.external_id === id); if (!s) return;
+  const otro = dmActual?.external_id !== id;
   dmActual = s; dmNuevos.delete(id);
   document.getElementById('dm-chat-vacio').hidden = true;
   ['dm-chat-head', 'dm-log', 'dm-nota'].forEach(k => { document.getElementById(k).hidden = false; });
-  dmPintarHead(); dmPintarLog(true); dmPintarPerfil();
+  dmPintarHead(); dmPintarPerfil();
+  if (dmCanalDe(s) === 'whatsapp') { if (otro || !dmWa) dmWaAbrir(); } else { dmWaCerrar(); dmPintarLog(true); }
   document.querySelectorAll('#dm-inbox [data-dm]').forEach(r => { r.classList.toggle('on', r.dataset.dm === id); if (r.dataset.dm === id) r.classList.remove('nuevo'); });
   const shell = document.getElementById('dm-shell');
   shell.classList.remove('ver-perfil');
@@ -21144,21 +21331,87 @@ function dmCerrarChat(fromNav) {
   if (!fromNav && dmNav) navConsume();
   dmNav = false;
 }
+// Vuelve el panel central y la ficha a "Elija una conversación".
+function dmLimpiarChat() {
+  if (!dmActual) return;
+  dmWaCerrar();
+  dmActual = null;
+  document.getElementById('dm-chat-vacio').hidden = false;
+  ['dm-chat-head', 'dm-log', 'dm-nota'].forEach(k => { document.getElementById(k).hidden = true; });
+  document.getElementById('dm-log').innerHTML = '';
+  document.getElementById('dm-perfil-body').innerHTML = dmPerfilVacio;
+  dmCerrarChat();
+}
 function dmPintarHead() {
   const s = dmActual, canal = dmCanalDe(s);
   document.getElementById('dm-chat-avatar').outerHTML = dmAvatar(s).replace('class="msg-avatar dm-avatar"', 'class="msg-avatar dm-avatar" id="dm-chat-avatar"');
   document.getElementById('dm-chat-titulo').textContent = dmNombre(s);
-  document.getElementById('dm-chat-sub').textContent = [dmUsuario(s) !== dmNombre(s) ? dmUsuario(s) : '', canal === 'facebook' ? 'Facebook' : 'Instagram', 'activo ' + fmtHoraMsg(s.updated_at)].filter(Boolean).join(' · ');
+  document.getElementById('dm-chat-sub').textContent = [dmUsuario(s) !== dmNombre(s) ? dmUsuario(s) : '', 'activo ' + fmtHoraMsg(s.updated_at)].filter(Boolean).join(' · ');
+  document.getElementById('dm-app-chip').innerHTML = `<i class="fa-brands ${dmIcoCanal(canal)}"></i><span>${dmLabelCanal(canal)}</span>`;
 }
 // previos: cuántos mensajes ya estaban pintados; los siguientes entran animados.
+// Mensajes seguidos del mismo lado se agrupan como en la app (la colita va en el último).
 function dmPintarLog(inicio, previos = 0) {
   const log = document.getElementById('dm-log'), h = dmHistorial(dmActual);
   const pegado = inicio || log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   log.innerHTML = h.length ? h.map((m, i) => {
-    const ia = m.rol === 'ia';
-    return `<div class="chat-msg ${ia ? 'mine' : 'other'}${!inicio && i >= previos ? ' msg-new' : ''}">${ia ? '<div class="dm-burbuja-ia"><i class="fas fa-robot"></i> Bot</div>' : ''}${esc(m.texto || '')}</div>`;
+    const ia = m.rol === 'ia', antes = h[i - 1], despues = h[i + 1];
+    const agrupado = antes && (antes.rol === 'ia') === ia, cola = !despues || (despues.rol === 'ia') !== ia;
+    return `<div class="chat-msg ${ia ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${cola ? ' tail' : ''}${!inicio && i >= previos ? ' msg-new' : ''}">${ia && !agrupado ? '<div class="dm-burbuja-ia"><i class="fas fa-robot"></i> Bot</div>' : ''}${esc(m.texto || '')}</div>`;
   }).join('') : '<div class="msg-empty">Sin mensajes todavía</div>';
   if (pegado) log.scrollTop = log.scrollHeight;
+}
+// WhatsApp: mensajes de Zernio vía whatsapp-inbox (la EF valida con el RLS que
+// el chat sea visible para quien pregunta y firma los adjuntos).
+async function dmWaAbrir() {
+  dmWaCerrar();
+  const id = dmActual.external_id, gen = ++dmWaGen;
+  document.getElementById('dm-log').innerHTML = '<div class="msg-empty"><i class="fas fa-spinner fa-spin"></i></div>';
+  let r;
+  try { r = await waInvocar({ accion: 'conversacion', external_id: id }); } catch { r = { sin_zernio: true }; }
+  if (gen !== dmWaGen || dmActual?.external_id !== id) return;
+  dmWa = { id, mensajes: r.mensajes || [], cursor: r.cursor || null, sinZernio: !!r.sin_zernio };
+  dmWaPintar(true);
+  if (!dmWa.sinZernio) dmWaPoll = setInterval(dmWaTick, DM_WA_POLL_MS);
+}
+function dmWaCerrar() {
+  dmWaGen++; dmWa = null;
+  clearInterval(dmWaPoll); dmWaPoll = null;
+  waMedia.forEach(p => p.then(u => u && URL.revokeObjectURL(u)));
+  waMedia.clear();
+}
+function dmWaTick() {
+  if (currentSec !== 'dms' || !dmWa) { dmWaCerrar(); return; }
+  if (document.visibilityState === 'visible') dmWaRefrescar();
+}
+async function dmWaRefrescar() {
+  if (!dmWa || dmWa.sinZernio) return;
+  const gen = dmWaGen, wa = dmWa;
+  let r;
+  try { r = await waInvocar({ accion: 'conversacion', external_id: wa.id }); } catch { return; }
+  if (gen !== dmWaGen) return;
+  const nuevos = (r.mensajes || []).filter(m => !wa.mensajes.some(x => x.id === m.id));
+  if (!nuevos.length) return;
+  wa.mensajes = [...wa.mensajes, ...nuevos].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+  dmWaPintar();
+}
+async function dmWaAnteriores() {
+  const wa = dmWa; if (!wa?.cursor) return;
+  const gen = dmWaGen, log = document.getElementById('dm-log'), alto = log.scrollHeight;
+  let r;
+  try { r = await waInvocar({ accion: 'conversacion', external_id: wa.id, cursor: wa.cursor }); } catch { errToast('No se pudieron cargar los mensajes anteriores'); return; }
+  if (gen !== dmWaGen) return;
+  wa.mensajes = [...(r.mensajes || []).filter(m => !wa.mensajes.some(x => x.id === m.id)), ...wa.mensajes]; wa.cursor = r.cursor || null;
+  dmWaPintar();
+  log.scrollTop = log.scrollHeight - alto;
+}
+function dmWaPintar(alFinal) {
+  if (dmWa.sinZernio) { dmPintarLog(true); return; }
+  const log = document.getElementById('dm-log');
+  const abajo = alFinal || log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+  log.innerHTML = waHtmlMensajes(dmWa.mensajes, dmWa.cursor && 'dm-wa-anteriores') || '<div class="msg-empty">Sin mensajes todavía</div>';
+  waEnlazarLog(log);
+  if (abajo) log.scrollTop = log.scrollHeight;
 }
 // antes: versión previa de la sesión, para resaltar lo recién llenado y animar la barra.
 function dmPintarPerfil(antes) {
@@ -21174,7 +21427,7 @@ function dmPintarPerfil(antes) {
     : '<div class="dm-lead-box pend"><div class="dm-lead-tit"><i class="fas fa-hourglass-half"></i> Todavía no es lead</div><div class="dm-lead-sub">El bot crea el lead cuando tiene los datos para cotizar.</div></div>';
   const ancho = antes ? dmProgreso(antes) : p;
   document.getElementById('dm-perfil-body').innerHTML = `
-    <div class="dm-ficha-top">${dmAvatar(s)}<div class="dm-ficha-nombre">${esc(dmNombre(s))}</div><div class="dm-ficha-user">${dmUsuario(s) && dmUsuario(s) !== dmNombre(s) ? esc(dmUsuario(s)) + ' · ' : ''}${canal === 'facebook' ? 'Facebook' : 'Instagram'}</div></div>
+    <div class="dm-ficha-top">${dmAvatar(s)}<div class="dm-ficha-nombre">${esc(dmNombre(s))}</div><div class="dm-ficha-user">${dmUsuario(s) && dmUsuario(s) !== dmNombre(s) ? esc(dmUsuario(s)) + ' · ' : ''}${dmLabelCanal(canal)}</div></div>
     <div class="dm-progreso${p === 100 ? ' completo' : ''}"><div class="dm-progreso-top"><span class="dm-label">${s.lead_creado ? 'Convertido en lead' : 'Camino a lead'}</span><span class="dm-progreso-pct">${p}%</span></div><div class="dm-barra" role="progressbar" aria-label="Avance hacia lead" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100"><span style="width:${ancho}%"></span></div></div>
     <ul class="dm-campos">${campos}</ul>${lead}
     <div class="dm-ficha-pie">Primer mensaje ${fmtHoraMsg(s.created_at)}</div>`;
@@ -21203,13 +21456,16 @@ function dmPasaFiltro(s) {
   if (dmFiltro === 'conv' && s.lead_creado) return false;
   if (dmFiltro === 'lead' && !s.lead_creado) return false;
   const t = dmBusqueda().toLowerCase();
-  return !t || `${s.nombre_ig || ''} ${s.campos?.nombre || ''} ${s.campos?.telefono || ''}`.toLowerCase().includes(t);
+  if (!t) return true;
+  const dig = t.replace(/\D/g, '');
+  return `${s.nombre_ig || ''} ${s.campos?.nombre || ''} ${s.campos?.telefono || ''}`.toLowerCase().includes(t)
+    || (dmCanalDe(s) === 'whatsapp' && dig.length >= 3 && String(s.external_id).includes(dig));
 }
 function dmCambio(s) {
   if (currentSec !== 'dms') { dmDesuscribir(); return; }
   if (!s?.external_id) return;
   const canal = dmCanalDe(s), id = s.external_id;
-  if (canal !== 'instagram' && canal !== 'facebook') return;
+  if (!DM_CANALES[canal]) return;
   const previo = dmSesiones.find(x => x.external_id === id);
   // Un jsonb TOAST que no cambió puede llegar ausente en el evento: se conserva el que había.
   if (previo) for (const k in previo) if (s[k] === undefined) s[k] = previo[k];
@@ -21223,7 +21479,11 @@ function dmCambio(s) {
   if (dmActual?.external_id === id) {
     const antes = dmActual;
     dmActual = s;
-    dmPintarHead(); dmPintarLog(false, dmHistorial(antes).length); dmPintarPerfil(antes);
+    dmPintarHead(); dmPintarPerfil(antes);
+    if (canal !== 'whatsapp') dmPintarLog(false, dmHistorial(antes).length);
+    else if (dmWa?.sinZernio) dmPintarLog(false, dmHistorial(antes).length);
+    // La respuesta del bot llega a Zernio unos segundos después de guardarse la sesión.
+    else if (dmWa && escribio) { dmWaRefrescar(); setTimeout(dmWaRefrescar, 5000); }
   }
 }
 
@@ -21350,18 +21610,19 @@ function waCerrarChat(fromNav, sinRecarga) {
 const WA_TICK = { sent: '✓', delivered: '✓✓', read: '✓✓', failed: '!' };
 function waAdjuntoHtml(a) {
   const publica = WA_URL_PUBLICA.test(a.url);
-  const fuente = publica ? `src="${esc(a.url)}"` : `data-wa-media="${esc(a.url)}" data-wa-mime="${esc(a.mime || '')}"`;
+  // exp/firma: los manda la acción conversacion (Meta DM) para que un asesor pueda bajar el adjunto.
+  const firma = a.firma ? ` data-wa-exp="${esc(a.exp)}" data-wa-firma="${esc(a.firma)}"` : '';
+  const fuente = publica ? `src="${esc(a.url)}"` : `data-wa-media="${esc(a.url)}" data-wa-mime="${esc(a.mime || '')}"${firma}`;
   if (a.tipo === 'image' || a.tipo === 'sticker') return `<img class="msg-img" ${fuente}${publica ? ` data-img="${esc(a.url)}"` : ''} alt="Foto">`;
   if (a.tipo === 'audio' || a.tipo === 'voice') return `<audio class="wa-audio" controls preload="none" ${fuente}></audio>`;
   if (a.tipo === 'video') return `<video class="msg-img" controls preload="metadata" ${fuente}></video>`;
   return `<div class="msg-doc" ${publica ? `data-doc="${esc(a.url)}"` : fuente}><i class="fas fa-file"></i><div><div class="msg-doc-nombre">${esc(a.mime || 'Archivo')}</div></div></div>`;
 }
-function waRenderMensajes(alFinal) {
-  const log = document.getElementById('wa-conv-log');
-  const abajo = alFinal || log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
-  let html = waMsgCursor ? '<button type="button" class="wa-mas" id="wa-anteriores">Cargar mensajes anteriores</button>' : '', dia = null;
-  waMensajes.forEach((m, i) => {
-    const f = new Date(m.fecha), key = f.toDateString(), prev = waMensajes[i - 1], sig = waMensajes[i + 1];
+// Compartido por la vista vieja (#wa-conv-log) y la pestaña WhatsApp de Meta DM (#dm-log).
+function waHtmlMensajes(lista, idAnteriores) {
+  let html = idAnteriores ? `<button type="button" class="wa-mas" id="${idAnteriores}">Cargar mensajes anteriores</button>` : '', dia = null;
+  lista.forEach((m, i) => {
+    const f = new Date(m.fecha), key = f.toDateString(), prev = lista[i - 1], sig = lista[i + 1];
     if (key !== dia) { html += `<div class="msg-date-chip">${etiquetaDia(f)}</div>`; dia = key; }
     const agrupado = prev && prev.saliente === m.saliente && new Date(prev.fecha).toDateString() === key;
     const cola = !sig || sig.saliente !== m.saliente || new Date(sig.fecha).toDateString() !== key;
@@ -21369,21 +21630,29 @@ function waRenderMensajes(alFinal) {
     const adj = m.adjuntos.map(waAdjuntoHtml).join('');
     html += `<div class="chat-msg ${m.saliente ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${cola ? ' tail' : ''}${adj ? ' adjunto' : ''}">${adj}${m.texto ? `<div>${textoConEnlaces(m.texto)}</div>` : ''}${meta}</div>`;
   });
-  log.innerHTML = html || '<div class="msg-empty">Sin mensajes</div>';
-  document.getElementById('wa-anteriores')?.addEventListener('click', waCargarAnteriores);
+  return html;
+}
+function waEnlazarLog(log) {
   log.querySelectorAll('[data-img]').forEach(el => el.addEventListener('click', () => openLightbox([el.dataset.img], 0)));
   log.querySelectorAll('[data-doc]').forEach(el => el.addEventListener('click', () => window.open(el.dataset.doc, '_blank', 'noopener')));
   log.querySelectorAll('[data-wa-media]').forEach(waCargarMedia);
+}
+function waRenderMensajes(alFinal) {
+  const log = document.getElementById('wa-conv-log');
+  const abajo = alFinal || log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+  log.innerHTML = waHtmlMensajes(waMensajes, waMsgCursor && 'wa-anteriores') || '<div class="msg-empty">Sin mensajes</div>';
+  document.getElementById('wa-anteriores')?.addEventListener('click', waCargarAnteriores);
+  waEnlazarLog(log);
   if (abajo) log.scrollTop = log.scrollHeight;
 }
-function waBlobUrl(url, mime) {
-  if (!waMedia.has(url)) waMedia.set(url, sb.functions.invoke('whatsapp-inbox', { body: { accion: 'media', url } })
+function waBlobUrl(url, mime, exp, firma) {
+  if (!waMedia.has(url)) waMedia.set(url, sb.functions.invoke('whatsapp-inbox', { body: { accion: 'media', url, ...(firma ? { exp: +exp, firma } : {}) } })
     .then(({ data, error }) => !error && data instanceof Blob ? URL.createObjectURL(mime ? new Blob([data], { type: mime }) : data) : null)
     .catch(() => null));
   return waMedia.get(url);
 }
 async function waCargarMedia(el) {
-  const u = await waBlobUrl(el.dataset.waMedia, el.dataset.waMime);
+  const u = await waBlobUrl(el.dataset.waMedia, el.dataset.waMime, el.dataset.waExp, el.dataset.waFirma);
   if (!el.isConnected) return;
   if (!u) { el.outerHTML = '<div class="msg-doc"><i class="fas fa-triangle-exclamation"></i><div class="msg-doc-peso">No se pudo cargar el adjunto</div></div>'; return; }
   if (el.tagName === 'IMG') { el.src = u; el.addEventListener('click', () => openLightbox([u], 0)); }
@@ -22395,11 +22664,13 @@ const NAV_ITEMS = [
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: '' },
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
   { sec: 'web-reasignados', icon: 'fas fa-hand-holding-dollar', label: 'Web y Reasignados', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Los leads por los que cobrás comisión' },
-  { sec: 'contactos-directos', icon: 'fas fa-comment-sms', label: 'Contactos directos', padre: 'grp-leads', roles: '', sub: 'Escribieron directo por WhatsApp (bio-redes, IA) o los asignó Karlys Corro -- no se gestionan desde acá' },
+  { sec: 'contactos-directos', icon: 'fas fa-comment-sms', label: 'Contactos directos', padre: 'grp-leads', roles: '', sub: 'Escribieron directo por WhatsApp (bio-redes, IA) -- no se gestionan desde acá' },
   { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Pegá números o capturas y se reparten entre los asesores' },
-  { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', padre: 'grp-mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
-  { sec: 'whatsapp', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp', padre: 'grp-mensajes', roles: 'nav-admin-only', sub: 'Chats del bot de ventas, por número' },
-  { sec: 'dms', icon: 'fas fa-inbox', label: 'DMs Instagram y Facebook', padre: 'grp-mensajes', roles: '', sub: 'Chats del bot en vivo, con la ficha del cliente camino a lead' },
+  { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Chat interno del equipo', badge: 'nav-msg-count', badgeDefault: '—' },
+  // Meta DM (2026-10-07): los chats del bot (Instagram, Facebook, WhatsApp) salieron
+  // de Mensajes a su propia entrada. La vista vieja de WhatsApp por número salió
+  // del menú; admin la abre desde la pestaña WhatsApp de Meta DM.
+  { sec: 'dms', icon: 'fa-brands fa-meta', label: 'Meta DM', roles: '', sub: 'Chats del bot en Instagram, Facebook y WhatsApp, en vivo y con la ficha del cliente' },
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
@@ -22432,7 +22703,8 @@ const NAV_ITEMS = [
 const NAV_PADRES = [
   { sec: 'grp-inicio', icon: 'fas fa-chart-pie', label: 'Inicio' },
   { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
-  { sec: 'grp-mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', badge: 'nav-msg-count', badgeDefault: '—' },
+  { sec: 'mensajes', hoja: true },
+  { sec: 'dms', hoja: true },
   { sec: 'correo', hoja: true },
   { sec: 'grp-tarifario', icon: 'fas fa-book-open', label: 'Tarifario' },
   { sec: 'stop-sales', hoja: true },
@@ -24548,6 +24820,8 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-07', emoji: '💬', titulo: 'Nueva sección Meta DM', texto: 'Los chats del bot en Instagram, Facebook y WhatsApp tienen ahora su propia sección, Meta DM, con una pestaña por app y los colores de cada una. Se actualizan en vivo y muestran la ficha del cliente camino a lead. Los asesores ven también los chats de WhatsApp de sus leads, con fotos y audios. Mensajes queda solo para el chat del equipo.' },
+  { fecha: '2026-10-07', emoji: '🏠', titulo: 'Asigná un apartamento a cada reserva', texto: 'Al crear o editar un servicio de hospedaje en una reserva, ahora podés elegir el apartamento: la lista muestra solo los que están libres en esas fechas y avisa si el grupo supera la capacidad. Ese apartamento queda bloqueado en Apartamentos → Disponibilidad, en azul: con rayas si el servicio todavía está por confirmar (cotizado o solicitado) y sólido cuando ya está reservado. Si cambiás las fechas del servicio, el bloqueo se mueve solo, y si el apartamento ya está ocupado esos días el sistema no deja guardar. Si anulás o cancelás el servicio, el apartamento se libera. El admin y el asesor dueño de la reserva pueden tocar el bloque para abrir la reserva; el resto solo ve que está ocupado, sin datos del cliente.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-07', emoji: '📅', titulo: 'Apartamentos: disponibilidad', texto: 'En Apartamentos hay una pestaña nueva, Disponibilidad: un calendario por mes con cada apartamento en su fila, para ver qué noches están ocupadas, en mantenimiento o reservadas por el propietario. Filtrá por llegada, salida y personas para ver cuáles están libres. El admin toca un día para bloquear fechas o edita un bloque; los asesores solo consultan. La noche del día de salida queda libre.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-07', emoji: '🏡', titulo: 'Sección Apartamentos', texto: 'Nueva sección Apartamentos, solo para admins: cada casa o posada (Casa Vacacional Playa del Sur, Vulcanost y Paikla) es un proveedor con sus apartamentos, la distribución por habitación (camas y personas), las comodidades y las fotos de cada espacio, más las de las áreas comunes (fachada, piscina, estacionamiento). Los precios, el bot y la web siguen funcionando igual desde el Tarifario. Vulcanost y Paikla quedaron con una unidad provisional por completar.', roles: ['admin'] },
   { fecha: '2026-10-05', emoji: '🧾', titulo: 'El PDF de la venta ahora separa cliente y proveedor', texto: 'Al tocar el botón PDF en Facturación → Ventas, el comprobante sale con dos bloques con nombre en vez de las tres cifras del cliente sueltas: el verde dice qué se le cobra al cliente (venta, abonado y lo que falta cobrar) y el azul, qué se le paga al proveedor (su costo, cuánto de eso ya cubre el abono y cuánto falta cubrir), con el nombre del proveedor escrito tal cual. Debajo de la barra de avance se ve el reparto del abono: qué parte le corresponde al proveedor y qué parte es margen. El detalle financiero y la tabla de abonos ahora aclaran a quién pertenece cada cifra: lo que pagó el cliente, lo que hay que transferirle al proveedor y los abonos del cliente. Debajo del nombre del cliente ahora figura la fecha en que entró al CRM ("Cliente desde el ...") y debajo del proveedor, las fechas del viaje ("Viaja del ... al ..."), que salen de la reserva de la venta.', roles: ['admin'] },
