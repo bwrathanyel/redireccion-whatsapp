@@ -2949,6 +2949,7 @@ const PV_WA_MOTIVOS = {
 };
 const PV_WA_ELEGIBLE = ['Elegible', 'fa-circle-check', 'var(--green)'];
 const PV_WA_PRESETS = [0, 15, 30, 60, 90];
+let PV_RT_TIMER = null;
 let PV_WA_DIAS = 30, PV_WA_FILTRO = 'todos', PV_WA_BUSCAR = '', PV_WA_DATA = null;
 const pvWaMotivo = k => k ? (PV_WA_MOTIVOS[k] || [k, 'fa-circle-minus', 'var(--muted)']) : PV_WA_ELEGIBLE;
 async function pvWhatsappCargar() {
@@ -3028,12 +3029,13 @@ function pvWhatsappLista() {
       <summary><i class="fas fa-chevron-right flecha"></i><i class="fas ${ic}"></i>${esc(t)}<small>${fmt(fs.length)} ${fs.length === 1 ? 'cliente' : 'clientes'}</small></summary>
       <div class="pv-wa-cuerpo">${tabla(fs)}</div></details>`; }).join('')}`;
 }
-async function loadPostventa() {
+async function loadPostventa(silencioso) {
+  silencioso = silencioso === true;
   const grid = document.getElementById('pv-grid');
   if (!grid || ROL === 'marketing') return;
   const waPanel = document.getElementById('pv-wa');
-  if (waPanel) { waPanel.hidden = ROL !== 'admin'; if (waPanel.open) pvWhatsappCargar(); }
-  grid.innerHTML = '<div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div>';
+  if (waPanel) { waPanel.hidden = ROL !== 'admin'; if (waPanel.open && !silencioso) pvWhatsappCargar(); }
+  if (!silencioso || !grid.children.length) grid.innerHTML = '<div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div>';
   const busqueda = document.getElementById('pv-search')?.value.trim() || null;
   const [resumen, bandeja] = await Promise.all([
     sb.rpc('postventa_resumen'),
@@ -22365,7 +22367,11 @@ function subscribeRealtime() {
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, payload => {
       if (ROL === 'asesor' && INBOX_LEADS.some(x => x.id === payload.new.id)
           && (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto || payload.new.eliminado_at)) quitarDeInbox(payload.new.id);
-      if (document.getElementById('sec-postventa')?.classList.contains('active')) loadPostventa();
+      // Solo ventas, con debounce y sin esqueleto: cada UPDATE de cualquier lead
+      // (el bot escribe sin parar) recargaba la pestaña Reservas entera.
+      if (payload.new.estado === 'PAGO REALIZADO' && document.getElementById('sec-postventa')?.classList.contains('active')) {
+        clearTimeout(PV_RT_TIMER); PV_RT_TIMER = setTimeout(() => loadPostventa(true), 5000);
+      }
       // A diferencia del INSERT (siempre entra en página 1 por el order by
       // fecha_creacion desc), un UPDATE puede tocar un lead de cualquier
       // página -- se refresca igual, loadTable() ya respeta filtros/página
@@ -23616,17 +23622,22 @@ let BOL_BUSCAR_DEBOUNCE = null;
 // Última cola cargada: la hoja de detalle lee de acá en vez de volver a pedirla.
 let BOL_COLA = [];
 
-// Precios de boletería nacional ya confirmados (mismos que en la IA). Si la ruta
-// de la solicitud coincide, se le muestra al agente el precio que ya tenemos en
-// vez de que lo busque de cero. Clave: "origen|destino" en minúsculas, sin tildes.
-const BOL_PRECIOS = {
-  'valencia|porlamar': 131, 'valencia|san antonio': 195, 'valencia|maracaibo': 164,
-};
-const bolNorm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+// Tarifa de referencia del catálogo (la misma que publican web e IA) para la
+// ruta de la solicitud: el agente no la busca de cero. Origen y destino llegan
+// en texto libre, se resuelven contra ciudad / nombre comercial / IATA.
+const bolNorm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+function bolIataDe(texto) {
+  const t = bolNorm(texto); if (!t || !bolCatalogo) return null;
+  const nombres = a => [a.ciudad, a.nombre_comercial].filter(Boolean).map(bolNorm);
+  const a = bolCatalogo.aeropuertos.find(a => bolNorm(a.iata_code) === t || nombres(a).includes(t))
+    || (t.length >= 4 ? bolCatalogo.aeropuertos.find(a => nombres(a).some(n => n.includes(t) || t.includes(n))) : null);
+  return a?.iata_code || null;
+}
 function bolPrecioRuta(origen, destino) {
-  const o = bolNorm(origen), d = bolNorm(destino);
-  const p = BOL_PRECIOS[`${o}|${d}`] ?? BOL_PRECIOS[`${d}|${o}`];
-  return p ? `Precio ya cargado para esta ruta: ${money(p)} por persona, ida y vuelta (Aerolíneas Turpial). El agente confirma cupo.` : '';
+  const o = bolIataDe(origen), d = bolIataDe(destino); if (!o || !d) return '';
+  const ruta = bolCatalogo.rutas.find(r => (r.origen_iata === o && r.destino_iata === d) || (r.origen_iata === d && r.destino_iata === o));
+  const p = ruta && bolRefRuta(ruta.id);
+  return p ? `Tarifa de referencia: ${money(p.precio)} por persona, ida y vuelta (la web y la IA ofrecen desde ${money(bolPublico(p.precio))}). El agente confirma cupo y precio real.` : '';
 }
 
 const BOL_ERR = {
@@ -23892,6 +23903,7 @@ async function loadColaBoleteria() {
   if (ROL !== 'admin' && ROL !== 'asesor' && ROL !== 'boleteria') return;
   const grid = document.getElementById('bol-grid');
   if (!grid) return;
+  await bolAsegurarCatalogo();
   const loading = document.getElementById('bol-loading'), empty = document.getElementById('bol-empty');
   loading?.classList.add('show');
   const [cola, agentes] = await Promise.all([
@@ -23972,12 +23984,16 @@ function irAColaBoleteria() {
   document.querySelector('[data-leads-tab="boleteria"]')?.click();
 }
 
-/* ---------- Sección Boletería (D4) -- base de conocimiento de vuelos:
-   rutas, aerolíneas, precios, requisitos por país y calendario de
-   temporadas. Distinta de la cola de solicitudes de arriba (BOL_*), que
-   sigue funcionando igual. */
+/* ---------- Sección Boletería -- catálogo de vuelos: rutas, precios,
+   aerolíneas, aeropuertos, requisitos por país y temporadas. Todo editable
+   por admin y boletería (los asesores solo leen). Los precios con
+   es_referencia son la tarifa "Desde" que publican la web y la IA: la vista
+   vuelos_referencia los lee directo, no hay otra copia. */
 let bolCatalogo = null;
 let bolTab = 'rutas';
+// Mismo recargo y redondeo que ventas-ia.ts (montosVuelo) y la web.
+const bolPublico = p => Math.ceil(Math.round(p * 1.2 * 100) / 100);
+const bolPuedeEditar = () => ROL === 'admin' || ROL === 'boleteria';
 function setupBoleteriaSeccion() {
   document.querySelectorAll('#bol-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
     bolTab = btn.dataset.bolTab;
@@ -23986,11 +24002,21 @@ function setupBoleteriaSeccion() {
     renderBoleteriaTab(true);
   }));
   document.getElementById('bol-buscador')?.addEventListener('input', () => renderBoleteriaTab());
-  document.getElementById('bol-ruta-nueva')?.addEventListener('click', nuevaRutaBoleteria);
-  document.getElementById('bol-aerolinea-nueva')?.addEventListener('click', nuevaAerolineaBoleteria);
-  document.getElementById('bol-precio-nuevo')?.addEventListener('click', nuevoPrecioBoleteria);
-  document.getElementById('bol-requisito-nuevo')?.addEventListener('click', nuevoRequisitoBoleteria);
-  document.getElementById('bol-temporada-nueva')?.addEventListener('click', nuevaTemporadaBoleteria);
+  document.getElementById('bol-ruta-nueva')?.addEventListener('click', () => bolFormRuta());
+  document.getElementById('bol-aerolinea-nueva')?.addEventListener('click', () => bolFormAerolinea());
+  document.getElementById('bol-precio-nuevo')?.addEventListener('click', () => bolFormPrecio());
+  document.getElementById('bol-aeropuerto-nuevo')?.addEventListener('click', () => bolFormAeropuerto());
+  document.getElementById('bol-requisito-nuevo')?.addEventListener('click', () => bolFormRequisito());
+  document.getElementById('bol-temporada-nueva')?.addEventListener('click', () => bolFormTemporada());
+  document.getElementById('sec-boleteria')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-bol-accion]'); if (!b) return;
+    const { bolAccion: acc, bolEntidad: ent, bolId: id } = b.dataset;
+    if (acc === 'editar') BOL_FORMS[ent]?.(id);
+    else if (acc === 'quitar') bolQuitar(ent, id);
+    else if (acc === 'verificar') bolVerificarAerolinea(Number(id));
+    else if (acc === 'asignar') bolAsignarAerolinea(Number(id));
+    else if (acc === 'historico') bolHistoricoRuta(Number(id));
+  });
   document.getElementById('btn-entrar-modo-boleteria')?.addEventListener('click', entrarModoBoleteria);
   document.getElementById('btn-salir-modo-boleteria')?.addEventListener('click', salirModoBoleteria);
   document.getElementById('sheet-entrar-modo-boleteria')?.addEventListener('click', entrarModoBoleteria);
@@ -23998,14 +24024,22 @@ function setupBoleteriaSeccion() {
   document.getElementById('nav-cola-boleteria')?.addEventListener('click', irAColaBoleteria);
   document.getElementById('sheet-cola-boleteria')?.addEventListener('click', irAColaBoleteria);
 }
-const BOL_WRAP = { rutas: 'bol-rutas-wrap', aerolineas: 'bol-aerolineas-wrap', precios: 'bol-precios-wrap', requisitos: 'bol-requisitos-wrap', calendario: 'bol-calendario-wrap' };
+const BOL_WRAP = { rutas: 'bol-rutas-wrap', aerolineas: 'bol-aerolineas-wrap', precios: 'bol-precios-wrap', aeropuertos: 'bol-aeropuertos-wrap', requisitos: 'bol-requisitos-wrap', calendario: 'bol-calendario-wrap' };
 async function loadBoleteria() {
+  document.querySelectorAll('#sec-boleteria .bol-solo-editor').forEach(el => el.style.display = bolPuedeEditar() ? '' : 'none');
   const wrap0 = document.getElementById(BOL_WRAP[bolTab]);
   if (wrap0 && !bolCatalogo) wrap0.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   const { data, error } = await sb.rpc('boleteria_catalogo');
   if (error) { console.error('boleteria_catalogo:', error); errToast('No se pudo cargar Boletería'); return; }
   bolCatalogo = data;
   renderBoleteriaTab(true);
+}
+// La cola usa el catálogo para mostrar la tarifa de referencia; la pide sola
+// si el usuario todavía no abrió la sección.
+async function bolAsegurarCatalogo() {
+  if (bolCatalogo) return;
+  const { data } = await sb.rpc('boleteria_catalogo');
+  if (data) bolCatalogo = data;
 }
 function bolFiltro() { return (val('bol-buscador') || '').trim().toLowerCase(); }
 function bolMatch(texto, alias) {
@@ -24016,51 +24050,72 @@ function bolMatch(texto, alias) {
 }
 function renderBoleteriaTab(animar) {
   if (!bolCatalogo) return;
-  if (bolTab === 'rutas') renderBolRutas();
-  else if (bolTab === 'aerolineas') renderBolAerolineas();
-  else if (bolTab === 'precios') renderBolPrecios();
-  else if (bolTab === 'requisitos') renderBolRequisitos();
-  else if (bolTab === 'calendario') renderBolCalendario();
+  ({ rutas: renderBolRutas, aerolineas: renderBolAerolineas, precios: renderBolPrecios, aeropuertos: renderBolAeropuertos, requisitos: renderBolRequisitos, calendario: renderBolCalendario })[bolTab]?.();
   if (animar) entradaLista(document.getElementById(BOL_WRAP[bolTab]));
 }
 function bolNombreAerolinea(id) { return bolCatalogo.aerolineas.find(a => a.id === id)?.nombre || '—'; }
 function bolNombreRuta(id) { return bolCatalogo.rutas.find(r => r.id === id)?.nombre_natural || '—'; }
+function bolNombreTemporada(id) { return id ? (bolCatalogo.temporadas.find(t => t.id === id)?.nombre || '—') : 'Todo el año'; }
+function bolNombreLugar(iata) { const a = bolCatalogo.aeropuertos.find(x => x.iata_code === iata); return a ? (a.nombre_comercial || a.ciudad) : iata; }
+function bolRefRuta(rutaId) { return bolCatalogo.precios.find(p => p.ruta_id === rutaId && p.es_referencia && p.tipo === 'ida_vuelta'); }
+function bolBtn(acc, ent, id, html, cls = '') { return `<button class="btn-sm ${cls}" type="button" data-bol-accion="${acc}" data-bol-entidad="${ent}" data-bol-id="${esc(id)}">${html}</button>`; }
+function bolAcciones(ent, id, extra = '') {
+  if (!bolPuedeEditar()) return '';
+  return `<div class="bolc-acc">${extra}${bolBtn('editar', ent, id, '<i class="fas fa-pen"></i> Editar')}${bolBtn('quitar', ent, id, '<i class="fas fa-trash"></i> Quitar', 'bolc-quitar')}</div>`;
+}
+const bolTxtPrecio = p => `${p.moneda === 'USD' ? money(p.precio) : esc(p.moneda) + ' ' + p.precio}`;
+
 function renderBolRutas() {
   const wrap = document.getElementById('bol-rutas-wrap'); if (!wrap) return;
-  const rutas = bolCatalogo.rutas.filter(r => bolMatch(r.nombre_natural + ' ' + r.nombre_corto + ' ' + r.origen_iata + ' ' + r.destino_iata, r.alias));
+  const rutas = bolCatalogo.rutas.filter(r => bolMatch(`${r.nombre_natural} ${r.nombre_corto} ${r.origen_iata} ${r.destino_iata}`, r.alias));
   wrap.innerHTML = rutas.length ? rutas.map(r => {
-    const aerolineas = bolCatalogo.ruta_aerolineas.filter(ra => ra.ruta_id === r.id).map(ra => bolNombreAerolinea(ra.aerolinea_id));
-    return `<div class="card"><h2>${esc(r.nombre_natural)}</h2><div class="csub">${esc(r.nombre_corto)}${r.es_internacional ? ' · Internacional' : ' · Nacional'}</div>
-      <div style="margin-top:8px;font-size:12.5px;color:var(--muted2)">${aerolineas.length ? 'Vuela: ' + esc(aerolineas.join(', ')) : 'Sin aerolíneas asignadas'}</div></div>`;
+    const ras = bolCatalogo.ruta_aerolineas.filter(ra => ra.ruta_id === r.id);
+    const ref = bolRefRuta(r.id);
+    const chips = ras.map(ra => `<span class="bolc-chip">${esc(bolNombreAerolinea(ra.aerolinea_id))}${ra.dias_operacion?.length ? ' · ' + esc(ra.dias_operacion.join(', ')) : ''}${bolPuedeEditar() ? `<button type="button" title="Quitar" data-bol-accion="quitar" data-bol-entidad="ruta_aerolinea" data-bol-id="${ra.id}">×</button>` : ''}</span>`).join('');
+    const extra = (bolPuedeEditar() ? bolBtn('asignar', 'ruta', r.id, '<i class="fas fa-plane"></i> Aerolínea') : '') + bolBtn('historico', 'ruta', r.id, '<i class="fas fa-chart-line"></i> Ventas');
+    return `<div class="card"><h2>${esc(r.nombre_natural)}</h2><div class="csub">${esc(r.origen_iata)} → ${esc(r.destino_iata)} · ${r.es_internacional ? 'Internacional' : 'Nacional'}</div>
+      ${ref ? `<div class="bolc-ref">Desde ${bolTxtPrecio(ref)} ida y vuelta · la web y la IA muestran ${money(bolPublico(ref.precio))}</div>` : '<div class="bolc-linea">Sin tarifa de referencia: la web y la IA no la ofrecen.</div>'}
+      ${chips ? `<div class="bolc-chips">${chips}</div>` : '<div class="bolc-linea">Sin aerolíneas asignadas</div>'}
+      ${bolPuedeEditar() ? bolAcciones('ruta', r.id, extra) : `<div class="bolc-acc">${extra}</div>`}</div>`;
   }).join('') : '<div class="pc-vacio">Sin rutas cargadas todavía.</div>';
 }
 function renderBolAerolineas() {
   const wrap = document.getElementById('bol-aerolineas-wrap'); if (!wrap) return;
   const aerolineas = bolCatalogo.aerolineas.filter(a => bolMatch(a.nombre + ' ' + (a.iata_code || '')));
-  wrap.innerHTML = aerolineas.length ? aerolineas.map(a => `
-    <div class="card"><h2>${esc(a.nombre)} ${a.por_verificar ? '<span class="chip" style="background:rgba(245,181,68,.18);color:#f5b544">Por verificar</span>' : ''}</h2>
-      <div class="csub">${esc(a.iata_code || 'Sin código IATA')}${a.operativa ? '' : ' · No operativa'}</div>
-      <div style="margin-top:8px;font-size:12.5px;color:var(--muted2)">
-        ${a.equipaje_bodega_kg ? 'Bodega: ' + a.equipaje_bodega_kg + 'kg · ' : ''}${a.equipaje_mano_kg ? 'Mano: ' + a.equipaje_mano_kg + 'kg' : ''}
-      </div>
-      ${a.contacto_whatsapp || a.contacto_oficina ? `<div style="margin-top:6px;font-size:12.5px">${esc(a.contacto_oficina || '')} ${esc(a.contacto_whatsapp || '')}</div>` : ''}
-      ${a.por_verificar ? `<button class="btn-sm" style="margin-top:8px" data-verificar="${a.id}">Marcar verificada</button>` : ''}
-    </div>`).join('') : '<div class="pc-vacio">Sin aerolíneas cargadas todavía.</div>';
-  wrap.querySelectorAll('[data-verificar]').forEach(b => b.addEventListener('click', async () => {
-    const a = bolCatalogo.aerolineas.find(x => x.id === Number(b.dataset.verificar));
-    await sb.rpc('boleteria_guardar_aerolinea', { p_id: a.id, p_nombre: a.nombre, p_iata: a.iata_code, p_operativa: a.operativa,
-      p_equipaje_bodega_kg: a.equipaje_bodega_kg, p_equipaje_mano_kg: a.equipaje_mano_kg, p_costo_maleta_extra: a.costo_maleta_extra,
-      p_contacto_oficina: a.contacto_oficina, p_contacto_whatsapp: a.contacto_whatsapp, p_contacto_email: a.contacto_email,
-      p_contacto_ejecutivo: a.contacto_ejecutivo, p_politica_cambio: a.politica_cambio, p_politica_cancelacion: a.politica_cancelacion,
-      p_marcar_verificada: true });
-    okToast('Marcada como verificada'); loadBoleteria();
-  }));
+  const linea = (k, v) => v ? `<div class="bolc-linea">${k}: <span style="color:var(--txt)">${esc(v)}</span></div>` : '';
+  wrap.innerHTML = aerolineas.length ? aerolineas.map(a => {
+    const equipaje = [a.equipaje_mano_kg ? `mano ${a.equipaje_mano_kg} kg` : '', a.equipaje_bodega_kg ? `bodega ${a.equipaje_bodega_kg} kg` : '', a.costo_maleta_extra ? `maleta extra ${money(a.costo_maleta_extra)}` : ''].filter(Boolean).join(' · ');
+    const rutas = bolCatalogo.ruta_aerolineas.filter(ra => ra.aerolinea_id === a.id).map(ra => bolNombreRuta(ra.ruta_id));
+    return `<div class="card"><h2>${esc(a.nombre)} ${a.por_verificar ? '<span class="chip" style="background:rgba(245,181,68,.18);color:#f5b544">Por verificar</span>' : ''}</h2>
+      <div class="csub">${esc(a.iata_code || 'Sin código IATA')}${a.operativa ? '' : ' · No operativa'}${a.verificada_en ? ' · verificada ' + esc(fmtFechaSolo(a.verificada_en.slice(0, 10))) : ''}</div>
+      ${linea('Equipaje', equipaje)}${linea('Oficina', a.contacto_oficina)}${linea('WhatsApp', a.contacto_whatsapp)}${linea('Email', a.contacto_email)}${linea('Ejecutivo', a.contacto_ejecutivo)}
+      ${linea('Cambios', a.politica_cambio)}${linea('Cancelación', a.politica_cancelacion)}${linea('Rutas', rutas.join(', '))}
+      ${bolAcciones('aerolinea', a.id, a.por_verificar ? bolBtn('verificar', 'aerolinea', a.id, '<i class="fas fa-check"></i> Verificada') : '')}</div>`;
+  }).join('') : '<div class="pc-vacio">Sin aerolíneas cargadas todavía.</div>';
 }
 function renderBolPrecios() {
   const wrap = document.getElementById('bol-precios-wrap'); if (!wrap) return;
-  const precios = bolCatalogo.precios.filter(p => bolMatch(bolNombreRuta(p.ruta_id) + ' ' + bolNombreAerolinea(p.aerolinea_id)));
-  wrap.innerHTML = `<div style="overflow-x:auto"><table><thead><tr><th>Ruta</th><th>Aerolínea</th><th>Tipo</th><th>Precio ref.</th><th>Vigencia</th></tr></thead><tbody>
-    ${precios.length ? precios.map(p => `<tr><td>${esc(bolNombreRuta(p.ruta_id))}</td><td>${esc(bolNombreAerolinea(p.aerolinea_id))}</td><td>${p.tipo === 'ida_vuelta' ? 'Ida y vuelta' : 'Ida'}</td><td>${p.moneda} ${p.precio}</td><td>${esc(fmtFechaSolo(p.vigente_desde))}${p.vigente_hasta ? ' – ' + esc(fmtFechaSolo(p.vigente_hasta)) : ''}</td></tr>`).join('') : '<tr><td colspan="5" class="muted">Sin precios cargados todavía -- los carga el equipo, ninguno viene sembrado.</td></tr>'}
+  const precios = bolCatalogo.precios.filter(p => bolMatch(`${bolNombreRuta(p.ruta_id)} ${p.aerolinea_id ? bolNombreAerolinea(p.aerolinea_id) : 'referencia'} ${bolNombreTemporada(p.temporada_id)}`));
+  const editor = bolPuedeEditar();
+  wrap.innerHTML = `<div class="csub" style="margin-bottom:10px">Las tarifas marcadas <span class="bolc-ref-tag">Web / IA</span> son las que publican la web y el bot (con +20%). Cambiarlas se ve en minutos.</div>
+    <div style="overflow-x:auto"><table class="bolc-tabla"><thead><tr><th>Ruta</th><th>Aerolínea</th><th>Temporada</th><th>Tipo</th><th>Tarifa</th><th>Cliente ve</th><th>Vigencia</th>${editor ? '<th></th>' : ''}</tr></thead><tbody>
+    ${precios.length ? precios.map(p => `<tr><td>${esc(bolNombreRuta(p.ruta_id))}</td>
+      <td>${p.es_referencia ? '<span class="bolc-ref-tag">Web / IA</span>' : esc(bolNombreAerolinea(p.aerolinea_id))}</td>
+      <td>${esc(bolNombreTemporada(p.temporada_id))}</td><td>${p.tipo === 'ida_vuelta' ? 'Ida y vuelta' : 'Ida'}</td><td>${bolTxtPrecio(p)}</td>
+      <td>${p.es_referencia && p.moneda === 'USD' ? money(bolPublico(p.precio)) : '—'}</td>
+      <td>${esc(fmtFechaSolo(p.vigente_desde))}${p.vigente_hasta ? ' – ' + esc(fmtFechaSolo(p.vigente_hasta)) : ''}</td>
+      ${editor ? `<td class="bolc-td-acc">${bolBtn('editar', 'precio', p.id, '<i class="fas fa-pen"></i>')} ${bolBtn('quitar', 'precio', p.id, '<i class="fas fa-trash"></i>', 'bolc-quitar')}</td>` : ''}</tr>`).join('')
+      : `<tr><td colspan="${editor ? 8 : 7}" class="muted">Sin precios cargados.</td></tr>`}
+  </tbody></table></div>`;
+}
+function renderBolAeropuertos() {
+  const wrap = document.getElementById('bol-aeropuertos-wrap'); if (!wrap) return;
+  const aps = bolCatalogo.aeropuertos.filter(a => bolMatch(`${a.iata_code} ${a.ciudad} ${a.nombre_comercial || ''} ${a.nombre} ${a.pais}`));
+  const editor = bolPuedeEditar();
+  wrap.innerHTML = `<div style="overflow-x:auto"><table class="bolc-tabla"><thead><tr><th>IATA</th><th>Nombre al cliente</th><th>Aeropuerto</th><th>País</th>${editor ? '<th></th>' : ''}</tr></thead><tbody>
+    ${aps.length ? aps.map(a => `<tr><td><b>${esc(a.iata_code)}</b></td><td>${esc(a.nombre_comercial || a.ciudad)}</td><td>${esc(a.nombre)}</td><td>${esc(a.pais)}</td>
+      ${editor ? `<td class="bolc-td-acc">${bolBtn('editar', 'aeropuerto', a.iata_code, '<i class="fas fa-pen"></i>')} ${bolBtn('quitar', 'aeropuerto', a.iata_code, '<i class="fas fa-trash"></i>', 'bolc-quitar')}</td>` : ''}</tr>`).join('')
+      : `<tr><td colspan="5" class="muted">Sin aeropuertos.</td></tr>`}
   </tbody></table></div>`;
 }
 function renderBolRequisitos() {
@@ -24069,10 +24124,10 @@ function renderBolRequisitos() {
   wrap.innerHTML = req.length ? req.map(r => `
     <div class="card"><h2>${esc(r.pais)}</h2>
       <div class="csub">${r.requiere_visa ? 'Requiere visa' : 'No requiere visa'}${r.acepta_cedula ? ' · Acepta cédula' : ''}</div>
-      ${r.vigencia_min_pasaporte_meses ? `<div style="margin-top:6px;font-size:12.5px;color:var(--muted2)">Pasaporte con al menos ${r.vigencia_min_pasaporte_meses} meses de vigencia</div>` : ''}
-      ${r.vacunas ? `<div style="margin-top:4px;font-size:12.5px;color:var(--muted2)">Vacunas: ${esc(r.vacunas)}</div>` : ''}
-      ${r.notas ? `<div style="margin-top:4px;font-size:12.5px">${esc(r.notas)}</div>` : ''}
-    </div>`).join('') : '<div class="pc-vacio">Sin requisitos cargados todavía.</div>';
+      ${r.vigencia_min_pasaporte_meses ? `<div class="bolc-linea">Pasaporte con al menos ${r.vigencia_min_pasaporte_meses} meses de vigencia</div>` : ''}
+      ${r.vacunas ? `<div class="bolc-linea">Vacunas: ${esc(r.vacunas)}</div>` : ''}
+      ${r.notas ? `<div class="bolc-linea" style="color:var(--txt)">${esc(r.notas)}</div>` : ''}
+      ${bolAcciones('requisito', r.id)}</div>`).join('') : '<div class="pc-vacio">Sin requisitos cargados todavía.</div>';
 }
 function renderBolCalendario() {
   const wrap = document.getElementById('bol-calendario-wrap'); if (!wrap) return;
@@ -24080,75 +24135,156 @@ function renderBolCalendario() {
   const nivelColor = { alta: '#ff5c8a', media: '#f5b544', baja: '#10b981' };
   wrap.innerHTML = temporadas.length ? temporadas.map(t => `
     <div class="card"><h2>${esc(t.nombre)} <span class="chip" style="background:${nivelColor[t.nivel]}22;color:${nivelColor[t.nivel]}">${t.nivel}</span></h2>
-      <div class="csub">${esc(fmtFechaSolo(t.fecha_inicio))} – ${esc(fmtFechaSolo(t.fecha_fin))} (${t.anio})</div></div>`).join('')
+      <div class="csub">${esc(fmtFechaSolo(t.fecha_inicio))} – ${esc(fmtFechaSolo(t.fecha_fin))} (${t.anio})</div>
+      ${bolAcciones('temporada', t.id)}</div>`).join('')
     : '<div class="pc-vacio">Sin temporadas cargadas todavía. Carnaval y Semana Santa se mueven cada año -- cargalas por año, no quedan fijas.</div>';
 }
 
-/* Altas rápidas: formularios cortos en la hoja de confirmarSheet (campos). */
-async function nuevaRutaBoleteria() {
-  const f = await confirmarSheet({ titulo: 'Nueva ruta', textoOk: 'Crear ruta', campos: [
-    { id: 'origen', label: 'Código IATA de origen (ej: CCS)', requerido: true },
-    { id: 'destino', label: 'Código IATA de destino (ej: MIA)', requerido: true },
-    { id: 'natural', label: 'Nombre natural (ej: Caracas – Miami)', requerido: true },
-    { id: 'corto', label: 'Nombre corto (ej: CCS–MIA)' },
-    { id: 'alias', label: 'Otras formas de nombrarla, separadas por coma' },
-    { id: 'internacional', label: 'Es una ruta internacional', tipo: 'check' }] });
-  if (!f) return;
-  const corto = f.corto || `${f.origen.toUpperCase()}–${f.destino.toUpperCase()}`;
-  const { data, error } = await sb.rpc('boleteria_guardar_ruta', { p_id: null, p_origen_iata: f.origen, p_destino_iata: f.destino, p_nombre_natural: f.natural, p_nombre_corto: corto, p_alias: f.alias ? f.alias.split(',').map(s => s.trim()).filter(Boolean) : [], p_es_internacional: f.internacional });
-  if (error || !data?.ok) { errToast(error?.message || 'No se pudo crear la ruta (¿el aeropuerto existe?)'); return; }
-  okToast('Ruta creada'); loadBoleteria();
+/* Formularios: uno por entidad, con id = editar y sin id = alta. */
+async function bolGuardar(rpc, args, ok) {
+  const { data, error } = await sb.rpc(rpc, args);
+  if (error || data?.ok === false) { errToast(error?.message || 'No se pudo guardar'); return false; }
+  okToast(ok); loadBoleteria(); return true;
 }
-async function nuevaAerolineaBoleteria() {
-  const f = await confirmarSheet({ titulo: 'Nueva aerolínea', textoOk: 'Crear aerolínea', campos: [
-    { id: 'nombre', label: 'Nombre de la aerolínea', requerido: true },
-    { id: 'iata', label: 'Código IATA' }] });
+const bolOpcAeropuertos = () => bolCatalogo.aeropuertos.map(a => ({ v: a.iata_code, t: `${a.iata_code} · ${a.nombre_comercial || a.ciudad} (${a.pais})` }));
+const bolNum = v => v === '' || v == null ? null : Number(v);
+async function bolFormRuta(id) {
+  const r = id ? bolCatalogo.rutas.find(x => x.id === Number(id)) : null;
+  const f = await confirmarSheet({ titulo: r ? 'Editar ruta' : 'Nueva ruta', textoOk: 'Guardar',
+    detalle: '¿Falta un aeropuerto? Cargalo primero en la pestaña Aeropuertos.', campos: [
+    { id: 'origen', label: 'Sale de', tipo: 'select', valor: r?.origen_iata || 'CCS', opciones: bolOpcAeropuertos() },
+    { id: 'destino', label: 'Llega a', tipo: 'select', valor: r?.destino_iata || '', opciones: bolOpcAeropuertos() },
+    { id: 'natural', label: 'Nombre (si lo dejás vacío: "Caracas – Miami")', valor: r?.nombre_natural || '' },
+    { id: 'alias', label: 'Otras formas de nombrarla, separadas por coma (ej: porlamar, isla)', valor: (r?.alias || []).join(', ') }] });
   if (!f) return;
-  const { data, error } = await sb.rpc('boleteria_guardar_aerolinea', { p_id: null, p_nombre: f.nombre, p_iata: f.iata || null, p_operativa: true,
-    p_equipaje_bodega_kg: null, p_equipaje_mano_kg: null, p_costo_maleta_extra: null, p_contacto_oficina: null, p_contacto_whatsapp: null,
-    p_contacto_email: null, p_contacto_ejecutivo: null, p_politica_cambio: null, p_politica_cancelacion: null, p_marcar_verificada: false });
-  if (error || !data?.ok) { errToast(error?.message || 'No se pudo crear la aerolínea'); return; }
-  okToast('Aerolínea creada como "por verificar"'); loadBoleteria();
+  if (f.origen === f.destino) { errToast('Origen y destino no pueden ser el mismo'); return; }
+  const ao = bolCatalogo.aeropuertos.find(a => a.iata_code === f.origen), ad = bolCatalogo.aeropuertos.find(a => a.iata_code === f.destino);
+  const no = ao.nombre_comercial || ao.ciudad, nd = ad.nombre_comercial || ad.ciudad;
+  await bolGuardar('boleteria_guardar_ruta', { p_id: r?.id ?? null, p_origen_iata: f.origen, p_destino_iata: f.destino,
+    p_nombre_natural: f.natural || `${no} – ${nd}`, p_nombre_corto: `${no}–${nd}`,
+    p_alias: f.alias ? f.alias.split(',').map(s => s.trim()).filter(Boolean) : [], p_es_internacional: !(ao.es_nacional && ad.es_nacional) }, r ? 'Ruta actualizada' : 'Ruta creada');
 }
-async function nuevoPrecioBoleteria() {
-  if (!bolCatalogo.rutas.length || !bolCatalogo.aerolineas.length) { errToast('Primero cargá al menos una ruta y una aerolínea'); return; }
-  const f = await confirmarSheet({ titulo: 'Nuevo precio de referencia', textoOk: 'Cargar precio', campos: [
-    { id: 'ruta', label: 'Ruta', tipo: 'select', opciones: bolCatalogo.rutas.map((r, i) => ({ v: i, t: r.nombre_natural })) },
-    { id: 'aerolinea', label: 'Aerolínea', tipo: 'select', opciones: bolCatalogo.aerolineas.map((a, i) => ({ v: i, t: a.nombre })) },
-    { id: 'tipo', label: 'Tipo de tarifa', tipo: 'select', valor: 'ida_vuelta', opciones: [{ v: 'ida_vuelta', t: 'Ida y vuelta' }, { v: 'ida', t: 'Solo ida' }] },
-    { id: 'precio', label: 'Precio de referencia en USD', tipo: 'number', min: 0, requerido: true }] });
+async function bolFormAerolinea(id) {
+  const a = id ? bolCatalogo.aerolineas.find(x => x.id === Number(id)) : null;
+  const f = await confirmarSheet({ titulo: a ? 'Editar aerolínea' : 'Nueva aerolínea', textoOk: 'Guardar', campos: [
+    { id: 'nombre', label: 'Nombre', requerido: true, valor: a?.nombre },
+    { id: 'iata', label: 'Código IATA (2 letras, ej: CM)', valor: a?.iata_code },
+    { id: 'operativa', label: 'Está operando', tipo: 'check', valor: a ? a.operativa : true },
+    { id: 'mano', label: 'Equipaje de mano (kg)', tipo: 'number', min: 0, valor: a?.equipaje_mano_kg },
+    { id: 'bodega', label: 'Equipaje de bodega (kg)', tipo: 'number', min: 0, valor: a?.equipaje_bodega_kg },
+    { id: 'extra', label: 'Maleta extra (USD)', tipo: 'number', min: 0, valor: a?.costo_maleta_extra },
+    { id: 'oficina', label: 'Oficina / teléfono', valor: a?.contacto_oficina },
+    { id: 'wa', label: 'WhatsApp', valor: a?.contacto_whatsapp },
+    { id: 'email', label: 'Email', valor: a?.contacto_email },
+    { id: 'ejecutivo', label: 'Ejecutivo de cuenta', valor: a?.contacto_ejecutivo },
+    { id: 'cambio', label: 'Política de cambios', tipo: 'textarea', valor: a?.politica_cambio },
+    { id: 'cancelacion', label: 'Política de cancelación / reembolso', tipo: 'textarea', valor: a?.politica_cancelacion },
+    { id: 'verificada', label: 'Datos verificados con la aerolínea', tipo: 'check', valor: a ? !a.por_verificar : false }] });
   if (!f) return;
-  const iRuta = parseInt(f.ruta, 10), iAer = parseInt(f.aerolinea, 10), precio = parseFloat(f.precio);
-  if (!bolCatalogo.rutas[iRuta] || !bolCatalogo.aerolineas[iAer] || !(precio > 0)) { errToast('Revisá el precio: tiene que ser mayor a 0'); return; }
-  const { data, error } = await sb.rpc('boleteria_guardar_precio', { p_ruta_id: bolCatalogo.rutas[iRuta].id, p_aerolinea_id: bolCatalogo.aerolineas[iAer].id, p_temporada_id: null, p_tipo: f.tipo, p_precio: precio, p_moneda: 'USD', p_vigente_desde: null, p_vigente_hasta: null });
-  if (error || !data?.ok) { errToast(error?.message || 'No se pudo cargar el precio'); return; }
-  okToast('Precio cargado'); loadBoleteria();
+  await bolGuardar('boleteria_guardar_aerolinea', { p_id: a?.id ?? null, p_nombre: f.nombre, p_iata: f.iata || null, p_operativa: f.operativa,
+    p_equipaje_bodega_kg: bolNum(f.bodega), p_equipaje_mano_kg: bolNum(f.mano), p_costo_maleta_extra: bolNum(f.extra),
+    p_contacto_oficina: f.oficina || null, p_contacto_whatsapp: f.wa || null, p_contacto_email: f.email || null, p_contacto_ejecutivo: f.ejecutivo || null,
+    p_politica_cambio: f.cambio || null, p_politica_cancelacion: f.cancelacion || null, p_marcar_verificada: f.verificada && (!a || a.por_verificar) },
+    a ? 'Aerolínea actualizada' : (f.verificada ? 'Aerolínea creada' : 'Aerolínea creada como "por verificar"'));
 }
-async function nuevoRequisitoBoleteria() {
-  const f = await confirmarSheet({ titulo: 'Nuevo requisito de viaje', textoOk: 'Guardar', campos: [
-    { id: 'pais', label: 'País', requerido: true },
-    { id: 'visa', label: 'Requiere visa', tipo: 'check' },
-    { id: 'cedula', label: 'Acepta cédula (sin pasaporte)', tipo: 'check' },
-    { id: 'meses', label: 'Vigencia mínima de pasaporte, en meses', tipo: 'number', min: 0, step: 1 },
-    { id: 'notas', label: 'Notas', tipo: 'textarea' }] });
+async function bolVerificarAerolinea(id) {
+  const a = bolCatalogo.aerolineas.find(x => x.id === id); if (!a) return;
+  await bolGuardar('boleteria_guardar_aerolinea', { p_id: a.id, p_nombre: a.nombre, p_iata: a.iata_code, p_operativa: a.operativa,
+    p_equipaje_bodega_kg: a.equipaje_bodega_kg, p_equipaje_mano_kg: a.equipaje_mano_kg, p_costo_maleta_extra: a.costo_maleta_extra,
+    p_contacto_oficina: a.contacto_oficina, p_contacto_whatsapp: a.contacto_whatsapp, p_contacto_email: a.contacto_email,
+    p_contacto_ejecutivo: a.contacto_ejecutivo, p_politica_cambio: a.politica_cambio, p_politica_cancelacion: a.politica_cancelacion,
+    p_marcar_verificada: true }, 'Marcada como verificada');
+}
+// "Editar" un precio carga uno nuevo que reemplaza al anterior: el viejo queda
+// inactivo como historial (lo hace boleteria_guardar_precio).
+async function bolFormPrecio(id) {
+  if (!bolCatalogo.rutas.length) { errToast('Primero cargá al menos una ruta'); return; }
+  const p = id ? bolCatalogo.precios.find(x => x.id === Number(id)) : null;
+  const f = await confirmarSheet({ titulo: p ? 'Actualizar precio' : 'Cargar precio', textoOk: 'Guardar', campos: [
+    { id: 'ruta', label: 'Ruta', tipo: 'select', valor: p?.ruta_id, opciones: bolCatalogo.rutas.map(r => ({ v: r.id, t: r.nombre_natural })) },
+    { id: 'ref', label: 'Tarifa "Desde" que publican la web y la IA', tipo: 'check', valor: p ? p.es_referencia : false },
+    { id: 'aerolinea', label: 'Aerolínea', tipo: 'select', valor: p?.aerolinea_id ?? '', opciones: [{ v: '', t: '— Ninguna en particular —' }, ...bolCatalogo.aerolineas.map(a => ({ v: a.id, t: a.nombre }))] },
+    { id: 'temporada', label: 'Temporada', tipo: 'select', valor: p?.temporada_id ?? '', opciones: [{ v: '', t: 'Todo el año' }, ...bolCatalogo.temporadas.map(t => ({ v: t.id, t: t.nombre }))] },
+    { id: 'tipo', label: 'Tipo de tarifa', tipo: 'select', valor: p?.tipo || 'ida_vuelta', opciones: [{ v: 'ida_vuelta', t: 'Ida y vuelta' }, { v: 'ida', t: 'Solo ida' }] },
+    { id: 'precio', label: 'Tarifa por persona', tipo: 'number', min: 0, requerido: true, valor: p?.precio },
+    { id: 'moneda', label: 'Moneda', tipo: 'select', valor: p?.moneda || 'USD', opciones: [{ v: 'USD', t: 'USD' }, { v: 'EUR', t: 'EUR' }] },
+    { id: 'desde', label: 'Vigente desde', tipo: 'date', valor: p?.vigente_desde || '' },
+    { id: 'hasta', label: 'Vigente hasta', tipo: 'date', valor: p?.vigente_hasta || '' }] });
   if (!f) return;
-  const { data, error } = await sb.rpc('boleteria_guardar_requisito', { p_id: null, p_pais: f.pais, p_requiere_visa: f.visa, p_vigencia_min_pasaporte_meses: f.meses ? parseInt(f.meses, 10) : null, p_acepta_cedula: f.cedula, p_vacunas: null, p_notas: f.notas || null });
-  if (error || !data?.ok) { errToast(error?.message || 'No se pudo guardar'); return; }
-  okToast('Requisito guardado'); loadBoleteria();
+  const precio = parseFloat(f.precio);
+  if (!(precio > 0)) { errToast('La tarifa tiene que ser mayor a 0'); return; }
+  if (!f.ref && !f.aerolinea) { errToast('Elegí la aerolínea, o marcalo como tarifa "Desde" de la web'); return; }
+  if (f.ref && f.moneda !== 'USD') { errToast('La tarifa de la web y la IA tiene que estar en USD'); return; }
+  if (f.ref && f.tipo === 'ida_vuelta' && !(await confirmarSheet({ titulo: '¿Publicar esta tarifa?', textoOk: 'Publicar',
+    detalle: `${bolNombreRuta(Number(f.ruta))}: la web y el bot van a ofrecer desde ${money(bolPublico(precio))} ida y vuelta por persona (tarifa ${money(precio)} + 20%). Se ve en unos minutos.` }))) return;
+  await bolGuardar('boleteria_guardar_precio', { p_ruta_id: Number(f.ruta), p_aerolinea_id: bolNum(f.aerolinea), p_temporada_id: bolNum(f.temporada),
+    p_tipo: f.tipo, p_precio: precio, p_moneda: f.moneda, p_vigente_desde: f.desde || null, p_vigente_hasta: f.hasta || null, p_es_referencia: f.ref }, 'Precio guardado');
 }
-async function nuevaTemporadaBoleteria() {
-  const f = await confirmarSheet({ titulo: 'Nueva temporada', textoOk: 'Guardar', campos: [
-    { id: 'nombre', label: 'Nombre de la temporada (ej: Carnaval 2027)', requerido: true },
-    { id: 'nivel', label: 'Nivel', tipo: 'select', valor: 'alta', opciones: [{ v: 'alta', t: 'Alta' }, { v: 'media', t: 'Media' }, { v: 'baja', t: 'Baja' }] },
-    { id: 'anio', label: 'Año', tipo: 'number', step: 1, valor: new Date().getFullYear(), requerido: true },
-    { id: 'inicio', label: 'Fecha de inicio', tipo: 'date', requerido: true },
-    { id: 'fin', label: 'Fecha de fin', tipo: 'date', requerido: true }] });
+async function bolFormAeropuerto(iata) {
+  const a = iata ? bolCatalogo.aeropuertos.find(x => x.iata_code === iata) : null;
+  const f = await confirmarSheet({ titulo: a ? `Editar ${a.iata_code}` : 'Nuevo aeropuerto', textoOk: 'Guardar', campos: [
+    ...(a ? [] : [{ id: 'iata', label: 'Código IATA (3 letras, ej: MIA)', requerido: true }]),
+    { id: 'ciudad', label: 'Ciudad', requerido: true, valor: a?.ciudad },
+    { id: 'comercial', label: 'Nombre que ve el cliente, si es otro (ej: Margarita)', valor: a?.nombre_comercial },
+    { id: 'nombre', label: 'Nombre del aeropuerto', requerido: true, valor: a?.nombre },
+    { id: 'pais', label: 'País', requerido: true, valor: a?.pais || 'Venezuela' },
+    { id: 'nacional', label: 'Es nacional (Venezuela)', tipo: 'check', valor: a ? a.es_nacional : false }] });
+  if (!f) return;
+  const code = (a?.iata_code || f.iata).toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code)) { errToast('El código IATA son 3 letras'); return; }
+  await bolGuardar('boleteria_guardar_aeropuerto', { p_iata: code, p_nombre: f.nombre, p_ciudad: f.ciudad, p_pais: f.pais, p_es_nacional: f.nacional, p_nombre_comercial: f.comercial || null }, 'Aeropuerto guardado');
+}
+async function bolFormRequisito(id) {
+  const r = id ? bolCatalogo.requisitos.find(x => x.id === Number(id)) : null;
+  const f = await confirmarSheet({ titulo: r ? `Editar ${r.pais}` : 'Nuevo requisito de viaje', textoOk: 'Guardar', campos: [
+    { id: 'pais', label: 'País', requerido: true, valor: r?.pais },
+    { id: 'visa', label: 'Requiere visa', tipo: 'check', valor: r?.requiere_visa },
+    { id: 'cedula', label: 'Acepta cédula (sin pasaporte)', tipo: 'check', valor: r?.acepta_cedula },
+    { id: 'meses', label: 'Vigencia mínima de pasaporte, en meses', tipo: 'number', min: 0, step: 1, valor: r?.vigencia_min_pasaporte_meses },
+    { id: 'vacunas', label: 'Vacunas exigidas', valor: r?.vacunas },
+    { id: 'notas', label: 'Notas', tipo: 'textarea', valor: r?.notas }] });
+  if (!f) return;
+  await bolGuardar('boleteria_guardar_requisito', { p_id: r?.id ?? null, p_pais: f.pais, p_requiere_visa: f.visa, p_vigencia_min_pasaporte_meses: f.meses ? parseInt(f.meses, 10) : null, p_acepta_cedula: f.cedula, p_vacunas: f.vacunas || null, p_notas: f.notas || null }, 'Requisito guardado');
+}
+async function bolFormTemporada(id) {
+  const t = id ? bolCatalogo.temporadas.find(x => x.id === Number(id)) : null;
+  const f = await confirmarSheet({ titulo: t ? 'Editar temporada' : 'Nueva temporada', textoOk: 'Guardar', campos: [
+    { id: 'nombre', label: 'Nombre de la temporada (ej: Carnaval 2027)', requerido: true, valor: t?.nombre },
+    { id: 'nivel', label: 'Nivel', tipo: 'select', valor: t?.nivel || 'alta', opciones: [{ v: 'alta', t: 'Alta' }, { v: 'media', t: 'Media' }, { v: 'baja', t: 'Baja' }] },
+    { id: 'anio', label: 'Año', tipo: 'number', step: 1, valor: t?.anio || new Date().getFullYear(), requerido: true },
+    { id: 'inicio', label: 'Fecha de inicio', tipo: 'date', requerido: true, valor: t?.fecha_inicio },
+    { id: 'fin', label: 'Fecha de fin', tipo: 'date', requerido: true, valor: t?.fecha_fin }] });
   if (!f) return;
   const anio = parseInt(f.anio, 10);
   if (!anio) { errToast('Año inválido'); return; }
-  const { data, error } = await sb.rpc('boleteria_guardar_temporada', { p_id: null, p_nombre: f.nombre, p_nivel: f.nivel, p_anio: anio, p_fecha_inicio: f.inicio, p_fecha_fin: f.fin });
-  if (error || !data?.ok) { errToast(error?.message || 'No se pudo guardar la temporada'); return; }
-  okToast('Temporada guardada'); loadBoleteria();
+  if (f.fin < f.inicio) { errToast('La temporada termina antes de empezar'); return; }
+  await bolGuardar('boleteria_guardar_temporada', { p_id: t?.id ?? null, p_nombre: f.nombre, p_nivel: f.nivel, p_anio: anio, p_fecha_inicio: f.inicio, p_fecha_fin: f.fin }, 'Temporada guardada');
+}
+const BOL_FORMS = { ruta: bolFormRuta, aerolinea: bolFormAerolinea, precio: bolFormPrecio, aeropuerto: bolFormAeropuerto, requisito: bolFormRequisito, temporada: bolFormTemporada };
+
+async function bolQuitar(ent, id) {
+  const p = ent === 'precio' ? bolCatalogo.precios.find(x => x.id === Number(id)) : null;
+  const r = ent === 'ruta' ? bolRefRuta(Number(id)) : null;
+  const avisoWeb = (p?.es_referencia || r) ? '\nLa web y el bot dejan de ofrecer esta ruta.' : '';
+  const nombres = { ruta: 'la ruta', aerolinea: 'la aerolínea', precio: 'el precio', aeropuerto: 'el aeropuerto', requisito: 'el requisito', temporada: 'la temporada', ruta_aerolinea: 'la aerolínea de esta ruta' };
+  if (!(await confirmarSheet({ titulo: `¿Quitar ${nombres[ent]}?`, detalle: `Deja de aparecer en Boletería (queda guardado como historial).${avisoWeb}`, textoOk: 'Quitar', destructivo: true }))) return;
+  await bolGuardar('boleteria_desactivar', { p_entidad: ent, p_id: String(id) }, 'Quitado');
+}
+async function bolAsignarAerolinea(rutaId) {
+  if (!bolCatalogo.aerolineas.length) { errToast('Primero cargá la aerolínea en su pestaña'); return; }
+  const f = await confirmarSheet({ titulo: `Aerolínea en ${bolNombreRuta(rutaId)}`, textoOk: 'Guardar', campos: [
+    { id: 'aerolinea', label: 'Aerolínea', tipo: 'select', opciones: bolCatalogo.aerolineas.map(a => ({ v: a.id, t: a.nombre })) },
+    { id: 'dias', label: 'Días que opera, separados por coma (ej: lun, mié, vie)' }] });
+  if (!f) return;
+  await bolGuardar('boleteria_guardar_ruta_aerolinea', { p_ruta_id: rutaId, p_aerolinea_id: Number(f.aerolinea), p_dias_operacion: f.dias ? f.dias.split(',').map(s => s.trim()).filter(Boolean) : [] }, 'Aerolínea asignada');
+}
+async function bolHistoricoRuta(rutaId) {
+  const { data, error } = await sb.rpc('boleteria_historico_ruta', { p_ruta_id: rutaId });
+  if (error) { errToast(error.message); return; }
+  const ventas = data?.ventas || [];
+  const lineas = ventas.slice(0, 15).map(v => `${fmtFechaSolo(String(v.fecha).slice(0, 10))} · ${money(v.monto)}${v.personas ? ` · ${v.personas} pers.` : ''}${v.origen || v.destino ? ` · ${v.origen || ''} → ${v.destino || ''}` : ''}`);
+  await confirmarSheet({ titulo: `Ventas: ${bolNombreRuta(rutaId)}`, textoOk: 'Cerrar', textoCancelar: 'Volver',
+    detalle: ventas.length ? `${data.nota}\n\n${lineas.join('\n')}${ventas.length > 15 ? `\n… y ${ventas.length - 15} más` : ''}` : 'Todavía no hay ventas facturadas que coincidan con esta ruta.' });
 }
 
 /* ---------- Sub-pestaña "En facturación" de Leads ----------
