@@ -696,6 +696,27 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .skel-bar{height:52px;border-radius:10px;background:linear-gradient(90deg,var(--panel-solid) 25%,rgba(255,255,255,.07) 50%,var(--panel-solid) 75%);background-size:200% 100%;animation:skel-shimmer 1.4s ease-in-out infinite}
 .tbl-state.skel-grid.show{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
 .skel-card{height:190px;border-radius:14px;background:linear-gradient(90deg,var(--panel-solid) 25%,rgba(255,255,255,.07) 50%,var(--panel-solid) 75%);background-size:200% 100%;animation:skel-shimmer 1.4s ease-in-out infinite}
+/* Cargador con progreso (cargadorIniciar en app.js): Tarifario y Galería. */
+.cargador-host{display:none}
+.cargador-host.show{display:block}
+.cargador{grid-column:1/-1;display:flex;flex-direction:column;gap:9px;padding:14px 0}
+.cargador-cab{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700;color:var(--txt)}
+.cargador-ico{width:28px;height:28px;border-radius:999px;display:grid;place-items:center;font-size:12px;background:var(--accent-soft);color:var(--accent);animation:cargador-vuelo 1.6s ease-in-out infinite}
+.cargador-pct{margin-left:auto;font-size:12px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+.cargador-barra{height:6px;border-radius:999px;background:var(--line2);overflow:hidden}
+.cargador-fill{position:relative;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--accent-deep));transition:width .2s linear;overflow:hidden}
+.cargador-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 25%,rgba(255,255,255,.35) 50%,transparent 75%);background-size:200% 100%;animation:skel-shimmer 1.4s linear infinite}
+.cargador-tip{min-height:16px;font-size:12px;color:var(--muted);transition:opacity .16s,transform .16s}
+.cargador-tip.cambia{opacity:0;transform:translateY(-4px)}
+.cargador-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:7px}
+.cargador-card{display:flex;flex-direction:column;gap:9px;padding:9px;border:1px solid var(--line);border-radius:14px;opacity:0;animation:cargador-entra .4s ease-out forwards;animation-delay:calc(var(--i) * 80ms)}
+.cc-foto,.cc-l{background:linear-gradient(90deg,var(--panel-solid) 25%,rgba(var(--ink-rgb),.07) 50%,var(--panel-solid) 75%);background-size:200% 100%;animation:skel-shimmer 1.4s ease-in-out infinite}
+.cc-foto{aspect-ratio:4/3;border-radius:10px}
+.cc-l{width:80%;height:11px;border-radius:999px}
+.cc-l.corta{width:45%}
+@keyframes cargador-entra{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+@keyframes cargador-vuelo{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-2px) rotate(-8deg)}}
+@media (prefers-reduced-motion:reduce){.cargador-ico,.cargador-fill::after,.cc-foto,.cc-l{animation:none}.cargador-card{animation:none;opacity:1}.cargador-tip{transition:none}}
 .tbl-state .es-t{font-size:14px;font-weight:600;color:var(--txt)}
 .tbl-state .es-s{font-size:12px}
 .spin{width:30px;height:30px;border:3px solid rgba(255,255,255,.1);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
@@ -5277,7 +5298,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <label class="tar-f-check" id="tar-f-ocultas-wrap" data-tabs="promo" data-hidden><input type="checkbox" class="tar-f" id="tar-f-ocultas"> Ver ocultas</label>
         <button class="mfs-done" data-mfs="tar-toolbar" type="button">Listo</button>
       </div>
-      <div class="tbl-state skel-grid" id="tar-loading"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>
+      <div class="cargador-host" id="tar-loading"></div>
       <div class="tbl-state" id="tar-empty"><i class="fas fa-book-open"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay ítems con este filtro</div></div>
       <div class="tar-grid" id="tar-grid"></div>
       <details class="tar-info-box" id="tar-info-box" style="display:none">

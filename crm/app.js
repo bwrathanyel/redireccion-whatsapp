@@ -2653,10 +2653,13 @@ async function startApp() {
   // entrada por default pasa a ser 'hoy' (bottom-nav de 5 zonas); desktop
   // sigue entrando por leads/dashboard como siempre, sin cambios.
   const esMobile = window.matchMedia('(max-width:760px)').matches;
-  const seccionGuardada = MI_PREFERENCIAS.ultima_seccion;
+  const seccionGuardada = ultimaSeccionLocal() || MI_PREFERENCIAS.ultima_seccion;
   // usuarioPuedeAbrirSeccion y no solo que exista #sec-*: las secciones que
   // salieron del menú (Mis Notas, Voz IA...) conservan su HTML.
   const seccionValida = seccionGuardada && document.getElementById('sec-' + seccionGuardada) && usuarioPuedeAbrirSeccion(seccionGuardada);
+  // Las secciones que no leen STATS se abren ya, sin esperar a loadStats():
+  // antes el admin veía el dashboard 1-2 s y recién ahí saltaba a la suya.
+  if (ROL === 'admin' && seccionValida && !['dashboard', 'hoy', 'leads', 'pipeline'].includes(seccionGuardada)) activateSection(seccionGuardada);
   if (ROL === 'asesor') {
     const destino = seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'leads');
     activateSection(destino);
@@ -17954,6 +17957,48 @@ function montarTarRefrescoAlVolver() {
   });
 }
 arrancar(montarTarRefrescoAlVolver);
+/* ---------- Cargador con progreso (secciones lentas: Tarifario, Galería) ----------
+   Con total conocido (ventanas de tarifas) la barra sigue el avance real y se
+   arrastra despacio hacia el próximo paso para no verse congelada; sin total
+   avanza sola hacia ~90 % y nunca llega a 100 por su cuenta. Nunca retrocede. */
+const CARGADOR_TIPS = ['Revisando hoteles y temporadas…', 'Buscando las mejores promociones…', 'Comparando precios por noche…', 'Juntando las fotos de cada destino…', 'Casi listo, acomodando las tarjetas…'];
+function cargadorIniciar(el, { titulo = 'Cargando…', icono = 'fa-plane-departure', tips = CARGADOR_TIPS, tarjetas = 6 } = {}) {
+  if (!el) return { progreso() {}, fin() {} };
+  clearInterval(el._cargadorTimer);
+  // Si llega otra carga sobre el mismo contenedor (cambio de pestaña a mitad),
+  // el fin() de la vieja no debe apagar la nueva.
+  const id = el._cargadorId = (el._cargadorId || 0) + 1;
+  if (el._cargadorPrevio === undefined) el._cargadorPrevio = el.innerHTML;
+  el.innerHTML = `<div class="cargador" role="status" aria-live="polite">
+    <div class="cargador-cab"><span class="cargador-ico"><i class="fas ${icono}"></i></span><span class="cargador-tit">${esc(titulo)}</span><span class="cargador-pct">0%</span></div>
+    <div class="cargador-barra"><div class="cargador-fill"></div></div>
+    <div class="cargador-tip">${esc(tips[0])}</div>
+    <div class="cargador-grid">${Array.from({ length: tarjetas }, (_, i) => `<div class="cargador-card" style="--i:${i}"><div class="cc-foto"></div><div class="cc-l"></div><div class="cc-l corta"></div></div>`).join('')}</div>
+  </div>`;
+  el.classList.add('show');
+  const fill = el.querySelector('.cargador-fill'), pct = el.querySelector('.cargador-pct'), tip = el.querySelector('.cargador-tip');
+  let visto = 0, real = null, paso = 0, tick = 0, n = 0;
+  const pintar = () => { fill.style.width = visto + '%'; pct.textContent = Math.round(visto) + '%'; };
+  el._cargadorTimer = setInterval(() => {
+    const techo = real === null ? 90 : Math.min(99, real + paso * 0.9);
+    visto = Math.max(visto, visto + (techo - visto) * 0.06);
+    pintar();
+    if (++tick % 10 === 0 && tips.length > 1) {
+      tip.classList.add('cambia');
+      setTimeout(() => { tip.textContent = tips[++n % tips.length]; tip.classList.remove('cambia'); }, 220);
+    }
+  }, 200);
+  return {
+    progreso(hechos, total) {
+      if (!(total > 0) || el._cargadorId !== id) return;
+      real = Math.min(99, hechos / total * 100); paso = 100 / total;
+      visto = Math.max(visto, real); pintar();
+    },
+    fin() { if (el._cargadorId !== id) return; clearInterval(el._cargadorTimer); el.classList.remove('show'); el.innerHTML = el._cargadorPrevio; },
+  };
+}
+const TAR_CARGADOR_TITULO = { hotsale: 'Cargando Hot Sales', ia: 'Cargando curaduría IA', promo: 'Cargando promociones', destino: 'Cargando guías y tours', hotel: 'Cargando hoteles', paquete: 'Cargando paquetes', boleteria: 'Cargando boletería' };
+
 async function loadTarifario() {
   loadTarifarioInfo();
   // TOP IA: la lista corta que el bot recorta (ia_top_productos). Solo se usa
@@ -17965,7 +18010,8 @@ async function loadTarifario() {
   }
   if (tarCache[tarTab]) { renderTarifario(); return; }
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
-  empty.classList.remove('show'); loading.classList.add('show'); grid.style.display = 'none';
+  empty.classList.remove('show'); grid.style.display = 'none';
+  const carga = cargadorIniciar(loading, { titulo: TAR_CARGADOR_TITULO[tarTab] || 'Cargando tarifario' });
   // Boletería no es un `tipo`: los vuelos siguen siendo 'paquete' para que el
   // catálogo público los rutee igual. Se filtran por la bandera es_boleteria,
   // y por eso esta pestaña necesita su propio filtro en vez de .eq('tipo', ...).
@@ -18016,12 +18062,13 @@ async function loadTarifario() {
       if (em || !mx?.length) return null;
       const desde = [];
       for (let a = 0; a < mx[0].id; a += PAGINA_TARIFAS) desde.push(a);
-      const partes = new Array(desde.length); let sig = 0, fallo = false;
+      const partes = new Array(desde.length); let sig = 0, fallo = false, hechas = 0;
       await Promise.all(Array.from({ length: Math.min(4, desde.length) }, async () => {
         for (let k; !fallo && (k = sig++) < desde.length;) {
           const { data: d, error: e } = await nuevaQuery().gt('id', desde[k]).lte('id', desde[k] + PAGINA_TARIFAS);
           if (e) { fallo = true; return; }
           partes[k] = d || [];
+          carga.progreso(++hechas, desde.length);
         }
       }));
       return fallo ? null : partes.flat();
@@ -18063,7 +18110,7 @@ async function loadTarifario() {
     q = soloVivos(sb.from('productos').select(selProductos).eq('tipo', tarTab).eq('es_boleteria', false)).order('nombre');
   }
   if (q) ({ data, error } = await q);
-  loading.classList.remove('show'); grid.style.display = 'grid';
+  carga.fin(); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
   // Un paquete puede heredar las fotos de su hotel vinculado (productos.hotel_id)
   // — PostgREST no resuelve bien el embed self-join `productos!hotel_id` (siempre
@@ -19270,10 +19317,12 @@ async function cargarGaleriaCategoria(key, append) {
   const loading = document.getElementById(`gal-loading-${key}`), empty = document.getElementById(`gal-empty-${key}`),
     list = document.getElementById(`gal-cat-list-${key}`), pager = document.getElementById(`gal-pager-${key}`);
   if (!append) { st.page = 0; list.innerHTML = ''; empty.style.display = 'none'; }
-  loading.classList.add('show');
+  // "Cargar más" sigue con el skeleton chico; la carga inicial usa el cargador.
+  const carga = append ? null : cargadorIniciar(loading, { titulo: 'Cargando fotos', icono: 'fa-images', tarjetas: 3, tips: ['Buscando las fotos de esta carpeta…', 'Preparando las miniaturas…', 'Casi listo…'] });
+  if (append) loading.classList.add('show');
   const from = st.page * GAL_PER;
   const { data, count, error, nombreDe } = await fetchGaleriaPagina(key, from);
-  loading.classList.remove('show');
+  if (carga) carga.fin(); else loading.classList.remove('show');
   if (error) { console.error(error); errToast('No se pudo cargar esta categoría de la galería'); return; }
   st.total = count ?? 0;
   const conFotos = (data || []).filter(x => fotosRaw(x).length);
@@ -22948,9 +22997,17 @@ let _navPrefsTimer = null;
 function guardarPreferenciasNavDebounced() {
   clearTimeout(_navPrefsTimer);
   _navPrefsTimer = setTimeout(() => {
+    _navPrefsTimer = null;
     Promise.resolve(sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS })).catch(() => {});
   }, 3000);
 }
+// Al recargar o cerrar con el debounce pendiente, se manda ya (best-effort:
+// el navegador puede cortar el fetch, pero la copia local ya quedó guardada).
+addEventListener('pagehide', () => {
+  if (!_navPrefsTimer) return;
+  clearTimeout(_navPrefsTimer); _navPrefsTimer = null;
+  Promise.resolve(sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS })).catch(() => {});
+});
 function incrementarUsoSeccion(sec) {
   if (!sec) return;
   const uso = { ...(MI_PREFERENCIAS.uso_secciones || {}) };
@@ -23578,10 +23635,19 @@ function aplicarOrdenSidebar() {
 }
 
 /* ---------- Recordar la última sección visitada (preferencias.ultima_seccion) ----------
-   Se guarda para cualquier rol, pero solo se restaura al entrar para admin/
-   asesor -- marketing y boleteria arrancan siempre en su única sección fija
-   (ver startApp), no tiene sentido restaurarles nada ahí. */
+   Solo admin/asesor: marketing y boleteria arrancan siempre en su sección
+   fija (ver startApp). No guardarles nada además evita que un admin en vista
+   previa de marketing deje 'tarifario' como su última sección (pasaba).
+   Copia local síncrona por pestaña (sessionStorage) y por navegador
+   (localStorage): la de la DB va con debounce de 3 s y se perdía al recargar
+   rápido, y otra pestaña abierta la pisaba al guardar sus preferencias. */
+const ultimaSeccionClave = () => 'crm_ultima_seccion_' + (MI_USUARIO_ID || '');
+function ultimaSeccionLocal() {
+  try { return sessionStorage.getItem(ultimaSeccionClave()) || localStorage.getItem(ultimaSeccionClave()); } catch (_) { return null; }
+}
 function guardarUltimaSeccion(sec) {
+  if (ROL !== 'admin' && ROL !== 'asesor') return;
+  try { sessionStorage.setItem(ultimaSeccionClave(), sec); localStorage.setItem(ultimaSeccionClave(), sec); } catch (_) { /* storage bloqueado */ }
   const padre = PADRE_DE[sec], ultimaHija = MI_PREFERENCIAS.ultima_hija || {};
   if (MI_PREFERENCIAS.ultima_seccion === sec && (!padre || ultimaHija[padre] === sec)) return;
   MI_PREFERENCIAS = { ...MI_PREFERENCIAS, ultima_seccion: sec, ...(padre ? { ultima_hija: { ...ultimaHija, [padre]: sec } } : {}) };
@@ -25025,6 +25091,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-08', emoji: '📍', titulo: 'El CRM abre donde lo dejaste', texto: 'Al recargar o volver a abrir el CRM ya no salta al Tarifario: abre la última sección en la que estabas. Si tenés varias pestañas, cada una recarga en la suya. Además, el Tarifario y la Galería muestran una barra con el avance real de la carga mientras traen los datos.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-07', emoji: '💬', titulo: 'Nueva sección Meta DM', texto: 'Los chats del bot en Instagram, Facebook y WhatsApp tienen ahora su propia sección, Meta DM, con una pestaña por app y los colores de cada una. Se actualizan en vivo y muestran la ficha del cliente camino a lead. Los asesores ven también los chats de WhatsApp de sus leads, con fotos y audios. Mensajes queda solo para el chat del equipo.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-07', emoji: '🏠', titulo: 'Asigná un apartamento a cada reserva', texto: 'Al crear o editar un servicio de hospedaje en una reserva, ahora podés elegir el apartamento: la lista muestra solo los que están libres en esas fechas y avisa si el grupo supera la capacidad. Ese apartamento queda bloqueado en Apartamentos → Disponibilidad, en azul: con rayas si el servicio todavía está por confirmar (cotizado o solicitado) y sólido cuando ya está reservado. Si cambiás las fechas del servicio, el bloqueo se mueve solo, y si el apartamento ya está ocupado esos días el sistema no deja guardar. Si anulás o cancelás el servicio, el apartamento se libera. El admin y el asesor dueño de la reserva pueden tocar el bloque para abrir la reserva; el resto solo ve que está ocupado, sin datos del cliente.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-07', emoji: '📅', titulo: 'Apartamentos: disponibilidad', texto: 'En Apartamentos hay una pestaña nueva, Disponibilidad: un calendario por mes con cada apartamento en su fila, para ver qué noches están ocupadas, en mantenimiento o reservadas por el propietario. Filtrá por llegada, salida y personas para ver cuáles están libres. El admin toca un día para bloquear fechas o edita un bloque; los asesores solo consultan. La noche del día de salida queda libre.', roles: ['admin', 'asesor'] },
