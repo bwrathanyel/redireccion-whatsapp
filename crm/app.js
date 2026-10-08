@@ -191,7 +191,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   pagos: ['Pagos por verificar', 'Links de pago que un cliente declaró como pagados -- verificá el comprobante antes de aprobar'] };
 // Sección sin entrada en TITLES: usa label/sub de NAV_ITEMS antes de caer en Dashboard.
 const tituloSeccion = sec => { if (TITLES[sec]) return TITLES[sec]; const n = NAV_ITEMS.find(it => it.sec === sec); return n ? [n.label, n.sub || ''] : TITLES.dashboard; };
-const initials =s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+const initials =s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => [...w][0]).join('').toUpperCase();
 function pintarAvatar(el, url, nombre) {
   if (!el) return;
   if (url) { el.style.backgroundImage = `url('${url}')`; el.textContent = ''; }
@@ -21496,6 +21496,7 @@ function setupWhatsapp() {
   document.getElementById('wa-buscar').addEventListener('input', waRenderChats);
   document.getElementById('wa-recargar').addEventListener('click', () => waCargarChats());
   document.getElementById('wa-conv-back').addEventListener('click', () => waCerrarChat());
+  document.getElementById('wa-volver-dm').addEventListener('click', () => activateSection('dms'));
   document.getElementById('wa-ver-lead').addEventListener('click', () => { if (waActual?.lead) abrirLeadDesdeMisVentas(waActual.lead.id); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && currentSec === 'whatsapp') waTick(); });
 }
@@ -21543,8 +21544,8 @@ function waRenderChats() {
   const lista = q ? waChats.filter(c => `${c.nombre || ''} ${c.telefono} ${c.lead?.nombre || ''}`.toLowerCase().includes(q)) : waChats;
   if (!lista.length) { cont.innerHTML = `<div class="msg-empty"><i class="fa-brands fa-whatsapp"></i><br>${q ? 'Sin resultados' : 'Sin chats todavía'}</div>`; return; }
   cont.innerHTML = lista.map(c => `
-    <div class="msg-inbox-row" data-wa="${esc(c.id)}">
-      <div class="msg-avatar wa-avatar">${c.foto ? `<img src="${esc(c.foto)}" alt="">` : esc(initials(c.nombre || '#'))}</div>
+    <div class="msg-inbox-row${waActual?.id === c.id ? ' on' : ''}" data-wa="${esc(c.id)}">
+      <div class="msg-avatar dm-avatar" data-canal="whatsapp">${c.foto ? `<img src="${esc(c.foto)}" alt="">` : esc(initials(c.nombre || '#'))}</div>
       <div class="msg-inbox-body">
         <div class="msg-inbox-top">
           <div class="msg-inbox-nombre">${esc(c.nombre || c.telefono)}</div>
@@ -21566,9 +21567,12 @@ async function waAbrirChat(c) {
   document.getElementById('wa-conv-titulo').textContent = c.nombre || c.telefono;
   document.getElementById('wa-conv-sub').textContent = c.lead ? `${c.telefono} · ${c.lead.estado || 'Lead'}${c.lead.asesor ? ' · ' + c.lead.asesor : ''}` : `${c.telefono} · sin lead en el CRM`;
   document.getElementById('wa-ver-lead').style.display = c.lead ? '' : 'none';
+  document.getElementById('wa-conv-avatar').innerHTML = c.foto ? `<img src="${esc(c.foto)}" alt="">` : esc(initials(c.nombre || '#'));
   document.getElementById('wa-conv-log').innerHTML = '<div class="msg-empty"><i class="fas fa-spinner fa-spin"></i></div>';
-  document.getElementById('wa-conv').classList.add('open');
-  navPush({ type: 'wa-conv' });
+  waPanelChat(true);
+  document.querySelectorAll('#wa-inbox [data-wa]').forEach(r => r.classList.toggle('on', r.dataset.wa === c.id));
+  const shell = document.getElementById('wa-shell');
+  if (!shell.classList.contains('ver-chat')) { shell.classList.add('ver-chat'); navPush({ type: 'wa-conv' }); }
   let r;
   try { r = await waInvocar({ accion: 'mensajes', accountId: waCuenta, conversationId: c.id }); } catch {
     if (miGen === waAbrirGen) { errToast('No se pudieron cargar los mensajes'); document.getElementById('wa-conv-log').innerHTML = ''; }
@@ -21598,13 +21602,20 @@ async function waCargarAnteriores() {
   waRenderMensajes();
   log.scrollTop = log.scrollHeight - alto;
 }
+function waPanelChat(abierto) {
+  document.getElementById('wa-conv-vacio').hidden = abierto;
+  ['wa-conv-head', 'wa-conv-log', 'wa-conv-nota'].forEach(id => document.getElementById(id).hidden = !abierto);
+}
 function waCerrarChat(fromNav, sinRecarga) {
   waAbrirGen++;
-  document.getElementById('wa-conv').classList.remove('open');
+  const shell = document.getElementById('wa-shell'), estaba = shell.classList.contains('ver-chat');
+  shell.classList.remove('ver-chat');
+  waPanelChat(false);
+  document.querySelectorAll('#wa-inbox [data-wa].on').forEach(r => r.classList.remove('on'));
   waActual = null; waMensajes = [];
   waMedia.forEach(p => p.then(u => u && URL.revokeObjectURL(u)));
   waMedia.clear();
-  if (!fromNav) navConsume();
+  if (!fromNav && estaba) navConsume();
   if (!sinRecarga && currentSec === 'whatsapp') waCargarChats(true);
 }
 const WA_TICK = { sent: '✓', delivered: '✓✓', read: '✓✓', failed: '!' };
