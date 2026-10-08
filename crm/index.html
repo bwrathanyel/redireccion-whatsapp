@@ -2242,6 +2242,18 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .rol-marketing #btn-entrar-modo-boleteria,.rol-marketing #sheet-entrar-modo-boleteria{display:none}
 .bol-buscador{min-width:260px}
 .bol-tab-panel .card{margin-bottom:12px}
+.bolc-acc{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.bolc-acc .btn-sm{padding:5px 10px}
+.bolc-quitar{color:#ff5c8a}
+.bolc-linea{margin-top:6px;font-size:12.5px;color:var(--muted2)}
+.bolc-ref{margin-top:8px;font-size:12.5px;color:var(--green)}
+.bolc-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.bolc-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px 4px 3px 10px}
+.bolc-chip button{border:0;background:none;color:var(--muted2);cursor:pointer;padding:0 6px;font-size:13px}
+.bolc-chip button:hover{color:#ff5c8a}
+.bolc-ref-tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:999px;background:rgba(16,185,129,.15);color:var(--green);white-space:nowrap}
+.bolc-tabla td,.bolc-tabla th{white-space:nowrap}
+.bolc-tabla td.bolc-td-acc{text-align:right}
 .rol-asesor .nav-asesor-hide{display:none}
 /* Inverso de nav-asesor-hide: visible SOLO para rol asesor (en cualquiera de
    los 3 tipos de nav-item). Usado hoy por "Mis Comisiones" en el sidebar
@@ -3074,10 +3086,31 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ria-tend{display:flex;align-items:stretch;gap:3px;height:132px}.ria-tend-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px}
 .ria-tend-bar{flex:1;width:100%;display:flex;align-items:flex-end}.ria-tend-c{display:flex;flex-direction:column;justify-content:flex-end;width:100%;border-radius:4px 4px 0 0;background:rgba(var(--accent-rgb),.3);overflow:hidden}.ria-tend-l{display:block;width:100%;background:var(--accent)}
 .ria-tend-col span{font-size:9px;color:var(--muted2);line-height:1}
-.pv-wa-motivos{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}.pv-wa-motivos span{font-size:11.5px;padding:4px 9px;border-radius:999px;background:var(--line2);color:var(--muted)}.pv-wa-motivos b{color:var(--txt)}
-.pv-wa-dias{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:12px}.pv-wa-dias input{width:64px}
-.pv-wa-fila{display:grid;grid-template-columns:minmax(120px,1.4fr) minmax(90px,1fr) minmax(110px,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}.pv-wa-fila b{color:var(--txt)}.pv-wa-fila button{font-size:11px;padding:4px 9px}
-@media(max-width:700px){.pv-wa-fila{grid-template-columns:1fr auto}}
+.pv-wa-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}.pv-wa-head h2{font-size:14px;margin:0 0 4px}.pv-wa-head .ria-sub{margin:0;max-width:72ch}
+.pv-wa-aviso{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;border-radius:999px;padding:4px 11px;background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber);white-space:nowrap}
+.pv-wa-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:14px}
+.pv-wa-kpi{border:1px solid var(--line);border-radius:12px;padding:11px 14px;background:color-mix(in srgb,var(--kc,var(--muted)) 6%,transparent)}
+.pv-wa-kpi span{display:flex;align-items:center;gap:7px;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted2)}.pv-wa-kpi span i{color:var(--kc,var(--muted));font-size:11px}
+.pv-wa-kpi b{display:block;font-size:22px;font-weight:800;letter-spacing:-.04em;margin-top:4px;font-variant-numeric:tabular-nums;color:var(--kc,var(--txt))}.pv-wa-kpi small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.pv-wa-ctrl{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px}.pv-wa-etq{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted2)}
+.pv-wa-seg{display:inline-flex;border:1px solid var(--line2);border-radius:10px;overflow:hidden}
+.pv-wa-seg button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:11.5px;font-weight:700;padding:0 11px;min-height:34px;cursor:pointer;font-variant-numeric:tabular-nums;transition:background .16s,color .16s}
+.pv-wa-seg button+button{border-left:1px solid var(--line2)}.pv-wa-seg button:hover{color:var(--txt)}.pv-wa-seg button.on{background:var(--accent-soft);color:var(--accent)}
+.pv-wa-buscar{flex:1;min-width:180px;max-width:280px;height:34px;margin-left:auto;border:1px solid var(--line2);border-radius:10px;background:transparent;color:var(--txt);font:inherit;font-size:12px;padding:0 11px;transition:border-color .16s,box-shadow .16s}
+.pv-wa-buscar:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.pv-wa-chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}.pv-wa-chips .pv-stage{display:inline-flex;align-items:center;gap:7px;transition:border-color .16s,background .16s}.pv-wa-chips .pv-stage:hover{border-color:var(--accent)}
+.pv-wa-chips .pv-stage i{color:var(--tc,var(--muted));font-size:10px}.pv-wa-chips .pv-stage b{font-variant-numeric:tabular-nums;color:var(--txt)}
+.pv-wa-th,.pv-wa-tr{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) 84px minmax(0,1.3fr) 128px 112px;gap:11px;align-items:center}
+.pv-wa-th{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted2);padding:0 9px 7px;border-bottom:1px solid var(--line2)}
+.pv-wa-tr{font-size:12px;color:var(--muted);padding:9px;border-bottom:1px solid var(--line);transition:background .16s}.pv-wa-tr:last-child{border-bottom:0}.pv-wa-tr:hover{background:color-mix(in srgb,var(--txt) 3%,transparent)}
+.pv-wa-tr>div{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pv-wa-tr .nom b{display:block;color:var(--txt);overflow:hidden;text-overflow:ellipsis}.pv-wa-tr .nom small{display:block;font-size:11px;overflow:hidden;text-overflow:ellipsis}
+.pv-wa-tr .num{font-variant-numeric:tabular-nums}.pv-wa-tr .nada{color:var(--muted2)}.pv-wa-tr .pv-btn{min-height:32px;width:100%}.pv-wa-tr .pv-btn.baja:hover{border-color:var(--danger);color:var(--danger)}
+.pv-wa-tag{display:inline-flex;align-items:center;gap:6px;max-width:100%;font-size:11px;font-weight:700;border-radius:999px;padding:3px 9px;background:color-mix(in srgb,var(--tc,var(--muted)) 14%,transparent);color:var(--tc,var(--muted));overflow:hidden;text-overflow:ellipsis}
+.pv-wa-grupo{border:1px solid var(--line);border-radius:12px;margin-top:9px;overflow:hidden}.pv-wa-grupo>summary{display:flex;align-items:center;gap:9px;padding:11px 14px;cursor:pointer;list-style:none;font-size:12px;font-weight:700;color:var(--txt);transition:background .16s}
+.pv-wa-grupo>summary::-webkit-details-marker{display:none}.pv-wa-grupo>summary:hover{background:color-mix(in srgb,var(--txt) 3%,transparent)}.pv-wa-grupo>summary .flecha{color:var(--muted2);font-size:10px;transition:transform .16s}.pv-wa-grupo[open]>summary .flecha{transform:rotate(90deg)}
+.pv-wa-grupo>summary>i:not(.flecha){color:var(--tc,var(--muted))}.pv-wa-grupo>summary small{margin-left:auto;font-size:11px;font-weight:600;color:var(--muted)}.pv-wa-grupo .pv-wa-cuerpo{border-top:1px solid var(--line);padding:4px 5px 5px}
+.pv-wa-sec{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted2);margin:18px 0 2px}.pv-wa-tr .nom .pv-wa-mov{display:none}
+@media(max-width:700px){.pv-wa-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.pv-wa-buscar{max-width:none;margin-left:0}.pv-wa-th{display:none}.pv-wa-tr{grid-template-columns:minmax(0,1fr) auto}.pv-wa-tr>.c-asesor,.pv-wa-tr>.c-fecha,.pv-wa-tr>.c-tel,.pv-wa-tr>.c-estado{display:none}.pv-wa-tr .nom .pv-wa-mov{display:block}}
 .ria-detalles{margin-bottom:12px}.ria-detalles>summary{cursor:pointer;list-style:none;font-size:12.5px;font-weight:800;color:var(--muted);padding:10px 2px}.ria-detalles>summary::-webkit-details-marker{display:none}.ria-detalles>summary::before{content:"▸ ";display:inline-block;transition:transform .15s}.ria-detalles[open]>summary{color:var(--txt)}.ria-detalles[open]>summary::before{transform:rotate(90deg)}
 @media(max-width:760px){.ria-dashboard{grid-template-columns:repeat(2,1fr)}.ria-db-title{grid-column:1/-1}.ria-grid{grid-template-columns:1fr}.ria-paso{grid-template-columns:100px 1fr 38px}.ria-cal-head,.ria-cal-fila{grid-template-columns:minmax(115px,1fr) 62px 62px}}
 /* ---------- Clientes de la IA: consumo del mes -------------------------
@@ -7525,39 +7558,44 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
     </section>
 
-    <!-- BOLETERÍA -- tema azul eléctrico scopeado a la sección (D4). El
-         marco del CRM y las otras 25 secciones no se tocan: los tokens
-         viven solo bajo #sec-boleteria. -->
+    <!-- BOLETERÍA -- catálogo de vuelos. El tema azul es del modo completo
+         (body.modo-boleteria), no de esta sección. Los precios marcados como
+         referencia son la fuente de la web y la IA (vista vuelos_referencia). -->
     <section class="section" id="sec-boleteria">
       <div class="tbar" style="margin-bottom:12px">
-        <input class="flt bol-buscador" id="bol-buscador" type="text" placeholder="Buscar ruta, aerolínea o país (ej: margarita, PMV, porla)...">
+        <input class="flt bol-buscador" id="bol-buscador" type="text" placeholder="Buscar ruta, aerolínea, aeropuerto o país (ej: margarita, PMV, porla)...">
       </div>
       <div class="seg-group" id="bol-tabs">
         <button class="seg on" data-bol-tab="rutas">Rutas</button>
-        <button class="seg" data-bol-tab="aerolineas">Aerolíneas</button>
         <button class="seg" data-bol-tab="precios">Precios</button>
+        <button class="seg" data-bol-tab="aerolineas">Aerolíneas</button>
+        <button class="seg" data-bol-tab="aeropuertos">Aeropuertos</button>
         <button class="seg" data-bol-tab="requisitos">Requisitos</button>
         <button class="seg" data-bol-tab="calendario">Calendario</button>
       </div>
 
       <div class="bol-tab-panel" data-bol-panel="rutas">
-        <div class="tbar" style="margin-bottom:12px"><button class="btn-sm" id="bol-ruta-nueva" type="button"><i class="fas fa-plus"></i> Nueva ruta</button></div>
+        <div class="tbar bol-solo-editor" style="margin-bottom:12px"><button class="btn-sm" id="bol-ruta-nueva" type="button"><i class="fas fa-plus"></i> Nueva ruta</button></div>
         <div id="bol-rutas-wrap" class="grid g-2b"></div>
       </div>
-      <div class="bol-tab-panel" data-bol-panel="aerolineas" style="display:none">
-        <div class="tbar" style="margin-bottom:12px"><button class="btn-sm" id="bol-aerolinea-nueva" type="button"><i class="fas fa-plus"></i> Nueva aerolínea</button></div>
-        <div id="bol-aerolineas-wrap" class="grid g-2b"></div>
-      </div>
       <div class="bol-tab-panel" data-bol-panel="precios" style="display:none">
-        <div class="tbar" style="margin-bottom:12px"><button class="btn-sm" id="bol-precio-nuevo" type="button"><i class="fas fa-plus"></i> Cargar precio</button></div>
+        <div class="tbar bol-solo-editor" style="margin-bottom:12px"><button class="btn-sm" id="bol-precio-nuevo" type="button"><i class="fas fa-plus"></i> Cargar precio</button></div>
         <div id="bol-precios-wrap"></div>
       </div>
+      <div class="bol-tab-panel" data-bol-panel="aerolineas" style="display:none">
+        <div class="tbar bol-solo-editor" style="margin-bottom:12px"><button class="btn-sm" id="bol-aerolinea-nueva" type="button"><i class="fas fa-plus"></i> Nueva aerolínea</button></div>
+        <div id="bol-aerolineas-wrap" class="grid g-2b"></div>
+      </div>
+      <div class="bol-tab-panel" data-bol-panel="aeropuertos" style="display:none">
+        <div class="tbar bol-solo-editor" style="margin-bottom:12px"><button class="btn-sm" id="bol-aeropuerto-nuevo" type="button"><i class="fas fa-plus"></i> Nuevo aeropuerto</button></div>
+        <div id="bol-aeropuertos-wrap"></div>
+      </div>
       <div class="bol-tab-panel" data-bol-panel="requisitos" style="display:none">
-        <div class="tbar" style="margin-bottom:12px"><button class="btn-sm" id="bol-requisito-nuevo" type="button"><i class="fas fa-plus"></i> Nuevo país</button></div>
+        <div class="tbar bol-solo-editor" style="margin-bottom:12px"><button class="btn-sm" id="bol-requisito-nuevo" type="button"><i class="fas fa-plus"></i> Nuevo país</button></div>
         <div id="bol-requisitos-wrap" class="grid g-2b"></div>
       </div>
       <div class="bol-tab-panel" data-bol-panel="calendario" style="display:none">
-        <div class="tbar" style="margin-bottom:12px"><button class="btn-sm" id="bol-temporada-nueva" type="button"><i class="fas fa-plus"></i> Nueva temporada</button></div>
+        <div class="tbar bol-solo-editor" style="margin-bottom:12px"><button class="btn-sm" id="bol-temporada-nueva" type="button"><i class="fas fa-plus"></i> Nueva temporada</button></div>
         <div id="bol-calendario-wrap" class="grid g-2b"></div>
       </div>
     </section>

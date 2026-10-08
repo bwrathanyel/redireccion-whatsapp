@@ -2922,6 +2922,10 @@ function setupPostventa() {
   const wa = document.getElementById('pv-wa');
   wa?.addEventListener('toggle', () => { if (wa.open) pvWhatsappCargar(); });
   document.getElementById('pv-wa-body')?.addEventListener('click', async e => {
+    const d = e.target.closest('button[data-wa-dias]');
+    if (d) { PV_WA_DIAS = Number(d.dataset.waDias); pvWhatsappCargar(); return; }
+    const f = e.target.closest('button[data-wa-filtro]');
+    if (f) { PV_WA_FILTRO = f.dataset.waFiltro; pvWhatsappRender(); return; }
     const b = e.target.closest('button[data-wa-lead]');
     if (!b) return;
     b.disabled = true;
@@ -2932,43 +2936,97 @@ function setupPostventa() {
     okToast(b.dataset.waBaja === '1' ? 'Cliente marcado como "no contactar"' : 'Cliente habilitado de nuevo');
     pvWhatsappCargar();
   });
-  document.getElementById('pv-wa-body')?.addEventListener('change', e => {
-    if (e.target.id !== 'pv-wa-dias') return;
-    PV_WA_DIAS = Math.min(365, Math.max(0, Number(e.target.value) || 0));
-    pvWhatsappCargar();
+  document.getElementById('pv-wa-body')?.addEventListener('input', e => {
+    if (e.target.id !== 'pv-wa-buscar') return;
+    PV_WA_BUSCAR = e.target.value; pvWhatsappLista();
   });
 }
 const PV_WA_MOTIVOS = {
-  sin_telefono: 'Sin teléfono', telefono_no_valido: 'Teléfono no válido', no_contactar: 'Pidió no ser contactado',
-  incidencia_abierta: 'Incidencia abierta', viaje_pendiente: 'Viaje aún sin terminar', sin_fecha: 'Sin fecha de referencia',
-  muy_reciente: 'Compró hace poco', contactado_hace_poco: 'Contactado hace poco',
+  sin_telefono: ['Sin teléfono', 'fa-phone-slash', 'var(--muted)'], telefono_no_valido: ['Teléfono no válido', 'fa-triangle-exclamation', 'var(--amber)'],
+  no_contactar: ['Pidió no ser contactado', 'fa-ban', 'var(--danger)'], incidencia_abierta: ['Incidencia abierta', 'fa-circle-exclamation', 'var(--pink)'],
+  viaje_pendiente: ['Viaje aún sin terminar', 'fa-plane-departure', 'var(--blue)'], sin_fecha: ['Sin fecha de referencia', 'fa-calendar-xmark', 'var(--muted)'],
+  muy_reciente: ['Compró hace poco', 'fa-hourglass-half', 'var(--purple)'], contactado_hace_poco: ['Contactado hace poco', 'fa-comment-dots', 'var(--amber)'],
 };
-let PV_WA_DIAS = 30;
+const PV_WA_ELEGIBLE = ['Elegible', 'fa-circle-check', 'var(--green)'];
+const PV_WA_PRESETS = [0, 15, 30, 60, 90];
+let PV_WA_DIAS = 30, PV_WA_FILTRO = 'todos', PV_WA_BUSCAR = '', PV_WA_DATA = null;
+const pvWaMotivo = k => k ? (PV_WA_MOTIVOS[k] || [k, 'fa-circle-minus', 'var(--muted)']) : PV_WA_ELEGIBLE;
 async function pvWhatsappCargar() {
   const body = document.getElementById('pv-wa-body');
   if (!body) return;
+  if (PV_WA_DATA) body.style.opacity = '.55';
   const { data, error } = await sb.rpc('postventa_segmento_whatsapp', { p_dias_minimos: PV_WA_DIAS });
-  if (error) { console.error('postventa_segmento_whatsapp', error); body.innerHTML = '<div class="ria-sub">No se pudo cargar el segmento.</div>'; return; }
-  const r = data?.resumen || {};
-  const excl = Object.entries(r.excluidos || {}).sort((a, b) => b[1] - a[1]);
-  const lista = data?.lista || [];
-  const fecha = f => f ? f.split('-').reverse().join('/') : 'sin fecha';
-  const MAX = 60;
+  body.style.opacity = '';
+  if (error) { console.error('postventa_segmento_whatsapp', error); body.innerHTML = '<div class="ria-vacio">No se pudo cargar el segmento.</div>'; return; }
+  PV_WA_DATA = data || {};
+  pvWhatsappRender();
+}
+function pvWhatsappRender() {
+  const body = document.getElementById('pv-wa-body');
+  if (!body || !PV_WA_DATA) return;
+  const r = PV_WA_DATA.resumen || {}, lista = PV_WA_DATA.lista || [];
+  const excl = Object.entries(r.excluidos || {}).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  const totalExcl = excl.reduce((s, [, n]) => s + n, 0);
+  if (PV_WA_FILTRO !== 'todos' && PV_WA_FILTRO !== 'elegibles' && !excl.some(([k]) => k === PV_WA_FILTRO)) PV_WA_FILTRO = 'todos';
+  const kpi = (t, v, d, ic, c) => `<div class="pv-wa-kpi" style="--kc:${c}"><span><i class="fas ${ic}"></i>${t}</span><b>${fmt(v)}</b><small>${d}</small></div>`;
+  const chip = (k, t, n, ic, c) => `<button class="pv-stage${PV_WA_FILTRO === k ? ' on' : ''}" type="button" data-wa-filtro="${k}" aria-pressed="${PV_WA_FILTRO === k}"${c ? ` style="--tc:${c}"` : ''}>${ic ? `<i class="fas ${ic}"></i>` : ''}${esc(t)} <b>${fmt(n)}</b></button>`;
+  const pct = r.vendidos ? Math.round((r.elegibles || 0) * 100 / r.vendidos) : 0;
   body.innerHTML = `
-    <h2>${fmt(r.elegibles || 0)} elegibles de ${fmt(r.vendidos || 0)} clientes con venta</h2>
-    <div class="ria-sub">Todavía no se envía nada: falta aprobar las plantillas en Meta. Elegible = teléfono válido, viaje terminado hace al menos los días indicados, sin incidencia abierta, sin contacto reciente y sin haber pedido que no lo contacten.</div>
-    <label class="pv-wa-dias">Días mínimos desde el viaje (o desde el cierre si no hay fecha de viaje)
-      <input id="pv-wa-dias" type="number" min="0" max="365" value="${PV_WA_DIAS}"></label>
-    <div class="pv-wa-motivos">${excl.length ? excl.map(([k, n]) => `<span>${esc(PV_WA_MOTIVOS[k] || k)}: <b>${fmt(n)}</b></span>`).join('') : '<span>Nadie excluido</span>'}</div>
-    <div>${lista.slice(0, MAX).map(c => `<div class="pv-wa-fila">
-      <div><b>${esc(c.nombre)}</b><br>${esc(c.destino || 'Sin destino')}</div>
-      <div>${esc(c.asesor || 'Sin asesor')}<br>${esc(fecha(c.referencia))}</div>
-      <div>${c.motivo_exclusion ? `<span class="${c.motivo_exclusion === 'no_contactar' ? 'ria-malo' : ''}">${esc(PV_WA_MOTIVOS[c.motivo_exclusion] || c.motivo_exclusion)}</span>` : '<span class="ria-bien">Elegible</span>'}<br>${esc(c.telefono_whatsapp || c.telefono || '')}</div>
-      <div>${c.motivo_exclusion === 'no_contactar'
-        ? `<button class="btn-sm" type="button" data-wa-lead="${c.lead_id}" data-wa-baja="0">Habilitar</button>`
-        : (c.telefono_whatsapp ? `<button class="btn-sm" type="button" data-wa-lead="${c.lead_id}" data-wa-baja="1">No contactar</button>` : '')}</div>
-    </div>`).join('') || '<div class="ria-sub">No hay clientes con venta cerrada.</div>'}</div>
-    ${lista.length > MAX ? `<div class="ria-sub">Mostrando ${MAX} de ${fmt(lista.length)}.</div>` : ''}`;
+    <div class="pv-wa-head"><div><h2>Clientes con venta listos para WhatsApp</h2>
+      <div class="ria-sub">Elegible = teléfono válido, viaje terminado hace al menos los días elegidos (o cierre, si no hay fecha de viaje), sin incidencia abierta, sin contacto reciente y sin haber pedido que no lo contacten.</div></div>
+      <span class="pv-wa-aviso"><i class="fas fa-lock"></i>Sin envíos: faltan plantillas aprobadas en Meta</span></div>
+    <div class="pv-wa-kpis">
+      ${kpi('Con venta', r.vendidos || 0, 'clientes con venta cerrada', 'fa-bag-shopping', 'var(--txt)')}
+      ${kpi('Elegibles', r.elegibles || 0, `${pct}% del total`, 'fa-circle-check', 'var(--green)')}
+      ${kpi('Excluidos', totalExcl, `${excl.length} ${excl.length === 1 ? 'motivo' : 'motivos'}`, 'fa-filter', 'var(--amber)')}
+      ${kpi('No contactar', r.excluidos?.no_contactar || 0, 'lo pidieron explícitamente', 'fa-ban', 'var(--danger)')}
+    </div>
+    <div class="pv-wa-ctrl"><span class="pv-wa-etq">Días desde el viaje</span>
+      <div class="pv-wa-seg" role="group" aria-label="Días mínimos desde el viaje">${PV_WA_PRESETS.map(n => `<button type="button" data-wa-dias="${n}" class="${n === PV_WA_DIAS ? 'on' : ''}" aria-pressed="${n === PV_WA_DIAS}">${n}</button>`).join('')}</div>
+      <input class="pv-wa-buscar" id="pv-wa-buscar" type="search" placeholder="Buscar cliente, destino o asesor..." value="${esc(PV_WA_BUSCAR)}" aria-label="Buscar en la campaña"></div>
+    <div class="pv-wa-chips">${chip('todos', 'Todos', lista.length)}${chip('elegibles', 'Elegibles', r.elegibles || 0, PV_WA_ELEGIBLE[1], PV_WA_ELEGIBLE[2])}${excl.map(([k, n]) => { const [t, ic, c] = pvWaMotivo(k); return chip(k, t, n, ic, c); }).join('')}</div>
+    <div id="pv-wa-lista"></div>`;
+  pvWhatsappLista();
+}
+function pvWhatsappLista() {
+  const cont = document.getElementById('pv-wa-lista');
+  if (!cont || !PV_WA_DATA) return;
+  const q = PV_WA_BUSCAR.trim().toLowerCase();
+  const lista = (PV_WA_DATA.lista || []).filter(c => !q || [c.nombre, c.destino, c.asesor].some(v => (v || '').toLowerCase().includes(q)));
+  const fecha = f => f ? f.split('-').reverse().join('/') : '';
+  const MAX = 100;
+  const fila = c => {
+    const [t, ic, col] = pvWaMotivo(c.motivo_exclusion), tel = c.telefono_whatsapp || c.telefono || '', f = fecha(c.referencia);
+    const accion = c.motivo_exclusion === 'no_contactar'
+      ? `<button class="pv-btn" type="button" data-wa-lead="${c.lead_id}" data-wa-baja="0">Habilitar</button>`
+      : (c.telefono_whatsapp ? `<button class="pv-btn baja" type="button" data-wa-lead="${c.lead_id}" data-wa-baja="1">No contactar</button>` : '<span class="nada">—</span>');
+    return `<div class="pv-wa-tr">
+      <div class="nom"><b title="${esc(c.nombre)}">${esc(c.nombre)}</b><small>${esc(c.destino || 'Sin destino')}</small>
+        <small class="pv-wa-mov">${esc(c.asesor || 'Sin asesor')}${f ? ` · ${esc(f)}` : ''} · <span style="color:${col}">${esc(t)}</span></small></div>
+      <div class="c-asesor${c.asesor ? '' : ' nada'}">${esc(c.asesor || 'Sin asesor')}</div>
+      <div class="c-fecha num${f ? '' : ' nada'}">${f ? esc(f) : '—'}</div>
+      <div class="c-estado"><span class="pv-wa-tag" style="--tc:${col}"><i class="fas ${ic}"></i>${esc(t)}</span></div>
+      <div class="c-tel num${tel ? '' : ' nada'}">${tel ? esc(tel) : '—'}</div>
+      <div>${accion}</div></div>`;
+  };
+  const tabla = filas => `<div class="pv-wa-th"><span>Cliente</span><span>Asesor</span><span>Fecha</span><span>Estado</span><span>Teléfono</span><span></span></div>
+    ${filas.slice(0, MAX).map(fila).join('')}${filas.length > MAX ? `<div class="ria-sub" style="margin:9px 0 0">Mostrando ${MAX} de ${fmt(filas.length)}. Usá el buscador para acotar.</div>` : ''}`;
+  if (!(PV_WA_DATA.lista || []).length) { cont.innerHTML = '<div class="ria-vacio">No hay clientes con venta cerrada.</div>'; return; }
+  if (!lista.length) { cont.innerHTML = '<div class="ria-vacio">Ningún cliente coincide con la búsqueda.</div>'; return; }
+  if (PV_WA_FILTRO !== 'todos') {
+    const sel = lista.filter(c => PV_WA_FILTRO === 'elegibles' ? !c.motivo_exclusion : c.motivo_exclusion === PV_WA_FILTRO);
+    cont.innerHTML = sel.length ? tabla(sel) : `<div class="ria-vacio">${PV_WA_FILTRO === 'elegibles' ? `Nadie es elegible con ${PV_WA_DIAS} días. Probá con menos días o revisá los motivos de exclusión.` : 'Ningún cliente en este grupo.'}</div>`;
+    return;
+  }
+  const eleg = lista.filter(c => !c.motivo_exclusion);
+  const grupos = {};
+  lista.filter(c => c.motivo_exclusion).forEach(c => (grupos[c.motivo_exclusion] ||= []).push(c));
+  cont.innerHTML = `<div class="pv-wa-sec">Elegibles · ${fmt(eleg.length)}</div>
+    ${eleg.length ? tabla(eleg) : `<div class="ria-vacio">Nadie es elegible con ${PV_WA_DIAS} días. Probá con menos días o abrí los grupos de abajo.</div>`}
+    ${Object.keys(grupos).length ? `<div class="pv-wa-sec">No elegibles · ${fmt(lista.length - eleg.length)}</div>` : ''}
+    ${Object.entries(grupos).sort((a, b) => b[1].length - a[1].length).map(([k, fs]) => { const [t, ic, col] = pvWaMotivo(k); return `<details class="pv-wa-grupo" style="--tc:${col}"${q ? ' open' : ''}>
+      <summary><i class="fas fa-chevron-right flecha"></i><i class="fas ${ic}"></i>${esc(t)}<small>${fmt(fs.length)} ${fs.length === 1 ? 'cliente' : 'clientes'}</small></summary>
+      <div class="pv-wa-cuerpo">${tabla(fs)}</div></details>`; }).join('')}`;
 }
 async function loadPostventa() {
   const grid = document.getElementById('pv-grid');
