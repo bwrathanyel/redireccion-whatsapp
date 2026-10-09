@@ -3272,7 +3272,10 @@ async function guardarPostventa(marcarPagado) {
    (solo boletos aéreos, sin precios). Los documentos viven en un bucket privado sin policies:
    la EF reservas-documentos firma subida y descarga, el navegador nunca toca el bucket directo. */
 const RV_TIPOS = { boleto_aereo: ['Boleto aéreo', 'fa-plane'], traslado_terrestre: ['Traslado terrestre', 'fa-van-shuttle'], traslado_maritimo: ['Traslado marítimo', 'fa-ship'], full_day: ['Full day', 'fa-sun'], hospedaje: ['Hospedaje', 'fa-hotel'], seguro: ['Seguro', 'fa-shield-heart'], otro: ['Otro', 'fa-circle-dot'] };
-const RV_ESTADOS = { cotizado: 'Cotizado', solicitado: 'Solicitado', confirmado: 'Confirmado', emitido: 'Emitido', cancelado: 'Cancelado' };
+const RV_ESTADOS_BASE = { cotizado: 'Cotizado', solicitado: 'Solicitado', confirmado: 'Confirmado', emitido: 'Emitido', cancelado: 'Cancelado' };
+// Los tres de boleto solo entran o salen por boleteria_registrar_evento: el select del form no los ofrece.
+const RV_ESTADOS = { ...RV_ESTADOS_BASE, cambiado: 'Cambiado', reembolso_solicitado: 'Reembolso solicitado', reembolsado: 'Reembolsado' };
+const rvEstadoOpts = sel => rvOpts(RV_ESTADOS_BASE[sel] || !RV_ESTADOS[sel] ? RV_ESTADOS_BASE : { [sel]: RV_ESTADOS[sel], ...RV_ESTADOS_BASE }, sel);
 // Claves permitidas por detalle_servicio_valido(); si se agrega una allá, sumarla acá.
 const RV_DETALLE = {
   boleto_aereo: [['aerolinea', 'Aerolínea'], ['ruta', 'Ruta'], ['vuelo', 'Vuelo'], ['clase', 'Clase'], ['pnr', 'PNR'], ['equipaje', 'Equipaje'], ['ida_vuelta', 'Ida y vuelta', 'bool']],
@@ -3301,6 +3304,13 @@ const RV_ERR = {
   nombre_invalido: 'Nombre de archivo inválido', formato_invalido: 'Solo PDF, JPG, PNG o WEBP',
   tamano_invalido: 'El archivo supera los 10 MB', ruta_invalida: 'Ruta de archivo inválida', archivo_no_subido: 'El archivo no terminó de subir',
   ya_registrado: 'Ese archivo ya estaba registrado', documento_no_existe: 'El documento ya no existe', firma_fallida: 'No se pudo firmar el archivo, probá de nuevo',
+  usar_registrar_evento: 'Cambios y reembolsos se registran con sus botones, no desde el estado', transicion_invalida: 'Ese paso no corresponde al estado actual del boleto',
+  tramo_invalido: 'Revisá las horas: la llegada no cuadra con la salida', aeropuerto_o_aerolinea_invalido: 'Algún código IATA o aerolínea no está en el catálogo',
+  demasiados_tramos: 'Máximo 12 tramos por boleto', ticket_duplicado: 'Ese número de ticket ya está cargado en otro boleto', ticket_invalido: 'Número de ticket inválido',
+  pasajero_no_pertenece: 'Ese pasajero no es de esta reserva', monto_invalido: 'Monto inválido', motivo_largo: 'El motivo supera los 300 caracteres', falta_motivo: 'Escribí la nota',
+  lead_fuera_de_postventa: 'El cliente todavía no está EN ESPERA DE PAGO ni PAGO REALIZADO: su asesor tiene que moverlo antes de crear la reserva',
+  lead_no_coincide: 'La solicitud es de otro cliente', reserva_no_disponible: 'Esa reserva ya no está abierta', solicitud_cerrada: 'La solicitud ya está cerrada',
+  solicitud_no_existe: 'La solicitud ya no existe', falta_lead: 'Elegí el cliente', lead_no_disponible: 'Ese cliente no existe o fue eliminado',
 };
 const rvErr = (error, data) => RV_ERR[data?.error] || RV_ERR[error?.message] || data?.error || error?.message || 'error desconocido';
 const rvMonto = (cent, mon) => (Number(cent || 0) / 100).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (mon || 'USD');
@@ -3419,6 +3429,7 @@ function rvTrasCambio() {
   if (currentSec === 'reservas-empresas') loadReservasEmpresas();
   if (currentSec === 'apartamentos' && APTO_TAB === 'disp') loadDisponibilidad();
   if (document.getElementById('rv-bol-box')?.hidden === false) loadBoletosPorEmitir();
+  if (currentSec === 'boleteria' && bolTab === 'reservas') loadBolReservas();
 }
 function rvAccion(accion, id, btn) {
   const n = id ? Number(id) : null;
@@ -3444,6 +3455,14 @@ function rvAccion(accion, id, btn) {
     case 'subir-documento': return rvSubirDocumento(btn);
     case 'descargar': return rvDescargar(n, btn);
     case 'anular-documento': return rvAnularDocumento(n);
+    case 'tramos': return bolAsegurarCatalogo().then(() => rvForm({ tipo: 'tramos', id: n }));
+    case 'tramo-mas': return rvTramoFila();
+    case 'tramo-menos': return btn.closest('.rv-tramo')?.remove();
+    case 'guardar-tramos': return rvGuardarTramos(btn);
+    case 'tickets': return rvForm({ tipo: 'tickets', id: n });
+    case 'guardar-tickets': return rvGuardarTickets(btn);
+    case 'evento': return rvForm({ tipo: 'evento', id: n, evento: btn.dataset.evento });
+    case 'guardar-evento': return rvGuardarEvento(btn);
   }
 }
 async function rvEnviar(btn, llamada) {
@@ -3458,11 +3477,14 @@ async function rvEnviar(btn, llamada) {
 /* Servicios */
 function rvRenderServicios(suave) {
   const p = rvPanel('servicios'); if (!p || !RV_DET) return;
-  if ((RV_FORM?.tipo === 'servicio' || RV_FORM?.tipo === 'costo') && rvFormAbierto(p, suave)) return;
-  if (RV_FORM?.tipo === 'servicio') return rvFormServicio(p);
-  if (RV_FORM?.tipo === 'costo') return rvFormCosto(p);
-  const vista = rvVista(), ss = RV_DET.servicios || [];
-  p.innerHTML = (rvPuedeEditar() ? '<button class="dbtn gh rv-add" type="button" data-rv-accion="nuevo-servicio"><i class="fas fa-plus"></i> Agregar servicio</button>' : '')
+  const forms = { servicio: rvFormServicio, costo: rvFormCosto, tramos: rvFormTramos, tickets: rvFormTickets, evento: rvFormEvento };
+  if (forms[RV_FORM?.tipo] && rvFormAbierto(p, suave)) return;
+  if (forms[RV_FORM?.tipo]) return forms[RV_FORM.tipo](p);
+  const vista = rvVista(), ss = RV_DET.servicios || [], r = RV_DET.reserva || {};
+  // Cobro para boletería (migración 20261009110000): total, pagado y saldo; el margen sigue solo para admin.
+  const cobro = vista === 'boleteria' && r.monto_total != null
+    ? `<div class="rv-cobro rv-cobro-${esc(r.estado_cobro || 'pendiente')}"><span>Total <b>${money(r.monto_total)}</b></span><span>Pagado <b>${money(r.monto_pagado || 0)}</b></span><span>Saldo <b>${money(Math.max(0, r.monto_total - (r.monto_pagado || 0)))}</b></span><em>${({ pagado: 'Pagado', parcial: 'Pago parcial', pendiente: 'Sin pagos' })[r.estado_cobro] || ''}</em></div>` : '';
+  p.innerHTML = cobro + (rvPuedeEditar() ? '<button class="dbtn gh rv-add" type="button" data-rv-accion="nuevo-servicio"><i class="fas fa-plus"></i> Agregar servicio</button>' : '')
     + (ss.length ? ss.map(s => rvServicioHtml(s, vista)).join('')
       : `<div class="pv-empty">${vista === 'boleteria' ? 'Esta reserva no tiene boletos aéreos' : 'Todavía no hay servicios. Al cargar el primero, el total de la reserva pasa a ser la suma de sus precios.'}</div>`);
 }
@@ -3472,19 +3494,22 @@ function rvServicioHtml(s, vista) {
   const pax = s.pax_adultos || s.pax_ninos ? `${Number(s.pax_adultos || 0)} adultos${s.pax_ninos ? `, ${Number(s.pax_ninos)} niños` : ''}` : '';
   const det = (RV_DETALLE[s.tipo] || []).filter(([k]) => s.detalle?.[k] != null && s.detalle[k] !== '')
     .map(([k, l, tipo]) => `${l}: ${tipo === 'bool' ? (s.detalle[k] ? 'sí' : 'no') : esc(s.detalle[k])}`).join(' · ');
-  const precio = vista === 'boleteria' ? '' : `<div class="rv-meta"><span class="rv-precio">${rvMonto(s.precio_centavos, s.precio_moneda)}${s.precio_moneda !== 'USD' ? ` <small>≈ ${rvMonto(s.precio_usd_centavos, 'USD')}</small>` : ''}</span></div>`;
+  // Boletería ve el precio de venta desde la migración 20261009110000; antes la RPC no lo mandaba.
+  const precio = s.precio_centavos == null ? '' : `<div class="rv-meta"><span class="rv-precio">${rvMonto(s.precio_centavos, s.precio_moneda)}${s.precio_moneda !== 'USD' ? ` <small>≈ ${rvMonto(s.precio_usd_centavos, 'USD')}</small>` : ''}</span></div>`;
   const costo = vista === 'admin' && !anulado ? `<div class="rv-costo"><i class="fas fa-lock"></i> ${s.costo_centavos != null ? `Costo ${rvMonto(s.costo_centavos, s.costo_moneda)} · ${esc(s.proveedor || 'sin proveedor')} · margen ${rvMonto(s.margen_usd_centavos, 'USD')}` : 'Sin costo ni proveedor'}</div>` : '';
   const acciones = anulado ? '' : [
     editable ? `<button class="btn-sm" type="button" data-rv-accion="editar-servicio" data-id="${s.id}"><i class="fas fa-pen"></i> Editar</button>` : '',
     vista === 'admin' ? `<button class="btn-sm" type="button" data-rv-accion="costo" data-id="${s.id}"><i class="fas fa-coins"></i> Costo</button>` : '',
-    vista === 'boleteria' ? `<button class="btn-sm" type="button" data-rv-accion="emitir" data-id="${s.id}"><i class="fas fa-ticket"></i> Localizador y estado</button><button class="btn-sm" type="button" data-rv-accion="subir-boleto" data-id="${s.id}"><i class="fas fa-upload"></i> Subir boleto</button>` : '',
+    vista === 'boleteria' ? `<button class="btn-sm" type="button" data-rv-accion="emitir" data-id="${s.id}"><i class="fas fa-ticket"></i> Localizador, estado y TL</button><button class="btn-sm" type="button" data-rv-accion="subir-boleto" data-id="${s.id}"><i class="fas fa-upload"></i> Subir boleto</button>` : '',
+    s.tipo === 'boleto_aereo' ? rvBoletoAcciones(s) : '',
     editable ? `<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-servicio" data-id="${s.id}"><i class="fas fa-ban"></i> Anular</button>` : '',
   ].join('');
+  const boleto = s.tipo === 'boleto_aereo' && !anulado ? rvBoletoHtml(s) : '';
   return `<div class="rv-item${anulado ? ' rv-anulado' : ''}">
     <div class="rv-item-top"><b><i class="fas ${t[1]}"></i> ${esc(t[0])}</b><span class="rv-estado rv-e-${anulado ? 'cancelado' : esc(s.estado)}">${anulado ? 'Anulado' : esc(RV_ESTADOS[s.estado] || s.estado)}</span></div>
     ${s.descripcion ? `<div class="rv-desc">${esc(s.descripcion)}</div>` : ''}
     <div class="rv-meta"><span><i class="fas fa-calendar"></i>${fechas}</span>${s.destino ? `<span><i class="fas fa-location-dot"></i>${esc(s.destino)}</span>` : ''}${pax ? `<span><i class="fas fa-user-group"></i>${pax}</span>` : ''}${s.localizador ? `<span><i class="fas fa-barcode"></i>${esc(s.localizador)}</span>` : ''}${!anulado && RV_APTOS[s.id] ? `<span><i class="fas fa-building"></i>${esc(RV_APTOS[s.id].apartamento)}${RV_APTOS[s.id].proveedor ? ' · ' + esc(RV_APTOS[s.id].proveedor) : ''}</span>` : ''}</div>
-    ${det ? `<div class="rv-det">${det}</div>` : ''}${precio}${costo}
+    ${det ? `<div class="rv-det">${det}</div>` : ''}${precio}${costo}${boleto}
     ${anulado && s.anulado_motivo ? `<div class="rv-det">Motivo: ${esc(s.anulado_motivo)}</div>` : ''}
     ${acciones ? `<div class="rv-acciones">${acciones}</div>` : ''}
   </div>`;
@@ -3495,7 +3520,9 @@ function rvFormServicio(p) {
   if (rvVista() === 'boleteria') {
     p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-ticket"></i> ${esc(s.detalle?.ruta || s.descripcion || 'Boleto aéreo')}</div>
       <label class="fl">Localizador</label><input class="ei" id="rv-s-localizador" maxlength="60" value="${esc(s.localizador || '')}">
-      <label class="fl">Estado</label><select class="ei" id="rv-s-estado">${rvOpts(RV_ESTADOS, s.estado)}</select>
+      <label class="fl">Estado</label><select class="ei" id="rv-s-estado">${rvEstadoOpts(s.estado)}</select>
+      <label class="fl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">
+      <div class="csub">Vacío = sin time limit. Al cambiarlo se reinician sus alertas.</div>
       ${rvBotones('guardar-servicio')}</div>`;
     return;
   }
@@ -3590,7 +3617,14 @@ function rvLeerDetalle() {
 async function rvGuardarServicio(btn) {
   const err = document.getElementById('rv-f-err'), id = RV_FORM?.id || null;
   let datos;
-  if (rvVista() === 'boleteria') datos = { localizador: val('rv-s-localizador').trim(), estado: val('rv-s-estado') };
+  if (rvVista() === 'boleteria') {
+    datos = { localizador: val('rv-s-localizador').trim(), estado: val('rv-s-estado'), time_limit: val('rv-s-tl') ? new Date(val('rv-s-tl')).toISOString() : '' };
+    // Sin cambio de estado no se manda: un boleto ya cambiado o en reembolso rechaza cualquier 'estado'.
+    const previo = (RV_DET.servicios || []).find(x => x.id === id);
+    if (datos.estado === previo?.estado) delete datos.estado;
+    // El input pierde los segundos: reenviar el mismo TL reiniciaría sus alertas.
+    if (val('rv-s-tl') === rvDtLocal(previo?.time_limit)) delete datos.time_limit;
+  }
   else {
     const inicio = val('rv-s-inicio') || null, fin = val('rv-s-fin') || null, precio = Number(val('rv-s-precio') || 0);
     if (inicio && fin && fin < inicio) { err.textContent = RV_ERR.rango_invalido; return; }
@@ -3659,6 +3693,137 @@ async function rvAnularServicio(id) {
   const { data, error } = await sb.rpc('anular_servicio', { p_servicio_id: id });
   if (error || !data?.ok) { errToast('No se pudo anular: ' + rvErr(error, data)); return; }
   okToast('Servicio anulado'); rvTrasCambio();
+}
+
+/* Boleto aéreo (Boletería 2.0, migración 20261009100000): tramos, tickets por pasajero, time limit e
+   historial (postventa_eventos boleto_*). Lo opera boletería o un admin; el asesor solo lo ve. */
+const rvAgente = () => rvVista() === 'boleteria' || rvVista() === 'admin';
+// timestamptz -> valor de <input type="datetime-local"> en la hora del navegador.
+const rvDtLocal = iso => { if (!iso) return ''; const d = new Date(iso); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
+// Las horas de tramo son locales del aeropuerto (timestamp sin zona): se muestran tal cual.
+const rvHoraTramo = t => t ? `${pvFecha(String(t).slice(0, 10))} ${String(t).slice(11, 16)}` : '';
+const BOL_TL_ABIERTO = ['cotizado', 'solicitado', 'confirmado'];
+function bolTl(iso) {
+  const min = Math.round((new Date(iso) - Date.now()) / 60000);
+  if (min < 0) return { txt: `TL vencido hace ${min > -120 ? -min + ' min' : Math.round(-min / 60) + ' h'}`, cls: 'vencido' };
+  if (min < 120) return { txt: `TL en ${min} min`, cls: 'urgente' };
+  if (min < 48 * 60) return { txt: `TL en ${Math.round(min / 60)} h`, cls: min < 24 * 60 ? 'urgente' : '' };
+  return { txt: 'TL ' + new Date(iso).toLocaleString('es-VE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }), cls: '' };
+}
+const BOL_EVENTOS = {
+  boleto_creado: 'Boleto creado', boleto_estado: 'Estado', boleto_tramos: 'Tramos actualizados', boleto_ticket: 'Ticket',
+  boleto_cambio: 'Cambio', boleto_reembolso_solicitado: 'Reembolso solicitado', boleto_reembolsado: 'Reembolsado',
+  boleto_reembolso_anulado: 'Reembolso anulado', boleto_nota: 'Nota',
+};
+function rvEventoTexto(e) {
+  const d = e.detalle || {}, est = k => RV_ESTADOS[k] || k;
+  return [BOL_EVENTOS[e.tipo] || e.tipo,
+    d.de && d.a && d.de !== d.a ? `${est(d.de)} → ${est(d.a)}` : '',
+    e.tipo === 'boleto_ticket' ? (d.numero_ticket ? esc(d.numero_ticket) : 'quitado') : '',
+    e.tipo === 'boleto_tramos' ? `${Number(d.tramos || 0)} tramo(s)` : '',
+    d.monto_centavos != null ? rvMonto(d.monto_centavos, d.moneda) : '',
+    d.motivo ? `“${esc(d.motivo)}”` : ''].filter(Boolean).join(' · ');
+}
+function rvBoletoHtml(s) {
+  const tramos = (RV_DET.tramos || []).filter(t => t.servicio_id === s.id);
+  const tickets = (RV_DET.boletos || []).filter(b => b.servicio_id === s.id);
+  const pax = RV_DET.pasajeros || [];
+  const eventos = (RV_DET.eventos || []).filter(e => Number(e.detalle?.servicio_id) === s.id).slice(0, 6);
+  const tl = s.time_limit && BOL_TL_ABIERTO.includes(s.estado) ? bolTl(s.time_limit) : null;
+  return `<div class="rv-bol">
+    ${tl ? `<div class="rv-bol-tl ${tl.cls}"><i class="fas fa-hourglass-half"></i> ${tl.txt}</div>` : ''}
+    <div class="rv-bol-t"><i class="fas fa-route"></i> Tramos</div>
+    ${tramos.length ? tramos.map(t => `<div class="rv-bol-fila"><b>${esc(t.origen_iata)} → ${esc(t.destino_iata)}</b><span>${rvHoraTramo(t.sale_en)}${t.llega_en ? ' – ' + esc(String(t.llega_en).slice(11, 16)) : ''}</span><span>${esc([t.aerolinea, t.numero_vuelo, t.clase].filter(Boolean).join(' · '))}</span></div>`).join('') : '<div class="csub">Sin tramos cargados</div>'}
+    <div class="rv-bol-t"><i class="fas fa-ticket"></i> Tickets</div>
+    ${pax.length ? pax.map(p => { const b = tickets.find(x => x.pasajero_id === p.id); return `<div class="rv-bol-fila"><span>${esc([p.nombre, p.apellido].filter(Boolean).join(' '))}</span><b>${b ? esc(b.numero_ticket) : '<span class="csub">sin ticket</span>'}</b></div>`; }).join('') : '<div class="csub">La reserva no tiene pasajeros cargados (los carga el asesor)</div>'}
+    ${eventos.length ? `<div class="rv-bol-t"><i class="fas fa-clock-rotate-left"></i> Historial</div>${eventos.map(e => `<div class="rv-bol-ev"><span>${rvEventoTexto(e)}</span><small>${new Date(e.created_at).toLocaleString('es-VE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${e.asesor ? ' · ' + esc(e.asesor) : ''}</small></div>`).join('')}` : ''}
+  </div>`;
+}
+function rvBoletoAcciones(s) {
+  if (!rvAgente()) return '';
+  const b = (acc, ico, txt, evento = '', cls = '') => `<button class="btn-sm ${cls}" type="button" data-rv-accion="${acc}" data-id="${s.id}"${evento ? ` data-evento="${evento}"` : ''}><i class="fas ${ico}"></i> ${txt}</button>`;
+  return [b('tramos', 'fa-route', 'Tramos'), b('tickets', 'fa-ticket', 'Tickets'),
+    ['emitido', 'cambiado'].includes(s.estado) ? b('evento', 'fa-right-left', 'Cambio', 'cambio') : '',
+    ['emitido', 'cambiado', 'confirmado'].includes(s.estado) ? b('evento', 'fa-rotate-left', 'Reembolso', 'reembolso_solicitado', 'rv-danger') : '',
+    s.estado === 'reembolso_solicitado' ? b('evento', 'fa-money-bill-transfer', 'Marcar reembolsado', 'reembolsado') + b('evento', 'fa-xmark', 'Anular reembolso', 'reembolso_anulado') : '',
+    b('evento', 'fa-note-sticky', 'Nota', 'nota')].join('');
+}
+const rvServicioForm = () => (RV_DET.servicios || []).find(x => x.id === RV_FORM.id);
+function rvTramoFila(t = {}) {
+  const box = document.getElementById('rv-tramos'); if (!box) return;
+  const aer = (bolCatalogo?.aerolineas || []).map(a => `<option value="${a.id}" ${a.id === t.aerolinea_id ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('');
+  box.insertAdjacentHTML('beforeend', `<div class="rv-tramo">
+    <div class="rv-3"><div><label class="fl">Origen</label><input class="ei" data-k="origen_iata" list="rv-iatas" maxlength="3" value="${esc(t.origen_iata || '')}" placeholder="CCS"></div><div><label class="fl">Destino</label><input class="ei" data-k="destino_iata" list="rv-iatas" maxlength="3" value="${esc(t.destino_iata || '')}" placeholder="MIA"></div><div><label class="fl">Vuelo</label><input class="ei" data-k="numero_vuelo" maxlength="12" value="${esc(t.numero_vuelo || '')}"></div></div>
+    <div class="rv-2"><div><label class="fl">Sale (hora local)</label><input class="ei" data-k="sale_en" type="datetime-local" value="${esc(String(t.sale_en || '').slice(0, 16))}"></div><div><label class="fl">Llega (hora local)</label><input class="ei" data-k="llega_en" type="datetime-local" value="${esc(String(t.llega_en || '').slice(0, 16))}"></div></div>
+    <div class="rv-2"><div><label class="fl">Aerolínea</label><select class="ei" data-k="aerolinea_id"><option value="">—</option>${aer}</select></div><div><label class="fl">Clase</label><input class="ei" data-k="clase" maxlength="20" value="${esc(t.clase || '')}"></div></div>
+    <button class="btn-sm rv-danger" type="button" data-rv-accion="tramo-menos"><i class="fas fa-trash"></i> Quitar tramo</button></div>`);
+}
+function rvFormTramos(p) {
+  const s = rvServicioForm(); if (!s) { RV_FORM = null; return rvRenderServicios(); }
+  const iatas = (bolCatalogo?.aeropuertos || []).map(a => `<option value="${esc(a.iata_code)}">${esc(a.nombre_comercial || a.ciudad || '')}</option>`).join('');
+  p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-route"></i> Tramos · ${esc(s.detalle?.ruta || s.descripcion || 'Boleto aéreo')}</div>
+    <div class="csub">Horas locales de cada aeropuerto, como salen en el boleto.</div><datalist id="rv-iatas">${iatas}</datalist>
+    <div id="rv-tramos"></div>
+    <button class="dbtn gh rv-add" type="button" data-rv-accion="tramo-mas"><i class="fas fa-plus"></i> Agregar tramo</button>
+    ${rvBotones('guardar-tramos')}</div>`;
+  const ts = (RV_DET.tramos || []).filter(t => t.servicio_id === s.id);
+  (ts.length ? ts : [{}]).forEach(t => rvTramoFila(t));
+}
+async function rvGuardarTramos(btn) {
+  const err = document.getElementById('rv-f-err');
+  const tramos = [...document.querySelectorAll('#rv-tramos .rv-tramo')].map(f => {
+    const o = {}; f.querySelectorAll('[data-k]').forEach(x => { if (x.value.trim()) o[x.dataset.k] = x.value.trim(); });
+    if (o.aerolinea_id) o.aerolinea_id = Number(o.aerolinea_id);
+    return o;
+  }).filter(o => Object.keys(o).length);
+  if (tramos.some(t => !/^[A-Za-z]{3}$/.test(t.origen_iata || '') || !/^[A-Za-z]{3}$/.test(t.destino_iata || '') || !t.sale_en)) { err.textContent = 'Cada tramo necesita origen, destino (código de 3 letras) y hora de salida'; return; }
+  if (!(await rvEnviar(btn, sb.rpc('boleteria_guardar_tramos', { p_servicio_id: RV_FORM.id, p_tramos: tramos })))) return;
+  RV_FORM = null; okToast('Tramos guardados'); rvTrasCambio();
+}
+function rvFormTickets(p) {
+  const s = rvServicioForm(); if (!s) { RV_FORM = null; return rvRenderServicios(); }
+  const pax = RV_DET.pasajeros || [], tk = (RV_DET.boletos || []).filter(b => b.servicio_id === s.id);
+  p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-ticket"></i> Tickets · ${esc(s.detalle?.ruta || s.descripcion || 'Boleto aéreo')}</div>
+    ${pax.length ? pax.map(x => `<label class="fl">${esc([x.nombre, x.apellido].filter(Boolean).join(' '))}</label><input class="ei" data-pax="${x.id}" data-antes="${esc(tk.find(b => b.pasajero_id === x.id)?.numero_ticket || '')}" maxlength="30" value="${esc(tk.find(b => b.pasajero_id === x.id)?.numero_ticket || '')}" placeholder="Número de ticket (vacío = sin ticket)">`).join('')
+      : '<div class="pv-empty">La reserva no tiene pasajeros. El asesor los carga en la pestaña Pasajeros.</div>'}
+    ${rvBotones('guardar-tickets')}</div>`;
+}
+async function rvGuardarTickets(btn) {
+  const err = document.getElementById('rv-f-err'), id = RV_FORM.id;
+  const cambios = [...document.querySelectorAll('#drawerContent [data-pax]')].filter(x => x.value.trim() !== x.dataset.antes);
+  if (!cambios.length) { RV_FORM = null; return rvRenderServicios(); }
+  btn.disabled = true;
+  for (const x of cambios) {
+    const { data, error } = await sb.rpc('boleteria_guardar_boleto', { p_servicio_id: id, p_pasajero_id: Number(x.dataset.pax), p_numero_ticket: x.value.trim() });
+    if (error || !data?.ok) { btn.disabled = false; err.textContent = 'No se pudo guardar: ' + rvErr(error, data); rvCargar(); return; }
+    x.dataset.antes = x.value.trim();
+  }
+  btn.disabled = false; RV_FORM = null; okToast('Tickets guardados'); rvTrasCambio();
+}
+const RV_EVENTO_FORM = {
+  cambio: ['Registrar cambio', 'Penalidad cobrada por la aerolínea (opcional)', true],
+  reembolso_solicitado: ['Solicitar reembolso', '', false],
+  reembolsado: ['Marcar reembolsado', 'Monto devuelto al cliente', true],
+  reembolso_anulado: ['Anular reembolso (el boleto vuelve a Emitido)', '', false],
+  nota: ['Nota en el historial', '', false],
+};
+function rvFormEvento(p) {
+  const s = rvServicioForm(), cfg = RV_EVENTO_FORM[RV_FORM.evento];
+  if (!s || !cfg) { RV_FORM = null; return rvRenderServicios(); }
+  p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-clock-rotate-left"></i> ${cfg[0]}</div>
+    <div class="csub">${esc(s.detalle?.ruta || s.descripcion || 'Boleto aéreo')} · ${esc(RV_ESTADOS[s.estado] || s.estado)}. Queda en el historial; no cambia el total de la reserva.</div>
+    ${cfg[2] ? `<div class="rv-2"><div><label class="fl">${cfg[1]}</label><input class="ei" id="rv-ev-monto" type="number" min="0" step="0.01"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-ev-moneda">${rvMonedaOpts('USD')}</select></div></div>` : ''}
+    <label class="fl">${RV_FORM.evento === 'nota' ? 'Nota' : 'Motivo (opcional)'}</label><textarea class="ei" id="rv-ev-motivo" maxlength="300" rows="3"></textarea>
+    ${rvBotones('guardar-evento')}</div>`;
+}
+async function rvGuardarEvento(btn) {
+  const err = document.getElementById('rv-f-err'), monto = val('rv-ev-monto');
+  if (monto !== '' && !(Number(monto) >= 0)) { err.textContent = RV_ERR.monto_invalido; return; }
+  if (RV_FORM.evento === 'nota' && !val('rv-ev-motivo').trim()) { err.textContent = RV_ERR.falta_motivo; return; }
+  const ok = await rvEnviar(btn, sb.rpc('boleteria_registrar_evento', { p_servicio_id: RV_FORM.id, p_tipo: RV_FORM.evento,
+    p_monto: monto === '' ? null : Number(monto), p_moneda: val('rv-ev-moneda') || 'USD', p_motivo: val('rv-ev-motivo').trim() || null }));
+  if (!ok) return;
+  RV_FORM = null; okToast('Registrado'); rvTrasCambio();
 }
 
 /* Pasajeros (datos sensibles: pasaportes) */
@@ -23188,6 +23353,8 @@ function activateSection(sec, fromNav) {
   // no se vuelve a pedir: volver a una pestaña reusa lo que ya está pintado.
   // Refrescar (pull/botón) fuerza la recarga vía REFRESCAR_SECCION.
   if (DASH_SUCIO && SECS_DASH.has(sec)) { DASH_SUCIO = false; requestAnimationFrame(() => { renderAll(); loadDestPeriodo(); }); }
+  // La cola de boletería es un solo DOM: se ubica antes del corte por frescura, que no vuelve a llamar a cargarSeccion.
+  bolMoverCola(sec === 'boleteria' && bolTab === 'solicitudes' ? 'bol-cola-host-sec' : 'bol-cola-host-leads');
   if (!CARGA_SIEMPRE.has(sec) && Date.now() - (ULTIMA_CARGA[sec] || 0) < CARGA_FRESCA_MS) return;
   requestAnimationFrame(() => setTimeout(() => {
     if (currentSec !== sec) return;
@@ -23776,7 +23943,7 @@ function setupLeadsTabs() {
     document.querySelectorAll('.leads-tab-panel').forEach(p => p.style.display = p.dataset.leadsPanel === leadsTab ? '' : 'none');
     if (leadsTab === 'colaboraciones') loadLeadsColaboraciones();
     if (leadsTab === 'facturacion') loadLeadsEnFacturacion();
-    if (leadsTab === 'boleteria') loadColaBoleteria();
+    if (leadsTab === 'boleteria') { bolMoverCola('bol-cola-host-leads'); loadColaBoleteria(); }
     if (leadsTab === 'lote') loadLeadsAsignadosLote();
   }));
   document.getElementById('lf-refrescar')?.addEventListener('click', () => loadLeadsEnFacturacion());
@@ -23995,7 +24162,8 @@ function bolDetalleHtml(s) {
   // el asesor dueño solo cancela lo suyo mientras nadie lo tomó; borrar es admin.
   const acc = [];
   if (MI_ES_AGENTE_BOLETERIA) {
-    if (s.estado === 'en_cola') acc.push(`<button class="dbtn save" data-bol-tomar="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
+    if (s.estado === 'en_cola' || s.estado === 'atendiendo') acc.push(`<button class="dbtn save" data-bol-convertir="${s.id}"><i class="fas fa-ticket"></i> Convertir en reserva</button>`);
+    if (s.estado === 'en_cola') acc.push(`<button class="dbtn gh" data-bol-tomar="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
     else if (s.estado === 'atendiendo') {
       acc.push(`<button class="dbtn save" data-bol-cerrar="${s.id}"><i class="fas fa-check"></i> Marcar resuelta</button>`);
       acc.push(`<button class="dbtn gh" data-bol-cancelar="${s.id}"><i class="fas fa-xmark"></i> Cancelar</button>`);
@@ -24050,6 +24218,7 @@ function abrirDetalleBoleteria(id) {
   cuerpo.querySelector('[data-bol-tomar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); bolTomar(id); });
   cuerpo.querySelector('[data-bol-cancelar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); bolCancelar(id); });
   cuerpo.querySelector('[data-bol-eliminar]')?.addEventListener('click', () => bolEliminar(id));
+  cuerpo.querySelector('[data-bol-convertir]')?.addEventListener('click', e => bolConvertirSolicitud(s, e.currentTarget));
   cuerpo.querySelector('[data-bol-cerrar]')?.addEventListener('click', () => {
     cerrarDetalleBoleteria();
     BOL_CERRAR_ID = id;
@@ -24133,6 +24302,135 @@ async function bolCancelar(id) {
   okToast('Solicitud cancelada'); loadColaBoleteria();
 }
 
+/* ---------- Boletería > Reservas (Boletería 2.0, Fase 4): boletos aéreos de todas las reservas, con KPIs.
+   Una reserva aérea solo nace si el lead está EN ESPERA DE PAGO o PAGO REALIZADO
+   (boleteria_crear_reserva no mueve el estado: eso lo decide el asesor). */
+const BOLR = { estado: '', q: '', desde: null, hasta: null, req: 0, lead: null, debounce: null };
+const BOLR_LEAD_OK = ['EN ESPERA DE PAGO', 'PAGO REALIZADO'];
+function setupBolReservas() {
+  document.getElementById('bolr-chips')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-bolr-estado]'); if (!b) return;
+    bolrFiltro(b.dataset.bolrEstado, false);
+  });
+  document.getElementById('bolr-kpis')?.addEventListener('click', e => {
+    const k = e.target.closest('[data-bolr-kpi]')?.dataset.bolrKpi; if (!k) return;
+    if (k === 'vuelan_7d') bolrFiltro('', true); else bolrFiltro(k === 'reembolsos_abiertos' ? 'reembolso_solicitado' : 'por_emitir', false);
+  });
+  document.getElementById('bolr-q')?.addEventListener('input', e => {
+    clearTimeout(BOLR.debounce);
+    BOLR.debounce = setTimeout(() => { BOLR.q = e.target.value.trim(); loadBolReservas(); }, 300);
+  });
+  document.getElementById('bolr-nueva')?.addEventListener('click', bolrFormNueva);
+  const grid = document.getElementById('bolr-grid');
+  const abrir = c => rvAbrirReserva(Number(c.dataset.rvReserva), c.dataset.rvTitulo, c.dataset.rvSub);
+  grid?.addEventListener('click', e => { const c = e.target.closest('[data-rv-reserva]'); if (c) abrir(c); });
+  grid?.addEventListener('keydown', e => { const c = e.target.closest('[data-rv-reserva]'); if (c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrir(c); } });
+}
+function bolrFiltro(estado, proximos) {
+  BOLR.estado = estado;
+  const hoy = hoyCaracasISO();
+  BOLR.desde = proximos ? hoy : null;
+  BOLR.hasta = proximos ? new Date(Date.parse(hoy + 'T12:00:00Z') + 7 * 864e5).toISOString().slice(0, 10) : null;
+  document.querySelectorAll('#bolr-chips .seg').forEach(x => x.classList.toggle('on', !proximos && x.dataset.bolrEstado === estado));
+  loadBolReservas();
+}
+async function loadBolReservas() {
+  const grid = document.getElementById('bolr-grid'); if (!grid) return;
+  if (!grid.children.length) grid.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  const req = ++BOLR.req;
+  const { data, error } = await sb.rpc('boleteria_reservas_listar', { p_estado: BOLR.estado || null, p_q: BOLR.q || null, p_desde: BOLR.desde, p_hasta: BOLR.hasta });
+  if (req !== BOLR.req) return;
+  if (error || !data?.ok) { console.error('boleteria_reservas_listar', error || data); grid.innerHTML = `<div class="pv-empty">No se pudieron cargar las reservas: ${esc(rvErr(error, data))}</div>`; return; }
+  const k = data.kpis || {};
+  const kpi = (clave, ico, txt, n, alerta) => `<button class="bolr-kpi${alerta && n ? ' alerta' : ''}" type="button" data-bolr-kpi="${clave}"><i class="fas ${ico}"></i><b>${Number(n || 0)}</b><span>${txt}</span></button>`;
+  document.getElementById('bolr-kpis').innerHTML = kpi('por_emitir', 'fa-hourglass-half', 'Por emitir', k.por_emitir)
+    + kpi('tl_24h', 'fa-stopwatch', k.tl_vencidos ? `TL < 24 h (${Number(k.tl_vencidos)} vencido${k.tl_vencidos > 1 ? 's' : ''})` : 'TL < 24 h', k.tl_24h, true)
+    + kpi('vuelan_7d', 'fa-plane-departure', 'Vuelan en 7 días', k.vuelan_7d)
+    + kpi('reembolsos_abiertos', 'fa-rotate-left', 'Reembolsos abiertos', k.reembolsos_abiertos, true);
+  const items = data.items || [];
+  grid.innerHTML = items.length ? items.map(bolrCardHtml).join('')
+    : `<div class="pv-empty">${BOLR.q || BOLR.estado || BOLR.desde ? 'Nada coincide con el filtro' : 'Todavía no hay reservas aéreas. Se crean desde una solicitud de la cola ("Convertir en reserva") o con "Nueva reserva aérea".'}</div>`;
+}
+function bolrCardHtml(s) {
+  const tl = s.time_limit && BOL_TL_ABIERTO.includes(s.estado) ? bolTl(s.time_limit) : null;
+  const vuelo = s.primer_vuelo ? rvHoraTramo(s.primer_vuelo) : s.fecha_inicio ? pvFecha(s.fecha_inicio) : 'Sin fecha';
+  return `<div class="bol-card rv-bol-card" role="button" tabindex="0" data-rv-reserva="${s.reserva_id}" data-rv-titulo="${esc(s.cliente || '')}" data-rv-sub="${esc([s.codigo, s.asesor].filter(Boolean).join(' · '))}">
+    <div class="rv-item-top"><b><i class="fas fa-plane"></i> ${esc(s.ruta || s.detalle?.ruta || s.descripcion || 'Boleto aéreo')}</b><span class="rv-estado rv-e-${esc(s.estado)}">${esc(RV_ESTADOS[s.estado] || s.estado)}</span></div>
+    <div class="rv-desc">${esc(s.cliente || 'Sin nombre')}${s.codigo ? ' · ' + esc(s.codigo) : ''}${s.localizador ? ` · PNR <b>${esc(s.localizador)}</b>` : ''}</div>
+    <div class="rv-meta"><span><i class="fas fa-calendar"></i>${vuelo}</span><span><i class="fas fa-user-group"></i>${Number(s.pasajeros || 0)} pax</span><span><i class="fas fa-ticket"></i>${Number(s.tickets || 0)} ticket${Number(s.tickets) === 1 ? '' : 's'}</span>${s.asesor ? `<span><i class="fas fa-user-tie"></i>${esc(s.asesor)}</span>` : ''}</div>
+    ${tl ? `<div class="rv-bol-tl ${tl.cls}"><i class="fas fa-hourglass-half"></i> ${tl.txt}</div>` : ''}
+  </div>`;
+}
+// Alta manual: lead + ruta. Sin solicitud de la cola.
+function bolrFormNueva() {
+  const grid = document.getElementById('bolr-grid'); if (!grid) return;
+  document.getElementById('bolr-form')?.remove();
+  BOLR.lead = null;
+  grid.insertAdjacentHTML('beforebegin', `<div class="edit-box" id="bolr-form" style="margin-bottom:12px"><div class="eb-title"><i class="fas fa-plane"></i> Nueva reserva aérea</div>
+    <label class="fl">Cliente (lead)</label><input class="ei" id="bolr-buscar" type="search" placeholder="Nombre o teléfono">
+    <div id="bolr-buscar-res" class="bolr-res"></div><div id="bolr-lead" class="csub"></div>
+    <label class="fl">Ruta</label><input class="ei" id="bolr-ruta" maxlength="300" placeholder="Ej.: Caracas - Madrid">
+    <label class="pv-doc" style="margin-top:10px"><input type="checkbox" id="bolr-iv"> Ida y vuelta</label>
+    <div class="rv-2"><div><label class="fl">Ida</label><input class="ei" id="bolr-ida" type="date"></div><div><label class="fl">Regreso</label><input class="ei" id="bolr-vuelta" type="date"></div></div>
+    <div class="rv-3"><div><label class="fl">Adultos</label><input class="ei" id="bolr-ad" type="number" min="1" max="99" value="1"></div><div><label class="fl">Niños</label><input class="ei" id="bolr-ni" type="number" min="0" max="99" value="0"></div><div><label class="fl">Time limit</label><input class="ei" id="bolr-tl" type="datetime-local"></div></div>
+    <div class="edit-err" id="bolr-err"></div>
+    <button class="dbtn save" type="button" id="bolr-crear"><i class="fas fa-floppy-disk"></i> Crear reserva</button>
+    <button class="dbtn gh" type="button" id="bolr-cancelar" style="margin-top:9px">Cancelar</button></div>`);
+  document.getElementById('bolr-cancelar').onclick = () => document.getElementById('bolr-form')?.remove();
+  document.getElementById('bolr-crear').onclick = e => bolrCrear(e.currentTarget);
+  document.getElementById('bolr-buscar').oninput = e => {
+    clearTimeout(BOL_BUSCAR_DEBOUNCE);
+    const q = e.target.value.trim().replace(/[,()%]/g, ''), box = document.getElementById('bolr-buscar-res');
+    if (q.length < 2) { box.innerHTML = ''; return; }
+    BOL_BUSCAR_DEBOUNCE = setTimeout(async () => {
+      const { data, error } = await sb.from('leads').select('id,nombre,telefono,asesor,estado')
+        .or(`nombre.ilike.%${q}%,telefono.ilike.%${q}%`).is('eliminado_at', null).limit(12);
+      if (error || !document.getElementById('bolr-buscar-res')) return;
+      box.innerHTML = (data || []).length ? data.map(l => `<div class="nl-buscar-row" data-lid="${l.id}"><b>${esc(l.nombre)}</b> <span>${esc(l.telefono || 'sin teléfono')}</span><small>${esc(l.asesor || 'Sin asignar')} · ${esc(niceEstado(l.estado))}</small></div>`).join('') : '<div class="csub">Sin resultados</div>';
+      box.querySelectorAll('[data-lid]').forEach(r => r.onclick = () => {
+        BOLR.lead = data.find(x => String(x.id) === r.dataset.lid); box.innerHTML = '';
+        document.getElementById('bolr-buscar').value = BOLR.lead.nombre || '';
+        document.getElementById('bolr-lead').innerHTML = BOLR_LEAD_OK.includes(BOLR.lead.estado)
+          ? `<i class="fas fa-user"></i> ${esc(BOLR.lead.nombre)} · ${esc(niceEstado(BOLR.lead.estado))}`
+          : `<span class="rv-danger"><i class="fas fa-triangle-exclamation"></i> Está en ${esc(niceEstado(BOLR.lead.estado))}. ${esc(RV_ERR.lead_fuera_de_postventa)}.</span>`;
+      });
+    }, 300);
+  };
+}
+// La reserva activa del lead puede tener un total cargado a mano por debajo de lo pagado: se ofrece una aparte.
+async function bolCrearReserva(solicitudId, leadId, datos, btn) {
+  const previo = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando...';
+  let r = await sb.rpc('boleteria_crear_reserva', { p_solicitud_id: solicitudId, p_lead_id: leadId, p_datos: datos });
+  if (r.data?.error === 'total_menor_que_pagado' && await confirmarSheet({ titulo: '¿Crear una reserva aparte?', detalle: 'La reserva abierta del cliente tiene un total cargado a mano menor a lo ya pagado: sumarle el boleto no cuadra. Se puede crear el boleto en una reserva nueva.', textoOk: 'Crear aparte' }))
+    r = await sb.rpc('boleteria_crear_reserva', { p_solicitud_id: solicitudId, p_lead_id: leadId, p_datos: { ...datos, nueva_reserva: true } });
+  btn.disabled = false; btn.innerHTML = previo;
+  return r;
+}
+async function bolrCrear(btn) {
+  const err = document.getElementById('bolr-err'); err.textContent = '';
+  if (!BOLR.lead) { err.textContent = RV_ERR.falta_lead; return; }
+  if (!val('bolr-ruta').trim()) { err.textContent = 'Escribí la ruta'; return; }
+  if (val('bolr-ida') && val('bolr-vuelta') && val('bolr-vuelta') < val('bolr-ida')) { err.textContent = RV_ERR.rango_invalido; return; }
+  const datos = { ruta: val('bolr-ruta').trim(), ida_vuelta: document.getElementById('bolr-iv').checked, fecha_inicio: val('bolr-ida'), fecha_fin: val('bolr-vuelta'),
+    pax_adultos: val('bolr-ad'), pax_ninos: val('bolr-ni'), time_limit: val('bolr-tl') ? new Date(val('bolr-tl')).toISOString() : '' };
+  const { data, error } = await bolCrearReserva(null, BOLR.lead.id, datos, btn);
+  if (error || !data?.ok) { err.textContent = 'No se pudo crear: ' + rvErr(error, data); return; }
+  document.getElementById('bolr-form')?.remove();
+  okToast(`Reserva ${data.codigo || ''} creada`); loadBolReservas();
+  rvAbrirReserva(data.reserva_id, BOLR.lead.nombre, [data.codigo, BOLR.lead.asesor].filter(Boolean).join(' · '));
+}
+async function bolConvertirSolicitud(s, btn) {
+  const { data, error } = await bolCrearReserva(s.id, null, {}, btn);
+  if (error || !data?.ok) {
+    errToast(data?.error === 'falta_lead' ? 'La solicitud no está enlazada a un lead del CRM: creala a mano desde Boletería > Reservas' : 'No se pudo convertir: ' + rvErr(error, data));
+    return;
+  }
+  cerrarDetalleBoleteria();
+  okToast(data.ya_existia ? 'Esta solicitud ya tenía reserva' : `Reserva ${data.codigo || ''} creada`);
+  loadColaBoleteria();
+  rvAbrirReserva(data.reserva_id, s.cliente_nombre, data.codigo || '');
+}
+
 /* ---------- Modo Boletería -- cambio de modo completo, no una sección más.
    body.modo-boleteria recolorea TODO el CRM (variables CSS en body, cascadean
    solas) y reemplaza el menú entero por el set de Boletería (mismo mecanismo
@@ -24156,9 +24454,13 @@ function salirModoBoleteria() {
   seccionAntesDeModoBoleteria = null;
 }
 function irAColaBoleteria() {
-  if (!modoBoleteria) entrarModoBoleteria();
-  activateSection('leads');
-  document.querySelector('[data-leads-tab="boleteria"]')?.click();
+  if (!modoBoleteria) entrarModoBoleteria(); else activateSection('boleteria');
+  bolActivarTab('solicitudes');
+}
+// Un solo DOM para la cola: Leads > Boletería (asesores) y Boletería > Solicitudes (agentes).
+function bolMoverCola(hostId) {
+  const c = document.getElementById('bol-cola'), h = document.getElementById(hostId);
+  if (c && h && c.parentElement !== h) h.appendChild(c);
 }
 
 /* ---------- Sección Boletería -- catálogo de vuelos: rutas, precios,
@@ -24167,17 +24469,14 @@ function irAColaBoleteria() {
    es_referencia son la tarifa "Desde" que publican la web y la IA: la vista
    vuelos_referencia los lee directo, no hay otra copia. */
 let bolCatalogo = null;
-let bolTab = 'rutas';
+// var y no let: activateSection lo lee y podría correr antes de esta línea (TDZ tumbaría el arranque).
+var bolTab = 'reservas';
 // Mismo recargo y redondeo que ventas-ia.ts (montosVuelo) y la web.
 const bolPublico = p => Math.ceil(Math.round(p * 1.2 * 100) / 100);
 const bolPuedeEditar = () => ROL === 'admin' || ROL === 'boleteria';
 function setupBoleteriaSeccion() {
-  document.querySelectorAll('#bol-tabs .seg').forEach(btn => btn.addEventListener('click', () => {
-    bolTab = btn.dataset.bolTab;
-    document.querySelectorAll('#bol-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
-    document.querySelectorAll('.bol-tab-panel').forEach(p => p.style.display = p.dataset.bolPanel === bolTab ? '' : 'none');
-    renderBoleteriaTab(true);
-  }));
+  document.querySelectorAll('#bol-tabs .seg').forEach(btn => btn.addEventListener('click', () => bolActivarTab(btn.dataset.bolTab)));
+  setupBolReservas();
   document.getElementById('bol-buscador')?.addEventListener('input', () => renderBoleteriaTab());
   document.getElementById('bol-ruta-nueva')?.addEventListener('click', () => bolFormRuta());
   document.getElementById('bol-aerolinea-nueva')?.addEventListener('click', () => bolFormAerolinea());
@@ -24202,8 +24501,23 @@ function setupBoleteriaSeccion() {
   document.getElementById('sheet-cola-boleteria')?.addEventListener('click', irAColaBoleteria);
 }
 const BOL_WRAP = { rutas: 'bol-rutas-wrap', aerolineas: 'bol-aerolineas-wrap', precios: 'bol-precios-wrap', aeropuertos: 'bol-aeropuertos-wrap', requisitos: 'bol-requisitos-wrap', calendario: 'bol-calendario-wrap' };
+// Reservas y Solicitudes operan con es_agente_boleteria(); un asesor común solo consulta el catálogo.
+const bolEsAgente = () => ROL === 'admin' || ROL === 'boleteria' || MI_ES_AGENTE_BOLETERIA;
+function bolActivarTab(tab) {
+  bolTab = tab;
+  document.querySelectorAll('#bol-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.bolTab === tab));
+  document.querySelectorAll('#sec-boleteria .bol-tab-panel').forEach(p => p.style.display = p.dataset.bolPanel === tab ? '' : 'none');
+  const busca = document.querySelector('#sec-boleteria .bol-catalogo-busca');
+  if (busca) busca.style.display = BOL_WRAP[tab] ? '' : 'none';
+  if (tab === 'reservas') loadBolReservas();
+  else if (tab === 'solicitudes') { bolMoverCola('bol-cola-host-sec'); loadColaBoleteria(); }
+  else { bolMoverCola('bol-cola-host-leads'); renderBoleteriaTab(true); }
+}
 async function loadBoleteria() {
   document.querySelectorAll('#sec-boleteria .bol-solo-editor').forEach(el => el.style.display = bolPuedeEditar() ? '' : 'none');
+  const agente = bolEsAgente();
+  document.querySelectorAll('#sec-boleteria .bol-solo-agente').forEach(el => el.style.display = agente ? '' : 'none');
+  bolActivarTab(!agente && bolTab === 'reservas' ? 'rutas' : bolTab);
   const wrap0 = document.getElementById(BOL_WRAP[bolTab]);
   if (wrap0 && !bolCatalogo) wrap0.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   const { data, error } = await sb.rpc('boleteria_catalogo');
@@ -24227,7 +24541,7 @@ function bolMatch(texto, alias) {
   return (alias || []).some(a => (a || '').toLowerCase().includes(q));
 }
 function renderBoleteriaTab(animar) {
-  if (!bolCatalogo) return;
+  if (!bolCatalogo || !BOL_WRAP[bolTab]) return;
   ({ rutas: renderBolRutas, aerolineas: renderBolAerolineas, precios: renderBolPrecios, aeropuertos: renderBolAeropuertos, requisitos: renderBolRequisitos, calendario: renderBolCalendario })[bolTab]?.();
   if (animar) entradaLista(document.getElementById(BOL_WRAP[bolTab]));
 }

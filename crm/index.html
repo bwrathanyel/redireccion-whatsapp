@@ -2701,6 +2701,42 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .rv-form{margin-bottom:12px}
 .rv-2,.rv-3{display:grid;gap:0 10px}.rv-2{grid-template-columns:repeat(2,minmax(0,1fr))}.rv-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .rv-bol-card{cursor:pointer}
+.rv-e-cambiado{color:var(--blue,#4a9eff);border-color:rgba(74,158,255,.35)}
+.rv-e-reembolso_solicitado{color:var(--amber);border-color:rgba(245,158,11,.35);border-style:dashed}
+.rv-e-reembolsado{color:var(--muted);border-color:var(--line2);text-decoration:line-through}
+.rv-bol{margin-top:9px;padding-top:9px;border-top:1px solid var(--line2)}
+.rv-bol-t{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.11em;color:var(--muted2);margin:9px 0 4px}
+.rv-bol-t i{margin-right:5px;opacity:.8}
+.rv-bol-fila{display:flex;flex-wrap:wrap;gap:2px 11px;align-items:baseline;justify-content:space-between;font-size:12px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--line)}
+.rv-bol-fila:last-of-type{border-bottom:0}
+.rv-bol-fila b{color:var(--txt);font-weight:700;overflow-wrap:anywhere}
+.rv-bol-ev{display:flex;justify-content:space-between;gap:9px;font-size:11.5px;color:var(--txt);padding:3px 0}
+.rv-bol-ev small{flex:none;color:var(--muted2)}
+.rv-bol-tl{display:inline-flex;align-items:center;gap:5px;margin-top:7px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--line2);color:var(--muted)}
+.rv-bol-tl.urgente{color:var(--amber);border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.08)}
+.rv-bol-tl.vencido{color:#fb7185;border-color:rgba(251,113,133,.35);background:rgba(251,113,133,.08)}
+.rv-cobro{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;font-size:12px;color:var(--muted);padding:9px 11px;margin-bottom:12px;border-radius:10px;border:1px solid var(--line2);background:var(--panel)}
+.rv-cobro b{color:var(--txt)}
+.rv-cobro em{margin-left:auto;font-style:normal;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid var(--line2)}
+.rv-cobro-pagado{border-color:rgba(16,185,129,.3)}.rv-cobro-pagado em{color:var(--green);border-color:rgba(16,185,129,.35)}
+.rv-cobro-parcial{border-color:rgba(245,158,11,.3)}.rv-cobro-parcial em{color:var(--amber);border-color:rgba(245,158,11,.35)}
+.rv-cobro-pendiente em{color:var(--muted)}
+.bolr-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:9px;margin-bottom:12px}
+.bolr-kpi{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;gap:0 9px;align-items:center;text-align:left;min-height:44px;padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font:inherit;cursor:pointer;transition:border-color .16s,transform .16s}
+.bolr-kpi:hover{border-color:rgba(245,158,11,.28);transform:translateY(-1px)}
+.bolr-kpi i{grid-row:1/3;font-size:16px;color:var(--muted2)}
+.bolr-kpi b{font-size:20px;line-height:1.1;font-weight:800}
+.bolr-kpi span{font-size:10.5px;font-weight:600;color:var(--muted)}
+.bolr-kpi.alerta{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.07)}
+.bolr-kpi.alerta i,.bolr-kpi.alerta b{color:var(--amber)}
+.bolr-res{max-height:220px;overflow:auto;border-radius:10px}
+.bolr-res:not(:empty){border:1px solid var(--line2);margin-top:4px}
+.bolr-res .nl-buscar-row{display:flex;flex-wrap:wrap;gap:2px 9px;align-items:baseline;padding:9px 11px;cursor:pointer;font-size:12.5px;border-bottom:1px solid var(--line)}
+.bolr-res .nl-buscar-row:last-child{border-bottom:0}
+.bolr-res .nl-buscar-row:hover{background:var(--accent-soft)}
+.bolr-res .nl-buscar-row span{color:var(--muted)}
+.bolr-res .nl-buscar-row small{width:100%;color:var(--muted2)}
+.bolr-res .csub{padding:9px 11px}
 .emp-res{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line2);font-size:12.5px;color:var(--muted)}.emp-res b{color:var(--text)}
 #rv-bol-box[hidden],[data-rv-panel][hidden],#pv-grupos[hidden],#emp-reservas-box[hidden],#rv-s-tasa-box[hidden],#rv-c-tasa-box[hidden]{display:none}
 .pv-stage{white-space:nowrap;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--muted);padding:8px 12px;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer}
@@ -4266,7 +4302,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 :root[data-theme="light"] .kpi{background:linear-gradient(145deg,rgba(var(--surface-rgb),.94),rgba(var(--surface-rgb),.9))}
 :root[data-theme="light"] thead th{background:rgba(var(--surface-rgb),.96)}
 :root[data-theme="light"] .asis-acc-i.err{color:var(--red,#961d1d)}
-:root[data-theme="light"] .rv-e-cancelado{color:#9a1529}
+:root[data-theme="light"] .rv-e-cancelado,:root[data-theme="light"] .rv-bol-tl.vencido{color:#9a1529}
 :root[data-theme="light"] .rv-danger{color:#9a1529}
 :root[data-theme="light"] .pv-stage.on{color:#6b450c}
 :root[data-theme="light"] .pv-card{background:linear-gradient(150deg,rgba(var(--surface-rgb),.94),rgba(var(--surface-rgb),.94));box-shadow:0 14px 36px rgba(var(--ink-rgb),.056)}
@@ -5074,7 +5110,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <!-- Colaboraciones: campañas de colaboración paga (ej. Casa Vacacional
            Playa del Sur) que van directo al WhatsApp del colaborador, sin
            pasar por el pipeline normal de asesores. -->
-      <div class="leads-tab-panel" data-leads-panel="boleteria" style="display:none">
+      <div class="leads-tab-panel" data-leads-panel="boleteria" style="display:none"><div id="bol-cola-host-leads"><div id="bol-cola">
         <div class="card">
           <div class="chead-row">
             <h2><i class="fas fa-plane-departure"></i> Cola de boletería</h2>
@@ -5092,7 +5128,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="csub">Boletos aéreos de reservas que todavía no están emitidos. Tocá uno para cargar el localizador y subir el boleto.</div>
           <div class="bol-grid" id="rv-bol-grid"></div>
         </div>
-      </div>
+      </div></div></div>
 
       <div class="leads-tab-panel" data-leads-panel="facturacion" style="display:none">
         <div class="card">
@@ -5513,6 +5549,11 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           </div>
           <button type="button" class="reload-btn" id="ase-ver-reasig" title="Ver reasignaciones de este periodo"><i class="fas fa-shuffle"></i> Reasignaciones <span id="ase-reasig-count"></span></button>
         </div>
+        <div class="card" style="margin-bottom:16px">
+          <h2><i class="fas fa-gauge-high"></i> Rendimiento y tasa de respuesta</h2>
+          <div class="csub">Leads asignados vs. perdidos por no responder a tiempo (timeout de reasignación)</div>
+          <div class="adv" id="rendList"></div>
+        </div>
         <div class="grid g-2b">
           <div class="card"><h2><i class="fas fa-user-tie"></i> Carga por asesor</h2><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
           <div class="card">
@@ -5532,11 +5573,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
               </div>
             </div>
           </div>
-        </div>
-        <div class="card" style="margin-top:16px">
-          <h2><i class="fas fa-gauge-high"></i> Rendimiento y tasa de respuesta</h2>
-          <div class="csub">Leads asignados vs. perdidos por no responder a tiempo (timeout de reasignación)</div>
-          <div class="adv" id="rendList"></div>
         </div>
 
         <div class="card" style="margin-top:16px">
@@ -7587,10 +7623,9 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
          (body.modo-boleteria), no de esta sección. Los precios marcados como
          referencia son la fuente de la web y la IA (vista vuelos_referencia). -->
     <section class="section" id="sec-boleteria">
-      <div class="tbar" style="margin-bottom:12px">
-        <input class="flt bol-buscador" id="bol-buscador" type="text" placeholder="Buscar ruta, aerolínea, aeropuerto o país (ej: margarita, PMV, porla)...">
-      </div>
       <div class="seg-group" id="bol-tabs">
+        <button class="seg bol-solo-agente" data-bol-tab="reservas">Reservas</button>
+        <button class="seg" data-bol-tab="solicitudes">Solicitudes</button>
         <button class="seg on" data-bol-tab="rutas">Rutas</button>
         <button class="seg" data-bol-tab="precios">Precios</button>
         <button class="seg" data-bol-tab="aerolineas">Aerolíneas</button>
@@ -7598,6 +7633,28 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <button class="seg" data-bol-tab="requisitos">Requisitos</button>
         <button class="seg" data-bol-tab="calendario">Calendario</button>
       </div>
+      <div class="tbar bol-catalogo-busca" style="margin-bottom:12px">
+        <input class="flt bol-buscador" id="bol-buscador" type="text" placeholder="Buscar ruta, aerolínea, aeropuerto o país (ej: margarita, PMV, porla)...">
+      </div>
+
+      <div class="bol-tab-panel" data-bol-panel="reservas" style="display:none">
+        <div class="bolr-kpis" id="bolr-kpis"></div>
+        <div class="tbar" style="margin-bottom:12px">
+          <input class="flt" id="bolr-q" type="search" placeholder="Buscar por PNR, pasajero, ticket, cliente o ruta...">
+          <button class="btn-sm" id="bolr-nueva" type="button"><i class="fas fa-plus"></i> Nueva reserva aérea</button>
+        </div>
+        <div class="seg-group seg-group-sm" id="bolr-chips">
+          <button class="seg on" data-bolr-estado="">Todas</button>
+          <button class="seg" data-bolr-estado="por_emitir">Por emitir</button>
+          <button class="seg" data-bolr-estado="emitido">Emitidas</button>
+          <button class="seg" data-bolr-estado="cambiado">Cambiadas</button>
+          <button class="seg" data-bolr-estado="reembolso_solicitado">Reembolso</button>
+          <button class="seg" data-bolr-estado="cancelado">Canceladas</button>
+        </div>
+        <div class="bol-grid" id="bolr-grid"></div>
+      </div>
+      <!-- La cola es un solo DOM: vive en Leads > Boletería y se muda acá (bolMoverCola) al abrir esta pestaña. -->
+      <div class="bol-tab-panel" data-bol-panel="solicitudes" style="display:none"><div id="bol-cola-host-sec"></div></div>
 
       <div class="bol-tab-panel" data-bol-panel="rutas">
         <div class="tbar bol-solo-editor" style="margin-bottom:12px"><button class="btn-sm" id="bol-ruta-nueva" type="button"><i class="fas fa-plus"></i> Nueva ruta</button></div>
