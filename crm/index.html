@@ -571,6 +571,8 @@ body.menu-arrastrando .side-scrim{transition:none}
 .rend-dest{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px;font-size:11px;color:var(--muted)}
 .rend-dest span{padding:2px 8px;border-radius:20px;background:rgba(239,68,68,.08);color:var(--txt)}
 @media(max-width:700px){.rend-res{grid-template-columns:1fr 1fr}.rend-kpi b{font-size:20px}}
+.ase-rap .seg{padding:6px 12px;white-space:nowrap}.ase-rap .seg i{margin-right:5px;font-size:11px;opacity:.85}
+@media(max-width:700px){.ase-rap{width:100%;overflow-x:auto;scrollbar-width:none}.ase-rap .seg{flex:1}}
 .rep-total{margin-left:8px;font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;background:rgba(255,255,255,.06);color:var(--muted);vertical-align:middle}
 .rep-total.ok{background:color-mix(in srgb, var(--green) 20%, transparent);color:var(--green)}
 .rep-total.bad{background:color-mix(in srgb, #ef4444 20%, transparent);color:#ef4444}
@@ -5571,6 +5573,11 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
                 <label>Hasta <input type="date" id="ase-hasta"></label>
               </div>
             </div>
+          </div>
+          <div class="seg-group seg-group-sm ase-rap" role="group" aria-label="Periodos rápidos">
+            <button type="button" class="seg" data-drp="ase" data-preset="finde" title="Último sábado y domingo completos"><i class="fas fa-umbrella-beach"></i> Últ. fin de semana</button>
+            <button type="button" class="seg" data-drp="ase" data-preset="semana" title="Lunes a viernes de esta semana"><i class="fas fa-briefcase"></i> Esta semana</button>
+            <button type="button" class="seg on" data-drp="ase" data-preset="7d" title="Últimos 7 días"><i class="fas fa-clock-rotate-left"></i> 7 días</button>
           </div>
           <button type="button" class="reload-btn" id="ase-ver-reasig" title="Ver reasignaciones de este periodo"><i class="fas fa-shuffle"></i> Reasignaciones <span id="ase-reasig-count"></span></button>
         </div>

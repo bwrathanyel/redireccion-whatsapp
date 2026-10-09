@@ -4687,16 +4687,23 @@ function initDateRangePicker(prefix) {
   if (!btn.closest('.sheet, .mfs')) popoverASheet(panel);
   btn.onclick = e => { e.stopPropagation(); panel.classList.toggle('open'); };
   document.addEventListener('click', e => { if (!panel.contains(e.target) && !btn.contains(e.target)) panel.classList.remove('open'); });
-  [desde, hasta].forEach(el => el.addEventListener('change', updateLabel));
-  panel.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => {
-    const hoy = new Date(); const iso = d => d.toISOString().slice(0, 10);
-    const preset = b.dataset.preset;
+  const rapidos = [...document.querySelectorAll(`[data-drp="${prefix}"][data-preset]`)];
+  let aplicando = false;
+  [desde, hasta].forEach(el => el.addEventListener('change', () => { updateLabel(); if (!aplicando) rapidos.forEach(r => r.classList.remove('on')); }));
+  [...panel.querySelectorAll('[data-preset]'), ...rapidos].forEach(b => b.onclick = () => {
+    const hoy = new Date(); const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const preset = b.dataset.preset, dow = hoy.getDay();
+    rapidos.forEach(r => r.classList.toggle('on', r === b));
+    aplicando = true;
     if (preset === 'todo') { desde.value = ''; hasta.value = ''; }
+    else if (preset === 'finde') { const sab = addD(hoy, dow === 6 ? 0 : -(dow + 1)); desde.value = iso(sab); hasta.value = iso(addD(sab, 1)); }
+    else if (preset === 'semana') { const lun = addD(hoy, -((dow + 6) % 7)); desde.value = iso(lun); hasta.value = iso(addD(lun, 4)); }
     else if (preset === 'hoy') { desde.value = iso(hoy); hasta.value = iso(hoy); }
     else if (preset === '7d') { desde.value = iso(addD(hoy, -6)); hasta.value = iso(hoy); }
     else if (preset === 'mes') { desde.value = iso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)); hasta.value = iso(hoy); }
     else if (preset === 'anio') { desde.value = iso(new Date(hoy.getFullYear(), 0, 1)); hasta.value = iso(hoy); }
     desde.dispatchEvent(new Event('change'));
+    aplicando = false;
     updateLabel();
     panel.classList.remove('open');
   });
