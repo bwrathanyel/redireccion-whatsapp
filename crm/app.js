@@ -5473,7 +5473,7 @@ function openDrawer(l) {
             ${campo('Canal', `<input id="e-canal" class="ei" type="text" value="${esc(l.canal || '')}">`)}
             ${campo('Destino de interés', `<input id="e-destino" class="ei" type="text" value="${esc(l.destino || '')}">`)}
             ${campo('Personas', `<input id="e-personas" class="ei" type="text" value="${esc(l.personas || '')}">`)}
-            ${campo('Fecha de viaje (aprox.)', `<input id="e-fecha-estimada" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09" value="${esc(l.fecha_estimada || '')}">`, true)}
+            ${campo('Fecha de viaje (aprox.)', `<input id="e-fecha-estimada" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09" value="${esc(l.fecha_estimada || '')}"><div class="csub" id="e-fecha-interp">${fechaViajeInterpretada(l)}</div>`, true)}
             ${campo('Consulta original', `<input id="e-destino-consulta" class="ei" type="text" value="${esc(l.destino_consulta || '')}">`, true)}
           </div>`, true)}
       </div>
@@ -5495,6 +5495,8 @@ function openDrawer(l) {
             <button class="dbtn save" id="pa-guardar" type="button"><i class="fas fa-calendar-check"></i> Fijar seguimiento</button>
             <button class="dbtn gh" id="pa-quitar" type="button">Hecho / quitar</button>
           </div>`, !!l.proxima_accion_at) : ''}
+        ${(ROL === 'asesor' || ROL === 'admin') && l.fecha_viaje_desde && !VENTA.includes(l.estado) ? seccion('tarifas-fecha', 'fa-tags', 'Tarifas para su fecha', `
+          <div id="tf-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>`, true) : ''}
         ${seccion('gestion', 'fa-sliders', 'Gestión', `
           <div class="dgrid">
             ${campo('Estado', `<select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>`, true)}
@@ -5594,6 +5596,7 @@ function openDrawer(l) {
     document.getElementById('res-nueva').onclick = () => crearReservaLead(l);
     cargarReservasLead(l);
   }
+  if (document.getElementById('tf-lista')) cargarTarifasFechaLead(l);
   document.querySelectorAll('.lead-tab-btn').forEach(btn => btn.addEventListener('click', () => {
     document.querySelectorAll('.lead-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.lead-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === btn.dataset.tab));
@@ -5604,6 +5607,26 @@ function openDrawer(l) {
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
+}
+
+/* ---------- Fecha de viaje interpretada + tarifas para esa fecha (migraciones 20261009171000/172000) ---------- */
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const fechaCorta = iso => { const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number); return `${d} ${MESES_CORTOS[m - 1]} ${y}`; };
+function fechaViajeInterpretada(l) {
+  if (!l.fecha_viaje_desde) return l.fecha_estimada ? '<i class="fas fa-circle-question"></i> No se pudo interpretar la fecha' : '';
+  const r = l.fecha_viaje_hasta && l.fecha_viaje_hasta !== l.fecha_viaje_desde ? `${fechaCorta(l.fecha_viaje_desde)} al ${fechaCorta(l.fecha_viaje_hasta)}` : fechaCorta(l.fecha_viaje_desde);
+  const dias = Math.round((new Date(l.fecha_viaje_desde + 'T00:00:00') - new Date(new Date().toDateString())) / 864e5);
+  return `<i class="fas fa-calendar-day"></i> ≈ ${r} · ${esc(l.fecha_viaje_exactitud || '')}${dias >= 0 ? ` · faltan ${dias} días` : ' · ya pasó'}`;
+}
+const filaTarifaFecha = t => `<div class="csub" style="display:flex;justify-content:space-between;gap:8px;padding:4px 0"><span><b>${esc(t.nombre)}</b>${t.destino ? ' · ' + esc(t.destino) : ''}${t.vigencia_texto ? '<br>' + esc(t.vigencia_texto) : ''}</span><span>${t.precio_desde_usd != null ? 'desde $' + Math.round(t.precio_desde_usd).toLocaleString('es-VE') : ''}</span></div>`;
+async function cargarTarifasFechaLead(l) {
+  const box = document.getElementById('tf-lista'); if (!box) return;
+  const { data, error } = await sb.rpc('sugerir_tarifas_lead', { p_lead_id: l.id });
+  if (!box.isConnected) return;
+  if (error) { console.error('sugerir_tarifas_lead', error); box.innerHTML = '<div class="csub">No se pudieron cargar las tarifas</div>'; return; }
+  const conf = data?.confirmadas || [], sug = data?.sugerencias || [];
+  box.innerHTML = (conf.length ? `<div class="fl">Confirmadas para ${esc(l.destino || 'su destino')}</div>${conf.map(filaTarifaFecha).join('')}` : `<div class="csub">Sin tarifas vigentes para ${esc(l.destino || 'ese destino')} en esa fecha.</div>`)
+    + (sug.length ? `<div class="fl" style="margin-top:10px">Otras opciones para esa fecha</div>${sug.map(filaTarifaFecha).join('')}` : '');
 }
 
 /* ---------- Reservas del lead (varias por cliente, ver migración 20260924110000) ---------- */
@@ -17477,7 +17500,9 @@ function setupTarifarioTabs() {
     // escritura libre (tar-f-precio, type=number) pasa por el mismo debounce que
     // el buscador: tipear "1500" ya no reconstruye la grilla 4 veces.
     const inmediato = el.type === 'checkbox' || el.tagName === 'SELECT';
-    el.addEventListener(inmediato ? 'change' : 'input', inmediato ? () => renderTarifario() : debRender);
+    // "Ver ocultas" necesita las promos apagadas, que la carga normal no trae.
+    const alCambiar = el.id === 'tar-f-ocultas' ? () => loadTarifario() : () => renderTarifario();
+    el.addEventListener(inmediato ? 'change' : 'input', inmediato ? alCambiar : debRender);
   });
   tarView = initViewSwitcher('tar-view-switch', 'tarifario', 'tarjetas', v => { tarView = v; renderTarifario(); });
   tabsOcultasListo = cargarTabsOcultas();
@@ -18258,7 +18283,11 @@ async function loadTarifario() {
     const { data: top } = await sb.from('ia_top_productos').select('producto_id').eq('activo', true);
     iaTopIds = new Set((top || []).map(r => Number(r.producto_id)));
   }
-  if (tarCache[tarTab]) { renderTarifario(); return; }
+  // Promociones y Hot Sales solo muestran vigentes salvo "Ver ocultas" (admin):
+  // traer las ~22k apagadas era el 96% de la carga (25-70 s, medido 2026-10-09)
+  // para ~900 visibles. IA sí lista apagadas, así que siempre va completa.
+  const completo = tarTab === 'ia' || (tarTab === 'promo' && ROL === 'admin' && !!document.getElementById('tar-f-ocultas')?.checked);
+  if (tarCache[tarTab] && (tarCache[tarTab]._completo || !completo)) { renderTarifario(); return; }
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
   empty.classList.remove('show'); grid.style.display = 'none';
   const carga = cargadorIniciar(loading, { titulo: TAR_CARGADOR_TITULO[tarTab] || 'Cargando tarifario' });
@@ -18342,8 +18371,8 @@ async function loadTarifario() {
       }));
       return fallo ? null : partes.flat();
     };
-    const traerTarifasPaginado = async (nuevaQuery) => {
-      const paralelo = await traerTarifasVentanas(nuevaQuery).catch(() => null);
+    const traerTarifasPaginado = async (nuevaQuery, ventanas) => {
+      const paralelo = ventanas ? await traerTarifasVentanas(nuevaQuery).catch(() => null) : null;
       if (paralelo) return { data: paralelo, error: null };
       const acc = [];
       for (let ultimo = 0; ;) {
@@ -18357,8 +18386,13 @@ async function loadTarifario() {
     };
     const [rf, rp, rhs] = await Promise.all([
       sb.from('tarifas').select(TAR_PROMO_SEL).eq('origen', 'flyer').order('id'),
-      traerTarifasPaginado(() => sb.from('tarifas').select(TAR_PROMO_SEL)
-        .or('titulo.not.is.null,hot_sale_estado.eq.poner,ia_estado.eq.poner').order('id')),
+      // Solo vigentes caben en 1 página keyset: las 78 ventanas en paralelo son
+      // para la carga completa.
+      traerTarifasPaginado(() => {
+        const qq = sb.from('tarifas').select(TAR_PROMO_SEL)
+          .or('titulo.not.is.null,hot_sale_estado.eq.poner,ia_estado.eq.poner').order('id');
+        return completo ? qq : qq.eq('vigente', true);
+      }, completo),
       tarTab === 'hotsale' ? sb.rpc('hot_sales_publicas') : null,
     ]);
     error = rf.error || rp.error;
@@ -18399,6 +18433,7 @@ async function loadTarifario() {
   // revisado, fecha_fin_estimada) para que filtros, orden, agrupación por hotel
   // y Hot Sales sigan hablando un solo idioma.
   const filas = (tarTab === 'promo' || tarTab === 'hotsale' || tarTab === 'ia') ? data.map(tarifaComoPromo) : data;
+  filas._completo = completo || !(tarTab === 'promo' || tarTab === 'hotsale');
   tarCache[tarTab] = filas;
   tarEntradaContexto = null;
   renderTarifario();
