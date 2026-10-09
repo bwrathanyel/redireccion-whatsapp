@@ -4101,19 +4101,16 @@ function renderRendimiento(datos) {
       <div class="rend-kpi mal"><b>${fmtN(mal)}</b><span>Perdidos por no responder</span></div>
       <div class="rend-kpi"><b style="color:${colorPctPerdido(pctTxt(mal, tot))}">${pctTxt(mal, tot)}%</b><span>Se pierde en el equipo</span></div>
     </div>
-    <div class="rend-ley"><span><i style="background:var(--green)"></i>Atendidos a tiempo (se quedaron con el asesor)</span><span><i style="background:var(--danger)"></i>Perdidos (no respondió y pasaron a otro asesor)</span></div>`;
+    <div class="rend-ley"><span><i style="background:var(--green)"></i>Atendidos a tiempo</span><span><i style="background:var(--danger)"></i>Perdidos: no respondió y pasaron a otro asesor</span><span class="d">% = perdidos sobre recibidos · pasá el mouse para ver detalle</span></div>`;
   box.innerHTML = resumen + entries.map(([nombre, v]) => {
     const total = v.asignados + v.perdidos, [estado, c] = estadoRendimiento(v.pct_perdido);
-    const chips = (v.top_destinos_perdidos || []).map(d => `<span>${esc(d.destino)} · ${d.c}</span>`).join('');
-    return `<div class="rend-row"><div class="ava" style="background:${c}">${initials(nombre)}</div><div class="rend-b">
-      <div class="rend-top"><span class="n">${esc(nombre)}</span><span class="rend-pill" style="color:${c};background:${c}1f">${estado}</span>
-        <div class="rend-pct"><b style="color:${c}">${v.pct_perdido}%</b><span>perdidos</span></div></div>
-      <div class="rend-bar" title="${v.asignados} atendidos · ${v.perdidos} perdidos de ${total}">
-        ${v.asignados ? `<div class="ok" style="flex:${v.asignados}"></div>` : ''}${v.perdidos ? `<div class="mal" style="flex:${v.perdidos}"></div>` : ''}</div>
-      <div class="rend-num"><span>Recibió <b>${fmtN(total)}</b></span><span class="ok"><i class="fas fa-check"></i> ${fmtN(v.asignados)} atendidos</span><span class="mal"><i class="fas fa-xmark"></i> ${fmtN(v.perdidos)} perdidos</span></div>
-      <div class="rend-op">${opinionAsesor(v.pct_perdido, promedio)}</div>
-      ${chips ? `<div class="rend-dest">Perdió más en: ${chips}</div>` : ''}
-    </div></div>`;
+    const dest = (v.top_destinos_perdidos || []).map(d => `${d.destino} (${d.c})`).join(', ');
+    const tip = `${nombre}: recibió ${total}, atendió ${v.asignados}, perdió ${v.perdidos}. ${opinionAsesor(v.pct_perdido, promedio)}${dest ? ' Perdió más en: ' + dest : ''}`;
+    return `<div class="rend-row" title="${esc(tip)}"><div class="ava" style="background:${c}">${initials(nombre)}</div>
+      <div class="rend-id"><span class="n">${esc(nombre)}</span><span class="rend-pill" style="color:${c};background:${c}1f">${estado}</span></div>
+      <div class="rend-bar">${v.asignados ? `<div class="ok" style="flex:${v.asignados}"></div>` : ''}${v.perdidos ? `<div class="mal" style="flex:${v.perdidos}"></div>` : ''}</div>
+      <div class="rend-num"><span class="ok"><i class="fas fa-check"></i>${fmtN(v.asignados)}</span><span class="mal"><i class="fas fa-xmark"></i>${fmtN(v.perdidos)}</span><span class="t">de ${fmtN(total)}</span></div>
+      <b class="rend-pct" style="color:${c}">${v.pct_perdido}%</b></div>`;
   }).join('');
 }
 
