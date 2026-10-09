@@ -4059,16 +4059,23 @@ function irAReasignacionesDesdeAsesores() {
 // promedio del equipo en el mismo periodo. Pedido explícito del dueño
 // (2026-08-06): más rápido, sin costo, y se actualiza al instante.
 function opinionAsesor(pct, promedio) {
-  if (pct === 0) return 'Sin pérdidas por timeout en el periodo.';
-  if (pct > promedio * 2) return 'Rebote elevado -- revisar disponibilidad.';
-  if (pct > promedio) return 'Por encima del resto del equipo.';
-  return 'Dentro de lo normal.';
+  if (pct === 0) return 'No perdió ningún lead en el periodo.';
+  if (pct > promedio * 2) return 'Pierde mucho más que el resto: revisar su disponibilidad.';
+  if (pct > promedio) return 'Pierde más que el promedio del equipo.';
+  return 'Igual o mejor que el promedio del equipo.';
 }
 function colorPctPerdido(pct) {
   if (pct > 30) return '#ef4444';
   if (pct > 15) return '#f5b544';
   return '#10b981';
 }
+function estadoRendimiento(pct) {
+  if (pct <= 5) return ['Excelente', '#10b981'];
+  if (pct <= 15) return ['Bien', '#10b981'];
+  if (pct <= 30) return ['Atención', '#f5b544'];
+  return ['Crítico', '#ef4444'];
+}
+const pctTxt = (n, t) => t ? Math.round(1000 * n / t) / 10 : 0;
 async function cargarRendimientoAsesores() {
   const box = document.getElementById('rendList');
   if (!box) return;
@@ -4086,14 +4093,26 @@ function renderRendimiento(datos) {
   if (!entries.length) { box.innerHTML = '<div class="muted" style="font-size:12.5px">Sin actividad en el periodo</div>'; return; }
   const promedio = entries.reduce((s, [, v]) => s + v.pct_perdido, 0) / entries.length;
   entries.sort((a, b) => b[1].pct_perdido - a[1].pct_perdido);
-  box.innerHTML = entries.map(([nombre, v]) => {
-    const c = colorPctPerdido(v.pct_perdido);
-    const chips = (v.top_destinos_perdidos || []).map(d => `<span class="destchip">${esc(d.destino)} (${d.c})</span>`).join('');
-    return `<div class="arow"><div class="ava" style="background:${c}">${initials(nombre)}</div><div class="ai">
-      <div class="an"><span>${esc(nombre)}</span><span class="anv">${v.pct_perdido}% perdido</span></div>
-      <div class="track"><div class="fill" style="width:${Math.min(v.pct_perdido, 100)}%;background:${c}"></div></div>
-      <div class="op">${v.asignados} asignados, ${v.perdidos} perdidos por timeout -- ${opinionAsesor(v.pct_perdido, promedio)}</div>
-      ${chips ? `<div class="destchips">${chips}</div>` : ''}
+  const ok = entries.reduce((s, [, v]) => s + v.asignados, 0), mal = entries.reduce((s, [, v]) => s + v.perdidos, 0), tot = ok + mal;
+  const fmtN = n => n.toLocaleString('es');
+  const resumen = `<div class="rend-res">
+      <div class="rend-kpi"><b>${fmtN(tot)}</b><span>Leads recibidos</span></div>
+      <div class="rend-kpi ok"><b>${fmtN(ok)}</b><span>Atendidos a tiempo</span></div>
+      <div class="rend-kpi mal"><b>${fmtN(mal)}</b><span>Perdidos por no responder</span></div>
+      <div class="rend-kpi"><b style="color:${colorPctPerdido(pctTxt(mal, tot))}">${pctTxt(mal, tot)}%</b><span>Se pierde en el equipo</span></div>
+    </div>
+    <div class="rend-ley"><span><i style="background:var(--green)"></i>Atendidos a tiempo (se quedaron con el asesor)</span><span><i style="background:var(--danger)"></i>Perdidos (no respondió y pasaron a otro asesor)</span></div>`;
+  box.innerHTML = resumen + entries.map(([nombre, v]) => {
+    const total = v.asignados + v.perdidos, [estado, c] = estadoRendimiento(v.pct_perdido);
+    const chips = (v.top_destinos_perdidos || []).map(d => `<span>${esc(d.destino)} · ${d.c}</span>`).join('');
+    return `<div class="rend-row"><div class="ava" style="background:${c}">${initials(nombre)}</div><div class="rend-b">
+      <div class="rend-top"><span class="n">${esc(nombre)}</span><span class="rend-pill" style="color:${c};background:${c}1f">${estado}</span>
+        <div class="rend-pct"><b style="color:${c}">${v.pct_perdido}%</b><span>perdidos</span></div></div>
+      <div class="rend-bar" title="${v.asignados} atendidos · ${v.perdidos} perdidos de ${total}">
+        ${v.asignados ? `<div class="ok" style="flex:${v.asignados}"></div>` : ''}${v.perdidos ? `<div class="mal" style="flex:${v.perdidos}"></div>` : ''}</div>
+      <div class="rend-num"><span>Recibió <b>${fmtN(total)}</b></span><span class="ok"><i class="fas fa-check"></i> ${fmtN(v.asignados)} atendidos</span><span class="mal"><i class="fas fa-xmark"></i> ${fmtN(v.perdidos)} perdidos</span></div>
+      <div class="rend-op">${opinionAsesor(v.pct_perdido, promedio)}</div>
+      ${chips ? `<div class="rend-dest">Perdió más en: ${chips}</div>` : ''}
     </div></div>`;
   }).join('');
 }
