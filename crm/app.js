@@ -6684,15 +6684,18 @@ async function riaConsultar(dias, forzar = false, completo = true) {
   const guardado = RIA_CACHE.get(dias);
   if (!forzar && guardado && Date.now() - guardado.en < 60000 && (guardado.completo || !completo)) return guardado.data;
   const rango = riaRango(dias);
-  const [general, piloto, reactivacion] = await Promise.all([
+  const [general, piloto, reactivacion, modelos] = await Promise.all([
     sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }),
     completo ? sb.rpc('panel_piloto_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_reactivacion_ia', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
+    completo ? sb.rpc('panel_modelos_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
   ]);
   if (general.error) throw general.error;
   if (completo && piloto.error) throw piloto.error;
   if (completo && reactivacion.error) throw reactivacion.error;
-  const data = completo ? { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data } : general.data;
+  // La comparativa por modelo es aditiva: si falla, el resto del panel se pinta igual.
+  if (completo && modelos.error) console.error('panel_modelos_ia', modelos.error);
+  const data = completo ? { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data, modelos: modelos.error ? null : modelos.data } : general.data;
   RIA_CACHE.set(dias, { en: Date.now(), data, completo });
   return data;
 }
@@ -6767,6 +6770,32 @@ function riaComparacionSeguimiento(reactivacion) {
   return `<div class="ria-cal-head" style="margin-top:10px"><span>Con seguimiento vs. sin (control)</span><span>Volvieron</span><span>Lead</span></div>${filas}
     <div class="ria-cal-head" style="margin-top:10px"><span>Por intento</span><span>Respondieron</span><span>Mediana resp.</span></div>
     ${intentos.map(i => `<div class="ria-cal-fila"><span>${esc(RIA_CANALES[i.canal] || i.canal)} · intento ${i.intento} (${fmt(riaNum(i.enviadas))})</span><b>${riaPct(i.respondidas, i.enviadas)}%</b><b>${i.mediana_min_respuesta == null ? '—' : fmt(Math.round(riaNum(i.mediana_min_respuesta))) + ' min'}</b></div>`).join('')}`;
+}
+
+const RIA_BRAZOS = { deepseek: 'DeepSeek', haiku: 'Haiku 5.5', lite: 'Lite' };
+function riaModelos(m) {
+  if (!m) return '<div class="ria-vacio">No se pudo cargar la comparativa por modelo.</div>';
+  const bz = m.brazos || [];
+  if (!bz.length) return '<div class="ria-vacio">Sin turnos con modelo identificado en este período.</div>';
+  const seg = ms => riaNum(ms) ? (riaNum(ms) / 1000).toFixed(1) + ' s' : '—';
+  const filas = [
+    ['Conversaciones', b => fmt(riaNum(b.conversaciones))],
+    ['Turnos respondidos', b => fmt(riaNum(b.turnos))],
+    ['Teléfono / conversación', b => riaPct(b.telefonos, b.conversaciones) + '%'],
+    ['Lead / conversación', b => riaPct(b.leads, b.conversaciones) + '%'],
+    ['Fallos de calidad / 100 turnos', b => (riaNum(b.fallos) * 100 / Math.max(1, riaNum(b.turnos))).toFixed(1)],
+    ['Fallos visibles / 100 turnos', b => (riaNum(b.fallos_visibles) * 100 / Math.max(1, riaNum(b.turnos))).toFixed(1)],
+    ['Largo promedio (caracteres)', b => fmt(riaNum(b.chars_promedio))],
+    ['Latencia promedio · p95', b => `${seg(b.latencia_promedio_ms)}<small style="display:block;color:var(--muted);font-weight:500">${seg(b.latencia_p95_ms)}</small>`],
+    ['Entrada por caché', b => riaPct(b.tokens_cache, b.tokens_entrada) + '%'],
+    ['Costo del modelo', b => riaDinero(b.costo_usd)],
+    ['Costo por turno', b => '$' + (riaNum(b.costo_usd) / Math.max(1, riaNum(b.turnos))).toFixed(4)],
+    ['Costo por lead', b => riaNum(b.leads) ? riaDinero(riaNum(b.costo_usd) / riaNum(b.leads)) : '—'],
+  ];
+  const muestra = bz.some(b => riaNum(b.conversaciones) < 30);
+  return `<div style="--n:${bz.length}"><div class="ria-cal-head ria-mod"><span>Métrica</span>${bz.map(b => `<span>${esc(RIA_BRAZOS[b.brazo] || b.brazo)}</span>`).join('')}</div>
+    ${filas.map(([n, f]) => `<div class="ria-cal-fila ria-mod"><span>${esc(n)}</span>${bz.map(b => `<b>${f(b)}</b>`).join('')}</div>`).join('')}</div>
+    <div class="ce-ayuda">${muestra ? 'Hay modelos con menos de 30 conversaciones: diferencias chicas todavía no son concluyentes. ' : ''}Costo estimado con las tarifas de cada proveedor (DeepSeek al doble en hora pico).${riaNum(m.errores_sin_modelo) ? ` ${fmt(riaNum(m.errores_sin_modelo))} turno(s) fallaron antes de llegar a un modelo.` : ''}</div>`;
 }
 
 function riaPintarPanel(data) {
@@ -6855,8 +6884,10 @@ function riaPintarPanel(data) {
   const canales = [...(data.por_canal || [])].sort((a, b) => riaNum(b.conversaciones) - riaNum(a.conversaciones));
   document.getElementById('ria-canales').innerHTML = canales.length ? `<div class="ria-lista">${canales.map(c => `<div class="ria-fila"><span><b>${esc(RIA_CANALES[c.canal] || c.canal)}</b><br>${fmt(riaNum(c.telefonos))} teléfonos · ${fmt(riaNum(c.leads_calificados))} leads (${riaPct(c.leads_calificados, c.conversaciones)}%)</span><b>${fmt(riaNum(c.conversaciones))}<small style="display:block;color:var(--muted);font-weight:500">${riaNum(c.latencia_promedio_ms) ? (riaNum(c.latencia_promedio_ms) / 1000).toFixed(1) + ' s' : '—'}</small></b></div>`).join('')}</div>` : '<div class="ria-vacio">Sin actividad por canal en este período.</div>';
 
+  document.getElementById('ria-modelos').innerHTML = riaModelos(data.modelos);
   const sinCache = Math.max(0, riaNum(op.tokens_entrada) - riaNum(op.tokens_cache));
-  const costo = sinCache * RIA_COSTO_ENTRADA + riaNum(op.tokens_cache) * RIA_COSTO_CACHE + riaNum(op.tokens_salida) * RIA_COSTO_SALIDA;
+  const costo = data.modelos?.brazos?.length ? data.modelos.brazos.reduce((s, b) => s + riaNum(b.costo_usd), 0)
+    : sinCache * RIA_COSTO_ENTRADA + riaNum(op.tokens_cache) * RIA_COSTO_CACHE + riaNum(op.tokens_salida) * RIA_COSTO_SALIDA;
   document.getElementById('ria-operacion').innerHTML = `<div class="ria-lista">
     <div class="ria-fila"><span>Última actividad</span><b>${esc(riaHora(op.ultima_actividad))}</b></div>
     <div class="ria-fila"><span>Latencia promedio</span><b>${riaNum(op.latencia_promedio_ms) ? (riaNum(op.latencia_promedio_ms) / 1000).toFixed(2) + ' s' : '—'}</b></div>
@@ -6864,7 +6895,7 @@ function riaPintarPanel(data) {
     <div class="ria-fila"><span>Tokens entrada / salida</span><b>${fmt(riaNum(op.tokens_entrada))} / ${fmt(riaNum(op.tokens_salida))}</b></div>
     <div class="ria-fila"><span>Entrada atendida por caché</span><b>${riaPct(op.tokens_cache, op.tokens_entrada)}%</b></div>
     <div class="ria-fila"><span>Costo estimado del modelo</span><b>${riaDinero(costo)}</b></div>
-  </div><div class="ce-ayuda">No incluye el costo fijo de ManyChat. El cálculo usa las tarifas configuradas actualmente para entrada, caché y salida.</div>`;
+  </div><div class="ce-ayuda">No incluye el costo fijo de ManyChat. Suma el costo de cada modelo con su propia tarifa (ver Comparativa por modelo).</div>`;
 
   const versiones = data.versiones || [];
   document.getElementById('ria-versiones').innerHTML = versiones.length ? `<div class="ria-lista">${versiones.map(v => `<div class="ria-fila"><span><b>${esc(v.nombre_version || 'Cerebro sin versión')}</b><br>${esc(v.motor_version)} · ${esc(v.estado_version || 'sin estado')}</span><b>${fmt(riaNum(v.conversaciones))}<small style="display:block;color:var(--muted);font-weight:500">${fmt(riaNum(v.leads_calificados))} leads</small></b></div>`).join('')}</div>` : '<div class="ria-vacio">Sin versiones con actividad en este período.</div>';
@@ -21402,6 +21433,28 @@ async function dmCargar(mas) {
   const filas = data.slice(0, DM_PAGINA);
   dmSesiones = mas ? [...dmSesiones, ...filas.filter(s => !dmSesiones.some(x => x.external_id === s.external_id))] : filas;
   dmRenderLista();
+  dmCargarModelos(filas.map(s => s.external_id));
+}
+// Modelo que respondió el último turno de cada chat (DeepSeek/Haiku/Lite). Solo
+// admin: la RPC no expone el hash de contacto y rechaza a los demás roles.
+const dmModelos = new Map();
+async function dmCargarModelos(ids, forzar) {
+  if (ROL !== 'admin') return;
+  ids = ids.filter(id => forzar || !dmModelos.has(id));
+  if (!ids.length) return;
+  const { data, error } = await sb.rpc('modelo_ia_contactos', { p_external_ids: ids.slice(0, 200) });
+  if (error) { console.error('modelo_ia_contactos', error); return; }
+  ids.forEach(id => dmModelos.set(id, data?.[id] || null));
+  ids.forEach(id => {
+    const el = document.querySelector(`#dm-inbox [data-dm="${CSS.escape(id)}"] .dm-fila-meta`);
+    if (el) { el.querySelector('.dm-modelo')?.remove(); el.insertAdjacentHTML('beforeend', dmChipModelo(id)); }
+  });
+  if (dmActual && ids.includes(dmActual.external_id)) dmPintarHead();
+}
+function dmChipModelo(id) {
+  const m = dmModelos.get(id);
+  if (!m?.brazo) return '';
+  return `<span class="dm-modelo" data-brazo="${esc(m.brazo)}" title="${esc(m.proveedor || '')} · último turno ${esc(fmtHoraMsg(m.en))}"><i class="fas fa-microchip"></i>${esc(RIA_BRAZOS[m.brazo] || m.brazo)}</span>`;
 }
 function dmFila(s) {
   const h = dmHistorial(s), u = h[h.length - 1], p = dmProgreso(s), id = s.external_id;
@@ -21410,7 +21463,7 @@ function dmFila(s) {
     <div class="msg-inbox-body">
       <div class="msg-inbox-top"><div class="msg-inbox-nombre">${esc(dmNombre(s))}</div><div class="msg-inbox-hora">${fmtHoraMsg(s.updated_at)}</div></div>
       <div class="msg-inbox-preview"><span>${u ? (u.rol === 'ia' ? '<i class="fas fa-robot"></i> ' : '') + esc(u.texto || '') : 'Sin mensajes'}</span></div>
-      <div class="dm-fila-meta"><div class="dm-mini-barra${s.lead_creado ? ' completa' : ''}"><span style="width:${p}%"></span></div><span class="dm-etq${s.lead_creado ? ' lead' : ''}">${s.lead_creado ? '<i class="fas fa-circle-check"></i> Lead' : p + '%'}</span></div>
+      <div class="dm-fila-meta"><div class="dm-mini-barra${s.lead_creado ? ' completa' : ''}"><span style="width:${p}%"></span></div><span class="dm-etq${s.lead_creado ? ' lead' : ''}">${s.lead_creado ? '<i class="fas fa-circle-check"></i> Lead' : p + '%'}</span>${dmChipModelo(id)}</div>
     </div>
   </div>`;
 }
@@ -21425,7 +21478,7 @@ function dmAbrir(id) {
   dmActual = s; dmNuevos.delete(id);
   document.getElementById('dm-chat-vacio').hidden = true;
   ['dm-chat-head', 'dm-log', 'dm-nota'].forEach(k => { document.getElementById(k).hidden = false; });
-  dmPintarHead(); dmPintarPerfil();
+  dmPintarHead(); dmPintarPerfil(); dmCargarModelos([id], true);
   if (dmCanalDe(s) === 'whatsapp') { if (otro || !dmWa) dmWaAbrir(); } else { dmWaCerrar(); dmPintarLog(true); }
   document.querySelectorAll('#dm-inbox [data-dm]').forEach(r => { r.classList.toggle('on', r.dataset.dm === id); if (r.dataset.dm === id) r.classList.remove('nuevo'); });
   const shell = document.getElementById('dm-shell');
@@ -21457,6 +21510,8 @@ function dmPintarHead() {
   document.getElementById('dm-chat-titulo').textContent = dmNombre(s);
   document.getElementById('dm-chat-sub').textContent = [dmUsuario(s) !== dmNombre(s) ? dmUsuario(s) : '', 'activo ' + fmtHoraMsg(s.updated_at)].filter(Boolean).join(' · ');
   document.getElementById('dm-app-chip').innerHTML = `<i class="fa-brands ${dmIcoCanal(canal)}"></i><span>${dmLabelCanal(canal)}</span>`;
+  const m = dmModelos.get(s.external_id);
+  if (m?.brazo) document.getElementById('dm-chat-sub').textContent += ' · IA: ' + (RIA_BRAZOS[m.brazo] || m.brazo);
 }
 // previos: cuántos mensajes ya estaban pintados; los siguientes entran animados.
 // Mensajes seguidos del mismo lado se agrupan como en la app (la colita va en el último).
@@ -23969,12 +24024,12 @@ async function loadColaBoleteria() {
   if (ROL !== 'admin' && ROL !== 'asesor' && ROL !== 'boleteria') return;
   const grid = document.getElementById('bol-grid');
   if (!grid) return;
-  await bolAsegurarCatalogo();
   const loading = document.getElementById('bol-loading'), empty = document.getElementById('bol-empty');
   loading?.classList.add('show');
   const [cola, agentes] = await Promise.all([
     sb.rpc('listar_cola_boleteria'),
     sb.rpc('agentes_boleteria_estado'),
+    bolAsegurarCatalogo(),
   ]);
   loading?.classList.remove('show');
   if (cola.error) { console.error('cola_boleteria', cola.error); errToast('No se pudo cargar la cola de boletería'); return; }
@@ -24104,7 +24159,8 @@ async function loadBoleteria() {
 // si el usuario todavía no abrió la sección.
 async function bolAsegurarCatalogo() {
   if (bolCatalogo) return;
-  const { data } = await sb.rpc('boleteria_catalogo');
+  const { data, error } = await sb.rpc('boleteria_catalogo');
+  if (error) console.error('boleteria_catalogo', error);
   if (data) bolCatalogo = data;
 }
 function bolFiltro() { return (val('bol-buscador') || '').trim().toLowerCase(); }
@@ -24123,7 +24179,11 @@ function bolNombreAerolinea(id) { return bolCatalogo.aerolineas.find(a => a.id =
 function bolNombreRuta(id) { return bolCatalogo.rutas.find(r => r.id === id)?.nombre_natural || '—'; }
 function bolNombreTemporada(id) { return id ? (bolCatalogo.temporadas.find(t => t.id === id)?.nombre || '—') : 'Todo el año'; }
 function bolNombreLugar(iata) { const a = bolCatalogo.aeropuertos.find(x => x.iata_code === iata); return a ? (a.nombre_comercial || a.ciudad) : iata; }
-function bolRefRuta(rutaId) { return bolCatalogo.precios.find(p => p.ruta_id === rutaId && p.es_referencia && p.tipo === 'ida_vuelta'); }
+// Mismo filtro de vigencia que la vista vuelos_referencia (current_date en UTC).
+function bolRefRuta(rutaId) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  return bolCatalogo.precios.find(p => p.ruta_id === rutaId && p.es_referencia && p.tipo === 'ida_vuelta' && p.vigente_desde <= hoy && (!p.vigente_hasta || p.vigente_hasta >= hoy));
+}
 function bolBtn(acc, ent, id, html, cls = '') { return `<button class="btn-sm ${cls}" type="button" data-bol-accion="${acc}" data-bol-entidad="${ent}" data-bol-id="${esc(id)}">${html}</button>`; }
 function bolAcciones(ent, id, extra = '') {
   if (!bolPuedeEditar()) return '';
@@ -24207,24 +24267,29 @@ function renderBolCalendario() {
 }
 
 /* Formularios: uno por entidad, con id = editar y sin id = alta. */
-async function bolGuardar(rpc, args, ok) {
+async function bolGuardar(rpc, args, ok, despues) {
   const { data, error } = await sb.rpc(rpc, args);
   if (error || data?.ok === false) { errToast(error?.message || 'No se pudo guardar'); return false; }
+  if (despues) await despues(data);
   okToast(ok); loadBoleteria(); return true;
 }
-const bolOpcAeropuertos = () => bolCatalogo.aeropuertos.map(a => ({ v: a.iata_code, t: `${a.iata_code} · ${a.nombre_comercial || a.ciudad} (${a.pais})` }));
+// Un aeropuerto quitado no viene en el catálogo: se agrega como opción para que
+// el select no caiga en silencio en otro.
+const bolOpcAeropuertos = (...actuales) => [...bolCatalogo.aeropuertos.map(a => ({ v: a.iata_code, t: `${a.iata_code} · ${a.nombre_comercial || a.ciudad} (${a.pais})` })),
+  ...actuales.filter(i => i && !bolCatalogo.aeropuertos.some(a => a.iata_code === i)).map(i => ({ v: i, t: `${i} (quitado)` }))];
 const bolNum = v => v === '' || v == null ? null : Number(v);
 async function bolFormRuta(id) {
   const r = id ? bolCatalogo.rutas.find(x => x.id === Number(id)) : null;
   const f = await confirmarSheet({ titulo: r ? 'Editar ruta' : 'Nueva ruta', textoOk: 'Guardar',
     detalle: '¿Falta un aeropuerto? Cargalo primero en la pestaña Aeropuertos.', campos: [
-    { id: 'origen', label: 'Sale de', tipo: 'select', valor: r?.origen_iata || 'CCS', opciones: bolOpcAeropuertos() },
-    { id: 'destino', label: 'Llega a', tipo: 'select', valor: r?.destino_iata || '', opciones: bolOpcAeropuertos() },
+    { id: 'origen', label: 'Sale de', tipo: 'select', valor: r?.origen_iata || 'CCS', opciones: bolOpcAeropuertos(r?.origen_iata) },
+    { id: 'destino', label: 'Llega a', tipo: 'select', valor: r?.destino_iata || '', opciones: bolOpcAeropuertos(r?.destino_iata) },
     { id: 'natural', label: 'Nombre (si lo dejás vacío: "Caracas – Miami")', valor: r?.nombre_natural || '' },
     { id: 'alias', label: 'Otras formas de nombrarla, separadas por coma (ej: porlamar, isla)', valor: (r?.alias || []).join(', ') }] });
   if (!f) return;
   if (f.origen === f.destino) { errToast('Origen y destino no pueden ser el mismo'); return; }
   const ao = bolCatalogo.aeropuertos.find(a => a.iata_code === f.origen), ad = bolCatalogo.aeropuertos.find(a => a.iata_code === f.destino);
+  if (!ao || !ad) { errToast('Ese aeropuerto fue quitado: reactivalo en Aeropuertos o elegí otro'); return; }
   const no = ao.nombre_comercial || ao.ciudad, nd = ad.nombre_comercial || ad.ciudad;
   await bolGuardar('boleteria_guardar_ruta', { p_id: r?.id ?? null, p_origen_iata: f.origen, p_destino_iata: f.destino,
     p_nombre_natural: f.natural || `${no} – ${nd}`, p_nombre_corto: `${no}–${nd}`,
@@ -24261,8 +24326,9 @@ async function bolVerificarAerolinea(id) {
     p_contacto_ejecutivo: a.contacto_ejecutivo, p_politica_cambio: a.politica_cambio, p_politica_cancelacion: a.politica_cancelacion,
     p_marcar_verificada: true }, 'Marcada como verificada');
 }
-// "Editar" un precio carga uno nuevo que reemplaza al anterior: el viejo queda
-// inactivo como historial (lo hace boleteria_guardar_precio).
+// "Editar" un precio carga uno nuevo y apaga el anterior, que queda como
+// historial. Se apaga acá y no solo en boleteria_guardar_precio porque si cambió
+// la ruta, el tipo o la marca de referencia, la RPC no lo reconoce como el mismo.
 async function bolFormPrecio(id) {
   if (!bolCatalogo.rutas.length) { errToast('Primero cargá al menos una ruta'); return; }
   const p = id ? bolCatalogo.precios.find(x => x.id === Number(id)) : null;
@@ -24284,7 +24350,8 @@ async function bolFormPrecio(id) {
   if (f.ref && f.tipo === 'ida_vuelta' && !(await confirmarSheet({ titulo: '¿Publicar esta tarifa?', textoOk: 'Publicar',
     detalle: `${bolNombreRuta(Number(f.ruta))}: la web y el bot van a ofrecer desde ${money(bolPublico(precio))} ida y vuelta por persona (tarifa ${money(precio)} + 20%). Se ve en unos minutos.` }))) return;
   await bolGuardar('boleteria_guardar_precio', { p_ruta_id: Number(f.ruta), p_aerolinea_id: bolNum(f.aerolinea), p_temporada_id: bolNum(f.temporada),
-    p_tipo: f.tipo, p_precio: precio, p_moneda: f.moneda, p_vigente_desde: f.desde || null, p_vigente_hasta: f.hasta || null, p_es_referencia: f.ref }, 'Precio guardado');
+    p_tipo: f.tipo, p_precio: precio, p_moneda: f.moneda, p_vigente_desde: f.desde || null, p_vigente_hasta: f.hasta || null, p_es_referencia: f.ref }, 'Precio guardado',
+    p && (d => d.id !== p.id && sb.rpc('boleteria_desactivar', { p_entidad: 'precio', p_id: String(p.id) })));
 }
 async function bolFormAeropuerto(iata) {
   const a = iata ? bolCatalogo.aeropuertos.find(x => x.iata_code === iata) : null;

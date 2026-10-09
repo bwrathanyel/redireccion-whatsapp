@@ -1802,6 +1802,9 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .dm-mini-barra.completa span{background:var(--green)}
 .dm-etq{font-size:10px;font-weight:700;color:var(--muted2);white-space:nowrap}
 .dm-etq.lead{color:var(--green)}
+.dm-modelo{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.dm-modelo[data-brazo="deepseek"]{color:var(--blue);border-color:color-mix(in srgb,var(--blue) 35%,transparent)}
+.dm-modelo[data-brazo="haiku"]{color:#d97706;border-color:color-mix(in srgb,#d97706 40%,transparent)}
 .dm-chat{position:relative}
 .dm-chat-head{display:flex;align-items:center;gap:11px;padding:0 0 11px;border-bottom:1px solid var(--line);flex-shrink:0}
 .dm-chat-head .dm-avatar{width:40px;height:40px;font-size:14px}
@@ -3103,6 +3106,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ria-fila:last-child{border-bottom:0}.ria-fila b{color:var(--txt);font-variant-numeric:tabular-nums}.ria-malo{color:#fca5a5!important}.ria-bien{color:#86efac!important}
 .ria-cal-head,.ria-cal-fila{display:grid;grid-template-columns:minmax(130px,1fr) 90px 90px;gap:8px;align-items:center}.ria-cal-head{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2);padding-bottom:8px}
 .ria-cal-fila{font-size:12px;color:var(--muted);padding:8px 0;border-top:1px solid var(--line)}.ria-cal-fila b{text-align:center;color:var(--txt)}
+.ria-cal-head.ria-mod,.ria-cal-fila.ria-mod{grid-template-columns:minmax(130px,1fr) repeat(var(--n,3),84px)}.ria-cal-head.ria-mod span:not(:first-child){text-align:center}
 .ria-vacio{font-size:12.5px;color:var(--muted);padding:18px 0;text-align:center}
 .ria-tend{display:flex;align-items:stretch;gap:3px;height:132px}.ria-tend-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px}
 .ria-tend-bar{flex:1;width:100%;display:flex;align-items:flex-end}.ria-tend-c{display:flex;flex-direction:column;justify-content:flex-end;width:100%;border-radius:4px 4px 0 0;background:rgba(var(--accent-rgb),.3);overflow:hidden}.ria-tend-l{display:block;width:100%;background:var(--accent)}
@@ -3133,7 +3137,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pv-wa-sec{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted2);margin:18px 0 2px}.pv-wa-tr .nom .pv-wa-mov{display:none}
 @media(max-width:700px){.pv-wa-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.pv-wa-buscar{max-width:none;margin-left:0}.pv-wa-th{display:none}.pv-wa-tr{grid-template-columns:minmax(0,1fr) auto}.pv-wa-tr>.c-asesor,.pv-wa-tr>.c-fecha,.pv-wa-tr>.c-tel,.pv-wa-tr>.c-estado{display:none}.pv-wa-tr .nom .pv-wa-mov{display:block}}
 .ria-detalles{margin-bottom:12px}.ria-detalles>summary{cursor:pointer;list-style:none;font-size:12.5px;font-weight:800;color:var(--muted);padding:10px 2px}.ria-detalles>summary::-webkit-details-marker{display:none}.ria-detalles>summary::before{content:"▸ ";display:inline-block;transition:transform .15s}.ria-detalles[open]>summary{color:var(--txt)}.ria-detalles[open]>summary::before{transform:rotate(90deg)}
-@media(max-width:760px){.ria-dashboard{grid-template-columns:repeat(2,1fr)}.ria-db-title{grid-column:1/-1}.ria-grid{grid-template-columns:1fr}.ria-paso{grid-template-columns:100px 1fr 38px}.ria-cal-head,.ria-cal-fila{grid-template-columns:minmax(115px,1fr) 62px 62px}}
+@media(max-width:760px){.ria-dashboard{grid-template-columns:repeat(2,1fr)}.ria-db-title{grid-column:1/-1}.ria-grid{grid-template-columns:1fr}.ria-paso{grid-template-columns:100px 1fr 38px}.ria-cal-head,.ria-cal-fila{grid-template-columns:minmax(115px,1fr) 62px 62px}.ria-cal-head.ria-mod,.ria-cal-fila.ria-mod{grid-template-columns:minmax(96px,1fr) repeat(var(--n,3),58px);gap:6px}}
 /* ---------- Clientes de la IA: consumo del mes -------------------------
    Dos barras y no una: la de mensajes es lo que le vendiste, la de contactos
    es lo que te cuesta. Se ven juntas porque la segunda es la que se pasa
@@ -6896,6 +6900,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div class="ria-card"><h2><i class="fas fa-share-nodes"></i> Canales</h2><div class="ria-sub">Todos los canales con la misma definición, de mayor a menor volumen.</div><div id="ria-canales"></div></div>
       </div>
       <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-life-ring"></i> Seguimiento a conversaciones</h2><div class="ria-sub">Mensajes de seguimiento a quien dejó la conversación a medias: cuántos vuelven, cuántos se vuelven lead y qué habría pasado sin el mensaje.</div><div id="ria-reactivacion"></div></div>
+      <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-microchip"></i> Comparativa por modelo</h2><div class="ria-sub">Cada contacto queda con un modelo fijo (DeepSeek, Haiku o Lite de respaldo). Turnos, velocidad y costo cuentan por el modelo que respondió; conversaciones y leads, por el modelo que atendió la mayor parte del chat.</div><div id="ria-modelos"></div></div>
       <div class="ria-grid">
         <div class="ria-card"><h2><i class="fas fa-shield-heart"></i> Calidad de las respuestas</h2><div class="ria-sub">Separa lo que intentó el modelo de lo que realmente recibió el cliente.</div><div id="ria-calidad"></div></div>
         <div class="ria-card"><h2><i class="fas fa-gauge-high"></i> Funcionamiento y costo</h2><div class="ria-sub">Velocidad, errores y consumo real de tokens.</div><div id="ria-operacion"></div></div>
