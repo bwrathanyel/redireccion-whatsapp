@@ -80,7 +80,12 @@ async function subirDerivados(storagePath, file) {
 const SUPABASE_KEY = 'sb_publishable_M7Ms9DLwpNSCXZNCDhYtbQ_LhMYeLxk';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { realtime: { params: { eventsPerSecond: 40 } } });
 
-const fmt = n => (n ?? 0).toLocaleString('es-VE');
+// Crear un Intl.*Format cuesta ~0,1 ms; en tablas de cientos de filas eso eran
+// cientos de ms por render. Se crean una vez por combinación de opciones.
+const INTL_CACHE = new Map();
+const dtf = (loc, o) => { const k = 'd' + loc + JSON.stringify(o); let f = INTL_CACHE.get(k); if (!f) INTL_CACHE.set(k, f = new Intl.DateTimeFormat(loc, o)); return f; };
+const nf = (loc, o) => { const k = 'n' + loc + JSON.stringify(o || {}); let f = INTL_CACHE.get(k); if (!f) INTL_CACHE.set(k, f = new Intl.NumberFormat(loc, o)); return f; };
+const fmt = n => typeof (n ?? 0) === 'number' ? nf('es-VE').format(n ?? 0) : (n ?? 0).toLocaleString('es-VE');
 const tiempoRelativo = iso => {
   if (!iso) return '—';
   const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
@@ -102,7 +107,7 @@ const tiempoSeguimiento = iso => {
   const dias = Math.round(horas / 24);
   return dias === 1 ? 'Mañana' : `En ${dias} días`;
 };
-const money = n => '$' + (Number(n) || 0).toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const money = n => '$' + nf('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(n) || 0);
 const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const fullMonth = k => { const [y, m] = k.split('-'); return MESL[+m - 1] + ' ' + y; };
@@ -1411,9 +1416,9 @@ function registrarPushNativo() {
 })();
 
 /* ---------- Sección Asistencia (admin) ---------- */
-const hoyCaracas = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(new Date());
+const hoyCaracas = () => dtf('en-CA', { timeZone: 'America/Caracas' }).format(new Date());
 // timestamptz (con offset) -> hora local Caracas. Reusado por Asistencia e Informe Diario.
-const fmtHoraCaracas = iso => iso ? new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)) : '—';
+const fmtHoraCaracas = iso => iso ? dtf('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)) : '—';
 // timestamptz -> "dd/mm hh:mm" en hora de Caracas. Bug real (2026-07-21): varias
 // tarjetas mostraban el timestamp crudo (`iso.slice(0,16).replace('T',' ')`), que es
 // UTC sin convertir -- un lead creado a las 10am Venezuela se veía como "14:00"
@@ -1421,12 +1426,12 @@ const fmtHoraCaracas = iso => iso ? new Intl.DateTimeFormat('es-VE', { timeZone:
 const fmtFechaHoraCaracas = iso => {
   if (!iso) return '—';
   const d = new Date(iso);
-  const fecha = new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit' }).format(d);
-  const hora = new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(d);
+  const fecha = dtf('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit' }).format(d);
+  const hora = dtf('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(d);
   return `${fecha} ${hora}`;
 };
 // timestamptz -> "dd/mm/aaaa" en hora de Caracas (misma trampa UTC que la de arriba).
-const fmtFechaCaracas = iso => iso ? new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso)) : '—';
+const fmtFechaCaracas = iso => iso ? dtf('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso)) : '—';
 // `date` de Postgres (ej. "2026-07-11", SIN hora/offset) -- a propósito no pasa por
 // Date()/timeZone: un date puro interpretado como hora local del navegador puede
 // correrse un día en timezones lejanos a Caracas (ej. UTC+9 lo lee como el día
@@ -1816,14 +1821,14 @@ function iconoDePersona(u) {
   return ROL_ICONO[u.rol] || { i: 'fa-user', c: '#94a3b8' };
 }
 
-const fmtDiaCorto = dia => new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(dia + 'T12:00:00Z'));
+const fmtDiaCorto = dia => dtf('es-VE', { timeZone: 'America/Caracas', weekday: 'short', day: '2-digit', month: '2-digit' }).format(new Date(dia + 'T12:00:00Z'));
 function fmtMinutos(min) {
   if (!min) return '0min';
   const h = Math.floor(min / 60), m = min % 60;
   return h ? (m ? h + 'h ' + m + 'min' : h + 'h') : m + 'min';
 }
 const fmtFechaLarga = iso => {
-  const p = new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'long' }).formatToParts(new Date(iso));
+  const p = dtf('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'long' }).formatToParts(new Date(iso));
   const dia = p.find(x => x.type === 'day')?.value, mes = p.find(x => x.type === 'month')?.value;
   return `${dia} de ${mes}`;
 };
@@ -2308,7 +2313,7 @@ async function loadAsistenciaHistorial() {
 const ASIST_HIST_PAGINA = 40;
 let ASIST_HIST_DATA = [], asistHistMostrar = ASIST_HIST_PAGINA;
 function pintarAsistenciaHistorial() {
-  const fmtFecha = iso => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas' }).format(new Date(iso));
+  const fmtFecha = iso => dtf('en-CA', { timeZone: 'America/Caracas' }).format(new Date(iso));
   const body = document.getElementById('asist-hist-tbody');
   const mas = document.getElementById('asist-hist-mas');
   if (!ASIST_HIST_DATA.length) {
@@ -3344,7 +3349,7 @@ function rvIniciar(reservaId, tab) {
   rvTab(tab);
   rvCargar();
 }
-// Boletería no pasa por la bandeja de Reservas: abre el cajón directo desde "Boletos por emitir".
+// Boletería no pasa por la bandeja de Reservas: abre el cajón directo desde la pestaña Reservas de la sección Boletería.
 function rvAbrirReserva(reservaId, titulo, sub) {
   PV_ACTUAL = null;
   document.getElementById('drawerContent').innerHTML = `
@@ -3428,7 +3433,6 @@ function rvTrasCambio() {
   if (currentSec === 'postventa' && (ROL === 'admin' || ROL === 'asesor')) loadPostventa();
   if (currentSec === 'reservas-empresas') loadReservasEmpresas();
   if (currentSec === 'apartamentos' && APTO_TAB === 'disp') loadDisponibilidad();
-  if (document.getElementById('rv-bol-box')?.hidden === false) loadBoletosPorEmitir();
   if (currentSec === 'boleteria' && bolTab === 'reservas') loadBolReservas();
 }
 function rvAccion(accion, id, btn) {
@@ -3925,29 +3929,6 @@ async function rvAnularDocumento(id) {
   const { data, error } = await sb.rpc('anular_documento', { p_documento_id: id });
   if (error || !data?.ok) { errToast('No se pudo quitar: ' + rvErr(error, data)); return; }
   okToast('Documento quitado'); rvTrasCambio();
-}
-
-/* Boletos por emitir (boleteria_bandeja): card en la pestaña Boletería de Leads, solo agentes. */
-async function loadBoletosPorEmitir() {
-  const box = document.getElementById('rv-bol-box'), grid = document.getElementById('rv-bol-grid');
-  if (!box || !grid) return;
-  if (!(MI_ES_AGENTE_BOLETERIA || ROL === 'boleteria')) { box.hidden = true; return; }
-  const { data, error } = await sb.rpc('boleteria_bandeja');
-  // Un admin sin la marca es_boleteria no pasa el filtro de la RPC: se oculta sin avisar.
-  if (error) { console.warn('boleteria_bandeja', error.message); box.hidden = true; return; }
-  const fs = data || [];
-  box.hidden = false;
-  document.getElementById('rv-bol-n').textContent = fs.length || '';
-  grid.innerHTML = fs.length ? fs.map(s => `<div class="bol-card rv-bol-card" role="button" tabindex="0" data-rv-reserva="${s.reserva_id}" data-rv-titulo="${esc(s.cliente || '')}" data-rv-sub="${esc([s.codigo, s.asesor].filter(Boolean).join(' · '))}">
-      <div class="rv-item-top"><b><i class="fas fa-plane"></i> ${esc(s.detalle?.ruta || s.descripcion || 'Boleto aéreo')}</b><span class="rv-estado rv-e-${esc(s.estado)}">${esc(RV_ESTADOS[s.estado] || s.estado)}</span></div>
-      <div class="rv-desc">${esc(s.cliente || 'Sin nombre')}${s.codigo ? ' · ' + esc(s.codigo) : ''}</div>
-      <div class="rv-meta"><span><i class="fas fa-calendar"></i>${s.fecha_inicio ? pvFecha(s.fecha_inicio) : 'Sin fecha'}</span><span><i class="fas fa-user-group"></i>${Number(s.pasajeros || 0)} pasajeros</span><span><i class="fas fa-paperclip"></i>${Number(s.documentos || 0)} docs</span>${s.asesor ? `<span><i class="fas fa-user-tie"></i>${esc(s.asesor)}</span>` : ''}</div>
-    </div>`).join('') : '<div class="csub">No hay boletos pendientes de emitir</div>';
-  grid.querySelectorAll('[data-rv-reserva]').forEach(c => {
-    const abrir = () => rvAbrirReserva(Number(c.dataset.rvReserva), c.dataset.rvTitulo, c.dataset.rvSub);
-    c.onclick = abrir;
-    c.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } };
-  });
 }
 
 function renderAdvisors(datosPeriodo) {
@@ -11558,8 +11539,8 @@ const LYRA_SUENO_MS = 5 * 60000, LYRA_GLOBO_CADA_MS = 4 * 60000, LYRA_GLOBOS_DIA
 // Avatar = el logo de Lotus con cara: sol con el degradado de marca, olas que
 // se mueven y el arco de 13 puntos del logo (mismos ángulos). La cara es SVG
 // en coordenadas 0-100 del sol; cada expresión es solo CSS sobre data-expr.
-const LYRA_CARA_SVG = '<svg class="lo-mar" viewBox="0 0 100 100" aria-hidden="true">'
-  + ['80', '91'].map(y => `<path d="M-40 ${y}q10-6 20 0t20 0t20 0t20 0t20 0t20 0t20 0t20 0t20 0"/>`).join('') + '</svg>'
+// Una ola por <span> para que la animación vaya al compositor (sobre SVG no se acelera).
+const LYRA_CARA_SVG = ['80', '91'].map(y => `<span class="lo-mar"><svg viewBox="0 0 100 100" aria-hidden="true"><path d="M-40 ${y}q10-6 20 0t20 0t20 0t20 0t20 0t20 0t20 0t20 0t20 0"/></svg></span>`).join('')
   + '<svg class="lo-cara" viewBox="0 0 100 100" aria-hidden="true">'
   + '<ellipse class="lo-rubor" cx="21" cy="57" rx="8" ry="4.5"/><ellipse class="lo-rubor" cx="79" cy="57" rx="8" ry="4.5"/>'
   + '<path class="lo-ceja l" d="M25 27q9-6 18-1"/><path class="lo-ceja r" d="M57 26q9-5 18 1"/>'
@@ -11820,6 +11801,7 @@ function setupLyra() {
   // El subtítulo ("En línea", "Lista para ayudar"…) cambia solo mientras está libre.
   setInterval(() => { LYRA.lema = lyraAlAzar(LYRA_FRASES.lemas); lyraEstado(); }, 45000);
   lyraPintarMenu(); lyraPintarHistorial(); lyraPosicionar(); lyraEstado(); lyraParpadeo(); lyraGesto(); lyraSetupMovible();
+  document.addEventListener('scroll', () => { lyraQuieta(); marcarDeslizando(); }, { capture: true, passive: true });
   LYRA.lista = true;
   lyraEscuchaIniciar();
   if (!lyraLeer('saludo', false, true)) {
@@ -12220,7 +12202,26 @@ function lyraCerrarGlobo() {
   LYRA.tGlobo = setTimeout(() => { g.hidden = true; }, 260);
 }
 // Llamada desde activateSection: contexto para el chat y, a veces, un comentario.
+// Con scroll o cambio de sección el orbe se pausa un momento: cada tick de sus
+// animaciones obliga a un frame completo del documento y bajaba a la mitad los fps.
+// La clase va en el dock/FAB (no en body: invalidaría estilos de todo).
+let lyraQuietaT = 0;
+// Con la rueda el cursor queda quieto y las tarjetas pasan por debajo: cada una
+// arrancaba su transición de hover (lift + borde) y repintaba frame a frame.
+// .desliza en la sección activa las apaga solo mientras dura el scroll.
+let deslizaT = 0, deslizaEl = null;
+function marcarDeslizando() {
+  if (!deslizaT) (deslizaEl = document.querySelector('.section.active'))?.classList.add('desliza');
+  clearTimeout(deslizaT);
+  deslizaT = setTimeout(() => { deslizaT = 0; deslizaEl?.classList.remove('desliza'); deslizaEl = null; }, 250);
+}
+function lyraQuieta() {
+  if (!lyraQuietaT) document.querySelectorAll('.lyra-dock,.lyra-fab').forEach(x => x.classList.add('quieta'));
+  clearTimeout(lyraQuietaT);
+  lyraQuietaT = setTimeout(() => { lyraQuietaT = 0; document.querySelectorAll('.lyra-dock,.lyra-fab').forEach(x => x.classList.remove('quieta')); }, 900);
+}
 function lyraSeccion(sec) {
+  lyraQuieta();
   lyraUsoMarcar(sec);
   if (!LYRA.lista) return;
   const frases = LYRA_FRASES.seccion[sec];
@@ -18280,7 +18281,24 @@ async function loadTarifario() {
   // de una línea del PDF. Leer las dos fuentes listaba cada flyer dos veces.
   // `promocion_fotos` ya apunta a `tarifas` (la FK se repuntó en la migración
   // 20260904210000), así que las fotos de los flyers siguen llegando igual.
-  const TAR_PROMO_SEL = '*, tarifario_bloques(*), promocion_fotos(storage_path,orden,es_principal,activo), productos(id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))';
+  // `tarifario_bloques` y `productos` NO van embebidos: ~100 bloques y ~100 hoteles
+  // se repetían en las ~22,6k filas y eran 2/3 de los 92 MB de la carga (medido
+  // 2026-10-09). Se traen una vez por id y se cuelgan en cada fila con la misma
+  // forma que tenía el embed (objeto o null), así el resto del código no cambia.
+  const TAR_PROMO_SEL = '*, promocion_fotos(storage_path,orden,es_principal,activo)';
+  const colgarBloquesYHoteles = async (filas) => {
+    const ids = k => [...new Set(filas.map(x => x[k]).filter(v => v != null))];
+    const bIds = ids('bloque_id'), pIds = ids('producto_id');
+    const [rb, rpr] = await Promise.all([
+      bIds.length ? sb.from('tarifario_bloques').select('*').in('id', bIds) : { data: [] },
+      pIds.length ? sb.from('productos').select('id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo)').in('id', pIds) : { data: [] },
+    ]);
+    const err = rb.error || rpr.error;
+    if (err) return err;
+    const bloques = new Map((rb.data || []).map(b => [b.id, b])), hoteles = new Map((rpr.data || []).map(p => [p.id, p]));
+    for (const x of filas) { x.tarifario_bloques = bloques.get(x.bloque_id) || null; x.productos = hoteles.get(x.producto_id) || null; }
+    return null;
+  };
   let q, data, error;
   if (tarTab === 'promo' || tarTab === 'hotsale' || tarTab === 'ia') {
     // Desde 2026-09-10 la pestaña IA cura CUALQUIER tarifa, no solo flyers
@@ -18304,15 +18322,17 @@ async function loadTarifario() {
     // Ventanas de id acotadas en paralelo: (a, a+1000] tiene a lo sumo 1000 filas
     // (ids enteros únicos), así que PostgREST nunca trunca y cada ventana cuesta lo
     // mismo que una página keyset, pero ya no se esperan una detrás de otra (7-13 s
-    // seguidos en el tarifario, medido 2026-09-30). Tope de 4 pedidos a la vez por
-    // el statement_timeout de 8 s. Si algo falla, cae al keyset secuencial de abajo.
+    // seguidos en el tarifario, medido 2026-09-30). Tope de 6 pedidos a la vez: era 4
+    // por el statement_timeout de 8 s con los embeds pesados; sin ellos cada ventana
+    // tarda ~3 ms en la base y lo que pesa es la latencia de red (~0,5-0,9 s por pedido,
+    // y ~34 de las 78 ventanas vienen vacías). Si algo falla, cae al keyset secuencial.
     const traerTarifasVentanas = async (nuevaQuery) => {
       const { data: mx, error: em } = await sb.from('tarifas').select('id').order('id', { ascending: false }).limit(1);
       if (em || !mx?.length) return null;
       const desde = [];
       for (let a = 0; a < mx[0].id; a += PAGINA_TARIFAS) desde.push(a);
       const partes = new Array(desde.length); let sig = 0, fallo = false, hechas = 0;
-      await Promise.all(Array.from({ length: Math.min(4, desde.length) }, async () => {
+      await Promise.all(Array.from({ length: Math.min(6, desde.length) }, async () => {
         for (let k; !fallo && (k = sig++) < desde.length;) {
           const { data: d, error: e } = await nuevaQuery().gt('id', desde[k]).lte('id', desde[k] + PAGINA_TARIFAS);
           if (e) { fallo = true; return; }
@@ -18352,6 +18372,7 @@ async function loadTarifario() {
     if (!error) {
       const vistos = new Set((rf.data || []).map(x => x.id));
       data = [...(rf.data || []), ...(rp.data || []).filter(x => !vistos.has(x.id))];
+      error = await colgarBloquesYHoteles(data);
     }
   } else if (tarTab === 'boleteria') {
     q = soloVivos(sb.from('productos').select(selProductos).eq('es_boleteria', true)).order('nombre');
@@ -22062,7 +22083,7 @@ async function waCargarMedia(el) {
 /* ---------- Mensajes (chat interno del staff) ---------- */
 const ADJUNTO_LIMITE = 20 * 1024 * 1024;
 const ICONO_EXT = { pdf: 'fa-file-pdf', doc: 'fa-file-word', docx: 'fa-file-word', xls: 'fa-file-excel', xlsx: 'fa-file-excel', ppt: 'fa-file-powerpoint', pptx: 'fa-file-powerpoint', zip: 'fa-file-zipper', rar: 'fa-file-zipper' };
-const fmtHoraChat = iso => new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+const fmtHoraChat = iso => dtf('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 let msgConversaciones = [];
 let msgActual = null;
 let msgMensajes = [];
@@ -22118,7 +22139,7 @@ async function cargarBandeja(soloBadge) {
 function fmtHoraMsg(iso) {
   const d = new Date(iso), hoy = new Date();
   if (d.toDateString() === hoy.toDateString()) return fmtHoraChat(iso);
-  return new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit' }).format(d);
+  return dtf('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit' }).format(d);
 }
 const MSG_PREVIEW_ICONO = { imagen: '📷 Foto', video: '🎥 Video', documento: '📄 Documento' };
 function renderBandeja() {
@@ -22267,7 +22288,7 @@ function etiquetaDia(fecha) {
   const hoy = new Date(), ayer = new Date(); ayer.setDate(hoy.getDate() - 1);
   if (fecha.toDateString() === hoy.toDateString()) return 'Hoy';
   if (fecha.toDateString() === ayer.toDateString()) return 'Ayer';
-  return new Intl.DateTimeFormat('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: 'long', year: 'numeric' }).format(fecha);
+  return dtf('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: 'long', year: 'numeric' }).format(fecha);
 }
 function reproducirVideo(el) {
   const video = el.querySelector('video');
@@ -23181,6 +23202,7 @@ function calcularFrecuentes() {
     .map(([sec]) => sec);
 }
 function ocultarHeadersVaciosMenu() {
+  NAV_VIS = null;
   actualizarPadresNav();
   ocultarHeadersVacios('sidebar-nav', '.nav-item', '.nav-label');
 }
@@ -23196,8 +23218,17 @@ function conSondeoNav(fn) {
   document.body.classList.add('nav-sondeo');
   try { return fn(); } finally { if (!ya) document.body.classList.remove('nav-sondeo'); }
 }
-function navVisiblePorRol(el) { return !!el && conSondeoNav(() => getComputedStyle(el).display !== 'none'); }
-function hijasVisibles(padre) { return conSondeoNav(() => NAV_ITEMS.filter(it => it.padre === padre && navVisiblePorRol(navItemDe(it.sec)))); }
+// Cada sondeo recalcula estilos de TODO el documento (clase en body): se hace
+// una sola vez por combinación de clases de body + ancho y se reusa.
+let NAV_VIS = null, NAV_VIS_CLAVE = '';
+function navVisiblePorRol(el) {
+  if (!el) return false;
+  const clave = document.body.className.replace(/nav-(sondeo|buscando)/g, '') + '|' + innerWidth;
+  if (!NAV_VIS || NAV_VIS_CLAVE !== clave) { NAV_VIS = new Map(); NAV_VIS_CLAVE = clave; }
+  if (!NAV_VIS.has(el)) conSondeoNav(() => document.querySelectorAll('#sidebar-nav > .nav-item').forEach(x => NAV_VIS.set(x, getComputedStyle(x).display !== 'none')));
+  return NAV_VIS.has(el) ? NAV_VIS.get(el) : conSondeoNav(() => getComputedStyle(el).display !== 'none');
+}
+function hijasVisibles(padre) { return NAV_ITEMS.filter(it => it.padre === padre && navVisiblePorRol(navItemDe(it.sec))); }
 function actualizarPadresNav() {
   document.querySelectorAll('#sidebar-nav > .nav-padre').forEach(p => p.classList.toggle('nav-padre-vacio', !hijasVisibles(p.dataset.sec).length));
 }
@@ -23334,6 +23365,10 @@ function activateSection(sec, fromNav) {
   // que la de la sección quede arriba de todo en NAV_STACK.
   cerrarMenuMovil('silencioso');
   if (!fromNav && currentSec !== null) navPush({ type: 'section', prevSec: currentSec });
+  // Salto instantáneo, no 'smooth': el scroll suave de ~400ms se pisaba con la
+  // entrada de la sección. Va ANTES de mostrar la sección nueva: después forzaba
+  // su layout completo en el mismo click (scrollTo/scrollTop esperan layout).
+  if (window.scrollY || document.body.scrollTop) { window.scrollTo({ top: 0, behavior: 'auto' }); document.body.scrollTop = 0; }
   if (currentSec === 'leads' && sec !== 'leads') detenerPollLeads();
   // Si hay un chat abierto y el usuario navega a otra sección sin cerrarlo,
   // el ?conversacion= de la URL queda pegado ahí para siempre y reaparece en
@@ -23350,6 +23385,9 @@ function activateSection(sec, fromNav) {
   const secEl = document.getElementById('sec-' + sec);
   secEl.classList.add('active');
   pintarPestanasNav(sec, secEl);
+  // Clase en .main en vez de .main:has(#sec-x.active): ese :has se re-evaluaba con
+  // cualquier mutación dentro de .main e invalidaba todos sus DIV (cargador, renders).
+  const mainEl = document.querySelector('.main'); mainEl?.classList.toggle('en-correo', sec === 'correo'); mainEl?.classList.toggle('en-facturacion', sec === 'facturacion');
   // Entrada de la sección nueva. La clase se saca al terminar para que el
   // transform de la animación no quede vivo más de lo necesario (ver
   // .section.entrando en index.html).
@@ -23366,11 +23404,7 @@ function activateSection(sec, fromNav) {
   const mbS = document.getElementById('mb-sub'); if (mbS) mbS.textContent = t[1];
   sincronizarFAB(sec);
   sincronizarBotonTutorial(sec);
-  // Salto instantáneo, no 'smooth': el scroll suave de ~400ms se pisaba con la
-  // entrada de la sección y se veía como dos animaciones peleando.
-  window.scrollTo({ top: 0, behavior: 'auto' });
-  document.body.scrollTop = 0;
-  document.body.classList.remove('appbar-oculta');
+  document.querySelector('.mobile-brand')?.classList.remove('appbar-oculta');
   // La carga va después del primer pintado de la sección (antes competía con
   // el display:block + animación en el mismo frame), y si se cargó hace poco
   // no se vuelve a pedir: volver a una pestaña reusa lo que ya está pintado.
@@ -23686,7 +23720,7 @@ function setupAppBar() {
     const campo = document.getElementById(BUSCADOR_SECCION[currentSec] || '');
     if (!campo) { abrirBusquedaGlobal(); return; }
     document.body.scrollTop = 0;
-    document.body.classList.remove('appbar-oculta');
+    document.querySelector('.mobile-brand')?.classList.remove('appbar-oculta');
     campo.focus();
   });
   const t = tituloSeccion(currentSec);
@@ -23704,7 +23738,9 @@ function setupAppBar() {
       // barra hacen que aparezca y desaparezca sola con el dedo quieto.
       if (Math.abs(y - ultimo) < 6) return;
       const bajando = y > ultimo && y > 70;
-      document.body.classList.toggle('appbar-oculta', bajando && !menuAbierto());
+      // En la barra misma, no en body: una clase en body durante el scroll
+      // recalculaba estilos de todo el documento en cada cambio de dirección.
+      document.querySelector('.mobile-brand')?.classList.toggle('appbar-oculta', bajando && !menuAbierto());
       ultimo = y;
     });
   }, { passive: true, capture: true });
@@ -24026,7 +24062,7 @@ const BOL_ERR = {
 // validar. Con la hora del navegador se corría un día para quien tenga el
 // dispositivo en otro huso.
 function hoyCaracasISO() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  return dtf('en-CA', { timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 
 // Validación de fechas en vivo: el navegador ya bloquea elegir antes del `min`,
@@ -24284,7 +24320,6 @@ async function loadColaBoleteria() {
   const filas = cola.data || [];
   // Soy agente si aparezco en el roster de agentes (marca es_boleteria).
   MI_ES_AGENTE_BOLETERIA = (agentes.data || []).some(a => String(a.usuario_id) === String(MI_USUARIO_ID)) || ROL === 'admin';
-  loadBoletosPorEmitir();
 
   const abiertas = filas.filter(s => s.estado === 'en_cola' || s.estado === 'atendiendo').length;
   const badge = document.getElementById('leads-bol-count');

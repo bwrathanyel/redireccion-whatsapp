@@ -713,12 +713,16 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 /* Skeletons: reservan aproximadamente el alto real del contenido cargado,
    en vez de un spinner chico centrado que deja saltar el layout al llegar
    los datos. */
-@keyframes skel-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* Barrido con transform sobre ::after (compuesto): animar background-position repintaba cada frame. */
+@keyframes skel-shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.skel-bar,.skel-card,.cc-foto,.cc-l{position:relative;overflow:hidden;background:var(--panel-solid)}
+.skel-bar::after,.skel-card::after,.cc-foto::after,.cc-l::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 20%,rgba(255,255,255,.07) 50%,transparent 80%);animation:skel-shimmer 1.4s ease-in-out infinite}
+.cc-foto::after,.cc-l::after{background:linear-gradient(90deg,transparent 20%,rgba(var(--ink-rgb),.07) 50%,transparent 80%)}
 .tbl-state.skel{padding:0;align-items:stretch}
 .tbl-state.skel.show{display:flex;flex-direction:column;gap:8px}
-.skel-bar{height:52px;border-radius:10px;background:linear-gradient(90deg,var(--panel-solid) 25%,rgba(255,255,255,.07) 50%,var(--panel-solid) 75%);background-size:200% 100%;animation:skel-shimmer 1.4s ease-in-out infinite}
+.skel-bar{height:52px;border-radius:10px}
 .tbl-state.skel-grid.show{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
-.skel-card{height:190px;border-radius:14px;background:linear-gradient(90deg,var(--panel-solid) 25%,rgba(255,255,255,.07) 50%,var(--panel-solid) 75%);background-size:200% 100%;animation:skel-shimmer 1.4s ease-in-out infinite}
+.skel-card{height:190px;border-radius:14px}
 /* Cargador con progreso (cargadorIniciar en app.js): Tarifario y Galería. */
 .cargador-host{display:none}
 .cargador-host.show{display:block}
@@ -728,18 +732,17 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .cargador-pct{margin-left:auto;font-size:12px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
 .cargador-barra{height:6px;border-radius:999px;background:var(--line2);overflow:hidden}
 .cargador-fill{position:relative;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--accent-deep));transition:width .2s linear;overflow:hidden}
-.cargador-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 25%,rgba(255,255,255,.35) 50%,transparent 75%);background-size:200% 100%;animation:skel-shimmer 1.4s linear infinite}
+.cargador-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 20%,rgba(255,255,255,.35) 50%,transparent 80%);animation:skel-shimmer 1.4s linear infinite}
 .cargador-tip{min-height:16px;font-size:12px;color:var(--muted);transition:opacity .16s,transform .16s}
 .cargador-tip.cambia{opacity:0;transform:translateY(-4px)}
 .cargador-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:7px}
 .cargador-card{display:flex;flex-direction:column;gap:9px;padding:9px;border:1px solid var(--line);border-radius:14px;opacity:0;animation:cargador-entra .4s ease-out forwards;animation-delay:calc(var(--i) * 80ms)}
-.cc-foto,.cc-l{background:linear-gradient(90deg,var(--panel-solid) 25%,rgba(var(--ink-rgb),.07) 50%,var(--panel-solid) 75%);background-size:200% 100%;animation:skel-shimmer 1.4s ease-in-out infinite}
 .cc-foto{aspect-ratio:4/3;border-radius:10px}
 .cc-l{width:80%;height:11px;border-radius:999px}
 .cc-l.corta{width:45%}
 @keyframes cargador-entra{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
 @keyframes cargador-vuelo{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-2px) rotate(-8deg)}}
-@media (prefers-reduced-motion:reduce){.cargador-ico,.cargador-fill::after,.cc-foto,.cc-l{animation:none}.cargador-card{animation:none;opacity:1}.cargador-tip{transition:none}}
+@media (prefers-reduced-motion:reduce){.cargador-ico,.cargador-fill::after,.cc-foto::after,.cc-l::after,.skel-bar::after,.skel-card::after{animation:none}.cargador-card{animation:none;opacity:1}.cargador-tip{transition:none}}
 .tbl-state .es-t{font-size:14px;font-weight:600;color:var(--txt)}
 .tbl-state .es-s{font-size:12px}
 .spin{width:30px;height:30px;border:3px solid rgba(255,255,255,.1);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
@@ -2075,28 +2078,28 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
    secciones. El alto de .correo-layout (calc(100vh - Npx)) descuenta este
    stack: padding main + topbar + padding card + toolbar + carpetas. */
 @media(min-width:761px){
-  .main:has(#sec-correo.active){padding:12px 20px 10px}
-  .main:has(#sec-correo.active) .topbar{gap:12px;margin:-4px 0 8px;padding:4px 0 6px}
-  .main:has(#sec-correo.active) .topbar>div:first-child{display:flex;align-items:baseline;flex:0 1 auto;gap:10px;min-width:0}
-  .main:has(#sec-correo.active) .topbar h1{font-size:20px;letter-spacing:-.4px;white-space:nowrap}
-  .main:has(#sec-correo.active) .topbar .sub{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .main:has(#sec-correo.active) .topbar-help-btn{padding:6px 12px;border-radius:9px;font-size:12px;box-shadow:none}
-  .main:has(#sec-correo.active) .pill{padding:6px 11px;border-radius:9px;font-size:12px}
+  .main.en-correo{padding:12px 20px 10px}
+  .main.en-correo .topbar{gap:12px;margin:-4px 0 8px;padding:4px 0 6px}
+  .main.en-correo .topbar>div:first-child{display:flex;align-items:baseline;flex:0 1 auto;gap:10px;min-width:0}
+  .main.en-correo .topbar h1{font-size:20px;letter-spacing:-.4px;white-space:nowrap}
+  .main.en-correo .topbar .sub{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .main.en-correo .topbar-help-btn{padding:6px 12px;border-radius:9px;font-size:12px;box-shadow:none}
+  .main.en-correo .pill{padding:6px 11px;border-radius:9px;font-size:12px}
   #sec-correo>.card{padding:12px 14px}
-  .main:has(#sec-correo.active) .foot-note{display:none}
+  .main.en-correo .foot-note{display:none}
 }
 
 /* Facturación aprovecha la ventana como Correo: cabecera compacta, sin tope de
    ancho, KPIs globales en una sola fila baja y más columnas de tarjetas. */
 @media(min-width:761px){
-  .main:has(#sec-facturacion.active){padding:12px 20px 10px;max-width:none}
-  .main:has(#sec-facturacion.active) .topbar{gap:12px;margin:-4px 0 8px;padding:4px 0 6px}
-  .main:has(#sec-facturacion.active) .topbar>div:first-child{display:flex;align-items:baseline;flex:0 1 auto;gap:10px;min-width:0}
-  .main:has(#sec-facturacion.active) .topbar h1{font-size:20px;letter-spacing:-.4px;white-space:nowrap}
-  .main:has(#sec-facturacion.active) .topbar .sub{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .main:has(#sec-facturacion.active) .topbar-help-btn{padding:6px 12px;border-radius:9px;font-size:12px;box-shadow:none}
-  .main:has(#sec-facturacion.active) .pill{padding:6px 11px;border-radius:9px;font-size:12px}
-  .main:has(#sec-facturacion.active) .foot-note{display:none}
+  .main.en-facturacion{padding:12px 20px 10px;max-width:none}
+  .main.en-facturacion .topbar{gap:12px;margin:-4px 0 8px;padding:4px 0 6px}
+  .main.en-facturacion .topbar>div:first-child{display:flex;align-items:baseline;flex:0 1 auto;gap:10px;min-width:0}
+  .main.en-facturacion .topbar h1{font-size:20px;letter-spacing:-.4px;white-space:nowrap}
+  .main.en-facturacion .topbar .sub{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .main.en-facturacion .topbar-help-btn{padding:6px 12px;border-radius:9px;font-size:12px;box-shadow:none}
+  .main.en-facturacion .pill{padding:6px 11px;border-radius:9px;font-size:12px}
+  .main.en-facturacion .foot-note{display:none}
   #sec-facturacion #fact-kpis{grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:10px}
   #sec-facturacion #fact-kpis .kpi{padding:10px 12px;border-radius:12px}
   #sec-facturacion #fact-kpis .kpi .kt{font-size:10px;letter-spacing:.4px;gap:6px}
@@ -2499,7 +2502,7 @@ body:not(.nav-buscando):not(.nav-sondeo) #sidebar-nav > .nav-hijo{display:none}
      bajar y vuelve al subir, siempre con transform (nunca height/padding). */
   .mobile-brand{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:30;margin:0 -14px 12px;padding:8px 14px;padding-top:calc(8px + env(safe-area-inset-top,0px));background:rgba(11,15,28,.97);border-bottom:1px solid var(--line);transition:transform var(--dur-normal) var(--ease-salida)}
   :root[data-theme="light"] .mobile-brand{background:rgba(244,245,249,.92)}
-  body.appbar-oculta .mobile-brand{transform:translateY(-101%)}
+  .mobile-brand.appbar-oculta{transform:translateY(-101%)}
   .mobile-brand img{display:none}
   .menu-btn,.ab-act{display:flex}
   .mobile-brand .mb-t{font-weight:800;font-size:16px;letter-spacing:-.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2677,6 +2680,7 @@ body::before{opacity:.45}
    sea el botón "Filtros" parecía no hacer nada. */
 .section.active{animation:section-in .16s ease-out}
 @keyframes section-in{from{opacity:.6}to{opacity:1}}
+.section.desliza :is(.tar-card,.tar-ficha,.post-card,.entity-card,.pv-card,.bol-card,.vr-card,.lt-card,.vig-item,.kpi,.kpi-btn,.bolr-kpi,.tut-card,.bt-hotel){transition:none}
 tbody tr{transition:background-color .15s}
 thead th{position:sticky;top:0;background:rgb(16,26,39);z-index:2}
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -2762,7 +2766,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .bolr-res .nl-buscar-row small{width:100%;color:var(--muted2)}
 .bolr-res .csub{padding:9px 11px}
 .emp-res{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line2);font-size:12.5px;color:var(--muted)}.emp-res b{color:var(--text)}
-#rv-bol-box[hidden],[data-rv-panel][hidden],#pv-grupos[hidden],#emp-reservas-box[hidden],#rv-s-tasa-box[hidden],#rv-c-tasa-box[hidden]{display:none}
+[data-rv-panel][hidden],#pv-grupos[hidden],#emp-reservas-box[hidden],#rv-s-tasa-box[hidden],#rv-c-tasa-box[hidden]{display:none}
 .pv-stage{white-space:nowrap;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--muted);padding:8px 12px;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer}
 .pv-stage.on{background:var(--accent-soft);color:#ffd595;border-color:rgba(245,158,11,.35)}
 .pv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(315px,1fr));gap:13px}
@@ -3869,9 +3873,9 @@ body.fsize-grande{--zoom:1.05}
   box-shadow:0 0 calc(var(--s) * .22) color-mix(in srgb,var(--lyra-sol-a) 50%,transparent),inset 0 calc(var(--s) * -.05) calc(var(--s) * .1) color-mix(in srgb,var(--lyra-tinta) 22%,transparent);
   animation:lyra-respira 4.2s ease-in-out infinite;transition:rotate .5s var(--ease-salida),filter .4s}
 .lo-sol svg{position:absolute;inset:0;width:100%;height:100%}
-.lo-mar{fill:none;stroke:var(--lyra-brillo);stroke-width:5;stroke-linecap:round;opacity:.92}
-.lo-mar path{animation:lyra-mar 5s linear infinite}
-.lo-mar path+path{animation-duration:7s;animation-direction:reverse}
+.lo-mar{position:absolute;inset:0;fill:none;stroke:var(--lyra-brillo);stroke-width:5;stroke-linecap:round;opacity:.92;animation:lyra-mar 5s linear infinite}
+.lo-sol .lo-mar svg{overflow:visible}
+.lo-mar+.lo-mar{animation-duration:7s;animation-direction:reverse}
 .lo-cara{transform:translate(var(--lx),var(--ly));transition:transform .35s var(--ease-salida);fill:none;stroke:var(--lyra-tinta);stroke-width:4.4;stroke-linecap:round;stroke-linejoin:round}
 .lo-cara *{transform-box:fill-box;transform-origin:center;transition:opacity .16s,transform .24s var(--ease-salida)}
 .lo-ojo-abierto ellipse,.b-grande,.b-o,.b-h1,.b-h2{fill:var(--lyra-tinta)}
@@ -3953,13 +3957,13 @@ body.fsize-grande{--zoom:1.05}
 .lyra-orb[data-expr=dormida] .lo-arco i{animation:none;opacity:.3}
 .lyra-orb[data-expr=dormida] .lo-halo{opacity:.3;animation-duration:7s}
 .lyra-orb[data-expr=dormida] .lo-sol{animation-duration:7s;filter:saturate(.6) brightness(.85)}
-.lyra-orb[data-expr=dormida] .lo-mar path{animation-duration:14s}
+.lyra-orb[data-expr=dormida] .lo-mar{animation-duration:14s}
 .lyra-orb[data-expr=dormida] .lo-zz{opacity:1}
 
 /* Versión quieta: avatar de cada mensaje y emojis de cara. Solo el sol. */
 .lyra-mini{--s:26px}
 .lyra-mini .lo-sol{left:0;top:0;width:100%;height:100%;animation:none;box-shadow:0 0 calc(var(--s) * .2) color-mix(in srgb,var(--lyra-sol-a) 40%,transparent)}
-.lyra-mini .lo-mar path{animation:none}
+.lyra-mini .lo-mar{animation:none}
 .lyra-mini .lo-cara{transform:none}
 .lyra-emo-cara{--s:19px;margin:0 2px;vertical-align:-5px}
 /* Emojis propios: ficha redonda con el sol de la marca y el ícono en tinta. */
@@ -3972,7 +3976,7 @@ body.fsize-grande{--zoom:1.05}
 @keyframes lyra-respira{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
 @keyframes lyra-halo{0%,100%{opacity:.55;transform:scale(.94)}50%{opacity:1;transform:scale(1.06)}}
 @keyframes lyra-luz{0%,100%{opacity:.5;transform:scale(.85)}18%{opacity:1;transform:scale(1.25)}}
-@keyframes lyra-mar{to{transform:translateX(-40px)}}
+@keyframes lyra-mar{to{transform:translateX(-40%)}}
 @keyframes lyra-gota{0%{opacity:0;transform:translateY(-2px)}30%{opacity:.9}100%{opacity:0;transform:translateY(8px)}}
 @keyframes lyra-z{0%{opacity:0;transform:translate(0,0) scale(.6)}30%{opacity:1}100%{opacity:0;transform:translate(.7em,-1.5em) scale(1.1)}}
 @keyframes lyra-habla{from{transform:scaleY(.4)}to{transform:scaleY(1.1)}}
@@ -3982,7 +3986,7 @@ body.fsize-grande{--zoom:1.05}
 /* Stickers de Lyra: el orbe grande con un gesto por expresión. Los WEBM de Telegram se
    graban de esta misma regla (scripts/lyra-stickers.py), así que todo ciclo divide 3s. */
 .lyra-sticker{--s:120px;margin:4px 0 2px;animation:3s ease-in-out infinite}
-.lyra-sticker .lo-halo,.lyra-sticker .lo-sol,.lyra-sticker .lo-arco i,.lyra-sticker .lo-mar path{animation-duration:3s}
+.lyra-sticker .lo-halo,.lyra-sticker .lo-sol,.lyra-sticker .lo-arco i,.lyra-sticker .lo-mar{animation-duration:3s}
 .lyra-sticker .lo-zz i{animation-duration:3s}.lyra-sticker .lo-zz i+i{animation-delay:1.5s}
 .lyra-sticker[data-expr] .lo-gota{animation-duration:1.5s}
 .lyra-sticker[data-expr=feliz] .lo-arco i{animation-duration:1.5s}
@@ -4016,6 +4020,7 @@ body.lyra-on .lyra-dock{display:flex}
 .lyra-dock:active{transform:scale(.98)}
 .lyra-dock:focus-visible,.lyra-fab:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .lyra-dock .lyra-orb{--s:50px;animation:lyra-flota 5s ease-in-out infinite}
+.lyra-dock.quieta .lyra-orb,.lyra-dock.quieta .lyra-orb *,.lyra-fab.quieta .lyra-orb,.lyra-fab.quieta .lyra-orb *{animation-play-state:paused}
 .lyra-dock-t{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
 .lyra-dock-t b{font-size:14.5px;letter-spacing:.3px}
 .lyra-dock-t small,.lyra-head-t small{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -5146,11 +5151,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="tbl-state skel" id="bol-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
           <div class="tbl-state" id="bol-empty"><i class="fas fa-plane-slash"></i><div class="es-t">Cola vacía</div><div class="es-s">Cuando mandes un cliente a boletería, aparece acá con su puesto en la cola</div></div>
           <div class="bol-grid" id="bol-grid"></div>
-        </div>
-        <div class="card" id="rv-bol-box" hidden style="margin-top:14px">
-          <div class="chead-row"><h2><i class="fas fa-ticket"></i> Boletos por emitir <span class="lih-count" id="rv-bol-n"></span></h2></div>
-          <div class="csub">Boletos aéreos de reservas que todavía no están emitidos. Tocá uno para cargar el localizador y subir el boleto.</div>
-          <div class="bol-grid" id="rv-bol-grid"></div>
         </div>
       </div></div></div>
 
@@ -7648,7 +7648,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
     </section>
 
-    <!-- BOLETERÍA -- catálogo de vuelos. El tema azul es del modo completo
+    <!-- BOLETERÍA -- reservas aéreas, solicitudes y catálogo de vuelos. El tema azul es del modo completo
          (body.modo-boleteria), no de esta sección. Los precios marcados como
          referencia son la fuente de la web y la IA (vista vuelos_referencia). -->
     <section class="section" id="sec-boleteria">
