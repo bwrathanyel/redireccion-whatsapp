@@ -2797,6 +2797,8 @@ function ensureChart() {
     s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
     s.onload = () => {
       Chart.defaults.color = cssVar('--muted') || '#8b93ad'; Chart.defaults.font.family = 'Inter'; Chart.defaults.font.size = 11;
+      // Sin animación: cada rebuild (lead nuevo, cambio de período) redibujaba ~1 s por frame.
+      Chart.defaults.animation = false;
       resolve();
     };
     s.onerror = reject;
@@ -4641,10 +4643,12 @@ function wireLeadCards(contenedor, data, { drag = false } = {}) {
   });
 }
 
-async function loadTable() {
+// silencioso: recarga en vivo (Realtime), sin spinner ni atenuar la tabla --
+// el bot actualiza leads sin parar y cada lote hacía parpadear la lista.
+async function loadTable(silencioso) {
   const gen = ++genCarga;
   const loading = document.getElementById('tbl-loading'), empty = document.getElementById('tbl-empty'), wrap = document.getElementById('tbl-wrap');
-  empty.classList.remove('show'); loading.classList.add('show'); wrap.style.opacity = '.4';
+  empty.classList.remove('show'); if (silencioso !== true) { loading.classList.add('show'); wrap.style.opacity = '.4'; }
   const from = (page - 1) * PER;
   const porSeguimiento = !!val('f-seguimiento'); // con el filtro, lo más urgente primero
   let qTabla = buildQuery(true).order(porSeguimiento ? 'proxima_accion_at' : 'fecha_creacion', { ascending: porSeguimiento, nullsFirst: false });
@@ -4677,9 +4681,11 @@ async function loadTable() {
   // clase después de que termina la última tarjeta con delay (12 * 40ms +
   // duración) para que un parche en vivo posterior (parcharLeadLive) no la
   // vuelva a disparar sobre una tarjeta que solo cambió de estado.
-  cardsEl.classList.add('entrada-lista');
-  clearTimeout(cardsEl._entradaLista);
-  cardsEl._entradaLista = setTimeout(() => cardsEl.classList.remove('entrada-lista'), 800);
+  if (silencioso !== true) {
+    cardsEl.classList.add('entrada-lista');
+    clearTimeout(cardsEl._entradaLista);
+    cardsEl._entradaLista = setTimeout(() => cardsEl.classList.remove('entrada-lista'), 800);
+  }
   // Caché de la página para resolver el lead al soltarlo en una pestaña
   // (arrastrar-y-soltar). Se rearma en cada render.
   LEADS_PAGINA = {};
@@ -4713,7 +4719,7 @@ function mostrarLeadsNuevos(n) {
   chip.textContent = `${total} lead${total === 1 ? '' : 's'} nuevo${total === 1 ? '' : 's'} — Ver`;
 }
 async function parcharLeadLive(evento) {
-  if (leadsView === 'lista') { await loadTable(); return; }
+  if (leadsView === 'lista') { await loadTable(true); return; }
   const gen = evento.gen;
   const { data: lead, error } = await buildQuery(false).eq('id', evento.new.id).maybeSingle();
   if (genLeadLive.get(evento.new.id) !== gen) return;
@@ -4799,7 +4805,7 @@ function encolarLeadLive(evento) {
   }, espera);
 }
 async function reconciliarLoteLive(ids) {
-  if (leadsView === 'lista') { await loadTable(); return; }
+  if (leadsView === 'lista') { await loadTable(true); return; }
   const { data, error } = await buildQuery(false).in('id', [...new Set(ids)]);
   if (error) { console.error('reconciliarLoteLive', error); return; }
   const recibidos = new Set((data || []).map(lead => String(lead.id)));
@@ -9907,10 +9913,16 @@ function setupCorreo() {
     cerrarHiloCorreo();
     cargarBandejaCorreo();
   });
+  let correoScrollPend = false;
   document.getElementById('correo-lista').addEventListener('scroll', e => {
     const el = e.currentTarget;
-    if (CORREO_HAY_MAS && !CORREO_CARGANDO_MAS && el.scrollTop + el.clientHeight > el.scrollHeight - 240) cargarBandejaCorreo('mas');
-  });
+    if (correoScrollPend || !CORREO_HAY_MAS || CORREO_CARGANDO_MAS) return;
+    correoScrollPend = true;
+    requestAnimationFrame(() => {
+      correoScrollPend = false;
+      if (CORREO_HAY_MAS && !CORREO_CARGANDO_MAS && el.scrollTop + el.clientHeight > el.scrollHeight - 240) cargarBandejaCorreo('mas');
+    });
+  }, { passive: true });
   document.addEventListener('keydown', atajosCorreo);
   refrescarBadgeCorreo();
 }
@@ -11962,11 +11974,17 @@ function lyraGesto() {
     lyraGesto();
   }, 9000 + Math.random() * 9000);
 }
+const MQ_MENOS_MOV = matchMedia('(prefers-reduced-motion: reduce)'), MQ_MOVIL_LYRA = matchMedia('(max-width:760px)');
 function lyraSeguirCursor() {
   LYRA.raf = 0;
-  if (LYRA.dormida || LYRA.expr === 'pensando' || document.body.classList.contains('lyra-moviendo') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const o = document.querySelector(matchMedia('(max-width:760px)').matches ? '#lyra-fab .lyra-orb' : '#lyra-dock .lyra-orb');
-  const r = o?.getBoundingClientRect();
+  if (LYRA.dormida || LYRA.expr === 'pensando' || document.hidden || document.body.classList.contains('lyra-moviendo') || MQ_MENOS_MOV.matches) return;
+  // El orbe casi no se mueve (dock del sidebar / FAB fijo): medirlo una vez por
+  // segundo y no en cada frame, justo después de que lyraMirar escribió estilos.
+  if (!LYRA.rectOrb || Date.now() - LYRA.rectOrbT > 1000) {
+    const o = document.querySelector(MQ_MOVIL_LYRA.matches ? '#lyra-fab .lyra-orb' : '#lyra-dock .lyra-orb');
+    LYRA.rectOrb = o?.getBoundingClientRect(); LYRA.rectOrbT = Date.now();
+  }
+  const r = LYRA.rectOrb;
   if (!r?.width) return;
   const dx = LYRA.px - (r.left + r.width / 2), dy = LYRA.py - (r.top + r.height / 2), d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 260);
   lyraMirar(dx / d * k, dy / d * k);
@@ -14801,8 +14819,20 @@ window.toggleExportMenu = (ev, tabla) => {
   if (!abierto) menu.classList.add('show');
 };
 document.addEventListener('click', () => document.querySelectorAll('.export-dd-menu.show').forEach(m => m.classList.remove('show')));
+// ~900 KB que antes se parseaban en cada arranque del CRM; ahora solo al exportar.
+let xlsxPromise = null;
+function ensureXLSX() {
+  if (window.XLSX) return Promise.resolve();
+  return xlsxPromise ||= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = resolve;
+    s.onerror = () => { xlsxPromise = null; reject(); };
+    document.head.appendChild(s);
+  });
+}
 window.exportarXLSX = async (tabla, titulo) => {
-  if (typeof XLSX === 'undefined') { errToast('La librería de Excel no cargó todavía, probá de nuevo en un segundo'); return; }
+  try { await ensureXLSX(); } catch { errToast('No se pudo cargar la librería de Excel, revisá la conexión'); return; }
   const d = await datosExport(tabla, 'xlsx');
   if (!d) return;
   const ws = XLSX.utils.aoa_to_sheet(d.aoa);
@@ -18434,13 +18464,20 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
     mediaEl.addEventListener('touchcancel', soltarFoto, { passive: true });
     return;
   }
+  // Espera un hover real: el puntero que solo pasa por encima (mouse quieto
+  // mientras la lista se mueve) no descarga fotos ni arranca el carrusel.
+  let espera = 0;
   cardEl.addEventListener('mouseenter', () => {
-    precargarFotos(fotos);
-    i = 0;
-    timer = setInterval(() => crossfade(i + 1), 1100);
-    carruselTimers.add(timer);
+    clearTimeout(espera);
+    espera = setTimeout(() => {
+      precargarFotos(fotos);
+      i = 0;
+      timer = setInterval(() => crossfade(i + 1), 1100);
+      carruselTimers.add(timer);
+    }, 300);
   });
   cardEl.addEventListener('mouseleave', () => {
+    clearTimeout(espera);
     clearInterval(timer); carruselTimers.delete(timer); timer = null;
     if (i !== 0) crossfade(0);
   });
@@ -18784,15 +18821,15 @@ function renderTarifario() {
   });
 }
 // Un solo IntersectionObserver a nivel de módulo, reusado entre renders.
+// Dos pasadas: primero todas las lecturas de layout (precio que desborda),
+// después todas las escrituras -- intercaladas forzaban un layout por tarjeta.
 const tarObserver = new IntersectionObserver((entries, obs) => {
-  for (const ent of entries) {
-    if (!ent.isIntersecting) continue;
-    const el = ent.target;
-    obs.unobserve(el);
-    tarHidratarTarjeta(el, el._tarItem);
-  }
+  const visibles = entries.filter(ent => ent.isIntersecting).map(ent => ent.target);
+  visibles.forEach(el => obs.unobserve(el));
+  const desborda = visibles.map(el => { const p = el.querySelector('.tc-precio'); return !!p && p.scrollHeight > p.clientHeight + 1; });
+  visibles.forEach((el, k) => tarHidratarTarjeta(el, el._tarItem, desborda[k]));
 }, { rootMargin: '200px' });
-function tarHidratarTarjeta(el, x) {
+function tarHidratarTarjeta(el, x, desborda) {
   if (!x) return;
   const fotos = fotosRotadas(x, 256);
   if (tarView === 'fichas') {
@@ -18809,8 +18846,7 @@ function tarHidratarTarjeta(el, x) {
   // "Ver más" solo en el precio_texto que de verdad desborda (párrafo largo
   // tipo Refugio Turístico Mifafi) -- no en el resto, que ya entra en 3 líneas.
   const precioEl = el.querySelector('.tc-precio');
-  if (precioEl && !precioEl.nextElementSibling?.classList?.contains('tc-precio-mas')
-      && precioEl.scrollHeight > precioEl.clientHeight + 1) {
+  if (precioEl && desborda && !precioEl.nextElementSibling?.classList?.contains('tc-precio-mas')) {
     const mas = document.createElement('button');
     mas.type = 'button'; mas.className = 'tc-precio-mas'; mas.textContent = 'Ver más';
     mas.onclick = e => {
@@ -21709,7 +21745,7 @@ function waRenderChats() {
   if (!lista.length) { cont.innerHTML = `<div class="msg-empty"><i class="fa-brands fa-whatsapp"></i><br>${q ? 'Sin resultados' : 'Sin chats todavía'}</div>`; return; }
   cont.innerHTML = lista.map(c => `
     <div class="msg-inbox-row${waActual?.id === c.id ? ' on' : ''}" data-wa="${esc(c.id)}">
-      <div class="msg-avatar dm-avatar" data-canal="whatsapp">${c.foto ? `<img src="${esc(c.foto)}" alt="">` : esc(initials(c.nombre || '#'))}</div>
+      <div class="msg-avatar dm-avatar" data-canal="whatsapp">${c.foto ? `<img src="${esc(c.foto)}" alt="" loading="lazy" decoding="async">` : esc(initials(c.nombre || '#'))}</div>
       <div class="msg-inbox-body">
         <div class="msg-inbox-top">
           <div class="msg-inbox-nombre">${esc(c.nombre || c.telefono)}</div>
@@ -21731,7 +21767,7 @@ async function waAbrirChat(c) {
   document.getElementById('wa-conv-titulo').textContent = c.nombre || c.telefono;
   document.getElementById('wa-conv-sub').textContent = c.lead ? `${c.telefono} · ${c.lead.estado || 'Lead'}${c.lead.asesor ? ' · ' + c.lead.asesor : ''}` : `${c.telefono} · sin lead en el CRM`;
   document.getElementById('wa-ver-lead').style.display = c.lead ? '' : 'none';
-  document.getElementById('wa-conv-avatar').innerHTML = c.foto ? `<img src="${esc(c.foto)}" alt="">` : esc(initials(c.nombre || '#'));
+  document.getElementById('wa-conv-avatar').innerHTML = c.foto ? `<img src="${esc(c.foto)}" alt="" loading="lazy" decoding="async">` : esc(initials(c.nombre || '#'));
   document.getElementById('wa-conv-log').innerHTML = '<div class="msg-empty"><i class="fas fa-spinner fa-spin"></i></div>';
   waPanelChat(true);
   document.querySelectorAll('#wa-inbox [data-wa]').forEach(r => r.classList.toggle('on', r.dataset.wa === c.id));
@@ -22456,7 +22492,7 @@ function subscribeRealtime() {
       // NO excluye es_prueba (esos leads sí aparecen, con su chip), así que acá
       // tampoco se filtra por es_prueba -- solo lo que buildQuery de verdad excluye.
       if (payload.new.servicio !== SERVICIO_POSADA_IA && !payload.new.eliminado_at && !payload.new.contacto_directo_enviado_at) toast(payload.new);
-      loadStats().then(() => { renderAll(); loadDestPeriodo(); });
+      loadStats().then(renderAllSiVisible);
       if (page === 1 && document.getElementById('sec-leads')?.classList.contains('active')) encolarLeadLive(payload);
       // Solo empujar al inbox en vivo si el lead realmente llegó sin atender
       // -- un INSERT no siempre significa "nuevo por atender" (ej. import
@@ -22506,7 +22542,7 @@ function subscribeRealtime() {
 // Función nombrada (antes vivía inline en el listener) para poder llamarla
 // también desde el pull-to-refresh (Fase 5.4) sin duplicar la lógica.
 function resyncTrasSegundoPlano() {
-  const p = loadStats().then(() => { renderAll(); loadDestPeriodo(); });
+  const p = loadStats().then(renderAllSiVisible);
   if (ROL === 'asesor') loadInboxLeads();
   if (document.getElementById('sec-leads')?.classList.contains('active')) loadTable();
   reconectarLeadsLive(true);
@@ -23147,6 +23183,27 @@ function activateSection(sec, fromNav) {
   window.scrollTo({ top: 0, behavior: 'auto' });
   document.body.scrollTop = 0;
   document.body.classList.remove('appbar-oculta');
+  // La carga va después del primer pintado de la sección (antes competía con
+  // el display:block + animación en el mismo frame), y si se cargó hace poco
+  // no se vuelve a pedir: volver a una pestaña reusa lo que ya está pintado.
+  // Refrescar (pull/botón) fuerza la recarga vía REFRESCAR_SECCION.
+  if (DASH_SUCIO && SECS_DASH.has(sec)) { DASH_SUCIO = false; requestAnimationFrame(() => { renderAll(); loadDestPeriodo(); }); }
+  if (!CARGA_SIEMPRE.has(sec) && Date.now() - (ULTIMA_CARGA[sec] || 0) < CARGA_FRESCA_MS) return;
+  requestAnimationFrame(() => setTimeout(() => {
+    if (currentSec !== sec) return;
+    ULTIMA_CARGA[sec] = Date.now();
+    cargarSeccion(sec);
+  }));
+}
+const CARGA_FRESCA_MS = 30000;
+const ULTIMA_CARGA = {};
+let DASH_SUCIO = false;
+const SECS_DASH = new Set(['dashboard', 'pipeline', 'gestion-personal']);
+// Con esas secciones ocultas no se reconstruyen sus charts a cada lead nuevo; se pintan al entrar.
+function renderAllSiVisible() { if (SECS_DASH.has(currentSec)) { renderAll(); loadDestPeriodo(); } else DASH_SUCIO = true; }
+// Datos vivos propios (poll, chat, Realtime): cargan en cada visita.
+const CARGA_SIEMPRE = new Set(['hoy', 'leads', 'mensajes', 'whatsapp', 'dms', 'correo', 'asistente', 'repartir']);
+function cargarSeccion(sec) {
   if (sec === 'ranking') loadRanking();
   if (sec === 'mis-ventas') loadMisVentasSeccion();
   if (sec === 'facturacion') loadFacturacion();
@@ -23186,7 +23243,6 @@ function activateSection(sec, fromNav) {
   if (sec === 'manual') renderManual();
   if (sec === 'actualizaciones') renderActualizaciones();
   if (sec === 'proyecto-constructor') renderProyectoConstructor();
-  setTimeout(() => Object.values(charts).forEach(c => c && c.resize()), 60);
 }
 function setupNav() {
   // Delegado (no querySelectorAll+forEach puntual): NAV_ITEMS regenera los
@@ -24789,9 +24845,11 @@ MENU_MQ.addEventListener('change', () => { sincronizarFAB(currentSec); sincroniz
    reserva el alto. En captura porque en móvil scrollea la ventana y también
    contenedores propios; el umbral acumula para que un arrastre lento cuente. */
 const FAB_SCROLL_Y = new WeakMap();
-document.addEventListener('scroll', e => {
-  if (!esMovil()) return;
-  const t = e.target === document ? document.scrollingElement : e.target;
+let FAB_SCROLL_T = null;
+// Un cálculo por frame (las lecturas de scrollHeight/clientHeight por evento
+// forzaban layout varias veces por frame durante el scroll).
+function fabScrollFrame() {
+  const t = FAB_SCROLL_T; FAB_SCROLL_T = null;
   if (!t || t.closest?.('.sheet,.drawer,.lyra-panel')) return;
   const y = t.scrollTop, prev = FAB_SCROLL_Y.get(t);
   if (prev === undefined) { FAB_SCROLL_Y.set(t, y); return; }
@@ -24800,6 +24858,12 @@ document.addEventListener('scroll', e => {
   const ocultar = y > prev && y > 40 && y + t.clientHeight < t.scrollHeight - 4;
   document.body.classList.toggle('fabs-ocultos', ocultar);
   lyraCerrarGlobo();
+}
+document.addEventListener('scroll', e => {
+  const t = e.target === document ? document.scrollingElement : e.target;
+  if (!esMovil() || !t) return;
+  if (!FAB_SCROLL_T) requestAnimationFrame(fabScrollFrame);
+  FAB_SCROLL_T = t;
 }, { capture: true, passive: true });
 // El globo de Lyra tapa lo que tiene debajo: cualquier toque fuera lo cierra.
 document.addEventListener('pointerdown', e => {
@@ -25158,6 +25222,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-09', emoji: '⚡', titulo: 'CRM más fluido', texto: 'El scroll y el cambio de pestaña ya no dan tirones. Si volvés a una sección que abriste hace menos de 30 segundos, aparece al instante sin recargar (deslizá hacia abajo o tocá Actualizar si querés traer lo último). El Excel se descarga igual que antes, solo que la herramienta se carga cuando exportás.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-08', emoji: '📍', titulo: 'El CRM abre donde lo dejaste', texto: 'Al recargar o volver a abrir el CRM ya no salta al Tarifario: abre la última sección en la que estabas. Si tenés varias pestañas, cada una recarga en la suya. Además, el Tarifario y la Galería muestran una barra con el avance real de la carga mientras traen los datos.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-07', emoji: '💬', titulo: 'Nueva sección Meta DM', texto: 'Los chats del bot en Instagram, Facebook y WhatsApp tienen ahora su propia sección, Meta DM, con una pestaña por app y los colores de cada una. Se actualizan en vivo y muestran la ficha del cliente camino a lead. Los asesores ven también los chats de WhatsApp de sus leads, con fotos y audios. Mensajes queda solo para el chat del equipo.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-07', emoji: '🏠', titulo: 'Asigná un apartamento a cada reserva', texto: 'Al crear o editar un servicio de hospedaje en una reserva, ahora podés elegir el apartamento: la lista muestra solo los que están libres en esas fechas y avisa si el grupo supera la capacidad. Ese apartamento queda bloqueado en Apartamentos → Disponibilidad, en azul: con rayas si el servicio todavía está por confirmar (cotizado o solicitado) y sólido cuando ya está reservado. Si cambiás las fechas del servicio, el bloqueo se mueve solo, y si el apartamento ya está ocupado esos días el sistema no deja guardar. Si anulás o cancelás el servicio, el apartamento se libera. El admin y el asesor dueño de la reserva pueden tocar el bloque para abrir la reserva; el resto solo ve que está ocupado, sin datos del cliente.', roles: ['admin', 'asesor'] },
