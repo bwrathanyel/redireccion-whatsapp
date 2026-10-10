@@ -3540,6 +3540,7 @@ function rvFormServicio(p) {
     <div id="rv-s-apto"></div>
     <div class="rv-3"><div><label class="fl">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div><div><label class="fl">Adultos</label><input class="ei" id="rv-s-adultos" type="number" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl">Niños</label><input class="ei" id="rv-s-ninos" type="number" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div></div>
     <div class="rv-2"><div><label class="fl">Localizador</label><input class="ei" id="rv-s-localizador" maxlength="60" value="${esc(s?.localizador || '')}"></div><div><label class="fl">Estado</label><select class="ei" id="rv-s-estado">${rvOpts(RV_ESTADOS, s?.estado || 'cotizado')}</select></div></div>
+    ${s?.tipo === 'boleto_aereo' ? `<label class="fl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">` : ''}
     <div id="rv-s-detalle"></div>
     <div class="eb-title" style="margin-top:14px"><i class="fas fa-tag"></i> Precio al cliente</div>
     <div class="rv-3"><div><label class="fl">Monto</label><input class="ei" id="rv-s-precio" type="number" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
@@ -3639,6 +3640,8 @@ async function rvGuardarServicio(btn) {
       localizador: val('rv-s-localizador').trim(), estado: val('rv-s-estado'), detalle: rvLeerDetalle(), precio, precio_moneda: val('rv-s-moneda'),
     };
     if (datos.precio_moneda !== 'USD' && val('rv-s-tasa') !== '') datos.precio_tasa = Number(val('rv-s-tasa'));
+    const tl = document.getElementById('rv-s-tl'), previo = (RV_DET.servicios || []).find(x => x.id === id);
+    if (tl && tl.value !== rvDtLocal(previo?.time_limit)) datos.time_limit = tl.value ? new Date(tl.value).toISOString() : '';
   }
   // Apartamento: solo si el selector está en pantalla (si no cargó, no se toca lo asignado).
   const selApto = rvVista() !== 'boleteria' && datos.tipo === 'hospedaje' ? document.getElementById('rv-s-apto-sel') : null;
