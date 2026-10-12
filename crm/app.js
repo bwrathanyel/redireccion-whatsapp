@@ -16385,7 +16385,7 @@ async function guardarAptoProv() {
 function abrirAptoSheet(id = null) {
   if (aptoLlenarSheet(id)) openSheet('apto-sheet');
 }
-function aptoLlenarSheet(id) {
+function aptoLlenarSheet(id, editar = false) {
   const a = id == null ? null : APTO_APTOS.find(x => x.id === id);
   if (id != null && !a) return false;
   if (!a && APTO_PROV_SEL == null) return false;
@@ -16406,30 +16406,93 @@ function aptoLlenarSheet(id) {
   aptoEl('apt-habs-wrap').hidden = !a || areas;
   aptoEl('apt-fotos-wrap').hidden = !a;
   aptoEl('apt-nuevo-aviso').hidden = !!a;
+  aptoEl('apt-editar').hidden = !a;
+  aptoModoEditar(!a || editar);
   aptoPintarResumen(a);
   aptoHabLimpiar();
   if (a) { aptoPintarHabs(); aptoCargarFotos(); }
   return true;
 }
-// Cabecera de lectura de la ficha: portada y lo que se consulta al cotizar, sin tener que
-// leer los campos del formulario. Refleja lo guardado; se rehace al reabrir.
+// Vista de la ficha (pedido del dueño 2026-10-12, a imagen del drawer del tarifario): galería
+// grande que se pasa con flechas, swipe o miniaturas y abre el lightbox; debajo lo que se
+// consulta al cotizar. Refleja lo guardado; se rehace al reabrir. Los campos van plegados
+// en #apt-editor.
 function aptoPintarResumen(a) {
   const box = aptoEl('apt-resumen');
   box.hidden = !a;
   if (!a) { box.innerHTML = ''; return; }
-  const areas = a.tipo === 'areas_comunes', amen = a.amenidades || [];
+  const areas = a.tipo === 'areas_comunes', amen = a.amenidades || [], prov = aptoProv(a.proveedor_id);
+  const fotos = APTO_FOTOS[a.id]?.length ? APTO_FOTOS[a.id] : [a.foto_principal].filter(Boolean);
+  const nv = APTO_VIDEOS_N[a.id] || 0, multi = fotos.length > 1;
   const hecho = (v, t) => v == null ? '' : `<div class="apt-hecho"><b>${fmt(v)}</b><span>${t}</span></div>`;
   const hechos = areas ? '' : hecho(a.capacidad_max, 'Personas') + hecho(a.num_habitaciones, 'Habitaciones') + hecho(a.num_banos, 'Baños');
   const pr = APTO_PRECIOS[a.id] || {}, temps = APTO_TEMPORADAS.filter(([k]) => pr[k] != null);
-  const precios = temps.length ? `<table class="apt-precios"><thead><tr><th>Temporada</th><th>Modalidad</th><th>Por noche</th></tr></thead>
-    <tbody>${temps.map(([k, txt]) => `<tr><td>${txt}</td><td>Solo hospedaje</td><td>USD ${fmt(pr[k])}</td></tr>`).join('')}</tbody></table>` : '';
-  box.innerHTML = `<div class="apt-resumen-foto"${a.foto_principal ? ` style="background-image:url('${fotoMini(a.foto_principal, 640)}')"` : ''}>${a.foto_principal ? '' : `<i class="fas ${areas ? 'fa-tree' : 'fa-door-open'}"></i>`}</div>
-    <div>
-      ${hechos ? `<div class="apt-hechos">${hechos}</div>` : ''}
-      ${precios}
-      ${amen.length ? `<div class="apt-amen">${amen.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
-      ${a.descripcion ? `<p class="apt-desc">${esc(a.descripcion)}</p>` : ''}
-    </div>`;
+  const habs = (a.habitaciones || []).filter(h => h.activo);
+  const galeria = fotos.length ? `<div class="apt-gal">
+      <div class="apt-gal-pista">${fotos.map((f, i) => `<img src="${esc(fotoMini(f, 1280))}" alt="Foto ${i + 1} de ${fotos.length}" data-gal-i="${i}"${i ? ' loading="lazy"' : ''}>`).join('')}</div>
+      ${multi ? `<button type="button" class="apt-gal-flecha" data-gal-dir="-1" aria-label="Foto anterior"><i class="fas fa-chevron-left"></i></button>
+      <button type="button" class="apt-gal-flecha sig" data-gal-dir="1" aria-label="Foto siguiente"><i class="fas fa-chevron-right"></i></button>` : ''}
+      <div class="apt-gal-info">${multi ? `<span class="apt-gal-n">1 / ${fotos.length}</span>` : ''}${nv ? `<button type="button" class="apt-gal-vid" data-gal-videos><i class="fas fa-play"></i> ${nv} video${nv > 1 ? 's' : ''}</button>` : ''}</div>
+    </div>
+    ${multi ? `<div class="apt-gal-minis">${fotos.map((f, i) => `<button type="button" data-gal-mini="${i}" aria-label="Ver foto ${i + 1}"${i ? '' : ' class="on"'}><img src="${esc(fotoMini(f, 256))}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}`
+    : `<div class="apt-gal apt-gal-vacia"><i class="fas ${areas ? 'fa-tree' : 'fa-door-open'}"></i><span>Todavía sin fotos</span></div>`;
+  box.innerHTML = `${galeria}
+    <div class="apt-ver-sub">${[APTO_TIPOS[a.tipo] || a.tipo, prov?.nombre, prov?.ubicacion].filter(Boolean).map(esc).join(' · ')}${a.activo ? '' : ' <span class="bt-tag" style="--c:var(--muted)">Inactivo</span>'}</div>
+    ${hechos ? `<div class="apt-hechos">${hechos}</div>` : ''}
+    ${temps.length ? `<div class="apt-precios-ver">${temps.map(([k, txt]) => `<div class="apt-precio-c"><span>${txt}</span><b>USD ${fmt(pr[k])}</b><small>por noche · solo hospedaje</small></div>`).join('')}</div>` : ''}
+    ${amen.length ? `<div class="apt-amen">${amen.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
+    ${a.descripcion ? `<div class="apt-desc">${aptoDescHtml(a.descripcion)}</div>` : ''}
+    ${habs.length ? `<div class="apt-sec apt-sec-sep"><i class="fas fa-bed"></i> Distribución</div>
+    <div class="apt-dist">${habs.map(h => `<div><b>${esc(h.nombre)}</b><span>${[APTO_HAB_TIPOS[h.tipo] || h.tipo, h.camas, h.capacidad ? fmt(h.capacidad) + ' pers.' : ''].filter(Boolean).map(esc).join(' · ')}</span></div>`).join('')}</div>` : ''}
+    <div id="apt-ver-videos" hidden></div>`;
+  aptoGaleriaEnganchar(box, fotos);
+}
+// La descripción llega como texto plano (importación de Telegram): "Habitaciones:" sola en su
+// línea es un subtítulo y las viñetas "•" van escritas a mano. Se pintan como títulos y listas.
+function aptoDescHtml(texto) {
+  const VINETA = /^(•|·|[-*]\s)\s*/;
+  let html = '', lista = false;
+  String(texto).split('\n').map(l => l.trim()).filter(Boolean).forEach(l => {
+    const vin = VINETA.test(l);
+    if (lista && !vin) { html += '</ul>'; lista = false; }
+    if (vin) { if (!lista) { html += '<ul>'; lista = true; } html += `<li>${esc(l.replace(VINETA, ''))}</li>`; }
+    else if (/^[^:]{1,40}:$/.test(l)) html += `<h4>${esc(l.slice(0, -1))}</h4>`;
+    else html += `<p>${esc(l)}</p>`;
+  });
+  return html + (lista ? '</ul>' : '');
+}
+// Pista con scroll-snap: el swipe es nativo; flechas y miniaturas solo la desplazan, y el
+// contador sigue al scroll. Tocar una foto abre el lightbox de siempre en 2048 (Worker).
+function aptoGaleriaEnganchar(box, fotos) {
+  const pista = box.querySelector('.apt-gal-pista');
+  if (!pista) return;
+  const n = box.querySelector('.apt-gal-n'), minis = box.querySelector('.apt-gal-minis');
+  const modo = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  const actual = () => Math.round(pista.scrollLeft / (pista.clientWidth || 1));
+  const ir = i => pista.scrollTo({ left: ((i + fotos.length) % fotos.length) * pista.clientWidth, behavior: modo });
+  let raf = 0, ultima = 0;
+  pista.addEventListener('scroll', () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      const i = actual();
+      if (i === ultima) return;
+      ultima = i;
+      if (n) n.textContent = `${i + 1} / ${fotos.length}`;
+      if (!minis) return;
+      [...minis.children].forEach((b, j) => b.classList.toggle('on', j === i));
+      const m = minis.children[i];
+      if (m) minis.scrollTo({ left: m.offsetLeft - (minis.clientWidth - m.offsetWidth) / 2, behavior: modo });
+    });
+  }, { passive: true });
+  box.querySelectorAll('[data-gal-dir]').forEach(b => b.onclick = () => ir(actual() + Number(b.dataset.galDir)));
+  minis?.addEventListener('click', e => { const b = e.target.closest('[data-gal-mini]'); if (b) ir(Number(b.dataset.galMini)); });
+  pista.addEventListener('click', e => { const img = e.target.closest('[data-gal-i]'); if (img) openLightbox(fotos.map(fotoGrande), Number(img.dataset.galI)); });
+  box.querySelector('[data-gal-videos]')?.addEventListener('click', () => aptoEl('apt-ver-videos')?.scrollIntoView({ behavior: modo, block: 'start' }));
+}
+function aptoModoEditar(si) {
+  aptoEl('apt-editor').hidden = !si;
+  aptoEl('apt-guardar').hidden = !si;
+  aptoEl('apt-editar').innerHTML = si ? '<i class="fas fa-chevron-up"></i> Ocultar edición' : '<i class="fas fa-pen"></i> Editar ficha';
 }
 function aptoCargarFotos() {
   const a = APTO_EDIT;
@@ -16448,6 +16511,12 @@ async function aptoCargarVideos(aptoId) {
   const { data, error } = await sb.from('apto_videos').select('id,storage_path,duracion_seg').eq('apartamento_id', aptoId).eq('activo', true).order('orden').order('id');
   if (APTO_EDIT?.id !== aptoId) return;
   aptoEl('apt-videos-n').textContent = error || !data.length ? '' : data.length;
+  const ver = aptoEl('apt-ver-videos');
+  if (ver) {
+    ver.hidden = !!error || !data.length;
+    ver.innerHTML = ver.hidden ? '' : `<div class="apt-sec apt-sec-sep"><i class="fas fa-video"></i> Videos</div>
+      <div class="apt-videos">${data.map(v => `<div class="apt-video"><video src="${esc(CDN_FOTOS + v.storage_path)}#t=0.1" controls preload="metadata" playsinline></video></div>`).join('')}</div>`;
+  }
   if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudieron cargar los videos</div>'; return; }
   box.innerHTML = `${data.length ? `<div class="apt-videos">${data.map(v => `
     <div class="apt-video">
@@ -16550,7 +16619,7 @@ async function guardarApto() {
   else okToast(editando ? 'Apartamento actualizado' : 'Apartamento creado');
   await loadApartamentos();
   // Recién creado: se reabre en modo edición para cargar de una vez sus espacios y fotos.
-  if (!editando) { aptoLlenarSheet(data.apartamento.id); return; }
+  if (!editando) { aptoLlenarSheet(data.apartamento.id, true); return; }
   APTO_EDIT = null; // ya se recargó arriba: evita que el observer repita la carga al cerrar
   closeSheet('apto-sheet');
 }
@@ -16586,6 +16655,11 @@ function setupApartamentos() {
   aptoEl('apv-guardar').addEventListener('click', guardarAptoProv);
   aptoEl('apt-cancelar').addEventListener('click', () => closeSheet('apto-sheet'));
   aptoEl('apt-guardar').addEventListener('click', guardarApto);
+  aptoEl('apt-editar').addEventListener('click', () => {
+    const abrir = aptoEl('apt-editor').hidden;
+    aptoModoEditar(abrir);
+    if (abrir) aptoEl('apt-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   aptoEl('apt-habs-lista').addEventListener('click', e => {
     const b = e.target.closest('[data-hab-id]');
     if (b) aptoHabEditar(Number(b.dataset.habId));

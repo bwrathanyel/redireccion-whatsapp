@@ -1111,26 +1111,53 @@ input.ei[type=date]{color-scheme:dark}
 .apt-sec i{font-size:11px;color:var(--accent-ink)}
 .apt-sec small{margin-left:auto;font-size:11px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--muted2)}
 .apt-hint{font-size:11.5px;color:var(--muted);margin:-2px 0 9px}
-.apt-resumen{display:grid;grid-template-columns:minmax(0,260px) 1fr;gap:14px;align-items:start;margin:4px 0 14px}
-.apt-resumen-foto{display:grid;place-items:center;aspect-ratio:4/3;border-radius:12px;background:var(--panel-solid) center/cover no-repeat;color:var(--muted2);font-size:28px}
-.apt-hechos{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:7px}
+.apt-resumen{margin:4px 0 14px}
+.apt-gal{position:relative;border-radius:14px;overflow:hidden;background:var(--panel-solid)}
+.apt-gal-pista{display:flex;aspect-ratio:16/9;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none}
+.apt-gal-pista::-webkit-scrollbar{display:none}
+.apt-gal-pista img{flex:0 0 100%;width:100%;height:100%;object-fit:cover;scroll-snap-align:start;scroll-snap-stop:always;display:block;cursor:zoom-in}
+.apt-gal-vacia{display:grid;place-items:center;align-content:center;gap:7px;aspect-ratio:16/9;color:var(--muted2);font-size:28px}
+.apt-gal-vacia span{font-size:12px;font-weight:600}
+.apt-gal-flecha{position:absolute;top:50%;left:9px;display:grid;place-items:center;width:44px;height:44px;margin-top:-22px;border:none;border-radius:999px;color:#fff;background:rgba(0,0,0,.55);font-size:14px;cursor:pointer;opacity:0;transition:opacity .16s}
+.apt-gal-flecha.sig{left:auto;right:9px}
+.apt-gal:hover .apt-gal-flecha,.apt-gal-flecha:focus-visible{opacity:1}
+.apt-gal-info{position:absolute;right:9px;bottom:9px;display:flex;gap:4px;pointer-events:none}
+.apt-gal-info>*{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:11px;font-weight:700;line-height:1;color:#fff;background:rgba(0,0,0,.55);border:none;border-radius:999px;padding:5px 9px}
+.apt-gal-info .apt-gal-vid{pointer-events:auto;cursor:pointer}
+.apt-gal-minis{position:relative;display:flex;gap:7px;overflow-x:auto;margin-top:9px;padding-bottom:4px;scrollbar-width:thin}
+.apt-gal-minis button{flex:0 0 auto;padding:0;border:2px solid transparent;border-radius:10px;background:none;cursor:pointer;opacity:.6;transition:opacity .16s,border-color .16s}
+.apt-gal-minis button:hover{opacity:.85}
+.apt-gal-minis button.on{opacity:1;border-color:var(--accent)}
+.apt-gal-minis img{display:block;width:84px;height:62px;object-fit:cover;border-radius:8px}
+.apt-ver-sub{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:14px 0 11px;font-size:12.5px;color:var(--muted)}
+.apt-precios-ver{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:7px;margin-top:9px}
+.apt-precio-c{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px 14px}
+.apt-precio-c span{display:block;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.apt-precio-c b{display:block;margin:4px 0 2px;font-size:22px;font-weight:800;letter-spacing:-.02em;color:var(--accent-ink)}
+.apt-precio-c small{font-size:11px;color:var(--muted2)}
+.apt-dist{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:7px}
+.apt-dist div{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:12.5px}
+.apt-dist span{display:block;font-size:11.5px;color:var(--muted)}
+.apt-editar{width:100%;margin:0 0 14px}
+@media(min-width:900px){#apto-sheet{width:min(760px,94vw);max-height:90vh}}
+.apt-hechos{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:7px}
 .apt-hecho{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
 .apt-hecho b{display:block;font-size:18px;font-weight:800;letter-spacing:-.02em}
 .apt-hecho span{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .apt-amen{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
 .apt-amen span{font-size:11.5px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px 9px}
-.apt-desc{font-size:12.5px;line-height:1.5;color:var(--muted);margin:9px 0 0;white-space:pre-line}
+.apt-desc{font-size:12.5px;line-height:1.55;margin:14px 0 0}
+.apt-desc h4{margin:14px 0 4px;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.apt-desc p{margin:0 0 4px;color:var(--muted)}
+.apt-desc ul{margin:0 0 4px;padding-left:18px}
+.apt-desc li{margin:2px 0}
+.apt-desc li::marker{color:var(--accent)}
 .apt-sec-sep{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
-.apt-precios{width:100%;border-collapse:collapse;margin-top:9px;font-size:12.5px}
-.apt-precios th{text-align:left;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:0 0 7px}
-.apt-precios td{padding:7px 0;border-top:1px solid var(--line)}
-.apt-precios th:last-child,.apt-precios td:last-child{text-align:right}
-.apt-precios td:last-child{font-weight:800}
 .apt-videos{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:9px}
 .apt-video{position:relative}
 .apt-video video{display:block;width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:10px;background:#000}
 .apt-video .tfa-btn{position:absolute;top:7px;right:7px}
-@media(max-width:640px){.apt-resumen{grid-template-columns:1fr}.apt-resumen-foto{aspect-ratio:16/9}}
+@media(max-width:640px){.apt-gal-flecha{display:none}.apt-gal{border-radius:12px}}
 .ef-fila{display:flex;gap:10px}
 .ef-fila>*{min-width:0}
 .ef-opc{color:var(--muted2);font-weight:500;text-transform:none;letter-spacing:0}
@@ -6446,6 +6473,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="apt-sheet-title"><i class="fas fa-house-chimney"></i> Nuevo apartamento</div>
       <div class="apt-resumen" id="apt-resumen" hidden></div>
+      <button class="dbtn gh apt-editar" id="apt-editar" type="button" hidden><i class="fas fa-pen"></i> Editar ficha</button>
+      <div id="apt-editor">
       <div class="edit-box" style="margin-top:4px">
         <div class="apt-sec"><i class="fas fa-pen-to-square"></i> Datos de la ficha</div>
         <label class="fl" for="apt-nombre">Nombre</label>
@@ -6516,6 +6545,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="apt-sec"><i class="fas fa-video"></i> Videos <small id="apt-videos-n"></small></div>
           <div id="apto-videos-admin"></div>
         </div>
+      </div>
       </div>
       <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
         <button class="dbtn" id="apt-cancelar" type="button" style="flex:1">Cerrar</button>
