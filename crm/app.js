@@ -16356,6 +16356,47 @@ function aptoCargarFotos() {
   aptoEl('apt-fotos-titulo').textContent = a.tipo === 'areas_comunes' ? 'Fotos de las áreas comunes (fachada, piscina, estacionamiento...)' : 'Fotos (asigná cada una a su habitación)';
   const habs = (a.habitaciones || []).filter(h => h.activo).map(h => ({ id: h.id, nombre: h.nombre }));
   cargarFotosAdmin('apto_fotos', 'apartamento_id', a.id, 'apartamentos', 'apto-fotos-admin', habs);
+  aptoCargarVideos(a.id);
+}
+// Videos del apartamento: viven en R2 y se sirven desde el Worker de fotos (CDN_FOTOS +
+// storage_path), nunca desde Supabase (incidente de egress 2026-08-05). Se suben por
+// producto-video-subir con x-apartamento-id, que valida admin y registra la fila en apto_videos.
+async function aptoCargarVideos(aptoId) {
+  const box = document.getElementById('apto-videos-admin');
+  if (!box) return;
+  const { data, error } = await sb.from('apto_videos').select('id,storage_path,duracion_seg').eq('apartamento_id', aptoId).eq('activo', true).order('orden').order('id');
+  if (APTO_EDIT?.id !== aptoId) return;
+  if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudieron cargar los videos</div>'; return; }
+  box.innerHTML = `${data.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">${data.map(v => `
+    <div style="position:relative">
+      <video src="${esc(CDN_FOTOS + v.storage_path)}#t=0.1" controls preload="metadata" playsinline style="width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:10px;background:#000;display:block"></video>
+      <button type="button" class="tfa-btn" data-video-quitar="${v.id}" title="Quitar video" style="position:absolute;top:6px;right:6px"><i class="fas fa-trash"></i></button>
+    </div>`).join('')}</div>` : '<div class="muted" style="font-size:12.5px">Todavía no hay videos cargados aquí.</div>'}
+    <button type="button" class="dbtn gh" id="apto-video-agregar" style="margin-top:10px;width:100%"><i class="fas fa-plus"></i> Subir video</button>
+    <input type="file" id="apto-video-file" accept="video/mp4,video/quicktime,video/webm" style="display:none">`;
+  box.querySelectorAll('[data-video-quitar]').forEach(btn => btn.onclick = async () => {
+    const volver = sheetAbierta;
+    const seguir = await confirmarSheet({ titulo: '¿Quitar este video?', detalle: 'Deja de mostrarse en la ficha del apartamento.', textoOk: 'Quitar', destructivo: true });
+    if (volver && sheetAbierta !== volver) openSheet(volver);
+    if (!seguir) return;
+    const { error: e } = await sb.from('apto_videos').update({ activo: false }).eq('id', +btn.dataset.videoQuitar);
+    if (e) { errToast('No se pudo quitar el video: ' + e.message); return; }
+    okToast('Video quitado');
+    aptoCargarVideos(aptoId);
+  });
+  const input = box.querySelector('#apto-video-file');
+  box.querySelector('#apto-video-agregar').onclick = () => {
+    input.onchange = async () => {
+      const file = input.files[0]; input.value = '';
+      if (!file) return;
+      const btn = box.querySelector('#apto-video-agregar');
+      btn.disabled = true; btn.innerHTML = 'Subiendo... <i class="fas fa-spinner fa-spin"></i>';
+      const out = await enviarVideo(file, { 'x-apartamento-id': String(aptoId) }, APTO_VIDEO_LIMITE);
+      if (out) okToast('Video subido');
+      aptoCargarVideos(aptoId);
+    };
+    input.click();
+  };
 }
 function aptoPintarHabs() {
   const hs = APTO_EDIT?.habitaciones || [];
@@ -21054,11 +21095,12 @@ function cargarVideoAdmin(productoId, videoUrl) {
     input.click();
   };
 }
-async function subirVideoProducto(productoId, file) {
-  if (!TAR_VIDEO_MIME.includes(file.type)) { errToast('Formato no soportado. Usá MP4, MOV o WebM.'); return; }
-  if (file.size > TAR_VIDEO_LIMITE) { errToast(`El video pesa ${(file.size / 1e6).toFixed(1)} MB. Máximo 25 MB (límite de Meta para adjuntos).`); return; }
-  const btn = document.getElementById('tar-video-agregar');
-  if (btn) { btn.disabled = true; btn.innerHTML = 'Subiendo... <i class="fas fa-spinner fa-spin"></i>'; }
+// Apartamentos admite más peso: sus videos no se adjuntan por Meta, solo se ven en el CRM.
+const APTO_VIDEO_LIMITE = 50 * 1024 * 1024;
+// Devuelve la respuesta de la función, o null si falló (el toast de error ya se mostró).
+async function enviarVideo(file, cabeceras, limite) {
+  if (!TAR_VIDEO_MIME.includes(file.type)) { errToast('Formato no soportado. Usá MP4, MOV o WebM.'); return null; }
+  if (file.size > limite) { errToast(`El video pesa ${(file.size / 1e6).toFixed(1)} MB. Máximo ${limite / 1024 / 1024} MB.`); return null; }
   const { data: { session } } = await sb.auth.getSession();
   try {
     const res = await fetch(VIDEO_SUBIR_FN, {
@@ -21067,20 +21109,27 @@ async function subirVideoProducto(productoId, file) {
         'Content-Type': file.type,
         Authorization: `Bearer ${session?.access_token || ''}`,
         apikey: SUPABASE_KEY,
-        'x-producto-id': String(productoId),
         'x-nombre-archivo': slugArchivo(file.name.replace(/\.[^.]+$/, '')) + (file.name.match(/\.[^.]+$/)?.[0] || '.mp4'),
+        ...cabeceras,
       },
       body: file,
     });
     const out = await res.json().catch(() => null);
-    if (!res.ok || !out?.ok) { errToast('No se pudo subir el video: ' + (out?.error || res.status)); cargarVideoAdmin(productoId, null); return; }
-    okToast('Video subido');
-    delete tarCache[tarTab];
-    cargarVideoAdmin(productoId, out.video_url);
+    if (!res.ok || !out?.ok) { errToast('No se pudo subir el video: ' + (out?.error || res.status)); return null; }
+    return out;
   } catch (e) {
     errToast('No se pudo subir el video: ' + e.message);
-    cargarVideoAdmin(productoId, null);
+    return null;
   }
+}
+async function subirVideoProducto(productoId, file) {
+  const btn = document.getElementById('tar-video-agregar');
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Subiendo... <i class="fas fa-spinner fa-spin"></i>'; }
+  const out = await enviarVideo(file, { 'x-producto-id': String(productoId) }, TAR_VIDEO_LIMITE);
+  if (!out) { cargarVideoAdmin(productoId, null); return; }
+  okToast('Video subido');
+  delete tarCache[tarTab];
+  cargarVideoAdmin(productoId, out.video_url);
 }
 async function guardarNotasTarifario(tabla, id) {
   const btn = document.getElementById('tar-notas-save');
