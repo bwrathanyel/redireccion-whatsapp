@@ -16176,7 +16176,7 @@ const APTO_ERRORES = {
   dato_invalido: 'Algún dato no es válido o es demasiado largo.',
   no_existe: 'Ya no existe: se recargó la lista.',
 };
-let APTO_PROVS = [], APTO_APTOS = [], APTO_PROV_SEL = null, APTO_PROV_EDIT = null, APTO_EDIT = null, APTO_HAB_EDIT = null, APTO_PRODUCTOS = null;
+let APTO_PROVS = [], APTO_APTOS = [], APTO_VIDEOS_N = {}, APTO_PROV_SEL = null, APTO_PROV_EDIT = null, APTO_EDIT = null, APTO_HAB_EDIT = null, APTO_PRODUCTOS = null;
 const aptoProv = id => APTO_PROVS.find(p => p.id === id) || null;
 const aptoMsg = data => APTO_ERRORES[data?.error] || 'No se pudo guardar: ' + (data?.error || '');
 const aptoEl = id => document.getElementById(id);
@@ -16202,11 +16202,15 @@ async function loadApartamentos() {
   if (APTO_TAB === 'disp') loadDisponibilidad();
   const cargando = aptoEl('apto-loading');
   if (!APTO_PROVS.length) cargando?.classList.add('show');
-  const [rp, ra] = await Promise.all([sb.rpc('listar_apto_proveedores'), sb.rpc('listar_apartamentos')]);
+  const [rp, ra, rv] = await Promise.all([sb.rpc('listar_apto_proveedores'), sb.rpc('listar_apartamentos'), sb.from('apto_videos').select('apartamento_id').eq('activo', true)]);
   cargando?.classList.remove('show');
   if (rp.error || ra.error) { console.error('apartamentos', rp.error || ra.error); errToast('No se pudieron cargar los apartamentos'); return; }
   APTO_PROVS = rp.data || [];
   APTO_APTOS = ra.data || [];
+  // El conteo de videos solo adorna las tarjetas: si falla, se muestran sin él.
+  if (rv.error) console.warn('apto videos', rv.error.message);
+  APTO_VIDEOS_N = {};
+  (rv.data || []).forEach(v => { APTO_VIDEOS_N[v.apartamento_id] = (APTO_VIDEOS_N[v.apartamento_id] || 0) + 1; });
   if (APTO_PROV_SEL != null && !aptoProv(APTO_PROV_SEL)) APTO_PROV_SEL = null;
   if (APTO_EDIT) APTO_EDIT = APTO_APTOS.find(a => a.id === APTO_EDIT.id) || null;
   aptoPintar();
@@ -16230,19 +16234,40 @@ function aptoPintarLista() {
     { t: 'Fotos', v: fmt(APTO_PROVS.reduce((s, p) => s + (p.num_fotos || 0), 0)), d: 'unidades y áreas comunes', i: 'fa-images', c: 'var(--blue)' },
   ]);
   const lista = APTO_PROVS.filter(p => !q || btNorm([p.nombre, p.ubicacion, p.contacto].join(' ')).includes(q));
-  const tag = (txt, c) => `<span class="bt-tag" style="--c:${c}">${txt}</span>`;
   aptoEl('apto-prov-grid').innerHTML = lista.map((p, i) => {
     const mias = APTO_APTOS.filter(a => a.proveedor_id === p.id);
     const foto = (mias.find(a => a.tipo === 'areas_comunes' && a.foto_principal) || mias.find(a => a.foto_principal))?.foto_principal;
-    return `<button type="button" class="bt-hotel${p.activo ? '' : ' apagado'}" style="--i:${Math.min(i, 24)}" data-apto-prov="${p.id}">
-      <span class="bt-foto"${foto ? ` style="background-image:url('${fotoMini(foto, 256)}')"` : ''}>${foto ? '' : '<i class="fas fa-house-chimney"></i>'}</span>
-      <span class="bt-hotel-info">
-        <span class="bt-hotel-nom">${esc(p.nombre)}</span>
-        <span class="bt-hotel-dest">${esc(p.ubicacion || '—')}</span>
-        <span class="bt-hotel-fila">${tag(`${fmt(p.num_apartamentos)} apartamento(s)`, 'var(--green)')}${tag(`${fmt(p.num_fotos)} foto(s)`, 'var(--blue)')}${p.activo ? '' : tag('Inactivo', 'var(--muted)')}</span>
-      </span>
-    </button>`;
+    const caps = mias.filter(a => a.activo && a.capacidad_max).map(a => a.capacidad_max), min = Math.min(...caps), max = Math.max(...caps);
+    return aptoTarjeta({
+      attr: `data-apto-prov="${p.id}"`, i, activo: p.activo, foto, icono: 'fa-house-chimney', nombre: p.nombre,
+      fotos: p.num_fotos, videos: mias.reduce((s, a) => s + (APTO_VIDEOS_N[a.id] || 0), 0),
+      datos: [
+        p.ubicacion && aptoDato('fa-location-dot', esc(p.ubicacion)),
+        aptoDato('fa-door-open', `${fmt(p.num_apartamentos)} apartamento(s)`),
+        caps.length && aptoDato('fa-user-group', `${fmt(min)}${max > min ? '–' + fmt(max) : ''} pers.`),
+      ],
+      tags: [!p.activo && aptoTag('Inactivo', 'var(--muted)')],
+    });
   }).join('') || `<div class="pv-empty" style="padding:18px">${APTO_PROVS.length ? 'Ningún proveedor coincide con la búsqueda' : 'Todavía no hay proveedores de apartamentos'}</div>`;
+}
+const aptoTag = (txt, c) => `<span class="bt-tag" style="--c:${c}">${txt}</span>`;
+const aptoDato = (icono, txt) => `<span><i class="fas ${icono}"></i>${txt}</span>`;
+// Tarjeta con portada grande (proveedor o apartamento): la foto manda, encima el tipo y
+// cuántas fotos/videos hay; abajo los datos que se usan para cotizar.
+function aptoTarjeta({ attr, i, activo, foto, icono, tipo, nombre, fotos, videos, datos, tags }) {
+  const medio = (ic, n) => n ? `<span class="apto-pill"><i class="fas ${ic}"></i> ${fmt(n)}</span>` : '';
+  const d = datos.filter(Boolean).join(''), t = tags.filter(Boolean).join('');
+  return `<button type="button" class="bt-hotel apto-card${activo ? '' : ' apagado'}" style="--i:${Math.min(i, 24)}" ${attr}>
+    <span class="apto-portada"${foto ? ` style="background-image:url('${fotoMini(foto, 640)}')"` : ''}>${foto ? '' : `<i class="fas ${icono}"></i>`}
+      ${tipo ? `<span class="apto-pill tipo">${esc(tipo)}</span>` : ''}
+      <span class="apto-medios">${medio('fa-images', fotos)}${medio('fa-video', videos)}</span>
+    </span>
+    <span class="apto-cuerpo">
+      <span class="bt-hotel-nom">${esc(nombre)}</span>
+      ${d ? `<span class="apto-datos">${d}</span>` : ''}
+      ${t ? `<span class="bt-hotel-fila">${t}</span>` : ''}
+    </span>
+  </button>`;
 }
 function aptoPintarDetalle(p) {
   aptoEl('apto-det-titulo').innerHTML = `<i class="fas fa-house-chimney"></i> ${esc(p.nombre)}${p.activo ? '' : ' <span class="bt-tag" style="--c:var(--muted)">Inactivo</span>'}`;
@@ -16255,17 +16280,20 @@ function aptoPintarDetalle(p) {
     `<span class="bt-dato"><i class="fas fa-hourglass-half"></i> ${p.dias_credito ? fmt(p.dias_credito) + ' días de crédito' : 'Contado'}${p.moneda_habitual ? ' · ' + esc(p.moneda_habitual) : ''}</span>`,
     p.producto_nombre && `<span class="bt-dato"><i class="fas fa-link"></i> Tarifario: ${esc(p.producto_nombre)}</span>`,
   ].filter(Boolean).join('');
-  const tag = (txt, c) => `<span class="bt-tag" style="--c:${c}">${txt}</span>`;
-  aptoEl('apto-grid').innerHTML = APTO_APTOS.filter(a => a.proveedor_id === p.id).map((a, i) => {
-    const areas = a.tipo === 'areas_comunes', habs = (a.habitaciones || []).filter(h => h.activo).length;
-    return `<button type="button" class="bt-hotel${a.activo ? '' : ' apagado'}" style="--i:${Math.min(i, 24)}" data-apto-id="${a.id}">
-      <span class="bt-foto"${a.foto_principal ? ` style="background-image:url('${fotoMini(a.foto_principal, 256)}')"` : ''}>${a.foto_principal ? '' : `<i class="fas ${areas ? 'fa-tree' : 'fa-door-open'}"></i>`}</span>
-      <span class="bt-hotel-info">
-        <span class="bt-hotel-nom">${esc(a.nombre)}</span>
-        <span class="bt-hotel-dest">${esc(APTO_TIPOS[a.tipo] || a.tipo)}${a.capacidad_max ? ` · hasta ${fmt(a.capacidad_max)} personas` : ''}</span>
-        <span class="bt-hotel-fila">${!areas && !a.capacidad_max ? tag('Falta capacidad', 'var(--amber)') : ''}${areas ? '' : tag(`${fmt(habs)} espacio(s)`, 'var(--purple)')}${a.num_fotos ? tag(`${fmt(a.num_fotos)} foto(s)`, 'var(--blue)') : tag('Sin fotos', 'var(--amber)')}${a.activo ? '' : tag('Inactivo', 'var(--muted)')}</span>
-      </span>
-    </button>`;
+  // Áreas comunes primero: es la cara del edificio.
+  const mias = APTO_APTOS.filter(a => a.proveedor_id === p.id).sort((x, y) => (y.tipo === 'areas_comunes') - (x.tipo === 'areas_comunes'));
+  aptoEl('apto-grid').innerHTML = mias.map((a, i) => {
+    const areas = a.tipo === 'areas_comunes';
+    return aptoTarjeta({
+      attr: `data-apto-id="${a.id}"`, i, activo: a.activo, foto: a.foto_principal, icono: areas ? 'fa-tree' : 'fa-door-open',
+      tipo: APTO_TIPOS[a.tipo] || a.tipo, nombre: a.nombre, fotos: a.num_fotos, videos: APTO_VIDEOS_N[a.id],
+      datos: areas ? [] : [
+        a.capacidad_max && aptoDato('fa-user-group', `Hasta ${fmt(a.capacidad_max)} pers.`),
+        a.num_habitaciones != null && aptoDato('fa-bed', `${fmt(a.num_habitaciones)} hab.`),
+        a.num_banos != null && aptoDato('fa-bath', `${fmt(a.num_banos)} baño(s)`),
+      ],
+      tags: [!areas && !a.capacidad_max && aptoTag('Falta capacidad', 'var(--amber)'), !a.num_fotos && aptoTag('Sin fotos', 'var(--amber)'), !a.activo && aptoTag('Inactivo', 'var(--muted)')],
+    });
   }).join('') || '<div class="pv-empty" style="padding:18px">Este proveedor todavía no tiene apartamentos</div>';
 }
 async function aptoPoblarProductos(actual, actualNombre) {
@@ -16346,14 +16374,31 @@ function aptoLlenarSheet(id) {
   aptoEl('apt-habs-wrap').hidden = !a || areas;
   aptoEl('apt-fotos-wrap').hidden = !a;
   aptoEl('apt-nuevo-aviso').hidden = !!a;
+  aptoPintarResumen(a);
   aptoHabLimpiar();
   if (a) { aptoPintarHabs(); aptoCargarFotos(); }
   return true;
 }
+// Cabecera de lectura de la ficha: portada y lo que se consulta al cotizar, sin tener que
+// leer los campos del formulario. Refleja lo guardado; se rehace al reabrir.
+function aptoPintarResumen(a) {
+  const box = aptoEl('apt-resumen');
+  box.hidden = !a;
+  if (!a) { box.innerHTML = ''; return; }
+  const areas = a.tipo === 'areas_comunes', amen = a.amenidades || [];
+  const hecho = (v, t) => v == null ? '' : `<div class="apt-hecho"><b>${fmt(v)}</b><span>${t}</span></div>`;
+  const hechos = areas ? '' : hecho(a.capacidad_max, 'Personas') + hecho(a.num_habitaciones, 'Habitaciones') + hecho(a.num_banos, 'Baños');
+  box.innerHTML = `<div class="apt-resumen-foto"${a.foto_principal ? ` style="background-image:url('${fotoMini(a.foto_principal, 640)}')"` : ''}>${a.foto_principal ? '' : `<i class="fas ${areas ? 'fa-tree' : 'fa-door-open'}"></i>`}</div>
+    <div>
+      ${hechos ? `<div class="apt-hechos">${hechos}</div>` : ''}
+      ${amen.length ? `<div class="apt-amen">${amen.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
+      ${a.descripcion ? `<p class="apt-desc">${esc(a.descripcion)}</p>` : ''}
+    </div>`;
+}
 function aptoCargarFotos() {
   const a = APTO_EDIT;
   if (!a) return;
-  aptoEl('apt-fotos-titulo').textContent = a.tipo === 'areas_comunes' ? 'Fotos de las áreas comunes (fachada, piscina, estacionamiento...)' : 'Fotos (asigná cada una a su habitación)';
+  aptoEl('apt-fotos-titulo').textContent = a.tipo === 'areas_comunes' ? 'Fachada, piscina, estacionamiento...' : 'Asigná cada foto a su habitación.';
   const habs = (a.habitaciones || []).filter(h => h.activo).map(h => ({ id: h.id, nombre: h.nombre }));
   cargarFotosAdmin('apto_fotos', 'apartamento_id', a.id, 'apartamentos', 'apto-fotos-admin', habs);
   aptoCargarVideos(a.id);
@@ -16366,11 +16411,12 @@ async function aptoCargarVideos(aptoId) {
   if (!box) return;
   const { data, error } = await sb.from('apto_videos').select('id,storage_path,duracion_seg').eq('apartamento_id', aptoId).eq('activo', true).order('orden').order('id');
   if (APTO_EDIT?.id !== aptoId) return;
+  aptoEl('apt-videos-n').textContent = error || !data.length ? '' : data.length;
   if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudieron cargar los videos</div>'; return; }
-  box.innerHTML = `${data.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">${data.map(v => `
-    <div style="position:relative">
-      <video src="${esc(CDN_FOTOS + v.storage_path)}#t=0.1" controls preload="metadata" playsinline style="width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:10px;background:#000;display:block"></video>
-      <button type="button" class="tfa-btn" data-video-quitar="${v.id}" title="Quitar video" style="position:absolute;top:6px;right:6px"><i class="fas fa-trash"></i></button>
+  box.innerHTML = `${data.length ? `<div class="apt-videos">${data.map(v => `
+    <div class="apt-video">
+      <video src="${esc(CDN_FOTOS + v.storage_path)}#t=0.1" controls preload="metadata" playsinline></video>
+      <button type="button" class="tfa-btn" data-video-quitar="${v.id}" title="Quitar video"><i class="fas fa-trash"></i></button>
     </div>`).join('')}</div>` : '<div class="muted" style="font-size:12.5px">Todavía no hay videos cargados aquí.</div>'}
     <button type="button" class="dbtn gh" id="apto-video-agregar" style="margin-top:10px;width:100%"><i class="fas fa-plus"></i> Subir video</button>
     <input type="file" id="apto-video-file" accept="video/mp4,video/quicktime,video/webm" style="display:none">`;

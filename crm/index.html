@@ -1107,6 +1107,24 @@ input.ei[type=date]{color-scheme:dark}
 .apt-hab.off{opacity:.5}
 .apt-hab span{color:var(--muted);font-size:11.5px}
 .apt-hab i{color:var(--accent-ink)}
+.apt-sec{display:flex;align-items:center;gap:7px;margin:0 0 9px;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.apt-sec i{font-size:11px;color:var(--accent-ink)}
+.apt-sec small{margin-left:auto;font-size:11px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--muted2)}
+.apt-hint{font-size:11.5px;color:var(--muted);margin:-2px 0 9px}
+.apt-resumen{display:grid;grid-template-columns:minmax(0,260px) 1fr;gap:14px;align-items:start;margin:4px 0 14px}
+.apt-resumen-foto{display:grid;place-items:center;aspect-ratio:4/3;border-radius:12px;background:var(--panel-solid) center/cover no-repeat;color:var(--muted2);font-size:28px}
+.apt-hechos{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:7px}
+.apt-hecho{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.apt-hecho b{display:block;font-size:18px;font-weight:800;letter-spacing:-.02em}
+.apt-hecho span{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.apt-amen{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.apt-amen span{font-size:11.5px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px 9px}
+.apt-desc{font-size:12.5px;line-height:1.5;color:var(--muted);margin:9px 0 0;white-space:pre-line}
+.apt-videos{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:9px}
+.apt-video{position:relative}
+.apt-video video{display:block;width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:10px;background:#000}
+.apt-video .tfa-btn{position:absolute;top:7px;right:7px}
+@media(max-width:640px){.apt-resumen{grid-template-columns:1fr}.apt-resumen-foto{aspect-ratio:16/9}}
 .ef-fila{display:flex;gap:10px}
 .ef-fila>*{min-width:0}
 .ef-opc{color:var(--muted2);font-weight:500;text-transform:none;letter-spacing:0}
@@ -3753,6 +3771,16 @@ body.fsize-grande{--tap:41.9px}
 @keyframes bt-sube{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes bt-logo-in{from{opacity:0;transform:scale(.85) rotate(-4deg)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.bt-logo,.bt-kpis .kpi,.bt-hotel{animation:none}}
+.bt-grid.apto-grid{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.bt-hotel.apto-card{flex-direction:column;gap:0;padding:0;overflow:hidden}
+.apto-portada{position:relative;display:grid;place-items:center;aspect-ratio:4/3;background:var(--panel-solid) center/cover no-repeat;color:var(--muted2);font-size:28px}
+.apto-pill{position:absolute;display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;line-height:1;color:#fff;background:rgba(0,0,0,.55);border-radius:999px;padding:5px 9px}
+.apto-pill.tipo{top:9px;left:9px}
+.apto-medios{position:absolute;right:9px;bottom:9px;display:flex;gap:4px}
+.apto-medios .apto-pill{position:static}
+.apto-cuerpo{flex:1;display:flex;flex-direction:column;gap:7px;padding:11px 14px 14px}
+.apto-datos{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}
+.apto-datos i{margin-right:5px;color:var(--accent-ink)}
 @media(max-width:760px){
   .bt-head{gap:12px;flex-wrap:wrap}
   .bt-logo{width:60px;height:60px;border-radius:12px}
@@ -6202,7 +6230,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div class="csub">Casas y posadas con apartamentos propios: unidades, habitaciones y fotos · tocá un proveedor para gestionar sus apartamentos</div>
         <div class="kpis bt-kpis lt-kpis" id="apto-kpis"></div>
         <div class="tbl-state skel" id="apto-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
-        <div class="bt-grid" id="apto-prov-grid"></div>
+        <div class="bt-grid apto-grid" id="apto-prov-grid"></div>
       </div>
       <div class="card" id="apto-vista-det" hidden>
         <div class="chead-row">
@@ -6213,7 +6241,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         </div>
         <div class="bt-datos" id="apto-det-datos"></div>
         <div class="csub" style="margin-top:12px">Tocá un apartamento para editar su distribución, habitaciones y fotos</div>
-        <div class="bt-grid" id="apto-grid"></div>
+        <div class="bt-grid apto-grid" id="apto-grid"></div>
       </div>
     </section>
 
@@ -6407,7 +6435,9 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     <div class="sheet" id="apto-sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="apt-sheet-title"><i class="fas fa-house-chimney"></i> Nuevo apartamento</div>
+      <div class="apt-resumen" id="apt-resumen" hidden></div>
       <div class="edit-box" style="margin-top:4px">
+        <div class="apt-sec"><i class="fas fa-pen-to-square"></i> Datos de la ficha</div>
         <label class="fl" for="apt-nombre">Nombre</label>
         <input id="apt-nombre" class="ei" maxlength="120" placeholder="Ej. Apartamento Amplio" autocomplete="off">
 
@@ -6433,37 +6463,42 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <label class="fl" for="apt-descripcion">Descripción <span class="ef-opc">(opcional)</span></label>
         <textarea id="apt-descripcion" class="ei" rows="2" maxlength="2000" placeholder="Distribución, literas, vista, reglas..."></textarea>
         <div class="edit-err" id="apt-err"></div>
+      </div>
+      <div class="csub" id="apt-nuevo-aviso" style="margin:-6px 0 12px" hidden>Guardá el apartamento para cargar sus habitaciones y fotos.</div>
 
-        <div id="apt-habs-wrap" hidden>
-          <label class="fl" style="margin-top:14px">Distribución por habitación</label>
-          <div id="apt-habs-lista"></div>
-          <div class="ef-fila" style="margin-top:8px">
-            <div style="flex:2"><label class="fl-sub" for="aph-nombre">Espacio</label><input id="aph-nombre" class="ei" maxlength="120" placeholder="Dormitorio principal" autocomplete="off"></div>
-            <div style="flex:1.2"><label class="fl-sub" for="aph-tipo">Tipo</label>
-              <select id="aph-tipo" class="ei">
-                <option value="dormitorio">Dormitorio</option><option value="sala">Sala</option><option value="cocina">Cocina</option>
-                <option value="bano">Baño</option><option value="exterior">Exterior</option><option value="otro">Otro</option>
-              </select></div>
-          </div>
-          <div class="ef-fila" style="margin-top:6px">
-            <div style="flex:2"><label class="fl-sub" for="aph-camas">Camas</label><input id="aph-camas" class="ei" maxlength="160" placeholder="1 matrimonial + 1 litera" autocomplete="off"></div>
-            <div style="flex:1"><label class="fl-sub" for="aph-capacidad">Personas</label><input id="aph-capacidad" class="ei" type="number" min="0" max="30" step="1"></div>
-          </div>
-          <div class="edit-err" id="aph-err"></div>
-          <div class="ef-fila" style="margin-top:6px">
-            <button class="dbtn gh" id="aph-cancelar" type="button" style="flex:1" hidden>Cancelar edición</button>
-            <button class="dbtn gh" id="aph-estado" type="button" style="flex:1" hidden></button>
-            <button class="dbtn gh" id="aph-guardar" type="button" style="flex:1"><i class="fas fa-plus"></i> Agregar espacio</button>
-          </div>
+      <div class="edit-box" id="apt-habs-wrap" hidden>
+        <div class="apt-sec"><i class="fas fa-bed"></i> Distribución por habitación</div>
+        <div id="apt-habs-lista"></div>
+        <div class="ef-fila" style="margin-top:8px">
+          <div style="flex:2"><label class="fl-sub" for="aph-nombre">Espacio</label><input id="aph-nombre" class="ei" maxlength="120" placeholder="Dormitorio principal" autocomplete="off"></div>
+          <div style="flex:1.2"><label class="fl-sub" for="aph-tipo">Tipo</label>
+            <select id="aph-tipo" class="ei">
+              <option value="dormitorio">Dormitorio</option><option value="sala">Sala</option><option value="cocina">Cocina</option>
+              <option value="bano">Baño</option><option value="exterior">Exterior</option><option value="otro">Otro</option>
+            </select></div>
         </div>
+        <div class="ef-fila" style="margin-top:6px">
+          <div style="flex:2"><label class="fl-sub" for="aph-camas">Camas</label><input id="aph-camas" class="ei" maxlength="160" placeholder="1 matrimonial + 1 litera" autocomplete="off"></div>
+          <div style="flex:1"><label class="fl-sub" for="aph-capacidad">Personas</label><input id="aph-capacidad" class="ei" type="number" min="0" max="30" step="1"></div>
+        </div>
+        <div class="edit-err" id="aph-err"></div>
+        <div class="ef-fila" style="margin-top:6px">
+          <button class="dbtn gh" id="aph-cancelar" type="button" style="flex:1" hidden>Cancelar edición</button>
+          <button class="dbtn gh" id="aph-estado" type="button" style="flex:1" hidden></button>
+          <button class="dbtn gh" id="aph-guardar" type="button" style="flex:1"><i class="fas fa-plus"></i> Agregar espacio</button>
+        </div>
+      </div>
 
-        <div id="apt-fotos-wrap" hidden>
-          <label class="fl" style="margin-top:14px" id="apt-fotos-titulo">Fotos</label>
+      <div id="apt-fotos-wrap" hidden>
+        <div class="edit-box">
+          <div class="apt-sec"><i class="fas fa-images"></i> Fotos</div>
+          <div class="apt-hint" id="apt-fotos-titulo"></div>
           <div id="apto-fotos-admin"></div>
-          <label class="fl" style="margin-top:14px">Videos</label>
+        </div>
+        <div class="edit-box">
+          <div class="apt-sec"><i class="fas fa-video"></i> Videos <small id="apt-videos-n"></small></div>
           <div id="apto-videos-admin"></div>
         </div>
-        <div class="csub" id="apt-nuevo-aviso" style="margin-top:12px" hidden>Guardá el apartamento para cargar sus habitaciones y fotos.</div>
       </div>
       <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
         <button class="dbtn" id="apt-cancelar" type="button" style="flex:1">Cerrar</button>
