@@ -16176,7 +16176,7 @@ const APTO_ERRORES = {
   dato_invalido: 'Algún dato no es válido o es demasiado largo.',
   no_existe: 'Ya no existe: se recargó la lista.',
 };
-let APTO_PROVS = [], APTO_APTOS = [], APTO_VIDEOS_N = {}, APTO_PROV_SEL = null, APTO_PROV_EDIT = null, APTO_EDIT = null, APTO_HAB_EDIT = null, APTO_PRODUCTOS = null;
+let APTO_PROVS = [], APTO_APTOS = [], APTO_VIDEOS_N = {}, APTO_PRECIOS = {}, APTO_PROV_SEL = null, APTO_PROV_EDIT = null, APTO_EDIT = null, APTO_HAB_EDIT = null, APTO_PRODUCTOS = null;
 const aptoProv = id => APTO_PROVS.find(p => p.id === id) || null;
 const aptoMsg = data => APTO_ERRORES[data?.error] || 'No se pudo guardar: ' + (data?.error || '');
 const aptoEl = id => document.getElementById(id);
@@ -16202,7 +16202,8 @@ async function loadApartamentos() {
   if (APTO_TAB === 'disp') loadDisponibilidad();
   const cargando = aptoEl('apto-loading');
   if (!APTO_PROVS.length) cargando?.classList.add('show');
-  const [rp, ra, rv] = await Promise.all([sb.rpc('listar_apto_proveedores'), sb.rpc('listar_apartamentos'), sb.from('apto_videos').select('apartamento_id').eq('activo', true)]);
+  const [rp, ra, rv, rq] = await Promise.all([sb.rpc('listar_apto_proveedores'), sb.rpc('listar_apartamentos'), sb.from('apto_videos').select('apartamento_id').eq('activo', true),
+    sb.from('apto_precios').select('apartamento_id,temporada,monto').eq('activo', true).eq('modalidad', 'solo_hospedaje')]);
   cargando?.classList.remove('show');
   if (rp.error || ra.error) { console.error('apartamentos', rp.error || ra.error); errToast('No se pudieron cargar los apartamentos'); return; }
   APTO_PROVS = rp.data || [];
@@ -16211,6 +16212,9 @@ async function loadApartamentos() {
   if (rv.error) console.warn('apto videos', rv.error.message);
   APTO_VIDEOS_N = {};
   (rv.data || []).forEach(v => { APTO_VIDEOS_N[v.apartamento_id] = (APTO_VIDEOS_N[v.apartamento_id] || 0) + 1; });
+  if (rq.error) console.warn('apto precios', rq.error.message);
+  APTO_PRECIOS = {};
+  (rq.data || []).forEach(p => { (APTO_PRECIOS[p.apartamento_id] ||= {})[p.temporada] = Number(p.monto); });
   if (APTO_PROV_SEL != null && !aptoProv(APTO_PROV_SEL)) APTO_PROV_SEL = null;
   if (APTO_EDIT) APTO_EDIT = APTO_APTOS.find(a => a.id === APTO_EDIT.id) || null;
   aptoPintar();
@@ -16238,6 +16242,7 @@ function aptoPintarLista() {
     const mias = APTO_APTOS.filter(a => a.proveedor_id === p.id);
     const foto = (mias.find(a => a.tipo === 'areas_comunes' && a.foto_principal) || mias.find(a => a.foto_principal))?.foto_principal;
     const caps = mias.filter(a => a.activo && a.capacidad_max).map(a => a.capacidad_max), min = Math.min(...caps), max = Math.max(...caps);
+    const montos = mias.filter(a => a.activo).flatMap(a => Object.values(APTO_PRECIOS[a.id] || {}));
     return aptoTarjeta({
       attr: `data-apto-prov="${p.id}"`, i, activo: p.activo, foto, icono: 'fa-house-chimney', nombre: p.nombre,
       fotos: p.num_fotos, videos: mias.reduce((s, a) => s + (APTO_VIDEOS_N[a.id] || 0), 0),
@@ -16245,6 +16250,7 @@ function aptoPintarLista() {
         p.ubicacion && aptoDato('fa-location-dot', esc(p.ubicacion)),
         aptoDato('fa-door-open', `${fmt(p.num_apartamentos)} apartamento(s)`),
         caps.length && aptoDato('fa-user-group', `${fmt(min)}${max > min ? '–' + fmt(max) : ''} pers.`),
+        montos.length && aptoDato('fa-tag', `Desde USD ${fmt(Math.min(...montos))}/noche`),
       ],
       tags: [!p.activo && aptoTag('Inactivo', 'var(--muted)')],
     });
@@ -16252,11 +16258,13 @@ function aptoPintarLista() {
 }
 const aptoTag = (txt, c) => `<span class="bt-tag" style="--c:${c}">${txt}</span>`;
 const aptoDato = (icono, txt) => `<span><i class="fas ${icono}"></i>${txt}</span>`;
+const APTO_TEMPORADAS = [['baja_media', 'Baja / media', 'apt-precio-baja'], ['alta', 'Alta', 'apt-precio-alta']];
 // Tarjeta con portada grande (proveedor o apartamento): la foto manda, encima el tipo y
 // cuántas fotos/videos hay; abajo los datos que se usan para cotizar.
-function aptoTarjeta({ attr, i, activo, foto, icono, tipo, nombre, fotos, videos, datos, tags }) {
+function aptoTarjeta({ attr, i, activo, foto, icono, tipo, nombre, fotos, videos, datos, tags, precio }) {
   const medio = (ic, n) => n ? `<span class="apto-pill"><i class="fas ${ic}"></i> ${fmt(n)}</span>` : '';
   const d = datos.filter(Boolean).join(''), t = tags.filter(Boolean).join('');
+  const pr = APTO_TEMPORADAS.filter(([k]) => precio?.[k] != null).map(([k, txt]) => `<span>${txt.split(' ')[0]} <b>$${fmt(precio[k])}</b></span>`).join('');
   return `<button type="button" class="bt-hotel apto-card${activo ? '' : ' apagado'}" style="--i:${Math.min(i, 24)}" ${attr}>
     <span class="apto-portada"${foto ? ` style="background-image:url('${fotoMini(foto, 640)}')"` : ''}>${foto ? '' : `<i class="fas ${icono}"></i>`}
       ${tipo ? `<span class="apto-pill tipo">${esc(tipo)}</span>` : ''}
@@ -16265,6 +16273,7 @@ function aptoTarjeta({ attr, i, activo, foto, icono, tipo, nombre, fotos, videos
     <span class="apto-cuerpo">
       <span class="bt-hotel-nom">${esc(nombre)}</span>
       ${d ? `<span class="apto-datos">${d}</span>` : ''}
+      ${pr ? `<span class="apto-precio">${pr}<small>USD/noche</small></span>` : ''}
       ${t ? `<span class="bt-hotel-fila">${t}</span>` : ''}
     </span>
   </button>`;
@@ -16286,7 +16295,7 @@ function aptoPintarDetalle(p) {
     const areas = a.tipo === 'areas_comunes';
     return aptoTarjeta({
       attr: `data-apto-id="${a.id}"`, i, activo: a.activo, foto: a.foto_principal, icono: areas ? 'fa-tree' : 'fa-door-open',
-      tipo: APTO_TIPOS[a.tipo] || a.tipo, nombre: a.nombre, fotos: a.num_fotos, videos: APTO_VIDEOS_N[a.id],
+      tipo: APTO_TIPOS[a.tipo] || a.tipo, nombre: a.nombre, fotos: a.num_fotos, videos: APTO_VIDEOS_N[a.id], precio: APTO_PRECIOS[a.id],
       datos: areas ? [] : [
         a.capacidad_max && aptoDato('fa-user-group', `Hasta ${fmt(a.capacidad_max)} pers.`),
         a.num_habitaciones != null && aptoDato('fa-bed', `${fmt(a.num_habitaciones)} hab.`),
@@ -16369,8 +16378,10 @@ function aptoLlenarSheet(id) {
   aptoPoner('apt-nombre', a?.nombre); aptoPoner('apt-estado', a && !a.activo ? '0' : '1');
   aptoPoner('apt-capacidad', a?.capacidad_max); aptoPoner('apt-habs', a?.num_habitaciones); aptoPoner('apt-banos', a?.num_banos);
   aptoPoner('apt-amenidades', (a?.amenidades || []).join(', ')); aptoPoner('apt-descripcion', a?.descripcion);
+  APTO_TEMPORADAS.forEach(([k, , elId]) => aptoPoner(elId, a ? APTO_PRECIOS[a.id]?.[k] : null));
   aptoEl('apt-err').textContent = '';
   aptoEl('apt-medidas').hidden = areas;
+  aptoEl('apt-precios-wrap').hidden = areas;
   aptoEl('apt-habs-wrap').hidden = !a || areas;
   aptoEl('apt-fotos-wrap').hidden = !a;
   aptoEl('apt-nuevo-aviso').hidden = !!a;
@@ -16388,9 +16399,13 @@ function aptoPintarResumen(a) {
   const areas = a.tipo === 'areas_comunes', amen = a.amenidades || [];
   const hecho = (v, t) => v == null ? '' : `<div class="apt-hecho"><b>${fmt(v)}</b><span>${t}</span></div>`;
   const hechos = areas ? '' : hecho(a.capacidad_max, 'Personas') + hecho(a.num_habitaciones, 'Habitaciones') + hecho(a.num_banos, 'Baños');
+  const pr = APTO_PRECIOS[a.id] || {}, temps = APTO_TEMPORADAS.filter(([k]) => pr[k] != null);
+  const precios = temps.length ? `<table class="apt-precios"><thead><tr><th>Temporada</th><th>Modalidad</th><th>Por noche</th></tr></thead>
+    <tbody>${temps.map(([k, txt]) => `<tr><td>${txt}</td><td>Solo hospedaje</td><td>USD ${fmt(pr[k])}</td></tr>`).join('')}</tbody></table>` : '';
   box.innerHTML = `<div class="apt-resumen-foto"${a.foto_principal ? ` style="background-image:url('${fotoMini(a.foto_principal, 640)}')"` : ''}>${a.foto_principal ? '' : `<i class="fas ${areas ? 'fa-tree' : 'fa-door-open'}"></i>`}</div>
     <div>
       ${hechos ? `<div class="apt-hechos">${hechos}</div>` : ''}
+      ${precios}
       ${amen.length ? `<div class="apt-amen">${amen.map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
       ${a.descripcion ? `<p class="apt-desc">${esc(a.descripcion)}</p>` : ''}
     </div>`;
@@ -16495,6 +16510,8 @@ async function guardarApto() {
   if (!nombre) { err.textContent = APTO_ERRORES.nombre_requerido; return; }
   const cap = aptoNum('apt-capacidad', 1, 60), habs = aptoNum('apt-habs', 0, 30), banos = aptoNum('apt-banos', 0, 20);
   if (cap.err || habs.err || banos.err) { err.textContent = 'Capacidad 1-60, habitaciones 0-30 y baños 0-20.'; return; }
+  const precios = APTO_TEMPORADAS.map(([k, , elId]) => [k, aptoNum(elId, 1, 99999)]);
+  if (precios.some(([, p]) => p.err)) { err.textContent = 'Los precios van en USD enteros, sin decimales.'; return; }
   const editando = APTO_EDIT;
   const datos = {
     nombre, tipo: editando?.tipo === 'areas_comunes' ? 'areas_comunes' : val('apt-tipo'),
@@ -16508,12 +16525,27 @@ async function guardarApto() {
   btn.disabled = false;
   if (error) { err.textContent = error.code === '42501' ? 'Solo un admin puede guardar.' : 'No se pudo guardar: ' + (error.message || ''); return; }
   if (!data?.ok) { err.textContent = aptoMsg(data); if (data?.error === 'no_existe') loadApartamentos(); return; }
-  okToast(editando ? 'Apartamento actualizado' : 'Apartamento creado');
+  if (datos.tipo !== 'areas_comunes' && !(await aptoGuardarPrecios(editando?.id ?? data.apartamento.id, precios))) errToast('El apartamento se guardó, pero los precios no. Probá de nuevo.');
+  else okToast(editando ? 'Apartamento actualizado' : 'Apartamento creado');
   await loadApartamentos();
   // Recién creado: se reabre en modo edición para cargar de una vez sus espacios y fotos.
   if (!editando) { aptoLlenarSheet(data.apartamento.id); return; }
   APTO_EDIT = null; // ya se recargó arriba: evita que el observer repita la carga al cerrar
   closeSheet('apto-sheet');
+}
+// Precio por noche de la unidad completa (apto_precios, escritura solo admin por RLS).
+// Solo escribe lo que cambió; un campo vaciado apaga el precio (activo=false), no lo borra.
+async function aptoGuardarPrecios(aptoId, precios) {
+  const antes = APTO_PRECIOS[aptoId] || {};
+  const filas = precios.filter(([k, p]) => p.v != null && p.v !== antes[k])
+    .map(([k, p]) => ({ apartamento_id: aptoId, temporada: k, modalidad: 'solo_hospedaje', monto: p.v, moneda: 'USD', activo: true, updated_at: new Date().toISOString() }));
+  const apagar = precios.filter(([k, p]) => p.v == null && antes[k] != null).map(([k]) => k);
+  const ops = [];
+  if (filas.length) ops.push(sb.from('apto_precios').upsert(filas, { onConflict: 'apartamento_id,temporada,modalidad' }));
+  if (apagar.length) ops.push(sb.from('apto_precios').update({ activo: false, updated_at: new Date().toISOString() }).eq('apartamento_id', aptoId).eq('modalidad', 'solo_hospedaje').in('temporada', apagar));
+  const errores = (await Promise.all(ops)).filter(r => r.error);
+  errores.forEach(r => console.error('apto precios', r.error));
+  return !errores.length;
 }
 function setupApartamentos() {
   aptoEl('apto-search').addEventListener('input', () => { if (APTO_PROVS.length) aptoPintarLista(); });

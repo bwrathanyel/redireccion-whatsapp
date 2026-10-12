@@ -1120,6 +1120,12 @@ input.ei[type=date]{color-scheme:dark}
 .apt-amen{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
 .apt-amen span{font-size:11.5px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px 9px}
 .apt-desc{font-size:12.5px;line-height:1.5;color:var(--muted);margin:9px 0 0;white-space:pre-line}
+.apt-sec-sep{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.apt-precios{width:100%;border-collapse:collapse;margin-top:9px;font-size:12.5px}
+.apt-precios th{text-align:left;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:0 0 7px}
+.apt-precios td{padding:7px 0;border-top:1px solid var(--line)}
+.apt-precios th:last-child,.apt-precios td:last-child{text-align:right}
+.apt-precios td:last-child{font-weight:800}
 .apt-videos{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:9px}
 .apt-video{position:relative}
 .apt-video video{display:block;width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:10px;background:#000}
@@ -3781,6 +3787,9 @@ body.fsize-grande{--tap:41.9px}
 .apto-cuerpo{flex:1;display:flex;flex-direction:column;gap:7px;padding:11px 14px 14px}
 .apto-datos{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}
 .apto-datos i{margin-right:5px;color:var(--accent-ink)}
+.apto-precio{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding-top:7px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.apto-precio b{font-size:14px;font-weight:800;color:var(--txt)}
+.apto-precio small{margin-left:auto;font-size:11px;color:var(--muted2)}
 @media(max-width:760px){
   .bt-head{gap:12px;flex-wrap:wrap}
   .bt-logo{width:60px;height:60px;border-radius:12px}
@@ -6462,6 +6471,13 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <input id="apt-amenidades" class="ei" maxlength="600" placeholder="Aire acondicionado, cocina equipada, parrillera..." autocomplete="off">
         <label class="fl" for="apt-descripcion">Descripción <span class="ef-opc">(opcional)</span></label>
         <textarea id="apt-descripcion" class="ei" rows="2" maxlength="2000" placeholder="Distribución, literas, vista, reglas..."></textarea>
+        <div id="apt-precios-wrap">
+          <div class="apt-sec apt-sec-sep"><i class="fas fa-tag"></i> Precio por noche <small>USD · solo hospedaje, unidad completa</small></div>
+          <div class="ef-fila">
+            <div style="flex:1"><label class="fl" for="apt-precio-baja">Temporada baja / media</label><input id="apt-precio-baja" class="ei" type="number" min="1" max="99999" step="1" inputmode="numeric" placeholder="USD"></div>
+            <div style="flex:1"><label class="fl" for="apt-precio-alta">Temporada alta</label><input id="apt-precio-alta" class="ei" type="number" min="1" max="99999" step="1" inputmode="numeric" placeholder="USD"></div>
+          </div>
+        </div>
         <div class="edit-err" id="apt-err"></div>
       </div>
       <div class="csub" id="apt-nuevo-aviso" style="margin:-6px 0 12px" hidden>Guardá el apartamento para cargar sus habitaciones y fotos.</div>
