@@ -16176,7 +16176,7 @@ const APTO_ERRORES = {
   dato_invalido: 'Algún dato no es válido o es demasiado largo.',
   no_existe: 'Ya no existe: se recargó la lista.',
 };
-let APTO_PROVS = [], APTO_APTOS = [], APTO_VIDEOS_N = {}, APTO_PRECIOS = {}, APTO_PROV_SEL = null, APTO_PROV_EDIT = null, APTO_EDIT = null, APTO_HAB_EDIT = null, APTO_PRODUCTOS = null;
+let APTO_PROVS = [], APTO_APTOS = [], APTO_VIDEOS_N = {}, APTO_PRECIOS = {}, APTO_FOTOS = {}, APTO_PROV_SEL = null, APTO_PROV_EDIT = null, APTO_EDIT = null, APTO_HAB_EDIT = null, APTO_PRODUCTOS = null;
 const aptoProv = id => APTO_PROVS.find(p => p.id === id) || null;
 const aptoMsg = data => APTO_ERRORES[data?.error] || 'No se pudo guardar: ' + (data?.error || '');
 const aptoEl = id => document.getElementById(id);
@@ -16202,8 +16202,9 @@ async function loadApartamentos() {
   if (APTO_TAB === 'disp') loadDisponibilidad();
   const cargando = aptoEl('apto-loading');
   if (!APTO_PROVS.length) cargando?.classList.add('show');
-  const [rp, ra, rv, rq] = await Promise.all([sb.rpc('listar_apto_proveedores'), sb.rpc('listar_apartamentos'), sb.from('apto_videos').select('apartamento_id').eq('activo', true),
-    sb.from('apto_precios').select('apartamento_id,temporada,monto').eq('activo', true).eq('modalidad', 'solo_hospedaje')]);
+  const [rp, ra, rv, rq, rf] = await Promise.all([sb.rpc('listar_apto_proveedores'), sb.rpc('listar_apartamentos'), sb.from('apto_videos').select('apartamento_id').eq('activo', true),
+    sb.from('apto_precios').select('apartamento_id,temporada,monto').eq('activo', true).eq('modalidad', 'solo_hospedaje'),
+    sb.from('apto_fotos').select('apartamento_id,storage_path').eq('activo', true).order('es_principal', { ascending: false }).order('orden').order('id')]);
   cargando?.classList.remove('show');
   if (rp.error || ra.error) { console.error('apartamentos', rp.error || ra.error); errToast('No se pudieron cargar los apartamentos'); return; }
   APTO_PROVS = rp.data || [];
@@ -16215,6 +16216,9 @@ async function loadApartamentos() {
   if (rq.error) console.warn('apto precios', rq.error.message);
   APTO_PRECIOS = {};
   (rq.data || []).forEach(p => { (APTO_PRECIOS[p.apartamento_id] ||= {})[p.temporada] = Number(p.monto); });
+  if (rf.error) console.warn('apto fotos', rf.error.message);
+  APTO_FOTOS = {};
+  (rf.data || []).forEach(f => { (APTO_FOTOS[f.apartamento_id] ||= []).push(f.storage_path); });
   if (APTO_PROV_SEL != null && !aptoProv(APTO_PROV_SEL)) APTO_PROV_SEL = null;
   if (APTO_EDIT) APTO_EDIT = APTO_APTOS.find(a => a.id === APTO_EDIT.id) || null;
   aptoPintar();
@@ -16238,9 +16242,13 @@ function aptoPintarLista() {
     { t: 'Fotos', v: fmt(APTO_PROVS.reduce((s, p) => s + (p.num_fotos || 0), 0)), d: 'unidades y áreas comunes', i: 'fa-images', c: 'var(--blue)' },
   ]);
   const lista = APTO_PROVS.filter(p => !q || btNorm([p.nombre, p.ubicacion, p.contacto].join(' ')).includes(q));
+  const carruseles = [];
+  detenerCarruseles();
   aptoEl('apto-prov-grid').innerHTML = lista.map((p, i) => {
     const mias = APTO_APTOS.filter(a => a.proveedor_id === p.id);
     const foto = (mias.find(a => a.tipo === 'areas_comunes' && a.foto_principal) || mias.find(a => a.foto_principal))?.foto_principal;
+    // El edificio primero (todas sus fotos de áreas comunes), después la portada de cada unidad.
+    carruseles.push(aptoCarrusel(foto, mias.filter(a => a.activo).flatMap(a => a.tipo === 'areas_comunes' ? APTO_FOTOS[a.id] || [] : a.foto_principal || [])));
     const caps = mias.filter(a => a.activo && a.capacidad_max).map(a => a.capacidad_max), min = Math.min(...caps), max = Math.max(...caps);
     const montos = mias.filter(a => a.activo).flatMap(a => Object.values(APTO_PRECIOS[a.id] || {}));
     return aptoTarjeta({
@@ -16255,6 +16263,16 @@ function aptoPintarLista() {
       tags: [!p.activo && aptoTag('Inactivo', 'var(--muted)')],
     });
   }).join('') || `<div class="pv-empty" style="padding:18px">${APTO_PROVS.length ? 'Ningún proveedor coincide con la búsqueda' : 'Todavía no hay proveedores de apartamentos'}</div>`;
+  aptoEngancharCarruseles(aptoEl('apto-prov-grid'), carruseles);
+}
+// Fotos del carrusel de una tarjeta: la portada primero (es la que ya se ve), sin repetir y
+// hasta 8, porque más puntos no entran al lado de los contadores en una tarjeta de 230px.
+const aptoCarrusel = (foto, rutas) => [...new Set([foto, ...rutas].filter(Boolean))].slice(0, 8).map(f => fotoMini(f, 640));
+function aptoEngancharCarruseles(grid, carruseles) {
+  grid.querySelectorAll('.apto-card').forEach((el, k) => {
+    const media = el.querySelector('.apto-portada');
+    attachHoverCarousel(el, media, carruseles[k], url => { media.style.backgroundImage = `url('${url}')`; }, media.querySelector('.carrusel-dots'));
+  });
 }
 const aptoTag = (txt, c) => `<span class="bt-tag" style="--c:${c}">${txt}</span>`;
 const aptoDato = (icono, txt) => `<span><i class="fas ${icono}"></i>${txt}</span>`;
@@ -16269,6 +16287,7 @@ function aptoTarjeta({ attr, i, activo, foto, icono, tipo, nombre, fotos, videos
     <span class="apto-portada"${foto ? ` style="background-image:url('${fotoMini(foto, 640)}')"` : ''}>${foto ? '' : `<i class="fas ${icono}"></i>`}
       ${tipo ? `<span class="apto-pill tipo">${esc(tipo)}</span>` : ''}
       <span class="apto-medios">${medio('fa-images', fotos)}${medio('fa-video', videos)}</span>
+      ${foto ? '<span class="carrusel-dots"></span>' : ''}
     </span>
     <span class="apto-cuerpo">
       <span class="bt-hotel-nom">${esc(nombre)}</span>
@@ -16291,6 +16310,7 @@ function aptoPintarDetalle(p) {
   ].filter(Boolean).join('');
   // Áreas comunes primero: es la cara del edificio.
   const mias = APTO_APTOS.filter(a => a.proveedor_id === p.id).sort((x, y) => (y.tipo === 'areas_comunes') - (x.tipo === 'areas_comunes'));
+  detenerCarruseles();
   aptoEl('apto-grid').innerHTML = mias.map((a, i) => {
     const areas = a.tipo === 'areas_comunes';
     return aptoTarjeta({
@@ -16304,6 +16324,7 @@ function aptoPintarDetalle(p) {
       tags: [!areas && !a.capacidad_max && aptoTag('Falta capacidad', 'var(--amber)'), !a.num_fotos && aptoTag('Sin fotos', 'var(--amber)'), !a.activo && aptoTag('Inactivo', 'var(--muted)')],
     });
   }).join('') || '<div class="pv-empty" style="padding:18px">Este proveedor todavía no tiene apartamentos</div>';
+  aptoEngancharCarruseles(aptoEl('apto-grid'), mias.map(a => aptoCarrusel(a.foto_principal, APTO_FOTOS[a.id] || [])));
 }
 async function aptoPoblarProductos(actual, actualNombre) {
   const sel = aptoEl('apv-producto');
