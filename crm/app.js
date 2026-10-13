@@ -3098,14 +3098,15 @@ function renderPostventaKPIs(r) {
   document.getElementById('pv-kpis').innerHTML = cards.map(c => `<div class="kpi pv-kpi" style="--kc:${c[3]}"><div class="kt"><i class="fas ${c[2]}"></i>${c[0]}</div><div class="kv">${c[1]}</div></div>`).join('');
 }
 function pvGrupoDe(c) {
-  return (RV_DESTINOS || []).find(d => d.id === c.destino_id)?.grupo || 'Sin destino';
+  return (RV_DESTINOS || []).find(d => d.id === c.destino_id)?.nombre || 'Sin destino';
 }
 function renderPvGrupos() {
   const bar = document.getElementById('pv-grupos');
   if (!bar) return;
   const cuenta = new Map();
   POSTVENTA.forEach(c => { const g = pvGrupoDe(c); cuenta.set(g, (cuenta.get(g) || 0) + 1); });
-  const orden = [...DEST_GRUPOS, ...[...cuenta.keys()].filter(g => !DEST_GRUPOS.includes(g) && g !== 'Sin destino'), 'Sin destino'].filter(g => cuenta.has(g));
+  const ordenDest = (RV_DESTINOS || []).map(d => d.nombre);
+  const orden = [...[...cuenta.keys()].filter(g => g !== 'Sin destino').sort((a, b) => cuenta.get(b) - cuenta.get(a) || ordenDest.indexOf(a) - ordenDest.indexOf(b)), 'Sin destino'].filter(g => cuenta.has(g));
   if (PV_GRUPO && !cuenta.has(PV_GRUPO)) PV_GRUPO = '';
   bar.hidden = !RV_DESTINOS || orden.length < 2;
   bar.innerHTML = [['', 'Todos los destinos', POSTVENTA.length], ...orden.map(g => [g, g, cuenta.get(g)])]
