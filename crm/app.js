@@ -5598,7 +5598,15 @@ function openDrawer(l) {
   document.getElementById('e-a-atender')?.addEventListener('click', () => atenderInboxLead(l));
   document.getElementById('e-a-facturar')?.addEventListener('click', () => abrirEnviarFacturacionSheet(l));
   document.getElementById('e-a-cotizacion')?.addEventListener('click', () => registrarCotizacionEnviada(l));
-  document.getElementById('e-a-boleteria')?.addEventListener('click', () => { window.closeDrawer(); abrirSolicitudBoleteria(l); });
+  // closeDrawer() consume su entrada con history.back(), que es asíncrono: si la hoja se abre
+  // antes, el popstate de ese back saca la hoja del NAV_STACK y la cierra al instante.
+  document.getElementById('e-a-boleteria')?.addEventListener('click', () => {
+    let hecho = false;
+    const ir = () => { if (hecho) return; hecho = true; abrirSolicitudBoleteria(l); };
+    window.addEventListener('popstate', ir, { once: true });
+    setTimeout(ir, 400);
+    window.closeDrawer();
+  });
   if (document.getElementById('pa-at')) setupProximaAccion(l);
   document.getElementById('e-emitir-pago')?.addEventListener('click', () => emitirLinkPago(l));
   if (document.getElementById('res-lista')) {
