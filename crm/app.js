@@ -22016,10 +22016,20 @@ function dmPintarLog(inicio, previos = 0) {
   log.innerHTML = h.length ? h.map((m, i) => {
     const ia = m.rol === 'ia', antes = h[i - 1], despues = h[i + 1];
     const agrupado = antes && (antes.rol === 'ia') === ia, cola = !despues || (despues.rol === 'ia') !== ia;
-    return `<div class="chat-msg ${ia ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${cola ? ' tail' : ''}${!inicio && i >= previos ? ' msg-new' : ''}">${ia && !agrupado ? '<div class="dm-burbuja-ia"><i class="fas fa-robot"></i> Bot</div>' : ''}${esc(m.texto || '')}</div>`;
+    const fotos = ia && Array.isArray(m.fotos) ? m.fotos.filter(u => /^https:\/\//.test(u)) : [], video = ia && /^https:\/\//.test(m.video || '') ? m.video : '';
+    const media = fotos.map((u, k) => `<img class="msg-img dm-foto" src="${esc(dmFotoMini(u))}" data-dm-msg="${i}" data-dm-foto="${k}" loading="lazy" alt="Foto">`).join('') + (video ? `<video class="msg-img dm-foto" controls preload="metadata" src="${esc(video)}"></video>` : '');
+    return `<div class="chat-msg ${ia ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${cola ? ' tail' : ''}${media ? ' adjunto' : ''}${!inicio && i >= previos ? ' msg-new' : ''}">${ia && !agrupado ? '<div class="dm-burbuja-ia"><i class="fas fa-robot"></i> Bot</div>' : ''}${m.texto ? `<div>${esc(m.texto)}</div>` : ''}${media ? `<div class="dm-fotos">${media}</div>` : ''}</div>`;
   }).join('') : '<div class="msg-empty">Sin mensajes todavía</div>';
+  log.querySelectorAll('[data-dm-foto]').forEach(el => el.addEventListener('click', () => {
+    const lista = (h[Number(el.dataset.dmMsg)]?.fotos || []).map(dmFotoGrande);
+    if (lista.length) openLightbox(lista, Number(el.dataset.dmFoto));
+  }));
   if (pegado) log.scrollTop = log.scrollHeight;
 }
+// Las fotos del bot se guardan al ancho que se le manda al cliente (1280); en el
+// chat se ve la miniatura y el lightbox abre el derivado de 2048. Ambos anchos los acepta el Worker.
+const dmFotoMini = u => u.replace('/_d/1280/', '/_d/640/');
+const dmFotoGrande = u => u.replace('/_d/1280/', '/_d/2048/');
 // WhatsApp: mensajes de Zernio vía whatsapp-inbox (la EF valida con el RLS que
 // el chat sea visible para quien pregunta y firma los adjuntos).
 async function dmWaAbrir() {
