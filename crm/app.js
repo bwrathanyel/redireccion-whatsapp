@@ -15446,7 +15446,8 @@ async function exportarVentaPdf(id) {
   doc.setFillColor(...C.navy); doc.rect(0, 0, 612, 120, 'F');
   doc.setFillColor(...C.naranja); doc.rect(0, 120, 612, 3, 'F');
   doc.setFillColor(...C.ambar); doc.rect(0, 120, 190, 3, 'F');
-  try { doc.addImage(await cargarImagenBase64('logolotus-integrado.png'), 'PNG', X0, 22, 76, 76); } catch (_e) { /* sin logo igual sale */ }
+  doc.setFillColor(255, 255, 255); doc.circle(X0 + 38, 60, 38, 'F');
+  try { doc.addImage(await cargarImagenBase64('logolotus-negro.png'), 'PNG', X0 + 3, 25, 70, 70); } catch (_e) { /* sin logo igual sale */ }
   font('bold', 16, C.blanco); doc.text('Destino y Eventos', 130, 54);
   font('bold', 16, C.naranja); doc.text('Lotus 360', 130, 74);
   font('normal', 8.5, C.claro); doc.text('Agencia de viajes · destinoyeventoslotus360.com', 130, 91);
@@ -17360,7 +17361,7 @@ async function construirInvoiceComisionPdf(l, ventas) {
   const fch = d => new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' });
   const gris = () => doc.setTextColor(120, 120, 120), negro = () => doc.setTextColor(40, 40, 40);
   try {
-    doc.addImage(await cargarImagenBase64('logolotus.png'), 'PNG', 30, 8, 104, 104);
+    doc.addImage(await cargarImagenBase64('logolotus-negro.png'), 'PNG', 30, 8, 104, 104);
   } catch (_e) { /* sin logo el invoice igual sale */ }
   negro(); doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
   doc.text(['DESTINO Y', 'EVENTOS', 'LOTUS 360'], 122, 52);
@@ -23153,7 +23154,7 @@ async function construirVoucherPdf(v) {
   doc.setFillColor(...naranja);
   doc.rect(0, 0, 612, 70, 'F');
   try {
-    const logo = await cargarImagenBase64('logolotus-integrado.png');
+    const logo = await cargarImagenBase64('logolotus-negro.png');
     doc.addImage(logo, 'PNG', 40, 12, 46, 46);
   } catch (_e) { /* sin logo el voucher igual se genera, solo queda sin el ícono */ }
   doc.setTextColor(255, 255, 255);
@@ -23405,7 +23406,7 @@ async function cbPdfBlob(c) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
   const W = 612, M = 40, oscuro = [60, 60, 60];
-  try { doc.addImage(await cargarImagenBase64('logolotus.png'), 'PNG', M - 8, 26, 84, 84); } catch (_e) { /* sin logo la cotización igual se genera */ }
+  try { doc.addImage(await cargarImagenBase64('logolotus-negro.png'), 'PNG', M - 8, 26, 84, 84); } catch (_e) { /* sin logo la cotización igual se genera */ }
   doc.setTextColor(20, 20, 20);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
   doc.text('DESTINO Y', M + 80, 62); doc.text('EVENTOS LOTUS 360', M + 80, 78);
