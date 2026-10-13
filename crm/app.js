@@ -22976,7 +22976,8 @@ async function cbCargarSeccion() {
   }
   const staff = await cargarUsuariosStaff();
   const sel = document.getElementById('cb-asesor'), previo = sel.value;
-  const asesores = staff.filter(u => u.id !== MI_USUARIO_ID && (u.rol === 'asesor' || u.rol === 'admin'))
+  // usuarios_chat no trae es_prueba: las cuentas de prueba se reconocen por nombre (__gate_*, Invitado N, "Prueba ...").
+  const asesores = staff.filter(u => u.id !== MI_USUARIO_ID && (u.rol === 'asesor' || u.rol === 'admin') && !/^__gate|prueba|invitado/i.test(u.nombre || ''))
     .sort((a, b) => (a.rol === b.rol ? 0 : a.rol === 'asesor' ? -1 : 1) || (a.nombre || '').localeCompare(b.nombre || ''));
   sel.innerHTML = '<option value="">— Elegí el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
   cbOffset = 0;
