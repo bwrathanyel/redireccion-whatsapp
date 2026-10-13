@@ -2695,6 +2695,13 @@ async function startApp() {
     if (!error && Array.isArray(data)) {
       ACTIVOS = [...new Set([...ACTIVOS, ...data.map(a => a.nombre)])];
     }
+    // Los selectores solo ofrecen a quienes están en el reparto de leads (más el
+    // propio admin); by_advisor arrastra ex-asesores con leads históricos.
+    const { data: rep, error: repErr } = await sb.from('asesores').select('nombre').eq('activo', true).or('peso_asignacion.not.is.null,peso_internacional.not.is.null');
+    if (!repErr && Array.isArray(rep) && rep.length) {
+      const enReparto = new Set([...rep.map(a => a.nombre), MI_NOMBRE]);
+      ACTIVOS = ACTIVOS.filter(n => enReparto.has(n));
+    }
   } catch (_) { /* fallo de red: se conserva by_advisor */ }
   if (ROL === 'admin') activateSection(seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'dashboard'));
   renderHoy();
@@ -4925,10 +4932,11 @@ async function parcharLeadLive(evento) {
 // mientras el drawer está abierto (openDrawer arma el HTML inicial por su
 // cuenta con la misma lógica; si se agrega un campo nuevo al drawer hay que
 // sumarlo acá también, no hay una única fuente de verdad para esto).
+const asesoresConActual = actual => actual && actual !== 'Sin asignar' && !ACTIVOS.includes(actual) ? [...ACTIVOS, actual] : ACTIVOS;
 function valorLeadParaCampo(id, l) {
   switch (id) {
     case 'e-estado': return ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER';
-    case 'e-asesor': return ROL === 'asesor' ? MI_NOMBRE : (ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar');
+    case 'e-asesor': return ROL === 'asesor' ? MI_NOMBRE : (l.asesor || 'Sin asignar');
     case 'e-servicio': return l.servicio || '';
     case 'e-monto': return l.monto ?? '';
     case 'e-comprado': return l.servicios_comprados || '';
@@ -5510,7 +5518,7 @@ function openDrawer(l) {
         ${seccion('gestion', 'fa-sliders', 'Gestión', `
           <div class="dgrid">
             ${campo('Estado', `<select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>`, true)}
-            ${campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...ACTIVOS], ACTIVOS.includes(l.asesor) ? l.asesor : 'Sin asignar')}</select>`)}
+            ${campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...asesoresConActual(l.asesor)], l.asesor || 'Sin asignar')}</select>`)}
             ${campo('Servicio de interés', `<select id="e-servicio" class="ei"><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select>`)}
             <div class="fcol f-full">
               <button class="dbtn gh" id="e-servicio-ia" type="button" style="width:100%;padding:9px;font-size:12px;margin-top:9px"><i class="fas fa-wand-magic-sparkles"></i> Detectar servicio con IA</button>
