@@ -23749,9 +23749,11 @@ function actualizarPadresNav() {
   document.querySelectorAll('#sidebar-nav > .nav-padre').forEach(p => p.classList.toggle('nav-padre-vacio', !hijasVisibles(p.dataset.sec).length));
 }
 // Clic en un padre: la última hija que se usó de ese grupo, o la primera visible.
+// Reservas abre siempre en Clientes, no en la última pestaña usada (pedido del dueño 2026-10-12).
+const PADRES_SIN_MEMORIA = ['grp-reservas'];
 function destinoDePadre(padre) {
   const vis = hijasVisibles(padre).map(it => it.sec);
-  const ultima = (MI_PREFERENCIAS.ultima_hija || {})[padre];
+  const ultima = PADRES_SIN_MEMORIA.includes(padre) ? null : (MI_PREFERENCIAS.ultima_hija || {})[padre];
   return vis.includes(ultima) ? ultima : (vis[0] || 'hoy');
 }
 function pintarPestanasNav(sec, secEl) {
