@@ -2382,6 +2382,27 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .ve-informe-diario .nav-item.solo-informe-diario,.ve-informe-diario .bn-item.solo-informe-diario,.ve-informe-diario .sheet-item.solo-informe-diario{display:flex}
 .nav-item.solo-voucher,.bn-item.solo-voucher,.sheet-item.solo-voucher{display:none}
 .puede-ver-voucher .nav-item.solo-voucher,.puede-ver-voucher .bn-item.solo-voucher,.puede-ver-voucher .sheet-item.solo-voucher{display:flex}
+/* Cotización de boletos */
+.cb-items{display:flex;flex-direction:column;gap:12px;margin-top:16px}
+.cb-item{border:1px solid var(--line2);border-radius:12px;padding:12px;background:rgba(255,255,255,.02)}
+.cb-item-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:12.5px;color:var(--muted)}
+.cb-item-cab b{color:var(--txt);font-size:13px}
+.cb-item-quitar{background:none;border:0;color:var(--muted);cursor:pointer;padding:4px 6px;font-size:13px}
+.cb-item-quitar:hover{color:#ff6b6b}
+.cb-item-grid{display:grid;grid-template-columns:2fr 2fr 1fr 1fr;gap:10px}
+.cb-item-grid .cb-full{grid-column:1/-1}
+.cb-item-grid .field{margin:0}
+.cb-add{width:auto;margin-top:10px;padding:8px 14px}
+.cb-total{display:flex;justify-content:flex-end;align-items:baseline;gap:12px;margin-top:14px;font-size:13px;color:var(--muted)}
+.cb-total b{font-size:20px;color:var(--txt)}
+.cb-textos{margin-top:14px}
+.cb-textos summary{cursor:pointer;font-size:12.5px;color:var(--muted);margin-bottom:8px}
+.cb-textos textarea{resize:vertical;font-family:inherit}
+.cb-acciones{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap}
+.cb-acciones .dbtn{width:auto;padding:8px 16px}
+.cb-hist-cab{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.cb-hist-cab .ei{max-width:280px}
+@media (max-width:720px){.cb-item-grid{grid-template-columns:1fr 1fr}.cb-hist-cab .ei{max-width:none}}
 .nav-item.nav-freelancer-only,.sheet-item.nav-freelancer-only{display:none}
 .es-freelancer .nav-item.nav-freelancer-only,.es-freelancer .sheet-item.nav-freelancer-only{display:flex}
 /* Menú agrupado (2026-09-25): las hijas se abren desde las pestañas de su
@@ -6976,6 +6997,45 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div id="vc-historial-tbody" class="lt-grid"></div>
         <div style="margin-top:12px;text-align:center">
           <button id="vc-cargar-mas-btn" class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasVouchers()">Cargar más</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- COTIZACIONES DE BOLETERÍA (2026-10-12): reemplaza las Estimaciones de Zoho
+         y la entrada "Reservas" del modo Boletería. Tabla cotizaciones_boleteria. -->
+    <section class="section" id="sec-cotizacion-boletos">
+      <div class="card">
+        <h2><i class="fas fa-file-invoice-dollar"></i> Cotización de boletos</h2>
+        <div class="csub">Armá la cotización en PDF y mandala directo al chat del asesor</div>
+        <div class="grid g-2">
+          <div class="field"><label class="fl">Cliente (facturar a)</label><input id="cb-cliente" class="ei" placeholder="Nombre del cliente o BOLETERÍA"></div>
+          <div class="field"><label class="fl">Enviar al asesor</label><select id="cb-asesor" class="ei"></select></div>
+          <div class="field"><label class="fl">Fecha</label><input id="cb-fecha" class="ei" type="date"></div>
+          <div class="field"><label class="fl">Válida hasta</label><input id="cb-vence" class="ei" type="date"></div>
+        </div>
+        <div id="cb-items" class="cb-items"></div>
+        <button class="dbtn cb-add" type="button" onclick="cbAgregarItem()"><i class="fas fa-plus"></i> Agregar boleto</button>
+        <div class="cb-total">Total <b id="cb-total">$0.00</b></div>
+        <details class="cb-textos">
+          <summary>Notas y términos del PDF</summary>
+          <div class="field"><label class="fl">Notas</label><textarea id="cb-notas" class="ei" rows="2"></textarea></div>
+          <div class="field"><label class="fl">Términos y condiciones</label><textarea id="cb-terminos" class="ei" rows="5"></textarea></div>
+        </details>
+        <div class="cb-acciones">
+          <button id="cb-enviar-btn" type="button" onclick="cbGuardar(true)"><i class="fas fa-paper-plane"></i> Generar y enviar al asesor</button>
+          <button id="cb-descargar-btn" class="dbtn" type="button" onclick="cbGuardar(false)"><i class="fas fa-file-pdf"></i> Solo descargar PDF</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cb-hist-cab">
+          <div class="csub">Cotizaciones generadas</div>
+          <input id="cb-buscar" class="ei" placeholder="Buscar cliente o asesor...">
+        </div>
+        <div class="tbl-state skel" id="cb-historial-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+        <div id="cb-historial" class="lt-grid"></div>
+        <div style="margin-top:12px;text-align:center">
+          <button id="cb-cargar-mas-btn" class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cbCargarMas()">Cargar más</button>
         </div>
       </div>
     </section>

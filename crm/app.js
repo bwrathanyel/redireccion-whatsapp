@@ -172,7 +172,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Cotización de boletos en PDF, lista para mandar al asesor'],
   tareas: ['Tareas', 'Tus tareas activas'],
   comisiones: ['Comisiones por corte', 'Ventas pagadas, verificación e invoices · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
@@ -1298,7 +1298,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria', 'cotizacion-boletos',
   'mensajes', 'whatsapp', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
@@ -22921,6 +22921,259 @@ async function construirVoucherPdf(v) {
   return finalDoc.save();
 }
 
+/* ---------- Cotización de boletos (2026-10-12) ----------
+   Reemplaza las Estimaciones de Zoho Invoice. El PDF se rearma siempre desde
+   la fila de cotizaciones_boleteria (no se guarda archivo); mandarlo al asesor
+   lo sube al chat interno como documento, igual que un adjunto a mano. */
+const CB_PAGE_SIZE = 20;
+const CB_NOTAS = '"Gracias por permitirnos ser parte de su próxima experiencia. En Lotus 360 nos encargamos de toda la logística para que usted solo se preocupe por disfrutar."';
+const CB_TERMINOS = 'Condiciones Generales:\nTodas las tarifas están expresadas en USD y están estrictamente sujetas a cambios y disponibilidad al momento de realizar la reserva formal.\nLos precios solo se garantizan con la emisión del boleto o confirmación del voucher de servicio.\nUna vez confirmada la reserva, los cambios o cancelaciones estarán sujetos a las penalidades del proveedor.';
+const CB_MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+let cbItems = [], cbOffset = 0, cbBuscarTimer = null, cbListo = false;
+const cbFilas = new Map();
+const cbNumero = n => 'COT-' + String(n).padStart(6, '0');
+const cbMonto = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const cbHoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
+const cbFechaLarga = iso => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${d} ${CB_MESES[+m - 1]} ${y}`; };
+const cbFechaCorta = iso => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${d}/${m}/${y.slice(2)}`; };
+const cbImporte = it => (Number(it.cant) || 0) * (Number(it.tarifa) || 0);
+const cbItemVacio = () => ({ ruta: '', aerolinea: '', cant: 1, tarifa: '', ida: '', ida_hora: '', vuelta: '', vuelta_hora: '', extra: '' });
+const cbArchivo = c => `Cotizacion-${cbNumero(c.numero)}-${c.cliente.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}.pdf`;
+
+function cbItemHtml(it, i) {
+  const f = (k, label, attrs, full = '') => `<div class="field${full}"><label class="fl">${label}</label><input class="ei" data-k="${k}" value="${esc(String(it[k] ?? ''))}" ${attrs}></div>`;
+  return `<div class="cb-item" data-i="${i}">
+    <div class="cb-item-cab"><b>Boleto ${i + 1}</b><span>Importe <b class="cb-importe">$${cbMonto(cbImporte(it))}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar boleto" aria-label="Quitar boleto ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
+    <div class="cb-item-grid">
+      ${f('ruta', 'Ruta', 'placeholder="CCS-LRV-CCS"')}${f('aerolinea', 'Aerolínea', 'placeholder="Sasca Airlines"')}${f('cant', 'Pasajeros', 'type="number" min="1" step="1"')}${f('tarifa', 'Tarifa c/u (USD)', 'type="number" min="0" step="0.01"')}
+      ${f('ida', 'Fecha de ida', 'type="date"')}${f('ida_hora', 'Horario ida', 'placeholder="07:45-08:15 AM"')}${f('vuelta', 'Fecha de vuelta', 'type="date"')}${f('vuelta_hora', 'Horario vuelta', 'placeholder="17:15-17:45 PM"')}
+      ${f('extra', 'Detalle adicional (opcional)', 'placeholder="Equipaje, clase, observaciones..."', ' cb-full')}
+    </div>
+  </div>`;
+}
+function cbActualizarTotal() { document.getElementById('cb-total').textContent = '$' + cbMonto(cbItems.reduce((s, it) => s + cbImporte(it), 0)); }
+function cbRenderItems() { document.getElementById('cb-items').innerHTML = cbItems.map(cbItemHtml).join(''); cbActualizarTotal(); }
+window.cbAgregarItem = () => { cbItems.push(cbItemVacio()); cbRenderItems(); };
+window.cbQuitarItem = i => { cbItems.splice(i, 1); cbRenderItems(); };
+function cbResetForm() {
+  cbItems = [cbItemVacio()]; cbRenderItems();
+  document.getElementById('cb-cliente').value = '';
+  document.getElementById('cb-fecha').value = cbHoy(); document.getElementById('cb-vence').value = cbHoy();
+  document.getElementById('cb-notas').value = CB_NOTAS; document.getElementById('cb-terminos').value = CB_TERMINOS;
+}
+async function cbCargarSeccion() {
+  if (!cbListo) {
+    cbListo = true;
+    cbResetForm();
+    document.getElementById('cb-items').addEventListener('input', e => {
+      const k = e.target.dataset.k, card = e.target.closest('.cb-item');
+      if (!k || !card) return;
+      const it = cbItems[+card.dataset.i]; it[k] = e.target.value;
+      card.querySelector('.cb-importe').textContent = '$' + cbMonto(cbImporte(it));
+      cbActualizarTotal();
+    });
+    document.getElementById('cb-buscar').addEventListener('input', () => { clearTimeout(cbBuscarTimer); cbBuscarTimer = setTimeout(() => { cbOffset = 0; cbCargarHistorial(false); }, 280); });
+  }
+  const staff = await cargarUsuariosStaff();
+  const sel = document.getElementById('cb-asesor'), previo = sel.value;
+  const asesores = staff.filter(u => u.id !== MI_USUARIO_ID && (u.rol === 'asesor' || u.rol === 'admin'))
+    .sort((a, b) => (a.rol === b.rol ? 0 : a.rol === 'asesor' ? -1 : 1) || (a.nombre || '').localeCompare(b.nombre || ''));
+  sel.innerHTML = '<option value="">— Elegí el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
+  cbOffset = 0;
+  await cbCargarHistorial(false);
+}
+async function cbCargarHistorial(append) {
+  const cont = document.getElementById('cb-historial'), mas = document.getElementById('cb-cargar-mas-btn');
+  if (!append) document.getElementById('cb-historial-loading')?.classList.add('show');
+  let q = sb.from('cotizaciones_boleteria').select('*');
+  // Sin comas/paréntesis -- romperían la sintaxis del filtro .or() de PostgREST.
+  const buscar = (val('cb-buscar') || '').trim().replace(/[,()]/g, '');
+  if (buscar) q = q.or(`cliente.ilike.%${buscar}%,enviado_a_nombre.ilike.%${buscar}%,creado_por_nombre.ilike.%${buscar}%`);
+  const { data, error } = await q.order('created_at', { ascending: false }).range(cbOffset, cbOffset + CB_PAGE_SIZE - 1);
+  document.getElementById('cb-historial-loading')?.classList.remove('show');
+  if (error) { if (!append) cont.innerHTML = '<div class="lt-vacio"><i class="fas fa-triangle-exclamation"></i> No se pudo cargar el historial</div>'; return; }
+  (data || []).forEach(c => cbFilas.set(c.id, c));
+  const filas = (data || []).map((c, i) => {
+    const rutas = (c.items || []).map(it => it.ruta).filter(Boolean).join(' · ') || '—';
+    return `<article class="lt-card" style="--i:${Math.min(i, 20)}">
+    <div class="lt-card-cab">
+      <div class="lt-card-tit" title="${esc(c.cliente)}">${esc(c.cliente)}</div>
+      <span class="bt-tag" style="--c:var(--blue)">${cbNumero(c.numero)}</span>
+    </div>
+    <div class="lt-card-meta"><i class="fas fa-user"></i> ${esc(c.creado_por_nombre || '—')} · ${esc(cbFechaLarga(c.fecha))}</div>
+    <div class="lt-cifras" style="grid-template-columns:2fr 1fr">
+      <div><span>Ruta</span><b title="${esc(rutas)}">${esc(rutas)}</b></div>
+      <div><span>Total</span><b>$${cbMonto(c.total)}</b></div>
+    </div>
+    <div class="lt-card-meta">${c.enviado_a ? `<i class="fas fa-paper-plane"></i> Enviada a ${esc(c.enviado_a_nombre || 'asesor')}` : '<i class="fas fa-circle-minus"></i> Sin enviar'}</div>
+    <div class="lt-card-pie">
+      <button class="btn-sm lt-primario" type="button" onclick="cbVerPdf('${c.id}')"><i class="fas fa-file-pdf"></i> Ver PDF</button>
+      <button class="btn-sm" type="button" onclick="cbReenviar('${c.id}', this)"><i class="fas fa-paper-plane"></i> Enviar al asesor</button>
+    </div>
+  </article>`;
+  }).join('');
+  if (!append && !filas) cont.innerHTML = '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin cotizaciones</div>';
+  else cont.innerHTML = append ? cont.innerHTML + filas : filas;
+  if (!append) entradaLista(cont);
+  if (mas) mas.style.display = (data || []).length < CB_PAGE_SIZE ? 'none' : '';
+}
+window.cbCargarMas = () => { cbOffset += CB_PAGE_SIZE; cbCargarHistorial(true); };
+
+async function cbEnviarAAsesor(c, blob, asesorId) {
+  const nombre = cbArchivo(c);
+  const { data: convId, error } = await sb.rpc('obtener_o_crear_conversacion_directa', { p_otro_usuario_id: asesorId });
+  if (error || !convId) return false;
+  const path = `${convId}/${crypto.randomUUID()}-${nombre}`;
+  const { error: upErr } = await sb.storage.from('chat-interno-adjuntos').upload(path, blob, { contentType: 'application/pdf' });
+  if (upErr) return false;
+  const { data, error: msgErr } = await sb.rpc('enviar_mensaje', { p_conversacion_id: convId, p_tipo: 'documento', p_storage_path: path, p_nombre_archivo: nombre, p_peso_bytes: blob.size });
+  if (msgErr || !data?.ok) { await sb.storage.from('chat-interno-adjuntos').remove([path]); return false; }
+  await sb.rpc('enviar_mensaje', { p_conversacion_id: convId, p_tipo: 'texto', p_contenido: `Cotización ${cbNumero(c.numero)} · ${c.cliente} · $${cbMonto(c.total)}` });
+  const envio = { enviado_a: asesorId, enviado_a_nombre: nombreUsuario(asesorId), enviado_at: new Date().toISOString() };
+  await sb.from('cotizaciones_boleteria').update(envio).eq('id', c.id);
+  Object.assign(c, envio);
+  return true;
+}
+window.cbGuardar = async function cbGuardar(enviar) {
+  const cliente = val('cb-cliente').trim();
+  if (!cliente) { errToast('Escribí el cliente'); return; }
+  const items = cbItems.map(it => ({ ...it, ruta: String(it.ruta || '').trim(), cant: Number(it.cant) || 0, tarifa: Number(it.tarifa) || 0 })).filter(it => it.ruta || it.tarifa);
+  if (!items.length) { errToast('Agregá al menos un boleto con ruta y tarifa'); return; }
+  if (items.some(it => !it.ruta || !it.cant)) { errToast('Cada boleto necesita ruta y pasajeros'); return; }
+  const asesorId = val('cb-asesor');
+  if (enviar && !asesorId) { errToast('Elegí a qué asesor mandarla'); document.getElementById('cb-asesor').focus(); return; }
+  const btn = document.getElementById(enviar ? 'cb-enviar-btn' : 'cb-descargar-btn'), htmlBtn = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
+  try {
+    const fila = {
+      creado_por: MI_USUARIO_ID, creado_por_nombre: MI_NOMBRE, cliente, fecha: val('cb-fecha') || cbHoy(), vence: val('cb-vence') || null,
+      items, total: items.reduce((s, it) => s + cbImporte(it), 0), notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null,
+    };
+    const { data: cot, error } = await sb.from('cotizaciones_boleteria').insert(fila).select().single();
+    if (error || !cot) { errToast('No se pudo guardar la cotización: ' + (error?.message || '')); return; }
+    cbResetForm();
+    try {
+      await ensureVoucherLibs();
+      const blob = await cbPdfBlob(cot);
+      if (!enviar) { cbDescargar(blob, cbArchivo(cot)); okToast(`Cotización ${cbNumero(cot.numero)} generada`); }
+      else if (await cbEnviarAAsesor(cot, blob, asesorId)) okToast(`${cbNumero(cot.numero)} enviada a ${nombreUsuario(asesorId)}`);
+      else errToast(`${cbNumero(cot.numero)} se guardó pero no se pudo enviar: reenviala desde el historial`);
+    } catch (e) {
+      console.error('cbGuardar pdf', e);
+      errToast(`${cbNumero(cot.numero)} se guardó pero no se pudo generar el PDF: reintentá desde el historial`);
+    }
+    cbOffset = 0; cbCargarHistorial(false);
+  } finally {
+    btn.disabled = false; btn.innerHTML = htmlBtn;
+  }
+};
+function cbDescargar(blob, nombre) {
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+window.cbVerPdf = async function cbVerPdf(id) {
+  const c = cbFilas.get(id);
+  if (!c) return;
+  try {
+    await ensureVoucherLibs();
+    window.open(URL.createObjectURL(await cbPdfBlob(c)), '_blank');
+  } catch (e) { console.error('cbVerPdf', e); errToast('No se pudo generar el PDF'); }
+};
+window.cbReenviar = async function cbReenviar(id, btn) {
+  const c = cbFilas.get(id), asesorId = val('cb-asesor');
+  if (!c) return;
+  if (!asesorId) { errToast('Elegí el asesor arriba, en «Enviar al asesor»'); document.getElementById('cb-asesor').focus(); return; }
+  btn.disabled = true;
+  try {
+    await ensureVoucherLibs();
+    if (await cbEnviarAAsesor(c, await cbPdfBlob(c), asesorId)) { okToast(`${cbNumero(c.numero)} enviada a ${nombreUsuario(asesorId)}`); cbCargarHistorial(false); }
+    else errToast('No se pudo enviar la cotización');
+  } catch (e) { console.error('cbReenviar', e); errToast('No se pudo generar el PDF'); }
+  finally { btn.disabled = false; }
+};
+
+// Mismo esquema que la Estimación de Zoho que reemplaza (QT-000464): logo,
+// datos fiscales, "Facturar a", tabla de boletos, total, notas y términos.
+async function cbPdfBlob(c) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const W = 612, M = 40, oscuro = [60, 60, 60];
+  try { doc.addImage(await cargarImagenBase64('logolotus.png'), 'PNG', M - 8, 26, 84, 84); } catch (_e) { /* sin logo la cotización igual se genera */ }
+  doc.setTextColor(20, 20, 20);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+  doc.text('DESTINO Y', M + 80, 62); doc.text('EVENTOS LOTUS 360', M + 80, 78);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(26);
+  doc.text('Cotización', W - M, 66, { align: 'right' });
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+  doc.text(`# ${cbNumero(c.numero)}`, W - M, 84, { align: 'right' });
+
+  doc.setFontSize(9.5); doc.text('Destinos Y Eventos Lotus 360', M, 128);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(70, 70, 70);
+  ['J412935585  DESTINOS Y EVENTOS LOTUS 360, C.A', 'AV PRINCIPAL CC DINASTIA NIVEL 03 OF 54 SECTOR S/N', 'NAGUANAGUA CARABOBO ZONA POSTAL 2005']
+    .forEach((l, i) => doc.text(l, M, 140 + i * 11));
+
+  doc.setFontSize(9.5);
+  doc.text('Fecha de la cotización:', W - M - 110, 196, { align: 'right' }); doc.text(cbFechaLarga(c.fecha), W - M, 196, { align: 'right' });
+  if (c.vence) { doc.text('Válida hasta:', W - M - 110, 212, { align: 'right' }); doc.text(cbFechaLarga(c.vence), W - M, 212, { align: 'right' }); }
+  doc.text('Facturar a', M, 204);
+  doc.setFont('helvetica', 'bold'); doc.setTextColor(20, 20, 20);
+  doc.text(doc.splitTextToSize(c.cliente.toUpperCase(), 260), M, 216);
+
+  const filas = (c.items || []).map((it, i) => {
+    const det = [`BOLETO AÉREO ${it.ruta.toUpperCase()}`];
+    if (it.aerolinea) det.push(`AEROLÍNEA: ${it.aerolinea.toUpperCase()}`);
+    if (it.ida) det.push(`FECHA DE IDA: ${cbFechaCorta(it.ida)}`);
+    if (it.ida_hora) det.push(`HORARIO: ${it.ida_hora.toUpperCase()}`);
+    if (it.vuelta) det.push(`FECHA DE VUELTA: ${cbFechaCorta(it.vuelta)}`);
+    if (it.vuelta_hora) det.push(`HORARIO: ${it.vuelta_hora.toUpperCase()}`);
+    if (it.extra) det.push(...String(it.extra).toUpperCase().split('\n'));
+    return [i + 1, det.join('\n'), Number(it.cant).toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))];
+  });
+  doc.autoTable({
+    startY: 240, theme: 'plain', margin: { left: M, right: M },
+    head: [['#', 'Artículo y descripción', 'Cant.', 'Tarifa', 'Importe']],
+    body: filas,
+    styles: { fontSize: 8.5, cellPadding: { top: 7, bottom: 7, left: 8, right: 8 }, textColor: [40, 40, 40], valign: 'top' },
+    headStyles: { fillColor: oscuro, textColor: 255, fontStyle: 'normal', fontSize: 9.5 },
+    columnStyles: { 0: { cellWidth: 30, halign: 'center' }, 2: { cellWidth: 52, halign: 'right' }, 3: { cellWidth: 70, halign: 'right' }, 4: { cellWidth: 80, halign: 'right' } },
+    didParseCell: d => { if (d.section === 'head' && d.column.index >= 2) d.cell.styles.halign = 'right'; },
+    didDrawCell: d => { if (d.section === 'body' && d.column.index === 0) { doc.setDrawColor(190, 190, 190); doc.line(M, d.cell.y + d.cell.height, W - M, d.cell.y + d.cell.height); } },
+  });
+
+  let y = doc.lastAutoTable.finalY + 22;
+  const total = `$${cbMonto(c.total)}`;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(40, 40, 40);
+  doc.text('Subtotal', W - M - 120, y, { align: 'right' }); doc.text(cbMonto(c.total), W - M - 8, y, { align: 'right' });
+  y += 14;
+  doc.setFillColor(243, 242, 240); doc.rect(W / 2 - 20, y, W / 2 + 20 - M, 32, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5);
+  doc.text('Total', W - M - 120, y + 20, { align: 'right' }); doc.text(total, W - M - 8, y + 20, { align: 'right' });
+  y += 66;
+
+  const bloque = (titulo, texto) => {
+    if (!texto) return;
+    if (y + 30 > 740) { doc.addPage(); y = 50; }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(40, 40, 40);
+    doc.text(titulo, M, y); y += 16;
+    doc.setFontSize(8.5); doc.setTextColor(60, 60, 60);
+    const lineas = String(texto).split('\n').flatMap(l => l.trim() ? doc.splitTextToSize(l, W - 2 * M - 8).concat(['']) : ['']);
+    lineas.forEach(l => { if (y > 740) { doc.addPage(); y = 50; } if (l) doc.text(l, M, y); y += l ? 11 : 5; });
+    y += 14;
+  };
+  bloque('Notas', c.notas);
+  bloque('Términos y condiciones', c.terminos);
+
+  for (let p = 1; p <= doc.getNumberOfPages(); p++) {
+    doc.setPage(p);
+    doc.setDrawColor(200, 200, 200); doc.line(M, 752, W - M, 752);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120, 120, 120);
+    doc.text('Destino y Eventos Lotus 360 · 0241-5144470 / 0424-4634041 · Destinoyeventoslotus360@gmail.com', W / 2, 766, { align: 'center' });
+  }
+  return doc.output('blob');
+}
+
 /* ---------- Realtime ---------- */
 // Salud del canal (falla #2 del plan de rediseño): sin esto el websocket
 // puede morir en silencio y la interfaz sigue pareciendo viva. El indicador
@@ -23362,7 +23615,9 @@ const NAV_ITEMS = [
   { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', roles: '', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
   { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
-  { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
+  // En modo Boletería, Reservas solo abría el voucher de hospedaje: lo reemplaza Cotizaciones (2026-10-12).
+  { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
+  { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Cotización de boletos en PDF para mandar al asesor' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
   { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', padre: 'grp-cobros', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar' },
@@ -23393,6 +23648,7 @@ const NAV_PADRES = [
   { sec: 'grp-tarifario', icon: 'fas fa-book-open', label: 'Tarifario' },
   { sec: 'stop-sales', hoja: true },
   { sec: 'apartamentos', hoja: true },
+  { sec: 'cotizacion-boletos', hoja: true },
   { sec: 'grp-reservas', icon: 'fas fa-handshake-angle', label: 'Reservas', badge: 'nav-postventa-count', badgeDefault: '0' },
   { sec: 'grp-cobros', icon: 'fas fa-file-invoice-dollar', label: 'Cobros' },
   { sec: 'grp-directorio', icon: 'fas fa-briefcase', label: 'Corporativo' },
@@ -23722,6 +23978,7 @@ function cargarSeccion(sec) {
   if (sec === 'stop-sales') { loadStopSalesVigentes(); ssCargarPdfActual(); }
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
+  if (sec === 'cotizacion-boletos') cbCargarSeccion();
   if (sec === 'boleteria') loadBoleteria();
   if (sec === 'tareas') loadTareas();
   if (sec === 'manual') renderManual();
@@ -24028,7 +24285,7 @@ const REFRESCAR_SECCION = {
   'clientes-eventos': () => loadClientesEventos(),
   'stop-sales': () => { loadStopSalesVigentes(); ssCargarPdfActual(); },
   redes: () => cargarRedActual(), voucher: () => loadVoucherSeccion(), tareas: () => loadTareas(),
-  boleteria: () => loadBoleteria(),
+  boleteria: () => loadBoleteria(), 'cotizacion-boletos': () => cbCargarSeccion(),
 };
 async function refrescarSeccionActual() {
   const tareas = [Promise.resolve(resyncTrasSegundoPlano())];
@@ -25854,6 +26111,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-12', emoji: '🧾', titulo: 'Cotizaciones de boletos', texto: 'En el modo Boletería, "Reservas" pasó a ser "Cotizaciones": armás la cotización de boletos (ruta, aerolínea, fechas, horarios, pasajeros y tarifa), se genera el PDF con número propio (COT-000001) y con un botón se la mandás al chat del asesor. Queda el historial para volver a verla o reenviarla. Reemplaza a las estimaciones de Zoho.', roles: ['admin', 'boleteria'] },
   { fecha: '2026-10-09', emoji: '⚡', titulo: 'CRM más fluido', texto: 'El scroll y el cambio de pestaña ya no dan tirones. Si volvés a una sección que abriste hace menos de 30 segundos, aparece al instante sin recargar (deslizá hacia abajo o tocá Actualizar si querés traer lo último). El Excel se descarga igual que antes, solo que la herramienta se carga cuando exportás.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-08', emoji: '📍', titulo: 'El CRM abre donde lo dejaste', texto: 'Al recargar o volver a abrir el CRM ya no salta al Tarifario: abre la última sección en la que estabas. Si tenés varias pestañas, cada una recarga en la suya. Además, el Tarifario y la Galería muestran una barra con el avance real de la carga mientras traen los datos.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-07', emoji: '💬', titulo: 'Nueva sección Meta DM', texto: 'Los chats del bot en Instagram, Facebook y WhatsApp tienen ahora su propia sección, Meta DM, con una pestaña por app y los colores de cada una. Se actualizan en vivo y muestran la ficha del cliente camino a lead. Los asesores ven también los chats de WhatsApp de sus leads, con fotos y audios. Mensajes queda solo para el chat del equipo.', roles: ['admin', 'asesor'] },
