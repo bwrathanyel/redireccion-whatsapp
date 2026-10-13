@@ -2908,6 +2908,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .dq i{font-size:15px;color:var(--muted)}
 .dq:hover{border-color:rgba(245,158,11,.35)}.dq:hover i{color:var(--accent-ink)}
 .dq.wa i{color:#25d366}
+.dq.dq-boleteria{background:linear-gradient(135deg,#2e6bff,#1d4fd8);border-color:rgba(127,176,255,.7);color:#fff;box-shadow:0 4px 14px rgba(46,107,255,.38);transition:transform .15s,box-shadow .15s,filter .15s}
+.dq.dq-boleteria i{color:#fff}
+.dq.dq-boleteria:hover{border-color:#bcd4ff;filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 6px 18px rgba(46,107,255,.5)}
+.dq.dq-boleteria:hover i{color:#fff}
 .dsec{border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.02);margin-bottom:10px}
 .dsec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:9px;padding:13px 14px;font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
 .dsec>summary::-webkit-details-marker{display:none}
@@ -2947,6 +2951,69 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .dresumen-cols{display:flex;align-items:flex-start;gap:28px}
   .dquien-es{width:280px;flex-shrink:0}
   .dhago{flex:1;min-width:0}
+}
+
+/* ============ Ficha del lead — pulido visual (2026-10-13) ============
+   Solo la ficha del lead: .dhead, .dsec y .drawer los comparten otras fichas
+   y las hojas, así que todo cuelga de clases que existen solo acá. --est llega
+   inline con el color del estado; --sec-c pinta el ícono de cada sección.
+   Las secciones siguen planas en móvil (lo decide el bloque max-width:760px
+   de más abajo): acá solo se tocan como tarjeta desde 761px. */
+.dhead-lead{position:relative;align-items:center;margin-bottom:14px;padding:14px 52px 14px 14px;border:1px solid color-mix(in srgb,var(--est) 24%,var(--line));border-radius:18px;background:radial-gradient(130% 120% at 0% 0%,color-mix(in srgb,var(--est) 15%,transparent),transparent 62%),rgba(var(--ink-rgb),.025)}
+.drawer:has(.dhead-lead) .dclose{top:32px;right:32px}
+.dhead-lead .dava{width:56px;height:56px;border-radius:16px;font-size:21px;box-shadow:0 0 0 2px var(--bg2),0 0 0 4px color-mix(in srgb,var(--est) 55%,transparent)}
+.dhead-lead .dn{font-size:19px;letter-spacing:-.01em}
+.dhead-lead .dm{display:flex;flex-wrap:wrap;gap:7px;margin-top:7px}
+.dm-chip{display:inline-flex;align-items:center;gap:7px;min-height:26px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);background:rgba(var(--ink-rgb),.05);font-size:12px;font-weight:600;color:var(--txt)}
+.dm-chip i{font-size:11px;color:var(--muted)}
+.dm-chip .fa-whatsapp{color:var(--wa)}
+.dhead-lead .badge-st{margin-top:9px}
+
+.dquick .dq:not(.dq-boleteria){min-height:62px;border-radius:14px;border-color:var(--line);background:rgba(var(--ink-rgb),.03);transition:border-color .16s,background-color .16s,transform .16s}
+.dquick .dq:not(.dq-boleteria):hover:not(:disabled){border-color:rgba(var(--accent-rgb),.35);background:rgba(var(--ink-rgb),.06);transform:translateY(-1px)}
+.dquick .dq.dq-boleteria{min-height:62px;border-radius:14px}
+.dquick .dq i{font-size:16px}
+#e-a-cotizacion i{color:var(--amber)}
+#e-a-facturar i{color:var(--purple)}
+.dquick .dq:disabled{opacity:.55;cursor:default}
+
+.dresumen-cols .dzone-label{font-size:10.5px;letter-spacing:.12em;margin:2px 0 11px}
+.dresumen-cols .dzone-label::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,currentColor,transparent);opacity:.35}
+
+.dresumen-cols .dsec{--sec-c:var(--accent-ink)}
+.dresumen-cols .dsec[data-dsec="datos"],.dresumen-cols .dsec[data-dsec="reservas"]{--sec-c:var(--blue)}
+.dresumen-cols .dsec[data-dsec="proxima"]{--sec-c:var(--amber)}
+.dresumen-cols .dsec[data-dsec="tarifas-fecha"]{--sec-c:var(--purple)}
+.dresumen-cols .dsec[data-dsec="pagos"]{--sec-c:var(--green)}
+.dresumen-cols .dsec[data-dsec="link-pago"]{--sec-c:var(--pink)}
+.dresumen-cols .dsec>summary{gap:11px;font-size:13px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--txt)}
+.dresumen-cols .dsec>summary .dsec-ic{display:grid;place-items:center;width:30px;height:30px;flex-shrink:0;border-radius:10px;font-size:13px;color:var(--sec-c);background:color-mix(in srgb,var(--sec-c) 15%,transparent)}
+.dresumen-cols .dsec>summary .dsec-arrow{display:grid;place-items:center;width:26px;height:26px;border-radius:999px;background:rgba(var(--ink-rgb),.04)}
+
+.dresumen-cols .fl{font-size:11px;font-weight:700;margin:11px 0 5px}
+.dresumen-cols .ei{background-color:rgba(var(--ink-rgb),.04);border-width:1px;font-size:14px;transition:border-color .16s,box-shadow .16s,background-color .16s}
+.dresumen-cols .ei:hover:not(:focus):not(:disabled){border-color:rgba(var(--ink-rgb),.22)}
+.dresumen-cols .ei:focus{background-color:rgba(var(--accent-rgb),.05)}
+.dresumen-cols .ei:disabled{opacity:.7;cursor:not-allowed}
+.dresumen-cols .ei::placeholder{color:var(--muted2)}
+.dresumen-cols .dsave .dbtn.save{min-height:48px;border-radius:12px;box-shadow:0 10px 22px rgba(var(--accent-rgb),.22)}
+
+@media(min-width:761px){
+  .lead-tabs{gap:4px;padding:4px;border:1px solid var(--line);border-radius:14px;background:rgba(var(--ink-rgb),.03)}
+  .lead-tab-btn{border:none;border-radius:10px;transition:background-color .16s,color .16s}
+  .lead-tab-btn:hover:not(.active){color:var(--txt);background:rgba(var(--ink-rgb),.04)}
+  .lead-tab-btn.active{background:var(--panel-solid);color:var(--accent-ink);box-shadow:inset 0 -2px 0 var(--accent)}
+  .dresumen-cols .dsec{border-radius:16px;margin-bottom:11px;transition:border-color .16s,background-color .16s}
+  .dresumen-cols .dsec:hover{border-color:var(--line2)}
+  .dresumen-cols .dsec[open]{border-color:var(--line2);background:rgba(var(--ink-rgb),.035)}
+  .dresumen-cols .dsec>summary{padding:11px 14px}
+}
+@media(min-width:900px){
+  .dquien-es .dgrid{grid-template-columns:1fr}
+}
+@media(max-width:760px){
+  .dhead-lead{padding-right:60px}
+  .drawer:has(.dhead-lead) .dclose{top:30px;right:23px}
 }
 
 /* ============ Revisión de vigencias del tarifario ============ */
@@ -3604,7 +3671,6 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .pa-atajos,.pa-acciones{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
 .pa-atajos .dbtn,.pa-acciones .dbtn{flex:1 1 auto;padding:9px 12px;font-size:12px}
 @media(max-width:760px){.pa-atajos .dbtn,.pa-acciones .dbtn{min-height:44px}}
-.dq.dq-alerta{color:var(--red,#ef4444)}
 .seg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
 .seg-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 13px;cursor:pointer}
 .seg-card:hover,.seg-card:focus-visible{border-color:var(--accent);outline:none}
@@ -4429,7 +4495,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 :root[data-theme="light"] .pv-meta .overdue{color:#9a1529}
 :root[data-theme="light"] .pv-btn{background:rgba(var(--ink-rgb),.025)}
 :root[data-theme="light"] .pv-btn.wa{color:#195831}
-:root[data-theme="light"] .dq{background:rgba(var(--ink-rgb),.025)}
+:root[data-theme="light"] .dq:not(.dq-boleteria){background:rgba(var(--ink-rgb),.025)}
+:root[data-theme="light"] .dm-chip .fa-whatsapp{color:#195a32}
 :root[data-theme="light"] .dq.wa i{color:#195a32}
 :root[data-theme="light"] .dsec{background:rgba(var(--ink-rgb),.02)}
 :root[data-theme="light"] .dsave{background:linear-gradient(180deg,rgba(var(--surface-rgb),0),var(--bg2) 30%)}
@@ -4514,7 +4581,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 :root[data-theme="light"] .dbtn.peligro{color:#9c1111}
 :root[data-theme="light"] .chip-seg{background:rgba(var(--ink-rgb),.05)}
 :root[data-theme="light"] .chip-seg.vence,:root[data-theme="light"] .pa-estado b.vence{color:var(--red,#961d1d)}
-:root[data-theme="light"] .dq.dq-alerta{color:var(--red,#961d1d)}
 :root[data-theme="light"] .estado-opt:active{background:rgba(var(--ink-rgb),.05)}
 :root[data-theme="light"] .lyra-dock-t small::before,:root[data-theme="light"] .lyra-head-t small::before{box-shadow:0 0 6px var(--green,rgba(16,185,129,.4))}
 :root[data-theme="light"] .lyra-panel{box-shadow:0 30px 80px -20px rgba(var(--ink-rgb),.1),0 0 44px -20px color-mix(in srgb,var(--accent) 65%,transparent)}
@@ -6283,9 +6349,9 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div class="chead-row">
           <h2><i class="fas fa-house-chimney"></i> Apartamentos</h2>
           <input class="ei bt-buscar" id="apto-search" type="search" placeholder="Buscar proveedor o ubicación..." aria-label="Buscar proveedor de apartamentos" autocomplete="off">
-          <button class="btn-sm" id="apto-nuevo-prov" type="button"><i class="fas fa-plus"></i> Nuevo proveedor</button>
+          <button class="btn-sm admin-only" id="apto-nuevo-prov" type="button"><i class="fas fa-plus"></i> Nuevo proveedor</button>
         </div>
-        <div class="csub">Casas y posadas con apartamentos propios: unidades, habitaciones y fotos · tocá un proveedor para gestionar sus apartamentos</div>
+        <div class="csub">Casas y posadas con apartamentos propios: unidades, habitaciones y fotos · tocá un proveedor para ver sus apartamentos</div>
         <div class="kpis bt-kpis lt-kpis" id="apto-kpis"></div>
         <div class="tbl-state skel" id="apto-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
         <div class="bt-grid apto-grid" id="apto-prov-grid"></div>
@@ -6294,11 +6360,11 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div class="chead-row">
           <button class="btn-sm" id="apto-volver" type="button"><i class="fas fa-arrow-left"></i> Proveedores</button>
           <h2 id="apto-det-titulo"><i class="fas fa-house-chimney"></i></h2>
-          <button class="btn-sm" id="apto-editar-prov" type="button"><i class="fas fa-id-card"></i> Ficha del proveedor</button>
-          <button class="btn-sm" id="apto-nuevo-apto" type="button"><i class="fas fa-plus"></i> Nuevo apartamento</button>
+          <button class="btn-sm admin-only" id="apto-editar-prov" type="button"><i class="fas fa-id-card"></i> Ficha del proveedor</button>
+          <button class="btn-sm admin-only" id="apto-nuevo-apto" type="button"><i class="fas fa-plus"></i> Nuevo apartamento</button>
         </div>
         <div class="bt-datos" id="apto-det-datos"></div>
-        <div class="csub" style="margin-top:12px">Tocá un apartamento para editar su distribución, habitaciones y fotos</div>
+        <div class="csub" style="margin-top:12px">Tocá un apartamento para ver sus fotos, distribución y precios</div>
         <div class="bt-grid apto-grid" id="apto-grid"></div>
       </div>
     </section>

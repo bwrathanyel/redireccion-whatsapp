@@ -149,6 +149,15 @@ function textoTelefonoLead(l) {
   if (l.telefono) return esc(l.telefono);
   return l.contacto_directo_enviado_at ? 'Contacto directo (sin teléfono)' : 'Sin teléfono';
 }
+function iconoCanalLead(canal) {
+  const c = String(canal || '').toLowerCase();
+  if (c.includes('whatsapp')) return 'fab fa-whatsapp';
+  if (c.includes('instagram')) return 'fab fa-instagram';
+  if (c.includes('facebook') || c.includes('messenger')) return 'fab fa-facebook-messenger';
+  if (c.includes('tiktok')) return 'fab fa-tiktok';
+  if (c.includes('web')) return 'fas fa-globe';
+  return 'fas fa-comment-dots';
+}
 // Ciclo de flechitas prev/next en la ficha del lead.
 const ESTADOS_CICLO = ESTADOS;
 const SERVICIOS = ['Vuelos', 'Full Day', 'Hospedaje', 'Paquete Todo Incluido', 'Hotel', 'Tour', 'Evento', 'Otro'];
@@ -5440,18 +5449,16 @@ function openDrawer(l) {
       <div class="dsec-body">${cuerpo}</div>
     </details>`;
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
+    <div class="dhead dhead-lead" style="--est:${estColor}"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="dhead-info"><div class="dn">${esc(l.nombre)}</div>
-      <div class="dm">${textoTelefonoLead(l)} · ${esc(l.canal)}</div>
+      <div class="dm"><span class="dm-chip"><i class="fas fa-phone"></i>${textoTelefonoLead(l)}</span>${l.canal ? `<span class="dm-chip"><i class="${iconoCanalLead(l.canal)}"></i>${esc(l.canal)}</span>` : ''}</div>
       <span class="badge-st" style="color:${estColor};background:${estColor}2e">${esc(niceEstado(l.estado))}</span>${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}</div></div>
 
     ${sinAtender ? `<button type="button" class="inbox-btn atender" id="e-a-atender" style="width:100%;margin-bottom:12px"><i class="fas fa-check"></i> Atender este lead</button>` : ''}
 
     <div class="dquick">
       ${wa ? `<a class="dq wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></a>` : ''}
-      ${(ROL === 'asesor' || ROL === 'admin') && l.external_id ? `<button class="dq" id="e-a-tomar-ia" type="button"><i class="fas fa-hand"></i><span>Tomar conversación</span></button>` : ''}
-      ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-seguimiento" type="button"><i class="fas fa-calendar-check"></i><span>Seguimiento</span></button>` : ''}
-      ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-boleteria" type="button"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
+      ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq dq-boleteria" id="e-a-boleteria" type="button" title="Rellenar la solicitud de boletería de este cliente y mandarla a un ejecutivo"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización'}</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') && !VENTA.includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
     </div>
@@ -5591,7 +5598,6 @@ function openDrawer(l) {
   document.getElementById('e-a-atender')?.addEventListener('click', () => atenderInboxLead(l));
   document.getElementById('e-a-facturar')?.addEventListener('click', () => abrirEnviarFacturacionSheet(l));
   document.getElementById('e-a-cotizacion')?.addEventListener('click', () => registrarCotizacionEnviada(l));
-  document.getElementById('e-a-tomar-ia')?.addEventListener('click', () => tomarConversacionIA(l));
   document.getElementById('e-a-boleteria')?.addEventListener('click', () => { window.closeDrawer(); abrirSolicitudBoleteria(l); });
   if (document.getElementById('pa-at')) setupProximaAccion(l);
   document.getElementById('e-emitir-pago')?.addEventListener('click', () => emitirLinkPago(l));
@@ -5698,22 +5704,6 @@ async function facturarReservaLead(l, reservaId, btn) {
   await Promise.all([cargarReservasLead(l), loadStats()]); renderAll();
 }
 
-async function tomarConversacionIA(l) {
-  const btn = document.getElementById('e-a-tomar-ia');
-  if (!btn || btn.disabled || !l?.id) return;
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i><span>Tomando...</span>';
-  const { data, error } = await sb.rpc('tomar_conversacion_ia', { p_lead_id: l.id, p_motivo: 'intervencion_humana_crm' });
-  if (error || !data?.ok) {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-hand"></i><span>Tomar conversación</span>';
-    errToast(error?.message || data?.error || 'No se pudo tomar la conversación');
-    return;
-  }
-  btn.innerHTML = '<i class="fas fa-user-check"></i><span>Atención humana activa</span>';
-  okToast('La IA quedó silenciada y se cancelaron sus seguimientos pendientes');
-}
-
 /* ---------- Próxima acción del lead (RPC fijar_proxima_accion; una sola por lead) ---------- */
 function pintarEstadoProximaAccion(l) {
   const el = document.getElementById('pa-estado'); if (!el) return;
@@ -5722,8 +5712,6 @@ function pintarEstadoProximaAccion(l) {
     ? `<i class="fas fa-calendar-day"></i> ${esc(fmtFechaHoraCaracas(l.proxima_accion_at))} · <b class="${new Date(l.proxima_accion_at) < new Date() ? 'vence' : ''}">${esc(tiempoSeguimiento(l.proxima_accion_at))}</b>${cerrado ? '<div class="csub">Lead cerrado: no aparece en Seguimientos.</div>' : ''}`
     : 'Sin próxima acción definida';
   const q = document.getElementById('pa-quitar'); if (q) q.disabled = !l.proxima_accion_at;
-  const chip = document.getElementById('e-a-seguimiento');
-  if (chip) chip.classList.toggle('dq-alerta', seguimientoActivo(l) && new Date(l.proxima_accion_at) < new Date());
 }
 async function fijarProximaAccion(l, at, nota) {
   const err = document.getElementById('pa-err'), botones = ['pa-guardar', 'pa-quitar'].map(id => document.getElementById(id));
@@ -5773,13 +5761,6 @@ function setupProximaAccion(l) {
     fijarProximaAccion(l, f.toISOString(), document.getElementById('pa-nota').value.trim() || null);
   };
   document.getElementById('pa-quitar').onclick = () => fijarProximaAccion(l, null, null);
-  document.getElementById('e-a-seguimiento')?.addEventListener('click', () => {
-    document.querySelector('.lead-tab-btn[data-tab="resumen"]')?.click();
-    const sec = document.querySelector('[data-dsec="proxima"]');
-    if (sec) sec.open = true;
-    sec?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(() => at.focus({ preventScroll: true }), 250);
-  });
 }
 async function registrarCotizacionEnviada(l) {
   const btn = document.getElementById('e-a-cotizacion');
@@ -16195,10 +16176,9 @@ function aptoTab(t) {
   if (t === 'disp') loadDisponibilidad();
   aptoPintar();
 }
+// El asesor ve el mismo catálogo en solo lectura (2026-10-13): las RPCs le mandan solo lo
+// activo y sin contacto/crédito/pago del proveedor; los botones de alta/edición son .admin-only.
 async function loadApartamentos() {
-  const esAdmin = ROL === 'admin';
-  aptoEl('apto-tabs').hidden = !esAdmin;
-  if (!esAdmin) { if (APTO_TAB !== 'disp') aptoTab('disp'); else loadDisponibilidad(); return; }
   if (APTO_TAB === 'disp') loadDisponibilidad();
   const cargando = aptoEl('apto-loading');
   if (!APTO_PROVS.length) cargando?.classList.add('show');
@@ -16305,7 +16285,7 @@ function aptoPintarDetalle(p) {
     p.contacto && `<span class="bt-dato"><i class="fas fa-user"></i> ${esc(p.contacto)}</span>`,
     p.telefono && `<span class="bt-dato"><i class="fas fa-phone"></i> <a href="tel:${esc(tel)}">${esc(p.telefono)}</a></span>`,
     p.email && `<span class="bt-dato"><i class="fas fa-envelope"></i> <a href="mailto:${esc(p.email)}">${esc(p.email)}</a></span>`,
-    `<span class="bt-dato"><i class="fas fa-hourglass-half"></i> ${p.dias_credito ? fmt(p.dias_credito) + ' días de crédito' : 'Contado'}${p.moneda_habitual ? ' · ' + esc(p.moneda_habitual) : ''}</span>`,
+    ROL === 'admin' && `<span class="bt-dato"><i class="fas fa-hourglass-half"></i> ${p.dias_credito ? fmt(p.dias_credito) + ' días de crédito' : 'Contado'}${p.moneda_habitual ? ' · ' + esc(p.moneda_habitual) : ''}</span>`,
     p.producto_nombre && `<span class="bt-dato"><i class="fas fa-link"></i> Tarifario: ${esc(p.producto_nombre)}</span>`,
   ].filter(Boolean).join('');
   // Áreas comunes primero: es la cara del edificio.
@@ -16406,11 +16386,13 @@ function aptoLlenarSheet(id, editar = false) {
   aptoEl('apt-habs-wrap').hidden = !a || areas;
   aptoEl('apt-fotos-wrap').hidden = !a;
   aptoEl('apt-nuevo-aviso').hidden = !!a;
-  aptoEl('apt-editar').hidden = !a;
-  aptoModoEditar(!a || editar);
+  // Asesor: solo la ficha (galería, precios, distribución, videos), sin el editor.
+  const esAdmin = ROL === 'admin';
+  aptoEl('apt-editar').hidden = !a || !esAdmin;
+  aptoModoEditar(esAdmin && (!a || editar));
   aptoPintarResumen(a);
   aptoHabLimpiar();
-  if (a) { aptoPintarHabs(); aptoCargarFotos(); }
+  if (a) { aptoPintarHabs(); if (esAdmin) aptoCargarFotos(); else aptoCargarVideos(a.id); }
   return true;
 }
 // Vista de la ficha (pedido del dueño 2026-10-12, a imagen del drawer del tarifario): galería
@@ -24642,6 +24624,8 @@ function abrirSolicitudBoleteria(lead) {
     document.getElementById('bol-nombre').value = lead.nombre || '';
     document.getElementById('bol-telefono').value = lead.telefono || '';
     document.getElementById('bol-destino').value = lead.destino || '';
+    const personas = parseInt(lead.personas, 10);
+    if (Number.isFinite(personas) && personas > 0) document.getElementById('bol-personas').value = personas;
     document.getElementById('bol-buscar-box').style.display = 'none';
     box.style.display = ''; box.innerHTML = `<i class="fas fa-user"></i> Desde el lead de <b>${esc(lead.nombre || 'Sin nombre')}</b>`;
     document.getElementById('bol-precio').textContent = bolPrecioRuta(val('bol-origen'), val('bol-destino'));
@@ -24649,7 +24633,11 @@ function abrirSolicitudBoleteria(lead) {
     document.getElementById('bol-buscar-box').style.display = '';
     box.style.display = 'none';
   }
+  // Con lead precargado el cliente ya está resuelto: se pliega y el cursor cae en lo que falta (el origen).
+  const secCliente = document.querySelector('#boleteria-sheet details.dsec');
+  if (secCliente) secCliente.open = !lead;
   openSheet('boleteria-sheet');
+  if (lead) setTimeout(() => document.getElementById('bol-origen')?.focus(), 250);
 }
 
 function bolBuscarLead(e) {
@@ -26114,6 +26102,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-13', emoji: '✨', titulo: 'Ficha del lead renovada', texto: 'La ficha del lead tiene un diseño nuevo, más claro y ordenado. El botón Boletería ahora es azul y te lleva directo a la solicitud de vuelo con los datos del cliente ya cargados, lista para mandarla a un ejecutivo de boletería. Se quitaron los botones "Tomar conversación" y "Seguimiento" (la próxima acción sigue dentro de la ficha).', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-12', emoji: '🧾', titulo: 'Cotizaciones de boletos', texto: 'En el modo Boletería, "Reservas" pasó a ser "Cotizaciones": armás la cotización de boletos (ruta, aerolínea, fechas, horarios, pasajeros y tarifa), se genera el PDF con número propio (COT-000001) y con un botón se la mandás al chat del asesor. Queda el historial para volver a verla o reenviarla. Reemplaza a las estimaciones de Zoho.', roles: ['admin', 'boleteria'] },
   { fecha: '2026-10-09', emoji: '⚡', titulo: 'CRM más fluido', texto: 'El scroll y el cambio de pestaña ya no dan tirones. Si volvés a una sección que abriste hace menos de 30 segundos, aparece al instante sin recargar (deslizá hacia abajo o tocá Actualizar si querés traer lo último). El Excel se descarga igual que antes, solo que la herramienta se carga cuando exportás.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-08', emoji: '📍', titulo: 'El CRM abre donde lo dejaste', texto: 'Al recargar o volver a abrir el CRM ya no salta al Tarifario: abre la última sección en la que estabas. Si tenés varias pestañas, cada una recarga en la suya. Además, el Tarifario y la Galería muestran una barra con el avance real de la carga mientras traen los datos.', roles: ['admin', 'asesor'] },
