@@ -2703,6 +2703,8 @@ async function startApp() {
       ACTIVOS = ACTIVOS.filter(n => enReparto.has(n));
     }
   } catch (_) { /* fallo de red: se conserva by_advisor */ }
+  // La sección guardada (ej. voucher) se activa antes de que ACTIVOS exista y su select quedaba vacío.
+  if (ROL === 'admin' && seccionValida && seccionGuardada === 'voucher' && ACTIVOS.length) loadVoucherSeccion();
   if (ROL === 'admin') activateSection(seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'dashboard'));
   renderHoy();
   renderAll();
