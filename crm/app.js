@@ -21764,6 +21764,8 @@ function prellenarVoucherDesdeChat(datos) {
     const el = document.getElementById(id);
     if (el && datos[campo] != null && datos[campo] !== '') el.value = datos[campo];
   }
+  vcDiasManual = !!val('vc-total-dias').trim();
+  vcActualizarPreview(); vcProgramarSugerencia();
   okToast('Voucher prellenado, revisá y completá lo que falte');
 }
 // Red de seguridad visual: aunque el prompt le pide a Gemini no usar markdown
@@ -22688,7 +22690,212 @@ function setupVoucher() {
   });
   document.getElementById('vc-filtro-desde')?.addEventListener('change', () => { vcOffset = 0; cargarHistorialVouchers(false); });
   document.getElementById('vc-filtro-hasta')?.addEventListener('change', () => { vcOffset = 0; cargarHistorialVouchers(false); });
+  const form = document.getElementById('vc-form'), q = document.getElementById('vc-lead-q'), res = document.getElementById('vc-lead-res');
+  if (!form) return;
+  form.addEventListener('input', e => {
+    const id = e.target.id;
+    if (id === 'vc-lead-q') { clearTimeout(vcLeadTimer); vcLeadTimer = setTimeout(vcBuscarLeadsQ, 250); return; }
+    if (id === 'vc-total-dias') vcDiasManual = !!e.target.value.trim();
+    if (id === 'vc-resta') vcRestaManual = e.target.value !== '';
+    if (id === 'vc-total-general' || id === 'vc-monto-pagado') vcRestaManual = false;
+    if (id === 'vc-forma-pago') vcSyncChips();
+    if ((id === 'vc-telefono' || id === 'vc-cliente-nombre') && !vcLead) vcProgramarSugerencia();
+    vcActualizarPreview();
+  });
+  form.addEventListener('change', e => { if (e.target.id !== 'vc-lead-q') vcActualizarPreview(); });
+  form.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const d = b.dataset;
+    if (d.pago) vcTogglePago(d.pago);
+    else if ('vcLead' in d) { const l = vcLeadsRes[Number(d.vcLead)]; if (l) vcElegirLead(l); }
+    else if ('vcQuitar' in d) { vcLead = null; vcReservas = null; vcReservasError = false; vcPintarLead(); vcActualizarPreview(); }
+    else if ('vcSin' in d || 'vcCon' in d) { vcSinReserva = 'vcSin' in d; vcActualizarPreview(); }
+    else if (d.vcSug === 'si' && vcSugCand) vcElegirLead(vcSugCand);
+    else if (d.vcSug === 'no' && vcSugCand) { vcSugDescartados.add(vcSugCand.id); document.getElementById('vc-sugerencia').hidden = true; }
+  });
+  res.addEventListener('mousedown', e => e.preventDefault());
+  q.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { vcCerrarRes(); return; }
+    if (res.hidden || !vcLeadsRes.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      vcLeadIdx = (vcLeadIdx + (e.key === 'ArrowDown' ? 1 : -1) + vcLeadsRes.length) % vcLeadsRes.length;
+      res.querySelectorAll('[data-vc-lead]').forEach((x, i) => x.classList.toggle('on', i === vcLeadIdx));
+    } else if (e.key === 'Enter') { e.preventDefault(); vcElegirLead(vcLeadsRes[Math.max(vcLeadIdx, 0)]); }
+  });
+  q.addEventListener('blur', () => setTimeout(vcCerrarRes, 120));
+  q.addEventListener('focus', () => { if (vcLeadsRes.length && q.value.trim().length >= 3) res.hidden = false; });
 }
+
+// Lead elegido + sus reservas activas. vcReservas null = cargando (o sin lead pagado).
+let vcLead = null, vcReservas = null, vcReservasError = false, vcConVoucher = new Set(), vcUltimaVinculada = null;
+let vcSinReserva = false, vcDiasManual = false, vcRestaManual = false;
+let vcLeadTimer = null, vcLeadTk = 0, vcLeadsRes = [], vcLeadIdx = -1;
+let vcSugTimer = null, vcSugCand = null;
+const vcSugDescartados = new Set();
+const VC_DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const vcNum = id => { const n = parseFloat(val(id)); return Number.isFinite(n) ? n : 0; };
+const vcMoney = n => '$' + (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const vcFechaCorta = iso => { const d = iso ? new Date(iso + 'T12:00:00') : null; return d && !isNaN(d) ? `${VC_DIAS[d.getDay()]} ${d.getDate()} ${MES3[d.getMonth()]}` : '—'; };
+const vcCerrarRes = () => { const b = document.getElementById('vc-lead-res'); if (b) b.hidden = true; };
+function vcNoches() {
+  const a = val('vc-fecha-entrada'), b = val('vc-fecha-salida');
+  if (!a || !b) return null;
+  const n = Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+  return n > 0 ? n : null;
+}
+async function vcBuscarLeadsQ() {
+  const q = val('vc-lead-q').replace(/[,()*%\\]/g, ' ').trim(), box = document.getElementById('vc-lead-res'), tk = ++vcLeadTk;
+  if (q.length < 3) { vcLeadsRes = []; vcCerrarRes(); return; }
+  const dig = q.replace(/\D/g, '');
+  let qb = sb.from('leads').select('id,nombre,telefono,asesor,estado,destino').is('eliminado_at', null);
+  qb = dig.length >= 6 ? qb.ilike('telefono', `%${dig.slice(-7)}%`) : qb.ilike('nombre', `%${q.replace(/\s+/g, '%')}%`);
+  const { data, error } = await qb.order('id', { ascending: false }).limit(6);
+  if (tk !== vcLeadTk) return;
+  vcLeadsRes = error ? [] : (data || []); vcLeadIdx = -1;
+  box.innerHTML = vcLeadsRes.length ? vcLeadsRes.map((l, i) => `<button type="button" role="option" data-vc-lead="${i}">
+      <div class="vc-res-txt"><b>${esc(l.nombre || 'Sin nombre')}</b><small>${esc([l.telefono, l.asesor, l.destino].filter(Boolean).join(' · '))}</small></div>
+      <span class="vc-pill${l.estado === 'PAGO REALIZADO' ? ' ok' : ''}">${esc(l.estado || '—')}</span></button>`).join('')
+    : `<div class="vc-res-vacio">${error ? 'No se pudo buscar' : 'Sin coincidencias: al generar se crea como cliente nuevo'}</div>`;
+  box.hidden = false;
+}
+function vcProgramarSugerencia() { clearTimeout(vcSugTimer); vcSugTimer = setTimeout(vcBuscarSugerencia, 600); }
+// "¿Es este cliente?": mismo matching que Importar vouchers (cola del teléfono o nombre igual).
+async function vcBuscarSugerencia() {
+  const box = document.getElementById('vc-sugerencia');
+  if (vcLead) { box.hidden = true; return; }
+  const tel = val('vc-telefono').trim(), nom = val('vc-cliente-nombre').trim();
+  const cands = await ivBuscarLeads({ telefono: tel, cliente_nombre: nom });
+  if (vcLead) return;
+  const cola = tel.replace(/\D/g, '').slice(-7), n = ivNorm(nom), libre = c => !vcSugDescartados.has(c.id);
+  const c = cands.find(x => libre(x) && cola.length >= 6 && String(x.telefono || '').replace(/\D/g, '').endsWith(cola))
+    || cands.find(x => libre(x) && n.length >= 5 && ivNorm(x.nombre) === n);
+  vcSugCand = c || null;
+  if (!c) { box.hidden = true; return; }
+  box.innerHTML = `<i class="fas fa-user-check"></i> <span>¿Es este cliente? <b>${esc(c.nombre || 'Sin nombre')}</b> · ${esc(c.telefono || 'sin teléfono')} · ${esc(c.estado || '')}</span>
+    <button class="vc-mini" type="button" data-vc-sug="si">Sí, vincular</button><button class="vc-mini" type="button" data-vc-sug="no">No</button>`;
+  box.hidden = false;
+}
+function vcElegirLead(l) {
+  if (!l) return;
+  vcLead = l; vcReservas = null; vcReservasError = false; vcSinReserva = false;
+  vcCerrarRes(); document.getElementById('vc-lead-q').value = ''; document.getElementById('vc-sugerencia').hidden = true;
+  const llenar = (id, v) => { const el = document.getElementById(id); if (el && v && !el.value.trim()) el.value = v; };
+  llenar('vc-cliente-nombre', l.nombre); llenar('vc-telefono', l.telefono); llenar('vc-destino', l.destino);
+  const sel = document.getElementById('vc-asesor');
+  if (ROL === 'admin' && l.asesor && [...sel.options].some(o => o.value === l.asesor)) sel.value = l.asesor;
+  vcPintarLead(); vcActualizarPreview();
+  if (l.estado === 'PAGO REALIZADO') vcCargarReservas(l);
+}
+async function vcCargarReservas(l) {
+  const [r, v] = await Promise.all([
+    sb.rpc('reservas_de_lead', { p_lead_id: l.id }),
+    sb.from('vouchers').select('reserva_id').eq('lead_id', l.id).not('reserva_id', 'is', null).order('created_at', { ascending: false }).limit(50),
+  ]);
+  if (vcLead !== l) return;
+  if (r.error || !r.data?.ok) { console.error('reservas_de_lead', r.error || r.data); vcReservasError = true; vcReservas = []; }
+  else vcReservas = (r.data.reservas || []).filter(x => x.activo);
+  const ids = (v.data || []).map(x => x.reserva_id);
+  vcConVoucher = new Set(ids); vcUltimaVinculada = ids[0] || null;
+  vcPintarLead(); vcActualizarPreview();
+}
+// Por defecto la principal sin voucher; si todas tienen, la última vinculada (corrección).
+// Nunca "nueva" por defecto: sería una segunda factura del mismo viaje.
+function vcReservaDefault() {
+  if (!vcReservas.length) return 'nueva';
+  const libre = vcReservas.find(r => r.principal && !vcConVoucher.has(r.id)) || vcReservas.find(r => !vcConVoucher.has(r.id));
+  if (libre) return libre.id;
+  return vcReservas.some(r => r.id === vcUltimaVinculada) ? vcUltimaVinculada : vcReservas[vcReservas.length - 1].id;
+}
+function vcPintarLead() {
+  const box = document.getElementById('vc-lead-chip'), l = vcLead;
+  if (!l) { box.hidden = true; box.innerHTML = ''; return; }
+  let fila = '';
+  if (l.estado === 'PAGO REALIZADO') fila = vcReservas === null
+    ? '<div class="vc-lead-res"><i class="fas fa-spinner fa-spin"></i> Cargando reservas...</div>'
+    : vcReservasError ? '<div class="vc-lead-res">No se pudieron cargar sus reservas</div>'
+    : `<div class="vc-lead-res"><span>Reserva</span><select id="vc-reserva-sel" class="ei">${vcReservas.map(r => `<option value="${r.id}">${esc(r.codigo)} · ${r.principal ? 'Principal' : 'Adicional'}${r.fecha_viaje_inicio ? ' · ' + pvFecha(r.fecha_viaje_inicio) : ''}${vcConVoucher.has(r.id) ? ' · ya tiene voucher' : ''}</option>`).join('')}<option value="nueva">Nueva reserva (otro viaje)</option></select></div>`;
+  box.innerHTML = `<div class="vc-lead-top"><i class="fas fa-circle-check"></i><div><b>${esc(l.nombre || 'Sin nombre')}</b><small>${esc([l.telefono, l.estado, l.asesor].filter(Boolean).join(' · '))}</small></div>
+    <button class="vc-quitar" type="button" data-vc-quitar title="Quitar cliente" aria-label="Quitar cliente"><i class="fas fa-xmark"></i></button></div>${fila}`;
+  box.hidden = false;
+  const sel = document.getElementById('vc-reserva-sel');
+  if (sel) sel.value = String(vcReservaDefault());
+}
+// Qué pasa al generar. Decisión del dueño: lead sin PAGO REALIZADO (o sin lead) -> se cierra la venta.
+function vcPlan() {
+  const l = vcLead, pagado = vcNum('vc-monto-pagado');
+  if (vcSinReserva) return { modo: 'solo', manual: true };
+  if (!l || l.estado !== 'PAGO REALIZADO') return pagado > 0 ? { modo: 'cerrar', lead: l } : { modo: 'solo', motivo: 'sin_pago' };
+  if (vcReservasError) return { modo: 'solo', motivo: 'error' };
+  if (vcReservas === null) return { modo: 'cargando', lead: l };
+  const v = document.getElementById('vc-reserva-sel')?.value || 'nueva';
+  const r = vcReservas.find(x => String(x.id) === v);
+  return r ? { modo: 'vincular', lead: l, reserva: r } : { modo: 'nueva', lead: l };
+}
+function vcPintarPlan(p) {
+  const pagado = vcNum('vc-monto-pagado'), nom = esc(p.lead?.nombre || val('vc-cliente-nombre').trim() || 'el cliente');
+  const txt = {
+    cerrar: p.lead ? `<i class="fas fa-handshake"></i> Se <b>cierra la venta</b> de ${nom} por <b>${vcMoney(pagado)}</b> (pasa a PAGO REALIZADO: factura y comisión) y queda su ficha en Reservas con el voucher.`
+      : `<i class="fas fa-user-plus"></i> Cliente nuevo: se <b>crea en el CRM</b>, se <b>cierra la venta</b> por <b>${vcMoney(pagado)}</b> y queda su ficha en Reservas con el voucher.`,
+    nueva: `<i class="fas fa-plus"></i> Se crea una <b>reserva nueva</b> (otro viaje) de ${nom}${pagado > 0 ? ` y se factura <b>${vcMoney(pagado)}</b>` : ', sin facturar (no hay pago)'}.`,
+    vincular: `<i class="fas fa-link"></i> Se actualiza la ficha <b>${esc(p.reserva?.codigo || '')}</b>: hospedaje, fechas y voucher adjunto. <b>No se factura de nuevo.</b>`,
+    cargando: '<i class="fas fa-spinner fa-spin"></i> Cargando las reservas del cliente...',
+    solo: p.manual ? '<i class="fas fa-file-pdf"></i> Solo se genera el PDF, sin tocar Reservas.'
+      : p.motivo === 'error' ? '<i class="fas fa-triangle-exclamation"></i> No se pudieron cargar las reservas del cliente: solo se genera el PDF.'
+      : '<i class="fas fa-file-pdf"></i> Sin monto pagado: solo se genera el PDF. Cargá lo pagado para cerrar la venta y crear la ficha.',
+  }[p.modo];
+  const link = p.modo === 'solo' ? (p.manual ? ' <button class="vc-link" type="button" data-vc-con>Vincular con Reservas</button>' : '')
+    : p.modo === 'cargando' ? '' : ' <button class="vc-link" type="button" data-vc-sin>Solo PDF, sin reserva</button>';
+  document.getElementById('vc-plan').innerHTML = txt + link;
+}
+function vcActualizarPreview() {
+  const $ = id => document.getElementById(id), txt = (id, v) => { $(id).textContent = v; };
+  if (!$('vc-boleto')) return;
+  const ent = val('vc-fecha-entrada'), sal = val('vc-fecha-salida'), n = vcNoches();
+  $('vc-fecha-salida').min = ent || '';
+  if (!vcDiasManual) $('vc-total-dias').value = n ? `${n + 1} días y ${n} noche${n === 1 ? '' : 's'}` : '';
+  const total = vcNum('vc-total-general'), pagado = vcNum('vc-monto-pagado');
+  if (!vcRestaManual) $('vc-resta').value = total > 0 ? String(Math.max(0, Math.round((total - pagado) * 100) / 100)) : '';
+  const resta = vcNum('vc-resta');
+  txt('vc-b-cliente', val('vc-cliente-nombre').trim() || 'Nombre del cliente');
+  $('vc-b-hotel').querySelector('span').textContent = val('vc-destino').trim() || 'Hotel o destino';
+  txt('vc-b-in', vcFechaCorta(ent)); txt('vc-b-out', vcFechaCorta(sal));
+  txt('vc-b-in-h', val('vc-check-in').trim() || '3:00 PM'); txt('vc-b-out-h', val('vc-check-out').trim() || '12:00 PM');
+  txt('vc-b-noches', n ? `${n} noche${n === 1 ? '' : 's'}` : '— noches');
+  const a = parseInt(val('vc-adultos'), 10) || 0, ni = val('vc-ninos').trim();
+  const ninos = !ni || /^(n\/?a|0|no|ninguno)$/i.test(ni) ? '' : /^\d+$/.test(ni) ? `${ni} niño${ni === '1' ? '' : 's'}` : `Niños: ${ni}`;
+  txt('vc-b-pax', [a ? `${a} adulto${a === 1 ? '' : 's'}` : '', ninos].filter(Boolean).join(' + ') || '—');
+  txt('vc-b-hab', val('vc-habitaciones').trim() || '—'); txt('vc-b-plan', val('vc-modalidad').trim() || '—');
+  txt('vc-b-total', vcMoney(total)); txt('vc-b-pagado', vcMoney(pagado)); txt('vc-b-resta', vcMoney(resta));
+  $('vc-b-resta').parentElement.classList.toggle('cero', total > 0 && resta <= 0);
+  $('vc-b-barra').style.width = (total > 0 ? Math.min(100, pagado / total * 100) : 0) + '%';
+  const p = vcPlan(); vcPintarPlan(p);
+  const r = $('vc-b-reserva');
+  r.classList.toggle('ok', ['cerrar', 'nueva', 'vincular'].includes(p.modo));
+  r.querySelector('span').textContent = !vcLead && p.modo === 'solo' && !p.manual ? 'Cliente sin vincular'
+    : { cerrar: 'Venta nueva · ficha en Reservas', nueva: 'Reserva nueva (otro viaje)', vincular: 'Ficha ' + (p.reserva?.codigo || ''), cargando: 'Buscando reservas...', solo: 'Solo PDF, sin ficha' }[p.modo];
+  const btn = $('vc-generar-btn');
+  if (!btn.disabled) btn.innerHTML = `<i class="fas fa-file-pdf"></i> ${{ cerrar: 'Generar y cerrar venta', nueva: 'Generar y crear reserva', vincular: 'Generar y vincular' }[p.modo] || 'Generar voucher'}`;
+}
+function vcSyncChips() {
+  const partes = val('vc-forma-pago').toLowerCase().split('+').map(s => s.trim());
+  document.querySelectorAll('#vc-pago-chips [data-pago]').forEach(b => b.classList.toggle('on', partes.includes(b.dataset.pago.toLowerCase())));
+}
+function vcTogglePago(pago) {
+  const el = document.getElementById('vc-forma-pago'), partes = el.value.split('+').map(s => s.trim()).filter(Boolean);
+  const i = partes.findIndex(x => x.toLowerCase() === pago.toLowerCase());
+  if (i >= 0) partes.splice(i, 1); else partes.push(pago);
+  el.value = partes.join(' + '); vcSyncChips();
+}
+function vcReset() {
+  ['vc-cliente-nombre', 'vc-documento', 'vc-telefono', 'vc-destino', 'vc-modalidad', 'vc-habitaciones', 'vc-fecha-entrada', 'vc-fecha-salida', 'vc-adultos', 'vc-ninos',
+    'vc-total-dias', 'vc-status', 'vc-total-general', 'vc-monto-pagado', 'vc-resta', 'vc-forma-pago', 'vc-lead-q'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('vc-check-in').value = '3:00 PM'; document.getElementById('vc-check-out').value = '12:00 PM';
+  vcLead = null; vcReservas = null; vcReservasError = false; vcSinReserva = vcDiasManual = vcRestaManual = false; vcSugCand = null; vcSugDescartados.clear();
+  document.getElementById('vc-sugerencia').hidden = true;
+  vcCerrarRes(); vcPintarLead(); vcSyncChips(); vcActualizarPreview();
+}
+window.vcLimpiar = () => { document.getElementById('vc-hecho').hidden = true; vcReset(); };
 async function loadVoucherSeccion() {
   const sel = document.getElementById('vc-asesor');
   const optHtml = (nombre, sel_) => `<option value="${esc(nombre)}" ${nombre === sel_ ? 'selected' : ''}>${esc(nombre)}</option>`;
@@ -22700,11 +22907,14 @@ async function loadVoucherSeccion() {
     sel.innerHTML = optHtml(MI_NOMBRE, MI_NOMBRE);
     sel.disabled = true;
   }
+  if (!val('vc-check-in')) document.getElementById('vc-check-in').value = '3:00 PM';
+  if (!val('vc-check-out')) document.getElementById('vc-check-out').value = '12:00 PM';
+  vcActualizarPreview();
   vcOffset = 0;
   await cargarHistorialVouchers(false);
 }
 function vcQueryBase() {
-  let q = sb.from('vouchers').select('numero_factura,created_at,asesor_nombre,cliente_nombre,destino_hospedaje,total_general,pdf_path');
+  let q = sb.from('vouchers').select('numero_factura,created_at,asesor_nombre,cliente_nombre,destino_hospedaje,total_general,pdf_path,reserva_id,reserva_codigo');
   // Sin comas/paréntesis -- romperían la sintaxis del filtro .or() de PostgREST.
   const buscar = (val('vc-buscar') || '').trim().replace(/[,()]/g, '');
   if (buscar) q = q.or(`cliente_nombre.ilike.%${buscar}%,asesor_nombre.ilike.%${buscar}%`);
@@ -22737,10 +22947,12 @@ async function cargarHistorialVouchers(append) {
     </div>
     <div class="lt-card-pie">
       <button class="btn-sm${v.pdf_path ? ' lt-primario' : ''}" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})"><i class="fas ${v.pdf_path ? 'fa-file-pdf' : 'fa-rotate'}"></i> ${v.pdf_path ? 'Ver PDF' : 'Reconstruir'}</button>
+      ${v.reserva_codigo ? `<button class="vc-chip-res" type="button" data-vc-res="${v.reserva_id}" data-cod="${esc(v.reserva_codigo)}" title="Abrir la ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> ${esc(v.reserva_codigo)}</button>` : ''}
     </div>
   </article>`).join('');
   if (!append && !filas) tbody.innerHTML = '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin vouchers</div>';
   else tbody.innerHTML = append ? tbody.innerHTML + filas : filas;
+  tbody.querySelectorAll('[data-vc-res]').forEach(b => b.onclick = () => abrirReservaDeLead(Number(b.dataset.vcRes), b.dataset.cod, b));
   if (!append) entradaLista(tbody);
   if (masBtn) masBtn.style.display = (data || []).length < VC_PAGE_SIZE ? 'none' : '';
   await actualizarBadgeVoucher();
@@ -22785,10 +22997,81 @@ function cargarImagenBase64(src) {
     reader.readAsDataURL(blob);
   }));
 }
+const VC_PASOS = { crear_lead_manual: 'No se pudo crear el cliente', actualizar_lead: 'No se pudo mover el lead', guardar_postventa: 'No se pudo crear la ficha', crear_reserva: 'No se pudo crear la reserva', cerrar_reserva: 'No se pudo facturar' };
+// Mismo orden que supabase/functions/voucher-a-venta (cerrar: pasos 3-6; nueva: "otro viaje").
+// st acumula lo que se alcanzó a crear: si un paso falla, lo anterior igual se vincula.
+async function vcEjecutarPlan(plan, reg, st, { total, pagado, asesorNombre }) {
+  if (plan.modo !== 'cerrar' && plan.modo !== 'nueva') return;
+  const paso = async (fn, args) => {
+    const { data, error } = await sb.rpc(fn, args);
+    if (error || !data?.ok) throw new Error(`${VC_PASOS[fn]}: ${errReserva(error, data) || 'error desconocido'}`);
+    return data;
+  };
+  const totalPv = total > 0 ? total : pagado;
+  const pv = {
+    p_prioridad: 'NORMAL', p_monto_total: totalPv, p_monto_pagado: Math.min(pagado, totalPv),
+    p_fecha_viaje_inicio: reg.fecha_entrada, p_fecha_viaje_fin: reg.fecha_salida, p_proveedor: reg.destino_hospedaje,
+    p_documentos: { voucher_hotel: true, comprobante_pago: pagado > 0 }, p_marcar_pagado: false, p_notas: `Voucher N° ${reg.numero_factura}`,
+  };
+  if (plan.modo === 'cerrar') {
+    if (!st.leadId) {
+      const cl = await paso('crear_lead_manual', { p_nombre: reg.cliente_nombre, p_telefono: reg.telefono, p_destino: reg.destino_hospedaje, p_asesor: ROL === 'admin' ? asesorNombre : null, p_canal: 'Voucher CRM' });
+      st.leadId = Number(cl.lead_id);
+    }
+    await paso('actualizar_lead', { p_lead_id: st.leadId, p_estado: 'COTIZACION ENVIADA', p_asesor: ROL === 'admin' && plan.lead && !plan.lead.asesor ? asesorNombre : null });
+    const p5 = await paso('guardar_postventa', { ...pv, p_lead_id: st.leadId, p_etapa: 'COBRO_PENDIENTE' });
+    st.reservaId = Number(p5.caso?.id) || null; st.codigo = p5.caso?.codigo || null;
+    await paso('actualizar_lead', { p_lead_id: st.leadId, p_estado: 'PAGO REALIZADO', p_monto: pagado });
+    return;
+  }
+  const cr = await paso('crear_reserva', { p_lead_id: st.leadId });
+  st.reservaId = Number(cr.caso?.id) || null; st.codigo = cr.caso?.codigo || null;
+  if (!st.reservaId) throw new Error(VC_PASOS.crear_reserva);
+  await paso('guardar_postventa', { ...pv, p_lead_id: st.leadId, p_reserva_id: st.reservaId, p_etapa: pagado > 0 ? 'CONFIRMACION_RESERVA' : 'COBRO_PENDIENTE' });
+  if (pagado > 0) await paso('cerrar_reserva', { p_reserva_id: st.reservaId, p_monto: pagado });
+}
+// PDF como documento 'voucher' de la reserva (mismo flujo que rvSubirDocumento).
+async function vcAdjuntarPdf(reservaId, servicioId, blob, nombre) {
+  const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: reservaId, servicio_id: servicioId, tipo: 'voucher', nombre, mime: 'application/pdf', tamano: blob.size } });
+  if (firma.error || !firma.data?.ok) { const m = await msgErrorFn(firma.error, firma.data); return RV_ERR[m] || m; }
+  const up = await sb.storage.from('reservas-documentos').uploadToSignedUrl(firma.data.path, firma.data.token, blob, { contentType: 'application/pdf' });
+  if (up.error) return up.error.message || 'error de red';
+  const { data, error } = await sb.rpc('registrar_documento', { p_reserva_id: reservaId, p_servicio_id: servicioId, p_tipo: 'voucher', p_storage_path: firma.data.path, p_nombre: nombre });
+  return error || !data?.ok ? rvErr(error, data) : null;
+}
+function vcDescargar(blob, nombre) {
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function vcPintarHecho(h) {
+  const box = document.getElementById('vc-hecho');
+  box.innerHTML = `<b><i class="fas fa-circle-check"></i> Voucher N° ${fmt(h.numero)} generado</b><span>${esc(h.resumen)}</span>
+    ${h.avisos.map(a => `<small style="color:var(--danger)"><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</small>`).join('')}
+    <div class="vc-hecho-acc">${h.reservaId && h.codigo ? `<button class="vc-mini" type="button" data-vc-abrir>Abrir ficha ${esc(h.codigo)}</button>` : ''}<button class="vc-mini" type="button" data-vc-ver>Ver PDF</button></div>`;
+  box.hidden = false;
+  box.querySelector('[data-vc-abrir]')?.addEventListener('click', e => abrirReservaDeLead(h.reservaId, h.codigo, e.currentTarget));
+  box.querySelector('[data-vc-ver]').addEventListener('click', () => verVoucherPdf(h.pdfPath || '', h.numero));
+}
 window.generarVoucherPdf = async function generarVoucherPdf() {
   const btn = document.getElementById('vc-generar-btn');
   const clienteNombre = val('vc-cliente-nombre').trim();
   if (!clienteNombre) { errToast('Ingresá el nombre del cliente'); return; }
+  const total = vcNum('vc-total-general'), pagado = vcNum('vc-monto-pagado');
+  if (total > 0 && pagado > total) { errToast('Lo pagado no puede superar el total'); return; }
+  if (val('vc-fecha-entrada') && val('vc-fecha-salida') && val('vc-fecha-salida') < val('vc-fecha-entrada')) { errToast('La salida no puede ser antes de la entrada'); return; }
+  const plan = vcPlan();
+  if (plan.modo === 'cargando') { errToast('Esperá a que carguen las reservas del cliente'); return; }
+  const montos = `Total ${vcMoney(total)} · Pagado ${vcMoney(pagado)} · Resta ${vcMoney(vcNum('vc-resta'))}`;
+  if (plan.modo === 'cerrar' && !(await confirmarSheet({
+    titulo: `¿Cerrar la venta por ${vcMoney(pagado)}?`, textoOk: 'Generar y cerrar venta',
+    detalle: `${plan.lead ? 'Cliente: ' + plan.lead.nombre : 'Se crea el cliente ' + clienteNombre + ' en el CRM.'}\nPasa a PAGO REALIZADO: se genera la factura por lo pagado, la comisión y la ficha en Reservas con el voucher.\n${montos}`,
+  }))) return;
+  if (plan.modo === 'nueva' && pagado > 0 && !(await confirmarSheet({
+    titulo: `¿Reserva nueva y facturar ${vcMoney(pagado)}?`, textoOk: 'Generar y facturar',
+    detalle: `Es otro viaje de ${plan.lead.nombre}: se crea una reserva aparte y se factura lo pagado (factura, comisión y cuenta por pagar).\n${montos}`,
+  }))) return;
   const asesorNombre = ROL === 'admin' ? (val('vc-asesor').trim() || MI_NOMBRE) : MI_NOMBRE;
   const fila = {
     creado_por: MI_USUARIO_ID, asesor_nombre: asesorNombre, cliente_nombre: clienteNombre,
@@ -22804,31 +23087,41 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     monto_pagado: val('vc-monto-pagado') ? parseFloat(val('vc-monto-pagado')) : null,
     resta: val('vc-resta') ? parseFloat(val('vc-resta')) : null,
   };
-  btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...';
+  let registro = null;
   try {
-    const { data: registro, error } = await sb.from('vouchers').insert(fila).select().single();
-    if (error || !registro) { errToast('No se pudo guardar el voucher: ' + (error?.message || '')); return; }
+    const ins = await sb.from('vouchers').insert(fila).select().single();
+    registro = ins.data;
+    if (ins.error || !registro) { errToast('No se pudo guardar el voucher: ' + (ins.error?.message || '')); return; }
     await ensureVoucherLibs();
-    const pdfBytes = await construirVoucherPdf(registro);
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const blob = new Blob([await construirVoucherPdf(registro)], { type: 'application/pdf' });
+    const nombreArchivo = `Voucher-${registro.numero_factura}-${clienteNombre.replace(/\s+/g, '-')}.pdf`;
     // Guarda el PDF real en Storage -- el historial siempre muestra este
-    // archivo exacto, no una reconstrucción, aunque cambie la plantilla más
-    // adelante. No bloquea la descarga inmediata al asesor si falla (queda
-    // sin pdf_path, cargarHistorialVouchers cae al fallback de reconstruir).
+    // archivo exacto, no una reconstrucción. Si falla, no bloquea la descarga
+    // (queda sin pdf_path y el historial cae al fallback de reconstruir).
+    // El path lo graba voucher_vincular: vouchers no tiene policy de UPDATE.
+    let pdfPath = `${MI_USUARIO_ID}/${registro.numero_factura}.pdf`;
     try {
-      const pdfPath = `${MI_USUARIO_ID}/${registro.numero_factura}.pdf`;
       const { error: upErr } = await sb.storage.from('vouchers-pdf').upload(pdfPath, blob, { contentType: 'application/pdf' });
-      if (!upErr) await sb.from('vouchers').update({ pdf_path: pdfPath }).eq('id', registro.id);
-      else console.error('subir pdf voucher a storage', upErr);
-    } catch (upEx) {
-      console.error('subir pdf voucher a storage', upEx);
+      if (upErr) { console.error('subir pdf voucher a storage', upErr); pdfPath = null; }
+    } catch (upEx) { console.error('subir pdf voucher a storage', upEx); pdfPath = null; }
+    vcDescargar(blob, nombreArchivo);
+    // Reservas solo después de tener el PDF: si falló la generación, no se factura nada.
+    const avisos = [], st = { leadId: plan.lead?.id || null, reservaId: plan.modo === 'vincular' ? plan.reserva.id : null, codigo: plan.reserva?.codigo || null };
+    try { await vcEjecutarPlan(plan, registro, st, { total, pagado, asesorNombre }); } catch (e) { console.error('voucher -> reservas', e); avisos.push(e.message); }
+    let servicioId = null;
+    if (pdfPath || st.reservaId) {
+      const vv = await sb.rpc('voucher_vincular', { p_voucher_id: registro.id, p_pdf_path: pdfPath, p_reserva_id: st.reservaId });
+      if (vv.error || !vv.data?.ok) { console.error('voucher_vincular', vv.error || vv.data); avisos.push('No se pudo vincular el voucher a la ficha: ' + (vv.error?.message || vv.data?.error || 'error desconocido')); }
+      else { st.codigo = vv.data.codigo || st.codigo; servicioId = vv.data.servicio_id || null; }
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `Voucher-${registro.numero_factura}-${clienteNombre.replace(/\s+/g, '-')}.pdf`;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-    okToast('Voucher generado');
+    if (st.reservaId) { const e = await vcAdjuntarPdf(st.reservaId, servicioId, blob, nombreArchivo); if (e) avisos.push('El PDF no quedó adjunto a la ficha: ' + e); }
+    const resumen = avisos.length ? 'El PDF se descargó, pero revisá lo de abajo'
+      : { cerrar: `Venta cerrada por ${vcMoney(pagado)}`, nueva: `Reserva nueva${pagado > 0 ? ' facturada por ' + vcMoney(pagado) : ''}`, vincular: 'Ficha actualizada con el voucher', solo: 'Solo PDF, sin ficha en Reservas' }[plan.modo]
+        + (st.codigo && plan.modo !== 'solo' ? ` · ${st.codigo}` : '');
+    vcPintarHecho({ numero: registro.numero_factura, resumen, avisos, reservaId: st.reservaId, codigo: st.codigo, pdfPath });
+    if (avisos.length) errToast(avisos[0]); else okToast(`Voucher N° ${registro.numero_factura} generado`);
+    vcReset();
     vcOffset = 0; cargarHistorialVouchers(false);
   } catch (e) {
     // El registro en `vouchers` (con su numero_factura) ya pudo haberse
@@ -22836,10 +23129,10 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     // cortada, voucher-terminos.pdf no disponible) -- avisar explícito en vez
     // de dejar el botón "colgado" sin feedback, que es lo que ocultaba el bug.
     console.error('generarVoucherPdf', e);
-    errToast('El voucher se guardó pero no se pudo generar el PDF, reintentá');
+    errToast(registro ? 'El voucher se guardó pero no se pudo generar el PDF, reintentá' : 'No se pudo generar el voucher');
     vcOffset = 0; cargarHistorialVouchers(false);
   } finally {
-    btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-pdf"></i> Generar PDF';
+    btn.disabled = false; vcActualizarPreview();
   }
 };
 async function construirVoucherPdf(v) {

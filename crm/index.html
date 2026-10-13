@@ -2408,6 +2408,104 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .cb-hist-cab{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .cb-hist-cab .ei{max-width:280px}
 @media (max-width:720px){.cb-item-grid{grid-template-columns:1fr 1fr}.cb-hist-cab .ei{max-width:none}}
+/* Voucher (2026-10-13): formulario compacto + boleto de vista previa. Ficha en Reservas vía voucher_vincular. */
+.vc-wrap{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start;margin-bottom:14px}
+.vc-form{position:relative;overflow:hidden;padding-left:24px;margin:0}
+.vc-form::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:linear-gradient(180deg,var(--lyra-sol-a),var(--lyra-sol-b))}
+.vc-form::after{content:"";position:absolute;top:-22px;right:-22px;width:160px;height:160px;background:url(logolotus.png) center/contain no-repeat;opacity:.05;pointer-events:none}
+.vc-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.vc-link{background:none;border:0;color:var(--muted);font:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:6px 8px;border-radius:8px;width:auto}
+.vc-link:hover{color:var(--accent-ink);background:var(--accent-soft)}
+.vc-grupo{border:0;margin:0;padding:0;min-width:0}
+.vc-grupo+.vc-grupo{border-top:1px dashed var(--line2);margin-top:14px;padding-top:12px}
+.vc-grupo legend{float:left;width:100%;display:flex;align-items:center;gap:8px;padding:0;margin-bottom:10px;font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.vc-grupo>:not(legend){clear:both}
+.vc-grupo legend span{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);letter-spacing:0}
+.vc-fila{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.vc-c{display:flex;flex-direction:column;gap:4px;min-width:0;margin:0}
+.vc-c.s2{grid-column:span 2}
+.vc-c>span{font-size:11px;font-weight:600;color:var(--muted)}
+.vc-form .ei{padding:8px 10px;font-size:13px;min-height:36px}
+.vc-buscar{position:relative;margin-bottom:10px}
+.vc-buscar>i{position:absolute;left:12px;top:18px;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
+.vc-form .vc-buscar .ei{padding-left:34px;background:rgba(var(--accent-rgb),.06);border-color:rgba(var(--accent-rgb),.3)}
+.vc-res{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;box-shadow:0 14px 34px rgba(0,0,0,.28);padding:4px;max-height:300px;overflow:auto}
+.vc-res button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-radius:9px;padding:8px 10px;color:var(--txt);font:inherit;cursor:pointer}
+.vc-res button:hover,.vc-res button.on{background:var(--accent-soft)}
+.vc-res-txt{flex:1;min-width:0}
+.vc-res-txt b{display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vc-res-txt small{display:block;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vc-res-vacio{padding:10px;font-size:12px;color:var(--muted)}
+.vc-pill{flex-shrink:0;font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--line2);color:var(--muted);white-space:nowrap}
+.vc-pill.ok{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}
+.vc-lead{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;padding:10px 12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--green) 35%,transparent);background:color-mix(in srgb,var(--green) 9%,transparent)}
+.vc-lead-top{display:flex;align-items:center;gap:10px}
+.vc-lead-top>i{color:var(--green)}
+.vc-lead-top>div{flex:1;min-width:0}
+.vc-lead-top b{display:block;font-size:13px}
+.vc-lead-top small{font-size:11px;color:var(--muted)}
+.vc-lead-res{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.vc-lead-res select.ei{flex:1;min-width:200px;width:auto}
+.vc-quitar{background:none;border:0;color:var(--muted);cursor:pointer;padding:4px 8px;border-radius:8px;width:auto;font:inherit}
+.vc-quitar:hover{color:var(--danger)}
+.vc-sugerencia{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:8px 12px;border-radius:10px;background:var(--accent-soft);font-size:12px}
+.vc-mini{background:var(--panel-solid);border:1px solid var(--line2);color:var(--txt);border-radius:999px;padding:4px 11px;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;width:auto}
+.vc-mini:hover{border-color:var(--accent)}
+.vc-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.vc-chips button{background:transparent;border:1px solid var(--line2);color:var(--muted);border-radius:999px;padding:5px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;width:auto}
+.vc-chips button:hover{color:var(--txt);border-color:var(--accent)}
+.vc-chips button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.vc-pie{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.vc-plan{flex:1;min-width:220px;font-size:12px;color:var(--muted);line-height:1.5}
+.vc-plan b{color:var(--txt)}
+.vc-plan>i{color:var(--accent-ink);margin-right:4px}
+.vc-plan .vc-link{padding:0 2px;font-size:12px;text-decoration:underline}
+.vc-generar{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--lyra-marca);color:var(--lyra-tinta);border:0;border-radius:12px;padding:11px 20px;font:inherit;font-size:14px;font-weight:800;cursor:pointer;width:auto;box-shadow:0 6px 18px rgba(var(--accent-rgb),.25)}
+.vc-generar:disabled{opacity:.6;cursor:progress}
+.vc-boleto-col{position:sticky;top:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.vc-boleto{position:relative;background:var(--panel-solid);border:1px solid var(--line2);border-radius:16px;padding-left:28px;overflow:hidden;box-shadow:0 14px 36px rgba(0,0,0,.18)}
+.vc-lomo{position:absolute;inset:0 auto 0 0;width:28px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--lyra-sol-a),var(--lyra-sol-b))}
+.vc-lomo span{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--lyra-tinta);white-space:nowrap}
+.vc-lomo::after{content:"";position:absolute;top:0;bottom:0;right:-4px;width:8px;background:radial-gradient(circle,var(--panel-solid) 2.2px,transparent 2.7px) center top/8px 12px repeat-y}
+.vc-b-cab{display:flex;align-items:center;gap:10px;padding:14px 16px 12px;border-bottom:1px solid var(--line)}
+.vc-b-cab img{width:34px;height:34px;object-fit:contain;border-radius:8px}
+.vc-b-cab>div{flex:1;min-width:0;line-height:1.2}
+.vc-b-cab b{display:block;font-size:14px;font-weight:800}
+.vc-b-cab small{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.vc-b-num{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;font-weight:700;padding:4px 8px;border-radius:8px;background:var(--accent-soft);color:var(--accent-ink);white-space:nowrap}
+.vc-b-cuerpo{padding:14px 16px}
+.vc-b-cuerpo small,.vc-b-talon small{display:block;font-size:9.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.vc-b-cliente{font-size:17px;font-weight:800;margin:2px 0 4px;overflow-wrap:anywhere}
+.vc-b-hotel{display:flex;gap:6px;align-items:baseline;font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.vc-b-hotel i{color:var(--accent-ink)}
+.vc-b-ruta{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin:14px 0;padding:10px 12px;border-radius:12px;background:rgba(var(--accent-rgb),.07)}
+.vc-b-ruta>div:last-child{text-align:right}
+.vc-b-ruta b{display:block;font-size:14px;font-weight:800;white-space:nowrap}
+.vc-b-ruta em{font-style:normal;font-size:11px;color:var(--muted)}
+.vc-b-noches{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700;color:var(--accent-ink);white-space:nowrap}
+.vc-b-noches::before,.vc-b-noches::after{content:"";width:22px;border-top:1.5px dashed currentColor;opacity:.5}
+.vc-b-datos{display:grid;grid-template-columns:auto 1fr 1fr;gap:12px}
+.vc-b-datos b{display:block;font-size:12.5px;font-weight:700;margin-top:2px;overflow-wrap:anywhere}
+.vc-b-corte{position:relative;height:0;border-top:2px dashed var(--line2);margin:0 14px}
+.vc-b-corte::before,.vc-b-corte::after{content:"";position:absolute;top:-11px;width:20px;height:20px;border-radius:50%;background:var(--bg)}
+.vc-b-corte::before{left:-52px}
+.vc-b-corte::after{right:-24px}
+.vc-b-talon{padding:14px 16px 16px}
+.vc-b-montos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.vc-b-montos b{display:block;font-size:15px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums}
+.vc-b-montos>div:last-child b{color:var(--accent-ink)}
+.vc-b-montos>div.cero b{color:var(--green)}
+.vc-b-barra{height:6px;border-radius:999px;background:var(--line2);margin:12px 0;overflow:hidden}
+.vc-b-barra i{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,var(--lyra-sol-a),var(--lyra-sol-b));transition:width .3s}
+.vc-b-reserva{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding:8px 10px;border:1.5px dashed var(--line2);border-radius:10px}
+.vc-b-reserva.ok{color:var(--green);border-color:color-mix(in srgb,var(--green) 45%,transparent);background:color-mix(in srgb,var(--green) 8%,transparent)}
+.vc-hecho{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:14px;font-size:12.5px;background:color-mix(in srgb,var(--green) 10%,transparent);border:1px solid color-mix(in srgb,var(--green) 35%,transparent)}
+.vc-hecho>b{color:var(--green)}
+.vc-hecho-acc{display:flex;gap:6px;flex-wrap:wrap}
+.vc-chip-res{background:var(--accent-soft);color:var(--accent-ink);border:0;border-radius:999px;padding:3px 9px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;font-weight:700;cursor:pointer;width:auto}
+:is(.vc-res,.vc-lead,.vc-sugerencia,.vc-hecho)[hidden]{display:none}
+@media (max-width:1100px){.vc-wrap{grid-template-columns:minmax(0,1fr)}.vc-boleto-col{position:static;width:100%;max-width:420px;margin:0 auto}}
+@media (max-width:760px){.vc-form{padding-left:18px}.vc-fila{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-form .ei{font-size:16px;min-height:44px}.vc-buscar>i{top:22px}.vc-generar{width:100%}.vc-chips button{padding:8px 14px}}
 .nav-item.nav-freelancer-only,.sheet-item.nav-freelancer-only{display:none}
 .es-freelancer .nav-item.nav-freelancer-only,.es-freelancer .sheet-item.nav-freelancer-only{display:flex}
 /* Menú agrupado (2026-09-25): las hijas se abren desde las pestañas de su
@@ -7020,33 +7118,106 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 
     <!-- VOUCHER (solo Luis Rueda y Beatriz Olmedillo, gate por MI_VE_VOUCHER) -->
     <section class="section" id="sec-voucher">
-      <div class="card">
-        <h2><i class="fas fa-file-invoice"></i> Voucher de hospedaje</h2>
-        <div class="csub">Genera el voucher en PDF con los datos del cliente y descárgalo para compartir</div>
-        <div class="grid g-2">
-          <div class="field"><label class="fl">Nombre y apellido</label><input id="vc-cliente-nombre" class="ei"></div>
-          <div class="field"><label class="fl">Documento de identificación</label><input id="vc-documento" class="ei"></div>
-          <div class="field"><label class="fl">Teléfono</label><input id="vc-telefono" class="ei"></div>
-          <div class="field"><label class="fl">Asesor(a) de ventas</label><select id="vc-asesor" class="ei"></select></div>
-          <div class="field"><label class="fl">Destino / Hospedaje</label><input id="vc-destino" class="ei"></div>
-          <div class="field"><label class="fl">Modalidad hospedaje</label><input id="vc-modalidad" class="ei" placeholder="Todo incluido"></div>
-          <div class="field"><label class="fl">Fecha de entrada</label><input id="vc-fecha-entrada" class="ei" type="date"></div>
-          <div class="field"><label class="fl">Check in</label><input id="vc-check-in" class="ei" placeholder="3:00 PM"></div>
-          <div class="field"><label class="fl">Fecha de salida</label><input id="vc-fecha-salida" class="ei" type="date"></div>
-          <div class="field"><label class="fl">Check out</label><input id="vc-check-out" class="ei" placeholder="12:00 PM"></div>
-          <div class="field"><label class="fl">Total días de disfrute</label><input id="vc-total-dias" class="ei" placeholder="5 días y 4 noches"></div>
-          <div class="field"><label class="fl">Cantidad de habitaciones / clase</label><input id="vc-habitaciones" class="ei" placeholder="Habitación doble"></div>
-          <div class="field"><label class="fl">Cantidad de adultos</label><input id="vc-adultos" class="ei" type="number" min="0" step="1"></div>
-          <div class="field"><label class="fl">Cantidad de niños</label><input id="vc-ninos" class="ei" placeholder="N/A"></div>
-          <div class="field"><label class="fl">Status de la reserva / N° localizador</label><input id="vc-status" class="ei" placeholder="Activa"></div>
-          <div class="field"><label class="fl">Total general (USD)</label><input id="vc-total-general" class="ei" type="number" min="0" step="0.01"></div>
-          <div class="field"><label class="fl">Forma de pago</label><input id="vc-forma-pago" class="ei" placeholder="TDC, Zelle, efectivo..."></div>
-          <div class="field"><label class="fl">Monto pagado (USD)</label><input id="vc-monto-pagado" class="ei" type="number" min="0" step="0.01"></div>
-          <div class="field"><label class="fl">Resta (USD)</label><input id="vc-resta" class="ei" type="number" min="0" step="0.01"></div>
-        </div>
-        <div style="margin-top:16px;display:flex;gap:10px">
-          <button id="vc-generar-btn" onclick="generarVoucherPdf()"><i class="fas fa-file-pdf"></i> Generar PDF</button>
-        </div>
+      <div class="vc-wrap">
+        <form class="card vc-form" id="vc-form" autocomplete="off" onsubmit="return false">
+          <div class="vc-cab">
+            <div>
+              <h2><i class="fas fa-file-invoice"></i> Voucher de hospedaje</h2>
+              <div class="csub">Genera el PDF y deja la ficha lista en Reservas</div>
+            </div>
+            <button class="vc-link" type="button" onclick="vcLimpiar()"><i class="fas fa-eraser"></i> Limpiar</button>
+          </div>
+
+          <fieldset class="vc-grupo">
+            <legend><span>1</span> Cliente</legend>
+            <div class="vc-buscar" id="vc-buscar-box">
+              <i class="fas fa-magnifying-glass"></i>
+              <input id="vc-lead-q" class="ei" type="search" placeholder="Buscar cliente en el CRM: nombre o teléfono" aria-label="Buscar cliente en el CRM">
+              <div class="vc-res" id="vc-lead-res" role="listbox" hidden></div>
+            </div>
+            <div class="vc-lead" id="vc-lead-chip" hidden></div>
+            <div class="vc-fila">
+              <label class="vc-c s2"><span>Nombre y apellido</span><input id="vc-cliente-nombre" class="ei"></label>
+              <label class="vc-c"><span>Documento</span><input id="vc-documento" class="ei" placeholder="V-12345678"></label>
+              <label class="vc-c"><span>Teléfono</span><input id="vc-telefono" class="ei" inputmode="tel"></label>
+              <label class="vc-c s2"><span>Asesor(a) de ventas</span><select id="vc-asesor" class="ei"></select></label>
+            </div>
+            <div class="vc-sugerencia" id="vc-sugerencia" hidden></div>
+          </fieldset>
+
+          <fieldset class="vc-grupo">
+            <legend><span>2</span> Estadía</legend>
+            <div class="vc-fila">
+              <label class="vc-c s2"><span>Destino / Hospedaje</span><input id="vc-destino" class="ei" placeholder="Hotel, posada o destino"></label>
+              <label class="vc-c"><span>Modalidad</span><input id="vc-modalidad" class="ei" placeholder="Todo incluido" list="vc-modalidades"></label>
+              <label class="vc-c"><span>Habitación / clase</span><input id="vc-habitaciones" class="ei" placeholder="Habitación doble"></label>
+              <label class="vc-c"><span>Entrada</span><input id="vc-fecha-entrada" class="ei" type="date"></label>
+              <label class="vc-c"><span>Salida</span><input id="vc-fecha-salida" class="ei" type="date"></label>
+              <label class="vc-c"><span>Check in</span><input id="vc-check-in" class="ei" placeholder="3:00 PM"></label>
+              <label class="vc-c"><span>Check out</span><input id="vc-check-out" class="ei" placeholder="12:00 PM"></label>
+              <label class="vc-c"><span>Adultos</span><input id="vc-adultos" class="ei" type="number" min="0" step="1" inputmode="numeric"></label>
+              <label class="vc-c"><span>Niños</span><input id="vc-ninos" class="ei" placeholder="N/A"></label>
+              <label class="vc-c"><span>Días de disfrute</span><input id="vc-total-dias" class="ei" placeholder="Se calcula con las fechas"></label>
+              <label class="vc-c"><span>Status / localizador</span><input id="vc-status" class="ei" placeholder="Activa"></label>
+            </div>
+            <datalist id="vc-modalidades"><option value="Todo incluido"><option value="Desayuno incluido"><option value="Media pensión"><option value="Pensión completa"><option value="Solo alojamiento"></datalist>
+          </fieldset>
+
+          <fieldset class="vc-grupo">
+            <legend><span>3</span> Pago</legend>
+            <div class="vc-fila">
+              <label class="vc-c"><span>Total (USD)</span><input id="vc-total-general" class="ei" type="number" min="0" step="0.01" inputmode="decimal"></label>
+              <label class="vc-c"><span>Pagado (USD)</span><input id="vc-monto-pagado" class="ei" type="number" min="0" step="0.01" inputmode="decimal"></label>
+              <label class="vc-c"><span>Resta (USD)</span><input id="vc-resta" class="ei" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Automático"></label>
+              <label class="vc-c"><span>Forma de pago</span><input id="vc-forma-pago" class="ei" placeholder="Zelle, efectivo..."></label>
+            </div>
+            <div class="vc-chips" id="vc-pago-chips" aria-label="Formas de pago frecuentes">
+              <button type="button" data-pago="Zelle">Zelle</button><button type="button" data-pago="Efectivo">Efectivo</button><button type="button" data-pago="Pago móvil">Pago móvil</button><button type="button" data-pago="Transferencia">Transferencia</button><button type="button" data-pago="TDC">TDC</button><button type="button" data-pago="Binance">Binance</button>
+            </div>
+          </fieldset>
+
+          <div class="vc-pie">
+            <div class="vc-plan" id="vc-plan" aria-live="polite"></div>
+            <button id="vc-generar-btn" class="vc-generar" type="button" onclick="generarVoucherPdf()"><i class="fas fa-file-pdf"></i> Generar voucher</button>
+          </div>
+        </form>
+
+        <aside class="vc-boleto-col" aria-label="Vista previa del voucher">
+          <div class="vc-boleto" id="vc-boleto">
+            <div class="vc-lomo" aria-hidden="true"><span>Destino y Eventos Lotus 360</span></div>
+            <div class="vc-b-cab">
+              <img src="logolotus.png" alt="" width="34" height="34">
+              <div><b>Lotus 360</b><small>Voucher de hospedaje</small></div>
+              <span class="vc-b-num" id="vc-b-num">Borrador</span>
+            </div>
+            <div class="vc-b-cuerpo">
+              <small>Huésped</small>
+              <div class="vc-b-cliente" id="vc-b-cliente">Nombre del cliente</div>
+              <div class="vc-b-hotel" id="vc-b-hotel"><i class="fas fa-hotel"></i> <span>Hotel o destino</span></div>
+              <div class="vc-b-ruta">
+                <div><small>Entrada</small><b id="vc-b-in">—</b><em id="vc-b-in-h">3:00 PM</em></div>
+                <div class="vc-b-noches"><i class="fas fa-moon"></i><span id="vc-b-noches">— noches</span></div>
+                <div><small>Salida</small><b id="vc-b-out">—</b><em id="vc-b-out-h">12:00 PM</em></div>
+              </div>
+              <div class="vc-b-datos">
+                <div><small>Pax</small><b id="vc-b-pax">—</b></div>
+                <div><small>Habitación</small><b id="vc-b-hab">—</b></div>
+                <div><small>Plan</small><b id="vc-b-plan">—</b></div>
+              </div>
+            </div>
+            <div class="vc-b-corte" aria-hidden="true"></div>
+            <div class="vc-b-talon">
+              <div class="vc-b-montos">
+                <div><small>Total</small><b id="vc-b-total">$0</b></div>
+                <div><small>Pagado</small><b id="vc-b-pagado">$0</b></div>
+                <div><small>Resta</small><b id="vc-b-resta">$0</b></div>
+              </div>
+              <div class="vc-b-barra"><i id="vc-b-barra"></i></div>
+              <div class="vc-b-reserva" id="vc-b-reserva"><i class="fas fa-suitcase-rolling"></i> <span>Cliente sin vincular</span></div>
+            </div>
+          </div>
+          <div class="vc-hecho" id="vc-hecho" hidden></div>
+        </aside>
       </div>
 
       <!-- Card aparte para el historial (antes compartía card con el
