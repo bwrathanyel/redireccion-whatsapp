@@ -2401,6 +2401,15 @@ body.modo-boleteria .nav-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .b
 body:not(.modo-boleteria) .nav-modo-boleteria-solo{display:none}
 .modo-boleteria-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(46,107,255,.14);border:1px solid rgba(74,158,255,.4);border-radius:10px;color:#7fb0ff;font-weight:600;font-size:12.5px;padding:9px 10px;cursor:pointer;font-family:inherit;margin-bottom:8px}
 .modo-boleteria-btn:hover{background:rgba(46,107,255,.24)}
+/* Solicitudes: primera del menú, más grande, y late en rojo con pendientes (fijarSolicitudesArriba) */
+#sidebar-nav > .nav-item.nav-bol-sol{flex-wrap:wrap;font-size:15px;font-weight:800;padding:13px 14px;margin:4px 0 10px;border-radius:12px;background:linear-gradient(135deg,rgba(46,107,255,.24),rgba(46,107,255,.08));border:1px solid rgba(74,158,255,.45);color:#e3ebff}
+#sidebar-nav > .nav-item.nav-bol-sol > i{font-size:17px}
+#sidebar-nav > .nav-item.nav-bol-sol .badge{font-size:12.5px;min-width:24px;padding:3px 8px;background:#ef4444;color:#fff}
+.nav-bol-sol .nav-bol-aviso{display:none;flex-basis:100%;font-size:11.5px;font-weight:700;color:#ffc2c2;margin-top:5px}
+#sidebar-nav > .nav-item.nav-bol-sol.pendientes{border-color:rgba(255,107,107,.75);animation:navBolSolLatido 1.3s ease-in-out infinite}
+.nav-bol-sol.pendientes .nav-bol-aviso{display:block}
+@keyframes navBolSolLatido{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55);background:rgba(239,68,68,.12)}50%{box-shadow:0 0 0 7px rgba(239,68,68,0);background:rgba(239,68,68,.3)}}
+@media (prefers-reduced-motion:reduce){#sidebar-nav > .nav-item.nav-bol-sol.pendientes{animation:none;background:rgba(239,68,68,.24)}}
 body.modo-boleteria #btn-entrar-modo-boleteria,body.modo-boleteria #sheet-entrar-modo-boleteria{display:none}
 body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .rol-boleteria #btn-entrar-modo-boleteria,.rol-boleteria #btn-salir-modo-boleteria,.rol-boleteria #sheet-entrar-modo-boleteria,.rol-boleteria #sheet-salir-modo-boleteria{display:none}

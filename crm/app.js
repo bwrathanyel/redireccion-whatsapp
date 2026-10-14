@@ -2706,7 +2706,7 @@ function arrancar(...pasos) {
 async function startApp() {
   if (booted) return; booted = true;
   arrancar(
-    renderNavItems, aplicarOrdenSidebar, renderFrecuentes, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
+    renderNavItems, aplicarOrdenSidebar, renderFrecuentes, fijarSolicitudesArriba, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes,
@@ -25060,12 +25060,23 @@ function setupBoleteria() {
     const c = e.target.closest?.('[data-bol-abrir]');
     if (c && e.target === c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrirDetalleBoleteria(c.dataset.bolAbrir); }
   });
-  // Cola viva: cada 30 s, solo con la cola a la vista y la pestaña visible. Repinta
-  // también los relojes de espera.
+  // Cola viva: cada 30 s con la pestaña visible. El agente la consulta esté donde
+  // esté (el menú parpadea si hay pendientes); el asesor, solo con la cola a la vista.
+  // Repinta también los relojes de espera.
   setInterval(() => {
     if (document.visibilityState !== 'visible') return;
-    if (currentSec === 'bol-solicitudes' || (currentSec === 'leads' && leadsTab === 'boleteria')) loadColaBoleteria(true);
+    if (bolEsAgente() || currentSec === 'bol-solicitudes' || (currentSec === 'leads' && leadsTab === 'boleteria')) loadColaBoleteria(true);
   }, 30000);
+}
+
+// Solicitudes va siempre primera en el menú, por encima del orden guardado y de
+// Frecuentes (pedido del dueño 2026-10-14), con una línea que avisa cuántas esperan.
+function fijarSolicitudesArriba() {
+  const item = navItemDe('bol-solicitudes'), buscar = document.getElementById('nav-buscar');
+  if (!item || !buscar) return;
+  item.classList.add('nav-bol-sol');
+  if (!document.getElementById('nav-bol-sol-aviso')) item.insertAdjacentHTML('beforeend', '<span class="nav-bol-aviso" id="nav-bol-sol-aviso"></span>');
+  buscar.after(item);
 }
 
 function abrirSolicitudBoleteria(lead) {
@@ -25424,6 +25435,9 @@ async function loadColaBoleteria(silencioso) {
   if (badge) { badge.textContent = abiertas; badge.style.display = abiertas ? '' : 'none'; }
   const navBadge = document.getElementById('nav-bol-sol-count');
   if (navBadge) { navBadge.textContent = enCola; navBadge.style.display = agente && enCola ? '' : 'none'; }
+  const navSol = navItemDe('bol-solicitudes'), aviso = document.getElementById('nav-bol-sol-aviso');
+  navSol?.classList.toggle('pendientes', agente && enCola > 0);
+  if (aviso) aviso.textContent = enCola === 1 ? '1 solicitud esperando' : `${enCola} solicitudes esperando`;
 
   const ag = document.getElementById('bol-agentes');
   ag.innerHTML = (agentes.data || []).length
