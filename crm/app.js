@@ -186,6 +186,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   comisiones: ['Comisiones por corte', 'Ventas pagadas, verificación e invoices · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
   boleteria: ['Boletería', 'Rutas, aerolíneas, precios y requisitos de vuelo'],
+  'bol-solicitudes': ['Solicitudes', 'Vuelos que piden los asesores, por orden de llegada'],
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
   'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
@@ -1362,14 +1363,14 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria', 'cotizacion-boletos',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos',
   'mensajes', 'whatsapp', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
 ];
 function seccionInicialPermitida() {
   if (ROL === 'marketing') return 'tarifario';
-  if (ROL === 'boleteria') return 'boleteria';
+  if (ROL === 'boleteria') return 'bol-solicitudes';
   return ROL === 'asesor' ? 'leads' : 'dashboard';
 }
 function usuarioPuedeAbrirSeccion(sec) {
@@ -1380,6 +1381,13 @@ function manejarDeepLinkSeccion() {
   const params = new URLSearchParams(location.search);
   const seccion = params.get('seccion') || params.get('ir');
   if (!seccion) return;
+  // Botones "Ver en CRM" de Telegram y push de boletería: ?ir=solicitud&sol=<id>.
+  if (seccion === 'solicitud') {
+    const sol = Number(params.get('sol'));
+    history.replaceState(null, '', location.pathname);
+    irASolicitudes(Number.isInteger(sol) && sol > 0 ? sol : null);
+    return;
+  }
   const destino = IR_SECCIONES.includes(seccion) && usuarioPuedeAbrirSeccion(seccion)
     ? seccion
     : seccionInicialPermitida();
@@ -7038,7 +7046,8 @@ function riaComparacionSeguimiento(reactivacion) {
 
 const RIA_BRAZOS = { deepseek: 'DeepSeek', haiku: 'Haiku 5.5', lite: 'Lite' };
 function riaAbFacebook(ab) {
-  const vs = ab?.variantes || [];
+  if (!ab) return '<div class="ria-vacio">No se pudo cargar la prueba A/B.</div>';
+  const vs = ab.variantes || [];
   if (!vs.length) return '<div class="ria-vacio">Sin comentarios de Facebook desde que empezó la prueba (14-oct).</div>';
   const nombre = { A: 'A · respuesta con precio', B: 'B · pregunta sin precio' };
   return `<div class="ria-lista">${vs.map(v => `<div class="ria-fila"><span><b>${esc(nombre[v.variante] || v.variante)}</b><br>${fmt(riaNum(v.respondieron))} respondieron (${riaPct(v.respondieron, v.contactos)}%) · ${fmt(riaNum(v.leads))} leads (${riaPct(v.leads, v.contactos)}%)</span><b>${fmt(riaNum(v.contactos))}</b></div>`).join('')}</div>`;
@@ -24028,6 +24037,7 @@ const NAV_ITEMS = [
   { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
   // En modo Boletería, Reservas solo abría el voucher de hospedaje: lo reemplaza Cotizaciones (2026-10-12).
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
+  { sec: 'bol-solicitudes', icon: 'fas fa-list-ol', label: 'Solicitudes', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Vuelos que piden los asesores, por orden de llegada', badge: 'nav-bol-sol-count', badgeDefault: '0' },
   { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Cotización de boletos en PDF para mandar al asesor' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok' },
@@ -24051,6 +24061,8 @@ const NAV_ITEMS = [
 // Orden del menú. `hoja`: entrada sin pestañas, es la sección misma. Los
 // badges viven en el padre porque la hija está oculta.
 const NAV_PADRES = [
+  // Primera: es el trabajo principal del modo Boletería (fuera de ese modo no se ve).
+  { sec: 'bol-solicitudes', hoja: true },
   { sec: 'grp-inicio', icon: 'fas fa-chart-pie', label: 'Inicio' },
   { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
   { sec: 'mensajes', hoja: true },
@@ -24340,7 +24352,7 @@ function activateSection(sec, fromNav) {
   // Refrescar (pull/botón) fuerza la recarga vía REFRESCAR_SECCION.
   if (DASH_SUCIO && SECS_DASH.has(sec)) { DASH_SUCIO = false; requestAnimationFrame(() => { renderAll(); loadDestPeriodo(); }); }
   // La cola de boletería es un solo DOM: se ubica antes del corte por frescura, que no vuelve a llamar a cargarSeccion.
-  bolMoverCola(sec === 'boleteria' && bolTab === 'solicitudes' ? 'bol-cola-host-sec' : 'bol-cola-host-leads');
+  bolMoverCola(sec === 'bol-solicitudes' ? 'bol-cola-host-sec' : 'bol-cola-host-leads');
   if (!CARGA_SIEMPRE.has(sec) && Date.now() - (ULTIMA_CARGA[sec] || 0) < CARGA_FRESCA_MS) return;
   requestAnimationFrame(() => setTimeout(() => {
     if (currentSec !== sec) return;
@@ -24355,7 +24367,7 @@ const SECS_DASH = new Set(['dashboard', 'pipeline', 'gestion-personal']);
 // Con esas secciones ocultas no se reconstruyen sus charts a cada lead nuevo; se pintan al entrar.
 function renderAllSiVisible() { if (SECS_DASH.has(currentSec)) { renderAll(); loadDestPeriodo(); } else DASH_SUCIO = true; }
 // Datos vivos propios (poll, chat, Realtime): cargan en cada visita.
-const CARGA_SIEMPRE = new Set(['hoy', 'leads', 'mensajes', 'whatsapp', 'dms', 'correo', 'asistente', 'repartir']);
+const CARGA_SIEMPRE = new Set(['hoy', 'leads', 'bol-solicitudes', 'mensajes', 'whatsapp', 'dms', 'correo', 'asistente', 'repartir']);
 function cargarSeccion(sec) {
   if (sec === 'ranking') loadRanking();
   if (sec === 'mis-ventas') loadMisVentasSeccion();
@@ -24392,6 +24404,7 @@ function cargarSeccion(sec) {
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'cotizacion-boletos') cbCargarSeccion();
+  if (sec === 'bol-solicitudes') loadColaBoleteria();
   if (sec === 'boleteria') loadBoleteria();
   if (sec === 'tareas') loadTareas();
   if (sec === 'manual') renderManual();
@@ -24698,7 +24711,7 @@ const REFRESCAR_SECCION = {
   'clientes-eventos': () => loadClientesEventos(),
   'stop-sales': () => { loadStopSalesVigentes(); ssCargarPdfActual(); },
   redes: () => cargarRedActual(), voucher: () => loadVoucherSeccion(), tareas: () => loadTareas(),
-  boleteria: () => loadBoleteria(), 'cotizacion-boletos': () => cbCargarSeccion(),
+  boleteria: () => loadBoleteria(), 'bol-solicitudes': () => loadColaBoleteria(), 'cotizacion-boletos': () => cbCargarSeccion(),
 };
 async function refrescarSeccionActual() {
   const tareas = [Promise.resolve(resyncTrasSegundoPlano())];
@@ -24939,7 +24952,6 @@ function setupLeadsTabs() {
   document.getElementById('ll-refrescar')?.addEventListener('click', () => loadLeadsAsignadosLote());
   loadLeadsEnFacturacion(); // el contador de la pestaña tiene que estar antes de que la abran
   loadLeadsAsignadosLote(); // idem: el badge de "Asignados en lote" cuenta pendientes
-  setupBoleteria();
   loadColaBoleteria();
   setupLeadsDropTargets();
 }
@@ -24954,6 +24966,8 @@ let BOL_CERRAR_ID = null;
 let BOL_BUSCAR_DEBOUNCE = null;
 // Última cola cargada: la hoja de detalle lee de acá en vez de volver a pedirla.
 let BOL_COLA = [];
+// Filtro y búsqueda de la cola; solicitud a abrir apenas cargue (deep link, recién tomada).
+let BOL_FILTRO = 'todas', BOL_Q = '', BOL_ABRIR_ID = null;
 
 // Tarifa de referencia del catálogo (la misma que publican web e IA) para la
 // ruta de la solicitud: el agente no la busca de cero. Origen y destino llegan
@@ -25025,6 +25039,33 @@ function setupBoleteria() {
     document.getElementById(id)?.addEventListener('change', bolValidarFechas));
   document.getElementById('bol-cerrar-cancelar')?.addEventListener('click', () => closeSheet('bol-cerrar-sheet'));
   document.getElementById('bol-cerrar-ok')?.addEventListener('click', cerrarSolicitudBoleteria);
+  document.getElementById('bol-res-rapidos')?.addEventListener('click', e => {
+    const chip = e.target.closest('[data-bol-res]'); if (!chip) return;
+    document.querySelectorAll('#bol-res-rapidos .bol-res-chip').forEach(c => c.classList.toggle('on', c === chip));
+    const nota = document.getElementById('bol-cerrar-nota');
+    nota.value = chip.dataset.bolRes + '. '; nota.focus(); nota.setSelectionRange(nota.value.length, nota.value.length);
+  });
+  document.getElementById('bol-tomar-sig')?.addEventListener('click', e => bolTomar(null, e.currentTarget));
+  document.getElementById('bol-filtros')?.addEventListener('click', e => { const b = e.target.closest('[data-bol-filtro]'); if (b) bolFiltrar(b.dataset.bolFiltro); });
+  let deb = null;
+  document.getElementById('bol-q')?.addEventListener('input', e => { clearTimeout(deb); deb = setTimeout(() => { BOL_Q = e.target.value.trim(); bolRenderCola(); }, 200); });
+  const grid = document.getElementById('bol-grid');
+  grid?.addEventListener('click', e => {
+    if (e.target.closest('[data-bol-wa]')) return;
+    const b = e.target.closest('[data-bol-card]');
+    if (b) { if (b.dataset.bolCard === 'tomar') bolTomar(b.dataset.id, b); else bolAbrirCerrar(b.dataset.id); return; }
+    const c = e.target.closest('[data-bol-abrir]'); if (c) abrirDetalleBoleteria(c.dataset.bolAbrir);
+  });
+  grid?.addEventListener('keydown', e => {
+    const c = e.target.closest?.('[data-bol-abrir]');
+    if (c && e.target === c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrirDetalleBoleteria(c.dataset.bolAbrir); }
+  });
+  // Cola viva: cada 30 s, solo con la cola a la vista y la pestaña visible. Repinta
+  // también los relojes de espera.
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (currentSec === 'bol-solicitudes' || (currentSec === 'leads' && leadsTab === 'boleteria')) loadColaBoleteria(true);
+  }, 30000);
 }
 
 function abrirSolicitudBoleteria(lead) {
@@ -25111,8 +25152,8 @@ async function enviarSolicitudBoleteria() {
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Mandar a la cola';
   if (error || !data?.ok) { err.textContent = 'No se pudo mandar: ' + (BOL_ERR[data?.error] || error?.message || data?.error || ''); return; }
   closeSheet('boleteria-sheet');
-  okToast('Solicitud mandada a la cola de boletería');
-  loadColaBoleteria();
+  okToast(data.puesto ? `Solicitud mandada: quedó #${data.puesto} en la cola` : 'Solicitud mandada a la cola de boletería');
+  loadColaBoleteria(true);
 }
 
 const BOL_ESTADO = {
@@ -25121,31 +25162,129 @@ const BOL_ESTADO = {
   resuelta:   { cls: 'res', t: 'Resuelta' },
   cancelada:  { cls: 'can', t: 'Cancelada' },
 };
-// La tarjeta es un resumen tocable. Todo el detalle y las acciones viven en la
-// hoja que abre al tocarla (bolDetalleHtml) -- antes la cola era un muro de
-// datos donde no se distinguía una solicitud de otra.
+const bolAbierta = s => s.estado === 'en_cola' || s.estado === 'atendiendo';
+const bolMin = (desde, hasta) => Math.max(0, Math.round(((hasta ? Date.parse(hasta) : Date.now()) - Date.parse(desde)) / 60000));
+const bolDuracion = m => m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) + ' min' : ''}` : `${Math.floor(m / 1440)} d`;
+const bolHora = iso => dtf('es-VE', { timeZone: 'America/Caracas', hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+const bolDiaCcs = iso => iso ? dtf('en-CA', { timeZone: 'America/Caracas', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso)) : null;
+const bolPrimerNombre = n => (n || '').trim().split(/\s+/)[0] || '';
+
+// Reloj de espera: verde < 10 min, ámbar < 20, rojo después (la alerta de
+// demora por Telegram sale a los 15).
+function bolEsperaHtml(s) {
+  if (s.estado === 'en_cola') {
+    const m = bolMin(s.creado_en);
+    return `<span class="bol-espera ${m < 10 ? 'ok' : m < 20 ? 'medio' : 'tarde'}" title="Esperando desde ${esc(fmtFechaHoraCaracas(s.creado_en))}"><i class="fas fa-clock"></i> ${bolDuracion(m)}</span>`;
+  }
+  if (s.estado === 'atendiendo' && s.tomada_en) return `<span class="bol-espera neutro" title="En revisión desde ${esc(fmtFechaHoraCaracas(s.tomada_en))}"><i class="fas fa-hourglass-half"></i> ${bolDuracion(bolMin(s.tomada_en))}</span>`;
+  return '';
+}
+
+// WhatsApp de la otra punta: el agente le escribe al asesor que la pidió; el
+// asesor, al agente que la atiende.
+function bolWaContacto(s) {
+  const alAsesor = MI_ES_AGENTE_BOLETERIA && !s.es_mia;
+  const nombre = alAsesor ? s.creado_por : s.tomada_por, dig = String((alAsesor ? s.creado_por_wa : s.tomada_por_wa) || '').replace(/\D/g, '');
+  if (!nombre || nombre === MI_NOMBRE || dig.length < 8) return null;
+  const ref = `la solicitud${alAsesor ? '' : ' de boletería'} #${s.id} de ${s.cliente_nombre} (${s.origen} → ${s.destino})`;
+  const texto = `Hola ${bolPrimerNombre(nombre)}, te escribo ${alAsesor ? 'de boletería ' : ''}por ${ref}.`;
+  return { nombre: bolPrimerNombre(nombre), url: `https://wa.me/${dig}?text=${encodeURIComponent(texto)}` };
+}
+
+// Línea de tiempo corta de la tarjeta del asesor: enviada -> en revisión -> lista.
+function bolLineaTiempo(s) {
+  const cerrada = !bolAbierta(s);
+  const pasos = [
+    { cls: 'hecho', t: `Enviada ${bolHora(s.creado_en)}` },
+    { cls: s.tomada_en ? 'hecho' : '', t: s.tomada_por ? `${bolPrimerNombre(s.tomada_por)} ${s.tomada_en ? bolHora(s.tomada_en) : ''}` : 'En revisión' },
+    { cls: cerrada ? (s.estado === 'cancelada' ? 'hecho can' : 'hecho fin') : '', t: s.estado === 'cancelada' ? 'Cancelada' : `Lista${cerrada && s.cerrada_en ? ' ' + bolHora(s.cerrada_en) : ''}` },
+  ];
+  return `<div class="bol-tl">${pasos.map(p => `<div class="bol-tl-paso ${p.cls}"><i></i><span>${esc(p.t)}</span></div>`).join('')}</div>`;
+}
+
+// La tarjeta es un resumen tocable: el detalle completo vive en la hoja que
+// abre (bolDetalleHtml). Los botones de la tarjeta son los atajos del día a
+// día: tomar, resolver y escribirle a la otra punta.
 function bolCardHtml(s) {
   const est = BOL_ESTADO[s.estado] || BOL_ESTADO.en_cola;
+  const agente = MI_ES_AGENTE_BOLETERIA;
   const fechas = [s.fecha_viaje && fmtDiaCorto(s.fecha_viaje), s.fecha_regreso && fmtDiaCorto(s.fecha_regreso)].filter(Boolean).join(' → ');
-  const puesto = (s.estado === 'en_cola' && s.puesto) ? `<span class="bol-puesto">#${s.puesto} en la cola</span>` : '';
+  const puesto = (s.estado === 'en_cola' && s.puesto) ? `<span class="bol-puesto">#${s.puesto}</span>` : '';
   const resumen = [
     fechas ? `<span><i class="fas fa-calendar-days"></i> ${esc(fechas)}</span>` : '',
     s.personas != null ? `<span><i class="fas fa-users"></i> ${s.personas}</span>` : '',
-    s.flexible_fechas ? '<span><i class="fas fa-shuffle"></i> Fechas flexibles</span>' : '',
+    s.flexible_fechas ? '<span><i class="fas fa-shuffle"></i> Flexible</span>' : '',
   ].filter(Boolean).join('');
+  const wa = bolWaContacto(s);
+  const acc = [];
+  if (agente && s.estado === 'en_cola') acc.push(`<button class="btn-sm" type="button" data-bol-card="tomar" data-id="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
+  if (agente && s.estado === 'atendiendo' && s.la_atiendo_yo) acc.push(`<button class="btn-sm" type="button" data-bol-card="resolver" data-id="${s.id}"><i class="fas fa-check"></i> Resolver</button>`);
+  if (wa) acc.push(`<a class="btn-sm bol-wa" href="${esc(wa.url)}" target="_blank" rel="noopener" data-bol-wa title="Escribirle a ${esc(wa.nombre)} por WhatsApp"><i class="fab fa-whatsapp"></i> ${esc(wa.nombre)}</a>`);
+  const quien = agente
+    ? `Pidió ${esc(s.creado_por || '—')}${s.tomada_por && s.estado !== 'en_cola' ? ' · atiende ' + esc(bolPrimerNombre(s.tomada_por)) : ''}`
+    : (s.tomada_por ? `Atiende ${esc(s.tomada_por)}` : 'Nadie la tomó todavía');
   return `<div class="bol-card st-${s.estado}" data-bol-abrir="${s.id}" role="button" tabindex="0">
     <div class="bol-top">
       <div class="bol-nombre">${esc(s.cliente_nombre)}</div>
-      ${puesto}
-      <span class="bol-chip ${est.cls}">${est.t}</span>
+      ${puesto}${bolEsperaHtml(s)}
+      ${bolAbierta(s) ? '' : `<span class="bol-chip ${est.cls}">${est.t}</span>`}
     </div>
     <div class="bol-ruta"><i class="fas fa-plane"></i> ${esc(s.origen)} → ${esc(s.destino)}</div>
     ${resumen ? `<div class="bol-resumen">${resumen}</div>` : ''}
-    <div class="bol-pie">
-      <span>Por ${esc(s.creado_por || '—')}${s.tomada_por ? ' · atiende ' + esc(s.tomada_por) : ''}</span>
-      <span>${tiempoRelativo(s.creado_en)}</span>
-    </div>
+    ${agente ? '' : bolLineaTiempo(s)}
+    ${!bolAbierta(s) && s.resultado ? `<div class="bol-resultado"><b>${s.estado === 'cancelada' ? 'Motivo' : 'Resultado'}:</b> ${esc(s.resultado)}</div>` : ''}
+    <div class="bol-pie"><span>${quien}</span><span>#${s.id} · ${tiempoRelativo(s.creado_en)}</span></div>
+    ${acc.length ? `<div class="bol-card-acc">${acc.join('')}</div>` : ''}
   </div>`;
+}
+
+const BOL_CERRADAS_TOPE = 12;
+function bolRenderCola() {
+  const grid = document.getElementById('bol-grid'); if (!grid) return;
+  const agente = MI_ES_AGENTE_BOLETERIA;
+  const q = bolNorm(BOL_Q);
+  const filas = q ? BOL_COLA.filter(s => bolNorm([s.cliente_nombre, s.origen, s.destino, s.creado_por, s.tomada_por, s.cliente_telefono, '#' + s.id].join(' ')).includes(q)) : BOL_COLA;
+  const porCierre = (a, b) => Date.parse(b.cerrada_en || 0) - Date.parse(a.cerrada_en || 0);
+  const vacio = BOL_COLA.length === 0;
+  document.getElementById('bol-empty')?.classList.toggle('show', vacio);
+  grid.style.display = vacio ? 'none' : '';
+  if (BOL_FILTRO === 'resuelta' || BOL_FILTRO === 'cancelada') {
+    const lista = filas.filter(s => s.estado === BOL_FILTRO).sort(porCierre);
+    grid.classList.add('plano');
+    grid.innerHTML = lista.length ? lista.map(bolCardHtml).join('')
+      : `<div class="bol-col-vacia">No hay ${BOL_FILTRO === 'resuelta' ? 'resueltas' : 'canceladas'} en los últimos 7 días${q ? ' con esa búsqueda' : ''}</div>`;
+    return;
+  }
+  const base = BOL_FILTRO === 'mias' && agente ? filas.filter(s => s.la_atiendo_yo) : filas;
+  const cerradas = base.filter(s => !bolAbierta(s)).sort(porCierre);
+  const cols = [
+    { t: agente ? 'En cola' : 'Esperando', ico: 'fa-hourglass-start', items: base.filter(s => s.estado === 'en_cola'), vacia: agente ? 'Nadie esperando' : 'Nada esperando' },
+    { t: agente ? 'Atendiendo' : 'En revisión', ico: 'fa-headset', items: base.filter(s => s.estado === 'atendiendo'), vacia: 'Ninguna en revisión' },
+    { t: 'Cerradas · 7 días', ico: 'fa-flag-checkered', items: cerradas.slice(0, BOL_CERRADAS_TOPE), total: cerradas.length, vacia: 'Ninguna cerrada' },
+  ];
+  grid.classList.remove('plano');
+  grid.innerHTML = cols.map(c => `<div class="bol-col">
+    <div class="bol-col-h"><i class="fas ${c.ico}"></i> ${c.t}<span class="n">${c.total ?? c.items.length}</span></div>
+    <div class="bol-col-lista">${c.items.length ? c.items.map(bolCardHtml).join('') : `<div class="bol-col-vacia">${c.vacia}</div>`}
+    ${c.total > c.items.length ? `<div class="bol-col-vacia">y ${c.total - c.items.length} más: usá los filtros Resueltas / Canceladas</div>` : ''}</div>
+  </div>`).join('');
+}
+
+function bolRenderKpis() {
+  const box = document.getElementById('bol-kpis'); if (!box) return;
+  if (!MI_ES_AGENTE_BOLETERIA) { box.innerHTML = ''; return; }
+  const hoy = hoyCaracasISO();
+  const cola = BOL_COLA.filter(s => s.estado === 'en_cola'), aten = BOL_COLA.filter(s => s.estado === 'atendiendo');
+  const vieja = cola.reduce((m, s) => Math.max(m, bolMin(s.creado_en)), 0);
+  const resHoy = BOL_COLA.filter(s => s.estado === 'resuelta' && bolDiaCcs(s.cerrada_en) === hoy).length;
+  const tomadasHoy = BOL_COLA.filter(s => s.tomada_en && bolDiaCcs(s.tomada_en) === hoy);
+  const prom = tomadasHoy.length ? Math.round(tomadasHoy.reduce((a, s) => a + bolMin(s.creado_en, s.tomada_en), 0) / tomadasHoy.length) : null;
+  const mias = aten.filter(s => s.la_atiendo_yo).length;
+  const kpi = (n, t, sub, alerta) => `<div class="bol-kpi${alerta ? ' alerta' : ''}"><b>${n}</b><span>${t}</span>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  box.innerHTML = kpi(cola.length, 'En cola', cola.length ? `La más vieja: ${bolDuracion(vieja)}` : 'Nadie esperando', vieja >= 15)
+    + kpi(aten.length, 'Atendiendo', mias ? `${mias} tuya${mias > 1 ? 's' : ''}` : '')
+    + kpi(resHoy, 'Resueltas hoy', '')
+    + kpi(prom == null ? '—' : bolDuracion(prom), 'Espera promedio hoy', 'De que llega a que alguien la toma');
 }
 
 function bolDetalleHtml(s) {
@@ -25157,16 +25296,25 @@ function bolDetalleHtml(s) {
   // el asesor dueño solo cancela lo suyo mientras nadie lo tomó; borrar es admin.
   const acc = [];
   if (MI_ES_AGENTE_BOLETERIA) {
-    if (s.estado === 'en_cola' || s.estado === 'atendiendo') acc.push(`<button class="dbtn save" data-bol-convertir="${s.id}"><i class="fas fa-ticket"></i> Convertir en reserva</button>`);
-    if (s.estado === 'en_cola') acc.push(`<button class="dbtn gh" data-bol-tomar="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
-    else if (s.estado === 'atendiendo') {
-      acc.push(`<button class="dbtn save" data-bol-cerrar="${s.id}"><i class="fas fa-check"></i> Marcar resuelta</button>`);
-      acc.push(`<button class="dbtn gh" data-bol-cancelar="${s.id}"><i class="fas fa-xmark"></i> Cancelar</button>`);
-    }
-  } else if (s.es_mia && s.estado === 'en_cola') {
-    acc.push(`<button class="dbtn gh" data-bol-cancelar="${s.id}"><i class="fas fa-xmark"></i> Cancelar solicitud</button>`);
+    if (s.estado === 'en_cola') acc.push(`<button class="dbtn save" data-bol-tomar="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
+    else if (s.estado === 'atendiendo') acc.push(`<button class="dbtn save" data-bol-cerrar="${s.id}"><i class="fas fa-check"></i> Marcar resuelta</button>`);
+    if (bolAbierta(s)) acc.push(`<button class="dbtn gh" data-bol-convertir="${s.id}"><i class="fas fa-ticket"></i> Convertir en reserva</button>`);
   }
+  const wa = bolWaContacto(s);
+  if (wa) acc.push(`<a class="dbtn wa" href="${esc(wa.url)}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp a ${esc(wa.nombre)}</a>`);
+  if (s.lead_id && (ROL === 'admin' || (ROL === 'asesor' && s.es_mia))) acc.push(`<button class="dbtn gh" data-bol-lead="${s.lead_id}"><i class="fas fa-user"></i> Ver lead</button>`);
+  if (MI_ES_AGENTE_BOLETERIA) acc.push(`<button class="dbtn gh" data-bol-copiar="${s.id}"><i class="fas fa-copy"></i> Copiar datos</button>`);
+  if (MI_ES_AGENTE_BOLETERIA ? bolAbierta(s) : (s.es_mia && s.estado === 'en_cola')) acc.push(`<button class="dbtn gh" data-bol-cancelar="${s.id}"><i class="fas fa-xmark"></i> ${MI_ES_AGENTE_BOLETERIA ? 'Cancelar' : 'Cancelar solicitud'}</button>`);
   if (ROL === 'admin') acc.push(`<button class="dbtn peligro" data-bol-eliminar="${s.id}"><i class="fas fa-trash"></i> Eliminar</button>`);
+
+  const f = iso => esc(fmtFechaHoraCaracas(iso));
+  const pasos = [{ cls: '', t: 'Enviada a la cola', sub: `${esc(s.creado_por || '—')} · ${f(s.creado_en)}` }];
+  if (s.tomada_en) pasos.push({ cls: '', t: `Tomada por ${esc(s.tomada_por || '—')}`, sub: `${f(s.tomada_en)} · esperó ${bolDuracion(bolMin(s.creado_en, s.tomada_en))}` });
+  else if (s.estado === 'en_cola') pasos.push({ cls: 'pend', t: `Esperando${s.puesto ? ` · #${s.puesto} en la cola` : ''}`, sub: `Lleva ${bolDuracion(bolMin(s.creado_en))}` });
+  if (s.estado === 'atendiendo') pasos.push({ cls: 'pend', t: 'En revisión', sub: `Hace ${bolDuracion(bolMin(s.tomada_en || s.creado_en))}` });
+  else if (s.estado === 'resuelta') pasos.push({ cls: 'fin', t: `Resuelta${s.cerrada_por ? ' por ' + esc(s.cerrada_por) : ''}`, sub: `${f(s.cerrada_en)}${s.tomada_en ? ' · en ' + bolDuracion(bolMin(s.tomada_en, s.cerrada_en)) : ''}` });
+  else if (s.estado === 'cancelada') pasos.push({ cls: 'can', t: `Cancelada${s.cerrada_por ? ' por ' + esc(s.cerrada_por) : ''}`, sub: f(s.cerrada_en) });
+  else pasos.push({ cls: 'pend', t: 'Lista', sub: 'Cuando boletería la resuelva' });
 
   return `
     <div class="bd-head">
@@ -25175,7 +25323,7 @@ function bolDetalleHtml(s) {
         <div class="bd-nombre">${esc(s.cliente_nombre)}</div>
         <div class="bd-sub">Solicitud #${s.id} · ${tiempoRelativo(s.creado_en)}</div>
         <span class="bol-chip ${est.cls}" style="margin-top:8px;display:inline-block">${est.t}</span>
-        ${(s.estado === 'en_cola' && s.puesto) ? `<span class="bol-puesto" style="margin-left:6px">#${s.puesto} en la cola</span>` : ''}
+        ${bolEsperaHtml(s) ? `<span style="margin-left:6px">${bolEsperaHtml(s)}</span>` : ''}
       </div>
     </div>
 
@@ -25194,15 +25342,26 @@ function bolDetalleHtml(s) {
       ${dato('Teléfono', esc(s.cliente_telefono || ''))}
       ${dato('Cédula', esc(s.cliente_cedula || ''))}
       ${dato('Notas del asesor', esc(s.notas || ''), true)}
-      ${dato('Resultado', esc(s.resultado || ''), true)}
+      ${dato(s.estado === 'cancelada' ? 'Motivo' : 'Resultado', esc(s.resultado || ''), true)}
     </div>
 
-    ${acc.length ? `<div class="bd-acc">${acc.join('')}</div>` : ''}
-    <div class="bd-pie">
-      Pedida por ${esc(s.creado_por || '—')} · ${esc(fmtFechaHoraCaracas(s.creado_en))}
-      ${s.tomada_por ? `<br>Atiende ${esc(s.tomada_por)}${s.tomada_en ? ' · ' + esc(fmtFechaHoraCaracas(s.tomada_en)) : ''}` : ''}
-      ${s.cerrada_en ? `<br>Cerrada ${esc(fmtFechaHoraCaracas(s.cerrada_en))}` : ''}
-    </div>`;
+    <div class="bd-tl">${pasos.map(p => `<div class="bd-tl-p ${p.cls}"><i></i><div><b>${p.t}</b><small>${p.sub}</small></div></div>`).join('')}</div>
+
+    ${acc.length ? `<div class="bd-acc">${acc.join('')}</div>` : ''}`;
+}
+
+// Texto plano para pegar en el sistema de la aerolínea o en un chat.
+function bolTextoCopiable(s) {
+  return [
+    `Solicitud #${s.id} · ${s.cliente_nombre}`,
+    `${s.origen} → ${s.destino}`,
+    `Ida: ${s.fecha_viaje ? fmtDiaCorto(s.fecha_viaje) : 'sin definir'} · Regreso: ${s.fecha_regreso ? fmtDiaCorto(s.fecha_regreso) : 'sin definir'}${s.flexible_fechas ? ' (flexible)' : ''}`,
+    s.personas != null ? `Personas: ${s.personas}` : '',
+    s.cliente_cedula ? `Cédula: ${s.cliente_cedula}` : '',
+    s.cliente_telefono ? `Teléfono: ${s.cliente_telefono}` : '',
+    s.notas ? `Notas: ${s.notas}` : '',
+    `Pidió: ${s.creado_por || '—'}`,
+  ].filter(Boolean).join('\n');
 }
 
 function abrirDetalleBoleteria(id) {
@@ -25210,16 +25369,18 @@ function abrirDetalleBoleteria(id) {
   if (!s) return;
   const cuerpo = document.getElementById('bol-detalle-cuerpo');
   cuerpo.innerHTML = bolDetalleHtml(s);
-  cuerpo.querySelector('[data-bol-tomar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); bolTomar(id); });
+  cuerpo.querySelector('[data-bol-tomar]')?.addEventListener('click', e => { cerrarDetalleBoleteria(); bolTomar(id, e.currentTarget); });
   cuerpo.querySelector('[data-bol-cancelar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); bolCancelar(id); });
   cuerpo.querySelector('[data-bol-eliminar]')?.addEventListener('click', () => bolEliminar(id));
   cuerpo.querySelector('[data-bol-convertir]')?.addEventListener('click', e => bolConvertirSolicitud(s, e.currentTarget));
-  cuerpo.querySelector('[data-bol-cerrar]')?.addEventListener('click', () => {
-    cerrarDetalleBoleteria();
-    BOL_CERRAR_ID = id;
-    document.getElementById('bol-cerrar-nota').value = '';
-    document.getElementById('bol-cerrar-err').textContent = '';
-    openSheet('bol-cerrar-sheet');
+  cuerpo.querySelector('[data-bol-cerrar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); bolAbrirCerrar(id); });
+  cuerpo.querySelector('[data-bol-copiar]')?.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(bolTextoCopiable(s)); okToast('Datos copiados'); } catch { errToast('No se pudo copiar'); }
+  });
+  cuerpo.querySelector('[data-bol-lead]')?.addEventListener('click', async () => {
+    const { data: l, error } = await sb.from('leads').select('*').eq('id', s.lead_id).maybeSingle();
+    if (error || !l || l.eliminado_at) { errToast('No se pudo abrir ese lead'); return; }
+    cerrarDetalleBoleteria(); openDrawer(l);
   });
   openSheet('bol-detalle-sheet');
 }
@@ -25240,45 +25401,83 @@ async function bolEliminar(id) {
   loadColaBoleteria();
 }
 
-async function loadColaBoleteria() {
+async function loadColaBoleteria(silencioso) {
   if (ROL !== 'admin' && ROL !== 'asesor' && ROL !== 'boleteria') return;
   const grid = document.getElementById('bol-grid');
   if (!grid) return;
-  const loading = document.getElementById('bol-loading'), empty = document.getElementById('bol-empty');
-  loading?.classList.add('show');
+  const loading = document.getElementById('bol-loading');
+  if (!silencioso && !BOL_COLA.length) loading?.classList.add('show');
   const [cola, agentes] = await Promise.all([
     sb.rpc('listar_cola_boleteria'),
     sb.rpc('agentes_boleteria_estado'),
     bolAsegurarCatalogo(),
   ]);
   loading?.classList.remove('show');
-  if (cola.error) { console.error('cola_boleteria', cola.error); errToast('No se pudo cargar la cola de boletería'); return; }
+  if (cola.error) { console.error('cola_boleteria', cola.error); if (!silencioso) errToast('No se pudo cargar la cola de boletería'); return; }
   const filas = cola.data || [];
-  // Soy agente si aparezco en el roster de agentes (marca es_boleteria).
-  MI_ES_AGENTE_BOLETERIA = (agentes.data || []).some(a => String(a.usuario_id) === String(MI_USUARIO_ID)) || ROL === 'admin';
+  // Agente: admin, rol boleteria o la marca es_boleteria (aparece en el roster).
+  MI_ES_AGENTE_BOLETERIA = ROL === 'admin' || ROL === 'boleteria' || (agentes.data || []).some(a => String(a.usuario_id) === String(MI_USUARIO_ID));
+  const agente = MI_ES_AGENTE_BOLETERIA;
 
-  const abiertas = filas.filter(s => s.estado === 'en_cola' || s.estado === 'atendiendo').length;
+  const abiertas = filas.filter(bolAbierta).length, enCola = filas.filter(s => s.estado === 'en_cola').length;
   const badge = document.getElementById('leads-bol-count');
   if (badge) { badge.textContent = abiertas; badge.style.display = abiertas ? '' : 'none'; }
+  const navBadge = document.getElementById('nav-bol-sol-count');
+  if (navBadge) { navBadge.textContent = enCola; navBadge.style.display = agente && enCola ? '' : 'none'; }
 
   const ag = document.getElementById('bol-agentes');
   ag.innerHTML = (agentes.data || []).length
     ? (agentes.data).map(a => `<div class="bol-ag"><span class="bol-ag-dot${a.conectado_ahora ? ' on' : ''}"></span><b>${esc(a.nombre)}</b>${a.atendiendo ? ` <span class="bol-ag-carga">· ${a.atendiendo} atendiendo</span>` : (a.conectado_ahora ? ' <span class="bol-ag-carga">· libre</span>' : '')}</div>`).join('')
     : '<div class="ef-opc">No hay agentes de boletería configurados. Un admin lo activa en Gestión de Personal.</div>';
 
-  empty?.classList.toggle('show', filas.length === 0);
+  const sig = document.getElementById('bol-tomar-sig');
+  if (sig) { sig.style.display = agente ? '' : 'none'; sig.disabled = !enCola; }
+  const mias = document.getElementById('bol-filtro-mias');
+  if (mias) mias.style.display = agente ? '' : 'none';
+  if (!agente && BOL_FILTRO === 'mias') bolFiltrar('todas');
+  document.getElementById('bol-cola-sub').textContent = agente
+    ? 'Vuelos que piden los asesores. Se atienden por orden de llegada: tomá la siguiente y avisale al asesor cómo quedó.'
+    : 'Tus pedidos de vuelos a boletería: en qué puesto están, quién los atiende y cómo quedaron.';
+  document.getElementById('bol-empty-s').textContent = agente
+    ? 'Cuando un asesor mande una solicitud, aparece acá y te llega por Telegram'
+    : 'Cuando mandes un cliente a boletería, aparece acá con su puesto en la cola';
+
   BOL_COLA = filas;
-  grid.innerHTML = filas.map(bolCardHtml).join('');
-  grid.querySelectorAll('[data-bol-abrir]').forEach(c => {
-    c.addEventListener('click', () => abrirDetalleBoleteria(c.dataset.bolAbrir));
-    c.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirDetalleBoleteria(c.dataset.bolAbrir); } });
-  });
+  bolRenderKpis();
+  bolRenderCola();
+  if (BOL_ABRIR_ID) {
+    const id = BOL_ABRIR_ID; BOL_ABRIR_ID = null;
+    if (filas.some(s => String(s.id) === String(id))) abrirDetalleBoleteria(id);
+    else errToast('Esa solicitud ya no está en la cola (se cerró hace más de 7 días o no es tuya)');
+  }
 }
 
-async function bolTomar(id) {
-  const { data, error } = await sb.rpc('tomar_solicitud_boleteria', { p_id: Number(id) });
-  if (error || !data?.ok) { errToast('No se pudo tomar: ' + (BOL_ERR[data?.error] || error?.message || '')); loadColaBoleteria(); return; }
-  okToast('Solicitud tomada'); loadColaBoleteria();
+function bolFiltrar(filtro) {
+  BOL_FILTRO = filtro;
+  document.querySelectorAll('#bol-filtros .seg').forEach(b => b.classList.toggle('on', b.dataset.bolFiltro === filtro));
+  bolRenderCola();
+}
+
+// Sin id: toma la más vieja en cola. Al tomarla se abre su detalle, que es lo
+// siguiente que el agente necesita ver.
+async function bolTomar(id, btn) {
+  if (btn) btn.disabled = true;
+  const { data, error } = await sb.rpc('tomar_solicitud_boleteria', { p_id: id == null ? null : Number(id) });
+  if (btn) btn.disabled = false;
+  if (error || !data?.ok) {
+    errToast(id == null && data?.error === 'no_disponible' ? 'No hay solicitudes esperando' : 'No se pudo tomar: ' + (BOL_ERR[data?.error] || error?.message || ''));
+    loadColaBoleteria(true); return;
+  }
+  okToast('Es tuya. Le avisamos al asesor.');
+  BOL_ABRIR_ID = data.solicitud_id;
+  loadColaBoleteria(true);
+}
+function bolAbrirCerrar(id) {
+  BOL_CERRAR_ID = id;
+  document.getElementById('bol-cerrar-nota').value = '';
+  document.getElementById('bol-cerrar-err').textContent = '';
+  document.querySelectorAll('#bol-res-rapidos .bol-res-chip').forEach(c => c.classList.remove('on'));
+  openSheet('bol-cerrar-sheet');
 }
 async function cerrarSolicitudBoleteria() {
   if (!BOL_CERRAR_ID) return;
@@ -25287,13 +25486,13 @@ async function cerrarSolicitudBoleteria() {
   const { data, error } = await sb.rpc('resolver_solicitud_boleteria', { p_id: Number(BOL_CERRAR_ID), p_resultado: val('bol-cerrar-nota') });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Marcar resuelta';
   if (error || !data?.ok) { err.textContent = 'No se pudo cerrar: ' + (BOL_ERR[data?.error] || error?.message || ''); return; }
-  closeSheet('bol-cerrar-sheet'); okToast('Solicitud resuelta'); BOL_CERRAR_ID = null; loadColaBoleteria();
+  closeSheet('bol-cerrar-sheet'); okToast('Resuelta. Le avisamos al asesor.'); BOL_CERRAR_ID = null; loadColaBoleteria(true);
 }
 async function bolCancelar(id) {
   if (!(await confirmarSheet({ titulo: '¿Cancelar esta solicitud de boletería?', textoOk: 'Cancelar solicitud', destructivo: true }))) return;
   const { data, error } = await sb.rpc('cancelar_solicitud_boleteria', { p_id: Number(id) });
   if (error || !data?.ok) { errToast('No se pudo cancelar: ' + (BOL_ERR[data?.error] || error?.message || '')); return; }
-  okToast('Solicitud cancelada'); loadColaBoleteria();
+  okToast('Solicitud cancelada'); loadColaBoleteria(true);
 }
 
 /* ---------- Boletería > Reservas (Boletería 2.0, Fase 4): boletos aéreos de todas las reservas, con KPIs.
@@ -25435,11 +25634,11 @@ async function bolConvertirSolicitud(s, btn) {
    startApp) y no tiene botón de volver -- no tiene otro lado al que ir. */
 let modoBoleteria = false;
 let seccionAntesDeModoBoleteria = null;
-function entrarModoBoleteria() {
+function entrarModoBoleteria(sec) {
   if (!modoBoleteria) seccionAntesDeModoBoleteria = currentSec;
   modoBoleteria = true;
   document.body.classList.add('modo-boleteria');
-  activateSection('boleteria');
+  activateSection(typeof sec === 'string' ? sec : (ROL === 'boleteria' ? 'bol-solicitudes' : 'boleteria'));
 }
 function salirModoBoleteria() {
   modoBoleteria = false;
@@ -25447,9 +25646,12 @@ function salirModoBoleteria() {
   activateSection(seccionAntesDeModoBoleteria && document.getElementById('sec-' + seccionAntesDeModoBoleteria) ? seccionAntesDeModoBoleteria : (ROL === 'asesor' ? 'leads' : 'dashboard'));
   seccionAntesDeModoBoleteria = null;
 }
-function irAColaBoleteria() {
-  if (!modoBoleteria) entrarModoBoleteria(); else activateSection('boleteria');
-  bolActivarTab('solicitudes');
+// Agente: sección Solicitudes del modo Boletería. Asesor: Leads > Boletería. Con id, abre esa.
+function irASolicitudes(id) {
+  BOL_ABRIR_ID = id || null;
+  if (bolEsAgente()) { if (!modoBoleteria) entrarModoBoleteria('bol-solicitudes'); else activateSection('bol-solicitudes'); }
+  else { activateSection('leads'); document.querySelector('#leads-tabs .seg[data-leads-tab="boleteria"]')?.click(); }
+  if (BOL_ABRIR_ID) loadColaBoleteria();
 }
 // Un solo DOM para la cola: Leads > Boletería (asesores) y Boletería > Solicitudes (agentes).
 function bolMoverCola(hostId) {
@@ -25469,6 +25671,9 @@ var bolTab = 'reservas';
 const bolPublico = p => Math.ceil(Math.round(p * 1.2 * 100) / 100);
 const bolPuedeEditar = () => ROL === 'admin' || ROL === 'boleteria';
 function setupBoleteriaSeccion() {
+  // Acá y no en setupLeadsTabs: el rol boleteria no llega a ese arranque y la
+  // cola le quedaba sin botones (Nueva solicitud, Actualizar, Marcar resuelta).
+  setupBoleteria();
   document.querySelectorAll('#bol-tabs .seg').forEach(btn => btn.addEventListener('click', () => bolActivarTab(btn.dataset.bolTab)));
   setupBolReservas();
   document.getElementById('bol-buscador')?.addEventListener('input', () => renderBoleteriaTab());
@@ -25491,8 +25696,6 @@ function setupBoleteriaSeccion() {
   document.getElementById('btn-salir-modo-boleteria')?.addEventListener('click', salirModoBoleteria);
   document.getElementById('sheet-entrar-modo-boleteria')?.addEventListener('click', entrarModoBoleteria);
   document.getElementById('sheet-salir-modo-boleteria')?.addEventListener('click', salirModoBoleteria);
-  document.getElementById('nav-cola-boleteria')?.addEventListener('click', irAColaBoleteria);
-  document.getElementById('sheet-cola-boleteria')?.addEventListener('click', irAColaBoleteria);
 }
 const BOL_WRAP = { rutas: 'bol-rutas-wrap', aerolineas: 'bol-aerolineas-wrap', precios: 'bol-precios-wrap', aeropuertos: 'bol-aeropuertos-wrap', requisitos: 'bol-requisitos-wrap', calendario: 'bol-calendario-wrap' };
 // Reservas y Solicitudes operan con es_agente_boleteria(); un asesor común solo consulta el catálogo.
@@ -25504,8 +25707,7 @@ function bolActivarTab(tab) {
   const busca = document.querySelector('#sec-boleteria .bol-catalogo-busca');
   if (busca) busca.style.display = BOL_WRAP[tab] ? '' : 'none';
   if (tab === 'reservas') loadBolReservas();
-  else if (tab === 'solicitudes') { bolMoverCola('bol-cola-host-sec'); loadColaBoleteria(); }
-  else { bolMoverCola('bol-cola-host-leads'); renderBoleteriaTab(true); }
+  else renderBoleteriaTab(true);
 }
 async function loadBoleteria() {
   document.querySelectorAll('#sec-boleteria .bol-solo-editor').forEach(el => el.style.display = bolPuedeEditar() ? '' : 'none');
@@ -26530,6 +26732,8 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-14', emoji: '📋', titulo: 'Solicitudes de boletería con sección propia', texto: 'Las solicitudes de vuelo salieron del catálogo y tienen su propia entrada en el menú, arriba de todo. Se ven en tablero (En cola, Atendiendo, Cerradas) con el tiempo de espera de cada una en colores, contadores del día, buscador, filtros y el botón "Tomar la siguiente". Cada solicitud nueva te llega por Telegram con botones para tomarla, resolverla o cancelarla sin abrir el CRM, verla en el CRM o escribirle al asesor por WhatsApp. Si una lleva 15 minutos sin que nadie la tome, llega un recordatorio. Quien es de boletería ya no recibe leads.', roles: ['admin', 'boleteria'] },
+  { fecha: '2026-10-14', emoji: '✈️', titulo: 'Seguí tus solicitudes de vuelo', texto: 'En Leads > Boletería cada solicitud muestra su recorrido (enviada, en revisión, lista), quién la atiende y el resultado. Te llega un Telegram cuando boletería la toma, cuando la resuelve (con el resultado) y si la cancela, con un botón para escribirle por WhatsApp a quien la atiende.', roles: ['asesor'] },
   { fecha: '2026-10-14', emoji: '🧳', titulo: 'Cotizaciones con hoteles, traslados y tours', texto: 'En Cotizaciones ya no solo se cotizan boletos: cada línea tiene un selector de tipo (boleto aéreo, hotel, traslado, tour o full day, u otro servicio) con sus propios campos. Así se arma un paquete completo en un solo PDF con un único total. En hotel, las noches se calculan solas a partir del check-in y el check-out.', roles: ['admin', 'boleteria'] },
   { fecha: '2026-10-13', emoji: '🏠', titulo: 'Apartamentos con fotos y detalles', texto: 'En Apartamentos ya no ves solo la disponibilidad: en la pestaña Proveedores están las casas y posadas con sus apartamentos. Tocá uno para ver la galería de fotos, videos, capacidad, distribución por habitación, comodidades y el precio por noche en temporada baja y alta.', roles: ['asesor'] },
   { fecha: '2026-10-13', emoji: '✨', titulo: 'Ficha del lead renovada', texto: 'La ficha del lead tiene un diseño nuevo, más claro y ordenado. El botón Boletería ahora es azul y te lleva directo a la solicitud de vuelo con los datos del cliente ya cargados, lista para mandarla a un ejecutivo de boletería. Se quitaron los botones "Tomar conversación" y "Seguimiento" (la próxima acción sigue dentro de la ficha).', roles: ['admin', 'asesor'] },
