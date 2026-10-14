@@ -25072,11 +25072,20 @@ function setupBoleteria() {
 // Solicitudes va siempre primera en el menú, por encima del orden guardado y de
 // Frecuentes (pedido del dueño 2026-10-14), con una línea que avisa cuántas esperan.
 function fijarSolicitudesArriba() {
-  const item = navItemDe('bol-solicitudes'), buscar = document.getElementById('nav-buscar');
-  if (!item || !buscar) return;
+  const item = navItemDe('bol-solicitudes');
+  if (!item) return;
   item.classList.add('nav-bol-sol');
   if (!document.getElementById('nav-bol-sol-aviso')) item.insertAdjacentHTML('beforeend', '<span class="nav-bol-aviso" id="nav-bol-sol-aviso"></span>');
-  buscar.after(item);
+  ubicarSolicitudesNav();
+}
+// Arriba de todo solo en modo Boletería. Fuera de ese modo el item está oculto
+// y, primero en el DOM, era el primer [data-sec] del menú: el gate de publicación
+// (verificar-crm.py) espera que ese se vea y fallaba.
+function ubicarSolicitudesNav() {
+  const item = navItemDe('bol-solicitudes'), buscar = document.getElementById('nav-buscar');
+  if (!item || !buscar) return;
+  if (modoBoleteria) buscar.after(item);
+  else document.querySelector('#sidebar-nav > .nav-label[data-label="secciones"]')?.after(item);
 }
 
 function abrirSolicitudBoleteria(lead) {
@@ -25652,11 +25661,13 @@ function entrarModoBoleteria(sec) {
   if (!modoBoleteria) seccionAntesDeModoBoleteria = currentSec;
   modoBoleteria = true;
   document.body.classList.add('modo-boleteria');
+  ubicarSolicitudesNav();
   activateSection(typeof sec === 'string' ? sec : (ROL === 'boleteria' ? 'bol-solicitudes' : 'boleteria'));
 }
 function salirModoBoleteria() {
   modoBoleteria = false;
   document.body.classList.remove('modo-boleteria');
+  ubicarSolicitudesNav();
   activateSection(seccionAntesDeModoBoleteria && document.getElementById('sec-' + seccionAntesDeModoBoleteria) ? seccionAntesDeModoBoleteria : (ROL === 'asesor' ? 'leads' : 'dashboard'));
   seccionAntesDeModoBoleteria = null;
 }
