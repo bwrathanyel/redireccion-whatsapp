@@ -2319,7 +2319,12 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .rol-asesor #f-asesor{display:none}
 .rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok),.rol-marketing .sheet-item:not(.nav-marketing-ok){display:none}
 .rol-boleteria .nav-item:not(.nav-boleteria-ok),.rol-boleteria .bn-item:not(.nav-boleteria-ok),.rol-boleteria .sheet-item:not(.nav-boleteria-ok){display:none}
+.rol-administrativo .nav-item:not(.nav-administrativo-ok),.rol-administrativo .bn-item:not(.nav-administrativo-ok),.rol-administrativo .sheet-item:not(.nav-administrativo-ok){display:none}
+.rol-administrativo .nav-item.nav-freelancer-only.nav-administrativo-ok{display:flex}
 .rol-asesor .admin-only,.rol-marketing .admin-only,.rol-boleteria .admin-only{display:none}
+/* Asistente administrativo (allowlist): solo los .admin-only de áreas concedidas llevan .oficina-ok. */
+.rol-administrativo .admin-only:not(.oficina-ok){display:none}
+.rol-administrativo #e-save,.rol-administrativo [data-mv-completar]{display:none}
 /* Contenedor de botones solo-admin: sin esto queda una pastilla vacía bajo las pestañas. */
 .rol-asesor .tar-admin-actions,.rol-marketing .tar-admin-actions,.rol-boleteria .tar-admin-actions{display:none}
 /* La fila del selector de asesor del sheet "Nuevo lead" llevaba display:flex
@@ -2327,7 +2332,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
    "Aleatorio" visibles para el asesor (que no puede reasignar). El flex vive
    acá para que .admin-only lo pueda tapar. */
 .nl-asesor-row{display:flex;gap:8px;align-items:center}
-.rol-asesor .nl-asesor-row,.rol-marketing .nl-asesor-row,.rol-boleteria .nl-asesor-row{display:none}
+.rol-asesor .nl-asesor-row,.rol-marketing .nl-asesor-row,.rol-boleteria .nl-asesor-row,.rol-administrativo .nl-asesor-row{display:none}
 
 /* Modo Boletería: cambio de modo completo, no un tema scopeado a una
    sección. body.modo-boleteria vive arriba de todo el árbol -- las
@@ -2398,7 +2403,10 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .cb-item-quitar:hover{color:#ff6b6b}
 .cb-item-grid{display:grid;grid-template-columns:2fr 2fr 1fr 1fr;gap:10px}
 .cb-item-grid .cb-full{grid-column:1/-1}
+.cb-item-grid .cb-dos{grid-column:span 2}
 .cb-item-grid .field{margin:0}
+.cb-item-tit{display:flex;align-items:center;gap:8px;min-width:0}
+.cb-item-cab .cb-tipo{width:auto;padding:5px 10px;font-size:12.5px;font-weight:600}
 .cb-add{width:auto;margin-top:10px;padding:8px 14px}
 .cb-total{display:flex;justify-content:flex-end;align-items:baseline;gap:12px;margin-top:14px;font-size:13px;color:var(--muted)}
 .cb-total b{font-size:20px;color:var(--txt)}
@@ -2510,6 +2518,7 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 @media (max-width:760px){.vc-form{padding-left:18px}.vc-fila{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-form .ei{font-size:16px;min-height:44px}.vc-buscar>i{top:22px}.vc-generar{width:100%}.vc-chips button{padding:8px 14px}}
 .nav-item.nav-freelancer-only,.sheet-item.nav-freelancer-only{display:none}
 .es-freelancer .nav-item.nav-freelancer-only,.es-freelancer .sheet-item.nav-freelancer-only{display:flex}
+.tiene-tareas .nav-item.nav-freelancer-only,.tiene-tareas .sheet-item.nav-freelancer-only{display:flex}
 /* Menú agrupado (2026-09-25): las hijas se abren desde las pestañas de su
    padre. Siguen en el DOM para el buscador (body.nav-buscando) y para el
    sondeo de permisos por rol (body.nav-sondeo, ver conSondeoNav en app.js). */
@@ -5239,7 +5248,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <button class="seg on" type="button" data-mv-tab="ventas">Ventas</button>
           <button class="seg" type="button" data-mv-tab="estadisticas">Estadísticas</button>
         </div>
-        <select class="flt admin-only" id="est-asesor"><option value="">Elegí un asesor…</option></select>
+        <select class="flt admin-only oficina-ok" id="est-asesor"><option value="">Elegí un asesor…</option></select>
       </div>
 
       <div class="mv-tab-panel" data-mv-panel="ventas">
@@ -5547,6 +5556,24 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="tareas-col-body" id="tareas-col-esperando"></div>
         </div>
       </div>
+      <div class="card" id="tareas-delegadas" style="margin-top:14px" hidden>
+        <div class="chead-row">
+          <h2><i class="fas fa-share-from-square"></i> Delegadas a asesores</h2>
+          <button class="btn-sm" onclick="abrirNuevaTareaUI()"><i class="fas fa-plus"></i> Nueva tarea</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <select class="flt" id="td-estado">
+            <option value="">Abiertas</option>
+            <option value="todas">Todas</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Asesor</th><th>Título</th><th>Prioridad</th><th>Estado</th><th>Vence</th><th></th></tr></thead>
+            <tbody id="td-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- TARIFARIO -->
@@ -5554,7 +5581,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="tar-tabs-row">
         <div class="seg-group chips-scroll" id="tar-tabs">
           <button class="seg on" data-tab="hotsale">🔥 Hot Sales</button>
-          <button class="seg admin-only" data-tab="ia">🤖 IA</button>
+          <button class="seg admin-only oficina-ok" data-tab="ia">🤖 IA</button>
           <button class="seg" data-tab="promo">Promociones</button>
           <button class="seg" data-tab="destino">Guías/Tours</button>
           <button class="seg" data-tab="hotel">Hoteles</button>
@@ -5562,10 +5589,10 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <button class="seg" data-tab="boleteria">Boletería</button>
         </div>
         <div class="tar-admin-actions">
-          <button class="tar-admin-btn admin-only" id="tar-nueva-promo-btn" type="button" title="Nueva promoción" hidden><i class="fas fa-plus"></i></button>
-          <button class="tar-admin-btn admin-only" id="tar-actualizador-btn" type="button" title="Actualizador de Tarifario"><i class="fas fa-arrows-rotate"></i></button>
-          <button class="tar-admin-btn admin-only" id="tar-revision-btn" type="button" title="Revisión del tarifario"><i class="fas fa-clipboard-check"></i></button>
-          <button class="tar-admin-btn admin-only" id="tar-ranking-btn" type="button" title="Ranking de Hot Sales"><i class="fas fa-fire"></i></button>
+          <button class="tar-admin-btn admin-only oficina-ok" id="tar-nueva-promo-btn" type="button" title="Nueva promoción" hidden><i class="fas fa-plus"></i></button>
+          <button class="tar-admin-btn admin-only oficina-ok" id="tar-actualizador-btn" type="button" title="Actualizador de Tarifario"><i class="fas fa-arrows-rotate"></i></button>
+          <button class="tar-admin-btn admin-only oficina-ok" id="tar-revision-btn" type="button" title="Revisión del tarifario"><i class="fas fa-clipboard-check"></i></button>
+          <button class="tar-admin-btn admin-only oficina-ok" id="tar-ranking-btn" type="button" title="Ranking de Hot Sales"><i class="fas fa-fire"></i></button>
           <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
         </div>
       </div>
@@ -6454,7 +6481,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div class="chead-row">
           <h2><i class="fas fa-house-chimney"></i> Apartamentos</h2>
           <input class="ei bt-buscar" id="apto-search" type="search" placeholder="Buscar proveedor o ubicación..." aria-label="Buscar proveedor de apartamentos" autocomplete="off">
-          <button class="btn-sm admin-only" id="apto-nuevo-prov" type="button"><i class="fas fa-plus"></i> Nuevo proveedor</button>
+          <button class="btn-sm admin-only oficina-ok" id="apto-nuevo-prov" type="button"><i class="fas fa-plus"></i> Nuevo proveedor</button>
         </div>
         <div class="csub">Casas y posadas con apartamentos propios: unidades, habitaciones y fotos · tocá un proveedor para ver sus apartamentos</div>
         <div class="kpis bt-kpis lt-kpis" id="apto-kpis"></div>
@@ -6465,8 +6492,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div class="chead-row">
           <button class="btn-sm" id="apto-volver" type="button"><i class="fas fa-arrow-left"></i> Proveedores</button>
           <h2 id="apto-det-titulo"><i class="fas fa-house-chimney"></i></h2>
-          <button class="btn-sm admin-only" id="apto-editar-prov" type="button"><i class="fas fa-id-card"></i> Ficha del proveedor</button>
-          <button class="btn-sm admin-only" id="apto-nuevo-apto" type="button"><i class="fas fa-plus"></i> Nuevo apartamento</button>
+          <button class="btn-sm admin-only oficina-ok" id="apto-editar-prov" type="button"><i class="fas fa-id-card"></i> Ficha del proveedor</button>
+          <button class="btn-sm admin-only oficina-ok" id="apto-nuevo-apto" type="button"><i class="fas fa-plus"></i> Nuevo apartamento</button>
         </div>
         <div class="bt-datos" id="apto-det-datos"></div>
         <div class="csub" style="margin-top:12px">Tocá un apartamento para ver sus fotos, distribución y precios</div>
@@ -6924,7 +6951,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="sheet-handle"></div>
       <div class="sheet-title">Nueva tarea</div>
       <div style="padding:4px 6px 14px">
-        <label class="fl">Freelancer</label>
+        <label class="fl" id="nt-asignado-label">Freelancer</label>
         <select class="ei" id="nt-freelancer"></select>
         <label class="fl" style="margin-top:10px">Título</label>
         <input class="ei" id="nt-titulo" type="text" placeholder="Ej. Publicar promo de fin de semana">
@@ -6966,7 +6993,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     <section class="section" id="sec-comisiones">
       <div class="seg-group chips-scroll" id="cm-tabs">
         <button class="seg" data-cm-tab="mias" data-cm-rol="asesor">Mis ventas</button>
-        <button class="seg" data-cm-tab="verificar" data-cm-rol="admin">Ventas por verificar <span class="lih-count" id="cm-pend-count">0</span></button>
+        <button class="seg" data-cm-tab="verificar" data-cm-rol="admin administrativo">Ventas por verificar <span class="lih-count" id="cm-pend-count">0</span></button>
         <button class="seg" data-cm-tab="invoices">Invoices</button>
         <button class="seg" data-cm-tab="config" data-cm-rol="admin">Configuración</button>
       </div>
@@ -7249,8 +7276,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
          y la entrada "Reservas" del modo Boletería. Tabla cotizaciones_boleteria. -->
     <section class="section" id="sec-cotizacion-boletos">
       <div class="card">
-        <h2><i class="fas fa-file-invoice-dollar"></i> Cotización de boletos</h2>
-        <div class="csub">Armá la cotización en PDF y mandala directo al chat del asesor</div>
+        <h2><i class="fas fa-file-invoice-dollar"></i> Cotización</h2>
+        <div class="csub">Boletos, hoteles, traslados y tours en un solo PDF, directo al chat del asesor</div>
         <div class="grid g-2">
           <div class="field"><label class="fl">Cliente (facturar a)</label><input id="cb-cliente" class="ei" placeholder="Nombre del cliente o BOLETERÍA"></div>
           <div class="field"><label class="fl">Enviar al asesor</label><select id="cb-asesor" class="ei"></select></div>
@@ -7258,7 +7285,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="field"><label class="fl">Válida hasta</label><input id="cb-vence" class="ei" type="date"></div>
         </div>
         <div id="cb-items" class="cb-items"></div>
-        <button class="dbtn cb-add" type="button" onclick="cbAgregarItem()"><i class="fas fa-plus"></i> Agregar boleto</button>
+        <button class="dbtn cb-add" type="button" onclick="cbAgregarItem()"><i class="fas fa-plus"></i> Agregar servicio</button>
         <div class="cb-total">Total <b id="cb-total">$0.00</b></div>
         <details class="cb-textos">
           <summary>Notas y términos del PDF</summary>
@@ -7353,6 +7380,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
       <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-life-ring"></i> Seguimiento a conversaciones</h2><div class="ria-sub">Mensajes de seguimiento a quien dejó la conversación a medias: cuántos vuelven, cuántos se vuelven lead y qué habría pasado sin el mensaje.</div><div id="ria-reactivacion"></div></div>
       <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-microchip"></i> Comparativa por modelo</h2><div class="ria-sub">Cada contacto queda con un modelo fijo (DeepSeek, Haiku o Lite de respaldo). Turnos, velocidad y costo cuentan por el modelo que respondió; conversaciones y leads, por el modelo que atendió la mayor parte del chat.</div><div id="ria-modelos"></div></div>
+      <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-comment-dots"></i> Respuesta privada en Facebook (A/B)</h2><div class="ria-sub">Quien solo comenta recibe un único mensaje privado; si no contesta, Meta no deja escribirle de nuevo. Mitad recibe la respuesta con precio (A) y mitad una pregunta sin precio (B). Contactos nuevos que entraron por un post.</div><div id="ria-ab-fb"></div></div>
       <div class="ria-grid">
         <div class="ria-card"><h2><i class="fas fa-shield-heart"></i> Calidad de las respuestas</h2><div class="ria-sub">Separa lo que intentó el modelo de lo que realmente recibió el cliente.</div><div id="ria-calidad"></div></div>
         <div class="ria-card"><h2><i class="fas fa-gauge-high"></i> Funcionamiento y costo</h2><div class="ria-sub">Velocidad, errores y consumo real de tokens.</div><div id="ria-operacion"></div></div>
@@ -8260,7 +8288,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     <datalist id="nl-canal-opciones">
       <option value="Instagram"><option value="Facebook"><option value="Ambos">
     </datalist>
-    <div class="admin-only">
+    <div class="admin-only oficina-ok">
       <label class="fl">Empresa <span style="font-weight:400;color:var(--muted2)">— vacío = cliente particular</span></label>
       <select id="nl-empresa" class="ei"><option value="">Cliente particular</option></select>
     </div>

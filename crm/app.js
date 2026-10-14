@@ -326,8 +326,13 @@ async function cargarUsuario() {
   return data;
 }
 
-const VISTA_ROL_OPCIONES = ['admin', 'asesor', 'marketing', 'boleteria'];
-const VISTA_ROL_LABEL = { admin: 'Administrador', asesor: 'Asesor comercial', marketing: 'Marketing', boleteria: 'Boletería' };
+const VISTA_ROL_OPCIONES = ['admin', 'asesor', 'marketing', 'boleteria', 'administrativo'];
+const VISTA_ROL_LABEL = { admin: 'Administrador', asesor: 'Asesor comercial', marketing: 'Marketing', boleteria: 'Boletería', administrativo: 'Asistente administrativo' };
+// Admin + asistente administrativo: allowlist de pantallas concedidas (docs/plan-rol-administrativo.md).
+// El resto de los chequeos ROL === 'admin' siguen siendo solo admin a propósito.
+const esOficina = () => ROL === 'admin' || ROL === 'administrativo';
+// actualizar_lead queda solo admin/asesor (dueño 2026-10-14): el administrativo ve leads pero no los modifica.
+const leadSoloLectura = () => { if (ROL !== 'administrativo') return false; errToast('Tu rol puede ver los leads pero no modificarlos'); return true; };
 
 /** Activa la vista previa de un rol y recarga -- recargar (en vez de mutar
  *  ROL en caliente) reusa TODO el flujo normal de login (los ~25 puntos del
@@ -386,6 +391,7 @@ async function entrarSegunRol() {
   document.body.classList.toggle('rol-asesor', ROL === 'asesor');
   document.body.classList.toggle('rol-marketing', ROL === 'marketing');
   document.body.classList.toggle('rol-boleteria', ROL === 'boleteria');
+  document.body.classList.toggle('rol-administrativo', ROL === 'administrativo');
   // Rol boleteria vive siempre en modo Boletería -- se aplica acá, antes de
   // startApp(), para que no haya un parpadeo de colores normales al cargar.
   if (ROL === 'boleteria') { modoBoleteria = true; document.body.classList.add('modo-boleteria'); }
@@ -393,7 +399,7 @@ async function entrarSegunRol() {
   pintarBannerVistaPrevia();
   overlay('login').classList.remove('show');
   overlay('setup').classList.remove('show');
-  const rolLabelUi = ROL === 'admin' ? 'Administrador' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : 'Asesor comercial';
+  const rolLabelUi = ROL === 'admin' ? 'Administrador' : ROL === 'administrativo' ? 'Asistente administrativo' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : 'Asesor comercial';
   document.getElementById('side-un').textContent = MI_NOMBRE;
   document.getElementById('side-ue').textContent = rolLabelUi;
   pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
@@ -726,6 +732,32 @@ async function loadTareas() {
   if (error) { errToast('No se pudieron cargar tus tareas'); return; }
   TAREAS_CACHE = data || [];
   renderTareas();
+  const delegadas = document.getElementById('tareas-delegadas');
+  if (delegadas) delegadas.hidden = ROL !== 'administrativo';
+  if (ROL === 'administrativo') loadTareasDelegadas();
+}
+// Asistente administrativo: lo que delegó o tienen abierto los asesores
+// (listar_tareas_admin ya le filtra a asesores + él mismo; lo suyo va arriba).
+let TAREAS_DELEGADAS = [];
+async function loadTareasDelegadas() {
+  const { data, error } = await sb.rpc('listar_tareas_admin', {});
+  if (error) { errToast('No se pudieron cargar las tareas delegadas'); return; }
+  TAREAS_DELEGADAS = (data || []).filter(t => t.asesor_id !== MI_USUARIO_ID);
+  renderTareasDelegadas();
+}
+function renderTareasDelegadas() {
+  const todas = val('td-estado') === 'todas';
+  const filas = TAREAS_DELEGADAS.filter(t => todas || !TAREA_CERRADA.includes(t.estado));
+  document.getElementById('td-tbody').innerHTML = filas.map(filaTareaAdmin).join('') || '<tr><td colspan="6">Sin tareas delegadas</td></tr>';
+}
+// Un asesor sin perfil freelancer ve "Tareas" solo mientras tenga alguna
+// abierta que le delegó el admin o el asistente administrativo.
+const TAREA_CERRADA = ['completada', 'cerrada', 'cancelada'];
+async function marcarTieneTareas() {
+  const { data, error } = await sb.rpc('listar_mis_tareas');
+  if (error) return;
+  document.body.classList.toggle('tiene-tareas', (data || []).some(t => !TAREA_CERRADA.includes(t.estado)));
+  ocultarHeadersVaciosMenu();
 }
 function renderTareas() {
   const hoy = new Date().toISOString().slice(0, 10);
@@ -819,6 +851,7 @@ function setupFreelancers() {
   }));
   document.getElementById('frl-tareas-freelancer')?.addEventListener('change', renderTareasAdminTabla);
   document.getElementById('frl-tareas-estado')?.addEventListener('change', renderTareasAdminTabla);
+  document.getElementById('td-estado')?.addEventListener('change', renderTareasDelegadas);
   document.getElementById('nt-cancelar')?.addEventListener('click', () => closeSheet('nueva-tarea-sheet'));
   document.getElementById('nt-confirmar')?.addEventListener('click', confirmarNuevaTarea);
   document.getElementById('frl-personal-dias')?.addEventListener('change', () => loadPersonalTiempo(true));
@@ -886,7 +919,10 @@ function renderTareasAdminTabla() {
   const asesorSel = val('frl-tareas-freelancer'), estadoSel = val('frl-tareas-estado');
   const filas = FRL_TAREAS_CACHE.filter(t =>
     (!asesorSel || String(t.asesor_id) === asesorSel) && (!estadoSel || t.estado === estadoSel));
-  document.getElementById('frl-tareas-tbody').innerHTML = filas.map(t => `
+  document.getElementById('frl-tareas-tbody').innerHTML = filas.map(filaTareaAdmin).join('') || '<tr><td colspan="6">Sin tareas</td></tr>';
+}
+function filaTareaAdmin(t) {
+  return `
     <tr>
       <td class="td-name">${esc(t.asesor_nombre)}</td>
       <td data-label="Tarea">${esc(t.titulo)}${t.reporte_abierto ? ' <i class="fas fa-flag" style="color:#ef4444" title="Reporte abierto"></i>' : ''}</td>
@@ -894,15 +930,34 @@ function renderTareasAdminTabla() {
       <td data-label="Estado"><span class="chip">${esc(t.estado)}</span></td>
       <td data-label="Vence" class="muted">${t.vence_at ? esc(fmtFechaHoraCaracas(t.vence_at)) : '—'}</td>
       <td class="td-acciones">${t.estado === 'en_revision' ? `<button class="btn-sm" onclick="aprobarTareaUI(${t.id})">Aprobar</button>` : ''}</td>
-    </tr>`).join('') || '<tr><td colspan="6">Sin tareas</td></tr>';
+    </tr>`;
+}
+function recargarTareasGestion() {
+  if (ROL === 'administrativo') loadTareas();
+  if (ROL !== 'administrativo' || frlTab === 'tareas') loadTareasAdmin();
 }
 window.aprobarTareaUI = async (taskId) => {
   const { data, error } = await sb.rpc('cambiar_estado_tarea', { p_task_id: taskId, p_nuevo_estado: 'completada' });
   if (error || !data?.ok) { errToast('No se pudo aprobar: ' + (error?.message || data?.error || '')); return; }
   okToast('Tarea aprobada');
-  loadTareasAdmin();
+  recargarTareasGestion();
 };
-window.abrirNuevaTareaUI = () => {
+// El administrativo delega a asesores activos (o a sí mismo): crear_tarea
+// rechaza cualquier otro destino. personal_resumen es la única lista con ids
+// que tiene concedida (usuarios no le abre RLS).
+async function cargarDestinosTareaAdministrativo() {
+  const { data, error } = await sb.rpc('personal_resumen', { p_dias: 1 });
+  if (error) { errToast('No se pudo cargar el equipo'); return false; }
+  const asesores = (data?.personas || []).filter(p => p.rol === 'asesor' && !p.bloqueado && !p.dado_de_baja && p.usuario_id !== MI_USUARIO_ID)
+    .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  document.getElementById('nt-freelancer').innerHTML = [{ usuario_id: MI_USUARIO_ID, nombre: `${MI_NOMBRE} (yo)` }, ...asesores]
+    .map(p => `<option value="${p.usuario_id}">${esc(p.nombre)}</option>`).join('');
+  return true;
+}
+window.abrirNuevaTareaUI = async () => {
+  const administrativo = ROL === 'administrativo';
+  document.getElementById('nt-asignado-label').textContent = administrativo ? 'Asignar a' : 'Freelancer';
+  if (administrativo && !(await cargarDestinosTareaAdministrativo())) return;
   document.getElementById('nt-titulo').value = '';
   document.getElementById('nt-descripcion').value = '';
   document.getElementById('nt-prioridad').value = 'media';
@@ -916,7 +971,7 @@ async function confirmarNuevaTarea() {
   const titulo = val('nt-titulo');
   if (!titulo || !titulo.trim()) { err.textContent = 'El título es obligatorio.'; return; }
   const asesorId = val('nt-freelancer');
-  if (!asesorId) { err.textContent = 'Elegí un freelancer.'; return; }
+  if (!asesorId) { err.textContent = 'Elegí a quién asignarla.'; return; }
   const venceInput = val('nt-vence');
   const btn = document.getElementById('nt-confirmar');
   btn.disabled = true; const previo = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando...';
@@ -929,7 +984,7 @@ async function confirmarNuevaTarea() {
   if (error || !data?.ok) { err.textContent = 'No se pudo crear: ' + (error?.message || data?.error || ''); return; }
   closeSheet('nueva-tarea-sheet');
   okToast('Tarea creada');
-  loadTareasAdmin();
+  recargarTareasGestion();
 }
 
 /* ---------- Control de asistencia (agent_sessions) ---------- */
@@ -938,7 +993,7 @@ async function confirmarNuevaTarea() {
 // nueva, así un refresh de página o un cierre de pestaña sin logout nunca
 // deja 2 sesiones activas ni una activa huérfana para siempre.
 async function handleCheckIn() {
-  if (ROL !== 'admin' && ROL !== 'asesor') return;
+  if (!esOficina() && ROL !== 'asesor') return;
   const { error } = await sb.rpc('agent_check_in');
   if (error) { console.error('check-in', error); return; }
   JORNADA_ACTIVA = true;
@@ -951,7 +1006,7 @@ async function handleCheckIn() {
 // sin informe).
 const JORNADA_CAMPOS = ['jornada-como-me-fue', 'jornada-que-aprendi', 'jornada-que-se-complico', 'jornada-bloqueos'];
 function abrirResumenJornada() {
-  if (ROL !== 'admin' && ROL !== 'asesor') return;
+  if (!esOficina() && ROL !== 'asesor') return;
   JORNADA_CAMPOS.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('jornada-resumen-ok').disabled = true;
   openSheet('jornada-resumen-sheet');
@@ -1793,7 +1848,7 @@ function aplicarFiltroPersonal(filtro) {
   document.getElementById('gp-kpi-card-equipo')?.classList.toggle('kpi-on', !filtro);
   renderPersonalCards();
 }
-const ROL_LABEL_GP = { admin: 'Administrador', asesor: 'Asesor', marketing: 'Marketing', boleteria: 'Boletería' };
+const ROL_LABEL_GP = { admin: 'Administrador', asesor: 'Asesor', marketing: 'Marketing', boleteria: 'Boletería', administrativo: 'Asistente administrativo' };
 function formatDuracionLarga(ms) {
   if (!ms) return 'Sin registro';
   const horasTotales = Math.floor(ms / 3600000);
@@ -2038,7 +2093,7 @@ function abrirEditorPersona(usuarioId) {
       <input id="pe-cargo" class="ei" type="text" placeholder="Ej: Ejecutivo de Boletería · Gerente Administrativo" value="${esc(u.cargo || '')}">
       <label class="fl">Rol</label>
       <select id="pe-rol" class="ei">
-        ${['asesor', 'admin', 'marketing', 'boleteria'].map(r => `<option value="${r}"${u.rol === r ? ' selected' : ''}>${VISTA_ROL_LABEL[r] || ROL_LABEL_GP[r] || r}</option>`).join('')}
+        ${['asesor', 'admin', 'marketing', 'boleteria', 'administrativo'].map(r => `<option value="${r}"${u.rol === r ? ' selected' : ''}>${VISTA_ROL_LABEL[r] || ROL_LABEL_GP[r] || r}</option>`).join('')}
       </select>
       ${u.rol === 'asesor' ? `
       <label class="fl">Teléfono</label>
@@ -2523,7 +2578,7 @@ async function enviarRecuperacion(e) {
 }
 
 /* ---------- Configurar usuario (reclamar cuenta, sin contraseña previa) ---------- */
-const ROL_LABEL = { admin: 'Admin', asesor: 'Asesor', marketing: 'Marketing', boleteria: 'Boletería' };
+const ROL_LABEL = { admin: 'Admin', asesor: 'Asesor', marketing: 'Marketing', boleteria: 'Boletería', administrativo: 'Administrativo' };
 let claimUsername = null;
 
 document.getElementById('claimLink').addEventListener('click', e => { e.preventDefault(); abrirListaClaim(); });
@@ -2673,7 +2728,8 @@ async function startApp() {
   const seccionValida = seccionGuardada && document.getElementById('sec-' + seccionGuardada) && usuarioPuedeAbrirSeccion(seccionGuardada);
   // Las secciones que no leen STATS se abren ya, sin esperar a loadStats():
   // antes el admin veía el dashboard 1-2 s y recién ahí saltaba a la suya.
-  if (ROL === 'admin' && seccionValida && !['dashboard', 'hoy', 'leads', 'pipeline'].includes(seccionGuardada)) activateSection(seccionGuardada);
+  if (esOficina() && seccionValida && !['dashboard', 'hoy', 'leads', 'pipeline'].includes(seccionGuardada)) activateSection(seccionGuardada);
+  const tareasAsesor = ROL === 'asesor' && !MI_ES_FREELANCER ? marcarTieneTareas() : null;
   if (ROL === 'asesor') {
     const destino = seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'leads');
     activateSection(destino);
@@ -2683,6 +2739,8 @@ async function startApp() {
     if (destino !== 'leads') loadInboxLeads();
   }
   await loadStats();
+  // Antes de que manejarDeepLinkSeccion pregunte si "?ir=tareas" (push de tarea nueva) está permitido.
+  await tareasAsesor;
   ACTIVOS = Object.keys(STATS.by_advisor || {});
   // by_advisor solo trae asesores que YA tienen leads; los recién agregados
   // (ej. Luis Silva, Maryori Sandoval) no aparecen y quedaban fuera del selector
@@ -2690,7 +2748,7 @@ async function startApp() {
   // (tabla `asesores` con activo=true), la fuente de verdad de quién puede recibir.
   // Solo admin: la RPC hace assert_rol(['admin']) y a un asesor le devuelve 403
   // en cada carga (~13/h en los logs del 2026-09-18).
-  if (ROL === 'admin') try {
+  if (esOficina()) try {
     const { data, error } = await sb.rpc('listar_asesores_activos');
     if (!error && Array.isArray(data)) {
       ACTIVOS = [...new Set([...ACTIVOS, ...data.map(a => a.nombre)])];
@@ -2705,7 +2763,7 @@ async function startApp() {
   } catch (_) { /* fallo de red: se conserva by_advisor */ }
   // La sección guardada (ej. voucher) se activa antes de que ACTIVOS exista y su select quedaba vacío.
   if (ROL === 'admin' && seccionValida && seccionGuardada === 'voucher' && ACTIVOS.length) loadVoucherSeccion();
-  if (ROL === 'admin') activateSection(seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'dashboard'));
+  if (esOficina()) activateSection(seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'dashboard'));
   renderHoy();
   renderAll();
   setupFilters();
@@ -3062,7 +3120,7 @@ async function loadPostventa(silencioso) {
   const grid = document.getElementById('pv-grid');
   if (!grid || ROL === 'marketing') return;
   const waPanel = document.getElementById('pv-wa');
-  if (waPanel) { waPanel.hidden = ROL !== 'admin'; if (waPanel.open && !silencioso) pvWhatsappCargar(); }
+  if (waPanel) { waPanel.hidden = !esOficina(); if (waPanel.open && !silencioso) pvWhatsappCargar(); }
   if (!silencioso || !grid.children.length) grid.innerHTML = '<div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div>';
   const busqueda = document.getElementById('pv-search')?.value.trim() || null;
   const [resumen, bandeja] = await Promise.all([
@@ -3076,7 +3134,7 @@ async function loadPostventa(silencioso) {
     return;
   }
   POSTVENTA = bandeja.data || [];
-  if (!RV_DESTINOS && (ROL === 'admin' || ROL === 'asesor')) {
+  if (!RV_DESTINOS && (esOficina() || ROL === 'asesor')) {
     const d = await sb.rpc('listar_destinos', { p_solo_activos: true });
     if (!d.error) RV_DESTINOS = d.data || [];
   }
@@ -3449,7 +3507,7 @@ function rvResumenTotal(r) {
 function rvForm(f) { RV_FORM = f; rvRenderServicios(); rvRenderPasajeros(); }
 function rvTrasCambio() {
   rvCargar();
-  if (currentSec === 'postventa' && (ROL === 'admin' || ROL === 'asesor')) loadPostventa();
+  if (currentSec === 'postventa' && (esOficina() || ROL === 'asesor')) loadPostventa();
   if (currentSec === 'reservas-empresas') loadReservasEmpresas();
   if (currentSec === 'apartamentos' && APTO_TAB === 'disp') loadDisponibilidad();
   if (currentSec === 'boleteria' && bolTab === 'reservas') loadBolReservas();
@@ -4153,7 +4211,7 @@ async function loadMisVentasVentas() {
   if (!document.getElementById('sec-mis-ventas')) return;
   const p_asesor_id = estAsesorId();
   const cards = document.getElementById('mv-cards');
-  if (ROL === 'admin' && !p_asesor_id) {
+  if (esOficina() && !p_asesor_id) {
     document.getElementById('mv-kpis').innerHTML = '';
     if (cards) cards.innerHTML = '<div class="muted" style="font-size:12.5px">Elegí un asesor para ver sus ventas.</div>';
     MV_DATA = [];
@@ -4218,6 +4276,7 @@ function renderMisVentasCards() {
   box.querySelectorAll('[data-mv-completar]').forEach(btn => btn.addEventListener('click', async e => {
     e.stopPropagation();
     const id = Number(btn.dataset.mvCompletar);
+    if (leadSoloLectura()) return;
     if (!await confirmarSheet({ titulo: '¿Marcar venta como completa?', detalle: 'El lead va a pasar a VENTA COMPLETA.', textoOk: 'Marcar completa' })) return;
     const card = btn.closest('.lt-card');
     const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: id, p_estado: 'VENTA COMPLETA' });
@@ -4260,7 +4319,7 @@ function setupEstadisticas() {
     document.querySelectorAll('#est-serie-metrica .seg').forEach(x => x.classList.remove('on'));
     b.classList.add('on'); estSerieMetrica = b.dataset.m; if (EST_DATA) renderEstSerie();
   });
-  if (ROL === 'admin') {
+  if (esOficina()) {
     const sel = document.getElementById('est-asesor');
     sb.rpc('estadisticas_asesores_lista').then(({ data, error }) => {
       if (error || !Array.isArray(data) || !sel) return;
@@ -4272,13 +4331,13 @@ function setupEstadisticas() {
 }
 
 function estAsesorId() {
-  return ROL === 'admin' ? (document.getElementById('est-asesor')?.value || null) : null;
+  return esOficina() ? (document.getElementById('est-asesor')?.value || null) : null;
 }
 
 async function loadEstadisticas() {
   if (!document.getElementById('sec-mis-ventas')) return;
   const p_asesor_id = estAsesorId();
-  if (ROL === 'admin' && !p_asesor_id) {
+  if (esOficina() && !p_asesor_id) {
     document.getElementById('est-kpis').innerHTML = '';
     const destinos = document.getElementById('est-destinos');
     if (destinos) destinos.innerHTML = '<div class="muted" style="font-size:12.5px">Elegí un asesor para ver sus estadísticas.</div>';
@@ -5100,7 +5159,7 @@ function leadCardHtml(l) {
   // cuando no queda ninguno: un div vacío igual sumaría el borde y dejaría un
   // hueco muerto abajo de la tarjeta.
   const acciones = [
-    (ROL === 'asesor' || ROL === 'admin') && !VENTA.includes(l.estado)
+    (ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado)
       ? `<button type="button" class="fact-btn" data-facturar-id="${l.id}" title="Enviar a facturación" aria-label="Enviar a facturación" onclick="event.stopPropagation()"><i class="fas fa-paper-plane"></i></button>` : '',
     wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : '',
   ].filter(Boolean).join('');
@@ -5141,7 +5200,7 @@ function leadCardHtml(l) {
 // no está en el ciclo (dato legacy), la flecha lo manda al primer paso real
 // del pipeline en vez de fallar.
 async function setEstadoLead(l, nuevo) {
-  if (!nuevo || nuevo === l.estado) return;
+  if (!nuevo || nuevo === l.estado || leadSoloLectura()) return;
   const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: nuevo });
   if (error || !data?.ok) { errToast('No se pudo cambiar el estado: ' + (error?.message || data?.error || '')); return; }
   l.estado = nuevo;
@@ -5230,6 +5289,7 @@ function inboxCardHtml(l) {
   </div>`;
 }
 async function atenderInboxLead(l) {
+  if (leadSoloLectura()) return;
   // window.open ANTES del await -- si va después, ya no corre dentro del
   // gesto síncrono del click y Chrome/Firefox lo bloquean como popup. Si de
   // todos modos vuelve null (ej. llamado async desde manejarDeepLinkLeadAccion
@@ -5471,7 +5531,7 @@ function openDrawer(l) {
       ${wa ? `<a class="dq wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></a>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq dq-boleteria" id="e-a-boleteria" type="button" title="Rellenar la solicitud de boletería de este cliente y mandarla a un ejecutivo"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización'}</span></button>` : ''}
-      ${(ROL === 'asesor' || ROL === 'admin') && !VENTA.includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
+      ${(ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
     </div>
 
     <div class="lead-tabs">
@@ -6176,6 +6236,7 @@ document.getElementById('th-select-all')?.addEventListener('change', e => {
   updateBulkBar();
 });
 async function guardarLead() {
+  if (leadSoloLectura()) return;
   const btn = document.getElementById('e-save'), err = document.getElementById('edit-err');
   // Conflicto real pendiente (falla #4): otra sesión cambió un campo que
   // el usuario también está editando acá mismo. Se manda igual el
@@ -6885,18 +6946,20 @@ async function riaConsultar(dias, forzar = false, completo = true) {
   const guardado = RIA_CACHE.get(dias);
   if (!forzar && guardado && Date.now() - guardado.en < 60000 && (guardado.completo || !completo)) return guardado.data;
   const rango = riaRango(dias);
-  const [general, piloto, reactivacion, modelos] = await Promise.all([
+  const [general, piloto, reactivacion, modelos, abFb] = await Promise.all([
     sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }),
     completo ? sb.rpc('panel_piloto_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_reactivacion_ia', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_modelos_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
+    completo ? sb.rpc('panel_ab_privado_fb', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
   ]);
   if (general.error) throw general.error;
   if (completo && piloto.error) throw piloto.error;
   if (completo && reactivacion.error) throw reactivacion.error;
   // La comparativa por modelo es aditiva: si falla, el resto del panel se pinta igual.
   if (completo && modelos.error) console.error('panel_modelos_ia', modelos.error);
-  const data = completo ? { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data, modelos: modelos.error ? null : modelos.data } : general.data;
+  if (completo && abFb.error) console.error('panel_ab_privado_fb', abFb.error);
+  const data = completo ? { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data, modelos: modelos.error ? null : modelos.data, ab_fb: abFb.error ? null : abFb.data } : general.data;
   RIA_CACHE.set(dias, { en: Date.now(), data, completo });
   return data;
 }
@@ -6933,7 +6996,7 @@ function riaPintarDashboard(data) {
 }
 
 async function loadResumenIADashboard(forzar = false) {
-  if (ROL !== 'admin' || !document.getElementById('ria-dashboard')) return;
+  if (!esOficina() || !document.getElementById('ria-dashboard')) return;
   try { riaPintarDashboard(await riaConsultar(1, forzar, false)); }
   catch (e) {
     console.error('rendimiento IA dashboard', e);
@@ -6974,6 +7037,13 @@ function riaComparacionSeguimiento(reactivacion) {
 }
 
 const RIA_BRAZOS = { deepseek: 'DeepSeek', haiku: 'Haiku 5.5', lite: 'Lite' };
+function riaAbFacebook(ab) {
+  const vs = ab?.variantes || [];
+  if (!vs.length) return '<div class="ria-vacio">Sin comentarios de Facebook desde que empezó la prueba (14-oct).</div>';
+  const nombre = { A: 'A · respuesta con precio', B: 'B · pregunta sin precio' };
+  return `<div class="ria-lista">${vs.map(v => `<div class="ria-fila"><span><b>${esc(nombre[v.variante] || v.variante)}</b><br>${fmt(riaNum(v.respondieron))} respondieron (${riaPct(v.respondieron, v.contactos)}%) · ${fmt(riaNum(v.leads))} leads (${riaPct(v.leads, v.contactos)}%)</span><b>${fmt(riaNum(v.contactos))}</b></div>`).join('')}</div>`;
+}
+
 function riaModelos(m) {
   if (!m) return '<div class="ria-vacio">No se pudo cargar la comparativa por modelo.</div>';
   const bz = m.brazos || [];
@@ -7086,6 +7156,8 @@ function riaPintarPanel(data) {
   document.getElementById('ria-canales').innerHTML = canales.length ? `<div class="ria-lista">${canales.map(c => `<div class="ria-fila"><span><b>${esc(RIA_CANALES[c.canal] || c.canal)}</b><br>${fmt(riaNum(c.telefonos))} teléfonos · ${fmt(riaNum(c.leads_calificados))} leads (${riaPct(c.leads_calificados, c.conversaciones)}%)</span><b>${fmt(riaNum(c.conversaciones))}<small style="display:block;color:var(--muted);font-weight:500">${riaNum(c.latencia_promedio_ms) ? (riaNum(c.latencia_promedio_ms) / 1000).toFixed(1) + ' s' : '—'}</small></b></div>`).join('')}</div>` : '<div class="ria-vacio">Sin actividad por canal en este período.</div>';
 
   document.getElementById('ria-modelos').innerHTML = riaModelos(data.modelos);
+  const abFb = document.getElementById('ria-ab-fb');
+  if (abFb) abFb.innerHTML = riaAbFacebook(data.ab_fb);
   const sinCache = Math.max(0, riaNum(op.tokens_entrada) - riaNum(op.tokens_cache));
   const costo = data.modelos?.brazos?.length ? data.modelos.brazos.reduce((s, b) => s + riaNum(b.costo_usd), 0)
     : sinCache * RIA_COSTO_ENTRADA + riaNum(op.tokens_cache) * RIA_COSTO_CACHE + riaNum(op.tokens_salida) * RIA_COSTO_SALIDA;
@@ -7103,7 +7175,7 @@ function riaPintarPanel(data) {
 }
 
 async function loadRendimientoIA(forzar = false) {
-  if (ROL !== 'admin' || !document.getElementById('ria-kpis')) return;
+  if (!esOficina() || !document.getElementById('ria-kpis')) return;
   document.getElementById('ria-actualizado').textContent = 'Cargando…';
   try {
     const data = await riaConsultar(RIA_DIAS, forzar);
@@ -7116,7 +7188,7 @@ async function loadRendimientoIA(forzar = false) {
 }
 
 function setupRendimientoIA() {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   document.getElementById('ria-dashboard')?.addEventListener('click', () => activateSection('rendimiento-ia'));
   document.getElementById('ria-recargar')?.addEventListener('click', () => { RIA_CACHE.clear(); loadRendimientoIA(true); loadResumenIADashboard(true); });
   document.getElementById('ria-periodos')?.addEventListener('click', e => {
@@ -8345,7 +8417,7 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
 /* ---------- Bandeja de Entrada de Facturación (admin) ---------- */
 let FACT_BANDEJA_CACHE = [];
 async function loadBandejaFacturacion() {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   const loading = document.getElementById('fact-bandeja-loading'), empty = document.getElementById('fact-bandeja-empty');
   loading?.classList.add('show');
   const { data, error } = await sb.rpc('listar_bandeja_facturacion');
@@ -8395,7 +8467,7 @@ async function loadBandejaFacturacion() {
    independiente (ver 20260728000000_blindar_cierre_venta.sql) ---------- */
 let FACT_VERIFICAR_CACHE = [];
 async function loadVentasPendientesVerificar() {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   const loading = document.getElementById('fact-verificar-loading'), empty = document.getElementById('fact-verificar-empty');
   loading?.classList.add('show');
   const { data, error } = await sb.rpc('listar_ventas_pendientes_verificar');
@@ -8626,12 +8698,12 @@ function resetSheetNuevoCliente() {
   document.getElementById('nl-err').textContent = '';
 }
 
-// Empresas activas para el selector del sheet (solo admin: listar_empresas_cliente lo exige).
+// Empresas activas para el selector del sheet (admin/administrativo: listar_empresas_cliente lo exige).
 async function poblarEmpresasSheetNuevoLead(preseleccion = null) {
   const sel = document.getElementById('nl-empresa');
   if (!sel) return;
   sel.innerHTML = '<option value="">Cliente particular</option>';
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   const { data, error } = await sb.rpc('listar_empresas_cliente', { p_solo_activos: true });
   if (!error && data) sel.innerHTML += data.map(e => `<option value="${e.id}">${esc(e.nombre)}</option>`).join('');
   if (preseleccion != null) sel.value = String(preseleccion);
@@ -8652,7 +8724,7 @@ async function abrirNuevoLead(empresaId = null) {
   document.getElementById('nl-buscar-box').style.display = 'none';
   document.getElementById('nl-fact-box').style.display = 'none';
   document.getElementById('nl-prueba-label').style.display = '';
-  if (ROL === 'admin') await Promise.all([poblarAsesoresSheetNuevoLead(), poblarEmpresasSheetNuevoLead(empresaId)]);
+  if (esOficina()) await Promise.all([ROL === 'admin' && poblarAsesoresSheetNuevoLead(), poblarEmpresasSheetNuevoLead(empresaId)]);
   openSheet('nuevo-lead-sheet');
 }
 document.getElementById('nl-abrir-btn')?.addEventListener('click', () => abrirNuevoLead());
@@ -8663,6 +8735,7 @@ document.getElementById('nl-abrir-btn')?.addEventListener('click', () => abrirNu
 // resueltos y precargados de solo lectura (no se puede "crear otro cliente"
 // desde ahí, ya existe).
 window.abrirNuevoClienteFacturacion = async (bandejaItem) => {
+  if (leadSoloLectura()) return;
   resetSheetNuevoCliente();
   NL_MODO_FACTURACION = true;
   NL_BANDEJA_LEAD_ID = bandejaItem ? bandejaItem.lead_id : null;
@@ -14294,7 +14367,7 @@ function setupStopSales() {
   // sección en sí ya no es nav-admin-only -- se esconde acá adentro, no en el
   // menú, para que cualquier rol pueda entrar y ver los bloqueos vigentes.
   const adminBox = document.getElementById('ss-admin-box');
-  if (adminBox) adminBox.style.display = ROL === 'admin' ? '' : 'none';
+  if (adminBox) adminBox.style.display = esOficina() ? '' : 'none';
 
   document.getElementById('ss-file').addEventListener('change', (e) => {
     const f = e.target.files?.[0];
@@ -15831,7 +15904,7 @@ const PROV_ERRORES = {
 };
 let PROV_CACHE = [], PROV_EDITANDO = null;
 async function loadProveedores() {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   const cargando = document.getElementById('prov-loading');
   cargando?.classList.add('show');
   const { data, error } = await sb.rpc('listar_proveedores', { p_solo_activos: false });
@@ -16305,7 +16378,7 @@ function aptoPintarDetalle(p) {
     p.contacto && `<span class="bt-dato"><i class="fas fa-user"></i> ${esc(p.contacto)}</span>`,
     p.telefono && `<span class="bt-dato"><i class="fas fa-phone"></i> <a href="tel:${esc(tel)}">${esc(p.telefono)}</a></span>`,
     p.email && `<span class="bt-dato"><i class="fas fa-envelope"></i> <a href="mailto:${esc(p.email)}">${esc(p.email)}</a></span>`,
-    ROL === 'admin' && `<span class="bt-dato"><i class="fas fa-hourglass-half"></i> ${p.dias_credito ? fmt(p.dias_credito) + ' días de crédito' : 'Contado'}${p.moneda_habitual ? ' · ' + esc(p.moneda_habitual) : ''}</span>`,
+    esOficina() && `<span class="bt-dato"><i class="fas fa-hourglass-half"></i> ${p.dias_credito ? fmt(p.dias_credito) + ' días de crédito' : 'Contado'}${p.moneda_habitual ? ' · ' + esc(p.moneda_habitual) : ''}</span>`,
     p.producto_nombre && `<span class="bt-dato"><i class="fas fa-link"></i> Tarifario: ${esc(p.producto_nombre)}</span>`,
   ].filter(Boolean).join('');
   // Áreas comunes primero: es la cara del edificio.
@@ -16407,7 +16480,7 @@ function aptoLlenarSheet(id, editar = false) {
   aptoEl('apt-fotos-wrap').hidden = !a;
   aptoEl('apt-nuevo-aviso').hidden = !!a;
   // Asesor: solo la ficha (galería, precios, distribución, videos), sin el editor.
-  const esAdmin = ROL === 'admin';
+  const esAdmin = esOficina();
   aptoEl('apt-editar').hidden = !a || !esAdmin;
   aptoModoEditar(esAdmin && (!a || editar));
   aptoPintarResumen(a);
@@ -16863,7 +16936,7 @@ const EMP_ERRORES = {
 };
 let EMP_CACHE = [], EMP_EDITANDO = null;
 async function loadEmpresas() {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   const cargando = document.getElementById('emp-loading');
   cargando?.classList.add('show');
   const { data, error } = await sb.rpc('listar_empresas_cliente', { p_solo_activos: false });
@@ -16979,7 +17052,7 @@ function setupEmpresas() {
 let RE_EMPRESAS = [], RE_RESERVAS = [], RE_LEADS = [], RE_EMPRESA = '', RE_VISTA = 'reservas', RE_BUSCAR = '';
 async function loadReservasEmpresas() {
   const grid = document.getElementById('re-grid');
-  if (!grid || ROL !== 'admin') return;
+  if (!grid || !esOficina()) return;
   grid.innerHTML = '<div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div>';
   const [emp, bandeja, leads] = await Promise.all([
     sb.rpc('listar_empresas_cliente', { p_solo_activos: false }), pvBandejaCompleta(), sb.rpc('listar_leads_empresas'),
@@ -17101,7 +17174,7 @@ function setupComisiones() {
   const tabs = document.getElementById('cm-tabs');
   if (!tabs || tabs._wired) return;
   tabs._wired = true;
-  tabs.querySelectorAll('[data-cm-rol]').forEach(b => { if (b.dataset.cmRol !== ROL) b.style.display = 'none'; });
+  tabs.querySelectorAll('[data-cm-rol]').forEach(b => { if (!b.dataset.cmRol.split(' ').includes(ROL)) b.style.display = 'none'; });
   tabs.addEventListener('click', e => { const b = e.target.closest('[data-cm-tab]'); if (b) cmTab(b.dataset.cmTab); });
   document.getElementById('cm-cargar-btn').addEventListener('click', cmAbrirCarga);
   document.getElementById('cm-cancelar').addEventListener('click', () => closeSheet('cm-venta-sheet'));
@@ -17125,7 +17198,7 @@ function cmTab(tab) {
   document.querySelectorAll('#sec-comisiones [data-cm-panel]').forEach(p => { p.style.display = p.dataset.cmPanel === tab ? '' : 'none'; });
   ({ mias: cmLoadMias, verificar: cmLoadVerificar, invoices: cmLoadInvoices, config: cmLoadConfig })[tab]?.();
 }
-function loadComisiones() { cmTab(CM_TAB || (ROL === 'admin' ? 'verificar' : 'mias')); }
+function loadComisiones() { cmTab(CM_TAB || (esOficina() ? 'verificar' : 'mias')); }
 
 async function cmLoadContexto() {
   const { data, error } = await sb.rpc('comision_contexto');
@@ -17259,7 +17332,7 @@ function cmRenderVerificar() {
   const filas = CM_VENTAS.filter(v => (!corte || v.pago_el === corte) && (!vend || v.usuario_id === vend) && (!est || v.estado === est));
   document.getElementById('cm-ver-tbody').innerHTML = filas.map(v => {
     const montos = CM_TIPOS.filter(k => Number(v['monto_' + k]) > 0).map(k => `${k[0].toUpperCase() + k.slice(1)} ${ivMoney(v['monto_' + k])} · ${v['pct_' + k]}%`).join('<br>');
-    const acc = v.estado === 'enviada' ? `<button class="dbtn save" data-cm-ver="${v.id}" type="button">Verificar</button> <button class="dbtn" data-cm-rech="${v.id}" type="button">Rechazar</button>`
+    const acc = ROL !== 'admin' ? '' : v.estado === 'enviada' ? `<button class="dbtn save" data-cm-ver="${v.id}" type="button">Verificar</button> <button class="dbtn" data-cm-rech="${v.id}" type="button">Rechazar</button>`
       : v.estado === 'verificada' ? `<button class="dbtn" data-cm-rech="${v.id}" type="button">Rechazar</button>` : '';
     return `<tr>
       <td data-label="Vendedor">${esc(v.vendedor)}</td>
@@ -17278,7 +17351,7 @@ function cmRenderVerificar() {
     const g = grupos.get(k) || { usuario_id: v.usuario_id, vendedor: v.vendedor, pago_el: v.pago_el, n: 0, total: 0 };
     g.n++; g.total += Number(v.comision_total || 0); grupos.set(k, g);
   });
-  document.getElementById('cm-invoice-bar').innerHTML = cmInvoiceBarHtml([...grupos.values()]);
+  document.getElementById('cm-invoice-bar').innerHTML = ROL === 'admin' ? cmInvoiceBarHtml([...grupos.values()]) : '';
 }
 const cmInvoiceBarHtml = grupos => grupos.map(g => `
     <div class="cm-resumen" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0">
@@ -17327,7 +17400,7 @@ async function cmLoadInvoices() {
       <td data-label="Total"><b>${ivMoney(l.total)}</b></td>
       <td data-label="Estado">${cmChip(l.estado)}</td>
       <td>${l.pdf_path ? `<button class="dbtn" type="button" data-cm-pdf="${l.id}"><i class="fas fa-file-pdf"></i> Ver</button>`
-        : l.estado !== 'anulada' ? `<button class="dbtn" type="button" data-cm-regen="${l.id}">Generar PDF</button>` : ''}
+        : l.estado !== 'anulada' && ROL !== 'administrativo' ? `<button class="dbtn" type="button" data-cm-regen="${l.id}">Generar PDF</button>` : ''}
         ${esAdmin && l.pdf_path && l.estado !== 'anulada' ? `<button class="dbtn" type="button" data-cm-enviar="${l.id}" data-cm-num="${l.numero}" data-cm-vend="${esc(l.vendedor)}"><i class="fas fa-paper-plane"></i> Enviar</button>` : ''}
         ${esAdmin && l.estado === 'emitida' ? `<button class="dbtn save" type="button" data-cm-pagar="${l.id}">Marcar pagado</button> <button class="dbtn" type="button" data-cm-anular="${l.id}">Anular</button>` : ''}
         ${l.enviada_telegram_en || l.enviada_correo_en ? `<div class="muted" style="font-size:11px">Enviado:${l.enviada_telegram_en ? ' Telegram' : ''}${l.enviada_correo_en ? ' Correo' : ''}</div>` : ''}</td>
@@ -17992,7 +18065,7 @@ async function rkMover(id, delta, btn) {
 }
 
 function setupRankingCatalogo() {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   document.getElementById('tar-ranking-btn')?.addEventListener('click', abrirRankingCatalogo);
   document.getElementById('rk-recargar')?.addEventListener('click', loadRankingCatalogo);
   document.getElementById('rk-buscar')?.addEventListener('input', rkPintar);
@@ -18068,7 +18141,7 @@ const iaEstadoDe = p => p.ia_estado === 'poner' ? 'poner' : p.ia_estado === 'qui
 
 function renderTarifarioIA() {
   const cont = document.getElementById('tar-grid');
-  if (ROL !== 'admin') { cont.innerHTML = '<div class="rk-vacio">Solo un admin puede curar las promociones de la IA.</div>'; return; }
+  if (!esOficina()) { cont.innerHTML = '<div class="rk-vacio">Solo un admin puede curar las promociones de la IA.</div>'; return; }
   const q = val('tar-search').trim().toLowerCase();
   // Desde 2026-09-10 la curación de IA aplica sobre cualquier tarifa con título,
   // no solo flyers (migración 20260910160000): mismo universo que las pestañas
@@ -18169,7 +18242,7 @@ function iaPromoActivaBoton(t) {
 // -> 'poner'. Vencida: deshabilitado (no se puede ofrecer). El tri-estado con
 // Auto sigue en la pestaña IA. Prefijo propio, nunca fa*.
 function tcIaBtnHtml(t, cls = 'tc-ia') {
-  if (ROL !== 'admin') return '';
+  if (!esOficina()) return '';
   const on = iaPromoActivaBoton(t);
   const vencida = !on && !promoFechaVigente(t);
   const forzada = t.ia_estado === 'poner' || t.ia_estado === 'quitar';
@@ -18182,7 +18255,7 @@ function tcIaBtnHtml(t, cls = 'tc-ia') {
 
 // Marca una promo para la IA. estado: 'poner' | 'quitar' | null (auto).
 async function iaMarcar(id, estado, btn) {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   const prev = btn ? btn.innerHTML : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
   const { data, error } = await sb.rpc('catalogo_ia_promo_marcar', { p_item_id: id, p_estado: estado });
@@ -18216,7 +18289,7 @@ function iaAplicarEstadoLocal(id, estado, orden) {
 // Reordena las 'poner': arma el array en el orden actual, mueve una y manda la
 // lista completa al RPC (renumera 1..n TODAS las 'poner', idempotente).
 async function iaMover(id, delta, btn) {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   const orden = (tarCache.ia || [])
     .filter(p => p.ia_estado === 'poner')
     .sort((a, b) => (a.ia_orden ?? 1e9) - (b.ia_orden ?? 1e9) || a.id - b.id)
@@ -18255,10 +18328,10 @@ async function cargarTabsOcultas() {
 function aplicarTabsOcultas() {
   document.querySelectorAll('#tar-tabs .seg').forEach(b => {
     const oculto = tabsOcultas.includes(b.dataset.tab);
-    if (ROL === 'admin') b.classList.toggle('tab-oculta', oculto);
+    if (esOficina()) b.classList.toggle('tab-oculta', oculto);
     else b.style.display = oculto ? 'none' : '';
   });
-  if (ROL !== 'admin') {
+  if (!esOficina()) {
     const activo = document.querySelector('#tar-tabs .seg.on');
     if (activo && tabsOcultas.includes(activo.dataset.tab)) {
       const primera = [...document.querySelectorAll('#tar-tabs .seg')].find(b => !tabsOcultas.includes(b.dataset.tab));
@@ -18392,11 +18465,11 @@ function actualizarVisibilidadFiltrosTarifario() {
   // "Nueva promoción" solo tiene sentido en la pestaña de promos (crear_promocion
   // no marca hotsale). El botón vive en la barra de tabs, con los demás de admin.
   const np = document.getElementById('tar-nueva-promo-btn');
-  if (np) np.hidden = !(ROL === 'admin' && tarTab === 'promo');
+  if (np) np.hidden = !(esOficina() && tarTab === 'promo');
   // "Ver ocultas" es solo para admin: es el único rol que las ve en la base
   // (policy permisiva) y el único que puede volver a mostrarlas.
   const oc = document.getElementById('tar-f-ocultas-wrap');
-  if (oc && ROL !== 'admin') { oc.setAttribute('data-hidden', ''); document.getElementById('tar-f-ocultas').checked = false; }
+  if (oc && !esOficina()) { oc.setAttribute('data-hidden', ''); document.getElementById('tar-f-ocultas').checked = false; }
 }
 
 /* Chips de filtros activos (2026-08-19). En móvil el botón de filtros pasó a ser
@@ -18505,7 +18578,7 @@ async function loadTarifario() {
   // Promociones y Hot Sales solo muestran vigentes salvo "Ver ocultas" (admin):
   // traer las ~22k apagadas era el 96% de la carga (25-70 s, medido 2026-10-09)
   // para ~900 visibles. IA sí lista apagadas, así que siempre va completa.
-  const completo = tarTab === 'ia' || (tarTab === 'promo' && ROL === 'admin' && !!document.getElementById('tar-f-ocultas')?.checked);
+  const completo = tarTab === 'ia' || (tarTab === 'promo' && esOficina() && !!document.getElementById('tar-f-ocultas')?.checked);
   if (tarCache[tarTab] && (tarCache[tarTab]._completo || !completo)) { renderTarifario(); return; }
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
   empty.classList.remove('show'); grid.style.display = 'none';
@@ -19093,7 +19166,7 @@ function renderTarifario() {
   const fGrupo = tarGrupoFiltro();
   const fNinos = document.getElementById('tar-f-ninos').checked;
   const fVigente = document.getElementById('tar-f-vigente').checked;
-  const fOcultas = ROL === 'admin' && !!document.getElementById('tar-f-ocultas')?.checked;
+  const fOcultas = esOficina() && !!document.getElementById('tar-f-ocultas')?.checked;
   const fOcultarOcultos = !!document.getElementById('tar-f-ocultar-ocultos')?.checked;
 
   let filtered = data.filter(x => {
@@ -19249,18 +19322,18 @@ function renderTarifario() {
     // La venta manda sobre el disfrute: al admin no se le esconde lo vencido
     // (lo necesita para gestionarlo), pero tiene que notarlo de un vistazo,
     // no leyendo la fecha entera del pie.
-    if (ROL === 'admin') {
+    if (esOficina()) {
       const vencido = (tarTab === 'promo' || tarTab === 'hotsale')
         ? !promoFechaVigente(x)
         : (mejorPrecio(x)?.fecha_venta_fin && mejorPrecio(x).fecha_venta_fin < hoy());
       if (vencido) { el.classList.add('tar-vencido-admin'); el.insertAdjacentHTML('afterbegin', '<span class="tar-vencido-badge">Vencida</span>'); }
     }
-    if (ROL === 'admin' && ((tarTab === 'promo' || tarTab === 'hotsale') ? x.revisado === false : x.activo === false)) {
+    if (esOficina() && ((tarTab === 'promo' || tarTab === 'hotsale') ? x.revisado === false : x.activo === false)) {
       el.classList.add('tar-oculto-admin');
       el.insertAdjacentHTML('afterbegin', '<span class="tar-oculto-badge">Oculto</span>');
     }
     // Promo sin hotel vinculado: dato faltante (ámbar), no error. Solo admin.
-    if (ROL === 'admin' && (tarTab === 'promo' || tarTab === 'hotsale') && !x.producto_id) {
+    if (esOficina() && (tarTab === 'promo' || tarTab === 'hotsale') && !x.producto_id) {
       el.insertAdjacentHTML('afterbegin', '<span class="tar-sin-hotel-badge" title="No cuelga de ningún hotel">Sin hotel</span>');
       el.querySelector('.tar-sin-hotel-badge').onclick = e => { e.stopPropagation(); abrirRevisionTarifario('sinhotel'); };
     }
@@ -19983,7 +20056,7 @@ const tarHeroHtml = h => `<div class="promo-precio-hero${h.porHab ? ' pph-hab-he
 // listado; la fila de título de la carpeta usa tcHsSegHtml, tri-estado, ver
 // abajo). Prefijo propio, nunca fa/fab/fas/far (los reclama Font Awesome).
 function tcHsBtnHtml(t, cls = 'tc-hs', enHotSales = false) {
-  if (ROL !== 'admin') return '';
+  if (!esOficina()) return '';
   // En la pestaña Hot Sales todo lo que se ve YA está en Hot Sales (forzado a
   // mano o por ranking automático). El botón tiene que salir activo igual, para
   // que un click lo excluya (`quitar`) sin importar cómo entró.
@@ -19995,7 +20068,7 @@ function tcHsBtnHtml(t, cls = 'tc-hs', enHotSales = false) {
 // hoteles que SOLO tienen promos de precio suelto: retirarlas los deja sin nada.
 const TAR_RETIRAR_EXCLUIR = ['chichiriviche', 'mifafi', 'gremary', 'heidelberg'];
 function tarPuedeRetirar(t, prodNombre, destino) {
-  if (ROL !== 'admin' || !t || tarPreciosLista(t).length) return false;
+  if (!esOficina() || !t || tarPreciosLista(t).length) return false;
   const ctx = tarNorm(`${prodNombre ?? TAR_DRAWER_ITEM?.nombre ?? ''} ${destino ?? TAR_DRAWER_ITEM?.destino ?? ''}`);
   return !TAR_RETIRAR_EXCLUIR.some(w => ctx.includes(w));
 }
@@ -20004,7 +20077,7 @@ function tarPuedeRetirar(t, prodNombre, destino) {
 // se actualiza el objeto en memoria (compartido con tarCache y el drawer) y se
 // re-pinta. Flujo `necesita_publicar` igual que rkMarcar.
 async function hsToggleTarifa(id, poner, btn) {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   const estado = poner ? 'poner' : 'quitar';
   const prev = btn ? btn.innerHTML : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
@@ -20060,17 +20133,17 @@ function hsAplicarEstadoLocal(id, estado) {
 // aunque estuviera naranja en la pestaña Hot Sales -- no era bug de escritura
 // (el RPC sí llegaba a la base), era la UI mintiendo sobre el estado real.
 function tcHsSegHtml(t) {
-  if (ROL !== 'admin') return '';
+  if (!esOficina()) return '';
   const est = t.hot_sale_estado === 'poner' ? 'poner' : t.hot_sale_estado === 'quitar' ? 'quitar' : 'auto';
   const btn = (v, lbl) => `<button type="button" class="promo-hs-seg-b${est === v ? ' on' : ''}" data-hs-set="${v}" data-hs-set-id="${t.id}">${lbl}</button>`;
-  return `<div class="promo-hs-seg admin-only" role="group" aria-label="Hot Sales" title="Eje manual de Hot Sales">${btn('poner', 'Fijar')}${btn('auto', 'Auto')}${btn('quitar', 'Excluir')}</div>`;
+  return `<div class="promo-hs-seg admin-only oficina-ok" role="group" aria-label="Hot Sales" title="Eje manual de Hot Sales">${btn('poner', 'Fijar')}${btn('auto', 'Auto')}${btn('quitar', 'Excluir')}</div>`;
 }
 // RPC de la fila de título. Mismo molde que hsToggleTarifa (confirm de
 // necesita_publicar incluido) pero tri-estado: acepta 'auto' además de
 // poner/quitar, y por eso puede EXCLUIR desde acá -- el binario viejo nunca
 // mandaba 'quitar' porque nunca leía 'on' sobre algo automático.
 async function hsMarcarEstado(idRaw, estadoUi, btn) {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   const id = Number(idRaw);
   const estado = estadoUi === 'auto' ? null : estadoUi;
   const grupo = btn?.closest('.promo-hs-seg');
@@ -20095,7 +20168,7 @@ async function hsMarcarEstado(idRaw, estadoUi, btn) {
   okToast(estado === 'poner' ? 'Fijada en Hot Sales' : estado === 'quitar' ? 'Excluida de Hot Sales' : 'Vuelta a automático');
 }
 async function retirarTarifaVieja(id, btn) {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   if (!(await confirmarSheet({ titulo: '¿Retirar esta promoción del catálogo?', detalle: 'Sale de la web y de Hot Sales, se puede revertir.', textoOk: 'Retirar', destructivo: true }))) return;
   const prev = btn ? btn.innerHTML : null;
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
@@ -20532,7 +20605,7 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
       <div class="promo-titulo">${esc(titulo)}</div>
       ${tcHsSegHtml(t)}
       ${tcIaBtnHtml(tarifaComoPromo(t), 'tar-ia-inline')}
-      ${ROL === 'admin' && !enHistorico ? tarMejorPrecioBtnHtml(t, esDestacada, vendible)
+      ${esOficina() && !enHistorico ? tarMejorPrecioBtnHtml(t, esDestacada, vendible)
         : esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
       ${vendible || enHistorico ? '' : '<span class="promo-badge promo-badge-off">Ya no se vende</span>'}
       ${noEntran ? `<span class="promo-badge promo-badge-off">No entran ${grupo}</span>` : ''}
@@ -20574,7 +20647,7 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
 // (TEMP. BAJA -> PRE VENTA NAVIDAD); decide el admin.
 function tarParesJuntables(filas) {
   const pares = new Map();
-  if (ROL !== 'admin') return pares;
+  if (!esOficina()) return pares;
   const canon = v => JSON.stringify(v && typeof v === 'object' ? Object.keys(v).sort().map(k => [k, v[k]]) : v ?? null);
   const diaSig = iso => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
   const simple = t => t.precios && t.disfrute_desde && t.fecha_fin && (t.ventanas || []).length <= 1;
@@ -21021,7 +21094,7 @@ TAR_ACCIONES.cotizador = tarMandarAlCotizador;
    enciende — mentirle al admin acá es peor que no dejarlo elegir. */
 async function tarDestacarTarifa(id) {
   const x = TAR_DRAWER_ITEM;
-  if (ROL !== 'admin' || !x) return;
+  if (!esOficina() || !x) return;
   const t = (x.tarifas || []).find(t => t.id === id);
   if (!t) return;
   // Encendida y fijada a mano: el mismo botón la suelta. Encendida por el
@@ -21061,7 +21134,7 @@ async function tarCargarHabitaciones(x) {
   // Sin habitaciones la tarjeta funciona igual (Fase 1): un error acá se avisa
   // por consola y no rompe el drawer. El admin de fotos se pinta igual (sin
   // selector): si no, un hotel quedaría sin poder gestionar sus fotos.
-  if (error) { console.warn('producto_habitaciones:', error.message); if (ROL === 'admin' && TAR_DRAWER_ITEM === x) cargarFotosAdmin('producto_fotos', 'producto_id', x.id, 'hoteles'); return; }
+  if (error) { console.warn('producto_habitaciones:', error.message); if (esOficina() && TAR_DRAWER_ITEM === x) cargarFotosAdmin('producto_fotos', 'producto_id', x.id, 'hoteles'); return; }
   x.habitaciones = data || [];
   // El drawer pudo cerrarse o cambiar de ficha mientras volvía la consulta.
   if (TAR_DRAWER_ITEM !== x) return;
@@ -21071,7 +21144,7 @@ async function tarCargarHabitaciones(x) {
   // acá (no en openProductoDrawer) para no correr dos fetch de producto_fotos en
   // paralelo pisándose el box -- ver openProductoDrawer, que solo llama a
   // cargarFotosAdmin directo si x.habitaciones ya estaba en caché.
-  if (ROL === 'admin') cargarFotosAdmin('producto_fotos', 'producto_id', x.id, 'hoteles', 'tar-fotos-admin', x.habitaciones);
+  if (esOficina()) cargarFotosAdmin('producto_fotos', 'producto_id', x.id, 'hoteles', 'tar-fotos-admin', x.habitaciones);
 }
 function tarHabDominio(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
@@ -21206,7 +21279,7 @@ function openProductoDrawer(x, tipoForzado = null) {
     ${bloques}
     ${carpeta}
     ${esPromo ? tarIncluyeHtml(x.incluye_tags) : ''}
-    ${ROL === 'admin' ? `
+    ${esOficina() ? `
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-note-sticky"></i> Notas internas (solo admin)</div>
       <textarea id="tar-notas" class="ei" rows="3" placeholder="Notas propias, no vienen del tarifario automático..." data-original="${esc(x.notas || '')}">${esc(x.notas || '')}</textarea>
@@ -21240,7 +21313,7 @@ function openProductoDrawer(x, tipoForzado = null) {
   if (!esPromo && carpeta) {
     if (x.habitaciones) tarPintarRevisionHabs(x); else tarCargarHabitaciones(x);
   }
-  if (ROL === 'admin') {
+  if (esOficina()) {
     document.getElementById('tar-notas-save').onclick = () => guardarNotasTarifario(esPromo ? 'promociones' : 'productos', x.id);
     if (esPromo) cargarFotosAdmin('promocion_fotos', 'promocion_id', x.id, 'promos');
     // !esPromo: si x.habitaciones ya está en caché se pinta acá con el selector
@@ -23242,23 +23315,62 @@ const cbHoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/
 const cbFechaLarga = iso => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${d} ${CB_MESES[+m - 1]} ${y}`; };
 const cbFechaCorta = iso => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${d}/${m}/${y.slice(2)}`; };
 const cbImporte = it => (Number(it.cant) || 0) * (Number(it.tarifa) || 0);
-const cbItemVacio = () => ({ ruta: '', aerolinea: '', cant: 1, tarifa: '', ida: '', ida_hora: '', vuelta: '', vuelta_hora: '', extra: '' });
+// Cotización multi-servicio (2026-10-14, paquetes corporativos): cada ítem lleva
+// `tipo`; las filas anteriores no lo tienen y se leen como boleto. El primer campo
+// de cada tipo es su título (ruta o nombre) y es el que se exige al guardar.
+const CB_CANT = 'type="number" min="1" step="1"', CB_TARIFA = ['tarifa', 'Tarifa c/u (USD)', 'type="number" min="0" step="0.01"'];
+const CB_TIPOS = {
+  boleto: { nombre: 'Boleto aéreo', campos: [['ruta', 'Ruta', 'placeholder="CCS-LRV-CCS"'], ['aerolinea', 'Aerolínea', 'placeholder="Sasca Airlines"'], ['cant', 'Pasajeros', CB_CANT], CB_TARIFA, ['ida', 'Fecha de ida', 'type="date"'], ['ida_hora', 'Horario ida', 'placeholder="07:45-08:15 AM"'], ['vuelta', 'Fecha de vuelta', 'type="date"'], ['vuelta_hora', 'Horario vuelta', 'placeholder="17:15-17:45 PM"']] },
+  hotel: { nombre: 'Hotel', campos: [['nombre', 'Hotel', 'placeholder="Sunsol Isla Caribe"'], ['plan', 'Plan', 'placeholder="Todo incluido"'], ['cant', 'Personas', CB_CANT], CB_TARIFA, ['ida', 'Check-in', 'type="date"'], ['vuelta', 'Check-out', 'type="date"'], ['hab', 'Habitación', 'placeholder="Doble estándar"', ' cb-dos']] },
+  traslado: { nombre: 'Traslado', campos: [['ruta', 'Trayecto', 'placeholder="Aeropuerto PMV - Hotel"'], ['ida', 'Fecha', 'type="date"'], ['cant', 'Pasajeros', CB_CANT], CB_TARIFA, ['ida_hora', 'Hora', 'placeholder="10:30 AM"'], ['vuelta', 'Fecha de regreso (opcional)', 'type="date"'], ['vuelta_hora', 'Hora de regreso', 'placeholder="04:00 PM"']] },
+  tour: { nombre: 'Tour / full day', campos: [['nombre', 'Tour o actividad', 'placeholder="Full day Cayo Sombrero"'], ['ida', 'Fecha', 'type="date"'], ['cant', 'Personas', CB_CANT], CB_TARIFA] },
+  otro: { nombre: 'Otro servicio', campos: [['nombre', 'Descripción', 'placeholder="Seguro de viaje"'], ['ida', 'Fecha (opcional)', 'type="date"'], ['cant', 'Cantidad', CB_CANT], CB_TARIFA] },
+};
+const cbTipo = it => CB_TIPOS[it.tipo] || CB_TIPOS.boleto;
+const cbTitulo = it => String(it[cbTipo(it).campos[0][0]] || '').trim();
+const cbItemVacio = (tipo = 'boleto') => Object.fromEntries([['tipo', tipo], ...CB_TIPOS[tipo].campos.map(([k]) => [k, k === 'cant' ? 1 : '']), ['extra', '']]);
 const cbArchivo = c => `Cotizacion-${cbNumero(c.numero)}-${c.cliente.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}.pdf`;
 
 function cbItemHtml(it, i) {
   const f = (k, label, attrs, full = '') => `<div class="field${full}"><label class="fl">${label}</label><input class="ei" data-k="${k}" value="${esc(String(it[k] ?? ''))}" ${attrs}></div>`;
+  const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto';
+  const opciones = Object.entries(CB_TIPOS).map(([k, t]) => `<option value="${k}"${k === tipo ? ' selected' : ''}>${t.nombre}</option>`).join('');
   return `<div class="cb-item" data-i="${i}">
-    <div class="cb-item-cab"><b>Boleto ${i + 1}</b><span>Importe <b class="cb-importe">$${cbMonto(cbImporte(it))}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar boleto" aria-label="Quitar boleto ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
+    <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span>Importe <b class="cb-importe">$${cbMonto(cbImporte(it))}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
     <div class="cb-item-grid">
-      ${f('ruta', 'Ruta', 'placeholder="CCS-LRV-CCS"')}${f('aerolinea', 'Aerolínea', 'placeholder="Sasca Airlines"')}${f('cant', 'Pasajeros', 'type="number" min="1" step="1"')}${f('tarifa', 'Tarifa c/u (USD)', 'type="number" min="0" step="0.01"')}
-      ${f('ida', 'Fecha de ida', 'type="date"')}${f('ida_hora', 'Horario ida', 'placeholder="07:45-08:15 AM"')}${f('vuelta', 'Fecha de vuelta', 'type="date"')}${f('vuelta_hora', 'Horario vuelta', 'placeholder="17:15-17:45 PM"')}
-      ${f('extra', 'Detalle adicional (opcional)', 'placeholder="Equipaje, clase, observaciones..."', ' cb-full')}
+      ${CB_TIPOS[tipo].campos.map(c => f(...c)).join('')}
+      ${f('extra', 'Detalle adicional (opcional)', 'placeholder="Equipaje, clase, qué incluye, observaciones..."', ' cb-full')}
     </div>
   </div>`;
 }
+function cbLimpiarItem(it) {
+  const o = { tipo: CB_TIPOS[it.tipo] ? it.tipo : 'boleto' };
+  [...CB_TIPOS[o.tipo].campos.map(([k]) => k), 'extra'].forEach(k => { o[k] = String(it[k] ?? '').trim(); });
+  return Object.assign(o, { cant: Number(it.cant) || 0, tarifa: Number(it.tarifa) || 0 });
+}
+const cbNoches = (a, b) => { const n = a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 864e5) : 0; return n > 0 ? String(n) : ''; };
+function cbDetalle(it) {
+  const U = s => String(s || '').toUpperCase(), d = [], add = (et, v) => { if (v) d.push(`${et}: ${v}`); };
+  const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto';
+  if (tipo === 'boleto') {
+    d.push(`BOLETO AÉREO ${U(it.ruta)}`);
+    add('AEROLÍNEA', U(it.aerolinea)); add('FECHA DE IDA', cbFechaCorta(it.ida)); add('HORARIO', U(it.ida_hora)); add('FECHA DE VUELTA', cbFechaCorta(it.vuelta)); add('HORARIO', U(it.vuelta_hora));
+  } else if (tipo === 'hotel') {
+    d.push(`HOSPEDAJE: ${U(it.nombre)}`);
+    add('PLAN', U(it.plan)); add('HABITACIÓN', U(it.hab)); add('CHECK-IN', cbFechaCorta(it.ida)); add('CHECK-OUT', cbFechaCorta(it.vuelta)); add('NOCHES', cbNoches(it.ida, it.vuelta));
+  } else if (tipo === 'traslado') {
+    d.push(`TRASLADO: ${U(it.ruta)}`);
+    add('FECHA', cbFechaCorta(it.ida)); add('HORA', U(it.ida_hora)); add('FECHA DE REGRESO', cbFechaCorta(it.vuelta)); add('HORA', U(it.vuelta_hora));
+  } else {
+    d.push(tipo === 'tour' ? `TOUR: ${U(it.nombre)}` : U(it.nombre));
+    add('FECHA', cbFechaCorta(it.ida));
+  }
+  if (it.extra) d.push(...U(it.extra).split('\n'));
+  return d.join('\n');
+}
 function cbActualizarTotal() { document.getElementById('cb-total').textContent = '$' + cbMonto(cbItems.reduce((s, it) => s + cbImporte(it), 0)); }
 function cbRenderItems() { document.getElementById('cb-items').innerHTML = cbItems.map(cbItemHtml).join(''); cbActualizarTotal(); }
-window.cbAgregarItem = () => { cbItems.push(cbItemVacio()); cbRenderItems(); };
+window.cbAgregarItem = () => { cbItems.push(cbItemVacio(cbLimpiarItem(cbItems.at(-1) || {}).tipo)); cbRenderItems(); };
 window.cbQuitarItem = i => { cbItems.splice(i, 1); cbRenderItems(); };
 function cbResetForm() {
   cbItems = [cbItemVacio()]; cbRenderItems();
@@ -23274,6 +23386,7 @@ async function cbCargarSeccion() {
       const k = e.target.dataset.k, card = e.target.closest('.cb-item');
       if (!k || !card) return;
       const it = cbItems[+card.dataset.i]; it[k] = e.target.value;
+      if (k === 'tipo') { cbItems[+card.dataset.i] = { ...cbItemVacio(it.tipo), ...it }; cbRenderItems(); return; }
       card.querySelector('.cb-importe').textContent = '$' + cbMonto(cbImporte(it));
       cbActualizarTotal();
     });
@@ -23284,7 +23397,7 @@ async function cbCargarSeccion() {
   // usuarios_chat no trae es_prueba: las cuentas de prueba se reconocen por nombre (__gate_*, Invitado N, "Prueba ...").
   const asesores = staff.filter(u => u.id !== MI_USUARIO_ID && (u.rol === 'asesor' || u.rol === 'admin') && !/^__gate|prueba|invitado/i.test(u.nombre || ''))
     .sort((a, b) => (a.rol === b.rol ? 0 : a.rol === 'asesor' ? -1 : 1) || (a.nombre || '').localeCompare(b.nombre || ''));
-  sel.innerHTML = '<option value="">— Elegí el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
+  sel.innerHTML = '<option value="">— Elige el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
   cbOffset = 0;
   await cbCargarHistorial(false);
 }
@@ -23300,7 +23413,7 @@ async function cbCargarHistorial(append) {
   if (error) { if (!append) cont.innerHTML = '<div class="lt-vacio"><i class="fas fa-triangle-exclamation"></i> No se pudo cargar el historial</div>'; return; }
   (data || []).forEach(c => cbFilas.set(c.id, c));
   const filas = (data || []).map((c, i) => {
-    const rutas = (c.items || []).map(it => it.ruta).filter(Boolean).join(' · ') || '—';
+    const rutas = (c.items || []).map(cbTitulo).filter(Boolean).join(' · ') || '—';
     return `<article class="lt-card" style="--i:${Math.min(i, 20)}">
     <div class="lt-card-cab">
       <div class="lt-card-tit" title="${esc(c.cliente)}">${esc(c.cliente)}</div>
@@ -23308,7 +23421,7 @@ async function cbCargarHistorial(append) {
     </div>
     <div class="lt-card-meta"><i class="fas fa-user"></i> ${esc(c.creado_por_nombre || '—')} · ${esc(cbFechaLarga(c.fecha))}</div>
     <div class="lt-cifras" style="grid-template-columns:2fr 1fr">
-      <div><span>Ruta</span><b title="${esc(rutas)}">${esc(rutas)}</b></div>
+      <div><span>Detalle</span><b title="${esc(rutas)}">${esc(rutas)}</b></div>
       <div><span>Total</span><b>$${cbMonto(c.total)}</b></div>
     </div>
     <div class="lt-card-meta">${c.enviado_a ? `<i class="fas fa-paper-plane"></i> Enviada a ${esc(c.enviado_a_nombre || 'asesor')}` : '<i class="fas fa-circle-minus"></i> Sin enviar'}</div>
@@ -23342,12 +23455,13 @@ async function cbEnviarAAsesor(c, blob, asesorId) {
 }
 window.cbGuardar = async function cbGuardar(enviar) {
   const cliente = val('cb-cliente').trim();
-  if (!cliente) { errToast('Escribí el cliente'); return; }
-  const items = cbItems.map(it => ({ ...it, ruta: String(it.ruta || '').trim(), cant: Number(it.cant) || 0, tarifa: Number(it.tarifa) || 0 })).filter(it => it.ruta || it.tarifa);
-  if (!items.length) { errToast('Agregá al menos un boleto con ruta y tarifa'); return; }
-  if (items.some(it => !it.ruta || !it.cant)) { errToast('Cada boleto necesita ruta y pasajeros'); return; }
+  if (!cliente) { errToast('Escribe el cliente'); return; }
+  const items = cbItems.map(cbLimpiarItem).filter(it => cbTitulo(it) || it.tarifa);
+  if (!items.length) { errToast('Agrega al menos un servicio con su descripción y tarifa'); return; }
+  const incompleto = items.find(it => !cbTitulo(it) || !it.cant);
+  if (incompleto) { const t = cbTipo(incompleto), falta = cbTitulo(incompleto) ? t.campos.find(([k]) => k === 'cant')[1] : t.campos[0][1]; errToast(`${t.nombre}: falta ${falta.toLowerCase()}`); return; }
   const asesorId = val('cb-asesor');
-  if (enviar && !asesorId) { errToast('Elegí a qué asesor mandarla'); document.getElementById('cb-asesor').focus(); return; }
+  if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); document.getElementById('cb-asesor').focus(); return; }
   const btn = document.getElementById(enviar ? 'cb-enviar-btn' : 'cb-descargar-btn'), htmlBtn = btn.innerHTML;
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
   try {
@@ -23363,10 +23477,10 @@ window.cbGuardar = async function cbGuardar(enviar) {
       const blob = await cbPdfBlob(cot);
       if (!enviar) { cbDescargar(blob, cbArchivo(cot)); okToast(`Cotización ${cbNumero(cot.numero)} generada`); }
       else if (await cbEnviarAAsesor(cot, blob, asesorId)) okToast(`${cbNumero(cot.numero)} enviada a ${nombreUsuario(asesorId)}`);
-      else errToast(`${cbNumero(cot.numero)} se guardó pero no se pudo enviar: reenviala desde el historial`);
+      else errToast(`${cbNumero(cot.numero)} se guardó pero no se pudo enviar: reenvíala desde el historial`);
     } catch (e) {
       console.error('cbGuardar pdf', e);
-      errToast(`${cbNumero(cot.numero)} se guardó pero no se pudo generar el PDF: reintentá desde el historial`);
+      errToast(`${cbNumero(cot.numero)} se guardó pero no se pudo generar el PDF: reintenta desde el historial`);
     }
     cbOffset = 0; cbCargarHistorial(false);
   } finally {
@@ -23390,7 +23504,7 @@ window.cbVerPdf = async function cbVerPdf(id) {
 window.cbReenviar = async function cbReenviar(id, btn) {
   const c = cbFilas.get(id), asesorId = val('cb-asesor');
   if (!c) return;
-  if (!asesorId) { errToast('Elegí el asesor arriba, en «Enviar al asesor»'); document.getElementById('cb-asesor').focus(); return; }
+  if (!asesorId) { errToast('Elige el asesor arriba, en «Enviar al asesor»'); document.getElementById('cb-asesor').focus(); return; }
   btn.disabled = true;
   try {
     await ensureVoucherLibs();
@@ -23427,16 +23541,7 @@ async function cbPdfBlob(c) {
   doc.setFont('helvetica', 'bold'); doc.setTextColor(20, 20, 20);
   doc.text(doc.splitTextToSize(c.cliente.toUpperCase(), 260), M, 216);
 
-  const filas = (c.items || []).map((it, i) => {
-    const det = [`BOLETO AÉREO ${it.ruta.toUpperCase()}`];
-    if (it.aerolinea) det.push(`AEROLÍNEA: ${it.aerolinea.toUpperCase()}`);
-    if (it.ida) det.push(`FECHA DE IDA: ${cbFechaCorta(it.ida)}`);
-    if (it.ida_hora) det.push(`HORARIO: ${it.ida_hora.toUpperCase()}`);
-    if (it.vuelta) det.push(`FECHA DE VUELTA: ${cbFechaCorta(it.vuelta)}`);
-    if (it.vuelta_hora) det.push(`HORARIO: ${it.vuelta_hora.toUpperCase()}`);
-    if (it.extra) det.push(...String(it.extra).toUpperCase().split('\n'));
-    return [i + 1, det.join('\n'), Number(it.cant).toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))];
-  });
+  const filas = (c.items || []).map((it, i) => [i + 1, cbDetalle(it), Number(it.cant).toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))]);
   doc.autoTable({
     startY: 240, theme: 'plain', margin: { left: M, right: M },
     head: [['#', 'Artículo y descripción', 'Cant.', 'Tarifa', 'Importe']],
@@ -23899,48 +24004,48 @@ function setupMisNotas() {
 // las necesitan. Mis Notas, Voz IA y Consultor IA salieron del
 // menú por falta de uso; su HTML y sus setup* siguen intactos.
 const NAV_ITEMS = [
-  { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide' },
-  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
-  { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', padre: 'grp-inicio', roles: 'nav-admin-only' },
-  { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
-  { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: '' },
-  { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: '' },
+  { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide nav-administrativo-ok' },
+  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', roles: 'nav-administrativo-ok', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
+  { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', padre: 'grp-inicio', roles: 'nav-admin-only nav-administrativo-ok' },
+  { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario nav-administrativo-ok', id: 'nav-informe-diario' },
+  { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-ok' },
+  { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: 'nav-administrativo-ok' },
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
-  { sec: 'web-reasignados', icon: 'fas fa-hand-holding-dollar', label: 'Web y Reasignados', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Los leads por los que cobrás comisión' },
+  { sec: 'web-reasignados', icon: 'fas fa-hand-holding-dollar', label: 'Web y Reasignados', padre: 'grp-leads', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Los leads por los que cobrás comisión' },
   { sec: 'contactos-directos', icon: 'fas fa-comment-sms', label: 'Contactos directos', padre: 'grp-leads', roles: '', sub: 'Escribieron directo por WhatsApp (bio-redes, IA) -- no se gestionan desde acá' },
   { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Pegá números o capturas y se reparten entre los asesores' },
-  { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Chat interno del equipo', badge: 'nav-msg-count', badgeDefault: '—' },
+  { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok', sub: 'Chat interno del equipo', badge: 'nav-msg-count', badgeDefault: '—' },
   // Meta DM (2026-10-07): los chats del bot (Instagram, Facebook, WhatsApp) salieron
   // de Mensajes a su propia entrada. La vista vieja de WhatsApp por número salió
   // del menú; admin la abre desde la pestaña WhatsApp de Meta DM.
   { sec: 'dms', icon: 'fa-brands fa-meta', label: 'Meta DM', roles: '', sub: 'Chats del bot en Instagram, Facebook y WhatsApp, en vivo y con la ficha del cliente' },
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
-  { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
-  { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
-  { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
-  { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', roles: '', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
-  { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
-  { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
+  { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok' },
+  { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok' },
+  { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
+  { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', roles: 'nav-administrativo-ok', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
+  { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: 'nav-administrativo-ok', sub: 'Servicios, pasajeros, documentos y cobros' },
+  { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
   // En modo Boletería, Reservas solo abría el voucher de hospedaje: lo reemplaza Cotizaciones (2026-10-12).
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Cotización de boletos en PDF para mandar al asesor' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
-  { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
-  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', padre: 'grp-cobros', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar' },
-  { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones por corte', padre: 'grp-cobros', roles: '', sub: 'Cargá tus ventas pagadas; pagos el 5 y el 20' },
+  { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok' },
+  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Links de pago declarados, pendientes de aprobar' },
+  { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones por corte', padre: 'grp-cobros', roles: 'nav-administrativo-ok', sub: 'Cargá tus ventas pagadas; pagos el 5 y el 20' },
   { sec: 'mis-comisiones', icon: 'fas fa-sack-dollar', label: 'Mis Comisiones', padre: 'grp-cobros', roles: 'nav-asesor-only' },
-  { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
-  { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
+  { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
+  { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
   { sec: 'bt-travel', icon: 'fas fa-umbrella-beach', label: 'BT Travel', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles todo incluido, stop sales, reservas y pagos' },
-  { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only', sub: 'Ventas, calidad, errores y costos' },
+  { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Ventas, calidad, errores y costos' },
   { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', padre: 'grp-ia', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Lyra: cotiza, revisa reservas, busca en la web y escribe a proveedores' },
-  { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', padre: 'grp-ia', roles: 'nav-admin-only', sub: 'Posadas que quieren el asistente' },
-  { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok' },
+  { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Posadas que quieren el asistente' },
+  { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok nav-administrativo-ok' },
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
-  { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only' },
-  { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', padre: 'grp-equipo', roles: 'nav-freelancer-only' },
-  { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Videotutoriales', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
-  { sec: 'actualizaciones', icon: 'fas fa-bullhorn', label: 'Actualizaciones', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only nav-administrativo-ok' },
+  { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', padre: 'grp-equipo', roles: 'nav-freelancer-only nav-administrativo-ok' },
+  { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Videotutoriales', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok' },
+  { sec: 'actualizaciones', icon: 'fas fa-bullhorn', label: 'Actualizaciones', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok' },
   { sec: 'proyecto-constructor', icon: 'fas fa-drafting-compass', label: 'Proyecto Constructor', padre: 'grp-ayuda', roles: 'nav-admin-only', sub: 'Avance del CRM que se vende a otras empresas' },
 ];
 // Orden del menú. `hoja`: entrada sin pestañas, es la sección misma. Los
@@ -23968,7 +24073,7 @@ const PADRE_DE = Object.fromEntries(NAV_ITEMS.filter(it => it.padre).map(it => [
 // las lleva): el padre hereda la unión de las de sus hijas. Las que ocultan
 // (nav-admin-only, solo-voucher...) no se heredan; eso lo resuelve
 // actualizarPadresNav mirando si alguna hija quedó visible.
-const NAV_ROLES_HABILITAN = ['nav-marketing-ok', 'nav-boleteria-ok', 'nav-modo-boleteria-ok'];
+const NAV_ROLES_HABILITAN = ['nav-marketing-ok', 'nav-boleteria-ok', 'nav-modo-boleteria-ok', 'nav-administrativo-ok'];
 
 function renderNavItems() {
   const htmlDesktop = (it, extra, padre) => {
@@ -24808,7 +24913,7 @@ function ultimaSeccionLocal() {
   try { return sessionStorage.getItem(ultimaSeccionClave()) || localStorage.getItem(ultimaSeccionClave()); } catch (_) { return null; }
 }
 function guardarUltimaSeccion(sec) {
-  if (ROL !== 'admin' && ROL !== 'asesor') return;
+  if (!esOficina() && ROL !== 'asesor') return;
   try { sessionStorage.setItem(ultimaSeccionClave(), sec); localStorage.setItem(ultimaSeccionClave(), sec); } catch (_) { /* storage bloqueado */ }
   const padre = PADRE_DE[sec], ultimaHija = MI_PREFERENCIAS.ultima_hija || {};
   if (MI_PREFERENCIAS.ultima_seccion === sec && (!padre || ultimaHija[padre] === sec)) return;
@@ -25744,7 +25849,7 @@ function lfCardHtml(x) {
   </div>`;
 }
 async function loadLeadsEnFacturacion() {
-  if (ROL !== 'admin' && ROL !== 'asesor') return;
+  if (!esOficina() && ROL !== 'asesor') return;
   const loading = document.getElementById('lf-loading'), empty = document.getElementById('lf-empty');
   const grid = document.getElementById('lf-grid');
   if (!grid) return;
@@ -26315,7 +26420,7 @@ const TUT_CATEGORIAS = [
   { titulo: 'Administración', icono: 'fa-user-shield', admin: true, ids: ['11-dashboard', '12-repartir-web', '13-pagos', '14-facturacion', '15-comisiones-admin', '16-gestion-personal'] },
 ];
 const tutCategoriaDe = id => TUT_CATEGORIAS.findIndex(c => c.ids.includes(id));
-const tutorialesVisibles = () => TUTORIALES.filter(t => ROL === 'admin' || (ROL === 'asesor' && t.rol === 'asesor')).sort((a, b) => tutCategoriaDe(a.id) - tutCategoriaDe(b.id) || a.id.localeCompare(b.id));
+const tutorialesVisibles = () => TUTORIALES.filter(t => ROL === 'admin' || ((ROL === 'asesor' || ROL === 'administrativo') && t.rol === 'asesor')).sort((a, b) => tutCategoriaDe(a.id) - tutCategoriaDe(b.id) || a.id.localeCompare(b.id));
 const tutorialesDeSeccion = sec => tutorialesVisibles().filter(t => t.secciones.includes(sec));
 const fmtDuracion = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 const TUT_URLS = new Map();
@@ -26425,6 +26530,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-14', emoji: '🧳', titulo: 'Cotizaciones con hoteles, traslados y tours', texto: 'En Cotizaciones ya no solo se cotizan boletos: cada línea tiene un selector de tipo (boleto aéreo, hotel, traslado, tour o full day, u otro servicio) con sus propios campos. Así se arma un paquete completo en un solo PDF con un único total. En hotel, las noches se calculan solas a partir del check-in y el check-out.', roles: ['admin', 'boleteria'] },
   { fecha: '2026-10-13', emoji: '🏠', titulo: 'Apartamentos con fotos y detalles', texto: 'En Apartamentos ya no ves solo la disponibilidad: en la pestaña Proveedores están las casas y posadas con sus apartamentos. Tocá uno para ver la galería de fotos, videos, capacidad, distribución por habitación, comodidades y el precio por noche en temporada baja y alta.', roles: ['asesor'] },
   { fecha: '2026-10-13', emoji: '✨', titulo: 'Ficha del lead renovada', texto: 'La ficha del lead tiene un diseño nuevo, más claro y ordenado. El botón Boletería ahora es azul y te lleva directo a la solicitud de vuelo con los datos del cliente ya cargados, lista para mandarla a un ejecutivo de boletería. Se quitaron los botones "Tomar conversación" y "Seguimiento" (la próxima acción sigue dentro de la ficha).', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-12', emoji: '🧾', titulo: 'Cotizaciones de boletos', texto: 'En el modo Boletería, "Reservas" pasó a ser "Cotizaciones": armás la cotización de boletos (ruta, aerolínea, fechas, horarios, pasajeros y tarifa), se genera el PDF con número propio (COT-000001) y con un botón se la mandás al chat del asesor. Queda el historial para volver a verla o reenviarla. Reemplaza a las estimaciones de Zoho.', roles: ['admin', 'boleteria'] },
