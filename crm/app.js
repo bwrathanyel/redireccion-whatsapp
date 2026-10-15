@@ -17824,18 +17824,26 @@ function ivBarra() {
   btn.innerHTML = `<i class="fas fa-file-import"></i> Importar${n ? ` ${n} voucher${n > 1 ? 's' : ''}` : ''}`;
 }
 
-// La empresa vive en cada fila: es lo que se importa. "Usar en las otras" solo copia el valor.
+// Texto plano largo (la nota de revisión puede ser un párrafo entero) se pliega en "ver más".
+const ivTexto = t => {
+  t = String(t || '');
+  return t.length > 160 ? `<details><summary><span class="iv-corto">${esc(t.slice(0, 140).trim())}… </span><span class="iv-mas"></span></summary>${esc(t)}</details>` : esc(t);
+};
+const ivAviso = (html, tipo = '') => `<div class="iv-aviso ${tipo}"><i class="fas fa-${tipo === 'error' ? 'circle-exclamation' : 'triangle-exclamation'}" aria-hidden="true"></i><div>${html}</div></div>`;
+
+// La empresa vive en cada tarjeta: es lo que se importa. "Usar en las otras" solo copia el valor.
 function ivRender() {
   const cont = document.getElementById('iv-lista');
   if (!cont) return;
   ivBarra();
   if (!IV_FILAS.length) { cont.innerHTML = ''; return; }
-  const esAdmin = ROL === 'admin', conEmpresa = esAdmin && IV_EMPRESAS.length > 0, nCols = conEmpresa ? 7 : 6;
+  const esAdmin = ROL === 'admin', conEmpresa = esAdmin && IV_EMPRESAS.length > 0;
   const abiertas = IV_FILAS.filter(ivAbierta);
-  const filas = IV_FILAS.map(f => {
+  const cards = IV_FILAS.map(f => {
     const d = f.datos || {};
-    if (f.estado === 'leyendo') return `<tr class="iv-fila-leyendo"><td colspan="${nCols}"><i class="fas fa-circle-notch fa-spin"></i> Leyendo ${esc(f.nombre)}…</td></tr>`;
-    if (f.estado === 'error' && !d.numero_voucher) return `<tr class="iv-fila" data-e="error"><td colspan="${nCols}"><span class="iv-estado">Error</span> ${esc(f.nombre)}: ${esc(f.resultado || 'no se pudo leer')}</td></tr>`;
+    const archivo = `<div class="iv-archivo" title="${esc(f.nombre)}"><i class="fas fa-file-pdf" aria-hidden="true"></i>${esc(f.nombre)}</div>`;
+    if (f.estado === 'leyendo') return `<article class="iv-card"><div class="iv-card-cab"><div class="iv-card-id"><div class="iv-num vacio"><i class="fas fa-circle-notch fa-spin"></i> Leyendo voucher…</div>${archivo}</div></div><div class="iv-skel" aria-hidden="true"><span></span><span></span><span></span></div></article>`;
+    if (f.estado === 'error' && !d.numero_voucher) return `<article class="iv-card" data-e="error"><div class="iv-card-cab"><div class="iv-card-id"><div class="iv-num vacio">No se pudo leer</div>${archivo}</div><span class="iv-estado">Error</span></div>${ivAviso(f.resultado && f.resultado !== 'no se pudo leer' ? ivTexto(f.resultado) : 'Probá con otro PDF o cargá la venta a mano.', 'error')}</article>`;
     const cand = (f.candidatos || []).find(c => c.id === f.lead_id);
     const sims = f.similares || [];
     const opciones = [`<option value="" ${f.crear_lead && !f.vincular ? 'selected' : ''}>➕ Crear lead nuevo</option>`].concat(
@@ -17849,43 +17857,51 @@ function ivRender() {
     const posible = !f.vincular && sims.find(r => !r.fuerte);
     const mismatch = cand && !f.crear_lead && !f.vincular && cand.asesor && ivNorm(cand.asesor) !== ivNorm(d.asesor_pdf);
     const otras = abierta && f.empresa_id ? abiertas.filter(x => x !== f && x.empresa_id !== f.empresa_id).length : 0;
-    const num = esc(String(d.numero_voucher ?? '?'));
-    return `<tr class="iv-fila" data-e="${f.estado}" data-fid="${f.id}">
-      <td class="iv-c-sel">${abierta ? `<input type="checkbox" class="iv-sel" aria-label="Importar voucher ${num}" ${f.sel ? 'checked' : ''}>` : ''}</td>
-      <td><div class="iv-num">${num}</div><span class="iv-estado">${IV_ESTADO[f.estado] || ''}</span><div class="iv-archivo" title="${esc(f.nombre)}">${esc(f.nombre)}</div></td>
-      <td>${ivCampo('cliente_nombre', 'Nombre', d.cliente_nombre, abierta)}${ivCampo('telefono', 'Teléfono', d.telefono, abierta)}</td>
-      <td>${ivCampo('destino', 'Hotel', d.destino, abierta)}${ivCampo('asesor_pdf', 'Asesor (PDF)', d.asesor_pdf, abierta)}</td>
-      <td><div class="iv-campo"><span>Total</span><b>${ivMoney(d.total_general)}</b></div>${ivCampo('total_cobrado', 'Cobrado', d.total_cobrado, abierta, 'number')}${sinMonto && abierta ? '<span class="iv-tag empresa">Sin monto · se completa en Postventa</span>' : ''}</td>
-      ${conEmpresa ? `<td>${abierta ? `<select class="iv-empresa" aria-label="Empresa del voucher ${num}"><option value="">Particular</option>${IV_EMPRESAS.map(e => `<option value="${e.id}" ${f.empresa_id === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>${otras ? `<button type="button" class="iv-copiar">Usar en ${otras === 1 ? 'la otra fila' : `las otras ${otras}`}</button>` : ''}` : esc(empresa?.nombre || 'Particular')}</td>` : ''}
-      <td>
-        ${abierta ? `<select class="iv-lead" aria-label="Dónde se carga el voucher ${num}">${opciones}</select>
-        ${debil ? '<div class="iv-nota">Coincide solo el nombre: revisá que sea el mismo cliente o elegí ➕ Crear lead nuevo.</div>' : ''}
-        ${posible ? `<div class="iv-nota">Ojo: ${esc(posible.codigo || '#' + posible.id)} de ${esc(posible.cliente)} tiene el mismo monto. Si es este viaje, elegí 🔗 para no duplicar la venta.</div>` : ''}
-        ${mismatch ? `<div class="iv-nota">El lead es de ${esc(cand.asesor)}, el voucher dice ${esc(d.asesor_pdf)}.${esAdmin ? ` <label><input type="checkbox" class="iv-reasignar" ${f.reasignar ? 'checked' : ''}> reasignar</label>` : ''}</div>` : ''}` : ''}
-        ${f.resultado && f.estado !== 'hecho' ? `<div class="iv-nota">${esc(f.resultado)}</div>` : ''}
-        ${d.nota_revision && !f.resultado ? `<div class="iv-nota">${esc(d.nota_revision)}</div>` : ''}
-        ${f.estado === 'hecho' ? `<span class="iv-tag">${f.sin_factura ? 'Sin factura · empresa' : 'Facturado ' + ivMoney(f.resultado_monto)}</span> <span class="muted" style="font-size:10.5px">${esc(f.resultado || '')}</span>` : ''}
-      </td>
-    </tr>`;
+    const num = d.numero_voucher != null && d.numero_voucher !== '' ? esc(String(d.numero_voucher)) : '';
+    const avisos = [
+      abierta && debil && ivAviso('Coincide solo el nombre: revisá que sea el mismo cliente o elegí ➕ Crear lead nuevo.'),
+      abierta && posible && ivAviso(`Ojo: ${esc(posible.codigo || '#' + posible.id)} de ${esc(posible.cliente)} tiene el mismo monto. Si es este viaje, elegí 🔗 para no duplicar la venta.`),
+      abierta && mismatch && ivAviso(`El lead es de ${esc(cand.asesor)}, el voucher dice ${esc(d.asesor_pdf)}.${esAdmin ? ` <label><input type="checkbox" class="iv-reasignar" ${f.reasignar ? 'checked' : ''}> reasignar</label>` : ''}`),
+      f.resultado && f.estado !== 'hecho' && ivAviso(ivTexto(f.resultado), ['error', 'duplicado'].includes(f.estado) ? 'error' : ''),
+      d.nota_revision && !f.resultado && ivAviso(ivTexto(d.nota_revision)),
+    ].filter(Boolean).join('');
+    const icono = f.vincular ? 'link' : f.crear_lead ? 'user-plus' : 'user-check';
+    return `<article class="iv-card" data-e="${f.estado}" data-fid="${f.id}"${abierta ? ` data-sel="${f.sel ? 1 : 0}"` : ''}>
+      <div class="iv-card-cab">
+        ${abierta ? `<label class="iv-check" title="Incluir en la importación"><input type="checkbox" class="iv-sel" aria-label="Importar voucher ${num || esc(f.nombre)}" ${f.sel ? 'checked' : ''}></label>` : ''}
+        <div class="iv-card-id"><div class="iv-num${num ? '' : ' vacio'}">${num ? `Voucher ${num}` : 'Sin número de voucher'}</div>${archivo}</div>
+        <span class="iv-estado">${IV_ESTADO[f.estado] || ''}</span>
+      </div>
+      <div class="iv-datos">
+        <div class="iv-sec"><h4>Cliente</h4><div class="iv-pares">${ivCampo('cliente_nombre', 'Nombre', d.cliente_nombre, abierta)}${ivCampo('telefono', 'Teléfono', d.telefono, abierta)}</div></div>
+        <div class="iv-sec"><h4>Viaje</h4><div class="iv-pares">${ivCampo('destino', 'Hotel', d.destino, abierta)}${ivCampo('asesor_pdf', 'Asesor (PDF)', d.asesor_pdf, abierta)}</div></div>
+        <div class="iv-sec"><h4>Montos</h4><div class="iv-pares"><div class="iv-campo"><span>Total</span><b>${ivMoney(d.total_general)}</b></div>${ivCampo('total_cobrado', 'Cobrado', d.total_cobrado, abierta, 'number')}</div>${sinMonto && abierta ? '<span class="iv-tag empresa">Sin monto · se completa en Postventa</span>' : ''}</div>
+      </div>
+      ${abierta || conEmpresa ? `<div class="iv-destino">
+        ${conEmpresa ? `<div class="iv-sec"><h4><i class="fas fa-building" aria-hidden="true"></i> Empresa</h4>${abierta ? `<select class="iv-empresa" aria-label="Empresa del voucher ${num}"><option value="">Particular</option>${IV_EMPRESAS.map(e => `<option value="${e.id}" ${f.empresa_id === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>` : esc(empresa?.nombre || 'Particular')}</div>${otras ? `<button type="button" class="iv-copiar">Usar en ${otras === 1 ? 'la otra tarjeta' : `las otras ${otras}`}</button>` : ''}` : ''}
+        ${abierta ? `<div class="iv-sec"><h4><i class="fas fa-${icono}" aria-hidden="true"></i> Se carga en</h4><select class="iv-lead" aria-label="Dónde se carga el voucher ${num}">${opciones}</select></div>` : ''}
+      </div>` : ''}
+      ${avisos}
+      ${f.estado === 'hecho' ? `<div class="iv-ok"><i class="fas fa-circle-check" aria-hidden="true"></i><div><b>${f.sin_factura ? 'Sin factura · empresa' : 'Facturado ' + ivMoney(f.resultado_monto)}</b><span>${esc(f.resultado || '')}</span></div></div>` : ''}
+    </article>`;
   }).join('');
-  const todas = abiertas.length > 0 && abiertas.every(f => f.sel);
-  cont.innerHTML = `<div class="iv-tabla-wrap"><table class="iv-tabla">
-    <thead><tr><th class="iv-c-sel">${abiertas.length ? `<input type="checkbox" class="iv-sel-todos" aria-label="Seleccionar todos" ${todas ? 'checked' : ''}>` : ''}</th><th>Voucher</th><th>Cliente</th><th>Viaje</th><th>Montos</th>${conEmpresa ? '<th>Empresa</th>' : ''}<th>Se carga en</th></tr></thead>
-    <tbody>${filas}</tbody></table></div>`;
+  const nSel = abiertas.filter(f => f.sel).length;
+  const top = abiertas.length > 1 ? `<div class="iv-top"><label class="iv-todos"><input type="checkbox" class="iv-sel-todos" ${nSel === abiertas.length ? 'checked' : ''}> Seleccionar todos</label><span>${nSel} de ${abiertas.length} seleccionados</span></div>` : '';
+  cont.innerHTML = `${top}<div class="iv-grid">${cards}</div>`;
   cont.querySelector('.iv-sel-todos')?.addEventListener('change', e => { abiertas.forEach(f => f.sel = e.target.checked); ivRender(); });
-  cont.querySelectorAll('tr[data-fid]').forEach(tr => {
-    const f = IV_FILAS.find(x => x.id === +tr.dataset.fid); if (!f) return;
-    tr.querySelector('.iv-sel')?.addEventListener('change', e => { f.sel = e.target.checked; ivRender(); });
-    tr.querySelector('.iv-lead')?.addEventListener('change', e => {
+  cont.querySelectorAll('.iv-card[data-fid]').forEach(card => {
+    const f = IV_FILAS.find(x => x.id === +card.dataset.fid); if (!f) return;
+    card.querySelector('.iv-sel')?.addEventListener('change', e => { f.sel = e.target.checked; ivRender(); });
+    card.querySelector('.iv-lead')?.addEventListener('change', e => {
       const v = e.target.value, sim = v.startsWith('r:') ? (f.similares || []).find(r => r.id === +v.slice(2)) : null;
       f.vincular = sim ? sim.id : null;
       f.lead_id = sim ? sim.lead_id : (v ? +v : null);
       f.crear_lead = !v; ivRender();
     });
-    tr.querySelector('.iv-reasignar')?.addEventListener('change', e => f.reasignar = e.target.checked);
-    tr.querySelector('.iv-empresa')?.addEventListener('change', e => { ivAplicarEmpresa(f, Number(e.target.value) || null); ivRender(); });
-    tr.querySelector('.iv-copiar')?.addEventListener('click', () => { abiertas.filter(x => x !== f).forEach(x => ivAplicarEmpresa(x, f.empresa_id)); ivRender(); });
-    tr.querySelectorAll('.iv-in').forEach(inp => inp.addEventListener('change', e => {
+    card.querySelector('.iv-reasignar')?.addEventListener('change', e => f.reasignar = e.target.checked);
+    card.querySelector('.iv-empresa')?.addEventListener('change', e => { ivAplicarEmpresa(f, Number(e.target.value) || null); ivRender(); });
+    card.querySelector('.iv-copiar')?.addEventListener('click', () => { abiertas.filter(x => x !== f).forEach(x => ivAplicarEmpresa(x, f.empresa_id)); ivRender(); });
+    card.querySelectorAll('.iv-in').forEach(inp => inp.addEventListener('change', e => {
       const k = e.target.dataset.k;
       f.datos[k] = k === 'total_cobrado' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value;
       if (k === 'total_cobrado' && f.empresa_id) ivRender();
