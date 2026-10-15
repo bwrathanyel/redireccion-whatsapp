@@ -14173,6 +14173,8 @@ const WR_ORIGEN = {
   reasignado: { txt: 'Reasignado', clase: 'fb' },
   ambos:      { txt: 'Ambos',     clase: 'am' },
   rescatado:  { txt: 'Rescatado', clase: 'am' },
+  colaboracion: { txt: 'De Andric', clase: 'am' },
+  manual:     { txt: 'Manual',    clase: 'am' },
 };
 
 function setupWebReasignados() {
@@ -14218,6 +14220,7 @@ function wrFilasVisibles() {
       // web y encima nunca se reasignó.
       : wrFiltro === 'web' ? (f.origen === 'web' || f.origen === 'ambos')
       : wrFiltro === 'reasignado' ? (f.origen === 'reasignado' || f.origen === 'ambos')
+      : wrFiltro === 'colaboracion' ? f.origen === 'colaboracion'
       : f.rescatado === true;
     if (!pasaFiltro) return false;
     if (!q) return true;
@@ -14240,11 +14243,11 @@ async function loadWebReasignados() {
   // de arriba); "Vendido"/"Mi comisión" son montos, no un subconjunto propio
   // (son el mismo grupo que "Ya vendidos"), así que no tienen acción aparte.
   pintarKPIs('wr-kpis', [
-    { t: 'Leads en total', v: fmt(r.total || 0), d: `${fmt(r.web || 0)} web · ${fmt(r.reasignados || 0)} reasignados · ${fmt(r.rescatados || 0)} rescatados`, i: 'fa-users', c: 'var(--blue)', go: () => wrIrAFiltro('todos'), key: 'todos', on: wrFiltro === 'todos' },
+    { t: 'Leads en total', v: fmt(r.total || 0), d: `${fmt(r.web || 0)} web · ${fmt(r.reasignados || 0)} reasignados · ${fmt(r.rescatados || 0)} rescatados · ${fmt(r.colaboracion || 0)} de Andric`, i: 'fa-users', c: 'var(--blue)', go: () => wrIrAFiltro('todos'), key: 'todos', on: wrFiltro === 'todos' },
     { t: 'Rescatados por IA', v: fmt(r.rescatados || 0), d: 'Respondieron al seguimiento final con teléfono válido', i: 'fa-life-ring', c: '#14b8a6', go: () => wrIrAFiltro('rescatados'), key: 'rescatados', on: wrFiltro === 'rescatados' },
     { t: 'Ya vendidos', v: fmt(r.vendidos || 0), d: r.vendidos ? 'Con factura emitida' : 'Todavía ninguno cerró', i: 'fa-circle-check', c: 'var(--green)', go: () => wrIrAFiltro('vendidos'), key: 'vendidos', on: wrFiltro === 'vendidos' },
     { t: 'Vendido', v: '$' + fmt(r.monto_vendido || 0), d: 'Suma de las facturas', i: 'fa-receipt', c: 'var(--purple)' },
-    { t: 'Mi comisión', v: '$' + fmt(r.mi_comision_total || 0), d: `Al ${data.pct}% de lo vendido`, i: 'fa-hand-holding-dollar', c: 'var(--accent)' },
+    { t: 'Mi comisión', v: '$' + fmt(r.mi_comision_total || 0), d: `Al ${data.pct}% de lo vendido · ${data.pct_colaboracion ?? 2.5}% en los de Andric marcados`, i: 'fa-hand-holding-dollar', c: 'var(--accent)' },
     { t: 'Comisiones Bwrathanyel', v: fmt(r.comisiones_bwrathanyel || 0), d: 'Marcados a mano', i: 'fa-star', c: 'var(--yellow, #eab308)', go: () => wrIrAFiltro('comisiones'), key: 'comisiones', on: wrFiltro === 'comisiones' },
   ]);
   // Un lead sacado de la lista mientras estaba seleccionado (o vendido/filtrado
@@ -14254,7 +14257,7 @@ async function loadWebReasignados() {
   wrPintarTabla();
 }
 
-const WR_ORIGEN_COLOR = { web: 'var(--blue)', reasignado: 'var(--purple)', ambos: 'var(--amber)', rescatado: 'var(--amber)' };
+const WR_ORIGEN_COLOR = { web: 'var(--blue)', reasignado: 'var(--purple)', ambos: 'var(--amber)', rescatado: 'var(--amber)', colaboracion: 'var(--green)', manual: 'var(--muted)' };
 
 function wrCardHtml(f, i = 0) {
   const o = WR_ORIGEN[f.origen] || WR_ORIGEN.web;
@@ -14271,8 +14274,10 @@ function wrCardHtml(f, i = 0) {
       <span class="bt-tag" style="--c:var(--muted)">${esc(f.estado || '—')}</span>
       ${f.rescatado ? '<span class="bt-tag" style="--c:#14b8a6" title="Respondió al seguimiento final de la IA y compartió un teléfono válido"><i class="fas fa-life-ring"></i> Rescatado</span>' : ''}
       ${f.en_manual ? '<span class="bt-tag" style="--c:var(--amber)"><i class="fas fa-star"></i> Comisiones Bwrathanyel</span>' : ''}
+      ${f.origen === 'colaboracion' && !f.en_manual ? '<span class="bt-tag" style="--c:var(--muted)" title="Si usted le preparó la cotización a Andric, márquelo en Comisiones para cobrar su porcentaje">Sin marcar</span>' : ''}
+      ${f.de_empresa ? '<span class="bt-tag" style="--c:var(--muted)"><i class="fas fa-building"></i> Empresa</span>' : ''}
     </div>
-    ${vendido ? `<div class="lt-cifras"><div><span>Venta</span><b>$${fmt(f.monto_total)}</b></div><div><span>Mi comisión</span><b class="lt-ok">$${fmt(f.mi_comision)}</b></div></div>` : ''}
+    ${vendido ? `<div class="lt-cifras"><div><span>Venta</span><b>$${fmt(f.monto_total)}</b></div><div><span>Mi comisión</span><b class="lt-ok">${f.mi_comision != null ? '$' + fmt(f.mi_comision) : '—'}</b></div></div>` : ''}
     <div class="lt-card-pie">
       <button type="button" class="btn-sm${f.en_manual ? '' : ' lt-primario'} wr-marcar" data-id="${f.id}" data-en="${f.en_manual ? '1' : '0'}">
         <i class="fas ${f.en_manual ? 'fa-star' : 'fa-star-half-stroke'}"></i> ${f.en_manual ? 'Sacar de Comisiones' : 'Mandar a Comisiones'}</button>
@@ -26757,6 +26762,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-15', emoji: '🤝', titulo: 'GH Hoteles en Corporativo y comisión por cotizar para Andric', texto: 'Los clientes que llegan por el catálogo de GH Hoteles quedan como clientes de la empresa GH Hoteles (Corporativo › Empresas) y le llegan directo a Andric. En Web y Reasignados hay un filtro nuevo, "De Andric": los leads que usted le cotice se marcan en Comisiones y cobran 2,5% de la venta. Los leads de empresa ya no cuentan como web.', roles: ['admin'] },
   { fecha: '2026-10-14', emoji: '📋', titulo: 'Solicitudes de boletería con sección propia', texto: 'Las solicitudes de vuelo salieron del catálogo y tienen su propia entrada en el menú, arriba de todo. Se ven en tablero (En cola, Atendiendo, Cerradas) con el tiempo de espera de cada una en colores, contadores del día, buscador, filtros y el botón "Tomar la siguiente". Cada solicitud nueva te llega por Telegram con botones para tomarla, resolverla o cancelarla sin abrir el CRM, verla en el CRM o escribirle al asesor por WhatsApp. Si una lleva 15 minutos sin que nadie la tome, llega un recordatorio. Quien es de boletería ya no recibe leads.', roles: ['admin', 'boleteria'] },
   { fecha: '2026-10-14', emoji: '✈️', titulo: 'Seguí tus solicitudes de vuelo', texto: 'En Leads > Boletería cada solicitud muestra su recorrido (enviada, en revisión, lista), quién la atiende y el resultado. Te llega un Telegram cuando boletería la toma, cuando la resuelve (con el resultado) y si la cancela, con un botón para escribirle por WhatsApp a quien la atiende.', roles: ['asesor'] },
   { fecha: '2026-10-14', emoji: '🧳', titulo: 'Cotizaciones con hoteles, traslados y tours', texto: 'En Cotizaciones ya no solo se cotizan boletos: cada línea tiene un selector de tipo (boleto aéreo, hotel, traslado, tour o full day, u otro servicio) con sus propios campos. Así se arma un paquete completo en un solo PDF con un único total. En hotel, las noches se calculan solas a partir del check-in y el check-out.', roles: ['admin', 'boleteria'] },
