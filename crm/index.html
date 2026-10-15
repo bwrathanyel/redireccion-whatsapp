@@ -2458,6 +2458,9 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 /* Cotización de boletos */
 .cb-items{display:flex;flex-direction:column;gap:12px;margin-top:16px}
 .cb-item{border:1px solid var(--line2);border-radius:12px;padding:12px;background:rgba(255,255,255,.02)}
+.cb-solicitud{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border:1px solid var(--blue);border-radius:12px;background:rgba(59,130,246,.08);font-size:13px}
+.cb-solicitud[hidden]{display:none}
+.cb-solicitud span{flex:1;min-width:180px}
 .cb-item-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:12.5px;color:var(--muted)}
 .cb-item-cab b{color:var(--txt);font-size:13px}
 .cb-item-quitar{background:none;border:0;color:var(--muted);cursor:pointer;padding:4px 6px;font-size:13px}
@@ -7349,6 +7352,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="card">
         <h2><i class="fas fa-file-invoice-dollar"></i> Cotización</h2>
         <div class="csub">Boletos, hoteles, traslados y tours en un solo PDF, directo al chat del asesor</div>
+        <div id="cb-solicitud" class="cb-solicitud" hidden></div>
         <div class="grid g-2">
           <div class="field"><label class="fl">Cliente (facturar a)</label><input id="cb-cliente" class="ei" placeholder="Nombre del cliente o BOLETERÍA"></div>
           <div class="field"><label class="fl">Enviar al asesor</label><select id="cb-asesor" class="ei"></select></div>

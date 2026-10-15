@@ -23386,7 +23386,34 @@ function cbActualizarTotal() { document.getElementById('cb-total').textContent =
 function cbRenderItems() { document.getElementById('cb-items').innerHTML = cbItems.map(cbItemHtml).join(''); cbActualizarTotal(); }
 window.cbAgregarItem = () => { cbItems.push(cbItemVacio(cbLimpiarItem(cbItems.at(-1) || {}).tipo)); cbRenderItems(); };
 window.cbQuitarItem = i => { cbItems.splice(i, 1); cbRenderItems(); };
+// Cotizar desde una solicitud de boletería (2026-10-15): precarga cliente, ruta,
+// fechas, personas y el asesor que la pidió; al enviarla al asesor la solicitud
+// queda resuelta y notificar-boleteria le adjunta el PDF por Telegram.
+let cbSolicitud = null, cbSolicitudPendiente = null;
+function cbDesdeSolicitud(s) { cbSolicitudPendiente = s; activateSection('cotizacion-boletos'); }
+function cbPintarSolicitud() {
+  const box = document.getElementById('cb-solicitud'), s = cbSolicitud;
+  box.hidden = !s;
+  box.innerHTML = s ? `<i class="fas fa-plane-departure"></i><span>Cotizando la <b>solicitud #${s.id}</b> de ${esc(s.creado_por || 'asesor')}: al enviarla al asesor queda resuelta.</span><button class="btn-sm" type="button" onclick="cbQuitarSolicitud()">Desvincular</button>` : '';
+}
+window.cbQuitarSolicitud = () => { cbSolicitud = null; cbPintarSolicitud(); };
+function cbAplicarSolicitud(sel) {
+  const s = cbSolicitudPendiente; cbSolicitudPendiente = null;
+  cbResetForm(); cbSolicitud = s; cbPintarSolicitud();
+  document.getElementById('cb-cliente').value = s.cliente_nombre || '';
+  cbItems = [{ ...cbItemVacio('boleto'), ruta: [s.origen, s.destino, s.fecha_regreso ? s.origen : ''].filter(Boolean).join(' - '), cant: s.personas || 1, ida: s.fecha_viaje || '', vuelta: s.fecha_regreso || '', extra: s.notas || '' }];
+  cbRenderItems();
+  // listar_cola_boleteria trae el nombre de quien pidió, no su id.
+  const op = [...sel.options].find(o => o.value && o.textContent.replace(/ \(admin\)$/, '') === s.creado_por);
+  if (op) sel.value = op.value;
+}
+async function cbResolverSolicitud(solId, cot) {
+  const { data, error } = await sb.rpc('resolver_solicitud_boleteria', { p_id: Number(solId), p_resultado: `Cotización ${cbNumero(cot.numero)} enviada` });
+  if (error || (!data?.ok && data?.error !== 'no_disponible')) errToast(`No se pudo marcar resuelta la solicitud #${solId}: hazlo desde Solicitudes`);
+  return !!data?.ok;
+}
 function cbResetForm() {
+  cbSolicitud = null; cbPintarSolicitud();
   cbItems = [cbItemVacio()]; cbRenderItems();
   document.getElementById('cb-cliente').value = '';
   document.getElementById('cb-fecha').value = cbHoy(); document.getElementById('cb-vence').value = cbHoy();
@@ -23412,6 +23439,7 @@ async function cbCargarSeccion() {
   const asesores = staff.filter(u => u.id !== MI_USUARIO_ID && (u.rol === 'asesor' || u.rol === 'admin') && !/^__gate|prueba|invitado/i.test(u.nombre || ''))
     .sort((a, b) => (a.rol === b.rol ? 0 : a.rol === 'asesor' ? -1 : 1) || (a.nombre || '').localeCompare(b.nombre || ''));
   sel.innerHTML = '<option value="">— Elige el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
+  if (cbSolicitudPendiente) cbAplicarSolicitud(sel);
   cbOffset = 0;
   await cbCargarHistorial(false);
 }
@@ -23433,7 +23461,7 @@ async function cbCargarHistorial(append) {
       <div class="lt-card-tit" title="${esc(c.cliente)}">${esc(c.cliente)}</div>
       <span class="bt-tag" style="--c:var(--blue)">${cbNumero(c.numero)}</span>
     </div>
-    <div class="lt-card-meta"><i class="fas fa-user"></i> ${esc(c.creado_por_nombre || '—')} · ${esc(cbFechaLarga(c.fecha))}</div>
+    <div class="lt-card-meta"><i class="fas fa-user"></i> ${esc(c.creado_por_nombre || '—')} · ${esc(cbFechaLarga(c.fecha))}${c.solicitud_id ? ` · <i class="fas fa-plane-departure"></i> Solicitud #${c.solicitud_id}` : ''}</div>
     <div class="lt-cifras" style="grid-template-columns:2fr 1fr">
       <div><span>Detalle</span><b title="${esc(rutas)}">${esc(rutas)}</b></div>
       <div><span>Total</span><b>$${cbMonto(c.total)}</b></div>
@@ -23462,7 +23490,7 @@ async function cbEnviarAAsesor(c, blob, asesorId) {
   const { data, error: msgErr } = await sb.rpc('enviar_mensaje', { p_conversacion_id: convId, p_tipo: 'documento', p_storage_path: path, p_nombre_archivo: nombre, p_peso_bytes: blob.size });
   if (msgErr || !data?.ok) { await sb.storage.from('chat-interno-adjuntos').remove([path]); return false; }
   await sb.rpc('enviar_mensaje', { p_conversacion_id: convId, p_tipo: 'texto', p_contenido: `Cotización ${cbNumero(c.numero)} · ${c.cliente} · $${cbMonto(c.total)}` });
-  const envio = { enviado_a: asesorId, enviado_a_nombre: nombreUsuario(asesorId), enviado_at: new Date().toISOString() };
+  const envio = { enviado_a: asesorId, enviado_a_nombre: nombreUsuario(asesorId), enviado_at: new Date().toISOString(), pdf_path: path };
   await sb.from('cotizaciones_boleteria').update(envio).eq('id', c.id);
   Object.assign(c, envio);
   return true;
@@ -23478,10 +23506,12 @@ window.cbGuardar = async function cbGuardar(enviar) {
   if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); document.getElementById('cb-asesor').focus(); return; }
   const btn = document.getElementById(enviar ? 'cb-enviar-btn' : 'cb-descargar-btn'), htmlBtn = btn.innerHTML;
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
+  const sol = cbSolicitud;
   try {
     const fila = {
       creado_por: MI_USUARIO_ID, creado_por_nombre: MI_NOMBRE, cliente, fecha: val('cb-fecha') || cbHoy(), vence: val('cb-vence') || null,
       items, total: items.reduce((s, it) => s + cbImporte(it), 0), notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null,
+      solicitud_id: sol?.id ?? null,
     };
     const { data: cot, error } = await sb.from('cotizaciones_boleteria').insert(fila).select().single();
     if (error || !cot) { errToast('No se pudo guardar la cotización: ' + (error?.message || '')); return; }
@@ -23490,7 +23520,10 @@ window.cbGuardar = async function cbGuardar(enviar) {
       await ensureVoucherLibs();
       const blob = await cbPdfBlob(cot);
       if (!enviar) { cbDescargar(blob, cbArchivo(cot)); okToast(`Cotización ${cbNumero(cot.numero)} generada`); }
-      else if (await cbEnviarAAsesor(cot, blob, asesorId)) okToast(`${cbNumero(cot.numero)} enviada a ${nombreUsuario(asesorId)}`);
+      else if (await cbEnviarAAsesor(cot, blob, asesorId)) {
+        const resuelta = sol && await cbResolverSolicitud(sol.id, cot);
+        okToast(`${cbNumero(cot.numero)} enviada a ${nombreUsuario(asesorId)}${resuelta ? ` · solicitud #${sol.id} resuelta` : ''}`);
+      }
       else errToast(`${cbNumero(cot.numero)} se guardó pero no se pudo enviar: reenvíala desde el historial`);
     } catch (e) {
       console.error('cbGuardar pdf', e);
@@ -23522,7 +23555,10 @@ window.cbReenviar = async function cbReenviar(id, btn) {
   btn.disabled = true;
   try {
     await ensureVoucherLibs();
-    if (await cbEnviarAAsesor(c, await cbPdfBlob(c), asesorId)) { okToast(`${cbNumero(c.numero)} enviada a ${nombreUsuario(asesorId)}`); cbCargarHistorial(false); }
+    if (await cbEnviarAAsesor(c, await cbPdfBlob(c), asesorId)) {
+      if (c.solicitud_id && MI_ES_AGENTE_BOLETERIA) await cbResolverSolicitud(c.solicitud_id, c);
+      okToast(`${cbNumero(c.numero)} enviada a ${nombreUsuario(asesorId)}`); cbCargarHistorial(false);
+    }
     else errToast('No se pudo enviar la cotización');
   } catch (e) { console.error('cbReenviar', e); errToast('No se pudo generar el PDF'); }
   finally { btn.disabled = false; }
@@ -25322,7 +25358,7 @@ function bolDetalleHtml(s) {
   const acc = [];
   if (MI_ES_AGENTE_BOLETERIA) {
     if (s.estado === 'en_cola') acc.push(`<button class="dbtn save" data-bol-tomar="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
-    else if (s.estado === 'atendiendo') acc.push(`<button class="dbtn save" data-bol-cerrar="${s.id}"><i class="fas fa-check"></i> Marcar resuelta</button>`);
+    else if (s.estado === 'atendiendo') acc.push(`<button class="dbtn save" data-bol-cotizar="${s.id}"><i class="fas fa-file-invoice-dollar"></i> Cotizar</button>`, `<button class="dbtn gh" data-bol-cerrar="${s.id}"><i class="fas fa-check"></i> Marcar resuelta</button>`);
     if (bolAbierta(s)) acc.push(`<button class="dbtn gh" data-bol-convertir="${s.id}"><i class="fas fa-ticket"></i> Convertir en reserva</button>`);
   }
   const wa = bolWaContacto(s);
@@ -25371,6 +25407,7 @@ function bolDetalleHtml(s) {
     </div>
 
     <div class="bd-tl">${pasos.map(p => `<div class="bd-tl-p ${p.cls}"><i></i><div><b>${p.t}</b><small>${p.sub}</small></div></div>`).join('')}</div>
+    ${s.estado !== 'en_cola' ? '<div class="bd-acc" data-bol-cot style="display:none"></div>' : ''}
 
     ${acc.length ? `<div class="bd-acc">${acc.join('')}</div>` : ''}`;
 }
@@ -25399,6 +25436,16 @@ function abrirDetalleBoleteria(id) {
   cuerpo.querySelector('[data-bol-eliminar]')?.addEventListener('click', () => bolEliminar(id));
   cuerpo.querySelector('[data-bol-convertir]')?.addEventListener('click', e => bolConvertirSolicitud(s, e.currentTarget));
   cuerpo.querySelector('[data-bol-cerrar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); bolAbrirCerrar(id); });
+  cuerpo.querySelector('[data-bol-cotizar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); cbDesdeSolicitud(s); });
+  // La cotización con que se resolvió: el asesor la ve si se la mandaron a él (RLS cot_bol_select).
+  const cotBox = cuerpo.querySelector('[data-bol-cot]');
+  if (cotBox) sb.from('cotizaciones_boleteria').select('*').eq('solicitud_id', s.id).order('created_at', { ascending: false }).limit(1).then(({ data }) => {
+    const c = data?.[0];
+    if (!c || !cotBox.isConnected) return;
+    cbFilas.set(c.id, c);
+    cotBox.innerHTML = `<button class="dbtn save" type="button" onclick="cbVerPdf('${c.id}')"><i class="fas fa-file-pdf"></i> Ver cotización ${cbNumero(c.numero)} · $${cbMonto(c.total)}</button>`;
+    cotBox.style.display = '';
+  });
   cuerpo.querySelector('[data-bol-copiar]')?.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(bolTextoCopiable(s)); okToast('Datos copiados'); } catch { errToast('No se pudo copiar'); }
   });
@@ -26762,6 +26809,8 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-15', emoji: '📄', titulo: 'Cotizar una solicitud en un toque', texto: 'En una solicitud que estés atendiendo, el botón "Cotizar" abre Cotizaciones con el cliente, la ruta, las fechas, las personas y el asesor ya cargados. Al enviarla al asesor, la solicitud queda resuelta con "Cotización COT-xxxx enviada" y al asesor le llega el PDF por el chat del CRM y por Telegram.', roles: ['boleteria', 'admin'] },
+  { fecha: '2026-10-15', emoji: '📄', titulo: 'Tu cotización llega en PDF', texto: 'Cuando boletería resuelve tu solicitud de vuelo con una cotización, te llega el PDF por Telegram y por el chat del CRM. En Leads > Boletería, la solicitud tiene el botón "Ver cotización".', roles: ['asesor'] },
   { fecha: '2026-10-15', emoji: '🤝', titulo: 'GH Hoteles en Corporativo y comisión por cotizar para Andric', texto: 'Los clientes que llegan por el catálogo de GH Hoteles quedan como clientes de la empresa GH Hoteles (Corporativo › Empresas) y le llegan directo a Andric. En Web y Reasignados hay un filtro nuevo, "De Andric": los leads que usted le cotice se marcan en Comisiones y cobran 2,5% de la venta. Los leads de empresa ya no cuentan como web.', roles: ['admin'] },
   { fecha: '2026-10-14', emoji: '📋', titulo: 'Solicitudes de boletería con sección propia', texto: 'Las solicitudes de vuelo salieron del catálogo y tienen su propia entrada en el menú, arriba de todo. Se ven en tablero (En cola, Atendiendo, Cerradas) con el tiempo de espera de cada una en colores, contadores del día, buscador, filtros y el botón "Tomar la siguiente". Cada solicitud nueva te llega por Telegram con botones para tomarla, resolverla o cancelarla sin abrir el CRM, verla en el CRM o escribirle al asesor por WhatsApp. Si una lleva 15 minutos sin que nadie la tome, llega un recordatorio. Quien es de boletería ya no recibe leads.', roles: ['admin', 'boleteria'] },
   { fecha: '2026-10-14', emoji: '✈️', titulo: 'Seguí tus solicitudes de vuelo', texto: 'En Leads > Boletería cada solicitud muestra su recorrido (enviada, en revisión, lista), quién la atiende y el resultado. Te llega un Telegram cuando boletería la toma, cuando la resuelve (con el resultado) y si la cancela, con un botón para escribirle por WhatsApp a quien la atiende.', roles: ['asesor'] },
