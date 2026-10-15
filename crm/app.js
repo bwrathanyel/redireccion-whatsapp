@@ -2264,6 +2264,7 @@ function abrirAltaPersona(comoFreelancer) {
       <label class="fl">Rol</label>
       <select id="pn-rol" class="ei">
         <option value="asesor">Asesor</option>
+        <option value="asesor_boleteria">Asesor + Boletería</option>
         <option value="admin">Administrador</option>
         <option value="marketing">Marketing</option>
         <option value="boleteria">Boletería</option>
@@ -2286,7 +2287,7 @@ function abrirAltaPersona(comoFreelancer) {
   document.getElementById('drawerBg').classList.add('open');
   navPush({ type: 'drawer' });
   const ajustarDatosAsesor = () => {
-    const esAsesor = val('pn-rol') === 'asesor';
+    const esAsesor = val('pn-rol').startsWith('asesor');
     document.getElementById('pn-datos-asesor').style.display = esAsesor ? '' : 'none';
   };
   document.getElementById('pn-rol').onchange = ajustarDatosAsesor;
@@ -2305,7 +2306,8 @@ async function crearPersona() {
       nombre: val('pn-nombre').trim(),
       username: val('pn-username').trim().toLowerCase(),
       cargo: val('pn-cargo').trim(),
-      rol: val('pn-rol'),
+      rol: val('pn-rol') === 'asesor_boleteria' ? 'asesor' : val('pn-rol'),
+      es_boleteria: val('pn-rol') === 'asesor_boleteria',
       es_freelancer: document.getElementById('pn-freelancer').checked,
       password: val('pn-password'),
     },
@@ -2315,7 +2317,7 @@ async function crearPersona() {
     err.textContent = ERR_PERSONAL[data?.error] || data?.detalle || error?.message || 'No se pudo crear la cuenta.';
     return;
   }
-  if (val('pn-rol') === 'asesor') {
+  if (val('pn-rol').startsWith('asesor')) {
     const { error: vinculoError } = await sb.rpc('admin_vincular_asesor', {
       p_usuario_id: data.usuario_id,
       p_nombre: val('pn-nombre').trim(),
@@ -3144,7 +3146,8 @@ async function loadPostventa(silencioso) {
     errToast('No se pudo cargar la bandeja de postventa');
     return;
   }
-  POSTVENTA = bandeja.data || [];
+  // Las reservas de empresa viven solo en la pestaña Empresas.
+  POSTVENTA = (bandeja.data || []).filter(c => c.empresa_id == null);
   if (!RV_DESTINOS && (esOficina() || ROL === 'asesor')) {
     const d = await sb.rpc('listar_destinos', { p_solo_activos: true });
     if (!d.error) RV_DESTINOS = d.data || [];
