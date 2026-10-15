@@ -181,7 +181,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Cotización de boletos en PDF, lista para mandar al asesor'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
   tareas: ['Tareas', 'Tus tareas activas'],
   comisiones: ['Comisiones por corte', 'Ventas pagadas, verificación e invoices · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
@@ -285,7 +285,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false, MI_ES_SUPERADMIN = false;
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false, MI_ES_SUPERADMIN = false, MI_ES_BOLETERIA = false;
 // Rol REAL del usuario logueado -- distinto de ROL cuando hay una vista
 // previa activa (ver "Vista previa de rol" más abajo). ROL_REAL nunca
 // cambia con la vista previa: el switcher lo usa para decidir si mostrarse
@@ -317,7 +317,7 @@ async function initAuth() {
 
 async function cargarUsuario() {
   const { data: { user } } = await sb.auth.getUser();
-  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,es_freelancer,bloqueado,es_superadmin').eq('id', user?.id).single();
+  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,es_freelancer,bloqueado,es_superadmin,es_boleteria').eq('id', user?.id).single();
   if (error || !data) {
     await sb.auth.signOut();
     showOverlay('login');
@@ -383,7 +383,7 @@ async function afterLogin() {
   MI_NOMBRE = u.nombre; ROL = (u.rol === 'admin' && VISTA_ROL_OPCIONES.includes(previa)) ? previa : u.rol;
   MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
   MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
-  MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado; MI_ES_SUPERADMIN = !!u.es_superadmin;
+  MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado; MI_ES_SUPERADMIN = !!u.es_superadmin; MI_ES_BOLETERIA = !!u.es_boleteria;
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   await entrarSegunRol();
 }
@@ -400,7 +400,7 @@ async function entrarSegunRol() {
   pintarBannerVistaPrevia();
   overlay('login').classList.remove('show');
   overlay('setup').classList.remove('show');
-  const rolLabelUi = ROL === 'admin' ? 'Administrador' : ROL === 'administrativo' ? 'Asistente administrativo' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : 'Asesor comercial';
+  const rolLabelUi = ROL === 'admin' ? 'Administrador' : ROL === 'administrativo' ? 'Asistente administrativo' : ROL === 'marketing' ? 'Marketing' : ROL === 'boleteria' ? 'Boletería' : MI_ES_BOLETERIA ? 'Asesor + Boletería' : 'Asesor comercial';
   document.getElementById('side-un').textContent = MI_NOMBRE;
   document.getElementById('side-ue').textContent = rolLabelUi;
   pintarAvatar(document.getElementById('side-avatar'), MI_AVATAR_URL, MI_NOMBRE);
@@ -1856,7 +1856,9 @@ function aplicarFiltroPersonal(filtro) {
   document.getElementById('gp-kpi-card-equipo')?.classList.toggle('kpi-on', !filtro);
   renderPersonalCards();
 }
-const ROL_LABEL_GP = { admin: 'Administrador', asesor: 'Asesor', marketing: 'Marketing', boleteria: 'Boletería', administrativo: 'Asistente administrativo' };
+const ROL_LABEL_GP = { admin: 'Administrador', asesor: 'Asesor', asesor_boleteria: 'Asesor + Boletería', marketing: 'Marketing', boleteria: 'Boletería', administrativo: 'Asistente administrativo' };
+// "Asesor + Boletería" no es un rol en la base: es rol asesor con la marca es_boleteria (20261015280000).
+const rolPersonal = u => u.rol === 'asesor' && u.es_boleteria ? 'asesor_boleteria' : u.rol;
 function formatDuracionLarga(ms) {
   if (!ms) return 'Sin registro';
   const horasTotales = Math.floor(ms / 3600000);
@@ -1967,7 +1969,7 @@ function renderPersonalCards() {
       ? '<details class="pc-dias"><summary><i class="fas fa-user-slash"></i> Dados de baja (' + personalBaja.length + ')</summary>'
         + personalBaja.map(u => '<div class="pc-dia"><div class="pc-dia-h"><span class="pc-dia-f">' + esc(u.nombre || '')
           + '</span><button class="btn-sm" data-reactivar="' + u.usuario_id + '">Reactivar</button></div>'
-          + '<div class="pc-dia-s">' + (ROL_LABEL_GP[u.rol] || esc(u.rol || '')) + (u.cargo ? ' · ' + esc(u.cargo) : '') + '</div></div>').join('')
+          + '<div class="pc-dia-s">' + (ROL_LABEL_GP[rolPersonal(u)] || esc(u.rol || '')) + (u.cargo ? ' · ' + esc(u.cargo) : '') + '</div></div>').join('')
         + '</details>'
       : '';
     bajaBox.querySelectorAll('[data-reactivar]').forEach(b => {
@@ -2051,7 +2053,7 @@ function cardPersonaHtml(u) {
       + '<div class="pc-ico" style="background:' + ico.c + '1f;color:' + ico.c + '"><i class="fas ' + ico.i + '"></i></div>'
       + '<div class="pc-id">'
         + '<div class="pc-nombre">' + esc(u.nombre || 'Sin nombre') + (u.conectado_ahora ? '<span class="pc-online" title="Conectado ahora"></span>' : '') + chips + '</div>'
-        + '<div class="pc-rol">' + (ROL_LABEL_GP[u.rol] || esc(u.rol || '')) + (u.username ? ' · @' + esc(u.username) : '') + '</div>'
+        + '<div class="pc-rol">' + (ROL_LABEL_GP[rolPersonal(u)] || esc(u.rol || '')) + (u.username ? ' · @' + esc(u.username) : '') + '</div>'
         + '<div class="pc-cargo">' + cargo + '</div>'
       + '</div>'
       + '<button class="pc-edit" type="button" data-editar="' + u.usuario_id + '" title="Editar"><i class="fas fa-pen"></i></button>'
@@ -2101,7 +2103,7 @@ function abrirEditorPersona(usuarioId) {
       <input id="pe-cargo" class="ei" type="text" placeholder="Ej: Ejecutivo de Boletería · Gerente Administrativo" value="${esc(u.cargo || '')}">
       <label class="fl">Rol</label>
       <select id="pe-rol" class="ei">
-        ${['asesor', 'admin', 'marketing', 'boleteria', 'administrativo'].map(r => `<option value="${r}"${u.rol === r ? ' selected' : ''}>${VISTA_ROL_LABEL[r] || ROL_LABEL_GP[r] || r}</option>`).join('')}
+        ${['asesor', 'asesor_boleteria', 'admin', 'marketing', 'boleteria', 'administrativo'].map(r => `<option value="${r}"${rolPersonal(u) === r ? ' selected' : ''}>${VISTA_ROL_LABEL[r] || ROL_LABEL_GP[r] || r}</option>`).join('')}
       </select>
       ${u.rol === 'asesor' ? `
       <label class="fl">Teléfono</label>
@@ -2175,14 +2177,15 @@ async function guardarPersona(usuarioId) {
   const nombre = val('pe-nombre').trim();
   if (nombre.length < 3) { err.textContent = 'El nombre es muy corto.'; return; }
   btn.disabled = true;
-  const rol = val('pe-rol');
+  const mixto = val('pe-rol') === 'asesor_boleteria';
+  const rol = mixto ? 'asesor' : val('pe-rol');
   const { data, error } = await sb.rpc('admin_actualizar_personal', {
     p_usuario_id: usuarioId,
     p_nombre: nombre,
     p_cargo: val('pe-cargo').trim(),
     p_rol: rol,
     p_es_freelancer: document.getElementById('pe-freelancer').checked,
-    p_es_boleteria: document.getElementById('pe-boleteria').checked,
+    p_es_boleteria: mixto || (rol !== 'asesor' && document.getElementById('pe-boleteria').checked),
     p_username: val('pe-username').trim() || null,
     p_ve_voucher: document.getElementById('pe-voucher').checked,
     p_ve_informe_diario: document.getElementById('pe-informe').checked,
@@ -5538,6 +5541,7 @@ function openDrawer(l) {
     <div class="dquick">
       ${wa ? `<a class="dq wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></a>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq dq-boleteria" id="e-a-boleteria" type="button" title="Rellenar la solicitud de boletería de este cliente y mandarla a un ejecutivo"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
+      ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-armar-cot" type="button" title="Armar la cotización en PDF para este cliente"><i class="fas fa-file-invoice-dollar"></i><span>Cotizar</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización'}</span></button>` : ''}
       ${(ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
     </div>
@@ -5682,6 +5686,14 @@ function openDrawer(l) {
   document.getElementById('e-a-boleteria')?.addEventListener('click', () => {
     let hecho = false;
     const ir = () => { if (hecho) return; hecho = true; abrirSolicitudBoleteria(l); };
+    window.addEventListener('popstate', ir, { once: true });
+    setTimeout(ir, 400);
+    window.closeDrawer();
+  });
+  // Igual que Boletería: navegar recién cuando el drawer terminó de cerrar (su popstate).
+  document.getElementById('e-a-armar-cot')?.addEventListener('click', () => {
+    let hecho = false;
+    const ir = () => { if (hecho) return; hecho = true; cbDesdeLead(l); };
     window.addEventListener('popstate', ir, { once: true });
     setTimeout(ir, 400);
     window.closeDrawer();
@@ -12403,8 +12415,8 @@ function lyraPintarCotizacion(b) {
     const wrap = document.createElement('div');
     wrap.className = 'cot-cards';
     wrap.innerHTML = b.opciones.map(op => {
-      // op.foto llega como URL al original: se reescribe al derivado chico del Worker de fotos.
-      const mini = op.foto && op.foto.startsWith(FOTOS_BASE) ? fotoMini(op.foto.slice(FOTOS_BASE.length), 256) : op.foto;
+      // op.foto ya es el derivado 1280 del Worker de fotos (urlFoto de la EF): la tarjeta pide el de 256.
+      const mini = op.foto ? op.foto.replace(/\/_d\/\d+\//, '/_d/256/') : '';
       return `<div class="cot-card">
         ${mini ? `<img class="tc-thumb" src="${esc(mini)}" alt="" loading="lazy">` : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${op.tipo === 'promocion' ? 'tag' : 'image'}"></i></div>`}
         <div class="tc-nombre">${esc(op.titulo)}</div>
@@ -12413,21 +12425,101 @@ function lyraPintarCotizacion(b) {
     }).join('');
     fila(wrap);
   }
+  // Preview del texto que se copia, recortado a ~8 líneas (sin espacios entre etiquetas: la burbuja es pre-wrap).
   if (texto) {
+    const prev = document.createElement('div');
+    const largo = texto.split('\n').length > 9 || texto.length > 600;
+    prev.className = 'chat-msg bot';
+    prev.innerHTML = `<div class="cot-prev-txt${largo ? ' recorte' : ''}">${lyraConEmojis(renderBotText(texto))}</div>`
+      + (largo ? '<button type="button" class="cot-ver" aria-expanded="false">Ver todo</button>' : '');
+    prev.querySelector('.cot-ver')?.addEventListener('click', e => {
+      const abierta = !prev.querySelector('.cot-prev-txt').classList.toggle('recorte');
+      e.currentTarget.textContent = abierta ? 'Ver menos' : 'Ver todo';
+      e.currentTarget.setAttribute('aria-expanded', abierta);
+    });
+    fila(prev);
+  }
+  const acciones = document.createElement('div');
+  acciones.className = 'cot-acciones';
+  const boton = (icono, etiqueta, fn) => {
     const btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'btn-sm';
-    btn.innerHTML = '<i class="fas fa-copy"></i> Texto para el cliente';
-    btn.onclick = async () => { try { await navigator.clipboard.writeText(texto); okToast('Texto copiado'); } catch { errToast('El navegador no dejó copiar'); } };
-    fila(btn);
-  }
-  if (b.voucher_datos && typeof b.voucher_datos === 'object') {
-    const btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'btn-sm';
-    btn.innerHTML = '<i class="fas fa-file-pdf"></i> Prellenar Voucher';
-    btn.onclick = () => { lyraCerrar(); prellenarVoucherDesdeChat(b.voucher_datos); };
-    fila(btn);
-  }
+    btn.innerHTML = `<i class="fas fa-${icono}"></i> ${etiqueta}`;
+    btn.onclick = fn;
+    acciones.appendChild(btn);
+  };
+  if (texto) boton('copy', 'Copiar', async () => { try { await navigator.clipboard.writeText(texto); okToast('Texto copiado'); } catch { errToast('El navegador no dejó copiar'); } });
+  if (texto || b.opciones?.length) boton('file-pdf', 'PDF', async e => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try { await lyraDescargarPdf(b); } catch (err) { console.error('lyraDescargarPdf', err); errToast('No se pudo armar el PDF'); }
+    finally { btn.disabled = false; }
+  });
+  if (b.voucher_datos && typeof b.voucher_datos === 'object') boton('file-signature', 'Prellenar voucher', () => { lyraCerrar(); prellenarVoucherDesdeChat(b.voucher_datos); });
+  if (acciones.children.length) fila(acciones);
   log.scrollTop = log.scrollHeight;
+}
+// El texto de Lyra viene armado para WhatsApp (ver la guía de estilo de cotizador-chat): 🏝️ destino, 📍 hotel
+// con sus viñetas de precio, 📅 fechas, 👥 personas, ✨ Incluye, Importante, validez y, al final, el bloque
+// PRESUPUESTO. Si llegó `presupuesto` estructurado, ese bloque sale como tabla y se corta del texto.
+function lyraDatosPdf(b) {
+  let texto = String(b.texto || '').replaceAll('---BLOQUE---', '\n');
+  const pres = Array.isArray(b.presupuesto?.opciones) && b.presupuesto.opciones.length ? b.presupuesto : null;
+  if (pres) texto = texto.replace(/^[\s*]*PRESUPUESTO\b[\s\S]*$/m, '');
+  const vd = b.voucher_datos && typeof b.voucher_datos === 'object' ? b.voucher_datos : {};
+  const d = { cliente: vd.cliente_nombre || '', titulo: '', fechas: '', personas: '', opciones: [], incluye: '', importante: '', notas: [], validez: '' };
+  const vineta = /^[•\-–]\s*/, mayus = s => s.charAt(0).toUpperCase() + s.slice(1);
+  let actual = null;
+  for (const cruda of texto.split('\n')) {
+    const c = cruda.trim(), l = pdfSinEmojis(c);
+    if (!l) continue;
+    if (c.startsWith('📍')) d.opciones.push(actual = { titulo: l.replace(/\*/g, ''), lineas: [] });
+    else if (c.startsWith('📅')) d.fechas = l;
+    else if (c.startsWith('👥')) d.personas = l;
+    else if (/^\*?incluye\b/i.test(l)) d.incluye = mayus(l.replace(/^\*?incluye:?\*?\s*/i, ''));
+    else if (/^\*?importante\b/i.test(l)) d.importante = mayus(l.replace(/^\*?importante:?\*?\s*/i, ''));
+    else if (/tarifa (válida|sujeta)|sujeta a cambio/i.test(l)) d.validez = l;
+    else if (actual && vineta.test(l)) actual.lineas.push(l.replace(vineta, ''));
+    else if (!d.titulo && !d.opciones.length && /^\p{Extended_Pictographic}/u.test(c)) d.titulo = l;
+    // Saludo y cierre de chat ("le comparto…:", "¿desea reservar por este WhatsApp?") sobran en un PDF.
+    else if (!/whatsapp|[?:]$/i.test(l)) d.notas.push(l);
+  }
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const parecido = (x, y) => { x = norm(x); y = norm(y); return !!x && !!y && (x.includes(y) || y.includes(x)); };
+  const tarjetas = Array.isArray(b.opciones) ? b.opciones : [];
+  if (!d.opciones.length) d.opciones = tarjetas.map(o => ({ titulo: o.titulo, lineas: [] }));
+  const usadas = new Set();
+  d.opciones.forEach((o, i) => {
+    const t = tarjetas.find(x => parecido(x.titulo, o.titulo)) || (tarjetas.length === d.opciones.length ? tarjetas[i] : null);
+    o.foto = t?.foto || null; o.precio_texto = t?.precio_texto || '';
+    const p = pres && (pres.opciones.find(x => parecido(x.titulo, o.titulo)) || (pres.opciones.length === d.opciones.length ? pres.opciones[i] : null));
+    if (p && !usadas.has(p)) { usadas.add(p); o.tabla = presupuestoTabla(p, pres.noches); }
+  });
+  pres?.opciones.filter(p => !usadas.has(p)).forEach(p => d.opciones.push({ titulo: p.titulo, lineas: [], tabla: presupuestoTabla(p, pres.noches) }));
+  const pl = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+  if (!d.personas && pres?.adultos) d.personas = pl(pres.adultos, 'adulto', 'adultos') + (pres.ninos ? ' y ' + pl(pres.ninos, 'niño', 'niños') : '');
+  const fecha = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '') ? fmtFechaSolo(s) : s;
+  if (!d.fechas && vd.fecha_entrada) d.fechas = [fecha(vd.fecha_entrada), fecha(vd.fecha_salida)].filter(Boolean).join(' al ');
+  if (!d.fechas && pres?.noches) d.fechas = `${pres.noches + 1} días y ${pl(pres.noches, 'noche', 'noches')}`;
+  return d;
+}
+// Mismo cálculo que renderPresupuesto (_shared/presupuesto.ts), en columnas.
+function presupuestoTabla(o, noches) {
+  const m = (n, mon) => { const s = Number(n).toLocaleString('es-VE', { minimumFractionDigits: Number.isInteger(+n) ? 0 : 2, maximumFractionDigits: 2 }); return mon === 'USD' ? '$' + s : `${s} ${mon}`; };
+  const pl = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+  const detalle = l => {
+    const p = m(l.precio_unitario, l.moneda), nn = pl(noches, 'noche', 'noches');
+    return ({ persona_noche: `${p} por persona por noche × ${pl(l.cantidad, 'persona', 'personas')} × ${nn}`,
+      habitacion_noche: `${p} por habitación por noche × ${pl(l.cantidad, 'habitación', 'habitaciones')} × ${nn}`,
+      persona: `${p} por persona × ${pl(l.cantidad, 'persona', 'personas')}`, total: `${p} total` })[l.unidad] || p;
+  };
+  return { filas: (o.lineas || []).map(l => [l.concepto, detalle(l), m(l.subtotal, l.moneda)]), totales: (o.subtotales || []).map(s => [`Total ${s.moneda}`, m(s.total, s.moneda)]) };
+}
+async function lyraDescargarPdf(b) {
+  await ensureVoucherLibs();
+  const d = lyraDatosPdf(b);
+  const nombre = `Cotizacion-${pdfSlug(d.cliente || d.titulo || 'Lotus360')}-${cbHoy()}.pdf`;
+  await pdfEntregar(await pdfCotizacionCliente(d), nombre);
 }
 // En el historial va el texto de la cotización (la EF lo necesita en los turnos siguientes) y los bloques para repintar.
 // Sticker de Lyra: el orbe grande con el gesto de .lyra-sticker, la misma regla de la que salen los WEBM de Telegram.
@@ -15483,16 +15575,30 @@ function renderVentas() {
 // si el CDN falla, el PDF sale igual en Helvetica.
 const PDF_FUENTES = [['Poppins-Regular.ttf', 'normal'], ['Poppins-Medium.ttf', 'medium'], ['Poppins-SemiBold.ttf', 'semibold'], ['Poppins-Bold.ttf', 'bold']];
 let pdfFuentesPromise = null;
+function bytesABase64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
 function cargarFuentesPdf() {
   if (!pdfFuentesPromise) pdfFuentesPromise = Promise.all(PDF_FUENTES.map(async ([arch, estilo]) => {
     const r = await fetch('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poppins/' + arch);
     if (!r.ok) throw new Error(arch);
-    const bytes = new Uint8Array(await r.arrayBuffer());
-    let bin = '';
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    return [arch, estilo, btoa(bin)];
+    return [arch, estilo, bytesABase64(new Uint8Array(await r.arrayBuffer()))];
   })).catch(e => { pdfFuentesPromise = null; throw e; });
   return pdfFuentesPromise;
+}
+// jsPDF no dibuja emojis ni glifos fuera de Poppins/WinAnsi: se quitan (también los :ly-x: de Lyra).
+const PDF_RE_EMOJI = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{FE0F}\u{200D}\u{20E3}]|:ly-[\w-]+:|[^\u0000-ɏ‐-‧‰-›€™]/gu;
+const pdfSinEmojis = s => String(s ?? '').replace(PDF_RE_EMOJI, '').replace(/[ \t]{2,}/g, ' ').replace(/ +([.,;:!?])/g, '$1').trim();
+const pdfSlug = s => pdfSinEmojis(s).replace(/\*/g, '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'Lotus360';
+// En el celular, la hoja de compartir (WhatsApp directo); en la PC, descarga.
+async function pdfEntregar(blob, nombre) {
+  const file = new File([blob], nombre, { type: 'application/pdf' });
+  if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: nombre }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  cbDescargar(blob, nombre);
 }
 async function exportarVentaPdf(id) {
   const f = FACT_VENTAS_CACHE.find(x => x.id === id);
@@ -17591,6 +17697,7 @@ async function cmGuardarConfig() {
    abonos); el total y el saldo van a Postventa. */
 let IV_FILAS = [];
 let IV_SEQ = 0;
+let IV_IMPORTANDO = false;
 // Vouchers de empresa (solo admin: asignar la empresa a la reserva lo exige). Pueden ir sin monto.
 let IV_EMPRESAS = [];
 
@@ -17602,20 +17709,11 @@ function setupImportarVouchers() {
   if (ROL === 'admin') sb.rpc('listar_empresas_cliente', { p_solo_activos: true }).then(({ data, error }) => {
     if (error || !Array.isArray(data) || !data.length) return;
     IV_EMPRESAS = data.map(e => ({ id: e.id, nombre: e.nombre }));
-    document.getElementById('iv-empresa-sel').innerHTML += IV_EMPRESAS.map(e => `<option value="${e.id}">${esc(e.nombre)}</option>`).join('');
-    document.getElementById('iv-empresa-barra').hidden = false;
-    ivRender();
-  });
-  document.getElementById('iv-empresa-aplicar')?.addEventListener('click', () => {
-    const empresa = Number(val('iv-empresa-sel')) || null;
-    const filas = IV_FILAS.filter(f => f.sel && f.datos && ['ok', 'revisar'].includes(f.estado));
-    if (!filas.length) { errToast('Tildá los vouchers a marcar'); return; }
-    filas.forEach(f => f.empresa_id = empresa);
     ivRender();
   });
   input.addEventListener('change', () => { if (input.files?.length) ivLeerArchivos([...input.files]); input.value = ''; });
   document.getElementById('iv-importar-btn')?.addEventListener('click', ivImportar);
-  document.getElementById('iv-limpiar-btn')?.addEventListener('click', () => { IV_FILAS = []; ivRender(); document.getElementById('iv-resultado').innerHTML = ''; });
+  document.getElementById('iv-limpiar-btn')?.addEventListener('click', () => { IV_FILAS = []; ivRender(); });
   drop?.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('cargando'); });
   drop?.addEventListener('dragleave', () => drop.classList.remove('cargando'));
   drop?.addEventListener('drop', e => {
@@ -17698,21 +17796,46 @@ function ivElegirLeadInicial(fila) {
   return elegido ? elegido.id : null;
 }
 
+// Voucher de empresa: el teléfono es el del contacto de la empresa, compartido por todos sus
+// pasajeros (FCA 2026-10-15). Un lead que coincide solo por teléfono no se anexa: lead nuevo.
+function ivAplicarEmpresa(f, empresa) {
+  f.empresa_id = empresa;
+  const c = (f.candidatos || []).find(x => x.id === f.lead_id);
+  if (empresa && c && !f.vincular && !f.crear_lead && (c.motivos || []).every(m => m === 'telefono')) { f.lead_id = null; f.crear_lead = true; }
+}
+
 function ivMoney(n) { return n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
+const IV_ESTADO = { ok: 'Listo', revisar: 'Revisar', hecho: 'Importado', duplicado: 'Ya estaba', error: 'Error' };
+const IV_RESUMEN = { leyendo: ['leyendo', 'leyendo'], ok: ['listo', 'listos'], revisar: ['a revisar', 'a revisar'], hecho: ['importado', 'importados'], duplicado: ['ya estaba', 'ya estaban'], error: ['con error', 'con error'] };
+const ivAbierta = f => !!f.datos && ['ok', 'revisar'].includes(f.estado);
+const ivCampo = (k, label, v, abierta, tipo = 'text') => `<label class="iv-campo"><span>${label}</span><input type="${tipo}"${tipo === 'number' ? ' step="0.01"' : ''} class="iv-in" data-k="${k}" value="${esc(String(v ?? ''))}"${abierta ? '' : ' disabled'}></label>`;
+
+function ivBarra() {
+  const barra = document.getElementById('iv-barra'), btn = document.getElementById('iv-importar-btn'), res = document.getElementById('iv-resumen');
+  if (barra) barra.style.display = IV_FILAS.length ? 'flex' : 'none';
+  if (res) res.textContent = Object.entries(IV_RESUMEN).map(([e, [uno, varios]]) => {
+    const n = IV_FILAS.filter(f => f.estado === e).length;
+    return n ? `${n} ${n === 1 ? uno : varios}` : '';
+  }).filter(Boolean).join(' · ');
+  if (!btn || IV_IMPORTANDO) return;
+  const n = IV_FILAS.filter(f => f.sel && ivAbierta(f)).length;
+  btn.disabled = !n;
+  btn.innerHTML = `<i class="fas fa-file-import"></i> Importar${n ? ` ${n} voucher${n > 1 ? 's' : ''}` : ''}`;
+}
+
+// La empresa vive en cada fila: es lo que se importa. "Usar en las otras" solo copia el valor.
 function ivRender() {
   const cont = document.getElementById('iv-lista');
-  const barra = document.getElementById('iv-barra');
   if (!cont) return;
-  if (!IV_FILAS.length) { cont.innerHTML = ''; if (barra) barra.style.display = 'none'; return; }
-  const esAdmin = ROL === 'admin', conEmpresa = esAdmin && IV_EMPRESAS.length > 0, nCols = conEmpresa ? 10 : 9;
+  ivBarra();
+  if (!IV_FILAS.length) { cont.innerHTML = ''; return; }
+  const esAdmin = ROL === 'admin', conEmpresa = esAdmin && IV_EMPRESAS.length > 0, nCols = conEmpresa ? 7 : 6;
+  const abiertas = IV_FILAS.filter(ivAbierta);
   const filas = IV_FILAS.map(f => {
     const d = f.datos || {};
-    const cls = f.estado === 'hecho' ? 'iv-fila-hecho' : f.estado === 'error' ? 'iv-fila-error'
-      : f.estado === 'duplicado' ? 'iv-fila-duplicado' : f.estado === 'revisar' ? 'iv-fila-revisar'
-      : f.estado === 'ok' ? 'iv-fila-ok' : '';
-    if (f.estado === 'leyendo') return `<tr><td colspan="${nCols}"><i class="fas fa-circle-notch fa-spin"></i> Leyendo ${esc(f.nombre)}…</td></tr>`;
-    if (f.estado === 'error' && !d.numero_voucher) return `<tr class="iv-fila-error"><td colspan="${nCols}">${esc(f.nombre)}: ${esc(f.resultado || 'no se pudo leer')}</td></tr>`;
+    if (f.estado === 'leyendo') return `<tr class="iv-fila-leyendo"><td colspan="${nCols}"><i class="fas fa-circle-notch fa-spin"></i> Leyendo ${esc(f.nombre)}…</td></tr>`;
+    if (f.estado === 'error' && !d.numero_voucher) return `<tr class="iv-fila" data-e="error"><td colspan="${nCols}"><span class="iv-estado">Error</span> ${esc(f.nombre)}: ${esc(f.resultado || 'no se pudo leer')}</td></tr>`;
     const cand = (f.candidatos || []).find(c => c.id === f.lead_id);
     const sims = f.similares || [];
     const opciones = [`<option value="" ${f.crear_lead && !f.vincular ? 'selected' : ''}>➕ Crear lead nuevo</option>`].concat(
@@ -17722,37 +17845,37 @@ function ivRender() {
     const debil = cand && !cand.fuerte && !f.crear_lead && !f.vincular;
     const empresa = f.empresa_id && IV_EMPRESAS.find(e => e.id === f.empresa_id);
     const sinMonto = empresa && !(Number(d.total_cobrado) > 0);
-    const abierta = !['hecho', 'error', 'duplicado'].includes(f.estado);
+    const abierta = ivAbierta(f);
     const posible = !f.vincular && sims.find(r => !r.fuerte);
     const mismatch = cand && !f.crear_lead && !f.vincular && cand.asesor && ivNorm(cand.asesor) !== ivNorm(d.asesor_pdf);
-    return `<tr class="${cls}" data-fid="${f.id}">
-      <td>${['hecho', 'error', 'duplicado'].includes(f.estado) ? '' : `<input type="checkbox" class="iv-sel" ${f.sel ? 'checked' : ''}>`}</td>
-      <td>${esc(String(d.numero_voucher ?? '?'))}<div class="muted" style="font-size:10.5px">${esc(f.nombre)}</div></td>
-      <td><input type="text" class="iv-in" data-k="cliente_nombre" value="${esc(d.cliente_nombre || '')}"></td>
-      <td><input type="text" class="iv-in" data-k="telefono" value="${esc(d.telefono || '')}"></td>
-      <td><input type="text" class="iv-in" data-k="asesor_pdf" value="${esc(d.asesor_pdf || '')}"></td>
-      <td><input type="text" class="iv-in" data-k="destino" value="${esc(d.destino || '')}"></td>
-      <td>${ivMoney(d.total_general)}</td>
-      <td><input type="number" step="0.01" class="iv-in" data-k="total_cobrado" value="${d.total_cobrado ?? ''}">${sinMonto && abierta ? '<span class="iv-tag empresa">Sin monto · se completa en Postventa</span>' : ''}</td>
-      ${conEmpresa ? `<td>${abierta ? `<select class="iv-empresa"><option value="">Particular</option>${IV_EMPRESAS.map(e => `<option value="${e.id}" ${f.empresa_id === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>` : esc(empresa?.nombre || 'Particular')}</td>` : ''}
+    const otras = abierta && f.empresa_id ? abiertas.filter(x => x !== f && x.empresa_id !== f.empresa_id).length : 0;
+    const num = esc(String(d.numero_voucher ?? '?'));
+    return `<tr class="iv-fila" data-e="${f.estado}" data-fid="${f.id}">
+      <td class="iv-c-sel">${abierta ? `<input type="checkbox" class="iv-sel" aria-label="Importar voucher ${num}" ${f.sel ? 'checked' : ''}>` : ''}</td>
+      <td><div class="iv-num">${num}</div><span class="iv-estado">${IV_ESTADO[f.estado] || ''}</span><div class="iv-archivo" title="${esc(f.nombre)}">${esc(f.nombre)}</div></td>
+      <td>${ivCampo('cliente_nombre', 'Nombre', d.cliente_nombre, abierta)}${ivCampo('telefono', 'Teléfono', d.telefono, abierta)}</td>
+      <td>${ivCampo('destino', 'Hotel', d.destino, abierta)}${ivCampo('asesor_pdf', 'Asesor (PDF)', d.asesor_pdf, abierta)}</td>
+      <td><div class="iv-campo"><span>Total</span><b>${ivMoney(d.total_general)}</b></div>${ivCampo('total_cobrado', 'Cobrado', d.total_cobrado, abierta, 'number')}${sinMonto && abierta ? '<span class="iv-tag empresa">Sin monto · se completa en Postventa</span>' : ''}</td>
+      ${conEmpresa ? `<td>${abierta ? `<select class="iv-empresa" aria-label="Empresa del voucher ${num}"><option value="">Particular</option>${IV_EMPRESAS.map(e => `<option value="${e.id}" ${f.empresa_id === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>${otras ? `<button type="button" class="iv-copiar">Usar en ${otras === 1 ? 'la otra fila' : `las otras ${otras}`}</button>` : ''}` : esc(empresa?.nombre || 'Particular')}</td>` : ''}
       <td>
-        <select class="iv-lead">${opciones}</select>
+        ${abierta ? `<select class="iv-lead" aria-label="Dónde se carga el voucher ${num}">${opciones}</select>
         ${debil ? '<div class="iv-nota">Coincide solo el nombre: revisá que sea el mismo cliente o elegí ➕ Crear lead nuevo.</div>' : ''}
         ${posible ? `<div class="iv-nota">Ojo: ${esc(posible.codigo || '#' + posible.id)} de ${esc(posible.cliente)} tiene el mismo monto. Si es este viaje, elegí 🔗 para no duplicar la venta.</div>` : ''}
-        ${mismatch ? `<div class="iv-nota">El lead es de ${esc(cand.asesor)}, el voucher dice ${esc(d.asesor_pdf)}.${esAdmin ? ` <label><input type="checkbox" class="iv-reasignar" ${f.reasignar ? 'checked' : ''}> reasignar</label>` : ''}</div>` : ''}
+        ${mismatch ? `<div class="iv-nota">El lead es de ${esc(cand.asesor)}, el voucher dice ${esc(d.asesor_pdf)}.${esAdmin ? ` <label><input type="checkbox" class="iv-reasignar" ${f.reasignar ? 'checked' : ''}> reasignar</label>` : ''}</div>` : ''}` : ''}
         ${f.resultado && f.estado !== 'hecho' ? `<div class="iv-nota">${esc(f.resultado)}</div>` : ''}
         ${d.nota_revision && !f.resultado ? `<div class="iv-nota">${esc(d.nota_revision)}</div>` : ''}
         ${f.estado === 'hecho' ? `<span class="iv-tag">${f.sin_factura ? 'Sin factura · empresa' : 'Facturado ' + ivMoney(f.resultado_monto)}</span> <span class="muted" style="font-size:10.5px">${esc(f.resultado || '')}</span>` : ''}
       </td>
     </tr>`;
   }).join('');
+  const todas = abiertas.length > 0 && abiertas.every(f => f.sel);
   cont.innerHTML = `<div class="iv-tabla-wrap"><table class="iv-tabla">
-    <thead><tr><th></th><th>N°</th><th>Cliente</th><th>Teléfono</th><th>Asesor (PDF)</th><th>Hotel</th><th>Total</th><th>Cobrado</th>${conEmpresa ? '<th>Empresa</th>' : ''}<th>Lead</th></tr></thead>
+    <thead><tr><th class="iv-c-sel">${abiertas.length ? `<input type="checkbox" class="iv-sel-todos" aria-label="Seleccionar todos" ${todas ? 'checked' : ''}>` : ''}</th><th>Voucher</th><th>Cliente</th><th>Viaje</th><th>Montos</th>${conEmpresa ? '<th>Empresa</th>' : ''}<th>Se carga en</th></tr></thead>
     <tbody>${filas}</tbody></table></div>`;
-  if (barra) barra.style.display = IV_FILAS.some(f => ['ok', 'revisar'].includes(f.estado)) ? 'flex' : 'none';
+  cont.querySelector('.iv-sel-todos')?.addEventListener('change', e => { abiertas.forEach(f => f.sel = e.target.checked); ivRender(); });
   cont.querySelectorAll('tr[data-fid]').forEach(tr => {
     const f = IV_FILAS.find(x => x.id === +tr.dataset.fid); if (!f) return;
-    tr.querySelector('.iv-sel')?.addEventListener('change', e => f.sel = e.target.checked);
+    tr.querySelector('.iv-sel')?.addEventListener('change', e => { f.sel = e.target.checked; ivRender(); });
     tr.querySelector('.iv-lead')?.addEventListener('change', e => {
       const v = e.target.value, sim = v.startsWith('r:') ? (f.similares || []).find(r => r.id === +v.slice(2)) : null;
       f.vincular = sim ? sim.id : null;
@@ -17760,7 +17883,8 @@ function ivRender() {
       f.crear_lead = !v; ivRender();
     });
     tr.querySelector('.iv-reasignar')?.addEventListener('change', e => f.reasignar = e.target.checked);
-    tr.querySelector('.iv-empresa')?.addEventListener('change', e => { f.empresa_id = Number(e.target.value) || null; ivRender(); });
+    tr.querySelector('.iv-empresa')?.addEventListener('change', e => { ivAplicarEmpresa(f, Number(e.target.value) || null); ivRender(); });
+    tr.querySelector('.iv-copiar')?.addEventListener('click', () => { abiertas.filter(x => x !== f).forEach(x => ivAplicarEmpresa(x, f.empresa_id)); ivRender(); });
     tr.querySelectorAll('.iv-in').forEach(inp => inp.addEventListener('change', e => {
       const k = e.target.dataset.k;
       f.datos[k] = k === 'total_cobrado' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value;
@@ -17770,17 +17894,17 @@ function ivRender() {
 }
 
 async function ivImportar() {
-  const pend = IV_FILAS.filter(f => f.sel && f.datos && ['ok', 'revisar'].includes(f.estado));
+  const pend = IV_FILAS.filter(f => f.sel && ivAbierta(f));
   if (!pend.length) { errToast('No hay filas para importar'); return; }
   const btn = document.getElementById('iv-importar-btn');
-  btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Importando…';
+  IV_IMPORTANDO = true; btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Importando…';
   const filas = pend.map(f => ({
     datos: f.datos, lead_id: f.crear_lead ? null : f.lead_id, crear_lead: f.crear_lead, vincular_reserva_id: f.vincular || null,
     reasignar: f.reasignar, empresa_id: f.empresa_id || null, pdf_base64: f.pdf_b64, archivo_hash: f.hash,
   }));
   const { data, error } = await sb.functions.invoke('voucher-a-venta', { body: { accion: 'importar', filas } });
-  btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-import"></i> Importar seleccionados';
-  if (error || !data?.ok) { errToast('Falló la importación: ' + (data?.error || error?.message || '')); return; }
+  IV_IMPORTANDO = false;
+  if (error || !data?.ok) { errToast('Falló la importación: ' + (data?.error || error?.message || '')); ivBarra(); return; }
   const porNum = {};
   (data.resultados || []).forEach(r => { porNum[r.numero_voucher] = r; });
   pend.forEach(f => {
@@ -23388,8 +23512,11 @@ const CB_CANT = 'type="number" min="1" step="1"', CB_TARIFA = ['tarifa', 'Tarifa
 const CB_TIPOS = {
   boleto: { nombre: 'Boleto aéreo', campos: [['ruta', 'Ruta', 'placeholder="CCS-LRV-CCS"'], ['aerolinea', 'Aerolínea', 'placeholder="Sasca Airlines"'], ['cant', 'Pasajeros', CB_CANT], CB_TARIFA, ['ida', 'Fecha de ida', 'type="date"'], ['ida_hora', 'Horario ida', 'placeholder="07:45-08:15 AM"'], ['vuelta', 'Fecha de vuelta', 'type="date"'], ['vuelta_hora', 'Horario vuelta', 'placeholder="17:15-17:45 PM"']] },
   hotel: { nombre: 'Hotel', campos: [['nombre', 'Hotel', 'placeholder="Sunsol Isla Caribe"'], ['plan', 'Plan', 'placeholder="Todo incluido"'], ['cant', 'Personas', CB_CANT], CB_TARIFA, ['ida', 'Check-in', 'type="date"'], ['vuelta', 'Check-out', 'type="date"'], ['hab', 'Habitación', 'placeholder="Doble estándar"', ' cb-dos']] },
+  // Paquete y full day (2026-10-15, cotización para asesores de ventas).
+  paquete: { nombre: 'Paquete', campos: [['nombre', 'Paquete', 'placeholder="Margarita 4D/3N"'], ['plan', 'Plan', 'placeholder="Todo incluido"'], ['cant', 'Personas', CB_CANT], CB_TARIFA, ['ida', 'Entrada', 'type="date"'], ['vuelta', 'Salida', 'type="date"']] },
+  fullday: { nombre: 'Full day / Excursión', campos: [['nombre', 'Full day o excursión', 'placeholder="Full day Cayo Sombrero"'], ['ida', 'Fecha', 'type="date"'], ['cant', 'Personas', CB_CANT], CB_TARIFA] },
+  tour: { nombre: 'Tour', campos: [['nombre', 'Tour', 'placeholder="Tour Salto Ángel"'], ['ida', 'Fecha', 'type="date"'], ['cant', 'Personas', CB_CANT], CB_TARIFA] },
   traslado: { nombre: 'Traslado', campos: [['ruta', 'Trayecto', 'placeholder="Aeropuerto PMV - Hotel"'], ['ida', 'Fecha', 'type="date"'], ['cant', 'Pasajeros', CB_CANT], CB_TARIFA, ['ida_hora', 'Hora', 'placeholder="10:30 AM"'], ['vuelta', 'Fecha de regreso (opcional)', 'type="date"'], ['vuelta_hora', 'Hora de regreso', 'placeholder="04:00 PM"']] },
-  tour: { nombre: 'Tour / full day', campos: [['nombre', 'Tour o actividad', 'placeholder="Full day Cayo Sombrero"'], ['ida', 'Fecha', 'type="date"'], ['cant', 'Personas', CB_CANT], CB_TARIFA] },
   otro: { nombre: 'Otro servicio', campos: [['nombre', 'Descripción', 'placeholder="Seguro de viaje"'], ['ida', 'Fecha (opcional)', 'type="date"'], ['cant', 'Cantidad', CB_CANT], CB_TARIFA] },
 };
 const cbTipo = it => CB_TIPOS[it.tipo] || CB_TIPOS.boleto;
@@ -23404,7 +23531,7 @@ function cbItemHtml(it, i) {
   return `<div class="cb-item" data-i="${i}">
     <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span>Importe <b class="cb-importe">$${cbMonto(cbImporte(it))}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
     <div class="cb-item-grid">
-      ${CB_TIPOS[tipo].campos.map(c => f(...c)).join('')}
+      ${CB_TIPOS[tipo].campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : f(...c)).join('')}
       ${f('extra', 'Detalle adicional (opcional)', 'placeholder="Equipaje, clase, qué incluye, observaciones..."', ' cb-full')}
     </div>
   </div>`;
@@ -23421,18 +23548,50 @@ function cbDetalle(it) {
   if (tipo === 'boleto') {
     d.push(`BOLETO AÉREO ${U(it.ruta)}`);
     add('AEROLÍNEA', U(it.aerolinea)); add('FECHA DE IDA', cbFechaCorta(it.ida)); add('HORARIO', U(it.ida_hora)); add('FECHA DE VUELTA', cbFechaCorta(it.vuelta)); add('HORARIO', U(it.vuelta_hora));
-  } else if (tipo === 'hotel') {
-    d.push(`HOSPEDAJE: ${U(it.nombre)}`);
-    add('PLAN', U(it.plan)); add('HABITACIÓN', U(it.hab)); add('CHECK-IN', cbFechaCorta(it.ida)); add('CHECK-OUT', cbFechaCorta(it.vuelta)); add('NOCHES', cbNoches(it.ida, it.vuelta));
+  } else if (tipo === 'hotel' || tipo === 'paquete') {
+    d.push(`${tipo === 'hotel' ? 'HOSPEDAJE' : 'PAQUETE'}: ${U(it.nombre)}`);
+    add('PLAN', U(it.plan)); add('HABITACIÓN', U(it.hab)); add(tipo === 'hotel' ? 'CHECK-IN' : 'ENTRADA', cbFechaCorta(it.ida)); add(tipo === 'hotel' ? 'CHECK-OUT' : 'SALIDA', cbFechaCorta(it.vuelta)); add('NOCHES', cbNoches(it.ida, it.vuelta));
   } else if (tipo === 'traslado') {
     d.push(`TRASLADO: ${U(it.ruta)}`);
     add('FECHA', cbFechaCorta(it.ida)); add('HORA', U(it.ida_hora)); add('FECHA DE REGRESO', cbFechaCorta(it.vuelta)); add('HORA', U(it.vuelta_hora));
   } else {
-    d.push(tipo === 'tour' ? `TOUR: ${U(it.nombre)}` : U(it.nombre));
+    d.push(tipo === 'tour' ? `TOUR: ${U(it.nombre)}` : tipo === 'fullday' ? `FULL DAY: ${U(it.nombre)}` : U(it.nombre));
     add('FECHA', cbFechaCorta(it.ida));
   }
   if (it.extra) d.push(...U(it.extra).split('\n'));
   return d.join('\n');
+}
+// Detalle para el PDF del cliente (modo ventas): mismo dato que cbDetalle, sin mayúsculas sostenidas.
+function cbDetalleCliente(it) {
+  const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto', d = [], add = (et, v) => { if (v) d.push(et ? `${et}: ${v}` : v); };
+  const f = cbFechaCorta, con = (...p) => p.filter(Boolean).join(' '), n = +cbNoches(it.ida, it.vuelta);
+  if (tipo === 'boleto') { add('Aerolínea', it.aerolinea); add('Ida', con(f(it.ida), it.ida_hora)); add('Vuelta', con(f(it.vuelta), it.vuelta_hora)); }
+  else if (tipo === 'hotel' || tipo === 'paquete') {
+    add('Plan', it.plan); add('Habitación', it.hab);
+    if (it.ida) add('', `${f(it.ida)}${it.vuelta ? ' al ' + f(it.vuelta) : ''}${n ? ` · ${n} noche${n === 1 ? '' : 's'}` : ''}`);
+  } else if (tipo === 'traslado') { add('Fecha', con(f(it.ida), it.ida_hora)); add('Regreso', con(f(it.vuelta), it.vuelta_hora)); }
+  else add('Fecha', f(it.ida));
+  add('', `${it.cant} × $${cbMonto(it.tarifa)}`);
+  if (it.extra) add('', it.extra);
+  return d.join('\n');
+}
+// Cotización de ventas → datos de pdfCotizacionCliente: una tabla con todos los servicios.
+function cbDatosPdf(c) {
+  const items = c.items || [], fechas = items.flatMap(it => [it.ida, it.vuelta]).filter(Boolean).sort();
+  const principal = items.find(it => it.tipo === 'hotel' || it.tipo === 'paquete') || items[0];
+  const personas = Math.max(0, ...items.filter(it => ['boleto', 'hotel', 'paquete'].includes(it.tipo || 'boleto')).map(it => Number(it.cant) || 0));
+  return {
+    cliente: c.cliente, numero: cbNumero(c.numero), fecha: c.fecha,
+    titulo: principal ? cbTitulo(principal) : '',
+    fechas: fechas.length ? (fechas[0] === fechas.at(-1) ? cbFechaLarga(fechas[0]) : `${cbFechaLarga(fechas[0])} al ${cbFechaLarga(fechas.at(-1))}`) : '',
+    personas: personas ? `${personas} persona${personas === 1 ? '' : 's'}` : '',
+    opciones: [{ titulo: 'Servicios cotizados', lineas: [], tabla: {
+      filas: items.map(it => [`${cbTipo(it).nombre}: ${cbTitulo(it)}`, cbDetalleCliente(it), '$' + cbMonto(cbImporte(it))]),
+      totales: [['Total', '$' + cbMonto(c.total)]],
+    } }],
+    notas: [c.notas, c.terminos].filter(Boolean).flatMap(t => String(t).split('\n')).map(l => l.trim()).filter(Boolean),
+    validez: c.vence ? `Cotización válida hasta el ${cbFechaLarga(c.vence)}. Sujeta a cambio y a disponibilidad.` : '',
+  };
 }
 function cbActualizarTotal() { document.getElementById('cb-total').textContent = '$' + cbMonto(cbItems.reduce((s, it) => s + cbImporte(it), 0)); }
 function cbRenderItems() { document.getElementById('cb-items').innerHTML = cbItems.map(cbItemHtml).join(''); cbActualizarTotal(); }
@@ -23449,6 +23608,43 @@ function cbPintarSolicitud() {
   box.innerHTML = s ? `<i class="fas fa-plane-departure"></i><span>Cotizando la <b>solicitud #${s.id}</b> de ${esc(s.creado_por || 'asesor')}: al enviarla al asesor queda resuelta.${cbBorradorMio() ? ' <small id="cb-borrador-estado" class="cb-borrador-estado"></small>' : ''}</span>${cbBorradorMio() ? '<button class="btn-sm" type="button" onclick="cbPausarYVolver(this)"><i class="fas fa-pause"></i> Guardar y volver a la cola</button>' : ''}<button class="btn-sm" type="button" onclick="cbQuitarSolicitud()">Desvincular</button>` : '';
 }
 window.cbQuitarSolicitud = async () => { await cbGuardarBorrador(); cbSolicitud = null; cbPintarSolicitud(); };
+// Modo ventas (2026-10-15): fuera del modo Boletería, esta sección es la cotización que el asesor
+// arma para su cliente. Sin "Enviar al asesor": el PDF (pdfCotizacionCliente) va al cliente y,
+// si se abrió desde un lead, la fila queda con lead_id y "Guardar en el lead" lo marca cotizado.
+const CB_CON_PRODUCTO = ['hotel', 'paquete', 'fullday', 'tour'];
+let cbModo = 'boleteria', cbLead = null, cbLeadPendiente = null, cbProductosListos = false;
+function cbDesdeLead(l) { cbLeadPendiente = { id: l.id, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; activateSection('cotizacion-boletos'); }
+function cbPintarLead() {
+  const box = document.getElementById('cb-lead');
+  box.hidden = !cbLead;
+  box.innerHTML = cbLead ? `<i class="fas fa-user"></i><span>Cotizando para <b>${esc(cbLead.nombre)}</b> (lead #${cbLead.id}): «Guardar en el lead» la deja como cotización enviada.</span><button class="btn-sm" type="button" onclick="cbQuitarLead()">Desvincular</button>` : '';
+  document.getElementById('cb-lead-btn').hidden = !cbLead;
+}
+window.cbQuitarLead = () => { cbLead = null; cbPintarLead(); };
+// Un formulario a medio armar sin lead se conserva al ligarlo; si era de otro lead, se empieza de cero.
+function cbAplicarLead() {
+  const l = cbLeadPendiente; cbLeadPendiente = null;
+  if (cbLead && cbLead.id !== l.id) cbResetForm();
+  cbLead = l; cbPintarLead();
+  document.getElementById('cb-cliente').value = l.nombre;
+}
+// Nombres del tarifario para autocompletar hotel/paquete/full day/tour; el precio sigue siendo manual.
+async function cbCargarProductos() {
+  if (cbProductosListos) return;
+  cbProductosListos = true;
+  const { data, error } = await sb.from('productos').select('nombre').in('tipo', ['hotel', 'paquete']).eq('activo', true).order('nombre');
+  if (error) { cbProductosListos = false; return; }
+  document.getElementById('cb-productos').innerHTML = [...new Set((data || []).map(p => p.nombre))].map(n => `<option value="${esc(n)}">`).join('');
+}
+const cbPdfDe = c => c.origen === 'ventas' ? pdfCotizacionCliente(cbDatosPdf(c)) : cbPdfBlob(c);
+async function cbCompartir(blob, nombre) {
+  const file = new File([blob], nombre, { type: 'application/pdf' });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: nombre }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  cbDescargar(blob, nombre);
+  okToast('Este navegador no deja compartir archivos: se descargó el PDF');
+}
 // Stand-by de boletería (2026-10-15): mientras la cotización está ligada a una
 // solicitud que atiendo yo, el formulario se autoguarda como borrador de la
 // solicitud (2 s después del último cambio) y se recupera al retomarla, también
@@ -23519,15 +23715,25 @@ async function cbResolverSolicitud(solId, cot) {
 function cbResetForm() {
   clearTimeout(cbBorradorTimer); cbBorradorTimer = null;
   cbSolicitud = null; cbPintarSolicitud();
-  cbItems = [cbItemVacio()]; cbRenderItems();
+  cbLead = null; cbPintarLead();
+  cbItems = [cbItemVacio(cbModo === 'ventas' ? 'hotel' : 'boleto')]; cbRenderItems();
   document.getElementById('cb-cliente').value = '';
   document.getElementById('cb-fecha').value = cbHoy(); document.getElementById('cb-vence').value = cbHoy();
   document.getElementById('cb-notas').value = CB_NOTAS; document.getElementById('cb-terminos').value = CB_TERMINOS;
 }
 async function cbCargarSeccion() {
+  const modo = cbLeadPendiente || (!cbSolicitudPendiente && !document.body.classList.contains('modo-boleteria')) ? 'ventas' : 'boleteria';
+  const primera = !cbListo, cambio = modo !== cbModo;
+  if (cambio && !primera) await cbGuardarBorrador();
+  cbModo = modo;
+  document.getElementById('sec-cotizacion-boletos').classList.toggle('cb-modo-ventas', modo === 'ventas');
+  if (primera || cambio) document.getElementById('cb-origen').value = modo;
+  if (cambio && !primera) cbResetForm();
+  cbCargarProductos();
   if (!cbListo) {
     cbListo = true;
     cbResetForm();
+    document.getElementById('cb-origen').addEventListener('change', () => { cbOffset = 0; cbCargarHistorial(false); });
     document.getElementById('cb-items').addEventListener('input', e => {
       const k = e.target.dataset.k, card = e.target.closest('.cb-item');
       if (!k || !card) return;
@@ -23550,6 +23756,7 @@ async function cbCargarSeccion() {
     .sort((a, b) => (a.rol === b.rol ? 0 : a.rol === 'asesor' ? -1 : 1) || (a.nombre || '').localeCompare(b.nombre || ''));
   sel.innerHTML = '<option value="">— Elige el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
   if (cbSolicitudPendiente) await cbAplicarSolicitud(sel);
+  if (cbLeadPendiente) cbAplicarLead();
   cbOffset = 0;
   await cbCargarHistorial(false);
 }
@@ -23560,26 +23767,27 @@ async function cbCargarHistorial(append) {
   // Sin comas/paréntesis -- romperían la sintaxis del filtro .or() de PostgREST.
   const buscar = (val('cb-buscar') || '').trim().replace(/[,()]/g, '');
   if (buscar) q = q.or(`cliente.ilike.%${buscar}%,enviado_a_nombre.ilike.%${buscar}%,creado_por_nombre.ilike.%${buscar}%`);
+  if (val('cb-origen')) q = q.eq('origen', val('cb-origen'));
   const { data, error } = await q.order('created_at', { ascending: false }).range(cbOffset, cbOffset + CB_PAGE_SIZE - 1);
   document.getElementById('cb-historial-loading')?.classList.remove('show');
   if (error) { if (!append) cont.innerHTML = '<div class="lt-vacio"><i class="fas fa-triangle-exclamation"></i> No se pudo cargar el historial</div>'; return; }
   (data || []).forEach(c => cbFilas.set(c.id, c));
   const filas = (data || []).map((c, i) => {
-    const rutas = (c.items || []).map(cbTitulo).filter(Boolean).join(' · ') || '—';
+    const rutas = (c.items || []).map(cbTitulo).filter(Boolean).join(' · ') || '—', ventas = c.origen === 'ventas';
     return `<article class="lt-card" style="--i:${Math.min(i, 20)}">
     <div class="lt-card-cab">
       <div class="lt-card-tit" title="${esc(c.cliente)}">${esc(c.cliente)}</div>
-      <span class="bt-tag" style="--c:var(--blue)">${cbNumero(c.numero)}</span>
+      <span class="bt-tag" style="--c:var(--${ventas ? 'green' : 'blue'})" title="${ventas ? 'Cotización de ventas' : 'Cotización de Boletería'}">${cbNumero(c.numero)}</span>
     </div>
-    <div class="lt-card-meta"><i class="fas fa-user"></i> ${esc(c.creado_por_nombre || '—')} · ${esc(cbFechaLarga(c.fecha))}${c.solicitud_id ? ` · <i class="fas fa-plane-departure"></i> Solicitud #${c.solicitud_id}` : ''}</div>
+    <div class="lt-card-meta"><i class="fas fa-user"></i> ${esc(c.creado_por_nombre || '—')} · ${esc(cbFechaLarga(c.fecha))}${c.solicitud_id ? ` · <i class="fas fa-plane-departure"></i> Solicitud #${c.solicitud_id}` : ''}${c.lead_id ? ` · <i class="fas fa-address-card"></i> Lead #${c.lead_id}` : ''}</div>
     <div class="lt-cifras" style="grid-template-columns:2fr 1fr">
       <div><span>Detalle</span><b title="${esc(rutas)}">${esc(rutas)}</b></div>
       <div><span>Total</span><b>$${cbMonto(c.total)}</b></div>
     </div>
-    <div class="lt-card-meta">${c.enviado_a ? `<i class="fas fa-paper-plane"></i> Enviada a ${esc(c.enviado_a_nombre || 'asesor')}` : '<i class="fas fa-circle-minus"></i> Sin enviar'}</div>
+    <div class="lt-card-meta">${ventas ? '<i class="fas fa-user-check"></i> Para el cliente' : c.enviado_a ? `<i class="fas fa-paper-plane"></i> Enviada a ${esc(c.enviado_a_nombre || 'asesor')}` : '<i class="fas fa-circle-minus"></i> Sin enviar'}</div>
     <div class="lt-card-pie">
       <button class="btn-sm lt-primario" type="button" onclick="cbVerPdf('${c.id}')"><i class="fas fa-file-pdf"></i> Ver PDF</button>
-      <button class="btn-sm" type="button" onclick="cbReenviar('${c.id}', this)"><i class="fas fa-paper-plane"></i> Enviar al asesor</button>
+      ${ventas ? '' : `<button class="btn-sm" type="button" onclick="cbReenviar('${c.id}', this)"><i class="fas fa-paper-plane"></i> Enviar al asesor</button>`}
     </div>
   </article>`;
   }).join('');
@@ -23605,7 +23813,9 @@ async function cbEnviarAAsesor(c, blob, asesorId) {
   Object.assign(c, envio);
   return true;
 }
-window.cbGuardar = async function cbGuardar(enviar) {
+// accion: 'enviar' | 'descargar' (Boletería y ventas) | 'compartir' | 'lead' (solo ventas).
+window.cbGuardar = async function cbGuardar(accion) {
+  const enviar = accion === 'enviar', ventas = cbModo === 'ventas';
   const cliente = val('cb-cliente').trim();
   if (!cliente) { errToast('Escribe el cliente'); return; }
   const items = cbItems.map(cbLimpiarItem).filter(it => cbTitulo(it) || it.tarifa);
@@ -23614,22 +23824,34 @@ window.cbGuardar = async function cbGuardar(enviar) {
   if (incompleto) { const t = cbTipo(incompleto), falta = cbTitulo(incompleto) ? t.campos.find(([k]) => k === 'cant')[1] : t.campos[0][1]; errToast(`${t.nombre}: falta ${falta.toLowerCase()}`); return; }
   const asesorId = val('cb-asesor');
   if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); document.getElementById('cb-asesor').focus(); return; }
-  const btn = document.getElementById(enviar ? 'cb-enviar-btn' : 'cb-descargar-btn'), htmlBtn = btn.innerHTML;
+  const btn = document.getElementById(`cb-${accion}-btn`), htmlBtn = btn.innerHTML;
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
-  const sol = cbSolicitud;
+  const sol = ventas ? null : cbSolicitud, lead = ventas ? cbLead : null;
   try {
     const fila = {
       creado_por: MI_USUARIO_ID, creado_por_nombre: MI_NOMBRE, cliente, fecha: val('cb-fecha') || cbHoy(), vence: val('cb-vence') || null,
       items, total: items.reduce((s, it) => s + cbImporte(it), 0), notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null,
-      solicitud_id: sol?.id ?? null,
+      solicitud_id: sol?.id ?? null, origen: cbModo, lead_id: lead?.id ?? null,
     };
     const { data: cot, error } = await sb.from('cotizaciones_boleteria').insert(fila).select().single();
     if (error || !cot) { errToast('No se pudo guardar la cotización: ' + (error?.message || '')); return; }
     cbResetForm();
     try {
       await ensureVoucherLibs();
-      const blob = await cbPdfBlob(cot);
-      if (!enviar) { cbDescargar(blob, cbArchivo(cot)); okToast(`Cotización ${cbNumero(cot.numero)} generada`); }
+      const blob = await cbPdfDe(cot), num = cbNumero(cot.numero);
+      if (ventas) {
+        let marca = '';
+        if (accion === 'lead' && lead) {
+          const { data: r, error: e } = await sb.rpc('registrar_cotizacion_enviada', { p_lead_id: lead.id });
+          if (e || !r?.ok) errToast(`${num} se guardó, pero no se pudo marcar el lead: ${e?.message || r?.error || ''}`);
+          else { marca = r.ya_registrada ? ' · el lead ya estaba cotizado' : ' · lead en COTIZACIÓN ENVIADA'; ACTIVIDAD_CACHE = null; loadStats().then(renderAllSiVisible).catch(() => {}); }
+        }
+        if (accion === 'compartir') await cbCompartir(blob, cbArchivo(cot));
+        else if (accion === 'lead') await pdfEntregar(blob, cbArchivo(cot));
+        else cbDescargar(blob, cbArchivo(cot));
+        okToast(`Cotización ${num} generada${marca}`);
+      }
+      else if (!enviar) { cbDescargar(blob, cbArchivo(cot)); okToast(`Cotización ${cbNumero(cot.numero)} generada`); }
       else if (await cbEnviarAAsesor(cot, blob, asesorId)) {
         const resuelta = sol && await cbResolverSolicitud(sol.id, cot);
         okToast(`${cbNumero(cot.numero)} enviada a ${nombreUsuario(asesorId)}${resuelta ? ` · solicitud #${sol.id} resuelta` : ''}`);
@@ -23655,7 +23877,7 @@ window.cbVerPdf = async function cbVerPdf(id) {
   if (!c) return;
   try {
     await ensureVoucherLibs();
-    window.open(URL.createObjectURL(await cbPdfBlob(c)), '_blank');
+    window.open(URL.createObjectURL(await cbPdfDe(c)), '_blank');
   } catch (e) { console.error('cbVerPdf', e); errToast('No se pudo generar el PDF'); }
 };
 window.cbReenviar = async function cbReenviar(id, btn) {
@@ -23741,6 +23963,175 @@ async function cbPdfBlob(c) {
     doc.setDrawColor(200, 200, 200); doc.line(M, 752, W - M, 752);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120, 120, 120);
     doc.text('Destino y Eventos Lotus 360 · 0241-5144470 / 0424-4634041 · Destinoyeventoslotus360@gmail.com', W / 2, 766, { align: 'center' });
+  }
+  return doc.output('blob');
+}
+
+// Cotización para el cliente (2026-10-15), con el estilo de exportarVentaPdf. La usa Lyra (lyraDatosPdf).
+// datos = { cliente, titulo, fechas, personas, numero?, fecha?, opciones: [{ titulo, foto, precio_texto,
+// lineas: [texto], tabla?: { filas: [[concepto, detalle, importe]], totales: [[etiqueta, valor]] } }],
+// incluye, importante, notas: [texto], validez }. Los textos admiten *negrita* de WhatsApp.
+async function pdfCotizacionCliente(datos) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  let F = 'helvetica', st = s => (s === 'normal' ? 'normal' : 'bold');
+  try {
+    (await cargarFuentesPdf()).forEach(([a, e, b]) => { doc.addFileToVFS(a, b); doc.addFont(a, 'Poppins', e); });
+    F = 'Poppins'; st = s => s;
+  } catch (_e) { /* sin Poppins sale en Helvetica */ }
+  const C = { navy: [15, 23, 42], naranja: [234, 118, 22], ambar: [245, 158, 11], ambarOsc: [180, 83, 9], txt: [15, 23, 42], gris: [100, 116, 139], claro: [148, 163, 184], linea: [226, 232, 240], suave: [248, 250, 252], blanco: [255, 255, 255] };
+  const tinte = (rgb, k) => rgb.map(c => Math.round(c + (255 - c) * k));
+  const font = (s, size, rgb) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...rgb); };
+  const plano = s => pdfSinEmojis(s).replace(/\*/g, '');
+  const X0 = 40, X1 = 572, W = X1 - X0, YMAX = 730;
+  // Foto: siempre el derivado 640 del Worker, nunca el original de Supabase (incidente de egress).
+  // cache 'reload': un <img> previo pudo dejar en caché la misma URL sin cabecera CORS.
+  const cargarFoto = async url => {
+    if (!url?.startsWith(CDN_FOTOS)) return null;
+    const r = await fetch(url.replace(/\/_d\/\d+\//, '/_d/640/'), { cache: 'reload' });
+    const tipo = (r.headers.get('content-type') || '').split(';')[0];
+    const fmt = { 'image/jpeg': 'JPEG', 'image/png': 'PNG' }[tipo];
+    if (!r.ok || !fmt) return null;
+    const src = `data:${tipo};base64,` + bytesABase64(new Uint8Array(await r.arrayBuffer()));
+    const { width: w, height: h } = doc.getImageProperties(src);
+    return { src, fmt, w, h };
+  };
+  const opciones = (datos.opciones || []).filter(o => o && (o.titulo || o.tabla));
+  const fotos = await Promise.all(opciones.map(o => cargarFoto(o.foto).catch(() => null)));
+  const emitida = (datos.fecha ? new Date(datos.fecha.slice(0, 10) + 'T12:00:00') : new Date())
+    .toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'long', year: 'numeric' });
+
+  doc.setFillColor(...C.navy); doc.rect(0, 0, 612, 112, 'F');
+  doc.setFillColor(...C.naranja); doc.rect(0, 112, 612, 3, 'F');
+  doc.setFillColor(...C.ambar); doc.rect(0, 112, 190, 3, 'F');
+  doc.setFillColor(...C.blanco); doc.circle(X0 + 34, 56, 34, 'F');
+  try { doc.addImage(await cargarImagenBase64('logolotus-negro.png'), 'PNG', X0 + 4, 26, 60, 60); } catch (_e) { /* sin logo igual sale */ }
+  font('bold', 15, C.blanco); doc.text('Destino y Eventos', 122, 50);
+  font('bold', 15, C.naranja); doc.text('Lotus 360', 122, 69);
+  font('normal', 8.5, C.claro); doc.text('Agencia de viajes · destinoyeventoslotus360.com', 122, 85);
+  font('medium', 7.5, C.claro); doc.text('COTIZACIÓN DE VIAJE', X1, 44, { align: 'right', charSpace: 1.4 });
+  if (datos.numero) {
+    font('bold', 24, C.blanco); doc.text(`N° ${datos.numero}`, X1, 74, { align: 'right' });
+    font('normal', 8.5, C.claro); doc.text(emitida, X1, 90, { align: 'right' });
+  } else { font('bold', 16, C.blanco); doc.text(emitida, X1, 70, { align: 'right' }); }
+
+  let y = 150;
+  const salto = alto => { if (y + alto > YMAX) { doc.addPage(); y = 56; } };
+  const seccion = (t, alto = 24) => {
+    salto(34 + alto);
+    font('semibold', 8.5, C.naranja); doc.text(t.toUpperCase(), X0, y, { charSpace: 1 });
+    doc.setDrawColor(...C.linea); doc.setLineWidth(0.8); doc.line(X0, y + 7, X1, y + 7);
+    y += 26;
+  };
+  // Texto con *negrita*: palabra por palabra, partiendo renglones a mano (jsPDF no mezcla fuentes en un text()).
+  const parrafo = (txt, x, w, size, rgb) => {
+    const lh = size * 1.45;
+    const piezas = pdfSinEmojis(txt).split(/(\*[^*\n]+\*)/).filter(Boolean).flatMap(p => {
+      const b = /^\*[^*]+\*$/.test(p);
+      return (b ? p.slice(1, -1) : p.replace(/\*/g, '')).split(/(\s+)/).filter(Boolean).map(t => [t, b]);
+    });
+    let cx = x;
+    salto(lh);
+    piezas.forEach(([t, b]) => {
+      font(b ? 'semibold' : 'normal', size, b ? C.txt : rgb);
+      const tw = doc.getTextWidth(t);
+      if (!t.trim()) { if (cx > x) cx += tw; return; }
+      if (cx + tw > x + w && cx > x) { y += lh; cx = x; salto(lh); }
+      doc.text(t, cx, y); cx += tw;
+    });
+    y += lh;
+  };
+  const vineta = (txt, x, w, size, rgb) => {
+    salto(size * 1.45);
+    doc.setFillColor(...C.naranja); doc.circle(x + 2.5, y - size * 0.33, 1.8, 'F');
+    parrafo(txt, x + 11, w - 11, size, rgb);
+  };
+
+  seccion('Su viaje');
+  if (datos.titulo) { font('bold', 15, C.txt); doc.splitTextToSize(plano(datos.titulo), W).forEach(l => { doc.text(l, X0, y); y += 19; }); y += 6; }
+  const campos = [['Cliente', datos.cliente], ['Fechas', datos.fechas], ['Personas', datos.personas]].filter(([, v]) => v);
+  if (campos.length) {
+    const cw = W / campos.length;
+    let alto = 0;
+    campos.forEach(([k, v], i) => {
+      const x = X0 + i * cw;
+      font('medium', 7.5, C.gris); doc.text(k.toUpperCase(), x, y, { charSpace: 0.6 });
+      font('semibold', 10.5, C.txt);
+      const ls = doc.splitTextToSize(plano(v), cw - 16).slice(0, 3);
+      ls.forEach((l, j) => doc.text(l, x, y + 16 + j * 14));
+      alto = Math.max(alto, 16 + ls.length * 14);
+    });
+    y += alto + 8;
+  }
+
+  opciones.forEach((o, i) => {
+    const foto = fotos[i], fw = 196, fh = 136;
+    y += 8;
+    seccion(opciones.length > 1 ? `Opción ${i + 1}` : 'Detalle', foto ? fh : 60);
+    const y0 = y - 8, tx = foto ? X0 + fw + 18 : X0, tw = X1 - tx;
+    if (foto) {
+      // "Cover": la foto llena el recuadro redondeado y se recorta lo que sobra.
+      const k = Math.max(fw / foto.w, fh / foto.h), dw = foto.w * k, dh = foto.h * k;
+      doc.saveGraphicsState();
+      doc.roundedRect(X0, y0, fw, fh, 10, 10, null); doc.clip(); doc.discardPath();
+      doc.addImage(foto.src, foto.fmt, X0 + (fw - dw) / 2, y0 + (fh - dh) / 2, dw, dh);
+      doc.restoreGraphicsState();
+    }
+    y = y0 + 14;
+    font('bold', 13, C.txt); doc.splitTextToSize(plano(o.titulo), tw).forEach(l => { doc.text(l, tx, y); y += 17; });
+    if (o.precio_texto) { font('semibold', 10.5, C.naranja); doc.splitTextToSize(plano(o.precio_texto), tw).forEach(l => { doc.text(l, tx, y); y += 15; }); }
+    y += 4;
+    (o.lineas || []).forEach(l => vineta(l, tx, tw, 9.5, C.gris));
+    if (foto) y = Math.max(y, y0 + fh + 16);
+    if (o.tabla?.filas?.length) {
+      salto(70);
+      doc.autoTable({
+        startY: y, theme: 'plain', margin: { left: X0, right: 612 - X1, top: 56, bottom: 792 - YMAX },
+        head: [['Concepto', 'Detalle', 'Subtotal']],
+        body: o.tabla.filas.map(r => r.map(plano)),
+        styles: { font: F, fontStyle: st('normal'), fontSize: 8.5, textColor: C.txt, cellPadding: { top: 6, bottom: 6, left: 8, right: 8 }, valign: 'top' },
+        headStyles: { fillColor: C.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 8 },
+        alternateRowStyles: { fillColor: C.suave },
+        columnStyles: { 0: { cellWidth: 150, fontStyle: st('medium') }, 1: { textColor: C.gris }, 2: { cellWidth: 84, halign: 'right', fontStyle: st('semibold') } },
+        didParseCell: d => { if (d.section === 'head' && d.column.index === 2) d.cell.styles.halign = 'right'; },
+      });
+      y = doc.lastAutoTable.finalY;
+      (o.tabla.totales || []).forEach(([k, v]) => {
+        salto(28);
+        doc.setFillColor(...tinte(C.ambar, 0.86)); doc.rect(X0, y, W, 26, 'F');
+        font('semibold', 9, C.ambarOsc); doc.text(plano(k).toUpperCase(), X1 - 110, y + 17, { align: 'right', charSpace: 0.6 });
+        font('bold', 12.5, C.txt); doc.text(plano(v), X1 - 8, y + 17.5, { align: 'right' });
+        y += 26;
+      });
+      y += 10;
+    }
+  });
+
+  if (datos.incluye) { y += 6; seccion('Incluye'); parrafo(datos.incluye, X0, W, 9.5, C.gris); }
+  if (datos.importante) {
+    y += 10;
+    font('normal', 9, C.txt);
+    const ls = doc.splitTextToSize(plano(datos.importante), W - 34), alto = 30 + ls.length * 13;
+    salto(alto);
+    doc.setFillColor(...tinte(C.ambar, 0.88)); doc.roundedRect(X0, y, W, alto, 6, 6, 'F');
+    doc.setFillColor(...C.ambar); doc.rect(X0, y, 4, alto, 'F');
+    font('semibold', 8, C.ambarOsc); doc.text('IMPORTANTE', X0 + 18, y + 16, { charSpace: 1 });
+    font('normal', 9, C.txt); ls.forEach((l, j) => doc.text(l, X0 + 18, y + 31 + j * 13));
+    y += alto + 16;
+  }
+  if (datos.notas?.length) {
+    y += 6; seccion('Detalles');
+    datos.notas.forEach(n => /^[•\-–]\s*/.test(n) ? vineta(n.replace(/^[•\-–]\s*/, ''), X0, W, 9.5, C.gris) : parrafo(n, X0, W, 9.5, C.gris));
+  }
+  if (datos.validez) { y += 10; parrafo(datos.validez, X0, W, 8.5, C.gris); }
+
+  const n = doc.getNumberOfPages();
+  for (let p = 1; p <= n; p++) {
+    doc.setPage(p);
+    doc.setDrawColor(...C.linea); doc.setLineWidth(0.8); doc.line(X0, 752, X1, 752);
+    font('normal', 7.5, C.gris);
+    doc.text('Destino y Eventos Lotus 360 · 0241-5144470 / 0424-4634041 · Destinoyeventoslotus360@gmail.com', X0, 766);
+    if (n > 1) doc.text(`${p} / ${n}`, X1, 766, { align: 'right' });
   }
   return doc.output('blob');
 }
@@ -24189,7 +24580,8 @@ const NAV_ITEMS = [
   // En modo Boletería, Reservas solo abría el voucher de hospedaje: lo reemplaza Cotizaciones (2026-10-12).
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'bol-solicitudes', icon: 'fas fa-list-ol', label: 'Solicitudes', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Vuelos que piden los asesores, repartidos entre agentes', badge: 'nav-bol-sol-count', badgeDefault: '0' },
-  { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Cotización de boletos en PDF para mandar al asesor' },
+  // Fuera del modo Boletería es la cotización del asesor para su cliente (cbModo 'ventas', 2026-10-15).
+  { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok' },
   { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Links de pago declarados, pendientes de aprobar' },
@@ -25903,7 +26295,8 @@ let bolCatalogo = null;
 var bolTab = 'reservas';
 // Mismo recargo y redondeo que ventas-ia.ts (montosVuelo) y la web.
 const bolPublico = p => Math.ceil(Math.round(p * 1.2 * 100) / 100);
-const bolPuedeEditar = () => ROL === 'admin' || ROL === 'boleteria';
+// Asesor + Boletería (rol asesor con la marca) también edita: assert_editor_boleteria (20261015280000).
+const bolPuedeEditar = () => ROL === 'admin' || ROL === 'boleteria' || (ROL === 'asesor' && MI_ES_BOLETERIA);
 function setupBoleteriaSeccion() {
   // Acá y no en setupLeadsTabs: el rol boleteria no llega a ese arranque y la
   // cola le quedaba sin botones (Nueva solicitud, Actualizar, Marcar resuelta).
@@ -26967,6 +27360,8 @@ function setupTutoriales() {
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
   { fecha: '2026-10-15', emoji: '🏢', titulo: 'Vouchers de empresa y sin leads duplicados', texto: 'En Importar vouchers, la columna "Empresa" (o "Marcar seleccionados" abajo) deja cada voucher a nombre de una empresa. Un voucher de empresa puede ir sin monto: queda como reserva de la empresa, sin factura, y el monto se completa después en Postventa. Además, si el cliente ya está en el CRM (mismo teléfono, cédula o nombre, con o sin acentos) el voucher se anexa a su lead en vez de crear uno nuevo, aunque sea de otro asesor.', roles: ['admin'] },
+  { fecha: '2026-10-15', emoji: '📑', titulo: 'Armá tus cotizaciones en PDF', texto: 'Nueva entrada "Cotizaciones" en el menú: sumá hospedaje, paquetes, full days, tours, traslados y boletos, cada uno con su tarifa, y sale un PDF con el logo de Lotus listo para el cliente. El nombre del hotel o paquete se autocompleta desde el tarifario. Desde la ficha del lead, el botón "Cotizar" la arma con el cliente ya cargado, y "Guardar en el lead" la deja como cotización enviada. Abajo ves el historial de las tuyas.', roles: ['asesor', 'admin'] },
+  { fecha: '2026-10-15', emoji: '🧾', titulo: 'Lyra: cotización en PDF con foto', texto: 'Cuando Lyra cotiza, ahora ves el texto para el cliente en el chat (con "Ver todo" si es largo) y abajo tres botones: "Copiar", "PDF" y "Prellenar voucher". El PDF sale con el logo, la foto de cada hotel, el desglose de precios en tabla, qué incluye y la validez de la tarifa, listo para mandarle al cliente. En el celular se abre directo para compartir por WhatsApp.', roles: ['asesor', 'admin'] },
   { fecha: '2026-10-15', emoji: '⏸️', titulo: 'Dejar una solicitud en stand-by', texto: 'En una solicitud que estés atendiendo, "Dejar en stand-by" la aparta sin perder nada y sigue siendo tuya. Mientras cotizás, lo que vas armando se guarda solo; con "Guardar y volver a la cola" la pausás y volvés a la lista. Para seguir, tocá "Retomar" en la tarjeta: la cotización vuelve tal cual la dejaste, incluso desde otro dispositivo.', roles: ['boleteria', 'admin'] },
   { fecha: '2026-10-15', emoji: '📕', titulo: 'Tarifario de BT Travel en PDF', texto: 'En Tarifario, el botón "BT Travel" (arriba a la derecha, junto a las pestañas) abre el último Tarifario Nacional de BT Travel completo, tal cual llegó. La primera vez de cada versión tarda unos segundos.', roles: ['asesor', 'boleteria', 'administrativo', 'admin'] },
   { fecha: '2026-10-15', emoji: '📄', titulo: 'Cotizar una solicitud en un toque', texto: 'En una solicitud que estés atendiendo, el botón "Cotizar" abre Cotizaciones con el cliente, la ruta, las fechas, las personas y el asesor ya cargados. Al enviarla al asesor, la solicitud queda resuelta con "Cotización COT-xxxx enviada" y al asesor le llega el PDF por el chat del CRM y por Telegram.', roles: ['boleteria', 'admin'] },

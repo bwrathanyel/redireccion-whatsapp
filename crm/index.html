@@ -1825,6 +1825,10 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .cot-card .tc-thumb{height:90px}
 .cot-card .tc-nombre{padding:8px 10px 0;font-size:12.5px;font-weight:700;line-height:1.3}
 .cot-card .tc-precio{padding:4px 10px 8px}
+.cot-prev-txt.recorte{max-height:calc(8 * 1.45em);overflow:hidden;-webkit-mask-image:linear-gradient(#000 65%,transparent);mask-image:linear-gradient(#000 65%,transparent)}
+.cot-ver{display:block;margin-top:6px;padding:0;border:0;background:none;color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer}
+.cot-ver:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.cot-acciones{display:flex;flex-wrap:wrap;gap:6px}
 
 /* ---------- Dictado por voz (Bloque 9) — Cotizador IA, Mensajes ---------- */
 .mic-btn{background:var(--panel-solid);border:1.5px solid var(--line2);color:var(--muted);border-radius:14px;width:48px;flex-shrink:0;cursor:pointer;font-size:15px;transition:color .15s,border-color .15s}
@@ -2462,6 +2466,9 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .cb-item{border:1px solid var(--line2);border-radius:12px;padding:12px;background:rgba(255,255,255,.02)}
 .cb-solicitud{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border:1px solid var(--blue);border-radius:12px;background:rgba(59,130,246,.08);font-size:13px}
 .cb-solicitud[hidden]{display:none}
+#sec-cotizacion-boletos.cb-modo-ventas .cb-solo-boleteria,#sec-cotizacion-boletos:not(.cb-modo-ventas) .cb-solo-ventas,#cb-lead-btn[hidden]{display:none!important}
+.cb-hist-filtros{display:flex;gap:8px;flex-wrap:wrap}
+.cb-hist-filtros select{width:auto}
 .cb-solicitud span{flex:1;min-width:180px}
 .cb-borrador-estado{color:var(--muted);font-weight:400;white-space:nowrap}
 .cb-item-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:12.5px;color:var(--muted)}
@@ -3613,26 +3620,46 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
   .rep-tabla td[data-label]:not([data-label=""])::before{content:attr(data-label);display:block;font-size:10.5px;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px}
 }
 /* Importar vouchers */
-.iv-barra{display:flex;gap:9px;margin-top:14px;flex-wrap:wrap}
+.iv-barra{display:flex;gap:9px;margin-top:14px;flex-wrap:wrap;align-items:center}
+.iv-barra .dbtn{flex:0 0 auto;min-height:44px;padding:0 16px;border-radius:10px}
+.iv-barra .dbtn.primary{background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;font-weight:800;box-shadow:0 10px 22px color-mix(in srgb,var(--accent) 22%,transparent)}
+.iv-barra .dbtn.primary:disabled{box-shadow:none}
+.iv-resumen{margin-right:auto;font-size:12px;color:var(--muted)}
 .iv-tabla-wrap{overflow-x:auto;margin-top:16px;border:1px solid var(--line);border-radius:14px}
 .iv-tabla{width:100%;border-collapse:collapse;font-size:12.5px;min-width:760px}
-.iv-tabla th{text-align:left;padding:9px 10px;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;
+.iv-tabla th{text-align:left;padding:9px 11px;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;
   color:var(--muted2);border-bottom:1px solid var(--line);white-space:nowrap;background:var(--panel)}
-.iv-tabla td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.iv-tabla td{padding:11px;border-bottom:1px solid var(--line);vertical-align:top}
 .iv-tabla tr:last-child td{border-bottom:0}
 .iv-tabla input[type=text],.iv-tabla input[type=number],.iv-tabla select{width:100%;min-width:90px;
-  background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:5px 7px;color:var(--txt);font-size:12px}
-.iv-fila-ok td{background:rgba(74,222,128,.05)}
-.iv-fila-revisar td{background:rgba(245,181,68,.09)}
-.iv-fila-error td,.iv-fila-duplicado td{background:rgba(248,113,113,.09)}
-.iv-fila-hecho td{background:rgba(74,222,128,.13)}
+  background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:5px 7px;color:var(--txt);font-size:12px;transition:border-color .16s,box-shadow .16s}
+.iv-tabla input:focus,.iv-tabla select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.iv-tabla input:disabled{background:transparent;border-color:transparent;padding-left:0;color:var(--muted)}
+.iv-tabla input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.iv-c-sel{width:28px}
+.iv-fila>td:first-child{box-shadow:inset 3px 0 0 var(--iv-c,transparent)}
+.iv-fila[data-e=ok]{--iv-c:var(--green)}
+.iv-fila[data-e=revisar]{--iv-c:var(--amber)}
+.iv-fila[data-e=hecho]{--iv-c:var(--green)}
+.iv-fila[data-e=error],.iv-fila[data-e=duplicado]{--iv-c:var(--danger)}
+.iv-fila[data-e=revisar] td{background:color-mix(in srgb,var(--amber) 6%,transparent)}
+.iv-fila[data-e=hecho] td{background:color-mix(in srgb,var(--green) 8%,transparent)}
+.iv-fila[data-e=error] td,.iv-fila[data-e=duplicado] td{background:color-mix(in srgb,var(--danger) 7%,transparent)}
+.iv-fila-leyendo td{color:var(--muted)}
+.iv-num{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums}
+.iv-estado{display:inline-block;margin-top:4px;padding:2px 7px;border-radius:999px;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--iv-c,var(--muted2));background:color-mix(in srgb,var(--iv-c,var(--muted2)) 14%,transparent)}
+.iv-archivo{max-width:140px;margin-top:4px;font-size:10.5px;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iv-campo{display:block}
+.iv-campo+.iv-campo{margin-top:7px}
+.iv-campo>span{display:block;margin-bottom:2px;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+.iv-campo>b{display:block;padding:5px 0;font-size:12.5px;font-variant-numeric:tabular-nums}
 .iv-tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
   padding:2px 7px;border-radius:999px;background:var(--panel);border:1px solid var(--line2);color:var(--muted2)}
-.iv-nota{font-size:11px;color:var(--amber);margin-top:3px;line-height:1.4}
-.iv-tag.empresa{display:block;width:max-content;margin-top:4px;color:var(--blue);border-color:rgba(74,158,255,.35)}
-.iv-empresa-barra{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.iv-empresa-barra[hidden]{display:none}
-.iv-empresa-barra select{background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:7px 9px;color:var(--txt);font-size:12.5px;max-width:220px}
+.iv-nota{font-size:11px;color:var(--amber);margin-top:4px;line-height:1.4}
+.iv-tag.empresa{display:block;width:max-content;margin-top:4px;color:var(--blue);border-color:color-mix(in srgb,var(--blue) 35%,transparent)}
+.iv-copiar{display:block;margin-top:4px;padding:2px 0;background:none;border:0;color:var(--accent);font:inherit;font-size:11px;font-weight:700;cursor:pointer}
+.iv-copiar:hover{text-decoration:underline}
 /* Lo que la IA entendió, editable: nadie publica al catálogo algo que no leyó
    como va a quedar. El 31/07 el modelo leyó bien un flyer y la respuesta al
    cliente igual salió mal, porque el precio quedó enterrado en la línea. */
@@ -7361,11 +7388,13 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     <section class="section" id="sec-cotizacion-boletos">
       <div class="card">
         <h2><i class="fas fa-file-invoice-dollar"></i> Cotización</h2>
-        <div class="csub">Boletos, hoteles, traslados y tours en un solo PDF, directo al chat del asesor</div>
+        <div class="csub"><span class="cb-solo-boleteria">Boletos, hoteles, traslados y tours en un solo PDF, directo al chat del asesor</span><span class="cb-solo-ventas">Hospedaje, paquetes, full days, tours y boletos en un PDF con el logo de Lotus, listo para el cliente</span></div>
         <div id="cb-solicitud" class="cb-solicitud" hidden></div>
+        <div id="cb-lead" class="cb-solicitud" hidden></div>
+        <datalist id="cb-productos"></datalist>
         <div class="grid g-2">
           <div class="field"><label class="fl">Cliente (facturar a)</label><input id="cb-cliente" class="ei" placeholder="Nombre del cliente o BOLETERÍA"></div>
-          <div class="field"><label class="fl">Enviar al asesor</label><select id="cb-asesor" class="ei"></select></div>
+          <div class="field cb-solo-boleteria"><label class="fl">Enviar al asesor</label><select id="cb-asesor" class="ei"></select></div>
           <div class="field"><label class="fl">Fecha</label><input id="cb-fecha" class="ei" type="date"></div>
           <div class="field"><label class="fl">Válida hasta</label><input id="cb-vence" class="ei" type="date"></div>
         </div>
@@ -7378,15 +7407,20 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="field"><label class="fl">Términos y condiciones</label><textarea id="cb-terminos" class="ei" rows="5"></textarea></div>
         </details>
         <div class="cb-acciones">
-          <button id="cb-enviar-btn" type="button" onclick="cbGuardar(true)"><i class="fas fa-paper-plane"></i> Generar y enviar al asesor</button>
-          <button id="cb-descargar-btn" class="dbtn" type="button" onclick="cbGuardar(false)"><i class="fas fa-file-pdf"></i> Solo descargar PDF</button>
+          <button id="cb-enviar-btn" class="cb-solo-boleteria" type="button" onclick="cbGuardar('enviar')"><i class="fas fa-paper-plane"></i> Generar y enviar al asesor</button>
+          <button id="cb-lead-btn" class="cb-solo-ventas" type="button" onclick="cbGuardar('lead')" hidden><i class="fas fa-user-check"></i> Guardar en el lead</button>
+          <button id="cb-descargar-btn" class="dbtn" type="button" onclick="cbGuardar('descargar')"><i class="fas fa-file-pdf"></i> <span class="cb-solo-boleteria">Solo descargar PDF</span><span class="cb-solo-ventas">Descargar PDF</span></button>
+          <button id="cb-compartir-btn" class="dbtn cb-solo-ventas" type="button" onclick="cbGuardar('compartir')"><i class="fas fa-share-nodes"></i> Compartir</button>
         </div>
       </div>
 
       <div class="card">
         <div class="cb-hist-cab">
           <div class="csub">Cotizaciones generadas</div>
-          <input id="cb-buscar" class="ei" placeholder="Buscar cliente o asesor...">
+          <div class="cb-hist-filtros">
+            <select id="cb-origen" class="ei" aria-label="Origen de la cotización"><option value="">Todas</option><option value="boleteria">Boletería</option><option value="ventas">Ventas</option></select>
+            <input id="cb-buscar" class="ei" placeholder="Buscar cliente o asesor...">
+          </div>
         </div>
         <div class="tbl-state skel" id="cb-historial-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
         <div id="cb-historial" class="lt-grid"></div>
@@ -7411,14 +7445,10 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </label>
       <div id="iv-lista"></div>
       <div class="iv-barra" id="iv-barra" style="display:none">
-        <span class="iv-empresa-barra" id="iv-empresa-barra" hidden>
-          <select id="iv-empresa-sel" aria-label="Empresa de los vouchers seleccionados"><option value="">Cliente particular</option></select>
-          <button class="dbtn" id="iv-empresa-aplicar" type="button"><i class="fas fa-building"></i> Marcar seleccionados</button>
-        </span>
-        <button class="dbtn primary" id="iv-importar-btn" type="button"><i class="fas fa-file-import"></i> Importar seleccionados</button>
-        <button class="dbtn" id="iv-limpiar-btn" type="button">Limpiar</button>
+        <span class="iv-resumen" id="iv-resumen" aria-live="polite"></span>
+        <button class="dbtn gh" id="iv-limpiar-btn" type="button">Limpiar</button>
+        <button class="dbtn primary" id="iv-importar-btn" type="button"><i class="fas fa-file-import"></i> Importar</button>
       </div>
-      <div id="iv-resultado"></div>
     </section>
 
     <!-- MÉTRICAS -->
