@@ -17644,6 +17644,7 @@ async function ivLeerArchivos(files) {
       fila.datos = data.datos;
       fila.estado = data.datos.necesita_revision ? 'revisar' : 'ok';
       fila.candidatos = await ivBuscarLeads(data.datos);
+      fila.similares = await ivReservasSimilares(data.datos);
       fila.lead_id = ivElegirLeadInicial(fila);
       ivRender();
     } catch (e) { fila.estado = 'error'; fila.resultado = e.message; ivRender(); }
@@ -17654,21 +17655,35 @@ async function ivLeerArchivos(files) {
 async function ivBuscarLeads(d) {
   const digitos = String(d.telefono || '').replace(/\D/g, '');
   const cola = digitos.slice(-7);
-  const primerNombre = String(d.cliente_nombre || '').trim().split(/\s+/)[0] || '';
+  // Nombre + apellido: solo el primer nombre ("Gabriel") llenaba el límite con homónimos y el lead real no aparecía.
+  const palabras = String(d.cliente_nombre || '').trim().split(/\s+/).filter(p => p.length >= 2).slice(0, 2);
   const ors = [];
   if (cola.length >= 6) ors.push(`telefono.ilike.*${cola}*`);
-  if (primerNombre.length >= 3) ors.push(`nombre.ilike.*${primerNombre}*`);
+  if (palabras[0]?.length >= 3) ors.push(`nombre.ilike.*${palabras.join('*')}*`);
   if (!ors.length) return [];
   const { data, error } = await sb.from('leads')
     .select('id,nombre,telefono,asesor,estado')
     .or(ors.join(','))
     .is('eliminado_at', null)
+    .order('id', { ascending: false })
     .limit(8);
   return error ? [] : (data || []);
+}
+// Reservas que ya existen para este viaje (fuerte = mismo cliente). Vincular evita duplicar lead/reserva/factura.
+async function ivReservasSimilares(d) {
+  const { data, error } = await sb.rpc('voucher_reservas_similares', {
+    p_asesor_pdf: d.asesor_pdf || null, p_nombre: d.cliente_nombre || null, p_telefono: d.telefono || null,
+    p_total: Number(d.total_general || d.total_cobrado) || 0,
+    p_fecha_entrada: d.fecha_entrada || null, p_fecha_salida: d.fecha_salida || null,
+  });
+  return error || !data?.ok ? [] : (data.reservas || []);
 }
 function ivNorm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim(); }
 function ivElegirLeadInicial(fila) {
   const d = fila.datos, cands = fila.candidatos;
+  const gemela = (fila.similares || []).find(r => r.fuerte);
+  fila.vincular = gemela ? gemela.id : null;
+  if (gemela) { fila.crear_lead = false; return gemela.lead_id; }
   if (!cands.length) { fila.crear_lead = true; return null; }
   const nom = ivNorm(d.cliente_nombre), asesorPdf = ivNorm(d.asesor_pdf);
   const exacto = cands.find(c => ivNorm(c.nombre) === nom && ivNorm(c.asesor) === asesorPdf)
@@ -17695,10 +17710,13 @@ function ivRender() {
     if (f.estado === 'leyendo') return `<tr><td colspan="9"><i class="fas fa-circle-notch fa-spin"></i> Leyendo ${esc(f.nombre)}…</td></tr>`;
     if (f.estado === 'error' && !d.numero_voucher) return `<tr class="iv-fila-error"><td colspan="9">${esc(f.nombre)}: ${esc(f.resultado || 'no se pudo leer')}</td></tr>`;
     const cand = (f.candidatos || []).find(c => c.id === f.lead_id);
-    const opciones = [`<option value="">➕ Crear lead nuevo</option>`].concat(
-      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}</option>`)
+    const sims = f.similares || [];
+    const opciones = [`<option value="" ${f.crear_lead && !f.vincular ? 'selected' : ''}>➕ Crear lead nuevo</option>`].concat(
+      sims.map(r => `<option value="r:${r.id}" ${f.vincular === r.id ? 'selected' : ''}>🔗 Ya está en el CRM: ${esc(r.codigo || '#' + r.id)} · ${esc(r.cliente)} · ${ivMoney(r.monto_total)} (no duplica)</option>`),
+      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && !f.vincular && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}</option>`)
     ).join('');
-    const mismatch = cand && !f.crear_lead && cand.asesor && ivNorm(cand.asesor) !== ivNorm(d.asesor_pdf);
+    const posible = !f.vincular && sims.find(r => !r.fuerte);
+    const mismatch = cand && !f.crear_lead && !f.vincular && cand.asesor && ivNorm(cand.asesor) !== ivNorm(d.asesor_pdf);
     return `<tr class="${cls}" data-fid="${f.id}">
       <td>${['hecho', 'error', 'duplicado'].includes(f.estado) ? '' : `<input type="checkbox" class="iv-sel" ${f.sel ? 'checked' : ''}>`}</td>
       <td>${esc(String(d.numero_voucher ?? '?'))}<div class="muted" style="font-size:10.5px">${esc(f.nombre)}</div></td>
@@ -17710,6 +17728,7 @@ function ivRender() {
       <td><input type="number" step="0.01" class="iv-in" data-k="total_cobrado" value="${d.total_cobrado ?? ''}"></td>
       <td>
         <select class="iv-lead">${opciones}</select>
+        ${posible ? `<div class="iv-nota">Ojo: ${esc(posible.codigo || '#' + posible.id)} de ${esc(posible.cliente)} tiene el mismo monto. Si es este viaje, elegí 🔗 para no duplicar la venta.</div>` : ''}
         ${mismatch ? `<div class="iv-nota">El lead es de ${esc(cand.asesor)}, el voucher dice ${esc(d.asesor_pdf)}.${esAdmin ? ` <label><input type="checkbox" class="iv-reasignar" ${f.reasignar ? 'checked' : ''}> reasignar</label>` : ''}</div>` : ''}
         ${f.resultado && f.estado !== 'hecho' ? `<div class="iv-nota">${esc(f.resultado)}</div>` : ''}
         ${d.nota_revision && !f.resultado ? `<div class="iv-nota">${esc(d.nota_revision)}</div>` : ''}
@@ -17724,7 +17743,12 @@ function ivRender() {
   cont.querySelectorAll('tr[data-fid]').forEach(tr => {
     const f = IV_FILAS.find(x => x.id === +tr.dataset.fid); if (!f) return;
     tr.querySelector('.iv-sel')?.addEventListener('change', e => f.sel = e.target.checked);
-    tr.querySelector('.iv-lead')?.addEventListener('change', e => { f.lead_id = e.target.value ? +e.target.value : null; f.crear_lead = !e.target.value; ivRender(); });
+    tr.querySelector('.iv-lead')?.addEventListener('change', e => {
+      const v = e.target.value, sim = v.startsWith('r:') ? (f.similares || []).find(r => r.id === +v.slice(2)) : null;
+      f.vincular = sim ? sim.id : null;
+      f.lead_id = sim ? sim.lead_id : (v ? +v : null);
+      f.crear_lead = !v; ivRender();
+    });
     tr.querySelector('.iv-reasignar')?.addEventListener('change', e => f.reasignar = e.target.checked);
     tr.querySelectorAll('.iv-in').forEach(inp => inp.addEventListener('change', e => {
       const k = e.target.dataset.k;
@@ -17739,7 +17763,7 @@ async function ivImportar() {
   const btn = document.getElementById('iv-importar-btn');
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Importando…';
   const filas = pend.map(f => ({
-    datos: f.datos, lead_id: f.crear_lead ? null : f.lead_id, crear_lead: f.crear_lead,
+    datos: f.datos, lead_id: f.crear_lead ? null : f.lead_id, crear_lead: f.crear_lead, vincular_reserva_id: f.vincular || null,
     reasignar: f.reasignar, pdf_base64: f.pdf_b64, archivo_hash: f.hash,
   }));
   const { data, error } = await sb.functions.invoke('voucher-a-venta', { body: { accion: 'importar', filas } });
@@ -17750,7 +17774,7 @@ async function ivImportar() {
   pend.forEach(f => {
     const r = porNum[f.datos.numero_voucher]; if (!r) return;
     if (r.estado === 'importado') { f.estado = 'hecho'; f.resultado = 'Lead #' + r.lead_id + (r.factura_id ? ' · factura #' + r.factura_id : ''); f.resultado_monto = r.monto_facturado; f.sel = false; }
-    else if (r.estado === 'ya_facturado') { f.estado = 'duplicado'; f.resultado = 'El lead ya tenía factura'; f.sel = false; }
+    else if (r.estado === 'ya_facturado') { f.estado = 'duplicado'; f.resultado = r.nota || 'El lead ya tenía factura'; f.sel = false; }
     else if (r.estado === 'duplicado') { f.estado = 'duplicado'; f.resultado = 'Voucher ya importado antes'; f.sel = false; }
     else { f.estado = 'error'; f.resultado = r.error || 'error'; }
   });
