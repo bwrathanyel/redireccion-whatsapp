@@ -17591,12 +17591,28 @@ async function cmGuardarConfig() {
    abonos); el total y el saldo van a Postventa. */
 let IV_FILAS = [];
 let IV_SEQ = 0;
+// Vouchers de empresa (solo admin: asignar la empresa a la reserva lo exige). Pueden ir sin monto.
+let IV_EMPRESAS = [];
 
 function setupImportarVouchers() {
   const input = document.getElementById('iv-file');
   const drop = document.getElementById('iv-drop');
   if (!input || input._wired) return;
   input._wired = true;
+  if (ROL === 'admin') sb.rpc('listar_empresas_cliente', { p_solo_activos: true }).then(({ data, error }) => {
+    if (error || !Array.isArray(data) || !data.length) return;
+    IV_EMPRESAS = data.map(e => ({ id: e.id, nombre: e.nombre }));
+    document.getElementById('iv-empresa-sel').innerHTML += IV_EMPRESAS.map(e => `<option value="${e.id}">${esc(e.nombre)}</option>`).join('');
+    document.getElementById('iv-empresa-barra').hidden = false;
+    ivRender();
+  });
+  document.getElementById('iv-empresa-aplicar')?.addEventListener('click', () => {
+    const empresa = Number(val('iv-empresa-sel')) || null;
+    const filas = IV_FILAS.filter(f => f.sel && f.datos && ['ok', 'revisar'].includes(f.estado));
+    if (!filas.length) { errToast('Tildá los vouchers a marcar'); return; }
+    filas.forEach(f => f.empresa_id = empresa);
+    ivRender();
+  });
   input.addEventListener('change', () => { if (input.files?.length) ivLeerArchivos([...input.files]); input.value = ''; });
   document.getElementById('iv-importar-btn')?.addEventListener('click', ivImportar);
   document.getElementById('iv-limpiar-btn')?.addEventListener('click', () => { IV_FILAS = []; ivRender(); document.getElementById('iv-resultado').innerHTML = ''; });
@@ -17652,23 +17668,14 @@ async function ivLeerArchivos(files) {
   drop?.classList.remove('cargando');
 }
 
+// Por teléfono, cédula o nombre sin acentos (Guzmán = GUZMAN). fuerte = mismo teléfono, cédula o
+// nombre completo; la EF usa los fuertes como guarda y nunca crea un lead duplicado.
 async function ivBuscarLeads(d) {
-  const digitos = String(d.telefono || '').replace(/\D/g, '');
-  const cola = digitos.slice(-7);
-  // Nombre + apellido: solo el primer nombre ("Gabriel") llenaba el límite con homónimos y el lead real no aparecía.
-  const palabras = String(d.cliente_nombre || '').trim().split(/\s+/).filter(p => p.length >= 2).slice(0, 2);
-  const ors = [];
-  if (cola.length >= 6) ors.push(`telefono.ilike.*${cola}*`);
-  if (palabras[0]?.length >= 3) ors.push(`nombre.ilike.*${palabras.join('*')}*`);
-  if (!ors.length) return [];
-  const { data, error } = await sb.from('leads')
-    .select('id,nombre,telefono,asesor,estado')
-    .or(ors.join(','))
-    .is('eliminado_at', null)
-    .order('id', { ascending: false })
-    .limit(8);
-  return error ? [] : (data || []);
+  const { data, error } = await sb.rpc('voucher_buscar_lead', { p_nombre: d.cliente_nombre || null, p_telefono: d.telefono || null, p_documento: d.documento || null });
+  return error || !data?.ok ? [] : (data.leads || []);
 }
+const IV_MOTIVO = { telefono: 'mismo teléfono', documento: 'misma cédula', nombre_exacto: 'mismo nombre', nombre: 'nombre parecido' };
+const ivMotivos = c => (c.motivos || []).filter(m => m !== 'nombre' || !c.motivos.includes('nombre_exacto')).map(m => IV_MOTIVO[m] || m).join(', ');
 // Reservas que ya existen para este viaje (fuerte = mismo cliente). Vincular evita duplicar lead/reserva/factura.
 async function ivReservasSimilares(d) {
   const { data, error } = await sb.rpc('voucher_reservas_similares', {
@@ -17684,14 +17691,11 @@ function ivElegirLeadInicial(fila) {
   const gemela = (fila.similares || []).find(r => r.fuerte);
   fila.vincular = gemela ? gemela.id : null;
   if (gemela) { fila.crear_lead = false; return gemela.lead_id; }
-  if (!cands.length) { fila.crear_lead = true; return null; }
-  const nom = ivNorm(d.cliente_nombre), asesorPdf = ivNorm(d.asesor_pdf);
-  const exacto = cands.find(c => ivNorm(c.nombre) === nom && ivNorm(c.asesor) === asesorPdf)
-    || cands.find(c => ivNorm(c.nombre).includes(nom) || nom.includes(ivNorm(c.nombre)));
-  if (!exacto) { fila.crear_lead = true; return null; }
-  if (asesorPdf && ivNorm(exacto.asesor) !== asesorPdf) { fila.crear_lead = true; return exacto.id; }
-  fila.crear_lead = false;
-  return exacto.id;
+  // Si el cliente ya existe se anexa a su lead, aunque sea de otro asesor (el admin puede reasignar).
+  const asesorPdf = ivNorm(d.asesor_pdf);
+  const elegido = cands.find(c => c.fuerte && ivNorm(c.asesor) === asesorPdf) || cands.find(c => c.fuerte) || cands[0];
+  fila.crear_lead = !elegido;
+  return elegido ? elegido.id : null;
 }
 
 function ivMoney(n) { return n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -17701,20 +17705,24 @@ function ivRender() {
   const barra = document.getElementById('iv-barra');
   if (!cont) return;
   if (!IV_FILAS.length) { cont.innerHTML = ''; if (barra) barra.style.display = 'none'; return; }
-  const esAdmin = ROL === 'admin';
+  const esAdmin = ROL === 'admin', conEmpresa = esAdmin && IV_EMPRESAS.length > 0, nCols = conEmpresa ? 10 : 9;
   const filas = IV_FILAS.map(f => {
     const d = f.datos || {};
     const cls = f.estado === 'hecho' ? 'iv-fila-hecho' : f.estado === 'error' ? 'iv-fila-error'
       : f.estado === 'duplicado' ? 'iv-fila-duplicado' : f.estado === 'revisar' ? 'iv-fila-revisar'
       : f.estado === 'ok' ? 'iv-fila-ok' : '';
-    if (f.estado === 'leyendo') return `<tr><td colspan="9"><i class="fas fa-circle-notch fa-spin"></i> Leyendo ${esc(f.nombre)}…</td></tr>`;
-    if (f.estado === 'error' && !d.numero_voucher) return `<tr class="iv-fila-error"><td colspan="9">${esc(f.nombre)}: ${esc(f.resultado || 'no se pudo leer')}</td></tr>`;
+    if (f.estado === 'leyendo') return `<tr><td colspan="${nCols}"><i class="fas fa-circle-notch fa-spin"></i> Leyendo ${esc(f.nombre)}…</td></tr>`;
+    if (f.estado === 'error' && !d.numero_voucher) return `<tr class="iv-fila-error"><td colspan="${nCols}">${esc(f.nombre)}: ${esc(f.resultado || 'no se pudo leer')}</td></tr>`;
     const cand = (f.candidatos || []).find(c => c.id === f.lead_id);
     const sims = f.similares || [];
     const opciones = [`<option value="" ${f.crear_lead && !f.vincular ? 'selected' : ''}>➕ Crear lead nuevo</option>`].concat(
       sims.map(r => `<option value="r:${r.id}" ${f.vincular === r.id ? 'selected' : ''}>🔗 Ya está en el CRM: ${esc(r.codigo || '#' + r.id)} · ${esc(r.cliente)} · ${ivMoney(r.monto_total)} (no duplica)</option>`),
-      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && !f.vincular && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}</option>`)
+      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && !f.vincular && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}${c.motivos ? ` (${esc(ivMotivos(c))})` : ''}</option>`)
     ).join('');
+    const debil = cand && !cand.fuerte && !f.crear_lead && !f.vincular;
+    const empresa = f.empresa_id && IV_EMPRESAS.find(e => e.id === f.empresa_id);
+    const sinMonto = empresa && !(Number(d.total_cobrado) > 0);
+    const abierta = !['hecho', 'error', 'duplicado'].includes(f.estado);
     const posible = !f.vincular && sims.find(r => !r.fuerte);
     const mismatch = cand && !f.crear_lead && !f.vincular && cand.asesor && ivNorm(cand.asesor) !== ivNorm(d.asesor_pdf);
     return `<tr class="${cls}" data-fid="${f.id}">
@@ -17725,19 +17733,21 @@ function ivRender() {
       <td><input type="text" class="iv-in" data-k="asesor_pdf" value="${esc(d.asesor_pdf || '')}"></td>
       <td><input type="text" class="iv-in" data-k="destino" value="${esc(d.destino || '')}"></td>
       <td>${ivMoney(d.total_general)}</td>
-      <td><input type="number" step="0.01" class="iv-in" data-k="total_cobrado" value="${d.total_cobrado ?? ''}"></td>
+      <td><input type="number" step="0.01" class="iv-in" data-k="total_cobrado" value="${d.total_cobrado ?? ''}">${sinMonto && abierta ? '<span class="iv-tag empresa">Sin monto · se completa en Postventa</span>' : ''}</td>
+      ${conEmpresa ? `<td>${abierta ? `<select class="iv-empresa"><option value="">Particular</option>${IV_EMPRESAS.map(e => `<option value="${e.id}" ${f.empresa_id === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>` : esc(empresa?.nombre || 'Particular')}</td>` : ''}
       <td>
         <select class="iv-lead">${opciones}</select>
+        ${debil ? '<div class="iv-nota">Coincide solo el nombre: revisá que sea el mismo cliente o elegí ➕ Crear lead nuevo.</div>' : ''}
         ${posible ? `<div class="iv-nota">Ojo: ${esc(posible.codigo || '#' + posible.id)} de ${esc(posible.cliente)} tiene el mismo monto. Si es este viaje, elegí 🔗 para no duplicar la venta.</div>` : ''}
         ${mismatch ? `<div class="iv-nota">El lead es de ${esc(cand.asesor)}, el voucher dice ${esc(d.asesor_pdf)}.${esAdmin ? ` <label><input type="checkbox" class="iv-reasignar" ${f.reasignar ? 'checked' : ''}> reasignar</label>` : ''}</div>` : ''}
         ${f.resultado && f.estado !== 'hecho' ? `<div class="iv-nota">${esc(f.resultado)}</div>` : ''}
         ${d.nota_revision && !f.resultado ? `<div class="iv-nota">${esc(d.nota_revision)}</div>` : ''}
-        ${f.estado === 'hecho' ? `<span class="iv-tag">Facturado ${ivMoney(f.resultado_monto)}</span> <span class="muted" style="font-size:10.5px">${esc(f.resultado || '')}</span>` : ''}
+        ${f.estado === 'hecho' ? `<span class="iv-tag">${f.sin_factura ? 'Sin factura · empresa' : 'Facturado ' + ivMoney(f.resultado_monto)}</span> <span class="muted" style="font-size:10.5px">${esc(f.resultado || '')}</span>` : ''}
       </td>
     </tr>`;
   }).join('');
   cont.innerHTML = `<div class="iv-tabla-wrap"><table class="iv-tabla">
-    <thead><tr><th></th><th>N°</th><th>Cliente</th><th>Teléfono</th><th>Asesor (PDF)</th><th>Hotel</th><th>Total</th><th>Cobrado</th><th>Lead</th></tr></thead>
+    <thead><tr><th></th><th>N°</th><th>Cliente</th><th>Teléfono</th><th>Asesor (PDF)</th><th>Hotel</th><th>Total</th><th>Cobrado</th>${conEmpresa ? '<th>Empresa</th>' : ''}<th>Lead</th></tr></thead>
     <tbody>${filas}</tbody></table></div>`;
   if (barra) barra.style.display = IV_FILAS.some(f => ['ok', 'revisar'].includes(f.estado)) ? 'flex' : 'none';
   cont.querySelectorAll('tr[data-fid]').forEach(tr => {
@@ -17750,9 +17760,11 @@ function ivRender() {
       f.crear_lead = !v; ivRender();
     });
     tr.querySelector('.iv-reasignar')?.addEventListener('change', e => f.reasignar = e.target.checked);
+    tr.querySelector('.iv-empresa')?.addEventListener('change', e => { f.empresa_id = Number(e.target.value) || null; ivRender(); });
     tr.querySelectorAll('.iv-in').forEach(inp => inp.addEventListener('change', e => {
       const k = e.target.dataset.k;
       f.datos[k] = k === 'total_cobrado' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value;
+      if (k === 'total_cobrado' && f.empresa_id) ivRender();
     }));
   });
 }
@@ -17764,7 +17776,7 @@ async function ivImportar() {
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Importando…';
   const filas = pend.map(f => ({
     datos: f.datos, lead_id: f.crear_lead ? null : f.lead_id, crear_lead: f.crear_lead, vincular_reserva_id: f.vincular || null,
-    reasignar: f.reasignar, pdf_base64: f.pdf_b64, archivo_hash: f.hash,
+    reasignar: f.reasignar, empresa_id: f.empresa_id || null, pdf_base64: f.pdf_b64, archivo_hash: f.hash,
   }));
   const { data, error } = await sb.functions.invoke('voucher-a-venta', { body: { accion: 'importar', filas } });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-import"></i> Importar seleccionados';
@@ -17773,7 +17785,7 @@ async function ivImportar() {
   (data.resultados || []).forEach(r => { porNum[r.numero_voucher] = r; });
   pend.forEach(f => {
     const r = porNum[f.datos.numero_voucher]; if (!r) return;
-    if (r.estado === 'importado') { f.estado = 'hecho'; f.resultado = 'Lead #' + r.lead_id + (r.factura_id ? ' · factura #' + r.factura_id : ''); f.resultado_monto = r.monto_facturado; f.sel = false; }
+    if (r.estado === 'importado') { f.estado = 'hecho'; f.resultado = 'Lead #' + r.lead_id + (r.factura_id ? ' · factura #' + r.factura_id : '') + (r.nota ? ' · ' + r.nota : ''); f.resultado_monto = r.monto_facturado; f.sin_factura = !r.factura_id && !!r.empresa_id; f.sel = false; }
     else if (r.estado === 'ya_facturado') { f.estado = 'duplicado'; f.resultado = r.nota || 'El lead ya tenía factura'; f.sel = false; }
     else if (r.estado === 'duplicado') { f.estado = 'duplicado'; f.resultado = 'Voucher ya importado antes'; f.sel = false; }
     else { f.estado = 'error'; f.resultado = r.error || 'error'; }
@@ -23424,8 +23436,8 @@ function cbDetalle(it) {
 }
 function cbActualizarTotal() { document.getElementById('cb-total').textContent = '$' + cbMonto(cbItems.reduce((s, it) => s + cbImporte(it), 0)); }
 function cbRenderItems() { document.getElementById('cb-items').innerHTML = cbItems.map(cbItemHtml).join(''); cbActualizarTotal(); }
-window.cbAgregarItem = () => { cbItems.push(cbItemVacio(cbLimpiarItem(cbItems.at(-1) || {}).tipo)); cbRenderItems(); };
-window.cbQuitarItem = i => { cbItems.splice(i, 1); cbRenderItems(); };
+window.cbAgregarItem = () => { cbItems.push(cbItemVacio(cbLimpiarItem(cbItems.at(-1) || {}).tipo)); cbRenderItems(); cbProgramarBorrador(); };
+window.cbQuitarItem = i => { cbItems.splice(i, 1); cbRenderItems(); cbProgramarBorrador(); };
 // Cotizar desde una solicitud de boletería (2026-10-15): precarga cliente, ruta,
 // fechas, personas y el asesor que la pidió; al enviarla al asesor la solicitud
 // queda resuelta y notificar-boleteria le adjunta el PDF por Telegram.
@@ -23434,12 +23446,53 @@ function cbDesdeSolicitud(s) { cbSolicitudPendiente = s; activateSection('cotiza
 function cbPintarSolicitud() {
   const box = document.getElementById('cb-solicitud'), s = cbSolicitud;
   box.hidden = !s;
-  box.innerHTML = s ? `<i class="fas fa-plane-departure"></i><span>Cotizando la <b>solicitud #${s.id}</b> de ${esc(s.creado_por || 'asesor')}: al enviarla al asesor queda resuelta.</span><button class="btn-sm" type="button" onclick="cbQuitarSolicitud()">Desvincular</button>` : '';
+  box.innerHTML = s ? `<i class="fas fa-plane-departure"></i><span>Cotizando la <b>solicitud #${s.id}</b> de ${esc(s.creado_por || 'asesor')}: al enviarla al asesor queda resuelta.${cbBorradorMio() ? ' <small id="cb-borrador-estado" class="cb-borrador-estado"></small>' : ''}</span>${cbBorradorMio() ? '<button class="btn-sm" type="button" onclick="cbPausarYVolver(this)"><i class="fas fa-pause"></i> Guardar y volver a la cola</button>' : ''}<button class="btn-sm" type="button" onclick="cbQuitarSolicitud()">Desvincular</button>` : '';
 }
-window.cbQuitarSolicitud = () => { cbSolicitud = null; cbPintarSolicitud(); };
-function cbAplicarSolicitud(sel) {
+window.cbQuitarSolicitud = async () => { await cbGuardarBorrador(); cbSolicitud = null; cbPintarSolicitud(); };
+// Stand-by de boletería (2026-10-15): mientras la cotización está ligada a una
+// solicitud que atiendo yo, el formulario se autoguarda como borrador de la
+// solicitud (2 s después del último cambio) y se recupera al retomarla, también
+// desde otro dispositivo. Otro agente o un admin que cotiza una ajena no la pisa.
+let cbBorradorTimer = null;
+const cbBorradorMio = () => !!cbSolicitud?.la_atiendo_yo;
+const cbBorrador = () => ({ v: 1, items: cbItems.map(it => ({ ...it })), cliente: val('cb-cliente'), fecha: val('cb-fecha'), vence: val('cb-vence'), notas: val('cb-notas'), terminos: val('cb-terminos'), asesor: val('cb-asesor') });
+function cbProgramarBorrador() {
+  if (!cbBorradorMio()) return;
+  clearTimeout(cbBorradorTimer); cbBorradorTimer = setTimeout(cbGuardarBorrador, 2000);
+}
+async function cbGuardarBorrador() {
+  const pendiente = cbBorradorTimer != null; clearTimeout(cbBorradorTimer); cbBorradorTimer = null;
+  if (!pendiente || !cbBorradorMio()) return true;
+  const id = cbSolicitud.id, { data, error } = await sb.rpc('guardar_borrador_solicitud_boleteria', { p_id: Number(id), p_borrador: cbBorrador() });
+  const estado = document.getElementById('cb-borrador-estado');
+  if (error || !data?.ok) {
+    console.error('cbGuardarBorrador', error || data);
+    // Ya no está en atención (la resolvió o canceló otro): se deja de autoguardar.
+    if (data?.error === 'no_atendiendo' || data?.error === 'no_es_tuya') { if (cbSolicitud?.id === id) { cbSolicitud.la_atiendo_yo = false; cbPintarSolicitud(); } }
+    else if (estado) estado.textContent = '· No se pudo guardar el borrador';
+    return false;
+  }
+  if (estado) estado.textContent = `· Borrador guardado ${bolHora(data.borrador_at)}`;
+  return true;
+}
+function cbRestaurarBorrador(b, sel) {
+  cbItems = Array.isArray(b.items) && b.items.length ? b.items.map(it => ({ ...cbItemVacio(CB_TIPOS[it?.tipo] ? it.tipo : 'boleto'), ...it })) : [cbItemVacio()];
+  cbRenderItems();
+  [['cb-cliente', b.cliente], ['cb-fecha', b.fecha], ['cb-vence', b.vence], ['cb-notas', b.notas], ['cb-terminos', b.terminos]].forEach(([id, v]) => { if (typeof v === 'string') document.getElementById(id).value = v; });
+  if (b.asesor && [...sel.options].some(o => o.value === b.asesor)) sel.value = b.asesor;
+}
+async function cbAplicarSolicitud(sel) {
   const s = cbSolicitudPendiente; cbSolicitudPendiente = null;
+  if (cbSolicitud && String(cbSolicitud.id) !== String(s.id)) await cbGuardarBorrador();
+  // Retomar: reanudar saca la pausa y trae el borrador; sin borrador se prellena con la solicitud.
+  let borrador = null;
+  if (s.la_atiendo_yo && (s.pausada_en || s.tiene_borrador)) {
+    const { data, error } = await sb.rpc('reanudar_solicitud_boleteria', { p_id: Number(s.id) });
+    if (error || !data?.ok) errToast('No se pudo recuperar lo avanzado de la solicitud #' + s.id);
+    else { borrador = data.borrador; s.pausada_en = null; }
+  }
   cbResetForm(); cbSolicitud = s; cbPintarSolicitud();
+  if (borrador) { cbRestaurarBorrador(borrador, sel); okToast(`Retomaste la solicitud #${s.id} donde la dejaste`); return; }
   document.getElementById('cb-cliente').value = s.cliente_nombre || '';
   cbItems = [{ ...cbItemVacio('boleto'), ruta: [s.origen, s.destino, s.fecha_regreso ? s.origen : ''].filter(Boolean).join(' - '), cant: s.personas || 1, ida: s.fecha_viaje || '', vuelta: s.fecha_regreso || '', extra: s.notas || '' }];
   cbRenderItems();
@@ -23447,12 +23500,24 @@ function cbAplicarSolicitud(sel) {
   const op = [...sel.options].find(o => o.value && o.textContent.replace(/ \(admin\)$/, '') === s.creado_por);
   if (op) sel.value = op.value;
 }
+// "Guardar y volver a la cola": la deja en stand-by con lo armado y vuelve a la cola.
+window.cbPausarYVolver = async btn => {
+  const s = cbSolicitud; if (!s) return;
+  clearTimeout(cbBorradorTimer); cbBorradorTimer = null;
+  btn.disabled = true;
+  const ok = await bolPausar(s.id, cbBorrador());
+  btn.disabled = false;
+  if (!ok) return;
+  cbResetForm();
+  if (NAV_STACK.at(-1)?.type === 'section') navConsume(); else activateSection('bol-solicitudes');
+};
 async function cbResolverSolicitud(solId, cot) {
   const { data, error } = await sb.rpc('resolver_solicitud_boleteria', { p_id: Number(solId), p_resultado: `Cotización ${cbNumero(cot.numero)} enviada` });
   if (error || (!data?.ok && data?.error !== 'no_disponible')) errToast(`No se pudo marcar resuelta la solicitud #${solId}: hazlo desde Solicitudes`);
   return !!data?.ok;
 }
 function cbResetForm() {
+  clearTimeout(cbBorradorTimer); cbBorradorTimer = null;
   cbSolicitud = null; cbPintarSolicitud();
   cbItems = [cbItemVacio()]; cbRenderItems();
   document.getElementById('cb-cliente').value = '';
@@ -23472,6 +23537,11 @@ async function cbCargarSeccion() {
       cbActualizarTotal();
     });
     document.getElementById('cb-buscar').addEventListener('input', () => { clearTimeout(cbBuscarTimer); cbBuscarTimer = setTimeout(() => { cbOffset = 0; cbCargarHistorial(false); }, 280); });
+    const camposBorrador = ['cb-cliente', 'cb-fecha', 'cb-vence', 'cb-notas', 'cb-terminos', 'cb-asesor'];
+    ['input', 'change'].forEach(ev => document.getElementById('sec-cotizacion-boletos').addEventListener(ev, e => {
+      if (e.target.closest('#cb-items') || camposBorrador.includes(e.target.id)) cbProgramarBorrador();
+    }));
+    document.addEventListener('visibilitychange', () => { if (document.hidden) cbGuardarBorrador(); });
   }
   const staff = await cargarUsuariosStaff();
   const sel = document.getElementById('cb-asesor'), previo = sel.value;
@@ -23479,7 +23549,7 @@ async function cbCargarSeccion() {
   const asesores = staff.filter(u => u.id !== MI_USUARIO_ID && (u.rol === 'asesor' || u.rol === 'admin') && !/^__gate|prueba|invitado/i.test(u.nombre || ''))
     .sort((a, b) => (a.rol === b.rol ? 0 : a.rol === 'asesor' ? -1 : 1) || (a.nombre || '').localeCompare(b.nombre || ''));
   sel.innerHTML = '<option value="">— Elige el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
-  if (cbSolicitudPendiente) cbAplicarSolicitud(sel);
+  if (cbSolicitudPendiente) await cbAplicarSolicitud(sel);
   cbOffset = 0;
   await cbCargarHistorial(false);
 }
@@ -24118,7 +24188,7 @@ const NAV_ITEMS = [
   { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
   // En modo Boletería, Reservas solo abría el voucher de hospedaje: lo reemplaza Cotizaciones (2026-10-12).
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
-  { sec: 'bol-solicitudes', icon: 'fas fa-list-ol', label: 'Solicitudes', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Vuelos que piden los asesores, por orden de llegada', badge: 'nav-bol-sol-count', badgeDefault: '0' },
+  { sec: 'bol-solicitudes', icon: 'fas fa-list-ol', label: 'Solicitudes', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Vuelos que piden los asesores, repartidos entre agentes', badge: 'nav-bol-sol-count', badgeDefault: '0' },
   { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Cotización de boletos en PDF para mandar al asesor' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok' },
@@ -25049,6 +25119,10 @@ let BOL_BUSCAR_DEBOUNCE = null;
 let BOL_COLA = [];
 // Filtro y búsqueda de la cola; solicitud a abrir apenas cargue (deep link, recién tomada).
 let BOL_FILTRO = 'todas', BOL_Q = '', BOL_ABRIR_ID = null;
+// Reparto (2026-10-15): cada solicitud va a un agente y solo él la toma. Un
+// admin que no reparte (no está en el roster) puede tomar cualquiera.
+let BOL_EN_REPARTO = false;
+const bolPuedoTomar = s => !s.asignada_a || s.asignada_a_mi || (ROL === 'admin' && !BOL_EN_REPARTO);
 
 // Tarifa de referencia del catálogo (la misma que publican web e IA) para la
 // ruta de la solicitud: el agente no la busca de cero. Origen y destino llegan
@@ -25076,11 +25150,15 @@ const BOL_ERR = {
   ya_en_cola: 'Ese lead ya tiene una solicitud abierta en la cola',
   lead_no_disponible: 'Ese lead ya no está disponible',
   no_disponible: 'Esa solicitud ya la tomó o cerró alguien más',
+  asignada_a_otro: 'Está asignada a otro agente',
   ida_en_el_pasado: 'La fecha de ida ya pasó',
   regreso_en_el_pasado: 'La fecha de regreso ya pasó',
   personas_invalidas: 'La cantidad de personas tiene que estar entre 1 y 60',
   no_existe: 'Esa solicitud ya no existe',
   ya_cerrada: 'Esa solicitud ya estaba cerrada',
+  no_atendiendo: 'Esa solicitud ya no está en atención',
+  no_es_tuya: 'Esa solicitud la atiende otro agente',
+  borrador_invalido: 'La cotización a medias es demasiado grande para guardarla',
 };
 
 // Hoy en Caracas, en formato YYYY-MM-DD -- el mismo día que usa el RPC para
@@ -25134,7 +25212,11 @@ function setupBoleteria() {
   grid?.addEventListener('click', e => {
     if (e.target.closest('[data-bol-wa]')) return;
     const b = e.target.closest('[data-bol-card]');
-    if (b) { if (b.dataset.bolCard === 'tomar') bolTomar(b.dataset.id, b); else bolAbrirCerrar(b.dataset.id); return; }
+    if (b) {
+      const accion = b.dataset.bolCard, s = accion === 'retomar' && BOL_COLA.find(x => String(x.id) === b.dataset.id);
+      if (accion === 'tomar') bolTomar(b.dataset.id, b); else if (s) cbDesdeSolicitud(s); else if (accion === 'resolver') bolAbrirCerrar(b.dataset.id);
+      return;
+    }
     const c = e.target.closest('[data-bol-abrir]'); if (c) abrirDetalleBoleteria(c.dataset.bolAbrir);
   });
   grid?.addEventListener('keydown', e => {
@@ -25253,7 +25335,7 @@ async function enviarSolicitudBoleteria() {
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Mandar a la cola';
   if (error || !data?.ok) { err.textContent = 'No se pudo mandar: ' + (BOL_ERR[data?.error] || error?.message || data?.error || ''); return; }
   closeSheet('boleteria-sheet');
-  okToast(data.puesto ? `Solicitud mandada: quedó #${data.puesto} en la cola` : 'Solicitud mandada a la cola de boletería');
+  okToast((data.puesto ? `Solicitud mandada: quedó #${data.puesto} en la cola` : 'Solicitud mandada a la cola de boletería') + (data.asignada_a ? `, asignada a ${bolPrimerNombre(data.asignada_a)}` : ''));
   loadColaBoleteria(true);
 }
 
@@ -25277,6 +25359,7 @@ function bolEsperaHtml(s) {
     const m = bolMin(s.creado_en);
     return `<span class="bol-espera ${m < 10 ? 'ok' : m < 20 ? 'medio' : 'tarde'}" title="Esperando desde ${esc(fmtFechaHoraCaracas(s.creado_en))}"><i class="fas fa-clock"></i> ${bolDuracion(m)}</span>`;
   }
+  if (s.estado === 'atendiendo' && s.pausada_en && MI_ES_AGENTE_BOLETERIA) return `<span class="bol-chip pausa" title="En stand-by desde ${esc(fmtFechaHoraCaracas(s.pausada_en))}"><i class="fas fa-pause"></i> En stand-by · ${tiempoRelativo(s.pausada_en)}</span>`;
   if (s.estado === 'atendiendo' && s.tomada_en) return `<span class="bol-espera neutro" title="En revisión desde ${esc(fmtFechaHoraCaracas(s.tomada_en))}"><i class="fas fa-hourglass-half"></i> ${bolDuracion(bolMin(s.tomada_en))}</span>`;
   return '';
 }
@@ -25318,12 +25401,14 @@ function bolCardHtml(s) {
   ].filter(Boolean).join('');
   const wa = bolWaContacto(s);
   const acc = [];
-  if (agente && s.estado === 'en_cola') acc.push(`<button class="btn-sm" type="button" data-bol-card="tomar" data-id="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
+  if (agente && s.estado === 'en_cola' && bolPuedoTomar(s)) acc.push(`<button class="btn-sm" type="button" data-bol-card="tomar" data-id="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
+  if (agente && s.estado === 'atendiendo' && s.la_atiendo_yo && s.pausada_en) acc.push(`<button class="btn-sm" type="button" data-bol-card="retomar" data-id="${s.id}"><i class="fas fa-play"></i> Retomar</button>`);
   if (agente && s.estado === 'atendiendo' && s.la_atiendo_yo) acc.push(`<button class="btn-sm" type="button" data-bol-card="resolver" data-id="${s.id}"><i class="fas fa-check"></i> Resolver</button>`);
   if (wa) acc.push(`<a class="btn-sm bol-wa" href="${esc(wa.url)}" target="_blank" rel="noopener" data-bol-wa title="Escribirle a ${esc(wa.nombre)} por WhatsApp"><i class="fab fa-whatsapp"></i> ${esc(wa.nombre)}</a>`);
+  const asignada = s.estado === 'en_cola' && s.asignada_a ? (s.asignada_a_mi ? 'asignada a vos' : 'asignada a ' + esc(bolPrimerNombre(s.asignada_a))) : '';
   const quien = agente
-    ? `Pidió ${esc(s.creado_por || '—')}${s.tomada_por && s.estado !== 'en_cola' ? ' · atiende ' + esc(bolPrimerNombre(s.tomada_por)) : ''}`
-    : (s.tomada_por ? `Atiende ${esc(s.tomada_por)}` : 'Nadie la tomó todavía');
+    ? `Pidió ${esc(s.creado_por || '—')}${s.tomada_por && s.estado !== 'en_cola' ? ' · atiende ' + esc(bolPrimerNombre(s.tomada_por)) : ''}${asignada ? ' · ' + asignada : ''}`
+    : (s.tomada_por ? `Atiende ${esc(s.tomada_por)}` : asignada ? asignada[0].toUpperCase() + asignada.slice(1) : 'Nadie la tomó todavía');
   return `<div class="bol-card st-${s.estado}" data-bol-abrir="${s.id}" role="button" tabindex="0">
     <div class="bol-top">
       <div class="bol-nombre">${esc(s.cliente_nombre)}</div>
@@ -25356,11 +25441,11 @@ function bolRenderCola() {
       : `<div class="bol-col-vacia">No hay ${BOL_FILTRO === 'resuelta' ? 'resueltas' : 'canceladas'} en los últimos 7 días${q ? ' con esa búsqueda' : ''}</div>`;
     return;
   }
-  const base = BOL_FILTRO === 'mias' && agente ? filas.filter(s => s.la_atiendo_yo) : filas;
+  const base = BOL_FILTRO === 'mias' && agente ? filas.filter(s => s.la_atiendo_yo || (s.estado === 'en_cola' && s.asignada_a_mi)) : filas;
   const cerradas = base.filter(s => !bolAbierta(s)).sort(porCierre);
   const cols = [
     { t: agente ? 'En cola' : 'Esperando', ico: 'fa-hourglass-start', items: base.filter(s => s.estado === 'en_cola'), vacia: agente ? 'Nadie esperando' : 'Nada esperando' },
-    { t: agente ? 'Atendiendo' : 'En revisión', ico: 'fa-headset', items: base.filter(s => s.estado === 'atendiendo'), vacia: 'Ninguna en revisión' },
+    { t: agente ? 'Atendiendo' : 'En revisión', ico: 'fa-headset', items: base.filter(s => s.estado === 'atendiendo').sort((a, b) => !!a.pausada_en - !!b.pausada_en), vacia: 'Ninguna en revisión' },
     { t: 'Cerradas · 7 días', ico: 'fa-flag-checkered', items: cerradas.slice(0, BOL_CERRADAS_TOPE), total: cerradas.length, vacia: 'Ninguna cerrada' },
   ];
   grid.classList.remove('plano');
@@ -25380,10 +25465,10 @@ function bolRenderKpis() {
   const resHoy = BOL_COLA.filter(s => s.estado === 'resuelta' && bolDiaCcs(s.cerrada_en) === hoy).length;
   const tomadasHoy = BOL_COLA.filter(s => s.tomada_en && bolDiaCcs(s.tomada_en) === hoy);
   const prom = tomadasHoy.length ? Math.round(tomadasHoy.reduce((a, s) => a + bolMin(s.creado_en, s.tomada_en), 0) / tomadasHoy.length) : null;
-  const mias = aten.filter(s => s.la_atiendo_yo).length;
+  const mias = aten.filter(s => s.la_atiendo_yo).length, miasCola = cola.filter(s => s.asignada_a_mi).length, pausadas = aten.filter(s => s.pausada_en).length;
   const kpi = (n, t, sub, alerta) => `<div class="bol-kpi${alerta ? ' alerta' : ''}"><b>${n}</b><span>${t}</span>${sub ? `<small>${sub}</small>` : ''}</div>`;
-  box.innerHTML = kpi(cola.length, 'En cola', cola.length ? `La más vieja: ${bolDuracion(vieja)}` : 'Nadie esperando', vieja >= 15)
-    + kpi(aten.length, 'Atendiendo', mias ? `${mias} tuya${mias > 1 ? 's' : ''}` : '')
+  box.innerHTML = kpi(cola.length, 'En cola', cola.length ? `${miasCola ? `${miasCola} para vos · ` : ''}La más vieja: ${bolDuracion(vieja)}` : 'Nadie esperando', vieja >= 15)
+    + kpi(aten.length, 'Atendiendo', [mias ? `${mias} tuya${mias > 1 ? 's' : ''}` : '', pausadas ? `${pausadas} en stand-by` : ''].filter(Boolean).join(' · '))
     + kpi(resHoy, 'Resueltas hoy', '')
     + kpi(prom == null ? '—' : bolDuracion(prom), 'Espera promedio hoy', 'De que llega a que alguien la toma');
 }
@@ -25397,8 +25482,13 @@ function bolDetalleHtml(s) {
   // el asesor dueño solo cancela lo suyo mientras nadie lo tomó; borrar es admin.
   const acc = [];
   if (MI_ES_AGENTE_BOLETERIA) {
-    if (s.estado === 'en_cola') acc.push(`<button class="dbtn save" data-bol-tomar="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
-    else if (s.estado === 'atendiendo') acc.push(`<button class="dbtn save" data-bol-cotizar="${s.id}"><i class="fas fa-file-invoice-dollar"></i> Cotizar</button>`, `<button class="dbtn gh" data-bol-cerrar="${s.id}"><i class="fas fa-check"></i> Marcar resuelta</button>`);
+    if (s.estado === 'en_cola' && bolPuedoTomar(s)) acc.push(`<button class="dbtn save" data-bol-tomar="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
+    else if (s.estado === 'atendiendo') {
+      const retomar = s.la_atiendo_yo && s.pausada_en;
+      acc.push(`<button class="dbtn save" data-bol-cotizar="${s.id}"><i class="fas fa-${retomar ? 'play' : 'file-invoice-dollar'}"></i> ${retomar ? 'Retomar cotización' : 'Cotizar'}</button>`);
+      if (s.la_atiendo_yo && !s.pausada_en) acc.push(`<button class="dbtn gh" data-bol-pausar="${s.id}"><i class="fas fa-pause"></i> Dejar en stand-by</button>`);
+      acc.push(`<button class="dbtn gh" data-bol-cerrar="${s.id}"><i class="fas fa-check"></i> Marcar resuelta</button>`);
+    }
     if (bolAbierta(s)) acc.push(`<button class="dbtn gh" data-bol-convertir="${s.id}"><i class="fas fa-ticket"></i> Convertir en reserva</button>`);
   }
   const wa = bolWaContacto(s);
@@ -25411,8 +25501,10 @@ function bolDetalleHtml(s) {
   const f = iso => esc(fmtFechaHoraCaracas(iso));
   const pasos = [{ cls: '', t: 'Enviada a la cola', sub: `${esc(s.creado_por || '—')} · ${f(s.creado_en)}` }];
   if (s.tomada_en) pasos.push({ cls: '', t: `Tomada por ${esc(s.tomada_por || '—')}`, sub: `${f(s.tomada_en)} · esperó ${bolDuracion(bolMin(s.creado_en, s.tomada_en))}` });
-  else if (s.estado === 'en_cola') pasos.push({ cls: 'pend', t: `Esperando${s.puesto ? ` · #${s.puesto} en la cola` : ''}`, sub: `Lleva ${bolDuracion(bolMin(s.creado_en))}` });
-  if (s.estado === 'atendiendo') pasos.push({ cls: 'pend', t: 'En revisión', sub: `Hace ${bolDuracion(bolMin(s.tomada_en || s.creado_en))}` });
+  else if (s.estado === 'en_cola') pasos.push({ cls: 'pend', t: `Esperando${s.puesto ? ` · #${s.puesto} en la cola` : ''}${s.asignada_a ? ` · asignada a ${s.asignada_a_mi ? 'vos' : esc(s.asignada_a)}` : ''}`,
+    sub: `Lleva ${bolDuracion(bolMin(s.creado_en))}${s.reasigna_en ? ` · si no la toma, pasa a otro agente a las ${esc(bolHora(s.reasigna_en))}` : ''}` });
+  if (s.estado === 'atendiendo' && s.pausada_en && MI_ES_AGENTE_BOLETERIA) pasos.push({ cls: 'pend', t: 'En stand-by', sub: `Desde ${f(s.pausada_en)}${s.tiene_borrador ? ' · con la cotización a medias guardada' : ''}` });
+  else if (s.estado === 'atendiendo') pasos.push({ cls: 'pend', t: 'En revisión', sub: `Hace ${bolDuracion(bolMin(s.tomada_en || s.creado_en))}` });
   else if (s.estado === 'resuelta') pasos.push({ cls: 'fin', t: `Resuelta${s.cerrada_por ? ' por ' + esc(s.cerrada_por) : ''}`, sub: `${f(s.cerrada_en)}${s.tomada_en ? ' · en ' + bolDuracion(bolMin(s.tomada_en, s.cerrada_en)) : ''}` });
   else if (s.estado === 'cancelada') pasos.push({ cls: 'can', t: `Cancelada${s.cerrada_por ? ' por ' + esc(s.cerrada_por) : ''}`, sub: f(s.cerrada_en) });
   else pasos.push({ cls: 'pend', t: 'Lista', sub: 'Cuando boletería la resuelva' });
@@ -25477,6 +25569,14 @@ function abrirDetalleBoleteria(id) {
   cuerpo.querySelector('[data-bol-convertir]')?.addEventListener('click', e => bolConvertirSolicitud(s, e.currentTarget));
   cuerpo.querySelector('[data-bol-cerrar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); bolAbrirCerrar(id); });
   cuerpo.querySelector('[data-bol-cotizar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); cbDesdeSolicitud(s); });
+  // Si su cotización está abierta, se pausa con lo armado y se libera el formulario.
+  cuerpo.querySelector('[data-bol-pausar]')?.addEventListener('click', async e => {
+    const ligada = String(cbSolicitud?.id) === String(id);
+    if (ligada) { clearTimeout(cbBorradorTimer); cbBorradorTimer = null; }
+    if (!await bolPausar(id, ligada ? cbBorrador() : null, e.currentTarget)) return;
+    if (ligada) cbResetForm();
+    cerrarDetalleBoleteria();
+  });
   // La cotización con que se resolvió: el asesor la ve si se la mandaron a él (RLS cot_bol_select).
   const cotBox = cuerpo.querySelector('[data-bol-cot]');
   if (cotBox) sb.from('cotizaciones_boleteria').select('*').eq('solicitud_id', s.id).order('created_at', { ascending: false }).limit(1).then(({ data }) => {
@@ -25528,10 +25628,12 @@ async function loadColaBoleteria(silencioso) {
   if (cola.error) { console.error('cola_boleteria', cola.error); if (!silencioso) errToast('No se pudo cargar la cola de boletería'); return; }
   const filas = cola.data || [];
   // Agente: admin, rol boleteria o la marca es_boleteria (aparece en el roster).
-  MI_ES_AGENTE_BOLETERIA = ROL === 'admin' || ROL === 'boleteria' || (agentes.data || []).some(a => String(a.usuario_id) === String(MI_USUARIO_ID));
+  BOL_EN_REPARTO = (agentes.data || []).some(a => String(a.usuario_id) === String(MI_USUARIO_ID));
+  MI_ES_AGENTE_BOLETERIA = ROL === 'admin' || ROL === 'boleteria' || BOL_EN_REPARTO;
   const agente = MI_ES_AGENTE_BOLETERIA;
 
-  const abiertas = filas.filter(bolAbierta).length, enCola = filas.filter(s => s.estado === 'en_cola').length;
+  // Para el agente, "esperando" son las que puede tomar él (las suyas y las sin asignar).
+  const abiertas = filas.filter(bolAbierta).length, enCola = filas.filter(s => s.estado === 'en_cola' && bolPuedoTomar(s)).length;
   const badge = document.getElementById('leads-bol-count');
   if (badge) { badge.textContent = abiertas; badge.style.display = abiertas ? '' : 'none'; }
   const navBadge = document.getElementById('nav-bol-sol-count');
@@ -25551,7 +25653,7 @@ async function loadColaBoleteria(silencioso) {
   if (mias) mias.style.display = agente ? '' : 'none';
   if (!agente && BOL_FILTRO === 'mias') bolFiltrar('todas');
   document.getElementById('bol-cola-sub').textContent = agente
-    ? 'Vuelos que piden los asesores. Se atienden por orden de llegada: tomá la siguiente y avisale al asesor cómo quedó.'
+    ? 'Vuelos que piden los asesores. Cada una se asigna al agente con menos pendientes; si no la tomás en 30 min (de 9:00 a 21:00) pasa al otro.'
     : 'Tus pedidos de vuelos a boletería: en qué puesto están, quién los atiende y cómo quedaron.';
   document.getElementById('bol-empty-s').textContent = agente
     ? 'Cuando un asesor mande una solicitud, aparece acá y te llega por Telegram'
@@ -25580,12 +25682,27 @@ async function bolTomar(id, btn) {
   const { data, error } = await sb.rpc('tomar_solicitud_boleteria', { p_id: id == null ? null : Number(id) });
   if (btn) btn.disabled = false;
   if (error || !data?.ok) {
-    errToast(id == null && data?.error === 'no_disponible' ? 'No hay solicitudes esperando' : 'No se pudo tomar: ' + (BOL_ERR[data?.error] || error?.message || ''));
+    errToast(id == null && data?.error === 'no_disponible' ? 'No hay solicitudes esperando para vos'
+      : data?.error === 'asignada_a_otro' && data?.asignada_a ? `Está asignada a ${data.asignada_a}` : 'No se pudo tomar: ' + (BOL_ERR[data?.error] || error?.message || ''));
     loadColaBoleteria(true); return;
   }
   okToast('Es tuya. Le avisamos al asesor.');
   BOL_ABRIR_ID = data.solicitud_id;
   loadColaBoleteria(true);
+}
+// Stand-by: sigue siendo del agente pero no cuenta como carga en el reparto.
+// Sin borrador conserva el que ya tenía guardado.
+async function bolPausar(id, borrador, btn) {
+  if (btn) btn.disabled = true;
+  const { data, error } = await sb.rpc('pausar_solicitud_boleteria', { p_id: Number(id), p_borrador: borrador ?? null });
+  if (btn) btn.disabled = false;
+  if (error || !data?.ok) {
+    errToast('No se pudo dejar en stand-by: ' + (BOL_ERR[data?.error] || error?.message || ''));
+    loadColaBoleteria(true); return false;
+  }
+  okToast(`Solicitud #${id} en stand-by${borrador ? ' con lo que llevabas armado' : ''}`);
+  loadColaBoleteria(true);
+  return true;
 }
 function bolAbrirCerrar(id) {
   BOL_CERRAR_ID = id;
@@ -26849,6 +26966,8 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-15', emoji: '🏢', titulo: 'Vouchers de empresa y sin leads duplicados', texto: 'En Importar vouchers, la columna "Empresa" (o "Marcar seleccionados" abajo) deja cada voucher a nombre de una empresa. Un voucher de empresa puede ir sin monto: queda como reserva de la empresa, sin factura, y el monto se completa después en Postventa. Además, si el cliente ya está en el CRM (mismo teléfono, cédula o nombre, con o sin acentos) el voucher se anexa a su lead en vez de crear uno nuevo, aunque sea de otro asesor.', roles: ['admin'] },
+  { fecha: '2026-10-15', emoji: '⏸️', titulo: 'Dejar una solicitud en stand-by', texto: 'En una solicitud que estés atendiendo, "Dejar en stand-by" la aparta sin perder nada y sigue siendo tuya. Mientras cotizás, lo que vas armando se guarda solo; con "Guardar y volver a la cola" la pausás y volvés a la lista. Para seguir, tocá "Retomar" en la tarjeta: la cotización vuelve tal cual la dejaste, incluso desde otro dispositivo.', roles: ['boleteria', 'admin'] },
   { fecha: '2026-10-15', emoji: '📕', titulo: 'Tarifario de BT Travel en PDF', texto: 'En Tarifario, el botón "BT Travel" (arriba a la derecha, junto a las pestañas) abre el último Tarifario Nacional de BT Travel completo, tal cual llegó. La primera vez de cada versión tarda unos segundos.', roles: ['asesor', 'boleteria', 'administrativo', 'admin'] },
   { fecha: '2026-10-15', emoji: '📄', titulo: 'Cotizar una solicitud en un toque', texto: 'En una solicitud que estés atendiendo, el botón "Cotizar" abre Cotizaciones con el cliente, la ruta, las fechas, las personas y el asesor ya cargados. Al enviarla al asesor, la solicitud queda resuelta con "Cotización COT-xxxx enviada" y al asesor le llega el PDF por el chat del CRM y por Telegram.', roles: ['boleteria', 'admin'] },
   { fecha: '2026-10-15', emoji: '📄', titulo: 'Tu cotización llega en PDF', texto: 'Cuando boletería resuelve tu solicitud de vuelo con una cotización, te llega el PDF por Telegram y por el chat del CRM. En Leads > Boletería, la solicitud tiene el botón "Ver cotización".', roles: ['asesor'] },

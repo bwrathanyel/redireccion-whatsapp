@@ -1204,6 +1204,8 @@ input.ei[type=date]{color-scheme:dark}
 .bol-chip.aten{background:rgba(74,158,255,.15);color:#7db8ff}
 .bol-chip.res{background:rgba(16,185,129,.15);color:var(--green)}
 .bol-chip.can{background:rgba(148,163,184,.15);color:var(--muted)}
+.bol-chip.pausa{background:rgba(245,181,68,.15);color:var(--amber);text-transform:none;letter-spacing:0}
+.bol-chip.pausa i{margin-right:3px}
 .bol-ruta{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin-bottom:8px}
 .bol-ruta i{color:var(--accent-ink);font-size:12px}
 .bol-precio{font-size:12px;margin-top:6px;color:var(--green)}
@@ -2461,6 +2463,7 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .cb-solicitud{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border:1px solid var(--blue);border-radius:12px;background:rgba(59,130,246,.08);font-size:13px}
 .cb-solicitud[hidden]{display:none}
 .cb-solicitud span{flex:1;min-width:180px}
+.cb-borrador-estado{color:var(--muted);font-weight:400;white-space:nowrap}
 .cb-item-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:12.5px;color:var(--muted)}
 .cb-item-cab b{color:var(--txt);font-size:13px}
 .cb-item-quitar{background:none;border:0;color:var(--muted);cursor:pointer;padding:4px 6px;font-size:13px}
@@ -3626,6 +3629,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .iv-tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
   padding:2px 7px;border-radius:999px;background:var(--panel);border:1px solid var(--line2);color:var(--muted2)}
 .iv-nota{font-size:11px;color:var(--amber);margin-top:3px;line-height:1.4}
+.iv-tag.empresa{display:block;width:max-content;margin-top:4px;color:var(--blue);border-color:rgba(74,158,255,.35)}
+.iv-empresa-barra{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.iv-empresa-barra[hidden]{display:none}
+.iv-empresa-barra select{background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:7px 9px;color:var(--txt);font-size:12.5px;max-width:220px}
 /* Lo que la IA entendió, editable: nadie publica al catálogo algo que no leyó
    como va a quedar. El 31/07 el modelo leyó bien un flyer y la respuesta al
    cliente igual salió mal, porque el precio quedó enterrado en la línea. */
@@ -7404,6 +7411,10 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </label>
       <div id="iv-lista"></div>
       <div class="iv-barra" id="iv-barra" style="display:none">
+        <span class="iv-empresa-barra" id="iv-empresa-barra" hidden>
+          <select id="iv-empresa-sel" aria-label="Empresa de los vouchers seleccionados"><option value="">Cliente particular</option></select>
+          <button class="dbtn" id="iv-empresa-aplicar" type="button"><i class="fas fa-building"></i> Marcar seleccionados</button>
+        </span>
         <button class="dbtn primary" id="iv-importar-btn" type="button"><i class="fas fa-file-import"></i> Importar seleccionados</button>
         <button class="dbtn" id="iv-limpiar-btn" type="button">Limpiar</button>
       </div>
