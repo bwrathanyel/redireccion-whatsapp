@@ -2377,8 +2377,8 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 /* Asistente administrativo (allowlist): solo los .admin-only de áreas concedidas llevan .oficina-ok. */
 .rol-administrativo .admin-only:not(.oficina-ok){display:none}
 .rol-administrativo #e-save,.rol-administrativo [data-mv-completar]{display:none}
-/* Contenedor de botones solo-admin: sin esto queda una pastilla vacía bajo las pestañas. */
-.rol-asesor .tar-admin-actions,.rol-marketing .tar-admin-actions,.rol-boleteria .tar-admin-actions{display:none}
+/* Asesor y boletería ven la pastilla solo con el botón del PDF de BT Travel; marketing, nada. */
+.rol-marketing .tar-admin-actions{display:none}
 /* La fila del selector de asesor del sheet "Nuevo lead" llevaba display:flex
    inline, que le ganaba en especificidad a .admin-only y dejaba el <select> +
    "Aleatorio" visibles para el asesor (que no puede reasignar). El flex vive
@@ -2636,6 +2636,8 @@ body:not(.nav-buscando):not(.nav-sondeo) #sidebar-nav > .nav-hijo{display:none}
 .tar-admin-btn:active {
   transform: scale(0.95);
 }
+.tar-admin-btn.tar-bt-pdf-btn{width:auto;padding:0 10px;gap:6px;font-size:12.5px;font-weight:600;color:var(--accent-ink)}
+.tar-admin-btn.tar-bt-pdf-btn.cargando{opacity:.6;cursor:progress}
 .tar-admin-btn::before {
   content: '';
   position: absolute;
@@ -5663,6 +5665,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <button class="seg" data-tab="boleteria">Boletería</button>
         </div>
         <div class="tar-admin-actions">
+          <button class="tar-admin-btn tar-bt-pdf-btn" id="tar-bt-pdf-btn" type="button" title="Ver el tarifario de BT Travel (PDF)"><i class="fas fa-file-pdf"></i><span>BT Travel</span></button>
           <button class="tar-admin-btn admin-only oficina-ok" id="tar-nueva-promo-btn" type="button" title="Nueva promoción" hidden><i class="fas fa-plus"></i></button>
           <button class="tar-admin-btn admin-only oficina-ok" id="tar-actualizador-btn" type="button" title="Actualizador de Tarifario"><i class="fas fa-arrows-rotate"></i></button>
           <button class="tar-admin-btn admin-only oficina-ok" id="tar-revision-btn" type="button" title="Revisión del tarifario"><i class="fas fa-clipboard-check"></i></button>

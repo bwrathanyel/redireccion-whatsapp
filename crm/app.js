@@ -18377,6 +18377,21 @@ function aplicarTabsOcultas() {
     }
   }
 }
+// Último TARIFARIO NACIONAL de BT Travel tal cual llegó al Drive (Edge Function tarifario-bt-pdf).
+// La ventana se abre antes del await para que no la bloqueen; la primera vez por versión tarda (copia ~12 MB del Drive).
+async function abrirPdfBtTravel(btn) {
+  if (btn.disabled) return;
+  const w = window.open('', '_blank');
+  btn.disabled = true; btn.classList.add('cargando');
+  const { data, error } = await sb.functions.invoke('tarifario-bt-pdf', { body: {} });
+  btn.disabled = false; btn.classList.remove('cargando');
+  if (!error && data?.ok && data.url) {
+    if (w) { w.opener = null; w.location = data.url; } else window.open(data.url, '_blank', 'noopener');
+    return;
+  }
+  w?.close();
+  errToast(data?.error === 'sin_tarifario' ? 'Todavía no llegó ningún tarifario de BT Travel al Drive' : 'No se pudo abrir el tarifario de BT Travel');
+}
 function setupTarAdmin() {
   const btn = document.getElementById('tar-admin-btn');
   if (!btn) return;
@@ -18384,6 +18399,7 @@ function setupTarAdmin() {
   document.getElementById('tar-revision-btn')?.addEventListener('click', () => abrirRevisionTarifario('vigencias'));
   document.getElementById('tar-actualizador-btn')?.addEventListener('click', () => abrirActualizadorTarifario());
   document.getElementById('tar-nueva-promo-btn')?.addEventListener('click', () => tarAbrirNuevaPromo());
+  document.getElementById('tar-bt-pdf-btn')?.addEventListener('click', ev => abrirPdfBtTravel(ev.currentTarget));
   document.getElementById('rev-tabs')?.addEventListener('click', ev => {
     const t = ev.target.closest('.act-tab');
     if (t) revCambiarTab(t.dataset.rtab);
@@ -26833,6 +26849,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-15', emoji: '📕', titulo: 'Tarifario de BT Travel en PDF', texto: 'En Tarifario, el botón "BT Travel" (arriba a la derecha, junto a las pestañas) abre el último Tarifario Nacional de BT Travel completo, tal cual llegó. La primera vez de cada versión tarda unos segundos.', roles: ['asesor', 'boleteria', 'administrativo', 'admin'] },
   { fecha: '2026-10-15', emoji: '📄', titulo: 'Cotizar una solicitud en un toque', texto: 'En una solicitud que estés atendiendo, el botón "Cotizar" abre Cotizaciones con el cliente, la ruta, las fechas, las personas y el asesor ya cargados. Al enviarla al asesor, la solicitud queda resuelta con "Cotización COT-xxxx enviada" y al asesor le llega el PDF por el chat del CRM y por Telegram.', roles: ['boleteria', 'admin'] },
   { fecha: '2026-10-15', emoji: '📄', titulo: 'Tu cotización llega en PDF', texto: 'Cuando boletería resuelve tu solicitud de vuelo con una cotización, te llega el PDF por Telegram y por el chat del CRM. En Leads > Boletería, la solicitud tiene el botón "Ver cotización".', roles: ['asesor'] },
   { fecha: '2026-10-15', emoji: '🤝', titulo: 'GH Hoteles en Corporativo y comisión por cotizar para Andric', texto: 'Los clientes que llegan por el catálogo de GH Hoteles quedan como clientes de la empresa GH Hoteles (Corporativo › Empresas) y le llegan directo a Andric. En Web y Reasignados hay un filtro nuevo, "De Andric": los leads que usted le cotice se marcan en Comisiones y cobran 2,5% de la venta. Los leads de empresa ya no cuentan como web.', roles: ['admin'] },
