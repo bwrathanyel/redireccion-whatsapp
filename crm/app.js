@@ -181,7 +181,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Destinos, hoteles, paquetes y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y guías/tours'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
   tareas: ['Tareas', 'Tus tareas activas'],
   comisiones: ['Comisiones por corte', 'Ventas pagadas, verificación e invoices · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
@@ -327,8 +327,9 @@ async function cargarUsuario() {
   return data;
 }
 
-const VISTA_ROL_OPCIONES = ['admin', 'asesor', 'marketing', 'boleteria', 'administrativo'];
-const VISTA_ROL_LABEL = { admin: 'Administrador', asesor: 'Asesor comercial', marketing: 'Marketing', boleteria: 'Boletería', administrativo: 'Asistente administrativo' };
+const VISTA_ROL_OPCIONES = ['admin', 'asesor', 'asesor_boleteria', 'marketing', 'boleteria', 'administrativo'];
+let VISTA_SIM = null;
+const VISTA_ROL_LABEL = { admin: 'Administrador', asesor: 'Asesor comercial', asesor_boleteria: 'Asesor + Boletería', marketing: 'Marketing', boleteria: 'Boletería', administrativo: 'Asistente administrativo' };
 // Admin + asistente administrativo: allowlist de pantallas concedidas (docs/plan-rol-administrativo.md).
 // El resto de los chequeos ROL === 'admin' siguen siendo solo admin a propósito.
 const esOficina = () => ROL === 'admin' || ROL === 'administrativo';
@@ -356,7 +357,7 @@ function salirVistaPreviaRol() {
 }
 function pintarBannerVistaPrevia() {
   let banner = document.getElementById('vista-previa-banner');
-  if (ROL_REAL !== 'admin' || ROL === ROL_REAL) {
+  if (ROL_REAL !== 'admin' || !VISTA_SIM) {
     banner?.remove();
     return;
   }
@@ -365,7 +366,7 @@ function pintarBannerVistaPrevia() {
     banner.id = 'vista-previa-banner';
     document.body.appendChild(banner);
   }
-  banner.innerHTML = `<i class="fas fa-eye"></i> Viendo el CRM como <b>${esc(VISTA_ROL_LABEL[ROL] || ROL)}</b> -- las acciones que hagas se ejecutan igual con tus permisos reales de admin. <button type="button" id="vista-previa-salir">Volver a mi vista</button>`;
+  banner.innerHTML = `<i class="fas fa-eye"></i> Viendo el CRM como <b>${esc(VISTA_ROL_LABEL[VISTA_SIM] || ROL)}</b> -- las acciones que hagas se ejecutan igual con tus permisos reales de admin. <button type="button" id="vista-previa-salir">Volver a mi vista</button>`;
   document.getElementById('vista-previa-salir').onclick = salirVistaPreviaRol;
 }
 
@@ -380,10 +381,11 @@ async function afterLogin() {
   // entró un asesor en la misma pestaña), se ignora: la vista previa es
   // exclusiva de admin.
   const previa = sessionStorage.getItem(VISTA_ROL_KEY);
-  MI_NOMBRE = u.nombre; ROL = (u.rol === 'admin' && VISTA_ROL_OPCIONES.includes(previa)) ? previa : u.rol;
+  MI_NOMBRE = u.nombre; VISTA_SIM = (u.rol === 'admin' && previa && previa !== 'admin' && VISTA_ROL_OPCIONES.includes(previa)) ? previa : null;
+  ROL = VISTA_SIM === 'asesor_boleteria' ? 'asesor' : (VISTA_SIM || u.rol);
   MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
   MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
-  MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado; MI_ES_SUPERADMIN = !!u.es_superadmin; MI_ES_BOLETERIA = !!u.es_boleteria;
+  MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado; MI_ES_SUPERADMIN = !!u.es_superadmin; MI_ES_BOLETERIA = VISTA_SIM ? VISTA_SIM === 'asesor_boleteria' : !!u.es_boleteria;
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   await entrarSegunRol();
 }
@@ -473,7 +475,7 @@ function openPerfilDrawer() {
       <div class="eb-title"><i class="fas fa-eye"></i> Vista previa de rol</div>
       <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Ver el CRM como lo ve otro rol, para revisar y corregir errores. No cambia tus permisos reales -- seguís pudiendo hacer todo como admin mientras la usás.</div>
       <div class="seg-group" id="perfil-vista-rol" style="margin-bottom:0;flex-wrap:wrap">
-        ${VISTA_ROL_OPCIONES.map(r => `<button type="button" data-v="${r}" class="seg${ROL === r ? ' on' : ''}">${esc(VISTA_ROL_LABEL[r])}</button>`).join('')}
+        ${VISTA_ROL_OPCIONES.map(r => `<button type="button" data-v="${r}" class="seg${(VISTA_SIM || ROL_REAL) === r ? ' on' : ''}">${esc(VISTA_ROL_LABEL[r])}</button>`).join('')}
       </div>
     </div>` : ''}
     ${puedeRecibirLeads() || puedeRecibirAsistencia() || puedeChatearInterno() ? `
@@ -17945,7 +17947,7 @@ let tarTab = 'hotsale', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 let tarEntradaContexto = null;
 const tarDestinosAbiertos = new Set();
 const tarHotelesAbiertos = new Set();
-const TAR_TAB_LABEL = { destino: 'Guías/Tours', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale', ia: 'IA', boleteria: 'Boletería' };
+const TAR_TAB_LABEL = { excursion: 'Excursión', traslado: 'Traslado', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale', ia: 'IA', boleteria: 'Boletería' };
 /* Un solo select de productos para las tres puertas de entrada al drawer
    (grilla del Tarifario, hidratación de la búsqueda IA y "abrir uno suelto"):
    tenían tres copias distintas y el drawer abierto desde el buscador se quedaba
@@ -18507,7 +18509,8 @@ const TAR_TAB_META = [
   { key: 'hotsale', label: 'Hot Sales' },
   { key: 'ia', label: 'IA (curación)' },
   { key: 'promo', label: 'Promociones' },
-  { key: 'destino', label: 'Guías/Tours' },
+  { key: 'excursion', label: 'Excursiones' },
+  { key: 'traslado', label: 'Traslados' },
   { key: 'hotel', label: 'Hoteles' },
   { key: 'paquete', label: 'Paquetes' },
   { key: 'boleteria', label: 'Boletería' },
@@ -18673,6 +18676,9 @@ function actualizarVisibilidadFiltrosTarifario() {
   });
   // "Nueva promoción" solo tiene sentido en la pestaña de promos (crear_promocion
   // no marca hotsale). El botón vive en la barra de tabs, con los demás de admin.
+  // Excursiones y Traslados son tabla/tarjetas propias: el selector de vista no aplica.
+  const vs = document.getElementById('tar-view-switch');
+  if (vs) vs.style.display = (tarTab === 'excursion' || tarTab === 'traslado') ? 'none' : '';
   const np = document.getElementById('tar-nueva-promo-btn');
   if (np) np.hidden = !(esOficina() && tarTab === 'promo');
   // "Ver ocultas" es solo para admin: es el único rol que las ve en la base
@@ -18773,7 +18779,7 @@ function cargadorIniciar(el, { titulo = 'Cargando…', icono = 'fa-plane-departu
     fin() { if (el._cargadorId !== id) return; clearInterval(el._cargadorTimer); el.classList.remove('show'); el.innerHTML = el._cargadorPrevio; },
   };
 }
-const TAR_CARGADOR_TITULO = { hotsale: 'Cargando Hot Sales', ia: 'Cargando curaduría IA', promo: 'Cargando promociones', destino: 'Cargando guías y tours', hotel: 'Cargando hoteles', paquete: 'Cargando paquetes', boleteria: 'Cargando boletería' };
+const TAR_CARGADOR_TITULO = { hotsale: 'Cargando Hot Sales', ia: 'Cargando curaduría IA', promo: 'Cargando promociones', excursion: 'Cargando excursiones', traslado: 'Cargando traslados', hotel: 'Cargando hoteles', paquete: 'Cargando paquetes', boleteria: 'Cargando boletería' };
 
 async function loadTarifario() {
   loadTarifarioInfo();
@@ -19361,6 +19367,81 @@ function _agregarHotelCalc(x) {
   };
 }
 
+/* Excursiones y Traslados (rework 2026-10-15). Las tarifas curadas del PDF BT
+   traen la grilla en `tarifas.precios`: excursión {adulto, nino, infante
+   (0 = gratis, null = N/A), edad_nino, min_pax, incluye_traslado, no_incluye[],
+   etiqueta}; traslado {modalidad, pax_min, pax_max, horas, monto, base, nino,
+   vehiculo, capacidad, sentido} y, en Los Roques, {modalidad: 'suplemento',
+   items[]{concepto, monto, por}} con la moneda en tarifas.moneda (EUR o USD).
+   Cada fila/tarjeta es un .tar-item con data-id, así abre la ficha igual que
+   las tarjetas de hotel. */
+const tarMonto = (n, mon) => n == null || n === '' ? '—' : (mon === 'EUR' ? '€' : '$') + nf('es-VE', { minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2, maximumFractionDigits: 2 }).format(Number(n));
+const tarTarifasVivas = x => (x.tarifas || []).filter(t => t.vigente !== false && t.precios).sort((a, b) => a.id - b.id);
+const tarRankDestino = k => { const i = DESTINO_ORDEN.indexOf(k.split(' · ')[0]); return i < 0 ? 99 : i; };
+// La etiqueta (Cubagua) abre su propio grupo dentro del destino: "Margarita · Cubagua".
+function tarGruposDestino(items, etiqueta = () => null) {
+  const grupos = {};
+  items.forEach(x => { const d = x.destino || 'Otros', e = etiqueta(x); (grupos[e ? `${d} · ${e}` : d] ??= []).push(x); });
+  return Object.entries(grupos).sort(([a], [b]) => tarRankDestino(a) - tarRankDestino(b) || a.localeCompare(b, 'es'));
+}
+const EXC_CAB = '<div class="exc-fila exc-cab"><div>Excursión</div><div>Adulto</div><div>Niño (edad)</div><div>Infante</div><div>Mín.</div><div>Traslado</div><div>No incluye</div></div>';
+function excFilaHtml(x) {
+  const ts = tarTarifasVivas(x);
+  if (!ts.length) return `<div class="exc-fila tar-item" data-id="${x.id}"><div class="exc-nombre">${esc(x.nombre)}</div><div class="exc-sin">Sin tarifa BT vigente</div></div>`;
+  return ts.map(t => {
+    const p = t.precios, mon = t.moneda;
+    const edad = Array.isArray(p.edad_nino) ? ` <small>(${p.edad_nino.join('-')})</small>` : '';
+    const inf = p.infante === 0 ? 'Gratis' : p.infante == null ? 'N/A' : tarMonto(p.infante, mon);
+    const tasas = (p.no_incluye || []).map(n => `${esc(n.concepto)} ${tarMonto(n.monto, mon)}${n.aplica ? ` <small>${esc(n.aplica)}</small>` : ''}`).join('<br>');
+    return `<div class="exc-fila tar-item" data-id="${x.id}">
+      <div class="exc-nombre">${esc(x.nombre)}${ts.length > 1 && t.titulo ? `<span class="exc-sub">${esc(t.titulo)}</span>` : ''}${p.notas ? `<span class="exc-sub">${esc(p.notas)}</span>` : ''}</div>
+      <div class="exc-c" data-l="Adulto"><b>${tarMonto(p.adulto, mon)}</b></div>
+      <div class="exc-c" data-l="Niño">${p.nino == null ? 'N/A' : tarMonto(p.nino, mon)}${edad}</div>
+      <div class="exc-c" data-l="Infante">${inf}</div>
+      <div class="exc-c" data-l="Mín.">${p.min_pax || '—'}</div>
+      <div class="exc-c exc-tras" data-l="Traslado">${p.incluye_traslado ? '<i class="fas fa-van-shuttle" aria-hidden="true"></i> Incluido' : '—'}</div>
+      <div class="exc-c exc-tasas" data-l="No incluye">${tasas || '—'}</div>
+    </div>`;
+  }).join('');
+}
+const trasEtiqueta = t => {
+  const p = t.precios;
+  if (p.modalidad === 'disposicion') return t.titulo || `${p.horas} horas`;
+  if (p.pax_min == null) return t.titulo || '';
+  if (p.pax_max == null) return `Desde ${p.pax_min} pasajeros`;
+  return p.pax_min === p.pax_max ? `${p.pax_min} pasajero${p.pax_min > 1 ? 's' : ''}` : `${p.pax_min} a ${p.pax_max} pasajeros`;
+};
+function trasFilaHtml(t) {
+  const p = t.precios;
+  if (p.modalidad === 'suplemento') {
+    const items = p.items || [];
+    const det = items.length ? items.map(i => `${esc(i.concepto)} <b>${tarMonto(i.monto, t.moneda)}</b> ${i.por ? `<small>por ${esc(i.por)}</small>` : ''}`).join('<br>') : esc(p.notas || 'Consultar precio');
+    return `<div class="tras-fila tras-fila-sup"><span>${esc(t.titulo || p.posada || '')}</span><div>${det}${items.length && p.notas ? `<small class="tras-nota">${esc(p.notas)}</small>` : ''}</div></div>`;
+  }
+  const por = p.base === 'persona' ? ' p/p' : p.base === 'unidad' ? ' por unidad' : '';
+  return `<div class="tras-fila"><span>${esc(trasEtiqueta(t))}</span><b>${tarMonto(p.monto, t.moneda)}${por}</b></div>`;
+}
+function trasCardHtml(x) {
+  const ts = tarTarifasVivas(x), p0 = ts[0]?.precios || {};
+  const sup = p0.modalidad === 'suplemento';
+  const meta = [p0.vehiculo, p0.capacidad ? `hasta ${p0.capacidad} pax` : '', { OW: 'Solo ida', RT: 'Ida y vuelta' }[p0.sentido]].filter(Boolean).join(' · ');
+  const nino = !sup && p0.nino != null ? `Niño: ${typeof p0.nino === 'number' ? tarMonto(p0.nino, ts[0].moneda) : esc(p0.nino)}` : '';
+  return `<div class="tras-card tar-item${sup ? ' tras-ancha' : ''}" data-id="${x.id}">
+    <div class="tras-nombre">${esc(x.nombre)}</div>${meta ? `<div class="tras-meta">${esc(meta)}</div>` : ''}
+    <div class="tras-tabla">${ts.map(trasFilaHtml).join('') || '<div class="tras-fila"><span>Sin tarifa BT vigente</span></div>'}</div>
+    ${nino ? `<div class="tras-pie">${nino}</div>` : ''}
+  </div>`;
+}
+function trasGrillaHtml(items, fDestino, q) {
+  const grupos = tarGruposDestino(items);
+  // Coche no tiene traslados en el PDF BT: se avisa en vez de dejar el hueco.
+  if (!q && (!fDestino || fDestino === 'Coche') && !items.some(x => x.destino === 'Coche')) {
+    grupos.push(['Coche', []]);
+    grupos.sort(([a], [b]) => tarRankDestino(a) - tarRankDestino(b));
+  }
+  return grupos.map(([d, xs]) => `<div class="tar-destino-header"><i class="fas fa-van-shuttle"></i> ${esc(d)} <span>${xs.length}</span></div>`
+    + (xs.length ? `<div class="tras-grid">${xs.map(trasCardHtml).join('')}</div>` : '<div class="tras-aviso"><i class="fas fa-circle-info"></i> Sin tarifa BT de traslados en el tarifario vigente.</div>')).join('');
+}
 function renderTarifario() {
   detenerCarruseles();
   // La pestaña IA no es una grilla de tarjetas: es una lista curada (tri-estado
@@ -19412,6 +19493,9 @@ function renderTarifario() {
         const td = tarifaDestacada(x);
         if (tarSuperaPrecioMax(td?.precio_desde_usd, td?.moneda, fPrecio)) return false;
       }
+    } else if (tarTab === 'excursion' || tarTab === 'traslado') {
+      if (fDestino && x.destino !== fDestino) return false;
+      if (fPrecio != null && tarTab === 'excursion' && !tarTarifasVivas(x).some(t => Number(t.precios.adulto) <= fPrecio)) return false;
     } else if (fPrecio != null) {
       const td = tarifaDestacada(x);
       if (tarSuperaPrecioMax(td?.precio_desde_usd, td?.moneda, fPrecio)) return false;
@@ -19495,15 +19579,11 @@ function renderTarifario() {
     filtered.forEach(x => (porDestino[destinoDe(x) || 'Otros'] ??= []).push(x));
     const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
     grid.innerHTML = destinos.map(d => `<div class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span></div>${tarItemsWrapHtml(porDestino[d])}`).join('');
-  } else if (tarTab === 'destino') {
-    // Nacionales primero (prioridad visual pedida), Internacionales después.
-    // Un ítem sin region clasificada (no debería pasar, los 13 ya están
-    // todos clasificados) cae en "Otros" al final en vez de desaparecer.
-    const REGION_LABEL = { nacional: 'Nacionales', internacional: 'Internacionales' };
-    const porRegion = {};
-    filtered.forEach(x => (porRegion[x.region || 'otros'] ??= []).push(x));
-    const orden = ['nacional', 'internacional', 'otros'].filter(r => porRegion[r]?.length);
-    grid.innerHTML = orden.map(r => `<div class="tar-destino-header"><i class="fas fa-earth-americas"></i> ${esc(REGION_LABEL[r] || 'Otros')} <span>${porRegion[r].length}</span></div>${tarItemsWrapHtml(porRegion[r])}`).join('');
+  } else if (tarTab === 'excursion') {
+    grid.innerHTML = tarGruposDestino(filtered, x => tarTarifasVivas(x)[0]?.precios.etiqueta)
+      .map(([g, xs]) => `<div class="tar-destino-header"><i class="fas fa-person-hiking"></i> ${esc(g)} <span>${xs.length}</span></div><div class="exc-tabla">${EXC_CAB}${xs.map(excFilaHtml).join('')}</div>`).join('');
+  } else if (tarTab === 'traslado') {
+    grid.innerHTML = trasGrillaHtml(filtered, fDestino, q);
   } else {
     grid.innerHTML = tarItemsWrapHtml(filtered);
   }
@@ -19513,7 +19593,7 @@ function renderTarifario() {
   // pintado tras cargar datos), no en cada tecla del buscador ni cambio de
   // filtro — si no, re-dispara N animaciones por pulsación.
   if (tarEntradaContexto !== tarTab) {
-    grid.querySelectorAll('.tar-grid-sub, .tar-fichas-grid, .tar-hotel-list').forEach(entradaLista);
+    grid.querySelectorAll('.tar-grid-sub, .tar-fichas-grid, .tar-hotel-list, .exc-tabla, .tras-grid').forEach(entradaLista);
     tarEntradaContexto = tarTab;
   }
   const byId = new Map(filtered.map(x => [String(x.id), x]));
@@ -26040,6 +26120,7 @@ async function loadColaBoleteria(silencioso) {
   const filas = cola.data || [];
   // Agente: admin, rol boleteria o la marca es_boleteria (aparece en el roster).
   BOL_EN_REPARTO = (agentes.data || []).some(a => String(a.usuario_id) === String(MI_USUARIO_ID));
+  if (VISTA_SIM === 'asesor_boleteria') BOL_EN_REPARTO = true;
   MI_ES_AGENTE_BOLETERIA = ROL === 'admin' || ROL === 'boleteria' || BOL_EN_REPARTO;
   const agente = MI_ES_AGENTE_BOLETERIA;
 
