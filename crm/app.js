@@ -19375,7 +19375,7 @@ function _agregarHotelCalc(x) {
    items[]{concepto, monto, por}} con la moneda en tarifas.moneda (EUR o USD).
    Cada fila/tarjeta es un .tar-item con data-id, así abre la ficha igual que
    las tarjetas de hotel. */
-const tarMonto = (n, mon) => n == null || n === '' ? '—' : (mon === 'EUR' ? '€' : '$') + nf('es-VE', { minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2, maximumFractionDigits: 2 }).format(Number(n));
+const tarMontoFmt = (n, mon) => n == null || n === '' ? '—' : (mon === 'EUR' ? '€' : '$') + nf('es-VE', { minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2, maximumFractionDigits: 2 }).format(Number(n));
 const tarTarifasVivas = x => (x.tarifas || []).filter(t => t.vigente !== false && t.precios).sort((a, b) => a.id - b.id);
 const tarRankDestino = k => { const i = DESTINO_ORDEN.indexOf(k.split(' · ')[0]); return i < 0 ? 99 : i; };
 // La etiqueta (Cubagua) abre su propio grupo dentro del destino: "Margarita · Cubagua".
@@ -19391,12 +19391,12 @@ function excFilaHtml(x) {
   return ts.map(t => {
     const p = t.precios, mon = t.moneda;
     const edad = Array.isArray(p.edad_nino) ? ` <small>(${p.edad_nino.join('-')})</small>` : '';
-    const inf = p.infante === 0 ? 'Gratis' : p.infante == null ? 'N/A' : tarMonto(p.infante, mon);
-    const tasas = (p.no_incluye || []).map(n => `${esc(n.concepto)} ${tarMonto(n.monto, mon)}${n.aplica ? ` <small>${esc(n.aplica)}</small>` : ''}`).join('<br>');
+    const inf = p.infante === 0 ? 'Gratis' : p.infante == null ? 'N/A' : tarMontoFmt(p.infante, mon);
+    const tasas = (p.no_incluye || []).map(n => `${esc(n.concepto)} ${tarMontoFmt(n.monto, mon)}${n.aplica ? ` <small>${esc(n.aplica)}</small>` : ''}`).join('<br>');
     return `<div class="exc-fila tar-item" data-id="${x.id}">
       <div class="exc-nombre">${esc(x.nombre)}${ts.length > 1 && t.titulo ? `<span class="exc-sub">${esc(t.titulo)}</span>` : ''}${p.notas ? `<span class="exc-sub">${esc(p.notas)}</span>` : ''}</div>
-      <div class="exc-c" data-l="Adulto"><b>${tarMonto(p.adulto, mon)}</b></div>
-      <div class="exc-c" data-l="Niño">${p.nino == null ? 'N/A' : tarMonto(p.nino, mon)}${edad}</div>
+      <div class="exc-c" data-l="Adulto"><b>${tarMontoFmt(p.adulto, mon)}</b></div>
+      <div class="exc-c" data-l="Niño">${p.nino == null ? 'N/A' : tarMontoFmt(p.nino, mon)}${edad}</div>
       <div class="exc-c" data-l="Infante">${inf}</div>
       <div class="exc-c" data-l="Mín.">${p.min_pax || '—'}</div>
       <div class="exc-c exc-tras" data-l="Traslado">${p.incluye_traslado ? '<i class="fas fa-van-shuttle" aria-hidden="true"></i> Incluido' : '—'}</div>
@@ -19415,17 +19415,17 @@ function trasFilaHtml(t) {
   const p = t.precios;
   if (p.modalidad === 'suplemento') {
     const items = p.items || [];
-    const det = items.length ? items.map(i => `${esc(i.concepto)} <b>${tarMonto(i.monto, t.moneda)}</b> ${i.por ? `<small>por ${esc(i.por)}</small>` : ''}`).join('<br>') : esc(p.notas || 'Consultar precio');
+    const det = items.length ? items.map(i => `${esc(i.concepto)} <b>${tarMontoFmt(i.monto, t.moneda)}</b> ${i.por ? `<small>por ${esc(i.por)}</small>` : ''}`).join('<br>') : esc(p.notas || 'Consultar precio');
     return `<div class="tras-fila tras-fila-sup"><span>${esc(t.titulo || p.posada || '')}</span><div>${det}${items.length && p.notas ? `<small class="tras-nota">${esc(p.notas)}</small>` : ''}</div></div>`;
   }
   const por = p.base === 'persona' ? ' p/p' : p.base === 'unidad' ? ' por unidad' : '';
-  return `<div class="tras-fila"><span>${esc(trasEtiqueta(t))}</span><b>${tarMonto(p.monto, t.moneda)}${por}</b></div>`;
+  return `<div class="tras-fila"><span>${esc(trasEtiqueta(t))}</span><b>${tarMontoFmt(p.monto, t.moneda)}${por}</b></div>`;
 }
 function trasCardHtml(x) {
   const ts = tarTarifasVivas(x), p0 = ts[0]?.precios || {};
   const sup = p0.modalidad === 'suplemento';
   const meta = [p0.vehiculo, p0.capacidad ? `hasta ${p0.capacidad} pax` : '', { OW: 'Solo ida', RT: 'Ida y vuelta' }[p0.sentido]].filter(Boolean).join(' · ');
-  const nino = !sup && p0.nino != null ? `Niño: ${typeof p0.nino === 'number' ? tarMonto(p0.nino, ts[0].moneda) : esc(p0.nino)}` : '';
+  const nino = !sup && p0.nino != null ? `Niño: ${typeof p0.nino === 'number' ? tarMontoFmt(p0.nino, ts[0].moneda) : esc(p0.nino)}` : '';
   return `<div class="tras-card tar-item${sup ? ' tras-ancha' : ''}" data-id="${x.id}">
     <div class="tras-nombre">${esc(x.nombre)}</div>${meta ? `<div class="tras-meta">${esc(meta)}</div>` : ''}
     <div class="tras-tabla">${ts.map(trasFilaHtml).join('') || '<div class="tras-fila"><span>Sin tarifa BT vigente</span></div>'}</div>
