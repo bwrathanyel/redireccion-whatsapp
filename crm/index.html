@@ -3002,6 +3002,9 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
    padre. Siguen en el DOM para el buscador (body.nav-buscando) y para el
    sondeo de permisos por rol (body.nav-sondeo, ver conSondeoNav en app.js). */
 body:not(.nav-buscando):not(.nav-sondeo) #sidebar-nav > .nav-hijo{display:none}
+/* Mensajes se abre por la burbuja #chat-fab; el ítem sigue en el DOM para que el
+   sondeo por rol (chatActualizarVisibilidad) y ?ir=mensajes funcionen. */
+body:not(.nav-sondeo) #sidebar-nav > .nav-item[data-sec="mensajes"]{display:none}
 #sidebar-nav > .nav-padre-vacio{display:none}
 .nav-tabs-sec{max-width:100%;overflow-x:auto;scrollbar-width:none}
 .nav-tabs-sec .seg{white-space:nowrap}

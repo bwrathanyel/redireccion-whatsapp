@@ -25478,12 +25478,19 @@ const cbPaxTexto = it => {
   return [f(p.a, 'adulto', 'adultos'), f(p.n, 'niño', 'niños'), f(p.i, 'infante', 'infantes')].filter(Boolean).join(', ');
 };
 const cbTotalPax = it => { if (!cbEsPax(it)) return Number(it.cant) || 0; const p = cbPax(it); return p.a + p.n + p.i; };
+// Hotel por persona por noche (2026-10-16): la tarifa se multiplica por las noches del check-in al
+// check-out (sin fechas, 1). Los ítems hotel guardados antes no traen `unidad`: su tarifa ya era el
+// total de la estadía por persona (los asesores multiplicaban a mano), así que se leen como 'persona'.
+const cbPorNoche = it => it.tipo === 'hotel' && it.unidad === 'persona_noche';
+const cbNochesCobro = it => cbPorNoche(it) ? (+cbNoches(it.ida, it.vuelta) || 1) : 1;
 const cbImporte = it => {
   const t = Number(it.tarifa) || 0;
   if (!cbEsPax(it)) return (Number(it.cant) || 0) * t;
   const p = cbPax(it);
-  return p.a * t + p.n * (Number(it.tarifa_nino) || 0) + p.i * (Number(it.tarifa_infante) || 0);
+  return (p.a * t + p.n * (Number(it.tarifa_nino) || 0) + p.i * (Number(it.tarifa_infante) || 0)) * cbNochesCobro(it);
 };
+const cbNochesTexto = n => `${n} noche${n === 1 ? '' : 's'}`;
+const cbImporteTexto = it => '$' + cbMonto(cbImporte(it)) + (cbPorNoche(it) ? ` · ${cbNochesTexto(cbNochesCobro(it))}` : '');
 // Cotización multi-servicio (2026-10-14, paquetes corporativos): cada ítem lleva
 // `tipo`; las filas anteriores no lo tienen y se leen como boleto. El primer campo
 // de cada tipo es su título (ruta o nombre) y es el que se exige al guardar.
@@ -25501,7 +25508,7 @@ const CB_TIPOS = {
 const cbTipo = it => CB_TIPOS[it.tipo] || CB_TIPOS.boleto;
 const cbTitulo = it => String(it[cbTipo(it).campos[0][0]] || '').trim();
 const CB_PAX_CAMPOS = [['adultos', 'tarifa', 'Adultos', 'Tarifa adulto (USD)', 1], ['ninos', 'tarifa_nino', 'Niños', 'Tarifa niño (USD)', 0], ['infantes', 'tarifa_infante', 'Infantes', 'Tarifa infante (USD)', 0]];
-const cbItemVacio = (tipo = 'boleto') => Object.fromEntries([['tipo', tipo], ...CB_TIPOS[tipo].campos.map(([k]) => [k, k === 'cant' ? 1 : '']), ...(CB_TIPOS[tipo].pax ? CB_PAX_CAMPOS.flatMap(([c, t]) => [[c, c === 'adultos' ? 1 : ''], [t, '']]) : []), ['extra', '']]);
+const cbItemVacio = (tipo = 'boleto') => Object.fromEntries([['tipo', tipo], ...CB_TIPOS[tipo].campos.map(([k]) => [k, k === 'cant' ? 1 : '']), ...(CB_TIPOS[tipo].pax ? CB_PAX_CAMPOS.flatMap(([c, t]) => [[c, c === 'adultos' ? 1 : ''], [t, '']]) : []), ...(tipo === 'hotel' ? [['unidad', 'persona_noche']] : []), ['extra', '']]);
 // Las filas/borradores anteriores a adultos-niños-infantes traen solo `cant`: pasa a adultos.
 const cbMigrarPax = it => CB_TIPOS[it?.tipo || 'boleto']?.pax && it.adultos === undefined && it.cant != null ? { ...it, adultos: it.cant } : it;
 const cbArchivo = c => `Cotizacion-${cbNumero(c.numero)}-${c.cliente.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}.pdf`;
@@ -25510,10 +25517,11 @@ function cbItemHtml(it, i) {
   const f = (k, label, attrs, full = '') => `<div class="field${full}"><label class="fl">${label}</label><input class="ei" data-k="${k}" value="${esc(String(it[k] ?? ''))}" ${attrs}></div>`;
   const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto';
   const opciones = Object.entries(CB_TIPOS).map(([k, t]) => `<option value="${k}"${k === tipo ? ' selected' : ''}>${t.nombre}</option>`).join('');
+  const unidad = tipo === 'hotel' ? `<div class="field cb-dos"><label class="fl">Tarifa por</label><select class="ei" data-k="unidad">${[['persona_noche', 'Persona por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${(cbPorNoche(it) ? 'persona_noche' : 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : '';
   return `<div class="cb-item" data-i="${i}">
-    <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span>Importe <b class="cb-importe">$${cbMonto(cbImporte(it))}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
+    <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span>Importe <b class="cb-importe">${cbImporteTexto(it)}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
     <div class="cb-item-grid">
-      ${CB_TIPOS[tipo].campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : f(...c)).join('')}
+      ${CB_TIPOS[tipo].campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : f(...c)).join('')}${unidad}
       ${CB_TIPOS[tipo].pax ? `<div class="cb-pax cb-full">${CB_PAX_CAMPOS.map(([c, t, lc, lt, min]) => `<div class="cb-pax-c"><div class="field"><label class="fl">${lc}</label><input class="ei" data-k="${c}" type="number" min="${min}" step="1" placeholder="0" value="${esc(String(it[c] ?? ''))}"></div><div class="field"><label class="fl">${lt}</label><input class="ei" data-k="${t}" type="number" min="0" step="0.01" value="${esc(String(it[t] ?? ''))}"></div></div>`).join('')}</div>` : ''}
       ${f('extra', 'Detalle adicional (opcional)', 'placeholder="Equipaje, clase, qué incluye, observaciones..."', ' cb-full')}
     </div>
@@ -25524,6 +25532,7 @@ function cbLimpiarItem(it) {
   [...CB_TIPOS[o.tipo].campos.map(([k]) => k), 'extra'].forEach(k => { o[k] = String(it[k] ?? '').trim(); });
   if (!CB_TIPOS[o.tipo].pax) return Object.assign(o, { cant: Number(it.cant) || 0, tarifa: Number(it.tarifa) || 0 });
   CB_PAX_CAMPOS.forEach(([c, t]) => { o[c] = Math.max(0, Math.floor(Number(it[c]) || 0)); o[t] = Number(it[t]) || 0; });
+  if (o.tipo === 'hotel') o.unidad = it.unidad === 'persona_noche' ? 'persona_noche' : 'persona';
   return Object.assign(o, { cant: o.adultos + o.ninos + o.infantes });
 }
 const cbNoches = (a, b) => { const n = a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 864e5) : 0; return n > 0 ? String(n) : ''; };
@@ -25536,6 +25545,7 @@ function cbDetalle(it) {
   } else if (tipo === 'hotel' || tipo === 'paquete') {
     d.push(`${tipo === 'hotel' ? 'HOSPEDAJE' : 'PAQUETE'}: ${U(it.nombre)}`);
     add('PLAN', U(it.plan)); add('HABITACIÓN', U(it.hab)); add(tipo === 'hotel' ? 'CHECK-IN' : 'ENTRADA', cbFechaCorta(it.ida)); add(tipo === 'hotel' ? 'CHECK-OUT' : 'SALIDA', cbFechaCorta(it.vuelta)); add('NOCHES', cbNoches(it.ida, it.vuelta));
+    if (cbPorNoche(it)) { const p = cbPax(it); add('TARIFA', p.n || p.i ? 'POR PERSONA POR NOCHE' : `$${cbMonto(it.tarifa)} POR PERSONA POR NOCHE × ${U(cbNochesTexto(cbNochesCobro(it)))}`); }
   } else if (tipo === 'traslado') {
     d.push(`TRASLADO: ${U(it.ruta)}`);
     add('FECHA', cbFechaCorta(it.ida)); add('HORA', U(it.ida_hora)); add('FECHA DE REGRESO', cbFechaCorta(it.vuelta)); add('HORA', U(it.vuelta_hora));
@@ -25725,7 +25735,7 @@ async function cbCargarSeccion() {
       if (!k || !card) return;
       const it = cbItems[+card.dataset.i]; it[k] = e.target.value;
       if (k === 'tipo') { cbItems[+card.dataset.i] = { ...cbItemVacio(it.tipo), ...it }; cbRenderItems(); return; }
-      card.querySelector('.cb-importe').textContent = '$' + cbMonto(cbImporte(it));
+      card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
       cbActualizarTotal();
     });
     document.getElementById('cb-buscar').addEventListener('input', () => { clearTimeout(cbBuscarTimer); cbBuscarTimer = setTimeout(() => { cbOffset = 0; cbCargarHistorial(false); }, 280); });
@@ -25919,9 +25929,11 @@ async function cbPdfBlob(c) {
   // Con niños o infantes el ítem lleva su descripción y una fila por categoría (adultos, niños, infantes).
   const filas = (c.items || []).flatMap((it, i) => {
     if (!cbEsPax(it)) return [[i + 1, cbDetalle(it), Number(it.cant).toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))]];
-    const p = cbPax(it);
-    if (!p.n && !p.i) return [[i + 1, cbDetalle(it), p.a.toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))]];
-    const cat = [['ADULTOS', p.a, it.tarifa], ['NIÑOS', p.n, it.tarifa_nino], ['INFANTES', p.i, it.tarifa_infante]].filter(x => x[1]).map(([n, q, t]) => ['', n, q.toFixed(2), cbMonto(t), cbMonto(q * (Number(t) || 0))]);
+    // Hotel por noche: la columna Tarifa va por la estadía completa para que Cant. × Tarifa = Importe.
+    const p = cbPax(it), noches = cbNochesCobro(it), tn = t => (Number(t) || 0) * noches;
+    if (!p.n && !p.i) return [[i + 1, cbDetalle(it), p.a.toFixed(2), cbMonto(tn(it.tarifa)), cbMonto(cbImporte(it))]];
+    const cat = [['ADULTOS', p.a, it.tarifa], ['NIÑOS', p.n, it.tarifa_nino], ['INFANTES', p.i, it.tarifa_infante]].filter(x => x[1])
+      .map(([n, q, t]) => ['', cbPorNoche(it) ? `${n} · $${cbMonto(t)} × ${cbNochesTexto(noches).toUpperCase()}` : n, q.toFixed(2), cbMonto(tn(t)), cbMonto(q * tn(t))]);
     return [[i + 1, cbDetalle(it), '', '', ''], ...cat];
   });
   doc.autoTable({
