@@ -181,7 +181,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de hospedaje en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de servicio (hospedaje, excursiones, traslados) en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
   tareas: ['Tareas', 'Tus tareas activas'],
   comisiones: ['Comisiones por corte', 'Ventas pagadas, verificación e invoices · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
@@ -23243,6 +23243,9 @@ function setupVoucher() {
   form.addEventListener('input', e => {
     const id = e.target.id;
     if (id === 'vc-lead-q') { clearTimeout(vcLeadTimer); vcLeadTimer = setTimeout(vcBuscarLeadsQ, 250); return; }
+    if (e.target.dataset.sk) { vcServInput(e.target); return; }
+    if (id === 'vc-referencia') document.getElementById('vc-ref-box').classList.remove('falta');
+    if (id === 'vc-modalidad') vcSyncPlanes();
     if (id === 'vc-total-dias') vcDiasManual = !!e.target.value.trim();
     if (id === 'vc-resta') vcRestaManual = e.target.value !== '';
     if (id === 'vc-total-general' || id === 'vc-monto-pagado') vcRestaManual = false;
@@ -23250,11 +23253,17 @@ function setupVoucher() {
     if ((id === 'vc-telefono' || id === 'vc-cliente-nombre') && !vcLead) vcProgramarSugerencia();
     vcActualizarPreview();
   });
-  form.addEventListener('change', e => { if (e.target.id !== 'vc-lead-q') vcActualizarPreview(); });
+  form.addEventListener('change', e => {
+    if (e.target.dataset.sk === 'nombre') { const c = e.target.closest('[data-si]'), s = vcServicios[Number(c.dataset.si)]; if (s && c.dataset.key !== vcServKey(s)) vcPintarServicios(); }
+    if (e.target.id !== 'vc-lead-q') vcActualizarPreview();
+  });
   form.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const d = b.dataset;
     if (d.pago) vcTogglePago(d.pago);
+    else if ('plan' in d) vcElegirPlan(d.plan);
+    else if (d.vcAdd) vcAgregarServicio(d.vcAdd);
+    else if ('vcSquitar' in d) { vcServicios.splice(Number(d.vcSquitar), 1); vcPintarServicios(); vcAjustarTotal(); vcActualizarPreview(); }
     else if ('vcLead' in d) { const l = vcLeadsRes[Number(d.vcLead)]; if (l) vcElegirLead(l); }
     else if ('vcQuitar' in d) { vcLead = null; vcReservas = null; vcReservasError = false; vcPintarLead(); vcActualizarPreview(); }
     else if ('vcSin' in d || 'vcCon' in d) { vcSinReserva = 'vcSin' in d; vcActualizarPreview(); }
@@ -23273,7 +23282,156 @@ function setupVoucher() {
   });
   q.addEventListener('blur', () => setTimeout(vcCerrarRes, 120));
   q.addEventListener('focus', () => { if (vcLeadsRes.length && q.value.trim().length >= 3) res.hidden = false; });
+  document.getElementById('vc-destino').addEventListener('focus', vcCargarTarifario, { once: true });
 }
+
+// Voucher de servicio (2026-10-16): modalidad en tarjetas y servicios anexos. Los de excursión,
+// traslado y paquete salen del tarifario (productos + tarifas vigentes) con precio sugerido editable.
+const VC_PLANES = ['Todo incluido', 'Pensión completa', 'Media pensión', 'Desayuno incluido', 'Solo alojamiento'];
+let vcPlanOtro = false;
+function vcElegirPlan(p) {
+  const el = document.getElementById('vc-modalidad');
+  if (p) { vcPlanOtro = false; el.value = el.value === p ? '' : p; }
+  else { vcPlanOtro = true; if (VC_PLANES.includes(el.value)) el.value = ''; }
+  vcSyncPlanes(); if (vcPlanOtro) el.focus(); vcActualizarPreview();
+}
+function vcSyncPlanes() {
+  const el = document.getElementById('vc-modalidad'), v = el.value.trim().toLowerCase();
+  const otro = vcPlanOtro || (!!v && !VC_PLANES.some(p => p.toLowerCase() === v));
+  document.querySelectorAll('#vc-planes [data-plan]').forEach(b => {
+    const on = b.dataset.plan ? !otro && b.dataset.plan.toLowerCase() === v : otro;
+    b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on));
+  });
+  el.hidden = !otro;
+}
+const VC_SERV_TIPOS = {
+  excursion: { nombre: 'Excursión / full day', pdf: 'EXCURSIÓN', icono: 'fa-umbrella-beach', ph: 'Buscar excursión o full day del tarifario' },
+  traslado: { nombre: 'Traslado', pdf: 'TRASLADO', icono: 'fa-van-shuttle', ph: 'Buscar traslado del tarifario' },
+  paquete: { nombre: 'Paquete', pdf: 'PAQUETE', icono: 'fa-suitcase', ph: 'Buscar paquete del tarifario' },
+  otro: { nombre: 'Otro servicio', pdf: '', icono: 'fa-plus', ph: 'Seguro de viaje, cena, entrada...' },
+};
+let vcServicios = [], vcServSuma = 0, vcTarifario = null, vcTarifarioPromesa = null;
+function vcCargarTarifario() {
+  if (vcTarifarioPromesa) return vcTarifarioPromesa;
+  vcTarifarioPromesa = (async () => {
+    const { data: prods, error } = await sb.from('productos').select('id,tipo,nombre,destino').in('tipo', ['hotel', 'excursion', 'traslado', 'paquete']).eq('activo', true).order('nombre');
+    if (error) throw error;
+    const ids = prods.filter(p => p.tipo !== 'hotel').map(p => p.id);
+    const tars = ids.length ? await sb.from('tarifas').select('id,producto_id,titulo,plan,habitacion,precio_texto,moneda,precios').in('producto_id', ids).eq('vigente', true).order('id') : { data: [] };
+    if (tars.error) throw tars.error;
+    const t = { prods: new Map(), porLabel: {} };
+    prods.forEach(p => t.prods.set(p.id, { ...p, tarifas: [] }));
+    (tars.data || []).forEach(x => t.prods.get(x.producto_id)?.tarifas.push(x));
+    ['hotel', 'excursion', 'traslado', 'paquete'].forEach(tipo => {
+      const lista = prods.filter(p => p.tipo === tipo), rep = n => lista.filter(p => p.nombre === n).length > 1;
+      const m = t.porLabel[tipo] = new Map();
+      lista.forEach(p => { const lbl = rep(p.nombre) && p.destino ? `${p.nombre} (${p.destino})` : p.nombre; if (!m.has(lbl)) m.set(lbl, t.prods.get(p.id)); });
+      document.getElementById('vc-dl-' + tipo).innerHTML = [...m].map(([lbl, p]) => `<option value="${esc(lbl)}"${p.destino ? ` label="${esc(p.destino)}"` : ''}>`).join('');
+    });
+    vcTarifario = t;
+    if (vcServicios.length) vcPintarServicios();
+    return t;
+  })().catch(e => { vcTarifarioPromesa = null; console.error('voucher tarifario', e); return null; });
+  return vcTarifarioPromesa;
+}
+const vcTarifaTxt = x => { const s = [x.titulo, x.plan, x.habitacion].filter(Boolean).join(' · ') || x.precio_texto || 'Tarifa'; return s.length > 90 ? s.slice(0, 89) + '…' : s; };
+const vcServProd = s => vcTarifario?.prods.get(s.producto_id) || null;
+const vcServTarifa = s => vcServProd(s)?.tarifas.find(x => x.id === s.tarifa_id) || null;
+const vcServKey = s => `${s.producto_id || ''}|${s.nombre ? 1 : 0}`;
+// Precio por persona (adulto/niño, niño fijo o en %) o por unidad. Moneda distinta de USD o niños
+// sin tarifa conocida quedan en manual: mejor vacío que un monto inventado.
+function vcPrecioTarifa(t, a, n) {
+  const p = t?.precios;
+  if (!p || (t.moneda && t.moneda !== 'USD') || (p.moneda && p.moneda !== 'USD') || a + n <= 0) return null;
+  if (p.base === 'unidad') return Number(p.monto) > 0 ? Number(p.monto) : null;
+  if (p.base !== 'persona') return null;
+  const ad = Number(p.adulto ?? p.monto);
+  if (!(ad > 0)) return null;
+  const ni = n <= 0 ? 0 : typeof p.nino === 'string' && /%$/.test(p.nino) ? ad * parseFloat(p.nino) / 100 : p.nino == null ? NaN : Number(p.nino);
+  return Number.isFinite(ni) ? Math.round((a * ad + n * ni) * 100) / 100 : null;
+}
+// La tarifa que corresponde a la cantidad de pasajeros (traslados por rango de pax), si el asesor no eligió otra.
+function vcServRecalc(s) {
+  const prod = vcServProd(s), pax = (Number(s.adultos) || 0) + (Number(s.ninos) || 0);
+  if (prod?.tarifas.length && !s.tarifaManual) {
+    const enRango = prod.tarifas.find(x => { const p = x.precios || {}; return pax >= (Number(p.pax_min) || 0) && (p.pax_max == null || pax <= Number(p.pax_max)); });
+    s.tarifa_id = (enRango || vcServTarifa(s) || prod.tarifas[0]).id;
+  }
+  if (!s.montoManual && prod) { const m = vcPrecioTarifa(vcServTarifa(s), Number(s.adultos) || 0, Number(s.ninos) || 0); s.monto = m == null ? '' : m; }
+}
+function vcServHtml(s, i) {
+  const t = VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro, prod = vcServProd(s), tar = vcServTarifa(s);
+  const f = (k, label, attrs = '', cls = '') => `<label class="vc-c${cls}"><span>${label}</span><input class="ei" data-sk="${k}" value="${esc(String(s[k] ?? ''))}" ${attrs}></label>`;
+  const conTarifario = s.tipo !== 'otro';
+  return `<div class="vc-serv" data-si="${i}" data-key="${vcServKey(s)}">
+    <div class="vc-serv-cab"><i class="fas ${t.icono}"></i><span>${t.nombre}</span><b data-s-importe>${s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''}</b>
+      <button class="vc-quitar" type="button" data-vc-squitar="${i}" title="Quitar servicio" aria-label="Quitar ${esc(t.nombre)}"><i class="fas fa-trash"></i></button></div>
+    <div class="vc-fila">
+      ${f('nombre', conTarifario ? 'Servicio' : 'Descripción', `placeholder="${esc(t.ph)}"${conTarifario ? ` list="vc-dl-${s.tipo}" autocomplete="off"` : ''}`, ' s2')}
+      ${prod?.tarifas.length ? `<label class="vc-c s2"><span>Tarifa / opción</span><select class="ei" data-sk="tarifa_id">${prod.tarifas.map(x => `<option value="${x.id}"${x.id === s.tarifa_id ? ' selected' : ''}>${esc(vcTarifaTxt(x))}</option>`).join('')}</select></label>`
+        : f('opcion', 'Opción', `placeholder="${s.tipo === 'traslado' ? 'Privado, compartido, ida y vuelta...' : 'Opcional'}"`, ' s2')}
+      ${prod ? `<div class="vc-serv-hint"><span class="vc-pill ok"><i class="fas fa-link"></i> Tarifario</span>${esc([prod.destino, tar?.precio_texto].filter(Boolean).join(' · '))}</div>`
+        : conTarifario && s.nombre ? '<div class="vc-serv-hint">No está en el tarifario: precio manual</div>' : ''}
+      ${f('fecha', 'Fecha', 'type="date"')}${f('hora', 'Hora', 'placeholder="8:00 AM"')}
+      ${f('adultos', 'Adultos', 'type="number" min="0" step="1" inputmode="numeric"')}${f('ninos', 'Niños', 'type="number" min="0" step="1" inputmode="numeric"')}
+      ${f('monto', 'Monto (USD)', `type="number" min="0" step="0.01" inputmode="decimal" placeholder="${prod && !s.montoManual && s.monto === '' ? 'Sin precio en USD' : '0.00'}"`)}
+      ${f('detalle', 'Detalle (opcional)', `placeholder="${s.tipo === 'traslado' ? 'Aeropuerto PMV → hotel, vuelo de las 10:30 AM' : 'Qué incluye, punto de encuentro...'}"`, ' s3')}
+    </div></div>`;
+}
+function vcPintarServicios() {
+  const box = document.getElementById('vc-servicios'), a = document.activeElement;
+  const foco = a && box.contains(a) && a.dataset.sk ? { i: a.closest('[data-si]').dataset.si, k: a.dataset.sk } : null;
+  box.innerHTML = vcServicios.map(vcServHtml).join('');
+  const el = foco && box.querySelector(`[data-si="${foco.i}"] [data-sk="${foco.k}"]`);
+  if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (_e) { /* date/number/select no tienen cursor */ } }
+}
+function vcAgregarServicio(tipo) {
+  const ni = val('vc-ninos').trim();
+  vcServicios.push({ tipo, producto_id: null, tarifa_id: null, nombre: '', opcion: '', fecha: tipo === 'traslado' ? val('vc-fecha-entrada') : '', hora: '',
+    adultos: parseInt(val('vc-adultos'), 10) || '', ninos: /^\d+$/.test(ni) ? Number(ni) : '', monto: '', detalle: '' });
+  vcPintarServicios();
+  document.querySelector(`#vc-servicios [data-si="${vcServicios.length - 1}"] [data-sk="nombre"]`)?.focus();
+  if (tipo !== 'otro') vcCargarTarifario();
+}
+function vcServInput(el) {
+  const caja = el.closest('[data-si]'), s = vcServicios[Number(caja.dataset.si)], k = el.dataset.sk;
+  if (!s) return;
+  let repintar = false;
+  if (k === 'tarifa_id') { s.tarifa_id = Number(el.value); s.tarifaManual = true; s.montoManual = false; repintar = true; }
+  else if (k === 'monto') { s.montoManual = el.value !== ''; s.monto = el.value === '' ? '' : Number(el.value); }
+  else s[k] = k === 'adultos' || k === 'ninos' ? (el.value === '' ? '' : Number(el.value)) : el.value;
+  if (k === 'nombre' && s.tipo !== 'otro') {
+    const p = vcTarifario?.porLabel[s.tipo]?.get(el.value.trim()) || null;
+    if ((p?.id || null) !== s.producto_id) {
+      s.producto_id = p?.id || null; s.tarifa_id = null; s.tarifaManual = s.montoManual = false;
+      if (p) { s.nombre = p.nombre; repintar = true; } else s.monto = '';
+    }
+  }
+  const tarAntes = s.tarifa_id;
+  if (k !== 'monto') vcServRecalc(s);
+  if (repintar || s.tarifa_id !== tarAntes) vcPintarServicios();
+  else {
+    const m = caja.querySelector('[data-sk="monto"]');
+    if (k !== 'monto' && m) m.value = s.monto === '' ? '' : String(s.monto);
+    caja.querySelector('[data-s-importe]').textContent = s.monto !== '' && s.monto != null ? vcMoney(s.monto) : '';
+  }
+  vcAjustarTotal(); vcActualizarPreview();
+}
+// Los servicios se suman solos al total aplicando la diferencia: el total sigue siendo editable a mano.
+function vcAjustarTotal() {
+  const suma = Math.round(vcServicios.reduce((a, x) => a + (Number(x.monto) || 0), 0) * 100) / 100, d = suma - vcServSuma;
+  vcServSuma = suma;
+  if (!d) return;
+  const t = Math.max(0, Math.round((vcNum('vc-total-general') + d) * 100) / 100);
+  document.getElementById('vc-total-general').value = t ? String(t) : ''; vcRestaManual = false;
+}
+const vcEsPagoMovil = () => /pago\s*m[oó]vil/i.test(val('vc-forma-pago'));
+const vcServLimpio = s => {
+  const tar = vcServTarifa(s), n = x => (x === '' || x == null ? null : Number(x));
+  return { tipo: s.tipo, producto_id: s.producto_id || null, tarifa_id: tar ? tar.id : null, nombre: String(s.nombre || '').trim(),
+    opcion: tar ? vcTarifaTxt(tar) : String(s.opcion || '').trim(), fecha: s.fecha || null, hora: String(s.hora || '').trim(),
+    adultos: n(s.adultos), ninos: n(s.ninos), monto: n(s.monto), detalle: String(s.detalle || '').trim() };
+};
 
 // Lead elegido + sus reservas activas. vcReservas null = cargando (o sin lead pagado).
 let vcLead = null, vcReservas = null, vcReservasError = false, vcConVoucher = new Set(), vcUltimaVinculada = null;
@@ -23413,7 +23571,17 @@ function vcActualizarPreview() {
   const a = parseInt(val('vc-adultos'), 10) || 0, ni = val('vc-ninos').trim();
   const ninos = !ni || /^(n\/?a|0|no|ninguno)$/i.test(ni) ? '' : /^\d+$/.test(ni) ? `${ni} niño${ni === '1' ? '' : 's'}` : `Niños: ${ni}`;
   txt('vc-b-pax', [a ? `${a} adulto${a === 1 ? '' : 's'}` : '', ninos].filter(Boolean).join(' + ') || '—');
+  vcSyncPlanes();
   txt('vc-b-hab', val('vc-habitaciones').trim() || '—'); txt('vc-b-plan', val('vc-modalidad').trim() || '—');
+  const servs = vcServicios.filter(s => String(s.nombre || '').trim());
+  $('vc-b-servs').innerHTML = servs.map(s => `<div><i class="fas ${(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).icono}"></i><span>${esc(s.nombre.trim())}</span><em>${esc([s.fecha ? vcFechaCorta(s.fecha) : '', s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''].filter(Boolean).join(' · '))}</em></div>`).join('');
+  $('vc-b-servs').hidden = !servs.length;
+  const pm = vcEsPagoMovil(), ref = val('vc-referencia').trim(), forma = val('vc-forma-pago').trim();
+  $('vc-ref-box').hidden = !pm;
+  $('vc-b-ref').innerHTML = forma ? `<i class="fas fa-receipt"></i> ${esc(forma)}${pm && ref ? ` · Ref. <b>${esc(ref)}</b>` : ''}` : '';
+  $('vc-b-ref').hidden = !forma;
+  $('vc-total-nota').innerHTML = vcServSuma > 0 ? `<i class="fas fa-circle-info"></i> El total incluye <b>${vcMoney(vcServSuma)}</b> de servicios adicionales (se suman solos; podés corregirlo a mano).` : '';
+  $('vc-total-nota').hidden = !(vcServSuma > 0);
   txt('vc-b-total', vcMoney(total)); txt('vc-b-pagado', vcMoney(pagado)); txt('vc-b-resta', vcMoney(resta));
   $('vc-b-resta').parentElement.classList.toggle('cero', total > 0 && resta <= 0);
   $('vc-b-barra').style.width = (total > 0 ? Math.min(100, pagado / total * 100) : 0) + '%';
@@ -23433,11 +23601,14 @@ function vcTogglePago(pago) {
   const el = document.getElementById('vc-forma-pago'), partes = el.value.split('+').map(s => s.trim()).filter(Boolean);
   const i = partes.findIndex(x => x.toLowerCase() === pago.toLowerCase());
   if (i >= 0) partes.splice(i, 1); else partes.push(pago);
-  el.value = partes.join(' + '); vcSyncChips();
+  el.value = partes.join(' + '); vcSyncChips(); vcActualizarPreview();
+  if (i < 0 && vcEsPagoMovil() && !val('vc-referencia').trim()) document.getElementById('vc-referencia').focus();
 }
 function vcReset() {
   ['vc-cliente-nombre', 'vc-documento', 'vc-telefono', 'vc-destino', 'vc-modalidad', 'vc-habitaciones', 'vc-fecha-entrada', 'vc-fecha-salida', 'vc-adultos', 'vc-ninos',
-    'vc-total-dias', 'vc-status', 'vc-total-general', 'vc-monto-pagado', 'vc-resta', 'vc-forma-pago', 'vc-lead-q'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    'vc-total-dias', 'vc-status', 'vc-total-general', 'vc-monto-pagado', 'vc-resta', 'vc-forma-pago', 'vc-referencia', 'vc-lead-q'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  vcServicios = []; vcServSuma = 0; vcPlanOtro = false; vcPintarServicios();
+  document.getElementById('vc-ref-box').classList.remove('falta');
   document.getElementById('vc-check-in').value = '3:00 PM'; document.getElementById('vc-check-out').value = '12:00 PM';
   vcLead = null; vcReservas = null; vcReservasError = false; vcSinReserva = vcDiasManual = vcRestaManual = false; vcSugCand = null; vcSugDescartados.clear();
   document.getElementById('vc-sugerencia').hidden = true;
@@ -23556,10 +23727,14 @@ async function vcEjecutarPlan(plan, reg, st, { total, pagado, asesorNombre }) {
     return data;
   };
   const totalPv = total > 0 ? total : pagado;
+  // Voucher solo de servicios (sin hotel): fechas y proveedor salen de los servicios anexos.
+  const servs = Array.isArray(reg.servicios) ? reg.servicios : [], fechas = servs.map(s => s.fecha).filter(Boolean).sort();
   const pv = {
     p_prioridad: 'NORMAL', p_monto_total: totalPv, p_monto_pagado: Math.min(pagado, totalPv),
-    p_fecha_viaje_inicio: reg.fecha_entrada, p_fecha_viaje_fin: reg.fecha_salida, p_proveedor: reg.destino_hospedaje,
-    p_documentos: { voucher_hotel: true, comprobante_pago: pagado > 0 }, p_marcar_pagado: false, p_notas: `Voucher N° ${reg.numero_factura}`,
+    p_fecha_viaje_inicio: reg.fecha_entrada || fechas[0] || null, p_fecha_viaje_fin: reg.fecha_salida || fechas[fechas.length - 1] || null,
+    p_proveedor: reg.destino_hospedaje || servs[0]?.nombre || null,
+    p_documentos: { voucher_hotel: true, comprobante_pago: pagado > 0 }, p_marcar_pagado: false,
+    p_notas: [`Voucher N° ${reg.numero_factura}`, servs.length ? 'Servicios: ' + servs.map(s => s.nombre).join(', ') : '', reg.referencia_pago ? 'Ref. pago móvil ' + reg.referencia_pago : ''].filter(Boolean).join(' · '),
   };
   if (plan.modo === 'cerrar') {
     if (!st.leadId) {
@@ -23609,6 +23784,13 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
   const total = vcNum('vc-total-general'), pagado = vcNum('vc-monto-pagado');
   if (total > 0 && pagado > total) { errToast('Lo pagado no puede superar el total'); return; }
   if (val('vc-fecha-entrada') && val('vc-fecha-salida') && val('vc-fecha-salida') < val('vc-fecha-entrada')) { errToast('La salida no puede ser antes de la entrada'); return; }
+  const referencia = val('vc-referencia').trim(), pagoMovil = vcEsPagoMovil();
+  if (pagoMovil && referencia.replace(/\D/g, '').length < 4) {
+    document.getElementById('vc-ref-box').classList.add('falta'); document.getElementById('vc-referencia').focus();
+    errToast('Colocá el número de referencia del pago móvil'); return;
+  }
+  const sinNombre = vcServicios.findIndex(s => !String(s.nombre || '').trim());
+  if (sinNombre >= 0) { document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)?.focus(); errToast(`Falta el nombre del servicio adicional ${sinNombre + 1} (o quitalo)`); return; }
   const plan = vcPlan();
   if (plan.modo === 'cargando') { errToast('Esperá a que carguen las reservas del cliente'); return; }
   const montos = `Total ${vcMoney(total)} · Pagado ${vcMoney(pagado)} · Resta ${vcMoney(vcNum('vc-resta'))}`;
@@ -23632,8 +23814,10 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     status_reserva: val('vc-status').trim() || null,
     total_general: val('vc-total-general') ? parseFloat(val('vc-total-general')) : null,
     forma_pago: val('vc-forma-pago').trim() || null,
+    referencia_pago: pagoMovil ? referencia : null,
     monto_pagado: val('vc-monto-pagado') ? parseFloat(val('vc-monto-pagado')) : null,
     resta: val('vc-resta') ? parseFloat(val('vc-resta')) : null,
+    servicios: vcServicios.map(vcServLimpio),
   };
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...';
   let registro = null;
@@ -23711,8 +23895,12 @@ async function construirVoucherPdf(v) {
   doc.text('Destinoyeventoslotus360@gmail.com', 40, 119);
 
   doc.setFontSize(14);
-  doc.text('VOUCHER HOSPEDAJE', 306, 100, { align: 'center' });
+  doc.text('VOUCHER DE SERVICIO', 306, 100, { align: 'center' });
 
+  // Sin hotel y con servicios anexos (voucher solo de excursión/traslado), las filas de hospedaje sobran.
+  const servs = Array.isArray(v.servicios) ? v.servicios : [];
+  const conHosp = !servs.length || [v.destino_hospedaje, v.fecha_entrada, v.fecha_salida, v.modalidad, v.habitaciones].some(Boolean);
+  const HOSP = ['DESTINO / HOSPEDAJE', 'FECHA DE ENTRADA', 'CHECK IN', 'FECHA DE SALIDA', 'CHECK OUT', 'MODALIDAD HOSPEDAJE', 'TOTAL DÍAS DE DISFRUTE', 'CANTIDAD DE HABITACIONES / CLASE'];
   const filas = [
     ['NOMBRE Y APELLIDO', v.cliente_nombre || ''],
     ['DOCUMENTO DE IDENTIFICACIÓN', v.documento_identidad || ''],
@@ -23729,7 +23917,7 @@ async function construirVoucherPdf(v) {
     ['CANTIDAD DE ADULTOS', v.adultos ?? ''],
     ['CANTIDAD DE NIÑOS', v.ninos || 'N/A'],
     ['STATUS DE LA RESERVA / N° LOCALIZADOR', v.status_reserva || ''],
-  ];
+  ].filter(([k]) => conHosp || !HOSP.includes(k));
   doc.autoTable({
     startY: 132, theme: 'grid', margin: { left: 40, right: 40 },
     styles: { fontSize: 9, cellPadding: 6 },
@@ -23737,9 +23925,26 @@ async function construirVoucherPdf(v) {
     body: filas,
   });
 
+  if (servs.length) {
+    const pl = (n, s, p) => (n ? `${n} ${n === 1 ? s : p}` : '');
+    doc.autoTable({
+      startY: doc.lastAutoTable.finalY + 16, theme: 'grid', margin: { left: 40, right: 40 },
+      styles: { fontSize: 9, cellPadding: 6 }, headStyles: { fillColor: naranja, textColor: 255, fontStyle: 'bold' },
+      columnStyles: { 0: { cellWidth: 250 }, 3: { halign: 'right' } },
+      head: [['SERVICIOS ADICIONALES', 'FECHA', 'PASAJEROS', 'MONTO']],
+      body: servs.map(s => [
+        [[(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).pdf, s.nombre].filter(Boolean).join(': '), s.opcion, s.detalle].filter(Boolean).join('\n'),
+        [s.fecha ? s.fecha.split('-').reverse().join('/') : '', s.hora].filter(Boolean).join(' '),
+        [pl(s.adultos, 'adulto', 'adultos'), pl(s.ninos, 'niño', 'niños')].filter(Boolean).join(' + '),
+        s.monto != null ? `$${Number(s.monto).toFixed(2)}` : '',
+      ]),
+    });
+  }
+
   const totales = [
     ['TOTAL GENERAL', v.total_general != null ? `$${Number(v.total_general).toFixed(2)}` : ''],
     [`PAGO ${v.forma_pago || ''}`.trim(), v.monto_pagado != null ? `${Number(v.monto_pagado).toFixed(2)}` : ''],
+    ...(v.referencia_pago ? [['N° DE REFERENCIA PAGO MÓVIL', v.referencia_pago]] : []),
     ['RESTA', v.resta != null ? `$${Number(v.resta).toFixed(2)}` : ''],
   ];
   doc.autoTable({
@@ -23753,8 +23958,8 @@ async function construirVoucherPdf(v) {
   const { PDFDocument } = window.PDFLib;
   const page1Doc = await PDFDocument.load(page1Bytes);
   const finalDoc = await PDFDocument.create();
-  const [p1] = await finalDoc.copyPages(page1Doc, [0]);
-  finalDoc.addPage(p1);
+  // Con varios servicios la tabla puede pasar a una segunda hoja: se copian todas, no solo la primera.
+  (await finalDoc.copyPages(page1Doc, page1Doc.getPageIndices())).forEach(p => finalDoc.addPage(p));
   const terminosBytes = await fetch('voucher-terminos.pdf').then(r => r.arrayBuffer());
   const terminosDoc = await PDFDocument.load(terminosBytes);
   const paginasTerminos = await finalDoc.copyPages(terminosDoc, terminosDoc.getPageIndices());
@@ -27689,6 +27894,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-16', emoji: '🎟️', titulo: 'Voucher de servicio: excursiones, traslados y referencia de pago móvil', texto: 'El voucher ahora es "Voucher de servicio". Puedes anexarle excursiones, full days, traslados y paquetes buscándolos del tarifario: el precio se sugiere solo según adultos y niños (lo puedes cambiar) y se suma al total. La modalidad se elige con tarjetas, y si el pago es por pago móvil hay que colocar el número de referencia, que sale en el PDF.', roles: ['asesor', 'admin'] },
   { fecha: '2026-10-16', emoji: '🧳', titulo: 'Solicitudes de vuelo con adultos, niños e infantes', texto: 'Al mandar una solicitud a boletería (también desde un lead) ya no pones "cuántas personas" a secas: indicas adultos, niños e infantes. Boletería lo ve así en la cola, en el detalle y al copiar los datos, y al cotizar o crear la reserva del boleto salen ya cargados. Las solicitudes anteriores se ven como adultos.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-16', emoji: '👨‍👩‍👧', titulo: 'Adultos, niños e infantes en las cotizaciones', texto: 'En boletos, hoteles, paquetes, full days, tours y traslados, "Pasajeros" ahora se divide en adultos, niños e infantes, cada uno con su tarifa. El importe suma cada categoría y el PDF muestra una línea por cada una. Las cotizaciones anteriores se ven igual que antes.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-15', emoji: '🏢', titulo: 'Vouchers de empresa y sin leads duplicados', texto: 'En Importar vouchers, la columna "Empresa" (o "Marcar seleccionados" abajo) deja cada voucher a nombre de una empresa. Un voucher de empresa puede ir sin monto: queda como reserva de la empresa, sin factura, y el monto se completa después en Postventa. Además, si el cliente ya está en el CRM (mismo teléfono, cédula o nombre, con o sin acentos) el voucher se anexa a su lead en vez de crear uno nuevo, aunque sea de otro asesor.', roles: ['admin'] },

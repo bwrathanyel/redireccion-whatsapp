@@ -2595,6 +2595,47 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .vc-chips button{background:transparent;border:1px solid var(--line2);color:var(--muted);border-radius:999px;padding:5px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;width:auto}
 .vc-chips button:hover{color:var(--txt);border-color:var(--accent)}
 .vc-chips button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+/* Voucher de servicio (2026-10-16): modalidad en tarjetas, servicios del tarifario, referencia de pago móvil. */
+.vc-c.s4{grid-column:1/-1}
+.vc-c.s3{grid-column:span 3}
+.vc-planes{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px}
+.vc-planes button{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;background:transparent;border:1px solid var(--line2);border-radius:12px;padding:10px 12px;color:var(--txt);font:inherit;cursor:pointer;width:auto;transition:border-color .15s,background .15s}
+.vc-planes button i{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:var(--line2);color:var(--muted);font-size:13px;margin-bottom:4px;transition:background .15s,color .15s}
+.vc-planes button b{font-size:12.5px;font-weight:700}
+.vc-planes button small{font-size:10.5px;color:var(--muted);line-height:1.3}
+.vc-planes button:hover{border-color:var(--accent)}
+.vc-planes button.on{border-color:var(--accent);background:rgba(var(--accent-rgb),.08)}
+.vc-planes button.on i{background:var(--accent-soft);color:var(--accent-ink)}
+.vc-planes button.on::after{content:"\f00c";font-family:"Font Awesome 6 Free";font-weight:900;position:absolute;top:8px;right:9px;font-size:10px;color:var(--accent-ink)}
+.vc-form .vc-plan-otro{margin-top:8px}
+.vc-opc{font-style:normal;font-weight:600;letter-spacing:0;text-transform:none;font-size:11px;opacity:.75}
+.vc-servs{display:flex;flex-direction:column;gap:10px}
+.vc-servs:not(:empty){margin-bottom:10px}
+.vc-serv{border:1px solid var(--line2);border-radius:12px;padding:10px 12px;background:rgba(var(--accent-rgb),.03)}
+.vc-serv-cab{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;font-weight:700}
+.vc-serv-cab>i{display:grid;place-items:center;width:24px;height:24px;border-radius:8px;background:var(--accent-soft);color:var(--accent-ink);font-size:11px}
+.vc-serv-cab>span{flex:1;min-width:0}
+.vc-serv-cab>b{font-variant-numeric:tabular-nums;color:var(--accent-ink)}
+.vc-serv-hint{grid-column:1/-1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:-2px}
+.vc-serv-hint .vc-pill{font-size:9.5px}
+.vc-add{display:flex;flex-wrap:wrap;gap:6px}
+.vc-add button{background:transparent;border:1.5px dashed var(--line2);color:var(--muted);border-radius:999px;padding:6px 13px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;width:auto}
+.vc-add button:hover{color:var(--accent-ink);border-color:var(--accent);background:var(--accent-soft)}
+.vc-add button i{margin-right:3px}
+.vc-ref{margin-top:10px;max-width:380px;padding:10px 12px;border-radius:12px;border:1px solid rgba(var(--accent-rgb),.4);background:rgba(var(--accent-rgb),.06)}
+.vc-c.vc-ref>span{color:var(--accent-ink)}
+.vc-ref b{color:var(--danger)}
+.vc-ref.falta{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 8%,transparent)}
+.vc-total-nota{margin-top:8px;font-size:11.5px;color:var(--muted)}
+.vc-total-nota b{color:var(--txt)}
+.vc-b-servs{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line2);display:flex;flex-direction:column;gap:6px}
+.vc-b-servs>div{display:flex;align-items:baseline;gap:7px;font-size:12px;min-width:0}
+.vc-b-servs>div i{color:var(--accent-ink);font-size:11px;width:14px;text-align:center}
+.vc-b-servs>div span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.vc-b-servs>div em{font-style:normal;font-size:11px;color:var(--muted);white-space:nowrap}
+.vc-b-ref{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);margin:-4px 0 10px}
+.vc-b-ref b{color:var(--txt);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+:is(.vc-ref,.vc-total-nota,.vc-b-servs,.vc-b-ref,.vc-plan-otro)[hidden]{display:none}
 .vc-pie{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
 .vc-plan{flex:1;min-width:220px;font-size:12px;color:var(--muted);line-height:1.5}
 .vc-plan b{color:var(--txt)}
@@ -2645,7 +2686,7 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .vc-chip-res{background:var(--accent-soft);color:var(--accent-ink);border:0;border-radius:999px;padding:3px 9px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;font-weight:700;cursor:pointer;width:auto}
 :is(.vc-res,.vc-lead,.vc-sugerencia,.vc-hecho)[hidden]{display:none}
 @media (max-width:1100px){.vc-wrap{grid-template-columns:minmax(0,1fr)}.vc-boleto-col{position:static;width:100%;max-width:420px;margin:0 auto}}
-@media (max-width:760px){.vc-form{padding-left:18px}.vc-fila{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-form .ei{font-size:16px;min-height:44px}.vc-buscar>i{top:22px}.vc-generar{width:100%}.vc-chips button{padding:8px 14px}}
+@media (max-width:760px){.vc-form{padding-left:18px}.vc-fila{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-form .ei{font-size:16px;min-height:44px}.vc-buscar>i{top:22px}.vc-generar{width:100%}.vc-chips button{padding:8px 14px}.vc-planes{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-c.s3{grid-column:1/-1}.vc-add button{padding:9px 14px}.vc-ref{max-width:none}}
 .nav-item.nav-freelancer-only,.sheet-item.nav-freelancer-only{display:none}
 .es-freelancer .nav-item.nav-freelancer-only,.es-freelancer .sheet-item.nav-freelancer-only{display:flex}
 .tiene-tareas .nav-item.nav-freelancer-only,.tiene-tareas .sheet-item.nav-freelancer-only{display:flex}
@@ -7350,7 +7391,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <form class="card vc-form" id="vc-form" autocomplete="off" onsubmit="return false">
           <div class="vc-cab">
             <div>
-              <h2><i class="fas fa-file-invoice"></i> Voucher de hospedaje</h2>
+              <h2><i class="fas fa-file-invoice"></i> Voucher de servicio</h2>
               <div class="csub">Genera el PDF y deja la ficha lista en Reservas</div>
             </div>
             <button class="vc-link" type="button" onclick="vcLimpiar()"><i class="fas fa-eraser"></i> Limpiar</button>
@@ -7374,11 +7415,21 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           </fieldset>
 
           <fieldset class="vc-grupo">
-            <legend><span>2</span> Estadía</legend>
+            <legend><span>2</span> Hospedaje</legend>
             <div class="vc-fila">
-              <label class="vc-c s2"><span>Destino / Hospedaje</span><input id="vc-destino" class="ei" placeholder="Hotel, posada o destino"></label>
-              <label class="vc-c"><span>Modalidad</span><input id="vc-modalidad" class="ei" placeholder="Todo incluido" list="vc-modalidades"></label>
-              <label class="vc-c"><span>Habitación / clase</span><input id="vc-habitaciones" class="ei" placeholder="Habitación doble"></label>
+              <label class="vc-c s2"><span>Destino / Hospedaje</span><input id="vc-destino" class="ei" placeholder="Hotel, posada o destino" list="vc-dl-hotel" autocomplete="off"></label>
+              <label class="vc-c s2"><span>Habitación / clase</span><input id="vc-habitaciones" class="ei" placeholder="Habitación doble"></label>
+              <div class="vc-c s4"><span id="vc-planes-lbl">Modalidad</span>
+                <div class="vc-planes" id="vc-planes" role="radiogroup" aria-labelledby="vc-planes-lbl">
+                  <button type="button" role="radio" aria-checked="false" data-plan="Todo incluido"><i class="fas fa-champagne-glasses"></i><b>Todo incluido</b><small>Comidas, bebidas y snacks</small></button>
+                  <button type="button" role="radio" aria-checked="false" data-plan="Pensión completa"><i class="fas fa-utensils"></i><b>Pensión completa</b><small>Desayuno, almuerzo y cena</small></button>
+                  <button type="button" role="radio" aria-checked="false" data-plan="Media pensión"><i class="fas fa-bowl-food"></i><b>Media pensión</b><small>Desayuno y cena</small></button>
+                  <button type="button" role="radio" aria-checked="false" data-plan="Desayuno incluido"><i class="fas fa-mug-hot"></i><b>Desayuno</b><small>Solo el desayuno</small></button>
+                  <button type="button" role="radio" aria-checked="false" data-plan="Solo alojamiento"><i class="fas fa-bed"></i><b>Solo alojamiento</b><small>Sin comidas</small></button>
+                  <button type="button" role="radio" aria-checked="false" data-plan=""><i class="fas fa-pen"></i><b>Otra</b><small>Escribirla a mano</small></button>
+                </div>
+                <input id="vc-modalidad" class="ei vc-plan-otro" placeholder="Ej: Plan europeo, desayuno y almuerzo..." aria-label="Modalidad" hidden>
+              </div>
               <label class="vc-c"><span>Entrada</span><input id="vc-fecha-entrada" class="ei" type="date"></label>
               <label class="vc-c"><span>Salida</span><input id="vc-fecha-salida" class="ei" type="date"></label>
               <label class="vc-c"><span>Check in</span><input id="vc-check-in" class="ei" placeholder="3:00 PM"></label>
@@ -7388,11 +7439,23 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
               <label class="vc-c"><span>Días de disfrute</span><input id="vc-total-dias" class="ei" placeholder="Se calcula con las fechas"></label>
               <label class="vc-c"><span>Status / localizador</span><input id="vc-status" class="ei" placeholder="Activa"></label>
             </div>
-            <datalist id="vc-modalidades"><option value="Todo incluido"><option value="Desayuno incluido"><option value="Media pensión"><option value="Pensión completa"><option value="Solo alojamiento"></datalist>
+            <datalist id="vc-dl-hotel"></datalist>
           </fieldset>
 
           <fieldset class="vc-grupo">
-            <legend><span>3</span> Pago</legend>
+            <legend><span>3</span> Servicios adicionales <em class="vc-opc">opcional</em></legend>
+            <div class="vc-servs" id="vc-servicios"></div>
+            <div class="vc-add" id="vc-add" aria-label="Anexar servicio del tarifario">
+              <button type="button" data-vc-add="excursion"><i class="fas fa-umbrella-beach"></i> Excursión / full day</button>
+              <button type="button" data-vc-add="traslado"><i class="fas fa-van-shuttle"></i> Traslado</button>
+              <button type="button" data-vc-add="paquete"><i class="fas fa-suitcase"></i> Paquete</button>
+              <button type="button" data-vc-add="otro"><i class="fas fa-plus"></i> Otro servicio</button>
+            </div>
+            <datalist id="vc-dl-excursion"></datalist><datalist id="vc-dl-traslado"></datalist><datalist id="vc-dl-paquete"></datalist>
+          </fieldset>
+
+          <fieldset class="vc-grupo">
+            <legend><span>4</span> Pago</legend>
             <div class="vc-fila">
               <label class="vc-c"><span>Total (USD)</span><input id="vc-total-general" class="ei" type="number" min="0" step="0.01" inputmode="decimal"></label>
               <label class="vc-c"><span>Pagado (USD)</span><input id="vc-monto-pagado" class="ei" type="number" min="0" step="0.01" inputmode="decimal"></label>
@@ -7402,6 +7465,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             <div class="vc-chips" id="vc-pago-chips" aria-label="Formas de pago frecuentes">
               <button type="button" data-pago="Zelle">Zelle</button><button type="button" data-pago="Efectivo">Efectivo</button><button type="button" data-pago="Pago móvil">Pago móvil</button><button type="button" data-pago="Transferencia">Transferencia</button><button type="button" data-pago="TDC">TDC</button><button type="button" data-pago="Binance">Binance</button>
             </div>
+            <label class="vc-c vc-ref" id="vc-ref-box" hidden><span><i class="fas fa-mobile-screen-button"></i> N° de referencia del pago móvil <b>*</b></span><input id="vc-referencia" class="ei" inputmode="numeric" placeholder="Ej: 004512 (mínimo 4 dígitos)" maxlength="40"></label>
+            <div class="vc-total-nota" id="vc-total-nota" hidden></div>
           </fieldset>
 
           <div class="vc-pie">
@@ -7415,11 +7480,11 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             <div class="vc-lomo" aria-hidden="true"><span>Destino y Eventos Lotus 360</span></div>
             <div class="vc-b-cab">
               <img src="logolotus.png" alt="" width="34" height="34">
-              <div><b>Lotus 360</b><small>Voucher de hospedaje</small></div>
+              <div><b>Lotus 360</b><small>Voucher de servicio</small></div>
               <span class="vc-b-num" id="vc-b-num">Borrador</span>
             </div>
             <div class="vc-b-cuerpo">
-              <small>Huésped</small>
+              <small>Cliente</small>
               <div class="vc-b-cliente" id="vc-b-cliente">Nombre del cliente</div>
               <div class="vc-b-hotel" id="vc-b-hotel"><i class="fas fa-hotel"></i> <span>Hotel o destino</span></div>
               <div class="vc-b-ruta">
@@ -7432,6 +7497,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
                 <div><small>Habitación</small><b id="vc-b-hab">—</b></div>
                 <div><small>Plan</small><b id="vc-b-plan">—</b></div>
               </div>
+              <div class="vc-b-servs" id="vc-b-servs" hidden></div>
             </div>
             <div class="vc-b-corte" aria-hidden="true"></div>
             <div class="vc-b-talon">
@@ -7441,6 +7507,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
                 <div><small>Resta</small><b id="vc-b-resta">$0</b></div>
               </div>
               <div class="vc-b-barra"><i id="vc-b-barra"></i></div>
+              <div class="vc-b-ref" id="vc-b-ref" hidden></div>
               <div class="vc-b-reserva" id="vc-b-reserva"><i class="fas fa-suitcase-rolling"></i> <span>Cliente sin vincular</span></div>
             </div>
           </div>
