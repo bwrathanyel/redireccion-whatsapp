@@ -3556,6 +3556,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ria-cal-fila{font-size:12px;color:var(--muted);padding:8px 0;border-top:1px solid var(--line)}.ria-cal-fila b{text-align:center;color:var(--txt)}
 .ria-cal-head.ria-mod,.ria-cal-fila.ria-mod{grid-template-columns:minmax(130px,1fr) repeat(var(--n,3),84px)}.ria-cal-head.ria-mod span:not(:first-child){text-align:center}
 .ria-vacio{font-size:12.5px;color:var(--muted);padding:18px 0;text-align:center}
+.ria-diag{padding:11px 0;border-bottom:1px solid var(--line)}.ria-diag:last-child{border-bottom:0}.ria-diag-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.ria-diag-top b{font-size:12.5px}
+.ria-diag-txt{margin:6px 0 0;font-size:12px;color:var(--muted);line-height:1.5}.ria-diag-txt b{color:var(--txt)}
+.ria-fila>span small{display:block;margin-top:3px;font-size:11px;color:var(--muted);font-weight:500;line-height:1.45}
+.ria-fila.ria-link{cursor:pointer;background:none;border:0;border-bottom:1px solid var(--line);width:100%;font:inherit;font-size:12px;color:var(--muted);text-align:left}.ria-fila.ria-link:hover>span{color:var(--txt)}
 .ria-tend{display:flex;align-items:stretch;gap:3px;height:132px}.ria-tend-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px}
 .ria-tend-bar{flex:1;width:100%;display:flex;align-items:flex-end}.ria-tend-c{display:flex;flex-direction:column;justify-content:flex-end;width:100%;border-radius:4px 4px 0 0;background:rgba(var(--accent-rgb),.3);overflow:hidden}.ria-tend-l{display:block;width:100%;background:var(--accent)}
 .ria-tend-col span{font-size:9px;color:var(--muted2);line-height:1}
@@ -7572,9 +7576,10 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <span class="ria-estado sin_datos" id="ria-estado">Cargando</span>
         <div class="ria-texto" id="ria-estado-texto">Consultando la telemetría privada de la IA…</div>
       </div>
+      <div class="ria-card" id="ria-card-diagnostico" style="margin-bottom:12px"><h2><i class="fas fa-stethoscope"></i> Diagnóstico</h2><div class="ria-sub">Qué está pasando, por qué y qué hacer. Reglas fijas sobre los números del período, de lo más urgente a lo informativo.</div><div id="ria-diagnostico"></div></div>
       <div class="kpis" id="ria-kpis"></div>
       <div class="ria-grid">
-        <div class="ria-card"><h2><i class="fas fa-filter"></i> Embudo comercial</h2><div class="ria-sub">En qué paso avanzan o se pierden las conversaciones.</div><div id="ria-embudo"></div></div>
+        <div class="ria-card" id="ria-card-embudo"><h2><i class="fas fa-filter"></i> Embudo comercial</h2><div class="ria-sub">En qué paso avanzan o se pierden las conversaciones.</div><div id="ria-embudo"></div></div>
         <div class="ria-card"><h2><i class="fas fa-handshake"></i> Resultado del negocio</h2><div class="ria-sub">Leads entregados, seguimiento y ventas atribuibles a la IA.</div><div id="ria-ventas"></div></div>
       </div>
       <div class="ria-grid">
@@ -7584,6 +7589,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-life-ring"></i> Seguimiento a conversaciones</h2><div class="ria-sub">Mensajes de seguimiento a quien dejó la conversación a medias: cuántos vuelven, cuántos se vuelven lead y qué habría pasado sin el mensaje.</div><div id="ria-reactivacion"></div></div>
       <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-microchip"></i> Comparativa por modelo</h2><div class="ria-sub">Cada contacto queda con un modelo fijo (DeepSeek, Haiku o Lite de respaldo). Turnos, velocidad y costo cuentan por el modelo que respondió; conversaciones y leads, por el modelo que atendió la mayor parte del chat.</div><div id="ria-modelos"></div></div>
       <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-comment-dots"></i> Respuesta privada en Facebook (A/B)</h2><div class="ria-sub">Quien solo comenta recibe un único mensaje privado; si no contesta, Meta no deja escribirle de nuevo. Mitad recibe la respuesta con precio (A) y mitad una pregunta sin precio (B). Contactos nuevos que entraron por un post.</div><div id="ria-ab-fb"></div></div>
+      <div class="ria-card" id="ria-card-errores" style="margin-bottom:12px"><h2><i class="fas fa-plug-circle-xmark"></i> Errores técnicos</h2><div class="ria-sub">Turnos en los que el modelo o el proveedor fallaron: qué vio el cliente, la causa probable y qué hacer.</div><div id="ria-errores"></div></div>
       <div class="ria-grid">
         <div class="ria-card"><h2><i class="fas fa-shield-heart"></i> Calidad de las respuestas</h2><div class="ria-sub">Separa lo que intentó el modelo de lo que realmente recibió el cliente.</div><div id="ria-calidad"></div></div>
         <div class="ria-card"><h2><i class="fas fa-gauge-high"></i> Funcionamiento y costo</h2><div class="ria-sub">Velocidad, errores y consumo real de tokens.</div><div id="ria-operacion"></div></div>

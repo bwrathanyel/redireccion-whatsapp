@@ -6995,11 +6995,103 @@ const riaNum = n => Number(n || 0);
 const riaPct = (n, total) => total ? Math.round(riaNum(n) * 1000 / riaNum(total)) / 10 : 0;
 const riaDinero = n => '$' + riaNum(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const riaHora = iso => iso ? new Date(iso).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' }) : 'Sin actividad';
-function riaCambio(actual, anterior) {
+function riaCambio(actual, anterior, ref = 'el período anterior') {
   actual = riaNum(actual); anterior = riaNum(anterior);
   if (!anterior) return actual ? 'Sin base comparable' : 'Sin cambios';
   const p = Math.round((actual - anterior) * 100 / anterior);
-  return `${p >= 0 ? '+' : ''}${p}% frente al período anterior`;
+  return `${p >= 0 ? '+' : ''}${p}% frente a ${ref}`;
+}
+const riaRefTexto = dias => dias === 1 ? 'ayer a esta hora' : `los ${dias} días anteriores`;
+const riaMinTexto = m => m >= 1440 ? `${Math.floor(m / 1440)} d ${Math.floor(m % 1440 / 60)} h` : m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+const riaIr = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+// Diagnóstico con reglas fijas (sin LLM): cada umbral es una constante para ajustarlo en un solo lugar.
+const RIA_UMBRAL_ERROR_ATENCION = 2, RIA_UMBRAL_ERROR_CRITICO = 5;   // % de turnos con error del modelo
+const RIA_UMBRAL_HORA = 0.5;            // fracción de errores en una sola hora del día
+const RIA_UMBRAL_CAIDA = 30;            // % de caída de conversaciones frente al período anterior
+const RIA_UMBRAL_ESPERA_MIN = 30, RIA_UMBRAL_ESPERA_CRITICA_MIN = 120;
+const RIA_UMBRAL_P95_MS = 8000, RIA_UMBRAL_CACHE = 50;
+const RIA_UMBRAL_BRECHA_LEAD = 0.25;    // teléfonos que no llegan a lead
+const RIA_MIN_MUESTRA = 30;
+const RIA_NIVELES = { critico: ['Crítico', 0], atencion: ['Atención', 1], info: ['Para saber', 2], bien: ['Bien', 3] };
+const RIA_PROVEEDORES = { desconocido: 'Sin proveedor (falló antes de elegir modelo)' };
+const RIA_ERRORES_INFO = {
+  formato: { corto: 'formato inválido', nombre: 'El modelo respondió en un formato inválido', cliente: 'Desde el 16-oct recibe "se me trabó, repítame". Antes no recibía nada: la función cortaba con error 502 y el chat quedaba en silencio.', causa: 'DeepSeek Flash no devolvió la herramienta de respuesta (o la devolvió con JSON roto) en los dos intentos. Es un fallo del proveedor, no de las reglas del bot.', hacer: 'Sin acción si queda bajo 2%. Si sube y se sostiene, avisar a Sistemas para mover más tráfico a Haiku o Lite.' },
+  timeout: { corto: 'timeouts', nombre: 'El modelo tardó demasiado', cliente: 'Recibe "se me trabó, repítame lo último que me escribió".', causa: 'El proveedor superó los 8,5 s de espera: saturación o caída momentánea.', hacer: 'Mirar a qué hora se concentran. Si se repite en el pico del día, el proveedor se satura: revisar la latencia p95 y la ruta de respaldo.' },
+  conexion: { corto: 'conexión', nombre: 'No se pudo conectar con el modelo', cliente: 'Ve un error del canal o no recibe respuesta; ManyChat puede reintentar.', causa: 'El servicio del proveedor estuvo caído o devolvió error de red en los dos intentos.', hacer: 'Revisar el estado del proveedor y avisar a Sistemas si dura más de unos minutos.' },
+  otro: { corto: 'sin clasificar', nombre: 'Error técnico sin clasificar', cliente: 'Depende del caso.', causa: 'Evento sin tipo registrado.', hacer: 'Sin acción: los eventos nuevos traen el tipo.' },
+};
+const RIA_ERRORES_MOTIVO = { sin_tool_call: 'contestó texto libre sin usar la herramienta', json_invalido: 'la herramienta llegó con JSON roto' };
+const RIA_PASOS = [['Conversaciones', 'conversaciones'], ['Destino', 'destinos'], ['Teléfono', 'telefonos'], ['Intención real', 'intenciones'], ['Lead creado', 'leads_calificados']];
+const RIA_PASO_AYUDA = {
+  'Destino': 'Muchos clientes escriben pero no dicen a dónde quieren viajar: revisar el primer mensaje del bot y la pregunta de destino.',
+  'Teléfono': 'Hay destino pero no teléfono: revisar cuándo y cómo la IA pide el WhatsApp (en WhatsApp el número ya viene del chat).',
+  'Intención real': 'Hay teléfono pero sin intención clara de compra: suelen ser curiosos; revisar la regla de intención.',
+  'Lead creado': 'El cliente cumple los requisitos pero no se crea el lead: revisar la regla de calificación y "listo para asesor".',
+};
+
+function riaDiagnostico(data, dias) {
+  const r = data.resumen || {}, ant = data.anterior || {}, op = data.operacion || {}, er = data.errores || {}, esp = data.ventas?.espera || {};
+  if (!riaNum(op.eventos)) return [];
+  const out = [], add = (nivel, titulo, porque, hacer = '') => out.push({ nivel, titulo, porque, hacer });
+  const turnos = riaNum(er.turnos_total), total = riaNum(er.total), tasa = riaPct(total, turnos), tipos = er.por_tipo || [];
+  const dom = tipos[0] ? (RIA_ERRORES_INFO[tipos[0].tipo] || RIA_ERRORES_INFO.otro) : null;
+  if (total && tasa >= RIA_UMBRAL_ERROR_ATENCION) add(tasa >= RIA_UMBRAL_ERROR_CRITICO ? 'critico' : 'atencion', `Errores técnicos altos: ${tasa}% de los turnos`, `${fmt(total)} de ${fmt(turnos)} turnos fallaron. Lo más frecuente: ${dom.nombre.toLowerCase()} (${fmt(riaNum(tipos[0].n))}).`, dom.hacer);
+  else add('bien', total ? `Errores técnicos normales: ${tasa}% de los turnos` : 'Sin errores técnicos', total ? `${fmt(total)} de ${fmt(turnos)} turnos. Bajo ${RIA_UMBRAL_ERROR_ATENCION}% es lo esperable con proveedores externos.` : `${fmt(turnos)} turnos sin fallos del modelo.`);
+  const top = (er.por_hora || []).reduce((m, h) => riaNum(h.n) > riaNum(m.n) ? h : m, { n: 0, hora: 0 });
+  if (total >= 5 && riaNum(top.n) / total > RIA_UMBRAL_HORA) {
+    const h = String(top.hora).padStart(2, '0');
+    add('atencion', `Errores concentrados entre las ${h}:00 y las ${h}:59`, `${fmt(riaNum(top.n))} de ${fmt(total)} errores (${riaPct(top.n, total)}%) cayeron en esa hora (hora de Caracas).`, 'Probable caída o saturación del proveedor en ese tramo. Si fue un solo día no requiere acción; si se repite cada día, avisar a Sistemas.');
+  }
+  const perdidos = tipos.reduce((s, t) => s + Math.max(0, riaNum(t.n) - riaNum(t.recuperados)), 0);
+  if (perdidos) add(perdidos >= 10 ? 'atencion' : 'info', `${fmt(perdidos)} conversación(es) pudieron perderse tras un error`, `${fmt(perdidos)} de ${fmt(total)} errores no tuvieron después un turno exitoso con ese contacto.`, 'No es seguro que se perdieran (algunos simplemente no volvieron a escribir), pero es el costo real de los errores.');
+  const dConv = riaNum(ant.conversaciones) ? Math.round((riaNum(r.conversaciones) - riaNum(ant.conversaciones)) * 100 / riaNum(ant.conversaciones)) : 0;
+  if (dConv <= -RIA_UMBRAL_CAIDA && tasa < RIA_UMBRAL_ERROR_ATENCION) add('atencion', `Conversaciones ${dConv}% frente a ${riaRefTexto(dias)}`, 'Los errores técnicos están en rango normal, así que la caída viene de menos tráfico y no de la IA.', 'Revisar si hubo menos publicaciones o anuncios en redes, o si cambió algún flujo de entrada.');
+  let peor = null;
+  for (let i = 1; i < RIA_PASOS.length; i++) {
+    const prev = riaNum(r[RIA_PASOS[i - 1][1]]), cur = riaNum(r[RIA_PASOS[i][1]]);
+    if (prev >= 20 && cur < prev && (!peor || (prev - cur) / prev > peor.perdida)) peor = { i, prev, cur, perdida: (prev - cur) / prev };
+  }
+  if (peor) add('info', `Mayor pérdida del embudo: de ${RIA_PASOS[peor.i - 1][0]} a ${RIA_PASOS[peor.i][0]} (${Math.round(peor.perdida * 100)}%)`, `Pasan ${fmt(peor.cur)} de ${fmt(peor.prev)}.`, RIA_PASO_AYUDA[RIA_PASOS[peor.i][0]]);
+  const sinLead = riaNum(r.oportunidades_sin_lead), brecha = riaNum(r.telefonos) - riaNum(r.leads_calificados);
+  if (sinLead) add(sinLead >= 5 ? 'atencion' : 'info', `${fmt(sinLead)} conversación(es) completas sin lead`, 'Tienen teléfono, destino e intención pero la IA no entregó el lead al asesor.', 'Revisar la regla de calificación o "listo para asesor": no se está activando.');
+  if (riaNum(r.telefonos) >= RIA_MIN_MUESTRA && brecha / riaNum(r.telefonos) > RIA_UMBRAL_BRECHA_LEAD) add('atencion', `${fmt(brecha)} teléfonos no llegaron a lead`, `La IA consiguió el teléfono pero no creó el lead (${riaPct(brecha, r.telefonos)}% de los teléfonos).`, 'Revisar la intención y la regla de calificación: el cliente dejó su número y ningún asesor lo contactó.');
+  const nEsp = riaNum(data.ventas?.esperando_primer_contacto), viejo = riaNum(esp.mas_viejo_min), n30 = riaNum(esp.mas_de_30_min), asesor = (esp.por_asesor || [])[0];
+  if (nEsp && viejo > RIA_UMBRAL_ESPERA_MIN) add(viejo > RIA_UMBRAL_ESPERA_CRITICA_MIN ? 'critico' : 'atencion', `${fmt(n30)} lead(s) llevan más de ${RIA_UMBRAL_ESPERA_MIN} min sin primer contacto`, `El más viejo espera hace ${riaMinTexto(viejo)}.${asesor ? ` Asesor con más pendientes: ${asesor.asesor} (${fmt(riaNum(asesor.n))}).` : ''}`, 'Tocar "Esperando primer contacto" para abrir los leads Por atender y avisar a los asesores.');
+  if (riaNum(r.duplicados)) add('critico', `${fmt(riaNum(r.duplicados))} contacto(s) con leads duplicados`, 'La misma persona generó más de un lead en el período.', 'Revisar y fusionar en Clientes: dos asesores pueden estar atendiendo a la misma persona.');
+  if (riaNum(op.latencia_p95_ms) > RIA_UMBRAL_P95_MS) add('atencion', `El 5% más lento de las respuestas tarda ${(riaNum(op.latencia_p95_ms) / 1000).toFixed(1)} s`, 'Está cerca del límite de espera (8,5 s): a más lentitud, más timeouts.', 'Comparar la latencia por modelo en "Comparativa por modelo".');
+  if (riaNum(op.tokens_entrada) && riaPct(op.tokens_cache, op.tokens_entrada) < RIA_UMBRAL_CACHE) add('info', `Solo ${riaPct(op.tokens_cache, op.tokens_entrada)}% de la entrada sale de caché`, 'Se paga precio completo por texto que podría salir más barato y rápido.', 'Avisar a Sistemas: probablemente cambió el orden o el contenido fijo del prompt.');
+  const prom = riaNum(r.conversaciones) ? riaNum(r.leads_calificados) / riaNum(r.conversaciones) : 0;
+  (data.por_canal || []).filter(c => prom && riaNum(c.conversaciones) >= RIA_MIN_MUESTRA && riaNum(c.leads_calificados) / riaNum(c.conversaciones) < prom / 2).forEach(c =>
+    add('info', `${RIA_CANALES[c.canal] || c.canal} convierte ${riaPct(c.leads_calificados, c.conversaciones)}% (promedio ${Math.round(prom * 1000) / 10}%)`, `Menos de la mitad del promedio general, con ${fmt(riaNum(c.conversaciones))} conversaciones.`, 'Revisar cómo entra el cliente por ese canal y el primer mensaje del bot.'));
+  if (!out.some(h => h.nivel !== 'bien')) add('bien', 'Todo dentro de lo normal', 'Ningún indicador pasó sus umbrales en este período.');
+  return out.sort((a, b) => RIA_NIVELES[a.nivel][1] - RIA_NIVELES[b.nivel][1]);
+}
+
+function riaDiagnosticoHtml(lista) {
+  if (!lista.length) return '<div class="ria-vacio">Sin datos en este período para diagnosticar.</div>';
+  return lista.map(h => `<div class="ria-diag"><div class="ria-diag-top"><span class="ria-estado ${h.nivel === 'info' ? 'sin_datos' : h.nivel}">${RIA_NIVELES[h.nivel][0]}</span><b>${esc(h.titulo)}</b></div>`
+    + `<div class="ria-diag-txt">${esc(h.porque)}</div>${h.hacer ? `<div class="ria-diag-txt"><b>Qué hacer:</b> ${esc(h.hacer)}</div>` : ''}</div>`).join('');
+}
+
+function riaErroresHtml(data, dias) {
+  const er = data.errores || {}, ea = data.errores_anterior || {}, total = riaNum(er.total), turnos = riaNum(er.turnos_total);
+  if (!turnos) return '<div class="ria-vacio">Sin turnos en este período.</div>';
+  if (!total) return `<div class="ria-vacio">Sin errores técnicos en ${fmt(turnos)} turnos.</div>`;
+  const tasa = riaPct(total, turnos), tasaAnt = riaPct(ea.n, ea.turnos);
+  const resumen = `<div class="ria-lista"><div class="ria-fila"><span><b>${fmt(total)} errores en ${fmt(turnos)} turnos</b> · ${tasa}%</span><b>${riaNum(ea.turnos) ? `antes: ${tasaAnt}% (${esc(riaRefTexto(dias))})` : 'sin período anterior'}</b></div></div>`;
+  const tipos = (er.por_tipo || []).map(t => {
+    const i = RIA_ERRORES_INFO[t.tipo] || RIA_ERRORES_INFO.otro, n = riaNum(t.n), motivo = RIA_ERRORES_MOTIVO[t.motivo];
+    return `<div class="ria-fila"><span><b>${esc(i.nombre)}</b>${motivo ? ` · ${esc(motivo)}` : ''}<small>Qué vio el cliente: ${esc(i.cliente)}</small><small>Causa probable: ${esc(i.causa)}</small><small>Qué hacer: ${esc(i.hacer)}</small>`
+      + `<small>${fmt(riaNum(t.recuperados))} de ${fmt(n)} volvieron a tener un turno exitoso · ${fmt(riaNum(t.terminaron_en_lead))} terminaron en lead${riaNum(t.latencia_promedio_ms) ? ` · tardó ${(riaNum(t.latencia_promedio_ms) / 1000).toFixed(1)} s en fallar` : ''}</small></span><b>${fmt(n)}</b></div>`;
+  }).join('');
+  const prov = (er.por_proveedor || []).filter(p => riaNum(p.turnos)).map(p => `<div class="ria-fila"><span>${esc(RIA_PROVEEDORES[p.proveedor] || p.proveedor)}</span><b class="${riaNum(p.tasa) * 100 >= RIA_UMBRAL_ERROR_ATENCION ? 'ria-malo' : ''}">${fmt(riaNum(p.n))} de ${fmt(riaNum(p.turnos))} · ${(riaNum(p.tasa) * 100).toFixed(1)}%</b></div>`).join('');
+  const porHora = new Map((er.por_hora || []).map(h => [riaNum(h.hora), riaNum(h.n)])), max = Math.max(1, ...porHora.values());
+  const barras = Array.from({ length: 24 }, (_, h) => { const n = porHora.get(h) || 0; return `<div class="ria-tend-col" title="${String(h).padStart(2, '0')}:00 · ${fmt(n)} error(es)"><div class="ria-tend-bar"><div class="ria-tend-c" style="height:${n ? Math.max(6, n * 100 / max) : 0}%;background:rgba(239,68,68,.55)"></div></div><span>${h}</span></div>`; }).join('');
+  return `${resumen}<div class="ria-lista">${tipos}</div>
+    <div class="ria-sub" style="margin:14px 0 4px"><b>Por proveedor / modelo</b></div><div class="ria-lista">${prov}</div>
+    <div class="ria-sub" style="margin:14px 0 8px"><b>Errores por hora del día</b> (hora de Caracas)</div><div class="ria-tend" style="height:84px">${barras}</div>
+    <div class="ce-ayuda">Último error: ${esc(riaHora(er.ultimo_en))}.</div>`;
 }
 
 function riaEstadoInfo(data) {
@@ -7101,7 +7193,9 @@ function riaPintarPanel(data) {
   const r = data.resumen || {}, ant = data.anterior || {}, op = data.operacion || {}, ventas = data.ventas || {};
   const salud = riaEstadoInfo(data), estado = document.getElementById('ria-estado');
   estado.className = `ria-estado ${salud.estado}`; estado.textContent = salud.titulo;
-  document.getElementById('ria-estado-texto').innerHTML = `${esc(salud.texto)} <b>${esc(riaCambio(r.leads_calificados, ant.leads_calificados))}</b>`;
+  document.getElementById('ria-estado-texto').innerHTML = `${esc(salud.texto)} <b>Leads: ${esc(riaCambio(r.leads_calificados, ant.leads_calificados, riaRefTexto(RIA_DIAS)))}</b>`;
+  document.getElementById('ria-diagnostico').innerHTML = riaDiagnosticoHtml(riaDiagnostico(data, RIA_DIAS));
+  document.getElementById('ria-errores').innerHTML = riaErroresHtml(data, RIA_DIAS);
   document.getElementById('ria-actualizado').textContent = 'Actualizado ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
 
   const gruposPiloto = new Map((data.piloto?.grupos || []).map(g => [g.experimento_grupo, g]));
@@ -7146,12 +7240,15 @@ function riaPintarPanel(data) {
     ${riaNum(entrega.requieren_atencion) ? `<div class="ria-fila"><span>Requieren atención humana</span><b class="ria-malo">${fmt(riaNum(entrega.requieren_atencion))}</b></div>` : ''}
   </div><div class="ce-ayuda">${entregaOk ? 'El vigilante de silencios puede actuar: la confirmación del flujo supera 99,5%.' : 'El vigilante de silencios no actúa mientras la confirmación del flujo esté por debajo de 99,5%; así no duplica mensajes legítimos. “Sin confirmación” son turnos sin aviso de vuelta de ManyChat; no prueba por sí solo que el mensaje no llegara.'}</div>`;
 
+  const er = data.errores || {}, erTotal = riaNum(er.total), erTasa = riaPct(erTotal, er.turnos_total);
+  const erDom = er.por_tipo?.[0] ? (RIA_ERRORES_INFO[er.por_tipo[0].tipo] || RIA_ERRORES_INFO.otro) : null;
+  const irEmbudo = () => riaIr('ria-card-embudo');
   pintarKPIs('ria-kpis', [
-    { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: `${riaCambio(r.conversaciones, ant.conversaciones)}${riaNum(r.solo_boton) ? ` · ${fmt(riaNum(r.solo_boton))} solo tocaron botón` : ''}`, i: 'fa-comments', c: 'var(--blue)' },
-    { t: 'Teléfonos', v: fmt(riaNum(r.telefonos)), d: `${riaPct(r.telefonos, r.conversaciones)}% de conversaciones`, i: 'fa-phone', c: 'var(--accent)' },
-    { t: 'Leads calificados', v: fmt(riaNum(r.leads_calificados)), d: `${riaPct(r.leads_calificados, r.conversaciones)}% de conversión`, i: 'fa-user-check', c: 'var(--green)' },
-    { t: 'Oportunidades sin lead', v: fmt(riaNum(r.oportunidades_sin_lead)), d: 'Teléfono + destino + intención', i: 'fa-triangle-exclamation', c: riaNum(r.oportunidades_sin_lead) ? '#ef4444' : 'var(--green)' },
-    { t: 'Errores técnicos', v: fmt(riaNum(data.salud?.errores_tecnicos)), d: 'Fallos del modelo o proveedor', i: 'fa-plug-circle-xmark', c: riaNum(data.salud?.errores_tecnicos) ? '#ef4444' : 'var(--green)' },
+    { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: `${riaCambio(r.conversaciones, ant.conversaciones, riaRefTexto(RIA_DIAS))}${riaNum(r.solo_boton) ? ` · ${fmt(riaNum(r.solo_boton))} solo tocaron botón` : ''}`, i: 'fa-comments', c: 'var(--blue)', go: irEmbudo, tt: 'Ver el embudo' },
+    { t: 'Teléfonos', v: fmt(riaNum(r.telefonos)), d: `${riaPct(r.telefonos, r.conversaciones)}% de conversaciones`, i: 'fa-phone', c: 'var(--accent)', go: irEmbudo, tt: 'Ver el embudo' },
+    { t: 'Leads calificados', v: fmt(riaNum(r.leads_calificados)), d: `${riaPct(r.leads_calificados, r.conversaciones)}% de conversión`, i: 'fa-user-check', c: 'var(--green)', go: irEmbudo, tt: 'Ver el embudo' },
+    { t: 'Oportunidades sin lead', v: fmt(riaNum(r.oportunidades_sin_lead)), d: 'Teléfono + destino + intención', i: 'fa-triangle-exclamation', c: riaNum(r.oportunidades_sin_lead) ? '#ef4444' : 'var(--green)', go: () => riaIr('ria-card-diagnostico'), tt: 'Ver el diagnóstico' },
+    { t: 'Errores técnicos', v: fmt(erTotal), d: erTotal ? `${erTasa}% de los turnos · ${erDom.corto}` : 'Fallos del modelo o proveedor', i: 'fa-plug-circle-xmark', c: erTasa >= RIA_UMBRAL_ERROR_ATENCION ? '#ef4444' : erTotal ? 'var(--amber)' : 'var(--green)', go: () => riaIr('ria-card-errores'), tt: 'Ver qué falló y qué hacer' },
   ]);
 
   const pasos = [['Conversaciones', r.conversaciones], ['Destino', r.destinos], ['Teléfono', r.telefonos], ['Intención real', r.intenciones], ['Lead creado', r.leads_calificados]];
@@ -7165,9 +7262,13 @@ function riaPintarPanel(data) {
     ${porCampania.map(c => `<div class="ria-fila"><span>${esc(nombreColab(c.campania))}</span><b>${fmt(riaNum(c.conversaciones))}</b></div>`).join('')}
   </div>${porCampania.length ? '' : '<div class="ria-vacio">Sin colaboraciones en este período.</div>'}`;
 
-  document.getElementById('ria-ventas').innerHTML = `<div class="ria-lista">
+  const esp = ventas.espera || {}, espAsesor = (esp.por_asesor || [])[0];
+  const espTxt = riaNum(ventas.esperando_primer_contacto) && riaNum(esp.mas_viejo_min) ? `El más viejo espera hace ${riaMinTexto(riaNum(esp.mas_viejo_min))}${espAsesor ? ` · más pendientes: ${espAsesor.asesor} (${fmt(riaNum(espAsesor.n))})` : ''}` : '';
+  const ventasBox = document.getElementById('ria-ventas');
+  ventasBox.onclick = e => { if (e.target.closest('[data-ria-ir="por-atender"]')) drillEstado('POR ATENDER'); };
+  ventasBox.innerHTML = `<div class="ria-lista">
     <div class="ria-fila"><span>Leads entregados</span><b>${fmt(riaNum(r.leads_calificados))}</b></div>
-    <div class="ria-fila"><span>Esperando primer contacto</span><b class="${riaNum(ventas.esperando_primer_contacto) ? 'ria-malo' : 'ria-bien'}">${fmt(riaNum(ventas.esperando_primer_contacto))}</b></div>
+    <button type="button" class="ria-fila ria-link" data-ria-ir="por-atender" title="Abrir los leads Por atender"><span>Esperando primer contacto${espTxt ? `<small>${esc(espTxt)}</small>` : ''}</span><b class="${riaNum(ventas.esperando_primer_contacto) ? 'ria-malo' : 'ria-bien'}">${fmt(riaNum(ventas.esperando_primer_contacto))}</b></button>
     <div class="ria-fila"><span>Ventas confirmadas</span><b>${fmt(riaNum(ventas.ventas_confirmadas))}</b></div>
     <div class="ria-fila"><span>Facturación atribuida</span><b>${riaDinero(ventas.facturacion_atribuida)}</b></div>
     <div class="ria-fila"><span>Leads duplicados</span><b class="${riaNum(r.duplicados) ? 'ria-malo' : 'ria-bien'}">${fmt(riaNum(r.duplicados))}</b></div>
