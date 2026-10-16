@@ -19743,7 +19743,11 @@ function renderTarifario() {
     const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
     grid.innerHTML = destinos.map(d => `<div class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span></div>${tarItemsWrapHtml(porDestino[d])}`).join('');
   } else if (tarTab === 'excursion') {
+    // Full days de grupo privado (tarifas.precios.modalidad='privado') arriba de todo.
+    const excPrivado = x => tarTarifasVivas(x).some(t => t.precios.modalidad === 'privado');
     grid.innerHTML = tarGruposDestino(filtered, x => tarTarifasVivas(x)[0]?.precios.etiqueta)
+      .map(([g, xs]) => [g, xs.slice().sort((a, b) => excPrivado(b) - excPrivado(a))])
+      .sort(([, a], [, b]) => b.some(excPrivado) - a.some(excPrivado))
       .map(([g, xs]) => `<div class="tar-destino-header"><i class="fas fa-person-hiking"></i> ${esc(g)} <span>${xs.length}</span></div><div class="exc-tabla">${EXC_CAB}${xs.map(excFilaHtml).join('')}</div>`).join('');
   } else if (tarTab === 'traslado') {
     grid.innerHTML = trasGrillaHtml(filtered, fDestino, q);
