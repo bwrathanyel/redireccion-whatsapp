@@ -1917,6 +1917,228 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .msg-conv-log{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:14px 2px}
 .msg-readonly-note{display:flex;align-items:center;gap:8px;justify-content:center;padding:12px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);flex-shrink:0}
 
+/* ---------- Chat interno: panel flotante estilo WhatsApp ----------
+   Vive a nivel <body> (.app tiene isolation:isolate). Todo scoped a #chat-panel:
+   .msg-inbox-row / .msg-avatar / .chat-msg los reusan WhatsApp y DMs. */
+.chat-panel{--wa:#25d366;--wa-mia:#005c4b;--wa-mia-txt:#e9edef;--wa-ajena:#202c33;--wa-ajena-txt:#e9edef;--wa-fondo:#0b141a;--wa-meta:rgba(233,237,239,.62);--wa-leido:#53bdeb;--wa-trama:rgba(233,237,239,.045);--cp-w:400px;
+  position:fixed;right:22px;bottom:22px;z-index:60;width:var(--cp-w);height:min(680px,calc(100dvh / var(--zoom,1) - 120px));display:block;overflow:hidden;background:var(--bg2);color:var(--txt);border:1px solid color-mix(in srgb,var(--accent) 28%,var(--line2));border-radius:22px;box-shadow:0 30px 80px -20px rgba(0,0,0,.65),0 0 44px -22px color-mix(in srgb,var(--accent) 60%,transparent);
+  opacity:0;visibility:hidden;transform:translateY(16px) scale(.97);transform-origin:right bottom;transition:opacity .2s,transform .3s var(--ease-salida),visibility 0s .3s,width .3s var(--ease-salida)}
+:root[data-theme="light"] .chat-panel{--wa-mia:#d9fdd3;--wa-mia-txt:#111b21;--wa-ajena:#fff;--wa-ajena-txt:#111b21;--wa-fondo:#efeae2;--wa-meta:#667781;--wa-trama:rgba(17,27,33,.05)}
+.chat-panel.abierto{opacity:1;visibility:visible;transform:none;transition:opacity .2s,transform .3s var(--ease-salida),visibility 0s,width .3s var(--ease-salida)}
+.chat-panel:focus{outline:none}
+#chat-panel button{font-family:inherit}
+
+/* Cabeceras */
+#chat-panel .cp-head{display:flex;align-items:center;gap:8px;height:58px;padding:0 10px 0 14px;flex-shrink:0;background:var(--panel-solid);border-bottom:1px solid var(--line)}
+#chat-panel .cp-head-t{flex:1;min-width:0;font-size:15px;font-weight:800;display:flex;align-items:center;gap:9px}
+#chat-panel .cp-head-t i{color:var(--accent-ink)}
+#chat-panel .cp-ico{width:36px;height:36px;flex-shrink:0;border-radius:50%;border:none;background:transparent;color:var(--muted);font-size:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+#chat-panel .cp-ico:hover{background:rgba(var(--ink-rgb),.08);color:var(--txt)}
+#chat-panel .cp-ico:focus-visible,#chat-panel .cp-send:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+#chat-panel .cp-ico.on{color:var(--accent-ink)}
+#chat-panel .cp-back{display:none}
+
+/* Lista y conversación: apiladas; en modo compacto la conversación desliza sobre la lista */
+#chat-panel .cp-lista,#chat-panel .cp-conv{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;background:var(--bg2)}
+#chat-panel .cp-lista{left:0;right:0}
+#chat-panel .cp-conv{left:0;right:0;transform:translateX(100%);visibility:hidden;transition:transform .25s var(--ease-salida),visibility 0s .25s;z-index:3}
+#chat-panel .cp-conv.open{transform:none;visibility:visible;transition:transform .25s var(--ease-salida),visibility 0s}
+#chat-panel .cp-conv .cp-back{display:inline-flex}
+#chat-panel .cp-vacio{display:none}
+#chat-panel .msg-inbox{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;gap:0}
+#chat-panel .msg-inbox-row{padding:10px 14px;border-radius:0;border-bottom:1px solid var(--line);margin:0}
+#chat-panel .msg-inbox-row.grupo{margin:0;border-radius:0;border:none;border-bottom:1px solid var(--line)}
+#chat-panel .msg-inbox-row.on{background:rgba(var(--accent-rgb),.12)}
+#chat-panel .msg-inbox-row.llego{animation:cp-llego 1.6s ease-out}
+#chat-panel .msg-inbox-row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+#chat-panel .msg-avatar{position:relative;overflow:visible}
+#chat-panel .msg-avatar.foto{background-size:cover;background-position:center}
+#chat-panel .cp-dot{position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;border-radius:50%;background:var(--green,#10b981);border:2px solid var(--bg2)}
+#chat-panel .msg-inbox-preview .escribiendo{color:var(--wa)}
+#chat-panel .msg-inbox-preview .fa-bell-slash{font-size:10px;color:var(--muted2);flex-shrink:0}
+#chat-panel .msg-inbox-badge{min-width:20px;text-align:center}
+#chat-panel .msg-inbox-row.silenciada .msg-inbox-badge{background:var(--muted2);color:var(--bg)}
+#chat-panel .msg-empty{padding:48px 20px}
+#chat-panel .cp-conv-head{gap:6px;padding-left:6px}
+#chat-panel .cp-conv-head .msg-avatar{width:38px;height:38px;font-size:13px}
+#chat-panel .cp-conv-t{flex:1;min-width:0;line-height:1.25}
+#chat-panel .msg-conv-titulo{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#chat-panel .msg-conv-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#chat-panel .msg-conv-sub.vivo{color:var(--wa)}
+#chat-panel .cp-cerrar-conv{display:none}
+
+/* Registro de mensajes (el estilo WhatsApp viene de .chat-wa, ver más arriba) */
+#chat-panel .cp-log{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:0;border-radius:0;padding:8px 12px 10px;position:relative;
+  background-color:var(--cp-bg,var(--wa-fondo));background-image:linear-gradient(rgba(0,0,0,var(--cp-oscurecer,0)),rgba(0,0,0,var(--cp-oscurecer,0))),var(--cp-bg-img,radial-gradient(var(--wa-trama) 1.2px,transparent 1.6px));background-size:100% 100%,var(--cp-bg-size,22px 22px);background-position:center}
+#chat-panel .cp-log .chat-msg{max-width:84%;align-self:flex-start;touch-action:pan-y;-webkit-touch-callout:none;word-break:break-word}
+#chat-panel .cp-log .chat-msg.mine{align-self:flex-end}
+#chat-panel .cp-log .chat-msg.other{align-self:flex-start}
+#chat-panel .cp-log .chat-empty{margin:auto;background:var(--wa-ajena);color:var(--wa-meta);padding:10px 14px;border-radius:10px;box-shadow:0 1px .5px rgba(11,20,26,.13)}
+#chat-panel .cp-log .chat-empty i{color:inherit;opacity:.6}
+#chat-panel .cp-log .msg-sender{font-size:11.5px}
+#chat-panel .cp-log .chat-msg.resaltado{animation:cp-resalta 1.3s ease-out}
+#chat-panel .cp-log .chat-msg.eliminado{font-style:italic;color:var(--wa-meta)}
+#chat-panel .cp-log .chat-msg.eliminado i{margin-right:5px}
+#chat-panel .cp-log .chat-msg.sticker{background:none;box-shadow:none;padding:0}
+#chat-panel .cp-log .chat-msg.sticker::before{display:none}
+#chat-panel .cp-log .chat-msg.sticker .msg-meta{justify-content:flex-end;margin:0;padding:0 2px;color:var(--wa-meta);text-shadow:0 0 3px var(--wa-fondo)}
+#chat-panel .cp-sticker{width:150px;height:150px;object-fit:contain;display:block;cursor:pointer}
+#chat-panel .cp-log .chat-msg .msg-img{max-width:100%;width:240px;max-height:300px;object-fit:cover}
+#chat-panel .cp-log .chat-msg.pegado{box-shadow:none}
+
+/* Botón ⌄ del mensaje (escritorio: aparece al pasar el mouse) */
+#chat-panel .cp-mas{position:absolute;top:2px;right:3px;width:22px;height:22px;border:none;border-radius:50%;color:var(--wa-meta);font-size:11px;cursor:pointer;opacity:0;transition:opacity .12s;display:flex;align-items:center;justify-content:center;z-index:2}
+#chat-panel .chat-msg.mine .cp-mas{background:var(--wa-mia)}
+#chat-panel .chat-msg.other .cp-mas{background:var(--wa-ajena)}
+#chat-panel .chat-msg.sticker .cp-mas{background:var(--wa-ajena);top:6px;right:6px}
+#chat-panel .chat-msg:hover .cp-mas,#chat-panel .cp-mas:focus-visible{opacity:1}
+@media(hover:none){#chat-panel .cp-mas{display:none}#chat-panel .cp-log .chat-msg{-webkit-user-select:none;user-select:none}}
+
+/* Respuesta citada y reacciones */
+#chat-panel .cp-cita{display:block;width:100%;text-align:left;border:none;border-left:4px solid var(--accent);background:rgba(0,0,0,.16);color:inherit;border-radius:6px;padding:4px 8px;margin:0 0 4px;cursor:pointer;font-size:12px;line-height:1.35;overflow:hidden}
+#chat-panel .cp-cita b{display:block;font-size:11.5px;color:var(--accent-ink)}
+#chat-panel .chat-msg.mine .cp-cita b{color:#9fe3c8}
+:root[data-theme="light"] #chat-panel .chat-msg.mine .cp-cita b{color:#0b6b4c}
+#chat-panel .cp-cita span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85}
+#chat-panel .cp-reacs{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+#chat-panel .cp-reac{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:11px;border:1px solid transparent;background:rgba(127,127,127,.2);color:inherit;font-size:12.5px;line-height:1.5;cursor:pointer}
+#chat-panel .cp-reac small{font-size:11px;font-weight:700}
+#chat-panel .cp-reac.mia{border-color:var(--wa);background:rgba(37,211,102,.18)}
+
+/* Nota de voz */
+#chat-panel .cp-audio{display:flex;align-items:center;gap:8px;min-width:220px;padding:2px 0}
+#chat-panel .cp-play{width:34px;height:34px;flex-shrink:0;border-radius:50%;border:none;background:var(--wa);color:#fff;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#chat-panel .cp-seek{flex:1;min-width:70px;height:18px;margin:0;accent-color:var(--wa);cursor:pointer}
+#chat-panel .cp-aud-t{font-size:11px;min-width:30px;text-align:right;font-variant-numeric:tabular-nums;color:var(--wa-meta)}
+#chat-panel .cp-vel{border:none;border-radius:10px;padding:2px 6px;font-size:11px;font-weight:700;background:rgba(127,127,127,.22);color:inherit;cursor:pointer}
+
+/* Composer */
+#chat-panel .cp-compose{flex-shrink:0;background:var(--panel-solid);border-top:1px solid var(--line);padding-bottom:var(--safe-b,0px)}
+#chat-panel .cp-row{display:flex;align-items:flex-end;gap:4px;padding:8px 8px}
+#chat-panel .cp-input{flex:1;min-width:0;resize:none;background:var(--bg2);border:1.5px solid var(--line2);border-radius:20px;padding:9px 14px;color:var(--txt);font-size:14px;line-height:1.35;font-family:inherit;outline:none;max-height:120px}
+#chat-panel .cp-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+#chat-panel .cp-send{width:42px;height:42px;flex-shrink:0;border-radius:50%;border:none;background:var(--wa);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .12s}
+#chat-panel .cp-send:active{transform:scale(.92)}
+#chat-panel .cp-send:disabled{opacity:.5;cursor:default}
+#chat-panel .cp-ico.subiendo{opacity:.5;pointer-events:none}
+#chat-panel .cp-citar{display:flex;align-items:center;gap:8px;margin:8px 10px 0;padding:6px 8px 6px 10px;border-left:4px solid var(--accent);border-radius:8px;background:rgba(var(--accent-rgb),.1);font-size:12px;min-width:0}
+#chat-panel .cp-citar[hidden],#chat-panel .cp-fotos[hidden],#chat-panel .cp-rec[hidden],#chat-panel .cp-row[hidden],#chat-panel .msg-readonly-note[hidden],#chat-panel .cp-compose[hidden],#chat-panel .cp-pop[hidden],#chat-panel .cp-drop[hidden]{display:none}
+#chat-panel .cp-citar-t{flex:1;min-width:0;line-height:1.35}
+#chat-panel .cp-citar-t b{display:block;color:var(--accent-ink);font-size:11.5px}
+#chat-panel .cp-citar-t span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+#chat-panel .cp-citar .cp-ico{width:28px;height:28px;font-size:13px}
+#chat-panel .cp-fotos{display:flex;gap:8px;padding:10px 10px 0;overflow-x:auto}
+#chat-panel .cp-foto{position:relative;width:68px;height:68px;flex:none;border-radius:10px;overflow:hidden;background:var(--bg2);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:22px}
+#chat-panel .cp-foto img{width:100%;height:100%;object-fit:cover;display:block}
+#chat-panel .cp-foto button{position:absolute;top:2px;right:2px;width:20px;height:20px;border:none;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#chat-panel .cp-foto.subiendo::after{content:'';position:absolute;left:0;right:0;bottom:0;height:5px;background:linear-gradient(90deg,var(--wa) 40%,rgba(255,255,255,.25) 40%);background-size:200% 100%;animation:cp-barra 1s linear infinite}
+#chat-panel .cp-foto.hecha::after{content:'\2713';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);color:#fff;font-size:24px}
+#chat-panel .cp-foto.error{outline:2px solid #ef4444}
+#chat-panel .cp-rec{display:flex;align-items:center;gap:10px;padding:8px 10px}
+#chat-panel .cp-rec-dot{width:10px;height:10px;border-radius:50%;background:#ef4444;flex-shrink:0;animation:cp-parpadea 1s ease-in-out infinite}
+#chat-panel .cp-rec-t{font-variant-numeric:tabular-nums;font-weight:700;font-size:14px;min-width:42px}
+#chat-panel .cp-rec-nivel{flex:1;height:6px;border-radius:3px;background:rgba(127,127,127,.25);overflow:hidden}
+#chat-panel .cp-rec-nivel i{display:block;height:100%;width:100%;background:var(--wa);transform-origin:left;transform:scaleX(var(--n,.02));transition:transform .08s linear}
+#chat-panel .msg-readonly-note{border-top:1px solid var(--line);background:var(--panel-solid)}
+#chat-panel .cp-drop{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(var(--accent-rgb),.14);border:3px dashed var(--accent);border-radius:inherit;color:var(--accent-ink);font-weight:800;font-size:15px;pointer-events:none;backdrop-filter:blur(2px)}
+
+/* Popover único: emojis/stickers, adjuntar, menú de mensaje, ⋮ y fondos */
+#chat-panel .cp-pop{position:absolute;z-index:30;background:var(--panel-solid);border:1px solid var(--line2);border-radius:14px;box-shadow:0 18px 44px -12px rgba(0,0,0,.6);overflow:hidden;max-height:calc(100% - 16px)}
+#chat-panel .cp-pop.ancho{left:8px;right:8px}
+#chat-panel .cp-menu{display:flex;flex-direction:column;min-width:210px;padding:5px}
+#chat-panel .cp-menu button{display:flex;align-items:center;gap:12px;min-height:40px;padding:0 12px;border:none;border-radius:9px;background:transparent;color:var(--txt);font-size:13.5px;font-weight:600;text-align:left;cursor:pointer}
+#chat-panel .cp-menu button:hover,#chat-panel .cp-menu button:focus-visible{background:rgba(var(--ink-rgb),.08);outline:none}
+#chat-panel .cp-menu button i{width:18px;text-align:center;color:var(--accent-ink)}
+#chat-panel .cp-menu button.peligro,#chat-panel .cp-menu button.peligro i{color:#ef4444}
+#chat-panel .cp-menu hr{border:none;border-top:1px solid var(--line);margin:4px 0}
+#chat-panel .cp-reacciones{display:flex;gap:2px;padding:6px 6px 2px;justify-content:space-between}
+#chat-panel .cp-reacciones button{width:36px;height:36px;border:none;border-radius:50%;background:transparent;font-size:22px;line-height:1;cursor:pointer;transition:transform .12s}
+#chat-panel .cp-reacciones button:hover,#chat-panel .cp-reacciones button:focus-visible{transform:scale(1.25);background:rgba(var(--ink-rgb),.08);outline:none}
+#chat-panel .cp-reacciones button.mia{background:rgba(37,211,102,.22)}
+#chat-panel .cp-tabs{display:flex;border-bottom:1px solid var(--line)}
+#chat-panel .cp-tabs button{flex:1;height:40px;border:none;background:transparent;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent}
+#chat-panel .cp-tabs button.on{color:var(--accent-ink);border-bottom-color:var(--accent)}
+#chat-panel .cp-emoji-host{height:310px;display:flex}
+#chat-panel emoji-picker{width:100%;height:100%;--background:var(--panel-solid);--border-color:var(--line);--input-border-color:var(--line2);--input-font-color:var(--txt);--input-placeholder-color:var(--muted);--button-hover-background:rgba(127,127,127,.18);--button-active-background:rgba(127,127,127,.28);--outline-color:var(--accent);--indicator-color:var(--accent);--category-font-color:var(--muted);--emoji-size:1.5rem;--num-columns:8}
+#chat-panel .cp-cargando{margin:auto;color:var(--muted);font-size:13px;padding:30px}
+#chat-panel .cp-stickers{height:310px;overflow-y:auto;padding:10px}
+#chat-panel .cp-stk-tit{font-size:10.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);margin:2px 2px 8px}
+#chat-panel .cp-stk-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+#chat-panel .cp-stk-grid button{aspect-ratio:1;border:none;border-radius:10px;background:rgba(127,127,127,.1);padding:4px;cursor:pointer}
+#chat-panel .cp-stk-grid button:hover,#chat-panel .cp-stk-grid button:focus-visible{background:rgba(var(--accent-rgb),.18);outline:none}
+#chat-panel .cp-stk-grid img{width:100%;height:100%;object-fit:contain;display:block}
+#chat-panel .cp-stk-nuevo{display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--accent-ink)}
+#chat-panel .cp-fondos{padding:12px;width:290px}
+#chat-panel .cp-fondos h4{margin:0 0 10px;font-size:13px}
+#chat-panel .cp-fondo-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+#chat-panel .cp-fondo-grid button{aspect-ratio:1;border:2px solid transparent;border-radius:10px;cursor:pointer;background-size:cover;background-position:center;padding:0;color:#fff;font-size:15px}
+#chat-panel .cp-fondo-grid button.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+#chat-panel .cp-fondo-grid button.subir{background:rgba(127,127,127,.15);color:var(--accent-ink)}
+#chat-panel .cp-fondos label{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:var(--muted)}
+#chat-panel .cp-fondos input[type=range]{flex:1;accent-color:var(--accent)}
+#chat-panel .cp-fondos .cp-solo{color:var(--txt);cursor:pointer}
+
+/* Botón flotante, globo de vista previa e indicadores */
+.chat-fab{position:fixed;right:22px;bottom:22px;z-index:57;width:56px;height:56px;border:none;border-radius:50%;background:var(--accent);color:var(--on-accent);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 26px -6px rgba(var(--accent-rgb),.55);transition:transform var(--dur-rapida) var(--ease-salida),opacity .2s}
+.chat-fab:hover{transform:translateY(-2px)}
+.chat-fab:focus-visible,#ab-chat:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.chat-fab[hidden],#ab-chat[hidden],.chat-globo[hidden]{display:none}
+body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
+.chat-fab-badge,.ab-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;background:#ef4444;color:#fff;font-size:11px;font-weight:800;line-height:16px;text-align:center;border:2px solid var(--bg)}
+.chat-fab-badge[hidden],.ab-badge[hidden]{display:none}
+.chat-fab.hay-nuevos::before{content:'';position:absolute;inset:0;border-radius:50%;border:3px solid var(--accent);animation:cp-anillo 1.8s ease-out infinite;pointer-events:none}
+.chat-fab.sacude,#ab-chat.sacude{animation:cp-sacude .8s ease-in-out}
+#ab-chat{position:relative}
+#ab-chat .ab-badge{top:-5px;right:-5px}
+#ab-chat.hay-nuevos{color:var(--accent-ink);border-color:rgba(var(--accent-rgb),.55);animation:cp-pulso 1.8s ease-out infinite}
+.chat-globo{position:fixed;right:22px;bottom:92px;z-index:61;max-width:300px;padding:10px 14px 11px;border-radius:16px 16px 4px 16px;background:var(--panel-solid);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line2));box-shadow:0 18px 40px -12px rgba(0,0,0,.55);color:var(--txt);font-size:13px;line-height:1.45;cursor:pointer;opacity:0;transform:translateY(8px) scale(.96);transform-origin:right bottom;transition:opacity .22s,transform .3s var(--ease-salida)}
+.chat-globo.show{opacity:1;transform:none}
+.chat-globo b{display:block;font-size:11px;letter-spacing:.4px;color:var(--accent-ink)}
+.chat-globo span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@media(min-width:761px){body.chat-on:not(.chat-abierto) #toasts{bottom:92px}body.chat-abierto #toasts{bottom:auto;top:76px}}
+
+@keyframes cp-anillo{0%{transform:scale(1);opacity:.85}100%{transform:scale(1.75);opacity:0}}
+@keyframes cp-pulso{0%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),.5)}100%{box-shadow:0 0 0 12px rgba(var(--accent-rgb),0)}}
+@keyframes cp-sacude{0%,100%{transform:rotate(0)}15%{transform:rotate(-14deg)}30%{transform:rotate(12deg)}45%{transform:rotate(-9deg)}60%{transform:rotate(7deg)}75%{transform:rotate(-3deg)}}
+@keyframes cp-llego{0%{background:rgba(var(--accent-rgb),.3)}100%{background:transparent}}
+@keyframes cp-resalta{0%,30%{filter:brightness(1.55)}100%{filter:none}}
+@keyframes cp-barra{from{background-position:0 0}to{background-position:-200% 0}}
+@keyframes cp-parpadea{0%,100%{opacity:1}50%{opacity:.25}}
+@media(prefers-reduced-motion:reduce){
+  .chat-fab.hay-nuevos::before,#ab-chat.hay-nuevos,.chat-fab.sacude,#ab-chat.sacude,#chat-panel .msg-inbox-row.llego,#chat-panel .cp-log .chat-msg.resaltado,#chat-panel .cp-rec-dot,#chat-panel .cp-foto.subiendo::after{animation:none}
+  .chat-panel,.chat-panel.abierto,#chat-panel .cp-conv,.chat-globo{transition:none}
+}
+
+/* Escritorio: modo expandido = lista + conversación (estilo WhatsApp Web) */
+@media(min-width:761px){
+  .chat-panel.expandido{--cp-w:920px;max-width:calc(100vw / var(--zoom,1) - 44px)}
+  #chat-panel.expandido .cp-lista{right:auto;width:330px;border-right:1px solid var(--line)}
+  #chat-panel.expandido .cp-conv{left:330px;transform:none;visibility:visible;z-index:1;transition:none}
+  #chat-panel.expandido .cp-conv .cp-back{display:none}
+  #chat-panel.expandido .cp-conv:not(.open) .cp-vacio{display:flex}
+  #chat-panel.expandido .cp-vacio{position:absolute;inset:0;z-index:5;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:var(--bg2);color:var(--muted);font-size:14px;text-align:center;padding:30px}
+  #chat-panel.expandido .cp-vacio i{font-size:44px;color:var(--muted2)}
+  #chat-panel:not(.expandido) .cp-cerrar-conv{display:inline-flex}
+  #chat-panel .msg-inbox-row:hover{background:rgba(var(--ink-rgb),.05)}
+}
+
+/* Móvil: pantalla completa; la conversación desliza sobre la lista */
+@media(max-width:760px){
+  .chat-panel{inset:0;width:auto;height:auto;border:none;border-radius:0;box-shadow:none;transform:translateY(24px);background:var(--bg2)}
+  #chat-panel .cp-lista,#chat-panel .cp-conv{top:env(safe-area-inset-top,0px)}
+  #cp-expandir{display:none}
+  .chat-fab{display:none!important}
+  .chat-globo{right:10px;bottom:auto;top:calc(var(--appbar-h,56px) + env(safe-area-inset-top,0px) + 6px);border-radius:16px 4px 16px 16px;transform-origin:right top}
+  #chat-panel .cp-head{height:56px}
+  #chat-panel .cp-ico{width:var(--tap,44px);height:var(--tap,44px)}
+  #chat-panel .cp-log .chat-msg{max-width:88%}
+  #chat-panel .cp-input{font-size:16px}
+  #chat-panel .cp-send{width:46px;height:46px}
+  #chat-panel .cp-emoji-host,#chat-panel .cp-stickers{height:min(310px,42dvh)}
+  #chat-panel .cp-pop.ancho{left:6px;right:6px}
+  body.chat-abierto #toasts{bottom:auto;top:calc(10px + env(safe-area-inset-top,0px))}
+}
+
 /* WhatsApp (Zernio): reutiliza la bandeja y las burbujas de Mensajes */
 .wa-filtros{display:flex;gap:8px;padding:0 0 10px;flex-shrink:0}
 .wa-filtros select,.wa-filtros input{flex:1;min-width:0;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;color:var(--txt);padding:8px 10px;font:inherit;font-size:13px}
@@ -2068,22 +2290,22 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 
 /* Burbujas WhatsApp: fondo con trama, radio 8px, colita en la primera de cada
    racha, hora y ticks dentro de la burbuja. */
-.dm-shell[data-canal="whatsapp"] .dm-log{background-color:var(--wa-fondo);background-image:radial-gradient(var(--wa-trama) 1.2px,transparent 1.6px);background-size:22px 22px;border-radius:12px;padding:11px 14px}
-.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg{position:relative;border:none;border-radius:8px;padding:6px 9px 7px;margin-top:2px;max-width:72%;box-shadow:0 1px .5px rgba(11,20,26,.13)}
-.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg:not(.grouped){margin-top:9px}
-.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.adjunto{padding:3px}
-.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.adjunto .msg-meta{padding:0 6px 2px}
-.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.mine{background:var(--wa-mia);color:var(--wa-mia-txt);margin-right:7px}
-.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.other{background:var(--wa-ajena);color:var(--wa-ajena-txt);margin-left:7px}
-.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.mine:not(.grouped){border-top-right-radius:0}
-.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.other:not(.grouped){border-top-left-radius:0}
-.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg:not(.grouped)::before{content:"";position:absolute;top:0;width:8px;height:13px}
-.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.mine:not(.grouped)::before{right:-8px;background:var(--wa-mia);clip-path:polygon(0 0,100% 0,0 100%)}
-.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.other:not(.grouped)::before{left:-8px;background:var(--wa-ajena);clip-path:polygon(0 0,100% 0,100% 100%)}
-.dm-shell[data-canal="whatsapp"] .dm-log .msg-meta,.dm-shell[data-canal="whatsapp"] .dm-log .chat-msg.other .msg-meta{color:var(--wa-meta);margin-top:2px}
-.dm-shell[data-canal="whatsapp"] .dm-log .msg-tick.leido{color:var(--wa-leido)}
-.dm-shell[data-canal="whatsapp"] .dm-log .msg-date-chip{background:var(--wa-ajena);color:var(--wa-meta);border:none;border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);text-transform:uppercase;letter-spacing:.04em;font-size:10.5px}
-.dm-shell[data-canal="whatsapp"] .dm-log .msg-doc i{background:color-mix(in srgb,currentColor 10%,transparent);color:inherit}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa){background-color:var(--wa-fondo);background-image:radial-gradient(var(--wa-trama) 1.2px,transparent 1.6px);background-size:22px 22px;border-radius:12px;padding:11px 14px}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg{position:relative;border:none;border-radius:8px;padding:6px 9px 7px;margin-top:2px;max-width:72%;box-shadow:0 1px .5px rgba(11,20,26,.13)}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg:not(.grouped){margin-top:9px}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg.adjunto{padding:3px}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg.adjunto .msg-meta{padding:0 6px 2px}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg.mine{background:var(--wa-mia);color:var(--wa-mia-txt);margin-right:7px}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg.other{background:var(--wa-ajena);color:var(--wa-ajena-txt);margin-left:7px}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg.mine:not(.grouped){border-top-right-radius:0}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg.other:not(.grouped){border-top-left-radius:0}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg:not(.grouped)::before{content:"";position:absolute;top:0;width:8px;height:13px}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg.mine:not(.grouped)::before{right:-8px;background:var(--wa-mia);clip-path:polygon(0 0,100% 0,0 100%)}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg.other:not(.grouped)::before{left:-8px;background:var(--wa-ajena);clip-path:polygon(0 0,100% 0,100% 100%)}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .msg-meta,:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .chat-msg.other .msg-meta{color:var(--wa-meta);margin-top:2px}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .msg-tick.leido{color:var(--wa-leido)}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .msg-date-chip{background:var(--wa-ajena);color:var(--wa-meta);border:none;border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);text-transform:uppercase;letter-spacing:.04em;font-size:10.5px}
+:is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .msg-doc i{background:color-mix(in srgb,currentColor 10%,transparent);color:inherit}
 @media(prefers-reduced-motion:reduce){.dm-vivo.on .dm-vivo-punto,.dm-campo.recien,.dm-inbox .msg-inbox-row.llego{animation:none}.dm-canal::after,.dm-log{transition:none}}
 /* Tablet: la ficha pasa a panel deslizable sobre el chat */
 @media(max-width:1179px){
@@ -2268,16 +2490,88 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
   .main.en-facturacion .topbar-help-btn{padding:6px 12px;border-radius:9px;font-size:12px;box-shadow:none}
   .main.en-facturacion .pill{padding:6px 11px;border-radius:9px;font-size:12px}
   .main.en-facturacion .foot-note{display:none}
-  #sec-facturacion #fact-kpis{grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:10px}
-  #sec-facturacion #fact-kpis .kpi{padding:10px 12px;border-radius:12px}
-  #sec-facturacion #fact-kpis .kpi .kt{font-size:10px;letter-spacing:.4px;gap:6px}
-  #sec-facturacion #fact-kpis .kpi .kt i{width:20px;height:20px;border-radius:6px;font-size:10px}
-  #sec-facturacion #fact-kpis .kpi .kv{font-size:20px;margin-top:6px}
-  #sec-facturacion #fact-kpis .kpi .kd{margin-top:2px}
   #sec-facturacion .lt-kpis{gap:10px;margin-bottom:8px}
   #sec-facturacion .lt-kpis .kpi{padding:10px 14px}
   #sec-facturacion .lt-kpis .kpi .kv{font-size:22px;margin-top:6px}
   #sec-facturacion .lt-grid{grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;margin-top:10px}
+}
+
+/* Facturación: una barra por pestaña (buscar · filtros · orden · acción · ⋯).
+   Los .lt-orden quedan en el DOM (aplicarOrdenTabla y abrirOrdenarSheet leen
+   de ahí las columnas) pero el orden se elige con el botón "Ordenar". */
+#sec-facturacion .lt-orden{display:none}
+.fact-barra{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:10px}
+.fact-barra .bt-buscar{flex:0 1 260px}
+.fact-barra .btn-sm{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px}
+.fact-barra .fact-orden-btn{margin-left:auto}
+.fact-barra .fact-orden-btn b{font-weight:700;color:var(--accent-ink)}
+#fact-tabs .lih-count{margin-left:6px;background:var(--accent);color:var(--on-accent);font-size:11px;font-weight:800;padding:1px 8px;border-radius:20px}
+#fact-tabs .lih-count.fact-alerta{background:var(--danger);color:#fff}
+#sec-facturacion .leads-inbox+.leads-inbox{margin-top:14px}
+@media(max-width:760px){
+  .fact-barra .bt-buscar{flex:1 1 200px;min-width:0}
+  .fact-barra .btn-sm{min-height:44px}
+  .fact-barra .fact-orden-btn{margin-left:0;flex:1 1 auto}
+  .fact-barra .mfs-trigger.mfs-icon{margin:0}
+}
+
+/* Balance */
+.bal-barra{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:16px}
+.bal-barra .seg-group{margin-bottom:0}
+.bal-nav{display:inline-flex;align-items:center;gap:6px}
+.bal-nav .btn-sm{min-width:34px;min-height:34px}
+.bal-nav .btn-sm:disabled{opacity:.35;cursor:default}
+.bal-etiqueta{min-width:130px;text-align:center;font-weight:700;font-size:14px;text-transform:capitalize}
+.bal-rango{display:inline-flex;gap:8px}
+.bal-rango[hidden],.bal-nav[hidden]{display:none}
+.bal-rango .ei{width:auto;padding:7px 10px;font-size:13px}
+.bal-fin{margin-left:auto;display:flex;align-items:center;gap:8px}
+.bal-fin .btn-sm{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px}
+.bal-aviso{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 16px;padding:11px 14px;border-radius:12px;border:1px solid color-mix(in srgb,var(--amber) 40%,transparent);background:color-mix(in srgb,var(--amber) 12%,transparent);font-size:13px}
+.bal-aviso[hidden]{display:none}
+.bal-aviso i{color:var(--amber)}
+.bal-aviso .btn-sm{margin-left:auto}
+#sec-balance .grid{margin-top:16px}
+#sec-balance .card h2{margin-bottom:6px}
+.bal-fila{display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.bal-fila:last-child{border-bottom:0}
+.bal-fila .bal-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.bal-fila .bal-v{font-weight:700;font-variant-numeric:tabular-nums}
+.bal-fila .bal-p{width:46px;text-align:right;font-size:11.5px;color:var(--muted)}
+.bal-fila.sub{padding:5px 0 5px 18px;font-size:12.5px;color:var(--muted)}
+.bal-fila.sub .bal-v{font-weight:600;color:var(--txt)}
+.bal-fila.tot{font-weight:800;border-top:1px solid var(--line2)}
+.bal-fila.tot .bal-v{font-weight:800}
+.bal-pos{color:var(--green)}.bal-neg{color:var(--danger)}
+.bal-nota{font-size:11.5px;color:var(--muted);margin-top:8px}
+.bal-saldo{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin-top:8px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg2);color:var(--txt);font:inherit;font-size:13px;text-align:left}
+.bal-saldo[data-bal]{cursor:pointer}
+.bal-saldo[data-bal]:hover{border-color:var(--line2)}
+.bal-saldo b{font-size:15px;font-variant-numeric:tabular-nums}
+.bal-saldo small{display:block;color:var(--muted);font-size:11.5px}
+.bal-ase{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(3,minmax(0,1fr));gap:8px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.bal-ase:last-child{border-bottom:0}
+.bal-ase.cab{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);padding-top:2px}
+.bal-ase .bal-n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.bal-ase .bal-n small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.bal-ase .bal-v{text-align:right;font-variant-numeric:tabular-nums}
+.bal-gasto{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.bal-gasto:last-child{border-bottom:0}
+.bal-gasto .bal-n{flex:1;min-width:0}
+.bal-gasto .bal-n b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.bal-gasto .bal-n small{color:var(--muted);font-size:11.5px}
+.bal-gasto .bal-v{font-weight:700;font-variant-numeric:tabular-nums}
+.bal-gasto .btn-sm{padding:6px 9px}
+@media(max-width:760px){
+  .bal-barra{gap:8px}
+  .bal-nav{flex:1 1 100%;justify-content:space-between}
+  .bal-etiqueta{flex:1}
+  .bal-rango{flex:1 1 100%}
+  .bal-rango .ei{flex:1;font-size:16px}
+  .bal-fin{margin-left:0;flex:1 1 100%}
+  .bal-fin #bal-gasto-btn{flex:1}
+  .bal-fin .btn-sm,.bal-nav .btn-sm,.bal-aviso .btn-sm,.bal-gasto .btn-sm{min-height:44px;min-width:44px}
+  .bal-aviso .btn-sm{margin-left:0}
 }
 
 .correo-compose-form{display:flex;flex-direction:column;gap:5px;padding:4px 6px 14px}
@@ -5350,6 +5644,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
       <div class="mb-tit"><div class="mb-t" id="mb-title">Dashboard</div><div class="mb-s" id="mb-sub">Resumen general</div></div>
       <button class="ab-act" id="ab-tutorial" type="button" aria-label="Ver tutorial de esta sección" hidden><i class="fas fa-circle-play"></i></button>
+      <button class="ab-act" id="ab-chat" type="button" aria-label="Mensajes" hidden><i class="fas fa-comment-dots"></i><span class="ab-badge" id="ab-badge" hidden></span></button>
       <button class="ab-act" id="ab-buscar" type="button" aria-label="Buscar"><i class="fas fa-search"></i></button>
     </div>
     <div class="recordatorios-banner recordatorios-banner-m" id="recordatorios-banner-m">
@@ -5894,35 +6189,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </details>
     </section>
 
-    <!-- MENSAJES (chat interno del staff) -->
-    <section class="section" id="sec-mensajes">
-      <div class="card chat-wrap msg-layout pantalla-chat">
-        <div class="chat-toolbar" style="justify-content:space-between">
-          <div class="eb-title" style="margin:0"><i class="fas fa-comment-dots"></i> Mensajes</div>
-          <button class="chat-tool-btn" id="msg-nuevo-btn" type="button"><i class="fas fa-plus"></i> Nuevo chat</button>
-        </div>
-        <div class="msg-inbox" id="msg-inbox" style="flex:1;overflow-y:auto"></div>
-
-        <div class="msg-conv" id="msg-conv">
-          <div class="msg-conv-head">
-            <button class="msg-conv-back" id="msg-conv-back" type="button"><i class="fas fa-arrow-left"></i></button>
-            <div>
-              <div class="msg-conv-titulo" id="msg-conv-titulo"></div>
-              <div class="msg-conv-sub" id="msg-conv-sub"></div>
-            </div>
-          </div>
-          <div class="msg-conv-log" id="msg-conv-log"></div>
-          <div class="msg-inputbar" id="msg-inputbar">
-            <button class="msg-attach-btn" id="msg-attach-btn" type="button" title="Adjuntar"><i class="fas fa-paperclip"></i></button>
-            <textarea class="msg-input" id="msg-input" rows="1" placeholder="Escribe un mensaje..."></textarea>
-            <button class="mic-btn" id="msg-mic-btn" type="button" title="Dictar por voz" aria-label="Dictar por voz"><i class="fas fa-microphone"></i></button>
-            <button class="chat-send" id="msg-send-btn" title="Enviar" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
-          </div>
-          <div class="msg-readonly-note" id="msg-readonly-note" style="display:none"><i class="fas fa-lock"></i> Solo lectura — únicamente los admins escriben acá</div>
-        </div>
-      </div>
-    </section>
-
     <!-- WHATSAPP (chats del bot por número, vía Zernio; solo admins, solo lectura) -->
     <section class="section" id="sec-whatsapp">
       <div class="dm-shell wa-shell" id="wa-shell" data-canal="whatsapp">
@@ -6401,34 +6667,80 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 
     </section>
 
+    <!-- BALANCE (admin + administrativo): ventas, costos, gastos y utilidad; base = fecha de venta -->
+    <section class="section" id="sec-balance">
+      <div class="bal-barra">
+        <div class="seg-group" id="bal-periodo">
+          <button class="seg" data-p="dia">Día</button>
+          <button class="seg" data-p="semana">Semana</button>
+          <button class="seg on" data-p="mes">Mes</button>
+          <button class="seg" data-p="anio">Año</button>
+          <button class="seg" data-p="rango">Rango</button>
+        </div>
+        <div class="bal-nav" id="bal-nav">
+          <button class="btn-sm" type="button" id="bal-prev" aria-label="Periodo anterior" title="Periodo anterior"><i class="fas fa-chevron-left"></i></button>
+          <span class="bal-etiqueta" id="bal-etiqueta">—</span>
+          <button class="btn-sm" type="button" id="bal-next" aria-label="Periodo siguiente" title="Periodo siguiente"><i class="fas fa-chevron-right"></i></button>
+        </div>
+        <div class="bal-rango" id="bal-rango" hidden>
+          <input class="ei" type="date" id="bal-desde" aria-label="Desde">
+          <input class="ei" type="date" id="bal-hasta" aria-label="Hasta">
+        </div>
+        <div class="bal-fin">
+          <button class="btn-sm lt-primario" id="bal-gasto-btn" type="button"><i class="fas fa-plus"></i> Registrar gasto</button>
+          <div class="export-dd">
+            <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'balance')" aria-label="Exportar" title="Exportar"><i class="fas fa-download"></i></button>
+            <div class="export-dd-menu" id="export-menu-balance">
+              <button onclick="exportarPDF('balance','Balance')"><i class="fas fa-file-pdf"></i> PDF</button>
+              <button onclick="exportarCSV('balance')"><i class="fas fa-file-csv"></i> CSV</button>
+              <button onclick="exportarXLSX('balance','Balance')"><i class="fas fa-file-excel"></i> XLSX</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpis kpis-5" id="bal-kpis"></div>
+      <div class="bal-aviso" id="bal-aviso" hidden></div>
+
+      <div class="card">
+        <h2 id="bal-grafico-tit"><i class="fas fa-chart-column"></i> Ventas, egresos y utilidad</h2>
+        <div class="csub" id="bal-grafico-sub"></div>
+        <div class="chart-wrap" id="bal-chart-wrap"><canvas id="chBalance"></canvas></div>
+        <div id="bal-dia-lista" hidden></div>
+      </div>
+
+      <div class="grid g-2b">
+        <div class="card"><h2><i class="fas fa-scale-balanced"></i> Estado de resultados</h2><div id="bal-er"></div></div>
+        <div class="card"><h2><i class="fas fa-hourglass-half"></i> Saldos hoy</h2><div class="csub">Lo pendiente ahora, sin importar el periodo elegido</div><div id="bal-saldos"></div></div>
+      </div>
+      <div class="grid g-2b">
+        <div class="card"><h2><i class="fas fa-user-tie"></i> Por asesor</h2><div id="bal-asesores"></div></div>
+        <div class="card"><h2><i class="fas fa-receipt"></i> Gastos del periodo</h2><div id="bal-gastos"></div></div>
+      </div>
+    </section>
+
     <!-- FACTURACIÓN -->
     <section class="section" id="sec-facturacion">
-      <div class="kpis" id="fact-kpis"></div>
-
       <div class="seg-group chips-scroll" id="fact-tabs">
         <button class="seg on" data-fact-tab="ventas">Ventas</button>
         <button class="seg" data-fact-tab="comisiones">Comisiones</button>
-        <button class="seg" data-fact-tab="cxp">Cuentas por Pagar</button>
-        <button class="seg" data-fact-tab="asesores">Asesores</button>
-        <button class="seg" data-fact-tab="bandeja">Bandeja de Entrada <span class="lih-count" id="fact-bandeja-count">0</span></button>
-        <button class="seg" data-fact-tab="verificar">Por Verificar <span class="lih-count" id="fact-verificar-count">0</span></button>
+        <button class="seg" data-fact-tab="cxp">Cuentas por pagar</button>
+        <button class="seg" data-fact-tab="asesores">Asesores <span class="lih-count fact-alerta" id="fact-asesores-alerta" hidden>0</span></button>
+        <button class="seg" data-fact-tab="revisar">Por revisar <span class="lih-count" id="fact-revisar-count" hidden>0</span></button>
       </div>
 
-      <div class="fact-tab-panel" data-fact-panel="bandeja" style="display:none">
+      <div class="fact-tab-panel" data-fact-panel="revisar" style="display:none">
         <div class="leads-inbox" id="fact-bandeja-inbox" style="display:block">
           <div class="leads-inbox-head">
-            <h2><i class="fas fa-inbox"></i> Clientes enviados a facturación</h2>
+            <h2><i class="fas fa-inbox"></i> Clientes enviados a facturación <span class="lih-count" id="fact-bandeja-count" hidden>0</span></h2>
           </div>
           <div class="tbl-state skel" id="fact-bandeja-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
           <div class="tbl-state" id="fact-bandeja-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tenés clientes pendientes de facturar</div></div>
           <div class="leads-inbox-grid" id="fact-bandeja-grid"></div>
         </div>
-      </div>
-
-      <div class="fact-tab-panel" data-fact-panel="verificar" style="display:none">
         <div class="leads-inbox" id="fact-verificar-inbox" style="display:block">
           <div class="leads-inbox-head">
-            <h2><i class="fas fa-shield-halved"></i> Ventas cerradas por un asesor, pendientes de confirmar</h2>
+            <h2><i class="fas fa-shield-halved"></i> Ventas cerradas por un asesor, pendientes de confirmar <span class="lih-count" id="fact-verificar-count" hidden>0</span></h2>
           </div>
           <div class="csub">Un asesor cerró estas ventas -- no generan factura ni comisión hasta que las confirmés. Revisá el monto contra el comprobante real antes de confirmar.</div>
           <div class="tbl-state skel" id="fact-verificar-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
@@ -6438,44 +6750,40 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
 
       <div class="fact-tab-panel" data-fact-panel="ventas">
-        <!-- Trigger + panel fuera de .card a propósito: .card tiene
-             backdrop-filter (blur), que igual que un transform residual
-             crea containing block para position:fixed y manda la hoja
-             lejos del viewport (bug real, encontrado verificando esta
-             misma fase). El patrón que ya funciona en Leads (leads-tbar)
-             tampoco anida su .mfs dentro de .card -- por eso nunca lo pisó. -->
-        <button class="mfs-trigger mfs-icon" data-mfs="fact-ventas-filtros" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
-        <div class="mfs" id="fact-ventas-filtros" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-          <select class="flt" id="fact-estado">
-            <option value="">Todos los estados</option>
-            <option value="pagada">Pagada</option>
-            <option value="anulada">Anulada</option>
-          </select>
-          <select class="flt" id="fact-mes">
-            <option value="">Todos los meses</option>
-          </select>
-          <select class="flt" id="fact-asesor">
-            <option value="">Todos los asesores</option>
-          </select>
-          <button class="mfs-done" data-mfs="fact-ventas-filtros" type="button">Listo</button>
-        </div>
-        <div class="card">
-          <div class="chead-row">
-            <h2><i class="fas fa-file-invoice-dollar"></i> Ventas</h2>
-            <input class="ei bt-buscar" id="fact-ventas-search" type="search" placeholder="Buscar cliente, asesor..." aria-label="Buscar cliente, asesor o proveedor">
-            <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('ventas')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
-            <button class="btn-sm" id="fact-nuevo-cliente-btn"><i class="fas fa-user-plus"></i> Nuevo cliente</button>
-            <button class="btn-sm" id="fact-vincular-pago-btn"><i class="fas fa-link"></i> Vincular pago a factura</button>
-            <div class="export-dd">
-              <button class="btn-sm" onclick="toggleExportMenu(event,'ventas')"><i class="fas fa-download"></i> Exportar tabla</button>
-              <div class="export-dd-menu" id="export-menu-ventas">
-                <button onclick="exportarPDF('ventas','Ventas')"><i class="fas fa-file-pdf"></i> PDF</button>
-                <button onclick="exportarCSV('ventas')"><i class="fas fa-file-csv"></i> CSV</button>
-                <button onclick="exportarXLSX('ventas','Ventas')"><i class="fas fa-file-excel"></i> XLSX</button>
-              </div>
+        <!-- Barra fuera de .card a propósito: .card tiene backdrop-filter (blur),
+             que igual que un transform residual crea containing block para
+             position:fixed y manda la hoja .mfs lejos del viewport (bug real).
+             Mismo motivo por el que el .mfs de Leads no anida en .card. -->
+        <div class="fact-barra">
+          <input class="ei bt-buscar" id="fact-ventas-search" type="search" placeholder="Buscar cliente, asesor..." aria-label="Buscar cliente, asesor o proveedor">
+          <button class="mfs-trigger mfs-icon" data-mfs="fact-ventas-filtros" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
+          <div class="mfs" id="fact-ventas-filtros" style="display:flex;gap:8px;flex-wrap:wrap">
+            <select class="flt" id="fact-estado">
+              <option value="">Todos los estados</option>
+              <option value="pagada">Pagada</option>
+              <option value="anulada">Anulada</option>
+            </select>
+            <select class="flt" id="fact-mes">
+              <option value="">Todos los meses</option>
+            </select>
+            <select class="flt" id="fact-asesor">
+              <option value="">Todos los asesores</option>
+            </select>
+            <button class="mfs-done" data-mfs="fact-ventas-filtros" type="button">Listo</button>
+          </div>
+          <button class="btn-sm fact-orden-btn" type="button" onclick="abrirOrdenarSheet('ventas')" title="Cambiar el orden"><i class="fas fa-arrow-down-wide-short"></i> <span>Ordenar<b data-orden-lbl="ventas"></b></span></button>
+          <button class="btn-sm lt-primario" id="fact-nuevo-cliente-btn" type="button"><i class="fas fa-user-plus"></i> Nuevo cliente</button>
+          <div class="export-dd">
+            <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'ventas')" aria-label="Más acciones" title="Más acciones"><i class="fas fa-ellipsis"></i></button>
+            <div class="export-dd-menu" id="export-menu-ventas">
+              <button id="fact-vincular-pago-btn" type="button"><i class="fas fa-link"></i> Vincular pago a factura</button>
+              <button onclick="exportarPDF('ventas','Ventas')"><i class="fas fa-file-pdf"></i> PDF</button>
+              <button onclick="exportarCSV('ventas')"><i class="fas fa-file-csv"></i> CSV</button>
+              <button onclick="exportarXLSX('ventas','Ventas')"><i class="fas fa-file-excel"></i> XLSX</button>
             </div>
           </div>
-          <div class="csub">Precio de venta, costo neto (cargado en Postventa) y margen por venta · tocá una cifra de arriba para filtrar</div>
+        </div>
+        <div class="card">
           <div class="kpis bt-kpis lt-kpis" id="fact-ventas-kpis"></div>
           <div class="lt-orden" role="group" aria-label="Ordenar por">
             <span class="lt-orden-lbl">Ordenar</span>
@@ -6496,21 +6804,19 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
 
       <div class="fact-tab-panel" data-fact-panel="comisiones" style="display:none">
-        <div class="card">
-          <div class="chead-row">
-            <h2><i class="fas fa-sack-dollar"></i> Comisiones</h2>
-            <input class="ei bt-buscar" id="fact-com-search" type="search" placeholder="Buscar asesor..." aria-label="Buscar asesor">
-            <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('comisiones')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
-            <div class="export-dd">
-              <button class="btn-sm" onclick="toggleExportMenu(event,'comisiones')"><i class="fas fa-download"></i> Exportar tabla</button>
-              <div class="export-dd-menu" id="export-menu-comisiones">
-                <button onclick="exportarPDF('comisiones','Comisiones')"><i class="fas fa-file-pdf"></i> PDF</button>
-                <button onclick="exportarCSV('comisiones')"><i class="fas fa-file-csv"></i> CSV</button>
-                <button onclick="exportarXLSX('comisiones','Comisiones')"><i class="fas fa-file-excel"></i> XLSX</button>
-              </div>
+        <div class="fact-barra">
+          <input class="ei bt-buscar" id="fact-com-search" type="search" placeholder="Buscar asesor..." aria-label="Buscar asesor">
+          <button class="btn-sm fact-orden-btn" type="button" onclick="abrirOrdenarSheet('comisiones')" title="Cambiar el orden"><i class="fas fa-arrow-down-wide-short"></i> <span>Ordenar<b data-orden-lbl="comisiones"></b></span></button>
+          <div class="export-dd">
+            <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'comisiones')" aria-label="Exportar" title="Exportar"><i class="fas fa-download"></i></button>
+            <div class="export-dd-menu" id="export-menu-comisiones">
+              <button onclick="exportarPDF('comisiones','Comisiones')"><i class="fas fa-file-pdf"></i> PDF</button>
+              <button onclick="exportarCSV('comisiones')"><i class="fas fa-file-csv"></i> CSV</button>
+              <button onclick="exportarXLSX('comisiones','Comisiones')"><i class="fas fa-file-excel"></i> XLSX</button>
             </div>
           </div>
-          <div class="csub">Tocá "Editar %" para pisar el % de una venta puntual · tocá una cifra de arriba para filtrar</div>
+        </div>
+        <div class="card">
           <div class="kpis bt-kpis lt-kpis lt-kpis-4" id="fact-com-kpis"></div>
           <div class="lt-orden" role="group" aria-label="Ordenar por">
             <span class="lt-orden-lbl">Ordenar</span>
@@ -6527,21 +6833,19 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
 
       <div class="fact-tab-panel" data-fact-panel="cxp" style="display:none">
-        <div class="card">
-          <div class="chead-row">
-            <h2><i class="fas fa-file-invoice"></i> Cuentas por Pagar</h2>
-            <input class="ei bt-buscar" id="cxp-search" type="search" placeholder="Buscar proveedor o cliente..." aria-label="Buscar proveedor o cliente">
-            <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('cxp')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
-            <div class="export-dd">
-              <button class="btn-sm" onclick="toggleExportMenu(event,'cxp')"><i class="fas fa-download"></i> Exportar tabla</button>
-              <div class="export-dd-menu" id="export-menu-cxp">
-                <button onclick="exportarPDF('cxp','Cuentas por Pagar')"><i class="fas fa-file-pdf"></i> PDF</button>
-                <button onclick="exportarCSV('cxp')"><i class="fas fa-file-csv"></i> CSV</button>
-                <button onclick="exportarXLSX('cxp','Cuentas por Pagar')"><i class="fas fa-file-excel"></i> XLSX</button>
-              </div>
+        <div class="fact-barra">
+          <input class="ei bt-buscar" id="cxp-search" type="search" placeholder="Buscar proveedor o cliente..." aria-label="Buscar proveedor o cliente">
+          <button class="btn-sm fact-orden-btn" type="button" onclick="abrirOrdenarSheet('cxp')" title="Cambiar el orden"><i class="fas fa-arrow-down-wide-short"></i> <span>Ordenar<b data-orden-lbl="cxp"></b></span></button>
+          <div class="export-dd">
+            <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'cxp')" aria-label="Exportar" title="Exportar"><i class="fas fa-download"></i></button>
+            <div class="export-dd-menu" id="export-menu-cxp">
+              <button onclick="exportarPDF('cxp','Cuentas por Pagar')"><i class="fas fa-file-pdf"></i> PDF</button>
+              <button onclick="exportarCSV('cxp')"><i class="fas fa-file-csv"></i> CSV</button>
+              <button onclick="exportarXLSX('cxp','Cuentas por Pagar')"><i class="fas fa-file-excel"></i> XLSX</button>
             </div>
           </div>
-          <div class="csub">Lo que le debemos a cada proveedor por reservas ya vendidas · tocá una cifra de arriba para filtrar</div>
+        </div>
+        <div class="card">
           <div class="kpis bt-kpis lt-kpis" id="cxp-kpis"></div>
           <div class="lt-orden" role="group" aria-label="Ordenar por">
             <span class="lt-orden-lbl">Ordenar</span>
@@ -6559,21 +6863,19 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
 
       <div class="fact-tab-panel" data-fact-panel="asesores" style="display:none">
-        <div class="card">
-          <div class="chead-row">
-            <h2><i class="fas fa-percent"></i> Comisión por asesor</h2>
-            <input class="ei bt-buscar" id="fact-asesores-search" type="search" placeholder="Buscar asesor..." aria-label="Buscar asesor">
-            <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('asesores')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
-            <div class="export-dd">
-              <button class="btn-sm" onclick="toggleExportMenu(event,'asesores')"><i class="fas fa-download"></i> Exportar tabla</button>
-              <div class="export-dd-menu" id="export-menu-asesores">
-                <button onclick="exportarPDF('asesores','Comisión por asesor')"><i class="fas fa-file-pdf"></i> PDF</button>
-                <button onclick="exportarCSV('asesores')"><i class="fas fa-file-csv"></i> CSV</button>
-                <button onclick="exportarXLSX('asesores','Comisión por asesor')"><i class="fas fa-file-excel"></i> XLSX</button>
-              </div>
+        <div class="fact-barra">
+          <input class="ei bt-buscar" id="fact-asesores-search" type="search" placeholder="Buscar asesor..." aria-label="Buscar asesor">
+          <button class="btn-sm fact-orden-btn" type="button" onclick="abrirOrdenarSheet('asesores')" title="Cambiar el orden"><i class="fas fa-arrow-down-wide-short"></i> <span>Ordenar<b data-orden-lbl="asesores"></b></span></button>
+          <div class="export-dd">
+            <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'asesores')" aria-label="Exportar" title="Exportar"><i class="fas fa-download"></i></button>
+            <div class="export-dd-menu" id="export-menu-asesores">
+              <button onclick="exportarPDF('asesores','Comisión por asesor')"><i class="fas fa-file-pdf"></i> PDF</button>
+              <button onclick="exportarCSV('asesores')"><i class="fas fa-file-csv"></i> CSV</button>
+              <button onclick="exportarXLSX('asesores','Comisión por asesor')"><i class="fas fa-file-excel"></i> XLSX</button>
             </div>
           </div>
-          <div class="csub">% que se aplica automáticamente sobre cada venta pagada · tocá una cifra de arriba para filtrar</div>
+        </div>
+        <div class="card">
           <div class="kpis bt-kpis lt-kpis" id="fact-asesores-kpis"></div>
           <div class="lt-orden" role="group" aria-label="Ordenar por">
             <span class="lt-orden-lbl">Ordenar</span>
@@ -8441,16 +8743,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
   </div>
 </div>
 
-<!-- Mensajes: adjuntar archivo -->
-<div class="sheet" id="msg-attach-sheet">
-  <div class="sheet-handle"></div>
-  <div class="sheet-title">Adjuntar</div>
-  <a class="sheet-item" id="msg-attach-foto"><i class="fas fa-image"></i> Foto o video</a>
-  <a class="sheet-item" id="msg-attach-doc"><i class="fas fa-file"></i> Documento</a>
-</div>
-<input type="file" id="msg-file-foto" accept="image/*,video/*" style="display:none">
-<input type="file" id="msg-file-doc" style="display:none">
-
 <!-- Mensajes: iniciar chat nuevo -->
 <div class="sheet" id="msg-nuevo-sheet">
   <div class="sheet-handle"></div>
@@ -8977,6 +9269,57 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 <!-- Preview pill -->
 <div class="preview-pill" id="preview-pill"></div>
 <!-- Toasts -->
+<!-- Chat interno del staff: panel flotante a nivel body (.app tiene isolation:isolate).
+     Reemplaza a la antigua sección Mensajes; el nav "Mensajes" y ?ir=mensajes lo abren. -->
+<button class="chat-fab" id="chat-fab" type="button" hidden aria-label="Abrir mensajes" aria-haspopup="dialog" title="Mensajes (Alt+M)"><i class="fas fa-comment-dots"></i><span class="chat-fab-badge" id="chat-fab-badge" hidden></span></button>
+<div class="chat-globo" id="chat-globo" role="status" aria-live="polite" hidden></div>
+<aside class="chat-panel" id="chat-panel" role="dialog" aria-label="Mensajes" tabindex="-1" inert aria-hidden="true">
+  <div class="cp-lista">
+    <header class="cp-head">
+      <div class="cp-head-t"><i class="fas fa-comment-dots"></i> Mensajes</div>
+      <button class="cp-ico" id="msg-nuevo-btn" type="button" title="Nuevo chat" aria-label="Nuevo chat"><i class="fas fa-plus"></i></button>
+      <button class="cp-ico" id="cp-expandir" type="button" title="Expandir" aria-label="Expandir panel" aria-pressed="false"><i class="fas fa-up-right-and-down-left-from-center"></i></button>
+      <button class="cp-ico" id="cp-cerrar" type="button" title="Cerrar (Esc)" aria-label="Cerrar mensajes"><i class="fas fa-xmark"></i></button>
+    </header>
+    <div class="msg-inbox" id="msg-inbox"></div>
+  </div>
+  <div class="cp-conv" id="msg-conv">
+    <header class="cp-head cp-conv-head">
+      <button class="cp-ico cp-back" id="msg-conv-back" type="button" aria-label="Volver a los chats"><i class="fas fa-arrow-left"></i></button>
+      <div class="msg-avatar" id="cp-conv-avatar" aria-hidden="true"></div>
+      <div class="cp-conv-t"><div class="msg-conv-titulo" id="msg-conv-titulo"></div><div class="msg-conv-sub" id="msg-conv-sub"></div></div>
+      <button class="cp-ico" id="cp-conv-menu" type="button" title="Más opciones" aria-label="Más opciones" aria-haspopup="menu"><i class="fas fa-ellipsis-vertical"></i></button>
+      <button class="cp-ico cp-cerrar-conv" id="cp-cerrar-conv" type="button" title="Cerrar (Esc)" aria-label="Cerrar mensajes"><i class="fas fa-xmark"></i></button>
+    </header>
+    <div class="cp-log chat-wa" id="msg-conv-log" role="log" aria-live="polite" aria-label="Mensajes de la conversación"></div>
+    <div class="cp-compose" id="cp-compose">
+      <div class="cp-citar" id="cp-citar" hidden></div>
+      <div class="cp-fotos" id="cp-fotos" hidden></div>
+      <div class="cp-row" id="cp-row">
+        <button class="cp-ico" id="cp-emoji-btn" type="button" title="Emojis y stickers" aria-label="Emojis y stickers" aria-haspopup="dialog"><i class="far fa-face-smile"></i></button>
+        <button class="cp-ico" id="msg-attach-btn" type="button" title="Adjuntar" aria-label="Adjuntar" aria-haspopup="menu"><i class="fas fa-paperclip"></i></button>
+        <textarea class="cp-input" id="msg-input" rows="1" placeholder="Escribe un mensaje" aria-label="Escribe un mensaje" enterkeyhint="send"></textarea>
+        <button class="cp-send" id="msg-send-btn" type="button" aria-label="Grabar nota de voz"><i class="fas fa-microphone"></i></button>
+      </div>
+      <div class="cp-rec" id="cp-rec" hidden>
+        <button class="cp-ico" id="cp-rec-cancelar" type="button" title="Descartar" aria-label="Descartar grabación"><i class="fas fa-trash"></i></button>
+        <span class="cp-rec-dot"></span><span class="cp-rec-t" id="cp-rec-t">0:00</span>
+        <div class="cp-rec-nivel" id="cp-rec-nivel"><i></i></div>
+        <button class="cp-send" id="cp-rec-enviar" type="button" title="Enviar nota de voz" aria-label="Enviar nota de voz"><i class="fas fa-paper-plane"></i></button>
+      </div>
+    </div>
+    <div class="msg-readonly-note" id="msg-readonly-note" hidden><i class="fas fa-lock"></i> Solo lectura — únicamente los admins escriben acá</div>
+    <div class="cp-pop" id="cp-pop" hidden></div>
+    <div class="cp-drop" id="cp-drop" hidden><span><i class="fas fa-cloud-arrow-up"></i> Suelta para adjuntar</span></div>
+    <div class="cp-vacio"><i class="fas fa-comments"></i><div>Elige un chat para empezar a escribir</div></div>
+  </div>
+</aside>
+<input type="file" id="cp-file-media" accept="image/*,video/*" multiple style="display:none">
+<input type="file" id="cp-file-camara" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="cp-file-doc" style="display:none">
+<input type="file" id="cp-file-fondo" accept="image/*" style="display:none">
+<input type="file" id="cp-file-sticker" accept="image/*" style="display:none">
+
 <div id="toasts"></div>
 <!-- Pull-to-refresh (Fase 5.4). A nivel body, no dentro de .app -- mismo
      motivo que #confirmar-sheet (index.html ~4351): .app tiene

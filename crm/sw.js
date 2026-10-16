@@ -10,7 +10,7 @@
 // apuntando a index.html) siempre pegaba ese camino roto; una pestaña normal
 // del navegador no, porque pedía '/' directo. Se cachea './' en vez de
 // './index.html' para no arrastrar el redirect.
-const CACHE_VERSION = 'lotus-crm-shell-v377';
+const CACHE_VERSION = 'lotus-crm-shell-v379';
 const SHELL_FILES = [
   './',
   './app.js',
@@ -241,6 +241,16 @@ self.addEventListener('notificationclick', (event) => {
       await sbRpc('marcar_push_evento', { p_id: datos.envio.id, p_token: datos.envio.token, p_evento: 'click' });
     }
     const cs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // Push de chat interno: con la app ya abierta se abre el panel flotante por
+    // postMessage (app.js) en vez de navegar, que recargaba el CRM entero.
+    let convId = null;
+    try { convId = new URL(url, self.location.origin).searchParams.get('conversacion'); } catch { /* url relativa rara: cae al flujo normal */ }
+    if (convId) {
+      for (const c of cs) {
+        try { c.postMessage({ tipo: 'abrir-conversacion', id: Number(convId) }); return await c.focus(); }
+        catch { /* cliente no alcanzable: probar el siguiente */ }
+      }
+    }
     for (const c of cs) {
       // navigate() rechaza si el cliente no está en un estado navegable (pasa
       // con la PWA recién despertada). Sin este catch el toque no hacía nada:

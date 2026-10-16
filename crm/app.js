@@ -181,7 +181,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de servicio (hospedaje, excursiones, traslados) en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], balance: ['Balance', 'Ventas, costos, gastos y utilidad por periodo'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'mis-comisiones': ['Mis Comisiones', 'Tus comisiones sobre ventas pagadas'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de servicio (hospedaje, excursiones, traslados) en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
   tareas: ['Tareas', 'Tus tareas activas'],
   comisiones: ['Comisiones por corte', 'Ventas pagadas, verificación e invoices · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
@@ -416,6 +416,7 @@ async function entrarSegunRol() {
   // aplica rol, módulos disponibles y sección inicial. Así `?seccion=` no
   // puede adelantar ni anular los permisos del usuario autenticado.
   await startApp();
+  iniciarChat();
   if (MI_ES_FREELANCER) {
     setupHeartbeatFreelancer();
     subscribeMiUsuarioLive();
@@ -2790,7 +2791,7 @@ async function startApp() {
   // del mismo query en paralelo sin orden garantizado de resolución.
   arrancar(
     setupMetricas, setupRanking, setupMisVentas, setupReasignaciones, setupAsesoresPeriodo,
-    setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
+    setupBalance, setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
     setupBuscadorIATarifario, setupIaAtencion, setupCerrarSheets, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
     setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas, setupReservasEmpresas, setupBtTravel, setupApartamentos,
     setupDestPeriodo, loadDestPeriodo,
@@ -8545,6 +8546,14 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
 
 /* ---------- Bandeja de Entrada de Facturación (admin) ---------- */
 let FACT_BANDEJA_CACHE = [];
+// Conteos de "Por revisar": el de la pestaña suma los dos y todos se ocultan en 0.
+function pintarConteoRevisar() {
+  const nB = FACT_BANDEJA_CACHE.length, nV = FACT_VERIFICAR_CACHE.length;
+  [['fact-bandeja-count', nB], ['fact-verificar-count', nV], ['fact-revisar-count', nB + nV]].forEach(([id, n]) => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = n; el.hidden = n === 0; }
+  });
+}
 async function loadBandejaFacturacion() {
   if (!esOficina()) return;
   const loading = document.getElementById('fact-bandeja-loading'), empty = document.getElementById('fact-bandeja-empty');
@@ -8553,7 +8562,7 @@ async function loadBandejaFacturacion() {
   loading?.classList.remove('show');
   if (error) { console.error('bandeja_facturacion', error); return; }
   FACT_BANDEJA_CACHE = data || [];
-  document.getElementById('fact-bandeja-count').textContent = FACT_BANDEJA_CACHE.length;
+  pintarConteoRevisar();
   empty?.classList.toggle('show', FACT_BANDEJA_CACHE.length === 0);
   const grid = document.getElementById('fact-bandeja-grid');
   grid.innerHTML = FACT_BANDEJA_CACHE.map(b => {
@@ -8603,7 +8612,7 @@ async function loadVentasPendientesVerificar() {
   loading?.classList.remove('show');
   if (error) { console.error('ventas_pendientes_verificar', error); return; }
   FACT_VERIFICAR_CACHE = data || [];
-  document.getElementById('fact-verificar-count').textContent = FACT_VERIFICAR_CACHE.length;
+  pintarConteoRevisar();
   empty?.classList.toggle('show', FACT_VERIFICAR_CACHE.length === 0);
   const grid = document.getElementById('fact-verificar-grid');
   grid.innerHTML = FACT_VERIFICAR_CACHE.map(v => `
@@ -8777,7 +8786,9 @@ async function verificarPagoAccion(id, aprobar, btn) {
   }
   okToast(aprobar ? 'Pago aprobado' : 'Pago rechazado');
   loadPagos();
+  ULTIMA_CARGA.balance = 0;
   if (currentSec === 'facturacion') loadFacturacion();
+  if (currentSec === 'balance') loadBalance();
 }
 
 function setupPagos() {
@@ -15270,6 +15281,7 @@ function renderReasignPager(pages) {
    Cada tabla se guarda en memoria (FACT_*_CACHE) para poder filtrar/ordenar
    en el cliente sin volver a pedirle nada al backend -- ver ordenarYFiltrar. */
 let FACT_ASESORES_CACHE = [], CXP_CACHE = [], FACT_VENTAS_CACHE = [], FACT_COMISIONES_CACHE = [], factTab = 'ventas';
+let factMesPendiente = null; // 'AAAA-MM' que Balance deja para que Ventas lo aplique al cargar
 const FACT_LAST = {}; // últimas filas renderizadas (post filtro/búsqueda/orden) por tabla -- exportar CSV/PDF usa esto, así "exportar por cliente" es solo filtrar y exportar
 const FACT_COLS = {
   ventas: [['numero_factura', 'N°'], ['cliente', 'Cliente'], ['asesor', 'Asesor'], ['venta_total', 'Precio venta'], ['abonado', 'Abonado'], ['costo_neto', 'Costo neto'], ['margen', 'Margen'], ['proveedor', 'Proveedor'], ['estado', 'Estado'], ['fecha_emision', 'Fecha']],
@@ -15439,7 +15451,14 @@ function aplicarOrdenTabla(tabla, col) {
   document.querySelectorAll(`.th-sort[data-sort-tbl="${tabla}"]`).forEach(h => h.querySelector('.sort-arrow')?.remove());
   document.querySelector(`.th-sort[data-sort-tbl="${tabla}"][data-sort-col="${col}"]`)
     ?.insertAdjacentHTML('beforeend', `<span class="sort-arrow">${spec.dir === 1 ? '▲' : '▼'}</span>`);
+  pintarOrdenLbl(tabla);
   FACT_RENDERERS[tabla]();
+}
+// Texto del botón "Ordenar: <columna>" de la barra; sin columna activa queda en "Ordenar".
+function pintarOrdenLbl(tabla) {
+  const { col, dir } = FACT_SORT[tabla] || {};
+  const lbl = col && document.querySelector(`.th-sort[data-sort-tbl="${tabla}"][data-sort-col="${col}"]`)?.childNodes[0].textContent.trim();
+  document.querySelectorAll(`[data-orden-lbl="${tabla}"]`).forEach(el => { el.textContent = lbl ? `: ${lbl} ${dir === 1 ? '▲' : '▼'}` : ''; });
 }
 function abrirOrdenarSheet(tabla) {
   const spec = FACT_SORT[tabla];
@@ -15483,8 +15502,7 @@ function setupFacturacion() {
     factTab = btn.dataset.factTab;
     document.querySelectorAll('#fact-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
     document.querySelectorAll('.fact-tab-panel').forEach(p => p.style.display = p.dataset.factPanel === factTab ? '' : 'none');
-    if (factTab === 'bandeja') loadBandejaFacturacion();
-    if (factTab === 'verificar') loadVentasPendientesVerificar();
+    if (factTab === 'revisar') { loadBandejaFacturacion(); loadVentasPendientesVerificar(); }
   }));
   document.querySelectorAll('.th-sort').forEach(th => th.addEventListener('click', () => aplicarOrdenTabla(th.dataset.sortTbl, th.dataset.sortCol)));
   document.querySelectorAll('.export-dd-menu').forEach(el => popoverASheet(el, { abierto: n => n.classList.contains('show'), cerrar: n => n.classList.remove('show') }));
@@ -15501,30 +15519,15 @@ function setupFacturacion() {
     const th = document.querySelector(`.th-sort[data-sort-tbl="${tabla}"][data-sort-col="${spec.col}"]`);
     th?.insertAdjacentHTML('beforeend', `<span class="sort-arrow">${spec.dir === 1 ? '▲' : '▼'}</span>`);
   });
+  Object.keys(FACT_SORT).forEach(pintarOrdenLbl);
 }
 async function loadFacturacion() {
-  loadFacturacionKpis();
   loadAsesoresComision();
   loadBandejaFacturacion();
   loadVentasPendientesVerificar();
   await loadCuentasPorPagar(); // CXP_CACHE poblado antes: loadFacturas lo usa para costo neto/proveedor/margen
   loadFacturas();
   loadComisionesAdmin();
-}
-async function loadFacturacionKpis() {
-  const { data, error } = await sb.rpc('resumen_facturacion');
-  if (error) { errToast('No se pudo cargar el resumen de facturación'); return; }
-  const r = data || {};
-  const sinConfigurar = r.comisiones_sin_configurar ?? 0;
-  const irA = tab => () => document.querySelector(`#fact-tabs .seg[data-fact-tab="${tab}"]`)?.click();
-  pintarKPIs('fact-kpis', [
-    { t: 'Total facturado', v: money(r.total_facturado), i: 'fa-sack-dollar', c: 'var(--green)', tt: 'Ver las ventas', go: irA('ventas') },
-    { t: 'Facturas pagadas', v: fmt(r.facturas_pagadas ?? 0), i: 'fa-file-invoice-dollar', c: 'var(--accent)', tt: 'Ver las ventas', go: irA('ventas') },
-    { t: 'Facturas anuladas', v: fmt(r.facturas_anuladas ?? 0), i: 'fa-ban', c: 'var(--muted)', tt: 'Ver las ventas', go: irA('ventas') },
-    { t: 'Comisiones sin configurar', v: fmt(sinConfigurar), i: 'fa-triangle-exclamation', c: sinConfigurar > 0 ? '#ef4444' : 'var(--green)', tt: 'Configurar la comisión de cada asesor', go: irA('asesores') },
-    { t: 'Comisiones pendientes', v: money(r.comisiones_pendientes_monto), i: 'fa-clock', c: 'var(--blue)', tt: 'Ver las comisiones', go: irA('comisiones') },
-    { t: 'Comisiones pagadas', v: money(r.comisiones_pagadas_monto), i: 'fa-check', c: 'var(--green)', tt: 'Ver las comisiones', go: irA('comisiones') },
-  ]);
 }
 async function loadAsesoresComision() {
   const { data, error } = await sb.rpc('listar_asesores_comision');
@@ -15543,6 +15546,8 @@ function renderAsesoresComision() {
   const filas = factAseFiltro ? buscadas.filter(FACT_ASE_KPI_FILTRO[factAseFiltro]) : buscadas;
   FACT_LAST.asesores = filas;
   const nSin = buscadas.filter(FACT_ASE_KPI_FILTRO.sin).length;
+  const alerta = document.getElementById('fact-asesores-alerta'), nSinTotal = FACT_ASESORES_CACHE.filter(FACT_ASE_KPI_FILTRO.sin).length;
+  if (alerta) { alerta.textContent = nSinTotal; alerta.hidden = nSinTotal === 0; }
   pintarKPIs('fact-asesores-kpis', [
     { key: '', t: 'Asesores', v: fmt(buscadas.length), d: 'ver todos', i: 'fa-user-tie', c: 'var(--blue)', on: factAseFiltro === '', go: () => filtrarAsesoresKpi('') },
     { key: 'sin', t: 'Sin configurar', v: fmt(nSin), d: 'falta definir su %', i: 'fa-triangle-exclamation', c: nSin > 0 ? 'var(--pink)' : 'var(--green)', on: factAseFiltro === 'sin', go: () => filtrarAsesoresKpi('sin') },
@@ -15581,23 +15586,18 @@ async function loadFacturas() {
   const { data, error } = await sb.rpc('listar_facturas', { p_estado: val('fact-estado') || null });
   document.getElementById('fact-ventas-loading')?.classList.remove('show');
   if (error) { errToast('No se pudieron cargar las facturas'); return; }
-  const cxpPorLead = new Map(CXP_CACHE.map(c => [c.lead_id, c]));
-  // La factura es lo COBRADO (abono); el precio total de la venta vive en leads.monto.
-  const abonadoPorLead = new Map();
-  (data || []).forEach(f => { if (f.estado === 'pagada') abonadoPorLead.set(f.lead_id, (abonadoPorLead.get(f.lead_id) || 0) + Number(f.monto_total || 0)); });
-  const montoPorLead = new Map(), entradaPorLead = new Map();
-  const ids = [...new Set((data || []).map(f => f.lead_id))];
-  for (let i = 0; i < ids.length; i += 150) {
-    const { data: ls } = await sb.from('leads').select('id,monto,fecha_creacion').in('id', ids.slice(i, i + 150));
-    (ls || []).forEach(l => { montoPorLead.set(l.id, Number(l.monto) || 0); entradaPorLead.set(l.id, l.fecha_creacion || null); });
-  }
+  // Una factura = una reserva (reserva_id es único). El precio real de la venta es el total
+  // de la reserva; la factura solo es lo cobrado hasta ahora (y reserva_pagado si va por delante).
+  const cxpPorReserva = new Map(CXP_CACHE.filter(c => c.reserva_id != null).map(c => [c.reserva_id, c]));
   FACT_VENTAS_CACHE = (data || []).map(f => {
-    const cxp = cxpPorLead.get(f.lead_id);
-    const costo_neto = cxp ? cxp.monto_a_transferir : null;
-    const abonado = abonadoPorLead.get(f.lead_id) || 0;
-    const venta_total = Math.max(montoPorLead.get(f.lead_id) || 0, abonado);
-    return { ...f, costo_neto, proveedor: cxp ? cxp.proveedor : null, proveedor_pagado: cxp ? cxp.monto_abonado : null, lead_entrada: entradaPorLead.get(f.lead_id) || null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null };
+    const cxp = cxpPorReserva.get(f.reserva_id);
+    const costoCxp = cxp ? cxp.monto_a_transferir : null, costoReserva = f.reserva_costo == null ? null : Number(f.reserva_costo);
+    const costo_neto = costoCxp ?? costoReserva;
+    const abonado = f.estado === 'pagada' ? Math.max(Number(f.monto_total) || 0, Number(f.reserva_pagado) || 0) : 0;
+    const venta_total = Math.max(Number(f.reserva_total) || 0, Number(f.monto_total) || 0, abonado);
+    return { ...f, costo_neto, proveedor: cxp ? cxp.proveedor : null, proveedor_pagado: cxp ? cxp.monto_abonado : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null };
   });
+  ULTIMA_CARGA.balance = 0; // el balance se alimenta de estas facturas: que se recargue al volver
   poblarFiltrosVentas();
   factVentasMostrar = TECHO_LISTA;
   renderVentas();
@@ -15606,7 +15606,8 @@ async function loadFacturas() {
 }
 function poblarFiltrosVentas() {
   const selMes = document.getElementById('fact-mes'), selAsesor = document.getElementById('fact-asesor');
-  const mesPrevio = selMes.value, asesorPrevio = selAsesor.value;
+  const mesPrevio = factMesPendiente ?? selMes.value, asesorPrevio = selAsesor.value;
+  factMesPendiente = null;
   const meses = [...new Set(FACT_VENTAS_CACHE.map(f => (f.fecha_emision || '').slice(0, 7)).filter(Boolean))].sort().reverse();
   const asesores = [...new Set(FACT_VENTAS_CACHE.map(f => f.asesor).filter(Boolean))].sort();
   const nombreMes = ym => new Date(ym + '-02').toLocaleDateString('es-VE', { month: 'long', year: 'numeric' });
@@ -15624,6 +15625,14 @@ function filtrarVentasKpi(clave) {
   factVentasMostrar = TECHO_LISTA;
   renderVentas();
 }
+// Avisos de la tarjeta: solo salen cuando aplican ("Debe $X" si falta cobrar, "Falta costo" si no hay costo neto).
+function chipsVenta(f) {
+  if (f.estado !== 'pagada') return '';
+  const debe = f.venta_total - f.abonado, chips = [];
+  if (debe > 0.005) chips.push(`<span class="bt-tag" style="--c:var(--amber)">Debe ${money(debe)}</span>`);
+  if (f.costo_neto == null) chips.push(`<span class="bt-tag" style="--c:var(--pink)">Falta costo</span>`);
+  return chips.length ? `<div class="lt-chips">${chips.join('')}</div>` : '';
+}
 function renderVentas() {
   const mes = val('fact-mes'), asesor = val('fact-asesor');
   let base = FACT_VENTAS_CACHE;
@@ -15636,12 +15645,13 @@ function renderVentas() {
   // visibles -- si no, "Total facturado" mentiría apenas hubiera más de
   // TECHO_LISTA facturas (mostraría la suma de la página, no la real).
   let sumaVenta = 0, sumaCosto = 0, sumaMargen = 0, ventaConCosto = 0, nPag = 0, nSinCosto = 0;
-  const leadsVistos = new Set(); // una venta puede tener varias facturas (abonos): contarla una vez
+  const reservasVistas = new Set(); // por si una reserva trae más de una factura: contarla una vez
   buscadas.forEach(f => {
     if (f.estado !== 'pagada') return;
     nPag++;
-    if (leadsVistos.has(f.lead_id)) return;
-    leadsVistos.add(f.lead_id);
+    const clave = f.reserva_id ?? 'f' + f.id;
+    if (reservasVistas.has(clave)) return;
+    reservasVistas.add(clave);
     sumaVenta += f.venta_total;
     if (f.costo_neto != null) { sumaCosto += f.costo_neto; sumaMargen += f.margen; ventaConCosto += f.venta_total; } else nSinCosto++;
   });
@@ -15662,22 +15672,227 @@ function renderVentas() {
         <div class="lt-card-tit" title="${esc(f.cliente || '')}">${esc(f.cliente || ('#' + fmt(f.lead_id)))}</div>
         <span class="bt-tag" style="--c:${f.estado === 'pagada' ? 'var(--green)' : 'var(--muted)'}">${f.estado === 'pagada' ? 'Pagada' : anulada ? 'Anulada' : esc(f.estado)}</span>
       </div>
-      <div class="lt-card-meta"><i class="fas fa-hashtag"></i>${fmt(f.numero_factura)} · <i class="fas fa-user-tie"></i>${esc(f.asesor || 'Sin asesor')} · ${esc(fmtFechaHoraCaracas(f.fecha_emision))}</div>
-      <div class="lt-card-meta"><i class="fas fa-building"></i>${f.proveedor ? esc(f.proveedor) : 'Sin proveedor'}</div>
-      <div class="lt-cifras" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+      <div class="lt-card-meta">${esc(['#' + fmt(f.numero_factura), f.asesor || 'Sin asesor', f.fecha_emision ? dtf('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'short' }).format(new Date(f.fecha_emision)) : '', f.proveedor].filter(Boolean).join(' · '))}</div>
+      <div class="lt-cifras">
         <div><span>Venta</span><b>${money(f.venta_total)}</b></div>
-        <div><span>Abonado</span><b class="${f.abonado >= f.venta_total ? 'lt-ok' : ''}">${money(f.abonado)}</b></div>
-        <div><span>Costo neto</span><b class="${conCosto ? '' : 'lt-debe'}">${conCosto ? money(f.costo_neto) : 'Sin definir'}</b></div>
+        <div><span>Costo</span><b class="${conCosto ? '' : 'lt-debe'}">${conCosto ? money(f.costo_neto) : '—'}</b></div>
         <div><span>Margen</span><b class="${!conCosto ? '' : f.margen >= 0 ? 'lt-ok' : 'lt-debe'}">${conCosto ? money(f.margen) : '—'}</b></div>
       </div>
+      ${chipsVenta(f)}
       ${conCosto ? `<div class="lt-barra" role="progressbar" aria-label="Margen sobre la venta" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" title="Margen ${pct}% de la venta"><i style="width:${pct}%"></i></div>` : ''}
       <div class="lt-card-pie">
-        <button class="btn-sm" type="button" onclick="abrirClienteDesdeFacturacion(${f.lead_id})"><i class="fas fa-user-pen"></i> Editar cliente</button>
-        <button class="btn-sm" type="button" onclick="exportarVentaPdf(${f.id})"><i class="fas fa-file-pdf"></i> PDF</button>
-        ${f.estado === 'pagada' ? `<button class="btn-sm" type="button" onclick="anularFacturaUI(${f.id})"><i class="fas fa-ban"></i> Anular</button>` : ''}
+        <button class="btn-sm" type="button" title="PDF de la venta" aria-label="PDF de la venta" onclick="exportarVentaPdf(${f.id})"><i class="fas fa-file-pdf"></i></button>
+        ${f.estado === 'pagada' && ROL === 'admin' ? `<button class="btn-sm" type="button" title="Anular factura" aria-label="Anular factura" onclick="anularFacturaUI(${f.id})"><i class="fas fa-ban"></i></button>` : ''}
       </div>
     </article>`;
   }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${factVentasFiltro || mes || asesor || val('fact-ventas-search') ? 'Nada coincide con el filtro' : 'Sin facturas'}</div>`;
+}
+/* ---------- Balance (admin + administrativo; base = fecha de venta) ----------
+   Todo sale de balance_agencia; el front solo pinta. Las fechas van en
+   America/Caracas (UTC-4 fijo, sin horario de verano). Los gastos se cargan a
+   mano (guardar_gasto) y el de IA entra solo desde las tablas *_ia_gasto. */
+const BAL_CATS = [['nomina', 'Nómina'], ['publicidad', 'Publicidad'], ['alquiler', 'Alquiler'], ['servicios', 'Servicios'], ['software', 'Software'], ['impuestos', 'Impuestos'], ['comisiones_bancarias', 'Comisiones bancarias'], ['otros', 'Otros']];
+const BAL_CAT_LBL = { ...Object.fromEntries(BAL_CATS), ia: 'Inteligencia artificial' };
+const BAL_ERR = { fecha_invalida: 'La fecha no es válida', categoria_invalida: 'Elegí una categoría', falta_concepto: 'Falta el concepto', moneda_invalida: 'Moneda inválida', monto_invalido: 'El monto tiene que ser mayor que 0', falta_tasa: 'En bolívares hace falta la tasa', gasto_no_encontrado: 'Ese gasto ya no existe' };
+const BAL = { tipo: 'mes', off: 0, rango: null, gen: 0, data: null, prev: null, p: null };
+const balMoney = n => { const v = Number(n) || 0; return (v < 0 ? '−' : '') + '$' + nf('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(v)); };
+const balMoney0 = n => { const v = Number(n) || 0; return (v < 0 ? '−' : '') + money(Math.abs(v)); };
+const ymdMas = (ymd, n) => { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const balFecha = (ymd, o) => dtf('es-VE', { timeZone: 'UTC', ...o }).format(new Date(ymd + 'T12:00:00Z'));
+// [desde, hasta) en fechas de Caracas. No toca periodo(), que usan otras secciones.
+function rangoBalance(tipo, off, rango) {
+  const hoy = hoyCaracas();
+  if (tipo === 'dia') {
+    const desde = ymdMas(hoy, off);
+    return { desde, hasta: ymdMas(desde, 1), bucket: 'dia', etiqueta: off === 0 ? 'Hoy' : off === -1 ? 'Ayer' : balFecha(desde, { weekday: 'short', day: 'numeric', month: 'short' }) };
+  }
+  if (tipo === 'semana') {
+    const lunes = ymdMas(hoy, -((new Date(hoy + 'T12:00:00Z').getUTCDay() + 6) % 7) + off * 7), hasta = ymdMas(lunes, 7), c = { day: 'numeric', month: 'short' };
+    return { desde: lunes, hasta, bucket: 'dia', etiqueta: balFecha(lunes, c) + ' – ' + balFecha(ymdMas(hasta, -1), c) };
+  }
+  if (tipo === 'mes') {
+    const [y, m] = hoy.split('-').map(Number), desde = new Date(Date.UTC(y, m - 1 + off, 1)).toISOString().slice(0, 10);
+    return { desde, hasta: new Date(Date.UTC(y, m + off, 1)).toISOString().slice(0, 10), bucket: 'dia', etiqueta: balFecha(desde, { month: 'long', year: 'numeric' }) };
+  }
+  if (tipo === 'anio') {
+    const y = Number(hoy.slice(0, 4)) + off;
+    return { desde: `${y}-01-01`, hasta: `${y + 1}-01-01`, bucket: 'mes', etiqueta: String(y) };
+  }
+  const desde = rango?.desde || hoy, fin = rango?.hasta && rango.hasta >= desde ? rango.hasta : desde, hasta = ymdMas(fin, 1), c = { day: 'numeric', month: 'short', year: 'numeric' };
+  return { desde, hasta, bucket: (new Date(hasta) - new Date(desde)) / 864e5 > 62 ? 'mes' : 'dia', etiqueta: balFecha(desde, c) + ' – ' + balFecha(fin, c) };
+}
+function periodoBalance(tipo, off = 0, rango = null) {
+  const r = rangoBalance(tipo, off, rango);
+  if (tipo !== 'rango') return { ...r, prev: rangoBalance(tipo, off - 1) };
+  const dias = Math.round((new Date(r.hasta) - new Date(r.desde)) / 864e5);
+  return { ...r, prev: { desde: ymdMas(r.desde, -dias), hasta: r.desde } };
+}
+const balTs = ymd => ymd + 'T00:00:00-04:00';
+async function loadBalance() {
+  if (!esOficina()) return;
+  const gen = ++BAL.gen, p = periodoBalance(BAL.tipo, BAL.off, BAL.rango);
+  if (!BAL.data) document.getElementById('bal-kpis').innerHTML = '<div class="tbl-state skel show" style="grid-column:1/-1"><div class="skel-bar"></div></div>';
+  const args = (r, det) => ({ p_desde: balTs(r.desde), p_hasta: balTs(r.hasta), p_bucket: p.bucket, p_detalle: det });
+  const [act, ant] = await Promise.all([sb.rpc('balance_agencia', args(p, true)), sb.rpc('balance_agencia', args(p.prev, false))]);
+  if (gen !== BAL.gen) return;
+  if (act.error || !act.data) { errToast('No se pudo cargar el balance'); return; }
+  BAL.data = act.data; BAL.prev = ant.data?.totales || null; BAL.p = p;
+  renderBalance();
+}
+function balFila(n, v, pct, cls = '') {
+  return `<div class="bal-fila ${cls}"><span class="bal-n">${n}</span><span class="bal-v">${v}</span><span class="bal-p">${pct}</span></div>`;
+}
+function renderBalance() {
+  const { data: d, prev, p } = BAL, t = d.totales || {}, esDia = BAL.tipo === 'dia';
+  document.getElementById('bal-etiqueta').textContent = p.etiqueta;
+  document.getElementById('bal-next').disabled = BAL.tipo !== 'rango' && BAL.off >= 0;
+  const delta = (a, b) => b > 0 ? ` · ${a >= b ? '+' : '−'}${Math.round(Math.abs(a - b) / b * 100)}% vs anterior` : '';
+  const margenNeto = t.vendido > 0 ? Math.round(t.utilidad / t.vendido * 100) : null;
+  pintarKPIs('bal-kpis', [
+    { t: 'Vendido', v: money(t.vendido), d: `${fmt(t.ventas)} ${t.ventas === 1 ? 'venta' : 'ventas'}${prev ? delta(t.vendido, prev.vendido) : ''}`, i: 'fa-sack-dollar', c: 'var(--green)' },
+    { t: 'Costo proveedores', v: money(t.costo), d: `Margen bruto ${money(t.margen_bruto)}`, i: 'fa-building', c: 'var(--amber)' },
+    { t: 'Comisiones', v: money(t.comisiones), d: t.comisiones_estimadas > 0 ? `${money(t.comisiones_estimadas)} estimadas` : '', i: 'fa-percent', c: 'var(--purple)' },
+    { t: 'Gastos', v: money(t.gastos), d: `IA ${balMoney(t.gastos_ia)}`, i: 'fa-receipt', c: 'var(--pink)' },
+    { t: 'Utilidad', v: balMoney0(t.utilidad), d: margenNeto != null ? `${margenNeto}% margen neto` : '', i: 'fa-scale-balanced', c: t.utilidad >= 0 ? 'var(--green)' : 'var(--danger)' },
+  ]);
+  const av = document.getElementById('bal-aviso');
+  av.hidden = !(t.sin_costo_n > 0);
+  if (!av.hidden) av.innerHTML = `<i class="fas fa-triangle-exclamation"></i><span><b>${fmt(t.sin_costo_n)}</b> ${t.sin_costo_n === 1 ? 'venta' : 'ventas'} (${money(t.sin_costo_vendido)}) sin costo neto: la utilidad está inflada.</span><button class="btn-sm" type="button" data-bal="sin-costo"><i class="fas fa-arrow-right"></i> Ver ventas</button>`;
+
+  document.getElementById('bal-grafico-tit').innerHTML = `<i class="fas ${esDia ? 'fa-list' : 'fa-chart-column'}"></i> ${esDia ? 'Ventas del día' : 'Ventas, egresos y utilidad'}`;
+  document.getElementById('bal-grafico-sub').textContent = esDia ? '' : p.bucket === 'mes' ? 'Un punto por mes' : 'Un punto por día';
+  document.getElementById('bal-chart-wrap').hidden = esDia;
+  const lista = document.getElementById('bal-dia-lista');
+  lista.hidden = !esDia;
+  if (esDia) {
+    charts.chBalance?.destroy(); delete charts.chBalance;
+    const vs = d.ventas || [];
+    lista.innerHTML = vs.length ? `<div class="bal-ase cab"><span>Cliente</span><span class="bal-v">Venta</span><span class="bal-v">Costo</span><span class="bal-v">Comisión</span></div>` + vs.map(v =>
+      `<div class="bal-ase"><span class="bal-n">${esc(v.cliente || '—')}<small>#${fmt(v.numero_factura)} · ${esc(v.asesor || 'Sin asesor')}${v.proveedor ? ' · ' + esc(v.proveedor) : ''}</small></span><span class="bal-v">${balMoney(v.precio)}</span><span class="bal-v">${v.costo == null ? '<span style="color:var(--amber)">sin costo</span>' : balMoney(v.costo)}</span><span class="bal-v">${balMoney(v.comision)}</span></div>`).join('')
+      : '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin ventas este día</div>';
+  } else pintarGraficoBalance(d.serie || [], p.bucket);
+
+  const base = t.vendido > 0 ? t.vendido : 0, pct = v => base ? Math.round(v / base * 100) + '%' : '';
+  const cats = (d.gastos_por_categoria || []).filter(c => Number(c.monto) > 0);
+  document.getElementById('bal-er').innerHTML =
+    balFila('Ventas', balMoney(t.vendido), base ? '100%' : '', 'tot') +
+    balFila(`Cobrado ${balMoney(t.cobrado)} · por cobrar ${balMoney(t.por_cobrar)}`, '', '', 'sub') +
+    balFila('− Costo de proveedores', balMoney(t.costo), pct(t.costo)) +
+    balFila('= Margen bruto', balMoney(t.margen_bruto), pct(t.margen_bruto), 'tot') +
+    balFila('− Comisiones' + (t.comisiones_estimadas > 0 ? ' <small>(parte estimada)</small>' : ''), balMoney(t.comisiones), pct(t.comisiones)) +
+    balFila('− Gastos', balMoney(t.gastos), pct(t.gastos)) +
+    cats.map(c => balFila(esc(BAL_CAT_LBL[c.categoria] || c.categoria), balMoney(c.monto), pct(c.monto), 'sub')).join('') +
+    balFila('= Utilidad neta', `<span class="${t.utilidad >= 0 ? 'bal-pos' : 'bal-neg'}">${balMoney(t.utilidad)}</span>`, pct(t.utilidad), 'tot');
+
+  const s = d.saldos || {};
+  document.getElementById('bal-saldos').innerHTML =
+    `<div class="bal-saldo"><span>Por cobrar<small>${fmt(s.por_cobrar_n || 0)} ${s.por_cobrar_n === 1 ? 'reserva con saldo' : 'reservas con saldo'}</small></span><b>${balMoney(s.por_cobrar)}</b></div>` +
+    `<button class="bal-saldo" type="button" data-bal="ir-cxp"><span>Por pagar a proveedores<small>Ir a Cuentas por pagar</small></span><b>${balMoney(s.por_pagar_proveedores)}</b></button>` +
+    `<button class="bal-saldo" type="button" data-bal="ir-comisiones"><span>Comisiones por pagar<small>Ir a Comisiones</small></span><b>${balMoney(s.comisiones_por_pagar)}</b></button>`;
+
+  const ases = [...(d.por_asesor || [])].sort((a, b) => (b.vendido || 0) - (a.vendido || 0));
+  document.getElementById('bal-asesores').innerHTML = ases.length ? `<div class="bal-ase cab"><span>Asesor</span><span class="bal-v">Vendido</span><span class="bal-v">Margen</span><span class="bal-v">Comisión</span></div>` + ases.map(a =>
+    `<div class="bal-ase"><span class="bal-n">${esc(a.asesor || 'Sin asesor')}<small>${fmt(a.ventas)} ${a.ventas === 1 ? 'venta' : 'ventas'}${a.sin_costo > 0 ? ` · <span style="color:var(--amber)">${fmt(a.sin_costo)} sin costo</span>` : ''}</small></span><span class="bal-v">${balMoney0(a.vendido)}</span><span class="bal-v">${balMoney0(a.margen)}</span><span class="bal-v">${balMoney0(a.comision)}</span></div>`).join('')
+    : '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin ventas en el periodo</div>';
+
+  const admin = ROL === 'admin', gs = d.gastos || [];
+  document.getElementById('bal-gastos').innerHTML =
+    (t.gastos_ia > 0 ? `<div class="bal-gasto"><span class="bal-n"><b>Inteligencia artificial</b><small>Automático · bots y asistentes</small></span><span class="bal-v">${balMoney(t.gastos_ia)}</span></div>` : '') +
+    gs.map(g => `<div class="bal-gasto"><span class="bal-n"><b>${esc(g.concepto)}</b><small>${esc(BAL_CAT_LBL[g.categoria] || g.categoria)} · ${balFecha(g.fecha, { day: 'numeric', month: 'short' })}${g.moneda === 'VES' ? ` · Bs ${fmt(Number(g.monto))} a ${fmt(Number(g.tasa))}` : ''}</small></span><span class="bal-v">${balMoney(g.monto_usd)}</span>`
+      + (admin ? `<button class="btn-sm" type="button" data-bal="gasto-editar" data-id="${g.id}" title="Editar gasto" aria-label="Editar gasto"><i class="fas fa-pen"></i></button><button class="btn-sm" type="button" data-bal="gasto-anular" data-id="${g.id}" title="Anular gasto" aria-label="Anular gasto"><i class="fas fa-ban"></i></button>` : '')
+      + '</div>').join('')
+    || (t.gastos_ia > 0 ? '' : '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin gastos en el periodo</div>');
+}
+async function pintarGraficoBalance(serie, bucket) {
+  await ensureChart();
+  if (BAL.tipo === 'dia') return;
+  const lbl = b => { const [y, m, dd] = String(b).slice(0, 10).split('-'); return bucket === 'mes' ? `${MES3[+m - 1]} '${y.slice(2)}` : `${+dd} ${MES3[+m - 1]}`; };
+  mk('chBalance', {
+    type: 'bar',
+    data: {
+      labels: serie.map(x => lbl(x.b)),
+      datasets: [
+        { type: 'bar', label: 'Vendido', data: serie.map(x => x.vendido), backgroundColor: 'rgba(16,185,129,.75)', borderRadius: 4, maxBarThickness: 26, order: 2 },
+        { type: 'bar', label: 'Egresos', data: serie.map(x => (Number(x.costo) || 0) + (Number(x.comisiones) || 0) + (Number(x.gastos) || 0)), backgroundColor: 'rgba(245,181,68,.75)', borderRadius: 4, maxBarThickness: 26, order: 2 },
+        { type: 'line', label: 'Utilidad', data: serie.map(x => x.utilidad), borderColor: '#4a9eff', backgroundColor: '#4a9eff', tension: .3, pointRadius: 2, borderWidth: 2, order: 1 },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } }, tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${balMoney(c.raw)}` } } }, scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } }, y: { grid: { color: gridColor() } } } },
+  });
+}
+EXPORTABLES.balance = {
+  cols: [['b', 'Periodo'], ['ventas', 'Ventas'], ['vendido', 'Vendido'], ['costo', 'Costo'], ['comisiones', 'Comisiones'], ['gastos', 'Gastos'], ['utilidad', 'Utilidad']],
+  filas: () => BAL.data?.serie || [],
+  celda: (c, r) => c === 'b' ? String(r.b).slice(0, 10) : ['vendido', 'costo', 'comisiones', 'gastos', 'utilidad'].includes(c) ? balMoney(r[c]) : String(r[c] ?? ''),
+};
+let TASA_USD = null;
+async function tasaUsdActual() {
+  if (TASA_USD == null) { const { data } = await sb.from('tasas_cambio').select('tasa').eq('moneda', 'USD').limit(1); TASA_USD = Number(data?.[0]?.tasa) || 0; }
+  return TASA_USD || null;
+}
+async function abrirGastoSheet(g) {
+  const tasaDef = await tasaUsdActual();
+  const f = await confirmarSheet({ titulo: g ? 'Editar gasto' : 'Registrar gasto', detalle: 'El gasto de IA entra solo: acá van los demás.', textoOk: 'Guardar', campos: [
+    { id: 'fecha', label: 'Fecha', tipo: 'date', valor: g?.fecha || hoyCaracas(), requerido: true },
+    { id: 'categoria', label: 'Categoría', tipo: 'select', opciones: BAL_CATS.map(([v, t]) => ({ v, t })), valor: g?.categoria || 'otros', requerido: true },
+    { id: 'concepto', label: 'Concepto', placeholder: 'Ej: pauta de Instagram', valor: g?.concepto || '', requerido: true },
+    { id: 'monto', label: 'Monto', tipo: 'number', step: 0.01, min: 0, valor: g?.monto ?? '', requerido: true },
+    { id: 'moneda', label: 'Moneda', tipo: 'select', opciones: [{ v: 'USD', t: 'Dólares (USD)' }, { v: 'VES', t: 'Bolívares (VES)' }], valor: g?.moneda || 'USD', requerido: true },
+    { id: 'tasa', label: 'Tasa en Bs por USD (solo si es en bolívares)', tipo: 'number', step: 0.01, min: 0, valor: g?.tasa ?? tasaDef ?? '' },
+    { id: 'notas', label: 'Notas', tipo: 'textarea', valor: g?.notas || '' },
+  ] });
+  if (!f) return;
+  const monto = Number(String(f.monto).replace(',', '.')), tasa = f.tasa ? Number(String(f.tasa).replace(',', '.')) : null;
+  const { data, error } = await sb.rpc('guardar_gasto', { p_fecha: f.fecha, p_categoria: f.categoria, p_concepto: f.concepto, p_monto: monto, p_moneda: f.moneda, p_tasa: f.moneda === 'VES' ? tasa : null, p_notas: f.notas || null, p_id: g?.id ?? null });
+  if (error || !data?.ok) { errToast(BAL_ERR[data?.error] || 'No se pudo guardar el gasto: ' + (error?.message || data?.error || '')); return; }
+  okToast(g ? 'Gasto actualizado' : 'Gasto registrado');
+  loadBalance();
+}
+async function anularGastoUI(id) {
+  const motivo = await pedirTexto({ titulo: 'Anular gasto', detalle: 'El gasto deja de sumar en el balance; queda registrado.', label: 'Motivo', tipo: 'textarea', requerido: true, textoOk: 'Anular', destructivo: true });
+  if (!motivo) return;
+  const { data, error } = await sb.rpc('anular_gasto', { p_id: id, p_motivo: motivo.trim() });
+  if (error || !data?.ok) { errToast(BAL_ERR[data?.error] || 'No se pudo anular: ' + (error?.message || '')); return; }
+  okToast('Gasto anulado');
+  loadBalance();
+}
+// Salta a Facturación en la pestaña pedida; sin_costo deja Ventas filtrada a las pagadas sin costo (y al mes, si el periodo cabe en uno).
+function balanceIrA(tab, sinCosto) {
+  if (sinCosto) { factVentasFiltro = 'sin_costo'; factMesPendiente = ['dia', 'semana', 'mes'].includes(BAL.tipo) ? BAL.p.desde.slice(0, 7) : ''; }
+  ULTIMA_CARGA.facturacion = 0;
+  activateSection('facturacion');
+  document.querySelector(`#fact-tabs .seg[data-fact-tab="${tab}"]`)?.click();
+}
+function setupBalance() {
+  const rangoInputs = () => {
+    const d = val('bal-desde'), h = val('bal-hasta');
+    if (d && h && d <= h) { BAL.rango = { desde: d, hasta: h }; loadBalance(); }
+  };
+  document.querySelectorAll('#bal-periodo .seg').forEach(btn => btn.addEventListener('click', () => {
+    BAL.tipo = btn.dataset.p; BAL.off = 0;
+    document.querySelectorAll('#bal-periodo .seg').forEach(b => b.classList.toggle('on', b === btn));
+    const esRango = BAL.tipo === 'rango';
+    if (esRango && !BAL.rango) { const h = hoyCaracas(); BAL.rango = { desde: h.slice(0, 8) + '01', hasta: h }; }
+    document.getElementById('bal-nav').hidden = esRango;
+    document.getElementById('bal-rango').hidden = !esRango;
+    if (esRango) { document.getElementById('bal-desde').value = BAL.rango.desde; document.getElementById('bal-hasta').value = BAL.rango.hasta; }
+    loadBalance();
+  }));
+  document.getElementById('bal-prev').addEventListener('click', () => { BAL.off--; loadBalance(); });
+  document.getElementById('bal-next').addEventListener('click', () => { if (BAL.off < 0) { BAL.off++; loadBalance(); } });
+  document.getElementById('bal-desde').addEventListener('change', rangoInputs);
+  document.getElementById('bal-hasta').addEventListener('change', rangoInputs);
+  document.getElementById('bal-gasto-btn').addEventListener('click', () => abrirGastoSheet(null));
+  document.getElementById('sec-balance').addEventListener('click', e => {
+    const b = e.target.closest('[data-bal]');
+    if (!b) return;
+    const a = b.dataset.bal, id = Number(b.dataset.id);
+    if (a === 'sin-costo') balanceIrA('ventas', true);
+    else if (a === 'ir-cxp') balanceIrA('cxp');
+    else if (a === 'ir-comisiones') balanceIrA('comisiones');
+    else if (a === 'gasto-editar') { const g = (BAL.data?.gastos || []).find(x => x.id === id); if (g) abrirGastoSheet(g); }
+    else if (a === 'gasto-anular') anularGastoUI(id);
+  });
 }
 // Poppins estática (jsPDF no maneja fuentes variables). Se baja una vez por sesión;
 // si el CDN falla, el PDF sale igual en Helvetica.
@@ -15711,6 +15926,8 @@ async function pdfEntregar(blob, nombre) {
 async function exportarVentaPdf(id) {
   const f = FACT_VENTAS_CACHE.find(x => x.id === id);
   if (!f) return;
+  const { data: leadPdf } = await sb.from('leads').select('fecha_creacion').eq('id', f.lead_id).maybeSingle();
+  const lead_entrada = leadPdf?.fecha_creacion || null;
   try { await ensureVoucherLibs(); } catch (_e) { errToast('No se pudo cargar el generador de PDF'); return; }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
@@ -15773,7 +15990,7 @@ async function exportarVentaPdf(id) {
   const [estadoTxt, estadoRgb] = anulada ? ['Anulada', C.rojo] : f.estado !== 'pagada' ? [String(f.estado || '—'), C.gris]
     : saldo > 0 ? ['Abono parcial', C.ambarOsc] : ['Pagada completa', C.verde];
   pill(estadoTxt, X1, y, estadoRgb);
-  [[X0, 180, 'Cliente', f.cliente || ('#' + f.lead_id), f.lead_entrada ? 'Cliente desde el ' + fmtFechaCaracas(f.lead_entrada) : null],
+  [[X0, 180, 'Cliente', f.cliente || ('#' + f.lead_id), lead_entrada ? 'Cliente desde el ' + fmtFechaCaracas(lead_entrada) : null],
    [232, 170, 'Asesor', f.asesor || 'Sin asesor'], [412, 160, 'Forma de pago', f.forma_pago || '—'],
    [X0, 360, 'Proveedor', f.proveedor || 'Sin proveedor'],
    [412, 160, 'Fechas del viaje', viaje, noches > 0 ? `${noches} noche${noches === 1 ? '' : 's'}` : null]]
@@ -16063,9 +16280,9 @@ async function confirmarMontoSheet() {
   if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return; }
   closeSheet('monto-sheet');
   okToast('Guardado');
-  if (MONTO_SHEET_ACCION.tipo === 'comision') { loadComisionesAdmin(); loadFacturacionKpis(); }
+  if (MONTO_SHEET_ACCION.tipo === 'comision') { loadComisionesAdmin(); }
   else if (MONTO_SHEET_ACCION.tipo === 'venta') { loadMisVentasVentas(); }
-  else { await loadCuentasPorPagar(); loadFacturacionKpis(); }
+  else { await loadCuentasPorPagar(); }
   MONTO_SHEET_ACCION = null;
 }
 window.abrirRegistrarAbonoVentaUI = (leadId, saldoPendiente) => {
@@ -16087,7 +16304,7 @@ window.editarPorcentajeComision = async (asesorId) => {
   const { data, error } = await sb.rpc('establecer_porcentaje_comision', { p_asesor_id: asesorId, p_porcentaje: porcentaje });
   if (error || !data?.ok) { errToast('No se pudo actualizar: ' + (error?.message || data?.error || '')); return; }
   okToast(`Comisión de ${a.nombre} actualizada a ${porcentaje}%`);
-  loadAsesoresComision(); loadComisionesAdmin(); loadFacturacionKpis();
+  loadAsesoresComision(); loadComisionesAdmin();
 };
 window.anularFacturaUI = async (facturaId) => {
   const motivo = await pedirTexto({ titulo: 'Anular factura', label: 'Motivo de la anulación', tipo: 'textarea', requerido: true, textoOk: 'Anular', destructivo: true });
@@ -16095,14 +16312,14 @@ window.anularFacturaUI = async (facturaId) => {
   const { error } = await sb.rpc('anular_factura', { p_factura_id: facturaId, p_motivo: motivo.trim() });
   if (error) { errToast('No se pudo anular: ' + error.message); return; }
   okToast('Factura anulada');
-  loadFacturas(); loadComisionesAdmin(); loadFacturacionKpis();
+  loadFacturas(); loadComisionesAdmin();
 };
 window.marcarComisionPagadaUI = async (comisionId) => {
   if (!(await confirmarSheet({ titulo: '¿Marcar esta comisión como pagada?', textoOk: 'Marcar pagada' }))) return;
   const { error } = await sb.rpc('marcar_comision_pagada', { p_comision_id: comisionId });
   if (error) { errToast('No se pudo marcar como pagada: ' + error.message); return; }
   okToast('Comisión marcada como pagada');
-  loadComisionesAdmin(); loadFacturacionKpis();
+  loadComisionesAdmin();
 };
 
 /* ---------- Proveedores (reservas y finanzas, Fase 1; solo admin) ----------
@@ -22890,33 +23107,94 @@ async function waCargarMedia(el) {
   else el.addEventListener('click', () => window.open(u, '_blank', 'noopener'));
 }
 
-/* ---------- Mensajes (chat interno del staff) ---------- */
+/* ---------- Mensajes (chat interno del staff) ----------
+   Panel flotante a nivel <body> (#chat-panel) + botón #chat-fab (escritorio) / #ab-chat (móvil).
+   Reemplaza a la antigua sección Mensajes: el router abre el panel en vez de activar una sección
+   (nav "Mensajes", ?ir=mensajes y el clic en el push). Un solo canal realtime global (mensajes-badge). */
 const ADJUNTO_LIMITE = 20 * 1024 * 1024;
 const ICONO_EXT = { pdf: 'fa-file-pdf', doc: 'fa-file-word', docx: 'fa-file-word', xls: 'fa-file-excel', xlsx: 'fa-file-excel', ppt: 'fa-file-powerpoint', pptx: 'fa-file-powerpoint', zip: 'fa-file-zipper', rar: 'fa-file-zipper' };
+const CHAT_STICKERS_LOTUS = ['feliz', 'enamorada', 'guino', 'festejando', 'sorprendida', 'pensando', 'verguenza', 'llorando', 'enojada', 'dormida'];
+const CHAT_REACCIONES_RAPIDAS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 const fmtHoraChat = iso => dtf('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+const chatEl = id => document.getElementById(id);
 let msgConversaciones = [];
 let msgActual = null;
 let msgMensajes = [];
 let msgLecturasPorMensaje = {};
+let msgReacciones = {}; // mensaje_id -> { usuario_id: emoji }
 let msgParticipantesActual = [];
 let msgUrlsAdjuntos = {};
 let msgUsuariosStaff = null;
-let msgChannelConv = null;
+let chatPanelAbierto = false;
+let chatPuede = false;
+let chatArrancado = false;
+let chatNavPusheado = false;
+let chatFocoPrevio = null;
+let chatEnLinea = new Set();
+let chatVistos = new Set();
+const chatBorradores = new Map();
+const chatAgenda = {}; // timers con nombre (debounce / expiraciones)
+const chatAgendar = (clave, ms, fn) => { clearTimeout(chatAgenda[clave]); chatAgenda[clave] = setTimeout(fn, ms); };
 
 function setupMensajes() {
-  document.getElementById('msg-nuevo-btn').addEventListener('click', abrirPickerNuevoChat);
-  document.getElementById('msg-conv-back').addEventListener('click', () => cerrarConversacion());
-  document.getElementById('msg-attach-btn').addEventListener('click', () => openSheet('msg-attach-sheet'));
-  document.getElementById('msg-attach-foto').addEventListener('click', () => { closeSheet('msg-attach-sheet'); document.getElementById('msg-file-foto').click(); });
-  document.getElementById('msg-attach-doc').addEventListener('click', () => { closeSheet('msg-attach-sheet'); document.getElementById('msg-file-doc').click(); });
-  document.getElementById('msg-file-foto').addEventListener('change', e => { if (e.target.files[0]) subirAdjunto(e.target.files[0]); e.target.value = ''; });
-  document.getElementById('msg-file-doc').addEventListener('change', e => { if (e.target.files[0]) subirAdjunto(e.target.files[0]); e.target.value = ''; });
-  const input = document.getElementById('msg-input');
-  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(120, input.scrollHeight) + 'px'; });
-  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensajeTexto(); } });
-  attachVoiceInput(document.getElementById('msg-mic-btn'), input);
-  document.getElementById('msg-send-btn').addEventListener('click', enviarMensajeTexto);
-  sb.channel('mensajes-badge').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes' }, () => cargarBandeja(true)).subscribe();
+  chatEl('msg-nuevo-btn').addEventListener('click', abrirPickerNuevoChat);
+  chatEl('cp-cerrar').addEventListener('click', () => chatCerrarPanel());
+  chatEl('cp-cerrar-conv').addEventListener('click', () => chatCerrarPanel());
+  chatEl('cp-expandir').addEventListener('click', chatAlternarExpandido);
+  chatEl('msg-conv-back').addEventListener('click', () => cerrarConversacion());
+  chatEl('chat-fab').addEventListener('click', () => chatAbrirPanel());
+  chatEl('ab-chat').addEventListener('click', () => chatPanelAbierto ? chatCerrarPanel() : chatAbrirPanel());
+  chatEl('chat-globo').addEventListener('click', () => { const id = Number(chatEl('chat-globo').dataset.conv); chatOcultarGlobo(); if (id) chatAbrirPorId(id); });
+  chatEl('cp-conv-menu').addEventListener('click', () => chatMenuConv());
+  chatSetupLog();
+  chatSetupComposer();
+  chatSetupArchivos();
+  document.addEventListener('keydown', e => {
+    if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyM' && chatPuede) { e.preventDefault(); chatPanelAbierto ? chatCerrarPanel() : chatAbrirPanel(); return; }
+    if (e.key !== 'Escape' || !chatPanelAbierto || !chatEl('chat-panel').contains(document.activeElement)) return;
+    if (!chatEl('cp-pop').hidden) { chatCerrarPop(true); return; }
+    chatCerrarPanel();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    chatTituloLimpiar();
+    if (!chatArrancado) return;
+    cargarBandeja(true);
+    if (msgActual) { chatSincronizarActual(); marcarMensajesAjenosComoLeidos(); }
+  });
+  try { if (localStorage.getItem('chat_expandido') === '1') chatEl('chat-panel').classList.add('expandido'); } catch { /* sin storage */ }
+  chatEl('cp-expandir').setAttribute('aria-pressed', String(chatEl('chat-panel').classList.contains('expandido')));
+  navigator.serviceWorker?.addEventListener('message', e => {
+    if (e.data?.tipo === 'abrir-conversacion' && Number.isFinite(e.data.id)) chatAbrirPorId(e.data.id);
+  });
+}
+
+/* El nav-item Mensajes lo ven más roles que los que pueden iniciar chats; el panel sigue esa misma visibilidad. */
+function chatActualizarVisibilidad() {
+  const puede = !!navVisiblePorRol(navItemDe('mensajes'));
+  if (puede === chatPuede && (chatArrancado || !puede)) return;
+  chatPuede = puede;
+  chatEl('chat-fab').hidden = !puede;
+  chatEl('ab-chat').hidden = !puede;
+  document.body.classList.toggle('chat-on', puede);
+  if (puede && !chatArrancado) chatArrancar();
+  if (!puede && chatPanelAbierto) chatCerrarPanel();
+}
+function iniciarChat() { chatActualizarVisibilidad(); }
+async function chatArrancar() {
+  chatArrancado = true;
+  await cargarUsuariosStaff();
+  cargarBandeja(true);
+  chatSuscribir();
+  chatPresenciaIniciar();
+}
+function chatSuscribir() {
+  sb.channel('mensajes-badge')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes' }, p => chatAlLlegarMensaje(p.new))
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'mensajes' }, p => chatAlActualizarMensaje(p.new))
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensaje_lecturas' }, p => chatAlLeer(p.new))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'mensaje_reacciones' }, chatAlReaccionar)
+    .subscribe();
 }
 
 async function cargarUsuariosStaff() {
@@ -22926,13 +23204,77 @@ async function cargarUsuariosStaff() {
   return msgUsuariosStaff;
 }
 function nombreUsuario(id) { return (msgUsuariosStaff || []).find(u => u.id === id)?.nombre || 'Alguien'; }
+function chatAvatarUsuario(id) { return (msgUsuariosStaff || []).find(u => u.id === id)?.avatar_url || ''; }
 
+/* ----- Panel: abrir / cerrar / expandir ----- */
+function chatAbrirPanel(opts = {}) {
+  if (!chatPuede || chatPanelAbierto) return;
+  const p = chatEl('chat-panel');
+  chatPanelAbierto = true;
+  chatFocoPrevio = document.activeElement;
+  p.removeAttribute('inert'); p.setAttribute('aria-hidden', 'false');
+  p.classList.add('abierto');
+  document.body.classList.add('chat-abierto');
+  if (MENU_MQ.matches) { chatNavPusheado = true; navPush({ type: 'chat-panel' }); }
+  chatOcultarGlobo();
+  chatTituloLimpiar();
+  cargarBandeja();
+  if (!opts.sinFoco) setTimeout(() => { if (chatPanelAbierto) p.focus({ preventScroll: true }); }, 60);
+}
+function chatCerrarPanel(fromNav) {
+  if (!chatPanelAbierto) return;
+  chatCerrarPop();
+  if (msgActual) cerrarConversacion(true, true);
+  chatPanelAbierto = false;
+  const p = chatEl('chat-panel');
+  p.setAttribute('inert', ''); p.setAttribute('aria-hidden', 'true');
+  p.classList.remove('abierto');
+  document.body.classList.remove('chat-abierto');
+  if (chatNavPusheado) { chatNavPusheado = false; if (!fromNav) navConsume(); }
+  const f = chatFocoPrevio; chatFocoPrevio = null;
+  if (f && f !== document.body && document.contains(f) && f.offsetParent !== null) f.focus({ preventScroll: true });
+}
+// Atrás del sistema en móvil: con una conversación abierta vuelve a la lista (y repone la entrada de historial); si no, cierra el panel.
+function chatAtrasSistema() {
+  if (msgActual && chatPanelAbierto) { cerrarConversacion(true); navPush({ type: 'chat-panel' }); return; }
+  chatNavPusheado = false;
+  chatCerrarPanel(true);
+}
+function chatAlternarExpandido() {
+  const p = chatEl('chat-panel'), on = !p.classList.contains('expandido');
+  p.classList.toggle('expandido', on);
+  chatEl('cp-expandir').setAttribute('aria-pressed', String(on));
+  try { localStorage.setItem('chat_expandido', on ? '1' : '0'); } catch { /* sin storage */ }
+}
+async function chatAbrirPorId(id) {
+  if (!chatPuede) return;
+  let c = msgConversaciones.find(x => x.conversacion_id === id);
+  if (!c) { await cargarBandeja(true); c = msgConversaciones.find(x => x.conversacion_id === id); }
+  if (c) await abrirConversacion(c);
+  else chatAbrirPanel();
+}
+
+/* ----- Bandeja ----- */
+function chatEsSilenciada(id) { return (MI_PREFERENCIAS.chat_silenciadas || []).includes(id); }
+function chatPintarContador() {
+  const total = msgConversaciones.reduce((a, c) => a + (c.no_leidos || 0), 0);
+  const txt = total > 99 ? '99+' : String(total);
+  const nav = chatEl('nav-msg-count');
+  if (nav) { nav.textContent = txt; nav.style.display = total ? '' : 'none'; }
+  const fab = chatEl('chat-fab'), ab = chatEl('ab-chat');
+  [['chat-fab-badge', fab], ['ab-badge', ab]].forEach(([id, btn]) => {
+    const b = chatEl(id); if (!b) return;
+    b.textContent = txt; b.hidden = !total;
+    btn.classList.toggle('hay-nuevos', total > 0);
+  });
+  fab.setAttribute('aria-label', total ? `Abrir mensajes (${total} sin leer)` : 'Abrir mensajes');
+  ab.setAttribute('aria-label', total ? `Mensajes (${total} sin leer)` : 'Mensajes');
+}
 async function cargarBandeja(soloBadge) {
-  // Antes la bandeja quedaba en blanco hasta que volvía la RPC. Skeleton solo
-  // en la carga visible (soloBadge repinta el contador en segundo plano).
-  const inbox = document.getElementById('msg-inbox');
+  // Skeleton solo en la carga visible; soloBadge repinta el contador en segundo plano.
+  const inbox = chatEl('msg-inbox');
   if (!soloBadge && inbox && !msgConversaciones.length) {
-    inbox.innerHTML = '<div class="tbl-state skel show" style="padding:8px 0"><div class="skel-bar" style="height:64px"></div><div class="skel-bar" style="height:64px"></div><div class="skel-bar" style="height:64px"></div><div class="skel-bar" style="height:64px"></div></div>';
+    inbox.innerHTML = '<div class="tbl-state skel show" style="padding:8px 14px"><div class="skel-bar" style="height:60px"></div><div class="skel-bar" style="height:60px"></div><div class="skel-bar" style="height:60px"></div><div class="skel-bar" style="height:60px"></div></div>';
   }
   const { data, error } = await sb.rpc('mis_conversaciones');
   if (error) {
@@ -22940,49 +23282,61 @@ async function cargarBandeja(soloBadge) {
     return;
   }
   msgConversaciones = data || [];
-  const noLeidos = msgConversaciones.reduce((a, c) => a + (c.no_leidos || 0), 0);
-  const badge = document.getElementById('nav-msg-count');
-  badge.textContent = noLeidos > 99 ? '99+' : String(noLeidos);
-  badge.style.display = noLeidos ? '' : 'none';
-  if (!soloBadge) renderBandeja();
+  chatPintarContador();
+  if (!soloBadge) renderBandeja(true); else if (chatPanelAbierto) renderBandeja();
 }
 function fmtHoraMsg(iso) {
   const d = new Date(iso), hoy = new Date();
   if (d.toDateString() === hoy.toDateString()) return fmtHoraChat(iso);
   return dtf('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit' }).format(d);
 }
-const MSG_PREVIEW_ICONO = { imagen: '📷 Foto', video: '🎥 Video', documento: '📄 Documento' };
-function renderBandeja() {
-  const cont = document.getElementById('msg-inbox');
+const MSG_PREVIEW_ICONO = { imagen: '📷 Foto', video: '🎥 Video', documento: '📄 Documento', audio: '🎤 Nota de voz', sticker: '🏷️ Sticker' };
+function chatTextoUltimo(um) {
+  if (um.eliminado) return '🚫 Mensaje eliminado';
+  return um.tipo === 'texto' ? (um.contenido || '') : (MSG_PREVIEW_ICONO[um.tipo] || '');
+}
+function chatAvatarHtml(nombre, url, grupo, uid) {
+  const en = !grupo && uid && chatEnLinea.has(uid) ? '<span class="cp-dot" title="En línea"></span>' : '';
+  const estilo = url ? ` style="background-image:url(${esc(JSON.stringify(url))})"` : '';
+  return `<div class="msg-avatar${grupo ? ' grupo' : ''}${url ? ' foto' : ''}" data-uid="${esc(uid || '')}"${estilo}>${url ? '' : grupo ? '<i class="fas fa-users"></i>' : esc(initials(nombre))}${en}</div>`;
+}
+function renderBandeja(animar) {
+  const cont = chatEl('msg-inbox');
   if (!msgConversaciones.length) { cont.innerHTML = '<div class="msg-empty"><i class="fas fa-comments"></i><br>Sin conversaciones todavía</div>'; return; }
   cont.innerHTML = msgConversaciones.map(c => {
-    const esGrupo = c.tipo === 'grupo', um = c.ultimo_mensaje;
-    const cuerpo = !um ? 'Sin mensajes todavía' : (um.tipo === 'texto' ? esc(um.contenido || '') : (MSG_PREVIEW_ICONO[um.tipo] || ''));
-    const preview = um?.es_mio ? 'Tú: ' + cuerpo : cuerpo;
+    const esGrupo = c.tipo === 'grupo', um = c.ultimo_mensaje, id = c.conversacion_id;
+    const escribiendo = chatQuienEscribe(id).length > 0;
+    let cuerpo = !um ? 'Sin mensajes todavía' : esc(chatTextoUltimo(um));
+    if (um && um.es_mio) cuerpo = 'Tú: ' + cuerpo;
+    else if (um && esGrupo && um.remitente) cuerpo = esc(um.remitente.split(' ')[0]) + ': ' + cuerpo;
+    const silenciada = chatEsSilenciada(id);
     return `
-    <div class="msg-inbox-row ${esGrupo ? 'grupo' : ''}" data-conv="${c.conversacion_id}">
-      <div class="msg-avatar ${esGrupo ? 'grupo' : ''}">${esGrupo ? '<i class="fas fa-users"></i>' : esc(initials(c.nombre))}</div>
+    <div class="msg-inbox-row ${esGrupo ? 'grupo' : ''}${msgActual?.conversacion_id === id ? ' on' : ''}${silenciada ? ' silenciada' : ''}" data-conv="${id}" role="button" tabindex="0">
+      ${chatAvatarHtml(c.nombre, c.otro_avatar, esGrupo, c.otro_usuario_id)}
       <div class="msg-inbox-body">
         <div class="msg-inbox-top">
           <div class="msg-inbox-nombre">${esc(c.nombre || 'Sin nombre')}</div>
           ${um ? `<div class="msg-inbox-hora">${fmtHoraMsg(um.created_at)}</div>` : ''}
         </div>
-        <div class="msg-inbox-preview"><span>${preview}</span></div>
+        <div class="msg-inbox-preview">${silenciada ? '<i class="fas fa-bell-slash" title="Silenciado"></i>' : ''}<span${escribiendo ? ' class="escribiendo"' : ''}>${escribiendo ? 'escribiendo…' : cuerpo}</span></div>
       </div>
       ${c.no_leidos ? `<div class="msg-inbox-badge">${c.no_leidos}</div>` : ''}
     </div>`;
   }).join('');
-  entradaLista(cont);
-  cont.querySelectorAll('.msg-inbox-row').forEach(row => row.addEventListener('click', () => {
-    const c = msgConversaciones.find(x => x.conversacion_id === Number(row.dataset.conv));
-    if (c) abrirConversacion(c);
-  }));
+  if (animar) entradaLista(cont);
+  cont.querySelectorAll('.msg-inbox-row').forEach(row => {
+    const abrir = () => { const c = msgConversaciones.find(x => x.conversacion_id === Number(row.dataset.conv)); if (c) abrirConversacion(c); };
+    row.addEventListener('click', abrir);
+    row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } });
+  });
 }
+let chatRefrescando = false;
+function chatRefrescarBandeja() { chatAgendar('bandeja', 350, async () => { if (chatRefrescando) return; chatRefrescando = true; try { await cargarBandeja(true); } finally { chatRefrescando = false; } }); }
 
 async function abrirPickerNuevoChat() {
   const lista = await cargarUsuariosStaff();
   const candidatos = lista.filter(u => u.id !== MI_USUARIO_ID);
-  document.getElementById('msg-picker-list').innerHTML = candidatos.map(u => `
+  chatEl('msg-picker-list').innerHTML = candidatos.map(u => `
     <div class="msg-picker-row" data-uid="${u.id}">
       <div class="msg-avatar">${esc(initials(u.nombre))}</div>
       <div><div class="msg-picker-nombre">${esc(u.nombre)}</div><div class="msg-picker-rol">${esc(u.rol)}</div></div>
@@ -22992,31 +23346,63 @@ async function abrirPickerNuevoChat() {
     const { data: convId, error } = await sb.rpc('obtener_o_crear_conversacion_directa', { p_otro_usuario_id: row.dataset.uid });
     if (error) { errToast('No se pudo iniciar el chat'); return; }
     const u = candidatos.find(x => x.id === row.dataset.uid);
-    await cargarBandeja();
-    abrirConversacion({ conversacion_id: convId, tipo: 'directo', nombre: u.nombre, otro_usuario_id: u.id });
+    await cargarBandeja(true);
+    abrirConversacion(msgConversaciones.find(x => x.conversacion_id === convId) || { conversacion_id: convId, tipo: 'directo', nombre: u.nombre, otro_usuario_id: u.id, otro_avatar: u.avatar_url });
   }));
   openSheet('msg-nuevo-sheet');
 }
 
-// miGen/msgAbrirGen: si el usuario abre una conversación y vuelve atrás antes
-// de que resuelvan sus awaits, cerrarConversacion incrementa msgAbrirGen y esta
-// llamada en vuelo se aborta en vez de pisar el estado de lo que se ve ahora
-// (o marcar como leídos mensajes que el usuario nunca llegó a ver).
+/* ----- Conversación ----- */
+function chatSetUrlConversacion(id) {
+  // El service worker mira ?conversacion= para no duplicar el aviso de sistema de la conversación que ya se está viendo.
+  const q = new URLSearchParams(location.search);
+  if (id) q.set('conversacion', id); else q.delete('conversacion');
+  const s = q.toString();
+  history.replaceState(history.state, '', location.pathname + (s ? '?' + s : '') + location.hash);
+}
+function chatSoloLectura(c) { return c.tipo === 'grupo' && ROL !== 'admin'; }
+function chatPintarCabecera() {
+  const c = msgActual; if (!c) return;
+  const esGrupo = c.tipo === 'grupo';
+  const av = chatEl('cp-conv-avatar');
+  av.className = 'msg-avatar' + (esGrupo ? ' grupo' : '') + (c.otro_avatar ? ' foto' : '');
+  av.style.backgroundImage = c.otro_avatar ? `url(${JSON.stringify(c.otro_avatar)})` : '';
+  av.innerHTML = c.otro_avatar ? '' : esGrupo ? '<i class="fas fa-users"></i>' : esc(initials(c.nombre));
+  if (!esGrupo && chatEnLinea.has(c.otro_usuario_id)) av.insertAdjacentHTML('beforeend', '<span class="cp-dot"></span>');
+  chatEl('msg-conv-titulo').textContent = c.nombre || 'Sin nombre';
+  chatPintarSub();
+}
+function chatPintarSub() {
+  const c = msgActual, sub = chatEl('msg-conv-sub'); if (!c) return;
+  const quienes = chatQuienEscribe(c.conversacion_id);
+  let txt, vivo = false;
+  if (quienes.length) { txt = c.tipo === 'grupo' ? (quienes.length === 1 ? `${nombreUsuario(quienes[0]).split(' ')[0]} está escribiendo…` : 'Varios están escribiendo…') : 'escribiendo…'; vivo = true; }
+  else if (c.tipo === 'grupo') txt = 'Grupo · todo el staff';
+  else if (chatEnLinea.has(c.otro_usuario_id)) { txt = 'en línea'; vivo = true; }
+  else txt = 'Chat individual';
+  sub.textContent = txt; sub.classList.toggle('vivo', vivo);
+}
+
+// miGen/msgAbrirGen: si el usuario abre una conversación y vuelve atrás antes de que resuelvan sus awaits,
+// cerrarConversacion incrementa msgAbrirGen y esta llamada en vuelo se aborta en vez de pisar el estado.
 let msgAbrirGen = 0;
 async function abrirConversacion(c) {
   const miGen = ++msgAbrirGen;
+  if (msgActual) { chatGuardarBorrador(); chatGrabarFin(false); chatAudioDetener(); }
   msgActual = c;
-  // El service worker usa este parámetro para saber si la pestaña YA está
-  // mirando esta conversación y así no duplicar el aviso de sistema con lo
-  // que el canal realtime ya muestra en vivo (ver sw.js, handler `push`).
-  history.replaceState(null, '', location.pathname + '?ir=mensajes&conversacion=' + c.conversacion_id);
-  document.getElementById('msg-conv-titulo').textContent = c.nombre || 'Sin nombre';
-  document.getElementById('msg-conv-sub').textContent = c.tipo === 'grupo' ? 'Grupo · todo el staff' : 'Chat individual';
-  const soloLectura = c.tipo === 'grupo' && ROL !== 'admin';
-  document.getElementById('msg-inputbar').style.display = soloLectura ? 'none' : 'flex';
-  document.getElementById('msg-readonly-note').style.display = soloLectura ? 'flex' : 'none';
-  document.getElementById('msg-conv').classList.add('open');
-  navPush({ type: 'msg-conv' });
+  chatAbrirPanel({ sinFoco: true });
+  chatCerrarPop(); chatCitaLimpiar(); chatFotosLimpiar();
+  chatSetUrlConversacion(c.conversacion_id);
+  chatPintarCabecera();
+  const soloLectura = chatSoloLectura(c);
+  chatEl('cp-compose').hidden = soloLectura;
+  chatEl('msg-readonly-note').hidden = !soloLectura;
+  chatRestaurarBorrador(c.conversacion_id);
+  chatAplicarFondo();
+  msgMensajes = []; msgLecturasPorMensaje = {}; msgReacciones = {}; chatVistos = new Set();
+  chatEl('msg-conv-log').innerHTML = '<div class="chat-empty"><i class="fas fa-circle-notch fa-spin"></i>Cargando…</div>';
+  chatEl('msg-conv').classList.add('open');
+  document.querySelectorAll('#msg-inbox .msg-inbox-row').forEach(r => r.classList.toggle('on', Number(r.dataset.conv) === c.conversacion_id));
 
   await cargarUsuariosStaff();
   const [{ data: participantes }, { data: mensajes }] = await Promise.all([
@@ -23024,66 +23410,113 @@ async function abrirConversacion(c) {
     sb.from('mensajes').select('*').eq('conversacion_id', c.conversacion_id).order('created_at'),
   ]);
   const ids = (mensajes || []).map(m => m.id);
-  const lecturasRes = ids.length ? await sb.from('mensaje_lecturas').select('mensaje_id,usuario_id').in('mensaje_id', ids) : { data: [] };
-  await cargarUrlsAdjuntos((mensajes || []).filter(m => m.storage_path));
+  const [lecturasRes, reaccionesRes] = ids.length
+    ? await Promise.all([sb.from('mensaje_lecturas').select('mensaje_id,usuario_id').in('mensaje_id', ids), sb.from('mensaje_reacciones').select('mensaje_id,usuario_id,emoji').in('mensaje_id', ids)])
+    : [{ data: [] }, { data: [] }];
+  await cargarUrlsAdjuntos(mensajes || []);
   if (miGen !== msgAbrirGen) return; // se cerró/cambió de conversación mientras esto cargaba
 
   msgParticipantesActual = (participantes || []).map(p => p.usuario_id);
   msgMensajes = mensajes || [];
-  msgLecturasPorMensaje = {};
   (lecturasRes.data || []).forEach(l => { (msgLecturasPorMensaje[l.mensaje_id] ??= []).push(l.usuario_id); });
-  renderConversacion();
+  (reaccionesRes.data || []).forEach(r => { (msgReacciones[r.mensaje_id] ??= {})[r.usuario_id] = r.emoji; });
+  renderConversacion('inicial');
   marcarMensajesAjenosComoLeidos();
-  suscribirConversacion(c.conversacion_id);
+  if (!MENU_MQ.matches && !soloLectura) chatEl('msg-input').focus({ preventScroll: true });
 }
-function cerrarConversacion(fromNav) {
+function cerrarConversacion(fromNav, silencioso) {
   msgAbrirGen++; // invalida cualquier abrirConversacion() todavía en vuelo
-  document.getElementById('msg-conv').classList.remove('open');
-  if (msgChannelConv) { sb.removeChannel(msgChannelConv); msgChannelConv = null; }
+  chatGuardarBorrador();
+  chatGrabarFin(false);
+  chatAudioDetener();
+  chatEl('msg-conv').classList.remove('open');
+  chatCerrarPop(); chatCitaLimpiar(); chatFotosLimpiar();
   msgActual = null;
-  history.replaceState(null, '', location.pathname);
-  if (!fromNav) navConsume();
-  cargarBandeja();
+  chatSetUrlConversacion(null);
+  document.querySelectorAll('#msg-inbox .msg-inbox-row.on').forEach(r => r.classList.remove('on'));
+  if (!silencioso) cargarBandeja(true);
 }
-function suscribirConversacion(conversacionId) {
-  if (msgChannelConv) sb.removeChannel(msgChannelConv);
-  msgChannelConv = sb.channel('mensajes-conv-' + conversacionId)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes', filter: `conversacion_id=eq.${conversacionId}` }, async payload => {
-      if (msgMensajes.some(m => m.id === payload.new.id)) return;
-      msgMensajes.push(payload.new);
-      if (payload.new.storage_path) await cargarUrlsAdjuntos([payload.new]);
-      renderConversacion();
-      if (payload.new.remitente_id !== MI_USUARIO_ID) marcarMensajesAjenosComoLeidos();
-    })
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensaje_lecturas' }, payload => {
-      const l = payload.new;
-      if (!msgMensajes.some(m => m.id === l.mensaje_id)) return;
-      marcarLocalComoLeido(l.mensaje_id, l.usuario_id);
-      renderConversacion();
-    })
-    .subscribe();
+async function chatSincronizarActual() {
+  // Tras volver a la pestaña: trae lo que el canal realtime no entregó con la pestaña dormida.
+  const c = msgActual; if (!c) return;
+  const ultimo = msgMensajes.reduce((a, m) => Math.max(a, m.id || 0), 0);
+  const { data } = await sb.from('mensajes').select('*').eq('conversacion_id', c.conversacion_id).gt('id', ultimo).order('created_at');
+  if (msgActual !== c || !data?.length) return;
+  const nuevos = data.filter(m => !msgMensajes.some(x => x.id === m.id));
+  if (!nuevos.length) return;
+  msgMensajes.push(...nuevos);
+  await cargarUrlsAdjuntos(nuevos);
+  renderConversacion();
+}
+
+/* ----- Realtime ----- */
+async function chatAlLlegarMensaje(m) {
+  const esMio = m.remitente_id === MI_USUARIO_ID;
+  delete chatEscribiendoDe[m.conversacion_id + ':' + m.remitente_id];
+  const enActual = msgActual && m.conversacion_id === msgActual.conversacion_id;
+  if (enActual && !msgMensajes.some(x => x.id === m.id)) {
+    msgMensajes.push(m);
+    await cargarUrlsAdjuntos([m]);
+    if (msgActual && m.conversacion_id === msgActual.conversacion_id) renderConversacion();
+  }
+  const visible = enActual && chatPanelAbierto && !document.hidden;
+  if (visible && !esMio) marcarMensajesAjenosComoLeidos();
+  chatRefrescarBandeja();
+  if (!esMio && !visible && !chatEsSilenciada(m.conversacion_id)) chatAviso(m);
+}
+function chatAlActualizarMensaje(m) {
+  const i = msgMensajes.findIndex(x => x.id === m.id);
+  if (i < 0) { chatRefrescarBandeja(); return; }
+  msgMensajes[i] = { ...msgMensajes[i], ...m };
+  if (m.eliminado_at) delete msgReacciones[m.id];
+  renderConversacion();
+  chatRefrescarBandeja();
+}
+function chatAlLeer(l) {
+  if (!msgMensajes.some(m => m.id === l.mensaje_id)) return;
+  marcarLocalComoLeido(l.mensaje_id, l.usuario_id);
+  renderConversacion();
+}
+function chatAlReaccionar(p) {
+  if (p.eventType === 'DELETE') {
+    const o = p.old || {};
+    if (msgReacciones[o.mensaje_id]) { delete msgReacciones[o.mensaje_id][o.usuario_id]; renderConversacion(); }
+    return;
+  }
+  const r = p.new;
+  if (!msgMensajes.some(m => m.id === r.mensaje_id)) return;
+  (msgReacciones[r.mensaje_id] ??= {})[r.usuario_id] = r.emoji;
+  renderConversacion();
 }
 function marcarLocalComoLeido(mensajeId, usuarioId) {
   (msgLecturasPorMensaje[mensajeId] ??= []);
   if (!msgLecturasPorMensaje[mensajeId].includes(usuarioId)) msgLecturasPorMensaje[mensajeId].push(usuarioId);
 }
 async function marcarMensajesAjenosComoLeidos() {
-  const pendientes = msgMensajes.filter(m => m.remitente_id !== MI_USUARIO_ID && !(msgLecturasPorMensaje[m.id] || []).includes(MI_USUARIO_ID));
+  if (!msgActual || !chatPanelAbierto || document.hidden) return;
+  const c = msgActual;
+  const pendientes = msgMensajes.filter(m => m.remitente_id !== MI_USUARIO_ID && !m.eliminado_at && !(msgLecturasPorMensaje[m.id] || []).includes(MI_USUARIO_ID));
   if (!pendientes.length) return;
   await Promise.all(pendientes.map(async m => {
     const { error } = await sb.rpc('marcar_leido', { p_mensaje_id: m.id });
     if (!error) marcarLocalComoLeido(m.id, MI_USUARIO_ID);
   }));
-  renderConversacion();
+  if (msgActual === c) renderConversacion();
   cargarBandeja(true);
 }
 
-async function cargarUrlsAdjuntos(mensajesConArchivo) {
-  const paths = mensajesConArchivo.map(m => m.storage_path).filter(p => p && !msgUrlsAdjuntos[p]);
-  if (!paths.length) return;
-  const { data, error } = await sb.storage.from('chat-interno-adjuntos').createSignedUrls(paths, 3600);
-  if (error) { errToast('No se pudieron cargar algunos adjuntos'); return; }
-  (data || []).forEach(d => { if (d.signedUrl) msgUrlsAdjuntos[d.path] = d.signedUrl; });
+async function cargarUrlsAdjuntos(mensajes) {
+  const paths = [...new Set(mensajes.map(m => m.storage_path).filter(p => p && !msgUrlsAdjuntos[p]))];
+  const propios = [...new Set(mensajes.filter(m => m.tipo === 'sticker' && m.contenido && !m.contenido.startsWith('lotus/') && !msgUrlsAdjuntos['u:' + m.contenido]).map(m => m.contenido))];
+  const trabajos = [];
+  if (paths.length) trabajos.push(sb.storage.from('chat-interno-adjuntos').createSignedUrls(paths, 3600).then(({ data, error }) => {
+    if (error) { errToast('No se pudieron cargar algunos adjuntos'); return; }
+    (data || []).forEach(d => { if (d.signedUrl) msgUrlsAdjuntos[d.path] = d.signedUrl; });
+  }));
+  if (propios.length) trabajos.push(sb.storage.from('chat-interno-usuario').createSignedUrls(propios, 3600).then(({ data }) => {
+    (data || []).forEach(d => { if (d.signedUrl) msgUrlsAdjuntos['u:' + d.path] = d.signedUrl; });
+  }));
+  await Promise.all(trabajos);
 }
 function formatBytes(n) {
   if (!n) return '';
@@ -23106,21 +23539,61 @@ function reproducirVideo(el) {
   video.setAttribute('controls', '');
   video.play();
 }
+const chatFmtDur = ms => { const s = Math.max(0, Math.round((ms || 0) / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+function chatPreviewTexto(m) {
+  if (m.eliminado_at) return '🚫 Mensaje eliminado';
+  if (m.tipo === 'texto') return m.contenido || '';
+  if (m.tipo === 'documento') return '📄 ' + (m.nombre_archivo || 'Documento');
+  return MSG_PREVIEW_ICONO[m.tipo] || '';
+}
 
-function renderBurbuja(m, esMio, agrupado, esUltimoDelGrupo, todosLeyeron, nombreRemitente) {
-  const clases = `chat-msg ${esMio ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${esUltimoDelGrupo ? ' tail' : ''}${m.tipo !== 'texto' ? ' adjunto' : ''} msg-new`;
+/* ----- Burbujas ----- */
+function chatUrlSticker(m) {
+  const c = m.contenido || '';
+  if (c.startsWith('lotus/')) { const n = c.slice(6); return CHAT_STICKERS_LOTUS.includes(n) ? `img/stickers/lotus/${n}.webp` : ''; }
+  return msgUrlsAdjuntos['u:' + c] || '';
+}
+function chatReaccionesHtml(id) {
+  const r = msgReacciones[id]; if (!r) return '';
+  const cuentas = {};
+  Object.values(r).forEach(e => { cuentas[e] = (cuentas[e] || 0) + 1; });
+  const claves = Object.keys(cuentas); if (!claves.length) return '';
+  const mia = r[MI_USUARIO_ID];
+  return `<div class="cp-reacs">${claves.map(e => `<button type="button" class="cp-reac${e === mia ? ' mia' : ''}" data-reac="${esc(e)}" aria-label="${esc(e)} ${cuentas[e]}">${esc(e)}${cuentas[e] > 1 ? `<small>${cuentas[e]}</small>` : ''}</button>`).join('')}</div>`;
+}
+function chatAudioHtml(m, url) {
+  const dur = m.duracion_ms || 0;
+  return `<div class="cp-audio" data-audio="${esc(url)}" data-dur="${dur}"><button type="button" class="cp-play" data-play aria-label="Reproducir nota de voz"><i class="fas fa-play"></i></button><input type="range" class="cp-seek" min="0" max="1000" value="0" step="1" aria-label="Posición de la nota de voz"><span class="cp-aud-t">${chatFmtDur(dur)}</span><button type="button" class="cp-vel" data-vel aria-label="Velocidad de reproducción">1×</button></div>`;
+}
+function renderBurbuja(m, esMio, agrupado, esUltimoDelGrupo, todosLeyeron, nombreRemitente, porId) {
+  const eliminado = !!m.eliminado_at, sticker = !eliminado && m.tipo === 'sticker';
+  const nuevo = !chatVistos.has(m.id); chatVistos.add(m.id);
+  const clases = `chat-msg ${esMio ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${esUltimoDelGrupo ? ' tail' : ''}${!eliminado && !sticker && m.tipo !== 'texto' ? ' adjunto' : ''}${sticker ? ' sticker' : ''}${eliminado ? ' eliminado' : ''}${nuevo ? ' msg-new' : ''}`;
   const hora = fmtHoraChat(m.created_at);
   // Un solo timestamp al final del grupo de burbujas consecutivas del mismo remitente, no uno por mensaje.
   const meta = esUltimoDelGrupo ? `<div class="msg-meta"><span>${hora}</span>${esMio ? `<span class="msg-tick${todosLeyeron ? ' leido' : ''}">${todosLeyeron ? '✓✓' : '✓'}</span>` : ''}</div>` : '';
   const sender = nombreRemitente ? `<div class="msg-sender">${esc(nombreRemitente)}</div>` : '';
   const url = msgUrlsAdjuntos[m.storage_path] || '';
   let cuerpo;
-  if (m.tipo !== 'texto' && !url) cuerpo = `${sender}<div class="msg-doc"><i class="fas fa-triangle-exclamation"></i><div><div class="msg-doc-nombre">${esc(m.nombre_archivo || 'Adjunto')}</div><div class="msg-doc-peso">No se pudo cargar</div></div></div>${meta}`;
-  else if (m.tipo === 'imagen') cuerpo = `${sender}<img class="msg-img" src="${esc(url)}" data-img="${esc(url)}">${m.contenido ? `<div style="padding:4px 4px 0">${esc(m.contenido)}</div>` : ''}${meta}`;
-  else if (m.tipo === 'video') cuerpo = `${sender}<div class="msg-video-wrap" data-video><video src="${esc(url)}" preload="metadata"></video><div class="msg-video-play"><i class="fas fa-play"></i></div></div>${meta}`;
-  else if (m.tipo === 'documento') cuerpo = `${sender}<div class="msg-doc" data-doc="${esc(url)}"><i class="fas ${iconoPorExtension(m.nombre_archivo)}"></i><div><div class="msg-doc-nombre">${esc(m.nombre_archivo || 'Archivo')}</div><div class="msg-doc-peso">${formatBytes(m.peso_bytes)}</div></div></div>${meta}`;
-  else cuerpo = `${sender}${cuerpoTextoChat(m.contenido || '')}${meta}`;
-  return `<div class="${clases}">${cuerpo}</div>`;
+  if (eliminado) cuerpo = `${sender}<div><i class="fas fa-ban"></i>Este mensaje fue eliminado</div>${meta}`;
+  else {
+    let cita = '';
+    if (m.responde_a) {
+      const o = porId.get(m.responde_a);
+      cita = `<button type="button" class="cp-cita" data-cita="${m.responde_a}"><b>${o ? esc(o.remitente_id === MI_USUARIO_ID ? 'Tú' : nombreUsuario(o.remitente_id)) : 'Mensaje'}</b><span>${o ? esc(chatPreviewTexto(o)) : 'No disponible'}</span></button>`;
+    }
+    if (sticker) {
+      const su = chatUrlSticker(m);
+      cuerpo = su ? `<img class="cp-sticker" src="${esc(su)}" alt="Sticker" loading="lazy" draggable="false">${meta}` : `<div class="msg-doc"><i class="fas fa-triangle-exclamation"></i><div><div class="msg-doc-nombre">Sticker</div><div class="msg-doc-peso">No se pudo cargar</div></div></div>${meta}`;
+    } else if ((m.tipo === 'imagen' || m.tipo === 'video' || m.tipo === 'documento' || m.tipo === 'audio') && !url) cuerpo = `${sender}${cita}<div class="msg-doc"><i class="fas fa-triangle-exclamation"></i><div><div class="msg-doc-nombre">${esc(m.nombre_archivo || 'Adjunto')}</div><div class="msg-doc-peso">No se pudo cargar</div></div></div>${meta}`;
+    else if (m.tipo === 'imagen') cuerpo = `${sender}${cita}<img class="msg-img" src="${esc(url)}" data-img="${esc(url)}" alt="${esc(m.nombre_archivo || 'Foto')}">${m.contenido ? `<div style="padding:4px 4px 0">${esc(m.contenido)}</div>` : ''}${meta}`;
+    else if (m.tipo === 'video') cuerpo = `${sender}${cita}<div class="msg-video-wrap" data-video><video src="${esc(url)}" preload="metadata"></video><div class="msg-video-play"><i class="fas fa-play"></i></div></div>${meta}`;
+    else if (m.tipo === 'documento') cuerpo = `${sender}${cita}<div class="msg-doc" data-doc="${esc(url)}"><i class="fas ${iconoPorExtension(m.nombre_archivo)}"></i><div><div class="msg-doc-nombre">${esc(m.nombre_archivo || 'Archivo')}</div><div class="msg-doc-peso">${formatBytes(m.peso_bytes)}</div></div></div>${meta}`;
+    else if (m.tipo === 'audio') cuerpo = `${sender}${cita}${chatAudioHtml(m, url)}${meta}`;
+    else cuerpo = `${sender}${cita}${cuerpoTextoChat(m.contenido || '')}${meta}`;
+  }
+  const mas = eliminado ? '' : '<button type="button" class="cp-mas" data-mas aria-label="Opciones del mensaje"><i class="fas fa-chevron-down"></i></button>';
+  return `<div class="${clases}" data-mid="${m.id}">${mas}${cuerpo}${eliminado ? '' : chatReaccionesHtml(m.id)}</div>`;
 }
 // Tarjeta con acciones: las últimas líneas "[[Etiqueta|https://… | adjunto:<ruta del bucket>]]" se dibujan como botones (sin columna nueva en mensajes).
 const RE_ACCION_CHAT = /^\[\[([^|\]]{1,30})\|((?:https?:\/\/|adjunto:)[^\]\s]+)\]\]$/;
@@ -23139,11 +23612,14 @@ async function abrirAdjuntoChat(path) {
   if (error || !data?.signedUrl) { errToast('No se pudo abrir el CV'); return; }
   window.open(data.signedUrl, '_blank', 'noopener');
 }
-function renderConversacion() {
-  const log = document.getElementById('msg-conv-log');
-  const scrollAbajo = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
-  const esGrupo = msgActual?.tipo === 'grupo';
+function renderConversacion(forzarAbajo) {
+  const log = chatEl('msg-conv-log');
+  if (!msgActual) return;
+  const pegado = forzarAbajo || log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+  const esGrupo = msgActual.tipo === 'grupo';
   const otrosParticipantes = msgParticipantesActual.filter(id => id !== MI_USUARIO_ID);
+  const porId = new Map(msgMensajes.map(m => [m.id, m]));
+  if (forzarAbajo === 'inicial') msgMensajes.forEach(m => chatVistos.add(m.id)); // al abrir no se anima el historial
   let html = '', diaAnterior = null, remitenteAnterior = null;
   msgMensajes.forEach((m, i) => {
     const fecha = new Date(m.created_at), diaKey = fecha.toDateString();
@@ -23155,55 +23631,841 @@ function renderConversacion() {
     const lecturas = msgLecturasPorMensaje[m.id] || [];
     const todosLeyeron = otrosParticipantes.length > 0 && otrosParticipantes.every(id => lecturas.includes(id));
     const nombreRemitente = esGrupo && !esMio && !agrupado ? nombreUsuario(m.remitente_id) : null;
-    html += renderBurbuja(m, esMio, agrupado, esUltimoDelGrupo, todosLeyeron, nombreRemitente);
+    html += renderBurbuja(m, esMio, agrupado, esUltimoDelGrupo, todosLeyeron, nombreRemitente, porId);
     remitenteAnterior = m.remitente_id;
   });
   log.innerHTML = html || '<div class="chat-empty"><i class="fas fa-comment-dots"></i>Todavía no hay mensajes en esta conversación</div>';
-  log.querySelectorAll('[data-img]').forEach(el => el.addEventListener('click', () => openLightbox([el.dataset.img], 0)));
-  log.querySelectorAll('[data-video]').forEach(el => el.addEventListener('click', () => reproducirVideo(el)));
-  log.querySelectorAll('[data-doc]').forEach(el => el.addEventListener('click', () => window.open(el.dataset.doc, '_blank')));
-  log.querySelectorAll('[data-adjunto-path]').forEach(el => el.addEventListener('click', () => abrirAdjuntoChat(el.dataset.adjuntoPath)));
-  if (scrollAbajo) log.scrollTop = log.scrollHeight;
+  if (pegado) {
+    log.scrollTop = log.scrollHeight;
+    log.querySelectorAll('img').forEach(img => { if (!img.complete) img.addEventListener('load', () => { log.scrollTop = log.scrollHeight; }, { once: true }); });
+  }
+  chatAudioRepintar();
 }
 
-async function enviarMensajeTexto() {
-  const input = document.getElementById('msg-input');
-  const texto = input.value.trim();
-  if (!texto || !msgActual) return;
-  input.value = ''; input.style.height = 'auto';
-  const { data, error } = await sb.rpc('enviar_mensaje', { p_conversacion_id: msgActual.conversacion_id, p_tipo: 'texto', p_contenido: texto });
-  if (error || !data?.ok) { errToast('No se pudo enviar el mensaje'); input.value = texto; input.style.height = 'auto'; input.style.height = input.scrollHeight + 'px'; return; }
-  // El eco de este INSERT también llega por el canal realtime de la conversación (suscribirConversacion);
-  // ese handler ya chequea por id antes de empujar, así que este push optimista no duplica la burbuja.
-  if (!msgMensajes.some(m => m.id === data.id)) {
-    msgMensajes.push({ id: data.id, conversacion_id: msgActual.conversacion_id, remitente_id: MI_USUARIO_ID, tipo: 'texto', contenido: texto, created_at: new Date().toISOString() });
-    renderConversacion();
-  }
+/* Un solo juego de listeners en el registro (delegación): renderConversacion repinta todo el innerHTML. */
+function chatSetupLog() {
+  const log = chatEl('msg-conv-log');
+  log.addEventListener('click', e => {
+    const t = e.target;
+    const mas = t.closest('[data-mas]'); if (mas) { chatMenuMensaje(mas.closest('.chat-msg')); return; }
+    const reac = t.closest('[data-reac]'); if (reac) { chatToggleReaccion(Number(reac.closest('.chat-msg').dataset.mid), reac.dataset.reac); return; }
+    const cita = t.closest('[data-cita]'); if (cita) { chatIrAMensaje(Number(cita.dataset.cita)); return; }
+    const play = t.closest('[data-play]'); if (play) { chatAudioAlternar(play.closest('.chat-msg')); return; }
+    const vel = t.closest('[data-vel]'); if (vel) { chatAudioVelocidad(); return; }
+    const img = t.closest('[data-img]'); if (img) { openLightbox([img.dataset.img], 0); return; }
+    const vid = t.closest('[data-video]'); if (vid) { reproducirVideo(vid); return; }
+    const doc = t.closest('[data-doc]'); if (doc) { window.open(doc.dataset.doc, '_blank'); return; }
+    const adj = t.closest('[data-adjunto-path]'); if (adj) { abrirAdjuntoChat(adj.dataset.adjuntoPath); return; }
+    const stk = t.closest('.cp-sticker'); if (stk) chatMenuMensaje(stk.closest('.chat-msg'));
+  });
+  log.addEventListener('input', e => { if (e.target.matches('.cp-seek')) chatAudioBuscar(e.target.closest('.chat-msg'), Number(e.target.value)); });
+  log.addEventListener('contextmenu', e => { const b = e.target.closest('.chat-msg'); if (b && !e.target.closest('a')) { e.preventDefault(); chatMenuMensaje(b); } });
+  chatSetupGestos(log);
 }
-async function subirAdjunto(file) {
+
+/* ----- Popover único (emojis/stickers, adjuntar, menú de mensaje, ⋮, fondos) ----- */
+let chatPopModo = null, chatPopAncla = null, chatPopAlElegir = null;
+function chatPopFuera(e) {
+  const pop = chatEl('cp-pop');
+  if (pop.contains(e.target) || (chatPopAncla && chatPopAncla.contains(e.target))) return;
+  chatCerrarPop();
+}
+function chatCerrarPop(devolverFoco) {
+  const pop = chatEl('cp-pop');
+  if (pop.hidden) return;
+  document.removeEventListener('pointerdown', chatPopFuera, true);
+  const ancla = chatPopAncla;
+  chatPopModo = null; chatPopAncla = null; chatPopAlElegir = null;
+  pop.hidden = true; pop.innerHTML = ''; pop.className = 'cp-pop'; pop.removeAttribute('style'); pop.removeAttribute('data-mid');
+  if (devolverFoco && ancla && document.contains(ancla)) ancla.focus({ preventScroll: true });
+}
+function chatAbrirPop(modo, ancla, html, clase) {
+  chatCerrarPop();
+  const pop = chatEl('cp-pop');
+  pop.className = 'cp-pop' + (clase ? ' ' + clase : '');
+  pop.innerHTML = html; pop.hidden = false;
+  chatPopModo = modo; chatPopAncla = ancla;
+  setTimeout(() => { if (chatPopModo === modo) document.addEventListener('pointerdown', chatPopFuera, true); }, 0);
+  return pop;
+}
+// Posiciones en px de layout (offsetTop/offsetHeight), no de getBoundingClientRect: el body tiene zoom.
+function chatPopSobreComposer(pop) { pop.style.bottom = (chatEl('cp-compose').offsetHeight + 6) + 'px'; }
+function chatPopBajoCabecera(pop) { pop.style.top = (chatEl('msg-conv').querySelector('.cp-head').offsetHeight + 4) + 'px'; pop.style.right = '8px'; }
+function chatPopJuntoAMensaje(pop, burbuja, esMio) {
+  const conv = chatEl('msg-conv'), log = chatEl('msg-conv-log');
+  const arriba = log.offsetTop + burbuja.offsetTop - log.scrollTop, h = pop.offsetHeight;
+  let top = arriba + burbuja.offsetHeight + 4;
+  if (top + h > conv.clientHeight - 8) top = arriba - h - 4;
+  pop.style.top = Math.max(8, Math.min(top, conv.clientHeight - h - 8)) + 'px';
+  pop.style[esMio ? 'right' : 'left'] = '12px';
+}
+
+/* ----- Composer ----- */
+let chatFotosPend = [];
+let chatEnviandoFotos = false;
+let chatCita = null;
+function chatAjustarAltura() { const i = chatEl('msg-input'); i.style.height = 'auto'; i.style.height = Math.min(120, i.scrollHeight) + 'px'; }
+function chatActualizarBotonEnviar() {
+  const hay = !!(chatEl('msg-input').value.trim() || chatFotosPend.length);
+  const b = chatEl('msg-send-btn'), modo = hay ? 'enviar' : 'mic';
+  if (b.dataset.modo === modo) return;
+  b.dataset.modo = modo;
+  b.innerHTML = `<i class="fas fa-${hay ? 'paper-plane' : 'microphone'}"></i>`;
+  b.setAttribute('aria-label', hay ? 'Enviar' : 'Grabar nota de voz');
+  b.title = hay ? 'Enviar' : 'Grabar nota de voz';
+}
+function chatSetupComposer() {
+  const input = chatEl('msg-input');
+  input.addEventListener('input', () => { chatAjustarAltura(); chatActualizarBotonEnviar(); chatEnviarEscribiendo(); });
+  input.addEventListener('keydown', e => {
+    // En pantallas táctiles Enter es salto de línea (como WhatsApp); se envía con el botón.
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !matchMedia('(pointer:coarse)').matches) { e.preventDefault(); chatEnviar(); }
+  });
+  input.addEventListener('paste', e => {
+    const imgs = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+    if (imgs.length) { e.preventDefault(); chatAgregarArchivos(imgs); }
+  });
+  chatEl('msg-send-btn').addEventListener('click', () => { if (chatEl('msg-send-btn').dataset.modo === 'enviar') chatEnviar(); else chatGrabarIniciar(); });
+  chatEl('cp-emoji-btn').addEventListener('click', e => chatMenuEmoji(e.currentTarget));
+  chatEl('msg-attach-btn').addEventListener('click', e => chatMenuAdjuntar(e.currentTarget));
+  chatEl('cp-rec-cancelar').addEventListener('click', () => chatGrabarFin(false));
+  chatEl('cp-rec-enviar').addEventListener('click', () => chatGrabarFin(true));
+  chatEl('cp-fotos').addEventListener('click', e => {
+    const q = e.target.closest('[data-quitar]'); if (!q || chatEnviandoFotos) return;
+    const [it] = chatFotosPend.splice(Number(q.closest('.cp-foto').dataset.i), 1);
+    if (it?.url) URL.revokeObjectURL(it.url);
+    chatFotosRender(); chatActualizarBotonEnviar();
+  });
+  const pop = chatEl('cp-pop');
+  pop.addEventListener('click', chatPopClick);
+  pop.addEventListener('input', chatPopInput);
+  pop.addEventListener('change', chatPopChange);
+  // Los stickers del pack se ven quietos (PNG) y se animan al pasar el mouse o enfocar.
+  const anima = (e, on) => { const img = e.target.closest?.('[data-stk] img[data-anim]'); if (img) img.src = on ? img.dataset.anim : img.dataset.quieto; };
+  pop.addEventListener('mouseover', e => anima(e, true));
+  pop.addEventListener('mouseout', e => anima(e, false));
+  pop.addEventListener('focusin', e => anima(e, true));
+  pop.addEventListener('focusout', e => anima(e, false));
+  // Arrastrar archivos sobre el panel
+  const panel = chatEl('chat-panel'), drop = chatEl('cp-drop');
+  const aceptaArchivos = e => msgActual && !chatEl('cp-compose').hidden && [...(e.dataTransfer?.types || [])].includes('Files');
+  panel.addEventListener('dragover', e => { if (aceptaArchivos(e)) { e.preventDefault(); drop.hidden = false; } });
+  panel.addEventListener('dragleave', e => { if (!panel.contains(e.relatedTarget)) drop.hidden = true; });
+  panel.addEventListener('drop', e => {
+    drop.hidden = true;
+    if (!aceptaArchivos(e)) return;
+    e.preventDefault();
+    chatAgregarArchivos([...e.dataTransfer.files]);
+  });
+}
+function chatSetupArchivos() {
+  const leer = (id, fn) => chatEl(id).addEventListener('change', e => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) fn(fs); });
+  leer('cp-file-media', fs => chatAgregarArchivos(fs));
+  leer('cp-file-camara', fs => chatAgregarArchivos(fs));
+  leer('cp-file-doc', fs => fs.forEach(f => subirAdjunto(f)));
+  leer('cp-file-fondo', fs => chatSubirFondo(fs[0]));
+  leer('cp-file-sticker', fs => chatCrearSticker(fs[0]));
+}
+
+function chatGuardarBorrador() {
   if (!msgActual) return;
-  if (file.size > ADJUNTO_LIMITE) { errToast('El archivo supera los 20MB — redúcelo antes de subirlo'); return; }
-  const attachBtn = document.getElementById('msg-attach-btn');
-  attachBtn.disabled = true; attachBtn.classList.add('msg-attach-uploading');
+  const t = chatEl('msg-input').value;
+  if (t.trim()) chatBorradores.set(msgActual.conversacion_id, t); else chatBorradores.delete(msgActual.conversacion_id);
+}
+function chatRestaurarBorrador(id) {
+  const i = chatEl('msg-input');
+  i.value = chatBorradores.get(id) || '';
+  i.placeholder = 'Escribe un mensaje';
+  chatAjustarAltura(); chatActualizarBotonEnviar();
+}
+function chatCitaLimpiar() { chatCita = null; const c = chatEl('cp-citar'); c.hidden = true; c.innerHTML = ''; }
+function chatResponderA(id) {
+  const m = msgMensajes.find(x => x.id === id); if (!m || m.eliminado_at || chatEl('cp-compose').hidden) return;
+  chatCita = { id };
+  const c = chatEl('cp-citar');
+  c.innerHTML = `<div class="cp-citar-t"><b>${esc(m.remitente_id === MI_USUARIO_ID ? 'Tú' : nombreUsuario(m.remitente_id))}</b><span>${esc(chatPreviewTexto(m))}</span></div><button type="button" class="cp-ico" aria-label="Quitar respuesta"><i class="fas fa-xmark"></i></button>`;
+  c.querySelector('button').addEventListener('click', chatCitaLimpiar);
+  c.hidden = false;
+  chatEl('msg-input').focus({ preventScroll: true });
+}
+
+/* Envío genérico: el eco del INSERT también llega por realtime (chatAlLlegarMensaje); ambos chequean por id y no duplican. */
+async function chatEnviarMensaje(p, conv = msgActual) {
+  if (!conv) return false;
+  const args = { p_conversacion_id: conv.conversacion_id, p_tipo: p.tipo, p_contenido: p.contenido, p_storage_path: p.storage_path, p_nombre_archivo: p.nombre_archivo, p_peso_bytes: p.peso_bytes, p_duracion_ms: p.duracion_ms, p_responde_a: p.responde_a };
+  Object.keys(args).forEach(k => { if (args[k] == null) delete args[k]; });
+  const { data, error } = await sb.rpc('enviar_mensaje', args);
+  if (error || !data?.ok) return false;
+  if (msgActual === conv && !msgMensajes.some(m => m.id === data.id)) {
+    const nuevo = { id: data.id, conversacion_id: conv.conversacion_id, remitente_id: MI_USUARIO_ID, tipo: p.tipo, contenido: p.contenido ?? null, storage_path: p.storage_path ?? null, nombre_archivo: p.nombre_archivo ?? null, peso_bytes: p.peso_bytes ?? null, duracion_ms: p.duracion_ms ?? null, responde_a: p.responde_a ?? null, created_at: new Date().toISOString() };
+    msgMensajes.push(nuevo);
+    await cargarUrlsAdjuntos([nuevo]);
+    if (msgActual === conv) renderConversacion(true);
+  }
+  chatRefrescarBandeja();
+  return true;
+}
+async function chatEnviar() {
+  if (!msgActual) return;
+  if (chatFotosPend.length) { chatEnviarFotos(); return; }
+  const input = chatEl('msg-input'), texto = input.value.trim();
+  if (!texto) return;
+  const respondeA = chatCita?.id || null;
+  input.value = ''; chatAjustarAltura(); chatActualizarBotonEnviar(); chatCitaLimpiar();
+  const ok = await chatEnviarMensaje({ tipo: 'texto', contenido: texto, responde_a: respondeA });
+  if (!ok) { errToast('No se pudo enviar el mensaje'); if (!input.value) { input.value = texto; chatAjustarAltura(); chatActualizarBotonEnviar(); } }
+}
+
+/* ----- Fotos / archivos ----- */
+const chatNombreSeguro = n => (n || 'archivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.\-]+/g, '_').slice(-80);
+async function chatComprimirImagen(file, maxPx, calidad) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, maxPx / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(bmp.width * k)); cv.height = Math.max(1, Math.round(bmp.height * k));
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); // un PNG con transparencia no debe quedar negro
+  ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
+  bmp.close?.();
+  return await new Promise(res => cv.toBlob(res, 'image/jpeg', calidad));
+}
+function chatAgregarArchivos(files) {
+  if (!msgActual || chatEl('cp-compose').hidden) return;
+  files.forEach(f => {
+    const esImg = f.type.startsWith('image/'), esVid = f.type.startsWith('video/');
+    if (!esImg && !esVid) { subirAdjunto(f); return; }
+    if (esVid && f.size > ADJUNTO_LIMITE) { errToast(`${f.name} supera los 20MB — redúcelo antes de subirlo`); return; }
+    chatFotosPend.push({ file: f, tipo: esImg ? 'imagen' : 'video', url: esImg ? URL.createObjectURL(f) : '', estado: '' });
+  });
+  chatFotosRender(); chatActualizarBotonEnviar();
+  if (chatFotosPend.length) { chatEl('msg-input').placeholder = 'Añade una leyenda…'; chatEl('msg-input').focus({ preventScroll: true }); }
+}
+function chatFotosRender() {
+  const cont = chatEl('cp-fotos');
+  cont.hidden = !chatFotosPend.length;
+  cont.innerHTML = chatFotosPend.map((it, i) => `<div class="cp-foto ${it.estado}" data-i="${i}">${it.url ? `<img src="${esc(it.url)}" alt="${esc(it.file.name)}">` : '<i class="fas fa-film"></i>'}${chatEnviandoFotos ? '' : '<button type="button" data-quitar aria-label="Quitar"><i class="fas fa-xmark"></i></button>'}</div>`).join('');
+  if (!chatFotosPend.length) chatEl('msg-input').placeholder = 'Escribe un mensaje';
+}
+function chatFotosLimpiar() {
+  chatFotosPend.forEach(it => { if (it.url) URL.revokeObjectURL(it.url); });
+  chatFotosPend = []; chatEnviandoFotos = false;
+  chatFotosRender(); chatActualizarBotonEnviar();
+}
+async function chatEnviarFotos() {
+  const c = msgActual; if (!c || chatEnviandoFotos || !chatFotosPend.length) return;
+  chatEnviandoFotos = true;
+  const input = chatEl('msg-input'), leyenda = input.value.trim(), respondeA = chatCita?.id || null;
+  input.value = ''; chatAjustarAltura(); chatCitaLimpiar();
+  const lote = chatFotosPend.slice();
+  let fallos = 0;
+  for (let i = 0; i < lote.length; i++) {
+    lote[i].estado = 'subiendo'; chatFotosRender();
+    const ok = await subirAdjunto(lote[i].file, { conv: c, leyenda: i === 0 ? leyenda : '', responde_a: i === 0 ? respondeA : null });
+    lote[i].estado = ok ? 'hecha' : 'error'; if (!ok) fallos++;
+    chatFotosRender();
+  }
+  if (msgActual !== c) { chatEnviandoFotos = false; return; } // se cambió de chat: cerrarConversacion ya limpió la previa
+  lote.filter(x => x.estado === 'hecha' && x.url).forEach(x => URL.revokeObjectURL(x.url));
+  chatFotosPend = lote.filter(x => x.estado === 'error').map(x => ({ ...x, estado: '' }));
+  chatEnviandoFotos = false;
+  if (fallos && leyenda && !input.value) { input.value = leyenda; chatAjustarAltura(); }
+  chatFotosRender(); chatActualizarBotonEnviar();
+}
+// Sube un archivo y manda el mensaje. Devuelve true/false (la previa de fotos marca el estado de cada una).
+async function subirAdjunto(file, opts = {}) {
+  const conv = opts.conv || msgActual;
+  if (!conv) return false;
+  const attachBtn = chatEl('msg-attach-btn');
+  attachBtn.classList.add('subiendo');
   try {
-    const tipo = file.type.startsWith('image/') ? 'imagen' : file.type.startsWith('video/') ? 'video' : 'documento';
-    const path = `${msgActual.conversacion_id}/${crypto.randomUUID()}-${file.name}`;
-    const { error: upErr } = await sb.storage.from('chat-interno-adjuntos').upload(path, file);
-    if (upErr) { errToast('No se pudo subir el archivo'); return; }
-    const { data, error } = await sb.rpc('enviar_mensaje', { p_conversacion_id: msgActual.conversacion_id, p_tipo: tipo, p_storage_path: path, p_nombre_archivo: file.name, p_peso_bytes: file.size });
-    if (error || !data?.ok) {
+    let blob = file, nombre = file.name;
+    if (file.type.startsWith('image/') && file.type !== 'image/gif' && file.size > 1.5 * 1024 * 1024) {
+      try { const c = await chatComprimirImagen(file, 1600, 0.82); if (c) { blob = c; nombre = file.name.replace(/\.[^.]+$/, '') + '.jpg'; } } catch { /* formato que el navegador no decodifica: se sube tal cual */ }
+    }
+    if (blob.size > ADJUNTO_LIMITE) { errToast('El archivo supera los 20MB — redúcelo antes de subirlo'); return false; }
+    const tipo = blob.type.startsWith('image/') ? 'imagen' : blob.type.startsWith('video/') ? 'video' : 'documento';
+    const path = `${conv.conversacion_id}/${crypto.randomUUID()}-${chatNombreSeguro(nombre)}`;
+    const { error: upErr } = await sb.storage.from('chat-interno-adjuntos').upload(path, blob, { contentType: blob.type || undefined });
+    if (upErr) { errToast('No se pudo subir el archivo'); return false; }
+    const ok = await chatEnviarMensaje({ tipo, contenido: opts.leyenda || null, storage_path: path, nombre_archivo: nombre, peso_bytes: blob.size, responde_a: opts.responde_a }, conv);
+    if (!ok) {
       await sb.storage.from('chat-interno-adjuntos').remove([path]); // evita huérfanos en el bucket si el RPC falla
       errToast('No se pudo enviar el adjunto');
-      return;
+      return false;
     }
-    if (!msgMensajes.some(m => m.id === data.id)) {
-      msgMensajes.push({ id: data.id, conversacion_id: msgActual.conversacion_id, remitente_id: MI_USUARIO_ID, tipo, storage_path: path, nombre_archivo: file.name, peso_bytes: file.size, created_at: new Date().toISOString() });
-      await cargarUrlsAdjuntos([{ storage_path: path }]);
-      renderConversacion();
-    }
-  } finally {
-    attachBtn.disabled = false; attachBtn.classList.remove('msg-attach-uploading');
+    return true;
+  } finally { attachBtn.classList.remove('subiendo'); }
+}
+
+/* ----- Notas de voz ----- */
+let chatRec = null;
+async function chatGrabarIniciar() {
+  if (chatRec || !msgActual) return;
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { errToast('Este navegador no permite grabar audio'); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { errToast(e?.name === 'NotAllowedError' ? 'Permite el micrófono en el navegador para grabar notas de voz' : 'No se encontró un micrófono'); return; }
+  if (chatRec || !msgActual) { stream.getTracks().forEach(t => t.stop()); return; }
+  const mime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  let rec;
+  try { rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+  catch { stream.getTracks().forEach(t => t.stop()); errToast('No se pudo iniciar la grabación'); return; }
+  const r = { rec, stream, chunks: [], mime: (rec.mimeType || mime || 'audio/webm').split(';')[0], t0: Date.now(), dur: 0, conv: msgActual, respondeA: chatCita?.id || null, enviar: false, hecho: false, raf: 0, ctx: null, timer: 0 };
+  rec.ondataavailable = e => { if (e.data?.size) r.chunks.push(e.data); };
+  rec.onstop = () => chatGrabarTerminada(r);
+  try { // medidor de nivel
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    r.ctx = new Ctx();
+    const an = r.ctx.createAnalyser(); an.fftSize = 512;
+    r.ctx.createMediaStreamSource(stream).connect(an);
+    const buf = new Uint8Array(an.fftSize), nivel = chatEl('cp-rec-nivel');
+    const tick = () => {
+      an.getByteTimeDomainData(buf);
+      let s = 0; for (const v of buf) { const x = (v - 128) / 128; s += x * x; }
+      nivel.style.setProperty('--n', Math.max(0.02, Math.min(1, Math.sqrt(s / buf.length) * 3.2)).toFixed(2));
+      r.raf = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch { /* sin medidor: la grabación sigue */ }
+  rec.start(250);
+  chatRec = r;
+  chatEl('cp-row').hidden = true; chatEl('cp-rec').hidden = false;
+  const reloj = () => { const ms = Date.now() - r.t0; chatEl('cp-rec-t').textContent = chatFmtDur(ms); if (ms >= 5 * 60 * 1000) chatGrabarFin(true); };
+  r.timer = setInterval(reloj, 250); reloj();
+}
+function chatGrabarFin(enviar) {
+  const r = chatRec; if (!r) return;
+  chatRec = null;
+  r.enviar = enviar; r.dur = Date.now() - r.t0;
+  clearInterval(r.timer); cancelAnimationFrame(r.raf); r.ctx?.close?.().catch(() => {});
+  chatEl('cp-rec').hidden = true; chatEl('cp-row').hidden = false;
+  try { if (r.rec.state !== 'inactive') r.rec.stop(); else chatGrabarTerminada(r); } catch { chatGrabarTerminada(r); }
+  r.stream.getTracks().forEach(t => t.stop());
+}
+async function chatGrabarTerminada(r) {
+  if (r.hecho) return; r.hecho = true;
+  if (!r.enviar) return;
+  if (r.dur < 700 || !r.chunks.length) { errToast('La nota de voz es muy corta'); return; }
+  const blob = new Blob(r.chunks, { type: r.mime });
+  const ext = r.mime.includes('mp4') ? 'm4a' : 'webm';
+  const path = `${r.conv.conversacion_id}/${crypto.randomUUID()}.${ext}`;
+  const btn = chatEl('msg-send-btn'); btn.disabled = true;
+  try {
+    const { error: upErr } = await sb.storage.from('chat-interno-adjuntos').upload(path, blob, { contentType: r.mime });
+    if (upErr) { errToast('No se pudo subir la nota de voz'); return; }
+    const ok = await chatEnviarMensaje({ tipo: 'audio', storage_path: path, nombre_archivo: `nota-de-voz.${ext}`, peso_bytes: blob.size, duracion_ms: r.dur, responde_a: r.respondeA }, r.conv);
+    if (!ok) { await sb.storage.from('chat-interno-adjuntos').remove([path]); errToast('No se pudo enviar la nota de voz'); return; }
+    if (msgActual === r.conv) chatCitaLimpiar();
+  } finally { btn.disabled = false; }
+}
+
+/* ----- Emojis y stickers ----- */
+let chatPickerPromesa = null;
+function chatCargarPicker() {
+  chatPickerPromesa ||= (async () => {
+    await import('https://cdn.jsdelivr.net/npm/emoji-picker-element@1.29.1/index.js');
+    return (await import('https://cdn.jsdelivr.net/npm/emoji-picker-element@1.29.1/i18n/es.js')).default;
+  })().catch(e => { chatPickerPromesa = null; throw e; });
+  return chatPickerPromesa;
+}
+async function chatMontarPicker(host, alElegir) {
+  host.innerHTML = '<div class="cp-cargando">Cargando emojis…</div>';
+  let es;
+  try { es = await chatCargarPicker(); } catch { if (host.isConnected) host.innerHTML = '<div class="cp-cargando">No se pudieron cargar los emojis. Revisa tu conexión.</div>'; return; }
+  if (!host.isConnected) return;
+  const p = document.createElement('emoji-picker');
+  p.i18n = es; p.locale = 'es';
+  p.dataSource = 'https://cdn.jsdelivr.net/npm/emoji-picker-element-data@1.8.0/es/cldr/data.json';
+  const claro = document.documentElement.dataset.theme === 'light';
+  p.classList.add(claro ? 'light' : 'dark');
+  p.addEventListener('emoji-click', e => alElegir(e.detail.unicode));
+  host.innerHTML = ''; host.appendChild(p);
+}
+function chatInsertarEmoji(emoji) {
+  const i = chatEl('msg-input');
+  const a = i.selectionStart ?? i.value.length, b = i.selectionEnd ?? i.value.length;
+  i.setRangeText(emoji, a, b, 'end');
+  i.dispatchEvent(new Event('input', { bubbles: true }));
+}
+function chatMenuEmoji(ancla) {
+  if (chatPopModo === 'emoji') { chatCerrarPop(true); return; }
+  const pop = chatAbrirPop('emoji', ancla, `<div class="cp-tabs" role="tablist"><button type="button" role="tab" class="on" data-tab="emoji" aria-selected="true">Emojis</button><button type="button" role="tab" data-tab="stickers" aria-selected="false">Stickers</button></div><div class="cp-emoji-host" id="cp-emoji-host"></div>`, 'ancho');
+  chatPopSobreComposer(pop);
+  chatMontarPicker(chatEl('cp-emoji-host'), chatInsertarEmoji);
+}
+function chatPopTab(tab) {
+  const pop = chatEl('cp-pop');
+  pop.querySelectorAll('[data-tab]').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+  const host = pop.querySelector('#cp-emoji-host, #cp-stickers-host');
+  if (!host) return;
+  if (tab === 'emoji') { host.id = 'cp-emoji-host'; host.className = 'cp-emoji-host'; chatMontarPicker(host, chatInsertarEmoji); }
+  else { host.id = 'cp-stickers-host'; host.className = 'cp-stickers'; chatPintarStickers(host); }
+}
+let chatMisStickers = null;
+async function chatCargarMisStickers(forzar) {
+  if (chatMisStickers && !forzar) return chatMisStickers;
+  const dir = `${MI_USUARIO_ID}/stickers`;
+  const { data, error } = await sb.storage.from('chat-interno-usuario').list(dir, { limit: 100, sortBy: { column: 'created_at', order: 'desc' } });
+  if (error) { chatMisStickers = []; return chatMisStickers; }
+  const paths = (data || []).filter(f => f.name && !f.name.startsWith('.')).map(f => `${dir}/${f.name}`);
+  const firmadas = paths.length ? (await sb.storage.from('chat-interno-usuario').createSignedUrls(paths, 3600)).data || [] : [];
+  chatMisStickers = firmadas.filter(d => d.signedUrl).map(d => { msgUrlsAdjuntos['u:' + d.path] = d.signedUrl; return { path: d.path, url: d.signedUrl }; });
+  return chatMisStickers;
+}
+async function chatPintarStickers(host) {
+  const pack = CHAT_STICKERS_LOTUS.map(n => `<button type="button" data-stk="lotus/${n}" aria-label="Sticker ${n}"><img src="img/stickers/lotus/${n}.png" data-quieto="img/stickers/lotus/${n}.png" data-anim="img/stickers/lotus/${n}.webp" alt="" loading="lazy" draggable="false"></button>`).join('');
+  const nuevo = '<button type="button" class="cp-stk-nuevo" data-stk-nuevo aria-label="Crear un sticker desde una foto"><i class="fas fa-plus"></i></button>';
+  host.innerHTML = `<div class="cp-stk-tit">Lotus 360</div><div class="cp-stk-grid">${pack}</div><div class="cp-stk-tit">Mis stickers</div><div class="cp-stk-grid" id="cp-mis-stk">${nuevo}</div>`;
+  const mis = await chatCargarMisStickers();
+  const grid = host.isConnected && host.querySelector('#cp-mis-stk');
+  if (grid) grid.innerHTML = nuevo + mis.map(s => `<button type="button" data-stk="${esc(s.path)}" aria-label="Sticker propio"><img src="${esc(s.url)}" alt="" loading="lazy" draggable="false"></button>`).join('');
+}
+async function chatEnviarSticker(id) {
+  const respondeA = chatCita?.id || null;
+  chatCerrarPop();
+  chatCitaLimpiar();
+  if (!await chatEnviarMensaje({ tipo: 'sticker', contenido: id, responde_a: respondeA })) errToast('No se pudo enviar el sticker');
+}
+async function chatCrearSticker(file) {
+  if (!file) return;
+  try {
+    const bmp = await createImageBitmap(file);
+    const cv = document.createElement('canvas'); cv.width = cv.height = 512;
+    const k = Math.min(512 / bmp.width, 512 / bmp.height), w = bmp.width * k, h = bmp.height * k;
+    cv.getContext('2d').drawImage(bmp, (512 - w) / 2, (512 - h) / 2, w, h);
+    bmp.close?.();
+    const blob = await new Promise(res => cv.toBlob(res, 'image/webp', 0.9));
+    if (!blob) throw new Error('webp');
+    const { error } = await sb.storage.from('chat-interno-usuario').upload(`${MI_USUARIO_ID}/stickers/${crypto.randomUUID()}.webp`, blob, { contentType: 'image/webp' });
+    if (error) throw error;
+    okToast('Sticker creado');
+    chatMisStickers = null;
+    const host = chatEl('cp-stickers-host');
+    if (host?.isConnected) chatPintarStickers(host);
+  } catch { errToast('No se pudo crear el sticker con esa imagen'); }
+}
+
+/* ----- Adjuntar ----- */
+function chatMenuAdjuntar(ancla) {
+  if (chatPopModo === 'adjuntar') { chatCerrarPop(true); return; }
+  const tactil = matchMedia('(pointer:coarse)').matches;
+  const pop = chatAbrirPop('adjuntar', ancla, `<div class="cp-menu" role="menu">
+    <button type="button" role="menuitem" data-ad="media"><i class="fas fa-image"></i> Fotos y videos</button>
+    ${tactil ? '<button type="button" role="menuitem" data-ad="camara"><i class="fas fa-camera"></i> Cámara</button>' : ''}
+    <button type="button" role="menuitem" data-ad="doc"><i class="fas fa-file"></i> Documento</button>
+  </div>`);
+  pop.style.left = '8px'; chatPopSobreComposer(pop);
+  pop.querySelector('button')?.focus({ preventScroll: true });
+}
+
+/* ----- Clics del popover (un solo manejador para todos los modos) ----- */
+function chatPopClick(e) {
+  const b = e.target.closest('button'); if (!b) return;
+  const d = b.dataset, pop = chatEl('cp-pop');
+  if (d.ad) {
+    chatCerrarPop();
+    chatEl({ media: 'cp-file-media', camara: 'cp-file-camara', doc: 'cp-file-doc' }[d.ad]).click();
+  } else if (d.tab) chatPopTab(d.tab);
+  else if (d.stk) chatEnviarSticker(d.stk);
+  else if (b.hasAttribute('data-stk-nuevo')) chatEl('cp-file-sticker').click();
+  else if (d.rq) { const mid = Number(pop.dataset.mid); chatCerrarPop(); chatToggleReaccion(mid, d.rq); }
+  else if (b.hasAttribute('data-rq-mas')) {
+    const mid = Number(pop.dataset.mid);
+    pop.innerHTML = '<div class="cp-emoji-host" id="cp-emoji-host"></div>';
+    pop.classList.add('ancho'); pop.removeAttribute('style'); chatPopSobreComposer(pop);
+    chatMontarPicker(chatEl('cp-emoji-host'), emoji => { chatCerrarPop(); chatReaccionar(mid, emoji); });
+  } else if (d.acc) chatAccionMensaje(d.acc, Number(pop.dataset.mid));
+  else if (d.cm) chatAccionConv(d.cm);
+  else if (d.fondo) { chatFondoGuardar({ tipo: 'preset', valor: d.fondo }); chatMarcarFondo(); }
+  else if (b.hasAttribute('data-fondo-subir')) chatEl('cp-file-fondo').click();
+}
+function chatPopInput(e) { if (e.target.matches('[data-fondo-osc]')) chatFondoGuardar({ oscurecer: Number(e.target.value) / 100 }); }
+function chatPopChange(e) { if (e.target.matches('[data-fondo-solo]')) chatFondoSolo(e.target.checked); }
+
+/* ----- Menú de mensaje, reacciones, responder, eliminar ----- */
+function chatMenuMensaje(burbuja) {
+  if (!burbuja) return;
+  const mid = Number(burbuja.dataset.mid), m = msgMensajes.find(x => x.id === mid);
+  if (!m || m.eliminado_at) return;
+  if (chatPopModo === 'mensaje' && chatEl('cp-pop').dataset.mid === String(mid)) return;
+  const esMio = m.remitente_id === MI_USUARIO_ID, mia = (msgReacciones[mid] || {})[MI_USUARIO_ID];
+  const puedeResponder = !chatEl('cp-compose').hidden;
+  const adjunto = m.storage_path && msgUrlsAdjuntos[m.storage_path];
+  const pop = chatAbrirPop('mensaje', burbuja, `<div class="cp-reacciones">${CHAT_REACCIONES_RAPIDAS.map(e => `<button type="button" data-rq="${e}" class="${e === mia ? 'mia' : ''}" aria-label="Reaccionar con ${e}">${e}</button>`).join('')}<button type="button" data-rq-mas aria-label="Más emojis"><i class="fas fa-plus" style="font-size:14px"></i></button></div>
+    <div class="cp-menu" role="menu">
+      ${puedeResponder ? '<button type="button" role="menuitem" data-acc="responder"><i class="fas fa-reply"></i> Responder</button>' : ''}
+      ${m.tipo === 'texto' ? '<button type="button" role="menuitem" data-acc="copiar"><i class="far fa-copy"></i> Copiar</button>' : ''}
+      ${adjunto ? '<button type="button" role="menuitem" data-acc="descargar"><i class="fas fa-download"></i> Descargar</button>' : ''}
+      ${esMio ? '<hr><button type="button" role="menuitem" class="peligro" data-acc="eliminar"><i class="fas fa-trash"></i> Eliminar</button>' : ''}
+    </div>`);
+  pop.dataset.mid = mid;
+  chatPopJuntoAMensaje(pop, burbuja, esMio);
+}
+async function chatAccionMensaje(acc, mid) {
+  const m = msgMensajes.find(x => x.id === mid);
+  chatCerrarPop();
+  if (!m) return;
+  if (acc === 'responder') chatResponderA(mid);
+  else if (acc === 'copiar') { try { await navigator.clipboard.writeText(m.contenido || ''); okToast('Mensaje copiado'); } catch { errToast('No se pudo copiar'); } }
+  else if (acc === 'descargar') chatDescargar(m);
+  else if (acc === 'eliminar') {
+    const ok = await confirmarSheet({ titulo: '¿Eliminar este mensaje?', detalle: 'Se elimina para todos en la conversación y no se puede deshacer.', textoOk: 'Eliminar', destructivo: true });
+    if (ok) chatEliminar(mid);
   }
+}
+async function chatDescargar(m) {
+  const url = msgUrlsAdjuntos[m.storage_path]; if (!url) return;
+  try {
+    const blob = await (await fetch(url)).blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = m.nombre_archivo || 'archivo';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch { window.open(url, '_blank', 'noopener'); }
+}
+async function chatEliminar(mid) {
+  const { data, error } = await sb.rpc('eliminar_mensaje', { p_mensaje_id: mid });
+  if (error || !data?.ok) { errToast('No se pudo eliminar el mensaje'); return; }
+  const m = msgMensajes.find(x => x.id === mid);
+  if (m) Object.assign(m, { eliminado_at: new Date().toISOString(), contenido: null, storage_path: null, nombre_archivo: null, peso_bytes: null, duracion_ms: null });
+  delete msgReacciones[mid];
+  if (chatAudioMid === mid) chatAudioDetener();
+  renderConversacion();
+  if (data.storage_path) sb.storage.from('chat-interno-adjuntos').remove([data.storage_path]).then(() => {});
+  chatRefrescarBandeja();
+}
+async function chatReaccionar(mid, emoji) { // emoji null = quitar la mía
+  const previa = (msgReacciones[mid] || {})[MI_USUARIO_ID] ?? null;
+  const poner = e => { const r = (msgReacciones[mid] ??= {}); if (e) r[MI_USUARIO_ID] = e; else delete r[MI_USUARIO_ID]; renderConversacion(); };
+  poner(emoji);
+  const { error } = await sb.rpc('reaccionar_mensaje', emoji ? { p_mensaje_id: mid, p_emoji: emoji } : { p_mensaje_id: mid });
+  if (error) { poner(previa); errToast('No se pudo reaccionar'); }
+}
+function chatToggleReaccion(mid, emoji) { chatReaccionar(mid, (msgReacciones[mid] || {})[MI_USUARIO_ID] === emoji ? null : emoji); }
+function chatIrAMensaje(id) {
+  const el = chatEl('msg-conv-log').querySelector(`[data-mid="${id}"]`);
+  if (!el) return;
+  el.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth' });
+  el.classList.remove('resaltado'); void el.offsetWidth; el.classList.add('resaltado');
+  setTimeout(() => el.classList.remove('resaltado'), 1400);
+}
+// Pulsación larga = menú del mensaje; deslizar a la derecha = responder (táctil).
+function chatSetupGestos(log) {
+  let g = null;
+  log.addEventListener('touchstart', e => {
+    g = null;
+    const b = e.target.closest('.chat-msg');
+    if (e.touches.length !== 1 || !b || e.target.closest('input,button,a')) return;
+    const t = e.touches[0];
+    g = { b, x: t.clientX, y: t.clientY, dx: 0, modo: '' };
+    g.timer = setTimeout(() => { if (g && !g.modo) { g.modo = 'largo'; navigator.vibrate?.(12); chatMenuMensaje(b); } }, 450);
+  }, { passive: true });
+  log.addEventListener('touchmove', e => {
+    if (!g) return;
+    const t = e.touches[0], dx = t.clientX - g.x, dy = t.clientY - g.y;
+    if (!g.modo) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      clearTimeout(g.timer);
+      if (dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.5 && !chatEl('cp-compose').hidden) g.modo = 'swipe'; else { g = null; return; }
+    }
+    if (g.modo === 'swipe') { g.dx = Math.min(Math.max(dx, 0), 80); g.b.style.transition = 'none'; g.b.style.transform = `translateX(${g.dx}px)`; }
+  }, { passive: true });
+  const fin = e => {
+    if (!g) return;
+    const { b, modo, dx } = g; clearTimeout(g.timer); g = null;
+    if (modo === 'largo' && e.cancelable) e.preventDefault(); // sin clic fantasma sobre lo que se mantuvo presionado
+    if (modo === 'swipe') {
+      b.style.transition = 'transform .2s'; b.style.transform = '';
+      setTimeout(() => { b.style.transition = ''; }, 230);
+      if (dx > 56) { navigator.vibrate?.(8); chatResponderA(Number(b.dataset.mid)); }
+    }
+  };
+  log.addEventListener('touchend', fin, { passive: false });
+  log.addEventListener('touchcancel', fin);
+}
+
+/* ----- Reproductor de notas de voz (uno a la vez) ----- */
+let chatAudio = null, chatAudioMid = 0, chatAudioVel = 1;
+function chatAudioAlternar(burbuja) {
+  const mid = Number(burbuja.dataset.mid), box = burbuja.querySelector('.cp-audio');
+  if (chatAudio && chatAudioMid === mid) { if (chatAudio.paused) chatAudio.play().catch(() => {}); else chatAudio.pause(); return; }
+  chatAudioDetener();
+  const a = new Audio(box.dataset.audio);
+  a.preload = 'auto'; a.playbackRate = chatAudioVel;
+  chatAudio = a; chatAudioMid = mid;
+  ['timeupdate', 'play', 'pause'].forEach(ev => a.addEventListener(ev, chatAudioRepintar));
+  a.addEventListener('ended', () => { a.currentTime = 0; chatAudioRepintar(); });
+  a.addEventListener('error', () => { if (chatAudio === a) { errToast('No se pudo reproducir la nota de voz'); chatAudioDetener(); } });
+  a.play().catch(() => {});
+}
+function chatAudioDetener() {
+  const a = chatAudio; chatAudio = null; chatAudioMid = 0;
+  if (a) { a.pause(); a.removeAttribute('src'); a.load?.(); }
+  chatAudioRepintar();
+}
+function chatAudioBuscar(burbuja, valor) {
+  const mid = Number(burbuja.dataset.mid), dur = Number(burbuja.querySelector('.cp-audio').dataset.dur) || 0;
+  if (!chatAudio || chatAudioMid !== mid) chatAudioAlternar(burbuja);
+  const total = dur || (isFinite(chatAudio.duration) ? chatAudio.duration * 1000 : 0);
+  if (total) chatAudio.currentTime = (valor / 1000) * total / 1000;
+}
+function chatAudioVelocidad() {
+  chatAudioVel = chatAudioVel === 1 ? 1.5 : chatAudioVel === 1.5 ? 2 : 1;
+  if (chatAudio) chatAudio.playbackRate = chatAudioVel;
+  chatAudioRepintar();
+}
+// renderConversacion reconstruye el DOM: el estado del reproductor vive acá y se vuelve a pintar tras cada render.
+function chatAudioRepintar() {
+  document.querySelectorAll('#msg-conv-log .cp-audio').forEach(box => {
+    const activo = !!chatAudio && Number(box.closest('.chat-msg').dataset.mid) === chatAudioMid;
+    const dur = Number(box.dataset.dur) || 0;
+    const seek = box.querySelector('.cp-seek'), sonando = activo && !chatAudio.paused;
+    box.querySelector('.cp-play i').className = 'fas fa-' + (sonando ? 'pause' : 'play');
+    box.querySelector('.cp-vel').textContent = chatAudioVel + '×';
+    const total = dur || (activo && isFinite(chatAudio.duration) ? chatAudio.duration * 1000 : 0);
+    const ahora = activo ? chatAudio.currentTime * 1000 : 0;
+    if (!seek.matches(':active')) seek.value = total ? Math.min(1000, ahora / total * 1000) : 0;
+    box.querySelector('.cp-aud-t').textContent = chatFmtDur(activo && ahora > 0 ? ahora : total);
+  });
+}
+
+/* ----- Menú ⋮ de la conversación ----- */
+function chatMenuConv() {
+  if (!msgActual) return;
+  if (chatPopModo === 'conv') { chatCerrarPop(true); return; }
+  const id = msgActual.conversacion_id, sil = chatEsSilenciada(id), son = MI_PREFERENCIAS.chat_sonido !== false;
+  const pop = chatAbrirPop('conv', chatEl('cp-conv-menu'), `<div class="cp-menu" role="menu">
+    <button type="button" role="menuitem" data-cm="sonido"><i class="fas fa-${son ? 'volume-high' : 'volume-xmark'}"></i> Sonido de avisos: ${son ? 'activado' : 'apagado'}</button>
+    <button type="button" role="menuitem" data-cm="silenciar"><i class="fas fa-bell${sil ? '' : '-slash'}"></i> ${sil ? 'Reactivar avisos de este chat' : 'Silenciar este chat'}</button>
+    <button type="button" role="menuitem" data-cm="fondo"><i class="fas fa-image"></i> Fondo del chat…</button>
+  </div>`);
+  chatPopBajoCabecera(pop);
+  pop.querySelector('button')?.focus({ preventScroll: true });
+}
+function chatAccionConv(cm) {
+  if (!msgActual) return;
+  const id = msgActual.conversacion_id;
+  if (cm === 'fondo') { chatMenuFondo(); return; }
+  chatCerrarPop(true);
+  if (cm === 'sonido') guardarPreferencia('chat_sonido', MI_PREFERENCIAS.chat_sonido === false);
+  else if (cm === 'silenciar') {
+    const s = new Set(MI_PREFERENCIAS.chat_silenciadas || []);
+    if (!s.delete(id)) s.add(id);
+    guardarPreferencia('chat_silenciadas', [...s]);
+    okToast(s.has(id) ? 'Chat silenciado: sin sonido ni notificaciones' : 'Avisos reactivados');
+    renderBandeja();
+  }
+}
+
+/* ----- Fondos del chat ----- */
+const chatSvg = s => `url("data:image/svg+xml,${encodeURIComponent(s)}")`;
+const CHAT_FONDOS = [
+  { id: 'wa', nombre: 'WhatsApp (según el tema)', muestra: 'linear-gradient(135deg,#0b141a 50%,#efeae2 50%)' },
+  { id: 'trama-oscura', nombre: 'Trama oscura', bg: '#0b141a', img: 'radial-gradient(rgba(233,237,239,.06) 1.2px,transparent 1.6px)', size: '22px 22px' },
+  { id: 'trama-clara', nombre: 'Trama clara', bg: '#efeae2', img: 'radial-gradient(rgba(17,27,33,.07) 1.2px,transparent 1.6px)', size: '22px 22px' },
+  { id: 'medianoche', nombre: 'Medianoche', bg: '#0f172a' },
+  { id: 'selva', nombre: 'Selva', bg: '#12332b' },
+  { id: 'cafe', nombre: 'Café', bg: '#33261a' },
+  { id: 'arena', nombre: 'Arena', bg: '#f1ead9' },
+  { id: 'cielo', nombre: 'Cielo', bg: '#dce8f5' },
+  { id: 'atardecer', nombre: 'Atardecer', bg: '#7c2d12', img: 'linear-gradient(160deg,#ff9100,#e0570a 55%,#7c2d12)', size: 'cover' },
+  { id: 'mar', nombre: 'Mar', bg: '#0f172a', img: 'linear-gradient(160deg,#0e7490,#0f172a)', size: 'cover' },
+  { id: 'ondas', nombre: 'Ondas', bg: '#102a43', img: chatSvg("<svg xmlns='http://www.w3.org/2000/svg' width='60' height='24' viewBox='0 0 60 24'><path d='M0 12Q15 0 30 12T60 12' fill='none' stroke='rgba(255,255,255,.08)' stroke-width='2'/></svg>"), size: '60px 24px' },
+  { id: 'rombos', nombre: 'Rombos', bg: '#1d1b2f', img: chatSvg("<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'><path d='M20 2 38 20 20 38 2 20Z' fill='none' stroke='rgba(255,255,255,.08)' stroke-width='1.5'/></svg>"), size: '40px 40px' },
+  { id: 'loto', nombre: 'Loto', bg: '#2a1722', img: chatSvg("<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><path d='M32 14c6 8 6 16 0 24-6-8-6-16 0-24Zm-14 10c9 1 14 8 14 14-9-1-14-8-14-14Zm28 0c-9 1-14 8-14 14 9-1 14-8 14-14Z' fill='none' stroke='rgba(255,255,255,.09)' stroke-width='1.5'/></svg>"), size: '64px 64px' },
+];
+const chatMuestraFondo = f => f.muestra || `${f.img ? f.img + ',' : ''}linear-gradient(${f.bg},${f.bg})`;
+function chatFondoCfg() {
+  const p = MI_PREFERENCIAS.chat_fondo || {};
+  const o = msgActual && p.por_conv?.[msgActual.conversacion_id];
+  return o || { tipo: p.tipo || 'preset', valor: p.valor || 'wa', oscurecer: p.oscurecer || 0 };
+}
+const chatFondosPidiendo = new Set();
+function chatAplicarFondo() {
+  const el = chatEl('msg-conv'), cfg = chatFondoCfg();
+  let bg = '', img = '', size = '';
+  if (cfg.tipo === 'imagen' && cfg.valor) {
+    const url = msgUrlsAdjuntos['u:' + cfg.valor];
+    if (url) { bg = '#000'; img = `url(${JSON.stringify(url)})`; size = 'cover'; }
+    else if (!chatFondosPidiendo.has(cfg.valor)) {
+      chatFondosPidiendo.add(cfg.valor);
+      sb.storage.from('chat-interno-usuario').createSignedUrl(cfg.valor, 86400).then(({ data }) => { if (data?.signedUrl) { msgUrlsAdjuntos['u:' + cfg.valor] = data.signedUrl; chatAplicarFondo(); } });
+    }
+  } else {
+    const f = CHAT_FONDOS.find(x => x.id === cfg.valor);
+    if (f && f.id !== 'wa') { bg = f.bg; img = f.img || 'none'; size = f.size || 'auto'; }
+  }
+  [['--cp-bg', bg], ['--cp-bg-img', img], ['--cp-bg-size', size]].forEach(([k, v]) => v ? el.style.setProperty(k, v) : el.style.removeProperty(k));
+  el.style.setProperty('--cp-oscurecer', String(cfg.oscurecer || 0));
+}
+function chatMenuFondo() {
+  if (!msgActual) return;
+  const cfg = chatFondoCfg(), solo = !!(MI_PREFERENCIAS.chat_fondo?.por_conv?.[msgActual.conversacion_id]);
+  const pop = chatAbrirPop('fondo', chatEl('cp-conv-menu'), `<div class="cp-fondos">
+    <h4>Fondo del chat</h4>
+    <div class="cp-fondo-grid">${CHAT_FONDOS.map(f => `<button type="button" data-fondo="${f.id}" title="${esc(f.nombre)}" aria-label="${esc(f.nombre)}" style="background:${esc(chatMuestraFondo(f))};background-size:${f.size && f.size !== 'cover' ? '16px 16px' : 'cover'}"></button>`).join('')}<button type="button" class="subir" data-fondo-subir title="Subir una imagen" aria-label="Subir una imagen"><i class="fas fa-arrow-up-from-bracket"></i></button></div>
+    <label>Oscurecer <input type="range" min="0" max="70" value="${Math.round((cfg.oscurecer || 0) * 100)}" data-fondo-osc aria-label="Oscurecer el fondo"></label>
+    <label class="cp-solo"><input type="checkbox" data-fondo-solo ${solo ? 'checked' : ''}> Solo para este chat</label>
+  </div>`);
+  chatPopBajoCabecera(pop);
+  chatMarcarFondo();
+}
+function chatMarcarFondo() {
+  const cfg = chatFondoCfg();
+  chatEl('cp-pop').querySelectorAll('[data-fondo]').forEach(b => b.classList.toggle('on', cfg.tipo === 'preset' && b.dataset.fondo === cfg.valor));
+}
+function chatFondoGuardar(cambio) {
+  if (!msgActual) return;
+  const id = msgActual.conversacion_id, solo = !!chatEl('cp-pop').querySelector('[data-fondo-solo]')?.checked;
+  const pref = { ...(MI_PREFERENCIAS.chat_fondo || {}) };
+  const nuevo = { ...chatFondoCfg(), ...cambio };
+  if (solo) pref.por_conv = { ...(pref.por_conv || {}), [id]: nuevo };
+  else Object.assign(pref, nuevo);
+  chatFondoPersistir(pref);
+}
+function chatFondoSolo(activar) {
+  if (!msgActual) return;
+  const id = msgActual.conversacion_id, pref = { ...(MI_PREFERENCIAS.chat_fondo || {}) };
+  const por = { ...(pref.por_conv || {}) };
+  if (activar) por[id] = { ...chatFondoCfg() }; else delete por[id];
+  pref.por_conv = por;
+  chatFondoPersistir(pref);
+}
+function chatFondoPersistir(pref) {
+  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, chat_fondo: pref }; // se ve al instante; el guardado va con debounce
+  chatAplicarFondo(); chatMarcarFondo();
+  chatAgendar('fondo-pref', 700, () => guardarPreferencia('chat_fondo', MI_PREFERENCIAS.chat_fondo));
+}
+async function chatSubirFondo(file) {
+  if (!file) return;
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+    cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height); bmp.close?.();
+    const blob = await new Promise(res => cv.toBlob(res, 'image/webp', 0.82));
+    if (!blob) throw new Error('webp');
+    const path = `${MI_USUARIO_ID}/fondos/${crypto.randomUUID()}.webp`;
+    const { error } = await sb.storage.from('chat-interno-usuario').upload(path, blob, { contentType: 'image/webp' });
+    if (error) throw error;
+    const { data } = await sb.storage.from('chat-interno-usuario').createSignedUrl(path, 86400);
+    if (data?.signedUrl) msgUrlsAdjuntos['u:' + path] = data.signedUrl;
+    chatFondoGuardar({ tipo: 'imagen', valor: path });
+  } catch { errToast('No se pudo usar esa imagen como fondo'); }
+}
+
+/* ----- Presencia y "escribiendo…" ----- */
+let chatPresCh = null, chatUltimoEscribiendo = 0;
+const chatEscribiendoDe = {}; // 'conv:uid' -> true (expira a los 5 s)
+function chatPresenciaIniciar() {
+  chatPresCh = sb.channel('chat-presencia', { config: { presence: { key: MI_USUARIO_ID }, broadcast: { self: false } } });
+  chatPresCh
+    .on('presence', { event: 'sync' }, () => {
+      chatEnLinea = new Set(Object.keys(chatPresCh.presenceState()));
+      if (chatPanelAbierto) { renderBandeja(); if (msgActual) chatPintarCabecera(); }
+    })
+    .on('broadcast', { event: 'escribiendo' }, ({ payload }) => chatAlEscribir(payload))
+    .subscribe(st => { if (st === 'SUBSCRIBED') chatPresCh.track({ desde: Date.now() }); });
+}
+function chatEnviarEscribiendo() {
+  if (!chatPresCh || !msgActual || !chatEl('msg-input').value.trim()) return;
+  const t = Date.now(); if (t - chatUltimoEscribiendo < 3000) return;
+  chatUltimoEscribiendo = t;
+  chatPresCh.send({ type: 'broadcast', event: 'escribiendo', payload: { uid: MI_USUARIO_ID, conv: msgActual.conversacion_id } });
+}
+function chatQuienEscribe(conv) { return Object.keys(chatEscribiendoDe).filter(k => k.startsWith(conv + ':')).map(k => k.slice(String(conv).length + 1)); }
+function chatRepintarEscribiendo() { if (msgActual) chatPintarSub(); if (chatPanelAbierto) renderBandeja(); }
+function chatAlEscribir(p) {
+  if (!p || p.uid === MI_USUARIO_ID) return;
+  const k = p.conv + ':' + p.uid;
+  chatEscribiendoDe[k] = true;
+  chatAgendar('esc-' + k, 5000, () => { delete chatEscribiendoDe[k]; chatRepintarEscribiendo(); });
+  chatRepintarEscribiendo();
+}
+
+/* ----- Avisos: sacudida, globo, sonido, título y favicon ----- */
+function chatAviso(m) {
+  const c = msgConversaciones.find(x => x.conversacion_id === m.conversacion_id);
+  const quien = nombreUsuario(m.remitente_id), nombre1 = quien.split(' ')[0], esGrupo = c?.tipo === 'grupo', texto = chatPreviewTexto(m);
+  chatSacudir();
+  chatSonar();
+  if (!chatPanelAbierto) chatGlobo(m.conversacion_id, esGrupo ? c.nombre : quien, esGrupo ? `${nombre1}: ${texto}` : texto);
+  if (document.hidden) chatTituloAvisar(esGrupo ? `Mensaje en ${c.nombre}` : `${nombre1} te escribió`);
+}
+function chatSacudir() {
+  const botones = [chatEl('chat-fab'), chatEl('ab-chat')];
+  botones.forEach(b => { b.classList.remove('sacude'); void b.offsetWidth; b.classList.add('sacude'); });
+  chatAgendar('sacude', 1000, () => botones.forEach(b => b.classList.remove('sacude')));
+}
+let chatSonoUltimo = 0, chatAudioCtx = null;
+function chatSonar() {
+  if (MI_PREFERENCIAS.chat_sonido === false || Date.now() - chatSonoUltimo < 1500) return;
+  chatSonoUltimo = Date.now();
+  try {
+    chatAudioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = chatAudioCtx; if (ctx.state === 'suspended') ctx.resume();
+    const t0 = ctx.currentTime;
+    [[880, 0], [1175, 0.12]].forEach(([f, d]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0 + d);
+      g.gain.exponentialRampToValueAtTime(0.2, t0 + d + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.24);
+      o.connect(g).connect(ctx.destination);
+      o.start(t0 + d); o.stop(t0 + d + 0.26);
+    });
+  } catch { /* sin audio: el aviso visual alcanza */ }
+}
+function chatGlobo(conv, titulo, texto) {
+  const g = chatEl('chat-globo');
+  g.dataset.conv = conv;
+  g.innerHTML = `<b>${esc(titulo)}</b><span>${esc(texto)}</span>`;
+  g.hidden = false;
+  requestAnimationFrame(() => g.classList.add('show'));
+  chatAgendar('globo', 5000, chatOcultarGlobo);
+}
+function chatOcultarGlobo() {
+  const g = chatEl('chat-globo');
+  clearTimeout(chatAgenda.globo);
+  g.classList.remove('show');
+  chatAgendar('globo-oculta', 260, () => { if (!g.classList.contains('show')) g.hidden = true; });
+}
+let chatTituloTimer = 0, chatTituloBase = '', chatTituloTexto = '', chatTituloN = 0, chatFaviconOrig = '', chatFaviconOn = false;
+function chatTituloAvisar(motivo) {
+  chatTituloN++;
+  if (!chatTituloTimer) {
+    chatTituloBase = document.title;
+    chatFaviconPunto(true);
+    let alterna = false;
+    chatTituloTimer = setInterval(() => { alterna = !alterna; document.title = alterna ? chatTituloTexto : chatTituloBase; }, 1200);
+  }
+  chatTituloTexto = `💬 (${chatTituloN}) ${motivo}`;
+  document.title = chatTituloTexto;
+}
+function chatTituloLimpiar() {
+  if (!chatTituloTimer) return;
+  clearInterval(chatTituloTimer); chatTituloTimer = 0; chatTituloN = 0;
+  document.title = chatTituloBase;
+  chatFaviconPunto(false);
+}
+function chatFaviconPunto(on) {
+  chatFaviconOn = on;
+  const link = document.querySelector('link[rel="icon"]'); if (!link) return;
+  if (!on) { if (chatFaviconOrig) link.href = chatFaviconOrig; return; }
+  chatFaviconOrig ||= link.href;
+  const img = new Image();
+  img.onload = () => {
+    if (!chatFaviconOn) return;
+    try {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+      const x = cv.getContext('2d');
+      x.drawImage(img, 0, 0, 64, 64);
+      x.fillStyle = '#ef4444'; x.beginPath(); x.arc(47, 17, 15, 0, Math.PI * 2); x.fill();
+      x.strokeStyle = '#fff'; x.lineWidth = 4; x.stroke();
+      link.href = cv.toDataURL('image/png');
+    } catch { /* canvas bloqueado: queda el ícono normal */ }
+  };
+  img.src = chatFaviconOrig;
 }
 
 /* ---------- Voucher (Bloque 15 — disponible para admin y asesor, gate por ROL) ----------
@@ -24835,7 +26097,7 @@ window.addEventListener('popstate', () => {
   else if (top.type === 'tutorial') cerrarTutorial(true);
   else if (top.type === 'tar-comparar') tarCerrarComparador(true);
   else if (top.type === 'sheet') closeSheet(top.id, true);
-  else if (top.type === 'msg-conv') cerrarConversacion(true);
+  else if (top.type === 'chat-panel') chatAtrasSistema();
   else if (top.type === 'wa-conv') waCerrarChat(true);
   else if (top.type === 'dm-conv') dmCerrarChat(true);
   else if (top.type === 'section') activateSection(top.prevSec, true);
@@ -25098,6 +26360,7 @@ const NAV_ITEMS = [
   // Fuera del modo Boletería es la cotización del asesor para su cliente (cbModo 'ventas', 2026-10-15).
   { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
+  { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Ventas, costos, gastos y utilidad por periodo' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok' },
   { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Links de pago declarados, pendientes de aprobar' },
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones por corte', padre: 'grp-cobros', roles: 'nav-administrativo-ok', sub: 'Cargá tus ventas pagadas; pagos el 5 y el 20' },
@@ -25358,6 +26621,12 @@ function setupNavBuscador() {
 function activateSection(sec, fromNav) {
   if (sec?.startsWith('grp-')) sec = destinoDePadre(sec);
   sec = SECCIONES_REUBICADAS[sec] || sec;
+  // Mensajes ya no es una sección: es un panel flotante encima de cualquier pantalla.
+  if (sec === 'mensajes') {
+    cerrarMenuMovil('silencioso');
+    if (currentSec !== null) { chatAbrirPanel(); return; }
+    sec = seccionInicialPermitida();
+  }
   if (!document.getElementById('sec-' + sec)) sec = 'hoy';
   if (currentSec === sec) { cerrarMenuMovil(); return; }
   // Antes del navPush de abajo: la entrada del menú se descarta a mano para
@@ -25369,15 +26638,12 @@ function activateSection(sec, fromNav) {
   // su layout completo en el mismo click (scrollTo/scrollTop esperan layout).
   if (window.scrollY || document.body.scrollTop) { window.scrollTo({ top: 0, behavior: 'auto' }); document.body.scrollTop = 0; }
   if (currentSec === 'leads' && sec !== 'leads') detenerPollLeads();
-  // Si hay un chat abierto y el usuario navega a otra sección sin cerrarlo,
-  // el ?conversacion= de la URL queda pegado ahí para siempre y reaparece en
-  // cada "Actualizar CRM" (location.replace conserva el query string actual).
-  if (msgActual && sec !== 'mensajes') cerrarConversacion(true);
   if (currentSec === 'whatsapp' && sec !== 'whatsapp') { waDetenerPoll(); if (waActual) waCerrarChat(true, true); }
   currentSec = sec;
   SECCIONES_CARGADAS.add(sec);
   guardarUltimaSeccion(sec);
   lyraSeccion(sec);
+  chatActualizarVisibilidad();
   document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec || x.dataset.sec === PADRE_DE[sec]));
   if (sheetAbierta) closeSheet(sheetAbierta, true);
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active', 'entrando'));
@@ -25429,6 +26695,7 @@ const CARGA_SIEMPRE = new Set(['hoy', 'leads', 'bol-solicitudes', 'mensajes', 'w
 function cargarSeccion(sec) {
   if (sec === 'ranking') loadRanking();
   if (sec === 'mis-ventas') loadMisVentasSeccion();
+  if (sec === 'balance') loadBalance();
   if (sec === 'facturacion') loadFacturacion();
   if (sec === 'pagos') loadPagos();
   if (sec === 'proveedores') loadProveedores();
@@ -25447,7 +26714,6 @@ function cargarSeccion(sec) {
   if (sec === 'clientes-asignados') loadClientesAsignados();
   if (sec === 'mis-notas') loadMisNotas();
   if (sec === 'tarifario') loadTarifario();
-  if (sec === 'mensajes') cargarBandeja();
   if (sec === 'whatsapp') loadWhatsapp();
   if (sec === 'dms') loadDms();
   if (sec === 'correo') cargarCorreoSeccion();
@@ -27706,7 +28972,7 @@ const TOUR_CAPITULOS = [
     { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Cada asesor solo ve sus propios leads nuevos, con estos mismos 3 botones. Si no toca ninguno a tiempo, el lead se reasigna automático a otro asesor.', mockup: mockupBandejaAsesor },
   ]},
   { id: 'mensajes', titulo: 'Mensajes', icono: 'fa-comment-dots', roles: ['admin', 'asesor', 'marketing'], seccion: 'mensajes', pasos: [
-    { titulo: 'Chat interno del equipo', texto: 'Esto no es WhatsApp del cliente -- es un chat interno para hablar con tus compañeros y con administración.', selector: '#sec-mensajes' },
+    { titulo: 'Chat interno del equipo', texto: 'Esto no es WhatsApp del cliente -- es un chat interno para hablar con tus compañeros y con administración.', selector: '#chat-panel' },
   ]},
   { id: 'metricas', titulo: 'Métricas', icono: 'fa-chart-simple', roles: ['admin'], seccion: 'gestion-personal', pasos: [
     { titulo: 'Números del negocio', texto: 'Conversión, tiempos de respuesta y ventas, con filtro de fecha. Está dentro de Gestión de Personal, como una pestaña más.', selector: '#gp-tabs' },
