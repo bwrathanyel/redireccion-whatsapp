@@ -3005,6 +3005,12 @@ body:not(.nav-buscando):not(.nav-sondeo) #sidebar-nav > .nav-hijo{display:none}
 /* Mensajes se abre por la burbuja #chat-fab; el ítem sigue en el DOM para que el
    sondeo por rol (chatActualizarVisibilidad) y ?ir=mensajes funcionen. */
 body:not(.nav-sondeo) #sidebar-nav > .nav-item[data-sec="mensajes"]{display:none}
+/* Entradas opcionales: ocultas hasta que el usuario las active en Mi Perfil (body.nav-ver-<sec>,
+   ver aplicarPreferencias). Fuera del sondeo de roles y del buscador del menú, que las siguen viendo. */
+body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-inicio) #sidebar-nav > [data-sec="grp-inicio"],
+body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-dms) #sidebar-nav > [data-sec="dms"],
+body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-ia) #sidebar-nav > [data-sec="grp-ia"],
+body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-marketing) #sidebar-nav > [data-sec="grp-marketing"]{display:none}
 #sidebar-nav > .nav-padre-vacio{display:none}
 .nav-tabs-sec{max-width:100%;overflow-x:auto;scrollbar-width:none}
 .nav-tabs-sec .seg{white-space:nowrap}

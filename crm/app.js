@@ -472,6 +472,11 @@ function openPerfilDrawer() {
         <button type="button" data-v="normal" class="seg${(MI_PREFERENCIAS.fuente || 'normal') === 'normal' ? ' on' : ''}">Normal</button>
         <button type="button" data-v="grande" class="seg${MI_PREFERENCIAS.fuente === 'grande' ? ' on' : ''}">Grande</button>
       </div>
+      <label class="fl" style="margin-top:12px">Secciones extra en el menú</label>
+      ${NAV_OPCIONALES.map(o => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+        <span style="font-size:13px">${o.label}<small style="display:block;color:var(--muted);margin-top:2px">${o.desc}</small></span>
+        <button type="button" class="tas-toggle" data-nav-extra="${o.sec}" aria-label="Mostrar ${o.label} en el menú"></button>
+      </div>`).join('')}
     </div>
     ${ROL_REAL === 'admin' ? `
     <div class="edit-box" style="margin-top:16px">
@@ -527,6 +532,7 @@ function openPerfilDrawer() {
   document.querySelectorAll('#perfil-tema button').forEach(b => b.onclick = () => guardarPreferencia('tema', b.dataset.v, 'perfil-tema'));
   document.querySelectorAll('#perfil-fuente button').forEach(b => b.onclick = () => guardarPreferencia('fuente', b.dataset.v, 'perfil-fuente'));
   document.querySelectorAll('#perfil-vista-rol button').forEach(b => b.onclick = () => activarVistaPreviaRol(b.dataset.v));
+  pintarTogglesNavExtra();
   actualizarTogglesNotif();
   renderInstalacionPwa();
 }
@@ -547,6 +553,23 @@ const accentRgb = () => cssVar('--accent-rgb') || '255,145,0';
 // Chart.js no entiende var(): la grilla y los textos se leen del tema vigente.
 const gridColor = () => `rgba(${cssVar('--ink-rgb') || '255,255,255'},.07)`;
 const temaActual = () => PALETAS[MI_PREFERENCIAS.tema] ? MI_PREFERENCIAS.tema : 'dark';
+// Entradas del menú que nacen ocultas y cada persona activa en Mi Perfil (MI_PREFERENCIAS.nav_extra).
+// Marketing las necesita para trabajar: su grupo nace visible. El CSS vive en index.html (nav-ver-<sec>).
+const NAV_OPCIONALES = [
+  { sec: 'grp-inicio', label: 'Inicio', desc: 'Dashboard, ventas, ranking e informe diario' },
+  { sec: 'dms', label: 'Meta DM', desc: 'Chats del bot en Instagram, Facebook y WhatsApp' },
+  { sec: 'grp-ia', label: 'IA', desc: 'Rendimiento, asistente y prospectos de IA' },
+  { sec: 'grp-marketing', label: 'Marketing', desc: 'Redes y clientes de eventos' },
+];
+const navExtraActivas = () => Array.isArray(MI_PREFERENCIAS.nav_extra) ? MI_PREFERENCIAS.nav_extra : (ROL === 'marketing' ? ['grp-marketing'] : []);
+function pintarTogglesNavExtra() {
+  const activas = navExtraActivas();
+  document.querySelectorAll('[data-nav-extra]').forEach(btn => {
+    const sec = btn.dataset.navExtra, on = activas.includes(sec);
+    btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', String(on));
+    btn.onclick = () => guardarPreferencia('nav_extra', on ? activas.filter(s => s !== sec) : [...activas, sec], 'perfil-nav-extra').then(pintarTogglesNavExtra);
+  });
+}
 function aplicarPreferencias() {
   const id = temaActual(), p = PALETAS[id], root = document.documentElement;
   root.dataset.theme = p.base;
@@ -555,6 +578,8 @@ function aplicarPreferencias() {
   if (window.Chart) Chart.defaults.color = cssVar('--muted') || '#8b93ad';
   document.body.classList.toggle('fsize-chico', MI_PREFERENCIAS.fuente === 'chico');
   document.body.classList.toggle('fsize-grande', MI_PREFERENCIAS.fuente === 'grande');
+  const extra = navExtraActivas();
+  NAV_OPCIONALES.forEach(o => document.body.classList.toggle('nav-ver-' + o.sec, extra.includes(o.sec)));
   // Cache local para que el script inline en <head> (ver index.html) pueda
   // aplicar tema/tamaño ANTES del primer paint en la próxima carga -- sin
   // esto, un usuario con tema claro ve un flash oscuro en cada refresh
@@ -25566,7 +25591,10 @@ function cbDetalleCliente(it) {
     if (it.ida) add('', `${f(it.ida)}${it.vuelta ? ' al ' + f(it.vuelta) : ''}${n ? ` · ${n} noche${n === 1 ? '' : 's'}` : ''}`);
   } else if (tipo === 'traslado') { add('Fecha', con(f(it.ida), it.ida_hora)); add('Regreso', con(f(it.vuelta), it.vuelta_hora)); }
   else add('Fecha', f(it.ida));
-  if (cbEsPax(it)) { const p = cbPax(it); [[p.a, 'adulto', 'adultos', it.tarifa], [p.n, 'niño', 'niños', it.tarifa_nino], [p.i, 'infante', 'infantes', it.tarifa_infante]].forEach(([n, s, pl, t]) => { if (n) add('', `${n} ${n === 1 ? s : pl} × $${cbMonto(t)}`); }); }
+  if (cbEsPax(it)) {
+    const p = cbPax(it), xNoche = cbPorNoche(it) ? ` por noche × ${cbNochesTexto(cbNochesCobro(it))}` : '';
+    [[p.a, 'adulto', 'adultos', it.tarifa], [p.n, 'niño', 'niños', it.tarifa_nino], [p.i, 'infante', 'infantes', it.tarifa_infante]].forEach(([n, s, pl, t]) => { if (n) add('', `${n} ${n === 1 ? s : pl} × $${cbMonto(t)}${xNoche}`); });
+  }
   else add('', `${it.cant} × $${cbMonto(it.tarifa)}`);
   if (it.extra) add('', it.extra);
   return d.join('\n');
@@ -29395,6 +29423,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-16', emoji: '🏨', titulo: 'Cotización de hotel por persona por noche', texto: 'En Cotizaciones, el hotel ahora cobra por persona por noche: pones la tarifa de una noche y el importe se multiplica solo por las noches entre el check-in y el check-out (ya no hace falta multiplicar a mano). Si la tarifa que tienes es por toda la estadía, en "Tarifa por" eliges "Persona (estadía completa)". El PDF muestra la tarifa por noche y las noches. Las cotizaciones ya guardadas no cambian.', roles: ['admin', 'boleteria', 'asesor'] },
   { fecha: '2026-10-16', emoji: '🎟️', titulo: 'Voucher de servicio: excursiones, traslados y referencia de pago móvil', texto: 'El voucher ahora es "Voucher de servicio". Puedes anexarle excursiones, full days, traslados y paquetes buscándolos del tarifario: el precio se sugiere solo según adultos y niños (lo puedes cambiar) y se suma al total. La modalidad se elige con tarjetas, y si el pago es por pago móvil hay que colocar el número de referencia, que sale en el PDF.', roles: ['asesor', 'admin'] },
   { fecha: '2026-10-16', emoji: '🧳', titulo: 'Solicitudes de vuelo con adultos, niños e infantes', texto: 'Al mandar una solicitud a boletería (también desde un lead) ya no pones "cuántas personas" a secas: indicas adultos, niños e infantes. Boletería lo ve así en la cola, en el detalle y al copiar los datos, y al cotizar o crear la reserva del boleto salen ya cargados. Las solicitudes anteriores se ven como adultos.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-16', emoji: '👨‍👩‍👧', titulo: 'Adultos, niños e infantes en las cotizaciones', texto: 'En boletos, hoteles, paquetes, full days, tours y traslados, "Pasajeros" ahora se divide en adultos, niños e infantes, cada uno con su tarifa. El importe suma cada categoría y el PDF muestra una línea por cada una. Las cotizaciones anteriores se ven igual que antes.', roles: ['asesor', 'boleteria', 'admin'] },
