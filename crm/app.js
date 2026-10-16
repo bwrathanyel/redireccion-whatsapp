@@ -23986,7 +23986,7 @@ async function cbAplicarSolicitud(sel) {
   cbResetForm(); cbSolicitud = s; cbPintarSolicitud();
   if (borrador) { cbRestaurarBorrador(borrador, sel); okToast(`Retomaste la solicitud #${s.id} donde la dejaste`); return; }
   document.getElementById('cb-cliente').value = s.cliente_nombre || '';
-  cbItems = [{ ...cbItemVacio('boleto'), ruta: [s.origen, s.destino, s.fecha_regreso ? s.origen : ''].filter(Boolean).join(' - '), adultos: s.personas || 1, ida: s.fecha_viaje || '', vuelta: s.fecha_regreso || '', extra: s.notas || '' }];
+  cbItems = [{ ...cbItemVacio('boleto'), ruta: [s.origen, s.destino, s.fecha_regreso ? s.origen : ''].filter(Boolean).join(' - '), adultos: s.adultos || s.personas || 1, ninos: s.ninos || '', infantes: s.infantes || '', ida: s.fecha_viaje || '', vuelta: s.fecha_regreso || '', extra: s.notas || '' }];
   cbRenderItems();
   // listar_cola_boleteria trae el nombre de quien pidió, no su id.
   const op = [...sel.options].find(o => o.value && o.textContent.replace(/ \(admin\)$/, '') === s.creado_por);
@@ -25955,10 +25955,21 @@ function ubicarSolicitudesNav() {
   else document.querySelector('#sidebar-nav > .nav-label[data-label="secciones"]')?.after(item);
 }
 
+// `leads.personas` es texto libre ("2 adultos y 1 niño", "4"): se rescata el desglose si lo trae;
+// un número suelto se toma como adultos. Sin número, no se precarga nada.
+function bolPaxDeTexto(txt) {
+  const t = String(txt ?? '').toLowerCase();
+  const n = re => { const m = t.match(re); return m ? parseInt(m[1], 10) : 0; };
+  const adultos = n(/(\d+)\s*adult/), ninos = n(/(\d+)\s*(?:ni[ñn]|menor|chic|chamo)/), infantes = n(/(\d+)\s*(?:infant|beb[eé]|bebe)/);
+  if (adultos + ninos + infantes > 0) return { adultos, ninos, infantes };
+  const suelto = parseInt(t, 10);
+  return Number.isFinite(suelto) && suelto > 0 ? { adultos: suelto, ninos: 0, infantes: 0 } : null;
+}
+
 function abrirSolicitudBoleteria(lead) {
   document.getElementById('bol-err').textContent = '';
   ['bol-nombre', 'bol-telefono', 'bol-cedula', 'bol-origen', 'bol-destino',
-   'bol-fecha-viaje', 'bol-fecha-regreso', 'bol-personas', 'bol-notas', 'bol-buscar'].forEach(id => {
+   'bol-fecha-viaje', 'bol-fecha-regreso', 'bol-adultos', 'bol-ninos', 'bol-infantes', 'bol-notas', 'bol-buscar'].forEach(id => {
     const e = document.getElementById(id); if (e) e.value = '';
   });
   document.getElementById('bol-flexible').checked = false;
@@ -25980,8 +25991,8 @@ function abrirSolicitudBoleteria(lead) {
     document.getElementById('bol-nombre').value = lead.nombre || '';
     document.getElementById('bol-telefono').value = lead.telefono || '';
     document.getElementById('bol-destino').value = lead.destino || '';
-    const personas = parseInt(lead.personas, 10);
-    if (Number.isFinite(personas) && personas > 0) document.getElementById('bol-personas').value = personas;
+    const pax = bolPaxDeTexto(lead.personas);
+    if (pax) { document.getElementById('bol-adultos').value = pax.adultos; document.getElementById('bol-ninos').value = pax.ninos || ''; document.getElementById('bol-infantes').value = pax.infantes || ''; }
     document.getElementById('bol-buscar-box').style.display = 'none';
     box.style.display = ''; box.innerHTML = `<i class="fas fa-user"></i> Desde el lead de <b>${esc(lead.nombre || 'Sin nombre')}</b>`;
     document.getElementById('bol-precio').textContent = bolPrecioRuta(val('bol-origen'), val('bol-destino'));
@@ -26026,6 +26037,11 @@ async function enviarSolicitudBoleteria() {
   const leadId = document.getElementById('bol-lead-id')?.value;
   const problemaFecha = bolValidarFechas();
   if (problemaFecha) { err.textContent = problemaFecha; return; }
+  // Vacío en los tres = no dijo cuántos; con alguno cargado se manda el desglose completo.
+  const [ad, ni, inf] = ['bol-adultos', 'bol-ninos', 'bol-infantes'].map(ent);
+  const hayPax = ad != null || ni != null || inf != null;
+  if (hayPax && (ad || 0) + (ni || 0) + (inf || 0) < 1) { err.textContent = 'Indica al menos una persona (o deja los tres campos vacíos).'; return; }
+  if (hayPax && !(ad > 0)) { err.textContent = 'Tiene que viajar al menos un adulto con los niños o infantes.'; return; }
   err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.rpc('crear_solicitud_boleteria', {
     p_cliente_nombre: val('bol-nombre'),
@@ -26034,7 +26050,7 @@ async function enviarSolicitudBoleteria() {
     p_cliente_telefono: val('bol-telefono'), p_cliente_cedula: val('bol-cedula'),
     p_fecha_viaje: val('bol-fecha-viaje') || null, p_fecha_regreso: val('bol-fecha-regreso') || null,
     p_flexible_fechas: document.getElementById('bol-flexible').checked,
-    p_personas: ent('bol-personas'), p_notas: val('bol-notas'),
+    p_adultos: ad, p_ninos: ni, p_infantes: inf, p_notas: val('bol-notas'),
   });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Mandar a la cola';
   if (error || !data?.ok) { err.textContent = 'No se pudo mandar: ' + (BOL_ERR[data?.error] || error?.message || data?.error || ''); return; }
@@ -26100,7 +26116,7 @@ function bolCardHtml(s) {
   const puesto = (s.estado === 'en_cola' && s.puesto) ? `<span class="bol-puesto">#${s.puesto}</span>` : '';
   const resumen = [
     fechas ? `<span><i class="fas fa-calendar-days"></i> ${esc(fechas)}</span>` : '',
-    s.personas != null ? `<span><i class="fas fa-users"></i> ${s.personas}</span>` : '',
+    paxTexto(s) ? `<span><i class="fas fa-users"></i> ${paxTexto(s)}</span>` : '',
     s.flexible_fechas ? '<span><i class="fas fa-shuffle"></i> Flexible</span>' : '',
   ].filter(Boolean).join('');
   const wa = bolWaContacto(s);
@@ -26234,7 +26250,7 @@ function bolDetalleHtml(s) {
     <div class="bd-datos">
       <div class="bd-dato"><div class="bd-k">Ida</div><div class="bd-v">${fechaTxt(s.fecha_viaje)}</div></div>
       <div class="bd-dato"><div class="bd-k">Regreso</div><div class="bd-v">${fechaTxt(s.fecha_regreso)}</div></div>
-      ${dato('Personas', s.personas != null ? String(s.personas) : '')}
+      ${dato('Personas', paxTexto(s))}
       ${dato('Flexibilidad', s.flexible_fechas ? 'Acepta otras fechas' : '')}
       ${dato('Teléfono', esc(s.cliente_telefono || ''))}
       ${dato('Cédula', esc(s.cliente_cedula || ''))}
@@ -26254,7 +26270,7 @@ function bolTextoCopiable(s) {
     `Solicitud #${s.id} · ${s.cliente_nombre}`,
     `${s.origen} → ${s.destino}`,
     `Ida: ${s.fecha_viaje ? fmtDiaCorto(s.fecha_viaje) : 'sin definir'} · Regreso: ${s.fecha_regreso ? fmtDiaCorto(s.fecha_regreso) : 'sin definir'}${s.flexible_fechas ? ' (flexible)' : ''}`,
-    s.personas != null ? `Personas: ${s.personas}` : '',
+    paxTexto(s) ? `Personas: ${paxTexto(s)}` : '',
     s.cliente_cedula ? `Cédula: ${s.cliente_cedula}` : '',
     s.cliente_telefono ? `Teléfono: ${s.cliente_telefono}` : '',
     s.notas ? `Notas: ${s.notas}` : '',
@@ -27673,6 +27689,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-16', emoji: '🧳', titulo: 'Solicitudes de vuelo con adultos, niños e infantes', texto: 'Al mandar una solicitud a boletería (también desde un lead) ya no pones "cuántas personas" a secas: indicas adultos, niños e infantes. Boletería lo ve así en la cola, en el detalle y al copiar los datos, y al cotizar o crear la reserva del boleto salen ya cargados. Las solicitudes anteriores se ven como adultos.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-16', emoji: '👨‍👩‍👧', titulo: 'Adultos, niños e infantes en las cotizaciones', texto: 'En boletos, hoteles, paquetes, full days, tours y traslados, "Pasajeros" ahora se divide en adultos, niños e infantes, cada uno con su tarifa. El importe suma cada categoría y el PDF muestra una línea por cada una. Las cotizaciones anteriores se ven igual que antes.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-15', emoji: '🏢', titulo: 'Vouchers de empresa y sin leads duplicados', texto: 'En Importar vouchers, la columna "Empresa" (o "Marcar seleccionados" abajo) deja cada voucher a nombre de una empresa. Un voucher de empresa puede ir sin monto: queda como reserva de la empresa, sin factura, y el monto se completa después en Postventa. Además, si el cliente ya está en el CRM (mismo teléfono, cédula o nombre, con o sin acentos) el voucher se anexa a su lead en vez de crear uno nuevo, aunque sea de otro asesor.', roles: ['admin'] },
   { fecha: '2026-10-15', emoji: '📑', titulo: 'Armá tus cotizaciones en PDF', texto: 'Nueva entrada "Cotizaciones" en el menú: sumá hospedaje, paquetes, full days, tours, traslados y boletos, cada uno con su tarifa, y sale un PDF con el logo de Lotus listo para el cliente. El nombre del hotel o paquete se autocompleta desde el tarifario. Desde la ficha del lead, el botón "Cotizar" la arma con el cliente ya cargado, y "Guardar en el lead" la deja como cotización enviada. Abajo ves el historial de las tuyas.', roles: ['asesor', 'admin'] },

@@ -8571,8 +8571,11 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
       <div class="bol-fecha-aviso" id="bol-fecha-aviso"></div>
       <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="bol-flexible" style="width:auto"> El cliente tiene flexibilidad de fechas</label>
-      <div class="dgrid" style="margin-top:4px">
-        <div class="fcol"><label class="fl">¿Cuántas personas? <span class="ef-opc">(opcional)</span></label><input id="bol-personas" class="ei" type="number" min="1" max="60" step="1" placeholder="1"></div>
+      <label class="fl">¿Cuántas personas? <span class="ef-opc">(opcional)</span></label>
+      <div class="ef-fila">
+        <div style="flex:1"><label class="fl-sub">Adultos</label><input id="bol-adultos" class="ei" type="number" min="0" max="60" step="1" placeholder="2"></div>
+        <div style="flex:1"><label class="fl-sub">Niños</label><input id="bol-ninos" class="ei" type="number" min="0" max="60" step="1" placeholder="0"></div>
+        <div style="flex:1"><label class="fl-sub">Infantes</label><input id="bol-infantes" class="ei" type="number" min="0" max="60" step="1" placeholder="0"></div>
       </div>
     </div>
   </details>
