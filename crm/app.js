@@ -23316,7 +23316,7 @@ async function waCargarMedia(el) {
 }
 
 /* ---------- Mensajes (chat interno del staff) ----------
-   Panel flotante a nivel <body> (#chat-panel) + botón #chat-fab (escritorio) / #ab-chat (móvil).
+   Panel flotante a nivel <body> (#chat-panel) + burbuja #chat-fab; en móvil el panel es una hoja desde abajo.
    Reemplaza a la antigua sección Mensajes: el router abre el panel en vez de activar una sección
    (nav "Mensajes", ?ir=mensajes y el clic en el push). Un solo canal realtime global (mensajes-badge). */
 const ADJUNTO_LIMITE = 20 * 1024 * 1024;
@@ -23351,7 +23351,8 @@ function setupMensajes() {
   chatEl('cp-expandir').addEventListener('click', chatAlternarExpandido);
   chatEl('msg-conv-back').addEventListener('click', () => cerrarConversacion());
   chatEl('chat-fab').addEventListener('click', () => chatAbrirPanel());
-  chatEl('ab-chat').addEventListener('click', () => chatPanelAbierto ? chatCerrarPanel() : chatAbrirPanel());
+  chatEl('chat-fondo').addEventListener('click', () => chatCerrarPanel());
+  chatSetupArrastreHoja();
   chatEl('chat-globo').addEventListener('click', () => { const id = Number(chatEl('chat-globo').dataset.conv); chatOcultarGlobo(); if (id) chatAbrirPorId(id); });
   chatEl('cp-conv-menu').addEventListener('click', () => chatMenuConv());
   chatSetupLog();
@@ -23383,7 +23384,6 @@ function chatActualizarVisibilidad() {
   if (puede === chatPuede && (chatArrancado || !puede)) return;
   chatPuede = puede;
   chatEl('chat-fab').hidden = !puede;
-  chatEl('ab-chat').hidden = !puede;
   document.body.classList.toggle('chat-on', puede);
   if (puede && !chatArrancado) chatArrancar();
   if (!puede && chatPanelAbierto) chatCerrarPanel();
@@ -23429,6 +23429,25 @@ function chatAbrirPanel(opts = {}) {
   cargarBandeja();
   if (!opts.sinFoco) setTimeout(() => { if (chatPanelAbierto) p.focus({ preventScroll: true }); }, 60);
 }
+// Móvil: la hoja se cierra arrastrándola hacia abajo desde el agarre o la cabecera.
+// clientY son px reales del dedo; el translate va en px CSS (body{zoom}).
+function chatSetupArrastreHoja() {
+  const p = chatEl('chat-panel');
+  p.addEventListener('pointerdown', e => {
+    if (!MENU_MQ.matches || !chatPanelAbierto || e.button !== 0 || e.target.closest('button') || !e.target.closest('.cp-asa,.cp-head')) return;
+    const k = zoomFactor(), y0 = e.clientY, t0 = performance.now();
+    let dy = 0;
+    p.setPointerCapture(e.pointerId);
+    p.classList.add('arrastrando');
+    const mover = ev => { dy = Math.max(0, ev.clientY - y0); p.style.transform = `translateY(${Math.round(dy / k)}px)`; };
+    const soltar = ev => {
+      p.removeEventListener('pointermove', mover); p.removeEventListener('pointerup', soltar); p.removeEventListener('pointercancel', soltar);
+      p.classList.remove('arrastrando'); p.style.transform = '';
+      if (ev.type === 'pointerup' && (dy > 100 || (dy > 30 && dy / (performance.now() - t0) > MENU_VEL))) chatCerrarPanel();
+    };
+    p.addEventListener('pointermove', mover); p.addEventListener('pointerup', soltar); p.addEventListener('pointercancel', soltar);
+  });
+}
 function chatCerrarPanel(fromNav) {
   if (!chatPanelAbierto) return;
   chatCerrarPop();
@@ -23469,14 +23488,10 @@ function chatPintarContador() {
   const txt = total > 99 ? '99+' : String(total);
   const nav = chatEl('nav-msg-count');
   if (nav) { nav.textContent = txt; nav.style.display = total ? '' : 'none'; }
-  const fab = chatEl('chat-fab'), ab = chatEl('ab-chat');
-  [['chat-fab-badge', fab], ['ab-badge', ab]].forEach(([id, btn]) => {
-    const b = chatEl(id); if (!b) return;
-    b.textContent = txt; b.hidden = !total;
-    btn.classList.toggle('hay-nuevos', total > 0);
-  });
+  const fab = chatEl('chat-fab'), b = chatEl('chat-fab-badge');
+  b.textContent = txt; b.hidden = !total;
+  fab.classList.toggle('hay-nuevos', total > 0);
   fab.setAttribute('aria-label', total ? `Abrir mensajes (${total} sin leer)` : 'Abrir mensajes');
-  ab.setAttribute('aria-label', total ? `Mensajes (${total} sin leer)` : 'Mensajes');
 }
 async function cargarBandeja(soloBadge) {
   // Skeleton solo en la carga visible; soloBadge repinta el contador en segundo plano.
@@ -24601,9 +24616,9 @@ function chatAviso(m) {
   if (document.hidden) chatTituloAvisar(esGrupo ? `Mensaje en ${c.nombre}` : `${nombre1} te escribió`);
 }
 function chatSacudir() {
-  const botones = [chatEl('chat-fab'), chatEl('ab-chat')];
-  botones.forEach(b => { b.classList.remove('sacude'); void b.offsetWidth; b.classList.add('sacude'); });
-  chatAgendar('sacude', 1000, () => botones.forEach(b => b.classList.remove('sacude')));
+  const b = chatEl('chat-fab');
+  b.classList.remove('sacude'); void b.offsetWidth; b.classList.add('sacude');
+  chatAgendar('sacude', 1000, () => b.classList.remove('sacude'));
 }
 let chatSonoUltimo = 0, chatAudioCtx = null;
 function chatSonar() {

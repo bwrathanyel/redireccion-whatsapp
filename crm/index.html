@@ -2081,16 +2081,14 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 /* Botón flotante, globo de vista previa e indicadores */
 .chat-fab{position:fixed;right:22px;bottom:22px;z-index:57;width:56px;height:56px;border:none;border-radius:50%;background:var(--accent);color:var(--on-accent);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 26px -6px rgba(var(--accent-rgb),.55);transition:transform var(--dur-rapida) var(--ease-salida),opacity .2s}
 .chat-fab:hover{transform:translateY(-2px)}
-.chat-fab:focus-visible,#ab-chat:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-.chat-fab[hidden],#ab-chat[hidden],.chat-globo[hidden]{display:none}
+.chat-fab:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.chat-fab[hidden],.chat-globo[hidden]{display:none}
 body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
-.chat-fab-badge,.ab-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;background:#ef4444;color:#fff;font-size:11px;font-weight:800;line-height:16px;text-align:center;border:2px solid var(--bg)}
-.chat-fab-badge[hidden],.ab-badge[hidden]{display:none}
+.chat-fab-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;background:#ef4444;color:#fff;font-size:11px;font-weight:800;line-height:16px;text-align:center;border:2px solid var(--bg)}
+.chat-fab-badge[hidden]{display:none}
 .chat-fab.hay-nuevos::before{content:'';position:absolute;inset:0;border-radius:50%;border:3px solid var(--accent);animation:cp-anillo 1.8s ease-out infinite;pointer-events:none}
-.chat-fab.sacude,#ab-chat.sacude{animation:cp-sacude .8s ease-in-out}
-#ab-chat{position:relative}
-#ab-chat .ab-badge{top:-5px;right:-5px}
-#ab-chat.hay-nuevos{color:var(--accent-ink);border-color:rgba(var(--accent-rgb),.55);animation:cp-pulso 1.8s ease-out infinite}
+.chat-fab.sacude{animation:cp-sacude .8s ease-in-out}
+.chat-fondo,.chat-panel .cp-asa{display:none}
 .chat-globo{position:fixed;right:22px;bottom:92px;z-index:61;max-width:300px;padding:10px 14px 11px;border-radius:16px 16px 4px 16px;background:var(--panel-solid);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line2));box-shadow:0 18px 40px -12px rgba(0,0,0,.55);color:var(--txt);font-size:13px;line-height:1.45;cursor:pointer;opacity:0;transform:translateY(8px) scale(.96);transform-origin:right bottom;transition:opacity .22s,transform .3s var(--ease-salida)}
 .chat-globo.show{opacity:1;transform:none}
 .chat-globo b{display:block;font-size:11px;letter-spacing:.4px;color:var(--accent-ink)}
@@ -2098,15 +2096,14 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
 @media(min-width:761px){body.chat-on:not(.chat-abierto) #toasts{bottom:92px}body.chat-abierto #toasts{bottom:auto;top:76px}}
 
 @keyframes cp-anillo{0%{transform:scale(1);opacity:.85}100%{transform:scale(1.75);opacity:0}}
-@keyframes cp-pulso{0%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),.5)}100%{box-shadow:0 0 0 12px rgba(var(--accent-rgb),0)}}
 @keyframes cp-sacude{0%,100%{transform:rotate(0)}15%{transform:rotate(-14deg)}30%{transform:rotate(12deg)}45%{transform:rotate(-9deg)}60%{transform:rotate(7deg)}75%{transform:rotate(-3deg)}}
 @keyframes cp-llego{0%{background:rgba(var(--accent-rgb),.3)}100%{background:transparent}}
 @keyframes cp-resalta{0%,30%{filter:brightness(1.55)}100%{filter:none}}
 @keyframes cp-barra{from{background-position:0 0}to{background-position:-200% 0}}
 @keyframes cp-parpadea{0%,100%{opacity:1}50%{opacity:.25}}
 @media(prefers-reduced-motion:reduce){
-  .chat-fab.hay-nuevos::before,#ab-chat.hay-nuevos,.chat-fab.sacude,#ab-chat.sacude,#chat-panel .msg-inbox-row.llego,#chat-panel .cp-log .chat-msg.resaltado,#chat-panel .cp-rec-dot,#chat-panel .cp-foto.subiendo::after{animation:none}
-  .chat-panel,.chat-panel.abierto,#chat-panel .cp-conv,.chat-globo{transition:none}
+  .chat-fab.hay-nuevos::before,.chat-fab.sacude,#chat-panel .msg-inbox-row.llego,#chat-panel .cp-log .chat-msg.resaltado,#chat-panel .cp-rec-dot,#chat-panel .cp-foto.subiendo::after{animation:none}
+  .chat-panel,.chat-panel.abierto,#chat-panel .cp-conv,.chat-globo,.chat-fondo{transition:none}
 }
 
 /* Escritorio: modo expandido = lista + conversación (estilo WhatsApp Web) */
@@ -2122,14 +2119,31 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
   #chat-panel .msg-inbox-row:hover{background:rgba(var(--ink-rgb),.05)}
 }
 
-/* Móvil: pantalla completa; la conversación desliza sobre la lista */
+/* Móvil: burbuja abajo a la derecha (encima del "+" si la sección lo tiene) y
+   el panel como hoja desde abajo, con la sección visible detrás. La conversación
+   desliza sobre la lista. Al escribir, la hoja sube hasta arriba. */
 @media(max-width:760px){
-  .chat-panel{inset:0;width:auto;height:auto;border:none;border-radius:0;box-shadow:none;transform:translateY(24px);background:var(--bg2)}
-  #chat-panel .cp-lista,#chat-panel .cp-conv{top:env(safe-area-inset-top,0px)}
+  .chat-fab{right:16px;bottom:calc(18px + var(--safe-b));z-index:55}
+  body:has(>.mfab) .chat-fab{bottom:calc(86px + var(--safe-b));width:46px;height:46px;font-size:18px}
+  body.menu-abierto .chat-fab,body:has(.sheet.open) .chat-fab,body:has(.drawer.open) .chat-fab,body.lyra-abierta .chat-fab,body.fabs-ocultos .chat-fab:not(.hay-nuevos){opacity:0;pointer-events:none;transform:translateY(18px) scale(.85)}
+  body.chat-on:not(:has(.section.active .pantalla-chat)) .main{padding-bottom:calc(92px + var(--safe-b))}
+  body.chat-on:has(>.mfab):not(:has(.section.active .pantalla-chat)) .main{padding-bottom:calc(146px + var(--safe-b))}
+  .chat-globo{right:16px;bottom:calc(86px + var(--safe-b));max-width:min(300px,calc(100vw - 32px))}
+  body:has(>.mfab) .chat-globo{bottom:calc(144px + var(--safe-b))}
+  /* Pantallas de chat (WhatsApp, DMs): su barra de escritura va abajo, ahí la burbuja no va y el aviso baja del appbar */
+  body:has(.section.active .pantalla-chat) .chat-fab{display:none}
+  body:has(.section.active .pantalla-chat) .chat-globo{bottom:auto;top:calc(var(--appbar-h,56px) + env(safe-area-inset-top,0px) + 6px);border-radius:16px 4px 16px 16px;transform-origin:right top}
+  .chat-fondo{display:block;position:fixed;inset:0;z-index:59;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .25s}
+  body.chat-abierto .chat-fondo{opacity:1;pointer-events:auto}
+  .chat-panel{inset:auto 0 0 0;top:calc(env(safe-area-inset-top,0px) + max(44px,7dvh));width:auto;height:auto;border:none;border-radius:22px 22px 0 0;box-shadow:0 -18px 50px -12px rgba(0,0,0,.6);transform:translateY(100%);transition:opacity .2s,transform .32s var(--ease-salida),visibility 0s .32s,top .25s var(--ease-salida);background:var(--bg2)}
+  .chat-panel.abierto{transition:opacity .2s,transform .32s var(--ease-salida),visibility 0s,top .25s var(--ease-salida)}
+  .chat-panel.arrastrando{transition:none}
+  #chat-panel:has(.cp-input:focus){top:env(safe-area-inset-top,0px);border-radius:0}
+  #chat-panel .cp-asa{display:block;position:absolute;top:0;left:50%;z-index:5;width:72px;height:14px;margin-left:-36px;touch-action:none}
+  #chat-panel .cp-asa::before{content:'';position:absolute;top:6px;left:16px;right:16px;height:4px;border-radius:3px;background:var(--line2)}
+  #chat-panel .cp-head{touch-action:none}
   #cp-expandir{display:none}
-  .chat-fab{display:none!important}
-  .chat-globo{right:10px;bottom:auto;top:calc(var(--appbar-h,56px) + env(safe-area-inset-top,0px) + 6px);border-radius:16px 4px 16px 16px;transform-origin:right top}
-  #chat-panel .cp-head{height:56px}
+  #chat-panel .cp-head{height:60px;padding-top:6px}
   #chat-panel .cp-ico{width:var(--tap,44px);height:var(--tap,44px)}
   #chat-panel .cp-log .chat-msg{max-width:88%}
   #chat-panel .cp-input{font-size:16px}
@@ -5700,7 +5714,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512">
       <div class="mb-tit"><div class="mb-t" id="mb-title">Dashboard</div><div class="mb-s" id="mb-sub">Resumen general</div></div>
       <button class="ab-act" id="ab-tutorial" type="button" aria-label="Ver tutorial de esta sección" hidden><i class="fas fa-circle-play"></i></button>
-      <button class="ab-act" id="ab-chat" type="button" aria-label="Mensajes" hidden><i class="fas fa-comment-dots"></i><span class="ab-badge" id="ab-badge" hidden></span></button>
       <button class="ab-act" id="ab-buscar" type="button" aria-label="Buscar"><i class="fas fa-search"></i></button>
     </div>
     <div class="recordatorios-banner recordatorios-banner-m" id="recordatorios-banner-m">
@@ -9334,7 +9347,9 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
      Reemplaza a la antigua sección Mensajes; el nav "Mensajes" y ?ir=mensajes lo abren. -->
 <button class="chat-fab" id="chat-fab" type="button" hidden aria-label="Abrir mensajes" aria-haspopup="dialog" title="Mensajes (Alt+M)"><i class="fas fa-comment-dots"></i><span class="chat-fab-badge" id="chat-fab-badge" hidden></span></button>
 <div class="chat-globo" id="chat-globo" role="status" aria-live="polite" hidden></div>
+<div class="chat-fondo" id="chat-fondo" aria-hidden="true"></div>
 <aside class="chat-panel" id="chat-panel" role="dialog" aria-label="Mensajes" tabindex="-1" inert aria-hidden="true">
+  <div class="cp-asa" aria-hidden="true"></div>
   <div class="cp-lista">
     <header class="cp-head">
       <div class="cp-head-t"><i class="fas fa-comment-dots"></i> Mensajes</div>
