@@ -15693,7 +15693,7 @@ function renderVentas() {
    mano (guardar_gasto) y el de IA entra solo desde las tablas *_ia_gasto. */
 const BAL_CATS = [['nomina', 'Nómina'], ['publicidad', 'Publicidad'], ['alquiler', 'Alquiler'], ['servicios', 'Servicios'], ['software', 'Software'], ['impuestos', 'Impuestos'], ['comisiones_bancarias', 'Comisiones bancarias'], ['otros', 'Otros']];
 const BAL_CAT_LBL = { ...Object.fromEntries(BAL_CATS), ia: 'Inteligencia artificial' };
-const BAL_ERR = { fecha_invalida: 'La fecha no es válida', categoria_invalida: 'Elegí una categoría', falta_concepto: 'Falta el concepto', moneda_invalida: 'Moneda inválida', monto_invalido: 'El monto tiene que ser mayor que 0', falta_tasa: 'En bolívares hace falta la tasa', gasto_no_encontrado: 'Ese gasto ya no existe' };
+const BAL_ERR = { fecha_invalida: 'La fecha no es válida', categoria_invalida: 'Elegí una categoría', falta_concepto: 'Falta el concepto', moneda_invalida: 'Moneda inválida', monto_invalido: 'El monto tiene que ser mayor que 0', falta_tasa: 'En bolívares hace falta la tasa', tasa_invalida: 'La tasa no es válida', falta_motivo: 'Falta el motivo', gasto_no_encontrado: 'Ese gasto ya no existe' };
 const BAL = { tipo: 'mes', off: 0, rango: null, gen: 0, data: null, prev: null, p: null };
 const balMoney = n => { const v = Number(n) || 0; return (v < 0 ? '−' : '') + '$' + nf('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(v)); };
 const balMoney0 = n => { const v = Number(n) || 0; return (v < 0 ? '−' : '') + money(Math.abs(v)); };
@@ -15756,8 +15756,8 @@ function renderBalance() {
     { t: 'Utilidad', v: balMoney0(t.utilidad), d: margenNeto != null ? `${margenNeto}% margen neto` : '', i: 'fa-scale-balanced', c: t.utilidad >= 0 ? 'var(--green)' : 'var(--danger)' },
   ]);
   const av = document.getElementById('bal-aviso');
-  av.hidden = !(t.sin_costo_n > 0);
-  if (!av.hidden) av.innerHTML = `<i class="fas fa-triangle-exclamation"></i><span><b>${fmt(t.sin_costo_n)}</b> ${t.sin_costo_n === 1 ? 'venta' : 'ventas'} (${money(t.sin_costo_vendido)}) sin costo neto: la utilidad está inflada.</span><button class="btn-sm" type="button" data-bal="sin-costo"><i class="fas fa-arrow-right"></i> Ver ventas</button>`;
+  av.hidden = !(t.sin_costo_n > 0 || t.sin_comision_n > 0);
+  if (!av.hidden) av.innerHTML = `<i class="fas fa-triangle-exclamation"></i><span>${t.sin_costo_n > 0 ? `<b>${fmt(t.sin_costo_n)}</b> ${t.sin_costo_n === 1 ? 'venta' : 'ventas'} (${money(t.sin_costo_vendido)}) sin costo neto` : ''}${t.sin_costo_n > 0 && t.sin_comision_n > 0 ? ' y ' : ''}${t.sin_comision_n > 0 ? `<b>${fmt(t.sin_comision_n)}</b> sin comisión cargada` : ''}: la utilidad está inflada.</span>${t.sin_costo_n > 0 ? '<button class="btn-sm" type="button" data-bal="sin-costo"><i class="fas fa-arrow-right"></i> Ver ventas</button>' : ''}`;
 
   document.getElementById('bal-grafico-tit').innerHTML = `<i class="fas ${esDia ? 'fa-list' : 'fa-chart-column'}"></i> ${esDia ? 'Ventas del día' : 'Ventas, egresos y utilidad'}`;
   document.getElementById('bal-grafico-sub').textContent = esDia ? '' : p.bucket === 'mes' ? 'Un punto por mes' : 'Un punto por día';
