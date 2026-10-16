@@ -15657,7 +15657,7 @@ function renderVentas() {
   document.getElementById('fact-tbody').innerHTML = visibles.map((f, i) => {
     const anulada = f.estado === 'anulada', conCosto = f.costo_neto != null;
     const pct = conCosto && f.venta_total > 0 ? Math.max(0, Math.min(100, Math.round(f.margen / f.venta_total * 100))) : 0;
-    return `<article class="lt-card${anulada ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}">
+    return `<article class="lt-card${anulada ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}${f.lead_id ? ';cursor:pointer' : ''}"${f.lead_id ? ` onclick="if(!event.target.closest('button,a'))abrirClienteDesdeFacturacion(${f.lead_id})"` : ''}>
       <div class="lt-card-cab">
         <div class="lt-card-tit" title="${esc(f.cliente || '')}">${esc(f.cliente || ('#' + fmt(f.lead_id)))}</div>
         <span class="bt-tag" style="--c:${f.estado === 'pagada' ? 'var(--green)' : 'var(--muted)'}">${f.estado === 'pagada' ? 'Pagada' : anulada ? 'Anulada' : esc(f.estado)}</span>
@@ -15997,7 +15997,7 @@ function renderCuentasPorPagar() {
   document.getElementById('cxp-tbody').innerHTML = visibles.map((c, i) => {
     const pagado = c.estado === 'pagado';
     const pct = c.monto_a_transferir > 0 ? Math.min(100, Math.round(c.monto_abonado / c.monto_a_transferir * 100)) : (pagado ? 100 : 0);
-    return `<article class="lt-card${pagado ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}">
+    return `<article class="lt-card${pagado ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}${c.lead_id ? ';cursor:pointer' : ''}"${c.lead_id ? ` onclick="if(!event.target.closest('button,a'))abrirClienteDesdeFacturacion(${c.lead_id})"` : ''}>
       <div class="lt-card-cab">
         <div class="lt-card-tit" title="${esc(c.proveedor)}">${esc(c.proveedor)}</div>
         <span class="bt-tag" style="--c:${pagado ? 'var(--green)' : 'var(--amber)'}">${pagado ? 'Pagado' : esc(c.estado === 'pendiente' ? 'Pendiente' : c.estado)}</span>
@@ -25835,7 +25835,7 @@ const BOL_ERR = {
   falta_origen: 'Falta de dónde sale el vuelo',
   falta_destino: 'Falta a dónde va el vuelo',
   regreso_antes_de_ida: 'La fecha de regreso es anterior a la de ida',
-  ya_en_cola: 'Ese lead ya tiene una solicitud abierta en la cola',
+  solicitud_duplicada: 'Ese lead ya tiene una solicitud abierta igual (misma ruta, fechas y personas)',
   lead_no_disponible: 'Ese lead ya no está disponible',
   no_disponible: 'Esa solicitud ya la tomó o cerró alguien más',
   asignada_a_otro: 'Está asignada a otro agente',
@@ -25843,6 +25843,8 @@ const BOL_ERR = {
   regreso_en_el_pasado: 'La fecha de regreso ya pasó',
   personas_invalidas: 'La cantidad de personas tiene que estar entre 1 y 60',
   no_existe: 'Esa solicitud ya no existe',
+  en_atencion: 'Boletería la está atendiendo: cancélala o pídeles que la cierren',
+  tiene_reserva: 'Ya tiene un boleto en una reserva: no se puede eliminar',
   ya_cerrada: 'Esa solicitud ya estaba cerrada',
   no_atendiendo: 'Esa solicitud ya no está en atención',
   no_es_tuya: 'Esa solicitud la atiende otro agente',
@@ -26184,7 +26186,7 @@ function bolDetalleHtml(s) {
   if (s.lead_id && (ROL === 'admin' || (ROL === 'asesor' && s.es_mia))) acc.push(`<button class="dbtn gh" data-bol-lead="${s.lead_id}"><i class="fas fa-user"></i> Ver lead</button>`);
   if (MI_ES_AGENTE_BOLETERIA) acc.push(`<button class="dbtn gh" data-bol-copiar="${s.id}"><i class="fas fa-copy"></i> Copiar datos</button>`);
   if (MI_ES_AGENTE_BOLETERIA ? bolAbierta(s) : (s.es_mia && s.estado === 'en_cola')) acc.push(`<button class="dbtn gh" data-bol-cancelar="${s.id}"><i class="fas fa-xmark"></i> ${MI_ES_AGENTE_BOLETERIA ? 'Cancelar' : 'Cancelar solicitud'}</button>`);
-  if (ROL === 'admin') acc.push(`<button class="dbtn peligro" data-bol-eliminar="${s.id}"><i class="fas fa-trash"></i> Eliminar</button>`);
+  if (ROL === 'admin' || (ROL === 'asesor' && s.es_mia && s.estado !== 'atendiendo')) acc.push(`<button class="dbtn peligro" data-bol-eliminar="${s.id}"><i class="fas fa-trash"></i> Eliminar</button>`);
 
   const f = iso => esc(fmtFechaHoraCaracas(iso));
   const pasos = [{ cls: '', t: 'Enviada a la cola', sub: `${esc(s.creado_por || '—')} · ${f(s.creado_en)}` }];
