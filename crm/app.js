@@ -16424,41 +16424,146 @@ async function loadProveedores() {
   loadMargenesProv();
 }
 // Fee por tipo (neto = venta ÷ (1 + %)) y tarifa base de traslados (migración 20261016230000).
+// Panel pensado para administración: % grande editable, ejemplo en vivo y excepciones por proveedor.
+const MG_TIPOS = ['boleto_aereo', 'hospedaje', 'traslado_terrestre', 'traslado_maritimo', 'full_day', 'seguro', 'otro'];
+const MG_FIJOS = ['boleto_aereo', 'hospedaje'];
+const MG = { margenes: [], traslados: [], ejemplo: 100, borr: {}, extra: new Set(), nuevaExc: null };
+const mgUsd = c => '$' + (Number(c || 0) / 100).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const mgPctTxt = n => Number(n).toLocaleString('es-VE', { maximumFractionDigits: 2 });
+const mgPctOk = v => v !== '' && Number(v) >= 0 && Number(v) < 100;
+const mgPropio = (el, sel) => [...el.querySelectorAll(sel)].find(x => x.closest('[data-k]') === el);
+function mgEjemplo(k, v) {
+  if (k.startsWith('t:')) return v === '' ? 'Sin tarifa: en cada reserva el neto de este traslado se carga a mano.'
+    : `Cada traslado con este proveedor toma <b>${mgUsd(Math.round(Number(v) * 100))}</b> de neto solo. En la reserva se puede cambiar.`;
+  if (!mgPctOk(v)) return '<span class="mg-ej-vacio">Escribí un % entre 0 y 99,99</span>';
+  const venta = Math.round(MG.ejemplo * 100), neto = Math.round(venta / (1 + Number(v) / 100));
+  return `Venta ${mgUsd(venta)}<i class="fas fa-arrow-right"></i>neto proveedor <b>${mgUsd(neto)}</b> · gana Lotus <b class="mg-gana">${mgUsd(venta - neto)}</b>`;
+}
+function mgTarjetaTipo(tipo) {
+  const [lbl, ico] = RV_TIPOS[tipo] || [tipo, 'fa-circle-dot'];
+  const sec = rvSeccion({ tipo }), secLbl = (RV_SECCIONES.find(s => s[0] === sec) || [])[1] || 'Otros';
+  const gen = MG.margenes.find(m => m.tipo === tipo && m.proveedor_id == null && m.activo);
+  const k = `m:${tipo}:`, orig = gen ? String(Number(gen.porcentaje)) : '', v = MG.borr[k] ?? orig;
+  const excs = MG.margenes.filter(m => m.tipo === tipo && m.proveedor_id != null && m.activo);
+  const usados = new Set(excs.map(m => m.proveedor_id));
+  const candidatos = PROV_CACHE.filter(p => p.activo && (p.tipos || []).includes(tipo) && !usados.has(p.id));
+  const exc = m => { const ke = `m:${tipo}:${m.proveedor_id}`, o = String(Number(m.porcentaje)), ve = MG.borr[ke] ?? o;
+    return `<div class="mg-exc${ve !== o ? ' sucio' : ''}" data-k="${ke}" data-orig="${o}"><span title="${esc(m.proveedor || '')}">${esc(m.proveedor || 'Proveedor')}</span><input class="ei" data-mg-in type="number" inputmode="decimal" min="0" max="99.99" step="0.01" value="${esc(ve)}" aria-label="Fee de ${esc(m.proveedor || '')}"><span class="mg-suf">%</span><button class="btn-sm" type="button" data-mg-guardar ${ve !== o ? '' : 'disabled'}>Guardar</button><button class="mg-x" type="button" data-mg-quitar aria-label="Quitar excepción de ${esc(m.proveedor || '')}"><i class="fas fa-xmark"></i></button></div>`; };
+  const nueva = MG.nuevaExc !== tipo ? '' : candidatos.length
+    ? `<div class="mg-exc mg-exc-nueva" data-nx="${tipo}"><select class="ei" data-nx-prov aria-label="Proveedor">${candidatos.map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select><input class="ei" data-nx-pct type="number" inputmode="decimal" min="0" max="99.99" step="0.01" placeholder="%" aria-label="Fee"><button class="btn-sm" type="button" data-mg-exc-crear>Guardar</button><button class="mg-x" type="button" data-mg-exc-cancelar aria-label="Cancelar"><i class="fas fa-xmark"></i></button></div>`
+    : `<div class="mg-nota">No hay más proveedores activos de este tipo. Marcá el tipo en la ficha del proveedor. <button class="mg-link" type="button" data-mg-exc-cancelar>Cerrar</button></div>`;
+  const quitar = !MG_FIJOS.includes(tipo) ? `<button class="mg-link mg-quitar" type="button" data-mg-quitar>Quitar fee</button>` : '';
+  return `<div class="mg-card mg-tipo${v !== orig ? ' sucio' : ''}${orig === '' ? ' mg-sin' : ''}" data-k="${k}" data-orig="${orig}">
+    <div class="mg-head"><i class="fas ${ico}"></i><div><b>${esc(lbl)}</b><span>${esc(secLbl)}${orig === '' ? ' · sin fee todavía' : ''}</span></div></div>
+    <label class="mg-big"><input data-mg-in type="number" inputmode="decimal" min="0" max="99.99" step="0.01" value="${esc(v)}" placeholder="0" aria-label="Fee de ${esc(lbl)} en %"><span class="mg-suf">% de fee</span></label>
+    <div class="mg-ej" data-ej>${mgEjemplo(k, v)}</div>
+    ${sec === 'traslado' ? '<div class="mg-nota">Solo se usa si el proveedor del traslado no tiene tarifa base.</div>' : ''}
+    <div class="mg-acc">${quitar}<button class="btn-sm mg-guardar" type="button" data-mg-guardar ${v !== orig ? '' : 'disabled'}><i class="fas fa-check"></i> Guardar</button></div>
+    ${excs.length || MG.nuevaExc === tipo ? `<div class="mg-exc-lista"><div class="mg-exc-tit">Fee distinto por proveedor (le gana al general)</div>${excs.map(exc).join('')}${nueva}</div>` : ''}
+    ${MG.nuevaExc === tipo || orig === '' ? '' : `<button class="mg-link" type="button" data-mg-exc-abrir="${tipo}"><i class="fas fa-plus"></i> % distinto para un proveedor</button>`}
+  </div>`;
+}
+function mgTarjetaTraslado(t) {
+  const k = `t:${t.id}`, orig = t.tarifa_base_centavos != null ? String(t.tarifa_base_centavos / 100) : '', v = MG.borr[k] ?? orig;
+  return `<div class="mg-card mg-tras${v !== orig ? ' sucio' : ''}${orig === '' ? ' mg-sin' : ''}" data-k="${k}" data-orig="${esc(orig)}">
+    <div class="mg-head"><i class="fas fa-van-shuttle"></i><div><b>${esc(t.nombre)}</b><span>Tarifa base por traslado${orig === '' ? ' · sin cargar' : ''}</span></div></div>
+    <label class="mg-big"><span class="mg-pre">$</span><input data-mg-in type="number" inputmode="decimal" min="0" step="0.01" value="${esc(v)}" placeholder="0,00" aria-label="Tarifa base de ${esc(t.nombre)} en USD"><span class="mg-suf">USD</span></label>
+    <div class="mg-ej" data-ej>${mgEjemplo(k, v)}</div>
+    <div class="mg-acc"><button class="btn-sm mg-guardar" type="button" data-mg-guardar ${v !== orig ? '' : 'disabled'}><i class="fas fa-check"></i> Guardar</button></div>
+  </div>`;
+}
+function mgRender() {
+  const box = document.getElementById('prov-margenes'); if (!box) return;
+  const conFee = new Set(MG.margenes.filter(m => m.activo).map(m => m.tipo));
+  const visibles = MG_TIPOS.filter(t => MG_FIJOS.includes(t) || conFee.has(t) || MG.extra.has(t));
+  const resto = MG_TIPOS.filter(t => !visibles.includes(t));
+  box.innerHTML = `<div class="mg-intro"><div><b>¿Cómo se calcula el neto?</b> El precio al cliente es lo que cobra el proveedor más el fee de Lotus. El CRM saca solo el neto: <code>neto = venta ÷ (1 + fee)</code>.</div>
+      <label class="mg-prueba">Probar con una venta de <span class="mg-big sm"><span class="mg-pre">$</span><input id="mg-ejemplo" type="number" inputmode="decimal" min="0" step="1" value="${MG.ejemplo}" aria-label="Venta de ejemplo en USD"></span></label></div>
+    <h3 class="mg-sub"><i class="fas fa-percent"></i> Fee por tipo de servicio</h3>
+    <div class="mg-grid">${visibles.map(mgTarjetaTipo).join('')}</div>
+    ${resto.length ? `<div class="mg-agregar"><span>Agregar fee a:</span>${resto.map(t => `<button class="mg-chip" type="button" data-mg-agregar="${t}"><i class="fas ${(RV_TIPOS[t] || [])[1] || 'fa-circle-dot'}"></i>${esc((RV_TIPOS[t] || [t])[0])}</button>`).join('')}</div>` : ''}
+    <h3 class="mg-sub"><i class="fas fa-van-shuttle"></i> Tarifa base de traslados</h3>
+    ${MG.traslados.length ? `<div class="mg-grid">${MG.traslados.map(mgTarjetaTraslado).join('')}</div>` : '<div class="pv-empty">No hay proveedores de traslado activos. Marcá "Traslado terrestre" en la ficha del proveedor.</div>'}
+    <div class="mg-pie"><i class="fas fa-circle-info"></i><span>Los cambios valen para los servicios que se carguen de ahora en adelante. Para recalcular uno ya cargado: en la reserva, <b>Neto y proveedor</b> → <b>Neto automático</b> → Guardar.</span></div>`;
+}
+async function mgCargar() {
+  const { data, error } = await sb.rpc('listar_margenes');
+  if (error || !data?.ok) return false;
+  MG.margenes = data.margenes || []; MG.traslados = data.traslados || [];
+  RV_MARGENES = MG.margenes; RV_PROVEEDORES = null;
+  return true;
+}
+async function mgGuardar(llamada, k, txt) {
+  const { data: r, error: er } = await llamada;
+  if (er || !r?.ok) { errToast('No se pudo guardar: ' + rvErr(er, r)); return false; }
+  if (k) delete MG.borr[k];
+  await mgCargar(); mgRender(); okToast(txt);
+  return true;
+}
 async function loadMargenesProv() {
   const box = document.getElementById('prov-margenes'); if (!box) return;
-  const { data, error } = await sb.rpc('listar_margenes');
-  if (error || !data?.ok) { box.innerHTML = '<div class="pv-empty">No se pudieron cargar los márgenes</div>'; return; }
-  RV_MARGENES = data.margenes || [];
-  const tipoLbl = t => (RV_TIPOS[t] || [t])[0];
-  const fila = m => `<div class="mg-fila"><span>${esc(tipoLbl(m.tipo))}${m.proveedor ? ' · ' + esc(m.proveedor) : ''}${m.activo ? '' : ' (inactivo)'}</span><input class="ei" type="number" min="0" max="99.99" step="0.01" value="${esc(m.porcentaje)}" aria-label="Porcentaje"><span>%</span><button class="btn-sm" type="button" data-mg-guardar data-tipo="${esc(m.tipo)}" data-prov="${m.proveedor_id ?? ''}">Guardar</button></div>`;
-  const tras = t => `<div class="mg-fila"><span>${esc(t.nombre)}</span><input class="ei" type="number" min="0" step="0.01" value="${t.tarifa_base_centavos != null ? t.tarifa_base_centavos / 100 : ''}" placeholder="Sin tarifa" aria-label="Tarifa base"><span>USD</span><button class="btn-sm" type="button" data-tb-guardar data-prov="${t.id}">Guardar</button></div>`;
-  const provs = PROV_CACHE.filter(p => p.activo).map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('');
-  box.innerHTML = `<div class="csub">Fee que se suma al neto: neto = venta ÷ (1 + %). Ej.: boleto de $392 con 18% → neto $332,20. Un % por proveedor le gana al general.</div>
-    ${RV_MARGENES.map(fila).join('') || '<div class="pv-empty">Sin márgenes cargados</div>'}
-    <div class="mg-fila"><select class="ei" id="mg-n-tipo" aria-label="Tipo">${rvOpts(RV_TIPOS, 'hospedaje')}</select><select class="ei" id="mg-n-prov" aria-label="Proveedor"><option value="">Todos los proveedores</option>${provs}</select><input class="ei" id="mg-n-pct" type="number" min="0" max="99.99" step="0.01" placeholder="%" aria-label="Porcentaje"><button class="btn-sm" type="button" data-mg-nuevo><i class="fas fa-plus"></i> Agregar</button></div>
-    <div class="mg-sub">Tarifa base de traslados</div><div class="csub">Al elegir el proveedor en el traslado de una reserva, el neto toma esta tarifa (editable).</div>
-    ${(data.traslados || []).map(tras).join('') || '<div class="pv-empty">No hay proveedores de traslado activos</div>'}`;
+  if (!box.dataset.listo) box.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  if (!(await mgCargar())) { box.innerHTML = '<div class="pv-empty">No se pudieron cargar los márgenes</div>'; return; }
+  box.dataset.listo = '1'; mgRender();
+  box.oninput = e => {
+    if (e.target.id === 'mg-ejemplo') {
+      MG.ejemplo = Math.max(0, Number(e.target.value) || 0);
+      box.querySelectorAll('.mg-tipo').forEach(c => { mgPropio(c, '[data-ej]').innerHTML = mgEjemplo(c.dataset.k, mgPropio(c, '[data-mg-in]').value); });
+      return;
+    }
+    if (!e.target.matches('[data-mg-in]')) return;
+    const c = e.target.closest('[data-k]'), v = e.target.value, sucio = v !== c.dataset.orig;
+    MG.borr[c.dataset.k] = v; if (!sucio) delete MG.borr[c.dataset.k];
+    c.classList.toggle('sucio', sucio);
+    mgPropio(c, '[data-mg-guardar]').disabled = !sucio;
+    const ej = mgPropio(c, '[data-ej]'); if (ej) ej.innerHTML = mgEjemplo(c.dataset.k, v);
+  };
+  box.onkeydown = e => {
+    if (e.key !== 'Enter' || !e.target.matches('input')) return;
+    e.preventDefault();
+    const c = e.target.closest('[data-k],[data-nx]');
+    if (c) (c.matches('[data-nx]') ? c.querySelector('[data-mg-exc-crear]') : mgPropio(c, '[data-mg-guardar]'))?.click();
+  };
   box.onclick = async e => {
-    const b = e.target.closest('[data-mg-guardar],[data-mg-nuevo],[data-tb-guardar]'); if (!b || b.disabled) return;
-    const fila = b.closest('.mg-fila'), num = fila.querySelector('input').value;
-    let llamada;
-    if (b.hasAttribute('data-tb-guardar')) {
-      if (num !== '' && !(Number(num) >= 0)) return errToast('Tarifa inválida');
-      llamada = sb.rpc('guardar_tarifa_base_proveedor', { p_proveedor_id: Number(b.dataset.prov), p_tarifa: num === '' ? null : Number(num) });
+    const b = e.target.closest('button'); if (!b || b.disabled || !box.contains(b)) return;
+    if (b.dataset.mgAgregar) { MG.extra.add(b.dataset.mgAgregar); mgRender(); box.querySelector(`[data-k="m:${b.dataset.mgAgregar}:"] [data-mg-in]`)?.focus(); return; }
+    if (b.dataset.mgExcAbrir) { MG.nuevaExc = b.dataset.mgExcAbrir; mgRender(); box.querySelector('[data-nx-pct]')?.focus(); return; }
+    if (b.hasAttribute('data-mg-exc-cancelar')) { MG.nuevaExc = null; mgRender(); return; }
+    if (b.hasAttribute('data-mg-exc-crear')) {
+      const fila = b.closest('[data-nx]'), pct = fila.querySelector('[data-nx-pct]').value, prov = fila.querySelector('[data-nx-prov]');
+      if (!mgPctOk(pct)) return errToast('El porcentaje va de 0 a 99,99');
+      b.disabled = true;
+      const ok = await mgGuardar(sb.rpc('guardar_margen', { p_tipo: fila.dataset.nx, p_porcentaje: Number(pct), p_proveedor_id: Number(prov.value) }), null,
+        `${prov.selectedOptions[0]?.text || 'Proveedor'}: fee ${mgPctTxt(pct)}%`);
+      if (ok) { MG.nuevaExc = null; mgRender(); } else b.disabled = false;
+      return;
+    }
+    const c = b.closest('[data-k]'); if (!c) return;
+    const [clase, a, prov] = c.dataset.k.split(':');
+    if (b.hasAttribute('data-mg-quitar')) {
+      if (clase === 'm' && !prov && c.dataset.orig === '') { MG.extra.delete(a); delete MG.borr[c.dataset.k]; mgRender(); return; }
+      const nombre = prov ? c.querySelector('span')?.textContent : (RV_TIPOS[a] || [a])[0];
+      if (!(await confirmarSheet({ titulo: prov ? `¿Quitar el fee propio de ${nombre}?` : `¿Quitar el fee de ${nombre}?`, detalle: prov ? 'Vuelve a usar el fee general del tipo de servicio.' : 'Los servicios nuevos de este tipo quedan sin neto automático.', textoOk: 'Quitar', destructivo: true }))) return;
+      b.disabled = true;
+      if (!prov) MG.extra.delete(a);
+      if (!(await mgGuardar(sb.rpc('guardar_margen', { p_tipo: a, p_porcentaje: Number(c.dataset.orig), p_proveedor_id: prov ? Number(prov) : null, p_activo: false }), c.dataset.k, 'Fee quitado'))) b.disabled = false;
+      return;
+    }
+    if (!b.hasAttribute('data-mg-guardar')) return;
+    const v = mgPropio(c, '[data-mg-in]').value;
+    let llamada, txt;
+    if (clase === 't') {
+      if (v !== '' && !(Number(v) >= 0)) return errToast('La tarifa no puede ser negativa');
+      const nombre = MG.traslados.find(t => t.id === Number(a))?.nombre || 'Proveedor';
+      llamada = sb.rpc('guardar_tarifa_base_proveedor', { p_proveedor_id: Number(a), p_tarifa: v === '' ? null : Number(v) });
+      txt = v === '' ? `${nombre}: tarifa base quitada` : `${nombre}: tarifa base ${mgUsd(Math.round(Number(v) * 100))}`;
     } else {
-      const nuevo = b.hasAttribute('data-mg-nuevo');
-      const pct = nuevo ? val('mg-n-pct') : num;
-      if (pct === '' || !(Number(pct) >= 0 && Number(pct) < 100)) return errToast('El porcentaje va de 0 a 99,99');
-      const prov = nuevo ? val('mg-n-prov') : b.dataset.prov;
-      llamada = sb.rpc('guardar_margen', { p_tipo: nuevo ? val('mg-n-tipo') : b.dataset.tipo, p_porcentaje: Number(pct), p_proveedor_id: prov ? Number(prov) : null });
+      if (!mgPctOk(v)) return errToast('El porcentaje va de 0 a 99,99');
+      llamada = sb.rpc('guardar_margen', { p_tipo: a, p_porcentaje: Number(v), p_proveedor_id: prov ? Number(prov) : null });
+      txt = `${prov ? c.querySelector('span')?.textContent : (RV_TIPOS[a] || [a])[0]}: fee ${mgPctTxt(v)}%`;
     }
     b.disabled = true;
-    const { data: r, error: er } = await llamada;
-    b.disabled = false;
-    if (er || !r?.ok) return errToast('No se pudo guardar: ' + rvErr(er, r));
-    okToast('Guardado. Aplica a servicios nuevos o al recalcular su neto');
-    RV_PROVEEDORES = null; RV_MARGENES = null;
-    loadMargenesProv();
+    if (await mgGuardar(llamada, c.dataset.k, txt)) { if (clase === 'm' && !prov) MG.extra.delete(a); } else b.disabled = false;
   };
 }
 // Los KPIs escriben en el <select> (ahora oculto) para que el resto del código

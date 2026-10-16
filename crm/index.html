@@ -3377,15 +3377,62 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .rv-det{font-size:11.5px;color:var(--muted2);margin-top:5px;overflow-wrap:anywhere}
 .rv-precio{color:var(--txt);font-weight:600}.rv-precio small{color:var(--muted2);font-weight:500}
 .rv-costo{font-size:11.5px;margin-top:7px;padding:6px 8px;border-radius:8px;background:var(--accent-soft);color:var(--txt)}
-.rv-costo.rv-falta{background:rgba(245,158,11,.12);color:var(--amber)}
+.rv-costo.rv-falta{background:color-mix(in srgb,var(--amber) 12%,transparent);color:var(--amber)}
 .rv-sec{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px 10px;margin:14px 0 7px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 .rv-sec i{margin-right:6px}
 .rv-sec span{font-size:11px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted2)}
 .rv-modo{display:flex;gap:6px;margin:8px 0 2px}
-.mg-fila{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:7px 0;font-size:13px}
-.mg-fila>span:first-child{flex:1;min-width:140px}
-.mg-fila input.ei{width:110px;margin:0}.mg-fila select.ei{flex:1;min-width:140px;margin:0}
-.mg-sub{font-size:13px;font-weight:700;margin:16px 0 4px}
+.mg-intro{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:11px 22px;margin:4px 0 0;padding:14px;border-radius:12px;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);font-size:13px;line-height:1.5}
+.mg-intro>div{flex:1;min-width:240px}
+.mg-intro code{font-family:inherit;font-weight:800;color:var(--accent-txt);white-space:nowrap}
+.mg-prueba{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:700;color:var(--muted)}
+.mg-sub{display:flex;align-items:center;gap:7px;margin:22px 0 9px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.11em;color:var(--muted)}
+.mg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:11px}
+.mg-card{display:flex;flex-direction:column;gap:9px;padding:14px;border-radius:14px;border:1px solid var(--line2);background:var(--panel-solid);transition:border-color .16s,box-shadow .16s}
+.mg-card.mg-sin{border-style:dashed}
+.mg-card.sucio,.mg-exc.sucio .ei{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.mg-head{display:flex;align-items:center;gap:11px}
+.mg-head>i{display:grid;place-items:center;flex-shrink:0;width:36px;height:36px;border-radius:10px;background:var(--accent-soft);color:var(--accent);font-size:15px}
+.mg-head b{display:block;font-size:14px}
+.mg-head span{font-size:11px;color:var(--muted)}
+.mg-big{display:flex;align-items:baseline;gap:4px;padding:2px 11px;border-radius:10px;border:1px solid var(--line2);background:var(--bg2);cursor:text;transition:border-color .16s,box-shadow .16s}
+.mg-big:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.mg-big input{flex:1;width:100%;min-width:0;padding:0;border:0;background:transparent;color:var(--txt);font-family:inherit;font-size:30px;font-weight:800;line-height:1.35;letter-spacing:-.04em;outline:none;-moz-appearance:textfield;appearance:textfield}
+.mg-big input::-webkit-inner-spin-button,.mg-big input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.mg-big.sm{padding:0 9px;background:var(--panel-solid)}
+.mg-big.sm input{width:84px;flex:none;font-size:16px;line-height:2.2;letter-spacing:0}
+.mg-pre,.mg-suf{font-size:13px;font-weight:700;color:var(--muted);white-space:nowrap}
+.mg-ej{min-height:36px;font-size:12px;line-height:1.5;color:var(--muted)}
+.mg-ej b{color:var(--txt)}
+.mg-ej .mg-gana{color:var(--green)}
+.mg-ej i{margin:0 7px;font-size:10px}
+.mg-ej-vacio{color:var(--amber)}
+.mg-nota{font-size:11px;line-height:1.5;color:var(--muted2)}
+.mg-acc{display:flex;align-items:center;gap:7px;margin-top:auto}
+.mg-acc .mg-guardar{margin-left:auto}
+#prov-margenes .btn-sm:disabled{opacity:.4;cursor:default}
+.mg-card.sucio .mg-guardar,.mg-exc.sucio [data-mg-guardar],.mg-exc-nueva [data-mg-exc-crear]{background:var(--accent);border-color:transparent;color:var(--on-accent)}
+.mg-link{display:inline-flex;align-items:center;gap:7px;align-self:flex-start;padding:4px 0;border:0;background:none;color:var(--accent-ink);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.mg-link:hover{text-decoration:underline}
+.mg-quitar{color:var(--muted)}
+.mg-exc-lista{display:flex;flex-direction:column;gap:7px;padding-top:9px;border-top:1px solid var(--line)}
+.mg-exc-tit{font-size:11px;font-weight:700;color:var(--muted)}
+.mg-exc{display:flex;align-items:center;flex-wrap:wrap;gap:7px;font-size:12px}
+.mg-exc>span:first-child{flex:1;min-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.mg-exc .ei{width:72px;margin:0}
+.mg-exc select.ei{flex:1;width:auto;min-width:120px}
+.mg-x{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;transition:background .16s,color .16s}
+.mg-x:hover{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger)}
+.mg-agregar{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:11px;font-size:12px;color:var(--muted)}
+.mg-chip{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 11px;border-radius:999px;border:1px dashed var(--line2);background:transparent;color:var(--txt);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:border-color .16s,background .16s}
+.mg-chip:hover{border-color:var(--accent);background:var(--accent-soft)}
+.mg-pie{display:flex;align-items:flex-start;gap:9px;margin-top:14px;font-size:12px;line-height:1.5;color:var(--muted)}
+.mg-pie i{margin-top:3px}
+@media (max-width:768px){
+  .mg-chip,.mg-x{min-height:44px}.mg-x{width:44px}
+  .mg-link{min-height:44px}
+  .mg-exc .ei{font-size:16px}
+}
 .rv-acciones{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
 .rv-danger{color:#fb7185}
 .rv-form{margin-bottom:12px}
@@ -6945,6 +6992,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
       <div class="card" style="margin-top:14px">
         <div class="chead-row"><h2><i class="fas fa-percent"></i> Márgenes y tarifas base</h2></div>
+        <div class="csub">Cuánto gana Lotus en cada servicio. Con estos valores el CRM calcula solo el neto que se le paga al proveedor en cada reserva.</div>
         <div id="prov-margenes"></div>
       </div>
     </section>
