@@ -3377,6 +3377,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .rv-det{font-size:11.5px;color:var(--muted2);margin-top:5px;overflow-wrap:anywhere}
 .rv-precio{color:var(--txt);font-weight:600}.rv-precio small{color:var(--muted2);font-weight:500}
 .rv-costo{font-size:11.5px;margin-top:7px;padding:6px 8px;border-radius:8px;background:var(--accent-soft);color:var(--txt)}
+.rv-costo.rv-falta{background:rgba(245,158,11,.12);color:var(--amber)}
+.rv-sec{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px 10px;margin:14px 0 7px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.rv-sec i{margin-right:6px}
+.rv-sec span{font-size:11px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted2)}
+.rv-modo{display:flex;gap:6px;margin:8px 0 2px}
+.mg-fila{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:7px 0;font-size:13px}
+.mg-fila>span:first-child{flex:1;min-width:140px}
+.mg-fila input.ei{width:110px;margin:0}.mg-fila select.ei{flex:1;min-width:140px;margin:0}
+.mg-sub{font-size:13px;font-weight:700;margin:16px 0 4px}
 .rv-acciones{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
 .rv-danger{color:#fb7185}
 .rv-form{margin-bottom:12px}
@@ -6933,6 +6942,10 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         </div>
         <div class="tbl-state skel" id="prov-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
         <div class="lt-grid" id="prov-tbody"></div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div class="chead-row"><h2><i class="fas fa-percent"></i> Márgenes y tarifas base</h2></div>
+        <div id="prov-margenes"></div>
       </div>
     </section>
 

@@ -3400,6 +3400,7 @@ const RV_ERR = {
   moneda_invalida: 'Moneda inválida', precio_invalido: 'Precio inválido', falta_tasa: 'Esa moneda no tiene tasa cargada: escribila a mano',
   total_menor_que_pagado: 'El total quedaría por debajo de lo ya pagado', dato_invalido: 'Algún dato tiene un formato inválido',
   proveedor_invalido: 'Elegí un proveedor', costo_invalido: 'El costo no puede ser negativo',
+  porcentaje_invalido: 'El porcentaje va de 0 a 99,99', tarifa_invalida: 'La tarifa no puede ser negativa',
   pasajero_no_existe: 'El pasajero ya no existe', nombre_requerido: 'El nombre es obligatorio', tipo_documento_invalido: 'Tipo de documento inválido',
   fecha_nacimiento_invalida: 'La fecha de nacimiento no puede ser futura', dato_demasiado_largo: 'Algún dato es demasiado largo', datos_invalidos: 'Datos inválidos',
   nombre_invalido: 'Nombre de archivo inválido', formato_invalido: 'Solo PDF, JPG, PNG o WEBP',
@@ -3418,6 +3419,15 @@ const rvMonto = (cent, mon) => (Number(cent || 0) / 100).toLocaleString('es-VE',
 const rvPeso = b => b < 1048576 ? Math.max(1, Math.round(b / 1024)) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
 const rvVista = () => RV_DET?.vista || '';
 const rvPuedeEditar = () => rvVista() === 'admin' || rvVista() === 'asesor';
+// Costos y proveedores: admin y administrativo (reserva_detalle.ve_costos, migración 20261016230000).
+const rvVeCostos = () => rvVista() === 'admin' || !!RV_DET?.ve_costos;
+const RV_SECCIONES = [['hotel', 'Hotel', 'fa-hotel'], ['traslado', 'Traslado', 'fa-van-shuttle'], ['boleteria', 'Boletería', 'fa-plane'], ['otros', 'Otros', 'fa-circle-dot']];
+const rvSeccion = s => s.seccion || ({ hospedaje: 'hotel', traslado_terrestre: 'traslado', traslado_maritimo: 'traslado', boleto_aereo: 'boleteria' })[s.tipo] || 'otros';
+let RV_MARGENES = null;
+const rvMargenPct = (tipo, provId) => {
+  const ms = (RV_MARGENES || []).filter(m => m.activo && m.tipo === tipo && (m.proveedor_id == null || m.proveedor_id === provId));
+  return (ms.find(m => m.proveedor_id === provId) || ms.find(m => m.proveedor_id == null))?.porcentaje ?? null;
+};
 const rvPanel = k => document.querySelector(`#drawerContent [data-rv-panel="${k}"]`);
 const rvOpts = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
 const rvMonedaOpts = sel => RV_MONEDAS.map(m => `<option ${m === sel ? 'selected' : ''}>${m}</option>`).join('');
@@ -3476,9 +3486,13 @@ async function rvCargar() {
     const d = await sb.rpc('listar_destinos', { p_solo_activos: true });
     if (!d.error) RV_DESTINOS = d.data || [];
   }
-  if (data.vista === 'admin' && !RV_PROVEEDORES) {
+  if ((data.vista === 'admin' || data.ve_costos) && !RV_PROVEEDORES) {
     const p = await sb.rpc('listar_proveedores', { p_solo_activos: false });
     if (!p.error) RV_PROVEEDORES = p.data || [];
+  }
+  if ((data.vista === 'admin' || data.ve_costos) && !RV_MARGENES) {
+    const m = await sb.rpc('listar_margenes');
+    if (!m.error && m.data?.ok) RV_MARGENES = m.data.margenes || [];
   }
   let aptos = {};
   if (data.vista === 'admin' || data.vista === 'asesor') {
@@ -3585,8 +3599,31 @@ function rvRenderServicios(suave) {
   const cobro = vista === 'boleteria' && r.monto_total != null
     ? `<div class="rv-cobro rv-cobro-${esc(r.estado_cobro || 'pendiente')}"><span>Total <b>${money(r.monto_total)}</b></span><span>Pagado <b>${money(r.monto_pagado || 0)}</b></span><span>Saldo <b>${money(Math.max(0, r.monto_total - (r.monto_pagado || 0)))}</b></span><em>${({ pagado: 'Pagado', parcial: 'Pago parcial', pendiente: 'Sin pagos' })[r.estado_cobro] || ''}</em></div>` : '';
   p.innerHTML = cobro + (rvPuedeEditar() ? '<button class="dbtn gh rv-add" type="button" data-rv-accion="nuevo-servicio"><i class="fas fa-plus"></i> Agregar servicio</button>' : '')
-    + (ss.length ? ss.map(s => rvServicioHtml(s, vista)).join('')
+    + (ss.length ? rvSeccionesHtml(ss, vista)
       : `<div class="pv-empty">${vista === 'boleteria' ? 'Esta reserva no tiene boletos aéreos' : 'Todavía no hay servicios. Al cargar el primero, el total de la reserva pasa a ser la suma de sus precios.'}</div>`);
+}
+// Desglose del gerente (2026-10-16): Hotel · Traslado · Boletería, cada uno con su proveedor y su neto.
+function rvSeccionesHtml(ss, vista) {
+  const costos = rvVeCostos();
+  return RV_SECCIONES.map(([k, titulo, icono]) => {
+    const items = ss.filter(s => rvSeccion(s) === k);
+    if (!items.length) return '';
+    const vivos = items.filter(s => !s.anulado_en);
+    const suma = f => vivos.reduce((t, s) => t + Number(s[f] || 0), 0);
+    const sinNeto = vivos.filter(s => s.costo_centavos == null).length;
+    const neto = !costos ? '' : sinNeto === vivos.length ? ' · Sin neto' : ` · Neto ${rvMonto(suma('costo_usd_centavos'), 'USD')}${sinNeto ? ` (falta en ${sinNeto})` : ''}`;
+    const resumen = vivos.length ? `Venta ${rvMonto(suma('precio_usd_centavos'), 'USD')}${neto}` : '';
+    return `<div class="rv-sec"><b><i class="fas ${icono}"></i>${titulo}</b>${resumen ? `<span>${resumen}</span>` : ''}</div>` + items.map(s => rvServicioHtml(s, vista)).join('');
+  }).join('');
+}
+function rvCostoHtml(s) {
+  if (s.costo_centavos == null) {
+    return `<div class="rv-costo rv-falta"><i class="fas fa-lock"></i> Sin neto${s.proveedor ? ' · ' + esc(s.proveedor) : ' ni proveedor'}</div>`;
+  }
+  const origen = !s.costo_auto ? 'manual' : s.margen_pct != null ? `auto ${Number(s.margen_pct).toLocaleString('es-VE')}%` : 'tarifa base';
+  const cxp = s.cxp ? (Number(s.cxp.abonado) >= Number(s.cxp.monto) ? ' · pagado al proveedor' : ` · por pagar ${rvMonto(Math.round((Number(s.cxp.monto) - Number(s.cxp.abonado)) * 100), 'USD')}`) : '';
+  const falta = !s.proveedor_id && rvSeccion(s) !== 'otros';
+  return `<div class="rv-costo${falta ? ' rv-falta' : ''}"><i class="fas fa-lock"></i> Neto ${rvMonto(s.costo_centavos, s.costo_moneda)} (${origen}) · ${esc(s.proveedor || 'falta proveedor')} · margen ${rvMonto(s.margen_usd_centavos, 'USD')}${cxp}</div>`;
 }
 function rvServicioHtml(s, vista) {
   const t = RV_TIPOS[s.tipo] || [s.tipo, 'fa-circle-dot'], anulado = !!s.anulado_en, editable = !anulado && rvPuedeEditar();
@@ -3596,10 +3633,10 @@ function rvServicioHtml(s, vista) {
     .map(([k, l, tipo]) => `${l}: ${tipo === 'bool' ? (s.detalle[k] ? 'sí' : 'no') : esc(s.detalle[k])}`).join(' · ');
   // Boletería ve el precio de venta desde la migración 20261009110000; antes la RPC no lo mandaba.
   const precio = s.precio_centavos == null ? '' : `<div class="rv-meta"><span class="rv-precio">${rvMonto(s.precio_centavos, s.precio_moneda)}${s.precio_moneda !== 'USD' ? ` <small>≈ ${rvMonto(s.precio_usd_centavos, 'USD')}</small>` : ''}</span></div>`;
-  const costo = vista === 'admin' && !anulado ? `<div class="rv-costo"><i class="fas fa-lock"></i> ${s.costo_centavos != null ? `Costo ${rvMonto(s.costo_centavos, s.costo_moneda)} · ${esc(s.proveedor || 'sin proveedor')} · margen ${rvMonto(s.margen_usd_centavos, 'USD')}` : 'Sin costo ni proveedor'}</div>` : '';
+  const costo = rvVeCostos() && !anulado ? rvCostoHtml(s) : '';
   const acciones = anulado ? '' : [
     editable ? `<button class="btn-sm" type="button" data-rv-accion="editar-servicio" data-id="${s.id}"><i class="fas fa-pen"></i> Editar</button>` : '',
-    vista === 'admin' ? `<button class="btn-sm" type="button" data-rv-accion="costo" data-id="${s.id}"><i class="fas fa-coins"></i> Costo</button>` : '',
+    rvVeCostos() ? `<button class="btn-sm" type="button" data-rv-accion="costo" data-id="${s.id}"><i class="fas fa-coins"></i> Neto y proveedor</button>` : '',
     vista === 'boleteria' ? `<button class="btn-sm" type="button" data-rv-accion="emitir" data-id="${s.id}"><i class="fas fa-ticket"></i> Localizador, estado y TL</button><button class="btn-sm" type="button" data-rv-accion="subir-boleto" data-id="${s.id}"><i class="fas fa-upload"></i> Subir boleto</button>` : '',
     s.tipo === 'boleto_aereo' ? rvBoletoAcciones(s) : '',
     editable ? `<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-servicio" data-id="${s.id}"><i class="fas fa-ban"></i> Anular</button>` : '',
@@ -3770,17 +3807,44 @@ async function rvGuardarServicio(btn) {
 function rvFormCosto(p) {
   const s = (RV_DET.servicios || []).find(x => x.id === RV_FORM.id);
   if (!s) { RV_FORM = null; return rvRenderServicios(); }
-  const provs = (RV_PROVEEDORES || []).filter(x => x.activo || x.id === s.proveedor_id).map(x => `<option value="${x.id}" ${x.id === s.proveedor_id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('');
-  p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-lock"></i> Costo y proveedor · ${esc(rvServicioNombre(s))}</div>
-    <div class="csub">Solo lo ve un admin. Venta: ${rvMonto(s.precio_usd_centavos, 'USD')}</div>
+  const todos = (RV_PROVEEDORES || []).filter(x => x.activo || x.id === s.proveedor_id);
+  const delTipo = todos.filter(x => (x.tipos || []).includes(s.tipo) || x.id === s.proveedor_id);
+  const provs = (delTipo.length ? delTipo : todos).map(x => `<option value="${x.id}" ${x.id === s.proveedor_id ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('');
+  const auto = s.costo_centavos == null || s.costo_auto !== false;
+  p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-lock"></i> Neto y proveedor · ${esc(rvServicioNombre(s))}</div>
+    <div class="csub">Solo lo ven admin y administración. Venta: ${rvMonto(s.precio_usd_centavos, 'USD')}</div>
     <label class="fl">Proveedor</label><select class="ei" id="rv-c-prov"><option value="">Elegí un proveedor</option>${provs}</select>
-    <div class="rv-3"><div><label class="fl">Costo</label><input class="ei" id="rv-c-costo" type="number" min="0" step="0.01" value="${s.costo_centavos != null ? s.costo_centavos / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-c-moneda">${rvMonedaOpts(s.costo_moneda || 'USD')}</select></div><div id="rv-c-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-c-tasa" type="number" min="0" step="any" value="${s.costo_moneda && s.costo_moneda !== 'USD' ? esc(s.costo_tasa) : ''}" placeholder="Automática"></div></div>
-    ${rvBotones('guardar-costo', s.costo_centavos != null ? '<button class="dbtn gh rv-danger" type="button" data-rv-accion="quitar-costo" style="margin-top:9px"><i class="fas fa-eraser"></i> Quitar costo y proveedor</button>' : '')}</div>`;
+    <div class="rv-modo seg-group seg-group-sm"><button class="seg${auto ? ' on' : ''}" type="button" data-rv-modo="auto">Neto automático</button><button class="seg${auto ? '' : ' on'}" type="button" data-rv-modo="manual">Neto manual</button></div>
+    <div id="rv-c-auto" ${auto ? '' : 'hidden'}><div class="csub" id="rv-c-auto-txt"></div></div>
+    <div id="rv-c-manual" ${auto ? 'hidden' : ''}><div class="rv-3"><div><label class="fl">Neto</label><input class="ei" id="rv-c-costo" type="number" min="0" step="0.01" value="${s.costo_centavos != null ? s.costo_centavos / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-c-moneda">${rvMonedaOpts(s.costo_moneda || 'USD')}</select></div><div id="rv-c-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-c-tasa" type="number" min="0" step="any" value="${s.costo_moneda && s.costo_moneda !== 'USD' ? esc(s.costo_tasa) : ''}" placeholder="Automática"></div></div></div>
+    ${rvBotones('guardar-costo', s.costo_centavos != null ? '<button class="dbtn gh rv-danger" type="button" data-rv-accion="quitar-costo" style="margin-top:9px"><i class="fas fa-eraser"></i> Quitar neto y proveedor</button>' : '')}</div>`;
   rvTasaVisible('rv-c');
+  const box = p.querySelector('[data-rv-form]');
+  const modo = m => { box.querySelectorAll('[data-rv-modo]').forEach(b => b.classList.toggle('on', b.dataset.rvModo === m)); document.getElementById('rv-c-auto').hidden = m !== 'auto'; document.getElementById('rv-c-manual').hidden = m !== 'manual'; };
+  box.querySelectorAll('[data-rv-modo]').forEach(b => b.onclick = () => modo(b.dataset.rvModo));
+  const pista = () => {
+    const provId = Number(val('rv-c-prov')) || null, prov = todos.find(x => x.id === provId);
+    const traslado = rvSeccion(s) === 'traslado', pct = rvMargenPct(s.tipo, provId);
+    const venta = Number(s.precio_usd_centavos || 0);
+    document.getElementById('rv-c-auto-txt').textContent = traslado && prov?.tarifa_base_centavos != null
+      ? `Neto = tarifa base de ${prov.nombre}: ${rvMonto(prov.tarifa_base_centavos, 'USD')}`
+      : pct != null ? `Neto = venta ÷ ${(1 + pct / 100).toLocaleString('es-VE')} (fee ${Number(pct).toLocaleString('es-VE')}%): ${rvMonto(Math.round(venta / (1 + pct / 100)), 'USD')}`
+      : traslado ? 'Este proveedor no tiene tarifa base: cargala en Proveedores → Márgenes o usá neto manual.'
+      : 'Este tipo de servicio no tiene % cargado: configuralo en Proveedores → Márgenes o usá neto manual.';
+  };
+  document.getElementById('rv-c-prov').onchange = pista; pista();
 }
 async function rvGuardarCosto(btn, quitar) {
   const err = document.getElementById('rv-f-err'), id = RV_FORM?.id, costo = val('rv-c-costo'), moneda = val('rv-c-moneda');
   const args = { p_servicio_id: id, p_proveedor_id: null, p_costo: null, p_moneda: 'USD', p_tasa: null };
+  if (!quitar && !document.getElementById('rv-c-auto')?.hidden) {
+    btn.disabled = true;
+    const r = await sb.rpc('costo_servicio_auto', { p_servicio_id: id, p_proveedor_id: Number(val('rv-c-prov')) || null });
+    btn.disabled = false;
+    if (r.error || !r.data?.ok) { err.textContent = 'No se pudo guardar: ' + rvErr(r.error, r.data); return; }
+    RV_FORM = null; okToast(r.data.sin_regla ? 'Proveedor guardado. Sin % ni tarifa base: el neto queda vacío' : 'Neto calculado'); rvTrasCambio();
+    return;
+  }
   if (quitar) {
     if (!(await confirmarSheet({ titulo: '¿Quitar costo y proveedor?', detalle: 'El servicio queda sin costo cargado.', textoOk: 'Quitar', destructivo: true }))) return;
   } else {
@@ -16357,6 +16421,45 @@ async function loadProveedores() {
   if (error) { errToast('No se pudieron cargar los proveedores'); return; }
   PROV_CACHE = (data || []).map(p => ({ ...p, servicios: (p.tipos || []).map(t => PROV_TIPO_LABEL[t] || t).join(', ') }));
   renderProveedores();
+  loadMargenesProv();
+}
+// Fee por tipo (neto = venta ÷ (1 + %)) y tarifa base de traslados (migración 20261016230000).
+async function loadMargenesProv() {
+  const box = document.getElementById('prov-margenes'); if (!box) return;
+  const { data, error } = await sb.rpc('listar_margenes');
+  if (error || !data?.ok) { box.innerHTML = '<div class="pv-empty">No se pudieron cargar los márgenes</div>'; return; }
+  RV_MARGENES = data.margenes || [];
+  const tipoLbl = t => (RV_TIPOS[t] || [t])[0];
+  const fila = m => `<div class="mg-fila"><span>${esc(tipoLbl(m.tipo))}${m.proveedor ? ' · ' + esc(m.proveedor) : ''}${m.activo ? '' : ' (inactivo)'}</span><input class="ei" type="number" min="0" max="99.99" step="0.01" value="${esc(m.porcentaje)}" aria-label="Porcentaje"><span>%</span><button class="btn-sm" type="button" data-mg-guardar data-tipo="${esc(m.tipo)}" data-prov="${m.proveedor_id ?? ''}">Guardar</button></div>`;
+  const tras = t => `<div class="mg-fila"><span>${esc(t.nombre)}</span><input class="ei" type="number" min="0" step="0.01" value="${t.tarifa_base_centavos != null ? t.tarifa_base_centavos / 100 : ''}" placeholder="Sin tarifa" aria-label="Tarifa base"><span>USD</span><button class="btn-sm" type="button" data-tb-guardar data-prov="${t.id}">Guardar</button></div>`;
+  const provs = PROV_CACHE.filter(p => p.activo).map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('');
+  box.innerHTML = `<div class="csub">Fee que se suma al neto: neto = venta ÷ (1 + %). Ej.: boleto de $392 con 18% → neto $332,20. Un % por proveedor le gana al general.</div>
+    ${RV_MARGENES.map(fila).join('') || '<div class="pv-empty">Sin márgenes cargados</div>'}
+    <div class="mg-fila"><select class="ei" id="mg-n-tipo" aria-label="Tipo">${rvOpts(RV_TIPOS, 'hospedaje')}</select><select class="ei" id="mg-n-prov" aria-label="Proveedor"><option value="">Todos los proveedores</option>${provs}</select><input class="ei" id="mg-n-pct" type="number" min="0" max="99.99" step="0.01" placeholder="%" aria-label="Porcentaje"><button class="btn-sm" type="button" data-mg-nuevo><i class="fas fa-plus"></i> Agregar</button></div>
+    <div class="mg-sub">Tarifa base de traslados</div><div class="csub">Al elegir el proveedor en el traslado de una reserva, el neto toma esta tarifa (editable).</div>
+    ${(data.traslados || []).map(tras).join('') || '<div class="pv-empty">No hay proveedores de traslado activos</div>'}`;
+  box.onclick = async e => {
+    const b = e.target.closest('[data-mg-guardar],[data-mg-nuevo],[data-tb-guardar]'); if (!b || b.disabled) return;
+    const fila = b.closest('.mg-fila'), num = fila.querySelector('input').value;
+    let llamada;
+    if (b.hasAttribute('data-tb-guardar')) {
+      if (num !== '' && !(Number(num) >= 0)) return errToast('Tarifa inválida');
+      llamada = sb.rpc('guardar_tarifa_base_proveedor', { p_proveedor_id: Number(b.dataset.prov), p_tarifa: num === '' ? null : Number(num) });
+    } else {
+      const nuevo = b.hasAttribute('data-mg-nuevo');
+      const pct = nuevo ? val('mg-n-pct') : num;
+      if (pct === '' || !(Number(pct) >= 0 && Number(pct) < 100)) return errToast('El porcentaje va de 0 a 99,99');
+      const prov = nuevo ? val('mg-n-prov') : b.dataset.prov;
+      llamada = sb.rpc('guardar_margen', { p_tipo: nuevo ? val('mg-n-tipo') : b.dataset.tipo, p_porcentaje: Number(pct), p_proveedor_id: prov ? Number(prov) : null });
+    }
+    b.disabled = true;
+    const { data: r, error: er } = await llamada;
+    b.disabled = false;
+    if (er || !r?.ok) return errToast('No se pudo guardar: ' + rvErr(er, r));
+    okToast('Guardado. Aplica a servicios nuevos o al recalcular su neto');
+    RV_PROVEEDORES = null; RV_MARGENES = null;
+    loadMargenesProv();
+  };
 }
 // Los KPIs escriben en el <select> (ahora oculto) para que el resto del código
 // que lee val('prov-filtro') / val('emp-filtro') siga igual.
