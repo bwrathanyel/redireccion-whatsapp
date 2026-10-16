@@ -19444,8 +19444,68 @@ function trasGrillaHtml(items, fDestino, q) {
   return grupos.map(([d, xs]) => `<div class="tar-destino-header"><i class="fas fa-van-shuttle"></i> ${esc(d)} <span>${xs.length}</span></div>`
     + (xs.length ? `<div class="tras-grid">${xs.map(trasCardHtml).join('')}</div>` : '<div class="tras-aviso"><i class="fas fa-circle-info"></i> Sin tarifa BT de traslados en el tarifario vigente.</div>')).join('');
 }
+// Revisión del borrador que deja tarifario-excursiones-extraer cuando entra un PDF nuevo de BT. Solo admin
+// (la tabla tiene RLS de admin). Nada llega al catálogo hasta que se publica por RPC.
+let tarBorrador = null, tarBorradorPedido = false;
+async function tarCargarBorrador() {
+  const { data } = await sb.from('tarifario_excursiones_borrador').select('id,nombre_archivo,diff,resumen,creado_en').eq('estado', 'pendiente').order('creado_en', { ascending: false }).limit(1);
+  tarBorrador = data?.[0] || null;
+}
+function tarBorrFmt(v) {
+  if (v == null) return '—';
+  if (typeof v === 'boolean') return v ? 'Sí' : 'No';
+  if (typeof v === 'number') return `$${v}`;
+  if (Array.isArray(v)) return v.length ? v.map(i => (i && typeof i === 'object') ? `${i.concepto ?? ''} ${i.monto != null ? '$' + i.monto : ''}${i.por ? ' ' + i.por : ''}`.trim() : i).join(', ') : '—';
+  return String(v);
+}
+function tarBorrFilaHtml(c) {
+  const det = c.tipo === 'cambio'
+    ? (c.campos || []).map(f => `<span class="tar-borr-det">${esc(f.campo.replace(/_/g, ' '))}: <span class="tar-borr-ant">${esc(tarBorrFmt(f.antes))}</span> → <b>${esc(tarBorrFmt(f.despues))}</b></span>`).join('')
+    : c.tipo === 'alta'
+      ? `<span class="tar-borr-det">${c.despues?.adulto != null ? `Adulto ${tarBorrFmt(c.despues.adulto)}${c.despues.nino != null ? ` · niño ${tarBorrFmt(c.despues.nino)}` : ''}` : c.despues?.monto != null ? tarBorrFmt(c.despues.monto) : ''}</span>`
+      : '<span class="tar-borr-det">Ya no figura en el PDF: se desactiva</span>';
+  return `<div class="tar-borr-fila"><span class="tar-borr-tag ${c.tipo}">${c.tipo === 'cambio' ? 'Cambia' : c.tipo === 'alta' ? 'Nueva' : 'Sale'}</span><div><b>${esc(c.nombre)}</b>${det}</div></div>`;
+}
+function tarPintarBorrador() {
+  const host = document.getElementById('tar-borrador');
+  if (!host) return;
+  if (ROL !== 'admin' || (tarTab !== 'excursion' && tarTab !== 'traslado')) { host.innerHTML = ''; host.dataset.firma = ''; return; }
+  if (!tarBorradorPedido) { tarBorradorPedido = true; tarCargarBorrador().then(tarPintarBorrador).catch(() => {}); return; }
+  const firma = tarBorrador ? `${tarBorrador.id}` : '-';
+  if (host.dataset.firma === firma) return;
+  host.dataset.firma = firma;
+  if (!tarBorrador) { host.innerHTML = ''; return; }
+  const cambios = tarBorrador.diff || [], r = tarBorrador.resumen || {};
+  const seccion = (titulo, cs) => cs.length ? `<div class="tar-borr-sec">${titulo} (${cs.length})</div>${cs.map(tarBorrFilaHtml).join('')}` : '';
+  const acc = cambios.filter(c => !c.solo_aviso);
+  host.innerHTML = `<details class="tar-borr">
+    <summary><i class="fas fa-file-circle-exclamation"></i> Nueva versión BT: ${acc.length} cambio${acc.length === 1 ? '' : 's'} <small>${esc(tarBorrador.nombre_archivo)}</small><i class="fas fa-chevron-down tar-destino-caret"></i></summary>
+    <div class="tar-borr-cuerpo">
+      ${seccion('Excursiones', acc.filter(c => c.seccion === 'excursion'))}${seccion('Traslados', acc.filter(c => c.seccion === 'traslado'))}${seccion('Los Roques: solo aviso, no se publica solo', cambios.filter(c => c.solo_aviso))}
+      <div class="tar-borr-acc"><button class="btn-sm" onclick="tarPublicarBorrador()"><i class="fas fa-check"></i> Publicar ${acc.length} cambio${acc.length === 1 ? '' : 's'}</button><button class="btn-sm" onclick="tarDescartarBorrador()">Descartar</button></div>
+      <span class="tar-borr-det">${r.sin_cambios ?? 0} filas sin cambios. Al publicar, las tarifas anteriores quedan inactivas (no se borran).</span>
+    </div></details>`;
+}
+async function tarCerrarBorrador(rpc, okMsg) {
+  const { data, error } = await sb.rpc(rpc, { p_id: tarBorrador.id });
+  if (error) { errToast(`No se pudo: ${error.message}`); return; }
+  okToast(typeof okMsg === 'function' ? okMsg(data) : okMsg);
+  tarBorrador = null; tarCache = {}; tarPintarBorrador(); loadTarifario();
+}
+async function tarPublicarBorrador() {
+  if (!tarBorrador) return;
+  const n = (tarBorrador.diff || []).filter(c => !c.solo_aviso).length;
+  if (!await confirmarSheet({ titulo: 'Publicar versión BT', detalle: `Se aplican ${n} cambios a Excursiones y Traslados (web, bot y CRM). Las tarifas anteriores quedan inactivas.`, textoOk: 'Publicar' })) return;
+  await tarCerrarBorrador('publicar_excursiones_borrador', d => `Publicado: ${d.altas} nuevas, ${d.reemplazos} con cambios, ${d.bajas} bajas`);
+}
+async function tarDescartarBorrador() {
+  if (!tarBorrador) return;
+  if (!await confirmarSheet({ titulo: 'Descartar versión BT', detalle: 'El catálogo queda como está. El borrador se archiva.', textoOk: 'Descartar', destructivo: true })) return;
+  await tarCerrarBorrador('descartar_excursiones_borrador', 'Borrador descartado');
+}
 function renderTarifario() {
   detenerCarruseles();
+  tarPintarBorrador();
   // La pestaña IA no es una grilla de tarjetas: es una lista curada (tri-estado
   // + orden + línea de corte). Rama propia, temprano.
   document.getElementById('tar-grid').style.display = tarTab === 'ia' ? 'block' : 'grid';

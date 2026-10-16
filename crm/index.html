@@ -1530,6 +1530,23 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tras-nota{display:block;margin-top:2px}
 .tras-pie{margin-top:9px}
 .tras-aviso{display:flex;align-items:center;gap:9px;padding:11px 14px;border:1px dashed var(--line2);border-radius:12px;font-size:12.5px;color:var(--muted)}
+/* Revisión del borrador del extractor de excursiones (F7): banner plegable + diff viejo -> nuevo. */
+.tar-borr{margin:0 0 14px;border:1px solid var(--accent);border-radius:12px;background:var(--accent-soft);font-size:12.5px;color:var(--txt)}
+.tar-borr>summary{display:flex;align-items:center;gap:9px;padding:11px 14px;cursor:pointer;list-style:none;font-weight:700}
+.tar-borr>summary::-webkit-details-marker{display:none}
+.tar-borr>summary small{font-weight:500;color:var(--muted)}
+.tar-borr>summary .tar-destino-caret{margin-left:auto}
+.tar-borr[open]>summary .tar-destino-caret{transform:rotate(180deg)}
+.tar-borr-cuerpo{padding:0 14px 14px}
+.tar-borr-sec{margin:12px 0 2px;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+.tar-borr-fila{display:grid;grid-template-columns:62px minmax(0,1fr);gap:4px 11px;align-items:start;padding:8px 0;border-top:1px solid var(--line)}
+.tar-borr-tag{justify-self:start;padding:2px 8px;border:1px solid var(--line2);border-radius:99px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.tar-borr-tag.alta{color:var(--green);border-color:var(--green)}
+.tar-borr-tag.baja{color:var(--danger);border-color:var(--danger)}
+.tar-borr-tag.cambio{color:var(--amber);border-color:var(--amber)}
+.tar-borr-ant{color:var(--muted);text-decoration:line-through}
+.tar-borr-det{display:block;margin-top:2px;font-size:11.5px;color:var(--muted)}
+.tar-borr-acc{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
 @media (max-width:760px){
   .exc-cab{display:none}
   .exc-fila{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px 11px}
@@ -5820,6 +5837,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <label class="tar-f-check" id="tar-f-ocultas-wrap" data-tabs="promo" data-hidden><input type="checkbox" class="tar-f" id="tar-f-ocultas"> Ver ocultas</label>
         <button class="mfs-done" data-mfs="tar-toolbar" type="button">Listo</button>
       </div>
+      <div id="tar-borrador"></div>
       <div class="cargador-host" id="tar-loading"></div>
       <div class="tbl-state" id="tar-empty"><i class="fas fa-book-open"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay ítems con este filtro</div></div>
       <div class="tar-grid" id="tar-grid"></div>
