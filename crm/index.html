@@ -2440,6 +2440,8 @@ body.modo-boleteria .nav-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .b
    de nadie) tienen que estar ocultos fuera de él -- si no, se filtran al
    menú normal para todos (bug real, visto en vivo). */
 body:not(.modo-boleteria) .nav-modo-boleteria-solo{display:none}
+body.asesor-boleteria:not(.modo-boleteria) .nav-modo-boleteria-solo{display:flex}
+body.asesor-boleteria :is(#btn-entrar-modo-boleteria,#sheet-entrar-modo-boleteria,#btn-salir-modo-boleteria,#sheet-salir-modo-boleteria){display:none}
 .modo-boleteria-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(46,107,255,.14);border:1px solid rgba(74,158,255,.4);border-radius:10px;color:#7fb0ff;font-weight:600;font-size:12.5px;padding:9px 10px;cursor:pointer;font-family:inherit;margin-bottom:8px}
 .modo-boleteria-btn:hover{background:rgba(46,107,255,.24)}
 /* Solicitudes: primera del menú, más grande, y late en rojo con pendientes (fijarSolicitudesArriba) */

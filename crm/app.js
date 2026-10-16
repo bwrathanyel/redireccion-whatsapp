@@ -386,6 +386,8 @@ async function afterLogin() {
   MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
   MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
   MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado; MI_ES_SUPERADMIN = !!u.es_superadmin; MI_ES_BOLETERIA = VISTA_SIM ? VISTA_SIM === 'asesor_boleteria' : !!u.es_boleteria;
+  // Asesor + Boletería: Solicitudes y Boletería van en el menú normal, sin modo aparte (dueño 2026-10-15).
+  document.body.classList.toggle('asesor-boleteria', ROL === 'asesor' && MI_ES_BOLETERIA);
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   await entrarSegunRol();
 }
@@ -26359,6 +26361,7 @@ async function bolConvertirSolicitud(s, btn) {
 let modoBoleteria = false;
 let seccionAntesDeModoBoleteria = null;
 function entrarModoBoleteria(sec) {
+  if (document.body.classList.contains('asesor-boleteria')) { activateSection(typeof sec === 'string' ? sec : 'boleteria'); return; }
   if (!modoBoleteria) seccionAntesDeModoBoleteria = currentSec;
   modoBoleteria = true;
   document.body.classList.add('modo-boleteria');
