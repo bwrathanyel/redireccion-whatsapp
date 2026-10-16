@@ -18068,7 +18068,7 @@ const TAR_TAB_LABEL = { excursion: 'Excursión', traslado: 'Traslado', hotel: 'H
      `promociones` es una VISTA sobre esas mismas filas. Pedir las dos traía
      cada flyer dos veces (tarjeta de promo + fila de la carpeta) y el conteo de
      promociones del hotel salía inflado. Una sola fuente: `tarifas`. */
-const TAR_SEL_PRODUCTOS = '*, tarifa_destacada_id, tarifas(*, tarifario_bloques(*)), producto_fotos(storage_path,orden,es_principal,activo)';
+const TAR_SEL_PRODUCTOS = '*, tarifa_destacada_id, tarifas(*, tarifario_bloques(*)), producto_fotos(storage_path,orden,es_principal,activo,credito,credito_url)';
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas']);
   const mesSel = document.getElementById('tar-f-mes');
@@ -19144,6 +19144,12 @@ const fotosDe = (x, ancho) => {
   return m.get(k);
 };
 const tieneFotoPrincipalPropia = x => fotosRaw(x).some(f => f.es_principal);
+// Atribución CC BY-SA de las fotos con `credito` (producto_fotos.credito/credito_url).
+const creditosFotosHtml = x => {
+  const c = fotosRaw(x).filter(f => f.credito).map(f => /^https:\/\//.test(f.credito_url || '')
+    ? `<a href="${esc(f.credito_url)}" target="_blank" rel="noopener noreferrer">${esc(f.credito)}</a>` : esc(f.credito));
+  return c.length ? `<div class="dcredito" style="font-size:11px;opacity:.7;margin:4px 0 8px">Foto: ${c.join(' · ')}</div>` : '';
+};
 // Cuando un hotel tiene varias promos, todas partían del mismo set de fotos
 // en el mismo orden — se veían idénticas en portada. Se le asigna a cada
 // promo del mismo hotel un índice de arranque distinto (0, 1, 2...) dentro
@@ -21710,6 +21716,7 @@ function openProductoDrawer(x, tipoForzado = null) {
       <img class="dportada" src="${esc(portada)}" alt="" data-drawer-foto="0">
       ${fotos.length > 1 ? `<div class="dgallery">${fotos.slice(1).map((f, i) => `<img src="${esc(f)}" alt="" loading="lazy" data-drawer-foto="${i + 1}">`).join('')}</div>` : ''}
     </div>` : ''}
+    ${creditosFotosHtml(x)}
     ${(() => {
       // Promo con grilla `precios`: el DBL por persona en grande (igual que la
       // card), el resto de las ocupaciones en una fila chica. Sin grilla cae al
@@ -24043,7 +24050,13 @@ async function cbCargarSeccion() {
   // usuarios_chat no trae es_prueba: las cuentas de prueba se reconocen por nombre (__gate_*, Invitado N, "Prueba ...").
   const asesores = staff.filter(u => u.id !== MI_USUARIO_ID && (u.rol === 'asesor' || u.rol === 'admin') && !/^__gate|prueba|invitado/i.test(u.nombre || ''))
     .sort((a, b) => (a.rol === b.rol ? 0 : a.rol === 'asesor' ? -1 : 1) || (a.nombre || '').localeCompare(b.nombre || ''));
-  sel.innerHTML = '<option value="">— Elige el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
+  // usuarios_chat solo le devuelve admins a un asesor común (el chat no le deja escribirle a otro asesor ni a sí mismo):
+  // cotiza para sí, así que el campo va fijo con su nombre y el PDF se descarga en vez de mandarse por chat.
+  const cotizaParaSi = ROL === 'asesor' && !MI_ES_BOLETERIA;
+  sel.disabled = cotizaParaSi;
+  document.getElementById('cb-enviar-btn').style.display = cotizaParaSi ? 'none' : '';
+  if (cotizaParaSi) sel.innerHTML = `<option value="${esc(MI_USUARIO_ID)}" selected>${esc(MI_NOMBRE)}</option>`;
+  else sel.innerHTML = '<option value="">— Elige el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
   if (cbSolicitudPendiente) await cbAplicarSolicitud(sel);
   if (cbLeadPendiente) cbAplicarLead();
   cbOffset = 0;
@@ -24140,7 +24153,7 @@ window.cbGuardar = async function cbGuardar(accion) {
         else cbDescargar(blob, cbArchivo(cot));
         okToast(`Cotización ${num} generada${marca}`);
       }
-      else if (!enviar) { cbDescargar(blob, cbArchivo(cot)); okToast(`Cotización ${cbNumero(cot.numero)} generada`); }
+      else if (!enviar || asesorId === MI_USUARIO_ID) { cbDescargar(blob, cbArchivo(cot)); okToast(`Cotización ${cbNumero(cot.numero)} generada`); }
       else if (await cbEnviarAAsesor(cot, blob, asesorId)) {
         const resuelta = sol && await cbResolverSolicitud(sol.id, cot);
         okToast(`${cbNumero(cot.numero)} enviada a ${nombreUsuario(asesorId)}${resuelta ? ` · solicitud #${sol.id} resuelta` : ''}`);
@@ -24176,6 +24189,7 @@ window.cbReenviar = async function cbReenviar(id, btn) {
   btn.disabled = true;
   try {
     await ensureVoucherLibs();
+    if (asesorId === MI_USUARIO_ID) { cbDescargar(await cbPdfBlob(c), cbArchivo(c)); btn.disabled = false; return; }
     if (await cbEnviarAAsesor(c, await cbPdfBlob(c), asesorId)) {
       if (c.solicitud_id && MI_ES_AGENTE_BOLETERIA) await cbResolverSolicitud(c.solicitud_id, c);
       okToast(`${cbNumero(c.numero)} enviada a ${nombreUsuario(asesorId)}`); cbCargarHistorial(false);
