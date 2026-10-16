@@ -23665,24 +23665,43 @@ const cbMonto = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDig
 const cbHoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
 const cbFechaLarga = iso => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${d} ${CB_MESES[+m - 1]} ${y}`; };
 const cbFechaCorta = iso => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${d}/${m}/${y.slice(2)}`; };
-const cbImporte = it => (Number(it.cant) || 0) * (Number(it.tarifa) || 0);
+// Adultos / niños / infantes (2026-10-15): los servicios con pasajeros (CB_TIPOS[..].pax) cobran una
+// tarifa por categoría. Las filas guardadas antes no traen `adultos`: sus `cant` se leen como adultos.
+// `cant` se sigue guardando como el total de personas.
+const cbEsPax = it => !!CB_TIPOS[it.tipo || 'boleto']?.pax;
+const cbPax = it => it.adultos === undefined ? { a: Number(it.cant) || 0, n: 0, i: 0 } : { a: Number(it.adultos) || 0, n: Number(it.ninos) || 0, i: Number(it.infantes) || 0 };
+const cbPaxTexto = it => {
+  const p = cbPax(it), f = (n, s, pl) => n ? `${n} ${n === 1 ? s : pl}` : '';
+  if (it.adultos === undefined) return p.a ? `${p.a} persona${p.a === 1 ? '' : 's'}` : '';
+  return [f(p.a, 'adulto', 'adultos'), f(p.n, 'niño', 'niños'), f(p.i, 'infante', 'infantes')].filter(Boolean).join(', ');
+};
+const cbTotalPax = it => { if (!cbEsPax(it)) return Number(it.cant) || 0; const p = cbPax(it); return p.a + p.n + p.i; };
+const cbImporte = it => {
+  const t = Number(it.tarifa) || 0;
+  if (!cbEsPax(it)) return (Number(it.cant) || 0) * t;
+  const p = cbPax(it);
+  return p.a * t + p.n * (Number(it.tarifa_nino) || 0) + p.i * (Number(it.tarifa_infante) || 0);
+};
 // Cotización multi-servicio (2026-10-14, paquetes corporativos): cada ítem lleva
 // `tipo`; las filas anteriores no lo tienen y se leen como boleto. El primer campo
 // de cada tipo es su título (ruta o nombre) y es el que se exige al guardar.
 const CB_CANT = 'type="number" min="1" step="1"', CB_TARIFA = ['tarifa', 'Tarifa c/u (USD)', 'type="number" min="0" step="0.01"'];
 const CB_TIPOS = {
-  boleto: { nombre: 'Boleto aéreo', campos: [['ruta', 'Ruta', 'placeholder="CCS-LRV-CCS"'], ['aerolinea', 'Aerolínea', 'placeholder="Sasca Airlines"'], ['cant', 'Pasajeros', CB_CANT], CB_TARIFA, ['ida', 'Fecha de ida', 'type="date"'], ['ida_hora', 'Horario ida', 'placeholder="07:45-08:15 AM"'], ['vuelta', 'Fecha de vuelta', 'type="date"'], ['vuelta_hora', 'Horario vuelta', 'placeholder="17:15-17:45 PM"']] },
-  hotel: { nombre: 'Hotel', campos: [['nombre', 'Hotel', 'placeholder="Sunsol Isla Caribe"'], ['plan', 'Plan', 'placeholder="Todo incluido"'], ['cant', 'Personas', CB_CANT], CB_TARIFA, ['ida', 'Check-in', 'type="date"'], ['vuelta', 'Check-out', 'type="date"'], ['hab', 'Habitación', 'placeholder="Doble estándar"', ' cb-dos']] },
+  boleto: { nombre: 'Boleto aéreo', campos: [['ruta', 'Ruta', 'placeholder="CCS-LRV-CCS"'], ['aerolinea', 'Aerolínea', 'placeholder="Sasca Airlines"'], ['ida', 'Fecha de ida', 'type="date"'], ['ida_hora', 'Horario ida', 'placeholder="07:45-08:15 AM"'], ['vuelta', 'Fecha de vuelta', 'type="date"'], ['vuelta_hora', 'Horario vuelta', 'placeholder="17:15-17:45 PM"']], pax: true },
+  hotel: { nombre: 'Hotel', campos: [['nombre', 'Hotel', 'placeholder="Sunsol Isla Caribe"'], ['plan', 'Plan', 'placeholder="Todo incluido"'], ['ida', 'Check-in', 'type="date"'], ['vuelta', 'Check-out', 'type="date"'], ['hab', 'Habitación', 'placeholder="Doble estándar"', ' cb-dos']], pax: true },
   // Paquete y full day (2026-10-15, cotización para asesores de ventas).
-  paquete: { nombre: 'Paquete', campos: [['nombre', 'Paquete', 'placeholder="Margarita 4D/3N"'], ['plan', 'Plan', 'placeholder="Todo incluido"'], ['cant', 'Personas', CB_CANT], CB_TARIFA, ['ida', 'Entrada', 'type="date"'], ['vuelta', 'Salida', 'type="date"']] },
-  fullday: { nombre: 'Full day / Excursión', campos: [['nombre', 'Full day o excursión', 'placeholder="Full day Cayo Sombrero"'], ['ida', 'Fecha', 'type="date"'], ['cant', 'Personas', CB_CANT], CB_TARIFA] },
-  tour: { nombre: 'Tour', campos: [['nombre', 'Tour', 'placeholder="Tour Salto Ángel"'], ['ida', 'Fecha', 'type="date"'], ['cant', 'Personas', CB_CANT], CB_TARIFA] },
-  traslado: { nombre: 'Traslado', campos: [['ruta', 'Trayecto', 'placeholder="Aeropuerto PMV - Hotel"'], ['ida', 'Fecha', 'type="date"'], ['cant', 'Pasajeros', CB_CANT], CB_TARIFA, ['ida_hora', 'Hora', 'placeholder="10:30 AM"'], ['vuelta', 'Fecha de regreso (opcional)', 'type="date"'], ['vuelta_hora', 'Hora de regreso', 'placeholder="04:00 PM"']] },
+  paquete: { nombre: 'Paquete', campos: [['nombre', 'Paquete', 'placeholder="Margarita 4D/3N"'], ['plan', 'Plan', 'placeholder="Todo incluido"'], ['ida', 'Entrada', 'type="date"'], ['vuelta', 'Salida', 'type="date"']], pax: true },
+  fullday: { nombre: 'Full day / Excursión', campos: [['nombre', 'Full day o excursión', 'placeholder="Full day Cayo Sombrero"'], ['ida', 'Fecha', 'type="date"']], pax: true },
+  tour: { nombre: 'Tour', campos: [['nombre', 'Tour', 'placeholder="Tour Salto Ángel"'], ['ida', 'Fecha', 'type="date"']], pax: true },
+  traslado: { nombre: 'Traslado', campos: [['ruta', 'Trayecto', 'placeholder="Aeropuerto PMV - Hotel"'], ['ida', 'Fecha', 'type="date"'], ['ida_hora', 'Hora', 'placeholder="10:30 AM"'], ['vuelta', 'Fecha de regreso (opcional)', 'type="date"'], ['vuelta_hora', 'Hora de regreso', 'placeholder="04:00 PM"']], pax: true },
   otro: { nombre: 'Otro servicio', campos: [['nombre', 'Descripción', 'placeholder="Seguro de viaje"'], ['ida', 'Fecha (opcional)', 'type="date"'], ['cant', 'Cantidad', CB_CANT], CB_TARIFA] },
 };
 const cbTipo = it => CB_TIPOS[it.tipo] || CB_TIPOS.boleto;
 const cbTitulo = it => String(it[cbTipo(it).campos[0][0]] || '').trim();
-const cbItemVacio = (tipo = 'boleto') => Object.fromEntries([['tipo', tipo], ...CB_TIPOS[tipo].campos.map(([k]) => [k, k === 'cant' ? 1 : '']), ['extra', '']]);
+const CB_PAX_CAMPOS = [['adultos', 'tarifa', 'Adultos', 'Tarifa adulto (USD)', 1], ['ninos', 'tarifa_nino', 'Niños', 'Tarifa niño (USD)', 0], ['infantes', 'tarifa_infante', 'Infantes', 'Tarifa infante (USD)', 0]];
+const cbItemVacio = (tipo = 'boleto') => Object.fromEntries([['tipo', tipo], ...CB_TIPOS[tipo].campos.map(([k]) => [k, k === 'cant' ? 1 : '']), ...(CB_TIPOS[tipo].pax ? CB_PAX_CAMPOS.flatMap(([c, t]) => [[c, c === 'adultos' ? 1 : ''], [t, '']]) : []), ['extra', '']]);
+// Las filas/borradores anteriores a adultos-niños-infantes traen solo `cant`: pasa a adultos.
+const cbMigrarPax = it => CB_TIPOS[it?.tipo || 'boleto']?.pax && it.adultos === undefined && it.cant != null ? { ...it, adultos: it.cant } : it;
 const cbArchivo = c => `Cotizacion-${cbNumero(c.numero)}-${c.cliente.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}.pdf`;
 
 function cbItemHtml(it, i) {
@@ -23693,6 +23712,7 @@ function cbItemHtml(it, i) {
     <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span>Importe <b class="cb-importe">$${cbMonto(cbImporte(it))}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
     <div class="cb-item-grid">
       ${CB_TIPOS[tipo].campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : f(...c)).join('')}
+      ${CB_TIPOS[tipo].pax ? `<div class="cb-pax cb-full">${CB_PAX_CAMPOS.map(([c, t, lc, lt, min]) => `<div class="cb-pax-c"><div class="field"><label class="fl">${lc}</label><input class="ei" data-k="${c}" type="number" min="${min}" step="1" placeholder="0" value="${esc(String(it[c] ?? ''))}"></div><div class="field"><label class="fl">${lt}</label><input class="ei" data-k="${t}" type="number" min="0" step="0.01" value="${esc(String(it[t] ?? ''))}"></div></div>`).join('')}</div>` : ''}
       ${f('extra', 'Detalle adicional (opcional)', 'placeholder="Equipaje, clase, qué incluye, observaciones..."', ' cb-full')}
     </div>
   </div>`;
@@ -23700,7 +23720,9 @@ function cbItemHtml(it, i) {
 function cbLimpiarItem(it) {
   const o = { tipo: CB_TIPOS[it.tipo] ? it.tipo : 'boleto' };
   [...CB_TIPOS[o.tipo].campos.map(([k]) => k), 'extra'].forEach(k => { o[k] = String(it[k] ?? '').trim(); });
-  return Object.assign(o, { cant: Number(it.cant) || 0, tarifa: Number(it.tarifa) || 0 });
+  if (!CB_TIPOS[o.tipo].pax) return Object.assign(o, { cant: Number(it.cant) || 0, tarifa: Number(it.tarifa) || 0 });
+  CB_PAX_CAMPOS.forEach(([c, t]) => { o[c] = Math.max(0, Math.floor(Number(it[c]) || 0)); o[t] = Number(it[t]) || 0; });
+  return Object.assign(o, { cant: o.adultos + o.ninos + o.infantes });
 }
 const cbNoches = (a, b) => { const n = a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 864e5) : 0; return n > 0 ? String(n) : ''; };
 function cbDetalle(it) {
@@ -23732,7 +23754,8 @@ function cbDetalleCliente(it) {
     if (it.ida) add('', `${f(it.ida)}${it.vuelta ? ' al ' + f(it.vuelta) : ''}${n ? ` · ${n} noche${n === 1 ? '' : 's'}` : ''}`);
   } else if (tipo === 'traslado') { add('Fecha', con(f(it.ida), it.ida_hora)); add('Regreso', con(f(it.vuelta), it.vuelta_hora)); }
   else add('Fecha', f(it.ida));
-  add('', `${it.cant} × $${cbMonto(it.tarifa)}`);
+  if (cbEsPax(it)) { const p = cbPax(it); [[p.a, 'adulto', 'adultos', it.tarifa], [p.n, 'niño', 'niños', it.tarifa_nino], [p.i, 'infante', 'infantes', it.tarifa_infante]].forEach(([n, s, pl, t]) => { if (n) add('', `${n} ${n === 1 ? s : pl} × $${cbMonto(t)}`); }); }
+  else add('', `${it.cant} × $${cbMonto(it.tarifa)}`);
   if (it.extra) add('', it.extra);
   return d.join('\n');
 }
@@ -23740,12 +23763,12 @@ function cbDetalleCliente(it) {
 function cbDatosPdf(c) {
   const items = c.items || [], fechas = items.flatMap(it => [it.ida, it.vuelta]).filter(Boolean).sort();
   const principal = items.find(it => it.tipo === 'hotel' || it.tipo === 'paquete') || items[0];
-  const personas = Math.max(0, ...items.filter(it => ['boleto', 'hotel', 'paquete'].includes(it.tipo || 'boleto')).map(it => Number(it.cant) || 0));
+  const conPersonas = items.filter(it => ['boleto', 'hotel', 'paquete'].includes(it.tipo || 'boleto')).sort((x, y) => cbTotalPax(y) - cbTotalPax(x))[0];
   return {
     cliente: c.cliente, numero: cbNumero(c.numero), fecha: c.fecha,
     titulo: principal ? cbTitulo(principal) : '',
     fechas: fechas.length ? (fechas[0] === fechas.at(-1) ? cbFechaLarga(fechas[0]) : `${cbFechaLarga(fechas[0])} al ${cbFechaLarga(fechas.at(-1))}`) : '',
-    personas: personas ? `${personas} persona${personas === 1 ? '' : 's'}` : '',
+    personas: conPersonas ? cbPaxTexto(conPersonas) : '',
     opciones: [{ titulo: 'Servicios cotizados', lineas: [], tabla: {
       filas: items.map(it => [`${cbTipo(it).nombre}: ${cbTitulo(it)}`, cbDetalleCliente(it), '$' + cbMonto(cbImporte(it))]),
       totales: [['Total', '$' + cbMonto(c.total)]],
@@ -23833,7 +23856,7 @@ async function cbGuardarBorrador() {
   return true;
 }
 function cbRestaurarBorrador(b, sel) {
-  cbItems = Array.isArray(b.items) && b.items.length ? b.items.map(it => ({ ...cbItemVacio(CB_TIPOS[it?.tipo] ? it.tipo : 'boleto'), ...it })) : [cbItemVacio()];
+  cbItems = Array.isArray(b.items) && b.items.length ? b.items.map(it => ({ ...cbItemVacio(CB_TIPOS[it?.tipo] ? it.tipo : 'boleto'), ...cbMigrarPax(it) })) : [cbItemVacio()];
   cbRenderItems();
   [['cb-cliente', b.cliente], ['cb-fecha', b.fecha], ['cb-vence', b.vence], ['cb-notas', b.notas], ['cb-terminos', b.terminos]].forEach(([id, v]) => { if (typeof v === 'string') document.getElementById(id).value = v; });
   if (b.asesor && [...sel.options].some(o => o.value === b.asesor)) sel.value = b.asesor;
@@ -23851,7 +23874,7 @@ async function cbAplicarSolicitud(sel) {
   cbResetForm(); cbSolicitud = s; cbPintarSolicitud();
   if (borrador) { cbRestaurarBorrador(borrador, sel); okToast(`Retomaste la solicitud #${s.id} donde la dejaste`); return; }
   document.getElementById('cb-cliente').value = s.cliente_nombre || '';
-  cbItems = [{ ...cbItemVacio('boleto'), ruta: [s.origen, s.destino, s.fecha_regreso ? s.origen : ''].filter(Boolean).join(' - '), cant: s.personas || 1, ida: s.fecha_viaje || '', vuelta: s.fecha_regreso || '', extra: s.notas || '' }];
+  cbItems = [{ ...cbItemVacio('boleto'), ruta: [s.origen, s.destino, s.fecha_regreso ? s.origen : ''].filter(Boolean).join(' - '), adultos: s.personas || 1, ida: s.fecha_viaje || '', vuelta: s.fecha_regreso || '', extra: s.notas || '' }];
   cbRenderItems();
   // listar_cola_boleteria trae el nombre de quien pidió, no su id.
   const op = [...sel.options].find(o => o.value && o.textContent.replace(/ \(admin\)$/, '') === s.creado_por);
@@ -23981,8 +24004,8 @@ window.cbGuardar = async function cbGuardar(accion) {
   if (!cliente) { errToast('Escribe el cliente'); return; }
   const items = cbItems.map(cbLimpiarItem).filter(it => cbTitulo(it) || it.tarifa);
   if (!items.length) { errToast('Agrega al menos un servicio con su descripción y tarifa'); return; }
-  const incompleto = items.find(it => !cbTitulo(it) || !it.cant);
-  if (incompleto) { const t = cbTipo(incompleto), falta = cbTitulo(incompleto) ? t.campos.find(([k]) => k === 'cant')[1] : t.campos[0][1]; errToast(`${t.nombre}: falta ${falta.toLowerCase()}`); return; }
+  const incompleto = items.find(it => !cbTitulo(it) || !(cbEsPax(it) ? cbPax(it).a : it.cant));
+  if (incompleto) { const t = cbTipo(incompleto), falta = !cbTitulo(incompleto) ? t.campos[0][1] : cbEsPax(incompleto) ? 'al menos un adulto' : t.campos.find(([k]) => k === 'cant')[1]; errToast(`${t.nombre}: falta ${falta.toLowerCase()}`); return; }
   const asesorId = val('cb-asesor');
   if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); document.getElementById('cb-asesor').focus(); return; }
   const btn = document.getElementById(`cb-${accion}-btn`), htmlBtn = btn.innerHTML;
@@ -24084,7 +24107,14 @@ async function cbPdfBlob(c) {
   doc.setFont('helvetica', 'bold'); doc.setTextColor(20, 20, 20);
   doc.text(doc.splitTextToSize(c.cliente.toUpperCase(), 260), M, 216);
 
-  const filas = (c.items || []).map((it, i) => [i + 1, cbDetalle(it), Number(it.cant).toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))]);
+  // Con niños o infantes el ítem lleva su descripción y una fila por categoría (adultos, niños, infantes).
+  const filas = (c.items || []).flatMap((it, i) => {
+    if (!cbEsPax(it)) return [[i + 1, cbDetalle(it), Number(it.cant).toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))]];
+    const p = cbPax(it);
+    if (!p.n && !p.i) return [[i + 1, cbDetalle(it), p.a.toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))]];
+    const cat = [['ADULTOS', p.a, it.tarifa], ['NIÑOS', p.n, it.tarifa_nino], ['INFANTES', p.i, it.tarifa_infante]].filter(x => x[1]).map(([n, q, t]) => ['', n, q.toFixed(2), cbMonto(t), cbMonto(q * (Number(t) || 0))]);
+    return [[i + 1, cbDetalle(it), '', '', ''], ...cat];
+  });
   doc.autoTable({
     startY: 240, theme: 'plain', margin: { left: M, right: M },
     head: [['#', 'Artículo y descripción', 'Cant.', 'Tarifa', 'Importe']],
@@ -24093,7 +24123,7 @@ async function cbPdfBlob(c) {
     headStyles: { fillColor: oscuro, textColor: 255, fontStyle: 'normal', fontSize: 9.5 },
     columnStyles: { 0: { cellWidth: 30, halign: 'center' }, 2: { cellWidth: 52, halign: 'right' }, 3: { cellWidth: 70, halign: 'right' }, 4: { cellWidth: 80, halign: 'right' } },
     didParseCell: d => { if (d.section === 'head' && d.column.index >= 2) d.cell.styles.halign = 'right'; },
-    didDrawCell: d => { if (d.section === 'body' && d.column.index === 0) { doc.setDrawColor(190, 190, 190); doc.line(M, d.cell.y + d.cell.height, W - M, d.cell.y + d.cell.height); } },
+    didDrawCell: d => { if (d.section === 'body' && d.column.index === 0 && (!filas[d.row.index + 1] || filas[d.row.index + 1][0] !== '')) { doc.setDrawColor(190, 190, 190); doc.line(M, d.cell.y + d.cell.height, W - M, d.cell.y + d.cell.height); } },
   });
 
   let y = doc.lastAutoTable.finalY + 22;
@@ -27522,6 +27552,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-16', emoji: '👨‍👩‍👧', titulo: 'Adultos, niños e infantes en las cotizaciones', texto: 'En boletos, hoteles, paquetes, full days, tours y traslados, "Pasajeros" ahora se divide en adultos, niños e infantes, cada uno con su tarifa. El importe suma cada categoría y el PDF muestra una línea por cada una. Las cotizaciones anteriores se ven igual que antes.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-15', emoji: '🏢', titulo: 'Vouchers de empresa y sin leads duplicados', texto: 'En Importar vouchers, la columna "Empresa" (o "Marcar seleccionados" abajo) deja cada voucher a nombre de una empresa. Un voucher de empresa puede ir sin monto: queda como reserva de la empresa, sin factura, y el monto se completa después en Postventa. Además, si el cliente ya está en el CRM (mismo teléfono, cédula o nombre, con o sin acentos) el voucher se anexa a su lead en vez de crear uno nuevo, aunque sea de otro asesor.', roles: ['admin'] },
   { fecha: '2026-10-15', emoji: '📑', titulo: 'Armá tus cotizaciones en PDF', texto: 'Nueva entrada "Cotizaciones" en el menú: sumá hospedaje, paquetes, full days, tours, traslados y boletos, cada uno con su tarifa, y sale un PDF con el logo de Lotus listo para el cliente. El nombre del hotel o paquete se autocompleta desde el tarifario. Desde la ficha del lead, el botón "Cotizar" la arma con el cliente ya cargado, y "Guardar en el lead" la deja como cotización enviada. Abajo ves el historial de las tuyas.', roles: ['asesor', 'admin'] },
   { fecha: '2026-10-15', emoji: '🧾', titulo: 'Lyra: cotización en PDF con foto', texto: 'Cuando Lyra cotiza, ahora ves el texto para el cliente en el chat (con "Ver todo" si es largo) y abajo tres botones: "Copiar", "PDF" y "Prellenar voucher". El PDF sale con el logo, la foto de cada hotel, el desglose de precios en tabla, qué incluye y la validez de la tarifa, listo para mandarle al cliente. En el celular se abre directo para compartir por WhatsApp.', roles: ['asesor', 'admin'] },

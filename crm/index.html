@@ -2533,6 +2533,8 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .cb-item-grid .cb-full{grid-column:1/-1}
 .cb-item-grid .cb-dos{grid-column:span 2}
 .cb-item-grid .field{margin:0}
+.cb-pax{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cb-pax-c{display:grid;grid-template-columns:1fr 1.4fr;gap:8px}
 .cb-item-tit{display:flex;align-items:center;gap:8px;min-width:0}
 .cb-item-cab .cb-tipo{width:auto;padding:5px 10px;font-size:12.5px;font-weight:600}
 .cb-add{width:auto;margin-top:10px;padding:8px 14px}
@@ -2545,7 +2547,7 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
 .cb-acciones .dbtn{width:auto;padding:8px 16px}
 .cb-hist-cab{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .cb-hist-cab .ei{max-width:280px}
-@media (max-width:720px){.cb-item-grid{grid-template-columns:1fr 1fr}.cb-hist-cab .ei{max-width:none}}
+@media (max-width:720px){.cb-item-grid{grid-template-columns:1fr 1fr}.cb-pax{grid-template-columns:1fr}.cb-hist-cab .ei{max-width:none}}
 /* Voucher (2026-10-13): formulario compacto + boleto de vista previa. Ficha en Reservas vía voucher_vincular. */
 .vc-wrap{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start;margin-bottom:14px}
 .vc-form{position:relative;overflow:hidden;padding-left:24px;margin:0}
