@@ -26826,8 +26826,6 @@ const NAV_ITEMS = [
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-ok' },
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: 'nav-administrativo-ok' },
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
-  { sec: 'web-reasignados', icon: 'fas fa-hand-holding-dollar', label: 'Web y Reasignados', padre: 'grp-leads', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Los leads por los que cobrás comisión' },
-  { sec: 'contactos-directos', icon: 'fas fa-comment-sms', label: 'Contactos directos', padre: 'grp-leads', roles: '', sub: 'Escribieron directo por WhatsApp (bio-redes, IA) -- no se gestionan desde acá' },
   { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Pegá números o capturas y se reparten entre los asesores' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok', sub: 'Chat interno del equipo', badge: 'nav-msg-count', badgeDefault: '—' },
   // Meta DM (2026-10-07): los chats del bot (Instagram, Facebook, WhatsApp) salieron
@@ -28581,11 +28579,11 @@ function salirModoBoleteria() {
   seccionAntesDeModoBoleteria = null;
   if (quedarseEnMenu) { abrirMenuMovil(); document.getElementById('sidebar-nav')?.scrollTo({ top: 0 }); }
 }
-// Agente: sección Solicitudes del modo Boletería. Asesor: Leads > Boletería. Con id, abre esa.
+// Sección Solicitudes del modo Boletería para todos (la pestaña Leads > Boletería
+// se quitó el 2026-10-16, pedido del dueño). Con id, abre esa.
 function irASolicitudes(id) {
   BOL_ABRIR_ID = id || null;
-  if (bolEsAgente()) { if (!modoBoleteria) entrarModoBoleteria('bol-solicitudes'); else activateSection('bol-solicitudes'); }
-  else { activateSection('leads'); document.querySelector('#leads-tabs .seg[data-leads-tab="boleteria"]')?.click(); }
+  if (!modoBoleteria) entrarModoBoleteria('bol-solicitudes'); else activateSection('bol-solicitudes');
   if (BOL_ABRIR_ID) loadColaBoleteria();
 }
 // Un solo DOM para la cola: Leads > Boletería (asesores) y Boletería > Solicitudes (agentes).
@@ -29547,7 +29545,7 @@ const TUTORIALES = [
   { id: '09-asistente', titulo: 'Pedirle ayuda a Lyra', rol: 'asesor', seg: 74, secciones: ['asistente'] },
   { id: '10-caso-completo', titulo: 'Caso completo: la venta de María de principio a fin', rol: 'asesor', seg: 180, secciones: ['hoy', 'leads'] },
   { id: '11-dashboard', titulo: 'Dashboard, Ranking e Informe diario', rol: 'admin', seg: 82, secciones: ['dashboard', 'ranking', 'informe-diario'] },
-  { id: '12-repartir-web', titulo: 'Repartir números, Web y Reasignados', rol: 'admin', seg: 100, secciones: ['repartir', 'web-reasignados'] },
+  { id: '12-repartir-web', titulo: 'Repartir números', rol: 'admin', seg: 100, secciones: ['repartir'] },
   { id: '13-pagos', titulo: 'Pagos por verificar', rol: 'admin', seg: 81, secciones: ['pagos'] },
   { id: '14-facturacion', titulo: 'Facturación', rol: 'admin', seg: 188, secciones: ['facturacion'] },
   { id: '15-comisiones-admin', titulo: 'Comisiones por corte y liquidaciones', rol: 'admin', seg: 160, secciones: ['comisiones'] },
