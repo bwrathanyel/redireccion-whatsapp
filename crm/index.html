@@ -293,7 +293,9 @@ body.modo-boleteria .modo-seg-bol{background:rgba(46,107,255,.2);color:#7fb0ff}
 .rol-boleteria .side-modo,.rol-marketing .side-modo,body.asesor-boleteria .side-modo{display:none}
 .rol-boleteria .side-modo+.side-foot,.rol-marketing .side-modo+.side-foot,body.asesor-boleteria .side-modo+.side-foot{border-top:1px solid var(--line)}
 /* Pie en una fila: cerrar sesión a la izquierda, Lyra (orbe) a la derecha. */
-.side-foot.side-foot-row{padding:8px 14px}
+.side-foot.side-foot-row{padding:8px 14px;flex-wrap:wrap;row-gap:8px}
+.side-foot .refresh-btn-lg{flex:1 1 100%;width:auto;height:38px;margin-left:0;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:12.5px;font-weight:700;padding:0 12px}
+.refresh-btn-lg span{white-space:nowrap}
 .side-logout{width:auto;display:flex;align-items:center;gap:8px;padding:0 12px;font-family:inherit;font-size:12px}
 .lyra-dock.lyra-dock-mini{width:auto;margin-left:auto;padding:2px;gap:0;border-radius:50%;background:transparent;border-color:transparent}
 .lyra-dock.lyra-dock-mini .lyra-orb{--s:40px}
@@ -3605,6 +3607,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .sidebar .nav-item .badge{font-size:10px;padding:2px 7px}
   .nav-item .nav-fav{width:29px;height:29px;display:grid;place-items:center;padding:0;font-size:11px}
   .side-foot.side-foot-row{padding:10px 12px}
+  .side-foot .refresh-btn-lg{height:44px;border-radius:12px;font-size:13.5px}
   .side-logout{height:44px;padding:0 14px;border-radius:12px;font-size:13.5px}
   .lyra-dock.lyra-dock-mini .lyra-orb{--s:44px}
   /* Switch Hospedajes | Boletería: una pastilla de color que se desliza al
@@ -5804,6 +5807,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
     </div>
     <div class="side-foot side-foot-row">
+      <!-- Volvió el botón con texto (pedido del dueño 2026-10-16): en móvil el ⟳ de arriba no se ve. -->
+      <button class="refresh-btn refresh-btn-lg" data-refresh type="button" title="Recarga el CRM completo con la última versión" aria-label="Actualizar CRM: recargar todo"><i class="fas fa-rotate"></i> <span>Actualizar CRM</span></button>
       <button class="logout-btn side-logout" onclick="cerrarSesion()" title="Cerrar sesión" aria-label="Cerrar sesión"><i class="fas fa-right-from-bracket"></i> <span>Cerrar sesión</span></button>
       <!-- Lyra (2026-09-26): la cara del asistente. Solo se ve con body.lyra-on
            (rol con acceso a la sección Asistente); el chat es #lyra-panel. -->

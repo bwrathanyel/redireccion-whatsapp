@@ -27598,6 +27598,9 @@ async function dispararRefreshPTR() {
   el.classList.add('show', 'cargando');
   el.style.transform = 'translate(-50%, 20px)';
   el.querySelector('i').style.transform = '';
+  // Pedido del dueño (2026-10-16): fuera de Leads el gesto recarga el CRM
+  // completo (como el botón Actualizar CRM); en Leads sigue siendo suave.
+  if (currentSec !== 'leads') { actualizarCRM(); return; }
   try { await refrescarSeccionActual(); } finally { setTimeout(ocultarIndicadorPTR, 350); }
 }
 
