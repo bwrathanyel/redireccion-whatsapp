@@ -8626,7 +8626,29 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <button class="ce-mini" id="ss-ver-pdf" type="button" disabled><i class="fas fa-file-pdf"></i> Ver PDF original</button>
       </div>
 
-      <div class="ss-guia">
+      <!-- Calendario y chips primero: es lo que se viene a mirar (pedido del dueño 2026-10-16). -->
+      <div class="card">
+        <h2><i class="fas fa-calendar-xmark"></i> Calendario de bloqueos</h2>
+        <div class="csub">Todo lo que BT reportó de hoy en adelante. Tocá un día marcado para ver qué hoteles están bloqueados.</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap">
+          <input type="text" class="ei" id="ss-vig-buscar" placeholder="Buscar hotel..." style="flex:1;min-width:150px">
+          <div class="view-switch" id="ss-view-switch"></div>
+        </div>
+        <div id="ss-vigentes" style="margin-top:14px"></div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h2><i class="fas fa-magnifying-glass"></i> ¿Puedo vender?</h2>
+        <div class="csub">Elegí el hotel y las fechas del cliente: te decimos noche por noche si hay cupo según el último PDF de BT.</div>
+        <div class="ss-verif-form">
+          <label class="ss-verif-hotel"><span class="fl">Hotel</span><select class="ei" id="ss-v-hotel"><option value="">— elegí un hotel —</option></select></label>
+          <label><span class="fl">Entrada (check-in)</span><input type="date" class="ei" id="ss-v-entrada"></label>
+          <label><span class="fl">Salida (check-out)</span><input type="date" class="ei" id="ss-v-salida"></label>
+        </div>
+        <div id="ss-v-resultado"><div class="ss-v-hint">Completá los tres datos y aparece la respuesta acá.</div></div>
+      </div>
+
+      <div class="ss-guia" style="margin:14px 0 0">
         <div class="ss-guia-it" style="--c:var(--danger)">
           <i class="fas fa-ban"></i>
           <div><b>Sin cupo</b><span class="ss-guia-bt">BT: stop sale</span>
@@ -8642,27 +8664,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div><b>Libre</b>
             <p>El hotel no figura bloqueado en el PDF de BT para esas noches. Se vende normal.</p></div>
         </div>
-      </div>
-
-      <div class="card">
-        <h2><i class="fas fa-magnifying-glass"></i> ¿Puedo vender?</h2>
-        <div class="csub">Elegí el hotel y las fechas del cliente: te decimos noche por noche si hay cupo según el último PDF de BT.</div>
-        <div class="ss-verif-form">
-          <label class="ss-verif-hotel"><span class="fl">Hotel</span><select class="ei" id="ss-v-hotel"><option value="">— elegí un hotel —</option></select></label>
-          <label><span class="fl">Entrada (check-in)</span><input type="date" class="ei" id="ss-v-entrada"></label>
-          <label><span class="fl">Salida (check-out)</span><input type="date" class="ei" id="ss-v-salida"></label>
-        </div>
-        <div id="ss-v-resultado"><div class="ss-v-hint">Completá los tres datos y aparece la respuesta acá.</div></div>
-      </div>
-
-      <div class="card" style="margin-top:14px">
-        <h2><i class="fas fa-calendar-xmark"></i> Calendario de bloqueos</h2>
-        <div class="csub">Todo lo que BT reportó de hoy en adelante. Tocá un día marcado para ver qué hoteles están bloqueados.</div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap">
-          <input type="text" class="ei" id="ss-vig-buscar" placeholder="Buscar hotel..." style="flex:1;min-width:150px">
-          <div class="view-switch" id="ss-view-switch"></div>
-        </div>
-        <div id="ss-vigentes" style="margin-top:14px"></div>
       </div>
 
       <details class="dsec ss-admin" id="ss-admin-box" style="margin-top:14px">

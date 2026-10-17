@@ -15385,13 +15385,14 @@ function ssRenderVigentes() {
   const noches = ssNochesPorHotel();
   SS_COLOR_HOTEL = new Map([...noches.keys()].map((n, i) => [n, ADV_COLORS[i % ADV_COLORS.length]]));
 
-  cont.innerHTML = `<div class="ss-rotulo">Resumen<span>tocá una tarjeta para filtrar; otra vez para ver todo</span></div>
-    <div id="ss-kpis" class="kpis kpis-3" style="margin-bottom:14px"></div>
-    <div class="ss-rotulo">Filtrar por hotel<span>el número son las noches bloqueadas de hoy en adelante</span></div>
+  // Chips y calendario arriba (se ven sin scroll); el resumen por estado va al pie.
+  cont.innerHTML = `<div class="ss-rotulo">Filtrar por hotel<span>el número son las noches bloqueadas de hoy en adelante</span></div>
     <div id="ss-chips-hotel" style="margin-bottom:11px"></div>
     ${ssFiltroActivoHtml()}
     <div id="ss-calendario" class="${ssView === 'calendario' ? 'show' : ''}"></div>
-    <div id="ss-hoteles" class="${ssView === 'hoteles' ? 'show' : ''}"></div>`;
+    <div id="ss-hoteles" class="${ssView === 'hoteles' ? 'show' : ''}"></div>
+    <div class="ss-rotulo" style="margin-top:16px">Resumen<span>tocá una tarjeta para filtrar; otra vez para ver todo</span></div>
+    <div id="ss-kpis" class="kpis kpis-3"></div>`;
 
   pintarKPIs('ss-kpis', [
     { t: 'Sin cupo', v: nStop, d: 'hoteles con noches sin cupo', i: 'fa-ban', c: '#ef4444', key: 'stop_sale', on: ssFiltro === 'stop_sale', tt: 'Ver solo los bloqueos sin cupo', go: () => ssIrAFiltro('stop_sale') },
@@ -28566,12 +28567,16 @@ function bolColaAlEntrar() {
   if (!BOL_COLA.length) l?.classList.add('show');
   BOL_PRECARGA.then(() => { l?.classList.remove('show'); if (!BOL_COLA.length) loadColaBoleteria(); });
 }
+// En el celular el menú queda abierto para elegir a dónde ir (pedido del dueño
+// 2026-10-16); la sección de antes queda solo de fondo.
 function salirModoBoleteria() {
+  const quedarseEnMenu = esMovil() && menuAbierto();
   modoBoleteria = false;
   document.body.classList.remove('modo-boleteria');
   ubicarSolicitudesNav();
   activateSection(seccionAntesDeModoBoleteria && document.getElementById('sec-' + seccionAntesDeModoBoleteria) ? seccionAntesDeModoBoleteria : (ROL === 'asesor' ? 'leads' : 'dashboard'));
   seccionAntesDeModoBoleteria = null;
+  if (quedarseEnMenu) { abrirMenuMovil(); document.getElementById('sidebar-nav')?.scrollTo({ top: 0 }); }
 }
 // Agente: sección Solicitudes del modo Boletería. Asesor: Leads > Boletería. Con id, abre esa.
 function irASolicitudes(id) {
