@@ -28924,6 +28924,7 @@ function entrarModoBoleteria(sec) {
   if (!modoBoleteria) seccionAntesDeModoBoleteria = currentSec;
   modoBoleteria = true;
   document.body.classList.add('modo-boleteria');
+  delete ULTIMA_CARGA['cotizacion-boletos'];
   ubicarSolicitudesNav();
   activateSection(typeof sec === 'string' ? sec : 'bol-solicitudes');
 }
@@ -28965,6 +28966,7 @@ function salirModoBoleteria() {
   const quedarseEnMenu = esMovil() && menuAbierto();
   modoBoleteria = false;
   document.body.classList.remove('modo-boleteria');
+  delete ULTIMA_CARGA['cotizacion-boletos'];
   ubicarSolicitudesNav();
   activateSection(seccionAntesDeModoBoleteria && document.getElementById('sec-' + seccionAntesDeModoBoleteria) ? seccionAntesDeModoBoleteria : (ROL === 'asesor' ? 'leads' : 'dashboard'));
   seccionAntesDeModoBoleteria = null;
