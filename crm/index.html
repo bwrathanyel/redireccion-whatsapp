@@ -3027,10 +3027,6 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
    padre. Siguen en el DOM para el buscador (body.nav-buscando) y para el
    sondeo de permisos por rol (body.nav-sondeo, ver conSondeoNav en app.js). */
 body:not(.nav-buscando):not(.nav-sondeo) #sidebar-nav > .nav-hijo{display:none}
-/* Cotizaciones es pestaña de Leads, pero en modo Boletería y para el rol
-   boletería (que no ven Leads) queda como entrada suelta. */
-body.modo-boleteria #sidebar-nav > .nav-hijo[data-sec="cotizacion-boletos"],
-body.rol-boleteria #sidebar-nav > .nav-hijo[data-sec="cotizacion-boletos"]{display:flex}
 #sidebar-nav > .nav-sep{padding:0;margin:8px 10px;height:1px;background:var(--line)}
 /* Mensajes se abre por la burbuja #chat-fab; el ítem sigue en el DOM para que el
    sondeo por rol (chatActualizarVisibilidad) y ?ir=mensajes funcionen. */
