@@ -25952,7 +25952,131 @@ const CB_TIPOS = {
 const cbTipo = it => CB_TIPOS[it.tipo] || CB_TIPOS.boleto;
 const cbTitulo = it => String(it[cbTipo(it).campos[0][0]] || '').trim();
 const CB_PAX_CAMPOS = [['adultos', 'tarifa', 'Adultos', 'Tarifa adulto (USD)', 1], ['ninos', 'tarifa_nino', 'Niños', 'Tarifa niño (USD)', 0], ['infantes', 'tarifa_infante', 'Infantes', 'Tarifa infante (USD)', 0]];
-const cbItemVacio = (tipo = 'boleto') => Object.fromEntries([['tipo', tipo], ...CB_TIPOS[tipo].campos.map(([k]) => [k, k === 'cant' ? 1 : '']), ...(CB_TIPOS[tipo].pax ? CB_PAX_CAMPOS.flatMap(([c, t]) => [[c, c === 'adultos' ? 1 : ''], [t, '']]) : []), ...(tipo === 'hotel' ? [['unidad', 'persona_noche']] : []), ['extra', '']]);
+const cbItemVacio = (tipo = 'boleto') => Object.fromEntries([['tipo', tipo], ...CB_TIPOS[tipo].campos.map(([k]) => [k, k === 'cant' ? 1 : '']), ...(CB_TIPOS[tipo].pax ? CB_PAX_CAMPOS.flatMap(([c, t]) => [[c, c === 'adultos' ? 1 : ''], [t, '']]) : []), ...(tipo === 'hotel' ? [['unidad', 'persona_noche']] : []), ...(tipo === 'boleto' ? [['origen', ''], ['destino', ''], ['viaje', 'rt']] : []), ['extra', '']]);
+// Boleto por ciudades (2026-10-17): origen y destino se eligen por nombre del catálogo de Boletería
+// y se muestran "Caracas (CCS)"; `ruta` se sigue guardando en IATA (CCS-PMV-CCS) y es lo que va al
+// PDF. `viaje`: 'rt' ida y vuelta, 'ow' solo ida. Las filas anteriores solo traen `ruta`: se parsea, y
+// si no son códigos (texto libre, multi-tramo) queda como `ruta_libre` hasta elegir origen y destino.
+const cbEsIata = s => /^[A-Z]{3}$/.test(s || '');
+const cbAeropuerto = code => bolCatalogo?.aeropuertos?.find(a => a.iata_code === code);
+const cbApNombre = a => a.nombre_comercial || a.ciudad;
+const cbApTexto = code => { if (!code) return ''; const a = cbAeropuerto(code); return a ? `${cbApNombre(a)} (${code})` : code; };
+const cbRutaIata = it => it.origen && it.destino ? [it.origen, it.destino, it.viaje === 'ow' ? '' : it.origen].filter(Boolean).join('-') : '';
+function cbSyncRuta(it) { if (it.origen && it.destino) { it.ruta = cbRutaIata(it); it.ruta_libre = false; } else if (!it.ruta_libre) it.ruta = ''; }
+function cbMigrarBoleto(it) {
+  if ((it?.tipo || 'boleto') !== 'boleto' || it.viaje !== undefined) return it;
+  const t = String(it.ruta || '').toUpperCase().split(/\s*[-–—→>/]\s*/).filter(Boolean);
+  if ((t.length === 2 || (t.length === 3 && t[2] === t[0])) && t.every(cbEsIata)) return { ...it, origen: t[0], destino: t[1], viaje: t.length === 3 || it.vuelta ? 'rt' : 'ow' };
+  return { ...it, viaje: it.ruta && !it.vuelta ? 'ow' : 'rt', ruta_libre: !!it.ruta };
+}
+function cbApResolver(texto) {
+  const t = String(texto || '').trim(), entre = t.match(/\(([A-Za-z]{3})\)\s*$/);
+  if (entre) return entre[1].toUpperCase();
+  return bolIataDe(t) || (cbEsIata(t.toUpperCase()) ? t.toUpperCase() : '');
+}
+function cbApBuscar(q) {
+  const t = bolNorm(q);
+  const puntaje = a => {
+    if (!t) return a.pais === 'Venezuela' ? 0 : 1;
+    const code = bolNorm(a.iata_code), nombres = [a.ciudad, a.nombre_comercial].filter(Boolean).map(bolNorm);
+    if (code === t) return 0;
+    if (nombres.some(n => n.startsWith(t))) return 1;
+    if (code.startsWith(t) || nombres.some(n => n.split(/[\s-]+/).some(w => w.startsWith(t)))) return 2;
+    if (nombres.some(n => n.includes(t))) return 3;
+    return bolNorm(a.pais).startsWith(t) ? 4 : -1;
+  };
+  return (bolCatalogo?.aeropuertos || []).map(a => [puntaje(a), a]).filter(([p]) => p >= 0)
+    .sort((x, y) => x[0] - y[0] || cbApNombre(x[1]).localeCompare(cbApNombre(y[1]))).slice(0, 8).map(([, a]) => a);
+}
+const CB_AVION = '<path d="M10 0C10-1.1 9-1.6 8-1.6H3L-2.5-8H-5l3.2 6.4h-4.7L-8.5-4H-10l1.2 4L-10 4h1.5l2-2.4h4.7L-5 8h2.5L3 1.6h5C9 1.6 10 1.1 10 0z"/>';
+function cbEscena(it) {
+  const ow = it.viaje === 'ow', quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ida = ow ? 'M24,44 Q120,-8 216,44' : 'M24,38 Q120,0 216,38', vuelta = 'M216,38 Q120,76 24,38', y = ow ? 44 : 38;
+  const avion = (p, cls, begin = '0s') => quieto
+    ? `<g class="cb-avion ${cls}" transform="translate(120,${p === vuelta ? 57 : ow ? 18 : 19})${p === vuelta ? ' rotate(180)' : ''}">${CB_AVION}</g>`
+    : `<g class="cb-avion ${cls}" opacity="0">${CB_AVION}<animateMotion path="${p}" dur="3.4s" begin="${begin}" repeatCount="indefinite" rotate="auto" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines=".45 0 .55 1"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.12;.88;1" dur="3.4s" begin="${begin}" repeatCount="indefinite"/></g>`;
+  return `<svg viewBox="0 0 240 76" aria-hidden="true" focusable="false">
+    <path class="cb-arco" d="${ida}"/>${ow ? '' : `<path class="cb-arco cb-arco-2" d="${vuelta}"/>`}
+    <circle class="cb-punto" cx="24" cy="${y}" r="4"/><circle class="cb-punto${ow ? ' cb-punto-fin' : ''}" cx="216" cy="${y}" r="4"/>${ow ? `<circle class="cb-pulso" cx="216" cy="${y}" r="4"/>` : ''}
+    ${avion(ida, 'cb-avion-ida')}${ow ? '' : avion(vuelta, 'cb-avion-vuelta', '1.7s')}
+  </svg>`;
+}
+function cbRutaResumen(it) {
+  if (it.origen && it.destino) return `<span class="cb-ruta-pdf">En el PDF</span>${cbRutaIata(it).split('-').map(c => `<b>${c}</b>`).join('<i class="fas fa-arrow-right-long"></i>')}`;
+  if (it.ruta_libre && it.ruta) return `<span class="cb-ruta-pdf">En el PDF</span><b>${esc(String(it.ruta).toUpperCase())}</b>`;
+  return '<span class="cb-ruta-vacia">Elija origen y destino</span>';
+}
+function cbApNota(code, texto) {
+  if (code) { const a = cbAeropuerto(code); return a ? `<i class="fas fa-location-dot"></i> ${esc(a.ciudad)}, ${esc(a.pais)}` : bolCatalogo ? '<span class="cb-warn"><i class="fas fa-circle-info"></i> Código fuera del catálogo de Boletería</span>' : ''; }
+  return texto ? `<span class="cb-warn"><i class="fas fa-triangle-exclamation"></i> No encontramos «${esc(texto)}». Elija de la lista o escriba el código IATA (3 letras).</span>` : '';
+}
+function cbRefHtml(it) {
+  if (!bolCatalogo || it.viaje === 'ow' || !it.origen || !it.destino) return '';
+  const r = bolCatalogo.rutas.find(r => (r.origen_iata === it.origen && r.destino_iata === it.destino) || (r.origen_iata === it.destino && r.destino_iata === it.origen));
+  const p = r && bolRefRuta(r.id); if (!p) return '';
+  const pub = bolPublico(p.precio);
+  return `<i class="fas fa-tag"></i><span>Referencia ${it.origen}-${it.destino} ida y vuelta: neto <b>$${cbMonto(p.precio)}</b> · web desde <b>$${cbMonto(pub)}</b></span><button type="button" class="cb-ref-usar" data-ref="${pub}">Usar $${cbMonto(pub)} por adulto</button>`;
+}
+function cbRutaHtml(it) {
+  const ap = (k, label, ph) => `<div class="field cb-ap"><label class="fl">${label}</label><div class="cb-ap-caja"><i class="fas ${k === 'origen' ? 'fa-plane-departure' : 'fa-plane-arrival'}"></i><input class="ei cb-ap-in" data-ap="${k}" value="${esc(cbApTexto(it[k]))}" placeholder="${ph}" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-label="${label}"></div><div class="cb-ap-lista" role="listbox" hidden></div><div class="cb-ap-nota">${cbApNota(it[k])}</div></div>`;
+  return `<div class="cb-ruta cb-full">
+    <div class="cb-ruta-cab"><div class="cb-viaje" role="radiogroup" aria-label="Tipo de viaje">${[['rt', 'fa-right-left', 'Ida y vuelta'], ['ow', 'fa-arrow-right-long', 'Solo ida']].map(([v, ic, t]) => `<button type="button" role="radio" data-viaje="${v}" aria-checked="${(it.viaje || 'rt') === v}"><i class="fas ${ic}"></i>${t}</button>`).join('')}</div><span class="cb-ruta-res">${cbRutaResumen(it)}</span></div>
+    <div class="cb-ruta-cuerpo">${ap('origen', 'Origen', 'Ciudad o código · ej. Caracas')}<div class="cb-escena"><div class="cb-escena-svg">${cbEscena(it)}</div><button type="button" class="cb-ap-swap" title="Invertir origen y destino" aria-label="Invertir origen y destino"><i class="fas fa-right-left"></i></button></div>${ap('destino', 'Destino', 'ej. Margarita, Los Roques')}</div>
+  </div>`;
+}
+// Repinta la parte de ruta de una tarjeta sin tocar los inputs (no pisa lo que se está escribiendo).
+function cbPintarRuta(card, it) {
+  card.classList.toggle('cb-ow', it.viaje === 'ow');
+  card.querySelectorAll('[data-viaje]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.viaje === (it.viaje || 'rt'))));
+  const svg = card.querySelector('.cb-escena-svg'); if (svg) svg.innerHTML = cbEscena(it);
+  const res = card.querySelector('.cb-ruta-res'); if (res) res.innerHTML = cbRutaResumen(it);
+  const ref = card.querySelector('.cb-ref'); if (ref) ref.innerHTML = cbRefHtml(it);
+}
+// El catálogo de aeropuertos llega después del primer pintado: actualiza nombres y notas.
+function cbRefrescarRutas() {
+  document.querySelectorAll('#cb-items .cb-item').forEach(card => {
+    const it = cbItems[+card.dataset.i]; if (!it || (it.tipo || 'boleto') !== 'boleto') return;
+    card.querySelectorAll('.cb-ap-in').forEach(inp => {
+      if (inp === document.activeElement) return;
+      if (it[inp.dataset.ap]) inp.value = cbApTexto(it[inp.dataset.ap]);
+      inp.closest('.cb-ap').querySelector('.cb-ap-nota').innerHTML = cbApNota(it[inp.dataset.ap]);
+    });
+    cbPintarRuta(card, it);
+  });
+}
+const cbApItem = inp => cbItems[+inp.closest('.cb-item').dataset.i];
+function cbApCerrar(inp) { const l = inp.closest('.cb-ap')?.querySelector('.cb-ap-lista'); if (l) l.hidden = true; inp.setAttribute('aria-expanded', 'false'); }
+function cbApAbrir(inp) {
+  const lista = inp.closest('.cb-ap').querySelector('.cb-ap-lista'), q = inp.value.trim();
+  const texto = q === cbApTexto(cbApItem(inp)[inp.dataset.ap]) ? '' : q;
+  if (!bolCatalogo) lista.innerHTML = '<div class="cb-ap-vacio"><i class="fas fa-spinner fa-spin"></i> Cargando aeropuertos…</div>';
+  else {
+    const res = cbApBuscar(texto), code = texto.toUpperCase();
+    const ops = res.map((a, i) => `<div class="cb-ap-op${i === 0 && texto ? ' activo' : ''}" role="option" data-code="${esc(a.iata_code)}"><span class="cb-ap-op-n"><b>${esc(cbApNombre(a))}</b><small>${esc(a.nombre_comercial ? a.ciudad + ', ' : '')}${esc(a.pais)}</small></span><em>${esc(a.iata_code)}</em></div>`);
+    if (cbEsIata(code) && !res.some(a => a.iata_code === code)) ops.push(`<div class="cb-ap-op${ops.length ? '' : ' activo'}" role="option" data-code="${code}"><span class="cb-ap-op-n"><b>Usar el código ${code}</b><small>No está en el catálogo de Boletería</small></span><em>${code}</em></div>`);
+    lista.innerHTML = ops.join('') || '<div class="cb-ap-vacio">Sin coincidencias. Escriba el código IATA de 3 letras.</div>';
+  }
+  lista.hidden = false; inp.setAttribute('aria-expanded', 'true');
+}
+function cbApElegir(inp, code) {
+  const it = cbApItem(inp), card = inp.closest('.cb-item'), libre = it.ruta_libre;
+  it[inp.dataset.ap] = code; inp.value = cbApTexto(code); cbApCerrar(inp);
+  inp.closest('.cb-ap').querySelector('.cb-ap-nota').innerHTML = cbApNota(code);
+  cbSyncRuta(it); cbProgramarBorrador();
+  if (libre && !it.ruta_libre) { cbRenderItems(); return; }
+  cbPintarRuta(card, it);
+  if (inp.dataset.ap === 'origen' && !it.destino) card.querySelector('[data-ap="destino"]')?.focus();
+}
+function cbApConfirmar(inp) {
+  const it = cbApItem(inp), texto = inp.value.trim(), ap = inp.dataset.ap;
+  cbApCerrar(inp);
+  if (texto && texto === cbApTexto(it[ap])) return;
+  const code = texto ? cbApResolver(texto) : '';
+  if (code) { cbApElegir(inp, code); return; }
+  it[ap] = ''; cbSyncRuta(it); cbProgramarBorrador();
+  inp.closest('.cb-ap').querySelector('.cb-ap-nota').innerHTML = cbApNota('', texto);
+  cbPintarRuta(inp.closest('.cb-item'), it);
+}
 // Las filas/borradores anteriores a adultos-niños-infantes traen solo `cant`: pasa a adultos.
 const cbMigrarPax = it => CB_TIPOS[it?.tipo || 'boleto']?.pax && it.adultos === undefined && it.cant != null ? { ...it, adultos: it.cant } : it;
 const cbArchivo = c => `Cotizacion-${cbNumero(c.numero)}-${c.cliente.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}.pdf`;
@@ -25963,11 +26087,14 @@ function cbItemHtml(it, i) {
   const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto';
   const opciones = Object.entries(CB_TIPOS).map(([k, t]) => `<option value="${k}"${k === tipo ? ' selected' : ''}>${t.nombre}</option>`).join('');
   const unidad = tipo === 'hotel' ? `<div class="field cb-dos"><label class="fl">Tarifa por</label><select class="ei" data-k="unidad">${[['persona_noche', 'Persona por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${(cbPorNoche(it) ? 'persona_noche' : 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : '';
-  return `<div class="cb-item" data-i="${i}">
+  const boleto = tipo === 'boleto', campos = CB_TIPOS[tipo].campos.filter(c => !(boleto && c[0] === 'ruta'));
+  return `<div class="cb-item${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
     <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span>Importe <b class="cb-importe">${cbImporteTexto(it)}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
     <div class="cb-item-grid">
-      ${CB_TIPOS[tipo].campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : f(...c)).join('')}${unidad}
+      ${boleto ? cbRutaHtml(it) + (it.ruta_libre ? f('ruta', 'Ruta anterior (se reemplaza al elegir origen y destino)', 'placeholder="CCS-PTY-MIA"', ' cb-full') : '') : ''}
+      ${campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')}${unidad}
       ${CB_TIPOS[tipo].pax ? `<div class="cb-pax cb-full">${CB_PAX_CAMPOS.map(([c, t, lc, lt, min]) => `<div class="cb-pax-c"><div class="field"><label class="fl">${lc}</label><input class="ei" data-k="${c}" type="number" min="${min}" step="1" placeholder="0" value="${esc(String(it[c] ?? ''))}"></div><div class="field"><label class="fl">${lt}</label><input class="ei" data-k="${t}" type="number" min="0" step="0.01" value="${esc(String(it[t] ?? ''))}"></div></div>`).join('')}</div>` : ''}
+      ${boleto ? `<div class="cb-ref cb-full">${cbRefHtml(it)}</div>` : ''}
       ${f('extra', 'Detalle adicional (opcional)', 'placeholder="Equipaje, clase, qué incluye, observaciones..."', ' cb-full')}
     </div>
   </div>`;
@@ -25975,6 +26102,12 @@ function cbItemHtml(it, i) {
 function cbLimpiarItem(it) {
   const o = { tipo: CB_TIPOS[it.tipo] ? it.tipo : 'boleto' };
   [...CB_TIPOS[o.tipo].campos.map(([k]) => k), 'extra'].forEach(k => { o[k] = String(it[k] ?? '').trim(); });
+  if (o.tipo === 'boleto') {
+    o.viaje = it.viaje === 'ow' ? 'ow' : 'rt';
+    o.origen = cbEsIata(it.origen) ? it.origen : ''; o.destino = cbEsIata(it.destino) ? it.destino : '';
+    if (o.origen && o.destino) o.ruta = cbRutaIata(o); else if (it.ruta_libre) o.ruta_libre = true;
+    if (o.viaje === 'ow') o.vuelta = o.vuelta_hora = '';
+  }
   if (!CB_TIPOS[o.tipo].pax) return Object.assign(o, { cant: Number(it.cant) || 0, tarifa: Number(it.tarifa) || 0 });
   CB_PAX_CAMPOS.forEach(([c, t]) => { o[c] = Math.max(0, Math.floor(Number(it[c]) || 0)); o[t] = Number(it[t]) || 0; });
   if (o.tipo === 'hotel') o.unidad = it.unidad === 'persona_noche' ? 'persona_noche' : 'persona';
@@ -25985,7 +26118,7 @@ function cbDetalle(it) {
   const U = s => String(s || '').toUpperCase(), d = [], add = (et, v) => { if (v) d.push(`${et}: ${v}`); };
   const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto';
   if (tipo === 'boleto') {
-    d.push(`BOLETO AÉREO ${U(it.ruta)}`);
+    d.push(`BOLETO AÉREO ${U(it.ruta)}${it.viaje === 'ow' ? ' (SOLO IDA)' : ''}`);
     add('AEROLÍNEA', U(it.aerolinea)); add('FECHA DE IDA', cbFechaCorta(it.ida)); add('HORARIO', U(it.ida_hora)); add('FECHA DE VUELTA', cbFechaCorta(it.vuelta)); add('HORARIO', U(it.vuelta_hora));
   } else if (tipo === 'hotel' || tipo === 'paquete') {
     d.push(`${tipo === 'hotel' ? 'HOSPEDAJE' : 'PAQUETE'}: ${U(it.nombre)}`);
@@ -26005,7 +26138,7 @@ function cbDetalle(it) {
 function cbDetalleCliente(it) {
   const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto', d = [], add = (et, v) => { if (v) d.push(et ? `${et}: ${v}` : v); };
   const f = cbFechaCorta, con = (...p) => p.filter(Boolean).join(' '), n = +cbNoches(it.ida, it.vuelta);
-  if (tipo === 'boleto') { add('Aerolínea', it.aerolinea); add('Ida', con(f(it.ida), it.ida_hora)); add('Vuelta', con(f(it.vuelta), it.vuelta_hora)); }
+  if (tipo === 'boleto') { if (it.viaje === 'ow') add('', 'Solo ida'); add('Aerolínea', it.aerolinea); add('Ida', con(f(it.ida), it.ida_hora)); add('Vuelta', con(f(it.vuelta), it.vuelta_hora)); }
   else if (tipo === 'hotel' || tipo === 'paquete') {
     add('Plan', it.plan); add('Habitación', it.hab);
     if (it.ida) add('', `${f(it.ida)}${it.vuelta ? ' al ' + f(it.vuelta) : ''}${n ? ` · ${n} noche${n === 1 ? '' : 's'}` : ''}`);
@@ -26116,7 +26249,7 @@ async function cbGuardarBorrador() {
   return true;
 }
 function cbRestaurarBorrador(b, sel) {
-  cbItems = Array.isArray(b.items) && b.items.length ? b.items.map(it => ({ ...cbItemVacio(CB_TIPOS[it?.tipo] ? it.tipo : 'boleto'), ...cbMigrarPax(it) })) : [cbItemVacio()];
+  cbItems = Array.isArray(b.items) && b.items.length ? b.items.map(it => ({ ...cbItemVacio(CB_TIPOS[it?.tipo] ? it.tipo : 'boleto'), ...cbMigrarBoleto(cbMigrarPax(it)) })) : [cbItemVacio()];
   cbRenderItems();
   [['cb-cliente', b.cliente], ['cb-fecha', b.fecha], ['cb-vence', b.vence], ['cb-notas', b.notas], ['cb-terminos', b.terminos]].forEach(([id, v]) => { if (typeof v === 'string') document.getElementById(id).value = v; });
   // Un borrador de días atrás trae la fecha y la vigencia de entonces: vuelven a hoy.
@@ -26136,8 +26269,10 @@ async function cbAplicarSolicitud(sel) {
   cbResetForm(); cbSolicitud = s; cbPintarSolicitud();
   if (borrador) { cbRestaurarBorrador(borrador, sel); okToast(`Retomaste la solicitud #${s.id} donde la dejaste`); return; }
   document.getElementById('cb-cliente').value = s.cliente_nombre || '';
-  cbItems = [{ ...cbItemVacio('boleto'), ruta: [s.origen, s.destino, s.fecha_regreso ? s.origen : ''].filter(Boolean).join(' - '), adultos: s.adultos || s.personas || 1, ninos: s.ninos || '', infantes: s.infantes || '', ida: s.fecha_viaje || '', vuelta: s.fecha_regreso || '', extra: s.notas || '' }];
-  cbRenderItems();
+  await bolAsegurarCatalogo();
+  const o = bolIataDe(s.origen) || '', d = bolIataDe(s.destino) || '';
+  cbItems = [{ ...cbItemVacio('boleto'), origen: o, destino: d, viaje: s.fecha_regreso ? 'rt' : 'ow', ruta_libre: !(o && d), ruta: o && d ? '' : [s.origen, s.destino, s.fecha_regreso ? s.origen : ''].filter(Boolean).join(' - '), adultos: s.adultos || s.personas || 1, ninos: s.ninos || '', infantes: s.infantes || '', ida: s.fecha_viaje || '', vuelta: s.fecha_regreso || '', extra: s.notas || '' }];
+  cbSyncRuta(cbItems[0]); cbRenderItems();
   // listar_cola_boleteria trae el nombre de quien pidió, no su id.
   const op = [...sel.options].find(o => o.value && o.textContent.replace(/ \(admin\)$/, '') === s.creado_por);
   if (op) sel.value = op.value;
@@ -26176,6 +26311,7 @@ async function cbCargarSeccion() {
   if (primera || cambio) document.getElementById('cb-origen').value = modo;
   if (cambio && !primera) cbResetForm();
   cbCargarProductos();
+  bolAsegurarCatalogo().then(cbRefrescarRutas);
   ['cb-fecha', 'cb-vence'].forEach(id => { document.getElementById(id).min = cbHoy(); });
   if (!cbListo) {
     cbListo = true;
@@ -26189,7 +26325,42 @@ async function cbCargarSeccion() {
     });
     cbResetForm();
     document.getElementById('cb-origen').addEventListener('change', () => { cbOffset = 0; cbCargarHistorial(false); });
-    document.getElementById('cb-items').addEventListener('input', e => {
+    const cbLista = document.getElementById('cb-items');
+    cbLista.addEventListener('focusin', e => { if (e.target.matches('.cb-ap-in')) { e.target.select(); cbApAbrir(e.target); } });
+    cbLista.addEventListener('focusout', e => { if (e.target.matches('.cb-ap-in')) cbApConfirmar(e.target); });
+    // mousedown y no click: así la opción se elige antes del blur del input.
+    cbLista.addEventListener('mousedown', e => {
+      const op = e.target.closest('.cb-ap-op'); if (!op) return;
+      e.preventDefault(); cbApElegir(op.closest('.cb-ap').querySelector('.cb-ap-in'), op.dataset.code);
+    });
+    cbLista.addEventListener('keydown', e => {
+      const inp = e.target; if (!inp.matches('.cb-ap-in')) return;
+      const lista = inp.closest('.cb-ap').querySelector('.cb-ap-lista'), ops = [...lista.querySelectorAll('.cb-ap-op')];
+      const i = ops.findIndex(o => o.classList.contains('activo'));
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault(); if (lista.hidden) { cbApAbrir(inp); return; }
+        if (!ops.length) return;
+        const n = (i + (e.key === 'ArrowDown' ? 1 : -1) + ops.length) % ops.length;
+        ops.forEach((o, j) => o.classList.toggle('activo', j === n)); ops[n].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') { e.preventDefault(); if (i >= 0 && !lista.hidden) cbApElegir(inp, ops[i].dataset.code); else cbApConfirmar(inp); }
+      else if (e.key === 'Escape') { cbApCerrar(inp); }
+    });
+    cbLista.addEventListener('click', e => {
+      const card = e.target.closest('.cb-item'); if (!card) return;
+      const it = cbItems[+card.dataset.i], viaje = e.target.closest('[data-viaje]'), ref = e.target.closest('.cb-ref-usar');
+      if (viaje) { if (it.viaje === viaje.dataset.viaje) return; it.viaje = viaje.dataset.viaje; cbSyncRuta(it); cbPintarRuta(card, it); cbProgramarBorrador(); }
+      else if (e.target.closest('.cb-ap-swap')) {
+        [it.origen, it.destino] = [it.destino, it.origen]; cbSyncRuta(it);
+        card.querySelectorAll('.cb-ap-in').forEach(inp => { inp.value = cbApTexto(it[inp.dataset.ap]); inp.closest('.cb-ap').querySelector('.cb-ap-nota').innerHTML = cbApNota(it[inp.dataset.ap]); });
+        card.querySelector('.cb-ap-swap').classList.remove('girando'); void card.offsetWidth; card.querySelector('.cb-ap-swap').classList.add('girando');
+        cbPintarRuta(card, it); cbProgramarBorrador();
+      } else if (ref) {
+        it.tarifa = ref.dataset.ref; const inp = card.querySelector('[data-k="tarifa"]'); if (inp) inp.value = it.tarifa;
+        card.querySelector('.cb-importe').textContent = cbImporteTexto(it); cbActualizarTotal(); cbProgramarBorrador();
+      }
+    });
+    cbLista.addEventListener('input', e => {
+      if (e.target.matches('.cb-ap-in')) { cbApAbrir(e.target); return; }
       const k = e.target.dataset.k, card = e.target.closest('.cb-item');
       if (!k || !card) return;
       const it = cbItems[+card.dataset.i]; it[k] = e.target.value;
@@ -29891,6 +30062,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-17', emoji: '✈️', titulo: 'Boletos: origen y destino por ciudad', texto: 'Al cotizar un boleto ya no hace falta saberse los códigos: escribe la ciudad (Caracas, Margarita, Los Roques...) y aparece con su código entre paréntesis; el PDF sigue saliendo con el código (CCS-PMV-CCS). Elige Ida y vuelta o Solo ida (en solo ida desaparecen la fecha y el horario de vuelta), invierte la ruta con un clic y, si la ruta está en el catálogo, ve la tarifa de referencia y la usa con un botón.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-16', emoji: '🏨', titulo: 'Cotización de hotel por persona por noche', texto: 'En Cotizaciones, el hotel ahora cobra por persona por noche: pones la tarifa de una noche y el importe se multiplica solo por las noches entre el check-in y el check-out (ya no hace falta multiplicar a mano). Si la tarifa que tienes es por toda la estadía, en "Tarifa por" eliges "Persona (estadía completa)". El PDF muestra la tarifa por noche y las noches. Las cotizaciones ya guardadas no cambian.', roles: ['admin', 'boleteria', 'asesor'] },
   { fecha: '2026-10-16', emoji: '🎟️', titulo: 'Voucher de servicio: excursiones, traslados y referencia de pago móvil', texto: 'El voucher ahora es "Voucher de servicio". Puedes anexarle excursiones, full days, traslados y paquetes buscándolos del tarifario: el precio se sugiere solo según adultos y niños (lo puedes cambiar) y se suma al total. La modalidad se elige con tarjetas, y si el pago es por pago móvil hay que colocar el número de referencia, que sale en el PDF.', roles: ['asesor', 'admin'] },
   { fecha: '2026-10-16', emoji: '🧳', titulo: 'Solicitudes de vuelo con adultos, niños e infantes', texto: 'Al mandar una solicitud a boletería (también desde un lead) ya no pones "cuántas personas" a secas: indicas adultos, niños e infantes. Boletería lo ve así en la cola, en el detalle y al copiar los datos, y al cotizar o crear la reserva del boleto salen ya cargados. Las solicitudes anteriores se ven como adultos.', roles: ['asesor', 'boleteria', 'admin'] },

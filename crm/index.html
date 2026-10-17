@@ -2881,6 +2881,63 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .cb-hist-cab{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .cb-hist-cab .ei{max-width:280px}
 @media (max-width:720px){.cb-item-grid{grid-template-columns:1fr 1fr}.cb-pax{grid-template-columns:1fr}.cb-hist-cab .ei{max-width:none}}
+/* Boleto: ruta por ciudades + ida y vuelta / solo ida animado (2026-10-17) */
+.cb-ruta{border:1px solid var(--line2);border-radius:12px;padding:12px 14px 6px;background:linear-gradient(135deg,rgba(var(--accent-rgb),.08),rgba(var(--accent-rgb),0) 55%)}
+.cb-ruta-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.cb-viaje{display:inline-flex;padding:3px;border-radius:999px;background:rgba(var(--ink-rgb),.04);border:1px solid var(--line2)}
+.cb-viaje button{border:0;background:none;color:var(--muted);font:inherit;font-size:12.5px;font-weight:600;padding:6px 14px;border-radius:999px;cursor:pointer;display:inline-flex;gap:7px;align-items:center;transition:background .25s,color .25s,box-shadow .25s}
+.cb-viaje button:hover{color:var(--txt)}
+.cb-viaje button[aria-checked="true"]{background:var(--accent);color:var(--on-accent);box-shadow:0 4px 14px rgba(var(--accent-rgb),.35)}
+.cb-viaje button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cb-ruta-res{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+.cb-ruta-res b{color:var(--txt);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13.5px;letter-spacing:.06em}
+.cb-ruta-res i{font-size:10px;color:var(--accent)}
+.cb-ruta-pdf{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;padding:2px 7px;border-radius:6px;background:var(--accent-soft);color:var(--accent-txt);margin-right:2px}
+.cb-ruta-vacia{font-style:italic}
+.cb-ruta-cuerpo{display:grid;grid-template-columns:1fr minmax(150px,230px) 1fr;gap:12px;align-items:start}
+.cb-ap{position:relative;margin:0}
+.cb-ap-caja{position:relative}
+.cb-ap-caja>i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--accent);font-size:13px;pointer-events:none}
+.cb-ap-caja .ei{padding-left:36px;font-weight:600}
+.cb-ap-nota{font-size:11.5px;color:var(--muted);min-height:18px;margin-top:4px;line-height:1.35}
+.cb-ap-nota i{font-size:10.5px;margin-right:2px}
+.cb-ap-nota .cb-warn{color:var(--amber)}
+.cb-ap-lista{position:absolute;z-index:40;left:0;right:0;top:64px;max-height:290px;overflow:auto;padding:4px;border-radius:12px;background:var(--panel-solid);border:1px solid var(--line2);box-shadow:0 14px 40px rgba(0,0,0,.35);animation:cbApIn .16s ease-out}
+.cb-ap-op{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer}
+.cb-ap-op:hover,.cb-ap-op.activo{background:var(--accent-soft)}
+.cb-ap-op-n{display:flex;flex-direction:column;min-width:0}
+.cb-ap-op-n b{color:var(--txt);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cb-ap-op-n small{color:var(--muted);font-size:11px}
+.cb-ap-op em{font-style:normal;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:700;font-size:12px;letter-spacing:.06em;padding:3px 7px;border-radius:6px;border:1px solid rgba(var(--accent-rgb),.35);color:var(--accent-txt)}
+.cb-ap-vacio{padding:10px;font-size:12px;color:var(--muted)}
+.cb-escena{position:relative;align-self:center;height:66px}
+.cb-escena-svg,.cb-escena svg{display:block;width:100%;height:100%}
+.cb-arco{fill:none;stroke:rgba(var(--accent-rgb),.55);stroke-width:1.6;stroke-dasharray:3 5;stroke-linecap:round;animation:cbArco 1.2s linear infinite}
+.cb-arco-2{stroke:color-mix(in srgb,var(--accent2) 60%,transparent)}
+.cb-punto{fill:var(--panel-solid);stroke:var(--accent);stroke-width:2}
+.cb-punto-fin{fill:var(--accent)}
+.cb-pulso{fill:none;stroke:var(--accent);stroke-width:1.5;transform-box:fill-box;transform-origin:center;animation:cbPulso 1.7s ease-out infinite}
+.cb-avion path{fill:var(--accent);filter:drop-shadow(0 2px 4px rgba(var(--accent-rgb),.5))}
+.cb-avion-vuelta path{fill:var(--accent2);filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+.cb-escena svg{animation:cbApIn .3s ease-out}
+.cb-ap-swap{position:absolute;left:50%;bottom:-4px;transform:translateX(-50%);width:28px;height:28px;border-radius:50%;border:1px solid var(--line2);background:var(--panel-solid);color:var(--muted);cursor:pointer;display:grid;place-items:center;font-size:11px;transition:color .2s,border-color .2s}
+.cb-ap-swap:hover{color:var(--accent);border-color:var(--accent)}
+.cb-ap-swap.girando i{animation:cbGiro .45s ease}
+.cb-item.cb-ow .cb-vuelta{display:none}
+.cb-item-grid .cb-col2{grid-column:2}
+.cb-vuelta{animation:cbApIn .25s ease-out}
+.cb-ref{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding:8px 10px;border-radius:10px;background:var(--accent-soft)}
+.cb-ref:empty{display:none}
+.cb-ref>i{color:var(--accent)}
+.cb-ref b{color:var(--txt)}
+.cb-ref-usar{margin-left:auto;border:1px solid rgba(var(--accent-rgb),.5);background:none;color:var(--accent-txt);font:inherit;font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;cursor:pointer}
+.cb-ref-usar:hover{background:var(--accent);color:var(--on-accent)}
+@keyframes cbArco{to{stroke-dashoffset:-16}}
+@keyframes cbPulso{from{transform:scale(1);opacity:.9}to{transform:scale(3.2);opacity:0}}
+@keyframes cbApIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@keyframes cbGiro{from{transform:rotate(0)}to{transform:rotate(180deg)}}
+@media (max-width:720px){.cb-item-grid .cb-col2{grid-column:auto}.cb-ruta-cuerpo{grid-template-columns:1fr}.cb-escena{height:54px;max-width:240px;width:100%;justify-self:center}.cb-ap-swap{left:auto;right:-36px;bottom:50%;transform:translateY(50%) rotate(90deg)}}
+@media (prefers-reduced-motion:reduce){.cb-arco,.cb-pulso,.cb-escena svg,.cb-vuelta,.cb-ap-lista,.cb-ap-swap.girando i{animation:none}}
 /* Voucher (2026-10-13): formulario compacto + boleto de vista previa. Ficha en Reservas vía voucher_vincular. */
 .vc-wrap{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start;margin-bottom:14px}
 .vc-form{position:relative;overflow:hidden;padding-left:24px;margin:0}
