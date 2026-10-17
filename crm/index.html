@@ -4851,7 +4851,10 @@ body.fsize-grande{--tap:41.9px}
 .vt-anular{margin-left:auto;background:transparent}
 .kpi-plegar{display:none}
 @media(max-width:760px){
-  .vt-accion{min-height:44px;flex:1 1 0;padding:0 11px}
+  /* 1fr = minmax(auto,1fr): el nombre/asesor en nowrap ensanchaba la tarjeta más allá de la pantalla */
+  #sec-facturacion .lt-grid{grid-template-columns:minmax(0,1fr)}
+  .vt-card,.vt-cab,.vt-montos,.vt-acciones{min-width:0;max-width:100%}
+  .vt-accion{min-height:44px;flex:1 1 0;min-width:0;padding:0 11px}
   .vt-anular{flex:0 0 auto}
   /* KPIs plegables (2026-10-16): botón "Resumen" arriba de cada bloque, cerrado por defecto */
   .kpi-plegar{display:flex;align-items:center;gap:9px;width:100%;min-height:44px;margin:0 0 9px;padding:0 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg2);color:var(--muted);font:inherit;font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;cursor:pointer}
