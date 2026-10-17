@@ -283,13 +283,15 @@ body:has(#vista-previa-banner){padding-top:36px}
 .sidebar-perfil.jornada-pulse .jornada-btn-ico{animation:jornadaPulseIco 1.2s ease-in-out 2}
 @keyframes jornadaPulseIco{50%{box-shadow:0 0 0 7px rgba(var(--accent-rgb),.25)}}
 /* Switch Hospedajes | Boletería: reemplaza a los dos botones del pie. */
-.modo-switch{display:flex;gap:3px;margin-top:8px;padding:3px;border-radius:11px;background:rgba(var(--ink-rgb,255,255,255),.04);border:1px solid var(--line)}
+.side-modo{flex-shrink:0;padding:10px 14px 0;border-top:1px solid var(--line)}.side-modo+.side-foot{border-top:0}
+.modo-switch{display:flex;gap:3px;margin-top:0;padding:3px;border-radius:11px;background:rgba(var(--ink-rgb,255,255,255),.04);border:1px solid var(--line)}
 .modo-seg{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 8px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s,color .15s}
 .modo-seg:hover{color:var(--txt)}
 body:not(.modo-boleteria) .modo-seg-hosp,body.modo-boleteria .modo-seg-bol{background:var(--accent-soft);color:var(--accent-ink);pointer-events:none}
 body.modo-boleteria .modo-seg-bol{background:rgba(46,107,255,.2);color:#7fb0ff}
 :root[data-theme="light"] body.modo-boleteria .modo-seg-bol{color:#124aa5}
-.rol-boleteria .modo-switch,.rol-marketing .modo-switch,body.asesor-boleteria .modo-switch{display:none}
+.rol-boleteria .side-modo,.rol-marketing .side-modo,body.asesor-boleteria .side-modo{display:none}
+.rol-boleteria .side-modo+.side-foot,.rol-marketing .side-modo+.side-foot,body.asesor-boleteria .side-modo+.side-foot{border-top:1px solid var(--line)}
 /* Pie en una fila: cerrar sesión a la izquierda, Lyra (orbe) a la derecha. */
 .side-foot.side-foot-row{padding:8px 14px}
 .side-logout{width:auto;display:flex;align-items:center;gap:8px;padding:0 12px;font-family:inherit;font-size:12px}
@@ -3047,10 +3049,10 @@ body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-marketing) #sidebar-na
    badge: empuja a la derecha y el badge queda pegado a ella. */
 .nav-item .nav-fav{margin-left:auto;padding:2px 4px;font-size:11px;color:var(--muted2);opacity:0;cursor:pointer;transition:opacity .15s,color .15s}
 .nav-item .nav-fav ~ .badge{margin-left:4px}
-.nav-item:hover .nav-fav,.nav-item .nav-fav:focus-visible{opacity:.75}
+.nav-item:hover .nav-fav,.nav-item .nav-fav:focus-visible{opacity:.15}
 .nav-item .nav-fav:hover{color:var(--amber);opacity:1}
-.nav-item.nav-favorito .nav-fav{opacity:1;color:var(--amber)}
-@media (hover:none){.nav-item .nav-fav{opacity:.4}}
+.nav-item.nav-favorito .nav-fav{opacity:.2;color:var(--amber)}
+@media (hover:none){.nav-item .nav-fav{opacity:.08}.nav-item.nav-favorito .nav-fav{opacity:.2}}
 
 /* Tarifario: fila de pestañas + botón de configuración (admin) */
 .tar-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
@@ -3593,14 +3595,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   /* 16px: con menos, iOS hace zoom al enfocar. */
   .nav-buscar{min-height:44px;margin:2px 0 4px;padding:11px 14px;border-radius:12px;font-size:16px}
   .sidebar .nav-label{font-size:10.5px;padding:11px 11px 4px}
-  .sidebar .nav-item{min-height:50px;padding:7px 9px;gap:12px;font-size:15px;border-radius:14px;transition:background .16s,color .16s,border-color .16s,transform .16s}
+  /* 20% más chico que la primera versión (pedido del dueño 2026-10-16). */
+  .sidebar .nav-item{min-height:40px;padding:5px 7px;gap:10px;font-size:13px;border-radius:11px;transition:background .16s,color .16s,border-color .16s,transform .16s}
   .sidebar .nav-item::before{display:none}
-  .sidebar .nav-item>i:first-child{width:36px;height:36px;flex-shrink:0;display:grid;place-items:center;border-radius:11px;background:rgba(var(--ink-rgb,255,255,255),.05);font-size:15px;transition:background .16s,color .16s,transform .16s}
+  .sidebar .nav-item>i:first-child{width:29px;height:29px;flex-shrink:0;display:grid;place-items:center;border-radius:9px;background:rgba(var(--ink-rgb,255,255,255),.05);font-size:12px;transition:background .16s,color .16s,transform .16s}
   .sidebar .nav-item.active>i:first-child{background:var(--accent);color:var(--on-accent)}
   .sidebar .nav-item:active{transform:scale(.98)}
   .sidebar .nav-item:active>i:first-child{transform:scale(.9)}
-  .sidebar .nav-item .badge{font-size:11.5px;padding:2px 9px}
-  .nav-item .nav-fav{width:36px;height:36px;display:grid;place-items:center;padding:0;font-size:14px}
+  .sidebar .nav-item .badge{font-size:10px;padding:2px 7px}
+  .nav-item .nav-fav{width:29px;height:29px;display:grid;place-items:center;padding:0;font-size:11px}
   .side-foot.side-foot-row{padding:10px 12px}
   .side-logout{height:44px;padding:0 14px;border-radius:12px;font-size:13.5px}
   .lyra-dock.lyra-dock-mini .lyra-orb{--s:44px}
@@ -5779,10 +5782,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         </button>
         <button class="jornada-btn jornada-btn-ico" id="jornada-btn-d" type="button" onclick="toggleJornada()" title="Comenzar jornada" aria-label="Comenzar jornada"><i class="fas fa-play"></i></button>
       </div>
-      <div class="modo-switch" id="modo-switch" role="group" aria-label="Modo de trabajo">
-        <button class="modo-seg modo-seg-hosp" id="btn-salir-modo-boleteria" type="button" title="Modo normal: hospedajes y paquetes"><i class="fas fa-hotel"></i> Hospedajes</button>
-        <button class="modo-seg modo-seg-bol" id="btn-entrar-modo-boleteria" type="button" title="Cambiar a modo Boletería"><i class="fas fa-plane-departure"></i> Boletería</button>
-      </div>
       <div class="recordatorios-banner" id="recordatorios-banner-d">
         <span>Activá los recordatorios de asistencia</span>
         <button onclick="activarRecordatorios()">Activar</button>
@@ -5797,6 +5796,13 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     </nav>
     <!-- Pie en una sola fila (2026-10-16): cerrar sesión y Lyra como orbe. El
          Actualizar quedó solo arriba y el modo Boletería es el switch de la cabecera. -->
+    <!-- Switch de modo abajo, sobre el pie (pedido del dueño 2026-10-16). -->
+    <div class="side-modo">
+      <div class="modo-switch" id="modo-switch" role="group" aria-label="Modo de trabajo">
+        <button class="modo-seg modo-seg-hosp" id="btn-salir-modo-boleteria" type="button" title="Modo normal: hospedajes y paquetes"><i class="fas fa-hotel"></i> Hospedajes</button>
+        <button class="modo-seg modo-seg-bol" id="btn-entrar-modo-boleteria" type="button" title="Cambiar a modo Boletería"><i class="fas fa-plane-departure"></i> Boletería</button>
+      </div>
+    </div>
     <div class="side-foot side-foot-row">
       <button class="logout-btn side-logout" onclick="cerrarSesion()" title="Cerrar sesión" aria-label="Cerrar sesión"><i class="fas fa-right-from-bracket"></i> <span>Cerrar sesión</span></button>
       <!-- Lyra (2026-09-26): la cara del asistente. Solo se ve con body.lyra-on
