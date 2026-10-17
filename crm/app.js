@@ -25741,6 +25741,8 @@ const cbFilas = new Map();
 const cbNumero = n => 'COT-' + String(n).padStart(6, '0');
 const cbMonto = n => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const cbHoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
+// Fecha mínima de un campo de fecha de la cotización: hoy, y la vuelta/salida no antes de la ida.
+const cbMinFecha = (k, ida) => k === 'vuelta' && ida > cbHoy() ? ida : cbHoy();
 const cbFechaLarga = iso => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${d} ${CB_MESES[+m - 1]} ${y}`; };
 const cbFechaCorta = iso => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${d}/${m}/${y.slice(2)}`; };
 // Adultos / niños / infantes (2026-10-15): los servicios con pasajeros (CB_TIPOS[..].pax) cobran una
@@ -25790,7 +25792,8 @@ const cbMigrarPax = it => CB_TIPOS[it?.tipo || 'boleto']?.pax && it.adultos === 
 const cbArchivo = c => `Cotizacion-${cbNumero(c.numero)}-${c.cliente.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}.pdf`;
 
 function cbItemHtml(it, i) {
-  const f = (k, label, attrs, full = '') => `<div class="field${full}"><label class="fl">${label}</label><input class="ei" data-k="${k}" value="${esc(String(it[k] ?? ''))}" ${attrs}></div>`;
+  // Fechas: nunca antes de hoy; la vuelta tampoco antes de la ida (cbMinFecha).
+  const f = (k, label, attrs, full = '') => `<div class="field${full}"><label class="fl">${label}</label><input class="ei" data-k="${k}" value="${esc(String(it[k] ?? ''))}" ${attrs}${attrs.includes('type="date"') ? ` min="${cbMinFecha(k, it.ida)}"` : ''}></div>`;
   const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto';
   const opciones = Object.entries(CB_TIPOS).map(([k, t]) => `<option value="${k}"${k === tipo ? ' selected' : ''}>${t.nombre}</option>`).join('');
   const unidad = tipo === 'hotel' ? `<div class="field cb-dos"><label class="fl">Tarifa por</label><select class="ei" data-k="unidad">${[['persona_noche', 'Persona por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${(cbPorNoche(it) ? 'persona_noche' : 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : '';
@@ -25950,6 +25953,8 @@ function cbRestaurarBorrador(b, sel) {
   cbItems = Array.isArray(b.items) && b.items.length ? b.items.map(it => ({ ...cbItemVacio(CB_TIPOS[it?.tipo] ? it.tipo : 'boleto'), ...cbMigrarPax(it) })) : [cbItemVacio()];
   cbRenderItems();
   [['cb-cliente', b.cliente], ['cb-fecha', b.fecha], ['cb-vence', b.vence], ['cb-notas', b.notas], ['cb-terminos', b.terminos]].forEach(([id, v]) => { if (typeof v === 'string') document.getElementById(id).value = v; });
+  // Un borrador de días atrás trae la fecha y la vigencia de entonces: vuelven a hoy.
+  ['cb-fecha', 'cb-vence'].forEach(id => { const el = document.getElementById(id); if (el.value && el.value < cbHoy()) el.value = cbHoy(); });
   if (b.asesor && [...sel.options].some(o => o.value === b.asesor)) sel.value = b.asesor;
 }
 async function cbAplicarSolicitud(sel) {
@@ -26005,6 +26010,7 @@ async function cbCargarSeccion() {
   if (primera || cambio) document.getElementById('cb-origen').value = modo;
   if (cambio && !primera) cbResetForm();
   cbCargarProductos();
+  ['cb-fecha', 'cb-vence'].forEach(id => { document.getElementById(id).min = cbHoy(); });
   if (!cbListo) {
     cbListo = true;
     cbResetForm();
@@ -26013,9 +26019,18 @@ async function cbCargarSeccion() {
       const k = e.target.dataset.k, card = e.target.closest('.cb-item');
       if (!k || !card) return;
       const it = cbItems[+card.dataset.i]; it[k] = e.target.value;
+      if (k === 'ida') { const vuelta = card.querySelector('[data-k="vuelta"]'); if (vuelta) vuelta.min = cbMinFecha('vuelta', it.ida); }
       if (k === 'tipo') { cbItems[+card.dataset.i] = { ...cbItemVacio(it.tipo), ...it }; cbRenderItems(); return; }
       card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
       cbActualizarTotal();
+    });
+    // Escribir la fecha a mano se salta el min del calendario: al salir del campo, una fecha pasada se borra.
+    document.getElementById('sec-cotizacion-boletos').addEventListener('focusout', e => {
+      const inp = e.target;
+      if (inp.type !== 'date' || !inp.min || !inp.value || inp.value >= inp.min) return;
+      inp.value = '';
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      errToast(inp.min > cbHoy() ? 'La vuelta no puede ser anterior a la ida' : 'No se puede elegir una fecha anterior a hoy');
     });
     document.getElementById('cb-buscar').addEventListener('input', () => { clearTimeout(cbBuscarTimer); cbBuscarTimer = setTimeout(() => { cbOffset = 0; cbCargarHistorial(false); }, 280); });
     const camposBorrador = ['cb-cliente', 'cb-fecha', 'cb-vence', 'cb-notas', 'cb-terminos', 'cb-asesor'];
@@ -26103,6 +26118,9 @@ window.cbGuardar = async function cbGuardar(accion) {
   if (!items.length) { errToast('Agrega al menos un servicio con su descripción y tarifa'); return; }
   const incompleto = items.find(it => !cbTitulo(it) || !(cbEsPax(it) ? cbPax(it).a : it.cant));
   if (incompleto) { const t = cbTipo(incompleto), falta = !cbTitulo(incompleto) ? t.campos[0][1] : cbEsPax(incompleto) ? 'al menos un adulto' : t.campos.find(([k]) => k === 'cant')[1]; errToast(`${t.nombre}: falta ${falta.toLowerCase()}`); return; }
+  const pasada = items.find(it => [it.ida, it.vuelta].some(d => d && d < cbHoy()));
+  if (pasada) { errToast(`${cbTipo(pasada).nombre}: hay una fecha anterior a hoy`); return; }
+  if ([val('cb-fecha'), val('cb-vence')].some(d => d && d < cbHoy())) { errToast('La fecha y la vigencia no pueden ser anteriores a hoy'); return; }
   const asesorId = val('cb-asesor');
   if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); document.getElementById('cb-asesor').focus(); return; }
   const btn = document.getElementById(`cb-${accion}-btn`), htmlBtn = btn.innerHTML;
