@@ -3027,6 +3027,8 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .vc-b-ref b{color:var(--txt);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 :is(.vc-ref,.vc-total-nota,.vc-b-servs,.vc-b-ref,.vc-plan-otro)[hidden]{display:none}
 .vc-pie{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.vc-pie-btns{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#vc-prueba-btn{padding:6px 14px;font-size:12.5px}
 .vc-plan{flex:1;min-width:220px;font-size:12px;color:var(--muted);line-height:1.5}
 .vc-plan b{color:var(--txt)}
 .vc-plan>i{color:var(--accent-ink);margin-right:4px}
@@ -8102,7 +8104,10 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 
           <div class="vc-pie">
             <div class="vc-plan" id="vc-plan" aria-live="polite"></div>
-            <button id="vc-generar-btn" class="vc-generar" type="button" onclick="generarVoucherPdf()"><i class="fas fa-file-pdf"></i> Generar voucher</button>
+            <div class="vc-pie-btns">
+              <button id="vc-prueba-btn" class="vc-mini" type="button" onclick="generarVoucherPrueba()" title="Descarga un PDF con datos de muestra. No guarda nada en el CRM."><i class="fas fa-flask"></i> Voucher de prueba</button>
+              <button id="vc-generar-btn" class="vc-generar" type="button" onclick="generarVoucherPdf()"><i class="fas fa-file-pdf"></i> Generar voucher</button>
+            </div>
           </div>
         </form>
 

@@ -25627,6 +25627,34 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     btn.disabled = false; vcActualizarPreview();
   }
 };
+// Voucher de prueba: PDF con datos de muestra. No escribe en `vouchers`, ni en Storage, ni en Reservas.
+const VC_PRUEBA = {
+  numero_factura: 'PRUEBA', asesor_nombre: 'Asesor de prueba',
+  cliente_nombre: 'CLIENTE DE PRUEBA', documento_identidad: 'V-00000000', telefono: '0414-0000000',
+  destino_hospedaje: 'Hotel de prueba, Los Roques', fecha_entrada: '2026-11-10', check_in: '15:00',
+  fecha_salida: '2026-11-14', check_out: '11:00', modalidad: 'Todo incluido', total_dias: '4 días / 3 noches',
+  habitaciones: '1 habitación doble', adultos: 2, ninos: '1', status_reserva: 'CONFIRMADA',
+  total_general: 500, forma_pago: 'Pago móvil', referencia_pago: '123456', monto_pagado: 250, resta: 250,
+  servicios: [
+    { tipo: 'excursion', nombre: 'Full day Cayo Sal', opcion: 'Con almuerzo', fecha: '2026-11-11', hora: '08:00', adultos: 2, ninos: 1, monto: 80 },
+    { tipo: 'traslado', nombre: 'Aeropuerto - hotel', fecha: '2026-11-10', hora: '13:00', adultos: 2, ninos: 1, monto: 40 },
+  ],
+};
+window.generarVoucherPrueba = async function generarVoucherPrueba() {
+  const btn = document.getElementById('vc-prueba-btn');
+  btn.disabled = true;
+  try {
+    await ensureVoucherLibs();
+    const blob = new Blob([await construirVoucherPdf({ ...VC_PRUEBA, created_at: new Date().toISOString() })], { type: 'application/pdf' });
+    vcDescargar(blob, 'Voucher-PRUEBA.pdf');
+    okToast('Voucher de prueba descargado (no se guardó nada)');
+  } catch (e) {
+    console.error('generarVoucherPrueba', e);
+    errToast('No se pudo generar el voucher de prueba');
+  } finally {
+    btn.disabled = false;
+  }
+};
 // Voucher v2 (2026-10-17): membrete formal, tablas con contorno y condiciones generales dibujadas con jsPDF (ya no se embebe voucher-terminos.pdf).
 const VCP = { navy: [15, 23, 42], naranja: [234, 118, 22], ambar: [245, 158, 11], ambarOsc: [180, 83, 9], gris: [100, 116, 139], linea: [226, 232, 240], suave: [248, 250, 252], verde: [21, 128, 61], cuerpo: [30, 41, 59] };
 const vcpTinte = (rgb, k) => rgb.map(c => Math.round(c + (255 - c) * k));
