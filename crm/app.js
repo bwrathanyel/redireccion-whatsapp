@@ -26870,8 +26870,8 @@ const NAV_ITEMS = [
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'bol-solicitudes', icon: 'fas fa-list-ol', label: 'Solicitudes', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Vuelos que piden los asesores, repartidos entre agentes', badge: 'nav-bol-sol-count', badgeDefault: '0' },
   // Fuera del modo Boletería es la cotización del asesor para su cliente (cbModo 'ventas', 2026-10-15).
-  // Ya no es pestaña de Leads (2026-10-17): entrada suelta solo en modo Boletería; el asesor la abre desde la ficha del lead (cbDesdeLead).
-  { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
+  // Ya no es pestaña de Leads (2026-10-17): entrada propia del menú en todos los modos (también la ficha del lead la abre con cbDesdeLead).
+  { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
   { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Ventas, costos, gastos y utilidad por periodo' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok' },
@@ -26899,9 +26899,9 @@ const NAV_ITEMS = [
 const NAV_PADRES = [
   // Primera: es el trabajo principal del modo Boletería (fuera de ese modo no se ve).
   { sec: 'bol-solicitudes', hoja: true },
-  { sec: 'cotizacion-boletos', hoja: true },
   { sec: 'grp-inicio', icon: 'fas fa-chart-pie', label: 'Inicio' },
   { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
+  { sec: 'cotizacion-boletos', hoja: true },
   // Bandeja (2026-10-16): Meta DM y Correo como pestañas. El chat interno se abre por la burbuja #chat-fab.
   { sec: 'grp-bandeja', icon: 'fas fa-inbox', label: 'Bandeja', badge: 'nav-bandeja-count', badgeDefault: '0' },
   { sec: 'mensajes', hoja: true },
