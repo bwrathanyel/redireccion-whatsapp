@@ -25952,12 +25952,123 @@ const cbTotalPax = it => { if (!cbEsPax(it)) return Number(it.cant) || 0; const 
 const cbPorNoche = it => it.tipo === 'hotel' && it.unidad === 'persona_noche';
 const cbNochesCobro = it => cbPorNoche(it) ? (+cbNoches(it.ida, it.vuelta) || 1) : 1;
 const cbImporte = it => {
+  if (it.tipo === 'hotel' && it.tramos?.length) return cbTarImporte(it);
   const t = Number(it.tarifa) || 0;
   if (!cbEsPax(it)) return (Number(it.cant) || 0) * t;
   const p = cbPax(it);
-  return (p.a * t + p.n * (Number(it.tarifa_nino) || 0) + p.i * (Number(it.tarifa_infante) || 0)) * cbNochesCobro(it);
+  return Math.round((p.a * t + p.n * (Number(it.tarifa_nino) || 0) + p.i * (it.infantes_gratis ? 0 : Number(it.tarifa_infante) || 0)) * cbNochesCobro(it) * 100) / 100;
 };
 const cbNochesTexto = n => `${n} noche${n === 1 ? '' : 's'}`;
+// BEGIN CB_TARIFAS: funciones puras; snapshots de precios, nunca recalcular documentos guardados.
+const cbTarNorm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const cbTarPlanClave = s => {
+  const n = cbTarNorm(s);
+  return /^(ti|todo incluido|all inclusive)$/.test(n) ? 'todo incluido' : n;
+};
+const cbTarBloque = t => Array.isArray(t.tarifario_bloques) ? t.tarifario_bloques[0] || {} : t.tarifario_bloques || {};
+const cbTarPlan = t => String(t.plan || cbTarBloque(t).plan || '').trim();
+const cbTarNum = v => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : null;
+const cbTarCent = v => Math.round((Number(v) || 0) * 100);
+const cbTotalItems = items => items.reduce((s, it) => s + cbTarCent(cbImporte(it)), 0) / 100;
+const cbTarFecha = s => { const ms = /^\d{4}-\d{2}-\d{2}$/.test(s || '') ? Date.parse(s + 'T00:00:00Z') : NaN; return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === s ? ms : NaN; };
+const cbTarIso = ms => new Date(ms).toISOString().slice(0, 10);
+const cbTarContexto = it => [it.producto_id, cbTarPlanClave(it.plan), cbTarNorm(it.hab), it.ida, it.vuelta, it.adultos, it.unidad].join('|');
+function cbTarNoches(a, b) {
+  const inicio = cbTarFecha(a), fin = cbTarFecha(b), n = (fin - inicio) / 864e5;
+  return Number.isInteger(n) && n > 0 && n <= 366 ? Array.from({ length: n }, (_, i) => cbTarIso(inicio + i * 864e5)) : [];
+}
+function cbTarUtil(t, hoy) {
+  return t.vigente !== false && !t.necesita_revision && (!t.venta_desde || t.venta_desde <= hoy)
+    && (!(t.venta_hasta || t.fecha_venta_fin) || (t.venta_hasta || t.fecha_venta_fin) >= hoy) && (!t.fecha_fin || t.fecha_fin >= hoy);
+}
+function cbTarOpciones(filas, campo) {
+  const grupos = new Map(), clave = campo === 'plan' ? cbTarPlanClave : cbTarNorm;
+  for (const t of [...filas].sort((a, b) => (a.orden_pdf ?? 1e9) - (b.orden_pdf ?? 1e9) || a.id - b.id)) {
+    const texto = campo === 'plan' ? cbTarPlan(t) : String(t.habitacion || '').trim(), k = clave(texto);
+    if (!k) continue;
+    const g = grupos.get(k); if (g) g.n++; else grupos.set(k, { texto, n: 1 });
+  }
+  return [...grupos.values()].sort((a, b) => campo === 'plan' ? b.n - a.n : 0).map(g => g.texto);
+}
+const cbTarDelPlan = (filas, plan) => filas.some(t => cbTarPlan(t)) ? filas.filter(t => cbTarPlanClave(cbTarPlan(t)) === cbTarPlanClave(plan)) : filas;
+function cbTarAmplitud(t, noche) {
+  const ws = Array.isArray(t.ventanas) && t.ventanas.some(w => w.desde || w.hasta) ? t.ventanas : [{ desde: t.disfrute_desde, hasta: t.fecha_fin }];
+  const ns = cbTarFecha(noche), hits = ws.map(w => [w.desde ? cbTarFecha(w.desde) : -Infinity, w.hasta ? cbTarFecha(w.hasta) : Infinity])
+    .filter(([a, b]) => ns >= a && ns <= b).map(([a, b]) => b - a);
+  return hits.length ? Math.min(...hits) : null;
+}
+function cbTarPrecioAdulto(t, adultos, ocupaciones) {
+  const p = t.precios || {}, claves = [...ocupaciones].filter(([, n]) => n === Number(adultos)).map(([k]) => k);
+  const valores = claves.map(k => cbTarNum(p[k])).filter(v => v !== null);
+  if (!valores.length || valores.some(v => v !== valores[0])) return null;
+  const base = p.base || cbTarBloque(t).base_precio;
+  if (base && !['persona', 'habitacion'].includes(base)) return null;
+  const sgl = cbTarNum(p.sgl), dbl = cbTarNum(p.dbl);
+  const porHab = base === 'habitacion' || (!base && sgl !== null && dbl !== null && dbl > sgl);
+  return porHab ? valores[0] / Number(adultos) : valores[0];
+}
+function cbTarPorHabitacion(t) {
+  const p = t.precios || {}, base = p.base || cbTarBloque(t).base_precio;
+  const sgl = cbTarNum(p.sgl), dbl = cbTarNum(p.dbl);
+  return base === 'habitacion' || (!base && sgl !== null && dbl !== null && dbl > sgl);
+}
+function cbTarSugerir(it, filas, hoy, ocupaciones) {
+  const noches = cbTarNoches(it.ida, it.vuelta), fallo = texto => ({ ok: false, texto });
+  if (!noches.length) return fallo('Elige entrada y salida (de 1 a 366 noches).');
+  if (it.unidad !== 'persona_noche') return fallo('La estadía completa se cotiza manualmente.');
+  if (!it.hab) return fallo('Elige una habitación del tarifario o escribe una tarifa manual.');
+  const utilizables = filas.filter(t => cbTarUtil(t, hoy));
+  const candidatas = cbTarDelPlan(utilizables, it.plan).filter(t => cbTarNorm(t.habitacion) === cbTarNorm(it.hab));
+  const tramos = [], usadas = [], avisos = new Set();
+  for (const noche of noches) {
+    const cubren = candidatas.map(t => ({ t, amplitud: cbTarAmplitud(t, noche) })).filter(x => x.amplitud !== null);
+    if (!cubren.length) return fallo('No hay tarifa para todas las noches. Ingresa el precio manualmente.');
+    const menor = Math.min(...cubren.map(x => x.amplitud));
+    const precisas = cubren.filter(x => x.amplitud === menor);
+    if (precisas.some(x => String(x.t.moneda || 'USD').toUpperCase() !== 'USD')) return fallo('La moneda del tarifario requiere confirmación manual en USD.');
+    const precios = precisas.map(x => cbTarPrecioAdulto(x.t, it.adultos, ocupaciones));
+    if (precios.some(p => p === null) || precios.some(p => p !== precios[0])) return fallo('Ocupación sin precio único: confirma la tarifa manualmente.');
+    precisas.sort((a, b) => (a.t.orden_pdf ?? 1e9) - (b.t.orden_pdf ?? 1e9) || a.t.id - b.t.id);
+    const t = precisas[0].t, tarifa = precios[0], siguiente = cbTarIso(cbTarFecha(noche) + 864e5);
+    usadas.push(...precisas.map(x => x.t));
+    const ultimo = tramos.at(-1);
+    if (ultimo?.tarifa_id === t.id) { ultimo.hasta = siguiente; ultimo.noches++; }
+    else tramos.push({ desde: noche, hasta: siguiente, noches: 1, tarifa, tarifa_habitacion: cbTarPorHabitacion(t) ? tarifa * Number(it.adultos) : null, tarifa_id: t.id, fuente_archivo: t.fuente_archivo || null });
+  }
+  for (const t of usadas) {
+    const b = cbTarBloque(t), mins = b.minimo_noches && typeof b.minimo_noches === 'object' ? [...new Set(Object.values(b.minimo_noches).map(Number).filter(n => n > 0))] : [];
+    if (!t.minimo_noches && mins.length > 1) return fallo('El mínimo de noches requiere confirmación manual para esta temporada.');
+    const min = Number(t.minimo_noches) || (typeof b.minimo_noches === 'number' ? b.minimo_noches : mins[0] || 0);
+    if (min > noches.length) return fallo(`El hotel exige mínimo ${min} noches. Confirma una excepción y tarifa manual.`);
+    for (const c of t.condiciones || []) if (typeof c === 'string') avisos.add(c);
+    for (const s of b.suplementos || []) if (s.obligatorio) avisos.add('Suplemento obligatorio pendiente: ' + (s.texto || s.temporada || 'confirmar en la ficha'));
+    if (b.impuestos?.igtf_pct) avisos.add(`IGTF ${b.impuestos.igtf_pct}% pendiente según forma de pago.`);
+  }
+  if (/on request/i.test(it.hab)) avisos.add('Habitación sujeta a confirmación del hotel.');
+  if (!it.plan) avisos.add('Plan sin especificar en el tarifario: completa o confirma antes de entregar.');
+  else if (!utilizables.some(t => cbTarPlan(t))) avisos.add('El tarifario no especifica el plan: confirma que el plan ingresado corresponda a esta tarifa.');
+  return { ok: true, tramos, avisos: [...avisos] };
+}
+function cbTarImporte(it) {
+  const a = Number(it.adultos) || 0, n = Number(it.ninos) || 0;
+  return (it.tramos || []).reduce((s, t) => s + Math.round((a * Number(t.tarifa || 0) + n * Number(it.tarifa_nino || 0)) * 100) * t.noches, 0) / 100;
+}
+function cbTarTramosValidos(it) {
+  if (!it.tramos?.length) return true;
+  const esperadas = cbTarNoches(it.ida, it.vuelta), reales = [];
+  for (const t of it.tramos) {
+    const ns = cbTarNoches(t.desde, t.hasta);
+    if (ns.length !== Number(t.noches) || cbTarNum(t.tarifa) === null) return false;
+    reales.push(...ns);
+  }
+  return !!esperadas.length && esperadas.length === reales.length && esperadas.every((n, i) => reales[i] === n);
+}
+const cbLeadFiltro = texto => {
+  const q = String(texto || '').replace(/[,()*%\\]/g, ' ').trim(), dig = q.replace(/\D/g, '');
+  const tel = /^[+\d\s.\-]+$/.test(q) && dig.length >= 6;
+  return { q, campo: tel ? 'telefono' : 'nombre', patron: tel ? '%' + dig.slice(-7) + '%' : '%' + q.replace(/\s+/g, '%') + '%' };
+};
+// END CB_TARIFAS
 const cbImporteTexto = it => '$' + cbMonto(cbImporte(it)) + (cbPorNoche(it) ? ` · ${cbNochesTexto(cbNochesCobro(it))}` : '');
 // Cotización multi-servicio (2026-10-14, paquetes corporativos): cada ítem lleva
 // `tipo`; las filas anteriores no lo tienen y se leen como boleto. El primer campo
@@ -25976,7 +26087,7 @@ const CB_TIPOS = {
 const cbTipo = it => CB_TIPOS[it.tipo] || CB_TIPOS.boleto;
 const cbTitulo = it => String(it[cbTipo(it).campos[0][0]] || '').trim();
 const CB_PAX_CAMPOS = [['adultos', 'tarifa', 'Adultos', 'Tarifa adulto (USD)', 1], ['ninos', 'tarifa_nino', 'Niños', 'Tarifa niño (USD)', 0], ['infantes', 'tarifa_infante', 'Infantes', 'Tarifa infante (USD)', 0]];
-const cbItemVacio = (tipo = 'boleto') => Object.fromEntries([['tipo', tipo], ...CB_TIPOS[tipo].campos.map(([k]) => [k, k === 'cant' ? 1 : '']), ...(CB_TIPOS[tipo].pax ? CB_PAX_CAMPOS.flatMap(([c, t]) => [[c, c === 'adultos' ? 1 : ''], [t, '']]) : []), ...(tipo === 'hotel' ? [['unidad', 'persona_noche']] : []), ...(tipo === 'boleto' ? [['origen', ''], ['destino', ''], ['viaje', 'rt']] : []), ['extra', '']]);
+const cbItemVacio = (tipo = 'boleto') => Object.fromEntries([['tipo', tipo], ...CB_TIPOS[tipo].campos.map(([k]) => [k, k === 'cant' ? 1 : '']), ...(CB_TIPOS[tipo].pax ? CB_PAX_CAMPOS.flatMap(([c, t]) => [[c, c === 'adultos' ? 1 : ''], [t, '']]) : []), ...(tipo === 'hotel' ? [['unidad', 'persona_noche'], ['adultos', 2], ['infantes_gratis', true]] : []), ...(tipo === 'boleto' ? [['origen', ''], ['destino', ''], ['viaje', 'rt']] : []), ['extra', '']]);
 // Boleto por ciudades (2026-10-17): origen y destino se eligen por nombre del catálogo de Boletería
 // y se muestran "Caracas (CCS)"; `ruta` se sigue guardando en IATA (CCS-PMV-CCS) y es lo que va al
 // PDF. `viaje`: 'rt' ida y vuelta, 'ow' solo ida. Las filas anteriores solo traen `ruta`: se parsea, y
@@ -26107,19 +26218,21 @@ const cbArchivo = c => `Cotizacion-${cbNumero(c.numero)}-${c.cliente.normalize('
 
 function cbItemHtml(it, i) {
   // Fechas: nunca antes de hoy; la vuelta tampoco antes de la ida (cbMinFecha).
-  const f = (k, label, attrs, full = '') => `<div class="field${full}"><label class="fl">${label}</label><input class="ei" data-k="${k}" value="${esc(String(it[k] ?? ''))}" ${attrs}${attrs.includes('type="date"') ? ` min="${cbMinFecha(k, it.ida)}"` : ''}></div>`;
+  const f = (k, label, attrs, full = '') => `<div class="field${full}"><label class="fl" for="cb-${k}-${i}">${label}</label><input id="cb-${k}-${i}" class="ei" data-k="${k}" value="${esc(String(it[k] ?? ''))}" ${attrs}${attrs.includes('type="date"') ? ` min="${cbMinFecha(k, it.ida)}"` : ''}></div>`;
   const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto';
   const opciones = Object.entries(CB_TIPOS).map(([k, t]) => `<option value="${k}"${k === tipo ? ' selected' : ''}>${t.nombre}</option>`).join('');
-  const unidad = tipo === 'hotel' ? `<div class="field cb-dos"><label class="fl">Tarifa por</label><select class="ei" data-k="unidad">${[['persona_noche', 'Persona por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${(cbPorNoche(it) ? 'persona_noche' : 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : '';
+  const unidad = tipo === 'hotel' ? `<div class="field cb-dos"><label class="fl" for="cb-unidad-${i}">Tarifa por</label><select id="cb-unidad-${i}" class="ei" data-k="unidad">${[['persona_noche', 'Persona por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${(cbPorNoche(it) ? 'persona_noche' : 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : '';
   const boleto = tipo === 'boleto', campos = CB_TIPOS[tipo].campos.filter(c => !(boleto && c[0] === 'ruta'));
-  return `<div class="cb-item${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
-    <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span>Importe <b class="cb-importe">${cbImporteTexto(it)}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
+  return `<div class="cb-item${it._plegado ? ' cb-plegado' : ''}${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
+    <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span><button type="button" class="btn-sm cb-plegar" data-cb-plegar aria-expanded="${!it._plegado}">${it._plegado ? 'Editar' : 'Contraer'}</button> Importe <b class="cb-importe">${cbImporteTexto(it)}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
     <div class="cb-item-grid">
       ${boleto ? cbRutaHtml(it) + (it.ruta_libre ? f('ruta', 'Ruta anterior (se reemplaza al elegir origen y destino)', 'placeholder="CCS-PTY-MIA"', ' cb-full') : '') : ''}
-      ${campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')}${unidad}
-      ${CB_TIPOS[tipo].pax ? `<div class="cb-pax cb-full">${CB_PAX_CAMPOS.map(([c, t, lc, lt, min]) => `<div class="cb-pax-c"><div class="field"><label class="fl">${lc}</label><input class="ei" data-k="${c}" type="number" min="${min}" step="1" placeholder="0" value="${esc(String(it[c] ?? ''))}"></div><div class="field"><label class="fl">${lt}</label><input class="ei" data-k="${t}" type="number" min="0" step="0.01" value="${esc(String(it[t] ?? ''))}"></div></div>`).join('')}</div>` : ''}
+      ${campos.map((c, j) => tipo === 'hotel' && j === 0 ? cbHotelHtml(it, i) : tipo === 'hotel' && ['plan', 'hab'].includes(c[0]) ? f(c[0], c[1], c[2] + ` list="cb-${c[0] === 'plan' ? 'planes' : 'habs'}-${i}" autocomplete="off"`, c[0] === 'plan' ? ' cb-dos' : c[3] || '') : j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')}
+      ${CB_TIPOS[tipo].pax ? `<div class="cb-pax cb-full">${CB_PAX_CAMPOS.map(([c, t, lc, lt, min]) => `<div class="cb-pax-c"><div class="field"><label class="fl" for="cb-${c}-${i}">${lc}</label><input id="cb-${c}-${i}" class="ei" data-k="${c}" type="number" min="${min}" step="1" placeholder="0" value="${esc(String(it[c] ?? ''))}"></div><div class="field${tipo === 'hotel' && ((t === 'tarifa_infante' && it.infantes_gratis) || (t === 'tarifa' && it.tramos?.length > 1)) ? ' cb-oculto' : ''}"><label class="fl" for="cb-${t}-${i}">${lt}</label><input id="cb-${t}-${i}" class="ei" data-k="${t}" type="number" min="0" step="0.01" value="${esc(String(it[t] ?? ''))}"></div></div>`).join('')}</div>` : ''}
+      ${cbHotelPrecioHtml(it, i)}
+      ${tipo === 'hotel' && it.infantes_gratis ? '<small class="cb-full cb-condicion">Infantes: alojamiento gratis.</small>' : ''}
       ${boleto ? `<div class="cb-ref cb-full">${cbRefHtml(it)}</div>` : ''}
-      ${f('extra', 'Detalle adicional (opcional)', 'placeholder="Equipaje, clase, qué incluye, observaciones..."', ' cb-full')}
+      <details class="cb-full cb-extra"${it.extra ? ' open' : ''}><summary>Detalle adicional</summary>${unidad}${f('extra', 'Qué incluye u observaciones', 'placeholder="Equipaje, clase, qué incluye, observaciones..."')}</details>
     </div>
   </div>`;
 }
@@ -26134,7 +26247,16 @@ function cbLimpiarItem(it) {
   }
   if (!CB_TIPOS[o.tipo].pax) return Object.assign(o, { cant: Number(it.cant) || 0, tarifa: Number(it.tarifa) || 0 });
   CB_PAX_CAMPOS.forEach(([c, t]) => { o[c] = Math.max(0, Math.floor(Number(it[c]) || 0)); o[t] = Number(it[t]) || 0; });
-  if (o.tipo === 'hotel') o.unidad = it.unidad === 'persona_noche' ? 'persona_noche' : 'persona';
+  if (o.tipo === 'hotel') {
+    o.unidad = it.unidad === 'persona_noche' ? 'persona_noche' : 'persona';
+    o.infantes_gratis = it.infantes_gratis === true;
+    if (o.infantes_gratis) o.tarifa_infante = 0;
+    if (it.producto_id) o.producto_id = Number(it.producto_id);
+    if (it.tarifas_contexto) o.tarifas_contexto = it.tarifas_contexto;
+    o.tarifa_manual = !!it.tarifa_manual; o.habitacion_manual = !!it.habitacion_manual;
+    if (it.tramos?.length) o.tramos = it.tramos.map(t => ({ desde: t.desde, hasta: t.hasta, noches: Number(t.noches), tarifa: Number(t.tarifa), tarifa_habitacion: cbTarNum(t.tarifa_habitacion), tarifa_id: t.tarifa_id || null, fuente_archivo: t.fuente_archivo || null }));
+    if (it.tarifa_avisos?.length) o.tarifa_avisos = [...it.tarifa_avisos];
+  }
   return Object.assign(o, { cant: o.adultos + o.ninos + o.infantes });
 }
 const cbNoches = (a, b) => { const n = a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 864e5) : 0; return n > 0 ? String(n) : ''; };
@@ -26168,7 +26290,11 @@ function cbDetalleCliente(it) {
     if (it.ida) add('', `${f(it.ida)}${it.vuelta ? ' al ' + f(it.vuelta) : ''}${n ? ` · ${n} noche${n === 1 ? '' : 's'}` : ''}`);
   } else if (tipo === 'traslado') { add('Fecha', con(f(it.ida), it.ida_hora)); add('Regreso', con(f(it.vuelta), it.vuelta_hora)); }
   else add('Fecha', f(it.ida));
-  if (cbEsPax(it)) {
+  if (it.tipo === 'hotel' && it.tramos?.length) {
+    it.tramos.forEach(t => add('', `${f(t.desde)} al ${f(t.hasta)} · ${cbNochesTexto(t.noches)} · ${t.tarifa_habitacion != null ? `${it.adultos} adultos, habitación $${cbMonto(t.tarifa_habitacion)} por noche` : `${it.adultos} adultos × $${cbMonto(t.tarifa)} por noche`}`));
+    if (+it.ninos) add('', `${it.ninos} niños × $${cbMonto(it.tarifa_nino)} por noche`);
+    if (+it.infantes) add('', `${it.infantes} infantes · alojamiento gratis`);
+  } else if (cbEsPax(it)) {
     const p = cbPax(it), xNoche = cbPorNoche(it) ? ` por noche × ${cbNochesTexto(cbNochesCobro(it))}` : '';
     [[p.a, 'adulto', 'adultos', it.tarifa], [p.n, 'niño', 'niños', it.tarifa_nino], [p.i, 'infante', 'infantes', it.tarifa_infante]].forEach(([n, s, pl, t]) => { if (n) add('', `${n} ${n === 1 ? s : pl} × $${cbMonto(t)}${xNoche}`); });
   }
@@ -26194,7 +26320,7 @@ function cbDatosPdf(c) {
     validez: c.vence ? `Cotización válida hasta el ${cbFechaLarga(c.vence)}. Sujeta a cambio y a disponibilidad.` : '',
   };
 }
-function cbActualizarTotal() { document.getElementById('cb-total').textContent = '$' + cbMonto(cbItems.reduce((s, it) => s + cbImporte(it), 0)); }
+function cbActualizarTotal() { document.getElementById('cb-total').textContent = '$' + cbMonto(cbTotalItems(cbItems)); cbPintarResumen(); }
 function cbRenderItems() { document.getElementById('cb-items').innerHTML = cbItems.map(cbItemHtml).join(''); cbActualizarTotal(); }
 window.cbAgregarItem = () => { cbItems.push(cbItemVacio(cbLimpiarItem(cbItems.at(-1) || {}).tipo)); cbRenderItems(); cbProgramarBorrador(); };
 window.cbQuitarItem = i => { cbItems.splice(i, 1); cbRenderItems(); cbProgramarBorrador(); };
@@ -26225,16 +26351,124 @@ window.cbQuitarLead = () => { cbLead = null; cbPintarLead(); };
 // Un formulario a medio armar sin lead se conserva al ligarlo; si era de otro lead, se empieza de cero.
 function cbAplicarLead() {
   const l = cbLeadPendiente; cbLeadPendiente = null;
-  if (cbLead && cbLead.id !== l.id) cbResetForm();
+  // Cambiar de cliente conserva los servicios y precios que ya se armaron.
   cbLead = l; cbPintarLead();
   document.getElementById('cb-cliente').value = l.nombre;
 }
-// Nombres del tarifario para autocompletar hotel/paquete/full day/tour; el precio sigue siendo manual.
+const cbHoteles = new Map(), cbHotelTarifas = new Map(), cbHotelPeticiones = new Map();
+let cbLeadsRes = [], cbLeadTimer = null, cbLeadTk = 0;
+const cbHotelFilas = it => (cbHotelTarifas.get(Number(it.producto_id)) || []).filter(t => cbTarUtil(t, cbHoy()));
+function cbPintarResumen() {
+  const box = document.getElementById('cb-resumen'); if (!box) return;
+  box.innerHTML = cbItems.map((it, i) => `<div class="cb-res-linea"><span><b>${esc(cbTitulo(it) || cbTipo(it).nombre)}</b><small>${esc([it.plan, it.tipo === 'hotel' && cbNoches(it.ida, it.vuelta) ? cbNochesTexto(+cbNoches(it.ida, it.vuelta)) : '', cbEsPax(it) ? cbPaxTexto(it) : ''].filter(Boolean).join(' · '))}</small></span><strong>$${cbMonto(cbImporte(it))}</strong></div>`).join('');
+}
+async function cbBuscarLead() {
+  const input = document.getElementById('cb-lead-q'), box = document.getElementById('cb-lead-res');
+  const f = cbLeadFiltro(input.value), tk = ++cbLeadTk;
+  if (f.q.length < 3) { cbLeadsRes = []; box.innerHTML = ''; box.hidden = true; input.setAttribute('aria-expanded', 'false'); return; }
+  box.hidden = false; input.setAttribute('aria-expanded', 'true'); box.innerHTML = '<div class="cb-picker-vacio">Buscando clientes…</div>';
+  let q = sb.from('leads').select('id,nombre,telefono,estado,asesor').is('eliminado_at', null).ilike(f.campo, f.patron);
+  if (ROL === 'asesor') q = q.eq('asesor', MI_NOMBRE);
+  try {
+    const { data, error } = await q.order('id', { ascending: false }).limit(8);
+    if (tk !== cbLeadTk) return;
+    cbLeadsRes = error ? [] : data || [];
+    box.innerHTML = cbLeadsRes.length ? cbLeadsRes.map((l, i) => `<button type="button" role="option" data-cb-lead="${i}"><span><b>${esc(l.nombre || 'Sin nombre')}</b><small>${esc(l.telefono || 'Sin teléfono')} · ${esc(l.estado || '')}</small></span></button>`).join('') : `<div class="cb-picker-vacio">${error ? 'No se pudo buscar. Intenta de nuevo.' : 'Sin coincidencias. Puedes cotizar escribiendo el nombre.'}</div>`;
+  } catch (_) { if (tk === cbLeadTk) box.innerHTML = '<div class="cb-picker-vacio">No se pudo buscar. Intenta de nuevo.</div>'; }
+}
+function cbElegirLead(i) {
+  const l = cbLeadsRes[i]; if (!l) return;
+  cbLeadTk++; clearTimeout(cbLeadTimer); cbLeadPendiente = l; cbAplicarLead();
+  document.getElementById('cb-lead-q').value = ''; document.getElementById('cb-lead-res').hidden = true;
+  document.getElementById('cb-lead-q').setAttribute('aria-expanded', 'false');
+  cbProgramarBorrador();
+}
+function cbPickerTeclas(e, box, elegir) {
+  const ops = [...box.querySelectorAll('[role="option"]')], previo = ops.findIndex(o => o.classList.contains('activo'));
+  if (e.key === 'Escape') { box.hidden = true; e.target.setAttribute('aria-expanded', 'false'); return; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault(); if (!ops.length) return;
+    const i = (previo + (e.key === 'ArrowDown' ? 1 : -1) + ops.length) % ops.length;
+    box.hidden = false; ops.forEach((o, n) => { o.classList.toggle('activo', n === i); o.setAttribute('aria-selected', String(n === i)); });
+    if (!ops[i].id) ops[i].id = box.id + '-op-' + i;
+    e.target.setAttribute('aria-activedescendant', ops[i].id); e.target.setAttribute('aria-expanded', 'true'); ops[i].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter' && !box.hidden && ops.length) { e.preventDefault(); elegir(ops[previo < 0 ? 0 : previo]); }
+}
+function cbHotelHtml(it, i) {
+  return `<div class="field cb-dos cb-picker"><label class="fl" for="cb-hotel-${i}">Hotel o posada</label><input id="cb-hotel-${i}" class="ei" data-busca="hotel" data-k="nombre" value="${esc(it.nombre || '')}" placeholder="Buscar hotel o escribir otro…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-hoteles-${i}"><div id="cb-hoteles-${i}" class="cb-picker-lista" role="listbox" aria-label="Hoteles" hidden></div></div>`;
+}
+function cbHotelBuscar(inp) {
+  const box = inp.parentElement.querySelector('.cb-picker-lista'), q = cbTarNorm(inp.value);
+  const lista = [...cbHoteles.values()].filter(p => p.tipo === 'hotel' && cbTarNorm(p.nombre + ' ' + (p.destino || '')).includes(q)).slice(0, 8);
+  box.innerHTML = lista.length ? lista.map(p => {
+    const f = ordenarFotos(p.producto_fotos || [])[0];
+    return `<button type="button" role="option" data-cb-hotel="${p.id}">${f ? `<img src="${esc(fotoMini(f.storage_path, 256))}" width="44" height="44" alt="" loading="lazy" onerror="this.hidden=true">` : '<i class="fas fa-hotel" aria-hidden="true"></i>'}<span><b>${esc(p.nombre)}</b><small>${esc(p.destino || 'Hotel o posada')}</small></span></button>`;
+  }).join('') : '<div class="cb-picker-vacio">Sin coincidencias. Puedes escribir el hotel manualmente.</div>';
+  box.hidden = false; inp.setAttribute('aria-expanded', 'true');
+}
+async function cbTraerTarifas(id) {
+  id = Number(id);
+  if (cbHotelTarifas.has(id)) return cbHotelTarifas.get(id);
+  if (!cbHotelPeticiones.has(id)) cbHotelPeticiones.set(id, (async () => {
+    const { data, error } = await sb.from('tarifas').select('id,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,tarifario_bloques(plan,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').limit(1000);
+    if (error) throw error;
+    cbHotelTarifas.set(id, data || []); return data || [];
+  })().finally(() => cbHotelPeticiones.delete(id)));
+  return cbHotelPeticiones.get(id);
+}
+async function cbHotelElegir(card, id) {
+  const i = +card.dataset.i, it = cbItems[i], p = cbHoteles.get(Number(id)); if (!p) return;
+  Object.assign(it, { nombre: p.nombre, producto_id: p.id, plan: '', hab: '', tarifa: '', tramos: [], tarifa_manual: false, habitacion_manual: false, _cargando: true });
+  cbRenderItems(); cbProgramarBorrador();
+  try {
+    await cbTraerTarifas(p.id);
+    if (cbItems[i] !== it || it.producto_id !== p.id) return;
+    it.plan = cbTarOpciones(cbHotelFilas(it), 'plan')[0] || ''; cbHotelRecalcular(it);
+  } catch (_) { it._aviso = 'No se pudieron cargar las tarifas. Puedes escribirlas manualmente o volver a elegir el hotel.'; }
+  finally { it._cargando = false; if (cbItems[i] === it) { cbRenderItems(); cbProgramarBorrador(); } }
+}
+function cbHotelRecalcular(it, aplicar = false) {
+  if (it.tipo !== 'hotel') return;
+  if (!it.producto_id) {
+    it._desactualizado = !!it.tarifas_contexto && it.tarifas_contexto !== cbTarContexto(it);
+    it._aviso = it._desactualizado ? 'Cambió el viaje. Revisa y confirma la tarifa manual para estas fechas.' : '';
+    return;
+  }
+  const filas = cbHotelFilas(it);
+  if (!it.hab || (!it.habitacion_manual && !it.tarifa_manual)) {
+    const hs = cbTarOpciones(cbTarDelPlan(filas, it.plan), 'habitacion');
+    it.hab = hs.find(h => cbTarSugerir({ ...it, hab: h }, filas, cbHoy(), TAR_OCUPACION).ok) || it.hab || hs[0] || '';
+  }
+  const s = cbTarSugerir(it, filas, cbHoy(), TAR_OCUPACION); it._sugerencia = s;
+  if (it.tarifa_manual && !aplicar) {
+    it._desactualizado = !!it.tarifas_contexto && it.tarifas_contexto !== cbTarContexto(it);
+    it._aviso = it._desactualizado ? 'Cambió el viaje. Revisa tu tarifa manual y confírmala, o usa la nueva sugerencia.' : 'Tarifa editada por el asesor.';
+    return;
+  }
+  it._desactualizado = false;
+  if (s.ok) {
+    it.tramos = s.tramos.map(t => ({ ...t })); it.tarifa = s.tramos[0].tarifa;
+    it.tarifas_contexto = cbTarContexto(it); it.tarifa_manual = false; it._aviso = '';
+    it.tarifa_avisos = s.avisos;
+  } else { it.tramos = []; it.tarifa = ''; it._aviso = s.texto; it.tarifa_avisos = []; }
+}
+function cbHotelPrecioHtml(it, i) {
+  if (it.tipo !== 'hotel') return '';
+  const filas = cbHotelFilas(it), planes = cbTarOpciones(filas, 'plan'), habs = cbTarOpciones(cbTarDelPlan(filas, it.plan), 'habitacion');
+  return `<datalist id="cb-planes-${i}">${planes.map(p => `<option value="${esc(p)}">`).join('')}</datalist><datalist id="cb-habs-${i}">${habs.map(h => `<option value="${esc(h)}">`).join('')}</datalist>
+    <div class="cb-tarifario cb-full" aria-live="polite">${it._cargando ? '<span>Cargando tarifas del hotel…</span>' : ''}${it._aviso ? `<p>${esc(it._aviso)}</p>` : ''}
+    ${it.tramos?.length > 1 ? `<div class="cb-tramos">${it.tramos.map((t, j) => `<label><span>${cbFechaCorta(t.desde)} → ${cbFechaCorta(t.hasta)}<small>${cbNochesTexto(t.noches)} · USD por adulto/noche</small></span><input class="ei" aria-label="Tarifa adulto del tramo ${j + 1}" data-tramo="${j}" type="number" min="0" step="0.01" value="${esc(String(t.tarifa))}"></label>`).join('')}</div>` : ''}
+    ${it.tarifa_manual && it._sugerencia?.ok ? `<button type="button" class="btn-sm" data-cb-usar>Usar tarifa del tarifario · ${it._sugerencia.tramos.map(t => '$' + cbMonto(t.tarifa)).join(' / ')}</button>` : ''}
+    ${it._desactualizado ? `<button type="button" class="btn-sm" data-cb-manual>Usar $${cbMonto(it.tarifa)} por adulto ${cbPorNoche(it) ? 'por noche' : 'por estadía'} para este viaje</button>` : ''}
+    ${(it.tarifa_avisos || []).map(a => `<small class="cb-condicion">${esc(a)}</small>`).join('')}</div>`;
+}
+// Carga liviana de nombres y portadas; el detalle de precios se pide solo al elegir hotel.
 async function cbCargarProductos() {
   if (cbProductosListos) return;
   cbProductosListos = true;
-  const { data, error } = await sb.from('productos').select('nombre').in('tipo', ['hotel', 'paquete']).eq('activo', true).order('nombre');
+  const { data, error } = await sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').in('tipo', ['hotel', 'paquete']).eq('activo', true).order('nombre').limit(1000);
   if (error) { cbProductosListos = false; return; }
+  (data || []).forEach(p => cbHoteles.set(Number(p.id), p));
   document.getElementById('cb-productos').innerHTML = [...new Set((data || []).map(p => p.nombre))].map(n => `<option value="${esc(n)}">`).join('');
 }
 const cbPdfDe = c => c.origen === 'ventas' ? pdfCotizacionCliente(cbDatosPdf(c)) : cbPdfBlob(c);
@@ -26252,7 +26486,7 @@ async function cbCompartir(blob, nombre) {
 // desde otro dispositivo. Otro agente o un admin que cotiza una ajena no la pisa.
 let cbBorradorTimer = null;
 const cbBorradorMio = () => !!cbSolicitud?.la_atiendo_yo;
-const cbBorrador = () => ({ v: 1, items: cbItems.map(it => ({ ...it })), cliente: val('cb-cliente'), fecha: val('cb-fecha'), vence: val('cb-vence'), notas: val('cb-notas'), terminos: val('cb-terminos'), asesor: val('cb-asesor') });
+const cbBorrador = () => ({ v: 2, items: cbItems.map(it => Object.fromEntries(Object.entries(it).filter(([k]) => !k.startsWith('_')))), lead: cbLead ? { id: cbLead.id, nombre: cbLead.nombre } : null, cliente: val('cb-cliente'), fecha: val('cb-fecha'), vence: val('cb-vence'), notas: val('cb-notas'), terminos: val('cb-terminos'), asesor: val('cb-asesor') });
 function cbProgramarBorrador() {
   if (!cbBorradorMio()) return;
   clearTimeout(cbBorradorTimer); cbBorradorTimer = setTimeout(cbGuardarBorrador, 2000);
@@ -26273,8 +26507,16 @@ async function cbGuardarBorrador() {
   return true;
 }
 function cbRestaurarBorrador(b, sel) {
-  cbItems = Array.isArray(b.items) && b.items.length ? b.items.map(it => ({ ...cbItemVacio(CB_TIPOS[it?.tipo] ? it.tipo : 'boleto'), ...cbMigrarBoleto(cbMigrarPax(it)) })) : [cbItemVacio()];
+  cbItems = Array.isArray(b.items) && b.items.length ? b.items.map(it => ({ ...cbItemVacio(CB_TIPOS[it?.tipo] ? it.tipo : 'boleto'), ...cbMigrarBoleto(cbMigrarPax(it)), ...(it.tipo === 'hotel' ? { unidad: it.unidad || 'persona', infantes_gratis: it.infantes_gratis === true } : {}) })) : [cbItemVacio()];
   cbRenderItems();
+  cbLead = b.lead || null; cbPintarLead();
+  cbItems.forEach(it => { if (it.tarifas_contexto && it.tarifas_contexto !== cbTarContexto(it)) { it._desactualizado = true; it._aviso = 'Revisa y confirma los precios del borrador para las fechas actuales.'; } });
+  cbRenderItems();
+  cbItems.forEach(it => {
+    if (it.tipo !== 'hotel') return;
+    if (!it.producto_id) return;
+    cbTraerTarifas(it.producto_id).then(() => { if (cbItems.includes(it)) cbRenderItems(); }).catch(() => {});
+  });
   [['cb-cliente', b.cliente], ['cb-fecha', b.fecha], ['cb-vence', b.vence], ['cb-notas', b.notas], ['cb-terminos', b.terminos]].forEach(([id, v]) => { if (typeof v === 'string') document.getElementById(id).value = v; });
   // Un borrador de días atrás trae la fecha y la vigencia de entonces: vuelven a hoy.
   ['cb-fecha', 'cb-vence'].forEach(id => { const el = document.getElementById(id); if (el.value && el.value < cbHoy()) el.value = cbHoy(); });
@@ -26321,6 +26563,9 @@ function cbResetForm() {
   clearTimeout(cbBorradorTimer); cbBorradorTimer = null;
   cbSolicitud = null; cbPintarSolicitud();
   cbLead = null; cbPintarLead();
+  cbLeadTk++; clearTimeout(cbLeadTimer); cbLeadsRes = [];
+  const busca = document.getElementById('cb-lead-q'), res = document.getElementById('cb-lead-res');
+  if (busca) busca.value = ''; if (res) res.hidden = true;
   cbItems = [cbItemVacio(cbModo === 'ventas' ? 'hotel' : 'boleto')]; cbRenderItems();
   document.getElementById('cb-cliente').value = '';
   document.getElementById('cb-fecha').value = cbHoy(); document.getElementById('cb-vence').value = cbHoy();
@@ -26339,6 +26584,11 @@ async function cbCargarSeccion() {
   ['cb-fecha', 'cb-vence'].forEach(id => { document.getElementById(id).min = cbHoy(); });
   if (!cbListo) {
     cbListo = true;
+    const leadInput = document.getElementById('cb-lead-q'), leadBox = document.getElementById('cb-lead-res');
+    leadInput.addEventListener('input', () => { cbLeadTk++; clearTimeout(cbLeadTimer); cbLeadsRes = []; leadBox.innerHTML = ''; leadBox.hidden = true; cbLeadTimer = setTimeout(cbBuscarLead, 280); });
+    leadInput.addEventListener('keydown', e => cbPickerTeclas(e, leadBox, op => cbElegirLead(+op.dataset.cbLead)));
+    leadInput.addEventListener('focusout', () => { cbLeadTk++; clearTimeout(cbLeadTimer); leadBox.hidden = true; leadInput.setAttribute('aria-expanded', 'false'); });
+    leadBox.addEventListener('mousedown', e => { const op = e.target.closest('[data-cb-lead]'); if (op) { e.preventDefault(); cbElegirLead(+op.dataset.cbLead); } });
     // "Válida hasta" sigue a la fecha de la cotización (pedido del dueño 2026-10-17); se puede alargar a mano.
     document.getElementById('cb-fecha').addEventListener('input', e => {
       const v = document.getElementById('cb-vence'), f = e.target.value;
@@ -26351,6 +26601,15 @@ async function cbCargarSeccion() {
     document.getElementById('cb-origen').addEventListener('change', () => { cbOffset = 0; cbCargarHistorial(false); });
     const cbLista = document.getElementById('cb-items');
     cbLista.addEventListener('focusin', e => { if (e.target.matches('.cb-ap-in')) { e.target.select(); cbApAbrir(e.target); } });
+    cbLista.addEventListener('focusin', e => { if (e.target.dataset.busca === 'hotel') cbHotelBuscar(e.target); });
+    cbLista.addEventListener('focusout', e => { if (e.target.dataset.busca === 'hotel') { e.target.parentElement.querySelector('.cb-picker-lista').hidden = true; e.target.setAttribute('aria-expanded', 'false'); } });
+    cbLista.addEventListener('mousedown', e => {
+      const op = e.target.closest('[data-cb-hotel]');
+      if (op) { e.preventDefault(); cbHotelElegir(op.closest('.cb-item'), op.dataset.cbHotel); }
+    });
+    cbLista.addEventListener('keydown', e => {
+      if (e.target.dataset.busca === 'hotel') cbPickerTeclas(e, e.target.parentElement.querySelector('.cb-picker-lista'), op => cbHotelElegir(op.closest('.cb-item'), op.dataset.cbHotel));
+    });
     cbLista.addEventListener('focusout', e => { if (e.target.matches('.cb-ap-in')) cbApConfirmar(e.target); });
     // mousedown y no click: así la opción se elige antes del blur del input.
     cbLista.addEventListener('mousedown', e => {
@@ -26372,6 +26631,12 @@ async function cbCargarSeccion() {
     cbLista.addEventListener('click', e => {
       const card = e.target.closest('.cb-item'); if (!card) return;
       const it = cbItems[+card.dataset.i], viaje = e.target.closest('[data-viaje]'), ref = e.target.closest('.cb-ref-usar');
+      if (e.target.closest('[data-cb-plegar]')) { it._plegado = !it._plegado; cbRenderItems(); return; }
+      if (e.target.closest('[data-cb-usar]')) { cbHotelRecalcular(it, true); cbRenderItems(); cbProgramarBorrador(); return; }
+      if (e.target.closest('[data-cb-manual]')) {
+        it.tramos = []; it.tarifas_contexto = cbTarContexto(it); it._desactualizado = false;
+        it._aviso = 'Tarifa manual confirmada para estas fechas y ocupación.'; cbRenderItems(); cbProgramarBorrador(); return;
+      }
       if (viaje) { if (it.viaje === viaje.dataset.viaje) return; it.viaje = viaje.dataset.viaje; cbSyncRuta(it); cbPintarRuta(card, it); cbProgramarBorrador(); }
       else if (e.target.closest('.cb-ap-swap')) {
         [it.origen, it.destino] = [it.destino, it.origen]; cbSyncRuta(it);
@@ -26386,12 +26651,39 @@ async function cbCargarSeccion() {
     cbLista.addEventListener('input', e => {
       if (e.target.matches('.cb-ap-in')) { cbApAbrir(e.target); return; }
       const k = e.target.dataset.k, card = e.target.closest('.cb-item');
+      if (card && e.target.dataset.tramo !== undefined) {
+        const it = cbItems[+card.dataset.i], t = it.tramos[+e.target.dataset.tramo];
+        t.tarifa = Number(e.target.value) || 0; t.tarifa_habitacion = null; it.tarifa_manual = true;
+        if (+e.target.dataset.tramo === 0) it.tarifa = t.tarifa;
+        if (cbTarTramosValidos(it)) it.tarifas_contexto = cbTarContexto(it);
+        card.querySelector('.cb-importe').textContent = cbImporteTexto(it); cbActualizarTotal(); cbProgramarBorrador(); return;
+      }
       if (!k || !card) return;
       const it = cbItems[+card.dataset.i]; it[k] = e.target.value;
+      if (e.target.dataset.busca === 'hotel') {
+        if (it.producto_id) { delete it.producto_id; it.tramos = []; if (!it.tarifa_manual) it.tarifa = ''; it.plan = ''; it.hab = ''; it.tarifa_avisos = []; }
+        card.querySelectorAll('[data-k=plan],[data-k=hab]').forEach(el => el.value = ''); card.querySelectorAll('datalist').forEach(el => el.innerHTML = '');
+        const precio = card.querySelector('[data-k=tarifa]'); if (precio) precio.value = it.tarifa || '';
+        cbHotelBuscar(e.target);
+      }
+      if (it.tipo === 'hotel' && k === 'tarifa') {
+        it.tarifa_manual = true; it.tarifas_contexto = cbTarContexto(it);
+        if (it.tramos?.length === 1) { it.tramos[0].tarifa = Number(it.tarifa) || 0; it.tramos[0].tarifa_habitacion = null; }
+      }
       if (k === 'ida') { const vuelta = card.querySelector('[data-k="vuelta"]'); if (vuelta) vuelta.min = cbMinFecha('vuelta', it.ida); }
-      if (k === 'tipo') { cbItems[+card.dataset.i] = { ...cbItemVacio(it.tipo), ...it }; cbRenderItems(); return; }
+      if (k === 'tipo') { cbItems[+card.dataset.i] = cbItemVacio(it.tipo); cbRenderItems(); return; }
       card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
       cbActualizarTotal();
+    });
+    cbLista.addEventListener('change', e => {
+      const k = e.target.dataset.k, card = e.target.closest('.cb-item'); if (!card) return;
+      const it = cbItems[+card.dataset.i];
+      if (it.tipo !== 'hotel') return;
+      if (k === 'hab') it.habitacion_manual = true;
+      if (['nombre', 'ida', 'vuelta', 'adultos', 'plan', 'hab', 'unidad', 'tarifa'].includes(k)) {
+        if (k === 'plan' && !it.tarifa_manual && cbTarOpciones(cbHotelFilas(it), 'plan').length) { it.hab = ''; it.habitacion_manual = false; }
+        cbHotelRecalcular(it); cbRenderItems(); cbProgramarBorrador();
+      }
     });
     // Escribir la fecha a mano se salta el min del calendario: al salir del campo, una fecha pasada se borra.
     document.getElementById('sec-cotizacion-boletos').addEventListener('focusout', e => {
@@ -26452,7 +26744,7 @@ async function cbCargarHistorial(append) {
     <div class="lt-card-meta">${ventas ? '<i class="fas fa-user-check"></i> Para el cliente' : c.enviado_a ? `<i class="fas fa-paper-plane"></i> Enviada a ${esc(c.enviado_a_nombre || 'asesor')}` : '<i class="fas fa-circle-minus"></i> Sin enviar'}</div>
     <div class="lt-card-pie">
       <button class="btn-sm lt-primario" type="button" onclick="cbVerPdf('${c.id}')"><i class="fas fa-file-pdf"></i> Ver PDF</button>
-      ${ventas ? '' : `<button class="btn-sm" type="button" onclick="cbReenviar('${c.id}', this)"><i class="fas fa-paper-plane"></i> Enviar al asesor</button>`}
+      ${ventas ? (c.lead_id ? `<button class="btn-sm" type="button" onclick="cbReintentarLead('${c.id}', this)">Registrar en lead</button>` : '') : `<button class="btn-sm" type="button" onclick="cbReenviar('${c.id}', this)"><i class="fas fa-paper-plane"></i> Enviar al asesor</button>`}
     </div>
   </article>`;
   }).join('');
@@ -26478,11 +26770,16 @@ async function cbEnviarAAsesor(c, blob, asesorId) {
   Object.assign(c, envio);
   return true;
 }
+let cbGenerando = false;
 // accion: 'enviar' | 'descargar' (Boletería y ventas) | 'compartir' | 'lead' (solo ventas).
 window.cbGuardar = async function cbGuardar(accion) {
+  if (cbGenerando) return;
   const enviar = accion === 'enviar', ventas = cbModo === 'ventas';
   const cliente = val('cb-cliente').trim();
   if (!cliente) { errToast('Escribe el cliente'); return; }
+  const hotelPendiente = cbItems.find(it => it.tipo === 'hotel' && (it._cargando || it._desactualizado || !cbTarTramosValidos(it) || (it.tarifas_contexto && it.tarifas_contexto !== cbTarContexto(it)) || (it.infantes_gratis && (!cbTarNoches(it.ida, it.vuelta).length || cbTarNum(it.tarifa) === null))));
+  if (hotelPendiente) { errToast('Hospedaje: revisa las fechas y confirma una tarifa para el viaje actual.'); return; }
+  if (cbItems.some(it => it.tipo === 'hotel' && Number(it.ninos) > 0 && cbTarNum(it.tarifa_nino) === null)) { errToast('Hospedaje: indica la tarifa de los niños; escribe 0 si la promoción los incluye gratis.'); return; }
   const items = cbItems.map(cbLimpiarItem).filter(it => cbTitulo(it) || it.tarifa);
   if (!items.length) { errToast('Agrega al menos un servicio con su descripción y tarifa'); return; }
   const incompleto = items.find(it => !cbTitulo(it) || !(cbEsPax(it) ? cbPax(it).a : it.cant));
@@ -26493,12 +26790,13 @@ window.cbGuardar = async function cbGuardar(accion) {
   const asesorId = val('cb-asesor');
   if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); document.getElementById('cb-asesor').focus(); return; }
   const btn = document.getElementById(`cb-${accion}-btn`), htmlBtn = btn.innerHTML;
+  cbGenerando = true; document.querySelectorAll('.cb-acciones button').forEach(b => b.disabled = true);
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
   const sol = ventas ? null : cbSolicitud, lead = ventas ? cbLead : null;
   try {
     const fila = {
       creado_por: MI_USUARIO_ID, creado_por_nombre: MI_NOMBRE, cliente, fecha: val('cb-fecha') || cbHoy(), vence: val('cb-vence') || null,
-      items, total: items.reduce((s, it) => s + cbImporte(it), 0), notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null,
+      items, total: cbTotalItems(items), notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null,
       solicitud_id: sol?.id ?? null, origen: cbModo, lead_id: lead?.id ?? null,
     };
     const { data: cot, error } = await sb.from('cotizaciones_boleteria').insert(fila).select().single();
@@ -26509,11 +26807,7 @@ window.cbGuardar = async function cbGuardar(accion) {
       const blob = await cbPdfDe(cot), num = cbNumero(cot.numero);
       if (ventas) {
         let marca = '';
-        if (accion === 'lead' && lead) {
-          const { data: r, error: e } = await sb.rpc('registrar_cotizacion_enviada', { p_lead_id: lead.id });
-          if (e || !r?.ok) errToast(`${num} se guardó, pero no se pudo marcar el lead: ${e?.message || r?.error || ''}`);
-          else { marca = r.ya_registrada ? ' · el lead ya estaba cotizado' : ' · lead en COTIZACIÓN ENVIADA'; ACTIVIDAD_CACHE = null; loadStats().then(renderAllSiVisible).catch(() => {}); }
-        }
+        if (lead) marca = await cbRegistrarLeadCot(cot);
         if (accion === 'compartir') await cbCompartir(blob, cbArchivo(cot));
         else if (accion === 'lead') await pdfEntregar(blob, cbArchivo(cot));
         else cbDescargar(blob, cbArchivo(cot));
@@ -26531,8 +26825,36 @@ window.cbGuardar = async function cbGuardar(accion) {
     }
     cbOffset = 0; cbCargarHistorial(false);
   } finally {
+    cbGenerando = false; document.querySelectorAll('.cb-acciones button').forEach(b => b.disabled = false);
     btn.disabled = false; btn.innerHTML = htmlBtn;
   }
+};
+async function cbRegistrarLeadCot(cot) {
+  if (!cot.lead_id) return '';
+  try {
+    const { data: lead, error: lectura } = await sb.from('leads').select('id,estado').eq('id', cot.lead_id).is('eliminado_at', null).maybeSingle();
+    if (lectura || !lead) throw new Error('No se pudo consultar el lead');
+    if (!['POR ATENDER', 'ATENDIDO', 'COTIZACION ENVIADA'].includes(lead.estado)) return ' · estado del lead conservado';
+    const { data, error } = await sb.rpc('registrar_cotizacion_enviada', { p_lead_id: cot.lead_id });
+    if (error || !data?.ok) throw new Error(error?.message || data?.error || 'sin respuesta');
+    ACTIVIDAD_CACHE = null;
+    if (currentLead?.id === cot.lead_id) {
+      currentLead.estado = data.estado;
+      if (data.fecha_cotizacion_enviada) currentLead.fecha_cotizacion_enviada = data.fecha_cotizacion_enviada;
+    }
+    loadStats().then(renderAllSiVisible).catch(() => {});
+    return data.estado_conservado ? ' · estado del lead conservado' : data.ya_registrada ? ' · lead ya registrado' : ' · lead en COTIZACIÓN ENVIADA';
+  } catch (e) {
+    errToast(`${cbNumero(cot.numero)} se guardó; no se pudo registrar el lead. Reintenta «Registrar en lead» desde el historial.`);
+    return ' · registro del lead pendiente';
+  }
+}
+window.cbReintentarLead = async (id, btn) => {
+  const c = cbFilas.get(id); if (!c || !c.lead_id) return;
+  btn.disabled = true;
+  try { await ensureVoucherLibs(); await cbPdfDe(c); const marca = await cbRegistrarLeadCot(c); if (!marca.includes('pendiente')) okToast(cbNumero(c.numero) + marca); }
+  catch (_) { errToast('No se pudo generar el PDF. El estado del lead se conservó.'); }
+  finally { btn.disabled = false; }
 };
 function cbDescargar(blob, nombre) {
   const url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -26545,7 +26867,9 @@ window.cbVerPdf = async function cbVerPdf(id) {
   if (!c) return;
   try {
     await ensureVoucherLibs();
-    window.open(URL.createObjectURL(await cbPdfDe(c)), '_blank');
+    const blob = await cbPdfDe(c);
+    if (c.origen === 'ventas' && c.lead_id) await cbRegistrarLeadCot(c);
+    window.open(URL.createObjectURL(blob), '_blank');
   } catch (e) { console.error('cbVerPdf', e); errToast('No se pudo generar el PDF'); }
 };
 window.cbReenviar = async function cbReenviar(id, btn) {
@@ -26595,6 +26919,7 @@ async function cbPdfBlob(c) {
   // Con niños o infantes el ítem lleva su descripción y una fila por categoría (adultos, niños, infantes).
   const filas = (c.items || []).flatMap((it, i) => {
     if (!cbEsPax(it)) return [[i + 1, cbDetalle(it), Number(it.cant).toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))]];
+    if (it.tipo === 'hotel' && it.tramos?.length) return [[i + 1, cbDetalleCliente(it), '1.00', cbMonto(cbImporte(it)), cbMonto(cbImporte(it))]];
     // Hotel por noche: la columna Tarifa va por la estadía completa para que Cant. × Tarifa = Importe.
     const p = cbPax(it), noches = cbNochesCobro(it), tn = t => (Number(t) || 0) * noches;
     if (!p.n && !p.i) return [[i + 1, cbDetalle(it), p.a.toFixed(2), cbMonto(tn(it.tarifa)), cbMonto(cbImporte(it))]];
@@ -30088,6 +30413,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-17', emoji: '📄', titulo: 'Cotizaciones más cómodas', texto: 'Busca al cliente por nombre o teléfono y elige hoteles con foto, plan y habitación. Las tarifas de hospedaje se sugieren según ocupación y fechas, con tramos editables y el total siempre a mano. Al generar el PDF se registra la cotización en el lead sin retroceder estados avanzados; si el registro falla, puedes reintentarlo desde el historial sin duplicar la cotización.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-17', emoji: '✈️', titulo: 'Boletos: origen y destino por ciudad', texto: 'Al cotizar un boleto ya no hace falta saberse los códigos: escribe la ciudad (Caracas, Margarita, Los Roques...) y aparece con su código entre paréntesis; el PDF sigue saliendo con el código (CCS-PMV-CCS). Elige Ida y vuelta o Solo ida (en solo ida desaparecen la fecha y el horario de vuelta), invierte la ruta con un clic y, si la ruta está en el catálogo, ve la tarifa de referencia y la usa con un botón.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-16', emoji: '🏨', titulo: 'Cotización de hotel por persona por noche', texto: 'En Cotizaciones, el hotel ahora cobra por persona por noche: pones la tarifa de una noche y el importe se multiplica solo por las noches entre el check-in y el check-out (ya no hace falta multiplicar a mano). Si la tarifa que tienes es por toda la estadía, en "Tarifa por" eliges "Persona (estadía completa)". El PDF muestra la tarifa por noche y las noches. Las cotizaciones ya guardadas no cambian.', roles: ['admin', 'boleteria', 'asesor'] },
   { fecha: '2026-10-16', emoji: '🎟️', titulo: 'Voucher de servicio: excursiones, traslados y referencia de pago móvil', texto: 'El voucher ahora es "Voucher de servicio". Puedes anexarle excursiones, full days, traslados y paquetes buscándolos del tarifario: el precio se sugiere solo según adultos y niños (lo puedes cambiar) y se suma al total. La modalidad se elige con tarjetas, y si el pago es por pago móvil hay que colocar el número de referencia, que sale en el PDF.', roles: ['asesor', 'admin'] },
