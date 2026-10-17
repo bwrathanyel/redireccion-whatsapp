@@ -3576,7 +3576,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .sidebar .brand img{width:28px;height:28px}
   .sidebar .brand .bt{font-size:13px;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .sidebar .brand .bs{font-size:9px;letter-spacing:1.4px}
-  .sidebar .brand .refresh-btn{display:none}
   .pv-toolbar{flex-wrap:nowrap;min-width:0;max-width:100%}.pv-search{min-width:0}.pv-refresh{flex:0 0 44px}
   .pv-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.pv-kpi{padding:8px 10px;min-width:0}.pv-kpi .kt{font-size:10.5px;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;line-height:1.3}.pv-kpi .kt i{margin-right:5px}.pv-kpi .kv{font-size:17px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pv-stagebar{width:100%;max-width:calc(100vw - 28px);min-width:0}
@@ -4822,6 +4821,48 @@ body.fsize-grande{--tap:41.9px}
 @keyframes mv-celebrar{0%{box-shadow:0 0 0 0 rgba(16,185,129,.45)}50%{transform:scale(1.015);box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
 .mv-celebra{animation:mv-celebrar .6s var(--ease-salida)}
 @media(prefers-reduced-motion:reduce){.lt-card{animation:none}.mv-celebra{animation:none}}
+/* Cobros > Ventas: tarjeta de venta (2026-10-16). --vc = color del estado, --c = color de cada acción/aviso. */
+.vt-card{gap:11px}
+.vt-cab{display:flex;align-items:flex-start;gap:11px}
+.vt-avatar{flex-shrink:0;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:14px;font-weight:800;letter-spacing:.02em;color:var(--vc);background:color-mix(in srgb,var(--vc) 15%,transparent);border:1px solid color-mix(in srgb,var(--vc) 28%,transparent)}
+.vt-quien{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.vt-quien .lt-card-tit{flex:none;font-size:15px}
+.vt-meta{display:flex;flex-wrap:wrap;gap:2px 11px;font-size:12px;color:var(--muted);min-width:0}
+.vt-meta span{display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vt-meta i{font-size:10.5px;color:var(--muted2)}
+.vt-estado{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:999px;padding:4px 9px;color:var(--vc);background:color-mix(in srgb,var(--vc) 14%,transparent)}
+.vt-montos{display:flex;flex-direction:column;gap:9px;padding:11px;border-radius:12px;background:color-mix(in srgb,var(--txt) 3.5%,transparent);border:1px solid var(--line)}
+.vt-montos span{font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+.vt-venta{display:flex;align-items:baseline;justify-content:space-between;gap:9px}
+.vt-venta b{font-size:22px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.vt-desglose{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line);padding-top:9px}
+.vt-desglose div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.vt-desglose div+div{padding-left:11px;border-left:1px solid var(--line)}
+.vt-desglose b{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vt-desglose b.vt-vacio{color:var(--muted2);font-weight:600}
+.vt-desglose small{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vt-aviso{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--c);padding:7px 11px;border-radius:10px;background:color-mix(in srgb,var(--c) 11%,transparent);border:1px solid color-mix(in srgb,var(--c) 24%,transparent)}
+.vt-aviso b{font-weight:800}
+.vt-acciones{display:flex;flex-wrap:wrap;gap:7px;margin-top:auto;padding-top:11px;border-top:1px solid var(--line)}
+.vt-accion{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:0 14px;border-radius:10px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent);border:1px solid color-mix(in srgb,var(--c) 30%,transparent);transition:background var(--dur-rapida),border-color var(--dur-rapida),transform var(--dur-rapida)}
+.vt-accion:hover{background:color-mix(in srgb,var(--c) 20%,transparent);border-color:var(--c)}
+.vt-accion:active{transform:scale(.97)}
+.vt-accion:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+.vt-anular{margin-left:auto;background:transparent}
+.kpi-plegar{display:none}
+@media(max-width:760px){
+  .vt-accion{min-height:44px;flex:1 1 0;padding:0 11px}
+  .vt-anular{flex:0 0 auto}
+  /* KPIs plegables (2026-10-16): botón "Resumen" arriba de cada bloque, cerrado por defecto */
+  .kpi-plegar{display:flex;align-items:center;gap:9px;width:100%;min-height:44px;margin:0 0 9px;padding:0 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg2);color:var(--muted);font:inherit;font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;cursor:pointer}
+  .kpi-plegar[aria-expanded="false"]{margin-bottom:14px}
+  .kpi-plegar>i:first-child{color:var(--accent-ink);font-size:13px}
+  .kpi-plegar-chev{margin-left:auto;font-size:11px;transition:transform var(--dur-rapida)}
+  .kpi-plegar[aria-expanded="true"] .kpi-plegar-chev{transform:rotate(180deg)}
+  .kpis.kpis-cerrado{display:none!important}
+  .kpi-plegar+.lt-kpis{margin-top:0}
+  .kpi-plegar:has(+ .kpis:empty),.kpi-plegar:has(+ .kpis[hidden]),.kpi-plegar:has(+ .kpis[style*="display: none"]),.kpi-plegar:has(+ .kpis[style*="display:none"]){display:none}
+}
 /* Postulaciones: la calificación manda. Franja izquierda del color del nivel,
    foto grande y un solo estado por tarjeta. */
 .post-card{border-left:3px solid var(--cal);gap:9px}
@@ -5774,7 +5815,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
   <aside class="sidebar">
     <div class="sidebar-top">
       <div class="brand"><img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512"><div><div class="bt">Destino y Eventos Lotus 360</div></div>
-        <button class="refresh-btn" data-refresh title="Actualizar el CRM a la última versión" aria-label="Actualizar el CRM"><i class="fas fa-rotate"></i></button>
         <button class="side-cerrar" id="side-cerrar" type="button" aria-label="Cerrar menú"><i class="fas fa-xmark"></i></button>
       </div>
       <!-- Perfil + jornada en una fila (2026-10-16): el punto sobre el avatar y

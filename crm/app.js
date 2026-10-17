@@ -2750,7 +2750,7 @@ async function startApp() {
     renderNavItems, renderFavoritos, fijarSolicitudesArriba, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
-    setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes,
+    setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -2877,6 +2877,24 @@ function contarKPI(el, valorFinal) {
     if (p < 1) requestAnimationFrame(cuadro); else el.textContent = valorFinal;
   }
   requestAnimationFrame(cuadro);
+}
+// Móvil: cada bloque de KPIs se pliega con un botón "Resumen" (el CSS solo lo
+// muestra en móvil). Cerrado por defecto; los que abre cada usuario se recuerdan.
+const KPIS_ABIERTOS_LS = 'kpis_abiertos';
+function setupKpisPlegables() {
+  let abiertos = [];
+  try { abiertos = JSON.parse(localStorage.getItem(KPIS_ABIERTOS_LS) || '[]'); } catch { /* sin storage: todos cerrados */ }
+  document.querySelectorAll('.kpis[id]').forEach(box => {
+    const abierto = abiertos.includes(box.id);
+    box.classList.toggle('kpis-cerrado', !abierto);
+    box.insertAdjacentHTML('beforebegin', `<button type="button" class="kpi-plegar" aria-controls="${box.id}" aria-expanded="${abierto}"><i class="fas fa-chart-simple"></i><span>Resumen</span><i class="fas fa-chevron-down kpi-plegar-chev"></i></button>`);
+    box.previousElementSibling.addEventListener('click', e => {
+      const abrir = !box.classList.toggle('kpis-cerrado');
+      e.currentTarget.setAttribute('aria-expanded', abrir);
+      abiertos = abiertos.filter(id => id !== box.id).concat(abrir ? [box.id] : []);
+      try { localStorage.setItem(KPIS_ABIERTOS_LS, JSON.stringify(abiertos)); } catch { /* comodidad, no crítico */ }
+    });
+  });
 }
 function pintarKPIs(box, cards) {
   if (typeof box === 'string') box = document.getElementById(box);
@@ -15938,13 +15956,13 @@ function filtrarVentasKpi(clave) {
   factVentasMostrar = TECHO_LISTA;
   renderVentas();
 }
-// Avisos de la tarjeta: solo salen cuando aplican ("Debe $X" si falta cobrar, "Falta costo" si no hay costo neto).
-function chipsVenta(f) {
+// Avisos de la tarjeta: solo salen cuando aplican (falta cobrar, o no hay costo neto).
+function avisosVenta(f) {
   if (f.estado !== 'pagada') return '';
-  const debe = f.venta_total - f.abonado, chips = [];
-  if (debe > 0.005) chips.push(`<span class="bt-tag" style="--c:var(--amber)">Debe ${money(debe)}</span>`);
-  if (f.costo_neto == null) chips.push(`<span class="bt-tag" style="--c:var(--pink)">Falta costo</span>`);
-  return chips.length ? `<div class="lt-chips">${chips.join('')}</div>` : '';
+  const debe = f.venta_total - f.abonado, avisos = [];
+  if (debe > 0.005) avisos.push(`<div class="vt-aviso" style="--c:var(--amber)"><i class="fas fa-hourglass-half"></i> Falta cobrar <b>${money(debe)}</b></div>`);
+  if (f.costo_neto == null) avisos.push(`<div class="vt-aviso" style="--c:var(--pink)"><i class="fas fa-triangle-exclamation"></i> Falta cargar el costo neto en Postventa</div>`);
+  return avisos.join('');
 }
 function renderVentas() {
   const mes = val('fact-mes'), asesor = val('fact-asesor');
@@ -15978,24 +15996,33 @@ function renderVentas() {
   const pager = document.getElementById('fact-ventas-pager');
   if (pager) pager.style.display = filas.length > factVentasMostrar ? '' : 'none';
   document.getElementById('fact-tbody').innerHTML = visibles.map((f, i) => {
-    const anulada = f.estado === 'anulada', conCosto = f.costo_neto != null;
-    const pct = conCosto && f.venta_total > 0 ? Math.max(0, Math.min(100, Math.round(f.margen / f.venta_total * 100))) : 0;
-    return `<article class="lt-card${anulada ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}${f.lead_id ? ';cursor:pointer' : ''}"${f.lead_id ? ` onclick="if(!event.target.closest('button,a'))abrirClienteDesdeFacturacion(${f.lead_id})"` : ''}>
-      <div class="lt-card-cab">
-        <div class="lt-card-tit" title="${esc(f.cliente || '')}">${esc(f.cliente || ('#' + fmt(f.lead_id)))}</div>
-        <span class="bt-tag" style="--c:${f.estado === 'pagada' ? 'var(--green)' : 'var(--muted)'}">${f.estado === 'pagada' ? 'Pagada' : anulada ? 'Anulada' : esc(f.estado)}</span>
+    const anulada = f.estado === 'anulada', pagada = f.estado === 'pagada', conCosto = f.costo_neto != null;
+    const pctReal = conCosto && f.venta_total > 0 ? Math.round(f.margen / f.venta_total * 100) : 0, pct = Math.max(0, Math.min(100, pctReal));
+    const ini = (f.cliente || '').trim().split(/\s+/).slice(0, 2).map(p => p[0] || '').join('').toUpperCase() || '#';
+    const fecha = f.fecha_emision ? dtf('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'short' }).format(new Date(f.fecha_emision)) : '';
+    return `<article class="lt-card vt-card${anulada ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)};--vc:${pagada ? 'var(--green)' : 'var(--muted)'}${f.lead_id ? ';cursor:pointer' : ''}"${f.lead_id ? ` onclick="if(!event.target.closest('button,a'))abrirClienteDesdeFacturacion(${f.lead_id})"` : ''}>
+      <div class="vt-cab">
+        <span class="vt-avatar" aria-hidden="true">${esc(ini)}</span>
+        <div class="vt-quien">
+          <div class="lt-card-tit" title="${esc(f.cliente || '')}">${esc(f.cliente || ('#' + fmt(f.lead_id)))}</div>
+          <div class="vt-meta"><span title="N° de factura"><i class="fas fa-receipt"></i> #${fmt(f.numero_factura)}</span>${fecha ? `<span title="Fecha de emisión"><i class="fas fa-calendar-day"></i> ${fecha}</span>` : ''}</div>
+          <div class="vt-meta"><span title="Asesor"><i class="fas fa-user-tie"></i> ${esc(f.asesor || 'Sin asesor')}</span></div>
+        </div>
+        <span class="vt-estado"><i class="fas ${pagada ? 'fa-circle-check' : anulada ? 'fa-ban' : 'fa-clock'}"></i> ${pagada ? 'Pagada' : anulada ? 'Anulada' : esc(f.estado)}</span>
       </div>
-      <div class="lt-card-meta">${esc(['#' + fmt(f.numero_factura), f.asesor || 'Sin asesor', f.fecha_emision ? dtf('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'short' }).format(new Date(f.fecha_emision)) : '', f.proveedor].filter(Boolean).join(' · '))}</div>
-      <div class="lt-cifras">
-        <div><span>Venta</span><b>${money(f.venta_total)}</b></div>
-        <div><span>Costo</span><b class="${conCosto ? '' : 'lt-debe'}">${conCosto ? money(f.costo_neto) : '—'}</b></div>
-        <div><span>Margen</span><b class="${!conCosto ? '' : f.margen >= 0 ? 'lt-ok' : 'lt-debe'}">${conCosto ? money(f.margen) : '—'}</b></div>
+      <div class="vt-montos">
+        <div class="vt-venta"><span>Venta</span><b>${money(f.venta_total)}</b></div>
+        <div class="vt-desglose">
+          <div><span>Costo neto</span><b class="${conCosto ? '' : 'vt-vacio'}">${conCosto ? money(f.costo_neto) : 'Sin cargar'}</b>${f.proveedor ? `<small title="Proveedor">${esc(f.proveedor)}</small>` : ''}</div>
+          <div><span>Margen</span><b class="${!conCosto ? 'vt-vacio' : f.margen >= 0 ? 'lt-ok' : 'lt-debe'}">${conCosto ? money(f.margen) : '—'}</b>${conCosto ? `<small>${pctReal}% de la venta</small>` : ''}</div>
+        </div>
+        ${conCosto ? `<div class="lt-barra" role="progressbar" aria-label="Margen sobre la venta" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" title="Margen ${pctReal}% de la venta"><i style="width:${pct}%"></i></div>` : ''}
       </div>
-      ${chipsVenta(f)}
-      ${conCosto ? `<div class="lt-barra" role="progressbar" aria-label="Margen sobre la venta" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" title="Margen ${pct}% de la venta"><i style="width:${pct}%"></i></div>` : ''}
-      <div class="lt-card-pie">
-        <button class="btn-sm" type="button" title="PDF de la venta" aria-label="PDF de la venta" onclick="exportarVentaPdf(${f.id})"><i class="fas fa-file-pdf"></i></button>
-        ${f.estado === 'pagada' && ROL === 'admin' ? `<button class="btn-sm" type="button" title="Anular factura" aria-label="Anular factura" onclick="anularFacturaUI(${f.id})"><i class="fas fa-ban"></i></button>` : ''}
+      ${avisosVenta(f)}
+      <div class="vt-acciones">
+        <button class="vt-accion" type="button" style="--c:var(--blue)" title="Descargar el PDF de esta venta" onclick="exportarVentaPdf(${f.id})"><i class="fas fa-file-pdf"></i> PDF</button>
+        ${f.lead_id ? `<button class="vt-accion" type="button" style="--c:var(--accent-ink)" title="Abrir la ficha del cliente" onclick="abrirClienteDesdeFacturacion(${f.lead_id})"><i class="fas fa-user"></i> Ver cliente</button>` : ''}
+        ${pagada && ROL === 'admin' ? `<button class="vt-accion vt-anular" type="button" style="--c:var(--danger)" title="Anular esta factura" onclick="anularFacturaUI(${f.id})"><i class="fas fa-ban"></i> Anular</button>` : ''}
       </div>
     </article>`;
   }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${factVentasFiltro || mes || asesor || val('fact-ventas-search') ? 'Nada coincide con el filtro' : 'Sin facturas'}</div>`;
