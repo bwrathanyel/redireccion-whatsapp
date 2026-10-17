@@ -26013,6 +26013,14 @@ async function cbCargarSeccion() {
   ['cb-fecha', 'cb-vence'].forEach(id => { document.getElementById(id).min = cbHoy(); });
   if (!cbListo) {
     cbListo = true;
+    // "Válida hasta" sigue a la fecha de la cotización (pedido del dueño 2026-10-17); se puede alargar a mano.
+    document.getElementById('cb-fecha').addEventListener('input', e => {
+      const v = document.getElementById('cb-vence'), f = e.target.value;
+      if (!f) return;
+      v.min = f > cbHoy() ? f : cbHoy();
+      v.value = f;
+      cbProgramarBorrador();
+    });
     cbResetForm();
     document.getElementById('cb-origen').addEventListener('change', () => { cbOffset = 0; cbCargarHistorial(false); });
     document.getElementById('cb-items').addEventListener('input', e => {
