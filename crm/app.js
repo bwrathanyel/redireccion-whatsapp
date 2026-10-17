@@ -200,7 +200,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
   'contactos-directos': ['Contactos directos', 'Escribieron directo por WhatsApp (bio-redes, IA) -- registro, no se gestionan desde acá'],
   repartir: ['Repartir números', 'Pegá números o capturas de clientes que te escribieron directo y repartilos entre los asesores'],
-  'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles que manda BT Travel -- cargá el PDF y confirmá antes de publicar'],
+  'stop-sales': ['Stop Sales', 'Qué hoteles de BT Travel no se pueden vender (o hay que confirmar) y en qué fechas'],
   manual: ['Videotutoriales', 'Lyra te explica cada parte del CRM, paso a paso'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'],
   pagos: ['Pagos por verificar', 'Links de pago que un cliente declaró como pagados -- verificá el comprobante antes de aprobar'] };
@@ -557,7 +557,8 @@ const temaActual = () => PALETAS[MI_PREFERENCIAS.tema] ? MI_PREFERENCIAS.tema : 
 // Marketing las necesita para trabajar: su grupo nace visible. El CSS vive en index.html (nav-ver-<sec>).
 const NAV_OPCIONALES = [
   { sec: 'grp-inicio', label: 'Inicio', desc: 'Dashboard, ventas, ranking e informe diario' },
-  { sec: 'dms', label: 'Meta DM', desc: 'Chats del bot en Instagram, Facebook y WhatsApp' },
+  { sec: 'grp-bandeja', label: 'Bandeja', desc: 'Meta DM (Instagram, Facebook y WhatsApp) y Correo' },
+  { sec: 'pipeline', label: 'Pipeline', desc: 'Pestaña en Leads: tablero de leads por estado' },
   { sec: 'grp-ia', label: 'IA', desc: 'Rendimiento, asistente y prospectos de IA' },
   { sec: 'grp-marketing', label: 'Marketing', desc: 'Redes y clientes de eventos' },
 ];
@@ -1089,7 +1090,12 @@ function renderJornadaUI() {
     if (!dot) return;
     dot.classList.toggle('on', JORNADA_ACTIVA);
     text.textContent = JORNADA_ACTIVA ? 'Jornada activa' : 'Jornada inactiva';
-    btn.textContent = JORNADA_ACTIVA ? 'Finalizar' : 'Comenzar';
+    // En el sidebar es un botón ícono dentro del perfil; en móvil sigue con texto.
+    if (sfx === '-d') {
+      const accion = JORNADA_ACTIVA ? 'Finalizar jornada' : 'Comenzar jornada';
+      btn.innerHTML = `<i class="fas fa-${JORNADA_ACTIVA ? 'stop' : 'play'}"></i>`;
+      btn.title = accion; btn.setAttribute('aria-label', accion);
+    } else btn.textContent = JORNADA_ACTIVA ? 'Finalizar' : 'Comenzar';
     btn.classList.toggle('on', JORNADA_ACTIVA);
   });
 }
@@ -2741,7 +2747,7 @@ function arrancar(...pasos) {
 async function startApp() {
   if (booted) return; booted = true;
   arrancar(
-    renderNavItems, aplicarOrdenSidebar, renderFrecuentes, fijarSolicitudesArriba, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
+    renderNavItems, renderFavoritos, fijarSolicitudesArriba, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes,
@@ -2761,20 +2767,18 @@ async function startApp() {
   if (ROL === 'boleteria') { entrarModoBoleteria(); return; }
   // Restaura la última sección visitada por este usuario (admin/asesor,
   // ver guardarUltimaSeccion) -- marketing/boleteria arriba se quedan
-  // siempre en su única sección fija, no aplica. En mobile el punto de
-  // entrada por default pasa a ser 'hoy' (bottom-nav de 5 zonas); desktop
-  // sigue entrando por leads/dashboard como siempre, sin cambios.
-  const esMobile = window.matchMedia('(max-width:760px)').matches;
+  // siempre en su única sección fija, no aplica. 'Hoy' salió del menú móvil
+  // (2026-10-16): móvil y escritorio entran igual, y una 'hoy' guardada ya no se restaura.
   const seccionGuardada = ultimaSeccionLocal() || MI_PREFERENCIAS.ultima_seccion;
   // usuarioPuedeAbrirSeccion y no solo que exista #sec-*: las secciones que
   // salieron del menú (Mis Notas, Voz IA...) conservan su HTML.
-  const seccionValida = seccionGuardada && document.getElementById('sec-' + seccionGuardada) && usuarioPuedeAbrirSeccion(seccionGuardada);
+  const seccionValida = seccionGuardada && seccionGuardada !== 'hoy' && document.getElementById('sec-' + seccionGuardada) && usuarioPuedeAbrirSeccion(seccionGuardada);
   // Las secciones que no leen STATS se abren ya, sin esperar a loadStats():
   // antes el admin veía el dashboard 1-2 s y recién ahí saltaba a la suya.
   if (esOficina() && seccionValida && !['dashboard', 'hoy', 'leads', 'pipeline'].includes(seccionGuardada)) activateSection(seccionGuardada);
   const tareasAsesor = ROL === 'asesor' && !MI_ES_FREELANCER ? marcarTieneTareas() : null;
   if (ROL === 'asesor') {
-    const destino = seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'leads');
+    const destino = seccionValida ? seccionGuardada : 'leads';
     activateSection(destino);
     // Si el destino restaurado no es 'leads', activateSection no dispara
     // loadInboxLeads() -- hace falta igual para el badge de pendientes
@@ -2806,7 +2810,7 @@ async function startApp() {
   } catch (_) { /* fallo de red: se conserva by_advisor */ }
   // La sección guardada (ej. voucher) se activa antes de que ACTIVOS exista y su select quedaba vacío.
   if (ROL === 'admin' && seccionValida && seccionGuardada === 'voucher' && ACTIVOS.length) loadVoucherSeccion();
-  if (esOficina()) activateSection(seccionValida ? seccionGuardada : (esMobile ? 'hoy' : 'dashboard'));
+  if (esOficina()) activateSection(seccionValida ? seccionGuardada : 'dashboard');
   renderHoy();
   renderAll();
   setupFilters();
@@ -2836,7 +2840,8 @@ async function loadStats() {
   trendMap = {}; (STATS.trend || []).forEach(x => trendMap[x.mes] = x.total);
   // Para asesor el badge de Leads muestra pendientes del inbox (actualizarBadgeLeads),
   // no el total histórico -- no pisarlo acá.
-  if (ROL !== 'asesor') document.getElementById('nav-lead-count').textContent = Number.isFinite(STATS.total) ? (STATS.total / 1000).toFixed(1).replace('.0', '') + 'k' : '—';
+  // El total histórico (50k+) no decía nada: el admin ve los que esperan primer contacto.
+  if (ROL !== 'asesor') document.getElementById('nav-lead-count').textContent = Number.isFinite(STATS.por_atender) ? fmt(STATS.por_atender) : '—';
 }
 
 /* ---------- KPIs ---------- */
@@ -10464,11 +10469,14 @@ async function refrescarBadgeCorreo() {
   actualizarBadgeCorreo();
 }
 function actualizarBadgeCorreo() {
-  const b = document.getElementById('nav-correo-count');
-  if (!b) return;
   const n = CORREO_CUENTAS.filter(c => !c.revocado).reduce((a, c) => a + (c.no_leidos || 0), 0);
-  b.textContent = n > 99 ? '99+' : String(n);
-  b.style.display = n ? '' : 'none';
+  // Correo es pestaña de Bandeja: el número también se muestra en el padre.
+  ['nav-correo-count', 'nav-bandeja-count'].forEach(id => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.textContent = n > 99 ? '99+' : String(n);
+    b.style.display = n ? '' : 'none';
+  });
 }
 async function cargarContadoresCorreo() {
   if (!CORREO_CUENTA_ACTIVA) return;
@@ -12479,8 +12487,7 @@ function lyraSeguirCursor() {
   // El orbe casi no se mueve (dock del sidebar / FAB fijo): medirlo una vez por
   // segundo y no en cada frame, justo después de que lyraMirar escribió estilos.
   if (!LYRA.rectOrb || Date.now() - LYRA.rectOrbT > 1000) {
-    const o = document.querySelector(MQ_MOVIL_LYRA.matches ? '#lyra-fab .lyra-orb' : '#lyra-dock .lyra-orb');
-    LYRA.rectOrb = o?.getBoundingClientRect(); LYRA.rectOrbT = Date.now();
+    const o = document.querySelector(MQ_MOVIL_LYRA.matches ? '#lyra-fab .lyra-orb' : '#lyra-dock .lyra-orb');    LYRA.rectOrb = o?.getBoundingClientRect(); LYRA.rectOrbT = Date.now();
   }
   const r = LYRA.rectOrb;
   if (!r?.width) return;
@@ -14690,6 +14697,28 @@ function setupStopSales() {
   });
   document.getElementById('ss-vig-buscar')?.addEventListener('input', () => ssRenderVigentes());
   document.getElementById('ss-ver-pdf')?.addEventListener('click', ssVerPdfOriginal);
+
+  const ent = document.getElementById('ss-v-entrada');
+  const sal = document.getElementById('ss-v-salida');
+  if (ent && sal) {
+    ent.min = sal.min = ssISO(new Date());
+    // Salida = entrada + 1 por defecto: la respuesta aparece al toque y después
+    // se corre la salida si son más noches.
+    ent.addEventListener('change', () => {
+      if (ent.value) {
+        const d = ssFecha(ent.value); d.setDate(d.getDate() + 1);
+        sal.min = ssISO(d);
+        if (!sal.value || sal.value <= ent.value) sal.value = ssISO(d);
+      }
+      ssVerificar();
+    });
+    sal.addEventListener('change', ssVerificar);
+  }
+  document.getElementById('ss-v-hotel')?.addEventListener('change', ssVerificar);
+}
+
+function ssDiaPdf() {
+  return SS_PDF_ACTUAL ? ssISO(new Date(SS_PDF_ACTUAL.creado_en)) : null;
 }
 
 // El botón "Ver PDF original" es para TODO rol (no vive dentro de
@@ -14703,9 +14732,26 @@ async function ssCargarPdfActual() {
   const fila = !error && Array.isArray(data) ? data[0] : null;
   SS_PDF_ACTUAL = fila || null;
   btn.disabled = !SS_PDF_ACTUAL;
-  meta.textContent = SS_PDF_ACTUAL
-    ? `Última carga: ${fmtDiaCorto(SS_PDF_ACTUAL.creado_en.slice(0, 10))}${SS_PDF_ACTUAL.creado_por ? ` — ${SS_PDF_ACTUAL.creado_por}` : ''}`
-    : 'Todavía no se cargó ningún PDF.';
+  const caja = document.getElementById('ss-fresco');
+  const ultima = document.getElementById('ss-admin-ultima');
+  const dia = ssDiaPdf();
+  if (!dia) {
+    meta.textContent = 'Todavía no se cargó ningún PDF de BT.';
+    caja?.classList.remove('viejo');
+    if (ultima) ultima.textContent = '';
+    ssVerificar();
+    return;
+  }
+  // BT manda el PDF cada pocos días: pasada una semana sin carga nueva, el dato
+  // probablemente ya no refleja la disponibilidad real.
+  const dias = -ssDiasRestantes(dia);
+  const viejo = dias > 7;
+  caja?.classList.toggle('viejo', viejo);
+  meta.innerHTML = `Datos del PDF de BT cargado el <b>${fmtDiaCorto(dia)}</b> (${dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`})`
+    + `${SS_PDF_ACTUAL.creado_por ? ` por ${esc(SS_PDF_ACTUAL.creado_por)}` : ''}.`
+    + (viejo ? ' <b>Puede estar desactualizado:</b> pedile a oficina el PDF nuevo.' : '');
+  if (ultima) ultima.textContent = `· última carga ${fmtDiaCorto(dia)}`;
+  ssVerificar();
 }
 
 async function ssVerPdfOriginal() {
@@ -14737,6 +14783,7 @@ async function ssLeer(file) {
   const alertaBox = document.getElementById('ss-alerta');
   document.getElementById('ss-publicar-box').style.display = 'none';
   mapeoBox.innerHTML = ''; alertaBox.innerHTML = '';
+  ssPaso(1);
   drop.classList.add('cargando');
   preview.innerHTML = `<div class="cp-pensando"><i class="fas fa-circle-notch fa-spin"></i> Leyendo el PDF…</div>`;
 
@@ -14773,8 +14820,22 @@ async function ssLeer(file) {
 // tono rojo que ESTADO_COLORS.PERDIDO para stop_sale, ámbar para on_request.
 function ssBadge(estado) {
   const stop = estado === 'stop_sale';
-  const color = stop ? '#ef4444' : '#e0a030';
-  return `<span class="badge-st" style="color:${color};background:${color}2e">${stop ? 'Stop sale' : 'On request'}</span>`;
+  const color = stop ? 'var(--danger)' : 'var(--amber)';
+  return `<span class="badge-st" style="color:${color};background:color-mix(in srgb,${color} 18%,transparent)" title="BT: ${stop ? 'stop sale' : 'on request'}">${stop ? 'Sin cupo' : 'A confirmar'}</span>`;
+}
+
+const SS_QUE_HACER = {
+  stop_sale: 'No ofrecer esas noches: proponé otra fecha u otro hotel.',
+  on_request: 'Pedile a BT que confirme el cupo antes de cobrar o confirmarle al cliente.',
+};
+
+// Pasos de la carga de oficina: 1 subir, 2 confirmar hoteles nuevos, 3 revisar y publicar.
+function ssPaso(n) {
+  document.querySelectorAll('#ss-steps li').forEach((li) => {
+    const p = Number(li.dataset.paso);
+    li.classList.toggle('on', p === n);
+    li.classList.toggle('ok', p < n);
+  });
 }
 
 // Días restantes hasta fecha_hasta (redondeado al día, sin hora) -- solo para
@@ -14785,10 +14846,25 @@ function ssDiasRestantes(fechaHasta) {
   return Math.round((fin - hoy) / 86400000);
 }
 
-function ssTextoCuando(dias) {
-  if (dias <= 0) return 'termina hoy';
-  if (dias === 1) return 'termina mañana';
-  return `termina en ${dias} día(s)`;
+// Primer día libre desde `desde`, mirando TODOS los rangos del hotel: un stop
+// sale que termina el 20 y sigue en on request hasta el 25 no está libre el 21.
+// `fecha_hasta` es inclusiva, por eso el primer libre es el día siguiente.
+function ssLibreDesde(rangos, desde) {
+  const d = ssFecha(desde);
+  for (let i = 0; i < 800; i++) {
+    const iso = ssISO(d);
+    if (!rangos.some((r) => r.fecha_desde <= iso && iso <= r.fecha_hasta)) return iso;
+    d.setDate(d.getDate() + 1);
+  }
+  return null;
+}
+
+function ssTextoLibre(iso) {
+  if (!iso) return 'sin fecha de liberación en el PDF';
+  const dias = ssDiasRestantes(iso);
+  if (dias <= 0) return 'libre desde hoy';
+  if (dias === 1) return `libre desde mañana (${fmtDiaCorto(iso)})`;
+  return `libre desde el ${fmtDiaCorto(iso)} (en ${dias} días)`;
 }
 
 async function ssPintarMapeo() {
@@ -14885,8 +14961,8 @@ function ssPintarPreview() {
     <div class="csub"><b>Meses leídos:</b> ${esc(meses)}</div>
     <div class="vig-resumen" style="margin-top:12px">
       <div class="vig-kpi"><b>${filas.length}</b><span>Bloqueo(s)</span></div>
-      <div class="vig-kpi ${hotelesStop ? 'grave' : ''}"><b>${hotelesStop}</b><span>Hoteles en stop sale</span></div>
-      <div class="vig-kpi ${hotelesOnRequest ? 'aviso' : ''}"><b>${hotelesOnRequest}</b><span>Hoteles en on request</span></div>
+      <div class="vig-kpi ${hotelesStop ? 'grave' : ''}"><b>${hotelesStop}</b><span>Hoteles sin cupo (stop sale)</span></div>
+      <div class="vig-kpi ${hotelesOnRequest ? 'aviso' : ''}"><b>${hotelesOnRequest}</b><span>Solo a confirmar (on request)</span></div>
     </div>
     <div style="margin-top:14px">${grupos.map(ssTarjetaHotelPreview).join('')}</div>
   </div>`;
@@ -14897,6 +14973,7 @@ function ssActualizarBotonPublicar() {
   const box = document.getElementById('ss-publicar-box');
   const btn = document.getElementById('ss-publicar');
   box.style.display = SS_DATA ? '' : 'none';
+  ssPaso(faltan.length ? 2 : 3);
   if (faltan.length) {
     btn.disabled = true;
     btn.innerHTML = `<i class="fas fa-hourglass-half"></i> Faltan ${faltan.length} hotel(es) por confirmar arriba`;
@@ -14960,6 +15037,7 @@ async function ssPublicar() {
   document.getElementById('ss-mapeo').innerHTML = '';
   document.getElementById('ss-alerta').innerHTML = '';
   document.getElementById('ss-publicar-box').style.display = 'none';
+  ssPaso(1);
   loadStopSalesVigentes();
   ssCargarPdfActual();
 }
@@ -14980,6 +15058,9 @@ let SS_DIA_ABIERTO = null;
 // creciera a miles de rangos, esto es lo primero que habría que memoizar por
 // (filtro + búsqueda), no por mes: el mes se lee de este mapa, no lo construye.
 let SS_POR_DIA = new Map();
+// nombre de hotel -> color. Lo comparten chips, puntitos del calendario, panel
+// del día y tarjetas: el mismo hotel tiene el mismo color en toda la pantalla.
+let SS_COLOR_HOTEL = new Map();
 
 const SS_MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const ssMesLargo = (mes) => { const [a, m] = mes.split('-'); return `${SS_MESES[+m - 1]} ${a}`; };
@@ -15025,21 +15106,23 @@ function ssCalendarioHtml(mes) {
   for (let d = 1; d <= diasEnMes; d++) {
     const iso = `${anio}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const hoteles = SS_POR_DIA.get(iso) || [];
+    const nombres = [...new Set(hoteles.map((h) => h.nombre))];
     const clases = ['ss-dia'];
     if (iso === hoyISO) clases.push('hoy');
     if (iso === SS_DIA_ABIERTO) clases.push('sel');
-    if (hoteles.length) {
+    if (nombres.length) {
       const soloRequest = hoteles.every((h) => h.estado === 'on_request');
-      clases.push('hay', soloRequest ? 'req' : hoteles.length >= 3 ? 'n3' : hoteles.length === 2 ? 'n2' : 'n1');
-      const q = hoteles.length === 1 ? '1 hotel' : `${hoteles.length} hoteles`;
-      celdas.push(`<button type="button" class="${clases.join(' ')}" data-ss-dia="${iso}" title="${q} ${soloRequest ? 'a confirmar' : 'sin cupo'} — tocá para ver cuáles">${d}</button>`);
+      clases.push('hay', soloRequest ? 'req' : nombres.length >= 3 ? 'n3' : nombres.length === 2 ? 'n2' : 'n1');
+      const q = nombres.length === 1 ? '1 hotel' : `${nombres.length} hoteles`;
+      celdas.push(`<button type="button" class="${clases.join(' ')}" data-ss-dia="${iso}" aria-label="${d}: ${q} ${soloRequest ? 'a confirmar' : 'bloqueados'}" title="${iso === hoyISO ? 'Hoy — ' : ''}${esc(nombres.join(', '))}"><span>${d}</span>${ssPuntosDia(nombres)}</button>`);
     } else {
-      celdas.push(`<div class="${clases.join(' ')}">${d}</div>`);
+      celdas.push(`<div class="${clases.join(' ')}"${iso === hoyISO ? ' title="Hoy"' : ''}>${d}</div>`);
     }
   }
 
   const proximo = siguientes[0] || previos[previos.length - 1];
-  return `<div class="ss-cal-nav">
+  return `<div class="ss-cal-wrap"><div class="ss-cal-col">
+    <div class="ss-cal-nav">
       <button type="button" class="ss-nav-btn" data-ss-mes="${previos[previos.length - 1] || ''}" ${previos.length ? '' : 'disabled'} title="Mes anterior con bloqueos"><i class="fas fa-chevron-left"></i></button>
       <b>${ssMesLargo(mes)}</b>
       <button type="button" class="ss-nav-btn" data-ss-mes="${siguientes[0] || ''}" ${siguientes.length ? '' : 'disabled'} title="Mes siguiente con bloqueos"><i class="fas fa-chevron-right"></i></button>
@@ -15049,27 +15132,50 @@ function ssCalendarioHtml(mes) {
       ${celdas.join('')}
     </div>
     <div class="ss-leyenda">
-      <span><i style="background:rgba(239,68,68,.22)"></i> 1 hotel</span>
+      <span><i style="background:rgba(239,68,68,.22)"></i> Sin cupo: 1 hotel</span>
       <span><i style="background:rgba(239,68,68,.4)"></i> 2 hoteles</span>
       <span><i style="background:rgba(239,68,68,.65)"></i> 3 o más</span>
       <span><i style="background:rgba(224,160,48,.2);border:1px dashed rgba(224,160,48,.55)"></i> Solo a confirmar</span>
+      <span><i class="ss-ley-dot"></i> 1 punto = 1 hotel (color de su chip)</span>
+      <span><i class="ss-ley-hoy"></i> Hoy</span>
     </div>
     ${!ssMesesConDatos().includes(mes) && proximo ? `<div class="ss-cal-nota">Sin bloqueos en ${ssMesLargo(mes)}. El más cercano es en ${ssMesLargo(proximo)}.</div>` : ''}
-    <div id="ss-detalle"></div>`;
+    </div>
+    <div id="ss-detalle"></div>
+  </div>`;
 }
+
+function ssPuntosDia(nombres) {
+  const max = nombres.length > 4 ? 3 : 4;
+  return `<span class="ss-dots">${nombres.slice(0, max).map((n) => `<i style="--c:${SS_COLOR_HOTEL.get(n) || 'var(--muted)'}"></i>`).join('')}${nombres.length > max ? `<em>+${nombres.length - max}</em>` : ''}</span>`;
+}
+
+const ssRangosDe = (nombre) => (SS_VIGENTES_DATA || []).filter((f) => f.nombre === nombre);
+const ssHayFiltro = () => !!(ssHotelSel || ssFiltro !== 'todos' || (document.getElementById('ss-vig-buscar')?.value || '').trim());
 
 function ssPintarDetalleDia() {
   const box = document.getElementById('ss-detalle');
   if (!box) return;
-  if (!SS_DIA_ABIERTO) { box.innerHTML = ''; return; }
-  const hoteles = SS_POR_DIA.get(SS_DIA_ABIERTO) || [];
+  if (!SS_DIA_ABIERTO) {
+    box.innerHTML = '<div class="ss-detalle"><div class="ss-detalle-sub" style="margin:0">Tocá un día marcado para ver qué hoteles están bloqueados y qué hacer.</div></div>';
+    return;
+  }
+  // Un hotel una sola vez por día; si ese día tiene stop sale y on request, manda el peor.
+  const porHotel = new Map();
+  for (const f of SS_POR_DIA.get(SS_DIA_ABIERTO) || []) {
+    if (!porHotel.has(f.nombre) || f.estado === 'stop_sale') porHotel.set(f.nombre, f);
+  }
+  const lista = [...porHotel.values()].sort((a, b) => (a.estado === b.estado ? a.nombre.localeCompare(b.nombre) : a.estado === 'stop_sale' ? -1 : 1));
+  const nStop = lista.filter((h) => h.estado === 'stop_sale').length;
   box.innerHTML = `<div class="ss-detalle">
-    <div class="ss-detalle-t">${fmtDiaCorto(SS_DIA_ABIERTO)} — ${hoteles.length === 1 ? '1 hotel' : `${hoteles.length} hoteles`}</div>
-    ${hoteles.map((h) => `<div class="vig-item">
-      <div class="vig-top"><div class="vig-nombre">${esc(h.nombre)}</div>${ssBadge(h.estado)}</div>
-      <div class="vig-texto">${fmtDiaCorto(h.fecha_desde)} → ${fmtDiaCorto(h.fecha_hasta)}
-        <span class="muted">(${ssTextoCuando(ssDiasRestantes(h.fecha_hasta))})</span></div>
+    <div class="ss-detalle-t">${fmtDiaCorto(SS_DIA_ABIERTO)}</div>
+    <div class="ss-detalle-sub">${lista.length === 1 ? '1 hotel bloqueado' : `${lista.length} hoteles bloqueados`}${nStop && nStop < lista.length ? ` (${nStop} sin cupo, ${lista.length - nStop} a confirmar)` : ''}</div>
+    ${lista.map((h) => `<div class="vig-item">
+      <div class="vig-top"><span class="ss-hotel-dot" style="--c:${SS_COLOR_HOTEL.get(h.nombre) || 'var(--muted)'}"></span><div class="vig-nombre">${esc(h.nombre)}</div>${ssBadge(h.estado)}</div>
+      <div class="ss-que-hacer">${SS_QUE_HACER[h.estado]}</div>
+      <div class="vig-texto">Bloqueado del ${fmtDiaCorto(h.fecha_desde)} al ${fmtDiaCorto(h.fecha_hasta)} · <span class="muted">${ssTextoLibre(ssLibreDesde(ssRangosDe(h.nombre), SS_DIA_ABIERTO))}</span></div>
     </div>`).join('')}
+    <div class="ss-detalle-pie">Los hoteles que no aparecen acá no tienen bloqueo ese día${ssHayFiltro() ? ' (ojo: hay un filtro activo, puede haber más)' : ''}.</div>
   </div>`;
 }
 
@@ -15086,21 +15192,22 @@ function ssTiraMes(rangos, mes) {
       ? `<i class="${r.estado === 'stop_sale' ? 'st' : 'rq'}" title="${fmtDiaCorto(r.fecha_desde)} → ${fmtDiaCorto(r.fecha_hasta)}"></i>`
       : '<i></i>');
   }
-  return `<div class="ss-tira-fila"><span class="ss-tira-mes">${SS_MESES[m - 1].slice(0, 3)}</span><div class="ss-tira">${segmentos.join('')}</div></div>`;
+  return `<div class="ss-tira-fila"><span class="ss-tira-mes">${SS_MESES[m - 1].slice(0, 3)}</span><div class="ss-tira">${segmentos.join('')}</div></div>
+    <div class="ss-tira-dias"><span>1</span><span>15</span><span>${diasEnMes}</span></div>`;
 }
 
-// Tarjeta de un hotel: se resalta en rojo (misma clase .grave de vig-item) si
-// algún rango vence hoy o mañana -- da la urgencia real de un vistazo sin tener
-// que leer la fecha exacta.
+// Tarjeta de un hotel: tira por mes (forma del bloqueo) + cada período con su
+// estado y desde cuándo vuelve a estar libre.
 function ssTarjetaVigente(g) {
   const meses = [...new Set(g.rangos.map((r) => r.fecha_desde.slice(0, 7)))].sort().slice(0, 3);
-  return `<div class="vig-item ${g.urgente ? 'grave' : ''}">
-    <div class="vig-top"><div class="vig-nombre">${esc(g.nombre)}</div><span class="vig-tipo">${g.rangos.length}</span></div>
+  const todos = ssRangosDe(g.nombre);
+  return `<div class="vig-item">
+    <div class="vig-top"><span class="ss-hotel-dot" style="--c:${SS_COLOR_HOTEL.get(g.nombre) || 'var(--muted)'}"></span><div class="vig-nombre">${esc(g.nombre)}</div><span class="vig-tipo">${g.rangos.length === 1 ? '1 período' : `${g.rangos.length} períodos`}</span></div>
     ${meses.map((m) => ssTiraMes(g.rangos, m)).join('')}
     <div style="margin-top:7px">
       ${g.rangos.map((r) => `<div class="vig-texto" style="display:flex;align-items:center;gap:8px;padding:2px 0;flex-wrap:wrap">
-        ${ssBadge(r.estado)}<span>${fmtDiaCorto(r.fecha_desde)} → ${fmtDiaCorto(r.fecha_hasta)}</span>
-        <span class="muted" style="font-size:11px">(${ssTextoCuando(ssDiasRestantes(r.fecha_hasta))})</span>
+        ${ssBadge(r.estado)}<span>del ${fmtDiaCorto(r.fecha_desde)} al ${fmtDiaCorto(r.fecha_hasta)}</span>
+        <span class="muted" style="font-size:11px">· ${ssTextoLibre(ssLibreDesde(todos, r.fecha_desde))}</span>
       </div>`).join('')}
     </div>
   </div>`;
@@ -15114,6 +15221,84 @@ async function loadStopSalesVigentes() {
   SS_VIGENTES_DATA = data || [];
   ssView = initViewSwitcher('ss-view-switch', 'stop-sales', 'calendario', (v) => { ssView = v; SS_DIA_ABIERTO = null; ssRenderVigentes(); }, ['calendario', 'hoteles']);
   ssRenderVigentes();
+  await ssPintarHotelesVerif();
+  ssVerificar();
+}
+
+/* ---------- "¿Puedo vender?": hotel + fechas -> veredicto noche por noche ----------
+   Noches = [entrada, salida): la del día de salida no se duerme. Cruza solo
+   contra lo publicado del PDF de BT; si el hotel no figura, se dice tal cual
+   (puede ser que BT no lo maneje), no se promete disponibilidad. */
+async function ssPintarHotelesVerif() {
+  const sel = document.getElementById('ss-v-hotel');
+  if (!sel || !SS_VIGENTES_DATA) return;
+  const actual = sel.value;
+  const conBloqueo = new Map(SS_VIGENTES_DATA.map((f) => [String(f.producto_id), f.nombre]));
+  const resto = (await ssProductosHotel()).filter((h) => !conBloqueo.has(String(h.id)));
+  sel.innerHTML = `<option value="">— elegí un hotel —</option>
+    ${conBloqueo.size ? `<optgroup label="Con bloqueos en el PDF de BT">${[...conBloqueo].sort((a, b) => a[1].localeCompare(b[1])).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}</optgroup>` : ''}
+    ${resto.length ? `<optgroup label="Resto del tarifario (sin bloqueos)">${resto.map((h) => `<option value="${h.id}">${esc(h.nombre)}${h.destino ? ` (${esc(h.destino)})` : ''}</option>`).join('')}</optgroup>` : ''}`;
+  sel.value = actual;
+}
+
+function ssVerificar() {
+  const box = document.getElementById('ss-v-resultado');
+  if (!box || !SS_VIGENTES_DATA) return;
+  const aviso = (t, cls = 'ss-v-hint') => { box.innerHTML = `<div class="${cls}">${t}</div>`; };
+  const pid = val('ss-v-hotel'), ent = val('ss-v-entrada'), sal = val('ss-v-salida');
+  if (!pid || !ent || !sal) return aviso('Completá los tres datos y aparece la respuesta acá.');
+  if (ent < ssISO(new Date())) return aviso('La entrada no puede ser antes de hoy.', 'ss-v-error');
+  if (sal <= ent) return aviso('La salida tiene que ser al menos un día después de la entrada.', 'ss-v-error');
+
+  const rangos = SS_VIGENTES_DATA.filter((f) => String(f.producto_id) === pid);
+  const noches = [];
+  for (const d = ssFecha(ent), fin = ssFecha(sal); d < fin && noches.length <= 60; d.setDate(d.getDate() + 1)) {
+    const iso = ssISO(d);
+    const aca = rangos.filter((r) => r.fecha_desde <= iso && iso <= r.fecha_hasta);
+    noches.push({ iso, dow: d.getDay(), estado: aca.some((r) => r.estado === 'stop_sale') ? 'stop_sale' : aca.length ? 'on_request' : 'libre' });
+  }
+  if (noches.length > 60) return aviso('Son más de 60 noches: acortá el rango.', 'ss-v-error');
+
+  const n = noches.length;
+  const nStop = noches.filter((x) => x.estado === 'stop_sale').length;
+  const nReq = noches.filter((x) => x.estado === 'on_request').length;
+  const pdf = ssDiaPdf();
+  const segun = pdf ? `según el PDF de BT del ${fmtDiaCorto(pdf)}` : 'según el último PDF de BT';
+  const cuantas = (k, que) => (n === 1 ? `La noche está ${que}` : k === n ? `Las ${n} noches están ${que}` : `${k} de las ${n} noches están ${que}`);
+  let c, ic, titulo, texto;
+  if (nStop) {
+    const libre = ssLibreDesde(rangos, noches.find((x) => x.estado === 'stop_sale').iso);
+    c = 'var(--danger)'; ic = 'fa-ban'; titulo = 'No vender';
+    texto = `${cuantas(nStop, 'sin cupo')} ${segun}. Proponé otras fechas u otro hotel.${libre ? ` El hotel vuelve a estar libre desde el ${fmtDiaCorto(libre)}.` : ''}`;
+  } else if (nReq) {
+    c = 'var(--amber)'; ic = 'fa-clock'; titulo = 'Consultar a BT antes de confirmar';
+    texto = `${cuantas(nReq, 'a confirmar')} ${segun}. Pedile a BT que confirme el cupo: no cobres ni le confirmes al cliente hasta tener la respuesta.`;
+  } else {
+    c = 'var(--green)'; ic = 'fa-circle-check'; titulo = 'Se puede vender';
+    texto = `${n === 1 ? 'La noche no figura bloqueada' : `Ninguna de las ${n} noches figura bloqueada`} ${segun}.`
+      + (rangos.length ? '' : ' Ojo: este hotel no aparece en el PDF. Si no lo maneja BT Travel, confirmá la disponibilidad por la vía de siempre.');
+  }
+
+  // Tramos seguidos con el mismo problema, para leerlos en una línea.
+  const tramos = [];
+  noches.forEach((x, i) => {
+    if (x.estado === 'libre') return;
+    if (i && noches[i - 1].estado === x.estado) tramos[tramos.length - 1].hasta = x.iso;
+    else tramos.push({ estado: x.estado, desde: x.iso, hasta: x.iso });
+  });
+  const ETIQ = { stop_sale: 'Sin cupo', on_request: 'A confirmar', libre: 'Libre' };
+  const nombre = document.getElementById('ss-v-hotel').selectedOptions[0]?.textContent || '';
+  box.innerHTML = `<div class="ss-veredicto" style="--c:${c}">
+      <i class="fas ${ic}"></i>
+      <div>
+        <div class="ss-veredicto-t">${titulo}</div>
+        <p><b>${esc(nombre)}</b> · ${n === 1 ? '1 noche' : `${n} noches`}: entrada ${fmtDiaCorto(ent)}, salida ${fmtDiaCorto(sal)}</p>
+        <p>${texto}</p>
+      </div>
+    </div>
+    ${tramos.length ? `<div class="ss-v-tramos">${tramos.map((t) => `<div><b>${ETIQ[t.estado]}:</b> ${t.desde === t.hasta ? `noche del ${fmtDiaCorto(t.desde)}` : `noches del ${fmtDiaCorto(t.desde)} al ${fmtDiaCorto(t.hasta)}`}</div>`).join('')}</div>` : ''}
+    <div class="ss-v-hint" style="margin-top:11px">Noche por noche (la del día de salida no se cuenta):</div>
+    <div class="ss-v-noches">${noches.map((x) => `<div class="ss-v-noche ${x.estado === 'stop_sale' ? 'st' : x.estado === 'on_request' ? 'rq' : ''}" title="Noche del ${fmtDiaCorto(x.iso)}: ${ETIQ[x.estado]}"><b>${+x.iso.slice(8)}</b><span>${'DLMMJVS'[x.dow]}</span></div>`).join('')}</div>`;
 }
 
 // Un solo lugar sincroniza el KPI activo y repinta -- mismo patrón que
@@ -15140,21 +15325,38 @@ function ssFilasVisibles() {
 // calendario a ese hotel puntual (2026-08-06, pedido del dueño). Mismo color
 // que ssBadge -- rojo si tiene algún rango sin cupo, ámbar si todos sus
 // rangos son solo "a confirmar".
-function ssChipsHoteles() {
-  const porNombre = new Map();
-  for (const f of SS_VIGENTES_DATA) {
-    porNombre.set(f.nombre, (porNombre.get(f.nombre) || 0) + 1);
+// Noches bloqueadas de hoy en adelante por hotel (días únicos, por si dos
+// rangos se pisan), de más a menos. Es el número que muestra cada chip.
+function ssNochesPorHotel() {
+  const hoy = ssISO(new Date());
+  const dias = new Map();
+  for (const [iso, filas] of ssDiasBloqueados(SS_VIGENTES_DATA)) {
+    if (iso < hoy) continue;
+    for (const f of filas) {
+      if (!dias.has(f.nombre)) dias.set(f.nombre, new Set());
+      dias.get(f.nombre).add(iso);
+    }
   }
-  // Color por hotel, no por estado -- acá TODO es stop sale, así que
-  // rojo/ámbar no distingue nada y quedaba muy monocromático. Mismo
-  // ADV_COLORS que "Carga por asesor" (app.js:122).
-  return [...porNombre.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([nombre, n], i) => {
-      const color = ADV_COLORS[i % ADV_COLORS.length];
-      const on = ssHotelSel === nombre;
-      return `<button type="button" class="ss-hotel-chip${on ? ' on' : ''}" data-ss-hotel="${esc(nombre)}" style="--c:${color}">${esc(nombre)} <span>${n}</span></button>`;
-    }).join('');
+  return new Map([...dias].map(([n, s]) => [n, s.size]).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])));
+}
+
+// Color por hotel, no por estado -- acá TODO es stop sale, así que rojo/ámbar
+// no distingue nada y quedaba muy monocromático. Mismo ADV_COLORS que "Carga
+// por asesor"; el color se repite en los puntitos del calendario.
+function ssChipsHoteles(noches) {
+  return [...noches].map(([nombre, n]) => {
+    const on = ssHotelSel === nombre;
+    const tt = `${on ? 'Volver a ver todos los hoteles' : `Ver solo ${nombre} en el calendario`} — ${n === 1 ? '1 noche bloqueada' : `${n} noches bloqueadas`} de hoy en adelante`;
+    return `<button type="button" class="ss-hotel-chip${on ? ' on' : ''}" data-ss-hotel="${esc(nombre)}" style="--c:${SS_COLOR_HOTEL.get(nombre)}" title="${esc(tt)}">${esc(nombre)} <span>${n}</span></button>`;
+  }).join('');
+}
+
+function ssFiltroActivoHtml() {
+  const partes = [];
+  if (ssHotelSel) partes.push(esc(ssHotelSel));
+  if (ssFiltro !== 'todos') partes.push({ stop_sale: 'solo sin cupo', on_request: 'solo a confirmar', semana: 'se liberan en 7 días o menos' }[ssFiltro]);
+  if (!partes.length) return '';
+  return `<div class="ss-filtro-activo"><i class="fas fa-filter"></i> Mostrando: <b>${partes.join(' · ')}</b><button type="button" class="ap-chip-todos" data-ss-limpiar>Ver todo</button></div>`;
 }
 
 function ssIrAHotel(nombre) {
@@ -15176,24 +15378,34 @@ function ssRenderVigentes() {
     return;
   }
   const filas = ssFilasVisibles();
-  const nStop = new Set(SS_VIGENTES_DATA.filter((f) => f.estado === 'stop_sale').map((f) => f.nombre)).size;
-  const nReq = new Set(SS_VIGENTES_DATA.filter((f) => f.estado === 'on_request').map((f) => f.nombre)).size;
-  const nSemana = SS_VIGENTES_DATA.filter((f) => ssDiasRestantes(f.fecha_hasta) <= 7).length;
+  const hotelesDonde = (fn) => new Set(SS_VIGENTES_DATA.filter(fn).map((f) => f.nombre)).size;
+  const nStop = hotelesDonde((f) => f.estado === 'stop_sale');
+  const nReq = hotelesDonde((f) => f.estado === 'on_request');
+  const nSemana = hotelesDonde((f) => ssDiasRestantes(f.fecha_hasta) <= 7);
+  const noches = ssNochesPorHotel();
+  SS_COLOR_HOTEL = new Map([...noches.keys()].map((n, i) => [n, ADV_COLORS[i % ADV_COLORS.length]]));
 
-  cont.innerHTML = `<div id="ss-kpis" class="kpis kpis-3" style="margin-bottom:14px"></div>
-    <div id="ss-chips-hotel" style="margin-bottom:14px"></div>
+  cont.innerHTML = `<div class="ss-rotulo">Resumen<span>tocá una tarjeta para filtrar; otra vez para ver todo</span></div>
+    <div id="ss-kpis" class="kpis kpis-3" style="margin-bottom:14px"></div>
+    <div class="ss-rotulo">Filtrar por hotel<span>el número son las noches bloqueadas de hoy en adelante</span></div>
+    <div id="ss-chips-hotel" style="margin-bottom:11px"></div>
+    ${ssFiltroActivoHtml()}
     <div id="ss-calendario" class="${ssView === 'calendario' ? 'show' : ''}"></div>
     <div id="ss-hoteles" class="${ssView === 'hoteles' ? 'show' : ''}"></div>`;
 
   pintarKPIs('ss-kpis', [
-    { t: 'Sin cupo', v: nStop, d: 'hoteles en stop sale', i: 'fa-ban', c: '#ef4444', key: 'stop_sale', on: ssFiltro === 'stop_sale', tt: 'Ver solo los bloqueos sin cupo', go: () => ssIrAFiltro('stop_sale') },
-    { t: 'A confirmar', v: nReq, d: 'hoteles on request', i: 'fa-clock', c: '#e0a030', key: 'on_request', on: ssFiltro === 'on_request', tt: 'Ver solo los que hay que confirmar', go: () => ssIrAFiltro('on_request') },
-    { t: 'Se liberan pronto', v: nSemana, d: 'terminan en 7 días o menos', i: 'fa-calendar-check', c: 'var(--green)', key: 'semana', on: ssFiltro === 'semana', tt: 'Ver los que se liberan esta semana', go: () => ssIrAFiltro('semana') },
+    { t: 'Sin cupo', v: nStop, d: 'hoteles con noches sin cupo', i: 'fa-ban', c: '#ef4444', key: 'stop_sale', on: ssFiltro === 'stop_sale', tt: 'Ver solo los bloqueos sin cupo', go: () => ssIrAFiltro('stop_sale') },
+    { t: 'A confirmar', v: nReq, d: 'hoteles que hay que confirmar con BT', i: 'fa-clock', c: '#e0a030', key: 'on_request', on: ssFiltro === 'on_request', tt: 'Ver solo los que hay que confirmar', go: () => ssIrAFiltro('on_request') },
+    { t: 'Se liberan pronto', v: nSemana, d: 'hoteles con un bloqueo que termina en 7 días o menos', i: 'fa-calendar-check', c: 'var(--green)', key: 'semana', on: ssFiltro === 'semana', tt: 'Ver los que se liberan esta semana', go: () => ssIrAFiltro('semana') },
   ]);
 
   const chipsBox = document.getElementById('ss-chips-hotel');
-  chipsBox.innerHTML = ssChipsHoteles();
+  chipsBox.innerHTML = ssChipsHoteles(noches);
   chipsBox.querySelectorAll('[data-ss-hotel]').forEach((b) => b.addEventListener('click', () => ssIrAHotel(b.dataset.ssHotel)));
+  cont.querySelector('[data-ss-limpiar]')?.addEventListener('click', () => {
+    ssFiltro = 'todos'; ssHotelSel = null; SS_DIA_ABIERTO = null;
+    ssRenderVigentes();
+  });
 
   if (!filas.length) {
     const donde = ssView === 'calendario' ? 'ss-calendario' : 'ss-hoteles';
@@ -15208,6 +15420,13 @@ function ssRenderVigentes() {
     // Si el mes que se estaba viendo se quedó sin datos por un filtro, saltar al
     // primero que sí tenga en vez de mostrar una grilla vacía sin explicación.
     if (!SS_MES || !meses.includes(SS_MES)) SS_MES = meses.includes(mesHoy) ? mesHoy : (meses.find((m) => m >= mesHoy) || meses[0]);
+    // El panel arranca en el primer día con bloqueo desde MAÑANA: nadie vende
+    // un hotel para el mismo día, así que abrir en "hoy" no le sirve a nadie.
+    if (!SS_DIA_ABIERTO || !SS_POR_DIA.has(SS_DIA_ABIERTO) || !SS_DIA_ABIERTO.startsWith(SS_MES)) {
+      const manana = new Date(); manana.setDate(manana.getDate() + 1);
+      const desde = ssISO(manana);
+      SS_DIA_ABIERTO = [...SS_POR_DIA.keys()].filter((k) => k.startsWith(SS_MES) && k >= desde).sort()[0] || null;
+    }
     const box = document.getElementById('ss-calendario');
     box.innerHTML = ssCalendarioHtml(SS_MES);
     ssPintarDetalleDia();
@@ -15216,8 +15435,12 @@ function ssRenderVigentes() {
       SS_MES = b.dataset.ssMes; SS_DIA_ABIERTO = null; ssRenderVigentes();
     }));
     box.querySelectorAll('[data-ss-dia]').forEach((b) => b.addEventListener('click', () => {
-      SS_DIA_ABIERTO = SS_DIA_ABIERTO === b.dataset.ssDia ? null : b.dataset.ssDia;
+      SS_DIA_ABIERTO = b.dataset.ssDia;
       ssRenderVigentes();
+      // En pantallas angostas el panel queda debajo de la grilla: llevarlo a la vista.
+      const det = document.getElementById('ss-detalle');
+      const col = document.querySelector('#ss-calendario .ss-cal-col');
+      if (det && col && det.getBoundingClientRect().top > col.getBoundingClientRect().top + 20) det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }));
   } else {
     document.getElementById('ss-hoteles').innerHTML = ssAgruparPorHotel(filas, 'nombre').map(ssTarjetaVigente).join('');
@@ -26609,19 +26832,20 @@ const NAV_ITEMS = [
   // Meta DM (2026-10-07): los chats del bot (Instagram, Facebook, WhatsApp) salieron
   // de Mensajes a su propia entrada. La vista vieja de WhatsApp por número salió
   // del menú; admin la abre desde la pestaña WhatsApp de Meta DM.
-  { sec: 'dms', icon: 'fa-brands fa-meta', label: 'Meta DM', roles: '', sub: 'Chats del bot en Instagram, Facebook y WhatsApp, en vivo y con la ficha del cliente' },
-  { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
+  { sec: 'dms', icon: 'fa-brands fa-meta', label: 'Meta DM', padre: 'grp-bandeja', roles: '', sub: 'Chats del bot en Instagram, Facebook y WhatsApp, en vivo y con la ficha del cliente' },
+  { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-bandeja', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok' },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok' },
   { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok nav-administrativo-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
-  { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', roles: 'nav-administrativo-ok', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
+  { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', padre: 'grp-tarifario', roles: 'nav-administrativo-ok', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: 'nav-administrativo-ok', sub: 'Servicios, pasajeros, documentos y cobros' },
   { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
   // En modo Boletería, Reservas solo abría el voucher de hospedaje: lo reemplaza Cotizaciones (2026-10-12).
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'bol-solicitudes', icon: 'fas fa-list-ol', label: 'Solicitudes', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Vuelos que piden los asesores, repartidos entre agentes', badge: 'nav-bol-sol-count', badgeDefault: '0' },
   // Fuera del modo Boletería es la cotización del asesor para su cliente (cbModo 'ventas', 2026-10-15).
-  { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
+  // Es pestaña de Leads; en modo Boletería y para el rol boletería queda suelta (CSS nav-hijo-suelto).
+  { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', padre: 'grp-leads', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
   { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Ventas, costos, gastos y utilidad por periodo' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok' },
@@ -26642,26 +26866,30 @@ const NAV_ITEMS = [
   { sec: 'actualizaciones', icon: 'fas fa-bullhorn', label: 'Actualizaciones', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-administrativo-ok' },
   { sec: 'proyecto-constructor', icon: 'fas fa-drafting-compass', label: 'Proyecto Constructor', padre: 'grp-ayuda', roles: 'nav-admin-only', sub: 'Avance del CRM que se vende a otras empresas' },
 ];
-// Orden del menú. `hoja`: entrada sin pestañas, es la sección misma. Los
-// badges viven en el padre porque la hija está oculta.
+// Orden del menú (fijo por áreas desde 2026-10-16, ya no se arrastra). `hoja`:
+// entrada sin pestañas, es la sección misma. `divisor`: título de bloque. Los
+// badges viven en el padre porque la hija está oculta. `noHereda`: clases de
+// rol que el padre NO toma de sus hijas (Leads no debe aparecer en modo
+// Boletería solo porque Cotizaciones vive adentro).
 const NAV_PADRES = [
   // Primera: es el trabajo principal del modo Boletería (fuera de ese modo no se ve).
   { sec: 'bol-solicitudes', hoja: true },
   { sec: 'grp-inicio', icon: 'fas fa-chart-pie', label: 'Inicio' },
-  { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
+  { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true, noHereda: ['nav-boleteria-ok', 'nav-modo-boleteria-ok'] },
+  // Bandeja (2026-10-16): Meta DM y Correo como pestañas. El chat interno se abre por la burbuja #chat-fab.
+  { sec: 'grp-bandeja', icon: 'fas fa-inbox', label: 'Bandeja', badge: 'nav-bandeja-count', badgeDefault: '0' },
   { sec: 'mensajes', hoja: true },
-  { sec: 'dms', hoja: true },
-  { sec: 'correo', hoja: true },
   { sec: 'grp-tarifario', icon: 'fas fa-book-open', label: 'Tarifario' },
   { sec: 'stop-sales', hoja: true },
-  { sec: 'apartamentos', hoja: true },
-  { sec: 'cotizacion-boletos', hoja: true },
   { sec: 'grp-reservas', icon: 'fas fa-handshake-angle', label: 'Reservas', badge: 'nav-postventa-count', badgeDefault: '0' },
   { sec: 'grp-cobros', icon: 'fas fa-file-invoice-dollar', label: 'Cobros' },
+  { divisor: 'Gestión' },
+  { sec: 'grp-equipo', icon: 'fas fa-people-group', label: 'Equipo', badge: 'nav-tareas-count', badgeDefault: '0' },
   { sec: 'grp-directorio', icon: 'fas fa-briefcase', label: 'Corporativo' },
   { sec: 'grp-ia', icon: 'fas fa-robot', label: 'IA' },
   { sec: 'grp-marketing', icon: 'fas fa-bullseye', label: 'Marketing' },
-  { sec: 'grp-equipo', icon: 'fas fa-people-group', label: 'Equipo', badge: 'nav-tareas-count', badgeDefault: '0' },
+  // Separador sin título: corta el bloque Gestión para que Ayuda no quede adentro.
+  { divisor: '' },
   { sec: 'grp-ayuda', icon: 'fas fa-circle-question', label: 'Ayuda' },
 ];
 const PADRE_DE = Object.fromEntries(NAV_ITEMS.filter(it => it.padre).map(it => [it.sec, it.padre]));
@@ -26672,21 +26900,26 @@ const PADRE_DE = Object.fromEntries(NAV_ITEMS.filter(it => it.padre).map(it => [
 const NAV_ROLES_HABILITAN = ['nav-marketing-ok', 'nav-boleteria-ok', 'nav-modo-boleteria-ok', 'nav-administrativo-ok'];
 
 function renderNavItems() {
-  const htmlDesktop = (it, extra, padre) => {
+  // `orden`: posición original de las entradas y títulos, para devolver a su
+  // lugar una entrada que deja de ser favorita (renderFavoritos).
+  const htmlDesktop = (it, extra, padre, orden) => {
     const cls = ['nav-item', extra, it.roles].filter(Boolean).join(' ');
     const idAttr = it.id ? ` id="${it.id}"` : '';
     const padreAttr = padre ? ` data-padre="${padre}"` : '';
+    const ordenAttr = orden != null ? ` data-orden="${orden}"` : '';
     const titleAttr = it.sub ? ` title="${esc(it.sub)}"` : '';
+    const fav = orden != null ? ` <span class="nav-fav" role="button" tabindex="0" data-fav="${it.sec}" aria-label="Fijar ${esc(it.label)} en Favoritos" title="Fijar en Favoritos"><i class="far fa-star"></i></span>` : '';
     const badge = it.badge ? ` <span class="badge" id="${it.badge}"${it.badgeVisible ? '' : ' style="display:none"'}>${esc(it.badgeDefault || '0')}</span>` : '';
-    return `<a class="${cls}"${idAttr} data-sec="${it.sec}"${padreAttr}${titleAttr}><i class="${it.icon}"></i> ${esc(it.label)}${badge}</a>`;
+    return `<a class="${cls}"${idAttr} data-sec="${it.sec}"${padreAttr}${ordenAttr}${titleAttr}><i class="${it.icon}"></i> ${esc(it.label)}${fav}${badge}</a>`;
   };
   const ancoraDesktop = document.getElementById('nav-items-anchor');
   if (ancoraDesktop) {
-    const bloque = '<div class="nav-label" data-label="secciones">Secciones</div>' + NAV_PADRES.map(p => {
-      if (p.hoja) return htmlDesktop(NAV_ITEMS.find(it => it.sec === p.sec), 'nav-top');
+    const bloque = '<div class="nav-label" data-label="secciones">Secciones</div>' + NAV_PADRES.map((p, i) => {
+      if (p.divisor != null) return p.divisor ? `<div class="nav-label" data-label="${esc(p.divisor.toLowerCase())}" data-orden="${i}">${esc(p.divisor)}</div>` : `<div class="nav-label nav-sep" data-label="sep" data-orden="${i}"></div>`;
+      if (p.hoja) return htmlDesktop(NAV_ITEMS.find(it => it.sec === p.sec), 'nav-top', null, i);
       const hijas = NAV_ITEMS.filter(it => it.padre === p.sec);
-      const roles = [...new Set(hijas.flatMap(h => h.roles.split(' ')))].filter(c => NAV_ROLES_HABILITAN.includes(c)).join(' ');
-      return htmlDesktop({ ...p, roles }, 'nav-top nav-padre') + hijas.map(h => htmlDesktop(h, 'nav-hijo', p.sec)).join('');
+      const roles = [...new Set(hijas.flatMap(h => h.roles.split(' ')))].filter(c => NAV_ROLES_HABILITAN.includes(c) && !(p.noHereda || []).includes(c)).join(' ');
+      return htmlDesktop({ ...p, roles }, 'nav-top nav-padre', null, i) + hijas.map(h => htmlDesktop(h, 'nav-hijo', p.sec)).join('');
     }).join('');
     ancoraDesktop.insertAdjacentHTML('beforebegin', bloque);
   }
@@ -26702,26 +26935,28 @@ function renderNavItems() {
   document.body.classList.toggle('puede-ver-voucher', ROL === 'admin' || ROL === 'asesor');
 }
 
-/* ---------- "Frecuentes": top de secciones más clickeadas ----------
-   MI_PREFERENCIAS.uso_secciones = {sec: count}, incrementado solo en clic real
-   (ver delegación de click en setupNav). Se calcula UNA vez al arrancar, no en
-   vivo, para que el menú no "salte" mientras el usuario navega. Los items se
-   MUEVEN (no se clonan) para no duplicar data-sec y romper el Map de
-   guardarOrdenSidebar/aplicarOrdenSidebar. Por eso Frecuentes no es
-   arrastrable: setupSidebarReorder/guardarOrdenSidebar excluyen .nav-freq. */
-const FRECUENTES_N = 6;
-const FRECUENTES_MIN_CLICS = 8;
-function calcularFrecuentes() {
+/* ---------- Favoritos: entradas que cada persona fija arriba con la estrella ----------
+   Reemplaza a "Frecuentes" (2026-10-16): el menú tiene orden fijo por áreas y
+   nada se mueve solo. MI_PREFERENCIAS.nav_favoritos = [sec de primer nivel].
+   Mientras la persona no fije nada se le proponen sus entradas más usadas
+   (uso_secciones), sin guardarlas. Los items se MUEVEN al bloque (no se
+   clonan: data-sec no puede repetirse) y vuelven a su lugar por data-orden. */
+const FAVORITOS_MAX = 5;
+const FAVORITOS_SEMILLA = 3;
+const FAVORITOS_SEMILLA_MIN_CLICS = 8;
+const favoritosActuales = () => Array.isArray(MI_PREFERENCIAS.nav_favoritos) ? MI_PREFERENCIAS.nav_favoritos : favoritosSemilla();
+function favoritosSemilla() {
   const uso = MI_PREFERENCIAS.uso_secciones || {};
   const total = Object.values(uso).reduce((a, b) => a + b, 0);
-  if (total < FRECUENTES_MIN_CLICS) return [];
+  if (total < FAVORITOS_SEMILLA_MIN_CLICS) return [];
+  actualizarPadresNav();
   // Los clics de una hija suman a su entrada del menú.
   const porEntrada = {};
   Object.entries(uso).forEach(([sec, n]) => { const k = PADRE_DE[sec] || sec; porEntrada[k] = (porEntrada[k] || 0) + n; });
   return Object.entries(porEntrada)
-    .filter(([sec]) => document.querySelector(`#sidebar-nav > .nav-item:not(.nav-hijo)[data-sec="${sec}"]`))
+    .filter(([sec]) => { const el = document.querySelector(`#sidebar-nav > .nav-top[data-sec="${sec}"]`); return el && getComputedStyle(el).display !== 'none'; })
     .sort((a, b) => b[1] - a[1])
-    .slice(0, FRECUENTES_N)
+    .slice(0, FAVORITOS_SEMILLA)
     .map(([sec]) => sec);
 }
 function ocultarHeadersVaciosMenu() {
@@ -26751,7 +26986,9 @@ function navVisiblePorRol(el) {
   if (!NAV_VIS.has(el)) conSondeoNav(() => document.querySelectorAll('#sidebar-nav > .nav-item').forEach(x => NAV_VIS.set(x, getComputedStyle(x).display !== 'none')));
   return NAV_VIS.has(el) ? NAV_VIS.get(el) : conSondeoNav(() => getComputedStyle(el).display !== 'none');
 }
-function hijasVisibles(padre) { return NAV_ITEMS.filter(it => it.padre === padre && navVisiblePorRol(navItemDe(it.sec))); }
+// El sondeo no ve las reglas nav-ver-<sec>: una hija opcional (Meta DM) solo es pestaña si la persona la activó.
+const navOpcionalApagada = sec => NAV_OPCIONALES.some(o => o.sec === sec) && !navExtraActivas().includes(sec);
+function hijasVisibles(padre) { return NAV_ITEMS.filter(it => it.padre === padre && !navOpcionalApagada(it.sec) && navVisiblePorRol(navItemDe(it.sec))); }
 function actualizarPadresNav() {
   document.querySelectorAll('#sidebar-nav > .nav-padre').forEach(p => p.classList.toggle('nav-padre-vacio', !hijasVisibles(p.dataset.sec).length));
 }
@@ -26769,8 +27006,13 @@ function pintarPestanasNav(sec, secEl) {
   if (!padre) return;
   const hermanas = hijasVisibles(padre);
   if (hermanas.length < 2) return;
+  // El badge de la hija (oculta en el menú) se repite en su pestaña si tiene algo.
+  const badgeDe = it => { const b = it.badge && document.getElementById(it.badge), t = b && b.style.display !== 'none' ? b.textContent.trim() : ''; return /^[1-9]/.test(t) ? ` <span class="badge">${esc(t)}</span>` : ''; };
   secEl.insertAdjacentHTML('afterbegin', `<div class="seg-group nav-tabs-sec" role="tablist">${hermanas.map(it =>
-    `<button type="button" class="seg${it.sec === sec ? ' on' : ''}" role="tab" aria-selected="${it.sec === sec}" data-nav-tab="${it.sec}"><i class="${it.icon}"></i> ${esc(it.label)}</button>`).join('')}</div>`);
+    `<button type="button" class="seg${it.sec === sec ? ' on' : ''}" role="tab" aria-selected="${it.sec === sec}" data-nav-tab="${it.sec}"><i class="${it.icon}"></i> ${esc(it.label)}${badgeDe(it)}</button>`).join('')}</div>`);
+  // En el celular las pestañas desbordan: la activa queda centrada a la vista.
+  const g = esMovil() && secEl.querySelector('.nav-tabs-sec'), on = g && g.querySelector('.seg.on');
+  if (on) g.scrollLeft = on.offsetLeft - (g.clientWidth - on.offsetWidth) / 2;
 }
 // Tras reordenar los padres, cada hija vuelve pegada a su padre (así el
 // buscador las muestra en su lugar).
@@ -26780,30 +27022,45 @@ function acomodarHijasNav() {
     document.querySelectorAll(`#sidebar-nav > .nav-hijo[data-padre="${p.dataset.sec}"]`).forEach(h => { ref.after(h); ref = h; });
   });
 }
-function renderFrecuentes() {
-  const top = calcularFrecuentes();
-  [
-    { contId: 'sidebar-nav', itemCls: 'nav-freq', labelHtml: '<div class="nav-label" data-label="frecuentes" data-grupo-frec>Frecuentes</div>' },
-  ].forEach(({ contId, itemCls, labelHtml }) => {
-    const cont = document.getElementById(contId);
-    if (!cont) return;
-    cont.querySelector('[data-grupo-frec]')?.remove();
-    cont.querySelectorAll('.' + itemCls).forEach(n => n.classList.remove(itemCls));
-    if (!top.length) return;
-    const primerHijo = cont.querySelector('.nav-item, .nav-label, .sheet-item, .sheet-label');
-    if (!primerHijo) return;
-    primerHijo.insertAdjacentHTML('beforebegin', labelHtml);
-    const marcador = cont.querySelector('[data-grupo-frec]');
-    // .slice().reverse(): marcador.after(el) inserta cada uno pegado al
-    // marcador, empujando abajo al anterior -- sin invertir, el orden final
-    // queda al revés (el menos clickeado de los 6 primero).
-    top.slice().reverse().forEach(sec => {
-      const el = cont.querySelector(`[data-sec="${sec}"]`);
-      if (!el) return;
-      el.classList.add(itemCls);
+function renderFavoritos() {
+  const nav = document.getElementById('sidebar-nav');
+  if (!nav) return;
+  nav.querySelector('[data-grupo-fav]')?.remove();
+  // Los que estaban arriba vuelven a su lugar: antes de la primera entrada o
+  // título con data-orden mayor que siga en su sitio (o al final del menú).
+  nav.querySelectorAll(':scope > .nav-favorito').forEach(el => {
+    el.classList.remove('nav-favorito');
+    const o = Number(el.dataset.orden);
+    const sig = [...nav.querySelectorAll(':scope > [data-orden]:not(.nav-favorito)')].find(x => x !== el && Number(x.dataset.orden) > o);
+    nav.insertBefore(el, sig || document.getElementById('nav-items-anchor'));
+  });
+  const favs = favoritosActuales();
+  nav.querySelectorAll('.nav-fav').forEach(s => {
+    const on = favs.includes(s.dataset.fav);
+    s.querySelector('i').className = (on ? 'fas' : 'far') + ' fa-star';
+    s.title = on ? 'Quitar de Favoritos' : 'Fijar en Favoritos';
+  });
+  if (favs.length) {
+    const primero = nav.querySelector(':scope > .nav-item, :scope > .nav-label');
+    primero?.insertAdjacentHTML('beforebegin', '<div class="nav-label" data-label="favoritos" data-grupo-fav>Favoritos</div>');
+    const marcador = nav.querySelector('[data-grupo-fav]');
+    // .reverse(): marcador.after() empuja abajo al anterior; sin invertir quedarían al revés.
+    favs.slice().reverse().forEach(sec => {
+      const el = nav.querySelector(`:scope > .nav-top[data-sec="${sec}"]`);
+      if (!el || !marcador) return;
+      el.classList.add('nav-favorito');
       marcador.after(el);
     });
-  });
+  }
+  acomodarHijasNav();
+}
+function alternarFavorito(sec) {
+  const favs = favoritosActuales();
+  if (!favs.includes(sec) && favs.length >= FAVORITOS_MAX) { errToast(`Podés fijar hasta ${FAVORITOS_MAX} favoritos. Quitá uno primero.`); return; }
+  const nuevos = favs.includes(sec) ? favs.filter(s => s !== sec) : [...favs, sec];
+  guardarPreferencia('nav_favoritos', nuevos, 'nav-favoritos');
+  renderFavoritos();
+  ocultarHeadersVaciosMenu();
 }
 
 /* ---------- Ocultar headers de grupo sin items visibles ----------
@@ -27000,9 +27257,11 @@ function cargarSeccion(sec) {
 }
 function setupNav() {
   // Delegado (no querySelectorAll+forEach puntual): NAV_ITEMS regenera los
-  // .nav-item/.sheet-item dinámicamente (renderNavItems/renderFrecuentes), un
+  // .nav-item/.sheet-item dinámicamente (renderNavItems/renderFavoritos), un
   // binding hecho una sola vez al boot no los cubriría.
   document.addEventListener('click', e => {
+    const fav = e.target.closest('#sidebar-nav .nav-fav');
+    if (fav) { e.preventDefault(); e.stopPropagation(); alternarFavorito(fav.dataset.fav); return; }
     const n = e.target.closest('.nav-item[data-sec], .nav-tabs-sec [data-nav-tab]');
     if (!n) return;
     const sec = n.dataset.navTab || (n.dataset.sec.startsWith('grp-') ? destinoDePadre(n.dataset.sec) : n.dataset.sec);
@@ -27014,7 +27273,10 @@ function setupNav() {
     const id = b.dataset.mfs;
     b.classList.contains('mfs-trigger') ? openSheet(id) : closeSheet(id);
   }));
-  setupSidebarReorder();
+  document.getElementById('sidebar-nav')?.addEventListener('keydown', e => {
+    const fav = e.target.closest('.nav-fav');
+    if (fav && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); alternarFavorito(fav.dataset.fav); }
+  });
   setupNavBuscador();
 }
 
@@ -27439,66 +27701,6 @@ function setupLongPressSeleccion() {
   document.addEventListener('click', e => {
     if (disparado) { e.preventDefault(); e.stopPropagation(); disparado = false; }
   }, true);
-}
-
-/* ---------- Orden de la sidebar a mano (drag & drop, guardado en
-   preferencias.orden_sidebar) ---------- Solo el sidebar de escritorio;
-   bottom-nav/more-sheet mobile quedan con su orden fijo de siempre. Los
-   nav-label también entran en el orden guardado (se arrastran los nav-item,
-   pero las etiquetas de grupo se mueven junto con ellos al reconstruir). */
-function setupSidebarReorder() {
-  const nav = document.getElementById('sidebar-nav');
-  if (!nav) return;
-  let dragEl = null;
-  nav.querySelectorAll(':scope > .nav-top:not(.nav-freq)').forEach(item => {
-    item.draggable = true;
-    item.addEventListener('dragstart', () => { dragEl = item; item.classList.add('dragging'); });
-    item.addEventListener('dragend', () => {
-      item.classList.remove('dragging');
-      nav.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-      dragEl = null;
-      acomodarHijasNav();
-      guardarOrdenSidebar();
-    });
-    item.addEventListener('dragover', e => {
-      e.preventDefault();
-      if (!dragEl || dragEl === item) return;
-      item.classList.add('drag-over');
-      const before = (e.clientY - item.getBoundingClientRect().top) < item.offsetHeight / 2;
-      nav.insertBefore(dragEl, before ? item : item.nextSibling);
-    });
-    item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
-  });
-}
-function guardarOrdenSidebar() {
-  const orden = [...document.querySelectorAll('#sidebar-nav > .nav-top:not(.nav-freq)')].map(el => 'sec:' + el.dataset.sec);
-  if (JSON.stringify(orden) === JSON.stringify(MI_PREFERENCIAS.orden_sidebar_v3 || null)) return;
-  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, orden_sidebar_v3: orden };
-  // sb.rpc() devuelve un builder "thenable" de postgrest-js, no una Promise real:
-  // tiene .then() pero NO .catch(). Llamar .catch() directo tira
-  // "TypeError: sb.rpc(...).catch is not a function" y, al ocurrir dentro de
-  // startApp, cortaba la inicialización entera (sin KPIs ni gráficas).
-  // Promise.resolve() lo normaliza a Promise real antes de encadenar .catch().
-  Promise.resolve(sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS })).catch(() => {});
-}
-function aplicarOrdenSidebar() {
-  // orden_sidebar (sin sufijo) es el guardado bajo el esquema VIEJO de 4
-  // grupos (principal/tarifario/gestion/ayuda) -- reproducirlo tal cual tras
-  // el regrupamiento a 7 grupos amontona los grupos nuevos (ventas/ia/
-  // marketing) al final, vacíos, porque no existen en ese array viejo.
-  // orden_sidebar_v2 fue el de 7 grupos; con el menú agrupado (2026-09-25)
-  // v3 ordena solo las 12 entradas y arranca limpio para todos.
-  const orden = MI_PREFERENCIAS.orden_sidebar_v3;
-  const nav = document.getElementById('sidebar-nav');
-  if (!orden?.length || !nav) return;
-  // Las entradas que no estén en el orden guardado (nuevas) quedan al
-  // final, en su posición original entre sí.
-  const pos = el => { const i = orden.indexOf('sec:' + el.dataset.sec); return i < 0 ? Infinity : i; };
-  const ancla = document.getElementById('nav-items-anchor');
-  [...nav.querySelectorAll(':scope > .nav-top')].map((el, i) => [el, i])
-    .sort((a, b) => (pos(a[0]) - pos(b[0])) || (a[1] - b[1]))
-    .forEach(([el]) => nav.insertBefore(el, ancla));
-  acomodarHijasNav();
 }
 
 /* ---------- Recordar la última sección visitada (preferencias.ultima_seccion) ----------
@@ -28327,7 +28529,19 @@ function entrarModoBoleteria(sec) {
   modoBoleteria = true;
   document.body.classList.add('modo-boleteria');
   ubicarSolicitudesNav();
-  activateSection(typeof sec === 'string' ? sec : (ROL === 'boleteria' ? 'bol-solicitudes' : 'boleteria'));
+  activateSection(typeof sec === 'string' ? sec : 'bol-solicitudes');
+}
+// En el celular el cambio de modo cierra el menú al instante: la pastilla del
+// switch se desliza primero (clase va-*, index.html) y recién después cambia.
+function conPausaModoMovil(fn, clase) {
+  return () => {
+    const sw = document.getElementById('modo-switch');
+    if (!esMovil() || !sw) return fn();
+    if (sw.classList.contains('va-bol') || sw.classList.contains('va-hosp')) return;
+    sw.classList.add(clase);
+    navigator.vibrate?.(12);
+    setTimeout(() => { sw.classList.remove(clase); fn(); }, 220);
+  };
 }
 function salirModoBoleteria() {
   modoBoleteria = false;
@@ -28383,8 +28597,8 @@ function setupBoleteriaSeccion() {
     else if (acc === 'asignar') bolAsignarAerolinea(Number(id));
     else if (acc === 'historico') bolHistoricoRuta(Number(id));
   });
-  document.getElementById('btn-entrar-modo-boleteria')?.addEventListener('click', entrarModoBoleteria);
-  document.getElementById('btn-salir-modo-boleteria')?.addEventListener('click', salirModoBoleteria);
+  document.getElementById('btn-entrar-modo-boleteria')?.addEventListener('click', conPausaModoMovil(entrarModoBoleteria, 'va-bol'));
+  document.getElementById('btn-salir-modo-boleteria')?.addEventListener('click', conPausaModoMovil(salirModoBoleteria, 'va-hosp'));
   document.getElementById('sheet-entrar-modo-boleteria')?.addEventListener('click', entrarModoBoleteria);
   document.getElementById('sheet-salir-modo-boleteria')?.addEventListener('click', salirModoBoleteria);
 }

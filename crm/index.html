@@ -193,11 +193,10 @@ body::before{content:'';position:fixed;inset:0;background:
 .nav-item.active i{color:var(--accent-ink)}
 .nav-item .badge{margin-left:auto;background:var(--accent);color:var(--on-accent);font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px}
 .nav-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.nav-item.nav-freq{background:rgba(var(--accent-rgb),.05)}
+.nav-item.nav-favorito{background:rgba(var(--accent-rgb),.05)}
 .nav-buscar{width:100%;box-sizing:border-box;margin:2px 0 6px;padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--txt);font-size:12.5px;font-family:inherit}
 .nav-buscar::placeholder{color:var(--muted2)}
 .side-foot{flex-shrink:0;padding:14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
-.side-foot-col{flex-direction:column;align-items:stretch}
 .side-foot-row{display:flex;align-items:center;gap:10px}
 /* Actualizar CRM: hace lo mismo que Ctrl+Shift+R (borra caché + Service Worker
    y recarga). Dos lugares porque el de arriba es el atajo a mano y el de abajo
@@ -208,9 +207,6 @@ body::before{content:'';position:fixed;inset:0;background:
 .refresh-btn .fa-rotate{transition:transform .3s}
 .refresh-btn.girando .fa-rotate{animation:rb-spin .7s linear infinite}
 @keyframes rb-spin{to{transform:rotate(360deg)}}
-.refresh-btn-lg{width:auto;height:50px;flex:1;margin-left:0;border-radius:13px;display:flex;align-items:center;justify-content:center;gap:9px;font-size:13px;font-weight:700;padding:0 14px}
-.refresh-btn-lg span{white-space:nowrap}
-.logout-btn-lg{width:50px;height:50px;font-size:18px;border-radius:13px;background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);color:#ff6b6b}
 .jornada-widget{margin:8px 10px 0;padding:7px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--line);display:flex;align-items:center;gap:8px}
 .jornada-dot{width:8px;height:8px;border-radius:50%;background:var(--muted2);flex-shrink:0}
 .jornada-dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(16,185,129,.18)}
@@ -272,9 +268,36 @@ body:has(#vista-previa-banner){padding-top:36px}
 .strike-row{display:flex;align-items:center;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--line);font-size:12.5px}
 .strike-row:last-child{border-bottom:none}
 .avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-deep));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#1a1000;flex-shrink:0;background-size:cover;background-position:center}
-.side-foot .un{font-size:12.5px;font-weight:600}.side-foot .ue{font-size:10.5px;color:var(--muted)}
-.sidebar-perfil{display:flex}
-.side-foot-perfil{display:flex;align-items:center;gap:10px;flex:1;background:transparent;border:none;padding:0;cursor:pointer;color:inherit;font-family:inherit;border-radius:8px}
+.sidebar-perfil{display:flex;align-items:center;gap:8px;margin-top:6px}
+.side-foot-perfil{display:flex;align-items:center;gap:10px;flex:1;min-width:0;background:transparent;border:none;padding:0;cursor:pointer;color:inherit;font-family:inherit;border-radius:8px}
+/* Jornada dentro del perfil (2026-10-16): punto sobre el avatar + subtítulo + botón ícono. */
+.side-avatar-wrap{position:relative;flex-shrink:0;display:flex}
+.side-avatar-wrap .jornada-dot{position:absolute;right:-2px;bottom:-2px;width:12px;height:12px;border:2px solid var(--bg2)}
+.side-perfil-t{display:flex;flex-direction:column;flex:1;min-width:0;text-align:left}
+.side-perfil-t .un{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side-perfil-t .ue{display:none;font-size:10.5px;color:var(--muted)}
+.side-perfil-t .jornada-text{flex:none;font-size:10.5px;margin-top:1px}
+.sidebar-perfil .jornada-btn-ico{width:34px;height:34px;min-height:34px;padding:0;border-radius:10px;font-size:11px;display:flex;align-items:center;justify-content:center}
+.rol-marketing .side-perfil-t .ue{display:block}
+.rol-marketing :is(#jornada-dot-d,#jornada-text-d,#jornada-btn-d){display:none}
+.sidebar-perfil.jornada-pulse .jornada-btn-ico{animation:jornadaPulseIco 1.2s ease-in-out 2}
+@keyframes jornadaPulseIco{50%{box-shadow:0 0 0 7px rgba(var(--accent-rgb),.25)}}
+/* Switch Hospedajes | Boletería: reemplaza a los dos botones del pie. */
+.modo-switch{display:flex;gap:3px;margin-top:8px;padding:3px;border-radius:11px;background:rgba(var(--ink-rgb,255,255,255),.04);border:1px solid var(--line)}
+.modo-seg{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 8px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s,color .15s}
+.modo-seg:hover{color:var(--txt)}
+body:not(.modo-boleteria) .modo-seg-hosp,body.modo-boleteria .modo-seg-bol{background:var(--accent-soft);color:var(--accent-ink);pointer-events:none}
+body.modo-boleteria .modo-seg-bol{background:rgba(46,107,255,.2);color:#7fb0ff}
+:root[data-theme="light"] body.modo-boleteria .modo-seg-bol{color:#124aa5}
+.rol-boleteria .modo-switch,.rol-marketing .modo-switch,body.asesor-boleteria .modo-switch{display:none}
+/* Pie en una fila: cerrar sesión a la izquierda, Lyra (orbe) a la derecha. */
+.side-foot.side-foot-row{padding:8px 14px}
+.side-logout{width:auto;display:flex;align-items:center;gap:8px;padding:0 12px;font-family:inherit;font-size:12px}
+.lyra-dock.lyra-dock-mini{width:auto;margin-left:auto;padding:2px;gap:0;border-radius:50%;background:transparent;border-color:transparent}
+.lyra-dock.lyra-dock-mini .lyra-orb{--s:40px}
+.lyra-dock-mini :is(.lyra-dock-t,.lyra-dock-k){display:none}
+.lyra-dock.lyra-dock-mini.nuevo::after{top:0;left:auto;right:0}
+.lyra-dock-mini .lyra-mic{position:absolute;right:-2px;bottom:-2px;width:18px;height:18px;font-size:9px;box-shadow:0 0 0 2px var(--bg2)}
 .side-foot-perfil:hover .un{color:var(--accent-ink)}
 .logout-btn{background:transparent;border:1px solid var(--line);color:var(--muted);width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:13px;flex-shrink:0;transition:color .15s,border-color .15s}
 .logout-btn:hover{color:#ff6b6b;border-color:rgba(255,107,107,.4)}
@@ -283,8 +306,8 @@ body:has(#vista-previa-banner){padding-top:36px}
    Reemplaza a la bottom-nav + swipe entre secciones (2026-08-27). El menú NO
    es un componente nuevo: es el MISMO <aside class="sidebar"> del escritorio,
    que en móvil pasa a position:fixed y se desliza desde la izquierda. Así el
-   catálogo de secciones, el filtrado por rol, el buscador, "Frecuentes" y el
-   orden guardado siguen viviendo en un solo lugar.
+   catálogo de secciones, el filtrado por rol, el buscador y los Favoritos
+   siguen viviendo en un solo lugar.
    Vive dentro de .app (que tiene isolation:isolate): no puede pintar por
    encima de .sheet/#drawer/#lightbox, y no hace falta -- el menú se cierra
    antes de abrir cualquiera de esos. */
@@ -2767,8 +2790,6 @@ body.modo-boleteria .nav-item:not(.nav-modo-boleteria-ok),body.modo-boleteria .b
 body:not(.modo-boleteria) .nav-modo-boleteria-solo{display:none}
 body.asesor-boleteria:not(.modo-boleteria) .nav-modo-boleteria-solo{display:flex}
 body.asesor-boleteria :is(#btn-entrar-modo-boleteria,#sheet-entrar-modo-boleteria,#btn-salir-modo-boleteria,#sheet-salir-modo-boleteria){display:none}
-.modo-boleteria-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(46,107,255,.14);border:1px solid rgba(74,158,255,.4);border-radius:10px;color:#7fb0ff;font-weight:600;font-size:12.5px;padding:9px 10px;cursor:pointer;font-family:inherit;margin-bottom:8px}
-.modo-boleteria-btn:hover{background:rgba(46,107,255,.24)}
 /* Solicitudes: primera del menú, más grande, y late en rojo con pendientes (fijarSolicitudesArriba) */
 #sidebar-nav > .nav-item.nav-bol-sol,#sidebar-nav > #nav-boleteria-home{flex-wrap:wrap;font-size:15px;font-weight:800;padding:13px 14px;margin:4px 0 10px;border-radius:12px;background:linear-gradient(135deg,rgba(46,107,255,.24),rgba(46,107,255,.08));border:1px solid rgba(74,158,255,.45);color:#e3ebff}
 #sidebar-nav > .nav-item.nav-bol-sol > i,#sidebar-nav > #nav-boleteria-home > i{font-size:17px}
@@ -2778,8 +2799,8 @@ body.asesor-boleteria :is(#btn-entrar-modo-boleteria,#sheet-entrar-modo-boleteri
 .nav-bol-sol.pendientes .nav-bol-aviso{display:block}
 @keyframes navBolSolLatido{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55);background:rgba(239,68,68,.12)}50%{box-shadow:0 0 0 7px rgba(239,68,68,0);background:rgba(239,68,68,.3)}}
 @media (prefers-reduced-motion:reduce){#sidebar-nav > .nav-item.nav-bol-sol.pendientes{animation:none;background:rgba(239,68,68,.24)}}
-body.modo-boleteria #btn-entrar-modo-boleteria,body.modo-boleteria #sheet-entrar-modo-boleteria{display:none}
-body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
+body.modo-boleteria #sheet-entrar-modo-boleteria{display:none}
+body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .rol-boleteria #btn-entrar-modo-boleteria,.rol-boleteria #btn-salir-modo-boleteria,.rol-boleteria #sheet-entrar-modo-boleteria,.rol-boleteria #sheet-salir-modo-boleteria{display:none}
 .rol-marketing #btn-entrar-modo-boleteria,.rol-marketing #sheet-entrar-modo-boleteria{display:none}
 .bol-buscador{min-width:260px}
@@ -3002,13 +3023,18 @@ body:not(.modo-boleteria) #btn-salir-modo-boleteria,body:not(.modo-boleteria) #s
    padre. Siguen en el DOM para el buscador (body.nav-buscando) y para el
    sondeo de permisos por rol (body.nav-sondeo, ver conSondeoNav en app.js). */
 body:not(.nav-buscando):not(.nav-sondeo) #sidebar-nav > .nav-hijo{display:none}
+/* Cotizaciones es pestaña de Leads, pero en modo Boletería y para el rol
+   boletería (que no ven Leads) queda como entrada suelta. */
+body.modo-boleteria #sidebar-nav > .nav-hijo[data-sec="cotizacion-boletos"],
+body.rol-boleteria #sidebar-nav > .nav-hijo[data-sec="cotizacion-boletos"]{display:flex}
+#sidebar-nav > .nav-sep{padding:0;margin:8px 10px;height:1px;background:var(--line)}
 /* Mensajes se abre por la burbuja #chat-fab; el ítem sigue en el DOM para que el
    sondeo por rol (chatActualizarVisibilidad) y ?ir=mensajes funcionen. */
 body:not(.nav-sondeo) #sidebar-nav > .nav-item[data-sec="mensajes"]{display:none}
 /* Entradas opcionales: ocultas hasta que el usuario las active en Mi Perfil (body.nav-ver-<sec>,
    ver aplicarPreferencias). Fuera del sondeo de roles y del buscador del menú, que las siguen viendo. */
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-inicio) #sidebar-nav > [data-sec="grp-inicio"],
-body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-dms) #sidebar-nav > [data-sec="dms"],
+body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-bandeja) #sidebar-nav > [data-sec="grp-bandeja"],
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-ia) #sidebar-nav > [data-sec="grp-ia"],
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-marketing) #sidebar-nav > [data-sec="grp-marketing"]{display:none}
 #sidebar-nav > .nav-padre-vacio{display:none}
@@ -3017,10 +3043,14 @@ body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-marketing) #sidebar-na
 .nav-tabs-sec .seg i{margin-right:4px;opacity:.8}
 @media(max-width:760px){.nav-tabs-sec .seg{flex:0 0 auto}}
 
-/* Sidebar reordenable a mano (drag & drop, orden guardado por-usuario) */
-.sidebar-nav .nav-item{cursor:grab}
-.sidebar-nav .nav-item.dragging{opacity:.4;cursor:grabbing}
-.sidebar-nav .nav-item.drag-over{box-shadow:inset 0 2px 0 var(--accent)}
+/* Favoritos (2026-10-16): estrella para fijar una entrada arriba. Va antes del
+   badge: empuja a la derecha y el badge queda pegado a ella. */
+.nav-item .nav-fav{margin-left:auto;padding:2px 4px;font-size:11px;color:var(--muted2);opacity:0;cursor:pointer;transition:opacity .15s,color .15s}
+.nav-item .nav-fav ~ .badge{margin-left:4px}
+.nav-item:hover .nav-fav,.nav-item .nav-fav:focus-visible{opacity:.75}
+.nav-item .nav-fav:hover{color:var(--amber);opacity:1}
+.nav-item.nav-favorito .nav-fav{opacity:1;color:var(--amber)}
+@media (hover:none){.nav-item .nav-fav{opacity:.4}}
 
 /* Tarifario: fila de pestañas + botón de configuración (admin) */
 .tar-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
@@ -3549,6 +3579,57 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .pv-btn{min-height:44px}.pv-doc-grid{grid-template-columns:1fr}
   .rv-3{grid-template-columns:repeat(2,minmax(0,1fr))}.rv-acciones .btn-sm{min-height:40px}
 }
+/* Menú móvil más tocable (2026-10-16): ítems de 50px con el ícono en una
+   baldosa, switch de modo con pastilla que se desliza y pestañas de sección
+   marcadas. Solo móvil: el escritorio quedó aprobado como está. */
+@media(max-width:760px){
+  .sidebar-top{padding:12px 12px 10px;gap:7px}
+  .sidebar-nav{padding:9px 11px;gap:4px}
+  .side-cerrar{width:44px;height:44px;border-radius:12px;font-size:17px}
+  .sidebar .avatar{width:40px;height:40px;font-size:14px}
+  .side-perfil-t .un{font-size:14.5px}
+  .side-perfil-t .jornada-text{font-size:12px}
+  .sidebar-perfil .jornada-btn-ico{width:44px;height:44px;min-height:44px;border-radius:12px;font-size:13px}
+  /* 16px: con menos, iOS hace zoom al enfocar. */
+  .nav-buscar{min-height:44px;margin:2px 0 4px;padding:11px 14px;border-radius:12px;font-size:16px}
+  .sidebar .nav-label{font-size:10.5px;padding:11px 11px 4px}
+  .sidebar .nav-item{min-height:50px;padding:7px 9px;gap:12px;font-size:15px;border-radius:14px;transition:background .16s,color .16s,border-color .16s,transform .16s}
+  .sidebar .nav-item::before{display:none}
+  .sidebar .nav-item>i:first-child{width:36px;height:36px;flex-shrink:0;display:grid;place-items:center;border-radius:11px;background:rgba(var(--ink-rgb,255,255,255),.05);font-size:15px;transition:background .16s,color .16s,transform .16s}
+  .sidebar .nav-item.active>i:first-child{background:var(--accent);color:var(--on-accent)}
+  .sidebar .nav-item:active{transform:scale(.98)}
+  .sidebar .nav-item:active>i:first-child{transform:scale(.9)}
+  .sidebar .nav-item .badge{font-size:11.5px;padding:2px 9px}
+  .nav-item .nav-fav{width:36px;height:36px;display:grid;place-items:center;padding:0;font-size:14px}
+  .side-foot.side-foot-row{padding:10px 12px}
+  .side-logout{height:44px;padding:0 14px;border-radius:12px;font-size:13.5px}
+  .lyra-dock.lyra-dock-mini .lyra-orb{--s:44px}
+  /* Switch Hospedajes | Boletería: una pastilla de color que se desliza al
+     segmento activo (naranja = Hospedajes, azul = Boletería). La clase va-*
+     la pone app.js para que el deslizamiento se vea antes de cerrar el menú. */
+  .modo-switch{position:relative;margin-top:2px;padding:4px;gap:4px;border-radius:14px}
+  .modo-switch::before{content:'';position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 6px);border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-deep));box-shadow:0 8px 18px rgba(var(--accent-rgb),.28);transition:transform var(--dur-normal) var(--ease-salida),background var(--dur-normal),box-shadow var(--dur-normal)}
+  body.modo-boleteria .modo-switch::before,body .modo-switch.va-bol::before{transform:translateX(calc(100% + 4px));background:linear-gradient(135deg,#2e6bff,#1d4fd8);box-shadow:0 8px 18px rgba(46,107,255,.35)}
+  body .modo-switch.va-hosp::before{transform:none;background:linear-gradient(135deg,var(--accent),var(--accent-deep));box-shadow:0 8px 18px rgba(var(--accent-rgb),.28)}
+  .modo-seg{position:relative;z-index:1;min-height:46px;gap:8px;border-radius:10px;font-size:14px;font-weight:700;transition:color var(--dur-normal),transform .16s}
+  .modo-seg i{font-size:15px}
+  .modo-seg:active{transform:scale(.95)}
+  body:not(.modo-boleteria) .modo-seg-hosp,body .modo-switch.va-hosp .modo-seg-hosp{background:transparent;color:var(--on-accent)}
+  body.modo-boleteria .modo-seg-bol,:root[data-theme="light"] body.modo-boleteria .modo-seg-bol,body .modo-switch.va-bol .modo-seg-bol{background:transparent;color:#fff}
+  body .modo-switch.va-bol .modo-seg-hosp,body .modo-switch.va-hosp .modo-seg-bol,:root[data-theme="light"] body .modo-switch.va-hosp .modo-seg-bol{color:var(--muted)}
+  /* Fuera del menú también se nota el modo: raya azul bajo la barra y botón de menú azul. */
+  body.modo-boleteria .mobile-brand{box-shadow:inset 0 -2px 0 #2e6bff}
+  body.modo-boleteria .menu-btn{border-color:rgba(46,107,255,.6);color:#7fb0ff}
+  :root[data-theme="light"] body.modo-boleteria .menu-btn{color:#124aa5}
+  /* Pestañas de la sección (pintarPestanasNav): más altas, la activa rellena. */
+  .nav-tabs-sec{position:relative;display:flex;width:100%;box-sizing:border-box;margin-bottom:14px;padding:4px;gap:4px;border-radius:14px;scroll-snap-type:x proximity}
+  .nav-tabs-sec .seg{min-height:42px;padding:0 14px;display:inline-flex;align-items:center;gap:7px;border-radius:10px;font-size:13.5px;font-weight:700;scroll-snap-align:center;transition:background .16s,color .16s,transform .16s}
+  .nav-tabs-sec .seg i{margin-right:0;font-size:13px}
+  .nav-tabs-sec .seg.on{background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:var(--on-accent);box-shadow:0 6px 16px rgba(var(--accent-rgb),.25)}
+  .nav-tabs-sec .seg.on i{opacity:1}
+  body.modo-boleteria .nav-tabs-sec .seg.on{background:linear-gradient(135deg,#2e6bff,#1d4fd8);color:#fff;box-shadow:0 6px 16px rgba(46,107,255,.3)}
+  .nav-tabs-sec .seg:active{transform:scale(.95)}
+}
 /* "Reducir movimiento": apaga TODA la animación de cambio de sección, no solo
    section-in. Antes sw-izq/sw-der (el empujón del swipe) y card-in (entrada
    escalonada de listas) seguían corriendo igual, que es justo lo que marea. */
@@ -3749,13 +3830,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* on_request va en ámbar Y punteado: el color solo no alcanza en daltonismo ni
    en una captura en blanco y negro. */
 .ss-dia.req{background:rgba(224,160,48,.2);border:1px dashed rgba(224,160,48,.55)}
-.ss-dia.hoy{box-shadow:0 0 0 1px var(--accent) inset}
+.ss-dia.hoy{box-shadow:0 0 0 2px var(--accent) inset}
 .ss-dia.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.ss-dia.hoy.sel{box-shadow:0 0 0 2px var(--accent) inset,0 0 0 2px var(--accent-soft)}
 .ss-leyenda{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:12px;font-size:10.5px;color:var(--muted2)}
 .ss-leyenda span{display:inline-flex;align-items:center;gap:5px}
 .ss-leyenda i{width:13px;height:13px;border-radius:4px;display:inline-block}
-.ss-detalle{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
-.ss-detalle-t{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:9px}
+.ss-leyenda i.ss-ley-hoy{border:2px solid var(--accent)}
+.ss-leyenda i.ss-ley-dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+/* Día con bloqueo: número + un puntito por hotel, del mismo color que su chip --
+   así se ve QUIÉN está bloqueado sin tener que tocar el día. */
+.ss-dia.hay{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.ss-dots{display:flex;align-items:center;gap:2px;height:7px}
+.ss-dots i{width:6px;height:6px;border-radius:50%;background:var(--c);box-shadow:0 0 0 1px rgba(0,0,0,.35)}
+.ss-dots em{font-style:normal;font-size:8.5px;font-weight:800;line-height:1}
+.ss-cal-wrap{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
+.ss-cal-col{flex:1 1 320px;max-width:440px;min-width:0}
+.ss-cal-wrap #ss-detalle{flex:1 1 280px;min-width:0}
+.ss-detalle{border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.02);padding:14px}
+.ss-detalle-t{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px}
+.ss-detalle-sub{font-size:11.5px;color:var(--muted2);margin-bottom:11px;line-height:1.5}
+.ss-detalle-pie{font-size:11px;color:var(--muted2);margin-top:9px;line-height:1.5}
+.ss-hotel-dot{width:9px;height:9px;border-radius:50%;background:var(--c);flex:none}
+.ss-que-hacer{font-size:12px;color:var(--txt);margin-top:2px;line-height:1.5}
 .ss-cal-nota{font-size:11px;color:var(--muted2);text-align:center;margin-top:11px}
 /* --- Tira de días por hotel (vista Hoteles) --- */
 .ss-tira-fila{display:flex;align-items:center;gap:8px;margin-top:5px}
@@ -3770,6 +3867,53 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 #sec-stop-sales .vig-item:hover{transform:translateY(-2px);border-color:rgba(var(--accent-rgb),.3)}
 #ss-calendario,#ss-hoteles{display:none}
 #ss-calendario.show,#ss-hoteles.show{display:block}
+.ss-tira-dias{display:flex;justify-content:space-between;margin:2px 0 0 34px;font-size:8.5px;color:var(--muted2);font-variant-numeric:tabular-nums}
+/* --- Stop Sales (2026-10-16): frescura del dato, guía de estados, "¿Puedo vender?", pasos de carga --- */
+.ss-fresco{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02);padding:9px 14px;margin-bottom:14px;font-size:12px;color:var(--muted);line-height:1.5}
+.ss-fresco>div>i{color:var(--accent-ink);margin-right:7px}
+.ss-fresco b{color:var(--txt)}
+.ss-fresco.viejo{border-color:color-mix(in srgb,var(--amber) 45%,transparent);background:color-mix(in srgb,var(--amber) 9%,transparent)}
+.ss-fresco.viejo>div>i{color:var(--amber)}
+.ss-guia{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px;margin-bottom:14px}
+.ss-guia-it{display:flex;gap:11px;align-items:flex-start;border:1px solid color-mix(in srgb,var(--c) 32%,transparent);background:color-mix(in srgb,var(--c) 7%,transparent);border-radius:12px;padding:11px 14px}
+.ss-guia-it>i{color:var(--c);font-size:16px;margin-top:2px}
+.ss-guia-it b{font-size:13px;color:var(--txt)}
+.ss-guia-bt{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted2);margin-left:7px}
+.ss-guia-it p{margin:4px 0 0;font-size:11.5px;line-height:1.5;color:var(--muted)}
+.ss-verif-form{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:11px;margin-top:4px}
+.ss-verif-form label{display:flex;flex-direction:column;min-width:0}
+.ss-v-hint{margin-top:14px;font-size:12px;color:var(--muted2)}
+.ss-v-error{margin-top:14px;font-size:12px;color:var(--danger)}
+.ss-veredicto{display:flex;gap:14px;align-items:flex-start;margin-top:14px;border:1px solid color-mix(in srgb,var(--c) 40%,transparent);background:color-mix(in srgb,var(--c) 10%,transparent);border-radius:14px;padding:14px}
+.ss-veredicto>i{font-size:22px;color:var(--c);margin-top:2px}
+.ss-veredicto-t{font-size:17px;font-weight:800;color:var(--txt);letter-spacing:-.01em}
+.ss-veredicto p{margin:4px 0 0;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.ss-v-noches{display:flex;flex-wrap:wrap;gap:4px;margin-top:11px}
+.ss-v-noche{width:38px;border-radius:9px;border:1px solid color-mix(in srgb,var(--green) 35%,transparent);background:color-mix(in srgb,var(--green) 12%,transparent);padding:4px 0;text-align:center;font-variant-numeric:tabular-nums}
+.ss-v-noche b{display:block;font-size:12px;color:var(--txt)}
+.ss-v-noche span{font-size:9px;font-weight:800;text-transform:uppercase;color:var(--muted2)}
+.ss-v-noche.st{background:color-mix(in srgb,var(--danger) 35%,transparent);border-color:color-mix(in srgb,var(--danger) 55%,transparent)}
+.ss-v-noche.rq{background:color-mix(in srgb,var(--amber) 22%,transparent);border:1px dashed color-mix(in srgb,var(--amber) 60%,transparent)}
+.ss-v-tramos{margin-top:9px;font-size:12px;color:var(--muted);line-height:1.7}
+.ss-v-tramos b{color:var(--txt)}
+.ss-rotulo{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:7px}
+.ss-rotulo span{font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted2);margin-left:4px}
+.ss-filtro-activo{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:-4px 0 14px}
+.ss-filtro-activo b{color:var(--txt)}
+.ss-admin>summary .ss-admin-meta{text-transform:none;letter-spacing:0;font-weight:500;color:var(--muted2)}
+.ss-steps{display:flex;gap:7px;flex-wrap:wrap;list-style:none;margin:11px 0 14px;padding:0}
+.ss-steps li{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;color:var(--muted2);border:1px solid var(--line);border-radius:999px;padding:4px 11px 4px 4px}
+.ss-steps li span{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:10.5px;font-weight:800;background:rgba(255,255,255,.06)}
+.ss-steps li.on{color:var(--txt);border-color:var(--accent)}
+.ss-steps li.on span{background:var(--accent);color:var(--on-accent)}
+.ss-steps li.ok{color:var(--muted)}
+.ss-steps li.ok span{background:color-mix(in srgb,var(--green) 22%,transparent);color:var(--green)}
+@media(max-width:760px){
+  .ss-verif-form{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .ss-verif-form .ss-verif-hotel{grid-column:1/-1}
+  .ss-cal-wrap{gap:14px}
+  .ss-cal-col{max-width:none}
+}
 /* --- Ranking de catálogo (Hot Sales por rendimiento medido) --- */
 .rk-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 4px}
 .rk-tools .ei{flex:1;min-width:140px}
@@ -5062,7 +5206,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 :root[data-theme="light"] .sidebar{background:linear-gradient(180deg,rgba(var(--surface-rgb),.9),rgba(var(--surface-rgb),.9))}
 :root[data-theme="light"] .nav-item:hover{background:rgba(var(--ink-rgb),.04)}
 :root[data-theme="light"] .nav-buscar{background:rgba(var(--ink-rgb),.03)}
-:root[data-theme="light"] .logout-btn-lg{color:#9c1111}
 :root[data-theme="light"] .jornada-widget{background:rgba(var(--ink-rgb),.03)}
 :root[data-theme="light"] .jornada-dot.on{box-shadow:0 0 0 3px rgba(16,185,129,.072)}
 :root[data-theme="light"] .jornada-btn.on{color:#961d1d}
@@ -5181,7 +5324,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 :root[data-theme="light"] .login-err{color:#9c1111}
 :root[data-theme="light"] body.modo-boleteria .sidebar{background:linear-gradient(180deg,rgba(var(--surface-rgb),.96),rgba(var(--surface-rgb),.98))}
 :root[data-theme="light"] body.modo-boleteria .seg.on{color:#1349a9}
-:root[data-theme="light"] .modo-boleteria-btn{color:#124aa5}
 :root[data-theme="light"] .tar-admin-actions{background:rgba(var(--surface-rgb),.9);border:1px solid rgba(var(--ink-rgb),.12);box-shadow:0 4px 12px rgba(var(--ink-rgb),.06)}
 :root[data-theme="light"] .tar-vencido-badge{color:#9b1414}
 :root[data-theme="light"] .tar-sin-hotel-badge{color:#5d4d0c}
@@ -5318,7 +5460,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 :root[data-theme="light"] .brand .bs{color:var(--accent-ink)}
 :root[data-theme="light"] .nav-label{color:var(--muted2)}
 :root[data-theme="light"] .nav-item:hover{background:rgba(var(--ink-rgb),.05);color:var(--txt)}
-:root[data-theme="light"] .nav-item.nav-freq{background:transparent}
+:root[data-theme="light"] .nav-item.nav-favorito{background:transparent}
 :root[data-theme="light"] .nav-item.active{background:rgba(var(--accent-rgb),.13);color:var(--accent-txt);border-color:rgba(var(--accent-rgb),.3);font-weight:700}
 :root[data-theme="light"] .nav-item.active i{color:var(--accent-ink)}
 :root[data-theme="light"] .nav-item.active::before{box-shadow:none}
@@ -5623,20 +5765,22 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
   <!-- Sidebar: menú principal en escritorio, cajón deslizable en móvil -->
   <aside class="sidebar">
     <div class="sidebar-top">
-      <div class="brand"><img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512"><div><div class="bt">Destino y Eventos Lotus 360</div><div class="bs">CRM comercial</div></div>
+      <div class="brand"><img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512"><div><div class="bt">Destino y Eventos Lotus 360</div></div>
         <button class="refresh-btn" data-refresh title="Actualizar el CRM a la última versión" aria-label="Actualizar el CRM"><i class="fas fa-rotate"></i></button>
         <button class="side-cerrar" id="side-cerrar" type="button" aria-label="Cerrar menú"><i class="fas fa-xmark"></i></button>
       </div>
-      <div class="sidebar-perfil">
+      <!-- Perfil + jornada en una fila (2026-10-16): el punto sobre el avatar y
+           el subtítulo dicen si la jornada está activa; el botón la marca. -->
+      <div class="sidebar-perfil" id="jornada-widget-d">
         <button class="side-foot-perfil" id="side-foot-perfil" title="Mi perfil" type="button">
-          <div class="avatar" id="side-avatar">·</div>
-          <div style="flex:1;text-align:left"><div class="un" id="side-un">—</div><div class="ue" id="side-ue">—</div></div>
+          <span class="side-avatar-wrap"><span class="avatar" id="side-avatar">·</span><span class="jornada-dot" id="jornada-dot-d"></span></span>
+          <span class="side-perfil-t"><span class="un" id="side-un">—</span><span class="ue" id="side-ue">—</span><span class="jornada-text" id="jornada-text-d">Jornada inactiva</span></span>
         </button>
+        <button class="jornada-btn jornada-btn-ico" id="jornada-btn-d" type="button" onclick="toggleJornada()" title="Comenzar jornada" aria-label="Comenzar jornada"><i class="fas fa-play"></i></button>
       </div>
-      <div class="jornada-widget" id="jornada-widget-d">
-        <span class="jornada-dot" id="jornada-dot-d"></span>
-        <span class="jornada-text" id="jornada-text-d">Jornada inactiva</span>
-        <button class="jornada-btn" id="jornada-btn-d" onclick="toggleJornada()">Comenzar</button>
+      <div class="modo-switch" id="modo-switch" role="group" aria-label="Modo de trabajo">
+        <button class="modo-seg modo-seg-hosp" id="btn-salir-modo-boleteria" type="button" title="Modo normal: hospedajes y paquetes"><i class="fas fa-hotel"></i> Hospedajes</button>
+        <button class="modo-seg modo-seg-bol" id="btn-entrar-modo-boleteria" type="button" title="Cambiar a modo Boletería"><i class="fas fa-plane-departure"></i> Boletería</button>
       </div>
       <div class="recordatorios-banner" id="recordatorios-banner-d">
         <span>Activá los recordatorios de asistencia</span>
@@ -5646,27 +5790,21 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
       <input class="nav-buscar" id="nav-buscar" type="text" placeholder="Buscar sección..." autocomplete="off">
-      <!-- "Hoy" existe solo en móvil (entraba por la bottom-nav; desde el
-           2026-08-27 entra por acá). En escritorio el punto de partida sigue
-           siendo Dashboard/Leads. -->
-      <a class="nav-item nav-solo-movil nav-marketing-ok nav-boleteria-ok" data-sec="hoy"><i class="fas fa-house"></i> Hoy</a>
+      <!-- "Hoy" salió del menú móvil (2026-10-16); la sección y renderHoy siguen en el código. -->
       <a class="nav-item nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo" id="nav-boleteria-home" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
       <template id="nav-items-anchor"></template>
     </nav>
-    <div class="side-foot side-foot-col">
-      <button class="modo-boleteria-btn" id="btn-entrar-modo-boleteria" type="button" title="Cambiar a modo Boletería"><i class="fas fa-plane-departure"></i> Boletería</button>
-      <button class="modo-boleteria-btn modo-boleteria-volver" id="btn-salir-modo-boleteria" type="button" title="Volver al modo normal"><i class="fas fa-arrow-left"></i> Volver a Hospedajes</button>
-      <div class="side-foot-row">
-        <button class="logout-btn logout-btn-lg" onclick="cerrarSesion()" title="Cerrar sesión"><i class="fas fa-right-from-bracket"></i></button>
-        <button class="refresh-btn refresh-btn-lg" data-refresh title="Actualizar el CRM a la última versión"><i class="fas fa-rotate"></i> <span>Actualizar CRM</span></button>
-      </div>
+    <!-- Pie en una sola fila (2026-10-16): cerrar sesión y Lyra como orbe. El
+         Actualizar quedó solo arriba y el modo Boletería es el switch de la cabecera. -->
+    <div class="side-foot side-foot-row">
+      <button class="logout-btn side-logout" onclick="cerrarSesion()" title="Cerrar sesión" aria-label="Cerrar sesión"><i class="fas fa-right-from-bracket"></i> <span>Cerrar sesión</span></button>
       <!-- Lyra (2026-09-26): la cara del asistente. Solo se ve con body.lyra-on
            (rol con acceso a la sección Asistente); el chat es #lyra-panel. -->
-      <button class="lyra-dock" id="lyra-dock" type="button" aria-controls="lyra-panel" aria-expanded="false" title="Hablar con Lyra (Ctrl+Z)">
+      <button class="lyra-dock lyra-dock-mini" id="lyra-dock" type="button" aria-controls="lyra-panel" aria-expanded="false" title="Hablar con Lyra (Ctrl+Z)" aria-label="Hablar con Lyra">
         <span class="lyra-orb" data-lyra-orb aria-hidden="true"></span>
         <span class="lyra-dock-t"><b>Lyra</b><small class="lyra-estado">En línea</small></span>
         <span class="lyra-mic" title="Escucha activa: el micrófono está abierto" aria-hidden="true"><i class="fas fa-microphone"></i></span>
-        <span class="lyra-dock-k" aria-hidden="true">Ctrl K</span>
+        <span class="lyra-dock-k" aria-hidden="true">Ctrl Z</span>
       </button>
     </div>
   </aside>
@@ -8482,25 +8620,62 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
          esconde toda la SECCIÓN del menú, y acá la sección entera sí debe
          verse -- solo esta caja de adentro es admin-only. -->
     <section class="section" id="sec-stop-sales">
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-          <h2><i class="fas fa-calendar-xmark"></i> Bloqueos vigentes hoy</h2>
-          <button class="ce-mini" id="ss-ver-pdf" type="button" disabled><i class="fas fa-file-pdf"></i> Ver PDF original</button>
+      <div class="ss-fresco" id="ss-fresco">
+        <div><i class="fas fa-file-lines"></i><span id="ss-pdf-meta">Buscando el último PDF de BT…</span></div>
+        <button class="ce-mini" id="ss-ver-pdf" type="button" disabled><i class="fas fa-file-pdf"></i> Ver PDF original</button>
+      </div>
+
+      <div class="ss-guia">
+        <div class="ss-guia-it" style="--c:var(--danger)">
+          <i class="fas fa-ban"></i>
+          <div><b>Sin cupo</b><span class="ss-guia-bt">BT: stop sale</span>
+            <p>El hotel no tiene habitaciones esas noches. No lo ofrezcas: proponé otra fecha u otro hotel.</p></div>
         </div>
-        <div id="ss-pdf-meta" class="muted" style="font-size:11.5px;margin-top:4px"></div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+        <div class="ss-guia-it" style="--c:var(--amber)">
+          <i class="fas fa-clock"></i>
+          <div><b>A confirmar</b><span class="ss-guia-bt">BT: on request</span>
+            <p>Puede haber lugar, pero BT tiene que confirmarlo. No cobres ni le confirmes al cliente hasta tener la respuesta.</p></div>
+        </div>
+        <div class="ss-guia-it" style="--c:var(--green)">
+          <i class="fas fa-circle-check"></i>
+          <div><b>Libre</b>
+            <p>El hotel no figura bloqueado en el PDF de BT para esas noches. Se vende normal.</p></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><i class="fas fa-magnifying-glass"></i> ¿Puedo vender?</h2>
+        <div class="csub">Elegí el hotel y las fechas del cliente: te decimos noche por noche si hay cupo según el último PDF de BT.</div>
+        <div class="ss-verif-form">
+          <label class="ss-verif-hotel"><span class="fl">Hotel</span><select class="ei" id="ss-v-hotel"><option value="">— elegí un hotel —</option></select></label>
+          <label><span class="fl">Entrada (check-in)</span><input type="date" class="ei" id="ss-v-entrada"></label>
+          <label><span class="fl">Salida (check-out)</span><input type="date" class="ei" id="ss-v-salida"></label>
+        </div>
+        <div id="ss-v-resultado"><div class="ss-v-hint">Completá los tres datos y aparece la respuesta acá.</div></div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h2><i class="fas fa-calendar-xmark"></i> Calendario de bloqueos</h2>
+        <div class="csub">Todo lo que BT reportó de hoy en adelante. Tocá un día marcado para ver qué hoteles están bloqueados.</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap">
           <input type="text" class="ei" id="ss-vig-buscar" placeholder="Buscar hotel..." style="flex:1;min-width:150px">
           <div class="view-switch" id="ss-view-switch"></div>
         </div>
-        <div id="ss-vigentes" style="margin-top:12px"></div>
+        <div id="ss-vigentes" style="margin-top:14px"></div>
       </div>
 
-      <div id="ss-admin-box" style="margin-top:20px">
+      <details class="dsec ss-admin" id="ss-admin-box" style="margin-top:14px">
+        <summary><i class="fas fa-cloud-arrow-up dsec-ic"></i> Cargar PDF nuevo de BT Travel <span class="ss-admin-meta" id="ss-admin-ultima"></span><i class="fas fa-chevron-down dsec-arrow"></i></summary>
+        <div class="dsec-body">
+        <ol class="ss-steps" id="ss-steps">
+          <li data-paso="1" class="on"><span>1</span> Subir el PDF</li>
+          <li data-paso="2"><span>2</span> Confirmar hoteles nuevos</li>
+          <li data-paso="3"><span>3</span> Revisar y publicar</li>
+        </ol>
         <div class="ce-intro">
-          BT Travel manda cada tanto un PDF con qué hoteles están <b>en stop sale</b> (sin cupo) o
-          <b>on request</b> (hay que confirmar) para cada día del mes. Subilo acá: se lee solo
-          (sin IA -- lee directo el color de cada celda del PDF, cero riesgo de inventar una
-          fecha) y te muestra la grilla para que la revises antes de confirmar.
+          Cuando BT Travel mande el PDF nuevo por mail, subilo acá. El sistema lo lee solo y te muestra
+          lo que entendió: <b>nada se publica hasta que lo revises y confirmes</b>. Si aparece un hotel que
+          todavía no conoce, te pide que elijas a cuál del tarifario corresponde (se recuerda para la próxima).
         </div>
 
         <label class="fl-drop" id="ss-drop">
@@ -8517,7 +8692,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="csub" style="margin-bottom:8px"><i class="fas fa-triangle-exclamation" style="color:#f59e0b"></i> Publicar <b>reemplaza todos</b> los bloqueos publicados antes, no solo los hoteles de este PDF.</div>
           <button class="dbtn save" id="ss-publicar"><i class="fas fa-check"></i> Confirmar y publicar</button>
         </div>
-      </div>
+        </div>
+      </details>
     </section>
 
     <!-- REDES (Instagram + TikTok: métricas + analista IA) -->
