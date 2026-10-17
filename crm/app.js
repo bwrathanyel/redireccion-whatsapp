@@ -24968,13 +24968,13 @@ function chatFaviconPunto(on) {
 }
 
 /* ---------- Voucher (Bloque 15 — disponible para admin y asesor, gate por ROL) ----------
-   La página 1 (datos variables) se genera con jsPDF+autotable; las páginas 2-4
-   (términos y condiciones fijos) se copian tal cual de voucher-terminos.pdf con
-   pdf-lib -- nunca se reescribe ese texto legal a mano. Ambas libs se cargan
-   perezosas (mismo patrón que ensureChart), solo cuando se entra a esta sección. */
+   Las 4 páginas se dibujan con jsPDF+autotable: la 1 con los datos variables y las 2-4 con el
+   texto legal de VC_TERMINOS (copiado palabra por palabra de voucher-terminos.pdf, que ya no
+   se usa) -- ese texto no se retoca sin el OK del dueño. La lib se carga perezosa (mismo
+   patrón que ensureChart), solo cuando se entra a esta sección. */
 let voucherLibsPromise = null;
 function ensureVoucherLibs() {
-  if (window.jspdf && window.PDFLib) return Promise.resolve();
+  if (window.jspdf) return Promise.resolve();
   if (voucherLibsPromise) return voucherLibsPromise;
   const cargarScript = src => new Promise((resolve, reject) => {
     const s = document.createElement('script');
@@ -24983,7 +24983,6 @@ function ensureVoucherLibs() {
   });
   voucherLibsPromise = cargarScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')
     .then(() => cargarScript('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js'))
-    .then(() => cargarScript('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js'))
     // Si un solo intento falla (CDN caído, red cortada), no dejar la promesa
     // rota cacheada para siempre -- el próximo llamado a ensureVoucherLibs()
     // tiene que poder reintentar la carga en vez de heredar el rechazo viejo.
@@ -25619,7 +25618,7 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
   } catch (e) {
     // El registro en `vouchers` (con su numero_factura) ya pudo haberse
     // guardado antes de que fallara la generación del PDF (CDN caído, red
-    // cortada, voucher-terminos.pdf no disponible) -- avisar explícito en vez
+    // cortada, fuentes o logo no disponibles) -- avisar explícito en vez
     // de dejar el botón "colgado" sin feedback, que es lo que ocultaba el bug.
     console.error('generarVoucherPdf', e);
     errToast(registro ? 'El voucher se guardó pero no se pudo generar el PDF, reintentá' : 'No se pudo generar el voucher');
@@ -25628,104 +25627,271 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     btn.disabled = false; vcActualizarPreview();
   }
 };
+// Voucher v2 (2026-10-17): membrete formal, tablas con contorno y condiciones generales dibujadas con jsPDF (ya no se embebe voucher-terminos.pdf).
+const VCP = { navy: [15, 23, 42], naranja: [234, 118, 22], ambar: [245, 158, 11], ambarOsc: [180, 83, 9], gris: [100, 116, 139], linea: [226, 232, 240], suave: [248, 250, 252], verde: [21, 128, 61], cuerpo: [30, 41, 59] };
+const vcpTinte = (rgb, k) => rgb.map(c => Math.round(c + (255 - c) * k));
+const VCP_X0 = 40, VCP_X1 = 572, VCP_W = VCP_X1 - VCP_X0;
+const VCP_RIF = 'J-41293558-5';
+// Degradado del logo (jsPDF no tiene degradados: tiras finas interpoladas).
+const vcpFranja = (doc, x, y, w, h) => { for (let i = 0, n = 90; i < n; i++) { const t = i / (n - 1); doc.setFillColor(...VCP.naranja.map((c, k) => Math.round(c + (VCP.ambar[k] - c) * t))); doc.rect(x + i * w / n, y, w / n + .5, h, 'F'); } };
+// Texto legal de las págs. 2-4 (extraído de voucher-terminos.pdf sin cambiar una palabra; typos incluidos a propósito).
+const VC_TERMINOS = {"intro":[["Conste por el presente documento un condicionado de uso de servicios turísticos ofrecidos por ",false],["DESTINO Y EVENTOS LOTUS 360º ",true],["con RIF ",false],["J-41293558-5 ",true],["quien en adelante será denominado como \"LA AGENCIA\" y adquirido por toda aquella persona natural o jurídica que dispondrá del servicio turístico ofrecido por LA AGENCIA y que en adelante será denominado como \"EL CLIENTE\". En dicho convenio se entenderá por LOS PRESTATARIOS a los prestadores de servicios turísticos como hoteles, empresas de transporte aéreo, fluvial, marítimo y terrestre, restaurantes y cualquiera otra entidad o persona que genere el servicio turístico que se indican en el paquete contratado por EL CLIENTE",false]],"secciones":[{"t":"RESPONSABILIDAD","p":["LA AGENCIA declara explícitamente que obra únicamente como intermediario entre EL CLIENTE y LOS PRESTATARIOS, por consiguiente declina toda responsabilidad por: cualquier daño, herida, accidente, retraso o irregularidad que pudieran ocurrir durante la ejecución de los servicios a las personas que efectúen el viaje por su mediación, todo lo relacionado con el equipaje y demás objetos de su propiedad, por las malas condiciones atmosféricas naturales, por manifestaciones, tumultos, guerras o rumores de guerra o por cualquier caso fortuito o de fuerza mayor y que por ende, no pueda ser imputable a la voluntad de cualquiera de las partes. Cuando EL CLIENTE viaje en cualquier medio de transporte aéreo, fluvial, terrestre o marítimo, conviene en someterse, en caso de accidentes o eventualidades, expresamente a las leyes del país en que este matriculado el referido transporte. En el caso de transporte aéreo, EL CLIENTE conviene en someterse a las condiciones generales de contratación impresas en el billete de la línea aérea, por tanto, LA AGENCIA no puede intervenir ni ser responsable. No obstante a todo lo anterior, la responsabilidad de LA AGENCIA, bien sea que funja como intermediaria u organizadora del viaje, será determinada de acuerdo a las disposiciones legales contenidas en la Ley Orgánica de Turismo de Venezuela y sus reglamentos."]},{"t":"RESERVACIONES","p":["Todos los servicios que LA AGENCIA ofrece deben pre-pagarse estrictamente y sin excepciones, según los lapsos de tiempo estipulados por el proveedor del servicio. Todas las tarifas están sujetas a cambio sin previo aviso cuando se produzca una alteración en los servicios, modificaciones en los costos o en los tipos de cambio previstos, o cuando así lo disponga el prestador del servicio, por causas no imputables a las partes. Una vez vencidos los plazos estipulados para el pago de los servicios reservados (fecha límite de pago) la reserva será automáticamente cancelada y una nueva reserva puede estar sujeta a cambios en las tarifas."]},{"t":"MODIFICACIONES, CAMBIOS, Y ANULACIONES","p":["Todas las modificaciones, cambios y anulaciones en las reservas ya confirmadas y pagadas por parte del CLIENTE deben efectuarse en forma escrita, vía email o vía fax a LA AGENCIA y confirmarse la recepción de la misma posteriormente vía telefónica. EL CLIENTE deberá someterse a las políticas de modificaciones, cambios y anulaciones, así como de los gastos administrativos y penalidades interpuestos por LOS PRESTATARIOS, entendiendo que LA AGENCIA funge como intermediaria y no tiene injerencia en las políticas de LOS PRESTATARIOS, por lo tanto, cualquier reclamo o queja debe dirigirse directamente a LOS PRESTATARIOS, pudiendo LA AGENCIA colaborar en la entrega de dicha queja o reclamo."]},{"t":"REEMBOLSOS","p":["Los boletos aéreos no son reembolsables por LA AGENCIA. Cualquier reembolso está sujeto a las condiciones del servicio interpuestas por el prestador de servicio. Toda solicitud de reembolso por parte del CLIENTE debe efectuarse en forma escrita, vía email o vía fax a LA AGENCIA y confirmarse la recepción de la misma posteriormente vía telefónica. Los reembolsos están sujetos a cargos administrativos descritos en el apartado siguiente."],"aviso":"BAJO NINGÚN CONCEPTO O SITUACIÓN NO SE HACEN DEVOLUCIONES DE DINERO, SOLO CAMBIOS DE FECHA SI ASÍ LO AMERITA EL CASO (EL MISMO PUEDE PRESENTAR MULTAS O CARGOS ADMINISTRATIVOS IMPUESTOS POR EL PRESTADOR DE SERVICIO AL CLIENTE)."},{"t":"CARGOS ADMINISTRATIVOS COBRADOS POR LA AGENCIA","p":["Toda modificación o cambio de reserva ya facturada genera en forma automática, sin excepción, un cargo por concepto de Gastos Administrativos que dependerá del tipo de servicio. Esos cargos se detallarán en el cuadro de honorarios y cargos por servicios al final de este condicionado. Toda anulación de reserva ya facturada generará en forma automática y sin excepción un cargo por gastos administrativos del 15%. Si EL CLIENTE decidiese dejar en LA AGENCIA el monto de su reserva como crédito a cuenta de futuros servicios tomados, será soportado con una Nota de Crédito que tendrá una validez de 1 año a partir del depósito original para utilizar el saldo a favor. Si el paquete anulado incluye boletos aéreos, este monto no es reembolsable por parte de LA AGENCIA, quedando el mismo en custodia del CLIENTE para que lo use en los términos y condiciones que la compañía aérea le imponga al momento de decidir usarlo."]},{"t":"PENALIDADES COBRADAS POR LOS HOTELES","p":["En caso de cancelación de una reservación ya pagada por EL CLIENTE o de no show, se aplicarán las penalidades que impone el hotel en sus políticas del servicio.","En general las políticas implican lo siguiente: a) En temporada baja: 1 noche por no show, si la cancelación es notificada al menos 7 días antes de la fecha de entrada. 100% del total de la reserva si la cancelación no es notificada, si EL CLIENTE no se presenta en la fecha del servicio o si la cancelación es con menos de 7 días de antelación. b) En temporada alta: Será del 100% del total de la reservación. Estas condiciones pueden variar de acuerdo a las políticas particulares de cada hotel."]},{"t":"CAMBIOS DE HOTEL","p":["Si el pasajero llegara al establecimiento y por causas ajenas a LA AGENCIA y producto de alguna deficiencia en el servicio del Hotel, éste quisiera hacer cambio a cualquier otro Hotel de la isla, se deberá pagar la reserva nueva de forma completa y LA AGENCIA tramitará el crédito y la devolución de la reserva original. Es imprescindible que el pasajero exponga los motivos por escrito con todos los detalles posibles de su decisión de cambiar de hotel, para que LA AGENCIA pueda justificar ante el hotel la decisión del CLIENTE y así tramitar el reembolso del hotel. LA AGENCIA dispone de 30 días continuos para efectuar dicho trámite y aplicará las políticas de anulaciones enumeradas joanteriormente. LA AGENCIA se limitará a la intermediación del reclamo, sin tener ninguna injerencia o responsabilidad directa en la decisión del prestador de otorgar o no el reembolso solicitado."]},{"t":"DEPÓSITOS DE GARANTÍA EN LOS HOTELES","p":["Todos los hoteles requieren un depósito o it lu bu en Tarjeta de Crédito como garantía de cualquier imprevisto o gasto adicional a los servicios previamente icu ji, que debeuy ser asumido por EL CLIENTE al momento de la llegada al Hotel y que no puede ser gestionado en ningún caso por LA AGENCIA."]},{"t":"SERVICIO DE TRASLADOS Y TOURS","p":["No se aceptarán pasajeros en estado de ebriedad en ningún servicio de trasladob o de u tours sin excepción, de presentarse esta situación EL h perderá todo derecho al servicio, así como la totalidad del pago realizado por el servicio. De no presentarse EL CLIENTE en el lugar y la hora acordada para el pick up del tour enviado vía correo electrónico por LA AGENCIA, se considerará no show generando un cargo del 100 % del monto pagado. Si EL CLIENTE ha contratado un servicio de traslado aeropuerto-hotel-aeropuerto y este no notifica el retraso con al menos 1 hora de anticipación a la hora pautada para la salida del vuelo a LA AGENCIA, está por ningún concepto se hará responsable de los cargos que puedan generarse por este retraso, pudiendo generar incluso la pérdida del 100% del servicio contratado. En caso de cancelación de una reservación ya pagada por EL CLIENTE o de no show, se aplicarán las penalidades que impone el prestador en sus políticas del servicio."]},{"t":"SERVICIO DE BOLETOS AÉREOS","p":["Todos los boletos aéreos emitidos son no reembolsables, no transferibles y no endosables. Los boletos aéreos están sujetos a las condiciones de la tarifa cotizada. Los boletos aéreos están sujetos a las condiciones de la línea aérea. Si en el primer segmento el pasajero no se presenta al vuelo, el segundo segmento será cancelado automáticamente por lo que deberá dirigirse directamente a la aerolínea para confirmar su segundo segmento. El pasajero deberá presentarse 2 horas antes de la salida de su vuelo nacional y 4 horas antes de la salida de su vuelo internacional. Al momento del check in EL CLIENTE deberá mostrar un documento oficial de identidad con fotografía: DNI, Pasaporte, Cédula de identidad. En caso de viajar con menores de edad deberá presentar partida de nacimiento y permiso de viaje expedido por el ente encargado. EL CLIENTE tiene un lapso de 3 horas una vez emitidos los boletos y mandados a verificar por el mismo, sus datos nombre, apellido y cédula de identidad, si existiese algún error la multa será costeada por el cliente."]},{"t":"SERVICIOS DE ENVÍO DE ENCOMIENDAS","p":["Todos nuestros vouchers de confirmación de reserva y pago, son de carácter electrónico. En los casos que EL CLIENTE requiera se le envíen los físicos de los mismos, facturas o boletos deberá suministrar la dirección a la cual requiera que le enviemos el documento y el costo del envío será por cuenta del CLIENTE."]},{"t":"ACEPTACIÓN","p":["EL CLIENTE declara conocer y aceptar las condiciones generales enunciadas aquí, al cumplirse por lo menos una de las siguientes situaciones: a) realizar el pago del servicio, b) al realizarse la facturación del servicio a crédito por parte de LA AGENCIA, c) al recibir los vouchers de servicio vía electrónica o física, c) al empezar hacer uso del servicio contratado parcial o totalmente, d) al aceptar vía escrita el presupuesto de los servicios ofertados."]}]};
+// Membrete de la pág. 1 y de la pág. 2 (portada de los términos).
+function vcpMembrete(doc, { F, st, logo }) {
+  const font = (s, size, rgb) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...rgb); };
+  vcpFranja(doc, 0, 0, 612, 4);
+  const lh = 66, lw = lh * 313 / 398;
+  if (logo) doc.addImage(logo, 'PNG', VCP_X0, 22, lw, lh);
+  const nx = VCP_X0 + lw + 12;
+  font('bold', 14, VCP.navy); doc.text('DESTINO Y EVENTOS LOTUS 360', nx, 52, { charSpace: .2 });
+  font('semibold', 7.2, VCP.ambarOsc); doc.text('AGENCIA DE VIAJES', nx, 65, { charSpace: 1.6 });
+  font('semibold', 7.6, VCP.navy); doc.text(`RIF ${VCP_RIF}`, VCP_X1, 38, { align: 'right' });
+  font('normal', 7.6, VCP.gris);
+  ['C.C.P. Dinastía, P-3 Oficina 5-4, Naguanagua.', '0241-5144470  ·  0424-4634041', 'Destinoyeventoslotus360@gmail.com']
+    .forEach((l, i) => doc.text(l, VCP_X1, 50 + i * 11, { align: 'right' }));
+  vcpFranja(doc, VCP_X0, 100, VCP_W, 2);
+}
+
+function vcpDibujarVoucher(doc, v, ctx) {
+  const { F, st } = ctx;
+  const nServ = Array.isArray(v.servicios) ? v.servicios.length : 0, pv = nServ ? 4.5 : 6.5, gap = nServ ? 12 : 16;
+  const font = (s, size, rgb) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...rgb); };
+  const usd = n => n != null && n !== '' ? `$${Number(n).toFixed(2)}` : '';
+  const txt = s => String(s ?? '').trim();
+  const borde = (x, y, w, h) => { doc.setDrawColor(...VCP.navy); doc.setLineWidth(.9); doc.rect(x, y, w, h, 'S'); };
+  // Contorno por hoja: si una tabla salta de página, cada tramo queda enmarcado.
+  const conBorde = (opts, x, w) => {
+    const ext = {};
+    doc.autoTable({ ...opts, didDrawCell: d => {
+      const p = doc.internal.getCurrentPageInfo().pageNumber, e = ext[p] || (ext[p] = { y0: d.cell.y, y1: 0 });
+      e.y0 = Math.min(e.y0, d.cell.y); e.y1 = Math.max(e.y1, d.cell.y + d.cell.height);
+    } });
+    const ultima = doc.internal.getCurrentPageInfo().pageNumber;
+    Object.entries(ext).forEach(([p, e]) => { doc.setPage(+p); borde(x, e.y0, w, e.y1 - e.y0); });
+    doc.setPage(ultima);
+    return doc.lastAutoTable.finalY;
+  };
+
+  // Tabla etiqueta/valor a 4 columnas con encabezado oscuro; contorno fuerte afuera, líneas finas adentro.
+  const tabla = (titulo, filas, y, { left = VCP_X0, width = VCP_W, lab = 120, cols = 4 } = {}) => {
+    const etiqueta = { fillColor: VCP.suave, textColor: VCP.gris, fontStyle: st('semibold'), fontSize: 7, cellWidth: lab };
+    return conBorde({
+      startY: y, theme: 'grid', margin: { left, right: 612 - left - width, bottom: 50 }, tableWidth: width,
+      styles: { font: F, fontStyle: st('medium'), fontSize: 9, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: pv, bottom: pv, left: 9, right: 9 }, valign: 'middle' },
+      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 8, lineWidth: 0, cellPadding: { top: 6, bottom: 6, left: 9, right: 9 } },
+      columnStyles: cols === 4 ? { 0: etiqueta, 2: { ...etiqueta, cellWidth: lab - 14 } } : { 0: etiqueta },
+      head: [[{ content: titulo, colSpan: cols, styles: { charSpace: .8 } }]],
+      body: filas,
+    }, left, width);
+  };
+  const ancho = (val, n = 3) => ({ content: txt(val) || '—', colSpan: n });
+
+  vcpMembrete(doc, ctx);
+
+  // ---------- Banda de título ----------
+  const servs = Array.isArray(v.servicios) ? v.servicios : [];
+  const conHosp = !servs.length || [v.destino_hospedaje, v.fecha_entrada, v.fecha_salida, v.modalidad, v.habitaciones].some(Boolean);
+  doc.setFillColor(...VCP.navy); doc.rect(VCP_X0, 114, VCP_W, 42, 'F');
+  font('bold', 14.5, [255, 255, 255]); doc.text(conHosp ? 'VOUCHER DE HOSPEDAJE' : 'VOUCHER DE SERVICIO', VCP_X0 + 14, 140.5, { charSpace: .6 });
+  font('semibold', 10, [255, 255, 255]); doc.text(`FACTURA N° ${txt(v.numero_factura)}`, VCP_X1 - 14, 132, { align: 'right' });
+  font('normal', 8, vcpTinte(VCP.navy, .7)); doc.text(`Fecha de emisión: ${v.fecha_emision}`, VCP_X1 - 14, 146, { align: 'right' });
+
+  // ---------- Saludo ----------
+  font('normal', 8.6, VCP.gris);
+  const saludo = doc.splitTextToSize('¡Felicidades! Se ha hecho acreedor de un servicio turístico de calidad con el sello de Destino y Eventos Lotus 360. Nuestro deseo es brindarle la mayor satisfacción que usted merece.', VCP_W);
+  doc.text(saludo, VCP_X0, 176, { lineHeightFactor: 1.4 });
+  let y = 176 + saludo.length * 12 + 8;
+
+  // ---------- Cliente ----------
+  y = tabla('DATOS DEL CLIENTE', [
+    ['NOMBRE Y APELLIDO', ancho(v.cliente_nombre)],
+    ['DOCUMENTO DE IDENTIDAD', txt(v.documento_identidad) || '—', 'TELÉFONO', txt(v.telefono) || '—'],
+    ['ASESOR(A) DE VENTAS', ancho(v.asesor_nombre)],
+  ], y) + gap;
+
+  // ---------- Reserva ----------
+  const status = txt(v.status_reserva).toUpperCase();
+  const filaStatus = ['STATUS / N° LOCALIZADOR', { content: status || '—', colSpan: 3, styles: { fontStyle: st('bold'), textColor: /ACTIV|CONFIRM/.test(status) ? VCP.verde : VCP.ambarOsc, charSpace: .6 } }];
+  y = tabla(conHosp ? 'DETALLE DE LA RESERVA' : 'PASAJEROS', conHosp ? [
+    ['DESTINO / HOSPEDAJE', { content: txt(v.destino_hospedaje) || '—', colSpan: 3, styles: { fontStyle: st('bold'), fontSize: 10.5 } }],
+    ['FECHA DE ENTRADA', txt(v.fecha_entrada) || '—', 'CHECK IN', txt(v.check_in) || '—'],
+    ['FECHA DE SALIDA', txt(v.fecha_salida) || '—', 'CHECK OUT', txt(v.check_out) || '—'],
+    ['MODALIDAD', txt(v.modalidad) || '—', 'DURACIÓN', txt(v.total_dias) || '—'],
+    ['HABITACIONES / CLASE', ancho(v.habitaciones)],
+    ['ADULTOS', txt(v.adultos) || '—', 'NIÑOS', txt(v.ninos) || 'N/A'],
+    filaStatus,
+  ] : [
+    ['ADULTOS', txt(v.adultos) || '—', 'NIÑOS', txt(v.ninos) || 'N/A'],
+    filaStatus,
+  ], y) + gap;
+
+  // ---------- Servicios adicionales ----------
+  if (servs.length) {
+    y = conBorde({
+      startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
+      styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 6, bottom: 6, left: 9, right: 9 } },
+      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
+      columnStyles: { 0: { cellWidth: 250 }, 3: { halign: 'right', fontStyle: st('semibold') } },
+      head: [['SERVICIOS ADICIONALES', 'FECHA', 'PASAJEROS', 'MONTO']],
+      body: servs.map(s => [s.nombre, s.fecha, s.pax, usd(s.monto)]),
+    }, VCP_X0, VCP_W) + gap;
+  }
+
+  // ---------- Pago ----------
+  if (y + 98 > 742) { doc.addPage(); y = 40; }
+  const yp = y, half = (VCP_W - 16) / 2;
+  const yA = tabla('FORMA DE PAGO', [
+    ['MÉTODO', txt(v.forma_pago) || '—'],
+    ...(v.referencia_pago ? [['REF. PAGO MÓVIL', txt(v.referencia_pago)]] : []),
+  ], yp, { width: half, lab: 70, cols: 2 });
+  const yB = tabla('RESUMEN DE PAGO', [
+    ['TOTAL GENERAL', { content: usd(v.total_general), styles: { halign: 'right', fontStyle: st('semibold') } }],
+    ['PAGADO', { content: usd(v.monto_pagado), styles: { halign: 'right', fontStyle: st('semibold') } }],
+    [{ content: 'RESTA', styles: { fillColor: vcpTinte(VCP.naranja, .9), textColor: VCP.ambarOsc, fontStyle: st('bold'), fontSize: 8.4 } },
+      { content: usd(v.resta), styles: { halign: 'right', fontStyle: st('bold'), fontSize: 13, textColor: VCP.ambarOsc, fillColor: vcpTinte(VCP.naranja, .9) } }],
+  ], yp, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
+  y = Math.max(yA, yB);
+}
+
+// Pie común a las 4 páginas; se dibuja al final, cuando ya se sabe el total.
+function vcpPie(doc, { F, st }, nVoucher = 1) {
+  const n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(...VCP.linea); doc.setLineWidth(.7); doc.line(VCP_X0, 750, VCP_X1, 750);
+    doc.setFont(F, st('normal')); doc.setFontSize(6.8); doc.setTextColor(...VCP.gris);
+    doc.text(`Destino y Eventos Lotus 360  ·  RIF ${VCP_RIF}  ·  0241-5144470  ·  Destinoyeventoslotus360@gmail.com`, 306, 763, { align: 'center' });
+    doc.text(i <= nVoucher ? 'Las condiciones generales de contratación forman parte de este voucher (páginas siguientes).' : 'Condiciones generales de la contratación de servicios turísticos', 306, 773, { align: 'center' });
+    doc.text(`Página ${i} de ${n}`, VCP_X1, 763, { align: 'right' });
+    vcpFranja(doc, 0, 788, 612, 4);
+  }
+}
+
+// Condiciones generales (págs. 2-4): se arman acá con el texto de VC_TERMINOS (extraído de voucher-terminos.pdf,
+// sin cambiar una palabra). Reemplaza el PDF original, que traía fuentes mezcladas, rojo/cursiva y cortes sueltos.
+function vcpDibujarTerminos(doc, ctx, T) {
+  const { F, st, logo } = ctx;
+  const font = (s, size, rgb) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...rgb); };
+  const FS = 8.7, LH = 12.6, YMAX = 740;
+  let y = 0;
+
+  const cabeceraCompacta = () => {
+    vcpFranja(doc, 0, 0, 612, 4);
+    const lh = 34, lw = lh * 313 / 398;
+    if (logo) doc.addImage(logo, 'PNG', VCP_X0, 31, lw, lh);
+    font('bold', 11.5, VCP.navy); doc.text('DESTINO Y EVENTOS LOTUS 360', VCP_X0 + lw + 9, 47, { charSpace: .2 });
+    font('semibold', 6.6, VCP.gris); doc.text('CONDICIONES GENERALES DE LA CONTRATACIÓN DE SERVICIOS TURÍSTICOS', VCP_X0 + lw + 9, 59, { charSpace: .5 });
+    font('semibold', 7.4, VCP.navy); doc.text(`RIF ${VCP_RIF}`, VCP_X1, 47, { align: 'right' });
+    vcpFranja(doc, VCP_X0, 72, VCP_W, 1.6);
+    y = 96;
+  };
+  const portada = () => {
+    vcpMembrete(doc, ctx);
+    doc.setFillColor(...VCP.navy); doc.rect(VCP_X0, 114, VCP_W, 42, 'F');
+    const titulo = 'CONDICIONES GENERALES DE LA CONTRATACIÓN DE SERVICIOS TURÍSTICOS';
+    let size = 11; font('bold', size, [255, 255, 255]);
+    while (doc.getTextWidth(titulo) + .4 * titulo.length > VCP_W - 28 && size > 7) { size -= .1; doc.setFontSize(size); }
+    doc.text(titulo, VCP_X0 + 14, 139.5, { charSpace: .4 });
+    y = 178;
+  };
+  const nuevaPagina = () => { doc.addPage(); cabeceraCompacta(); };
+  const asegurar = h => { if (y + h > YMAX) nuevaPagina(); };
+
+  const medir = (w, b) => { doc.setFont(F, st(b ? 'semibold' : 'normal')); doc.setFontSize(FS); return doc.getTextWidth(w); };
+  const envolver = (runs, ancho) => {
+    const toks = [];
+    (typeof runs === 'string' ? [[runs, false]] : runs).forEach(([t, b]) => t.split(/\s+/).filter(Boolean).forEach(w => toks.push({ w, b, wd: medir(w, b) })));
+    const sp = medir(' ', false), out = [];
+    let cur = [], suma = 0;
+    toks.forEach(k => {
+      const nw = cur.length ? suma + sp * .8 + k.wd : k.wd;
+      if (nw > ancho && cur.length) { out.push(cur); cur = [k]; suma = k.wd; } else { cur.push(k); suma = nw; }
+    });
+    if (cur.length) out.push(cur);
+    return out;
+  };
+  const lineaJustificada = (toks, yy, justificar) => {
+    const sp0 = medir(' ', false), tw = toks.reduce((s, k) => s + k.wd, 0);
+    let sp = toks.length > 1 ? (VCP_W - tw) / (toks.length - 1) : sp0;
+    if (!justificar || sp > sp0 * 4.5) sp = sp0;
+    let x = VCP_X0;
+    toks.forEach(k => { font(k.b ? 'semibold' : 'normal', FS, VCP.cuerpo); doc.text(k.w, x, yy); x += k.wd + sp; });
+  };
+  const parrafo = (runs, { conTitulo = false } = {}) => {
+    const ls = envolver(runs, VCP_W);
+    let i = 0;
+    while (i < ls.length) {
+      let caben = Math.floor((YMAX - y) / LH);
+      if (i === 0 && conTitulo) caben = Math.floor((YMAX - y - 32) / LH);
+      if (caben < Math.min(2, ls.length - i)) { nuevaPagina(); continue; }
+      let n = Math.min(caben, ls.length - i);
+      if (ls.length - i - n === 1 && n > 2) n -= 1;
+      for (let k = 0; k < n; k++, i++) { y += LH; lineaJustificada(ls[i], y, i < ls.length - 1); }
+      if (i < ls.length) nuevaPagina();
+    }
+    y += 5;
+  };
+  const tituloSeccion = t => {
+    asegurar(32 + 2 * LH);
+    y += 12;
+    font('bold', 8.6, VCP.navy); doc.text(t, VCP_X0, y, { charSpace: .5 });
+    doc.setDrawColor(...VCP.linea); doc.setLineWidth(.6); doc.line(VCP_X0, y + 5, VCP_X1, y + 5);
+    vcpFranja(doc, VCP_X0, y + 4.2, 40, 1.6);
+    y += 8;
+  };
+  const pad = 10, lhAviso = 11.8;
+  const medirAviso = t => { doc.setFont(F, st('semibold')); doc.setFontSize(8.2); const ls = doc.splitTextToSize(t, VCP_W - 2 * pad - 6); return { ls, h: ls.length * lhAviso + 2 * pad - 3 }; };
+  const aviso = t => {
+    const lh = lhAviso, { ls, h } = medirAviso(t);
+    asegurar(h + 8); y += 3;
+    doc.setFillColor(...vcpTinte(VCP.naranja, .93)); doc.rect(VCP_X0, y, VCP_W, h, 'F');
+    doc.setDrawColor(...VCP.navy); doc.setLineWidth(.9); doc.rect(VCP_X0, y, VCP_W, h, 'S');
+    doc.setFillColor(...VCP.navy); doc.rect(VCP_X0, y, 4, h, 'F');
+    font('semibold', 8.2, VCP.navy);
+    ls.forEach((l, i) => doc.text(l, VCP_X0 + pad + 6, y + pad + 6 + i * lh));
+    y += h + 8;
+  };
+
+  portada();
+  parrafo(T.intro);
+  T.secciones.forEach(s => {
+    // Una sección con aviso se mantiene entera en la misma página.
+    if (s.aviso) asegurar(32 + s.p.reduce((h, p) => h + envolver(p, VCP_W).length * LH + 5, 0) + medirAviso(s.aviso).h + 11);
+    tituloSeccion(s.t);
+    s.p.forEach((p, i) => parrafo(p, { conTitulo: i === 0 }));
+    if (s.aviso) aviso(s.aviso);
+  });
+  // Firma: nombre, línea y datos, como en el original.
+  asegurar(110); y += 38;
+  font('bold', 9.5, VCP.navy); doc.text('Andric Arevalo', 306, y, { align: 'center' });
+  doc.setDrawColor(...VCP.navy); doc.setLineWidth(.8); doc.line(150, y + 10, 462, y + 10);
+  font('normal', 8.6, VCP.gris); doc.text('V-12.137.282', 306, y + 24, { align: 'center' }); doc.text('Director Comercial', 306, y + 37, { align: 'center' });
+}
+
 async function construirVoucherPdf(v) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  const naranja = [255, 145, 0], gris = [244, 245, 249];
-  doc.setFillColor(...naranja);
-  doc.rect(0, 0, 612, 70, 'F');
+  let F = 'helvetica', st = s => (s === 'normal' || s === 'medium' ? 'normal' : 'bold');
   try {
-    const logo = await cargarImagenBase64('logolotus-negro.png');
-    doc.addImage(logo, 'PNG', 40, 12, 46, 46);
-  } catch (_e) { /* sin logo el voucher igual se genera, solo queda sin el ícono */ }
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
-  doc.text('DESTINO Y EVENTOS LOTUS 360', 100, 40);
-  doc.setTextColor(20, 20, 20); doc.setFontSize(11);
-  doc.text(`FACTURA N° ${v.numero_factura}`, 572, 30, { align: 'right' });
-  doc.text(`FECHA ${new Date(v.created_at).toLocaleDateString('es-VE')}`, 572, 48, { align: 'right' });
-
-  // Datos fiscales de la agencia -- esquina superior izquierda, debajo de la
-  // franja naranja. Fijos (no vienen del registro del voucher).
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
-  doc.text('DESTINO Y EVENTOS LOTUS 360', 40, 82);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
-  doc.text('J-412-9355-85', 40, 92);
-  doc.text('C.C.P. Dinastía, P-3 Oficina 5-4, Naguanagua.', 40, 101);
-  doc.text('0241-5144470 / 0424-4634041', 40, 110);
-  doc.text('Destinoyeventoslotus360@gmail.com', 40, 119);
-
-  doc.setFontSize(14);
-  doc.text('VOUCHER DE SERVICIO', 306, 100, { align: 'center' });
-
-  // Sin hotel y con servicios anexos (voucher solo de excursión/traslado), las filas de hospedaje sobran.
-  const servs = Array.isArray(v.servicios) ? v.servicios : [];
-  const conHosp = !servs.length || [v.destino_hospedaje, v.fecha_entrada, v.fecha_salida, v.modalidad, v.habitaciones].some(Boolean);
-  const HOSP = ['DESTINO / HOSPEDAJE', 'FECHA DE ENTRADA', 'CHECK IN', 'FECHA DE SALIDA', 'CHECK OUT', 'MODALIDAD HOSPEDAJE', 'TOTAL DÍAS DE DISFRUTE', 'CANTIDAD DE HABITACIONES / CLASE'];
-  const filas = [
-    ['NOMBRE Y APELLIDO', v.cliente_nombre || ''],
-    ['DOCUMENTO DE IDENTIFICACIÓN', v.documento_identidad || ''],
-    ['TELÉFONO', v.telefono || ''],
-    ['ASESOR(A) DE VENTAS', v.asesor_nombre || ''],
-    ['DESTINO / HOSPEDAJE', v.destino_hospedaje || ''],
-    ['FECHA DE ENTRADA', v.fecha_entrada || ''],
-    ['CHECK IN', v.check_in || ''],
-    ['FECHA DE SALIDA', v.fecha_salida || ''],
-    ['CHECK OUT', v.check_out || ''],
-    ['MODALIDAD HOSPEDAJE', v.modalidad || ''],
-    ['TOTAL DÍAS DE DISFRUTE', v.total_dias || ''],
-    ['CANTIDAD DE HABITACIONES / CLASE', v.habitaciones || ''],
-    ['CANTIDAD DE ADULTOS', v.adultos ?? ''],
-    ['CANTIDAD DE NIÑOS', v.ninos || 'N/A'],
-    ['STATUS DE LA RESERVA / N° LOCALIZADOR', v.status_reserva || ''],
-  ].filter(([k]) => conHosp || !HOSP.includes(k));
-  doc.autoTable({
-    startY: 132, theme: 'grid', margin: { left: 40, right: 40 },
-    styles: { fontSize: 9, cellPadding: 6 },
-    columnStyles: { 0: { fontStyle: 'bold', fillColor: gris, cellWidth: 220 } },
-    body: filas,
-  });
-
-  if (servs.length) {
-    const pl = (n, s, p) => (n ? `${n} ${n === 1 ? s : p}` : '');
-    doc.autoTable({
-      startY: doc.lastAutoTable.finalY + 16, theme: 'grid', margin: { left: 40, right: 40 },
-      styles: { fontSize: 9, cellPadding: 6 }, headStyles: { fillColor: naranja, textColor: 255, fontStyle: 'bold' },
-      columnStyles: { 0: { cellWidth: 250 }, 3: { halign: 'right' } },
-      head: [['SERVICIOS ADICIONALES', 'FECHA', 'PASAJEROS', 'MONTO']],
-      body: servs.map(s => [
-        [[(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).pdf, s.nombre].filter(Boolean).join(': '), s.opcion, s.detalle].filter(Boolean).join('\n'),
-        [s.fecha ? s.fecha.split('-').reverse().join('/') : '', s.hora].filter(Boolean).join(' '),
-        [pl(s.adultos, 'adulto', 'adultos'), pl(s.ninos, 'niño', 'niños')].filter(Boolean).join(' + '),
-        s.monto != null ? `$${Number(s.monto).toFixed(2)}` : '',
-      ]),
-    });
-  }
-
-  const totales = [
-    ['TOTAL GENERAL', v.total_general != null ? `$${Number(v.total_general).toFixed(2)}` : ''],
-    [`PAGO ${v.forma_pago || ''}`.trim(), v.monto_pagado != null ? `${Number(v.monto_pagado).toFixed(2)}` : ''],
-    ...(v.referencia_pago ? [['N° DE REFERENCIA PAGO MÓVIL', v.referencia_pago]] : []),
-    ['RESTA', v.resta != null ? `$${Number(v.resta).toFixed(2)}` : ''],
-  ];
-  doc.autoTable({
-    startY: doc.lastAutoTable.finalY + 16, theme: 'grid', margin: { left: 40, right: 40 },
-    styles: { fontSize: 9, cellPadding: 6 },
-    columnStyles: { 0: { fontStyle: 'bold', fillColor: naranja, textColor: 255, cellWidth: 220 } },
-    body: totales,
-  });
-
-  const page1Bytes = doc.output('arraybuffer');
-  const { PDFDocument } = window.PDFLib;
-  const page1Doc = await PDFDocument.load(page1Bytes);
-  const finalDoc = await PDFDocument.create();
-  // Con varios servicios la tabla puede pasar a una segunda hoja: se copian todas, no solo la primera.
-  (await finalDoc.copyPages(page1Doc, page1Doc.getPageIndices())).forEach(p => finalDoc.addPage(p));
-  const terminosBytes = await fetch('voucher-terminos.pdf').then(r => r.arrayBuffer());
-  const terminosDoc = await PDFDocument.load(terminosBytes);
-  const paginasTerminos = await finalDoc.copyPages(terminosDoc, terminosDoc.getPageIndices());
-  paginasTerminos.forEach(p => finalDoc.addPage(p));
-  return finalDoc.save();
+    (await cargarFuentesPdf()).forEach(([a, e, b]) => { doc.addFileToVFS(a, b); doc.addFont(a, 'Poppins', e); });
+    F = 'Poppins'; st = s => s;
+  } catch (_e) { /* sin Poppins sale en Helvetica */ }
+  let logo = null;
+  try { const d = await cargarImagenBase64('logo-color.png'); if (d.startsWith('data:image/png')) logo = d; } catch (_e) { /* sin logo el membrete igual sale, solo sin la imagen */ }
+  const ctx = { F, st, logo };
+  const pl = (n, s, p) => (n ? `${n} ${n === 1 ? s : p}` : '');
+  const servicios = (Array.isArray(v.servicios) ? v.servicios : []).map(s => ({
+    nombre: [[(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).pdf, s.nombre].filter(Boolean).join(': '), s.opcion, s.detalle].filter(Boolean).join('\n'),
+    fecha: [s.fecha ? s.fecha.split('-').reverse().join('/') : '', s.hora].filter(Boolean).join(' '),
+    pax: [pl(s.adultos, 'adulto', 'adultos'), pl(s.ninos, 'niño', 'niños')].filter(Boolean).join(' + '),
+    monto: s.monto,
+  }));
+  vcpDibujarVoucher(doc, { ...v, fecha_emision: new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }), servicios }, ctx);
+  const nVoucher = doc.getNumberOfPages();
+  doc.addPage();
+  vcpDibujarTerminos(doc, ctx, VC_TERMINOS);
+  vcpPie(doc, ctx, nVoucher);
+  return doc.output('arraybuffer');
 }
 
 /* ---------- Cotización de boletos (2026-10-12) ----------
