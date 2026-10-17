@@ -7098,7 +7098,7 @@ function riaCambio(actual, anterior, ref = 'el período anterior') {
 }
 const riaRefTexto = dias => dias === 1 ? 'ayer a esta hora' : `los ${dias} días anteriores`;
 const riaMinTexto = m => m >= 1440 ? `${Math.floor(m / 1440)} d ${Math.floor(m % 1440 / 60)} h` : m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
-const riaIr = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+const riaIr = id => { const el = document.getElementById(id); if (!el) return; if (el.tagName === 'DETAILS') el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 
 // Diagnóstico con reglas fijas (sin LLM): cada umbral es una constante para ajustarlo en un solo lugar.
 const RIA_UMBRAL_ERROR_ATENCION = 2, RIA_UMBRAL_ERROR_CRITICO = 5;   // % de turnos con error del modelo
@@ -27248,7 +27248,7 @@ function cargarSeccion(sec) {
   if (sec === 'redes') cargarRedActual();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'cotizacion-boletos') cbCargarSeccion();
-  if (sec === 'bol-solicitudes') loadColaBoleteria();
+  if (sec === 'bol-solicitudes') bolColaAlEntrar();
   if (sec === 'boleteria') loadBoleteria();
   if (sec === 'tareas') loadTareas();
   if (sec === 'manual') renderManual();
@@ -27310,6 +27310,8 @@ function abrirMenuMovil() {
   document.body.classList.add('menu-abierto');
   document.getElementById('menu-btn')?.setAttribute('aria-expanded', 'true');
   navPush({ type: 'menu' });
+  // Después de que el menú termina de entrar: la primera vez la cola llega lista al switch.
+  if (!BOL_COLA.length) setTimeout(bolPrecargarCola, 350);
 }
 // modo 'fromNav': lo cerró el popstate, la entrada de historial ya se consumió.
 // modo 'silencioso': se descarta la entrada a mano (mismo patrón que
@@ -28275,10 +28277,11 @@ async function loadColaBoleteria(silencioso) {
   if (!grid) return;
   const loading = document.getElementById('bol-loading');
   if (!silencioso && !BOL_COLA.length) loading?.classList.add('show');
+  // El catálogo solo lo usa el detalle (precio de la ruta): la cola no lo espera.
+  const catalogo = bolAsegurarCatalogo();
   const [cola, agentes] = await Promise.all([
     sb.rpc('listar_cola_boleteria'),
     sb.rpc('agentes_boleteria_estado'),
-    bolAsegurarCatalogo(),
   ]);
   loading?.classList.remove('show');
   if (cola.error) { console.error('cola_boleteria', cola.error); if (!silencioso) errToast('No se pudo cargar la cola de boletería'); return; }
@@ -28321,7 +28324,7 @@ async function loadColaBoleteria(silencioso) {
   bolRenderCola();
   if (BOL_ABRIR_ID) {
     const id = BOL_ABRIR_ID; BOL_ABRIR_ID = null;
-    if (filas.some(s => String(s.id) === String(id))) abrirDetalleBoleteria(id);
+    if (filas.some(s => String(s.id) === String(id))) { await catalogo; abrirDetalleBoleteria(id); }
     else errToast('Esa solicitud ya no está en la cola (se cerró hace más de 7 días o no es tuya)');
   }
 }
@@ -28540,8 +28543,28 @@ function conPausaModoMovil(fn, clase) {
     if (sw.classList.contains('va-bol') || sw.classList.contains('va-hosp')) return;
     sw.classList.add(clase);
     navigator.vibrate?.(12);
-    setTimeout(() => { sw.classList.remove(clase); fn(); }, 220);
+    // Fundido de pantalla completa: el recoloreo del CRM y el cambio de sección
+    // se pintan de una vez detrás del fundido, sin cuadros a medio cambiar.
+    const cambiar = () => { sw.classList.remove(clase); fn(); };
+    setTimeout(() => {
+      if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return cambiar();
+      document.startViewTransition(cambiar);
+    }, 220);
   };
+}
+// Precarga de la cola al abrir el menú del celular o tocar el switch: viaja
+// mientras se desliza la pastilla y se cierra el menú, y al entrar se reusa.
+let BOL_PRECARGA = null;
+function bolPrecargarCola() {
+  if (BOL_PRECARGA || modoBoleteria) return;
+  BOL_PRECARGA = loadColaBoleteria(true).catch(e => console.error('precarga cola', e))
+    .finally(() => setTimeout(() => { BOL_PRECARGA = null; }, 3000));
+}
+function bolColaAlEntrar() {
+  if (!BOL_PRECARGA) return loadColaBoleteria();
+  const l = document.getElementById('bol-loading');
+  if (!BOL_COLA.length) l?.classList.add('show');
+  BOL_PRECARGA.then(() => { l?.classList.remove('show'); if (!BOL_COLA.length) loadColaBoleteria(); });
 }
 function salirModoBoleteria() {
   modoBoleteria = false;
@@ -28597,6 +28620,7 @@ function setupBoleteriaSeccion() {
     else if (acc === 'asignar') bolAsignarAerolinea(Number(id));
     else if (acc === 'historico') bolHistoricoRuta(Number(id));
   });
+  document.getElementById('btn-entrar-modo-boleteria')?.addEventListener('pointerdown', bolPrecargarCola);
   document.getElementById('btn-entrar-modo-boleteria')?.addEventListener('click', conPausaModoMovil(entrarModoBoleteria, 'va-bol'));
   document.getElementById('btn-salir-modo-boleteria')?.addEventListener('click', conPausaModoMovil(salirModoBoleteria, 'va-hosp'));
   document.getElementById('sheet-entrar-modo-boleteria')?.addEventListener('click', entrarModoBoleteria);
@@ -28628,11 +28652,15 @@ async function loadBoleteria() {
 }
 // La cola usa el catálogo para mostrar la tarifa de referencia; la pide sola
 // si el usuario todavía no abrió la sección.
-async function bolAsegurarCatalogo() {
-  if (bolCatalogo) return;
-  const { data, error } = await sb.rpc('boleteria_catalogo');
-  if (error) console.error('boleteria_catalogo', error);
-  if (data) bolCatalogo = data;
+// Una sola petición en vuelo: la cola y la precarga lo piden casi a la vez.
+let BOL_CAT_VUELO = null;
+function bolAsegurarCatalogo() {
+  if (bolCatalogo) return Promise.resolve();
+  if (!BOL_CAT_VUELO) BOL_CAT_VUELO = sb.rpc('boleteria_catalogo').then(({ data, error }) => {
+    if (error) console.error('boleteria_catalogo', error);
+    if (data) bolCatalogo = data;
+  }).catch(e => console.error('boleteria_catalogo', e)).finally(() => { BOL_CAT_VUELO = null; });
+  return BOL_CAT_VUELO;
 }
 function bolFiltro() { return (val('bol-buscador') || '').trim().toLowerCase(); }
 function bolMatch(texto, alias) {

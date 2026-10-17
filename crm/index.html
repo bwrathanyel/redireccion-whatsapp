@@ -4106,6 +4106,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .ria-estado-card .ria-texto{flex:1;min-width:180px;font-size:12.5px;color:var(--muted);line-height:1.5}.ria-estado-card .ria-texto b{color:var(--txt)}
 .ria-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:12px;margin-bottom:12px}.ria-card{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:16px}
 .ria-card h2{font-size:14px;margin:0 0 4px}.ria-sub{font-size:11.5px;color:var(--muted);margin-bottom:14px;line-height:1.5}
+.ria-plegable>summary{cursor:pointer;list-style:none}.ria-plegable>summary::-webkit-details-marker{display:none}.ria-plegable:not([open])>summary .ria-sub{margin-bottom:0}.ria-chev{float:right;font-size:12px;color:var(--muted);margin-top:2px;transition:transform .2s}.ria-plegable[open] .ria-chev{transform:rotate(180deg)}
 .ria-funnel{display:flex;flex-direction:column;gap:8px}.ria-paso{display:grid;grid-template-columns:minmax(105px,1fr) 2.5fr 48px;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
 .ria-paso b{color:var(--txt);text-align:right}.ria-bar{height:9px;background:var(--line2);border-radius:999px;overflow:hidden}.ria-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),#fbbf24)}
 .ria-lista{display:flex;flex-direction:column;gap:8px}.ria-fila{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
@@ -8166,7 +8167,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <span class="ria-estado sin_datos" id="ria-estado">Cargando</span>
         <div class="ria-texto" id="ria-estado-texto">Consultando la telemetría privada de la IA…</div>
       </div>
-      <div class="ria-card" id="ria-card-diagnostico" style="margin-bottom:12px"><h2><i class="fas fa-stethoscope"></i> Diagnóstico</h2><div class="ria-sub">Qué está pasando, por qué y qué hacer. Reglas fijas sobre los números del período, de lo más urgente a lo informativo.</div><div id="ria-diagnostico"></div></div>
+      <details class="ria-card ria-plegable" id="ria-card-diagnostico" style="margin-bottom:12px"><summary><h2><i class="fas fa-stethoscope"></i> Diagnóstico<i class="fas fa-chevron-down ria-chev"></i></h2><div class="ria-sub">Qué está pasando, por qué y qué hacer. Reglas fijas sobre los números del período, de lo más urgente a lo informativo.</div></summary><div id="ria-diagnostico"></div></details>
       <div class="kpis" id="ria-kpis"></div>
       <div class="ria-grid">
         <div class="ria-card" id="ria-card-embudo"><h2><i class="fas fa-filter"></i> Embudo comercial</h2><div class="ria-sub">En qué paso avanzan o se pierden las conversaciones.</div><div id="ria-embudo"></div></div>
