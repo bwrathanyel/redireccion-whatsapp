@@ -12158,10 +12158,6 @@ function setupLyra() {
   document.addEventListener('scroll', () => { lyraQuieta(); marcarDeslizando(); }, { capture: true, passive: true });
   LYRA.lista = true;
   lyraEscuchaIniciar();
-  if (!lyraLeer('saludo', false, true)) {
-    lyraGuardar('saludo', true, true);
-    setTimeout(() => lyraDecir(lyraSaludo(), { expr: 'feliz' }), 2500);
-  }
 }
 // Saludo por hora; algunos días (lunes, viernes, fin de semana) tienen el suyo.
 function lyraSaludo() {
