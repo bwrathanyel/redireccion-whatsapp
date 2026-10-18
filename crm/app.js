@@ -26430,7 +26430,8 @@ function cbPickerTeclas(e, box, elegir) {
   } else if (e.key === 'Enter' && !box.hidden && ops.length) { e.preventDefault(); elegir(ops[previo < 0 ? 0 : previo]); }
 }
 function cbHotelHtml(it, i) {
-  return `<div class="field cb-dos cb-picker"><label class="fl" for="cb-hotel-${i}">Hotel o posada</label><input id="cb-hotel-${i}" class="ei" data-busca="hotel" data-k="nombre" value="${esc(it.nombre || '')}" placeholder="Buscar hotel o escribir otro…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-hoteles-${i}"><div id="cb-hoteles-${i}" class="cb-picker-lista" role="listbox" aria-label="Hoteles" hidden></div></div>`;
+  const p = cbHoteles.get(Number(it.producto_id)), foto = ordenarFotos(p?.producto_fotos || [])[0];
+  return `<div class="field cb-dos cb-picker"><label class="fl" for="cb-hotel-${i}">Hotel o posada</label>${foto ? `<img class="cb-hotel-foto" src="${esc(fotoMini(foto.storage_path, 256))}" width="64" height="64" alt="Foto de ${esc(p.nombre)}" decoding="async" onerror="this.hidden=true">` : ''}<input id="cb-hotel-${i}" class="ei" data-busca="hotel" data-k="nombre" value="${esc(it.nombre || '')}" placeholder="Buscar hotel o escribir otro…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-hoteles-${i}"><div id="cb-hoteles-${i}" class="cb-picker-lista" role="listbox" aria-label="Hoteles" hidden></div></div>`;
 }
 const cbHotelDestinoOrden = p => {
   const destino = cbTarNorm(p.destino);
@@ -26775,6 +26776,7 @@ async function cbCargarSeccion() {
       const it = cbItems[+card.dataset.i], previo = it[k]; it[k] = e.target.value;
       if (e.target.dataset.busca === 'hotel') {
         if (it.producto_id) {
+          card.querySelector('.cb-hotel-foto')?.remove();
           delete it.producto_id; it.tramos = []; if (!it.tarifa_manual) it.tarifa = '';
           it._cargaHotel = (it._cargaHotel || 0) + 1; it._cargando = false; it._tarifaError = false;
           it.plan = ''; it.hab = ''; it.plan_libre = false; it.hab_libre = false; it.tarifa_avisos = [];
@@ -30549,6 +30551,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-18', emoji: '🏨', titulo: 'Foto del hotel seleccionado', texto: 'Al elegir un hotel en Cotizaciones se conserva una miniatura junto a su nombre para reconocerlo mientras preparas la cotización.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🧒', titulo: 'Tarifa de niños automática al cotizar', texto: 'Al añadir niños a un hotel se completa su tarifa desde la habitación y las fechas elegidas. El total y el PDF respetan los precios por temporada. Se indica el rango de edad de la ficha; si hay varias tarifas posibles o falta el dato, se pide confirmar el precio.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🏝️', titulo: 'Todos los hoteles, con Margarita y Los Roques primero', texto: 'El buscador de Cotizaciones ya no limita los resultados a ocho hoteles. Dentro de Hot Sale muestra primero Margarita, luego Los Roques y después los demás destinos, manteniendo el orden del Tarifario en cada grupo.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🔥', titulo: 'Hot Sales primero al cotizar', texto: 'El buscador de hoteles de Cotizaciones muestra primero los que están en Hot Sale, en el mismo orden del Tarifario. Los demás hoteles siguen disponibles al buscar.', roles: ['asesor', 'boleteria', 'admin'] },
