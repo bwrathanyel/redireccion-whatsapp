@@ -26367,6 +26367,7 @@ function cbAplicarLead() {
   document.getElementById('cb-cliente').value = l.nombre;
 }
 const cbHoteles = new Map(), cbHotelTarifas = new Map(), cbHotelPeticiones = new Map();
+const cbHotSalesOrden = new Map();
 let cbLeadsRes = [], cbLeadTimer = null, cbLeadTk = 0;
 const cbHotelFilas = it => (cbHotelTarifas.get(Number(it.producto_id)) || []).filter(t => cbTarUtil(t, cbHoy()));
 function cbPintarResumen() {
@@ -26410,7 +26411,8 @@ function cbHotelHtml(it, i) {
 }
 function cbHotelBuscar(inp) {
   const box = inp.parentElement.querySelector('.cb-picker-lista'), q = cbTarNorm(inp.value);
-  const lista = [...cbHoteles.values()].filter(p => p.tipo === 'hotel' && cbTarNorm(p.nombre + ' ' + (p.destino || '')).includes(q)).slice(0, 8);
+  const lista = [...cbHoteles.values()].filter(p => p.tipo === 'hotel' && cbTarNorm(p.nombre + ' ' + (p.destino || '')).includes(q))
+    .sort((a, b) => (cbHotSalesOrden.get(Number(a.id)) ?? Infinity) - (cbHotSalesOrden.get(Number(b.id)) ?? Infinity) || a.nombre.localeCompare(b.nombre, 'es')).slice(0, 8);
   box.innerHTML = lista.length ? lista.map(p => {
     const f = ordenarFotos(p.producto_fotos || [])[0];
     return `<button type="button" role="option" data-cb-hotel="${p.id}">${f ? `<img src="${esc(fotoMini(f.storage_path, 256))}" width="44" height="44" alt="" loading="lazy" onerror="this.hidden=true">` : '<i class="fas fa-hotel" aria-hidden="true"></i>'}<span><b>${esc(p.nombre)}</b><small>${esc(p.destino || 'Hotel o posada')}</small></span></button>`;
@@ -26505,10 +26507,28 @@ function cbHotelPrecioHtml(it, i) {
     ${(it.tarifa_avisos || []).map(a => `<small class="cb-condicion">${esc(a)}</small>`).join('')}</div>`;
 }
 // Carga liviana de nombres y portadas; el detalle de precios se pide solo al elegir hotel.
+async function cbCargarHotSales() {
+  try {
+    const { data, error } = await sb.rpc('hot_sales_publicas');
+    if (error) throw error;
+    if (!data?.length) { cbHotSalesOrden.clear(); return; }
+    const { data: tarifas, error: errorTarifas } = await sb.from('tarifas').select('id,producto_id').in('id', data.map(h => h.id)).limit(1000);
+    if (errorTarifas) throw errorTarifas;
+    const productos = new Map((tarifas || []).map(t => [Number(t.id), Number(t.producto_id)]));
+    cbHotSalesOrden.clear();
+    data.forEach(h => {
+      const id = productos.get(Number(h.id));
+      if (id) cbHotSalesOrden.set(id, Math.min(cbHotSalesOrden.get(id) ?? Infinity, Number(h.posicion)));
+    });
+  } catch (error) { console.warn('Hot Sales en Cotizaciones', error); }
+}
 async function cbCargarProductos() {
   if (cbProductosListos) return;
   cbProductosListos = true;
-  const { data, error } = await sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').in('tipo', ['hotel', 'paquete']).eq('activo', true).order('nombre').limit(1000);
+  const [{ data, error }] = await Promise.all([
+    sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').in('tipo', ['hotel', 'paquete']).eq('activo', true).order('nombre').limit(1000),
+    cbCargarHotSales(),
+  ]);
   if (error) { cbProductosListos = false; return; }
   (data || []).forEach(p => cbHoteles.set(Number(p.id), p));
   document.getElementById('cb-productos').innerHTML = [...new Set((data || []).map(p => p.nombre))].map(n => `<option value="${esc(n)}">`).join('');
@@ -30472,6 +30492,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-18', emoji: '🔥', titulo: 'Hot Sales primero al cotizar', texto: 'El buscador de hoteles de Cotizaciones muestra primero los que están en Hot Sale, en el mismo orden del Tarifario. Los demás hoteles siguen disponibles al buscar.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🏨', titulo: 'Plan y habitación al elegir un hotel', texto: 'Corregimos un error al seleccionar un hotel que dejaba vacíos Plan y Habitación y mostraba un fallo de tarifas. Ahora los selectores se completan con los datos de su ficha del Tarifario y permiten cambiar de habitación.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-17', emoji: '🏨', titulo: 'Recuperar la carga de planes y habitaciones', texto: 'La carga de tarifas del hotel ahora tiene un límite de espera. Si la conexión se traba, los campos se liberan y aparece Reintentar carga de tarifas. Cambiar de hotel durante la carga también conserva la selección más reciente.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-17', emoji: '🏨', titulo: 'Plan y habitación con selector', texto: 'Al elegir un hotel, el plan y la habitación se completan desde el tarifario y puedes cambiarlos con selectores. Si falta un dato, aparece la opción para escribirlo confirmado. En el celular la cotización ahora va en una columna, con controles grandes, pasajeros en filas y una barra compacta con el total, PDF y compartir.', roles: ['asesor', 'boleteria', 'admin'] },
