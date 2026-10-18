@@ -26409,23 +26409,35 @@ function cbHotelBuscar(inp) {
 async function cbTraerTarifas(id) {
   id = Number(id);
   if (cbHotelTarifas.has(id)) return cbHotelTarifas.get(id);
-  if (!cbHotelPeticiones.has(id)) cbHotelPeticiones.set(id, (async () => {
-    const { data, error } = await sb.from('tarifas').select('id,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,tarifario_bloques(plan,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').limit(1000);
-    if (error) throw error;
-    cbHotelTarifas.set(id, data || []); return data || [];
-  })().finally(() => cbHotelPeticiones.delete(id)));
+  if (!cbHotelPeticiones.has(id)) {
+    const control = new AbortController(); let reloj;
+    const espera = new Promise((_, rechazar) => { reloj = setTimeout(() => { control.abort(); rechazar(new Error('La carga de tarifas tardó demasiado.')); }, 12000); });
+    const consulta = (async () => {
+      const { data, error } = await sb.from('tarifas').select('id,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,tarifario_bloques(plan,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
+      if (error) throw error;
+      return data || [];
+    })();
+    const peticion = Promise.race([consulta, espera]).then(filas => { cbHotelTarifas.set(id, filas); return filas; }).finally(() => {
+      clearTimeout(reloj); if (cbHotelPeticiones.get(id) === peticion) cbHotelPeticiones.delete(id);
+    });
+    cbHotelPeticiones.set(id, peticion);
+  }
   return cbHotelPeticiones.get(id);
 }
 async function cbHotelElegir(card, id) {
-  const i = +card.dataset.i, it = cbItems[i], p = cbHoteles.get(Number(id)); if (!p) return;
-  Object.assign(it, { nombre: p.nombre, producto_id: p.id, plan: '', hab: '', tarifa: '', tramos: [], tarifa_manual: false, habitacion_manual: false, plan_libre: false, hab_libre: false, _cargando: true });
-  cbRenderItems(); cbProgramarBorrador();
+  const i = +card.dataset.i, it = cbItems[i], p = cbHoteles.get(Number(id)); if (!it || !p) return;
+  const carga = (it._cargaHotel || 0) + 1;
+  Object.assign(it, { nombre: p.nombre, producto_id: p.id, plan: '', hab: '', tarifa: '', tramos: [], tarifa_manual: false, habitacion_manual: false, plan_libre: false, hab_libre: false, _cargando: true, _cargaHotel: carga, _tarifaError: false, _aviso: '' });
   try {
+    cbRenderItems(); cbProgramarBorrador();
     await cbTraerTarifas(p.id);
-    if (cbItems[i] !== it || it.producto_id !== p.id) return;
+    if (!cbItems.includes(it) || it._cargaHotel !== carga || it.producto_id !== p.id) return;
     it.plan = cbTarOpciones(cbHotelFilas(it), 'plan')[0] || ''; cbHotelRecalcular(it);
-  } catch (_) { it._aviso = 'No se pudieron cargar las tarifas. Puedes escribirlas manualmente o volver a elegir el hotel.'; }
-  finally { it._cargando = false; if (cbItems[i] === it) { cbRenderItems(); cbProgramarBorrador(); } }
+  } catch (_) {
+    if (it._cargaHotel === carga) { it._tarifaError = true; it._aviso = 'No se pudieron cargar las tarifas. Reintenta o escribe el plan, la habitación y el precio confirmados.'; }
+  } finally {
+    if (it._cargaHotel === carga) { it._cargando = false; if (cbItems.includes(it)) { cbRenderItems(); cbProgramarBorrador(); } }
+  }
 }
 function cbHotelRecalcular(it, aplicar = false) {
   if (it.tipo !== 'hotel') return;
@@ -26457,7 +26469,7 @@ function cbHotelSelectorHtml(it, i, campo, label) {
   const opciones = cbTarOpciones(esPlan ? filas : cbTarDelPlan(filas, it.plan), esPlan ? 'plan' : 'habitacion');
   const clave = esPlan ? cbTarPlanClave : cbTarNorm, actual = opciones.find(o => clave(o) === clave(it[campo]));
   const libre = it[campo + '_libre'] || (!!it[campo] && !actual), id = `cb-${campo}-${i}`;
-  const vacio = it._cargando ? 'Cargando opciones…' : opciones.length ? `Selecciona ${esPlan ? 'el plan' : 'la habitación'}` : esPlan ? 'Plan no indicado en el tarifario' : 'Sin habitaciones cargadas';
+  const vacio = it._cargando ? 'Cargando opciones…' : it._tarifaError ? 'Carga pendiente: reintenta o escribe el dato' : opciones.length ? `Selecciona ${esPlan ? 'el plan' : 'la habitación'}` : esPlan ? 'Plan no indicado en el tarifario' : 'Sin habitaciones cargadas';
   return `<div class="field cb-dos cb-hotel-selector"><label class="fl" for="${id}">${label}</label><select id="${id}" class="ei" data-cb-campo="${campo}"${it._cargando ? ' disabled' : ''}>
     <option value=""${!libre && !actual ? ' selected' : ''}>${vacio}</option>${opciones.map(o => `<option value="${esc(o)}"${!libre && o === actual ? ' selected' : ''}>${esc(o)}</option>`).join('')}
     <option value="__manual__"${libre ? ' selected' : ''}>${esPlan ? 'Escribir plan confirmado' : 'Escribir otra habitación'}</option></select>
@@ -26474,6 +26486,7 @@ function cbHotelCambiarOpcion(it, campo, valor) {
 function cbHotelPrecioHtml(it, i) {
   if (it.tipo !== 'hotel') return '';
   return `<div class="cb-tarifario cb-full" aria-live="polite">${it._cargando ? '<span>Cargando tarifas del hotel…</span>' : ''}${it._aviso ? `<p>${esc(it._aviso)}</p>` : ''}
+    ${it._tarifaError ? '<button type="button" class="dbtn" style="min-height:44px" data-cb-reintentar>Reintentar carga de tarifas</button>' : ''}
     ${it.tramos?.length > 1 ? `<div class="cb-tramos">${it.tramos.map((t, j) => `<label><span>${cbFechaCorta(t.desde)} → ${cbFechaCorta(t.hasta)}<small>${cbNochesTexto(t.noches)} · USD por adulto/noche</small></span><input class="ei" aria-label="Tarifa adulto del tramo ${j + 1}" data-tramo="${j}" type="number" min="0" step="0.01" value="${esc(String(t.tarifa))}"></label>`).join('')}</div>` : ''}
     ${it.tarifa_manual && it._sugerencia?.ok ? `<button type="button" class="btn-sm" data-cb-usar>Usar tarifa del tarifario · ${it._sugerencia.tramos.map(t => '$' + cbMonto(t.tarifa)).join(' / ')}</button>` : ''}
     ${it._desactualizado ? `<button type="button" class="btn-sm" data-cb-manual>Usar $${cbMonto(it.tarifa)} por adulto ${cbPorNoche(it) ? 'por noche' : 'por estadía'} para este viaje</button>` : ''}
@@ -26650,6 +26663,7 @@ async function cbCargarSeccion() {
       if (hotel) { cbHotelElegir(hotel.closest('.cb-item'), hotel.dataset.cbHotel); return; }
       const card = e.target.closest('.cb-item'); if (!card) return;
       const it = cbItems[+card.dataset.i], viaje = e.target.closest('[data-viaje]'), ref = e.target.closest('.cb-ref-usar');
+      if (e.target.closest('[data-cb-reintentar]')) { cbHotelElegir(card, it.producto_id); return; }
       if (e.target.closest('[data-cb-plegar]')) { it._plegado = !it._plegado; cbRenderItems(); return; }
       if (e.target.closest('[data-cb-usar]')) { cbHotelRecalcular(it, true); cbRenderItems(); cbProgramarBorrador(); return; }
       if (e.target.closest('[data-cb-manual]')) {
@@ -26682,6 +26696,7 @@ async function cbCargarSeccion() {
       if (e.target.dataset.busca === 'hotel') {
         if (it.producto_id) {
           delete it.producto_id; it.tramos = []; if (!it.tarifa_manual) it.tarifa = '';
+          it._cargaHotel = (it._cargaHotel || 0) + 1; it._cargando = false; it._tarifaError = false;
           it.plan = ''; it.hab = ''; it.plan_libre = false; it.hab_libre = false; it.tarifa_avisos = [];
           card.querySelectorAll('.cb-hotel-selector').forEach(el => {
             const campo = el.querySelector('select').dataset.cbCampo;
@@ -30444,6 +30459,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-17', emoji: '🏨', titulo: 'Recuperar la carga de planes y habitaciones', texto: 'La carga de tarifas del hotel ahora tiene un límite de espera. Si la conexión se traba, los campos se liberan y aparece Reintentar carga de tarifas. Cambiar de hotel durante la carga también conserva la selección más reciente.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-17', emoji: '🏨', titulo: 'Plan y habitación con selector', texto: 'Al elegir un hotel, el plan y la habitación se completan desde el tarifario y puedes cambiarlos con selectores. Si falta un dato, aparece la opción para escribirlo confirmado. En el celular la cotización ahora va en una columna, con controles grandes, pasajeros en filas y una barra compacta con el total, PDF y compartir.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-17', emoji: '📄', titulo: 'Cotizaciones más cómodas', texto: 'Busca al cliente por nombre o teléfono y elige hoteles con foto, plan y habitación. Las tarifas de hospedaje se sugieren según ocupación y fechas, con tramos editables y el total siempre a mano. Al generar el PDF se registra la cotización en el lead sin retroceder estados avanzados; si el registro falla, puedes reintentarlo desde el historial sin duplicar la cotización.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-17', emoji: '✈️', titulo: 'Boletos: origen y destino por ciudad', texto: 'Al cotizar un boleto ya no hace falta saberse los códigos: escribe la ciudad (Caracas, Margarita, Los Roques...) y aparece con su código entre paréntesis; el PDF sigue saliendo con el código (CCS-PMV-CCS). Elige Ida y vuelta o Solo ida (en solo ida desaparecen la fecha y el horario de vuelta), invierte la ruta con un clic y, si la ruta está en el catálogo, ve la tarifa de referencia y la usa con un botón.', roles: ['asesor', 'boleteria', 'admin'] },
