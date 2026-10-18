@@ -26409,10 +26409,17 @@ function cbPickerTeclas(e, box, elegir) {
 function cbHotelHtml(it, i) {
   return `<div class="field cb-dos cb-picker"><label class="fl" for="cb-hotel-${i}">Hotel o posada</label><input id="cb-hotel-${i}" class="ei" data-busca="hotel" data-k="nombre" value="${esc(it.nombre || '')}" placeholder="Buscar hotel o escribir otro…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-hoteles-${i}"><div id="cb-hoteles-${i}" class="cb-picker-lista" role="listbox" aria-label="Hoteles" hidden></div></div>`;
 }
+const cbHotelDestinoOrden = p => {
+  const destino = cbTarNorm(p.destino);
+  return destino.includes('margarita') ? 0 : destino.includes('los roques') ? 1 : 2;
+};
 function cbHotelBuscar(inp) {
   const box = inp.parentElement.querySelector('.cb-picker-lista'), q = cbTarNorm(inp.value);
   const lista = [...cbHoteles.values()].filter(p => p.tipo === 'hotel' && cbTarNorm(p.nombre + ' ' + (p.destino || '')).includes(q))
-    .sort((a, b) => (cbHotSalesOrden.get(Number(a.id)) ?? Infinity) - (cbHotSalesOrden.get(Number(b.id)) ?? Infinity) || a.nombre.localeCompare(b.nombre, 'es')).slice(0, 8);
+    .sort((a, b) => Number(cbHotSalesOrden.has(Number(b.id))) - Number(cbHotSalesOrden.has(Number(a.id)))
+      || cbHotelDestinoOrden(a) - cbHotelDestinoOrden(b)
+      || (cbHotSalesOrden.get(Number(a.id)) ?? Infinity) - (cbHotSalesOrden.get(Number(b.id)) ?? Infinity)
+      || a.nombre.localeCompare(b.nombre, 'es'));
   box.innerHTML = lista.length ? lista.map(p => {
     const f = ordenarFotos(p.producto_fotos || [])[0];
     return `<button type="button" role="option" data-cb-hotel="${p.id}">${f ? `<img src="${esc(fotoMini(f.storage_path, 256))}" width="44" height="44" alt="" loading="lazy" onerror="this.hidden=true">` : '<i class="fas fa-hotel" aria-hidden="true"></i>'}<span><b>${esc(p.nombre)}</b><small>${esc(p.destino || 'Hotel o posada')}</small></span></button>`;
@@ -30492,6 +30499,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-18', emoji: '🏝️', titulo: 'Todos los hoteles, con Margarita y Los Roques primero', texto: 'El buscador de Cotizaciones ya no limita los resultados a ocho hoteles. Dentro de Hot Sale muestra primero Margarita, luego Los Roques y después los demás destinos, manteniendo el orden del Tarifario en cada grupo.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🔥', titulo: 'Hot Sales primero al cotizar', texto: 'El buscador de hoteles de Cotizaciones muestra primero los que están en Hot Sale, en el mismo orden del Tarifario. Los demás hoteles siguen disponibles al buscar.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🏨', titulo: 'Plan y habitación al elegir un hotel', texto: 'Corregimos un error al seleccionar un hotel que dejaba vacíos Plan y Habitación y mostraba un fallo de tarifas. Ahora los selectores se completan con los datos de su ficha del Tarifario y permiten cambiar de habitación.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-17', emoji: '🏨', titulo: 'Recuperar la carga de planes y habitaciones', texto: 'La carga de tarifas del hotel ahora tiene un límite de espera. Si la conexión se traba, los campos se liberan y aparece Reintentar carga de tarifas. Cambiar de hotel durante la carga también conserva la selección más reciente.', roles: ['asesor', 'boleteria', 'admin'] },
