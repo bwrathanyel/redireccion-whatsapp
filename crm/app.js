@@ -26321,7 +26321,18 @@ function cbDatosPdf(c) {
   };
 }
 function cbActualizarTotal() { document.getElementById('cb-total').textContent = '$' + cbMonto(cbTotalItems(cbItems)); cbPintarResumen(); }
-function cbRenderItems() { document.getElementById('cb-items').innerHTML = cbItems.map(cbItemHtml).join(''); cbActualizarTotal(); }
+let cbRenderizando = false;
+function cbRenderItems() {
+  if (cbRenderizando) return;
+  cbRenderizando = true;
+  try {
+    const lista = document.getElementById('cb-items'), foco = document.activeElement;
+    // Al quitar un input enfocado, Chrome dispara change/blur durante innerHTML.
+    // Resolverlos antes evita que otro render modifique los mismos nodos.
+    if (foco && lista.contains(foco)) foco.blur();
+    lista.innerHTML = cbItems.map(cbItemHtml).join(''); cbActualizarTotal();
+  } finally { cbRenderizando = false; }
+}
 window.cbAgregarItem = () => { cbItems.push(cbItemVacio(cbLimpiarItem(cbItems.at(-1) || {}).tipo)); cbRenderItems(); cbProgramarBorrador(); };
 window.cbQuitarItem = i => { cbItems.splice(i, 1); cbRenderItems(); cbProgramarBorrador(); };
 // Cotizar desde una solicitud de boletería (2026-10-15): precarga cliente, ruta,
@@ -26339,7 +26350,7 @@ window.cbQuitarSolicitud = async () => { await cbGuardarBorrador(); cbSolicitud 
 // arma para su cliente. Sin "Enviar al asesor": el PDF (pdfCotizacionCliente) va al cliente y,
 // si se abrió desde un lead, la fila queda con lead_id y "Guardar en el lead" lo marca cotizado.
 const CB_CON_PRODUCTO = ['hotel', 'paquete', 'fullday', 'tour'];
-let cbModo = 'boleteria', cbLead = null, cbLeadPendiente = null, cbProductosListos = false, cbProductosPeticion = null;
+let cbModo = 'boleteria', cbLead = null, cbLeadPendiente = null, cbProductosListos = false;
 function cbDesdeLead(l) { cbLeadPendiente = { id: l.id, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; activateSection('cotizacion-boletos'); }
 function cbPintarLead() {
   const box = document.getElementById('cb-lead');
@@ -26356,7 +26367,6 @@ function cbAplicarLead() {
   document.getElementById('cb-cliente').value = l.nombre;
 }
 const cbHoteles = new Map(), cbHotelTarifas = new Map(), cbHotelPeticiones = new Map();
-const CB_TAR_SEL = 'id,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,tarifario_bloques(plan,base_precio,minimo_noches,suplementos,impuestos)';
 let cbLeadsRes = [], cbLeadTimer = null, cbLeadTk = 0;
 const cbHotelFilas = it => (cbHotelTarifas.get(Number(it.producto_id)) || []).filter(t => cbTarUtil(t, cbHoy()));
 function cbPintarResumen() {
@@ -26414,7 +26424,7 @@ async function cbTraerTarifas(id) {
     const control = new AbortController(); let reloj;
     const espera = new Promise((_, rechazar) => { reloj = setTimeout(() => { control.abort(); rechazar(new Error('La carga de tarifas tardó demasiado.')); }, 12000); });
     const consulta = (async () => {
-      const { data, error } = await sb.from('tarifas').select(CB_TAR_SEL).eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
+      const { data, error } = await sb.from('tarifas').select('id,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,tarifario_bloques(plan,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
       if (error) throw error;
       return data || [];
     })();
@@ -26494,21 +26504,15 @@ function cbHotelPrecioHtml(it, i) {
     ${it._desactualizado ? `<button type="button" class="btn-sm" data-cb-manual>Usar $${cbMonto(it.tarifa)} por adulto ${cbPorNoche(it) ? 'por noche' : 'por estadía'} para este viaje</button>` : ''}
     ${(it.tarifa_avisos || []).map(a => `<small class="cb-condicion">${esc(a)}</small>`).join('')}</div>`;
 }
-// La ficha y sus tarifas se cargan juntas, igual que en el Tarifario.
+// Carga liviana de nombres y portadas; el detalle de precios se pide solo al elegir hotel.
 async function cbCargarProductos() {
   if (cbProductosListos) return;
-  if (cbProductosPeticion) return cbProductosPeticion;
-  cbProductosPeticion = (async () => {
-    const { data, error } = await sb.from('productos').select(`id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo),tarifas(${CB_TAR_SEL})`).in('tipo', ['hotel', 'paquete']).eq('activo', true).eq('tarifas.vigente', true).order('nombre').limit(1000);
-    if (error) throw error;
-    (data || []).forEach(p => {
-      cbHoteles.set(Number(p.id), p);
-      cbHotelTarifas.set(Number(p.id), p.tarifas || []);
-    });
-    document.getElementById('cb-productos').innerHTML = [...new Set((data || []).map(p => p.nombre))].map(n => `<option value="${esc(n)}">`).join('');
-    cbProductosListos = true;
-  })().catch(error => { console.error('cbCargarProductos', error); }).finally(() => { cbProductosPeticion = null; });
-  return cbProductosPeticion;
+  cbProductosListos = true;
+  const { data, error } = await sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').in('tipo', ['hotel', 'paquete']).eq('activo', true).order('nombre').limit(1000);
+  if (error) { cbProductosListos = false; return; }
+  (data || []).forEach(p => cbHoteles.set(Number(p.id), p));
+  document.getElementById('cb-productos').innerHTML = [...new Set((data || []).map(p => p.nombre))].map(n => `<option value="${esc(n)}">`).join('');
+  if (document.activeElement?.matches('[data-busca="hotel"]')) cbHotelBuscar(document.activeElement);
 }
 const cbPdfDe = c => c.origen === 'ventas' ? pdfCotizacionCliente(cbDatosPdf(c)) : cbPdfBlob(c);
 async function cbCompartir(blob, nombre) {
@@ -30468,7 +30472,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-10-18', emoji: '🏨', titulo: 'Planes y habitaciones desde la ficha del hotel', texto: 'Cotizaciones carga los planes, habitaciones y tarifas junto con la ficha de cada hotel. Al seleccionarlo reutiliza esos datos, sin otra petición que pueda dejar vacíos Plan y Habitación.', roles: ['asesor', 'boleteria', 'admin'] },
+  { fecha: '2026-10-18', emoji: '🏨', titulo: 'Plan y habitación al elegir un hotel', texto: 'Corregimos un error al seleccionar un hotel que dejaba vacíos Plan y Habitación y mostraba un fallo de tarifas. Ahora los selectores se completan con los datos de su ficha del Tarifario y permiten cambiar de habitación.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-17', emoji: '🏨', titulo: 'Recuperar la carga de planes y habitaciones', texto: 'La carga de tarifas del hotel ahora tiene un límite de espera. Si la conexión se traba, los campos se liberan y aparece Reintentar carga de tarifas. Cambiar de hotel durante la carga también conserva la selección más reciente.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-17', emoji: '🏨', titulo: 'Plan y habitación con selector', texto: 'Al elegir un hotel, el plan y la habitación se completan desde el tarifario y puedes cambiarlos con selectores. Si falta un dato, aparece la opción para escribirlo confirmado. En el celular la cotización ahora va en una columna, con controles grandes, pasajeros en filas y una barra compacta con el total, PDF y compartir.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-17', emoji: '📄', titulo: 'Cotizaciones más cómodas', texto: 'Busca al cliente por nombre o teléfono y elige hoteles con foto, plan y habitación. Las tarifas de hospedaje se sugieren según ocupación y fechas, con tramos editables y el total siempre a mano. Al generar el PDF se registra la cotización en el lead sin retroceder estados avanzados; si el registro falla, puedes reintentarlo desde el historial sin duplicar la cotización.', roles: ['asesor', 'boleteria', 'admin'] },
