@@ -26431,7 +26431,7 @@ function cbPickerTeclas(e, box, elegir) {
 }
 function cbHotelHtml(it, i) {
   const p = cbHoteles.get(Number(it.producto_id)), foto = ordenarFotos(p?.producto_fotos || [])[0];
-  return `<div class="field cb-dos cb-picker"><label class="fl" for="cb-hotel-${i}">Hotel o posada</label>${foto ? `<img class="cb-hotel-foto" src="${esc(fotoMini(foto.storage_path, 256))}" width="64" height="64" alt="Foto de ${esc(p.nombre)}" decoding="async" onerror="this.hidden=true">` : ''}<input id="cb-hotel-${i}" class="ei" data-busca="hotel" data-k="nombre" value="${esc(it.nombre || '')}" placeholder="Buscar hotel o escribir otro…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-hoteles-${i}"><div id="cb-hoteles-${i}" class="cb-picker-lista" role="listbox" aria-label="Hoteles" hidden></div></div>`;
+  return `<div class="field cb-dos cb-picker"><label class="fl" for="cb-hotel-${i}">Hotel o posada</label>${foto ? `<img class="cb-hotel-foto" src="${esc(fotoMini(foto.storage_path, 256))}" width="64" height="64" alt="Foto de ${esc(p.nombre)}" decoding="async">` : ''}<input id="cb-hotel-${i}" class="ei" data-busca="hotel" data-k="nombre" value="${esc(it.nombre || '')}" placeholder="Buscar hotel o escribir otro…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-hoteles-${i}"><div id="cb-hoteles-${i}" class="cb-picker-lista" role="listbox" aria-label="Hoteles" hidden></div></div>`;
 }
 const cbHotelDestinoOrden = p => {
   const destino = cbTarNorm(p.destino);
@@ -26711,6 +26711,7 @@ async function cbCargarSeccion() {
     cbResetForm();
     document.getElementById('cb-origen').addEventListener('change', () => { cbOffset = 0; cbCargarHistorial(false); });
     const cbLista = document.getElementById('cb-items');
+    cbLista.addEventListener('error', e => { if (e.target.matches('.cb-hotel-foto')) e.target.hidden = true; }, true);
     cbLista.addEventListener('focusin', e => { if (e.target.matches('.cb-ap-in')) { e.target.select(); cbApAbrir(e.target); } });
     cbLista.addEventListener('focusin', e => { if (e.target.dataset.busca === 'hotel') cbHotelBuscar(e.target); });
     cbLista.addEventListener('focusout', e => { if (e.target.dataset.busca === 'hotel') { e.target.parentElement.querySelector('.cb-picker-lista').hidden = true; e.target.setAttribute('aria-expanded', 'false'); } });
