@@ -58,14 +58,14 @@ export function crearDocumentosRevisiones(c) {
       : d.creado_por === c.usuario() || (t === 'cotizacion' && c.atiende(d.solicitud_id)));
   }
   function acciones(t, d) {
-    const btn = (a, texto, icono) => `<button class="btn-sm" type="button" data-dr="${a}" data-dr-tipo="${t}" data-dr-id="${esc(d.id)}"><i class="fas fa-${icono}"></i> ${texto}</button>`;
+    const btn = (a, texto, icono) => `<button class="btn-sm dr-accion" type="button" data-dr="${a}" data-dr-tipo="${t}" data-dr-id="${esc(d.id)}" title="${texto}" aria-label="${texto} ${esc(numero(t, d))}"><i class="fas fa-${icono}" aria-hidden="true"></i></button>`;
     const editable = puedeEditar(t, d), cerrado = anulado(d);
-    return `<span class="bt-tag">${cerrado ? 'Anulado · ' : ''}Revisión ${d.revision || 1}</span>`
-      + (!cerrado && editable ? btn('editar', 'Editar', 'pen') + btn('anular', 'Anular', 'ban') : '')
+    return `<div class="dr-acciones" role="group" aria-label="Acciones de ${esc(numero(t, d))}"><span class="dr-revision">${cerrado ? 'Anulado · ' : ''}Revisión ${d.revision || 1}</span>`
+      + (!cerrado && editable ? btn('editar', 'Editar', 'pen-to-square') + btn('anular', 'Anular', 'circle-xmark') : '')
       + btn('historial', 'Historial', 'clock-rotate-left')
       + (t === 'solicitud' ? (editable && ['resuelta', 'cancelada'].includes(d.estado) ? btn('reenviar', 'Volver a enviar', 'paper-plane') : '')
         : !cerrado ? btn('descarga', 'Descargar', 'download') + btn('compartir', 'Compartir', 'share-nodes')
-          + (t === 'cotizacion' && d.origen !== 'ventas' && editable ? btn('reenviar', 'Volver a enviar', 'paper-plane') : '') : '');
+          + (t === 'cotizacion' && d.origen !== 'ventas' && editable ? btn('reenviar', 'Volver a enviar', 'paper-plane') : '') : '') + '</div>';
   }
   function cancelar(t) {
     ediciones.delete(t); $(`dr-editando-${t}`)?.remove();

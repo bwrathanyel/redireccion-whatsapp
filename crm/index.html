@@ -1265,9 +1265,25 @@ input.ei[type=date]{color-scheme:dark}
 .bol-espera.medio{background:rgba(245,158,11,.16);color:#f5b544}
 .bol-espera.tarde{background:rgba(239,68,68,.15);color:#ff6b6b}
 .bol-espera.neutro{background:rgba(148,163,184,.13);color:var(--muted)}
-.bol-card-acc{display:flex;gap:8px;margin-top:10px}
-.bol-card-acc .btn-sm{flex:1;justify-content:center}
-.bol-card-acc .bol-wa{flex:none;color:#25d366}
+.bol-card-acc{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:10px;min-width:0}
+.bol-card-acc .btn-sm{flex:0 1 auto;min-height:44px;justify-content:center}
+.bol-card-acc .bol-wa{display:inline-flex;align-items:center;flex:0 0 44px;width:44px;height:44px;padding:0;text-decoration:none;color:var(--green)}
+.bol-card-acc .bol-wa i{font-size:18px}
+.dr-acciones{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:0;max-width:100%}
+.dr-revision{padding:0 4px;font-size:11px;line-height:1.4;color:var(--muted);white-space:nowrap}
+.dr-acciones .dr-accion{display:inline-flex;align-items:center;justify-content:center;flex:0 0 44px;width:44px;height:44px;min-height:44px;padding:0;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);transition:background .16s,color .16s,border-color .16s}
+.dr-accion i{font-size:16px;pointer-events:none}
+.lt-card-pie .dr-acciones .dr-accion{flex:0 0 44px;min-width:44px}
+.lt-card-pie .dr-acciones .dr-accion i{font-size:16px;opacity:1}
+.dr-acciones .dr-accion:hover{background:var(--panel-solid);border-color:var(--line2);color:var(--txt)}
+.dr-acciones .dr-accion[data-dr="editar"]:hover,.dr-acciones .dr-accion[data-dr="reenviar"]:hover{color:var(--accent-ink);background:var(--accent-soft)}
+.dr-acciones .dr-accion[data-dr="anular"]:hover{color:var(--danger)}
+.dr-accion:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
+.dr-accion:disabled{opacity:.5;cursor:wait}
+.bol-card-acc .dr-acciones{display:contents}
+.bol-card-acc .dr-revision{display:none}
+.bol-pie{flex-wrap:wrap}
+.bol-pie>span{min-width:0;overflow-wrap:anywhere}
 .bol-resultado{font-size:12px;margin-top:9px;padding:7px 9px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid var(--line);overflow-wrap:anywhere}
 .bol-tl{display:flex;margin-top:11px;font-size:10.5px;color:var(--muted2)}
 .bol-tl-paso{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:0;text-align:center;position:relative}

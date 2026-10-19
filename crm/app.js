@@ -29180,7 +29180,7 @@ function bolCardHtml(s) {
   if (agente && s.estado === 'en_cola' && bolPuedoTomar(s)) acc.push(`<button class="btn-sm" type="button" data-bol-card="tomar" data-id="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
   if (agente && s.estado === 'atendiendo' && s.la_atiendo_yo && s.pausada_en) acc.push(`<button class="btn-sm" type="button" data-bol-card="retomar" data-id="${s.id}"><i class="fas fa-play"></i> Retomar</button>`);
   if (agente && s.estado === 'atendiendo' && s.la_atiendo_yo) acc.push(`<button class="btn-sm" type="button" data-bol-card="resolver" data-id="${s.id}"><i class="fas fa-check"></i> Resolver</button>`);
-  if (wa) acc.push(`<a class="btn-sm bol-wa" href="${esc(wa.url)}" target="_blank" rel="noopener" data-bol-wa title="Escribirle a ${esc(wa.nombre)} por WhatsApp"><i class="fab fa-whatsapp"></i> ${esc(wa.nombre)}</a>`);
+  if (wa) acc.push(`<a class="btn-sm bol-wa" href="${esc(wa.url)}" target="_blank" rel="noopener" data-bol-wa aria-label="Escribirle a ${esc(wa.nombre)} por WhatsApp" title="Escribirle a ${esc(wa.nombre)} por WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></a>`);
   const asignada = s.estado === 'en_cola' && s.asignada_a ? (s.asignada_a_mi ? 'asignada a vos' : 'asignada a ' + esc(bolPrimerNombre(s.asignada_a))) : '';
   const quien = agente
     ? `Pidió ${esc(s.creado_por || '—')}${s.tomada_por && s.estado !== 'en_cola' ? ' · atiende ' + esc(bolPrimerNombre(s.tomada_por)) : ''}${asignada ? ' · ' + asignada : ''}`
@@ -29195,7 +29195,7 @@ function bolCardHtml(s) {
     ${resumen ? `<div class="bol-resumen">${resumen}</div>` : ''}
     ${agente ? '' : bolLineaTiempo(s)}
     ${!bolAbierta(s) && s.resultado ? `<div class="bol-resultado"><b>${s.estado === 'cancelada' ? 'Motivo' : 'Resultado'}:</b> ${esc(s.resultado)}</div>` : ''}
-    <div class="bol-pie"><span>${quien}</span><span>#${s.id} · ${tiempoRelativo(s.creado_en)}</span></div>
+    <div class="bol-pie"><span>${quien}</span><span>#${s.id} · Rev. ${s.revision || 1} · ${tiempoRelativo(s.creado_en)}</span></div>
     <div class="bol-card-acc">${acc.join('')}${DR?.acciones('solicitud', s) || ''}</div>
   </div>`;
 }
