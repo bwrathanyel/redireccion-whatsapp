@@ -3252,6 +3252,8 @@ function renderPostventa() {
 function pvWire(grid, lista, antes = () => {}) {
   grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => { antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvOpen))); });
   grid.querySelectorAll('[data-pv-wa]').forEach(b => b.onclick = () => window.open(`https://wa.me/${b.dataset.pvWa}`, '_blank', 'noopener'));
+  grid.querySelectorAll('[data-pv-abono]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); pvAbrirAbono(Number(b.dataset.pvAbono), b); });
+  grid.querySelectorAll('[data-pv-servicio]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvServicio)), 'nuevo-servicio'); });
 }
 function pvCardHtml(c, extra = '') {
     const ahora = Date.now();
@@ -3268,8 +3270,141 @@ function pvCardHtml(c, extra = '') {
       <div class="pv-progress"><span style="width:${pct}%"></span></div>
       <div class="pv-meta"><span><i class="fas fa-calendar"></i>${c.fecha_viaje_inicio ? pvFecha(c.fecha_viaje_inicio) : 'Viaje sin fecha'}</span><span class="pv-docs"><i class="fas fa-file-circle-check"></i>${docsListos}/6 docs</span></div>
       <div class="pv-meta"><span class="${vencido ? 'overdue' : ''}"><i class="fas fa-bell"></i>${tiempoSeguimiento(c.proximo_seguimiento_at)}</span>${c.incidencia_abierta ? '<span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span>' : ''}</div>
-      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button"><i class="fab fa-whatsapp"></i> WhatsApp</button>` : '<span></span>'}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar <i class="fas fa-arrow-right"></i></button></div>
+      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button" aria-label="WhatsApp de ${esc(c.nombre || 'cliente')}" title="Abrir WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></button>` : ''}${['admin','asesor','administrativo'].includes(ROL) ? `<button class="pv-btn" data-pv-abono="${c.id}" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente"'}>+ Abono</button><button class="pv-btn" data-pv-servicio="${c.id}" type="button">+ Servicio</button>` : ''}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar</button></div>
     </article>`;
+}
+// Abonos de la tarjeta: siempre por reserva, sin usar reserva_principal ni registrar_abono_venta.
+let PV_ABONO = null;
+function pvAbonoSolicitud(s, nuevo) {
+  if (nuevo !== undefined) {
+    s.pendiente = nuevo;
+    try { if (nuevo) sessionStorage.setItem(s.clave, JSON.stringify(nuevo)); else sessionStorage.removeItem(s.clave); } catch (_) { /* Mantener la solicitud en memoria si Storage no está disponible. */ }
+  }
+  return s.pendiente;
+}
+function pvAbonoPintar(s) {
+  if (PV_ABONO !== s) return;
+  const $ = id => document.getElementById(id), r = s.reserva;
+  $('pv-abono-cliente').textContent = r ? `${r.cliente || 'Cliente'} · ${r.codigo || 'Reserva'}` : 'Consultando reserva…';
+  $('pv-abono-pagado').textContent = r ? money(r.monto_pagado) : '—';
+  $('pv-abono-saldo').textContent = r ? money(r.saldo_pendiente) : '—';
+  const cerrado = !r || s.cargando || s.guardando;
+  $('pv-abono-monto').disabled = cerrado || !!s.pendiente || r.saldo_pendiente <= 0;
+  $('pv-abono-nota').disabled = cerrado || !!s.pendiente || r.saldo_pendiente <= 0;
+  $('pv-abono-liquidar').disabled = cerrado || !!s.pendiente || r.saldo_pendiente <= 0;
+  if (r) $('pv-abono-monto').max = r.saldo_pendiente;
+  if (s.pendiente) {
+    $('pv-abono-monto').value = s.pendiente.monto;
+    $('pv-abono-nota').value = s.pendiente.nota || '';
+    // Un reintento puede corresponder a un abono que ya dejó el saldo en cero.
+    $('pv-abono-monto').removeAttribute('max');
+  }
+  $('pv-abono-guardar').disabled = s.cargando || s.guardando || (!!r && r.saldo_pendiente <= 0 && !s.pendiente);
+  $('pv-abono-guardar').textContent = s.guardando ? 'Guardando…' : !r ? 'Reintentar carga' : s.pendiente ? 'Reintentar abono' : 'Guardar abono';
+}
+async function pvAbonoCargar(s) {
+  s.cargando = true; pvAbonoPintar(s);
+  try {
+    const { data, error } = await sb.rpc('reserva_detalle', { p_reserva_id: s.id });
+    if (PV_ABONO !== s) return;
+    if (error || !data?.ok || !data.reserva || data.vista === 'boleteria') throw Error('No se pudo consultar la reserva. Reintenta la carga.');
+    s.reserva = data.reserva;
+    s.reserva.saldo_pendiente = Math.max(0, Math.round((Number(s.reserva.monto_total) - Number(s.reserva.monto_pagado)) * 100) / 100);
+    document.getElementById('pv-abono-error').textContent = s.pendiente ? 'Hay un abono sin confirmar. Reinténtalo para consultar su resultado sin cobrarlo otra vez.' : s.reserva.saldo_pendiente <= 0 ? 'Esta reserva no tiene saldo pendiente.' : '';
+  } catch (e) {
+    if (PV_ABONO === s) document.getElementById('pv-abono-error').textContent = e.message || 'No se pudo consultar la reserva.';
+  } finally {
+    s.cargando = false; pvAbonoPintar(s);
+  }
+}
+function pvAbonoRefrescar() {
+  // Los formularios actuales de servicios usan este mismo refresco por sección.
+  if (currentSec === 'postventa') loadPostventa();
+  if (currentSec === 'reservas-empresas') loadReservasEmpresas();
+}
+async function pvAbrirAbono(reservaId, origen) {
+  if (!['admin','asesor','administrativo'].includes(ROL)) return;
+  if (PV_ABONO?.guardando) { errToast('Espera a que termine el abono en curso.'); return; }
+  let sheet = document.getElementById('pv-abono-sheet');
+  if (!sheet) {
+    sheet = document.createElement('div'); sheet.id = 'pv-abono-sheet'; sheet.className = 'sheet';
+    sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true'); sheet.setAttribute('aria-labelledby', 'pv-abono-titulo');
+    sheet.innerHTML = `<div class="sheet-handle"></div><div class="sheet-title" id="pv-abono-titulo">Agregar abono</div>
+      <form class="pv-abono-body" id="pv-abono-form" novalidate>
+        <div id="pv-abono-cliente"></div><div class="pv-balance pv-abono-balance" aria-live="polite"><span>Pagado <b id="pv-abono-pagado">—</b></span><span>Saldo <b id="pv-abono-saldo">—</b></span></div>
+        <label class="fl" for="pv-abono-monto">Monto del abono (USD)</label><input class="ei" id="pv-abono-monto" type="number" inputmode="decimal" min="0.01" step="0.01" required>
+        <button class="dbtn gh" id="pv-abono-liquidar" type="button">Liquidar saldo</button>
+        <label class="fl" for="pv-abono-nota">Nota (opcional)</label><textarea class="ei" id="pv-abono-nota" rows="2" maxlength="2000"></textarea>
+        <div class="edit-err" id="pv-abono-error" role="status" aria-live="polite"></div>
+        <div class="pv-abono-actions"><button class="dbtn" id="pv-abono-cancelar" type="button">Cerrar</button><button class="dbtn save" id="pv-abono-guardar" type="submit">Guardar abono</button></div>
+      </form>`;
+    document.body.appendChild(sheet);
+    document.getElementById('pv-abono-form').onsubmit = e => { e.preventDefault(); pvGuardarAbono(); };
+    document.getElementById('pv-abono-cancelar').onclick = () => closeSheet('pv-abono-sheet');
+    document.getElementById('pv-abono-liquidar').onclick = () => {
+      if (!PV_ABONO?.reserva || PV_ABONO.pendiente || PV_ABONO.guardando) return;
+      const input = document.getElementById('pv-abono-monto'); input.value = PV_ABONO.reserva.saldo_pendiente.toFixed(2); input.focus();
+    };
+    sheet.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSheet('pv-abono-sheet'); }
+      if (e.key !== 'Tab') return;
+      const items = [...sheet.querySelectorAll('input,textarea,button')].filter(x => !x.disabled);
+      const first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    });
+  }
+  const clave = `lotus-abono-reserva:${MI_USUARIO_ID}:${reservaId}`;
+  // Recuperar el importe original tras un timeout o recarga de esta pestaña.
+  let pendiente = PV_ABONO?.clave === clave ? PV_ABONO.pendiente : null;
+  try { pendiente = JSON.parse(sessionStorage.getItem(clave)) || pendiente; } catch (_) { /* Sin Storage, conservar memoria. */ }
+  const s = PV_ABONO = { id: reservaId, clave, pendiente, origen, reserva: null, cargando: true, guardando: false };
+  document.getElementById('pv-abono-form').reset();
+  document.getElementById('pv-abono-error').textContent = '';
+  pvAbonoPintar(s); openSheet('pv-abono-sheet'); document.getElementById('pv-abono-cancelar').focus();
+  await pvAbonoCargar(s);
+  if (PV_ABONO === s && sheet.classList.contains('open') && !document.getElementById('pv-abono-monto').disabled) document.getElementById('pv-abono-monto').focus();
+}
+async function pvGuardarAbono() {
+  const s = PV_ABONO;
+  if (!s || s.cargando || s.guardando) return;
+  if (!s.reserva) { await pvAbonoCargar(s); return; }
+  const err = document.getElementById('pv-abono-error'); err.textContent = '';
+  if (!s.pendiente) {
+    const monto = Number(document.getElementById('pv-abono-monto').value);
+    if (!Number.isFinite(monto) || monto <= 0 || Math.abs(monto * 100 - Math.round(monto * 100)) > 0.000001) { err.textContent = 'Indica un monto en USD con hasta dos decimales.'; return; }
+    if (monto > s.reserva.saldo_pendiente) { err.textContent = 'El abono no puede superar el saldo pendiente.'; return; }
+    pvAbonoSolicitud(s, { id: crypto.randomUUID(), monto, nota: document.getElementById('pv-abono-nota').value.trim() || null });
+  }
+  s.guardando = true; pvAbonoPintar(s);
+  try {
+    const p = s.pendiente;
+    const { data, error } = await sb.rpc('registrar_abono_reserva', { p_reserva_id: s.id, p_monto: p.monto, p_solicitud_id: p.id, p_nota: p.nota });
+    if (error) {
+      if (error.code === '42501') { pvAbonoSolicitud(s, null); throw Error('No tienes permiso para registrar este abono.'); }
+      throw Error('No se confirmó el resultado. Reintenta este mismo abono; no se cobrará dos veces.');
+    }
+    if (!data?.ok) {
+      if (!data) throw Error('No se confirmó el resultado. Reintenta este mismo abono.');
+      pvAbonoSolicitud(s, null);
+      await pvAbonoCargar(s);
+      err.textContent = data.error === 'supera_saldo' ? 'El saldo cambió. Revisa el importe antes de guardar.' : 'No se registró el abono: ' + (data.error || 'Error desconocido');
+      return;
+    }
+    pvAbonoSolicitud(s, null);
+    if (PV_ABONO === s && sheetAbierta === 'pv-abono-sheet') closeSheet('pv-abono-sheet');
+    pvAbonoRefrescar();
+    if (PV_ACTUAL?.id === s.id && RV_RESERVA_ID === s.id) {
+      Object.assign(PV_ACTUAL, data);
+      const pagado = document.getElementById('pv-e-pagado'); if (pagado) pagado.value = data.monto_pagado;
+      rvCargar();
+    }
+    okToast('Abono registrado');
+  } catch (e) {
+    if (PV_ABONO === s) err.textContent = e.message || 'No se confirmó el resultado. Reintenta el mismo abono.';
+  } finally {
+    s.guardando = false; pvAbonoPintar(s);
+  }
 }
 // Tarjetas de reservas fuera de la bandeja (fichas de proveedor y empresa): la bandeja completa,
 // sin filtro de etapa, es la misma fuente que pinta Reservas.
@@ -3305,7 +3440,7 @@ function pvDateTimeInput(iso) {
   const d = new Date(iso), p = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
-function abrirPostventa(c) {
+function abrirPostventa(c, accionInicial = null) {
   if (!c) return; PV_ACTUAL = c;
   const opt = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
   const docs = c.documentos || {};
@@ -3347,7 +3482,7 @@ function abrirPostventa(c) {
   // Desde la ficha del lead el cajón ya está abierto: no empujar otra entrada de historial.
   const yaAbierto = document.getElementById('drawer').classList.contains('open');
   document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!yaAbierto) navPush({ type: 'drawer' });
-  rvIniciar(c.id, 'resumen');
+  rvIniciar(c.id, accionInicial === 'nuevo-servicio' ? 'servicios' : 'resumen', accionInicial);
   if (ROL === 'admin') pvCargarEmpresas(c);
 }
 // Sin empresa_id en la bandeja (migración 20260925190000 sin aplicar) se deduce de las reservas de cada empresa.
@@ -3492,7 +3627,9 @@ function rvTab(k) {
   document.querySelectorAll('#drawerContent [data-rv-tab]').forEach(b => b.classList.toggle('on', b.dataset.rvTab === k));
   document.querySelectorAll('#drawerContent [data-rv-panel]').forEach(p => p.hidden = p.dataset.rvPanel !== k);
 }
-function rvIniciar(reservaId, tab) {
+let RV_APERTURA = 0;
+function rvIniciar(reservaId, tab, accionInicial = null) {
+  const apertura = ++RV_APERTURA;
   RV_RESERVA_ID = reservaId; RV_DET = null; RV_FORM = null; RV_APTOS = {};
   document.querySelectorAll('#drawerContent [data-rv-tab]').forEach(b => b.onclick = () => rvTab(b.dataset.rvTab));
   ['servicios', 'pasajeros', 'documentos'].forEach(k => {
@@ -3501,7 +3638,12 @@ function rvIniciar(reservaId, tab) {
     p.onclick = e => { const b = e.target.closest('[data-rv-accion]'); if (b && !b.disabled) rvAccion(b.dataset.rvAccion, b.dataset.id, b); };
   });
   rvTab(tab);
-  rvCargar();
+  const carga = rvCargar();
+  if (accionInicial === 'nuevo-servicio') carga.then(() => {
+    if (apertura !== RV_APERTURA || RV_RESERVA_ID !== reservaId || !RV_DET || !rvPuedeEditar() || !document.getElementById('drawer')?.classList.contains('open')) return;
+    rvForm({ tipo: 'servicio', id: null });
+    rvPanel('servicios')?.querySelector('input,select,textarea')?.focus();
+  });
 }
 // Boletería no pasa por la bandeja de Reservas: abre el cajón directo desde la pestaña Reservas de la sección Boletería.
 function rvAbrirReserva(reservaId, titulo, sub) {
@@ -30109,6 +30251,7 @@ function openSheet(id) {
   navPush({ type: 'sheet', id });
 }
 function closeSheet(id, fromNav) {
+  if (id === 'pv-abono-sheet') PV_ABONO?.origen?.isConnected && PV_ABONO.origen.focus();
   // Cerrar el menú de capítulos por cualquier vía (X, tocar afuera, elegir
   // un capítulo) cuenta como "ya vio el tutorial" -- no solo completarlo.
   document.getElementById(id)?.classList.remove('open');
@@ -30552,6 +30695,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-19', emoji: '➕', titulo: 'Abonos y servicios desde Reservas', texto: 'Las tarjetas de Reservas tienen accesos para agregar un abono o un servicio. Abono muestra lo pagado y el saldo de esa reserva; Liquidar saldo completa el monto para que lo revises antes de guardar. WhatsApp queda como un icono con un área cómoda para tocar.', roles: ['asesor', 'administrativo', 'admin'] },
   { fecha: '2026-10-18', emoji: '🏨', titulo: 'Foto del hotel seleccionado', texto: 'Al elegir un hotel en Cotizaciones se conserva una miniatura junto a su nombre para reconocerlo mientras preparas la cotización.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🧒', titulo: 'Tarifa de niños automática al cotizar', texto: 'Al añadir niños a un hotel se completa su tarifa desde la habitación y las fechas elegidas. El total y el PDF respetan los precios por temporada. Se indica el rango de edad de la ficha; si hay varias tarifas posibles o falta el dato, se pide confirmar el precio.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🏝️', titulo: 'Todos los hoteles, con Margarita y Los Roques primero', texto: 'El buscador de Cotizaciones ya no limita los resultados a ocho hoteles. Dentro de Hot Sale muestra primero Margarita, luego Los Roques y después los demás destinos, manteniendo el orden del Tarifario en cada grupo.', roles: ['asesor', 'boleteria', 'admin'] },
