@@ -1,4 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/+esm';
+import { crearDocumentosRevisiones } from './documentos-revisiones.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -2750,7 +2751,7 @@ async function startApp() {
     renderNavItems, renderFavoritos, fijarSolicitudesArriba, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
-    setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
+    setupDocumentosRevisiones, setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -16584,6 +16585,7 @@ window.exportarVentaPdf = exportarVentaPdf;
 function cargarMasVentas() { factVentasMostrar += TECHO_LISTA; renderVentas(); }
 window.cargarMasVentas = cargarMasVentas;
 async function loadComisionesAdmin() {
+  DR?.cargarComisiones();
   document.getElementById('fact-com-loading')?.classList.add('show');
   const { data, error } = await sb.rpc('listar_comisiones');
   document.getElementById('fact-com-loading')?.classList.remove('show');
@@ -16654,6 +16656,7 @@ function renderComisiones() {
 function cargarMasComisiones() { factComMostrar += TECHO_LISTA; renderComisiones(); }
 window.cargarMasComisiones = cargarMasComisiones;
 async function loadCuentasPorPagar() {
+  DR?.cargarCreditos();
   document.getElementById('cxp-loading')?.classList.add('show');
   const { data, error } = await sb.rpc('listar_cuentas_por_pagar');
   document.getElementById('cxp-loading')?.classList.remove('show');
@@ -18265,7 +18268,7 @@ function cmTab(tab) {
   document.querySelectorAll('#sec-comisiones [data-cm-panel]').forEach(p => { p.style.display = p.dataset.cmPanel === tab ? '' : 'none'; });
   ({ mias: cmLoadMias, verificar: cmLoadVerificar, invoices: cmLoadInvoices, config: cmLoadConfig })[tab]?.();
 }
-function loadComisiones() { cmTab(CM_TAB || (esOficina() ? 'verificar' : 'mias')); }
+function loadComisiones() { DR?.cargarComisiones(); cmTab(CM_TAB || (esOficina() ? 'verificar' : 'mias')); }
 
 async function cmLoadContexto() {
   const { data, error } = await sb.rpc('comision_contexto');
@@ -18484,7 +18487,7 @@ async function cmSubirInvoicePdf(id) {
     const { data, error } = await sb.rpc('comision_liquidacion_detalle', { p_id: id });
     if (error || !data?.ok) return { ok: false };
     await ensureVoucherLibs();
-    const bytes = await construirInvoiceComisionPdf(data.liquidacion, data.ventas || []);
+    const bytes = await construirInvoiceComisionPdf(data.liquidacion, [...(data.ventas || []), ...(data.ajustes || []).map(a => ({ cliente_nombre: `Ajuste voucher ${a.voucher_id}: ${a.motivo}`, comision_total: a.importe }))]);
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     return await cmEf({ accion: 'subir', liquidacion_id: id, pdf_base64: btoa(bin) });
@@ -25127,6 +25130,77 @@ function ensureVoucherLibs() {
     .catch(e => { voucherLibsPromise = null; throw e; });
   return voucherLibsPromise;
 }
+function drRotularPdf(doc, texto) {
+  for (let pagina = 1; pagina <= doc.getNumberOfPages(); pagina++) {
+    doc.setPage(pagina); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(100, 100, 100);
+    doc.text(texto, 572, 12, { align: 'right' });
+  }
+}
+let DR = null;
+function setupDocumentosRevisiones() {
+  if (DR) return;
+  DR = crearDocumentosRevisiones({ sb, esc, rol: () => ROL, usuario: () => MI_USUARIO_ID,
+    atiende: id => BOL_COLA.some(s => String(s.id) === String(id) && s.la_atiendo_yo),
+    fecha: fmtFechaHoraCaracas, nombreUsuario, prepararUsuarios: cargarUsuariosStaff, importeItem: cbImporte, confirmar: confirmarSheet, pedir: pedirTexto, abrir: openSheet, cerrar: closeSheet,
+    ok: okToast, error: errToast, librerias: ensureVoucherLibs, descargar: vcDescargar,
+    pdf: async (tipo, d) => tipo === 'voucher' ? new Blob([await construirVoucherPdf(d)], { type: 'application/pdf' }) : cbPdfDe(d),
+    prepararAdjunto: async (reservaId, servicioId, pdf, nombre) => {
+      const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: reservaId, servicio_id: servicioId, tipo: 'voucher', nombre, mime: 'application/pdf', tamano: pdf.size } });
+      if (firma.error || !firma.data?.ok) throw new Error('No se pudo preparar el PDF de la reserva. La revisión vigente se conserva.');
+      const up = await sb.storage.from('reservas-documentos').uploadToSignedUrl(firma.data.path, firma.data.token, pdf, { contentType: 'application/pdf' });
+      if (up.error) throw new Error('No se pudo subir el PDF a la reserva. Reintenta para guardar la revisión.');
+      return { path: firma.data.path, nombre };
+    },
+    destinatarios: () => [...document.getElementById('cb-asesor').options].filter(o => o.value).map(o => ({ id: o.value, nombre: o.textContent })),
+    abrirEditor: drAbrirEditor,
+    contenedorEditor: tipo => document.getElementById({ voucher: 'vc-form', cotizacion: 'cb-form', solicitud: 'boleteria-sheet' }[tipo]) || document.getElementById('sec-cotizacion-boletos'),
+    limpiar: tipo => { if (tipo === 'voucher') vcReset(); else if (tipo === 'cotizacion') cbResetForm(); else closeSheet('boleteria-sheet'); },
+    recargar: async tipo => { if (tipo === 'voucher') { vcOffset = 0; await cargarHistorialVouchers(false); }
+      else if (tipo === 'cotizacion') { cbOffset = 0; await cbCargarHistorial(false); } else await loadColaBoleteria(true); },
+    editorActualizado: (tipo, d) => {
+      if (tipo === 'voucher') {
+        ['vc-lead-q', 'vc-reserva-sel'].forEach(id => { const e = document.getElementById(id); if (e) e.disabled = !!d; });
+        const asesor = document.getElementById('vc-asesor'); if (asesor) { if (d) asesor.value = d.asesor_nombre; asesor.disabled = !!d || ROL !== 'admin'; } vcActualizarPreview();
+      } else if (tipo === 'cotizacion') {
+        for (const id of ['cb-enviar-btn', 'cb-compartir-btn', 'cb-lead-btn']) {
+          const b = document.getElementById(id); if (!b) continue;
+          if (d) { if (!('drOculto' in b.dataset)) b.dataset.drOculto = String(b.hidden); b.hidden = true; }
+          else if ('drOculto' in b.dataset) { b.hidden = b.dataset.drOculto === 'true'; delete b.dataset.drOculto; }
+        }
+        const b = document.getElementById('cb-descargar-btn');
+        if (b && d) { b.dataset.drEtiqueta ||= b.innerHTML; b.innerHTML = '<i class="fas fa-file-pdf"></i> Guardar revisión'; }
+        else if (b?.dataset.drEtiqueta) { b.innerHTML = b.dataset.drEtiqueta; delete b.dataset.drEtiqueta; }
+      } else if (tipo === 'solicitud') document.getElementById('bol-enviar').innerHTML = d ? 'Guardar revisión' : '<i class="fas fa-paper-plane"></i> Mandar a la cola';
+    },
+  });
+  DR.setup();
+  document.getElementById('vc-documentos-estado')?.addEventListener('change', () => { vcOffset = 0; cargarHistorialVouchers(false); });
+  document.getElementById('cb-documentos-estado')?.addEventListener('change', () => { cbOffset = 0; cbCargarHistorial(false); });
+}
+async function drAbrirEditor(tipo, d) {
+  if (tipo === 'voucher') {
+    activateSection('voucher'); vcReset();
+    const campos = { 'vc-cliente-nombre': 'cliente_nombre', 'vc-documento': 'documento_identidad', 'vc-telefono': 'telefono', 'vc-destino': 'destino_hospedaje',
+      'vc-fecha-entrada': 'fecha_entrada', 'vc-check-in': 'check_in', 'vc-fecha-salida': 'fecha_salida', 'vc-check-out': 'check_out', 'vc-modalidad': 'modalidad',
+      'vc-total-dias': 'total_dias', 'vc-habitaciones': 'habitaciones', 'vc-adultos': 'adultos', 'vc-ninos': 'ninos', 'vc-status': 'status_reserva',
+      'vc-total-general': 'total_general', 'vc-forma-pago': 'forma_pago', 'vc-referencia': 'referencia_pago', 'vc-monto-pagado': 'monto_pagado', 'vc-resta': 'resta' };
+    Object.entries(campos).forEach(([id, k]) => { document.getElementById(id).value = d[k] ?? ''; });
+    vcServicios = structuredClone(d.servicios || []); vcServSuma = vcServicios.reduce((n, s) => n + (Number(s.monto) || 0), 0);
+    vcDiasManual = vcRestaManual = true; vcPlanOtro = true; vcPintarServicios(); vcSyncChips(); vcActualizarPreview();
+  } else if (tipo === 'cotizacion') {
+    activateSection('cotizacion-boletos'); await cbCargarSeccion(); cbResetForm();
+    cbRestaurarBorrador({ ...d, asesor: d.enviado_a }, document.getElementById('cb-asesor'));
+    ['cb-fecha', 'cb-vence'].forEach(id => { document.getElementById(id).min = ''; document.getElementById(id).value = d[id === 'cb-fecha' ? 'fecha' : 'vence'] || ''; });
+  } else {
+    cerrarDetalleBoleteria(); abrirSolicitudBoleteria();
+    const campos = { 'bol-nombre': 'cliente_nombre', 'bol-telefono': 'cliente_telefono', 'bol-cedula': 'cliente_cedula', 'bol-origen': 'origen', 'bol-destino': 'destino',
+      'bol-fecha-viaje': 'fecha_viaje', 'bol-fecha-regreso': 'fecha_regreso', 'bol-adultos': 'adultos', 'bol-ninos': 'ninos', 'bol-infantes': 'infantes', 'bol-notas': 'notas' };
+    Object.entries(campos).forEach(([id, k]) => { document.getElementById(id).value = d[k] ?? ''; });
+    document.getElementById('bol-lead-id').value = d.lead_id || ''; document.getElementById('bol-flexible').checked = !!d.flexible_fechas;
+    document.getElementById('bol-buscar-box').style.display = 'none';
+    ['bol-fecha-viaje', 'bol-fecha-regreso'].forEach(id => { document.getElementById(id).min = ''; });
+  }
+}
 const VC_PAGE_SIZE = 20;
 let vcOffset = 0;
 let vcSearchTimer = null;
@@ -25437,6 +25511,7 @@ function vcPlan() {
   return r ? { modo: 'vincular', lead: l, reserva: r } : { modo: 'nueva', lead: l };
 }
 function vcPintarPlan(p) {
+  if (DR?.edicion('voucher')) { document.getElementById('vc-plan').textContent = 'Corrección del voucher existente. La reserva vinculada se conserva.'; return; }
   const pagado = vcNum('vc-monto-pagado'), nom = esc(p.lead?.nombre || val('vc-cliente-nombre').trim() || 'el cliente');
   const txt = {
     cerrar: p.lead ? `<i class="fas fa-handshake"></i> Se <b>cierra la venta</b> de ${nom} por <b>${vcMoney(pagado)}</b> (pasa a PAGO REALIZADO: factura y comisión) y queda su ficha en Reservas con el voucher.`
@@ -25489,7 +25564,8 @@ function vcActualizarPreview() {
   r.querySelector('span').textContent = !vcLead && p.modo === 'solo' && !p.manual ? 'Cliente sin vincular'
     : { cerrar: 'Venta nueva · ficha en Reservas', nueva: 'Reserva nueva (otro viaje)', vincular: 'Ficha ' + (p.reserva?.codigo || ''), cargando: 'Buscando reservas...', solo: 'Solo PDF, sin ficha' }[p.modo];
   const btn = $('vc-generar-btn');
-  if (!btn.disabled) btn.innerHTML = `<i class="fas fa-file-pdf"></i> ${{ cerrar: 'Generar y cerrar venta', nueva: 'Generar y crear reserva', vincular: 'Generar y vincular' }[p.modo] || 'Generar voucher'}`;
+  if (!btn.disabled && DR?.edicion('voucher')) btn.innerHTML = '<i class="fas fa-file-pdf"></i> Guardar revisión';
+  else if (!btn.disabled) btn.innerHTML = `<i class="fas fa-file-pdf"></i> ${{ cerrar: 'Generar y cerrar venta', nueva: 'Generar y crear reserva', vincular: 'Generar y vincular' }[p.modo] || 'Generar voucher'}`;
 }
 function vcSyncChips() {
   const partes = val('vc-forma-pago').toLowerCase().split('+').map(s => s.trim());
@@ -25503,6 +25579,7 @@ function vcTogglePago(pago) {
   if (i < 0 && vcEsPagoMovil() && !val('vc-referencia').trim()) document.getElementById('vc-referencia').focus();
 }
 function vcReset() {
+  DR?.cancelar('voucher');
   ['vc-cliente-nombre', 'vc-documento', 'vc-telefono', 'vc-destino', 'vc-modalidad', 'vc-habitaciones', 'vc-fecha-entrada', 'vc-fecha-salida', 'vc-adultos', 'vc-ninos',
     'vc-total-dias', 'vc-status', 'vc-total-general', 'vc-monto-pagado', 'vc-resta', 'vc-forma-pago', 'vc-referencia', 'vc-lead-q'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   vcServicios = []; vcServSuma = 0; vcPlanOtro = false; vcPintarServicios();
@@ -25531,8 +25608,9 @@ async function loadVoucherSeccion() {
   await cargarHistorialVouchers(false);
 }
 function vcQueryBase() {
-  let q = sb.from('vouchers').select('numero_factura,created_at,asesor_nombre,cliente_nombre,destino_hospedaje,total_general,pdf_path,reserva_id,reserva_codigo');
+  let q = sb.from('vouchers').select('id,creado_por,revision,anulado_en,anulado_motivo,numero_factura,created_at,asesor_nombre,cliente_nombre,destino_hospedaje,total_general,pdf_path,reserva_id,reserva_codigo');
   // Sin comas/paréntesis -- romperían la sintaxis del filtro .or() de PostgREST.
+  q = val('vc-documentos-estado') === 'anulados' ? q.not('anulado_en', 'is', null) : q.is('anulado_en', null);
   const buscar = (val('vc-buscar') || '').trim().replace(/[,()]/g, '');
   if (buscar) q = q.or(`cliente_nombre.ilike.%${buscar}%,asesor_nombre.ilike.%${buscar}%`);
   const desde = val('vc-filtro-desde'), hasta = val('vc-filtro-hasta');
@@ -25564,6 +25642,7 @@ async function cargarHistorialVouchers(append) {
     </div>
     <div class="lt-card-pie">
       <button class="btn-sm${v.pdf_path ? ' lt-primario' : ''}" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})"><i class="fas ${v.pdf_path ? 'fa-file-pdf' : 'fa-rotate'}"></i> ${v.pdf_path ? 'Ver PDF' : 'Reconstruir'}</button>
+      ${DR?.acciones('voucher', v) || ''}
       ${v.reserva_codigo ? `<button class="vc-chip-res" type="button" data-vc-res="${v.reserva_id}" data-cod="${esc(v.reserva_codigo)}" title="Abrir la ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> ${esc(v.reserva_codigo)}</button>` : ''}
     </div>
   </article>`).join('');
@@ -25601,7 +25680,7 @@ async function actualizarBadgeVoucher() {
   const badge = document.getElementById('nav-voucher-count');
   if (!badge) return;
   const inicioMes = new Date(); inicioMes.setDate(1); inicioMes.setHours(0, 0, 0, 0);
-  const { count, error } = await sb.from('vouchers').select('id', { count: 'exact', head: true }).gte('created_at', inicioMes.toISOString());
+  const { count, error } = await sb.from('vouchers').select('id', { count: 'exact', head: true }).is('anulado_en', null).gte('created_at', inicioMes.toISOString());
   if (error) return;
   badge.textContent = count || 0;
   badge.style.display = count ? '' : 'none';
@@ -25689,17 +25768,6 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
   }
   const sinNombre = vcServicios.findIndex(s => !String(s.nombre || '').trim());
   if (sinNombre >= 0) { document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)?.focus(); errToast(`Falta el nombre del servicio adicional ${sinNombre + 1} (o quitalo)`); return; }
-  const plan = vcPlan();
-  if (plan.modo === 'cargando') { errToast('Esperá a que carguen las reservas del cliente'); return; }
-  const montos = `Total ${vcMoney(total)} · Pagado ${vcMoney(pagado)} · Resta ${vcMoney(vcNum('vc-resta'))}`;
-  if (plan.modo === 'cerrar' && !(await confirmarSheet({
-    titulo: `¿Cerrar la venta por ${vcMoney(pagado)}?`, textoOk: 'Generar y cerrar venta',
-    detalle: `${plan.lead ? 'Cliente: ' + plan.lead.nombre : 'Se crea el cliente ' + clienteNombre + ' en el CRM.'}\nPasa a PAGO REALIZADO: se genera la factura por lo pagado, la comisión y la ficha en Reservas con el voucher.\n${montos}`,
-  }))) return;
-  if (plan.modo === 'nueva' && pagado > 0 && !(await confirmarSheet({
-    titulo: `¿Reserva nueva y facturar ${vcMoney(pagado)}?`, textoOk: 'Generar y facturar',
-    detalle: `Es otro viaje de ${plan.lead.nombre}: se crea una reserva aparte y se factura lo pagado (factura, comisión y cuenta por pagar).\n${montos}`,
-  }))) return;
   const asesorNombre = ROL === 'admin' ? (val('vc-asesor').trim() || MI_NOMBRE) : MI_NOMBRE;
   const fila = {
     creado_por: MI_USUARIO_ID, asesor_nombre: asesorNombre, cliente_nombre: clienteNombre,
@@ -25717,6 +25785,18 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     resta: val('vc-resta') ? parseFloat(val('vc-resta')) : null,
     servicios: vcServicios.map(vcServLimpio),
   };
+  if (DR?.edicion('voucher')) { await DR.guardar('voucher', fila); return; }
+  const plan = vcPlan();
+  if (plan.modo === 'cargando') { errToast('Esperá a que carguen las reservas del cliente'); return; }
+  const montos = `Total ${vcMoney(total)} · Pagado ${vcMoney(pagado)} · Resta ${vcMoney(vcNum('vc-resta'))}`;
+  if (plan.modo === 'cerrar' && !(await confirmarSheet({
+    titulo: `¿Cerrar la venta por ${vcMoney(pagado)}?`, textoOk: 'Generar y cerrar venta',
+    detalle: `${plan.lead ? 'Cliente: ' + plan.lead.nombre : 'Se crea el cliente ' + clienteNombre + ' en el CRM.'}\nPasa a PAGO REALIZADO: se genera la factura por lo pagado, la comisión y la ficha en Reservas con el voucher.\n${montos}`,
+  }))) return;
+  if (plan.modo === 'nueva' && pagado > 0 && !(await confirmarSheet({
+    titulo: `¿Reserva nueva y facturar ${vcMoney(pagado)}?`, textoOk: 'Generar y facturar',
+    detalle: `Es otro viaje de ${plan.lead.nombre}: se crea una reserva aparte y se factura lo pagado (factura, comisión y cuenta por pagar).\n${montos}`,
+  }))) return;
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...';
   let registro = null;
   try {
@@ -26057,6 +26137,7 @@ async function construirVoucherPdf(v) {
   doc.addPage();
   vcpDibujarTerminos(doc, ctx, VC_TERMINOS);
   vcpPie(doc, ctx, nVoucher);
+  drRotularPdf(doc, `Voucher ${v.numero_factura} · revisión ${v.revision || 1}`);
   return doc.output('arraybuffer');
 }
 
@@ -26473,7 +26554,7 @@ function cbDatosPdf(c) {
   const principal = items.find(it => it.tipo === 'hotel' || it.tipo === 'paquete') || items[0];
   const conPersonas = items.filter(it => ['boleto', 'hotel', 'paquete'].includes(it.tipo || 'boleto')).sort((x, y) => cbTotalPax(y) - cbTotalPax(x))[0];
   return {
-    cliente: c.cliente, numero: cbNumero(c.numero), fecha: c.fecha,
+    cliente: c.cliente, numero: cbNumero(c.numero), fecha: c.fecha, revision: c.revision || 1,
     titulo: principal ? cbTitulo(principal) : '',
     fechas: fechas.length ? (fechas[0] === fechas.at(-1) ? cbFechaLarga(fechas[0]) : `${cbFechaLarga(fechas[0])} al ${cbFechaLarga(fechas.at(-1))}`) : '',
     personas: conPersonas ? cbPaxTexto(conPersonas) : '',
@@ -26813,6 +26894,8 @@ async function cbResolverSolicitud(solId, cot) {
   return !!data?.ok;
 }
 function cbResetForm() {
+  DR?.cancelar('cotizacion');
+  ['cb-fecha', 'cb-vence'].forEach(id => { document.getElementById(id).min = cbHoy(); });
   clearTimeout(cbBorradorTimer); cbBorradorTimer = null;
   cbSolicitud = null; cbPintarSolicitud();
   cbLead = null; cbPintarLead();
@@ -27002,6 +27085,7 @@ async function cbCargarHistorial(append) {
   const cont = document.getElementById('cb-historial'), mas = document.getElementById('cb-cargar-mas-btn');
   if (!append) document.getElementById('cb-historial-loading')?.classList.add('show');
   let q = sb.from('cotizaciones_boleteria').select('*');
+  q = val('cb-documentos-estado') === 'anulados' ? q.not('anulado_en', 'is', null) : q.is('anulado_en', null);
   // Sin comas/paréntesis -- romperían la sintaxis del filtro .or() de PostgREST.
   const buscar = (val('cb-buscar') || '').trim().replace(/[,()]/g, '');
   if (buscar) q = q.or(`cliente.ilike.%${buscar}%,enviado_a_nombre.ilike.%${buscar}%,creado_por_nombre.ilike.%${buscar}%`);
@@ -27025,7 +27109,8 @@ async function cbCargarHistorial(append) {
     <div class="lt-card-meta">${ventas ? '<i class="fas fa-user-check"></i> Para el cliente' : c.enviado_a ? `<i class="fas fa-paper-plane"></i> Enviada a ${esc(c.enviado_a_nombre || 'asesor')}` : '<i class="fas fa-circle-minus"></i> Sin enviar'}</div>
     <div class="lt-card-pie">
       <button class="btn-sm lt-primario" type="button" onclick="cbVerPdf('${c.id}')"><i class="fas fa-file-pdf"></i> Ver PDF</button>
-      ${ventas ? (c.lead_id ? `<button class="btn-sm" type="button" onclick="cbReintentarLead('${c.id}', this)">Registrar en lead</button>` : '') : `<button class="btn-sm" type="button" onclick="cbReenviar('${c.id}', this)"><i class="fas fa-paper-plane"></i> Enviar al asesor</button>`}
+      ${DR?.acciones('cotizacion', c) || ''}
+      ${!c.anulado_en && ventas ? (c.lead_id ? `<button class="btn-sm" type="button" onclick="cbReintentarLead('${c.id}', this)">Registrar en lead</button>` : '') : ''}
     </div>
   </article>`;
   }).join('');
@@ -27037,6 +27122,7 @@ async function cbCargarHistorial(append) {
 window.cbCargarMas = () => { cbOffset += CB_PAGE_SIZE; cbCargarHistorial(true); };
 
 async function cbEnviarAAsesor(c, blob, asesorId) {
+  if (DR) return DR.enviarCotizacion(c, asesorId, blob);
   const nombre = cbArchivo(c);
   const { data: convId, error } = await sb.rpc('obtener_o_crear_conversacion_directa', { p_otro_usuario_id: asesorId });
   if (error || !convId) return false;
@@ -27066,11 +27152,11 @@ window.cbGuardar = async function cbGuardar(accion) {
   const incompleto = items.find(it => !cbTitulo(it) || !(cbEsPax(it) ? cbPax(it).a : it.cant));
   if (incompleto) { const t = cbTipo(incompleto), falta = !cbTitulo(incompleto) ? t.campos[0][1] : cbEsPax(incompleto) ? 'al menos un adulto' : t.campos.find(([k]) => k === 'cant')[1]; errToast(`${t.nombre}: falta ${falta.toLowerCase()}`); return; }
   const pasada = items.find(it => [it.ida, it.vuelta].some(d => d && d < cbHoy()));
-  if (pasada) { errToast(`${cbTipo(pasada).nombre}: hay una fecha anterior a hoy`); return; }
-  if ([val('cb-fecha'), val('cb-vence')].some(d => d && d < cbHoy())) { errToast('La fecha y la vigencia no pueden ser anteriores a hoy'); return; }
+  if (pasada && !DR?.edicion('cotizacion')) { errToast(`${cbTipo(pasada).nombre}: hay una fecha anterior a hoy`); return; }
+  if (!DR?.edicion('cotizacion') && [val('cb-fecha'), val('cb-vence')].some(d => d && d < cbHoy())) { errToast('La fecha y la vigencia no pueden ser anteriores a hoy'); return; }
   const asesorId = val('cb-asesor');
   if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); document.getElementById('cb-asesor').focus(); return; }
-  const btn = document.getElementById(`cb-${accion}-btn`), htmlBtn = btn.innerHTML;
+  const btn = document.getElementById(`cb-${accion}-btn`), htmlBtn = btn.dataset.drEtiqueta || btn.innerHTML;
   cbGenerando = true; document.querySelectorAll('.cb-acciones button').forEach(b => b.disabled = true);
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
   const sol = ventas ? null : cbSolicitud, lead = ventas ? cbLead : null;
@@ -27078,8 +27164,9 @@ window.cbGuardar = async function cbGuardar(accion) {
     const fila = {
       creado_por: MI_USUARIO_ID, creado_por_nombre: MI_NOMBRE, cliente, fecha: val('cb-fecha') || cbHoy(), vence: val('cb-vence') || null,
       items, total: cbTotalItems(items), notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null,
-      solicitud_id: sol?.id ?? null, origen: cbModo, lead_id: lead?.id ?? null,
+      solicitud_id: sol?.id ?? null, solicitud_revision: sol?.revision ?? null, origen: cbModo, lead_id: lead?.id ?? null,
     };
+    if (DR?.edicion('cotizacion')) { await DR.guardar('cotizacion', { ...fila, items: items.map(it => ({ ...it, importe_revision: cbImporte(it) })) }); return; }
     const { data: cot, error } = await sb.from('cotizaciones_boleteria').insert(fila).select().single();
     if (error || !cot) { errToast('No se pudo guardar la cotización: ' + (error?.message || '')); return; }
     cbResetForm();
@@ -27107,7 +27194,7 @@ window.cbGuardar = async function cbGuardar(accion) {
     cbOffset = 0; cbCargarHistorial(false);
   } finally {
     cbGenerando = false; document.querySelectorAll('.cb-acciones button').forEach(b => b.disabled = false);
-    btn.disabled = false; btn.innerHTML = htmlBtn;
+    btn.disabled = false; btn.innerHTML = DR?.edicion('cotizacion') ? '<i class="fas fa-file-pdf"></i> Guardar revisión' : htmlBtn;
   }
 };
 async function cbRegistrarLeadCot(cot) {
@@ -27148,12 +27235,12 @@ window.cbVerPdf = async function cbVerPdf(id) {
   if (!c) return;
   try {
     await ensureVoucherLibs();
-    const blob = await cbPdfDe(c);
-    if (c.origen === 'ventas' && c.lead_id) await cbRegistrarLeadCot(c);
+    const blob = c.pdf_revision_path ? await DR.pdfVigente('cotizacion', c) : await cbPdfDe(c);
     window.open(URL.createObjectURL(blob), '_blank');
   } catch (e) { console.error('cbVerPdf', e); errToast('No se pudo generar el PDF'); }
 };
 window.cbReenviar = async function cbReenviar(id, btn) {
+  if (DR && cbFilas.has(id)) { try { await DR.reenviarCotizacion(cbFilas.get(id)); } catch (e) { errToast(e.message); } return; }
   const c = cbFilas.get(id), asesorId = val('cb-asesor');
   if (!c) return;
   if (!asesorId) { errToast('Elige el asesor arriba, en «Enviar al asesor»'); document.getElementById('cb-asesor').focus(); return; }
@@ -27248,6 +27335,7 @@ async function cbPdfBlob(c) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120, 120, 120);
     doc.text('Destino y Eventos Lotus 360 · 0241-5144470 / 0424-4634041 · Destinoyeventoslotus360@gmail.com', W / 2, 766, { align: 'center' });
   }
+  drRotularPdf(doc, `Cotización ${cbNumero(c.numero)} · revisión ${c.revision || 1}`);
   return doc.output('blob');
 }
 
@@ -27417,6 +27505,7 @@ async function pdfCotizacionCliente(datos) {
     doc.text('Destino y Eventos Lotus 360 · 0241-5144470 / 0424-4634041 · Destinoyeventoslotus360@gmail.com', X0, 766);
     if (n > 1) doc.text(`${p} / ${n}`, X1, 766, { align: 'right' });
   }
+  drRotularPdf(doc, `Cotización ${datos.numero} · revisión ${datos.revision || 1}`);
   return doc.output('blob');
 }
 
@@ -28870,7 +28959,7 @@ function setupBoleteria() {
     nota.value = chip.dataset.bolRes + '. '; nota.focus(); nota.setSelectionRange(nota.value.length, nota.value.length);
   });
   document.getElementById('bol-tomar-sig')?.addEventListener('click', e => bolTomar(null, e.currentTarget));
-  document.getElementById('bol-filtros')?.addEventListener('click', e => { const b = e.target.closest('[data-bol-filtro]'); if (b) bolFiltrar(b.dataset.bolFiltro); });
+  document.getElementById('bol-filtros')?.addEventListener('click', e => { const b = e.target.closest('[data-bol-filtro]'); if (b) { const anterior = BOL_FILTRO; bolFiltrar(b.dataset.bolFiltro); if (anterior === 'anuladas' || BOL_FILTRO === 'anuladas') loadColaBoleteria(true); } });
   let deb = null;
   document.getElementById('bol-q')?.addEventListener('input', e => { clearTimeout(deb); deb = setTimeout(() => { BOL_Q = e.target.value.trim(); bolRenderCola(); }, 200); });
   const grid = document.getElementById('bol-grid');
@@ -28928,6 +29017,7 @@ function bolPaxDeTexto(txt) {
 }
 
 function abrirSolicitudBoleteria(lead) {
+  DR?.cancelar('solicitud');
   document.getElementById('bol-err').textContent = '';
   ['bol-nombre', 'bol-telefono', 'bol-cedula', 'bol-origen', 'bol-destino',
    'bol-fecha-viaje', 'bol-fecha-regreso', 'bol-adultos', 'bol-ninos', 'bol-infantes', 'bol-notas', 'bol-buscar'].forEach(id => {
@@ -28996,13 +29086,18 @@ async function enviarSolicitudBoleteria() {
   const btn = document.getElementById('bol-enviar'), err = document.getElementById('bol-err');
   const ent = id => { const v = parseInt(val(id), 10); return Number.isFinite(v) ? v : null; };
   const leadId = document.getElementById('bol-lead-id')?.value;
-  const problemaFecha = bolValidarFechas();
+  const problemaFecha = DR?.edicion('solicitud') ? (val('bol-fecha-viaje') && val('bol-fecha-regreso') && val('bol-fecha-regreso') < val('bol-fecha-viaje') ? 'El regreso no puede ser antes de la ida.' : '') : bolValidarFechas();
   if (problemaFecha) { err.textContent = problemaFecha; return; }
   // Vacío en los tres = no dijo cuántos; con alguno cargado se manda el desglose completo.
   const [ad, ni, inf] = ['bol-adultos', 'bol-ninos', 'bol-infantes'].map(ent);
   const hayPax = ad != null || ni != null || inf != null;
   if (hayPax && (ad || 0) + (ni || 0) + (inf || 0) < 1) { err.textContent = 'Indica al menos una persona (o deja los tres campos vacíos).'; return; }
   if (hayPax && !(ad > 0)) { err.textContent = 'Tiene que viajar al menos un adulto con los niños o infantes.'; return; }
+  if (DR?.edicion('solicitud')) {
+    await DR.guardar('solicitud', { cliente_nombre: val('bol-nombre'), cliente_telefono: val('bol-telefono'), cliente_cedula: val('bol-cedula'),
+      origen: val('bol-origen'), destino: val('bol-destino'), fecha_viaje: val('bol-fecha-viaje') || null, fecha_regreso: val('bol-fecha-regreso') || null,
+      flexible_fechas: document.getElementById('bol-flexible').checked, adultos: ad, ninos: ni, infantes: inf, notas: val('bol-notas') }); return;
+  }
   err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.rpc('crear_solicitud_boleteria', {
     p_cliente_nombre: val('bol-nombre'),
@@ -29101,7 +29196,7 @@ function bolCardHtml(s) {
     ${agente ? '' : bolLineaTiempo(s)}
     ${!bolAbierta(s) && s.resultado ? `<div class="bol-resultado"><b>${s.estado === 'cancelada' ? 'Motivo' : 'Resultado'}:</b> ${esc(s.resultado)}</div>` : ''}
     <div class="bol-pie"><span>${quien}</span><span>#${s.id} · ${tiempoRelativo(s.creado_en)}</span></div>
-    ${acc.length ? `<div class="bol-card-acc">${acc.join('')}</div>` : ''}
+    <div class="bol-card-acc">${acc.join('')}${DR?.acciones('solicitud', s) || ''}</div>
   </div>`;
 }
 
@@ -29115,6 +29210,7 @@ function bolRenderCola() {
   const vacio = BOL_COLA.length === 0;
   document.getElementById('bol-empty')?.classList.toggle('show', vacio);
   grid.style.display = vacio ? 'none' : '';
+  if (BOL_FILTRO === 'anuladas') { grid.classList.add('plano'); grid.innerHTML = filas.map(bolCardHtml).join('') || '<div class="bol-col-vacia">Sin solicitudes anuladas</div>'; return; }
   if (BOL_FILTRO === 'resuelta' || BOL_FILTRO === 'cancelada') {
     const lista = filas.filter(s => s.estado === BOL_FILTRO).sort(porCierre);
     grid.classList.add('plano');
@@ -29177,7 +29273,6 @@ function bolDetalleHtml(s) {
   if (s.lead_id && (ROL === 'admin' || (ROL === 'asesor' && s.es_mia))) acc.push(`<button class="dbtn gh" data-bol-lead="${s.lead_id}"><i class="fas fa-user"></i> Ver lead</button>`);
   if (MI_ES_AGENTE_BOLETERIA) acc.push(`<button class="dbtn gh" data-bol-copiar="${s.id}"><i class="fas fa-copy"></i> Copiar datos</button>`);
   if (MI_ES_AGENTE_BOLETERIA ? bolAbierta(s) : (s.es_mia && s.estado === 'en_cola')) acc.push(`<button class="dbtn gh" data-bol-cancelar="${s.id}"><i class="fas fa-xmark"></i> ${MI_ES_AGENTE_BOLETERIA ? 'Cancelar' : 'Cancelar solicitud'}</button>`);
-  if (ROL === 'admin' || (ROL === 'asesor' && s.es_mia && s.estado !== 'atendiendo')) acc.push(`<button class="dbtn peligro" data-bol-eliminar="${s.id}"><i class="fas fa-trash"></i> Eliminar</button>`);
 
   const f = iso => esc(fmtFechaHoraCaracas(iso));
   const pasos = [{ cls: '', t: 'Enviada a la cola', sub: `${esc(s.creado_por || '—')} · ${f(s.creado_en)}` }];
@@ -29222,6 +29317,7 @@ function bolDetalleHtml(s) {
     <div class="bd-tl">${pasos.map(p => `<div class="bd-tl-p ${p.cls}"><i></i><div><b>${p.t}</b><small>${p.sub}</small></div></div>`).join('')}</div>
     ${s.estado !== 'en_cola' ? '<div class="bd-acc" data-bol-cot style="display:none"></div>' : ''}
 
+    <div class="bd-acc">${DR?.acciones('solicitud', s) || ''}</div>
     ${acc.length ? `<div class="bd-acc">${acc.join('')}</div>` : ''}`;
 }
 
@@ -29286,12 +29382,8 @@ function cerrarDetalleBoleteria() {
 }
 
 async function bolEliminar(id) {
-  if (!(await confirmarSheet({ titulo: '¿Eliminar esta solicitud de la cola?', detalle: 'Deja de verse para todos.', textoOk: 'Eliminar', destructivo: true }))) return;
-  const { data, error } = await sb.rpc('eliminar_solicitud_boleteria', { p_id: Number(id) });
-  if (error || !data?.ok) { errToast('No se pudo eliminar: ' + (BOL_ERR[data?.error] || error?.message || '')); return; }
-  cerrarDetalleBoleteria();
-  okToast('Solicitud eliminada');
-  loadColaBoleteria();
+  const boton = document.querySelector(`[data-dr="anular"][data-dr-tipo="solicitud"][data-dr-id="${id}"]`);
+  if (boton) boton.click(); else errToast('Abre el historial de la solicitud para anularla.');
 }
 
 async function loadColaBoleteria(silencioso) {
@@ -29303,7 +29395,7 @@ async function loadColaBoleteria(silencioso) {
   // El catálogo solo lo usa el detalle (precio de la ruta): la cola no lo espera.
   const catalogo = bolAsegurarCatalogo();
   const [cola, agentes] = await Promise.all([
-    sb.rpc('listar_cola_boleteria'),
+    sb.rpc('documentos_solicitudes', { p_anuladas: BOL_FILTRO === 'anuladas' }),
     sb.rpc('agentes_boleteria_estado'),
   ]);
   loading?.classList.remove('show');
@@ -30695,6 +30787,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-19', emoji: '📝', titulo: 'Correcciones con historial de documentos', texto: 'Solicitudes, cotizaciones y vouchers permiten editar, anular y consultar revisiones sin perder su número. Antes de guardar se revisan las diferencias de dinero; los pagos previos se conservan. La revisión vigente se puede descargar, compartir y volver a enviar desde el historial.', roles: ['asesor', 'boleteria', 'administrativo', 'admin'] },
   { fecha: '2026-10-19', emoji: '➕', titulo: 'Abonos y servicios desde Reservas', texto: 'Las tarjetas de Reservas tienen accesos para agregar un abono o un servicio. Abono muestra lo pagado y el saldo de esa reserva; Pago completado completa el monto para que lo revises antes de guardar. WhatsApp queda como un icono con un área cómoda para tocar.', roles: ['asesor', 'administrativo', 'admin'] },
   { fecha: '2026-10-18', emoji: '🏨', titulo: 'Foto del hotel seleccionado', texto: 'Al elegir un hotel en Cotizaciones se conserva una miniatura junto a su nombre para reconocerlo mientras preparas la cotización.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🧒', titulo: 'Tarifa de niños automática al cotizar', texto: 'Al añadir niños a un hotel se completa su tarifa desde la habitación y las fechas elegidas. El total y el PDF respetan los precios por temporada. Se indica el rango de edad de la ficha; si hay varias tarifas posibles o falta el dato, se pide confirmar el precio.', roles: ['asesor', 'boleteria', 'admin'] },

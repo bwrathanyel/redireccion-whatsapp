@@ -1325,6 +1325,11 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 #vc-generar-btn:hover{filter:brightness(1.08);transform:translateY(-2px);box-shadow:0 14px 28px rgba(var(--accent-rgb),.42)}
 #vc-generar-btn:active{transform:translateY(0) scale(.97)}
 #vc-generar-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+#dr-historial-cuerpo .dr-datos{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font-size:12px}
+#dr-historial-cuerpo .dr-datos dt{color:var(--muted);font-weight:600}
+#dr-historial-cuerpo .dr-datos dd{margin:0 0 12px}
+#dr-historial-cuerpo .lt-card{margin-bottom:12px}
+#dr-historial-cuerpo .lt-card-pie,#dr-historial-cuerpo .vc-hecho{flex-wrap:wrap}
 .dbtn.save:active{transform:scale(.98)}
 /* toggle de periodo */
 .seg-group{display:inline-flex;background:var(--panel-solid);border:1px solid var(--line2);border-radius:12px;padding:4px;gap:3px;margin-bottom:16px}
@@ -6321,6 +6326,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
               <button class="seg" type="button" data-bol-filtro="mias" id="bol-filtro-mias">Las que atiendo</button>
               <button class="seg" type="button" data-bol-filtro="resuelta">Resueltas</button>
               <button class="seg" type="button" data-bol-filtro="cancelada">Canceladas</button>
+              <button class="seg" type="button" data-bol-filtro="anuladas">Anuladas</button>
             </div>
           </div>
           <div class="tbl-state skel" id="bol-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
@@ -7194,6 +7200,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           </div>
         </div>
         <div class="card">
+          <div id="dr-fact-ajustes" class="vc-hecho" hidden></div>
           <div class="kpis bt-kpis lt-kpis lt-kpis-4" id="fact-com-kpis"></div>
           <div class="lt-orden" role="group" aria-label="Ordenar por">
             <span class="lt-orden-lbl">Ordenar</span>
@@ -7223,6 +7230,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           </div>
         </div>
         <div class="card">
+          <div id="dr-creditos-proveedor" class="vc-hecho" hidden></div>
           <div class="kpis bt-kpis lt-kpis" id="cxp-kpis"></div>
           <div class="lt-orden" role="group" aria-label="Ordenar por">
             <span class="lt-orden-lbl">Ordenar</span>
@@ -7915,6 +7923,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 
     <!-- COMISIONES POR CORTE (asesor/freelancer carga ventas; admin verifica, emite invoice y configura %) -->
     <section class="section" id="sec-comisiones">
+      <div id="dr-comision-ajustes" class="vc-hecho" hidden></div>
       <div class="seg-group chips-scroll" id="cm-tabs">
         <button class="seg" data-cm-tab="mias" data-cm-rol="asesor">Mis ventas</button>
         <button class="seg" data-cm-tab="verificar" data-cm-rol="admin administrativo">Ventas por verificar <span class="lih-count" id="cm-pend-count">0</span></button>
@@ -8211,6 +8220,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <button class="mfs-trigger mfs-icon" data-mfs="vc-filtros" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
       <div class="mfs" id="vc-filtros" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px">
         <div class="field" style="flex:2;min-width:220px"><label class="fl">Buscar (cliente o asesor)</label><input id="vc-buscar" class="ei" placeholder="Nombre..."></div>
+        <div class="field"><label class="fl" for="vc-documentos-estado">Estado</label><select id="vc-documentos-estado" class="ei"><option value="activos">Activos</option><option value="anulados">Anulados</option></select></div>
         <div class="field" style="flex:1;min-width:150px"><label class="fl">Desde</label><input id="vc-filtro-desde" class="ei" type="date"></div>
         <div class="field" style="flex:1;min-width:150px"><label class="fl">Hasta</label><input id="vc-filtro-hasta" class="ei" type="date"></div>
         <button class="mfs-done" data-mfs="vc-filtros" type="button">Listo</button>
@@ -8268,6 +8278,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="cb-hist-filtros">
             <select id="cb-origen" class="ei" aria-label="Origen de la cotización"><option value="">Todas</option><option value="boleteria">Boletería</option><option value="ventas">Ventas</option></select>
             <input id="cb-buscar" class="ei" placeholder="Buscar cliente o asesor...">
+            <select id="cb-documentos-estado" class="ei" aria-label="Estado de las cotizaciones"><option value="activos">Activas</option><option value="anulados">Anuladas</option></select>
           </div>
         </div>
         <div class="tbl-state skel" id="cb-historial-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
