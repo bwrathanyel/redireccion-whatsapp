@@ -3333,7 +3333,7 @@ async function pvAbrirAbono(reservaId, origen) {
       <form class="pv-abono-body" id="pv-abono-form" novalidate>
         <div id="pv-abono-cliente"></div><div class="pv-balance pv-abono-balance" aria-live="polite"><span>Pagado <b id="pv-abono-pagado">—</b></span><span>Saldo <b id="pv-abono-saldo">—</b></span></div>
         <label class="fl" for="pv-abono-monto">Monto del abono (USD)</label><input class="ei" id="pv-abono-monto" type="number" inputmode="decimal" min="0.01" step="0.01" required>
-        <button class="dbtn gh" id="pv-abono-liquidar" type="button">Liquidar saldo</button>
+        <button class="dbtn gh" id="pv-abono-liquidar" type="button">Pago completado</button>
         <label class="fl" for="pv-abono-nota">Nota (opcional)</label><textarea class="ei" id="pv-abono-nota" rows="2" maxlength="2000"></textarea>
         <div class="edit-err" id="pv-abono-error" role="status" aria-live="polite"></div>
         <div class="pv-abono-actions"><button class="dbtn" id="pv-abono-cancelar" type="button">Cerrar</button><button class="dbtn save" id="pv-abono-guardar" type="submit">Guardar abono</button></div>
@@ -30695,7 +30695,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-10-19', emoji: '➕', titulo: 'Abonos y servicios desde Reservas', texto: 'Las tarjetas de Reservas tienen accesos para agregar un abono o un servicio. Abono muestra lo pagado y el saldo de esa reserva; Liquidar saldo completa el monto para que lo revises antes de guardar. WhatsApp queda como un icono con un área cómoda para tocar.', roles: ['asesor', 'administrativo', 'admin'] },
+  { fecha: '2026-10-19', emoji: '➕', titulo: 'Abonos y servicios desde Reservas', texto: 'Las tarjetas de Reservas tienen accesos para agregar un abono o un servicio. Abono muestra lo pagado y el saldo de esa reserva; Pago completado completa el monto para que lo revises antes de guardar. WhatsApp queda como un icono con un área cómoda para tocar.', roles: ['asesor', 'administrativo', 'admin'] },
   { fecha: '2026-10-18', emoji: '🏨', titulo: 'Foto del hotel seleccionado', texto: 'Al elegir un hotel en Cotizaciones se conserva una miniatura junto a su nombre para reconocerlo mientras preparas la cotización.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🧒', titulo: 'Tarifa de niños automática al cotizar', texto: 'Al añadir niños a un hotel se completa su tarifa desde la habitación y las fechas elegidas. El total y el PDF respetan los precios por temporada. Se indica el rango de edad de la ficha; si hay varias tarifas posibles o falta el dato, se pide confirmar el precio.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🏝️', titulo: 'Todos los hoteles, con Margarita y Los Roques primero', texto: 'El buscador de Cotizaciones ya no limita los resultados a ocho hoteles. Dentro de Hot Sale muestra primero Margarita, luego Los Roques y después los demás destinos, manteniendo el orden del Tarifario en cada grupo.', roles: ['asesor', 'boleteria', 'admin'] },
