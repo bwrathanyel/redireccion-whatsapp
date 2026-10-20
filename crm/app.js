@@ -26242,7 +26242,25 @@ const cbTarPlanClave = s => {
   return /^(ti|todo incluido|all inclusive)$/.test(n) ? 'todo incluido' : n;
 };
 const cbTarBloque = t => Array.isArray(t.tarifario_bloques) ? t.tarifario_bloques[0] || {} : t.tarifario_bloques || {};
-const cbTarPlan = t => String(t.plan || cbTarBloque(t).plan || '').trim();
+// El extractor del tarifario a veces pierde la etiqueta "PLAN TODO INCLUIDO" del
+// encabezado del hotel pero sí guarda el recuadro de "incluye": de ahí se deduce el
+// régimen, solo cuando la propia tarifa declara comidas. Sin eso el asesor veía
+// "Plan no indicado en el tarifario" en hoteles que sí lo tienen (Costa Caribe, 2026-10-20).
+const cbPlanDeBloque = b => {
+  const txt = cbTarNorm([...(b.incluye || []), ...(b.otras || [])].join(' | '));
+  if (!txt) return '';
+  if (/\btodo incluido\b|\ball inclusive\b/.test(txt)) return 'TODO INCLUIDO';
+  const limpio = txt.replace(/regimen opcional[^.|]*/g, ' ').replace(/\bno incluye\b[^.|]*/g, ' ');
+  const lista = (limpio.match(/\bincluye[n]?\b\s*:?\s*([^.|]{0,220})/) || [])[1] || '';
+  const desayuno = /desayuno/.test(lista), almuerzo = /almuerzo/.test(lista), cena = /cena/.test(lista);
+  const bebidas = /bebidas?[^,]{0,60}(alcohol|nacional|ilimitad)/.test(lista);
+  if (almuerzo && cena && bebidas) return 'TODO INCLUIDO';
+  if (almuerzo && cena) return 'FULL PENSIÓN';
+  if (desayuno && (almuerzo || cena)) return 'MEDIA PENSIÓN';
+  if (desayuno) return 'SOLO DESAYUNO';
+  return '';
+};
+const cbTarPlan = t => String(t.plan || cbTarBloque(t).plan || cbPlanDeBloque(cbTarBloque(t)) || '').trim();
 const cbTarNum = v => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : null;
 const cbTarCent = v => Math.round((Number(v) || 0) * 100);
 const cbTotalItems = items => items.reduce((s, it) => s + cbTarCent(cbImporte(it)), 0) / 100;
@@ -26734,7 +26752,7 @@ async function cbTraerTarifas(id) {
     const control = new AbortController(); let reloj;
     const espera = new Promise((_, rechazar) => { reloj = setTimeout(() => { control.abort(); rechazar(new Error('La carga de tarifas tardó demasiado.')); }, 12000); });
     const consulta = (async () => {
-      const { data, error } = await sb.from('tarifas').select('id,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,tarifario_bloques(plan,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
+      const { data, error } = await sb.from('tarifas').select('id,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,tarifario_bloques(plan,incluye,otras,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
       if (error) throw error;
       return data || [];
     })();
