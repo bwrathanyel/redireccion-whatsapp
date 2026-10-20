@@ -3161,6 +3161,15 @@ body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-inicio) #sidebar-nav >
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-bandeja) #sidebar-nav > [data-sec="grp-bandeja"],
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-ia) #sidebar-nav > [data-sec="grp-ia"],
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-marketing) #sidebar-nav > [data-sec="grp-marketing"]{display:none}
+/* Pestañas opcionales de Gestión de Personal: ocultas hasta que un admin las
+   active en Mi Perfil (body.gp-ver-<tab>, ver aplicarPreferencias). El botón
+   "Reasignaciones" de la pestaña Asesores se oculta junto con su pestaña. */
+body:not(.gp-ver-prueba) #gp-tabs [data-gp-tab="prueba"],
+body:not(.gp-ver-freelancers) #gp-tabs [data-gp-tab="freelancers"],
+body:not(.gp-ver-reasignaciones) #gp-tabs [data-gp-tab="reasignaciones"],
+body:not(.gp-ver-metricas) #gp-tabs [data-gp-tab="metricas"],
+body:not(.gp-ver-notificaciones) #gp-tabs [data-gp-tab="notificaciones"],
+body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
 #sidebar-nav > .nav-padre-vacio{display:none}
 .nav-tabs-sec{max-width:100%;overflow-x:auto;scrollbar-width:none}
 .nav-tabs-sec .seg{white-space:nowrap}

@@ -480,6 +480,15 @@ function openPerfilDrawer() {
       </div>`).join('')}
     </div>
     ${ROL_REAL === 'admin' ? `
+    <div class="edit-box" style="margin-top:16px" id="perfil-gp-tabs">
+      <div class="eb-title"><i class="fas fa-people-group"></i> Secciones de Gestión de Personal</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Por defecto quedan ocultas. Activá las pestañas que quieras ver en Equipo → Gestión de Personal.</div>
+      ${GP_TABS_OPCIONALES.map(o => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+        <span style="font-size:13px">${o.label}<small style="display:block;color:var(--muted);margin-top:2px">${o.desc}</small></span>
+        <button type="button" class="tas-toggle" data-gp-extra="${o.tab}" aria-label="Mostrar ${o.label}"></button>
+      </div>`).join('')}
+    </div>` : ''}
+    ${ROL_REAL === 'admin' ? `
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-eye"></i> Vista previa de rol</div>
       <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Ver el CRM como lo ve otro rol, para revisar y corregir errores. No cambia tus permisos reales -- seguís pudiendo hacer todo como admin mientras la usás.</div>
@@ -534,6 +543,7 @@ function openPerfilDrawer() {
   document.querySelectorAll('#perfil-fuente button').forEach(b => b.onclick = () => guardarPreferencia('fuente', b.dataset.v, 'perfil-fuente'));
   document.querySelectorAll('#perfil-vista-rol button').forEach(b => b.onclick = () => activarVistaPreviaRol(b.dataset.v));
   pintarTogglesNavExtra();
+  pintarTogglesGpExtra();
   actualizarTogglesNotif();
   renderInstalacionPwa();
 }
@@ -572,6 +582,27 @@ function pintarTogglesNavExtra() {
     btn.onclick = () => guardarPreferencia('nav_extra', on ? activas.filter(s => s !== sec) : [...activas, sec], 'perfil-nav-extra').then(pintarTogglesNavExtra);
   });
 }
+// Pestañas de Gestión de Personal que nacen ocultas y cada admin activa en Mi
+// Perfil (MI_PREFERENCIAS.gp_tabs_extra). El CSS que las oculta vive en
+// index.html (body.gp-ver-<tab>); acá solo se agregan/quitan esas clases.
+const GP_TABS_OPCIONALES = [
+  { tab: 'prueba', label: 'Asignación de lotes', desc: 'Reparto de leads de prueba por asesor' },
+  { tab: 'freelancers', label: 'Freelancers', desc: 'Trabajo real, inactividad y bloqueos' },
+  { tab: 'reasignaciones', label: 'Reasignaciones', desc: 'Historial de leads reasignados' },
+  { tab: 'metricas', label: 'Métricas', desc: 'Conversión, tiempos y ventas del equipo' },
+  { tab: 'notificaciones', label: 'Notificaciones', desc: 'Diagnóstico de notificaciones push' },
+];
+const gpTabsExtraActivas = () => Array.isArray(MI_PREFERENCIAS.gp_tabs_extra) ? MI_PREFERENCIAS.gp_tabs_extra : [];
+const gpTabVisible = tab => ['personal', 'asesores', 'postulaciones'].includes(tab) || gpTabsExtraActivas().includes(tab);
+function pintarTogglesGpExtra() {
+  const activas = gpTabsExtraActivas();
+  document.querySelectorAll('[data-gp-extra]').forEach(btn => {
+    const tab = btn.dataset.gpExtra, on = activas.includes(tab);
+    btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', String(on));
+    btn.onclick = () => guardarPreferencia('gp_tabs_extra', on ? activas.filter(t => t !== tab) : [...activas, tab], 'perfil-gp-tabs').then(pintarTogglesGpExtra);
+  });
+  aplicarTabGpVisible();
+}
 function aplicarPreferencias() {
   const id = temaActual(), p = PALETAS[id], root = document.documentElement;
   root.dataset.theme = p.base;
@@ -582,6 +613,8 @@ function aplicarPreferencias() {
   document.body.classList.toggle('fsize-grande', MI_PREFERENCIAS.fuente === 'grande');
   const extra = navExtraActivas();
   NAV_OPCIONALES.forEach(o => document.body.classList.toggle('nav-ver-' + o.sec, extra.includes(o.sec)));
+  const gpExtra = gpTabsExtraActivas();
+  GP_TABS_OPCIONALES.forEach(o => document.body.classList.toggle('gp-ver-' + o.tab, gpExtra.includes(o.tab)));
   // Cache local para que el script inline en <head> (ver index.html) pueda
   // aplicar tema/tamaño ANTES del primer paint en la próxima carga -- sin
   // esto, un usuario con tema claro ve un flash oscuro en cada refresh
@@ -1554,6 +1587,15 @@ const fmtFechaSolo = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m
    date pickers, listeners de periodo) sigue corriendo en startApp; acá solo
    cambió dónde vive su DOM. */
 let gpTab = 'personal';
+// Si el admin oculta desde Mi Perfil la pestaña en la que estaba, vuelve a
+// Personal y deja la barra y los paneles coherentes con lo habilitado.
+function aplicarTabGpVisible() {
+  const tabs = document.querySelectorAll('#gp-tabs .seg');
+  if (!tabs.length) return;
+  if (!gpTabVisible(gpTab)) gpTab = 'personal';
+  tabs.forEach(b => b.classList.toggle('on', b.dataset.gpTab === gpTab));
+  document.querySelectorAll('.gp-tab-panel').forEach(p => { p.style.display = p.dataset.gpPanel === gpTab ? '' : 'none'; });
+}
 // El táctil ya desliza solo; con mouse (ventana angosta en escritorio) no hay
 // scrollbar visible ni gesto, así que se habilita arrastrar y la rueda.
 function habilitarArrastreHorizontal(el) {
@@ -1577,6 +1619,7 @@ function habilitarArrastreHorizontal(el) {
 function setupGestionPersonal() {
   habilitarArrastreHorizontal(document.getElementById('gp-tabs'));
   document.querySelectorAll('#gp-tabs .seg').forEach(btn => btn.addEventListener('click', async () => {
+    if (!gpTabVisible(btn.dataset.gpTab)) return;
     if (gpTab === 'asesores' && btn.dataset.gpTab !== 'asesores' && (repartoDirty.domestico || repartoDirty.internacional) && !(await confirmarSheet({ titulo: '¿Salir sin guardar?', detalle: 'Hay cambios sin guardar en el reparto.', textoOk: 'Salir', destructivo: true }))) return;
     gpTab = btn.dataset.gpTab;
     document.querySelectorAll('#gp-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
@@ -30787,6 +30830,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-20', emoji: '🗂️', titulo: 'Gestión de Personal más limpia', texto: 'Las pestañas Asignación de lotes, Freelancers, Reasignaciones, Métricas y Notificaciones ahora se activan desde Mi Perfil. Por defecto quedan ocultas para que la pantalla del equipo se centre en Personal, Asesores y Postulaciones.', roles: ['admin'] },
   { fecha: '2026-10-19', emoji: '📝', titulo: 'Correcciones con historial de documentos', texto: 'Solicitudes, cotizaciones y vouchers permiten editar, anular y consultar revisiones sin perder su número. Antes de guardar se revisan las diferencias de dinero; los pagos previos se conservan. La revisión vigente se puede descargar, compartir y volver a enviar desde el historial.', roles: ['asesor', 'boleteria', 'administrativo', 'admin'] },
   { fecha: '2026-10-19', emoji: '➕', titulo: 'Abonos y servicios desde Reservas', texto: 'Las tarjetas de Reservas tienen accesos para agregar un abono o un servicio. Abono muestra lo pagado y el saldo de esa reserva; Pago completado completa el monto para que lo revises antes de guardar. WhatsApp queda como un icono con un área cómoda para tocar.', roles: ['asesor', 'administrativo', 'admin'] },
   { fecha: '2026-10-18', emoji: '🏨', titulo: 'Foto del hotel seleccionado', texto: 'Al elegir un hotel en Cotizaciones se conserva una miniatura junto a su nombre para reconocerlo mientras preparas la cotización.', roles: ['asesor', 'boleteria', 'admin'] },
