@@ -25465,12 +25465,22 @@ function vcNoches() {
   const n = Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
   return n > 0 ? n : null;
 }
+// Búsqueda de cliente por nombre o teléfono. Un número se busca como teléfono desde el
+// primer dígito: antes exigía 6 y, con 3-5 dígitos, caía a buscar por nombre y contestaba
+// "sin coincidencias", así que los asesores creían que la búsqueda estaba rota (2026-10-20).
+const leadBusqueda = texto => {
+  const q = String(texto || '').replace(/[,()*%\\]/g, ' ').trim(), dig = q.replace(/\D/g, '');
+  const tel = dig.length > 0 && /^[+\d\s.\-]+$/.test(q);
+  return { q, tel, minimo: tel ? 1 : 2, campo: tel ? 'telefono' : 'nombre',
+    patron: tel ? '%' + dig.slice(-7) + '%' : '%' + q.replace(/\s+/g, '%') + '%' };
+};
 async function vcBuscarLeadsQ() {
-  const q = val('vc-lead-q').replace(/[,()*%\\]/g, ' ').trim(), box = document.getElementById('vc-lead-res'), tk = ++vcLeadTk;
-  if (q.length < 3) { vcLeadsRes = []; vcCerrarRes(); return; }
-  const dig = q.replace(/\D/g, '');
-  let qb = sb.from('leads').select('id,nombre,telefono,asesor,estado,destino').is('eliminado_at', null);
-  qb = dig.length >= 6 ? qb.ilike('telefono', `%${dig.slice(-7)}%`) : qb.ilike('nombre', `%${q.replace(/\s+/g, '%')}%`);
+  const f = leadBusqueda(val('vc-lead-q')), box = document.getElementById('vc-lead-res'), tk = ++vcLeadTk;
+  if (!f.q) { vcLeadsRes = []; vcCerrarRes(); return; }
+  box.hidden = false;
+  if (f.q.length < f.minimo) { vcLeadsRes = []; box.innerHTML = '<div class="vc-res-vacio">Sigue escribiendo el nombre, o escribe el teléfono.</div>'; return; }
+  box.innerHTML = '<div class="vc-res-vacio">Buscando clientes…</div>';
+  const qb = sb.from('leads').select('id,nombre,telefono,asesor,estado,destino').is('eliminado_at', null).ilike(f.campo, f.patron);
   const { data, error } = await qb.order('id', { ascending: false }).limit(6);
   if (tk !== vcLeadTk) return;
   vcLeadsRes = error ? [] : (data || []); vcLeadIdx = -1;
@@ -26350,11 +26360,6 @@ function cbTarTramosValidos(it) {
   }
   return !!esperadas.length && esperadas.length === reales.length && esperadas.every((n, i) => reales[i] === n);
 }
-const cbLeadFiltro = texto => {
-  const q = String(texto || '').replace(/[,()*%\\]/g, ' ').trim(), dig = q.replace(/\D/g, '');
-  const tel = /^[+\d\s.\-]+$/.test(q) && dig.length >= 6;
-  return { q, campo: tel ? 'telefono' : 'nombre', patron: tel ? '%' + dig.slice(-7) + '%' : '%' + q.replace(/\s+/g, '%') + '%' };
-};
 // END CB_TARIFAS
 const cbImporteTexto = it => '$' + cbMonto(cbImporte(it)) + (cbPorNoche(it) ? ` · ${cbNochesTexto(cbNochesCobro(it))}` : '');
 // Cotización multi-servicio (2026-10-14, paquetes corporativos): cada ítem lleva
@@ -26663,11 +26668,17 @@ function cbPintarResumen() {
   const box = document.getElementById('cb-resumen'); if (!box) return;
   box.innerHTML = cbItems.map((it, i) => `<div class="cb-res-linea"><span><b>${esc(cbTitulo(it) || cbTipo(it).nombre)}</b><small>${esc([it.plan, it.tipo === 'hotel' && cbNoches(it.ida, it.vuelta) ? cbNochesTexto(+cbNoches(it.ida, it.vuelta)) : '', cbEsPax(it) ? cbPaxTexto(it) : ''].filter(Boolean).join(' · '))}</small></span><strong>$${cbMonto(cbImporte(it))}</strong></div>`).join('');
 }
+function cbPintarBusquedaLead(f) {
+  const input = document.getElementById('cb-lead-q'), box = document.getElementById('cb-lead-res');
+  if (!f.q) { box.innerHTML = ''; box.hidden = true; input.setAttribute('aria-expanded', 'false'); return; }
+  box.hidden = false; input.setAttribute('aria-expanded', 'true');
+  box.innerHTML = `<div class="cb-picker-vacio">${f.q.length < f.minimo ? 'Sigue escribiendo el nombre, o escribe el teléfono.' : 'Buscando clientes…'}</div>`;
+}
 async function cbBuscarLead() {
   const input = document.getElementById('cb-lead-q'), box = document.getElementById('cb-lead-res');
-  const f = cbLeadFiltro(input.value), tk = ++cbLeadTk;
-  if (f.q.length < 3) { cbLeadsRes = []; box.innerHTML = ''; box.hidden = true; input.setAttribute('aria-expanded', 'false'); return; }
-  box.hidden = false; input.setAttribute('aria-expanded', 'true'); box.innerHTML = '<div class="cb-picker-vacio">Buscando clientes…</div>';
+  const f = leadBusqueda(input.value), tk = ++cbLeadTk;
+  cbPintarBusquedaLead(f);
+  if (f.q.length < f.minimo) { cbLeadsRes = []; return; }
   let q = sb.from('leads').select('id,nombre,telefono,estado,asesor').is('eliminado_at', null).ilike(f.campo, f.patron);
   if (ROL === 'asesor') q = q.eq('asesor', MI_NOMBRE);
   try {
@@ -26964,7 +26975,11 @@ async function cbCargarSeccion() {
   if (!cbListo) {
     cbListo = true;
     const leadInput = document.getElementById('cb-lead-q'), leadBox = document.getElementById('cb-lead-res');
-    leadInput.addEventListener('input', () => { cbLeadTk++; clearTimeout(cbLeadTimer); cbLeadsRes = []; leadBox.innerHTML = ''; leadBox.hidden = true; cbLeadTimer = setTimeout(cbBuscarLead, 280); });
+    leadInput.addEventListener('input', () => {
+      cbLeadTk++; clearTimeout(cbLeadTimer); cbLeadsRes = [];
+      cbPintarBusquedaLead(leadBusqueda(leadInput.value));
+      cbLeadTimer = setTimeout(cbBuscarLead, 280);
+    });
     leadInput.addEventListener('keydown', e => cbPickerTeclas(e, leadBox, op => cbElegirLead(+op.dataset.cbLead)));
     leadInput.addEventListener('focusout', () => { cbLeadTk++; clearTimeout(cbLeadTimer); leadBox.hidden = true; leadInput.setAttribute('aria-expanded', 'false'); });
     leadBox.addEventListener('mousedown', e => { const op = e.target.closest('[data-cb-lead]'); if (op) { e.preventDefault(); cbElegirLead(+op.dataset.cbLead); } });
