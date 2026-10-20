@@ -26886,6 +26886,37 @@ async function cbCompartir(blob, nombre) {
   cbDescargar(blob, nombre);
   okToast('Este navegador no deja compartir archivos: se descargó el PDF');
 }
+// WhatsApp (2026-10-20): en escritorio abre la app de WhatsApp Desktop (protocolo
+// whatsapp://), que si ya está abierta solo se trae al frente con el mensaje listo;
+// si no hay app instalada, a los 1,6 s cae a WhatsApp Web. En móvil abre la app.
+function cbAbrirWhatsapp(tel, texto) {
+  const q = `${tel ? `phone=${tel}&` : ''}${texto ? `text=${encodeURIComponent(texto)}` : ''}`;
+  const web = `https://wa.me/${tel || ''}?text=${encodeURIComponent(texto)}`;
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    location.href = `whatsapp://send?${q}`;
+    setTimeout(() => { if (!document.hidden) location.href = web; }, 900);
+    return;
+  }
+  let abrio = false;
+  const alSalir = () => { abrio = true; };
+  window.addEventListener('blur', alSalir, { once: true });
+  location.href = `whatsapp://send?${q}`;
+  setTimeout(() => {
+    window.removeEventListener('blur', alSalir);
+    if (!abrio) location.href = web;
+  }, 1600);
+}
+window.cbWhatsapp = () => {
+  const cliente = val('cb-cliente').trim();
+  const items = cbItems.map(cbLimpiarItem).filter(it => cbTitulo(it) || it.tarifa);
+  const total = cbTotalItems(items), titulos = items.map(it => cbTitulo(it)).filter(Boolean);
+  const tel = String(cbLead?.telefono || '').replace(/\D/g, '');
+  const extra = titulos.length > 3 ? ` y ${titulos.length - 3} servicio${titulos.length - 3 === 1 ? '' : 's'} más` : '';
+  const texto = cliente
+    ? `Hola ${cliente}, te comparto la cotización${titulos.length ? ` de ${titulos.slice(0, 3).join(' + ')}${extra}` : ''}${total ? ` por un total de $${cbMonto(total)}` : ''}. Cualquier duda me avisas. — ${MI_NOMBRE}`
+    : '';
+  cbAbrirWhatsapp(tel, texto);
+};
 // Stand-by de boletería (2026-10-15): mientras la cotización está ligada a una
 // solicitud que atiendo yo, el formulario se autoguarda como borrador de la
 // solicitud (2 s después del último cambio) y se recupera al retomarla, también
