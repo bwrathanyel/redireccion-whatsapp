@@ -3793,6 +3793,7 @@ function rvAccion(accion, id, btn) {
   const n = id ? Number(id) : null;
   switch (accion) {
     case 'nuevo-servicio': return rvForm({ tipo: 'servicio', id: null });
+    case 'voucher': return rvGenerarVoucher(n, btn);
     case 'editar-servicio': case 'emitir': return rvForm({ tipo: 'servicio', id: n });
     case 'costo': return rvForm({ tipo: 'costo', id: n });
     case 'nuevo-pasajero': return rvForm({ tipo: 'pasajero', id: null });
@@ -3860,6 +3861,56 @@ function rvSeccionesHtml(ss, vista) {
     return `<div class="rv-sec"><b><i class="fas ${icono}"></i>${titulo}</b>${resumen ? `<span>${resumen}</span>` : ''}</div>` + items.map(s => rvServicioHtml(s, vista)).join('');
   }).join('');
 }
+function rvDetalleTexto(s) {
+  return (RV_DETALLE[s.tipo] || []).filter(([k]) => s.detalle?.[k] != null && s.detalle[k] !== '')
+    .map(([k, l, t]) => `${l}: ${t === 'bool' ? (s.detalle[k] ? 'sí' : 'no') : s.detalle[k]}`).join(' · ');
+}
+// Voucher de una reserva que ya existe: se arma con la reserva + sus servicios y pasajeros, sin crear
+// venta ni tocar facturación. Queda descargado y adjunto a la ficha del servicio.
+async function rvGenerarVoucher(servicioId, btn) {
+  const c = PV_ACTUAL, det = RV_DET || {}, r = det.reserva || {}, s0 = (det.servicios || []).find(x => x.id === servicioId);
+  if (!c || !s0) return errToast('No pude leer el servicio. Reabrí la reserva e intentá de nuevo.');
+  const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
+  if (!pax.length) return errToast('Cargá los pasajeros en la pestaña Pasajeros: el voucher los necesita.');
+  const titular = pax.find(p => p.titular) || pax[0];
+  const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
+  const hosp = servs.find(s => s.tipo === 'hospedaje');
+  const total = Number(r.monto_total ?? c.monto_total ?? 0), pagado = Number(r.monto_pagado ?? c.monto_pagado ?? 0);
+  const fecha = s => s ? pvFecha(s) : '';
+  const v = {
+    codigo_reserva: c.codigo || r.codigo || '', created_at: new Date().toISOString(),
+    cliente_nombre: `${titular.nombre || ''} ${titular.apellido || ''}`.trim().toUpperCase() || String(c.nombre || '').toUpperCase(),
+    documento_identidad: [RV_TIPO_DOC[titular.tipo_documento] || '', titular.numero_documento].filter(Boolean).join(' '),
+    telefono: titular.telefono || c.telefono || '', asesor_nombre: c.asesor || '',
+    destino_hospedaje: hosp ? (hosp.detalle?.hotel || hosp.descripcion || '') : (r.destino || c.destino || ''),
+    fecha_entrada: fecha(hosp?.fecha_inicio), fecha_salida: fecha(hosp?.fecha_fin),
+    check_in: hosp?.detalle?.check_in || '', check_out: hosp?.detalle?.check_out || '',
+    modalidad: hosp?.detalle?.plan || '', habitaciones: hosp?.detalle?.habitacion || '',
+    total_dias: hosp?.detalle?.noches ? `${hosp.detalle.noches} noches` : '',
+    adultos: r.pax_adultos || servs.reduce((n, s) => Math.max(n, Number(s.pax_adultos || 0)), 0) || null,
+    ninos: String(r.pax_ninos || servs.reduce((n, s) => Math.max(n, Number(s.pax_ninos || 0)), 0) || ''),
+    status_reserva: 'CONFIRMADO', total_general: total, monto_pagado: pagado, resta: Math.round((total - pagado) * 100) / 100,
+    forma_pago: '', referencia_pago: '',
+    servicios: servs.map(s => ({ tipo: s.tipo, nombre: s.descripcion || (RV_TIPOS[s.tipo] || [s.tipo])[0], opcion: '', detalle: rvDetalleTexto(s),
+      fecha: s.fecha_inicio || '', hora: s.hora ? String(s.hora).slice(0, 5) : '', adultos: s.pax_adultos, ninos: s.pax_ninos,
+      monto: s.precio_usd_centavos != null ? Number(s.precio_usd_centavos) / 100 : null })),
+  };
+  const previo = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Voucher...'; }
+  try {
+    await ensureVoucherLibs();
+    const blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
+    const nombre = `Voucher-${v.codigo_reserva || c.id}-${v.cliente_nombre.replace(/[^\wÁÉÍÓÚÑ]+/gi, '-').slice(0, 40)}.pdf`;
+    const falla = await vcAdjuntarPdf(c.id, servicioId, blob, nombre);
+    vcDescargar(blob, nombre);
+    if (falla) errToast(`Voucher generado y descargado, pero no se adjuntó a la ficha: ${falla}`);
+    else okToast('Voucher generado, descargado y adjunto a la reserva');
+  } catch (e) {
+    errToast('No se pudo generar el voucher: ' + (e?.message || e));
+  } finally {
+    if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
+  }
+}
 function rvCostoHtml(s) {
   if (s.costo_centavos == null) {
     return `<div class="rv-costo rv-falta"><i class="fas fa-lock"></i> Sin neto${s.proveedor ? ' · ' + esc(s.proveedor) : ' ni proveedor'}</div>`;
@@ -3883,6 +3934,7 @@ function rvServicioHtml(s, vista) {
     rvVeCostos() ? `<button class="btn-sm" type="button" data-rv-accion="costo" data-id="${s.id}"><i class="fas fa-coins"></i> Neto y proveedor</button>` : '',
     vista === 'boleteria' ? `<button class="btn-sm" type="button" data-rv-accion="emitir" data-id="${s.id}"><i class="fas fa-ticket"></i> Localizador, estado y TL</button><button class="btn-sm" type="button" data-rv-accion="subir-boleto" data-id="${s.id}"><i class="fas fa-upload"></i> Subir boleto</button>` : '',
     s.tipo === 'boleto_aereo' ? rvBoletoAcciones(s) : '',
+    `<button class="btn-sm" type="button" data-rv-accion="voucher" data-id="${s.id}"><i class="fas fa-file-invoice"></i> Voucher</button>`,
     editable ? `<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-servicio" data-id="${s.id}"><i class="fas fa-ban"></i> Anular</button>` : '',
   ].join('');
   const boleto = s.tipo === 'boleto_aereo' && !anulado ? rvBoletoHtml(s) : '';
@@ -26028,7 +26080,7 @@ function vcpDibujarVoucher(doc, v, ctx) {
   const conHosp = !servs.length || [v.destino_hospedaje, v.fecha_entrada, v.fecha_salida, v.modalidad, v.habitaciones].some(Boolean);
   doc.setFillColor(...VCP.navy); doc.rect(VCP_X0, 114, VCP_W, 42, 'F');
   font('bold', 14.5, [255, 255, 255]); doc.text(conHosp ? 'VOUCHER DE HOSPEDAJE' : 'VOUCHER DE SERVICIO', VCP_X0 + 14, 140.5, { charSpace: .6 });
-  font('semibold', 10, [255, 255, 255]); doc.text(`FACTURA N° ${txt(v.numero_factura)}`, VCP_X1 - 14, 132, { align: 'right' });
+  font('semibold', 10, [255, 255, 255]); doc.text(v.numero_factura ? `FACTURA N° ${txt(v.numero_factura)}` : `RESERVA N° ${txt(v.codigo_reserva)}`, VCP_X1 - 14, 132, { align: 'right' });
   font('normal', 8, vcpTinte(VCP.navy, .7)); doc.text(`Fecha de emisión: ${v.fecha_emision}`, VCP_X1 - 14, 146, { align: 'right' });
 
   // ---------- Saludo ----------
@@ -26226,7 +26278,7 @@ async function construirVoucherPdf(v) {
   doc.addPage();
   vcpDibujarTerminos(doc, ctx, VC_TERMINOS);
   vcpPie(doc, ctx, nVoucher);
-  drRotularPdf(doc, `Voucher ${v.numero_factura} · revisión ${v.revision || 1}`);
+  drRotularPdf(doc, v.numero_factura ? `Voucher ${v.numero_factura} · revisión ${v.revision || 1}` : `Voucher ${v.codigo_reserva || ''}`);
   return doc.output('arraybuffer');
 }
 
