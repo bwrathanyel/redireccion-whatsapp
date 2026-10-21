@@ -1204,13 +1204,13 @@ input.ei[type=date],input.ei[type=datetime-local],input.ei[type=time]{color-sche
 .ef-serv-x:hover{color:#ff8a8a}
 .ef-serv .fl-sub{display:block;margin:7px 0 3px}
 .ef-serv .field{margin:0;flex:1 1 150px;min-width:0}.ef-serv .field .fl{margin:7px 0 3px}.ef-hotel-ph{flex-wrap:wrap}.ef-hotel-ph>.btn-sm{align-self:flex-end}
-.ef-date{position:relative}
-.ef-date input[type=date]{padding-right:34px}
-.ef-date input[type=date]::-webkit-calendar-picker-indicator{display:none}
-.ef-cal-btn{position:absolute;top:0;right:0;bottom:0;width:34px;background:none;border:0;border-radius:0 9px 9px 0;color:var(--accent-ink);font-size:13px;cursor:pointer}
-.ef-cal-btn:hover{color:var(--accent)}
-.ef-cal{position:fixed;z-index:80;width:276px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:14px;padding:12px;box-shadow:0 16px 40px rgba(0,0,0,.5)}
-.ef-cal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:13.5px}
+@media (pointer:fine){
+html input[type=date]{padding-right:32px;background-repeat:no-repeat;background-position:right 10px center;background-size:15px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b93ad' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath d='M16 3v4M8 3v4M3 10h18'/%3E%3C/svg%3E");cursor:text}
+html input[type=date]::-webkit-calendar-picker-indicator{display:none}
+.fdate{min-width:150px}
+}
+.ef-cal{position:fixed;z-index:9999;width:276px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:14px;padding:12px;box-shadow:0 16px 40px rgba(0,0,0,.5)}
+.ef-cal-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:13.5px}.ef-cal-h>span{display:flex}
 .ef-cal-h button,.ef-cal-f button{background:none;border:0;color:var(--accent-ink);font:inherit;font-size:12.5px;font-weight:600;padding:6px 10px;border-radius:8px;cursor:pointer}
 .ef-cal-h button:hover:not(:disabled),.ef-cal-f button:hover:not(:disabled){background:var(--accent-soft)}
 .ef-cal-g{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
