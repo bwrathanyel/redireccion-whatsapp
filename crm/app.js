@@ -3622,6 +3622,9 @@ const RV_DETALLE = {
   otro: [['nota', 'Nota']],
 };
 const RV_MONEDAS = ['USD', 'VES', 'EUR', 'USDT', 'COP'];
+// Datos capturados en la ventana del voucher de paquete, por reserva y por sesión.
+const RV_VOUCHER_PAQUETE = new Map();
+const RV_VOUCHER_PAGOS = ['Zelle', 'Pago móvil', 'Transferencia bancaria', 'Efectivo USD', 'Efectivo Bs', 'Binance / USDT', 'Punto de venta', 'Otro'];
 const RV_TIPO_DOC = { cedula: 'Cédula', pasaporte: 'Pasaporte', rif: 'RIF', otro: 'Otro' };
 const RV_DOC_TIPOS = { voucher: 'Voucher', boleto: 'Boleto', comprobante: 'Comprobante', documento_identidad: 'Documento de identidad', otro: 'Otro' };
 const RV_DOC_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
@@ -3800,6 +3803,7 @@ function rvAccion(accion, id, btn) {
   switch (accion) {
     case 'nuevo-servicio': return rvForm({ tipo: 'servicio', id: null });
     case 'voucher': return rvGenerarVoucher(n, btn);
+    case 'voucher-paquete': return rvGenerarVoucherPaquete(btn);
     case 'editar-servicio': case 'emitir': return rvForm({ tipo: 'servicio', id: n });
     case 'costo': return rvForm({ tipo: 'costo', id: n });
     case 'nuevo-pasajero': return rvForm({ tipo: 'pasajero', id: null });
@@ -3851,9 +3855,15 @@ function rvRenderServicios(suave) {
   // Cobro para boletería (migración 20261009110000): total, pagado y saldo; el margen sigue solo para admin.
   const cobro = vista === 'boleteria' && r.monto_total != null
     ? `<div class="rv-cobro rv-cobro-${esc(r.estado_cobro || 'pendiente')}"><span>Total <b>${money(r.monto_total)}</b></span><span>Pagado <b>${money(r.monto_pagado || 0)}</b></span><span>Saldo <b>${money(Math.max(0, r.monto_total - (r.monto_pagado || 0)))}</b></span><em>${({ pagado: 'Pagado', parcial: 'Pago parcial', pendiente: 'Sin pagos' })[r.estado_cobro] || ''}</em></div>` : '';
-  p.innerHTML = cobro + (rvPuedeEditar() ? '<button class="dbtn gh rv-add" type="button" data-rv-accion="nuevo-servicio"><i class="fas fa-plus"></i> Agregar servicio</button>' : '')
+  p.innerHTML = cobro + rvBarraServicios(ss)
     + (ss.length ? rvSeccionesHtml(ss, vista)
       : `<div class="pv-empty">${vista === 'boleteria' ? 'Esta reserva no tiene boletos aéreos' : 'Todavía no hay servicios. Al cargar el primero, el total de la reserva pasa a ser la suma de sus precios.'}</div>`);
+}
+function rvBarraServicios(ss) {
+  if (!rvPuedeEditar()) return '';
+  const vivos = ss.some(s => !s.anulado_en);
+  return `<div class="rv-add-barra"><button class="dbtn gh rv-add" type="button" data-rv-accion="nuevo-servicio"><i class="fas fa-plus"></i> Agregar servicio</button>
+    ${vivos ? '<button class="dbtn gh rv-add rv-add-voucher" type="button" data-rv-accion="voucher-paquete"><i class="fas fa-suitcase-rolling"></i> Voucher del paquete</button>' : ''}</div>`;
 }
 // Desglose del gerente (2026-10-16): Hotel · Traslado · Boletería, cada uno con su proveedor y su neto.
 function rvSeccionesHtml(ss, vista) {
@@ -3921,6 +3931,117 @@ async function rvGenerarVoucher(servicioId, btn) {
     else okToast('Voucher generado, descargado y adjunto a la reserva');
   } catch (e) {
     errToast('No se pudo generar el voucher: ' + (e?.message || e));
+  } finally {
+    if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
+  }
+}
+const rvVoucherFechaIso = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : ''; };
+const rvVoucherRango = s => {
+  const ini = rvVoucherFechaIso(s.fecha_inicio), fin = rvVoucherFechaIso(s.fecha_fin);
+  const fechas = !ini ? '' : fin && s.fecha_fin !== s.fecha_inicio ? `${ini} al ${fin}` : ini;
+  return [fechas, s.hora ? String(s.hora).slice(0, 5) : ''].filter(Boolean).join(' ');
+};
+// Voucher de todo el paquete (hotel + vuelos + traslados...). Si falta cédula, teléfono o
+// forma de pago, la misma hoja de confirmación los pide antes de armar el PDF.
+async function rvGenerarVoucherPaquete(btn) {
+  const c = PV_ACTUAL, det = RV_DET || {}, r = det.reserva || {};
+  const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
+  if (!servs.length) { errToast('La reserva no tiene servicios activos para el voucher.'); return; }
+  const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
+  const titular = pax.find(p => p.titular) || pax[0] || null;
+  const prev = RV_VOUCHER_PAQUETE.get(RV_RESERVA_ID) || {};
+  const cliente = ([titular?.nombre, titular?.apellido].filter(Boolean).join(' ').trim()).replace(/\s+/g, ' ') || String(c?.nombre || r.cliente || '').trim();
+  const documento = titular?.numero_documento || prev.documento || '';
+  const telefono = titular?.telefono || c?.telefono || r.telefono || prev.telefono || '';
+  const formaPago = prev.formaPago || r.forma_pago || '';
+  const referencia = prev.referencia || r.referencia_pago || '';
+  const faltan = [];
+  if (!cliente || /^sin nombre$/i.test(cliente)) faltan.push('nombre');
+  if (!documento) faltan.push('cédula');
+  if (!telefono) faltan.push('teléfono');
+  if (!formaPago) faltan.push('forma de pago');
+  let datos = { cliente, documento, telefono, formaPago, referencia };
+  if (faltan.length) {
+    const f = await confirmarSheet({
+      titulo: 'Datos del voucher del paquete',
+      detalle: `Falta completar: ${faltan.join(', ')}. Estos datos van impresos en el voucher.`,
+      textoOk: 'Generar voucher',
+      campos: [
+        { id: 'cliente', label: 'Nombre y apellido', valor: cliente, requerido: true, placeholder: 'Titular de la reserva' },
+        { id: 'documento', label: 'Cédula del titular', valor: documento, requerido: true, placeholder: 'V-12.345.678' },
+        { id: 'telefono', label: 'Teléfono', valor: telefono, requerido: true, placeholder: '0414-1234567' },
+        { id: 'formaPago', label: 'Forma de pago', tipo: 'select', valor: formaPago, requerido: true, opciones: [{ v: '', t: 'Elegí una...' }, ...RV_VOUCHER_PAGOS.map(p => ({ v: p, t: p }))] },
+        { id: 'referencia', label: 'Referencia del pago móvil', valor: referencia, requeridoSi: out => out.formaPago === 'Pago móvil', placeholder: 'Número o últimos dígitos' },
+      ],
+    });
+    if (!f) return;
+    datos = f;
+    RV_VOUCHER_PAQUETE.set(RV_RESERVA_ID, datos);
+  }
+  const doc = String(datos.documento || '').trim();
+  const documentoFinal = /^[\d.\s]+$/.test(doc) ? rvDocMostrar(doc, 'cedula') : doc.toUpperCase();
+  const inicios = servs.map(s => s.fecha_inicio).filter(Boolean).sort();
+  const fines = servs.map(s => s.fecha_fin || s.fecha_inicio).filter(Boolean).sort();
+  const entrada = inicios[0] || r.fecha_viaje_inicio, salida = fines[fines.length - 1] || r.fecha_viaje_fin;
+  const hosp = servs.find(s => s.tipo === 'hospedaje') || null;
+  const destinos = [...new Set(servs.map(s => s.destino).filter(Boolean))];
+  const destinoBase = r.destino || c?.destino || destinos[0] || '';
+  const hotel = hosp ? String(hosp.detalle?.hotel || hosp.descripcion || '').trim() : '';
+  const destino = [hotel, destinoBase].filter((x, i, a) => x && a.indexOf(x) === i).join(' · ') || 'Paquete turístico';
+  const noches = Number(hosp?.detalle?.noches || 0);
+  const dias = entrada && salida && salida !== entrada ? Math.round((Date.parse(salida) - Date.parse(entrada)) / 864e5) : 0;
+  const maxPax = k => servs.reduce((n, s) => Math.max(n, Number(s[k] || 0)), 0);
+  const adultos = Number(r.pax_adultos || 0) || maxPax('pax_adultos') || null;
+  const ninos = Number(r.pax_ninos || 0) || maxPax('pax_ninos') || 0;
+  const suma = servs.reduce((t, s) => t + (Number(s.precio_usd_centavos) || 0), 0) / 100;
+  const total = Number(r.monto_total ?? c?.monto_total ?? 0) || suma;
+  const pagado = Number(r.monto_pagado ?? c?.monto_pagado ?? 0);
+  const codigo = c?.codigo || r.codigo || '';
+  const v = {
+    codigo_reserva: codigo, created_at: new Date().toISOString(),
+    cliente_nombre: String(datos.cliente || '').trim().toUpperCase(),
+    documento_identidad: documentoFinal, telefono: String(datos.telefono || '').trim(),
+    asesor_nombre: c?.asesor || r.asesor || '',
+    destino_hospedaje: destino,
+    fecha_entrada: rvVoucherFechaIso(entrada), fecha_salida: rvVoucherFechaIso(salida),
+    check_in: '', check_out: '',
+    modalidad: hosp?.detalle?.plan || 'Paquete turístico', habitaciones: hosp?.detalle?.habitacion || '',
+    total_dias: noches ? `${noches} noches` : dias > 0 ? `${dias} noches` : '',
+    adultos, ninos,
+    status_reserva: servs.every(s => ['confirmado', 'emitido'].includes(s.estado)) ? 'CONFIRMADO' : 'PENDIENTE',
+    total_general: total, monto_pagado: pagado, resta: Math.round((total - pagado) * 100) / 100,
+    forma_pago: datos.formaPago || '', referencia_pago: datos.referencia || '',
+    numero_factura: r.numero_factura || '',
+    titulo_voucher: 'VOUCHER DE PAQUETE', etiqueta_detalle: 'DETALLE DEL PAQUETE',
+    etiqueta_destino: 'DESTINO / PAQUETE', etiqueta_servicios: 'SERVICIOS DEL PAQUETE',
+    servicios: servs.map(s => {
+      const tks = (det.boletos || []).filter(b => b.servicio_id === s.id && b.numero_ticket).map(b => b.numero_ticket);
+      const vuelos = s.tipo === 'boleto_aereo' ? (det.tramos || []).filter(t => t.servicio_id === s.id)
+        .map(t => `${t.origen_iata || ''} a ${t.destino_iata || ''} ${rvFechaHoraTramo(t.sale_en)}${t.numero_vuelo ? ' · vuelo ' + t.numero_vuelo : ''}`.trim()).join('\n') : '';
+      return {
+        tipo: 'otro',
+        nombre: `${(RV_TIPOS[s.tipo] || [s.tipo])[0]}${s.descripcion ? ' · ' + s.descripcion : ''}`.toUpperCase(),
+        detalle: [rvDetalleTexto(s), s.localizador ? `Localizador: ${s.localizador}` : '', vuelos, tks.length ? `E-tickets: ${tks.join(' / ')}` : ''].filter(Boolean).join('\n'),
+        fecha_texto: rvVoucherRango(s),
+        adultos: Number(s.pax_adultos || 0), ninos: Number(s.pax_ninos || 0),
+        monto: s.precio_usd_centavos != null ? Number(s.precio_usd_centavos) / 100 : null,
+      };
+    }),
+    pasajeros: pax.map(p => ({ nombre: [p.nombre, p.apellido].filter(Boolean).join(' '), documento: p.numero_documento ? [RV_TIPO_DOC[p.tipo_documento] || '', p.numero_documento].filter(Boolean).join(' ') : '' })),
+  };
+  const previo = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...'; }
+  try {
+    await ensureVoucherLibs();
+    const blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
+    const nombre = `Voucher-Paquete-${codigo || RV_RESERVA_ID}-${String(v.cliente_nombre).replace(/[^\wÁÉÍÓÚÑ]+/gi, '-').slice(0, 40)}.pdf`;
+    let falla = null;
+    try { falla = await vcAdjuntarPdf(RV_RESERVA_ID, null, blob, nombre); } catch (e) { falla = e?.message || 'error de red'; }
+    vcDescargar(blob, nombre);
+    if (falla) errToast(`Voucher generado y descargado, pero no se adjuntó a la reserva: ${falla}`);
+    else { okToast('Voucher del paquete generado, descargado y adjunto' + (pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
+  } catch (e) {
+    errToast('No se pudo generar el voucher del paquete: ' + (e?.message || e));
   } finally {
     if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
   }
@@ -26711,8 +26832,9 @@ function vcpDibujarVoucher(doc, v, ctx) {
   // ---------- Banda de título ----------
   const servs = Array.isArray(v.servicios) ? v.servicios : [];
   const conHosp = !servs.length || [v.destino_hospedaje, v.fecha_entrada, v.fecha_salida, v.modalidad, v.habitaciones].some(Boolean);
+  const titulo = txt(v.titulo_voucher) || (conHosp ? 'VOUCHER DE HOSPEDAJE' : 'VOUCHER DE SERVICIO');
   doc.setFillColor(...VCP.navy); doc.rect(VCP_X0, 114, VCP_W, 42, 'F');
-  font('bold', 14.5, [255, 255, 255]); doc.text(conHosp ? 'VOUCHER DE HOSPEDAJE' : 'VOUCHER DE SERVICIO', VCP_X0 + 14, 140.5, { charSpace: .6 });
+  font('bold', 14.5, [255, 255, 255]); doc.text(titulo, VCP_X0 + 14, 140.5, { charSpace: .6 });
   font('semibold', 10, [255, 255, 255]); doc.text(v.numero_factura ? `FACTURA N° ${txt(v.numero_factura)}` : `RESERVA N° ${txt(v.codigo_reserva)}`, VCP_X1 - 14, 132, { align: 'right' });
   font('normal', 8, vcpTinte(VCP.navy, .7)); doc.text(`Fecha de emisión: ${v.fecha_emision}`, VCP_X1 - 14, 146, { align: 'right' });
 
@@ -26732,8 +26854,10 @@ function vcpDibujarVoucher(doc, v, ctx) {
   // ---------- Reserva ----------
   const status = txt(v.status_reserva).toUpperCase();
   const filaStatus = ['STATUS / N° LOCALIZADOR', { content: status || '—', colSpan: 3, styles: { fontStyle: st('bold'), textColor: /ACTIV|CONFIRM/.test(status) ? VCP.verde : VCP.ambarOsc, charSpace: .6 } }];
-  y = tabla(conHosp ? 'DETALLE DE LA RESERVA' : 'PASAJEROS', conHosp ? [
-    ['DESTINO / HOSPEDAJE', { content: txt(v.destino_hospedaje) || '—', colSpan: 3, styles: { fontStyle: st('bold'), fontSize: 10.5 } }],
+  const etiquetaDetalle = txt(v.etiqueta_detalle) || (conHosp ? 'DETALLE DE LA RESERVA' : 'PASAJEROS');
+  const etiquetaDestino = txt(v.etiqueta_destino) || 'DESTINO / HOSPEDAJE';
+  y = tabla(etiquetaDetalle, conHosp ? [
+    [etiquetaDestino, { content: txt(v.destino_hospedaje) || '—', colSpan: 3, styles: { fontStyle: st('bold'), fontSize: 10.5 } }],
     ['FECHA DE ENTRADA', txt(v.fecha_entrada) || '—', 'CHECK IN', txt(v.check_in) || '—'],
     ['FECHA DE SALIDA', txt(v.fecha_salida) || '—', 'CHECK OUT', txt(v.check_out) || '—'],
     ['MODALIDAD', txt(v.modalidad) || '—', 'DURACIÓN', txt(v.total_dias) || '—'],
@@ -26752,8 +26876,20 @@ function vcpDibujarVoucher(doc, v, ctx) {
       styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 6, bottom: 6, left: 9, right: 9 } },
       headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
       columnStyles: { 0: { cellWidth: 250 }, 3: { halign: 'right', fontStyle: st('semibold') } },
-      head: [['SERVICIOS ADICIONALES', 'FECHA', 'PASAJEROS', 'MONTO']],
+      head: [[txt(v.etiqueta_servicios) || 'SERVICIOS ADICIONALES', 'FECHA', 'PASAJEROS', 'MONTO']],
       body: servs.map(s => [s.nombre, s.fecha, s.pax, usd(s.monto)]),
+    }, VCP_X0, VCP_W) + gap;
+  }
+
+  // ---------- Pasajeros (opcional: el voucher del paquete los lista) ----------
+  if (Array.isArray(v.pasajeros) && v.pasajeros.length) {
+    y = conBorde({
+      startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
+      styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 6, bottom: 6, left: 9, right: 9 } },
+      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
+      columnStyles: { 1: { cellWidth: 170 } },
+      head: [['PASAJEROS', 'DOCUMENTO']],
+      body: v.pasajeros.map(p => [p.nombre || '—', p.documento || '—']),
     }, VCP_X0, VCP_W) + gap;
   }
 
@@ -26902,7 +27038,7 @@ async function construirVoucherPdf(v) {
   const pl = (n, s, p) => (n ? `${n} ${n === 1 ? s : p}` : '');
   const servicios = (Array.isArray(v.servicios) ? v.servicios : []).map(s => ({
     nombre: [[(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).pdf, s.nombre].filter(Boolean).join(': '), s.opcion, s.detalle].filter(Boolean).join('\n'),
-    fecha: [s.fecha ? s.fecha.split('-').reverse().join('/') : '', s.hora].filter(Boolean).join(' '),
+    fecha: s.fecha_texto || [s.fecha ? s.fecha.split('-').reverse().join('/') : '', s.hora].filter(Boolean).join(' '),
     pax: [pl(s.adultos, 'adulto', 'adultos'), pl(s.ninos, 'niño', 'niños')].filter(Boolean).join(' + '),
     monto: s.monto,
   }));
@@ -31530,7 +31666,7 @@ function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Conf
     cont.innerHTML = confirmarSheetCampos ? confirmarSheetCampos.map((c, i) => {
       const idc = `csc-${i}`, val = c.valor ?? '';
       if (c.tipo === 'check') return `<label class="csc-check"><input type="checkbox" id="${idc}"${c.valor ? ' checked' : ''}> ${esc(c.label)}</label>`;
-      const lab = c.label ? `<label class="fl" for="${idc}">${esc(c.label)}${c.requerido ? '' : ' <span style="font-weight:400">(opcional)</span>'}</label>` : '';
+      const lab = c.label ? `<label class="fl" for="${idc}">${esc(c.label)}${!c.requerido && !c.requeridoSi ? ' <span style="font-weight:400">(opcional)</span>' : ''}</label>` : '';
       if (c.tipo === 'select') return `${lab}<select class="ei" id="${idc}">${(c.opciones || []).map(o => `<option value="${esc(o.v)}"${String(o.v) === String(val) ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select>`;
       if (c.tipo === 'textarea') return `${lab}<textarea class="ei" id="${idc}" placeholder="${esc(c.placeholder || '')}">${esc(val)}</textarea>`;
       const extra = c.tipo === 'number' ? ` inputmode="decimal" step="${c.step ?? 'any'}"${c.min != null ? ` min="${c.min}"` : ''}${c.max != null ? ` max="${c.max}"` : ''}` : '';
@@ -31551,7 +31687,8 @@ function resolverConfirmarSheet(valor) {
     campos.forEach((c, i) => {
       const el = document.getElementById(`csc-${i}`);
       const v = c.tipo === 'check' ? !!el?.checked : (el?.value ?? '').trim();
-      if (c.requerido && c.tipo !== 'check' && !v && !falta) falta = c;
+      const requerido = typeof c.requeridoSi === 'function' ? !!c.requeridoSi(out) : c.requerido;
+      if (requerido && c.tipo !== 'check' && !v && !falta) falta = c;
       out[c.id ?? i] = v;
     });
     if (falta) {
@@ -31805,6 +31942,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-21', emoji: '🧾', titulo: 'Voucher del paquete completo', texto: 'En Reservas > Servicios, el botón "Voucher del paquete" arma un solo PDF con todos los servicios de la reserva (hotel, vuelos, traslados y el resto), los pasajeros y el resumen de pago. Si falta la cédula, el teléfono o la forma de pago, los pide en una ventana antes de generarlo. Queda descargado y adjunto a la reserva, y el voucher de hotel deja de figurar como pendiente.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '✈️', titulo: 'Tarifas de vuelo nuevas y precio de Navidad', texto: 'Las tarifas "Desde" de boletería se actualizaron con lo que de verdad se cotizó: Caracas–Margarita $190, Caracas–Los Roques $335 y Valencia–Margarita $200 por persona ida y vuelta (antes 109, 320 y 160). Además, las salidas en Navidad y Fin de Año (del 15 de diciembre al 10 de enero) tienen su propio precio, más alto: $395, $390 y $300. La web, el cotizador y la IA ya eligen el precio según la fecha de viaje, así que si el cliente viaja en esas fechas ven el monto de temporada. En Boletería > Rutas se ven las dos tarifas de cada ruta.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-21', emoji: '🧳', titulo: 'Paquetes con boleto incluido', texto: 'En Tarifario > Paquetes, arriba, están los Paquetes Lotus: boleto aéreo ida y vuelta + hotel, con salidas de Navidad y Fin de Año y otros para todo el año. "Copiar enlace" te da la ficha de la web para mandarle al cliente: ahí elige desde dónde sale, fecha, noches y pasajeros, y ve el total al momento. Los admin crean, editan u ocultan paquetes con "Nuevo paquete" (eligen hotel y desde qué ciudades sale el vuelo); el precio lo calcula la web solo, con las tarifas del hotel y la tarifa "Desde" de Boletería. Los paquetes de BT Travel siguen abajo, pero ya no salen en la web.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-21', emoji: '📊', titulo: 'Proveedores con su margen real', texto: 'Cada proveedor muestra ahora cuánto deja de verdad: el margen (ganancia ÷ venta) sale solo de las ventas con total y costo neto en Postventa, separado en hotel y boletos. Al total se le restan los boletos y traslados que no vende ese proveedor. Debajo se ve el margen configurado y, si no coincide, el botón "Usar" lo guarda para ese proveedor. Arriba: margen promedio y "Ventas a revisar", con las que no cuadran (por ejemplo, un neto que ya incluye el boleto). La ficha del proveedor tiene una pestaña Margen con cada venta usada. Además, el % de margen por tipo de servicio ahora se calcula sobre la venta (neto = venta × (1 − %)), y en Ventas el costo neto suma todos los servicios de la reserva: si a uno le falta el neto, avisa en vez de mostrar un margen inflado.', roles: ['admin', 'administrativo'] },
