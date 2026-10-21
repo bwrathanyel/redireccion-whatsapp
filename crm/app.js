@@ -9205,6 +9205,7 @@ const EF_ERRORES = {
 async function abrirEnviarFacturacionSheet(l) {
   EF_LEAD_ACTUAL = l;
   document.getElementById('ef-err').textContent = '';
+  efCalCerrar();
   document.getElementById('ef-cliente').innerHTML =
     `<i class="fas fa-user"></i> Reserva para <b>${esc(l.nombre || 'Sin nombre')}</b>${l.telefono ? ' · ' + esc(l.telefono) : ''}`;
 
@@ -9268,19 +9269,25 @@ function efAgregarServicio(tipo) {
   const card = document.createElement('div');
   card.className = 'ef-serv'; card.dataset.tipo = tipo;
   const campo = (k, lbl, attrs = '') => `<div style="flex:1"><label class="fl-sub">${esc(lbl)}</label><input class="ei" data-k="${k}" ${attrs} autocomplete="off"></div>`;
+  const fecha = (k, lbl) => `<div style="flex:1"><label class="fl-sub">${esc(lbl)}</label><div class="ef-date"><input class="ei" data-k="${k}" type="date" min="${cbHoy()}" autocomplete="off"><button type="button" class="ef-cal-btn" data-ef-cal aria-label="Abrir calendario"><i class="fas fa-calendar-days"></i></button></div></div>`;
   card.innerHTML = `
     <div class="ef-serv-top"><b><i class="fas ${icono}"></i>${esc(nombre)}</b>
       <button type="button" class="ef-serv-x" aria-label="Quitar servicio"><i class="fas fa-xmark"></i></button></div>
     ${hospedaje ? '<div class="ef-fila ef-hotel-campo"></div><div class="ef-fila ef-hotel-ph"></div>' : `<div class="ef-fila">${campo('p', sp.p[1])}</div>
     ${sp.x.length ? `<div class="ef-fila">${sp.x.map(([k, l]) => campo(k, l)).join('')}</div>` : ''}`}
     <div class="ef-fila">
-      ${campo('f1', sp.f[0], 'type="date"')}
-      ${sp.f[1] ? campo('f2', sp.f[1] + ' (opcional)', 'type="date"') : ''}
+      ${fecha('f1', sp.f[0])}
+      ${sp.f[1] ? fecha('f2', sp.f[1] + ' (opcional)') : ''}
       ${sp.hora ? campo('hora', 'Hora (opcional)', 'type="time"') : ''}
     </div>
     <div class="ef-fila">${campo('precio', 'Precio total de este servicio (USD)', 'type="number" min="0" step="0.01" placeholder="0.00"')}</div>`;
   card.querySelector('.ef-serv-x').addEventListener('click', () => { card.remove(); efRecalcular(); });
   card.querySelector('[data-k="precio"]').addEventListener('input', efRecalcular);
+  const f1 = card.querySelector('[data-k="f1"]'), f2 = card.querySelector('[data-k="f2"]');
+  if (f2) f1.addEventListener('change', () => {
+    f2.min = f1.value && f1.value > cbHoy() ? f1.value : cbHoy();
+    if (f2.value && f2.value < f1.value) f2.value = '';
+  });
   if (hospedaje) {
     card._hotel = { i: 'ef' + (++EF_HOTEL_SEQ), nombre: '', producto_id: null, plan: '', hab: '', plan_libre: false, hab_libre: false, _cargando: false, _tarifaError: false, carga: 0 };
     efHotelPintar(card, true); cbCargarProductos();
@@ -9301,6 +9308,7 @@ function efLeerServicios() {
     const v = k => (st && delHotel[k] ? st[delHotel[k]] : card.querySelector(`[data-k="${k}"]`)?.value || '').trim();
     if (!v('p')) return { error: `${nombre}: falta ${sp.p[1].toLowerCase()}` };
     if (!v('f1')) return { error: `${nombre}: falta la fecha (${sp.f[0].toLowerCase()})` };
+    if (v('f1') < cbHoy()) return { error: `${nombre}: la fecha (${sp.f[0].toLowerCase()}) ya pasó` };
     if (v('f2') && v('f2') < v('f1')) return { error: `${nombre}: la fecha final es anterior a la inicial` };
     const precio = parseFloat(v('precio'));
     if (!Number.isFinite(precio) || precio < 0) return { error: `${nombre}: falta el precio` };
@@ -9333,6 +9341,60 @@ function efRecalcular() {
   if (t) t.value = total > 0 ? total.toFixed(2) : '';
   efPintarAbono();
 }
+// Calendario propio para las fechas de Crear reserva: el popup nativo de <input type="date"> no se puede
+// estilar. El input sigue siendo el dueño del valor (tecleable, min, eventos input/change).
+const EF_MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+let EF_CAL = null;
+const efIso = (y, m, d) => new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);
+function efCalCerrar() { if (EF_CAL) { EF_CAL.el.remove(); EF_CAL = null; } }
+function efCalPintar() {
+  const { el, input, vista: { y, m } } = EF_CAL, min = input.min, sel = input.value, hoy = cbHoy();
+  const vacios = (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7, dias = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  let celdas = '<span></span>'.repeat(vacios);
+  for (let d = 1; d <= dias; d++) {
+    const iso = efIso(y, m, d);
+    celdas += `<button type="button" data-ef-dia="${iso}" class="${iso === sel ? 'sel' : iso === hoy ? 'hoy' : ''}"${min && iso < min ? ' disabled' : ''}>${d}</button>`;
+  }
+  el.innerHTML = `<div class="ef-cal-h"><button type="button" data-ef-mes="-1" aria-label="Mes anterior"${min && efIso(y, m, 0) < min ? ' disabled' : ''}><i class="fas fa-chevron-left"></i></button><b>${EF_MESES[m]} ${y}</b><button type="button" data-ef-mes="1" aria-label="Mes siguiente"><i class="fas fa-chevron-right"></i></button></div>
+    <div class="ef-cal-g">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(d => `<span class="ef-cal-d">${d}</span>`).join('')}${celdas}</div>
+    <div class="ef-cal-f"><button type="button" data-ef-hoy${min && hoy < min ? ' disabled' : ''}>Hoy</button><button type="button" data-ef-borrar>Borrar</button></div>`;
+}
+function efCalAbrir(input) {
+  efCalCerrar();
+  const [y, m] = (input.value || input.min || cbHoy()).split('-').map(Number);
+  const el = document.createElement('div');
+  el.className = 'ef-cal'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Elegir fecha');
+  document.body.appendChild(el);
+  EF_CAL = { el, input, vista: { y, m: m - 1 } };
+  efCalPintar();
+  const r = input.getBoundingClientRect(), h = el.offsetHeight, w = el.offsetWidth;
+  el.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+  el.style.top = (r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
+  el.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.disabled) return;
+    const v = EF_CAL.vista;
+    if (b.dataset.efMes) {
+      const n = v.y * 12 + v.m + Number(b.dataset.efMes);
+      EF_CAL.vista = { y: Math.floor(n / 12), m: n % 12 }; efCalPintar();
+      el.querySelector(`[data-ef-mes="${b.dataset.efMes}"]:not(:disabled)`)?.focus(); return;
+    }
+    const iso = b.dataset.efDia ?? (b.hasAttribute('data-ef-hoy') ? cbHoy() : b.hasAttribute('data-ef-borrar') ? '' : null);
+    if (iso === null) return;
+    efCalCerrar(); input.value = iso;
+    input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.focus();
+  });
+  (el.querySelector('.sel') || el.querySelector('.hoy:not(:disabled)') || el.querySelector('[data-ef-dia]:not(:disabled)'))?.focus();
+}
+document.addEventListener('pointerdown', e => { if (EF_CAL && !EF_CAL.el.contains(e.target) && !e.target.closest('[data-ef-cal]')) efCalCerrar(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || !EF_CAL) return;
+  e.stopPropagation(); const i = EF_CAL.input; efCalCerrar(); i.focus();
+}, true);
+document.addEventListener('scroll', e => { if (EF_CAL && !EF_CAL.el.contains(e.target)) efCalCerrar(); }, true);
+window.addEventListener('resize', efCalCerrar);
+window.addEventListener('popstate', efCalCerrar);
+
 (function () {
   const caja = document.getElementById('ef-agregar');
   if (!caja) return;
@@ -9344,6 +9406,11 @@ function efRecalcular() {
   });
   const lista = document.getElementById('ef-servicios');
   lista.addEventListener('error', e => { if (e.target.matches('.cb-hotel-foto')) e.target.hidden = true; }, true);
+  lista.addEventListener('click', e => {
+    const b = e.target.closest('[data-ef-cal]'); if (!b) return;
+    const input = b.parentElement.querySelector('input');
+    if (EF_CAL?.input === input) efCalCerrar(); else efCalAbrir(input);
+  });
   lista.addEventListener('focusin', e => { if (e.target.dataset.busca === 'hotel') cbHotelBuscar(e.target); });
   lista.addEventListener('focusout', e => {
     if (e.target.dataset.busca !== 'hotel') return;
@@ -32148,6 +32215,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-21', emoji: '📅', titulo: 'Fechas de Crear reserva: calendario y sin fechas pasadas', texto: 'En Crear reserva las fechas ya no te dejan elegir días anteriores a hoy, y la fecha final (salida, regreso, hasta) no puede ser antes de la inicial: si cambias la inicial y la final quedaba antes, se borra sola. Además el selector de fecha tiene un calendario propio con los colores del CRM (botón del calendario a la derecha del campo; también puedes teclear la fecha).', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '🏨', titulo: 'Hoteles con foto al crear una reserva', texto: 'En Crear reserva, el servicio de hospedaje usa el mismo buscador de hoteles y posadas con foto de Cotizaciones, y te deja elegida la habitación y el plan (con foto de la habitación). Si el hotel no está en la lista, o quieres otra habitación o plan, los escribes a mano como antes.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '➕', titulo: 'Crear reserva', texto: 'El botón "Enviar a facturación" ahora es "Crear reserva" y ya no pasa por un admin: eliges los servicios que compró el cliente (hospedaje, vuelos, traslados, full day, seguro u otro), anotas lo que pagó y la reserva queda creada al instante con su abono y su saldo. Después le cargas pasajeros y documentos desde Reservas.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '🧾', titulo: 'Voucher del paquete completo', texto: 'En Reservas > Servicios, el botón "Voucher del paquete" arma un solo PDF con todos los servicios de la reserva (hotel, vuelos, traslados y el resto), los pasajeros y el resumen de pago. Si falta la cédula, el teléfono o la forma de pago, los pide en una ventana antes de generarlo. Queda descargado y adjunto a la reserva, y el voucher de hotel deja de figurar como pendiente.', roles: ['admin', 'asesor'] },
