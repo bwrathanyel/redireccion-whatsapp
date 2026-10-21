@@ -8635,6 +8635,36 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
     </section>
 
+    <!-- ALIANZAS Y PROPUESTAS: contactos que la IA de ventas detecta como NO clientes
+         (alianza, proveedor, prensa, spam). Los guarda contactos_no_cliente; solo admin. -->
+    <section class="section" id="sec-propuestas">
+      <div class="ce-intro">
+        Quienes escribieron al bot para <b>proponer una alianza, ofrecer un servicio o pedir prensa</b>.
+        La IA les toma 4 datos (nombre, empresa o cuenta, qué propone y cómo contactarlos), les dice que el equipo
+        los revisa y los deja acá. <b>No aparecen en Leads</b> ni se asignan a ningún asesor. Solo los ven los admin.
+      </div>
+      <div class="ce-barra">
+        <div class="seg-group" id="pr-estados">
+          <button class="seg on" data-pr-filtro-estado="nuevo">Nuevos</button>
+          <button class="seg" data-pr-filtro-estado="visto">Vistos</button>
+          <button class="seg" data-pr-filtro-estado="descartado">Descartados</button>
+          <button class="seg" data-pr-filtro-estado="todos">Todos</button>
+        </div>
+        <button class="ce-mini" id="pr-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
+        <span class="ce-vig" id="pr-conteo"></span>
+      </div>
+      <div class="ce-barra">
+        <div class="seg-group" id="pr-categorias">
+          <button class="seg on" data-pr-filtro-cat="util">Alianzas, proveedores y prensa</button>
+          <button class="seg" data-pr-filtro-cat="alianza">Alianza</button>
+          <button class="seg" data-pr-filtro-cat="proveedor">Proveedor</button>
+          <button class="seg" data-pr-filtro-cat="prensa">Prensa</button>
+          <button class="seg" data-pr-filtro-cat="spam">Spam</button>
+        </div>
+      </div>
+      <div id="pr-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+    </section>
+
     <!-- CLIENTES EVENTOS: quienes se registraron con el QR del stand (/juega) y los
          premios que ganaron. La laptop de juegos no usa internet: al cerrar se
          descarga un archivo y un admin lo sube acá (RPC importar_premios_evento). -->

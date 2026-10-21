@@ -1,6 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/+esm';
 import { crearDocumentosRevisiones } from './documentos-revisiones.js';
 import { crearAbonos } from './abonos.js';
+import { crearPropuestas } from './propuestas.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -192,6 +193,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
   'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
+  propuestas: ['Alianzas y propuestas', 'Quienes escriben al bot para ofrecer algo, no para comprar'],
   'clientes-eventos': ['Clientes Eventos', 'Quienes se registraron con el QR del stand y los premios que ganaron'],
   'bt-travel': ['BT Travel', 'Hoteles todo incluido, disponibilidad, reservas y pagos del mayorista'],
   apartamentos: ['Apartamentos', 'Casas y posadas con apartamentos propios: unidades, habitaciones y fotos'],
@@ -1436,7 +1438,7 @@ const IR_SECCIONES = [
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos',
   'mensajes', 'whatsapp', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
-  'rendimiento-ia', 'ia-atencion', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
+  'rendimiento-ia', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
 ];
 function seccionInicialPermitida() {
@@ -3834,7 +3836,7 @@ async function rvGenerarVoucherPaquete(btn) {
     try {
       const { data: lista } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: RV_RESERVA_ID });
       ultimo = (lista?.abonos || []).filter(a => !a.anulado_en)
-        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0] || null;
+        .sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
     } catch (e) { console.error('voucher: abonos', e); }
   }
   const formaPago = prev.formaPago || r.forma_pago || RV_METODO_A_VOUCHER[ultimo?.metodo] || '';
@@ -8405,6 +8407,13 @@ async function loadIaAtencion() {
   }
   window.__iaPosadas = posadas;
   cont.innerHTML = posadas.map(iaCard).join('');
+}
+
+// Alianzas y propuestas (propuestas.js): el módulo se arma la primera vez que se abre la sección.
+let PR = null;
+function loadPropuestas() {
+  if (!PR) { PR = crearPropuestas({ sb, esc, fecha: fmtFechaHoraCaracas, ok: okToast, error: errToast }); PR.enlazar(); }
+  return PR.cargar();
 }
 
 function iaCard(p) {
@@ -29502,6 +29511,7 @@ const NAV_ITEMS = [
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Ventas, calidad, errores y costos' },
   { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', padre: 'grp-ia', roles: 'nav-boleteria-ok', sub: 'Lyra: cotiza, revisa reservas, busca en la web y escribe a proveedores' },
   { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Posadas que quieren el asistente' },
+  { sec: 'propuestas', icon: 'fas fa-handshake', label: 'Alianzas y propuestas', padre: 'grp-ia', roles: 'nav-admin-only', sub: 'Quienes escriben al bot para ofrecer algo' },
   { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok nav-administrativo-ok' },
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
   { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only nav-administrativo-ok' },
@@ -29885,6 +29895,7 @@ function cargarSeccion(sec) {
   if (sec === 'galeria') loadGaleria();
   if (sec === 'rendimiento-ia') loadRendimientoIA();
   if (sec === 'ia-atencion') loadIaAtencion();
+  if (sec === 'propuestas') loadPropuestas();
   if (sec === 'clientes-eventos') loadClientesEventos();
   if (sec === 'web-reasignados') loadWebReasignados();
   if (sec === 'contactos-directos') loadContactosDirectos();
@@ -30203,7 +30214,7 @@ const REFRESCAR_SECCION = {
   postventa: () => loadPostventa(), 'reservas-empresas': () => loadReservasEmpresas(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
   'rendimiento-ia': () => loadRendimientoIA(),
-  'ia-atencion': () => loadIaAtencion(), 'web-reasignados': () => loadWebReasignados(), 'contactos-directos': () => loadContactosDirectos(),
+  'ia-atencion': () => loadIaAtencion(), 'propuestas': () => loadPropuestas(), 'web-reasignados': () => loadWebReasignados(), 'contactos-directos': () => loadContactosDirectos(),
   'clientes-eventos': () => loadClientesEventos(),
   'stop-sales': () => { loadStopSalesVigentes(); ssCargarPdfActual(); },
   redes: () => cargarRedActual(), voucher: () => loadVoucherSeccion(), tareas: () => loadTareas(),
