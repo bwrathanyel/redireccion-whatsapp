@@ -3871,17 +3871,16 @@ async function rvGenerarVoucher(servicioId, btn) {
   const c = PV_ACTUAL, det = RV_DET || {}, r = det.reserva || {}, s0 = (det.servicios || []).find(x => x.id === servicioId);
   if (!c || !s0) return errToast('No pude leer el servicio. Reabrí la reserva e intentá de nuevo.');
   const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
-  if (!pax.length) return errToast('Cargá los pasajeros en la pestaña Pasajeros: el voucher los necesita.');
-  const titular = pax.find(p => p.titular) || pax[0];
+  const titular = pax.find(p => p.titular) || pax[0] || null;
   const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
   const hosp = servs.find(s => s.tipo === 'hospedaje');
   const total = Number(r.monto_total ?? c.monto_total ?? 0), pagado = Number(r.monto_pagado ?? c.monto_pagado ?? 0);
   const fecha = s => s ? pvFecha(s) : '';
   const v = {
     codigo_reserva: c.codigo || r.codigo || '', created_at: new Date().toISOString(),
-    cliente_nombre: `${titular.nombre || ''} ${titular.apellido || ''}`.trim().toUpperCase() || String(c.nombre || '').toUpperCase(),
-    documento_identidad: [RV_TIPO_DOC[titular.tipo_documento] || '', titular.numero_documento].filter(Boolean).join(' '),
-    telefono: titular.telefono || c.telefono || '', asesor_nombre: c.asesor || '',
+    cliente_nombre: (titular ? `${titular.nombre || ''} ${titular.apellido || ''}`.trim().toUpperCase() : '') || String(c.nombre || '').toUpperCase(),
+    documento_identidad: titular ? [RV_TIPO_DOC[titular.tipo_documento] || '', titular.numero_documento].filter(Boolean).join(' ') : '',
+    telefono: (titular?.telefono) || c.telefono || '', asesor_nombre: c.asesor || '',
     destino_hospedaje: hosp ? (hosp.detalle?.hotel || hosp.descripcion || '') : (r.destino || c.destino || ''),
     fecha_entrada: fecha(hosp?.fecha_inicio), fecha_salida: fecha(hosp?.fecha_fin),
     check_in: hosp?.detalle?.check_in || '', check_out: hosp?.detalle?.check_out || '',
@@ -31115,7 +31114,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-10-20', emoji: '📄', titulo: 'Voucher desde la reserva', texto: 'Cada servicio en Reservas > Servicios tiene su botón Voucher: arma el PDF con el cliente, los pasajeros, los tramos y los e-tickets, lo descarga y lo deja adjunto a la ficha. Pide pasajeros cargados y avisa si el boleto todavía no tiene tickets.', roles: ['admin', 'asesor', 'administrativo'] },
+  { fecha: '2026-10-20', emoji: '📄', titulo: 'Voucher desde la reserva', texto: 'Cada servicio en Reservas > Servicios tiene su botón Voucher: arma el PDF con el cliente, los pasajeros (si están cargados), los tramos y los e-tickets, lo descarga y lo deja adjunto a la ficha. Si la reserva no tiene pasajeros usa el nombre del cliente de la reserva, y avisa si el boleto todavía no tiene tickets.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🧾', titulo: 'Abono con comprobante y boleto con datos completos', texto: '+ Abono en la tarjeta de la reserva ahora abre la pestaña Abonos con el formulario listo: método, referencia y captura del comprobante, que pasa a ser obligatoria (salvo Efectivo). Además, un boleto aéreo no se guarda sin localizador/PNR, aerolínea y ruta.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🗂️', titulo: 'Gestión de Personal más limpia', texto: 'Las pestañas Asignación de lotes, Freelancers, Reasignaciones, Métricas y Notificaciones ahora se activan desde Mi Perfil. Por defecto quedan ocultas para que la pantalla del equipo se centre en Personal, Asesores y Postulaciones.', roles: ['admin'] },
   { fecha: '2026-10-19', emoji: '🔗', titulo: 'Revisión de ventas al generar vouchers', texto: 'Antes de generar un voucher eliges si corresponde a una reserva existente o a otra venta. Se muestran operaciones similares aunque cambien el nombre o las fechas. Los reintentos conservan la misma operación y el abono se factura una sola vez.', roles: ['asesor', 'admin'] },
