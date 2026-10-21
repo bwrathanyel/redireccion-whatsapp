@@ -9253,17 +9253,18 @@ async function abrirEnviarFacturacionSheet(l) {
    'ef-monto-total', 'ef-notas'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   document.getElementById('ef-metodo').value = '';
   document.getElementById('ef-abono').className = 'ef-abono';
+  efComprobanteEstado('');
   EF_SOLICITUD = crypto.randomUUID();
   document.getElementById('ef-servicios').innerHTML = '';
   efAgregarServicio('hospedaje');
   efAvisoPrecarga('');
   openSheet('enviar-facturacion-sheet');
-  efPrecargar(l, EF_SOLICITUD);
+  efPrecargar(l, EF_SOLICITUD).catch(e => console.error('efPrecargar', e));
 }
 
 // Precarga desde la última cotización del lead (si no hay, desde sus fechas y personas): el asesor
-// confirma en vez de reescribir. Corre al abrir la hoja, con las tarjetas vacías; si la hoja se cierra
-// o se abre otro lead mientras consulta, `solicitud` ya no coincide y no toca nada.
+// confirma en vez de reescribir. Corre al abrir la hoja, con las tarjetas vacías; si se abre otro lead
+// mientras consulta, `solicitud` ya no coincide y no toca nada.
 const EF_DE_COT = { hotel: 'hospedaje', boleto: 'boleto_aereo', traslado: 'traslado_terrestre', fullday: 'full_day', tour: 'full_day', paquete: 'otro', otro: 'otro' };
 function efPonerCampo(card, k, v) {
   const e = card.querySelector(`[data-k="${k}"]`);
@@ -9295,9 +9296,12 @@ async function efPrecargar(l, solicitud) {
   const hoy = cbHoy(), fecha = f => (f && f >= hoy ? f : '');   // una fecha pasada la completa el asesor
   const items = (cot?.items || []).filter(it => EF_DE_COT[it.tipo]);
   const cont = document.getElementById('ef-servicios');
+  // Si el asesor ya empezó a escribir mientras se consultaba, no se le pisa nada.
+  const intacto = () => cont.querySelectorAll('.ef-serv').length <= 1 && ![...cont.querySelectorAll('[data-k]'), document.getElementById('ef-adultos'), document.getElementById('ef-ninos')].some(e => e?.value) && !cont.querySelector('.ef-serv')?._hotel?.producto_id;
+  if (!cont || !intacto()) return;
   if (items.length) {
     await cbCargarProductos();
-    if (EF_SOLICITUD !== solicitud) return;
+    if (EF_SOLICITUD !== solicitud || !intacto()) return;
     cont.innerHTML = '';
     for (const it of items) {
       const tipo = EF_DE_COT[it.tipo], card = efAgregarServicio(tipo), st = card._hotel;
@@ -9606,6 +9610,60 @@ function efPintarAbono() {
 }
 ['ef-monto-pagado', 'ef-monto-total'].forEach(id =>
   document.getElementById(id)?.addEventListener('input', efPintarAbono));
+
+// Comprobante de pago: la IA lee la captura y rellena método, referencia y monto. El asesor revisa y
+// confirma; nada se guarda hasta «Crear reserva», y la imagen no se guarda en ningún lado.
+const EF_COMP_ERRORES = {
+  no_autenticado: 'tu sesión venció, entra de nuevo', tipo_invalido: 'usa una imagen JPG, PNG o WebP',
+  imagen_demasiado_grande: 'la imagen pesa demasiado', imagen_invalida: 'la imagen está dañada',
+  modelo_no_disponible: 'el servicio de lectura no está disponible', extraccion_fallida: 'inténtalo otra vez o llena a mano',
+};
+function efComprobanteEstado(texto, malo) {
+  const st = document.getElementById('ef-comprobante-st'); if (!st) return;
+  st.textContent = texto || '';
+  st.className = 'ef-comprob-st' + (texto ? ' show' : '') + (malo ? ' malo' : '');
+}
+async function efLeerComprobante(file) {
+  if (!file) return;
+  const caja = document.querySelector('.ef-comprob');
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { efComprobanteEstado('Sube una captura en JPG, PNG o WebP.', true); return; }
+  if (file.size > 6291456) { efComprobanteEstado('La imagen pesa más de 6 MB.', true); return; }
+  caja.classList.add('leyendo');
+  efComprobanteEstado('Leyendo comprobante…');
+  try {
+    const { data, error } = await sb.functions.invoke('leer-comprobante', { body: { mime: file.type, imagen: await archivoABase64(file) } });
+    if (error || !data?.ok) {
+      const m = error ? await msgErrorFn(error, data) : (data?.error || 'extraccion_fallida');
+      efComprobanteEstado(m === 'no_es_comprobante' ? 'Esa imagen no parece un comprobante de pago.' : `No pude leerlo: ${EF_COMP_ERRORES[m] || m}`, true);
+      return;
+    }
+    const d = data.datos, partes = [];
+    const metodo = document.getElementById('ef-metodo');
+    if (d.metodo && [...metodo.options].some(o => o.value === d.metodo)) { metodo.value = d.metodo; partes.push(d.metodo); }
+    if (d.referencia) { document.getElementById('ef-referencia').value = d.referencia; partes.push(`ref. ${d.referencia}`); }
+    let usd = null;
+    if (d.monto != null && d.moneda === 'USD') { usd = d.monto; partes.push(money(d.monto)); }
+    else if (d.monto != null && d.moneda === 'VES') {
+      const bs = d.monto.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const tasa = await tasaUsdActual();
+      if (tasa) {
+        usd = Math.round(d.monto / tasa * 100) / 100;
+        partes.push(`Bs ${bs} ≈ ${money(usd)} (tasa BCV ${tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`);
+      } else partes.push(`Bs ${bs} (no hay tasa BCV cargada: escribe el monto en USD)`);
+    } else if (d.monto != null) partes.push(`monto ${d.monto} (moneda no clara: escribe el monto en USD)`);
+    if (usd != null) { const m = document.getElementById('ef-monto-pagado'); m.value = usd.toFixed(2); m.dispatchEvent(new Event('input')); }
+    if (d.fecha) partes.push(`fecha ${d.fecha.split('-').reverse().join('/')}`);
+    if (!partes.length) { efComprobanteEstado('No pude leer datos del comprobante. Llénalos a mano.', true); return; }
+    efComprobanteEstado(`Leído: ${partes.join(' · ')}.${d.confianza < 0.6 ? ' Lectura dudosa.' : ''} Revisa que coincida con el comprobante antes de crear la reserva.`);
+  } catch (e) {
+    console.error('leer-comprobante', e);
+    efComprobanteEstado('No pude leer el comprobante. Llénalo a mano.', true);
+  } finally {
+    caja.classList.remove('leyendo');
+    const input = document.getElementById('ef-comprobante'); if (input) input.value = '';
+  }
+}
+document.getElementById('ef-comprobante')?.addEventListener('change', e => efLeerComprobante(e.target.files?.[0]));
 
 document.getElementById('ef-cancelar')?.addEventListener('click', () => closeSheet('enviar-facturacion-sheet'));
 document.getElementById('ef-enviar')?.addEventListener('click', async () => {
@@ -32330,6 +32388,8 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-21', emoji: '📸', titulo: 'Lee el comprobante de pago', texto: 'En Crear reserva, sube la captura del comprobante y el CRM llena solo el método, la referencia y el monto. Si el pago fue en bolívares, te muestra los bolívares y su equivalente en dólares con la tasa BCV del día. Revisa que los datos coincidan con el comprobante antes de crear la reserva: la lectura es automática y puede equivocarse.', roles: ['admin', 'asesor'] },
+  { fecha: '2026-10-21', emoji: '⚡', titulo: 'Reservas: menos escribir, más automático', texto: 'Al crear una reserva, el CRM ya trae lo de la última cotización del lead (hotel, plan, habitación, fechas, personas, vuelos y precio) y tú solo confirmas; si no hay cotización, usa las fechas y personas del lead. El titular se carga solo como pasajero, el proveedor del hotel se asigna solo (y con eso nace la cuenta por pagar), las noches se calculan con las fechas, y las casillas de comprobante, voucher, boletos y reserva emitida se marcan solas. La etapa de la reserva avanza sola según saldo, servicios y documentos; si la cambias a mano, se respeta hasta que cambie algo importante. El voucher del paquete toma la forma de pago del último abono y ya no te la vuelve a pedir.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '📅', titulo: 'Calendario nuevo en todas las fechas', texto: 'Todos los campos de fecha del CRM en computador usan ahora un calendario propio con los colores del CRM: icono a la derecha del campo, botones Hoy y Borrar, flechas de mes y de año, y también puedes teclear la fecha. En Crear reserva además no se pueden elegir días anteriores a hoy y la fecha final no puede ser antes de la inicial. En celular se mantiene el selector de fecha del teléfono.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '🏨', titulo: 'Hoteles con foto al crear una reserva', texto: 'En Crear reserva, el servicio de hospedaje usa el mismo buscador de hoteles y posadas con foto de Cotizaciones, y te deja elegida la habitación y el plan (con foto de la habitación). Si el hotel no está en la lista, o quieres otra habitación o plan, los escribes a mano como antes.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '➕', titulo: 'Crear reserva', texto: 'El botón "Enviar a facturación" ahora es "Crear reserva" y ya no pasa por un admin: eliges los servicios que compró el cliente (hospedaje, vuelos, traslados, full day, seguro u otro), anotas lo que pagó y la reserva queda creada al instante con su abono y su saldo. Después le cargas pasajeros y documentos desde Reservas.', roles: ['admin', 'asesor'] },

@@ -1196,6 +1196,9 @@ input.ei[type=date],input.ei[type=datetime-local],input.ei[type=time]{color-sche
 #proveedor-sheet .fl-sub{text-align:left;margin-top:7px}
 .ef-abono{display:none;font-size:12px;margin-top:7px;padding:8px 10px;border-radius:9px;background:rgba(74,158,255,.09);border:1px solid rgba(74,158,255,.25);color:#9ec5ff}
 .ef-abono.show{display:block}
+.ef-comprob{margin:2px 0 7px}.ef-comprob .btn-sm{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.ef-comprob.leyendo .btn-sm{opacity:.55;pointer-events:none}
+.ef-comprob-st{display:none;font-size:12px;margin-top:6px;color:var(--muted)}.ef-comprob-st.show{display:block}.ef-comprob-st.malo{color:#ff8a8a}
 .ef-abono.malo{background:rgba(239,68,68,.09);border-color:rgba(239,68,68,.3);color:#ffa5a5}
 .ef-serv{background:rgba(10,12,28,.55);border:1.5px solid var(--line2);border-radius:12px;padding:9px 11px 11px;margin-bottom:9px}
 .ef-serv-top{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin-bottom:2px}
@@ -9839,6 +9842,11 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     </div>
 
     <label class="fl">Método de pago <span class="ef-opc">(si ya pagó algo)</span></label>
+    <div class="ef-comprob">
+      <label class="btn-sm" for="ef-comprobante"><i class="fas fa-camera"></i> Leer captura del comprobante</label>
+      <input type="file" id="ef-comprobante" accept="image/jpeg,image/png,image/webp" hidden>
+      <div class="ef-comprob-st" id="ef-comprobante-st"></div>
+    </div>
     <select id="ef-metodo" class="ei">
       <option value="">Elige uno...</option>
       <option>Zelle</option>
