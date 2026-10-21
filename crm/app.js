@@ -17279,15 +17279,71 @@ function prvBloqueMargen(p, s) {
     <div class="prv-m-cab"><span>Margen ${esc(lbl.toLowerCase())}</span><b>${prvPct(pct)}</b></div>
     <div class="prv-m-barra" role="img" aria-label="Margen real ${prvPct(pct)}${conf != null ? `, configurado ${prvPct(conf)}` : ''}"><i style="width:${escala(pct)}%"></i>${conf != null ? `<s style="left:${escala(conf)}%" title="Configurado: ${prvPct(conf)}"></s>` : ''}</div>
     <div class="prv-m-pie"><span><b>${fmt(s.casos)}</b> ${s.casos === 1 ? 'venta' : 'ventas'}</span><span><b>${money(s.venta)}</b> vendidos${grupo}</span>${varia}</div>
-    <div class="prv-m-conf"><span>Configurado: <b>${conf != null ? prvPct(conf) : 'sin %'}</b> ${conf != null ? (propio ? '(propio)' : '(general)') : ''}</span>${difiere ? `<button class="prv-usar" type="button" data-prv-usar="${tipo}" data-prv-id="${p.id}" data-pct="${Math.round(pct * 10) / 10}" title="Guardar ${prvPct(pct)} como margen de ${esc(p.nombre)} en ${esc(lbl.toLowerCase())}"><i class="fas fa-wand-magic-sparkles"></i> Usar ${prvPct(pct)}</button>` : '<span class="lt-ok"><i class="fas fa-check"></i> coincide</span>'}</div>
+    ${prvConfFila(p, tipo, lbl, difiere ? Math.round(pct * 10) / 10 : null, !difiere, conf, propio)}
   </div>`;
+}
+// Fila "Configurado" con edición a mano: PRV.editando = "<proveedor>:<tipo>" abre el campo.
+function prvConfFila(p, tipo, lbl, sugerido, coincide = false, conf = rvMargenPct(tipo, p.id), propio = (MG.margenes || []).some(m => m.activo && m.tipo === tipo && m.proveedor_id === p.id)) {
+  const k = `${p.id}:${tipo}`, attrs = `data-prv-id="${p.id}" data-prv-tipo-m="${tipo}"`;
+  if (PRV.editando === k) return `<div class="prv-m-conf prv-edit" ${attrs}>
+      <label class="prv-edit-campo"><span>Margen de ${esc(lbl.toLowerCase())}</span><input class="ei" type="number" inputmode="decimal" min="0" max="99.99" step="0.1" value="${conf != null ? Number(conf) : ''}" placeholder="0" data-prv-input aria-label="Margen de ${esc(p.nombre)} en ${esc(lbl.toLowerCase())}, en %"><b>%</b></label>
+      <span class="prv-edit-acc">${propio ? `<button class="mg-link" type="button" data-prv-general title="Quitar el % propio y usar el general del tipo de servicio">Usar el general</button>` : ''}<button class="btn-sm" type="button" data-prv-cancelar>Cancelar</button><button class="btn-sm lt-primario" type="button" data-prv-guardar><i class="fas fa-check"></i> Guardar</button></span>
+    </div>`;
+  return `<div class="prv-m-conf" ${attrs}><span>Configurado: <b>${conf != null ? prvPct(conf) : 'sin %'}</b> ${conf != null ? (propio ? '(propio)' : '(general)') : ''}</span>
+    <span class="prv-edit-acc"><button class="prv-editar" type="button" data-prv-editar title="Escribir el margen a mano"><i class="fas fa-pen"></i> Editar</button>${sugerido != null ? `<button class="prv-usar" type="button" data-prv-usar="${tipo}" data-prv-id="${p.id}" data-pct="${sugerido}" title="Guardar ${prvPct(sugerido)} como margen de ${esc(p.nombre)} en ${esc(lbl.toLowerCase())}"><i class="fas fa-wand-magic-sparkles"></i> Usar ${prvPct(sugerido)}</button>` : coincide ? '<span class="lt-ok"><i class="fas fa-check"></i> coincide</span>' : ''}</span></div>`;
+}
+function prvRepintarMargen() {
+  renderProveedores();
+  const enFicha = !!PROV_EDITANDO && PROV_TAB === 'margen' && document.getElementById('proveedor-sheet')?.classList.contains('open');
+  if (enFicha) provPintarMargen();
+  const inp = document.querySelector(enFicha ? '#prov-reservas-box [data-prv-input]' : '#prov-tbody [data-prv-input]'); if (inp) { inp.focus(); inp.select(); }
+}
+async function prvGuardarMargenMano(fila, volverGeneral = false) {
+  const id = Number(fila.dataset.prvId), tipo = fila.dataset.prvTipoM, p = PROV_CACHE.find(x => x.id === id); if (!p) return;
+  const lbl = ((PROV_TIPOS.find(y => y[0] === tipo) || [, tipo])[1]).toLowerCase();
+  let llamada, txt;
+  if (volverGeneral) {
+    const actual = (MG.margenes || []).find(m => m.activo && m.tipo === tipo && m.proveedor_id === id); if (!actual) return;
+    llamada = sb.rpc('guardar_margen', { p_tipo: tipo, p_porcentaje: Number(actual.porcentaje), p_proveedor_id: id, p_activo: false });
+    txt = `${p.nombre}: vuelve al margen general en ${lbl}`;
+  } else {
+    const v = fila.querySelector('[data-prv-input]')?.value ?? '';
+    if (!mgPctOk(v)) { errToast('El margen va de 0 a 99,99%'); fila.querySelector('[data-prv-input]')?.focus(); return; }
+    const pct = Math.round(Number(v) * 100) / 100;
+    llamada = sb.rpc('guardar_margen', { p_tipo: tipo, p_porcentaje: pct, p_proveedor_id: id });
+    txt = `${p.nombre}: margen ${prvPct(pct)} en ${lbl}`;
+  }
+  fila.querySelectorAll('button,input').forEach(b => { b.disabled = true; });
+  const { data: r, error } = await llamada;
+  if (error || !r?.ok) { errToast('No se pudo guardar: ' + rvErr(error, r)); fila.querySelectorAll('button,input').forEach(b => { b.disabled = false; }); return; }
+  PRV.editando = null;
+  await mgCargar(); mgRender(); prvRepintarMargen();
+  okToast(txt);
+}
+// Clicks y teclas de la edición a mano; true si el evento era de la edición (no abrir la ficha).
+function prvManejarEdicion(e) {
+  const fila = e.target.closest('[data-prv-tipo-m]'); if (!fila) return false;
+  if (e.type === 'keydown') {
+    if (!e.target.matches('[data-prv-input]')) return false;
+    if (e.key === 'Enter') { e.preventDefault(); prvGuardarMargenMano(fila); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); PRV.editando = null; prvRepintarMargen(); }
+    return true;
+  }
+  if (e.target.closest('[data-prv-editar]')) { PRV.editando = `${fila.dataset.prvId}:${fila.dataset.prvTipoM}`; prvRepintarMargen(); return true; }
+  if (e.target.closest('[data-prv-cancelar]')) { PRV.editando = null; prvRepintarMargen(); return true; }
+  if (e.target.closest('[data-prv-guardar]')) { prvGuardarMargenMano(fila); return true; }
+  if (e.target.closest('[data-prv-general]')) { prvGuardarMargenMano(fila, true); return true; }
+  return fila.classList.contains('prv-edit');
 }
 function prvTarjeta(p, i) {
   const r = prvResumen(p), color = PRV_TIPO_COLOR[(p.tipos || [])[0]] || 'var(--accent)';
   const tel = String(p.telefono || '').replace(/[^\d]/g, '');
   const tipos = (p.tipos || []).map(t => { const x = PROV_TIPOS.find(y => y[0] === t); return `<span><i class="fas ${x ? x[2] : 'fa-circle-dot'}"></i>${esc(x ? x[1] : t)}</span>`; }).join('') || '<span>Sin servicios cargados</span>';
   const margen = r.secs.length ? r.secs.sort((a, b) => b.casos - a.casos).map(s => prvBloqueMargen(p, s)).join('')
-    : `<div class="prv-m prv-m-vacio"><i class="fas fa-chart-simple"></i><span>${PRV.ok ? 'Sin ventas con neto cargado todavía' : 'No se pudo calcular el margen'}</span></div>`;
+    : (() => {
+      const tipoM = (p.tipos || []).find(t => MG_TIPOS.includes(t)), lblM = tipoM ? (PROV_TIPOS.find(y => y[0] === tipoM) || [, tipoM])[1] : '';
+      return `<div class="prv-m prv-m-vacio"><div class="prv-m-vacio-txt"><i class="fas fa-chart-simple"></i><span>${PRV.ok ? 'Sin ventas con neto cargado todavía' : 'No se pudo calcular el margen'}</span></div>${tipoM ? prvConfFila(p, tipoM, lblM, null) : ''}</div>`;
+    })();
   const quien = [p.contacto && esc(p.contacto), p.telefono && (tel.length >= 7 ? `<a href="https://wa.me/${tel}" target="_blank" rel="noopener" title="Escribir por WhatsApp"><i class="fab fa-whatsapp"></i> ${esc(p.telefono)}</a>` : esc(p.telefono))].filter(Boolean).join(' · ');
   return `<article class="prv-card${p.activo ? '' : ' apagado'}" data-prov-id="${p.id}" tabindex="0" role="button" aria-label="Abrir ficha de ${esc(p.nombre)}" style="--i:${Math.min(i, 20)};--pc:${color}">
     <div class="prv-top">
@@ -17327,7 +17383,8 @@ async function prvUsarMargen(id, tipo, pct) {
   if (!(await confirmarSheet({ titulo: `¿Usar ${prvPct(pct)} como margen de ${p.nombre}?`, detalle: `Los netos automáticos nuevos de ${lbl.toLowerCase()} con este proveedor van a salir con ese margen. Lo ya cargado no cambia.`, textoOk: 'Usar este %' }))) return;
   const { data: r, error } = await sb.rpc('guardar_margen', { p_tipo: tipo, p_porcentaje: pct, p_proveedor_id: id });
   if (error || !r?.ok) { errToast('No se pudo guardar: ' + rvErr(error, r)); return; }
-  await mgCargar(); mgRender(); renderProveedores();
+  PRV.editando = null;
+  await mgCargar(); mgRender(); prvRepintarMargen();
   okToast(`${p.nombre}: margen ${prvPct(pct)} en ${lbl.toLowerCase()}`);
 }
 function provPintarMargen() {
@@ -17803,18 +17860,23 @@ function setupProveedores() {
     if (e.target.closest('[data-prv-cerrar]')) { PRV.revisar = false; renderProveedores(); }
   });
   document.getElementById('prov-tbody').addEventListener('click', e => {
-    if (e.target.closest('a')) return;
+    if (e.target.closest('a') || prvManejarEdicion(e)) return;
     const usar = e.target.closest('[data-prv-usar]');
     if (usar) { prvUsarMargen(Number(usar.dataset.prvId), usar.dataset.prvUsar, Number(usar.dataset.pct)); return; }
     const fila = e.target.closest('[data-prov-id]');
     if (fila) abrirProveedorSheet(Number(fila.dataset.provId));
   });
   document.getElementById('prov-tbody').addEventListener('keydown', e => {
+    if (prvManejarEdicion(e)) return;
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.prv-card')) { e.preventDefault(); abrirProveedorSheet(Number(e.target.dataset.provId)); }
   });
   document.getElementById('prov-reservas-box').addEventListener('click', e => {
+    if (prvManejarEdicion(e)) return;
+    const usar = e.target.closest('[data-prv-usar]');
+    if (usar) { prvUsarMargen(Number(usar.dataset.prvId), usar.dataset.prvUsar, Number(usar.dataset.pct)); return; }
     const c = e.target.closest('[data-prv-lead]'); if (c) { closeSheet('proveedor-sheet'); abrirClienteDesdeFacturacion(Number(c.dataset.prvLead)); }
   });
+  document.getElementById('prov-reservas-box').addEventListener('keydown', prvManejarEdicion);
   document.getElementById('prov-tipos').addEventListener('click', e => {
     const b = e.target.closest('.ef-tipo');
     if (!b) return;
