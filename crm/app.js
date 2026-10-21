@@ -4012,7 +4012,7 @@ async function rvGenerarVoucherPaquete(btn) {
     total_general: total, monto_pagado: pagado, resta: Math.round((total - pagado) * 100) / 100,
     forma_pago: datos.formaPago || '', referencia_pago: datos.referencia || '',
     numero_factura: r.numero_factura || '',
-    titulo_voucher: 'VOUCHER DE PAQUETE', etiqueta_detalle: 'DETALLE DEL PAQUETE',
+    titulo_voucher: 'VOUCHER DE PAQUETE TURÍSTICO', etiqueta_detalle: 'DETALLE DEL PAQUETE',
     etiqueta_destino: 'DESTINO / PAQUETE', etiqueta_servicios: 'SERVICIOS DEL PAQUETE',
     servicios: servs.map(s => {
       const tks = (det.boletos || []).filter(b => b.servicio_id === s.id && b.numero_ticket).map(b => b.numero_ticket);
