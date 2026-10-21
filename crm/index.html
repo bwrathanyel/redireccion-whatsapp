@@ -4985,6 +4985,78 @@ body.fsize-grande{--tap:41.9px}
 @keyframes mv-celebrar{0%{box-shadow:0 0 0 0 rgba(16,185,129,.45)}50%{transform:scale(1.015);box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
 .mv-celebra{animation:mv-celebrar .6s var(--ease-salida)}
 @media(prefers-reduced-motion:reduce){.lt-card{animation:none}.mv-celebra{animation:none}}
+/* Proveedores con margen real (2026-10-21). --pc = color del servicio principal, --mc = color del margen. */
+.prv-barra{display:flex;flex-wrap:wrap;align-items:center;gap:9px 14px;margin-top:14px}
+.prv-seg{display:inline-flex;padding:3px;border-radius:999px;background:var(--bg2);border:1px solid var(--line)}
+.prv-seg button{font:inherit;font-size:12px;font-weight:700;color:var(--muted);background:none;border:0;border-radius:999px;padding:6px 14px;cursor:pointer;transition:color var(--dur-rapida),background var(--dur-rapida)}
+.prv-seg button:hover{color:var(--txt)}
+.prv-seg button.on{color:var(--on-accent);background:var(--accent)}
+.prv-seg button small{font-weight:600;opacity:.75;margin-left:4px}
+.prv-chips{display:flex;flex-wrap:wrap;gap:7px;flex:1;min-width:0}
+.prv-chip{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;font-weight:600;color:var(--muted);background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer;transition:border-color var(--dur-rapida),color var(--dur-rapida)}
+.prv-chip:hover{color:var(--txt);border-color:var(--line2)}
+.prv-chip.on{color:var(--accent-ink);border-color:var(--accent);background:var(--accent-soft)}
+.prv-chip i{font-size:11px}
+.prv-orden{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2)}
+.prv-orden .ei{width:auto;min-width:150px;text-transform:none;letter-spacing:0}
+.prv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-top:14px}
+.prv-card{position:relative;display:flex;flex-direction:column;gap:14px;background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:16px;cursor:pointer;overflow:hidden;animation:bt-sube .4s var(--ease-salida) both;animation-delay:calc(var(--i,0) * 25ms);transition:transform var(--dur-rapida),border-color var(--dur-rapida)}
+.prv-card::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:var(--pc,var(--accent));opacity:.85}
+.prv-card:hover{transform:translateY(-2px);border-color:var(--line2)}
+.prv-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.prv-card.apagado{opacity:.6}
+.prv-top{display:flex;align-items:center;gap:11px}
+.prv-ava{display:grid;place-items:center;flex-shrink:0;width:44px;height:44px;border-radius:12px;font-size:14px;font-weight:800;letter-spacing:.02em;color:color-mix(in srgb,var(--pc,var(--accent)) 65%,var(--txt));background:color-mix(in srgb,var(--pc,var(--accent)) 16%,transparent)}
+.prv-id{flex:1;min-width:0}
+.prv-nom{font-size:15px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prv-tipos{display:flex;flex-wrap:wrap;gap:4px 9px;margin-top:4px;font-size:11.5px;color:var(--muted)}
+.prv-tipos span{display:inline-flex;align-items:center;gap:4px}
+.prv-tipos i{font-size:10px;color:var(--accent-ink)}
+.prv-m{display:flex;flex-direction:column;gap:7px;padding:12px;border-radius:12px;background:color-mix(in srgb,var(--mc,var(--muted)) 8%,transparent);border:1px solid color-mix(in srgb,var(--mc,var(--muted)) 22%,transparent)}
+.prv-m+.prv-m{margin-top:-7px}
+.prv-m-cab{display:flex;align-items:baseline;justify-content:space-between;gap:9px}
+.prv-m-cab span{font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+.prv-m-cab b{font-size:28px;font-weight:800;line-height:1;letter-spacing:-.03em;color:var(--mc,var(--txt))}
+.prv-m-barra{position:relative;height:7px;border-radius:999px;background:var(--line2)}
+.prv-m-barra i{display:block;height:100%;border-radius:inherit;background:var(--mc,var(--green));transition:width .4s var(--ease-salida)}
+.prv-m-barra s{position:absolute;top:-3px;width:2px;height:13px;border-radius:2px;background:var(--txt);opacity:.7;transform:translateX(-1px)}
+.prv-m-pie{display:flex;flex-wrap:wrap;align-items:center;gap:4px 9px;font-size:11.5px;color:var(--muted)}
+.prv-m-pie b{color:var(--txt);font-weight:700}
+.prv-varia{display:inline-flex;align-items:center;gap:4px;color:var(--amber);font-weight:700}
+.prv-m-conf{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:7px;padding-top:7px;border-top:1px dashed var(--line2);font-size:11.5px;color:var(--muted)}
+.prv-usar{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:11.5px;font-weight:800;color:var(--accent-ink);background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:999px;padding:5px 11px;cursor:pointer;transition:border-color var(--dur-rapida)}
+.prv-usar:hover{border-color:var(--accent)}
+.prv-m-vacio{flex-direction:row;align-items:center;gap:9px;font-size:12px;color:var(--muted)}
+.prv-m-vacio i{color:var(--muted2)}
+.prv-datos{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:auto;font-size:12px;color:var(--muted)}
+.prv-datos .prv-quien{flex:1 1 100%;min-width:0;display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prv-datos a{color:var(--txt);text-decoration:none;font-weight:600}
+.prv-datos a:hover{color:var(--accent-ink)}
+.prv-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;background:rgba(var(--ink-rgb),.05);border:1px solid var(--line);font-size:11px;font-weight:700;color:var(--txt)}
+.prv-pill i{font-size:10px;color:var(--muted2)}
+.prv-revisar{margin-top:14px;padding:14px;border-radius:12px;background:color-mix(in srgb,var(--amber) 8%,transparent);border:1px solid color-mix(in srgb,var(--amber) 30%,transparent)}
+.prv-revisar h3{display:flex;align-items:center;gap:7px;margin:0 0 4px;font-size:14px}
+.prv-revisar h3 i{color:var(--amber)}
+.prv-revisar p{margin:0 0 11px;font-size:12px;color:var(--muted);line-height:1.5}
+.prv-casos{display:flex;flex-direction:column;gap:7px}
+.prv-caso{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;align-items:center;gap:4px 14px;width:100%;text-align:left;font:inherit;color:var(--txt);background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:9px 11px;cursor:pointer;transition:border-color var(--dur-rapida)}
+.prv-caso:hover{border-color:var(--line2)}
+.prv-caso b{display:block;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prv-caso small{display:block;font-size:11px;color:var(--muted);line-height:1.4}
+.prv-caso .prv-caso-pct{font-size:15px;font-weight:800;color:var(--mc,var(--txt));text-align:right;white-space:nowrap}
+.prv-caso.usado{cursor:pointer}
+.prv-ficha-m{display:flex;flex-direction:column;gap:11px;padding:4px 0}
+.prv-ficha-m h4{margin:7px 0 0;font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+@media(max-width:760px){
+  .prv-grid{grid-template-columns:1fr}
+  .prv-chips{flex:1 1 100%;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .prv-chip{flex-shrink:0;white-space:nowrap}
+  .prv-orden{width:100%}
+  .prv-orden .ei{flex:1}
+  .prv-caso{grid-template-columns:minmax(0,1fr) auto}
+  .prv-caso .prv-caso-motivo{grid-column:1/-1;order:3}
+}
+@media(prefers-reduced-motion:reduce){.prv-card{animation:none}}
 /* Cobros > Ventas: tarjeta de venta (2026-10-16). --vc = color del estado, --c = color de cada acción/aviso. */
 .vt-card{gap:11px}
 .vt-cab{display:flex;align-items:flex-start;gap:11px}
@@ -7355,26 +7427,29 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             <option value="inactivos">Inactivos</option>
             <option value="todos">Todos</option>
           </select>
-          <button class="btn-sm ordenar-trigger-movil" type="button" onclick="abrirOrdenarSheet('proveedores')"><i class="fas fa-arrow-down-wide-short"></i> Ordenar</button>
-          <button class="btn-sm" id="prov-nuevo" type="button"><i class="fas fa-plus"></i> Nuevo proveedor</button>
+          <button class="btn-sm lt-primario" id="prov-nuevo" type="button"><i class="fas fa-plus"></i> Nuevo proveedor</button>
         </div>
-        <div class="csub">Hoteles, posadas, aerolíneas y operadores a los que Lotus les compra · tocá un proveedor para ver o editar su ficha</div>
-        <div class="kpis bt-kpis lt-kpis" id="prov-kpis"></div>
-        <div class="lt-orden" role="group" aria-label="Ordenar por">
-          <span class="lt-orden-lbl">Ordenar</span>
-          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="nombre">Proveedor</button>
-          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="servicios">Servicios</button>
-          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="contacto">Contacto</button>
-          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="moneda_habitual">Moneda</button>
-          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="dias_credito">Crédito</button>
-          <button type="button" class="th-sort lt-orden-op" data-sort-tbl="proveedores" data-sort-col="activo">Estado</button>
+        <div class="csub">A quién le compra Lotus y cuánto deja cada uno. El margen (ganancia ÷ venta) se mide solo con las ventas de Postventa, separando hotel y boletos.</div>
+        <div class="kpis bt-kpis lt-kpis lt-kpis-4" id="prov-kpis"></div>
+        <div class="prv-barra">
+          <div class="prv-seg" id="prov-estado" role="group" aria-label="Estado"></div>
+          <div class="prv-chips" id="prov-chips" role="group" aria-label="Filtrar por servicio"></div>
+          <label class="prv-orden"><span>Ordenar por</span>
+            <select class="ei" id="prov-orden" aria-label="Ordenar proveedores">
+              <option value="margen">Mayor margen</option>
+              <option value="venta">Más vendido</option>
+              <option value="nombre">Nombre</option>
+              <option value="credito">Días de crédito</option>
+            </select>
+          </label>
         </div>
+        <div class="prv-revisar" id="prov-revisar" hidden></div>
         <div class="tbl-state skel" id="prov-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
-        <div class="lt-grid" id="prov-tbody"></div>
+        <div class="prv-grid" id="prov-tbody"></div>
       </div>
       <div class="card" style="margin-top:14px">
-        <div class="chead-row"><h2><i class="fas fa-percent"></i> Márgenes y tarifas base</h2></div>
-        <div class="csub">Cuánto gana Lotus en cada servicio. Con estos valores el CRM calcula solo el neto que se le paga al proveedor en cada reserva.</div>
+        <div class="chead-row"><h2><i class="fas fa-percent"></i> Margen por tipo de servicio</h2></div>
+        <div class="csub">El % que usa el CRM para sacar solo el neto que se le paga al proveedor en cada reserva. Si un proveedor tiene su propio %, ese gana.</div>
         <div id="prov-margenes"></div>
       </div>
     </section>

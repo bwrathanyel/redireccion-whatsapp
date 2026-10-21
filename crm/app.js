@@ -195,7 +195,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'clientes-eventos': ['Clientes Eventos', 'Quienes se registraron con el QR del stand y los premios que ganaron'],
   'bt-travel': ['BT Travel', 'Hoteles todo incluido, disponibilidad, reservas y pagos del mayorista'],
   apartamentos: ['Apartamentos', 'Casas y posadas con apartamentos propios: unidades, habitaciones y fotos'],
-  proveedores: ['Proveedores','A quién le compra Lotus: servicios, contacto, crédito y datos de pago'],
+  proveedores: ['Proveedores','A quién le compra Lotus y cuánto margen deja cada uno'],
   asistente: ['Asistente', 'Revisa reservas, carga servicios y pasajeros, deja notas y escribe a proveedores -- con tus permisos'],
   'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
   'voz-ia': ['Voz IA', 'Probá la voz clonada de la jefa y controlá la muestra de referencia que usa la IA'],
@@ -4146,7 +4146,7 @@ function rvFormCosto(p) {
     const venta = Number(s.precio_usd_centavos || 0);
     document.getElementById('rv-c-auto-txt').textContent = traslado && prov?.tarifa_base_centavos != null
       ? `Neto = tarifa base de ${prov.nombre}: ${rvMonto(prov.tarifa_base_centavos, 'USD')}`
-      : pct != null ? `Neto = venta ÷ ${(1 + pct / 100).toLocaleString('es-VE')} (fee ${Number(pct).toLocaleString('es-VE')}%): ${rvMonto(Math.round(venta / (1 + pct / 100)), 'USD')}`
+      : pct != null ? `Neto = venta − ${Number(pct).toLocaleString('es-VE')}% de margen: ${rvMonto(Math.round(venta * (1 - pct / 100)), 'USD')}`
       : traslado ? 'Este proveedor no tiene tarifa base: cargala en Proveedores → Márgenes o usá neto manual.'
       : 'Este tipo de servicio no tiene % cargado: configuralo en Proveedores → Márgenes o usá neto manual.';
   };
@@ -16438,14 +16438,27 @@ async function loadFacturas() {
   if (error) { errToast('No se pudieron cargar las facturas'); return; }
   // Una factura = una reserva (reserva_id es único). El precio real de la venta es el total
   // de la reserva; la factura solo es lo cobrado hasta ahora (y reserva_pagado si va por delante).
-  const cxpPorReserva = new Map(CXP_CACHE.filter(c => c.reserva_id != null).map(c => [c.reserva_id, c]));
+  // El neto de la ficha de Postventa suele ser solo el del hotel: se le suman los netos de
+  // boletos y traslados, salvo que la ficha ya los incluya (neto ≥ total − su precio). Sin neto
+  // en la ficha, la suma de los netos de los servicios (el boleto sin proveedor no genera cuenta
+  // por pagar y antes quedaba afuera, inflando el margen). Si falta un neto, no hay margen.
+  const cxpsPorReserva = new Map();
+  CXP_CACHE.forEach(c => { if (c.reserva_id != null) cxpsPorReserva.set(c.reserva_id, [...(cxpsPorReserva.get(c.reserva_id) || []), c]); });
+  const sumar = (xs, k) => xs.reduce((a, x) => a + (Number(x[k]) || 0), 0);
   FACT_VENTAS_CACHE = (data || []).map(f => {
-    const cxp = cxpPorReserva.get(f.reserva_id);
-    const costoCxp = cxp ? cxp.monto_a_transferir : null, costoReserva = f.reserva_costo == null ? null : Number(f.reserva_costo);
-    const costo_neto = costoCxp ?? costoReserva;
+    const cxps = cxpsPorReserva.get(f.reserva_id) || [];
+    const costoCxp = cxps.length ? sumar(cxps, 'monto_a_transferir') : null, costoReserva = f.reserva_costo == null ? null : Number(f.reserva_costo);
+    const conServ = Number(f.reserva_servicios_n) > 0 && f.reserva_costo_servicios != null;
     const abonado = f.estado === 'pagada' ? Math.max(Number(f.monto_total) || 0, Number(f.reserva_pagado) || 0) : 0;
     const venta_total = Math.max(Number(f.reserva_total) || 0, Number(f.monto_total) || 0, abonado);
-    return { ...f, costo_neto, proveedor: cxp ? cxp.proveedor : null, proveedor_pagado: cxp ? cxp.monto_abonado : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null };
+    const precioBt = Number(f.reserva_precio_bt) || 0, fichaIncluyeBt = costoReserva != null && precioBt > 0 && costoReserva >= venta_total - precioBt;
+    let netosFaltan = 0, costo_neto;
+    if (costoReserva != null) { netosFaltan = fichaIncluyeBt ? 0 : Number(f.reserva_bt_sin_costo) || 0; costo_neto = costoReserva + (fichaIncluyeBt ? 0 : Number(f.reserva_costo_bt) || 0); }
+    else if (conServ) { netosFaltan = Number(f.servicios_sin_costo) || 0; costo_neto = Number(f.reserva_costo_servicios); }
+    else costo_neto = costoCxp;
+    if (netosFaltan) costo_neto = null;
+    const proveedor = [...new Set(cxps.map(c => c.proveedor).filter(Boolean))].join(' + ') || null;
+    return { ...f, costo_neto, netos_faltan: netosFaltan, proveedor, proveedor_pagado: cxps.length ? sumar(cxps, 'monto_abonado') : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null };
   });
   ULTIMA_CARGA.balance = 0; // el balance se alimenta de estas facturas: que se recargue al volver
   poblarFiltrosVentas();
@@ -16480,7 +16493,8 @@ function avisosVenta(f) {
   if (f.estado !== 'pagada') return '';
   const debe = f.venta_total - f.abonado, avisos = [];
   if (debe > 0.005) avisos.push(`<div class="vt-aviso" style="--c:var(--amber)"><i class="fas fa-hourglass-half"></i> Falta cobrar <b>${money(debe)}</b></div>`);
-  if (f.costo_neto == null) avisos.push(`<div class="vt-aviso" style="--c:var(--pink)"><i class="fas fa-triangle-exclamation"></i> Falta cargar el costo neto en Postventa</div>`);
+  if (f.netos_faltan) avisos.push(`<div class="vt-aviso" style="--c:var(--pink)"><i class="fas fa-triangle-exclamation"></i> Falta el neto de ${fmt(f.netos_faltan)} servicio${f.netos_faltan === 1 ? '' : 's'} de la reserva: sin eso el margen no es real</div>`);
+  else if (f.costo_neto == null) avisos.push(`<div class="vt-aviso" style="--c:var(--pink)"><i class="fas fa-triangle-exclamation"></i> Falta cargar el costo neto en Postventa</div>`);
   return avisos.join('');
 }
 function renderVentas() {
@@ -17213,14 +17227,120 @@ async function loadProveedores() {
   if (!esOficina()) return;
   const cargando = document.getElementById('prov-loading');
   cargando?.classList.add('show');
-  const { data, error } = await sb.rpc('listar_proveedores', { p_solo_activos: false });
+  const [{ data, error }, mr] = await Promise.all([sb.rpc('listar_proveedores', { p_solo_activos: false }), sb.rpc('margen_real_proveedores')]);
   cargando?.classList.remove('show');
   if (error) { errToast('No se pudieron cargar los proveedores'); return; }
+  if (mr.error || !mr.data?.ok) console.error('margen_real_proveedores', mr.error || mr.data);
+  prvGuardarMargenReal(mr.error ? null : mr.data);
   PROV_CACHE = (data || []).map(p => ({ ...p, servicios: (p.tipos || []).map(t => PROV_TIPO_LABEL[t] || t).join(', ') }));
   renderProveedores();
   loadMargenesProv();
 }
-// Fee por tipo (neto = venta ÷ (1 + %)) y tarifa base de traslados (migración 20261016230000).
+/* ---------- Margen real por proveedor (2026-10-21) ----------
+   margen_real_proveedores mide ganancia ÷ venta en las fichas de Postventa, separando
+   hotel y boletería; los casos que no cierran vienen con `motivo` y no entran en el %.
+   Las dos Gremary suman juntas (grupos: miembro → cabeza). */
+const PRV = { tipo: '', revisar: false, porProv: new Map(), casos: [], cabeza: new Map(), ok: false };
+const PRV_SECCION = { hotel: ['Hotel', 'hospedaje', 'fa-bed'], boleteria: ['Boletos', 'boleto_aereo', 'fa-plane'], traslado: ['Traslados', 'traslado_terrestre', 'fa-van-shuttle'] };
+const PRV_MOTIVO = {
+  neto_incluye_otros: 'El neto es igual o mayor que lo que vendió este proveedor: seguramente suma el boleto u otro servicio.',
+  margen_alto: 'Más de 40%: el total parece traer servicios de otro proveedor.',
+  margen_bajo: 'Menos de 5%: revisá el neto cargado.',
+  proveedor_sin_ficha: 'El proveedor escrito en la ficha no coincide con ninguno de la lista.',
+};
+const PRV_TIPO_COLOR = { hospedaje: 'var(--accent)', boleto_aereo: 'var(--blue)', traslado_terrestre: 'var(--purple)', traslado_maritimo: 'var(--purple)', full_day: 'var(--amber)', seguro: 'var(--green)', otro: 'var(--muted)' };
+const prvPct = n => Number(n).toLocaleString('es-VE', { maximumFractionDigits: 1 }) + '%';
+const prvColor = n => n == null ? 'var(--muted)' : n >= 18 ? 'var(--green)' : n >= 10 ? 'var(--amber)' : 'var(--pink)';
+const prvIniciales = s => String(s || '').replace(/^(posada|hotel|hacienda|campamento|casa vacacional|refugio turistico)\s+/i, '').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '#';
+function prvGuardarMargenReal(d) {
+  PRV.ok = !!d?.ok; PRV.porProv = new Map(); PRV.casos = d?.casos || [];
+  PRV.cabeza = new Map((d?.grupos || []).map(g => [g.miembro, g.cabeza]));
+  (d?.proveedores || []).forEach(r => {
+    const m = PRV.porProv.get(r.proveedor_id) || {};
+    m[r.seccion] = r; PRV.porProv.set(r.proveedor_id, m);
+  });
+}
+const prvDatos = id => PRV.porProv.get(PRV.cabeza.get(id) ?? id) || {};
+const prvCasosDe = id => { const cab = PRV.cabeza.get(id) ?? id; return PRV.casos.filter(c => c.proveedor_id === cab); };
+function prvResumen(p) {
+  const secs = Object.values(prvDatos(p.id));
+  const venta = secs.reduce((a, s) => a + Number(s.venta || 0), 0), neto = secs.reduce((a, s) => a + Number(s.neto || 0), 0);
+  return { secs, venta, margen: venta > 0 ? Math.round(1000 * (venta - neto) / venta) / 10 : null, casos: secs.reduce((a, s) => a + s.casos, 0) };
+}
+function prvBloqueMargen(p, s) {
+  const [lbl, tipo] = PRV_SECCION[s.seccion] || [s.seccion, 'otro'];
+  const pct = Number(s.margen_pct), mc = prvColor(pct);
+  const conf = rvMargenPct(tipo, p.id), propio = (MG.margenes || []).some(m => m.activo && m.tipo === tipo && m.proveedor_id === p.id);
+  const difiere = conf == null || Math.abs(Number(conf) - pct) >= 1;
+  const escala = v => Math.max(0, Math.min(100, Number(v) / 40 * 100));
+  const varia = !s.consistente ? `<span class="prv-varia" title="Entre la venta con menos margen y la de más hay más de 10 puntos"><i class="fas fa-triangle-exclamation"></i> varía ${prvPct(s.min_pct)}–${prvPct(s.max_pct)}</span>` : '';
+  const grupo = PRV.cabeza.has(p.id) ? ' · suma con Posada Gremary' : '';
+  return `<div class="prv-m" style="--mc:${mc}">
+    <div class="prv-m-cab"><span>Margen ${esc(lbl.toLowerCase())}</span><b>${prvPct(pct)}</b></div>
+    <div class="prv-m-barra" role="img" aria-label="Margen real ${prvPct(pct)}${conf != null ? `, configurado ${prvPct(conf)}` : ''}"><i style="width:${escala(pct)}%"></i>${conf != null ? `<s style="left:${escala(conf)}%" title="Configurado: ${prvPct(conf)}"></s>` : ''}</div>
+    <div class="prv-m-pie"><span><b>${fmt(s.casos)}</b> ${s.casos === 1 ? 'venta' : 'ventas'}</span><span><b>${money(s.venta)}</b> vendidos${grupo}</span>${varia}</div>
+    <div class="prv-m-conf"><span>Configurado: <b>${conf != null ? prvPct(conf) : 'sin %'}</b> ${conf != null ? (propio ? '(propio)' : '(general)') : ''}</span>${difiere ? `<button class="prv-usar" type="button" data-prv-usar="${tipo}" data-prv-id="${p.id}" data-pct="${Math.round(pct * 10) / 10}" title="Guardar ${prvPct(pct)} como margen de ${esc(p.nombre)} en ${esc(lbl.toLowerCase())}"><i class="fas fa-wand-magic-sparkles"></i> Usar ${prvPct(pct)}</button>` : '<span class="lt-ok"><i class="fas fa-check"></i> coincide</span>'}</div>
+  </div>`;
+}
+function prvTarjeta(p, i) {
+  const r = prvResumen(p), color = PRV_TIPO_COLOR[(p.tipos || [])[0]] || 'var(--accent)';
+  const tel = String(p.telefono || '').replace(/[^\d]/g, '');
+  const tipos = (p.tipos || []).map(t => { const x = PROV_TIPOS.find(y => y[0] === t); return `<span><i class="fas ${x ? x[2] : 'fa-circle-dot'}"></i>${esc(x ? x[1] : t)}</span>`; }).join('') || '<span>Sin servicios cargados</span>';
+  const margen = r.secs.length ? r.secs.sort((a, b) => b.casos - a.casos).map(s => prvBloqueMargen(p, s)).join('')
+    : `<div class="prv-m prv-m-vacio"><i class="fas fa-chart-simple"></i><span>${PRV.ok ? 'Sin ventas con neto cargado todavía' : 'No se pudo calcular el margen'}</span></div>`;
+  const quien = [p.contacto && esc(p.contacto), p.telefono && (tel.length >= 7 ? `<a href="https://wa.me/${tel}" target="_blank" rel="noopener" title="Escribir por WhatsApp"><i class="fab fa-whatsapp"></i> ${esc(p.telefono)}</a>` : esc(p.telefono))].filter(Boolean).join(' · ');
+  return `<article class="prv-card${p.activo ? '' : ' apagado'}" data-prov-id="${p.id}" tabindex="0" role="button" aria-label="Abrir ficha de ${esc(p.nombre)}" style="--i:${Math.min(i, 20)};--pc:${color}">
+    <div class="prv-top">
+      <span class="prv-ava" aria-hidden="true">${esc(prvIniciales(p.nombre))}</span>
+      <div class="prv-id"><div class="prv-nom" title="${esc(p.nombre)}">${esc(p.nombre)}</div><div class="prv-tipos">${tipos}</div></div>
+      ${p.activo ? '' : '<span class="bt-tag" style="--c:var(--muted)">Inactivo</span>'}
+    </div>
+    ${margen}
+    <div class="prv-datos">
+      <span class="prv-quien"><i class="fas fa-user"></i> ${quien || 'Sin contacto cargado'}</span>
+      <span class="prv-pill"><i class="fas fa-hourglass-half"></i> ${p.dias_credito ? fmt(p.dias_credito) + ' días de crédito' : 'Contado'}</span>
+      ${p.moneda_habitual ? `<span class="prv-pill"><i class="fas fa-coins"></i> ${esc(p.moneda_habitual)}</span>` : ''}
+      ${p.rif ? `<span class="prv-pill"><i class="fas fa-id-card"></i> ${esc(p.rif)}</span>` : ''}
+    </div>
+  </article>`;
+}
+function prvCasoFila(c) {
+  const sec = (PRV_SECCION[c.seccion] || [c.seccion])[0];
+  const resta = [Number(c.boletos) > 0 && `boletos ${money(c.boletos)}`, Number(c.traslados) > 0 && `traslados ${money(c.traslados)}`].filter(Boolean).join(' y ');
+  return `<button class="prv-caso" type="button" ${c.lead_id ? `data-prv-lead="${c.lead_id}"` : 'disabled'} style="--mc:${c.motivo ? 'var(--amber)' : prvColor(c.margen_pct)}" title="Abrir la ficha del cliente">
+    <span><b>${esc(c.cliente || 'Cliente #' + (c.lead_id ?? '—'))}</b><small>${esc(c.proveedor_texto || '')} · ${esc(sec)}</small></span>
+    <span class="prv-caso-motivo"><small>Total ${money(c.monto_total)}${resta ? ` − ${resta}` : ''} = venta ${money(c.venta_proveedor)} · neto ${money(c.costo_neto)}</small>${c.motivo ? `<small style="color:var(--amber)">${esc(PRV_MOTIVO[c.motivo] || c.motivo)}</small>` : ''}</span>
+    <span class="prv-caso-pct">${c.margen_pct != null ? prvPct(c.margen_pct) : '—'}</span>
+  </button>`;
+}
+function prvPintarRevisar() {
+  const box = document.getElementById('prov-revisar'), malos = PRV.casos.filter(c => c.motivo);
+  box.hidden = !PRV.revisar;
+  if (!PRV.revisar) return;
+  box.innerHTML = `<h3><i class="fas fa-magnifying-glass-chart"></i> Ventas a revisar (${fmt(malos.length)})</h3>
+    <p>No entran en el margen hasta que se corrijan. Tocá una para abrir al cliente y revisar el total o el costo neto en su ficha de Postventa. <button class="mg-link" type="button" data-prv-cerrar>Cerrar</button></p>
+    <div class="prv-casos">${malos.map(prvCasoFila).join('') || '<div class="pv-empty">Todo cuadra: no hay ventas para revisar.</div>'}</div>`;
+}
+async function prvUsarMargen(id, tipo, pct) {
+  const p = PROV_CACHE.find(x => x.id === id); if (!p || !(pct >= 0 && pct < 100)) return;
+  const lbl = (PROV_TIPOS.find(y => y[0] === tipo) || [, tipo])[1];
+  if (!(await confirmarSheet({ titulo: `¿Usar ${prvPct(pct)} como margen de ${p.nombre}?`, detalle: `Los netos automáticos nuevos de ${lbl.toLowerCase()} con este proveedor van a salir con ese margen. Lo ya cargado no cambia.`, textoOk: 'Usar este %' }))) return;
+  const { data: r, error } = await sb.rpc('guardar_margen', { p_tipo: tipo, p_porcentaje: pct, p_proveedor_id: id });
+  if (error || !r?.ok) { errToast('No se pudo guardar: ' + rvErr(error, r)); return; }
+  await mgCargar(); mgRender(); renderProveedores();
+  okToast(`${p.nombre}: margen ${prvPct(pct)} en ${lbl.toLowerCase()}`);
+}
+function provPintarMargen() {
+  const cont = document.getElementById('prov-reservas-box'), p = PROV_EDITANDO; if (!p) return;
+  const casos = prvCasosDe(p.id), usados = casos.filter(c => !c.motivo), malos = casos.filter(c => c.motivo);
+  const secs = Object.values(prvDatos(p.id));
+  cont.innerHTML = `<div class="prv-ficha-m">
+    ${secs.length ? secs.map(s => prvBloqueMargen(p, s)).join('') : '<div class="pv-empty" style="padding:18px">Todavía no hay ventas con este proveedor que tengan total y costo neto en Postventa.</div>'}
+    ${usados.length ? `<h4>Ventas que entran en el cálculo (${fmt(usados.length)})</h4><div class="prv-casos">${usados.map(prvCasoFila).join('')}</div>` : ''}
+    ${malos.length ? `<h4>A revisar, no entran (${fmt(malos.length)})</h4><div class="prv-casos">${malos.map(prvCasoFila).join('')}</div>` : ''}
+  </div>`;
+}
+// Margen por tipo (neto = venta × (1 − %)) y tarifa base de traslados (migración 20261016230000).
 // Panel pensado para administración: % grande editable, ejemplo en vivo y excepciones por proveedor.
 const MG_TIPOS = ['boleto_aereo', 'hospedaje', 'traslado_terrestre', 'traslado_maritimo', 'full_day', 'seguro', 'otro'];
 const MG_FIJOS = ['boleto_aereo', 'hospedaje'];
@@ -17233,7 +17353,7 @@ function mgEjemplo(k, v) {
   if (k.startsWith('t:')) return v === '' ? 'Sin tarifa: en cada reserva el neto de este traslado se carga a mano.'
     : `Cada traslado con este proveedor toma <b>${mgUsd(Math.round(Number(v) * 100))}</b> de neto solo. En la reserva se puede cambiar.`;
   if (!mgPctOk(v)) return '<span class="mg-ej-vacio">Escribí un % entre 0 y 99,99</span>';
-  const venta = Math.round(MG.ejemplo * 100), neto = Math.round(venta / (1 + Number(v) / 100));
+  const venta = Math.round(MG.ejemplo * 100), neto = Math.round(venta * (1 - Number(v) / 100));
   return `Venta ${mgUsd(venta)}<i class="fas fa-arrow-right"></i>neto proveedor <b>${mgUsd(neto)}</b> · gana Lotus <b class="mg-gana">${mgUsd(venta - neto)}</b>`;
 }
 function mgTarjetaTipo(tipo) {
@@ -17245,18 +17365,18 @@ function mgTarjetaTipo(tipo) {
   const usados = new Set(excs.map(m => m.proveedor_id));
   const candidatos = PROV_CACHE.filter(p => p.activo && (p.tipos || []).includes(tipo) && !usados.has(p.id));
   const exc = m => { const ke = `m:${tipo}:${m.proveedor_id}`, o = String(Number(m.porcentaje)), ve = MG.borr[ke] ?? o;
-    return `<div class="mg-exc${ve !== o ? ' sucio' : ''}" data-k="${ke}" data-orig="${o}"><span title="${esc(m.proveedor || '')}">${esc(m.proveedor || 'Proveedor')}</span><input class="ei" data-mg-in type="number" inputmode="decimal" min="0" max="99.99" step="0.01" value="${esc(ve)}" aria-label="Fee de ${esc(m.proveedor || '')}"><span class="mg-suf">%</span><button class="btn-sm" type="button" data-mg-guardar ${ve !== o ? '' : 'disabled'}>Guardar</button><button class="mg-x" type="button" data-mg-quitar aria-label="Quitar excepción de ${esc(m.proveedor || '')}"><i class="fas fa-xmark"></i></button></div>`; };
+    return `<div class="mg-exc${ve !== o ? ' sucio' : ''}" data-k="${ke}" data-orig="${o}"><span title="${esc(m.proveedor || '')}">${esc(m.proveedor || 'Proveedor')}</span><input class="ei" data-mg-in type="number" inputmode="decimal" min="0" max="99.99" step="0.01" value="${esc(ve)}" aria-label="Margen de ${esc(m.proveedor || '')}"><span class="mg-suf">%</span><button class="btn-sm" type="button" data-mg-guardar ${ve !== o ? '' : 'disabled'}>Guardar</button><button class="mg-x" type="button" data-mg-quitar aria-label="Quitar excepción de ${esc(m.proveedor || '')}"><i class="fas fa-xmark"></i></button></div>`; };
   const nueva = MG.nuevaExc !== tipo ? '' : candidatos.length
-    ? `<div class="mg-exc mg-exc-nueva" data-nx="${tipo}"><select class="ei" data-nx-prov aria-label="Proveedor">${candidatos.map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select><input class="ei" data-nx-pct type="number" inputmode="decimal" min="0" max="99.99" step="0.01" placeholder="%" aria-label="Fee"><button class="btn-sm" type="button" data-mg-exc-crear>Guardar</button><button class="mg-x" type="button" data-mg-exc-cancelar aria-label="Cancelar"><i class="fas fa-xmark"></i></button></div>`
+    ? `<div class="mg-exc mg-exc-nueva" data-nx="${tipo}"><select class="ei" data-nx-prov aria-label="Proveedor">${candidatos.map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select><input class="ei" data-nx-pct type="number" inputmode="decimal" min="0" max="99.99" step="0.01" placeholder="%" aria-label="Margen"><button class="btn-sm" type="button" data-mg-exc-crear>Guardar</button><button class="mg-x" type="button" data-mg-exc-cancelar aria-label="Cancelar"><i class="fas fa-xmark"></i></button></div>`
     : `<div class="mg-nota">No hay más proveedores activos de este tipo. Marcá el tipo en la ficha del proveedor. <button class="mg-link" type="button" data-mg-exc-cancelar>Cerrar</button></div>`;
-  const quitar = !MG_FIJOS.includes(tipo) ? `<button class="mg-link mg-quitar" type="button" data-mg-quitar>Quitar fee</button>` : '';
+  const quitar = !MG_FIJOS.includes(tipo) ? `<button class="mg-link mg-quitar" type="button" data-mg-quitar>Quitar margen</button>` : '';
   return `<div class="mg-card mg-tipo${v !== orig ? ' sucio' : ''}${orig === '' ? ' mg-sin' : ''}" data-k="${k}" data-orig="${orig}">
-    <div class="mg-head"><i class="fas ${ico}"></i><div><b>${esc(lbl)}</b><span>${esc(secLbl)}${orig === '' ? ' · sin fee todavía' : ''}</span></div></div>
-    <label class="mg-big"><input data-mg-in type="number" inputmode="decimal" min="0" max="99.99" step="0.01" value="${esc(v)}" placeholder="0" aria-label="Fee de ${esc(lbl)} en %"><span class="mg-suf">% de fee</span></label>
+    <div class="mg-head"><i class="fas ${ico}"></i><div><b>${esc(lbl)}</b><span>${esc(secLbl)}${orig === '' ? ' · sin margen todavía' : ''}</span></div></div>
+    <label class="mg-big"><input data-mg-in type="number" inputmode="decimal" min="0" max="99.99" step="0.01" value="${esc(v)}" placeholder="0" aria-label="Margen de ${esc(lbl)} en %"><span class="mg-suf">% de margen</span></label>
     <div class="mg-ej" data-ej>${mgEjemplo(k, v)}</div>
     ${sec === 'traslado' ? '<div class="mg-nota">Solo se usa si el proveedor del traslado no tiene tarifa base.</div>' : ''}
     <div class="mg-acc">${quitar}<button class="btn-sm mg-guardar" type="button" data-mg-guardar ${v !== orig ? '' : 'disabled'}><i class="fas fa-check"></i> Guardar</button></div>
-    ${excs.length || MG.nuevaExc === tipo ? `<div class="mg-exc-lista"><div class="mg-exc-tit">Fee distinto por proveedor (le gana al general)</div>${excs.map(exc).join('')}${nueva}</div>` : ''}
+    ${excs.length || MG.nuevaExc === tipo ? `<div class="mg-exc-lista"><div class="mg-exc-tit">Margen distinto por proveedor (le gana al general)</div>${excs.map(exc).join('')}${nueva}</div>` : ''}
     ${MG.nuevaExc === tipo || orig === '' ? '' : `<button class="mg-link" type="button" data-mg-exc-abrir="${tipo}"><i class="fas fa-plus"></i> % distinto para un proveedor</button>`}
   </div>`;
 }
@@ -17274,11 +17394,11 @@ function mgRender() {
   const conFee = new Set(MG.margenes.filter(m => m.activo).map(m => m.tipo));
   const visibles = MG_TIPOS.filter(t => MG_FIJOS.includes(t) || conFee.has(t) || MG.extra.has(t));
   const resto = MG_TIPOS.filter(t => !visibles.includes(t));
-  box.innerHTML = `<div class="mg-intro"><div><b>¿Cómo se calcula el neto?</b> El precio al cliente es lo que cobra el proveedor más el fee de Lotus. El CRM saca solo el neto: <code>neto = venta ÷ (1 + fee)</code>.</div>
+  box.innerHTML = `<div class="mg-intro"><div><b>¿Cómo se calcula el neto?</b> El margen es la parte de la venta que se queda Lotus. El CRM saca solo lo que se le paga al proveedor: <code>neto = venta × (1 − margen)</code>. Con 20%, una venta de $100 deja $80 de neto y $20 de ganancia.</div>
       <label class="mg-prueba">Probar con una venta de <span class="mg-big sm"><span class="mg-pre">$</span><input id="mg-ejemplo" type="number" inputmode="decimal" min="0" step="1" value="${MG.ejemplo}" aria-label="Venta de ejemplo en USD"></span></label></div>
-    <h3 class="mg-sub"><i class="fas fa-percent"></i> Fee por tipo de servicio</h3>
+    <h3 class="mg-sub"><i class="fas fa-percent"></i> Margen por tipo de servicio</h3>
     <div class="mg-grid">${visibles.map(mgTarjetaTipo).join('')}</div>
-    ${resto.length ? `<div class="mg-agregar"><span>Agregar fee a:</span>${resto.map(t => `<button class="mg-chip" type="button" data-mg-agregar="${t}"><i class="fas ${(RV_TIPOS[t] || [])[1] || 'fa-circle-dot'}"></i>${esc((RV_TIPOS[t] || [t])[0])}</button>`).join('')}</div>` : ''}
+    ${resto.length ? `<div class="mg-agregar"><span>Agregar margen a:</span>${resto.map(t => `<button class="mg-chip" type="button" data-mg-agregar="${t}"><i class="fas ${(RV_TIPOS[t] || [])[1] || 'fa-circle-dot'}"></i>${esc((RV_TIPOS[t] || [t])[0])}</button>`).join('')}</div>` : ''}
     <h3 class="mg-sub"><i class="fas fa-van-shuttle"></i> Tarifa base de traslados</h3>
     ${MG.traslados.length ? `<div class="mg-grid">${MG.traslados.map(mgTarjetaTraslado).join('')}</div>` : '<div class="pv-empty">No hay proveedores de traslado activos. Marcá "Traslado terrestre" en la ficha del proveedor.</div>'}
     <div class="mg-pie"><i class="fas fa-circle-info"></i><span>Los cambios valen para los servicios que se carguen de ahora en adelante. Para recalcular uno ya cargado: en la reserva, <b>Neto y proveedor</b> → <b>Neto automático</b> → Guardar.</span></div>`;
@@ -17294,14 +17414,14 @@ async function mgGuardar(llamada, k, txt) {
   const { data: r, error: er } = await llamada;
   if (er || !r?.ok) { errToast('No se pudo guardar: ' + rvErr(er, r)); return false; }
   if (k) delete MG.borr[k];
-  await mgCargar(); mgRender(); okToast(txt);
+  await mgCargar(); mgRender(); renderProveedores(); okToast(txt);
   return true;
 }
 async function loadMargenesProv() {
   const box = document.getElementById('prov-margenes'); if (!box) return;
   if (!box.dataset.listo) box.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   if (!(await mgCargar())) { box.innerHTML = '<div class="pv-empty">No se pudieron cargar los márgenes</div>'; return; }
-  box.dataset.listo = '1'; mgRender();
+  box.dataset.listo = '1'; mgRender(); renderProveedores();
   box.oninput = e => {
     if (e.target.id === 'mg-ejemplo') {
       MG.ejemplo = Math.max(0, Number(e.target.value) || 0);
@@ -17331,7 +17451,7 @@ async function loadMargenesProv() {
       if (!mgPctOk(pct)) return errToast('El porcentaje va de 0 a 99,99');
       b.disabled = true;
       const ok = await mgGuardar(sb.rpc('guardar_margen', { p_tipo: fila.dataset.nx, p_porcentaje: Number(pct), p_proveedor_id: Number(prov.value) }), null,
-        `${prov.selectedOptions[0]?.text || 'Proveedor'}: fee ${mgPctTxt(pct)}%`);
+        `${prov.selectedOptions[0]?.text || 'Proveedor'}: margen ${mgPctTxt(pct)}%`);
       if (ok) { MG.nuevaExc = null; mgRender(); } else b.disabled = false;
       return;
     }
@@ -17340,10 +17460,10 @@ async function loadMargenesProv() {
     if (b.hasAttribute('data-mg-quitar')) {
       if (clase === 'm' && !prov && c.dataset.orig === '') { MG.extra.delete(a); delete MG.borr[c.dataset.k]; mgRender(); return; }
       const nombre = prov ? c.querySelector('span')?.textContent : (RV_TIPOS[a] || [a])[0];
-      if (!(await confirmarSheet({ titulo: prov ? `¿Quitar el fee propio de ${nombre}?` : `¿Quitar el fee de ${nombre}?`, detalle: prov ? 'Vuelve a usar el fee general del tipo de servicio.' : 'Los servicios nuevos de este tipo quedan sin neto automático.', textoOk: 'Quitar', destructivo: true }))) return;
+      if (!(await confirmarSheet({ titulo: prov ? `¿Quitar el margen propio de ${nombre}?` : `¿Quitar el margen de ${nombre}?`, detalle: prov ? 'Vuelve a usar el margen general del tipo de servicio.' : 'Los servicios nuevos de este tipo quedan sin neto automático.', textoOk: 'Quitar', destructivo: true }))) return;
       b.disabled = true;
       if (!prov) MG.extra.delete(a);
-      if (!(await mgGuardar(sb.rpc('guardar_margen', { p_tipo: a, p_porcentaje: Number(c.dataset.orig), p_proveedor_id: prov ? Number(prov) : null, p_activo: false }), c.dataset.k, 'Fee quitado'))) b.disabled = false;
+      if (!(await mgGuardar(sb.rpc('guardar_margen', { p_tipo: a, p_porcentaje: Number(c.dataset.orig), p_proveedor_id: prov ? Number(prov) : null, p_activo: false }), c.dataset.k, 'Margen quitado'))) b.disabled = false;
       return;
     }
     if (!b.hasAttribute('data-mg-guardar')) return;
@@ -17357,7 +17477,7 @@ async function loadMargenesProv() {
     } else {
       if (!mgPctOk(v)) return errToast('El porcentaje va de 0 a 99,99');
       llamada = sb.rpc('guardar_margen', { p_tipo: a, p_porcentaje: Number(v), p_proveedor_id: prov ? Number(prov) : null });
-      txt = `${prov ? c.querySelector('span')?.textContent : (RV_TIPOS[a] || [a])[0]}: fee ${mgPctTxt(v)}%`;
+      txt = `${prov ? c.querySelector('span')?.textContent : (RV_TIPOS[a] || [a])[0]}: margen ${mgPctTxt(v)}%`;
     }
     b.disabled = true;
     if (await mgGuardar(llamada, c.dataset.k, txt)) { if (clase === 'm' && !prov) MG.extra.delete(a); } else b.disabled = false;
@@ -17367,31 +17487,39 @@ async function loadMargenesProv() {
 // que lee val('prov-filtro') / val('emp-filtro') siga igual.
 function filtrarPorSelect(id, valor, render) { document.getElementById(id).value = valor; render(); }
 function renderProveedores() {
-  const filtro = val('prov-filtro') || 'activos';
-  const buscadas = ordenarYFiltrar(PROV_CACHE, ['nombre', 'rif', 'contacto', 'telefono', 'email', 'servicios'], val('prov-search'), FACT_SORT.proveedores);
-  const filas = filtro === 'todos' ? buscadas : buscadas.filter(p => !!p.activo === (filtro === 'activos'));
-  const nAct = buscadas.filter(p => p.activo).length;
-  const ir = v => () => filtrarPorSelect('prov-filtro', v, renderProveedores);
+  const filtro = val('prov-filtro') || 'activos', orden = val('prov-orden') || 'margen';
+  const buscadas = ordenarYFiltrar(PROV_CACHE, ['nombre', 'rif', 'contacto', 'telefono', 'email', 'servicios'], val('prov-search'), { col: null });
+  const porEstado = filtro === 'todos' ? buscadas : buscadas.filter(p => !!p.activo === (filtro === 'activos'));
+  const filas = (PRV.tipo ? porEstado.filter(p => (p.tipos || []).includes(PRV.tipo)) : porEstado).map(p => ({ p, r: prvResumen(p) }));
+  const cmp = {
+    margen: (a, b) => (b.r.margen ?? -1) - (a.r.margen ?? -1) || b.r.venta - a.r.venta,
+    venta: (a, b) => b.r.venta - a.r.venta || (b.r.margen ?? -1) - (a.r.margen ?? -1),
+    credito: (a, b) => (b.p.dias_credito || 0) - (a.p.dias_credito || 0),
+    nombre: () => 0,
+  }[orden] || (() => 0);
+  filas.sort((a, b) => (b.p.activo - a.p.activo) || cmp(a, b) || String(a.p.nombre).localeCompare(String(b.p.nombre), 'es'));
+  // Cifras sobre los activos: cada grupo de Gremary suma una sola vez.
+  const activos = PROV_CACHE.filter(p => p.activo), vistos = new Set();
+  let venta = 0, neto = 0, casos = 0;
+  activos.forEach(p => { const cab = PRV.cabeza.get(p.id) ?? p.id; if (vistos.has(cab)) return; vistos.add(cab);
+    Object.values(prvDatos(p.id)).forEach(s => { venta += Number(s.venta || 0); neto += Number(s.neto || 0); casos += s.casos; }); });
+  const conDato = activos.filter(p => prvResumen(p).secs.length).length, nRevisar = PRV.casos.filter(c => c.motivo).length;
+  const prom = venta > 0 ? Math.round(1000 * (venta - neto) / venta) / 10 : null;
   pintarKPIs('prov-kpis', [
-    { key: 'activos', t: 'Activos', v: fmt(nAct), d: 'a los que les compramos hoy', i: 'fa-truck-field', c: 'var(--green)', on: filtro === 'activos', go: ir('activos') },
-    { key: 'inactivos', t: 'Inactivos', v: fmt(buscadas.length - nAct), d: 'dados de baja', i: 'fa-circle-pause', c: 'var(--muted)', on: filtro === 'inactivos', go: ir('inactivos') },
-    { key: 'todos', t: 'Todos', v: fmt(buscadas.length), d: 'ver todos', i: 'fa-list', c: 'var(--blue)', on: filtro === 'todos', go: ir('todos') },
+    { key: 'activos', t: 'Proveedores activos', v: fmt(activos.length), d: `${fmt(PROV_CACHE.length - activos.length)} inactivos`, i: 'fa-truck-field', c: 'var(--blue)' },
+    { key: 'margen', t: 'Margen promedio', v: prom != null ? prvPct(prom) : '—', d: prom != null ? `${money(venta - neto)} ganados sobre ${money(venta)}` : 'sin ventas medidas', i: 'fa-chart-line', c: prvColor(prom), tt: 'Ordenar por mayor margen', go: () => { document.getElementById('prov-orden').value = 'margen'; renderProveedores(); } },
+    { key: 'medidos', t: 'Con margen medido', v: `${fmt(conDato)} de ${fmt(activos.length)}`, d: `${fmt(casos)} ventas con neto en Postventa`, i: 'fa-scale-balanced', c: 'var(--green)' },
+    { key: 'revisar', t: 'Ventas a revisar', v: fmt(nRevisar), d: nRevisar ? 'no cuadran: tocá para verlas' : 'todo cuadra', i: 'fa-triangle-exclamation', c: nRevisar ? 'var(--amber)' : 'var(--green)', on: PRV.revisar, tt: 'Ver las ventas que no cuadran', go: () => { PRV.revisar = !PRV.revisar; renderProveedores(); if (PRV.revisar) document.getElementById('prov-revisar').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } },
   ]);
-  document.getElementById('prov-tbody').innerHTML = filas.map((p, i) => `
-    <article class="lt-card${p.activo ? '' : ' lt-card-hecha'}" data-prov-id="${p.id}" style="--i:${Math.min(i, 20)};cursor:pointer">
-      <div class="lt-card-cab">
-        <div class="lt-card-tit" title="${esc(p.nombre || '')}">${esc(p.nombre)}</div>
-        <span class="bt-tag" style="--c:${p.activo ? 'var(--green)' : 'var(--muted)'}">${p.activo ? 'Activo' : 'Inactivo'}</span>
-      </div>
-      <div class="lt-card-meta"><i class="fas fa-concierge-bell"></i>${esc(p.servicios) || 'Sin servicios cargados'}</div>
-      <div class="lt-card-meta"><i class="fas fa-user"></i>${esc([p.contacto, p.telefono].filter(Boolean).join(' · ')) || 'Sin contacto'}</div>
-      <div class="lt-cifras">
-        <div><span>Moneda</span><b>${esc(p.moneda_habitual) || '—'}</b></div>
-        <div><span>Crédito</span><b>${p.dias_credito ? fmt(p.dias_credito) + ' días' : 'Contado'}</b></div>
-        <div><span>RIF</span><b>${esc(p.rif) || '—'}</b></div>
-      </div>
-      <div class="lt-card-pie"><button class="btn-sm" type="button" data-prov-id="${p.id}"><i class="fas fa-id-card"></i> Ver ficha</button></div>
-    </article>`).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${PROV_CACHE.length ? 'Ningún proveedor coincide con la búsqueda o el filtro' : 'Todavía no hay proveedores cargados'}</div>`;
+  const nEst = { activos: buscadas.filter(p => p.activo).length, inactivos: buscadas.filter(p => !p.activo).length, todos: buscadas.length };
+  document.getElementById('prov-estado').innerHTML = [['activos', 'Activos'], ['inactivos', 'Inactivos'], ['todos', 'Todos']]
+    .map(([k, l]) => `<button type="button" class="${filtro === k ? 'on' : ''}" data-prv-estado="${k}" aria-pressed="${filtro === k}">${l}<small>${fmt(nEst[k])}</small></button>`).join('');
+  const tiposUsados = PROV_TIPOS.filter(([k]) => porEstado.some(p => (p.tipos || []).includes(k)));
+  document.getElementById('prov-chips').innerHTML = tiposUsados.length > 1 ? tiposUsados.map(([k, l, ic]) =>
+    `<button type="button" class="prv-chip${PRV.tipo === k ? ' on' : ''}" data-prv-tipo="${k}" aria-pressed="${PRV.tipo === k}"><i class="fas ${ic}"></i>${esc(l)}</button>`).join('') : '';
+  prvPintarRevisar();
+  document.getElementById('prov-tbody').innerHTML = filas.map(({ p }, i) => prvTarjeta(p, i)).join('')
+    || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${PROV_CACHE.length ? 'Ningún proveedor coincide con la búsqueda o el filtro' : 'Todavía no hay proveedores cargados'}</div>`;
 }
 function abrirProveedorSheet(id = null) {
   const p = id == null ? null : PROV_CACHE.find(x => x.id === id);
@@ -17421,7 +17549,8 @@ function provTab(tab) {
   document.getElementById('prov-ficha').hidden = tab !== 'ficha';
   document.getElementById('prov-reservas-box').hidden = tab === 'ficha';
   document.querySelectorAll('#prov-tabs [data-prov-tab]').forEach(b => b.classList.toggle('on', b.dataset.provTab === tab));
-  if (tab !== 'ficha') provPintarReservas(tab);
+  if (tab === 'margen') provPintarMargen();
+  else if (tab !== 'ficha') provPintarReservas(tab);
 }
 function provServExtra(s) {
   const d = s.detalle || {}, pax = (s.pax_adultos || 0) + (s.pax_ninos || 0);
@@ -17439,8 +17568,9 @@ function provServExtra(s) {
 async function provCargarReservas(p) {
   const tabs = document.getElementById('prov-tabs');
   const pintarTabs = cuenta => {
-    tabs.innerHTML = [['ficha', 'Ficha'], ['todas', 'Todas las reservas'], ...(p.tipos || []).map(t => [t, PROV_TIPO_LABEL[t] || t])]
-      .map(([k, l]) => `<button class="pv-stage${k === PROV_TAB ? ' on' : ''}" type="button" data-prov-tab="${k}">${esc(l)}${k !== 'ficha' && cuenta ? ' · ' + (cuenta[k] || 0) : ''}</button>`).join('');
+    const nMargen = prvCasosDe(p.id).length;
+    tabs.innerHTML = [['ficha', 'Ficha'], ['margen', 'Margen'], ['todas', 'Todas las reservas'], ...(p.tipos || []).map(t => [t, PROV_TIPO_LABEL[t] || t])]
+      .map(([k, l]) => `<button class="pv-stage${k === PROV_TAB ? ' on' : ''}" type="button" data-prov-tab="${k}">${esc(l)}${k === 'margen' ? (nMargen ? ' · ' + nMargen : '') : k !== 'ficha' && cuenta ? ' · ' + (cuenta[k] || 0) : ''}</button>`).join('');
     tabs.querySelectorAll('[data-prov-tab]').forEach(b => b.onclick = () => provTab(b.dataset.provTab));
   };
   PROV_RES = null;
@@ -17659,10 +17789,31 @@ async function guardarProveedor() {
 function setupProveedores() {
   document.getElementById('prov-search').addEventListener('input', renderProveedores);
   document.getElementById('prov-filtro').addEventListener('change', renderProveedores);
+  document.getElementById('prov-orden').addEventListener('change', renderProveedores);
   document.getElementById('prov-nuevo').addEventListener('click', () => abrirProveedorSheet());
+  document.getElementById('prov-estado').addEventListener('click', e => {
+    const b = e.target.closest('[data-prv-estado]'); if (b) filtrarPorSelect('prov-filtro', b.dataset.prvEstado, renderProveedores);
+  });
+  document.getElementById('prov-chips').addEventListener('click', e => {
+    const b = e.target.closest('[data-prv-tipo]'); if (!b) return;
+    PRV.tipo = PRV.tipo === b.dataset.prvTipo ? '' : b.dataset.prvTipo; renderProveedores();
+  });
+  document.getElementById('prov-revisar').addEventListener('click', e => {
+    const c = e.target.closest('[data-prv-lead]'); if (c) abrirClienteDesdeFacturacion(Number(c.dataset.prvLead));
+    if (e.target.closest('[data-prv-cerrar]')) { PRV.revisar = false; renderProveedores(); }
+  });
   document.getElementById('prov-tbody').addEventListener('click', e => {
+    if (e.target.closest('a')) return;
+    const usar = e.target.closest('[data-prv-usar]');
+    if (usar) { prvUsarMargen(Number(usar.dataset.prvId), usar.dataset.prvUsar, Number(usar.dataset.pct)); return; }
     const fila = e.target.closest('[data-prov-id]');
     if (fila) abrirProveedorSheet(Number(fila.dataset.provId));
+  });
+  document.getElementById('prov-tbody').addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.prv-card')) { e.preventDefault(); abrirProveedorSheet(Number(e.target.dataset.provId)); }
+  });
+  document.getElementById('prov-reservas-box').addEventListener('click', e => {
+    const c = e.target.closest('[data-prv-lead]'); if (c) { closeSheet('proveedor-sheet'); abrirClienteDesdeFacturacion(Number(c.dataset.prvLead)); }
   });
   document.getElementById('prov-tipos').addEventListener('click', e => {
     const b = e.target.closest('.ef-tipo');
@@ -31378,6 +31529,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-21', emoji: '📊', titulo: 'Proveedores con su margen real', texto: 'Cada proveedor muestra ahora cuánto deja de verdad: el margen (ganancia ÷ venta) sale solo de las ventas con total y costo neto en Postventa, separado en hotel y boletos. Al total se le restan los boletos y traslados que no vende ese proveedor. Debajo se ve el margen configurado y, si no coincide, el botón "Usar" lo guarda para ese proveedor. Arriba: margen promedio y "Ventas a revisar", con las que no cuadran (por ejemplo, un neto que ya incluye el boleto). La ficha del proveedor tiene una pestaña Margen con cada venta usada. Además, el % de margen por tipo de servicio ahora se calcula sobre la venta (neto = venta × (1 − %)), y en Ventas el costo neto suma todos los servicios de la reserva: si a uno le falta el neto, avisa en vez de mostrar un margen inflado.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🎫', titulo: 'Tickets del boleto: subir, arrastrar o pegar', texto: 'En Reservas > Servicios > Tickets podés arrastrar las fotos, pegar una captura con Ctrl+V o elegir los archivos (PDF, JPG, PNG o WEBP, hasta 10 MB, varios a la vez). Cada ticket se ve como una tarjeta con su miniatura y lo que dice: pasajeros, número de ticket, ruta, aerolínea, fecha y localizador. Al subirlo, los pasajeros se cargan solos en la pestaña Pasajeros (y sus números de ticket en el boleto); si la lectura falla, el botón Releer lo vuelve a intentar. Además, en Pasajeros se fueron fecha de nacimiento, teléfono y email, el documento arranca en Cédula y el número se pone solo como V-30.603.613.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-20', emoji: '✂️', titulo: 'Alta de boleto más corta', texto: 'El formulario de un boleto aéreo quedó con lo que de verdad se usa: fechas, adultos, niños, localizador, estado, time limit, aerolínea, ruta y precio. Se fueron Vuelo, Clase, PNR y Equipaje (el PNR es el localizador); el número de vuelo y la clase se cargan por tramo en la pestaña Tramos, y la hora también sale de ahí.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '📄', titulo: 'Voucher desde la reserva', texto: 'Cada servicio en Reservas > Servicios tiene su botón Voucher: arma el PDF con el cliente, los pasajeros (si están cargados), los tramos y los e-tickets, lo descarga y lo deja adjunto a la ficha. Si la reserva no tiene pasajeros usa el nombre del cliente de la reserva, y avisa si el boleto todavía no tiene tickets.', roles: ['admin', 'asesor', 'administrativo'] },
