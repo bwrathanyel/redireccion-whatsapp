@@ -3613,7 +3613,7 @@ const RV_ESTADOS = { ...RV_ESTADOS_BASE, cambiado: 'Cambiado', reembolso_solicit
 const rvEstadoOpts = sel => rvOpts(RV_ESTADOS_BASE[sel] || !RV_ESTADOS[sel] ? RV_ESTADOS_BASE : { [sel]: RV_ESTADOS[sel], ...RV_ESTADOS_BASE }, sel);
 // Claves permitidas por detalle_servicio_valido(); si se agrega una allá, sumarla acá.
 const RV_DETALLE = {
-  boleto_aereo: [['aerolinea', 'Aerolínea'], ['ruta', 'Ruta'], ['vuelo', 'Vuelo'], ['clase', 'Clase'], ['pnr', 'PNR'], ['equipaje', 'Equipaje'], ['ida_vuelta', 'Ida y vuelta', 'bool']],
+  boleto_aereo: [['aerolinea', 'Aerolínea'], ['ruta', 'Ruta']],
   traslado_terrestre: [['origen', 'Origen'], ['destino', 'Destino'], ['vehiculo', 'Vehículo']],
   traslado_maritimo: [['embarcadero', 'Embarcadero'], ['embarcacion', 'Embarcación'], ['ida_vuelta', 'Ida y vuelta', 'bool']],
   full_day: [['excursion', 'Excursión'], ['punto_encuentro', 'Punto de encuentro'], ['incluye', 'Incluye']],
@@ -3973,7 +3973,7 @@ function rvFormServicio(p) {
     <label class="fl">Destino</label><select class="ei" id="rv-s-destino"><option value="">Sin destino</option>${sinCatalogo}${destinos}</select>
     <div class="rv-2"><div><label class="fl">Desde</label><input class="ei" id="rv-s-inicio" type="date" value="${esc(s?.fecha_inicio || '')}"></div><div><label class="fl">Hasta</label><input class="ei" id="rv-s-fin" type="date" value="${esc(s?.fecha_fin || '')}"></div></div>
     <div id="rv-s-apto"></div>
-    <div class="rv-3"><div><label class="fl">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div><div><label class="fl">Adultos</label><input class="ei" id="rv-s-adultos" type="number" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl">Niños</label><input class="ei" id="rv-s-ninos" type="number" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div></div>
+    <div class="rv-3"><div id="rv-s-hora-box"><label class="fl">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div><div><label class="fl">Adultos</label><input class="ei" id="rv-s-adultos" type="number" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl">Niños</label><input class="ei" id="rv-s-ninos" type="number" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div></div>
     <div class="rv-2"><div><label class="fl">Localizador</label><input class="ei" id="rv-s-localizador" maxlength="60" value="${esc(s?.localizador || '')}"></div><div><label class="fl">Estado</label><select class="ei" id="rv-s-estado">${rvOpts(RV_ESTADOS, s?.estado || 'cotizado')}</select></div></div>
     ${s?.tipo === 'boleto_aereo' ? `<label class="fl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">` : ''}
     <div id="rv-s-detalle"></div>
@@ -3981,11 +3981,12 @@ function rvFormServicio(p) {
     <div class="rv-3"><div><label class="fl">Monto</label><input class="ei" id="rv-s-precio" type="number" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
     ${rvBotones('guardar-servicio')}</div>`;
   rvDetalleCampos(s?.detalle || {});
-  document.getElementById('rv-s-tipo').onchange = () => { rvDetalleCampos(rvLeerDetalle()); rvAptoCampo(); };
+  document.getElementById('rv-s-tipo').onchange = () => { rvDetalleCampos(rvLeerDetalle()); rvAptoCampo(); rvHoraVisible(); };
   ['rv-s-inicio', 'rv-s-fin'].forEach(k => { document.getElementById(k).onchange = rvAptoCampo; });
   ['rv-s-adultos', 'rv-s-ninos'].forEach(k => { document.getElementById(k).oninput = rvAptoAviso; });
   rvTasaVisible('rv-s');
   rvAptoCampo();
+  rvHoraVisible();
 }
 // Apartamento del hospedaje (Fase 3): unidades libres en esas fechas según apto_disponibilidad.
 // La unidad que ya tiene este servicio cuenta como libre para sí misma; las ocupadas salen deshabilitadas.
@@ -4033,6 +4034,8 @@ function rvAptoAviso() {
     : u && u.capacidad_max && pax > u.capacidad_max ? `Ojo: son ${pax} personas y este apartamento admite ${u.capacidad_max}. Se puede guardar igual.` : '';
 }
 // La tasa solo aplica a monedas distintas de USD; vacía = la del día (tasa_por_usd en la base).
+// En un boleto la hora de salida vive en los tramos: el campo suelto sobra.
+function rvHoraVisible() { const b = document.getElementById('rv-s-hora-box'); if (b) b.hidden = val('rv-s-tipo') === 'boleto_aereo'; }
 function rvTasaVisible(pre) {
   const sel = document.getElementById(pre + '-moneda'), box = document.getElementById(pre + '-tasa-box');
   const pintar = () => box.hidden = sel.value === 'USD';
@@ -31114,6 +31117,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-20', emoji: '✂️', titulo: 'Alta de boleto más corta', texto: 'El formulario de un boleto aéreo quedó con lo que de verdad se usa: fechas, adultos, niños, localizador, estado, time limit, aerolínea, ruta y precio. Se fueron Vuelo, Clase, PNR y Equipaje (el PNR es el localizador); el número de vuelo y la clase se cargan por tramo en la pestaña Tramos, y la hora también sale de ahí.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '📄', titulo: 'Voucher desde la reserva', texto: 'Cada servicio en Reservas > Servicios tiene su botón Voucher: arma el PDF con el cliente, los pasajeros (si están cargados), los tramos y los e-tickets, lo descarga y lo deja adjunto a la ficha. Si la reserva no tiene pasajeros usa el nombre del cliente de la reserva, y avisa si el boleto todavía no tiene tickets.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🧾', titulo: 'Abono con comprobante y boleto con datos completos', texto: '+ Abono en la tarjeta de la reserva ahora abre la pestaña Abonos con el formulario listo: método, referencia y captura del comprobante, que pasa a ser obligatoria (salvo Efectivo). Además, un boleto aéreo no se guarda sin localizador/PNR, aerolínea y ruta.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🗂️', titulo: 'Gestión de Personal más limpia', texto: 'Las pestañas Asignación de lotes, Freelancers, Reasignaciones, Métricas y Notificaciones ahora se activan desde Mi Perfil. Por defecto quedan ocultas para que la pantalla del equipo se centre en Personal, Asesores y Postulaciones.', roles: ['admin'] },
