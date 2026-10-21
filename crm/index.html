@@ -3632,6 +3632,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .rv-acciones{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
 .rv-danger{color:#fb7185}
 .rv-form{margin-bottom:12px}
+.rv-tk-drop{display:flex;align-items:center;gap:11px;padding:13px 14px;border:1px dashed var(--line2);border-radius:12px;background:var(--panel);cursor:pointer;transition:border-color .16s,background .16s}
+.rv-tk-drop:hover,.rv-tk-drop:focus-within{border-color:var(--accent);background:var(--accent-soft)}
+.rv-tk-drop>i{font-size:19px;color:var(--accent);flex:none}
+.rv-tk-drop span{display:block;font-size:12.5px;font-weight:600;color:var(--txt);overflow-wrap:anywhere}
+.rv-tk-drop small{display:block;font-size:11px;color:var(--muted2);margin-top:2px}
+.rv-tk-drop.sel{border-style:solid;border-color:var(--accent)}
+.rv-tk-file{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
 .rv-2,.rv-3{display:grid;gap:0 10px}.rv-2{grid-template-columns:repeat(2,minmax(0,1fr))}.rv-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .rv-bol-card{cursor:pointer}
 .rv-e-cambiado{color:var(--blue,#4a9eff);border-color:rgba(74,158,255,.35)}

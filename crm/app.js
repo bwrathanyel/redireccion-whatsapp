@@ -3820,6 +3820,7 @@ function rvAccion(accion, id, btn) {
     case 'guardar-tramos': return rvGuardarTramos(btn);
     case 'tickets': return rvForm({ tipo: 'tickets', id: n });
     case 'guardar-tickets': return rvGuardarTickets(btn);
+    case 'subir-tickets': return rvSubirTickets(btn);
     case 'evento': return rvForm({ tipo: 'evento', id: n, evento: btn.dataset.evento });
     case 'guardar-evento': return rvGuardarEvento(btn);
   }
@@ -4257,13 +4258,62 @@ async function rvGuardarTramos(btn) {
   if (!(await rvEnviar(btn, sb.rpc('boleteria_guardar_tramos', { p_servicio_id: RV_FORM.id, p_tramos: tramos })))) return;
   RV_FORM = null; okToast('Tramos guardados'); rvTrasCambio();
 }
+const rvTicketsDocs = s => (RV_DET.documentos || []).filter(d => d.tipo === 'boleto' && d.servicio_id === s.id);
+function rvTicketsDocsHtml(s) {
+  const docs = rvTicketsDocs(s);
+  if (!docs.length) return '';
+  return `<div class="rv-bol-t"><i class="fas fa-paperclip"></i> Tickets subidos (${docs.length})</div>` + docs.map(d => `<div class="rv-item">
+    <div class="rv-item-top"><b><i class="fas ${d.mime === 'application/pdf' ? 'fa-file-pdf' : 'fa-file-image'}"></i> ${esc(d.nombre)}</b></div>
+    <div class="rv-meta"><span>${rvPeso(Number(d.tamano_bytes || 0))}</span><span>${pvFecha(d.created_at)}${d.subido_por ? ' · ' + esc(d.subido_por) : ''}</span></div>
+    <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}"><i class="fas fa-eye"></i> Ver</button><button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
+  </div>`).join('');
+}
 function rvFormTickets(p) {
   const s = rvServicioForm(); if (!s) { RV_FORM = null; return rvRenderServicios(); }
   const pax = RV_DET.pasajeros || [], tk = (RV_DET.boletos || []).filter(b => b.servicio_id === s.id);
   p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-ticket"></i> Tickets · ${esc(s.detalle?.ruta || s.descripcion || 'Boleto aéreo')}</div>
-    ${pax.length ? pax.map(x => `<label class="fl">${esc([x.nombre, x.apellido].filter(Boolean).join(' '))}</label><input class="ei" data-pax="${x.id}" data-antes="${esc(tk.find(b => b.pasajero_id === x.id)?.numero_ticket || '')}" maxlength="30" value="${esc(tk.find(b => b.pasajero_id === x.id)?.numero_ticket || '')}" placeholder="Número de ticket (vacío = sin ticket)">`).join('')
-      : '<div class="pv-empty">La reserva no tiene pasajeros. El asesor los carga en la pestaña Pasajeros.</div>'}
-    ${rvBotones('guardar-tickets')}</div>`;
+    ${pax.length ? pax.map(x => `<label class="fl">${esc([x.nombre, x.apellido].filter(Boolean).join(' '))}</label><input class="ei" data-pax="${x.id}" data-antes="${esc(tk.find(b => b.pasajero_id === x.id)?.numero_ticket || '')}" maxlength="30" value="${esc(tk.find(b => b.pasajero_id === x.id)?.numero_ticket || '')}" placeholder="Número de ticket (vacío = sin ticket)">`).join('') : ''}
+    <div class="rv-bol-t"><i class="fas fa-cloud-arrow-up"></i> Subir tickets</div>
+    <label class="rv-tk-drop" id="rv-tk-drop" for="rv-tk-file"><i class="fas fa-file-arrow-up"></i><div><span id="rv-tk-txt">Tocá para elegir los tickets</span><small>PDF o foto · hasta 10 MB por archivo · podés elegir varios</small></div></label>
+    <input class="rv-tk-file" id="rv-tk-file" type="file" accept="${RV_DOC_MIMES.join(',')}" multiple>
+    <button class="dbtn gh rv-add" type="button" data-rv-accion="subir-tickets" style="margin-top:9px"><i class="fas fa-cloud-arrow-up"></i> Subir</button>
+    ${rvTicketsDocsHtml(s)}
+    ${pax.length ? rvBotones('guardar-tickets') : `<div class="edit-err" id="rv-f-err"></div><button class="dbtn gh" type="button" data-rv-accion="cancelar" style="margin-top:9px">Cerrar</button>`}</div>`;
+  const inp = p.querySelector('#rv-tk-file');
+  if (inp) inp.onchange = () => {
+    const n = inp.files?.length || 0, txt = document.getElementById('rv-tk-txt'), drop = document.getElementById('rv-tk-drop');
+    if (drop) drop.classList.toggle('sel', n > 0);
+    if (txt) txt.textContent = !n ? 'Tocá para elegir los tickets' : n === 1 ? inp.files[0].name : `${n} archivos: ${[...inp.files].map(f => f.name).join(', ')}`;
+  };
+}
+async function rvSubirTickets(btn) {
+  const err = document.getElementById('rv-f-err'), input = document.getElementById('rv-tk-file'), s = rvServicioForm();
+  const files = [...(input?.files || [])], reservaId = RV_RESERVA_ID;
+  if (!s) return;
+  if (!files.length) { err.textContent = 'Elegí al menos un archivo'; return; }
+  const malo = files.find(f => !RV_DOC_MIMES.includes(f.type));
+  if (malo) { err.textContent = `${malo.name}: ${RV_ERR.formato_invalido}`; return; }
+  const grande = files.find(f => f.size > 10485760);
+  if (grande) { err.textContent = `${grande.name}: ${RV_ERR.tamano_invalido}`; return; }
+  const previo = btn.innerHTML;
+  err.textContent = ''; btn.disabled = true;
+  const fin = msg => { btn.disabled = false; btn.innerHTML = previo; if (msg) err.textContent = msg; };
+  let subidos = 0;
+  for (const [i, file] of files.entries()) {
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Subiendo ${i + 1}/${files.length}...`;
+    const nombre = file.name.slice(0, 150);
+    const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: reservaId, servicio_id: s.id, tipo: 'boleto', nombre, mime: file.type, tamano: file.size } });
+    if (firma.error || !firma.data?.ok) { const m = await msgErrorFn(firma.error, firma.data); return fin(`No se pudo subir ${file.name}: ${RV_ERR[m] || m}`); }
+    const up = await sb.storage.from('reservas-documentos').uploadToSignedUrl(firma.data.path, firma.data.token, file, { contentType: file.type });
+    if (up.error) { console.error('subir ticket', up.error); return fin(`No se pudo subir ${file.name}: ${up.error.message || 'error de red'}`); }
+    const { data, error } = await sb.rpc('registrar_documento', { p_reserva_id: reservaId, p_servicio_id: s.id, p_tipo: 'boleto', p_storage_path: firma.data.path, p_nombre: nombre });
+    if (error || !data?.ok) return fin(`No se pudo guardar ${file.name}: ${rvErr(error, data)}`);
+    subidos++;
+  }
+  fin();
+  okToast(subidos === 1 ? 'Ticket subido' : `${subidos} tickets subidos`);
+  await rvCargar();
+  if (RV_FORM?.tipo === 'tickets') rvFormTickets(rvPanel('servicios'));
 }
 async function rvGuardarTickets(btn) {
   const err = document.getElementById('rv-f-err'), id = RV_FORM.id;
@@ -4401,7 +4451,10 @@ async function rvAnularDocumento(id) {
   if (!(await confirmarSheet({ titulo: '¿Quitar este documento?', detalle: 'Deja de verse en la reserva.', textoOk: 'Quitar', destructivo: true }))) return;
   const { data, error } = await sb.rpc('anular_documento', { p_documento_id: id });
   if (error || !data?.ok) { errToast('No se pudo quitar: ' + rvErr(error, data)); return; }
-  okToast('Documento quitado'); rvTrasCambio();
+  okToast('Documento quitado');
+  if (RV_DET?.documentos) RV_DET.documentos = RV_DET.documentos.filter(d => d.id !== id);
+  if (RV_FORM?.tipo === 'tickets') rvFormTickets(rvPanel('servicios'));
+  rvTrasCambio();
 }
 
 function renderAdvisors(datosPeriodo) {
@@ -31117,6 +31170,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-20', emoji: '🎫', titulo: 'Subir los tickets del boleto', texto: 'En Reservas > Servicios > Tickets de un boleto ahora podés subir el PDF o la foto de los tickets (varios, hasta 10 MB cada uno), aunque la reserva todavía no tenga pasajeros cargados. Quedan guardados en la ficha del servicio, se pueden ver o quitar, y si hay pasajeros siguen los campos del número de ticket.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-20', emoji: '✂️', titulo: 'Alta de boleto más corta', texto: 'El formulario de un boleto aéreo quedó con lo que de verdad se usa: fechas, adultos, niños, localizador, estado, time limit, aerolínea, ruta y precio. Se fueron Vuelo, Clase, PNR y Equipaje (el PNR es el localizador); el número de vuelo y la clase se cargan por tramo en la pestaña Tramos, y la hora también sale de ahí.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '📄', titulo: 'Voucher desde la reserva', texto: 'Cada servicio en Reservas > Servicios tiene su botón Voucher: arma el PDF con el cliente, los pasajeros (si están cargados), los tramos y los e-tickets, lo descarga y lo deja adjunto a la ficha. Si la reserva no tiene pasajeros usa el nombre del cliente de la reserva, y avisa si el boleto todavía no tiene tickets.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🧾', titulo: 'Abono con comprobante y boleto con datos completos', texto: '+ Abono en la tarjeta de la reserva ahora abre la pestaña Abonos con el formulario listo: método, referencia y captura del comprobante, que pasa a ser obligatoria (salvo Efectivo). Además, un boleto aéreo no se guarda sin localizador/PNR, aerolínea y ruta.', roles: ['admin', 'asesor', 'administrativo'] },
