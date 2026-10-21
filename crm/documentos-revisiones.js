@@ -77,7 +77,12 @@ export function crearDocumentosRevisiones(c) {
     await c.abrirEditor(t, d);
     ediciones.set(t, { original: d, operacion: crypto.randomUUID() });
     const aviso = document.createElement('div'); aviso.id = `dr-editando-${t}`; aviso.className = 'vc-hecho';
-    aviso.innerHTML = `<b>${esc(numero(t, d))}</b><span>Estás corrigiendo este registro. Guarda la revisión y luego vuelve a enviarla desde el historial.</span><button class="btn-sm" type="button">Cancelar edición</button>`;
+    const sig = (d.revision || 1) + 1, para = d.enviado_a_nombre || (d.enviado_a ? c.nombreUsuario(d.enviado_a) : '');
+    const ayuda = t === 'cotizacion'
+      ? `Cambia vuelos, horarios, aerolínea o precios abajo y toca <b>Guardar revisión</b>. Se genera el PDF nuevo (revisión ${sig})${para && d.origen !== 'ventas' ? ` y reemplaza al que tiene ${esc(para)} en el chat` : ''}.`
+      : `Corrige los datos y guarda: quedará como revisión ${sig} y la anterior se conserva en el historial.`;
+    aviso.className = 'vc-hecho dr-editando';
+    aviso.innerHTML = `<i class="fas fa-pen-to-square dr-editando-ico" aria-hidden="true"></i><div class="dr-editando-txt"><b>Corrigiendo ${esc(numero(t, d))}</b><span>${ayuda}</span></div><button class="btn-sm" type="button">Cancelar</button>`;
     aviso.querySelector('button').onclick = () => { cancelar(t); c.limpiar(t); };
     c.contenedorEditor(t).prepend(aviso); c.editorActualizado?.(t, d); aviso.scrollIntoView({ block: 'nearest' });
   }
@@ -104,10 +109,30 @@ export function crearDocumentosRevisiones(c) {
     for (const x of i.comisiones || []) lineas.push(`Comisión: ${money(x.antes)} → ${money(x.despues)}${x.comprometida ? `; ajuste para próxima liquidación: ${money(x.diferencia)}` : ''}.`);
     return lineas.join('\n');
   }
+  // La cotización corregida reemplaza a la que el asesor ya tenía en el chat: sale la
+  // revisión nueva y se retiran los mensajes de revisiones anteriores que mandó este
+  // mismo usuario (los PDF viejos siguen en el historial del documento).
+  async function reemplazarEnChat(d, original, pdf) {
+    const destino = d.enviado_a || original.enviado_a;
+    if (!destino || String(destino) === String(c.usuario())) return null;
+    const h = await rpc('documento_historial', { p_tipo: 'cotizacion', p_id: String(d.id) });
+    const previos = h.envios.filter(e => e.accion === 'chat_interno' && e.mensaje_id && (e.revision || 1) < (d.revision || 1)
+      && String(e.destinatario) === String(destino) && String(e.enviado_por) === String(c.usuario()));
+    await enviarCotizacion(d, destino, pdf);
+    for (const e of previos) { try { await c.sb.rpc('eliminar_mensaje', { p_mensaje_id: e.mensaje_id }); } catch { /* el mensaje viejo queda; la revisión nueva ya llegó */ } }
+    return { nombre: d.enviado_a_nombre || original.enviado_a_nombre || c.nombreUsuario(destino), reemplazo: previos.length > 0 };
+  }
   async function finalizar(t, ed, resultado, pdf) {
-    if (pdf) c.descargar(pdf, nombre(t, resultado.documento));
+    const d = resultado.documento;
+    let envio = null;
+    if (t === 'cotizacion' && pdf && d.origen !== 'ventas') {
+      try { envio = await reemplazarEnChat(d, ed.original, pdf); }
+      catch (e) { c.error(`La revisión se guardó, pero no se pudo mandar al asesor (${mensaje(e)}). Reenvíala desde el historial.`); }
+    }
+    if (pdf && !envio) c.descargar(pdf, nombre(t, d));
     cancelar(t); c.limpiar(t); await c.recargar(t);
-    c.ok(`${numero(t, resultado.documento)} guardada. Puedes volver a enviarla desde el historial.`);
+    c.ok(envio ? `${numero(t, d)} lista: PDF nuevo enviado a ${envio.nombre}${envio.reemplazo ? ', reemplazó al anterior en el chat' : ''}.`
+      : `${numero(t, d)} guardada.${t === 'solicitud' ? '' : ' Descargaste el PDF nuevo; puedes enviarlo desde el historial.'}`);
     if (resultado.aviso) c.error(resultado.aviso);
   }
   async function guardar(t, datosEntrada) {
@@ -252,5 +277,6 @@ export function crearDocumentosRevisiones(c) {
       el.innerHTML = '<b>Pagos a proveedores por conciliar</b>' + r.items.map(a => `<p>${esc(a.proveedor)} · Reserva ${esc(a.codigo)} · diferencia a favor: <b>${money(a.credito_por_conciliar)}</b>. Pagado conservado: ${money(a.monto_abonado)}.</p>`).join('');
     } catch (e) { el.hidden = false; el.textContent = mensaje(e); }
   }
-  return { setup, acciones, puedeEditar, guardar, cancelar, edicion: t => ediciones.get(t)?.original || null, reenviarCotizacion, enviarCotizacion, pdfVigente, cargarComisiones, cargarCreditos };
+  async function ejecutar(a, t, id) { try { await accion(a, t, id); } catch (e) { c.error(mensaje(e)); } }
+  return { setup, acciones, puedeEditar, ejecutar, guardar, cancelar, edicion: t => ediciones.get(t)?.original || null, reenviarCotizacion, enviarCotizacion, pdfVigente, cargarComisiones, cargarCreditos };
 }

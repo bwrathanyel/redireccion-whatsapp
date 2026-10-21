@@ -20095,6 +20095,10 @@ function setupTarAdmin() {
   document.getElementById('tar-revision-btn')?.addEventListener('click', () => abrirRevisionTarifario('vigencias'));
   document.getElementById('tar-actualizador-btn')?.addEventListener('click', () => abrirActualizadorTarifario());
   document.getElementById('tar-nueva-promo-btn')?.addEventListener('click', () => tarAbrirNuevaPromo());
+  document.getElementById('tar-grid')?.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-paq-accion]');
+    if (b) paqAccion(b.dataset.paqAccion, Number(b.dataset.paqId));
+  });
   document.getElementById('tar-bt-pdf-btn')?.addEventListener('click', ev => abrirPdfBtTravel(ev.currentTarget));
   document.getElementById('rev-tabs')?.addEventListener('click', ev => {
     const t = ev.target.closest('.act-tab');
@@ -21135,7 +21139,8 @@ function renderTarifario() {
 
   document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
   tarChips();
-  document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0);
+  // En Paquetes la grilla siempre tiene el bloque de Paquetes Lotus arriba.
+  document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0 && tarTab !== 'paquete');
   const grid = document.getElementById('tar-grid');
   if (tarTab === 'hotel') {
     // Contraídas por defecto (pedido explícito) -- son ~7 destinos con
@@ -21182,7 +21187,10 @@ function renderTarifario() {
     const porDestino = {};
     filtered.forEach(x => (porDestino[destinoDe(x) || 'Otros'] ??= []).push(x));
     const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
-    grid.innerHTML = destinos.map(d => `<div class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span></div>${tarItemsWrapHtml(porDestino[d])}`).join('');
+    grid.innerHTML = '<div id="paq-lotus" class="paq-lotus"></div>'
+      + (destinos.length ? '<div class="paq-bt-titulo">Del tarifario BT Travel (no salen en la web)</div>' : '')
+      + destinos.map(d => `<div class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span></div>${tarItemsWrapHtml(porDestino[d])}`).join('');
+    paqPintar(q, fDestino);
   } else if (tarTab === 'excursion') {
     // Full days de grupo privado (tarifas.precios.modalidad='privado') arriba de todo.
     const excPrivado = x => tarTarifasVivas(x).some(t => t.precios.modalidad === 'privado');
@@ -21291,6 +21299,147 @@ function tarHidratarTarjeta(el, x, desborda) {
     precioEl.insertAdjacentElement('afterend', mas);
   }
 }
+/* ---------- Paquetes Lotus (tabla `paquetes`, migración 20261021150000).
+   Paquete = hotel del tarifario + rutas de vuelo publicadas en Boletería. El
+   precio NO se guarda: la web (/paquete/<slug>) lo calcula con las tarifas del
+   hotel y la tarifa "Desde". Acá se listan, se copia el enlace para el cliente y
+   el admin los crea/edita (RLS: escritura solo admin). */
+const PAQ_WEB = 'https://destinoyeventoslotus360.com/paquete/';
+const PAQ_ETIQUETAS = ['', 'Navidad', 'Fin de Año', 'Todo incluido', 'Escapada', 'Luna de miel', 'Familiar', 'Montaña', 'Los Roques'];
+// Orígenes que /cotizar sabe nombrar (ORIGENES_VUELO de la web): otro origen no sale allá.
+const PAQ_ORIGENES_WEB = ['VLN', 'CCS', 'MAR', 'BLA', 'PMV'];
+let PAQ = null, paqCargando = null, PAQ_HOTELES = null;
+async function paqCargar(forzar) {
+  if (PAQ && !forzar) return PAQ;
+  if (paqCargando && !forzar) return paqCargando;
+  paqCargando = (async () => {
+    const [p, r] = await Promise.all([
+      sb.from('paquetes').select('id,slug,titulo,etiqueta,descripcion,notas,hotel_id,plan,vuelo_destino_iata,vuelo_origenes,fecha_entrada,fecha_salida,noches_min,noches_default,noches_max,incluye,orden,activo,'
+        + 'hotel:productos(id,nombre,destino,activo,producto_fotos(storage_path,orden,es_principal,activo,habitacion_id))').order('orden').order('id'),
+      sb.from('web_vuelos_referencia').select('origen_iata,origen_nombre,destino_iata,destino_nombre,desde_usd')]);
+    if (p.error) throw p.error;
+    PAQ = { paquetes: p.data || [], rutas: r.data || [] };
+    return PAQ;
+  })().finally(() => { paqCargando = null; });
+  return paqCargando;
+}
+const paqRutas = (p, rutas) => (p.vuelo_origenes || []).filter(o => PAQ_ORIGENES_WEB.includes(o))
+  .map(o => rutas.find(r => r.origen_iata === o && r.destino_iata === p.vuelo_destino_iata)).filter(Boolean);
+const paqFecha = iso => new Date(iso + 'T00:00:00Z').toLocaleDateString('es-VE', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+function paqTarjetaHtml(p, rutas) {
+  const rs = paqRutas(p, rutas), admin = ROL === 'admin';
+  const foto = (p.hotel?.producto_fotos || []).filter(f => f.activo !== false && f.habitacion_id == null)
+    .sort((a, b) => (b.es_principal - a.es_principal) || a.orden - b.orden)[0];
+  const cuando = p.fecha_entrada ? `Salida fija ${paqFecha(p.fecha_entrada)} → ${paqFecha(p.fecha_salida)}` : `El cliente elige: ${p.noches_min} a ${p.noches_max} noches`;
+  const avisos = [!p.activo && 'Oculto en la web', p.hotel && !p.hotel.activo && 'Hotel apagado', !rs.length && 'Sin ruta activa: no sale en la web',
+    p.fecha_entrada && p.fecha_entrada < hoyCaracas() && 'Salida vencida'].filter(Boolean);
+  return `<article class="paq-card${p.activo ? '' : ' paq-off'}">
+    <div class="paq-foto">${foto ? `<img src="${esc(fotoMini(foto.storage_path, 640))}" alt="" loading="lazy">` : '<i class="fas fa-hotel"></i>'}${p.etiqueta ? `<span class="paq-etq">${esc(p.etiqueta)}</span>` : ''}</div>
+    <div class="paq-cuerpo">
+      <b class="paq-titulo">${esc(p.titulo)}</b>
+      <span class="paq-sub">${esc([p.hotel?.nombre, p.hotel?.destino, p.plan && tarCap(p.plan.toLowerCase())].filter(Boolean).join(' · '))}</span>
+      <span class="paq-sub"><i class="far fa-calendar"></i> ${esc(cuando)}</span>
+      <span class="paq-rutas">${rs.map(r => `<span class="paq-ruta"><i class="fas fa-plane"></i> ${esc(r.origen_iata)} → ${esc(r.destino_iata)} · desde $${bolPublico(Number(r.desde_usd))}</span>`).join('')}</span>
+      ${avisos.length ? `<span class="paq-aviso"><i class="fas fa-triangle-exclamation"></i> ${avisos.map(esc).join(' · ')}</span>` : ''}
+      <div class="paq-acciones">
+        <a class="btn-sm" href="${PAQ_WEB}${esc(p.slug)}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i> Ver en la web</a>
+        <button class="btn-sm" type="button" data-paq-accion="copiar" data-paq-id="${p.id}"><i class="far fa-copy"></i> Copiar enlace</button>
+        ${admin ? `<button class="btn-sm" type="button" data-paq-accion="editar" data-paq-id="${p.id}"><i class="fas fa-pen"></i> Editar</button>
+        <button class="btn-sm" type="button" data-paq-accion="activo" data-paq-id="${p.id}">${p.activo ? '<i class="fas fa-eye-slash"></i> Ocultar' : '<i class="fas fa-eye"></i> Mostrar'}</button>` : ''}
+      </div>
+    </div>
+  </article>`;
+}
+async function paqPintar(q, fDestino) {
+  const host = document.getElementById('paq-lotus'); if (!host) return;
+  host.innerHTML = '<div class="paq-vacio">Cargando paquetes…</div>';
+  let d;
+  try { d = await paqCargar(); } catch (e) { console.error(e); host.innerHTML = '<div class="paq-vacio">No se pudieron cargar los paquetes.</div>'; return; }
+  if (!host.isConnected) return;
+  const lista = d.paquetes.filter(p => (!fDestino || p.hotel?.destino === fDestino)
+    && (!q || `${p.titulo} ${p.hotel?.nombre || ''} ${p.hotel?.destino || ''} ${p.etiqueta || ''}`.toLowerCase().includes(q)));
+  host.innerHTML = `<div class="tar-destino-header paq-cabecera"><i class="fas fa-suitcase-rolling"></i> Paquetes Lotus · boleto + hotel <span>${lista.length}</span>`
+    + `${ROL === 'admin' ? '<button class="btn-sm paq-nuevo" type="button" data-paq-accion="nuevo"><i class="fas fa-plus"></i> Nuevo paquete</button>' : ''}</div>`
+    + (lista.length ? `<div class="paq-grid">${lista.map(p => paqTarjetaHtml(p, d.rutas)).join('')}</div>` : '<div class="paq-vacio">Sin paquetes con este filtro.</div>');
+}
+async function paqRefrescar() { await paqCargar(true); if (tarTab === 'paquete') renderTarifario(); }
+async function paqAccion(acc, id) {
+  const p = PAQ?.paquetes.find(x => x.id === id);
+  if (acc === 'copiar' && p) {
+    try { await navigator.clipboard.writeText(PAQ_WEB + p.slug); okToast('Enlace copiado'); } catch { errToast('El navegador no dejó copiar'); }
+    return;
+  }
+  if (ROL !== 'admin') return;
+  if (acc === 'nuevo' || acc === 'editar') return paqForm(acc === 'editar' ? p : null);
+  if (acc === 'activo' && p) {
+    const { error } = await sb.from('paquetes').update({ activo: !p.activo }).eq('id', p.id);
+    if (error) { console.error(error); errToast('No se pudo guardar'); return; }
+    okToast(p.activo ? 'Paquete oculto en la web' : 'Paquete visible en la web');
+    await paqRefrescar();
+  }
+}
+function paqSlug(titulo, existentes) {
+  const base = titulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '') || 'paquete';
+  const usados = new Set(existentes.map(x => x.slug));
+  let s = base, n = 2;
+  while (usados.has(s)) s = `${base}-${n++}`;
+  return s;
+}
+async function paqForm(p) {
+  if (!PAQ_HOTELES) {
+    const { data, error } = await sb.from('productos').select('id,nombre,destino').eq('tipo', 'hotel').eq('activo', true).order('destino').order('nombre');
+    if (error) { console.error(error); errToast('No se pudieron cargar los hoteles'); return; }
+    PAQ_HOTELES = data || [];
+  }
+  let d;
+  try { d = await paqCargar(); } catch { errToast('No se pudieron cargar las rutas'); return; }
+  const destinos = [...new Map(d.rutas.map(r => [r.destino_iata, r.destino_nombre])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'));
+  const etiquetas = [...new Set([...PAQ_ETIQUETAS, p?.etiqueta || ''])];
+  const f = await confirmarSheet({ titulo: p ? 'Editar paquete' : 'Nuevo paquete', textoOk: 'Siguiente',
+    detalle: 'El precio no se carga: la web lo calcula con las tarifas del hotel y el vuelo. Con fecha de ida y de vuelta es una salida fija; sin fechas, el cliente elige fecha y noches.',
+    campos: [
+      { id: 'titulo', label: 'Título', requerido: true, valor: p?.titulo, placeholder: 'Navidad todo incluido en Margarita' },
+      { id: 'etiqueta', label: 'Etiqueta', tipo: 'select', valor: p?.etiqueta || '', opciones: etiquetas.map(e => ({ v: e, t: e || 'Sin etiqueta' })) },
+      { id: 'hotel', label: 'Hotel', tipo: 'select', requerido: true, valor: p?.hotel_id || '', opciones: [{ v: '', t: 'Elegí el hotel' }, ...PAQ_HOTELES.map(h => ({ v: h.id, t: `${h.destino || 'Sin destino'} · ${h.nombre}` }))] },
+      { id: 'plan', label: 'Plan preferido, vacío = cualquiera', valor: p?.plan, placeholder: 'TODO INCLUIDO' },
+      { id: 'llega', label: 'El vuelo llega a', tipo: 'select', requerido: true, valor: p?.vuelo_destino_iata || '', opciones: [{ v: '', t: 'Elegí el aeropuerto' }, ...destinos.map(([i, n]) => ({ v: i, t: `${n} (${i})` }))] },
+      { id: 'entrada', label: 'Fecha de ida, solo si es salida fija', tipo: 'date', valor: p?.fecha_entrada },
+      { id: 'salida', label: 'Fecha de vuelta, solo si es salida fija', tipo: 'date', valor: p?.fecha_salida },
+      { id: 'nmin', label: 'Noches mínimas', requerido: true, tipo: 'number', min: 1, max: 21, step: 1, valor: p?.noches_min ?? 2 },
+      { id: 'ndef', label: 'Noches sugeridas', requerido: true, tipo: 'number', min: 1, max: 21, step: 1, valor: p?.noches_default ?? 3 },
+      { id: 'nmax', label: 'Noches máximas', requerido: true, tipo: 'number', min: 1, max: 21, step: 1, valor: p?.noches_max ?? 7 },
+      { id: 'descripcion', label: 'Descripción: 2 o 3 frases, sin precios', tipo: 'textarea', valor: p?.descripcion },
+      { id: 'incluye', label: 'Incluye extra, una línea por ítem', tipo: 'textarea', valor: (p?.incluye || []).join('\n') },
+      { id: 'notas', label: 'Letra chica', tipo: 'textarea', valor: p?.notas },
+      { id: 'orden', label: 'Orden: menor = primero', tipo: 'number', step: 1, valor: p?.orden ?? (d.paquetes.length + 1) * 10 }] });
+  if (!f) return;
+  const hotelId = Number(f.hotel);
+  if (!hotelId || !f.llega) { errToast('Elegí el hotel y el aeropuerto de llegada'); return; }
+  if (!!f.entrada !== !!f.salida) { errToast('Para una salida fija cargá las dos fechas; si no, dejalas vacías'); return; }
+  if (f.entrada && f.salida <= f.entrada) { errToast('La vuelta tiene que ser después de la ida'); return; }
+  let [nmin, ndef, nmax] = [f.nmin, f.ndef, f.nmax].map(n => Math.round(Number(n)));
+  if (f.entrada) nmin = ndef = nmax = Math.round((Date.parse(f.salida) - Date.parse(f.entrada)) / 864e5);
+  if (!(nmin >= 1 && nmin <= ndef && ndef <= nmax && nmax <= 21)) { errToast('Noches: mínimas ≤ sugeridas ≤ máximas, hasta 21'); return; }
+  const conRuta = d.rutas.filter(r => r.destino_iata === f.llega && PAQ_ORIGENES_WEB.includes(r.origen_iata));
+  if (!conRuta.length) { errToast('No hay rutas publicadas a ese aeropuerto desde Valencia, Caracas, Maracaibo, Barcelona o Margarita: cargala en Boletería'); return; }
+  const g = await confirmarSheet({ titulo: '¿Desde dónde sale el vuelo?', textoOk: 'Guardar',
+    detalle: 'El boleto usa la tarifa "Desde" publicada en Boletería, con el recargo de la web.',
+    campos: conRuta.map(r => ({ id: r.origen_iata, tipo: 'check', valor: p ? (p.vuelo_origenes || []).includes(r.origen_iata) : true,
+      label: `${r.origen_nombre} (${r.origen_iata}) · desde $${bolPublico(Number(r.desde_usd))}` })) });
+  if (!g) return;
+  const origenes = conRuta.map(r => r.origen_iata).filter(i => g[i]);
+  if (!origenes.length) { errToast('Marcá al menos un origen'); return; }
+  const fila = { titulo: f.titulo, etiqueta: f.etiqueta || null, hotel_id: hotelId, plan: f.plan || null, vuelo_destino_iata: f.llega,
+    vuelo_origenes: origenes, fecha_entrada: f.entrada || null, fecha_salida: f.salida || null, noches_min: nmin, noches_default: ndef, noches_max: nmax,
+    descripcion: f.descripcion || null, incluye: f.incluye.split('\n').map(s => s.trim()).filter(Boolean), notas: f.notas || null, orden: Math.round(Number(f.orden)) || 0 };
+  const { error } = p ? await sb.from('paquetes').update(fila).eq('id', p.id)
+    : await sb.from('paquetes').insert({ ...fila, slug: paqSlug(fila.titulo, d.paquetes) });
+  if (error) { console.error(error); errToast('No se pudo guardar: ' + (error.message || 'error')); return; }
+  okToast(p ? 'Paquete actualizado: la web se actualiza en 1-2 min' : 'Paquete creado: sale en la web en 1-2 min');
+  await paqRefrescar();
+}
+
 function tarItemsWrapHtml(items) {
   const html = items.map(x => tarView === 'lista' ? tarRowHtml(x) : tarView === 'fichas' ? tarFichaHtml(x) : tarCardHtml(x)).join('');
   const cls = tarView === 'lista' ? 'tar-hotel-list' : tarView === 'fichas' ? 'tar-fichas-grid' : 'tar-grid-sub';
@@ -25768,12 +25917,13 @@ function setupDocumentosRevisiones() {
     contenedorEditor: tipo => document.getElementById({ voucher: 'vc-form', cotizacion: 'cb-form', solicitud: 'boleteria-sheet' }[tipo]) || document.getElementById('sec-cotizacion-boletos'),
     limpiar: tipo => { if (tipo === 'voucher') vcReset(); else if (tipo === 'cotizacion') cbResetForm(); else closeSheet('boleteria-sheet'); },
     recargar: async tipo => { if (tipo === 'voucher') { vcOffset = 0; await cargarHistorialVouchers(false); }
-      else if (tipo === 'cotizacion') { cbOffset = 0; await cbCargarHistorial(false); } else await loadColaBoleteria(true); },
+      else if (tipo === 'cotizacion') { cbOffset = 0; await cbCargarHistorial(false); loadColaBoleteria(true); } else await loadColaBoleteria(true); },
     editorActualizado: (tipo, d) => {
       if (tipo === 'voucher') {
         ['vc-lead-q', 'vc-reserva-sel'].forEach(id => { const e = document.getElementById(id); if (e) e.disabled = !!d; });
         const asesor = document.getElementById('vc-asesor'); if (asesor) { if (d) asesor.value = d.asesor_nombre; asesor.disabled = !!d || ROL !== 'admin'; } vcActualizarPreview();
       } else if (tipo === 'cotizacion') {
+        document.body.classList.toggle('cb-editando-rev', !!d);
         for (const id of ['cb-enviar-btn', 'cb-compartir-btn', 'cb-lead-btn']) {
           const b = document.getElementById(id); if (!b) continue;
           if (d) { if (!('drOculto' in b.dataset)) b.dataset.drOculto = String(b.hidden); b.hidden = true; }
@@ -29772,7 +29922,7 @@ function setupBoleteria() {
     const b = e.target.closest('[data-bol-card]');
     if (b) {
       const accion = b.dataset.bolCard, s = accion === 'retomar' && BOL_COLA.find(x => String(x.id) === b.dataset.id);
-      if (accion === 'tomar') bolTomar(b.dataset.id, b); else if (s) cbDesdeSolicitud(s); else if (accion === 'resolver') bolAbrirCerrar(b.dataset.id);
+      if (accion === 'tomar') bolTomar(b.dataset.id, b); else if (accion === 'cotizacion') bolCorregirCotizacion(b.dataset.id, b); else if (accion === 'ver-cot') bolVerCotizacion(b.dataset.id, b); else if (s) cbDesdeSolicitud(s); else if (accion === 'resolver') bolAbrirCerrar(b.dataset.id);
       return;
     }
     const c = e.target.closest('[data-bol-abrir]'); if (c) abrirDetalleBoleteria(c.dataset.bolAbrir);
@@ -29972,6 +30122,7 @@ function bolLineaTiempo(s) {
 function bolCardHtml(s) {
   const est = BOL_ESTADO[s.estado] || BOL_ESTADO.en_cola;
   const agente = MI_ES_AGENTE_BOLETERIA;
+  const cot = s.estado === 'resuelta' ? BOL_COTS.get(String(s.id)) : null;
   const fechas = [s.fecha_viaje && fmtDiaCorto(s.fecha_viaje), s.fecha_regreso && fmtDiaCorto(s.fecha_regreso)].filter(Boolean).join(' → ');
   const puesto = (s.estado === 'en_cola' && s.puesto) ? `<span class="bol-puesto">#${s.puesto}</span>` : '';
   const resumen = [
@@ -29998,10 +30149,61 @@ function bolCardHtml(s) {
     <div class="bol-ruta"><i class="fas fa-plane"></i> ${esc(s.origen)} → ${esc(s.destino)}</div>
     ${resumen ? `<div class="bol-resumen">${resumen}</div>` : ''}
     ${agente ? '' : bolLineaTiempo(s)}
-    ${!bolAbierta(s) && s.resultado ? `<div class="bol-resultado"><b>${s.estado === 'cancelada' ? 'Motivo' : 'Resultado'}:</b> ${esc(s.resultado)}</div>` : ''}
+    ${cot ? bolCotHtml(s, cot) : ''}
+    ${!bolAbierta(s) && s.resultado && !(cot && BOL_RES_COT.test(s.resultado.trim())) ? `<div class="bol-resultado"><b>${s.estado === 'cancelada' ? 'Motivo' : 'Resultado'}:</b> ${esc(s.resultado)}</div>` : ''}
     <div class="bol-pie"><span>${quien}</span><span>#${s.id} · Rev. ${s.revision || 1} · ${tiempoRelativo(s.creado_en)}</span></div>
     <div class="bol-card-acc">${acc.join('')}${DR?.acciones('solicitud', s) || ''}</div>
   </div>`;
+}
+
+// El lápiz de la solicitud solo corrige ruta, fechas y personas; vuelos, horarios,
+// aerolínea y precios viven en la cotización con que se resolvió (BOL_COTS, por solicitud).
+let BOL_COTS = new Map();
+const BOL_RES_COT = /^Cotización COT-\d+ enviada\.?$/i;
+async function bolCargarCots(filas) {
+  const ids = filas.filter(s => s.estado === 'resuelta').map(s => s.id);
+  const mapa = new Map();
+  if (ids.length) {
+    const { data, error } = await sb.from('cotizaciones_boleteria').select('id,numero,total,revision,solicitud_id,enviado_a,enviado_a_nombre,creado_por,origen,anulado_en,created_at')
+      .in('solicitud_id', ids).is('anulado_en', null).order('created_at', { ascending: false });
+    if (error) { console.warn('bolCargarCots', error); return; }
+    (data || []).forEach(c => { if (!mapa.has(String(c.solicitud_id))) mapa.set(String(c.solicitud_id), c); });
+  }
+  BOL_COTS = mapa;
+}
+const bolPuedoCorregirCot = (s, c) => MI_ES_AGENTE_BOLETERIA && (ROL === 'admin' || s.la_atiendo_yo || String(c.creado_por) === String(MI_USUARIO_ID));
+function bolCotHtml(s, c) {
+  const para = c.enviado_a_nombre ? bolPrimerNombre(c.enviado_a_nombre) : '';
+  return `<div class="bol-cot">
+    <span class="bol-cot-ico" aria-hidden="true"><i class="fas fa-file-invoice-dollar"></i></span>
+    <div class="bol-cot-info"><b>Cotización ${cbNumero(c.numero)}</b><small>${(c.revision || 1) > 1 ? `Corregida · revisión ${c.revision}` : 'Revisión 1'}${para ? ` · enviada a ${esc(para)}` : ''}</small></div>
+    <span class="bol-cot-total">$${cbMonto(c.total)}</span>
+    <div class="bol-cot-acc">
+      <button class="btn-sm" type="button" data-bol-card="ver-cot" data-id="${s.id}"><i class="fas fa-file-pdf" aria-hidden="true"></i> Ver PDF</button>
+      ${bolPuedoCorregirCot(s, c) ? `<button class="btn-sm bol-cot-corregir" type="button" data-bol-card="cotizacion" data-id="${s.id}" title="Cambiar vuelos, horarios, aerolínea o precios y reenviar el PDF"><i class="fas fa-pen-to-square" aria-hidden="true"></i> Corregir vuelos y precio</button>` : ''}
+    </div>
+  </div>`;
+}
+async function bolCotDe(solicitudId, completa) {
+  const c = BOL_COTS.get(String(solicitudId));
+  let q = sb.from('cotizaciones_boleteria').select(completa ? '*' : 'id').is('anulado_en', null);
+  q = c ? q.eq('id', c.id) : q.eq('solicitud_id', solicitudId).order('created_at', { ascending: false }).limit(1);
+  const { data, error } = await q;
+  if (error || !data?.[0]) { errToast(error ? 'No se pudo buscar la cotización' : 'Esta solicitud no tiene una cotización vigente'); return null; }
+  return data[0];
+}
+async function bolVerCotizacion(solicitudId, btn) {
+  if (btn) btn.disabled = true;
+  try { const c = await bolCotDe(solicitudId, true); if (c) { cbFilas.set(c.id, c); await cbVerPdf(c.id); } }
+  finally { if (btn) btn.disabled = false; }
+}
+async function bolCorregirCotizacion(solicitudId, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const c = await bolCotDe(solicitudId, false); if (!c) return;
+    if (document.getElementById('bol-detalle-sheet')?.classList.contains('open')) cerrarDetalleBoleteria();
+    await DR?.ejecutar('editar', 'cotizacion', c.id);
+  } finally { if (btn) btn.disabled = false; }
 }
 
 const BOL_CERRADAS_TOPE = 12;
@@ -30164,7 +30366,9 @@ function abrirDetalleBoleteria(id) {
     const c = data?.[0];
     if (!c || !cotBox.isConnected) return;
     cbFilas.set(c.id, c);
-    cotBox.innerHTML = `<button class="dbtn save" type="button" onclick="cbVerPdf('${c.id}')"><i class="fas fa-file-pdf"></i> Ver cotización ${cbNumero(c.numero)} · $${cbMonto(c.total)}</button>`;
+    cotBox.innerHTML = `<button class="dbtn save" type="button" onclick="cbVerPdf('${c.id}')"><i class="fas fa-file-pdf"></i> Ver cotización ${cbNumero(c.numero)} · $${cbMonto(c.total)}</button>`
+      + (!c.anulado_en && DR?.puedeEditar('cotizacion', c) ? `<button class="dbtn bol-cot-corregir" type="button" data-bol-cot-corregir><i class="fas fa-pen-to-square"></i> Corregir vuelos y precio</button>` : '');
+    cotBox.querySelector('[data-bol-cot-corregir]')?.addEventListener('click', e => bolCorregirCotizacion(s.id, e.currentTarget));
     cotBox.style.display = '';
   });
   cuerpo.querySelector('[data-bol-copiar]')?.addEventListener('click', async () => {
@@ -30238,6 +30442,7 @@ async function loadColaBoleteria(silencioso) {
     ? 'Cuando un asesor mande una solicitud, aparece acá y te llega por Telegram'
     : 'Cuando mandes un cliente a boletería, aparece acá con su puesto en la cola';
 
+  await bolCargarCots(filas);
   BOL_COLA = filas;
   bolRenderKpis();
   bolRenderCola();
@@ -31591,6 +31796,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-21', emoji: '🧳', titulo: 'Paquetes con boleto incluido', texto: 'En Tarifario > Paquetes, arriba, están los Paquetes Lotus: boleto aéreo ida y vuelta + hotel, con salidas de Navidad y Fin de Año y otros para todo el año. "Copiar enlace" te da la ficha de la web para mandarle al cliente: ahí elige desde dónde sale, fecha, noches y pasajeros, y ve el total al momento. Los admin crean, editan u ocultan paquetes con "Nuevo paquete" (eligen hotel y desde qué ciudades sale el vuelo); el precio lo calcula la web solo, con las tarifas del hotel y la tarifa "Desde" de Boletería. Los paquetes de BT Travel siguen abajo, pero ya no salen en la web.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-21', emoji: '📊', titulo: 'Proveedores con su margen real', texto: 'Cada proveedor muestra ahora cuánto deja de verdad: el margen (ganancia ÷ venta) sale solo de las ventas con total y costo neto en Postventa, separado en hotel y boletos. Al total se le restan los boletos y traslados que no vende ese proveedor. Debajo se ve el margen configurado y, si no coincide, el botón "Usar" lo guarda para ese proveedor. Arriba: margen promedio y "Ventas a revisar", con las que no cuadran (por ejemplo, un neto que ya incluye el boleto). La ficha del proveedor tiene una pestaña Margen con cada venta usada. Además, el % de margen por tipo de servicio ahora se calcula sobre la venta (neto = venta × (1 − %)), y en Ventas el costo neto suma todos los servicios de la reserva: si a uno le falta el neto, avisa en vez de mostrar un margen inflado.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🎫', titulo: 'Tickets del boleto: subir, arrastrar o pegar', texto: 'En Reservas > Servicios > Tickets podés arrastrar las fotos, pegar una captura con Ctrl+V o elegir los archivos (PDF, JPG, PNG o WEBP, hasta 10 MB, varios a la vez). Cada ticket se ve como una tarjeta con su miniatura y lo que dice: pasajeros, número de ticket, ruta, aerolínea, fecha y localizador. Al subirlo, los pasajeros se cargan solos en la pestaña Pasajeros (y sus números de ticket en el boleto); si la lectura falla, el botón Releer lo vuelve a intentar. Además, en Pasajeros se fueron fecha de nacimiento, teléfono y email, el documento arranca en Cédula y el número se pone solo como V-30.603.613.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-20', emoji: '✂️', titulo: 'Alta de boleto más corta', texto: 'El formulario de un boleto aéreo quedó con lo que de verdad se usa: fechas, adultos, niños, localizador, estado, time limit, aerolínea, ruta y precio. Se fueron Vuelo, Clase, PNR y Equipaje (el PNR es el localizador); el número de vuelo y la clase se cargan por tramo en la pestaña Tramos, y la hora también sale de ahí.', roles: ['admin', 'asesor', 'administrativo'] },
