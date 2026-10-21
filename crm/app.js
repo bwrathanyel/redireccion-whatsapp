@@ -30809,9 +30809,17 @@ function bolNombreRuta(id) { return bolCatalogo.rutas.find(r => r.id === id)?.no
 function bolNombreTemporada(id) { return id ? (bolCatalogo.temporadas.find(t => t.id === id)?.nombre || '—') : 'Todo el año'; }
 function bolNombreLugar(iata) { const a = bolCatalogo.aeropuertos.find(x => x.iata_code === iata); return a ? (a.nombre_comercial || a.ciudad) : iata; }
 // Mismo filtro de vigencia que la vista vuelos_referencia (current_date en UTC).
+// Con temporadas cargadas hay una fila por ruta y temporada: acá se devuelve la
+// base (todo el año) y bolRefTemporadas() las demás.
 function bolRefRuta(rutaId) {
   const hoy = new Date().toISOString().slice(0, 10);
-  return bolCatalogo.precios.find(p => p.ruta_id === rutaId && p.es_referencia && p.tipo === 'ida_vuelta' && p.vigente_desde <= hoy && (!p.vigente_hasta || p.vigente_hasta >= hoy));
+  return bolCatalogo.precios.find(p => p.ruta_id === rutaId && p.es_referencia && p.tipo === 'ida_vuelta' && !p.temporada_id && p.vigente_desde <= hoy && (!p.vigente_hasta || p.vigente_hasta >= hoy));
+}
+// Tarifas de referencia por temporada (Navidad, Fin de Año…), ya vencidas incluidas:
+// acá se muestran para que el admin vea qué publica la web en cada fecha.
+function bolRefTemporadas(rutaId) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  return bolCatalogo.precios.filter(p => p.ruta_id === rutaId && p.es_referencia && p.tipo === 'ida_vuelta' && p.temporada_id && p.vigente_desde <= hoy && (!p.vigente_hasta || p.vigente_hasta >= hoy));
 }
 function bolBtn(acc, ent, id, html, cls = '') { return `<button class="btn-sm ${cls}" type="button" data-bol-accion="${acc}" data-bol-entidad="${ent}" data-bol-id="${esc(id)}">${html}</button>`; }
 function bolAcciones(ent, id, extra = '') {
@@ -30830,6 +30838,7 @@ function renderBolRutas() {
     const extra = (bolPuedeEditar() ? bolBtn('asignar', 'ruta', r.id, '<i class="fas fa-plane"></i> Aerolínea') : '') + bolBtn('historico', 'ruta', r.id, '<i class="fas fa-chart-line"></i> Ventas');
     return `<div class="card"><h2>${esc(r.nombre_natural)}</h2><div class="csub">${esc(r.origen_iata)} → ${esc(r.destino_iata)} · ${r.es_internacional ? 'Internacional' : 'Nacional'}</div>
       ${ref ? `<div class="bolc-ref">Desde ${bolTxtPrecio(ref)} ida y vuelta · la web y la IA muestran ${money(bolPublico(ref.precio))}</div>` : '<div class="bolc-linea">Sin tarifa de referencia: la web y la IA no la ofrecen.</div>'}
+      ${bolRefTemporadas(r.id).map(p => `<div class="bolc-ref">${esc(bolNombreTemporada(p.temporada_id))}: desde ${bolTxtPrecio(p)} · la web y la IA muestran ${money(bolPublico(p.precio))}</div>`).join('')}
       ${chips ? `<div class="bolc-chips">${chips}</div>` : '<div class="bolc-linea">Sin aerolíneas asignadas</div>'}
       ${bolPuedeEditar() ? bolAcciones('ruta', r.id, extra) : `<div class="bolc-acc">${extra}</div>`}</div>`;
   }).join('') : '<div class="pc-vacio">Sin rutas cargadas todavía.</div>';
@@ -31796,6 +31805,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-21', emoji: '✈️', titulo: 'Tarifas de vuelo nuevas y precio de Navidad', texto: 'Las tarifas "Desde" de boletería se actualizaron con lo que de verdad se cotizó: Caracas–Margarita $190, Caracas–Los Roques $335 y Valencia–Margarita $200 por persona ida y vuelta (antes 109, 320 y 160). Además, las salidas en Navidad y Fin de Año (del 15 de diciembre al 10 de enero) tienen su propio precio, más alto: $395, $390 y $300. La web, el cotizador y la IA ya eligen el precio según la fecha de viaje, así que si el cliente viaja en esas fechas ven el monto de temporada. En Boletería > Rutas se ven las dos tarifas de cada ruta.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-21', emoji: '🧳', titulo: 'Paquetes con boleto incluido', texto: 'En Tarifario > Paquetes, arriba, están los Paquetes Lotus: boleto aéreo ida y vuelta + hotel, con salidas de Navidad y Fin de Año y otros para todo el año. "Copiar enlace" te da la ficha de la web para mandarle al cliente: ahí elige desde dónde sale, fecha, noches y pasajeros, y ve el total al momento. Los admin crean, editan u ocultan paquetes con "Nuevo paquete" (eligen hotel y desde qué ciudades sale el vuelo); el precio lo calcula la web solo, con las tarifas del hotel y la tarifa "Desde" de Boletería. Los paquetes de BT Travel siguen abajo, pero ya no salen en la web.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-21', emoji: '📊', titulo: 'Proveedores con su margen real', texto: 'Cada proveedor muestra ahora cuánto deja de verdad: el margen (ganancia ÷ venta) sale solo de las ventas con total y costo neto en Postventa, separado en hotel y boletos. Al total se le restan los boletos y traslados que no vende ese proveedor. Debajo se ve el margen configurado y, si no coincide, el botón "Usar" lo guarda para ese proveedor. Arriba: margen promedio y "Ventas a revisar", con las que no cuadran (por ejemplo, un neto que ya incluye el boleto). La ficha del proveedor tiene una pestaña Margen con cada venta usada. Además, el % de margen por tipo de servicio ahora se calcula sobre la venta (neto = venta × (1 − %)), y en Ventas el costo neto suma todos los servicios de la reserva: si a uno le falta el neto, avisa en vez de mostrar un margen inflado.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🎫', titulo: 'Tickets del boleto: subir, arrastrar o pegar', texto: 'En Reservas > Servicios > Tickets podés arrastrar las fotos, pegar una captura con Ctrl+V o elegir los archivos (PDF, JPG, PNG o WEBP, hasta 10 MB, varios a la vez). Cada ticket se ve como una tarjeta con su miniatura y lo que dice: pasajeros, número de ticket, ruta, aerolínea, fecha y localizador. Al subirlo, los pasajeros se cargan solos en la pestaña Pasajeros (y sus números de ticket en el boleto); si la lectura falla, el botón Releer lo vuelve a intentar. Además, en Pasajeros se fueron fecha de nacimiento, teléfono y email, el documento arranca en Cédula y el número se pone solo como V-30.603.613.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
