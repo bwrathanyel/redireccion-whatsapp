@@ -1,5 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/+esm';
 import { crearDocumentosRevisiones } from './documentos-revisiones.js';
+import { crearAbonos } from './abonos.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -3296,7 +3297,7 @@ function renderPostventa() {
 function pvWire(grid, lista, antes = () => {}) {
   grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => { antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvOpen))); });
   grid.querySelectorAll('[data-pv-wa]').forEach(b => b.onclick = () => window.open(`https://wa.me/${b.dataset.pvWa}`, '_blank', 'noopener'));
-  grid.querySelectorAll('[data-pv-abono]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); pvAbrirAbono(Number(b.dataset.pvAbono), b); });
+  grid.querySelectorAll('[data-pv-abono]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); pvAbrirAbonoReserva(lista.find(c => c.id === Number(b.dataset.pvAbono)), b); });
   grid.querySelectorAll('[data-pv-servicio]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvServicio)), 'nuevo-servicio'); });
 }
 function pvCardHtml(c, extra = '') {
@@ -3365,6 +3366,12 @@ function pvAbonoRefrescar() {
   // Los formularios actuales de servicios usan este mismo refresco por sección.
   if (currentSec === 'postventa') loadPostventa();
   if (currentSec === 'reservas-empresas') loadReservasEmpresas();
+}
+// "+ Abono" de la tarjeta: abre la reserva en la pestaña Abonos con el alta lista (método, referencia y captura).
+function pvAbrirAbonoReserva(c, origen) {
+  if (!c || !['admin', 'asesor', 'administrativo'].includes(ROL)) return;
+  if (PV_ABONO?.guardando) { errToast('Espera a que termine el abono en curso.'); return; }
+  abrirPostventa(c, 'abonos');
 }
 async function pvAbrirAbono(reservaId, origen) {
   if (!['admin','asesor','administrativo'].includes(ROL)) return;
@@ -3517,7 +3524,7 @@ function abrirPostventa(c, accionInicial = null) {
       <button class="dbtn save" id="pv-e-guardar" type="button"><i class="fas fa-floppy-disk"></i> Guardar postventa</button>
       ${(c.principal === false ? !c.factura_id : !VENTA.includes(c.estado_lead)) ? '<button class="dbtn gh" id="pv-e-pago" type="button" style="margin-top:9px"><i class="fas fa-circle-check"></i> Registrar pago completo</button>' : ''}
     </div></div>
-    <div data-rv-panel="servicios" hidden></div><div data-rv-panel="pasajeros" hidden></div><div data-rv-panel="documentos" hidden></div>`;
+    <div data-rv-panel="servicios" hidden></div><div data-rv-panel="pasajeros" hidden></div><div data-rv-panel="documentos" hidden></div><div data-rv-panel="abonos" hidden></div>`;
   document.getElementById('pv-e-guardar').onclick = () => guardarPostventa(false);
   document.getElementById('pv-e-pago')?.addEventListener('click', () => {
     document.getElementById('pv-e-pagado').value = document.getElementById('pv-e-total').value;
@@ -3526,7 +3533,7 @@ function abrirPostventa(c, accionInicial = null) {
   // Desde la ficha del lead el cajón ya está abierto: no empujar otra entrada de historial.
   const yaAbierto = document.getElementById('drawer').classList.contains('open');
   document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!yaAbierto) navPush({ type: 'drawer' });
-  rvIniciar(c.id, accionInicial === 'nuevo-servicio' ? 'servicios' : 'resumen', accionInicial);
+  rvIniciar(c.id, accionInicial === 'nuevo-servicio' ? 'servicios' : accionInicial === 'abonos' ? 'abonos' : 'resumen', accionInicial);
   if (ROL === 'admin') pvCargarEmpresas(c);
 }
 // Sin empresa_id en la bandeja (migración 20260925190000 sin aplicar) se deduce de las reservas de cada empresa.
@@ -3665,6 +3672,8 @@ const rvBotones = (guardar, extra = '') => `<div class="edit-err" id="rv-f-err">
 
 function rvTabsHtml(conResumen) {
   const tabs = [...(conResumen ? [['resumen', 'Resumen']] : []), ['servicios', 'Servicios'], ['pasajeros', 'Pasajeros'], ['documentos', 'Documentos']];
+  // Los abonos son plata de la reserva: boletería no los ve.
+  if (['admin', 'asesor', 'administrativo'].includes(ROL)) tabs.push(['abonos', 'Abonos']);
   return tabs.map(([k, t]) => `<button class="seg" type="button" data-rv-tab="${k}">${t}${k === 'resumen' ? '' : ` <span class="rv-n" data-rv-n="${k}"></span>`}</button>`).join('');
 }
 function rvTab(k) {
@@ -3682,6 +3691,7 @@ function rvIniciar(reservaId, tab, accionInicial = null) {
     p.onclick = e => { const b = e.target.closest('[data-rv-accion]'); if (b && !b.disabled) rvAccion(b.dataset.rvAccion, b.dataset.id, b); };
   });
   rvTab(tab);
+  abonosModulo().montar(reservaId, accionInicial === 'abonos');
   const carga = rvCargar();
   if (accionInicial === 'nuevo-servicio') carga.then(() => {
     if (apertura !== RV_APERTURA || RV_RESERVA_ID !== reservaId || !RV_DET || !rvPuedeEditar() || !document.getElementById('drawer')?.classList.contains('open')) return;
@@ -3695,7 +3705,7 @@ function rvAbrirReserva(reservaId, titulo, sub) {
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent-ink)"><i class="fas fa-ticket"></i></div><div><div class="dn">${esc(titulo || 'Reserva')}</div><div class="dm">${esc(sub || '')}</div></div></div>
     <div class="seg-group seg-group-sm rv-tabs">${rvTabsHtml(false)}</div>
-    <div data-rv-panel="servicios"></div><div data-rv-panel="pasajeros" hidden></div><div data-rv-panel="documentos" hidden></div>`;
+    <div data-rv-panel="servicios"></div><div data-rv-panel="pasajeros" hidden></div><div data-rv-panel="documentos" hidden></div><div data-rv-panel="abonos" hidden></div>`;
   const yaAbierto = document.getElementById('drawer').classList.contains('open');
   document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!yaAbierto) navPush({ type: 'drawer' });
   rvIniciar(reservaId, 'servicios');
@@ -4007,6 +4017,11 @@ async function rvGuardarServicio(btn) {
       localizador: val('rv-s-localizador').trim(), estado: val('rv-s-estado'), detalle: rvLeerDetalle(), precio, precio_moneda: val('rv-s-moneda'),
     };
     if (datos.precio_moneda !== 'USD' && val('rv-s-tasa') !== '') datos.precio_tasa = Number(val('rv-s-tasa'));
+    if (datos.tipo === 'boleto_aereo') {
+      if (!datos.localizador) { err.textContent = 'Falta el localizador / PNR del boleto.'; return; }
+      if (!String(datos.detalle.aerolinea || '').trim()) { err.textContent = 'Falta la aerolínea del boleto.'; return; }
+      if (!String(datos.detalle.ruta || '').trim()) { err.textContent = 'Falta la ruta del boleto (ej.: Valencia - Porlamar - Valencia).'; return; }
+    }
     const tl = document.getElementById('rv-s-tl'), previo = (RV_DET.servicios || []).find(x => x.id === id);
     if (tl && tl.value !== rvDtLocal(previo?.time_limit)) datos.time_limit = tl.value ? new Date(tl.value).toISOString() : '';
   }
@@ -25179,6 +25194,25 @@ function drRotularPdf(doc, texto) {
     doc.text(texto, 572, 12, { align: 'right' });
   }
 }
+let AB = null;
+function abonosModulo() {
+  if (!AB) AB = crearAbonos({ sb, esc, usuario: () => MI_USUARIO_ID, fecha: fmtFechaHoraCaracas,
+    ok: okToast, error: errToast, pedir: pedirTexto,
+    // Fase 3: con esto el módulo arma la revisión del voucher y el recibo del abono.
+    librerias: ensureVoucherLibs,
+    membrete: (doc, ctx) => vcpMembrete(doc, ctx),
+    logo: () => cargarImagenBase64('logolotus-integrado.png'),
+    pdfVoucher: async d => new Blob([await construirVoucherPdf(d)], { type: 'application/pdf' }),
+    descargar: vcDescargar,
+    prepararAdjunto: async (reservaId, servicioId, pdf, nombre) => {
+      const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: reservaId, servicio_id: servicioId, tipo: 'voucher', nombre, mime: 'application/pdf', tamano: pdf.size } });
+      if (firma.error || !firma.data?.ok) throw new Error('No se pudo preparar el PDF de la reserva. La revisión vigente sigue igual.');
+      const up = await sb.storage.from('reservas-documentos').uploadToSignedUrl(firma.data.path, firma.data.token, pdf, { contentType: 'application/pdf' });
+      if (up.error) throw new Error('No se pudo subir el PDF a la reserva. Reintenta para guardar la revisión.');
+      return { path: firma.data.path, nombre };
+    } });
+  return AB;
+}
 let DR = null;
 function setupDocumentosRevisiones() {
   if (DR) return;
@@ -25746,44 +25780,40 @@ function cargarImagenBase64(src) {
     reader.readAsDataURL(blob);
   }));
 }
-const VC_PASOS = { crear_lead_manual: 'No se pudo crear el cliente', actualizar_lead: 'No se pudo mover el lead', guardar_postventa: 'No se pudo crear la ficha', crear_reserva: 'No se pudo crear la reserva', cerrar_reserva: 'No se pudo facturar' };
-// Mismo orden que supabase/functions/voucher-a-venta (cerrar: pasos 3-6; nueva: "otro viaje").
-// st acumula lo que se alcanzó a crear: si un paso falla, lo anterior igual se vincula.
-async function vcEjecutarPlan(plan, reg, st, { total, pagado, asesorNombre }) {
-  if (plan.modo !== 'cerrar' && plan.modo !== 'nueva') return;
-  const paso = async (fn, args) => {
-    const { data, error } = await sb.rpc(fn, args);
-    if (error || !data?.ok) throw new Error(`${VC_PASOS[fn]}: ${errReserva(error, data) || 'error desconocido'}`);
-    return data;
-  };
-  const totalPv = total > 0 ? total : pagado;
-  // Voucher solo de servicios (sin hotel): fechas y proveedor salen de los servicios anexos.
-  const servs = Array.isArray(reg.servicios) ? reg.servicios : [], fechas = servs.map(s => s.fecha).filter(Boolean).sort();
-  const pv = {
-    p_prioridad: 'NORMAL', p_monto_total: totalPv, p_monto_pagado: Math.min(pagado, totalPv),
-    p_fecha_viaje_inicio: reg.fecha_entrada || fechas[0] || null, p_fecha_viaje_fin: reg.fecha_salida || fechas[fechas.length - 1] || null,
-    p_proveedor: reg.destino_hospedaje || servs[0]?.nombre || null,
-    p_documentos: { voucher_hotel: true, comprobante_pago: pagado > 0 }, p_marcar_pagado: false,
-    p_notas: [`Voucher N° ${reg.numero_factura}`, servs.length ? 'Servicios: ' + servs.map(s => s.nombre).join(', ') : '', reg.referencia_pago ? 'Ref. pago móvil ' + reg.referencia_pago : ''].filter(Boolean).join(' · '),
-  };
-  if (plan.modo === 'cerrar') {
-    if (!st.leadId) {
-      const cl = await paso('crear_lead_manual', { p_nombre: reg.cliente_nombre, p_telefono: reg.telefono, p_destino: reg.destino_hospedaje, p_asesor: ROL === 'admin' ? asesorNombre : null, p_canal: 'Voucher CRM' });
-      st.leadId = Number(cl.lead_id);
-    }
-    await paso('actualizar_lead', { p_lead_id: st.leadId, p_estado: 'COTIZACION ENVIADA', p_asesor: ROL === 'admin' && plan.lead && !plan.lead.asesor ? asesorNombre : null });
-    const p5 = await paso('guardar_postventa', { ...pv, p_lead_id: st.leadId, p_etapa: 'COBRO_PENDIENTE' });
-    st.reservaId = Number(p5.caso?.id) || null; st.codigo = p5.caso?.codigo || null;
-    await paso('actualizar_lead', { p_lead_id: st.leadId, p_estado: 'PAGO REALIZADO', p_monto: pagado });
-    return;
+
+let vcSolicitudPendiente = null, vcGenerando = false;
+async function vcRevisarOperacion(fila, plan) {
+  const { data, error } = await sb.rpc('voucher_revisar_venta', { p_datos: fila });
+  if (error || !data?.ok) throw new Error('No se pudieron revisar las ventas existentes. Intenta de nuevo.');
+  const similares = data.reservas || [];
+  const opciones = [{ v: '', t: 'Selecciona qué operación corresponde' }, ...similares.map(r => ({
+    v: String(r.id), t: `${r.codigo} · ${r.cliente} · ${r.fecha_viaje_inicio || 'sin fecha'} / ${r.fecha_viaje_fin || 'sin fecha'} · Total ${vcMoney(r.monto_total)} · Abono ${vcMoney(r.monto_pagado)}`,
+  }))];
+  if (plan.reserva && !similares.some(r => r.id === plan.reserva.id)) opciones.push({ v: String(plan.reserva.id), t: `${plan.reserva.codigo} · ${plan.lead.nombre} · Reserva seleccionada` });
+  opciones.push({ v: 'nueva', t: plan.lead ? 'Crear otra venta para el cliente seleccionado' : 'Crear una venta para un cliente nuevo' });
+  opciones.push({ v: 'solo', t: 'Generar solo el PDF' });
+  const eleccion = await confirmarSheet({ titulo: similares.length ? 'Revisa las ventas antes de generar' : '¿Vincular o crear una venta?', textoOk: 'Revisar elección',
+    detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : 'Elige expresamente cómo guardar este voucher.'}`,
+    campos: [{ id: 'operacion', tipo: 'select', label: 'Operación', requerido: true, valor: '', opciones }],
+  });
+  if (!eleccion) return null;
+  if (eleccion.operacion === 'solo') return { modo: 'solo' };
+  if (eleccion.operacion !== 'nueva') {
+    const reserva = similares.find(r => String(r.id) === eleccion.operacion) || plan.reserva;
+    if (!reserva) throw new Error('La reserva seleccionada ya no está disponible.');
+    return { modo: 'vincular', lead: { id: reserva.lead_id || plan.lead.id, nombre: reserva.cliente || plan.lead.nombre }, reserva };
   }
-  const cr = await paso('crear_reserva', { p_lead_id: st.leadId });
-  st.reservaId = Number(cr.caso?.id) || null; st.codigo = cr.caso?.codigo || null;
-  if (!st.reservaId) throw new Error(VC_PASOS.crear_reserva);
-  await paso('guardar_postventa', { ...pv, p_lead_id: st.leadId, p_reserva_id: st.reservaId, p_etapa: pagado > 0 ? 'CONFIRMACION_RESERVA' : 'COBRO_PENDIENTE' });
-  if (pagado > 0) await paso('cerrar_reserva', { p_reserva_id: st.reservaId, p_monto: pagado });
+  let motivo = null;
+  if (similares.length) {
+    motivo = await pedirTexto({ titulo: 'Confirma que es una venta distinta', detalle: 'Se conservarán las operaciones existentes. Explica qué diferencia esta compra para dejar constancia.', label: 'Motivo (mínimo 8 caracteres)', requerido: true });
+    if (motivo === null) return null;
+    if (motivo.trim().length < 8) throw new Error('Explica el motivo con al menos 8 caracteres.');
+  }
+  const otroViaje = plan.lead && ['PAGO REALIZADO', 'VENTA COMPLETA'].includes(plan.lead.estado);
+  if (!(Number(fila.monto_pagado) > 0) && !otroViaje) throw new Error('Para crear una venta carga el abono o elige generar solo el PDF.');
+  return { modo: otroViaje ? 'nueva' : 'cerrar', lead: plan.lead, revisadas: similares.map(r => r.id), motivo };
 }
-// PDF como documento 'voucher' de la reserva (mismo flujo que rvSubirDocumento).
+
 async function vcAdjuntarPdf(reservaId, servicioId, blob, nombre) {
   const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: reservaId, servicio_id: servicioId, tipo: 'voucher', nombre, mime: 'application/pdf', tamano: blob.size } });
   if (firma.error || !firma.data?.ok) { const m = await msgErrorFn(firma.error, firma.data); return RV_ERR[m] || m; }
@@ -25821,6 +25851,8 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
   }
   const sinNombre = vcServicios.findIndex(s => !String(s.nombre || '').trim());
   if (sinNombre >= 0) { document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)?.focus(); errToast(`Falta el nombre del servicio adicional ${sinNombre + 1} (o quitalo)`); return; }
+  const planInicial = vcPlan();
+  if (planInicial.modo === 'cargando') { errToast('Esperá a que carguen las reservas del cliente'); return; }
   const asesorNombre = ROL === 'admin' ? (val('vc-asesor').trim() || MI_NOMBRE) : MI_NOMBRE;
   const fila = {
     creado_por: MI_USUARIO_ID, asesor_nombre: asesorNombre, cliente_nombre: clienteNombre,
@@ -25839,23 +25871,19 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     servicios: vcServicios.map(vcServLimpio),
   };
   if (DR?.edicion('voucher')) { await DR.guardar('voucher', fila); return; }
-  const plan = vcPlan();
-  if (plan.modo === 'cargando') { errToast('Esperá a que carguen las reservas del cliente'); return; }
-  const montos = `Total ${vcMoney(total)} · Pagado ${vcMoney(pagado)} · Resta ${vcMoney(vcNum('vc-resta'))}`;
-  if (plan.modo === 'cerrar' && !(await confirmarSheet({
-    titulo: `¿Cerrar la venta por ${vcMoney(pagado)}?`, textoOk: 'Generar y cerrar venta',
-    detalle: `${plan.lead ? 'Cliente: ' + plan.lead.nombre : 'Se crea el cliente ' + clienteNombre + ' en el CRM.'}\nPasa a PAGO REALIZADO: se genera la factura por lo pagado, la comisión y la ficha en Reservas con el voucher.\n${montos}`,
-  }))) return;
-  if (plan.modo === 'nueva' && pagado > 0 && !(await confirmarSheet({
-    titulo: `¿Reserva nueva y facturar ${vcMoney(pagado)}?`, textoOk: 'Generar y facturar',
-    detalle: `Es otro viaje de ${plan.lead.nombre}: se crea una reserva aparte y se factura lo pagado (factura, comisión y cuenta por pagar).\n${montos}`,
-  }))) return;
-  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...';
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Revisando...';
   let registro = null;
   try {
-    const ins = await sb.from('vouchers').insert(fila).select().single();
-    registro = ins.data;
-    if (ins.error || !registro) { errToast('No se pudo guardar el voucher: ' + (ins.error?.message || '')); return; }
+    const plan = await vcRevisarOperacion(fila, planInicial);
+    if (!plan) return;
+    const resumenEleccion = plan.modo === 'vincular' ? `Vincular a ${plan.reserva.codigo} de ${plan.lead.nombre}. Se actualizan las fechas con las de este voucher y se conserva la facturación existente.`
+      : plan.modo === 'solo' ? 'Generar solo el PDF.' : `Crear una venta ${plan.modo === 'nueva' ? 'adicional' : 'nueva'}. ${pagado > 0 ? 'Se factura una sola vez el abono de ' + vcMoney(pagado) : 'Se crea la reserva sin facturar, todavía no tiene abonos'}.`;
+    if (!(await confirmarSheet({ titulo: 'Confirmar voucher', textoOk: 'Generar voucher', detalle: `${resumenEleccion}\nCliente: ${clienteNombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(total)} · Abono ${vcMoney(pagado)} · Saldo ${vcMoney(fila.resta)}` }))) return;
+    const huella = JSON.stringify(fila);
+    if (vcSolicitudPendiente?.huella !== huella) vcSolicitudPendiente = { huella, id: crypto.randomUUID() };
+    const ins = await sb.rpc('voucher_preparar', { p_datos: fila, p_solicitud_id: vcSolicitudPendiente.id });
+    registro = ins.data?.voucher;
+    if (ins.error || !ins.data?.ok || !registro) throw new Error('No se pudo guardar el voucher: ' + (ins.error?.message || ins.data?.error || ''));
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(registro)], { type: 'application/pdf' });
     const nombreArchivo = `Voucher-${registro.numero_factura}-${clienteNombre.replace(/\s+/g, '-')}.pdf`;
@@ -25863,28 +25891,30 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     // archivo exacto, no una reconstrucción. Si falla, no bloquea la descarga
     // (queda sin pdf_path y el historial cae al fallback de reconstruir).
     // El path lo graba voucher_vincular: vouchers no tiene policy de UPDATE.
-    let pdfPath = `${MI_USUARIO_ID}/${registro.numero_factura}.pdf`;
+    let pdfPath = registro.pdf_path || `${MI_USUARIO_ID}/${registro.numero_factura}.pdf`;
     try {
-      const { error: upErr } = await sb.storage.from('vouchers-pdf').upload(pdfPath, blob, { contentType: 'application/pdf' });
-      if (upErr) { console.error('subir pdf voucher a storage', upErr); pdfPath = null; }
+      const { error: upErr } = registro.pdf_path ? { error: null } : await sb.storage.from('vouchers-pdf').upload(pdfPath, blob, { contentType: 'application/pdf' });
+      if (upErr) {
+        const existente = await sb.storage.from('vouchers-pdf').createSignedUrl(pdfPath, 60);
+        if (existente.error || !existente.data?.signedUrl) { console.error('subir pdf voucher a storage', upErr); pdfPath = null; }
+      }
     } catch (upEx) { console.error('subir pdf voucher a storage', upEx); pdfPath = null; }
     vcDescargar(blob, nombreArchivo);
     // Reservas solo después de tener el PDF: si falló la generación, no se factura nada.
-    const avisos = [], st = { leadId: plan.lead?.id || null, reservaId: plan.modo === 'vincular' ? plan.reserva.id : null, codigo: plan.reserva?.codigo || null };
-    try { await vcEjecutarPlan(plan, registro, st, { total, pagado, asesorNombre }); } catch (e) { console.error('voucher -> reservas', e); avisos.push(e.message); }
-    let servicioId = null;
-    if (pdfPath || st.reservaId) {
-      const vv = await sb.rpc('voucher_vincular', { p_voucher_id: registro.id, p_pdf_path: pdfPath, p_reserva_id: st.reservaId });
-      if (vv.error || !vv.data?.ok) { console.error('voucher_vincular', vv.error || vv.data); avisos.push('No se pudo vincular el voucher a la ficha: ' + (vv.error?.message || vv.data?.error || 'error desconocido')); }
-      else { st.codigo = vv.data.codigo || st.codigo; servicioId = vv.data.servicio_id || null; }
-    }
-    if (st.reservaId) { const e = await vcAdjuntarPdf(st.reservaId, servicioId, blob, nombreArchivo); if (e) avisos.push('El PDF no quedó adjunto a la ficha: ' + e); }
+    if (!pdfPath) throw new Error('El PDF se descargó, pero no se pudo guardar. La venta no se confirmó; reintenta para completarla.');
+    const cierre = await sb.rpc('voucher_confirmar_venta', { p_voucher_id: registro.id, p_modo: plan.modo,
+      p_lead_id: plan.lead?.id || null, p_reserva_id: plan.reserva?.id || null,
+      p_revisadas: plan.revisadas || [], p_motivo: plan.motivo || null, p_pdf_path: pdfPath });
+    if (cierre.error || !cierre.data?.ok) throw new Error(cierre.data?.error === 'revisar_duplicados'
+      ? 'Apareció otra venta similar mientras confirmabas. Reintenta y revisa las coincidencias.' : 'La venta no se confirmó: ' + (cierre.error?.message || cierre.data?.error || 'error desconocido'));
+    const avisos = [], st = { leadId: cierre.data.lead_id, reservaId: cierre.data.reserva_id, codigo: cierre.data.codigo };
+    if (st.reservaId && !cierre.data.reutilizado) { const e = await vcAdjuntarPdf(st.reservaId, cierre.data.servicio_id, blob, nombreArchivo); if (e) avisos.push('El PDF quedó en el historial de vouchers, pero no se pudo adjuntar a la ficha: ' + e); }
     const resumen = avisos.length ? 'El PDF se descargó, pero revisá lo de abajo'
       : { cerrar: `Venta cerrada por ${vcMoney(pagado)}`, nueva: `Reserva nueva${pagado > 0 ? ' facturada por ' + vcMoney(pagado) : ''}`, vincular: 'Ficha actualizada con el voucher', solo: 'Solo PDF, sin ficha en Reservas' }[plan.modo]
         + (st.codigo && plan.modo !== 'solo' ? ` · ${st.codigo}` : '');
     vcPintarHecho({ numero: registro.numero_factura, resumen, avisos, reservaId: st.reservaId, codigo: st.codigo, pdfPath });
     if (avisos.length) errToast(avisos[0]); else okToast(`Voucher N° ${registro.numero_factura} generado`);
-    vcReset();
+    vcSolicitudPendiente = null; vcReset();
     vcOffset = 0; cargarHistorialVouchers(false);
   } catch (e) {
     // El registro en `vouchers` (con su numero_factura) ya pudo haberse
@@ -25892,11 +25922,17 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     // cortada, fuentes o logo no disponibles) -- avisar explícito en vez
     // de dejar el botón "colgado" sin feedback, que es lo que ocultaba el bug.
     console.error('generarVoucherPdf', e);
-    errToast(registro ? 'El voucher se guardó pero no se pudo generar el PDF, reintentá' : 'No se pudo generar el voucher');
+    errToast(e.message || (registro ? 'El voucher se guardó, revisa el error y reintenta para completar la operación.' : 'No se pudo generar el voucher'));
     vcOffset = 0; cargarHistorialVouchers(false);
   } finally {
     btn.disabled = false; vcActualizarPreview();
   }
+};
+const vcGenerarUnaVez = window.generarVoucherPdf;
+window.generarVoucherPdf = async function () {
+  if (vcGenerando) return;
+  vcGenerando = true;
+  try { return await vcGenerarUnaVez(); } finally { vcGenerando = false; }
 };
 // Voucher de prueba: PDF con datos de muestra. No escribe en `vouchers`, ni en Storage, ni en Reservas.
 const VC_PRUEBA = {
@@ -26225,11 +26261,15 @@ const cbTotalPax = it => { if (!cbEsPax(it)) return Number(it.cant) || 0; const 
 // Hotel por persona por noche (2026-10-16): la tarifa se multiplica por las noches del check-in al
 // check-out (sin fechas, 1). Los ítems hotel guardados antes no traen `unidad`: su tarifa ya era el
 // total de la estadía por persona (los asesores multiplicaban a mano), así que se leen como 'persona'.
-const cbPorNoche = it => it.tipo === 'hotel' && it.unidad === 'persona_noche';
+const cbPorHabitacion = it => it.tipo === 'hotel' && it.unidad === 'habitacion_noche';
+const cbHabitaciones = it => it.habitaciones === undefined ? 1 : Number(it.habitaciones) || 0;
+const cbHabitacionesTexto = it => `${cbHabitaciones(it)} ${cbHabitaciones(it) === 1 ? 'habitación' : 'habitaciones'}`;
+const cbPorNoche = it => it.tipo === 'hotel' && ['persona_noche', 'habitacion_noche'].includes(it.unidad);
 const cbNochesCobro = it => cbPorNoche(it) ? (+cbNoches(it.ida, it.vuelta) || 1) : 1;
 const cbImporte = it => {
   if (it.tipo === 'hotel' && it.tramos?.length) return cbTarImporte(it);
   const t = Number(it.tarifa) || 0;
+  if (cbPorHabitacion(it)) return Math.round(cbHabitaciones(it) * t * cbNochesCobro(it) * 100) / 100;
   if (!cbEsPax(it)) return (Number(it.cant) || 0) * t;
   const p = cbPax(it);
   return Math.round((p.a * t + p.n * (Number(it.tarifa_nino) || 0) + p.i * (it.infantes_gratis ? 0 : Number(it.tarifa_infante) || 0)) * cbNochesCobro(it) * 100) / 100;
@@ -26266,7 +26306,7 @@ const cbTarCent = v => Math.round((Number(v) || 0) * 100);
 const cbTotalItems = items => items.reduce((s, it) => s + cbTarCent(cbImporte(it)), 0) / 100;
 const cbTarFecha = s => { const ms = /^\d{4}-\d{2}-\d{2}$/.test(s || '') ? Date.parse(s + 'T00:00:00Z') : NaN; return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === s ? ms : NaN; };
 const cbTarIso = ms => new Date(ms).toISOString().slice(0, 10);
-const cbTarContexto = it => [it.producto_id, cbTarPlanClave(it.plan), cbTarNorm(it.hab), it.ida, it.vuelta, it.adultos, it.unidad].join('|');
+const cbTarContexto = it => [it.producto_id, cbTarPlanClave(it.plan), cbTarNorm(it.hab), it.ida, it.vuelta, cbPorHabitacion(it) ? it.tarifa_variante || '' : it.adultos, it.unidad].join('|');
 function cbTarNoches(a, b) {
   const inicio = cbTarFecha(a), fin = cbTarFecha(b), n = (fin - inicio) / 864e5;
   return Number.isInteger(n) && n > 0 && n <= 366 ? Array.from({ length: n }, (_, i) => cbTarIso(inicio + i * 864e5)) : [];
@@ -26295,16 +26335,33 @@ function cbTarPrecioAdulto(t, adultos, ocupaciones) {
   const p = t.precios || {}, claves = [...ocupaciones].filter(([, n]) => n === Number(adultos)).map(([k]) => k);
   const valores = claves.map(k => cbTarNum(p[k])).filter(v => v !== null);
   if (!valores.length || valores.some(v => v !== valores[0])) return null;
-  const base = p.base || cbTarBloque(t).base_precio;
-  if (base && !['persona', 'habitacion'].includes(base)) return null;
-  const sgl = cbTarNum(p.sgl), dbl = cbTarNum(p.dbl);
-  const porHab = base === 'habitacion' || (!base && sgl !== null && dbl !== null && dbl > sgl);
-  return porHab ? valores[0] / Number(adultos) : valores[0];
+  const base = cbTarBase(t);
+  if (base && !['persona_noche', 'habitacion_noche'].includes(base)) return null;
+  return base === 'habitacion_noche' ? valores[0] / Number(adultos) : valores[0];
 }
+const cbTarBase = t => ({ persona: 'persona_noche', persona_noche: 'persona_noche', habitacion: 'habitacion_noche', habitacion_noche: 'habitacion_noche' })[cbTarNorm(t.precios?.base || cbTarBloque(t).base_precio)] || '';
 function cbTarPorHabitacion(t) {
-  const p = t.precios || {}, base = p.base || cbTarBloque(t).base_precio;
-  const sgl = cbTarNum(p.sgl), dbl = cbTarNum(p.dbl);
-  return base === 'habitacion' || (!base && sgl !== null && dbl !== null && dbl > sgl);
+  return cbTarBase(t) === 'habitacion_noche';
+}
+function cbTarVariantes(t, ocupaciones) {
+  const nombres = { 1: 'Sencilla', 2: 'Doble', 3: 'Triple', 4: 'Cuádruple', 5: 'Quíntuple', 6: 'Séxtuple', 7: 'Séptuple', 8: 'Óctuple' };
+  return Object.entries(t.precios || {}).filter(([k, v]) => (ocupaciones.has(k) || /^pax_[1-9]\d*$/.test(k)) && cbTarNum(v) !== null)
+    .map(([clave, precio]) => ({ clave, precio: Number(precio), nombre: nombres[ocupaciones.get(clave)] || clave.replace(/^pax_(\d+)$/, '$1 personas') }));
+}
+function cbTarPrecioHabitacion(t, variante, ocupaciones) {
+  const opciones = cbTarVariantes(t, ocupaciones);
+  if (variante) return opciones.find(o => o.clave === variante)?.precio ?? null;
+  return opciones.length && opciones.every(o => o.precio === opciones[0].precio) ? opciones[0].precio : null;
+}
+function cbHotelUnidad(it, filas) {
+  const candidatas = cbTarDelPlan(filas, it.plan).filter(t => !it.hab || cbTarNorm(t.habitacion) === cbTarNorm(it.hab));
+  const noches = cbTarNoches(it.ida, it.vuelta);
+  const aplican = candidatas.filter(t => !noches.length || noches.some(n => cbTarAmplitud(t, n) !== null));
+  const bases = [...new Set(aplican.map(cbTarBase))];
+  it._unidadPendiente = !it.unidad_manual && !(bases.length === 1 && bases[0]);
+  if (!it.unidad_manual && bases.length === 1 && bases[0] && it.unidad !== bases[0]) {
+    it.unidad = bases[0]; it.tarifa = ''; it.tramos = []; it.tarifa_manual = false; delete it.tarifa_variante;
+  }
 }
 function cbTarPrecioNino(t, cantidad) {
   const opciones = Object.entries(t.precios || {}).flatMap(([k, v]) => {
@@ -26322,7 +26379,8 @@ const cbTarNinoTramo = (it, t) => cbTarNum(it.tarifa_nino_auto === false ? it.ta
 function cbTarSugerir(it, filas, hoy, ocupaciones) {
   const noches = cbTarNoches(it.ida, it.vuelta), fallo = texto => ({ ok: false, texto });
   if (!noches.length) return fallo('Elige entrada y salida (de 1 a 366 noches).');
-  if (it.unidad !== 'persona_noche') return fallo('La estadía completa se cotiza manualmente.');
+  if (!cbPorNoche(it)) return fallo('La estadía completa se cotiza manualmente.');
+  if (it._unidadPendiente) return fallo('El tarifario no declara una unidad única. Confirma «Tarifa por» antes de cargar el precio.');
   if (!it.hab) return fallo('Elige una habitación del tarifario o escribe una tarifa manual.');
   const utilizables = filas.filter(t => cbTarUtil(t, hoy));
   const candidatas = cbTarDelPlan(utilizables, it.plan).filter(t => cbTarNorm(t.habitacion) === cbTarNorm(it.hab));
@@ -26332,13 +26390,14 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
     if (!cubren.length) return fallo('No hay tarifa para todas las noches. Ingresa el precio manualmente.');
     const menor = Math.min(...cubren.map(x => x.amplitud));
     const precisas = cubren.filter(x => x.amplitud === menor);
+    if (precisas.some(x => cbTarBase(x.t) && cbTarBase(x.t) !== it.unidad)) return fallo('La unidad elegida no corresponde a esta tarifa. Ingresa y confirma un precio manual.');
     if (precisas.some(x => String(x.t.moneda || 'USD').toUpperCase() !== 'USD')) return fallo('La moneda del tarifario requiere confirmación manual en USD.');
-    const precios = precisas.map(x => cbTarPrecioAdulto(x.t, it.adultos, ocupaciones));
+    const precios = precisas.map(x => cbPorHabitacion(it) ? cbTarPrecioHabitacion(x.t, it.tarifa_variante, ocupaciones) : cbTarPrecioAdulto(x.t, it.adultos, ocupaciones));
     if (precios.some(p => p === null) || precios.some(p => p !== precios[0])) return fallo('Ocupación sin precio único: confirma la tarifa manualmente.');
     precisas.sort((a, b) => (a.t.orden_pdf ?? 1e9) - (b.t.orden_pdf ?? 1e9) || a.t.id - b.t.id);
     const t = precisas[0].t, tarifa = precios[0], siguiente = cbTarIso(cbTarFecha(noche) + 864e5);
     let tarifaNino = null;
-    if (Number(it.ninos) > 0) {
+    if (!cbPorHabitacion(it) && Number(it.ninos) > 0) {
       const infantiles = precisas.map(x => cbTarPrecioNino(x.t, Number(it.ninos)));
       if (infantiles.every(p => p.precio !== null && p.precio === infantiles[0].precio)) {
         tarifaNino = infantiles[0].precio;
@@ -26348,7 +26407,7 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
     usadas.push(...precisas.map(x => x.t));
     const ultimo = tramos.at(-1);
     if (ultimo?.tarifa_id === t.id) { ultimo.hasta = siguiente; ultimo.noches++; }
-    else tramos.push({ desde: noche, hasta: siguiente, noches: 1, tarifa, tarifa_nino: tarifaNino, tarifa_habitacion: cbTarPorHabitacion(t) ? tarifa * Number(it.adultos) : null, tarifa_id: t.id, fuente_archivo: t.fuente_archivo || null });
+    else tramos.push({ desde: noche, hasta: siguiente, noches: 1, tarifa, tarifa_nino: tarifaNino, tarifa_habitacion: cbPorHabitacion(it) ? tarifa : cbTarPorHabitacion(t) ? tarifa * Number(it.adultos) : null, tarifa_id: t.id, fuente_archivo: t.fuente_archivo || null });
   }
   for (const t of usadas) {
     const b = cbTarBloque(t), mins = b.minimo_noches && typeof b.minimo_noches === 'object' ? [...new Set(Object.values(b.minimo_noches).map(Number).filter(n => n > 0))] : [];
@@ -26365,6 +26424,7 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
   return { ok: true, tramos, avisos: [...avisos] };
 }
 function cbTarImporte(it) {
+  if (cbPorHabitacion(it)) return (it.tramos || []).reduce((s, t) => s + cbTarCent(t.tarifa) * t.noches * cbHabitaciones(it), 0) / 100;
   const a = Number(it.adultos) || 0, n = Number(it.ninos) || 0;
   return (it.tramos || []).reduce((s, t) => s + Math.round((a * Number(t.tarifa || 0) + n * (cbTarNinoTramo(it, t) || 0)) * 100) * t.noches, 0) / 100;
 }
@@ -26397,7 +26457,7 @@ const CB_TIPOS = {
 const cbTipo = it => CB_TIPOS[it.tipo] || CB_TIPOS.boleto;
 const cbTitulo = it => String(it[cbTipo(it).campos[0][0]] || '').trim();
 const CB_PAX_CAMPOS = [['adultos', 'tarifa', 'Adultos', 'Tarifa adulto (USD)', 1], ['ninos', 'tarifa_nino', 'Niños', 'Tarifa niño (USD)', 0], ['infantes', 'tarifa_infante', 'Infantes', 'Tarifa infante (USD)', 0]];
-const cbItemVacio = (tipo = 'boleto') => Object.fromEntries([['tipo', tipo], ...CB_TIPOS[tipo].campos.map(([k]) => [k, k === 'cant' ? 1 : '']), ...(CB_TIPOS[tipo].pax ? CB_PAX_CAMPOS.flatMap(([c, t]) => [[c, c === 'adultos' ? 1 : ''], [t, '']]) : []), ...(tipo === 'hotel' ? [['unidad', 'persona_noche'], ['adultos', 2], ['infantes_gratis', true]] : []), ...(tipo === 'boleto' ? [['origen', ''], ['destino', ''], ['viaje', 'rt']] : []), ['extra', '']]);
+const cbItemVacio = (tipo = 'boleto') => Object.fromEntries([['tipo', tipo], ...CB_TIPOS[tipo].campos.map(([k]) => [k, k === 'cant' ? 1 : '']), ...(CB_TIPOS[tipo].pax ? CB_PAX_CAMPOS.flatMap(([c, t]) => [[c, c === 'adultos' ? 1 : ''], [t, '']]) : []), ...(tipo === 'hotel' ? [['unidad', 'persona_noche'], ['habitaciones', 1], ['adultos', 2], ['infantes_gratis', true]] : []), ...(tipo === 'boleto' ? [['origen', ''], ['destino', ''], ['viaje', 'rt']] : []), ['extra', '']]);
 // Boleto por ciudades (2026-10-17): origen y destino se eligen por nombre del catálogo de Boletería
 // y se muestran "Caracas (CCS)"; `ruta` se sigue guardando en IATA (CCS-PMV-CCS) y es lo que va al
 // PDF. `viaje`: 'rt' ida y vuelta, 'ow' solo ida. Las filas anteriores solo traen `ruta`: se parsea, y
@@ -26528,21 +26588,23 @@ const cbArchivo = c => `Cotizacion-${cbNumero(c.numero)}-${c.cliente.normalize('
 
 function cbItemHtml(it, i) {
   // Fechas: nunca antes de hoy; la vuelta tampoco antes de la ida (cbMinFecha).
-  const f = (k, label, attrs, full = '') => `<div class="field${full}"><label class="fl" for="cb-${k}-${i}">${label}</label><input id="cb-${k}-${i}" class="ei" data-k="${k}" value="${esc(String(it[k] ?? ''))}" ${attrs}${attrs.includes('type="date"') ? ` min="${cbMinFecha(k, it.ida)}"` : ''}></div>`;
+  const f = (k, label, attrs, full = '') => `<div class="field${full}"><label class="fl" for="cb-${k}-${i}">${label}</label><input id="cb-${k}-${i}" class="ei" data-k="${k}" value="${esc(String(it[k] ?? (k === 'habitaciones' ? 1 : '')))}" ${attrs}${attrs.includes('type="date"') ? ` min="${cbMinFecha(k, it.ida)}"` : ''}></div>`;
   const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto';
   const opciones = Object.entries(CB_TIPOS).map(([k, t]) => `<option value="${k}"${k === tipo ? ' selected' : ''}>${t.nombre}</option>`).join('');
-  const unidad = tipo === 'hotel' ? `<div class="field cb-dos"><label class="fl" for="cb-unidad-${i}">Tarifa por</label><select id="cb-unidad-${i}" class="ei" data-k="unidad">${[['persona_noche', 'Persona por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${(cbPorNoche(it) ? 'persona_noche' : 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : '';
+  const unidad = tipo === 'hotel' ? `<div class="field cb-dos"><label class="fl" for="cb-unidad-${i}">Tarifa por</label><select id="cb-unidad-${i}" class="ei" data-k="unidad">${it._unidadPendiente ? '<option value="" selected disabled>Confirma la unidad</option>' : ''}${[['persona_noche', 'Persona por noche'], ['habitacion_noche', 'Habitación por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${!it._unidadPendiente && (it.unidad || 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select>${it._unidadPendiente ? '<small>Confirma la unidad: no está indicada en el tarifario.</small>' : ''}</div>` : '';
   const boleto = tipo === 'boleto', campos = CB_TIPOS[tipo].campos.filter(c => !(boleto && c[0] === 'ruta'));
   return `<div class="cb-item${it._plegado ? ' cb-plegado' : ''}${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
     <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span><button type="button" class="btn-sm cb-plegar" data-cb-plegar aria-expanded="${!it._plegado}">${it._plegado ? 'Editar' : 'Contraer'}</button> Importe <b class="cb-importe">${cbImporteTexto(it)}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
     <div class="cb-item-grid">
       ${boleto ? cbRutaHtml(it) + (it.ruta_libre ? f('ruta', 'Ruta anterior (se reemplaza al elegir origen y destino)', 'placeholder="CCS-PTY-MIA"', ' cb-full') : '') : ''}
       ${campos.map((c, j) => tipo === 'hotel' && j === 0 ? cbHotelHtml(it, i) : tipo === 'hotel' && ['plan', 'hab'].includes(c[0]) ? cbHotelSelectorHtml(it, i, c[0], c[1]) : j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')}
-      ${CB_TIPOS[tipo].pax ? `<div class="cb-pax cb-full">${CB_PAX_CAMPOS.map(([c, t, lc, lt, min]) => `<div class="cb-pax-c"><div class="field"><label class="fl" for="cb-${c}-${i}">${lc}</label><input id="cb-${c}-${i}" class="ei" data-k="${c}" type="number" min="${min}" step="1" placeholder="0" value="${esc(String(it[c] ?? ''))}"></div><div class="field${tipo === 'hotel' && ((t === 'tarifa_infante' && it.infantes_gratis) || (t === 'tarifa' && it.tramos?.length > 1)) ? ' cb-oculto' : ''}"><label class="fl" for="cb-${t}-${i}">${lt}</label><input id="cb-${t}-${i}" class="ei" data-k="${t}" type="number" min="0" step="0.01" value="${esc(String(it[t] ?? ''))}"></div></div>`).join('')}</div>` : ''}
+      ${unidad}
+      ${cbPorHabitacion(it) ? f('habitaciones', 'Habitaciones', 'type="number" min="1" step="1"') + cbHotelVariantesHtml(it, i) + (it.tramos?.length > 1 ? '' : f('tarifa', 'Precio habitación / noche (USD)', 'type="number" min="0" step="0.01"', ' cb-dos')) : ''}
+      ${CB_TIPOS[tipo].pax ? `<div class="cb-pax cb-full${cbPorHabitacion(it) ? ' cb-pax-habitacion' : ''}">${CB_PAX_CAMPOS.map(([c, t, lc, lt, min]) => `<div class="cb-pax-c"><div class="field"><label class="fl" for="cb-${c}-${i}">${lc}</label><input id="cb-${c}-${i}" class="ei" data-k="${c}" type="number" min="${min}" step="1" placeholder="0" value="${esc(String(it[c] ?? ''))}"></div>${cbPorHabitacion(it) ? '' : `<div class="field${tipo === 'hotel' && ((t === 'tarifa_infante' && it.infantes_gratis) || (t === 'tarifa' && it.tramos?.length > 1)) ? ' cb-oculto' : ''}"><label class="fl" for="cb-${t}-${i}">${lt}</label><input id="cb-${t}-${i}" class="ei" data-k="${t}" type="number" min="0" step="0.01" value="${esc(String(it[t] ?? ''))}"></div>`}</div>`).join('')}</div>` : ''}
       ${cbHotelPrecioHtml(it, i)}
-      ${tipo === 'hotel' && it.infantes_gratis ? '<small class="cb-full cb-condicion">Infantes: alojamiento gratis.</small>' : ''}
+      ${cbPorHabitacion(it) ? '<small class="cb-full cb-condicion">Precio por habitación. La ocupación y los ajustes los confirma el asesor.</small>' : tipo === 'hotel' && it.infantes_gratis ? '<small class="cb-full cb-condicion">Infantes: alojamiento gratis.</small>' : ''}
       ${boleto ? `<div class="cb-ref cb-full">${cbRefHtml(it)}</div>` : ''}
-      <details class="cb-full cb-extra"${it.extra ? ' open' : ''}><summary>Detalle adicional</summary>${unidad}${f('extra', 'Qué incluye u observaciones', 'placeholder="Equipaje, clase, qué incluye, observaciones..."')}</details>
+      <details class="cb-full cb-extra"${it.extra ? ' open' : ''}><summary>Detalle adicional</summary>${f('extra', 'Qué incluye u observaciones', 'placeholder="Equipaje, clase, qué incluye, observaciones..."')}</details>
     </div>
   </div>`;
 }
@@ -26558,7 +26620,9 @@ function cbLimpiarItem(it) {
   if (!CB_TIPOS[o.tipo].pax) return Object.assign(o, { cant: Number(it.cant) || 0, tarifa: Number(it.tarifa) || 0 });
   CB_PAX_CAMPOS.forEach(([c, t]) => { o[c] = Math.max(0, Math.floor(Number(it[c]) || 0)); o[t] = Number(it[t]) || 0; });
   if (o.tipo === 'hotel') {
-    o.unidad = it.unidad === 'persona_noche' ? 'persona_noche' : 'persona';
+    o.unidad = ['persona_noche', 'habitacion_noche'].includes(it.unidad) ? it.unidad : 'persona';
+    o.unidad_manual = !!it.unidad_manual;
+    if (cbPorHabitacion(it)) { o.habitaciones = cbHabitaciones(it); if (it.tarifa_variante) o.tarifa_variante = it.tarifa_variante; }
     o.infantes_gratis = it.infantes_gratis === true;
     if (o.infantes_gratis) o.tarifa_infante = 0;
     if (it.producto_id) o.producto_id = Number(it.producto_id);
@@ -26581,7 +26645,8 @@ function cbDetalle(it) {
   } else if (tipo === 'hotel' || tipo === 'paquete') {
     d.push(`${tipo === 'hotel' ? 'HOSPEDAJE' : 'PAQUETE'}: ${U(it.nombre)}`);
     add('PLAN', U(it.plan)); add('HABITACIÓN', U(it.hab)); add(tipo === 'hotel' ? 'CHECK-IN' : 'ENTRADA', cbFechaCorta(it.ida)); add(tipo === 'hotel' ? 'CHECK-OUT' : 'SALIDA', cbFechaCorta(it.vuelta)); add('NOCHES', cbNoches(it.ida, it.vuelta));
-    if (cbPorNoche(it)) { const p = cbPax(it); add('TARIFA', p.n || p.i ? 'POR PERSONA POR NOCHE' : `$${cbMonto(it.tarifa)} POR PERSONA POR NOCHE × ${U(cbNochesTexto(cbNochesCobro(it)))}`); }
+    if (cbPorHabitacion(it)) { add('TARIFA', `$${cbMonto(it.tarifa)} POR HABITACIÓN POR NOCHE × ${U(cbHabitacionesTexto(it))} × ${U(cbNochesTexto(cbNochesCobro(it)))}`); add('PASAJEROS', cbPaxTexto(it)); }
+    else if (cbPorNoche(it)) { const p = cbPax(it); add('TARIFA', p.n || p.i ? 'POR PERSONA POR NOCHE' : `$${cbMonto(it.tarifa)} POR PERSONA POR NOCHE × ${U(cbNochesTexto(cbNochesCobro(it)))}`); }
   } else if (tipo === 'traslado') {
     d.push(`TRASLADO: ${U(it.ruta)}`);
     add('FECHA', cbFechaCorta(it.ida)); add('HORA', U(it.ida_hora)); add('FECHA DE REGRESO', cbFechaCorta(it.vuelta)); add('HORA', U(it.vuelta_hora));
@@ -26602,7 +26667,11 @@ function cbDetalleCliente(it) {
     if (it.ida) add('', `${f(it.ida)}${it.vuelta ? ' al ' + f(it.vuelta) : ''}${n ? ` · ${n} noche${n === 1 ? '' : 's'}` : ''}`);
   } else if (tipo === 'traslado') { add('Fecha', con(f(it.ida), it.ida_hora)); add('Regreso', con(f(it.vuelta), it.vuelta_hora)); }
   else add('Fecha', f(it.ida));
-  if (it.tipo === 'hotel' && it.tramos?.length) {
+  if (cbPorHabitacion(it)) {
+    add('Habitaciones', cbHabitacionesTexto(it)); if (it.tarifa_variante) add('Variante de tarifa', it.tarifa_variante.replace(/_/g, ' ')); add('Pasajeros', cbPaxTexto(it));
+    if (it.tramos?.length) it.tramos.forEach(t => add('', `${f(t.desde)} al ${f(t.hasta)} · $${cbMonto(t.tarifa)} por habitación por noche × ${cbHabitacionesTexto(it)} × ${cbNochesTexto(t.noches)}`));
+    else add('Tarifa', `$${cbMonto(it.tarifa)} por habitación por noche × ${cbHabitacionesTexto(it)} × ${cbNochesTexto(cbNochesCobro(it))}`);
+  } else if (it.tipo === 'hotel' && it.tramos?.length) {
     it.tramos.forEach(t => add('', `${f(t.desde)} al ${f(t.hasta)} · ${cbNochesTexto(t.noches)} · ${t.tarifa_habitacion != null ? `${it.adultos} adultos, habitación $${cbMonto(t.tarifa_habitacion)} por noche` : `${it.adultos} adultos × $${cbMonto(t.tarifa)} por noche`}`));
     if (+it.ninos) it.tramos.forEach(t => add('', `${f(t.desde)} al ${f(t.hasta)} · ${it.ninos} niños × $${cbMonto(cbTarNinoTramo(it, t))} por noche`));
     if (+it.infantes) add('', `${it.infantes} infantes · alojamiento gratis`);
@@ -26679,12 +26748,13 @@ function cbAplicarLead() {
   document.getElementById('cb-cliente').value = l.nombre;
 }
 const cbHoteles = new Map(), cbHotelTarifas = new Map(), cbHotelPeticiones = new Map();
+const cbHotelHabitaciones = new Map(), cbHabPeticiones = new Map(), cbFotosErrores = new Set();
 const cbHotSalesOrden = new Map();
 let cbLeadsRes = [], cbLeadTimer = null, cbLeadTk = 0;
 const cbHotelFilas = it => (cbHotelTarifas.get(Number(it.producto_id)) || []).filter(t => cbTarUtil(t, cbHoy()));
 function cbPintarResumen() {
   const box = document.getElementById('cb-resumen'); if (!box) return;
-  box.innerHTML = cbItems.map((it, i) => `<div class="cb-res-linea"><span><b>${esc(cbTitulo(it) || cbTipo(it).nombre)}</b><small>${esc([it.plan, it.tipo === 'hotel' && cbNoches(it.ida, it.vuelta) ? cbNochesTexto(+cbNoches(it.ida, it.vuelta)) : '', cbEsPax(it) ? cbPaxTexto(it) : ''].filter(Boolean).join(' · '))}</small></span><strong>$${cbMonto(cbImporte(it))}</strong></div>`).join('');
+  box.innerHTML = cbItems.map((it, i) => `<div class="cb-res-linea"><span><b>${esc(cbTitulo(it) || cbTipo(it).nombre)}</b><small>${esc([it.plan, cbPorHabitacion(it) ? cbHabitacionesTexto(it) + ' · por habitación/noche' : '', it.tipo === 'hotel' && cbNoches(it.ida, it.vuelta) ? cbNochesTexto(+cbNoches(it.ida, it.vuelta)) : '', cbEsPax(it) ? cbPaxTexto(it) : ''].filter(Boolean).join(' · '))}</small></span><strong>$${cbMonto(cbImporte(it))}</strong></div>`).join('');
 }
 function cbPintarBusquedaLead(f) {
   const input = document.getElementById('cb-lead-q'), box = document.getElementById('cb-lead-res');
@@ -26718,7 +26788,7 @@ function cbPickerTeclas(e, box, elegir) {
   if (e.key === 'Escape') { box.hidden = true; e.target.setAttribute('aria-expanded', 'false'); return; }
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
     e.preventDefault(); if (!ops.length) return;
-    const i = (previo + (e.key === 'ArrowDown' ? 1 : -1) + ops.length) % ops.length;
+    const i = previo < 0 ? (e.key === 'ArrowDown' ? 0 : ops.length - 1) : (previo + (e.key === 'ArrowDown' ? 1 : -1) + ops.length) % ops.length;
     box.hidden = false; ops.forEach((o, n) => { o.classList.toggle('activo', n === i); o.setAttribute('aria-selected', String(n === i)); });
     if (!ops[i].id) ops[i].id = box.id + '-op-' + i;
     e.target.setAttribute('aria-activedescendant', ops[i].id); e.target.setAttribute('aria-expanded', 'true'); ops[i].scrollIntoView({ block: 'nearest' });
@@ -26766,10 +26836,10 @@ async function cbTraerTarifas(id) {
 async function cbHotelElegir(card, id) {
   const i = +card.dataset.i, it = cbItems[i], p = cbHoteles.get(Number(id)); if (!it || !p) return;
   const carga = (it._cargaHotel || 0) + 1;
-  Object.assign(it, { nombre: p.nombre, producto_id: p.id, plan: '', hab: '', tarifa: '', tarifa_nino: '', tarifa_nino_auto: true, tarifa_nino_contexto: '', tramos: [], tarifa_manual: false, habitacion_manual: false, plan_libre: false, hab_libre: false, _cargando: true, _cargaHotel: carga, _tarifaError: false, _aviso: '' });
+  Object.assign(it, { nombre: p.nombre, producto_id: p.id, plan: '', hab: '', tarifa: '', tarifa_nino: '', tarifa_nino_auto: true, tarifa_nino_contexto: '', tramos: [], tarifas_contexto: '', tarifa_manual: false, unidad_manual: false, tarifa_variante: '', habitacion_manual: false, plan_libre: false, hab_libre: false, _cargando: true, _cargaHotel: carga, _tarifaError: false, _aviso: '' });
   try {
     cbRenderItems(); cbProgramarBorrador();
-    await cbTraerTarifas(p.id);
+    await Promise.all([cbTraerTarifas(p.id), cbTraerHabitaciones(p.id)]);
     if (!cbItems.includes(it) || it._cargaHotel !== carga || it.producto_id !== p.id) return;
     it.plan = cbTarOpciones(cbHotelFilas(it), 'plan')[0] || ''; cbHotelRecalcular(it);
   } catch (error) {
@@ -26789,10 +26859,12 @@ function cbHotelRecalcular(it, aplicar = false) {
   const filas = cbHotelFilas(it);
   if (!it.hab || (!it.habitacion_manual && !it.tarifa_manual)) {
     const hs = cbTarOpciones(cbTarDelPlan(filas, it.plan), 'habitacion');
-    it.hab = hs.find(h => cbTarSugerir({ ...it, hab: h }, filas, cbHoy(), TAR_OCUPACION).ok) || it.hab || hs[0] || '';
+    if (!cbPorHabitacion(it)) it.hab = hs.find(h => { const prueba = { ...it, hab: h }; cbHotelUnidad(prueba, filas); return cbTarSugerir(prueba, filas, cbHoy(), TAR_OCUPACION).ok; }) || it.hab || hs[0] || '';
+    else it.hab = it.hab || hs[0] || '';
   }
+  cbHotelUnidad(it, filas);
   const s = cbTarSugerir(it, filas, cbHoy(), TAR_OCUPACION); it._sugerencia = s;
-  if (Number(it.ninos) > 0) {
+  if (!cbPorHabitacion(it) && Number(it.ninos) > 0) {
     const manual = it.tarifa_nino_auto === false || (it.tarifa_nino_auto == null && cbTarNum(it.tarifa_nino) !== null);
     const contexto = cbTarContexto(it);
     if (s.ok) {
@@ -26821,9 +26893,68 @@ function cbHotelRecalcular(it, aplicar = false) {
     it.tarifa_avisos = s.avisos;
   } else { it.tramos = []; it.tarifa = ''; it._aviso = s.texto; it.tarifa_avisos = []; }
 }
+async function cbTraerHabitaciones(id) {
+  id = Number(id);
+  if (cbHotelHabitaciones.has(id)) return cbHotelHabitaciones.get(id);
+  if (!cbHabPeticiones.has(id)) {
+    const control = new AbortController();
+    const reloj = setTimeout(() => control.abort(), 12000);
+    const peticion = (async () => {
+      try {
+        const { data, error } = await sb.from('producto_habitaciones').select('id,nombre,nombre_norm,revisado,producto_fotos(storage_path,orden,es_principal,activo)').eq('producto_id', id).eq('revisado', true).abortSignal(control.signal).limit(200);
+        if (error) throw error;
+        const filas = (data || []).filter(h => h.revisado === true);
+        cbHotelHabitaciones.set(id, filas); cbFotosErrores.delete(id); return filas;
+      } catch (_) { cbFotosErrores.add(id); return []; }
+      finally { clearTimeout(reloj); cbHabPeticiones.delete(id); }
+    })();
+    cbHabPeticiones.set(id, peticion);
+  }
+  return cbHabPeticiones.get(id);
+}
+function cbHabitacionFotos(it, nombre) {
+  const h = (cbHotelHabitaciones.get(Number(it.producto_id)) || []).find(h => h.revisado && h.nombre_norm === tarNombreNorm(nombre));
+  return ordenarFotos(h?.producto_fotos || []).filter(f => f.activo === true);
+}
+function cbHabMiniHtml(it, nombre) {
+  const foto = cbHabitacionFotos(it, nombre)[0];
+  return foto ? `<img src="${esc(fotoMini(foto.storage_path, 256))}" alt="${esc(nombre)}" width="44" height="44" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><small hidden>Sin foto</small>` : '<small class="cb-hab-sin-foto">Sin foto</small>';
+}
+function cbHabitacionHtml(it, i, opciones) {
+  const foto = cbHabitacionFotos(it, it.hab)[0];
+  return `<div class="field cb-dos cb-hotel-selector cb-picker"><label class="fl" id="cb-hab-label-${i}" for="cb-hab-${i}">Habitación</label>
+    <button type="button" id="cb-hab-${i}" class="ei cb-hab-elegida" role="combobox" data-cb-hab-abrir aria-haspopup="listbox" aria-labelledby="cb-hab-label-${i} cb-hab-texto-${i}" aria-expanded="false" aria-controls="cb-habitaciones-${i}">${cbHabMiniHtml(it, it.hab)}<span id="cb-hab-texto-${i}">${esc(it.hab || (it._cargando ? 'Cargando habitaciones…' : 'Elige una habitación'))}</span><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+    <div id="cb-habitaciones-${i}" class="cb-picker-lista" role="listbox" aria-label="Habitaciones" hidden>${opciones.map(h => `<button type="button" tabindex="-1" role="option" aria-selected="${cbTarNorm(it.hab) === cbTarNorm(h)}" data-cb-hab="${esc(h)}">${cbHabMiniHtml(it, h)}<span>${esc(h)}</span></button>`).join('')}<button type="button" tabindex="-1" role="option" aria-selected="false" data-cb-hab="__manual__"><span>Escribir otra habitación</span></button></div>
+    ${it.hab_libre ? `<input id="cb-hab-${i}-manual" class="ei" data-k="hab" value="${esc(it.hab || '')}" aria-label="Habitación manual" placeholder="Escribe la habitación confirmada">` : ''}
+    ${foto ? `<button type="button" class="btn-sm cb-hab-ver" data-cb-hab-fotos><i class="fas fa-images" aria-hidden="true"></i> Ver fotos de esta habitación</button>` : ''}
+    ${cbFotosErrores.has(Number(it.producto_id)) ? '<small>No se pudieron cargar las fotos. <button class="btn-sm" type="button" data-cb-fotos-reintentar>Reintentar fotos</button></small>' : ''}</div>`;
+}
+function cbHabCerrar(box) {
+  box.querySelector('.cb-picker-lista').hidden = true;
+  const boton = box.querySelector('[data-cb-hab-abrir]');
+  boton.setAttribute('aria-expanded', 'false'); boton.removeAttribute('aria-activedescendant');
+}
+function cbHabElegir(op) {
+  const card = op.closest('.cb-item'), i = +card.dataset.i, it = cbItems[i];
+  cbHotelCambiarOpcion(it, 'hab', op.dataset.cbHab); cbRenderItems(); cbProgramarBorrador();
+  document.getElementById(it.hab_libre ? `cb-hab-${i}-manual` : `cb-hab-${i}`)?.focus();
+}
+function cbHotelVariantesHtml(it, i) {
+  const filas = cbTarDelPlan(cbHotelFilas(it), it.plan).filter(t => cbTarNorm(t.habitacion) === cbTarNorm(it.hab));
+  const noches = cbTarNoches(it.ida, it.vuelta), opciones = new Map();
+  for (const t of filas.filter(t => !noches.length || noches.some(n => cbTarAmplitud(t, n) !== null))) {
+    for (const o of cbTarVariantes(t, TAR_OCUPACION)) {
+      if (!opciones.has(o.clave)) opciones.set(o.clave, { nombre: o.nombre, precios: new Set(), moneda: t.moneda || 'USD' });
+      opciones.get(o.clave).precios.add(o.precio);
+    }
+  }
+  if (opciones.size < 2 && !it.tarifa_variante) return '';
+  return `<div class="field"><label class="fl" for="cb-variante-${i}">Variante de tarifa</label><select class="ei" id="cb-variante-${i}" data-k="tarifa_variante"><option value="">Elegir variante</option>${[...opciones].map(([k, o]) => `<option value="${esc(k)}"${it.tarifa_variante === k ? ' selected' : ''}>${esc(o.nombre)} · ${esc(o.moneda)} ${[...o.precios].sort((a,b) => a-b).map(cbMonto).join(' / ')} por noche</option>`).join('')}</select></div>`;
+}
 function cbHotelSelectorHtml(it, i, campo, label) {
   const filas = cbHotelFilas(it), esPlan = campo === 'plan';
   const opciones = cbTarOpciones(esPlan ? filas : cbTarDelPlan(filas, it.plan), esPlan ? 'plan' : 'habitacion');
+  if (!esPlan) return cbHabitacionHtml(it, i, opciones);
   const clave = esPlan ? cbTarPlanClave : cbTarNorm, actual = opciones.find(o => clave(o) === clave(it[campo]));
   const libre = it[campo + '_libre'] || (!!it[campo] && !actual), id = `cb-${campo}-${i}`;
   const vacio = it._cargando ? 'Cargando opciones…' : it._tarifaError ? 'Carga pendiente: reintenta o escribe el dato' : opciones.length ? `Selecciona ${esPlan ? 'el plan' : 'la habitación'}` : esPlan ? 'Plan no indicado en el tarifario' : 'Sin habitaciones cargadas';
@@ -26834,17 +26965,19 @@ function cbHotelSelectorHtml(it, i, campo, label) {
 }
 function cbHotelCambiarOpcion(it, campo, valor) {
   it[campo + '_libre'] = valor === '__manual__';
-  if (valor === '__manual__') return;
+  if (valor === '__manual__') { if (campo === 'hab') { it.hab = ''; it.habitacion_manual = true; it.tramos = []; it.tarifa = ''; it.tarifa_manual = false; it.tarifa_variante = ''; } return; }
   it[campo] = valor;
   if (campo === 'plan') { it.hab = ''; it.habitacion_manual = false; it.hab_libre = false; }
   else it.habitacion_manual = true;
+  it.tarifa_variante = '';
+  if (campo === 'hab' || campo === 'plan') { it.tarifa_manual = false; it.tarifa = ''; it.tramos = []; }
   cbHotelRecalcular(it);
 }
 function cbHotelPrecioHtml(it, i) {
   if (it.tipo !== 'hotel') return '';
   return `<div class="cb-tarifario cb-full" aria-live="polite">${it._cargando ? '<span>Cargando tarifas del hotel…</span>' : ''}${it._aviso ? `<p>${esc(it._aviso)}</p>` : ''}
     ${it._tarifaError ? '<button type="button" class="dbtn" style="min-height:44px" data-cb-reintentar>Reintentar carga de tarifas</button>' : ''}
-    ${it.tramos?.length > 1 ? `<div class="cb-tramos">${it.tramos.map((t, j) => `<label><span>${cbFechaCorta(t.desde)} → ${cbFechaCorta(t.hasta)}<small>${cbNochesTexto(t.noches)} · USD por adulto/noche${Number(it.ninos) > 0 ? ` · niños: ${cbTarNinoTramo(it, t) === null ? 'por confirmar' : '$' + cbMonto(cbTarNinoTramo(it, t)) + '/noche'}` : ''}</small></span><input class="ei" aria-label="Tarifa adulto del tramo ${j + 1}" data-tramo="${j}" type="number" min="0" step="0.01" value="${esc(String(t.tarifa))}"></label>`).join('')}</div>` : ''}
+    ${it.tramos?.length > 1 ? `<div class="cb-tramos">${it.tramos.map((t, j) => `<label><span>${cbFechaCorta(t.desde)} → ${cbFechaCorta(t.hasta)}<small>${cbNochesTexto(t.noches)} · USD por ${cbPorHabitacion(it) ? 'habitación' : 'adulto'}/noche${!cbPorHabitacion(it) && Number(it.ninos) > 0 ? ` · niños: ${cbTarNinoTramo(it, t) === null ? 'por confirmar' : '$' + cbMonto(cbTarNinoTramo(it, t)) + '/noche'}` : ''}</small></span><input class="ei" aria-label="Tarifa ${cbPorHabitacion(it) ? 'habitación' : 'adulto'} del tramo ${j + 1}" data-tramo="${j}" type="number" min="0" step="0.01" value="${esc(String(t.tarifa))}"></label>`).join('')}</div>` : ''}
     ${it.tarifa_manual && it._sugerencia?.ok ? `<button type="button" class="btn-sm" data-cb-usar>Usar tarifa del tarifario · ${it._sugerencia.tramos.map(t => '$' + cbMonto(t.tarifa)).join(' / ')}</button>` : ''}
     ${it._desactualizado ? `<button type="button" class="btn-sm" data-cb-manual>Usar $${cbMonto(it.tarifa)} por adulto ${cbPorNoche(it) ? 'por noche' : 'por estadía'} para este viaje</button>` : ''}
     ${(it.tarifa_avisos || []).map(a => `<small class="cb-condicion">${esc(a)}</small>`).join('')}</div>`;
@@ -26923,7 +27056,7 @@ window.cbWhatsapp = () => {
 // desde otro dispositivo. Otro agente o un admin que cotiza una ajena no la pisa.
 let cbBorradorTimer = null;
 const cbBorradorMio = () => !!cbSolicitud?.la_atiendo_yo;
-const cbBorrador = () => ({ v: 2, items: cbItems.map(it => Object.fromEntries(Object.entries(it).filter(([k]) => !k.startsWith('_')))), lead: cbLead ? { id: cbLead.id, nombre: cbLead.nombre } : null, cliente: val('cb-cliente'), fecha: val('cb-fecha'), vence: val('cb-vence'), notas: val('cb-notas'), terminos: val('cb-terminos'), asesor: val('cb-asesor') });
+const cbBorrador = () => ({ v: 2, items: cbItems.map(it => ({ ...Object.fromEntries(Object.entries(it).filter(([k]) => !k.startsWith('_'))), ...(it.tipo === 'hotel' ? { unidad_pendiente: !!it._unidadPendiente } : {}) })), lead: cbLead ? { id: cbLead.id, nombre: cbLead.nombre } : null, cliente: val('cb-cliente'), fecha: val('cb-fecha'), vence: val('cb-vence'), notas: val('cb-notas'), terminos: val('cb-terminos'), asesor: val('cb-asesor') });
 function cbProgramarBorrador() {
   if (!cbBorradorMio()) return;
   clearTimeout(cbBorradorTimer); cbBorradorTimer = setTimeout(cbGuardarBorrador, 2000);
@@ -26944,7 +27077,7 @@ async function cbGuardarBorrador() {
   return true;
 }
 function cbRestaurarBorrador(b, sel) {
-  cbItems = Array.isArray(b.items) && b.items.length ? b.items.map(it => ({ ...cbItemVacio(CB_TIPOS[it?.tipo] ? it.tipo : 'boleto'), ...cbMigrarBoleto(cbMigrarPax(it)), ...(it.tipo === 'hotel' ? { unidad: it.unidad || 'persona', infantes_gratis: it.infantes_gratis === true } : {}) })) : [cbItemVacio()];
+  cbItems = Array.isArray(b.items) && b.items.length ? b.items.map(it => ({ ...cbItemVacio(CB_TIPOS[it?.tipo] ? it.tipo : 'boleto'), ...cbMigrarBoleto(cbMigrarPax(it)), ...(it.tipo === 'hotel' ? { unidad: it.unidad || 'persona', unidad_manual: it.unidad_manual ?? true, _unidadPendiente: it.unidad_pendiente === true, infantes_gratis: it.infantes_gratis === true } : {}) })) : [cbItemVacio()];
   cbRenderItems();
   cbLead = b.lead || null; cbPintarLead();
   cbItems.forEach(it => { if (it.tarifas_contexto && it.tarifas_contexto !== cbTarContexto(it)) { it._desactualizado = true; it._aviso = 'Revisa y confirma los precios del borrador para las fechas actuales.'; } });
@@ -26952,7 +27085,7 @@ function cbRestaurarBorrador(b, sel) {
   cbItems.forEach(it => {
     if (it.tipo !== 'hotel') return;
     if (!it.producto_id) return;
-    cbTraerTarifas(it.producto_id).then(() => { if (cbItems.includes(it)) cbRenderItems(); }).catch(() => {});
+    Promise.all([cbTraerTarifas(it.producto_id), cbTraerHabitaciones(it.producto_id)]).then(() => { if (cbItems.includes(it)) cbRenderItems(); }).catch(() => {});
   });
   [['cb-cliente', b.cliente], ['cb-fecha', b.fecha], ['cb-vence', b.vence], ['cb-notas', b.notas], ['cb-terminos', b.terminos]].forEach(([id, v]) => { if (typeof v === 'string') document.getElementById(id).value = v; });
   // Un borrador de días atrás trae la fecha y la vigencia de entonces: vuelven a hoy.
@@ -27048,10 +27181,19 @@ async function cbCargarSeccion() {
     cbLista.addEventListener('focusin', e => { if (e.target.dataset.busca === 'hotel') cbHotelBuscar(e.target); });
     cbLista.addEventListener('focusout', e => { if (e.target.dataset.busca === 'hotel') { e.target.parentElement.querySelector('.cb-picker-lista').hidden = true; e.target.setAttribute('aria-expanded', 'false'); } });
     cbLista.addEventListener('pointerdown', e => {
+      const hab = e.target.closest('[data-cb-hab]');
+      if (hab) { e.preventDefault(); return; }
       const op = e.target.closest('[data-cb-hotel]');
       if (op) { e.preventDefault(); cbHotelElegir(op.closest('.cb-item'), op.dataset.cbHotel); }
     });
     cbLista.addEventListener('keydown', e => {
+      if (e.target.matches('[data-cb-hab-abrir]')) {
+        const box = e.target.closest('.cb-picker'), lista = box.querySelector('.cb-picker-lista');
+        if (e.key === 'Tab') { cbHabCerrar(box); return; }
+        if (e.key === 'Escape') { cbHabCerrar(box); return; }
+        if ((e.key === 'Enter' || e.key === ' ') && lista.hidden) { e.preventDefault(); lista.hidden = false; e.target.setAttribute('aria-expanded', 'true'); return; }
+        cbPickerTeclas(e, lista, cbHabElegir); return;
+      }
       if (e.target.dataset.busca === 'hotel') cbPickerTeclas(e, e.target.parentElement.querySelector('.cb-picker-lista'), op => cbHotelElegir(op.closest('.cb-item'), op.dataset.cbHotel));
     });
     cbLista.addEventListener('focusout', e => { if (e.target.matches('.cb-ap-in')) cbApConfirmar(e.target); });
@@ -27073,10 +27215,15 @@ async function cbCargarSeccion() {
       else if (e.key === 'Escape') { cbApCerrar(inp); }
     });
     cbLista.addEventListener('click', e => {
+      const hab = e.target.closest('[data-cb-hab]'); if (hab) { cbHabElegir(hab); return; }
+      const abrir = e.target.closest('[data-cb-hab-abrir]');
+      if (abrir) { const lista = abrir.parentElement.querySelector('.cb-picker-lista'); lista.hidden = !lista.hidden; abrir.setAttribute('aria-expanded', String(!lista.hidden)); return; }
       const hotel = e.target.closest('[data-cb-hotel]');
       if (hotel) { cbHotelElegir(hotel.closest('.cb-item'), hotel.dataset.cbHotel); return; }
       const card = e.target.closest('.cb-item'); if (!card) return;
       const it = cbItems[+card.dataset.i], viaje = e.target.closest('[data-viaje]'), ref = e.target.closest('.cb-ref-usar');
+      if (e.target.closest('[data-cb-hab-fotos]')) { const fotos = cbHabitacionFotos(it, it.hab); if (fotos.length) openLightbox(fotos.map(f => fotoGrande(f.storage_path)), 0); return; }
+      if (e.target.closest('[data-cb-fotos-reintentar]')) { cbTraerHabitaciones(it.producto_id).then(() => { if (cbItems.includes(it)) cbRenderItems(); }); return; }
       if (e.target.closest('[data-cb-reintentar]')) { cbHotelElegir(card, it.producto_id); return; }
       if (e.target.closest('[data-cb-plegar]')) { it._plegado = !it._plegado; cbRenderItems(); return; }
       if (e.target.closest('[data-cb-usar]')) { cbHotelRecalcular(it, true); cbRenderItems(); cbProgramarBorrador(); return; }
@@ -27107,14 +27254,20 @@ async function cbCargarSeccion() {
       }
       if (!k || !card) return;
       const it = cbItems[+card.dataset.i], previo = it[k]; it[k] = e.target.value;
+      if (it.tipo === 'hotel' && k === 'unidad') {
+        it.unidad_manual = true; it._unidadPendiente = false; it.tarifa_manual = false;
+        it.tarifa = ''; it.tarifa_nino = ''; it.tarifa_nino_auto = true; it.tramos = []; it.tarifas_contexto = ''; it.tarifa_variante = '';
+      }
+      if (it.tipo === 'hotel' && k === 'tarifa_variante') { it.tramos = []; it.tarifa = ''; it.tarifa_manual = false; it.tarifas_contexto = ''; }
       if (e.target.dataset.busca === 'hotel') {
         if (it.producto_id) {
           card.querySelector('.cb-hotel-foto')?.remove();
           delete it.producto_id; it.tramos = []; if (!it.tarifa_manual) it.tarifa = '';
           it._cargaHotel = (it._cargaHotel || 0) + 1; it._cargando = false; it._tarifaError = false;
           it.plan = ''; it.hab = ''; it.plan_libre = false; it.hab_libre = false; it.tarifa_avisos = [];
+          it.unidad_manual = false; it._unidadPendiente = true; it.tarifa_variante = '';
           card.querySelectorAll('.cb-hotel-selector').forEach(el => {
-            const campo = el.querySelector('select').dataset.cbCampo;
+            const campo = el.querySelector('select')?.dataset.cbCampo || 'hab';
             el.outerHTML = cbHotelSelectorHtml(it, +card.dataset.i, campo, campo === 'plan' ? 'Plan' : 'Habitación');
           });
         }
@@ -27128,7 +27281,7 @@ async function cbCargarSeccion() {
       if (it.tipo === 'hotel' && k === 'tarifa_nino') {
         it.tarifa_nino_auto = false; it.tarifa_nino_contexto = cbTarContexto(it);
       }
-      if (it.tipo === 'hotel' && k === 'ninos') {
+      if (it.tipo === 'hotel' && k === 'ninos' && !cbPorHabitacion(it)) {
         if (!(Number(previo) > 0)) it.tarifa_nino_auto = true;
         cbHotelRecalcular(it);
         card.querySelector('[data-k="tarifa_nino"]').value = it.tarifa_nino ?? '';
@@ -27151,10 +27304,18 @@ async function cbCargarSeccion() {
         return;
       }
       if (k === 'hab') it.habitacion_manual = true;
-      if (['nombre', 'ida', 'vuelta', 'adultos', 'plan', 'hab', 'unidad', 'tarifa'].includes(k)) {
+      if (k === 'unidad' && !it.unidad_manual) { it.unidad = e.target.value; it.unidad_manual = true; it._unidadPendiente = false; it.tarifa_manual = false; it.tarifa = ''; it.tramos = []; it.tarifas_contexto = ''; }
+      if (['nombre', 'ida', 'vuelta', 'adultos', 'plan', 'hab', 'unidad', 'tarifa', 'tarifa_variante', 'habitaciones'].includes(k)) {
         if (k === 'plan' && !it.tarifa_manual && cbTarOpciones(cbHotelFilas(it), 'plan').length) { it.hab = ''; it.habitacion_manual = false; }
         cbHotelRecalcular(it); cbRenderItems(); cbProgramarBorrador();
       }
+    });
+    cbLista.addEventListener('focusout', e => {
+      const box = e.target.closest('.cb-picker');
+      if (box?.querySelector('[data-cb-hab-abrir]') && !box.contains(e.relatedTarget)) cbHabCerrar(box);
+    });
+    document.addEventListener('pointerdown', e => {
+      cbLista.querySelectorAll('[data-cb-hab-abrir]').forEach(b => { if (!b.parentElement.contains(e.target)) cbHabCerrar(b.parentElement); });
     });
     // Escribir la fecha a mano se salta el min del calendario: al salir del campo, una fecha pasada se borra.
     document.getElementById('sec-cotizacion-boletos').addEventListener('focusout', e => {
@@ -27251,9 +27412,9 @@ window.cbGuardar = async function cbGuardar(accion) {
   const enviar = accion === 'enviar', ventas = cbModo === 'ventas';
   const cliente = val('cb-cliente').trim();
   if (!cliente) { errToast('Escribe el cliente'); return; }
-  const hotelPendiente = cbItems.find(it => it.tipo === 'hotel' && (it._cargando || it._desactualizado || !cbTarTramosValidos(it) || (it.tarifas_contexto && it.tarifas_contexto !== cbTarContexto(it)) || (it.infantes_gratis && (!cbTarNoches(it.ida, it.vuelta).length || cbTarNum(it.tarifa) === null))));
+  const hotelPendiente = cbItems.find(it => it.tipo === 'hotel' && (it._cargando || it._unidadPendiente || it._desactualizado || !cbTarTramosValidos(it) || (it.tarifas_contexto && it.tarifas_contexto !== cbTarContexto(it)) || ((it.infantes_gratis || cbPorHabitacion(it)) && (!cbTarNoches(it.ida, it.vuelta).length || cbTarNum(it.tarifa) === null)) || (cbPorHabitacion(it) && (!Number.isInteger(cbHabitaciones(it)) || cbHabitaciones(it) < 1))));
   if (hotelPendiente) { errToast('Hospedaje: revisa las fechas y confirma una tarifa para el viaje actual.'); return; }
-  if (cbItems.some(it => it.tipo === 'hotel' && Number(it.ninos) > 0 && (cbTarNum(it.tarifa_nino) === null || (it.tramos || []).some(t => cbTarNinoTramo(it, t) === null)))) { errToast('Hospedaje: indica la tarifa de los niños; escribe 0 si la promoción los incluye gratis.'); return; }
+  if (cbItems.some(it => it.tipo === 'hotel' && !cbPorHabitacion(it) && Number(it.ninos) > 0 && (cbTarNum(it.tarifa_nino) === null || (it.tramos || []).some(t => cbTarNinoTramo(it, t) === null)))) { errToast('Hospedaje: indica la tarifa de los niños; escribe 0 si la promoción los incluye gratis.'); return; }
   const items = cbItems.map(cbLimpiarItem).filter(it => cbTitulo(it) || it.tarifa);
   if (!items.length) { errToast('Agrega al menos un servicio con su descripción y tarifa'); return; }
   const incompleto = items.find(it => !cbTitulo(it) || !(cbEsPax(it) ? cbPax(it).a : it.cant));
@@ -27393,6 +27554,7 @@ async function cbPdfBlob(c) {
 
   // Con niños o infantes el ítem lleva su descripción y una fila por categoría (adultos, niños, infantes).
   const filas = (c.items || []).flatMap((it, i) => {
+    if (cbPorHabitacion(it)) return [[i + 1, cbDetalleCliente(it), cbHabitaciones(it).toFixed(2), cbMonto(cbImporte(it) / (cbHabitaciones(it) || 1)), cbMonto(cbImporte(it))]];
     if (!cbEsPax(it)) return [[i + 1, cbDetalle(it), Number(it.cant).toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))]];
     if (it.tipo === 'hotel' && it.tramos?.length) return [[i + 1, cbDetalleCliente(it), '1.00', cbMonto(cbImporte(it)), cbMonto(cbImporte(it))]];
     // Hotel por noche: la columna Tarifa va por la estadía completa para que Cant. × Tarifa = Importe.
@@ -30894,9 +31056,9 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-20', emoji: '🧾', titulo: 'Abono con comprobante y boleto con datos completos', texto: '+ Abono en la tarjeta de la reserva ahora abre la pestaña Abonos con el formulario listo: método, referencia y captura del comprobante, que pasa a ser obligatoria (salvo Efectivo). Además, un boleto aéreo no se guarda sin localizador/PNR, aerolínea y ruta.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🗂️', titulo: 'Gestión de Personal más limpia', texto: 'Las pestañas Asignación de lotes, Freelancers, Reasignaciones, Métricas y Notificaciones ahora se activan desde Mi Perfil. Por defecto quedan ocultas para que la pantalla del equipo se centre en Personal, Asesores y Postulaciones.', roles: ['admin'] },
-  { fecha: '2026-10-19', emoji: '📝', titulo: 'Correcciones con historial de documentos', texto: 'Solicitudes, cotizaciones y vouchers permiten editar, anular y consultar revisiones sin perder su número. Antes de guardar se revisan las diferencias de dinero; los pagos previos se conservan. La revisión vigente se puede descargar, compartir y volver a enviar desde el historial.', roles: ['asesor', 'boleteria', 'administrativo', 'admin'] },
-  { fecha: '2026-10-19', emoji: '➕', titulo: 'Abonos y servicios desde Reservas', texto: 'Las tarjetas de Reservas tienen accesos para agregar un abono o un servicio. Abono muestra lo pagado y el saldo de esa reserva; Pago completado completa el monto para que lo revises antes de guardar. WhatsApp queda como un icono con un área cómoda para tocar.', roles: ['asesor', 'administrativo', 'admin'] },
+  { fecha: '2026-10-19', emoji: '🔗', titulo: 'Revisión de ventas al generar vouchers', texto: 'Antes de generar un voucher eliges si corresponde a una reserva existente o a otra venta. Se muestran operaciones similares aunque cambien el nombre o las fechas. Los reintentos conservan la misma operación y el abono se factura una sola vez.', roles: ['asesor', 'admin'] },
   { fecha: '2026-10-18', emoji: '🏨', titulo: 'Foto del hotel seleccionado', texto: 'Al elegir un hotel en Cotizaciones se conserva una miniatura junto a su nombre para reconocerlo mientras preparas la cotización.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🧒', titulo: 'Tarifa de niños automática al cotizar', texto: 'Al añadir niños a un hotel se completa su tarifa desde la habitación y las fechas elegidas. El total y el PDF respetan los precios por temporada. Se indica el rango de edad de la ficha; si hay varias tarifas posibles o falta el dato, se pide confirmar el precio.', roles: ['asesor', 'boleteria', 'admin'] },
   { fecha: '2026-10-18', emoji: '🏝️', titulo: 'Todos los hoteles, con Margarita y Los Roques primero', texto: 'El buscador de Cotizaciones ya no limita los resultados a ocho hoteles. Dentro de Hot Sale muestra primero Margarita, luego Los Roques y después los demás destinos, manteniendo el orden del Tarifario en cada grupo.', roles: ['asesor', 'boleteria', 'admin'] },

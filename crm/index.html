@@ -2889,6 +2889,15 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .cb-item-grid .field{margin:0}
 .cb-pax{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .cb-pax-c{display:grid;grid-template-columns:1fr 1.4fr;gap:8px}
+.cb-pax-habitacion .cb-pax-c{grid-template-columns:1fr}
+.cb-hab-elegida{display:flex;align-items:center;gap:10px;height:auto;min-height:44px;text-align:left;white-space:normal}
+.cb-hab-elegida span,.cb-hab-elegida+.cb-picker-lista span{flex:1;min-width:0;overflow-wrap:anywhere}
+.cb-hab-elegida img,.cb-hab-elegida+.cb-picker-lista img{object-fit:cover;border-radius:8px;flex-shrink:0}
+.cb-hab-sin-foto{display:inline-flex;align-items:center;justify-content:center;min-width:44px;max-width:64px;min-height:44px;color:var(--muted);font-size:12px}
+.cb-hab-elegida+.cb-picker-lista button{min-height:44px;white-space:normal;text-align:left}
+.cb-hab-elegida+.cb-picker-lista button[aria-selected="true"]{background:var(--accent-soft)}
+.cb-hab-elegida:focus-visible,.cb-hab-ver:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cb-hab-ver{margin-top:4px;min-height:44px}
 .cb-item-tit{display:flex;align-items:center;gap:8px;min-width:0}
 .cb-item-cab .cb-tipo{width:auto;padding:5px 10px;font-size:12.5px;font-weight:600}
 .cb-add{width:auto;margin-top:10px;padding:8px 14px}
