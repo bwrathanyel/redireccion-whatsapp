@@ -6056,7 +6056,7 @@ function leadCardHtml(l) {
   // hueco muerto abajo de la tarjeta.
   const acciones = [
     (ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado)
-      ? `<button type="button" class="fact-btn" data-facturar-id="${l.id}" title="Enviar a facturación" aria-label="Enviar a facturación" onclick="event.stopPropagation()"><i class="fas fa-paper-plane"></i></button>` : '',
+      ? `<button type="button" class="fact-btn" data-facturar-id="${l.id}" title="Crear reserva" aria-label="Crear reserva" onclick="event.stopPropagation()"><i class="fas fa-plus"></i></button>` : '',
     wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : '',
   ].filter(Boolean).join('');
   return `<div class="entity-card ${sinAtenderDatos ? 'tiene-sin-atender' : ''}" data-lead-id="${l.id}" style="position:relative;border-left:4px solid ${estadoColor}">
@@ -6428,7 +6428,7 @@ function openDrawer(l) {
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq dq-boleteria" id="e-a-boleteria" type="button" title="Rellenar la solicitud de boletería de este cliente y mandarla a un ejecutivo"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-armar-cot" type="button" title="Armar la cotización en PDF para este cliente"><i class="fas fa-file-invoice-dollar"></i><span>Cotizar</span></button>` : ''}
       ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización'}</span></button>` : ''}
-      ${(ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-paper-plane"></i><span>Facturación</span></button>` : ''}
+      ${(ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-plus"></i><span>Crear reserva</span></button>` : ''}
     </div>
 
     <div class="lead-tabs">
@@ -9275,10 +9275,10 @@ window.abrirClienteDesdeFacturacion = async (leadId) => {
   openDrawer(data);
 };
 
-/* ---------- Enviar a facturación (asesor/admin, desde el drawer de un lead) ---------- */
-// El botón manda el lead Y los datos de la venta. Antes iba pelado y el admin
-// tenía que perseguir por chat cédula, qué se vendió, cuándo viaja y cuánto
-// pagó -- se piden acá, que es el momento en que el asesor los tiene a mano.
+/* ---------- Crear reserva (asesor/admin, desde el drawer de un lead) ---------- */
+// El asesor carga la reserva solo: servicios, lo que pagó y listo. No hay admin
+// destino ni bandeja de confirmación (crear_reserva_con_servicios). Los ids EF_* y
+// la hoja `enviar-facturacion-sheet` conservan el nombre de cuando esto era "Enviar a facturación".
 let EF_LEAD_ACTUAL = null;
 let EF_SOLICITUD = null; // mismo uuid en los reintentos del mismo envío: el abono no se duplica
 
@@ -9312,24 +9312,15 @@ async function abrirEnviarFacturacionSheet(l) {
   EF_LEAD_ACTUAL = l;
   document.getElementById('ef-err').textContent = '';
   document.getElementById('ef-cliente').innerHTML =
-    `<i class="fas fa-user"></i> Facturando a <b>${esc(l.nombre || 'Sin nombre')}</b>${l.telefono ? ' · ' + esc(l.telefono) : ''}`;
+    `<i class="fas fa-user"></i> Reserva para <b>${esc(l.nombre || 'Sin nombre')}</b>${l.telefono ? ' · ' + esc(l.telefono) : ''}`;
 
-  ['ef-cedula', 'ef-adultos', 'ef-ninos', 'ef-infantes', 'ef-referencia', 'ef-monto-pagado',
+  ['ef-adultos', 'ef-ninos', 'ef-referencia', 'ef-monto-pagado',
    'ef-monto-total', 'ef-notas'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   document.getElementById('ef-metodo').value = '';
   document.getElementById('ef-abono').className = 'ef-abono';
   EF_SOLICITUD = crypto.randomUUID();
   document.getElementById('ef-servicios').innerHTML = '';
   efAgregarServicio('hospedaje');
-
-  const sel = document.getElementById('ef-admin');
-  sel.innerHTML = '<option value="">Luis Rueda (por defecto)</option>';
-  const { data, error } = await sb.rpc('usuarios_chat');
-  if (!error && data) {
-    (data || []).filter(u => u.rol === 'admin').forEach(u => {
-      sel.innerHTML += `<option value="${esc(u.id)}">${esc(u.nombre)}</option>`;
-    });
-  }
   openSheet('enviar-facturacion-sheet');
 }
 
@@ -9432,8 +9423,7 @@ function paxTexto(x) {
   return x.personas != null ? `${x.personas} pers.` : '';
 }
 
-// Aviso en vivo de abono vs total: que el asesor vea el saldo antes de mandar,
-// no que se entere el admin al facturar.
+// Aviso en vivo de abono vs total: que el asesor vea el saldo antes de crear la reserva.
 function efPintarAbono() {
   const pagado = parseFloat(val('ef-monto-pagado'));
   const total = parseFloat(val('ef-monto-total'));
@@ -9441,7 +9431,7 @@ function efPintarAbono() {
   if (!Number.isFinite(pagado) || !Number.isFinite(total) || total <= 0) { box.className = 'ef-abono'; return; }
   if (pagado > total) {
     box.className = 'ef-abono show malo';
-    box.textContent = 'Pagó más que el total de la venta. Revisa los dos montos antes de enviar.';
+    box.textContent = 'Pagó más que el total de la venta. Revisa los dos montos antes de crear la reserva.';
   } else if (pagado < total) {
     box.className = 'ef-abono show';
     box.textContent = `Es un abono: queda un saldo de ${money(total - pagado)}.`;
@@ -9462,37 +9452,31 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   err.textContent = '';
   const { servicios, error: errServ } = efLeerServicios();
   if (errServ) { err.textContent = errServ; return; }
-  if (!val('ef-cedula')) { err.textContent = EF_ERRORES.falta_cedula; return; }
-  if (!val('ef-metodo')) { err.textContent = EF_ERRORES.falta_metodo_pago; return; }
-  const pagado = num('ef-monto-pagado');
-  if (pagado === null) { err.textContent = 'Falta el monto que pagó (0 si todavía no ha pagado)'; return; }
+  const pagado = num('ef-monto-pagado') ?? 0; // vacío = todavía no pagó
+  if (pagado > 0 && !val('ef-metodo')) { err.textContent = EF_ERRORES.falta_metodo_pago; return; }
   if (pagado > 0 && !val('ef-referencia')) { err.textContent = EF_ERRORES.referencia_requerida; return; }
-  btn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
-  // Una sola llamada crea la reserva con sus servicios, registra el abono y deja la solicitud
-  // en la bandeja del admin; si algo falla no queda nada a medias (enviar_a_facturacion v2).
-  const { data, error } = await sb.rpc('enviar_a_facturacion', {
+  btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
+  // Una sola llamada crea la reserva con sus servicios y registra el abono; si algo falla no
+  // queda nada a medias (crear_reserva_con_servicios). No pasa por ningún admin.
+  const { data, error } = await sb.rpc('crear_reserva_con_servicios', {
     p_lead_id: EF_LEAD_ACTUAL.id,
-    p_admin_destino_id: val('ef-admin') || null,
-    p_cedula: val('ef-cedula'),
     p_servicios: servicios,
     p_adultos: ent('ef-adultos'),
     p_ninos: ent('ef-ninos'),
-    p_infantes: ent('ef-infantes'),
-    p_metodo_pago: val('ef-metodo'),
-    p_referencia_pago: val('ef-referencia'),
+    p_metodo_pago: val('ef-metodo') || null,
+    p_referencia_pago: val('ef-referencia') || null,
     p_monto_pagado: pagado,
-    p_notas_venta: val('ef-notas'),
+    p_notas: val('ef-notas') || null,
     p_solicitud_id: EF_SOLICITUD,
   });
-  btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar';
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Crear reserva';
   if (error || !data?.ok) {
     const clave = data?.error;
-    err.textContent = 'No se pudo enviar: ' + (EF_ERRORES[clave] || error?.message || clave || '');
+    err.textContent = 'No se pudo crear la reserva: ' + (EF_ERRORES[clave] || error?.message || clave || '');
     return;
   }
   closeSheet('enviar-facturacion-sheet');
-  okToast(`Reserva ${data.codigo} creada · enviada a facturar a ${data.admin_destino}`);
-  if (typeof loadLeadsEnFacturacion === 'function') loadLeadsEnFacturacion();
+  okToast(`Reserva ${data.codigo} creada${data.saldo_pendiente > 0 ? ` · saldo ${money(data.saldo_pendiente)}` : ''}`);
 });
 
 /* ---------- Bandeja de Entrada de Facturación (admin) ---------- */
@@ -32180,6 +32164,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-21', emoji: '➕', titulo: 'Crear reserva', texto: 'El botón "Enviar a facturación" ahora es "Crear reserva" y ya no pasa por un admin: eliges los servicios que compró el cliente (hospedaje, vuelos, traslados, full day, seguro u otro), anotas lo que pagó y la reserva queda creada al instante con su abono y su saldo. Después le cargas pasajeros y documentos desde Reservas.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '🧾', titulo: 'Voucher del paquete completo', texto: 'En Reservas > Servicios, el botón "Voucher del paquete" arma un solo PDF con todos los servicios de la reserva (hotel, vuelos, traslados y el resto), los pasajeros y el resumen de pago. Si falta la cédula, el teléfono o la forma de pago, los pide en una ventana antes de generarlo. Queda descargado y adjunto a la reserva, y el voucher de hotel deja de figurar como pendiente.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '✈️', titulo: 'Tarifas de vuelo nuevas y precio de Navidad', texto: 'Las tarifas "Desde" de boletería se actualizaron con lo que de verdad se cotizó: Caracas–Margarita $190, Caracas–Los Roques $335 y Valencia–Margarita $200 por persona ida y vuelta (antes 109, 320 y 160). Además, las salidas en Navidad y Fin de Año (del 15 de diciembre al 10 de enero) tienen su propio precio, más alto: $395, $390 y $300. La web, el cotizador y la IA ya eligen el precio según la fecha de viaje, así que si el cliente viaja en esas fechas ven el monto de temporada. En Boletería > Rutas se ven las dos tarifas de cada ruta.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-21', emoji: '🧳', titulo: 'Paquetes con boleto incluido', texto: 'En Tarifario > Paquetes, arriba, están los Paquetes Lotus: boleto aéreo ida y vuelta + hotel, con salidas de Navidad y Fin de Año y otros para todo el año. "Copiar enlace" te da la ficha de la web para mandarle al cliente: ahí elige desde dónde sale, fecha, noches y pasajeros, y ve el total al momento. Los admin crean, editan u ocultan paquetes con "Nuevo paquete" (eligen hotel y desde qué ciudades sale el vuelo); el precio lo calcula la web solo, con las tarifas del hotel y la tarifa "Desde" de Boletería. Los paquetes de BT Travel siguen abajo, pero ya no salen en la web.', roles: ['admin', 'asesor', 'administrativo'] },
