@@ -3950,7 +3950,7 @@ async function rvGenerarVoucherPaquete(btn) {
   const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
   const titular = pax.find(p => p.titular) || pax[0] || null;
   const prev = RV_VOUCHER_PAQUETE.get(RV_RESERVA_ID) || {};
-  const cliente = ([titular?.nombre, titular?.apellido].filter(Boolean).join(' ').trim()).replace(/\s+/g, ' ') || String(c?.nombre || r.cliente || '').trim();
+  const cliente = (([titular?.nombre, titular?.apellido].filter(Boolean).join(' ').trim()) || String(c?.nombre || r.cliente || '').trim()).replace(/\s+/g, ' ');
   const documento = titular?.numero_documento || prev.documento || '';
   const telefono = titular?.telefono || c?.telefono || r.telefono || prev.telefono || '';
   const formaPago = prev.formaPago || r.forma_pago || '';
@@ -3999,7 +3999,7 @@ async function rvGenerarVoucherPaquete(btn) {
   const codigo = c?.codigo || r.codigo || '';
   const v = {
     codigo_reserva: codigo, created_at: new Date().toISOString(),
-    cliente_nombre: String(datos.cliente || '').trim().toUpperCase(),
+    cliente_nombre: String(datos.cliente || '').replace(/\s+/g, ' ').trim().toUpperCase(),
     documento_identidad: documentoFinal, telefono: String(datos.telefono || '').trim(),
     asesor_nombre: c?.asesor || r.asesor || '',
     destino_hospedaje: destino,
