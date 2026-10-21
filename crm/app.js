@@ -3861,8 +3861,8 @@ function rvSeccionesHtml(ss, vista) {
     return `<div class="rv-sec"><b><i class="fas ${icono}"></i>${titulo}</b>${resumen ? `<span>${resumen}</span>` : ''}</div>` + items.map(s => rvServicioHtml(s, vista)).join('');
   }).join('');
 }
-function rvDetalleTexto(s) {
-  return (RV_DETALLE[s.tipo] || []).filter(([k]) => s.detalle?.[k] != null && s.detalle[k] !== '')
+const rvFechaHoraTramo = iso => { if (!iso) return ''; const [d, h] = String(iso).split('T'); const [y, m, dd] = String(d).split('-'); return dd ? `${dd}/${m}/${y}${h ? ' ' + h.slice(0, 5) : ''}` : ''; };
+function rvDetalleTexto(s) {  return (RV_DETALLE[s.tipo] || []).filter(([k]) => s.detalle?.[k] != null && s.detalle[k] !== '')
     .map(([k, l, t]) => `${l}: ${t === 'bool' ? (s.detalle[k] ? 'sí' : 'no') : s.detalle[k]}`).join(' · ');
 }
 // Voucher de una reserva que ya existe: se arma con la reserva + sus servicios y pasajeros, sin crear
@@ -3891,9 +3891,15 @@ async function rvGenerarVoucher(servicioId, btn) {
     ninos: String(r.pax_ninos || servs.reduce((n, s) => Math.max(n, Number(s.pax_ninos || 0)), 0) || ''),
     status_reserva: 'CONFIRMADO', total_general: total, monto_pagado: pagado, resta: Math.round((total - pagado) * 100) / 100,
     forma_pago: '', referencia_pago: '',
-    servicios: servs.map(s => ({ tipo: s.tipo, nombre: s.descripcion || (RV_TIPOS[s.tipo] || [s.tipo])[0], opcion: '', detalle: rvDetalleTexto(s),
-      fecha: s.fecha_inicio || '', hora: s.hora ? String(s.hora).slice(0, 5) : '', adultos: s.pax_adultos, ninos: s.pax_ninos,
-      monto: s.precio_usd_centavos != null ? Number(s.precio_usd_centavos) / 100 : null })),
+    servicios: servs.map(s => {
+      const tks = (det.boletos || []).filter(b => b.servicio_id === s.id && b.numero_ticket).map(b => b.numero_ticket);
+      const vuelos = s.tipo === 'boleto_aereo' ? (det.tramos || []).filter(t => t.servicio_id === s.id)
+        .map(t => `${t.origen_iata || ''} a ${t.destino_iata || ''} ${rvFechaHoraTramo(t.sale_en)}${t.numero_vuelo ? ' · vuelo ' + t.numero_vuelo : ''}`.trim()).join('\n') : '';
+      return { tipo: s.tipo, nombre: s.descripcion || (RV_TIPOS[s.tipo] || [s.tipo])[0], opcion: '',
+        detalle: [rvDetalleTexto(s), vuelos, tks.length ? 'E-tickets: ' + tks.join(' / ') : ''].filter(Boolean).join('\n'),
+        fecha: s.fecha_inicio || '', hora: s.hora ? String(s.hora).slice(0, 5) : '', adultos: s.pax_adultos, ninos: s.pax_ninos,
+        monto: s.precio_usd_centavos != null ? Number(s.precio_usd_centavos) / 100 : null };
+    }),
   };
   const previo = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Voucher...'; }
@@ -3904,6 +3910,7 @@ async function rvGenerarVoucher(servicioId, btn) {
     const falla = await vcAdjuntarPdf(c.id, servicioId, blob, nombre);
     vcDescargar(blob, nombre);
     if (falla) errToast(`Voucher generado y descargado, pero no se adjuntó a la ficha: ${falla}`);
+    else if (servs.some(s => s.tipo === 'boleto_aereo' && !(det.boletos || []).some(b => b.servicio_id === s.id && b.numero_ticket))) errToast('Voucher generado y adjunto, pero el boleto todavía no tiene e-tickets cargados (botón Tickets).');
     else okToast('Voucher generado, descargado y adjunto a la reserva');
   } catch (e) {
     errToast('No se pudo generar el voucher: ' + (e?.message || e));
@@ -31108,6 +31115,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-20', emoji: '📄', titulo: 'Voucher desde la reserva', texto: 'Cada servicio en Reservas > Servicios tiene su botón Voucher: arma el PDF con el cliente, los pasajeros, los tramos y los e-tickets, lo descarga y lo deja adjunto a la ficha. Pide pasajeros cargados y avisa si el boleto todavía no tiene tickets.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🧾', titulo: 'Abono con comprobante y boleto con datos completos', texto: '+ Abono en la tarjeta de la reserva ahora abre la pestaña Abonos con el formulario listo: método, referencia y captura del comprobante, que pasa a ser obligatoria (salvo Efectivo). Además, un boleto aéreo no se guarda sin localizador/PNR, aerolínea y ruta.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🗂️', titulo: 'Gestión de Personal más limpia', texto: 'Las pestañas Asignación de lotes, Freelancers, Reasignaciones, Métricas y Notificaciones ahora se activan desde Mi Perfil. Por defecto quedan ocultas para que la pantalla del equipo se centre en Personal, Asesores y Postulaciones.', roles: ['admin'] },
   { fecha: '2026-10-19', emoji: '🔗', titulo: 'Revisión de ventas al generar vouchers', texto: 'Antes de generar un voucher eliges si corresponde a una reserva existente o a otra venta. Se muestran operaciones similares aunque cambien el nombre o las fechas. Los reintentos conservan la misma operación y el abono se factura una sola vez.', roles: ['asesor', 'admin'] },
