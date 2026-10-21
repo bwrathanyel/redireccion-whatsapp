@@ -3486,7 +3486,7 @@ const RV_DETALLE = {
   traslado_terrestre: [['origen', 'Origen'], ['destino', 'Destino'], ['vehiculo', 'Vehículo']],
   traslado_maritimo: [['embarcadero', 'Embarcadero'], ['embarcacion', 'Embarcación'], ['ida_vuelta', 'Ida y vuelta', 'bool']],
   full_day: [['excursion', 'Excursión'], ['punto_encuentro', 'Punto de encuentro'], ['incluye', 'Incluye']],
-  hospedaje: [['hotel', 'Hotel'], ['habitacion', 'Habitación'], ['plan', 'Plan'], ['noches', 'Noches', 'num'], ['check_in', 'Check-in'], ['check_out', 'Check-out'], ['voucher', 'N° de voucher']],
+  hospedaje: [['hotel', 'Hotel'], ['habitacion', 'Habitación'], ['plan', 'Plan'], ['noches', 'Noches', 'calc'], ['check_in', 'Check-in'], ['check_out', 'Check-out'], ['voucher', 'N° de voucher']],
   seguro: [['aseguradora', 'Aseguradora'], ['cobertura', 'Cobertura'], ['poliza', 'Póliza']],
   otro: [['nota', 'Nota']],
 };
@@ -3494,6 +3494,8 @@ const RV_MONEDAS = ['USD', 'VES', 'EUR', 'USDT', 'COP'];
 // Datos capturados en la ventana del voucher de paquete, por reserva y por sesión.
 const RV_VOUCHER_PAQUETE = new Map();
 const RV_VOUCHER_PAGOS = ['Zelle', 'Pago móvil', 'Transferencia bancaria', 'Efectivo USD', 'Efectivo Bs', 'Binance / USDT', 'Punto de venta', 'Otro'];
+// Método de los abonos (abonos.js, METODOS) -> opción equivalente del voucher, para no pedirlo dos veces.
+const RV_METODO_A_VOUCHER = { 'Pago móvil': 'Pago móvil', Zelle: 'Zelle', Efectivo: 'Efectivo USD', Transferencia: 'Transferencia bancaria', TDC: 'Punto de venta', Binance: 'Binance / USDT' };
 const RV_TIPO_DOC = { cedula: 'Cédula', pasaporte: 'Pasaporte', rif: 'RIF', otro: 'Otro' };
 const RV_DOC_TIPOS = { voucher: 'Voucher', boleto: 'Boleto', comprobante: 'Comprobante', documento_identidad: 'Documento de identidad', otro: 'Otro' };
 const RV_DOC_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
@@ -3826,8 +3828,17 @@ async function rvGenerarVoucherPaquete(btn) {
   const cliente = (([titular?.nombre, titular?.apellido].filter(Boolean).join(' ').trim()) || String(c?.nombre || r.cliente || '').trim()).replace(/\s+/g, ' ');
   const documento = titular?.numero_documento || prev.documento || '';
   const telefono = titular?.telefono || c?.telefono || r.telefono || prev.telefono || '';
-  const formaPago = prev.formaPago || r.forma_pago || '';
-  const referencia = prev.referencia || r.referencia_pago || '';
+  // Forma de pago y referencia: lo confirmado antes en este voucher, la reserva, y si no el último abono vigente.
+  let ultimo = null;
+  if (!prev.formaPago && !r.forma_pago) {
+    try {
+      const { data: lista } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: RV_RESERVA_ID });
+      ultimo = (lista?.abonos || []).filter(a => !a.anulado_en)
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0] || null;
+    } catch (e) { console.error('voucher: abonos', e); }
+  }
+  const formaPago = prev.formaPago || r.forma_pago || RV_METODO_A_VOUCHER[ultimo?.metodo] || '';
+  const referencia = prev.referencia || r.referencia_pago || ultimo?.referencia || '';
   const faltan = [];
   if (!cliente || /^sin nombre$/i.test(cliente)) faltan.push('nombre');
   if (!documento) faltan.push('cédula');
@@ -4007,7 +4018,7 @@ function rvFormServicio(p) {
     ${rvBotones('guardar-servicio')}</div>`;
   rvDetalleCampos(s?.detalle || {});
   document.getElementById('rv-s-tipo').onchange = () => { rvDetalleCampos(rvLeerDetalle()); rvAptoCampo(); rvHoraVisible(); };
-  ['rv-s-inicio', 'rv-s-fin'].forEach(k => { document.getElementById(k).onchange = rvAptoCampo; });
+  ['rv-s-inicio', 'rv-s-fin'].forEach(k => { document.getElementById(k).onchange = () => { rvAptoCampo(); rvNochesCampo(); }; });
   ['rv-s-adultos', 'rv-s-ninos'].forEach(k => { document.getElementById(k).oninput = rvAptoAviso; });
   rvTasaVisible('rv-s');
   p.querySelectorAll('#rv-s-viaje [data-rv-viaje]').forEach(b => b.onclick = () => {
@@ -4090,11 +4101,20 @@ function rvTasaVisible(pre) {
   sel.onchange = () => { document.getElementById(pre + '-tasa').value = ''; pintar(); };
   pintar();
 }
+// Noches: dato calculado (fecha de salida - llegada), el servidor lo pisa igual al guardar. Sin fechas muestra lo guardado.
+function rvNochesCampo() {
+  const el = document.getElementById('rv-s-noches'); if (!el) return;
+  const ini = val('rv-s-inicio'), fin = val('rv-s-fin');
+  const n = ini && fin && fin > ini ? Math.round((new Date(fin + 'T00:00:00Z') - new Date(ini + 'T00:00:00Z')) / 864e5) : null;
+  el.textContent = n != null ? String(n) : (el.dataset.previo || 'Se calcula con las fechas');
+}
 function rvDetalleCampos(det) {
   const campos = RV_DETALLE[val('rv-s-tipo')] || [];
   document.getElementById('rv-s-detalle').innerHTML = campos.map(([k, l, t]) => t === 'bool'
     ? `<label class="pv-doc" style="margin-top:10px"><input type="checkbox" data-rv-det="${k}" data-t="bool" ${det[k] ? 'checked' : ''}>${l}</label>`
+    : t === 'calc' ? `<label class="fl">${l}</label><div class="csub" id="rv-s-${k}" data-previo="${esc(det[k] ?? '')}"></div>`
     : `<label class="fl">${l}</label><input class="ei" data-rv-det="${k}" data-t="${t || ''}" ${t === 'num' ? 'type="number" min="0" step="1"' : 'maxlength="200"'} value="${esc(det[k] ?? '')}">`).join('');
+  rvNochesCampo();
 }
 function rvLeerDetalle() {
   const d = {};
@@ -4108,7 +4128,11 @@ function rvLeerDetalle() {
 // El formulario reemplaza todo el detalle: lo que no tiene campo propio (el producto del tarifario) se reenvía para no perderlo.
 function rvDetalleOculto(id) {
   const previo = (RV_DET.servicios || []).find(x => x.id === id);
-  return val('rv-s-tipo') === 'hospedaje' && previo?.detalle?.producto_id != null ? { producto_id: previo.detalle.producto_id } : {};
+  if (val('rv-s-tipo') !== 'hospedaje') return {};
+  const o = {}, pd = previo?.detalle || {};
+  if (pd.producto_id != null) o.producto_id = pd.producto_id;
+  if (pd.noches != null) o.noches = pd.noches;
+  return o;
 }
 async function rvGuardarServicio(btn) {
   const err = document.getElementById('rv-f-err'), id = RV_FORM?.id || null;
@@ -4149,6 +4173,7 @@ async function rvGuardarServicio(btn) {
     if (datos.tipo === 'boleto_aereo') {
       if (!String(datos.detalle.aerolinea || '').trim()) { err.textContent = 'Falta la aerolínea del boleto.'; return; }
       if (!String(datos.detalle.ruta || datos.descripcion || '').trim()) { err.textContent = 'Falta la ruta del boleto (ej.: Valencia - Porlamar - Valencia).'; return; }
+      if (!String(datos.descripcion || '').trim()) datos.descripcion = String(datos.detalle.ruta).trim();
       if (!tramosPrevios.length && datos.detalle.ida_vuelta && !datos.fecha_inicio) { err.textContent = 'Falta la fecha de ida.'; return; }
       if (!tramosPrevios.length && datos.detalle.ida_vuelta && !datos.fecha_fin) { err.textContent = 'Para ida y vuelta cargá la fecha de vuelta.'; return; }
     }
@@ -4549,9 +4574,24 @@ async function rvTkLeer(docId, s, file) {
     rvTkRepintarLista(s);
   }
 }
+// Del ticket leído por la IA, completa en el servicio lo que está vacío: localizador, aerolínea y ruta.
+// No pisa lo que el asesor ya escribió. Los tramos los arma el botón de la tarjeta del boleto.
+async function rvTkAutoServicio(s, datos) {
+  const loc = !s.localizador ? String(datos?.localizador || '').trim().slice(0, 60) : '';
+  const detalle = { ...(s.detalle || {}) };
+  let cambia = !!loc;
+  [['aerolinea', datos?.aerolinea], ['ruta', datos?.ruta]].forEach(([k, v]) => {
+    const t = String(v || '').trim();
+    if (t && !String(detalle[k] || '').trim()) { detalle[k] = t; cambia = true; }
+  });
+  if (!cambia) return;
+  const { data, error } = await sb.rpc('guardar_servicio', { p_reserva_id: RV_RESERVA_ID, p_servicio_id: s.id, p_datos: { ...(loc ? { localizador: loc } : {}), detalle } });
+  if (error || !data?.ok) console.error('rvTkAutoServicio', error || data);
+}
 async function rvTkAutoPasajeros(s, datos) {
   if (!rvPuedeEditar()) return;
-  const det = (datos?.pasajeros || []).filter(p => p.nombre || p.apellido);
+  await rvTkAutoServicio(s, datos);
+  const det =(datos?.pasajeros || []).filter(p => p.nombre || p.apellido);
   if (!det.length) return;
   const norm = v => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
   // La IA puede leer "YENIRETT" donde la reserva dice "YENIRET": una letra de diferencia
@@ -4709,7 +4749,7 @@ function rvFormPasajero(p) {
   p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-user"></i> ${x ? 'Editar pasajero' : 'Nuevo pasajero'}</div>
     <div class="rv-2">${campo('nombre', 'Nombre', x?.nombre, 'maxlength="80"')}${campo('apellido', 'Apellido', x?.apellido, 'maxlength="80"')}</div>
     <div class="rv-2"><div><label class="fl">Documento</label><select class="ei" id="rv-p-tipodoc">${rvOpts(RV_TIPO_DOC, tipo)}</select></div><div><label class="fl">Número</label><input class="ei" id="rv-p-numdoc" value="${esc(rvDocMostrar(x?.numero_documento, tipo))}" maxlength="30" autocomplete="off"></div></div>
-    <div style="margin-top:8px">${campo('nacionalidad', 'Nacionalidad', x?.nacionalidad, 'maxlength="60"')}</div>
+    <div class="rv-2" style="margin-top:8px">${campo('nacionalidad', 'Nacionalidad', x?.nacionalidad, 'maxlength="60"')}${campo('telefono', 'Teléfono', x?.telefono, 'maxlength="30" inputmode="tel" autocomplete="off"')}</div>
     <label class="pv-doc" style="margin-top:10px"><input type="checkbox" id="rv-p-titular" ${x?.titular ? 'checked' : ''}>Titular de la reserva</label>
     ${rvBotones('guardar-pasajero')}</div>`;
   const tipoSel = p.querySelector('#rv-p-tipodoc'), num = p.querySelector('#rv-p-numdoc');
@@ -4726,7 +4766,7 @@ async function rvGuardarPasajero(btn) {
   const datos = {
     nombre: val('rv-p-nombre'), apellido: val('rv-p-apellido'), tipo_documento: tipo,
     numero_documento: tipo === 'cedula' && !rvDocDigitos(num) ? '' : num,
-    nacionalidad: val('rv-p-nacionalidad'), titular: document.getElementById('rv-p-titular').checked,
+    nacionalidad: val('rv-p-nacionalidad'), telefono: val('rv-p-telefono').trim(), titular: document.getElementById('rv-p-titular').checked,
   };
   if (!(await rvEnviar(btn, sb.rpc('guardar_pasajero', { p_reserva_id: RV_RESERVA_ID, p_pasajero_id: id, p_datos: datos })))) return;
   RV_FORM = null; okToast(id ? 'Pasajero actualizado' : 'Pasajero agregado'); rvTrasCambio();
@@ -9216,7 +9256,77 @@ async function abrirEnviarFacturacionSheet(l) {
   EF_SOLICITUD = crypto.randomUUID();
   document.getElementById('ef-servicios').innerHTML = '';
   efAgregarServicio('hospedaje');
+  efAvisoPrecarga('');
   openSheet('enviar-facturacion-sheet');
+  efPrecargar(l, EF_SOLICITUD);
+}
+
+// Precarga desde la última cotización del lead (si no hay, desde sus fechas y personas): el asesor
+// confirma en vez de reescribir. Corre al abrir la hoja, con las tarjetas vacías; si la hoja se cierra
+// o se abre otro lead mientras consulta, `solicitud` ya no coincide y no toca nada.
+const EF_DE_COT = { hotel: 'hospedaje', boleto: 'boleto_aereo', traslado: 'traslado_terrestre', fullday: 'full_day', tour: 'full_day', paquete: 'otro', otro: 'otro' };
+function efPonerCampo(card, k, v) {
+  const e = card.querySelector(`[data-k="${k}"]`);
+  if (!e || v == null || v === '') return;
+  e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true }));
+}
+function efAvisoPrecarga(texto) {
+  document.getElementById('ef-precarga')?.remove();
+  if (!texto) return;
+  const av = document.createElement('div');
+  av.id = 'ef-precarga';
+  av.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin:0 0 8px';
+  av.innerHTML = `<span style="flex:1"><i class="fas fa-clipboard-list"></i> ${esc(texto)}</span><button type="button" class="btn-sm" id="ef-precarga-limpiar">Limpiar</button>`;
+  document.getElementById('ef-servicios').before(av);
+  document.getElementById('ef-precarga-limpiar').addEventListener('click', () => {
+    av.remove();
+    ['ef-adultos', 'ef-ninos'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('ef-servicios').innerHTML = ''; efAgregarServicio('hospedaje');
+  });
+}
+async function efPrecargar(l, solicitud) {
+  let cot = null;
+  try {
+    const { data } = await sb.from('cotizaciones_boleteria').select('numero,created_at,items')
+      .eq('lead_id', l.id).is('anulado_en', null).order('created_at', { ascending: false }).limit(1);
+    cot = data?.[0] || null;
+  } catch (e) { console.error('efPrecargar', e); }
+  if (EF_SOLICITUD !== solicitud) return;
+  const hoy = cbHoy(), fecha = f => (f && f >= hoy ? f : '');   // una fecha pasada la completa el asesor
+  const items = (cot?.items || []).filter(it => EF_DE_COT[it.tipo]);
+  const cont = document.getElementById('ef-servicios');
+  if (items.length) {
+    await cbCargarProductos();
+    if (EF_SOLICITUD !== solicitud) return;
+    cont.innerHTML = '';
+    for (const it of items) {
+      const tipo = EF_DE_COT[it.tipo], card = efAgregarServicio(tipo), st = card._hotel;
+      if (tipo === 'hospedaje') {
+        if (it.producto_id && cbHoteles.has(Number(it.producto_id))) await efHotelElegir(card, it.producto_id);
+        else Object.assign(st, { nombre: it.nombre || '' });
+        if (EF_SOLICITUD !== solicitud) return;
+        if (it.plan) st.plan = it.plan;
+        if (it.hab) st.hab = it.hab;
+        efHotelPintar(card, true);
+      } else efPonerCampo(card, 'p', it.tipo === 'boleto' || it.tipo === 'traslado' ? it.ruta : it.nombre);
+      if (it.tipo === 'boleto') efPonerCampo(card, 'aerolinea', it.aerolinea);
+      efPonerCampo(card, 'f1', fecha(it.ida));
+      if (it.tipo !== 'fullday' && it.tipo !== 'tour' && it.tipo !== 'otro' && it.viaje !== 'ow') efPonerCampo(card, 'f2', fecha(it.vuelta));
+      efPonerCampo(card, 'precio', (Math.round(cbImporte(it) * 100) / 100).toFixed(2));
+    }
+    const maximo = k => Math.max(0, ...items.map(it => Math.floor(Number(it[k]) || 0)));
+    if (maximo('adultos')) document.getElementById('ef-adultos').value = maximo('adultos');
+    if (maximo('ninos')) document.getElementById('ef-ninos').value = maximo('ninos');
+    efAvisoPrecarga(`Precargado desde la cotización${cot.numero ? ' ' + cot.numero : ''} del ${fechaCorta(String(cot.created_at).slice(0, 10))}`);
+    efRecalcular();
+    return;
+  }
+  const card = cont.querySelector('.ef-serv'), personas = parseInt(l.personas, 10);
+  if (!card || !(fecha(l.fecha_viaje_desde) || personas > 0)) return;
+  efPonerCampo(card, 'f1', fecha(l.fecha_viaje_desde));
+  if (fecha(l.fecha_viaje_desde)) efPonerCampo(card, 'f2', fecha(l.fecha_viaje_hasta));
+  if (personas > 0) document.getElementById('ef-adultos').value = personas;
+  efAvisoPrecarga('Precargado con las fechas y personas del lead (no hay cotización)');
 }
 
 // Un servicio por tarjeta. Las claves del detalle son las que acepta detalle_servicio_valido
