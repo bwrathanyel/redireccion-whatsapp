@@ -3625,6 +3625,11 @@ const RV_MONEDAS = ['USD', 'VES', 'EUR', 'USDT', 'COP'];
 const RV_TIPO_DOC = { cedula: 'Cédula', pasaporte: 'Pasaporte', rif: 'RIF', otro: 'Otro' };
 const RV_DOC_TIPOS = { voucher: 'Voucher', boleto: 'Boleto', comprobante: 'Comprobante', documento_identidad: 'Documento de identidad', otro: 'Otro' };
 const RV_DOC_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+// Lectura IA de los tickets: las URLs firmadas duran 120 s (se cachean 90) y `datos_ia` se
+// guarda en reserva_documentos, así que RV_DOC_IA se recarga junto con la reserva.
+const RV_TK_URLS = new Map();
+const RV_TK_LEYENDO = new Set();
+let RV_DOC_IA = {}, RV_TK_IA_CARGANDO = false;
 const RV_ERR = {
   'no autorizado': 'No tenés permiso sobre esta reserva', no_autorizado: 'No tenés permiso sobre esta reserva',
   reserva_no_existe: 'La reserva no existe', servicio_no_existe: 'El servicio ya no existe', servicio_anulado: 'El servicio está anulado',
@@ -3748,6 +3753,7 @@ async function rvCargar() {
   RV_APTOS = aptos;
   RV_DET = data;
   rvRender();
+  rvTkCargarIa();
 }
 function rvRender() {
   const { servicios = [], pasajeros = [], documentos = [], reserva = {} } = RV_DET;
@@ -3820,7 +3826,8 @@ function rvAccion(accion, id, btn) {
     case 'guardar-tramos': return rvGuardarTramos(btn);
     case 'tickets': return rvForm({ tipo: 'tickets', id: n });
     case 'guardar-tickets': return rvGuardarTickets(btn);
-    case 'subir-tickets': return rvSubirTickets(btn);
+    case 'leer-ticket': return rvTkLeerDoc(n);
+    case 'pasajeros-ticket': return rvTkUsarPasajeros(n);
     case 'evento': return rvForm({ tipo: 'evento', id: n, evento: btn.dataset.evento });
     case 'guardar-evento': return rvGuardarEvento(btn);
   }
@@ -4259,14 +4266,62 @@ async function rvGuardarTramos(btn) {
   RV_FORM = null; okToast('Tramos guardados'); rvTrasCambio();
 }
 const rvTicketsDocs = s => (RV_DET.documentos || []).filter(d => d.tipo === 'boleto' && d.servicio_id === s.id);
+function rvTkUrl(docId, refrescar) {
+  const c = RV_TK_URLS.get(docId);
+  if (!refrescar && c && c.exp > Date.now()) return Promise.resolve(c.url);
+  return sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: docId } }).then(r => {
+    if (r.error || !r.data?.ok) throw new Error('sin_url');
+    RV_TK_URLS.set(docId, { url: r.data.url, exp: Date.now() + 90000 });
+    return r.data.url;
+  });
+}
 function rvTicketsDocsHtml(s) {
   const docs = rvTicketsDocs(s);
-  if (!docs.length) return '';
-  return `<div class="rv-bol-t"><i class="fas fa-paperclip"></i> Tickets subidos (${docs.length})</div>` + docs.map(d => `<div class="rv-item">
-    <div class="rv-item-top"><b><i class="fas ${d.mime === 'application/pdf' ? 'fa-file-pdf' : 'fa-file-image'}"></i> ${esc(d.nombre)}</b></div>
-    <div class="rv-meta"><span>${rvPeso(Number(d.tamano_bytes || 0))}</span><span>${pvFecha(d.created_at)}${d.subido_por ? ' · ' + esc(d.subido_por) : ''}</span></div>
-    <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}"><i class="fas fa-eye"></i> Ver</button><button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
-  </div>`).join('');
+  if (!docs.length) return '<div class="pv-empty">Todavía no hay tickets subidos.</div>';
+  return `<div class="rv-bol-t"><i class="fas fa-paperclip"></i> Tickets subidos (${docs.length})</div>` + docs.map(d => {
+    const ia = RV_DOC_IA[d.id], pas = ia?.pasajeros || [], leyendo = RV_TK_LEYENDO.has(d.id);
+    const det = ia ? [ia.ruta, ia.aerolinea, ia.fecha ? pvFecha(ia.fecha) : '', ia.localizador ? 'Loc. ' + ia.localizador : ''].filter(Boolean).join(' · ') : '';
+    return `<div class="rv-tk-card">
+      <div class="rv-tk-thumb" data-tk-thumb="${d.id}"><i class="fas ${d.mime === 'application/pdf' ? 'fa-file-pdf' : 'fa-file-image'}"></i></div>
+      <div class="rv-tk-body">
+        <div class="rv-tk-name">${esc(d.nombre)}</div>
+        <div class="rv-meta"><span>${rvPeso(Number(d.tamano_bytes || 0))}</span><span>${pvFecha(d.created_at)}${d.subido_por ? ' · ' + esc(d.subido_por) : ''}</span></div>
+        ${pas.length ? `<div class="rv-tk-pas">${pas.map(p => `<span class="rv-tk-chip"><i class="fas fa-user"></i>${esc([p.nombre, p.apellido].filter(Boolean).join(' '))}${p.numero_ticket ? ' · <b>' + esc(p.numero_ticket) + '</b>' : ''}</span>`).join('')}</div>`
+          : leyendo ? '<div class="csub"><i class="fas fa-spinner fa-spin"></i> Leyendo el ticket…</div>'
+          : `<div class="csub">${ia ? 'No detecté pasajeros en este ticket' : 'Sin lectura: probá Releer'}</div>`}
+        ${det ? `<div class="rv-tk-det">${esc(det)}</div>` : ''}
+        <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}"><i class="fas fa-eye"></i> Ver</button><button class="btn-sm" type="button" data-rv-accion="leer-ticket" data-id="${d.id}"><i class="fas fa-wand-magic-sparkles"></i> Releer</button>${pas.length && rvPuedeEditar() ? `<button class="btn-sm" type="button" data-rv-accion="pasajeros-ticket" data-id="${d.id}"><i class="fas fa-user-plus"></i> Usar en Pasajeros</button>` : ''}<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function rvTkMiniaturas() {
+  for (const box of [...document.querySelectorAll('#drawerContent [data-tk-thumb]')]) {
+    if (box.dataset.cargada === '1') continue;
+    const id = Number(box.dataset.tkThumb), d = (RV_DET.documentos || []).find(x => x.id === id);
+    if (!d) continue;
+    box.dataset.cargada = '1';
+    try {
+      if (d.mime === 'application/pdf') {
+        const lib = await cargarPdfjs();
+        const pdf = await lib.getDocument({ data: await (await fetch(await rvTkUrl(id))).arrayBuffer() }).promise;
+        const page = await pdf.getPage(1), vp = page.getViewport({ scale: 1 });
+        const canvas = document.createElement('canvas');
+        canvas.width = 180; canvas.height = Math.round(180 / vp.width * vp.height);
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport: page.getViewport({ scale: 180 / vp.width }) }).promise;
+        box.innerHTML = '<img alt="">'; box.querySelector('img').src = canvas.toDataURL('image/jpeg', .8);
+      } else {
+        box.innerHTML = '<img alt="">'; box.querySelector('img').src = await rvTkUrl(id);
+      }
+      box.classList.add('con-foto');
+    } catch (e) { console.error('miniatura ticket', e); }
+  }
+}
+function rvTkRepintarLista(s) {
+  const box = document.getElementById('rv-tk-lista');
+  if (!box || !s) return;
+  box.innerHTML = rvTicketsDocsHtml(s);
+  rvTkMiniaturas();
 }
 function rvFormTickets(p) {
   const s = rvServicioForm(); if (!s) { RV_FORM = null; return rvRenderServicios(); }
@@ -4274,46 +4329,182 @@ function rvFormTickets(p) {
   p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-ticket"></i> Tickets · ${esc(s.detalle?.ruta || s.descripcion || 'Boleto aéreo')}</div>
     ${pax.length ? pax.map(x => `<label class="fl">${esc([x.nombre, x.apellido].filter(Boolean).join(' '))}</label><input class="ei" data-pax="${x.id}" data-antes="${esc(tk.find(b => b.pasajero_id === x.id)?.numero_ticket || '')}" maxlength="30" value="${esc(tk.find(b => b.pasajero_id === x.id)?.numero_ticket || '')}" placeholder="Número de ticket (vacío = sin ticket)">`).join('') : ''}
     <div class="rv-bol-t"><i class="fas fa-cloud-arrow-up"></i> Subir tickets</div>
-    <label class="rv-tk-drop" id="rv-tk-drop" for="rv-tk-file"><i class="fas fa-file-arrow-up"></i><div><span id="rv-tk-txt">Tocá para elegir los tickets</span><small>PDF o foto · hasta 10 MB por archivo · podés elegir varios</small></div></label>
+    <div class="rv-tk-drop" id="rv-tk-drop" role="button" tabindex="0"><i class="fas fa-file-circle-plus"></i><div><span id="rv-tk-txt">Arrastrá las fotos, pegá con Ctrl+V o hacé clic</span><small>PDF, JPG, PNG o WEBP · hasta 10 MB · podés subir varios</small></div></div>
     <input class="rv-tk-file" id="rv-tk-file" type="file" accept="${RV_DOC_MIMES.join(',')}" multiple>
-    <button class="dbtn gh rv-add" type="button" data-rv-accion="subir-tickets" style="margin-top:9px"><i class="fas fa-cloud-arrow-up"></i> Subir</button>
-    ${rvTicketsDocsHtml(s)}
+    <div class="rv-tk-estado" id="rv-tk-estado"></div>
+    <div id="rv-tk-lista">${rvTicketsDocsHtml(s)}</div>
     ${pax.length ? rvBotones('guardar-tickets') : `<div class="edit-err" id="rv-f-err"></div><button class="dbtn gh" type="button" data-rv-accion="cancelar" style="margin-top:9px">Cerrar</button>`}</div>`;
-  const inp = p.querySelector('#rv-tk-file');
-  if (inp) inp.onchange = () => {
-    const n = inp.files?.length || 0, txt = document.getElementById('rv-tk-txt'), drop = document.getElementById('rv-tk-drop');
-    if (drop) drop.classList.toggle('sel', n > 0);
-    if (txt) txt.textContent = !n ? 'Tocá para elegir los tickets' : n === 1 ? inp.files[0].name : `${n} archivos: ${[...inp.files].map(f => f.name).join(', ')}`;
-  };
+  const inp = p.querySelector('#rv-tk-file'), drop = p.querySelector('#rv-tk-drop');
+  document.removeEventListener('paste', rvTkPaste); document.addEventListener('paste', rvTkPaste);
+  drop.onclick = () => inp?.click();
+  drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inp?.click(); } };
+  inp.onchange = () => { const fs = [...(inp.files || [])]; inp.value = ''; if (fs.length) rvTkSubirArchivos(fs, s); };
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+  ['dragleave', 'dragend'].forEach(ev => drop.addEventListener(ev, () => drop.classList.remove('drag')));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag'); const fs = [...(e.dataTransfer?.files || [])]; if (fs.length) rvTkSubirArchivos(fs, s); });
+  rvTkMiniaturas();
 }
-async function rvSubirTickets(btn) {
-  const err = document.getElementById('rv-f-err'), input = document.getElementById('rv-tk-file'), s = rvServicioForm();
-  const files = [...(input?.files || [])], reservaId = RV_RESERVA_ID;
-  if (!s) return;
-  if (!files.length) { err.textContent = 'Elegí al menos un archivo'; return; }
-  const malo = files.find(f => !RV_DOC_MIMES.includes(f.type));
-  if (malo) { err.textContent = `${malo.name}: ${RV_ERR.formato_invalido}`; return; }
-  const grande = files.find(f => f.size > 10485760);
-  if (grande) { err.textContent = `${grande.name}: ${RV_ERR.tamano_invalido}`; return; }
-  const previo = btn.innerHTML;
-  err.textContent = ''; btn.disabled = true;
-  const fin = msg => { btn.disabled = false; btn.innerHTML = previo; if (msg) err.textContent = msg; };
-  let subidos = 0;
-  for (const [i, file] of files.entries()) {
-    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Subiendo ${i + 1}/${files.length}...`;
-    const nombre = file.name.slice(0, 150);
-    const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: reservaId, servicio_id: s.id, tipo: 'boleto', nombre, mime: file.type, tamano: file.size } });
-    if (firma.error || !firma.data?.ok) { const m = await msgErrorFn(firma.error, firma.data); return fin(`No se pudo subir ${file.name}: ${RV_ERR[m] || m}`); }
-    const up = await sb.storage.from('reservas-documentos').uploadToSignedUrl(firma.data.path, firma.data.token, file, { contentType: file.type });
-    if (up.error) { console.error('subir ticket', up.error); return fin(`No se pudo subir ${file.name}: ${up.error.message || 'error de red'}`); }
-    const { data, error } = await sb.rpc('registrar_documento', { p_reserva_id: reservaId, p_servicio_id: s.id, p_tipo: 'boleto', p_storage_path: firma.data.path, p_nombre: nombre });
-    if (error || !data?.ok) return fin(`No se pudo guardar ${file.name}: ${rvErr(error, data)}`);
-    subidos++;
+function rvTkNombre(file) {
+  const n = String(file?.name || '').trim();
+  const ext = (String(file?.type || '').split('/')[1] || 'bin').replace('jpeg', 'jpg');
+  if (!n || /^image\.\w+$/i.test(n)) return `captura-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
+  return n.slice(0, 150);
+}
+async function rvTkContenido(file) {
+  if (file.type === 'application/pdf') {
+    const texto = await textoDelPdf(file).catch(() => '');
+    if (texto.length >= 40) return { texto };
+    const lib = await cargarPdfjs();
+    const pdf = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+    const page = await pdf.getPage(1), vp = page.getViewport({ scale: 1 });
+    const canvas = document.createElement('canvas');
+    canvas.width = 1400; canvas.height = Math.round(1400 / vp.width * vp.height);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: page.getViewport({ scale: 1400 / vp.width }) }).promise;
+    return { mime: 'image/jpeg', imagen: canvas.toDataURL('image/jpeg', .82).split(',')[1] };
   }
-  fin();
-  okToast(subidos === 1 ? 'Ticket subido' : `${subidos} tickets subidos`);
+  return { mime: file.type, imagen: await archivoABase64(file) };
+}
+async function rvTkSubirArchivos(files, s) {
+  if (!s || !files?.length) return;
+  const estado = document.getElementById('rv-tk-estado'), drop = document.getElementById('rv-tk-drop');
+  const malo = files.find(f => !RV_DOC_MIMES.includes(f.type));
+  if (malo) { errToast(`${rvTkNombre(malo)}: ${RV_ERR.formato_invalido}`); return; }
+  const grande = files.find(f => f.size > 10485760);
+  if (grande) { errToast(`${rvTkNombre(grande)}: ${RV_ERR.tamano_invalido}`); return; }
+  drop?.classList.add('cargando');
+  let subidos = 0;
+  try {
+    for (const [i, file] of files.entries()) {
+      if (estado) estado.textContent = `Subiendo ${i + 1} de ${files.length}…`;
+      const nombre = rvTkNombre(file);
+      const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: RV_RESERVA_ID, servicio_id: s.id, tipo: 'boleto', nombre, mime: file.type, tamano: file.size } });
+      if (firma.error || !firma.data?.ok) { const m = await msgErrorFn(firma.error, firma.data); errToast(`No se pudo subir ${nombre}: ${RV_ERR[m] || m}`); continue; }
+      const up = await sb.storage.from('reservas-documentos').uploadToSignedUrl(firma.data.path, firma.data.token, file, { contentType: file.type });
+      if (up.error) { console.error('subir ticket', up.error); errToast(`No se pudo subir ${nombre}: ${up.error.message || 'error de red'}`); continue; }
+      const { data, error } = await sb.rpc('registrar_documento', { p_reserva_id: RV_RESERVA_ID, p_servicio_id: s.id, p_tipo: 'boleto', p_storage_path: firma.data.path, p_nombre: nombre });
+      if (error || !data?.ok) { errToast(`No se pudo guardar ${nombre}: ${rvErr(error, data)}`); continue; }
+      subidos++;
+      if (estado) estado.textContent = `Leyendo el ticket ${i + 1} de ${files.length}…`;
+      await rvTkLeer(data.documento_id, s, file);
+    }
+  } finally {
+    drop?.classList.remove('cargando');
+    if (estado) estado.textContent = '';
+  }
+  if (subidos) okToast(subidos === 1 ? 'Ticket subido' : `${subidos} tickets subidos`);
   await rvCargar();
   if (RV_FORM?.tipo === 'tickets') rvFormTickets(rvPanel('servicios'));
+}
+async function rvTkLeer(docId, s, file) {
+  if (!docId || !file) return;
+  RV_TK_LEYENDO.add(docId);
+  rvTkRepintarLista(s);
+  try {
+    const contenido = await rvTkContenido(file);
+    const { data, error } = await sb.functions.invoke('analizar-ticket', { body: { documento_id: docId, ...contenido } });
+    if (error || !data?.ok) {
+      const m = error ? await msgErrorFn(error, data) : (data?.error || 'extraccion_fallida');
+      errToast(m === 'no_es_ticket' ? 'El archivo no parece un ticket aéreo' : `No pude leer el ticket: ${RV_ERR[m] || m}`);
+      return;
+    }
+    RV_DOC_IA[docId] = data.datos;
+    await rvTkAutoPasajeros(s, data.datos);
+  } finally {
+    RV_TK_LEYENDO.delete(docId);
+    rvTkRepintarLista(s);
+  }
+}
+async function rvTkAutoPasajeros(s, datos) {
+  if (!rvPuedeEditar()) return;
+  const det = (datos?.pasajeros || []).filter(p => p.nombre || p.apellido);
+  if (!det.length) return;
+  const norm = v => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+  // La IA puede leer "YENIRETT" donde la reserva dice "YENIRET": una letra de diferencia
+  // se toma como el mismo pasajero para no duplicarlo al releer el ticket.
+  const dist = (a, b) => {
+    if (a === b) return 0;
+    if (Math.abs(a.length - b.length) > 2) return 3;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return prev[b.length];
+  };
+  const pasajeros = RV_DET.pasajeros || [];
+  const tickets = (RV_DET.boletos || []).filter(b => b.servicio_id === s.id);
+  let creados = 0;
+  for (const p of det) {
+    const nombre = (p.nombre || p.apellido || '').trim(), apellido = (p.apellido || '').trim();
+    const clave = norm(`${apellido} ${nombre}`);
+    const ya = pasajeros.find(x => {
+      const a = norm(`${x.apellido || ''} ${x.nombre || ''}`), b = norm(`${x.nombre || ''} ${x.apellido || ''}`);
+      return a === clave || b === clave || (clave.length > 8 && (dist(a, clave) <= 1 || dist(b, clave) <= 1));
+    });
+    const tipo = p.tipo_documento || 'cedula';
+    const num = tipo === 'cedula' && p.numero_documento ? rvDocMostrar(p.numero_documento, 'cedula') : (p.numero_documento || '');
+    if (ya) {
+      if (p.numero_ticket && !tickets.some(b => b.pasajero_id === ya.id && b.numero_ticket)) {
+        await sb.rpc('boleteria_guardar_boleto', { p_servicio_id: s.id, p_pasajero_id: ya.id, p_numero_ticket: p.numero_ticket });
+        tickets.push({ pasajero_id: ya.id, numero_ticket: p.numero_ticket });
+      }
+      continue;
+    }
+    const { data } = await sb.rpc('guardar_pasajero', { p_reserva_id: RV_RESERVA_ID, p_pasajero_id: null, p_datos: {
+      nombre, apellido, tipo_documento: tipo, numero_documento: num, titular: !pasajeros.length && !creados } });
+    if (!data?.ok || !data.pasajero) continue;
+    creados++;
+    pasajeros.push(data.pasajero);
+    if (p.numero_ticket) {
+      await sb.rpc('boleteria_guardar_boleto', { p_servicio_id: s.id, p_pasajero_id: data.pasajero.id, p_numero_ticket: p.numero_ticket });
+      tickets.push({ pasajero_id: data.pasajero.id, numero_ticket: p.numero_ticket });
+    }
+  }
+  if (creados) okToast(creados === 1 ? 'Pasajero cargado del ticket' : `${creados} pasajeros cargados del ticket`);
+  return creados;
+}
+async function rvTkUsarPasajeros(docId) {
+  const s = rvServicioForm();
+  if (!s) return;
+  const creados = await rvTkAutoPasajeros(s, RV_DOC_IA[docId] || {});
+  if (!creados) errToast('Los pasajeros de este ticket ya están cargados');
+  await rvCargar();
+  if (RV_FORM?.tipo === 'tickets') rvFormTickets(rvPanel('servicios'));
+}
+async function rvTkLeerDoc(docId) {
+  const s = rvServicioForm(); if (!s) return;
+  const d = (RV_DET.documentos || []).find(x => x.id === docId); if (!d) return;
+  const estado = document.getElementById('rv-tk-estado');
+  if (estado) estado.textContent = 'Leyendo el ticket…';
+  try {
+    const blob = await (await fetch(await rvTkUrl(docId, true))).blob();
+    await rvTkLeer(docId, s, new File([blob], d.nombre, { type: d.mime }));
+  } catch (e) {
+    errToast('No pude abrir el ticket: ' + (e?.message || e));
+  } finally { if (estado) estado.textContent = ''; }
+}
+function rvTkPaste(e) {
+  if (RV_FORM?.tipo !== 'tickets') return;
+  const s = rvServicioForm(); if (!s) return;
+  const fotos = [...(e.clipboardData?.items || [])].filter(i => i.kind === 'file' && /^image\//.test(i.type)).map(i => i.getAsFile()).filter(Boolean);
+  if (!fotos.length) return;
+  e.preventDefault();
+  const files = fotos.map((f, i) => { try { return new File([f], f.name || `captura-${Date.now()}-${i}.png`, { type: f.type }); } catch { return f; } });
+  rvTkSubirArchivos(files, s);
+}
+async function rvTkCargarIa() {
+  if (!(RV_DET?.documentos || []).some(d => d.tipo === 'boleto')) { RV_DOC_IA = {}; return; }
+  if (RV_TK_IA_CARGANDO) return;
+  RV_TK_IA_CARGANDO = true;
+  try {
+    const { data } = await sb.rpc('reserva_tickets_ia', { p_reserva_id: RV_RESERVA_ID });
+    if (!data?.ok) return;
+    const map = {};
+    (data.documentos || []).forEach(x => { if (x.datos_ia) map[x.documento_id] = x.datos_ia; });
+    RV_DOC_IA = map;
+    if (RV_FORM?.tipo === 'tickets') rvTkRepintarLista(rvServicioForm());
+  } finally { RV_TK_IA_CARGANDO = false; }
 }
 async function rvGuardarTickets(btn) {
   const err = document.getElementById('rv-f-err'), id = RV_FORM.id;
@@ -4362,29 +4553,45 @@ function rvRenderPasajeros(suave) {
   p.innerHTML = (edita ? '<button class="dbtn gh rv-add" type="button" data-rv-accion="nuevo-pasajero"><i class="fas fa-user-plus"></i> Agregar pasajero</button>' : '')
     + (ps.length ? ps.map(x => `<div class="rv-item">
       <div class="rv-item-top"><b><i class="fas fa-user"></i> ${esc([x.nombre, x.apellido].filter(Boolean).join(' '))}</b>${x.titular ? '<span class="rv-estado rv-e-confirmado">Titular</span>' : ''}</div>
-      <div class="rv-meta">${x.numero_documento ? `<span><i class="fas fa-id-card"></i>${esc(RV_TIPO_DOC[x.tipo_documento] || 'Doc.')} ${esc(x.numero_documento)}</span>` : ''}${x.fecha_nacimiento ? `<span><i class="fas fa-cake-candles"></i>${pvFecha(x.fecha_nacimiento)}</span>` : ''}${x.nacionalidad ? `<span><i class="fas fa-flag"></i>${esc(x.nacionalidad)}</span>` : ''}${x.telefono ? `<span><i class="fas fa-phone"></i>${esc(x.telefono)}</span>` : ''}${x.email ? `<span><i class="fas fa-envelope"></i>${esc(x.email)}</span>` : ''}</div>
+      <div class="rv-meta">${x.numero_documento ? `<span><i class="fas fa-id-card"></i>${esc(RV_TIPO_DOC[x.tipo_documento] || 'Doc.')} ${esc(x.numero_documento)}</span>` : ''}${x.nacionalidad ? `<span><i class="fas fa-flag"></i>${esc(x.nacionalidad)}</span>` : ''}</div>
       ${edita ? `<div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="editar-pasajero" data-id="${x.id}"><i class="fas fa-pen"></i> Editar</button><button class="btn-sm rv-danger" type="button" data-rv-accion="borrar-pasajero" data-id="${x.id}"><i class="fas fa-trash"></i> Borrar</button></div>` : ''}
     </div>`).join('') : '<div class="pv-empty">Sin pasajeros cargados</div>');
+}
+const rvDocDigitos = v => String(v ?? '').replace(/\D/g, '').slice(0, 9);
+const rvDocPuntos = d => d.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+function rvDocMostrar(v, tipo) {
+  const s = String(v ?? '').trim();
+  if (tipo !== 'cedula') return s.replace(/\./g, '');
+  const pref = /^e/i.test(s) ? 'E-' : 'V-';
+  const d = rvDocDigitos(s);
+  return d ? pref + rvDocPuntos(d) : pref;
 }
 function rvFormPasajero(p) {
   const x = RV_FORM.id ? (RV_DET.pasajeros || []).find(y => y.id === RV_FORM.id) : null;
   if (RV_FORM.id && !x) { RV_FORM = null; return rvRenderPasajeros(); }
+  const tipo = x?.tipo_documento || 'cedula';
   const campo = (id, label, v, extra = '') => `<div><label class="fl">${label}</label><input class="ei" id="rv-p-${id}" value="${esc(v || '')}" ${extra}></div>`;
   p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-user"></i> ${x ? 'Editar pasajero' : 'Nuevo pasajero'}</div>
     <div class="rv-2">${campo('nombre', 'Nombre', x?.nombre, 'maxlength="80"')}${campo('apellido', 'Apellido', x?.apellido, 'maxlength="80"')}</div>
-    <div class="rv-2"><div><label class="fl">Documento</label><select class="ei" id="rv-p-tipodoc"><option value="">Sin documento</option>${rvOpts(RV_TIPO_DOC, x?.tipo_documento)}</select></div>${campo('numdoc', 'Número', x?.numero_documento, 'maxlength="30"')}</div>
-    <div class="rv-2">${campo('nacimiento', 'Fecha de nacimiento', x?.fecha_nacimiento, 'type="date"')}${campo('nacionalidad', 'Nacionalidad', x?.nacionalidad, 'maxlength="60"')}</div>
-    <div class="rv-2">${campo('telefono', 'Teléfono', x?.telefono, 'maxlength="30" inputmode="tel"')}${campo('email', 'Email', x?.email, 'maxlength="120" type="email"')}</div>
+    <div class="rv-2"><div><label class="fl">Documento</label><select class="ei" id="rv-p-tipodoc">${rvOpts(RV_TIPO_DOC, tipo)}</select></div><div><label class="fl">Número</label><input class="ei" id="rv-p-numdoc" value="${esc(rvDocMostrar(x?.numero_documento, tipo))}" maxlength="30" autocomplete="off"></div></div>
+    <div style="margin-top:8px">${campo('nacionalidad', 'Nacionalidad', x?.nacionalidad, 'maxlength="60"')}</div>
     <label class="pv-doc" style="margin-top:10px"><input type="checkbox" id="rv-p-titular" ${x?.titular ? 'checked' : ''}>Titular de la reserva</label>
     ${rvBotones('guardar-pasajero')}</div>`;
+  const tipoSel = p.querySelector('#rv-p-tipodoc'), num = p.querySelector('#rv-p-numdoc');
+  const aplicar = () => { if (tipoSel.value === 'cedula') num.value = rvDocMostrar(num.value, 'cedula'); num.inputMode = tipoSel.value === 'cedula' ? 'numeric' : 'text'; };
+  aplicar();
+  tipoSel.onchange = () => { if (tipoSel.value !== 'cedula') num.value = num.value.replace(/^[VEve]-\s*/, '').replace(/\./g, ''); aplicar(); };
+  num.oninput = () => { if (tipoSel.value === 'cedula') num.value = rvDocMostrar(num.value, 'cedula'); };
+  num.onblur = aplicar;
 }
 async function rvGuardarPasajero(btn) {
   const err = document.getElementById('rv-f-err'), id = RV_FORM?.id || null;
   if (!val('rv-p-nombre').trim()) { err.textContent = RV_ERR.nombre_requerido; return; }
+  const tipo = val('rv-p-tipodoc') || 'cedula', num = val('rv-p-numdoc').trim();
   const datos = {
-    nombre: val('rv-p-nombre'), apellido: val('rv-p-apellido'), tipo_documento: val('rv-p-tipodoc'), numero_documento: val('rv-p-numdoc'),
-    fecha_nacimiento: val('rv-p-nacimiento'), nacionalidad: val('rv-p-nacionalidad'), telefono: val('rv-p-telefono'), email: val('rv-p-email'),
-    titular: document.getElementById('rv-p-titular').checked,
+    nombre: val('rv-p-nombre'), apellido: val('rv-p-apellido'), tipo_documento: tipo,
+    numero_documento: tipo === 'cedula' && !rvDocDigitos(num) ? '' : num,
+    nacionalidad: val('rv-p-nacionalidad'), titular: document.getElementById('rv-p-titular').checked,
   };
   if (!(await rvEnviar(btn, sb.rpc('guardar_pasajero', { p_reserva_id: RV_RESERVA_ID, p_pasajero_id: id, p_datos: datos })))) return;
   RV_FORM = null; okToast(id ? 'Pasajero actualizado' : 'Pasajero agregado'); rvTrasCambio();
@@ -4453,6 +4660,7 @@ async function rvAnularDocumento(id) {
   if (error || !data?.ok) { errToast('No se pudo quitar: ' + rvErr(error, data)); return; }
   okToast('Documento quitado');
   if (RV_DET?.documentos) RV_DET.documentos = RV_DET.documentos.filter(d => d.id !== id);
+  delete RV_DOC_IA[id]; RV_TK_URLS.delete(id);
   if (RV_FORM?.tipo === 'tickets') rvFormTickets(rvPanel('servicios'));
   rvTrasCambio();
 }
@@ -31170,7 +31378,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-10-20', emoji: '🎫', titulo: 'Subir los tickets del boleto', texto: 'En Reservas > Servicios > Tickets de un boleto ahora podés subir el PDF o la foto de los tickets (varios, hasta 10 MB cada uno), aunque la reserva todavía no tenga pasajeros cargados. Quedan guardados en la ficha del servicio, se pueden ver o quitar, y si hay pasajeros siguen los campos del número de ticket.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
+  { fecha: '2026-10-20', emoji: '🎫', titulo: 'Tickets del boleto: subir, arrastrar o pegar', texto: 'En Reservas > Servicios > Tickets podés arrastrar las fotos, pegar una captura con Ctrl+V o elegir los archivos (PDF, JPG, PNG o WEBP, hasta 10 MB, varios a la vez). Cada ticket se ve como una tarjeta con su miniatura y lo que dice: pasajeros, número de ticket, ruta, aerolínea, fecha y localizador. Al subirlo, los pasajeros se cargan solos en la pestaña Pasajeros (y sus números de ticket en el boleto); si la lectura falla, el botón Releer lo vuelve a intentar. Además, en Pasajeros se fueron fecha de nacimiento, teléfono y email, el documento arranca en Cédula y el número se pone solo como V-30.603.613.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-20', emoji: '✂️', titulo: 'Alta de boleto más corta', texto: 'El formulario de un boleto aéreo quedó con lo que de verdad se usa: fechas, adultos, niños, localizador, estado, time limit, aerolínea, ruta y precio. Se fueron Vuelo, Clase, PNR y Equipaje (el PNR es el localizador); el número de vuelo y la clase se cargan por tramo en la pestaña Tramos, y la hora también sale de ahí.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '📄', titulo: 'Voucher desde la reserva', texto: 'Cada servicio en Reservas > Servicios tiene su botón Voucher: arma el PDF con el cliente, los pasajeros (si están cargados), los tramos y los e-tickets, lo descarga y lo deja adjunto a la ficha. Si la reserva no tiene pasajeros usa el nombre del cliente de la reserva, y avisa si el boleto todavía no tiene tickets.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-20', emoji: '🧾', titulo: 'Abono con comprobante y boleto con datos completos', texto: '+ Abono en la tarjeta de la reserva ahora abre la pestaña Abonos con el formulario listo: método, referencia y captura del comprobante, que pasa a ser obligatoria (salvo Efectivo). Además, un boleto aéreo no se guarda sin localizador/PNR, aerolínea y ruta.', roles: ['admin', 'asesor', 'administrativo'] },
