@@ -113,9 +113,9 @@ const money = n => '$' + nf('es-VE', { minimumFractionDigits: 0, maximumFraction
 const MES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const fullMonth = k => { const [y, m] = k.split('-'); return MESL[+m - 1] + ' ' + y; };
-const ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'PAGO REALIZADO', 'VENTA COMPLETA', 'PERDIDO', 'NUMERO INVALIDO'];
+const ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'VENTA COMPLETA', 'PERDIDO', 'NUMERO INVALIDO'];
 const ESTADOS_EDIT = ESTADOS;
-const ESTADO_COLORS = { 'POR ATENDER': '#ff9100', 'ATENDIDO': '#4a9eff', 'CLIENTE CONTACTADO': '#4a9eff', 'COTIZACION ENVIADA': '#a06bff', 'PAGO REALIZADO': '#10b981', 'VENTA COMPLETA': '#f5b544', 'PERDIDO': '#ef4444', 'NUMERO INVALIDO': '#94a3b8' };
+const ESTADO_COLORS = { 'POR ATENDER': '#ff9100', 'ATENDIDO': '#4a9eff', 'CLIENTE CONTACTADO': '#4a9eff', 'COTIZACION ENVIADA': '#a06bff', 'EN ESPERA DE PAGO': '#06b6d4', 'PAGO REALIZADO': '#10b981', 'VENTA COMPLETA': '#f5b544', 'PERDIDO': '#ef4444', 'NUMERO INVALIDO': '#94a3b8' };
 const PRIORIDAD_IA_ICONOS = { alta: '🔥', media: '●', baja: '○' };
 // Usa .chip-prioridad + .alta/.media/.baja (index.html:164-168) -- ya
 // existían en el CSS pero nadie las consumía, esto rendía un glyph con color
@@ -244,7 +244,7 @@ function formatearTexto(texto) {
 }
 const val = id => document.getElementById(id)?.value ?? '';
 // Solo rótulo: el valor guardado en la base sigue sin tildes.
-const ESTADO_ROTULO = { 'COTIZACION ENVIADA': 'Cotización enviada', 'NUMERO INVALIDO': 'Número inválido' };
+const ESTADO_ROTULO = { 'COTIZACION ENVIADA': 'Cotización enviada', 'EN ESPERA DE PAGO': 'En espera de pago', 'NUMERO INVALIDO': 'Número inválido' };
 const niceEstado = v => ESTADO_ROTULO[v] || ((v === (v || '').toUpperCase() && (v || '').includes(' ')) ? v.charAt(0) + v.slice(1).toLowerCase() : v);
 const sortEntries = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]);
 
@@ -9280,9 +9280,21 @@ window.abrirClienteDesdeFacturacion = async (leadId) => {
 // tenía que perseguir por chat cédula, qué se vendió, cuándo viaja y cuánto
 // pagó -- se piden acá, que es el momento en que el asesor los tiene a mano.
 let EF_LEAD_ACTUAL = null;
-let efTipos = new Set(['hospedaje']);
+let EF_SOLICITUD = null; // mismo uuid en los reintentos del mismo envío: el abono no se duplica
 
 const EF_ERRORES = {
+  servicios_invalidos: 'Revisa los servicios: agrega al menos uno y completa sus datos',
+  reserva_ya_tiene_servicios: 'Esa reserva ya tiene servicios cargados',
+  reserva_no_existe: 'La reserva ya no existe',
+  total_cero: 'El total de la venta no puede ser cero',
+  referencia_requerida: 'Falta la referencia del pago',
+  monto_invalido: 'El monto pagado no es válido (máximo 2 decimales)',
+  metodo_invalido: 'El método de pago no es válido',
+  dato_invalido: 'Algún dato (fecha, precio o cantidad) no es válido',
+  detalle_invalido: 'Algún dato del servicio no es válido',
+  rango_invalido: 'Un servicio tiene la fecha final anterior a la inicial',
+  precio_invalido: 'Algún precio no es válido',
+  tipo_invalido: 'Algún tipo de servicio no es válido',
   ya_facturado: 'Este cliente ya tiene una factura',
   falta_cedula: 'Falta la cédula del cliente',
   falta_hotel: 'Falta el hotel o posada',
@@ -9302,16 +9314,13 @@ async function abrirEnviarFacturacionSheet(l) {
   document.getElementById('ef-cliente').innerHTML =
     `<i class="fas fa-user"></i> Facturando a <b>${esc(l.nombre || 'Sin nombre')}</b>${l.telefono ? ' · ' + esc(l.telefono) : ''}`;
 
-  ['ef-cedula', 'ef-hotel', 'ef-vuelo-origen', 'ef-vuelo-destino', 'ef-fecha-viaje',
-   'ef-fecha-regreso', 'ef-adultos', 'ef-ninos', 'ef-infantes', 'ef-referencia', 'ef-monto-pagado',
+  ['ef-cedula', 'ef-adultos', 'ef-ninos', 'ef-infantes', 'ef-referencia', 'ef-monto-pagado',
    'ef-monto-total', 'ef-notas'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   document.getElementById('ef-metodo').value = '';
   document.getElementById('ef-abono').className = 'ef-abono';
-  // El destino del lead suele ser la ciudad a la que viaja: sirve de arranque
-  // para la ruta del vuelo, pero se deja editable porque no siempre coincide.
-  if (l.destino) document.getElementById('ef-vuelo-destino').value = l.destino;
-  efTipos = new Set(['hospedaje']);
-  efPintarTipos();
+  EF_SOLICITUD = crypto.randomUUID();
+  document.getElementById('ef-servicios').innerHTML = '';
+  efAgregarServicio('hospedaje');
 
   const sel = document.getElementById('ef-admin');
   sel.innerHTML = '<option value="">Luis Rueda (por defecto)</option>';
@@ -9324,31 +9333,93 @@ async function abrirEnviarFacturacionSheet(l) {
   openSheet('enviar-facturacion-sheet');
 }
 
-function efPintarTipos() {
-  document.querySelectorAll('#ef-tipos .ef-tipo').forEach(b => b.classList.toggle('on', efTipos.has(b.dataset.efTipo)));
-  // Hospedaje + boletería a la vez muestran ambos bloques de campos; "paquete"
-  // igual; "otro" no pide ninguno de los dos pero sigue exigiendo fecha, método y monto.
-  const hotel = efTipos.has('hospedaje') || efTipos.has('paquete');
-  const vuelo = efTipos.has('boleteria') || efTipos.has('paquete');
-  document.getElementById('ef-campo-hotel').style.display = hotel ? '' : 'none';
-  document.getElementById('ef-campo-vuelo').style.display = vuelo ? '' : 'none';
-  const soloHospedaje = efTipos.size === 1 && efTipos.has('hospedaje');
-  document.getElementById('ef-lbl-fecha').textContent = soloHospedaje ? 'Fecha de entrada' : 'Fecha del viaje';
-  document.getElementById('ef-lbl-regreso').innerHTML = (soloHospedaje ? 'Fecha de salida' : 'Fecha de regreso') + ' <span class="ef-opc">(opcional)</span>';
+// Un servicio por tarjeta. Las claves del detalle son las que acepta detalle_servicio_valido
+// (migración 20260924130000): hotel/habitacion/plan, ruta/aerolinea, origen/destino, etc.
+// `p` = campo principal (obligatorio), `x` = campos extra, `f` = etiquetas de fecha inicial/final.
+const EF_SERV = {
+  hospedaje:          { p: ['hotel', 'Hotel o posada'], x: [['habitacion', 'Habitación'], ['plan', 'Plan (ej. desayuno)']], f: ['Entrada', 'Salida'] },
+  boleto_aereo:       { p: ['ruta', 'Ruta (ej. CCS - PMV)'], x: [['aerolinea', 'Aerolínea']], f: ['Ida', 'Regreso'] },
+  traslado_terrestre: { p: ['origen', 'Desde'], x: [['destino', 'Hasta']], f: ['Fecha', null], hora: true },
+  traslado_maritimo:  { p: ['embarcadero', 'Embarcadero o ruta'], x: [['embarcacion', 'Embarcación']], f: ['Fecha', null], hora: true },
+  full_day:           { p: ['excursion', 'Excursión'], x: [['punto_encuentro', 'Punto de encuentro']], f: ['Fecha', null], hora: true },
+  seguro:             { p: ['aseguradora', 'Aseguradora'], x: [['cobertura', 'Cobertura']], f: ['Desde', 'Hasta'] },
+  otro:               { p: [null, 'Descripción del servicio'], x: [], f: ['Fecha', null] },
+};
+function efAgregarServicio(tipo) {
+  const sp = EF_SERV[tipo], [nombre, icono] = RV_TIPOS[tipo];
+  const card = document.createElement('div');
+  card.className = 'ef-serv'; card.dataset.tipo = tipo;
+  const campo = (k, lbl, attrs = '') => `<div style="flex:1"><label class="fl-sub">${esc(lbl)}</label><input class="ei" data-k="${k}" ${attrs} autocomplete="off"></div>`;
+  card.innerHTML = `
+    <div class="ef-serv-top"><b><i class="fas ${icono}"></i>${esc(nombre)}</b>
+      <button type="button" class="ef-serv-x" aria-label="Quitar servicio"><i class="fas fa-xmark"></i></button></div>
+    <div class="ef-fila">${campo('p', sp.p[1])}</div>
+    ${sp.x.length ? `<div class="ef-fila">${sp.x.map(([k, l]) => campo(k, l)).join('')}</div>` : ''}
+    <div class="ef-fila">
+      ${campo('f1', sp.f[0], 'type="date"')}
+      ${sp.f[1] ? campo('f2', sp.f[1] + ' (opcional)', 'type="date"') : ''}
+      ${sp.hora ? campo('hora', 'Hora (opcional)', 'type="time"') : ''}
+    </div>
+    <div class="ef-fila">${campo('precio', 'Precio total de este servicio (USD)', 'type="number" min="0" step="0.01" placeholder="0.00"')}</div>`;
+  card.querySelector('.ef-serv-x').addEventListener('click', () => { card.remove(); efRecalcular(); });
+  card.querySelector('[data-k="precio"]').addEventListener('input', efRecalcular);
+  document.getElementById('ef-servicios').appendChild(card);
+  efRecalcular();
+  return card;
 }
-// "Otro" no combina con nada; el resto se puede marcar libremente entre sí.
-function efSetTipo(tipo) {
-  if (tipo === 'otro') {
-    efTipos = efTipos.has('otro') ? new Set() : new Set(['otro']);
-  } else {
-    efTipos.delete('otro');
-    efTipos.has(tipo) ? efTipos.delete(tipo) : efTipos.add(tipo);
+// Lee las tarjetas. Devuelve { servicios } o { error } con el primer problema, antes de molestar al servidor.
+function efLeerServicios() {
+  const cards = [...document.querySelectorAll('#ef-servicios .ef-serv')];
+  if (!cards.length) return { error: 'Agrega al menos un servicio' };
+  const adultos = parseInt(val('ef-adultos'), 10), ninos = parseInt(val('ef-ninos'), 10);
+  const servicios = [];
+  for (const card of cards) {
+    const tipo = card.dataset.tipo, sp = EF_SERV[tipo], nombre = RV_TIPOS[tipo][0];
+    const v = k => (card.querySelector(`[data-k="${k}"]`)?.value || '').trim();
+    if (!v('p')) return { error: `${nombre}: falta ${sp.p[1].toLowerCase()}` };
+    if (!v('f1')) return { error: `${nombre}: falta la fecha (${sp.f[0].toLowerCase()})` };
+    if (v('f2') && v('f2') < v('f1')) return { error: `${nombre}: la fecha final es anterior a la inicial` };
+    const precio = parseFloat(v('precio'));
+    if (!Number.isFinite(precio) || precio < 0) return { error: `${nombre}: falta el precio` };
+    const detalle = {};
+    if (sp.p[0]) detalle[sp.p[0]] = v('p');
+    sp.x.forEach(([k]) => { if (v(k)) detalle[k] = v(k); });
+    if (tipo === 'hospedaje' && v('f2')) {
+      const noches = Math.round((Date.parse(v('f2')) - Date.parse(v('f1'))) / 86400000);
+      if (noches > 0) detalle.noches = noches;
+    }
+    if (tipo === 'boleto_aereo') detalle.ida_vuelta = !!v('f2');
+    const s = {
+      tipo, precio, precio_moneda: 'USD', detalle,
+      descripcion: [v('p'), ...sp.x.map(([k]) => v(k))].filter(Boolean).join(' · ').slice(0, 300),
+      fecha_inicio: v('f1'),
+      pax_adultos: Number.isFinite(adultos) ? adultos : 0,
+      pax_ninos: Number.isFinite(ninos) ? ninos : 0,
+    };
+    if (v('f2')) s.fecha_fin = v('f2');
+    if (v('hora')) s.hora = v('hora');
+    servicios.push(s);
   }
-  efPintarTipos();
+  return { servicios };
 }
-document.getElementById('ef-tipos')?.addEventListener('click', e => {
-  const b = e.target.closest('.ef-tipo'); if (b) efSetTipo(b.dataset.efTipo);
-});
+// Total = suma de las tarjetas: es lo que va a quedar en la reserva.
+function efRecalcular() {
+  const total = [...document.querySelectorAll('#ef-servicios [data-k="precio"]')]
+    .reduce((a, i) => a + (parseFloat(i.value) || 0), 0);
+  const t = document.getElementById('ef-monto-total');
+  if (t) t.value = total > 0 ? total.toFixed(2) : '';
+  efPintarAbono();
+}
+(function () {
+  const caja = document.getElementById('ef-agregar');
+  if (!caja) return;
+  caja.innerHTML = Object.entries(RV_TIPOS).map(([k, [n, i]]) =>
+    `<button type="button" class="ef-tipo" data-ef-add="${k}"><i class="fas ${i}"></i> ${esc(n)}</button>`).join('');
+  caja.addEventListener('click', e => {
+    const b = e.target.closest('[data-ef-add]');
+    if (b) efAgregarServicio(b.dataset.efAdd).querySelector('input')?.focus();
+  });
+})();
 
 // "personas" (filas viejas) no dice si viajan con niños/infantes -- el desglose
 // nuevo sí, y hay que poder mostrar ambos según qué haya cargado cada envío.
@@ -9370,7 +9441,7 @@ function efPintarAbono() {
   if (!Number.isFinite(pagado) || !Number.isFinite(total) || total <= 0) { box.className = 'ef-abono'; return; }
   if (pagado > total) {
     box.className = 'ef-abono show malo';
-    box.textContent = 'Pagó más que el total de la venta. Revisá los dos montos antes de enviar.';
+    box.textContent = 'Pagó más que el total de la venta. Revisa los dos montos antes de enviar.';
   } else if (pagado < total) {
     box.className = 'ef-abono show';
     box.textContent = `Es un abono: queda un saldo de ${money(total - pagado)}.`;
@@ -9389,26 +9460,29 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   const num = id => { const v = parseFloat(val(id)); return Number.isFinite(v) ? v : null; };
   const ent = id => { const v = parseInt(val(id), 10); return Number.isFinite(v) ? v : null; };
   err.textContent = '';
-  if (efTipos.size === 0) { err.textContent = 'Elegí qué se vendió'; return; }
+  const { servicios, error: errServ } = efLeerServicios();
+  if (errServ) { err.textContent = errServ; return; }
+  if (!val('ef-cedula')) { err.textContent = EF_ERRORES.falta_cedula; return; }
+  if (!val('ef-metodo')) { err.textContent = EF_ERRORES.falta_metodo_pago; return; }
+  const pagado = num('ef-monto-pagado');
+  if (pagado === null) { err.textContent = 'Falta el monto que pagó (0 si todavía no ha pagado)'; return; }
+  if (pagado > 0 && !val('ef-referencia')) { err.textContent = EF_ERRORES.referencia_requerida; return; }
   btn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
+  // Una sola llamada crea la reserva con sus servicios, registra el abono y deja la solicitud
+  // en la bandeja del admin; si algo falla no queda nada a medias (enviar_a_facturacion v2).
   const { data, error } = await sb.rpc('enviar_a_facturacion', {
     p_lead_id: EF_LEAD_ACTUAL.id,
     p_admin_destino_id: val('ef-admin') || null,
     p_cedula: val('ef-cedula'),
-    p_tipo_venta: Array.from(efTipos),
-    p_hotel_posada: val('ef-hotel'),
-    p_vuelo_origen: val('ef-vuelo-origen'),
-    p_vuelo_destino: val('ef-vuelo-destino'),
-    p_fecha_viaje: val('ef-fecha-viaje') || null,
-    p_fecha_regreso: val('ef-fecha-regreso') || null,
+    p_servicios: servicios,
     p_adultos: ent('ef-adultos'),
     p_ninos: ent('ef-ninos'),
     p_infantes: ent('ef-infantes'),
     p_metodo_pago: val('ef-metodo'),
     p_referencia_pago: val('ef-referencia'),
-    p_monto_pagado: num('ef-monto-pagado'),
-    p_monto_total: num('ef-monto-total'),
+    p_monto_pagado: pagado,
     p_notas_venta: val('ef-notas'),
+    p_solicitud_id: EF_SOLICITUD,
   });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar';
   if (error || !data?.ok) {
@@ -9417,7 +9491,7 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
     return;
   }
   closeSheet('enviar-facturacion-sheet');
-  okToast(`Enviado a ${data.admin_destino}`);
+  okToast(`Reserva ${data.codigo} creada · enviada a facturar a ${data.admin_destino}`);
   if (typeof loadLeadsEnFacturacion === 'function') loadLeadsEnFacturacion();
 });
 
@@ -9450,31 +9524,73 @@ async function loadBandejaFacturacion() {
     const icono = tipos.length > 1 ? 'fa-layer-group' : (LF_TIPO[tipos[0]]?.i || 'fa-tag');
     const fechas = [b.fecha_viaje && fmtDiaCorto(b.fecha_viaje), b.fecha_regreso && fmtDiaCorto(b.fecha_regreso)]
       .filter(Boolean).join(' → ');
-    const pagado = b.monto_pagado != null ? Number(b.monto_pagado) : null;
-    const total = b.monto_total != null ? Number(b.monto_total) : null;
+    // Envío nuevo: la reserva ya existe con sus servicios y abonos. Los montos son los de la reserva
+    // (en vivo), no la foto del momento del envío.
+    const conServicios = !!b.reserva_id && Array.isArray(b.servicios) && b.servicios.length > 0;
+    const pagado = conServicios ? Number(b.reserva_monto_pagado || 0) : (b.monto_pagado != null ? Number(b.monto_pagado) : null);
+    const total = conServicios ? Number(b.reserva_monto_total || 0) : (b.monto_total != null ? Number(b.monto_total) : null);
     const fila = (icono, texto) => texto ? `<div class="ec-row"><i class="fas ${icono}"></i> ${texto}</div>` : '';
+    const filasServicios = !conServicios ? '' : b.servicios.map(s => {
+      const [nom, ic] = RV_TIPOS[s.tipo] || ['Servicio', 'fa-circle-dot'];
+      const f = [s.fecha_inicio && fmtDiaCorto(s.fecha_inicio), s.fecha_fin && fmtDiaCorto(s.fecha_fin)].filter(Boolean).join(' → ');
+      return fila(ic, `${esc(s.descripcion || nom)}${f ? ' · ' + esc(f) : ''} · <b>${money(Number(s.precio_usd_centavos || 0) / 100)}</b>`);
+    }).join('');
     return `
     <div class="entity-card inbox-card" data-id="${b.lead_id}">
       <div class="ec-top"><div class="ec-nombre">${esc(b.nombre)}</div></div>
       <div class="ec-row"><i class="fas fa-phone"></i> ${esc(b.telefono) || 'Sin teléfono'}</div>
       ${fila('fa-id-card', esc(b.cedula || ''))}
-      ${queSeVendio ? fila(icono, esc(queSeVendio)) : `<div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(b.destino) || '—'}</div>`}
-      ${fila('fa-calendar-day', esc(fechas) + (paxTexto(b) ? ' · ' + esc(paxTexto(b)) : ''))}
+      ${conServicios ? fila('fa-folder-open', `Reserva <b>${esc(b.reserva_codigo || '')}</b>`) : ''}
+      ${conServicios ? filasServicios + fila('fa-user-group', esc(paxTexto(b)))
+        : `${queSeVendio ? fila(icono, esc(queSeVendio)) : `<div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(b.destino) || '—'}</div>`}
+      ${fila('fa-calendar-day', esc(fechas) + (paxTexto(b) ? ' · ' + esc(paxTexto(b)) : ''))}`}
       ${fila('fa-dollar-sign', pagado != null ? `Pagó ${money(pagado)}${total != null ? ` de ${money(total)}` : ''}${(total != null && total > pagado) ? ` · <b style="color:var(--amber)">saldo ${money(total - pagado)}</b>` : ''}` : '')}
       ${fila('fa-credit-card', esc([b.metodo_pago, b.referencia_pago].filter(Boolean).join(' · ')))}
       ${fila('fa-note-sticky', esc(b.notas_venta || ''))}
       <div class="ec-row"><i class="fas fa-user"></i> Enviado por ${esc(b.enviado_por)}</div>
       <div class="ec-row"><i class="fas fa-clock"></i> ${tiempoRelativo(b.creado_en)}</div>
       <div class="inbox-actions">
-        <button type="button" class="inbox-btn atender" data-bandeja-lead-id="${b.lead_id}"><i class="fas fa-file-invoice-dollar"></i> Facturar</button>
+        <button type="button" class="inbox-btn atender" data-bandeja-id="${b.bandeja_id}"><i class="fas fa-file-invoice-dollar"></i> Facturar</button>
+        ${conServicios ? `<button type="button" class="inbox-btn" data-bandeja-reserva="${b.bandeja_id}"><i class="fas fa-folder-open"></i> Ver reserva</button>` : ''}
       </div>
     </div>`;
   }).join('');
-  grid.querySelectorAll('[data-bandeja-lead-id]').forEach(btn => btn.addEventListener('click', () => {
-    const item = FACT_BANDEJA_CACHE.find(x => String(x.lead_id) === btn.dataset.bandejaLeadId);
-    if (item) window.abrirNuevoClienteFacturacion(item);
+  const porId = btn => FACT_BANDEJA_CACHE.find(x => String(x.bandeja_id) === (btn.dataset.bandejaId || btn.dataset.bandejaReserva));
+  grid.querySelectorAll('[data-bandeja-id]').forEach(btn => btn.addEventListener('click', () => {
+    const item = porId(btn);
+    if (!item) return;
+    if (item.reserva_id && Array.isArray(item.servicios) && item.servicios.length) facturarBandejaReserva(item, btn);
+    else window.abrirNuevoClienteFacturacion(item);
+  }));
+  grid.querySelectorAll('[data-bandeja-reserva]').forEach(btn => btn.addEventListener('click', () => {
+    const item = porId(btn);
+    if (item) abrirReservaDeLead(item.reserva_id, item.reserva_codigo, btn);
   }));
   entradaLista(grid);
+}
+
+const FB_ERRORES = {
+  no_pendiente: 'Esa solicitud ya no está pendiente',
+  facturar_principal_primero: 'Este cliente tiene una reserva más antigua sin facturar: factúrala primero',
+  reserva_sin_monto: 'La reserva no tiene servicios con precio',
+  lead_sin_asesor: 'El cliente no tiene asesor asignado',
+  lead_no_disponible: 'Este cliente ya no está disponible',
+  reserva_no_existe: 'La reserva ya no existe',
+};
+// El asesor ya creó la reserva al enviar: acá solo se factura (factura, comisión y cuenta por pagar
+// salen de facturar_reserva). No hay que volver a cargar nada.
+async function facturarBandejaReserva(b, btn) {
+  const total = Number(b.reserva_monto_total || 0), pagado = Number(b.reserva_monto_pagado || 0);
+  const detalle = (pagado < total ? `Cobrado ${money(pagado)} de ${money(total)}: el saldo de ${money(total - pagado)} queda en Cobros.` : 'Pago completo.')
+    + ' Se genera la factura, la comisión y la cuenta por pagar.';
+  if (!(await confirmarSheet({ titulo: `¿Facturar ${b.reserva_codigo} por ${money(total)}?`, detalle, textoOk: 'Facturar' }))) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('facturar_reserva_bandeja', { p_lead_id: b.lead_id, p_reserva_id: b.reserva_id });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo facturar: ' + (FB_ERRORES[data?.error] || error?.message || data?.error || '')); return; }
+  okToast(`${data.codigo} facturada`);
+  loadFacturacion();
+  loadBandejaFacturacion();
 }
 
 /* ---------- Ventas por verificar (admin) -- ventas que un asesor cerró
@@ -9683,7 +9799,7 @@ function setupPagos() {
 
 /* ---------- Nuevo lead manual (botón "Nuevo lead" en Leads, admin + asesor) /
    Nuevo cliente de Facturación (mismo sheet, modo distinto) ---------- */
-let NL_MODO_FACTURACION = false, NL_BANDEJA_LEAD_ID = null, NL_BUSCAR_DEBOUNCE = null;
+let NL_MODO_FACTURACION = false, NL_BANDEJA_LEAD_ID = null, NL_BANDEJA_RESERVA_ID = null, NL_BUSCAR_DEBOUNCE = null;
 
 async function poblarAsesoresSheetNuevoLead() {
   const sel = document.getElementById('nl-asesor');
@@ -9735,7 +9851,7 @@ async function nlAsignarEmpresa(leadId) {
 }
 async function abrirNuevoLead(empresaId = null) {
   resetSheetNuevoCliente();
-  NL_MODO_FACTURACION = false; NL_BANDEJA_LEAD_ID = null;
+  NL_MODO_FACTURACION = false; NL_BANDEJA_LEAD_ID = null; NL_BANDEJA_RESERVA_ID = null;
   document.getElementById('nl-titulo').innerHTML = '<i class="fas fa-user-plus"></i> Nuevo lead';
   document.getElementById('nl-crear').innerHTML = '<i class="fas fa-floppy-disk"></i> Crear lead';
   document.getElementById('nl-buscar-box').style.display = 'none';
@@ -9756,6 +9872,7 @@ window.abrirNuevoClienteFacturacion = async (bandejaItem) => {
   resetSheetNuevoCliente();
   NL_MODO_FACTURACION = true;
   NL_BANDEJA_LEAD_ID = bandejaItem ? bandejaItem.lead_id : null;
+  NL_BANDEJA_RESERVA_ID = bandejaItem?.reserva_id ?? null;
   document.getElementById('nl-titulo').innerHTML = '<i class="fas fa-file-invoice-dollar"></i> Nuevo cliente';
   document.getElementById('nl-crear').innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar';
   document.getElementById('nl-fact-box').style.display = '';
@@ -9929,7 +10046,7 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
   if (pv.error || !pv.data?.ok) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar'; err.textContent = 'No se pudo facturar: ' + (pv.error?.message || pv.data?.error || ''); return; }
 
   if (NL_BANDEJA_LEAD_ID) {
-    const marc = await sb.rpc('marcar_bandeja_procesada', { p_lead_id: NL_BANDEJA_LEAD_ID });
+    const marc = await sb.rpc('marcar_bandeja_procesada', { p_lead_id: NL_BANDEJA_LEAD_ID, p_reserva_id: NL_BANDEJA_RESERVA_ID });
     // La factura/comisión ya se generaron -- esto NO revierte nada si falla,
     // solo avisa que la tarjeta puede seguir viéndose en la Bandeja aunque
     // ya esté facturada (se puede volver a facturar sin duplicar, guardar_postventa

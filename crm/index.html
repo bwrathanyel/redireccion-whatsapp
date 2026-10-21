@@ -1195,6 +1195,14 @@ input.ei[type=date]{color-scheme:dark}
 .ef-abono{display:none;font-size:12px;margin-top:7px;padding:8px 10px;border-radius:9px;background:rgba(74,158,255,.09);border:1px solid rgba(74,158,255,.25);color:#9ec5ff}
 .ef-abono.show{display:block}
 .ef-abono.malo{background:rgba(239,68,68,.09);border-color:rgba(239,68,68,.3);color:#ffa5a5}
+.ef-serv{background:rgba(10,12,28,.55);border:1.5px solid var(--line2);border-radius:12px;padding:9px 11px 11px;margin-bottom:9px}
+.ef-serv-top{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin-bottom:2px}
+.ef-serv-top i{color:var(--accent);margin-right:6px}
+.ef-serv-x{background:none;border:0;color:var(--muted);font-size:15px;padding:4px 8px;cursor:pointer;font-family:inherit}
+.ef-serv-x:hover{color:#ff8a8a}
+.ef-serv .fl-sub{display:block;margin:7px 0 3px}
+.ef-agregar{margin-bottom:4px}
+.ef-agregar .ef-tipo{min-width:0;flex:0 1 auto;padding:7px 11px}
 /* Sub-pestaña "En facturación" de Leads */
 .lf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:14px}
 .lf-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
@@ -5626,7 +5634,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 :root[data-theme="light"] .toast{box-shadow:0 10px 30px rgba(var(--ink-rgb),.1)}
 :root[data-theme="light"] .toast-err i{color:#961d1d}
 :root[data-theme="light"] .ei{background:rgba(var(--surface-rgb),.9)}
-:root[data-theme="light"] .ef-tipo{background:rgba(var(--surface-rgb),.9)}
+:root[data-theme="light"] .ef-tipo,:root[data-theme="light"] .ef-serv{background:rgba(var(--surface-rgb),.9)}
 :root[data-theme="light"] .ef-abono{color:#124ba1}
 :root[data-theme="light"] .ef-abono.malo{color:#9e1212}
 :root[data-theme="light"] .lf-falta{color:#9c1111}
@@ -9805,37 +9813,9 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     <label class="fl">Cédula del cliente</label>
     <input id="ef-cedula" class="ei" placeholder="V-12345678" autocomplete="off">
 
-    <label class="fl">¿Qué se vendió?</label>
-    <div class="ef-tipos" id="ef-tipos">
-      <button type="button" class="ef-tipo on" data-ef-tipo="hospedaje"><i class="fas fa-bed"></i> Hospedaje</button>
-      <button type="button" class="ef-tipo" data-ef-tipo="boleteria"><i class="fas fa-plane"></i> Boletería</button>
-      <button type="button" class="ef-tipo" data-ef-tipo="paquete"><i class="fas fa-suitcase-rolling"></i> Paquete</button>
-      <button type="button" class="ef-tipo" data-ef-tipo="otro"><i class="fas fa-ellipsis"></i> Otro</button>
-    </div>
-
-    <div id="ef-campo-hotel">
-      <label class="fl">Hotel / Posada</label>
-      <input id="ef-hotel" class="ei" placeholder="Nombre exacto del hotel o posada" autocomplete="off">
-    </div>
-
-    <div id="ef-campo-vuelo">
-      <label class="fl">Vuelo — ¿de dónde a dónde?</label>
-      <div class="ef-fila">
-        <input id="ef-vuelo-origen" class="ei" placeholder="Sale de (ej. Valencia)" autocomplete="off">
-        <input id="ef-vuelo-destino" class="ei" placeholder="Llega a (ej. Porlamar)" autocomplete="off">
-      </div>
-    </div>
-
-    <div class="ef-fila">
-      <div style="flex:1">
-        <label class="fl" id="ef-lbl-fecha">Fecha del viaje</label>
-        <input id="ef-fecha-viaje" class="ei" type="date">
-      </div>
-      <div style="flex:1">
-        <label class="fl" id="ef-lbl-regreso">Fecha de regreso <span class="ef-opc">(opcional)</span></label>
-        <input id="ef-fecha-regreso" class="ei" type="date">
-      </div>
-    </div>
+    <label class="fl">Servicios que compró</label>
+    <div id="ef-servicios"></div>
+    <div class="ef-tipos ef-agregar" id="ef-agregar"></div>
 
     <label class="fl">¿Cuántas personas? <span class="ef-opc">(opcional)</span></label>
     <div class="ef-fila">
@@ -9857,7 +9837,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <option>Otro</option>
     </select>
 
-    <label class="fl">Referencia del pago <span class="ef-opc">(opcional, para cuadrar con el banco)</span></label>
+    <label class="fl">Referencia del pago <span class="ef-opc">(obligatoria si pagó algo, para cuadrar con el banco)</span></label>
     <input id="ef-referencia" class="ei" placeholder="Últimos dígitos o número de referencia" autocomplete="off">
 
     <div class="ef-fila">
@@ -9866,8 +9846,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <input id="ef-monto-pagado" class="ei" type="number" min="0" step="0.01" placeholder="0.00">
       </div>
       <div style="flex:1">
-        <label class="fl">Total de la venta (USD) <span class="ef-opc">(opcional)</span></label>
-        <input id="ef-monto-total" class="ei" type="number" min="0" step="0.01" placeholder="0.00">
+        <label class="fl">Total de la venta (USD) <span class="ef-opc">(suma de los servicios)</span></label>
+        <input id="ef-monto-total" class="ei" type="number" placeholder="0.00" readonly>
       </div>
     </div>
     <div class="ef-abono" id="ef-abono"></div>
