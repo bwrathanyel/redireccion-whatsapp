@@ -4096,16 +4096,39 @@ function rvFormServicio(p) {
   }
   const destinos = destinosPorGrupo(RV_DESTINOS || []).map(([g, ds]) => `<optgroup label="${esc(g)}">${ds.map(d => `<option value="${d.id}" ${d.id === s?.destino_id ? 'selected' : ''}>${esc(d.nombre)}</option>`).join('')}</optgroup>`).join('');
   const sinCatalogo = s?.destino_id && !(RV_DESTINOS || []).some(d => d.id === s.destino_id) ? `<option value="${s.destino_id}" selected>${esc(s.destino || 'Destino ' + s.destino_id)}</option>` : '';
+  const tramosPrevios = s ? (RV_DET.tramos || []).filter(t => t.servicio_id === s.id) : [];
+  const esBoleto = s?.tipo === 'boleto_aereo';
+  const t0 = tramosPrevios[0], tN = tramosPrevios[tramosPrevios.length - 1];
+  const viaje = s?.detalle?.ida_vuelta === false ? 'ow'
+    : s?.detalle?.ida_vuelta === true ? 'rt'
+    : s && tramosPrevios.length ? (tramosPrevios.length > 1 ? 'rt' : 'ow')
+    : 'rt';
+  const horaIda = t0?.sale_en ? String(t0.sale_en).slice(11, 16) : (s?.hora ? String(s.hora).slice(0, 5) : '');
+  const horaVuelta = tramosPrevios.length > 1 && tN?.sale_en ? String(tN.sale_en).slice(11, 16) : '';
   p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-suitcase-rolling"></i> ${s ? 'Editar servicio' : 'Nuevo servicio'}</div>
     <label class="fl">Tipo</label><select class="ei" id="rv-s-tipo">${rvOpts(RV_TIPOS, s?.tipo || 'hospedaje')}</select>
     <label class="fl">Descripción</label><input class="ei" id="rv-s-desc" maxlength="300" value="${esc(s?.descripcion || '')}" placeholder="Ej.: 3 noches en Los Roques, todo incluido">
     <label class="fl">Destino</label><select class="ei" id="rv-s-destino"><option value="">Sin destino</option>${sinCatalogo}${destinos}</select>
-    <div class="rv-2"><div><label class="fl">Desde</label><input class="ei" id="rv-s-inicio" type="date" value="${esc(s?.fecha_inicio || '')}"></div><div><label class="fl">Hasta</label><input class="ei" id="rv-s-fin" type="date" value="${esc(s?.fecha_fin || '')}"></div></div>
+    <div id="rv-s-boleto-box" ${esBoleto && !tramosPrevios.length ? '' : 'hidden'}>
+      <label class="fl">Tipo de viaje</label>
+      <div class="seg-group seg-group-sm rv-viaje" id="rv-s-viaje">
+        <button class="seg${viaje === 'rt' ? ' on' : ''}" type="button" data-rv-viaje="rt"><i class="fas fa-right-left"></i> Ida y vuelta</button>
+        <button class="seg${viaje === 'ow' ? ' on' : ''}" type="button" data-rv-viaje="ow"><i class="fas fa-arrow-right-long"></i> Solo ida</button>
+      </div>
+    </div>
+    <div class="rv-2" id="rv-s-fechas"><div><label class="fl" id="rv-s-lab-inicio">Desde</label><input class="ei" id="rv-s-inicio" type="date" value="${esc(s?.fecha_inicio || '')}"></div><div><label class="fl" id="rv-s-lab-fin">Hasta</label><input class="ei" id="rv-s-fin" type="date" value="${esc(s?.fecha_fin || '')}"></div></div>
+    <div class="rv-2" id="rv-s-horas-boleto" ${esBoleto && !tramosPrevios.length ? '' : 'hidden'}>
+      <div><label class="fl">Hora de ida</label><input class="ei" id="rv-s-hora-ida" type="time" value="${esc(horaIda)}"></div>
+      <div id="rv-s-hora-vuelta-box"><label class="fl">Hora de vuelta</label><input class="ei" id="rv-s-hora-vuelta" type="time" value="${esc(horaVuelta)}"></div>
+    </div>
+    <div id="rv-s-tramos-ayuda" class="csub" ${esBoleto && !tramosPrevios.length ? '' : 'hidden'}>Al guardar se cargan los tramos con la ruta, las fechas y las horas.</div>
+    <div id="rv-s-tramos-existe" class="csub" ${esBoleto && tramosPrevios.length ? '' : 'hidden'}>Este boleto ya tiene ${tramosPrevios.length} tramo(s) cargado(s). Las fechas y horas se editan en Tramos.</div>
     <div id="rv-s-apto"></div>
     <div class="rv-3"><div id="rv-s-hora-box"><label class="fl">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div><div><label class="fl">Adultos</label><input class="ei" id="rv-s-adultos" type="number" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl">Niños</label><input class="ei" id="rv-s-ninos" type="number" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div></div>
     <div class="rv-2"><div><label class="fl">Localizador</label><input class="ei" id="rv-s-localizador" maxlength="60" value="${esc(s?.localizador || '')}"></div><div><label class="fl">Estado</label><select class="ei" id="rv-s-estado">${rvOpts(RV_ESTADOS, s?.estado || 'cotizado')}</select></div></div>
     ${s?.tipo === 'boleto_aereo' ? `<label class="fl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">` : ''}
     <div id="rv-s-detalle"></div>
+    <div id="rv-s-ruta-ayuda" class="csub" ${esBoleto ? '' : 'hidden'}>Ruta en texto o códigos IATA (ej.: VLN-PMV-VLN). Se usa para armar los tramos.</div>
     <div class="eb-title" style="margin-top:14px"><i class="fas fa-tag"></i> Precio al cliente</div>
     <div class="rv-3"><div><label class="fl">Monto</label><input class="ei" id="rv-s-precio" type="number" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
     ${rvBotones('guardar-servicio')}</div>`;
@@ -4114,6 +4137,12 @@ function rvFormServicio(p) {
   ['rv-s-inicio', 'rv-s-fin'].forEach(k => { document.getElementById(k).onchange = rvAptoCampo; });
   ['rv-s-adultos', 'rv-s-ninos'].forEach(k => { document.getElementById(k).oninput = rvAptoAviso; });
   rvTasaVisible('rv-s');
+  p.querySelectorAll('#rv-s-viaje [data-rv-viaje]').forEach(b => b.onclick = () => {
+    p.querySelectorAll('#rv-s-viaje [data-rv-viaje]').forEach(x => x.classList.toggle('on', x === b));
+    const fin = document.getElementById('rv-s-fin'); if (fin) fin.disabled = b.dataset.rvViaje === 'ow';
+    rvHoraVisible();
+  });
+  if (viaje === 'ow') { const fin = document.getElementById('rv-s-fin'); if (fin) fin.disabled = true; }
   rvAptoCampo();
   rvHoraVisible();
 }
@@ -4164,7 +4193,24 @@ function rvAptoAviso() {
 }
 // La tasa solo aplica a monedas distintas de USD; vacía = la del día (tasa_por_usd en la base).
 // En un boleto la hora de salida vive en los tramos: el campo suelto sobra.
-function rvHoraVisible() { const b = document.getElementById('rv-s-hora-box'); if (b) b.hidden = val('rv-s-tipo') === 'boleto_aereo'; }
+function rvHoraVisible() {
+  const boleto = val('rv-s-tipo') === 'boleto_aereo';
+  const nTramos = RV_FORM?.id ? (RV_DET?.tramos || []).filter(t => t.servicio_id === RV_FORM.id).length : 0;
+  const rapido = boleto && !nTramos && rvAgente();
+  const ver = (id, oculto) => { const el = document.getElementById(id); if (el) el.hidden = oculto; };
+  ver('rv-s-hora-box', boleto);
+  ver('rv-s-boleto-box', !rapido);
+  ver('rv-s-fechas', boleto && nTramos > 0);
+  ver('rv-s-horas-boleto', !rapido);
+  ver('rv-s-tramos-ayuda', !rapido);
+  ver('rv-s-tramos-existe', !boleto || !nTramos);
+  ver('rv-s-ruta-ayuda', !boleto);
+  const labI = document.getElementById('rv-s-lab-inicio'), labF = document.getElementById('rv-s-lab-fin');
+  if (labI) labI.textContent = boleto ? 'Fecha de ida' : 'Desde';
+  if (labF) labF.textContent = boleto ? 'Fecha de vuelta' : 'Hasta';
+  const vbox = document.getElementById('rv-s-hora-vuelta-box');
+  if (vbox) vbox.hidden = document.querySelector('#rv-s-viaje [data-rv-viaje].on')?.dataset.rvViaje === 'ow';
+}
 function rvTasaVisible(pre) {
   const sel = document.getElementById(pre + '-moneda'), box = document.getElementById(pre + '-tasa-box');
   const pintar = () => box.hidden = sel.value === 'USD';
@@ -4188,6 +4234,7 @@ function rvLeerDetalle() {
 }
 async function rvGuardarServicio(btn) {
   const err = document.getElementById('rv-f-err'), id = RV_FORM?.id || null;
+  const tramosPrevios = id ? (RV_DET.tramos || []).filter(t => t.servicio_id === id) : [];
   let datos;
   if (rvVista() === 'boleteria') {
     datos = { localizador: val('rv-s-localizador').trim(), estado: val('rv-s-estado'), time_limit: val('rv-s-tl') ? new Date(val('rv-s-tl')).toISOString() : '' };
@@ -4208,9 +4255,25 @@ async function rvGuardarServicio(btn) {
     };
     if (datos.precio_moneda !== 'USD' && val('rv-s-tasa') !== '') datos.precio_tasa = Number(val('rv-s-tasa'));
     if (datos.tipo === 'boleto_aereo') {
+      const viaje = document.querySelector('#rv-s-viaje [data-rv-viaje].on')?.dataset.rvViaje || 'rt';
+      datos.detalle.ida_vuelta = viaje === 'rt';
+      datos.hora_ida = val('rv-s-hora-ida');
+      datos.hora_vuelta = val('rv-s-hora-vuelta');
+      if (viaje === 'ow') datos.fecha_fin = datos.fecha_inicio;
+      if (tramosPrevios.length) { delete datos.fecha_inicio; delete datos.fecha_fin; }
+      if (!String(datos.detalle.ruta || '').trim() && String(datos.descripcion || '').trim()) {
+        if (!bolCatalogo) await bolAsegurarCatalogo();
+        const iatas = rvRutaIatas(datos.descripcion);
+        if (iatas.length === 2) datos.detalle.ruta = iatas.join('-');
+        else if (iatas.length === 3 && iatas[0] === iatas[2]) datos.detalle.ruta = [iatas[0], iatas[1], datos.detalle.ida_vuelta ? iatas[0] : ''].filter(Boolean).join('-');
+      }
+    }
+    if (datos.tipo === 'boleto_aereo') {
       if (!datos.localizador) { err.textContent = 'Falta el localizador / PNR del boleto.'; return; }
       if (!String(datos.detalle.aerolinea || '').trim()) { err.textContent = 'Falta la aerolínea del boleto.'; return; }
-      if (!String(datos.detalle.ruta || '').trim()) { err.textContent = 'Falta la ruta del boleto (ej.: Valencia - Porlamar - Valencia).'; return; }
+      if (!String(datos.detalle.ruta || datos.descripcion || '').trim()) { err.textContent = 'Falta la ruta del boleto (ej.: Valencia - Porlamar - Valencia).'; return; }
+      if (!tramosPrevios.length && datos.detalle.ida_vuelta && !datos.fecha_inicio) { err.textContent = 'Falta la fecha de ida.'; return; }
+      if (!tramosPrevios.length && datos.detalle.ida_vuelta && !datos.fecha_fin) { err.textContent = 'Para ida y vuelta cargá la fecha de vuelta.'; return; }
     }
     const tl = document.getElementById('rv-s-tl'), previo = (RV_DET.servicios || []).find(x => x.id === id);
     if (tl && tl.value !== rvDtLocal(previo?.time_limit)) datos.time_limit = tl.value ? new Date(tl.value).toISOString() : '';
@@ -4225,7 +4288,8 @@ async function rvGuardarServicio(btn) {
     if (l.error || !l.data?.ok) { err.textContent = 'No se pudo liberar el apartamento: ' + rvErr(l.error, l.data); return; }
   }
   let res;
-  const ok = await rvEnviar(btn, sb.rpc('guardar_servicio', { p_reserva_id: RV_RESERVA_ID, p_servicio_id: id, p_datos: datos }).then(r => { res = r.data; return r; }));
+  const { hora_ida, hora_vuelta, ...datosGuardar } = datos;
+  const ok = await rvEnviar(btn, sb.rpc('guardar_servicio', { p_reserva_id: RV_RESERVA_ID, p_servicio_id: id, p_datos: datosGuardar }).then(r => { res = r.data; return r; }));
   if (!ok) {
     if (cambia) await sb.rpc('asignar_apartamento', { p_servicio_id: id, p_apartamento_id: tenia.apartamento_id });
     return;
@@ -4239,8 +4303,14 @@ async function rvGuardarServicio(btn) {
       : RV_APTO_ERR[a.data?.error] || a.error?.message || 'error desconocido';
     else if (a.data.aviso === 'capacidad') aviso = ' · Ojo: supera la capacidad del apartamento';
   }
+  let fallaTramos = '';
+  if (datos.tipo === 'boleto_aereo' && rvAgente() && sid && !tramosPrevios.length) {
+    const r = await rvCrearTramosBoleto(sid, datos);
+    if (r.falla) fallaTramos = r.falla;
+    else if (r.aviso) aviso = [aviso, r.aviso].filter(Boolean).join(' · ');
+  }
   RV_FORM = null; rvTrasCambio();
-  if (falla) errToast(`${id ? 'Servicio actualizado' : 'Servicio agregado'}, pero el apartamento no se asignó: ${falla}`);
+  if (falla || fallaTramos) errToast(`${id ? 'Servicio actualizado' : 'Servicio agregado'}${falla ? ', pero el apartamento no se asignó: ' + falla : ''}${fallaTramos ? '; los tramos no se cargaron: ' + fallaTramos : ''}`);
   else okToast((id ? 'Servicio actualizado' : 'Servicio agregado') + aviso);
 }
 function rvFormCosto(p) {
@@ -4304,6 +4374,27 @@ async function rvAnularServicio(id) {
 /* Boleto aéreo (Boletería 2.0, migración 20261009100000): tramos, tickets por pasajero, time limit e
    historial (postventa_eventos boleto_*). Lo opera boletería o un admin; el asesor solo lo ve. */
 const rvAgente = () => rvVista() === 'boleteria' || rvVista() === 'admin';
+// Ruta libre -> códigos IATA del catálogo, en el orden en que aparecen. Reconoce
+// "VLN-PMV-VLN", "Valencia porlamar Valencia" y "Caracas - Los Roques - Caracas".
+function rvRutaIatas(texto) {
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const t = ' ' + norm(texto) + ' ';
+  const hits = [];
+  const add = (code, needle) => {
+    const n = norm(needle); if (!n) return;
+    const re = new RegExp('(^| )' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?= |$)', 'g');
+    let m; while ((m = re.exec(t))) hits.push({ pos: m.index + m[1].length, len: n.length, code });
+  };
+  (bolCatalogo?.aeropuertos || []).forEach(a => {
+    add(a.iata_code, a.iata_code);
+    if (a.ciudad) add(a.iata_code, a.ciudad);
+    if (a.nombre_comercial) add(a.iata_code, a.nombre_comercial);
+  });
+  hits.sort((a, b) => a.pos - b.pos || b.len - a.len);
+  const out = []; let fin = -1;
+  for (const h of hits) { if (h.pos < fin) continue; out.push(h.code); fin = h.pos + h.len; }
+  return out;
+}
 // timestamptz -> valor de <input type="datetime-local"> en la hora del navegador.
 const rvDtLocal = iso => { if (!iso) return ''; const d = new Date(iso); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
 // Las horas de tramo son locales del aeropuerto (timestamp sin zona): se muestran tal cual.
@@ -4364,6 +4455,15 @@ function rvTramoFila(t = {}) {
     <div class="rv-2"><div><label class="fl">Aerolínea</label><select class="ei" data-k="aerolinea_id"><option value="">—</option>${aer}</select></div><div><label class="fl">Clase</label><input class="ei" data-k="clase" maxlength="20" value="${esc(t.clase || '')}"></div></div>
     <button class="btn-sm rv-danger" type="button" data-rv-accion="tramo-menos"><i class="fas fa-trash"></i> Quitar tramo</button></div>`);
 }
+function rvTramosSugeridos(s) {
+  const iatas = rvRutaIatas(s?.detalle?.ruta || s?.descripcion || '');
+  if (iatas.length < 2) return [{}];
+  const rt = s?.detalle?.ida_vuelta !== false;
+  const ida = String(s?.fecha_inicio || '').slice(0, 10), vuelta = String(s?.fecha_fin || ida).slice(0, 10);
+  const out = [{ origen_iata: iatas[0], destino_iata: iatas[1], sale_en: ida ? `${ida}T08:00` : '' }];
+  if (rt && ida) out.push({ origen_iata: iatas[1], destino_iata: iatas[0], sale_en: vuelta ? `${vuelta}T18:00` : '' });
+  return out;
+}
 function rvFormTramos(p) {
   const s = rvServicioForm(); if (!s) { RV_FORM = null; return rvRenderServicios(); }
   const iatas = (bolCatalogo?.aeropuertos || []).map(a => `<option value="${esc(a.iata_code)}">${esc(a.nombre_comercial || a.ciudad || '')}</option>`).join('');
@@ -4373,7 +4473,7 @@ function rvFormTramos(p) {
     <button class="dbtn gh rv-add" type="button" data-rv-accion="tramo-mas"><i class="fas fa-plus"></i> Agregar tramo</button>
     ${rvBotones('guardar-tramos')}</div>`;
   const ts = (RV_DET.tramos || []).filter(t => t.servicio_id === s.id);
-  (ts.length ? ts : [{}]).forEach(t => rvTramoFila(t));
+  (ts.length ? ts : rvTramosSugeridos(s)).forEach(t => rvTramoFila(t));
 }
 async function rvGuardarTramos(btn) {
   const err = document.getElementById('rv-f-err');
@@ -4385,6 +4485,28 @@ async function rvGuardarTramos(btn) {
   if (tramos.some(t => !/^[A-Za-z]{3}$/.test(t.origen_iata || '') || !/^[A-Za-z]{3}$/.test(t.destino_iata || '') || !t.sale_en)) { err.textContent = 'Cada tramo necesita origen, destino (código de 3 letras) y hora de salida'; return; }
   if (!(await rvEnviar(btn, sb.rpc('boleteria_guardar_tramos', { p_servicio_id: RV_FORM.id, p_tramos: tramos })))) return;
   RV_FORM = null; okToast('Tramos guardados'); rvTrasCambio();
+}
+// Arma los tramos de un boleto sin tramos desde la ruta, las fechas y las horas del formulario.
+// Si la ruta tiene escalas no inventa horarios: avisa y se completan en Tramos.
+async function rvCrearTramosBoleto(servicioId, datos) {
+  if (!bolCatalogo) await bolAsegurarCatalogo();
+  const iatas = rvRutaIatas(datos.detalle?.ruta || datos.descripcion || '');
+  if (iatas.length < 2) return { aviso: 'No reconocí los aeropuertos en la ruta: cargá los tramos a mano.' };
+  if (iatas.length > 2 && !(iatas.length === 3 && iatas[0] === iatas[2])) return { aviso: 'La ruta tiene varias escalas: completá los tramos a mano.' };
+  const ida = String(datos.fecha_inicio || '').slice(0, 10), vuelta = String(datos.fecha_fin || '').slice(0, 10);
+  const hIda = String(datos.hora_ida || '').slice(0, 5), hVuelta = String(datos.hora_vuelta || '').slice(0, 5);
+  if (!ida) return { aviso: 'Falta la fecha de ida para armar los tramos.' };
+  if (!hIda) return { aviso: 'Falta la hora de ida para armar los tramos.' };
+  const rt = datos.detalle?.ida_vuelta === true;
+  if (rt && !vuelta) return { aviso: 'Falta la fecha de vuelta para armar los tramos.' };
+  if (rt && !hVuelta) return { aviso: 'Falta la hora de vuelta para armar los tramos.' };
+  const aer = (bolCatalogo?.aerolineas || []).find(a => bolNorm(a.nombre) === bolNorm(datos.detalle?.aerolinea || ''));
+  const base = { aerolinea_id: aer?.id || null, clase: '' };
+  const tramos = [{ ...base, origen_iata: iatas[0], destino_iata: iatas[1], sale_en: `${ida}T${hIda}` }];
+  if (rt) tramos.push({ ...base, origen_iata: iatas[1], destino_iata: iatas[0], sale_en: `${vuelta}T${hVuelta}` });
+  const { data, error } = await sb.rpc('boleteria_guardar_tramos', { p_servicio_id: servicioId, p_tramos: tramos });
+  if (error || !data?.ok) return { falla: rvErr(error, data) };
+  return { ok: true, tramos: data.tramos || tramos.length };
 }
 const rvTicketsDocs = s => (RV_DET.documentos || []).filter(d => d.tipo === 'boleto' && d.servicio_id === s.id);
 function rvTkUrl(docId, refrescar) {
