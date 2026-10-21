@@ -3309,7 +3309,7 @@ function pvCardHtml(c, extra = '') {
     const vencido = c.proximo_seguimiento_at && new Date(c.proximo_seguimiento_at).getTime() < ahora && c.etapa !== 'CERRADO';
     const wa = String(c.telefono || '').replace(/\D/g, '');
     return `<article class="pv-card" data-id="${c.id}">
-      <div class="pv-card-top"><span class="pv-chip"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span><span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span></div>
+      <div class="pv-card-top"><span class="pv-chip"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span>${c.prioridad && c.prioridad !== 'NORMAL' ? `<span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span>` : ''}</div>
       <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span style="font-size:10.5px;font-weight:500;color:var(--muted2)">${esc(c.codigo || '')}${c.principal === false ? ' · adicional' : ''}</span></div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}</div>${extra}
       <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>Saldo <b>${money(c.saldo_pendiente)}</b></span></div>
       <div class="pv-progress"><span style="width:${pct}%"></span></div>
@@ -3320,142 +3320,10 @@ function pvCardHtml(c, extra = '') {
 }
 // Abonos de la tarjeta: siempre por reserva, sin usar reserva_principal ni registrar_abono_venta.
 let PV_ABONO = null;
-function pvAbonoSolicitud(s, nuevo) {
-  if (nuevo !== undefined) {
-    s.pendiente = nuevo;
-    try { if (nuevo) sessionStorage.setItem(s.clave, JSON.stringify(nuevo)); else sessionStorage.removeItem(s.clave); } catch (_) { /* Mantener la solicitud en memoria si Storage no está disponible. */ }
-  }
-  return s.pendiente;
-}
-function pvAbonoPintar(s) {
-  if (PV_ABONO !== s) return;
-  const $ = id => document.getElementById(id), r = s.reserva;
-  $('pv-abono-cliente').textContent = r ? `${r.cliente || 'Cliente'} · ${r.codigo || 'Reserva'}` : 'Consultando reserva…';
-  $('pv-abono-pagado').textContent = r ? money(r.monto_pagado) : '—';
-  $('pv-abono-saldo').textContent = r ? money(r.saldo_pendiente) : '—';
-  const cerrado = !r || s.cargando || s.guardando;
-  $('pv-abono-monto').disabled = cerrado || !!s.pendiente || r.saldo_pendiente <= 0;
-  $('pv-abono-nota').disabled = cerrado || !!s.pendiente || r.saldo_pendiente <= 0;
-  $('pv-abono-liquidar').disabled = cerrado || !!s.pendiente || r.saldo_pendiente <= 0;
-  if (r) $('pv-abono-monto').max = r.saldo_pendiente;
-  if (s.pendiente) {
-    $('pv-abono-monto').value = s.pendiente.monto;
-    $('pv-abono-nota').value = s.pendiente.nota || '';
-    // Un reintento puede corresponder a un abono que ya dejó el saldo en cero.
-    $('pv-abono-monto').removeAttribute('max');
-  }
-  $('pv-abono-guardar').disabled = s.cargando || s.guardando || (!!r && r.saldo_pendiente <= 0 && !s.pendiente);
-  $('pv-abono-guardar').textContent = s.guardando ? 'Guardando…' : !r ? 'Reintentar carga' : s.pendiente ? 'Reintentar abono' : 'Guardar abono';
-}
-async function pvAbonoCargar(s) {
-  s.cargando = true; pvAbonoPintar(s);
-  try {
-    const { data, error } = await sb.rpc('reserva_detalle', { p_reserva_id: s.id });
-    if (PV_ABONO !== s) return;
-    if (error || !data?.ok || !data.reserva || data.vista === 'boleteria') throw Error('No se pudo consultar la reserva. Reintenta la carga.');
-    s.reserva = data.reserva;
-    s.reserva.saldo_pendiente = Math.max(0, Math.round((Number(s.reserva.monto_total) - Number(s.reserva.monto_pagado)) * 100) / 100);
-    document.getElementById('pv-abono-error').textContent = s.pendiente ? 'Hay un abono sin confirmar. Reinténtalo para consultar su resultado sin cobrarlo otra vez.' : s.reserva.saldo_pendiente <= 0 ? 'Esta reserva no tiene saldo pendiente.' : '';
-  } catch (e) {
-    if (PV_ABONO === s) document.getElementById('pv-abono-error').textContent = e.message || 'No se pudo consultar la reserva.';
-  } finally {
-    s.cargando = false; pvAbonoPintar(s);
-  }
-}
-function pvAbonoRefrescar() {
-  // Los formularios actuales de servicios usan este mismo refresco por sección.
-  if (currentSec === 'postventa') loadPostventa();
-  if (currentSec === 'reservas-empresas') loadReservasEmpresas();
-}
 // "+ Abono" de la tarjeta: abre la reserva en la pestaña Abonos con el alta lista (método, referencia y captura).
 function pvAbrirAbonoReserva(c, origen) {
   if (!c || !['admin', 'asesor', 'administrativo'].includes(ROL)) return;
-  if (PV_ABONO?.guardando) { errToast('Espera a que termine el abono en curso.'); return; }
   abrirPostventa(c, 'abonos');
-}
-async function pvAbrirAbono(reservaId, origen) {
-  if (!['admin','asesor','administrativo'].includes(ROL)) return;
-  if (PV_ABONO?.guardando) { errToast('Espera a que termine el abono en curso.'); return; }
-  let sheet = document.getElementById('pv-abono-sheet');
-  if (!sheet) {
-    sheet = document.createElement('div'); sheet.id = 'pv-abono-sheet'; sheet.className = 'sheet';
-    sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true'); sheet.setAttribute('aria-labelledby', 'pv-abono-titulo');
-    sheet.innerHTML = `<div class="sheet-handle"></div><div class="sheet-title" id="pv-abono-titulo">Agregar abono</div>
-      <form class="pv-abono-body" id="pv-abono-form" novalidate>
-        <div id="pv-abono-cliente"></div><div class="pv-balance pv-abono-balance" aria-live="polite"><span>Pagado <b id="pv-abono-pagado">—</b></span><span>Saldo <b id="pv-abono-saldo">—</b></span></div>
-        <label class="fl" for="pv-abono-monto">Monto del abono (USD)</label><input class="ei" id="pv-abono-monto" type="number" inputmode="decimal" min="0.01" step="0.01" required>
-        <button class="dbtn gh" id="pv-abono-liquidar" type="button">Pago completado</button>
-        <label class="fl" for="pv-abono-nota">Nota (opcional)</label><textarea class="ei" id="pv-abono-nota" rows="2" maxlength="2000"></textarea>
-        <div class="edit-err" id="pv-abono-error" role="status" aria-live="polite"></div>
-        <div class="pv-abono-actions"><button class="dbtn" id="pv-abono-cancelar" type="button">Cerrar</button><button class="dbtn save" id="pv-abono-guardar" type="submit">Guardar abono</button></div>
-      </form>`;
-    document.body.appendChild(sheet);
-    document.getElementById('pv-abono-form').onsubmit = e => { e.preventDefault(); pvGuardarAbono(); };
-    document.getElementById('pv-abono-cancelar').onclick = () => closeSheet('pv-abono-sheet');
-    document.getElementById('pv-abono-liquidar').onclick = () => {
-      if (!PV_ABONO?.reserva || PV_ABONO.pendiente || PV_ABONO.guardando) return;
-      const input = document.getElementById('pv-abono-monto'); input.value = PV_ABONO.reserva.saldo_pendiente.toFixed(2); input.focus();
-    };
-    sheet.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSheet('pv-abono-sheet'); }
-      if (e.key !== 'Tab') return;
-      const items = [...sheet.querySelectorAll('input,textarea,button')].filter(x => !x.disabled);
-      const first = items[0], last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
-    });
-  }
-  const clave = `lotus-abono-reserva:${MI_USUARIO_ID}:${reservaId}`;
-  // Recuperar el importe original tras un timeout o recarga de esta pestaña.
-  let pendiente = PV_ABONO?.clave === clave ? PV_ABONO.pendiente : null;
-  try { pendiente = JSON.parse(sessionStorage.getItem(clave)) || pendiente; } catch (_) { /* Sin Storage, conservar memoria. */ }
-  const s = PV_ABONO = { id: reservaId, clave, pendiente, origen, reserva: null, cargando: true, guardando: false };
-  document.getElementById('pv-abono-form').reset();
-  document.getElementById('pv-abono-error').textContent = '';
-  pvAbonoPintar(s); openSheet('pv-abono-sheet'); document.getElementById('pv-abono-cancelar').focus();
-  await pvAbonoCargar(s);
-  if (PV_ABONO === s && sheet.classList.contains('open') && !document.getElementById('pv-abono-monto').disabled) document.getElementById('pv-abono-monto').focus();
-}
-async function pvGuardarAbono() {
-  const s = PV_ABONO;
-  if (!s || s.cargando || s.guardando) return;
-  if (!s.reserva) { await pvAbonoCargar(s); return; }
-  const err = document.getElementById('pv-abono-error'); err.textContent = '';
-  if (!s.pendiente) {
-    const monto = Number(document.getElementById('pv-abono-monto').value);
-    if (!Number.isFinite(monto) || monto <= 0 || Math.abs(monto * 100 - Math.round(monto * 100)) > 0.000001) { err.textContent = 'Indica un monto en USD con hasta dos decimales.'; return; }
-    if (monto > s.reserva.saldo_pendiente) { err.textContent = 'El abono no puede superar el saldo pendiente.'; return; }
-    pvAbonoSolicitud(s, { id: crypto.randomUUID(), monto, nota: document.getElementById('pv-abono-nota').value.trim() || null });
-  }
-  s.guardando = true; pvAbonoPintar(s);
-  try {
-    const p = s.pendiente;
-    const { data, error } = await sb.rpc('registrar_abono_reserva', { p_reserva_id: s.id, p_monto: p.monto, p_solicitud_id: p.id, p_nota: p.nota });
-    if (error) {
-      if (error.code === '42501') { pvAbonoSolicitud(s, null); throw Error('No tienes permiso para registrar este abono.'); }
-      throw Error('No se confirmó el resultado. Reintenta este mismo abono; no se cobrará dos veces.');
-    }
-    if (!data?.ok) {
-      if (!data) throw Error('No se confirmó el resultado. Reintenta este mismo abono.');
-      pvAbonoSolicitud(s, null);
-      await pvAbonoCargar(s);
-      err.textContent = data.error === 'supera_saldo' ? 'El saldo cambió. Revisa el importe antes de guardar.' : 'No se registró el abono: ' + (data.error || 'Error desconocido');
-      return;
-    }
-    pvAbonoSolicitud(s, null);
-    if (PV_ABONO === s && sheetAbierta === 'pv-abono-sheet') closeSheet('pv-abono-sheet');
-    pvAbonoRefrescar();
-    if (PV_ACTUAL?.id === s.id && RV_RESERVA_ID === s.id) {
-      Object.assign(PV_ACTUAL, data);
-      const pagado = document.getElementById('pv-e-pagado'); if (pagado) pagado.value = data.monto_pagado;
-      rvCargar();
-    }
-    okToast('Abono registrado');
-  } catch (e) {
-    if (PV_ABONO === s) err.textContent = e.message || 'No se confirmó el resultado. Reintenta el mismo abono.';
-  } finally {
-    s.guardando = false; pvAbonoPintar(s);
-  }
 }
 // Tarjetas de reservas fuera de la bandeja (fichas de proveedor y empresa): la bandeja completa,
 // sin filtro de etapa, es la misma fuente que pinta Reservas.
@@ -3504,7 +3372,8 @@ function abrirPostventa(c, accionInicial = null) {
       <label class="fl">Prioridad</label><select class="ei" id="pv-e-prioridad">${opt({ BAJA:'Baja', NORMAL:'Normal', ALTA:'Alta', URGENTE:'Urgente' }, c.prioridad)}</select>
       <div class="pv-balance" id="pv-e-balance">Mantén el monto total y lo abonado al día. El saldo se calcula automáticamente.</div>
       <label class="fl">Monto total (USD)</label><input class="ei" id="pv-e-total" type="number" min="0" step="0.01" value="${Number(c.monto_total || 0)}">
-      <label class="fl">Monto pagado (USD)</label><input class="ei" id="pv-e-pagado" type="number" min="0" step="0.01" value="${Number(c.monto_pagado || 0)}">
+      <label class="fl">Monto pagado (USD)</label><input class="ei" id="pv-e-pagado" type="number" min="0" step="0.01" value="${Number(c.monto_pagado || 0)}" readonly>
+      <div class="csub">Se suma solo con cada abono. Registra los pagos en la pestaña Abonos.</div>
       <div class="eb-title" style="margin-top:17px"><i class="fas fa-plane"></i> Viaje y reserva</div>
       <label class="fl">Inicio del viaje</label><input class="ei" id="pv-e-inicio" type="date" value="${esc(c.fecha_viaje_inicio || '')}">
       <label class="fl">Fin del viaje</label><input class="ei" id="pv-e-fin" type="date" value="${esc(c.fecha_viaje_fin || '')}">
@@ -3617,7 +3486,7 @@ const RV_DETALLE = {
   traslado_terrestre: [['origen', 'Origen'], ['destino', 'Destino'], ['vehiculo', 'Vehículo']],
   traslado_maritimo: [['embarcadero', 'Embarcadero'], ['embarcacion', 'Embarcación'], ['ida_vuelta', 'Ida y vuelta', 'bool']],
   full_day: [['excursion', 'Excursión'], ['punto_encuentro', 'Punto de encuentro'], ['incluye', 'Incluye']],
-  hospedaje: [['hotel', 'Hotel'], ['habitacion', 'Habitación'], ['plan', 'Plan'], ['noches', 'Noches', 'num']],
+  hospedaje: [['hotel', 'Hotel'], ['habitacion', 'Habitación'], ['plan', 'Plan'], ['noches', 'Noches', 'num'], ['check_in', 'Check-in'], ['check_out', 'Check-out'], ['voucher', 'N° de voucher']],
   seguro: [['aseguradora', 'Aseguradora'], ['cobertura', 'Cobertura'], ['poliza', 'Póliza']],
   otro: [['nota', 'Nota']],
 };
@@ -3783,6 +3652,9 @@ async function rvChecklist() {
 const rvFormAbierto = (p, suave) => suave && RV_FORM && p.querySelector('.rv-form[data-rv-form]');
 // Con servicios el total lo calcula el trigger recalcular_total_reserva y guardar_postventa ignora p_monto_total.
 function rvResumenTotal(r) {
+  // El pagado lo suman los abonos en el servidor: se vuelve a leer aquí para que "Guardar postventa" no mande un valor viejo.
+  const pagado = document.getElementById('pv-e-pagado');
+  if (pagado && r.monto_pagado != null) { pagado.value = Number(r.monto_pagado || 0); if (PV_ACTUAL) PV_ACTUAL.monto_pagado = r.monto_pagado; }
   const total = document.getElementById('pv-e-total');
   if (!total || !r.con_servicios) return;
   total.value = Number(r.monto_total || 0); total.readOnly = true;
@@ -3825,6 +3697,7 @@ function rvAccion(accion, id, btn) {
     case 'descargar': return rvDescargar(n, btn);
     case 'anular-documento': return rvAnularDocumento(n);
     case 'tramos': return bolAsegurarCatalogo().then(() => rvForm({ tipo: 'tramos', id: n }));
+    case 'armar-tramos': return rvArmarTramos(n, btn);
     case 'tramo-mas': return rvTramoFila();
     case 'tramo-menos': return btn.closest('.rv-tramo')?.remove();
     case 'guardar-tramos': return rvGuardarTramos(btn);
@@ -4232,6 +4105,11 @@ function rvLeerDetalle() {
   });
   return d;
 }
+// El formulario reemplaza todo el detalle: lo que no tiene campo propio (el producto del tarifario) se reenvía para no perderlo.
+function rvDetalleOculto(id) {
+  const previo = (RV_DET.servicios || []).find(x => x.id === id);
+  return val('rv-s-tipo') === 'hospedaje' && previo?.detalle?.producto_id != null ? { producto_id: previo.detalle.producto_id } : {};
+}
 async function rvGuardarServicio(btn) {
   const err = document.getElementById('rv-f-err'), id = RV_FORM?.id || null;
   const tramosPrevios = id ? (RV_DET.tramos || []).filter(t => t.servicio_id === id) : [];
@@ -4251,7 +4129,7 @@ async function rvGuardarServicio(btn) {
     datos = {
       tipo: val('rv-s-tipo'), descripcion: val('rv-s-desc').trim(), destino_id: val('rv-s-destino') ? Number(val('rv-s-destino')) : null,
       fecha_inicio: inicio, fecha_fin: fin, hora: val('rv-s-hora'), pax_adultos: Number(val('rv-s-adultos') || 0), pax_ninos: Number(val('rv-s-ninos') || 0),
-      localizador: val('rv-s-localizador').trim(), estado: val('rv-s-estado'), detalle: rvLeerDetalle(), precio, precio_moneda: val('rv-s-moneda'),
+      localizador: val('rv-s-localizador').trim(), estado: val('rv-s-estado'), detalle: { ...rvLeerDetalle(), ...rvDetalleOculto(id) }, precio, precio_moneda: val('rv-s-moneda'),
     };
     if (datos.precio_moneda !== 'USD' && val('rv-s-tasa') !== '') datos.precio_tasa = Number(val('rv-s-tasa'));
     if (datos.tipo === 'boleto_aereo') {
@@ -4429,7 +4307,7 @@ function rvBoletoHtml(s) {
   return `<div class="rv-bol">
     ${tl ? `<div class="rv-bol-tl ${tl.cls}"><i class="fas fa-hourglass-half"></i> ${tl.txt}</div>` : ''}
     <div class="rv-bol-t"><i class="fas fa-route"></i> Tramos</div>
-    ${tramos.length ? tramos.map(t => `<div class="rv-bol-fila"><b>${esc(t.origen_iata)} → ${esc(t.destino_iata)}</b><span>${rvHoraTramo(t.sale_en)}${t.llega_en ? ' – ' + esc(String(t.llega_en).slice(11, 16)) : ''}</span><span>${esc([t.aerolinea, t.numero_vuelo, t.clase].filter(Boolean).join(' · '))}</span></div>`).join('') : '<div class="csub">Sin tramos cargados</div>'}
+    ${tramos.length ? tramos.map(t => `<div class="rv-bol-fila"><b>${esc(t.origen_iata)} → ${esc(t.destino_iata)}</b><span>${rvHoraTramo(t.sale_en)}${t.llega_en ? ' – ' + esc(String(t.llega_en).slice(11, 16)) : ''}</span><span>${esc([t.aerolinea, t.numero_vuelo, t.clase].filter(Boolean).join(' · '))}</span></div>`).join('') : `<div class="csub">Sin tramos cargados</div>${rvAgente() && !s.anulado_en && s.fecha_inicio && (s.detalle?.ruta || s.descripcion) ? `<button class="btn-sm" type="button" data-rv-accion="armar-tramos" data-id="${s.id}"><i class="fas fa-wand-magic-sparkles"></i> Armar tramos desde la ruta</button>` : ''}`}
     <div class="rv-bol-t"><i class="fas fa-ticket"></i> Tickets</div>
     ${pax.length ? pax.map(p => { const b = tickets.find(x => x.pasajero_id === p.id); return `<div class="rv-bol-fila"><span>${esc([p.nombre, p.apellido].filter(Boolean).join(' '))}</span><b>${b ? esc(b.numero_ticket) : '<span class="csub">sin ticket</span>'}</b></div>`; }).join('') : '<div class="csub">La reserva no tiene pasajeros cargados (los carga el asesor)</div>'}
     ${eventos.length ? `<div class="rv-bol-t"><i class="fas fa-clock-rotate-left"></i> Historial</div>${eventos.map(e => `<div class="rv-bol-ev"><span>${rvEventoTexto(e)}</span><small>${new Date(e.created_at).toLocaleString('es-VE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${e.asesor ? ' · ' + esc(e.asesor) : ''}</small></div>`).join('')}` : ''}
@@ -4507,7 +4385,22 @@ async function rvCrearTramosBoleto(servicioId, datos) {
   if (error || !data?.ok) return { falla: rvErr(error, data) };
   return { ok: true, tramos: data.tramos || tramos.length };
 }
-const rvTicketsDocs = s => (RV_DET.documentos || []).filter(d => d.tipo === 'boleto' && d.servicio_id === s.id);
+// Botón de la tarjeta del boleto: arma los tramos con la ruta y las fechas ya guardadas. Solo ida con hora se resuelve aquí;
+// si falta la hora o no se sabe si es ida y vuelta, abre el formulario, que pide las horas y arma los tramos al guardar.
+async function rvArmarTramos(servicioId, btn) {
+  const s = (RV_DET.servicios || []).find(x => x.id === servicioId); if (!s) return;
+  const hora = s.hora ? String(s.hora).slice(0, 5) : '';
+  if (!hora || s.detalle?.ida_vuelta !== false) {
+    okToast('Completa las horas de ida y vuelta y guarda: los tramos se arman solos.');
+    return bolAsegurarCatalogo().then(() => rvForm({ tipo: 'servicio', id: servicioId }));
+  }
+  if (btn) btn.disabled = true;
+  const r = await rvCrearTramosBoleto(servicioId, { detalle: s.detalle, descripcion: s.descripcion, fecha_inicio: s.fecha_inicio, fecha_fin: s.fecha_fin, hora_ida: hora });
+  if (btn) btn.disabled = false;
+  if (r.falla || r.aviso) return errToast(r.falla ? 'No se cargaron los tramos: ' + r.falla : r.aviso);
+  okToast('Tramos armados desde la ruta'); rvTrasCambio();
+}
+const rvTicketsDocs = s =>(RV_DET.documentos || []).filter(d => d.tipo === 'boleto' && d.servicio_id === s.id);
 function rvTkUrl(docId, refrescar) {
   const c = RV_TK_URLS.get(docId);
   if (!refrescar && c && c.exp > Date.now()) return Promise.resolve(c.url);
@@ -6633,6 +6526,7 @@ const RES_ERRORES = {
   lead_sin_asesor: 'Asigná un asesor al lead antes de facturar',
   factura_anulada: 'La factura de esta reserva está anulada: emití una factura manual desde Facturación',
   reserva_inactiva: 'La reserva no está activa: el lead salió de espera de pago / pago realizado',
+  'pago incompleto': 'El pagado no cubre el total. Registra el saldo en la pestaña Abonos.',
 };
 // guardar_postventa levanta excepciones (error.message = código); crear/cerrar_reserva devuelven {ok:false,error}.
 const errReserva = (error, data) => RES_ERRORES[error?.message] || error?.message || RES_ERRORES[data?.error] || data?.error || '';
@@ -9336,16 +9230,49 @@ const EF_SERV = {
   seguro:             { p: ['aseguradora', 'Aseguradora'], x: [['cobertura', 'Cobertura']], f: ['Desde', 'Hasta'] },
   otro:               { p: [null, 'Descripción del servicio'], x: [], f: ['Fecha', null] },
 };
+let EF_HOTEL_SEQ = 0;
+// Hospedaje reutiliza los selectores de Cotizaciones (buscador con foto, plan y habitación con foto,
+// cbTraerTarifas/cbTraerHabitaciones). `card._hotel` hace de `it`; sin producto_id queda todo a mano.
+function efHotelPintar(card, conHotel) {
+  const st = card._hotel;
+  if (conHotel) card.querySelector('.ef-hotel-campo').innerHTML = cbHotelHtml(st, st.i);
+  card.querySelector('.ef-hotel-ph').innerHTML = st.producto_id
+    ? cbHotelSelectorHtml(st, st.i, 'plan', 'Plan') + cbHotelSelectorHtml(st, st.i, 'hab', 'Habitación')
+      + (st._tarifaError ? '<button type="button" class="btn-sm" data-ef-reintentar>Reintentar tarifas</button>' : '')
+    : `<div class="field"><label class="fl">Habitación</label><input class="ei" data-k="hab" value="${esc(st.hab)}" autocomplete="off"></div><div class="field"><label class="fl">Plan (ej. desayuno)</label><input class="ei" data-k="plan" value="${esc(st.plan)}" autocomplete="off"></div>`;
+}
+async function efHotelElegir(card, id) {
+  const st = card._hotel, p = cbHoteles.get(Number(id)); if (!st || !p) return;
+  const carga = ++st.carga;
+  Object.assign(st, { nombre: p.nombre, producto_id: p.id, plan: '', hab: '', plan_libre: false, hab_libre: false, _cargando: true, _tarifaError: false });
+  efHotelPintar(card, true);
+  try {
+    await Promise.all([cbTraerTarifas(p.id), cbTraerHabitaciones(p.id)]);
+    if (st.carga !== carga) return;
+    st.plan = cbTarOpciones(cbHotelFilas(st), 'plan')[0] || '';
+    st.hab = cbTarOpciones(cbTarDelPlan(cbHotelFilas(st), st.plan), 'habitacion')[0] || '';
+  } catch (error) {
+    console.error('efHotelElegir', error);
+    if (st.carga === carga) st._tarifaError = true;
+  } finally {
+    if (st.carga === carga) { st._cargando = false; efHotelPintar(card); }
+  }
+}
+function efHabElegir(op) {
+  const card = op.closest('.ef-serv'), st = card._hotel;
+  cbHotelCambiarOpcion(st, 'hab', op.dataset.cbHab); efHotelPintar(card);
+  document.getElementById(st.hab_libre ? `cb-hab-${st.i}-manual` : `cb-hab-${st.i}`)?.focus();
+}
 function efAgregarServicio(tipo) {
-  const sp = EF_SERV[tipo], [nombre, icono] = RV_TIPOS[tipo];
+  const sp = EF_SERV[tipo], [nombre, icono] = RV_TIPOS[tipo], hospedaje = tipo === 'hospedaje';
   const card = document.createElement('div');
   card.className = 'ef-serv'; card.dataset.tipo = tipo;
   const campo = (k, lbl, attrs = '') => `<div style="flex:1"><label class="fl-sub">${esc(lbl)}</label><input class="ei" data-k="${k}" ${attrs} autocomplete="off"></div>`;
   card.innerHTML = `
     <div class="ef-serv-top"><b><i class="fas ${icono}"></i>${esc(nombre)}</b>
       <button type="button" class="ef-serv-x" aria-label="Quitar servicio"><i class="fas fa-xmark"></i></button></div>
-    <div class="ef-fila">${campo('p', sp.p[1])}</div>
-    ${sp.x.length ? `<div class="ef-fila">${sp.x.map(([k, l]) => campo(k, l)).join('')}</div>` : ''}
+    ${hospedaje ? '<div class="ef-fila ef-hotel-campo"></div><div class="ef-fila ef-hotel-ph"></div>' : `<div class="ef-fila">${campo('p', sp.p[1])}</div>
+    ${sp.x.length ? `<div class="ef-fila">${sp.x.map(([k, l]) => campo(k, l)).join('')}</div>` : ''}`}
     <div class="ef-fila">
       ${campo('f1', sp.f[0], 'type="date"')}
       ${sp.f[1] ? campo('f2', sp.f[1] + ' (opcional)', 'type="date"') : ''}
@@ -9354,6 +9281,10 @@ function efAgregarServicio(tipo) {
     <div class="ef-fila">${campo('precio', 'Precio total de este servicio (USD)', 'type="number" min="0" step="0.01" placeholder="0.00"')}</div>`;
   card.querySelector('.ef-serv-x').addEventListener('click', () => { card.remove(); efRecalcular(); });
   card.querySelector('[data-k="precio"]').addEventListener('input', efRecalcular);
+  if (hospedaje) {
+    card._hotel = { i: 'ef' + (++EF_HOTEL_SEQ), nombre: '', producto_id: null, plan: '', hab: '', plan_libre: false, hab_libre: false, _cargando: false, _tarifaError: false, carga: 0 };
+    efHotelPintar(card, true); cbCargarProductos();
+  }
   document.getElementById('ef-servicios').appendChild(card);
   efRecalcular();
   return card;
@@ -9366,7 +9297,8 @@ function efLeerServicios() {
   const servicios = [];
   for (const card of cards) {
     const tipo = card.dataset.tipo, sp = EF_SERV[tipo], nombre = RV_TIPOS[tipo][0];
-    const v = k => (card.querySelector(`[data-k="${k}"]`)?.value || '').trim();
+    const st = card._hotel, delHotel = { p: 'nombre', habitacion: 'hab', plan: 'plan' };
+    const v = k => (st && delHotel[k] ? st[delHotel[k]] : card.querySelector(`[data-k="${k}"]`)?.value || '').trim();
     if (!v('p')) return { error: `${nombre}: falta ${sp.p[1].toLowerCase()}` };
     if (!v('f1')) return { error: `${nombre}: falta la fecha (${sp.f[0].toLowerCase()})` };
     if (v('f2') && v('f2') < v('f1')) return { error: `${nombre}: la fecha final es anterior a la inicial` };
@@ -9409,6 +9341,56 @@ function efRecalcular() {
   caja.addEventListener('click', e => {
     const b = e.target.closest('[data-ef-add]');
     if (b) efAgregarServicio(b.dataset.efAdd).querySelector('input')?.focus();
+  });
+  const lista = document.getElementById('ef-servicios');
+  lista.addEventListener('error', e => { if (e.target.matches('.cb-hotel-foto')) e.target.hidden = true; }, true);
+  lista.addEventListener('focusin', e => { if (e.target.dataset.busca === 'hotel') cbHotelBuscar(e.target); });
+  lista.addEventListener('focusout', e => {
+    if (e.target.dataset.busca !== 'hotel') return;
+    e.target.parentElement.querySelector('.cb-picker-lista').hidden = true; e.target.setAttribute('aria-expanded', 'false');
+  });
+  lista.addEventListener('pointerdown', e => {
+    if (e.target.closest('[data-cb-hab]')) { e.preventDefault(); return; }
+    const op = e.target.closest('[data-cb-hotel]');
+    if (op) { e.preventDefault(); efHotelElegir(op.closest('.ef-serv'), op.dataset.cbHotel); }
+  });
+  lista.addEventListener('keydown', e => {
+    const t = e.target;
+    if (t.matches('[data-cb-hab-abrir]')) {
+      const box = t.closest('.cb-picker'), op = box.querySelector('.cb-picker-lista');
+      if (e.key === 'Tab' || e.key === 'Escape') { cbHabCerrar(box); return; }
+      if ((e.key === 'Enter' || e.key === ' ') && op.hidden) { e.preventDefault(); op.hidden = false; t.setAttribute('aria-expanded', 'true'); return; }
+      cbPickerTeclas(e, op, efHabElegir); return;
+    }
+    if (t.dataset.busca === 'hotel') cbPickerTeclas(e, t.parentElement.querySelector('.cb-picker-lista'), op => efHotelElegir(op.closest('.ef-serv'), op.dataset.cbHotel));
+  });
+  lista.addEventListener('click', e => {
+    const t = e.target, card = t.closest('.ef-serv'), st = card?._hotel; if (!st) return;
+    const hab = t.closest('[data-cb-hab]'); if (hab) { efHabElegir(hab); return; }
+    const abrir = t.closest('[data-cb-hab-abrir]');
+    if (abrir) { const op = abrir.parentElement.querySelector('.cb-picker-lista'); op.hidden = !op.hidden; abrir.setAttribute('aria-expanded', String(!op.hidden)); return; }
+    const hotel = t.closest('[data-cb-hotel]'); if (hotel) { efHotelElegir(card, hotel.dataset.cbHotel); return; }
+    if (t.closest('[data-cb-hab-fotos]')) { const fotos = cbHabitacionFotos(st, st.hab); if (fotos.length) openLightbox(fotos.map(f => fotoGrande(f.storage_path)), 0); return; }
+    if (t.closest('[data-cb-fotos-reintentar]')) { cbTraerHabitaciones(st.producto_id).then(() => efHotelPintar(card)); return; }
+    if (t.closest('[data-ef-reintentar]')) efHotelElegir(card, st.producto_id);
+  });
+  lista.addEventListener('change', e => {
+    const sel = e.target.closest('select[data-cb-campo]'), card = sel?.closest('.ef-serv'), st = card?._hotel; if (!st) return;
+    cbHotelCambiarOpcion(st, sel.dataset.cbCampo, sel.value);
+    if (sel.dataset.cbCampo === 'plan' && sel.value !== '__manual__') st.hab = cbTarOpciones(cbTarDelPlan(cbHotelFilas(st), st.plan), 'habitacion')[0] || '';
+    efHotelPintar(card);
+  });
+  lista.addEventListener('input', e => {
+    const t = e.target, card = t.closest('.ef-serv'), st = card?._hotel, k = t.dataset.k;
+    if (!st || !['nombre', 'hab', 'plan'].includes(k)) return;
+    st[k] = t.value;
+    if (k !== 'nombre') return;
+    if (st.producto_id) {
+      card.querySelector('.cb-hotel-foto')?.remove();
+      Object.assign(st, { producto_id: null, carga: st.carga + 1, _cargando: false, _tarifaError: false, plan: '', hab: '', plan_libre: false, hab_libre: false });
+      efHotelPintar(card);
+    }
+    cbHotelBuscar(t);
   });
 })();
 
@@ -26225,6 +26207,8 @@ let AB = null;
 function abonosModulo() {
   if (!AB) AB = crearAbonos({ sb, esc, usuario: () => MI_USUARIO_ID, fecha: fmtFechaHoraCaracas,
     ok: okToast, error: errToast, pedir: pedirTexto,
+    // Un abono nuevo o anulado cambia el pagado en el servidor: refresca el resumen del drawer.
+    pagosCambiaron: () => rvTrasCambio(),
     // Fase 3: con esto el módulo arma la revisión del voucher y el recibo del abono.
     librerias: ensureVoucherLibs,
     membrete: (doc, ctx) => vcpMembrete(doc, ctx),
@@ -32164,6 +32148,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-21', emoji: '🏨', titulo: 'Hoteles con foto al crear una reserva', texto: 'En Crear reserva, el servicio de hospedaje usa el mismo buscador de hoteles y posadas con foto de Cotizaciones, y te deja elegida la habitación y el plan (con foto de la habitación). Si el hotel no está en la lista, o quieres otra habitación o plan, los escribes a mano como antes.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '➕', titulo: 'Crear reserva', texto: 'El botón "Enviar a facturación" ahora es "Crear reserva" y ya no pasa por un admin: eliges los servicios que compró el cliente (hospedaje, vuelos, traslados, full day, seguro u otro), anotas lo que pagó y la reserva queda creada al instante con su abono y su saldo. Después le cargas pasajeros y documentos desde Reservas.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '🧾', titulo: 'Voucher del paquete completo', texto: 'En Reservas > Servicios, el botón "Voucher del paquete" arma un solo PDF con todos los servicios de la reserva (hotel, vuelos, traslados y el resto), los pasajeros y el resumen de pago. Si falta la cédula, el teléfono o la forma de pago, los pide en una ventana antes de generarlo. Queda descargado y adjunto a la reserva, y el voucher de hotel deja de figurar como pendiente.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '✈️', titulo: 'Tarifas de vuelo nuevas y precio de Navidad', texto: 'Las tarifas "Desde" de boletería se actualizaron con lo que de verdad se cotizó: Caracas–Margarita $190, Caracas–Los Roques $335 y Valencia–Margarita $200 por persona ida y vuelta (antes 109, 320 y 160). Además, las salidas en Navidad y Fin de Año (del 15 de diciembre al 10 de enero) tienen su propio precio, más alto: $395, $390 y $300. La web, el cotizador y la IA ya eligen el precio según la fecha de viaje, así que si el cliente viaja en esas fechas ven el monto de temporada. En Boletería > Rutas se ven las dos tarifas de cada ruta.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },

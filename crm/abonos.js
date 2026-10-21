@@ -240,6 +240,7 @@ export function crearAbonos(c) {
       else c.ok(`Abono registrado · ${docs.voucherInfo ? `Voucher ${docs.voucherInfo.numero} rev. ${docs.voucherInfo.revision}` : 'sin revisión de voucher'}${docs.reciboId ? ' · Recibo' : ''} · saldo ${usd(data.saldo_pendiente)}`);
       est.datos = null;
       await cargar(est.reservaId);
+      c.pagosCambiaron?.();
     } catch (e) {
       poner(mensaje(e));
       c.error(mensaje(e));
@@ -261,6 +262,7 @@ export function crearAbonos(c) {
     c.ok(`Abono anulado · saldo ${usd(data.saldo_pendiente)}`);
     est.datos = null;
     await cargar(est.reservaId);
+    c.pagosCambiaron?.();
   }
   // ------------------------------------------------ documentos del abono (fase 3)
   // El abono (el pago) ya está guardado y es la fuente de verdad: acá solo se arman los

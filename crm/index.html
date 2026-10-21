@@ -476,6 +476,7 @@ body.menu-arrastrando .side-scrim{transition:none}
 .card h2{font-size:14px;font-weight:700;display:flex;align-items:center;gap:9px;margin-bottom:4px}
 .card h2 i{color:var(--accent-ink);font-size:13px}
 .card .csub{font-size:11.5px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:6px}
+#drawer .csub,.rv-form .csub{font-size:11.5px;line-height:1.35;font-weight:400;color:var(--muted);margin:3px 0 10px}
 .chart-wrap{position:relative;height:230px}
 .chart-wrap-lg{height:250px}
 .chart-sm{position:relative;height:210px}
@@ -1089,7 +1090,8 @@ input.ei[list]::-webkit-calendar-picker-indicator{opacity:0;width:28px;cursor:po
 select.ei{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238b93ad' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;cursor:pointer;color-scheme:dark}
 select.ei option{background:var(--panel-solid);color:var(--txt);font-size:15px;font-weight:600;padding:10px 12px}
 select.ei option:checked{background:var(--accent);color:var(--on-accent)}
-input.ei[type=date]{color-scheme:dark}
+input.ei[type=date],input.ei[type=datetime-local],input.ei[type=time]{color-scheme:dark}
+:root[data-theme="light"] input.ei[type=date],:root[data-theme="light"] input.ei[type=datetime-local],:root[data-theme="light"] input.ei[type=time]{color-scheme:light}
 .venta-box{display:none;margin-top:8px;padding-top:10px;border-top:1px dashed rgba(var(--accent-rgb),.3)}
 /* Enviar a facturación */
 .ef-cliente{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);margin:2px 0 10px;padding:0 2px}
@@ -1201,6 +1203,7 @@ input.ei[type=date]{color-scheme:dark}
 .ef-serv-x{background:none;border:0;color:var(--muted);font-size:15px;padding:4px 8px;cursor:pointer;font-family:inherit}
 .ef-serv-x:hover{color:#ff8a8a}
 .ef-serv .fl-sub{display:block;margin:7px 0 3px}
+.ef-serv .field{margin:0;flex:1 1 150px;min-width:0}.ef-serv .field .fl{margin:7px 0 3px}.ef-hotel-ph{flex-wrap:wrap}.ef-hotel-ph>.btn-sm{align-self:flex-end}
 .ef-agregar{margin-bottom:4px}
 .ef-agregar .ef-tipo{min-width:0;flex:0 1 auto;padding:7px 11px}
 /* Sub-pestaña "En facturación" de Leads */
