@@ -261,7 +261,7 @@ body:has(#vista-previa-banner){padding-top:36px}
 .export-dd{position:relative;display:inline-block}
 .export-dd-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--bg2);border:1px solid var(--line2);border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.4);z-index:20;min-width:150px;overflow:hidden}
 .export-dd-menu.show{display:block}
-.exp-fila{display:flex;justify-content:flex-end;margin:4px 0 10px}
+.exp-fila{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin:4px 0 10px}
 .export-dd-menu button{display:flex;align-items:center;gap:9px;width:100%;padding:10px 14px;background:transparent;border:none;color:var(--txt);font-size:12.5px;font-family:inherit;cursor:pointer;text-align:left}
 .export-dd-menu button:hover{background:rgba(255,255,255,.06)}
 .btn-sm:hover{border-color:var(--accent)}
@@ -7630,8 +7630,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     <section class="section" id="sec-pagos">
       <div class="card">
         <h2><i class="fas fa-money-check-dollar"></i> Pagos por verificar</h2>
-        <div class="csub">Links de pago que un cliente declaró como pagados. Abrí el comprobante y comprobá el monto y la referencia contra el banco antes de aprobar.</div>
-        <div class="exp-fila"><div class="export-dd">
+        <div class="csub">Pagos que un cliente declaró como pagados, incluidas las compras hechas en la web. Abre el comprobante y comprueba el monto y la referencia contra el banco antes de aprobar.</div>
+        <div class="exp-fila"><button class="btn-sm" type="button" id="pagos-web-todos"><i class="fas fa-globe"></i> Compras web: solo pendientes</button><div class="export-dd">
           <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'pagos')"><i class="fas fa-download"></i> Exportar</button>
           <div class="export-dd-menu" id="export-menu-pagos">
             <button onclick="exportarPDF('pagos','Pagos por verificar')"><i class="fas fa-file-pdf"></i> PDF</button>

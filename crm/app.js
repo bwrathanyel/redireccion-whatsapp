@@ -10384,6 +10384,23 @@ const MSG_VERIFICAR_PAGO = {
   factura_de_otro_lead: 'La factura asociada es de otro lead.',
   pago_ya_conciliado: 'El pago ya quedó conciliado con otra factura.',
 };
+// Compras directas de la web: se verifican con verificar_pago_web (puente a reserva, abono, lead y correo),
+// nunca con verificar_pago a secas, que solo marcaría el pago y dejaría la reserva sin confirmar.
+let PAGOS_WEB_TODOS = false;
+let PAGOS_CARGA = 0;
+const PAGO_ESTADO_LABEL = {
+  emitido: 'Sin declarar', pendiente_verificacion: 'Por verificar', verificado: 'Verificado',
+  rechazado: 'Rechazado', vencido: 'Vencido',
+};
+const MSG_VERIFICAR_PAGO_WEB = {
+  ...MSG_VERIFICAR_PAGO,
+  no_es_pago_web: 'Este pago no es de una compra hecha en la web.',
+  pago_no_declarado: 'El cliente aún no declaró este pago. Recarga la lista.',
+  reserva_liberada: 'El cupo de esta reserva ya se liberó por vencimiento. Habla con el cliente y rehaz la reserva a mano antes de cobrar.',
+  reserva_no_disponible: 'La reserva ya no está disponible (cerrada o eliminada). Revísala antes de aprobar.',
+  lead_fuera_de_ventas: 'El lead ya salió del flujo de ventas. Revisa el caso antes de aprobar.',
+  riel_no_soportado: 'Este medio de pago no se puede confirmar desde aquí.',
+};
 
 // "Bs 4.000,00 · ~$98,77 (tasa 40,50)" para VES; "$98,77" / "USDT 98,77" para el resto.
 function pagoMontoTexto(p) {
@@ -10438,21 +10455,73 @@ async function emitirLinkPago(l) {
   ACTIVIDAD_CACHE = null;
 }
 
+function pagoWebCard(p) {
+  const centavosUsd = p.moneda === 'VES' ? p.monto_usd_centavos : (p.monto_usd_centavos ?? p.monto_centavos);
+  const total = p.total_usd == null ? null : Number(p.total_usd);
+  const descuadre = total != null && centavosUsd != null && Math.abs(Number(centavosUsd) / 100 - total) > 0.01;
+  const pend = p.estado === 'pendiente_verificacion';
+  const slaTxt = pend
+    ? `Verificar antes de ${fmtFechaHoraCaracas(p.verificar_antes_de)}${p.sla_vencido ? ' · plazo vencido' : ''}`
+    : p.estado === 'emitido' || p.estado === 'vencido' ? `Plazo de pago: ${fmtFechaHoraCaracas(p.expira_en)}` : '';
+  const acciones = [];
+  if (p.comprobante_path) acciones.push(`<button type="button" class="inbox-btn" data-pago-comprobante="${p.id}"><i class="fas fa-receipt"></i> Comprobante</button>`);
+  else if (pend) acciones.push('<span class="ec-row" style="color:var(--amber)"><i class="fas fa-triangle-exclamation"></i> Sin comprobante</span>');
+  if (pend) {
+    acciones.push(`<button type="button" class="inbox-btn atender" data-pagoweb-aprobar="${p.id}"><i class="fas fa-check"></i> Verificar y confirmar</button>`);
+    acciones.push(`<button type="button" class="inbox-btn nopuedo" data-pagoweb-rechazar="${p.id}"><i class="fas fa-xmark"></i> Rechazar</button>`);
+  } else if (p.estado === 'vencido' || p.estado === 'emitido') {
+    acciones.push(`<button type="button" class="inbox-btn atender" data-pagoweb-tarde="${p.id}"><i class="fas fa-check"></i> Ya pagó: confirmar</button>`);
+  }
+  return `
+    <div class="entity-card inbox-card" data-pago="${p.id}">
+      <div class="ec-top"><div class="ec-nombre">${esc(p.lead_nombre || 'Sin nombre')}</div>
+        <span class="badge-st" style="${p.sla_vencido ? 'color:var(--danger)' : 'color:var(--muted)'}">${esc(PAGO_ESTADO_LABEL[p.estado] || p.estado)}</span></div>
+      <div class="ec-row"><i class="fas fa-globe"></i> Compra web ${esc(p.codigo || '')}${p.resumen ? ' · ' + esc(p.resumen) : ''}</div>
+      <div class="ec-row"><i class="fas fa-dollar-sign"></i> ${esc(pagoMontoTexto(p))} · ${esc(PAGO_RIEL_LABEL[p.riel] || p.riel)}</div>
+      ${total != null ? `<div class="ec-row" ${descuadre ? 'style="color:var(--danger)"' : ''}><i class="fas fa-${descuadre ? 'triangle-exclamation' : 'scale-balanced'}"></i> Total de la reserva: $${esc(total.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}${descuadre ? ' · el monto no coincide' : ''}</div>` : ''}
+      <div class="ec-row"><i class="fas fa-hashtag"></i> Ref: ${esc(p.referencia_declarada || '—')}</div>
+      <div class="ec-row"><i class="fas fa-user"></i> ${esc(p.asesor || 'Sin asignar')}${p.lead_telefono ? ' · ' + esc(p.lead_telefono) : ''}</div>
+      <div class="ec-row"><i class="fas fa-clock"></i> ${p.declarado_en ? 'Declarado ' + esc(tiempoRelativo(p.declarado_en)) : 'Sin declarar'}</div>
+      ${slaTxt ? `<div class="ec-row" ${pend && p.sla_vencido ? 'style="color:var(--danger)"' : ''}><i class="fas fa-hourglass-half"></i> ${esc(slaTxt)}</div>` : ''}
+      ${acciones.length ? `<div class="inbox-actions">${acciones.join('')}</div>` : ''}
+    </div>`;
+}
+
 async function loadPagos() {
   const loading = document.getElementById('pagos-loading');
   const empty = document.getElementById('pagos-empty');
   const lista = document.getElementById('pagos-lista');
   if (!lista) return;
+  const carga = ++PAGOS_CARGA;
   loading.classList.add('show'); empty.classList.remove('show'); lista.innerHTML = '';
-  const { data, error } = await sb.rpc('listar_pagos', { p_estado: 'pendiente_verificacion' });
+  // La cola de pendientes se pide siempre: sus ids se sacan de la lista general (cuyo botón «Aprobar» no sirve
+  // para una compra web). En modo «todas» se pide aparte la cola completa solo para mostrarla.
+  const [rLista, rWeb, rWebTodas] = await Promise.all([
+    sb.rpc('listar_pagos', { p_estado: 'pendiente_verificacion' }),
+    sb.rpc('pagos_web_cola', { p_solo_pendientes: true, p_limite: 300 }),
+    PAGOS_WEB_TODOS ? sb.rpc('pagos_web_cola', { p_solo_pendientes: false, p_limite: 300 }) : Promise.resolve(null),
+  ]);
+  if (carga !== PAGOS_CARGA) return; // llegó una recarga más nueva: la que pinta es esa
   loading.classList.remove('show');
-  if (error || !data?.ok) {
-    errToast(error?.message || data?.error || 'No se pudieron cargar los pagos');
+  if (rLista.error || !rLista.data?.ok) {
+    errToast(rLista.error?.message || rLista.data?.error || 'No se pudieron cargar los pagos');
     return;
   }
-  PAGOS_CACHE = data.pagos || [];
+  // PGRST202 = la RPC aún no existe (CRM publicado antes de la migración): no puede haber compras web.
+  // Cualquier otro fallo corta: sin la cola, una compra web se vería en la lista general con el botón equivocado.
+  const falla = [rWeb, rWebTodas].find(r => r?.error && r.error.code !== 'PGRST202');
+  if (falla) {
+    errToast(falla.error.message || 'No se pudo cargar la cola de compras web');
+    return;
+  }
+  const idsPendientes = new Set((Array.isArray(rWeb.data) ? rWeb.data : []).map(w => w.pago_id));
+  const filasWeb = Array.isArray(rWebTodas?.data) ? rWebTodas.data : [];
+  const web = [...filasWeb, ...(Array.isArray(rWeb.data) ? rWeb.data : []).filter(w => !filasWeb.some(x => x.pago_id === w.pago_id))]
+    .map(w => ({ ...w, id: w.pago_id, _web: true, lead_nombre: w.cliente, lead_telefono: w.telefono, created_at: w.orden }));
+  const idsWeb = new Set([...idsPendientes, ...web.map(w => w.id)]);
+  PAGOS_CACHE = [...web, ...(rLista.data.pagos || []).filter(p => !idsWeb.has(p.id))];
   if (!PAGOS_CACHE.length) { empty.classList.add('show'); return; }
-  lista.innerHTML = PAGOS_CACHE.map(p => `
+  lista.innerHTML = PAGOS_CACHE.map(p => p._web ? pagoWebCard(p) : `
     <div class="entity-card inbox-card" data-pago="${p.id}">
       <div class="ec-top"><div class="ec-nombre">${esc(p.lead_nombre || 'Sin nombre')}</div></div>
       <div class="ec-row"><i class="fas fa-tag"></i> ${esc(p.tipo === 'abono' ? 'Abono / reserva' : 'Pago total')} · ${esc(PAGO_RIEL_LABEL[p.riel] || p.riel)}</div>
@@ -10503,6 +10572,48 @@ async function verificarPagoAccion(id, aprobar, btn) {
   if (currentSec === 'balance') loadBalance();
 }
 
+// modo: 'aprobar' | 'rechazar' | 'tarde' (pago sin declarar o vencido que la persona confirma haber visto en el banco).
+// Un solo confirmarSheet por acción: encadenar dos cierra el segundo (history.back del primero).
+async function verificarPagoWebAccion(id, modo, btn) {
+  const p = PAGOS_CACHE.find(x => x.id === id && x._web);
+  if (!p) return;
+  const aprobar = modo !== 'rechazar';
+  const cod = p.codigo || 'la reserva';
+  let motivo = null;
+  if (aprobar) {
+    const aviso = modo === 'tarde'
+      ? 'El cliente no declaró este pago a tiempo. Confirma solo si ya comprobaste en el banco que el dinero entró. '
+      : 'Confirma solo si ya comprobaste el monto y la referencia contra el banco. ';
+    if (!(await confirmarSheet({
+      titulo: `¿Confirmar la reserva ${cod}?`,
+      detalle: aviso + `Se registra el abono de ${pagoMontoTexto(p)}, se confirman los servicios, el lead pasa a PAGO REALIZADO y el cliente recibe por correo su localizador.`,
+      textoOk: 'Verificar y confirmar',
+    }))) return;
+  } else {
+    motivo = await pedirTexto({ titulo: 'Rechazar pago', detalle: `Compra ${cod} · ${pagoMontoTexto(p)}. El motivo queda registrado; si no hay otro pago vivo, el cupo se libera solo.`, label: 'Motivo del rechazo', tipo: 'textarea', requerido: true, textoOk: 'Rechazar', destructivo: true });
+    if (motivo === null) return;
+  }
+  if (btn) btn.disabled = true;
+  const params = { p_pago_id: id, p_aprobar: aprobar };
+  if (motivo) params.p_motivo = motivo.trim();
+  if (modo === 'tarde') params.p_sin_declaracion = true;
+  const { data, error } = await sb.rpc('verificar_pago_web', params);
+  if (error || !data?.ok) {
+    if (btn) btn.disabled = false;
+    errToast(MSG_VERIFICAR_PAGO_WEB[data?.error] || error?.message || data?.error || 'No se pudo procesar el pago');
+    if (['pago_no_existe', 'estado_final', 'pago_no_declarado', 'reserva_liberada', 'reserva_no_disponible'].includes(data?.error)) loadPagos();
+    return;
+  }
+  if (!aprobar) okToast('Pago rechazado');
+  else okToast(data.correo_encolado
+    ? `Reserva ${data.codigo} confirmada. El correo con el localizador sale en unos minutos.`
+    : `Reserva ${data.codigo} confirmada. El cliente no dejó correo: envíale el código por WhatsApp.`);
+  loadPagos();
+  ULTIMA_CARGA.balance = 0;
+  if (currentSec === 'facturacion') loadFacturacion();
+  if (currentSec === 'balance') loadBalance();
+}
+
 function setupPagos() {
   const lista = document.getElementById('pagos-lista');
   if (!lista) return;
@@ -10513,6 +10624,20 @@ function setupPagos() {
     if (apr) return verificarPagoAccion(Number(apr.dataset.pagoAprobar), true, apr);
     const rec = e.target.closest('[data-pago-rechazar]');
     if (rec) return verificarPagoAccion(Number(rec.dataset.pagoRechazar), false, rec);
+    const wApr = e.target.closest('[data-pagoweb-aprobar]');
+    if (wApr) return verificarPagoWebAccion(Number(wApr.dataset.pagowebAprobar), 'aprobar', wApr);
+    const wRec = e.target.closest('[data-pagoweb-rechazar]');
+    if (wRec) return verificarPagoWebAccion(Number(wRec.dataset.pagowebRechazar), 'rechazar', wRec);
+    const wTarde = e.target.closest('[data-pagoweb-tarde]');
+    if (wTarde) return verificarPagoWebAccion(Number(wTarde.dataset.pagowebTarde), 'tarde', wTarde);
+  });
+  const todos = document.getElementById('pagos-web-todos');
+  if (todos) todos.addEventListener('click', () => {
+    PAGOS_WEB_TODOS = !PAGOS_WEB_TODOS;
+    todos.innerHTML = PAGOS_WEB_TODOS
+      ? '<i class="fas fa-globe"></i> Compras web: todas'
+      : '<i class="fas fa-globe"></i> Compras web: solo pendientes';
+    loadPagos();
   });
 }
 
@@ -17348,7 +17473,7 @@ EXPORTABLES.informe = {
 EXPORTABLES.pagos = {
   cols: [['lead_nombre', 'Cliente'], ['lead_telefono', 'Teléfono'], ['asesor', 'Asesor'], ['tipo', 'Tipo'], ['riel', 'Medio'], ['monto', 'Monto'], ['referencia_declarada', 'Referencia'], ['comprobante_path', 'Comprobante'], ['created_at', 'Declarado']],
   filas: () => PAGOS_CACHE,
-  celda: (c, r) => c === 'monto' ? pagoMontoTexto(r) : c === 'comprobante_path' ? siNo(r[c]) : r[c] == null ? '' : c === 'tipo' ? (r[c] === 'abono' ? 'Abono / reserva' : 'Pago total') : c === 'riel' ? (PAGO_RIEL_LABEL[r[c]] || r[c]) : c === 'created_at' ? fmtFechaHoraCaracas(r[c]) : String(r[c]),
+  celda: (c, r) => c === 'monto' ? pagoMontoTexto(r) : c === 'comprobante_path' ? siNo(r[c]) : r[c] == null ? '' : c === 'tipo' ? (r._web ? 'Compra web' : r[c] === 'abono' ? 'Abono / reserva' : 'Pago total') : c === 'riel' ? (PAGO_RIEL_LABEL[r[c]] || r[c]) : c === 'created_at' ? fmtFechaHoraCaracas(r[c]) : String(r[c]),
 };
 EXPORTABLES.cev = {
   cols: [['nombre', 'Nombre'], ['telefono', 'Teléfono'], ['instagram', 'Instagram'], ['codigo', 'Código'], ['interes', 'Interés'], ['acepta_promos', 'Acepta promos'], ['creado_en', 'Registro'], ['premios', 'Premios'], ['cupones', 'Cupones'], ['por_entregar', 'Por entregar']],
