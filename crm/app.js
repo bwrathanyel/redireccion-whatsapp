@@ -10373,13 +10373,13 @@ const PAGO_RIEL_LABEL = {
 const MSG_EMITIR_PAGO = {
   lead_no_disponible: 'El lead no está disponible.',
   monto_invalido: 'El monto no es válido.',
-  falta_tasa: 'Para cobrar en Bs necesitás la tasa Bs/USD del día.',
+  falta_tasa: 'Para cobrar en Bs necesitas la tasa Bs/USD del día.',
   monto_ves_muy_bajo: 'Ese monto en Bs equivale a menos de un centavo de dólar. Revisalo.',
 };
 const MSG_VERIFICAR_PAGO = {
   pago_no_existe: 'El pago ya no existe.',
   estado_final: 'Este pago ya fue procesado.',
-  excede_total_factura: 'El pago supera el total de la factura asociada. Revisá antes de aprobar.',
+  excede_total_factura: 'El pago supera el total de la factura asociada. Revisa antes de aprobar.',
   factura_no_existe: 'La factura asociada no existe.',
   factura_de_otro_lead: 'La factura asociada es de otro lead.',
   pago_ya_conciliado: 'El pago ya quedó conciliado con otra factura.',
@@ -10421,10 +10421,10 @@ async function emitirLinkPago(l) {
   const monto = parseFloat(val('lp-monto'));
   const tasa = parseFloat(val('lp-tasa'));
   if (!Number.isFinite(monto) || monto <= 0) {
-    err.textContent = 'Poné un monto mayor a 0.'; err.style.display = 'block'; return;
+    err.textContent = 'Escribe un monto mayor a 0.'; err.style.display = 'block'; return;
   }
   if (moneda === 'VES' && (!Number.isFinite(tasa) || tasa <= 0)) {
-    err.textContent = 'Para cobrar en Bs necesitás la tasa Bs/USD del día.'; err.style.display = 'block'; return;
+    err.textContent = 'Para cobrar en Bs necesitas la tasa Bs/USD del día.'; err.style.display = 'block'; return;
   }
   const centavos = Math.round(monto * 100);
   btn.disabled = true;
@@ -10455,34 +10455,71 @@ async function emitirLinkPago(l) {
   ACTIVIDAD_CACHE = null;
 }
 
+// Montos con miles a mano: toLocaleString('es-VE') no agrupa números de 4 cifras (1234,56).
+function pagoWebDec(centavos) {
+  const c = Math.round(Math.abs(Number(centavos) || 0));
+  return `${Math.floor(c / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${String(c % 100).padStart(2, '0')}`;
+}
+// El monto tal como debe verse en el banco: Bs para Pago Móvil, USDT para Binance, $ para Zelle.
+function pagoWebMontoBanco(p) {
+  const pre = p.moneda === 'VES' ? 'Bs' : p.moneda === 'USDT' ? 'USDT' : '$';
+  return `${pre} ${pagoWebDec(p.monto_centavos)}`;
+}
+const PAGO_WEB_MONO = 'font-family:ui-monospace,SFMono-Regular,Menlo,monospace';
+// Cargos de la compra (gestión web, IGTF): resumen los trae mezclados con el hotel ("Hotel + Cargo… + IGTF…").
+const esCargoWeb = t => /^(cargo por gesti|igtf)/i.test(String(t).trim());
+const refNormal = r => String(r || '').replace(/\s+/g, '').toLowerCase();
+// Otra fila cargada en la cola con la misma referencia: mismo pago declarado dos veces o error de tipeo.
+function pagoWebRefRepetida(p) {
+  const r = refNormal(p.referencia_declarada);
+  if (r.length < 4) return null;
+  return PAGOS_CACHE.find(o => o.id !== p.id && refNormal(o.referencia_declarada) === r) || null;
+}
+
 function pagoWebCard(p) {
   const centavosUsd = p.moneda === 'VES' ? p.monto_usd_centavos : (p.monto_usd_centavos ?? p.monto_centavos);
   const total = p.total_usd == null ? null : Number(p.total_usd);
   const descuadre = total != null && centavosUsd != null && Math.abs(Number(centavosUsd) / 100 - total) > 0.01;
   const pend = p.estado === 'pendiente_verificacion';
+  const partes = String(p.resumen || '').split(' + ').map(t => t.trim()).filter(Boolean);
+  const servicios = partes.filter(t => !esCargoWeb(t));
+  const cargos = partes.filter(esCargoWeb);
+  const repetida = pagoWebRefRepetida(p);
   const slaTxt = pend
     ? `Verificar antes de ${fmtFechaHoraCaracas(p.verificar_antes_de)}${p.sla_vencido ? ' · plazo vencido' : ''}`
     : p.estado === 'emitido' || p.estado === 'vencido' ? `Plazo de pago: ${fmtFechaHoraCaracas(p.expira_en)}` : '';
+  const sub = [
+    PAGO_RIEL_LABEL[p.riel] || p.riel,
+    p.moneda === 'VES' ? `≈ $${pagoWebDec(p.monto_usd_centavos || 0)} · tasa ${p.tasa_usd_ves}` : '',
+  ].filter(Boolean).join(' · ');
   const acciones = [];
-  if (p.comprobante_path) acciones.push(`<button type="button" class="inbox-btn" data-pago-comprobante="${p.id}"><i class="fas fa-receipt"></i> Comprobante</button>`);
+  if (p.comprobante_path) acciones.push(`<button type="button" class="inbox-btn" data-pago-comprobante="${p.id}"><i class="fas fa-receipt"></i> Ver comprobante</button>`);
   else if (pend) acciones.push('<span class="ec-row" style="color:var(--amber)"><i class="fas fa-triangle-exclamation"></i> Sin comprobante</span>');
   if (pend) {
     acciones.push(`<button type="button" class="inbox-btn atender" data-pagoweb-aprobar="${p.id}"><i class="fas fa-check"></i> Verificar y confirmar</button>`);
     acciones.push(`<button type="button" class="inbox-btn nopuedo" data-pagoweb-rechazar="${p.id}"><i class="fas fa-xmark"></i> Rechazar</button>`);
   } else if (p.estado === 'vencido' || p.estado === 'emitido') {
-    acciones.push(`<button type="button" class="inbox-btn atender" data-pagoweb-tarde="${p.id}"><i class="fas fa-check"></i> Ya pagó: confirmar</button>`);
+    acciones.push(`<button type="button" class="inbox-btn avisar" data-pagoweb-tarde="${p.id}"><i class="fas fa-check"></i> Ya pagó: confirmar</button>`);
   }
   return `
     <div class="entity-card inbox-card" data-pago="${p.id}">
       <div class="ec-top"><div class="ec-nombre">${esc(p.lead_nombre || 'Sin nombre')}</div>
         <span class="badge-st" style="${p.sla_vencido ? 'color:var(--danger)' : 'color:var(--muted)'}">${esc(PAGO_ESTADO_LABEL[p.estado] || p.estado)}</span></div>
-      <div class="ec-row"><i class="fas fa-globe"></i> Compra web ${esc(p.codigo || '')}${p.resumen ? ' · ' + esc(p.resumen) : ''}</div>
-      <div class="ec-row"><i class="fas fa-dollar-sign"></i> ${esc(pagoMontoTexto(p))} · ${esc(PAGO_RIEL_LABEL[p.riel] || p.riel)}</div>
-      ${total != null ? `<div class="ec-row" ${descuadre ? 'style="color:var(--danger)"' : ''}><i class="fas fa-${descuadre ? 'triangle-exclamation' : 'scale-balanced'}"></i> Total de la reserva: $${esc(total.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}${descuadre ? ' · el monto no coincide' : ''}</div>` : ''}
-      <div class="ec-row"><i class="fas fa-hashtag"></i> Ref: ${esc(p.referencia_declarada || '—')}</div>
+      ${slaTxt ? `<div class="ec-row" style="font-weight:700;color:${pend && p.sla_vencido ? 'var(--danger)' : pend ? 'var(--amber)' : 'var(--muted)'}"><i class="fas fa-hourglass-half"></i> ${esc(slaTxt)}</div>` : ''}
+      <div style="margin-top:10px;${PAGO_WEB_MONO};font-size:22px;font-weight:800;line-height:1.2;color:var(--txt)">${esc(pagoWebMontoBanco(p))}</div>
+      <div class="ec-row" style="margin-top:2px">${esc(sub)}</div>
+      ${total != null ? `<div class="ec-row" ${descuadre ? 'style="color:var(--danger);font-weight:700"' : ''}><i class="fas fa-${descuadre ? 'triangle-exclamation' : 'scale-balanced'}"></i> Total de la reserva: $${esc(pagoWebDec(total * 100))}${descuadre ? ' · el monto no coincide' : ''}</div>` : ''}
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <span style="font-size:12px;color:var(--muted)">Ref.</span>
+        <span style="${PAGO_WEB_MONO};font-size:15px;font-weight:700;color:var(--txt);user-select:all;word-break:break-all;flex:1">${esc(p.referencia_declarada || '—')}</span>
+        ${p.referencia_declarada ? `<button type="button" class="dbtn" data-pagoweb-copiar="${p.id}" aria-label="Copiar referencia" style="min-width:44px;min-height:44px"><i class="fas fa-copy"></i></button>` : ''}
+      </div>
+      ${repetida ? `<div class="ec-row" style="color:var(--danger);font-weight:700"><i class="fas fa-triangle-exclamation"></i> Referencia repetida (${esc(repetida.codigo || repetida.lead_nombre || 'otro pago')})</div>` : ''}
+      <div class="ec-row"><i class="fas fa-globe"></i> Compra web ${esc(p.codigo || '')}${servicios.length ? ' · ' + esc(servicios.join(' + ')) : ''}</div>
+      ${cargos.length ? `<div class="ec-row" style="margin-top:2px;padding-left:20px">Incluye ${esc(cargos.join(' y '))}</div>` : ''}
       <div class="ec-row"><i class="fas fa-user"></i> ${esc(p.asesor || 'Sin asignar')}${p.lead_telefono ? ' · ' + esc(p.lead_telefono) : ''}</div>
       <div class="ec-row"><i class="fas fa-clock"></i> ${p.declarado_en ? 'Declarado ' + esc(tiempoRelativo(p.declarado_en)) : 'Sin declarar'}</div>
-      ${slaTxt ? `<div class="ec-row" ${pend && p.sla_vencido ? 'style="color:var(--danger)"' : ''}><i class="fas fa-hourglass-half"></i> ${esc(slaTxt)}</div>` : ''}
+      <div data-pagoweb-prev="${p.id}" style="display:none;margin-top:10px"></div>
       ${acciones.length ? `<div class="inbox-actions">${acciones.join('')}</div>` : ''}
     </div>`;
 }
@@ -10518,6 +10555,9 @@ async function loadPagos() {
   const filasWeb = Array.isArray(rWebTodas?.data) ? rWebTodas.data : [];
   const web = [...filasWeb, ...(Array.isArray(rWeb.data) ? rWeb.data : []).filter(w => !filasWeb.some(x => x.pago_id === w.pago_id))]
     .map(w => ({ ...w, id: w.pago_id, _web: true, lead_nombre: w.cliente, lead_telefono: w.telefono, created_at: w.orden }));
+  // Por verificar primero, la que vence antes arriba; el resto conserva el orden de la cola.
+  const vence = w => w.estado === 'pendiente_verificacion' && w.verificar_antes_de ? Date.parse(w.verificar_antes_de) : Infinity;
+  web.sort((a, b) => vence(a) - vence(b));
   const idsWeb = new Set([...idsPendientes, ...web.map(w => w.id)]);
   PAGOS_CACHE = [...web, ...(rLista.data.pagos || []).filter(p => !idsWeb.has(p.id))];
   if (!PAGOS_CACHE.length) { empty.classList.add('show'); return; }
@@ -10541,8 +10581,16 @@ async function loadPagos() {
 async function abrirComprobantePago(id) {
   const p = PAGOS_CACHE.find(x => x.id === id);
   if (!p?.comprobante_path) return;
+  // Compra web con foto: se ve dentro de la tarjeta (segundo toque la cierra); PDF u otro, en pestaña nueva.
+  const prev = p._web ? document.querySelector(`[data-pagoweb-prev="${id}"]`) : null;
+  if (prev && prev.style.display !== 'none') { prev.style.display = 'none'; prev.innerHTML = ''; return; }
   const { data, error } = await sb.storage.from('comprobantes-pago').createSignedUrl(p.comprobante_path, 300);
   if (error || !data?.signedUrl) { errToast('No se pudo abrir el comprobante'); return; }
+  if (prev && /.(jpe?g|png|webp|gif|heic|heif)$/i.test(p.comprobante_path)) {
+    prev.innerHTML = `<a href="${esc(data.signedUrl)}" target="_blank" rel="noopener"><img src="${esc(data.signedUrl)}" alt="Comprobante de ${esc(p.codigo || 'la compra')}" style="display:block;max-width:100%;max-height:360px;border-radius:9px;border:1px solid var(--line)"></a>`;
+    prev.style.display = '';
+    return;
+  }
   window.open(data.signedUrl, '_blank', 'noopener');
 }
 
@@ -10582,11 +10630,22 @@ async function verificarPagoWebAccion(id, modo, btn) {
   let motivo = null;
   if (aprobar) {
     const aviso = modo === 'tarde'
-      ? 'El cliente no declaró este pago a tiempo. Confirma solo si ya comprobaste en el banco que el dinero entró. '
-      : 'Confirma solo si ya comprobaste el monto y la referencia contra el banco. ';
+      ? 'El cliente no declaró este pago a tiempo. Confirma solo si ya comprobaste en el banco que el dinero entró.'
+      : 'Confirma solo si los tres datos coinciden con el banco:';
+    const repetida = pagoWebRefRepetida(p);
+    const cotejar = [
+      `• Monto: ${pagoWebMontoBanco(p)}`,
+      `• Referencia: ${p.referencia_declarada || '(no la escribió)'}`,
+      `• Cuenta destino: ${PAGO_RIEL_LABEL[p.riel] || p.riel} de la agencia`,
+    ].join('\n');
     if (!(await confirmarSheet({
       titulo: `¿Confirmar la reserva ${cod}?`,
-      detalle: aviso + `Se registra el abono de ${pagoMontoTexto(p)}, se confirman los servicios, el lead pasa a PAGO REALIZADO y el cliente recibe por correo su localizador.`,
+      detalle: `${aviso}
+${cotejar}${repetida ? `
+
+Ojo: la misma referencia aparece en ${repetida.codigo || repetida.lead_nombre || 'otro pago'}.` : ''}
+
+Al confirmar se registra el abono, se confirman los servicios, el lead pasa a PAGO REALIZADO y el cliente recibe por correo su localizador.`,
       textoOk: 'Verificar y confirmar',
     }))) return;
   } else {
@@ -10628,6 +10687,11 @@ function setupPagos() {
     if (wApr) return verificarPagoWebAccion(Number(wApr.dataset.pagowebAprobar), 'aprobar', wApr);
     const wRec = e.target.closest('[data-pagoweb-rechazar]');
     if (wRec) return verificarPagoWebAccion(Number(wRec.dataset.pagowebRechazar), 'rechazar', wRec);
+    const wCopiar = e.target.closest('[data-pagoweb-copiar]');
+    if (wCopiar) {
+      const ref = PAGOS_CACHE.find(x => x.id === Number(wCopiar.dataset.pagowebCopiar))?.referencia_declarada || '';
+      return navigator.clipboard.writeText(ref).then(() => okToast('Referencia copiada'), () => errToast('El navegador no dejó copiar'));
+    }
     const wTarde = e.target.closest('[data-pagoweb-tarde]');
     if (wTarde) return verificarPagoWebAccion(Number(wTarde.dataset.pagowebTarde), 'tarde', wTarde);
   });
@@ -33028,6 +33092,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-22', emoji: '💳', titulo: 'Compras web más fáciles de verificar', texto: 'En Pagos por verificar, cada compra web muestra arriba el plazo para verificarla, el monto exacto en la moneda del banco y la referencia con un botón para copiarla. Si la referencia ya se usó en otra compra, te lo marca en rojo. El comprobante se ve dentro de la tarjeta, y al confirmar revisas en una sola ventana el monto, la referencia y la cuenta destino.', roles: ['admin'] },
   { fecha: '2026-10-21', emoji: '📸', titulo: 'Lee el comprobante de pago', texto: 'En Crear reserva, sube la captura del comprobante y el CRM llena solo el método, la referencia y el monto. Si el pago fue en bolívares, te muestra los bolívares y su equivalente en dólares con la tasa BCV del día. Revisa que los datos coincidan con el comprobante antes de crear la reserva: la lectura es automática y puede equivocarse.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '⚡', titulo: 'Reservas: menos escribir, más automático', texto: 'Al crear una reserva, el CRM ya trae lo de la última cotización del lead (hotel, plan, habitación, fechas, personas, vuelos y precio) y tú solo confirmas; si no hay cotización, usa las fechas y personas del lead. El titular se carga solo como pasajero, el proveedor del hotel se asigna solo (y con eso nace la cuenta por pagar), las noches se calculan con las fechas, y las casillas de comprobante, voucher, boletos y reserva emitida se marcan solas. La etapa de la reserva avanza sola según saldo, servicios y documentos; si la cambias a mano, se respeta hasta que cambie algo importante. El voucher del paquete toma la forma de pago del último abono y ya no te la vuelve a pedir.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '📅', titulo: 'Calendario nuevo en todas las fechas', texto: 'Todos los campos de fecha del CRM en computador usan ahora un calendario propio con los colores del CRM: icono a la derecha del campo, botones Hoy y Borrar, flechas de mes y de año, y también puedes teclear la fecha. En Crear reserva además no se pueden elegir días anteriores a hoy y la fecha final no puede ser antes de la inicial. En celular se mantiene el selector de fecha del teléfono.', roles: ['admin', 'asesor'] },
