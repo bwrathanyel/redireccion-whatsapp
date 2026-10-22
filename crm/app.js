@@ -10508,6 +10508,7 @@ function pagoWebCard(p) {
       <div class="ec-top"><div class="ec-nombre">${esc(p.lead_nombre || 'Sin nombre')}</div>
         <span class="badge-st" style="${p.sla_vencido ? 'color:var(--danger)' : 'color:var(--muted)'}">${esc(PAGO_ESTADO_LABEL[p.estado] || p.estado)}</span></div>
       ${slaTxt ? `<div class="ec-row" style="font-weight:700;color:${pend && p.sla_vencido ? 'var(--danger)' : pend ? 'var(--amber)' : 'var(--muted)'}"><i class="fas fa-hourglass-half"></i> ${esc(slaTxt)}</div>` : ''}
+      ${p.disponibilidad === 'sin_cupo' ? `<div class="ec-row" style="color:var(--danger);font-weight:700"><i class="fas fa-ban"></i> El hotel cerró cupo (stop sale) después de la reserva${pend ? ' · el cliente ya declaró el pago: reubícalo o devuélvele el dinero' : ' · aún no paga: contáctalo para cambiar fechas u hotel'}</div>` : ''}
       <div style="margin-top:10px;${PAGO_WEB_MONO};font-size:22px;font-weight:800;line-height:1.2;color:var(--txt)">${esc(pagoWebMontoBanco(p))}</div>
       <div class="ec-row" style="margin-top:2px">${esc(sub)}</div>
       ${total != null ? `<div class="ec-row" ${descuadre ? 'style="color:var(--danger);font-weight:700"' : ''}><i class="fas fa-${descuadre ? 'triangle-exclamation' : 'scale-balanced'}"></i> Total de la reserva: $${esc(pagoWebDec(total * 100))}${descuadre ? ' · el monto no coincide' : ''}</div>` : ''}
