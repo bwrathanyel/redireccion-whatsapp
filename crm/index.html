@@ -3149,6 +3149,16 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .vc-planes button.on i{background:var(--accent-soft);color:var(--accent-ink)}
 .vc-planes button.on::after{content:"\f00c";font-family:"Font Awesome 6 Free";font-weight:900;position:absolute;top:8px;right:9px;font-size:10px;color:var(--accent-ink)}
 .vc-form .vc-plan-otro{margin-top:8px}
+.vc-planes-hint{display:block;margin-top:6px;font-size:11px;color:var(--muted)}.vc-planes-hint[hidden]{display:none}
+.vc-planes button.tar small::after{content:" · tarifario";color:var(--accent-ink);font-weight:600}
+.vc-hotel-fotos{display:flex;gap:6px;margin-top:6px;overflow-x:auto}.vc-hotel-fotos[hidden]{display:none}
+.vc-hotel-fotos button{position:relative;flex:0 0 auto;width:64px;height:64px;padding:0;border:1px solid var(--line2);border-radius:8px;overflow:hidden;background:var(--line2);cursor:pointer}
+.vc-hotel-fotos img{width:100%;height:100%;object-fit:cover;display:block}
+.vc-hotel-fotos b{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.55);color:#fff;font-size:13px}
+.vc-hotel-fotos button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.vc-hab:has(#vc-hab-picker .cb-picker)>span{display:none}
+#vc-hab-picker .field{margin:0}#vc-hab-picker .fl{font-size:11px;font-weight:600;color:var(--muted);margin:0 0 4px}
+#vc-hab-picker:not(:empty)+.ei{margin-top:6px}
 .vc-opc{font-style:normal;font-weight:600;letter-spacing:0;text-transform:none;font-size:11px;opacity:.75}
 .vc-servs{display:flex;flex-direction:column;gap:10px}
 .vc-servs:not(:empty){margin-bottom:10px}
@@ -8467,8 +8477,11 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <fieldset class="vc-grupo">
             <legend><span>2</span> Hospedaje</legend>
             <div class="vc-fila">
-              <label class="vc-c s2"><span>Destino / Hospedaje</span><input id="vc-destino" class="ei" placeholder="Hotel, posada o destino" list="vc-dl-hotel" autocomplete="off"></label>
-              <label class="vc-c s2"><span>Habitación / clase</span><input id="vc-habitaciones" class="ei" placeholder="Habitación doble"></label>
+              <div class="vc-c s2"><span id="vc-destino-lbl">Destino / Hospedaje</span>
+                <div class="cb-picker"><input id="vc-destino" class="ei" data-busca="hotel" placeholder="Buscar hotel del tarifario o escribir el destino" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="vc-hoteles" aria-labelledby="vc-destino-lbl"><div id="vc-hoteles" class="cb-picker-lista" role="listbox" aria-label="Hoteles" hidden></div></div>
+                <div class="vc-hotel-fotos" id="vc-hotel-fotos" hidden></div>
+              </div>
+              <div class="vc-c s2 vc-hab" id="vc-hab-box"><span id="vc-hab-lbl">Habitación / clase</span><div id="vc-hab-picker"></div><input id="vc-habitaciones" class="ei" placeholder="Habitación doble" aria-labelledby="vc-hab-lbl"></div>
               <div class="vc-c s4"><span id="vc-planes-lbl">Modalidad</span>
                 <div class="vc-planes" id="vc-planes" role="radiogroup" aria-labelledby="vc-planes-lbl">
                   <button type="button" role="radio" aria-checked="false" data-plan="Todo incluido"><i class="fas fa-champagne-glasses"></i><b>Todo incluido</b><small>Comidas, bebidas y snacks</small></button>
@@ -8479,6 +8492,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
                   <button type="button" role="radio" aria-checked="false" data-plan=""><i class="fas fa-pen"></i><b>Otra</b><small>Escribirla a mano</small></button>
                 </div>
                 <input id="vc-modalidad" class="ei vc-plan-otro" placeholder="Ej: Plan europeo, desayuno y almuerzo..." aria-label="Modalidad" hidden>
+                <small class="vc-planes-hint" id="vc-planes-hint" hidden></small>
               </div>
               <label class="vc-c"><span>Entrada</span><input id="vc-fecha-entrada" class="ei" type="date"></label>
               <label class="vc-c"><span>Salida</span><input id="vc-fecha-salida" class="ei" type="date"></label>
