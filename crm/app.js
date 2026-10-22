@@ -2795,7 +2795,7 @@ function arrancar(...pasos) {
 async function startApp() {
   if (booted) return; booted = true;
   arrancar(
-    renderNavItems, renderFavoritos, fijarSolicitudesArriba, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
+    renderNavItems, renderFavoritos, fijarSolicitudesArriba, setupAvisoPagos, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupDocumentosRevisiones, setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
@@ -3106,15 +3106,34 @@ const PV_DOCS = {
   voucher_hotel: 'Voucher de hotel', boletos: 'Boletos', seguro: 'Seguro',
   itinerario_entregado: 'Itinerario entregado',
 };
+// Orden y secciones abiertas de Reservas → Clientes: preferencia de cada usuario en este navegador.
+let PV_ORDEN = 'viaje', PV_RAPIDO = '', PV_SEC_ABIERTAS = {};
+try { const p = JSON.parse(localStorage.getItem('pv-prefs') || '{}'); if (p.orden) PV_ORDEN = p.orden; if (p.secs) PV_SEC_ABIERTAS = p.secs; } catch {}
+function pvGuardarPrefs() {
+  try { localStorage.setItem('pv-prefs', JSON.stringify({ orden: PV_ORDEN, secs: PV_SEC_ABIERTAS })); } catch {}
+}
 function setupPostventa() {
+  // La bandeja trae todas las etapas (cerrados incluidos): etapa, destino, orden y filtros rápidos se aplican en memoria.
   document.querySelectorAll('#pv-stagebar .pv-stage').forEach(b => b.addEventListener('click', () => {
-    document.querySelectorAll('#pv-stagebar .pv-stage').forEach(x => x.classList.remove('on'));
-    b.classList.add('on'); PV_ETAPA = b.dataset.etapa || ''; loadPostventa();
+    PV_ETAPA = b.dataset.etapa || ''; renderPostventa();
   }));
-  document.getElementById('pv-grupos')?.addEventListener('click', e => {
-    const b = e.target.closest('.pv-stage');
-    if (b) { PV_GRUPO = b.dataset.grupo; renderPostventa(); }
+  document.getElementById('pv-destino')?.addEventListener('change', e => { PV_GRUPO = e.target.value; renderPostventa(); });
+  const orden = document.getElementById('pv-orden');
+  if (orden) {
+    orden.value = PV_ORDEN;
+    if (orden.value !== PV_ORDEN) { PV_ORDEN = 'viaje'; orden.value = 'viaje'; }
+    orden.addEventListener('change', () => { PV_ORDEN = orden.value; pvGuardarPrefs(); renderPostventa(); });
+  }
+  document.getElementById('pv-resumen')?.addEventListener('click', e => {
+    const b = e.target.closest('button[data-rapido]');
+    if (b) { PV_RAPIDO = PV_RAPIDO === b.dataset.rapido ? '' : b.dataset.rapido; renderPostventa(); }
   });
+  // «toggle» no burbujea: se escucha en captura para recordar qué secciones dejó abiertas.
+  document.getElementById('pv-grid')?.addEventListener('toggle', e => {
+    const d = e.target;
+    if (!d.matches?.('details.pv-sec') || document.getElementById('pv-search')?.value.trim()) return;
+    PV_SEC_ABIERTAS[d.dataset.sec] = d.open; pvGuardarPrefs();
+  }, true);
   document.getElementById('pv-refresh')?.addEventListener('click', loadPostventa);
   document.getElementById('pv-search')?.addEventListener('input', () => {
     clearTimeout(PV_SEARCH_TIMER); PV_SEARCH_TIMER = setTimeout(loadPostventa, 280);
@@ -3239,7 +3258,7 @@ async function loadPostventa(silencioso) {
   const busqueda = document.getElementById('pv-search')?.value.trim() || null;
   const [resumen, bandeja] = await Promise.all([
     sb.rpc('postventa_resumen'),
-    sb.rpc('postventa_bandeja', { p_etapa: PV_ETAPA || null, p_busqueda: busqueda }),
+    sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: busqueda }),
   ]);
   if (resumen.error || bandeja.error) {
     console.error('postventa', resumen.error || bandeja.error);
@@ -3253,47 +3272,94 @@ async function loadPostventa(silencioso) {
     const d = await sb.rpc('listar_destinos', { p_solo_activos: true });
     if (!d.error) RV_DESTINOS = d.data || [];
   }
-  renderPostventaKPIs(resumen.data || {});
   renderPostventa();
   const badge = document.getElementById('nav-postventa-count');
   const pendientes = Number(resumen.data?.total || 0);
   if (badge) { badge.textContent = pendientes; badge.style.display = pendientes > 0 ? '' : 'none'; }
 }
-function renderPostventaKPIs(r) {
-  const cards = [
-    ['Casos de postventa', fmt(r.total || 0), 'fa-handshake-angle', 'var(--blue)'],
-    ['Cobros', fmt(r.cobros_pendientes || 0), 'fa-wallet', 'var(--amber)'],
-    ['Documentación', fmt(r.documentacion || 0), 'fa-folder-open', 'var(--purple)'],
-    ['Viajes en 14 días', fmt(r.viajes_proximos || 0), 'fa-plane-departure', 'var(--green)'],
-    ['Seguimientos vencidos', fmt(r.seguimientos_vencidos || 0), 'fa-clock', '#fb7185'],
-    ['Saldo por cobrar', money(r.saldo_pendiente || 0), 'fa-coins', 'var(--accent)'],
-  ];
-  document.getElementById('pv-kpis').innerHTML = cards.map(c => `<div class="kpi pv-kpi" style="--kc:${c[3]}"><div class="kt"><i class="fas ${c[2]}"></i>${c[0]}</div><div class="kv">${c[1]}</div></div>`).join('');
+// Filtros rápidos de la barra de resumen: cruzan etapas, por eso no repiten los chips de etapa.
+const PV_RAPIDOS = {
+  pronto: ['viajan en ≤14 días', 'fa-plane-departure', 'var(--amber)', c => { const v = pvViaje(c); return v.dias != null && v.dias <= 14; }],
+  en_viaje: ['en viaje', 'fa-suitcase-rolling', 'var(--green)', c => pvViaje(c).bucket === 'en_viaje'],
+  vencidos: ['seguimientos vencidos', 'fa-clock', 'var(--danger)', c => c.etapa !== 'CERRADO' && !!c.proximo_seguimiento_at && new Date(c.proximo_seguimiento_at).getTime() < Date.now()],
+  sin_seg: ['sin seguimiento', 'fa-bell-slash', 'var(--muted)', c => c.etapa !== 'CERRADO' && !c.proximo_seguimiento_at],
+  saldo: ['con saldo', 'fa-coins', 'var(--accent)', c => Number(c.saldo_pendiente) > 0],
+  incidencia: ['con incidencia', 'fa-triangle-exclamation', 'var(--danger)', c => !!c.incidencia_abierta],
+};
+function renderPvResumen(lista) {
+  const el = document.getElementById('pv-resumen');
+  if (!el) return;
+  el.innerHTML = Object.entries(PV_RAPIDOS).map(([k, [t, ic, col, f]]) => {
+    const sel = lista.filter(f), n = sel.length, on = PV_RAPIDO === k;
+    if (!n && !on && k === 'incidencia') return '';
+    const extra = k === 'saldo' && n ? ` · ${money(sel.reduce((s, c) => s + Number(c.saldo_pendiente || 0), 0))}` : '';
+    return `<button type="button" class="pv-rap${on ? ' on' : ''}" data-rapido="${k}" style="--tc:${col}" aria-pressed="${on}"${n || on ? '' : ' disabled'}><i class="fas ${ic}" aria-hidden="true"></i><b>${fmt(n)}</b> ${t}${extra}</button>`;
+  }).join('');
 }
 function pvGrupoDe(c) {
   return (RV_DESTINOS || []).find(d => d.id === c.destino_id)?.nombre || 'Sin destino';
 }
 function renderPvGrupos() {
-  const bar = document.getElementById('pv-grupos');
-  if (!bar) return;
+  const sel = document.getElementById('pv-destino');
+  if (!sel) return;
   const cuenta = new Map();
   POSTVENTA.forEach(c => { const g = pvGrupoDe(c); cuenta.set(g, (cuenta.get(g) || 0) + 1); });
   const ordenDest = (RV_DESTINOS || []).map(d => d.nombre);
   const orden = [...[...cuenta.keys()].filter(g => g !== 'Sin destino').sort((a, b) => cuenta.get(b) - cuenta.get(a) || ordenDest.indexOf(a) - ordenDest.indexOf(b)), 'Sin destino'].filter(g => cuenta.has(g));
-  if (PV_GRUPO && !cuenta.has(PV_GRUPO)) PV_GRUPO = '';
-  bar.hidden = !RV_DESTINOS || orden.length < 2;
-  bar.innerHTML = [['', 'Todos los destinos', POSTVENTA.length], ...orden.map(g => [g, g, cuenta.get(g)])]
-    .map(([k, l, n]) => `<button class="pv-stage${k === PV_GRUPO ? ' on' : ''}" type="button" data-grupo="${esc(k)}" aria-pressed="${k === PV_GRUPO}">${esc(l)} · ${n}</button>`).join('');
+  // Si la búsqueda deja fuera el destino elegido, se mantiene con 0 en vez de soltar el filtro.
+  if (PV_GRUPO && !cuenta.has(PV_GRUPO)) orden.push(PV_GRUPO);
+  sel.hidden = !RV_DESTINOS || (orden.length < 2 && !PV_GRUPO);
+  sel.innerHTML = [['', `Todos los destinos (${POSTVENTA.length})`], ...orden.map(g => [g, `${g} (${cuenta.get(g) || 0})`])]
+    .map(([k, l]) => `<option value="${esc(k)}"${k === PV_GRUPO ? ' selected' : ''}>${esc(l)}</option>`).join('');
+}
+const PV_SECCIONES = [
+  ['en_viaje', 'En viaje ahora', 'fa-suitcase-rolling', 'var(--green)', true],
+  ['semana', 'Viajan esta semana', 'fa-plane-departure', 'var(--danger)', true],
+  ['mes', 'Próximos 30 días', 'fa-calendar-week', 'var(--amber)', true],
+  ['luego', 'Más adelante', 'fa-calendar', 'var(--blue)', true],
+  ['volvio', 'Ya viajaron', 'fa-house-chimney', 'var(--muted)', false],
+  ['sin', 'Sin fecha de viaje', 'fa-calendar-xmark', 'var(--muted)', false],
+];
+function pvSeccionesHtml(casos) {
+  const grupos = {};
+  casos.forEach(c => { const v = pvViaje(c); (grupos[v.bucket] ||= []).push([c, v]); });
+  const buscando = !!document.getElementById('pv-search')?.value.trim();
+  return PV_SECCIONES.filter(([k]) => grupos[k]).map(([k, t, ic, col, abierta]) => {
+    const fs = grupos[k].sort((a, b) => a[1].orden - b[1].orden);
+    const open = buscando || PV_RAPIDO || (PV_SEC_ABIERTAS[k] ?? abierta);
+    return `<details class="pv-sec" data-sec="${k}" style="--tc:${col}"${open ? ' open' : ''}>
+      <summary><i class="fas fa-chevron-right flecha" aria-hidden="true"></i><i class="fas ${ic}" aria-hidden="true"></i>${t}<small>${fs.length} ${fs.length === 1 ? 'reserva' : 'reservas'}</small></summary>
+      <div class="pv-grid">${fs.map(([c]) => pvCardHtml(c)).join('')}</div></details>`;
+  }).join('');
+}
+function pvOrdenar(casos) {
+  const l = [...casos], seg = c => c.proximo_seguimiento_at ? Date.parse(c.proximo_seguimiento_at) : 8.64e15;
+  if (PV_ORDEN === 'saldo') l.sort((a, b) => Number(b.saldo_pendiente || 0) - Number(a.saldo_pendiente || 0));
+  else if (PV_ORDEN === 'seguimiento') l.sort((a, b) => seg(a) - seg(b));
+  return l;
 }
 function renderPostventa() {
   const grid = document.getElementById('pv-grid');
   renderPvGrupos();
-  const casos = PV_GRUPO ? POSTVENTA.filter(c => pvGrupoDe(c) === PV_GRUPO) : POSTVENTA;
+  const base = PV_GRUPO ? POSTVENTA.filter(c => pvGrupoDe(c) === PV_GRUPO) : POSTVENTA;
+  const porEtapa = {};
+  base.forEach(c => { porEtapa[c.etapa] = (porEtapa[c.etapa] || 0) + 1; });
+  document.querySelectorAll('#pv-stagebar .pv-stage').forEach(b => {
+    const k = b.dataset.etapa || '', on = k === PV_ETAPA, n = b.querySelector('.pv-n');
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
+    if (n) n.textContent = k ? (porEtapa[k] || 0) : base.length;
+  });
+  const enEtapa = PV_ETAPA ? base.filter(c => c.etapa === PV_ETAPA) : base;
+  if (PV_RAPIDO && !PV_RAPIDOS[PV_RAPIDO]) PV_RAPIDO = '';
+  renderPvResumen(enEtapa);
+  const casos = PV_RAPIDO ? enEtapa.filter(PV_RAPIDOS[PV_RAPIDO][3]) : enEtapa;
+  const secciones = PV_ORDEN === 'viaje' && casos.length > 0;
+  grid.classList.toggle('pv-secs', secciones);
   if (!casos.length) {
     grid.innerHTML = '<div class="pv-empty"><i class="fas fa-circle-check"></i><b>Todo al día</b><br>No hay casos con este filtro</div>';
     return;
   }
-  grid.innerHTML = casos.map(c => pvCardHtml(c)).join('');
+  grid.innerHTML = secciones ? pvSeccionesHtml(casos) : pvOrdenar(casos).map(c => pvCardHtml(c)).join('');
   pvWire(grid, POSTVENTA);
   entradaLista(grid);
 }
@@ -3323,6 +3389,27 @@ function pvRangoViaje(ini, fin) {
   const txt = mismo ? `${a.getDate()}–${pvFecha(fin)}` : `${pvFecha(ini)} – ${pvFecha(fin)}`;
   return n > 0 ? `${txt} · ${n} ${n === 1 ? 'noche' : 'noches'}` : txt;
 }
+// Dónde está el viaje respecto de hoy (días de calendario, hora local): texto del chip, color,
+// sección de la lista y clave de orden dentro de ella. `dias` solo existe si aún no salió.
+function pvViaje(c) {
+  const ini = String(c.fecha_viaje_inicio || '').slice(0, 10), fin = String(c.fecha_viaje_fin || '').slice(0, 10) || ini;
+  if (!ini) return { bucket: 'sin', orden: 0 };
+  const hoy = new Date(); hoy.setHours(12, 0, 0, 0);
+  const dif = iso => Math.round((new Date(iso + 'T12:00:00') - hoy) / 864e5);
+  const dIni = dif(ini), dFin = Math.max(dif(fin), dIni);
+  const lapso = n => n < 60 ? `${n} días` : `${Math.round(n / 30)} meses`;
+  if (dIni >= 0) return {
+    bucket: dIni <= 7 ? 'semana' : dIni <= 30 ? 'mes' : 'luego', dias: dIni, orden: dIni, ic: 'fa-plane-departure',
+    t: dIni === 0 ? 'Viaja hoy' : dIni === 1 ? 'Viaja mañana' : `Viaja en ${lapso(dIni)}`,
+    col: dIni <= 3 ? 'var(--danger)' : dIni <= 14 ? 'var(--amber)' : 'var(--blue)',
+  };
+  if (dFin >= 0) return {
+    bucket: 'en_viaje', orden: dFin, ic: 'fa-suitcase-rolling', col: 'var(--green)',
+    t: dFin === 0 ? 'En viaje · vuelve hoy' : `En viaje · vuelve ${dFin === 1 ? 'mañana' : `en ${lapso(dFin)}`}`,
+  };
+  const h = -dFin;
+  return { bucket: 'volvio', orden: h, ic: 'fa-house-chimney', col: 'var(--muted)', t: h === 1 ? 'Volvió ayer' : `Volvió hace ${lapso(h)}` };
+}
 function pvCardHtml(c, extra = '') {
     const ahora = Date.now();
     const etapa = PV_ETAPAS[c.etapa] || [c.etapa, 'fa-circle'];
@@ -3331,6 +3418,8 @@ function pvCardHtml(c, extra = '') {
     const docs = c.documentos || {}, docsListos = Object.keys(PV_DOCS).filter(k => docs[k] === true).length;
     const vencido = c.proximo_seguimiento_at && new Date(c.proximo_seguimiento_at).getTime() < ahora && c.etapa !== 'CERRADO';
     const wa = String(c.telefono || '').replace(/\D/g, '');
+    const viaje = pvViaje(c);
+    const viajeHtml = viaje.t ? `<span class="pv-viaje" style="--tc:${viaje.col}"><i class="fas ${viaje.ic}" aria-hidden="true"></i>${esc(viaje.t)}</span>` : '';
     // «Falta» sale de reserva_faltantes (postventa_bandeja.falta_resumen); sin él (otras fuentes) queda el conteo de docs.
     const falta = Array.isArray(c.falta_resumen) ? pvFaltaChips(c, vencido) : null;
     const faltaHtml = falta === null
@@ -3340,7 +3429,7 @@ function pvCardHtml(c, extra = '') {
         : '<div class="pv-falta ok"><i class="fas fa-check" aria-hidden="true"></i> Todo en orden</div>')
         + (c.proximo_seguimiento_at ? `<div class="pv-meta"><span class="${vencido ? 'overdue' : ''}"><i class="fas fa-bell"></i>Seguimiento: ${tiempoSeguimiento(c.proximo_seguimiento_at)}</span></div>` : '');
     return `<article class="pv-card" data-id="${c.id}">
-      <div class="pv-card-top"><span class="pv-chip${c.etapa === 'LISTO_PARA_VIAJAR' ? ' ok' : ''}"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span>${c.prioridad && c.prioridad !== 'NORMAL' ? `<span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span>` : ''}</div>
+      <div class="pv-card-top"><span class="pv-chip${c.etapa === 'LISTO_PARA_VIAJAR' ? ' ok' : ''}"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span>${c.prioridad && c.prioridad !== 'NORMAL' ? `<span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span>` : ''}${viajeHtml}</div>
       <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span style="font-size:10.5px;font-weight:500;color:var(--muted2)">${esc(c.codigo || '')}${c.principal === false ? ' · adicional' : ''}</span></div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}${falta === null ? '' : ` · ${esc(pvRangoViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin))}`}</div>${extra}
       <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>Saldo <b>${money(c.saldo_pendiente)}</b></span></div>
       <div class="pv-progress${total > 0 && pagado >= total ? ' full' : ''}"><span style="width:${pct}%"></span></div>
@@ -10388,7 +10477,6 @@ const MSG_VERIFICAR_PAGO = {
 };
 // Compras directas de la web: se verifican con verificar_pago_web (puente a reserva, abono, lead y correo),
 // nunca con verificar_pago a secas, que solo marcaría el pago y dejaría la reserva sin confirmar.
-let PAGOS_WEB_TODOS = false;
 let PAGOS_CARGA = 0;
 const PAGO_ESTADO_LABEL = {
   emitido: 'Sin declarar', pendiente_verificacion: 'Por verificar', verificado: 'Verificado',
@@ -10495,7 +10583,7 @@ function pagoWebCard(p) {
     p.moneda === 'VES' ? `≈ $${pagoWebDec(p.monto_usd_centavos || 0)} · tasa ${p.tasa_usd_ves}` : '',
   ].filter(Boolean).join(' · ');
   const acciones = [];
-  if (p.comprobante_path) acciones.push(`<button type="button" class="inbox-btn" data-pago-comprobante="${p.id}"><i class="fas fa-receipt"></i> Ver comprobante</button>`);
+  if (p.comprobante_path) acciones.push(`<button type="button" class="inbox-btn pagos-sec" data-pago-comprobante="${p.id}"><i class="fas fa-receipt"></i> Ver comprobante</button>`);
   else if (pend) acciones.push('<span class="ec-row" style="color:var(--amber)"><i class="fas fa-triangle-exclamation"></i> Sin comprobante</span>');
   if (pend) {
     acciones.push(`<button type="button" class="inbox-btn atender" data-pagoweb-aprobar="${p.id}"><i class="fas fa-check"></i> Verificar y confirmar</button>`);
@@ -10503,11 +10591,19 @@ function pagoWebCard(p) {
   } else if (p.estado === 'vencido' || p.estado === 'emitido') {
     acciones.push(`<button type="button" class="inbox-btn avisar" data-pagoweb-tarde="${p.id}"><i class="fas fa-check"></i> Ya pagó: confirmar</button>`);
   }
+  const etapa = pagoEtapa(p);
+  const tot = Number(p.servicios_total || 0), conLoc = Number(p.servicios_con_localizador || 0);
+  if (etapa === 'reserva' && p.reserva_id) acciones.push(`<button type="button" class="inbox-btn atender" data-pagoweb-reserva="${p.id}"><i class="fas fa-ticket"></i> Cargar localizador${tot - conLoc === 1 ? '' : 'es'}</button>`);
+  if (etapa === 'confirmada' && p.reserva_id) acciones.push(`<button type="button" class="inbox-btn" data-pagoweb-reserva="${p.id}"><i class="fas fa-folder-open"></i> Ver reserva</button>`);
+  const etapaTxt = etapa === 'reserva'
+    ? (p.servicios_total == null ? 'Pago confirmado · confirma la reserva con el proveedor' : `Pago confirmado · faltan ${tot - conLoc} de ${tot} localizador${tot === 1 ? '' : 'es'}`)
+    : etapa === 'confirmada' ? 'Reserva confirmada · en Reservas y Cobros' : '';
   return `
     <div class="entity-card inbox-card" data-pago="${p.id}">
       <div class="ec-top"><div class="ec-nombre">${esc(p.lead_nombre || 'Sin nombre')}</div>
         <span class="badge-st" style="${p.sla_vencido ? 'color:var(--danger)' : 'color:var(--muted)'}">${esc(PAGO_ESTADO_LABEL[p.estado] || p.estado)}</span></div>
       ${slaTxt ? `<div class="ec-row" style="font-weight:700;color:${pend && p.sla_vencido ? 'var(--danger)' : pend ? 'var(--amber)' : 'var(--muted)'}"><i class="fas fa-hourglass-half"></i> ${esc(slaTxt)}</div>` : ''}
+      ${etapaTxt ? `<div class="ec-row" style="font-weight:700;color:${etapa === 'confirmada' ? 'var(--green)' : 'var(--amber)'}"><i class="fas fa-${etapa === 'confirmada' ? 'circle-check' : 'clipboard-check'}"></i> ${esc(etapaTxt)}</div>` : ''}
       ${p.disponibilidad === 'sin_cupo' ? `<div class="ec-row" style="color:var(--danger);font-weight:700"><i class="fas fa-ban"></i> El hotel cerró cupo (stop sale) después de la reserva${pend ? ' · el cliente ya declaró el pago: reubícalo o devuélvele el dinero' : ' · aún no paga: contáctalo para cambiar fechas u hotel'}</div>` : ''}
       <div style="margin-top:10px;${PAGO_WEB_MONO};font-size:22px;font-weight:800;line-height:1.2;color:var(--txt)">${esc(pagoWebMontoBanco(p))}</div>
       <div class="ec-row" style="margin-top:2px">${esc(sub)}</div>
@@ -10515,7 +10611,7 @@ function pagoWebCard(p) {
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
         <span style="font-size:12px;color:var(--muted)">Ref.</span>
         <span style="${PAGO_WEB_MONO};font-size:15px;font-weight:700;color:var(--txt);user-select:all;word-break:break-all;flex:1">${esc(p.referencia_declarada || '—')}</span>
-        ${p.referencia_declarada ? `<button type="button" class="dbtn" data-pagoweb-copiar="${p.id}" aria-label="Copiar referencia" style="min-width:44px;min-height:44px"><i class="fas fa-copy"></i></button>` : ''}
+        ${p.referencia_declarada ? `<button type="button" class="pagos-copiar" data-pagoweb-copiar="${p.id}" aria-label="Copiar referencia" title="Copiar referencia"><i class="fas fa-copy"></i></button>` : ''}
       </div>
       ${repetida ? `<div class="ec-row" style="color:var(--danger);font-weight:700"><i class="fas fa-triangle-exclamation"></i> Referencia repetida (${esc(repetida.codigo || repetida.lead_nombre || 'otro pago')})</div>` : ''}
       <div class="ec-row"><i class="fas fa-globe"></i> Compra web ${esc(p.codigo || '')}${servicios.length ? ' · ' + esc(servicios.join(' + ')) : ''}</div>
@@ -10527,19 +10623,42 @@ function pagoWebCard(p) {
     </div>`;
 }
 
-async function loadPagos() {
+// Tablero de Pagos (2026-10-22): el recorrido completo de un pago, cada tarjeta
+// avanza sola. La reserva cuenta como confirmada cuando cada servicio (sin los
+// cargos IGTF/gestión) tiene localizador del proveedor (pagos_web_cola los cuenta).
+const PAGOS_ETAPAS = [
+  { k: 'verificar', t: 'Por verificar', s: 'El cliente declaró el pago: compáralo con el banco', color: 'var(--danger)', vacio: 'Nada por verificar' },
+  { k: 'reserva', t: 'Pago confirmado · falta la reserva', s: 'Carga el localizador de cada servicio cuando el proveedor confirme', color: 'var(--amber)', vacio: 'Ninguna reserva esperando confirmación' },
+  { k: 'confirmada', t: 'Reserva confirmada', s: 'Ya está en Reservas y Cobros', color: 'var(--green)', vacio: 'Todavía ninguna' },
+];
+const PAGOS_CONFIRMADAS_MAX = 20;
+function pagoEtapa(p) {
+  if (p.estado === 'pendiente_verificacion') return 'verificar';
+  if (!p._web) return null;
+  if (p.estado === 'emitido' || p.estado === 'vencido') return 'espera';
+  if (p.estado !== 'verificado') return null;
+  // Sin los campos (RPC vieja) no se puede afirmar que esté confirmada.
+  if (p.servicios_total == null) return 'reserva';
+  return Number(p.servicios_con_localizador) >= Number(p.servicios_total) ? 'confirmada' : 'reserva';
+}
+const PAGOS_ETAPA_LABEL = { verificar: 'Por verificar', reserva: 'Pago confirmado · falta la reserva', confirmada: 'Reserva confirmada', espera: 'Esperando que el cliente pague' };
+
+// `silencioso`: refresco de fondo (sondeo), sin esqueleto ni parpadeo.
+async function loadPagos(silencioso = false) {
   const loading = document.getElementById('pagos-loading');
   const empty = document.getElementById('pagos-empty');
   const lista = document.getElementById('pagos-lista');
   if (!lista) return;
+  // No repintar debajo de un comprobante abierto: se cerraría mientras lo miran.
+  if (silencioso && [...lista.querySelectorAll('[data-pagoweb-prev]')].some(e => e.style.display !== 'none')) return;
   const carga = ++PAGOS_CARGA;
-  loading.classList.add('show'); empty.classList.remove('show'); lista.innerHTML = '';
+  if (!silencioso) { loading.classList.add('show'); empty.classList.remove('show'); lista.innerHTML = ''; }
   // La cola de pendientes se pide siempre: sus ids se sacan de la lista general (cuyo botón «Aprobar» no sirve
-  // para una compra web). En modo «todas» se pide aparte la cola completa solo para mostrarla.
+  // para una compra web). La cola completa trae además las verificadas y las que esperan el pago.
   const [rLista, rWeb, rWebTodas] = await Promise.all([
     sb.rpc('listar_pagos', { p_estado: 'pendiente_verificacion' }),
     sb.rpc('pagos_web_cola', { p_solo_pendientes: true, p_limite: 300 }),
-    PAGOS_WEB_TODOS ? sb.rpc('pagos_web_cola', { p_solo_pendientes: false, p_limite: 300 }) : Promise.resolve(null),
+    sb.rpc('pagos_web_cola', { p_solo_pendientes: false, p_limite: 300 }),
   ]);
   if (carga !== PAGOS_CARGA) return; // llegó una recarga más nueva: la que pinta es esa
   loading.classList.remove('show');
@@ -10562,9 +10681,28 @@ async function loadPagos() {
   const vence = w => w.estado === 'pendiente_verificacion' && w.verificar_antes_de ? Date.parse(w.verificar_antes_de) : Infinity;
   web.sort((a, b) => vence(a) - vence(b));
   const idsWeb = new Set([...idsPendientes, ...web.map(w => w.id)]);
-  PAGOS_CACHE = [...web, ...(rLista.data.pagos || []).filter(p => !idsWeb.has(p.id))];
-  if (!PAGOS_CACHE.length) { empty.classList.add('show'); return; }
-  lista.innerHTML = PAGOS_CACHE.map(p => p._web ? pagoWebCard(p) : `
+  PAGOS_CACHE = [...web, ...(rLista.data.pagos || []).filter(p => !idsWeb.has(p.id))].filter(p => pagoEtapa(p));
+  pintarAvisoPagos((rLista.data.pagos || []).length);
+  const de = k => PAGOS_CACHE.filter(p => pagoEtapa(p) === k);
+  // Las confirmadas se acumulan para siempre: solo las más recientes (la cola ya viene de la más nueva a la más vieja).
+  const cols = { verificar: de('verificar'), reserva: de('reserva'), confirmada: de('confirmada').slice(0, PAGOS_CONFIRMADAS_MAX) };
+  const espera = de('espera');
+  empty.classList.toggle('show', !PAGOS_CACHE.length);
+  if (!PAGOS_CACHE.length) { lista.innerHTML = ''; return; }
+  const card = p => p._web ? pagoWebCard(p) : pagoAsesorCard(p);
+  lista.innerHTML = `<div class="pagos-tablero">${PAGOS_ETAPAS.map(e => `
+    <section class="pagos-col" data-etapa="${e.k}" style="--etapa:${e.color}">
+      <header class="pagos-col-head"><span class="pagos-col-punto"></span><h3>${esc(e.t)}</h3><span class="pagos-col-n">${cols[e.k].length}</span></header>
+      <div class="pagos-col-sub">${esc(e.s)}</div>
+      <div class="pagos-col-cards">${cols[e.k].length ? cols[e.k].map(card).join('') : `<div class="pagos-col-vacio">${esc(e.vacio)}</div>`}</div>
+    </section>`).join('')}</div>
+    ${espera.length ? `<details class="pagos-espera"><summary><i class="fas fa-hourglass-half"></i> Esperando que el cliente pague <span class="pagos-col-n">${espera.length}</span></summary>
+      <div class="leads-inbox-grid">${espera.map(card).join('')}</div></details>` : ''}`;
+  if (!silencioso) entradaLista(lista);
+}
+
+function pagoAsesorCard(p) {
+  return `
     <div class="entity-card inbox-card" data-pago="${p.id}">
       <div class="ec-top"><div class="ec-nombre">${esc(p.lead_nombre || 'Sin nombre')}</div></div>
       <div class="ec-row"><i class="fas fa-tag"></i> ${esc(p.tipo === 'abono' ? 'Abono / reserva' : 'Pago total')} · ${esc(PAGO_RIEL_LABEL[p.riel] || p.riel)}</div>
@@ -10577,8 +10715,7 @@ async function loadPagos() {
         <button type="button" class="inbox-btn atender" data-pago-aprobar="${p.id}"><i class="fas fa-check"></i> Aprobar</button>
         <button type="button" class="inbox-btn nopuedo" data-pago-rechazar="${p.id}"><i class="fas fa-xmark"></i> Rechazar</button>
       </div>
-    </div>`).join('');
-  entradaLista(lista);
+    </div>`;
 }
 
 async function abrirComprobantePago(id) {
@@ -10697,14 +10834,12 @@ function setupPagos() {
     }
     const wTarde = e.target.closest('[data-pagoweb-tarde]');
     if (wTarde) return verificarPagoWebAccion(Number(wTarde.dataset.pagowebTarde), 'tarde', wTarde);
-  });
-  const todos = document.getElementById('pagos-web-todos');
-  if (todos) todos.addEventListener('click', () => {
-    PAGOS_WEB_TODOS = !PAGOS_WEB_TODOS;
-    todos.innerHTML = PAGOS_WEB_TODOS
-      ? '<i class="fas fa-globe"></i> Compras web: todas'
-      : '<i class="fas fa-globe"></i> Compras web: solo pendientes';
-    loadPagos();
+    // El localizador se carga por servicio en la ficha de la reserva; al volver a Pagos la tarjeta avanza sola.
+    const wRes = e.target.closest('[data-pagoweb-reserva]');
+    if (wRes) {
+      const p = PAGOS_CACHE.find(x => x.id === Number(wRes.dataset.pagowebReserva));
+      if (p?.reserva_id) return abrirReservaDeLead(p.reserva_id, p.codigo, wRes);
+    }
   });
 }
 
@@ -17538,9 +17673,9 @@ EXPORTABLES.informe = {
   celda: (c, r) => c === 'tiene_informe' ? siNo(r[c]) : r[c] == null ? '' : c === 'fecha' ? fmtFechaSolo(r[c]) : c === 'hora_salida' ? fmtHoraCaracas(r[c]) : String(r[c]),
 };
 EXPORTABLES.pagos = {
-  cols: [['lead_nombre', 'Cliente'], ['lead_telefono', 'Teléfono'], ['asesor', 'Asesor'], ['tipo', 'Tipo'], ['riel', 'Medio'], ['monto', 'Monto'], ['referencia_declarada', 'Referencia'], ['comprobante_path', 'Comprobante'], ['created_at', 'Declarado']],
+  cols: [['etapa', 'Etapa'], ['lead_nombre', 'Cliente'], ['lead_telefono', 'Teléfono'], ['asesor', 'Asesor'], ['tipo', 'Tipo'], ['riel', 'Medio'], ['monto', 'Monto'], ['referencia_declarada', 'Referencia'], ['comprobante_path', 'Comprobante'], ['created_at', 'Declarado']],
   filas: () => PAGOS_CACHE,
-  celda: (c, r) => c === 'monto' ? pagoMontoTexto(r) : c === 'comprobante_path' ? siNo(r[c]) : r[c] == null ? '' : c === 'tipo' ? (r._web ? 'Compra web' : r[c] === 'abono' ? 'Abono / reserva' : 'Pago total') : c === 'riel' ? (PAGO_RIEL_LABEL[r[c]] || r[c]) : c === 'created_at' ? fmtFechaHoraCaracas(r[c]) : String(r[c]),
+  celda: (c, r) => c === 'etapa' ? (PAGOS_ETAPA_LABEL[pagoEtapa(r)] || '') : c === 'monto' ? pagoMontoTexto(r) : c === 'comprobante_path' ? siNo(r[c]) : r[c] == null ? '' : c === 'tipo' ? (r._web ? 'Compra web' : r[c] === 'abono' ? 'Abono / reserva' : 'Pago total') : c === 'riel' ? (PAGO_RIEL_LABEL[r[c]] || r[c]) : c === 'created_at' ? fmtFechaHoraCaracas(r[c]) : String(r[c]),
 };
 EXPORTABLES.cev = {
   cols: [['nombre', 'Nombre'], ['telefono', 'Teléfono'], ['instagram', 'Instagram'], ['codigo', 'Código'], ['interes', 'Interés'], ['acepta_promos', 'Acepta promos'], ['creado_en', 'Registro'], ['premios', 'Premios'], ['cupones', 'Cupones'], ['por_entregar', 'Por entregar']],
@@ -30318,7 +30453,8 @@ const NAV_ITEMS = [
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
   { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Ventas, costos, gastos y utilidad por periodo' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok' },
-  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Links de pago declarados, pendientes de aprobar' },
+  // Entrada propia desde 2026-10-22 (antes pestaña de Cobros): late en rojo con pagos por verificar (setupAvisoPagos).
+  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Links de pago declarados, pendientes de aprobar', badge: 'nav-pagos-count', badgeDefault: '0' },
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones por corte', padre: 'grp-cobros', roles: 'nav-administrativo-ok', sub: 'Cargá tus ventas pagadas; pagos el 5 y el 20' },
   { sec: 'mis-comisiones', icon: 'fas fa-sack-dollar', label: 'Mis Comisiones', padre: 'grp-cobros', roles: 'nav-asesor-only' },
   { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
@@ -30353,6 +30489,7 @@ const NAV_PADRES = [
   { sec: 'stop-sales', hoja: true },
   { sec: 'grp-reservas', icon: 'fas fa-handshake-angle', label: 'Reservas', badge: 'nav-postventa-count', badgeDefault: '0' },
   { sec: 'grp-cobros', icon: 'fas fa-file-invoice-dollar', label: 'Cobros' },
+  { sec: 'pagos', hoja: true },
   { divisor: 'Gestión' },
   { sec: 'grp-equipo', icon: 'fas fa-people-group', label: 'Equipo', badge: 'nav-tareas-count', badgeDefault: '0' },
   { sec: 'grp-directorio', icon: 'fas fa-briefcase', label: 'Corporativo' },
@@ -31358,6 +31495,31 @@ function fijarSolicitudesArriba() {
   if (!document.getElementById('nav-bol-sol-aviso')) item.insertAdjacentHTML('beforeend', '<span class="nav-bol-aviso" id="nav-bol-sol-aviso"></span>');
   ubicarSolicitudesNav();
 }
+// Pagos por verificar: mismo aviso que Solicitudes, pero en reposo es una entrada
+// común; solo crece y late cuando hay pagos declarados esperando (dueño 2026-10-22).
+function setupAvisoPagos() {
+  const item = navItemDe('pagos');
+  if (!item || !esOficina()) return;
+  item.classList.add('nav-pagos');
+  item.insertAdjacentHTML('beforeend', '<span class="nav-pagos-aviso" id="nav-pagos-aviso"></span>');
+  contarPagosPendientes();
+  // Con la sección abierta se repinta el tablero entero (también pinta el aviso): así avanza solo.
+  setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (currentSec === 'pagos') loadPagos(true); else contarPagosPendientes();
+  }, 60000);
+}
+async function contarPagosPendientes() {
+  const { data, error } = await sb.rpc('listar_pagos', { p_estado: 'pendiente_verificacion' });
+  if (!error && data?.ok) pintarAvisoPagos((data.pagos || []).length);
+}
+function pintarAvisoPagos(n) {
+  const badge = document.getElementById('nav-pagos-count'), aviso = document.getElementById('nav-pagos-aviso');
+  if (badge) { badge.textContent = n; badge.style.display = n ? '' : 'none'; }
+  navItemDe('pagos')?.classList.toggle('pendientes', n > 0);
+  if (aviso) aviso.textContent = n === 1 ? '1 pago por verificar' : `${n} pagos por verificar`;
+}
+
 // Arriba de todo solo en modo Boletería. Fuera de ese modo el item está oculto
 // y, primero en el DOM, era el primer [data-sec] del menú: el gate de publicación
 // (verificar-crm.py) espera que ese se vea y fallaba.

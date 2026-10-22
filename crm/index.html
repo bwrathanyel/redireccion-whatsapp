@@ -1969,6 +1969,24 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .sheet-input{width:100%;box-sizing:border-box;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:9px;padding:10px 12px;color:var(--txt);font-size:16px;font-family:inherit;outline:none;color-scheme:dark;margin:10px 0}
 .sheet-input:focus{border-color:var(--accent)}
 @media(max-width:760px){.inbox-btn{min-height:44px;font-size:12px}}
+/* Pagos por verificar: tablero de 3 etapas (loadPagos). --etapa la pone cada columna. */
+.pagos-tablero{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.pagos-col{border:1px solid var(--line);border-top:3px solid var(--etapa);border-radius:14px;padding:11px;min-width:0}
+.pagos-col-head{display:flex;align-items:center;gap:7px}
+.pagos-col-head h3{margin:0;font-size:13px;font-weight:800;color:var(--txt);flex:1;min-width:0}
+.pagos-col-punto{width:9px;height:9px;border-radius:999px;background:var(--etapa);flex:none}
+.pagos-col-n{min-width:22px;padding:2px 7px;border-radius:999px;background:var(--line2);color:var(--txt);font-size:11.5px;font-weight:800;text-align:center}
+.pagos-col[data-etapa="verificar"] .pagos-col-n{background:var(--danger);color:#fff}
+.pagos-col-sub{font-size:11.5px;color:var(--muted);margin:4px 0 11px}
+.pagos-col-cards{display:flex;flex-direction:column;gap:11px}
+.pagos-col-vacio{padding:22px 11px;border:1px dashed var(--line2);border-radius:12px;text-align:center;font-size:12px;color:var(--muted)}
+.pagos-espera{margin-top:14px;border:1px solid var(--line);border-radius:14px;padding:11px}
+.pagos-espera summary{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;font-weight:800;color:var(--muted);min-height:28px}
+.pagos-espera[open] summary{margin-bottom:11px}
+.pagos-copiar{flex:none;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--muted);cursor:pointer;transition:color .16s,border-color .16s}
+.pagos-copiar:hover{color:var(--accent);border-color:var(--accent)}
+.inbox-btn.pagos-sec{background:transparent;color:var(--txt);border-color:var(--line2)}
+@media(max-width:1099px){.pagos-tablero{grid-template-columns:1fr}}
 
 /* ---------- Cotizador IA ---------- */
 .chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);height:calc(100dvh - 180px);min-height:420px}
@@ -2901,6 +2919,15 @@ body.asesor-boleteria :is(#btn-entrar-modo-boleteria,#sheet-entrar-modo-boleteri
 .nav-bol-sol.pendientes .nav-bol-aviso{display:block}
 @keyframes navBolSolLatido{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55);background:rgba(239,68,68,.12)}50%{box-shadow:0 0 0 7px rgba(239,68,68,0);background:rgba(239,68,68,.3)}}
 @media (prefers-reduced-motion:reduce){#sidebar-nav > .nav-item.nav-bol-sol.pendientes{animation:none;background:rgba(239,68,68,.24)}}
+/* Pagos por verificar: entrada común en reposo; con pendientes crece y late como Solicitudes (setupAvisoPagos) */
+#sidebar-nav > .nav-item.nav-pagos{flex-wrap:wrap;border:1px solid transparent;transition:padding .25s ease,margin .25s ease,font-size .25s ease}
+#sidebar-nav > .nav-item.nav-pagos .badge{background:#ef4444;color:#fff}
+.nav-pagos .nav-pagos-aviso{display:none;flex-basis:100%;font-size:11.5px;font-weight:700;color:#ffc2c2;margin-top:5px}
+#sidebar-nav > .nav-item.nav-pagos.pendientes{font-size:15px;font-weight:800;padding:13px 14px;margin:4px 0 10px;border-radius:12px;border-color:rgba(255,107,107,.75);animation:navBolSolLatido 1.3s ease-in-out infinite}
+#sidebar-nav > .nav-item.nav-pagos.pendientes > i{font-size:17px}
+#sidebar-nav > .nav-item.nav-pagos.pendientes .badge{font-size:12.5px;min-width:24px;padding:3px 8px}
+.nav-pagos.pendientes .nav-pagos-aviso{display:block}
+@media (prefers-reduced-motion:reduce){#sidebar-nav > .nav-item.nav-pagos{transition:none}#sidebar-nav > .nav-item.nav-pagos.pendientes{animation:none;background:rgba(239,68,68,.24)}}
 body.modo-boleteria #sheet-entrar-modo-boleteria{display:none}
 body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .rol-boleteria #btn-entrar-modo-boleteria,.rol-boleteria #btn-salir-modo-boleteria,.rol-boleteria #sheet-entrar-modo-boleteria,.rol-boleteria #sheet-salir-modo-boleteria{display:none}
@@ -3935,6 +3962,44 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pv-empty{grid-column:1/-1;padding:55px 20px;text-align:center;color:var(--muted)}.pv-empty i{font-size:30px;color:var(--green);display:block;margin-bottom:12px}
 .pv-doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}.pv-doc{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:9px;font-size:11px;color:var(--muted);cursor:pointer}.pv-doc input{accent-color:var(--accent)}
 .pv-balance{border-radius:12px;padding:12px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.14);margin:12px 0;font-size:12px;color:var(--muted)}
+/* Reservas → Clientes (22-oct): filtros rápidos en vez de KPI, etapa + selects en una fila,
+   secciones plegables por fecha de viaje y chip «viaja en N días» en la tarjeta. */
+.pv-resumen{display:flex;gap:6px;overflow-x:auto;padding:2px 1px 10px;scrollbar-width:none}.pv-resumen::-webkit-scrollbar{display:none}
+.pv-rap{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;white-space:nowrap;border:1px solid transparent;border-radius:999px;background:color-mix(in srgb,var(--tc) 9%,transparent);color:var(--muted);padding:6px 11px;font:inherit;font-size:11.5px;cursor:pointer;transition:background .16s,border-color .16s}
+.pv-rap i{color:var(--tc);font-size:11px}.pv-rap b{color:var(--txt);font-weight:800}
+.pv-rap:hover:not(:disabled){background:color-mix(in srgb,var(--tc) 16%,transparent)}
+.pv-rap.on{border-color:color-mix(in srgb,var(--tc) 55%,transparent);background:color-mix(in srgb,var(--tc) 18%,transparent);color:var(--txt)}
+.pv-rap:disabled{opacity:.45;cursor:default}
+.pv-rap:focus-visible,.pv-sec>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pv-filtros{display:flex;align-items:flex-start;gap:10px}.pv-filtros .pv-stagebar{flex:1;min-width:0}
+.pv-selects{display:flex;gap:8px;flex:0 0 auto}.pv-selects select.flt{padding-top:7px;padding-bottom:7px;font-size:12px;max-width:230px}
+#pv-destino[hidden]{display:none}
+.pv-stage .pv-n{font-weight:800;margin-left:2px;opacity:.7}.pv-stage .pv-n:empty{display:none}
+#pv-grid.pv-secs{display:block}
+.pv-sec{margin-bottom:10px}
+.pv-sec>summary{display:flex;align-items:center;gap:9px;padding:8px 4px;cursor:pointer;list-style:none;font-size:13px;font-weight:800;color:var(--txt)}
+.pv-sec>summary::-webkit-details-marker{display:none}
+.pv-sec>summary .flecha{color:var(--muted2);font-size:10px;transition:transform .16s}.pv-sec[open]>summary .flecha{transform:rotate(90deg)}
+.pv-sec>summary>i:not(.flecha){color:var(--tc)}
+.pv-sec>summary small{font-size:11px;font-weight:600;color:var(--muted)}
+.pv-sec>summary::after{content:'';flex:1;height:1px;background:var(--line);margin-left:4px}
+.pv-sec>.pv-grid{padding:4px 0 6px}
+.pv-card-top{justify-content:flex-start;flex-wrap:wrap;gap:6px 8px}
+.pv-viaje{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:5px 9px;border-radius:999px;white-space:nowrap;font-size:10.5px;font-weight:750;color:var(--tc);background:color-mix(in srgb,var(--tc) 14%,transparent)}
+/* Tarjeta más liviana: «Falta» solo con borde, chips chicos y acciones en una fila en escritorio. */
+.pv-falta{background:transparent;padding:7px 9px;gap:5px}
+.pv-falta-i{font-size:10.5px;padding:3px 8px}
+@media(min-width:761px){
+  .pv-card{padding:15px}.pv-name{margin:12px 0 3px}
+  .pv-card-foot{gap:6px;margin-top:12px;padding-top:11px}
+  .pv-card-foot .pv-btn{min-height:38px;flex:1 1 auto;padding:0 8px;font-size:11px}
+  .pv-card-foot .pv-btn.wa{flex:0 0 38px;width:38px;height:38px;font-size:15px}
+}
+@media(max-width:760px){
+  .pv-filtros{flex-direction:column;gap:2px}.pv-filtros .pv-stagebar{width:100%}
+  .pv-selects{width:100%}.pv-selects select.flt{flex:1;min-width:0;max-width:none;min-height:var(--tap,44px)}
+  .pv-rap{min-height:36px}
+}
 
 @media(min-width:761px){
   .app{grid-template-columns:272px minmax(0,1fr)}
@@ -6889,23 +6954,34 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div class="pv-search"><i class="fas fa-search"></i><input id="pv-search" type="search" placeholder="Buscar cliente, destino o localizador..."></div>
         <button class="pv-refresh" id="pv-refresh" type="button" title="Actualizar" aria-label="Actualizar postventa"><i class="fas fa-rotate"></i></button>
       </div>
-      <div class="kpis pv-kpis" id="pv-kpis"></div>
+      <!-- Filtros rápidos (reemplazan a los 6 KPI): se arman en JS con renderPvResumen -->
+      <div class="pv-resumen chips-scroll" id="pv-resumen" aria-label="Filtros rápidos"></div>
       <details class="ria-detalles pv-wa" id="pv-wa" hidden>
         <summary>Campaña WhatsApp a clientes con venta (solo administradores)</summary>
         <div class="ria-card" id="pv-wa-body"><div class="ria-sub">Cargando...</div></div>
       </details>
-      <div class="pv-stagebar chips-scroll" id="pv-stagebar">
-        <button class="pv-stage on" data-etapa="">Todos</button>
-        <button class="pv-stage" data-etapa="COBRO_PENDIENTE">Cobro</button>
-        <button class="pv-stage" data-etapa="CONFIRMACION_RESERVA">Reserva</button>
-        <button class="pv-stage" data-etapa="DOCUMENTACION">Documentación</button>
-        <button class="pv-stage" data-etapa="LISTO_PARA_VIAJAR">Listo para viajar</button>
-        <button class="pv-stage" data-etapa="EN_VIAJE">En viaje</button>
-        <button class="pv-stage" data-etapa="SEGUIMIENTO_POSTVIAJE">Seguimiento</button>
-        <button class="pv-stage" data-etapa="CERRADO">Cerrados</button>
+      <div class="pv-filtros">
+        <div class="pv-stagebar chips-scroll" id="pv-stagebar" aria-label="Filtrar por etapa">
+          <button class="pv-stage on" type="button" data-etapa="">Todos <b class="pv-n"></b></button>
+          <button class="pv-stage" type="button" data-etapa="COBRO_PENDIENTE">Cobro <b class="pv-n"></b></button>
+          <button class="pv-stage" type="button" data-etapa="CONFIRMACION_RESERVA">Reserva <b class="pv-n"></b></button>
+          <button class="pv-stage" type="button" data-etapa="DOCUMENTACION">Documentación <b class="pv-n"></b></button>
+          <button class="pv-stage" type="button" data-etapa="LISTO_PARA_VIAJAR">Listo para viajar <b class="pv-n"></b></button>
+          <button class="pv-stage" type="button" data-etapa="EN_VIAJE">En viaje <b class="pv-n"></b></button>
+          <button class="pv-stage" type="button" data-etapa="SEGUIMIENTO_POSTVIAJE">Seguimiento <b class="pv-n"></b></button>
+          <button class="pv-stage" type="button" data-etapa="CERRADO">Cerrados <b class="pv-n"></b></button>
+        </div>
+        <div class="pv-selects">
+          <!-- Destinos de la bandeja: se arman en JS (renderPvGrupos) -->
+          <select class="flt" id="pv-destino" aria-label="Filtrar por destino" hidden></select>
+          <select class="flt" id="pv-orden" aria-label="Ordenar reservas">
+            <option value="viaje">Por fecha de viaje</option>
+            <option value="saldo">Mayor saldo primero</option>
+            <option value="seguimiento">Próximo seguimiento</option>
+            <option value="bandeja">Prioridad (urgentes primero)</option>
+          </select>
+        </div>
       </div>
-      <!-- Pestañas por destinos.grupo (Etapa D): se arman en JS con los grupos presentes en la bandeja -->
-      <div class="pv-stagebar chips-scroll" id="pv-grupos" aria-label="Filtrar por destino" hidden></div>
       <div class="pv-grid" id="pv-grid"><div class="pv-empty"><i class="fas fa-circle-notch fa-spin"></i>Cargando postventa...</div></div>
     </section>
 
@@ -7776,8 +7852,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
     <section class="section" id="sec-pagos">
       <div class="card">
         <h2><i class="fas fa-money-check-dollar"></i> Pagos por verificar</h2>
-        <div class="csub">Pagos que un cliente declaró como pagados, incluidas las compras hechas en la web. Abre el comprobante y comprueba el monto y la referencia contra el banco antes de aprobar.</div>
-        <div class="exp-fila"><button class="btn-sm" type="button" id="pagos-web-todos"><i class="fas fa-globe"></i> Compras web: solo pendientes</button><div class="export-dd">
+        <div class="csub">El recorrido de cada pago: se verifica contra el banco, se confirma la reserva con el proveedor (localizador) y queda en Reservas y Cobros. Las tarjetas avanzan solas de columna.</div>
+        <div class="exp-fila"><div class="export-dd">
           <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'pagos')"><i class="fas fa-download"></i> Exportar</button>
           <div class="export-dd-menu" id="export-menu-pagos">
             <button onclick="exportarPDF('pagos','Pagos por verificar')"><i class="fas fa-file-pdf"></i> PDF</button>
@@ -7787,7 +7863,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         </div></div>
         <div class="tbl-state skel" id="pagos-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
         <div class="tbl-state" id="pagos-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No hay pagos pendientes de verificar</div></div>
-        <div class="leads-inbox-grid" id="pagos-lista"></div>
+        <div id="pagos-lista"></div>
       </div>
     </section>
 
