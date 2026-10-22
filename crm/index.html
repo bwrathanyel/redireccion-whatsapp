@@ -6184,17 +6184,30 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
      Si hay una versión nueva del CRM, el mismo splash avisa "Actualizando" y
      recarga solo (ver el script de abajo). app.js lo cierra con LotusBoot.listo(). -->
 <style>
-#boot-splash{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:radial-gradient(1000px 600px at 50% -10%,rgba(var(--accent-rgb),.14),transparent 60%),var(--bg);color:var(--txt);transition:opacity .28s ease,visibility .28s ease}
+#boot-splash{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(900px 560px at 50% 42%,rgba(var(--accent-rgb),.16),transparent 62%),var(--bg);color:var(--txt);transition:opacity .28s ease,visibility .28s ease}
 #boot-splash.fuera{opacity:0;visibility:hidden;pointer-events:none}
-#boot-splash img{width:84px;height:84px;object-fit:contain;animation:boot-giro 1.6s linear infinite}
-#boot-splash .boot-texto{font:500 14px/1.4 Inter,system-ui,sans-serif;color:var(--muted);text-align:center;padding:0 24px;min-height:20px}
+#boot-splash .boot-logo{position:relative;width:148px;height:148px;display:grid;place-items:center;margin-bottom:26px}
+/* El PNG trae fondo cuadrado: se recorta en círculo y NO gira (rotarlo mostraba las esquinas). El movimiento lo lleva el aro. */
+#boot-splash .boot-logo img{width:116px;height:116px;object-fit:contain;clip-path:circle(47%);animation:boot-respira 2.4s ease-in-out infinite}
+#boot-splash .boot-aro{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 40%,rgba(var(--accent-rgb),.35) 70%,var(--accent) 100%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2px));animation:boot-giro 1.15s linear infinite}
+#boot-splash .boot-halo{position:absolute;inset:6px;border-radius:50%;box-shadow:0 0 38px rgba(var(--accent-rgb),.28);animation:boot-halo 2.4s ease-in-out infinite}
+#boot-splash .boot-marca{font:700 15px/1.3 Inter,system-ui,sans-serif;letter-spacing:.02em;color:var(--txt);text-align:center;padding:0 24px}
+#boot-splash .boot-texto{font:500 13.5px/1.4 Inter,system-ui,sans-serif;color:var(--muted);text-align:center;padding:0 24px;margin-top:8px;min-height:20px;animation:boot-entra .45s ease both}
 #boot-splash.actualizando .boot-texto{color:var(--accent-ink)}
+#boot-splash.actualizando .boot-aro{animation-duration:.8s;background:conic-gradient(from 0deg,transparent 0 30%,rgba(var(--accent-rgb),.4) 65%,var(--accent2) 100%)}
 @keyframes boot-giro{to{transform:rotate(360deg)}}
-@keyframes boot-pulso{50%{opacity:.45}}
-@media(prefers-reduced-motion:reduce){#boot-splash img{animation:boot-pulso 1.6s ease-in-out infinite}}
+@keyframes boot-respira{50%{transform:scale(1.05)}}
+@keyframes boot-halo{50%{opacity:.45;transform:scale(1.06)}}
+@keyframes boot-entra{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){#boot-splash .boot-aro,#boot-splash .boot-halo,#boot-splash .boot-texto{animation:none}#boot-splash .boot-aro{background:rgba(var(--accent-rgb),.5)}}
 </style>
 <div id="boot-splash" role="status" aria-live="polite">
-  <img src="logolotus-integrado.png" alt="" width="84" height="84">
+  <div class="boot-logo">
+    <span class="boot-halo"></span>
+    <span class="boot-aro"></span>
+    <img src="logolotus-integrado.png" alt="" width="116" height="116">
+  </div>
+  <div class="boot-marca">Destino y Eventos Lotus 360</div>
   <div class="boot-texto" id="boot-texto">Cargando tu panel…</div>
 </div>
 <script>
@@ -6208,7 +6221,10 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
   var habiaControlador = !!(sw && sw.controller);
   var frases = FR_CARGA, idx = 1, rot = null, abandono = null;
 
-  function pintar() { txt.textContent = frases[idx++ % frases.length]; }
+  function pintar() {
+    txt.textContent = frases[idx++ % frases.length];
+    txt.style.animation = 'none'; void txt.offsetWidth; txt.style.animation = ''; // reinicia el fundido de entrada
+  }
   function mostrar(modoAct) {
     el.classList.remove('fuera');
     el.classList.toggle('actualizando', !!modoAct);
