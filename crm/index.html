@@ -4322,6 +4322,96 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
   .drawer:has(.dhead-lead) .dclose{top:30px;right:23px}
 }
 
+/* ============ Ficha del lead — sin pestañas, autoguardado (2026-10-22) ============
+   Franja de acción (estado editable + botón principal + WhatsApp + "Más"),
+   "Datos" en modo lectura con lápiz, chat/nota/historial dentro de "Quién es",
+   e indicador de guardado en vez del botón sticky. Todo cuelga de clases que
+   existen solo en esta ficha. */
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.dhead-lead .dava{width:44px;height:44px;border-radius:13px;font-size:17px}
+.dhead-lead .dn{font-size:18px}
+.dh-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.dh-badges .badge-st{margin-top:0}
+.dacc{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+.dacc-estado{position:relative;flex:0 1 auto;min-width:0}
+.dacc-estado::before{content:"";position:absolute;left:12px;top:50%;width:8px;height:8px;margin-top:-4px;border-radius:50%;background:var(--est);pointer-events:none}
+.dacc-estado select{appearance:none;-webkit-appearance:none;max-width:100%;height:40px;padding:0 30px 0 27px;border:1px solid color-mix(in srgb,var(--est) 40%,var(--line));border-radius:999px;background:color-mix(in srgb,var(--est) 13%,transparent);color:var(--txt);font:inherit;font-size:12.5px;font-weight:800;cursor:pointer;transition:border-color .16s}
+.dacc-estado select:hover:not(:disabled){border-color:color-mix(in srgb,var(--est) 70%,var(--line))}
+.dacc-estado select:disabled{cursor:default;opacity:.8}
+.dacc-estado select option{background:var(--bg2);color:var(--txt)}
+.dacc-estado>i{position:absolute;right:12px;top:50%;margin-top:-5px;font-size:10px;color:var(--muted);pointer-events:none}
+.dacc-cta{flex:1;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:0 14px;border:none;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:var(--on-accent,#fff);font:inherit;font-size:13px;font-weight:800;white-space:nowrap;cursor:pointer;box-shadow:0 8px 18px rgba(var(--accent-rgb),.2);transition:filter .16s,transform .16s}
+.dacc-cta:hover{filter:brightness(1.06)}
+.dacc-cta:active{transform:translateY(1px)}
+.dacc-cta[hidden]{display:none}
+.dacc-ic{width:40px;height:40px;flex-shrink:0;display:grid;place-items:center;border:1px solid var(--line2);border-radius:10px;background:transparent;color:var(--muted);font-size:15px;text-decoration:none;cursor:pointer;transition:border-color .16s,color .16s}
+.dacc-ic:hover{border-color:rgba(var(--accent-rgb),.35);color:var(--txt)}
+.dacc-ic.wa{color:var(--wa)}
+.dacc-ic[aria-expanded="true"]{border-color:rgba(var(--accent-rgb),.45);color:var(--accent-ink)}
+.dacc-mas{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin:7px 0 2px;padding:6px;border:1px solid var(--line);border-radius:12px;background:rgba(var(--ink-rgb),.03)}
+.dacc-mas[hidden]{display:none}
+.dq-mas{display:flex;align-items:center;gap:9px;min-height:40px;padding:0 11px;border:none;border-radius:9px;background:transparent;color:var(--txt);font:inherit;font-size:12.5px;font-weight:600;text-align:left;cursor:pointer;transition:background-color .16s}
+.dq-mas:hover:not(:disabled){background:rgba(var(--ink-rgb),.06)}
+.dq-mas:disabled{opacity:.55;cursor:default}
+.dq-mas i{width:16px;text-align:center;color:var(--muted)}
+.dguardado{min-height:16px;margin:4px 2px 7px;font-size:11px;font-weight:600;color:var(--muted2);text-align:right}
+.dguardado.ok i{color:var(--green)}
+.dguardado.error{color:var(--danger)}
+#edit-err:empty{display:none}
+.lead-conflict-bar{flex-wrap:wrap}
+.lead-conflict-bar .conflict-acc{display:flex;gap:6px;flex-basis:100%}
+.lead-conflict-bar .conflict-acc .dbtn{flex:none;width:auto;margin:0;padding:7px 12px;font-size:12px}
+.dbloque{margin-bottom:10px;padding:11px 14px 13px;border:1px solid var(--line);border-radius:14px;background:rgba(var(--ink-rgb),.02)}
+.dbloque[hidden]{display:none}
+.dbloque-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:13px;font-weight:700}
+.dbloque-h>span:first-child i{margin-right:6px;color:var(--blue)}
+.dbloque-btn{padding:4px 7px;border:none;border-radius:8px;background:transparent;color:var(--accent-ink);font:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:background-color .16s}
+.dbloque-btn:hover{background:var(--accent-soft)}
+.dbloque-h .dnotas-meta{min-height:0;margin:0;font-size:11px;font-weight:600;color:var(--muted2);text-align:right}
+.dlect{margin:0}
+.dl-fila{display:grid;grid-template-columns:92px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.dl-fila:last-child{border-bottom:none}
+.dl-fila dt{font-size:11px;font-weight:700;color:var(--muted)}
+.dl-fila dd{margin:0;min-width:0;font-size:13px;color:var(--txt);overflow-wrap:anywhere}
+.dl-fila dd .csub{margin-top:2px}
+.dlect .vacio,.dl-consulta.vacio{color:var(--muted2)}
+.dl-consulta-wrap{margin-top:9px}
+.dl-t{margin-bottom:4px;font-size:11px;font-weight:700;color:var(--muted)}
+.dl-consulta{font-size:12.5px;line-height:1.5;color:var(--txt);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.dl-consulta.abierta{display:block;-webkit-line-clamp:unset;overflow:visible}
+.dl-vermas{padding:4px 0 0;border:none;background:none;color:var(--accent-ink);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.dl-vermas[hidden]{display:none}
+#d-datos .dedicion{display:none}
+#d-datos.modo-edicion .dedicion{display:grid}
+#d-datos.modo-edicion .dlect,#d-datos.modo-edicion .dl-consulta-wrap{display:none}
+.ei.ei-consulta{min-height:66px;line-height:1.45;resize:none;overflow:hidden}
+.conv-preview .conv-mini{margin-bottom:6px;font-size:12px;line-height:1.45;color:var(--muted);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.conv-preview .conv-mini:last-child{margin-bottom:0}
+.conv-preview .conv-mini b{color:var(--txt);font-weight:700}
+.conv-preview .conv-mini.ia b{color:var(--accent-ink)}
+.dbloque #e-notas{min-height:62px;resize:vertical}
+.dsec>summary .dsec-res{min-width:0;max-width:52%;margin-left:auto;overflow:hidden;font-size:11.5px;font-weight:600;color:var(--muted);text-overflow:ellipsis;white-space:nowrap}
+.dsec>summary .dsec-res:empty{display:none}
+.dsec>summary .dsec-res:not(:empty)~.dsec-arrow{margin-left:6px}
+.dsec[hidden]{display:none}
+.dresumen-cols .dsec[data-dsec="historial"]{--sec-c:var(--muted)}
+.fl.fl-ia{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.ia-mini{width:26px;height:26px;flex-shrink:0;display:grid;place-items:center;border:1px solid var(--line2);border-radius:8px;background:transparent;color:var(--purple);font-size:11px;cursor:pointer;transition:border-color .16s}
+.ia-mini:hover:not(:disabled){border-color:var(--purple)}
+.venta-msg{margin-bottom:6px;font-size:12px;font-weight:700;color:var(--amber)}
+.venta-msg:empty{display:none}
+@media(min-width:761px){
+  .dbloque{border-radius:16px;margin-bottom:11px}
+}
+@media(max-width:760px){
+  .dacc-estado select{height:var(--tap)}
+  .dacc-cta{min-height:var(--tap)}
+  .dacc-ic{width:var(--tap);height:var(--tap);font-size:18px}
+  .dacc-mas{grid-template-columns:1fr}
+  .dq-mas{min-height:var(--tap)}
+  .dl-fila{grid-template-columns:84px 1fr}
+}
+
 /* ============ Revisión de vigencias del tarifario ============ */
 .vig-resumen{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .vig-kpi{flex:1;min-width:96px;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
@@ -10610,6 +10700,13 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
   <div class="sheet-handle"></div>
   <div class="sheet-title" id="acciones-lead-titulo">Acciones</div>
   <div id="acciones-lead-opciones" class="estado-lead-opciones"></div>
+</div>
+
+<div class="sheet" id="conv-lead-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Conversación con la IA</div>
+  <div class="csub" id="conv-lead-canal" style="margin-bottom:12px"></div>
+  <div id="conv-body"></div>
 </div>
 
 <!-- Lightbox de fotos -->

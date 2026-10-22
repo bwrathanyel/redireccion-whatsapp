@@ -315,6 +315,9 @@ let activeMonth = null, activeDestino = null, currentLead = null;
 // camposSuciosLead trackea qué inputs tocó el usuario -- esos NO se
 // sobreescriben cuando llega un UPDATE ajeno, el resto sí se refresca solo.
 let camposSuciosLead = new Set(), conflictoLeadPendiente = false;
+// Autoguardado de la ficha (2026-10-22): ids en conflicto con un cambio ajeno
+// (no se guardan solos hasta que el usuario elija), timers y guardado en vuelo.
+let CONFLICTO_IDS_LEAD = new Set(), VALORES_EN_VUELO_LEAD = {}, autoguardadoTimer = null, autoguardadoEnVuelo = null, autoguardadoOtraVez = false, notasTimer = null;
 const FIELD_IDS_LEAD = ['e-estado', 'e-asesor', 'e-servicio', 'e-monto', 'e-comprado', 'e-nombre', 'e-telefono', 'e-canal', 'e-destino', 'e-personas', 'e-fecha-estimada', 'e-destino-consulta', 'e-monto-completo', 'e-monto-inicial', 'e-restante-pago', 'e-fecha'];
 const FIELD_LABELS_LEAD = { 'e-estado': 'Estado', 'e-asesor': 'Asesor asignado', 'e-servicio': 'Servicio de interés', 'e-monto': 'Monto de la venta', 'e-comprado': 'Servicios comprados', 'e-nombre': 'Nombre', 'e-telefono': 'Teléfono', 'e-canal': 'Canal', 'e-destino': 'Destino de interés', 'e-personas': 'Personas', 'e-fecha-estimada': 'Fecha de viaje', 'e-destino-consulta': 'Consulta original', 'e-monto-completo': 'Monto completo', 'e-monto-inicial': 'Monto inicial', 'e-restante-pago': 'Restante de pago', 'e-fecha': 'Fecha de captación' };
 let SELECTED_LEADS = new Set(), deleteMode = 'single';
@@ -6483,7 +6486,7 @@ function abrirAccionesLeadSheet(l) {
   const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
   const opciones = [
     { k: 'ficha', t: 'Abrir ficha', i: 'fa-id-card', go: () => openDrawer(l) },
-    !leadSoloLectura() && { k: 'estado', t: 'Cambiar estado', i: 'fa-arrows-rotate', go: () => abrirEstadoLeadSheet(l) },
+    ROL !== 'administrativo' && { k: 'estado', t: 'Cambiar estado', i: 'fa-arrows-rotate', go: () => abrirEstadoLeadSheet(l) },
     vende && cta !== 'cotizar' && { k: 'cotizar', t: 'Cotizar', i: 'fa-file-invoice-dollar', go: () => cbDesdeLead(l) },
     vende && !l.fecha_cotizacion_enviada && { k: 'reg-cot', t: 'Registrar cotización enviada', i: 'fa-file-circle-check', go: () => registrarCotizacionEnviada(l) },
     (ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) && cta !== 'reserva' && { k: 'reserva', t: 'Crear reserva', i: 'fa-plus', go: () => abrirEnviarFacturacionSheet(l) },
@@ -6566,29 +6569,53 @@ function valorLeadParaCampo(id, l) {
 // Aplica un UPDATE ajeno al drawer abierto: refresca los campos que el
 // usuario NO tocó, conserva tal cual los que sí (camposSuciosLead), y avisa.
 function aplicarActualizacionLeadAbierto(lead) {
-  const actualizados = [], conflictivos = [];
+  const actualizados = [], conflictivos = [], base = currentLead;
   FIELD_IDS_LEAD.forEach(id => {
     const el = document.getElementById(id);
     if (!el || el.disabled) return;
     const nuevo = valorLeadParaCampo(id, lead);
     if (nuevo === null || String(el.value) === String(nuevo)) return;
-    if (camposSuciosLead.has(id)) { conflictivos.push(id); return; }
+    // Campo que el usuario está editando: es conflicto solo si el servidor
+    // trae algo distinto a lo que ya sabíamos (el eco del autoguardado de
+    // OTRO campo trae este igual que antes, y eso no es conflicto).
+    if (camposSuciosLead.has(id)) {
+      const enVuelo = VALORES_EN_VUELO_LEAD[id]; // lo que nuestro guardado está mandando ahora mismo
+      if (base && String(valorLeadParaCampo(id, base) ?? '') !== String(nuevo) && !(enVuelo !== undefined && String(enVuelo).trim() === String(nuevo))) conflictivos.push(id);
+      return;
+    }
     el.value = nuevo;
     actualizados.push(id);
   });
   document.getElementById('venta-box')?.classList.toggle('show', VENTA.includes(document.getElementById('e-estado').value));
   currentLead = lead;
+  pintarLecturaDatos();
+  if (actualizados.includes('e-estado')) { document.getElementById('dacc-estado')?.style.setProperty('--est', ESTADO_COLORS[lead.estado] || '#8b93ad'); pintarCtaDrawer(lead); aplicarVisibilidadSeccionesDrawer(); }
+  // Llega también el eco de nuestro propio autoguardado: si no hubo nada que
+  // refrescar ni conflicto, no se muestra la barra.
   if (actualizados.length || conflictivos.length) mostrarConflictoLead(actualizados, conflictivos);
 }
 function mostrarConflictoLead(actualizados, conflictivos) {
   const bar = document.getElementById('lead-conflict-bar');
   if (!bar) return;
   conflictoLeadPendiente = conflictivos.length > 0;
+  // Con autoguardado, un campo en conflicto NO se guarda solo: espera a que el
+  // usuario elija entre lo que escribió y lo que llegó.
+  CONFLICTO_IDS_LEAD = new Set(conflictivos);
   const nombres = ids => ids.map(id => FIELD_LABELS_LEAD[id]).join(', ');
   bar.innerHTML = conflictivos.length
-    ? `<i class="fas fa-triangle-exclamation"></i> <span>Este lead cambió mientras lo editabas.${actualizados.length ? ' Se actualizaron solos: ' + esc(nombres(actualizados)) + '.' : ''} <b>Conflicto en: ${esc(nombres(conflictivos))}</b> — se conservó lo que escribiste, revisá antes de guardar.</span>`
+    ? `<i class="fas fa-triangle-exclamation"></i> <span>Este lead cambió mientras lo editabas.${actualizados.length ? ' Se actualizaron solos: ' + esc(nombres(actualizados)) + '.' : ''} <b>Conflicto en: ${esc(nombres(conflictivos))}</b>. ¿Con cuál te quedas?</span>
+       <span class="conflict-acc"><button type="button" class="dbtn gh" data-conflicto="mio">Usar lo mío</button><button type="button" class="dbtn gh" data-conflicto="nuevo">Usar lo nuevo</button></span>`
     : `<i class="fas fa-arrows-rotate"></i> <span>Este lead cambió mientras lo tenías abierto. Se actualizó solo: ${esc(nombres(actualizados))}.</span>`;
   bar.style.display = 'flex';
+  bar.querySelectorAll('[data-conflicto]').forEach(b => b.addEventListener('click', () => {
+    const ids = [...CONFLICTO_IDS_LEAD];
+    CONFLICTO_IDS_LEAD = new Set(); conflictoLeadPendiente = false; bar.style.display = 'none';
+    if (b.dataset.conflicto === 'nuevo') {
+      ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = valorLeadParaCampo(id, currentLead) ?? ''; camposSuciosLead.delete(id); });
+      document.getElementById('venta-box')?.classList.toggle('show', VENTA.includes(document.getElementById('e-estado').value));
+      pintarLecturaDatos();
+    } else autoguardarLead();
+  }));
 }
 function encolarLeadLive(evento) {
   evento.gen = (genLeadLive.get(evento.new.id) || 0) + 1;
@@ -6848,11 +6875,14 @@ async function atenderInboxLead(l) {
   const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
   const winRef = wa ? window.open(`https://wa.me/${wa}`, '_blank') : null;
   const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: 'ATENDIDO' });
-  if (error || !data?.ok) { errToast('No se pudo marcar como atendido: ' + (error?.message || data?.error || '')); return; }
+  if (error || !data?.ok) { errToast('No se pudo marcar como atendido: ' + (error?.message || data?.error || '')); return false; }
+  // El mismo objeto lo usa la ficha abierta para repintar estado y botón principal.
+  l.estado = 'ATENDIDO'; l.fecha_primer_contacto = l.fecha_primer_contacto || new Date().toISOString();
   quitarDeInbox(l.id);
   okToast('Lead marcado como atendido');
-  if (wa && !winRef) linkToast(`El navegador bloqueó la apertura automática -- <a href="https://wa.me/${wa}" target="_blank" rel="noopener">tocá acá para abrir WhatsApp</a>`);
+  if (wa && !winRef) linkToast(`El navegador bloqueó la apertura automática -- <a href="https://wa.me/${wa}" target="_blank" rel="noopener">toca aquí para abrir WhatsApp</a>`);
   loadTable();
+  return true;
 }
 
 /* ---------- Hoy (mobile-only, punto de entrada del bottom-nav) ----------
@@ -7052,191 +7082,219 @@ function actualizarBadgeLeads(pendientes) {
 }
 
 /* ---------- Drawer editable ---------- */
-function openDrawer(l) {
+// Ficha del lead (rediseño 2026-10-22): sin pestañas ni botón Guardar.
+// Cabecera compacta con el estado editable y UN botón principal según el estado;
+// "Quién es" se lee como lista (el lápiz pasa a inputs) y suma chat, nota e
+// historial que antes vivían en pestañas que nadie abría. Cada campo se guarda
+// solo (autoguardarLead). Los inputs conservan sus ids: FIELD_IDS_LEAD,
+// valorLeadParaCampo y aplicarActualizacionLeadAbierto siguen igual.
+function openDrawer(l, opciones = {}) {
   currentLead = l;
-  camposSuciosLead = new Set(); conflictoLeadPendiente = false;
-  CONV_CACHE = null; ACTIVIDAD_CACHE = null; CORREO_LEAD_CACHE = null; // se recargan por lead, ver cargarConversacionLead/cargarActividadLead/cargarCorreoLead
+  camposSuciosLead = new Set(); conflictoLeadPendiente = false; CONFLICTO_IDS_LEAD = new Set();
+  clearTimeout(autoguardadoTimer); clearTimeout(notasTimer);
+  CONV_CACHE = null; CONV_HIST = null; ACTIVIDAD_CACHE = null; CORREO_LEAD_CACHE = null; // se recargan por lead
   const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
   const av = clientAvatar(l);
-  const sinAtender = l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
+  const soloLectura = ROL === 'administrativo';
+  const vende = ROL === 'asesor' || ROL === 'admin';
+  const cta = accionPrincipalLead(l);
   const opt = (arr, sel) => arr.map(v => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(niceEstado(v))}</option>`).join('');
   const estColor = ESTADO_COLORS[l.estado] || '#8b93ad';
-  // campo(): cada input con su etiqueta en una celda de la grilla, para que la
-  // ficha se lea en dos columnas en vez de una tira vertical infinita.
+  // campo(): cada input con su etiqueta en una celda de la grilla.
   const campo = (etiqueta, html, full) => `<div class="fcol ${full ? 'f-full' : ''}"><label class="fl">${etiqueta}</label>${html}</div>`;
-  const seccion = (id, icono, titulo, cuerpo, abierta) => `
-    <details class="dsec" ${abierta ? 'open' : ''} data-dsec="${id}">
-      <summary><i class="fas ${icono} dsec-ic"></i> ${titulo} <i class="fas fa-chevron-down dsec-arrow"></i></summary>
+  const seccion = (id, icono, titulo, cuerpo, abierta, extra = '') => `
+    <details class="dsec" ${abierta ? 'open' : ''} data-dsec="${id}" ${extra}>
+      <summary><i class="fas ${icono} dsec-ic"></i> <span class="dsec-t">${titulo}</span><span class="dsec-res" id="${id}-resumen"></span> <i class="fas fa-chevron-down dsec-arrow"></i></summary>
       <div class="dsec-body">${cuerpo}</div>
     </details>`;
+  const lectura = (etiqueta, id, extra = '') => `<div class="dl-fila"><dt>${etiqueta}</dt><dd><span data-lect="${id}"></span>${extra}</dd></div>`;
+  const dis = soloLectura ? 'disabled' : '';
+  const badges = `${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}`;
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead dhead-lead" style="--est:${estColor}"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
-      <div class="dhead-info"><div class="dn">${esc(l.nombre)}</div>
-      <div class="dm"><span class="dm-chip"><i class="fas fa-phone"></i>${textoTelefonoLead(l)}</span>${l.canal ? `<span class="dm-chip"><i class="${iconoCanalLead(l.canal)}"></i>${esc(l.canal)}</span>` : ''}</div>
-      <span class="badge-st" style="color:${estColor};background:${estColor}2e">${esc(niceEstado(l.estado))}</span>${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}</div></div>
+      <div class="dhead-info"><div class="dn"><span id="d-nombre">${esc(nombreLead(l))}</span>${badgePrioridadIA(l)}</div>
+      <div class="dm"><span class="dm-chip"><i class="fas fa-phone"></i>${textoTelefonoLead(l)}</span>${l.canal ? `<span class="dm-chip"><i class="${iconoCanalLead(l.canal)}"></i>${esc(l.canal)}</span>` : ''}${l.destino ? `<span class="dm-chip"><i class="fas fa-location-dot"></i>${esc(l.destino)}</span>` : ''}<span class="dm-chip"><i class="fas fa-clock"></i>${esc(tiempoRelativo(l.fecha_creacion))}</span></div>
+      ${badges.trim() ? `<div class="dh-badges">${badges}</div>` : ''}</div></div>
 
-    ${sinAtender ? `<button type="button" class="inbox-btn atender" id="e-a-atender" style="width:100%;margin-bottom:12px"><i class="fas fa-check"></i> Atender este lead</button>` : ''}
-
-    <div class="dquick">
-      ${wa ? `<a class="dq wa" href="https://wa.me/${wa}" target="_blank"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></a>` : ''}
-      ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq dq-boleteria" id="e-a-boleteria" type="button" title="Rellenar la solicitud de boletería de este cliente y mandarla a un ejecutivo"><i class="fas fa-plane-departure"></i><span>Boletería</span></button>` : ''}
-      ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-armar-cot" type="button" title="Armar la cotización en PDF para este cliente"><i class="fas fa-file-invoice-dollar"></i><span>Cotizar</span></button>` : ''}
-      ${(ROL === 'asesor' || ROL === 'admin') ? `<button class="dq" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización'}</span></button>` : ''}
-      ${(ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) ? `<button class="dq" id="e-a-facturar" type="button"><i class="fas fa-plus"></i><span>Crear reserva</span></button>` : ''}
+    <div class="dacc">
+      <label class="dacc-estado" id="dacc-estado" style="--est:${estColor}"><span class="sr-only">Estado</span>
+        <select id="e-estado" ${dis}>${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select><i class="fas fa-chevron-down"></i></label>
+      <button type="button" class="dacc-cta" id="e-a-cta" ${cta ? `data-accion="${cta.key}"` : 'hidden'}>${cta ? `<i class="fas ${cta.icono}"></i>${cta.texto}` : ''}</button>
+      ${wa ? `<a class="dacc-ic wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp"><i class="fab fa-whatsapp"></i></a>` : ''}
+      <button type="button" class="dacc-ic" id="e-a-mas" aria-expanded="false" aria-controls="dacc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
     </div>
-
-    <div class="lead-tabs">
-      <button type="button" class="lead-tab-btn active" data-tab="resumen">Ficha</button>
-      <button type="button" class="lead-tab-btn" data-tab="notas">Notas</button>
-      <button type="button" class="lead-tab-btn" data-tab="conversacion">Chat</button>
-      <button type="button" class="lead-tab-btn" data-tab="correo">Correo</button>
-      <button type="button" class="lead-tab-btn" data-tab="actividad">Actividad</button>
+    <div class="dacc-mas" id="dacc-mas" hidden>
+      ${vende ? `<button class="dq-mas" id="e-a-armar-cot" type="button"><i class="fas fa-file-invoice-dollar"></i>Armar cotización</button>` : ''}
+      ${vende ? `<button class="dq-mas" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización enviada'}</span></button>` : ''}
+      ${(ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) ? `<button class="dq-mas" id="e-a-facturar" type="button"><i class="fas fa-plus"></i>Crear reserva</button>` : ''}
+      ${vende ? `<button class="dq-mas" id="e-a-boleteria" type="button"><i class="fas fa-plane-departure"></i>Solicitud de boletería</button>` : ''}
+      <button class="dq-mas" type="button" data-ver="link-pago"><i class="fas fa-link"></i>Link de pago</button>
+      <button class="dq-mas" type="button" data-ver="pagos"><i class="fas fa-dollar-sign"></i>Pagos y captación</button>
+      ${wa ? `<button class="dq-mas" type="button" id="e-a-avisar"><i class="fas fa-flag"></i>Avisar número incorrecto</button>` : ''}
+      <button class="dq-mas" type="button" id="e-copiar-id"><i class="fas fa-copy"></i>Copiar ID ${esc(l.external_id || l.id)}</button>
     </div>
-
-    <div class="lead-tab-panel active" data-tab="resumen">
+    <div class="dguardado" id="d-guardado" aria-live="polite"></div>
+    <div class="edit-err" id="edit-err"></div>
     <div class="lead-conflict-bar" id="lead-conflict-bar" style="display:none"></div>
+
     <div class="dresumen-cols">
       <div class="dquien-es">
         <div class="dzone-label"><i class="fas fa-user"></i> Quién es</div>
-        ${seccion('datos', 'fa-user-pen', 'Datos del cliente', `
-          <div class="dgrid">
-            ${campo('Nombre', `<input id="e-nombre" class="ei" type="text" value="${esc(l.nombre || '')}">`, true)}
-            ${campo('Teléfono', `<input id="e-telefono" class="ei" type="text" value="${esc(l.telefono || '')}">`)}
-            ${campo('Canal', `<input id="e-canal" class="ei" type="text" value="${esc(l.canal || '')}">`)}
-            ${campo('Destino de interés', `<input id="e-destino" class="ei" type="text" value="${esc(l.destino || '')}">`)}
-            ${campo('Personas', `<input id="e-personas" class="ei" type="text" value="${esc(l.personas || '')}">`)}
-            ${campo('Fecha de viaje (aprox.)', `<input id="e-fecha-estimada" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09" value="${esc(l.fecha_estimada || '')}"><div class="csub" id="e-fecha-interp">${fechaViajeInterpretada(l)}</div>`, true)}
-            ${campo('Consulta original', `<input id="e-destino-consulta" class="ei" type="text" value="${esc(l.destino_consulta || '')}">`, true)}
-          </div>`, true)}
+        <section class="dbloque" id="d-datos" data-dsec="datos">
+          <div class="dbloque-h"><span><i class="fas fa-user-pen"></i> Datos del cliente</span>${soloLectura ? '' : '<button type="button" class="dbloque-btn" id="d-editar"><i class="fas fa-pen"></i> Editar</button>'}</div>
+          <dl class="dlect">
+            ${lectura('Teléfono', 'e-telefono')}
+            ${lectura('Canal', 'e-canal')}
+            ${lectura('Destino', 'e-destino')}
+            ${lectura('Personas', 'e-personas')}
+            ${lectura('Fecha de viaje', 'e-fecha-estimada', `<div class="csub">${fechaViajeInterpretada(l)}</div>`)}
+          </dl>
+          <div class="dl-consulta-wrap">
+            <div class="dl-t">Consulta original</div>
+            <div class="dl-consulta" data-lect="e-destino-consulta"></div>
+            <button type="button" class="dl-vermas" id="d-vermas" hidden>Ver más</button>
+          </div>
+          <div class="dgrid dedicion">
+            ${campo('Nombre', `<input id="e-nombre" class="ei" type="text" value="${esc(l.nombre || '')}" ${dis}>`, true)}
+            ${campo('Teléfono', `<input id="e-telefono" class="ei" type="text" value="${esc(l.telefono || '')}" ${dis}>`)}
+            ${campo('Canal', `<input id="e-canal" class="ei" type="text" value="${esc(l.canal || '')}" ${dis}>`)}
+            ${campo('Destino de interés', `<input id="e-destino" class="ei" type="text" value="${esc(l.destino || '')}" ${dis}>`)}
+            ${campo('Personas', `<input id="e-personas" class="ei" type="text" value="${esc(l.personas || '')}" ${dis}>`)}
+            ${campo('Fecha de viaje (aprox.)', `<input id="e-fecha-estimada" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09" value="${esc(l.fecha_estimada || '')}" ${dis}><div class="csub" id="e-fecha-interp">${fechaViajeInterpretada(l)}</div>`, true)}
+            ${campo('Consulta original', `<textarea id="e-destino-consulta" class="ei ei-consulta" rows="3" ${dis}>${esc(l.destino_consulta || '')}</textarea>`, true)}
+          </div>
+        </section>
+
+        <section class="dbloque" id="conv-bloque" hidden>
+          <div class="dbloque-h"><span><i class="fas fa-robot"></i> Chat con la IA</span><button type="button" class="dbloque-btn" id="conv-ver">Ver todo</button></div>
+          <div id="conv-preview" class="conv-preview"></div>
+        </section>
+
+        <section class="dbloque">
+          <div class="dbloque-h"><span><i class="fas fa-note-sticky"></i> Nota del equipo</span><span class="dnotas-meta" id="e-notas-meta"></span></div>
+          <textarea id="e-notas" class="ei" rows="3" placeholder="Qué se habló, qué quedó pendiente… solo la ve el equipo">${esc(l.notas || '')}</textarea>
+        </section>
+
+        <details class="dsec" data-dsec="historial">
+          <summary><i class="fas fa-clock-rotate-left dsec-ic"></i> <span class="dsec-t">Historial</span> <i class="fas fa-chevron-down dsec-arrow"></i></summary>
+          <div class="dsec-body">
+            <div id="act-body"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+            <div id="correo-lead-wrap"><div class="dl-t" style="margin-top:14px">Correo</div><div id="correo-lead-body"></div></div>
+          </div>
+        </details>
       </div>
       <div class="dhago">
         <div class="dzone-label acc"><i class="fas fa-arrow-right-arrow-left"></i> Qué hago con él</div>
-        ${(ROL === 'asesor' || ROL === 'admin') ? seccion('proxima', 'fa-calendar-check', 'Próxima acción', `
+        ${vende ? seccion('proxima', 'fa-calendar-check', 'Próxima acción', `
           <div class="pa-estado" id="pa-estado"></div>
-          <div class="dgrid">
-            ${campo('Cuándo', `<input id="pa-at" class="ei" type="datetime-local" value="${l.proxima_accion_at ? aInputLocal(l.proxima_accion_at) : ''}">`, true)}
-            ${campo('Qué toca hacer', `<input id="pa-nota" class="ei" type="text" maxlength="200" placeholder="Ej: llamar con la cotización" value="${esc(l.proxima_accion_nota || '')}">`, true)}
-          </div>
           <div class="pa-atajos">
             <button type="button" class="dbtn gh" data-pa="manana">Mañana 9:00</button>
             <button type="button" class="dbtn gh" data-pa="3dias">En 3 días</button>
             <button type="button" class="dbtn gh" data-pa="lunes">Próx. lunes</button>
+          </div>
+          <div class="dgrid">
+            ${campo('Otra fecha', `<input id="pa-at" class="ei" type="datetime-local" value="${l.proxima_accion_at ? aInputLocal(l.proxima_accion_at) : ''}">`, true)}
+            ${campo('Qué toca hacer', `<input id="pa-nota" class="ei" type="text" maxlength="200" placeholder="Ej: llamar con la cotización" value="${esc(l.proxima_accion_nota || '')}">`, true)}
           </div>
           <div class="edit-err" id="pa-err"></div>
           <div class="pa-acciones">
             <button class="dbtn save" id="pa-guardar" type="button"><i class="fas fa-calendar-check"></i> Fijar seguimiento</button>
             <button class="dbtn gh" id="pa-quitar" type="button">Hecho / quitar</button>
           </div>`, !!l.proxima_accion_at) : ''}
-        ${(ROL === 'asesor' || ROL === 'admin') && l.fecha_viaje_desde && !VENTA.includes(l.estado) ? seccion('tarifas-fecha', 'fa-tags', 'Tarifas para su fecha', `
-          <div id="tf-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>`, true) : ''}
         ${seccion('gestion', 'fa-sliders', 'Gestión', `
           <div class="dgrid">
-            ${campo('Estado', `<select id="e-estado" class="ei">${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select>`, true)}
-            ${campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...asesoresConActual(l.asesor)], l.asesor || 'Sin asignar')}</select>`)}
-            ${campo('Servicio de interés', `<select id="e-servicio" class="ei"><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select>`)}
-            <div class="fcol f-full">
-              <button class="dbtn gh" id="e-servicio-ia" type="button" style="width:100%;padding:9px;font-size:12px;margin-top:9px"><i class="fas fa-wand-magic-sparkles"></i> Detectar servicio con IA</button>
-              <div class="e-servicio-razon" id="e-servicio-razon">${l.servicio_ia_razon ? '<i class="fas fa-robot"></i> ' + esc(l.servicio_ia_razon) : ''}</div>
-            </div>
+            <div class="fcol"><label class="fl fl-ia">Servicio de interés <button class="ia-mini" id="e-servicio-ia" type="button" title="Detectar el servicio con IA" aria-label="Detectar el servicio con IA" ${dis}><i class="fas fa-wand-magic-sparkles"></i></button></label><select id="e-servicio" class="ei" ${dis}><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select></div>
+            ${campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' || soloLectura ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...asesoresConActual(l.asesor)], l.asesor || 'Sin asignar')}</select>`)}
+            <div class="fcol f-full"><div class="e-servicio-razon" id="e-servicio-razon">${l.servicio_ia_razon ? '<i class="fas fa-robot"></i> ' + esc(l.servicio_ia_razon) : ''}</div></div>
           </div>
           <div id="venta-box" class="venta-box ${VENTA.includes(l.estado) ? 'show' : ''}">
+            <div class="venta-msg" id="venta-msg"></div>
             <div class="dgrid">
-              ${campo('Monto de la venta (USD)', `<input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}">`, true)}
-              ${campo('Servicios / paquetes comprados', `<input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}">`, true)}
+              ${campo('Monto de la venta (USD)', `<input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}" ${dis}>`, true)}
+              ${campo('Servicios / paquetes comprados', `<input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}" ${dis}>`, true)}
             </div>
           </div>`, true)}
+        ${vende && l.fecha_viaje_desde && !VENTA.includes(l.estado) ? seccion('tarifas-fecha', 'fa-tags', 'Tarifas para su fecha', `
+          <div id="tf-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>`, false) : ''}
 
         ${seccion('pagos', 'fa-dollar-sign', 'Pagos y captación', `
           <div class="dgrid">
-            ${campo('Monto completo (USD)', `<input id="e-monto-completo" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_completo ?? ''}">`)}
-            ${campo('Monto inicial (USD)', `<input id="e-monto-inicial" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_inicial ?? ''}">`)}
-            ${campo('Restante de pago (USD)', `<input id="e-restante-pago" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.restante_pago ?? ''}">`)}
-            ${campo('Fecha de captación', `<input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}">`)}
+            ${campo('Monto completo (USD)', `<input id="e-monto-completo" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_completo ?? ''}" ${dis}>`)}
+            ${campo('Monto inicial (USD)', `<input id="e-monto-inicial" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_inicial ?? ''}" ${dis}>`)}
+            ${campo('Restante de pago (USD)', `<input id="e-restante-pago" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.restante_pago ?? ''}" ${dis}>`)}
+            ${campo('Fecha de captación', `<input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}" ${dis}>`)}
           </div>`, false)}
 
-        ${(ROL === 'asesor' || ROL === 'admin') && VENTA.includes(l.estado) ? seccion('reservas', 'fa-suitcase-rolling', 'Reservas del cliente', `
+        ${vende && VENTA.includes(l.estado) ? seccion('reservas', 'fa-suitcase-rolling', 'Reservas del cliente', `
           <div class="csub" style="margin-bottom:8px">Cada viaje del cliente es una reserva. La primera se cierra con el lead; las adicionales se facturan aparte.</div>
           <div id="res-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
           <div class="edit-err" id="res-err"></div>
-          <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, VENTA.includes(l.estado)) : ''}
+          <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, true) : ''}
 
         ${seccion('link-pago', 'fa-link', 'Link de pago', `
-          <div class="csub" style="margin-bottom:8px">Emitís un link para que el cliente pague y suba el comprobante. El monto lo fijás vos; queda pendiente hasta que un admin lo verifique.</div>
+          <div class="csub" style="margin-bottom:8px">Emites un link para que el cliente pague y suba el comprobante. El monto lo fijas tú; queda pendiente hasta que un admin lo verifique.</div>
           <div class="dgrid">
             ${campo('Tipo', `<select id="lp-tipo" class="ei"><option value="abono">Abono / reserva</option><option value="total">Pago total</option></select>`)}
             ${campo('Riel', `<select id="lp-riel" class="ei"><option value="pago_movil">Pago Móvil</option><option value="c2p">C2P</option><option value="zelle">Zelle</option><option value="binance">Binance (USDT)</option><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option></select>`)}
             ${campo('Moneda', `<select id="lp-moneda" class="ei"><option value="USD">USD</option><option value="VES">Bs (VES)</option><option value="USDT">USDT</option></select>`)}
             ${campo('Monto', `<input id="lp-monto" class="ei" type="number" min="0" step="0.01" placeholder="0.00">`)}
-            ${campo('Tasa Bs/USD (solo si cobrás en Bs)', `<input id="lp-tasa" class="ei" type="number" min="0" step="0.01" placeholder="Ej: 40.50">`, true)}
+            ${campo('Tasa Bs/USD (solo si cobras en Bs)', `<input id="lp-tasa" class="ei" type="number" min="0" step="0.01" placeholder="Ej: 40.50">`, true)}
           </div>
           <div class="edit-err" id="lp-err"></div>
           <button class="dbtn save" id="e-emitir-pago" type="button" style="width:100%"><i class="fas fa-link"></i> Emitir link de pago</button>
-          <div id="lp-resultado" style="display:none;margin-top:10px"></div>`, false)}
-
-        <div class="edit-err" id="edit-err"></div>
-        <div class="dsave"><button class="dbtn save" id="e-save"><i class="fas fa-floppy-disk"></i> Guardar cambios</button></div>
-        <div class="did"><span>ID: ${esc(l.external_id || l.id)}</span><button type="button" id="e-copiar-id" title="Copiar ID"><i class="fas fa-copy"></i></button></div>
+          <div id="lp-resultado" style="display:none;margin-top:10px"></div>`, l.estado === 'EN ESPERA DE PAGO')}
       </div>
-    </div>
-    </div>
-
-    <div class="lead-tab-panel" data-tab="notas">
-      <label class="fl">Notas internas — solo las ve el equipo, nunca el cliente</label>
-      <textarea id="e-notas" class="ei" rows="10" placeholder="Qué se habló, qué quedó pendiente, próximo paso...">${esc(l.notas || '')}</textarea>
-      <button class="dbtn save" id="e-notas-save" type="button"><i class="fas fa-floppy-disk"></i> Guardar notas</button>
-      <div class="dnotas-meta" id="e-notas-meta"></div>
-    </div>
-
-    <div class="lead-tab-panel" data-tab="conversacion">
-      <div style="font-size:11px;color:var(--muted2);background:rgba(var(--ink-rgb),.03);border-radius:10px;padding:9px 11px;margin-bottom:12px;line-height:1.5">
-        <i class="fas fa-paperclip"></i> Extracto de la conversación gestionada por la IA en ${esc(l.canal || 'el canal')} (ManyChat) — solo lectura.
-      </div>
-      <div id="conv-body"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
-    </div>
-
-    <div class="lead-tab-panel" data-tab="correo">
-      <div id="correo-lead-body"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
-    </div>
-
-    <div class="lead-tab-panel" data-tab="actividad">
-      <div id="act-body"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
     </div>`;
 
-  document.getElementById('e-estado').onchange = e => document.getElementById('venta-box').classList.toggle('show', VENTA.includes(e.target.value));
+  const datos = document.getElementById('d-datos');
+  pintarLecturaDatos();
+  aplicarVisibilidadSeccionesDrawer();
+  document.getElementById('e-estado').addEventListener('change', e => {
+    document.getElementById('venta-box').classList.toggle('show', VENTA.includes(e.target.value));
+    document.getElementById('dacc-estado').style.setProperty('--est', ESTADO_COLORS[e.target.value] || '#8b93ad');
+  });
+  // Autoguardado: `input` solo marca el campo como tocado; `change` (al elegir
+  // en un select, o al salir de un input) dispara el guardado.
   FIELD_IDS_LEAD.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
-    const marcar = () => camposSuciosLead.add(id);
-    el.addEventListener('input', marcar);
-    el.addEventListener('change', marcar);
+    el.addEventListener('input', () => camposSuciosLead.add(id));
+    el.addEventListener('change', () => { camposSuciosLead.add(id); programarAutoguardado(); });
   });
-  document.getElementById('e-save').onclick = guardarLead;
-  document.getElementById('e-notas-save').onclick = guardarNotasLead;
+  const consulta = document.getElementById('e-destino-consulta');
+  const ajustarConsulta = () => { consulta.style.height = 'auto'; consulta.style.height = consulta.scrollHeight + 2 + 'px'; };
+  consulta.addEventListener('input', ajustarConsulta);
+  document.getElementById('d-editar')?.addEventListener('click', e => {
+    const editando = datos.classList.toggle('modo-edicion');
+    e.currentTarget.innerHTML = editando ? '<i class="fas fa-check"></i> Listo' : '<i class="fas fa-pen"></i> Editar';
+    if (editando) { ajustarConsulta(); document.getElementById('e-telefono').focus(); }
+    else { if (camposSuciosLead.size) autoguardarLead(); pintarLecturaDatos(); }
+  });
+  document.getElementById('d-vermas').addEventListener('click', e => {
+    const abierta = document.querySelector('#d-datos .dl-consulta').classList.toggle('abierta');
+    e.currentTarget.textContent = abierta ? 'Ver menos' : 'Ver más';
+  });
+  const notas = document.getElementById('e-notas');
+  notas.addEventListener('input', () => { clearTimeout(notasTimer); notasTimer = setTimeout(guardarNotasLead, 1500); });
+  notas.addEventListener('blur', () => guardarNotasLead());
+  const mas = document.getElementById('dacc-mas'), btnMas = document.getElementById('e-a-mas');
+  btnMas.addEventListener('click', () => { mas.hidden = !mas.hidden; btnMas.setAttribute('aria-expanded', String(!mas.hidden)); });
+  mas.querySelectorAll('[data-ver]').forEach(b => b.addEventListener('click', () => irASeccionDrawer(b.dataset.ver)));
+  document.getElementById('e-a-cta').addEventListener('click', e => accionPrincipalDrawer(l, e.currentTarget.dataset.accion));
+  document.getElementById('e-a-avisar')?.addEventListener('click', () => abrirAvisarTelefono(l));
   document.getElementById('e-servicio-ia').onclick = detectarServicioDelLead;
   document.getElementById('e-copiar-id').onclick = async () => {
     try { await navigator.clipboard.writeText(String(l.external_id || l.id)); okToast('ID copiado'); }
     catch { errToast('El navegador no dejó copiar'); }
   };
-  document.getElementById('e-a-atender')?.addEventListener('click', () => atenderInboxLead(l));
   document.getElementById('e-a-facturar')?.addEventListener('click', () => abrirEnviarFacturacionSheet(l));
   document.getElementById('e-a-cotizacion')?.addEventListener('click', () => registrarCotizacionEnviada(l));
-  // closeDrawer() consume su entrada con history.back(), que es asíncrono: si la hoja se abre
-  // antes, el popstate de ese back saca la hoja del NAV_STACK y la cierra al instante.
-  document.getElementById('e-a-boleteria')?.addEventListener('click', () => {
-    let hecho = false;
-    const ir = () => { if (hecho) return; hecho = true; abrirSolicitudBoleteria(l); };
-    window.addEventListener('popstate', ir, { once: true });
-    setTimeout(ir, 400);
-    window.closeDrawer();
-  });
-  // Igual que Boletería: navegar recién cuando el drawer terminó de cerrar (su popstate).
-  document.getElementById('e-a-armar-cot')?.addEventListener('click', () => {
-    let hecho = false;
-    const ir = () => { if (hecho) return; hecho = true; cbDesdeLead(l); };
-    window.addEventListener('popstate', ir, { once: true });
-    setTimeout(ir, 400);
-    window.closeDrawer();
-  });
+  // Boletería y Cotizar navegan a otra sección: recién cuando el drawer terminó de cerrar.
+  document.getElementById('e-a-boleteria')?.addEventListener('click', () => trasCerrarDrawer(() => abrirSolicitudBoleteria(l)));
+  document.getElementById('e-a-armar-cot')?.addEventListener('click', () => trasCerrarDrawer(() => cbDesdeLead(l)));
+  document.getElementById('conv-ver').addEventListener('click', () => openSheet('conv-lead-sheet'));
+  const historial = document.querySelector('details[data-dsec="historial"]');
+  historial.addEventListener('toggle', () => { if (historial.open) { cargarActividadLead(l); cargarCorreoLead(l); } });
   if (document.getElementById('pa-at')) setupProximaAccion(l);
   document.getElementById('e-emitir-pago')?.addEventListener('click', () => emitirLinkPago(l));
   if (document.getElementById('res-lista')) {
@@ -7244,16 +7302,72 @@ function openDrawer(l) {
     cargarReservasLead(l);
   }
   if (document.getElementById('tf-lista')) cargarTarifasFechaLead(l);
-  document.querySelectorAll('.lead-tab-btn').forEach(btn => btn.addEventListener('click', () => {
-    document.querySelectorAll('.lead-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.lead-tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === btn.dataset.tab));
-    if (btn.dataset.tab === 'conversacion') cargarConversacionLead(l);
-    if (btn.dataset.tab === 'correo') cargarCorreoLead(l);
-    if (btn.dataset.tab === 'actividad') cargarActividadLead(l);
-  }));
+  cargarConversacionLead(l);
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
+  document.getElementById('drawer').scrollTop = 0;
   navPush({ type: 'drawer' });
+  if (opciones.seccion) setTimeout(() => irASeccionDrawer(opciones.seccion), 320);
+}
+// Filas de solo lectura de "Datos del cliente": salen de los inputs (no del
+// lead) para reflejar lo que el asesor acaba de escribir y lo que llegó en vivo.
+function pintarLecturaDatos() {
+  document.querySelectorAll('#d-datos [data-lect]').forEach(el => {
+    const v = (document.getElementById(el.dataset.lect)?.value || '').trim();
+    el.textContent = v || '—';
+    el.classList.toggle('vacio', !v);
+  });
+  const dn = document.getElementById('d-nombre'), en = document.getElementById('e-nombre');
+  if (dn && en) dn.textContent = nombreLead({ nombre: en.value });
+  const c = document.querySelector('#d-datos .dl-consulta'), ver = document.getElementById('d-vermas');
+  if (!c || !ver) return;
+  c.classList.remove('abierta'); ver.textContent = 'Ver más';
+  // Recién pintado: el alto real ya existe si el drawer está en el DOM.
+  requestAnimationFrame(() => { ver.hidden = c.scrollHeight <= c.clientHeight + 2; });
+}
+// Pagos y Link de pago aparecen cuando el estado los necesita (o si ya hay
+// montos cargados); antes estaban siempre y alargaban la ficha. Desde "Más"
+// se pueden abrir igual en cualquier estado.
+function aplicarVisibilidadSeccionesDrawer() {
+  const estado = document.getElementById('e-estado')?.value || currentLead?.estado;
+  const enCobro = ['COTIZACION ENVIADA', 'EN ESPERA DE PAGO', ...VENTA].includes(estado);
+  const l = currentLead || {};
+  const conMontos = [l.monto_completo, l.monto_inicial, l.restante_pago].some(v => v != null && v !== '');
+  const pagos = document.querySelector('.dhago details[data-dsec="pagos"]');
+  const link = document.querySelector('.dhago details[data-dsec="link-pago"]');
+  if (pagos && !pagos.dataset.revelada) pagos.hidden = !(enCobro || conMontos);
+  if (link && !link.dataset.revelada) link.hidden = !['COTIZACION ENVIADA', 'EN ESPERA DE PAGO'].includes(estado);
+}
+function irASeccionDrawer(id) {
+  const el = document.querySelector(`.dhago details[data-dsec="${id}"]`);
+  const mas = document.getElementById('dacc-mas');
+  if (mas) { mas.hidden = true; document.getElementById('e-a-mas')?.setAttribute('aria-expanded', 'false'); }
+  if (!el) return;
+  el.hidden = false; el.dataset.revelada = '1'; el.open = true;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+// Botón principal dentro del drawer: lo que es navegación a una sección de la
+// misma ficha se resuelve acá (sin reabrir el drawer y perder lo escrito).
+async function accionPrincipalDrawer(l, key) {
+  if (key === 'link-pago' || key === 'reservas') { irASeccionDrawer(key); return; }
+  if (key === 'atender') {
+    if (await atenderInboxLead(l) && currentLead?.id === l.id) {
+      document.getElementById('e-estado').value = l.estado;
+      document.getElementById('dacc-estado')?.style.setProperty('--est', ESTADO_COLORS[l.estado] || '#8b93ad');
+      pintarCtaDrawer(l);
+    }
+    return;
+  }
+  ejecutarAccionLead(l, key);
+}
+function pintarCtaDrawer(l) {
+  const btn = document.getElementById('e-a-cta');
+  if (!btn) return;
+  const cta = accionPrincipalLead(l);
+  btn.hidden = !cta;
+  if (!cta) return;
+  btn.dataset.accion = cta.key;
+  btn.innerHTML = `<i class="fas ${cta.icono}"></i>${cta.texto}`;
 }
 
 /* ---------- Fecha de viaje interpretada + tarifas para esa fecha (migraciones 20261009171000/172000) ---------- */
@@ -7351,6 +7465,9 @@ function pintarEstadoProximaAccion(l) {
     ? `<i class="fas fa-calendar-day"></i> ${esc(fmtFechaHoraCaracas(l.proxima_accion_at))} · <b class="${new Date(l.proxima_accion_at) < new Date() ? 'vence' : ''}">${esc(tiempoSeguimiento(l.proxima_accion_at))}</b>${cerrado ? '<div class="csub">Lead cerrado: no aparece en Seguimientos.</div>' : ''}`
     : 'Sin próxima acción definida';
   const q = document.getElementById('pa-quitar'); if (q) q.disabled = !l.proxima_accion_at;
+  // Resumen en el título de la sección: se ve sin desplegarla.
+  const r = document.getElementById('proxima-resumen');
+  if (r) r.textContent = l.proxima_accion_at ? tiempoSeguimiento(l.proxima_accion_at) + (l.proxima_accion_nota ? ' · ' + l.proxima_accion_nota : '') : '';
 }
 async function fijarProximaAccion(l, at, nota) {
   const err = document.getElementById('pa-err'), botones = ['pa-guardar', 'pa-quitar'].map(id => document.getElementById(id));
@@ -7390,6 +7507,7 @@ function setupProximaAccion(l) {
     else if (b.dataset.pa === '3dias') d.setDate(d.getDate() + 3);
     else d.setDate(d.getDate() + (((8 - d.getDay()) % 7) || 7));
     a9(d);
+    document.getElementById('pa-guardar').click(); // un toque fija el seguimiento, sin paso extra
   }));
   document.getElementById('pa-guardar').onclick = () => {
     if (!at.value) { document.getElementById('pa-err').textContent = 'Elegí fecha y hora, o usá "Hecho / quitar".'; return; }
@@ -7402,21 +7520,23 @@ function setupProximaAccion(l) {
   document.getElementById('pa-quitar').onclick = () => fijarProximaAccion(l, null, null);
 }
 async function registrarCotizacionEnviada(l) {
+  // El botón existe solo con el drawer abierto; desde el menú "⋯" de la
+  // tarjeta se registra igual, sin botón que animar.
   const btn = document.getElementById('e-a-cotizacion');
-  if (!btn || btn.disabled || !l?.id) return;
-  btn.disabled = true;
-  const anterior = btn.innerHTML;
-  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i><span>Registrando...</span>';
+  if (btn?.disabled || !l?.id) return;
+  if (btn) btn.disabled = true;
+  const anterior = btn?.innerHTML;
+  if (btn) btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i><span>Registrando...</span>';
   const { data, error } = await sb.rpc('registrar_cotizacion_enviada', { p_lead_id: l.id });
   if (error || !data?.ok) {
-    btn.disabled = false; btn.innerHTML = anterior;
+    if (btn) { btn.disabled = false; btn.innerHTML = anterior; }
     errToast(error?.message || data?.error || 'No se pudo registrar la cotización');
     return;
   }
   l.estado = data.estado || 'COTIZACION ENVIADA';
   l.fecha_cotizacion_enviada = data.fecha_cotizacion_enviada;
   if (currentLead?.id === l.id) Object.assign(currentLead, l);
-  btn.innerHTML = '<i class="fas fa-file-circle-check"></i><span>Cotización registrada</span>';
+  if (btn) btn.innerHTML = '<i class="fas fa-file-circle-check"></i><span>Cotización registrada</span>';
   ACTIVIDAD_CACHE = null;
   okToast(data.ya_registrada ? 'La cotización ya estaba registrada' : 'Cotización enviada registrada');
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
@@ -7426,7 +7546,7 @@ async function registrarCotizacionEnviada(l) {
    mobile-only -- ver .lead-tabs en el CSS). Carga perezosa: solo se pide al
    backend la primera vez que se toca cada pestaña (en desktop, sin tab bar
    visible, nunca se llega a llamar esto). ---------- */
-let CONV_CACHE = null, ACTIVIDAD_CACHE = null, CORREO_LEAD_CACHE = null;
+let CONV_CACHE = null, CONV_HIST = null, ACTIVIDAD_CACHE = null, CORREO_LEAD_CACHE = null;
 
 /* ---------- Viewer de correo completo (Fase 2 del cliente Gmail) ----------
    El cuerpo (texto/html) ya viaja en el select -- guardarlo en un Map en vez
@@ -7670,7 +7790,11 @@ async function cargarCorreoLead(l) {
   if (CORREO_LEAD_CACHE) { box.innerHTML = CORREO_LEAD_CACHE; return; }
   const { data, error } = await sb.from('gmail_correos').select('id,lead_id,credencial_id,gmail_message_id,gmail_thread_id,direccion,de,para,asunto,snippet,cuerpo_texto,cuerpo_html,enviado_en,leido,gmail_correo_adjuntos(id,filename,mime_type,tamano_bytes)').eq('lead_id', l.id).order('enviado_en', { ascending: true });
   if (error) { box.innerHTML = '<div class="muted">No se pudo cargar el correo de este lead</div>'; return; }
-  if (!data.length) { CORREO_LEAD_CACHE = '<div class="muted">Sin correos vinculados a este lead todavía</div>'; box.innerHTML = CORREO_LEAD_CACHE; return; }
+  if (!data.length) {
+    CORREO_LEAD_CACHE = '<div class="muted">Sin correos vinculados a este lead todavía</div>'; box.innerHTML = CORREO_LEAD_CACHE;
+    document.getElementById('correo-lead-wrap')?.setAttribute('hidden', ''); // en el Historial de la ficha, sin correos no se muestra
+    return;
+  }
   data.forEach(c => CORREOS_DATA.set(c.id, c));
   // Un lead puede tener varios hilos si escribió por asuntos distintos --
   // separador visual cuando cambia de hilo, sin perder el orden cronológico
@@ -7705,16 +7829,28 @@ async function cargarCorreoProveedor(p) {
   entradaLista(box);
 }
 async function cargarConversacionLead(l) {
+  // Se pide al abrir la ficha: los últimos 3 mensajes van en "Quién es" y el
+  // historial completo en la hoja #conv-lead-sheet. Sin conversación, el bloque no aparece.
+  const bloque = document.getElementById('conv-bloque'), preview = document.getElementById('conv-preview');
   const box = document.getElementById('conv-body');
-  if (!box) return;
-  if (CONV_CACHE) { box.innerHTML = CONV_CACHE; return; }
-  const { data, error } = await sb.from('manychat_ia_sesiones').select('historial').eq('lead_id', l.id).order('updated_at', { ascending: false }).limit(1);
-  if (error) { box.innerHTML = '<div class="muted">No se pudo cargar la conversación</div>'; return; }
-  const historial = data?.[0]?.historial || [];
-  if (!historial.length) { CONV_CACHE = '<div class="muted">Sin conversación registrada con la IA para este lead</div>'; box.innerHTML = CONV_CACHE; return; }
-  CONV_CACHE = historial.map(m => `<div class="conv-msg ${m.rol === 'ia' ? 'ia' : 'lead'}"><div class="conv-who">${m.rol === 'ia' ? 'Lotus IA' : 'Cliente'}</div>${esc(m.texto)}</div>`).join('');
-  box.innerHTML = CONV_CACHE;
-  entradaLista(box);
+  if (!CONV_HIST) {
+    const { data, error } = await sb.from('manychat_ia_sesiones').select('historial').eq('lead_id', l.id).order('updated_at', { ascending: false }).limit(1);
+    if (currentLead?.id !== l.id) return;
+    if (error) {
+      if (bloque) bloque.hidden = false;
+      if (preview) preview.innerHTML = '<div class="muted">No se pudo cargar la conversación</div>';
+      return;
+    }
+    CONV_HIST = (data?.[0]?.historial || []).filter(m => m && m.texto);
+  }
+  if (bloque) bloque.hidden = !CONV_HIST.length;
+  if (!CONV_HIST.length) return;
+  const quien = m => m.rol === 'ia' ? 'Lotus IA' : 'Cliente';
+  if (preview) preview.innerHTML = CONV_HIST.slice(-3).map(m => `<div class="conv-mini ${m.rol === 'ia' ? 'ia' : 'lead'}"><b>${quien(m)}:</b> ${esc(m.texto)}</div>`).join('');
+  CONV_CACHE = CONV_HIST.map(m => `<div class="conv-msg ${m.rol === 'ia' ? 'ia' : 'lead'}"><div class="conv-who">${quien(m)}</div>${esc(m.texto)}</div>`).join('');
+  if (box) box.innerHTML = CONV_CACHE;
+  const canal = document.getElementById('conv-lead-canal');
+  if (canal) canal.textContent = `Gestionada por la IA en ${l.canal || 'el canal'} (ManyChat), solo lectura · ${CONV_HIST.length} mensajes`;
 }
 async function cargarActividadLead(l) {
   const box = document.getElementById('act-body');
@@ -7795,73 +7931,140 @@ document.getElementById('th-select-all')?.addEventListener('change', e => {
   });
   updateBulkBar();
 });
-async function guardarLead() {
-  if (leadSoloLectura()) return;
-  const btn = document.getElementById('e-save'), err = document.getElementById('edit-err');
-  // Conflicto real pendiente (falla #4): otra sesión cambió un campo que
-  // el usuario también está editando acá mismo. Se manda igual el
-  // formulario completo si confirma -- sus valores pisan los del servidor,
-  // como ya hacía el guardado normal, pero ahora al menos avisa antes.
-  if (conflictoLeadPendiente && !(await confirmarSheet({ titulo: 'Este lead cambió mientras lo editabas', detalle: 'Hay campos en conflicto. ¿Guardar igual con tus valores?', textoOk: 'Guardar igual' }))) return;
-  // Vista previa de rol activa (admin real viendo como asesor): el select de
-  // "Asesor asignado" queda deshabilitado con el NOMBRE DEL ADMIN adentro
-  // (mismo render que ve un asesor real, ver campo() más arriba) -- sin este
-  // guard, guardar cualquier lead ajeno mientras se previsualiza "asesor" le
-  // reasignaría el lead al admin en silencio (el admin real puede abrir
-  // cualquier lead, a diferencia de un asesor real). Se manda el asesor que
-  // el lead YA tenía, sin tocarlo.
-  const enVistaPreviaNoAdmin = ROL_REAL === 'admin' && ROL !== ROL_REAL;
-  const estado = val('e-estado'), asesor = enVistaPreviaNoAdmin ? currentLead.asesor : val('e-asesor'), servicio = val('e-servicio');
-  const montoRaw = val('e-monto').trim();
-  if (VENTA.includes(estado) && (!montoRaw || !(parseFloat(montoRaw) > 0))) { err.textContent = 'Ingresa el monto de la venta (debe ser mayor a 0)'; return; }
-  const nombre = val('e-nombre').trim();
-  if (!nombre) { err.textContent = 'El nombre no puede quedar vacío'; return; }
-  const monto = VENTA.includes(estado) ? parseFloat(montoRaw) : null;
-  const comprado = VENTA.includes(estado) ? val('e-comprado').trim() : null;
-  const fechaVal = val('e-fecha');
-  const montoCompletoRaw = val('e-monto-completo').trim();
-  const montoInicialRaw = val('e-monto-inicial').trim();
-  const restantePagoRaw = val('e-restante-pago').trim();
-  err.textContent = ''; btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
-  // Bug real (2026-09-03): esto se mandaba SIEMPRE, aunque el usuario no
-  // hubiera tocado el <select id="e-estado">. Para un asesor que solo quería
-  // guardar montos/fecha en "Pagos y captación", mandar el estado actual del
-  // lead re-disparaba el guard anti-cierre de actualizar_lead ("cerrá la venta
-  // desde Postventa...") si ese lead ya estaba en PAGO REALIZADO. Mismo patrón
-  // que p_fecha_creacion abajo: solo se manda si el campo visible cambió; si no,
-  // null y el RPC (coalesce) deja el estado intacto.
-  const estadoParam = camposSuciosLead.has('e-estado') ? estado : null;
-  const { data, error } = await sb.rpc('actualizar_lead', {
-    p_lead_id: currentLead.id, p_estado: estadoParam, p_asesor: asesor, p_monto: monto, p_servicio: servicio, p_servicios_comprados: comprado,
-    p_nombre: nombre, p_telefono: val('e-telefono').trim(), p_canal: val('e-canal').trim(),
-    p_destino: val('e-destino').trim(), p_destino_consulta: val('e-destino-consulta').trim(), p_personas: val('e-personas').trim(),
-    // Bug real (2026-07-21): esto se mandaba SIEMPRE que se guardaba el drawer,
-    // aunque el admin no hubiera tocado el campo "Fecha de captación" -- como el
-    // input solo tiene fecha (sin hora), cada guardado reescribía fecha_creacion
-    // a las 12:00 en punto, borrando la hora REAL de creación del lead cada vez
-    // que se editaba cualquier otra cosa (estado, asesor, etc). Ahora solo se
-    // manda si la fecha visible realmente cambió respecto a la que ya tenía el
-    // lead -- si no cambió, se manda null y el RPC (coalesce) deja la hora real intacta.
-    p_fecha_creacion: fechaVal && fechaVal !== (currentLead.fecha_creacion ? currentLead.fecha_creacion.slice(0, 10) : '')
-      ? new Date(fechaVal + 'T12:00:00').toISOString()
-      : null,
-    p_fecha_estimada: val('e-fecha-estimada').trim(),
-    p_monto_completo: montoCompletoRaw ? parseFloat(montoCompletoRaw) : null,
-    p_monto_inicial: montoInicialRaw ? parseFloat(montoInicialRaw) : null,
-    p_restante_pago: restantePagoRaw ? parseFloat(restantePagoRaw) : null,
-  });
-  if (error || !data?.ok) {
-    btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios';
-    err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return;
+// Parámetros de actualizar_lead con SOLO los campos tocados (el resto va en
+// null y el RPC los deja intactos con coalesce, verificado en prod 2026-10-22).
+// Función pura -- se prueba aparte con los casos del plan. Reglas heredadas:
+//  - p_estado solo si se tocó el estado (re-mandarlo disparaba el guard
+//    anti-cierre en leads ya vendidos, bug real 2026-09-03);
+//  - p_nombre solo si se tocó: cualquier nombre no vacío apaga nombre_dudoso;
+//  - p_fecha_creacion solo si la fecha visible cambió (el input no tiene hora:
+//    mandarla siempre pisaba la hora real de creación, bug real 2026-07-21);
+//  - estado de venta exige monto > 0: estado, monto y comprado viajan juntos
+//    o el estado espera;
+//  - un texto/monto vaciado no se puede guardar (el RPC conserva el valor
+//    anterior), así que se devuelve en `restaurar` para no mostrar algo que no es.
+const CAMPOS_TEXTO_LEAD = { 'e-telefono': 'p_telefono', 'e-canal': 'p_canal', 'e-destino': 'p_destino', 'e-destino-consulta': 'p_destino_consulta', 'e-personas': 'p_personas', 'e-fecha-estimada': 'p_fecha_estimada', 'e-servicio': 'p_servicio' };
+const CAMPOS_MONTO_LEAD = { 'e-monto-completo': 'p_monto_completo', 'e-monto-inicial': 'p_monto_inicial', 'e-restante-pago': 'p_restante_pago' };
+function armarParamsAutoguardado(v, sucios, lead, { vistaPrevia = false, excluir = new Set() } = {}) {
+  const s = id => sucios.has(id) && !excluir.has(id);
+  const t = id => String(v[id] ?? '').trim();
+  const p = {}, enviados = [], restaurar = [], avisos = [];
+  const estado = v['e-estado'], esVenta = VENTA.includes(estado);
+  if (esVenta && (s('e-estado') || s('e-monto') || s('e-comprado'))) {
+    const m = parseFloat(t('e-monto'));
+    if (m > 0) {
+      p.p_monto = m; p.p_servicios_comprados = t('e-comprado') || null;
+      if (s('e-estado')) p.p_estado = estado;
+      enviados.push(...['e-estado', 'e-monto', 'e-comprado'].filter(s));
+    } else avisos.push({ campo: 'e-monto', msg: 'Ingresa el monto de la venta (mayor a 0) para cerrarla.' });
+  } else {
+    if (s('e-estado')) { p.p_estado = estado; enviados.push('e-estado'); }
+    // Fuera de venta el monto no se manda (mismo criterio que antes): se suelta.
+    enviados.push(...['e-monto', 'e-comprado'].filter(s));
   }
-  // Check animado (Fase 6) en vez de cerrar de una -- el botón muestra el
-  // éxito un instante antes de que el drawer desaparezca, no solo el toast
-  // que ya se lee después de que la pantalla cambió.
-  btn.classList.add('guardado-ok');
-  btn.innerHTML = '<i class="fas fa-check"></i> Guardado';
-  okToast('Lead actualizado');
-  await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
-  setTimeout(() => { btn.classList.remove('guardado-ok'); btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar cambios'; window.closeDrawer(); }, 450);
+  if (s('e-nombre')) {
+    if (t('e-nombre')) { p.p_nombre = t('e-nombre'); enviados.push('e-nombre'); }
+    else restaurar.push('e-nombre');
+  }
+  if (s('e-asesor')) {
+    if (!vistaPrevia && t('e-asesor')) p.p_asesor = t('e-asesor');
+    enviados.push('e-asesor');
+  }
+  Object.entries(CAMPOS_TEXTO_LEAD).forEach(([id, k]) => {
+    if (!s(id)) return;
+    if (t(id)) { p[k] = t(id); enviados.push(id); } else restaurar.push(id);
+  });
+  Object.entries(CAMPOS_MONTO_LEAD).forEach(([id, k]) => {
+    if (!s(id)) return;
+    const n = parseFloat(t(id));
+    if (Number.isFinite(n)) { p[k] = n; enviados.push(id); } else restaurar.push(id);
+  });
+  if (s('e-fecha')) {
+    const antes = lead.fecha_creacion ? lead.fecha_creacion.slice(0, 10) : '';
+    if (!t('e-fecha')) restaurar.push('e-fecha');
+    else { if (t('e-fecha') !== antes) p.p_fecha_creacion = new Date(t('e-fecha') + 'T12:00:00').toISOString(); enviados.push('e-fecha'); }
+  }
+  return { params: p, enviados, restaurar, avisos };
+}
+function programarAutoguardado(ms = 300) {
+  clearTimeout(autoguardadoTimer);
+  autoguardadoTimer = setTimeout(() => autoguardarLead(), ms);
+}
+// Uno en vuelo a la vez; si llega otro cambio mientras tanto, se corre de nuevo al terminar.
+async function autoguardarLead(opts = {}) {
+  clearTimeout(autoguardadoTimer);
+  if (autoguardadoEnVuelo) { autoguardadoOtraVez = true; return autoguardadoEnVuelo; }
+  autoguardadoEnVuelo = autoguardarLeadUnaVez(opts).finally(() => { autoguardadoEnVuelo = null; });
+  await autoguardadoEnVuelo;
+  if (autoguardadoOtraVez) { autoguardadoOtraVez = false; return autoguardarLead(); }
+}
+function pintarGuardado(texto, tipo = '') {
+  const el = document.getElementById('d-guardado');
+  if (!el) return;
+  el.className = 'dguardado ' + tipo;
+  el.innerHTML = texto;
+}
+async function autoguardarLeadUnaVez(opts = {}) {
+  const lead = currentLead;
+  if (!lead || !document.getElementById('e-estado') || ROL === 'administrativo' || !camposSuciosLead.size) return;
+  const valores = {};
+  FIELD_IDS_LEAD.forEach(id => { const el = document.getElementById(id); if (el) valores[id] = el.value; });
+  // Vista previa de rol (admin real viendo como asesor): el select de asesor
+  // muestra el nombre del ADMIN; mandarlo reasignaría el lead en silencio.
+  const vistaPrevia = ROL_REAL === 'admin' && ROL !== ROL_REAL;
+  const { params, enviados, restaurar, avisos } = armarParamsAutoguardado(valores, camposSuciosLead, lead, { vistaPrevia, excluir: CONFLICTO_IDS_LEAD });
+  restaurar.forEach(id => { const el = document.getElementById(id); if (el) el.value = valorLeadParaCampo(id, lead) ?? ''; camposSuciosLead.delete(id); });
+  const err = document.getElementById('edit-err'), ventaMsg = document.getElementById('venta-msg');
+  if (ventaMsg) ventaMsg.textContent = avisos.find(a => a.campo === 'e-monto')?.msg || '';
+  if (avisos.length) { if (opts.alCerrar) errToast('El estado no se cambió: ' + avisos[0].msg); else document.getElementById('e-monto')?.focus(); }
+  if (restaurar.length) pintarLecturaDatos();
+  if (!enviados.length) return;
+  const conRpc = Object.keys(params).length > 0;
+  if (!conRpc) { enviados.forEach(id => camposSuciosLead.delete(id)); return; }
+  pintarGuardado('<i class="fas fa-circle-notch fa-spin"></i> Guardando…');
+  VALORES_EN_VUELO_LEAD = Object.fromEntries(enviados.map(id => [id, valores[id]]));
+  const { data, error } = await sb.rpc('actualizar_lead', {
+    p_lead_id: lead.id, p_estado: null, p_asesor: null, p_monto: null, p_servicio: null, p_servicios_comprados: null,
+    p_nombre: null, p_telefono: null, p_canal: null, p_destino: null, p_destino_consulta: null, p_personas: null,
+    p_fecha_creacion: null, p_fecha_estimada: null, p_monto_completo: null, p_monto_inicial: null, p_restante_pago: null,
+    ...params,
+  });
+  VALORES_EN_VUELO_LEAD = {};
+  const enFicha = currentLead?.id === lead.id && !!document.getElementById('e-estado');
+  if (error || !data?.ok) {
+    const msg = 'No se pudo guardar: ' + (error?.message || data?.error || '');
+    if (enFicha) { pintarGuardado('<i class="fas fa-triangle-exclamation"></i> ' + esc(msg), 'error'); if (err) err.textContent = msg; }
+    errToast(msg);
+    return;
+  }
+  // Lo guardado pasa al lead en memoria; un campo deja de estar "sucio" solo
+  // si nadie lo volvió a cambiar mientras el guardado viajaba.
+  const campoLead = { 'e-nombre': 'nombre', 'e-telefono': 'telefono', 'e-canal': 'canal', 'e-destino': 'destino', 'e-destino-consulta': 'destino_consulta', 'e-personas': 'personas', 'e-fecha-estimada': 'fecha_estimada', 'e-servicio': 'servicio', 'e-monto-completo': 'monto_completo', 'e-monto-inicial': 'monto_inicial', 'e-restante-pago': 'restante_pago' };
+  enviados.forEach(id => {
+    if (campoLead[id]) lead[campoLead[id]] = CAMPOS_MONTO_LEAD[id] ? params[CAMPOS_MONTO_LEAD[id]] : String(valores[id]).trim();
+    if (document.getElementById(id)?.value === valores[id]) camposSuciosLead.delete(id);
+  });
+  if (params.p_nombre) lead.nombre_dudoso = false;
+  if (params.p_fecha_creacion) lead.fecha_creacion = params.p_fecha_creacion;
+  if (params.p_monto != null) { lead.monto = params.p_monto; lead.servicios_comprados = params.p_servicios_comprados; }
+  if (data.asesor) lead.asesor = data.asesor;
+  const cambioEstado = !!params.p_estado;
+  if (cambioEstado) { lead.estado = data.estado || params.p_estado; if (lead.estado !== 'POR ATENDER' && !lead.fecha_primer_contacto) lead.fecha_primer_contacto = new Date().toISOString(); }
+  if (enFicha) {
+    if (err) err.textContent = '';
+    if (ventaMsg) ventaMsg.textContent = '';
+    pintarGuardado(`<i class="fas fa-check"></i> Guardado ${esc(fmtHoraCaracas(new Date().toISOString()))}`, 'ok');
+    pintarLecturaDatos();
+    if (cambioEstado) { pintarCtaDrawer(lead); aplicarVisibilidadSeccionesDrawer(); }
+  }
+  loadTable(true);
+  if (cambioEstado) { await loadStats(); renderAll(); loadDestPeriodo(); }
+}
+// Cerrar el drawer con algo escrito y sin "salir" del campo: se guarda igual.
+function guardarPendientesLead() {
+  if (!document.getElementById('e-estado') || !currentLead) return;
+  if (notasTimer) { clearTimeout(notasTimer); notasTimer = null; guardarNotasLead(); }
+  if (camposSuciosLead.size) autoguardarLead({ alCerrar: true }); // los ids en conflicto quedan fuera solos
 }
 
 /* ---------- Revisión de vigencias del tarifario (admin) ----------
@@ -9872,7 +10075,7 @@ async function clasificarServicioLeads(ids) {
 async function detectarServicioDelLead() {
   const btn = document.getElementById('e-servicio-ia'), razon = document.getElementById('e-servicio-razon');
   const html0 = btn.innerHTML;
-  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analizando...';
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
   const res = await clasificarServicioLeads([currentLead.id]);
   btn.disabled = false; btn.innerHTML = html0;
   if (res.error) { razon.textContent = 'No se pudo analizar: ' + res.error; return; }
@@ -9918,15 +10121,23 @@ async function detectarServicioSeleccionados() {
 // anotar sin arrastrar el resto del formulario. Va por RPC porque leads no
 // tiene grant de UPDATE para authenticated -- todo escribe vía security definer.
 async function guardarNotasLead() {
-  const btn = document.getElementById('e-notas-save'), meta = document.getElementById('e-notas-meta');
-  const notas = val('e-notas').trim();
-  btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
-  const { data, error } = await sb.rpc('guardar_notas_lead', { p_lead_id: currentLead.id, p_notas: notas });
-  btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar notas';
-  if (error || !data?.ok) { meta.textContent = 'No se pudieron guardar: ' + (error?.message || data?.error || ''); return; }
-  currentLead.notas = notas || null;
-  meta.textContent = 'Guardado ' + fmtHoraCaracas(new Date().toISOString());
-  okToast('Notas guardadas');
+  // Se guarda sola (pausa de 1,5 s al escribir, o al salir del campo); sin
+  // botón. Si no cambió respecto a lo guardado, no llama al RPC.
+  clearTimeout(notasTimer); notasTimer = null;
+  const el = document.getElementById('e-notas'), meta = document.getElementById('e-notas-meta'), lead = currentLead;
+  if (!el || !lead) return;
+  const notas = el.value.trim();
+  if (notas === (lead.notas || '').trim()) return;
+  if (meta) meta.textContent = 'Guardando…';
+  const { data, error } = await sb.rpc('guardar_notas_lead', { p_lead_id: lead.id, p_notas: notas });
+  const enFicha = currentLead?.id === lead.id;
+  if (error || !data?.ok) {
+    if (meta && enFicha) meta.textContent = 'No se guardó';
+    errToast('No se pudo guardar la nota: ' + (error?.message || data?.error || ''));
+    return;
+  }
+  lead.notas = notas || null;
+  if (meta && enFicha) meta.textContent = 'Guardado ' + fmtHoraCaracas(new Date().toISOString());
 }
 
 // Abre el drawer de edición completo de un lead/cliente desde Facturación
@@ -11383,6 +11594,7 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
   loadBandejaFacturacion();
 });
 window.closeDrawer = (fromNav) => {
+  guardarPendientesLead(); // ficha del lead: lo escrito sin "salir" del campo se guarda igual
   const notas = document.getElementById('tar-notas');
   const cerrar = () => { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume(); };
   if (notas && notas.value.trim() !== (notas.dataset.original || '').trim()) {
@@ -33687,6 +33899,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-22', emoji: '💾', titulo: 'La ficha del lead se guarda sola', texto: 'Ya no hay botón "Guardar cambios": cada dato se guarda al elegirlo o al salir del campo, y arriba ves "Guardado" con la hora. El estado se cambia desde arriba de la ficha, junto al botón del siguiente paso. Los datos del cliente se leen como lista (toca "Editar" para cambiarlos) y la consulta larga se recorta con "Ver más". Ya no hay pestañas: la nota del equipo, los últimos mensajes con la IA y el historial están dentro de la misma ficha. Si eliges un estado de venta, te pide el monto antes de guardarlo.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-22', emoji: '🗂️', titulo: 'Tarjetas de leads más claras', texto: 'Cada tarjeta de lead muestra arriba el estado y hace cuánto llegó, la consulta del cliente resumida en dos líneas y la última oferta que le mostró la IA. Abajo tiene un solo botón con el siguiente paso según el estado (Atender, Cotizar, Crear reserva, Link de pago o Ver reservas) y en "⋯" el resto de las acciones, sin abrir la ficha. La prioridad de la IA ahora dice "Alta" o "Media" en vez de un símbolo.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-22', emoji: '👓', titulo: 'Letra más grande y más fácil de leer', texto: 'En Mi Perfil → Personalización ahora eliges el tamaño de letra entre Chico, Normal, Grande (más grande que antes) y Muy grande, y también el tipo de letra: Inter (la de siempre), Atkinson Hyperlegible (letras bien distintas, pensada para vista cansada), Lexend (más espaciada) o Source Sans 3 (nítida en tablas y montos). Si se te cansa la vista, prueba Grande con Atkinson y el tema Sereno.', roles: ['admin', 'asesor', 'marketing', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-22', emoji: '🔔', titulo: 'Pagos por verificar avisa solo y sigue la reserva', texto: 'Pagos por verificar ahora tiene su propia entrada en el menú: cuando hay pagos esperando crece, late en rojo y dice cuántos son. Dentro, el tablero tiene tres columnas: Por verificar, Pago confirmado (falta cargar el localizador de cada servicio) y Reserva confirmada. La tarjeta avanza sola cuando cargas el localizador, y el botón "Cargar localizadores" te lleva directo a la reserva. Las compras que aún no han pagado quedan en un plegable abajo.', roles: ['admin', 'administrativo'] },
