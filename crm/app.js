@@ -3350,14 +3350,21 @@ function renderPostventa() {
 }
 function pvWire(grid, lista, antes = () => {}) {
   grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => { antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvOpen))); });
-  // Tocar la tarjeta (fuera de sus botones) equivale a «Gestionar»; no dispara si el usuario está seleccionando texto.
+  // Tocar la tarjeta equivale a «Gestionar», salvo en sus botones, en la franja de botones (hueco entre ellos)
+  // y mientras el usuario selecciona texto.
   grid.querySelectorAll('.pv-card:has([data-pv-open])').forEach(card => {
     card.classList.add('pv-click');
     card.onclick = e => {
-      if (e.target.closest('button,a,input,select,textarea') || String(window.getSelection() || '')) return;
+      if (e.target.closest('button,a,input,select,textarea,.pv-card-foot') || String(window.getSelection() || '')) return;
       antes();
       abrirPostventa(lista.find(c => c.id === Number(card.dataset.id)));
     };
+  });
+  // Chip de «Falta»: abre la reserva directo en la pestaña que resuelve ese faltante («resumen» = solo abrirla).
+  grid.querySelectorAll('[data-pv-falta]').forEach(b => b.onclick = () => {
+    antes();
+    const cod = b.dataset.pvFalta;
+    abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvId)), cod && cod !== 'resumen' ? { falta: cod, id: b.dataset.sid } : null);
   });
   grid.querySelectorAll('[data-pv-wa]').forEach(b => b.onclick = () => window.open(`https://wa.me/${b.dataset.pvWa}`, '_blank', 'noopener'));
   grid.querySelectorAll('[data-pv-abono]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); pvAbrirAbonoReserva(lista.find(c => c.id === Number(b.dataset.pvAbono)), b); });
@@ -3366,14 +3373,15 @@ function pvWire(grid, lista, antes = () => {}) {
 // Chips de «Falta» de la tarjeta: una por motivo (las repetidas se cuentan) y una última si no hay seguimiento.
 function pvFaltaChips(c, vencido) {
   const m = new Map(), etq = { pasajeros: 'Pasajeros', voucher: 'Voucher hotel', documentos: 'Documentos de pasajeros', cuotas: 'Cuotas vencidas' };
+  // Cada chip lleva `cod`/`sid` (código del faltante y servicio) para que al tocarlo abra la pestaña que lo resuelve (rvIr).
   c.falta_resumen.forEach(f => {
     const t = f.codigo === 'saldo' ? `Saldo ${money(c.saldo_pendiente)}` : f.codigo === 'servicio' ? (f.texto || 'Servicio por confirmar').replace(/ \d{2}\/\d{2}/, '') : etq[f.codigo] || f.texto;
-    m.set(t, (m.get(t) || 0) + 1);
+    const x = m.get(t);
+    if (x) x.n++; else m.set(t, { n: 1, cod: f.codigo, sid: f.servicio_id || '' });
   });
-  const lista = [...m].map(([t, n]) => ({ t: n > 1 ? `${t} ×${n}` : t }));
-  if (!c.proximo_seguimiento_at && c.etapa !== 'CERRADO') lista.push({ t: 'Sin seguimiento' });
-  else if (vencido) lista.push({ t: 'Seguimiento vencido', venc: true });
-  return lista.length > 4 ? [...lista.slice(0, 3), { t: `+${lista.length - 3} más` }] : lista;
+  const lista = [...m].map(([t, x]) => ({ t: x.n > 1 ? `${t} ×${x.n}` : t, cod: x.cod, sid: x.sid }));
+  if (vencido) lista.push({ t: 'Seguimiento vencido', venc: true, cod: 'seguimiento' });
+  return lista.length > 4 ? [...lista.slice(0, 3), { t: `+${lista.length - 3} más`, cod: 'resumen' }] : lista;
 }
 function pvRangoViaje(ini, fin) {
   if (!ini) return 'Viaje sin fecha';
@@ -3419,7 +3427,7 @@ function pvCardHtml(c, extra = '') {
     const faltaHtml = falta === null
       ? `<div class="pv-meta"><span><i class="fas fa-calendar"></i>${c.fecha_viaje_inicio ? pvFecha(c.fecha_viaje_inicio) : 'Viaje sin fecha'}</span><span class="pv-docs"><i class="fas fa-file-circle-check"></i>${docsListos}/6 docs</span></div>
       <div class="pv-meta"><span class="${vencido ? 'overdue' : ''}"><i class="fas fa-bell"></i>${tiempoSeguimiento(c.proximo_seguimiento_at)}</span></div>`
-      : (falta.length ? `<div class="pv-falta"><span class="pv-falta-t">Falta</span>${falta.map(x => `<span class="pv-falta-i${x.venc ? ' overdue' : ''}">${esc(x.t)}</span>`).join('')}</div>`
+      : (falta.length ? `<div class="pv-falta"><span class="pv-falta-t">Falta</span>${falta.map(x => `<button class="pv-falta-i${x.venc ? ' overdue' : ''}" type="button" data-pv-falta="${esc(x.cod || '')}" data-sid="${esc(x.sid || '')}" data-pv-id="${c.id}">${esc(x.t)}</button>`).join('')}</div>`
         : '<div class="pv-falta ok"><i class="fas fa-check" aria-hidden="true"></i> Todo en orden</div>')
         + (c.proximo_seguimiento_at ? `<div class="pv-meta"><span class="${vencido ? 'overdue' : ''}"><i class="fas fa-bell"></i>Seguimiento: ${tiempoSeguimiento(c.proximo_seguimiento_at)}</span></div>` : '');
     return `<article class="pv-card" data-id="${c.id}">
@@ -3748,6 +3756,15 @@ function rvIniciar(reservaId, tab, accionInicial = null) {
   rvTab(tab);
   abonosModulo().montar(reservaId, accionInicial === 'abonos');
   const carga = rvCargar();
+  // Venida desde un chip de «Falta» de la tarjeta: lleva a la pestaña que resuelve ese faltante.
+  if (accionInicial?.falta === 'seguimiento') {
+    const det = document.querySelector('#drawerContent .rs-mas'); if (det) det.open = true;
+    document.getElementById('pv-e-seguimiento')?.focus();
+  } else if (accionInicial?.falta) carga.then(() => {
+    if (apertura !== RV_APERTURA || RV_RESERVA_ID !== reservaId || !RV_DET || !document.getElementById('drawer')?.classList.contains('open')) return;
+    if (accionInicial.falta === 'pasajeros' && !rvPuedeEditar()) return rvTab('pasajeros');
+    rvIr(accionInicial.falta, accionInicial.id);
+  });
   if (accionInicial === 'nuevo-servicio') carga.then(() => {
     if (apertura !== RV_APERTURA || RV_RESERVA_ID !== reservaId || !RV_DET || !rvPuedeEditar() || !document.getElementById('drawer')?.classList.contains('open')) return;
     rvForm({ tipo: 'servicio', id: null });
