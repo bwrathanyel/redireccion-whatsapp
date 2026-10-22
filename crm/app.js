@@ -27746,9 +27746,11 @@ async function vcRevisarOperacion(fila, plan) {
   if (plan.reserva && !similares.some(r => r.id === plan.reserva.id)) opciones.push({ v: String(plan.reserva.id), t: `${plan.reserva.codigo} · ${plan.lead.nombre} · Reserva seleccionada` });
   opciones.push({ v: 'nueva', t: plan.lead ? 'Crear otra venta para el cliente seleccionado' : 'Crear una venta para un cliente nuevo' });
   opciones.push({ v: 'solo', t: 'Generar solo el PDF' });
-  const eleccion = await confirmarSheet({ titulo: similares.length ? 'Revisa las ventas antes de generar' : '¿Vincular o crear una venta?', textoOk: 'Revisar elección',
-    detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : 'Elige expresamente cómo guardar este voucher.'}`,
-    campos: [{ id: 'operacion', tipo: 'select', label: 'Operación', requerido: true, valor: '', opciones }],
+  // Una sola hoja: encadenar otra confirmarSheet/pedirTexto la deja cerrada por el history.back de esta.
+  const eleccion = await confirmarSheet({ titulo: similares.length ? 'Revisa las ventas antes de generar' : '¿Vincular o crear una venta?', textoOk: 'Generar voucher',
+    detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)} · Saldo ${vcMoney(fila.resta)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : 'Elige expresamente cómo guardar este voucher.'}\nCrear venta factura una sola vez el abono${Number(fila.monto_pagado) > 0 ? ' de ' + vcMoney(fila.monto_pagado) : ' (hoy no hay abono cargado)'}.`,
+    campos: [{ id: 'operacion', tipo: 'select', label: 'Operación', requerido: true, valor: '', opciones },
+      ...(similares.length ? [{ id: 'motivo', tipo: 'textarea', label: 'Motivo si es una venta distinta (mínimo 8 caracteres)', placeholder: 'Qué diferencia esta compra de las existentes', requeridoSi: out => out.operacion === 'nueva' }] : [])],
   });
   if (!eleccion) return null;
   if (eleccion.operacion === 'solo') return { modo: 'solo' };
@@ -27759,8 +27761,7 @@ async function vcRevisarOperacion(fila, plan) {
   }
   let motivo = null;
   if (similares.length) {
-    motivo = await pedirTexto({ titulo: 'Confirma que es una venta distinta', detalle: 'Se conservarán las operaciones existentes. Explica qué diferencia esta compra para dejar constancia.', label: 'Motivo (mínimo 8 caracteres)', requerido: true });
-    if (motivo === null) return null;
+    motivo = eleccion.motivo || '';
     if (motivo.trim().length < 8) throw new Error('Explica el motivo con al menos 8 caracteres.');
   }
   const otroViaje = plan.lead && ['PAGO REALIZADO', 'VENTA COMPLETA'].includes(plan.lead.estado);
@@ -27830,9 +27831,6 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
   try {
     const plan = await vcRevisarOperacion(fila, planInicial);
     if (!plan) return;
-    const resumenEleccion = plan.modo === 'vincular' ? `Vincular a ${plan.reserva.codigo} de ${plan.lead.nombre}. Se actualizan las fechas con las de este voucher y se conserva la facturación existente.`
-      : plan.modo === 'solo' ? 'Generar solo el PDF.' : `Crear una venta ${plan.modo === 'nueva' ? 'adicional' : 'nueva'}. ${pagado > 0 ? 'Se factura una sola vez el abono de ' + vcMoney(pagado) : 'Se crea la reserva sin facturar, todavía no tiene abonos'}.`;
-    if (!(await confirmarSheet({ titulo: 'Confirmar voucher', textoOk: 'Generar voucher', detalle: `${resumenEleccion}\nCliente: ${clienteNombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(total)} · Abono ${vcMoney(pagado)} · Saldo ${vcMoney(fila.resta)}` }))) return;
     const huella = JSON.stringify(fila);
     if (vcSolicitudPendiente?.huella !== huella) vcSolicitudPendiente = { huella, id: crypto.randomUUID() };
     const ins = await sb.rpc('voucher_preparar', { p_datos: fila, p_solicitud_id: vcSolicitudPendiente.id });
