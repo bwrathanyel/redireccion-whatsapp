@@ -3970,20 +3970,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pv-rap:hover:not(:disabled){background:color-mix(in srgb,var(--tc) 16%,transparent)}
 .pv-rap.on{border-color:color-mix(in srgb,var(--tc) 55%,transparent);background:color-mix(in srgb,var(--tc) 18%,transparent);color:var(--txt)}
 .pv-rap:disabled{opacity:.45;cursor:default}
-.pv-rap:focus-visible,.pv-sec>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pv-rap:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .pv-filtros{display:flex;align-items:flex-start;gap:10px}.pv-filtros .pv-stagebar{flex:1;min-width:0}
 .pv-selects{display:flex;gap:8px;flex:0 0 auto}.pv-selects select.flt{padding-top:7px;padding-bottom:7px;font-size:12px;max-width:230px}
 #pv-destino[hidden]{display:none}
 .pv-stage .pv-n{font-weight:800;margin-left:2px;opacity:.7}.pv-stage .pv-n:empty{display:none}
-#pv-grid.pv-secs{display:block}
-.pv-sec{margin-bottom:10px}
-.pv-sec>summary{display:flex;align-items:center;gap:9px;padding:8px 4px;cursor:pointer;list-style:none;font-size:13px;font-weight:800;color:var(--txt)}
-.pv-sec>summary::-webkit-details-marker{display:none}
-.pv-sec>summary .flecha{color:var(--muted2);font-size:10px;transition:transform .16s}.pv-sec[open]>summary .flecha{transform:rotate(90deg)}
-.pv-sec>summary>i:not(.flecha){color:var(--tc)}
-.pv-sec>summary small{font-size:11px;font-weight:600;color:var(--muted)}
-.pv-sec>summary::after{content:'';flex:1;height:1px;background:var(--line);margin-left:4px}
-.pv-sec>.pv-grid{padding:4px 0 6px}
+/* Vista compacta: solo quién, cuándo viaja, plata y Gestionar; «Falta» y abonos quedan en la ficha. */
+#pv-grid.pv-compacta{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+#pv-grid.pv-compacta .pv-card{padding:12px}
+#pv-grid.pv-compacta .pv-name{font-size:14px;margin:9px 0 2px}
+#pv-grid.pv-compacta :is(.pv-falta,.pv-progress,.pv-meta,[data-pv-abono],[data-pv-servicio]){display:none}
+#pv-grid.pv-compacta .pv-money-row{margin-top:8px}
+#pv-grid.pv-compacta .pv-card-foot{margin-top:9px;padding-top:9px}
 .pv-card-top{justify-content:flex-start;flex-wrap:wrap;gap:6px 8px}
 .pv-viaje{display:inline-flex;align-items:center;gap:6px;margin-left:auto;padding:5px 9px;border-radius:999px;white-space:nowrap;font-size:10.5px;font-weight:750;color:var(--tc);background:color-mix(in srgb,var(--tc) 14%,transparent)}
 /* Tarjeta más liviana: «Falta» solo con borde, chips chicos y acciones en una fila en escritorio. */
@@ -6975,10 +6973,16 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <!-- Destinos de la bandeja: se arman en JS (renderPvGrupos) -->
           <select class="flt" id="pv-destino" aria-label="Filtrar por destino" hidden></select>
           <select class="flt" id="pv-orden" aria-label="Ordenar reservas">
-            <option value="viaje">Por fecha de viaje</option>
+            <option value="recientes">Más recientes primero</option>
+            <option value="antiguas">Más antiguas primero</option>
+            <option value="viaje">Próximas a viajar</option>
             <option value="saldo">Mayor saldo primero</option>
             <option value="seguimiento">Próximo seguimiento</option>
             <option value="bandeja">Prioridad (urgentes primero)</option>
+          </select>
+          <select class="flt" id="pv-vista" aria-label="Forma de ver las fichas">
+            <option value="tarjetas">Vista: tarjetas</option>
+            <option value="compacta">Vista: compacta</option>
           </select>
         </div>
       </div>

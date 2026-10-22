@@ -3106,11 +3106,11 @@ const PV_DOCS = {
   voucher_hotel: 'Voucher de hotel', boletos: 'Boletos', seguro: 'Seguro',
   itinerario_entregado: 'Itinerario entregado',
 };
-// Orden y secciones abiertas de Reservas → Clientes: preferencia de cada usuario en este navegador.
-let PV_ORDEN = 'viaje', PV_RAPIDO = '', PV_SEC_ABIERTAS = {};
-try { const p = JSON.parse(localStorage.getItem('pv-prefs') || '{}'); if (p.orden) PV_ORDEN = p.orden; if (p.secs) PV_SEC_ABIERTAS = p.secs; } catch {}
+// Orden y vista de Reservas → Clientes: preferencia de cada usuario en este navegador.
+let PV_ORDEN = 'recientes', PV_VISTA = 'tarjetas', PV_RAPIDO = '';
+try { const p = JSON.parse(localStorage.getItem('pv-prefs2') || '{}'); if (p.orden) PV_ORDEN = p.orden; if (p.vista) PV_VISTA = p.vista; } catch {}
 function pvGuardarPrefs() {
-  try { localStorage.setItem('pv-prefs', JSON.stringify({ orden: PV_ORDEN, secs: PV_SEC_ABIERTAS })); } catch {}
+  try { localStorage.setItem('pv-prefs2', JSON.stringify({ orden: PV_ORDEN, vista: PV_VISTA })); } catch {}
 }
 function setupPostventa() {
   // La bandeja trae todas las etapas (cerrados incluidos): etapa, destino, orden y filtros rápidos se aplican en memoria.
@@ -3118,22 +3118,19 @@ function setupPostventa() {
     PV_ETAPA = b.dataset.etapa || ''; renderPostventa();
   }));
   document.getElementById('pv-destino')?.addEventListener('change', e => { PV_GRUPO = e.target.value; renderPostventa(); });
-  const orden = document.getElementById('pv-orden');
-  if (orden) {
-    orden.value = PV_ORDEN;
-    if (orden.value !== PV_ORDEN) { PV_ORDEN = 'viaje'; orden.value = 'viaje'; }
-    orden.addEventListener('change', () => { PV_ORDEN = orden.value; pvGuardarPrefs(); renderPostventa(); });
-  }
+  [['pv-orden', 'PV_ORDEN', 'recientes'], ['pv-vista', 'PV_VISTA', 'tarjetas']].forEach(([id, v, def]) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.value = v === 'PV_ORDEN' ? PV_ORDEN : PV_VISTA;
+    if (sel.value === '') sel.value = def;
+    const fijar = () => { if (v === 'PV_ORDEN') PV_ORDEN = sel.value; else PV_VISTA = sel.value; };
+    fijar();
+    sel.addEventListener('change', () => { fijar(); pvGuardarPrefs(); renderPostventa(); });
+  });
   document.getElementById('pv-resumen')?.addEventListener('click', e => {
     const b = e.target.closest('button[data-rapido]');
     if (b) { PV_RAPIDO = PV_RAPIDO === b.dataset.rapido ? '' : b.dataset.rapido; renderPostventa(); }
   });
-  // «toggle» no burbujea: se escucha en captura para recordar qué secciones dejó abiertas.
-  document.getElementById('pv-grid')?.addEventListener('toggle', e => {
-    const d = e.target;
-    if (!d.matches?.('details.pv-sec') || document.getElementById('pv-search')?.value.trim()) return;
-    PV_SEC_ABIERTAS[d.dataset.sec] = d.open; pvGuardarPrefs();
-  }, true);
   document.getElementById('pv-refresh')?.addEventListener('click', loadPostventa);
   document.getElementById('pv-search')?.addEventListener('input', () => {
     clearTimeout(PV_SEARCH_TIMER); PV_SEARCH_TIMER = setTimeout(loadPostventa, 280);
@@ -3284,6 +3281,9 @@ const PV_RAPIDOS = {
   vencidos: ['seguimientos vencidos', 'fa-clock', 'var(--danger)', c => c.etapa !== 'CERRADO' && !!c.proximo_seguimiento_at && new Date(c.proximo_seguimiento_at).getTime() < Date.now()],
   sin_seg: ['sin seguimiento', 'fa-bell-slash', 'var(--muted)', c => c.etapa !== 'CERRADO' && !c.proximo_seguimiento_at],
   saldo: ['con saldo', 'fa-coins', 'var(--accent)', c => Number(c.saldo_pendiente) > 0],
+  pasajeros: ['sin pasajeros', 'fa-users', 'var(--purple)', c => (c.falta_resumen || []).some(f => f.codigo === 'pasajeros')],
+  documentos: ['faltan documentos', 'fa-folder-open', 'var(--blue)', c => (c.falta_resumen || []).some(f => f.codigo === 'documentos' || f.codigo === 'voucher')],
+  volvio: ['ya viajaron', 'fa-house-chimney', 'var(--muted)', c => pvViaje(c).bucket === 'volvio'],
   incidencia: ['con incidencia', 'fa-triangle-exclamation', 'var(--danger)', c => !!c.incidencia_abierta],
 };
 function renderPvResumen(lista) {
@@ -3312,29 +3312,15 @@ function renderPvGrupos() {
   sel.innerHTML = [['', `Todos los destinos (${POSTVENTA.length})`], ...orden.map(g => [g, `${g} (${cuenta.get(g) || 0})`])]
     .map(([k, l]) => `<option value="${esc(k)}"${k === PV_GRUPO ? ' selected' : ''}>${esc(l)}</option>`).join('');
 }
-const PV_SECCIONES = [
-  ['en_viaje', 'En viaje ahora', 'fa-suitcase-rolling', 'var(--green)', true],
-  ['semana', 'Viajan esta semana', 'fa-plane-departure', 'var(--danger)', true],
-  ['mes', 'Próximos 30 días', 'fa-calendar-week', 'var(--amber)', true],
-  ['luego', 'Más adelante', 'fa-calendar', 'var(--blue)', true],
-  ['volvio', 'Ya viajaron', 'fa-house-chimney', 'var(--muted)', false],
-  ['sin', 'Sin fecha de viaje', 'fa-calendar-xmark', 'var(--muted)', false],
-];
-function pvSeccionesHtml(casos) {
-  const grupos = {};
-  casos.forEach(c => { const v = pvViaje(c); (grupos[v.bucket] ||= []).push([c, v]); });
-  const buscando = !!document.getElementById('pv-search')?.value.trim();
-  return PV_SECCIONES.filter(([k]) => grupos[k]).map(([k, t, ic, col, abierta]) => {
-    const fs = grupos[k].sort((a, b) => a[1].orden - b[1].orden);
-    const open = buscando || PV_RAPIDO || (PV_SEC_ABIERTAS[k] ?? abierta);
-    return `<details class="pv-sec" data-sec="${k}" style="--tc:${col}"${open ? ' open' : ''}>
-      <summary><i class="fas fa-chevron-right flecha" aria-hidden="true"></i><i class="fas ${ic}" aria-hidden="true"></i>${t}<small>${fs.length} ${fs.length === 1 ? 'reserva' : 'reservas'}</small></summary>
-      <div class="pv-grid">${fs.map(([c]) => pvCardHtml(c)).join('')}</div></details>`;
-  }).join('');
-}
+// «Más recientes» usa el id: la bandeja no trae created_at y el id (como el código R-) es correlativo.
+// «Fecha de viaje»: los que viajan antes primero, luego los que están de viaje, los que ya volvieron y al final sin fecha.
 function pvOrdenar(casos) {
   const l = [...casos], seg = c => c.proximo_seguimiento_at ? Date.parse(c.proximo_seguimiento_at) : 8.64e15;
-  if (PV_ORDEN === 'saldo') l.sort((a, b) => Number(b.saldo_pendiente || 0) - Number(a.saldo_pendiente || 0));
+  const viaje = c => { const v = pvViaje(c); return v.dias != null ? v.dias : v.bucket === 'en_viaje' ? 1e5 + v.orden : v.bucket === 'volvio' ? 2e5 + v.orden : 3e5; };
+  if (PV_ORDEN === 'recientes') l.sort((a, b) => b.id - a.id);
+  else if (PV_ORDEN === 'antiguas') l.sort((a, b) => a.id - b.id);
+  else if (PV_ORDEN === 'viaje') l.sort((a, b) => viaje(a) - viaje(b));
+  else if (PV_ORDEN === 'saldo') l.sort((a, b) => Number(b.saldo_pendiente || 0) - Number(a.saldo_pendiente || 0));
   else if (PV_ORDEN === 'seguimiento') l.sort((a, b) => seg(a) - seg(b));
   return l;
 }
@@ -3353,13 +3339,12 @@ function renderPostventa() {
   if (PV_RAPIDO && !PV_RAPIDOS[PV_RAPIDO]) PV_RAPIDO = '';
   renderPvResumen(enEtapa);
   const casos = PV_RAPIDO ? enEtapa.filter(PV_RAPIDOS[PV_RAPIDO][3]) : enEtapa;
-  const secciones = PV_ORDEN === 'viaje' && casos.length > 0;
-  grid.classList.toggle('pv-secs', secciones);
+  grid.classList.toggle('pv-compacta', PV_VISTA === 'compacta');
   if (!casos.length) {
     grid.innerHTML = '<div class="pv-empty"><i class="fas fa-circle-check"></i><b>Todo al día</b><br>No hay casos con este filtro</div>';
     return;
   }
-  grid.innerHTML = secciones ? pvSeccionesHtml(casos) : pvOrdenar(casos).map(c => pvCardHtml(c)).join('');
+  grid.innerHTML = pvOrdenar(casos).map(c => pvCardHtml(c)).join('');
   pvWire(grid, POSTVENTA);
   entradaLista(grid);
 }
