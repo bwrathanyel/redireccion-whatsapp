@@ -3350,6 +3350,15 @@ function renderPostventa() {
 }
 function pvWire(grid, lista, antes = () => {}) {
   grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => { antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvOpen))); });
+  // Tocar la tarjeta (fuera de sus botones) equivale a «Gestionar»; no dispara si el usuario está seleccionando texto.
+  grid.querySelectorAll('.pv-card:has([data-pv-open])').forEach(card => {
+    card.classList.add('pv-click');
+    card.onclick = e => {
+      if (e.target.closest('button,a,input,select,textarea') || String(window.getSelection() || '')) return;
+      antes();
+      abrirPostventa(lista.find(c => c.id === Number(card.dataset.id)));
+    };
+  });
   grid.querySelectorAll('[data-pv-wa]').forEach(b => b.onclick = () => window.open(`https://wa.me/${b.dataset.pvWa}`, '_blank', 'noopener'));
   grid.querySelectorAll('[data-pv-abono]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); pvAbrirAbonoReserva(lista.find(c => c.id === Number(b.dataset.pvAbono)), b); });
   grid.querySelectorAll('[data-pv-servicio]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvServicio)), 'nuevo-servicio'); });
@@ -33362,6 +33371,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-22', emoji: '🔔', titulo: 'Pagos por verificar avisa solo y sigue la reserva', texto: 'Pagos por verificar ahora tiene su propia entrada en el menú: cuando hay pagos esperando crece, late en rojo y dice cuántos son. Dentro, el tablero tiene tres columnas: Por verificar, Pago confirmado (falta cargar el localizador de cada servicio) y Reserva confirmada. La tarjeta avanza sola cuando cargas el localizador, y el botón "Cargar localizadores" te lleva directo a la reserva. Las compras que aún no han pagado quedan en un plegable abajo.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-22', emoji: '💳', titulo: 'Compras web más fáciles de verificar', texto: 'En Pagos por verificar, cada compra web muestra arriba el plazo para verificarla, el monto exacto en la moneda del banco y la referencia con un botón para copiarla. Si la referencia ya se usó en otra compra, te lo marca en rojo. El comprobante se ve dentro de la tarjeta, y al confirmar revisas en una sola ventana el monto, la referencia y la cuenta destino.', roles: ['admin'] },
   { fecha: '2026-10-21', emoji: '📸', titulo: 'Lee el comprobante de pago', texto: 'En Crear reserva, sube la captura del comprobante y el CRM llena solo el método, la referencia y el monto. Si el pago fue en bolívares, te muestra los bolívares y su equivalente en dólares con la tasa BCV del día. Revisa que los datos coincidan con el comprobante antes de crear la reserva: la lectura es automática y puede equivocarse.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-21', emoji: '⚡', titulo: 'Reservas: menos escribir, más automático', texto: 'Al crear una reserva, el CRM ya trae lo de la última cotización del lead (hotel, plan, habitación, fechas, personas, vuelos y precio) y tú solo confirmas; si no hay cotización, usa las fechas y personas del lead. El titular se carga solo como pasajero, el proveedor del hotel se asigna solo (y con eso nace la cuenta por pagar), las noches se calculan con las fechas, y las casillas de comprobante, voucher, boletos y reserva emitida se marcan solas. La etapa de la reserva avanza sola según saldo, servicios y documentos; si la cambias a mano, se respeta hasta que cambie algo importante. El voucher del paquete toma la forma de pago del último abono y ya no te la vuelve a pedir.', roles: ['admin', 'asesor'] },
