@@ -299,7 +299,7 @@ let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO
 let ROL_REAL = null;
 const VISTA_ROL_KEY = 'vista_rol_preview';
 const overlay = id => document.getElementById(id);
-const showOverlay = id => { OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
+const showOverlay = id => { window.LotusBoot?.listo(); OVERLAYS.forEach(o => overlay(o).classList.toggle('show', o === id)); if (id === 'login') cargarUsuariosLogin(); };
 // Se recarga cada vez que se muestra el login (no solo una vez al abrir la
 // página) para que un usuario recién reclamado en esta misma sesión ya
 // aparezca sin necesitar refrescar.
@@ -420,6 +420,7 @@ async function entrarSegunRol() {
   // aplica rol, módulos disponibles y sección inicial. Así `?seccion=` no
   // puede adelantar ni anular los permisos del usuario autenticado.
   await startApp();
+  window.LotusBoot?.listo();
   iniciarChat();
   if (MI_ES_FREELANCER) {
     setupHeartbeatFreelancer();
@@ -33503,7 +33504,9 @@ function registrarServiceWorkerConAviso() {
   if (!('serviceWorker' in navigator)) return;
   const yaHabiaControlador = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (yaHabiaControlador) mostrarAvisoActualizacion();
+    // El splash de index.html (LotusBoot) ya recarga solo en el arranque o al
+    // volver tras un rato; el toast queda para cuando hay trabajo a medias.
+    if (yaHabiaControlador && !window.LotusBoot?.recargando) mostrarAvisoActualizacion();
   });
   navigator.serviceWorker.register('sw.js').then(reg => {
     // El navegador NO revisa solo si sw.js cambió en el server mientras la

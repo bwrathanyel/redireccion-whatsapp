@@ -6180,6 +6180,126 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 </style>
 </head>
 <body>
+<!-- Splash de arranque: pinta antes que app.js y tapa el vacío mientras carga.
+     Si hay una versión nueva del CRM, el mismo splash avisa "Actualizando" y
+     recarga solo (ver el script de abajo). app.js lo cierra con LotusBoot.listo(). -->
+<style>
+#boot-splash{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:radial-gradient(1000px 600px at 50% -10%,rgba(var(--accent-rgb),.14),transparent 60%),var(--bg);color:var(--txt);transition:opacity .28s ease,visibility .28s ease}
+#boot-splash.fuera{opacity:0;visibility:hidden;pointer-events:none}
+#boot-splash img{width:84px;height:84px;object-fit:contain;animation:boot-giro 1.6s linear infinite}
+#boot-splash .boot-texto{font:500 14px/1.4 Inter,system-ui,sans-serif;color:var(--muted);text-align:center;padding:0 24px;min-height:20px}
+#boot-splash.actualizando .boot-texto{color:var(--accent-ink)}
+@keyframes boot-giro{to{transform:rotate(360deg)}}
+@keyframes boot-pulso{50%{opacity:.45}}
+@media(prefers-reduced-motion:reduce){#boot-splash img{animation:boot-pulso 1.6s ease-in-out infinite}}
+</style>
+<div id="boot-splash" role="status" aria-live="polite">
+  <img src="logolotus-integrado.png" alt="" width="84" height="84">
+  <div class="boot-texto" id="boot-texto">Cargando tu panel…</div>
+</div>
+<script>
+(function () {
+  var el = document.getElementById('boot-splash'), txt = document.getElementById('boot-texto');
+  var sw = navigator.serviceWorker;
+  var FR_CARGA = ['Cargando tu panel…', 'Verificando tu sesión…', 'Sincronizando datos…', 'Preparando tus leads…', 'Casi listo…'];
+  var FR_ACT = ['Actualizando a la última versión…', 'Descargando las mejoras…', 'Aplicando los cambios…', 'Reiniciando el CRM…'];
+  var VENTANA_MS = 20000, AUSENCIA_MS = 10 * 60 * 1000, TOPE_CHEQUEO_MS = 1500, TOPE_ACTUALIZAR_MS = 15000, TOPE_SPLASH_MS = 15000;
+  var S = { listo: false, revisado: false, actualizando: false, recargando: false, ventana: Date.now() + VENTANA_MS, ocultoDesde: 0 };
+  var habiaControlador = !!(sw && sw.controller);
+  var frases = FR_CARGA, idx = 1, rot = null, abandono = null;
+
+  function pintar() { txt.textContent = frases[idx++ % frases.length]; }
+  function mostrar(modoAct) {
+    el.classList.remove('fuera');
+    el.classList.toggle('actualizando', !!modoAct);
+    frases = modoAct ? FR_ACT : FR_CARGA; idx = 0; pintar();
+    clearInterval(rot); rot = setInterval(pintar, 2200);
+  }
+  function ocultar() { el.classList.add('fuera'); clearInterval(rot); }
+  function intentarOcultar() { if (S.listo && S.revisado && !S.actualizando) ocultar(); }
+
+  // Texto escrito sin guardar en la pantalla visible: ahí no se recarga solo,
+  // queda el toast de app.js y el usuario decide.
+  function hayTrabajo() {
+    var a = document.activeElement;
+    if (a && a !== document.body && (a.isContentEditable ? a.textContent.trim() : /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.value)) return true;
+    var campos = document.querySelectorAll('textarea,input[type=text],input[type=tel],input[type=email]');
+    for (var k = 0; k < campos.length; k++) {
+      var c = campos[k];
+      if (c.value && c.value.trim() && c.offsetParent !== null) return true;
+    }
+    return false;
+  }
+
+  function abandonar() {
+    clearTimeout(abandono);
+    S.actualizando = false; frases = FR_CARGA; idx = 0;
+    el.classList.remove('actualizando');
+    intentarOcultar();
+  }
+  function entrarActualizacion() {
+    if (S.actualizando || S.recargando) return;
+    if (S.listo && hayTrabajo()) return;
+    S.actualizando = true; mostrar(true);
+    clearTimeout(abandono); abandono = setTimeout(abandonar, TOPE_ACTUALIZAR_MS);
+  }
+  function recargar() {
+    var ult = 0;
+    try { ult = +sessionStorage.getItem('lotus_boot_recarga') || 0; } catch (e) {}
+    if (Date.now() - ult < 60000) return; // anti-bucle: si ya recargó hace poco, que avise el toast
+    try { sessionStorage.setItem('lotus_boot_recarga', String(Date.now())); } catch (e) {}
+    S.recargando = true; S.actualizando = true; mostrar(true);
+    setTimeout(function () { location.reload(); }, 600);
+  }
+
+  // reg.update() obliga a mirar sw.js en el servidor (el navegador solo lo hace
+  // solo cada ~24 h). Si hay versión nueva, el SW instala y toma control
+  // (skipWaiting + clients.claim en sw.js) y eso dispara controllerchange.
+  function revisar() {
+    if (!sw || !sw.controller) return Promise.resolve(false);
+    var tope = new Promise(function (r) { setTimeout(function () { r(false); }, TOPE_CHEQUEO_MS); });
+    var upd = sw.getRegistration().then(function (reg) {
+      if (!reg) return false;
+      return reg.update().then(function () {
+        var w = reg.installing || reg.waiting;
+        if (!w) return false;
+        w.addEventListener('statechange', function () { if (w.state === 'redundant') abandonar(); });
+        entrarActualizacion();
+        return true;
+      });
+    }).catch(function () { return false; });
+    return Promise.race([upd, tope]);
+  }
+
+  if (sw) sw.addEventListener('controllerchange', function () {
+    if (!habiaControlador || S.recargando) return; // primera instalación: nada que actualizar
+    if (!S.actualizando && Date.now() > S.ventana) return; // sesión en curso: avisa el toast de app.js
+    if (S.listo && !S.actualizando && hayTrabajo()) return;
+    recargar();
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { S.ocultoDesde = Date.now(); return; }
+    var ausente = S.ocultoDesde && Date.now() - S.ocultoDesde > AUSENCIA_MS;
+    S.ocultoDesde = 0;
+    if (!ausente) return;
+    S.ventana = Date.now() + VENTANA_MS;
+    // El aviso pudo quedar esperando mientras la pestaña estaba oculta.
+    if (document.getElementById('update-toast') && !hayTrabajo()) { recargar(); return; }
+    revisar();
+  });
+
+  window.LotusBoot = {
+    listo: function () { S.listo = true; intentarOcultar(); },
+    get recargando() { return S.recargando; }
+  };
+
+  mostrar(false);
+  revisar().then(function () { S.revisado = true; intentarOcultar(); });
+  // Red de seguridad: si app.js nunca avisa (error de arranque), no dejar el splash tapando todo.
+  setTimeout(function () { if (!S.actualizando) { S.listo = true; S.revisado = true; ocultar(); } }, TOPE_SPLASH_MS);
+})();
+</script>
 <!-- Pantalla de acceso -->
 <div id="login">
   <form id="loginForm" class="login-card">
