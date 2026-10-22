@@ -3451,11 +3451,12 @@ function abrirPostventa(c, accionInicial = null) {
       <div class="csub">La etapa se actualiza sola según pagos, servicios y fechas; «Cambiar» la fija a mano.</div>
       <div class="rs-sec">Checklist <span>Las marcas «Auto» las pone el sistema</span></div>
       <div class="pv-doc-grid rs-chk-box">${Object.entries(PV_DOCS).map(([k, t]) => pvChkFila(k, t, docs)).join('')}</div>
-      <div class="rs-sec">Seguimiento</div>
-      <label class="fl" for="pv-e-seguimiento">Próxima acción</label><input class="ei" id="pv-e-seguimiento" type="datetime-local" value="${pvDateTimeInput(c.proximo_seguimiento_at)}">
-      <div class="rs-quick">${[['1', 'Mañana'], ['3', 'En 3 días'], ['lun', 'Lunes'], ['0', 'Quitar']].map(([k, t]) => `<button class="rs-q" type="button" data-pv-seg="${k}">${t}</button>`).join('')}</div>
-      <label class="fl" for="pv-e-notas">Notas internas</label><textarea class="ei" id="pv-e-notas" rows="3" placeholder="Acuerdos, pendientes y próximo paso...">${esc(c.notas || '')}</textarea>
-      <details class="rs-mas"><summary>Más: prioridad, satisfacción, incidencia y datos del proveedor</summary><div class="rs-mas-body">
+      <details class="rs-mas"><summary>Más: seguimiento, notas, prioridad, satisfacción, incidencia y proveedor</summary><div class="rs-mas-body">
+        <div class="rs-sec">Seguimiento</div>
+        <label class="fl" for="pv-e-seguimiento">Próxima acción</label><input class="ei" id="pv-e-seguimiento" type="datetime-local" value="${pvDateTimeInput(c.proximo_seguimiento_at)}">
+        <div class="rs-quick">${[['1', 'Mañana'], ['3', 'En 3 días'], ['lun', 'Lunes'], ['0', 'Quitar']].map(([k, t]) => `<button class="rs-q" type="button" data-pv-seg="${k}">${t}</button>`).join('')}</div>
+        <label class="fl" for="pv-e-notas">Notas internas</label><textarea class="ei" id="pv-e-notas" rows="3" placeholder="Acuerdos, pendientes y próximo paso...">${esc(c.notas || '')}</textarea>
+        <div class="rs-sec">Otros datos</div>
         <div class="rs-grid2">
           <div><label class="fl" for="pv-e-prioridad">Prioridad</label><select class="ei" id="pv-e-prioridad">${opt({ BAJA: 'Baja', NORMAL: 'Normal', ALTA: 'Alta', URGENTE: 'Urgente' }, c.prioridad)}</select></div>
           <div><label class="fl" for="pv-e-satisfaccion">Satisfacción (postviaje)</label><select class="ei" id="pv-e-satisfaccion"><option value="">Sin medir</option>${[1, 2, 3, 4, 5].map(n => `<option value="${n}" ${Number(c.satisfaccion) === n ? 'selected' : ''}>${n} / 5</option>`).join('')}</select></div>
