@@ -1225,6 +1225,43 @@ html input[type=date]::-webkit-calendar-picker-indicator{display:none}
 .ef-cal-g button.sel{background:var(--accent);color:var(--on-accent);font-weight:700}
 .ef-cal button:disabled{opacity:.3;cursor:default}
 .ef-cal-f{display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line2)}
+/* Lista propia de los <select> (selLotusAbrir en app.js). Escritorio: popover bajo el campo; ≤760px: hoja inferior. */
+.sel-lotus{position:fixed;z-index:9999;display:flex;flex-direction:column;min-width:180px;max-width:360px;max-height:320px;padding:6px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.5);opacity:0;transform:translateY(-4px) scale(.98);transform-origin:top center;transition:opacity var(--dur-rapida) var(--ease-salida),transform var(--dur-rapida) var(--ease-salida)}
+.sel-lotus.arriba{transform-origin:bottom center;transform:translateY(4px) scale(.98)}
+.sel-lotus.abierta{opacity:1;transform:none}
+.sel-lotus:not(.abierta){pointer-events:none}
+.sel-lotus-ops{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:2px;overflow-y:auto;overscroll-behavior:contain}
+.sel-lotus-op{display:flex;align-items:center;gap:10px;flex:0 0 auto;width:100%;min-height:34px;padding:7px 10px;border:0;border-radius:8px;background:none;color:var(--txt);font:inherit;font-size:13px;text-align:left;cursor:pointer;transition:background var(--dur-rapida),color var(--dur-rapida)}
+.sel-lotus.abierta .sel-lotus-op{animation:selLotusOp var(--dur-normal) var(--ease-salida) both;animation-delay:calc(var(--i) * 18ms)}
+@keyframes selLotusOp{from{opacity:0;transform:translateY(-3px)}}
+.sel-lotus-op span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sel-lotus-op i{font-size:11px;color:var(--accent-ink);opacity:0;transform:scale(.6);transition:opacity var(--dur-rapida),transform var(--dur-rapida) var(--ease-salida)}
+.sel-lotus-op.activa{background:rgba(var(--ink-rgb),.06)}
+.sel-lotus-op.sel{color:var(--accent-ink);font-weight:700;background:var(--accent-soft)}
+.sel-lotus-op.sel.activa{background:rgba(var(--accent-rgb),.22)}
+.sel-lotus-op.sel i{opacity:1;transform:none}
+.sel-lotus-op:disabled{opacity:.4;cursor:default}
+.sel-lotus-op[hidden],.sel-lotus-grupo[hidden],.sel-lotus-vacio[hidden]{display:none}
+.sel-lotus-grupo{flex:0 0 auto;padding:8px 10px 4px;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.sel-lotus .sel-lotus-buscar{flex:0 0 auto;width:100%;height:34px;margin:0 0 6px;padding:0 10px;background:var(--bg2);border:1px solid var(--line2);border-radius:8px;color:var(--txt);font:inherit;font-size:12.5px;outline:none;box-shadow:none}
+.sel-lotus .sel-lotus-buscar:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.sel-lotus-vacio{padding:10px;font-size:12.5px;color:var(--muted)}
+:root[data-theme="light"] .sel-lotus{box-shadow:0 16px 40px rgba(var(--ink-rgb),.12)}
+@media(max-width:760px){
+  .sel-lotus-velo{position:fixed;inset:0;z-index:9998;background:rgba(4,6,12,.6);backdrop-filter:blur(3px);opacity:0;transition:opacity var(--dur-normal)}
+  .sel-lotus-velo.abierta{opacity:1}
+  .sel-lotus.sel-lotus-hoja{left:0;right:0;bottom:0;top:auto;min-width:0;max-width:none;max-height:72vh;padding:8px 14px calc(14px + var(--safe-b));background:var(--bg2);border-bottom:none;border-radius:20px 20px 0 0;box-shadow:0 -20px 50px rgba(0,0,0,.45);opacity:1;transform:translateY(100%);transition:transform var(--dur-hoja) var(--ease-salida)}
+  .sel-lotus.sel-lotus-hoja.abierta{transform:none}
+  .sel-lotus-hoja::before{content:'';flex:0 0 auto;align-self:center;width:38px;height:4px;margin:2px 0 10px;border-radius:999px;background:var(--line2)}
+  .sel-lotus-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 4px 10px}
+  .sel-lotus-cab b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}
+  .sel-lotus-cerrar{flex:0 0 auto;width:44px;height:44px;margin:-6px -8px -6px 0;border:0;border-radius:12px;background:none;color:var(--muted);font-size:16px;cursor:pointer}
+  .sel-lotus-hoja .sel-lotus-op{min-height:48px;padding:12px 14px;border-radius:12px;font-size:15px}
+  .sel-lotus-hoja .sel-lotus-op i{font-size:13px}
+  .sel-lotus-hoja .sel-lotus-buscar{height:44px;margin-bottom:8px;border-radius:12px;font-size:16px}
+  :root[data-theme="light"] .sel-lotus-velo{background:rgba(15,23,42,.36)}
+  :root[data-theme="light"] .sel-lotus.sel-lotus-hoja{box-shadow:0 -20px 50px rgba(var(--ink-rgb),.1)}
+}
 .ef-agregar{margin-bottom:4px}
 .ef-agregar .ef-tipo{min-width:0;flex:0 1 auto;padding:7px 11px}
 /* Sub-pestaña "En facturación" de Leads */
@@ -1989,7 +2026,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 @media(max-width:1099px){.pagos-tablero{grid-template-columns:1fr}}
 
 /* ---------- Cotizador IA ---------- */
-.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 180px);height:calc(100dvh - 180px);min-height:420px}
+.chat-wrap{display:flex;flex-direction:column;height:calc(100vh - 105px);height:calc(100dvh - 105px);min-height:420px}
 .chat-toolbar{display:flex;gap:8px;flex-shrink:0;margin-bottom:10px}
 .chat-tool-btn{display:flex;align-items:center;gap:6px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:7px 12px;color:var(--muted);font-size:12px;font-family:inherit;cursor:pointer;transition:color .15s,border-color .15s}
 .chat-tool-btn:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
@@ -2320,7 +2357,7 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
 /* Meta DM (Instagram / Facebook / WhatsApp): lista | chat | ficha (3 columnas en escritorio).
    Los colores de cada app son marca ajena: viven como tokens de este bloque, con
    su variante clara, y solo se usan en pestañas, avatares, barra y área de chat. */
-.dm-shell{position:relative;display:grid;grid-template-columns:320px minmax(0,1fr) 300px;gap:14px;height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:520px;
+.dm-shell{position:relative;display:grid;grid-template-columns:320px minmax(0,1fr) 300px;gap:14px;height:calc(100vh - 75px);height:calc(100dvh - 75px);min-height:520px;
   --ig-degradado:linear-gradient(135deg,#7638fa,#d300c5 52%,#ff0069); --ig:#d300c5; --ig-ajena:#262626;
   --fb:#0866ff; --fb-burbuja:linear-gradient(160deg,#00b2ff,#006aff); --fb-ajena:#303030;
   --ajena-txt:#f5f5f5;
@@ -2625,13 +2662,6 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
    secciones. El alto de .correo-layout (calc(100vh - Npx)) descuenta este
    stack: padding main + topbar + padding card + toolbar + carpetas. */
 @media(min-width:761px){
-  .main.en-correo{padding:12px 20px 10px}
-  .main.en-correo .topbar{gap:12px;margin:-4px 0 8px;padding:4px 0 6px}
-  .main.en-correo .topbar>div:first-child{display:flex;align-items:baseline;flex:0 1 auto;gap:10px;min-width:0}
-  .main.en-correo .topbar h1{font-size:20px;letter-spacing:-.4px;white-space:nowrap}
-  .main.en-correo .topbar .sub{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .main.en-correo .topbar-help-btn{padding:6px 12px;border-radius:9px;font-size:12px;box-shadow:none}
-  .main.en-correo .pill{padding:6px 11px;border-radius:9px;font-size:12px}
   #sec-correo>.card{padding:12px 14px}
   .main.en-correo .foot-note{display:none}
 }
@@ -2639,13 +2669,6 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
 /* Facturación aprovecha la ventana como Correo: cabecera compacta, sin tope de
    ancho, KPIs globales en una sola fila baja y más columnas de tarjetas. */
 @media(min-width:761px){
-  .main.en-facturacion{padding:12px 20px 10px;max-width:none}
-  .main.en-facturacion .topbar{gap:12px;margin:-4px 0 8px;padding:4px 0 6px}
-  .main.en-facturacion .topbar>div:first-child{display:flex;align-items:baseline;flex:0 1 auto;gap:10px;min-width:0}
-  .main.en-facturacion .topbar h1{font-size:20px;letter-spacing:-.4px;white-space:nowrap}
-  .main.en-facturacion .topbar .sub{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .main.en-facturacion .topbar-help-btn{padding:6px 12px;border-radius:9px;font-size:12px;box-shadow:none}
-  .main.en-facturacion .pill{padding:6px 11px;border-radius:9px;font-size:12px}
   .main.en-facturacion .foot-note{display:none}
   #sec-facturacion .lt-kpis{gap:10px;margin-bottom:8px}
   #sec-facturacion .lt-kpis .kpi{padding:10px 14px}
@@ -4010,8 +4033,20 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 
 @media(min-width:761px){
   .app{grid-template-columns:272px minmax(0,1fr)}
-  .main{max-width:1800px;padding:28px 36px 46px}
-  .topbar{position:sticky;top:0;margin:-8px 0 22px;padding:14px 0 16px;background:linear-gradient(180deg,rgba(7,11,18,.97) 72%,rgba(7,11,18,0))}
+  /* Cabecera y KPIs compactos en todo el CRM (antes solo Facturación/Correo):
+     título y subtítulo en una línea, botones bajos y sin tope de ancho. */
+  .main{max-width:none;padding:12px 20px 10px}
+  .topbar{position:sticky;top:0;gap:12px;margin:-4px 0 8px;padding:4px 0 6px;background:linear-gradient(180deg,rgba(7,11,18,.97) 72%,rgba(7,11,18,0))}
+  .main .topbar>div:first-child{display:flex;align-items:baseline;flex:0 1 auto;gap:10px;min-width:0}
+  .main .topbar h1{font-size:20px;letter-spacing:-.4px;white-space:nowrap}
+  .main .topbar .sub{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .main .topbar-help-btn{padding:6px 12px;border-radius:9px;font-size:12px;box-shadow:none}
+  .main .pill{padding:6px 11px;border-radius:9px;font-size:12px}
+  .kpis{gap:10px;margin-bottom:8px}
+  .kpi{padding:10px 14px}
+  .kpi .kt i{width:22px;height:22px;font-size:11px}
+  .kpi .kv{font-size:22px;margin-top:6px}
+  .kpi::after{right:-24px;top:-28px;width:90px;height:90px}
 }
 @media(max-width:1100px){.pv-kpis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:760px){
@@ -5431,12 +5466,97 @@ body.fsize-grande{--tap:41.9px}
 .post-grupo:first-child{margin-top:0}
 .post-grupo b{font-size:11px;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink)}
 .post-grupo::after{content:"";flex:1;height:1px;background:var(--line)}
-.post-filtros{align-items:center}
-.post-filtros-sep{width:1px;align-self:stretch;background:var(--line2)}
-.post-edad{display:inline-flex;align-items:center;gap:4px}
-.post-edad-lbl{font-size:12px;color:var(--muted)}
-.post-edad .flt{width:78px}
+/* Postulaciones (2026-10-22): barra de búsqueda/acciones + filtros agrupados en
+   «Perfil» y «Seguimiento». Cada selector lleva su rótulo arriba y se pinta con
+   el acento cuando tiene un valor elegido, así se ve de un vistazo qué filtra. */
+.post-barra{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
+.post-buscar{display:flex;align-items:center;gap:8px;flex:0 1 300px;min-width:200px;height:40px;padding:0 12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--muted);cursor:text}
+.post-buscar:focus-within{border-color:var(--accent)}
+.post-buscar input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--txt);font:inherit;font-size:13px}
+.post-barra-acc{display:flex;gap:8px;margin-left:auto}
+.post-barra .btn-sm{min-height:40px;display:inline-flex;align-items:center;gap:6px}
+.post-cv-btn{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.post-filtros{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin-bottom:10px}
+.pf-grupo{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px;background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:12px}
+.pf-grupo-t{display:inline-flex;align-items:center;gap:6px;padding:0 6px 0 4px;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.pf-grupo-t i{color:var(--accent)}
+.pf-campo{position:relative;display:inline-flex;flex-direction:column;justify-content:center;gap:1px;min-width:118px;height:40px;padding:0 28px 0 10px;background:var(--panel);border:1px solid var(--line);border-radius:9px;cursor:pointer;transition:border-color .15s,background .15s}
+.pf-campo:hover{border-color:var(--line2)}
+.pf-campo::after{content:'';position:absolute;right:11px;top:50%;width:6px;height:6px;margin-top:-5px;border-right:1.6px solid var(--muted);border-bottom:1.6px solid var(--muted);transform:rotate(45deg);pointer-events:none}
+.pf-l{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);line-height:1.1;white-space:nowrap}
+.pf-campo select{appearance:none;-webkit-appearance:none;width:100%;min-height:0;height:auto;padding:0;margin:0;background:none;border:0;outline:0;box-shadow:none;color:var(--txt);font:inherit;font-size:12.5px;font-weight:600;line-height:1.3;cursor:pointer;text-overflow:ellipsis}
+.pf-campo select option{background:var(--bg2);color:var(--txt)}
+.pf-campo:focus-within{border-color:var(--accent)}
+.pf-campo:has(option:checked:not([value=""])),.pf-edad:has(input:not(:placeholder-shown)){border-color:var(--accent);background:var(--accent-soft)}
+.pf-campo:has(option:checked:not([value=""])) .pf-l,.pf-edad:has(input:not(:placeholder-shown)) .pf-l{color:var(--accent-ink)}
+.post-barra .pf-campo:has(#post-orden){background:var(--panel);border-color:var(--line)}
+.post-barra .pf-campo:has(#post-orden) .pf-l{color:var(--muted)}
+.pf-ancho{min-width:190px;max-width:260px}
+.pf-edad{padding-right:10px;cursor:default}.pf-edad::after{display:none}
+.pf-edad-in{display:flex;align-items:center;gap:4px}
+.pf-edad-in b{color:var(--muted2);font-weight:400}
+.pf-edad input{width:44px;padding:0;background:none;border:0;outline:0;color:var(--txt);font:inherit;font-size:12.5px;font-weight:600;-moz-appearance:textfield}
+.pf-edad input::-webkit-inner-spin-button,.pf-edad input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.pf-toggle{display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 12px;background:var(--panel);border:1px solid var(--line);border-radius:9px;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap}
+.pf-toggle input{accent-color:var(--accent);width:15px;height:15px;margin:0}
+.pf-toggle:has(input:checked){border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+.pf-limpiar{align-self:center}
 #post-f-limpiar:disabled{opacity:.5;cursor:default}
+.post-pie{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:8px}
+.post-pie .pf-toggle{height:32px;padding:0 10px;font-size:12px}
+.post-pie-txt{font-size:12px;color:var(--muted)}
+.post-pie-txt #post-resumen{color:var(--txt);font-weight:700}
+.post-filtros-btn{display:none}
+/* Escritorio (2026-10-22, v2): una sola barra. «Filtros (n)» abre los grupos
+   Perfil/Seguimiento en un popover; lo puesto se ve como chips debajo, y los
+   KPIs son pestañas finas en la cabecera de la card (filtran al tocarlas). */
+@media(min-width:761px){
+  .post-barra{margin-bottom:10px}
+  .post-filtros-dd{position:relative}
+  .post-filtros-btn{display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 13px;background:var(--panel);border:1px solid var(--line);border-radius:9px;color:var(--txt);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .15s,background .15s}
+  .post-filtros-btn:hover,.post-filtros-btn[aria-expanded="true"]{border-color:var(--line2)}
+  .post-filtros-btn i{color:var(--muted)}
+  .post-filtros-btn b:empty{display:none}
+  .post-filtros-btn b{display:inline-block;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--accent);color:#1a1000;font-size:11px;line-height:18px;text-align:center}
+  .post-filtros-btn.con-filtros{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+  .post-filtros-btn.con-filtros i{color:var(--accent-ink)}
+  .post-filtros{display:none}
+  .post-filtros.pf-abierto{display:grid;grid-template-columns:1fr 1fr;gap:14px;position:absolute;top:calc(100% + 6px);left:0;z-index:30;width:520px;max-width:calc(100vw - 48px);padding:14px;background:var(--bg2);border:1px solid var(--line2);border-radius:14px;box-shadow:0 18px 44px rgba(0,0,0,.45)}
+  .post-filtros .pf-grupo{flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:6px;padding:0;background:none;border:0;border-radius:0}
+  .post-filtros .pf-grupo-t{padding:0 2px 2px}
+  .post-filtros .pf-campo,.post-filtros .pf-ancho,.post-filtros .pf-toggle{width:100%;min-width:0;max-width:none}
+  .post-filtros .pf-pie{grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+  .post-filtros .mfs-done{display:inline-flex;align-items:center;min-height:34px;padding:0 16px;background:var(--accent);border:0;border-radius:9px;color:#1a1000;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+  .post-chips:not(:empty){margin:-2px 0 10px}
+  .post-card{padding-top:10px}
+  .post-tabs{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+  .post-tabs .post-pie{margin:0 0 0 auto}
+  .post-pie-origen{display:none}
+  #post-kpis.kpis{display:inline-flex;flex-wrap:wrap;gap:2px;margin:0;padding:3px;background:var(--panel);border:1px solid var(--line);border-radius:11px}
+  #post-kpis .kpi{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;background:none;border:0;border-radius:8px;box-shadow:none;overflow:visible;animation:none;transform:none}
+  #post-kpis .kpi::after,#post-kpis .kpi .kd,#post-kpis .kpi .kgo{display:none}
+  #post-kpis .kpi .kt{gap:6px;font-size:12.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--muted);white-space:nowrap}
+  #post-kpis .kpi .kt i{width:auto;height:auto;background:none;color:var(--kc);font-size:11px;opacity:1}
+  #post-kpis .kpi .kv{margin:0;padding:1px 7px;border-radius:999px;background:var(--line);color:var(--txt);font-size:11.5px;font-weight:700;letter-spacing:0}
+  #post-kpis .kpi:hover{background:var(--line)}
+  #post-kpis .kpi.kpi-on{background:var(--accent-soft)}
+  #post-kpis .kpi.kpi-on .kt{color:var(--accent-ink)}
+  #post-kpis .kpi.kpi-on .kv{background:var(--accent);color:#1a1000}
+  :root[data-theme="light"] .post-filtros.pf-abierto{box-shadow:0 18px 44px rgba(var(--ink-rgb),.12)}
+}
+@media(max-width:760px){
+  .post-chips{display:none}
+  .post-barra .post-buscar{flex:1 1 100%}
+  .post-barra .post-filtros-dd{flex:1 1 100%}
+  .post-barra .mfs-trigger{margin-bottom:0;flex:1 1 100%}
+  .pf-pie{display:flex;flex-direction:column;gap:8px}
+  .post-barra-acc{margin-left:0;flex:1 1 100%}.post-barra-acc .btn-sm{flex:1;justify-content:center}
+  .mfs.post-filtros{flex-direction:column}
+  .pf-grupo{flex-direction:column;align-items:stretch}
+  .pf-grupo-t{padding:4px 2px}
+  .pf-campo,.pf-ancho,.pf-toggle{max-width:none;width:100%;height:50px}
+  .pf-campo select,.pf-edad input,.post-buscar input{font-size:16px}
+}
 /* Ficha: acciones de contacto fijas bajo el nombre (la cabecera ya es sticky). */
 #post-d-body .pf-head{flex-wrap:wrap}
 .post-d-rapidas{flex-basis:100%;display:flex;gap:7px;flex-wrap:wrap;padding-bottom:11px}
@@ -7495,70 +7615,90 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="gp-tab-panel" data-gp-panel="postulaciones" style="display:none">
         <!-- Trigger + panel fuera de .card -- ver comentario igual en el
              panel de Ventas (backdrop-filter de .card rompe position:fixed). -->
-        <button class="mfs-trigger mfs-icon" data-mfs="post-filtros" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
-        <div class="mfs post-filtros" id="post-filtros" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-          <select class="flt" id="post-orden" aria-label="Ordenar">
-            <option value="calificacion">Orden: mejor calificación</option>
-            <option value="reciente">Orden: más recientes</option>
-            <option value="antigua">Orden: más antiguas</option>
-            <option value="experiencia">Orden: más experiencia</option>
-          </select>
-          <label class="tar-f-check"><input type="checkbox" id="post-agrupar"> Agrupar por cargo</label>
-          <span class="post-filtros-sep" aria-hidden="true"></span>
-          <select class="flt" id="post-f-cargo" aria-label="Cargo"><option value="">Todos los cargos</option></select>
-          <select class="flt" id="post-f-genero" aria-label="Género">
-            <option value="">Cualquier género</option>
-            <option value="femenino">Femenino</option>
-            <option value="masculino">Masculino</option>
-            <option value="otro">Otro</option>
-            <option value="sin_dato">Sin dato</option>
-          </select>
-          <span class="post-edad" role="group" aria-label="Rango de edad">
-            <span class="post-edad-lbl">Edad</span>
-            <input class="flt" id="post-f-edad-min" type="number" min="14" max="99" placeholder="desde" aria-label="Edad desde">
-            <input class="flt" id="post-f-edad-max" type="number" min="14" max="99" placeholder="hasta" aria-label="Edad hasta">
-          </span>
-          <select class="flt" id="post-f-foto" aria-label="Foto">
-            <option value="">Con y sin foto</option>
-            <option value="con">Con foto</option>
-            <option value="sin">Sin foto</option>
-          </select>
-          <select class="flt" id="post-f-modalidad">
-            <option value="">Todas las modalidades</option>
-            <option value="presencial">Presencial</option>
-            <option value="freelance">Freelance</option>
-            <option value="formacion">Formación Asesor Integral</option>
-          </select>
-          <select class="flt" id="post-f-llamada">
-            <option value="">Cualquier estado de llamada</option>
-            <option value="pendiente">Pendiente de llamar</option>
-            <option value="llamado">Llamado</option>
-          </select>
-          <select class="flt" id="post-f-calidad">
-            <option value="">Cualquier calificación</option>
-            <option value="sin_calificar">Sin calificar</option>
-            <option value="excelente">Excelente</option>
-            <option value="bueno">Bueno</option>
-            <option value="debil">Débil</option>
-            <option value="descartado">Descartado</option>
-          </select>
-          <label class="tar-f-check"><input type="checkbox" id="post-f-sin-revisar"> Solo sin revisar</label>
-          <button class="btn-sm" type="button" id="post-f-limpiar" disabled>Sin filtros</button>
-          <button class="btn-sm" type="button" id="post-reanalizar-todas" style="margin-left:auto" title="Vuelve a evaluar todos los CVs guardados con el criterio actual. No toca los datos de contacto."><i class="fas fa-wand-magic-sparkles"></i> Re-analizar todas</button>
-          <button class="mfs-done" data-mfs="post-filtros" type="button">Listo</button>
+        <!-- Una sola barra: buscar · Filtros (popover en escritorio, hoja .mfs
+             en móvil) · Ordenar · Agrupar · Cargar CV · ⋯. Los filtros puestos
+             se ven como chips debajo; los KPIs son pestañas dentro de la card. -->
+        <div class="post-barra">
+          <label class="post-buscar"><i class="fas fa-magnifying-glass"></i><input id="post-search" type="search" placeholder="Buscar nombre o teléfono…" aria-label="Buscar postulación"></label>
+          <div class="post-filtros-dd">
+          <button class="post-filtros-btn" id="post-filtros-btn" type="button" aria-expanded="false" aria-controls="post-filtros"><i class="fas fa-sliders"></i> Filtros <b id="post-filtros-n"></b></button>
+          <button class="mfs-trigger mfs-icon" data-mfs="post-filtros" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
+        <div class="mfs post-filtros" id="post-filtros" role="dialog" aria-label="Filtros de postulaciones">
+          <div class="pf-grupo" role="group" aria-label="Perfil del candidato">
+            <span class="pf-grupo-t"><i class="fas fa-user"></i> Perfil</span>
+            <label class="pf-campo pf-ancho"><span class="pf-l">Cargo</span><select id="post-f-cargo"><option value="">Todos</option></select></label>
+            <label class="pf-campo"><span class="pf-l">Modalidad</span><select id="post-f-modalidad">
+              <option value="">Todas</option>
+              <option value="presencial">Presencial</option>
+              <option value="freelance">Freelance</option>
+              <option value="formacion">Formación Asesor Integral</option>
+            </select></label>
+            <label class="pf-campo"><span class="pf-l">Género</span><select id="post-f-genero">
+              <option value="">Todos</option>
+              <option value="femenino">Femenino</option>
+              <option value="masculino">Masculino</option>
+              <option value="otro">Otro</option>
+              <option value="sin_dato">Sin dato</option>
+            </select></label>
+            <span class="pf-campo pf-edad" role="group" aria-label="Rango de edad"><span class="pf-l">Edad</span>
+              <span class="pf-edad-in"><input id="post-f-edad-min" type="number" min="14" max="99" placeholder="desde" aria-label="Edad desde"><b>–</b><input id="post-f-edad-max" type="number" min="14" max="99" placeholder="hasta" aria-label="Edad hasta"></span></span>
+            <label class="pf-campo"><span class="pf-l">Foto</span><select id="post-f-foto">
+              <option value="">Con y sin foto</option>
+              <option value="con">Con foto</option>
+              <option value="sin">Sin foto</option>
+            </select></label>
+          </div>
+          <div class="pf-grupo" role="group" aria-label="Seguimiento">
+            <span class="pf-grupo-t"><i class="fas fa-list-check"></i> Seguimiento</span>
+            <label class="pf-campo"><span class="pf-l">Calificación del CV</span><select id="post-f-calidad">
+              <option value="">Todas</option>
+              <option value="sin_calificar">Sin calificar</option>
+              <option value="excelente">Excelente</option>
+              <option value="bueno">Bueno</option>
+              <option value="debil">Débil</option>
+              <option value="descartado">Descartado</option>
+            </select></label>
+            <label class="pf-campo"><span class="pf-l">Llamada</span><select id="post-f-llamada">
+              <option value="">Todas</option>
+              <option value="pendiente">Pendiente de llamar</option>
+              <option value="llamado">Ya llamado</option>
+            </select></label>
+            <label class="pf-toggle"><input type="checkbox" id="post-f-sin-revisar"><span>Solo sin revisar</span></label>
+          </div>
+          <div class="pf-pie">
+            <button class="btn-sm pf-limpiar" type="button" id="post-f-limpiar" disabled>Sin filtros</button>
+            <button class="mfs-done" data-mfs="post-filtros" type="button">Listo</button>
+          </div>
         </div>
-        <div class="card">
-          <div class="chead-row">
-            <h2><i class="fas fa-address-card"></i> Postulaciones</h2>
-            <div style="display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap">
-              <input class="ei bt-buscar" id="post-search" type="search" style="max-width:240px" placeholder="Buscar nombre o teléfono..." aria-label="Buscar postulación">
-              <button class="btn-sm" type="button" id="post-cargar-cv"><i class="fas fa-file-arrow-up"></i> Cargar CV</button>
-              <input type="file" id="post-cv-input" accept="application/pdf" style="display:none">
+          </div>
+          <label class="pf-campo"><span class="pf-l">Ordenar</span>
+            <select id="post-orden" aria-label="Ordenar">
+              <option value="calificacion">Mejor calificación</option>
+              <option value="reciente">Más recientes</option>
+              <option value="antigua">Más antiguas</option>
+              <option value="experiencia">Más experiencia</option>
+            </select></label>
+          <label class="pf-toggle"><input type="checkbox" id="post-agrupar"><span>Agrupar por cargo</span></label>
+          <span class="post-barra-acc">
+            <button class="btn-sm post-cv-btn" type="button" id="post-cargar-cv"><i class="fas fa-file-arrow-up"></i> Cargar CV</button>
+            <input type="file" id="post-cv-input" accept="application/pdf" style="display:none">
+            <span class="export-dd">
+              <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'post')" aria-label="Más acciones" title="Más acciones"><i class="fas fa-ellipsis"></i></button>
+              <span class="export-dd-menu" id="export-menu-post">
+                <button type="button" id="post-reanalizar-todas" title="Vuelve a evaluar todos los CVs guardados con el criterio actual. No toca los datos de contacto."><i class="fas fa-wand-magic-sparkles"></i> Re-analizar todas</button>
+              </span>
+            </span>
+          </span>
+        </div>
+        <div class="chips-bar post-chips" id="post-chips"></div>
+        <div class="card post-card">
+          <div class="post-tabs">
+            <div class="kpis bt-kpis lt-kpis lt-kpis-4 post-kpis" id="post-kpis" role="group" aria-label="Vistas rápidas"></div>
+            <div class="post-pie">
+              <span class="post-pie-txt" title="Candidatos de «Trabaja con nosotros» y CVs cargados a mano"><span id="post-resumen"></span><span class="post-pie-origen"> · de «Trabaja con nosotros» y CVs cargados a mano</span></span>
+              <label class="pf-toggle"><input type="checkbox" id="post-th-select-all"><span>Seleccionar visibles</span></label>
             </div>
           </div>
-          <div class="csub">Candidatos de "Trabaja con nosotros" y CVs cargados a mano (los que llegan por correo) · <span id="post-resumen"></span></div>
-          <div class="kpis bt-kpis lt-kpis lt-kpis-4" id="post-kpis"></div>
-          <label class="tar-f-check lt-selec"><input type="checkbox" id="post-th-select-all"> Seleccionar las visibles</label>
           <div class="bulk-bar" id="post-bulk-bar" style="display:none;align-items:center;gap:10px;padding:10px 4px;margin-bottom:8px;background:#ef444414;border:1px solid #ef444433;border-radius:10px">
             <span id="post-bulk-count" style="font-size:13.5px;font-weight:600"></span>
             <button class="dbtn" id="post-bulk-clear" type="button" style="width:auto;padding:6px 12px">Cancelar selección</button>

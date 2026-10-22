@@ -10134,6 +10134,158 @@ document.addEventListener('scroll', e => { if (EF_CAL && !EF_CAL.el.contains(e.t
 window.addEventListener('resize', efCalCerrar);
 window.addEventListener('popstate', efCalCerrar);
 
+// Lista propia para TODOS los <select> del CRM: la nativa (blanca, resaltado azul de Windows, rueda de iOS)
+// no se puede estilar. El <select> sigue siendo el dueño del valor y de los eventos, nada cambia en el DOM:
+// solo se intercepta la apertura. ≤760px sale como hoja inferior. data-nativo lo excluye.
+let SEL_LOTUS = null, SEL_TOQUE = null;
+const selEsLotus = s => s instanceof HTMLSelectElement && !s.multiple && s.size <= 1 && !s.disabled && !s.hasAttribute('data-nativo');
+const selLotusDe = t => {
+  if (t instanceof HTMLSelectElement) return selEsLotus(t) ? t : null;
+  if (!(t instanceof Element) || t.closest('input,textarea,button,a')) return null;
+  const s = t.closest('.pf-campo')?.querySelector('select');
+  return s && selEsLotus(s) ? s : null;
+};
+const selNorm = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const selLotusTitulo = sel => {
+  const lab = sel.labels?.[0];
+  const t = lab ? [...lab.childNodes].filter(n => n !== sel && !n.contains?.(sel)).map(n => n.textContent).join(' ') : '';
+  return (t || sel.getAttribute('aria-label') || sel.title || '').replace(/\s+/g, ' ').replace(/[:*]\s*$/, '').trim() || 'Elegir una opción';
+};
+function selLotusCerrar() {
+  if (!SEL_LOTUS) return;
+  const { el, velo } = SEL_LOTUS; SEL_LOTUS = null;
+  el.classList.remove('abierta'); velo?.classList.remove('abierta');
+  setTimeout(() => { el.remove(); velo?.remove(); }, 340);
+}
+function selLotusActivar(op) {
+  SEL_LOTUS.el.querySelector('.sel-lotus-op.activa')?.classList.remove('activa');
+  if (!op) return;
+  op.classList.add('activa');
+  const ops = op.parentElement;
+  if (op.offsetTop < ops.scrollTop) ops.scrollTop = op.offsetTop;
+  else if (op.offsetTop + op.offsetHeight > ops.scrollTop + ops.clientHeight) ops.scrollTop = op.offsetTop + op.offsetHeight - ops.clientHeight;
+}
+const selLotusVisibles = () => [...SEL_LOTUS.el.querySelectorAll('.sel-lotus-op:not([hidden]):not(:disabled)')];
+function selLotusElegir(i) {
+  const { sel, velo } = SEL_LOTUS; selLotusCerrar();
+  // En la hoja no se re-enfoca: en iOS enfocar el <select> abre la rueda nativa encima.
+  if (!velo) sel.focus({ preventScroll: true });
+  if (sel.selectedIndex === i) return;
+  sel.selectedIndex = i;
+  sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true }));
+}
+function selLotusFiltrar(q) {
+  const el = SEL_LOTUS.el, n = selNorm(q.trim());
+  el.querySelectorAll('.sel-lotus-op').forEach(b => { b.hidden = !!n && !selNorm(b.textContent).includes(n); });
+  el.querySelectorAll('.sel-lotus-grupo').forEach(g => {
+    let s = g.nextElementSibling, alguna = false;
+    while (s && !s.classList.contains('sel-lotus-grupo')) { if (!s.hidden) alguna = true; s = s.nextElementSibling; }
+    g.hidden = !alguna;
+  });
+  const vis = selLotusVisibles();
+  el.querySelector('.sel-lotus-vacio').hidden = vis.length > 0;
+  selLotusActivar(vis[0]);
+}
+function selLotusAbrir(sel) {
+  selLotusCerrar(); efCalCerrar();
+  const hoja = matchMedia('(max-width:760px)').matches;
+  let ops = '', k = 0;
+  const op = o => o.hidden || o.style.display === 'none' ? '' : `<button type="button" role="option" class="sel-lotus-op${o.selected ? ' sel' : ''}" data-i="${o.index}" aria-selected="${o.selected}" style="--i:${Math.min(k++, 8)}"${o.disabled ? ' disabled' : ''}><span>${esc(o.text)}</span><i class="fas fa-check"></i></button>`;
+  for (const c of sel.children) {
+    if (c.tagName === 'OPTGROUP') ops += `<div class="sel-lotus-grupo">${esc(c.label)}</div>` + [...c.children].map(op).join('');
+    else if (c.tagName === 'OPTION') ops += op(c);
+  }
+  const buscar = sel.options.length > 12;
+  const el = document.createElement('div');
+  el.className = 'sel-lotus' + (hoja ? ' sel-lotus-hoja' : '');
+  el.innerHTML = (hoja ? `<div class="sel-lotus-cab"><b>${esc(selLotusTitulo(sel))}</b><button type="button" class="sel-lotus-cerrar" aria-label="Cerrar"><i class="fas fa-xmark"></i></button></div>` : '')
+    + (buscar ? '<input class="sel-lotus-buscar" type="search" placeholder="Buscar…" autocomplete="off" aria-label="Buscar opción">' : '')
+    + `<div class="sel-lotus-ops" role="listbox" aria-label="${esc(selLotusTitulo(sel))}">${ops}</div><div class="sel-lotus-vacio" hidden>Sin coincidencias</div>`;
+  let velo = null;
+  if (hoja) { velo = document.createElement('div'); velo.className = 'sel-lotus-velo'; document.body.appendChild(velo); }
+  document.body.appendChild(el);
+  SEL_LOTUS = { el, sel, velo, campo: sel.closest('.pf-campo'), letras: '', letrasT: 0 };
+  if (!hoja) {
+    // body{zoom}: igual que efCalAbrir, rect en px visuales y left/top en px CSS.
+    const z = parseFloat(getComputedStyle(document.body).zoom) || 1, r = (SEL_LOTUS.campo || sel).getBoundingClientRect();
+    el.style.minWidth = Math.max(180, r.width / z) + 'px';
+    const h = el.offsetHeight * z, w = el.offsetWidth * z, abajo = innerHeight - r.bottom - 14, arriba = r.top - 14;
+    const subir = h > abajo && arriba > abajo, cabe = subir ? arriba : abajo;
+    if (h > cabe) el.style.maxHeight = cabe / z + 'px';
+    el.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) / z + 'px';
+    el.style.top = (subir ? r.top - 6 - Math.min(h, cabe) : r.bottom + 6) / z + 'px';
+    el.classList.toggle('arriba', subir);
+  }
+  const lista = el.querySelector('.sel-lotus-ops'), elegida = lista.querySelector('.sel-lotus-op.sel');
+  if (elegida) lista.scrollTop = elegida.offsetTop - (lista.clientHeight - elegida.offsetHeight) / 2;
+  selLotusActivar(elegida || selLotusVisibles()[0]);
+  void el.offsetHeight;
+  requestAnimationFrame(() => { el.classList.add('abierta'); velo?.classList.add('abierta'); });
+  const caja = el.querySelector('.sel-lotus-buscar');
+  if (caja) { caja.addEventListener('input', () => selLotusFiltrar(caja.value)); if (!hoja) caja.focus({ preventScroll: true }); }
+  // Clics dentro de la lista no deben contar como "clic afuera" de popovers u hojas que la contienen.
+  ['pointerdown', 'mousedown', 'click'].forEach(t => el.addEventListener(t, e => e.stopPropagation()));
+  el.addEventListener('mousedown', e => { if (e.target !== caja) e.preventDefault(); });
+  el.addEventListener('mousemove', e => { const b = e.target.closest('.sel-lotus-op'); if (b && !b.disabled && !b.classList.contains('activa')) selLotusActivar(b); });
+  el.addEventListener('click', e => {
+    if (e.target.closest('.sel-lotus-cerrar')) { selLotusCerrar(); return; }
+    const b = e.target.closest('.sel-lotus-op'); if (b && !b.disabled) selLotusElegir(Number(b.dataset.i));
+  });
+  velo?.addEventListener('click', e => { e.stopPropagation(); if (SEL_LOTUS?.velo === velo) selLotusCerrar(); });
+}
+document.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  const s = selLotusDe(e.target); if (!s) return;
+  e.preventDefault();
+  if (SEL_LOTUS?.sel === s) { if (!SEL_LOTUS.velo) selLotusCerrar(); return; }
+  if (!matchMedia('(max-width:760px)').matches) s.focus({ preventScroll: true });
+  selLotusAbrir(s);
+}, true);
+// En pantalla táctil la rueda/lista nativa sale con el tap: se cancela en touchend (solo si fue tap, no scroll).
+document.addEventListener('touchstart', e => {
+  const s = selLotusDe(e.target), p = e.touches[0];
+  SEL_TOQUE = s ? { s, x: p.clientX, y: p.clientY } : null;
+}, { capture: true, passive: true });
+document.addEventListener('touchend', e => {
+  const q = SEL_TOQUE; SEL_TOQUE = null;
+  if (!q || selLotusDe(e.target) !== q.s) return;
+  const p = e.changedTouches[0]; if (Math.abs(p.clientX - q.x) > 10 || Math.abs(p.clientY - q.y) > 10) return;
+  e.preventDefault();
+  if (SEL_LOTUS?.sel !== q.s) selLotusAbrir(q.s);
+}, { capture: true, passive: false });
+document.addEventListener('pointerdown', e => {
+  if (!SEL_LOTUS || SEL_LOTUS.velo || SEL_LOTUS.el.contains(e.target) || e.target === SEL_LOTUS.sel || SEL_LOTUS.campo?.contains(e.target)) return;
+  selLotusCerrar();
+}, true);
+document.addEventListener('keydown', e => {
+  if (!SEL_LOTUS) {
+    const s = selLotusDe(e.target);
+    if (s && e.target === s && (e.key === ' ' || e.key === 'F4' || (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')))) { e.preventDefault(); selLotusAbrir(s); }
+    return;
+  }
+  const vis = selLotusVisibles(), act = SEL_LOTUS.el.querySelector('.sel-lotus-op.activa'), i = vis.indexOf(act);
+  const mover = j => { e.preventDefault(); selLotusActivar(vis[Math.max(0, Math.min(vis.length - 1, j))]); };
+  if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); const { sel, velo } = SEL_LOTUS; selLotusCerrar(); if (!velo) sel.focus({ preventScroll: true }); }
+  else if (e.key === 'ArrowDown') mover(i + 1);
+  else if (e.key === 'ArrowUp') mover(i < 0 ? 0 : i - 1);
+  else if (e.key === 'Home' && e.target === SEL_LOTUS.sel) mover(0);
+  else if (e.key === 'End' && e.target === SEL_LOTUS.sel) mover(vis.length - 1);
+  else if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); if (act) selLotusElegir(Number(act.dataset.i)); }
+  else if (e.key === 'Tab') selLotusCerrar();
+  else if (e.key === ' ' && e.target === SEL_LOTUS.sel) { e.preventDefault(); if (act) selLotusElegir(Number(act.dataset.i)); }
+  else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && e.target === SEL_LOTUS.sel) {
+    // Búsqueda por letra, como la lista nativa: teclear "ca" salta a "Caracas".
+    e.preventDefault();
+    const ahora = Date.now(); SEL_LOTUS.letras = (ahora - SEL_LOTUS.letrasT > 700 ? '' : SEL_LOTUS.letras) + selNorm(e.key); SEL_LOTUS.letrasT = ahora;
+    const ini = SEL_LOTUS.letras.length === 1 ? i + 1 : Math.max(i, 0);
+    const b = [...vis.slice(ini), ...vis.slice(0, ini)].find(o => selNorm(o.textContent.trim()).startsWith(SEL_LOTUS.letras));
+    if (b) selLotusActivar(b);
+  }
+}, true);
+document.addEventListener('scroll', e => { if (SEL_LOTUS && !SEL_LOTUS.velo && !SEL_LOTUS.el.contains(e.target)) selLotusCerrar(); }, true);
+window.addEventListener('resize', () => { if (SEL_LOTUS && !SEL_LOTUS.velo) selLotusCerrar(); });
+window.addEventListener('popstate', selLotusCerrar);
+
 (function () {
   const caja = document.getElementById('ef-agregar');
   if (!caja) return;
@@ -11494,7 +11646,7 @@ function poblarCargosPost() {
   if (!sel) return;
   const actual = sel.value, cuenta = {};
   postCache.forEach(p => { const c = postCargo(p); cuenta[c] = (cuenta[c] || 0) + 1; });
-  sel.innerHTML = '<option value="">Todos los cargos</option>' + Object.entries(cuenta).sort((a, b) => b[1] - a[1])
+  sel.innerHTML = '<option value="">Todos</option>' + Object.entries(cuenta).sort((a, b) => b[1] - a[1])
     .map(([c, n]) => `<option value="${esc(c)}"${c === actual ? ' selected' : ''}>${esc(c)} (${n})</option>`).join('');
 }
 const POST_ORDEN = {
@@ -11529,6 +11681,13 @@ function setupFiltrosPostulaciones() {
     .forEach(el => el.addEventListener('change', rerender));
   document.querySelectorAll('#post-f-edad-min,#post-f-edad-max').forEach(el => el.addEventListener('input', () => { clearTimeout(postSearchDeb); postSearchDeb = setTimeout(rerender, 300); }));
   document.getElementById('post-f-limpiar').addEventListener('click', limpiarFiltrosPost);
+  // Escritorio: «Filtros» abre los grupos en un popover; en móvil sigue la hoja .mfs.
+  const pop = document.getElementById('post-filtros'), popBtn = document.getElementById('post-filtros-btn');
+  const popAbrir = abrir => { pop.classList.toggle('pf-abierto', abrir); popBtn.setAttribute('aria-expanded', abrir); };
+  popBtn.addEventListener('click', e => { e.stopPropagation(); popAbrir(!pop.classList.contains('pf-abierto')); });
+  pop.querySelector('.mfs-done')?.addEventListener('click', () => popAbrir(false));
+  document.addEventListener('click', e => { if (pop.classList.contains('pf-abierto') && !pop.contains(e.target) && !popBtn.contains(e.target)) popAbrir(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && pop.classList.contains('pf-abierto')) { popAbrir(false); popBtn.focus(); } });
 }
 // Techo de filas visibles en el render (Fase 4 -- "100 facturas ≈ 1.000
 // filas visuales en móvil"). El FETCH sigue trayendo todo (postCache
@@ -11553,10 +11712,10 @@ function renderPostulaciones() {
     postMostrar = TECHO_LISTA; renderPostulaciones();
   };
   pintarKPIs('post-kpis', [
-    { key: 'todas', t: 'Postulaciones', v: fmt(base.length), d: 'ver todas', i: 'fa-address-card', c: 'var(--blue)', on: !fLlamada && !fCalidad && !soloSinRevisar, go: kpiIr('', '', false) },
-    { key: 'sin_revisar', t: 'Sin revisar', v: fmt(base.filter(p => !p.revisado).length), d: 'nadie abrió la ficha', i: 'fa-eye-slash', c: 'var(--accent)', on: soloSinRevisar && !fLlamada && !fCalidad, go: kpiIr('', '', true) },
-    { key: 'por_llamar', t: 'Por llamar', v: fmt(base.filter(p => p.estado_llamada === 'pendiente').length), d: 'pendientes de contacto', i: 'fa-phone', c: 'var(--amber)', on: fLlamada === 'pendiente' && !fCalidad && !soloSinRevisar, go: kpiIr('pendiente', '', false) },
-    { key: 'sin_calificar', t: 'Sin calificar', v: fmt(base.filter(p => !p.calidad_prospecto).length), d: 'falta evaluar el CV', i: 'fa-star-half-stroke', c: 'var(--purple)', on: fCalidad === 'sin_calificar' && !fLlamada && !soloSinRevisar, go: kpiIr('', 'sin_calificar', false) },
+    { key: 'todas', t: 'Todas', v: fmt(base.length), d: 'ver todas', tt: 'Todas las postulaciones', i: 'fa-address-card', c: 'var(--blue)', on: !fLlamada && !fCalidad && !soloSinRevisar, go: kpiIr('', '', false) },
+    { key: 'sin_revisar', t: 'Sin revisar', v: fmt(base.filter(p => !p.revisado).length), d: 'nadie abrió la ficha', tt: 'Nadie abrió la ficha', i: 'fa-eye-slash', c: 'var(--accent)', on: soloSinRevisar && !fLlamada && !fCalidad, go: kpiIr('', '', true) },
+    { key: 'por_llamar', t: 'Por llamar', v: fmt(base.filter(p => p.estado_llamada === 'pendiente').length), d: 'pendientes de contacto', tt: 'Pendientes de contacto', i: 'fa-phone', c: 'var(--amber)', on: fLlamada === 'pendiente' && !fCalidad && !soloSinRevisar, go: kpiIr('pendiente', '', false) },
+    { key: 'sin_calificar', t: 'Sin calificar', v: fmt(base.filter(p => !p.calidad_prospecto).length), d: 'falta evaluar el CV', tt: 'Falta evaluar el CV', i: 'fa-star-half-stroke', c: 'var(--purple)', on: fCalidad === 'sin_calificar' && !fLlamada && !soloSinRevisar, go: kpiIr('', 'sin_calificar', false) },
   ]);
   const filtered = base.filter(p => {
     if (fLlamada && p.estado_llamada !== fLlamada) return false;
@@ -11577,6 +11736,28 @@ function renderPostulaciones() {
   const activos = [f.q, f.modalidad, f.cargo, f.genero, f.foto, f.edadMin, f.edadMax, fLlamada, fCalidad, soloSinRevisar || null].filter(x => x != null && x !== '').length;
   const limpiar = document.getElementById('post-f-limpiar');
   if (limpiar) { limpiar.disabled = !activos; limpiar.textContent = activos ? `Limpiar filtros (${activos})` : 'Sin filtros'; }
+  // Chips de lo que filtra (la búsqueda no: ya se ve en su caja); cada ✕ quita solo ese.
+  const etq = id => document.getElementById(id)?.selectedOptions[0]?.textContent.replace(/\s*\(\d+\)$/, '') || '';
+  const otraVez = () => { postMostrar = TECHO_LISTA; renderPostulaciones(); };
+  const vaciar = (...ids) => () => { ids.forEach(id => { document.getElementById(id).value = ''; }); otraVez(); };
+  const chips = [];
+  if (f.cargo) chips.push(['Cargo: ' + etq('post-f-cargo'), vaciar('post-f-cargo')]);
+  if (f.modalidad) chips.push(['Modalidad: ' + etq('post-f-modalidad'), vaciar('post-f-modalidad')]);
+  if (f.genero) chips.push(['Género: ' + etq('post-f-genero'), vaciar('post-f-genero')]);
+  if (f.edadMin != null || f.edadMax != null) chips.push(['Edad: ' + (f.edadMin != null && f.edadMax != null ? `${f.edadMin}–${f.edadMax}` : f.edadMin != null ? `desde ${f.edadMin}` : `hasta ${f.edadMax}`), vaciar('post-f-edad-min', 'post-f-edad-max')]);
+  if (f.foto) chips.push([etq('post-f-foto'), vaciar('post-f-foto')]);
+  if (fCalidad) chips.push(['CV: ' + etq('post-f-calidad'), vaciar('post-f-calidad')]);
+  if (fLlamada) chips.push(['Llamada: ' + etq('post-f-llamada'), vaciar('post-f-llamada')]);
+  if (soloSinRevisar) chips.push(['Solo sin revisar', () => { chkSinRevisar.checked = false; otraVez(); }]);
+  const nFiltros = document.getElementById('post-filtros-n');
+  if (nFiltros) nFiltros.textContent = chips.length || '';
+  document.getElementById('post-filtros-btn')?.classList.toggle('con-filtros', chips.length > 0);
+  const chipsBox = document.getElementById('post-chips');
+  if (chipsBox) {
+    chipsBox.innerHTML = chips.length ? chips.map((c, i) => `<span class="fchip">${esc(c[0])} <b data-ci="${i}" title="Quitar">✕</b></span>`).join('') + '<button class="clear-all" type="button"><i class="fas fa-times"></i> Limpiar</button>' : '';
+    chipsBox.querySelectorAll('b[data-ci]').forEach(b => b.onclick = chips[b.dataset.ci][1]);
+    chipsBox.querySelector('.clear-all')?.addEventListener('click', limpiarFiltrosPost);
+  }
   const resumen = document.getElementById('post-resumen');
   if (resumen) resumen.textContent = `${fmt(filtered.length)} de ${fmt(postCache.length)} candidatos`;
   document.getElementById('post-empty').classList.toggle('show', filtered.length === 0);
@@ -12117,6 +12298,9 @@ async function reanalizarTodasLasPostulaciones() {
   const btn = document.getElementById('post-reanalizar-todas');
   const original = btn?.innerHTML;
   if (btn) btn.disabled = true;
+  // El botón vive en el menú ⋯ (que se cierra): el avance se repite en el ⋯.
+  const mas = btn?.closest('.export-dd')?.querySelector(':scope > .btn-sm');
+  const masOriginal = mas?.innerHTML;
   let ok = 0, fallos = [], cambios = 0, fotos = 0, borradas = 0;
   if (sinCV.length) {
     const { error } = await sb.from('postulaciones_empleo').delete().in('id', sinCV.map(p => p.id));
@@ -12125,6 +12309,7 @@ async function reanalizarTodasLasPostulaciones() {
   for (let i = 0; i < conCV.length; i++) {
     const p = conCV[i];
     if (btn) btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${i + 1} de ${conCV.length}...`;
+    if (mas) mas.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${i + 1}/${conCV.length}`;
     const r = await reanalizarEnServidor(p.id);
     if (r.foto === 'nueva') fotos++;
     if (!r.ok) { fallos.push(`${p.nombre}: ${r.error}`); continue; }
@@ -12132,6 +12317,7 @@ async function reanalizarTodasLasPostulaciones() {
     if (r.ahora !== p.calidad_prospecto) cambios++;
   }
   if (btn) { btn.disabled = false; btn.innerHTML = original; }
+  if (mas) mas.innerHTML = masOriginal;
   await loadPostulaciones();
   const resumen = `${ok} re-analizadas (${cambios} cambiaron de nivel), ${fotos} fotos nuevas${borradas ? `, ${borradas} sin CV eliminadas` : ''}.`;
   if (fallos.length) {
@@ -26465,7 +26651,7 @@ function chatSetupLog() {
 let chatPopModo = null, chatPopAncla = null, chatPopAlElegir = null;
 function chatPopFuera(e) {
   const pop = chatEl('cp-pop');
-  if (pop.contains(e.target) || (chatPopAncla && chatPopAncla.contains(e.target))) return;
+  if (pop.contains(e.target) || e.target.closest?.('.sel-lotus,.sel-lotus-velo') || (chatPopAncla && chatPopAncla.contains(e.target))) return;
   chatCerrarPop();
 }
 function chatCerrarPop(devolverFoco) {
