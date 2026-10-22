@@ -20,6 +20,15 @@ try {
     if (p.tema !== 'light') document.documentElement.dataset.paleta = p.tema;
     document.querySelector('meta[name="theme-color"]').setAttribute('content', t[1]);
   }
+  if (p.fuente && p.fuente !== 'normal') document.documentElement.dataset.fuente = p.fuente;
+  // Copia mínima de LETRAS (app.js) -- id → familia de Google Fonts. Mantener en sincronía.
+  var l = { atkinson: 'Atkinson+Hyperlegible+Next', lexend: 'Lexend', source: 'Source+Sans+3' }[p.letra];
+  if (l) {
+    document.documentElement.dataset.letra = p.letra;
+    var k = document.createElement('link'); k.rel = 'stylesheet'; k.id = 'letra-css';
+    k.href = 'https://fonts.googleapis.com/css2?family=' + l + ':wght@400..800&display=swap';
+    document.head.appendChild(k);
+  }
 } catch (e) { /* localStorage no disponible (modo privado) -- se pierde el cache, no rompe nada */ }
 </script>
 <link rel="icon" href="icons/icon-192.png">
@@ -151,8 +160,23 @@ try {
    Chrome, iOS Safari, desktop Chrome/Edge) -- únicos navegadores reales
    de uso en este CRM. */
 body{zoom:.9}
-body.fsize-chico{zoom:.8}
-body.fsize-grande{zoom:1.05}
+/* data-fuente va en <html> (no clase en body) para que el script del head
+   lo ponga antes del primer paint. --tap = 44px reales / zoom y --zoom
+   (alto de .sidebar) van junto al zoom de cada escala. "Grande" era 1.05
+   (+17 % sobre Normal, casi no se notaba, 2026-10-22). Muy grande baja a
+   1.15 en móvil: a 1.25 un Android de 360px quedaba en 288px de layout. */
+:root[data-fuente="chico"] body{zoom:.8;--tap:55px;--zoom:.8}
+:root[data-fuente="grande"] body{zoom:1.1;--tap:40px;--zoom:1.1}
+:root[data-fuente="xl"] body{zoom:1.25;--tap:35.2px;--zoom:1.25}
+@media(max-width:760px){:root[data-fuente="xl"] body{zoom:1.15;--tap:38.3px;--zoom:1.15}}
+/* Tipo de letra (Mi Perfil). Todo hereda de body vía font-family:inherit;
+   los ui-monospace explícitos (códigos, localizadores) no cambian. La
+   familia elegida la baja cargarLetra() (app.js) / el script del head --
+   las que nadie eligió no se descargan. */
+:root{--font-ui:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+:root[data-letra="atkinson"]{--font-ui:'Atkinson Hyperlegible Next','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+:root[data-letra="lexend"]{--font-ui:'Lexend','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+:root[data-letra="source"]{--font-ui:'Source Sans 3','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 /* Fix del "bar gris" en iOS/Android: <html> sin fondo propio deja ver el
    fondo por defecto del navegador (blanco/gris) durante el rebote de scroll
@@ -168,7 +192,7 @@ body.fsize-grande{zoom:1.05}
    Fix: <html> deja de scrollear (overflow:hidden, solo pinta fondo);
    <body> pasa a ser el único contenedor de scroll real, explícito. */
 html{-webkit-text-size-adjust:100%;background:var(--bg);height:100%;overflow:hidden;overscroll-behavior-y:none}
-body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--txt);-webkit-font-smoothing:antialiased;height:100%;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:none}
+body{font-family:var(--font-ui);background:var(--bg);color:var(--txt);-webkit-font-smoothing:antialiased;height:100%;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:none}
 body.lb-lock,body.menu-abierto{overflow:hidden}
 body::before{content:'';position:fixed;inset:0;background:
   radial-gradient(900px 500px at 12% -8%,rgba(var(--accent-rgb),.10),transparent 60%),
@@ -1454,6 +1478,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tema-muestra i{width:16px;height:16px;border-radius:50%}
 .tema-nombre{font-size:13px;font-weight:700}.tema-nombre i{color:var(--muted);width:14px}
 .tema-desc{font-size:11.5px;line-height:1.35;color:var(--muted)}
+.letra-muestra{display:flex;align-items:center;height:38px;border-radius:8px;padding:0 10px;border:1px solid var(--line);background:var(--bg2);font-size:19px;font-weight:600;white-space:nowrap;overflow:hidden}
 @media (max-width:520px){.tema-grid{grid-template-columns:1fr 1fr}}
 .chead-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:4px}
 .chead-row h2{margin-bottom:0}
@@ -5050,10 +5075,9 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 
    --tap: body{zoom:.9} hace que 44px CSS midan 39,6px reales. El token
    devuelve los 44px REALES para cada escala de fuente (44/.9, 44/.8,
-   44/1.05) -- se usa solo en los controles que este rediseño toca. */
+   44/1.05) -- se usa solo en los controles que este rediseño toca. Los
+   valores por escala viven junto al zoom (:root[data-fuente], arriba). */
 :root{--tap:48.9px;--appbar-h:calc(56px + env(safe-area-inset-top,0px))}
-body.fsize-chico{--tap:55px}
-body.fsize-grande{--tap:41.9px}
 .mfab{display:none}
 
 @media(max-width:760px){
@@ -5587,8 +5611,6 @@ body.fsize-grande{--tap:41.9px}
    del panel sí. JS pone la expresión en data-expr y la mirada en --lx/--ly.
    Solo se anima transform/opacity. */
 body{--zoom:.9}
-body.fsize-chico{--zoom:.8}
-body.fsize-grande{--zoom:1.05}
 @media(min-width:761px){.sidebar{height:calc(100vh / var(--zoom))}}
 :root{--lyra-sol-a:#FC7300;--lyra-sol-b:#FBC000;--lyra-tinta:#3a1505;--lyra-brillo:#fff6e6;--lyra-rubor:var(--pink);--lyra-rec:var(--pink);--lyra-marca:linear-gradient(90deg,var(--lyra-sol-a),var(--lyra-sol-b))}
 

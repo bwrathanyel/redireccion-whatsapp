@@ -476,6 +476,15 @@ function openPerfilDrawer() {
         <button type="button" data-v="chico" class="seg${MI_PREFERENCIAS.fuente === 'chico' ? ' on' : ''}">Chico</button>
         <button type="button" data-v="normal" class="seg${(MI_PREFERENCIAS.fuente || 'normal') === 'normal' ? ' on' : ''}">Normal</button>
         <button type="button" data-v="grande" class="seg${MI_PREFERENCIAS.fuente === 'grande' ? ' on' : ''}">Grande</button>
+        <button type="button" data-v="xl" class="seg${MI_PREFERENCIAS.fuente === 'xl' ? ' on' : ''}">Muy grande</button>
+      </div>
+      <label class="fl" style="margin-top:12px">Tipo de letra</label>
+      <div class="tema-grid" id="perfil-letra">
+        ${Object.entries(LETRAS).map(([id, l]) => `<button type="button" data-v="${id}" class="tema-card${letraActual() === id ? ' on' : ''}" aria-pressed="${letraActual() === id}">
+          <span class="letra-muestra" style="font-family:'${l.familia}',sans-serif">${LETRA_MUESTRA}</span>
+          <span class="tema-nombre">${l.nombre}</span>
+          <span class="tema-desc">${l.desc}</span>
+        </button>`).join('')}
       </div>
       <label class="fl" style="margin-top:12px">Secciones extra en el menú</label>
       ${NAV_OPCIONALES.map(o => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
@@ -545,6 +554,8 @@ function openPerfilDrawer() {
   document.getElementById('perfil-avatar-file').onchange = e => { if (e.target.files[0]) subirAvatar(e.target.files[0]); e.target.value = ''; };
   document.querySelectorAll('#perfil-tema button').forEach(b => b.onclick = () => guardarPreferencia('tema', b.dataset.v, 'perfil-tema'));
   document.querySelectorAll('#perfil-fuente button').forEach(b => b.onclick = () => guardarPreferencia('fuente', b.dataset.v, 'perfil-fuente'));
+  document.querySelectorAll('#perfil-letra button').forEach(b => b.onclick = () => guardarPreferencia('letra', b.dataset.v, 'perfil-letra'));
+  cargarMuestrasLetra();
   document.querySelectorAll('#perfil-vista-rol button').forEach(b => b.onclick = () => activarVistaPreviaRol(b.dataset.v));
   pintarTogglesNavExtra();
   pintarTogglesGpExtra();
@@ -568,6 +579,29 @@ const accentRgb = () => cssVar('--accent-rgb') || '255,145,0';
 // Chart.js no entiende var(): la grilla y los textos se leen del tema vigente.
 const gridColor = () => `rgba(${cssVar('--ink-rgb') || '255,255,255'},.07)`;
 const temaActual = () => PALETAS[MI_PREFERENCIAS.tema] ? MI_PREFERENCIAS.tema : 'dark';
+// Tipo de letra (Mi Perfil → MI_PREFERENCIAS.letra). Inter ya la carga index.html; las demás se bajan
+// solo si alguien las elige. Si se agrega una, sumarla también al script pre-paint y a :root[data-letra].
+const LETRAS = {
+  inter:    { familia: 'Inter',                      nombre: 'Inter',                 desc: 'La de siempre, compacta' },
+  atkinson: { familia: 'Atkinson Hyperlegible Next', nombre: 'Atkinson Hyperlegible', desc: 'Letras bien distintas (I l 1, 0 O). Para vista cansada' },
+  lexend:   { familia: 'Lexend',                     nombre: 'Lexend',                desc: 'Más aire entre letras, lectura relajada' },
+  source:   { familia: 'Source Sans 3',              nombre: 'Source Sans 3',         desc: 'Nítida en textos chicos, tablas y montos' },
+};
+const LETRA_MUESTRA = 'Aa Bb 1Il 0O 360';
+const letraActual = () => LETRAS[MI_PREFERENCIAS.letra] ? MI_PREFERENCIAS.letra : 'inter';
+const letraUrl = (id, eje) => `https://fonts.googleapis.com/css2?family=${LETRAS[id].familia.replace(/ /g, '+')}:${eje}&display=swap`;
+function ponerLinkCss(linkId, href) {
+  let link = document.getElementById(linkId);
+  if (!href) { link?.remove(); return; }
+  if (link?.getAttribute('href') === href) return;
+  if (!link) { link = document.createElement('link'); link.rel = 'stylesheet'; link.id = linkId; document.head.appendChild(link); }
+  link.href = href;
+}
+const cargarLetra = id => ponerLinkCss('letra-css', id === 'inter' ? null : letraUrl(id, 'wght@400..800'));
+// Vista previa del perfil: misma URL completa, no un subset &text= -- ese declara otro @font-face con
+// el mismo nombre y peso, y al elegir la letra la UI podría quedarse solo con los glifos de la muestra.
+const cargarMuestrasLetra = () => Object.keys(LETRAS).filter(id => id !== 'inter').forEach(id =>
+  ponerLinkCss('letra-muestra-' + id, letraUrl(id, 'wght@400..800')));
 // Entradas del menú que nacen ocultas y cada persona activa en Mi Perfil (MI_PREFERENCIAS.nav_extra).
 // Marketing las necesita para trabajar: su grupo nace visible. El CSS vive en index.html (nav-ver-<sec>).
 const NAV_OPCIONALES = [
@@ -613,8 +647,12 @@ function aplicarPreferencias() {
   if (id === 'dark' || id === 'light') delete root.dataset.paleta; else root.dataset.paleta = id;
   document.querySelector('meta[name="theme-color"]').setAttribute('content', p.color);
   if (window.Chart) Chart.defaults.color = cssVar('--muted') || '#8b93ad';
-  document.body.classList.toggle('fsize-chico', MI_PREFERENCIAS.fuente === 'chico');
-  document.body.classList.toggle('fsize-grande', MI_PREFERENCIAS.fuente === 'grande');
+  const fuente = MI_PREFERENCIAS.fuente;
+  if (['chico', 'grande', 'xl'].includes(fuente)) root.dataset.fuente = fuente; else delete root.dataset.fuente;
+  const letra = letraActual();
+  if (letra === 'inter') delete root.dataset.letra; else root.dataset.letra = letra;
+  cargarLetra(letra);
+  if (window.Chart) Chart.defaults.font.family = cssVar('--font-ui') || 'Inter';
   const extra = navExtraActivas();
   NAV_OPCIONALES.forEach(o => document.body.classList.toggle('nav-ver-' + o.sec, extra.includes(o.sec)));
   const gpExtra = gpTabsExtraActivas();
@@ -623,7 +661,7 @@ function aplicarPreferencias() {
   // aplicar tema/tamaño ANTES del primer paint en la próxima carga -- sin
   // esto, un usuario con tema claro ve un flash oscuro en cada refresh
   // mientras se resuelve sesión+perfil por red.
-  try { localStorage.setItem('lotus_prefs', JSON.stringify({ tema: MI_PREFERENCIAS.tema, fuente: MI_PREFERENCIAS.fuente })); } catch (_e) { /* localStorage puede fallar en modo privado -- solo se pierde el cache, no rompe nada */ }
+  try { localStorage.setItem('lotus_prefs', JSON.stringify({ tema: MI_PREFERENCIAS.tema, fuente: MI_PREFERENCIAS.fuente, letra: MI_PREFERENCIAS.letra })); } catch (_e) { /* localStorage puede fallar en modo privado -- solo se pierde el cache, no rompe nada */ }
 }
 async function guardarPreferencia(clave, valor, grupoId) {
   const anterior = MI_PREFERENCIAS;
@@ -636,7 +674,7 @@ async function guardarPreferencia(clave, valor, grupoId) {
     // que un refresh (que relee de la DB) va a revertir sin avisar.
     MI_PREFERENCIAS = anterior;
     aplicarPreferencias();
-    const valorPrevio = anterior[clave] ?? (grupoId === 'perfil-tema' ? 'dark' : 'normal');
+    const valorPrevio = anterior[clave] ?? ({ 'perfil-tema': 'dark', 'perfil-letra': 'inter' }[grupoId] || 'normal');
     document.querySelectorAll(`#${grupoId} button`).forEach(b => b.classList.toggle('on', b.dataset.v === valorPrevio));
     errToast('No se pudo guardar: ' + error.message);
   }
@@ -2991,7 +3029,7 @@ function ensureChart() {
     const s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
     s.onload = () => {
-      Chart.defaults.color = cssVar('--muted') || '#8b93ad'; Chart.defaults.font.family = 'Inter'; Chart.defaults.font.size = 11;
+      Chart.defaults.color = cssVar('--muted') || '#8b93ad'; Chart.defaults.font.family = cssVar('--font-ui') || 'Inter'; Chart.defaults.font.size = 11;
       // Sin animación: cada rebuild (lead nuevo, cambio de período) redibujaba ~1 s por frame.
       Chart.defaults.animation = false;
       resolve();
@@ -33574,6 +33612,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-22', emoji: '👓', titulo: 'Letra más grande y más fácil de leer', texto: 'En Mi Perfil → Personalización ahora eliges el tamaño de letra entre Chico, Normal, Grande (más grande que antes) y Muy grande, y también el tipo de letra: Inter (la de siempre), Atkinson Hyperlegible (letras bien distintas, pensada para vista cansada), Lexend (más espaciada) o Source Sans 3 (nítida en tablas y montos). Si se te cansa la vista, prueba Grande con Atkinson y el tema Sereno.', roles: ['admin', 'asesor', 'marketing', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-22', emoji: '🔔', titulo: 'Pagos por verificar avisa solo y sigue la reserva', texto: 'Pagos por verificar ahora tiene su propia entrada en el menú: cuando hay pagos esperando crece, late en rojo y dice cuántos son. Dentro, el tablero tiene tres columnas: Por verificar, Pago confirmado (falta cargar el localizador de cada servicio) y Reserva confirmada. La tarjeta avanza sola cuando cargas el localizador, y el botón "Cargar localizadores" te lleva directo a la reserva. Las compras que aún no han pagado quedan en un plegable abajo.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-22', emoji: '💳', titulo: 'Compras web más fáciles de verificar', texto: 'En Pagos por verificar, cada compra web muestra arriba el plazo para verificarla, el monto exacto en la moneda del banco y la referencia con un botón para copiarla. Si la referencia ya se usó en otra compra, te lo marca en rojo. El comprobante se ve dentro de la tarjeta, y al confirmar revisas en una sola ventana el monto, la referencia y la cuenta destino.', roles: ['admin'] },
   { fecha: '2026-10-21', emoji: '📸', titulo: 'Lee el comprobante de pago', texto: 'En Crear reserva, sube la captura del comprobante y el CRM llena solo el método, la referencia y el monto. Si el pago fue en bolívares, te muestra los bolívares y su equivalente en dólares con la tasa BCV del día. Revisa que los datos coincidan con el comprobante antes de crear la reserva: la lectura es automática y puede equivocarse.', roles: ['admin', 'asesor'] },
