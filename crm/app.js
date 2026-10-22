@@ -117,13 +117,69 @@ const fullMonth = k => { const [y, m] = k.split('-'); return MESL[+m - 1] + ' ' 
 const ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'VENTA COMPLETA', 'PERDIDO', 'NUMERO INVALIDO'];
 const ESTADOS_EDIT = ESTADOS;
 const ESTADO_COLORS = { 'POR ATENDER': '#ff9100', 'ATENDIDO': '#4a9eff', 'CLIENTE CONTACTADO': '#4a9eff', 'COTIZACION ENVIADA': '#a06bff', 'EN ESPERA DE PAGO': '#06b6d4', 'PAGO REALIZADO': '#10b981', 'VENTA COMPLETA': '#f5b544', 'PERDIDO': '#ef4444', 'NUMERO INVALIDO': '#94a3b8' };
-const PRIORIDAD_IA_ICONOS = { alta: '🔥', media: '●', baja: '○' };
-// Usa .chip-prioridad + .alta/.media/.baja (index.html:164-168) -- ya
-// existían en el CSS pero nadie las consumía, esto rendía un glyph con color
-// inline suelto en vez de la píldora.
+// Prioridad IA con la palabra, no un glyph: los símbolos 🔥 ● ○ nadie los
+// leía. "baja" no se muestra (es la mayoría y solo sumaba ruido).
+const PRIORIDAD_IA_TEXTO = { urgente: 'Urgente', alta: 'Alta', media: 'Media' };
 function badgePrioridadIA(l) {
-  if (!l.prioridad_ia || !PRIORIDAD_IA_ICONOS[l.prioridad_ia]) return '';
-  return ` <span class="chip-prioridad ${l.prioridad_ia}" title="${esc(l.prioridad_ia_razon || '')}">${PRIORIDAD_IA_ICONOS[l.prioridad_ia]}</span>`;
+  if (!l.prioridad_ia || !PRIORIDAD_IA_TEXTO[l.prioridad_ia]) return '';
+  return ` <span class="chip-prioridad ${l.prioridad_ia}" title="${esc(l.prioridad_ia_razon || '')}">${PRIORIDAD_IA_TEXTO[l.prioridad_ia]}</span>`;
+}
+// Solo para MOSTRAR: el input del drawer sigue con el valor crudo, así un
+// guardado nunca convierte "Sin nombre" en dato.
+function nombreLead(l) {
+  const n = String(l?.nombre ?? '').trim();
+  return !n || /^(null|undefined|none|-)$/i.test(n) ? 'Sin nombre' : n;
+}
+// destino_consulta lo arman la IA y el cotizador web como segmentos
+// "resumen | Fecha estimada: … | Ya se le mostró: … | ⚠️ aviso". La tarjeta
+// muestra solo el resumen y la última oferta; el drawer sigue con el texto crudo.
+function partesConsulta(texto) {
+  const r = { resumen: '', etiquetas: {}, oferta: '', avisos: [] };
+  const segs = String(texto || '').split(' | ').map(s => s.trim()).filter(Boolean);
+  let libre = '';
+  segs.forEach(s => {
+    if (s.startsWith('⚠️')) { r.avisos.push(s.replace(/^⚠️\s*/, '')); return; }
+    const m = s.match(/^([^:]{2,30}):\s*(.+)$/);
+    if (!m) { if (!libre) libre = s; return; }
+    if (m[1] === 'Ya se le mostró') r.oferta = m[2];
+    else r.etiquetas[m[1]] = m[2];
+  });
+  const e = r.etiquetas;
+  // Cotizador web: no hay texto libre, se arma con hotel (sin el "(#283)" interno), fechas y viajeros.
+  r.resumen = libre || [(e.Hotel || '').replace(/\s*\(#\d+\)/g, '') || e.Destino, e.Fechas, e.Viajeros].filter(Boolean).join(' · ')
+    || Object.values(e)[0] || '';
+  return r;
+}
+// Botón principal de la tarjeta y del drawer según el estado. Mismos permisos
+// por rol que tenían los botones rápidos del drawer.
+function accionPrincipalLead(l) {
+  const vende = ROL === 'asesor' || ROL === 'admin';
+  if (l.estado === 'POR ATENDER' && !l.fecha_primer_contacto && ROL === 'asesor' && !leadSoloLectura()) return { key: 'atender', texto: 'Atender', icono: 'fa-check' };
+  if (['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO'].includes(l.estado)) return vende ? { key: 'cotizar', texto: 'Cotizar', icono: 'fa-file-invoice-dollar' } : null;
+  if (l.estado === 'COTIZACION ENVIADA') return ROL === 'asesor' || esOficina() ? { key: 'reserva', texto: 'Crear reserva', icono: 'fa-plus' } : null;
+  if (l.estado === 'EN ESPERA DE PAGO') return { key: 'link-pago', texto: 'Link de pago', icono: 'fa-link' };
+  if (VENTA.includes(l.estado)) return vende ? { key: 'reservas', texto: 'Ver reservas', icono: 'fa-suitcase-rolling' } : null;
+  return null;
+}
+// Navegar a otra sección solo cuando el drawer terminó de cerrar (su popstate):
+// si se navega antes, el history.back del drawer deshace la navegación.
+function trasCerrarDrawer(fn) {
+  if (!document.getElementById('drawer')?.classList.contains('open')) { fn(); return; }
+  let hecho = false;
+  const ir = () => { if (hecho) return; hecho = true; fn(); };
+  window.addEventListener('popstate', ir, { once: true });
+  setTimeout(ir, 400);
+  window.closeDrawer();
+}
+function ejecutarAccionLead(l, key) {
+  switch (key) {
+    case 'atender': return atenderInboxLead(l);
+    case 'cotizar': return trasCerrarDrawer(() => cbDesdeLead(l));
+    case 'reserva': return abrirEnviarFacturacionSheet(l);
+    case 'link-pago': return openDrawer(l, { seccion: 'link-pago' });
+    case 'reservas': return openDrawer(l, { seccion: 'reservas' });
+    case 'ficha': return openDrawer(l);
+  }
 }
 function badgeNombreDudoso(l) {
   if (!l.nombre_dudoso) return '';
@@ -6348,24 +6404,7 @@ function buildQuery(forCount) {
 // "Asignados en lote"). El wiring va acá una sola vez: duplicarlo dejaba la
 // segunda lista con tarjetas muertas al primer cambio en la primera.
 function wireLeadCards(contenedor, data, { drag = false } = {}) {
-  const dndDesktop = drag && window.matchMedia('(min-width:761px)').matches;
-  [...contenedor.querySelectorAll('.entity-card')].forEach((el, i) => {
-    el.addEventListener('click', () => openDrawer(data[i]));
-    if (dndDesktop && (ROL === 'asesor' || ROL === 'admin')) wireLeadDrag(el, data[i].id);
-    el.querySelectorAll('.estado-arrow').forEach(btn => btn.addEventListener('click', e => {
-      e.stopPropagation();
-      moverEstadoLead(data[i], Number(btn.dataset.dir));
-    }));
-    el.querySelector('[data-estado-chip]')?.addEventListener('click', e => { e.stopPropagation(); abrirEstadoLeadSheet(data[i]); });
-    el.querySelector('[data-atender-id]')?.addEventListener('click', e => {
-      e.stopPropagation();
-      atenderInboxLead(data[i]);
-    });
-    el.querySelector('[data-facturar-id]')?.addEventListener('click', e => {
-      e.stopPropagation();
-      abrirEnviarFacturacionSheet(data[i]);
-    });
-  });
+  [...contenedor.querySelectorAll('.entity-card')].forEach((el, i) => wireTarjetaLead(el, data[i], { drag }));
 }
 
 // silencioso: recarga en vivo (Realtime), sin spinner ni atenuar la tabla --
@@ -6389,7 +6428,7 @@ async function loadTable(silencioso) {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
       <td class="solo-admin-borrar"><input type="checkbox" class="lead-check" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''}></td>
-      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div></td>
+      <td class="td-name"><div class="lead-name"><div class="ln-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>${esc(nombreLead(l))}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div></td>
       <td data-label="Teléfono" class="muted">${textoTelefonoLead(l)}${l.requiere_revision_telefono ? ' <i class="fas fa-flag" style="color:#ef4444" title="Número marcado para revisión"></i>' : ''}${l.telefono_colision_revision ? ' <i class="fas fa-triangle-exclamation" style="color:#f59e0b" title="Este teléfono coincide con otro lead abierto -- revisar antes de fusionar"></i>' : ''}</td>
       <td data-label="Destino">${esc(l.destino)}</td>
       <td data-label="Canal"><span class="chip ${cc}">${esc(l.canal)}</span></td>
@@ -6422,13 +6461,46 @@ async function loadTable(silencioso) {
   renderPager(Math.max(Math.ceil(totalFiltered / PER), 1));
 }
 let colaLeadsLive = new Map(), timerLeadsLive = null, inicioLoteLeads = 0, loteLeadsEnCurso = Promise.resolve(), genLeadLive = new Map();
-function wireLeadCardLive(el, lead) {
+function wireLeadCardLive(el, lead) { wireTarjetaLead(el, lead, { drag: true }); }
+// Único cableado de la tarjeta de lead: carga completa (wireLeadCards) y parche
+// en vivo (wireLeadCardLive) pasan por acá, así un botón nuevo no se pierde
+// cuando Realtime reemplaza la tarjeta.
+function wireTarjetaLead(el, lead, { drag = false } = {}) {
   el.addEventListener('click', () => openDrawer(lead));
-  if (window.matchMedia('(min-width:761px)').matches && (ROL === 'asesor' || ROL === 'admin')) wireLeadDrag(el, lead.id);
+  if (drag && window.matchMedia('(min-width:761px)').matches && (ROL === 'asesor' || ROL === 'admin')) wireLeadDrag(el, lead.id);
   el.querySelectorAll('.estado-arrow').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); moverEstadoLead(lead, Number(btn.dataset.dir)); }));
   el.querySelector('[data-estado-chip]')?.addEventListener('click', e => { e.stopPropagation(); abrirEstadoLeadSheet(lead); });
-  el.querySelector('[data-atender-id]')?.addEventListener('click', e => { e.stopPropagation(); atenderInboxLead(lead); });
-  el.querySelector('[data-facturar-id]')?.addEventListener('click', e => { e.stopPropagation(); abrirEnviarFacturacionSheet(lead); });
+  el.querySelector('.lc-cta')?.addEventListener('click', e => { e.stopPropagation(); ejecutarAccionLead(lead, e.currentTarget.dataset.accion); });
+  el.querySelector('.lc-mas')?.addEventListener('click', e => { e.stopPropagation(); abrirAccionesLeadSheet(lead); });
+}
+// Menú "⋯" de la tarjeta: todo lo que no es el botón principal. Cada opción
+// cierra esta hoja y recién abre lo siguiente en su popstate -- dos hojas
+// encadenadas se pisan (el history.back de la primera cierra la segunda).
+function abrirAccionesLeadSheet(l) {
+  const cont = document.getElementById('acciones-lead-opciones');
+  if (!cont) return;
+  const vende = ROL === 'asesor' || ROL === 'admin', cta = accionPrincipalLead(l)?.key;
+  const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
+  const opciones = [
+    { k: 'ficha', t: 'Abrir ficha', i: 'fa-id-card', go: () => openDrawer(l) },
+    !leadSoloLectura() && { k: 'estado', t: 'Cambiar estado', i: 'fa-arrows-rotate', go: () => abrirEstadoLeadSheet(l) },
+    vende && cta !== 'cotizar' && { k: 'cotizar', t: 'Cotizar', i: 'fa-file-invoice-dollar', go: () => cbDesdeLead(l) },
+    vende && !l.fecha_cotizacion_enviada && { k: 'reg-cot', t: 'Registrar cotización enviada', i: 'fa-file-circle-check', go: () => registrarCotizacionEnviada(l) },
+    (ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) && cta !== 'reserva' && { k: 'reserva', t: 'Crear reserva', i: 'fa-plus', go: () => abrirEnviarFacturacionSheet(l) },
+    vende && { k: 'boleteria', t: 'Solicitud de boletería', i: 'fa-plane-departure', go: () => abrirSolicitudBoleteria(l) },
+    wa && { k: 'avisar', t: 'Avisar número incorrecto', i: 'fa-flag', go: () => abrirAvisarTelefono(l) },
+  ].filter(Boolean);
+  cont.innerHTML = opciones.map(o => `<button type="button" class="estado-opt" data-k="${o.k}"><i class="fas ${o.i} ao-ic"></i><span class="eo-txt">${esc(o.t)}</span></button>`).join('');
+  cont.querySelectorAll('.estado-opt').forEach((b, i) => b.addEventListener('click', () => {
+    let hecho = false;
+    const ir = () => { if (hecho) return; hecho = true; opciones[i].go(); };
+    window.addEventListener('popstate', ir, { once: true });
+    setTimeout(ir, 400);
+    closeSheet('acciones-lead-sheet');
+  }));
+  const titulo = document.getElementById('acciones-lead-titulo');
+  if (titulo) titulo.textContent = nombreLead(l);
+  openSheet('acciones-lead-sheet');
 }
 function mostrarLeadsNuevos(n) {
   if (!window.matchMedia('(max-width:760px)').matches) return;
@@ -6615,41 +6687,33 @@ function updateBulkBar() {
 function clearSelection() { SELECTED_LEADS.clear(); updateBulkBar(); document.querySelectorAll('.lead-check').forEach(cb => cb.checked = false); }
 function leadCardHtml(l) {
   const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
-  const detalle = leadsView === 'fichas' ? `
-    <div class="ec-row"><i class="fas fa-comment-dots"></i> ${esc(l.destino_consulta || 'Sin consulta registrada')}</div>
-    <div class="ec-row"><i class="fas fa-users"></i> ${esc(l.personas || '—')} persona(s)</div>` : '';
+  // Tarjeta de acción: estado y tiempo arriba, la consulta resumida (nunca el
+  // texto entero: llega a 985 caracteres y estiraba toda la fila de la grilla)
+  // y UN botón principal según el estado. El resto vive en el menú "⋯".
+  const pc = partesConsulta(l.destino_consulta);
+  const fichas = leadsView === 'fichas';
   // "Sin atender" es dato (rol + estado + sin fecha_primer_contacto), no
-  // presentación -- antes se calculaba con matchMedia() EN EL MOMENTO DEL
-  // RENDER, así que si el teléfono rotaba después, la tarjeta ya impresa
-  // quedaba mostrando la versión vieja hasta el próximo refresh. Ahora la
-  // condición de datos siempre se evalúa igual, y es el CSS (.tiene-sin-atender
-  // dentro de @media(max-width:760px)) el que decide qué se ve -- reacciona
-  // solo a la rotación, sin volver a tocar el DOM.
+  // presentación: el CSS (.tiene-sin-atender dentro de @media(max-width:760px))
+  // decide qué se ve, así rotar el teléfono no deja la tarjeta desactualizada.
   const sinAtenderDatos = ROL === 'asesor' && l.estado === 'POR ATENDER' && !l.fecha_primer_contacto;
-  // Fallback único (antes #5f677f acá y #8b93ad en el badge -- mismo estado
-  // desconocido pintado de dos grises distintos en la misma tarjeta).
   const FALLBACK_COLOR = '#8b93ad';
   const estadoColor = ESTADO_COLORS[l.estado] || FALLBACK_COLOR;
-  // Los botones se arman aparte para poder omitir el contenedor `.ec-actions`
-  // cuando no queda ninguno: un div vacío igual sumaría el borde y dejaría un
-  // hueco muerto abajo de la tarjeta.
-  const acciones = [
-    (ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado)
-      ? `<button type="button" class="fact-btn" data-facturar-id="${l.id}" title="Crear reserva" aria-label="Crear reserva" onclick="event.stopPropagation()"><i class="fas fa-plus"></i></button>` : '',
-    wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : '',
-  ].filter(Boolean).join('');
-  return `<div class="entity-card ${sinAtenderDatos ? 'tiene-sin-atender' : ''}" data-lead-id="${l.id}" style="position:relative;border-left:4px solid ${estadoColor}">
+  const cta = accionPrincipalLead(l);
+  const personas = String(l.personas || pc.etiquetas.Viajeros || '').trim();
+  const sub = [
+    `<span class="lc-destino"><i class="fas fa-location-dot"></i>${esc(l.destino) || 'Sin destino'}</span>`,
+    personas ? `<span>${esc(personas)}${/^\d+$/.test(personas) ? ' pers.' : ''}</span>` : '',
+  ].filter(Boolean).join('<span class="ec-dot">·</span>');
+  const contexto = [
+    l.canal ? `<span class="chip ${cc}">${esc(l.canal)}</span>` : '',
+    `<span>${textoTelefonoLead(l)}</span>`,
+    ROL !== 'asesor' && l.asesor ? `<span>${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</span>` : '',
+  ].filter(Boolean).join('<span class="ec-dot">·</span>');
+  const chipsFichas = fichas ? [pc.etiquetas['Fecha estimada'] || pc.etiquetas.Fechas, pc.etiquetas.Presupuesto && 'Presupuesto ' + pc.etiquetas.Presupuesto]
+    .filter(Boolean).map(t => `<span class="lc-chip">${esc(t)}</span>`).join('') : '';
+  return `<div class="entity-card lead-card ${sinAtenderDatos ? 'tiene-sin-atender' : ''}" data-lead-id="${l.id}" style="position:relative;border-left:4px solid ${estadoColor}">
     <input type="checkbox" class="lead-check solo-admin-borrar" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''} style="position:absolute;top:10px;right:10px;width:18px;height:18px">
-    <div class="ec-top">
-      <div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
-      <div class="ec-headtext">
-        <div class="ec-nombre"><span class="ec-estado-dot" style="background:${estadoColor}"></span>${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div>
-        <div class="ec-destino"><i class="fas fa-location-dot"></i> ${esc(l.destino) || 'Sin destino'}</div>
-      </div>
-    </div>
-    <div class="ec-row"><i class="fas fa-phone"></i> ${textoTelefonoLead(l)}</div>
-    ${seguimientoActivo(l) ? `<div class="ec-row">${chipSeguimiento(l)}</div>` : ''}
-    <div class="ec-estado-row">
+    <div class="lc-head">
       ${sinAtenderDatos ? `<span class="badge-st sin-atender-movil" style="color:var(--accent-ink);background:var(--accent-soft)">Sin atender</span>` : ''}
       <span class="estado-stepper" data-id="${l.id}">
         <button type="button" class="estado-arrow" data-dir="-1" title="Estado anterior" aria-label="Estado anterior"><i class="fas fa-chevron-left"></i></button>
@@ -6657,17 +6721,26 @@ function leadCardHtml(l) {
         <button type="button" class="estado-arrow" data-dir="1" title="Siguiente estado" aria-label="Siguiente estado"><i class="fas fa-chevron-right"></i></button>
       </span>
       <button type="button" class="chip-estado" data-estado-chip="${l.id}" style="color:${estadoColor};background:${estadoColor}2e" aria-label="Cambiar estado">${esc(niceEstado(l.estado))} <i class="fas fa-chevron-down"></i></button>
+      <span class="lc-tiempo">${esc(tiempoRelativo(l.fecha_creacion))}</span>
+      ${seguimientoActivo(l) ? chipSeguimiento(l) : ''}
     </div>
-    <div class="ec-context">
-      <span class="chip ${cc}">${esc(l.canal)}</span>
-      <span class="ec-dot">·</span>
-      <span>${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</span>
-      <span class="ec-dot">·</span>
-      <span>${esc(tiempoRelativo(l.fecha_creacion))}</span>
+    <div class="ec-top">
+      <div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
+      <div class="ec-headtext">
+        <div class="ec-nombre"><span class="ec-estado-dot" style="background:${estadoColor}"></span>${esc(nombreLead(l))}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}${l.es_prueba ? ' <span class="chip-prueba">PRUEBA</span>' : ''}</div>
+        <div class="lc-sub">${sub}</div>
+      </div>
     </div>
-    ${detalle}
-    ${acciones ? `<div class="ec-foot"><div class="ec-actions">${acciones}</div></div>` : ''}
-    ${sinAtenderDatos ? `<button type="button" class="inbox-btn atender atender-movil" style="width:100%;margin-top:9px" data-atender-id="${l.id}"><i class="fas fa-check"></i> Atender</button>` : ''}
+    <div class="ec-context">${contexto}</div>
+    ${pc.resumen ? `<div class="lc-consulta${fichas ? ' larga' : ''}" title="${esc(pc.resumen)}">${esc(pc.resumen)}</div>` : ''}
+    ${pc.avisos.length || chipsFichas ? `<div class="lc-chips">${pc.avisos.map(a => `<span class="lc-chip aviso"><i class="fas fa-triangle-exclamation"></i>${esc(a)}</span>`).join('')}${chipsFichas}</div>` : ''}
+    ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-tag"></i><span>Última oferta: ${esc(pc.oferta)}</span></div>` : ''}
+    <div class="lc-fill"></div>
+    <div class="lc-foot">
+      ${cta ? `<button type="button" class="lc-cta" data-accion="${cta.key}"><i class="fas ${cta.icono}"></i>${cta.texto}</button>` : '<span class="lc-cta-vacio"></span>'}
+      ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
+      <button type="button" class="lc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
+    </div>
   </div>`;
 }
 // Flechitas del stepper de estado en la ficha del lead -- avanza/retrocede
@@ -6747,12 +6820,14 @@ function renderInbox() {
   actualizarBadgeLeads(INBOX_LEADS.length);
 }
 function inboxCardHtml(l) {
-  const av = clientAvatar(l);
+  const av = clientAvatar(l), pc = partesConsulta(l.destino_consulta);
   return `<div class="entity-card inbox-card" data-id="${l.id}">
-    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(l.nombre)}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}</div></div>
+    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(nombreLead(l))}${badgePrioridadIA(l)}${badgeNombreDudoso(l)}</div></div>
     <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
     <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
-    ${l.destino_consulta ? `<div class="ec-row"><i class="fas fa-comment-dots"></i> ${esc(l.destino_consulta)}</div>` : ''}
+    ${pc.resumen ? `<div class="lc-consulta" title="${esc(pc.resumen)}">${esc(pc.resumen)}</div>` : ''}
+    ${pc.avisos.length ? `<div class="lc-chips">${pc.avisos.map(a => `<span class="lc-chip aviso"><i class="fas fa-triangle-exclamation"></i>${esc(a)}</span>`).join('')}</div>` : ''}
+    ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-tag"></i><span>Última oferta: ${esc(pc.oferta)}</span></div>` : ''}
     ${l.personas ? `<div class="ec-row"><i class="fas fa-users"></i> ${esc(l.personas)} persona(s)</div>` : ''}
     <div class="ec-row"><i class="fas fa-clock"></i> ${tiempoRelativo(l.fecha_creacion)}</div>
     ${l.no_reasignar ? `<div class="ec-row" style="color:var(--muted2)"><i class="fas fa-lock"></i> Llegó directo por WhatsApp -- no se reasigna</div>` : ''}
@@ -33612,6 +33687,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-22', emoji: '🗂️', titulo: 'Tarjetas de leads más claras', texto: 'Cada tarjeta de lead muestra arriba el estado y hace cuánto llegó, la consulta del cliente resumida en dos líneas y la última oferta que le mostró la IA. Abajo tiene un solo botón con el siguiente paso según el estado (Atender, Cotizar, Crear reserva, Link de pago o Ver reservas) y en "⋯" el resto de las acciones, sin abrir la ficha. La prioridad de la IA ahora dice "Alta" o "Media" en vez de un símbolo.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-22', emoji: '👓', titulo: 'Letra más grande y más fácil de leer', texto: 'En Mi Perfil → Personalización ahora eliges el tamaño de letra entre Chico, Normal, Grande (más grande que antes) y Muy grande, y también el tipo de letra: Inter (la de siempre), Atkinson Hyperlegible (letras bien distintas, pensada para vista cansada), Lexend (más espaciada) o Source Sans 3 (nítida en tablas y montos). Si se te cansa la vista, prueba Grande con Atkinson y el tema Sereno.', roles: ['admin', 'asesor', 'marketing', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-22', emoji: '🔔', titulo: 'Pagos por verificar avisa solo y sigue la reserva', texto: 'Pagos por verificar ahora tiene su propia entrada en el menú: cuando hay pagos esperando crece, late en rojo y dice cuántos son. Dentro, el tablero tiene tres columnas: Por verificar, Pago confirmado (falta cargar el localizador de cada servicio) y Reserva confirmada. La tarjeta avanza sola cuando cargas el localizador, y el botón "Cargar localizadores" te lleva directo a la reserva. Las compras que aún no han pagado quedan en un plegable abajo.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-22', emoji: '💳', titulo: 'Compras web más fáciles de verificar', texto: 'En Pagos por verificar, cada compra web muestra arriba el plazo para verificarla, el monto exacto en la moneda del banco y la referencia con un botón para copiarla. Si la referencia ya se usó en otra compra, te lo marca en rojo. El comprobante se ve dentro de la tarjeta, y al confirmar revisas en una sola ventana el monto, la referencia y la cuenta destino.', roles: ['admin'] },

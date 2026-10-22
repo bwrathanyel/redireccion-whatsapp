@@ -1936,6 +1936,40 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
   .atender-movil{display:block}
   .entity-card.tiene-sin-atender .estado-stepper{display:none}
 }
+/* Tarjeta de lead "de acción" (2026-10-22): estado+tiempo arriba, consulta
+   resumida a 2 líneas (la cruda llega a 985 caracteres y estiraba la fila de
+   la grilla), un botón principal según el estado y el resto en "⋯". Prefijo
+   lc- propio: .ec-head ya lo usan otras tarjetas. */
+.entity-card.lead-card{display:flex;flex-direction:column}
+.lead-card .lc-head{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-height:24px;margin-bottom:9px;padding-right:24px}
+.lead-card .lc-tiempo{font-size:11px;font-weight:600;color:var(--muted2)}
+.lead-card .ec-top{margin-bottom:2px}
+.lead-card .ec-ava{width:34px;height:34px;font-size:13px}
+.lc-sub{display:flex;align-items:center;gap:6px;min-width:0;margin-top:2px;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden}
+.lc-sub .lc-destino{display:inline-flex;align-items:center;gap:5px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.lc-sub i{color:var(--muted2);font-size:11px;flex-shrink:0}
+.lc-consulta{margin-top:9px;padding-left:9px;border-left:2px solid var(--line2);font-size:12px;line-height:1.45;color:var(--txt);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.lc-consulta.larga{-webkit-line-clamp:4}
+.lc-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+.lc-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:2px 9px;border-radius:999px;background:rgba(var(--ink-rgb),.05);color:var(--muted);font-size:10.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lc-chip.aviso{background:color-mix(in srgb,var(--amber) 15%,transparent);color:var(--amber)}
+.lc-oferta{display:flex;align-items:center;gap:6px;min-width:0;margin-top:7px;font-size:11.5px;color:var(--muted)}
+.lc-oferta i{color:var(--muted2);font-size:10px;flex-shrink:0}
+.lc-oferta span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lc-fill{flex:1 0 11px}
+.lc-foot{display:flex;align-items:center;gap:7px;padding-top:11px;border-top:1px solid var(--line)}
+.lc-cta{flex:1;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;padding:0 14px;border:none;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:var(--on-accent,#fff);font:inherit;font-size:12.5px;font-weight:800;white-space:nowrap;cursor:pointer;box-shadow:0 8px 18px rgba(var(--accent-rgb),.2);transition:filter .16s,transform .16s}
+.lc-cta:hover{filter:brightness(1.06)}
+.lc-cta:active{transform:translateY(1px)}
+.lc-cta-vacio{flex:1}
+.lc-mas{width:40px;height:40px;flex-shrink:0;display:grid;place-items:center;border:1px solid var(--line2);border-radius:10px;background:transparent;color:var(--muted);cursor:pointer;transition:border-color .16s,color .16s}
+.lc-mas:hover{border-color:rgba(var(--accent-rgb),.35);color:var(--txt)}
+.lead-card .lc-foot .wa-btn{width:40px;height:40px;flex-shrink:0}
+.estado-opt .ao-ic{width:18px;text-align:center;color:var(--muted);font-size:14px}
+@media(max-width:760px){
+  .lc-cta{min-height:var(--tap)}
+  .lc-mas,.lead-card .lc-foot .wa-btn{width:var(--tap);height:var(--tap);font-size:18px}
+}
 #tbl-wrap.hide{display:none}
 
 /* ---------- Personal (Gestión de Personal > tarjetas del equipo) ---------- */
@@ -10570,6 +10604,12 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
   <div class="sheet-handle"></div>
   <div class="sheet-title">Cambiar estado</div>
   <div id="estado-lead-opciones" class="estado-lead-opciones"></div>
+</div>
+
+<div class="sheet" id="acciones-lead-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title" id="acciones-lead-titulo">Acciones</div>
+  <div id="acciones-lead-opciones" class="estado-lead-opciones"></div>
 </div>
 
 <!-- Lightbox de fotos -->
