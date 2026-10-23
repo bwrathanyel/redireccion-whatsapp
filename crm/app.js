@@ -27962,6 +27962,7 @@ async function drAbrirEditor(tipo, d) {
     activateSection('cotizacion-boletos'); await cbCargarSeccion(); cbResetForm();
     cbRestaurarBorrador({ ...d, asesor: d.enviado_a }, document.getElementById('cb-asesor'));
     ['cb-fecha', 'cb-vence'].forEach(id => { document.getElementById(id).min = ''; document.getElementById(id).value = d[id === 'cb-fecha' ? 'fecha' : 'vence'] || ''; });
+    cbResumenCliente();
   } else {
     cerrarDetalleBoleteria(); abrirSolicitudBoleteria();
     const campos = { 'bol-nombre': 'cliente_nombre', 'bol-telefono': 'cliente_telefono', 'bol-cedula': 'cliente_cedula', 'bol-origen': 'origen', 'bol-destino': 'destino',
@@ -27987,6 +27988,13 @@ function setupVoucher() {
     const id = e.target.id;
     if (id === 'vc-lead-q') { clearTimeout(vcLeadTimer); vcLeadTimer = setTimeout(vcBuscarLeadsQ, 250); return; }
     if (e.target.dataset.sk) { vcServInput(e.target); return; }
+    if (id === 'vc-plan-selector') {
+      const p = e.target.value;
+      if (p === '__otra') { vcElegirPlan(''); return; }
+      vcPlanOtro = false; document.getElementById('vc-modalidad').value = p;
+      if (vcHotel.producto_id) vcHotelPlan(vcHotel.planes.find(x => vcPlanDeTarifario(x) === p) || '');
+      vcActualizarPreview(); return;
+    }
     if (id === 'vc-referencia') document.getElementById('vc-ref-box').classList.remove('falta');
     if (id === 'vc-modalidad') vcSyncPlanes();
     if (id === 'vc-total-dias') vcDiasManual = !!e.target.value.trim();
@@ -28041,6 +28049,15 @@ function setupVoucher() {
 // traslado y paquete salen del tarifario (productos + tarifas vigentes) con precio sugerido editable.
 const VC_PLANES = ['Todo incluido', 'Pensión completa', 'Media pensión', 'Desayuno incluido', 'Solo alojamiento'];
 let vcPlanOtro = false;
+function vcResumenSecciones() {
+  const texto = (id, partes, vacio) => { document.getElementById(id).textContent = partes.filter(Boolean).join(' · ') || vacio; };
+  const reserva = vcReservas?.find(r => String(r.id) === val('vc-reserva-sel'));
+  texto('vc-cliente-resumen', [val('vc-cliente-nombre').trim(), val('vc-documento').trim(), val('vc-telefono').trim(), val('vc-asesor'), vcLead?.estado, reserva?.codigo], 'Buscar o completar datos');
+  texto('vc-hospedaje-resumen', [val('vc-destino').trim(), val('vc-habitaciones').trim(), val('vc-modalidad').trim(), val('vc-fecha-entrada') && vcFechaCorta(val('vc-fecha-entrada')), val('vc-fecha-salida') && 'al ' + vcFechaCorta(val('vc-fecha-salida')), val('vc-adultos') && val('vc-adultos') + ' adultos', val('vc-ninos').trim() && 'Niños: ' + val('vc-ninos').trim()], 'Hotel, fechas y pasajeros');
+  texto('vc-horarios-resumen', ['Entrada ' + (val('vc-check-in').trim() || '3:00 PM'), 'salida ' + (val('vc-check-out').trim() || '12:00 PM'), val('vc-total-dias').trim(), val('vc-status').trim()], '');
+  texto('vc-servicios-resumen', vcServicios.length ? [vcServicios.length + ' servicio' + (vcServicios.length === 1 ? '' : 's'), vcMoney(vcServSuma)] : [], 'Opcional · excursiones, traslados y otros');
+  texto('vc-pago-resumen', vcNum('vc-total-general') || vcNum('vc-monto-pagado') ? ['Total ' + vcMoney(vcNum('vc-total-general')), 'pagado ' + vcMoney(vcNum('vc-monto-pagado')), 'resta ' + vcMoney(vcNum('vc-resta')), val('vc-forma-pago').trim()] : [val('vc-forma-pago').trim()], 'Total, abono y forma de pago');
+}
 function vcElegirPlan(p) {
   const el = document.getElementById('vc-modalidad');
   if (p) { vcPlanOtro = false; el.value = el.value === p ? '' : p; }
@@ -28051,12 +28068,7 @@ function vcElegirPlan(p) {
 function vcSyncPlanes() {
   const el = document.getElementById('vc-modalidad'), v = el.value.trim().toLowerCase();
   const otro = vcPlanOtro || (!!v && !VC_PLANES.some(p => p.toLowerCase() === v));
-  const delHotel = new Set((vcHotel.producto_id ? vcHotel.planes : []).map(vcPlanDeTarifario));
-  document.querySelectorAll('#vc-planes [data-plan]').forEach(b => {
-    const on = b.dataset.plan ? !otro && b.dataset.plan.toLowerCase() === v : otro;
-    b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on));
-    b.classList.toggle('tar', !!b.dataset.plan && delHotel.has(b.dataset.plan));
-  });
+  document.getElementById('vc-plan-selector').value = otro ? '__otra' : VC_PLANES.find(p => p.toLowerCase() === v) || '';
   el.hidden = !otro;
 }
 // Hospedaje del voucher (2026-10-22): reutiliza el buscador, las tarifas y las habitaciones de
@@ -28362,6 +28374,8 @@ function vcElegirLead(l) {
   const sel = document.getElementById('vc-asesor');
   if (ROL === 'admin' && l.asesor && [...sel.options].some(o => o.value === l.asesor)) sel.value = l.asesor;
   vcPintarLead(); vcActualizarPreview();
+  document.getElementById('vc-cliente-seccion').open = false;
+  document.querySelector('#vc-cliente-seccion > summary').focus({ preventScroll: true });
   if (l.estado === 'PAGO REALIZADO') vcCargarReservas(l);
 }
 async function vcCargarReservas(l) {
@@ -28455,6 +28469,8 @@ function vcActualizarPreview() {
   $('vc-total-nota').innerHTML = vcServSuma > 0 ? `<i class="fas fa-circle-info"></i> El total incluye <b>${vcMoney(vcServSuma)}</b> de servicios adicionales (se suman solos; puedes corregirlo a mano).` : '';
   $('vc-total-nota').hidden = !(vcServSuma > 0);
   txt('vc-b-total', vcMoney(total)); txt('vc-b-pagado', vcMoney(pagado)); txt('vc-b-resta', vcMoney(resta));
+  txt('vc-total-accion', vcMoney(total)); txt('vc-pagado-accion', `Pagado ${vcMoney(pagado)} · resta ${vcMoney(resta)}`);
+  vcResumenSecciones();
   $('vc-b-resta').parentElement.classList.toggle('cero', total > 0 && resta <= 0);
   $('vc-b-barra').style.width = (total > 0 ? Math.min(100, pagado / total * 100) : 0) + '%';
   const p = vcPlan(); vcPintarPlan(p);
@@ -28482,6 +28498,8 @@ function vcReset() {
   ['vc-cliente-nombre', 'vc-documento', 'vc-telefono', 'vc-destino', 'vc-modalidad', 'vc-habitaciones', 'vc-fecha-entrada', 'vc-fecha-salida', 'vc-adultos', 'vc-ninos',
     'vc-total-dias', 'vc-status', 'vc-total-general', 'vc-monto-pagado', 'vc-resta', 'vc-forma-pago', 'vc-referencia', 'vc-lead-q'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   vcServicios = []; vcServSuma = 0; vcPlanOtro = false; vcPintarServicios(); vcHotelSoltar();
+  ['vc-cliente-seccion', 'vc-hospedaje-seccion', 'vc-pago-seccion'].forEach(id => document.getElementById(id).open = true);
+  ['vc-servicios-seccion', 'vc-horarios-seccion'].forEach(id => document.getElementById(id).open = false);
   document.getElementById('vc-fecha-entrada').min = cbHoy();
   document.getElementById('vc-ref-box').classList.remove('falta');
   document.getElementById('vc-check-in').value = '3:00 PM'; document.getElementById('vc-check-out').value = '12:00 PM';
@@ -28687,19 +28705,19 @@ function vcPintarHecho(h) {
 window.generarVoucherPdf = async function generarVoucherPdf() {
   const btn = document.getElementById('vc-generar-btn');
   const clienteNombre = val('vc-cliente-nombre').trim();
-  if (!clienteNombre) { errToast('Ingresa el nombre del cliente'); return; }
+  if (!clienteNombre) { errToast('Ingresa el nombre del cliente'); docEnfocar('vc-cliente-nombre'); return; }
   const total = vcNum('vc-total-general'), pagado = vcNum('vc-monto-pagado');
-  if (total > 0 && pagado > total) { errToast('Lo pagado no puede superar el total'); return; }
+  if (total > 0 && pagado > total) { errToast('Lo pagado no puede superar el total'); docEnfocar('vc-monto-pagado'); return; }
   const minEntrada = document.getElementById('vc-fecha-entrada').min;
-  if (minEntrada && val('vc-fecha-entrada') && val('vc-fecha-entrada') < minEntrada) { errToast('La entrada no puede ser una fecha pasada'); document.getElementById('vc-fecha-entrada').focus(); return; }
-  if (val('vc-fecha-entrada') && val('vc-fecha-salida') && val('vc-fecha-salida') < val('vc-fecha-entrada')) { errToast('La salida no puede ser antes de la entrada'); return; }
+  if (minEntrada && val('vc-fecha-entrada') && val('vc-fecha-entrada') < minEntrada) { errToast('La entrada no puede ser una fecha pasada'); docEnfocar('vc-fecha-entrada'); return; }
+  if (val('vc-fecha-entrada') && val('vc-fecha-salida') && val('vc-fecha-salida') < val('vc-fecha-entrada')) { errToast('La salida no puede ser antes de la entrada'); docEnfocar('vc-fecha-salida'); return; }
   const referencia = val('vc-referencia').trim(), pagoMovil = vcEsPagoMovil();
   if (pagoMovil && referencia.replace(/\D/g, '').length < 4) {
-    document.getElementById('vc-ref-box').classList.add('falta'); document.getElementById('vc-referencia').focus();
+    document.getElementById('vc-ref-box').classList.add('falta'); docEnfocar('vc-referencia');
     errToast('Colocá el número de referencia del pago móvil'); return;
   }
   const sinNombre = vcServicios.findIndex(s => !String(s.nombre || '').trim());
-  if (sinNombre >= 0) { document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)?.focus(); errToast(`Falta el nombre del servicio adicional ${sinNombre + 1} (o quitalo)`); return; }
+  if (sinNombre >= 0) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)); errToast(`Falta el nombre del servicio adicional ${sinNombre + 1} (o quitalo)`); return; }
   const planInicial = vcPlan();
   if (planInicial.modo === 'cargando') { errToast('Esperá a que carguen las reservas del cliente'); return; }
   const asesorNombre = ROL === 'admin' ? (val('vc-asesor').trim() || MI_NOMBRE) : MI_NOMBRE;
@@ -29447,6 +29465,29 @@ function cbApConfirmar(inp) {
 const cbMigrarPax = it => CB_TIPOS[it?.tipo || 'boleto']?.pax && it.adultos === undefined && it.cant != null ? { ...it, adultos: it.cant } : it;
 const cbArchivo = c => `Cotizacion-${cbNumero(c.numero)}-${c.cliente.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}.pdf`;
 
+function docEnfocar(campo) {
+  const el = typeof campo === 'string' ? document.getElementById(campo) : campo;
+  if (!el) return;
+  for (let p = el.parentElement; p; p = p.parentElement) if (p.tagName === 'DETAILS') p.open = true;
+  const card = el.closest('.cb-item');
+  if (card?.classList.contains('cb-plegado')) {
+    cbItems[+card.dataset.i]._plegado = false; card.classList.remove('cb-plegado');
+    const b = card.querySelector('[data-cb-plegar]'); b.textContent = 'Contraer'; b.setAttribute('aria-expanded', 'true');
+  }
+  el.focus(); el.scrollIntoView?.({ block: 'nearest' });
+}
+function cbEnfocarServicio(it, campo) {
+  const i = cbItems.indexOf(it), card = document.querySelector(`#cb-items .cb-item[data-i="${i}"]`);
+  docEnfocar(card?.querySelector(`[data-k="${campo}"]`) || card?.querySelector('input,select'));
+}
+function cbResumenServicio(it) {
+  return [cbTitulo(it) || 'Servicio sin descripción', it.plan, it.hab, it.ida && cbFechaLarga(it.ida), it.vuelta && 'al ' + cbFechaLarga(it.vuelta), cbEsPax(it) ? cbPaxTexto(it) : it.cant ? it.cant + ' unidad(es)' : ''].filter(Boolean).join(' · ');
+}
+function cbResumenCliente(plegar = false) {
+  const nombre = val('cb-cliente').trim();
+  document.getElementById('cb-cliente-resumen').textContent = [nombre, val('cb-vence') && 'Válida hasta ' + cbFechaLarga(val('cb-vence'))].filter(Boolean).join(' · ') || 'Cliente, fecha y vigencia';
+  if (plegar && nombre) { document.getElementById('cb-cliente-seccion').open = false; document.querySelector('#cb-cliente-seccion > summary').focus({ preventScroll: true }); }
+}
 function cbItemHtml(it, i) {
   // Fechas: nunca antes de hoy; la vuelta tampoco antes de la ida (cbMinFecha).
   const f = (k, label, attrs, full = '') => `<div class="field${full}"><label class="fl" for="cb-${k}-${i}">${label}</label><input id="cb-${k}-${i}" class="ei" data-k="${k}" value="${esc(String(it[k] ?? (k === 'habitaciones' ? 1 : '')))}" ${attrs}${attrs.includes('type="date"') ? ` min="${cbMinFecha(k, it.ida)}"` : ''}></div>`;
@@ -29454,9 +29495,11 @@ function cbItemHtml(it, i) {
   const opciones = Object.entries(CB_TIPOS).map(([k, t]) => `<option value="${k}"${k === tipo ? ' selected' : ''}>${t.nombre}</option>`).join('');
   const unidad = tipo === 'hotel' ? `<div class="field cb-dos"><label class="fl" for="cb-unidad-${i}">Tarifa por</label><select id="cb-unidad-${i}" class="ei" data-k="unidad">${it._unidadPendiente ? '<option value="" selected disabled>Confirma la unidad</option>' : ''}${[['persona_noche', 'Persona por noche'], ['habitacion_noche', 'Habitación por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${!it._unidadPendiente && (it.unidad || 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select>${it._unidadPendiente ? '<small>Confirma la unidad: no está indicada en el tarifario.</small>' : ''}</div>` : '';
   const boleto = tipo === 'boleto', campos = CB_TIPOS[tipo].campos.filter(c => !(boleto && c[0] === 'ruta'));
-  return `<div class="cb-item${it._plegado ? ' cb-plegado' : ''}${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
-    <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span><button type="button" class="btn-sm cb-plegar" data-cb-plegar aria-expanded="${!it._plegado}">${it._plegado ? 'Editar' : 'Contraer'}</button> Importe <b class="cb-importe">${cbImporteTexto(it)}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
-    <div class="cb-item-grid">
+  if (tipo === 'hotel') { const orden = ['nombre', 'plan', 'hab', 'ida', 'vuelta']; campos.sort((a, b) => orden.indexOf(a[0]) - orden.indexOf(b[0])); }
+  return `<div class="cb-item${tipo === 'hotel' ? ' cb-servicio-hotel' : ''}${it._plegado ? ' cb-plegado' : ''}${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
+    <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span><button type="button" class="btn-sm cb-plegar" data-cb-plegar aria-controls="cb-item-campos-${i}" aria-expanded="${!it._plegado}">${it._plegado ? 'Editar' : 'Contraer'}</button> Importe <b class="cb-importe">${cbImporteTexto(it)}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
+    <div class="cb-item-resumen">${esc(cbResumenServicio(it))}</div>
+    <div class="cb-item-grid" id="cb-item-campos-${i}">
       ${boleto ? cbRutaHtml(it) + (it.ruta_libre ? f('ruta', 'Ruta anterior (se reemplaza al elegir origen y destino)', 'placeholder="CCS-PTY-MIA"', ' cb-full') : '') : ''}
       ${campos.map((c, j) => tipo === 'hotel' && j === 0 ? cbHotelHtml(it, i) : tipo === 'hotel' && ['plan', 'hab'].includes(c[0]) ? cbHotelSelectorHtml(it, i, c[0], c[1]) : j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')}
       ${unidad}
@@ -29562,7 +29605,7 @@ function cbDatosPdf(c) {
     validez: c.vence ? `Cotización válida hasta el ${cbFechaLarga(c.vence)}. Sujeta a cambio y a disponibilidad.` : '',
   };
 }
-function cbActualizarTotal() { document.getElementById('cb-total').textContent = '$' + cbMonto(cbTotalItems(cbItems)); cbPintarResumen(); }
+function cbActualizarTotal() { document.getElementById('cb-total').textContent = '$' + cbMonto(cbTotalItems(cbItems)); cbPintarResumen(); document.querySelectorAll('#cb-items .cb-item').forEach(card => { card.querySelector('.cb-item-resumen').textContent = cbResumenServicio(cbItems[+card.dataset.i]); }); }
 let cbRenderizando = false;
 function cbRenderItems() {
   if (cbRenderizando) return;
@@ -29607,6 +29650,7 @@ function cbAplicarLead() {
   // Cambiar de cliente conserva los servicios y precios que ya se armaron.
   cbLead = l; cbPintarLead();
   document.getElementById('cb-cliente').value = l.nombre;
+  cbResumenCliente(true);
 }
 const cbHoteles = new Map(), cbHotelTarifas = new Map(), cbHotelPeticiones = new Map();
 const cbHotelHabitaciones = new Map(), cbHabPeticiones = new Map(), cbFotosErrores = new Set();
@@ -29952,6 +29996,7 @@ function cbRestaurarBorrador(b, sel) {
   // Un borrador de días atrás trae la fecha y la vigencia de entonces: vuelven a hoy.
   ['cb-fecha', 'cb-vence'].forEach(id => { const el = document.getElementById(id); if (el.value && el.value < cbHoy()) el.value = cbHoy(); });
   if (b.asesor && [...sel.options].some(o => o.value === b.asesor)) sel.value = b.asesor;
+  cbResumenCliente();
 }
 async function cbAplicarSolicitud(sel) {
   const s = cbSolicitudPendiente; cbSolicitudPendiente = null;
@@ -30003,6 +30048,7 @@ function cbResetForm() {
   document.getElementById('cb-cliente').value = '';
   document.getElementById('cb-fecha').value = cbHoy(); document.getElementById('cb-vence').value = cbHoy();
   document.getElementById('cb-notas').value = CB_NOTAS; document.getElementById('cb-terminos').value = CB_TERMINOS;
+  document.getElementById('cb-cliente-seccion').open = true; cbResumenCliente();
 }
 async function cbCargarSeccion() {
   const modo = cbLeadPendiente || (!cbSolicitudPendiente && !document.body.classList.contains('modo-boleteria')) ? 'ventas' : 'boleteria';
@@ -30086,7 +30132,7 @@ async function cbCargarSeccion() {
       if (e.target.closest('[data-cb-hab-fotos]')) { const fotos = cbHabitacionFotos(it, it.hab); if (fotos.length) openLightbox(fotos.map(f => fotoGrande(f.storage_path)), 0); return; }
       if (e.target.closest('[data-cb-fotos-reintentar]')) { cbTraerHabitaciones(it.producto_id).then(() => { if (cbItems.includes(it)) cbRenderItems(); }); return; }
       if (e.target.closest('[data-cb-reintentar]')) { cbHotelElegir(card, it.producto_id); return; }
-      if (e.target.closest('[data-cb-plegar]')) { it._plegado = !it._plegado; cbRenderItems(); return; }
+      if (e.target.closest('[data-cb-plegar]')) { it._plegado = !it._plegado; cbRenderItems(); document.querySelector(`#cb-items .cb-item[data-i="${card.dataset.i}"] [data-cb-plegar]`).focus({ preventScroll: true }); return; }
       if (e.target.closest('[data-cb-usar]')) { cbHotelRecalcular(it, true); cbRenderItems(); cbProgramarBorrador(); return; }
       if (e.target.closest('[data-cb-manual]')) {
         it.tramos = []; it.tarifas_contexto = cbTarContexto(it); it._desactualizado = false;
@@ -30190,6 +30236,7 @@ async function cbCargarSeccion() {
     const camposBorrador = ['cb-cliente', 'cb-fecha', 'cb-vence', 'cb-notas', 'cb-terminos', 'cb-asesor'];
     ['input', 'change'].forEach(ev => document.getElementById('sec-cotizacion-boletos').addEventListener(ev, e => {
       if (e.target.closest('#cb-items') || camposBorrador.includes(e.target.id)) cbProgramarBorrador();
+      if (camposBorrador.includes(e.target.id)) cbResumenCliente();
     }));
     document.addEventListener('visibilitychange', () => { if (document.hidden) cbGuardarBorrador(); });
   }
@@ -30207,6 +30254,7 @@ async function cbCargarSeccion() {
   else sel.innerHTML = '<option value="">— Elige el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
   if (cbSolicitudPendiente) await cbAplicarSolicitud(sel);
   if (cbLeadPendiente) cbAplicarLead();
+  cbResumenCliente();
   cbOffset = 0;
   await cbCargarHistorial(false);
 }
@@ -30305,19 +30353,21 @@ window.cbGuardar = async function cbGuardar(accion) {
   if (cbGenerando) return;
   const enviar = accion === 'enviar', ventas = cbModo === 'ventas';
   const cliente = val('cb-cliente').trim();
-  if (!cliente) { errToast('Escribe el cliente'); return; }
+  if (!cliente) { errToast('Escribe el cliente'); docEnfocar('cb-cliente'); return; }
   const hotelPendiente = cbItems.find(it => it.tipo === 'hotel' && (it._cargando || it._unidadPendiente || it._desactualizado || !cbTarTramosValidos(it) || (it.tarifas_contexto && it.tarifas_contexto !== cbTarContexto(it)) || ((it.infantes_gratis || cbPorHabitacion(it)) && (!cbTarNoches(it.ida, it.vuelta).length || cbTarNum(it.tarifa) === null)) || (cbPorHabitacion(it) && (!Number.isInteger(cbHabitaciones(it)) || cbHabitaciones(it) < 1))));
-  if (hotelPendiente) { errToast('Hospedaje: revisa las fechas y confirma una tarifa para el viaje actual.'); return; }
-  if (cbItems.some(it => it.tipo === 'hotel' && !cbPorHabitacion(it) && Number(it.ninos) > 0 && (cbTarNum(it.tarifa_nino) === null || (it.tramos || []).some(t => cbTarNinoTramo(it, t) === null)))) { errToast('Hospedaje: indica la tarifa de los niños; escribe 0 si la promoción los incluye gratis.'); return; }
-  const items = cbItems.map(cbLimpiarItem).filter(it => cbTitulo(it) || it.tarifa);
-  if (!items.length) { errToast('Agrega al menos un servicio con su descripción y tarifa'); return; }
+  if (hotelPendiente) { errToast('Hospedaje: revisa las fechas y confirma una tarifa para el viaje actual.'); cbEnfocarServicio(hotelPendiente, 'ida'); return; }
+  const ninosSinTarifa = cbItems.find(it => it.tipo === 'hotel' && !cbPorHabitacion(it) && Number(it.ninos) > 0 && (cbTarNum(it.tarifa_nino) === null || (it.tramos || []).some(t => cbTarNinoTramo(it, t) === null)));
+  if (ninosSinTarifa) { errToast('Hospedaje: indica la tarifa de los niños; escribe 0 si la promoción los incluye gratis.'); cbEnfocarServicio(ninosSinTarifa, 'tarifa_nino'); return; }
+  const registros = cbItems.map(it => ({ original: it, datos: cbLimpiarItem(it) })).filter(({ datos }) => cbTitulo(datos) || datos.tarifa);
+  const items = registros.map(({ datos }) => datos);
+  if (!items.length) { errToast('Agrega al menos un servicio con su descripción y tarifa'); cbEnfocarServicio(cbItems[0], 'nombre'); return; }
   const incompleto = items.find(it => !cbTitulo(it) || !(cbEsPax(it) ? cbPax(it).a : it.cant));
-  if (incompleto) { const t = cbTipo(incompleto), falta = !cbTitulo(incompleto) ? t.campos[0][1] : cbEsPax(incompleto) ? 'al menos un adulto' : t.campos.find(([k]) => k === 'cant')[1]; errToast(`${t.nombre}: falta ${falta.toLowerCase()}`); return; }
+  if (incompleto) { const t = cbTipo(incompleto), falta = !cbTitulo(incompleto) ? t.campos[0][1] : cbEsPax(incompleto) ? 'al menos un adulto' : t.campos.find(([k]) => k === 'cant')[1]; errToast(`${t.nombre}: falta ${falta.toLowerCase()}`); cbEnfocarServicio(registros[items.indexOf(incompleto)].original, !cbTitulo(incompleto) ? t.campos[0][0] : cbEsPax(incompleto) ? 'adultos' : 'cant'); return; }
   const pasada = items.find(it => [it.ida, it.vuelta].some(d => d && d < cbHoy()));
-  if (pasada && !DR?.edicion('cotizacion')) { errToast(`${cbTipo(pasada).nombre}: hay una fecha anterior a hoy`); return; }
-  if (!DR?.edicion('cotizacion') && [val('cb-fecha'), val('cb-vence')].some(d => d && d < cbHoy())) { errToast('La fecha y la vigencia no pueden ser anteriores a hoy'); return; }
+  if (pasada && !DR?.edicion('cotizacion')) { errToast(`${cbTipo(pasada).nombre}: hay una fecha anterior a hoy`); cbEnfocarServicio(registros[items.indexOf(pasada)].original, pasada.ida && pasada.ida < cbHoy() ? 'ida' : 'vuelta'); return; }
+  if (!DR?.edicion('cotizacion') && [val('cb-fecha'), val('cb-vence')].some(d => d && d < cbHoy())) { errToast('La fecha y la vigencia no pueden ser anteriores a hoy'); docEnfocar(val('cb-fecha') && val('cb-fecha') < cbHoy() ? 'cb-fecha' : 'cb-vence'); return; }
   const asesorId = val('cb-asesor');
-  if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); document.getElementById('cb-asesor').focus(); return; }
+  if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); docEnfocar('cb-asesor'); return; }
   const btn = document.getElementById(`cb-${accion}-btn`), htmlBtn = btn.dataset.drEtiqueta || btn.innerHTML;
   cbGenerando = true; document.querySelectorAll('.cb-acciones button').forEach(b => b.disabled = true);
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
@@ -34042,6 +34092,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '📋', titulo: 'Formularios de voucher y cotización más compactos', texto: 'Cliente, hospedaje, servicios y pago se organizan en secciones plegables con un resumen de lo completado. Hotel, habitación y modalidad quedan juntos; los totales y las acciones principales siguen a mano. Si falta un dato, se abre la sección para corregirlo. También se ajustaron las barras de acciones para que no tapen el historial.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
   { fecha: '2026-10-23', emoji: '📄', titulo: 'Tus últimos vouchers y cotizaciones a mano', texto: 'Debajo de la vista previa del voucher y del resumen de la cotización aparecen los tres últimos documentos activos, con cliente, fecha y total. Toca uno para abrir su PDF o usa «Ver todos» para ir al historial completo.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
   { fecha: '2026-10-23', emoji: '🧾', titulo: 'Comisiones: % por persona y pestaña Pagos', texto: 'En Configuración cada persona tiene un solo % (o usa el general), con «Por servicio» para separar boletos, traslado, hospedaje y paquete, y «Volver al general» para quitarle el propio. Los admin sin ventas quedan ocultos. La pestaña Invoices ahora se llama Pagos: un pago por vendedor y corte, sin número de factura ni PDF, y ya no se manda nada por Telegram ni correo.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-23', emoji: '💰', titulo: 'Comisiones más claras', texto: 'El Resumen de Comisiones abre con el próximo pago: la fecha, cuántos días faltan, el total y cuánto le toca a cada vendedor (toca un nombre para ver sus ventas). Los pagos anteriores quedan plegados en un historial. En Ventas cada comisión es una tarjeta con sus servicios y porcentajes, un buscador por cliente, código o destino, y el botón «Ver reserva». Los asesores ven sus propios invoices en el Resumen. Se quitaron los restos de la verificación manual, que ya no hace falta.', roles: ['admin', 'administrativo', 'asesor'] },
