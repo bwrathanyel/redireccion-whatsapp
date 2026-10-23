@@ -11492,7 +11492,7 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
 window.closeDrawer = (fromNav) => {
   guardarPendientesLead(); // ficha del lead: lo escrito sin "salir" del campo se guarda igual
   const notas = document.getElementById('tar-notas');
-  const cerrar = () => { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume(); };
+  const cerrar = () => { tarDrawerSolicitud++; document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume(); };
   if (notas && notas.value.trim() !== (notas.dataset.original || '').trim()) {
     confirmarSheet({ titulo: '¿Cerrar sin guardar?', detalle: 'Hay notas sin guardar.', textoOk: 'Cerrar', destructivo: true }).then(ok => { if (ok) cerrar(); });
     return;
@@ -21379,6 +21379,9 @@ const TAR_TAB_LABEL = { excursion: 'Excursión', traslado: 'Traslado', hotel: 'H
      cada flyer dos veces (tarjeta de promo + fila de la carpeta) y el conteo de
      promociones del hotel salía inflado. Una sola fuente: `tarifas`. */
 const TAR_SEL_PRODUCTOS = '*, tarifa_destacada_id, tarifas(*, tarifario_bloques(*)), producto_fotos(storage_path,orden,es_principal,activo,credito,credito_url)';
+// Filtrar ANTES del límite del embed: sin esto 1000 históricas pueden dejar
+// fuera todas las tarifas actuales de un hotel (Venetur, Aria, Morrocoy).
+const tarConsultaProductos = q => q.eq('tarifas.vigente', true);
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas']);
   const mesSel = document.getElementById('tar-f-mes');
@@ -22228,7 +22231,7 @@ async function loadTarifario() {
   // ninguna promo vigente -- solo se le vacía el embed.
   // Un solo filtro desde la Fase 5 paso 4: `tarifas.vigente` cubre también a los
   // flyers, que ahora son filas de `tarifas` (lo que era `promociones.revisado`).
-  const soloVivos = qq => qq.eq('tarifas.vigente', true);
+  const soloVivos = tarConsultaProductos;
   // Promociones / Hot Sales leen `tarifas` directo (no la vista `promociones`):
   // una fila con título ES una promoción, venga de un flyer (`origen='flyer'`) o
   // de una línea del PDF. Leer las dos fuentes listaba cada flyer dos veces.
@@ -23513,6 +23516,68 @@ let TAR_EDIT_ID = null, TAR_EDIT_PROD = null, TF_PROT_INICIAL = false;
 // El ítem que abrió el drawer. Al buscar por IA el producto no está en
 // tarCache[tarTab] (viene fresco de la base), así que los editores caen a este.
 let TAR_DRAWER_ITEM = null;
+let tarDrawerSolicitud = 0, tarDrawerCache = null;
+function tarDrawerEstado() {
+  const fuentes = Object.entries(tarCache), dia = hoy();
+  if (!tarDrawerCache || tarDrawerCache.base !== tarCache || tarDrawerCache.dia !== dia
+    || fuentes.length !== tarDrawerCache.fuentes.size
+    || fuentes.some(([k, v]) => tarDrawerCache.fuentes.get(k) !== v)) {
+    tarDrawerCache = { base: tarCache, dia, fuentes: new Map(fuentes), productos: new Map(), pedidos: new Map() };
+  }
+  return tarDrawerCache;
+}
+function tarInvalidarTab() {
+  // Una edición desde Hot Sales también invalida la copia de Hoteles/IA.
+  tarCache = {};
+  tarDrawerCache = null;
+}
+function tarDrawerBuscarProducto(id) {
+  const estado = tarDrawerEstado();
+  if (estado.productos.has(id)) return estado.productos.get(id);
+  for (const tab of ['hotel', 'excursion', 'traslado', 'paquete', 'boleteria']) {
+    const p = (tarCache[tab] || []).find(x => Number(x.id) === id && x.origen == null
+      && Array.isArray(x.tarifas) && x.tarifas.every(t => t.vigente === true));
+    if (p) { estado.productos.set(id, p); return p; }
+  }
+  return null;
+}
+function tarDrawerPedirProducto(id) {
+  const estado = tarDrawerEstado();
+  if (estado.pedidos.has(id)) return estado.pedidos.get(id);
+  const control = new AbortController();
+  const reloj = setTimeout(() => control.abort(), 12000);
+  const pedido = (async () => {
+    try {
+      const { data, error } = await tarConsultaProductos(sb.from('productos').select(TAR_SEL_PRODUCTOS))
+        .eq('id', id).abortSignal(control.signal).maybeSingle();
+      if (error || !data) throw new Error('No se pudo cargar la ficha');
+      if (tarDrawerEstado() === estado) estado.productos.set(id, data);
+      return data;
+    } finally {
+      clearTimeout(reloj);
+      estado.pedidos.delete(id);
+    }
+  })();
+  estado.pedidos.set(id, pedido);
+  return pedido;
+}
+function tarDrawerAbrirCarga() {
+  const solicitud = ++tarDrawerSolicitud;
+  TAR_DRAWER_ITEM = null;
+  const drawer = document.getElementById('drawer'), abierto = drawer.classList.contains('open');
+  document.getElementById('drawerContent').innerHTML = `<div id="tar-drawer-carga" data-solicitud="${solicitud}" role="status" aria-live="polite">
+    <div class="dhead"><div class="dn">Cargando ficha…</div></div>
+    <div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><span>Cargando tarifas vigentes…</span></div>
+  </div>`;
+  drawer.classList.add('open');
+  document.getElementById('drawerBg').classList.add('open');
+  if (!abierto) navPush({ type: 'drawer' });
+  return solicitud;
+}
+function tarDrawerCargaActual(solicitud) {
+  return solicitud === tarDrawerSolicitud && document.getElementById('drawer').classList.contains('open')
+    && document.getElementById('tar-drawer-carga')?.dataset.solicitud === String(solicitud);
+}
 
 function tarAbrirEditorFicha(id) {
   const p = (tarCache[tarTab] || []).find(x => x.id === Number(id))
@@ -23625,8 +23690,8 @@ async function tfRetirarFila(row) {
 // Tras cada acción sobre una tarifa se relee el producto de la base para que la
 // tabla, el switch de protegido y el catálogo cacheado no queden desfasados.
 async function tfRecargarProducto() {
-  delete tarCache[tarTab];
-  const { data } = await sb.from('productos').select('id, notas, tarifas(*)').eq('id', TAR_EDIT_ID).single();
+  tarInvalidarTab();
+  const { data } = await tarConsultaProductos(sb.from('productos').select('id, notas, tarifas(*)')).eq('id', TAR_EDIT_ID).single();
   if (data && TAR_EDIT_PROD) { TAR_EDIT_PROD.tarifas = data.tarifas; TAR_EDIT_PROD.notas = data.notas; }
   tfRenderTarifas();
   tfInitProtegido();
@@ -23780,7 +23845,7 @@ async function tarGuardarPromo(btn) {
     ? 'Promoción creada — protegida del tarifario nacional, la IA la usa ya'
     : 'Promoción actualizada — la IA la usa desde el próximo mensaje');
   closeSheet('tar-promo-sheet');
-  delete tarCache[tarTab];
+  tarInvalidarTab();
   loadTarifario();
 }
 
@@ -23807,7 +23872,7 @@ async function tarGuardarFicha(btn) {
   closeSheet('tar-ficha-sheet');
   // El tarifario se cachea por pestaña: sin invalidar, la tarjeta seguiría
   // mostrando el valor viejo aunque la base ya tenga el nuevo.
-  delete tarCache[tarTab];
+  tarInvalidarTab();
   loadTarifario();
 }
 /* ---------- Galería (4 carpetas desplegables, mismo orden/categorías que Tarifario) ---------- */
@@ -25073,18 +25138,13 @@ function tgCabeceraHtml(x, nombre, fotos, n) {
     ${datos ? `<div class="tg-datos">${datos}</div>` : ''}
   </div>`;
 }
-/* La carpeta: las N filas del hotel agrupadas por plan (Todo Incluido / Solo
-   Desayuno / ...). La destacada va primera y marcada; las que ya no se venden
-   se muestran APAGADAS, no escondidas -- el asesor tiene que poder ver por qué
-   una promoción dejó de estar, y el admin necesita verlas para gestionarlas. */
+/* La ficha normal muestra solo tarifas vendibles, para todos los roles.
+   El histórico se conserva en la base y nunca se construye en este drawer. */
 function tarCarpetaHtml(x) {
   const tarifas = x?.tarifas || [];
-  if (!tarifas.length) return '';
-  // Vivas arriba, agrupadas por plan como siempre. Las retiradas bajan a un
-  // solo <details> "Ver histórico" al final -- el asesor no las lee, el admin
-  // las gestiona desde ahí.
+  if (!tarifas.length && x?.tipo !== 'hotel') return '';
   const vivas = tarifas.filter(tarVendibleHoy);
-  const historicas = tarifas.filter(t => !tarVendibleHoy(t));
+  if (!vivas.length) return `<div class="carpeta"><div class="tbl-state show">No hay tarifas vigentes para este ${x?.tipo === 'hotel' ? 'hotel' : 'producto'}.</div></div>`;
   const destacadaId = tarifaDestacada(x)?.id ?? null;
   const grupos = new Map();
   vivas.forEach(t => {
@@ -25140,13 +25200,6 @@ function tarCarpetaHtml(x) {
       <div class="promo-grid">${filas.map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null, habs.get(tarNombreNorm(t.habitacion)) || null, grupoTam, false, juntables.get(t.id) || null, x.nombre || '', notaUnica)).join('')}</div>
     </section>`;
     }).join('')}
-    ${historicas.length ? `<details class="carpeta-historico">
-      <summary>Ver histórico (${historicas.length})</summary>
-      <div class="promo-grid">${historicas
-        .slice()
-        .sort((a, b) => (a.plan || '').localeCompare(b.plan || '', 'es') || (a.id - b.id))
-        .map(t => tarPromoCardHtml(t, null, null, null, 0, true, null, x.nombre || '')).join('')}</div>
-    </details>` : ''}
   </div>`;
 }
 // Condiciones completas del bloque azul, plegadas en la cabecera de la carpeta.
@@ -25189,7 +25242,7 @@ function tarBloqueHtml(b) {
 }
 function tarBloquesHtml(x) {
   const vistos = new Map();
-  (x?.tarifas || []).forEach(t => { const b = tarBloque(t); if (b && b.id != null && !vistos.has(b.id)) vistos.set(b.id, b); });
+  (x?.tarifas || []).filter(tarVendibleHoy).forEach(t => { const b = tarBloque(t); if (b && b.id != null && !vistos.has(b.id)) vistos.set(b.id, b); });
   return [...vistos.values()].map(tarBloqueHtml).join('');
 }
 /* Fase 2.1 — selección de tarjetas.
@@ -25282,15 +25335,12 @@ function tarEngancharCarpeta() {
 function tarRepintarCarpeta(x) {
   const vieja = document.querySelector('#drawerContent .carpeta');
   if (!vieja) return;
-  // Tocar un precio de la tabla repinta todo: el histórico abierto sigue abierto.
-  const histAbierto = !!vieja.querySelector('.carpeta-historico[open]');
   const scrollTablas = [...vieja.querySelectorAll('[data-tg-plan]')].map(p => [p.dataset.tgPlan, p.querySelector('.tg-tabla')?.scrollLeft || 0]);
   vieja.outerHTML = tarCarpetaHtml(x);
   document.querySelectorAll('#drawerContent [data-tg-plan]').forEach(p => {
     const tabla = p.querySelector('.tg-tabla');
     if (tabla) tabla.scrollLeft = scrollTablas.find(([plan]) => plan === p.dataset.tgPlan)?.[1] || 0;
   });
-  if (histAbierto) document.querySelector('#drawerContent .carpeta-historico')?.setAttribute('open', '');
   tarEngancharCarpeta();
   // La selección sigue viva: sin esto las tarjetas nuevas nacen destildadas y la
   // barra diría "2 seleccionadas" sobre tarjetas en blanco.
@@ -25629,7 +25679,10 @@ function tarWireDescClamp() {
     b.onclick = () => { b.textContent = d.classList.toggle('abierto') ? 'Ver menos' : 'Ver más'; };
   });
 }
-function openProductoDrawer(x, tipoForzado = null) {
+function openProductoDrawer(x, tipoForzado = null, solicitud = null) {
+  if (solicitud !== null && !tarDrawerCargaActual(solicitud)) return;
+  if (solicitud === null) tarDrawerSolicitud++;
+  const drawerAbierto = document.getElementById('drawer').classList.contains('open');
   TAR_DRAWER_ITEM = x;
   // Al reabrir la ficha la destacada vuelve a ir primera (y la tabla vuelve a
   // abrir su detalle, en Doble).
@@ -25643,6 +25696,7 @@ function openProductoDrawer(x, tipoForzado = null) {
   // Desde el buscador IA el resultado puede ser de otra pestaña que la abierta:
   // el tipo real viene explícito para no pintar una promo como producto.
   const esPromo = tipoForzado ? tipoForzado === 'promocion' : (tarTab === 'promo' || tarTab === 'hotsale');
+  if (!esPromo) x.tarifas = (x.tarifas || []).filter(tarVendibleHoy);
   const nombre = esPromo ? tarNombrePromo(x) : x.nombre;
   const tarifa = !esPromo ? mejorPrecio(x) : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
@@ -25724,7 +25778,7 @@ function openProductoDrawer(x, tipoForzado = null) {
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
-  navPush({ type: 'drawer' });
+  if (!drawerAbierto) navPush({ type: 'drawer' });
   document.getElementById('dCotizador').onclick = () =>
     lyraCotizar({ opcion_tabla: esPromo ? 'promociones' : 'productos', opcion_id: x.id, nombre }, `Cotízame ${nombre}: `);
   document.getElementById('tar-editar-ficha')?.addEventListener('click', () => tarAbrirEditorFicha(x.id));
@@ -25801,7 +25855,7 @@ async function subirVideoProducto(productoId, file) {
   const out = await enviarVideo(file, { 'x-producto-id': String(productoId) }, TAR_VIDEO_LIMITE);
   if (!out) { cargarVideoAdmin(productoId, null); return; }
   okToast('Video subido');
-  delete tarCache[tarTab];
+  tarInvalidarTab();
   cargarVideoAdmin(productoId, out.video_url);
 }
 async function guardarNotasTarifario(tabla, id) {
@@ -25813,7 +25867,7 @@ async function guardarNotasTarifario(tabla, id) {
   if (error) { errToast('No se pudieron guardar las notas: ' + error.message); return; }
   okToast('Notas guardadas');
   document.getElementById('tar-notas').dataset.original = notas;
-  delete tarCache[tarTab];
+  tarInvalidarTab();
 }
 const TAR_FOTOS_LIMITE = 5 * 1024 * 1024, TAR_FOTOS_MIME = ['image/png', 'image/jpeg', 'image/webp'];
 function slugArchivo(nombre) {
@@ -25859,7 +25913,7 @@ async function cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId = 'tar-foto
     if (eHab) { errToast('No se pudo asignar la habitación: ' + eHab.message); return; }
     okToast('Habitación actualizada');
     if (tabla === 'apto_fotos') return;
-    delete tarCache[tarTab];
+    tarInvalidarTab();
     // Refresca x.habitaciones (con las fotos ya agrupadas) para que la tarjeta
     // y el comparador vean el cambio sin tener que cerrar y reabrir el drawer.
     if (TAR_DRAWER_ITEM) tarCargarHabitaciones(TAR_DRAWER_ITEM);
@@ -25909,7 +25963,7 @@ async function eliminarFoto(tabla, fk, entidadId, fotoId, prefijo, eraPrincipal,
   }
   box.style.opacity = '1';
   okToast('Foto eliminada');
-  delete tarCache[tarTab];
+  tarInvalidarTab();
   cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId, habitaciones);
 }
 async function agregarFoto(tabla, fk, entidadId, prefijo, ordenSiguiente, file, boxId = 'tar-fotos-admin', habitaciones = null) {
@@ -25933,7 +25987,7 @@ async function agregarFoto(tabla, fk, entidadId, prefijo, ordenSiguiente, file, 
   }
   box.style.opacity = '1';
   okToast('Foto agregada');
-  delete tarCache[tarTab];
+  tarInvalidarTab();
   cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId, habitaciones);
 }
 async function marcarFotoPrincipal(tabla, fk, entidadId, fotoId, prefijo, boxId = 'tar-fotos-admin', habitaciones = null) {
@@ -25944,7 +25998,7 @@ async function marcarFotoPrincipal(tabla, fk, entidadId, fotoId, prefijo, boxId 
   box.style.opacity = '1';
   if (error) { errToast('No se pudo marcar como principal: ' + error.message); return; }
   okToast('Foto principal actualizada');
-  delete tarCache[tarTab];
+  tarInvalidarTab();
   cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId, habitaciones);
 }
 async function reemplazarFoto(tabla, fk, entidadId, fotoIdViejo, prefijo, file, boxId = 'tar-fotos-admin', habitaciones = null) {
@@ -25981,7 +26035,7 @@ async function reemplazarFoto(tabla, fk, entidadId, fotoIdViejo, prefijo, file, 
   }
   box.style.opacity = '1';
   okToast('Foto reemplazada');
-  delete tarCache[tarTab];
+  tarInvalidarTab();
   cargarFotosAdmin(tabla, fk, entidadId, prefijo, boxId, habitaciones);
 }
 /* ---------- Lightbox de fotos (drawer de producto + Galería) ---------- */
@@ -33882,8 +33936,11 @@ function cerrarResultadosIA() {
 async function hidratarResultadosIA(res) {
   const enMemoria = new Map();
   for (const [tab, filas] of Object.entries(tarCache)) {
-    const clave = (tab === 'promo' || tab === 'hotsale') ? 'promocion' : 'producto';
-    for (const x of filas || []) enMemoria.set(clave + ':' + x.id, x);
+    const clave = (tab === 'promo' || tab === 'hotsale' || tab === 'ia') ? 'promocion' : 'producto';
+    for (const x of filas || []) {
+      if (clave === 'producto' && (!Array.isArray(x.tarifas) || x.tarifas.some(t => t.vigente !== true))) continue;
+      enMemoria.set(clave + ':' + x.id, x);
+    }
   }
   const faltan = { promocion: [], producto: [] };
   res.forEach(r => {
@@ -33893,10 +33950,13 @@ async function hidratarResultadosIA(res) {
   const selPromos = '*, promocion_fotos(storage_path,orden,es_principal,activo), productos(nombre,destino,producto_fotos(storage_path,orden,es_principal,activo))';
   const pedidos = [];
   if (faltan.promocion.length) pedidos.push(sb.from('promociones').select(selPromos).in('id', faltan.promocion).then(r => ['promocion', r]));
-  if (faltan.producto.length) pedidos.push(sb.from('productos').select(selProductos).in('id', faltan.producto).then(r => ['producto', r]));
+  if (faltan.producto.length) pedidos.push(tarConsultaProductos(sb.from('productos').select(selProductos)).in('id', faltan.producto).then(r => ['producto', r]));
   for (const [clave, { data, error }] of await Promise.all(pedidos)) {
     if (error) { console.error('hidratarResultadosIA:', error); continue; }
-    (data || []).forEach(x => enMemoria.set(clave + ':' + x.id, x));
+    (data || []).forEach(x => {
+      enMemoria.set(clave + ':' + x.id, x);
+      if (clave === 'producto') tarDrawerEstado().productos.set(Number(x.id), x);
+    });
   }
   // El ítem completo se cuelga del resultado; si no se pudo traer queda null y
   // esa fila cae a la vista de lista, que solo necesita título y extracto.
@@ -34003,18 +34063,27 @@ async function abrirDesdeBusquedaIA(tipo, id) {
   // por tipo, abrir un hotel desde una card de promo podía enganchar una tarifa
   // cuyo id coincidía con el product_id y abrirla como promoción ajena.
   const esPromo = tipo === 'promocion';
-  const enCache = (tarCache[tarTab] || []).find(x =>
-    Number(x.id) === id && (esPromo ? x.origen != null : x.origen == null));
+  id = Number(id);
+  if (!Number.isSafeInteger(id) || id <= 0) { errToast('No se pudo abrir ese ítem'); return; }
+  const enCache = esPromo ? (tarCache[tarTab] || []).find(x => Number(x.id) === id && x.origen != null)
+    : tarDrawerBuscarProducto(id);
   if (enCache) { openProductoDrawer(enCache, tipo); return; }
-  const tabla = tipo === 'promocion' ? 'promociones' : 'productos';
-  // Los productos necesitan las tarifas embebidas: el drawer dibuja la carpeta
-  // de promociones y el editor de ficha (tfRenderTarifas) las edita fila por
-  // fila. Mismo select que la grilla, si no el drawer abierto desde el buscador
-  // sale sin fotos, sin destacada y sin condiciones.
-  const sel = tipo === 'promocion' ? '*' : TAR_SEL_PRODUCTOS;
-  const { data, error } = await sb.from(tabla).select(sel).eq('id', id).maybeSingle();
-  if (error || !data) { errToast('No se pudo abrir ese ítem'); return; }
-  openProductoDrawer(data, tipo);
+  const solicitud = tarDrawerAbrirCarga();
+  try {
+    let item;
+    if (esPromo) {
+      const { data, error } = await sb.from('promociones').select('*').eq('id', id).maybeSingle();
+      if (error || !data) throw new Error('No se pudo cargar la promoción');
+      item = data;
+    } else item = await tarDrawerPedirProducto(id);
+    if (!tarDrawerCargaActual(solicitud)) return;
+    openProductoDrawer(item, tipo, solicitud);
+  } catch {
+    if (!tarDrawerCargaActual(solicitud)) return;
+    const box = document.getElementById('tar-drawer-carga');
+    box.innerHTML = '<div class="dhead"><div class="dn">No se pudo cargar la ficha</div></div><p>Revisa la conexión y vuelve a intentarlo.</p><button type="button" class="dbtn gh" id="tar-drawer-reintentar">Reintentar</button>';
+    document.getElementById('tar-drawer-reintentar').onclick = () => abrirDesdeBusquedaIA(tipo, id);
+  }
 }
 
 /* ---------- Hoja inferior genérica (más opciones del nav, filtros en móvil) — un solo backdrop compartido, una hoja abierta a la vez ---------- */
@@ -34470,6 +34539,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '🏨', titulo: 'Tarifas vigentes y apertura de la ficha', texto: 'La ficha de cada hotel muestra solo tarifas vigentes. Corregimos los hoteles que parecían no tener precios porque se cargaba primero el histórico. Cuando hace falta consultar la ficha, el panel se abre con un indicador de carga; al volver a un hotel se reutiliza lo cargado y los errores permiten reintentar.', roles: ROLES_TODOS },
   { fecha: '2026-10-23', emoji: '🏨', titulo: 'Todos los hoteles en tablas', texto: 'Cada hotel muestra sus tarifas vigentes en tablas por temporada y habitación, aunque tenga una sola tarifa o datos incompletos. Si hay muchas habitaciones puedes deslizar la tabla; al tocar un precio se abre su detalle. El histórico sigue disponible al final.', roles: ['admin', 'asesor', 'marketing'] },
   { fecha: '2026-10-23', emoji: '🗂️', titulo: 'Precios del hotel en una tabla', texto: 'Al abrir un hotel en el Tarifario, sus precios ahora salen en una tabla: cada fila es una temporada y cada columna una habitación, con la temporada de hoy marcada. Toca un precio para ver debajo todas sus ocupaciones, las fechas de disfrute y el botón Seleccionar; el interruptor Doble/Sencilla cambia los montos de la tabla. Arriba van las fotos, el «Desde», el check-in y el check-out, y los requisitos pasan a «Políticas del hotel». Los hoteles cuyas tarifas no arman una tabla limpia se siguen viendo en tarjetas.', roles: ROLES_TODOS },
   { fecha: '2026-10-23', emoji: '💬', titulo: 'WhatsApp restringido por asesor', texto: 'Administración puede activar este modo por asesor en Gestión de personal. La IA entrega su enlace y le pide al cliente escribirle primero; los leads nuevos y pendientes pasan a Atendido a los cinco minutos, sin registrar contacto humano. Los recordatorios se frenan al confirmar, avanzar el caso o tomar la conversación.', roles: ['admin'] },
