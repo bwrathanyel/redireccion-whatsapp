@@ -3150,24 +3150,41 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .cm-hist .lt-card-tit{font-size:14px}
 .cm-hist-total{font-weight:800;white-space:nowrap}
 .cm-hist .cm-reparto{padding:2px 14px 7px;border-top:0}
-/* Ventas e invoices. */
+/* Ventas y pagos. */
 #sec-comisiones .cm-estados{margin:0}
 #sec-comisiones .lt-orden-op[aria-pressed=true]{color:var(--accent-ink);border-color:var(--accent);background:var(--accent-soft)}
 .cm-ventas-n{margin-left:auto;font-size:12px;color:var(--muted)}
 .cm-com b{color:var(--accent-ink)}
 .cm-motivo{font-size:12px;line-height:1.4;color:var(--danger)}
-.cm-sin-envio{color:var(--muted)}
 #sec-comisiones .lt-card-pie{align-items:center}
 #sec-comisiones .lt-card-pie .btn-sm{min-height:34px}
 #sec-comisiones .lt-card-pie .cm-mas{margin-left:auto;min-width:34px;justify-content:center}
 /* Configuración. */
 .card .cm-cfg-txt{display:block;line-height:1.5;margin-bottom:14px;max-width:78ch}
-.cm-reglas-wrap{overflow-x:auto}
-.cm-reglas{width:100%;max-width:760px}
-.cm-reglas td:not(:first-child){white-space:nowrap}
-.cm-cfg-fila{gap:11px}
-.cm-cfg-campo{margin-top:11px}
-.cm-cfg-acc{margin-top:14px}
+.cm-pct-lista{display:grid;gap:11px}
+.cm-pct-fila{display:grid;grid-template-columns:minmax(140px,1fr) minmax(160px,auto) auto;align-items:center;gap:14px;padding:14px;border:1px solid var(--line);border-radius:12px}
+.cm-pct-general{border:0;padding:0}
+.cm-pct-quien{min-width:0;overflow-wrap:anywhere}
+.cm-pct-quien b{display:block;font-size:14px}
+.cm-pct-quien small{display:block;margin-top:4px;color:var(--muted);font-size:12px}
+.cm-pct-valor,.cm-pct-acc{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.cm-pct-acc{justify-content:flex-end}
+.cm-pct-in{display:inline-flex;align-items:center;gap:7px;color:var(--muted);white-space:nowrap}
+.cm-pct-in .ei{width:88px;min-height:44px;padding:9px 11px;font-size:16px;text-align:right}
+.cm-pct-in .ei::placeholder{color:var(--muted2);opacity:1}
+.cm-pct-general [data-cm-todos]{width:110px;font-size:22px;font-weight:800}
+.cm-pct-chip{padding:4px 9px;border-radius:999px;font-size:12px;color:var(--muted);background:var(--bg2)}
+.cm-pct-chip[data-e=propio]{color:var(--accent-ink);background:var(--accent-soft)}
+.cm-pct-servicios{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding-top:14px;border-top:1px solid var(--line)}
+.cm-pct-servicios[hidden]{display:none}
+.cm-pct-servicios>.cm-nota{grid-column:1/-1}
+.cm-pct-srv{display:grid;gap:7px;min-width:0;font-size:12px;color:var(--muted)}
+.cm-pct-srv .cm-pct-in .ei{width:100%;min-width:0}
+.cm-pct-srv .cm-pct-in{min-width:0}
+.cm-pct-admins{margin-top:14px}
+.cm-pct-admins[hidden]{display:none}
+.cm-pct-acc .btn-sm,.cm-pct-admins{min-height:44px}
+[data-cm-panel=config][aria-busy=true]{opacity:.7}
 @media(max-width:760px){
   #sec-comisiones .fact-barra{flex-wrap:nowrap}
   #sec-comisiones .fact-barra .bt-buscar{flex:1 1 auto;min-width:0}
@@ -3180,18 +3197,10 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
   #sec-comisiones .cm-prox-total{font-size:28px}
   #sec-comisiones .cm-sv-fila{flex-wrap:wrap}
   #sec-comisiones .cm-sv-fila .btn-sm{min-height:44px}
-  /* % por persona: una tarjeta con los 4 servicios en 2×2, en vez de la tabla→tarjeta genérica. */
-  #sec-comisiones .cm-reglas tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 11px}
-  #sec-comisiones .cm-reglas tbody td{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 7px;padding:0;text-align:left}
-  #sec-comisiones .cm-reglas tbody td::before{grid-column:1/-1}
-  #sec-comisiones .cm-reglas tbody td:first-child{grid-column:1/-1;display:block;padding-bottom:9px;border-bottom:1px solid var(--line)}
-  #sec-comisiones .cm-reglas tbody td:first-child::before{display:none}
-  #sec-comisiones .cm-reglas input{width:100%;min-height:44px}
-  #sec-comisiones .cm-cfg-fila{flex-wrap:wrap}
-  #sec-comisiones .cm-cfg-fila>div{flex:1 1 100%!important}
+  #sec-comisiones .cm-pct-fila{grid-template-columns:minmax(0,1fr);gap:11px}
+  #sec-comisiones .cm-pct-acc{justify-content:flex-start}
+  #sec-comisiones .cm-pct-servicios{grid-template-columns:minmax(0,1fr)}
 }
-.cm-reglas input{width:72px;padding:6px 8px}
-.cm-reglas input::placeholder{color:var(--muted2);opacity:.8}
 /* solo-informe-diario / solo-voucher: a diferencia de los de arriba, no dependen
    del rol sino de un flag por usuario (ve_informe_diario) o de una combinación
    rol+modo (voucher). Se ocultan/muestran por clase en <body> (ve-informe-diario /
@@ -9035,13 +9044,13 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       </div>
     </div>
 
-    <!-- COMISIONES: automáticas al pagarse la reserva; admin verifica, ve invoices y configura % -->
+    <!-- COMISIONES: automáticas al pagarse la reserva; pagos por corte y % por persona -->
     <section class="section" id="sec-comisiones">
       <div id="dr-comision-ajustes" class="vc-hecho" hidden></div>
       <div class="seg-group chips-scroll" id="cm-tabs">
         <button class="seg" data-cm-tab="resumen" type="button">Resumen</button>
         <button class="seg" data-cm-tab="ventas" type="button" id="cm-tab-ventas">Ventas</button>
-        <button class="seg" data-cm-tab="invoices" data-cm-rol="admin administrativo" type="button">Invoices</button>
+        <button class="seg" data-cm-tab="invoices" data-cm-rol="admin administrativo" type="button">Pagos</button>
         <button class="seg" data-cm-tab="config" data-cm-rol="admin" type="button">Configuración</button>
       </div>
 
@@ -9049,10 +9058,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div id="cm-aviso-sin-venta"></div>
         <div id="cm-proximo"></div>
         <div id="cm-secundarias"></div>
-        <div id="cm-mis-invoices" hidden>
-          <h3 class="cm-subtit">Mis invoices</h3>
-          <div class="lt-grid" id="cm-mis-inv-lista"></div>
-        </div>
         <div id="cm-historial-wrap" hidden>
           <h3 class="cm-subtit">Historial de pagos</h3>
           <div class="cm-historial" id="cm-historial"></div>
@@ -9085,26 +9090,15 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 
       <div class="cm-panel" data-cm-panel="config" style="display:none">
         <div class="card">
-          <h2><i class="fas fa-sliders"></i> Porcentajes de comisión</h2>
-          <div class="csub cm-cfg-txt">
-            La comisión es la suma de cada monto de la reserva por su %: boletos, traslado, hospedaje y paquete (el paquete incluye full day, seguro y la diferencia que no cae en ningún servicio).
-            Una celda vacía usa el % de la fila <b>General</b>, que se ve en gris. Un cambio aplica a las comisiones nuevas; las que ya existen conservan su %.
-          </div>
-          <div class="cm-reglas-wrap">
-            <table class="cm-reglas">
-              <thead><tr><th>Persona</th><th>Boletos</th><th>Traslado</th><th>Hospedaje</th><th>Paquete</th></tr></thead>
-              <tbody id="cm-reglas-tbody"></tbody>
-            </table>
-          </div>
+          <h2><i class="fas fa-percent"></i> Comisión general</h2>
+          <div class="csub cm-cfg-txt">Este porcentaje aplica a quien no tenga uno propio. Los cambios valen para comisiones nuevas; las anteriores conservan su porcentaje.</div>
+          <div id="cm-pct-general"></div>
         </div>
         <div class="card">
-          <h2><i class="fas fa-file-lines"></i> Datos del invoice</h2>
-          <div class="ef-fila cm-cfg-fila">
-            <div style="flex:1"><label class="fl" for="cm-cfg-numero">Próximo número de invoice</label><input id="cm-cfg-numero" class="ei" type="number" min="1" step="1"></div>
-            <div style="flex:2"><label class="fl" for="cm-cfg-condiciones">Condiciones de pago</label><input id="cm-cfg-condiciones" class="ei" maxlength="200"></div>
-          </div>
-          <div class="cm-cfg-campo"><label class="fl" for="cm-cfg-terminos">Términos</label><textarea id="cm-cfg-terminos" class="ei" rows="3" maxlength="1000"></textarea></div>
-          <div class="cm-cfg-acc"><button class="dbtn save" id="cm-cfg-guardar" type="button">Guardar datos del invoice</button></div>
+          <h2><i class="fas fa-user-tag"></i> Por persona</h2>
+          <div class="csub cm-cfg-txt">Déjalo vacío para usar el general, o ponle un % propio.</div>
+          <div class="cm-pct-lista" id="cm-pct-lista"></div>
+          <button type="button" class="btn-sm cm-pct-admins" id="cm-pct-admins" hidden></button>
         </div>
       </div>
     </section>
