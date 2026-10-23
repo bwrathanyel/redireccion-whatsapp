@@ -3902,6 +3902,12 @@ body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
   .drawer{top:auto;bottom:0;left:0;right:0;width:100%;max-width:100%;height:auto;max-height:90vh;border-left:none;border-top:1px solid var(--line2);border-radius:22px 22px 0 0;transform:translateY(100%);padding:22px 20px calc(22px + var(--safe-b))}
   .drawer.open{transform:translateY(0)}
   .drawer::before{content:'';position:absolute;top:9px;left:50%;transform:translateX(-50%);width:40px;height:4px;border-radius:3px;background:var(--line2)}
+  /* Parpadeo al abrir drawer/hoja en Android: el blur a pantalla completa se re-muestrea en
+     cada frame y las animaciones infinite de atrás (latidos, Lyra, skeletons) lo invalidan.
+     Sin blur y con fondo más opaco no se nota; el tema claro lo pisa más abajo. */
+  .drawer-bg,.sheet-bg{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(4,6,12,.72)}
+  .drawer-bg{transition:opacity .25s}
+  .drawer{will-change:transform}
   .dbtn{padding:15px}
   .preview-pill{left:12px;right:12px;bottom:calc(84px + var(--safe-b));transform:translateY(140px);max-width:none}
   .preview-pill.show{transform:translateY(0)}
