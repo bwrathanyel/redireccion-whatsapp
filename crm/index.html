@@ -937,6 +937,14 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .tg-modo-b:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .tg-tabla{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel-solid)}
 .tg-fila{display:grid;grid-template-columns:150px repeat(var(--tg-cols),minmax(0,1fr))}
+.tg-ancha{overflow-x:auto;overscroll-behavior-x:contain}
+.tg-ancha .tg-fila{grid-template-columns:150px repeat(var(--tg-cols),96px);width:max-content;min-width:100%}
+.tg-ancha .tg-th-temp,.tg-ancha .tg-temp{position:sticky;left:0;z-index:1;background:var(--panel-solid)}
+.tg-ancha .tg-th-temp{align-self:stretch}
+.tg-ancha .tg-monto{max-width:100%;overflow-wrap:anywhere;flex-wrap:wrap;justify-content:flex-end}
+.tg-ancha:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tg-precio-etq{font-size:11px;color:var(--muted);text-align:right;overflow-wrap:anywhere}
+.tg-duplicadas{margin-top:12px}
 .tg-fila+.tg-fila{border-top:1px solid var(--line)}
 .tg-fila-cab{background:rgba(var(--ink-rgb),.025)}
 .tg-th{padding:12px 14px 10px;text-align:right;border-left:1px solid var(--line);min-width:0}
@@ -1005,6 +1013,7 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
   .tg-desde-v{font-size:22px}
   .tg-plan-cab{flex-wrap:wrap}
   .tg-fila{grid-template-columns:96px repeat(var(--tg-cols),minmax(0,1fr))}
+  .tg-ancha .tg-fila{grid-template-columns:96px repeat(var(--tg-cols),96px)}
   .tg-th{padding:10px 8px 8px}
   .tg-th-temp{font-size:9px;letter-spacing:.06em}
   .tg-th-n{font-size:11px;line-height:1.2}

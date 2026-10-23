@@ -24754,10 +24754,10 @@ async function tarJuntarTarifas(queda, sale, btn) {
    precio abre su detalle debajo. El detalle reusa los helpers de la tarjeta
    (tcHsSegHtml, tcIaBtnHtml, tarMejorPrecioBtnHtml, data-tar-sel, data-juntar-*)
    para que el cableado delegado de tarEngancharCarpeta siga siendo uno solo.
-   Un plan que no arma una tabla limpia cae a las tarjetas de siempre: falta
-   habitación, título o DBL en alguna fila; más de TG_MAX_COLS habitaciones; dos
-   tarifas en la misma celda (cargas duplicadas); o una tabla casi vacía. Medido
-   el 23-oct: 55 de 170 planes vigentes arman tabla, el resto queda como estaba.
+   Todos los hoteles usan tabla, incluso con datos parciales o una sola tarifa.
+   Las ventanas separan temporadas repetidas; duplicados de una misma celda
+   muestran el id más reciente, con una nota de revisión solo para oficina.
+   Otros productos conservan los criterios originales de tabla o tarjetas.
    Prefijo `tg-`, nunca fa/fab/fas/far (los reclama Font Awesome). */
 const TG_MAX_COLS = 5;
 const TG_SIN_PLAN = 'Sin plan indicado';
@@ -24782,10 +24782,15 @@ function tgRango([a, b], anio = true) {
   return a ? `desde ${tgFecha(a, anio)}` : b ? `hasta ${tgFecha(b, anio)}` : '';
 }
 const tgMonto = (t, k) => { const v = tarNumPrecio(t, k); return v === null ? '—' : tarMontoCorto(tarRedondea(v), t.moneda); };
-const tgNombreHab = t => tgOracion(tarHabCorta(t));
+const tgNombreHab = t => t.habitacion ? tgOracion(tarHabCorta(t)) : 'Precio';
 // Título de la temporada sin el hotel (el drawer ya lo dice) ni la habitación
 // (es la columna). Si limpiar deja nada, queda el título del PDF.
 function tgNombreTemp(t, hotel) {
+  if (!String(t.titulo || '').trim()) {
+    const vs = tarVentanas(t), h = hoy();
+    const w = vs.find(([a, b]) => (!a || a <= h) && (!b || b >= h)) || vs.find(([, b]) => !b || b >= h) || vs[0];
+    return w ? tgRango(w) : 'Tarifa general';
+  }
   let s = hotel ? tarTituloSinHotel({ titulo: t.titulo, habitacion: t.habitacion, plan: t.plan, producto_id: t.producto_id || 1, productos: { nombre: hotel } }) : String(t.titulo || '');
   const h = String(t.habitacion || '').toLowerCase(), i = h ? s.toLowerCase().indexOf(h) : -1;
   if (i >= 0 && s.length > h.length) {
@@ -24794,19 +24799,30 @@ function tgNombreTemp(t, hotel) {
   }
   return tgOracion(s);
 }
-// Devuelve {filas, cols, celdas} o null (el plan sigue con tarjetas).
-function tgArmarGrilla(filas) {
-  if (filas.length < 2) return null;
-  if (filas.some(t => !t.habitacion || !t.titulo || tarNumPrecio(t, 'dbl') === null)) return null;
+// `todas` se activa solo en hoteles. Los demás productos conservan su fallback.
+function tgArmarGrilla(filas, todas = false) {
+  if (!filas.length) return null;
+  if (!todas && (filas.length < 2 || filas.some(t => !t.habitacion || !t.titulo || tarNumPrecio(t, 'dbl') === null))) return null;
   const fs = new Map(), cs = new Map(), celdas = new Map();
+  const duplicadas = [];
   for (const t of filas) {
     const kc = tarNombreNorm(t.habitacion);
     let kf = tarNombreNorm(t.titulo);
     // Hay PDFs que repiten la habitación dentro del título: sin quitarla cada
     // habitación sería su propia temporada y la tabla saldría en diagonal.
     if (kc && kf !== kc && kf.includes(kc)) kf = kf.replace(kc, ' ').replace(/\s+/g, ' ').trim();
-    if (celdas.has(kf + '|' + kc)) return null;
-    celdas.set(kf + '|' + kc, t);
+    if (todas) {
+      const ventanas = tarVentanas(t).map(w => JSON.stringify(w)).sort();
+      kf = JSON.stringify([kf, ventanas, ventanas.length ? '' : t.vigencia_texto || '', t.moneda || 'USD']);
+    }
+    const key = kf + '|' + kc;
+    const anterior = celdas.get(key);
+    if (anterior) {
+      if (!todas) return null;
+      const reciente = Number(t.id) > Number(anterior.id) ? t : anterior;
+      duplicadas.push(reciente === t ? anterior : t);
+      celdas.set(key, reciente);
+    } else celdas.set(key, t);
     const o = t.orden_pdf ?? 0;
     if (!cs.has(kc)) cs.set(kc, { k: kc, t, orden: o, tarifas: [] });
     if (!fs.has(kf)) fs.set(kf, { k: kf, t, orden: o, tarifas: [] });
@@ -24814,9 +24830,28 @@ function tgArmarGrilla(filas) {
     c.orden = Math.min(c.orden, o); c.tarifas.push(t);
     f.orden = Math.min(f.orden, o); f.tarifas.push(t);
   }
-  if (cs.size > TG_MAX_COLS || celdas.size < fs.size * cs.size * 0.5) return null;
+  if (!todas && (cs.size > TG_MAX_COLS || celdas.size < fs.size * cs.size * 0.5)) return null;
+  if (todas) {
+    for (const [key, f] of fs) {
+      f.tarifas = [...cs.keys()].map(k => celdas.get(key + '|' + k)).filter(Boolean);
+      f.t = f.tarifas[0];
+    }
+    for (const [key, c] of cs) {
+      c.tarifas = [...fs.keys()].map(k => celdas.get(k + '|' + key)).filter(Boolean);
+      c.t = c.tarifas[0];
+    }
+  }
   const porOrden = (a, b) => a.orden - b.orden || a.k.localeCompare(b.k);
-  return { filas: [...fs.values()].sort(porOrden), cols: [...cs.values()].sort(porOrden), celdas };
+  return { filas: [...fs.values()].sort(porOrden), cols: [...cs.values()].sort(porOrden), celdas, duplicadas };
+}
+// Se muestra el precio del proveedor sin inferir base ni convertir monedas.
+function tgPrecio(t, modo = 'dbl') {
+  const ps = tarPreciosLista(t);
+  const p = ps.find(p => p.k === modo) || (modo === 'sgl' ? null : ps.find(p => p.k === 'sgl') || ps[0]);
+  if (p) return { txt: tgMonto(t, p.k), etq: tgEtiqueta(p.k), k: p.k };
+  if (modo === 'sgl') return { txt: '—', etq: 'Sin tarifa sencilla', k: '' };
+  const corto = tarPrecioCorto(t);
+  return { txt: corto ? `${corto.desde ? 'Desde ' : ''}${corto.monto}` : 'Consultar', etq: corto?.unidad || '', k: '' };
 }
 // Segunda línea de la temporada: la ventana vigente o la próxima, cuántas más
 // hay y el mínimo de noches si es el mismo para toda la fila (el mínimo puede
@@ -24879,6 +24914,10 @@ function tgDetalleHtml(t, c) {
   // Doble primero: es la columna de la tabla y el precio que se promociona.
   const baldosas = tarPreciosLista(t).sort((p, q) => (q.k === 'dbl') - (p.k === 'dbl'))
     .map(p => ({ k: tgEtiqueta(p.k), v: tgMonto(t, p.k), sub: p.k === 'dbl' ? subDoble : '' }));
+  if (!baldosas.length) {
+    const p = tgPrecio(t);
+    baldosas.push({ k: 'Precio', v: p.txt, sub: p.etq });
+  }
   const vh = tarVentaHasta(t);
   const venta = [t.venta_desde && t.venta_desde > hoy() ? `Venta desde ${tgFecha(t.venta_desde, true)}` : '', vh ? `Venta hasta ${tgFecha(vh, true)}` : ''].filter(Boolean).join(' · ');
   const ventanas = tarVentanas(t);
@@ -24896,6 +24935,7 @@ function tgDetalleHtml(t, c) {
     ${!esOficina() && esDestacada || noEntran ? `<div class="tg-det-badges">${!esOficina() && esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}${noEntran ? `<span class="promo-badge promo-badge-off">No entran ${c.grupo}</span>` : ''}</div>` : ''}
     ${nino ? `<div class="promo-ninos" title="${esc(nino.txt)}"><i class="fas fa-child"></i><div><div class="promo-ninos-t">${esc(nino.label)}</div>${nino.detalle ? `<div class="promo-ninos-d">${esc(nino.detalle)}</div>` : ''}</div></div>` : ''}
     <div class="tg-baldosas">${baldosas.map(b => `<div class="tg-baldosa"><div class="tg-k">${esc(b.k)}</div><div class="tg-baldosa-v">${esc(b.v)}</div>${b.sub ? `<div class="tg-baldosa-s">${esc(b.sub)}</div>` : ''}</div>`).join('')}</div>
+    ${!tarPreciosLista(t).length && t.precio_texto ? `<div class="tg-det-sub">${esc(tgOracion(t.precio_texto))}</div>` : ''}
     ${ventanas.length || venta || t.vigencia_texto ? `<div class="tg-fechas">
       <div class="tg-fechas-cab"><span class="tg-k">Fechas de disfrute</span>${venta ? `<span class="tg-venta">${esc(venta)}</span>` : ''}</div>
       ${ventanas.length ? `<div class="tg-chips">${ventanas.map(w => `<span class="tg-chip">${esc(tgRango(w))}</span>`).join('')}</div>`
@@ -24909,24 +24949,27 @@ function tgDetalleHtml(t, c) {
 }
 function tgCeldaHtml(t, nomCol, nomFila, c) {
   if (!t) return '<div class="tg-celda tg-vacia"><span aria-hidden="true">—</span><span class="sr-only">Sin tarifa</span></div>';
-  const vD = tgMonto(t, 'dbl'), vS = tgMonto(t, 'sgl');
+  const precio = tgPrecio(t, c.modo);
   const on = t.id === c.selId;
   const cap = tarCapacidadVendible(t);
   const noEntran = c.grupo > 0 && cap != null && cap.max < c.grupo;
   const hs = t.hot_sale_estado === 'poner';
   const nino = tarNinoGratis(t);
-  const v = c.modo === 'sgl' ? vS : vD;
-  return `<button type="button" class="tg-celda${on ? ' on' : ''}${noEntran ? ' tg-apagada' : ''}" data-tg-pick="${t.id}" data-tarifa-id="${t.id}" aria-pressed="${on}" aria-label="${esc(`${nomCol}, ${nomFila}: ${v}${noEntran ? ` (no entran ${c.grupo})` : ''}`)}">
+  const v = precio.txt;
+  return `<button type="button" class="tg-celda${on ? ' on' : ''}${noEntran ? ' tg-apagada' : ''}" data-tg-pick="${t.id}" data-tarifa-id="${t.id}" aria-pressed="${on}" aria-label="${esc(`${nomCol}, ${nomFila}: ${v}${precio.etq ? `, ${precio.etq}` : ''}${noEntran ? ` (no entran ${c.grupo})` : ''}`)}">
     <span class="tg-monto">${t.id === c.destacadaId ? '<i class="fas fa-star tg-estrella" title="Mejor precio"></i>' : ''}${esc(v)}</span>
+    ${precio.etq && precio.k !== c.modo ? `<span class="tg-precio-etq">${esc(precio.etq)}</span>` : ''}
     ${hs || nino ? `<span class="tg-marcas">${hs ? '<span class="tg-hs" title="Fijada en Hot Sales"><i class="fas fa-fire"></i><span class="tg-hs-t">Hot Sale</span></span>' : ''}${nino ? `<i class="fas fa-child tg-nino" title="${esc(nino.label)}"></i>` : ''}</span>` : ''}
   </button>`;
 }
 function tgPlanHtml(x, plan, filas, g, ctx) {
+  filas = [...g.celdas.values()];
   const hotel = x.nombre || '';
   const sel = filas.find(t => t.id === x._tgSel?.[plan]) || filas.find(t => t.id === ctx.destacadaId)
-    || filas.slice().sort((a, b) => tarNumPrecio(a, 'dbl') - tarNumPrecio(b, 'dbl') || a.id - b.id)[0];
+    || filas.slice().sort((a, b) => (tarNumPrecio(a, 'dbl') ?? Infinity) - (tarNumPrecio(b, 'dbl') ?? Infinity) || a.id - b.id)[0];
   const conSgl = filas.some(t => tarNumPrecio(t, 'sgl') !== null);
-  const modo = conSgl && x._tgModo?.[plan] === 'sgl' ? 'sgl' : 'dbl';
+  const conDbl = filas.some(t => tarNumPrecio(t, 'dbl') !== null);
+  const modo = conSgl && conDbl && x._tgModo?.[plan] === 'sgl' ? 'sgl' : 'dbl';
   const { lineas, comunes } = tgNotasPlan(filas);
   const minEnFila = new Set();
   const fh = g.filas.map(f => {
@@ -24946,14 +24989,16 @@ function tgPlanHtml(x, plan, filas, g, ctx) {
   const c = { ...ctx, hotel, modo, deltas, selId: sel.id, compartidas: new Set(comunes.map(k => k.txt)), ocup: new Set(lineas), minEnFila };
   const sinNombre = plan === TG_SIN_PLAN;
   const sub = [sinNombre ? '' : 'Tarifas por noche', `${g.filas.length} temporada${g.filas.length > 1 ? 's' : ''}`,
-    `${g.cols.length} habitaci${g.cols.length > 1 ? 'ones' : 'ón'}`, 'toca un precio para ver el detalle'].filter(Boolean).join(' · ');
+    g.cols.some(c => c.t.habitacion) ? `${g.cols.length} habitaci${g.cols.length > 1 ? 'ones' : 'ón'}` : '', 'toca un precio para ver el detalle'].filter(Boolean).join(' · ');
+  const ancha = g.cols.length > TG_MAX_COLS;
   const modoBtn = (k, n) => `<button type="button" class="tg-modo-b${modo === k ? ' on' : ''}" data-tg-modo="${k}" aria-pressed="${modo === k}">${n}</button>`;
   return `<section class="carpeta-plan tg-plan" data-tg-plan="${esc(plan)}">
     <div class="tg-plan-cab">
       <div class="tg-plan-tit"><h3 class="tg-plan-t">${esc(sinNombre ? 'Tarifas por noche' : tgOracion(plan))}</h3><div class="tg-plan-s">${esc(sub)}</div></div>
-      ${conSgl ? `<div class="tg-modo" role="group" aria-label="Ocupación">${modoBtn('dbl', 'Doble')}${modoBtn('sgl', 'Sencilla')}</div>` : ''}
+      ${conSgl && conDbl ? `<div class="tg-modo" role="group" aria-label="Ocupación">${modoBtn('dbl', 'Doble')}${modoBtn('sgl', 'Sencilla')}</div>` : ''}
     </div>
-    <div class="tg-tabla tg-cols-${g.cols.length}" style="--tg-cols:${g.cols.length}">
+    ${ancha ? '<div class="tg-plan-s">Desliza la tabla para ver todas las habitaciones</div>' : ''}
+    <div class="tg-tabla tg-cols-${g.cols.length}${ancha ? ' tg-ancha' : ''}" style="--tg-cols:${g.cols.length}"${ancha ? ' tabindex="0" role="region" aria-label="Tarifas por temporada y habitación, tabla desplazable"' : ''}>
       <div class="tg-fila tg-fila-cab">
         <div class="tg-th tg-th-temp">Temporada</div>
         ${ch.map(k => `<div class="tg-th" title="${esc(k.col.t.habitacion)}"><div class="tg-th-n">${esc(k.nom)}</div>${k.cap ? `<div class="tg-th-cap"><i class="fas fa-user"></i>${k.cap} adulto${k.cap > 1 ? 's' : ''}</div>` : ''}</div>`).join('')}
@@ -24963,6 +25008,7 @@ function tgPlanHtml(x, plan, filas, g, ctx) {
         ${ch.map(k => tgCeldaHtml(g.celdas.get(r.f.k + '|' + k.col.k), k.nom, r.nom, c)).join('')}
       </div>`).join('')}
     </div>
+    ${esOficina() && g.duplicadas?.length ? `<div class="tg-nota tg-duplicadas">Revisión: ${g.duplicadas.length} tarifa${g.duplicadas.length > 1 ? 's' : ''} con el mismo título, habitación y fechas. Se muestra la de registro más reciente en cada celda.</div>` : ''}
     ${tgDetalleHtml(sel, c)}
     ${lineas.length || comunes.length ? `<div class="tg-notas">
       ${lineas.length ? `<div class="tg-nota"><i class="fas fa-user-group"></i><span><strong>Capacidad según el PDF:</strong> ${esc(lineas.map(tgOracion).join(' · '))}</span></div>` : ''}
@@ -25079,7 +25125,7 @@ function tarCarpetaHtml(x) {
     : 'Sin promociones vigentes';
   // Dirección A: el plan que arma tabla se pinta como tabla; el resto, tarjetas.
   // Si todos son tabla, el conteo ya lo dice la cabecera del drawer.
-  const grillas = new Map(planes.map(p => [p, tgArmarGrilla(grupos.get(p))]));
+  const grillas = new Map(planes.map(p => [p, tgArmarGrilla(grupos.get(p), x.tipo === 'hotel')]));
   const todoTabla = planes.length > 0 && planes.every(p => grillas.get(p));
   const ctxTabla = { destacadaId, deltas, habs, grupo: grupoTam, juntables };
   return `<div class="carpeta${todoTabla ? ' carpeta-tabla' : ''}">
@@ -25238,7 +25284,12 @@ function tarRepintarCarpeta(x) {
   if (!vieja) return;
   // Tocar un precio de la tabla repinta todo: el histórico abierto sigue abierto.
   const histAbierto = !!vieja.querySelector('.carpeta-historico[open]');
+  const scrollTablas = [...vieja.querySelectorAll('[data-tg-plan]')].map(p => [p.dataset.tgPlan, p.querySelector('.tg-tabla')?.scrollLeft || 0]);
   vieja.outerHTML = tarCarpetaHtml(x);
+  document.querySelectorAll('#drawerContent [data-tg-plan]').forEach(p => {
+    const tabla = p.querySelector('.tg-tabla');
+    if (tabla) tabla.scrollLeft = scrollTablas.find(([plan]) => plan === p.dataset.tgPlan)?.[1] || 0;
+  });
   if (histAbierto) document.querySelector('#drawerContent .carpeta-historico')?.setAttribute('open', '');
   tarEngancharCarpeta();
   // La selección sigue viva: sin esto las tarjetas nuevas nacen destildadas y la
@@ -34419,6 +34470,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '🏨', titulo: 'Todos los hoteles en tablas', texto: 'Cada hotel muestra sus tarifas vigentes en tablas por temporada y habitación, aunque tenga una sola tarifa o datos incompletos. Si hay muchas habitaciones puedes deslizar la tabla; al tocar un precio se abre su detalle. El histórico sigue disponible al final.', roles: ['admin', 'asesor', 'marketing'] },
   { fecha: '2026-10-23', emoji: '🗂️', titulo: 'Precios del hotel en una tabla', texto: 'Al abrir un hotel en el Tarifario, sus precios ahora salen en una tabla: cada fila es una temporada y cada columna una habitación, con la temporada de hoy marcada. Toca un precio para ver debajo todas sus ocupaciones, las fechas de disfrute y el botón Seleccionar; el interruptor Doble/Sencilla cambia los montos de la tabla. Arriba van las fotos, el «Desde», el check-in y el check-out, y los requisitos pasan a «Políticas del hotel». Los hoteles cuyas tarifas no arman una tabla limpia se siguen viendo en tarjetas.', roles: ROLES_TODOS },
   { fecha: '2026-10-23', emoji: '💬', titulo: 'WhatsApp restringido por asesor', texto: 'Administración puede activar este modo por asesor en Gestión de personal. La IA entrega su enlace y le pide al cliente escribirle primero; los leads nuevos y pendientes pasan a Atendido a los cinco minutos, sin registrar contacto humano. Los recordatorios se frenan al confirmar, avanzar el caso o tomar la conversación.', roles: ['admin'] },
   { fecha: '2026-10-23', emoji: '📋', titulo: 'Formularios de voucher y cotización más compactos', texto: 'Cliente, hospedaje, servicios y pago se organizan en secciones plegables con un resumen de lo completado. Hotel, habitación y modalidad quedan juntos; los totales y las acciones principales siguen a mano. Si falta un dato, se abre la sección para corregirlo. También se ajustaron las barras de acciones para que no tapen el historial.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
