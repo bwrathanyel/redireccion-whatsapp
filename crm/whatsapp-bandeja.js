@@ -31,12 +31,18 @@ const CSS = `
 .wb-plantilla-cuerpo{font-size:13px;color:var(--muted);white-space:pre-wrap}
 .wb-fallido{color:var(--danger)}
 .wb-por{font-weight:700}
+.wb-comp{margin-top:6px;padding:8px 10px;border-radius:10px;background:var(--bg2);border:1px solid var(--line2);font-size:12.5px;color:var(--txt)}
+.wb-comp-ia{display:block;font-size:11px;color:var(--muted);margin-bottom:2px}
+.wb-comp-alerta{color:var(--amber);margin-top:4px}
+.wb-comp-acc{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.wb-comp-acc button{padding:5px 9px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--txt);font:inherit;font-size:12px;cursor:pointer}
 `;
 
 export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox, abrirLead, ok, error }) {
   let convs = [];
   let actual = null;
   let mensajes = [];
+  let comprobantes = new Map();
   let plantillas = null;
   const plantillasPor = new Map();
   let canalLista = null;
@@ -109,8 +115,10 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     if (g !== gen) return;
     if (e) { $('wb-log').innerHTML = '<div class="msg-empty">No se pudieron cargar los mensajes</div>'; return; }
     mensajes = (data || []).reverse();
+    comprobantes = new Map();
     pintarMensajes(true);
     suscribirChat(c.id);
+    cargarComprobantes(c.id, g);
     if (c.no_leidos > 0) {
       c.no_leidos = 0; pintarLista(); pintarBadge();
       sb.rpc('wa_marcar_leida', { p_conversacion: c.id }).then(({ error: e2 }) => e2 && console.warn('wa_marcar_leida', e2.message));
@@ -119,7 +127,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
 
   function cerrar() {
     gen++;
-    actual = null; mensajes = [];
+    actual = null; mensajes = []; comprobantes = new Map();
     if (canalChat) { sb.removeChannel(canalChat); canalChat = null; }
     $('wb-shell').classList.remove('ver-chat');
     $('wb-vacio').hidden = false;
@@ -158,6 +166,32 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     });
   }
 
+  // Lo que la IA leyó de una imagen de pago. Solo sugiere: la persona registra el abono en la ficha.
+  async function cargarComprobantes(id, g) {
+    const { data } = await sb.from('wa_comprobantes').select('id,wamid,datos,estado,duplicado_de')
+      .eq('conversacion_id', id).neq('estado', 'no_comprobante');
+    if (g !== gen || actual?.id !== id) return;
+    comprobantes = new Map((data || []).map(x => [x.wamid, x]));
+    if (comprobantes.size) pintarMensajes(false);
+  }
+  function comprobanteHtml(m) {
+    const c = comprobantes.get(m.wamid);
+    if (!c) return '';
+    const d = c.datos || {};
+    const monto = d.monto != null ? `${d.moneda === 'VES' ? 'Bs ' : '$'}${Number(d.monto).toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : 'monto no legible';
+    const partes = [d.metodo, d.referencia && `Ref. ${d.referencia}`, monto, d.fecha].filter(Boolean).map(esc).join(' · ');
+    const dup = c.duplicado_de ? `<div class="wb-comp-alerta"><i class="fas fa-triangle-exclamation"></i> Esta referencia ya aparece ${c.duplicado_de.startsWith('abono:') ? 'en un abono registrado' : 'en otro comprobante de este número'}: revisa antes de registrar</div>` : '';
+    const cierre = c.estado === 'registrado' ? '<div class="wb-ventana">Registrado</div>' : c.estado === 'descartado' ? '<div class="wb-ventana">Descartado</div>'
+      : `<div class="wb-comp-acc"><button data-wb-comp="${c.id}" data-wb-est="registrado">Ya lo registré</button><button data-wb-comp="${c.id}" data-wb-est="descartado">Descartar</button></div>`;
+    return `<div class="wb-comp"><span class="wb-comp-ia"><i class="fas fa-wand-magic-sparkles"></i> Lo leyó la IA, verifícalo con el banco</span><b>${partes || 'Sin datos legibles'}</b>${dup}${cierre}</div>`;
+  }
+  async function marcarComprobante(id, estado) {
+    const { error: e } = await sb.from('wa_comprobantes').update({ estado }).eq('id', id);
+    if (e) { error('No se pudo actualizar el comprobante'); return; }
+    for (const c of comprobantes.values()) if (c.id === id) c.estado = estado;
+    pintarMensajes(false);
+  }
+
   function pintarMensajes(alFinal) {
     const log = $('wb-log');
     const abajo = alFinal || log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
@@ -171,7 +205,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
       const meta = !mismo(sig) ? `<div class="msg-meta">${quien ? `<span class="wb-por">${esc(quien)}</span>` : ''}<span>${fmtHoraChat(m.enviado_en)}</span>${tick}</div>` : '';
       const adj = adjuntoHtml(m);
       const texto = m.texto ? `<div>${m.plantilla ? '<i class="fas fa-file-lines"></i> ' : ''}${textoConEnlaces(m.texto)}</div>` : (adj ? '' : `<div><i>(${esc(m.tipo)})</i></div>`);
-      html += `<div class="chat-msg ${sale ? 'mine' : 'other'}${mismo(prev) ? ' grouped' : ''}${!mismo(sig) ? ' tail' : ''}${adj ? ' adjunto' : ''}">${adj}${texto}${meta}</div>`;
+      html += `<div class="chat-msg ${sale ? 'mine' : 'other'}${mismo(prev) ? ' grouped' : ''}${!mismo(sig) ? ' tail' : ''}${adj ? ' adjunto' : ''}">${adj}${texto}${comprobanteHtml(m)}${meta}</div>`;
     });
     log.innerHTML = html || '<div class="msg-empty">Sin mensajes</div>';
     log.querySelectorAll('[data-wb-media]').forEach(cargarMedia);
@@ -215,6 +249,11 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
         mensajes.push(m);
         pintarMensajes(false);
         if (m.direccion === 'entrante') sb.rpc('wa_marcar_leida', { p_conversacion: id }).then(() => {});
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wa_comprobantes', filter: `conversacion_id=eq.${id}` }, ({ new: c }) => {
+        if (!c?.wamid || actual?.id !== id) return;
+        if (c.estado === 'no_comprobante') comprobantes.delete(c.wamid); else comprobantes.set(c.wamid, c);
+        pintarMensajes(false);
       })
       .subscribe();
   }
@@ -323,6 +362,10 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
       if (c) abrir(c);
     });
     $('wb-back').addEventListener('click', cerrar);
+    $('wb-log').addEventListener('click', ev => {
+      const b = ev.target.closest('[data-wb-comp]');
+      if (b) marcarComprobante(Number(b.dataset.wbComp), b.dataset.wbEst);
+    });
     $('wb-ver-lead').addEventListener('click', () => actual?.lead_id && abrirLead(actual.lead_id));
     $('wb-texto').addEventListener('input', autoAlto);
     $('wb-texto').addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey && !matchMedia('(pointer:coarse)').matches) { ev.preventDefault(); enviarTexto(); } });

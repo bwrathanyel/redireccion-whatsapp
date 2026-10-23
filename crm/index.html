@@ -59,6 +59,9 @@ try {
   --accent:#ff9100; --accent-rgb:255,145,0; --accent2:#ff5c8a; --on-accent:#1a1000; --accent-txt:#ffd8a8; --accent-soft:rgba(var(--accent-rgb),.14);
   --accent-ink:var(--accent); --ink-rgb:255,255,255; --accent-deep:#e0570a;
   --blue:#4a9eff; --pph-hab:var(--blue); --green:#10b981; --purple:#a06bff; --amber:#f5b544; --pink:#ff5c8a; --danger:#ef4444; --wa:#25D366;
+  /* Monto de la pastilla de precio sobre la foto del Tarifario: la pastilla es SIEMPRE oscura,
+     y el --green del tema claro (#1f613c) ahí no se lee. No se redefine en el tema claro. */
+  --precio-sobre-foto:#34d399;
   --safe-b:env(safe-area-inset-bottom,0px);
   /* Fase 6 -- escala de movimiento. El CSS no tenía una: cada transición
      inventaba su propia duración (.24s acá, .3s allá). --ease-salida ya
@@ -1553,24 +1556,32 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tar-ia-go:hover,.tar-ia-go.on{color:var(--accent-ink);background:var(--accent-soft)}
 .tar-ia-go.cargando{color:var(--accent-ink)}
 .tar-grid{display:block}
-/* Tarjeta del Tarifario -- rediseño 2026-08-19.
-   Antes: foto de 120px, título del mismo peso visual que la descripción y un
-   pie donde precio (verde), vigencia (ámbar) y tags se apilaban sin jerarquía;
-   la vigencia, que es texto libre largo, se comía tres renglones.
-   Ahora: el padding se mudó de la tarjeta a .tc-body/.tc-pie para que la foto
-   llegue a los bordes sin el truco de márgenes negativos, el título es lo único
-   grande del cuerpo, y el pie separa precio / fechas / tags en bloques con peso
-   distinto. flex + margin-top:auto en el pie: sin eso las tarjetas de una misma
-   fila estiran su alto pero el precio queda a distinta altura en cada una. */
+/* Tarjeta del Tarifario -- rediseño 2026-10-23 (precio sobre la foto).
+   El precio va en una pastilla sobre la foto (.tc-precio-foto, texto completo en
+   su title); el cuerpo es hotel / título / descripción de 1 línea / meta (fecha
+   corta + íconos de lo incluido). Todo lo largo vive en el detalle (click).
+   flex + margin-top:auto en .tc-meta: las tarjetas de una misma fila estiran su
+   alto y la meta queda a la misma altura en todas. */
 .tar-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:0;cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s;overflow:hidden;display:flex;flex-direction:column}
 .tar-card:hover{border-color:rgba(var(--accent-rgb),.35);transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.32)}
-.tar-card .tc-body{padding:13px 15px 0}
-.tar-card .tc-pie{margin-top:auto;padding:11px 15px 14px}
-/* Descripción normalizada con IA (promociones.resumen_ia) -- misma que usa la
-   web pública. Sin min-height: el margin-top:auto del pie ya empareja los pies
-   de una fila, y el alto fijo dejaba un hueco vacío feo en las tarjetas que no
-   tienen descripción cargada. */
-.tc-resumen-ia{font-size:12.5px;color:var(--muted);line-height:1.5;margin:7px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tar-card .tc-body{display:flex;flex-direction:column;gap:4px;padding:11px 14px 13px;flex:1;min-width:0}
+/* Hotel de la promo: renglón gris de una línea, clicable (abre el hotel). */
+.tc-hotel{display:flex;align-items:center;gap:5px;max-width:100%;background:none;border:none;padding:0;font:inherit;font-size:11px;font-weight:600;line-height:1.3;color:var(--muted);text-align:left;cursor:pointer}
+.tc-hotel i{color:var(--accent-ink);font-size:10px;flex-shrink:0}
+.tc-hotel span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc-hotel:hover{color:var(--accent-ink)}
+/* Descripción (resumen_ia / 1ª viñeta del hotel) en UNA línea; el resto va en el detalle. */
+.tc-desc{font-size:12.5px;line-height:1.45;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Fecha corta · promos · íconos de lo incluido (con tooltip). */
+.tc-meta{margin-top:auto;padding-top:5px;display:flex;align-items:center;gap:7px;min-width:0;font-size:11px;color:var(--muted2)}
+.tc-meta .tcm-fecha,.tc-meta .tcm-promos{white-space:nowrap}
+.tc-meta .tcm-fecha.is-pronto{color:var(--amber);font-weight:700}
+.tc-meta .tcm-fecha.is-vencida{color:var(--danger);font-weight:700}
+.tc-meta .tcm-promos i{color:var(--accent-ink);font-size:10px}
+.tc-meta .tcm-sep{opacity:.6}
+.tc-meta .tcm-iconos{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-size:13px;color:var(--muted)}
+.tc-meta .tcm-iconos i{cursor:help}
+.tc-meta .tcm-iconos i:hover{color:var(--accent-ink)}
 
 /* ---------- Buscador IA del Tarifario ---------- */
 /* Resultados de la IA: bloque aparte de la grilla normal, con borde acentuado
@@ -1599,30 +1610,32 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 /* Botón de ocultar: invisible hasta pasar el mouse por la tarjeta -- en
    pantalla táctil (hover:none) no hay "pasar el mouse", así que ahí queda
    siempre visible o sería inalcanzable. */
-.tc-hide{position:absolute;top:8px;right:8px;z-index:3;width:30px;height:30px;display:grid;place-items:center;background:rgba(6,10,18,.84);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s,background .15s,color .15s}
-.tar-card:hover .tc-hide{opacity:1}
+.tc-acciones{position:absolute;top:8px;right:8px;z-index:3;display:flex;gap:6px}
+.tc-hide,.tc-hs,.tc-ia{height:30px;min-width:30px;display:inline-flex;align-items:center;justify-content:center;gap:0;padding:0 9px;background:rgba(6,10,18,.84);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s,background .15s,color .15s,border-color .15s}
+.tar-card:hover .tc-hide,.tar-card:hover .tc-hs,.tar-card:hover .tc-ia,.tc-hide:focus-visible,.tc-hs:focus-visible,.tc-ia:focus-visible{opacity:1}
+.tc-hide{padding:0}
 .tc-hide:hover{background:#ef4444;border-color:#ef4444;color:#fff}
-@media (hover:none){.tc-hide{opacity:1}}
-/* Toggle Hot Sales flotando sobre la foto (B1), gemelo de .tc-hide pero a la
-   izquierda. El rótulo se oculta acá (solo la llama); .promo-hs-seg sí lo muestra. */
-.tc-hs{position:absolute;top:8px;left:8px;z-index:3;height:30px;display:inline-flex;align-items:center;gap:0;padding:0 9px;background:rgba(6,10,18,.84);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s,background .15s,color .15s}
+/* Toggle Hot Sales sobre la foto (B1). El rótulo se oculta acá (solo la llama);
+   .promo-hs-seg sí lo muestra. Encendido = siempre visible, salvo en la pestaña
+   Hot Sales, donde TODAS están encendidas y sería ruido: ahí solo al hover. */
 .tc-hs .hs-lbl{display:none}
-.tar-card:hover .tc-hs{opacity:1}
 .tc-hs.is-on{opacity:1;background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.tc-en-hs .tc-hs.is-on{opacity:0}
+.tc-en-hs:hover .tc-hs.is-on,.tc-en-hs .tc-hs.is-on:focus-visible{opacity:1}
 .tc-hs:disabled{cursor:progress}
-@media (hover:none){.tc-hs{opacity:1}}
 /* Toggle "Ofrecer con la IA" sobre la foto (pestaña IA / curación del bot de
    ventas). Gemelo de .tc-hs pero MORADO: el naranja es Hot Sales (curación de
-   la web) y son ejes distintos -- confundirlos sería el bug obvio. Va debajo de
-   .tc-hs para no pisarlo. Prefijo propio, nunca fa/fab/fas/far. */
-/* Siempre visible (ya no solo al hover): es un control de curación, no un
-   adorno. Marcado = la IA la ofrece (morado lleno). Desmarcado = neutro
-   translúcido. Excluida a mano = borde rojo. Vencida = deshabilitado. */
-.tc-ia{position:absolute;top:44px;left:8px;z-index:3;height:30px;display:inline-flex;align-items:center;gap:0;padding:0 9px;background:rgba(6,10,18,.84);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:1;transition:opacity .15s,background .15s,color .15s,border-color .15s}
+   la web) y son ejes distintos -- confundirlos sería el bug obvio. Prefijo
+   propio, nunca fa/fab/fas/far. Encendida o forzada a mano = siempre visible;
+   apagada = solo al hover. Marcado = la IA la ofrece (morado lleno). Excluida a
+   mano = borde rojo. Vencida = deshabilitado. */
 .tc-ia .ia-lbl{display:none}
 .tc-ia.is-on{background:var(--purple);border-color:var(--purple);color:#fff}
+.tc-ia.is-on,.tc-ia.is-forzada{opacity:1}
 .tc-ia.is-off.is-forzada{border-color:rgba(239,68,68,.85)}
-.tc-ia:disabled{opacity:.55;cursor:not-allowed}
+.tc-ia:disabled,.tar-card:hover .tc-ia:disabled{opacity:.55;cursor:not-allowed}
+/* Pantalla táctil: no hay hover, así que los controles quedan siempre visibles. */
+@media (hover:none){.tc-hide,.tc-hs,.tc-ia,.tc-en-hs .tc-hs.is-on{opacity:1}.tc-ia:disabled{opacity:.55}}
 /* Variante en línea (fila de lista, ficha, fila de título de la carpeta) --
    sin position:absolute, con rótulo visible. */
 .tar-ia-inline{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted);border-radius:999px;cursor:pointer;font-family:inherit;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;flex:0 0 auto;transition:background .15s,color .15s,border-color .15s}
@@ -1631,19 +1644,23 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tar-ia-inline.is-off.is-forzada{border-color:rgba(239,68,68,.5);color:#fca5a5}
 .tar-ia-inline:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:760px){.tar-hotel-row .tar-ia-inline .ia-lbl{display:none}.tar-hotel-row .tar-ia-inline{gap:0;padding:0 8px}}
-.tc-hotel-chip{cursor:pointer;font-family:inherit}
-.tc-hotel-chip:hover{border-color:var(--accent);color:var(--txt)}
-.tc-media-wrap .tc-thumb{height:170px}
-.tc-media-wrap .tc-thumb.tc-thumb-vacio{width:100%;height:170px;margin:0;border-radius:0;border:none;border-bottom:1px solid var(--line2)}
-/* Degradado al pie de la foto: sostiene el chip de destino y evita que una foto
-   clara deje el borde de abajo lavado contra el cuerpo de la tarjeta. */
-.tc-media-scrim{position:absolute;inset:auto 0 0 0;height:64px;background:linear-gradient(to top,rgba(6,10,18,.88),rgba(6,10,18,0));pointer-events:none}
-/* max-width al 62%: los dots del carrusel van centrados abajo, así que un
-   destino largo no debe llegar hasta el medio de la foto. */
-.tc-destino-chip{position:absolute;left:10px;bottom:9px;display:inline-flex;align-items:center;gap:5px;max-width:62%;background:rgba(6,10,18,.84);border:1px solid rgba(255,255,255,.14);color:#fff;font-size:11px;font-weight:600;border-radius:20px;padding:4px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc-media-wrap .tc-thumb{aspect-ratio:4/3;height:auto}
+.tc-media-wrap .tc-thumb.tc-thumb-vacio{width:100%;aspect-ratio:4/3;height:auto;margin:0;border-radius:0;border:none;border-bottom:1px solid var(--line2)}
+/* Degradado arriba (sostiene el destino y los botones de admin) y abajo (sostiene la
+   pastilla de precio y los puntos del carrusel): una foto clara no los deja lavados. */
+.tc-media-scrim{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(6,10,18,.62),rgba(6,10,18,0) 36%),linear-gradient(to top,rgba(6,10,18,.7),rgba(6,10,18,0) 40%);pointer-events:none}
+/* Destino arriba-izquierda; si hay botones de admin arriba-derecha, se les deja su ancho. */
+.tc-destino-chip{position:absolute;left:10px;top:9px;display:inline-flex;align-items:center;gap:5px;max-width:calc(100% - 20px);background:rgba(6,10,18,.84);border:1px solid rgba(255,255,255,.14);color:#fff;font-size:11px;font-weight:600;border-radius:20px;padding:4px 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc-media-wrap:has(.tc-acciones) .tc-destino-chip{max-width:calc(100% - 134px)}
 .tc-destino-chip i{color:var(--accent-ink);font-size:10px;flex-shrink:0}
-.tc-hotel-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;background:var(--panel-solid);border:1px solid var(--line2);color:var(--muted);font-size:11px;font-weight:600;border-radius:20px;padding:3px 9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px}
-.tc-hotel-chip i{color:var(--accent-ink);font-size:10px;flex-shrink:0}
+/* Precio sobre la foto, abajo-derecha. Siempre oscura (se lee igual en tema claro y
+   oscuro); el monto usa --precio-sobre-foto, no --green. El texto completo del
+   proveedor va en el title. El margen izquierdo deja lugar a los puntos del carrusel. */
+.tc-precio-foto{position:absolute;right:10px;bottom:9px;z-index:2;max-width:calc(100% - 84px);display:inline-flex;align-items:baseline;gap:5px;background:rgba(6,10,18,.86);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:5px 10px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tc-precio-foto .tcp-m{font-size:15px;font-weight:800;line-height:1.2;letter-spacing:-.2px;color:var(--precio-sobre-foto)}
+.tc-precio-foto .tcp-d,.tc-precio-foto .tcp-u{font-size:10.5px;font-weight:600;color:rgba(255,255,255,.72)}
+.tc-precio-foto.sin-precio{font-size:11.5px;font-weight:600;color:rgba(255,255,255,.62)}
+.tc-media-wrap .carrusel-dots{left:12px;right:auto;bottom:21px;justify-content:flex-start}
 .tc-thumb{width:100%;height:120px;object-fit:cover;display:block;background:var(--panel-solid);transition:opacity .18s ease}
 .tc-thumb.tc-thumb-vacio{width:calc(100% - 36px);height:100px;margin:16px 18px 0;border-radius:10px;display:grid;place-items:center;color:var(--muted2);font-size:22px;border:1px dashed var(--line2)}
 .carrusel-dots{position:absolute;left:0;right:0;bottom:8px;display:flex;justify-content:center;gap:5px;pointer-events:none}
@@ -1659,17 +1676,6 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tc-resumen li::before{content:"•";position:absolute;left:0;color:var(--accent-ink)}
 .tar-card .tc-resumen{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .tc-resumen-ficha{-webkit-line-clamp:unset;display:block;overflow:visible}
-/* El precio es el dato que más se busca de un vistazo: sube de tamaño y se
-   separa del resto con una línea, en vez de ser un renglón verde más. */
-.tar-card .tc-precio{font-size:14.5px;font-weight:800;color:var(--green);line-height:1.35;padding-top:11px;border-top:1px solid var(--line);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-/* Dos renglones fijos: el precio_texto de un flyer cargado a mano no estira su
-   tarjeta y el pie arranca a la misma altura en toda la fila. */
-.tar-card .tc-precio{min-height:calc(2.7em + 12px)}
-.tar-card .tc-precio.abierto{-webkit-line-clamp:unset;display:block;overflow:visible}
-/* Solo se agrega desde JS a las que de verdad desbordan -- un "ver más" en una
-   tarjeta de una línea es ruido. */
-.tc-precio-mas{background:transparent;border:none;color:var(--accent-ink);font-size:11px;font-weight:700;padding:4px 0 0;cursor:pointer;display:block}
-.tar-card .tc-vigencia{font-size:11px;color:var(--amber);margin-top:3px}
 /* vigencia_texto es prosa cargada a mano ("Fecha de venta ... ; Fecha de
    disfrute ...") y se comía 3 renglones corridos. vigenciaPartes() en app.js la
    parte en sus dos mitades y acá se muestran como filas etiquetadas, con la
@@ -5316,13 +5322,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
   .timeline-list-box{max-height:none;overflow:visible;padding:8px 2px 16px}
 }
 /* ================= Rediseño móvil — Tarifario (Fase 3) ================= */
-.tc-precio-badge{display:none}
 @media(max-width:760px){
   .tc-media-wrap .tc-thumb,.tc-media-wrap .tc-thumb.tc-thumb-vacio{height:auto;aspect-ratio:16/9}
-  .tc-destino-chip{top:9px;bottom:auto;left:9px}
-  .tc-media-scrim{inset:0 0 auto 0;height:74px;background:linear-gradient(to bottom,rgba(6,10,18,.82),rgba(6,10,18,0))}
-  .tc-precio-badge{display:inline-block;position:absolute;right:9px;bottom:9px;z-index:3;max-width:72%;background:rgba(6,10,18,.86);border:1px solid rgba(255,255,255,.14);color:var(--green);font-size:12px;font-weight:800;border-radius:12px;padding:5px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tc-hide{width:var(--tap);height:var(--tap)}
+  .tc-hide,.tc-hs,.tc-ia{height:var(--tap);min-width:var(--tap)}
+  .tc-media-wrap:has(.tc-acciones) .tc-destino-chip{max-width:calc(100% - 20px - (var(--tap) * 3) - 12px)}
 }
 /* Rendimiento móvil del Tarifario — cambios invisibles.
    - .tar-card: el backdrop-filter difumina el degradado fijo del body, que ya es
@@ -5335,7 +5338,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
      recuerde el alto real tras el primer paint, así la barra de scroll no salta.
    - .tf-media: la capa de composición forzada por tarjeta (translateZ/backface) es
      para el crossfade con clon de la rama hover, que en móvil no corre. */
-.tar-item.tar-card{content-visibility:auto;contain-intrinsic-size:auto 380px}
+.tar-item.tar-card{content-visibility:auto;contain-intrinsic-size:auto 330px}
 .tar-item.tar-ficha{content-visibility:auto;contain-intrinsic-size:auto 300px}
 .tar-item.tar-hotel-row{content-visibility:auto;contain-intrinsic-size:auto 72px}
 @media(max-width:760px){

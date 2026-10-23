@@ -7767,6 +7767,8 @@ async function cargarActividadLead(l) {
       ? { hora: e.created_at, texto: `🔁 Volvió a escribir por <b>${esc(e.detalle?.canal || 'otro canal')}</b>${e.detalle?.destino && e.detalle.destino !== e.detalle?.destino_previo ? `, preguntando por <b>${esc(e.detalle.destino)}</b>` : ''} — no se creó un lead nuevo` }
       : e.tipo === 'cotizacion_enviada'
       ? { hora: e.created_at, texto: `📄 ${e.asesor ? '<b>' + esc(e.asesor) + '</b> registró' : 'Se registró'} la cotización como enviada` }
+      : e.tipo === 'ia_rellenar'
+      ? { hora: e.created_at, texto: `✨ <b>La IA rellenó</b> desde el chat de WhatsApp: ${Object.entries(e.detalle?.campos || {}).map(([k, v]) => `${esc(k.replace(/_/g, ' '))} → <b>${esc(String(v?.despues ?? ''))}</b>`).join(', ')}` }
       : e.tipo === 'proxima_accion'
       ? { hora: e.created_at, texto: `📅 <b>${esc(e.detalle?.por || 'Sistema')}</b> ${e.detalle?.accion === 'quitada' ? 'quitó la próxima acción' : `fijó la próxima acción para <b>${esc(fmtFechaHoraCaracas(e.detalle?.at))}</b>${e.detalle?.nota ? ' — ' + esc(e.detalle.nota) : ''}`}` }
       : { hora: e.created_at, texto: `${e.asesor ? esc(e.asesor) + ': ' : ''}cambió de <b>${esc(niceEstado(e.estado_de))}</b> a <b>${esc(niceEstado(e.estado_a))}</b>` }),
@@ -22305,6 +22307,35 @@ const tagsHtml = (tags, limite) => {
   const resto = v.length - mostrar.length;
   return `<div class="tar-tags">${mostrar.map(t => `<span class="tar-tag">${esc(t)}</span>`).join('')}${resto > 0 ? `<span class="tar-tag tar-tag-mas">+${resto}</span>` : ''}</div>`;
 };
+// Tarjeta del listado: en vez de chips con texto, hasta 3 íconos (el texto va en
+// el tooltip). Lo que no tiene ícono no se muestra aquí; sigue entero en el detalle.
+// Se matchea sobre el texto sin acentos. «Niños gratis» tiene su propia franja.
+const TAR_ICONOS_INCLUYE = [
+  [/vuelo|aereo|boleto|ticket/, 'plane'],
+  [/traslado|transfer/, 'van-shuttle'],
+  [/desayuno|almuerzo|cena\b|comida|todo incluido|pension|buffet/, 'utensils'],
+  [/excursion|tour\b|full day|caminata/, 'person-hiking'],
+  [/regalo|gratis|cortesia|obsequio/, 'gift'],
+  [/piscina|pileta/, 'person-swimming'],
+  [/seguro|asistencia/, 'shield-heart'],
+];
+function tarIconosIncluye(tags) {
+  const { plan, si } = tarIncluyeSplit(tags);
+  const porIcono = new Map();
+  [...plan, ...si].forEach(t => {
+    const n = tarNorm(t);
+    if (/nin[oa]s?\s+gratis/.test(n)) return;
+    const hit = TAR_ICONOS_INCLUYE.find(([re]) => re.test(n));
+    if (!hit) return;
+    if (!porIcono.has(hit[1])) porIcono.set(hit[1], []);
+    porIcono.get(hit[1]).push(t);
+  });
+  if (!porIcono.size) return '';
+  return `<span class="tcm-iconos">${[...porIcono].slice(0, 3).map(([ic, txt]) => {
+    const t = esc(txt.join(' · '));
+    return `<i class="fas fa-${ic}" role="img" title="${t}" aria-label="${t}"></i>`;
+  }).join('')}</span>`;
+}
 // Ficha: plan como chips, y lo incluido / no incluido como listas con ícono.
 function tarIncluyeHtml(tags) {
   const { plan, si, no } = tarIncluyeSplit(tags);
@@ -23044,25 +23075,21 @@ function renderTarifario() {
     if (hotelChip) hotelChip.onclick = e => { e.stopPropagation(); abrirDesdeBusquedaIA('producto', Number(hotelChip.dataset.abrirHotel)); };
     const retBtn = el.querySelector('[data-retirar-tarifa]');
     if (retBtn) retBtn.onclick = e => { e.stopPropagation(); retirarTarifaVieja(Number(retBtn.dataset.retirarTarifa), retBtn); };
-    // El carrusel táctil y la medición de desborde de "Ver más" se enganchan
-    // cuando la tarjeta se acerca a la pantalla, no a las N de una: baja el
-    // registro de listeners y saca del render la pasada de layout forzado sobre
-    // toda la grilla. De paso arregla el bug viejo (una tarjeta dentro de un
-    // <details> cerrado daba scrollHeight 0 y nunca recibía su botón).
+    // El carrusel táctil se engancha cuando la tarjeta se acerca a la pantalla,
+    // no a las N de una: baja el registro de listeners del render.
     el._tarItem = x;
     tarObserver.observe(el);
   });
 }
 // Un solo IntersectionObserver a nivel de módulo, reusado entre renders.
-// Dos pasadas: primero todas las lecturas de layout (precio que desborda),
-// después todas las escrituras -- intercaladas forzaban un layout por tarjeta.
 const tarObserver = new IntersectionObserver((entries, obs) => {
-  const visibles = entries.filter(ent => ent.isIntersecting).map(ent => ent.target);
-  visibles.forEach(el => obs.unobserve(el));
-  const desborda = visibles.map(el => { const p = el.querySelector('.tc-precio'); return !!p && p.scrollHeight > p.clientHeight + 1; });
-  visibles.forEach((el, k) => tarHidratarTarjeta(el, el._tarItem, desborda[k]));
+  entries.forEach(ent => {
+    if (!ent.isIntersecting) return;
+    obs.unobserve(ent.target);
+    tarHidratarTarjeta(ent.target, ent.target._tarItem);
+  });
 }, { rootMargin: '200px' });
-function tarHidratarTarjeta(el, x, desborda) {
+function tarHidratarTarjeta(el, x) {
   if (!x) return;
   const fotos = fotosRotadas(x, 256);
   if (tarView === 'fichas') {
@@ -23075,20 +23102,6 @@ function tarHidratarTarjeta(el, x, desborda) {
   } else {
     const media = el.querySelector('.thr-thumb');
     if (media && media.tagName === 'IMG') attachHoverCarousel(el, media, fotos, url => { media.src = url; });
-  }
-  // "Ver más" solo en el precio_texto que de verdad desborda (párrafo largo
-  // tipo Refugio Turístico Mifafi) -- no en el resto, que ya entra en 3 líneas.
-  const precioEl = el.querySelector('.tc-precio');
-  if (precioEl && desborda && !precioEl.nextElementSibling?.classList?.contains('tc-precio-mas')) {
-    const mas = document.createElement('button');
-    mas.type = 'button'; mas.className = 'tc-precio-mas'; mas.textContent = 'Ver más';
-    mas.onclick = e => {
-      e.stopPropagation();
-      const abrir = !precioEl.classList.contains('abierto');
-      precioEl.classList.toggle('abierto', abrir);
-      mas.textContent = abrir ? 'Ver menos' : 'Ver más';
-    };
-    precioEl.insertAdjacentElement('afterend', mas);
   }
 }
 /* ---------- Paquetes Lotus (tabla `paquetes`, migración 20261021150000).
@@ -23267,17 +23280,18 @@ function tarRowHtml(x) {
     <i class="fas fa-chevron-right"></i>
   </div>`;
 }
-function tarCardThumbHtml(foto, esPromo, destino, hideBtn, precio, extraBtns) {
+// Foto de la tarjeta: destino arriba-izq, botones de admin arriba-der, puntos del
+// carrusel abajo-izq y el precio en una pastilla abajo-der. `precio` es lo que
+// devuelve tarPrecioCorto (o null: «Consultar»); el texto completo va en el title.
+function tarCardThumbHtml(foto, esPromo, destino, precio, acciones) {
   const media = foto
     ? `<img class="tc-thumb" src="${esc(foto)}" alt="" loading="lazy" decoding="async">`
     : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`;
-  // El destino va como chip sobre la foto y no como renglón del cuerpo: libera
-  // una línea de texto y deja el dato donde el ojo ya está mirando.
   const chip = destino ? `<div class="tc-destino-chip"><i class="fas fa-location-dot"></i>${esc(destino)}</div>` : '';
-  // Un precio en prosa larga no entra en la pastilla (quedaba recortado) y se repite en el cuerpo de la tarjeta.
-  const precioCorto = precio ? String(precio).split(/[\n;]/)[0].trim() : '';
-  const badge = precioCorto && precioCorto.length <= 26 ? `<div class="tc-precio-badge">${esc(precioCorto)}</div>` : '';
-  return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}${badge}<div class="carrusel-dots"></div>${hideBtn || ''}${extraBtns || ''}</div>`;
+  const pastilla = precio
+    ? `<div class="tc-precio-foto" title="${esc(precio.title)}">${precio.desde ? '<span class="tcp-d">Desde</span>' : ''}<b class="tcp-m">${esc(precio.monto)}</b>${precio.unidad ? `<span class="tcp-u">${esc(precio.unidad)}</span>` : ''}</div>`
+    : '<div class="tc-precio-foto sin-precio">Consultar</div>';
+  return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}${pastilla}<div class="carrusel-dots"></div>${acciones ? `<div class="tc-acciones">${acciones}</div>` : ''}</div>`;
 }
 // Botón "ocultar" al pasar el mouse por la tarjeta (2026-08-27) -- antes había
 // que abrir el engranaje "Configurar visibilidad" y buscar en cientos. Mismo
@@ -23322,19 +23336,17 @@ function tarCardHtml(x) {
     // usa la web pública). Por diseño NUNCA contiene precios -- el precio real
     // sale siempre de precio_texto, tal cual está cargado.
     const nino = tarNinoGratis(x);
-    return `<div class="tar-item tar-card${nino ? ' tc-con-ninos' : ''}" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tcHideBtnHtml(x.id, 'tarifas', 'vigente'), x._tarifa ? tarBadgePrecio(x._tarifa) : x.precio_texto, tcHsBtnHtml(x, 'tc-hs', tarTab === 'hotsale') + tcIaBtnHtml(x))}
+    const hotel = x.producto_id ? `<button type="button" class="tc-hotel" data-abrir-hotel="${x.producto_id}"><i class="fas fa-hotel"></i><span>${esc(x.productos?.nombre || '')}</span></button>` : '';
+    const retirar = tarPuedeRetirar(x, x.productos?.nombre, destinoDe(x)) ? `<button type="button" class="promo-retirar" data-retirar-tarifa="${x.id}"><i class="fas fa-box-archive"></i> Retirar del catálogo</button>` : '';
+    return `<div class="tar-item tar-card${nino ? ' tc-con-ninos' : ''}${tarTab === 'hotsale' ? ' tc-en-hs' : ''}" data-id="${x.id}">
+      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tarPrecioCorto(x), tcHsBtnHtml(x, 'tc-hs', tarTab === 'hotsale') + tcIaBtnHtml(x) + tcHideBtnHtml(x.id, 'tarifas', 'vigente'))}
       ${tarNinosHtml(nino, 'tc-ninos')}
       <div class="tc-body">
-        ${x.producto_id ? `<button type="button" class="tc-hotel-chip" data-abrir-hotel="${x.producto_id}"><i class="fas fa-hotel"></i> ${esc(x.productos?.nombre || '')}</button>` : ''}
-        <div class="tc-nombre">${esc(tarNombrePromo(x))}</div>
-        ${x.resumen_ia ? `<div class="tc-resumen-ia">${esc(x.resumen_ia)}</div>` : ''}
-      </div>
-      <div class="tc-pie">
-        ${x.precio_texto ? `<div class="tc-precio">${esc(x.precio_texto)}</div>` : ''}
-        ${vigenciaHtml(x.vigencia_texto)}
-        ${tagsHtml(x.incluye_tags, 4)}
-        ${tarPuedeRetirar(x, x.productos?.nombre, destinoDe(x)) ? `<button type="button" class="promo-retirar" data-retirar-tarifa="${x.id}"><i class="fas fa-box-archive"></i> Retirar del catálogo</button>` : ''}
+        ${hotel}
+        <div class="tc-nombre">${esc(tarTituloSinHotel(x))}</div>
+        ${x.resumen_ia ? `<div class="tc-desc">${esc(x.resumen_ia)}</div>` : ''}
+        ${tarMetaHtml(tarFechaCorta(x), 0, tarIconosIncluye(x.incluye_tags))}
+        ${retirar}
       </div></div>`;
   }
   const tarifa = mejorPrecio(x);
@@ -23343,22 +23355,36 @@ function tarCardHtml(x) {
   // vinculados. Un solo conteo: cuando eran dos listas, el flyer se contaba dos
   // veces (acá y en "N promociones activas").
   const nTarifas = (x.tarifas || []).length;
-  const tagsHotel = agregarHotel(x).tags;
+  const ag = agregarHotel(x);
   const bullets = resumenBullets(x.descripcion);
   const nino = tarNinoGratisHotel(x);
   return `<div class="tar-item tar-card${nino ? ' tc-con-ninos' : ''}" data-id="${x.id}">
-    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), tcHideBtnHtml(x.id, 'productos', 'activo'), tarBadgePrecio(tarifa))}
+    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), tarPrecioCorto(tarifa, ag), tcHideBtnHtml(x.id, 'productos', 'activo'))}
     ${tarNinosHtml(nino, 'tc-ninos')}
     <div class="tc-body">
       <div class="tc-nombre">${esc(x.nombre)}</div>
-      ${bullets.length ? `<ul class="tc-resumen">${bullets.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
-    </div>
-    <div class="tc-pie">
-      ${tarifa ? `<div class="tc-precio">${esc(tarifa.precio_texto)}</div>` : ''}
-      ${vigenciaHtml(tarifa?.vigencia_texto)}
-      ${nTarifas > 1 ? `<div class="tc-promos"><i class="fas fa-layer-group"></i> ${nTarifas} promociones</div>` : ''}
-      ${tagsHtml(tagsHotel, 4)}
+      ${bullets.length ? `<div class="tc-desc">${esc(bullets[0])}</div>` : ''}
+      ${tarMetaHtml(tarFechaCorta(tarifa), nTarifas, tarIconosIncluye(ag.tags))}
     </div></div>`;
+}
+// Última línea de la tarjeta: hasta cuándo se vende · cuántas promos (hotel) · íconos de lo incluido.
+function tarMetaHtml(fecha, nPromos, iconos) {
+  const partes = [];
+  if (fecha) partes.push(`<span class="tcm-fecha${fecha.cls ? ' ' + fecha.cls : ''}">${esc(fecha.txt)}</span>`);
+  if (nPromos > 1) partes.push(`<span class="tcm-promos"><i class="fas fa-layer-group"></i> ${nPromos} promos</span>`);
+  if (!partes.length && !iconos) return '';
+  return `<div class="tc-meta">${partes.join('<span class="tcm-sep">·</span>')}${iconos}</div>`;
+}
+// Hasta cuándo se vende, corto: «Hasta 15 sep». Ámbar si faltan ≤7 días, «Vencida»
+// si ya pasó. Sin fecha no se muestra nada (no se cae a vigencia_texto: es prosa).
+function tarFechaCorta(t) {
+  const f = String(tarVentaHasta(t) || t?.fecha_fin_estimada || t?.fecha_fin || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return null;
+  const dia = s => Date.parse(s + 'T12:00:00Z');
+  const dias = Math.round((dia(f) - dia(hoy())) / 864e5);
+  if (dias < 0) return { txt: 'Vencida', cls: 'is-vencida' };
+  const txt = dtf('es-VE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(dia(f)).replace(/\./g, '');
+  return { txt: 'Hasta ' + txt, cls: dias <= 7 ? 'is-pronto' : '' };
 }
 function tarFichaHtml(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
@@ -23887,7 +23913,71 @@ function tarPrecioDobleHero(t) {
   if (porHab) return { monto: tarMonto(dbl, t.moneda), nota: 'por habitación / noche · doble', pp: tarMonto(Math.round(dbl / 2 * 100) / 100, t.moneda), porHab };
   return { monto: tarMonto(Math.round(dbl * 100) / 100, t.moneda), nota: 'por persona / noche · ocupación doble', porHab };
 }
-const TAR_NOTA_POR_HAB = '<div class="pph-nota pph-hab">Grilla del proveedor: precio por habitación / noche</div>';
+// Pastilla de precio sobre la foto de la tarjeta: monto + unidad cortos, el texto
+// completo del proveedor queda en el title y en el detalle. Devuelve
+// {monto, unidad, desde, title} o null («Consultar»).
+//  - hotel (`ag` = agregarHotel): el «Desde» más bajo por persona de lo vendible hoy.
+//  - con `precios`: el DBL por persona y noche (regla del dueño para las promos);
+//    sin DBL, el «Desde» por persona.
+//  - sin estructura: se lee el primer monto de precio_texto y la unidad que lo rodea.
+const tarRedondea = n => Math.round(n * 100) / 100;
+const tarMontoCorto = (n, m) => {
+  const entero = Number.isInteger(n);
+  const [e, d] = (entero ? String(n) : n.toFixed(2).replace('.', ',')).split(',');
+  return tarSimbolo(m) + e.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (d ? ',' + d : '');
+};
+// «1.350,00» / «60,00» / «110» / «1,350.00» -> número. Un único separador seguido
+// de exactamente 3 dígitos es de miles; si no, es decimal.
+function tarParseMonto(s) {
+  s = String(s).replace(/[.,]+$/, '');
+  const lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
+  if (lc >= 0 && ld >= 0) { const k = Math.max(lc, ld); return parseFloat(s.slice(0, k).replace(/[.,]/g, '') + '.' + s.slice(k + 1)); }
+  const sep = lc >= 0 ? ',' : ld >= 0 ? '.' : null;
+  if (!sep) return parseFloat(s);
+  const p = s.split(sep);
+  return p.length > 2 || p[1].length === 3 ? parseFloat(p.join('')) : parseFloat(p[0] + '.' + p[1]);
+}
+const TAR_RE_MONEDA = '(US\\$|USD|\\$|€|EUR)';
+function tarPrecioCorto(t, ag) {
+  if (!t && !(ag && ag.precioMin != null)) return null;
+  const titulo = t?.precio_texto ? String(t.precio_texto).trim().slice(0, 400) : '';
+  const arma = (n, moneda, unidad, desde) => {
+    const monto = tarMontoCorto(n, moneda);
+    return { monto, unidad, desde: !!desde, title: titulo || `${desde ? 'Desde ' : ''}${monto} ${unidad}`.trim() };
+  };
+  if (ag && ag.precioMin != null) {
+    const r = arma(ag.precioMin, ag.precioMinMoneda, 'p/p', true);
+    r.title = `Desde ${r.monto} por persona (la tarifa más baja vendible hoy)`;
+    return r;
+  }
+  if (t.precios) {
+    const h = tarPrecioDobleHero(t);
+    const num = s => parseFloat(String(s).replace(/[^\d.]/g, ''));
+    if (h) return arma(num(h.porHab ? h.pp : h.monto), t.moneda, 'p/p · noche', false);
+    const pp = tarPrecioPorPersona(t);
+    if (pp !== null) return arma(tarRedondea(pp), t.moneda, 'p/p', true);
+  }
+  const txt = String(t.precio_texto || '');
+  let unidad = '';
+  let m = txt.match(new RegExp('\\bDBL\\b\\s*:?\\s*' + TAR_RE_MONEDA + '\\s*(\\d[\\d.,]*)', 'i'));
+  if (m) unidad = 'DBL';
+  else m = txt.match(new RegExp(TAR_RE_MONEDA + '\\s*(\\d[\\d.,]*)', 'i'));
+  if (!m) return null;
+  const n = tarParseMonto(m[2]);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const resto = txt.slice(m.index + m[0].length, m.index + m[0].length + 60).toLowerCase();
+  if (!unidad) {
+    const pers = /(?:por|x|\/)\s*(?:persona|pax|adulto)|\bp\/p\b/.test(resto);
+    const noche = /(?:por|x|\/|cada)\s*noche/.test(resto);
+    unidad = pers && noche ? 'p/p · noche' : pers ? 'p/p' : noche ? 'por noche'
+      : /(?:por|x)\s*pareja/.test(resto) ? 'por pareja' : /(?:por|x)\s*habitaci[oó]n/.test(resto) ? 'por hab.' : '';
+  }
+  const desde = /desde\s*:?\s*$/i.test(txt.slice(Math.max(0, m.index - 14), m.index));
+  const r = arma(n, /€|EUR/i.test(m[1]) ? 'EUR' : 'USD', unidad, desde);
+  r.title = titulo || r.title;
+  return r;
+}
+const TAR_NOTA_POR_HAB ='<div class="pph-nota pph-hab">Grilla del proveedor: precio por habitación / noche</div>';
 const tarHeroHtml = h => `<div class="promo-precio-hero${h.porHab ? ' pph-hab-hero' : ''}"><span class="pph-monto">${esc(h.monto)}</span><span class="pph-nota">${esc(h.nota)}</span>${h.porHab ? `<span class="pph-pp">${esc(h.pp)} por persona</span>` : ''}</div>`;
 // Botón de Hot Sales en la card (solo admin). Binario: si está `poner` el click
 // quita, si no pone. `cls` cambia el molde (.tc-hs flota sobre la foto en el
@@ -24149,12 +24239,32 @@ function tarifaComoPromo(t) {
 function tarNombrePromo(t) {
   const hotel = t?.productos?.nombre || '';
   const titulo = t?.titulo || t?.habitacion || t?.plan || 'Promoción';
-  // "Gremary (Posada Gremary)": el título suele nombrar al hotel por una sola de
-  // sus dos formas, y sin esto salía "Gremary (Posada Gremary) · … - Posada Gremary".
-  const formas = [hotel, hotel.replace(/\s*\([^)]*\)/g, ''), ...[...hotel.matchAll(/\(([^)]+)\)/g)].map(m => m[1])]
-    .map(f => tarNorm(f).trim()).filter(f => f.length >= 5 && !/^(hotel|posada|resort|hostal|club|campamento)$/.test(f));
-  if (hotel && !formas.some(f => tarNorm(titulo).includes(f))) return `${hotel} · ${titulo}`;
+  if (hotel && !tarFormasHotel(hotel).some(f => tarNorm(titulo).includes(f))) return `${hotel} · ${titulo}`;
   return titulo;
+}
+// "Gremary (Posada Gremary)": el título suele nombrar al hotel por una sola de
+// sus dos formas, y sin esto salía "Gremary (Posada Gremary) · … - Posada Gremary".
+function tarFormasHotel(hotel) {
+  return [hotel, hotel.replace(/\s*\([^)]*\)/g, ''), ...[...hotel.matchAll(/\(([^)]+)\)/g)].map(m => m[1])]
+    .map(f => tarNorm(f).trim()).filter(f => f.length >= 5 && !/^(hotel|posada|resort|hostal|club|campamento)$/.test(f));
+}
+// Título de la tarjeta, que ya tiene el hotel en su propia línea: se le quita el
+// nombre del hotel (cualquiera de sus formas, sin importar acentos ni mayúsculas)
+// y los separadores que queden colgando. Si no queda nada, el título tal cual.
+function tarTituloSinHotel(x) {
+  const hotel = x?.productos?.nombre || '';
+  const titulo = String(x?.titulo || x?.habitacion || x?.plan || 'Promoción');
+  if (!x?.producto_id || !hotel) return tarNombrePromo(x);
+  // Un carácter por elemento: normalizar sin acentos conserva las posiciones.
+  let ch = Array.from(titulo.normalize('NFC'));
+  for (const f of tarFormasHotel(hotel).sort((a, b) => b.length - a.length)) {
+    const i = ch.map(c => tarNorm(c).charAt(0) || c).join('').indexOf(f);
+    if (i >= 0) ch.splice(i, f.length);
+  }
+  const limpio = ch.join('').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ')
+    .replace(/^[\s\-–—·|:,.]+|[\s\-–—·|:,.]+$/g, '')
+    .replace(/(?:\s+(?:en|de|del|el|la|at))+$/i, '').trim();
+  return limpio.length >= 3 ? limpio : (x.habitacion || x.plan || titulo);
 }
 function tarifaPrecioNumerico(precioTexto) {
   // Anclado a $/€: un match sin ancla agarra el primer dígito de CUALQUIER
@@ -33766,6 +33876,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '🏷️', titulo: 'Tarjetas del Tarifario más limpias', texto: 'El precio ahora va en una pastilla sobre la foto (por ejemplo "$50 p/p · noche"; pasa el mouse para ver el texto completo del proveedor). Debajo de la foto queda el hotel, el nombre de la habitación o promo sin repetir el hotel, una línea de descripción y, al final, hasta cuándo se vende y unos íconos de lo que incluye (vuelo, traslado, comidas, excursión…) con el detalle al pasar el mouse. El resto de la información sigue completa al abrir la tarjeta.', roles: ['admin', 'asesor', 'marketing'] },
   { fecha: '2026-10-22', emoji: '🧹', titulo: 'Ficha del lead más corta', texto: 'Quitamos de la ficha lo que nadie usaba: Próxima acción, Tarifas para su fecha, Pagos y captación y Link de pago. Gestión (servicio, asesor y monto de la venta) pasó arriba, y las reservas quedan junto al chat, la nota y el historial. Si necesitas que te recuerden un lead, toca ⋯ y elige "Recordar mañana" (a las 9:00). En un lead en espera de pago, el botón principal ahora es "Crear reserva".', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-22', emoji: '💾', titulo: 'La ficha del lead se guarda sola', texto: 'Ya no hay botón "Guardar cambios": cada dato se guarda al elegirlo o al salir del campo, y arriba ves "Guardado" con la hora. El estado se cambia desde arriba de la ficha, junto al botón del siguiente paso. Los datos del cliente se leen como lista (toca "Editar" para cambiarlos) y la consulta larga se recorta con "Ver más". Ya no hay pestañas: la nota del equipo, los últimos mensajes con la IA y el historial están dentro de la misma ficha. Si eliges un estado de venta, te pide el monto antes de guardarlo.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-22', emoji: '🗂️', titulo: 'Tarjetas de leads más claras', texto: 'Cada tarjeta de lead muestra arriba el estado y hace cuánto llegó, la consulta del cliente resumida en dos líneas y la última oferta que le mostró la IA. Abajo tiene un solo botón con el siguiente paso según el estado (Atender, Cotizar, Crear reserva, Link de pago o Ver reservas) y en "⋯" el resto de las acciones, sin abrir la ficha. La prioridad de la IA ahora dice "Alta" o "Media" en vez de un símbolo.', roles: ['admin', 'asesor'] },
