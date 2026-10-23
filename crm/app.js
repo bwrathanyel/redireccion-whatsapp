@@ -6349,6 +6349,9 @@ function renderChips() {
   // En móvil el botón de filtros es solo un ícono: sin este puntito no habría
   // forma de saber que hay filtros puestos sin abrir la hoja.
   document.getElementById('leads-mfs-trigger')?.classList.toggle('con-filtros', chips.length > 0);
+  const nSel = ['f-sin-telefono', 'f-seguimiento', 'f-canal', 'f-estado', 'f-asesor', 'f-servicio', 'f-anio'].filter(id => val(id)).length;
+  const lfN = document.getElementById('leads-filtros-n'); if (lfN) lfN.textContent = nSel || '';
+  document.getElementById('leads-filtros-btn')?.classList.toggle('con-filtros', nSel > 0);
   // Aviso de que los contactos directos viven aparte -- solo texto, sin lógica
   // nueva (ver spec "Contactos directos" sección 5).
   const avisoCD = document.getElementById('cd-aviso-cc');
@@ -6360,6 +6363,18 @@ function renderChips() {
 }
 function setDrop(id, v) { const el = document.getElementById(id); el.value = v; if (id.endsWith('-desde') || id.endsWith('-hasta')) el.dispatchEvent(new Event('change')); refresh(); }
 function refresh() { page = 1; loadTable(); renderChips(); }
+{
+  const pop = document.getElementById('leads-filtros-pop'), btn = document.getElementById('leads-filtros-btn');
+  const abrir = a => { pop?.classList.toggle('lf-abierto', a); btn?.setAttribute('aria-expanded', a); };
+  btn?.addEventListener('click', e => { e.stopPropagation(); abrir(!pop.classList.contains('lf-abierto')); });
+  document.getElementById('leads-filtros-listo')?.addEventListener('click', () => abrir(false));
+  document.getElementById('leads-filtros-limpiar')?.addEventListener('click', () => {
+    ['f-sin-telefono', 'f-seguimiento', 'f-canal', 'f-estado', 'f-asesor', 'f-servicio', 'f-anio'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    page = 1; loadTable(); renderChips();
+  });
+  document.addEventListener('click', e => { if (pop?.classList.contains('lf-abierto') && !e.target.closest('.lf-dd')) abrir(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && pop?.classList.contains('lf-abierto')) { abrir(false); btn?.focus(); } });
+}
 document.getElementById('leads-reload-btn')?.addEventListener('click', async () => {
   const btn = document.getElementById('leads-reload-btn');
   btn.disabled = true; const html0 = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Recargar';
@@ -11242,7 +11257,7 @@ async function abrirNuevoLead(empresaId = null) {
   if (esOficina()) await Promise.all([ROL === 'admin' && poblarAsesoresSheetNuevoLead(), poblarEmpresasSheetNuevoLead(empresaId)]);
   openSheet('nuevo-lead-sheet');
 }
-document.getElementById('nl-abrir-btn')?.addEventListener('click', () => abrirNuevoLead());
+document.querySelectorAll('#nl-abrir-btn,#nl-abrir-btn-d').forEach(b => b.addEventListener('click', () => abrirNuevoLead()));
 
 // Abre el mismo sheet en modo "Nuevo cliente" de Facturación -- con datos de
 // venta (precio/costo/proveedor) y buscador de clientes existentes. Si viene

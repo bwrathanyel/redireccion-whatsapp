@@ -685,6 +685,33 @@ input.flt:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-sof
    @media(max-width:760px)). En escritorio queda oculto: Regla #1 del plan
    de rediseño, el único cambio de escritorio autorizado es la tarjeta de
    lead (Fase 2.6), esto no lo es. */
+.lf-btn,.lf-l,.lf-pie,#nl-abrir-btn-d{display:none}
+.lf-dd,.lf-pop,.lf-campo{display:contents}
+@media(min-width:761px){
+  .leads-pipeline-head{display:none !important}
+  #leads-tbar{gap:8px;margin-bottom:10px}
+  #leads-tbar .tcount{margin-left:auto}
+  #nl-abrir-btn-d{display:inline-flex;align-items:center;gap:7px;min-height:40px}
+  .lf-dd{display:block;position:relative;z-index:30}
+  .lf-btn{display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 13px;background:var(--panel);border:1px solid var(--line);border-radius:9px;color:var(--txt);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .15s,background .15s}
+  .lf-btn:hover,.lf-btn[aria-expanded="true"]{border-color:var(--line2)}
+  .lf-btn i{color:var(--muted)}
+  .lf-btn .lf-flecha{font-size:10px}
+  .lf-btn b:empty{display:none}
+  .lf-btn b{display:inline-block;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--accent);color:#1a1000;font-size:11px;line-height:18px;text-align:center}
+  .lf-btn.con-filtros{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+  .lf-btn.con-filtros i{color:var(--accent-ink)}
+  .lf-pop{display:none}
+  .lf-pop.lf-abierto{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;position:absolute;top:calc(100% + 6px);left:0;z-index:30;width:460px;max-width:calc(100vw - 48px);padding:14px;background:var(--bg2);border:1px solid var(--line2);border-radius:14px;box-shadow:0 18px 44px rgba(0,0,0,.45)}
+  :root[data-theme="light"] .lf-pop.lf-abierto{box-shadow:0 18px 44px rgba(var(--ink-rgb),.12)}
+  .lf-campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .lf-l{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .lf-pop .flt{width:100%;min-width:0}
+  .lf-pie{display:flex;grid-column:1/-1;justify-content:space-between;align-items:center;padding-top:10px;border-top:1px solid var(--line)}
+  .lf-limpiar{background:none;border:0;color:var(--muted);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+  .lf-limpiar:hover{color:var(--txt)}
+  .lf-listo{display:inline-flex;align-items:center;min-height:34px;padding:0 16px;background:var(--accent);border:0;border-radius:9px;color:#1a1000;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
+}
 .leads-pipeline-head{justify-content:flex-end}
 .live-indicator{display:none;align-items:center;gap:6px}
 .live-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--muted);transition:background .3s}
@@ -7082,13 +7109,19 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         </div>
         <button class="mfs-trigger mfs-icon" id="leads-mfs-trigger" data-mfs="leads-tbar" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
         <div class="tbar mfs" id="leads-tbar">
-            <select class="flt" id="f-sin-telefono"><option value="">Todos</option><option value="sin">Solo sin número</option><option value="con">Solo con número</option></select>
-            <select class="flt" id="f-seguimiento" aria-label="Seguimiento"><option value="">Todos los seguimientos</option><option value="pendiente">Vencidos y de hoy</option><option value="vencidos">Vencidos</option><option value="hoy">De hoy</option><option value="proximos">Próximos</option></select>
-            <select class="flt" id="f-canal"><option value="">Todos los canales</option></select>
-            <select class="flt" id="f-estado"><option value="">Todos los estados</option></select>
-            <select class="flt" id="f-asesor"><option value="">Todos los asesores</option></select>
-            <select class="flt" id="f-servicio"><option value="">Todos los servicios</option></select>
-            <select class="flt" id="f-anio"><option value="">Todos los años</option></select>
+            <div class="lf-dd">
+              <button class="lf-btn" id="leads-filtros-btn" type="button" aria-expanded="false" aria-controls="leads-filtros-pop"><i class="fas fa-sliders"></i> Filtros <b id="leads-filtros-n"></b> <i class="fas fa-chevron-down lf-flecha"></i></button>
+              <div class="lf-pop" id="leads-filtros-pop" role="dialog" aria-label="Filtros de leads">
+              <label class="lf-campo"><span class="lf-l">Teléfono</span><select class="flt" id="f-sin-telefono"><option value="">Con y sin número</option><option value="sin">Solo sin número</option><option value="con">Solo con número</option></select></label>
+              <label class="lf-campo"><span class="lf-l">Seguimiento</span><select class="flt" id="f-seguimiento" aria-label="Seguimiento"><option value="">Todos los seguimientos</option><option value="pendiente">Vencidos y de hoy</option><option value="vencidos">Vencidos</option><option value="hoy">De hoy</option><option value="proximos">Próximos</option></select></label>
+              <label class="lf-campo"><span class="lf-l">Canal</span><select class="flt" id="f-canal"><option value="">Todos los canales</option></select></label>
+              <label class="lf-campo"><span class="lf-l">Estado</span><select class="flt" id="f-estado"><option value="">Todos los estados</option></select></label>
+              <label class="lf-campo"><span class="lf-l">Asesor</span><select class="flt" id="f-asesor"><option value="">Todos los asesores</option></select></label>
+              <label class="lf-campo"><span class="lf-l">Servicio</span><select class="flt" id="f-servicio"><option value="">Todos los servicios</option></select></label>
+              <label class="lf-campo"><span class="lf-l">Año</span><select class="flt" id="f-anio"><option value="">Todos los años</option></select></label>
+                <div class="lf-pie"><button class="lf-limpiar" id="leads-filtros-limpiar" type="button">Limpiar filtros</button><button class="lf-listo" id="leads-filtros-listo" type="button">Listo</button></div>
+              </div>
+            </div>
             <div class="drp" id="drp-f">
               <button type="button" class="flt drp-btn" id="drp-f-btn"><i class="fas fa-calendar-days"></i> <span id="drp-f-label">Rango de fechas</span></button>
               <div class="drp-panel" id="drp-f-panel">
@@ -7115,6 +7148,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
                 <button onclick="exportarXLSX('leads','Leads')"><i class="fas fa-file-excel"></i> XLSX</button>
               </div>
             </div>
+            <button class="dbtn save" id="nl-abrir-btn-d" type="button" style="width:auto;flex:none;padding:8px 14px"><i class="fas fa-user-plus"></i> Nuevo lead</button>
             <button class="mfs-done" data-mfs="leads-tbar" type="button">Listo</button>
         </div>
         <div class="card">
