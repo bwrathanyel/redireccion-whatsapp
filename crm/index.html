@@ -5495,6 +5495,38 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 @keyframes mv-celebrar{0%{box-shadow:0 0 0 0 rgba(16,185,129,.45)}50%{transform:scale(1.015);box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
 .mv-celebra{animation:mv-celebrar .6s var(--ease-salida)}
 @media(prefers-reduced-motion:reduce){.lt-card{animation:none}.mv-celebra{animation:none}}
+/* Cuentas por pagar: una ficha por proveedor a todo el ancho, una fila por cliente (2026-10-23).
+   .cxp-montos es display:contents: el texto, el saldo y los botones alinean en columnas entre filas. */
+#sec-facturacion #cxp-tbody{grid-template-columns:minmax(0,1fr)}
+.cxp-ficha:hover{transform:none}
+.cxp-filas{display:flex;flex-direction:column}
+.cxp-fila{display:grid;grid-template-columns:minmax(0,1fr) 270px 92px 120px;align-items:center;gap:6px 14px;padding:9px 8px;border-top:1px solid var(--line);border-radius:8px;transition:background var(--dur-rapida)}
+.cxp-fila-link{cursor:pointer}
+.cxp-fila:hover{background:var(--line)}
+.cxp-fila-hecha{opacity:.78}
+.cxp-quien{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cxp-quien b{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cxp-quien span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cxp-montos{display:contents}
+.cxp-montos span{font-size:11.5px;color:var(--muted);text-align:right;white-space:nowrap}
+.cxp-montos b{font-size:14px;font-weight:700;text-align:right;white-space:nowrap}
+.cxp-acc{display:flex;gap:6px;justify-content:flex-end}
+.cxp-acc .btn-sm{display:inline-flex;align-items:center;gap:6px}
+.cxp-acc .btn-sm i{font-size:11px;opacity:.85}
+.cxp-ver-pagadas{display:block;width:100%;padding:10px 8px;border:0;border-top:1px solid var(--line);border-radius:8px;background:transparent;color:var(--accent-ink);font:inherit;font-size:12px;font-weight:600;text-align:left;cursor:pointer}
+.cxp-ver-pagadas:hover{background:var(--line)}
+.cxp-ver-pagadas:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media(max-width:1100px){
+  #cxp-tbody .cxp-fila{grid-template-columns:minmax(0,1fr) auto auto}
+  #cxp-tbody .cxp-quien{grid-column:1/-1}
+  #cxp-tbody .cxp-montos span{text-align:left;white-space:normal}
+}
+@media(max-width:760px){
+  #cxp-tbody .cxp-acc{grid-column:1/-1;justify-content:flex-start}
+  #cxp-tbody .cxp-acc .btn-sm{min-height:44px}
+  #cxp-tbody .cxp-acc .lt-primario{flex:1;justify-content:center}
+  #cxp-tbody .cxp-ver-pagadas{min-height:44px}
+}
 /* Proveedores con margen real (2026-10-21). --pc = color del servicio principal, --mc = color del margen. */
 .prv-barra{display:flex;flex-wrap:wrap;align-items:center;gap:9px 14px;margin-top:14px}
 .prv-seg{display:inline-flex;padding:3px;border-radius:999px;background:var(--bg2);border:1px solid var(--line)}

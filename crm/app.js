@@ -18867,41 +18867,75 @@ function renderCuentasPorPagar() {
   const filas = cxpFiltroEstado ? buscadas.filter(c => c.estado === cxpFiltroEstado) : buscadas;
   FACT_LAST.cxp = filas;
   let sumaTransferir = 0, sumaAbonado = 0, sumaSaldo = 0, nPend = 0, nPag = 0;
+  const provsBuscados = new Set();
   buscadas.forEach(c => {
     sumaTransferir += c.monto_a_transferir; sumaAbonado += c.monto_abonado; sumaSaldo += c.saldo_pendiente;
     if (c.estado === 'pendiente') nPend++; else if (c.estado === 'pagado') nPag++;
+    provsBuscados.add(cxpClave(c.proveedor));
   });
   const pctAbonado = sumaTransferir > 0 ? Math.round(sumaAbonado / sumaTransferir * 100) : 0;
   pintarKPIs('cxp-kpis', [
-    { key: '', t: 'A transferir', v: money(sumaTransferir), d: `${fmt(buscadas.length)} cuentas · ver todas`, i: 'fa-file-invoice-dollar', c: 'var(--blue)', on: cxpFiltroEstado === '', go: () => filtrarCxpEstado('') },
+    { key: '', t: 'A transferir', v: money(sumaTransferir), d: `${fmt(provsBuscados.size)} proveedores · ${fmt(buscadas.length)} cuentas · ver todas`, i: 'fa-file-invoice-dollar', c: 'var(--blue)', on: cxpFiltroEstado === '', go: () => filtrarCxpEstado('') },
     { key: 'pendiente', t: 'Saldo pendiente', v: money(sumaSaldo), d: `${fmt(nPend)} por pagar · ${pctAbonado}% ya abonado`, i: 'fa-hourglass-half', c: 'var(--amber)', on: cxpFiltroEstado === 'pendiente', go: () => filtrarCxpEstado('pendiente') },
     { key: 'pagado', t: 'Pagadas', v: fmt(nPag), d: `${money(sumaAbonado)} abonado en total`, i: 'fa-circle-check', c: 'var(--green)', on: cxpFiltroEstado === 'pagado', go: () => filtrarCxpEstado('pagado') },
   ]);
-  const visibles = filas.slice(0, cxpMostrar);
+  const grupos = new Map();
+  filas.forEach(c => {
+    const k = cxpClave(c.proveedor);
+    let g = grupos.get(k);
+    if (!g) grupos.set(k, g = { clave: k, nombre: String(c.proveedor || '').trim() || 'Sin proveedor', filas: [], transferir: 0, abonado: 0, saldo: 0, nPend: 0 });
+    g.filas.push(c); g.transferir += c.monto_a_transferir; g.abonado += c.monto_abonado; g.saldo += c.saldo_pendiente;
+    if (c.estado === 'pendiente') g.nPend++;
+  });
+  const { col, dir } = FACT_SORT.cxp, campoSuma = { saldo_pendiente: 'saldo', monto_a_transferir: 'transferir', monto_abonado: 'abonado' }[col];
+  const lista = [...grupos.values()].sort(campoSuma ? (a, b) => (a[campoSuma] - b[campoSuma]) * dir : col === 'proveedor' ? (a, b) => a.clave.localeCompare(b.clave) * dir : (a, b) => b.saldo - a.saldo);
+  const visibles = lista.slice(0, cxpMostrar);
   const pager = document.getElementById('cxp-pager');
-  if (pager) pager.style.display = filas.length > cxpMostrar ? '' : 'none';
-  document.getElementById('cxp-tbody').innerHTML = visibles.map((c, i) => {
-    const pagado = c.estado === 'pagado';
-    const pct = c.monto_a_transferir > 0 ? Math.min(100, Math.round(c.monto_abonado / c.monto_a_transferir * 100)) : (pagado ? 100 : 0);
-    return `<article class="lt-card${pagado ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}${c.lead_id ? ';cursor:pointer' : ''}"${c.lead_id ? ` onclick="if(!event.target.closest('button,a'))abrirClienteDesdeFacturacion(${c.lead_id})"` : ''}>
-      <div class="lt-card-cab">
-        <div class="lt-card-tit" title="${esc(c.proveedor)}">${esc(c.proveedor)}</div>
-        <span class="bt-tag" style="--c:${pagado ? 'var(--green)' : 'var(--amber)'}">${pagado ? 'Pagado' : esc(c.estado === 'pendiente' ? 'Pendiente' : c.estado)}</span>
-      </div>
-      <div class="lt-card-meta"><i class="fas fa-user"></i> ${esc(c.cliente || 'Sin cliente')}</div>
-      <div class="lt-cifras">
-        <div><span>A transferir</span><b>${money(c.monto_a_transferir)}</b></div>
-        <div><span>Abonado</span><b>${money(c.monto_abonado)}</b></div>
-        <div><span>Saldo</span><b class="${c.saldo_pendiente > 0 ? 'lt-debe' : 'lt-ok'}">${money(c.saldo_pendiente)}</b></div>
-      </div>
-      <div class="lt-barra" role="progressbar" aria-label="Abonado" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
-      <div class="lt-card-pie">
-        <button class="btn-sm" type="button" onclick="abrirClienteDesdeFacturacion(${c.lead_id})"><i class="fas fa-user-pen"></i> Editar cliente</button>
-        ${c.estado === 'pendiente' ? `<button class="btn-sm lt-primario" type="button" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})"><i class="fas fa-hand-holding-dollar"></i> Registrar abono</button>` : ''}
-      </div>
-    </article>`;
-  }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${cxpFiltroEstado || val('cxp-search') ? 'Nada coincide con el filtro' : 'Sin cuentas por pagar'}</div>`;
+  if (pager) pager.style.display = lista.length > cxpMostrar ? '' : 'none';
+  document.getElementById('cxp-tbody').innerHTML = visibles.map(cxpFichaHtml).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${cxpFiltroEstado || val('cxp-search') ? 'Nada coincide con el filtro' : 'Sin cuentas por pagar'}</div>`;
 }
+// Mismo proveedor con y sin proveedor_id (o con distinto acento/espacios) cae en una sola ficha.
+function cxpClave(p) { return String(p || '').trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' '); }
+function cxpFichaHtml(g, i) {
+  const hecha = g.nPend === 0;
+  const pct = g.transferir > 0 ? Math.min(100, Math.round(g.abonado / g.transferir * 100)) : (hecha ? 100 : 0);
+  const pagadas = g.filas.filter(c => c.estado === 'pagado');
+  // Buscando se muestran todas: si no, el cliente buscado podría quedar tras el «Ver pagadas».
+  const plegar = !hecha && pagadas.length > 0 && !val('cxp-search').trim();
+  const cuerpo = plegar ? g.filas.filter(c => c.estado !== 'pagado') : g.filas;
+  return `<article class="lt-card cxp-ficha${hecha ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}">
+    <div class="lt-card-cab">
+      <div class="lt-card-tit" title="${esc(g.nombre)}">${esc(g.nombre)}</div>
+      <span class="bt-tag" style="--c:${hecha ? 'var(--green)' : 'var(--amber)'}">${hecha ? 'Pagado' : `${fmt(g.nPend)} pendiente${g.nPend === 1 ? '' : 's'}`}</span>
+    </div>
+    <div class="lt-cifras">
+      <div><span>A transferir</span><b>${money(g.transferir)}</b></div>
+      <div><span>Abonado</span><b>${money(g.abonado)}</b></div>
+      <div><span>Saldo</span><b class="${g.saldo > 0 ? 'lt-debe' : 'lt-ok'}">${money(g.saldo)}</b></div>
+    </div>
+    <div class="lt-barra" role="progressbar" aria-label="Abonado" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
+    <div class="cxp-filas">${cuerpo.map(cxpFilaHtml).join('')}${plegar ? `<button class="cxp-ver-pagadas" type="button" aria-expanded="false" data-n="${pagadas.length}" onclick="cxpVerPagadas(this)">Ver ${fmt(pagadas.length)} pagada${pagadas.length === 1 ? '' : 's'}</button><div class="cxp-pagadas" hidden>${pagadas.map(cxpFilaHtml).join('')}</div>` : ''}</div>
+  </article>`;
+}
+function cxpFilaHtml(c) {
+  const detalle = [c.reserva_codigo, c.servicio].filter(Boolean).join(' · ');
+  const abrir = c.lead_id ? `abrirClienteDesdeFacturacion(${c.lead_id})` : '';
+  return `<div class="cxp-fila${c.estado === 'pagado' ? ' cxp-fila-hecha' : ''}${abrir ? ' cxp-fila-link' : ''}"${abrir ? ` onclick="if(!event.target.closest('button,a'))${abrir}"` : ''}>
+    <div class="cxp-quien"><b title="${esc(c.cliente || 'Sin cliente')}">${esc(c.cliente || 'Sin cliente')}</b>${detalle ? `<span title="${esc(detalle)}">${esc(detalle)}</span>` : ''}</div>
+    <div class="cxp-montos"><span>A transferir ${money(c.monto_a_transferir)} · Abonado ${money(c.monto_abonado)}</span><b class="${c.saldo_pendiente > 0 ? 'lt-debe' : 'lt-ok'}">${money(c.saldo_pendiente)}</b></div>
+    <div class="cxp-acc">
+      ${c.estado === 'pendiente' ? `<button class="btn-sm lt-primario" type="button" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})"><i class="fas fa-hand-holding-dollar"></i> Abonar</button>` : ''}
+      ${abrir ? `<button class="btn-sm" type="button" onclick="${abrir}" title="Editar cliente" aria-label="Editar cliente"><i class="fas fa-user-pen"></i></button>` : ''}
+    </div>
+  </div>`;
+}
+function cxpVerPagadas(btn) {
+  const caja = btn.nextElementSibling, abre = caja.hidden;
+  caja.hidden = !abre;
+  btn.setAttribute('aria-expanded', abre);
+  btn.textContent = abre ? 'Ocultar pagadas' : `Ver ${fmt(+btn.dataset.n)} pagada${btn.dataset.n === '1' ? '' : 's'}`;
+}
+window.cxpVerPagadas = cxpVerPagadas;
 function cargarMasCxp() { cxpMostrar += TECHO_LISTA; renderCuentasPorPagar(); }
 window.cargarMasCxp = cargarMasCxp;
 
