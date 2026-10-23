@@ -62,6 +62,9 @@ try {
   /* Monto de la pastilla de precio sobre la foto del Tarifario: la pastilla es SIEMPRE oscura,
      y el --green del tema claro (#1f613c) ahí no se lee. No se redefine en el tema claro. */
   --precio-sobre-foto:#34d399;
+  /* Velo y texto de los controles que flotan SOBRE una foto (X y «Ver N fotos» del
+     drawer del Tarifario): la foto no cambia con el tema, así que no se redefinen. */
+  --velo-foto:rgba(8,11,22,.62); --sobre-foto:#eef1f8;
   --safe-b:env(safe-area-inset-bottom,0px);
   /* Fase 6 -- escala de movimiento. El CSS no tenía una: cada transición
      inventaba su propia duración (.24s acá, .3s allá). --ease-salida ya
@@ -886,6 +889,142 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .carpeta-historico>summary::before{content:'\25B8';display:inline-block;margin-right:6px;transition:transform .15s}
 .carpeta-historico[open]>summary::before{transform:rotate(90deg)}
 .carpeta-historico[open]>summary{margin-bottom:8px}
+/* ---------- Drawer del Tarifario, dirección A (2026-10-23) ----------
+   Cabecera con mosaico + tabla temporadas × habitaciones + detalle de la celda
+   elegida (app.js tgCabeceraHtml / tgPlanHtml / tgDetalleHtml). Solo variables
+   del tema: el tema claro las redefine. Prefijo tg-, nunca fa/fab/fas/far.
+   El drawer se ensancha a 560px solo en escritorio (bloque min-width:761px) y
+   el móvil tiene su propio bloque debajo: ninguno pisa al otro. */
+.tg-cab{display:flex;flex-direction:column;gap:14px;margin-bottom:16px}
+.tg-mosaico{position:relative;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:4px;height:208px;border-radius:16px;overflow:hidden;background:var(--panel-solid)}
+.tg-mosaico-1{grid-template-columns:1fr}
+.tg-mosaico img{width:100%;height:100%;object-fit:cover;display:block;cursor:pointer;transition:opacity var(--dur-rapida)}
+.tg-mosaico img:hover{opacity:.92}
+.tg-verfotos{position:absolute;right:10px;bottom:10px;height:30px;padding:0 12px;border-radius:999px;border:0;background:var(--velo-foto);color:var(--sobre-foto);font-family:inherit;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.drawer:has(.tg-mosaico) .dclose{top:34px;right:34px;width:40px;height:40px;border-radius:999px;border:0;background:var(--velo-foto);color:var(--sobre-foto);z-index:2}
+.drawer:has(.tg-mosaico) .dclose:hover{color:var(--sobre-foto);filter:brightness(1.3)}
+.tg-verfotos:focus-visible,.drawer:has(.tg-mosaico) .dclose:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tg-titular{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+.tg-cab:not(:has(.tg-mosaico)) .tg-titular{padding-right:44px;align-items:center}
+.tg-titular .dava{width:54px;height:54px;border-radius:14px;display:grid;place-items:center;font-size:20px;flex-shrink:0}
+.tg-titular-txt{min-width:0;flex:1}
+.tg-nombre{margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.15;color:var(--txt);overflow-wrap:anywhere}
+.tg-lugar{margin-top:6px;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.tg-lugar i{font-size:12px}
+.tg-desde{display:flex;flex-direction:column;align-items:flex-end;text-align:right;flex-shrink:0}
+.tg-desde-k{font-size:11px;font-weight:600;color:var(--muted)}
+.tg-desde-v{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.05;color:var(--accent-ink);font-variant-numeric:tabular-nums}
+.tg-desde-n{font-size:11px;color:var(--muted)}
+.tg-datos{display:flex;flex-wrap:wrap;gap:8px}
+.tg-dato{min-height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--line2);display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--txt)}
+.tg-dato i{font-size:11px;color:var(--muted)}
+.tg-k{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.tg-desc{margin-bottom:12px}
+.tg-desc .ddesc-t{font-size:13.5px;line-height:1.55;color:var(--txt)}
+.tg-pol{padding:12px 14px;border-radius:12px;background:rgba(var(--ink-rgb),.03);border:1px solid var(--line)}
+.tg-pol .ddesc{margin-top:6px}
+.tg-pol .ddesc-t{font-size:12.5px;line-height:1.55;color:var(--txt);-webkit-line-clamp:2;line-clamp:2}
+.carpeta-tabla{margin-top:22px}
+.tg-plan{margin-bottom:22px}
+.tg-plan-cab{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
+.tg-plan-tit{min-width:0}
+.tg-plan-t{margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em;color:var(--txt)}
+.tg-plan-s{margin-top:3px;font-size:12px;color:var(--muted)}
+.tg-modo{display:flex;padding:3px;border-radius:10px;background:var(--panel-solid);border:1px solid var(--line);flex-shrink:0}
+.tg-modo-b{border:0;height:28px;padding:0 12px;border-radius:8px;background:transparent;color:var(--muted);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.tg-modo-b:hover:not(.on){color:var(--txt)}
+.tg-modo-b.on{background:var(--accent-soft);color:var(--accent-txt)}
+.tg-modo-b:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.tg-tabla{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel-solid)}
+.tg-fila{display:grid;grid-template-columns:150px repeat(var(--tg-cols),minmax(0,1fr))}
+.tg-fila+.tg-fila{border-top:1px solid var(--line)}
+.tg-fila-cab{background:rgba(var(--ink-rgb),.025)}
+.tg-th{padding:12px 14px 10px;text-align:right;border-left:1px solid var(--line);min-width:0}
+.tg-th-temp{border-left:0;text-align:left;align-self:end;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.tg-th-n{font-size:12.5px;font-weight:700;line-height:1.25;color:var(--txt);overflow-wrap:anywhere}
+.tg-th-cap{margin-top:3px;display:flex;justify-content:flex-end;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
+.tg-th-cap i{font-size:9.5px}
+.tg-temp{padding:11px 14px;display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0}
+.tg-temp-n{display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;font-size:13px;font-weight:700;color:var(--txt);overflow-wrap:anywhere}
+.tg-temp-r{font-size:11px;line-height:1.35;color:var(--muted)}
+.tg-hoy{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--green);background:color-mix(in srgb,var(--green) 14%,transparent);padding:2px 6px;border-radius:999px}
+.tg-celda{position:relative;min-width:0;border:0;border-left:1px solid var(--line);border-radius:0;background:transparent;color:var(--txt);font-family:inherit;padding:10px 14px;min-height:60px;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:2px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background var(--dur-rapida)}
+.tg-celda:hover:not(.on):not(.tg-vacia){background:rgba(var(--ink-rgb),.04)}
+.tg-celda.on{background:var(--accent-soft);box-shadow:inset 0 0 0 1.5px var(--accent);color:var(--accent-txt)}
+.tg-celda:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.tg-vacia{cursor:default;color:var(--muted2);font-size:15px}
+.tg-apagada{opacity:.45}
+.tg-monto{display:flex;align-items:center;gap:5px;font-size:15px;font-weight:700}
+.tg-estrella{font-size:10px;color:var(--accent-ink)}
+.tg-marcas{display:flex;align-items:center;gap:5px}
+.tg-hs{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;color:var(--amber)}
+.tg-hs i{font-size:9px}
+.tg-nino{font-size:10px;color:var(--pink)}
+/* Ya está en la selección (Comparar/Copiar): punto de acento en la esquina. */
+.tg-marcada::after{content:'';position:absolute;top:7px;left:7px;width:7px;height:7px;border-radius:999px;background:var(--accent)}
+.tg-det{margin-top:12px;border:1px solid var(--line2);border-radius:14px;background:var(--panel-solid);padding:16px;display:flex;flex-direction:column;gap:14px}
+.tg-det-off{opacity:.7}
+.tg-det-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.tg-det-tit{min-width:0}
+.tg-det-h{font-size:16px;font-weight:800;letter-spacing:-.01em;color:var(--txt);overflow-wrap:anywhere}
+.tg-det-h span{color:var(--muted);font-weight:600}
+.tg-det-sub{margin-top:4px;font-size:12px;color:var(--muted)}
+.tg-det-sel{display:flex;gap:7px;align-items:center;min-height:32px;font-size:12px;color:var(--muted);flex-shrink:0;cursor:pointer}
+.tg-det-sel input{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer}
+.tg-det-badges{display:flex;flex-wrap:wrap;gap:6px}
+.tg-det .promo-ninos{margin:0}
+.tg-baldosas{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.tg-baldosa{background:rgba(var(--ink-rgb),.035);border-radius:10px;padding:10px 12px;min-width:0}
+.tg-baldosa .tg-k{font-weight:700;letter-spacing:.06em;overflow-wrap:anywhere}
+.tg-baldosa-v{margin-top:4px;font-size:18px;font-weight:800;color:var(--txt);font-variant-numeric:tabular-nums}
+.tg-baldosa-s{font-size:11px;color:var(--muted)}
+.tg-fechas{display:flex;flex-direction:column;gap:8px}
+.tg-fechas-cab{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px 10px}
+.tg-venta{font-size:12px;color:var(--muted)}
+.tg-chips{display:flex;flex-wrap:wrap;gap:6px}
+.tg-chip{font-size:12px;padding:5px 9px;border-radius:8px;background:rgba(var(--ink-rgb),.04);border:1px solid var(--line);color:var(--txt);font-variant-numeric:tabular-nums}
+.tg-equipo{display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--muted)}
+.tg-equipo i{margin-top:3px;font-size:11px;flex-shrink:0}
+.tg-det .hab-fotos{margin-top:-6px}
+.tg-det .promo-cond{margin:0}
+.tg-det .promo-pie{margin-top:0}
+.tg-admin{margin-top:0;padding-top:12px;border-top:1px solid var(--line)}
+.tg-admin .promo-hs-seg-b{font-size:11.5px;padding:5px 10px}
+.tg-admin .tar-ia-inline.tar-ia-ico,.tg-admin .promo-mp-btn{width:34px;height:34px;border-radius:10px}
+.tg-notas{margin-top:12px;display:flex;flex-direction:column;gap:6px;padding:0 2px}
+.tg-nota{display:flex;gap:10px;font-size:12px;line-height:1.5;color:var(--muted)}
+.tg-nota i{margin-top:3px;font-size:11px;flex-shrink:0}
+.tg-nota strong{color:var(--txt);font-weight:700}
+.tg-nota-fuerte{color:var(--amber);font-weight:600}
+@media(min-width:761px){.drawer:has(.tg-cab){width:560px}}
+@media(max-width:760px){
+  .tg-mosaico{height:168px;gap:3px;border-radius:14px}
+  .drawer:has(.tg-mosaico) .dclose{top:30px;right:28px;width:44px;height:44px}
+  .tg-titular{gap:12px}
+  .tg-nombre{font-size:20px}
+  .tg-desde-v{font-size:22px}
+  .tg-plan-cab{flex-wrap:wrap}
+  .tg-fila{grid-template-columns:96px repeat(var(--tg-cols),minmax(0,1fr))}
+  .tg-th{padding:10px 8px 8px}
+  .tg-th-temp{font-size:9px;letter-spacing:.06em}
+  .tg-th-n{font-size:11px;line-height:1.2}
+  .tg-th-cap{margin-top:2px;font-size:10px}
+  .tg-th-cap i{display:none}
+  .tg-temp{padding:9px 8px 9px 11px;gap:2px}
+  .tg-temp-n{font-size:12px;line-height:1.25}
+  .tg-temp-r{font-size:10px;line-height:1.3}
+  .tg-hoy{font-size:9px;padding:1px 5px}
+  .tg-celda{padding:9px 8px;min-height:56px}
+  .tg-monto{font-size:13.5px;gap:3px}
+  .tg-estrella{font-size:8px}
+  .tg-hs-t{display:none}
+  .tg-det{padding:14px;gap:12px}
+  .tg-det-h{font-size:15px}
+  .tg-baldosas{grid-template-columns:repeat(2,minmax(0,1fr))}
+  /* Cinco habitaciones dejan ~51px por celda: «€1.350» no entra con el padding normal. */
+  .tg-cols-5 .tg-celda,.tg-cols-5 .tg-th{padding-left:4px;padding-right:4px}
+  .tg-cols-5 .tg-monto{font-size:12px}
+}
 .promo-card{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 12px}
 /* Controles de admin en su propia fila (Hot Sales a la izquierda, IA y Mejor precio
    como iconos a la derecha) para que el título quede solo. */

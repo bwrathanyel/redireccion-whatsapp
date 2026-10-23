@@ -21887,7 +21887,7 @@ function iaAplicarEstadoLocal(id, estado, orden) {
   (tarCache.promo || []).forEach(marca);
   (tarCache.hotsale || []).forEach(marca);
   (TAR_DRAWER_ITEM?.tarifas || []).forEach(marca);
-  if (TAR_DRAWER_ITEM && document.querySelector(`#drawerContent .promo-card[data-tarifa-id="${id}"]`)) {
+  if (TAR_DRAWER_ITEM && document.querySelector(`#drawerContent .carpeta [data-tarifa-id="${id}"]`)) {
     tarRepintarCarpeta(TAR_DRAWER_ITEM);
   }
   if (tarTab === 'ia') renderTarifarioIA();
@@ -23950,7 +23950,7 @@ function tarPreciosLista(t) {
     if (ia < 0 && ib < 0) return a.localeCompare(b, 'es');
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
-  return claves.map(k => ({ etq: tarEtiquetaPrecio(k), monto: tarMonto(p[k], t.moneda) }));
+  return claves.map(k => ({ k, etq: tarEtiquetaPrecio(k), monto: tarMonto(p[k], t.moneda) }));
 }
 // `precio_desde_usd` guarda euros en ~300 filas (moneda='EUR'): el tope "hasta $X" es
 // en dólares, así que un monto en otra moneda no se compara (mejor mostrar de más que
@@ -24132,7 +24132,7 @@ function hsAplicarEstadoLocal(id, estado) {
   (tarCache.promo || []).forEach(marca);
   (tarCache.hotsale || []).forEach(marca);
   (TAR_DRAWER_ITEM?.tarifas || []).forEach(marca);
-  if (TAR_DRAWER_ITEM && document.querySelector(`#drawerContent .promo-card[data-tarifa-id="${id}"]`)) {
+  if (TAR_DRAWER_ITEM && document.querySelector(`#drawerContent .carpeta [data-tarifa-id="${id}"]`)) {
     tarRepintarCarpeta(TAR_DRAWER_ITEM);
   }
   // Hot Sales sale de hot_sales_publicas(): marcar cambia qué entra y en qué
@@ -24748,6 +24748,285 @@ async function tarJuntarTarifas(queda, sale, btn) {
   if (tarTab === 'promo' || tarTab === 'hotsale' || tarTab === 'ia') renderTarifario();
   okToast('Promociones unidas');
 }
+/* ---------- Dirección A (2026-10-23): cada plan es una tabla ----------
+   Filas = temporada (`titulo`), columnas = habitación: el asesor compara los
+   16 precios de un hotel de un vistazo en vez de leer 16 tarjetas, y tocar un
+   precio abre su detalle debajo. El detalle reusa los helpers de la tarjeta
+   (tcHsSegHtml, tcIaBtnHtml, tarMejorPrecioBtnHtml, data-tar-sel, data-juntar-*)
+   para que el cableado delegado de tarEngancharCarpeta siga siendo uno solo.
+   Un plan que no arma una tabla limpia cae a las tarjetas de siempre: falta
+   habitación, título o DBL en alguna fila; más de TG_MAX_COLS habitaciones; dos
+   tarifas en la misma celda (cargas duplicadas); o una tabla casi vacía. Medido
+   el 23-oct: 55 de 170 planes vigentes arman tabla, el resto queda como estaba.
+   Prefijo `tg-`, nunca fa/fab/fas/far (los reclama Font Awesome). */
+const TG_MAX_COLS = 5;
+const TG_SIN_PLAN = 'Sin plan indicado';
+// Siglas que tienen que seguir en mayúscula cuando un texto que vino TODO EN
+// MAYÚSCULAS del PDF se pasa a minúscula de oración. Sin lookbehind a propósito:
+// un Safari viejo no lo parsea y tumbaría el app.js entero.
+const TG_SIGLAS_RX = /(^|[^a-zà-ÿ])(dbl|sgl|tpl|cdp|chd|pax|adl|adt|iva|igtf|am|pm|usd|eur|bcv|tv|vip|rif)(?=[^a-zà-ÿ]|$)/g;
+function tgOracion(s) {
+  const txt = String(s ?? '');
+  // Solo si no trae NINGUNA minúscula: un texto ya escrito a mano se respeta.
+  if (!/[A-ZÀ-Þ]/.test(txt) || /[a-zß-ÿ]/.test(txt)) return txt;
+  return txt.toLowerCase()
+    .replace(/(^\s*(?:[-•*·]\s*)?|[.!?]\s+|\n\s*(?:[-•*·]\s*)?)([a-zà-ÿ])/g, (m, p, c) => p + c.toUpperCase())
+    .replace(TG_SIGLAS_RX, (m, p, w) => p + w.toUpperCase())
+    .replace(/(\d)([a-z])(?=[^a-zà-ÿ]|$)/g, (m, d, l) => d + l.toUpperCase()); // 4D/3N
+}
+// «1 sept.» (es-VE) -> «1 sep»; «21 – 26 dic» cuando el mes es el mismo.
+const tgFecha = (iso, anio) => fmtFechaCorta(iso).replace('.', '').replace(/(\d+ )sept\b/, '$1sep') + (anio ? ' ' + iso.slice(0, 4) : '');
+function tgRango([a, b], anio = true) {
+  if (a && b && a.slice(0, 7) === b.slice(0, 7)) return `${Number(a.slice(8, 10))} – ${tgFecha(b, anio)}`;
+  if (a && b) return `${tgFecha(a, anio && a.slice(0, 4) !== b.slice(0, 4))} – ${tgFecha(b, anio)}`;
+  return a ? `desde ${tgFecha(a, anio)}` : b ? `hasta ${tgFecha(b, anio)}` : '';
+}
+const tgMonto = (t, k) => { const v = tarNumPrecio(t, k); return v === null ? '—' : tarMontoCorto(tarRedondea(v), t.moneda); };
+const tgNombreHab = t => tgOracion(tarHabCorta(t));
+// Título de la temporada sin el hotel (el drawer ya lo dice) ni la habitación
+// (es la columna). Si limpiar deja nada, queda el título del PDF.
+function tgNombreTemp(t, hotel) {
+  let s = hotel ? tarTituloSinHotel({ titulo: t.titulo, habitacion: t.habitacion, plan: t.plan, producto_id: t.producto_id || 1, productos: { nombre: hotel } }) : String(t.titulo || '');
+  const h = String(t.habitacion || '').toLowerCase(), i = h ? s.toLowerCase().indexOf(h) : -1;
+  if (i >= 0 && s.length > h.length) {
+    const limpio = (s.slice(0, i) + s.slice(i + h.length)).replace(/\s{2,}/g, ' ').replace(/^[\s\-–—·|:,.]+|[\s\-–—·|:,.]+$/g, '').trim();
+    if (limpio.length >= 3) s = limpio;
+  }
+  return tgOracion(s);
+}
+// Devuelve {filas, cols, celdas} o null (el plan sigue con tarjetas).
+function tgArmarGrilla(filas) {
+  if (filas.length < 2) return null;
+  if (filas.some(t => !t.habitacion || !t.titulo || tarNumPrecio(t, 'dbl') === null)) return null;
+  const fs = new Map(), cs = new Map(), celdas = new Map();
+  for (const t of filas) {
+    const kc = tarNombreNorm(t.habitacion);
+    let kf = tarNombreNorm(t.titulo);
+    // Hay PDFs que repiten la habitación dentro del título: sin quitarla cada
+    // habitación sería su propia temporada y la tabla saldría en diagonal.
+    if (kc && kf !== kc && kf.includes(kc)) kf = kf.replace(kc, ' ').replace(/\s+/g, ' ').trim();
+    if (celdas.has(kf + '|' + kc)) return null;
+    celdas.set(kf + '|' + kc, t);
+    const o = t.orden_pdf ?? 0;
+    if (!cs.has(kc)) cs.set(kc, { k: kc, t, orden: o, tarifas: [] });
+    if (!fs.has(kf)) fs.set(kf, { k: kf, t, orden: o, tarifas: [] });
+    const c = cs.get(kc), f = fs.get(kf);
+    c.orden = Math.min(c.orden, o); c.tarifas.push(t);
+    f.orden = Math.min(f.orden, o); f.tarifas.push(t);
+  }
+  if (cs.size > TG_MAX_COLS || celdas.size < fs.size * cs.size * 0.5) return null;
+  const porOrden = (a, b) => a.orden - b.orden || a.k.localeCompare(b.k);
+  return { filas: [...fs.values()].sort(porOrden), cols: [...cs.values()].sort(porOrden), celdas };
+}
+// Segunda línea de la temporada: la ventana vigente o la próxima, cuántas más
+// hay y el mínimo de noches si es el mismo para toda la fila (el mínimo puede
+// venir por habitación desde el bloque; si difiere, lo dice cada detalle).
+function tgResumenTemp(f) {
+  const h = hoy(), vs = tarVentanas(f.t);
+  const enHoy = vs.some(([a, b]) => (!a || a <= h) && (!b || b >= h));
+  const prox = vs.find(([a, b]) => (!a || a <= h) && (!b || b >= h)) || vs.find(([, b]) => !b || b >= h) || vs[0];
+  const mins = new Set(f.tarifas.map(tarMinimoNoches));
+  const min = mins.size === 1 ? [...mins][0] : null;
+  const partes = [
+    prox ? tgRango(prox, false) : f.t.vigencia_texto || '',
+    vs.length > 1 ? `+${vs.length - 1} fecha${vs.length > 2 ? 's' : ''}` : '',
+    min ? `mín. ${min} noche${min > 1 ? 's' : ''}` : '',
+  ];
+  return { txt: partes.filter(Boolean).join(' · '), hoy: enHoy, min };
+}
+// Lo que se dice una sola vez bajo la tabla: la ocupación del PDF (es prosa por
+// PLAN, no por celda) y las condiciones que traen TODAS las tarifas del plan.
+function tgNotasPlan(filas) {
+  const lineas = [...new Set(filas.flatMap(t => tarBloque(t)?.ocupacion?.lineas || []))];
+  const listas = filas.map(tarCondicionesResumen);
+  const comunes = listas[0].filter(c => !/^Mínimo \d/.test(c.txt) && !lineas.includes(c.txt)
+    && listas.every(l => l.some(d => d.txt === c.txt)));
+  return { lineas, comunes };
+}
+const TG_ETQ = { dbl: 'Doble', sgl: 'Sencilla', tpl: 'Triple', cdp: 'Cuádruple', cpl: 'Cuádruple', cdl: 'Cuádruple', qpl: 'Quíntuple', sex: 'Séxtuple', pax_adic: 'Pers. adicional' };
+function tgEtiqueta(k) {
+  if (TG_ETQ[k]) return TG_ETQ[k];
+  const m = /^chd_(\d+)_(\d+)$/.exec(k);
+  return m ? `Niño ${m[1]}–${m[2]}` : /^chd/.test(k) ? 'Niño' : tarEtiquetaPrecio(k);
+}
+// «+€20 DBL vs STANDAR» -> «+€20 DBL vs Standar»: la tabla ya habla en minúscula.
+const tgDeltaTxt = d => d.base ? 'La más económica de la temporada' : String(d.txt).replace(/(vs |que )(.+)$/, (m, p, n) => p + tgOracion(n));
+// Equipamiento de la habitación (producto_habitaciones revisada) en una línea;
+// la lista completa y la descripción quedan en el title. Las fotos propias de la
+// habitación siguen abriendo su lightbox por data-hab-foto-id.
+function tgHabHtml(h) {
+  if (!h) return '';
+  const amen = h.amenities || [], vis = amen.slice(0, TAR_HAB_AMEN), resto = amen.length - vis.length;
+  const datos = [...tarHabDatos(h).filter(d => d !== h.vista), ...vis];
+  const tip = [tarHabTip(h), resto ? amen.join(' · ') : ''].filter(Boolean).join('\n');
+  return (datos.length ? `<div class="tg-equipo"${tip ? ` title="${esc(tip)}"` : ''}><i class="fas fa-bed"></i><span>${esc(datos.join(' · '))}${resto ? ` · +${resto}` : ''}</span></div>` : '') + tarHabFotosHtml(h);
+}
+function tgDetalleHtml(t, c) {
+  const esDestacada = t.id === c.destacadaId;
+  const vendible = tarVendibleHoy(t);
+  const cap = tarCapacidadVendible(t);
+  const noEntran = c.grupo > 0 && cap != null && cap.max < c.grupo;
+  const hab = c.habs.get(tarNombreNorm(t.habitacion)) || null;
+  const delta = c.deltas.get(t.id) || null;
+  const nino = tarNinoGratis(t);
+  const juntarCon = c.juntables.get(t.id) || null;
+  const vista = hab?.vista || tarAtributosHabitacion(t.habitacion).find(a => /^(vista|frente)/i.test(a)) || '';
+  const sub = [cap ? `Hasta ${cap.max} adulto${cap.max > 1 ? 's' : ''}` : '', vista, delta ? tgDeltaTxt(delta) : ''].filter(Boolean).join(' · ');
+  const hero = tarPrecioDobleHero(t);
+  // «p/p» solo cuando la base es por habitación (declarada o dbl > sgl). Las
+  // suites de SGL = DBL no dicen nada hasta que el dueño confirme su base.
+  const subDoble = hero?.porHab ? `${hero.pp.replace('.', ',')} p/p` : t.precios?.base === 'persona' ? 'por persona' : '';
+  // Doble primero: es la columna de la tabla y el precio que se promociona.
+  const baldosas = tarPreciosLista(t).sort((p, q) => (q.k === 'dbl') - (p.k === 'dbl'))
+    .map(p => ({ k: tgEtiqueta(p.k), v: tgMonto(t, p.k), sub: p.k === 'dbl' ? subDoble : '' }));
+  const vh = tarVentaHasta(t);
+  const venta = [t.venta_desde && t.venta_desde > hoy() ? `Venta desde ${tgFecha(t.venta_desde, true)}` : '', vh ? `Venta hasta ${tgFecha(vh, true)}` : ''].filter(Boolean).join(' · ');
+  const ventanas = tarVentanas(t);
+  const cond = tarCondicionesResumen(t).filter(x => !c.compartidas.has(x.txt) && !c.ocup.has(x.txt)
+    && !(c.minEnFila.has(t.id) && /^Mínimo \d/.test(x.txt)));
+  const hsSeg = tcHsSegHtml(t);
+  return `<div class="tg-det${noEntran ? ' tg-det-off' : ''}" data-tarifa-id="${t.id}">
+    <div class="tg-det-top">
+      <div class="tg-det-tit">
+        <div class="tg-det-h" title="${esc(t.titulo || '')}">${esc(tgNombreHab(t))} <span>· ${esc(tgNombreTemp(t, c.hotel))}</span></div>
+        ${sub ? `<div class="tg-det-sub">${esc(sub)}</div>` : ''}
+      </div>
+      <label class="tg-det-sel"><input type="checkbox" data-tar-sel="${t.id}" aria-label="Seleccionar ${esc(t.titulo || t.habitacion || 'tarifa')}"> Seleccionar</label>
+    </div>
+    ${!esOficina() && esDestacada || noEntran ? `<div class="tg-det-badges">${!esOficina() && esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}${noEntran ? `<span class="promo-badge promo-badge-off">No entran ${c.grupo}</span>` : ''}</div>` : ''}
+    ${nino ? `<div class="promo-ninos" title="${esc(nino.txt)}"><i class="fas fa-child"></i><div><div class="promo-ninos-t">${esc(nino.label)}</div>${nino.detalle ? `<div class="promo-ninos-d">${esc(nino.detalle)}</div>` : ''}</div></div>` : ''}
+    <div class="tg-baldosas">${baldosas.map(b => `<div class="tg-baldosa"><div class="tg-k">${esc(b.k)}</div><div class="tg-baldosa-v">${esc(b.v)}</div>${b.sub ? `<div class="tg-baldosa-s">${esc(b.sub)}</div>` : ''}</div>`).join('')}</div>
+    ${ventanas.length || venta || t.vigencia_texto ? `<div class="tg-fechas">
+      <div class="tg-fechas-cab"><span class="tg-k">Fechas de disfrute</span>${venta ? `<span class="tg-venta">${esc(venta)}</span>` : ''}</div>
+      ${ventanas.length ? `<div class="tg-chips">${ventanas.map(w => `<span class="tg-chip">${esc(tgRango(w))}</span>`).join('')}</div>`
+        : t.vigencia_texto ? `<div class="tg-det-sub">${esc(t.vigencia_texto)}</div>` : ''}
+    </div>` : ''}
+    ${tgHabHtml(hab)}
+    ${cond.length ? `<ul class="promo-cond">${cond.map(x => `<li${x.fuerte ? ' class="promo-cond-fuerte"' : ''}>${esc(x.txt)}</li>`).join('')}</ul>` : ''}
+    ${esOficina() ? `<div class="promo-ctl tg-admin">${hsSeg ? `<span class="promo-ctl-k">Hot Sales</span>${hsSeg}` : ''}<span class="promo-ctl-ico">${tcIaBtnHtml(tarifaComoPromo(t), 'tar-ia-inline tar-ia-ico')}${tarMejorPrecioBtnHtml(t, esDestacada, vendible)}</span></div>` : ''}
+    ${juntarCon ? `<div class="promo-pie"><button type="button" class="promo-juntar" data-juntar-queda="${t.id}" data-juntar-sale="${juntarCon.id}" title="Mismo precio y fechas pegadas: queda esta tarifa con las dos fechas unidas y la otra se retira"><i class="fas fa-object-group"></i> Juntar con «${esc(juntarCon.titulo || juntarCon.habitacion || 'Tarifa')}»</button></div>` : ''}
+  </div>`;
+}
+function tgCeldaHtml(t, nomCol, nomFila, c) {
+  if (!t) return '<div class="tg-celda tg-vacia"><span aria-hidden="true">—</span><span class="sr-only">Sin tarifa</span></div>';
+  const vD = tgMonto(t, 'dbl'), vS = tgMonto(t, 'sgl');
+  const on = t.id === c.selId;
+  const cap = tarCapacidadVendible(t);
+  const noEntran = c.grupo > 0 && cap != null && cap.max < c.grupo;
+  const hs = t.hot_sale_estado === 'poner';
+  const nino = tarNinoGratis(t);
+  const v = c.modo === 'sgl' ? vS : vD;
+  return `<button type="button" class="tg-celda${on ? ' on' : ''}${noEntran ? ' tg-apagada' : ''}" data-tg-pick="${t.id}" data-tarifa-id="${t.id}" aria-pressed="${on}" aria-label="${esc(`${nomCol}, ${nomFila}: ${v}${noEntran ? ` (no entran ${c.grupo})` : ''}`)}">
+    <span class="tg-monto">${t.id === c.destacadaId ? '<i class="fas fa-star tg-estrella" title="Mejor precio"></i>' : ''}${esc(v)}</span>
+    ${hs || nino ? `<span class="tg-marcas">${hs ? '<span class="tg-hs" title="Fijada en Hot Sales"><i class="fas fa-fire"></i><span class="tg-hs-t">Hot Sale</span></span>' : ''}${nino ? `<i class="fas fa-child tg-nino" title="${esc(nino.label)}"></i>` : ''}</span>` : ''}
+  </button>`;
+}
+function tgPlanHtml(x, plan, filas, g, ctx) {
+  const hotel = x.nombre || '';
+  const sel = filas.find(t => t.id === x._tgSel?.[plan]) || filas.find(t => t.id === ctx.destacadaId)
+    || filas.slice().sort((a, b) => tarNumPrecio(a, 'dbl') - tarNumPrecio(b, 'dbl') || a.id - b.id)[0];
+  const conSgl = filas.some(t => tarNumPrecio(t, 'sgl') !== null);
+  const modo = conSgl && x._tgModo?.[plan] === 'sgl' ? 'sgl' : 'dbl';
+  const { lineas, comunes } = tgNotasPlan(filas);
+  const minEnFila = new Set();
+  const fh = g.filas.map(f => {
+    const r = tgResumenTemp(f);
+    if (r.min) f.tarifas.forEach(t => minEnFila.add(t.id));
+    return { f, r, nom: tgNombreTemp(f.t, hotel) };
+  });
+  const ch = g.cols.map(col => {
+    const caps = col.tarifas.map(tarCapacidadVendible).filter(Boolean).map(k => k.max);
+    return { col, nom: tgNombreHab(col.t), cap: caps.length ? Math.max(...caps) : null };
+  });
+  // En la tabla el «+€20 vs Standar» se mide DENTRO de la temporada (la fila):
+  // contra todo el plan restaría Navidad contra Temporada baja, que no explica
+  // nada de la habitación. Una fila de una sola habitación no lleva delta.
+  const deltas = new Map();
+  g.filas.forEach(f => { for (const [id, d] of tarDeltasDePlan(f.tarifas)) deltas.set(id, d); });
+  const c = { ...ctx, hotel, modo, deltas, selId: sel.id, compartidas: new Set(comunes.map(k => k.txt)), ocup: new Set(lineas), minEnFila };
+  const sinNombre = plan === TG_SIN_PLAN;
+  const sub = [sinNombre ? '' : 'Tarifas por noche', `${g.filas.length} temporada${g.filas.length > 1 ? 's' : ''}`,
+    `${g.cols.length} habitaci${g.cols.length > 1 ? 'ones' : 'ón'}`, 'toca un precio para ver el detalle'].filter(Boolean).join(' · ');
+  const modoBtn = (k, n) => `<button type="button" class="tg-modo-b${modo === k ? ' on' : ''}" data-tg-modo="${k}" aria-pressed="${modo === k}">${n}</button>`;
+  return `<section class="carpeta-plan tg-plan" data-tg-plan="${esc(plan)}">
+    <div class="tg-plan-cab">
+      <div class="tg-plan-tit"><h3 class="tg-plan-t">${esc(sinNombre ? 'Tarifas por noche' : tgOracion(plan))}</h3><div class="tg-plan-s">${esc(sub)}</div></div>
+      ${conSgl ? `<div class="tg-modo" role="group" aria-label="Ocupación">${modoBtn('dbl', 'Doble')}${modoBtn('sgl', 'Sencilla')}</div>` : ''}
+    </div>
+    <div class="tg-tabla tg-cols-${g.cols.length}" style="--tg-cols:${g.cols.length}">
+      <div class="tg-fila tg-fila-cab">
+        <div class="tg-th tg-th-temp">Temporada</div>
+        ${ch.map(k => `<div class="tg-th" title="${esc(k.col.t.habitacion)}"><div class="tg-th-n">${esc(k.nom)}</div>${k.cap ? `<div class="tg-th-cap"><i class="fas fa-user"></i>${k.cap} adulto${k.cap > 1 ? 's' : ''}</div>` : ''}</div>`).join('')}
+      </div>
+      ${fh.map(r => `<div class="tg-fila">
+        <div class="tg-temp" title="${esc(r.f.t.titulo)}"><div class="tg-temp-n"><span>${esc(r.nom)}</span>${r.r.hoy ? '<span class="tg-hoy">Hoy</span>' : ''}</div>${r.r.txt ? `<div class="tg-temp-r">${esc(r.r.txt)}</div>` : ''}</div>
+        ${ch.map(k => tgCeldaHtml(g.celdas.get(r.f.k + '|' + k.col.k), k.nom, r.nom, c)).join('')}
+      </div>`).join('')}
+    </div>
+    ${tgDetalleHtml(sel, c)}
+    ${lineas.length || comunes.length ? `<div class="tg-notas">
+      ${lineas.length ? `<div class="tg-nota"><i class="fas fa-user-group"></i><span><strong>Capacidad según el PDF:</strong> ${esc(lineas.map(tgOracion).join(' · '))}</span></div>` : ''}
+      ${comunes.map(k => `<div class="tg-nota${k.fuerte ? ' tg-nota-fuerte' : ''}"><i class="fas fa-circle-info"></i><span>${esc(k.txt)}</span></div>`).join('')}
+    </div>` : ''}
+  </section>`;
+}
+// Tocar un precio o el interruptor Doble/Sencilla guarda la elección en el ítem
+// (como _mpOrdenId) y repinta la carpeta: una sola fuente de verdad, y la
+// elección sobrevive a los repintados de Hot Sales / IA / Mejor precio. El foco
+// vuelve al mismo botón para que el teclado no se pierda.
+function tgElegir(btn) {
+  const x = TAR_DRAWER_ITEM, plan = btn.closest('[data-tg-plan]')?.dataset.tgPlan;
+  if (!x || plan == null) return;
+  let foco;
+  if (btn.dataset.tgPick) {
+    if (!x._tgSel) x._tgSel = {};
+    x._tgSel[plan] = Number(btn.dataset.tgPick);
+    foco = `[data-tg-pick="${btn.dataset.tgPick}"]`;
+  } else {
+    if (!x._tgModo) x._tgModo = {};
+    x._tgModo[plan] = btn.dataset.tgModo === 'sgl' ? 'sgl' : 'dbl';
+    foco = `[data-tg-plan="${CSS.escape(plan)}"] [data-tg-modo="${x._tgModo[plan]}"]`;
+  }
+  tarRepintarCarpeta(x);
+  document.querySelector('#drawerContent .carpeta ' + foco)?.focus({ preventScroll: true });
+}
+// Cabecera del drawer cuando el hotel tiene carpeta: mosaico de fotos, nombre,
+// «Desde» (el DBL de la destacada, la que elige la base) y datos rápidos.
+// `TAR_TAB_LABEL` y la X (#dClose, fuera de #drawerContent) son los de siempre:
+// el CSS la sube sobre la foto con :has(.tg-mosaico).
+function tgCabeceraHtml(x, nombre, fotos, n) {
+  const tarifas = x.tarifas || [], vivas = tarifas.filter(tarVendibleHoy);
+  const dest = tarifaDestacada(x);
+  const d = dest && tarVendibleHoy(dest) && tarNumPrecio(dest, 'dbl') !== null ? dest : null;
+  const b = tarBloque(d || vivas[0] || tarifas[0]);
+  const hero = d ? tarPrecioDobleHero(d) : null;
+  const baseDecl = d?.precios?.base || b?.base_precio || null;
+  const desdeNota = hero?.porHab ? 'noche · hab. doble' : d?.precios?.base === 'persona' ? 'p/p · noche · doble' : 'noche · doble';
+  const conteo = new Map();
+  vivas.forEach(t => { const m = String(t.moneda || 'USD').toUpperCase(); conteo.set(m, (conteo.get(m) || 0) + 1); });
+  const moneda = [...conteo.entries()].sort((p, q) => q[1] - p[1])[0]?.[0] || null;
+  // «EUR» en todo el sistema es bolívares a tasa euro BCV (o el mismo número en
+  // divisa), no euros: el chip lo dice así para que nadie cotice en euros.
+  const precioChip = [moneda === 'EUR' ? 'Precios a tasa euro' : moneda ? 'Precios en dólares' : '',
+    baseDecl === 'habitacion' ? 'por habitación' : baseDecl === 'persona' ? 'por persona' : ''].filter(Boolean).join(' · ');
+  const chip = (ic, txt) => `<span class="tg-dato"><i class="fas ${ic}"></i>${esc(txt)}</span>`;
+  const datos = [b?.check_in ? chip('fa-clock', 'Check-in ' + b.check_in) : '', b?.check_out ? chip('fa-clock-rotate-left', 'Check-out ' + b.check_out) : '',
+    precioChip ? chip('fa-coins', precioChip) : ''].filter(Boolean).join('');
+  const sub = [x.destino, TAR_TAB_LABEL[x.tipo] || TAR_TAB_LABEL[tarTab], vivas.length ? `${vivas.length} tarifa${vivas.length > 1 ? 's' : ''} vigente${vivas.length > 1 ? 's' : ''}` : 'Sin tarifas vigentes'].filter(Boolean).join(' · ');
+  return `<div class="tg-cab">
+    ${fotos.length ? `<div class="tg-mosaico${fotos.length > 1 ? '' : ' tg-mosaico-1'}">
+      <img src="${esc(fotos[0])}" alt="${esc(nombre)}" data-drawer-foto="0">
+      ${fotos[1] ? `<img src="${esc(fotos[1])}" alt="" loading="lazy" data-drawer-foto="1">` : ''}
+      ${n > 1 ? `<button type="button" class="tg-verfotos" data-drawer-foto="0"><i class="fas fa-images"></i> Ver ${n} fotos</button>` : ''}
+    </div>` : ''}
+    <div class="tg-titular">
+      ${fotos.length ? '' : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}
+      <div class="tg-titular-txt"><h2 class="tg-nombre">${esc(nombre)}</h2><div class="tg-lugar"><i class="fas fa-location-dot"></i>${esc(sub)}</div></div>
+      ${hero ? `<div class="tg-desde"><span class="tg-desde-k">Desde</span><span class="tg-desde-v">${esc(tgMonto(d, 'dbl'))}</span><span class="tg-desde-n">${desdeNota}</span></div>` : ''}
+    </div>
+    ${datos ? `<div class="tg-datos">${datos}</div>` : ''}
+  </div>`;
+}
 /* La carpeta: las N filas del hotel agrupadas por plan (Todo Incluido / Solo
    Desayuno / ...). La destacada va primera y marcada; las que ya no se venden
    se muestran APAGADAS, no escondidas -- el asesor tiene que poder ver por qué
@@ -24763,7 +25042,7 @@ function tarCarpetaHtml(x) {
   const destacadaId = tarifaDestacada(x)?.id ?? null;
   const grupos = new Map();
   vivas.forEach(t => {
-    const k = t.plan || 'Sin plan indicado';
+    const k = t.plan || TG_SIN_PLAN;
     if (!grupos.has(k)) grupos.set(k, []);
     grupos.get(k).push(t);
   });
@@ -24798,13 +25077,19 @@ function tarCarpetaHtml(x) {
   const tituloCarpeta = vivas.length
     ? `${vivas.length} ${vivas.length > 1 ? 'promociones' : 'promoción'}`
     : 'Sin promociones vigentes';
-  return `<div class="carpeta">
-    <div class="carpeta-titulo"><i class="fas fa-layer-group"></i> ${tituloCarpeta}</div>
+  // Dirección A: el plan que arma tabla se pinta como tabla; el resto, tarjetas.
+  // Si todos son tabla, el conteo ya lo dice la cabecera del drawer.
+  const grillas = new Map(planes.map(p => [p, tgArmarGrilla(grupos.get(p))]));
+  const todoTabla = planes.length > 0 && planes.every(p => grillas.get(p));
+  const ctxTabla = { destacadaId, deltas, habs, grupo: grupoTam, juntables };
+  return `<div class="carpeta${todoTabla ? ' carpeta-tabla' : ''}">
+    ${todoTabla ? '' : `<div class="carpeta-titulo"><i class="fas fa-layer-group"></i> ${tituloCarpeta}</div>`}
     ${planes.map(p => {
       const filas = grupos.get(p);
+      if (grillas.get(p)) return tgPlanHtml(x, p, filas, grillas.get(p), ctxTabla);
       const notaUnica = tarNotaHabUnica(filas);
       return `<section class="carpeta-plan">
-      ${grupos.size > 1 || p !== 'Sin plan indicado' ? `<h4 class="carpeta-plan-titulo">${esc(p)}</h4>` : ''}
+      ${grupos.size > 1 || p !== TG_SIN_PLAN ? `<h4 class="carpeta-plan-titulo">${esc(p)}</h4>` : ''}
       ${notaUnica ? TAR_NOTA_POR_HAB : ''}
       <div class="promo-grid">${filas.map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null, habs.get(tarNombreNorm(t.habitacion)) || null, grupoTam, false, juntables.get(t.id) || null, x.nombre || '', notaUnica)).join('')}</div>
     </section>`;
@@ -24901,12 +25186,16 @@ function tarSincronizarBarra() {
     const cantOk = a === 'comparar' ? n >= 2 : n >= 1;
     b.disabled = !cantOk || typeof TAR_ACCIONES[a] !== 'function';
   });
-  document.querySelectorAll('#drawerContent .promo-card[data-tarifa-id]').forEach(c => {
+  document.querySelectorAll('#drawerContent .promo-card[data-tarifa-id], #drawerContent .tg-det[data-tarifa-id]').forEach(c => {
     const marcada = tarSeleccion.has(Number(c.dataset.tarifaId));
     c.classList.toggle('promo-elegida', marcada);
     const cb = c.querySelector('input[data-tar-sel]');
     if (cb) cb.checked = marcada;
   });
+  // En la tabla el tilde vive en el detalle; la celda solo lleva una marca para
+  // que se vea qué precios entran en Comparar/Copiar sin abrirlos uno por uno.
+  document.querySelectorAll('#drawerContent .tg-celda[data-tarifa-id]').forEach(c =>
+    c.classList.toggle('tg-marcada', tarSeleccion.has(Number(c.dataset.tarifaId))));
 }
 function tarLimpiarSeleccion() {
   tarSeleccion.clear();
@@ -24925,6 +25214,8 @@ function tarEngancharCarpeta() {
     tarSincronizarBarra();
   });
   carpeta.addEventListener('click', e => {
+    const tg = e.target.closest('[data-tg-pick], [data-tg-modo]');
+    if (tg) { e.stopPropagation(); tgElegir(tg); return; }
     const habFoto = e.target.closest('[data-hab-foto-id]');
     if (habFoto) { e.stopPropagation(); tarAbrirLightboxHabitacion(Number(habFoto.dataset.habFotoId), Number(habFoto.dataset.habFotoIdx)); return; }
     const hsSeg = e.target.closest('[data-hs-set]');
@@ -24945,7 +25236,10 @@ function tarEngancharCarpeta() {
 function tarRepintarCarpeta(x) {
   const vieja = document.querySelector('#drawerContent .carpeta');
   if (!vieja) return;
+  // Tocar un precio de la tabla repinta todo: el histórico abierto sigue abierto.
+  const histAbierto = !!vieja.querySelector('.carpeta-historico[open]');
   vieja.outerHTML = tarCarpetaHtml(x);
+  if (histAbierto) document.querySelector('#drawerContent .carpeta-historico')?.setAttribute('open', '');
   tarEngancharCarpeta();
   // La selección sigue viva: sin esto las tarjetas nuevas nacen destildadas y la
   // barra diría "2 seleccionadas" sobre tarjetas en blanco.
@@ -25286,8 +25580,9 @@ function tarWireDescClamp() {
 }
 function openProductoDrawer(x, tipoForzado = null) {
   TAR_DRAWER_ITEM = x;
-  // Al reabrir la ficha la destacada vuelve a ir primera.
-  if (x) delete x._mpOrdenId;
+  // Al reabrir la ficha la destacada vuelve a ir primera (y la tabla vuelve a
+  // abrir su detalle, en Doble).
+  if (x) { delete x._mpOrdenId; delete x._tgSel; delete x._tgModo; }
   // Otra ficha, otra selección: arrastrar ids de un hotel a otro haría que las
   // acciones operaran sobre tarifas que ya no están en pantalla.
   tarSeleccion.clear();
@@ -25316,10 +25611,13 @@ function openProductoDrawer(x, tipoForzado = null) {
   // se veían y el drawer arrancaba directo en texto.
   const portada = fotos.length ? fotosRotadas(x, 640)[0] : null;
   const subtitulo = esPromo ? [TAR_TAB_LABEL[tarTab], x.productos?.destino].filter(Boolean).join(' · ') : (x.destino || TAR_TAB_LABEL[tarTab]);
+  // Hotel con carpeta = dirección A: cabecera con mosaico, descripción suelta y
+  // «Políticas del hotel» en caja. Promos y fichas sin tarifas quedan como antes.
+  const conTabla = !esPromo && !!carpeta;
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead dhead-tar">${portada ? '' : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
-      <div class="dm">${esc(subtitulo)}</div></div></div>
-    ${portada ? `<div class="dgaleria">
+    ${conTabla ? tgCabeceraHtml(x, nombre, fotos.length ? fotosRotadas(x, 640).slice(0, 2) : [], fotos.length) : `<div class="dhead dhead-tar">${portada ? '' : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
+      <div class="dm">${esc(subtitulo)}</div></div></div>`}
+    ${portada && !conTabla ? `<div class="dgaleria">
       <img class="dportada" src="${esc(portada)}" alt="" data-drawer-foto="0">
       ${fotos.length > 1 ? `<div class="dgallery">${fotos.slice(1).map((f, i) => `<img src="${esc(f)}" alt="" loading="lazy" data-drawer-foto="${i + 1}">`).join('')}</div>` : ''}
     </div>` : ''}
@@ -25344,10 +25642,13 @@ function openProductoDrawer(x, tipoForzado = null) {
     ${vigencia && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div class="dfbody"><div class="dfl">Vigencia</div>${esPromo ? `<div class="drico">${tarTextoRico(vigencia)}</div>` : `<div class="dfv dfv-rich">${formatearTexto(vigencia)}</div>`}</div></div>` : ''}
     ${infantil && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-child"></i></div><div><div class="dfl">Adicional por niño</div><div class="dfv dfv-rich">${formatearTexto(infantil.precio_texto)}</div></div></div>` : ''}
     ${esPromo && x.resumen_ia ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div class="dfbody"><div class="dfl">Descripción</div>${tarDescClampHtml(esc(x.resumen_ia), 'dfv-lead')}</div></div>` : ''}
-    ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div class="dfbody"><div class="dfl">Descripción</div>${tarDescClampHtml(formatearTexto(x.descripcion))}</div></div>` : ''}
-    ${!esPromo && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv dfv-rich">${formatearTexto(x.requisitos)}</div></div></div>` : ''}
-    ${bloques}
+    ${!esPromo && !conTabla && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div class="dfbody"><div class="dfl">Descripción</div>${tarDescClampHtml(formatearTexto(x.descripcion))}</div></div>` : ''}
+    ${!esPromo && !conTabla && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv dfv-rich">${formatearTexto(x.requisitos)}</div></div></div>` : ''}
+    ${conTabla && x.descripcion ? `<div class="tg-desc">${tarDescClampHtml(formatearTexto(x.descripcion))}</div>` : ''}
+    ${conTabla && x.requisitos ? `<div class="tg-pol"><div class="tg-k">${x.tipo === 'hotel' ? 'Políticas del hotel' : 'Requisitos'}</div>${tarDescClampHtml(formatearTexto(tgOracion(x.requisitos)))}</div>` : ''}
+    ${conTabla ? '' : bloques}
     ${carpeta}
+    ${conTabla ? bloques : ''}
     ${esPromo ? tarIncluyeHtml(x.incluye_tags) : ''}
     ${esOficina() ? `
     <details class="dadmin"${x.notas ? ' open' : ''}>
@@ -34118,6 +34419,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '🗂️', titulo: 'Precios del hotel en una tabla', texto: 'Al abrir un hotel en el Tarifario, sus precios ahora salen en una tabla: cada fila es una temporada y cada columna una habitación, con la temporada de hoy marcada. Toca un precio para ver debajo todas sus ocupaciones, las fechas de disfrute y el botón Seleccionar; el interruptor Doble/Sencilla cambia los montos de la tabla. Arriba van las fotos, el «Desde», el check-in y el check-out, y los requisitos pasan a «Políticas del hotel». Los hoteles cuyas tarifas no arman una tabla limpia se siguen viendo en tarjetas.', roles: ROLES_TODOS },
   { fecha: '2026-10-23', emoji: '💬', titulo: 'WhatsApp restringido por asesor', texto: 'Administración puede activar este modo por asesor en Gestión de personal. La IA entrega su enlace y le pide al cliente escribirle primero; los leads nuevos y pendientes pasan a Atendido a los cinco minutos, sin registrar contacto humano. Los recordatorios se frenan al confirmar, avanzar el caso o tomar la conversación.', roles: ['admin'] },
   { fecha: '2026-10-23', emoji: '📋', titulo: 'Formularios de voucher y cotización más compactos', texto: 'Cliente, hospedaje, servicios y pago se organizan en secciones plegables con un resumen de lo completado. Hotel, habitación y modalidad quedan juntos; los totales y las acciones principales siguen a mano. Si falta un dato, se abre la sección para corregirlo. También se ajustaron las barras de acciones para que no tapen el historial.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
   { fecha: '2026-10-23', emoji: '📄', titulo: 'Tus últimos vouchers y cotizaciones a mano', texto: 'Debajo de la vista previa del voucher y del resumen de la cotización aparecen los tres últimos documentos activos, con cliente, fecha y total. Toca uno para abrir su PDF o usa «Ver todos» para ir al historial completo.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
