@@ -24624,10 +24624,19 @@ function tarMejorPrecioBtnHtml(t, esDestacada, vendible) {
     : esDestacada && tarDestacadaManual === t.id ? 'Fijado a mano · click para volver al automático'
     : esDestacada ? 'Elegido automático (más barato) · click para fijarlo'
     : 'Marcar como mejor precio';
-  return `<button type="button" class="promo-mp-btn${esDestacada ? ' on' : ''}" data-mp-set="${t.id}" title="${tip}"${vendible ? '' : ' disabled'}>★ Mejor precio</button>`;
+  // Solo el icono: el estado se lee por el relleno y el texto completo queda en el title.
+  return `<button type="button" class="promo-mp-btn${esDestacada ? ' on' : ''}" data-mp-set="${t.id}" title="Mejor precio · ${tip}" aria-label="Mejor precio"${vendible ? '' : ' disabled'}><i class="fas fa-star"></i></button>`;
+}
+// ¿Todas las tarjetas del plan que muestran precio llevarían la nota «Grilla del
+// proveedor: por habitación»? Entonces se escribe una sola vez bajo el título del
+// plan y las tarjetas la omiten. Si el plan mezcla bases, cada tarjeta conserva la suya.
+function tarNotaHabUnica(filas) {
+  const lleva = t => t.precios?.base === 'habitacion' && tarPreciosLista(t).length > 0 && !tarPrecioDobleHero(t);
+  const conPrecio = filas.filter(t => tarPreciosLista(t).length || t.precio_texto);
+  return filas.filter(lleva).length >= 2 && conPrecio.every(lleva);
 }
 // Una tarjeta = una promoción = una fila del PDF.
-function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false, juntarCon = null) {
+function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false, juntarCon = null, hotel = '', sinNotaHab = false) {
   const esDestacada = destacadaId != null && t.id === destacadaId;
   const vendible = tarVendibleHoy(t);
   // Capacidad vendible: la que el proveedor cotiza. Sin claves de ocupación no
@@ -24641,8 +24650,14 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
   const venta = [t.venta_desde || null, tarVentaHasta(t)];
   const cond = tarCondicionesResumen(t);
   const titulo = t.titulo || t.habitacion || t.plan || 'Tarifa';
+  // El drawer ya dice de qué hotel es: el título de la tarjeta no lo repite (el
+  // completo queda en el tooltip). `producto_id` solo habilita la limpieza.
+  const tituloCorto = hotel ? tarTituloSinHotel({ titulo: t.titulo, habitacion: t.habitacion, plan: t.plan, producto_id: t.producto_id || 1, productos: { nombre: hotel } }) : titulo;
   const attrs = tarAtributosHabitacion(t.habitacion || titulo);
   const nino = tarNinoGratis(t);
+  const conMejorBtn = esOficina() && !enHistorico;
+  const hsSeg = tcHsSegHtml(t);
+  const ctl = esOficina() ? `${hsSeg ? `<span class="promo-ctl-k">Hot Sales</span>${hsSeg}` : ''}<span class="promo-ctl-ico">${tcIaBtnHtml(tarifaComoPromo(t), 'tar-ia-inline tar-ia-ico')}${conMejorBtn ? tarMejorPrecioBtnHtml(t, esDestacada, vendible) : ''}</span>` : '';
   // Prefijo `promo-` a propósito: `pc-` ya lo usa la tarjeta de Personal
   // (.pc-top, .pc-nombre...) y reusarlo pintaría dos componentes distintos con
   // el mismo CSS. Tampoco se usan prefijos fa/fab/fas/far (los reclama Font
@@ -24650,15 +24665,13 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
   return `<article class="promo-card${esDestacada ? ' promo-destacada' : ''}${nino ? ' promo-con-ninos' : ''}${vendible && !noEntran ? '' : ' promo-apagada'}" data-tarifa-id="${t.id}">
     <div class="promo-top">
       <label class="promo-check"><input type="checkbox" data-tar-sel="${t.id}" aria-label="Seleccionar ${esc(titulo)}"></label>
-      <div class="promo-titulo">${esc(titulo)}</div>
-      ${tcHsSegHtml(t)}
-      ${tcIaBtnHtml(tarifaComoPromo(t), 'tar-ia-inline')}
-      ${esOficina() && !enHistorico ? tarMejorPrecioBtnHtml(t, esDestacada, vendible)
-        : esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
+      <div class="promo-titulo" title="${esc(titulo)}">${esc(tituloCorto)}</div>
+      ${!conMejorBtn && esDestacada ? '<span class="promo-badge">Mejor precio hoy</span>' : ''}
       ${vendible || enHistorico ? '' : '<span class="promo-badge promo-badge-off">Ya no se vende</span>'}
       ${noEntran ? `<span class="promo-badge promo-badge-off">No entran ${grupo}</span>` : ''}
     </div>
-    ${t.habitacion && t.habitacion !== titulo ? `<div class="promo-sub">${esc(t.habitacion)}</div>` : ''}
+    ${ctl ? `<div class="promo-ctl">${ctl}</div>` : ''}
+    ${t.habitacion && t.habitacion !== titulo && !tarNorm(tituloCorto).includes(tarNorm(t.habitacion)) ? `<div class="promo-sub">${esc(t.habitacion)}</div>` : ''}
     ${nino ? `<div class="promo-ninos" title="${esc(nino.txt)}"><i class="fas fa-child"></i><div><div class="promo-ninos-t">${esc(nino.label)}</div>${nino.detalle ? `<div class="promo-ninos-d">${esc(nino.detalle)}</div>` : ''}</div></div>` : ''}
     ${attrs.length || delta || cap ? `<div class="promo-attr">
       ${attrs.map(a => `<span class="promo-attr-chip">${esc(a)}</span>`).join('')}
@@ -24673,7 +24686,7 @@ function tarPromoCardHtml(t, destacadaId, delta, hab, grupo, enHistorico = false
         const resto = precios.filter(p => p.etq !== 'DBL');
         return tarHeroHtml(hero) + (resto.length ? fila(resto, ' promo-precios-sec') : '');
       }
-      return precios.length ? (t.precios.base === 'habitacion' ? TAR_NOTA_POR_HAB : '') + fila(precios, '')
+      return precios.length ? (t.precios.base === 'habitacion' && !sinNotaHab ? TAR_NOTA_POR_HAB : '') + fila(precios, '')
         : t.precio_texto ? `<div class="promo-precio-texto dfv-rich">${formatearTexto(t.precio_texto)}</div>` : '';
     })()}
     ${venta[0] || venta[1] || ventanas.length || t.vigencia_texto ? `<div class="promo-datos">
@@ -24796,16 +24809,21 @@ function tarCarpetaHtml(x) {
     : 'Sin promociones vigentes';
   return `<div class="carpeta">
     <div class="carpeta-titulo"><i class="fas fa-layer-group"></i> ${tituloCarpeta}</div>
-    ${planes.map(p => `<section class="carpeta-plan">
+    ${planes.map(p => {
+      const filas = grupos.get(p);
+      const notaUnica = tarNotaHabUnica(filas);
+      return `<section class="carpeta-plan">
       ${grupos.size > 1 || p !== 'Sin plan indicado' ? `<h4 class="carpeta-plan-titulo">${esc(p)}</h4>` : ''}
-      <div class="promo-grid">${grupos.get(p).map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null, habs.get(tarNombreNorm(t.habitacion)) || null, grupoTam, false, juntables.get(t.id) || null)).join('')}</div>
-    </section>`).join('')}
+      ${notaUnica ? TAR_NOTA_POR_HAB : ''}
+      <div class="promo-grid">${filas.map(t => tarPromoCardHtml(t, destacadaId, deltas.get(t.id) || null, habs.get(tarNombreNorm(t.habitacion)) || null, grupoTam, false, juntables.get(t.id) || null, x.nombre || '', notaUnica)).join('')}</div>
+    </section>`;
+    }).join('')}
     ${historicas.length ? `<details class="carpeta-historico">
       <summary>Ver histórico (${historicas.length})</summary>
       <div class="promo-grid">${historicas
         .slice()
         .sort((a, b) => (a.plan || '').localeCompare(b.plan || '', 'es') || (a.id - b.id))
-        .map(t => tarPromoCardHtml(t, null, null, null, 0, true)).join('')}</div>
+        .map(t => tarPromoCardHtml(t, null, null, null, 0, true, null, x.nombre || '')).join('')}</div>
     </details>` : ''}
   </div>`;
 }
@@ -25263,6 +25281,18 @@ async function tarDescartarHabitacion(x, id) {
   tarRepintarCarpeta(x);
   okToast('Habitación descartada');
 }
+// Descripción larga del drawer: 3 líneas y «Ver más». El texto completo sigue en el
+// DOM; el botón solo aparece si de verdad se recortó algo (tarWireDescClamp).
+const tarDescClampHtml = (html, extra = '') =>
+  `<div class="ddesc"><div class="ddesc-t dfv dfv-rich ${extra}">${html}</div><button type="button" class="ddesc-mas" hidden>Ver más</button></div>`;
+function tarWireDescClamp() {
+  document.querySelectorAll('#drawerContent .ddesc').forEach(d => {
+    const t = d.querySelector('.ddesc-t'), b = d.querySelector('.ddesc-mas');
+    if (!t || !b || t.scrollHeight <= t.clientHeight + 1) return;
+    b.hidden = false;
+    b.onclick = () => { b.textContent = d.classList.toggle('abierto') ? 'Ver menos' : 'Ver más'; };
+  });
+}
 function openProductoDrawer(x, tipoForzado = null) {
   TAR_DRAWER_ITEM = x;
   // Al reabrir la ficha la destacada vuelve a ir primera.
@@ -25296,7 +25326,7 @@ function openProductoDrawer(x, tipoForzado = null) {
   const portada = fotos.length ? fotosRotadas(x, 640)[0] : null;
   const subtitulo = esPromo ? [TAR_TAB_LABEL[tarTab], x.productos?.destino].filter(Boolean).join(' · ') : (x.destino || TAR_TAB_LABEL[tarTab]);
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead">${fotos[0] ? `<div class="dava" style="background-image:url('${esc(fotos[0])}')"></div>` : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
+    <div class="dhead dhead-tar">${portada ? '' : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
       <div class="dm">${esc(subtitulo)}</div></div></div>
     ${portada ? `<div class="dgaleria">
       <img class="dportada" src="${esc(portada)}" alt="" data-drawer-foto="0">
@@ -25322,14 +25352,16 @@ function openProductoDrawer(x, tipoForzado = null) {
     })()}
     ${vigencia && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-clock"></i></div><div class="dfbody"><div class="dfl">Vigencia</div>${esPromo ? `<div class="drico">${tarTextoRico(vigencia)}</div>` : `<div class="dfv dfv-rich">${formatearTexto(vigencia)}</div>`}</div></div>` : ''}
     ${infantil && !carpeta ? `<div class="dfield"><div class="dfi"><i class="fas fa-child"></i></div><div><div class="dfl">Adicional por niño</div><div class="dfv dfv-rich">${formatearTexto(infantil.precio_texto)}</div></div></div>` : ''}
-    ${esPromo && x.resumen_ia ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div class="dfbody"><div class="dfl">Descripción</div><div class="dfv dfv-rich dfv-lead">${esc(x.resumen_ia)}</div></div></div>` : ''}
-    ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div><div class="dfl">Descripción</div><div class="dfv dfv-rich">${formatearTexto(x.descripcion)}</div></div></div>` : ''}
+    ${esPromo && x.resumen_ia ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div class="dfbody"><div class="dfl">Descripción</div>${tarDescClampHtml(esc(x.resumen_ia), 'dfv-lead')}</div></div>` : ''}
+    ${!esPromo && x.descripcion ? `<div class="dfield"><div class="dfi"><i class="fas fa-circle-info"></i></div><div class="dfbody"><div class="dfl">Descripción</div>${tarDescClampHtml(formatearTexto(x.descripcion))}</div></div>` : ''}
     ${!esPromo && x.requisitos ? `<div class="dfield"><div class="dfi"><i class="fas fa-triangle-exclamation"></i></div><div><div class="dfl">Requisitos</div><div class="dfv dfv-rich">${formatearTexto(x.requisitos)}</div></div></div>` : ''}
     ${bloques}
     ${carpeta}
     ${esPromo ? tarIncluyeHtml(x.incluye_tags) : ''}
     ${esOficina() ? `
-    <div class="edit-box" style="margin-top:16px">
+    <details class="dadmin"${x.notas ? ' open' : ''}>
+    <summary><i class="fas fa-user-shield"></i> Notas, fotos y ajustes <span class="dadmin-solo">solo admin</span><i class="fas fa-chevron-down dadmin-arrow"></i></summary>
+    <div class="edit-box">
       <div class="eb-title"><i class="fas fa-note-sticky"></i> Notas internas (solo admin)</div>
       <textarea id="tar-notas" class="ei" rows="3" placeholder="Notas propias, no vienen del tarifario automático..." data-original="${esc(x.notas || '')}">${esc(x.notas || '')}</textarea>
       <button class="dbtn save" id="tar-notas-save" type="button" style="margin-top:8px"><i class="fas fa-floppy-disk"></i> Guardar notas</button>
@@ -25343,7 +25375,7 @@ function openProductoDrawer(x, tipoForzado = null) {
       ${esPromo
         ? `<button class="dbtn gh" id="tar-editar-promo" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Editar esta promoción</button>`
         : `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>`}
-    </div>` : ''}
+    </div></details>` : ''}
     ${carpeta ? tarBarraSeleccionHtml() : ''}
     <div class="dactions"><button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Cotizar con Lyra</button></div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
@@ -25356,6 +25388,7 @@ function openProductoDrawer(x, tipoForzado = null) {
   document.getElementById('tar-editar-promo')?.addEventListener('click', () => tarAbrirEditorPromo(x.id));
   document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotosOrig, +el.dataset.drawerFoto)));
   tarActivarSeleccion();
+  tarWireDescClamp();
   // Las habitaciones se piden para todos los roles (la RLS le da al no-admin
   // solo las revisadas, que son las que pinta la tarjeta); el panel de revisión
   // solo existe si el contenedor #hab-rev se emitió, o sea para admin.
@@ -33976,6 +34009,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '🏨', titulo: 'Ficha del hotel más ligera', texto: 'Al abrir un hotel o una promoción en el Tarifario, la foto principal ocupa menos y las demás van en miniaturas al lado. La descripción se recorta a tres líneas con «Ver más». Las promociones ya no repiten el nombre del hotel en el título, y la nota «precio por habitación / noche» sale una sola vez por plan. En admin, las notas, fotos y ajustes quedan plegados en un bloque que se abre con un toque.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-23', emoji: '📷', titulo: 'Hoteles sin foto real ya no se ven', texto: 'Los hoteles que no tienen ninguna foto que muestre el alojamiento (sin fotos, solo imágenes generadas por IA, o solo planos y logos) dejaron de aparecer en la web y en el Tarifario, junto con sus promociones. Los administradores los siguen viendo con la marca "Sin foto" (en Hoteles, desmarcando "Ocultar ocultos"; en Promociones, con "Ver ocultas"). En cuanto se sube una foto real del hotel, reaparece solo.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-23', emoji: '🏷️', titulo: 'Tarjetas del Tarifario más limpias', texto: 'El precio ahora va en una pastilla sobre la foto (por ejemplo "$50 p/p · noche"; pasa el mouse para ver el texto completo del proveedor). Debajo de la foto queda el hotel, el nombre de la habitación o promo sin repetir el hotel, una línea de descripción y, al final, hasta cuándo se vende y unos íconos de lo que incluye (vuelo, traslado, comidas, excursión…) con el detalle al pasar el mouse. El resto de la información sigue completa al abrir la tarjeta.', roles: ['admin', 'asesor', 'marketing'] },
   { fecha: '2026-10-22', emoji: '🧹', titulo: 'Ficha del lead más corta', texto: 'Quitamos de la ficha lo que nadie usaba: Próxima acción, Tarifas para su fecha, Pagos y captación y Link de pago. Gestión (servicio, asesor y monto de la venta) pasó arriba, y las reservas quedan junto al chat, la nota y el historial. Si necesitas que te recuerden un lead, toca ⋯ y elige "Recordar mañana" (a las 9:00). En un lead en espera de pago, el botón principal ahora es "Crear reserva".', roles: ['admin', 'asesor'] },

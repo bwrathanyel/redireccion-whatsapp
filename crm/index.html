@@ -886,7 +886,15 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .carpeta-historico>summary::before{content:'\25B8';display:inline-block;margin-right:6px;transition:transform .15s}
 .carpeta-historico[open]>summary::before{transform:rotate(90deg)}
 .carpeta-historico[open]>summary{margin-bottom:8px}
-.promo-card{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:11px 14px}
+.promo-card{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 12px}
+/* Controles de admin en su propia fila (Hot Sales a la izquierda, IA y Mejor precio
+   como iconos a la derecha) para que el título quede solo. */
+.promo-ctl{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:7px}
+.promo-ctl-k{font-size:9.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+.promo-ctl-ico{display:inline-flex;gap:5px;margin-left:auto}
+.tar-ia-inline.tar-ia-ico{width:28px;height:28px;padding:0;gap:0;justify-content:center}
+.tar-ia-ico .ia-lbl{display:none}
+.carpeta-plan>.pph-nota{margin:0 0 8px}
 .promo-destacada{border-color:rgba(var(--accent-rgb),.35);background:var(--accent-soft)}
 .promo-apagada{opacity:.55}
 .promo-top{display:flex;align-items:flex-start;gap:7px;flex-wrap:wrap}
@@ -988,7 +996,7 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .promo-hs-seg-b.on{background:var(--accent);color:var(--on-accent)}
 .promo-hs-seg-b[data-hs-set="quitar"].on{background:rgba(239,68,68,.18);color:#fca5a5}
 .promo-hs-seg-b:disabled{opacity:.5;cursor:progress}
-.promo-mp-btn{background:transparent;border:1px solid var(--line2);color:var(--muted);font-family:inherit;font-size:10px;font-weight:800;letter-spacing:.3px;padding:2px 9px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s,border-color .15s}
+.promo-mp-btn{background:transparent;border:1px solid var(--line2);color:var(--muted);font-family:inherit;font-size:12px;font-weight:800;width:28px;height:28px;padding:0;display:inline-grid;place-items:center;border-radius:999px;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s,border-color .15s}
 .promo-mp-btn:hover:not(.on):not(:disabled){color:var(--txt);border-color:var(--accent)}
 .promo-mp-btn.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .promo-mp-btn:disabled{opacity:.5;cursor:not-allowed}
@@ -1861,11 +1869,31 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .dgallery{display:flex;gap:8px;overflow-x:auto;margin:14px 0 4px;padding-bottom:4px;scrollbar-width:thin}
 .dgallery img{height:90px;width:auto;display:block;border-radius:10px;transition:opacity .15s;flex-shrink:0;cursor:pointer}
 .dgallery img:hover{opacity:.85}
-.dgaleria{margin:0 0 9px}
-.dgaleria .dportada{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;border-radius:14px;cursor:pointer;background:var(--bg2);transition:opacity .16s}
+/* Drawer del tarifario: portada chica a la izquierda y las demás fotos en una
+   rejilla angosta a la derecha (con scroll si son muchas). Antes la portada era
+   16:9 a todo el ancho y se comía media pantalla. */
+.dgaleria{margin:0 0 9px;display:flex;gap:8px;align-items:stretch}
+.dgaleria .dportada{flex:0 0 58%;width:58%;height:150px;object-fit:cover;display:block;border-radius:12px;cursor:pointer;background:var(--bg2);transition:opacity .16s}
+.dgaleria .dportada:only-child{flex:1;width:100%}
 .dgaleria .dportada:hover{opacity:.92}
-.dgaleria .dgallery{margin:9px 0 0}
-.dgaleria .dgallery img{height:62px;width:84px;object-fit:cover}
+.dgaleria .dgallery{flex:1;min-width:0;margin:0;padding:0;max-height:150px;overflow-x:hidden;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(56px,1fr));grid-auto-rows:44px;gap:6px;align-content:start}
+.dgaleria .dgallery img{width:100%;height:44px;object-fit:cover;border-radius:8px}
+.dhead.dhead-tar{margin-bottom:12px}
+/* Descripción del drawer: 3 líneas y «Ver más» (el botón solo sale si se recortó). */
+.ddesc-t{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden}
+.ddesc.abierto .ddesc-t{display:block;-webkit-line-clamp:unset;line-clamp:unset;overflow:visible}
+.ddesc-mas{background:none;border:0;padding:4px 0 0;margin:0;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--accent-ink);cursor:pointer}
+.ddesc-mas:hover{text-decoration:underline}
+/* Bloque de administración del drawer, plegado por defecto (abierto si ya hay notas). */
+.dadmin{margin-top:16px;border:1px solid var(--line);border-radius:12px}
+.dadmin>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 13px;font-size:12px;font-weight:700;color:var(--muted)}
+.dadmin>summary::-webkit-details-marker{display:none}
+.dadmin>summary i:first-child{color:var(--accent-ink)}
+.dadmin-solo{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2)}
+.dadmin-arrow{margin-left:auto;font-size:10px;color:var(--muted2);transition:transform .2s}
+.dadmin[open]>summary{color:var(--txt)}
+.dadmin[open]>summary .dadmin-arrow{transform:rotate(180deg)}
+.dadmin>.edit-box{margin:0;border:0;border-top:1px solid var(--line);border-radius:0 0 12px 12px;background:none}
 .dfield .dfbody{flex:1;min-width:0}
 .dfv-lead{font-size:14px;color:var(--txt)}
 .drico{margin-top:7px}
