@@ -18973,9 +18973,12 @@ function cxpFichaHtml(g, i) {
 function cxpFilaHtml(c) {
   const detalle = [c.reserva_codigo, c.servicio].filter(Boolean).join(' · ');
   const abrir = c.lead_id ? `abrirClienteDesdeFacturacion(${c.lead_id})` : '';
-  return `<div class="cxp-fila${c.estado === 'pagado' ? ' cxp-fila-hecha' : ''}${abrir ? ' cxp-fila-link' : ''}"${abrir ? ` onclick="if(!event.target.closest('button,a'))${abrir}"` : ''}>
+  const hecha = c.estado === 'pagado';
+  const pct = c.monto_a_transferir > 0 ? Math.min(100, Math.round(c.monto_abonado / c.monto_a_transferir * 100)) : (hecha ? 100 : 0);
+  return `<div class="cxp-fila${hecha ? ' cxp-fila-hecha' : ''}${abrir ? ' cxp-fila-link' : ''}"${abrir ? ` onclick="if(!event.target.closest('button,a'))${abrir}"` : ''}>
     <div class="cxp-quien"><b title="${esc(c.cliente || 'Sin cliente')}">${esc(c.cliente || 'Sin cliente')}</b>${detalle ? `<span title="${esc(detalle)}">${esc(detalle)}</span>` : ''}</div>
-    <div class="cxp-montos"><span>Monto ${money(c.monto_a_transferir)} · Abonado ${money(c.monto_abonado)}</span><b class="${c.saldo_pendiente > 0 ? 'lt-debe' : 'lt-ok'}">${money(c.saldo_pendiente)}</b></div>
+    <div class="cxp-montos"><span>Monto ${money(c.monto_a_transferir)} · Abonado ${money(c.monto_abonado)}</span><small>Pendiente de pagar</small><b class="${c.saldo_pendiente > 0 ? 'lt-debe' : 'lt-ok'}">${money(c.saldo_pendiente)}</b></div>
+    <div class="lt-barra" role="progressbar" aria-label="Abonado" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
     <div class="cxp-acc">
       ${c.estado === 'pendiente' ? `<button class="btn-sm lt-primario" type="button" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})"><i class="fas fa-hand-holding-dollar"></i> Abonar</button>` : ''}
       ${abrir ? `<button class="btn-sm" type="button" onclick="${abrir}" title="Editar cliente" aria-label="Editar cliente"><i class="fas fa-user-pen"></i></button>` : ''}
