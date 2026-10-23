@@ -2633,6 +2633,7 @@ function renderInformeDiario() {
         <span class="bt-tag" style="--c:${f.tiene_informe ? 'var(--green)' : 'var(--amber)'}">${f.tiene_informe ? 'Con informe' : 'Sin informe'}</span>
       </div>
       <div class="lt-card-meta"><i class="fas fa-calendar-day"></i> ${fmtFechaSolo(f.fecha)}${f.tiene_informe ? ` · <i class="fas fa-door-open"></i> salió ${fmtHoraCaracas(f.hora_salida)}` : ''}</div>
+      ${f.metricas && f.metricas.atendidos ? `<div class="lt-card-meta" title="Contactos de la cola cerrados ese día"><i class="fas fa-phone-volume"></i> ${fmt(f.metricas.atendidos)} atendidos · ${fmt(f.metricas.con_seguimiento)} con seguimiento · ${fmt(f.metricas.sin_seguimiento)} sin seguimiento · ${fmt(f.metricas.a_punto_de_vender)} a punto de vender</div>` : ''}
       ${f.tiene_informe ? `<div class="lt-texto">${renderInformeCampos(f)}</div>` : ''}
     </article>`).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${informeFiltro ? 'Nada coincide con el filtro' : 'Sin registros'}</div>`;
 }

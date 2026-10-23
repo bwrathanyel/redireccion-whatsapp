@@ -3,6 +3,7 @@
 // cada quien (admin todo; asesor solo los chats de sus leads). Envía por la EF
 // whatsapp-enviar: texto/imagen/documento con la ventana de 24 h abierta, si no,
 // solo plantilla aprobada. En vivo por Realtime; CSS propio mínimo (prefijo wb-).
+import { crearCampanasWa } from './wa-campanas.js';
 const VENTANA_MS = 24 * 60 * 60 * 1000;
 const TICK = { enviando: '🕓', enviado: '✓', entregado: '✓✓', leido: '✓✓', fallido: '!' };
 const ERRORES = {
@@ -311,6 +312,11 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     }
     $('wb-buscar').addEventListener('input', pintarLista);
     $('wb-recargar').addEventListener('click', cargarLista);
+    if (rol() === 'admin') {
+      $('wb-recargar').insertAdjacentHTML('beforebegin', '<button class="chat-tool-btn" id="wb-campanas" type="button" aria-label="Campañas" title="Campañas"><i class="fas fa-bullhorn"></i></button>');
+      const campanas = crearCampanasWa({ sb, esc, ok, error });
+      $('wb-campanas').addEventListener('click', campanas.abrir);
+    }
     $('wb-inbox').addEventListener('click', ev => {
       const row = ev.target.closest('[data-wb]');
       const c = row && convs.find(x => x.id === Number(row.dataset.wb));
