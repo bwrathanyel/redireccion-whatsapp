@@ -24990,7 +24990,7 @@ function tgPlanHtml(x, plan, filas, g, ctx) {
   const sinNombre = plan === TG_SIN_PLAN;
   const sub = [sinNombre ? '' : 'Tarifas por noche', `${g.filas.length} temporada${g.filas.length > 1 ? 's' : ''}`,
     g.cols.some(c => c.t.habitacion) ? `${g.cols.length} habitaci${g.cols.length > 1 ? 'ones' : 'ón'}` : '', 'toca un precio para ver el detalle'].filter(Boolean).join(' · ');
-  const ancha = g.cols.length > TG_MAX_COLS;
+  const ancha = g.cols.length > 2;
   const modoBtn = (k, n) => `<button type="button" class="tg-modo-b${modo === k ? ' on' : ''}" data-tg-modo="${k}" aria-pressed="${modo === k}">${n}</button>`;
   return `<section class="carpeta-plan tg-plan" data-tg-plan="${esc(plan)}">
     <div class="tg-plan-cab">
@@ -24998,7 +24998,7 @@ function tgPlanHtml(x, plan, filas, g, ctx) {
       ${conSgl && conDbl ? `<div class="tg-modo" role="group" aria-label="Ocupación">${modoBtn('dbl', 'Doble')}${modoBtn('sgl', 'Sencilla')}</div>` : ''}
     </div>
     ${ancha ? '<div class="tg-plan-s">Desliza la tabla para ver todas las habitaciones</div>' : ''}
-    <div class="tg-tabla tg-cols-${g.cols.length}${ancha ? ' tg-ancha' : ''}" style="--tg-cols:${g.cols.length}"${ancha ? ' tabindex="0" role="region" aria-label="Tarifas por temporada y habitación, tabla desplazable"' : ''}>
+    <div class="tg-tabla tg-cols-${g.cols.length}${ancha ? ' tg-ancha' : ''}" style="--tg-cols:${g.cols.length}" tabindex="0" role="region" aria-label="Tarifas por temporada y habitación, tabla desplazable">
       <div class="tg-fila tg-fila-cab">
         <div class="tg-th tg-th-temp">Temporada</div>
         ${ch.map(k => `<div class="tg-th" title="${esc(k.col.t.habitacion)}"><div class="tg-th-n">${esc(k.nom)}</div>${k.cap ? `<div class="tg-th-cap"><i class="fas fa-user"></i>${k.cap} adulto${k.cap > 1 ? 's' : ''}</div>` : ''}</div>`).join('')}

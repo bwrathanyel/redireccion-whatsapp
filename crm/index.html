@@ -935,21 +935,19 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .tg-modo-b:hover:not(.on){color:var(--txt)}
 .tg-modo-b.on{background:var(--accent-soft);color:var(--accent-txt)}
 .tg-modo-b:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.tg-tabla{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel-solid)}
-.tg-fila{display:grid;grid-template-columns:150px repeat(var(--tg-cols),minmax(0,1fr))}
-.tg-ancha{overflow-x:auto;overscroll-behavior-x:contain}
-.tg-ancha .tg-fila{grid-template-columns:150px repeat(var(--tg-cols),96px);width:max-content;min-width:100%}
-.tg-ancha .tg-th-temp,.tg-ancha .tg-temp{position:sticky;left:0;z-index:1;background:var(--panel-solid)}
-.tg-ancha .tg-th-temp{align-self:stretch}
-.tg-ancha .tg-monto{max-width:100%;overflow-wrap:anywhere;flex-wrap:wrap;justify-content:flex-end}
-.tg-ancha:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tg-tabla{--tg-col-min:150px;--tg-temp-ancho:150px;border:1px solid var(--line);border-radius:14px;overflow-x:auto;overscroll-behavior-x:contain;background:var(--panel-solid)}
+.tg-fila{display:grid;grid-template-columns:var(--tg-temp-ancho) repeat(var(--tg-cols),minmax(var(--tg-col-min),1fr));min-width:calc(var(--tg-temp-ancho) + var(--tg-cols) * var(--tg-col-min))}
+.tg-tabla .tg-th-temp,.tg-tabla .tg-temp{position:sticky;left:0;z-index:1;background:var(--panel-solid)}
+.tg-tabla .tg-th-temp{align-self:stretch}
+.tg-tabla .tg-monto{max-width:100%;overflow-wrap:break-word;flex-wrap:wrap;justify-content:flex-end}
+.tg-tabla:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .tg-precio-etq{font-size:11px;color:var(--muted);text-align:right;overflow-wrap:anywhere}
 .tg-duplicadas{margin-top:12px}
 .tg-fila+.tg-fila{border-top:1px solid var(--line)}
 .tg-fila-cab{background:rgba(var(--ink-rgb),.025)}
 .tg-th{padding:12px 14px 10px;text-align:right;border-left:1px solid var(--line);min-width:0}
 .tg-th-temp{border-left:0;text-align:left;align-self:end;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-.tg-th-n{font-size:12.5px;font-weight:700;line-height:1.25;color:var(--txt);overflow-wrap:anywhere}
+.tg-th-n{font-size:12.5px;font-weight:700;line-height:1.25;color:var(--txt);overflow-wrap:break-word;word-break:normal}
 .tg-th-cap{margin-top:3px;display:flex;justify-content:flex-end;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
 .tg-th-cap i{font-size:9.5px}
 .tg-temp{padding:11px 14px;display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0}
@@ -1012,8 +1010,7 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
   .tg-nombre{font-size:20px}
   .tg-desde-v{font-size:22px}
   .tg-plan-cab{flex-wrap:wrap}
-  .tg-fila{grid-template-columns:96px repeat(var(--tg-cols),minmax(0,1fr))}
-  .tg-ancha .tg-fila{grid-template-columns:96px repeat(var(--tg-cols),96px)}
+  .tg-tabla{--tg-col-min:128px;--tg-temp-ancho:96px}
   .tg-th{padding:10px 8px 8px}
   .tg-th-temp{font-size:9px;letter-spacing:.06em}
   .tg-th-n{font-size:11px;line-height:1.2}
@@ -1030,9 +1027,6 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
   .tg-det{padding:14px;gap:12px}
   .tg-det-h{font-size:15px}
   .tg-baldosas{grid-template-columns:repeat(2,minmax(0,1fr))}
-  /* Cinco habitaciones dejan ~51px por celda: «€1.350» no entra con el padding normal. */
-  .tg-cols-5 .tg-celda,.tg-cols-5 .tg-th{padding-left:4px;padding-right:4px}
-  .tg-cols-5 .tg-monto{font-size:12px}
 }
 .promo-card{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 12px}
 /* Controles de admin en su propia fila (Hot Sales a la izquierda, IA y Mejor precio
