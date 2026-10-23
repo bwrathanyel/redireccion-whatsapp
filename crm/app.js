@@ -2,6 +2,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { crearDocumentosRevisiones } from './documentos-revisiones.js';
 import { crearAbonos } from './abonos.js';
 import { crearPropuestas } from './propuestas.js';
+import { crearBandejaWa } from './whatsapp-bandeja.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -156,8 +157,7 @@ function accionPrincipalLead(l) {
   const vende = ROL === 'asesor' || ROL === 'admin';
   if (l.estado === 'POR ATENDER' && !l.fecha_primer_contacto && ROL === 'asesor' && !leadSoloLectura()) return { key: 'atender', texto: 'Atender', icono: 'fa-check' };
   if (['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO'].includes(l.estado)) return vende ? { key: 'cotizar', texto: 'Cotizar', icono: 'fa-file-invoice-dollar' } : null;
-  if (l.estado === 'COTIZACION ENVIADA') return ROL === 'asesor' || esOficina() ? { key: 'reserva', texto: 'Crear reserva', icono: 'fa-plus' } : null;
-  if (l.estado === 'EN ESPERA DE PAGO') return { key: 'link-pago', texto: 'Link de pago', icono: 'fa-link' };
+  if (['COTIZACION ENVIADA', 'EN ESPERA DE PAGO'].includes(l.estado)) return ROL === 'asesor' || esOficina() ? { key: 'reserva', texto: 'Crear reserva', icono: 'fa-plus' } : null;
   if (VENTA.includes(l.estado)) return vende ? { key: 'reservas', texto: 'Ver reservas', icono: 'fa-suitcase-rolling' } : null;
   return null;
 }
@@ -176,7 +176,6 @@ function ejecutarAccionLead(l, key) {
     case 'atender': return atenderInboxLead(l);
     case 'cotizar': return trasCerrarDrawer(() => cbDesdeLead(l));
     case 'reserva': return abrirEnviarFacturacionSheet(l);
-    case 'link-pago': return openDrawer(l, { seccion: 'link-pago' });
     case 'reservas': return openDrawer(l, { seccion: 'reservas' });
     case 'ficha': return openDrawer(l);
   }
@@ -250,6 +249,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
   propuestas: ['Alianzas y propuestas', 'Quienes escriben al bot para ofrecer algo, no para comprar'],
+  'wa-bandeja': ['WhatsApp empresa', 'Chats del número de la empresa: contesta aquí a los clientes'],
   'clientes-eventos': ['Clientes Eventos', 'Quienes se registraron con el QR del stand y los premios que ganaron'],
   'bt-travel': ['BT Travel', 'Hoteles todo incluido, disponibilidad, reservas y pagos del mayorista'],
   apartamentos: ['Apartamentos', 'Casas y posadas con apartamentos propios: unidades, habitaciones y fotos'],
@@ -1535,7 +1535,7 @@ const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'mis-comisiones', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos',
-  'mensajes', 'whatsapp', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
+  'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
 ];
@@ -6589,7 +6589,7 @@ function aplicarActualizacionLeadAbierto(lead) {
   document.getElementById('venta-box')?.classList.toggle('show', VENTA.includes(document.getElementById('e-estado').value));
   currentLead = lead;
   pintarLecturaDatos();
-  if (actualizados.includes('e-estado')) { document.getElementById('dacc-estado')?.style.setProperty('--est', ESTADO_COLORS[lead.estado] || '#8b93ad'); pintarCtaDrawer(lead); aplicarVisibilidadSeccionesDrawer(); }
+  if (actualizados.includes('e-estado')) { document.getElementById('dacc-estado')?.style.setProperty('--est', ESTADO_COLORS[lead.estado] || '#8b93ad'); pintarCtaDrawer(lead); }
   // Llega también el eco de nuestro propio autoguardado: si no hubo nada que
   // refrescar ni conflicto, no se muestra la barra.
   if (actualizados.length || conflictivos.length) mostrarConflictoLead(actualizados, conflictivos);
@@ -7128,8 +7128,7 @@ function openDrawer(l, opciones = {}) {
       ${vende ? `<button class="dq-mas" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización enviada'}</span></button>` : ''}
       ${(ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) ? `<button class="dq-mas" id="e-a-facturar" type="button"><i class="fas fa-plus"></i>Crear reserva</button>` : ''}
       ${vende ? `<button class="dq-mas" id="e-a-boleteria" type="button"><i class="fas fa-plane-departure"></i>Solicitud de boletería</button>` : ''}
-      <button class="dq-mas" type="button" data-ver="link-pago"><i class="fas fa-link"></i>Link de pago</button>
-      <button class="dq-mas" type="button" data-ver="pagos"><i class="fas fa-dollar-sign"></i>Pagos y captación</button>
+      ${vende && !ESTADOS_SIN_SEGUIMIENTO.includes(l.estado) ? `<button class="dq-mas" type="button" id="e-a-recordar"><i class="fas fa-bell"></i>Recordar mañana</button>` : ''}
       ${wa ? `<button class="dq-mas" type="button" id="e-a-avisar"><i class="fas fa-flag"></i>Avisar número incorrecto</button>` : ''}
       <button class="dq-mas" type="button" id="e-copiar-id"><i class="fas fa-copy"></i>Copiar ID ${esc(l.external_id || l.id)}</button>
     </div>
@@ -7137,9 +7136,24 @@ function openDrawer(l, opciones = {}) {
     <div class="edit-err" id="edit-err"></div>
     <div class="lead-conflict-bar" id="lead-conflict-bar" style="display:none"></div>
 
+    <section class="dbloque dgestion" id="d-gestion" data-dsec="gestion">
+      <div class="dbloque-h"><span><i class="fas fa-sliders"></i> Gestión</span></div>
+      <div class="dgrid">
+        <div class="fcol"><label class="fl fl-ia">Servicio de interés <button class="ia-mini" id="e-servicio-ia" type="button" title="Detectar el servicio con IA" aria-label="Detectar el servicio con IA" ${dis}><i class="fas fa-wand-magic-sparkles"></i></button></label><select id="e-servicio" class="ei" ${dis}><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select></div>
+        ${campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' || soloLectura ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...asesoresConActual(l.asesor)], l.asesor || 'Sin asignar')}</select>`)}
+        <div class="fcol f-full"><div class="e-servicio-razon" id="e-servicio-razon">${l.servicio_ia_razon ? '<i class="fas fa-robot"></i> ' + esc(l.servicio_ia_razon) : ''}</div></div>
+      </div>
+      <div id="venta-box" class="venta-box ${VENTA.includes(l.estado) ? 'show' : ''}">
+        <div class="venta-msg" id="venta-msg"></div>
+        <div class="dgrid">
+          ${campo('Monto de la venta (USD)', `<input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}" ${dis}>`)}
+          ${campo('Servicios / paquetes comprados', `<input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}" ${dis}>`)}
+        </div>
+      </div>
+    </section>
+
     <div class="dresumen-cols">
       <div class="dquien-es">
-        <div class="dzone-label"><i class="fas fa-user"></i> Quién es</div>
         <section class="dbloque" id="d-datos" data-dsec="datos">
           <div class="dbloque-h"><span><i class="fas fa-user-pen"></i> Datos del cliente</span>${soloLectura ? '' : '<button type="button" class="dbloque-btn" id="d-editar"><i class="fas fa-pen"></i> Editar</button>'}</div>
           <dl class="dlect">
@@ -7165,6 +7179,13 @@ function openDrawer(l, opciones = {}) {
           </div>
         </section>
 
+      </div>
+      <div class="dhago">
+        ${vende && VENTA.includes(l.estado) ? seccion('reservas', 'fa-suitcase-rolling', 'Reservas del cliente', `
+          <div class="csub" style="margin-bottom:8px">Cada viaje del cliente es una reserva. La primera se cierra con el lead; las adicionales se facturan aparte.</div>
+          <div id="res-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+          <div class="edit-err" id="res-err"></div>
+          <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, true) : ''}
         <section class="dbloque" id="conv-bloque" hidden>
           <div class="dbloque-h"><span><i class="fas fa-robot"></i> Chat con la IA</span><button type="button" class="dbloque-btn" id="conv-ver">Ver todo</button></div>
           <div id="conv-preview" class="conv-preview"></div>
@@ -7183,72 +7204,10 @@ function openDrawer(l, opciones = {}) {
           </div>
         </details>
       </div>
-      <div class="dhago">
-        <div class="dzone-label acc"><i class="fas fa-arrow-right-arrow-left"></i> Qué hago con él</div>
-        ${vende ? seccion('proxima', 'fa-calendar-check', 'Próxima acción', `
-          <div class="pa-estado" id="pa-estado"></div>
-          <div class="pa-atajos">
-            <button type="button" class="dbtn gh" data-pa="manana">Mañana 9:00</button>
-            <button type="button" class="dbtn gh" data-pa="3dias">En 3 días</button>
-            <button type="button" class="dbtn gh" data-pa="lunes">Próx. lunes</button>
-          </div>
-          <div class="dgrid">
-            ${campo('Otra fecha', `<input id="pa-at" class="ei" type="datetime-local" value="${l.proxima_accion_at ? aInputLocal(l.proxima_accion_at) : ''}">`, true)}
-            ${campo('Qué toca hacer', `<input id="pa-nota" class="ei" type="text" maxlength="200" placeholder="Ej: llamar con la cotización" value="${esc(l.proxima_accion_nota || '')}">`, true)}
-          </div>
-          <div class="edit-err" id="pa-err"></div>
-          <div class="pa-acciones">
-            <button class="dbtn save" id="pa-guardar" type="button"><i class="fas fa-calendar-check"></i> Fijar seguimiento</button>
-            <button class="dbtn gh" id="pa-quitar" type="button">Hecho / quitar</button>
-          </div>`, !!l.proxima_accion_at) : ''}
-        ${seccion('gestion', 'fa-sliders', 'Gestión', `
-          <div class="dgrid">
-            <div class="fcol"><label class="fl fl-ia">Servicio de interés <button class="ia-mini" id="e-servicio-ia" type="button" title="Detectar el servicio con IA" aria-label="Detectar el servicio con IA" ${dis}><i class="fas fa-wand-magic-sparkles"></i></button></label><select id="e-servicio" class="ei" ${dis}><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select></div>
-            ${campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' || soloLectura ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...asesoresConActual(l.asesor)], l.asesor || 'Sin asignar')}</select>`)}
-            <div class="fcol f-full"><div class="e-servicio-razon" id="e-servicio-razon">${l.servicio_ia_razon ? '<i class="fas fa-robot"></i> ' + esc(l.servicio_ia_razon) : ''}</div></div>
-          </div>
-          <div id="venta-box" class="venta-box ${VENTA.includes(l.estado) ? 'show' : ''}">
-            <div class="venta-msg" id="venta-msg"></div>
-            <div class="dgrid">
-              ${campo('Monto de la venta (USD)', `<input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}" ${dis}>`, true)}
-              ${campo('Servicios / paquetes comprados', `<input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}" ${dis}>`, true)}
-            </div>
-          </div>`, true)}
-        ${vende && l.fecha_viaje_desde && !VENTA.includes(l.estado) ? seccion('tarifas-fecha', 'fa-tags', 'Tarifas para su fecha', `
-          <div id="tf-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>`, false) : ''}
-
-        ${seccion('pagos', 'fa-dollar-sign', 'Pagos y captación', `
-          <div class="dgrid">
-            ${campo('Monto completo (USD)', `<input id="e-monto-completo" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_completo ?? ''}" ${dis}>`)}
-            ${campo('Monto inicial (USD)', `<input id="e-monto-inicial" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.monto_inicial ?? ''}" ${dis}>`)}
-            ${campo('Restante de pago (USD)', `<input id="e-restante-pago" class="ei" type="number" min="0" step="1" placeholder="Sin definir" value="${l.restante_pago ?? ''}" ${dis}>`)}
-            ${campo('Fecha de captación', `<input id="e-fecha" class="ei" type="date" value="${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : ''}" ${dis}>`)}
-          </div>`, false)}
-
-        ${vende && VENTA.includes(l.estado) ? seccion('reservas', 'fa-suitcase-rolling', 'Reservas del cliente', `
-          <div class="csub" style="margin-bottom:8px">Cada viaje del cliente es una reserva. La primera se cierra con el lead; las adicionales se facturan aparte.</div>
-          <div id="res-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
-          <div class="edit-err" id="res-err"></div>
-          <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, true) : ''}
-
-        ${seccion('link-pago', 'fa-link', 'Link de pago', `
-          <div class="csub" style="margin-bottom:8px">Emites un link para que el cliente pague y suba el comprobante. El monto lo fijas tú; queda pendiente hasta que un admin lo verifique.</div>
-          <div class="dgrid">
-            ${campo('Tipo', `<select id="lp-tipo" class="ei"><option value="abono">Abono / reserva</option><option value="total">Pago total</option></select>`)}
-            ${campo('Riel', `<select id="lp-riel" class="ei"><option value="pago_movil">Pago Móvil</option><option value="c2p">C2P</option><option value="zelle">Zelle</option><option value="binance">Binance (USDT)</option><option value="transferencia">Transferencia</option><option value="efectivo">Efectivo</option></select>`)}
-            ${campo('Moneda', `<select id="lp-moneda" class="ei"><option value="USD">USD</option><option value="VES">Bs (VES)</option><option value="USDT">USDT</option></select>`)}
-            ${campo('Monto', `<input id="lp-monto" class="ei" type="number" min="0" step="0.01" placeholder="0.00">`)}
-            ${campo('Tasa Bs/USD (solo si cobras en Bs)', `<input id="lp-tasa" class="ei" type="number" min="0" step="0.01" placeholder="Ej: 40.50">`, true)}
-          </div>
-          <div class="edit-err" id="lp-err"></div>
-          <button class="dbtn save" id="e-emitir-pago" type="button" style="width:100%"><i class="fas fa-link"></i> Emitir link de pago</button>
-          <div id="lp-resultado" style="display:none;margin-top:10px"></div>`, l.estado === 'EN ESPERA DE PAGO')}
-      </div>
     </div>`;
 
   const datos = document.getElementById('d-datos');
   pintarLecturaDatos();
-  aplicarVisibilidadSeccionesDrawer();
   document.getElementById('e-estado').addEventListener('change', e => {
     document.getElementById('venta-box').classList.toggle('show', VENTA.includes(e.target.value));
     document.getElementById('dacc-estado').style.setProperty('--est', ESTADO_COLORS[e.target.value] || '#8b93ad');
@@ -7279,8 +7238,8 @@ function openDrawer(l, opciones = {}) {
   notas.addEventListener('blur', () => guardarNotasLead());
   const mas = document.getElementById('dacc-mas'), btnMas = document.getElementById('e-a-mas');
   btnMas.addEventListener('click', () => { mas.hidden = !mas.hidden; btnMas.setAttribute('aria-expanded', String(!mas.hidden)); });
-  mas.querySelectorAll('[data-ver]').forEach(b => b.addEventListener('click', () => irASeccionDrawer(b.dataset.ver)));
   document.getElementById('e-a-cta').addEventListener('click', e => accionPrincipalDrawer(l, e.currentTarget.dataset.accion));
+  document.getElementById('e-a-recordar')?.addEventListener('click', () => { document.getElementById('dacc-mas').hidden = true; document.getElementById('e-a-mas')?.setAttribute('aria-expanded', 'false'); recordarLeadManana(l); });
   document.getElementById('e-a-avisar')?.addEventListener('click', () => abrirAvisarTelefono(l));
   document.getElementById('e-servicio-ia').onclick = detectarServicioDelLead;
   document.getElementById('e-copiar-id').onclick = async () => {
@@ -7295,13 +7254,10 @@ function openDrawer(l, opciones = {}) {
   document.getElementById('conv-ver').addEventListener('click', () => openSheet('conv-lead-sheet'));
   const historial = document.querySelector('details[data-dsec="historial"]');
   historial.addEventListener('toggle', () => { if (historial.open) { cargarActividadLead(l); cargarCorreoLead(l); } });
-  if (document.getElementById('pa-at')) setupProximaAccion(l);
-  document.getElementById('e-emitir-pago')?.addEventListener('click', () => emitirLinkPago(l));
   if (document.getElementById('res-lista')) {
     document.getElementById('res-nueva').onclick = () => crearReservaLead(l);
     cargarReservasLead(l);
   }
-  if (document.getElementById('tf-lista')) cargarTarifasFechaLead(l);
   cargarConversacionLead(l);
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
@@ -7325,19 +7281,6 @@ function pintarLecturaDatos() {
   // Recién pintado: el alto real ya existe si el drawer está en el DOM.
   requestAnimationFrame(() => { ver.hidden = c.scrollHeight <= c.clientHeight + 2; });
 }
-// Pagos y Link de pago aparecen cuando el estado los necesita (o si ya hay
-// montos cargados); antes estaban siempre y alargaban la ficha. Desde "Más"
-// se pueden abrir igual en cualquier estado.
-function aplicarVisibilidadSeccionesDrawer() {
-  const estado = document.getElementById('e-estado')?.value || currentLead?.estado;
-  const enCobro = ['COTIZACION ENVIADA', 'EN ESPERA DE PAGO', ...VENTA].includes(estado);
-  const l = currentLead || {};
-  const conMontos = [l.monto_completo, l.monto_inicial, l.restante_pago].some(v => v != null && v !== '');
-  const pagos = document.querySelector('.dhago details[data-dsec="pagos"]');
-  const link = document.querySelector('.dhago details[data-dsec="link-pago"]');
-  if (pagos && !pagos.dataset.revelada) pagos.hidden = !(enCobro || conMontos);
-  if (link && !link.dataset.revelada) link.hidden = !['COTIZACION ENVIADA', 'EN ESPERA DE PAGO'].includes(estado);
-}
 function irASeccionDrawer(id) {
   const el = document.querySelector(`.dhago details[data-dsec="${id}"]`);
   const mas = document.getElementById('dacc-mas');
@@ -7349,7 +7292,7 @@ function irASeccionDrawer(id) {
 // Botón principal dentro del drawer: lo que es navegación a una sección de la
 // misma ficha se resuelve acá (sin reabrir el drawer y perder lo escrito).
 async function accionPrincipalDrawer(l, key) {
-  if (key === 'link-pago' || key === 'reservas') { irASeccionDrawer(key); return; }
+  if (key === 'reservas') { irASeccionDrawer(key); return; }
   if (key === 'atender') {
     if (await atenderInboxLead(l) && currentLead?.id === l.id) {
       document.getElementById('e-estado').value = l.estado;
@@ -7378,16 +7321,6 @@ function fechaViajeInterpretada(l) {
   const r = l.fecha_viaje_hasta && l.fecha_viaje_hasta !== l.fecha_viaje_desde ? `${fechaCorta(l.fecha_viaje_desde)} al ${fechaCorta(l.fecha_viaje_hasta)}` : fechaCorta(l.fecha_viaje_desde);
   const dias = Math.round((new Date(l.fecha_viaje_desde + 'T00:00:00') - new Date(new Date().toDateString())) / 864e5);
   return `<i class="fas fa-calendar-day"></i> ≈ ${r} · ${esc(l.fecha_viaje_exactitud || '')}${dias >= 0 ? ` · faltan ${dias} días` : ' · ya pasó'}`;
-}
-const filaTarifaFecha = t => `<div class="csub" style="display:flex;justify-content:space-between;gap:8px;padding:4px 0"><span><b>${esc(t.nombre)}</b>${t.destino ? ' · ' + esc(t.destino) : ''}${t.vigencia_texto ? '<br>' + esc(t.vigencia_texto) : ''}</span><span>${t.precio_desde_usd != null ? 'desde $' + Math.round(t.precio_desde_usd).toLocaleString('es-VE') : ''}</span></div>`;
-async function cargarTarifasFechaLead(l) {
-  const box = document.getElementById('tf-lista'); if (!box) return;
-  const { data, error } = await sb.rpc('sugerir_tarifas_lead', { p_lead_id: l.id });
-  if (!box.isConnected) return;
-  if (error) { console.error('sugerir_tarifas_lead', error); box.innerHTML = '<div class="csub">No se pudieron cargar las tarifas</div>'; return; }
-  const conf = data?.confirmadas || [], sug = data?.sugerencias || [];
-  box.innerHTML = (conf.length ? `<div class="fl">Confirmadas para ${esc(l.destino || 'su destino')}</div>${conf.map(filaTarifaFecha).join('')}` : `<div class="csub">Sin tarifas vigentes para ${esc(l.destino || 'ese destino')} en esa fecha.</div>`)
-    + (sug.length ? `<div class="fl" style="margin-top:10px">Otras opciones para esa fecha</div>${sug.map(filaTarifaFecha).join('')}` : '');
 }
 
 /* ---------- Reservas del lead (varias por cliente, ver migración 20260924110000) ---------- */
@@ -7457,67 +7390,17 @@ async function facturarReservaLead(l, reservaId, btn) {
   await Promise.all([cargarReservasLead(l), loadStats()]); renderAll();
 }
 
-/* ---------- Próxima acción del lead (RPC fijar_proxima_accion; una sola por lead) ---------- */
-function pintarEstadoProximaAccion(l) {
-  const el = document.getElementById('pa-estado'); if (!el) return;
-  const cerrado = ESTADOS_SIN_SEGUIMIENTO.includes(l.estado);
-  el.innerHTML = l.proxima_accion_at
-    ? `<i class="fas fa-calendar-day"></i> ${esc(fmtFechaHoraCaracas(l.proxima_accion_at))} · <b class="${new Date(l.proxima_accion_at) < new Date() ? 'vence' : ''}">${esc(tiempoSeguimiento(l.proxima_accion_at))}</b>${cerrado ? '<div class="csub">Lead cerrado: no aparece en Seguimientos.</div>' : ''}`
-    : 'Sin próxima acción definida';
-  const q = document.getElementById('pa-quitar'); if (q) q.disabled = !l.proxima_accion_at;
-  // Resumen en el título de la sección: se ve sin desplegarla.
-  const r = document.getElementById('proxima-resumen');
-  if (r) r.textContent = l.proxima_accion_at ? tiempoSeguimiento(l.proxima_accion_at) + (l.proxima_accion_nota ? ' · ' + l.proxima_accion_nota : '') : '';
-}
-async function fijarProximaAccion(l, at, nota) {
-  const err = document.getElementById('pa-err'), botones = ['pa-guardar', 'pa-quitar'].map(id => document.getElementById(id));
-  err.textContent = '';
-  botones.forEach(b => { if (b) b.disabled = true; });
-  const { data, error } = await sb.rpc('fijar_proxima_accion', { p_lead_id: l.id, p_at: at, p_nota: nota });
-  botones.forEach(b => { if (b) b.disabled = false; });
-  // La ficha pudo cerrarse o pasar a otro lead mientras la RPC respondía: no pintar en la ficha equivocada.
-  const enFicha = currentLead?.id === l.id && !!document.getElementById('pa-estado');
-  if (error || !data?.ok) {
-    const msg = /fuera de rango/.test(error?.message || '') ? 'La fecha tiene que ser desde ayer hasta dentro de 2 años.'
-      : /demasiado larga/.test(error?.message || '') ? 'La nota admite hasta 200 caracteres.'
-      : error?.message || (data?.error === 'lead_eliminado' ? 'Ese lead ya fue eliminado' : 'No se pudo guardar el seguimiento');
-    if (enFicha) { err.textContent = msg; pintarEstadoProximaAccion(l); } else errToast(msg);
-    return false;
-  }
+/* ---------- Recordar mañana (RPC fijar_proxima_accion; una sola por lead) ---------- */
+async function recordarLeadManana(l) {
+  const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); // 9:00 en la hora del equipo (VET)
+  const { data, error } = await sb.rpc('fijar_proxima_accion', { p_lead_id: l.id, p_at: d.toISOString(), p_nota: null });
+  if (error || !data?.ok) { errToast(error?.message || (data?.error === 'lead_eliminado' ? 'Ese lead ya fue eliminado' : 'No se pudo fijar el seguimiento')); return; }
   l.proxima_accion_at = data.proxima_accion_at ?? null; l.proxima_accion_nota = data.proxima_accion_nota ?? null;
   if (!data.sin_cambios) l.proxima_accion_aviso_at = null;
   if (currentLead?.id === l.id) Object.assign(currentLead, l);
-  if (enFicha) {
-    if (!l.proxima_accion_at) { document.getElementById('pa-at').value = ''; document.getElementById('pa-nota').value = ''; }
-    pintarEstadoProximaAccion(l);
-  }
   ACTIVIDAD_CACHE = null;
-  okToast(l.proxima_accion_at ? 'Seguimiento fijado' : 'Seguimiento quitado');
+  okToast('Te lo recordamos mañana a las 9:00');
   loadTable(); refrescarKpisHoyAsesor();
-  return true;
-}
-function setupProximaAccion(l) {
-  pintarEstadoProximaAccion(l);
-  const at = document.getElementById('pa-at');
-  // 9:00 del día pedido, en la hora del equipo del usuario (el equipo trabaja en VET)
-  const a9 = d => { d.setHours(9, 0, 0, 0); at.value = aInputLocal(d.toISOString()); };
-  document.querySelectorAll('[data-pa]').forEach(b => b.addEventListener('click', () => {
-    const d = new Date();
-    if (b.dataset.pa === 'manana') d.setDate(d.getDate() + 1);
-    else if (b.dataset.pa === '3dias') d.setDate(d.getDate() + 3);
-    else d.setDate(d.getDate() + (((8 - d.getDay()) % 7) || 7));
-    a9(d);
-    document.getElementById('pa-guardar').click(); // un toque fija el seguimiento, sin paso extra
-  }));
-  document.getElementById('pa-guardar').onclick = () => {
-    if (!at.value) { document.getElementById('pa-err').textContent = 'Elegí fecha y hora, o usá "Hecho / quitar".'; return; }
-    const f = new Date(at.value);
-    if (Number.isNaN(f.getTime())) { document.getElementById('pa-err').textContent = 'La fecha no es válida.'; return; }
-    // La RPC rechaza fechas de más de 1 día atrás: un seguimiento muy vencido no se puede re-guardar con la misma fecha.
-    if (f < new Date(Date.now() - 864e5)) { document.getElementById('pa-err').textContent = 'Esa fecha ya pasó hace más de un día: elegí una nueva o usá "Hecho / quitar".'; return; }
-    fijarProximaAccion(l, f.toISOString(), document.getElementById('pa-nota').value.trim() || null);
-  };
-  document.getElementById('pa-quitar').onclick = () => fijarProximaAccion(l, null, null);
 }
 async function registrarCotizacionEnviada(l) {
   // El botón existe solo con el drawer abierto; desde el menú "⋯" de la
@@ -8055,7 +7938,7 @@ async function autoguardarLeadUnaVez(opts = {}) {
     if (ventaMsg) ventaMsg.textContent = '';
     pintarGuardado(`<i class="fas fa-check"></i> Guardado ${esc(fmtHoraCaracas(new Date().toISOString()))}`, 'ok');
     pintarLecturaDatos();
-    if (cambioEstado) { pintarCtaDrawer(lead); aplicarVisibilidadSeccionesDrawer(); }
+    if (cambioEstado) { pintarCtaDrawer(lead); }
   }
   loadTable(true);
   if (cambioEstado) { await loadStats(); renderAll(); loadDestPeriodo(); }
@@ -9336,6 +9219,16 @@ let PR = null;
 function loadPropuestas() {
   if (!PR) { PR = crearPropuestas({ sb, esc, fecha: fmtFechaHoraCaracas, ok: okToast, error: errToast }); PR.enlazar(); }
   return PR.cargar();
+}
+// WhatsApp empresa (whatsapp-bandeja.js): bandeja del número de campañas, con envío.
+let WB = null;
+function loadWaBandeja() {
+  if (!WB) {
+    WB = crearBandejaWa({ sb, esc, rol: () => ROL, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox,
+      abrirLead: id => abrirLeadDesdeMisVentas(id), ok: okToast, error: errToast });
+    WB.enlazar();
+  }
+  return WB.abrirSeccion();
 }
 
 function iaCard(p) {
@@ -10986,50 +10879,6 @@ function pagoMontoTexto(p) {
     return `Bs ${dec(p.monto_centavos)} · ~$${dec(p.monto_usd_centavos || 0)} (tasa ${p.tasa_usd_ves})`;
   }
   return `${p.moneda === 'USDT' ? 'USDT ' : '$'}${dec(p.monto_centavos)}`;
-}
-
-async function emitirLinkPago(l) {
-  const btn = document.getElementById('e-emitir-pago');
-  const err = document.getElementById('lp-err');
-  const out = document.getElementById('lp-resultado');
-  if (!btn || !l?.id) return;
-  err.textContent = ''; err.style.display = 'none';
-  const tipo = val('lp-tipo'), riel = val('lp-riel'), moneda = val('lp-moneda');
-  const monto = parseFloat(val('lp-monto'));
-  const tasa = parseFloat(val('lp-tasa'));
-  if (!Number.isFinite(monto) || monto <= 0) {
-    err.textContent = 'Escribe un monto mayor a 0.'; err.style.display = 'block'; return;
-  }
-  if (moneda === 'VES' && (!Number.isFinite(tasa) || tasa <= 0)) {
-    err.textContent = 'Para cobrar en Bs necesitas la tasa Bs/USD del día.'; err.style.display = 'block'; return;
-  }
-  const centavos = Math.round(monto * 100);
-  btn.disabled = true;
-  const antes = btn.innerHTML;
-  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Emitiendo...';
-  const { data, error } = await sb.rpc('emitir_pago', {
-    p_lead_id: l.id, p_tipo: tipo, p_monto_centavos: centavos, p_moneda: moneda,
-    p_riel: riel, p_tasa_usd_ves: moneda === 'VES' ? tasa : null,
-  });
-  btn.disabled = false; btn.innerHTML = antes;
-  if (error || !data?.ok) {
-    err.textContent = MSG_EMITIR_PAGO[data?.error] || error?.message || data?.error || 'No se pudo emitir el link.';
-    err.style.display = 'block';
-    return;
-  }
-  const url = `https://destinoyeventoslotus360.com/pagar/${data.token}`;
-  out.style.display = 'block';
-  out.innerHTML = `
-    <div class="csub" style="margin-bottom:6px"><i class="fas fa-circle-check" style="color:var(--green)"></i> Link listo. Vence el ${esc(fmtFechaHoraCaracas(data.expira_en))}.</div>
-    <div style="display:flex;gap:8px">
-      <input class="ei" id="lp-url" type="text" readonly value="${esc(url)}" style="flex:1">
-      <button type="button" class="dbtn" id="lp-copiar" style="white-space:nowrap"><i class="fas fa-copy"></i> Copiar</button>
-    </div>`;
-  document.getElementById('lp-copiar').onclick = async () => {
-    try { await navigator.clipboard.writeText(url); okToast('Link copiado'); }
-    catch { errToast('El navegador no dejó copiar'); }
-  };
-  ACTIVIDAD_CACHE = null;
 }
 
 // Montos con miles a mano: toLocaleString('es-VE') no agrupa números de 4 cifras (1234,56).
@@ -30959,6 +30808,7 @@ const NAV_ITEMS = [
   // de Mensajes a su propia entrada. La vista vieja de WhatsApp por número salió
   // del menú; admin la abre desde la pestaña WhatsApp de Meta DM.
   { sec: 'dms', icon: 'fa-brands fa-meta', label: 'Meta DM', padre: 'grp-bandeja', roles: '', sub: 'Chats del bot en Instagram, Facebook y WhatsApp, en vivo y con la ficha del cliente' },
+  { sec: 'wa-bandeja', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp empresa', padre: 'grp-bandeja', roles: '', sub: 'Clientes que respondieron al número de la empresa', badge: 'nav-wab-count', badgeDefault: '0' },
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-bandeja', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok' },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok' },
@@ -31371,6 +31221,7 @@ function cargarSeccion(sec) {
   if (sec === 'rendimiento-ia') loadRendimientoIA();
   if (sec === 'ia-atencion') loadIaAtencion();
   if (sec === 'propuestas') loadPropuestas();
+  if (sec === 'wa-bandeja') loadWaBandeja();
   if (sec === 'clientes-eventos') loadClientesEventos();
   if (sec === 'web-reasignados') loadWebReasignados();
   if (sec === 'contactos-directos') loadContactosDirectos();
@@ -31689,7 +31540,7 @@ const REFRESCAR_SECCION = {
   postventa: () => loadPostventa(), 'reservas-empresas': () => loadReservasEmpresas(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
   tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
   'rendimiento-ia': () => loadRendimientoIA(),
-  'ia-atencion': () => loadIaAtencion(), 'propuestas': () => loadPropuestas(), 'web-reasignados': () => loadWebReasignados(), 'contactos-directos': () => loadContactosDirectos(),
+  'ia-atencion': () => loadIaAtencion(), 'propuestas': () => loadPropuestas(), 'wa-bandeja': () => loadWaBandeja(), 'web-reasignados': () => loadWebReasignados(), 'contactos-directos': () => loadContactosDirectos(),
   'clientes-eventos': () => loadClientesEventos(),
   'stop-sales': () => { loadStopSalesVigentes(); ssCargarPdfActual(); },
   redes: () => cargarRedActual(), voucher: () => loadVoucherSeccion(), tareas: () => loadTareas(),
@@ -33899,6 +33750,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-22', emoji: '🧹', titulo: 'Ficha del lead más corta', texto: 'Quitamos de la ficha lo que nadie usaba: Próxima acción, Tarifas para su fecha, Pagos y captación y Link de pago. Gestión (servicio, asesor y monto de la venta) pasó arriba, y las reservas quedan junto al chat, la nota y el historial. Si necesitas que te recuerden un lead, toca ⋯ y elige "Recordar mañana" (a las 9:00). En un lead en espera de pago, el botón principal ahora es "Crear reserva".', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-22', emoji: '💾', titulo: 'La ficha del lead se guarda sola', texto: 'Ya no hay botón "Guardar cambios": cada dato se guarda al elegirlo o al salir del campo, y arriba ves "Guardado" con la hora. El estado se cambia desde arriba de la ficha, junto al botón del siguiente paso. Los datos del cliente se leen como lista (toca "Editar" para cambiarlos) y la consulta larga se recorta con "Ver más". Ya no hay pestañas: la nota del equipo, los últimos mensajes con la IA y el historial están dentro de la misma ficha. Si eliges un estado de venta, te pide el monto antes de guardarlo.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-22', emoji: '🗂️', titulo: 'Tarjetas de leads más claras', texto: 'Cada tarjeta de lead muestra arriba el estado y hace cuánto llegó, la consulta del cliente resumida en dos líneas y la última oferta que le mostró la IA. Abajo tiene un solo botón con el siguiente paso según el estado (Atender, Cotizar, Crear reserva, Link de pago o Ver reservas) y en "⋯" el resto de las acciones, sin abrir la ficha. La prioridad de la IA ahora dice "Alta" o "Media" en vez de un símbolo.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-22', emoji: '👓', titulo: 'Letra más grande y más fácil de leer', texto: 'En Mi Perfil → Personalización ahora eliges el tamaño de letra entre Chico, Normal, Grande (más grande que antes) y Muy grande, y también el tipo de letra: Inter (la de siempre), Atkinson Hyperlegible (letras bien distintas, pensada para vista cansada), Lexend (más espaciada) o Source Sans 3 (nítida en tablas y montos). Si se te cansa la vista, prueba Grande con Atkinson y el tema Sereno.', roles: ['admin', 'asesor', 'marketing', 'administrativo', 'boleteria'] },

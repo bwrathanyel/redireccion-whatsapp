@@ -4288,20 +4288,16 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 
 .dresumen-cols .dsec{--sec-c:var(--accent-ink)}
 .dresumen-cols .dsec[data-dsec="datos"],.dresumen-cols .dsec[data-dsec="reservas"]{--sec-c:var(--blue)}
-.dresumen-cols .dsec[data-dsec="proxima"]{--sec-c:var(--amber)}
-.dresumen-cols .dsec[data-dsec="tarifas-fecha"]{--sec-c:var(--purple)}
-.dresumen-cols .dsec[data-dsec="pagos"]{--sec-c:var(--green)}
-.dresumen-cols .dsec[data-dsec="link-pago"]{--sec-c:var(--pink)}
 .dresumen-cols .dsec>summary{gap:11px;font-size:13px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--txt)}
 .dresumen-cols .dsec>summary .dsec-ic{display:grid;place-items:center;width:30px;height:30px;flex-shrink:0;border-radius:10px;font-size:13px;color:var(--sec-c);background:color-mix(in srgb,var(--sec-c) 15%,transparent)}
 .dresumen-cols .dsec>summary .dsec-arrow{display:grid;place-items:center;width:26px;height:26px;border-radius:999px;background:rgba(var(--ink-rgb),.04)}
 
-.dresumen-cols .fl{font-size:11px;font-weight:700;margin:11px 0 5px}
-.dresumen-cols .ei{background-color:rgba(var(--ink-rgb),.04);border-width:1px;font-size:14px;transition:border-color .16s,box-shadow .16s,background-color .16s}
-.dresumen-cols .ei:hover:not(:focus):not(:disabled){border-color:rgba(var(--ink-rgb),.22)}
-.dresumen-cols .ei:focus{background-color:rgba(var(--accent-rgb),.05)}
-.dresumen-cols .ei:disabled{opacity:.7;cursor:not-allowed}
-.dresumen-cols .ei::placeholder{color:var(--muted2)}
+.dresumen-cols .fl,.dgestion .fl{font-size:11px;font-weight:700;margin:11px 0 5px}
+.dresumen-cols .ei,.dgestion .ei{background-color:rgba(var(--ink-rgb),.04);border-width:1px;font-size:14px;transition:border-color .16s,box-shadow .16s,background-color .16s}
+.dresumen-cols .ei:hover:not(:focus):not(:disabled),.dgestion .ei:hover:not(:focus):not(:disabled){border-color:rgba(var(--ink-rgb),.22)}
+.dresumen-cols .ei:focus,.dgestion .ei:focus{background-color:rgba(var(--accent-rgb),.05)}
+.dresumen-cols .ei:disabled,.dgestion .ei:disabled{opacity:.7;cursor:not-allowed}
+.dresumen-cols .ei::placeholder,.dgestion .ei::placeholder{color:var(--muted2)}
 .dresumen-cols .dsave .dbtn.save{min-height:48px;border-radius:12px;box-shadow:0 10px 22px rgba(var(--accent-rgb),.22)}
 
 @media(min-width:761px){
@@ -7454,6 +7450,45 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           </div>
           <div class="msg-conv-log dm-log" id="wa-conv-log" hidden></div>
           <div class="msg-readonly-note" id="wa-conv-nota" hidden><i class="fas fa-lock"></i> Solo lectura — el bot responde aquí; el asesor atiende por su WhatsApp</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHATSAPP EMPRESA: número de campañas por Cloud API, atendido a mano (whatsapp-bandeja.js) -->
+    <section class="section" id="sec-wa-bandeja">
+      <div class="dm-shell wa-shell" id="wb-shell" data-canal="whatsapp">
+        <aside class="card dm-lista" aria-label="Chats de WhatsApp de la empresa">
+          <div class="wa-cab">
+            <div class="wa-cab-tit"><i class="fa-brands fa-whatsapp"></i> WhatsApp empresa</div>
+            <button class="chat-tool-btn" id="wb-recargar" type="button" aria-label="Actualizar"><i class="fas fa-rotate"></i></button>
+          </div>
+          <input class="dm-buscar" id="wb-buscar" type="search" placeholder="Buscar nombre o teléfono" aria-label="Buscar chat">
+          <div class="msg-inbox dm-inbox wa-lista" id="wb-inbox"></div>
+        </aside>
+        <div class="card dm-chat" id="wb-conv">
+          <div class="dm-vacio" id="wb-vacio"><i class="fa-brands fa-whatsapp"></i><div>Elija un chat</div><div class="dm-vacio-sub">Los clientes que respondieron al número de la empresa. Contesta desde aquí.</div></div>
+          <div class="dm-chat-head" id="wb-head" hidden>
+            <button class="msg-conv-back" id="wb-back" type="button" aria-label="Volver a la lista"><i class="fas fa-arrow-left"></i></button>
+            <div class="msg-avatar dm-avatar" id="wb-avatar" data-canal="whatsapp"></div>
+            <div class="dm-chat-titulos">
+              <div class="msg-conv-titulo" id="wb-titulo"></div>
+              <div class="msg-conv-sub" id="wb-sub"></div>
+            </div>
+            <button class="chat-tool-btn" id="wb-ver-lead" type="button"><i class="fas fa-user"></i> Ver lead</button>
+          </div>
+          <div class="msg-conv-log dm-log" id="wb-log" role="log" aria-live="polite" hidden></div>
+          <div class="wb-compose" id="wb-compose" hidden>
+            <button class="wb-ico" id="wb-adjuntar" type="button" title="Adjuntar foto o documento" aria-label="Adjuntar"><i class="fas fa-paperclip"></i></button>
+            <input type="file" id="wb-archivo" accept="image/jpeg,image/png,application/pdf,.doc,.docx,.xls,.xlsx" hidden>
+            <textarea id="wb-texto" rows="1" placeholder="Escribe un mensaje" aria-label="Escribe un mensaje" enterkeyhint="send" maxlength="4096"></textarea>
+            <button class="wb-send" id="wb-enviar" type="button" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
+          </div>
+          <div class="wb-plantilla" id="wb-plantilla" hidden>
+            <select id="wb-pl-sel" aria-label="Plantilla"></select>
+            <div class="wb-plantilla-cuerpo" id="wb-pl-cuerpo"></div>
+            <div id="wb-pl-vars" style="display:flex;flex-direction:column;gap:8px"></div>
+            <button class="wb-send" id="wb-pl-enviar" type="button" style="width:auto;border-radius:20px;padding:0 18px" disabled><i class="fas fa-paper-plane"></i>&nbsp; Enviar plantilla</button>
+          </div>
         </div>
       </div>
     </section>
