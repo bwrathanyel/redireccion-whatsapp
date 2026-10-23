@@ -5499,17 +5499,25 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 #sec-facturacion #cxp-tbody.cxp-por-proveedor{grid-template-columns:minmax(0,1fr)}
 #cxp-abrir-todo[hidden]{display:none}
 /* Franja del proveedor (tintada, desplegable) vs. zona de clientes (fondo hundido, barra de color a la izquierda). */
-.cxp-ficha{padding:0;gap:0;overflow:hidden}
-.cxp-ficha:hover{transform:none}
-.cxp-cab{display:flex;flex-direction:column;gap:10px;padding:14px 16px;list-style:none;cursor:pointer;user-select:none;background:var(--accent-soft)}
+.cxp-ficha{padding:0;gap:0;overflow:hidden;border-color:var(--line2);border-left:4px solid var(--amber);box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.cxp-ficha:hover{transform:none;border-left-color:var(--amber)}
+.cxp-ficha.lt-card-hecha,.cxp-ficha.lt-card-hecha:hover{border-left-color:var(--green)}
+.cxp-cab{display:flex;flex-direction:column;gap:10px;padding:14px 16px;list-style:none;cursor:pointer;user-select:none;background:var(--panel-solid)}
 .cxp-cab::-webkit-details-marker{display:none}
 .cxp-cab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .cxp-ficha[open]>.cxp-cab{border-bottom:1px solid var(--line2)}
 .cxp-ficha .lt-card-tit{font-size:15px}
-.cxp-chev{font-size:11px;color:var(--accent-ink);transition:transform var(--dur-rapida)}
+.cxp-chev{font-size:11px;color:var(--muted);transition:transform var(--dur-rapida),color var(--dur-rapida)}
+.cxp-cab:hover .cxp-chev{color:var(--txt)}
 .cxp-ficha[open] .cxp-chev{transform:rotate(90deg)}
 .cxp-n{font-size:11.5px;color:var(--muted);white-space:nowrap}
 .cxp-ficha .lt-cifras div{justify-content:flex-end}
+.cxp-ficha .lt-cifras{gap:0}
+.cxp-ficha .lt-cifras div{padding:0 14px}
+.cxp-ficha .lt-cifras div:first-child{padding-left:0}
+.cxp-ficha .lt-cifras div+div{border-left:1px solid var(--line2)}
+.cxp-ficha .lt-cifras b{font-size:15px}
+.cxp-ficha .lt-cifras div:last-child b{font-size:20px;line-height:1.1}
 .cxp-ficha .lt-cifras span{white-space:normal;line-height:1.2}
 .cxp-filas,.cxp-pagadas{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(250px,100%),1fr));gap:10px;padding:12px 14px;background:var(--bg)}
 .cxp-pagadas{grid-column:1/-1;padding:0}
@@ -5535,6 +5543,9 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 @media(max-width:760px){
   #cxp-tbody .cxp-filas{padding:8px}
   #cxp-tbody .cxp-cab{padding:12px}
+  #cxp-tbody .cxp-ficha .lt-cifras div{padding:0 8px}
+  #cxp-tbody .cxp-ficha .lt-cifras div:first-child{padding-left:0}
+  #cxp-tbody .cxp-ficha .lt-cifras div:last-child b{font-size:17px}
   #cxp-tbody .cxp-acc .btn-sm{min-height:44px}
   #cxp-tbody .cxp-ver-pagadas{min-height:44px}
   .cxp-n{display:none}

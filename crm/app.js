@@ -22253,7 +22253,7 @@ async function loadTarifario() {
     const bIds = ids('bloque_id'), pIds = ids('producto_id');
     const [rb, rpr] = await Promise.all([
       bIds.length ? sb.from('tarifario_bloques').select('*').in('id', bIds) : { data: [] },
-      pIds.length ? sb.from('productos').select('id,nombre,destino,producto_fotos(storage_path,orden,es_principal,activo)').in('id', pIds) : { data: [] },
+      pIds.length ? sb.from('productos').select('id,nombre,destino,oculto_sin_foto,producto_fotos(storage_path,orden,es_principal,activo)').in('id', pIds) : { data: [] },
     ]);
     const err = rb.error || rpr.error;
     if (err) return err;
@@ -22990,6 +22990,9 @@ function renderTarifario() {
       if (fNinos && ag.ninosMax < 1) return false;
       if (fVigente && !ag.algunaVigente) return false;
       if (fOcultarOcultos && x.activo === false) return false;
+      // Hotel sin foto real (productos.oculto_sin_foto): la web ya lo oculta; acá solo la oficina
+      // lo ve, y con "Ocultar ocultos" desmarcado.
+      if (x.oculto_sin_foto && (!esOficina() || fOcultarOcultos)) return false;
       if (fGrupo && !ag.capacidadDesconocida && ag.capacidadMax < fGrupo) return false;
     } else if (tarTab === 'promo') {
       // Las retiradas (revisado=false) salen SOLO con el chip "Ver ocultas".
@@ -22998,12 +23001,15 @@ function renderTarifario() {
       // lo que el barrido ya apagó.
       if (x.revisado === false) { if (!fOcultas) return false; }
       else if (fVigente && !promoVigente(x)) return false;
+      // Promo de un hotel sin foto real: igual que la web, solo sale con "Ver ocultas" (oficina).
+      if (x.productos?.oculto_sin_foto && !fOcultas) return false;
       if (fDestino && destinoDe(x) !== fDestino) return false;
       if (fTipo && !(x.incluye_tags || []).includes(fTipo)) return false;
       if (fPrecio != null && tarSuperaPrecioMax(x.precio_desde_usd, x.moneda, fPrecio)) return false;
       if (fNinos && !(x.ninos_gratis_cantidad > 0)) return false;
       if (fMes != null && !promoDisponibleEnMes(x, fMes)) return false;
     } else if (tarTab === 'hotsale') {
+      if (x.productos?.oculto_sin_foto) return false;
       if (fDestino && destinoDe(x) !== fDestino) return false;
       if (fVigente && !promoVigente(x)) return false;
     } else if (tarTab === 'paquete') {
@@ -23149,6 +23155,10 @@ function renderTarifario() {
     if (esOficina() && ((tarTab === 'promo' || tarTab === 'hotsale') ? x.revisado === false : x.activo === false)) {
       el.classList.add('tar-oculto-admin');
       el.insertAdjacentHTML('afterbegin', '<span class="tar-oculto-badge">Oculto</span>');
+    } else if (esOficina() && (tarTab === 'promo' ? x.productos?.oculto_sin_foto : tarTab === 'hotel' && x.oculto_sin_foto)) {
+      // Oculto de la web por falta de foto real del hotel (el admin lo ve para poder subirle fotos).
+      el.classList.add('tar-oculto-admin');
+      el.insertAdjacentHTML('afterbegin', '<span class="tar-oculto-badge" title="La web no lo muestra: el hotel no tiene una foto real que muestre el alojamiento">Sin foto</span>');
     }
     // Promo sin hotel vinculado: dato faltante (ámbar), no error. Solo admin.
     if (esOficina() && (tarTab === 'promo' || tarTab === 'hotsale') && !x.producto_id) {
@@ -33966,6 +33976,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '📷', titulo: 'Hoteles sin foto real ya no se ven', texto: 'Los hoteles que no tienen ninguna foto que muestre el alojamiento (sin fotos, solo imágenes generadas por IA, o solo planos y logos) dejaron de aparecer en la web y en el Tarifario, junto con sus promociones. Los administradores los siguen viendo con la marca "Sin foto" (en Hoteles, desmarcando "Ocultar ocultos"; en Promociones, con "Ver ocultas"). En cuanto se sube una foto real del hotel, reaparece solo.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-23', emoji: '🏷️', titulo: 'Tarjetas del Tarifario más limpias', texto: 'El precio ahora va en una pastilla sobre la foto (por ejemplo "$50 p/p · noche"; pasa el mouse para ver el texto completo del proveedor). Debajo de la foto queda el hotel, el nombre de la habitación o promo sin repetir el hotel, una línea de descripción y, al final, hasta cuándo se vende y unos íconos de lo que incluye (vuelo, traslado, comidas, excursión…) con el detalle al pasar el mouse. El resto de la información sigue completa al abrir la tarjeta.', roles: ['admin', 'asesor', 'marketing'] },
   { fecha: '2026-10-22', emoji: '🧹', titulo: 'Ficha del lead más corta', texto: 'Quitamos de la ficha lo que nadie usaba: Próxima acción, Tarifas para su fecha, Pagos y captación y Link de pago. Gestión (servicio, asesor y monto de la venta) pasó arriba, y las reservas quedan junto al chat, la nota y el historial. Si necesitas que te recuerden un lead, toca ⋯ y elige "Recordar mañana" (a las 9:00). En un lead en espera de pago, el botón principal ahora es "Crear reserva".', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-22', emoji: '💾', titulo: 'La ficha del lead se guarda sola', texto: 'Ya no hay botón "Guardar cambios": cada dato se guarda al elegirlo o al salir del campo, y arriba ves "Guardado" con la hora. El estado se cambia desde arriba de la ficha, junto al botón del siguiente paso. Los datos del cliente se leen como lista (toca "Editar" para cambiarlos) y la consulta larga se recorta con "Ver más". Ya no hay pestañas: la nota del equipo, los últimos mensajes con la IA y el historial están dentro de la misma ficha. Si eliges un estado de venta, te pide el monto antes de guardarlo.', roles: ['admin', 'asesor'] },
