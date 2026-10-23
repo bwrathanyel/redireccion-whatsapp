@@ -2196,6 +2196,9 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .msg-inbox-row:hover{background:rgba(255,255,255,.04)}
 .msg-inbox-row.grupo{background:var(--accent-soft);border:1px solid rgba(var(--accent-rgb),.2);margin-bottom:8px}
 .msg-avatar{flex-shrink:0;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-deep));display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:700}
+:root{--chat-avatar-saturation:52%;--chat-avatar-lightness:58%}
+.msg-avatar.persona{background:color-mix(in srgb,var(--chat-avatar-color) 24%,var(--bg2));color:var(--txt);outline:1px solid color-mix(in srgb,var(--chat-avatar-color) 42%,transparent);outline-offset:-1px}
+.msg-avatar.foto{background-size:cover;background-position:center}
 .msg-avatar.grupo{background:linear-gradient(135deg,var(--blue),#2f6fd6)}
 .msg-inbox-body{flex:1;min-width:0}
 .msg-inbox-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}

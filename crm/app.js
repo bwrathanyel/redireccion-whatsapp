@@ -26677,10 +26677,14 @@ function chatTextoUltimo(um) {
   if (um.eliminado) return '🚫 Mensaje eliminado';
   return um.tipo === 'texto' ? (um.contenido || '') : (MSG_PREVIEW_ICONO[um.tipo] || '');
 }
+// La identidad del color depende del UUID, no del orden ni de la presencia.
+function chatColorPersona(uid, nombre) {
+  return `hsl(${seedHash(uid || nombre || '') % 360} var(--chat-avatar-saturation) var(--chat-avatar-lightness))`;
+}
 function chatAvatarHtml(nombre, url, grupo, uid) {
   const en = !grupo && uid && chatEnLinea.has(uid) ? '<span class="cp-dot" title="En línea"></span>' : '';
-  const estilo = url ? ` style="background-image:url(${esc(JSON.stringify(url))})"` : '';
-  return `<div class="msg-avatar${grupo ? ' grupo' : ''}${url ? ' foto' : ''}" data-uid="${esc(uid || '')}"${estilo}>${url ? '' : grupo ? '<i class="fas fa-users"></i>' : esc(initials(nombre))}${en}</div>`;
+  const estilo = url ? ` style="background-image:url(${esc(JSON.stringify(url))})"` : !grupo ? ` style="--chat-avatar-color:${chatColorPersona(uid, nombre)}"` : '';
+  return `<div class="msg-avatar${grupo ? ' grupo' : !url ? ' persona' : ''}${url ? ' foto' : ''}" data-uid="${esc(uid || '')}"${estilo}>${url ? '' : grupo ? '<i class="fas fa-users"></i>' : esc(initials(nombre))}${en}</div>`;
 }
 function renderBandeja(animar) {
   const cont = chatEl('msg-inbox');
@@ -26717,10 +26721,10 @@ function chatRefrescarBandeja() { chatAgendar('bandeja', 350, async () => { if (
 
 async function abrirPickerNuevoChat() {
   const lista = await cargarUsuariosStaff();
-  const candidatos = lista.filter(u => u.id !== MI_USUARIO_ID);
+  const candidatos = lista.filter(u => u.id !== MI_USUARIO_ID && !/^__gate_/i.test((u.nombre || '').trim()));
   chatEl('msg-picker-list').innerHTML = candidatos.map(u => `
     <div class="msg-picker-row" data-uid="${u.id}">
-      <div class="msg-avatar">${esc(initials(u.nombre))}</div>
+      ${chatAvatarHtml(u.nombre, u.avatar_url, false, u.id)}
       <div><div class="msg-picker-nombre">${esc(u.nombre)}</div><div class="msg-picker-rol">${esc(u.rol)}</div></div>
     </div>`).join('') || '<div class="msg-empty">No hay contactos disponibles</div>';
   document.querySelectorAll('#msg-picker-list .msg-picker-row').forEach(row => row.addEventListener('click', async () => {
@@ -26747,7 +26751,9 @@ function chatPintarCabecera() {
   const c = msgActual; if (!c) return;
   const esGrupo = c.tipo === 'grupo';
   const av = chatEl('cp-conv-avatar');
-  av.className = 'msg-avatar' + (esGrupo ? ' grupo' : '') + (c.otro_avatar ? ' foto' : '');
+  av.className = 'msg-avatar' + (esGrupo ? ' grupo' : !c.otro_avatar ? ' persona' : '') + (c.otro_avatar ? ' foto' : '');
+  if (!esGrupo && !c.otro_avatar) av.style.setProperty('--chat-avatar-color', chatColorPersona(c.otro_usuario_id, c.nombre));
+  else av.style.removeProperty('--chat-avatar-color');
   av.style.backgroundImage = c.otro_avatar ? `url(${JSON.stringify(c.otro_avatar)})` : '';
   av.innerHTML = c.otro_avatar ? '' : esGrupo ? '<i class="fas fa-users"></i>' : esc(initials(c.nombre));
   if (!esGrupo && chatEnLinea.has(c.otro_usuario_id)) av.insertAdjacentHTML('beforeend', '<span class="cp-dot"></span>');
