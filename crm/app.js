@@ -20686,17 +20686,20 @@ function setupReservasEmpresas() {
    La comisión nace sola cuando la reserva queda pagada completa (trigger en la base) y el invoice
    se emite y se envía solo al cerrar el corte. Todo pasa por RPC comision_* (las tablas no tienen
    policies). El corte (pago_el) y el % los decide el servidor con su propio reloj; acá solo se muestran. */
-let CM_TAB = null, CM_VENTAS = [], CM_CTX = null, CM_CFG = null, CM_IR_CORTE = null;
+let CM_TAB = null, CM_VENTAS = [], CM_CTX = null, CM_CFG = null, CM_INVS = [], CM_IR = null, CM_EST = 'pend';
 const CM_TIPOS = ['boletos', 'traslado', 'hospedaje', 'paquete'];
-const CM_ESTADO = { enviada: 'Por verificar', verificada: 'Verificada', rechazada: 'Rechazada', liquidada: 'En invoice', emitida: 'Emitido', pagada: 'Pagado', anulada: 'Anulado' };
+const CM_TIPO_TXT = { boletos: 'Boletos', traslado: 'Traslado', hospedaje: 'Hospedaje', paquete: 'Paquete' };
+// "Pendiente" = ya tiene comisión y todavía no se pagó (verificada sola o metida en un invoice emitido).
+const CM_PEND = ['verificada', 'liquidada'];
+const CM_ESTADO = { verificada: 'Pendiente', liquidada: 'En invoice', pagada: 'Pagada', rechazada: 'Rechazada' };
+const CM_ESTADO_INV = { emitida: 'Emitido', pagada: 'Pagado', anulada: 'Anulado' };
 const CM_ERR = {
   reserva_no_existe: 'La reserva no existe', reserva_inactiva: 'La reserva está inactiva',
-  no_esta_enviada: 'La venta ya no está por verificar', no_se_puede_rechazar: 'La venta ya no se puede rechazar',
+  no_se_puede_rechazar: 'La venta ya no se puede rechazar',
   invoice_cerrado: 'Ese invoice ya está pagado o enviado: el PDF no se puede cambiar',
-  motivo_requerido: 'Escribe el motivo del rechazo', sin_ventas_verificadas: 'No hay ventas verificadas de ese vendedor en ese corte',
+  motivo_requerido: 'Escribe el motivo del rechazo', sin_ventas_verificadas: 'No hay ventas pendientes de ese vendedor en ese corte',
   no_esta_emitida: 'El invoice ya no está emitido', tipo_invalido: 'Tipo de servicio inválido',
   porcentaje_invalido: 'El % tiene que estar entre 0 y 100', texto_invalido: 'Condiciones y términos no pueden quedar vacíos',
-  umbral_invalido: 'El umbral tiene que estar entre 0 y 100.000', umbral_requerido: 'Para activar la verificación automática indica un umbral mayor a 0',
 };
 const cmFecha = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') : '—';
 const cmFechaCorta = d => d ? String(d).slice(0, 10).split('-').reverse().slice(0, 2).join('/') : '—';
@@ -20704,7 +20707,17 @@ const cmErr = (data, error, def) => error ? (error.code === '42501' ? 'No tienes
   : data?.error === 'corte_abierto' ? `El corte todavía está abierto: el invoice se emite el ${fmtFechaHoraCaracas(data.cierra_en)}`
   : data?.error === 'numero_invalido' ? `El número tiene que ser ${data.minimo} o mayor (ya hay invoices emitidos)`
   : CM_ERR[data?.error] || def;
-const cmChip = (e, auto) => `<span class="cm-estado" data-e="${esc(e)}">${esc(CM_ESTADO[e] || e)}</span>${auto ? ' <span class="chip" title="Verificada automáticamente por la regla del umbral">Auto</span>' : ''}`;
+const cmChip = (e, inv) => `<span class="cm-estado" data-e="${esc(e)}">${esc((inv ? CM_ESTADO_INV : CM_ESTADO)[e] || e)}</span>`;
+const cmPlural = (n, s) => `${n} ${s}${n === 1 ? '' : 's'}`;
+const cmNorm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// Fechas de pago en hora Caracas: "Miércoles 05/11" y "Faltan 13 días".
+const cmHoy = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
+const cmDias = d => Math.round((Date.parse(String(d).slice(0, 10)) - Date.parse(cmHoy())) / 864e5);
+const cmFechaLarga = d => {
+  const dia = new Date(String(d).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('es-VE', { weekday: 'long', timeZone: 'UTC' });
+  return `${dia[0].toUpperCase()}${dia.slice(1)} ${cmFechaCorta(d)}`;
+};
+const cmFalta = n => n === 0 ? 'Es hoy' : n === 1 ? 'Es mañana' : n > 1 ? `Faltan ${n} días` : `Venció hace ${-n} día${n === -1 ? '' : 's'}`;
 
 function setupComisiones() {
   const tabs = document.getElementById('cm-tabs');
@@ -20712,19 +20725,20 @@ function setupComisiones() {
   tabs._wired = true;
   tabs.querySelectorAll('[data-cm-rol]').forEach(b => { if (!b.dataset.cmRol.split(' ').includes(ROL)) b.style.display = 'none'; });
   document.getElementById('cm-tab-ventas').textContent = esOficina() ? 'Ventas' : 'Mis ventas';
-  document.getElementById('cm-ventas-titulo').textContent = esOficina() ? 'Ventas con comisión' : 'Mis ventas';
-  document.getElementById('cm-f-vendedor-wrap').style.display = esOficina() ? '' : 'none';
+  document.getElementById('cm-f-vendedor').style.display = esOficina() ? '' : 'none';
   tabs.addEventListener('click', e => { const b = e.target.closest('[data-cm-tab]'); if (b) cmTab(b.dataset.cmTab); });
-  document.getElementById('cm-cortes').addEventListener('click', e => {
-    const b = e.target.closest('[data-cm-corte]');
-    if (b) { CM_IR_CORTE = b.dataset.cmCorte; cmTab('ventas'); }
+  document.querySelector('#sec-comisiones [data-cm-panel="resumen"]').addEventListener('click', cmClickResumen);
+  ['cm-f-corte', 'cm-f-vendedor'].forEach(id => document.getElementById(id).addEventListener('change', cmRenderVentas));
+  document.getElementById('cm-buscar').addEventListener('input', cmRenderVentas);
+  document.getElementById('cm-f-estado').addEventListener('click', e => {
+    const b = e.target.closest('[data-cm-est]');
+    if (b) { CM_EST = b.dataset.cmEst; cmRenderVentas(); }
   });
-  ['cm-f-corte', 'cm-f-vendedor', 'cm-f-estado'].forEach(id => document.getElementById(id).addEventListener('change', cmRenderVentas));
-  document.getElementById('cm-ver-lista').addEventListener('click', cmAccionVenta);
-  document.getElementById('cm-inv-tbody').addEventListener('click', cmAccionInvoice);
+  document.getElementById('cm-ventas-lista').addEventListener('click', cmAccionVenta);
+  document.getElementById('cm-inv-lista').addEventListener('click', cmAccionInvoice);
+  document.getElementById('cm-mis-inv-lista').addEventListener('click', cmAccionInvoice);
   document.getElementById('cm-reglas-tbody').addEventListener('change', cmGuardarRegla);
   document.getElementById('cm-cfg-guardar').addEventListener('click', cmGuardarConfig);
-  document.getElementById('cm-auto-guardar').addEventListener('click', cmGuardarAutoverif);
 }
 function cmTab(tab) {
   CM_TAB = tab;
@@ -20747,58 +20761,95 @@ async function pvComisionPintar(reservaId) {
   if (!el || error || !data?.existe || PV_ACTUAL?.id !== reservaId) return;
   el.innerHTML = `<div class="cm-linea-reserva"><i class="fas fa-sack-dollar"></i> Comisión: <b>${ivMoney(data.comision_total)}</b> · se paga el ${cmFecha(data.pago_el)} ${cmChip(data.estado)}${ROL === 'asesor' ? '' : ` · ${esc(data.vendedor || '')}`}</div>`;
 }
-const cmAvisoCorte = c => c ? `Lo que se pague completo ahora entra en el pago del <b>${cmFecha(c.pago_el)}</b> (ese corte cierra el ${esc(fmtFechaHoraCaracas(c.cierra_en))}).` : '';
 
 async function cmCargarVentas() {
   const [ctx, { data, error }] = await Promise.all([cmLoadContexto(), sb.rpc('comision_ventas_listar')]);
   if (error) { errToast('No se pudieron cargar las comisiones'); return false; }
   CM_VENTAS = data || [];
-  const pend = CM_VENTAS.filter(v => v.estado === 'enviada').length;
-  const badge = document.getElementById('cm-pend-count');
-  badge.textContent = pend;
-  badge.style.display = pend > 0 && esOficina() ? '' : 'none';
   return !!ctx;
 }
 
-// Agrupa por día de pago. Rechazadas y anuladas no cuentan: no se van a pagar.
+// Agrupa por día de pago. Rechazadas no cuentan: no se van a pagar.
 function cmCortes() {
   const mapa = new Map();
+  const vacio = pago_el => ({ pago_el, n: 0, total: 0, nPend: 0, pend: 0, pagadas: 0, enInvoice: 0, ventas: [] });
   CM_VENTAS.filter(v => v.estado !== 'rechazada').forEach(v => {
-    const g = mapa.get(v.pago_el) || { pago_el: v.pago_el, n: 0, total: 0, pagadas: 0, enInvoice: 0 };
-    g.n++; g.total += Number(v.comision_total || 0);
+    const g = mapa.get(v.pago_el) || vacio(v.pago_el), m = Number(v.comision_total || 0);
+    g.n++; g.total += m; g.ventas.push(v);
+    if (CM_PEND.includes(v.estado)) { g.nPend++; g.pend += m; }
     if (v.estado === 'pagada') g.pagadas++;
     if (v.estado === 'liquidada') g.enInvoice++;
     mapa.set(v.pago_el, g);
   });
   const abierto = CM_CTX?.pago_el;
-  if (abierto && !mapa.has(abierto)) mapa.set(abierto, { pago_el: abierto, n: 0, total: 0, pagadas: 0, enInvoice: 0 });
+  if (abierto && !mapa.has(abierto)) mapa.set(abierto, vacio(abierto));
   return [...mapa.values()].sort((a, b) => (a.pago_el < b.pago_el ? 1 : -1)).map(g => ({
     ...g, estado: g.n && g.pagadas === g.n ? 'pagada' : g.pago_el >= abierto ? 'en curso' : g.enInvoice ? 'liquidada' : 'cerrado',
   }));
 }
-const CM_CORTE_TXT = { 'en curso': 'En curso', cerrado: 'Cerrado', liquidada: 'Invoice emitido', pagada: 'Pagado' };
+const CM_CORTE_TXT = { 'en curso': 'Corte abierto', cerrado: 'Cerrado', liquidada: 'Invoice emitido', pagada: 'Pagado' };
+const cmChipCorte = e => `<span class="cm-estado" data-e="${({ pagada: 'pagada', liquidada: 'liquidada', 'en curso': 'curso' })[e] || ''}">${CM_CORTE_TXT[e]}</span>`;
+
+// Reparto de un pago: por vendedor para la oficina, venta por venta para el asesor.
+// Cada fila abre Ventas filtrada por ese pago (y ese vendedor).
+function cmRepartoHtml(c, soloPend) {
+  const ventas = soloPend ? c.ventas.filter(v => CM_PEND.includes(v.estado)) : c.ventas;
+  const fila = (nombre, detalle, monto, vend) => `<button type="button" class="cm-rf" data-cm-ir="${esc(c.pago_el)}" data-cm-ir-vend="${esc(vend || '')}" data-cm-ir-est="${soloPend ? 'pend' : ''}">
+      <span class="cm-rf-nom">${esc(nombre)}</span><span class="cm-rf-n">${esc(detalle)}</span><b>${ivMoney(monto)}</b><i class="fas fa-chevron-right" aria-hidden="true"></i></button>`;
+  if (!esOficina()) return ventas.map(v => fila(v.cliente_nombre, v.destino || v.reserva_codigo || '', v.comision_total)).join('');
+  const por = new Map();
+  ventas.forEach(v => {
+    const p = por.get(v.usuario_id) || { id: v.usuario_id, nombre: v.vendedor, n: 0, total: 0 };
+    p.n++; p.total += Number(v.comision_total || 0);
+    por.set(v.usuario_id, p);
+  });
+  return [...por.values()].sort((a, b) => b.total - a.total).map(p => fila(p.nombre, cmPlural(p.n, 'venta'), p.total, p.id)).join('');
+}
 
 async function cmLoadResumen() {
-  const [ok] = await Promise.all([cmCargarVentas(), cmLoadSinVenta()]);
+  const [ok] = await Promise.all([cmCargarVentas(), cmLoadSinVenta(), cmLoadMisInvoices()]);
   if (!ok) return;
   const cortes = cmCortes();
   const abierto = cortes.find(c => c.pago_el === CM_CTX.pago_el);
-  const proximo = [...cortes].reverse().find(c => c.estado !== 'pagada' && c.n);
-  const mes = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Caracas' }).slice(0, 7);
-  const pagado = CM_VENTAS.filter(v => v.estado === 'pagada' && String(v.pago_el).slice(0, 7) === mes).reduce((s, v) => s + Number(v.comision_total || 0), 0);
-  const kpi = (color, icono, titulo, valor, detalle) => `<div class="kpi" style="--kc:var(--${color})"><div class="kt"><i class="fas ${icono}"></i> ${titulo}</div><div class="kv">${valor}</div><div class="kd">${detalle}</div></div>`;
-  document.getElementById('cm-kpis').innerHTML =
-    kpi('accent', 'fa-calendar-day', 'Próximo pago', proximo ? ivMoney(proximo.total) : '$0.00', proximo ? `El ${cmFecha(proximo.pago_el)} · ${proximo.n} venta${proximo.n === 1 ? '' : 's'}` : 'No tienes pagos pendientes')
-    + kpi('blue', 'fa-hourglass-half', 'Corte en curso', ivMoney(abierto?.total || 0), `Pago del ${cmFecha(CM_CTX.pago_el)} · cierra el ${esc(fmtFechaHoraCaracas(CM_CTX.cierra_en))}`)
-    + kpi('green', 'fa-circle-check', 'Pagado este mes', ivMoney(pagado), 'Comisiones ya depositadas');
-  document.getElementById('cm-aviso-corte').innerHTML = cmAvisoCorte(CM_CTX);
-  document.getElementById('cm-cortes').innerHTML = cortes.slice(0, 8).map(c => `
-    <button type="button" class="cm-corte" data-cm-corte="${c.pago_el}">
-      <span><b>Pago del ${cmFecha(c.pago_el)}</b> ${cmChipCorte(c.estado)}<small>${c.n ? `${c.n} venta${c.n === 1 ? '' : 's'}` : 'Sin ventas todavía'}</small></span>
-      <span class="cm-corte-monto">${ivMoney(c.total)}</span>
-    </button>`).join('');
+  if (!abierto) return;
+  // Próximo pago: el más viejo que todavía debe algo; si no debe nada, el del corte abierto.
+  const proximo = [...cortes].reverse().find(c => c.nPend) || abierto;
+  const dias = cmDias(proximo.pago_el), reparto = cmRepartoHtml(proximo, true);
+  const vacio = esOficina() ? 'Todavía no hay comisiones en este pago.' : 'Todavía no tienes comisiones en este pago. Aparecen solas cuando una de tus reservas queda pagada completa.';
+  document.getElementById('cm-proximo').innerHTML = `<article class="lt-card cm-proximo">
+    <div class="lt-card-cab"><span class="cm-etq"><i class="fas fa-calendar-day" aria-hidden="true"></i> Próximo pago</span>${dias < 0 ? '<span class="cm-estado" data-e="atrasado">Atrasado</span>' : cmChipCorte(proximo.estado)}</div>
+    <div class="cm-prox-cuerpo">
+      <div class="cm-prox-fecha"><b>${cmFechaLarga(proximo.pago_el)}</b><span${dias === 0 || dias === 1 ? ' class="cm-hoy"' : ''}>${cmFalta(dias)}</span></div>
+      <div class="cm-prox-total">${ivMoney(proximo.pend)}</div>
+    </div>
+    ${proximo === abierto ? `<div class="cm-nota">El corte cierra el ${esc(fmtFechaHoraCaracas(CM_CTX.cierra_en))}: lo que se pague completo antes se suma a este pago.</div>` : ''}
+    ${reparto ? `<div class="cm-reparto">${reparto}</div>` : `<div class="cm-nota">${proximo.n ? 'Todo lo de este pago ya está pagado.' : vacio}</div>`}
+  </article>`;
+
+  const mes = cmHoy().slice(0, 7);
+  const pagadasMes = CM_VENTAS.filter(v => v.estado === 'pagada' && String(v.pago_el).slice(0, 7) === mes);
+  const pagado = pagadasMes.reduce((s, v) => s + Number(v.comision_total || 0), 0);
+  document.getElementById('cm-secundarias').innerHTML = `<div class="lt-card cm-secundarias"><div class="lt-cifras cm-2">
+    <div><span>Corte en curso</span><b>${ivMoney(abierto.total)}</b><small>Pago del ${cmFechaCorta(abierto.pago_el)} · cierra el ${esc(fmtFechaHoraCaracas(CM_CTX.cierra_en))}</small></div>
+    <div><span>Pagado este mes</span><b class="lt-ok">${ivMoney(pagado)}</b><small>${pagadasMes.length ? cmPlural(pagadasMes.length, 'venta') : 'Nada depositado todavía'}</small></div>
+  </div></div>`;
+
+  const hist = cortes.filter(c => c !== proximo && c !== abierto && c.n);
+  document.getElementById('cm-historial-wrap').hidden = !hist.length;
+  document.getElementById('cm-historial').innerHTML = hist.map((c, i) => `<details class="lt-card cxp-ficha cm-hist${c.estado === 'pagada' ? ' cm-hist-pagada' : ''}" style="--i:${Math.min(i, 20)}">
+    <summary class="cxp-cab"><div class="lt-card-cab">
+      <i class="fas fa-chevron-right cxp-chev" aria-hidden="true"></i>
+      <div class="lt-card-tit">Pago del ${cmFecha(c.pago_el)}</div>${cmChipCorte(c.estado)}<b class="cm-hist-total">${ivMoney(c.total)}</b>
+    </div></summary>
+    <div class="cm-reparto">${cmRepartoHtml(c, false)}</div>
+  </details>`).join('');
 }
-const cmChipCorte = e => `<span class="cm-estado" data-e="${e === 'pagada' ? 'pagada' : e === 'liquidada' ? 'liquidada' : e === 'en curso' ? 'enviada' : ''}">${CM_CORTE_TXT[e]}</span>`;
+function cmClickResumen(e) {
+  const ir = e.target.closest('[data-cm-ir]');
+  if (ir) { CM_IR = { pago: ir.dataset.cmIr, vend: ir.dataset.cmIrVend, est: ir.dataset.cmIrEst }; cmTab('ventas'); return; }
+  const res = e.target.closest('[data-cm-reserva]');
+  if (res) abrirReservaDeLead(Number(res.dataset.cmReserva), res.dataset.cmCod, res);
+}
 
 const CM_SIN_VENTA = { sin_vendedor: 'el asesor no tiene usuario en el CRM', gemela: 'duplicada de otra reserva que sí comisiona', rechazada: 'rechazada por ti' };
 async function cmLoadSinVenta() {
@@ -20806,72 +20857,133 @@ async function cmLoadSinVenta() {
   if (ROL !== 'admin') { cont.innerHTML = ''; return; }
   const { data, error } = await sb.rpc('comision_sin_venta_listar');
   if (error || !data?.length) { cont.innerHTML = ''; return; }
-  cont.innerHTML = `<div class="cm-aviso"><i class="fas fa-triangle-exclamation"></i> <b>${data.length} reserva${data.length === 1 ? '' : 's'} pagada${data.length === 1 ? '' : 's'} sin comisión.</b> No es un error: ninguna se pagará salvo que lo resuelvas.
-    <details><summary>Ver cuáles</summary><ul>${data.map(r => `<li>${esc(r.reserva_codigo || '#' + r.reserva_id)} · ${esc(r.cliente || '')} · ${esc(r.asesor || 'sin asesor')} · ${ivMoney(r.monto_total)} — ${esc(CM_SIN_VENTA[r.motivo] || r.motivo)}</li>`).join('')}</ul></details></div>`;
+  const n = data.length;
+  cont.innerHTML = `<details class="cm-aviso">
+    <summary><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> ${n} reserva${n === 1 ? '' : 's'} pagada${n === 1 ? '' : 's'} sin comisión<i class="fas fa-chevron-right cxp-chev" aria-hidden="true"></i></summary>
+    ${data.map(r => `<div class="cm-sv-fila">
+      <div><b>${esc(r.reserva_codigo || '#' + r.reserva_id)} · ${esc(r.cliente || '')}</b><small>${esc(r.asesor || 'Sin asesor')} · ${ivMoney(r.monto_total)} · ${esc(CM_SIN_VENTA[r.motivo] || r.motivo)}</small></div>
+      ${r.reserva_codigo ? `<button type="button" class="btn-sm" data-cm-reserva="${r.reserva_id}" data-cm-cod="${esc(r.reserva_codigo)}"><i class="fas fa-arrow-up-right-from-square" aria-hidden="true"></i> Ver reserva</button>` : ''}
+    </div>`).join('')}
+    <div class="cm-nota cm-sv-nota">No es un error: ninguna se pagará salvo que lo resuelvas.</div>
+  </details>`;
 }
 
 async function cmLoadVentas() {
   if (!(await cmCargarVentas())) return;
   const selCorte = document.getElementById('cm-f-corte'), selVend = document.getElementById('cm-f-vendedor');
   const cortes = [...new Set(CM_VENTAS.map(v => v.pago_el))].sort().reverse();
-  const prevCorte = CM_IR_CORTE || selCorte.value, prevVend = selVend.value;
-  CM_IR_CORTE = null;
-  selCorte.innerHTML = '<option value="">Todos</option>' + cortes.map(c => `<option value="${c}">Pago del ${cmFecha(c)}</option>`).join('');
+  const ir = CM_IR;
+  CM_IR = null;
+  const prevCorte = ir ? ir.pago : selCorte.value, prevVend = ir ? ir.vend : selVend.value;
+  if (ir) { CM_EST = ir.est; document.getElementById('cm-buscar').value = ''; }
+  selCorte.innerHTML = '<option value="">Todos los pagos</option>' + cortes.map(c => `<option value="${c}">Pago del ${cmFecha(c)}</option>`).join('');
   const vends = [...new Map(CM_VENTAS.map(v => [v.usuario_id, v.vendedor])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1])));
-  selVend.innerHTML = '<option value="">Todos</option>' + vends.map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('');
-  if (cortes.includes(prevCorte)) selCorte.value = prevCorte;
-  if (vends.some(([id]) => id === prevVend)) selVend.value = prevVend;
+  selVend.innerHTML = '<option value="">Todos los vendedores</option>' + vends.map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('');
+  selCorte.value = cortes.includes(prevCorte) ? prevCorte : '';
+  selVend.value = vends.some(([id]) => id === prevVend) ? prevVend : '';
   cmRenderVentas();
 }
-function cmRenderVentas() {
-  const corte = document.getElementById('cm-f-corte').value, vend = document.getElementById('cm-f-vendedor').value, est = document.getElementById('cm-f-estado').value;
-  const filas = CM_VENTAS.filter(v => (!corte || v.pago_el === corte) && (!vend || v.usuario_id === vend) && (!est || v.estado === est));
-  document.getElementById('cm-ver-lista').innerHTML = filas.map(v => {
-    const montos = CM_TIPOS.filter(k => Number(v['monto_' + k]) > 0).map(k => `${k[0].toUpperCase() + k.slice(1)} ${ivMoney(v['monto_' + k])} · ${v['pct_' + k]}%`).join(' · ');
-    const acc = ROL !== 'admin' ? '' : v.estado === 'enviada' ? `<button class="dbtn save" data-cm-ver="${v.id}" type="button">Verificar</button><button class="dbtn" data-cm-rech="${v.id}" type="button">Rechazar</button>`
-      : v.estado === 'verificada' ? `<button class="dbtn" data-cm-rech="${v.id}" type="button">Rechazar</button>` : '';
-    const sub = [esOficina() ? v.vendedor : null, v.reserva_codigo, v.destino, v.origen === 'historico' ? 'Histórica' : null].filter(Boolean).map(esc).join(' · ');
-    return `<article class="cm-venta">
-      <div><b>${esc(v.cliente_nombre)}</b> ${cmChip(v.estado, v.auto_verificada)}
-        <small>${sub}</small>${montos ? `<small>${montos}</small>` : ''}
-        ${v.motivo_rechazo ? `<small>${esc(v.motivo_rechazo)}</small>` : ''}${v.liquidacion_numero ? `<small>Invoice #${v.liquidacion_numero}</small>` : ''}</div>
-      <div class="cm-venta-monto">${ivMoney(v.comision_total)}<small>Se paga el ${cmFecha(v.pago_el)}</small></div>
-      ${acc ? `<div class="cm-venta-acc">${acc}</div>` : ''}
-    </article>`;
-  }).join('') || `<div class="muted">${CM_VENTAS.length ? 'No hay ventas con estos filtros' : esOficina() ? 'Todavía no hay comisiones' : 'Aún no tienes comisiones. Aparecen solas cuando una de tus reservas queda pagada completa.'}</div>`;
+function cmVentaCardHtml(v, i) {
+  const servicios = CM_TIPOS.filter(k => Number(v['monto_' + k]) > 0);
+  const venta = servicios.reduce((s, k) => s + Number(v['monto_' + k]), 0);
+  const meta = [v.reserva_codigo, v.destino, esOficina() ? v.vendedor : null, v.liquidacion_numero ? `Invoice #${v.liquidacion_numero}` : null].filter(Boolean).map(esc).join(' · ');
+  const pie = (v.reserva_id && v.reserva_codigo ? `<button type="button" class="btn-sm" data-cm-reserva="${v.reserva_id}" data-cm-cod="${esc(v.reserva_codigo)}"><i class="fas fa-arrow-up-right-from-square" aria-hidden="true"></i> Ver reserva</button>` : '')
+    + (ROL === 'admin' && v.estado === 'verificada' ? `<button type="button" class="btn-sm cm-mas" data-cm-mas-venta="${v.id}" aria-label="Más acciones" title="Más acciones"><i class="fas fa-ellipsis" aria-hidden="true"></i></button>` : '');
+  return `<article class="lt-card${v.estado === 'rechazada' ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}">
+    <div class="lt-card-cab"><div class="lt-card-tit" title="${esc(v.cliente_nombre)}">${esc(v.cliente_nombre)}</div>${v.origen === 'historico' ? '<span class="cm-estado">Histórica</span>' : ''}${cmChip(v.estado)}</div>
+    ${meta ? `<div class="lt-card-meta">${meta}</div>` : ''}
+    ${servicios.length ? `<div class="lt-chips">${servicios.map(k => `<span class="cm-estado">${CM_TIPO_TXT[k]} ${ivMoney(v['monto_' + k])} · ${Number(v['pct_' + k])}%</span>`).join('')}</div>` : ''}
+    <div class="lt-cifras">
+      <div><span>Venta</span><b>${ivMoney(venta)}</b></div>
+      <div class="cm-com"><span>Comisión</span><b>${ivMoney(v.comision_total)}</b></div>
+      <div><span>Se paga el</span><b>${cmFecha(v.pago_el)}</b></div>
+    </div>
+    ${v.motivo_rechazo ? `<div class="cm-motivo"><i class="fas fa-circle-info" aria-hidden="true"></i> ${esc(v.motivo_rechazo)}</div>` : ''}
+    ${pie ? `<div class="lt-card-pie">${pie}</div>` : ''}
+  </article>`;
 }
-async function cmAccionVenta(e) {
-  const ver = e.target.closest('[data-cm-ver]'), rech = e.target.closest('[data-cm-rech]');
-  if (!ver && !rech) return;
-  let res;
-  if (ver) res = await sb.rpc('comision_venta_verificar', { p_id: Number(ver.dataset.cmVer) });
-  else {
-    const motivo = await pedirTexto({ titulo: 'Rechazar venta', detalle: 'El vendedor verá este motivo.', label: '¿Por qué se rechaza?', tipo: 'textarea', textoOk: 'Rechazar', destructivo: true });
-    if (motivo == null) return;
-    res = await sb.rpc('comision_venta_rechazar', { p_id: Number(rech.dataset.cmRech), p_motivo: motivo });
-  }
-  if (res.error || !res.data?.ok) { errToast(cmErr(res.data, res.error, 'No se pudo actualizar la venta')); return; }
-  okToast(ver ? 'Venta verificada' : 'Venta rechazada');
+function cmRenderVentas() {
+  const g = id => document.getElementById(id);
+  const corte = g('cm-f-corte').value, vend = g('cm-f-vendedor').value, q = cmNorm(g('cm-buscar').value.trim());
+  const pasa = v => CM_EST === 'pend' ? CM_PEND.includes(v.estado) : !CM_EST || v.estado === CM_EST;
+  const filas = CM_VENTAS.filter(v => (!corte || v.pago_el === corte) && (!vend || v.usuario_id === vend) && pasa(v)
+    && (!q || cmNorm(`${v.cliente_nombre} ${v.reserva_codigo} ${v.destino}`).includes(q)));
+  g('cm-f-estado').querySelectorAll('[data-cm-est]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.cmEst === CM_EST)));
+  g('cm-mfs-trigger').classList.toggle('con-filtros', !!(corte || vend));
+  const suma = filas.filter(v => v.estado !== 'rechazada').reduce((s, v) => s + Number(v.comision_total || 0), 0);
+  g('cm-ventas-n').textContent = filas.length ? `${cmPlural(filas.length, 'venta')} · ${ivMoney(suma)}` : '';
+  const sola = 'Aparecen solas cuando una de tus reservas queda pagada completa.';
+  const vacio = !CM_VENTAS.length ? (esOficina() ? 'Todavía no hay comisiones. Aparecen solas cuando una reserva queda pagada completa.' : `Aún no tienes comisiones. ${sola}`)
+    : q || corte || vend ? 'Ninguna venta coincide con la búsqueda o los filtros.'
+    : CM_EST === 'pend' ? `No hay comisiones pendientes de pago.${esOficina() ? '' : ` ${sola}`}`
+    : CM_EST === 'pagada' ? 'Todavía no hay comisiones pagadas.' : 'No hay ventas rechazadas.';
+  g('cm-ventas-lista').innerHTML = filas.map(cmVentaCardHtml).join('') || `<div class="lt-vacio">${vacio}</div>`;
+}
+function cmAccionVenta(e) {
+  const res = e.target.closest('[data-cm-reserva]');
+  if (res) { abrirReservaDeLead(Number(res.dataset.cmReserva), res.dataset.cmCod, res); return; }
+  const mas = e.target.closest('[data-cm-mas-venta]');
+  const v = mas && CM_VENTAS.find(x => x.id === Number(mas.dataset.cmMasVenta));
+  if (v) cmMenu(v.cliente_nombre, [{ t: 'Rechazar comisión', i: 'fa-ban', go: () => cmRechazarVenta(v.id) }]);
+}
+async function cmRechazarVenta(id) {
+  const motivo = await pedirTexto({ titulo: 'Rechazar comisión', detalle: 'El vendedor verá este motivo.', label: '¿Por qué se rechaza?', tipo: 'textarea', textoOk: 'Rechazar', destructivo: true });
+  if (motivo == null) return;
+  const { data, error } = await sb.rpc('comision_venta_rechazar', { p_id: id, p_motivo: motivo });
+  if (error || !data?.ok) { errToast(cmErr(data, error, 'No se pudo rechazar la venta')); return; }
+  okToast('Venta rechazada');
   cmLoadVentas();
 }
+// Menú "⋯": reusa la hoja de acciones del lead. Cada opción cierra la hoja y recién abre lo
+// siguiente en su popstate -- dos hojas encadenadas se pisan (ver abrirAccionesLeadSheet).
+function cmMenu(titulo, opciones) {
+  const cont = document.getElementById('acciones-lead-opciones');
+  if (!cont || !opciones.length) return;
+  cont.innerHTML = opciones.map(o => `<button type="button" class="estado-opt"><i class="fas ${o.i} ao-ic" aria-hidden="true"></i><span class="eo-txt">${esc(o.t)}</span></button>`).join('');
+  cont.querySelectorAll('.estado-opt').forEach((b, i) => b.addEventListener('click', () => {
+    let hecho = false;
+    const ir = () => { if (hecho) return; hecho = true; opciones[i].go(); };
+    window.addEventListener('popstate', ir, { once: true });
+    setTimeout(ir, 400);
+    closeSheet('acciones-lead-sheet');
+  }));
+  document.getElementById('acciones-lead-titulo').textContent = titulo;
+  openSheet('acciones-lead-sheet');
+}
+
+function cmInvoiceCardHtml(l, i) {
+  const envio = [l.enviada_telegram_en && 'Telegram', l.enviada_correo_en && 'Correo'].filter(Boolean);
+  const meta = [esOficina() ? esc(l.vendedor) : null, `Se paga el ${cmFecha(l.pago_el)}`, cmPlural(Number(l.ventas) || 0, 'venta')].filter(Boolean).join(' · ');
+  return `<article class="lt-card${l.estado === 'anulada' ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i || 0, 20)}">
+    <div class="lt-card-cab"><div class="lt-card-tit">Invoice #${esc(l.numero)}</div>${cmChip(l.estado, true)}</div>
+    <div class="lt-card-meta">${meta}</div>
+    <div class="lt-cifras cm-2">
+      <div class="cm-com"><span>Total</span><b>${ivMoney(l.total)}</b></div>
+      <div><span>Envío</span><b class="${envio.length ? 'lt-ok' : 'cm-sin-envio'}">${envio.length ? envio.map(t => `<i class="fas fa-check" aria-hidden="true"></i> ${t}`).join(' · ') : 'Sin enviar'}</b></div>
+    </div>
+    <div class="lt-card-pie">
+      ${l.pdf_path ? `<button type="button" class="btn-sm lt-primario" data-cm-pdf="${l.id}"><i class="fas fa-file-pdf" aria-hidden="true"></i> Ver PDF</button>` : '<span class="cm-nota">PDF en preparación</span>'}
+      ${ROL === 'admin' && l.estado !== 'anulada' ? `<button type="button" class="btn-sm cm-mas" data-cm-mas-inv="${l.id}" aria-label="Más acciones" title="Más acciones"><i class="fas fa-ellipsis" aria-hidden="true"></i></button>` : ''}
+    </div>
+  </article>`;
+}
+const CM_INV_VACIO = 'Los invoices se emiten solos al cerrar cada corte (el 15 y el último día del mes).';
 async function cmLoadInvoices() {
   const { data, error } = await sb.rpc('comision_liquidaciones_listar');
   if (error) { errToast('No se pudieron cargar los invoices'); return; }
-  const esAdmin = ROL === 'admin';
-  document.getElementById('cm-inv-tbody').innerHTML = (data || []).map(l => `
-    <tr>
-      <td data-label="N°"><b>#${l.numero}</b></td>
-      <td data-label="Vendedor">${esc(l.vendedor)}</td>
-      <td data-label="Se paga el">${cmFecha(l.pago_el)}</td>
-      <td data-label="Ventas">${l.ventas}</td>
-      <td data-label="Total"><b>${ivMoney(l.total)}</b></td>
-      <td data-label="Estado">${cmChip(l.estado)}</td>
-      <td>${l.pdf_path ? `<button class="dbtn" type="button" data-cm-pdf="${l.id}"><i class="fas fa-file-pdf"></i> Ver</button>`
-        : l.estado !== 'anulada' && ROL !== 'administrativo' ? `<button class="dbtn" type="button" data-cm-regen="${l.id}">Generar PDF</button>` : ''}
-        ${esAdmin && l.pdf_path && l.estado !== 'anulada' ? `<button class="dbtn" type="button" data-cm-enviar="${l.id}" data-cm-num="${l.numero}" data-cm-vend="${esc(l.vendedor)}"><i class="fas fa-paper-plane"></i> Enviar</button>` : ''}
-        ${esAdmin && l.estado === 'emitida' ? `<button class="dbtn save" type="button" data-cm-pagar="${l.id}">Marcar pagado</button> <button class="dbtn" type="button" data-cm-anular="${l.id}">Anular</button>` : ''}
-        ${l.enviada_telegram_en || l.enviada_correo_en ? `<div class="muted" style="font-size:11px">Enviado:${l.enviada_telegram_en ? ' Telegram' : ''}${l.enviada_correo_en ? ' Correo' : ''}</div>` : ''}</td>
-    </tr>`).join('') || '<tr><td colspan="7">Todavía no hay invoices</td></tr>';
+  CM_INVS = data || [];
+  document.getElementById('cm-inv-lista').innerHTML = CM_INVS.map(cmInvoiceCardHtml).join('')
+    || `<div class="lt-vacio"><i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> ${CM_INV_VACIO}</div>`;
+}
+// El asesor ve sus invoices en el Resumen (la pestaña Invoices es de la oficina).
+async function cmLoadMisInvoices() {
+  const wrap = document.getElementById('cm-mis-invoices');
+  if (esOficina()) { wrap.hidden = true; return; }
+  const { data, error } = await sb.rpc('comision_liquidaciones_listar');
+  wrap.hidden = !!error;
+  if (error) return;
+  CM_INVS = (data || []).filter(l => l.estado !== 'anulada');
+  document.getElementById('cm-mis-inv-lista').innerHTML = CM_INVS.map(cmInvoiceCardHtml).join('') || `<div class="lt-vacio">${CM_INV_VACIO}</div>`;
 }
 // La EF responde errores de negocio con 4xx: supabase-js los deja en error.context.
 async function cmEf(body) {
@@ -20951,38 +21063,50 @@ async function construirInvoiceComisionPdf(l, ventas) {
   return new Uint8Array(doc.output('arraybuffer'));
 }
 async function cmAccionInvoice(e) {
-  const ver = e.target.closest('[data-cm-pdf]'), regen = e.target.closest('[data-cm-regen]'), enviar = e.target.closest('[data-cm-enviar]');
+  const ver = e.target.closest('[data-cm-pdf]');
   if (ver) {
+    ver.disabled = true;
     const r = await cmEf({ accion: 'ver', liquidacion_id: Number(ver.dataset.cmPdf) });
+    ver.disabled = false;
     if (r?.ok && r.url) window.open(r.url, '_blank'); else errToast('No se pudo abrir el PDF');
     return;
   }
-  if (regen) {
-    regen.disabled = true;
-    const r = await cmSubirInvoicePdf(Number(regen.dataset.cmRegen));
-    if (r?.ok) { okToast('PDF generado'); cmLoadInvoices(); } else { regen.disabled = false; errToast('No se pudo generar el PDF'); }
-    return;
-  }
-  if (enviar) {
-    if (!(await confirmarSheet({ titulo: `¿Enviar el invoice #${enviar.dataset.cmNum}?`, detalle: `Va a ${enviar.dataset.cmVend} por Telegram y correo.`, textoOk: 'Enviar' }))) return;
-    enviar.disabled = true;
-    const r = await cmEf({ accion: 'enviar', liquidacion_id: Number(enviar.dataset.cmEnviar) });
-    enviar.disabled = false;
-    const txt = s => s === 'enviado' ? 'enviado' : ({ vendedor_sin_telegram: 'no tiene Telegram vinculado', vendedor_sin_correo: 'no tiene correo',
-      remitente_sin_gmail: 'la cuenta corporativa no tiene Gmail conectado', sin_remitente_configurado: 'falta configurar la cuenta remitente' })[s] || 'falló';
-    if (!r?.telegram) { errToast(r?.error === 'sin_pdf' ? 'Primero generá el PDF' : 'No se pudo enviar'); return; }
-    (r.ok ? okToast : errToast)(`Telegram: ${txt(r.telegram)} · Correo: ${txt(r.correo)}`);
-    cmLoadInvoices();
-    return;
-  }
-  const pagar = e.target.closest('[data-cm-pagar]'), anular = e.target.closest('[data-cm-anular]');
-  if (!pagar && !anular) return;
-  if (anular && !(await confirmarSheet({ titulo: '¿Anular este invoice?', detalle: 'Sus ventas vuelven a "verificada" y el número no se reutiliza.', textoOk: 'Anular', destructivo: true }))) return;
-  const { data, error } = pagar
-    ? await sb.rpc('comision_liquidacion_marcar_pagada', { p_id: Number(pagar.dataset.cmPagar) })
-    : await sb.rpc('comision_liquidacion_anular', { p_id: Number(anular.dataset.cmAnular) });
+  const mas = e.target.closest('[data-cm-mas-inv]');
+  const l = mas && CM_INVS.find(x => x.id === Number(mas.dataset.cmMasInv));
+  if (!l) return;
+  const enviada = !!(l.enviada_telegram_en || l.enviada_correo_en);
+  cmMenu(`Invoice #${l.numero} · ${l.vendedor}`, [
+    !l.pdf_path && { t: 'Generar PDF', i: 'fa-file-circle-plus', go: () => cmGenerarPdf(l) },
+    l.pdf_path && { t: enviada ? 'Reenviar' : 'Enviar', i: 'fa-paper-plane', go: () => cmEnviarInvoice(l, enviada) },
+    l.estado === 'emitida' && { t: 'Marcar pagado', i: 'fa-circle-check', go: () => cmPagarInvoice(l) },
+    l.estado === 'emitida' && { t: 'Anular', i: 'fa-ban', go: () => cmAnularInvoice(l) },
+  ].filter(Boolean));
+}
+async function cmGenerarPdf(l) {
+  const r = await cmSubirInvoicePdf(l.id);
+  if (r?.ok) { okToast('PDF generado'); cmLoadInvoices(); } else errToast(cmErr(r, null, 'No se pudo generar el PDF'));
+}
+async function cmEnviarInvoice(l, enviada) {
+  if (!(await confirmarSheet({ titulo: `¿${enviada ? 'Reenviar' : 'Enviar'} el invoice #${l.numero}?`, detalle: `Va a ${l.vendedor} por Telegram y correo.`, textoOk: enviada ? 'Reenviar' : 'Enviar' }))) return;
+  const r = await cmEf({ accion: 'enviar', liquidacion_id: l.id });
+  const txt = s => s === 'enviado' ? 'enviado' : ({ vendedor_sin_telegram: 'no tiene Telegram vinculado', vendedor_sin_correo: 'no tiene correo',
+    remitente_sin_gmail: 'la cuenta corporativa no tiene Gmail conectado', sin_remitente_configurado: 'falta configurar la cuenta remitente' })[s] || 'falló';
+  if (!r?.telegram) { errToast(r?.error === 'sin_pdf' ? 'Primero genera el PDF' : 'No se pudo enviar'); return; }
+  (r.ok ? okToast : errToast)(`Telegram: ${txt(r.telegram)} · Correo: ${txt(r.correo)}`);
+  cmLoadInvoices();
+}
+async function cmPagarInvoice(l) {
+  if (!(await confirmarSheet({ titulo: `¿Marcar pagado el invoice #${l.numero}?`, detalle: `${ivMoney(l.total)} a ${l.vendedor}.`, textoOk: 'Marcar pagado' }))) return;
+  cmRpcInvoice('comision_liquidacion_marcar_pagada', l.id, 'Invoice marcado como pagado');
+}
+async function cmAnularInvoice(l) {
+  if (!(await confirmarSheet({ titulo: `¿Anular el invoice #${l.numero}?`, detalle: 'Sus ventas vuelven a pendientes y el número no se reutiliza.', textoOk: 'Anular', destructivo: true }))) return;
+  cmRpcInvoice('comision_liquidacion_anular', l.id, 'Invoice anulado');
+}
+async function cmRpcInvoice(fn, id, ok) {
+  const { data, error } = await sb.rpc(fn, { p_id: id });
   if (error || !data?.ok) { errToast(cmErr(data, error, 'No se pudo actualizar el invoice')); return; }
-  okToast(pagar ? 'Invoice marcado como pagado' : 'Invoice anulado');
+  okToast(ok);
   cmLoadInvoices();
 }
 
@@ -20994,8 +21118,8 @@ async function cmLoadConfig() {
   const pct = (u, k) => reglas.find(r => (r.usuario_id || null) === u && r.tipo === k)?.porcentaje;
   const celda = (u, k) => {
     const propio = pct(u, k), general = pct(null, k);
-    return `<td data-label="${k}"><input class="ei" type="number" min="0" max="100" step="0.01" data-cm-u="${u || ''}" data-cm-k="${k}"
-      value="${propio ?? ''}" placeholder="${u && general != null ? general : ''}">%</td>`;
+    return `<td data-label="${CM_TIPO_TXT[k]}"><input class="ei" type="number" min="0" max="100" step="0.01" data-cm-u="${u || ''}" data-cm-k="${k}"
+      value="${propio ?? ''}" placeholder="${u && general != null ? general : ''}" aria-label="${CM_TIPO_TXT[k]} (%)">%</td>`;
   };
   const fila = (u, nombre, sub) => `<tr><td data-label="Persona"><b>${esc(nombre)}</b>${sub ? `<div class="muted" style="font-size:11px">${esc(sub)}</div>` : ''}</td>${CM_TIPOS.map(k => celda(u, k)).join('')}</tr>`;
   document.getElementById('cm-reglas-tbody').innerHTML = fila(null, 'General (todos)', 'Se usa cuando la persona no tiene % propio')
@@ -21004,15 +21128,6 @@ async function cmLoadConfig() {
   document.getElementById('cm-cfg-numero').value = c.proximo_numero ?? '';
   document.getElementById('cm-cfg-condiciones').value = c.condiciones || '';
   document.getElementById('cm-cfg-terminos').value = c.terminos || '';
-  document.getElementById('cm-auto-activa').checked = !!c.autoverif_activa;
-  document.getElementById('cm-auto-umbral').value = c.autoverif_umbral > 0 ? c.autoverif_umbral : '';
-}
-async function cmGuardarAutoverif() {
-  const umbral = Number(document.getElementById('cm-auto-umbral').value) || 0;
-  const { data, error } = await sb.rpc('comision_autoverif_guardar', { p_activa: document.getElementById('cm-auto-activa').checked, p_umbral: umbral });
-  if (error || data?.ok === false) { errToast(cmErr(data, error, 'No se pudo guardar')); return; }
-  okToast('Verificación automática guardada');
-  cmLoadConfig();
 }
 async function cmGuardarRegla(e) {
   const i = e.target.closest('[data-cm-k]');
@@ -33925,6 +34040,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '💰', titulo: 'Comisiones más claras', texto: 'El Resumen de Comisiones abre con el próximo pago: la fecha, cuántos días faltan, el total y cuánto le toca a cada vendedor (toca un nombre para ver sus ventas). Los pagos anteriores quedan plegados en un historial. En Ventas cada comisión es una tarjeta con sus servicios y porcentajes, un buscador por cliente, código o destino, y el botón «Ver reserva». Los asesores ven sus propios invoices en el Resumen. Se quitaron los restos de la verificación manual, que ya no hace falta.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-10-23', emoji: '🏨', titulo: 'Ficha del hotel más ligera', texto: 'Al abrir un hotel o una promoción en el Tarifario, la foto principal ocupa menos y las demás van en miniaturas al lado. La descripción se recorta a tres líneas con «Ver más». Las promociones ya no repiten el nombre del hotel en el título, y la nota «precio por habitación / noche» sale una sola vez por plan. En admin, las notas, fotos y ajustes quedan plegados en un bloque que se abre con un toque.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-23', emoji: '📷', titulo: 'Hoteles sin foto real ya no se ven', texto: 'Los hoteles que no tienen ninguna foto que muestre el alojamiento (sin fotos, solo imágenes generadas por IA, o solo planos y logos) dejaron de aparecer en la web y en el Tarifario, junto con sus promociones. Los administradores los siguen viendo con la marca "Sin foto" (en Hoteles, desmarcando "Ocultar ocultos"; en Promociones, con "Ver ocultas"). En cuanto se sube una foto real del hotel, reaparece solo.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-23', emoji: '🏷️', titulo: 'Tarjetas del Tarifario más limpias', texto: 'El precio ahora va en una pastilla sobre la foto (por ejemplo "$50 p/p · noche"; pasa el mouse para ver el texto completo del proveedor). Debajo de la foto queda el hotel, el nombre de la habitación o promo sin repetir el hotel, una línea de descripción y, al final, hasta cuándo se vende y unos íconos de lo que incluye (vuelo, traslado, comidas, excursión…) con el detalle al pasar el mouse. El resto de la información sigue completa al abrir la tarjeta.', roles: ['admin', 'asesor', 'marketing'] },
