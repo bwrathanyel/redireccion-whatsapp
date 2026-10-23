@@ -1949,6 +1949,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tf-media{position:relative;height:150px;background:linear-gradient(135deg,rgba(var(--accent-rgb),.16),rgba(var(--accent-rgb),.04));background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:26px;transition:opacity .18s ease;transform:translateZ(0);backface-visibility:hidden}
 .tar-ficha .tf-body{padding:14px 16px 16px}
 
+.ase-wa-fila{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}.ase-wa-fila:last-child{border-bottom:0}.ase-wa-detalle{display:block;font-size:12px;margin-top:4px}.ase-wa-control{display:flex;align-items:center;gap:8px;position:relative;flex-shrink:0;min-height:44px}.ase-wa-estado{font-size:12px;color:var(--muted)}.ase-wa-control input{position:absolute;right:0;width:44px;height:44px;opacity:0;margin:0;cursor:pointer}.ase-wa-switch{display:block;width:40px;height:24px;border:1px solid var(--line2);border-radius:999px;background:var(--bg2);pointer-events:none}.ase-wa-switch::after{content:'';display:block;width:18px;height:18px;margin:2px;border-radius:50%;background:var(--muted);transition:transform .16s}.ase-wa-control input:checked+.ase-wa-switch{background:var(--accent-soft);border-color:var(--accent)}.ase-wa-control input:checked+.ase-wa-switch::after{background:var(--accent);transform:translateX(16px)}.ase-wa-control input:focus-visible+.ase-wa-switch{outline:2px solid var(--accent);outline-offset:3px}.ase-wa-control input:disabled+.ase-wa-switch{opacity:.45}.ase-wa-control input:disabled{cursor:default}
 /* ---------- Selector de vista (fichas / tarjetas / lista), estándar en todo el CRM ---------- */
 .view-switch{display:inline-flex;gap:3px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:3px}
 .vs-btn{background:transparent;border:none;color:var(--muted);padding:7px 11px;border-radius:7px;cursor:pointer;font-size:12.5px;transition:background .15s,color .15s}
@@ -7976,6 +7977,11 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           </div>
         </div>
 
+        <div class="card ase-wa-card" id="ase-wa-config" style="display:none;margin-top:16px">
+          <h2><i class="fas fa-comment-slash"></i> WhatsApp restringido</h2>
+          <div class="csub">La IA le entrega al cliente el enlace de su asesor y le recuerda escribirle primero. Sus leads nuevos y pendientes pasan a Atendido a los 5 minutos de llegar.</div>
+          <div id="ase-contacto-restringido" aria-live="polite"><span class="muted">Cargando…</span></div>
+        </div>
         <div class="card" style="margin-top:16px">
           <h2><i class="fas fa-share-nodes"></i> Reparto de redes (bio)</h2>
           <div class="csub">Turnos, guardia nocturna y tope de ráfaga para los links rotativos de IG/FB/TikTok</div>

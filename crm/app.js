@@ -5631,6 +5631,32 @@ async function loadAsesoresPeriodo() {
   cargarReparto();
   cargarBioReparto();
   cargarReasigCountAsesores();
+  cargarWhatsappRestringido();
+}
+async function cargarWhatsappRestringido() {
+  const box = document.getElementById('ase-contacto-restringido');
+  const card = document.getElementById('ase-wa-config');
+  if (card) card.style.display = ROL === 'admin' ? '' : 'none';
+  if (!box || ROL !== 'admin') return;
+  const { data, error } = await sb.from('asesores').select('id,nombre,whatsapp,whatsapp_restringido').eq('activo', true).eq('es_cuenta_sistema', false).order('nombre');
+  if (error) { box.innerHTML = '<p class="muted">No se pudo cargar esta configuración. Requiere la actualización de WhatsApp restringido en el servidor.</p>'; return; }
+  box.innerHTML = (data || []).map(a => {
+    const valido = /^[1-9]\d{6,14}$/.test(String(a.whatsapp || '').replace(/\D/g, ''));
+    return `<label class="ase-wa-fila"><span><strong>${esc(a.nombre)}</strong><span class="ase-wa-detalle muted">${valido ? esc(a.whatsapp) : 'Complete un WhatsApp válido antes de activar'}</span></span><span class="ase-wa-control"><span class="ase-wa-estado">${a.whatsapp_restringido ? 'Activo' : 'Apagado'}</span><input type="checkbox" role="switch" aria-label="WhatsApp restringido de ${esc(a.nombre)}" data-ase-wa="${a.id}" ${a.whatsapp_restringido ? 'checked' : ''} ${!valido && !a.whatsapp_restringido ? 'disabled' : ''}><span class="ase-wa-switch" aria-hidden="true"></span></span></label>`;
+  }).join('') || '<p class="muted">No hay asesores activos.</p>';
+  box.querySelectorAll('[data-ase-wa]').forEach(input => input.addEventListener('change', () => guardarWhatsappRestringido(input)));
+}
+async function guardarWhatsappRestringido(input) {
+  const activo = input.checked, fila = input.closest('.ase-wa-fila'), estado = fila.querySelector('.ase-wa-estado');
+  input.disabled = true; estado.textContent = 'Guardando…';
+  try {
+    const { data, error } = await sb.rpc('admin_configurar_whatsapp_restringido', { p_asesor_id: Number(input.dataset.aseWa), p_activo: activo });
+    if (error || !data?.ok) throw new Error(data?.error === 'whatsapp_invalido' ? 'El asesor necesita un WhatsApp válido' : 'No se pudo guardar el cambio');
+    estado.textContent = activo ? 'Activo' : 'Apagado';
+    okToast(activo ? 'Modo restringido activado para este asesor' : 'Modo restringido apagado');
+  } catch (error) {
+    input.checked = !activo; estado.textContent = input.checked ? 'Activo' : 'Apagado'; errToast(error.message || 'No se pudo guardar el cambio');
+  } finally { input.disabled = false; }
 }
 async function cargarReasigCountAsesores() {
   const el = document.getElementById('ase-reasig-count');
@@ -34092,6 +34118,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '💬', titulo: 'WhatsApp restringido por asesor', texto: 'Administración puede activar este modo por asesor en Gestión de personal. La IA entrega su enlace y le pide al cliente escribirle primero; los leads nuevos y pendientes pasan a Atendido a los cinco minutos, sin registrar contacto humano. Los recordatorios se frenan al confirmar, avanzar el caso o tomar la conversación.', roles: ['admin'] },
   { fecha: '2026-10-23', emoji: '📋', titulo: 'Formularios de voucher y cotización más compactos', texto: 'Cliente, hospedaje, servicios y pago se organizan en secciones plegables con un resumen de lo completado. Hotel, habitación y modalidad quedan juntos; los totales y las acciones principales siguen a mano. Si falta un dato, se abre la sección para corregirlo. También se ajustaron las barras de acciones para que no tapen el historial.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
   { fecha: '2026-10-23', emoji: '📄', titulo: 'Tus últimos vouchers y cotizaciones a mano', texto: 'Debajo de la vista previa del voucher y del resumen de la cotización aparecen los tres últimos documentos activos, con cliente, fecha y total. Toca uno para abrir su PDF o usa «Ver todos» para ir al historial completo.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
   { fecha: '2026-10-23', emoji: '🧾', titulo: 'Comisiones: % por persona y pestaña Pagos', texto: 'En Configuración cada persona tiene un solo % (o usa el general), con «Por servicio» para separar boletos, traslado, hospedaje y paquete, y «Volver al general» para quitarle el propio. Los admin sin ventas quedan ocultos. La pestaña Invoices ahora se llama Pagos: un pago por vendedor y corte, sin número de factura ni PDF, y ya no se manda nada por Telegram ni correo.', roles: ['admin', 'administrativo'] },
