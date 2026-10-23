@@ -5497,13 +5497,27 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 @media(prefers-reduced-motion:reduce){.lt-card{animation:none}.mv-celebra{animation:none}}
 /* Cuentas por pagar: una ficha por proveedor a todo el ancho, una fila por cliente (2026-10-23).
    .cxp-montos es display:contents: el texto, el saldo y los botones alinean en columnas entre filas. */
-#sec-facturacion #cxp-tbody{grid-template-columns:minmax(0,1fr)}
+#sec-facturacion #cxp-tbody.cxp-por-proveedor{grid-template-columns:minmax(0,1fr)}
+#cxp-abrir-todo[hidden]{display:none}
+/* Franja del proveedor (tintada, desplegable) vs. zona de clientes (fondo hundido, barra de color a la izquierda). */
+.cxp-ficha{padding:0;gap:0;overflow:hidden}
 .cxp-ficha:hover{transform:none}
-.cxp-filas{display:flex;flex-direction:column}
-.cxp-fila{display:grid;grid-template-columns:minmax(0,1fr) 270px 92px 120px;align-items:center;gap:6px 14px;padding:9px 8px;border-top:1px solid var(--line);border-radius:8px;transition:background var(--dur-rapida)}
+.cxp-cab{display:flex;flex-direction:column;gap:10px;padding:14px 16px;list-style:none;cursor:pointer;user-select:none;background:var(--accent-soft)}
+.cxp-cab::-webkit-details-marker{display:none}
+.cxp-cab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.cxp-ficha[open]>.cxp-cab{border-bottom:1px solid var(--line2)}
+.cxp-ficha .lt-card-tit{font-size:15px}
+.cxp-chev{font-size:11px;color:var(--accent-ink);transition:transform var(--dur-rapida)}
+.cxp-ficha[open] .cxp-chev{transform:rotate(90deg)}
+.cxp-n{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.cxp-ficha .lt-cifras div{justify-content:flex-end}
+.cxp-ficha .lt-cifras span{white-space:normal;line-height:1.2}
+.cxp-filas{display:flex;flex-direction:column;padding:4px 12px 8px 22px;background:var(--bg)}
+.cxp-fila{display:grid;grid-template-columns:minmax(0,1fr) 270px 92px 120px;align-items:center;gap:6px 14px;padding:9px 10px;border-top:1px solid var(--line);border-left:3px solid var(--amber);transition:background var(--dur-rapida)}
+.cxp-filas>.cxp-fila:first-child{border-top:0}
 .cxp-fila-link{cursor:pointer}
 .cxp-fila:hover{background:var(--line)}
-.cxp-fila-hecha{opacity:.78}
+.cxp-fila-hecha{opacity:.78;border-left-color:var(--green)}
 .cxp-quien{display:flex;flex-direction:column;gap:2px;min-width:0}
 .cxp-quien b{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cxp-quien span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -5522,10 +5536,13 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
   #cxp-tbody .cxp-montos span{text-align:left;white-space:normal}
 }
 @media(max-width:760px){
+  #cxp-tbody .cxp-filas{padding:4px 8px 8px 12px}
+  #cxp-tbody .cxp-cab{padding:12px}
   #cxp-tbody .cxp-acc{grid-column:1/-1;justify-content:flex-start}
   #cxp-tbody .cxp-acc .btn-sm{min-height:44px}
   #cxp-tbody .cxp-acc .lt-primario{flex:1;justify-content:center}
   #cxp-tbody .cxp-ver-pagadas{min-height:44px}
+  .cxp-n{display:none}
 }
 /* Proveedores con margen real (2026-10-21). --pc = color del servicio principal, --mc = color del margen. */
 .prv-barra{display:flex;flex-wrap:wrap;align-items:center;gap:9px 14px;margin-top:14px}
@@ -8198,6 +8215,11 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="fact-tab-panel" data-fact-panel="cxp" style="display:none">
         <div class="fact-barra">
           <input class="ei bt-buscar" id="cxp-search" type="search" placeholder="Buscar proveedor o cliente..." aria-label="Buscar proveedor o cliente">
+          <div class="seg-group seg-group-sm" role="group" aria-label="Tipo de vista">
+            <button class="seg on" type="button" data-cxp-vista="proveedor" onclick="cxpCambiarVista('proveedor')"><i class="fas fa-layer-group"></i> Por proveedor</button>
+            <button class="seg" type="button" data-cxp-vista="cuenta" onclick="cxpCambiarVista('cuenta')"><i class="fas fa-table-cells-large"></i> Por cuenta</button>
+          </div>
+          <button class="btn-sm" id="cxp-abrir-todo" type="button" onclick="cxpAbrirTodo()" title="Abrir o cerrar todas las fichas"><i class="fas fa-angles-down"></i> <span>Abrir / cerrar todo</span></button>
           <button class="btn-sm fact-orden-btn" type="button" onclick="abrirOrdenarSheet('cxp')" title="Cambiar el orden"><i class="fas fa-arrow-down-wide-short"></i> <span>Ordenar<b data-orden-lbl="cxp"></b></span></button>
           <div class="export-dd">
             <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'cxp')" aria-label="Exportar" title="Exportar"><i class="fas fa-download"></i></button>
@@ -8213,8 +8235,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="kpis bt-kpis lt-kpis" id="cxp-kpis"></div>
           <div class="lt-orden" role="group" aria-label="Ordenar por">
             <span class="lt-orden-lbl">Ordenar</span>
-            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="saldo_pendiente">Saldo</button>
-            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="monto_a_transferir">A transferir</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="saldo_pendiente">Pendiente de pagar</button>
+            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="monto_a_transferir">Monto</button>
             <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="monto_abonado">Abonado</button>
             <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="proveedor">Proveedor</button>
             <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="cliente">Cliente</button>
