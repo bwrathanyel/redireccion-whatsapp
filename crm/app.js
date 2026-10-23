@@ -28507,8 +28507,10 @@ async function loadVoucherSeccion() {
   vcOffset = 0;
   await cargarHistorialVouchers(false);
 }
-function vcQueryBase() {
+function vcQueryBase(recientes = false) {
   let q = sb.from('vouchers').select('id,creado_por,revision,anulado_en,anulado_motivo,numero_factura,created_at,asesor_nombre,cliente_nombre,destino_hospedaje,total_general,pdf_path,reserva_id,reserva_codigo');
+  // La ficha lateral siempre muestra los últimos activos, sin filtros del registro.
+  if (recientes) return q.is('anulado_en', null);
   // Sin comas/paréntesis -- romperían la sintaxis del filtro .or() de PostgREST.
   q = val('vc-documentos-estado') === 'anulados' ? q.not('anulado_en', 'is', null) : q.is('anulado_en', null);
   const buscar = (val('vc-buscar') || '').trim().replace(/[,()]/g, '');
@@ -28518,7 +28520,37 @@ function vcQueryBase() {
   if (hasta) q = q.lt('created_at', new Date(new Date(hasta).getTime() + 86400000).toISOString().slice(0, 10));
   return q;
 }
+window.vcVerHistorial = () => {
+  const titulo = document.getElementById('vc-historial-sub');
+  titulo?.scrollIntoView({ block: 'start' });
+  titulo?.focus({ preventScroll: true });
+};
+async function cargarVouchersRecientes() {
+  const lista = document.getElementById('vc-recientes-lista');
+  if (!lista) return;
+  lista.setAttribute('aria-busy', 'true');
+  try {
+    const { data, error } = await vcQueryBase(true).order('created_at', { ascending: false }).limit(3);
+    if (error) throw error;
+    lista.innerHTML = (data || []).map((v, i) => `<button class="vc-reciente" type="button" data-vc-reciente="${i}" aria-label="${esc((v.pdf_path ? 'Ver PDF' : 'Reconstruir PDF') + ' del voucher N° ' + fmt(v.numero_factura) + ' de ' + v.cliente_nombre)}">
+      <b title="${esc(v.cliente_nombre)}">${esc(v.cliente_nombre)}</b><span class="vc-reciente-num">N° ${fmt(v.numero_factura)}</span>
+      <small title="${esc(v.destino_hospedaje || '')}">${esc(v.destino_hospedaje || 'Sin destino')}</small>
+      <span class="vc-reciente-total">${v.total_general != null ? vcMoney(v.total_general) : '—'}<i class="fas fa-file-pdf" aria-hidden="true"></i></span>
+      <small title="${esc(v.asesor_nombre || '')}">${esc(v.asesor_nombre || '—')} · ${esc((v.created_at || '').slice(0, 10))}</small>
+    </button>`).join('') || '<p class="vc-recientes-estado">Aún no hay vouchers generados.</p>';
+    lista.querySelectorAll('[data-vc-reciente]').forEach(b => b.onclick = () => {
+      const v = data[Number(b.dataset.vcReciente)];
+      window.verVoucherPdf(v.pdf_path || '', v.numero_factura);
+    });
+  } catch (_) {
+    lista.innerHTML = '<p class="vc-recientes-estado">No se pudieron cargar los vouchers.</p><button class="vc-link" type="button" onclick="cargarVouchersRecientes()">Reintentar</button>';
+  } finally {
+    lista.setAttribute('aria-busy', 'false');
+  }
+}
+window.cargarVouchersRecientes = cargarVouchersRecientes;
 async function cargarHistorialVouchers(append) {
+  const recientes = append ? Promise.resolve() : cargarVouchersRecientes();
   const tbody = document.getElementById('vc-historial-tbody');
   const masBtn = document.getElementById('vc-cargar-mas-btn');
   // Solo la carga inicial muestra el skeleton -- "Cargar más" (append=true)
@@ -28529,6 +28561,7 @@ async function cargarHistorialVouchers(append) {
     .order('created_at', { ascending: false })
     .range(vcOffset, vcOffset + VC_PAGE_SIZE - 1);
   document.getElementById('vc-historial-loading')?.classList.remove('show');
+  await recientes;
   if (error) { if (!append) tbody.innerHTML = ''; return; }
   const filas = (data || []).map((v, i) => `<article class="lt-card" style="--i:${Math.min(i, 20)}">
     <div class="lt-card-cab">
@@ -30177,7 +30210,39 @@ async function cbCargarSeccion() {
   cbOffset = 0;
   await cbCargarHistorial(false);
 }
+window.cbVerHistorial = () => {
+  const titulo = document.getElementById('cb-historial-titulo');
+  titulo?.scrollIntoView({ block: 'start' });
+  titulo?.focus({ preventScroll: true });
+};
+async function cbCargarRecientes() {
+  const lista = document.getElementById('cb-recientes-lista');
+  if (!lista) return;
+  lista.setAttribute('aria-busy', 'true');
+  try {
+    // Independiente de los filtros del registro; conserva los permisos de la sesión.
+    const { data, error } = await sb.from('cotizaciones_boleteria').select('*').is('anulado_en', null).order('created_at', { ascending: false }).limit(3);
+    if (error) throw error;
+    (data || []).forEach(c => cbFilas.set(c.id, c));
+    lista.innerHTML = (data || []).map((c, i) => {
+      const detalle = (c.items || []).map(cbTitulo).filter(Boolean).join(' · ') || 'Sin servicios';
+      return `<button class="vc-reciente" type="button" data-cb-reciente="${i}" aria-label="${esc('Ver PDF de la cotización ' + cbNumero(c.numero) + ' de ' + c.cliente)}">
+        <b title="${esc(c.cliente)}">${esc(c.cliente)}</b><span class="vc-reciente-num">${esc(cbNumero(c.numero))}</span>
+        <small title="${esc(detalle)}">${esc(detalle)}</small>
+        <span class="vc-reciente-total">$${cbMonto(c.total)}<i class="fas fa-file-pdf" aria-hidden="true"></i></span>
+        <small title="${esc(c.creado_por_nombre || '')}">${esc(c.creado_por_nombre || '—')} · ${esc((c.created_at || '').slice(0, 10))}</small>
+      </button>`;
+    }).join('') || '<p class="vc-recientes-estado">Aún no hay cotizaciones generadas.</p>';
+    lista.querySelectorAll('[data-cb-reciente]').forEach(b => b.onclick = () => window.cbVerPdf(data[Number(b.dataset.cbReciente)].id));
+  } catch (_) {
+    lista.innerHTML = '<p class="vc-recientes-estado">No se pudieron cargar las cotizaciones.</p><button class="vc-link" type="button" onclick="cbCargarRecientes()">Reintentar</button>';
+  } finally {
+    lista.setAttribute('aria-busy', 'false');
+  }
+}
+window.cbCargarRecientes = cbCargarRecientes;
 async function cbCargarHistorial(append) {
+  const recientes = append ? Promise.resolve() : cbCargarRecientes();
   const cont = document.getElementById('cb-historial'), mas = document.getElementById('cb-cargar-mas-btn');
   if (!append) document.getElementById('cb-historial-loading')?.classList.add('show');
   let q = sb.from('cotizaciones_boleteria').select('*');
@@ -30188,6 +30253,7 @@ async function cbCargarHistorial(append) {
   if (val('cb-origen')) q = q.eq('origen', val('cb-origen'));
   const { data, error } = await q.order('created_at', { ascending: false }).range(cbOffset, cbOffset + CB_PAGE_SIZE - 1);
   document.getElementById('cb-historial-loading')?.classList.remove('show');
+  await recientes;
   if (error) { if (!append) cont.innerHTML = '<div class="lt-vacio"><i class="fas fa-triangle-exclamation"></i> No se pudo cargar el historial</div>'; return; }
   (data || []).forEach(c => cbFilas.set(c.id, c));
   const filas = (data || []).map((c, i) => {
@@ -33976,6 +34042,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '📄', titulo: 'Tus últimos vouchers y cotizaciones a mano', texto: 'Debajo de la vista previa del voucher y del resumen de la cotización aparecen los tres últimos documentos activos, con cliente, fecha y total. Toca uno para abrir su PDF o usa «Ver todos» para ir al historial completo.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
   { fecha: '2026-10-23', emoji: '🧾', titulo: 'Comisiones: % por persona y pestaña Pagos', texto: 'En Configuración cada persona tiene un solo % (o usa el general), con «Por servicio» para separar boletos, traslado, hospedaje y paquete, y «Volver al general» para quitarle el propio. Los admin sin ventas quedan ocultos. La pestaña Invoices ahora se llama Pagos: un pago por vendedor y corte, sin número de factura ni PDF, y ya no se manda nada por Telegram ni correo.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-23', emoji: '💰', titulo: 'Comisiones más claras', texto: 'El Resumen de Comisiones abre con el próximo pago: la fecha, cuántos días faltan, el total y cuánto le toca a cada vendedor (toca un nombre para ver sus ventas). Los pagos anteriores quedan plegados en un historial. En Ventas cada comisión es una tarjeta con sus servicios y porcentajes, un buscador por cliente, código o destino, y el botón «Ver reserva». Los asesores ven sus propios invoices en el Resumen. Se quitaron los restos de la verificación manual, que ya no hace falta.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-10-23', emoji: '🏨', titulo: 'Ficha del hotel más ligera', texto: 'Al abrir un hotel o una promoción en el Tarifario, la foto principal ocupa menos y las demás van en miniaturas al lado. La descripción se recorta a tres líneas con «Ver más». Las promociones ya no repiten el nombre del hotel en el título, y la nota «precio por habitación / noche» sale una sola vez por plan. En admin, las notas, fotos y ajustes quedan plegados en un bloque que se abre con un toque.', roles: ['admin', 'asesor'] },

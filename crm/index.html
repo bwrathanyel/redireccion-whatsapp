@@ -3326,7 +3326,8 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .cb-plegar{margin-right:8px}.cb-plegado .cb-item-grid{display:none}.cb-plegado .cb-item-cab{margin:0}.cb-oculto{display:none!important}
 .cb-extra{font-size:12px;color:var(--muted)}.cb-extra summary{cursor:pointer;padding:6px 0}.cb-extra .field{margin-top:8px}
 .cb-hotel-selector .cb-manual-input{margin-top:4px}.cb-hotel-selector>select+label{display:block;margin-top:8px}.cb-action-short{display:none}
-.cb-resumen-col{position:sticky;top:82px;min-width:0;margin:0;padding:18px}.cb-resumen-col h3{font-size:16px;margin:0 0 14px}
+.cb-lateral{position:sticky;top:82px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.cb-resumen-col{min-width:0;margin:0;padding:18px}.cb-resumen-col h3{font-size:16px;margin:0 0 14px}
 .cb-res-linea{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12px}.cb-res-linea span{min-width:0}.cb-res-linea b{display:block;overflow-wrap:anywhere}.cb-res-linea strong{white-space:nowrap;font-variant-numeric:tabular-nums}.cb-res-linea small{display:block;color:var(--muted);margin-top:4px}
 .cb-resumen-col .cb-total{justify-content:space-between;padding:14px 0;margin:0}.cb-resumen-col .cb-total b{font-size:24px;font-variant-numeric:tabular-nums}.cb-resumen-col .cb-acciones{display:flex;flex-direction:column;gap:8px;margin-top:0}.cb-resumen-col .cb-acciones button{width:100%;min-height:44px}
 .cb-resumen-col #cb-lead-btn{display:none!important}.cb-resumen-col #cb-descargar-btn{background:var(--accent);color:var(--on-accent);border-color:transparent}
@@ -3340,6 +3341,7 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 @media(max-width:1150px){.cb-layout{grid-template-columns:minmax(0,1fr) 240px}.cb-editor .cb-item-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cb-cab-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cb-editor .cb-dos{grid-column:span 2}}
 @media(max-width:900px){
   #sec-cotizacion-boletos .cb-layout{display:block;padding-bottom:calc(120px + var(--safe-b))}
+  .cb-lateral{position:static;margin-top:14px}
   #sec-cotizacion-boletos .cb-editor{padding:14px}
   .cb-editor .cb-cab-grid,.cb-editor .cb-item-grid{grid-template-columns:minmax(0,1fr);gap:14px}
   .cb-editor :is(.cb-dos,.cb-full,.cb-col2,.cb-cliente-campo){grid-column:1/-1}
@@ -3467,6 +3469,19 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .vc-generar{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--lyra-marca);color:var(--lyra-tinta);border:0;border-radius:12px;padding:11px 20px;font:inherit;font-size:14px;font-weight:800;cursor:pointer;width:auto;box-shadow:0 6px 18px rgba(var(--accent-rgb),.25)}
 .vc-generar:disabled{opacity:.6;cursor:progress}
 .vc-boleto-col{position:sticky;top:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.vc-recientes{border:1px solid var(--line2);border-radius:14px;background:var(--panel-solid);padding:12px 14px}
+.vc-recientes-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+.vc-recientes-cab h3{margin:0;font-size:13px;font-weight:800;color:var(--txt)}
+.vc-recientes-cab .vc-link{font-size:11px;min-height:36px;padding:6px}
+.vc-reciente{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;width:100%;padding:10px 0;background:none;border:0;border-top:1px solid var(--line);color:var(--txt);font:inherit;text-align:left;cursor:pointer;border-radius:0}
+.vc-reciente:hover{background:var(--accent-soft)}
+.vc-reciente:focus-visible,.vc-recientes .vc-link:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
+.vc-reciente b{font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vc-reciente small{grid-column:1;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vc-reciente-num{font-size:11px;color:var(--blue);font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.vc-reciente-total{grid-column:2;grid-row:2 / 4;align-self:center;font-size:12px;font-weight:800;white-space:nowrap;font-variant-numeric:tabular-nums}
+.vc-reciente-total i{margin-left:6px;color:var(--accent-ink)}
+.vc-recientes-estado{margin:8px 0;font-size:12px;color:var(--muted)}
 .vc-boleto{position:relative;background:var(--panel-solid);border:1px solid var(--line2);border-radius:16px;padding-left:28px;overflow:hidden;box-shadow:0 14px 36px rgba(0,0,0,.18)}
 .vc-lomo{position:absolute;inset:0 auto 0 0;width:28px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--lyra-sol-a),var(--lyra-sol-b))}
 .vc-lomo span{writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--lyra-tinta);white-space:nowrap}
@@ -9258,6 +9273,13 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             </div>
           </div>
           <div class="vc-hecho" id="vc-hecho" hidden></div>
+          <section class="vc-recientes" aria-labelledby="vc-recientes-titulo">
+            <div class="vc-recientes-cab">
+              <h3 id="vc-recientes-titulo">Últimos vouchers</h3>
+              <button class="vc-link" type="button" onclick="vcVerHistorial()">Ver todos <i class="fas fa-arrow-down" aria-hidden="true"></i></button>
+            </div>
+            <div id="vc-recientes-lista" aria-live="polite"><p class="vc-recientes-estado">Cargando vouchers…</p></div>
+          </section>
         </aside>
       </div>
 
@@ -9276,7 +9298,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <button class="mfs-done" data-mfs="vc-filtros" type="button">Listo</button>
       </div>
       <div class="card">
-        <div class="csub" id="vc-historial-sub">Registro de vouchers generados</div>
+        <div class="csub" id="vc-historial-sub" tabindex="-1">Registro de vouchers generados</div>
         <div class="tbl-state skel" id="vc-historial-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
         <div id="vc-historial-tbody" class="lt-grid"></div>
         <div style="margin-top:12px;text-align:center">
@@ -9310,6 +9332,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="field"><label class="fl">Términos y condiciones</label><textarea id="cb-terminos" class="ei" rows="5"></textarea></div>
         </details>
       </div>
+      <div class="cb-lateral">
       <aside class="card cb-resumen-col" aria-label="Resumen de cotización"><h3>Tu cotización</h3><div id="cb-resumen"></div>
         <div class="cb-total"><span>Total USD</span> <b id="cb-total">$0.00</b></div>
 
@@ -9321,11 +9344,19 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <button id="cb-whatsapp-btn" class="dbtn cb-solo-ventas cb-wa" type="button" onclick="cbWhatsapp()" title="Abrir WhatsApp con el mensaje listo"><i class="fab fa-whatsapp" aria-hidden="true"></i> WhatsApp</button>
         </div>
       </aside>
+      <section class="vc-recientes" aria-labelledby="cb-recientes-titulo">
+        <div class="vc-recientes-cab">
+          <h3 id="cb-recientes-titulo">Últimas cotizaciones</h3>
+          <button class="vc-link" type="button" onclick="cbVerHistorial()">Ver todas <i class="fas fa-arrow-down" aria-hidden="true"></i></button>
+        </div>
+        <div id="cb-recientes-lista" aria-live="polite"><p class="vc-recientes-estado">Cargando cotizaciones…</p></div>
+      </section>
+      </div>
       </div>
 
       <div class="card">
         <div class="cb-hist-cab">
-          <div class="csub">Cotizaciones generadas</div>
+          <div class="csub" id="cb-historial-titulo" tabindex="-1">Cotizaciones generadas</div>
           <div class="cb-hist-filtros">
             <select id="cb-origen" class="ei" aria-label="Origen de la cotización"><option value="">Todas</option><option value="boleteria">Boletería</option><option value="ventas">Ventas</option></select>
             <input id="cb-buscar" class="ei" placeholder="Buscar cliente o asesor...">
