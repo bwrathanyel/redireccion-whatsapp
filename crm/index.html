@@ -808,6 +808,20 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .skel-bar{height:52px;border-radius:10px}
 .tbl-state.skel-grid.show{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
 .skel-card{height:190px;border-radius:14px}
+/* Recarga de Leads: feedback sobre el borde, sin desplazar la lista. */
+.card:has(>#tbl-loading),.leads-inbox:has(>#inbox-loading){position:relative}
+.tbl-state.leads-carga{position:absolute;inset:0 0 auto;height:0;padding:0;gap:0;z-index:2;pointer-events:none;color:var(--accent-ink)}
+.leads-carga.show{animation:leads-carga-aparece var(--dur-rapida) ease .12s both}
+.leads-carga-linea{position:absolute;inset:0 0 auto;height:2px;border-radius:999px;overflow:hidden}
+.leads-carga-linea::after{content:'';position:absolute;inset:0 auto 0 0;width:32%;border-radius:inherit;background:linear-gradient(90deg,transparent,var(--accent),transparent);animation:leads-carga-barrido 1.6s var(--ease-salida) infinite}
+.leads-carga-insignia{position:absolute;top:0;left:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:8px;max-width:calc(100% - 28px);padding:6px 12px;border:1px solid rgba(var(--accent-rgb),.28);border-radius:999px;background:var(--panel-solid);box-shadow:var(--shadow);font-size:11.5px;font-weight:600;line-height:18px;white-space:nowrap}
+.leads-carga-aro{width:18px;height:18px;flex:none;border:1.5px solid rgba(var(--accent-rgb),.18);border-top-color:var(--accent);border-right-color:var(--accent);border-radius:50%;animation:spin 1.1s linear infinite}
+#inbox-loading{top:9px}
+#inbox-loading .leads-carga-linea{display:none}
+#inbox-loading .leads-carga-insignia{left:auto;right:0;transform:translateY(-50%);box-shadow:none}
+@keyframes leads-carga-aparece{from{opacity:0}to{opacity:1}}
+@keyframes leads-carga-barrido{from{transform:translateX(-110%)}to{transform:translateX(420%)}}
+@media(prefers-reduced-motion:reduce){.leads-carga.show,.leads-carga-aro,.leads-carga-linea::after{animation:none}.leads-carga-linea::after{left:34%;opacity:.6}}
 /* Cargador con progreso (cargadorIniciar en app.js): Tarifario y Galería. */
 .cargador-host{display:none}
 .cargador-host.show{display:block}
@@ -7527,7 +7541,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
           <div class="leads-inbox-head">
             <h2><i class="fas fa-inbox"></i> Leads nuevos <span class="lih-count" id="inbox-count">0</span></h2>
           </div>
-          <div class="tbl-state skel" id="inbox-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="tbl-state leads-carga" id="inbox-loading" role="status" aria-live="polite"><span class="leads-carga-insignia"><span class="leads-carga-aro" aria-hidden="true"></span>Actualizando</span></div>
           <div class="tbl-state" id="inbox-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tenés leads nuevos esperando respuesta</div></div>
           <div class="leads-inbox-grid" id="inbox-grid"></div>
         </div>
@@ -7584,7 +7598,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
             <button class="dbtn gh" id="bulk-servicio-ia" type="button" style="width:auto;padding:6px 12px"><i class="fas fa-wand-magic-sparkles"></i> Detectar servicio con IA</button>
             <button class="dbtn" id="bulk-eliminar" type="button" style="width:auto;padding:6px 12px;background:#ef4444;color:#fff;margin-left:auto"><i class="fas fa-trash"></i> Eliminar seleccionados</button>
           </div>
-          <div class="tbl-state skel" id="tbl-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="tbl-state leads-carga" id="tbl-loading" role="status" aria-live="polite"><span class="leads-carga-linea" aria-hidden="true"></span><span class="leads-carga-insignia"><span class="leads-carga-aro" aria-hidden="true"></span>Actualizando leads</span></div>
           <div class="tbl-state" id="tbl-empty"><i class="fas fa-inbox"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay leads con estos filtros</div></div>
           <div id="tbl-wrap" style="overflow-x:auto">
             <table>

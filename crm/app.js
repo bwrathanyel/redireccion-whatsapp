@@ -6459,15 +6459,15 @@ function wireLeadCards(contenedor, data, { drag = false } = {}) {
 // el bot actualiza leads sin parar y cada lote hacía parpadear la lista.
 async function loadTable(silencioso) {
   const gen = ++genCarga;
-  const loading = document.getElementById('tbl-loading'), empty = document.getElementById('tbl-empty'), wrap = document.getElementById('tbl-wrap');
-  empty.classList.remove('show'); if (silencioso !== true) { loading.classList.add('show'); wrap.style.opacity = '.4'; }
+  const loading = document.getElementById('tbl-loading'), empty = document.getElementById('tbl-empty');
+  empty.classList.remove('show'); if (silencioso !== true) loading.classList.add('show');
   const from = (page - 1) * PER;
   const porSeguimiento = !!val('f-seguimiento'); // con el filtro, lo más urgente primero
   let qTabla = buildQuery(true).order(porSeguimiento ? 'proxima_accion_at' : 'fecha_creacion', { ascending: porSeguimiento, nullsFirst: false });
   if (porSeguimiento) qTabla = qTabla.order('id'); // los atajos repiten la hora exacta: sin desempate .range() pagina inestable
   const { data, count, error } = await qTabla.range(from, from + PER - 1);
   if (gen !== genCarga) return;
-  loading.classList.remove('show'); wrap.style.opacity = '1';
+  loading.classList.remove('show');
   if (error) { console.error(error); errToast('No se pudieron cargar los leads'); return; }
   totalFiltered = count ?? 0;
   document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`;
@@ -22537,7 +22537,8 @@ function precargarFotos(fotos) {
 // siempre sobre un nodo desconectado. Se trackean los timers activos acá para
 // poder apagarlos todos de una vez al principio de cada render.
 let carruselTimers = new Set();
-function detenerCarruseles() { carruselTimers.forEach(t => clearInterval(t)); carruselTimers.clear(); }
+const carruselLimpiezas = new Set();
+function detenerCarruseles() { carruselLimpiezas.forEach(limpiar => limpiar()); carruselLimpiezas.clear(); carruselTimers.forEach(t => clearInterval(t)); carruselTimers.clear(); }
 // Sin mouse no hay hover — en touch (celular/tablet) el carrusel se controla
 // con swipe (con dots visibles siempre, no solo al interactuar) en vez de
 // auto-rotar solo. Auto-rotar 50 tarjetas a la vez en una grilla de celular
@@ -22548,33 +22549,37 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
   if (dotsEl) dotsEl.innerHTML = fotos && fotos.length > 1 ? fotos.map((_, idx) => `<span class="carrusel-dot${idx === 0 ? ' on' : ''}"></span>`).join('') : '';
   if (!mediaEl || !fotos || fotos.length < 2) return;
   let timer = null, i = 0;
-  // Crossfade real: clona el estado actual como "fantasma" fijo encima (mismo
-  // rect en pantalla) que se desvanece mientras la foto nueva aparece debajo,
-  // en vez de fundir a opacity:0 y recién ahí cambiar la foto (eso dejaba un
-  // parpadeo al color de fondo entre una foto y otra, se sentía como corte).
-  const crossfade = n => {
-    i = (n + fotos.length) % fotos.length;
-    const rect = mediaEl.getBoundingClientRect();
-    const ghost = mediaEl.cloneNode(true);
-    ghost.removeAttribute('id');
-    ghost.querySelector('.carrusel-dots')?.remove();
-    Object.assign(ghost.style, { position: 'fixed', top: rect.top + 'px', left: rect.left + 'px', width: rect.width + 'px', height: rect.height + 'px', margin: '0', zIndex: '5', pointerEvents: 'none', transition: 'none', opacity: '1' });
-    document.body.appendChild(ghost);
-    setFoto(fotos[i]);
-    mediaEl.style.transition = 'none';
-    mediaEl.style.opacity = '0';
-    // Fuerza al navegador a "fijar" opacity:1 (fantasma) y opacity:0 (foto
-    // nueva) antes de animar — si no, ambos cambios de estilo quedan en el
-    // mismo lote y la transición nunca llega a pintarse (salto instantáneo).
-    void ghost.offsetWidth;
-    void mediaEl.offsetWidth;
-    requestAnimationFrame(() => {
-      ghost.style.transition = 'opacity .35s ease';
-      mediaEl.style.transition = 'opacity .35s ease';
-      mediaEl.style.opacity = '1';
-      ghost.style.opacity = '0';
-    });
-    setTimeout(() => ghost.remove(), 380);
+  let solicitud = 0, transicion = Promise.resolve(), quitarTransicion = null;
+  // La capa vive en la misma caja: un clon fijo en body multiplica de nuevo
+  // las coordenadas por zoom y se separa de la tarjeta al moverla o scrollear.
+  const crossfade = async n => {
+    const turno = ++solicitud, siguiente = (n + fotos.length) % fotos.length;
+    const imagen = new Image();
+    imagen.src = fotos[siguiente];
+    try { await imagen.decode(); } catch { return; }
+    await transicion;
+    if (turno !== solicitud || !cardEl.isConnected || siguiente === i) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setFoto(fotos[siguiente]); i = siguiente;
+    } else {
+      const enImg = mediaEl.tagName === 'IMG', host = enImg ? mediaEl.parentElement : mediaEl;
+      if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+      const ghost = mediaEl.cloneNode(false);
+      ghost.removeAttribute('id');
+      ghost.removeAttribute('loading');
+      ghost.setAttribute('aria-hidden', 'true');
+      Object.assign(ghost.style, { position: 'absolute', margin: '0', pointerEvents: 'none', transition: 'none', opacity: '1', borderRadius: getComputedStyle(mediaEl).borderRadius, ...(enImg
+        ? { left: mediaEl.offsetLeft + 'px', top: mediaEl.offsetTop + 'px', width: mediaEl.offsetWidth + 'px', height: mediaEl.offsetHeight + 'px' }
+        : { inset: '0', width: '100%', height: '100%' }) });
+      if (enImg) mediaEl.after(ghost); else host.prepend(ghost);
+      setFoto(fotos[siguiente]); i = siguiente;
+      transicion = new Promise(resolve => {
+        const animacion = ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 350, easing: 'ease', fill: 'forwards' });
+        const terminar = () => { ghost.remove(); animacion.cancel(); quitarTransicion = null; resolve(); };
+        quitarTransicion = terminar;
+        animacion.onfinish = terminar;
+      });
+    }
     if (dotsEl) [...dotsEl.children].forEach((d, idx) => d.classList.toggle('on', idx === i));
   };
   if (esTouch) {
@@ -22673,11 +22678,16 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
   // Espera un hover real: el puntero que solo pasa por encima (mouse quieto
   // mientras la lista se mueve) no descarga fotos ni arranca el carrusel.
   let espera = 0;
+  const limpiar = () => {
+    clearTimeout(espera); clearInterval(timer); carruselTimers.delete(timer); timer = null;
+    solicitud++; quitarTransicion?.();
+  };
   cardEl.addEventListener('mouseenter', () => {
+    carruselLimpiezas.add(limpiar);
     clearTimeout(espera);
     espera = setTimeout(() => {
+      if (!cardEl.isConnected) return;
       precargarFotos(fotos);
-      i = 0;
       timer = setInterval(() => crossfade(i + 1), 1100);
       carruselTimers.add(timer);
     }, 300);
@@ -22685,7 +22695,7 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
   cardEl.addEventListener('mouseleave', () => {
     clearTimeout(espera);
     clearInterval(timer); carruselTimers.delete(timer); timer = null;
-    if (i !== 0) crossfade(0);
+    crossfade(0);
   });
 }
 const DESTINO_ORDEN = ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas'];
@@ -34539,6 +34549,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '✨', titulo: 'Recargas de Leads y fotos más suaves', texto: 'Al recargar Leads, la lista permanece visible con un indicador discreto en el color del tema. Las fotos del Tarifario cambian dentro de su tarjeta al pasar el mouse, sin saltos ni destellos entre imágenes.', roles: ROLES_TODOS },
   { fecha: '2026-10-23', emoji: '🏨', titulo: 'Tarifas vigentes y apertura de la ficha', texto: 'La ficha de cada hotel muestra solo tarifas vigentes. Corregimos los hoteles que parecían no tener precios porque se cargaba primero el histórico. Cuando hace falta consultar la ficha, el panel se abre con un indicador de carga; al volver a un hotel se reutiliza lo cargado y los errores permiten reintentar.', roles: ROLES_TODOS },
   { fecha: '2026-10-23', emoji: '🏨', titulo: 'Todos los hoteles en tablas', texto: 'Cada hotel muestra sus tarifas vigentes en tablas por temporada y habitación, aunque tenga una sola tarifa o datos incompletos. Si hay muchas habitaciones puedes deslizar la tabla; al tocar un precio se abre su detalle. El histórico sigue disponible al final.', roles: ['admin', 'asesor', 'marketing'] },
   { fecha: '2026-10-23', emoji: '🗂️', titulo: 'Precios del hotel en una tabla', texto: 'Al abrir un hotel en el Tarifario, sus precios ahora salen en una tabla: cada fila es una temporada y cada columna una habitación, con la temporada de hoy marcada. Toca un precio para ver debajo todas sus ocupaciones, las fechas de disfrute y el botón Seleccionar; el interruptor Doble/Sencilla cambia los montos de la tabla. Arriba van las fotos, el «Desde», el check-in y el check-out, y los requisitos pasan a «Políticas del hotel». Los hoteles cuyas tarifas no arman una tabla limpia se siguen viendo en tarjetas.', roles: ROLES_TODOS },
