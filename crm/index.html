@@ -4058,6 +4058,12 @@ body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
      Sin blur y con fondo más opaco no se nota; el tema claro lo pisa más abajo. */
   .drawer-bg,.sheet-bg{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(4,6,12,.72)}
   .drawer-bg{transition:opacity .25s}
+  /* Mismo motivo (parpadeo/tirones en un Poco X7, 2026-10-24): los blurs que quedaban afuera, y
+     los latidos de box-shadow, que repintan cada frame, pasan a opacidad (va por compositor). */
+  .tarcmp,.lb-close,.lb-arrow,.lb-counter,.sel-lotus-velo,#chat-panel .cp-drop{backdrop-filter:none;-webkit-backdrop-filter:none}
+  .tk-live::before,.dm-vivo.on .dm-vivo-punto{animation:mov-latido 1.8s ease-in-out infinite}
+  @keyframes mov-latido{50%{opacity:.35}}
+  .lo-mar{animation:none}
   .drawer{will-change:transform}
   .dbtn{padding:15px}
   .preview-pill{left:12px;right:12px;bottom:calc(84px + var(--safe-b));transform:translateY(140px);max-width:none}
