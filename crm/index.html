@@ -11,6 +11,19 @@
 // flash de tema oscuro (default) en usuarios que eligieron claro, mientras
 // se resuelve sesión+perfil por red (aplicarPreferencias() en app.js hace
 // lo mismo pero recién tras el login, ver ese comentario para el porqué).
+// Móvil táctil (≤760px): la escala de cada tamaño de letra la pone el viewport
+// nativo (ancho de layout = pantalla / zoom), no body{zoom} -- con zoom CSS
+// Chromium Android dejaba franjas sin pintar en las hojas inferiores (Poco X7,
+// 2026-10-25). Mismos factores que :root[data-fuente] (CSS, más abajo).
+function ajustarViewport() {
+  var s = screen, vert = matchMedia('(orientation: portrait)').matches;
+  var w = vert ? Math.min(s.width, s.height) : Math.max(s.width, s.height);
+  var z = { chico: .8, grande: 1.1, xl: 1.15 }[document.documentElement.dataset.fuente] || .9;
+  var a = Math.min(760, Math.round(w / z)), movil = w <= 760 && matchMedia('(pointer: coarse)').matches;
+  document.querySelector('meta[name="viewport"]').setAttribute('content', movil
+    ? 'width=' + a + ', initial-scale=' + (w / a).toFixed(4) + ', viewport-fit=cover'
+    : 'width=device-width, initial-scale=1.0, viewport-fit=cover');
+}
 try {
   var p = JSON.parse(localStorage.getItem('lotus_prefs') || '{}');
   // Copia mínima de PALETAS (app.js) -- [base, theme-color]. Mantener en sincronía.
@@ -30,6 +43,8 @@ try {
     document.head.appendChild(k);
   }
 } catch (e) { /* localStorage no disponible (modo privado) -- se pierde el cache, no rompe nada */ }
+ajustarViewport();
+matchMedia('(orientation: portrait)').addEventListener('change', ajustarViewport);
 </script>
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -175,6 +190,12 @@ body{zoom:.9}
 :root[data-fuente="grande"] body{zoom:1.1;--tap:40px;--zoom:1.1}
 :root[data-fuente="xl"] body{zoom:1.25;--tap:35.2px;--zoom:1.25}
 @media(max-width:760px){:root[data-fuente="xl"] body{zoom:1.15;--tap:38.3px;--zoom:1.15}}
+/* Móvil táctil: sin zoom CSS, la escala la hace ajustarViewport() (head).
+   --tap queda igual: el viewport escala igual que el zoom. --zoom:1 porque
+   el vh del viewport nativo ya cubre la pantalla. :root gana sobre el
+   body{--zoom:.9} del bloque Lyra. Sin doble toque: sin él Chrome vuelve a
+   esperar 300 ms por toque cuando el ancho no es device-width. */
+@media(max-width:760px) and (pointer:coarse){:root body,:root[data-fuente] body{zoom:1;--zoom:1}html{touch-action:manipulation}}
 /* Tipo de letra (Mi Perfil). Todo hereda de body vía font-family:inherit;
    los ui-monospace explícitos (códigos, localizadores) no cambian. La
    familia elegida la baja cargarLetra() (app.js) / el script del head --

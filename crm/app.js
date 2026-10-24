@@ -709,6 +709,7 @@ function aplicarPreferencias() {
   if (window.Chart) Chart.defaults.color = cssVar('--muted') || '#8b93ad';
   const fuente = MI_PREFERENCIAS.fuente;
   if (['chico', 'grande', 'xl'].includes(fuente)) root.dataset.fuente = fuente; else delete root.dataset.fuente;
+  window.ajustarViewport?.();
   const letra = letraActual();
   if (letra === 'inter') delete root.dataset.letra; else root.dataset.letra = letra;
   cargarLetra(letra);
