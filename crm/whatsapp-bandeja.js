@@ -110,7 +110,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     $('wb-log').innerHTML = '<div class="msg-empty"><i class="fas fa-spinner fa-spin"></i></div>';
     document.querySelectorAll('#wb-inbox [data-wb]').forEach(r => r.classList.toggle('on', Number(r.dataset.wb) === c.id));
     const { data, error: e } = await sb.from('whatsapp_mensajes')
-      .select('wamid,direccion,tipo,texto,enviado_en,estado,error,enviado_por,plantilla,media_id,media_mime,media_path')
+      .select('wamid,direccion,tipo,texto,enviado_en,estado,error,enviado_por,plantilla,media_id,media_mime,media_path,transcripcion')
       .eq('conversacion_id', c.id).order('enviado_en', { ascending: false }).limit(150);
     if (g !== gen) return;
     if (e) { $('wb-log').innerHTML = '<div class="msg-empty">No se pudieron cargar los mensajes</div>'; return; }
@@ -151,7 +151,8 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     const fuente = m.media_path ? `data-wb-media="${esc(m.media_path)}"` : '';
     if (!m.media_path) return `<div class="msg-doc"><i class="fas fa-paperclip"></i><div><div class="msg-doc-nombre">Adjunto (${esc(m.tipo)}) · aún no descargado</div></div></div>`;
     if (m.tipo === 'image' || m.tipo === 'sticker') return `<img class="msg-img" ${fuente} alt="Foto">`;
-    if (m.tipo === 'audio') return `<audio class="wa-audio" controls preload="none" ${fuente}></audio>`;
+    // transcripcion: la escribe whatsapp-webhook al bajar la nota de voz (mismo bloque que Meta DM).
+    if (m.tipo === 'audio') return `<audio class="wa-audio" controls preload="none" ${fuente}></audio>${m.transcripcion ? `<div class="wa-transcripcion"><i class="fas fa-microphone"></i><span>${esc(m.transcripcion)}</span></div>` : ''}`;
     if (m.tipo === 'video') return `<video class="msg-img" controls preload="metadata" ${fuente}></video>`;
     return `<div class="msg-doc" ${fuente} data-wb-doc="1"><i class="fas fa-file"></i><div><div class="msg-doc-nombre">${esc(m.media_mime || 'Archivo')}</div></div></div>`;
   }
@@ -240,7 +241,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
           const antes = mensajes[i];
           mensajes[i] = { ...antes, ...m };
           // Un cambio de estado (✓✓) solo toca el tick: re-pintar todo cortaría un audio en reproducción.
-          if (antes.texto === m.texto && antes.media_path === m.media_path && antes.media_id === m.media_id) pintarTick(mensajes[i]);
+          if (antes.texto === m.texto && antes.media_path === m.media_path && antes.media_id === m.media_id && antes.transcripcion === m.transcripcion) pintarTick(mensajes[i]);
           else pintarMensajes(false);
           return;
         }

@@ -2622,6 +2622,9 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
 .wa-lead-linea i{color:var(--accent-ink)}
 .wa-mas{align-self:center;margin:8px auto;background:var(--panel-solid);border:1px solid var(--line2);border-radius:20px;color:var(--txt);font:inherit;font-size:12px;padding:6px 14px;cursor:pointer}
 .wa-audio{display:block;width:240px;max-width:100%}
+.wa-transcripcion{display:flex;gap:6px;align-items:flex-start;width:240px;max-width:100%;margin-top:4px;padding:2px 6px;font-size:12.5px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
+.wa-transcripcion i{font-size:10px;margin-top:3px;opacity:.6}
+.dm-voz{display:flex;align-items:center;gap:4px;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;opacity:.7;margin-bottom:2px}
 @media(max-width:760px){.wa-filtros{flex-direction:column}}
 /* Vista "todos los chats del número": misma cáscara que Meta DM, dos columnas y tema WhatsApp */
 .dm-shell.wa-shell{grid-template-columns:320px minmax(0,1fr)}
@@ -4679,7 +4682,7 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
    Las secciones siguen planas en móvil (lo decide el bloque max-width:760px
    de más abajo): acá solo se tocan como tarjeta desde 761px. */
 .dhead-lead{position:relative;align-items:center;margin-bottom:14px;padding:14px 52px 14px 14px;border:1px solid color-mix(in srgb,var(--est) 24%,var(--line));border-radius:18px;background:radial-gradient(130% 120% at 0% 0%,color-mix(in srgb,var(--est) 15%,transparent),transparent 62%),rgba(var(--ink-rgb),.025)}
-.drawer:has(.dhead-lead) .dclose{top:32px;right:32px}
+.drawer:has(.dhead-lead) .dclose{top:32px;right:32px;z-index:2}
 .dhead-lead .dava{width:56px;height:56px;border-radius:16px;font-size:21px;box-shadow:0 0 0 2px var(--bg2),0 0 0 4px color-mix(in srgb,var(--est) 55%,transparent)}
 .dhead-lead .dn{font-size:19px;letter-spacing:-.01em}
 .dhead-lead .dm{display:flex;flex-wrap:wrap;gap:7px;margin-top:7px}

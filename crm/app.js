@@ -26645,7 +26645,7 @@ function dmPintarLog(inicio, previos = 0) {
     const agrupado = antes && (antes.rol === 'ia') === ia, cola = !despues || (despues.rol === 'ia') !== ia;
     const fotos = ia && Array.isArray(m.fotos) ? m.fotos.filter(u => /^https:\/\//.test(u)) : [], video = ia && /^https:\/\//.test(m.video || '') ? m.video : '';
     const media = fotos.map((u, k) => `<img class="msg-img dm-foto" src="${esc(dmFotoMini(u))}" data-dm-msg="${i}" data-dm-foto="${k}" loading="lazy" alt="Foto">`).join('') + (video ? `<video class="msg-img dm-foto" controls preload="metadata" src="${esc(video)}"></video>` : '');
-    return `<div class="chat-msg ${ia ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${cola ? ' tail' : ''}${media ? ' adjunto' : ''}${!inicio && i >= previos ? ' msg-new' : ''}">${ia && !agrupado ? '<div class="dm-burbuja-ia"><i class="fas fa-robot"></i> Bot</div>' : ''}${m.texto ? `<div>${esc(m.texto)}</div>` : ''}${media ? `<div class="dm-fotos">${media}</div>` : ''}</div>`;
+    return `<div class="chat-msg ${ia ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${cola ? ' tail' : ''}${media ? ' adjunto' : ''}${!inicio && i >= previos ? ' msg-new' : ''}">${ia && !agrupado ? '<div class="dm-burbuja-ia"><i class="fas fa-robot"></i> Bot</div>' : ''}${!ia && m.voz ? '<div class="dm-voz"><i class="fas fa-microphone"></i> Nota de voz</div>' : ''}${m.texto ? `<div>${esc(m.texto)}</div>` : ''}${media ? `<div class="dm-fotos">${media}</div>` : ''}</div>`;
   }).join('') : '<div class="msg-empty">Sin mensajes todavía</div>';
   log.querySelectorAll('[data-dm-foto]').forEach(el => el.addEventListener('click', () => {
     const lista = (h[Number(el.dataset.dmMsg)]?.fotos || []).map(dmFotoGrande);
@@ -26915,13 +26915,15 @@ function waCerrarChat(fromNav, sinRecarga) {
   if (!sinRecarga && currentSec === 'whatsapp') waCargarChats(true);
 }
 const WA_TICK = { sent: '✓', delivered: '✓✓', read: '✓✓', failed: '!' };
+// Nota de voz que transcribió el bot (audio_transcripciones, la cruza whatsapp-inbox).
+const waTranscripcionHtml = t => t ? `<div class="wa-transcripcion"><i class="fas fa-microphone"></i><span>${esc(t)}</span></div>` : '';
 function waAdjuntoHtml(a) {
   const publica = WA_URL_PUBLICA.test(a.url);
   // exp/firma: los manda la acción conversacion (Meta DM) para que un asesor pueda bajar el adjunto.
   const firma = a.firma ? ` data-wa-exp="${esc(a.exp)}" data-wa-firma="${esc(a.firma)}"` : '';
   const fuente = publica ? `src="${esc(a.url)}"` : `data-wa-media="${esc(a.url)}" data-wa-mime="${esc(a.mime || '')}"${firma}`;
   if (a.tipo === 'image' || a.tipo === 'sticker') return `<img class="msg-img" ${fuente}${publica ? ` data-img="${esc(a.url)}"` : ''} alt="Foto">`;
-  if (a.tipo === 'audio' || a.tipo === 'voice') return `<audio class="wa-audio" controls preload="none" ${fuente}></audio>`;
+  if (a.tipo === 'audio' || a.tipo === 'voice') return `<audio class="wa-audio" controls preload="none" ${fuente}></audio>${waTranscripcionHtml(a.transcripcion)}`;
   if (a.tipo === 'video') return `<video class="msg-img" controls preload="metadata" ${fuente}></video>`;
   return `<div class="msg-doc" ${publica ? `data-doc="${esc(a.url)}"` : fuente}><i class="fas fa-file"></i><div><div class="msg-doc-nombre">${esc(a.mime || 'Archivo')}</div></div></div>`;
 }
@@ -34602,6 +34604,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-24', emoji: '🎤', titulo: 'Notas de voz con texto', texto: 'En Meta DM, las notas de voz de WhatsApp muestran debajo lo que dijo el cliente, también cuando ya tomaste tú la conversación. En Instagram y Facebook, el mensaje que llegó por audio lleva la marca «Nota de voz». WhatsApp empresa transcribe igual los audios que lleguen al número de la empresa.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-24', emoji: '✅', titulo: 'Tareas nuevas: tu día en una lista', texto: 'Tareas ya está en el menú para todos. Ves lo vencido, lo de hoy y lo que viene, cada tarea con su próximo paso como botón. Los pasos se marcan solos cuando los haces en el CRM (estado del cliente, cotización, llamada, reserva): toca «Hacer ahora» y al volver ya está. También puedes enviar una foto como evidencia, comentar con administración, avisar un problema y crearte recordatorios. En el teléfono se abre además deslizando desde el borde derecho. Activa los avisos para enterarte cuando te asignan algo.', roles: ['admin', 'administrativo', 'asesor', 'marketing', 'boleteria'] },
   { fecha: '2026-10-24', emoji: '📋', titulo: 'Tareas: el equipo en vivo', texto: 'En Tareas → Equipo ves a cada persona con su avance en vivo y, arriba, lo que necesita tu atención (problemas, revisiones, vencidas, sin abrir) con su acción a un toque. Al crear una tarea eliges una o varias personas, el cliente, pasos que se verifican solos, si requiere tu aprobación y si se repite. Las plantillas guardan las tareas frecuentes; las que se repiten se crean solas y se pueden pausar. La ficha de cada cliente muestra sus tareas.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-23', emoji: '📅', titulo: 'Gremary: disponibilidad desde enero de 2027', texto: 'Posada Gremary no tiene cupo hasta el 31 de diciembre de 2026. Revisa sus fechas en Stop Sales → Los Roques y ofrece otras posadas del destino para ese período. Las promociones vinculadas de Hot Sales abren la misma ficha completa del hotel.', roles: ROLES_TODOS },
