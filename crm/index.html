@@ -197,9 +197,9 @@ body{zoom:.9}
    decide que la página no es scrolleable, o corta el scroll antes de tiempo.
    Fix: <html> deja de scrollear (overflow:hidden, solo pinta fondo);
    <body> pasa a ser el único contenedor de scroll real, explícito. */
-html{-webkit-text-size-adjust:100%;background:var(--bg);height:100%;overflow:hidden;overscroll-behavior-y:none}
-body{font-family:var(--font-ui);background:var(--bg);color:var(--txt);-webkit-font-smoothing:antialiased;height:100%;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:none}
-body.lb-lock,body.menu-abierto{overflow:hidden}
+html{-webkit-text-size-adjust:100%;background:var(--bg);height:100%;overflow:hidden;overscroll-behavior:none}
+body{font-family:var(--font-ui);background:var(--bg);color:var(--txt);-webkit-font-smoothing:antialiased;height:100%;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:none}
+body.lb-lock,body.menu-abierto,body.tk-lock{overflow:hidden}
 body::before{content:'';position:fixed;inset:0;background:
   radial-gradient(900px 500px at 12% -8%,rgba(var(--accent-rgb),.10),transparent 60%),
   radial-gradient(1000px 600px at 110% 10%,rgba(74,158,255,.10),transparent 55%);z-index:-1;pointer-events:none}
@@ -1260,20 +1260,11 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 
 /* toasts */
 #toasts{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:10px;z-index:62}
-/* Fase 5.4 -- pull-to-refresh. left/transform los pone JS a partir del
-   arrastre; sin transition en el drag (mismo motivo que .bn-indicator:
-   tiene que seguir al dedo cuadro a cuadro). */
-.ptr-indicador{position:fixed;top:0;left:50%;width:38px;height:38px;border-radius:50%;background:var(--panel-solid);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;z-index:60;box-shadow:0 6px 16px rgba(0,0,0,.35);opacity:0;pointer-events:none;font-size:14px;color:var(--muted);transition:opacity .18s linear;will-change:transform,opacity}
 /* Confirmación táctil del long-press: la tarjeta se hunde mientras se sostiene
    y el pulso remata al dispararse la selección. */
 .entity-card.lp-press{transform:scale(.975);transition:transform .18s var(--ease-salida)}
 @keyframes lp-pulso{0%{transform:scale(.975)}45%{transform:scale(1.02)}100%{transform:none}}
 .entity-card.lp-hecho{animation:lp-pulso .32s var(--ease-salida)}
-.ptr-indicador.show{opacity:1}
-.ptr-indicador.listo{color:var(--accent-ink);border-color:rgba(var(--accent-rgb),.5)}
-.ptr-indicador.cargando i{animation:ptr-spin .7s linear infinite}
-@keyframes ptr-spin{to{transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce){.ptr-indicador.cargando i{animation:none}}
 .toast{display:flex;align-items:center;gap:12px;background:var(--panel-solid);border:1px solid rgba(37,211,102,.4);border-left:4px solid var(--green);border-radius:12px;padding:13px 16px;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.5);transform:translateX(130%);opacity:0;transition:.3s cubic-bezier(.3,1,.4,1);max-width:300px}
 .toast.show{transform:translateX(0);opacity:1}
 .toast i{color:var(--green);font-size:16px}.toast b{color:#fff;font-weight:700}
@@ -5934,6 +5925,36 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
   #cxp-tbody .cxp-ver-pagadas{min-height:44px}
   .cxp-n{display:none}
 }
+/* Comisiones: una ficha por asesor (mismo molde que CxP) y una mini-tarjeta por venta (2026-10-24). */
+#sec-facturacion #fact-com-tbody{grid-template-columns:minmax(0,1fr)}
+.com-avatar{display:grid;place-items:center;flex-shrink:0;width:30px;height:30px;border-radius:50%;font-size:11.5px;font-weight:700;color:var(--accent-ink);background:var(--accent-soft)}
+.com-ficha .lt-card-cab{align-items:center}
+.cxp-ficha.com-ficha-sin,.cxp-ficha.com-ficha-sin:hover{border-left-color:var(--pink)}
+.com-pie{display:flex;align-items:center;gap:10px}
+.com-pie .lt-barra{flex:1}
+.com-pie small{font-size:11px;color:var(--muted);white-space:nowrap}
+.com-pie .btn-sm{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.com-fila{border-left-color:var(--c)}
+.com-fila-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.com-fila-cab .cxp-quien{flex:1}
+.com-fila-cab .bt-tag{flex-shrink:0}
+.com-calc{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding-top:8px;border-top:1px dashed var(--line2)}
+.com-calc span{font-size:12px;color:var(--muted)}
+.com-calc span b{color:var(--txt);font-weight:600}
+.com-calc strong{font-size:20px;font-weight:700;line-height:1.1}
+.com-pagada-el{font-size:11.5px;color:var(--muted)}
+.com-pagada-el i{color:var(--green);margin-right:3px}
+.com-fila-sin_configurar{box-shadow:0 0 0 1px color-mix(in srgb,var(--pink) 35%,transparent)}
+@media(max-width:760px){
+  #fact-com-tbody .cxp-filas{padding:8px}
+  #fact-com-tbody .cxp-cab{padding:12px}
+  #fact-com-tbody .cxp-ficha .lt-cifras div{padding:0 8px}
+  #fact-com-tbody .cxp-ficha .lt-cifras div:first-child{padding-left:0}
+  #fact-com-tbody .cxp-ficha .lt-cifras div:last-child b{font-size:17px}
+  #fact-com-tbody .cxp-acc .btn-sm,#fact-com-tbody .cxp-ver-pagadas{min-height:44px}
+  .com-pie{flex-wrap:wrap}
+  .com-pie .btn-sm{flex-basis:100%;justify-content:center;min-height:44px}
+}
 /* Proveedores con margen real (2026-10-21). --pc = color del servicio principal, --mc = color del margen. */
 .prv-barra{display:flex;flex-wrap:wrap;align-items:center;gap:9px 14px;margin-top:14px}
 .prv-seg{display:inline-flex;padding:3px;border-radius:999px;background:var(--bg2);border:1px solid var(--line)}
@@ -6605,7 +6626,6 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 :root[data-theme="light"] .promo-retirar:hover{color:#961d1d}
 :root[data-theme="light"] .tar-selbtn{background:rgba(var(--ink-rgb),.06)}
 :root[data-theme="light"] .dbtn.gh{background:rgba(var(--ink-rgb),.06)}
-:root[data-theme="light"] .ptr-indicador{box-shadow:0 6px 16px rgba(var(--ink-rgb),.1)}
 :root[data-theme="light"] .toast{box-shadow:0 10px 30px rgba(var(--ink-rgb),.1)}
 :root[data-theme="light"] .toast-err i{color:#961d1d}
 :root[data-theme="light"] .ei{background:rgba(var(--surface-rgb),.9)}
@@ -7125,7 +7145,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 .tk-grab{display:none}
 .tk-panel-h{display:flex;align-items:center;gap:9px;padding:12px 16px;border-bottom:1px solid var(--line)}
 .tk-estado{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:color-mix(in srgb,var(--c) 15%,transparent);color:var(--c)}
-.tk-panel-b{flex:1;overflow-y:auto;padding:18px 22px 22px}
+.tk-panel-b{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:18px 22px 22px}
 .tk-panel h2{font-size:20px;font-weight:800;letter-spacing:-.03em;line-height:1.25}
 .tk-panel-f{display:flex;gap:9px;padding:12px 16px calc(12px + var(--safe-b));border-top:1px solid var(--line);background:var(--bg2)}
 .tk-panel-f .tk-btn-pri{flex:1}
@@ -7328,7 +7348,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   .tk-toasts{bottom:72px}
 }
 @media (max-width:760px){
-  .tk-panel.tk-panel-lateral{top:0;bottom:0;left:auto;right:0;width:min(420px,92%);height:auto;border-top:0;border-left:1px solid var(--line2);border-radius:20px 0 0 20px;animation-name:tk-panelIn}
+  .tk-panel.tk-panel-lateral{top:0;bottom:0;left:auto;right:0;width:min(420px,86%);height:auto;touch-action:pan-y;border-top:0;border-left:1px solid var(--line2);border-radius:20px 0 0 20px;animation-name:tk-panelIn}
   .tk-panel-lateral .tk-panel-b{padding:14px 14px 22px}
 }
 /* Fases 3-4: tarjeta en Hoy, bloque en la ficha del lead, pestañas del admin y constructor */
@@ -8996,7 +9016,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 
       <div class="fact-tab-panel" data-fact-panel="comisiones" style="display:none">
         <div class="fact-barra">
-          <input class="ei bt-buscar" id="fact-com-search" type="search" placeholder="Buscar asesor..." aria-label="Buscar asesor">
+          <input class="ei bt-buscar" id="fact-com-search" type="search" placeholder="Buscar asesor, cliente o factura..." aria-label="Buscar asesor, cliente o factura">
+          <button class="btn-sm" type="button" onclick="comAbrirTodo()" title="Abrir o cerrar todas las fichas"><i class="fas fa-angles-down"></i> <span>Abrir / cerrar todo</span></button>
           <button class="btn-sm fact-orden-btn" type="button" onclick="abrirOrdenarSheet('comisiones')" title="Cambiar el orden"><i class="fas fa-arrow-down-wide-short"></i> <span>Ordenar<b data-orden-lbl="comisiones"></b></span></button>
           <div class="export-dd">
             <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'comisiones')" aria-label="Exportar" title="Exportar"><i class="fas fa-download"></i></button>
@@ -11532,10 +11553,6 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 <input type="file" id="cp-file-sticker" accept="image/*" style="display:none">
 
 <div id="toasts"></div>
-<!-- Pull-to-refresh (Fase 5.4). A nivel body, no dentro de .app -- mismo
-     motivo que #confirmar-sheet (index.html ~4351): .app tiene
-     isolation:isolate y atraparía el z-index contra el bottom-nav. -->
-<div class="ptr-indicador" id="ptr-indicador"><i class="fas fa-arrow-rotate-right"></i></div>
 
 <!-- Drawer -->
 <aside class="drawer" id="drawer">

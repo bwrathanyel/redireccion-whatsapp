@@ -884,7 +884,7 @@ function ocultarBloqueoOverlay() {
 let TK = null;
 function tareasV2() {
   if (!TK) TK = crearTareas({ sb, esc, rol: () => ROL, miId: () => MI_USUARIO_ID, irA: sec => activateSection(sec),
-    abrirLead: id => abrirLeadDesdeMisVentas(id), hayOverlayAbierto });
+    abrirLead: id => abrirLeadDesdeMisVentas(id), hayOverlayAbierto, navPush, navConsume, navQuitar });
   return TK;
 }
 function setupTareasV2() { if (MI_USUARIO_ID) tareasV2().enlazar(); }
@@ -2910,7 +2910,7 @@ function arrancar(...pasos) {
 async function startApp() {
   if (booted) return; booted = true;
   arrancar(
-    renderNavItems, renderFavoritos, fijarSolicitudesArriba, setupAvisoPagos, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupPullToRefresh, setupLongPressSeleccion,
+    renderNavItems, renderFavoritos, fijarSolicitudesArriba, setupAvisoPagos, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupDocumentosRevisiones, setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
@@ -6530,7 +6530,11 @@ function wireLeadCardLive(el, lead) { wireTarjetaLead(el, lead, { drag: true });
 // Único cableado de la tarjeta de lead: carga completa (wireLeadCards) y parche
 // en vivo (wireLeadCardLive) pasan por acá, así un botón nuevo no se pierde
 // cuando Realtime reemplaza la tarjeta.
-function wireTarjetaLead(el, lead, { drag = false } = {}) {
+function wireTarjetaLead(el, lead0, { drag = false } = {}) {
+  // En Leads la tarjeta no se repinta si el HTML no cambió: los handlers leen el lead más nuevo de LEADS_PAGINA.
+  const actual = () => (el.closest('#leads-cards') && LEADS_PAGINA[lead0.id]) || lead0;
+  let lead = lead0;
+  el.addEventListener('click', () => { lead = actual(); }, true);
   el.addEventListener('click', () => openDrawer(lead));
   if (drag && window.matchMedia('(min-width:761px)').matches && (ROL === 'asesor' || ROL === 'admin')) wireLeadDrag(el, lead.id);
   el.querySelectorAll('.estado-arrow').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); moverEstadoLead(lead, Number(btn.dataset.dir)); }));
@@ -6581,7 +6585,7 @@ function mostrarLeadsNuevos(n) {
   chip.textContent = `${total} lead${total === 1 ? '' : 's'} nuevo${total === 1 ? '' : 's'} — Ver`;
 }
 async function parcharLeadLive(evento) {
-  if (leadsView === 'lista') { await loadTable(true); return; }
+  if (leadsView === 'lista') return; // reconciliarLoteLive recarga la lista una sola vez por lote
   const gen = evento.gen;
   const { data: lead, error } = await buildQuery(false).eq('id', evento.new.id).maybeSingle();
   if (genLeadLive.get(evento.new.id) !== gen) return;
@@ -6593,6 +6597,7 @@ async function parcharLeadLive(evento) {
   const tmp = document.createElement('div'); tmp.innerHTML = leadCardHtml(lead);
   const nuevo = tmp.firstElementChild;
   LEADS_PAGINA[lead.id] = lead;
+  if (card && card.outerHTML === nuevo.outerHTML) { if (currentLead?.id === lead.id && !document.getElementById('drawer')?.classList.contains('open')) currentLead = lead; return; }
   if (card) card.replaceWith(nuevo); else { cards.prepend(nuevo); totalFiltered++; document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`; }
   wireLeadCardLive(nuevo, lead);
   nuevo.classList.add('lead-actualizado'); setTimeout(() => nuevo.classList.remove('lead-actualizado'), 1200);
@@ -6706,8 +6711,9 @@ async function reconciliarLoteLive(ids) {
     if (!card) continue;
     const html = leadCardHtml(lead);
     const tmp = document.createElement('div'); tmp.innerHTML = html;
+    LEADS_PAGINA[lead.id] = lead;
     if (card.outerHTML === tmp.firstElementChild.outerHTML) continue;
-    const nuevo = tmp.firstElementChild; LEADS_PAGINA[lead.id] = lead; card.replaceWith(nuevo); wireLeadCardLive(nuevo, lead);
+    const nuevo = tmp.firstElementChild; card.replaceWith(nuevo); wireLeadCardLive(nuevo, lead);
   }
 }
 /* ---------- Arrastrar un lead a una pestaña (solo escritorio) ----------
@@ -18008,7 +18014,7 @@ let factMesPendiente = null; // 'AAAA-MM' que Balance deja para que Ventas lo ap
 const FACT_LAST = {}; // últimas filas renderizadas (post filtro/búsqueda/orden) por tabla -- exportar CSV/PDF usa esto, así "exportar por cliente" es solo filtrar y exportar
 const FACT_COLS = {
   ventas: [['numero_factura', 'N°'], ['cliente', 'Cliente'], ['asesor', 'Asesor'], ['venta_total', 'Precio venta'], ['abonado', 'Abonado'], ['costo_neto', 'Costo neto'], ['margen', 'Margen'], ['proveedor', 'Proveedor'], ['estado', 'Estado'], ['fecha_emision', 'Fecha']],
-  comisiones: [['asesor', 'Asesor'], ['monto_venta', 'Monto venta'], ['porcentaje', '%'], ['monto_comision', 'Comisión'], ['estado', 'Estado']],
+  comisiones: [['asesor', 'Asesor'], ['cliente', 'Cliente'], ['monto_venta', 'Monto venta'], ['porcentaje', '%'], ['monto_comision', 'Comisión'], ['estado', 'Estado']],
   cxp: [['proveedor', 'Proveedor'], ['cliente', 'Cliente'], ['monto_a_transferir', 'A transferir'], ['monto_abonado', 'Abonado'], ['saldo_pendiente', 'Saldo'], ['estado', 'Estado']],
   asesores: [['nombre', 'Asesor'], ['porcentaje_comision', '% Comisión']],
 };
@@ -18876,7 +18882,9 @@ const COM_ESTADO = {
   pagada: { t: 'Pagada', c: 'var(--green)' }, anulada: { t: 'Anulada', c: 'var(--muted)' },
 };
 function renderComisiones() {
-  const buscadas = ordenarYFiltrar(FACT_COMISIONES_CACHE, ['asesor'], val('fact-com-search'), FACT_SORT.comisiones);
+  const facs = new Map(FACT_VENTAS_CACHE.map(f => [f.id, f]));
+  const conVenta = FACT_COMISIONES_CACHE.map(c => { const f = facs.get(c.factura_id); return { ...c, cliente: f?.cliente || '', numero_factura: f?.numero_factura ?? null, lead_id: f?.lead_id ?? null }; });
+  const buscadas = ordenarYFiltrar(conVenta, ['asesor', 'cliente', 'numero_factura'], val('fact-com-search'), FACT_SORT.comisiones);
   const filas = factComFiltro ? buscadas.filter(c => c.estado === factComFiltro) : buscadas;
   FACT_LAST.comisiones = filas;
   let sumaTotal = 0, sumaPend = 0, sumaPag = 0, nVig = 0, nSin = 0, nPend = 0, nPag = 0;
@@ -18893,33 +18901,109 @@ function renderComisiones() {
     { key: 'pendiente', t: 'Por pagar', v: money(sumaPend), d: `${fmt(nPend)} pendientes`, i: 'fa-hourglass-half', c: 'var(--amber)', on: factComFiltro === 'pendiente', go: () => filtrarComisionesEstado('pendiente') },
     { key: 'pagada', t: 'Pagadas', v: money(sumaPag), d: `${fmt(nPag)} comisiones`, i: 'fa-circle-check', c: 'var(--green)', on: factComFiltro === 'pagada', go: () => filtrarComisionesEstado('pagada') },
   ]);
-  const visibles = filas.slice(0, factComMostrar);
+  const grupos = new Map();
+  filas.forEach(c => {
+    const k = cxpClave(c.asesor);
+    let g = grupos.get(k);
+    if (!g) grupos.set(k, g = { clave: k, nombre: String(c.asesor || '').trim() || 'Sin asesor', filas: [], venta: 0, comision: 0, pendiente: 0, pagado: 0, nPend: 0, nSin: 0 });
+    g.filas.push(c);
+    if (c.estado === 'anulada') return;
+    g.venta += c.monto_venta || 0; g.comision += c.monto_comision || 0;
+    if (c.estado === 'pendiente') { g.nPend++; g.pendiente += c.monto_comision || 0; }
+    else if (c.estado === 'sin_configurar') g.nSin++;
+    else if (c.estado === 'pagada') g.pagado += c.monto_comision || 0;
+  });
+  const { col, dir } = FACT_SORT.comisiones, campoSuma = { monto_comision: 'comision', monto_venta: 'venta' }[col];
+  const lista = [...grupos.values()].sort(campoSuma ? (a, b) => (a[campoSuma] - b[campoSuma]) * dir
+    : col === 'asesor' ? (a, b) => a.clave.localeCompare(b.clave) * dir
+    : (a, b) => (b.nSin > 0) - (a.nSin > 0) || b.pendiente - a.pendiente || a.clave.localeCompare(b.clave));
+  COM_GRUPOS = new Map(lista.map(g => [g.clave, g]));
   const pager = document.getElementById('fact-com-pager');
-  if (pager) pager.style.display = filas.length > factComMostrar ? '' : 'none';
-  document.getElementById('fact-com-tbody').innerHTML = visibles.map((c, i) => {
-    const est = COM_ESTADO[c.estado] || { t: c.estado, c: 'var(--muted)' };
-    const hecha = c.estado === 'pagada' || c.estado === 'anulada';
-    const fac = FACT_VENTAS_CACHE.find(f => f.id === c.factura_id);
-    return `<article class="lt-card${hecha ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}">
-      <div class="lt-card-cab">
-        <div class="lt-card-tit" title="${esc(c.asesor || '')}">${esc(c.asesor || 'Sin asesor')}</div>
-        <span class="bt-tag" style="--c:${est.c}">${esc(est.t)}</span>
-      </div>
-      <div class="lt-card-meta"><i class="fas fa-hashtag"></i>${fac ? fmt(fac.numero_factura) : 'Factura ' + fmt(c.factura_id)} · ${esc(fmtFechaHoraCaracas(c.created_at))}</div>
-      ${fac?.cliente ? `<div class="lt-card-meta"><i class="fas fa-user"></i>${esc(fac.cliente)}</div>` : ''}
-      ${c.fecha_pago ? `<div class="lt-card-meta"><i class="fas fa-circle-check"></i>Pagada el ${esc(fmtFechaHoraCaracas(c.fecha_pago))}</div>` : ''}
-      <div class="lt-cifras">
-        <div><span>Venta</span><b>${money(c.monto_venta)}</b></div>
-        <div><span>%</span><b class="${c.porcentaje != null ? '' : 'lt-debe'}">${c.porcentaje != null ? c.porcentaje + '%' : 'Sin definir'}</b></div>
-        <div><span>Comisión</span><b class="${c.estado === 'pagada' ? 'lt-ok' : ''}">${c.monto_comision != null ? money(c.monto_comision) : '—'}</b></div>
-      </div>
-      ${['sin_configurar', 'pendiente'].includes(c.estado) ? `<div class="lt-card-pie">
-        <button class="btn-sm${c.estado === 'sin_configurar' ? ' lt-primario' : ''}" type="button" onclick="abrirEditarComisionUI(${c.id}, ${c.porcentaje ?? 'null'})"><i class="fas fa-percent"></i> Editar %</button>
-        ${c.estado === 'pendiente' ? `<button class="btn-sm lt-primario" type="button" onclick="marcarComisionPagadaUI(${c.id})"><i class="fas fa-circle-check"></i> Marcar pagada</button>` : ''}
-      </div>` : ''}
-    </article>`;
-  }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${factComFiltro || val('fact-com-search') ? 'Nada coincide con el filtro' : 'Sin comisiones'}</div>`;
+  if (pager) pager.style.display = lista.length > factComMostrar ? '' : 'none';
+  document.getElementById('fact-com-tbody').innerHTML = lista.slice(0, factComMostrar).map(comFichaHtml).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${factComFiltro || val('fact-com-search') ? 'Nada coincide con el filtro' : 'Sin comisiones'}</div>`;
 }
+// Fichas abiertas se recuerdan entre renders: marcar pagada recarga la lista y no debe plegarlo todo.
+let COM_GRUPOS = new Map();
+const comAbiertas = new Set();
+function comToggle(el) {
+  if (val('fact-com-search').trim()) return;
+  if (el.open) comAbiertas.add(el.dataset.clave); else comAbiertas.delete(el.dataset.clave);
+}
+window.comToggle = comToggle;
+function comAbrirTodo() {
+  const fichas = [...document.querySelectorAll('#fact-com-tbody details.cxp-ficha')], abrir = fichas.some(d => !d.open);
+  fichas.forEach(d => { d.open = abrir; });
+}
+window.comAbrirTodo = comAbrirTodo;
+const COM_PRIORIDAD = { sin_configurar: 0, pendiente: 1, pagada: 2, anulada: 3 };
+function comFichaHtml(g, i) {
+  const alDia = g.nPend === 0 && g.nSin === 0;
+  const pct = g.comision > 0 ? Math.min(100, Math.round(g.pagado / g.comision * 100)) : (alDia ? 100 : 0);
+  const orden = [...g.filas].sort((a, b) => (COM_PRIORIDAD[a.estado] ?? 9) - (COM_PRIORIDAD[b.estado] ?? 9));
+  const abiertas = orden.filter(c => c.estado === 'pendiente' || c.estado === 'sin_configurar'), cerradas = orden.filter(c => !abiertas.includes(c));
+  // Buscando se muestran todas: si no, el cliente buscado podría quedar tras el «Ver pagadas».
+  const plegar = abiertas.length > 0 && cerradas.length > 0 && !val('fact-com-search').trim();
+  const cuerpo = plegar ? abiertas : orden;
+  const abierta = comAbiertas.has(g.clave) || !!val('fact-com-search').trim();
+  const tag = g.nSin > 0 ? ['var(--pink)', `${fmt(g.nSin)} sin %`] : g.nPend > 0 ? ['var(--amber)', `${fmt(g.nPend)} por pagar`] : ['var(--green)', 'Al día'];
+  const nVentas = g.filas.filter(c => c.estado !== 'anulada').length;
+  return `<details class="lt-card cxp-ficha com-ficha${alDia ? ' lt-card-hecha' : ''}${g.nSin > 0 ? ' com-ficha-sin' : ''}" style="--i:${Math.min(i, 20)}" data-clave="${esc(g.clave)}"${abierta ? ' open' : ''} ontoggle="comToggle(this)">
+    <summary class="cxp-cab">
+      <div class="lt-card-cab">
+        <i class="fas fa-chevron-right cxp-chev" aria-hidden="true"></i>
+        <span class="com-avatar" aria-hidden="true">${esc(g.nombre.split(/\s+/).slice(0, 2).map(p => p.charAt(0)).join('').toUpperCase())}</span>
+        <div class="lt-card-tit" title="${esc(g.nombre)}">${esc(g.nombre)}</div>
+        <span class="cxp-n">${fmt(nVentas)} venta${nVentas === 1 ? '' : 's'}</span>
+        <span class="bt-tag" style="--c:${tag[0]}">${tag[1]}</span>
+      </div>
+      <div class="lt-cifras">
+        <div><span>Vendido</span><b>${money(g.venta)}</b></div>
+        <div><span>Comisión total</span><b>${money(g.comision)}</b></div>
+        <div><span>Por pagar</span><b class="${g.pendiente > 0 ? 'lt-debe' : 'lt-ok'}">${money(g.pendiente)}</b></div>
+      </div>
+      <div class="com-pie">
+        <div class="lt-barra" role="progressbar" aria-label="Comisión pagada" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
+        <small>${pct}% pagado</small>
+        ${g.nPend > 0 ? `<button class="btn-sm lt-primario" type="button" onclick="event.preventDefault();event.stopPropagation();pagarComisionesAsesorUI(this.closest('details').dataset.clave, this)"><i class="fas fa-circle-check"></i> Pagar todas · ${money(g.pendiente)}</button>` : ''}
+      </div>
+    </summary>
+    <div class="cxp-filas">${cuerpo.map(comFilaHtml).join('')}${plegar ? `<button class="cxp-ver-pagadas" type="button" aria-expanded="false" data-n="${cerradas.length}" onclick="cxpVerPagadas(this)">Ver ${fmt(cerradas.length)} pagada${cerradas.length === 1 ? '' : 's'}</button><div class="cxp-pagadas" hidden>${cerradas.map(comFilaHtml).join('')}</div>` : ''}</div>
+  </details>`;
+}
+function comFilaHtml(c) {
+  const est = COM_ESTADO[c.estado] || { t: c.estado, c: 'var(--muted)' };
+  const hecha = c.estado === 'pagada' || c.estado === 'anulada';
+  const abrir = c.lead_id ? `abrirClienteDesdeFacturacion(${c.lead_id})` : '';
+  const ref = [c.numero_factura != null ? '#' + fmt(c.numero_factura) : 'Factura ' + fmt(c.factura_id), fmtFechaHoraCaracas(c.created_at)].join(' · ');
+  const pctTxt = c.porcentaje != null ? c.porcentaje + '%' : 'sin %';
+  return `<div class="cxp-fila com-fila com-fila-${esc(c.estado)}${hecha ? ' cxp-fila-hecha' : ''}${abrir ? ' cxp-fila-link' : ''}" style="--c:${est.c}"${abrir ? ` onclick="if(!event.target.closest('button,a'))${abrir}"` : ''}>
+    <div class="com-fila-cab">
+      <div class="cxp-quien"><b title="${esc(c.cliente || 'Sin cliente')}">${esc(c.cliente || 'Sin cliente')}</b><span>${esc(ref)}</span></div>
+      <span class="bt-tag" style="--c:${est.c}">${esc(est.t)}</span>
+    </div>
+    <div class="com-calc">
+      <span>Venta ${money(c.monto_venta)} × <b class="${c.porcentaje != null ? '' : 'lt-debe'}">${esc(pctTxt)}</b></span>
+      <strong class="${c.estado === 'pagada' ? 'lt-ok' : ''}">${c.monto_comision != null ? money(c.monto_comision) : '—'}</strong>
+    </div>
+    ${c.fecha_pago ? `<small class="com-pagada-el"><i class="fas fa-circle-check"></i> Pagada el ${esc(fmtFechaHoraCaracas(c.fecha_pago))}</small>` : ''}
+    ${hecha ? '' : `<div class="cxp-acc">
+      <button class="btn-sm${c.estado === 'sin_configurar' ? ' lt-primario' : ''}" type="button" onclick="abrirEditarComisionUI(${c.id}, ${c.porcentaje ?? 'null'})"><i class="fas fa-percent"></i> Editar %</button>
+      ${c.estado === 'pendiente' ? `<button class="btn-sm lt-primario" type="button" onclick="marcarComisionPagadaUI(${c.id})"><i class="fas fa-circle-check"></i> Marcar pagada</button>` : ''}
+    </div>`}
+  </div>`;
+}
+window.pagarComisionesAsesorUI = async (clave, btn) => {
+  const g = COM_GRUPOS.get(clave);
+  const pend = g ? g.filas.filter(c => c.estado === 'pendiente') : [];
+  if (!pend.length) return;
+  if (!(await confirmarSheet({ titulo: `¿Marcar ${pend.length} comisi${pend.length === 1 ? 'ón' : 'ones'} de ${g.nombre} como pagada${pend.length === 1 ? '' : 's'}?`, detalle: `Total a pagar: ${money(g.pendiente)}`, textoOk: 'Marcar pagadas' }))) return;
+  if (btn) btn.disabled = true;
+  let ok = 0;
+  for (const c of pend) { const { error } = await sb.rpc('marcar_comision_pagada', { p_comision_id: c.id }); if (!error) ok++; }
+  if (ok === pend.length) okToast(`${ok} comisi${ok === 1 ? 'ón pagada' : 'ones pagadas'} a ${g.nombre}`);
+  else errToast(`Se pagaron ${ok} de ${pend.length}; revisa las que quedaron pendientes`);
+  loadComisionesAdmin();
+};
 function cargarMasComisiones() { factComMostrar += TECHO_LISTA; renderComisiones(); }
 window.cargarMasComisiones = cargarMasComisiones;
 async function loadCuentasPorPagar() {
@@ -26832,8 +26916,13 @@ async function waCargarChats(silencioso, cursor) {
   if (cursor) waChats = [...waChats, ...r.chats.filter(c => !waChats.some(x => x.id === c.id))];
   else waChats = [...r.chats, ...(silencioso ? waChats.filter(c => !r.chats.some(n => n.id === c.id)) : [])];
   if (cursor || !silencioso || waChatsCursor === null) waChatsCursor = r.cursor;
+  // El poll de 20 s casi siempre trae lo mismo: repintar igual recreaba todos los avatares (parpadeo).
+  const firma = JSON.stringify(waChats);
+  if (silencioso && !cursor && firma === waFirmaChats) return;
+  waFirmaChats = firma;
   waRenderChats();
 }
+let waFirmaChats = '';
 function waRenderChats() {
   const cont = document.getElementById('wa-inbox');
   const q = document.getElementById('wa-buscar').value.trim().toLowerCase();
@@ -26944,12 +27033,18 @@ function waHtmlMensajes(lista, idAnteriores) {
 function waEnlazarLog(log) {
   log.querySelectorAll('[data-img]').forEach(el => el.addEventListener('click', () => openLightbox([el.dataset.img], 0)));
   log.querySelectorAll('[data-doc]').forEach(el => el.addEventListener('click', () => window.open(el.dataset.doc, '_blank', 'noopener')));
-  log.querySelectorAll('[data-wa-media]').forEach(waCargarMedia);
+  log.querySelectorAll('[data-wa-media]').forEach(el => { if (el.dataset.waListo) delete el.dataset.waListo; else waCargarMedia(el); });
 }
 function waRenderMensajes(alFinal) {
   const log = document.getElementById('wa-conv-log');
   const abajo = alFinal || log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
-  log.innerHTML = waHtmlMensajes(waMensajes, waMsgCursor && 'wa-anteriores') || '<div class="msg-empty">Sin mensajes</div>';
+  const html = waHtmlMensajes(waMensajes, waMsgCursor && 'wa-anteriores') || '<div class="msg-empty">Sin mensajes</div>';
+  if (html === log._html && log._htmlNodo === log.firstChild) return;
+  // Adjuntos ya cargados se reusan (mismo motivo que pintarMensajes de whatsapp-bandeja.js).
+  const previos = new Map([...log.querySelectorAll('[data-wa-media][src]')].map(el => [el.dataset.waMedia, el]));
+  log.innerHTML = html;
+  log._html = html; log._htmlNodo = log.firstChild;
+  log.querySelectorAll('[data-wa-media]').forEach(el => { const v = previos.get(el.dataset.waMedia); if (v && v.tagName === el.tagName) { previos.delete(el.dataset.waMedia); v.dataset.waListo = '1'; el.replaceWith(v); } });
   document.getElementById('wa-anteriores')?.addEventListener('click', waCargarAnteriores);
   waEnlazarLog(log);
   if (abajo) log.scrollTop = log.scrollHeight;
@@ -27018,10 +27113,12 @@ function setupMensajes() {
     if (!chatEl('cp-pop').hidden) { chatCerrarPop(true); return; }
     chatCerrarPanel();
   });
+  let chatUltimoVolver = 0;
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     chatTituloLimpiar();
-    if (!chatArrancado) return;
+    if (!chatArrancado || Date.now() - chatUltimoVolver < 30000) return;
+    chatUltimoVolver = Date.now();
     cargarBandeja(true);
     if (msgActual) { chatSincronizarActual(); marcarMensajesAjenosComoLeidos(); }
   });
@@ -31241,7 +31338,9 @@ function reconectarLeadsLive(inmediato = false) {
   if (!inmediato) intentosReconexionLive++;
   timerReconexionLive = setTimeout(() => {
     cerrandoCanalIntencional = true;
-    if (canalLeadsLive) sb.removeChannel(canalLeadsLive);
+    const viejos = [canalLeadsLive, canalCorreosLive].filter(Boolean);
+    canalLeadsLive = canalCorreosLive = null;
+    viejos.forEach(c => sb.removeChannel(c).catch(() => {}));
     cerrandoCanalIntencional = false;
     subscribeRealtime();
   }, espera);
@@ -31249,8 +31348,13 @@ function reconectarLeadsLive(inmediato = false) {
 window.addEventListener('online', () => { intentosReconexionLive = 0; reconectarLeadsLive(true); });
 window.addEventListener('offline', marcarLeadsLiveCaido);
 
+// Topic con sufijo propio por suscripción: removeChannel es asíncrono y sb.channel() con el
+// mismo nombre devolvía el canal viejo aún cerrándose (bindings duplicados o canal muerto).
+let canalCorreosLive = null, nCanalLive = 0;
 function subscribeRealtime() {
-  canalLeadsLive = sb.channel('leads-live')
+  const n = ++nCanalLive;
+  const canal = canalLeadsLive = sb.channel('leads-live-' + n);
+  canal
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, payload => {
       // Mismo criterio de visibilidad que buildQuery (:2334) -- si no, avisa
       // de leads que el usuario nunca ve aparecer en la lista. Nota: buildQuery
@@ -31285,7 +31389,7 @@ function subscribeRealtime() {
     })
     .subscribe(estado => {
       if (estado === 'SUBSCRIBED') { marcarLeadsLiveVivo(); return; }
-      if (cerrandoCanalIntencional) return;
+      if (cerrandoCanalIntencional || canal !== canalLeadsLive) return;
       if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(estado)) { marcarLeadsLiveCaido(); reconectarLeadsLive(); }
     });
 
@@ -31293,7 +31397,7 @@ function subscribeRealtime() {
   // canal chico, mismo criterio simple que mensajes-badge. RLS ya filtra qué
   // correos llegan a este cliente. Refresca la bandeja si está a la vista, y
   // la pestaña de correo del lead abierto si el correo nuevo es de ese lead.
-  sb.channel('gmail-correos-live').on('postgres_changes', { event: '*', schema: 'public', table: 'gmail_correos' }, payload => {
+  canalCorreosLive = sb.channel('gmail-correos-live-' + n).on('postgres_changes', { event: '*', schema: 'public', table: 'gmail_correos' }, payload => {
     programarRecargaCorreo();
     if (currentLead && payload.new?.lead_id === currentLead.id) { CORREO_LEAD_CACHE = null; cargarCorreoLead(currentLead); }
   }).subscribe();
@@ -31304,16 +31408,22 @@ function subscribeRealtime() {
 // perdido. Se refresca todo lo que dependía del canal caído -- KPIs/
 // pipeline, inbox+badge, la tabla si está a la vista -- y se reintenta la
 // suscripción de una vez, sin esperar a que algo falle para notarlo.
-// Función nombrada (antes vivía inline en el listener) para poder llamarla
-// también desde el pull-to-refresh (Fase 5.4) sin duplicar la lógica.
+// Con throttle: el asesor salta a WhatsApp y vuelve todo el tiempo, y cada regreso
+// repintaba lista, KPIs e inbox y tiraba el canal aunque siguiera vivo (lag + parpadeo).
+// El canal solo se rearma si no está unido o si la app estuvo oculta más de 2 min.
+let ultimoResync = 0, ocultoDesde = 0;
 function resyncTrasSegundoPlano() {
+  const fuera = ocultoDesde ? Date.now() - ocultoDesde : 0;
+  ocultoDesde = 0;
+  if (Date.now() - ultimoResync < 30000) return Promise.resolve();
+  ultimoResync = Date.now();
   const p = loadStats().then(renderAllSiVisible);
   if (ROL === 'asesor') loadInboxLeads();
-  if (document.getElementById('sec-leads')?.classList.contains('active')) loadTable();
-  reconectarLeadsLive(true);
+  if (document.getElementById('sec-leads')?.classList.contains('active')) loadTable(true);
+  if (fuera > 120000 || canalLeadsLive?.state !== 'joined') reconectarLeadsLive(true);
   return p;
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) resyncTrasSegundoPlano(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) ocultoDesde = Date.now(); else resyncTrasSegundoPlano(); });
 // Red de seguridad si el websocket de Realtime se cae y tarda en reconectar
 // -- refresco silencioso de la tabla mientras la sección Leads esté abierta,
 // se arranca/para desde activateSection() para no dejarlo corriendo en fondo.
@@ -31333,14 +31443,9 @@ let leadsPollInterval = null;
 const leadsVisible = () => !document.hidden && document.getElementById('sec-leads').classList.contains('active');
 function iniciarPollLeads() {
   if (leadsPollInterval) return;
-  leadsPollInterval = setInterval(() => { if (leadsVisible()) loadTable(); }, 180000);
-  document.addEventListener('visibilitychange', pollLeadsAlVolver);
+  leadsPollInterval = setInterval(() => { if (leadsVisible()) loadTable(true); }, 180000);
 }
-function pollLeadsAlVolver() { if (leadsVisible()) loadTable(); }
-function detenerPollLeads() {
-  clearInterval(leadsPollInterval); leadsPollInterval = null;
-  document.removeEventListener('visibilitychange', pollLeadsAlVolver);
-}
+function detenerPollLeads() { clearInterval(leadsPollInterval); leadsPollInterval = null; }
 // Card nueva al tope del inbox en vivo + notificación local instantánea si la
 // pestaña no está en foco (no depende de la latencia del push del servidor).
 function recibirLeadNuevoInbox(lead) {
@@ -31393,6 +31498,8 @@ function navPush(entry) { NAV_STACK.push(entry); history.pushState({ navDepth: N
 // esto, cada cierre manual deja una entrada fantasma y el próximo gesto de
 // atrás del sistema queda desfasado (hay que tocarlo dos veces sin efecto).
 function navConsume() { if (NAV_STACK.length) history.back(); }
+// Saca la entrada sin tocar el historial: para cerrar algo justo antes de navegar a otra pantalla.
+function navQuitar(entry) { const i = NAV_STACK.indexOf(entry); if (i >= 0) NAV_STACK.splice(i, 1); }
 window.addEventListener('popstate', () => {
   if (!NAV_STACK.length) return; // pantalla raíz: se deja que el SO cierre la PWA
   const top = NAV_STACK.pop();
@@ -31408,6 +31515,7 @@ window.addEventListener('popstate', () => {
   else if (top.type === 'tour') volverAlMenuTutorial(true);
   else if (top.type === 'menu') cerrarMenuMovil('fromNav');
   else if (top.type === 'seleccion') top.limpiar?.();
+  else if (top.type === 'tk-panel') top.cerrar?.();
 });
 
 /* ---------- Nav ---------- */
@@ -32015,7 +32123,6 @@ function activateSection(sec, fromNav) {
   // La carga va después del primer pintado de la sección (antes competía con
   // el display:block + animación en el mismo frame), y si se cargó hace poco
   // no se vuelve a pedir: volver a una pestaña reusa lo que ya está pintado.
-  // Refrescar (pull/botón) fuerza la recarga vía REFRESCAR_SECCION.
   if (DASH_SUCIO && SECS_DASH.has(sec)) { DASH_SUCIO = false; requestAnimationFrame(() => { renderAll(); loadDestPeriodo(); }); }
   // La cola de boletería es un solo DOM: se ubica antes del corte por frescura, que no vuelve a llamar a cargarSeccion.
   bolMoverCola(sec === 'bol-solicitudes' ? 'bol-cola-host-sec' : 'bol-cola-host-leads');
@@ -32126,7 +32233,8 @@ function hayOverlayAbierto() {
   return !!sheetAbierta
     || document.getElementById('drawer')?.classList.contains('open')
     || document.getElementById('tour-overlay')?.classList.contains('open')
-    || document.body.classList.contains('lb-lock');
+    || document.body.classList.contains('lb-lock')
+    || !!document.querySelector('.tk-overlay');
 }
 function abrirMenuMovil() {
   if (!esMovil() || menuAbierto()) return;
@@ -32361,109 +32469,6 @@ function setupAppBar() {
       ultimo = y;
     });
   }, { passive: true, capture: true });
-}
-
-/* ---------- Pull-to-refresh (Fase 5.4) ----------
-   <body> es el contenedor de scroll real, no <html> (index.html:78-89,
-   decisión de un bug de iOS del 2026-07-18 -- no tocar esa parte). El
-   gesto se engancha ahí y solo arranca con body.scrollTop === 0. Es un
-   atajo, no reemplaza los botones de refrescar que ya existen en cada
-   sección -- esos se quedan igual. */
-// Mismo mapeo de sección->recarga que ya usa activateSection() (app.js
-// ~11185), repetido acá a propósito: activateSection es un if-chain con un
-// guard de "no hacer nada si ya estás ahí" (no sirve para forzar un
-// refresco), y convertirlo en esta tabla es un refactor más grande que lo
-// que pide esta fase. Si se agrega una sección nueva con carga propia, hay
-// que sumarla en los dos lugares.
-const REFRESCAR_SECCION = {
-  leads: () => loadTable(), 'clientes-asignados': () => loadClientesAsignados(), 'mis-notas': () => loadMisNotas(), ranking: () => loadRanking(), 'mis-ventas': () => loadMisVentasSeccion(), facturacion: () => loadFacturacion(), pagos: () => loadPagos(), proveedores: () => loadProveedores(), apartamentos: () => loadApartamentos(),
-  comisiones: () => loadComisiones(), 'gestion-personal': () => loadGestionPersonal(),
-  postventa: () => loadPostventa(), 'reservas-empresas': () => loadReservasEmpresas(), 'informe-diario': () => loadInformeDiario(), hoy: () => renderHoy(),
-  tarifario: () => loadTarifario(), mensajes: () => cargarBandeja(), galeria: () => loadGaleria(),
-  'rendimiento-ia': () => loadRendimientoIA(),
-  'ia-atencion': () => loadIaAtencion(), 'propuestas': () => loadPropuestas(), 'wa-bandeja': () => loadWaBandeja(), 'web-reasignados': () => loadWebReasignados(), 'contactos-directos': () => loadContactosDirectos(),
-  'clientes-eventos': () => loadClientesEventos(),
-  'stop-sales': () => { loadStopSalesVigentes(); ssCargarPdfActual(); },
-  redes: () => cargarRedActual(), voucher: () => loadVoucherSeccion(), tareas: () => loadTareasV2(),
-  boleteria: () => loadBoleteria(), 'bol-solicitudes': () => loadColaBoleteria(), 'cotizacion-boletos': () => cbCargarSeccion(),
-};
-async function refrescarSeccionActual() {
-  const tareas = [Promise.resolve(resyncTrasSegundoPlano())];
-  const fn = REFRESCAR_SECCION[currentSec];
-  if (fn) tareas.push(Promise.resolve(fn()));
-  await Promise.allSettled(tareas);
-}
-
-function mostrarIndicadorPTR(distancia, umbral) {
-  const el = document.getElementById('ptr-indicador');
-  if (!el) return;
-  const p = Math.min(distancia / umbral, 1);
-  el.classList.add('show');
-  el.classList.toggle('listo', distancia >= umbral);
-  // Escala y opacidad acompañan al arrastre en vez de aparecer de golpe a
-  // tamaño completo: el indicador "nace" del borde mientras baja el dedo.
-  el.style.opacity = String(Math.min(1, .25 + p));
-  el.style.transform = `translate(-50%, ${Math.min(distancia, umbral + 20) - 44}px) scale(${.7 + p * .3})`;
-  el.querySelector('i').style.transform = `rotate(${p * 200}deg)`;
-}
-function ocultarIndicadorPTR() {
-  const el = document.getElementById('ptr-indicador');
-  if (!el) return;
-  el.classList.remove('show', 'listo', 'cargando');
-  el.style.opacity = '';
-  el.style.transform = '';
-  el.querySelector('i').style.transform = '';
-}
-async function dispararRefreshPTR() {
-  const el = document.getElementById('ptr-indicador');
-  if (!el) return;
-  el.classList.add('show', 'cargando');
-  el.style.transform = 'translate(-50%, 20px)';
-  el.querySelector('i').style.transform = '';
-  // Pedido del dueño (2026-10-16): fuera de Leads el gesto recarga el CRM
-  // completo (como el botón Actualizar CRM); en Leads sigue siendo suave.
-  if (currentSec !== 'leads') { actualizarCRM(); return; }
-  try { await refrescarSeccionActual(); } finally { setTimeout(ocultarIndicadorPTR, 350); }
-}
-
-function setupPullToRefresh() {
-  const UMBRAL = 70;
-  const TOPE = 130;
-  let y0 = 0, activo = false, distancia = 0, avisado = false, pendiente = false;
-
-  document.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1 || document.body.scrollTop > 0) { activo = false; return; }
-    if (hayOverlayAbierto() || menuAbierto()) { activo = false; return; }
-    if (e.target.closest('input,textarea,select,canvas')) { activo = false; return; }
-    y0 = e.touches[0].clientY; activo = true; distancia = 0; avisado = false;
-  }, { passive: true });
-
-  document.addEventListener('touchmove', e => {
-    if (!activo) return;
-    if (document.body.scrollTop > 0) { activo = false; distancia = 0; ocultarIndicadorPTR(); return; }
-    const dy = e.touches[0].clientY - y0;
-    if (dy <= 0) { distancia = 0; ocultarIndicadorPTR(); return; }
-    // Resistencia elástica en vez del 0.5 lineal de antes: al principio sigue
-    // al dedo casi 1:1 y se va frenando contra TOPE, que es como se siente el
-    // gesto en una app nativa (antes había que arrastrar 140px para 70).
-    distancia = TOPE * (1 - Math.exp(-dy / TOPE));
-    if (!avisado && distancia >= UMBRAL) { avisado = true; navigator.vibrate?.(8); }
-    if (avisado && distancia < UMBRAL) avisado = false;
-    // El indicador se repinta una vez por cuadro: touchmove llega más seguido
-    // que los frames y escribir transform en cada evento es trabajo tirado.
-    if (pendiente) return;
-    pendiente = true;
-    requestAnimationFrame(() => { pendiente = false; if (activo) mostrarIndicadorPTR(distancia, UMBRAL); });
-  }, { passive: true });
-
-  document.addEventListener('touchend', () => {
-    if (!activo) return;
-    activo = false;
-    if (distancia >= UMBRAL) dispararRefreshPTR(); else ocultarIndicadorPTR();
-    distancia = 0;
-  }, { passive: true });
-
-  document.addEventListener('touchcancel', () => { activo = false; distancia = 0; ocultarIndicadorPTR(); }, { passive: true });
 }
 
 /* ---------- Long-press para selección múltiple (Fase 5.5) ----------

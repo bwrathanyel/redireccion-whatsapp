@@ -66,11 +66,11 @@ const iniciales = s => String(s || '?').trim().split(/\s+/).slice(0, 2).map(p =>
 const leerLocal = (k, def) => { try { return localStorage.getItem(k) ?? def; } catch { return def; } };
 const guardarLocal = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
-export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, hayOverlayAbierto }) {
+export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, hayOverlayAbierto, navPush, navConsume, navQuitar }) {
   let datos = null, cargando = false, fallo = false, gen = 0;
   let abierta = null, detalle = null, enviando = false, verHechas = false;
   let canal = null, intentos = 0, timerRe = null, timerRecarga = null, cerrando = false;
-  let raiz = null, panelMovil = null, enlazado = false, vivo = false;
+  let raiz = null, panelMovil = null, navLateral = null, enlazado = false, vivo = false;
   // Admin y administrativo: pestañas Mi día / Equipo / Lista / Plantillas sobre tablero_tareas_admin.
   const gestor = () => ['admin', 'administrativo'].includes(rol());
   let vista = leerLocal('tk-vista', ''), tablero = null, falloTab = false, genTab = 0, timerTab = null, tabSucio = false;
@@ -815,7 +815,7 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     await conBoton(btn, async () => {
       const r = await rpc('tarea_registrar_accion', { p_id: Number(id), p_paso_id: Number(pasoId) });
       const p = r.paso || {};
-      cerrarPanelMovil(); cerrarDetalle();
+      cerrarPanelMovil('ir'); cerrarDetalle();
       if (DE_RESERVA.includes(p.detector) && p.reserva_id && abrirReserva) abrirReserva(p.reserva_id, p.lead_id);
       else if (p.lead_id) abrirLead(p.lead_id);
       else abrirTarea(id);
@@ -863,7 +863,7 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
       return p && crearTarea({ plantilla: p, modo: ds.tkTplEditar ? 'plantilla' : 'tarea' });
     }
     if ('tkTplNueva' in ds) return crearTarea({ modo: 'plantilla' });
-    if ('tkIr' in ds) { cerrarPanelMovil(); return irA('tareas'); }
+    if ('tkIr' in ds) { cerrarPanelMovil('ir'); return irA('tareas'); }
     if ('tkEquipo' in ds) { vista = 'equipo'; guardarLocal('tk-vista', vista); return irA('tareas'); }
     if ('tkReintentarTab' in ds) return cargarTablero();
     if (ds.tkHacer) { e.stopPropagation(); return hacerAhora(b, ds.tkHacer, ds.paso); }
@@ -915,8 +915,8 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
         cliente_token: c.dataset.token, pasos: [{ titulo, detector: 'manual' }] } });
       c.remove(); toast(r.repetida ? 'Ya estaba guardado' : 'Recordatorio guardado'); recargarPronto();
     });
-    if ('tkLead' in ds) { const id = Number(ds.tkLead); cerrarPanelMovil(); cerrarDetalle(); return abrirLead(id); }
-    if ('tkCola' in ds) { cerrarPanelMovil(); return irA('clientes-asignados'); }
+    if ('tkLead' in ds) { const id = Number(ds.tkLead); cerrarPanelMovil('ir'); cerrarDetalle(); return abrirLead(id); }
+    if ('tkCola' in ds) { cerrarPanelMovil('ir'); return irA('clientes-asignados'); }
     if ('tkHechas' in ds) { verHechas = !verHechas; return pintar(); }
     if ('tkReintentar' in ds) return cargar();
     if (ds.tkOpen) return abrirTarea(ds.tkOpen);
@@ -991,12 +991,66 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     document.body.appendChild(panelMovil);
     panelMovil.addEventListener('click', e => {
       if (e.target.closest('[data-tk-cerrar-lateral]')) return cerrarPanelMovil();
-      if (e.target.closest('[data-tk-ver-todo]')) { cerrarPanelMovil(); return irA('tareas'); }
+      if (e.target.closest('[data-tk-ver-todo]')) { cerrarPanelMovil('ir'); return irA('tareas'); }
       clic(e);
     });
+    document.body.classList.add('tk-lock');
+    navLateral = { type: 'tk-panel', cerrar: () => cerrarPanelMovil('nav') };
+    navPush?.(navLateral);
+    arrastreCierre(panelMovil);
     pintar(); cargar(); conectar();
   }
-  function cerrarPanelMovil() { panelMovil?.remove(); panelMovil = null; }
+  // modo 'nav': lo cerró el «atrás» del sistema (la entrada ya salió del historial).
+  // modo 'ir': se cierra para navegar a otra pantalla; history.back() sería asíncrono y
+  // se comería la entrada que esa navegación empuja, así que solo se saca de la pila.
+  function cerrarPanelMovil(modo) {
+    const p = panelMovil;
+    if (!p) return;
+    panelMovil = null;
+    document.body.classList.remove('tk-lock');
+    if (modo === 'ir') navQuitar?.(navLateral); else if (modo !== 'nav') navConsume?.();
+    navLateral = null;
+    const aside = p.querySelector('.tk-panel-lateral'), scrim = p.querySelector('.tk-scrim');
+    p.style.pointerEvents = 'none';
+    if (modo === 'ir' || !aside) return p.remove();
+    aside.style.transition = 'transform .2s var(--ease-salida,ease-out)'; aside.style.transform = 'translateX(105%)';
+    if (scrim) { scrim.style.transition = 'opacity .2s linear'; scrim.style.opacity = '0'; }
+    setTimeout(() => p.remove(), 220);
+  }
+  // Deslizar a la derecha desde cualquier punto del panel lo cierra; el panel sigue al dedo.
+  function arrastreCierre(ov) {
+    const aside = ov.querySelector('.tk-panel-lateral'), scrim = ov.querySelector('.tk-scrim');
+    let x0 = 0, y0 = 0, t0 = 0, dx = 0, eje = null, raf = 0;
+    const zoom = () => parseFloat(getComputedStyle(document.body).zoom) || 1;
+    const aplicar = () => { raf = 0; aside.style.transform = `translateX(${dx}px)`; if (scrim) scrim.style.opacity = String(1 - Math.min(1, dx / aside.offsetWidth)); };
+    const soltar = () => { aside.style.transition = 'transform .2s var(--ease-salida,ease-out)'; aside.style.transform = ''; if (scrim) { scrim.style.transition = 'opacity .2s linear'; scrim.style.opacity = ''; } };
+    ov.addEventListener('touchstart', e => {
+      eje = null; dx = 0;
+      if (e.touches.length !== 1 || e.target.closest('input,textarea,select') || scrollX(e.target)) { eje = 'no'; return; }
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+      aside.style.transition = ''; if (scrim) scrim.style.transition = '';
+    }, { passive: true });
+    ov.addEventListener('touchmove', e => {
+      if (eje === 'no' || eje === 'y' || !panelMovil) return;
+      const mx = (e.touches[0].clientX - x0) / zoom(), my = (e.touches[0].clientY - y0) / zoom();
+      if (!eje) {
+        if (Math.abs(mx) + Math.abs(my) < 8) return;
+        eje = mx > 0 && Math.abs(mx) > Math.abs(my) * 1.2 ? 'x' : 'y';
+        if (eje === 'y') return;
+      }
+      e.preventDefault();
+      dx = Math.max(0, mx);
+      if (!raf) raf = requestAnimationFrame(aplicar);
+    }, { passive: false });
+    ov.addEventListener('touchend', () => {
+      if (eje !== 'x') return;
+      eje = null;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      const v = dx / Math.max(1, Date.now() - t0);
+      if (dx > aside.offsetWidth * 0.3 || (v > 0.5 && dx > 30)) cerrarPanelMovil(); else soltar();
+    }, { passive: true });
+    ov.addEventListener('touchcancel', () => { if (eje === 'x') soltar(); eje = null; }, { passive: true });
+  }
   // Zona ancha como MENU_BORDE del menú izquierdo: el borde exacto es el gesto «atrás» del sistema y el toque nunca llega.
   const BORDE = 150;
   const scrollX = el => { for (; el && el !== document.body; el = el.parentElement) {

@@ -59,7 +59,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     return `<span class="wb-ventana"><i class="far fa-clock"></i> Ventana abierta · quedan ${h ? h + ' h' : 'minutos'}</span>`;
   }
 
-  async function cargarLista() {
+  async function cargarLista(forzar) {
     const { data, error: e } = await sb.from('whatsapp_conversaciones')
       .select('id,nombre,wa_id,no_leidos,ultimo_mensaje_at,ultimo_entrante_at,lead_id,asesor,phone_number_id')
       .neq('phone_number_id', '__gate_pnid')
@@ -67,10 +67,12 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     if (e) { $('wb-inbox').innerHTML = '<div class="msg-empty">No se pudieron cargar los chats</div>'; return; }
     convs = data || [];
     if (actual) actual = convs.find(c => c.id === actual.id) || actual;
-    pintarLista();
+    if (forzar === true || listaVisible()) pintarLista();
     pintarBadge();
   }
-  const recargarLista = () => { clearTimeout(recarga); recarga = setTimeout(cargarLista, 400); };
+  // Fuera de la sección solo hace falta el contador: no se repintan 300 filas por cada cambio.
+  const listaVisible = () => !document.hidden && !!wb-inbox?.offsetParent;
+  const recargarLista = () => { clearTimeout(recarga); recarga = setTimeout(cargarLista, listaVisible() ? 400 : 5000); };
 
   function pintarBadge() {
     const n = convs.reduce((s, c) => s + (c.no_leidos > 0 ? 1 : 0), 0), el = $('nav-wab-count');
@@ -208,8 +210,14 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
       const texto = m.texto ? `<div>${m.plantilla ? '<i class="fas fa-file-lines"></i> ' : ''}${textoConEnlaces(m.texto)}</div>` : (adj ? '' : `<div><i>(${esc(m.tipo)})</i></div>`);
       html += `<div class="chat-msg ${sale ? 'mine' : 'other'}${mismo(prev) ? ' grouped' : ''}${!mismo(sig) ? ' tail' : ''}${adj ? ' adjunto' : ''}">${adj}${texto}${comprobanteHtml(m)}${meta}</div>`;
     });
+    // Las fotos/audios ya cargados se reusan: recrearlos dejaba cajas en 0 px hasta la URL firmada
+    // (la lista saltaba) y cortaba el audio que se estaba escuchando.
+    const previos = new Map([...log.querySelectorAll('[data-wb-media][src]')].map(el => [el.dataset.wbMedia, el]));
     log.innerHTML = html || '<div class="msg-empty">Sin mensajes</div>';
-    log.querySelectorAll('[data-wb-media]').forEach(cargarMedia);
+    log.querySelectorAll('[data-wb-media]').forEach(el => {
+      const v = previos.get(el.dataset.wbMedia);
+      if (v && v.tagName === el.tagName) { previos.delete(el.dataset.wbMedia); el.replaceWith(v); } else cargarMedia(el);
+    });
     if (abajo) log.scrollTop = log.scrollHeight;
   }
 
@@ -392,7 +400,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
         })
         .subscribe();
     }
-    await cargarLista();
+    await cargarLista(true);
   }
 
   return { enlazar, abrirSeccion, cerrar, contar: cargarLista };
