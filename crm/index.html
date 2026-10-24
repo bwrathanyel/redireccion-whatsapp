@@ -4064,7 +4064,11 @@ body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
   .tk-live::before,.dm-vivo.on .dm-vivo-punto{animation:mov-latido 1.8s ease-in-out infinite}
   @keyframes mov-latido{50%{opacity:.35}}
   .lo-mar{animation:none}
-  .drawer{will-change:transform}
+  /* Video del Poco X7 (2026-10-25): con la ficha abierta quedaban franjas sin pintar varios segundos.
+     El fondo seguía animando (Lyra, latidos, skeletons) y el raster no llegaba a la hoja; además el
+     will-change fijo la dejaba como capa propia con su scroll adentro. La transición ya la promueve sola. */
+  body:has(#drawerBg.open,#sheet-bg.open,.tk-overlay) :is(.app,.lyra-dock,.chat-fab),
+  body:has(#drawerBg.open,#sheet-bg.open,.tk-overlay) :is(.app,.lyra-dock,.chat-fab) :is(*,*::before,*::after){animation-play-state:paused}
   .dbtn{padding:15px}
   .preview-pill{left:12px;right:12px;bottom:calc(84px + var(--safe-b));transform:translateY(140px);max-width:none}
   .preview-pill.show{transform:translateY(0)}

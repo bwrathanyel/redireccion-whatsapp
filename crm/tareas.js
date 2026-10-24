@@ -1059,7 +1059,7 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     let x0 = 0, y0 = 0, activo = false;
     document.addEventListener('touchstart', e => {
       activo = false;
-      if (!esMovil() || e.touches.length !== 1 || panelMovil || document.querySelector('.tk-overlay') || hayOverlayAbierto?.()) return;
+      if (!esMovil() || e.touches.length !== 1 || panelMovil || document.querySelector('.tk-overlay') || document.body.classList.contains('menu-abierto') || hayOverlayAbierto?.()) return;
       const t = e.touches[0];
       if (t.clientX < innerWidth - BORDE || e.target.closest?.('input,textarea,select') || scrollX(e.target)) return;
       x0 = t.clientX; y0 = t.clientY; activo = true;
