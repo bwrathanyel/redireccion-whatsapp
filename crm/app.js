@@ -3052,7 +3052,13 @@ function setupKpisPlegables() {
     const abierto = abiertos.includes(box.id);
     box.classList.toggle('kpis-cerrado', !abierto);
     box.insertAdjacentHTML('beforebegin', `<button type="button" class="kpi-plegar" aria-controls="${box.id}" aria-expanded="${abierto}"><i class="fas fa-chart-simple"></i><span>Resumen</span><i class="fas fa-chevron-down kpi-plegar-chev"></i></button>`);
-    box.previousElementSibling.addEventListener('click', e => {
+    // Antes era CSS con :has(+ .kpis[style*=...]): un [style] dentro de :has hace que cualquier
+    // style inline de la página (el menú lo cambia en cada cuadro del arrastre) recalcule ~1000 elementos.
+    const boton = box.previousElementSibling;
+    const sinKpis = () => { boton.hidden = !box.hasChildNodes() || box.hidden || box.style.display === 'none'; };
+    sinKpis();
+    new MutationObserver(sinKpis).observe(box, { childList: true, attributes: true, attributeFilter: ['style', 'hidden'] });
+    boton.addEventListener('click', e => {
       const abrir = !box.classList.toggle('kpis-cerrado');
       e.currentTarget.setAttribute('aria-expanded', abrir);
       abiertos = abiertos.filter(id => id !== box.id).concat(abrir ? [box.id] : []);
@@ -10589,7 +10595,7 @@ window.addEventListener('popstate', selLotusCerrar);
     if (b) efAgregarServicio(b.dataset.efAdd).querySelector('input')?.focus();
   });
   const lista = document.getElementById('ef-servicios');
-  lista.addEventListener('error', e => { if (e.target.matches('.cb-hotel-foto')) e.target.hidden = true; }, true);
+  lista.addEventListener('error', e => { if (e.target.matches('.cb-hotel-foto')) e.target.remove(); }, true);
   lista.addEventListener('focusin', e => { if (e.target.dataset.busca === 'hotel') cbHotelBuscar(e.target); });
   lista.addEventListener('focusout', e => {
     if (e.target.dataset.busca !== 'hotel') return;
@@ -30082,7 +30088,7 @@ function cbResumenCliente(plegar = false) {
 }
 function cbItemHtml(it, i) {
   // Fechas: nunca antes de hoy; la vuelta tampoco antes de la ida (cbMinFecha).
-  const f = (k, label, attrs, full = '') => `<div class="field${full}"><label class="fl" for="cb-${k}-${i}">${label}</label><input id="cb-${k}-${i}" class="ei" data-k="${k}" value="${esc(String(it[k] ?? (k === 'habitaciones' ? 1 : '')))}" ${attrs}${attrs.includes('type="date"') ? ` min="${cbMinFecha(k, it.ida)}"` : ''}></div>`;
+  const f = (k, label, attrs, full = '') => `<div class="field${full}${attrs.includes('type="date"') ? ' field-fecha' : ''}"><label class="fl" for="cb-${k}-${i}">${label}</label><input id="cb-${k}-${i}" class="ei" data-k="${k}" value="${esc(String(it[k] ?? (k === 'habitaciones' ? 1 : '')))}" ${attrs}${attrs.includes('type="date"') ? ` min="${cbMinFecha(k, it.ida)}"` : ''}></div>`;
   const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto';
   const opciones = Object.entries(CB_TIPOS).map(([k, t]) => `<option value="${k}"${k === tipo ? ' selected' : ''}>${t.nombre}</option>`).join('');
   const unidad = tipo === 'hotel' ? `<div class="field cb-dos"><label class="fl" for="cb-unidad-${i}">Tarifa por</label><select id="cb-unidad-${i}" class="ei" data-k="unidad">${it._unidadPendiente ? '<option value="" selected disabled>Confirma la unidad</option>' : ''}${[['persona_noche', 'Persona por noche'], ['habitacion_noche', 'Habitación por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${!it._unidadPendiente && (it.unidad || 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select>${it._unidadPendiente ? '<small>Confirma la unidad: no está indicada en el tarifario.</small>' : ''}</div>` : '';
@@ -30675,7 +30681,7 @@ async function cbCargarSeccion() {
     cbResetForm();
     document.getElementById('cb-origen').addEventListener('change', () => { cbOffset = 0; cbCargarHistorial(false); });
     const cbLista = document.getElementById('cb-items');
-    cbLista.addEventListener('error', e => { if (e.target.matches('.cb-hotel-foto')) e.target.hidden = true; }, true);
+    cbLista.addEventListener('error', e => { if (e.target.matches('.cb-hotel-foto')) e.target.remove(); }, true);
     cbLista.addEventListener('focusin', e => { if (e.target.matches('.cb-ap-in')) { e.target.select(); cbApAbrir(e.target); } });
     cbLista.addEventListener('focusin', e => { if (e.target.dataset.busca === 'hotel') cbHotelBuscar(e.target); });
     cbLista.addEventListener('focusout', e => { if (e.target.dataset.busca === 'hotel') { e.target.parentElement.querySelector('.cb-picker-lista').hidden = true; e.target.setAttribute('aria-expanded', 'false'); } });

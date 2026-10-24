@@ -94,12 +94,16 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
   async function cargar() {
     const g = ++gen;
     cargando = !datos; fallo = false; pintar();
+    let igual = false;
     try {
       const d = await rpc('listar_mis_tareas_v2');
       if (g !== gen) return;
+      igual = !cargando && JSON.stringify({ ...d, ahora: 0 }) === JSON.stringify({ ...datos, ahora: 0 });
       datos = d; offset.ms = d.ahora ? new Date(d.ahora).getTime() - Date.now() : 0;
     } catch (e) { if (g === gen) fallo = e.message; }
-    cargando = false; pintar(); refrescarBadge();
+    await panelQuieto();
+    if (g !== gen) return;
+    cargando = false; if (!igual) pintar(); refrescarBadge();
   }
   const recargarPronto = () => {
     clearTimeout(timerRecarga);
@@ -982,12 +986,18 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
 
   // ── Panel del teléfono: swipe desde el borde derecho ───────────────────────────
   const esMovil = () => matchMedia('(max-width:760px)').matches;
-  function abrirPanelMovil() {
-    if (panelMovil?.isConnected) return;
-    panelMovil = document.createElement('div'); panelMovil.className = 'tk-overlay tk-lateral';
+  // Mientras el panel sigue al dedo o se acomoda, la respuesta de cargar() espera: reescribir su
+  // contenido a mitad de la transición era el cuadro más largo al abrirlo.
+  let panelQuietoEn = 0;
+  const panelQuieto = async () => { while (Date.now() < panelQuietoEn) await new Promise(r => setTimeout(r, panelQuietoEn - Date.now())); };
+  // arrastre: lo abre gestoBorde y la posición la lleva el dedo (sin animación de entrada).
+  function abrirPanelMovil(arrastre) {
+    if (panelMovil?.isConnected) return panelMovil;
+    panelMovil = document.createElement('div'); panelMovil.className = 'tk-overlay tk-lateral' + (arrastre ? ' tk-arrastre' : '');
     panelMovil.innerHTML = `<div class="tk-scrim is-dim" data-tk-cerrar-lateral></div><aside class="tk-panel tk-panel-lateral" role="dialog" aria-modal="true" aria-label="Mis tareas">
       <div class="tk-panel-h"><b style="flex:1;font-size:15px">Tareas</b><button class="tk-btn tk-btn-sm" data-tk-ver-todo>Ver sección</button>
       <button class="tk-icon-btn" data-tk-cerrar-lateral aria-label="Cerrar"><i class="fas fa-xmark"></i></button></div><div class="tk-panel-b tk-root"></div></aside>`;
+    if (arrastre) { panelMovil.querySelector('.tk-panel-lateral').style.transform = 'translateX(100%)'; panelMovil.querySelector('.tk-scrim').style.opacity = '0'; }
     document.body.appendChild(panelMovil);
     panelMovil.addEventListener('click', e => {
       if (e.target.closest('[data-tk-cerrar-lateral]')) return cerrarPanelMovil();
@@ -998,7 +1008,9 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     navLateral = { type: 'tk-panel', cerrar: () => cerrarPanelMovil('nav') };
     navPush?.(navLateral);
     arrastreCierre(panelMovil);
-    pintar(); cargar(); conectar();
+    panelQuietoEn = Date.now() + 400;
+    cargar(); conectar();
+    return panelMovil;
   }
   // modo 'nav': lo cerró el «atrás» del sistema (la entrada ya salió del historial).
   // modo 'ir': se cierra para navegar a otra pantalla; history.back() sería asíncrono y
@@ -1055,21 +1067,49 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
   const BORDE = 150;
   const scrollX = el => { for (; el && el !== document.body; el = el.parentElement) {
     if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true; } return false; };
+  // El panel sigue al dedo desde el primer movimiento horizontal (antes recién aparecía al soltar,
+  // y esa espera se sentía como lag); al soltar se abre o vuelve según distancia o velocidad.
   function gestoBorde() {
-    let x0 = 0, y0 = 0, activo = false;
+    let x0 = 0, y0 = 0, t0 = 0, dx = 0, activo = false, eje = null, raf = 0, aside = null, scrim = null, ancho = 1;
+    const aplicar = () => { raf = 0; const x = Math.max(0, ancho + dx); aside.style.transform = `translateX(${x}px)`; scrim.style.opacity = String(1 - x / ancho); };
     document.addEventListener('touchstart', e => {
       activo = false;
       if (!esMovil() || e.touches.length !== 1 || panelMovil || document.querySelector('.tk-overlay') || document.body.classList.contains('menu-abierto') || hayOverlayAbierto?.()) return;
       const t = e.touches[0];
       if (t.clientX < innerWidth - BORDE || e.target.closest?.('input,textarea,select') || scrollX(e.target)) return;
-      x0 = t.clientX; y0 = t.clientY; activo = true;
+      x0 = t.clientX; y0 = t.clientY; t0 = Date.now(); dx = 0; eje = null; aside = null; activo = true;
     }, { passive: true });
-    document.addEventListener('touchend', e => {
+    document.addEventListener('touchmove', e => {
       if (!activo) return;
+      const t = e.touches[0]; dx = t.clientX - x0;
+      if (!eje) {
+        const dy = t.clientY - y0;
+        if (Math.abs(dx) + Math.abs(dy) < 10) return;
+        eje = dx < 0 && Math.abs(dx) > Math.abs(dy) * 1.2 ? 'x' : 'y';
+        if (eje === 'y') { activo = false; return; }
+        const ov = abrirPanelMovil(true);
+        aside = ov.querySelector('.tk-panel-lateral'); scrim = ov.querySelector('.tk-scrim');
+        ancho = aside.offsetWidth || 1;
+      }
+      e.preventDefault();
+      panelQuietoEn = Date.now() + 400;
+      if (!raf) raf = requestAnimationFrame(aplicar);
+    }, { passive: false });
+    const soltar = abrir => {
       activo = false;
-      const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
-      if (dx < -60 && Math.abs(dy) < Math.abs(dx) * 0.7) abrirPanelMovil();
+      if (eje !== 'x' || !aside) return;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      if (!abrir) return cerrarPanelMovil();
+      aside.style.transition = 'transform .26s var(--ease-salida,ease-out)'; aside.style.transform = '';
+      scrim.style.transition = 'opacity .26s linear'; scrim.style.opacity = '';
+      panelQuietoEn = Date.now() + 280;
+    };
+    document.addEventListener('touchend', () => {
+      if (!activo) return;
+      const v = -dx / Math.max(1, Date.now() - t0);
+      soltar(-dx > ancho * 0.3 || (v > 0.35 && dx < -30));
     }, { passive: true });
+    document.addEventListener('touchcancel', () => { if (activo) soltar(false); }, { passive: true });
   }
 
   // ── Avisos ───────────────────────────────────────────────────────────────────
