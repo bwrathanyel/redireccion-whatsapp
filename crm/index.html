@@ -10174,6 +10174,10 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
          esconde toda la SECCIÓN del menú, y acá la sección entera sí debe
          verse -- solo esta caja de adentro es admin-only. -->
     <section class="section" id="sec-stop-sales">
+      <div class="seg-group" role="group" aria-label="Destino de Stop Sales">
+        <button type="button" class="seg on" data-ss-destino="bt" aria-pressed="true">BT Travel</button>
+        <button type="button" class="seg" data-ss-destino="roques" aria-pressed="false">Los Roques</button>
+      </div>
       <div class="ss-fresco" id="ss-fresco">
         <div><i class="fas fa-file-lines"></i><span id="ss-pdf-meta">Buscando el último PDF de BT…</span></div>
         <button class="ce-mini" id="ss-ver-pdf" type="button" disabled><i class="fas fa-file-pdf"></i> Ver PDF original</button>
@@ -10182,7 +10186,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <!-- Calendario y chips primero: es lo que se viene a mirar (pedido del dueño 2026-10-16). -->
       <div class="card">
         <h2><i class="fas fa-calendar-xmark"></i> Calendario de bloqueos</h2>
-        <div class="csub">Todo lo que BT reportó de hoy en adelante. Tocá un día marcado para ver qué hoteles están bloqueados.</div>
+        <div class="csub">Bloqueos publicados de hoy en adelante. Toca un día marcado para ver los hoteles y cuándo termina cada bloqueo.</div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap">
           <input type="text" class="ei" id="ss-vig-buscar" placeholder="Buscar hotel..." style="flex:1;min-width:150px">
           <div class="view-switch" id="ss-view-switch"></div>
@@ -10192,7 +10196,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 
       <div class="card" style="margin-top:14px">
         <h2><i class="fas fa-magnifying-glass"></i> ¿Puedo vender?</h2>
-        <div class="csub">Elegí el hotel y las fechas del cliente: te decimos noche por noche si hay cupo según el último PDF de BT.</div>
+        <div class="csub">Elige el hotel y las fechas del cliente para revisar los bloqueos noche por noche.</div>
         <div class="ss-verif-form">
           <label class="ss-verif-hotel"><span class="fl">Hotel</span><select class="ei" id="ss-v-hotel"><option value="">— elegí un hotel —</option></select></label>
           <label><span class="fl">Entrada (check-in)</span><input type="date" class="ei" id="ss-v-entrada"></label>
@@ -10204,18 +10208,18 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
       <div class="ss-guia" style="margin:14px 0 0">
         <div class="ss-guia-it" style="--c:var(--danger)">
           <i class="fas fa-ban"></i>
-          <div><b>Sin cupo</b><span class="ss-guia-bt">BT: stop sale</span>
+            <div><b>Sin cupo</b><span class="ss-guia-bt">stop sale</span>
             <p>El hotel no tiene habitaciones esas noches. No lo ofrezcas: proponé otra fecha u otro hotel.</p></div>
         </div>
         <div class="ss-guia-it" style="--c:var(--amber)">
           <i class="fas fa-clock"></i>
-          <div><b>A confirmar</b><span class="ss-guia-bt">BT: on request</span>
-            <p>Puede haber lugar, pero BT tiene que confirmarlo. No cobres ni le confirmes al cliente hasta tener la respuesta.</p></div>
+            <div><b>A confirmar</b><span class="ss-guia-bt">on request</span>
+            <p>El proveedor debe confirmar el cupo. No cobres ni confirmes al cliente hasta tener la respuesta.</p></div>
         </div>
         <div class="ss-guia-it" style="--c:var(--green)">
           <i class="fas fa-circle-check"></i>
           <div><b>Libre</b>
-            <p>El hotel no figura bloqueado en el PDF de BT para esas noches. Se vende normal.</p></div>
+            <p>No hay un bloqueo registrado para esas noches. Confirma cupo y tarifa con el proveedor antes de cerrar.</p></div>
         </div>
       </div>
 
@@ -10244,7 +10248,7 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
         <div id="ss-mapeo"></div>
         <div id="ss-preview"></div>
         <div id="ss-publicar-box" style="display:none;margin-top:14px">
-          <div class="csub" style="margin-bottom:8px"><i class="fas fa-triangle-exclamation" style="color:#f59e0b"></i> Publicar <b>reemplaza todos</b> los bloqueos publicados antes, no solo los hoteles de este PDF.</div>
+          <div class="csub" style="margin-bottom:8px"><i class="fas fa-triangle-exclamation" style="color:#f59e0b"></i> Publicar reemplaza los bloqueos del PDF anterior de BT. Los bloqueos manuales, como los de Los Roques, se conservan.</div>
           <button class="dbtn save" id="ss-publicar"><i class="fas fa-check"></i> Confirmar y publicar</button>
         </div>
         </div>

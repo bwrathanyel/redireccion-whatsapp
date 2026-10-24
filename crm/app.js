@@ -260,7 +260,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
   'contactos-directos': ['Contactos directos', 'Escribieron directo por WhatsApp (bio-redes, IA) -- registro, no se gestionan desde acá'],
   repartir: ['Repartir números', 'Pegá números o capturas de clientes que te escribieron directo y repartilos entre los asesores'],
-  'stop-sales': ['Stop Sales', 'Qué hoteles de BT Travel no se pueden vender (o hay que confirmar) y en qué fechas'],
+  'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles por destino: noches sin cupo o pendientes de confirmar'],
   manual: ['Videotutoriales', 'Lyra te explica cada parte del CRM, paso a paso'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'],
   pagos: ['Pagos por verificar', 'Links de pago que un cliente declaró como pagados -- verificá el comprobante antes de aprobar'] };
@@ -17056,6 +17056,7 @@ function setupStopSales() {
     e.target.value = '';
   });
   document.getElementById('ss-vig-buscar')?.addEventListener('input', () => ssRenderVigentes());
+  document.querySelectorAll('[data-ss-destino]').forEach(b => b.addEventListener('click', () => ssCambiarDestino(b.dataset.ssDestino)));
   document.getElementById('ss-ver-pdf')?.addEventListener('click', ssVerPdfOriginal);
 
   const ent = document.getElementById('ss-v-entrada');
@@ -17181,12 +17182,12 @@ async function ssLeer(file) {
 function ssBadge(estado) {
   const stop = estado === 'stop_sale';
   const color = stop ? 'var(--danger)' : 'var(--amber)';
-  return `<span class="badge-st" style="color:${color};background:color-mix(in srgb,${color} 18%,transparent)" title="BT: ${stop ? 'stop sale' : 'on request'}">${stop ? 'Sin cupo' : 'A confirmar'}</span>`;
+  return `<span class="badge-st" style="color:${color};background:color-mix(in srgb,${color} 18%,transparent)" title="Proveedor: ${stop ? 'stop sale' : 'on request'}">${stop ? 'Sin cupo' : 'A confirmar'}</span>`;
 }
 
 const SS_QUE_HACER = {
-  stop_sale: 'No ofrecer esas noches: proponé otra fecha u otro hotel.',
-  on_request: 'Pedile a BT que confirme el cupo antes de cobrar o confirmarle al cliente.',
+  stop_sale: 'No ofrecer esas noches: propón otra fecha u otro hotel del mismo destino.',
+  on_request: 'Pide al proveedor que confirme el cupo antes de cobrar o confirmar al cliente.',
 };
 
 // Pasos de la carga de oficina: 1 subir, 2 confirmar hoteles nuevos, 3 revisar y publicar.
@@ -17224,7 +17225,7 @@ function ssTextoLibre(iso) {
   const dias = ssDiasRestantes(iso);
   if (dias <= 0) return 'libre desde hoy';
   if (dias === 1) return `libre desde mañana (${fmtDiaCorto(iso)})`;
-  return `libre desde el ${fmtDiaCorto(iso)} (en ${dias} días)`;
+  return `disponible desde el ${ssFechaCompleta(iso)} (en ${dias} días)`;
 }
 
 async function ssPintarMapeo() {
@@ -17407,6 +17408,24 @@ async function ssPublicar() {
    bloqueado el 15?" y la de hoteles "¿cómo está el Wyndham?". El selector es el
    mismo initViewSwitcher del resto del CRM, así que la elección se recuerda. */
 let SS_VIGENTES_DATA = null;
+let ssDestino = 'bt';
+const ssEsLosRoques = destino => (destino || '').trim().toLowerCase() === 'los roques';
+const ssDelDestino = filas => filas.filter(f => ssEsLosRoques(f.destino) === (ssDestino === 'roques'));
+function ssCambiarDestino(destino) {
+  if (!['bt', 'roques'].includes(destino)) return;
+  ssDestino = destino;
+  ssFiltro = 'todos'; ssHotelSel = null; SS_MES = null; SS_DIA_ABIERTO = null;
+  const buscar = document.getElementById('ss-vig-buscar');
+  if (buscar) buscar.value = '';
+  document.querySelectorAll('[data-ss-destino]').forEach(b => {
+    const activo = b.dataset.ssDestino === destino;
+    b.classList.toggle('on', activo); b.setAttribute('aria-pressed', String(activo));
+  });
+  document.getElementById('ss-fresco').style.display = destino === 'roques' ? 'none' : '';
+  document.getElementById('ss-admin-box').style.display = destino === 'bt' && esOficina() ? '' : 'none';
+  ssRenderVigentes();
+  ssPintarHotelesVerif().then(ssVerificar);
+}
 let ssView = 'calendario';
 let ssFiltro = 'todos';
 let ssHotelSel = null; // nombre exacto del hotel elegido en los chips, o null = todos
@@ -17428,6 +17447,7 @@ const ssMesLargo = (mes) => { const [a, m] = mes.split('-'); return `${SS_MESES[
 // UTC y en Venezuela (UTC-4) devuelve el día anterior -- de ahí el 'T00:00:00',
 // igual que en ssDiasRestantes.
 const ssFecha = (iso) => new Date(iso + 'T00:00:00');
+const ssFechaCompleta = iso => new Intl.DateTimeFormat('es-VE', { day: 'numeric', month: 'long', year: 'numeric' }).format(ssFecha(iso));
 const ssISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 function ssDiasBloqueados(filas) {
@@ -17578,7 +17598,10 @@ async function loadStopSalesVigentes() {
   cont.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   const { data, error } = await sb.rpc('stop_sales_vigentes');
   if (error) { cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
-  SS_VIGENTES_DATA = data || [];
+  const hoteles = await ssProductosHotel();
+  if (!hoteles.length && data?.length) { cont.innerHTML = '<div class="vig-vacio">No se pudieron cargar los destinos. Vuelve a entrar a Stop Sales para reintentar.</div>'; return; }
+  const destinos = new Map(hoteles.map(h => [Number(h.id), h.destino]));
+  SS_VIGENTES_DATA = (data || []).map(f => ({ ...f, destino: destinos.get(Number(f.producto_id)) || '' }));
   ssView = initViewSwitcher('ss-view-switch', 'stop-sales', 'calendario', (v) => { ssView = v; SS_DIA_ABIERTO = null; ssRenderVigentes(); }, ['calendario', 'hoteles']);
   ssRenderVigentes();
   await ssPintarHotelesVerif();
@@ -17593,10 +17616,13 @@ async function ssPintarHotelesVerif() {
   const sel = document.getElementById('ss-v-hotel');
   if (!sel || !SS_VIGENTES_DATA) return;
   const actual = sel.value;
-  const conBloqueo = new Map(SS_VIGENTES_DATA.map((f) => [String(f.producto_id), f.nombre]));
-  const resto = (await ssProductosHotel()).filter((h) => !conBloqueo.has(String(h.id)));
+  const destino = ssDestino;
+  const hoteles = await ssProductosHotel();
+  if (destino !== ssDestino) return;
+  const conBloqueo = new Map(ssDelDestino(SS_VIGENTES_DATA).map((f) => [String(f.producto_id), f.nombre]));
+  const resto = ssDelDestino(hoteles).filter((h) => !conBloqueo.has(String(h.id)));
   sel.innerHTML = `<option value="">— elegí un hotel —</option>
-    ${conBloqueo.size ? `<optgroup label="Con bloqueos en el PDF de BT">${[...conBloqueo].sort((a, b) => a[1].localeCompare(b[1])).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}</optgroup>` : ''}
+    ${conBloqueo.size ? `<optgroup label="Con bloqueos publicados">${[...conBloqueo].sort((a, b) => a[1].localeCompare(b[1])).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}</optgroup>` : ''}
     ${resto.length ? `<optgroup label="Resto del tarifario (sin bloqueos)">${resto.map((h) => `<option value="${h.id}">${esc(h.nombre)}${h.destino ? ` (${esc(h.destino)})` : ''}</option>`).join('')}</optgroup>` : ''}`;
   sel.value = actual;
 }
@@ -17623,20 +17649,20 @@ function ssVerificar() {
   const nStop = noches.filter((x) => x.estado === 'stop_sale').length;
   const nReq = noches.filter((x) => x.estado === 'on_request').length;
   const pdf = ssDiaPdf();
-  const segun = pdf ? `según el PDF de BT del ${fmtDiaCorto(pdf)}` : 'según el último PDF de BT';
+  const segun = ssDestino === 'roques' ? 'según la disponibilidad registrada de Los Roques' : pdf ? `según el PDF de BT del ${fmtDiaCorto(pdf)}` : 'según los bloqueos publicados';
   const cuantas = (k, que) => (n === 1 ? `La noche está ${que}` : k === n ? `Las ${n} noches están ${que}` : `${k} de las ${n} noches están ${que}`);
   let c, ic, titulo, texto;
   if (nStop) {
     const libre = ssLibreDesde(rangos, noches.find((x) => x.estado === 'stop_sale').iso);
     c = 'var(--danger)'; ic = 'fa-ban'; titulo = 'No vender';
-    texto = `${cuantas(nStop, 'sin cupo')} ${segun}. Proponé otras fechas u otro hotel.${libre ? ` El hotel vuelve a estar libre desde el ${fmtDiaCorto(libre)}.` : ''}`;
+    texto = `${cuantas(nStop, 'sin cupo')} ${segun}. Propón otras fechas u otro hotel del mismo destino.${libre ? ` Disponible desde el ${ssFechaCompleta(libre)}; confirma cupo y tarifa para viajar desde esa fecha.` : ''}`;
   } else if (nReq) {
     c = 'var(--amber)'; ic = 'fa-clock'; titulo = 'Consultar a BT antes de confirmar';
     texto = `${cuantas(nReq, 'a confirmar')} ${segun}. Pedile a BT que confirme el cupo: no cobres ni le confirmes al cliente hasta tener la respuesta.`;
   } else {
     c = 'var(--green)'; ic = 'fa-circle-check'; titulo = 'Se puede vender';
     texto = `${n === 1 ? 'La noche no figura bloqueada' : `Ninguna de las ${n} noches figura bloqueada`} ${segun}.`
-      + (rangos.length ? '' : ' Ojo: este hotel no aparece en el PDF. Si no lo maneja BT Travel, confirmá la disponibilidad por la vía de siempre.');
+      + ' Confirma cupo y tarifa con el proveedor antes de cerrar.';
   }
 
   // Tramos seguidos con el mismo problema, para leerlos en una línea.
@@ -17671,7 +17697,7 @@ function ssIrAFiltro(clave) {
 
 function ssFilasVisibles() {
   const filtro = (document.getElementById('ss-vig-buscar')?.value || '').trim().toLowerCase();
-  return SS_VIGENTES_DATA.filter((f) => {
+  return ssDelDestino(SS_VIGENTES_DATA).filter((f) => {
     if (filtro && !f.nombre.toLowerCase().includes(filtro)) return false;
     if (ssHotelSel && f.nombre !== ssHotelSel) return false;
     if (ssFiltro === 'stop_sale') return f.estado === 'stop_sale';
@@ -17690,7 +17716,7 @@ function ssFilasVisibles() {
 function ssNochesPorHotel() {
   const hoy = ssISO(new Date());
   const dias = new Map();
-  for (const [iso, filas] of ssDiasBloqueados(SS_VIGENTES_DATA)) {
+  for (const [iso, filas] of ssDiasBloqueados(ssDelDestino(SS_VIGENTES_DATA))) {
     if (iso < hoy) continue;
     for (const f of filas) {
       if (!dias.has(f.nombre)) dias.set(f.nombre, new Set());
@@ -17733,12 +17759,13 @@ function ssIrAHotel(nombre) {
 function ssRenderVigentes() {
   const cont = document.getElementById('ss-vigentes');
   if (!SS_VIGENTES_DATA) return;
-  if (!SS_VIGENTES_DATA.length) {
+  const delDestino = ssDelDestino(SS_VIGENTES_DATA);
+  if (!delDestino.length) {
     cont.innerHTML = '<div class="vig-vacio"><i class="fas fa-circle-check"></i><b>Sin bloqueos vigentes</b></div>';
     return;
   }
   const filas = ssFilasVisibles();
-  const hotelesDonde = (fn) => new Set(SS_VIGENTES_DATA.filter(fn).map((f) => f.nombre)).size;
+  const hotelesDonde = (fn) => new Set(delDestino.filter(fn).map((f) => f.nombre)).size;
   const nStop = hotelesDonde((f) => f.estado === 'stop_sale');
   const nReq = hotelesDonde((f) => f.estado === 'on_request');
   const nSemana = hotelesDonde((f) => ssDiasRestantes(f.fecha_hasta) <= 7);
@@ -23140,10 +23167,11 @@ function renderTarifario() {
   [...document.querySelectorAll('#tar-grid .tar-item')].forEach(el => {
     const x = byId.get(el.dataset.id);
     if (!x) return;
-    // Una fila de `tarifas` listada en Promociones (Fase 4) NO abre un drawer de
-    // promoción: abre la carpeta de su hotel, que es donde vive con sus
-    // hermanas y sus condiciones.
-    el.onclick = () => x._tarifa && x._productoId ? abrirDesdeBusquedaIA('producto', x._productoId) : openProductoDrawer(x);
+    // Hot Sales abre la misma ficha del hotel, también para flyers vinculados.
+    el.onclick = () => {
+      const productoId = (x._tarifa || tarTab === 'hotsale') ? (x._productoId || x.producto_id) : null;
+      return productoId ? abrirDesdeBusquedaIA('producto', productoId) : openProductoDrawer(x);
+    };
     // La policy RLS deja al admin ver también lo que él mismo ocultó (para
     // poder revertirlo) — sin esta marca se vería idéntico a lo visible y
     // parecería que ocultar no hizo nada.
@@ -34549,6 +34577,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-23', emoji: '📅', titulo: 'Gremary: disponibilidad desde enero de 2027', texto: 'Posada Gremary no tiene cupo hasta el 31 de diciembre de 2026. Revisa sus fechas en Stop Sales → Los Roques y ofrece otras posadas del destino para ese período. Las promociones vinculadas de Hot Sales abren la misma ficha completa del hotel.', roles: ROLES_TODOS },
   { fecha: '2026-10-23', emoji: '✨', titulo: 'Recargas de Leads y fotos más suaves', texto: 'Al recargar Leads, la lista permanece visible con un indicador discreto en el color del tema. Las fotos del Tarifario cambian dentro de su tarjeta al pasar el mouse, sin saltos ni destellos entre imágenes.', roles: ROLES_TODOS },
   { fecha: '2026-10-23', emoji: '🏨', titulo: 'Tarifas vigentes y apertura de la ficha', texto: 'La ficha de cada hotel muestra solo tarifas vigentes. Corregimos los hoteles que parecían no tener precios porque se cargaba primero el histórico. Cuando hace falta consultar la ficha, el panel se abre con un indicador de carga; al volver a un hotel se reutiliza lo cargado y los errores permiten reintentar.', roles: ROLES_TODOS },
   { fecha: '2026-10-23', emoji: '🏨', titulo: 'Todos los hoteles en tablas', texto: 'Cada hotel muestra sus tarifas vigentes en tablas por temporada y habitación, aunque tenga una sola tarifa o datos incompletos. Si hay muchas habitaciones puedes deslizar la tabla; al tocar un precio se abre su detalle. El histórico sigue disponible al final.', roles: ['admin', 'asesor', 'marketing'] },
