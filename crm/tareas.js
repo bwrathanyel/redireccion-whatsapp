@@ -997,13 +997,17 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     pintar(); cargar(); conectar();
   }
   function cerrarPanelMovil() { panelMovil?.remove(); panelMovil = null; }
+  // Zona ancha como MENU_BORDE del menú izquierdo: el borde exacto es el gesto «atrás» del sistema y el toque nunca llega.
+  const BORDE = 150;
+  const scrollX = el => { for (; el && el !== document.body; el = el.parentElement) {
+    if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true; } return false; };
   function gestoBorde() {
     let x0 = 0, y0 = 0, activo = false;
     document.addEventListener('touchstart', e => {
       activo = false;
       if (!esMovil() || e.touches.length !== 1 || panelMovil || document.querySelector('.tk-overlay') || hayOverlayAbierto?.()) return;
       const t = e.touches[0];
-      if (t.clientX < innerWidth - 24) return;
+      if (t.clientX < innerWidth - BORDE || e.target.closest?.('input,textarea,select') || scrollX(e.target)) return;
       x0 = t.clientX; y0 = t.clientY; activo = true;
     }, { passive: true });
     document.addEventListener('touchend', e => {

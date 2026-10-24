@@ -358,6 +358,7 @@ body.menu-arrastrando .side-scrim{transition:none}
 .mb-tit{flex:1;min-width:0}
 /* Cerrar el menú desde adentro: el escritorio no lo necesita (siempre visible). */
 .side-cerrar{display:none;width:38px;height:38px;border-radius:11px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-size:15px;cursor:pointer;margin-left:auto}
+.brand .refresh-btn+.side-cerrar{margin-left:0}
 .nav-item.nav-solo-movil{display:none}
 /* Badge de leads sin atender: mismo id/clase que usaba la bottom-nav, ahora
    dibujado sobre el botón de menú (.menu-dot lo acompaña como punto simple). */
@@ -7638,6 +7639,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   <aside class="sidebar">
     <div class="sidebar-top">
       <div class="brand"><img src="logolotus-integrado.png" alt="Destino y Eventos Lotus 360" width="512" height="512"><div><div class="bt">Destino y Eventos Lotus 360</div></div>
+        <!-- ⟳ chico arriba otra vez (pedido del dueño 2026-10-24): el botón grande del pie se quitó para ganar espacio. -->
+        <button class="refresh-btn" data-refresh type="button" title="Recarga el CRM completo con la última versión" aria-label="Actualizar CRM: recargar todo"><i class="fas fa-rotate"></i></button>
         <button class="side-cerrar" id="side-cerrar" type="button" aria-label="Cerrar menú"><i class="fas fa-xmark"></i></button>
       </div>
       <!-- Perfil + jornada en una fila (2026-10-16): el punto sobre el avatar y
@@ -7671,8 +7674,6 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </div>
     </div>
     <div class="side-foot side-foot-row">
-      <!-- Volvió el botón con texto (pedido del dueño 2026-10-16): en móvil el ⟳ de arriba no se ve. -->
-      <button class="refresh-btn refresh-btn-lg" data-refresh type="button" title="Recarga el CRM completo con la última versión" aria-label="Actualizar CRM: recargar todo"><i class="fas fa-rotate"></i> <span>Actualizar CRM</span></button>
       <button class="logout-btn side-logout" onclick="cerrarSesion()" title="Cerrar sesión" aria-label="Cerrar sesión"><i class="fas fa-right-from-bracket"></i> <span>Cerrar sesión</span></button>
       <!-- Lyra (2026-09-26): la cara del asistente. Solo se ve con body.lyra-on
            (rol con acceso a la sección Asistente); el chat es #lyra-panel. -->
