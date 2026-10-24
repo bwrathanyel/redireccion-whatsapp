@@ -3,6 +3,7 @@ import { crearDocumentosRevisiones } from './documentos-revisiones.js';
 import { crearAbonos } from './abonos.js';
 import { crearPropuestas } from './propuestas.js';
 import { crearBandejaWa } from './whatsapp-bandeja.js';
+import { crearTareas } from './tareas.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -240,7 +241,7 @@ const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
 const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], balance: ['Balance', 'Ventas, costos, gastos y utilidad por periodo'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de servicio (hospedaje, excursiones, traslados) en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
-  tareas: ['Tareas', 'Tus tareas activas'],
+  tareas: ['Tareas', 'Tu día: lo asignado y tus recordatorios'],
   comisiones: ['Comisiones', 'Se calculan solas al pagarse la reserva · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
   boleteria: ['Boletería', 'Rutas, aerolíneas, precios y requisitos de vuelo'],
@@ -878,6 +879,22 @@ function ocultarBloqueoOverlay() {
   document.getElementById('bloqueo-overlay')?.classList.remove('show');
 }
 
+// Tareas v2 (tareas.js): Mi día con pasos que se marcan solos. Arranca para todos los roles
+// (badge, tiempo real y swipe desde el borde derecho en el teléfono); ?ir=tareas&t=<id> abre una.
+let TK = null;
+function tareasV2() {
+  if (!TK) TK = crearTareas({ sb, esc, rol: () => ROL, miId: () => MI_USUARIO_ID, irA: sec => activateSection(sec),
+    abrirLead: id => abrirLeadDesdeMisVentas(id), hayOverlayAbierto });
+  return TK;
+}
+function setupTareasV2() { if (MI_USUARIO_ID) tareasV2().enlazar(); }
+function loadTareasV2() {
+  const q = new URLSearchParams(location.search), t = Number(q.get('t'));
+  if (t) { q.delete('t'); history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '')); }
+  tareasV2().enlazar();
+  return TK.abrirSeccion(t > 0 ? t : null);
+}
+
 /* ---------- Tareas (freelancer) ----------
    Tablero de 3 columnas sobre listar_mis_tareas() -- filosofía del spec:
    un clic para avanzar, reportar problema siempre visible y nunca genera
@@ -1461,7 +1478,7 @@ window.activarRecordatorios = async () => {
     const { error } = await sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS });
     if (error) { MI_PREFERENCIAS = anterior; errToast('No se pudo guardar: ' + error.message); return false; }
   }
-  return activarNotificaciones(puedeRecibirAsistencia() ? 'Avisos' : 'Leads nuevos');
+  return activarNotificaciones('Avisos');
 };
 // "No, gracias" es una decisión, no un "después lo veo": se guarda en el perfil
 // y no en sessionStorage. Antes el banner volvía en cada pestaña nueva, así que
@@ -1478,25 +1495,24 @@ window.ocultarRecordatoriosBanner = async () => {
 // contaba también las filas expiradas: un dispositivo muerto bastaba para
 // esconderlo para siempre.
 async function renderAvisosPushUI() {
-  const puedeRecibirAlgo = ROL === 'asesor' || ROL === 'admin';
+  // Todos los roles reciben avisos de Tareas (asignadas, comentarios, devueltas), así que el
+  // banner ya no depende de vender ni de las preferencias de leads/asistencia.
   const estado = await estadoPushReal();
-  const rechazoTodo = MI_PREFERENCIAS.notificaciones_leads === false
-    && (!puedeRecibirAsistencia() || MI_PREFERENCIAS.notificaciones_asistencia === false);
+  const vende = ROL === 'asesor' || ROL === 'admin';
   const bloqueado = estado.soportado && estado.permiso === 'denied';
   // En iPhone el Web Push no existe hasta que la app está en la pantalla de
   // inicio (iOS 16.4+): sin PushManager no hay nada que activar. Ofrecer
   // "Activar" ahí es mandar a la persona a un callejón sin salida -- toca,
   // falla, y no se entera de que lo que faltaba era instalar.
   const faltaInstalar = esIOS() && !pwaInstalada();
-  const mostrar = puedeRecibirAlgo && (estado.soportado || faltaInstalar) && !estado.activo
-    && !rechazoTodo && !MI_PREFERENCIAS.push_rechazado;
+  const mostrar = (estado.soportado || faltaInstalar) && !estado.activo && !MI_PREFERENCIAS.push_rechazado;
   const texto = faltaInstalar
     ? 'En iPhone: tocá Compartir y "Agregar a inicio"; activalos desde ese ícono.'
     : (bloqueado
       ? 'Avisos bloqueados: permitilos desde el candado junto a la dirección.'
       : (puedeRecibirAsistencia()
-        ? 'Activá los avisos de leads y asistencia.'
-        : 'Activá los avisos de leads nuevos.'));
+        ? 'Activa los avisos de leads, tareas y asistencia.'
+        : (vende ? 'Activa los avisos de leads nuevos y tareas.' : 'Activa los avisos de tus tareas.')));
   ['-d', '-m'].forEach(sfx => {
     const el = document.getElementById('recordatorios-banner' + sfx);
     if (!el) return;
@@ -2898,6 +2914,7 @@ async function startApp() {
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupDocumentosRevisiones, setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
+    setupTareasV2,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -7236,6 +7253,11 @@ function openDrawer(l, opciones = {}) {
           <div id="conv-preview" class="conv-preview"></div>
         </section>
 
+        <section class="dbloque" id="d-tareas">
+          <div class="dbloque-h"><span><i class="fas fa-list-check"></i> Tareas</span></div>
+          <div class="tk-root" id="d-tareas-body"></div>
+        </section>
+
         <section class="dbloque">
           <div class="dbloque-h"><span><i class="fas fa-note-sticky"></i> Nota del equipo</span><span class="dnotas-meta" id="e-notas-meta"></span></div>
           <textarea id="e-notas" class="ei" rows="3" placeholder="Qué se habló, qué quedó pendiente… solo la ve el equipo">${esc(l.notas || '')}</textarea>
@@ -7253,6 +7275,7 @@ function openDrawer(l, opciones = {}) {
 
   const datos = document.getElementById('d-datos');
   pintarLecturaDatos();
+  if (MI_USUARIO_ID) tareasV2().bloqueLead(document.getElementById('d-tareas-body'), { id: l.id, nombre: nombreLead(l), estado: l.estado, asesor: l.asesor });
   document.getElementById('e-estado').addEventListener('change', e => {
     document.getElementById('venta-box').classList.toggle('show', VENTA.includes(e.target.value));
     document.getElementById('dacc-estado').style.setProperty('--est', ESTADO_COLORS[e.target.value] || '#8b93ad');
@@ -31654,7 +31677,8 @@ const NAV_ITEMS = [
   { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok nav-administrativo-ok' },
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
   { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only nav-administrativo-ok' },
-  { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', padre: 'grp-equipo', roles: 'nav-freelancer-only nav-administrativo-ok' },
+  // Tareas v2 (2026-10-23): entrada propia para todos los roles; antes solo freelancers o quien tuviera una abierta.
+  { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok', sub: 'Tu día: lo que te asignaron y tus recordatorios', badge: 'nav-tareas-v2-count', badgeDefault: '0' },
   { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Videotutoriales', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-administrativo-ok' },
   { sec: 'actualizaciones', icon: 'fas fa-bullhorn', label: 'Actualizaciones', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-administrativo-ok' },
   { sec: 'proyecto-constructor', icon: 'fas fa-drafting-compass', label: 'Proyecto Constructor', padre: 'grp-ayuda', roles: 'nav-admin-only', sub: 'Avance del CRM que se vende a otras empresas' },
@@ -31667,6 +31691,7 @@ const NAV_PADRES = [
   // Primera: es el trabajo principal del modo Boletería (fuera de ese modo no se ve).
   { sec: 'bol-solicitudes', hoja: true },
   { sec: 'grp-inicio', icon: 'fas fa-chart-pie', label: 'Inicio' },
+  { sec: 'tareas', hoja: true },
   { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
   { sec: 'cotizacion-boletos', hoja: true },
   // Bandeja (2026-10-16): Meta DM y Correo como pestañas. El chat interno se abre por la burbuja #chat-fab.
@@ -32046,7 +32071,7 @@ function cargarSeccion(sec) {
   if (sec === 'cotizacion-boletos') cbCargarSeccion();
   if (sec === 'bol-solicitudes') bolColaAlEntrar();
   if (sec === 'boleteria') loadBoleteria();
-  if (sec === 'tareas') loadTareas();
+  if (sec === 'tareas') loadTareasV2();
   if (sec === 'manual') renderManual();
   if (sec === 'actualizaciones') renderActualizaciones();
   if (sec === 'proyecto-constructor') renderProyectoConstructor();
@@ -32357,7 +32382,7 @@ const REFRESCAR_SECCION = {
   'ia-atencion': () => loadIaAtencion(), 'propuestas': () => loadPropuestas(), 'wa-bandeja': () => loadWaBandeja(), 'web-reasignados': () => loadWebReasignados(), 'contactos-directos': () => loadContactosDirectos(),
   'clientes-eventos': () => loadClientesEventos(),
   'stop-sales': () => { loadStopSalesVigentes(); ssCargarPdfActual(); },
-  redes: () => cargarRedActual(), voucher: () => loadVoucherSeccion(), tareas: () => loadTareas(),
+  redes: () => cargarRedActual(), voucher: () => loadVoucherSeccion(), tareas: () => loadTareasV2(),
   boleteria: () => loadBoleteria(), 'bol-solicitudes': () => loadColaBoleteria(), 'cotizacion-boletos': () => cbCargarSeccion(),
 };
 async function refrescarSeccionActual() {
@@ -34577,6 +34602,8 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-24', emoji: '✅', titulo: 'Tareas nuevas: tu día en una lista', texto: 'Tareas ya está en el menú para todos. Ves lo vencido, lo de hoy y lo que viene, cada tarea con su próximo paso como botón. Los pasos se marcan solos cuando los haces en el CRM (estado del cliente, cotización, llamada, reserva): toca «Hacer ahora» y al volver ya está. También puedes enviar una foto como evidencia, comentar con administración, avisar un problema y crearte recordatorios. En el teléfono se abre además deslizando desde el borde derecho. Activa los avisos para enterarte cuando te asignan algo.', roles: ['admin', 'administrativo', 'asesor', 'marketing', 'boleteria'] },
+  { fecha: '2026-10-24', emoji: '📋', titulo: 'Tareas: el equipo en vivo', texto: 'En Tareas → Equipo ves a cada persona con su avance en vivo y, arriba, lo que necesita tu atención (problemas, revisiones, vencidas, sin abrir) con su acción a un toque. Al crear una tarea eliges una o varias personas, el cliente, pasos que se verifican solos, si requiere tu aprobación y si se repite. Las plantillas guardan las tareas frecuentes; las que se repiten se crean solas y se pueden pausar. La ficha de cada cliente muestra sus tareas.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-23', emoji: '📅', titulo: 'Gremary: disponibilidad desde enero de 2027', texto: 'Posada Gremary no tiene cupo hasta el 31 de diciembre de 2026. Revisa sus fechas en Stop Sales → Los Roques y ofrece otras posadas del destino para ese período. Las promociones vinculadas de Hot Sales abren la misma ficha completa del hotel.', roles: ROLES_TODOS },
   { fecha: '2026-10-23', emoji: '✨', titulo: 'Recargas de Leads y fotos más suaves', texto: 'Al recargar Leads, la lista permanece visible con un indicador discreto en el color del tema. Las fotos del Tarifario cambian dentro de su tarjeta al pasar el mouse, sin saltos ni destellos entre imágenes.', roles: ROLES_TODOS },
   { fecha: '2026-10-23', emoji: '🏨', titulo: 'Tarifas vigentes y apertura de la ficha', texto: 'La ficha de cada hotel muestra solo tarifas vigentes. Corregimos los hoteles que parecían no tener precios porque se cargaba primero el histórico. Cuando hace falta consultar la ficha, el panel se abre con un indicador de carga; al volver a un hotel se reutiliza lo cargado y los errores permiten reintentar.', roles: ROLES_TODOS },
