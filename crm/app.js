@@ -399,7 +399,13 @@ async function sesionInvalida(msg) {
 // tiempo transcurrido (el desfase es constante, la resta lo cancela) con
 // chequeo al volver a la pestaña; (3) aviso si el desfase pasa de 2 min.
 let renovando = null, sesionEmitidaEn = 0, sesionDura = 0, timerSesion = null;
-const renovarSesion = () => renovando ??= sb.auth.refreshSession().finally(() => { renovando = null; });
+// Desfase y contador se miden solo acá: es el único token que se sabe recién
+// emitido. supabase-js re-emite SIGNED_IN con el token VIEJO al volver a la
+// pestaña, y su iat daba falsos "reloj adelantado".
+const renovarSesion = () => renovando ??= sb.auth.refreshSession().then(r => {
+  if (r.data?.session) try { programarRenovacion(r.data.session); } catch (_e) { /* token ilegible: queda la defensa por 401 */ }
+  return r;
+}).finally(() => { renovando = null; });
 async function fetchConSesion(input, init = {}) {
   const res = await fetch(input, init);
   const url = typeof input === 'string' ? input : input.url;
@@ -427,10 +433,10 @@ function programarRenovacion(session) {
 const sesionPorVencer = () => sesionEmitidaEn && Date.now() - sesionEmitidaEn > sesionDura - 5 * 60e3;
 // Callback sin await a sb: supabase-js avisa que awaits dentro bloquean su lock.
 sb.auth.onAuthStateChange((evento, session) => {
-  if (evento === 'SIGNED_IN' || evento === 'TOKEN_REFRESHED') { if (session) try { programarRenovacion(session); } catch (_e) { /* token ilegible: queda la defensa por 401 */ } }
-  // La sesión guardada pudo emitirse con un reloj desfasado: no hay forma de
-  // saber cuánto le queda, así que se renueva una vez al cargar.
-  else if (evento === 'INITIAL_SESSION' && session) setTimeout(renovarSesion, 0);
+  // La sesión guardada (o la del login) no dice cuánto le queda con un reloj
+  // desfasado: se renueva una vez por pestaña y desde ahí manda el contador.
+  // Solo con contador en 0, si no dos pestañas se renovarían en ping-pong.
+  if ((evento === 'INITIAL_SESSION' || evento === 'SIGNED_IN') && session && !sesionEmitidaEn) setTimeout(renovarSesion, 0);
   else if (evento === 'SIGNED_OUT') { clearTimeout(timerSesion); sesionEmitidaEn = 0; if (MI_USUARIO_ID) showOverlay('login'); }
 });
 const revisarSesion = () => { if (!document.hidden && sesionPorVencer()) renovarSesion(); };
