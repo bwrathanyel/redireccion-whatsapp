@@ -83,7 +83,7 @@ async function subirDerivados(storagePath, file) {
   } catch (e) { console.warn('derivados', e); }
 }
 const SUPABASE_KEY = 'sb_publishable_M7Ms9DLwpNSCXZNCDhYtbQ_LhMYeLxk';
-const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { realtime: { params: { eventsPerSecond: 40 } } });
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { global: { fetch: fetchConSesion }, realtime: { params: { eventsPerSecond: 40 } } });
 
 // Crear un Intl.*Format cuesta ~0,1 ms; en tablas de cientos de filas eso eran
 // cientos de ms por render. Se crean una vez por combinación de opciones.
@@ -390,6 +390,54 @@ async function sesionInvalida(msg) {
   document.getElementById('loginErr').textContent = msg;
   return null;
 }
+
+// supabase-js decide cuándo renovar el token con la hora LOCAL. Con el reloj
+// del equipo atrasado cree que el token sigue vigente, nunca renueva y a la
+// hora del login todo falla con "JWT expired" (2026-10-25: PC con 6 h de
+// atraso). Defensa independiente del reloj: (1) toda llamada de sb que vuelve
+// 401 por JWT renueva y reintenta una vez; (2) renovación propia medida en
+// tiempo transcurrido (el desfase es constante, la resta lo cancela) con
+// chequeo al volver a la pestaña; (3) aviso si el desfase pasa de 2 min.
+let renovando = null, sesionEmitidaEn = 0, sesionDura = 0, timerSesion = null;
+const renovarSesion = () => renovando ??= sb.auth.refreshSession().finally(() => { renovando = null; });
+async function fetchConSesion(input, init = {}) {
+  const res = await fetch(input, init);
+  const url = typeof input === 'string' ? input : input.url;
+  // Storage responde 400/403 (no 401) con "jwt expired" / "exp claim".
+  if (![400, 401, 403].includes(res.status) || url.includes('/auth/v1/') || !/jwt|exp claim/i.test(await res.clone().text())) return res;
+  const { data, error } = await renovarSesion();
+  const token = data?.session?.access_token;
+  if (!token) { if (!esErrorRed(error)) sesionInvalida('Tu sesión expiró, vuelve a entrar'); return res; }
+  const headers = new Headers(init.headers); headers.set('Authorization', 'Bearer ' + token);
+  return fetch(input, { ...init, headers });
+}
+function avisarDesfaseReloj(ms) {
+  if (Math.abs(ms) < 2 * 60e3 || avisarDesfaseReloj.hecho) return;
+  avisarDesfaseReloj.hecho = true;
+  const min = Math.round(Math.abs(ms) / 60e3);
+  errToast(`La hora de este equipo está ${ms > 0 ? 'atrasada' : 'adelantada'} ${min >= 90 ? Math.round(min / 60) + ' h' : min + ' min'}. Pon fecha y hora en automático para evitar errores.`);
+}
+function programarRenovacion(session) {
+  const p = JSON.parse(atob(session.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+  sesionEmitidaEn = Date.now(); sesionDura = (p.exp - p.iat) * 1000;
+  avisarDesfaseReloj(p.iat * 1000 - Date.now());
+  clearTimeout(timerSesion);
+  timerSesion = setTimeout(renovarSesion, Math.max(30e3, sesionDura - 5 * 60e3));
+}
+const sesionPorVencer = () => sesionEmitidaEn && Date.now() - sesionEmitidaEn > sesionDura - 5 * 60e3;
+// Callback sin await a sb: supabase-js avisa que awaits dentro bloquean su lock.
+sb.auth.onAuthStateChange((evento, session) => {
+  if (evento === 'SIGNED_IN' || evento === 'TOKEN_REFRESHED') { if (session) try { programarRenovacion(session); } catch (_e) { /* token ilegible: queda la defensa por 401 */ } }
+  // La sesión guardada pudo emitirse con un reloj desfasado: no hay forma de
+  // saber cuánto le queda, así que se renueva una vez al cargar.
+  else if (evento === 'INITIAL_SESSION' && session) setTimeout(renovarSesion, 0);
+  else if (evento === 'SIGNED_OUT') { clearTimeout(timerSesion); sesionEmitidaEn = 0; if (MI_USUARIO_ID) showOverlay('login'); }
+});
+const revisarSesion = () => { if (!document.hidden && sesionPorVencer()) renovarSesion(); };
+document.addEventListener('visibilitychange', revisarSesion);
+window.addEventListener('focus', revisarSesion);
+window.addEventListener('online', revisarSesion);
+
 async function cargarUsuario(intento = 0) {
   let { data: { user }, error: eu } = await sb.auth.getUser();
   if (!user && !esErrorRed(eu)) {
