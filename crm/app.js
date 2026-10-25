@@ -634,7 +634,18 @@ const PALETAS = {
   medianoche: { base: 'dark',  color: '#000000', nombre: 'Medianoche', icono: 'fa-star',       desc: 'Negro puro, ahorra batería en el celular', muestra: ['#000000', '#a78bfa', '#f472b6'] },
   lavanda:    { base: 'light', color: '#dbd6e7', nombre: 'Lavanda',    icono: 'fa-spa',        desc: 'Degradado lila a rosa, suave y tranquilo', muestra: ['#dbd6e7', '#725abd', '#a4587d'] },
 };
-const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+// Cache por estado de <html> (atributos + ancho + esquema): cada getComputedStyle tras tocar el DOM
+// forzaba un recálculo de estilos, y los gráficos lo llaman varias veces por render (gridColor, tonoChart).
+const CSS_VAR = new Map(); let CSS_VAR_K = '';
+const OSCURO_MQ = matchMedia('(prefers-color-scheme: dark)');
+const cssVar = n => {
+  const de = document.documentElement; let k = innerWidth + '|' + OSCURO_MQ.matches;
+  for (const a of de.attributes) k += '|' + a.name + '=' + a.value;
+  if (k !== CSS_VAR_K) { CSS_VAR.clear(); CSS_VAR_K = k; }
+  let v = CSS_VAR.get(n);
+  if (v === undefined) { v = getComputedStyle(de).getPropertyValue(n).trim(); CSS_VAR.set(n, v); }
+  return v;
+};
 const accentRgb = () => cssVar('--accent-rgb') || '255,145,0';
 // Chart.js no entiende var(): la grilla y los textos se leen del tema vigente.
 const gridColor = () => `rgba(${cssVar('--ink-rgb') || '255,255,255'},.07)`;
@@ -3019,6 +3030,7 @@ async function loadStats() {
 // directo). Clave = id del contenedor + título, no hay otro identificador
 // estable entre los ~15 lugares que llaman pintarKPIs.
 const KPIS_ANIMADOS = new Set();
+const KPI_MQ = matchMedia('(max-width:760px)');
 function contarKPI(el, valorFinal) {
   // k.v ya viene formateado (fmt()/money(), con separadores y a veces "$" o
   // texto alrededor) -- se anima solo la parte numérica y se reconstruye
@@ -3082,10 +3094,13 @@ function pintarKPIs(box, cards) {
       + (k.go ? '<i class="fas fa-arrow-right kgo"></i>' : '')
       + `</${tag}>`;
   }).join('');
+  // Sin conteo animado si nadie lo ve (bloque plegado en el celular o sección oculta): eran ~36
+  // cuadros de textContent + estilo por KPI. El valor final ya está en el HTML.
+  const oculto = (KPI_MQ.matches && box.classList.contains('kpis-cerrado')) || !!box.closest('.section:not(.active)');
   [...box.children].forEach((el, i) => {
     if (cards[i].go) el.addEventListener('click', cards[i].go);
     const clave = boxId + '|' + cards[i].t;
-    if (!KPIS_ANIMADOS.has(clave)) { KPIS_ANIMADOS.add(clave); contarKPI(el.querySelector('.kv'), cards[i].v); }
+    if (!KPIS_ANIMADOS.has(clave)) { KPIS_ANIMADOS.add(clave); if (!oculto) contarKPI(el.querySelector('.kv'), cards[i].v); }
   });
 }
 function renderKPIs() {
@@ -13817,6 +13832,7 @@ async function loadRedesTikTok() {
 let redesFbCuentas = {}, redesFbCuenta = {}, redesFbGen = 0;
 const FB_RED = { facebook: { nombre: 'Facebook', icono: 'fa-facebook', seccion: 'Página' }, instagram: { nombre: 'Instagram', icono: 'fa-instagram', seccion: 'Cuenta' }, tiktok: { nombre: 'TikTok', icono: 'fa-tiktok', seccion: 'Cuenta' } };
 const redesFbCache = new Map(), REDES_FB_CACHE_MS = 5 * 60 * 1000;
+let redesFbPintado = {};
 const FB_BLOQUES = { pagina: 'las métricas de la página', seguidores: 'los seguidores', posts: 'las publicaciones', horas: 'los mejores horarios', reacciones: 'las reacciones' };
 const FB_TIPOS = { image: 'Foto', photo: 'Foto', video: 'Video', reel: 'Reel', carousel: 'Carrusel', album: 'Álbum', link: 'Enlace', text: 'Texto', texto: 'Texto', story: 'Historia' };
 const FB_REACCIONES = [['like', 'Me gusta', '#4a9eff'], ['love', 'Me encanta', '#ff5c8a'], ['care', 'Me importa', '#ffb347'], ['haha', 'Jaja', '#ffd23f'], ['wow', 'Asombro', '#a06bff'], ['sad', 'Tristeza', '#7a8aa0'], ['angry', 'Enojo', '#ff6b4a']];
@@ -13867,7 +13883,14 @@ async function loadRedesZernio(plat) {
       hit = { t: Date.now(), data: await redesFbInvocar({ accion: 'resumen', plataforma: plat, accountId: redesFbCuenta[plat], desde, hasta }) };
       redesFbCache.set(clave, hit);
     }
-    if (gen === redesFbGen) fbPintar(hit.data, plat);
+    // Si la persona ya se fue de Redes, no se rearman los ~8 gráficos en otra pantalla
+    // (~300ms en un celular): la próxima visita recarga y pega en redesFbCache.
+    // Volver con el mismo resumen en caché (y el mismo tema) no recrea los gráficos: solo repone los avisos.
+    const tema = [...document.documentElement.attributes].map(a => a.name + '=' + a.value).join('|');
+    if (gen !== redesFbGen) return;
+    if (currentSec !== 'redes') delete ULTIMA_CARGA.redes;
+    else if (redesFbPintado.data === hit.data && redesFbPintado.tema === tema) avisos.innerHTML = redesFbPintado.avisos;
+    else { fbPintar(hit.data, plat); redesFbPintado = { data: hit.data, tema, avisos: avisos.innerHTML }; }
   } catch (e) {
     console.error(e);
     if (gen !== redesFbGen) return;
@@ -14879,6 +14902,9 @@ const MQ_MENOS_MOV = matchMedia('(prefers-reduced-motion: reduce)'), MQ_MOVIL_LY
 function lyraSeguirCursor() {
   LYRA.raf = 0;
   if (LYRA.dormida || LYRA.expr === 'pensando' || document.hidden || document.body.classList.contains('lyra-moviendo') || MQ_MENOS_MOV.matches) return;
+  // Celular con el menú o la bandeja de Tareas siguiendo al dedo: mover los ojos recalculaba
+  // ~115 nodos del orbe por cuadro (--lx/--ly heredan) y el orbe queda tapado igual.
+  if (MQ_MOVIL_LYRA.matches && /\b(menu-arrastrando|menu-abierto|tk-lock)\b/.test(document.body.className)) return;
   // El orbe casi no se mueve (dock del sidebar / FAB fijo): medirlo una vez por
   // segundo y no en cada frame, justo después de que lyraMirar escribió estilos.
   if (!LYRA.rectOrb || Date.now() - LYRA.rectOrbT > 1000) {
@@ -23205,6 +23231,7 @@ function renderTarifario() {
   // En Paquetes la grilla siempre tiene el bloque de Paquetes Lotus arriba.
   document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0 && tarTab !== 'paquete');
   const grid = document.getElementById('tar-grid');
+  const tarDiferir = esMovil(); // en escritorio quedan armadas: Ctrl+F encuentra hoteles en bloques cerrados
   if (tarTab === 'hotel') {
     // Contraídas por defecto (pedido explícito) -- son ~7 destinos con
     // decenas de hoteles cada uno, todas abiertas de arranque era una
@@ -23217,8 +23244,9 @@ function renderTarifario() {
     const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
     grid.innerHTML = destinos.map(d => `<details class="tar-destino-block" data-destino="${esc(d)}"${tarDestinosAbiertos.has(d) ? ' open' : ''}>
       <summary class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span><i class="fas fa-chevron-down tar-destino-caret"></i></summary>
-      ${tarItemsWrapHtml(porDestino[d])}
+      ${tarDiferir && !tarDestinosAbiertos.has(d) ? '' : tarItemsWrapHtml(porDestino[d])}
     </details>`).join('');
+    if (tarDiferir) tarDiferirBloques(grid, destinos.map(d => tarDestinosAbiertos.has(d) ? null : porDestino[d]));
     grid.querySelectorAll('.tar-destino-block').forEach(det => det.addEventListener('toggle', () => {
       const d = det.dataset.destino;
       if (det.open) tarDestinosAbiertos.add(d); else tarDestinosAbiertos.delete(d);
@@ -23240,8 +23268,9 @@ function renderTarifario() {
     });
     grid.innerHTML = hoteles.map(h => `<details class="tar-destino-block" data-hotel="${esc(h)}"${tarHotelesAbiertos.has(h) ? ' open' : ''}>
       <summary class="tar-destino-header"><i class="fas fa-hotel"></i> ${esc(h)} <span>${porHotel[h].length}</span><i class="fas fa-chevron-down tar-destino-caret"></i></summary>
-      ${tarItemsWrapHtml(porHotel[h])}
+      ${tarDiferir && !tarHotelesAbiertos.has(h) ? '' : tarItemsWrapHtml(porHotel[h])}
     </details>`).join('');
+    if (tarDiferir) tarDiferirBloques(grid, hoteles.map(h => tarHotelesAbiertos.has(h) ? null : porHotel[h]));
     grid.querySelectorAll('.tar-destino-block').forEach(det => det.addEventListener('toggle', () => {
       const h = det.dataset.hotel;
       if (det.open) tarHotelesAbiertos.add(h); else tarHotelesAbiertos.delete(h);
@@ -23277,8 +23306,27 @@ function renderTarifario() {
   }
   const byId = new Map(filtered.map(x => [String(x.id), x]));
   tarObserver.disconnect();
-  [...document.querySelectorAll('#tar-grid .tar-item')].forEach(el => {
-    const x = byId.get(el.dataset.id);
+  grid._tarById = byId;
+  [...document.querySelectorAll('#tar-grid .tar-item')].forEach(el => tarWireItem(el, byId.get(el.dataset.id)));
+}
+// Bloques cerrados de Hoteles/Promociones en el celular: sus tarjetas se arman al abrirlos
+// (el click del summary corre antes de que se abra, no hay cuadro vacío). Eran cientos de
+// tarjetas parseadas en cada cambio de pestaña sin que se vieran (~300ms con CPU 4x).
+function tarDiferirBloques(grid, grupos) {
+  grid.querySelectorAll(':scope > .tar-destino-block').forEach((det, i) => {
+    if (!grupos[i]) return;
+    const llenar = () => {
+      const items = grupos[i];
+      if (!items) return;
+      grupos[i] = null;
+      det.insertAdjacentHTML('beforeend', tarItemsWrapHtml(items));
+      det.querySelectorAll('.tar-item').forEach(el => tarWireItem(el, grid._tarById?.get(el.dataset.id)));
+    };
+    det.querySelector('summary')?.addEventListener('click', llenar);
+    det.addEventListener('toggle', () => { if (det.open) llenar(); });
+  });
+}
+function tarWireItem(el, x) {
     if (!x) return;
     // Hot Sales abre la misma ficha del hotel, también para flyers vinculados.
     el.onclick = () => {
@@ -23324,7 +23372,6 @@ function renderTarifario() {
     // no a las N de una: baja el registro de listeners del render.
     el._tarItem = x;
     tarObserver.observe(el);
-  });
 }
 // Un solo IntersectionObserver a nivel de módulo, reusado entre renders.
 const tarObserver = new IntersectionObserver((entries, obs) => {
@@ -32226,7 +32273,8 @@ function setupNav() {
    cierra con la X, tocando el fondo, arrastrando hacia la izquierda o con el
    atrás del sistema. */
 const MENU_MQ = matchMedia('(max-width:760px)');
-const MENU_OFF = 20;     // px que el panel flotante queda fuera de pantalla (margen izq + sombra), debe coincidir con el translateX de cierre en index.html
+const MENU_OFF = 80;     // px que el panel flotante queda fuera de pantalla (margen izq + sombra), debe coincidir con el translateX de cierre en index.html
+const MENU_ASOMA = 20;   // al abrir arrastrando el borde del panel arranca acá (y no en MENU_OFF): así sigue al dedo sin 60px muertos de sombra
 const MENU_BORDE = 150;  // px de zona sensible desde el borde izquierdo: ancha a propósito para poder empezar el arrastre bien hacia el centro y esquivar el gesto de "atrás" del sistema en el borde exacto
 const MENU_MIN = 55;     // px reales para confirmar por distancia
 const MENU_VEL = 0.35;   // px reales/ms para confirmar por velocidad
@@ -32372,7 +32420,7 @@ function setupMenuMovil() {
   // aside sigue al dedo con transform (body.menu-arrastrando anula la
   // transition, si no quedaría siempre un cuadro atrás), y al soltar se
   // devuelve el control al CSS borrando el transform inline.
-  let activo = false, abriendo = false, x0 = 0, y0 = 0, t0 = 0, eje = null, ancho = 280;
+  let activo = false, abriendo = false, x0 = 0, y0 = 0, t0 = 0, eje = null, ancho = 280, zf = 1;
   // El orden importa: primero se decide el estado final (clase en <body>) y
   // recién después se sueltan los estilos inline. Al revés, el aside saltaba a
   // la posición cerrada un cuadro antes de animarse hacia la abierta.
@@ -32408,19 +32456,20 @@ function setupMenuMovil() {
       // secciones es peor que no tener gesto: el eje se decide una vez.
       eje = Math.abs(dx) >= Math.abs(dy) * 1.3 ? 'x' : 'y';
       if (eje !== 'x') { activo = false; return; }
+      // Una vez por arrastre: getComputedStyle en cada touchmove forzaba el recálculo de estilos pendiente.
+      zf = zoomFactor();
       document.body.classList.add('menu-arrastrando');
     }
     e.preventDefault();
-    const zf = zoomFactor();
     // El recorrido de cierre es el ancho del panel + lo que queda fuera de
     // pantalla (margen + sombra): si no, arrastrar hasta el tope deja una franja.
     const rec = ancho + MENU_OFF;
     const avance = abriendo
-      ? Math.max(-rec, Math.min(0, -rec + dx))
+      ? Math.max(-rec, Math.min(0, -(ancho + MENU_ASOMA) + dx))
       : Math.max(-rec, Math.min(0, dx));
     aside.style.transform = `translateX(${avance / zf}px)`;
     const scrim = document.getElementById('side-scrim');
-    if (scrim) { scrim.style.opacity = String(1 + avance / rec); scrim.style.pointerEvents = 'auto'; }
+    if (scrim) { scrim.style.opacity = String(Math.max(0, 1 + avance / (abriendo ? ancho + MENU_ASOMA : rec))); scrim.style.pointerEvents = 'auto'; }
   }, { passive: false });
 
   const soltar = e => {

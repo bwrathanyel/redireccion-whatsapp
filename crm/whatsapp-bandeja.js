@@ -71,7 +71,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     pintarBadge();
   }
   // Fuera de la sección solo hace falta el contador: no se repintan 300 filas por cada cambio.
-  const listaVisible = () => !document.hidden && !!wb-inbox?.offsetParent;
+  const listaVisible = () => !document.hidden && !!$('wb-inbox')?.offsetParent;
   const recargarLista = () => { clearTimeout(recarga); recarga = setTimeout(cargarLista, listaVisible() ? 400 : 5000); };
 
   function pintarBadge() {

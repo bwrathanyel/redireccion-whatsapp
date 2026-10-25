@@ -815,6 +815,9 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .skel-bar,.skel-card,.cc-foto,.cc-l{position:relative;overflow:hidden;background:var(--panel-solid)}
 .skel-bar::after,.skel-card::after,.cc-foto::after,.cc-l::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 20%,rgba(255,255,255,.07) 50%,transparent 80%);animation:skel-shimmer 1.4s ease-in-out infinite}
 .cc-foto::after,.cc-l::after{background:linear-gradient(90deg,transparent 20%,rgba(var(--ink-rgb),.07) 50%,transparent 80%)}
+/* Móvil: las hojas cerradas viven en translateY(100%) (no display:none) y sus skeletons seguían
+   barriendo: cada cuadro del documento pagaba estilo + layerize aunque no se vieran (2026-10-25). */
+@media(max-width:760px),(pointer:coarse){.sheet:not(.open) :is(.skel-bar,.skel-card,.cc-foto,.cc-l,.cargador-fill)::after,.sheet:not(.open) .cargador-ico{animation-play-state:paused}}
 .tbl-state.skel{padding:0;align-items:stretch}
 .tbl-state.skel.show{display:flex;flex-direction:column;gap:8px}
 .skel-bar{height:52px;border-radius:10px}
@@ -3594,7 +3597,9 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .vc-hotel-fotos img{width:100%;height:100%;object-fit:cover;display:block}
 .vc-hotel-fotos b{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.55);color:#fff;font-size:13px}
 .vc-hotel-fotos button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.vc-hab:has(#vc-hab-picker .cb-picker)>span{display:none}
+/* #id y no "span": lo que queda a la derecha de un :has() entra al set global de invalidación
+   de :has, y con "span" cada panel que se agregaba al body recalculaba todos los <span>. */
+.vc-hab:has(#vc-hab-picker .cb-picker)>#vc-hab-lbl{display:none}
 #vc-hab-picker .field{margin:0}#vc-hab-picker .fl{font-size:11px;font-weight:600;color:var(--muted);margin:0 0 4px}
 #vc-hab-picker:not(:empty)+.ei{margin-top:6px}
 .vc-opc{font-style:normal;font-weight:600;letter-spacing:0;text-transform:none;font-size:11px;opacity:.75}
@@ -3945,12 +3950,15 @@ body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
      ocultarHeadersVacios() -- por eso se esconde con transform, no ocultándolo. */
   /* Cajón flotante estilo Gemini: separado de los bordes, esquinas redondeadas
      y alto acotado en vez de franja borde a borde. El translateX de cierre
-     descuenta el margen izquierdo + la sombra (~20px) para que no quede una
-     franja asomando; el gesto de arrastre usa la misma constante (MENU_OFF en
-     app.js). */
-  .sidebar{position:fixed;top:12px;bottom:12px;left:12px;height:auto;width:min(300px,82vw);z-index:65;border:1px solid var(--line2);border-radius:20px;overflow:hidden;transform:translateX(calc(-100% - 20px));transition:transform var(--dur-hoja) var(--ease-salida);background:var(--bg2);box-shadow:none;will-change:transform}
+     descuenta el margen izquierdo + todo el difuminado de la sombra (80px) para
+     que no quede una franja asomando; el gesto de arrastre usa la misma
+     constante (MENU_OFF en app.js). La sombra va fija y viaja con el panel:
+     ponerla recién al abrir la hacía aparecer de golpe y repintaba la capa
+     entera del menú en el primer cuadro. */
+  .sidebar{position:fixed;top:12px;bottom:12px;left:12px;height:auto;width:min(300px,82vw);z-index:65;border:1px solid var(--line2);border-radius:20px;overflow:hidden;transform:translateX(calc(-100% - 80px));transition:transform var(--dur-hoja) var(--ease-salida);background:var(--bg2);will-change:transform}
   :root[data-theme="light"] .sidebar{background:var(--bg2)}
-  body.menu-abierto .sidebar{transform:none;box-shadow:0 22px 60px rgba(0,0,0,.5)}
+  body .sidebar{box-shadow:0 22px 60px rgba(0,0,0,.5)}
+  body.menu-abierto .sidebar{transform:none}
   body.menu-arrastrando .sidebar{transition:none}
   .side-cerrar{display:grid;place-items:center}
   .nav-item.nav-solo-movil{display:flex}
@@ -4632,6 +4640,14 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
   .section.active,body.swipe-izq .section.active,body.swipe-der .section.active{animation:none!important}
   #leads-cards.entrada-lista>.entity-card{animation:none!important}
   .bn-indicator{transition:none!important}
+}
+/* Listas largas en el celular (perf 2026-10-25): las tarjetas fuera de pantalla no pagan
+   estilo/layout/paint al entrar a la sección ni al filtrar (Reservas: 85 tarjetas, ~2200 nodos).
+   Medido: en Leads (25 tarjetas) y en la lista de chats (filas de 71px) no gana y encarece el scroll. */
+@media(max-width:760px){
+  #pv-grid>.pv-card{content-visibility:auto;contain-intrinsic-size:auto 268px}
+  /* Entrada escalonada solo en las que pueden verse: el resto entra quieto (fuera de pantalla). */
+  #pv-grid.entrada-lista>:nth-child(n+9),#tar-grid .entrada-lista>:nth-child(n+9),#leads-cards.entrada-lista>.entity-card:nth-child(n+9){animation:none}
 }
 
 /* ============ Ficha del lead — rediseño 2026-07-30 ============ */
@@ -5859,6 +5875,11 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .lt-orden-op:hover{color:var(--txt);border-color:var(--line2)}
 .lt-orden-op:has(.sort-arrow){color:var(--accent-ink);border-color:var(--accent);background:var(--accent-soft)}
 .lt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;margin-top:14px}
+/* Móvil, una columna: solo las primeras tarjetas están a la vista al entrar; animar las 50 (escalonadas
+   hasta 1,6 s) mantenía 50 capas vivas y layerize en cada cuadro. Ids: no pisa las listas de otras secciones. */
+@media(max-width:760px){#sec-facturacion .lt-card:nth-child(n+7),#sec-cotizacion-boletos .lt-card:nth-child(n+7){animation:none}
+  /* ~50 tarjetas de ~300px y ~40 nodos cada una: fuera de pantalla no se maqueta ni pinta. */
+  #sec-facturacion .lt-card{content-visibility:auto;contain-intrinsic-size:auto 300px}}
 .lt-card{display:flex;flex-direction:column;gap:10px;background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:14px;animation:bt-sube .4s var(--ease-salida) both;animation-delay:calc(var(--i,0) * 25ms);transition:transform var(--dur-rapida),border-color var(--dur-rapida)}
 .lt-card:hover{transform:translateY(-2px);border-color:var(--line2)}
 .lt-card-hecha{opacity:.72}
@@ -6555,6 +6576,13 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
      pantallas de chat tienen su barra de escritura abajo: ahí Lyra no va. */
   body.lyra-on:not(:has(.section.active .pantalla-chat)) .main,body:has(>.mfab) .main{padding-bottom:calc(92px + var(--safe-b))}
   body.fabs-ocultos .lyra-fab,body.fabs-ocultos .mfab{opacity:0;pointer-events:none;transform:translateY(18px) scale(.85)}
+  /* Oculto (scroll hacia abajo, panel de Lyra) o tapado por el menú, el orbe seguía con ~19
+     animaciones infinitas: cada cuadro con trabajo en el hilo principal (scroll, arrastres) les
+     recalculaba estilo y capas. content-visibility:hidden las frena; cambia recién cuando
+     terminó el fundido de salida y vuelve al instante. */
+  body.fabs-ocultos .lyra-fab,body.lyra-abierta .lyra-fab,body.menu-abierto .lyra-fab{content-visibility:hidden;transition:opacity var(--dur-rapida),transform var(--dur-rapida) var(--ease-salida),content-visibility 0s linear var(--dur-hoja) allow-discrete}
+  /* Las zetas solo se ven dormida (.lo-zz va en opacity:0): despierta no tienen por qué correr. */
+  .lyra-orb:not([data-expr=dormida]) .lo-zz i{animation-play-state:paused}
   body:has(.section.active .pantalla-chat) .lyra-fab,body:has(.section.active .pantalla-chat) .lyra-globo{display:none}
   .lyra-oir{width:34px;height:34px;font-size:13px;opacity:.75}
   .lyra-panel{left:0;right:0;top:calc(var(--appbar-h) + 10px);bottom:0;width:auto;height:auto;max-height:none;padding-bottom:var(--safe-b);border-bottom:0;border-radius:22px 22px 0 0;transform:translateY(28px);transform-origin:center bottom}
@@ -7044,6 +7072,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 .tk-head-acts{margin-left:auto;display:flex;gap:9px;align-items:center;flex-wrap:wrap}
 .tk-live{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:var(--green);letter-spacing:.04em}
 .tk-live::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--green);animation:tk-pulso 1.8s infinite}
+/* Móvil: el override a opacidad de la media de 760px quedaba antes en el archivo y este tk-pulso (box-shadow, repinta cada cuadro) lo pisaba. */
+@media(max-width:760px){.tk-live::before{animation:mov-latido 1.8s ease-in-out infinite}}
 @keyframes tk-pulso{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--green) 55%,transparent)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
 .tk-tabs{display:inline-flex;gap:2px;background:rgba(var(--ink-rgb),.05);border:1px solid var(--line);border-radius:10px;padding:2px}
 .tk-tabs button{min-height:34px;padding:0 14px;border-radius:8px;font-size:12px;font-weight:700;color:var(--muted)}

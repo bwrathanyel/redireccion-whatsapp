@@ -60,8 +60,10 @@ const FEED_ICO = { creada: ['fas fa-plus', 'var(--blue)'], vista: ['far fa-eye',
 const ROLES = { admin: 'Admin', administrativo: 'Administrativo', asesor: 'Asesor', marketing: 'Marketing', boleteria: 'Boletería', freelancer: 'Freelancer' };
 const ABIERTOS = ['pendiente', 'en_proceso', 'bloqueada', 'en_revision'];
 
-const diaCcs = d => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(d);
-const horaCcs = d => d.toLocaleTimeString('es-VE', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
+// Formateadores creados una vez: armar un Intl.DateTimeFormat por llamada pesaba ~30ms por render en el celular.
+let FMT_DIA, FMT_HORA;
+const diaCcs = d => (FMT_DIA ||= new Intl.DateTimeFormat('en-CA', { timeZone: TZ })).format(d);
+const horaCcs = d => (FMT_HORA ||= new Intl.DateTimeFormat('es-VE', { timeZone: TZ, hour: 'numeric', minute: '2-digit' })).format(d);
 const iniciales = s => String(s || '?').trim().split(/\s+/).slice(0, 2).map(p => p[0] || '').join('').toUpperCase() || '?';
 const leerLocal = (k, def) => { try { return localStorage.getItem(k) ?? def; } catch { return def; } };
 const guardarLocal = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
@@ -1032,9 +1034,10 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
   // Deslizar a la derecha desde cualquier punto del panel lo cierra; el panel sigue al dedo.
   function arrastreCierre(ov) {
     const aside = ov.querySelector('.tk-panel-lateral'), scrim = ov.querySelector('.tk-scrim');
-    let x0 = 0, y0 = 0, t0 = 0, dx = 0, eje = null, raf = 0;
+    let x0 = 0, y0 = 0, t0 = 0, dx = 0, eje = null, raf = 0, z = 1;
     const zoom = () => parseFloat(getComputedStyle(document.body).zoom) || 1;
-    const aplicar = () => { raf = 0; aside.style.transform = `translateX(${dx}px)`; if (scrim) scrim.style.opacity = String(1 - Math.min(1, dx / aside.offsetWidth)); };
+    let w = 1;
+    const aplicar = () => { raf = 0; aside.style.transform = `translateX(${dx}px)`; if (scrim) scrim.style.opacity = String(1 - Math.min(1, dx / w)); };
     const soltar = () => { aside.style.transition = 'transform .2s var(--ease-salida,ease-out)'; aside.style.transform = ''; if (scrim) { scrim.style.transition = 'opacity .2s linear'; scrim.style.opacity = ''; } };
     ov.addEventListener('touchstart', e => {
       eje = null; dx = 0;
@@ -1044,11 +1047,14 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     }, { passive: true });
     ov.addEventListener('touchmove', e => {
       if (eje === 'no' || eje === 'y' || !panelMovil) return;
-      const mx = (e.touches[0].clientX - x0) / zoom(), my = (e.touches[0].clientY - y0) / zoom();
+      // zoom() es getComputedStyle: leerlo solo hasta decidir el eje, no en cada cuadro del arrastre.
+      if (!eje) z = zoom();
+      const mx = (e.touches[0].clientX - x0) / z, my = (e.touches[0].clientY - y0) / z;
       if (!eje) {
         if (Math.abs(mx) + Math.abs(my) < 8) return;
         eje = mx > 0 && Math.abs(mx) > Math.abs(my) * 1.2 ? 'x' : 'y';
         if (eje === 'y') return;
+        w = aside.offsetWidth || 1;
       }
       e.preventDefault();
       dx = Math.max(0, mx);
