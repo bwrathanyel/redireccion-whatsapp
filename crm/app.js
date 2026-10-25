@@ -8761,14 +8761,22 @@ async function riaConsultar(dias, forzar = false, completo = true) {
   const guardado = RIA_CACHE.get(dias);
   if (!forzar && guardado && Date.now() - guardado.en < 60000 && (guardado.completo || !completo)) return guardado.data;
   const rango = riaRango(dias);
-  const [general, piloto, reactivacion, modelos, abFb] = await Promise.all([
+  // «Hoy» se compara contra el mismo día de la semana pasada: contra «ayer» cada domingo
+  // parecía un desplome (el domingo siempre convierte menos que el sábado).
+  const haceSemana = iso => new Date(new Date(iso).getTime() - 7 * 86400000).toISOString();
+  const [general, semana, piloto, reactivacion, modelos, abFb] = await Promise.all([
     sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }),
+    dias === 1 ? sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: haceSemana(rango.desde), p_hasta: haceSemana(rango.hasta) }) : null,
     completo ? sb.rpc('panel_piloto_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_reactivacion_ia', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_modelos_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_ab_privado_fb', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
   ]);
   if (general.error) throw general.error;
+  if (semana) {
+    if (semana.error) console.error('panel_rendimiento_ia semana', semana.error);
+    general.data = { ...general.data, anterior: semana.error ? {} : semana.data?.resumen || {} };
+  }
   if (completo && piloto.error) throw piloto.error;
   if (completo && reactivacion.error) throw reactivacion.error;
   // La comparativa por modelo es aditiva: si falla, el resto del panel se pinta igual.
@@ -8789,7 +8797,7 @@ function riaCambio(actual, anterior, ref = 'el período anterior') {
   const p = Math.round((actual - anterior) * 100 / anterior);
   return `${p >= 0 ? '+' : ''}${p}% frente a ${ref}`;
 }
-const riaRefTexto = dias => dias === 1 ? 'ayer a esta hora' : `los ${dias} días anteriores`;
+const riaRefTexto = dias => dias === 1 ? `el ${new Date().toLocaleDateString('es-VE', { weekday: 'long' })} pasado a esta hora` : `los ${dias} días anteriores`;
 const riaMinTexto = m => m >= 1440 ? `${Math.floor(m / 1440)} d ${Math.floor(m % 1440 / 60)} h` : m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
 const riaIr = id => { const el = document.getElementById(id); if (!el) return; if (el.tagName === 'DETAILS') el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 
@@ -8867,7 +8875,7 @@ function riaErroresHtml(data, dias) {
   if (!turnos) return '<div class="ria-vacio">Sin turnos en este período.</div>';
   if (!total) return `<div class="ria-vacio">Sin errores técnicos en ${fmt(turnos)} turnos.</div>`;
   const tasa = riaPct(total, turnos), tasaAnt = riaPct(ea.n, ea.turnos);
-  const resumen = `<div class="ria-lista"><div class="ria-fila"><span><b>${fmt(total)} errores en ${fmt(turnos)} turnos</b> · ${tasa}%</span><b>${riaNum(ea.turnos) ? `antes: ${tasaAnt}% (${esc(riaRefTexto(dias))})` : 'sin período anterior'}</b></div></div>`;
+  const resumen = `<div class="ria-lista"><div class="ria-fila"><span><b>${fmt(total)} errores en ${fmt(turnos)} turnos</b> · ${tasa}%</span><b>${riaNum(ea.turnos) ? `antes: ${tasaAnt}% (${esc(dias === 1 ? 'ayer a esta hora' : riaRefTexto(dias))})` : 'sin período anterior'}</b></div></div>`;
   const tipos = (er.por_tipo || []).map(t => {
     const i = RIA_ERRORES_INFO[t.tipo] || RIA_ERRORES_INFO.otro, n = riaNum(t.n), motivo = RIA_ERRORES_MOTIVO[t.motivo];
     return `<div class="ria-fila"><span><b>${esc(i.nombre)}</b>${motivo ? ` · ${esc(motivo)}` : ''}<small>Qué vio el cliente: ${esc(i.cliente)}</small><small>Causa probable: ${esc(i.causa)}</small><small>Qué hacer: ${esc(i.hacer)}</small>`
