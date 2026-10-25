@@ -379,13 +379,31 @@ async function initAuth() {
   if (session) await afterLogin(); else showOverlay('login');
 }
 
-async function cargarUsuario() {
-  const { data: { user } } = await sb.auth.getUser();
-  const { data, error } = await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,es_freelancer,bloqueado,es_superadmin,es_boleteria').eq('id', user?.id).single();
+// Solo cierra la sesión si la cuenta no existe (PGRST116) o el token ya no se
+// puede renovar. Antes cualquier error (red caída, token vencido al volver de
+// suspensión y recargar por versión nueva) deslogueaba (2026-10-25). signOut
+// local: el global tumbaba la sesión del mismo usuario en sus otros equipos.
+const esErrorRed = e => !!e && (e.name === 'AuthRetryableFetchError' || !e.status || e.status >= 500);
+async function sesionInvalida(msg) {
+  await sb.auth.signOut({ scope: 'local' });
+  showOverlay('login');
+  document.getElementById('loginErr').textContent = msg;
+  return null;
+}
+async function cargarUsuario(intento = 0) {
+  let { data: { user }, error: eu } = await sb.auth.getUser();
+  if (!user && !esErrorRed(eu)) {
+    const { error: er } = await sb.auth.refreshSession();
+    if (er) eu = er; else ({ data: { user }, error: eu } = await sb.auth.getUser());
+  }
+  if (!user && !esErrorRed(eu)) return sesionInvalida('Tu sesión expiró, vuelve a entrar');
+  const { data, error } = user ? await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,es_freelancer,bloqueado,es_superadmin,es_boleteria').eq('id', user.id).single() : { data: null, error: eu };
+  if (error?.code === 'PGRST116') return sesionInvalida('Cuenta sin configurar, contacta a un administrador');
   if (error || !data) {
-    await sb.auth.signOut();
+    if (intento < 3) { await new Promise(r => setTimeout(r, 1500 * (intento + 1))); return cargarUsuario(intento + 1); }
     showOverlay('login');
-    document.getElementById('loginErr').textContent = 'Cuenta sin configurar, contacta a un administrador';
+    document.getElementById('loginErr').textContent = 'Error de conexión, revisa tu internet e intenta de nuevo';
+    window.addEventListener('online', initAuth, { once: true });
     return null;
   }
   return data;
@@ -2861,7 +2879,7 @@ window.cerrarSesion = async () => {
   // compartida) -- sessionStorage sobrevive a un logout, solo se limpia al
   // cerrar la pestaña.
   sessionStorage.removeItem(VISTA_ROL_KEY);
-  await sb.auth.signOut();
+  await sb.auth.signOut({ scope: 'local' });
   location.reload();
 };
 
