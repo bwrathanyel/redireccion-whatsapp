@@ -9040,7 +9040,8 @@ function riaPintarPanel(data) {
   const erDom = er.por_tipo?.[0] ? (RIA_ERRORES_INFO[er.por_tipo[0].tipo] || RIA_ERRORES_INFO.otro) : null;
   const irEmbudo = () => riaIr('ria-card-embudo');
   pintarKPIs('ria-kpis', [
-    { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: `${riaCambio(r.conversaciones, ant.conversaciones, riaRefTexto(RIA_DIAS))}${riaNum(r.solo_boton) ? ` · ${fmt(riaNum(r.solo_boton))} solo tocaron botón` : ''}`, i: 'fa-comments', c: 'var(--blue)', go: irEmbudo, tt: 'Ver el embudo' },
+    { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: `${ant.comparable === false ? 'Sin comparar: antes del 26-oct los comentarios sin respuesta contaban' : riaCambio(r.conversaciones, ant.conversaciones, riaRefTexto(RIA_DIAS))}${riaNum(r.solo_boton) ? ` · ${fmt(riaNum(r.solo_boton))} solo tocaron botón` : ''}`, i: 'fa-comments', c: 'var(--blue)', go: irEmbudo, tt: 'Ver el embudo' },
+    ...(riaNum(r.comentarios) ? [{ t: 'Comentarios sin respuesta', v: fmt(riaNum(r.comentarios_sin_respuesta)), d: `${riaPct(r.comentarios_sin_respuesta, r.comentarios)}% de ${fmt(riaNum(r.comentarios))} comentarios · no cuentan como conversación`, i: 'fa-comment-slash', c: 'var(--amber)' }] : []),
     { t: 'Teléfonos', v: fmt(riaNum(r.telefonos)), d: `${riaPct(r.telefonos, r.conversaciones)}% de conversaciones`, i: 'fa-phone', c: 'var(--accent)', go: irEmbudo, tt: 'Ver el embudo' },
     { t: 'Leads calificados', v: fmt(riaNum(r.leads_calificados)), d: `${riaPct(r.leads_calificados, r.conversaciones)}% de conversión`, i: 'fa-user-check', c: 'var(--green)', go: irEmbudo, tt: 'Ver el embudo' },
     { t: 'Oportunidades sin lead', v: fmt(riaNum(r.oportunidades_sin_lead)), d: 'Teléfono + destino + intención', i: 'fa-triangle-exclamation', c: riaNum(r.oportunidades_sin_lead) ? '#ef4444' : 'var(--green)', go: () => riaIr('ria-card-diagnostico'), tt: 'Ver el diagnóstico' },
