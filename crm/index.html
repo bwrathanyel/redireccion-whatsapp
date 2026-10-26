@@ -7464,6 +7464,46 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 .tk-ev a{color:var(--accent);text-decoration:none;word-break:break-all}
 .tk-ev small{color:var(--muted)}
 .tk-ev .tk-btn{justify-self:start}
+/* ---------- Afordancia (2026-10-26): todo lo clickeable se nota y se enciende al pasar el mouse ---------- */
+:where(.tk-root,.tk-overlay) :is(button,a,select,summary,[role="button"]):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tk-tabs button{transition:background var(--dur-rapida),color var(--dur-rapida)}
+.tk-tabs button:hover{background:rgba(var(--ink-rgb),.06);color:var(--txt)}
+.tk-tabs button[aria-selected="true"]:hover{background:var(--panel-solid)}
+.tk-fsel{cursor:pointer}
+.tk-fsel:hover{border-color:var(--accent);background:rgba(var(--accent-rgb),.06)}
+.tk-filters label.tk-chip{cursor:pointer}
+.tk-filters label.tk-chip:hover{border-color:var(--accent);color:var(--txt)}
+
+/* Filas de la lista: son botones que abren el detalle */
+.tk-row{padding-right:36px}
+.tk-row[data-tk-open],.tk-row.is-group{position:relative;cursor:pointer;transition:background var(--dur-rapida),box-shadow var(--dur-rapida)}
+.tk-row[data-tk-open]::after{content:"\f054";font-family:"Font Awesome 6 Free";font-weight:900;font-size:9px;line-height:1;color:var(--muted);width:22px;height:22px;border-radius:7px;border:1px solid var(--line);display:grid;place-items:center;position:absolute;right:12px;top:50%;transform:translateY(-50%);transition:color var(--dur-rapida),background var(--dur-rapida),border-color var(--dur-rapida),transform var(--dur-rapida)}
+.tk-row[data-tk-open]:hover,.tk-row.is-group:hover{background:rgba(var(--accent-rgb),.075);box-shadow:inset 3px 0 0 var(--accent)}
+.tk-row[data-tk-open]:hover::after{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);transform:translate(2px,-50%)}
+.tk-row[data-tk-open]:focus-visible,.tk-row.is-group:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;background:rgba(var(--accent-rgb),.08)}
+.tk-row[data-tk-open]:active,.tk-row.is-group:active{background:rgba(var(--accent-rgb),.15)}
+
+/* Tarjetas de Mi día y personas de Equipo */
+.tk-card{transition:border-color var(--dur-rapida),background var(--dur-rapida),box-shadow var(--dur-rapida),transform var(--dur-rapida)}
+.tk-card:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--line2));background:color-mix(in srgb,var(--accent) 6%,var(--panel));box-shadow:0 10px 22px rgba(var(--accent-rgb),.16)}
+.tk-card.is-sel:hover{box-shadow:0 0 0 3px var(--accent-soft),0 10px 22px rgba(var(--accent-rgb),.16)}
+.tk-card:focus-visible,.tk-person:focus-visible,.tk-done:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (hover:hover){.tk-card:hover{transform:translateY(-1px)}}
+.tk-person{transition:border-color var(--dur-rapida),background var(--dur-rapida),box-shadow var(--dur-rapida)}
+.tk-person:hover{border-color:color-mix(in srgb,var(--accent) 50%,var(--line2));background:color-mix(in srgb,var(--accent) 6%,var(--panel));box-shadow:0 8px 20px rgba(var(--accent-rgb),.14)}
+.tk-done:hover{border-color:color-mix(in srgb,var(--green) 45%,var(--line2));background:rgba(var(--ink-rgb),.045)}
+
+/* Cabeceras plegables y filas del bloque Hoy */
+.tk-group-h{cursor:pointer}
+.tk-group-h:hover{color:var(--txt)}
+.tk-group-h[data-g="vencidas"]:hover{color:var(--danger)}
+.tk-hoy-h{transition:background var(--dur-rapida)}
+.tk-hoy-h:hover{background:rgba(var(--ink-rgb),.04)}
+.tk-hoy-i:hover,.tk-lt-i:hover{background:rgba(var(--accent-rgb),.06);box-shadow:inset 3px 0 0 var(--accent)}
+.tk-feed li[data-tk-open]:hover{background:rgba(var(--accent-rgb),.06)}
+.tk-atn-i>[data-tk-open]{border-radius:8px}
+.tk-atn-i>[data-tk-open]:hover{background:rgba(var(--accent-rgb),.06)}
+@media (max-width:760px){.tk-row{padding-right:38px}}
 /* ---------- fin Tareas v2 ---------- */
 </style>
 </head>

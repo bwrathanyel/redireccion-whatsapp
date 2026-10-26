@@ -293,7 +293,7 @@ export function crearAbonos(c) {
     const up = await sb.storage.from('vouchers-pdf').upload(path, pdf, { contentType: 'application/pdf' });
     if (up.error && String(up.error.statusCode) !== '409') throw new Error('No se pudo subir el PDF del voucher.');
     const adjunto = c.prepararAdjunto && pre.candidato.reserva_id
-      ? await c.prepararAdjunto(pre.candidato.reserva_id, pre.impacto?.servicio_id ?? null, pdf, `Voucher-${pre.candidato.numero_factura || v.id}-r${pre.candidato.revision}.pdf`)
+      ? await c.prepararAdjunto(pre.candidato.reserva_id, pre.impacto?.servicio_id ?? null, pdf, c.nombreArchivo ? c.nombreArchivo('voucher', pre.candidato) : `Voucher-${pre.candidato.numero_factura || v.id}-r${pre.candidato.revision}.pdf`)
       : null;
     const r = await rpcDoc('documento_guardar', {
       p_tipo: 'voucher', p_id: String(v.id), p_version: actual.revision || 1, p_datos: datos,
@@ -373,7 +373,7 @@ export function crearAbonos(c) {
           monto_usd: abono.monto_usd, metodo: abono.metodo, referencia: abono.referencia,
           total_pagado: pagado, saldo,
         });
-        reciboId = await adjuntarRecibo(blob, `Recibo abono ${diaMesAnio(abono.fecha)}.pdf`);
+        reciboId = await adjuntarRecibo(blob, c.nombreArchivo ? c.nombreArchivo('recibo', { cliente: actual?.cliente_nombre, codigo: d.codigo, fecha: abono.fecha }) : `Recibo abono ${diaMesAnio(abono.fecha)}.pdf`);
       }
     } catch (e) { fallo = fallo || mensaje(e); }
     try {

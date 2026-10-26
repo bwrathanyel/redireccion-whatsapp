@@ -52,7 +52,7 @@ export function crearDocumentosRevisiones(c) {
     if (path) return archivo(t === 'voucher' || d.pdf_revision_path ? 'vouchers-pdf' : 'chat-interno-adjuntos', path);
     return blob(t, d);
   }
-  function nombre(t, d) { return `${TITULOS[t]}-${d.numero_factura || d.numero || d.id}-r${d.revision || 1}.pdf`; }
+  function nombre(t, d) { return c.nombreArchivo ? c.nombreArchivo(t, d) : `${TITULOS[t]}-${d.numero_factura || d.numero || d.id}-r${d.revision || 1}.pdf`; }
   function puedeEditar(t, d) {
     return c.rol() === 'admin' || (t === 'solicitud' ? d.es_mia || d.la_atiendo_yo
       : d.creado_por === c.usuario() || (t === 'cotizacion' && c.atiende(d.solicitud_id)));

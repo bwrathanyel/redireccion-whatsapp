@@ -91,6 +91,49 @@ const INTL_CACHE = new Map();
 const dtf = (loc, o) => { const k = 'd' + loc + JSON.stringify(o); let f = INTL_CACHE.get(k); if (!f) INTL_CACHE.set(k, f = new Intl.DateTimeFormat(loc, o)); return f; };
 const nf = (loc, o) => { const k = 'n' + loc + JSON.stringify(o || {}); let f = INTL_CACHE.get(k); if (!f) INTL_CACHE.set(k, f = new Intl.NumberFormat(loc, o)); return f; };
 const fmt = n => typeof (n ?? 0) === 'number' ? nf('es-VE').format(n ?? 0) : (n ?? 0).toLocaleString('es-VE');
+
+// Nombre legible y uniforme para todo documento que se descarga del CRM:
+// "Lotus 360 - Voucher 006364 - Juan Pérez - Los Roques - 2026-11-15.pdf".
+// La empresa va primero (así se agrupan en la carpeta), después qué es, de
+// quién y la fecha AAAA-MM-DD al final, que ordena sola. Se quitan solo los
+// caracteres que Windows no acepta; acentos y espacios se conservan.
+const DOC_EMPRESA = 'Lotus 360';
+const docParte = (v, max = 50) => {
+  const t = String(v ?? '').normalize('NFC').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  const c = t.slice(0, max);
+  return (c.includes(' ') ? c.slice(0, c.lastIndexOf(' ')) : c).replace(/[\s,.;:-]+$/, '');
+};
+const docFecha = iso => { const d = String(iso ?? '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : ''; };
+function docNombre(partes, ext = 'pdf') {
+  const campos = partes.map(p => docParte(p)).filter(Boolean);
+  const tope = 120 - (ext ? ext.length + 1 : 0);
+  const fecha = /^\d{4}-\d{2}-\d{2}$/.test(campos[campos.length - 1] || '') ? campos.pop() : '';
+  let titulo = [DOC_EMPRESA, ...campos].join(' - ');
+  const disponible = tope - (fecha ? fecha.length + 3 : 0);
+  if (titulo.length > disponible && campos.length) {
+    const cuota = Math.max(12, Math.floor((disponible - DOC_EMPRESA.length - 3 * campos.length) / campos.length));
+    titulo = [DOC_EMPRESA, ...campos.map(c => docParte(c, cuota))].join(' - ');
+    if (titulo.length > disponible) titulo = docParte(titulo, disponible);
+  }
+  return [titulo, fecha].filter(Boolean).join(' - ') + (ext ? '.' + ext : '');
+}
+function descargarArchivo(blob, nombre) {
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+// Mismo estándar para los PDF que generan los módulos de revisiones y abonos.
+function docNombrePorTipo(tipo, d = {}, revision) {
+  const ref = d.numero_factura ?? d.numero ?? d.id ?? '';
+  const rev = Number(revision ?? d.revision ?? 1) > 1 ? ` rev ${revision ?? d.revision}` : '';
+  const num = ref === '' ? '' : ` ${String(ref).padStart(6, '0')}`;
+  if (tipo === 'voucher') return docNombre([`Voucher${num}${rev}`, d.cliente_nombre, d.destino_hospedaje, docFecha(d.fecha_entrada)]);
+  if (tipo === 'cotizacion') return docNombre([`Cotización${num}${rev}`, d.cliente, docFecha(d.fecha)]);
+  if (tipo === 'recibo') return docNombre(['Recibo de abono', d.cliente, d.codigo, docFecha(d.fecha)]);
+  return docNombre([`${tipo}${num}${rev}`, d.cliente || d.cliente_nombre, d.destino_hospedaje || d.codigo, docFecha(d.fecha || d.fecha_entrada)]);
+}
 const tiempoRelativo = iso => {
   if (!iso) return '—';
   const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
@@ -4117,6 +4160,7 @@ function rvAccion(accion, id, btn) {
     case 'elegir-archivo': return document.getElementById('rv-d-file')?.click();
     case 'subir-documento': return rvSubirDocumento(btn);
     case 'descargar': return rvDescargar(n, btn);
+    case 'descargar-archivo': return rvDescargarArchivo(n, btn);
     case 'anular-documento': return rvAnularDocumento(n);
     case 'tramos': return bolAsegurarCatalogo().then(() => rvForm({ tipo: 'tramos', id: n }));
     case 'armar-tramos': return rvArmarTramos(n, btn);
@@ -4223,7 +4267,7 @@ async function rvGenerarVoucher(servicioId, btn) {
   try {
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
-    const nombre = `Voucher-${v.codigo_reserva || c.id}-${v.cliente_nombre.replace(/[^\wÁÉÍÓÚÑ]+/gi, '-').slice(0, 40)}.pdf`;
+    const nombre = docNombre([`Voucher ${v.codigo_reserva || c.id}`, v.cliente_nombre, v.destino_hospedaje, docFecha(hosp?.fecha_inicio)]);
     const falla = await vcAdjuntarPdf(c.id, servicioId, blob, nombre);
     vcDescargar(blob, nombre);
     if (falla) errToast(`Voucher generado y descargado, pero no se adjuntó a la ficha: ${falla}`);
@@ -4343,7 +4387,7 @@ async function rvGenerarVoucherPaquete(btn) {
   try {
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
-    const nombre = `Voucher-Paquete-${codigo || RV_RESERVA_ID}-${String(v.cliente_nombre).replace(/[^\wÁÉÍÓÚÑ]+/gi, '-').slice(0, 40)}.pdf`;
+    const nombre = docNombre([`Voucher ${codigo || RV_RESERVA_ID}`, v.cliente_nombre, destino, docFecha(entrada)]);
     let falla = null;
     try { falla = await vcAdjuntarPdf(RV_RESERVA_ID, null, blob, nombre); } catch (e) { falla = e?.message || 'error de red'; }
     vcDescargar(blob, nombre);
@@ -5137,7 +5181,7 @@ function rvTicketsDocsHtml(s) {
           : leyendo ? '<div class="csub"><i class="fas fa-spinner fa-spin"></i> Leyendo el ticket…</div>'
           : `<div class="csub">${ia ? 'No detecté pasajeros en este ticket' : 'Sin lectura: probá Releer'}</div>`}
         ${det ? `<div class="rv-tk-det">${esc(det)}</div>` : ''}
-        <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}"><i class="fas fa-eye"></i> Ver</button><button class="btn-sm" type="button" data-rv-accion="leer-ticket" data-id="${d.id}"><i class="fas fa-wand-magic-sparkles"></i> Releer</button>${pas.length && rvPuedeEditar() ? `<button class="btn-sm" type="button" data-rv-accion="pasajeros-ticket" data-id="${d.id}"><i class="fas fa-user-plus"></i> Usar en Pasajeros</button>` : ''}<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
+        <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}"><i class="fas fa-eye"></i> Ver</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}"><i class="fas fa-download"></i> Descargar</button><button class="btn-sm" type="button" data-rv-accion="leer-ticket" data-id="${d.id}"><i class="fas fa-wand-magic-sparkles"></i> Releer</button>${pas.length && rvPuedeEditar() ? `<button class="btn-sm" type="button" data-rv-accion="pasajeros-ticket" data-id="${d.id}"><i class="fas fa-user-plus"></i> Usar en Pasajeros</button>` : ''}<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
       </div>
     </div>`;
   }).join('');
@@ -5603,7 +5647,7 @@ function rvRenderDocumentos(suave) {
     return `<div class="rv-doc"><div class="rv-doc-file">${esc(rvDocExt(d))}</div>
       <div class="rv-doc-main"><div class="rv-doc-n" title="${esc(d.nombre)}">${esc(d.nombre)}</div><div class="rv-doc-sub">${esc(detalle)}</div></div>
       <span class="rv-chip${d.tipo === 'comprobante' ? ' ok' : ''}">${esc(RV_DOC_TIPOS[d.tipo] || d.tipo)}</span>
-      <div class="rv-doc-acc"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}"><i class="fas fa-eye"></i> Ver</button>${vista !== 'boleteria' && rvPuedeEditar() ? `<button class="rv-doc-x" type="button" data-rv-accion="anular-documento" data-id="${d.id}" title="Quitar" aria-label="Quitar ${esc(d.nombre)}"><i class="fas fa-trash"></i></button>` : ''}</div></div>`;
+      <div class="rv-doc-acc"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}"><i class="fas fa-eye"></i> Ver</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}" title="Descargar con nombre legible" aria-label="Descargar ${esc(d.nombre)}"><i class="fas fa-download"></i></button>${vista !== 'boleteria' && rvPuedeEditar() ? `<button class="rv-doc-x" type="button" data-rv-accion="anular-documento" data-id="${d.id}" title="Quitar" aria-label="Quitar ${esc(d.nombre)}"><i class="fas fa-trash"></i></button>` : ''}</div></div>`;
   }).join('') : '<div class="pv-empty">Sin documentos cargados</div>';
   const tipoSug = rvDocTipoSugerido();
   const caja = puedeSubir ? `<div class="rv-subir" data-rv-drop>
@@ -5656,6 +5700,34 @@ async function rvDescargar(id, btn) {
   // La URL firmada dura 120 s; si el navegador bloquea la ventana, queda el link a mano.
   const w = window.open(data.url, '_blank');
   if (w) w.opener = null; else linkToast(`<a href="${esc(data.url)}" target="_blank" rel="noopener">Abrir ${esc(data.nombre || 'documento')}</a>`);
+}
+// Nombre legible para un documento de la reserva: si ya viene con el estándar
+// nuevo se respeta; si no, se arma con el tipo, el nombre original útil, el
+// cliente, el código de la reserva y la fecha.
+function rvDocNombreArchivo(d) {
+  const ext = (String(d.mime || 'application/pdf').split('/')[1] || 'pdf').replace('jpeg', 'jpg');
+  const original = String(d.nombre || '').trim();
+  if (/^Lotus 360 - /.test(original)) return original;
+  const r = RV_DET?.reserva || {};
+  const tipo = RV_DOC_TIPOS[d.tipo] || { recibo_abono: 'Recibo de abono' }[d.tipo] || d.tipo || 'Documento';
+  const base = original.replace(/\.[^.]+$/, '');
+  const util = /^(captura|image|img|file|archivo|scan|documento)\b/i.test(base) ? '' : base.slice(0, 50);
+  const partes = util && util.toLowerCase().startsWith(tipo.toLowerCase()) ? [util] : [tipo, util];
+  return docNombre([...partes, r.cliente, r.codigo, docFecha(d.created_at)], ext);
+}
+async function rvDescargarArchivo(id, btn) {
+  btn.disabled = true;
+  try {
+    const { data, error } = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: id } });
+    if (error || !data?.ok) { const m = await msgErrorFn(error, data); errToast('No se pudo descargar: ' + (RV_ERR[m] || m)); return; }
+    const res = await fetch(data.url);
+    if (!res.ok) throw new Error('sin_archivo');
+    const d = (RV_DET?.documentos || []).find(x => x.id === id) || { nombre: data.nombre, mime: data.mime };
+    descargarArchivo(await res.blob(), rvDocNombreArchivo(d));
+  } catch (e) {
+    console.error('rvDescargarArchivo', e);
+    errToast('No se pudo descargar el archivo');
+  } finally { btn.disabled = false; }
 }
 async function rvAnularDocumento(id) {
   if (!(await confirmarSheet({ titulo: '¿Quitar este documento?', detalle: 'Deja de verse en la reserva.', textoOk: 'Quitar', destructivo: true }))) return;
@@ -15244,7 +15316,7 @@ function presupuestoTabla(o, noches) {
 async function lyraDescargarPdf(b) {
   await ensureVoucherLibs();
   const d = lyraDatosPdf(b);
-  const nombre = `Cotizacion-${pdfSlug(d.cliente || d.titulo || 'Lotus360')}-${cbHoy()}.pdf`;
+  const nombre = docNombre(['Cotización', d.cliente || d.titulo, docFecha(cbHoy())]);
   await pdfEntregar(await pdfCotizacionCliente(d), nombre);
 }
 // En el historial va el texto de la cotización (la EF lo necesita en los turnos siguientes) y los bloques para repintar.
@@ -18155,6 +18227,10 @@ function formatCeldaExport(col, row) {
 const EXPORTABLES = {};
 Object.keys(FACT_COLS).forEach(t => { EXPORTABLES[t] = { cols: FACT_COLS[t], filas: () => FACT_LAST[t] || [], celda: formatCeldaExport }; });
 const TOPE_PDF_EXPORT = 2000;
+// Mismos títulos de los menús de exportar, para que el archivo se llame como la
+// pantalla: "Lotus 360 - Comisiones - 2026-10-26.csv" en vez de "comisiones_2026-10-26".
+const EXPORT_NOMBRES = { leads: 'Leads', balance: 'Balance', ventas: 'Ventas', comisiones: 'Comisiones', cxp: 'Cuentas por pagar', asesores: 'Comisión por asesor', pagos: 'Pagos por verificar', informe: 'Informe diario', ranking: 'Ranking de asesores', cev: 'Clientes del evento' };
+const nombreExport = (tabla, ext) => docNombre([EXPORT_NOMBRES[tabla] || tabla, docFecha(hoyCaracas())], ext);
 async function datosExport(tabla, formato) {
   const def = EXPORTABLES[tabla];
   if (!def) return null;
@@ -18172,7 +18248,7 @@ window.exportarCSV = async (tabla) => {
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = `${tabla}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.href = url; a.download = nombreExport(tabla, 'csv');
   a.click();
   URL.revokeObjectURL(url);
 };
@@ -18203,7 +18279,7 @@ window.exportarXLSX = async (tabla, titulo) => {
   const ws = XLSX.utils.aoa_to_sheet(d.aoa);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, titulo.slice(0, 31));
-  XLSX.writeFile(wb, `${tabla}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  XLSX.writeFile(wb, nombreExport(tabla, 'xlsx'));
 };
 window.exportarPDF = async (tabla, titulo) => {
   // La ventana se abre ANTES del await: abierta después de una espera, el
@@ -18974,7 +19050,7 @@ async function exportarVentaPdf(id) {
     doc.text('Destino y Eventos Lotus 360 · Documento de uso interno · Montos en US$', X0, 766);
     doc.text(`Generado el ${generado} · Página ${p} de ${n}`, X1, 766, { align: 'right' });
   }
-  doc.save(`venta-${f.numero_factura}-${String(f.cliente || f.lead_id).replace(/[^\w]+/g, '_')}.pdf`);
+  doc.save(docNombre([`Factura ${String(f.numero_factura).padStart(6, '0')}`, f.cliente || `Cliente ${f.lead_id}`, docFecha(f.fecha_emision)]));
 }
 window.exportarVentaPdf = exportarVentaPdf;
 function cargarMasVentas() { factVentasMostrar += TECHO_LISTA; renderVentas(); }
@@ -28652,6 +28728,7 @@ function abonosModulo() {
     logo: () => cargarImagenBase64('logolotus-integrado.png'),
     pdfVoucher: async d => new Blob([await construirVoucherPdf(d)], { type: 'application/pdf' }),
     descargar: vcDescargar,
+    nombreArchivo: docNombrePorTipo,
     prepararAdjunto: async (reservaId, servicioId, pdf, nombre) => {
       const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: reservaId, servicio_id: servicioId, tipo: 'voucher', nombre, mime: 'application/pdf', tamano: pdf.size } });
       if (firma.error || !firma.data?.ok) throw new Error('No se pudo preparar el PDF de la reserva. La revisión vigente sigue igual.');
@@ -28667,7 +28744,7 @@ function setupDocumentosRevisiones() {
   DR = crearDocumentosRevisiones({ sb, esc, rol: () => ROL, usuario: () => MI_USUARIO_ID,
     atiende: id => BOL_COLA.some(s => String(s.id) === String(id) && s.la_atiendo_yo),
     fecha: fmtFechaHoraCaracas, nombreUsuario, prepararUsuarios: cargarUsuariosStaff, importeItem: cbImporte, confirmar: confirmarSheet, pedir: pedirTexto, abrir: openSheet, cerrar: closeSheet,
-    ok: okToast, error: errToast, librerias: ensureVoucherLibs, descargar: vcDescargar,
+    ok: okToast, error: errToast, librerias: ensureVoucherLibs, descargar: vcDescargar, nombreArchivo: docNombrePorTipo,
     pdf: async (tipo, d) => tipo === 'voucher' ? new Blob([await construirVoucherPdf(d)], { type: 'application/pdf' }) : cbPdfDe(d),
     prepararAdjunto: async (reservaId, servicioId, pdf, nombre) => {
       const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: reservaId, servicio_id: servicioId, tipo: 'voucher', nombre, mime: 'application/pdf', tamano: pdf.size } });
@@ -29443,12 +29520,7 @@ async function vcAdjuntarPdf(reservaId, servicioId, blob, nombre) {
   const { data, error } = await sb.rpc('registrar_documento', { p_reserva_id: reservaId, p_servicio_id: servicioId, p_tipo: 'voucher', p_storage_path: firma.data.path, p_nombre: nombre });
   return error || !data?.ok ? rvErr(error, data) : null;
 }
-function vcDescargar(blob, nombre) {
-  const url = URL.createObjectURL(blob), a = document.createElement('a');
-  a.href = url; a.download = nombre;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+function vcDescargar(blob, nombre) { descargarArchivo(blob, nombre); }
 function vcPintarHecho(h) {
   const box = document.getElementById('vc-hecho');
   box.innerHTML = `<b><i class="fas fa-circle-check"></i> Voucher N° ${fmt(h.numero)} generado</b><span>${esc(h.resumen)}</span>
@@ -29506,7 +29578,10 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     if (ins.error || !ins.data?.ok || !registro) throw new Error('No se pudo guardar el voucher: ' + (ins.error?.message || ins.data?.error || ''));
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(registro)], { type: 'application/pdf' });
-    const nombreArchivo = `Voucher-${registro.numero_factura}-${clienteNombre.replace(/\s+/g, '-')}.pdf`;
+    const nombreArchivo = docNombre([
+      `Voucher ${String(registro.numero_factura).padStart(6, '0')}`,
+      clienteNombre, registro.destino_hospedaje, docFecha(registro.fecha_entrada),
+    ]);
     // Guarda el PDF real en Storage -- el historial siempre muestra este
     // archivo exacto, no una reconstrucción. Si falla, no bloquea la descarga
     // (queda sin pdf_path y el historial cae al fallback de reconstruir).
@@ -29573,7 +29648,7 @@ window.generarVoucherPrueba = async function generarVoucherPrueba() {
   try {
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf({ ...VC_PRUEBA, created_at: new Date().toISOString() })], { type: 'application/pdf' });
-    vcDescargar(blob, 'Voucher-PRUEBA.pdf');
+    vcDescargar(blob, docNombre(['Voucher de prueba', docFecha(hoyCaracas())]));
     okToast('Voucher de prueba descargado (no se guardó nada)');
   } catch (e) {
     console.error('generarVoucherPrueba', e);
@@ -30250,7 +30325,7 @@ function cbApConfirmar(inp) {
 }
 // Las filas/borradores anteriores a adultos-niños-infantes traen solo `cant`: pasa a adultos.
 const cbMigrarPax = it => CB_TIPOS[it?.tipo || 'boleto']?.pax && it.adultos === undefined && it.cant != null ? { ...it, adultos: it.cant } : it;
-const cbArchivo = c => `Cotizacion-${cbNumero(c.numero)}-${c.cliente.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}.pdf`;
+const cbArchivo = c => docNombre([`Cotización ${String(c.numero).padStart(6, '0')}`, c.cliente, docFecha(c.fecha)]);
 
 function docEnfocar(campo) {
   const el = typeof campo === 'string' ? document.getElementById(campo) : campo;
@@ -31236,12 +31311,7 @@ window.cbReintentarLead = async (id, btn) => {
   catch (_) { errToast('No se pudo generar el PDF. El estado del lead se conservó.'); }
   finally { btn.disabled = false; }
 };
-function cbDescargar(blob, nombre) {
-  const url = URL.createObjectURL(blob), a = document.createElement('a');
-  a.href = url; a.download = nombre;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+function cbDescargar(blob, nombre) { descargarArchivo(blob, nombre); }
 window.cbVerPdf = async function cbVerPdf(id) {
   const c = cbFilas.get(id);
   if (!c) return;
@@ -34819,6 +34889,8 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-26', emoji: '🖱️', titulo: 'Tareas: se ve qué se puede abrir', texto: 'En Tareas, cada fila de la lista ahora muestra una flecha al costado y se ilumina en naranja al pasar el mouse; la flecha también se enciende. Las pestañas, los filtros, el bloque «Cola diaria», las tarjetas de Mi día y las personas de Equipo responden igual al pasar el mouse, y con el teclado cada elemento marca dónde estás.', roles: ROLES_TODOS },
+  { fecha: '2026-10-26', emoji: '🏷️', titulo: 'Documentos con nombre claro', texto: 'Todo lo que descargas del CRM —voucher, cotización, factura, tickets y recibos— se guarda con un nombre que dice qué es, de qué cliente y de qué fecha: por ejemplo «Lotus 360 - Voucher 006364 - Juan Pérez - Los Roques - 2026-11-15.pdf». Los documentos de una reserva tienen además su botón «Descargar», y las exportaciones llevan el nombre de la pantalla.', roles: ROLES_TODOS },
   { fecha: '2026-10-24', emoji: '🎤', titulo: 'Notas de voz con texto', texto: 'En Meta DM, las notas de voz de WhatsApp muestran debajo lo que dijo el cliente, también cuando ya tomaste tú la conversación. En Instagram y Facebook, el mensaje que llegó por audio lleva la marca «Nota de voz». WhatsApp empresa transcribe igual los audios que lleguen al número de la empresa.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-24', emoji: '✅', titulo: 'Tareas nuevas: tu día en una lista', texto: 'Tareas ya está en el menú para todos. Ves lo vencido, lo de hoy y lo que viene, cada tarea con su próximo paso como botón. Los pasos se marcan solos cuando los haces en el CRM (estado del cliente, cotización, llamada, reserva): toca «Hacer ahora» y al volver ya está. También puedes enviar una foto como evidencia, comentar con administración, avisar un problema y crearte recordatorios. En el teléfono se abre además deslizando desde el borde derecho. Activa los avisos para enterarte cuando te asignan algo.', roles: ['admin', 'administrativo', 'asesor', 'marketing', 'boleteria'] },
   { fecha: '2026-10-24', emoji: '📋', titulo: 'Tareas: el equipo en vivo', texto: 'En Tareas → Equipo ves a cada persona con su avance en vivo y, arriba, lo que necesita tu atención (problemas, revisiones, vencidas, sin abrir) con su acción a un toque. Al crear una tarea eliges una o varias personas, el cliente, pasos que se verifican solos, si requiere tu aprobación y si se repite. Las plantillas guardan las tareas frecuentes; las que se repiten se crean solas y se pueden pausar. La ficha de cada cliente muestra sus tareas.', roles: ['admin', 'administrativo'] },
