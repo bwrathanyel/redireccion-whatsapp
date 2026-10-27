@@ -6203,9 +6203,28 @@ function repartoEnRotacion() {
   return set;
 }
 
+// Reparte 100 entre las filas respetando la proporción (mayor residuo). Se usa
+// cuando se saca una cuenta del sistema del pool heredado y la suma deja de dar
+// 100: el resto se reajusta en vez de arrastrar un reparto inválido.
+function repartoNormalizar100(filas) {
+  const total = filas.reduce((s, a) => s + (Number(a.peso) || 0), 0);
+  if (!total || Math.abs(total - 100) < 0.001) return filas;
+  const factor = 100 / total;
+  const exactos = filas.map(a => (Number(a.peso) || 0) * factor);
+  const out = filas.map((a, i) => ({ ...a, peso: Math.floor(exactos[i]) }));
+  let resto = 100 - out.reduce((s, a) => s + a.peso, 0);
+  const orden = exactos.map((e, i) => ({ i, r: e - Math.floor(e) })).sort((a, b) => b.r - a.r);
+  for (const o of orden) { if (resto <= 0) break; out[o.i].peso += 1; resto--; }
+  return out;
+}
 function draftDesdeAsesores(pool) {
   const col = pool === 'domestico' ? 'peso_asignacion' : 'peso_internacional';
-  return repartoAsesores.filter(a => a[col] !== null).map(a => ({ nombre: a.nombre, peso: Number(a[col]), fijo: false }));
+  // Las cuentas del sistema (Asesor IA, Página Web) no reciben leads: no van en
+  // el reparto aunque tengan un peso guardado en 0.
+  const filas = repartoAsesores
+    .filter(a => a[col] !== null && !a.es_cuenta_sistema)
+    .map(a => ({ nombre: a.nombre, peso: Number(a[col]), fijo: false }));
+  return repartoNormalizar100(filas);
 }
 function draftDesdeGrupo(g) {
   if (!g) return [];
@@ -6510,7 +6529,7 @@ async function guardarReparto() {
     : await sb.rpc('admin_guardar_reparto', { p_pool: repartoPool, p_pesos });
   btn.disabled = false;
   if (error || !data?.ok) {
-    const msgs = { pool_vacio: 'El reparto no puede quedar vacío', suma_invalida: 'La suma no dio 100%', peso_invalido: 'Hay un peso inválido', no_existe: 'Algún asesor ya no existe o está inactivo', pool_invalido: 'Pool inválido', grupo_invalido: 'Ese destino ya no existe', nombre_invalido: 'Falta el nombre de un asesor', nombre_duplicado: 'Hay un asesor repetido', no_elegible: 'Un asesor de boletería no entra en el reparto de leads' };
+    const msgs = { pool_vacio: 'El reparto no puede quedar vacío', suma_invalida: 'La suma no dio 100%', peso_invalido: 'Hay un peso inválido', no_existe: 'Algún asesor ya no existe, está inactivo o es una cuenta del sistema', pool_invalido: 'Pool inválido', grupo_invalido: 'Ese destino ya no existe', nombre_invalido: 'Falta el nombre de un asesor', nombre_duplicado: 'Hay un asesor repetido', no_elegible: 'Un asesor de boletería no entra en el reparto de leads' };
     errToast('No se pudo guardar: ' + (msgs[data?.error] || data?.error || error?.message || ''));
     return;
   }
