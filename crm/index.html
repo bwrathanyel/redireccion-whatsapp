@@ -664,6 +664,18 @@ body.menu-arrastrando .side-scrim{transition:none}
 .rep-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap}
 .rep-actions select{background:var(--panel-solid);border:1px solid var(--line2);border-radius:8px;color:var(--txt);padding:7px 10px;font-size:12px;font-family:inherit}
 .rep-actions-save{display:flex;gap:8px}
+.rep-grupos{flex-wrap:wrap;margin-top:10px}
+.rep-grupo-info{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:10px 0 2px;font-size:12px;color:var(--muted);line-height:1.4}
+.rep-grupo-info b{color:var(--txt);font-weight:600}
+.rep-grupo-info button{background:transparent;border:1px solid var(--line2);border-radius:8px;color:var(--txt);padding:5px 10px;font-size:11.5px;font-family:inherit;cursor:pointer}
+.rep-grupo-info button:hover{border-color:var(--accent);color:var(--accent-ink)}
+.rep-grupo-info .rep-real{flex-basis:100%;margin-top:2px;font-size:11.5px;color:var(--muted2)}
+.rep-efectivo{margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04);font-size:11.5px;line-height:1.6;color:var(--muted)}
+.rep-efectivo b{color:var(--txt)}
+.rep-efectivo .sube{color:#34d399;font-weight:700}
+.rep-efectivo .baja{color:#f87171;font-weight:700}
+.rep-efectivo .aviso{margin-top:6px;color:#f87171}
+.rep-efectivo:empty{display:none}
 .btn-sec{background:transparent;border:1px solid var(--line2);border-radius:8px;padding:7px 13px;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit}
 .btn-sec:hover{color:var(--txt);border-color:var(--muted)}
 .btn-acc{background:var(--accent);border:none;border-radius:8px;padding:7px 13px;font-size:11.5px;font-weight:700;color:var(--on-accent);cursor:pointer;font-family:inherit}
@@ -6653,6 +6665,10 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 :root[data-theme="light"] .rep-row{border-bottom:1px solid rgba(var(--ink-rgb),.05)}
 :root[data-theme="light"] .rep-row .rep-num input{background:rgba(var(--ink-rgb),.05);border:1px solid rgba(var(--ink-rgb),.1);border-radius:8px;color:var(--txt)}
 :root[data-theme="light"] .rep-row button.rep-quitar:hover{color:#961d1d}
+:root[data-theme="light"] .rep-efectivo{background:rgba(var(--ink-rgb),.04)}
+:root[data-theme="light"] .rep-efectivo .sube{color:#067647}
+:root[data-theme="light"] .rep-efectivo .baja,
+:root[data-theme="light"] .rep-efectivo .aviso{color:#961d1d}
 :root[data-theme="light"] .dc-row .track{background:rgba(var(--ink-rgb),.05)}
 :root[data-theme="light"] .lead-conflict-bar i{color:#6b4910}
 :root[data-theme="light"] .lead-conflict-bar b{color:#6b4910}
@@ -8658,13 +8674,17 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <div class="card"><h2><i class="fas fa-user-tie"></i> Carga por asesor</h2><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
           <div class="card">
             <h2><i class="fas fa-scale-balanced"></i> Reparto objetivo <span class="rep-total" id="repTotal">100%</span></h2>
-            <div class="csub">Cómo se sortean los leads nuevos entre asesores</div>
+            <div class="csub">Cómo se sortean los leads nuevos entre asesores; cada destino puede tener su propio reparto</div>
             <div class="seg-group seg-group-sm" id="repPool">
               <button class="seg on" data-pool="domestico">Nacional</button>
               <button class="seg" data-pool="internacional">Internacional</button>
+              <button class="seg" data-pool="destino" hidden>Por destino</button>
             </div>
+            <div class="seg-group seg-group-sm rep-grupos" id="repGrupos" hidden></div>
+            <div class="rep-grupo-info" id="repGrupoInfo" hidden></div>
             <div class="rep-bar" id="repBar"></div>
             <div id="repRows"></div>
+            <div class="rep-efectivo" id="repEfectivo"></div>
             <div class="rep-actions">
               <select id="repAgregar"><option value="">+ Añadir asesor…</option></select>
               <div class="rep-actions-save" id="repGuardarWrap" style="display:none">

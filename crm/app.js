@@ -1873,7 +1873,7 @@ function setupGestionPersonal() {
   habilitarArrastreHorizontal(document.getElementById('gp-tabs'));
   document.querySelectorAll('#gp-tabs .seg').forEach(btn => btn.addEventListener('click', async () => {
     if (!gpTabVisible(btn.dataset.gpTab)) return;
-    if (gpTab === 'asesores' && btn.dataset.gpTab !== 'asesores' && (repartoDirty.domestico || repartoDirty.internacional) && !(await confirmarSheet({ titulo: '¿Salir sin guardar?', detalle: 'Hay cambios sin guardar en el reparto.', textoOk: 'Salir', destructivo: true }))) return;
+    if (gpTab === 'asesores' && btn.dataset.gpTab !== 'asesores' && repartoHayCambios() && !(await confirmarSheet({ titulo: '¿Salir sin guardar?', detalle: 'Hay cambios sin guardar en el reparto.', textoOk: 'Salir', destructivo: true }))) return;
     gpTab = btn.dataset.gpTab;
     document.querySelectorAll('#gp-tabs .seg').forEach(b => b.classList.toggle('on', b === btn));
     btn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
@@ -5804,7 +5804,7 @@ function setupAsesoresPeriodo() {
   document.getElementById('ase-hasta').value = isoD(hoy);
   initDateRangePicker('ase');
   ['ase-desde', 'ase-hasta'].forEach(id => document.getElementById(id).addEventListener('change', async () => {
-    if ((repartoDirty.domestico || repartoDirty.internacional) && !(await confirmarSheet({ titulo: '¿Cambiar de periodo sin guardar?', detalle: 'Hay cambios sin guardar en el reparto.', textoOk: 'Cambiar', destructivo: true }))) return;
+    if (repartoHayCambios() && !(await confirmarSheet({ titulo: '¿Cambiar de periodo sin guardar?', detalle: 'Hay cambios sin guardar en el reparto.', textoOk: 'Cambiar', destructivo: true }))) return;
     loadAsesoresPeriodo();
   }));
   document.getElementById('ase-ver-reasig').onclick = irAReasignacionesDesdeAsesores;
@@ -6173,29 +6173,76 @@ function renderEstDestinos(dest) {
 }
 
 /* ---------- Reparto objetivo: editor de pesos que siempre suma 100% ----------
-   Dos pools independientes (domestico/internacional), auto-balance en vivo
-   (mover una barra reajusta proporcionalmente al resto, salvo los fijados con
-   candado), y guardado atómico vía admin_guardar_reparto -- reemplazó al
-   guardado de a uno (admin_actualizar_peso_asesor) porque no garantizaba que
-   la suma diera 100 ni reseteaba el estado del round-robin. */
-let repartoPool = 'domestico';
-let repartoAsesores = []; // todos los activos: {nombre, peso_asignacion, peso_internacional}
-let repartoDraft = { domestico: [], internacional: [] }; // [{nombre, peso, fijo}]
-let repartoDirty = { domestico: false, internacional: false };
+   Tres dimensiones: Nacional, Internacional y Por destino (los grupos de
+   `destinos.grupo`). Un grupo sin reparto propio hereda el pool de siempre;
+   activarlo le da su propio sorteo con estado aparte ('destino:<grupo>') y un
+   preview del % efectivo por asesor con el volumen real de 90 días, para que
+   no se mueva la carga de nadie sin que se vea. Los pools Nacional e
+   Internacional nunca se reescriben desde acá. */
+let repartoPool = 'domestico';            // domestico | internacional | destino
+let repartoGrupo = null;                  // grupo elegido cuando repartoPool === 'destino'
+let repartoDestino = null;                // respuesta de reparto_destino_listar()
+let repartoAsesores = [];                 // activos: {nombre, peso_asignacion, peso_internacional, es_cuenta_sistema}
+let repartoDraft = { domestico: [], internacional: [] }; // + 'destino:<grupo>'
+let repartoHereda = {};                   // 'destino:<grupo>' -> true cuando usa el pool general
+let repartoDirty = { domestico: false, internacional: false }; // + 'destino:<grupo>'
+
+function repartoClave() { return repartoPool === 'destino' ? 'destino:' + repartoGrupo : repartoPool; }
+function repartoHayCambios() { return Object.values(repartoDirty).some(Boolean); }
+function repartoGrupoDe(nombre) { return (repartoDestino?.grupos || []).find(g => g.grupo === nombre) || null; }
+function repartoNumero(n) { return Number(n || 0).toLocaleString('es-VE'); }
+// Quiénes están hoy en la rotación: peso propio en algún pool o en el reparto
+// de algún destino. Los que ya no están (bajas, cuentas viejas) no se muestran
+// en la foto de los últimos 90 días aunque tengan leads en la ventana.
+function repartoEnRotacion() {
+  const set = new Set();
+  repartoAsesores.forEach(a => {
+    if (Number(a.peso_asignacion) > 0 || Number(a.peso_internacional) > 0) set.add(a.nombre);
+  });
+  (repartoDestino?.grupos || []).forEach(g => (g.pesos || []).forEach(p => set.add(p.nombre)));
+  return set;
+}
 
 function draftDesdeAsesores(pool) {
   const col = pool === 'domestico' ? 'peso_asignacion' : 'peso_internacional';
   return repartoAsesores.filter(a => a[col] !== null).map(a => ({ nombre: a.nombre, peso: Number(a[col]), fijo: false }));
 }
+function draftDesdeGrupo(g) {
+  if (!g) return [];
+  if (g.con_reparto) return (g.pesos || []).map(p => ({ nombre: p.nombre, peso: Number(p.peso), fijo: false }));
+  return draftDesdeAsesores(g.grupo === 'Internacional' ? 'internacional' : 'domestico');
+}
 async function cargarReparto() {
   const box = document.getElementById('repRows');
   if (!box) return;
-  const { data, error } = await sb.from('asesores').select('nombre,peso_asignacion,peso_internacional').eq('activo', true).order('nombre');
+  const [{ data, error }, rd] = await Promise.all([
+    sb.from('asesores').select('nombre,peso_asignacion,peso_internacional,es_cuenta_sistema').eq('activo', true).order('nombre'),
+    sb.rpc('reparto_destino_listar'),
+  ]);
   if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar</div>'; return; }
   repartoAsesores = data || [];
+  repartoDestino = (!rd.error && rd.data?.ok) ? rd.data : null;
+  // Los destinos que más volumen mueven primero: es el orden en el que se
+  // piensa el reparto (y define cuál abre por defecto).
+  repartoDestino?.grupos?.sort((a, b) => (Number(b.volumen_90d) || 0) - (Number(a.volumen_90d) || 0) || a.grupo.localeCompare(b.grupo));
   repartoDraft.domestico = draftDesdeAsesores('domestico');
   repartoDraft.internacional = draftDesdeAsesores('internacional');
+  repartoHereda = {};
+  if (repartoDestino?.grupos?.length) {
+    const nombres = repartoDestino.grupos.map(g => g.grupo);
+    if (!repartoGrupo || !nombres.includes(repartoGrupo)) repartoGrupo = nombres[0];
+    repartoDestino.grupos.forEach(g => {
+      const k = 'destino:' + g.grupo;
+      repartoDraft[k] = draftDesdeGrupo(g);
+      repartoHereda[k] = !g.con_reparto;
+      repartoDirty[k] = false;
+    });
+  }
+  const tabDestino = document.querySelector('#repPool [data-pool="destino"]');
+  if (tabDestino) tabDestino.hidden = !repartoDestino?.grupos?.length;
+  if (!repartoDestino?.grupos?.length && repartoPool === 'destino') repartoPool = 'domestico';
   repartoDirty.domestico = false; repartoDirty.internacional = false;
+  document.querySelectorAll('#repPool .seg').forEach(x => x.classList.toggle('on', x.dataset.pool === repartoPool));
   renderReparto();
 }
 function repartoSuma(pool) { return repartoDraft[pool].reduce((s, a) => s + a.peso, 0); }
@@ -6247,18 +6294,105 @@ function repartoBarHtml(pool) {
   const filas = repartoDraft[pool];
   return filas.map((a, i) => `<span style="flex-grow:${Math.max(a.peso, 0.01)};background:${ADV_COLORS[i % ADV_COLORS.length]}" title="${esc(a.nombre)}: ${a.peso}%"></span>`).join('');
 }
-function repartoRowHtml(pool, a, i) {
+function repartoRowHtml(a, i, bloqueado) {
   const c = ADV_COLORS[i % ADV_COLORS.length];
+  const dis = a.fijo || bloqueado;
   return `<div class="rep-row" data-i="${i}">
     <span class="rep-dot" style="background:${c}"></span>
     <span class="rep-nombre" title="${esc(a.nombre)}">${esc(a.nombre)}</span>
-    <input type="range" min="0" max="100" step="1" value="${a.peso}" ${a.fijo ? 'disabled' : ''} data-rep-slider>
+    <input type="range" min="0" max="100" step="1" value="${a.peso}" ${dis ? 'disabled' : ''} data-rep-slider>
     <div class="rep-actions-row">
-      <span class="rep-num"><input type="number" min="0" max="100" step="1" value="${a.peso}" ${a.fijo ? 'disabled' : ''} data-rep-num><span class="rep-pct">%</span></span>
-      <button type="button" class="${a.fijo ? 'on' : ''}" data-rep-fijo title="${a.fijo ? 'Desbloquear' : 'Fijar (no se mueve al reajustar)'}"><i class="fas fa-${a.fijo ? 'lock' : 'lock-open'}"></i></button>
-      <button type="button" class="rep-quitar" data-rep-quitar title="Quitar del reparto"><i class="fas fa-xmark"></i></button>
+      <span class="rep-num"><input type="number" min="0" max="100" step="1" value="${a.peso}" ${dis ? 'disabled' : ''} data-rep-num><span class="rep-pct">%</span></span>
+      <button type="button" class="${a.fijo ? 'on' : ''}" ${bloqueado ? 'disabled' : ''} data-rep-fijo title="${a.fijo ? 'Desbloquear' : 'Fijar (no se mueve al reajustar)'}"><i class="fas fa-${a.fijo ? 'lock' : 'lock-open'}"></i></button>
+      <button type="button" class="rep-quitar" ${bloqueado ? 'disabled' : ''} data-rep-quitar title="Quitar del reparto"><i class="fas fa-xmark"></i></button>
     </div>
   </div>`;
+}
+function repartoPesosMapa(key) {
+  const m = new Map();
+  (repartoDraft[key] || []).forEach(f => m.set(f.nombre, Number(f.peso) || 0));
+  return m;
+}
+// % efectivo por asesor con el volumen real de 90 días: hoy (todo heredado) y
+// con los borradores actuales. Las barras dicen el largo plazo; esto dice en
+// qué se traduce cuando convive con el resto de los destinos.
+function repartoEfectivo(conDestino) {
+  const rd = repartoDestino;
+  if (!rd) return [];
+  const nac = repartoPesosMapa('domestico'), intl = repartoPesosMapa('internacional');
+  const acc = new Map();
+  let total = 0;
+  const sumar = (mapa, vol) => {
+    if (!vol) return;
+    total += vol;
+    mapa.forEach((peso, nombre) => acc.set(nombre, (acc.get(nombre) || 0) + vol * peso / 100));
+  };
+  (rd.grupos || []).forEach(g => {
+    const propio = conDestino && !repartoHereda['destino:' + g.grupo];
+    const pesos = propio ? repartoPesosMapa('destino:' + g.grupo) : null;
+    const v = Number(g.volumen_90d) || 0;
+    const vIntl = Math.min(Number(g.volumen_intl_90d) || 0, v);
+    sumar(pesos || nac, v - vIntl);
+    sumar(pesos || intl, vIntl);
+  });
+  sumar(nac, Number(rd.cobertura?.sin_grupo_90d) || 0);
+  if (!total) return [];
+  return [...acc].map(([nombre, puntos]) => ({ nombre, pct: 100 * puntos / total }))
+    .filter(x => x.pct > 0.05)
+    .sort((a, b) => b.pct - a.pct);
+}
+function repartoPreviewHtml() {
+  const ahora = repartoEfectivo(true);
+  if (!ahora.length) return '';
+  const antes = new Map(repartoEfectivo(false).map(x => [x.nombre, x.pct]));
+  const filas = ahora.map(x => {
+    const d = x.pct - (antes.get(x.nombre) || 0);
+    const mov = Math.abs(d) < 0.05 ? '' : ` <span class="${d > 0 ? 'sube' : 'baja'}">${d > 0 ? '+' : ''}${d.toFixed(1)}</span>`;
+    return `<b>${esc(x.nombre)}</b> ${x.pct.toFixed(1)}%${mov}`;
+  }).join(' · ');
+  const grandes = ahora.filter(x => Math.abs(x.pct - (antes.get(x.nombre) || 0)) >= 3);
+  const aviso = grandes.length
+    ? `<div class="aviso">Ojo: este cambio mueve más de 3 puntos la carga de ${grandes.map(x => esc(x.nombre)).join(', ')}.</div>`
+    : '';
+  const cob = repartoDestino?.cobertura;
+  const nota = cob
+    ? `<div class="muted" style="margin-top:6px">${cob.pct}% de los leads de 90 días tiene grupo identificado; el resto hereda Nacional.</div>`
+    : '';
+  return `<div><span class="muted">Efectivo con el volumen de 90 días:</span> ${filas}</div>${aviso}${nota}`;
+}
+async function repartoCambiarGrupo(nombre) {
+  if (nombre === repartoGrupo) return;
+  if (repartoDirty[repartoClave()] && !(await confirmarSheet({ titulo: '¿Cambiar de destino sin guardar?', detalle: 'Hay cambios sin guardar en este reparto.', textoOk: 'Cambiar', destructivo: true }))) return;
+  repartoGrupo = nombre;
+  renderReparto();
+}
+function repartoActivarGrupo() {
+  const key = repartoClave();
+  if (!repartoHereda[key]) return;
+  repartoHereda[key] = false;
+  repartoDirty[key] = true;
+  renderReparto();
+}
+async function repartoQuitarPropio() {
+  if (!repartoGrupo) return;
+  const pool = repartoGrupo === 'Internacional' ? 'Internacional' : 'Nacional';
+  if (!(await confirmarSheet({ titulo: '¿Quitar el reparto propio de ' + repartoGrupo + '?', detalle: 'Ese destino vuelve a sortearse con el reparto ' + pool + '. Los leads que lleguen después se reparten como antes.', textoOk: 'Quitar', destructivo: true }))) return;
+  const { data, error } = await sb.rpc('admin_quitar_reparto_destino', { p_grupo: repartoGrupo });
+  if (error || !data?.ok) { errToast('No se pudo quitar: ' + (data?.error || error?.message || '')); return; }
+  okToast('Reparto del destino quitado');
+  await cargarReparto();
+}
+function repartoDescartar() {
+  const key = repartoClave();
+  if (repartoPool === 'destino') {
+    const g = repartoGrupoDe(repartoGrupo);
+    repartoDraft[key] = draftDesdeGrupo(g);
+    repartoHereda[key] = g ? !g.con_reparto : true;
+  } else {
+    repartoDraft[key] = draftDesdeAsesores(repartoPool);
+  }
+  repartoDirty[key] = false;
+  renderReparto();
 }
 function renderReparto() {
   const rowsBox = document.getElementById('repRows');
@@ -6266,76 +6400,121 @@ function renderReparto() {
   const totalChip = document.getElementById('repTotal');
   const saveWrap = document.getElementById('repGuardarWrap');
   const selectAgregar = document.getElementById('repAgregar');
+  const gruposBox = document.getElementById('repGrupos');
+  const grupoInfo = document.getElementById('repGrupoInfo');
+  const efectivo = document.getElementById('repEfectivo');
   if (!rowsBox) return;
-  const filas = repartoDraft[repartoPool];
 
-  rowsBox.innerHTML = filas.map((a, i) => repartoRowHtml(repartoPool, a, i)).join('') || '<div class="muted" style="font-size:12.5px">Sin asesores en este reparto</div>';
-  barBox.innerHTML = repartoBarHtml(repartoPool);
-  const total = repartoSuma(repartoPool);
+  const key = repartoClave();
+  const esDestino = repartoPool === 'destino';
+  const bloqueado = esDestino && !!repartoHereda[key];
+  const filas = repartoDraft[key] || [];
+
+  if (gruposBox) {
+    gruposBox.hidden = !esDestino;
+    if (esDestino) {
+      gruposBox.innerHTML = (repartoDestino?.grupos || []).map(g => {
+        const propio = !repartoHereda['destino:' + g.grupo];
+        const on = g.grupo === repartoGrupo;
+        return `<button type="button" class="seg${on ? ' on' : ''}" data-rep-grupo="${esc(g.grupo)}" title="${esc(g.grupo)}${propio ? ' · reparto propio' : ' · hereda'}">${esc(g.grupo)}${propio ? ' •' : ''}</button>`;
+      }).join('');
+      gruposBox.querySelectorAll('[data-rep-grupo]').forEach(b => b.onclick = () => repartoCambiarGrupo(b.dataset.repGrupo));
+    }
+  }
+
+  if (grupoInfo) {
+    grupoInfo.hidden = !esDestino;
+    if (esDestino && repartoGrupo) {
+      const g = repartoGrupoDe(repartoGrupo);
+      const vol = Number(g?.volumen_90d) || 0;
+      const totalVol = Number(repartoDestino?.cobertura?.total_90d) || 0;
+      const detalle = `${repartoNumero(vol)} leads en 90 días${totalVol ? ' · ' + Math.round(100 * vol / totalVol) + '% del volumen' : ''}`;
+      const enRotacion = repartoEnRotacion();
+      const real = (repartoDestino?.realidad || []).filter(r => r.grupo === repartoGrupo && enRotacion.has(r.asesor));
+      const totalReal = real.reduce((s, r) => s + (Number(r.n) || 0), 0);
+      const realTxt = totalReal
+        ? `<div class="rep-real">Cómo está cayendo de verdad en 90 días (asesores en rotación): ${real.map(r => `${esc(r.asesor)} ${Math.round(100 * (Number(r.n) || 0) / totalReal)}%`).join(' · ')}</div>`
+        : '';
+      if (bloqueado) {
+        grupoInfo.innerHTML = `<span><b>${esc(repartoGrupo)}</b> · ${detalle} · hereda <b>${repartoGrupo === 'Internacional' ? 'Internacional' : 'Nacional'}</b></span><button type="button" data-rep-activar>Reparto propio</button>${realTxt}`;
+        grupoInfo.querySelector('[data-rep-activar]').onclick = repartoActivarGrupo;
+      } else {
+        grupoInfo.innerHTML = `<span><b>${esc(repartoGrupo)}</b> · ${detalle} · reparto propio activo</span><button type="button" data-rep-quitar-propio>Quitar reparto propio</button>${realTxt}`;
+        grupoInfo.querySelector('[data-rep-quitar-propio]').onclick = repartoQuitarPropio;
+      }
+    }
+  }
+
+  rowsBox.innerHTML = filas.map((a, i) => repartoRowHtml(a, i, bloqueado)).join('') || '<div class="muted" style="font-size:12.5px">Sin asesores en este reparto</div>';
+  barBox.innerHTML = repartoBarHtml(key);
+  const total = repartoSuma(key);
   totalChip.textContent = total + '%';
   totalChip.className = 'rep-total ' + (total === 100 ? 'ok' : 'bad');
-  saveWrap.style.display = repartoDirty[repartoPool] ? 'flex' : 'none';
+  saveWrap.style.display = repartoDirty[key] ? 'flex' : 'none';
 
   const col = repartoPool === 'domestico' ? 'peso_asignacion' : 'peso_internacional';
   const enPool = new Set(filas.map(f => f.nombre));
-  const disponibles = repartoAsesores.filter(x => x[col] === null && !enPool.has(x.nombre));
+  const disponibles = repartoAsesores.filter(x => {
+    if (enPool.has(x.nombre)) return false;
+    if (esDestino) return !x.es_cuenta_sistema;
+    return x[col] === null;
+  });
   selectAgregar.innerHTML = '<option value="">+ Añadir asesor…</option>' + disponibles.map(x => `<option value="${esc(x.nombre)}">${esc(x.nombre)}</option>`).join('');
 
   rowsBox.querySelectorAll('[data-rep-slider]').forEach(el => el.oninput = () => {
     const i = Number(el.closest('.rep-row').dataset.i);
-    rebalancear(repartoPool, i, Number(el.value));
-    repartoDirty[repartoPool] = true;
+    rebalancear(key, i, Number(el.value));
+    repartoDirty[key] = true;
     renderReparto();
   });
   rowsBox.querySelectorAll('[data-rep-num]').forEach(el => el.onchange = () => {
     const i = Number(el.closest('.rep-row').dataset.i);
-    rebalancear(repartoPool, i, Number(el.value) || 0);
-    repartoDirty[repartoPool] = true;
+    rebalancear(key, i, Number(el.value) || 0);
+    repartoDirty[key] = true;
     renderReparto();
   });
   rowsBox.querySelectorAll('[data-rep-fijo]').forEach(el => el.onclick = () => {
     const i = Number(el.closest('.rep-row').dataset.i);
-    repartoDraft[repartoPool][i].fijo = !repartoDraft[repartoPool][i].fijo;
+    repartoDraft[key][i].fijo = !repartoDraft[key][i].fijo;
     renderReparto();
   });
   rowsBox.querySelectorAll('[data-rep-quitar]').forEach(el => el.onclick = () => {
     const i = Number(el.closest('.rep-row').dataset.i);
-    repartoQuitar(repartoPool, i);
+    repartoQuitar(key, i);
   });
+  if (efectivo) efectivo.innerHTML = repartoPreviewHtml();
 }
 function setupReparto() {
   document.querySelectorAll('#repPool .seg').forEach(b => b.onclick = async () => {
     if (repartoPool === b.dataset.pool) return;
-    if (repartoDirty[repartoPool] && !(await confirmarSheet({ titulo: '¿Cambiar de pestaña sin guardar?', detalle: 'Hay cambios sin guardar en este reparto.', textoOk: 'Cambiar', destructivo: true }))) return;
+    if (repartoDirty[repartoClave()] && !(await confirmarSheet({ titulo: '¿Cambiar de pestaña sin guardar?', detalle: 'Hay cambios sin guardar en este reparto.', textoOk: 'Cambiar', destructivo: true }))) return;
     repartoPool = b.dataset.pool;
     document.querySelectorAll('#repPool .seg').forEach(x => x.classList.toggle('on', x === b));
     renderReparto();
   });
   document.getElementById('repAgregar')?.addEventListener('change', e => {
-    if (e.target.value) { repartoAgregar(repartoPool, e.target.value); e.target.value = ''; }
+    if (e.target.value) { repartoAgregar(repartoClave(), e.target.value); e.target.value = ''; }
   });
-  document.getElementById('repDescartar')?.addEventListener('click', () => {
-    repartoDraft[repartoPool] = draftDesdeAsesores(repartoPool);
-    repartoDirty[repartoPool] = false;
-    renderReparto();
-  });
+  document.getElementById('repDescartar')?.addEventListener('click', repartoDescartar);
   document.getElementById('repGuardar')?.addEventListener('click', guardarReparto);
 }
 async function guardarReparto() {
-  const pool = repartoPool;
-  const total = repartoSuma(pool);
+  const key = repartoClave();
+  const total = repartoSuma(key);
   if (total !== 100) { errToast('El reparto tiene que sumar 100% (va en ' + total + '%)'); return; }
   const btn = document.getElementById('repGuardar');
   btn.disabled = true;
-  const p_pesos = repartoDraft[pool].map(a => ({ nombre: a.nombre, peso: a.peso }));
-  const { data, error } = await sb.rpc('admin_guardar_reparto', { p_pool: pool, p_pesos });
+  const p_pesos = repartoDraft[key].map(a => ({ nombre: a.nombre, peso: a.peso }));
+  const { data, error } = repartoPool === 'destino'
+    ? await sb.rpc('admin_guardar_reparto_destino', { p_grupo: repartoGrupo, p_pesos })
+    : await sb.rpc('admin_guardar_reparto', { p_pool: repartoPool, p_pesos });
   btn.disabled = false;
   if (error || !data?.ok) {
-    const msgs = { pool_vacio: 'El reparto no puede quedar vacío', suma_invalida: 'La suma no dio 100%', peso_invalido: 'Hay un peso inválido', no_existe: 'Algún asesor ya no existe o está inactivo', pool_invalido: 'Pool inválido' };
+    const msgs = { pool_vacio: 'El reparto no puede quedar vacío', suma_invalida: 'La suma no dio 100%', peso_invalido: 'Hay un peso inválido', no_existe: 'Algún asesor ya no existe o está inactivo', pool_invalido: 'Pool inválido', grupo_invalido: 'Ese destino ya no existe', nombre_invalido: 'Falta el nombre de un asesor', nombre_duplicado: 'Hay un asesor repetido', no_elegible: 'Un asesor de boletería no entra en el reparto de leads' };
     errToast('No se pudo guardar: ' + (msgs[data?.error] || data?.error || error?.message || ''));
     return;
   }
-  okToast('Reparto guardado');
+  okToast(repartoPool === 'destino' ? 'Reparto del destino guardado' : 'Reparto guardado');
   await cargarReparto();
 }
 
@@ -34889,6 +35068,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-27', emoji: '🎯', titulo: 'Reparto por destino', texto: 'El Reparto objetivo tiene una pestaña nueva, «Por destino»: cada destino (Margarita, Los Roques, Canaima, Mérida, Otros nacionales, Corporativo e Internacional) puede tener su propio reparto entre asesores. Mientras no lo actives, ese destino se sigue sorteando con el reparto Nacional tal como está hoy, sin cambiarle nada a nadie. La pestaña muestra cuántos leads trajo cada destino en los últimos 90 días, cómo se están repartiendo de verdad entre los asesores, y antes de guardar el efecto sobre la carga de cada uno: el porcentaje que le tocaría y cuánto se mueve. «Quitar reparto propio» devuelve el destino al reparto general.', roles: ['admin'] },
   { fecha: '2026-10-26', emoji: '🖱️', titulo: 'Tareas: se ve qué se puede abrir', texto: 'En Tareas, cada fila de la lista ahora muestra una flecha al costado y se ilumina en naranja al pasar el mouse; la flecha también se enciende. Las pestañas, los filtros, el bloque «Cola diaria», las tarjetas de Mi día y las personas de Equipo responden igual al pasar el mouse, y con el teclado cada elemento marca dónde estás.', roles: ROLES_TODOS },
   { fecha: '2026-10-26', emoji: '🏷️', titulo: 'Documentos con nombre claro', texto: 'Todo lo que descargas del CRM —voucher, cotización, factura, tickets y recibos— se guarda con un nombre que dice qué es, de qué cliente y de qué fecha: por ejemplo «Lotus 360 - Voucher 006364 - Juan Pérez - Los Roques - 2026-11-15.pdf». Los documentos de una reserva tienen además su botón «Descargar», y las exportaciones llevan el nombre de la pantalla.', roles: ROLES_TODOS },
   { fecha: '2026-10-24', emoji: '🎤', titulo: 'Notas de voz con texto', texto: 'En Meta DM, las notas de voz de WhatsApp muestran debajo lo que dijo el cliente, también cuando ya tomaste tú la conversación. En Instagram y Facebook, el mensaje que llegó por audio lleva la marca «Nota de voz». WhatsApp empresa transcribe igual los audios que lleguen al número de la empresa.', roles: ['admin', 'asesor'] },
