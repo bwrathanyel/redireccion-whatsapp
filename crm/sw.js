@@ -10,7 +10,7 @@
 // apuntando a index.html) siempre pegaba ese camino roto; una pestaña normal
 // del navegador no, porque pedía '/' directo. Se cachea './' en vez de
 // './index.html' para no arrastrar el redirect.
-const CACHE_VERSION = 'lotus-crm-shell-v509';
+const CACHE_VERSION = 'lotus-crm-shell-v510';
 const SHELL_FILES = [
   './',
   './app.js',
@@ -64,6 +64,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // Supabase/CDN externos: siempre red
+  if (url.pathname.startsWith('/prueba/')) return; // modo prueba: app aparte, nunca del shell cacheado
 
   // Chrome/Chromium rechaza (net::ERR_FAILED) cualquier respuesta con
   // redirected=true para una navegación -- ver hallazgo real arriba. Instalaciones

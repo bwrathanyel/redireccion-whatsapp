@@ -305,6 +305,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   propuestas: ['Alianzas y propuestas', 'Quienes escriben al bot para ofrecer algo, no para comprar'],
   'wa-bandeja': ['WhatsApp empresa', 'Chats del número de la empresa: contesta aquí a los clientes'],
   'clientes-eventos': ['Clientes Eventos', 'Quienes se registraron con el QR del stand y los premios que ganaron'],
+  induccion: ['Inducción', 'Cómo le fue a cada persona en el modo de prueba: tiempos, saltos y dónde se trabó'],
   'bt-travel': ['BT Travel', 'Hoteles todo incluido, disponibilidad, reservas y pagos del mayorista'],
   apartamentos: ['Apartamentos', 'Casas y posadas con apartamentos propios: unidades, habitaciones y fotos'],
   proveedores: ['Proveedores','A quién le compra Lotus y cuánto margen deja cada uno'],
@@ -3134,7 +3135,7 @@ async function startApp() {
     setupMetricas, setupRanking, setupMisVentas, setupReasignaciones, setupAsesoresPeriodo,
     setupBalance, setupFacturacion, setupPagos, setupGestionPersonal, setupLeadsTabs, setupImportarVouchers,
     setupBuscadorIATarifario, setupIaAtencion, setupCerrarSheets, setupVozIA, setupRendimientoIA, setupWebReasignados, setupStopSales,
-    setupRankingCatalogo, setupClientesEventos, setupProveedores, setupEmpresas, setupReservasEmpresas, setupBtTravel, setupApartamentos,
+    setupRankingCatalogo, setupClientesEventos, setupInduccion, setupProveedores, setupEmpresas, setupReservasEmpresas, setupBtTravel, setupApartamentos,
     setupDestPeriodo, loadDestPeriodo,
     setupVoucher, actualizarBadgeVoucher,
     setupTareas, setupFreelancers, setupComisiones, setupFiltrosPostulaciones,
@@ -7368,11 +7369,23 @@ function renderInbox() {
   [...grid.querySelectorAll('.inbox-card')].forEach((el, i) => {
     const l = INBOX_LEADS[i];
     el.addEventListener('click', () => openDrawer(l));
-    el.querySelector('.inbox-btn.atender').addEventListener('click', e => { e.stopPropagation(); atenderInboxLead(l); });
-    el.querySelector('.inbox-btn.nopuedo')?.addEventListener('click', e => { e.stopPropagation(); noPuedoInboxLead(l); });
+    const conCandado = candadoInbox(el);
+    el.querySelector('.inbox-btn.atender').addEventListener('click', conCandado(() => atenderInboxLead(l)));
+    el.querySelector('.inbox-btn.nopuedo')?.addEventListener('click', conCandado(() => noPuedoInboxLead(l)));
     el.querySelector('.inbox-btn.avisar').addEventListener('click', e => { e.stopPropagation(); abrirAvisarTelefono(l); });
   });
   actualizarBadgeLeads(INBOX_LEADS.length);
+}
+// Doble toque = dos RPC y dos WhatsApp: Atender y No puedo se bloquean juntos hasta que responda.
+function candadoInbox(card) {
+  const btns = [...card.querySelectorAll('.inbox-btn.atender,.inbox-btn.nopuedo')];
+  const abre = () => btns.forEach(b => { b.disabled = false; });
+  return fn => e => {
+    e.stopPropagation();
+    if (btns.some(b => b.disabled)) return;
+    btns.forEach(b => { b.disabled = true; });
+    Promise.resolve(fn()).then(ok => { if (!ok) abre(); }, abre);
+  };
 }
 function inboxCardHtml(l) {
   const av = clientAvatar(l), pc = partesConsulta(l.destino_consulta);
@@ -7438,8 +7451,9 @@ function renderHoyAsesor() {
   [...box.querySelectorAll('.inbox-card')].forEach((el, i) => {
     const l = top[i];
     el.addEventListener('click', () => openDrawer(l));
-    el.querySelector('.inbox-btn.atender').addEventListener('click', e => { e.stopPropagation(); atenderInboxLead(l); });
-    el.querySelector('.inbox-btn.nopuedo')?.addEventListener('click', e => { e.stopPropagation(); noPuedoInboxLead(l); });
+    const conCandado = candadoInbox(el);
+    el.querySelector('.inbox-btn.atender').addEventListener('click', conCandado(() => atenderInboxLead(l)));
+    el.querySelector('.inbox-btn.nopuedo')?.addEventListener('click', conCandado(() => noPuedoInboxLead(l)));
     el.querySelector('.inbox-btn.avisar').addEventListener('click', e => { e.stopPropagation(); abrirAvisarTelefono(l); });
   });
   pintarKpisHoyAsesor();
@@ -7555,6 +7569,7 @@ async function noPuedoInboxLead(l) {
   // (misma reasignar_lead(), mismo check de ownership) dispara el push al
   // asesor nuevo -- si se llamara la RPC directo desde acá, ese aviso nunca
   // salía (solo lo disparan telegram-webhook/timeout-leads hoy).
+  if (!(await confirmarSheet({ titulo: '¿Pasar este lead a otro asesor?', detalle: 'Ya no será tuyo.', textoOk: 'Sí, no puedo' }))) return;
   const { data, error } = await sb.functions.invoke('reasignar-lead', { body: { p_lead_id: l.id } });
   if (error) { errToast('No se pudo reasignar: ' + error.message); return; }
   if (data?.motivo === 'fuera_de_horario') { errToast('No se reasignan leads entre 9pm y 9am -- el lead sigue contigo'); return; }
@@ -7563,6 +7578,7 @@ async function noPuedoInboxLead(l) {
   if (data.pool_agotado) { errToast('No hay más asesores disponibles por ahora -- el lead sigue contigo'); return; }
   quitarDeInbox(l.id);
   okToast('Lead reasignado a otro asesor');
+  return true;
 }
 function quitarDeInbox(leadId) {
   INBOX_LEADS = INBOX_LEADS.filter(x => x.id !== leadId);
@@ -7651,11 +7667,11 @@ function openDrawer(l, opciones = {}) {
       ${wa ? `<a class="dacc-ic wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}><i class="fab fa-whatsapp"></i></a>` : ''}
       <button type="button" class="dacc-ic" id="e-a-mas" aria-expanded="false" aria-controls="dacc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
     </div>
+    ${vende && !l.fecha_cotizacion_enviada ? `<button class="dacc-cot" id="e-a-cotizacion" type="button"><i class="fas fa-file-circle-check"></i><span>Registrar cotización enviada</span></button>` : ''}
     <div class="dacc-mas" id="dacc-mas" hidden>
       ${vende && !soloLectura ? `<button class="dq-mas" id="e-a-pegar-chat" type="button"><i class="fas fa-paste"></i>Pegar chat de WhatsApp</button>` : ''}
       ${vende && l.destino ? `<button class="dq-mas" id="e-a-texto-ia" type="button"><i class="fas fa-wand-magic-sparkles"></i>Respuesta sugerida (IA)</button>` : ''}
       ${vende ? `<button class="dq-mas" id="e-a-armar-cot" type="button"><i class="fas fa-file-invoice-dollar"></i>Armar cotización</button>` : ''}
-      ${vende ? `<button class="dq-mas" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización enviada'}</span></button>` : ''}
       ${(ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) ? `<button class="dq-mas" id="e-a-facturar" type="button"><i class="fas fa-plus"></i>Crear reserva</button>` : ''}
       ${vende ? `<button class="dq-mas" id="e-a-boleteria" type="button"><i class="fas fa-plane-departure"></i>Solicitud de boletería</button>` : ''}
       ${vende && !ESTADOS_SIN_SEGUIMIENTO.includes(l.estado) ? `<button class="dq-mas" type="button" id="e-a-recordar"><i class="fas fa-bell"></i>Recordar mañana</button>` : ''}
@@ -7676,7 +7692,7 @@ function openDrawer(l, opciones = {}) {
       <div id="venta-box" class="venta-box ${VENTA.includes(l.estado) ? 'show' : ''}">
         <div class="venta-msg" id="venta-msg"></div>
         <div class="dgrid">
-          ${campo('Monto de la venta (USD)', `<input id="e-monto" class="ei" type="number" min="0" step="1" placeholder="0" value="${l.monto ?? ''}" ${dis}>`)}
+          ${campo('Monto de la venta (USD)', `<input id="e-monto" class="ei" type="number" min="0" step="any" inputmode="decimal" placeholder="0" value="${l.monto ?? ''}" ${dis}>`)}
           ${campo('Servicios / paquetes comprados', `<input id="e-comprado" class="ei" type="text" placeholder="Ej: Vuelo + Hotel 3 noches" value="${esc(l.servicios_comprados || '')}" ${dis}>`)}
         </div>
       </div>
@@ -7700,7 +7716,7 @@ function openDrawer(l, opciones = {}) {
           </div>
           <div class="dgrid dedicion">
             ${campo('Nombre', `<input id="e-nombre" class="ei" type="text" value="${esc(l.nombre || '')}" ${dis}>`, true)}
-            ${campo('Teléfono', `<input id="e-telefono" class="ei" type="text" value="${esc(l.telefono || '')}" ${dis}>`)}
+            ${campo('Teléfono', `<input id="e-telefono" class="ei" type="tel" autocomplete="off" value="${esc(l.telefono || '')}" ${dis}>`)}
             ${campo('Canal', `<input id="e-canal" class="ei" type="text" value="${esc(l.canal || '')}" ${dis}>`)}
             ${campo('Destino de interés', `<input id="e-destino" class="ei" type="text" value="${esc(l.destino || '')}" ${dis}>`)}
             ${campo('Personas', `<input id="e-personas" class="ei" type="text" value="${esc(l.personas || '')}" ${dis}>`)}
@@ -9847,6 +9863,104 @@ async function cevImportar(file) {
   okToast(`${fmt(data.nuevos)} premios nuevos importados`);
   CEV_EVENTO = data.evento;
   await loadClientesEventos();
+}
+
+/* ---------- Inducción: resultados del modo de prueba (/prueba/) ---------- */
+let IND_SESIONES = [], IND_ABIERTA = null;
+const IND_MISIONES = {
+  atender: 'Atender el lead nuevo', tarifario: 'Buscar en el Tarifario', cotizar: 'Registrar la cotización', abono: 'Registrar un abono',
+  lyra: 'Pedirle ayuda a Lyra', kpi: 'Explorar el Dashboard', pago: 'Verificar un pago', repartir: 'Repartir números', personal: 'Revisar quién vino hoy',
+};
+const IND_ROL = { asesor: 'Asesor de ventas', admin: 'Administración' };
+const indDur = seg => { seg = Math.max(0, Math.round(seg || 0)); return seg < 60 ? `${seg} s` : seg < 3600 ? `${Math.floor(seg / 60)} min ${seg % 60 ? (seg % 60) + ' s' : ''}`.trim() : `${Math.floor(seg / 3600)} h ${Math.round(seg % 3600 / 60)} min`; };
+const indFecha = ts => ts ? new Date(ts).toLocaleString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+// Agilidad 0-100: arranca en 100 y descuenta saltos, reintentos, errores, ayudas y lentitud (más de 3 min por tarea).
+function indAgilidad(s) {
+  if (!s.misiones && !s.saltos) return null;
+  const porTarea = s.duracion_seg / 60 / Math.max(1, s.misiones + s.saltos);
+  const resta = s.saltos * 12 + s.reintentos * 6 + s.errores * 4 + s.ayudas * 2 + Math.max(0, porTarea - 3) * 3;
+  return Math.max(0, Math.round(100 - resta));
+}
+async function loadInduccion() {
+  const cont = document.getElementById('ind-lista');
+  const { data, error } = await sb.rpc('prueba_resumen');
+  if (error) { cont.innerHTML = `<div class="vig-vacio">${error.code === '42501' ? 'Solo un admin puede ver la inducción' : 'No se pudo cargar: ' + esc(error.message || '')}</div>`; return; }
+  IND_SESIONES = (data || []).map(s => ({ ...s, agilidad: indAgilidad(s) }));
+  indPintar();
+}
+function indPintar() {
+  const cont = document.getElementById('ind-lista');
+  const q = document.getElementById('ind-buscar').value.trim().toLowerCase(), rol = document.getElementById('ind-rol').value;
+  const ss = IND_SESIONES.filter(s => (!rol || s.rol === rol) && (!q || s.nombre.toLowerCase().includes(q)));
+  const conNota = ss.filter(s => s.agilidad != null);
+  pintarKPIs('ind-kpis', [
+    { t: 'Personas', v: fmt(ss.length), d: `${fmt(ss.filter(s => s.fin).length)} cerraron la práctica`, i: 'fa-user-graduate', c: 'var(--blue)' },
+    { t: 'Agilidad media', v: conNota.length ? fmt(Math.round(conNota.reduce((a, s) => a + s.agilidad, 0) / conNota.length)) : '—', d: 'De 0 a 100', i: 'fa-gauge-high', c: 'var(--green)' },
+    { t: 'Tareas saltadas', v: fmt(ss.reduce((a, s) => a + s.saltos, 0)), d: 'Entre todos', i: 'fa-forward', c: 'var(--amber)' },
+    { t: 'Ayudas a Lyra', v: fmt(ss.reduce((a, s) => a + s.ayudas, 0)), d: 'Preguntas durante la práctica', i: 'fa-robot', c: 'var(--purple)' },
+  ]);
+  if (!ss.length) {
+    cont.innerHTML = `<div class="vig-vacio"><i class="fas fa-graduation-cap"></i><b>${IND_SESIONES.length ? 'Nadie coincide con la búsqueda' : 'Todavía nadie practicó'}</b>
+      <div style="font-size:12.5px;margin-top:6px">Acá aparece cada persona que entre al modo de prueba desde el login.</div></div>`;
+    return;
+  }
+  const orden = [...ss].sort((a, b) => (b.agilidad ?? -1) - (a.agilidad ?? -1) || (a.inicio < b.inicio ? 1 : -1));
+  cont.innerHTML = `<div class="ce-grupo"><div class="ce-grupo-t">Ranking de agilidad <span class="ce-dest">${fmt(orden.length)}</span></div>
+    ${orden.map((s, i) => `<div class="ce-card ind-card" data-ind="${esc(s.id)}" role="button" tabindex="0" aria-expanded="${IND_ABIERTA === s.id}">
+      <div class="cev-top"><div class="cev-nom">${s.agilidad != null ? `${i + 1}. ` : ''}${esc(s.nombre)}</div>
+        <span class="cev-cod" title="Agilidad: 100 menos saltos, reintentos, errores, ayudas y lentitud">${s.agilidad != null ? `${s.agilidad}/100` : 'Sin tareas'}</span></div>
+      <div class="ia-datos">
+        <span class="ia-dato"><i class="fas fa-id-badge"></i> ${esc(IND_ROL[s.rol] || s.rol)}</span>
+        <span class="ia-dato" title="Inicio de la práctica"><i class="fas fa-calendar"></i> ${indFecha(s.inicio)}</span>
+        <span class="ia-dato"><i class="fas fa-stopwatch"></i> ${indDur(s.duracion_seg)}</span>
+        <span class="ia-dato"><i class="fas fa-circle-check"></i> ${fmt(s.misiones)} hechas</span>
+        ${s.saltos ? `<span class="ia-dato"><i class="fas fa-forward"></i> ${fmt(s.saltos)} saltadas</span>` : ''}
+        ${s.reintentos ? `<span class="ia-dato"><i class="fas fa-rotate-left"></i> ${fmt(s.reintentos)} reinicios</span>` : ''}
+        ${s.errores ? `<span class="ia-dato"><i class="fas fa-triangle-exclamation"></i> ${fmt(s.errores)} errores</span>` : ''}
+        ${s.ayudas ? `<span class="ia-dato"><i class="fas fa-robot"></i> ${fmt(s.ayudas)} a Lyra</span>` : ''}
+        ${s.inactivo_seg ? `<span class="ia-dato" title="Más de 30 s sin tocar nada"><i class="fas fa-hourglass-half"></i> ${indDur(s.inactivo_seg)} quieto</span>` : ''}
+      </div>
+      <div class="ind-detalle" id="ind-det-${esc(s.id)}"${IND_ABIERTA === s.id ? '' : ' hidden'}></div>
+    </div>`).join('')}</div>`;
+  if (IND_ABIERTA) indDetalle(IND_ABIERTA);
+}
+async function indDetalle(id) {
+  const box = document.getElementById('ind-det-' + id); if (!box) return;
+  box.hidden = false;
+  box.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div></div>';
+  const { data, error } = await sb.rpc('prueba_detalle', { p_sesion: id });
+  if (IND_ABIERTA !== id) return;
+  if (error || !data?.ok) { box.innerHTML = `<div class="cev-nada">No se pudo cargar el detalle${error ? ': ' + esc(error.message || '') : ''}</div>`; return; }
+  const ms = data.misiones.map(m => ({ ...m, seg: m.inicio && m.fin ? (new Date(m.fin) - new Date(m.inicio)) / 1000 : null }));
+  const peso = m => (m.seg || 0) + m.inactivo_seg + m.reintentos * 60 + m.errores * 30 + (m.saltada ? 120 : 0);
+  const trabo = ms.length ? ms.reduce((a, m) => peso(m) > peso(a) ? m : a) : null;
+  const titulo = id => esc(IND_MISIONES[id] || id);
+  box.innerHTML = `
+    ${trabo && peso(trabo) > 0 ? `<div class="ce-intro"><i class="fas fa-flag" style="color:var(--amber)"></i> Donde más se trabó: <b>${titulo(trabo.mision)}</b>
+      (${[trabo.seg != null ? indDur(trabo.seg) : null, trabo.saltada ? 'la saltó' : null, trabo.reintentos ? `${trabo.reintentos} reinicios` : null, trabo.inactivo_seg ? `${indDur(trabo.inactivo_seg)} quieto` : null].filter(Boolean).join(' · ')})</div>` : ''}
+    <div class="ce-grupo-t">Tareas, en orden</div>
+    ${ms.length ? `<div class="cev-prems">${ms.map(m => `<div class="cev-nada"><b>${m.completada ? '✔' : m.saltada ? '⏭' : '…'} ${titulo(m.mision)}</b> ·
+      ${m.seg != null ? indDur(m.seg) : 'sin terminar'}${m.clics ? ` · ${fmt(m.clics)} clics` : ''}${m.errores ? ` · ${fmt(m.errores)} errores` : ''}${m.ayudas ? ` · ${fmt(m.ayudas)} a Lyra` : ''}${m.inactivo_seg ? ` · ${indDur(m.inactivo_seg)} quieto` : ''}</div>`).join('')}</div>` : '<div class="cev-nada">No llegó a empezar ninguna tarea</div>'}
+    <div class="ce-grupo-t">Secciones donde más entró</div>
+    ${data.secciones.length ? `<div class="ia-datos">${data.secciones.slice(0, 8).map(s => `<span class="ia-dato">${esc(TITLES[s.seccion]?.[0] || s.seccion)} · ${fmt(s.visitas)} visitas · ${fmt(s.clics)} clics</span>`).join('')}</div>` : '<div class="cev-nada">Sin datos</div>'}
+    <div class="ce-grupo-t">Preguntas a Lyra y búsquedas</div>
+    ${data.lyra.length ? data.lyra.map(l => `<div class="cev-nada">«${esc(l.texto || '')}»${l.mision ? ` <span style="color:var(--muted)">· en ${titulo(l.mision)}</span>` : ''}</div>`).join('') : '<div class="cev-nada">No preguntó nada</div>'}
+    ${data.errores.length ? `<div class="ce-grupo-t">Errores</div>${data.errores.slice(0, 20).map(e => `<div class="cev-nada">${indFecha(e.ts)} · ${esc(e.detalle?.error || e.detalle?.msg || '')}${e.mision ? ` · ${titulo(e.mision)}` : ''}</div>`).join('')}` : ''}`;
+}
+function setupInduccion() {
+  document.getElementById('ind-recargar').addEventListener('click', loadInduccion);
+  document.getElementById('ind-buscar').addEventListener('input', indPintar);
+  document.getElementById('ind-rol').addEventListener('change', indPintar);
+  const abre = e => {
+    const card = e.target.closest('.ind-card'); if (!card || e.target.closest('.ind-detalle')) return;
+    const id = card.dataset.ind, cerrar = IND_ABIERTA === id;
+    document.querySelectorAll('.ind-card').forEach(c => { c.setAttribute('aria-expanded', 'false'); c.querySelector('.ind-detalle').hidden = true; });
+    IND_ABIERTA = cerrar ? null : id;
+    if (!cerrar) { card.setAttribute('aria-expanded', 'true'); indDetalle(id); }
+  };
+  const lista = document.getElementById('ind-lista');
+  lista.addEventListener('click', abre);
+  lista.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('ind-card')) { e.preventDefault(); abre(e); } });
 }
 
 function setupClientesEventos() {
@@ -18856,6 +18970,15 @@ function setupFacturacion() {
   document.getElementById('fact-asesores-search').addEventListener('input', renderAsesoresComision);
   document.getElementById('monto-sheet-cancelar').addEventListener('click', () => closeSheet('monto-sheet'));
   document.getElementById('monto-sheet-confirmar').addEventListener('click', confirmarMontoSheet);
+  document.getElementById('monto-sheet-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); confirmarMontoSheet(); } });
+  // En abonos se ve cuánto queda antes de guardar.
+  document.getElementById('monto-sheet-input').addEventListener('input', e => {
+    const a = MONTO_SHEET_ACCION, v = Number(e.target.value), err = document.getElementById('monto-sheet-error');
+    if (!a || a.tipo === 'comision') return;
+    const ok = v > 0 && v <= a.saldoPendiente;
+    err.textContent = ok ? `Saldo quedará: ${money(a.saldoPendiente - v)}` : '';
+    err.classList.toggle('info', ok);
+  });
   // Flechita del orden por defecto (fecha_emision desc en Ventas) visible
   // desde el primer render, no solo después de tocar un encabezado.
   Object.entries(FACT_SORT).forEach(([tabla, spec]) => {
@@ -19783,7 +19906,7 @@ window.abrirEditarComisionUI = (comisionId, porcentajeActual) => {
   const input = document.getElementById('monto-sheet-input');
   input.min = 0; input.max = 100; input.step = 0.01; input.value = porcentajeActual ?? '';
   document.getElementById('monto-sheet-error').textContent = '';
-  openSheet('monto-sheet');
+  openSheet('monto-sheet'); input.focus();
 };
 window.abrirRegistrarAbonoUI = (cxpId, saldoPendiente) => {
   MONTO_SHEET_ACCION = { tipo: 'abono', id: cxpId, saldoPendiente };
@@ -19792,11 +19915,12 @@ window.abrirRegistrarAbonoUI = (cxpId, saldoPendiente) => {
   const input = document.getElementById('monto-sheet-input');
   input.min = 0; input.max = saldoPendiente; input.step = 0.01; input.value = '';
   document.getElementById('monto-sheet-error').textContent = '';
-  openSheet('monto-sheet');
+  openSheet('monto-sheet'); input.focus();
 };
 async function confirmarMontoSheet() {
   if (!MONTO_SHEET_ACCION) return;
   const err = document.getElementById('monto-sheet-error');
+  err.classList.remove('info');
   const valor = Number(document.getElementById('monto-sheet-input').value);
   if (!Number.isFinite(valor) || valor <= 0) { err.textContent = 'Ingresá un monto válido.'; return; }
   const btn = document.getElementById('monto-sheet-confirmar');
@@ -19816,7 +19940,7 @@ async function confirmarMontoSheet() {
   const { data, error } = resultado;
   if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (error?.message || data?.error || ''); return; }
   closeSheet('monto-sheet');
-  okToast('Guardado');
+  okToast(MONTO_SHEET_ACCION.tipo === 'comision' ? `Comisión actualizada a ${valor}%` : `Abono de ${money(valor)} registrado`);
   if (MONTO_SHEET_ACCION.tipo === 'comision') { loadComisionesAdmin(); }
   else if (MONTO_SHEET_ACCION.tipo === 'venta') { loadMisVentasVentas(); }
   else { await loadCuentasPorPagar(); }
@@ -19829,7 +19953,7 @@ window.abrirRegistrarAbonoVentaUI = (leadId, saldoPendiente) => {
   const input = document.getElementById('monto-sheet-input');
   input.min = 0; input.max = saldoPendiente; input.step = 0.01; input.value = '';
   document.getElementById('monto-sheet-error').textContent = '';
-  openSheet('monto-sheet');
+  openSheet('monto-sheet'); input.focus();
 };
 window.editarPorcentajeComision = async (asesorId) => {
   const a = FACT_ASESORES_CACHE.find(x => x.id === asesorId);
@@ -32522,6 +32646,7 @@ const NAV_ITEMS = [
   { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok nav-administrativo-ok' },
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
   { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only nav-administrativo-ok' },
+  { sec: 'induccion', icon: 'fas fa-graduation-cap', label: 'Inducción', padre: 'grp-equipo', roles: 'nav-admin-only', sub: 'Cómo le fue a cada persona en el modo de prueba' },
   // Tareas v2 (2026-10-23): entrada propia para todos los roles; antes solo freelancers o quien tuviera una abierta.
   { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok', sub: 'Tu día: lo que te asignaron y tus recordatorios', badge: 'nav-tareas-v2-count', badgeDefault: '0' },
   { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Videotutoriales', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-administrativo-ok' },
@@ -32906,6 +33031,7 @@ function cargarSeccion(sec) {
   if (sec === 'propuestas') loadPropuestas();
   if (sec === 'wa-bandeja') loadWaBandeja();
   if (sec === 'clientes-eventos') loadClientesEventos();
+  if (sec === 'induccion') loadInduccion();
   if (sec === 'web-reasignados') loadWebReasignados();
   if (sec === 'contactos-directos') loadContactosDirectos();
   if (sec === 'repartir') repPoblarAsesores();
