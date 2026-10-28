@@ -5542,6 +5542,8 @@ function rvFormPasajero(p) {
   const campo = (id, label, v, extra = '') => `<div><label class="fl">${label}</label><input class="ei" id="rv-p-${id}" value="${esc(v || '')}" ${extra}></div>`;
   const abierto = x?.nacionalidad || x?.telefono || x?.titular ? ' open' : '';
   p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-user"></i> ${x ? 'Editar pasajero' : 'Nuevo pasajero'}</div>
+    <label class="dbtn gh" style="width:100%;margin-bottom:6px;cursor:pointer"><i class="fas fa-id-card"></i> <span id="rv-p-leer-txt">Leer cédula o pasaporte</span><input type="file" id="rv-p-leer" accept="image/jpeg,image/png,image/webp" hidden></label>
+    <div class="csub" id="rv-p-leer-msg" hidden></div>
     <div class="rv-2">${campo('nombre', 'Nombre', x?.nombre, 'maxlength="80"')}${campo('apellido', 'Apellido', x?.apellido, 'maxlength="80"')}</div>
     <div class="rv-2"><div><label class="fl">Documento</label><select class="ei" id="rv-p-tipodoc">${rvOpts(RV_TIPO_DOC, tipo)}</select></div><div><label class="fl">Número</label><input class="ei" id="rv-p-numdoc" value="${esc(rvDocMostrar(x?.numero_documento, tipo))}" maxlength="30" autocomplete="off"></div></div>
     <details class="rs-mas"${abierto}><summary>Más datos</summary><div class="rs-mas-body">
@@ -5556,6 +5558,24 @@ function rvFormPasajero(p) {
   tipoSel.onchange = () => { if (tipoSel.value !== 'cedula') num.value = num.value.replace(/^[VEve]-\s*/, '').replace(/\./g, ''); aplicar(); };
   num.oninput = () => { if (tipoSel.value === 'cedula') num.value = rvDocMostrar(num.value, 'cedula'); };
   num.onblur = aplicar;
+  p.querySelector('#rv-p-leer').onchange = e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) rvLeerDocumento(p, f, aplicar); };
+}
+// EF analizar-documento-identidad: prellena; el pasajero se guarda recién con «Guardar».
+async function rvLeerDocumento(p, archivo, aplicar) {
+  const msg = p.querySelector('#rv-p-leer-msg'), txt = p.querySelector('#rv-p-leer-txt');
+  msg.hidden = false; msg.textContent = ''; txt.textContent = 'Leyendo…';
+  const imagen = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.onerror = () => r(null); fr.readAsDataURL(archivo); });
+  const { data, error } = imagen ? await sb.functions.invoke('analizar-documento-identidad', { body: { reserva_id: RV_RESERVA_ID, mime: archivo.type || 'image/jpeg', imagen } }) : { data: null };
+  if (!p.isConnected) return;
+  txt.textContent = 'Leer cédula o pasaporte';
+  if (error || !data?.ok) { msg.textContent = data?.error === 'no_es_documento' ? 'Esa foto no parece un documento de identidad.' : 'No se pudo leer: completá a mano.'; return; }
+  const d = data.datos, poner = (id, v) => { const el = p.querySelector('#rv-p-' + id); if (el && v) el.value = v; };
+  poner('nombre', d.nombre); poner('apellido', d.apellido); poner('nacionalidad', d.nacionalidad);
+  if (RV_TIPO_DOC[d.tipo_documento]) p.querySelector('#rv-p-tipodoc').value = d.tipo_documento;
+  poner('numdoc', d.numero_documento); aplicar();
+  if (d.nacionalidad) p.querySelector('details.rs-mas')?.setAttribute('open', '');
+  const vence = d.vencimiento && new Date(d.vencimiento) < new Date(Date.now() + 180 * 864e5) ? ` Ojo: vence el ${d.vencimiento}.` : '';
+  msg.textContent = `Datos leídos del documento${d.confianza < 0.6 ? ' (foto poco clara)' : ''}: revisalos y guardá.${vence}`;
 }
 async function rvPasajeroRapido(btn) {
   const err = document.getElementById('rv-q-err') || document.getElementById('rv-f-err');
@@ -6747,7 +6767,7 @@ function renderChips() {
   const box = document.getElementById('active-filters'); if (!box) return;
   const chips = [];
   const push = (label, clr) => chips.push([label, clr]);
-  if (val('f-seguimiento')) push('Seguimiento: ' + ({ pendiente: 'vencidos y de hoy', vencidos: 'vencidos', hoy: 'hoy', proximos: 'próximos' }[val('f-seguimiento')] || ''), () => setDrop('f-seguimiento', ''));
+  if (val('f-seguimiento')) push('Seguimiento: ' + ({ pendiente: 'vencidos y de hoy', vencidos: 'vencidos', hoy: 'hoy', proximos: 'próximos', para_cerrar: 'para cerrar' }[val('f-seguimiento')] || ''), () => setDrop('f-seguimiento', ''));
   if (val('f-canal')) push('Canal: ' + val('f-canal'), () => setDrop('f-canal', ''));
   if (val('f-estado')) push('Estado: ' + niceEstado(val('f-estado')), () => setDrop('f-estado', ''));
   if (val('f-asesor')) push('Asesor: ' + val('f-asesor'), () => setDrop('f-asesor', ''));
@@ -6799,6 +6819,8 @@ document.getElementById('leads-reload-btn')?.addEventListener('click', async () 
 // a los asesores (entran sin asesor); acá se excluyen también para el admin,
 // que sí las vería, y viven en su propia sección: IA Atención al Cliente.
 const SERVICIO_POSADA_IA = 'Asistente IA (posada)';
+const PARA_CERRAR_DIAS = { abierto: 14, cotizado: 21, ventana: 90 };
+let PARA_CERRAR_PAGINA = [];
 
 function buildQuery(forCount) {
   let q = sb.from('leads').select('*', forCount ? { count: 'exact' } : {})
@@ -6810,7 +6832,15 @@ function buildQuery(forCount) {
   if (fst === 'sin') q = q.is('telefono', null);
   else if (fst === 'con') q = q.not('telefono', 'is', null);
   const fseg = val('f-seguimiento');
-  if (fseg) {
+  if (fseg === 'para_cerrar') {
+    // Abiertos y quietos: ATENDIDO/CONTACTADO >14 días o cotizados >21, sin
+    // un seguimiento agendado a futuro (eso es "sigue vivo").
+    const hace = d => new Date(Date.now() - d * 864e5).toISOString();
+    // Solo los últimos 90 días: el histórico viejo es otra limpieza (de admin).
+    q = q.gte('fecha_creacion', hace(PARA_CERRAR_DIAS.ventana))
+      .or(`and(estado.in.("ATENDIDO","CLIENTE CONTACTADO"),updated_at.lt.${hace(PARA_CERRAR_DIAS.abierto)}),and(estado.eq."COTIZACION ENVIADA",updated_at.lt.${hace(PARA_CERRAR_DIAS.cotizado)})`)
+      .or(`proxima_accion_at.is.null,proxima_accion_at.lt.${new Date().toISOString()}`);
+  } else if (fseg) {
     q = q.not('proxima_accion_at', 'is', null).not('estado', 'in', FILTRO_SIN_SEGUIMIENTO);
     const ahora = new Date().toISOString();
     if (fseg === 'pendiente') q = q.lte('proxima_accion_at', finDelDia().toISOString());
@@ -6830,6 +6860,31 @@ function buildQuery(forCount) {
   if (qs) { const qsSafe = qs.replace(/[,()%]/g, ''); q = q.or(`nombre.ilike.%${qsSafe}%,telefono.ilike.%${qsSafe}%`); }
   return q;
 }
+// Con «Para cerrar», un botón al lado de los chips cierra en bloque lo que se
+// ve en la página (nunca más que eso, para que el asesor sepa qué toca).
+function pintarBotonParaCerrar() {
+  document.getElementById('para-cerrar-btn')?.remove();
+  const n = PARA_CERRAR_PAGINA.length, box = document.getElementById('active-filters');
+  if (!n || !box || ROL === 'administrativo') return;
+  box.insertAdjacentHTML('beforeend', `<button class="clear-all" id="para-cerrar-btn" type="button"><i class="fas fa-box-archive"></i> Marcar PERDIDO estos ${n}</button>`);
+  document.getElementById('para-cerrar-btn').onclick = cerrarLeadsQuietos;
+}
+async function cerrarLeadsQuietos() {
+  const leads = PARA_CERRAR_PAGINA.slice();
+  const ok = await confirmarSheet({
+    titulo: `¿Marcar ${leads.length} leads como PERDIDO?`,
+    detalle: `Son los que ves en esta página: sin movimiento hace más de ${PARA_CERRAR_DIAS.abierto} días (o ${PARA_CERRAR_DIAS.cotizado} si ya tenían cotización) y sin seguimiento agendado.\nSi alguno sigue vivo, abrilo antes y tocá «Recordar mañana».`,
+    textoOk: 'Marcar PERDIDO', destructivo: true,
+  });
+  if (!ok) return;
+  let hechos = 0;
+  for (const l of leads) {
+    const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: 'PERDIDO' });
+    if (!error && data?.ok) hechos++;
+  }
+  okToast(`${hechos} de ${leads.length} marcados como PERDIDO`);
+  loadTable(); loadStats();
+}
 // Las tarjetas de lead viven en dos listas (el pipeline y la sub-pestaña
 // "Asignados en lote"). El wiring va acá una sola vez: duplicarlo dejaba la
 // segunda lista con tarjetas muertas al primer cambio en la primera.
@@ -6844,8 +6899,10 @@ async function loadTable(silencioso) {
   const loading = document.getElementById('tbl-loading'), empty = document.getElementById('tbl-empty');
   empty.classList.remove('show'); if (silencioso !== true) loading.classList.add('show');
   const from = (page - 1) * PER;
-  const porSeguimiento = !!val('f-seguimiento'); // con el filtro, lo más urgente primero
-  let qTabla = buildQuery(true).order(porSeguimiento ? 'proxima_accion_at' : 'fecha_creacion', { ascending: porSeguimiento, nullsFirst: false });
+  const paraCerrar = val('f-seguimiento') === 'para_cerrar';
+  const porSeguimiento = !!val('f-seguimiento') && !paraCerrar; // con el filtro, lo más urgente primero
+  let qTabla = paraCerrar ? buildQuery(true).order('updated_at', { ascending: true })
+    : buildQuery(true).order(porSeguimiento ? 'proxima_accion_at' : 'fecha_creacion', { ascending: porSeguimiento, nullsFirst: false });
   if (porSeguimiento) qTabla = qTabla.order('id'); // los atajos repiten la hora exacta: sin desempate .range() pagina inestable
   const { data, count, error } = await qTabla.range(from, from + PER - 1);
   if (gen !== genCarga) return;
@@ -6853,6 +6910,8 @@ async function loadTable(silencioso) {
   if (error) { console.error(error); errToast('No se pudieron cargar los leads'); return; }
   totalFiltered = count ?? 0;
   document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`;
+  PARA_CERRAR_PAGINA = paraCerrar ? (data || []) : [];
+  pintarBotonParaCerrar();
   if (!data.length) { empty.classList.add('show'); document.getElementById('tbody').innerHTML = ''; document.getElementById('leads-cards').innerHTML = ''; document.getElementById('pager').innerHTML = ''; return; }
   document.getElementById('tbody').innerHTML = data.map(l => {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
@@ -6865,7 +6924,7 @@ async function loadTable(silencioso) {
       <td data-label="Asesor">${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</td>
       <td data-label="Estado"><span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}2e">${esc(niceEstado(l.estado))}</span></td>
       <td data-label="Fecha" class="muted">${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : '—'}</td>
-      <td class="td-wa">${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : '<span class="muted">—</span>'}</td>
+      <td class="td-wa">${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}><i class="fab fa-whatsapp"></i></a>` : '<span class="muted">—</span>'}</td>
     </tr>`;
   }).join('');
   [...document.querySelectorAll('#tbody tr')].forEach((tr, i) => tr.addEventListener('click', () => openDrawer(data[i])));
@@ -7198,7 +7257,7 @@ function leadCardHtml(l) {
     <div class="lc-fill"></div>
     <div class="lc-foot">
       ${cta ? `<button type="button" class="lc-cta" data-accion="${cta.key}"><i class="fas ${cta.icono}"></i>${cta.texto}</button>` : '<span class="lc-cta-vacio"></span>'}
-      ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
+      ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}><i class="fab fa-whatsapp"></i></a>` : ''}
       <button type="button" class="lc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
     </div>
   </div>`;
@@ -7553,10 +7612,12 @@ function openDrawer(l, opciones = {}) {
       <label class="dacc-estado" id="dacc-estado" style="--est:${estColor}"><span class="sr-only">Estado</span>
         <select id="e-estado" ${dis}>${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select><i class="fas fa-chevron-down"></i></label>
       <button type="button" class="dacc-cta" id="e-a-cta" ${cta ? `data-accion="${cta.key}"` : 'hidden'}>${cta ? `<i class="fas ${cta.icono}"></i>${cta.texto}` : ''}</button>
-      ${wa ? `<a class="dacc-ic wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp"><i class="fab fa-whatsapp"></i></a>` : ''}
+      ${wa ? `<a class="dacc-ic wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}><i class="fab fa-whatsapp"></i></a>` : ''}
       <button type="button" class="dacc-ic" id="e-a-mas" aria-expanded="false" aria-controls="dacc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
     </div>
     <div class="dacc-mas" id="dacc-mas" hidden>
+      ${vende && !soloLectura ? `<button class="dq-mas" id="e-a-pegar-chat" type="button"><i class="fas fa-paste"></i>Pegar chat de WhatsApp</button>` : ''}
+      ${vende && l.destino ? `<button class="dq-mas" id="e-a-texto-ia" type="button"><i class="fas fa-wand-magic-sparkles"></i>Respuesta sugerida (IA)</button>` : ''}
       ${vende ? `<button class="dq-mas" id="e-a-armar-cot" type="button"><i class="fas fa-file-invoice-dollar"></i>Armar cotización</button>` : ''}
       ${vende ? `<button class="dq-mas" id="e-a-cotizacion" type="button" ${l.fecha_cotizacion_enviada ? 'disabled' : ''}><i class="fas fa-file-circle-check"></i><span>${l.fecha_cotizacion_enviada ? 'Cotización registrada' : 'Registrar cotización enviada'}</span></button>` : ''}
       ${(ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) ? `<button class="dq-mas" id="e-a-facturar" type="button"><i class="fas fa-plus"></i>Crear reserva</button>` : ''}
@@ -7690,6 +7751,8 @@ function openDrawer(l, opciones = {}) {
   // Boletería y Cotizar navegan a otra sección: recién cuando el drawer terminó de cerrar.
   document.getElementById('e-a-boleteria')?.addEventListener('click', () => trasCerrarDrawer(() => abrirSolicitudBoleteria(l)));
   document.getElementById('e-a-armar-cot')?.addEventListener('click', () => trasCerrarDrawer(() => cbDesdeLead(l)));
+  document.getElementById('e-a-pegar-chat')?.addEventListener('click', () => abrirPegarChat(l));
+  document.getElementById('e-a-texto-ia')?.addEventListener('click', () => abrirTextoIA(l));
   document.getElementById('conv-ver').addEventListener('click', () => openSheet('conv-lead-sheet'));
   const historial = document.querySelector('details[data-dsec="historial"]');
   historial.addEventListener('toggle', () => { if (historial.open) { cargarActividadLead(l); cargarCorreoLead(l); } });
@@ -7862,6 +7925,100 @@ async function registrarCotizacionEnviada(l) {
   ACTIVIDAD_CACHE = null;
   okToast(data.ya_registrada ? 'La cotización ya estaba registrada' : 'Cotización enviada registrada');
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
+}
+
+/* ---------- Abrir WhatsApp desde el CRM = lead atendido. En captura porque
+   los links frenan la propagación (onclick="event.stopPropagation()"). El
+   link sigue su curso; el estado se marca en paralelo. ---------- */
+document.addEventListener('click', e => {
+  const a = e.target.closest?.('a[data-atender]');
+  if (!a || leadSoloLectura()) return;
+  const id = Number(a.dataset.atender);
+  a.removeAttribute('data-atender');
+  sb.rpc('actualizar_lead', { p_lead_id: id, p_estado: 'ATENDIDO' }).then(({ data, error }) => {
+    if (error || !data?.ok) return;
+    if (currentLead?.id === id) { currentLead.estado = 'ATENDIDO'; currentLead.fecha_primer_contacto ||= new Date().toISOString(); const sel = document.getElementById('e-estado'); if (sel) sel.value = 'ATENDIDO'; }
+    quitarDeInbox(id); loadTable();
+  });
+}, true);
+
+/* ---------- Pegar chat de WhatsApp → ficha (EF parse-chat-lead). La IA
+   propone; el asesor tilda qué se aplica. Se aplica por el mismo camino que
+   tipear en la ficha (evento change → autoguardado). ---------- */
+const PC_CAMPOS = [['nombre', 'e-nombre', 'Nombre'], ['telefono', 'e-telefono', 'Teléfono'], ['destino', 'e-destino', 'Destino'], ['personas', 'e-personas', 'Personas'], ['fecha_estimada', 'e-fecha-estimada', 'Fecha de viaje'], ['destino_consulta', 'e-destino-consulta', 'Consulta']];
+const PC_PISAR_SOLO_VACIO = ['nombre', 'telefono', 'destino_consulta'];
+function abrirPegarChat(l) {
+  document.getElementById('dacc-mas').hidden = true;
+  document.getElementById('pc-texto').value = '';
+  document.getElementById('pc-resultado').innerHTML = '';
+  document.getElementById('pc-err').textContent = '';
+  document.getElementById('pc-leer').onclick = () => leerChatPegado(l);
+  openSheet('pegar-chat-sheet');
+  setTimeout(() => document.getElementById('pc-texto').focus(), 250);
+}
+async function leerChatPegado(l) {
+  const texto = document.getElementById('pc-texto').value.trim(), btn = document.getElementById('pc-leer'), err = document.getElementById('pc-err');
+  err.textContent = '';
+  if (texto.length < 20) { err.textContent = 'Pegá al menos un par de mensajes.'; return; }
+  btn.disabled = true; const previo = btn.innerHTML; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Leyendo…';
+  const { data, error } = await sb.functions.invoke('parse-chat-lead', { body: { chat_text: texto } });
+  btn.disabled = false; btn.innerHTML = previo;
+  if (error || !data?.ok) { err.textContent = 'No se pudo leer el chat. Probá de nuevo en un momento.'; return; }
+  const filas = PC_CAMPOS.map(([k, id, et]) => {
+    const nuevo = data.datos?.[k], actual = document.getElementById(id)?.value.trim() || '';
+    if (nuevo == null || String(nuevo) === actual) return '';
+    const marcar = !actual || actual === 'Sin nombre' || !PC_PISAR_SOLO_VACIO.includes(k);
+    return `<label class="pc-fila"><input type="checkbox" data-pc="${id}" ${marcar ? 'checked' : ''}><span><b>${et}</b><br>${actual ? `<s class="muted">${esc(actual)}</s> → ` : ''}${esc(nuevo)}</span></label>`;
+  }).join('');
+  const est = data.estado_sugerido && data.estado_sugerido !== l.estado && ESTADOS_EDIT.includes(data.estado_sugerido)
+    ? `<label class="pc-fila"><input type="checkbox" data-pc-estado="${esc(data.estado_sugerido)}" ${data.estado_sugerido === 'PERDIDO' ? '' : 'checked'}><span><b>Estado</b><br><s class="muted">${esc(niceEstado(l.estado))}</s> → ${esc(niceEstado(data.estado_sugerido))}</span></label>` : '';
+  const pres = data.datos?.presupuesto != null ? ` Presupuesto: ${money(data.datos.presupuesto)}.` : '';
+  const nota = data.resumen || pres ? `<label class="pc-fila"><input type="checkbox" data-pc-nota checked><span><b>Agregar a notas</b><br><span id="pc-nota-txt">${esc((data.resumen || '') + pres)}</span></span></label>` : '';
+  const caja = document.getElementById('pc-resultado');
+  if (!filas && !est && !nota) { caja.innerHTML = '<div class="csub">El chat no trae datos nuevos para esta ficha.</div>'; return; }
+  caja.innerHTML = `${filas}${est}${nota}<button class="dbtn" id="pc-aplicar" type="button" style="width:100%;margin-top:8px"><i class="fas fa-check"></i> Aplicar lo marcado</button>`;
+  document.getElementById('pc-aplicar').onclick = () => aplicarChatPegado(l, data);
+}
+function aplicarChatPegado(l, res) {
+  const caja = document.getElementById('pc-resultado');
+  let n = 0;
+  caja.querySelectorAll('input[data-pc]:checked').forEach(c => {
+    const el = document.getElementById(c.dataset.pc), k = PC_CAMPOS.find(f => f[1] === c.dataset.pc)[0];
+    if (!el || el.disabled) return;
+    el.value = String(res.datos[k]); el.dispatchEvent(new Event('change')); n++;
+  });
+  const est = caja.querySelector('input[data-pc-estado]:checked'), sel = document.getElementById('e-estado');
+  if (est && sel && !sel.disabled) { sel.value = est.dataset.pcEstado; sel.dispatchEvent(new Event('change')); n++; }
+  if (caja.querySelector('input[data-pc-nota]:checked')) {
+    const notas = document.getElementById('e-notas'), d = new Date();
+    if (notas && !notas.disabled) {
+      const linea = `[Chat ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}] ${document.getElementById('pc-nota-txt').textContent}`;
+      notas.value = notas.value.trim() ? notas.value.trimEnd() + '\n' + linea : linea;
+      guardarNotasLead(); n++;
+    }
+  }
+  closeSheet('pegar-chat-sheet');
+  pintarLecturaDatos();
+  okToast(n ? `Ficha actualizada (${n})` : 'No se aplicó nada');
+}
+
+/* ---------- Respuesta sugerida (EF sugerir-respuesta): texto listo para
+   WhatsApp con el tarifario real del destino del lead. ---------- */
+async function abrirTextoIA(l) {
+  document.getElementById('dacc-mas').hidden = true;
+  const txt = document.getElementById('tia-texto'), err = document.getElementById('tia-err');
+  txt.value = 'Armando la respuesta con el tarifario…'; txt.disabled = true; err.textContent = '';
+  const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
+  document.getElementById('tia-wa').hidden = !wa;
+  document.getElementById('tia-wa').onclick = () => window.open(`https://wa.me/${wa}?text=${encodeURIComponent(txt.value)}`, '_blank');
+  document.getElementById('tia-copiar').onclick = async () => {
+    try { await navigator.clipboard.writeText(txt.value); okToast('Copiado'); } catch { errToast('El navegador no dejó copiar'); }
+  };
+  openSheet('texto-ia-sheet');
+  const { data, error } = await sb.functions.invoke('sugerir-respuesta', { body: { p_lead_id: l.id } });
+  txt.disabled = false;
+  if (error || !data?.ok) { txt.value = ''; err.textContent = data?.error === 'lead_no_encontrado' ? 'No tenés acceso a ese lead.' : 'No se pudo armar la respuesta. Probá de nuevo en un momento.'; return; }
+  txt.value = data.mensaje || '';
 }
 
 /* ---------- Conversación/Actividad del registro de lead (Fase 3, tabs
@@ -30774,7 +30931,7 @@ window.cbQuitarSolicitud = async () => { await cbGuardarBorrador(); cbSolicitud 
 // si se abrió desde un lead, la fila queda con lead_id y "Guardar en el lead" lo marca cotizado.
 const CB_CON_PRODUCTO = ['hotel', 'paquete', 'fullday', 'tour'];
 let cbModo = 'boleteria', cbLead = null, cbLeadPendiente = null, cbProductosListos = false;
-function cbDesdeLead(l) { cbLeadPendiente = { id: l.id, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; activateSection('cotizacion-boletos'); }
+function cbDesdeLead(l) { cbLeadPendiente = { id: l.id, nombre: l.nombre || l.telefono || `Lead #${l.id}`, telefono: l.telefono }; activateSection('cotizacion-boletos'); }
 function cbPintarLead() {
   const box = document.getElementById('cb-lead');
   box.hidden = !cbLead;

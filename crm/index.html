@@ -4755,6 +4755,9 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .dquick .dq.dq-boleteria{min-height:62px;border-radius:14px}
 .dquick .dq i{font-size:16px}
 #e-a-cotizacion i{color:var(--amber)}
+.pc-fila{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px;line-height:1.4;cursor:pointer}
+.pc-fila input{margin-top:3px;flex:none}
+#pc-texto,#tia-texto{width:100%;resize:vertical}
 #e-a-facturar i{color:var(--purple)}
 .dquick .dq:disabled{opacity:.55;cursor:default}
 
@@ -8115,7 +8118,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
               <button class="lf-btn" id="leads-filtros-btn" type="button" aria-expanded="false" aria-controls="leads-filtros-pop"><i class="fas fa-sliders"></i> Filtros <b id="leads-filtros-n"></b> <i class="fas fa-chevron-down lf-flecha"></i></button>
               <div class="lf-pop" id="leads-filtros-pop" role="dialog" aria-label="Filtros de leads">
               <label class="lf-campo"><span class="lf-l">Teléfono</span><select class="flt" id="f-sin-telefono"><option value="">Con y sin número</option><option value="sin">Solo sin número</option><option value="con">Solo con número</option></select></label>
-              <label class="lf-campo"><span class="lf-l">Seguimiento</span><select class="flt" id="f-seguimiento" aria-label="Seguimiento"><option value="">Todos los seguimientos</option><option value="pendiente">Vencidos y de hoy</option><option value="vencidos">Vencidos</option><option value="hoy">De hoy</option><option value="proximos">Próximos</option></select></label>
+              <label class="lf-campo"><span class="lf-l">Seguimiento</span><select class="flt" id="f-seguimiento" aria-label="Seguimiento"><option value="">Todos los seguimientos</option><option value="pendiente">Vencidos y de hoy</option><option value="vencidos">Vencidos</option><option value="hoy">De hoy</option><option value="proximos">Próximos</option><option value="para_cerrar">Para cerrar (sin movimiento)</option></select></label>
               <label class="lf-campo"><span class="lf-l">Canal</span><select class="flt" id="f-canal"><option value="">Todos los canales</option></select></label>
               <label class="lf-campo"><span class="lf-l">Estado</span><select class="flt" id="f-estado"><option value="">Todos los estados</option></select></label>
               <label class="lf-campo"><span class="lf-l">Asesor</span><select class="flt" id="f-asesor"><option value="">Todos los asesores</option></select></label>
@@ -11750,6 +11753,28 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   <div class="sheet-title">Conversación con la IA</div>
   <div class="csub" id="conv-lead-canal" style="margin-bottom:12px"></div>
   <div id="conv-body"></div>
+</div>
+
+<div class="sheet" id="pegar-chat-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Pegar chat de WhatsApp</div>
+  <div class="csub" style="margin-bottom:10px">En WhatsApp: mantené apretado un mensaje, seleccioná varios y «Copiar». La IA llena la ficha; vos elegís qué se aplica.</div>
+  <textarea id="pc-texto" class="ei" rows="7" maxlength="20000" placeholder="Pegá acá la conversación…"></textarea>
+  <button class="dbtn" id="pc-leer" type="button" style="width:100%;margin-top:8px"><i class="fas fa-wand-magic-sparkles"></i> Leer chat</button>
+  <div id="pc-resultado" style="margin-top:12px"></div>
+  <div class="edit-err" id="pc-err"></div>
+</div>
+
+<div class="sheet" id="texto-ia-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Respuesta sugerida</div>
+  <div class="csub" style="margin-bottom:10px">Armada con el tarifario real del destino. Revisala antes de mandarla.</div>
+  <textarea id="tia-texto" class="ei" rows="12"></textarea>
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button class="dbtn gh" id="tia-copiar" type="button" style="flex:1"><i class="fas fa-copy"></i> Copiar</button>
+    <button class="dbtn" id="tia-wa" type="button" style="flex:1"><i class="fab fa-whatsapp"></i> Abrir WhatsApp</button>
+  </div>
+  <div class="edit-err" id="tia-err"></div>
 </div>
 
 <!-- Lightbox de fotos -->

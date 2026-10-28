@@ -59,6 +59,7 @@ const CSS = `
 .ab-anular{margin:7px 0 0;padding:0;border:0;background:none;color:var(--danger);font-size:11px;font-weight:700;cursor:pointer}
 .ab-aviso{margin:0 0 14px;padding:9px 11px;border:1px solid var(--amber);border-radius:10px;font-size:11px;color:var(--txt)}
 .ab-err{margin:11px 0 0;font-size:11px;color:var(--danger);min-height:0}
+.ab-ia{margin:7px 0 0;font-size:11.5px;color:var(--muted)}
 .ab-vacia{padding:14px;border:1px dashed var(--line2);border-radius:10px;font-size:12px;color:var(--muted)}
 .ab-fila-acc{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:7px}
 .ab-mini{font-size:10px;font-weight:700;padding:4px 8px;border-radius:7px;border:1px solid var(--line2);background:var(--panel);color:var(--ink);cursor:pointer}
@@ -76,7 +77,7 @@ export function crearAbonos(c) {
   const mensaje = e => ERRORES[e?.message || e] || (e?.message || e) || 'No se pudo completar la operación';
   const panel = () => document.querySelector('[data-rv-panel="abonos"]');
   const miUid = () => String(c.usuario() || '');
-  let est = { reservaId: null, datos: null, token: 0, metodo: '', moneda: 'USD', archivo: null, guardando: false, formAbierto: false };
+  let est = { reservaId: null, datos: null, token: 0, tokenIA: 0, metodo: '', moneda: 'USD', archivo: null, guardando: false, formAbierto: false };
 
   function inyectarCss() {
     if (document.getElementById('ab-css')) return;
@@ -103,7 +104,7 @@ export function crearAbonos(c) {
     p.oninput = e => {
       if (e.target.id === 'ab-monto' || e.target.id === 'ab-moneda') actualizarTasa();
     };
-    p.onchange = e => { if (e.target.id === 'ab-file') { est.archivo = e.target.files?.[0] || null; } };
+    p.onchange = e => { if (e.target.id === 'ab-file') { est.archivo = e.target.files?.[0] || null; if (est.archivo) leerComprobante(est.archivo); } };
     return true;
   }
   function kpis(d) {
@@ -135,6 +136,7 @@ export function crearAbonos(c) {
       <label class="fl" for="ab-nota">Nota (opcional)</label><textarea class="ei" id="ab-nota" maxlength="2000" rows="2"></textarea>
       <label class="fl" for="ab-file">Captura del comprobante del pago</label>
       <input class="ei" id="ab-file" type="file" accept="image/jpeg,image/png,image/webp">
+      <p class="ab-ia" id="ab-ia" hidden></p>
       <p class="ab-err" id="ab-err"></p>
       <div class="ab-acciones">
         <button class="dbtn save" type="button" data-ab-accion="guardar"><i class="fas fa-floppy-disk"></i> Registrar abono</button>
@@ -178,6 +180,29 @@ export function crearAbonos(c) {
     if (moneda !== 'VES') return;
     const eq = document.getElementById('ab-usd');
     if (eq) eq.textContent = !monto || !tasa ? '—' : usd(monto / tasa);
+  }
+  // La captura ya es obligatoria: se aprovecha para prellenar (EF analizar-comprobante).
+  // Solo completa lo que está vacío; nunca registra nada.
+  async function leerComprobante(archivo) {
+    const aviso = document.getElementById('ab-ia'); if (!aviso) return;
+    const token = ++est.tokenIA;
+    aviso.hidden = false; aviso.textContent = 'Leyendo el comprobante…';
+    const imagen = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.onerror = () => r(null); fr.readAsDataURL(archivo); });
+    if (!imagen) { aviso.hidden = true; return; }
+    const { data, error } = await sb.functions.invoke('analizar-comprobante', { body: { reserva_id: est.reservaId, mime: archivo.type || 'image/jpeg', imagen } });
+    if (token !== est.tokenIA || !document.getElementById('ab-ia')) return;
+    if (error || !data?.ok) { aviso.textContent = 'No se pudo leer: completá los datos a mano.'; return; }
+    const d = data.datos || {}, puestos = [];
+    const monto = document.getElementById('ab-monto'), moneda = document.getElementById('ab-moneda'), ref = document.getElementById('ab-ref');
+    if (d.moneda && moneda && !monto.value) { moneda.value = d.moneda; est.moneda = d.moneda; puestos.push('moneda'); }
+    if (d.monto != null && monto && !monto.value) { monto.value = d.monto; puestos.push('monto'); }
+    if (d.referencia && ref && !ref.value) { ref.value = d.referencia; puestos.push('referencia'); }
+    if (d.metodo && METODOS.includes(d.metodo)) {
+      est.metodo = d.metodo; puestos.push('método');
+      panel()?.querySelectorAll('[data-ab-accion="metodo"]').forEach(x => x.classList.toggle('on', x.dataset.metodo === est.metodo));
+    }
+    actualizarTasa();
+    aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revisalo antes de registrar.` : 'No se encontraron datos en la captura.';
   }
   function abrirForm() {
     est.metodo = est.metodo || 'Zelle'; est.moneda = 'USD'; est.archivo = null; est.formAbierto = true;
