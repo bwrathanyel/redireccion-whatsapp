@@ -938,9 +938,12 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
    El drawer se ensancha a 560px solo en escritorio (bloque min-width:761px) y
    el móvil tiene su propio bloque debajo: ninguno pisa al otro. */
 .tg-cab{display:flex;flex-direction:column;gap:14px;margin-bottom:16px}
-.tg-mosaico{position:relative;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:4px;height:208px;border-radius:16px;overflow:hidden;background:var(--panel-solid)}
+.tg-mosaico{position:relative;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:4px;height:240px;border-radius:16px;overflow:hidden;background:var(--panel-solid)}
 .tg-mosaico-1{grid-template-columns:1fr}
-.tg-mosaico img{width:100%;height:100%;object-fit:cover;display:block;cursor:pointer;transition:opacity var(--dur-rapida)}
+/* La foto se ve entera (contain); el hueco lo llena la misma foto difuminada. */
+.tg-foto{position:relative;overflow:hidden;min-width:0}
+.tg-foto::before{content:"";position:absolute;inset:0;background:var(--bg) center/cover no-repeat;filter:blur(18px) brightness(.7);transform:scale(1.15)}
+.tg-mosaico img{position:relative;width:100%;height:100%;object-fit:contain;display:block;cursor:pointer;transition:opacity var(--dur-rapida)}
 .tg-mosaico img:hover{opacity:.92}
 .tg-verfotos{position:absolute;right:10px;bottom:10px;height:30px;padding:0 12px;border-radius:999px;border:0;background:var(--velo-foto);color:var(--sobre-foto);font-family:inherit;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .drawer:has(.tg-mosaico) .dclose{top:34px;right:34px;width:40px;height:40px;border-radius:999px;border:0;background:var(--velo-foto);color:var(--sobre-foto);z-index:2}
@@ -960,6 +963,11 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .tg-datos{display:flex;flex-wrap:wrap;gap:8px}
 .tg-dato{min-height:30px;padding:0 11px;border-radius:999px;border:1px solid var(--line2);display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--txt)}
 .tg-dato i{font-size:11px;color:var(--muted)}
+.tg-pdf{background:none;font-family:inherit;cursor:pointer;color:var(--accent);border-color:var(--accent)}
+.tg-pdf i{color:var(--accent)}
+.tg-pdf:hover{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.tg-pdf:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tg-pdf:disabled{opacity:.6;cursor:progress}
 .tg-k{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .tg-desc{margin-bottom:12px}
 .tg-desc .ddesc-t{font-size:13.5px;line-height:1.55;color:var(--txt)}
@@ -1046,7 +1054,7 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .tg-nota-fuerte{color:var(--amber);font-weight:600}
 @media(min-width:761px){.drawer:has(.tg-cab){width:900px;height:calc(100vh / var(--zoom));height:calc(100dvh / var(--zoom))}}
 @media(max-width:760px){
-  .tg-mosaico{height:168px;gap:3px;border-radius:14px}
+  .tg-mosaico{height:200px;gap:3px;border-radius:14px}
   .drawer:has(.tg-mosaico) .dclose{top:30px;right:28px;width:44px;height:44px}
   .tg-titular{gap:12px}
   .tg-nombre{font-size:20px}

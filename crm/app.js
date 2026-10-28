@@ -22509,18 +22509,20 @@ function aplicarTabsOcultas() {
 }
 // Último TARIFARIO NACIONAL de BT Travel tal cual llegó al Drive (Edge Function tarifario-bt-pdf).
 // La ventana se abre antes del await para que no la bloqueen; la primera vez por versión tarda (copia ~12 MB del Drive).
-async function abrirPdfBtTravel(btn) {
+// Con productoId devuelve solo las páginas de ese hotel (extracto chico, cacheado por versión).
+async function abrirPdfBtTravel(btn, productoId) {
   if (btn.disabled) return;
   const w = window.open('', '_blank');
   btn.disabled = true; btn.classList.add('cargando');
-  const { data, error } = await sb.functions.invoke('tarifario-bt-pdf', { body: {} });
+  const { data, error } = await sb.functions.invoke('tarifario-bt-pdf', { body: productoId ? { producto_id: productoId } : {} });
   btn.disabled = false; btn.classList.remove('cargando');
   if (!error && data?.ok && data.url) {
     if (w) { w.opener = null; w.location = data.url; } else window.open(data.url, '_blank', 'noopener');
     return;
   }
   w?.close();
-  errToast(data?.error === 'sin_tarifario' ? 'Todavía no llegó ningún tarifario de BT Travel al Drive' : 'No se pudo abrir el tarifario de BT Travel');
+  errToast(data?.error === 'sin_tarifario' ? 'Todavía no llegó ningún tarifario de BT Travel al Drive'
+    : data?.error === 'sin_paginas' ? 'Este hotel no figura en el tarifario de BT Travel activo' : 'No se pudo abrir el tarifario de BT Travel');
 }
 function setupTarAdmin() {
   const btn = document.getElementById('tar-admin-btn');
@@ -25766,12 +25768,14 @@ function tgCabeceraHtml(x, nombre, fotos, n) {
     unidadHotel === 'habitacion_noche' ? 'por habitación por noche' : unidadHotel === 'persona_noche' ? 'por persona por noche' : ''].filter(Boolean).join(' · ');
   const chip = (ic, txt) => `<span class="tg-dato"><i class="fas ${ic}"></i>${esc(txt)}</span>`;
   const datos = [b?.check_in ? chip('fa-clock', 'Check-in ' + b.check_in) : '', b?.check_out ? chip('fa-clock-rotate-left', 'Check-out ' + b.check_out) : '',
-    precioChip ? chip('fa-coins', precioChip) : ''].filter(Boolean).join('');
+    precioChip ? chip('fa-coins', precioChip) : '',
+    x.tipo === 'hotel' && vivas.length && ROL !== 'marketing' ? '<button type="button" class="tg-dato tg-pdf" data-tar-pdf><i class="fas fa-file-pdf"></i>Ver en tarifario BT Travel</button>' : ''].filter(Boolean).join('');
+  const foto = (src, i, alt) => `<div class="tg-foto" style="--bg:url('${esc(src.replace(/'/g, '%27'))}')"><img src="${esc(src)}" alt="${esc(alt)}"${i ? ' loading="lazy"' : ''} data-drawer-foto="${i}"></div>`;
   const sub = [x.destino, TAR_TAB_LABEL[x.tipo] || TAR_TAB_LABEL[tarTab], vivas.length ? `${vivas.length} tarifa${vivas.length > 1 ? 's' : ''} vigente${vivas.length > 1 ? 's' : ''}` : 'Sin tarifas vigentes'].filter(Boolean).join(' · ');
   return `<div class="tg-cab">
     ${fotos.length ? `<div class="tg-mosaico${fotos.length > 1 ? '' : ' tg-mosaico-1'}">
-      <img src="${esc(fotos[0])}" alt="${esc(nombre)}" data-drawer-foto="0">
-      ${fotos[1] ? `<img src="${esc(fotos[1])}" alt="" loading="lazy" data-drawer-foto="1">` : ''}
+      ${foto(fotos[0], 0, nombre)}
+      ${fotos[1] ? foto(fotos[1], 1, '') : ''}
       ${n > 1 ? `<button type="button" class="tg-verfotos" data-drawer-foto="0"><i class="fas fa-images"></i> Ver ${n} fotos</button>` : ''}
     </div>` : ''}
     <div class="tg-titular">
@@ -26364,7 +26368,7 @@ function openProductoDrawer(x, tipoForzado = null, solicitud = null) {
   // «Políticas del hotel» en caja. Promos y fichas sin tarifas quedan como antes.
   const conTabla = !esPromo && !!carpeta;
   document.getElementById('drawerContent').innerHTML = `
-    ${conTabla ? tgCabeceraHtml(x, nombre, fotos.length ? fotosRotadas(x, 640).slice(0, 2) : [], fotos.length) : `<div class="dhead dhead-tar">${portada ? '' : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
+    ${conTabla ? tgCabeceraHtml(x, nombre, fotos.length ? [fotosRotadas(x, 1280)[0], fotosRotadas(x, 640)[1]].filter(Boolean) : [], fotos.length) :`<div class="dhead dhead-tar">${portada ? '' : `<div class="dava" style="background:${ADV_COLORS[0]}22;color:${ADV_COLORS[0]}"><i class="fas fa-book-open"></i></div>`}<div><div class="dn">${esc(nombre)}</div>
       <div class="dm">${esc(subtitulo)}</div></div></div>`}
     ${portada && !conTabla ? `<div class="dgaleria">
       <img class="dportada" src="${esc(portada)}" alt="" data-drawer-foto="0">
@@ -26428,6 +26432,7 @@ function openProductoDrawer(x, tipoForzado = null, solicitud = null) {
   document.getElementById('tar-editar-ficha')?.addEventListener('click', () => tarAbrirEditorFicha(x.id));
   document.getElementById('tar-editar-promo')?.addEventListener('click', () => tarAbrirEditorPromo(x.id));
   document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotosOrig, +el.dataset.drawerFoto)));
+  document.querySelector('#drawerContent [data-tar-pdf]')?.addEventListener('click', e => abrirPdfBtTravel(e.currentTarget, x.id));
   tarActivarSeleccion();
   tarWireDescClamp();
   // Las habitaciones se piden para todos los roles (la RLS le da al no-admin
