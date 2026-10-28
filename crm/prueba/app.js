@@ -4,6 +4,7 @@ import { crearAbonos } from './abonos.js';
 import { crearPropuestas } from './propuestas.js';
 import { crearBandejaWa } from './whatsapp-bandeja.js';
 import { crearTareas } from './tareas.js';
+import { crearCampanasWa } from './wa-campanas.js';
 
 const SUPABASE_URL = 'https://demo.invalid';
 const FOTOS_BASE = 'prueba-fotos/';
@@ -3417,6 +3418,7 @@ function setupPostventa() {
     if (d) { PV_WA_DIAS = Number(d.dataset.waDias); pvWhatsappCargar(); return; }
     const f = e.target.closest('button[data-wa-filtro]');
     if (f) { PV_WA_FILTRO = f.dataset.waFiltro; pvWhatsappRender(); return; }
+    if (e.target.closest('#pv-wa-campanas')) { pvCampanas().abrir(); return; }
     const b = e.target.closest('button[data-wa-lead]');
     if (!b) return;
     b.disabled = true;
@@ -3442,6 +3444,8 @@ const PV_WA_ELEGIBLE = ['Elegible', 'fa-circle-check', 'var(--green)'];
 const PV_WA_PRESETS = [0, 15, 30, 60, 90];
 let PV_RT_TIMER = null;
 let PV_WA_DIAS = 30, PV_WA_FILTRO = 'todos', PV_WA_BUSCAR = '', PV_WA_DATA = null;
+let PV_CAMPANAS = null;
+const pvCampanas = () => PV_CAMPANAS ||= crearCampanasWa({ sb, esc, ok: okToast, error: errToast, origen: 'reservas', rol: ROL, etapaTxt: k => (PV_ETAPAS[k] || [k])[0] });
 const pvWaMotivo = k => k ? (PV_WA_MOTIVOS[k] || [k, 'fa-circle-minus', 'var(--muted)']) : PV_WA_ELEGIBLE;
 async function pvWhatsappCargar() {
   const body = document.getElementById('pv-wa-body');
@@ -3466,7 +3470,7 @@ function pvWhatsappRender() {
   body.innerHTML = `
     <div class="pv-wa-head"><div><h2>Clientes con venta listos para WhatsApp</h2>
       <div class="ria-sub">Elegible = teléfono válido, viaje terminado hace al menos los días elegidos (o cierre, si no hay fecha de viaje), sin incidencia abierta, sin contacto reciente y sin haber pedido que no lo contacten.</div></div>
-      <span class="pv-wa-aviso"><i class="fas fa-lock"></i>Sin envíos: faltan plantillas aprobadas en Meta</span></div>
+      <button class="btn-sm lt-primario" type="button" id="pv-wa-campanas"><i class="fas fa-bullhorn"></i> Campañas por WhatsApp</button></div>
     <div class="pv-wa-kpis">
       ${kpi('Con venta', r.vendidos || 0, 'clientes con venta cerrada', 'fa-bag-shopping', 'var(--txt)')}
       ${kpi('Elegibles', r.elegibles || 0, `${pct}% del total`, 'fa-circle-check', 'var(--green)')}
@@ -15186,7 +15190,7 @@ function setupLyra() {
   const input = document.getElementById('lyra-input');
   // Mientras habla, un clic en el orbe la calla en vez de abrir/cerrar el chat.
   ['lyra-dock', 'lyra-fab'].forEach(id => { document.getElementById(id).onclick = () => (LYRA.voz || LYRA.cadena ? lyraCortar() : lyraAlternar()); });
-  document.getElementById('lyra-cerrar').onclick = lyraCerrar;
+  document.getElementById('lyra-cerrar').onclick = () => lyraCerrar();
   document.getElementById('lyra-send').onclick = e => (e.currentTarget.dataset.modo === 'mic' ? lyraGrabar() : lyraEnviar());
   document.getElementById('lyra-globo').onclick = () => lyraAbrir();
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); lyraEnviar(); } });
@@ -15201,8 +15205,8 @@ function setupLyra() {
     if (h) { LYRA.humor = Number(h.dataset.lyraHumor); lyraGuardar('humor', LYRA.humor); lyraPintarMenu(); lyraExpr(['neutral', 'guino', 'sarcastica'][LYRA.humor], 1600); }
     if (e.target.closest('#lyra-limpiar')) { asisChatHistory = []; lyraGuardarHistorial(); lyraPintarHistorial(); lyraMenu(false); }
     if (e.target.closest('#lyra-reubicar')) { lyraMenu(false); lyraReubicar(); }
-    if (e.target.closest('#lyra-ver-acciones')) { lyraMenu(false); lyraCerrar(); activateSection('asistente'); }
-    if (e.target.closest('#lyra-ver-memoria')) { lyraMenu(false); lyraCerrar(); activateSection('asistente'); document.getElementById('asis-mem')?.scrollIntoView({ block: 'start' }); }
+    if (e.target.closest('#lyra-ver-acciones')) { lyraMenu(false); lyraTrasCerrar(() => activateSection('asistente')); }
+    if (e.target.closest('#lyra-ver-memoria')) { lyraMenu(false); lyraTrasCerrar(() => { activateSection('asistente'); document.getElementById('asis-mem')?.scrollIntoView({ block: 'start' }); }); }
   });
   document.getElementById('lyra-silencio').onchange = e => { LYRA.silencio = e.target.checked; lyraGuardar('silencio', LYRA.silencio); lyraEstado(); };
   LYRA.escuchaOn = LYRA.mic && lyraLeer('escucha', false) === true;
@@ -15241,8 +15245,6 @@ function setupLyra() {
     if (!LYRA.raf) LYRA.raf = requestAnimationFrame(lyraSeguirCursor);
   }, { passive: true });
   window.addEventListener('resize', lyraPosicionar, { passive: true });
-  window.addEventListener('offline', () => lyraDecir(lyraAlAzar(LYRA_FRASES.sinRed), { expr: 'preocupada', forzar: true }));
-  window.addEventListener('online', () => lyraDecir(lyraAlAzar(LYRA_FRASES.conRed), { expr: 'feliz', forzar: true }));
   setInterval(() => {
     if (!LYRA.dormida && !LYRA.abierta && !LYRA.ocupada && Date.now() - LYRA.actividad > LYRA_SUENO_MS) lyraDormir();
   }, 30000);
@@ -15267,6 +15269,8 @@ function lyraPosicionar() {
 function lyraAbrir() {
   if (!LYRA.lista) return;
   LYRA.abierta = true;
+  // En el celular el panel es una hoja: el gesto/botón de atrás la cierra.
+  if (lyraEsMovil() && !LYRA.nav) { LYRA.nav = { type: 'lyra' }; navPush(LYRA.nav); }
   lyraCerrarGlobo(); lyraPosicionar();
   lyraAplicarCaja(lyraLeer('caja', null));
   const p = document.getElementById('lyra-panel');
@@ -15280,9 +15284,12 @@ function lyraAbrir() {
   log.scrollTop = log.scrollHeight;
   if (!matchMedia('(max-width:760px)').matches) setTimeout(() => document.getElementById('lyra-input').focus(), 80);
 }
-function lyraCerrar() {
+// desdeNav: lo cerró el popstate, la entrada de historial ya se consumió.
+function lyraCerrar(desdeNav) {
   if (!LYRA.abierta) return;
   LYRA.abierta = false;
+  if (LYRA.nav && !desdeNav) { if (NAV_STACK.at(-1) === LYRA.nav) navConsume(); else navQuitar(LYRA.nav); }
+  LYRA.nav = null;
   lyraMenu(false);
   if (LYRA.rec) lyraPararGrabacion(false);
   const p = document.getElementById('lyra-panel');
@@ -15292,6 +15299,29 @@ function lyraCerrar() {
   ['lyra-dock', 'lyra-fab'].forEach(id => document.getElementById(id).setAttribute('aria-expanded', 'false'));
 }
 function lyraAlternar() { LYRA.abierta ? lyraCerrar() : lyraAbrir(); }
+// Navegar recién cuando el history.back del cierre terminó: si no, deshace la navegación.
+function lyraTrasCerrar(fn) {
+  if (!LYRA.nav || NAV_STACK.at(-1) !== LYRA.nav) { lyraCerrar(); fn(); return; }
+  let hecho = false;
+  const ir = () => { if (hecho) return; hecho = true; fn(); };
+  window.addEventListener('popstate', ir, { once: true });
+  setTimeout(ir, 400);
+  lyraCerrar();
+}
+// Celular: arrastrar la cabecera hacia abajo cierra la hoja.
+function lyraDeslizarCerrar(e) {
+  const p = document.getElementById('lyra-panel'), y0 = e.clientY;
+  let dy = 0;
+  p.style.transition = 'none';
+  const mover = ev => { dy = Math.max(0, ev.clientY - y0); p.style.transform = `translateY(${dy}px)`; };
+  const soltar = () => {
+    window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); window.removeEventListener('pointercancel', soltar);
+    p.style.transition = ''; p.style.transform = '';
+    if (dy > 90) lyraCerrar();
+  };
+  window.addEventListener('pointermove', mover, { passive: true });
+  window.addEventListener('pointerup', soltar); window.addEventListener('pointercancel', soltar);
+}
 
 // ---- panel movible y redimensionable (solo escritorio). La caja se guarda en
 // px CSS; k convierte px de pantalla a px CSS porque body tiene zoom.
@@ -15386,7 +15416,7 @@ function lyraArrastrar(e, dir) {
 function lyraSetupMovible() {
   const p = document.getElementById('lyra-panel'), head = p.querySelector('.lyra-head');
   p.insertAdjacentHTML('beforeend', ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].map(d => `<span class="lyra-rz" data-rz="${d}" aria-hidden="true"></span>`).join(''));
-  head.addEventListener('pointerdown', e => { if (!e.target.closest('button')) lyraArrastrar(e, null); });
+  head.addEventListener('pointerdown', e => { if (!e.target.closest('button')) (lyraEsMovil() ? lyraDeslizarCerrar(e) : lyraArrastrar(e, null)); });
   head.addEventListener('dblclick', e => { if (!e.target.closest('button')) lyraReubicar(); });
   p.addEventListener('pointerdown', e => { const h = e.target.closest('[data-rz]'); if (h) lyraArrastrar(e, h.dataset.rz); });
   window.addEventListener('resize', () => { if (LYRA.abierta) lyraAplicarCaja(lyraLeer('caja', null)); }, { passive: true });
@@ -15618,7 +15648,6 @@ function lyraDormir() { LYRA.dormida = true; lyraMirar(0, 0.4); lyraExpr('dormid
 function lyraDespertar() {
   LYRA.dormida = false;
   lyraExpr('sorprendida', 900); lyraEstado();
-  if (Math.random() < 0.5) setTimeout(() => lyraDecir(lyraAlAzar(LYRA_FRASES.despierta), { expr: 'guino' }), 900);
 }
 
 // ---- globitos: lo que dice sola, con topes
@@ -15647,7 +15676,8 @@ function lyraCerrarGlobo() {
   g.classList.remove('show');
   LYRA.tGlobo = setTimeout(() => { g.hidden = true; }, 260);
 }
-// Llamada desde activateSection: contexto para el chat y, a veces, un comentario.
+// Llamada desde activateSection: contexto para el chat. Sin comentarios sueltos:
+// los globos solo salen como respuesta a algo que pidió el usuario.
 // Con scroll o cambio de sección el orbe se pausa un momento: cada tick de sus
 // animaciones obliga a un frame completo del documento y bajaba a la mitad los fps.
 // La clase va en el dock/FAB (no en body: invalidaría estilos de todo).
@@ -15669,9 +15699,6 @@ function lyraQuieta() {
 function lyraSeccion(sec) {
   lyraQuieta();
   lyraUsoMarcar(sec);
-  if (!LYRA.lista) return;
-  const frases = LYRA_FRASES.seccion[sec];
-  if (frases && Math.random() < 0.3) setTimeout(() => lyraDecir(lyraAlAzar(frases), { expr: Math.random() < 0.5 ? 'sarcastica' : 'feliz' }), 1200);
 }
 
 // ---- chat
@@ -15781,7 +15808,7 @@ function lyraPintarCotizacion(b) {
     try { await lyraDescargarPdf(b); } catch (err) { console.error('lyraDescargarPdf', err); errToast('No se pudo armar el PDF'); }
     finally { btn.disabled = false; }
   });
-  if (b.voucher_datos && typeof b.voucher_datos === 'object') boton('file-signature', 'Prellenar voucher', () => { lyraCerrar(); prellenarVoucherDesdeChat(b.voucher_datos); });
+  if (b.voucher_datos && typeof b.voucher_datos === 'object') boton('file-signature', 'Prellenar voucher', () => lyraTrasCerrar(() => prellenarVoucherDesdeChat(b.voucher_datos)));
   if (acciones.children.length) fila(acciones);
   log.scrollTop = log.scrollHeight;
 }
@@ -32372,6 +32399,7 @@ window.addEventListener('popstate', () => {
   else if (top.type === 'menu') cerrarMenuMovil('fromNav');
   else if (top.type === 'seleccion') top.limpiar?.();
   else if (top.type === 'tk-panel') top.cerrar?.();
+  else if (top.type === 'lyra') lyraCerrar(true);
 });
 
 /* ---------- Nav ---------- */

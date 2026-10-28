@@ -80,6 +80,8 @@
   if (!ss('prueba:rol')) try { Object.keys(localStorage).filter(k => k.startsWith('prueba:')).forEach(k => localStorage.removeItem(k.slice(7))); } catch { /* sin storage */ }
 
   /* ---------- Estilos ---------- */
+  // Sin movimiento (reduced-motion o paleta «sereno»): el foco aparece en su lugar y la flecha queda quieta.
+  const QUIETO = s => `${s} #prueba-spot,${s} #prueba-spot.pp-fijo{transition:opacity .15s}${s} #prueba-flecha .pf-linea{transition:none}${s} #prueba-flecha.pp-listo g{animation:none}`;
   const css = document.createElement('style');
   css.textContent = `
 #prueba-franja{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99990;padding:3px 12px;border-radius:0 0 10px 10px;font:600 11.5px/1.4 system-ui,sans-serif;letter-spacing:.02em;color:#1a1200;background:#ffb020;box-shadow:0 4px 14px -6px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap}
@@ -119,8 +121,17 @@ body.prueba-guiada:not(.prueba-lyra) #lyra-dock,body.prueba-guiada:not(.prueba-l
 body:is(.menu-abierto,.chat-abierto,.lyra-abierta) #prueba-panel,body:has(:is(.sheet,.drawer,.mfs).open) #prueba-panel{display:none}
 #prueba-candado{display:none;margin:12px 8px 0;padding:9px 10px;border-radius:10px;border:1px dashed var(--line2,rgba(255,255,255,.2));color:var(--muted,#999);font:12.5px/1.4 system-ui,sans-serif}
 body.prueba-guiada #prueba-candado{display:block}
-.prueba-nuevo{border-radius:10px;animation:pp-brillo 1.2s ease-in-out 4}
-@keyframes pp-brillo{50%{box-shadow:0 0 0 3px #ffb020,0 0 18px 4px rgba(255,176,32,.45)}}
+#prueba-spot{position:fixed;z-index:99975;pointer-events:none;opacity:0;border-radius:12px;box-shadow:0 0 0 2px #ffb020,0 0 0 9999px rgba(8,8,12,.45);transition:opacity .4s ease,top .6s var(--pp-ease),left .6s var(--pp-ease),width .6s var(--pp-ease),height .6s var(--pp-ease),border-radius .6s var(--pp-ease);--pp-ease:cubic-bezier(.22,1,.36,1)}
+#prueba-spot.on{opacity:1}
+#prueba-spot.pp-fijo{transition:opacity .4s ease}
+#prueba-flecha{position:fixed;inset:0;width:100%;height:100%;z-index:99978;pointer-events:none;overflow:visible;opacity:0;transition:opacity .3s ease}
+#prueba-flecha.on{opacity:1}
+#prueba-flecha path{fill:none;stroke:#ffb020;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+#prueba-flecha .pf-linea{transition:stroke-dashoffset .55s cubic-bezier(.22,1,.36,1)}
+#prueba-flecha .pf-punta{opacity:0;transition:opacity .25s ease}
+#prueba-flecha.pp-listo .pf-punta{opacity:1}
+#prueba-flecha.pp-listo g{animation:pp-vaiven 1.2s ease-in-out infinite alternate}
+@keyframes pp-vaiven{to{transform:translate(var(--dx,0),var(--dy,0))}}
 #prueba-inicio{position:fixed;inset:0;z-index:99970;display:flex;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));overflow:auto;background:var(--bg,#0e0e12);color:var(--txt,#eee);font:15px/1.5 system-ui,sans-serif}
 #prueba-inicio .pi-caja{width:min(440px,100%);margin:auto;padding:28px 24px 22px;border-radius:20px;background:var(--panel-solid,#1b1b1f);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 30px 60px -20px rgba(0,0,0,.8);text-align:center}
 #prueba-inicio .pi-ico{font-size:42px;line-height:1;margin-bottom:8px}
@@ -161,7 +172,8 @@ body.prueba-guiada #prueba-candado{display:block}
   #prueba-panel p{font-size:14px;margin-bottom:10px}
   #prueba-panel button,#prueba-modal button{min-height:44px;padding:8px 14px;font-size:14px}
 }
-@media (prefers-reduced-motion:reduce){.prueba-nuevo{animation:none;box-shadow:0 0 0 3px #ffb020}#prueba-panel,#prueba-panel.festejo,#prueba-panel .pp-ico,#prueba-panel .pp-barra i{animation:none}}`;
+@media (prefers-reduced-motion:reduce){#prueba-panel,#prueba-panel.festejo,#prueba-panel .pp-ico,#prueba-panel .pp-barra i{animation:none}${QUIETO('')}}
+${QUIETO(':root[data-paleta="sereno"]')}`;
   document.head.appendChild(css);
 
   /* ---------- Franja ---------- */
@@ -272,35 +284,153 @@ body.prueba-guiada #prueba-candado{display:block}
     document.body.classList.toggle('prueba-lyra', ok.has('lyra'));
     if (!document.getElementById('prueba-candado')) nav.insertAdjacentHTML('beforeend', '<div id="prueba-candado">🔒 Se abren más secciones a medida que avanzas.</div>');
   }
-  const brilla = x => { x.classList.remove('prueba-nuevo'); void x.offsetWidth; x.classList.add('prueba-nuevo'); setTimeout(() => x.classList.remove('prueba-nuevo'), 5000); };
+  /* ---------- Guía: foco que se desliza, flecha y scroll suave ---------- */
+  const quieto = () => matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.paleta === 'sereno';
+  const pausa = ms => new Promise(ok => setTimeout(ok, quieto() ? 0 : ms));
+  const limita = (v, a, b) => Math.min(Math.max(v, a), b);
+  const spot = document.createElement('div'), flecha = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  spot.id = 'prueba-spot'; flecha.id = 'prueba-flecha';
+  [spot, flecha].forEach(x => x.setAttribute('aria-hidden', 'true'));
+  flecha.innerHTML = '<g><path class="pf-linea"/><path class="pf-punta"/></g>';
+  let turno = 0, objetivo = null, conFlecha = false, apagaEn = 0, ultimoScroll = 0, rafMide = 0;
+  const panelGuia = () => [...document.querySelectorAll('#prueba-pres,#prueba-panel')].find(p => p.getClientRects().length);
+  // Lo que se ve del objetivo, con aire alrededor y recortado a la pantalla.
+  function caja(el) {
+    const r = el.getBoundingClientRect(), x = Math.max(r.left - 6, 4), y = Math.max(r.top - 6, 4), w = Math.min(r.right + 6, innerWidth - 4) - x, h = Math.min(r.bottom + 6, innerHeight - 4) - y;
+    return r.width && r.height && w > 8 && h > 8 ? { x, y, w, h } : null;
+  }
+  function apaga() { turno++; objetivo = null; conFlecha = false; clearTimeout(apagaEn); spot.classList.remove('on'); flecha.classList.remove('on', 'pp-listo'); }
+  const corta = () => { turno++; };
+  // Cuando el objetivo cambia de lugar por scroll se lo sigue pegado; si se movió solo (se abrió algo), el foco viaja.
+  function coloca(viaja) {
+    if (!objetivo) return;
+    if (!objetivo.isConnected) { objetivo = null; spot.classList.remove('on'); flecha.classList.remove('on', 'pp-listo'); return; }
+    const c = caja(objetivo);
+    if (!c) { spot.classList.remove('on'); flecha.classList.remove('on', 'pp-listo'); return; }
+    const salta = !viaja || !spot.classList.contains('on');
+    spot.classList.toggle('pp-fijo', salta);
+    Object.assign(spot.style, { left: c.x + 'px', top: c.y + 'px', width: c.w + 'px', height: c.h + 'px', borderRadius: limita((parseFloat(getComputedStyle(objetivo).borderTopLeftRadius) || 0) + 6, 8, 24) + 'px' });
+    if (salta) void spot.offsetWidth;
+    spot.classList.add('on');
+    if (conFlecha) traza(false);
+  }
+  // Flecha curva desde el borde del panel hasta el borde del objetivo, apuntando a su centro. En el celular va recta.
+  function traza(dibuja) {
+    const p = panelGuia(), c = objetivo && caja(objetivo), g = flecha.firstChild, [linea, punta] = g.children;
+    const nada = () => flecha.classList.remove('on', 'pp-listo');
+    if (!p || !c || c.h > innerHeight * .6) return nada();
+    const r = p.getBoundingClientRect(), cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+    const dx = cx < r.left ? r.left - cx : cx > r.right ? cx - r.right : 0, dy = cy < r.top ? r.top - cy : cy > r.bottom ? cy - r.bottom : 0;
+    if (!dx && !dy) return nada();
+    const vertical = dy >= dx;
+    const ax = vertical ? limita(cx, r.left + 20, r.right - 20) : cx < r.left ? r.left : r.right, ay = vertical ? (cy < r.top ? r.top : r.bottom) : limita(cy, r.top + 20, r.bottom - 20);
+    const L = c.x - 6, R = c.x + c.w + 6, T = c.y - 6, B = c.y + c.h + 6, vx = cx - ax, vy = cy - ay;
+    const k = Math.max(vx ? ((vx > 0 ? L : R) - ax) / vx : -Infinity, vy ? ((vy > 0 ? T : B) - ay) / vy : -Infinity);
+    if (!(k > 0 && k < 1)) return nada();
+    const bx = ax + vx * k, by = ay + vy * k, largo = Math.hypot(bx - ax, by - ay);
+    if (largo < 36) return nada();
+    const ux = (bx - ax) / largo, uy = (by - ay) / largo, sx = ax + ux * 8, sy = ay + uy * 8;
+    const curva = innerWidth <= 760 ? 0 : Math.min(largo * .18, 60) * (ux > 0 ? -1 : 1);
+    const qx = (sx + bx) / 2 - uy * curva, qy = (sy + by) / 2 + ux * curva;
+    const tl = Math.hypot(bx - qx, by - qy) || 1, hx = (bx - qx) / tl, hy = (by - qy) / tl;
+    linea.setAttribute('d', `M${sx} ${sy}Q${qx} ${qy} ${bx} ${by}`);
+    punta.setAttribute('d', `M${bx - hx * 10 - hy * 6} ${by - hy * 10 + hx * 6}L${bx} ${by}L${bx - hx * 10 + hy * 6} ${by - hy * 10 - hx * 6}`);
+    g.style.setProperty('--dx', hx * 4 + 'px'); g.style.setProperty('--dy', hy * 4 + 'px');
+    const len = linea.getTotalLength();
+    linea.style.strokeDasharray = len;
+    if (!dibuja || quieto()) { linea.style.strokeDashoffset = 0; flecha.classList.add('on', 'pp-listo'); return; }
+    flecha.classList.remove('pp-listo');
+    linea.style.transition = 'none'; linea.style.strokeDashoffset = len; flecha.classList.add('on');
+    void linea.getBoundingClientRect(); linea.style.transition = ''; linea.style.strokeDashoffset = 0;
+    const t = turno; setTimeout(() => t === turno && conFlecha && flecha.classList.add('pp-listo'), 500);
+  }
+  function scroller(el) {
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      const o = getComputedStyle(p).overflowY;
+      if ((o === 'auto' || o === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
+    }
+    return null;
+  }
+  // scrollIntoView nativo salta en el celular: scroll propio de 700 ms que deja el objetivo en lo que el panel no tapa.
+  function desliza(el, t) {
+    const s = scroller(el); if (!s) return Promise.resolve();
+    const r = el.getBoundingClientRect(), p = panelGuia()?.getBoundingClientRect();
+    const sr = s === document.body || s === document.documentElement ? { top: 0, bottom: innerHeight } : s.getBoundingClientRect();
+    const arriba = Math.max(sr.top, innerWidth <= 760 ? 72 : 16), abajo = Math.min(sr.bottom, p && p.width > innerWidth * .6 ? p.top - 12 : innerHeight), alto = abajo - arriba;
+    const delta = r.height > alto * .8 ? r.top - arriba - 8 : r.top + r.height / 2 - (arriba + alto / 2);
+    const desde = s.scrollTop, hasta = limita(desde + delta, 0, s.scrollHeight - s.clientHeight);
+    if (Math.abs(hasta - desde) < 4) return Promise.resolve();
+    if (quieto()) { s.scrollTop = hasta; return Promise.resolve(); }
+    return new Promise(ok => {
+      const t0 = performance.now();
+      const paso = ahora => {
+        if (t !== turno) return ok();
+        const k = Math.min((ahora - t0) / 700, 1), e = k < .5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2;
+        s.scrollTop = desde + (hasta - desde) * e;
+        if (k < 1) requestAnimationFrame(paso); else setTimeout(ok, 120);
+      };
+      requestAnimationFrame(paso);
+    });
+  }
+  // No muestra nada hasta que el objetivo existe y quedó quieto (dos medidas iguales): las secciones y la ficha entran animadas.
+  const estable = (busca, t, intentos = 16) => new Promise(ok => {
+    let antes = '';
+    const mira = n => {
+      if (t !== turno) return ok(null);
+      const x = busca(), r = x?.getBoundingClientRect(), firma = r?.width ? [r.top, r.left, r.width, r.height].map(Math.round).join() : '';
+      if (firma && firma === antes) return ok(x);
+      antes = firma;
+      if (!n) return ok(firma ? x : null);
+      setTimeout(() => mira(n - 1), 250);
+    };
+    mira(intentos);
+  });
+  // Coreografía de un paso: espera al objetivo, scroll, el foco viaja, se dibuja la flecha. Un paso nuevo cancela el anterior.
+  async function guiar(busca, { dura = 0 } = {}) {
+    const t = ++turno; clearTimeout(apagaEn);
+    conFlecha = false; flecha.classList.remove('on', 'pp-listo');
+    const el = typeof busca === 'function' ? await estable(busca, t) : busca;
+    if (t !== turno) return false;
+    if (!el) { apaga(); return false; }
+    if (!spot.isConnected) document.body.append(spot, flecha);
+    await desliza(el, t); if (t !== turno) return false;
+    objetivo = el; coloca(true);
+    await pausa(600); if (t !== turno) return false;
+    conFlecha = true; traza(true);
+    await pausa(450); if (t !== turno) return false;
+    if (dura) apagaEn = setTimeout(() => t === turno && apaga(), dura);
+    return true;
+  }
+  const remide = () => { ultimoScroll = performance.now(); if (objetivo && !rafMide) rafMide = requestAnimationFrame(() => { rafMide = 0; coloca(false); }); };
+  addEventListener('scroll', remide, { capture: true, passive: true });
+  addEventListener('resize', remide, { passive: true });
+  setInterval(() => { if (objetivo && performance.now() - ultimoScroll > 300) coloca(true); }, 500);
+  // Tocar la pantalla fuera de la guía es que la persona ya está haciendo el paso: el foco se retira.
+  addEventListener('pointerdown', e => { if (objetivo && !e.target.closest?.('#prueba-panel,#prueba-pres,#prueba-modal,#prueba-portada')) apaga(); }, true);
   // Busca en pantalla el botón o nombre que la misión pide tocar; la sección puede tardar en cargar.
   // El texto primero: offsetParent fuerza layout y se recorre todo el DOM.
-  const buscaTexto = texto => [...document.querySelectorAll('button,summary,a,[role="tab"],[data-nav-tab],b,strong,span')].find(e => e.textContent.trim().replace(/^[^\p{L}]+/u, '').startsWith(texto)
+  const buscaTexto = texto => [...document.querySelectorAll('button,summary,a,[role="tab"],[data-nav-tab],b,strong,span,.ec-nombre')].find(e => e.textContent.trim().replace(/^[^\p{L}]+/u, '').startsWith(texto)
     && e.offsetParent && !e.closest('#prueba-panel,#prueba-modal,#prueba-pres,#sidebar-nav'));
-  function enfoca(texto, intentos = 12) {
-    const x = buscaTexto(texto);
-    if (!x) { if (intentos) setTimeout(() => enfoca(texto, intentos - 1), 300); return; }
-    x.scrollIntoView({ block: 'center', behavior: 'smooth' }); brilla(x.closest('button,summary,a,[role="tab"]') || x);
-  }
+  const enfoca = (texto, opc) => guiar(() => { const x = buscaTexto(texto); return x && (x.closest('button,summary,a,[role="tab"]') || x); }, opc);
   // El menú en el celular está cerrado y algunas secciones cuelgan de un padre: se navega con la función del CRM, no con su click.
-  function destaca(k, ir, foco) {
+  // marca:false navega sin mover el foco (la presentación lo lleva a otro lado).
+  function destaca(k, ir, foco, opc = {}) {
     if (ir && k !== 'lyra') window.__pruebaIr?.(k);
     const fab = document.getElementById('lyra-fab');
     const el = k === 'lyra' ? (fab?.offsetParent ? fab : document.getElementById('lyra-dock')) : document.querySelector(`#sidebar-nav [data-sec="${k}"]`);
-    if (el) {
-      if (ir && (k === 'lyra' || !window.__pruebaIr)) el.click();
-      const padre = el.dataset.padre && document.querySelector(`#sidebar-nav [data-sec="${el.dataset.padre}"]`);
-      [el, padre].filter(Boolean).forEach(brilla);
-    }
-    if (foco) setTimeout(() => enfoca(foco), 300);
+    if (el && ir && (k === 'lyra' || !window.__pruebaIr)) el.click();
+    if (foco) return enfoca(foco, opc);
+    if (!el || opc.marca === false) return Promise.resolve(false);
+    const padre = el.dataset.padre && document.querySelector(`#sidebar-nav [data-sec="${el.dataset.padre}"]`);
+    return guiar(() => [el, padre].find(x => x && caja(x)), opc);
   }
-  window.__pruebaGuia = { destaca, enfoca, buscaTexto, brilla, enLogin, presentando };
+  window.__pruebaGuia = { destaca, enfoca, buscaTexto, guiar, apaga, corta, pausa, quieto, enLogin, presentando };
   function presenta(mi) {
     const k = clave(mi);
     mide('mision_inicio');
     if (estado.vistas.includes(k)) { aplicaGuia(); return pinta(); }
     estado.vistas.push(k); guarda(estado); aplicaGuia();
-    modal([INTROS[k]], mi.sec ? 'Ir ahí' : 'Entendido', () => { destaca(k, !!mi.sec, mi.foco); pinta(); });
+    modal([INTROS[k]], mi.sec ? 'Ir ahí' : 'Entendido', () => { destaca(k, !!mi.sec, mi.foco, { dura: 8000 }); pinta(); });
   }
   function seguir() {
     // En el celular la tarea queda plegada en una línea; se abre tocándola.
@@ -323,7 +453,7 @@ body.prueba-guiada #prueba-candado{display:block}
         if (e.target.closest('header')) { estado.plegado = !estado.plegado; guarda(estado); return pinta(); }
         const b = e.target.closest('button[data-acc]'); if (!b) return;
         const mi = actual();
-        if (b.dataset.acc === 'ir' && mi) { destaca(clave(mi), true, mi.foco); if (esMovil()) { estado.plegado = true; guarda(estado); pinta(); } }
+        if (b.dataset.acc === 'ir' && mi) { destaca(clave(mi), true, mi.foco, { dura: 8000 }); if (esMovil()) { estado.plegado = true; guarda(estado); pinta(); } }
         if (b.dataset.acc === 'seguir') seguir();
         if (b.dataset.acc === 'saltar' && mi) { mide('mision_saltar'); estado.hechas.push(mi.id); guarda(estado); seguir(); }
         if (b.dataset.acc === 'reiniciar' && confirm('¿Empezar de cero? Se borra lo que hiciste en la práctica.')) { mide('mision_reiniciar'); try { sessionStorage.removeItem(CLAVE); } catch { /* nada que limpiar */ } location.reload(); }

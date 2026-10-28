@@ -35,14 +35,17 @@
   ];
   const TEMAS = [...new Set(DIAPOS.map(d => d.tema))].filter(t => t !== 'Fin');
 
+  const QUIETO = s => `${s} #prueba-portada,${s} #prueba-portada .pp-caja{animation:none;transition:none}${s} #prueba-pres .pr-barra i,${s} #prueba-pres .pr-cuerpo{transition:none}`;
   const css = document.createElement('style');
   css.textContent = `
 #prueba-pres{position:fixed;left:16px;bottom:16px;z-index:99980;width:min(400px,calc(100vw - 32px));color:var(--txt,#eee);background:var(--panel-solid,#1b1b1f);border:1px solid var(--line2,rgba(255,255,255,.14));border-radius:16px;box-shadow:0 18px 40px -16px rgba(0,0,0,.7);font:15px/1.5 system-ui,sans-serif;overflow:hidden}
 #prueba-pres header{display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;user-select:none;font-size:13px;color:var(--muted,#aaa)}
 #prueba-pres header b{flex:1;color:var(--txt,#eee);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #prueba-pres .pr-barra{height:4px;background:var(--line2,rgba(255,255,255,.1))}
-#prueba-pres .pr-barra i{display:block;height:100%;background:#ffb020;transition:width .3s}
-#prueba-pres .pr-cuerpo{padding:14px 16px 16px}
+#prueba-pres .pr-barra i{display:block;height:100%;background:#ffb020;transition:width .6s cubic-bezier(.22,1,.36,1)}
+#prueba-pres .pr-cuerpo{padding:14px 16px 16px;transition:opacity .32s ease,transform .32s cubic-bezier(.22,1,.36,1)}
+#prueba-pres .pr-cuerpo.pr-sale{opacity:0;transition-duration:.18s}
+#prueba-pres .pr-cuerpo.pr-oculto{opacity:0;transform:translateY(8px)}
 #prueba-pres h4{margin:0 0 6px;font-size:19px;line-height:1.25}
 #prueba-pres p{margin:0 0 14px;color:var(--muted,#bbb)}
 #prueba-pres .pr-temas{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
@@ -55,8 +58,11 @@
 #prueba-pres .pr-mas{margin-left:auto;border-color:transparent;color:var(--muted,#aaa);text-decoration:underline;padding:8px 6px}
 #prueba-pres .pr-teclas{margin:12px 0 0;font-size:12px;color:var(--muted,#888)}
 #prueba-pres.plegado .pr-cuerpo{display:none}
-#prueba-portada{position:fixed;inset:0;z-index:99985;display:flex;overflow:auto;padding:max(24px,env(safe-area-inset-top)) 24px max(24px,env(safe-area-inset-bottom));background:var(--bg,#0e0e12);color:var(--txt,#eee);font:18px/1.5 system-ui,sans-serif}
-#prueba-portada .pp-caja{width:min(760px,100%);margin:auto;text-align:center}
+#prueba-portada{position:fixed;inset:0;z-index:99985;display:flex;overflow:auto;padding:max(24px,env(safe-area-inset-top)) 24px max(24px,env(safe-area-inset-bottom));background:var(--bg,#0e0e12);color:var(--txt,#eee);font:18px/1.5 system-ui,sans-serif;animation:pr-funde .4s ease;transition:opacity .3s ease}
+#prueba-portada.pr-sale{opacity:0}
+#prueba-portada .pp-caja{width:min(760px,100%);margin:auto;text-align:center;animation:pr-entra .5s cubic-bezier(.22,1,.36,1)}
+@keyframes pr-funde{from{opacity:0}}
+@keyframes pr-entra{from{opacity:0;transform:scale(.98)}}
 #prueba-portada .pp-ico{font-size:clamp(56px,10vw,96px);line-height:1;margin-bottom:18px}
 #prueba-portada small{display:block;margin-bottom:8px;color:#ffb020;font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:14px}
 #prueba-portada h2{margin:0 0 14px;font-size:clamp(32px,6vw,56px);line-height:1.1}
@@ -72,37 +78,39 @@ body:has(#prueba-portada) #prueba-pres{display:none}
   #prueba-pres .pr-teclas{display:none}
   body:has(#prueba-pres:not(.plegado)) .main{padding-bottom:calc(260px + env(safe-area-inset-bottom))}
   body:is(.menu-abierto,.chat-abierto) #prueba-pres,body:has(input:focus,textarea:focus) #prueba-pres{display:none}
-}`;
+}
+@media (prefers-reduced-motion:reduce){${QUIETO('')}}
+${QUIETO(':root[data-paleta="sereno"]')}`;
   document.head.appendChild(css);
 
   let i = Math.min(Math.max(parseInt(ss(CLAVE), 10) || 0, 0), DIAPOS.length - 1);
-  let plegado = false, panel = null, ultimaAccion = -1;
+  // paso: cada diapositiva nueva lo sube y lo que quedó esperando de la anterior se descarta.
+  let plegado = false, panel = null, mostrada = -1, paso = 0;
 
-  const espera = (busca, intentos = 15) => new Promise(ok => {
-    const prueba = n => { const x = busca(); if (x || !n) return ok(x || null); setTimeout(() => prueba(n - 1), 300); };
+  const espera = (busca, t, intentos = 15) => new Promise(ok => {
+    const prueba = n => { if (t !== paso) return ok(null); const x = busca(); if (x || !n) return ok(x || null); setTimeout(() => prueba(n - 1), 300); };
     prueba(intentos);
   });
   const visible = el => el && (el.offsetParent || el.getClientRects().length) ? el : null;
   function cierraFicha() {
     if (document.getElementById('drawer')?.classList.contains('open')) document.getElementById('drawerBg')?.click();
   }
-  async function muestra(d) {
-    if (d.portada || G.enLogin()) return;
+  async function muestra(d, t = paso) {
+    if (d.portada || G.enLogin()) return G.apaga();
+    G.corta();
     if (!d.abre) cierraFicha();
     // El botón de Lyra abre y cierra: solo se toca para cambiar de estado.
     const lyraAbierta = document.body.classList.contains('lyra-abierta');
     if ((d.sec === 'lyra') !== lyraAbierta) { const fab = document.getElementById('lyra-fab'); (fab?.offsetParent ? fab : document.getElementById('lyra-dock'))?.click(); }
-    if (d.sec && d.sec !== 'lyra') G.destaca(d.sec, true);
-    if (d.sec === 'lyra') G.destaca('lyra', false);
+    if (d.sec === 'lyra') return G.destaca('lyra', false);
+    if (d.sec) G.destaca(d.sec, true, null, { marca: false });
     if (d.abre && !document.getElementById('drawer')?.classList.contains('open')) {
-      const x = await espera(() => G.buscaTexto(d.abre));
+      const x = await espera(() => G.buscaTexto(d.abre), t);
+      if (t !== paso) return;
       x?.click();
     }
-    if (d.foco) return setTimeout(() => G.enfoca(d.foco), 350);
-    if (d.sel) {
-      const x = await espera(() => visible(document.querySelector(d.sel)));
-      if (x) { x.scrollIntoView({ block: x.offsetHeight > innerHeight * 0.7 ? 'start' : 'center', behavior: 'smooth' }); G.brilla(x); }
-    }
+    if (d.foco) return G.enfoca(d.foco);
+    if (d.sel) return G.guiar(() => visible(document.querySelector(d.sel)));
   }
 
   function ir(n) {
@@ -119,10 +127,25 @@ body:has(#prueba-portada) #prueba-pres{display:none}
     location.reload();
   }
 
-  function pinta() {
+  // El contenido viejo se desvanece, la guía lleva la vista al objetivo y recién ahí entra el texto nuevo.
+  async function pinta() {
     const d = DIAPOS[i];
-    document.getElementById('prueba-portada')?.remove();
-    if (G.enLogin()) { panel?.remove(); panel = null; return; }
+    if (G.enLogin()) { panel?.remove(); panel = null; mostrada = -1; return; }
+    // El panel se arma una sola vez: la barra conserva su ancho y anima hasta el nuevo.
+    if (!panel) {
+      panel = document.createElement('section');
+      panel.id = 'prueba-pres'; panel.setAttribute('aria-live', 'polite');
+      panel.innerHTML = '<header data-pr="plegar"></header><div class="pr-barra"><i></i></div><div class="pr-cuerpo"></div>';
+      document.body.appendChild(panel);
+    }
+    const temaActual = d.tema, cuerpo = panel.querySelector('.pr-cuerpo');
+    panel.classList.toggle('plegado', plegado);
+    panel.querySelector('header').innerHTML = `<span aria-hidden="true">🎤</span><b>${plegado ? `${i + 1}/${DIAPOS.length} · ${d.titulo}` : temaActual}</b><span>${i + 1}/${DIAPOS.length} ${plegado ? '▴' : '▾'}</span>`;
+    panel.querySelector('.pr-barra i').style.width = `${(i + 1) / DIAPOS.length * 100}%`;
+    if (mostrada === i) return;
+    mostrada = i;
+    const t = ++paso;
+    document.querySelectorAll('#prueba-portada:not(.pr-sale)').forEach(v => { v.classList.add('pr-sale'); v.inert = true; setTimeout(() => v.remove(), G.quieto() ? 0 : 300); });
     if (d.portada) {
       const p = document.createElement('div');
       p.id = 'prueba-portada'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-modal', 'true'); p.setAttribute('aria-label', d.titulo);
@@ -134,21 +157,17 @@ body:has(#prueba-portada) #prueba-pres{display:none}
       document.body.appendChild(p);
       p.querySelector('.pr-ir').focus();
     }
-    if (!panel) {
-      panel = document.createElement('section');
-      panel.id = 'prueba-pres'; panel.setAttribute('aria-live', 'polite');
-      document.body.appendChild(panel);
-    }
-    const temaActual = d.tema;
-    panel.classList.toggle('plegado', plegado);
-    panel.innerHTML = `<header data-pr="plegar"><span aria-hidden="true">🎤</span><b>${plegado ? `${i + 1}/${DIAPOS.length} · ${d.titulo}` : temaActual}</b><span>${i + 1}/${DIAPOS.length} ${plegado ? '▴' : '▾'}</span></header>
-      <div class="pr-barra"><i style="width:${(i + 1) / DIAPOS.length * 100}%"></i></div>
-      <div class="pr-cuerpo"><div class="pr-temas">${TEMAS.map(t => `<button data-tema="${t}"${t === temaActual ? ' class="on"' : ''}>${t}</button>`).join('')}</div>
+    if (cuerpo.innerHTML) { cuerpo.classList.add('pr-sale'); await G.pausa(180); if (t !== paso) return; }
+    cuerpo.innerHTML = `<div class="pr-temas">${TEMAS.map(t => `<button data-tema="${t}"${t === temaActual ? ' class="on"' : ''}>${t}</button>`).join('')}</div>
         <h4>${d.titulo}</h4><p>${d.texto}</p>
         <div class="pr-acc"><button data-pr="atras"${i ? '' : ' disabled'}>←</button><button class="pr-ir" data-pr="sig"${i < DIAPOS.length - 1 ? '' : ' disabled'}>Siguiente →</button><button data-pr="mostrar">Mostrar otra vez</button>
           <button class="pr-mas" data-pr="reiniciar" title="Vuelve a cargar los datos de ejemplo sin perder la diapositiva">Reiniciar datos</button><button class="pr-mas" data-pr="salir">Salir</button></div>
-        <p class="pr-teclas">Teclado: ← → o PageUp/PageDown · Inicio/Fin · M muestra · H oculta</p></div>`;
-    if (ultimaAccion !== i) { ultimaAccion = i; setTimeout(() => muestra(d), 150); }
+        <p class="pr-teclas">Teclado: ← → o PageUp/PageDown · Inicio/Fin · M muestra · H oculta</p>`;
+    cuerpo.style.transition = 'none'; cuerpo.classList.replace('pr-sale', 'pr-oculto') || cuerpo.classList.add('pr-oculto');
+    void cuerpo.offsetWidth; cuerpo.style.transition = '';
+    // Si el objetivo tarda (sección pesada), el texto no espera más de 1,6 s.
+    await Promise.race([muestra(d, t), G.pausa(1600)]);
+    if (t === paso) cuerpo.classList.remove('pr-oculto');
   }
 
   const ACCIONES = {
