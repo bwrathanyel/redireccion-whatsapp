@@ -4,6 +4,7 @@ import { crearAbonos } from './abonos.js';
 import { crearPropuestas } from './propuestas.js';
 import { crearBandejaWa } from './whatsapp-bandeja.js';
 import { crearTareas } from './tareas.js';
+import { crearCampanasWa } from './wa-campanas.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -3415,6 +3416,7 @@ function setupPostventa() {
     if (d) { PV_WA_DIAS = Number(d.dataset.waDias); pvWhatsappCargar(); return; }
     const f = e.target.closest('button[data-wa-filtro]');
     if (f) { PV_WA_FILTRO = f.dataset.waFiltro; pvWhatsappRender(); return; }
+    if (e.target.closest('#pv-wa-campanas')) { pvCampanas().abrir(); return; }
     const b = e.target.closest('button[data-wa-lead]');
     if (!b) return;
     b.disabled = true;
@@ -3440,6 +3442,8 @@ const PV_WA_ELEGIBLE = ['Elegible', 'fa-circle-check', 'var(--green)'];
 const PV_WA_PRESETS = [0, 15, 30, 60, 90];
 let PV_RT_TIMER = null;
 let PV_WA_DIAS = 30, PV_WA_FILTRO = 'todos', PV_WA_BUSCAR = '', PV_WA_DATA = null;
+let PV_CAMPANAS = null;
+const pvCampanas = () => PV_CAMPANAS ||= crearCampanasWa({ sb, esc, ok: okToast, error: errToast, origen: 'reservas', rol: ROL, etapaTxt: k => (PV_ETAPAS[k] || [k])[0] });
 const pvWaMotivo = k => k ? (PV_WA_MOTIVOS[k] || [k, 'fa-circle-minus', 'var(--muted)']) : PV_WA_ELEGIBLE;
 async function pvWhatsappCargar() {
   const body = document.getElementById('pv-wa-body');
@@ -3464,7 +3468,7 @@ function pvWhatsappRender() {
   body.innerHTML = `
     <div class="pv-wa-head"><div><h2>Clientes con venta listos para WhatsApp</h2>
       <div class="ria-sub">Elegible = teléfono válido, viaje terminado hace al menos los días elegidos (o cierre, si no hay fecha de viaje), sin incidencia abierta, sin contacto reciente y sin haber pedido que no lo contacten.</div></div>
-      <span class="pv-wa-aviso"><i class="fas fa-lock"></i>Sin envíos: faltan plantillas aprobadas en Meta</span></div>
+      <button class="btn-sm lt-primario" type="button" id="pv-wa-campanas"><i class="fas fa-bullhorn"></i> Campañas por WhatsApp</button></div>
     <div class="pv-wa-kpis">
       ${kpi('Con venta', r.vendidos || 0, 'clientes con venta cerrada', 'fa-bag-shopping', 'var(--txt)')}
       ${kpi('Elegibles', r.elegibles || 0, `${pct}% del total`, 'fa-circle-check', 'var(--green)')}
@@ -3791,6 +3795,35 @@ function rvIr(cod, sid) {
   if (cod === 'voucher') return rvDocAbrir('voucher', sid);
   rvTab('servicios');
 }
+// Mensajes al cliente desde la ficha (Edge Function wa-plantilla-enviar, Zernio). Los
+// parámetros los arma el servidor desde la reserva; acá solo se muestra y se confirma.
+const PV_MSJ = { recordatorio_viaje: 'Recordatorio de viaje', seguimiento_reserva: 'Seguimiento de reserva' };
+const PV_MSJ_MOTIVOS = {
+  telefono: 'El cliente no tiene un WhatsApp válido', sin_fecha: 'La reserva no tiene fecha de viaje',
+  viaje_pasado: 'El viaje ya pasó', sin_destino: 'La reserva no tiene destino', baja: 'El cliente pidió no recibir mensajes',
+  no_contactar: 'El cliente está marcado «no contactar»', enviado_hoy: 'El cliente ya recibió un mensaje de plantilla hoy',
+};
+function pvMsjSugerido(c) {
+  if (!c.fecha_viaje_inicio) return false;
+  const dias = Math.round((new Date(c.fecha_viaje_inicio + 'T12:00:00') - new Date()) / 86400000);
+  return dias >= 1 && dias <= 5;
+}
+async function pvMensajeCliente(c, plantilla, btn) {
+  btn.disabled = true;
+  try {
+    const { data, error } = await sb.functions.invoke('wa-plantilla-enviar', { body: { accion: 'preview', caso_id: c.id, plantilla } });
+    if (error || !data?.ok) { console.error('wa-plantilla-enviar preview', error || data); errToast('No se pudo preparar el mensaje'); return; }
+    if (data.motivo) { errToast(PV_MSJ_MOTIVOS[data.motivo] || `No se puede enviar (${data.motivo})`); return; }
+    const previo = (data.historial || []).find(h => h.plantilla === plantilla && h.estado === 'enviado');
+    const aviso = previo ? `\n\nOjo: este mensaje ya se envió el ${fmtFechaHoraCaracas(previo.creado_en)}${previo.enviado_por ? ` (${previo.enviado_por})` : ''}.` : '';
+    const si = await confirmarSheet({ titulo: `Enviar «${PV_MSJ[plantilla]}» por WhatsApp`, detalle: data.texto + aviso, textoOk: 'Enviar' });
+    if (!si) return;
+    const r = await sb.functions.invoke('wa-plantilla-enviar', { body: { accion: 'enviar', caso_id: c.id, plantilla } });
+    if (r.error || !r.data?.ok) { console.error('wa-plantilla-enviar enviar', r.error || r.data); errToast('No se pudo enviar el mensaje'); return; }
+    okToast('Mensaje enviado por WhatsApp');
+  } finally { btn.disabled = false; }
+}
+
 function abrirPostventa(c, accionInicial = null) {
   if (!c) return; PV_ACTUAL = c;
   const opt = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
@@ -3817,6 +3850,8 @@ function abrirPostventa(c, accionInicial = null) {
       <div class="csub">La etapa se actualiza sola según pagos, servicios y fechas; «Cambiar» la fija a mano.</div>
       <div class="rs-sec">Checklist <span>Las marcas «Auto» las pone el sistema</span></div>
       <div class="pv-doc-grid rs-chk-box">${Object.entries(PV_DOCS).map(([k, t]) => pvChkFila(k, t, docs)).join('')}</div>
+      <div class="rs-sec">Mensajes al cliente <span>WhatsApp con plantilla aprobada; antes de enviar se ve el texto</span></div>
+      <div class="rs-quick">${Object.entries(PV_MSJ).map(([k, t]) => `<button class="rs-q" type="button" data-pv-msj="${k}"><i class="fa-brands fa-whatsapp"></i> ${t}${k === 'recordatorio_viaje' && pvMsjSugerido(c) ? ' · sugerido' : ''}</button>`).join('')}</div>
       <details class="rs-mas"><summary>Más: seguimiento, notas, prioridad, satisfacción, incidencia y proveedor</summary><div class="rs-mas-body">
         <div class="rs-sec">Seguimiento</div>
         <label class="fl" for="pv-e-seguimiento">Próxima acción</label><input class="ei" id="pv-e-seguimiento" type="datetime-local" value="${pvDateTimeInput(c.proximo_seguimiento_at)}">
@@ -3852,6 +3887,7 @@ function abrirPostventa(c, accionInicial = null) {
   resumen.onclick = e => {
     const go = e.target.closest('[data-rv-go]'); if (go) return rvIr(go.dataset.rvGo, go.dataset.id);
     const sg = e.target.closest('[data-pv-seg]'); if (sg) pvSeguimientoRapido(sg.dataset.pvSeg);
+    const mj = e.target.closest('[data-pv-msj]'); if (mj) pvMensajeCliente(c, mj.dataset.pvMsj, mj);
   };
   document.getElementById('pv-e-guardar').onclick = () => guardarPostventa(false);
   document.getElementById('pv-e-pago')?.addEventListener('click', () => {
