@@ -2438,11 +2438,18 @@ function abrirEditorPersona(usuarioId) {
       <select id="pe-rol" class="ei">
         ${['asesor', 'asesor_boleteria', 'admin', 'marketing', 'boleteria', 'administrativo'].map(r => `<option value="${r}"${rolPersonal(u) === r ? ' selected' : ''}>${VISTA_ROL_LABEL[r] || ROL_LABEL_GP[r] || r}</option>`).join('')}
       </select>
-      ${u.rol === 'asesor' ? `
+      ${(u.rol === 'asesor' || u.asesor_id) ? `
       <label class="fl">Teléfono</label>
       <input id="pe-whatsapp" class="ei" type="tel" placeholder="Ej: +58 412 1234567" value="${esc(u.whatsapp || '')}">
       <label class="fl">Grupo de Telegram</label>
-      <input id="pe-telegram" class="ei" type="text" placeholder="ID del grupo o chat" value="${esc(u.telegram_chat_id || '')}">` : ''}
+      <input id="pe-telegram" class="ei" type="text" placeholder="ID del grupo o chat" value="${esc(u.telegram_chat_id || '')}">
+      <label class="fl">Género</label>
+      <select id="pe-genero" class="ei">
+        <option value=""${u.genero ? '' : ' selected'}>Sin definir</option>
+        <option value="femenino"${u.genero === 'femenino' ? ' selected' : ''}>Femenino — «la asesora»</option>
+        <option value="masculino"${u.genero === 'masculino' ? ' selected' : ''}>Masculino — «el asesor»</option>
+      </select>
+      <div class="form-hint">Así la IA le habla de esta persona al cliente: «la asesora Ambar» o «el asesor Luis». Si queda sin definir, la IA evita el artículo y no lo adivina por el nombre.</div>` : ''}
       <label class="pe-check" style="margin-top:12px"><input type="checkbox" id="pe-freelancer"${u.es_freelancer ? ' checked' : ''}> Es freelancer (se bloquea a los 15 min sin actividad)</label>
       <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-boleteria"${u.es_boleteria ? ' checked' : ''}> Es agente de boletería (atiende la cola de solicitudes de vuelos)</label>
       <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-voucher"${u.ve_voucher ? ' checked' : ''}> Ve vouchers</label>
@@ -2537,6 +2544,11 @@ async function guardarPersona(usuarioId) {
       p_whatsapp: val('pe-whatsapp').trim() || null,
       p_telegram_chat_id: val('pe-telegram').trim() || null,
     });
+  }
+  const generoEl = document.getElementById('pe-genero');
+  if (generoEl) {
+    const gen = await sb.rpc('admin_guardar_genero_asesor', { p_usuario_id: usuarioId, p_genero: generoEl.value || null });
+    if (gen.error || !gen.data?.ok) { btn.disabled = false; err.textContent = 'Se guardaron los datos pero no el género.'; return; }
   }
   const clave = val('pe-password');
   let toast = 'Datos actualizados';
@@ -9002,12 +9014,19 @@ async function actQuitar(clave, btn) {
    El panel consume exclusivamente agregados admin-only. Los hashes de contacto
    no salen de la RPC y el navegador nunca recibe chats, nombres o teléfonos. */
 let RIA_DIAS = 7;
+let RIA_FECHA = null;
 const RIA_CACHE = new Map();
 const RIA_COSTO_ENTRADA = 0.14 / 1e6;
 const RIA_COSTO_CACHE = 0.014 / 1e6;
 const RIA_COSTO_SALIDA = 0.28 / 1e6;
 
-function riaRango(dias) {
+function riaRango(dias, fecha = null) {
+  if (fecha) {
+    // Día de Caracas (UTC-4 fijo, sin horario de verano); si es hoy, corta en «ahora».
+    const desde = new Date(`${fecha}T00:00:00-04:00`);
+    const hasta = new Date(Math.min(desde.getTime() + 86400000, Date.now()));
+    return { desde: desde.toISOString(), hasta: hasta.toISOString() };
+  }
   const hasta = new Date();
   const desde = new Date(hasta);
   if (dias === 1) desde.setHours(0, 0, 0, 0);
@@ -9017,16 +9036,17 @@ function riaRango(dias) {
 
 // completo=false: solo la RPC general (el widget del inicio muestra 5 números y no
 // necesita el piloto ni el seguimiento, que son las dos RPC pesadas).
-async function riaConsultar(dias, forzar = false, completo = true) {
-  const guardado = RIA_CACHE.get(dias);
+async function riaConsultar(dias, forzar = false, completo = true, fecha = null) {
+  const clave = fecha || dias;
+  const guardado = RIA_CACHE.get(clave);
   if (!forzar && guardado && Date.now() - guardado.en < 60000 && (guardado.completo || !completo)) return guardado.data;
-  const rango = riaRango(dias);
+  const rango = riaRango(dias, fecha);
   // «Hoy» se compara contra el mismo día de la semana pasada: contra «ayer» cada domingo
   // parecía un desplome (el domingo siempre convierte menos que el sábado).
   const haceSemana = iso => new Date(new Date(iso).getTime() - 7 * 86400000).toISOString();
   const [general, semana, piloto, reactivacion, modelos, abFb] = await Promise.all([
     sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }),
-    dias === 1 ? sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: haceSemana(rango.desde), p_hasta: haceSemana(rango.hasta) }) : null,
+    dias === 1 || fecha ? sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: haceSemana(rango.desde), p_hasta: haceSemana(rango.hasta) }) : null,
     completo ? sb.rpc('panel_piloto_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_reactivacion_ia', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_modelos_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
@@ -9043,7 +9063,7 @@ async function riaConsultar(dias, forzar = false, completo = true) {
   if (completo && modelos.error) console.error('panel_modelos_ia', modelos.error);
   if (completo && abFb.error) console.error('panel_ab_privado_fb', abFb.error);
   const data = completo ? { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data, modelos: modelos.error ? null : modelos.data, ab_fb: abFb.error ? null : abFb.data } : general.data;
-  RIA_CACHE.set(dias, { en: Date.now(), data, completo });
+  RIA_CACHE.set(clave, { en: Date.now(), data, completo });
   return data;
 }
 
@@ -9057,7 +9077,8 @@ function riaCambio(actual, anterior, ref = 'el período anterior') {
   const p = Math.round((actual - anterior) * 100 / anterior);
   return `${p >= 0 ? '+' : ''}${p}% frente a ${ref}`;
 }
-const riaRefTexto = dias => dias === 1 ? `el ${new Date().toLocaleDateString('es-VE', { weekday: 'long' })} pasado a esta hora` : `los ${dias} días anteriores`;
+const riaFechaCorta = fecha => new Date(`${fecha}T12:00:00-04:00`).toLocaleDateString('es-VE', { weekday: 'short', day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Caracas' });
+const riaRefTexto = (dias, fecha = null) => fecha ? `el ${new Date(`${fecha}T12:00:00-04:00`).toLocaleDateString('es-VE', { weekday: 'long', timeZone: 'America/Caracas' })} anterior` : dias === 1 ? `el ${new Date().toLocaleDateString('es-VE', { weekday: 'long' })} pasado a esta hora` : `los ${dias} días anteriores`;
 const riaMinTexto = m => m >= 1440 ? `${Math.floor(m / 1440)} d ${Math.floor(m % 1440 / 60)} h` : m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
 const riaIr = id => { const el = document.getElementById(id); if (!el) return; if (el.tagName === 'DETAILS') el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
 
@@ -9102,7 +9123,7 @@ function riaDiagnostico(data, dias) {
   const perdidos = tipos.reduce((s, t) => s + Math.max(0, riaNum(t.n) - riaNum(t.recuperados)), 0);
   if (perdidos) add(perdidos >= 10 ? 'atencion' : 'info', `${fmt(perdidos)} conversación(es) pudieron perderse tras un error`, `${fmt(perdidos)} de ${fmt(total)} errores no tuvieron después un turno exitoso con ese contacto.`, 'No es seguro que se perdieran (algunos simplemente no volvieron a escribir), pero es el costo real de los errores.');
   const dConv = riaNum(ant.conversaciones) ? Math.round((riaNum(r.conversaciones) - riaNum(ant.conversaciones)) * 100 / riaNum(ant.conversaciones)) : 0;
-  if (dConv <= -RIA_UMBRAL_CAIDA && tasa < RIA_UMBRAL_ERROR_ATENCION) add('atencion', `Conversaciones ${dConv}% frente a ${riaRefTexto(dias)}`, 'Los errores técnicos están en rango normal, así que la caída viene de menos tráfico y no de la IA.', 'Revisar si hubo menos publicaciones o anuncios en redes, o si cambió algún flujo de entrada.');
+  if (dConv <= -RIA_UMBRAL_CAIDA && tasa < RIA_UMBRAL_ERROR_ATENCION) add('atencion', `Conversaciones ${dConv}% frente a ${riaRefTexto(dias, RIA_FECHA)}`, 'Los errores técnicos están en rango normal, así que la caída viene de menos tráfico y no de la IA.', 'Revisar si hubo menos publicaciones o anuncios en redes, o si cambió algún flujo de entrada.');
   let peor = null;
   for (let i = 1; i < RIA_PASOS.length; i++) {
     const prev = riaNum(r[RIA_PASOS[i - 1][1]]), cur = riaNum(r[RIA_PASOS[i][1]]);
@@ -9135,7 +9156,7 @@ function riaErroresHtml(data, dias) {
   if (!turnos) return '<div class="ria-vacio">Sin turnos en este período.</div>';
   if (!total) return `<div class="ria-vacio">Sin errores técnicos en ${fmt(turnos)} turnos.</div>`;
   const tasa = riaPct(total, turnos), tasaAnt = riaPct(ea.n, ea.turnos);
-  const resumen = `<div class="ria-lista"><div class="ria-fila"><span><b>${fmt(total)} errores en ${fmt(turnos)} turnos</b> · ${tasa}%</span><b>${riaNum(ea.turnos) ? `antes: ${tasaAnt}% (${esc(dias === 1 ? 'ayer a esta hora' : riaRefTexto(dias))})` : 'sin período anterior'}</b></div></div>`;
+  const resumen = `<div class="ria-lista"><div class="ria-fila"><span><b>${fmt(total)} errores en ${fmt(turnos)} turnos</b> · ${tasa}%</span><b>${riaNum(ea.turnos) ? `antes: ${tasaAnt}% (${esc(RIA_FECHA ? 'el día anterior' : dias === 1 ? 'ayer a esta hora' : riaRefTexto(dias))})` : 'sin período anterior'}</b></div></div>`;
   const tipos = (er.por_tipo || []).map(t => {
     const i = RIA_ERRORES_INFO[t.tipo] || RIA_ERRORES_INFO.otro, n = riaNum(t.n), motivo = RIA_ERRORES_MOTIVO[t.motivo];
     return `<div class="ria-fila"><span><b>${esc(i.nombre)}</b>${motivo ? ` · ${esc(motivo)}` : ''}<small>Qué vio el cliente: ${esc(i.cliente)}</small><small>Causa probable: ${esc(i.causa)}</small><small>Qué hacer: ${esc(i.hacer)}</small>`
@@ -9249,10 +9270,10 @@ function riaPintarPanel(data) {
   const r = data.resumen || {}, ant = data.anterior || {}, op = data.operacion || {}, ventas = data.ventas || {};
   const salud = riaEstadoInfo(data), estado = document.getElementById('ria-estado');
   estado.className = `ria-estado ${salud.estado}`; estado.textContent = salud.titulo;
-  document.getElementById('ria-estado-texto').innerHTML = `${esc(salud.texto)} <b>Leads: ${esc(riaCambio(r.leads_calificados, ant.leads_calificados, riaRefTexto(RIA_DIAS)))}</b>`;
-  document.getElementById('ria-diagnostico').innerHTML = riaDiagnosticoHtml(riaDiagnostico(data, RIA_DIAS));
-  document.getElementById('ria-errores').innerHTML = riaErroresHtml(data, RIA_DIAS);
-  document.getElementById('ria-actualizado').textContent = 'Actualizado ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('ria-estado-texto').innerHTML = `${esc(salud.texto)} <b>Leads: ${esc(riaCambio(r.leads_calificados, ant.leads_calificados, riaRefTexto(RIA_DIAS, RIA_FECHA)))}</b>`;
+  document.getElementById('ria-diagnostico').innerHTML = riaDiagnosticoHtml(riaDiagnostico(data, RIA_FECHA ? 1 : RIA_DIAS));
+  document.getElementById('ria-errores').innerHTML = riaErroresHtml(data, RIA_FECHA ? 1 : RIA_DIAS);
+  document.getElementById('ria-actualizado').textContent = RIA_FECHA && RIA_FECHA !== hoyCaracas() ? `Día ${riaFechaCorta(RIA_FECHA)} completo` : 'Actualizado ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
 
   const gruposPiloto = new Map((data.piloto?.grupos || []).map(g => [g.experimento_grupo, g]));
   const control = gruposPiloto.get('control') || {}, tratamiento = gruposPiloto.get('tratamiento') || {};
@@ -9300,7 +9321,7 @@ function riaPintarPanel(data) {
   const erDom = er.por_tipo?.[0] ? (RIA_ERRORES_INFO[er.por_tipo[0].tipo] || RIA_ERRORES_INFO.otro) : null;
   const irEmbudo = () => riaIr('ria-card-embudo');
   pintarKPIs('ria-kpis', [
-    { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: `${ant.comparable === false ? 'Sin comparar: antes del 26-oct los comentarios sin respuesta contaban' : riaCambio(r.conversaciones, ant.conversaciones, riaRefTexto(RIA_DIAS))}${riaNum(r.solo_boton) ? ` · ${fmt(riaNum(r.solo_boton))} solo tocaron botón` : ''}`, i: 'fa-comments', c: 'var(--blue)', go: irEmbudo, tt: 'Ver el embudo' },
+    { t: 'Conversaciones', v: fmt(riaNum(r.conversaciones)), d: `${ant.comparable === false ? 'Sin comparar: antes del 26-oct los comentarios sin respuesta contaban' : riaCambio(r.conversaciones, ant.conversaciones, riaRefTexto(RIA_DIAS, RIA_FECHA))}${riaNum(r.solo_boton) ? ` · ${fmt(riaNum(r.solo_boton))} solo tocaron botón` : ''}`, i: 'fa-comments', c: 'var(--blue)', go: irEmbudo, tt: 'Ver el embudo' },
     ...(riaNum(r.comentarios) ? [{ t: 'Comentarios sin respuesta', v: fmt(riaNum(r.comentarios_sin_respuesta)), d: `${riaPct(r.comentarios_sin_respuesta, r.comentarios)}% de ${fmt(riaNum(r.comentarios))} comentarios · no cuentan como conversación`, i: 'fa-comment-slash', c: 'var(--amber)' }] : []),
     { t: 'Teléfonos', v: fmt(riaNum(r.telefonos)), d: `${riaPct(r.telefonos, r.conversaciones)}% de conversaciones`, i: 'fa-phone', c: 'var(--accent)', go: irEmbudo, tt: 'Ver el embudo' },
     { t: 'Leads calificados', v: fmt(riaNum(r.leads_calificados)), d: `${riaPct(r.leads_calificados, r.conversaciones)}% de conversión`, i: 'fa-user-check', c: 'var(--green)', go: irEmbudo, tt: 'Ver el embudo' },
@@ -9364,7 +9385,7 @@ async function loadRendimientoIA(forzar = false) {
   if (!esOficina() || !document.getElementById('ria-kpis')) return;
   document.getElementById('ria-actualizado').textContent = 'Cargando…';
   try {
-    const data = await riaConsultar(RIA_DIAS, forzar);
+    const data = await riaConsultar(RIA_FECHA ? 1 : RIA_DIAS, forzar, true, RIA_FECHA);
     riaPintarPanel(data);
   } catch (e) {
     console.error('rendimiento IA', e);
@@ -9377,12 +9398,36 @@ function setupRendimientoIA() {
   if (!esOficina()) return;
   document.getElementById('ria-dashboard')?.addEventListener('click', () => activateSection('rendimiento-ia'));
   document.getElementById('ria-recargar')?.addEventListener('click', () => { RIA_CACHE.clear(); loadRendimientoIA(true); loadResumenIADashboard(true); });
-  document.getElementById('ria-periodos')?.addEventListener('click', e => {
-    const b = e.target.closest('[data-ria-dias]'); if (!b) return;
+  const fechaBtn = document.getElementById('drp-ria-btn'), fechaPanel = document.getElementById('drp-ria-panel');
+  const fechaInput = document.getElementById('ria-fecha'), fechaLabel = document.getElementById('drp-ria-label');
+  const marcarDia = fecha => {
+    RIA_FECHA = fecha;
+    fechaBtn.classList.toggle('on', !!fecha);
+    fechaLabel.textContent = fecha ? riaFechaCorta(fecha) : 'Elegir día';
+    if (!fecha) fechaInput.value = '';
+  };
+  const elegirPeriodo = b => {
+    marcarDia(null);
     RIA_DIAS = Number(b.dataset.riaDias);
     document.querySelectorAll('[data-ria-dias]').forEach(x => x.classList.toggle('on', x === b));
     loadRendimientoIA();
+  };
+  document.getElementById('ria-periodos')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-ria-dias]'); if (b) elegirPeriodo(b);
   });
+  if (fechaBtn) {
+    popoverASheet(fechaPanel);
+    fechaBtn.onclick = e => { e.stopPropagation(); fechaInput.max = hoyCaracas(); fechaPanel.classList.toggle('open'); };
+    document.addEventListener('click', e => { if (!fechaPanel.contains(e.target) && !fechaBtn.contains(e.target)) fechaPanel.classList.remove('open'); });
+    fechaInput.addEventListener('change', () => {
+      fechaPanel.classList.remove('open');
+      if (!fechaInput.value) return;
+      if (fechaInput.value === hoyCaracas()) { elegirPeriodo(document.querySelector('[data-ria-dias="1"]')); return; }
+      marcarDia(fechaInput.value);
+      document.querySelectorAll('[data-ria-dias]').forEach(x => x.classList.remove('on'));
+      loadRendimientoIA();
+    });
+  }
   loadResumenIADashboard();
 }
 
@@ -35068,6 +35113,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-28', emoji: '📅', titulo: 'Rendimiento IA por día exacto', texto: 'Nuevo botón "Elegir día" junto a Hoy / 7 días / 30 días: abrí el calendario, elegí cualquier fecha pasada y el panel muestra las estadísticas de ese día completo, comparadas contra el mismo día de la semana anterior.', roles: ['admin'] },
   { fecha: '2026-10-27', emoji: '🎯', titulo: 'Reparto por destino', texto: 'El Reparto objetivo tiene una pestaña nueva, «Por destino»: cada destino (Margarita, Los Roques, Canaima, Mérida, Otros nacionales, Corporativo e Internacional) puede tener su propio reparto entre asesores. Mientras no lo actives, ese destino se sigue sorteando con el reparto Nacional tal como está hoy, sin cambiarle nada a nadie. La pestaña muestra cuántos leads trajo cada destino en los últimos 90 días, cómo se están repartiendo de verdad entre los asesores, y antes de guardar el efecto sobre la carga de cada uno: el porcentaje que le tocaría y cuánto se mueve. «Quitar reparto propio» devuelve el destino al reparto general.', roles: ['admin'] },
   { fecha: '2026-10-26', emoji: '🖱️', titulo: 'Tareas: se ve qué se puede abrir', texto: 'En Tareas, cada fila de la lista ahora muestra una flecha al costado y se ilumina en naranja al pasar el mouse; la flecha también se enciende. Las pestañas, los filtros, el bloque «Cola diaria», las tarjetas de Mi día y las personas de Equipo responden igual al pasar el mouse, y con el teclado cada elemento marca dónde estás.', roles: ROLES_TODOS },
   { fecha: '2026-10-26', emoji: '🏷️', titulo: 'Documentos con nombre claro', texto: 'Todo lo que descargas del CRM —voucher, cotización, factura, tickets y recibos— se guarda con un nombre que dice qué es, de qué cliente y de qué fecha: por ejemplo «Lotus 360 - Voucher 006364 - Juan Pérez - Los Roques - 2026-11-15.pdf». Los documentos de una reserva tienen además su botón «Descargar», y las exportaciones llevan el nombre de la pantalla.', roles: ROLES_TODOS },

@@ -756,6 +756,7 @@ input.flt:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-sof
 .drp{position:relative}
 .drp-btn{display:inline-flex;align-items:center;gap:8px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:9px 14px;color:var(--txt);font-size:12.5px;font-family:inherit;cursor:pointer;transition:border-color .15s}
 .drp-btn:hover{border-color:var(--accent)}
+.drp-btn.on{background:var(--accent-soft);color:var(--accent-txt);border-color:var(--accent)}
 .drp-btn i{color:var(--accent-ink);font-size:12px}
 .reload-btn{display:inline-flex;align-items:center;gap:8px;background:var(--accent-soft);border:1px solid rgba(var(--accent-rgb),.35);border-radius:10px;padding:9px 14px;color:var(--accent-txt);font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer;transition:border-color .15s,background .15s,transform .15s}
 .reload-btn i{color:var(--accent-ink);font-size:12px;transition:transform .4s}
@@ -10243,6 +10244,12 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <button class="seg" data-ria-dias="1">Hoy</button>
           <button class="seg on" data-ria-dias="7">7 días</button>
           <button class="seg" data-ria-dias="30">30 días</button>
+        </div>
+        <div class="drp" id="drp-ria">
+          <button type="button" class="flt drp-btn" id="drp-ria-btn"><i class="fas fa-calendar-days"></i> <span id="drp-ria-label">Elegir día</span></button>
+          <div class="drp-panel" id="drp-ria-panel">
+            <div class="drp-inputs"><label>Día <input type="date" id="ria-fecha"></label></div>
+          </div>
         </div>
         <button class="ce-mini" id="ria-recargar"><i class="fas fa-rotate"></i> Actualizar</button>
         <span class="ce-vig" id="ria-actualizado"></span>
