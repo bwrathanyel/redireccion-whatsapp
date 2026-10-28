@@ -22947,34 +22947,62 @@ const tagsHtml = (tags, limite) => {
   const resto = v.length - mostrar.length;
   return `<div class="tar-tags">${mostrar.map(t => `<span class="tar-tag">${esc(t)}</span>`).join('')}${resto > 0 ? `<span class="tar-tag tar-tag-mas">+${resto}</span>` : ''}</div>`;
 };
-// Tarjeta del listado: en vez de chips con texto, hasta 3 íconos (el texto va en
-// el tooltip). Lo que no tiene ícono no se muestra aquí; sigue entero en el detalle.
-// Se matchea sobre el texto sin acentos. «Niños gratis» tiene su propia franja.
+// Tarjeta del listado: en vez de chips con texto, hasta 5 íconos (el texto va en
+// el tooltip, lo que sobra en un «+N»). Lo que no tiene ícono no se muestra aquí;
+// sigue entero en el detalle. Se matchea sobre el texto sin acentos. «Niños
+// gratis» tiene su propia franja. El orden importa: un tag toma el PRIMER ícono
+// que matchea («Wi-Fi gratis» es wifi, no regalo).
 const TAR_ICONOS_INCLUYE = [
-  [/vuelo|aereo|boleto|ticket/, 'plane'],
-  [/traslado|transfer/, 'van-shuttle'],
-  [/desayuno|almuerzo|cena\b|comida|todo incluido|pension|buffet/, 'utensils'],
-  [/excursion|tour\b|full day|caminata/, 'person-hiking'],
-  [/regalo|gratis|cortesia|obsequio/, 'gift'],
-  [/piscina|pileta/, 'person-swimming'],
-  [/seguro|asistencia/, 'shield-heart'],
+  [/vuelo|aereo|boleto|ticket/, 'plane', 'Boleto aéreo'],
+  [/traslado|transfer/, 'van-shuttle', 'Traslados'],
+  [/desayuno|almuerzo|cena\b|comida|todo incluido|pension|buffet/, 'utensils', 'Comidas'],
+  [/excursion|tour\b|full day|caminata/, 'person-hiking', 'Excursión'],
+  [/wi-?fi|internet/, 'wifi', 'Wi-Fi'],
+  [/piscina|pileta/, 'person-swimming', 'Piscina'],
+  [/playa|frente al mar|orilla del mar/, 'umbrella-beach', 'Playa'],
+  [/aire acondicionado|\ba\/a\b/, 'snowflake', 'Aire acondicionado'],
+  [/calefaccion|chimenea/, 'temperature-high', 'Calefacción'],
+  [/agua caliente/, 'shower', 'Agua caliente'],
+  [/\btv\b|television|tv por cable|directv/, 'tv', 'TV'],
+  [/\bspa\b|jacuzzi|sauna|hidromasaje/, 'spa', 'Spa / jacuzzi'],
+  [/\bbar\b|bebidas|tragos|barra libre/, 'martini-glass-citrus', 'Bar / bebidas'],
+  [/estacionamiento|parking|aparcamiento/, 'square-parking', 'Estacionamiento'],
+  [/gimnasio|\bgym\b/, 'dumbbell', 'Gimnasio'],
+  [/mascota|pet friendly/, 'paw', 'Acepta mascotas'],
+  [/mirador|vista a la montana|vista panoramica/, 'mountain-sun', 'Vista panorámica'],
+  // 4º campo = solo desde incluye_tags: en prosa «gratis» o «asistencia» no
+  // significan regalo ni seguro («estacionamiento gratis», «asistencia 24 h»).
+  [/regalo|gratis|cortesia|obsequio/, 'gift', 'Regalo / cortesía', true],
+  [/seguro|asistencia/, 'shield-heart', 'Seguro de viaje', true],
 ];
-function tarIconosIncluye(tags) {
+const TAR_ICONOS_MAX = 5;
+// `texto` (resumen_ia / descripción) suma lo que el hotel ofrece aunque no esté en
+// incluye_tags. Se parte en frases y se salta la que niega («sin TV», «no incluye
+// traslado»): un ícono de algo que NO trae es peor que no mostrarlo.
+function tarIconosIncluye(tags, texto) {
   const { plan, si } = tarIncluyeSplit(tags);
   const porIcono = new Map();
+  const sumar = (hit, txt) => {
+    if (!porIcono.has(hit[1])) porIcono.set(hit[1], []);
+    if (!porIcono.get(hit[1]).includes(txt)) porIcono.get(hit[1]).push(txt);
+  };
   [...plan, ...si].forEach(t => {
     const n = tarNorm(t);
     if (/nin[oa]s?\s+gratis/.test(n)) return;
     const hit = TAR_ICONOS_INCLUYE.find(([re]) => re.test(n));
-    if (!hit) return;
-    if (!porIcono.has(hit[1])) porIcono.set(hit[1], []);
-    porIcono.get(hit[1]).push(t);
+    if (hit) sumar(hit, t);
+  });
+  tarNorm(texto).split(/[.;,\n]|\s+y\s+/).forEach(frase => {
+    if (/\b(?:sin|no|ni)\b/.test(frase) || /nin[oa]s?\s+gratis/.test(frase)) return;
+    TAR_ICONOS_INCLUYE.forEach(hit => { if (!hit[3] && !porIcono.has(hit[1]) && hit[0].test(frase)) sumar(hit, hit[2]); });
   });
   if (!porIcono.size) return '';
-  return `<span class="tcm-iconos">${[...porIcono].slice(0, 3).map(([ic, txt]) => {
+  const todos = [...porIcono], vis = todos.slice(0, TAR_ICONOS_MAX), resto = todos.slice(TAR_ICONOS_MAX);
+  const mas = resto.length ? (() => { const t = esc(resto.map(([, txt]) => txt[0]).join(' · ')); return `<span class="tcm-mas" title="${t}" aria-label="${t}">+${resto.length}</span>`; })() : '';
+  return `<span class="tcm-iconos">${vis.map(([ic, txt]) => {
     const t = esc(txt.join(' · '));
     return `<i class="fas fa-${ic}" role="img" title="${t}" aria-label="${t}"></i>`;
-  }).join('')}</span>`;
+  }).join('')}${mas}</span>`;
 }
 // Ficha: plan como chips, y lo incluido / no incluido como listas con ícono.
 function tarIncluyeHtml(tags) {
@@ -24027,7 +24055,7 @@ function tarCardHtml(x) {
         ${hotel}
         <div class="tc-nombre">${esc(tarTituloSinHotel(x))}</div>
         ${x.resumen_ia ? `<div class="tc-desc">${esc(x.resumen_ia)}</div>` : ''}
-        ${tarMetaHtml(tarFechaCorta(x), 0, tarIconosIncluye(x.incluye_tags))}
+        ${tarMetaHtml(tarFechaCorta(x), 0, tarIconosIncluye(x.incluye_tags, `${tarTituloSinHotel(x)}. ${x.resumen_ia || ''}`), tarVendibleHoy(x))}
         ${retirar}
       </div></div>`;
   }
@@ -24046,13 +24074,18 @@ function tarCardHtml(x) {
     <div class="tc-body">
       <div class="tc-nombre">${esc(x.nombre)}</div>
       ${bullets.length ? `<div class="tc-desc">${esc(bullets[0])}</div>` : ''}
-      ${tarMetaHtml(tarFechaCorta(tarifa), nTarifas, tarIconosIncluye(ag.tags))}
+      ${tarMetaHtml(tarFechaCorta(tarifa), nTarifas, tarIconosIncluye(ag.tags, x.descripcion), (x.tarifas || []).some(tarVendibleHoy))}
     </div></div>`;
 }
 // Última línea de la tarjeta: hasta cuándo se vende · cuántas promos (hotel) · íconos de lo incluido.
-function tarMetaHtml(fecha, nPromos, iconos) {
+// Sin fecha de cierre pero vendible hoy: pastilla neutra en vez de dejar el pie vacío.
+function tarMetaHtml(fecha, nPromos, iconos, vendible) {
   const partes = [];
-  if (fecha) partes.push(`<span class="tcm-fecha${fecha.cls ? ' ' + fecha.cls : ''}">${esc(fecha.txt)}</span>`);
+  if (!fecha && vendible) fecha = { txt: 'Sin fecha de cierre', cls: 'is-abierta', title: 'Vendible hoy; la tarifa no tiene fecha de cierre cargada' };
+  if (fecha) {
+    const ic = { 'is-pronto': 'hourglass-half', 'is-vencida': 'calendar-xmark', 'is-abierta': 'infinity' }[fecha.cls] || 'calendar-check';
+    partes.push(`<span class="tcm-fecha${fecha.cls ? ' ' + fecha.cls : ''}"${fecha.title ? ` title="${esc(fecha.title)}"` : ''}><i class="fas fa-${ic}"></i>${esc(fecha.txt)}</span>`);
+  }
   if (nPromos > 1) partes.push(`<span class="tcm-promos"><i class="fas fa-layer-group"></i> ${nPromos} promos</span>`);
   if (!partes.length && !iconos) return '';
   return `<div class="tc-meta">${partes.join('<span class="tcm-sep">·</span>')}${iconos}</div>`;
@@ -24064,9 +24097,11 @@ function tarFechaCorta(t) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return null;
   const dia = s => Date.parse(s + 'T12:00:00Z');
   const dias = Math.round((dia(f) - dia(hoy())) / 864e5);
-  if (dias < 0) return { txt: 'Vencida', cls: 'is-vencida' };
+  const larga = dtf('es-VE', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(dia(f));
+  if (dias < 0) return { txt: 'Vencida', cls: 'is-vencida', title: `Se vendía hasta el ${larga}` };
   const txt = dtf('es-VE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(dia(f)).replace(/\./g, '');
-  return { txt: 'Hasta ' + txt, cls: dias <= 7 ? 'is-pronto' : '' };
+  const quedan = dias === 0 ? ' (último día)' : dias <= 7 ? ` (quedan ${dias} día${dias > 1 ? 's' : ''})` : '';
+  return { txt: 'Hasta ' + txt, cls: dias <= 7 ? 'is-pronto' : '', title: `Se vende hasta el ${larga}${quedan}` };
 }
 function tarFichaHtml(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';

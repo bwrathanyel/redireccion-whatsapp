@@ -1756,15 +1756,22 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 /* Descripción (resumen_ia / 1ª viñeta del hotel) en UNA línea; el resto va en el detalle. */
 .tc-desc{font-size:12.5px;line-height:1.45;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Fecha corta · promos · íconos de lo incluido (con tooltip). */
-.tc-meta{margin-top:auto;padding-top:5px;display:flex;align-items:center;gap:7px;min-width:0;font-size:11px;color:var(--muted2)}
+/* 2026-10-28: la fecha va en pastilla con ícono y color por estado (antes gris 11px,
+   casi invisible) y los íconos en cuadritos; si no entran, bajan de renglón. */
+.tc-meta{margin-top:auto;padding-top:9px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:center;gap:6px 7px;min-width:0;font-size:11px;color:var(--muted2)}
 .tc-meta .tcm-fecha,.tc-meta .tcm-promos{white-space:nowrap}
-.tc-meta .tcm-fecha.is-pronto{color:var(--amber);font-weight:700}
-.tc-meta .tcm-fecha.is-vencida{color:var(--danger);font-weight:700}
+.tc-meta .tcm-fecha{--c:var(--green);display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;line-height:1.3;color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent);border:1px solid color-mix(in srgb,var(--c) 32%,transparent)}
+.tc-meta .tcm-fecha i{font-size:10.5px}
+.tc-meta .tcm-fecha.is-pronto{--c:var(--amber)}
+.tc-meta .tcm-fecha.is-vencida{--c:var(--danger)}
+.tc-meta .tcm-fecha.is-abierta{--c:var(--muted);font-weight:600}
+.tc-meta .tcm-fecha[title]{cursor:help}
 .tc-meta .tcm-promos i{color:var(--accent-ink);font-size:10px}
 .tc-meta .tcm-sep{opacity:.6}
-.tc-meta .tcm-iconos{margin-left:auto;display:inline-flex;align-items:center;gap:9px;font-size:13px;color:var(--muted)}
-.tc-meta .tcm-iconos i{cursor:help}
-.tc-meta .tcm-iconos i:hover{color:var(--accent-ink)}
+.tc-meta .tcm-iconos{margin-left:auto;display:inline-flex;align-items:center;gap:5px}
+.tc-meta .tcm-iconos i,.tc-meta .tcm-mas{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:7px;background:rgba(var(--accent-rgb),.10);color:var(--accent-ink);font-size:11.5px;cursor:help;transition:background .15s}
+.tc-meta .tcm-mas{width:auto;min-width:24px;padding:0 5px;font-size:10.5px;font-weight:700}
+.tc-meta .tcm-iconos i:hover,.tc-meta .tcm-mas:hover{background:rgba(var(--accent-rgb),.22)}
 
 /* ---------- Buscador IA del Tarifario ---------- */
 /* Resultados de la IA: bloque aparte de la grilla normal, con borde acentuado
