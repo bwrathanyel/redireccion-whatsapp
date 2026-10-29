@@ -3226,11 +3226,12 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
 .rol-asesor #f-asesor{display:none}
 .rol-marketing .nav-item:not(.nav-marketing-ok),.rol-marketing .bn-item:not(.nav-marketing-ok),.rol-marketing .sheet-item:not(.nav-marketing-ok){display:none}
 .rol-boleteria .nav-item:not(.nav-boleteria-ok),.rol-boleteria .bn-item:not(.nav-boleteria-ok),.rol-boleteria .sheet-item:not(.nav-boleteria-ok){display:none}
-.rol-administrativo .nav-item:not(.nav-administrativo-ok),.rol-administrativo .bn-item:not(.nav-administrativo-ok),.rol-administrativo .sheet-item:not(.nav-administrativo-ok){display:none}
-.rol-administrativo .nav-item.nav-freelancer-only.nav-administrativo-ok{display:flex}
+/* Asistente administrativo (lista negra, 2026-10-28): ve todo lo de admin salvo Leads, Balance, IA (menos Lyra) y campañas. */
+.rol-administrativo .nav-administrativo-no{display:none}
 .rol-asesor .admin-only,.rol-marketing .admin-only,.rol-boleteria .admin-only{display:none}
-/* Asistente administrativo (allowlist): solo los .admin-only de áreas concedidas llevan .oficina-ok. */
-.rol-administrativo .admin-only:not(.oficina-ok){display:none}
+.rol-administrativo .admin-only.administrativo-no{display:none}
+/* Gestión de Personal: ve equipo, asistencia y strikes; alta, rol y baja quedan solo admin. */
+.rol-administrativo #gp-personal-nuevo,.rol-administrativo #frl-personal-nuevo,.rol-administrativo #gp-personal-grid [data-editar],.rol-administrativo [data-reactivar]{display:none}
 .rol-administrativo #e-save,.rol-administrativo [data-mv-completar]{display:none}
 /* Asesor y boletería ven la pastilla solo con el botón del PDF de BT Travel; marketing, nada. */
 .rol-marketing .tar-admin-actions{display:none}
@@ -8080,7 +8081,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <button class="seg on" type="button" data-mv-tab="ventas">Ventas</button>
           <button class="seg" type="button" data-mv-tab="estadisticas">Estadísticas</button>
         </div>
-        <select class="flt admin-only oficina-ok" id="est-asesor"><option value="">Elegí un asesor…</option></select>
+        <select class="flt admin-only" id="est-asesor"><option value="">Elegí un asesor…</option></select>
       </div>
 
       <div class="mv-tab-panel" data-mv-panel="ventas">
@@ -8463,7 +8464,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       <div class="tar-tabs-row">
         <div class="seg-group chips-scroll" id="tar-tabs">
           <button class="seg on" data-tab="hotsale">🔥 Hot Sales</button>
-          <button class="seg admin-only oficina-ok" data-tab="ia">🤖 IA</button>
+          <button class="seg admin-only" data-tab="ia">🤖 IA</button>
           <button class="seg" data-tab="promo">Promociones</button>
           <button class="seg" data-tab="excursion">Excursiones</button>
           <button class="seg" data-tab="traslado">Traslados</button>
@@ -8473,10 +8474,10 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         </div>
         <div class="tar-admin-actions">
           <button class="tar-admin-btn tar-bt-pdf-btn" id="tar-bt-pdf-btn" type="button" title="Ver el tarifario de BT Travel (PDF)"><i class="fas fa-file-pdf"></i><span>BT Travel</span></button>
-          <button class="tar-admin-btn admin-only oficina-ok" id="tar-nueva-promo-btn" type="button" title="Nueva promoción" hidden><i class="fas fa-plus"></i></button>
-          <button class="tar-admin-btn admin-only oficina-ok" id="tar-actualizador-btn" type="button" title="Actualizador de Tarifario"><i class="fas fa-arrows-rotate"></i></button>
-          <button class="tar-admin-btn admin-only oficina-ok" id="tar-revision-btn" type="button" title="Revisión del tarifario"><i class="fas fa-clipboard-check"></i></button>
-          <button class="tar-admin-btn admin-only oficina-ok" id="tar-ranking-btn" type="button" title="Ranking de Hot Sales"><i class="fas fa-fire"></i></button>
+          <button class="tar-admin-btn admin-only" id="tar-nueva-promo-btn" type="button" title="Nueva promoción" hidden><i class="fas fa-plus"></i></button>
+          <button class="tar-admin-btn admin-only" id="tar-actualizador-btn" type="button" title="Actualizador de Tarifario"><i class="fas fa-arrows-rotate"></i></button>
+          <button class="tar-admin-btn admin-only" id="tar-revision-btn" type="button" title="Revisión del tarifario"><i class="fas fa-clipboard-check"></i></button>
+          <button class="tar-admin-btn admin-only" id="tar-ranking-btn" type="button" title="Ranking de Hot Sales"><i class="fas fa-fire"></i></button>
           <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
         </div>
       </div>
@@ -9461,7 +9462,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <div class="chead-row">
           <h2><i class="fas fa-house-chimney"></i> Apartamentos</h2>
           <input class="ei bt-buscar" id="apto-search" type="search" placeholder="Buscar proveedor o ubicación..." aria-label="Buscar proveedor de apartamentos" autocomplete="off">
-          <button class="btn-sm admin-only oficina-ok" id="apto-nuevo-prov" type="button"><i class="fas fa-plus"></i> Nuevo proveedor</button>
+          <button class="btn-sm admin-only" id="apto-nuevo-prov" type="button"><i class="fas fa-plus"></i> Nuevo proveedor</button>
         </div>
         <div class="csub">Casas y posadas con apartamentos propios: unidades, habitaciones y fotos · tocá un proveedor para ver sus apartamentos</div>
         <div class="kpis bt-kpis lt-kpis" id="apto-kpis"></div>
@@ -9472,8 +9473,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <div class="chead-row">
           <button class="btn-sm" id="apto-volver" type="button"><i class="fas fa-arrow-left"></i> Proveedores</button>
           <h2 id="apto-det-titulo"><i class="fas fa-house-chimney"></i></h2>
-          <button class="btn-sm admin-only oficina-ok" id="apto-editar-prov" type="button"><i class="fas fa-id-card"></i> Ficha del proveedor</button>
-          <button class="btn-sm admin-only oficina-ok" id="apto-nuevo-apto" type="button"><i class="fas fa-plus"></i> Nuevo apartamento</button>
+          <button class="btn-sm admin-only" id="apto-editar-prov" type="button"><i class="fas fa-id-card"></i> Ficha del proveedor</button>
+          <button class="btn-sm admin-only" id="apto-nuevo-apto" type="button"><i class="fas fa-plus"></i> Nuevo apartamento</button>
         </div>
         <div class="bt-datos" id="apto-det-datos"></div>
         <div class="csub" style="margin-top:12px">Tocá un apartamento para ver sus fotos, distribución y precios</div>
@@ -11357,7 +11358,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <datalist id="nl-canal-opciones">
       <option value="Instagram"><option value="Facebook"><option value="Ambos">
     </datalist>
-    <div class="admin-only oficina-ok">
+    <div class="admin-only">
       <label class="fl">Empresa <span style="font-weight:400;color:var(--muted2)">— vacío = cliente particular</span></label>
       <select id="nl-empresa" class="ei"><option value="">Cliente particular</option></select>
     </div>
@@ -11365,7 +11366,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <input id="nl-personas" class="ei" type="text">
     <label class="fl">Fecha estimada</label>
     <input id="nl-fecha" class="ei" type="text" placeholder="Ej: 15 de agosto, o del 10 al 15/09">
-    <label class="fl admin-only">Asesor</label>
+    <label class="fl admin-only administrativo-no">Asesor</label>
     <div class="admin-only nl-asesor-row">
       <select id="nl-asesor" class="ei" style="flex:1"><option value="">Sin asignar</option></select>
       <button class="dbtn" id="nl-aleatorio-btn" type="button" style="width:auto;white-space:nowrap;padding:8px 12px"><i class="fas fa-shuffle"></i> Aleatorio</button>

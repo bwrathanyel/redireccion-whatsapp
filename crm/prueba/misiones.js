@@ -14,8 +14,6 @@
         ok: d => esLead(d, 'actualizar_lead', a => a.p_estado === 'ATENDIDO') },
       { id: 'ficha', titulo: 'Abre la ficha de María', foco: 'María González', texto: 'Toca el nombre de <b>María González</b> en la lista: se abre su ficha con sus datos, el historial de lo que se habló y las notas del equipo.', sec: 'leads',
         ok: d => d.tipo === 'ficha' },
-      { id: 'nota', titulo: 'Déjale una nota', sel: '#e-notas', foco: 'María González', texto: 'En la ficha de María busca <b>Notas</b> y escribe lo que hablaron (ej. «Quiere Margarita en diciembre, 2 adultos»). Se guarda sola cuando dejas de escribir; así cualquiera del equipo sabe en qué va.', sec: 'leads',
-        ok: d => esLead(d, 'guardar_notas_lead', a => !!String(a.p_notas || '').trim()) },
       { id: 'tarifario', titulo: 'Busca en el Tarifario', foco: 'Hoteles', texto: 'Entra a la pestaña <b>Hoteles</b>, escribe <b>Margarita</b> en el buscador y mira cuántos hoteles salen y desde qué precio. Así sabrás qué ofrecerle a María.', sec: 'tarifario',
         ok: d => d.tipo === 'busqueda' && /margarita/i.test(d.texto) },
       { id: 'cotizar', titulo: 'Registra la cotización', sel: '#dacc-estado', foco: 'María González', texto: 'Ya le mandaste el precio a María por WhatsApp. Toca su nombre en la lista para abrir su ficha y, en el selector de estado de arriba, elige <b>Cotización enviada</b>. (Si cotizas con el botón «Cotizar», el CRM lo registra solo.) Si ya lo hiciste antes, toca Saltar.', sec: 'leads',
@@ -73,7 +71,7 @@
     { icono: '🎯', titulo: 'Tu guía', texto: 'Abajo verás una barrita con tu tarea. Toca <b>Llévame</b> y te muestro dónde ir. La <b>i</b> te explica la tarea otra vez; ahí también puedes <b>Saltar</b> o <b>Reiniciar</b>.' },
   ];
   const CIERRE = {
-    asesor: 'Repite tú solo el caso completo: atiende a un cliente, déjale una nota, cotízale, agenda el seguimiento y registra su pago. Si te trabas, pregúntale a Lyra.',
+    asesor: 'Repite tú solo el caso completo: atiende a un cliente, abre su ficha, cotízale, agenda el seguimiento y registra su pago. Si te trabas, pregúntale a Lyra.',
     admin: 'Repite tú solo el recorrido: aprueba un pago, reparte un número, asigna una tarea y revisa quién vino hoy. Si te trabas, pregúntale a Lyra.',
   };
   const cierre = () => CIERRE[P.m.rol] || CIERRE.asesor;
@@ -337,6 +335,25 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
   }
   function apaga() { turno++; objetivo = null; conFlecha = false; clearTimeout(apagaEn); spot.classList.remove('on'); flecha.classList.remove('on', 'pp-listo'); }
   const corta = () => { turno++; };
+  // Cerrar una capa es history.back(): su popstate llega después y, si ya se navegó, devuelve a Leads o cierra el menú.
+  function cierraConVuelta(boton) {
+    const vuelta = new Promise(ok => { addEventListener('popstate', ok, { once: true }); setTimeout(ok, 500); });
+    boton?.click();
+    return vuelta;
+  }
+  // Capas que tapan la sección, de la de más arriba a la de más abajo: [abierta, su cierre, lo que cuenta como dentro].
+  // El botón de Lyra es parte de Lyra: guiar hacia él no la cierra.
+  const CAPAS = [['.sheet.open', '#sheet-bg'], ['#lightbox.open', '#lbClose'], ['#tarcmp.open', '#tarcmp-cerrar'], ['#drawer.open', '#drawerBg'],
+    ['#chat-panel.abierto', '#cp-cerrar'], ['body.lyra-abierta #lyra-panel', '#lyra-cerrar', '#lyra-panel,#lyra-fab,#lyra-dock']];
+  // Si el objetivo queda detrás de una capa abierta, se cierran las de encima suyo; sin objetivo, todas.
+  async function despeja(el, t) {
+    for (const [abierta, cierre, dentro = abierta] of CAPAS) {
+      if (el?.closest(dentro)) return;
+      if (!document.querySelector(abierta)) continue;
+      await cierraConVuelta(document.querySelector(cierre));
+      if (t !== turno) return;
+    }
+  }
   // Cuando el objetivo cambia de lugar por scroll se lo sigue pegado; si se movió solo (se abrió algo), el foco viaja.
   function coloca(viaja) {
     if (!objetivo) return;
@@ -426,7 +443,10 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
   async function guiar(busca, { dura = 0 } = {}) {
     const t = ++turno; clearTimeout(apagaEn);
     conFlecha = false; flecha.classList.remove('on', 'pp-listo');
-    const el = typeof busca === 'function' ? await estable(busca, t) : busca;
+    let el = typeof busca === 'function' ? await estable(busca, t) : busca;
+    if (t !== turno) return false;
+    if (el) { await despeja(el, t); if (t !== turno) return false; }
+    if (el && !el.isConnected) el = typeof busca === 'function' ? await estable(busca, t) : null;
     if (t !== turno) return false;
     if (!el) { apaga(); return false; }
     // En <html> y no en body: body{zoom:.9} escalaría las coordenadas del foco y la flecha.
@@ -462,6 +482,8 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
   // Sin movimiento, o si ya se está ahí, se navega directo. Devuelve false si otro paso la interrumpió.
   async function viaja(k) {
     const ir = () => { window.__pruebaIr(k); return true; };
+    // Otra sección: lo que esté abierto encima se cierra antes, o su vuelta atrás desharía el viaje.
+    if (visible() !== k) { const t = turno; await despeja(null, t); if (t !== turno) return false; }
     const item = itemMenu(k);
     if (quieto() || !item || visible() === k) return ir();
     if (esMovil() && !document.body.classList.contains('menu-abierto')) document.getElementById('menu-btn')?.click();
@@ -481,6 +503,7 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     if (ir && k !== 'lyra' && window.__pruebaIr && !await viaja(k)) return false;
     const fab = document.getElementById('lyra-fab');
     const el = k === 'lyra' ? (fab?.offsetParent ? fab : document.getElementById('lyra-dock')) : document.querySelector(`#sidebar-nav [data-sec="${k}"]`);
+    if (el && ir && k === 'lyra') { const t = turno; await despeja(el, t); if (t !== turno) return false; }
     if (el && ir && (k === 'lyra' || !window.__pruebaIr)) el.click();
     if (foco || opc.sel) return guiar(() => objetivoDe(opc.sel, foco), opc);
     // Con navegación propia el camino por el menú ya se mostró: volver a marcar la entrada no dice nada nuevo.
@@ -488,7 +511,7 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     const padre = el.dataset.padre && document.querySelector(`#sidebar-nav [data-sec="${el.dataset.padre}"]`);
     return guiar(() => [el, padre].find(x => x && caja(x)), opc);
   }
-  window.__pruebaGuia = { destaca, enfoca, buscaTexto, porTexto, guiar, apaga, corta, pausa, quieto, enLogin, presentando };
+  window.__pruebaGuia = { destaca, enfoca, buscaTexto, porTexto, guiar, apaga, corta, pausa, quieto, enLogin, presentando, cierraConVuelta };
   function presenta(mi) {
     const k = clave(mi);
     mide('mision_inicio');

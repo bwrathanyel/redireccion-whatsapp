@@ -92,13 +92,7 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     prueba(intentos);
   });
   const visible = el => el && (el.offsetParent || el.getClientRects().length) ? el : null;
-  // La ficha se cierra con history.back(): su popstate llega después y, si ya se navegó, devuelve a Leads.
-  // Lyra igual: al cerrarla su popstate cerraba el menú que la guía acababa de abrir.
-  function cierraConVuelta(boton) {
-    const vuelta = new Promise(ok => { addEventListener('popstate', ok, { once: true }); setTimeout(ok, 500); });
-    boton?.click();
-    return vuelta;
-  }
+  const { cierraConVuelta } = G;
   const cierraFicha = () => document.getElementById('drawer')?.classList.contains('open') && cierraConVuelta(document.getElementById('drawerBg'));
   async function muestra(d, t = paso) {
     if (d.portada || G.enLogin()) return G.apaga();
