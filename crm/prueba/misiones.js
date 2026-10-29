@@ -18,10 +18,6 @@
         ok: d => d.tipo === 'busqueda' && /margarita/i.test(d.texto) },
       { id: 'cotizar', titulo: 'Registra la cotización', sel: '#dacc-estado', foco: 'María González', texto: 'Ya le mandaste el precio a María por WhatsApp. Toca su nombre en la lista para abrir su ficha y, en el selector de estado de arriba, elige <b>Cotización enviada</b>. (Si cotizas con el botón «Cotizar», el CRM lo registra solo.) Si ya lo hiciste antes, toca Saltar.', sec: 'leads',
         ok: d => esLead(d, 'registrar_cotizacion_enviada') || esLead(d, 'actualizar_lead', a => a.p_estado === 'COTIZACION ENVIADA') },
-      { id: 'seguimiento', titulo: 'Agenda el seguimiento', sel: ['#e-a-recordar', '#e-a-mas'], foco: 'María González', texto: 'María dijo que lo piensa. En su ficha toca los tres puntitos <b>⋯</b> y luego <b>Recordar mañana</b>: el CRM te la vuelve a poner adelante a las 9:00 para que no se enfríe.', sec: 'leads',
-        ok: d => esLead(d, 'fijar_proxima_accion') },
-      { id: 'pipeline', titulo: 'Mira tu embudo', texto: 'Cada barra es una etapa del cliente. Toca la de <b>Cotización enviada</b>: ahí debería estar María. Así ves de un vistazo en qué va cada uno.', sec: 'pipeline',
-        ok: d => d.tipo === 'click' && d.dentro === 'pipeline' },
       { id: 'abono', titulo: 'Registra un abono', foco: 'Registrar abono', texto: 'Ricardo Díaz ya pagó la mitad de su viaje y debe $325. Anota un pago parcial que te hizo: en su tarjeta toca <b>Registrar abono</b>, escribe un monto menor o igual al saldo (ej. 100) y confirma.', sec: 'mis-ventas',
         ok: d => esLead(d, 'registrar_abono_venta') },
       { id: 'tareas', titulo: 'Revisa tus tareas', texto: 'Aquí está tu día: lo que te asignaron y tus recordatorios. Toca una tarea para ver sus pasos y qué falta.', sec: 'tareas',
@@ -40,8 +36,6 @@
         ok: d => d.tipo === 'click' && d.dentro === 'comisiones' },
       { id: 'repartir', titulo: 'Reparte números', foco: 'Detectar', texto: 'Un cliente escribió directo y hay que dárselo a un asesor. Pega en el cuadro estas dos líneas: «0414-5550101 Marta» y «0424-5550102 Jorge». Toca «Detectar números», revísalos y toca «Repartir». En «Asignar» eliges un asesor o dejas el reparto automático.', sec: 'repartir',
         ok: d => d.tipo === 'fn' && d.nombre === 'repartir-numeros' && d.args?.accion === 'repartir' },
-      { id: 'embudo', titulo: 'Mira el embudo del equipo', texto: 'Cada barra es una etapa: cuántos clientes hay atendidos, cotizados y esperando pago. Toca una barra para ver quiénes están ahí.', sec: 'pipeline',
-        ok: d => d.tipo === 'click' && d.dentro === 'pipeline' },
       { id: 'asignar', titulo: 'Asigna una tarea', foco: 'Nueva tarea', texto: 'Toca <b>Nueva tarea</b>, escribe qué hay que hacer (ej. «Llamar a los leads de ayer»), elige un asesor y créala. Le aparece en su lista al instante.', sec: 'tareas',
         ok: d => esLead(d, 'tarea_crear') },
       { id: 'personal', titulo: 'Revisa quién vino hoy', foco: 'Ver día por día', texto: 'Cada tarjeta es una persona del equipo y dice si marcó asistencia hoy. Busca a quien aparece como «No marcó hoy» y abre «Ver día por día» para ver sus horarios.', sec: 'gestion-personal',
@@ -102,7 +96,7 @@
     { icono: '🎯', titulo: 'Tu guía', texto: 'Abajo verás una barrita con tu tarea. Toca <b>Llévame</b> y te muestro dónde ir. La <b>i</b> te explica la tarea otra vez; ahí también puedes <b>Saltar</b> o <b>Reiniciar</b>.' },
   ];
   const CIERRE = {
-    asesor: 'Repite tú solo el caso completo: atiende a un cliente, abre su ficha, cotízale, agenda el seguimiento y registra su pago. Si te trabas, pregúntale a Lyra.',
+    asesor: 'Repite tú solo el caso completo: atiende a un cliente, abre su ficha, cotízale y registra su pago. Si te trabas, pregúntale a Lyra.',
     admin: 'Repite tú solo el recorrido: aprueba un pago, reparte un número, asigna una tarea y revisa quién vino hoy. Si te trabas, pregúntale a Lyra.',
   };
   const cierre = () => CIERRE[P.m.rol] || CIERRE.asesor;
