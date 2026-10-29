@@ -228,9 +228,14 @@ body.prueba-guiada #prueba-candado{display:block}
   #prueba-modal{background:rgba(8,8,12,.92);-webkit-backdrop-filter:none;backdrop-filter:none}
   #prueba-panel .pp-fila{gap:8px;padding:3px 3px 3px 4px;-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--panel-solid,#1b1b1f)}
   #prueba-panel .pp-tit{font-size:13px}
-  #prueba-panel .pp-detalle p{font-size:14px;margin-bottom:10px}
   #prueba-panel button,#prueba-modal button{min-height:44px;padding:8px 14px;font-size:14px}
   #prueba-panel .pp-fila button.pp-info{width:44px;height:44px}
+  #prueba-panel .pp-detalle{bottom:calc(100% + 6px);padding:10px 12px 6px;border-radius:14px;max-height:min(46vh,320px);overflow:auto;overscroll-behavior:contain}
+  #prueba-panel .pp-detalle h4{margin-bottom:3px;font-size:11.5px;font-weight:600;letter-spacing:.02em;color:var(--muted,#aaa)}
+  #prueba-panel .pp-detalle p{font-size:13.5px;line-height:1.4;margin-bottom:6px;color:var(--txt,#eee)}
+  #prueba-panel .pp-detalle .pp-acc{gap:2px;margin:0 -6px}
+  #prueba-panel .pp-detalle button{min-height:38px;padding:6px 10px;font-size:13px;border-color:transparent;color:#ffb020}
+  #prueba-panel .pp-detalle button.pp-reini{color:var(--muted,#aaa)}
 }
 @media (prefers-reduced-motion:reduce){${QUIETO('')}}
 ${QUIETO(':root[data-paleta="sereno"]')}`;
