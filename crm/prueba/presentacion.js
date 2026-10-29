@@ -13,9 +13,9 @@
   const DIAPOS = [
     { tema: 'Leads y atender', portada: true, icono: '👥', titulo: 'Leads y atender', texto: 'Cómo llega un cliente al CRM y qué haces en los primeros minutos.' },
     { tema: 'Leads y atender', titulo: 'Tu bandeja de leads', sec: 'leads', sel: '#sec-leads', texto: 'Cada persona que escribe por Instagram, Facebook o la web cae aquí, ya asignada a un asesor. Tú ves solo los tuyos.' },
-    { tema: 'Leads y atender', titulo: 'Leads nuevos por atender', sec: 'leads', sel: '#inbox-grid', texto: 'Los nuevos esperan arriba hasta que alguien los toma. Si nadie los toca a tiempo, el CRM se los pasa solo a otro asesor.' },
+    { tema: 'Leads y atender', titulo: 'Leads nuevos por atender', sec: 'leads', sel: ['#inbox-grid', '.lead-card.tiene-sin-atender'], texto: 'Los nuevos esperan arriba hasta que alguien los toma. Si nadie los toca a tiempo, el CRM se los pasa solo a otro asesor.' },
     { tema: 'Leads y atender', titulo: 'Atender', sec: 'leads', foco: 'Atender', texto: 'Lo tomas tú: queda <b>ATENDIDO</b> y en el CRM real se abre su WhatsApp. Escríbele en ese momento, no después.' },
-    { tema: 'Leads y atender', titulo: 'No puedo', sec: 'leads', foco: 'No puedo', texto: 'Si de verdad no puedes atenderlo, se lo pasas a otro asesor (te pide confirmar). Úsalo poco: el cliente está esperando.' },
+    { tema: 'Leads y atender', titulo: 'No puedo', sec: 'leads', foco: 'No puedo', sel: '.lead-card.tiene-sin-atender', texto: 'Si de verdad no puedes atenderlo, se lo pasas a otro asesor (te pide confirmar). Úsalo poco: el cliente está esperando.' },
     { tema: 'Leads y atender', titulo: 'La ficha del cliente', sec: 'leads', abre: 'María González', sel: '#drawer', texto: 'Tocando el nombre se abre su ficha: datos, historial y notas. Las acciones están en los tres puntitos <b>⋯</b>.' },
     { tema: 'Leads y atender', titulo: 'Los estados', sec: 'pipeline', sel: '#sec-pipeline', texto: '<b>POR ATENDER → ATENDIDO → COTIZACIÓN ENVIADA → EN ESPERA DE PAGO → PAGO REALIZADO</b>, y <b>PERDIDO</b> si no compra. Mantenlo al día: así todo el equipo sabe en qué va cada cliente.' },
     { tema: 'Cotizar y tarifario', portada: true, icono: '🏨', titulo: 'Cotizar y tarifario', texto: 'Dónde están los precios y cómo dejas registrado lo que le ofreciste al cliente.' },
@@ -25,7 +25,7 @@
     { tema: 'Cotizar y tarifario', titulo: 'Cotizar', sec: 'leads', abre: 'María González', sel: '#e-a-cta', texto: '<b>Cotizar</b> arma el PDF con el viaje y el precio. Al generarlo, el CRM pasa solo al cliente a <b>COTIZACIÓN ENVIADA</b>: no tienes que registrar nada más.' },
     { tema: 'Cotizar y tarifario', titulo: 'Si cotizaste por WhatsApp', sec: 'leads', abre: 'María González', sel: '#dacc-estado', texto: 'Si el precio se lo escribiste directo por WhatsApp, cambia aquí el estado a <b>Cotización enviada</b>. Así nadie lo da por olvidado.' },
     { tema: 'Ventas y abonos', portada: true, icono: '💰', titulo: 'Ventas y abonos', texto: 'Lo que ya vendiste, lo que te falta cobrar y cómo anotas cada pago.' },
-    { tema: 'Ventas y abonos', titulo: 'Mis Ventas', sec: 'mis-ventas', sel: '#mv-kpis', texto: 'Arriba, tus números: cuánto vendiste y cuánto falta por cobrar.' },
+    { tema: 'Ventas y abonos', titulo: 'Mis Ventas', sec: 'mis-ventas', sel: ['#mv-kpis', '.kpi-plegar[aria-controls="mv-kpis"]'], texto: 'Arriba, tus números: cuánto vendiste y cuánto falta por cobrar. En el celular se despliegan con <b>Resumen</b>.' },
     { tema: 'Ventas y abonos', titulo: 'Cada venta', sec: 'mis-ventas', sel: '#mv-cards', texto: 'Una tarjeta por venta. Ricardo Díaz ya pagó la mitad de su viaje y le quedan <b>$325</b> por pagar.' },
     { tema: 'Ventas y abonos', titulo: 'Registrar un abono', sec: 'mis-ventas', foco: 'Registrar abono', texto: 'Cada pago parcial se anota aquí: un monto menor o igual al saldo, y ves cuánto <b>quedará</b> antes de confirmar. Administración revisa el comprobante; recién ahí cuenta.' },
     { tema: 'Lyra y tareas', portada: true, icono: '✨', titulo: 'Lyra y tareas', texto: 'Tu asistente y tu lista del día.' },
@@ -92,25 +92,34 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     prueba(intentos);
   });
   const visible = el => el && (el.offsetParent || el.getClientRects().length) ? el : null;
-  function cierraFicha() {
-    if (document.getElementById('drawer')?.classList.contains('open')) document.getElementById('drawerBg')?.click();
+  // La ficha se cierra con history.back(): su popstate llega después y, si ya se navegó, devuelve a Leads.
+  // Lyra igual: al cerrarla su popstate cerraba el menú que la guía acababa de abrir.
+  function cierraConVuelta(boton) {
+    const vuelta = new Promise(ok => { addEventListener('popstate', ok, { once: true }); setTimeout(ok, 500); });
+    boton?.click();
+    return vuelta;
   }
+  const cierraFicha = () => document.getElementById('drawer')?.classList.contains('open') && cierraConVuelta(document.getElementById('drawerBg'));
   async function muestra(d, t = paso) {
     if (d.portada || G.enLogin()) return G.apaga();
     G.corta();
-    if (!d.abre) cierraFicha();
+    if (!d.abre) { await cierraFicha(); if (t !== paso) return; }
     // El botón de Lyra abre y cierra: solo se toca para cambiar de estado.
     const lyraAbierta = document.body.classList.contains('lyra-abierta');
-    if ((d.sec === 'lyra') !== lyraAbierta) { const fab = document.getElementById('lyra-fab'); (fab?.offsetParent ? fab : document.getElementById('lyra-dock'))?.click(); }
+    if ((d.sec === 'lyra') !== lyraAbierta) {
+      const fab = document.getElementById('lyra-fab'), boton = fab?.offsetParent ? fab : document.getElementById('lyra-dock');
+      if (lyraAbierta) { await cierraConVuelta(boton); if (t !== paso) return; } else boton?.click();
+    }
     if (d.sec === 'lyra') return G.destaca('lyra', false);
-    if (d.sec) G.destaca(d.sec, true, null, { marca: false });
+    // Si cambia de sección, la guía muestra el camino por el menú antes de entrar: se espera a que termine.
+    if (d.sec) { await G.destaca(d.sec, true, null, { marca: false }); if (t !== paso) return; }
     if (d.abre && !document.getElementById('drawer')?.classList.contains('open')) {
       const x = await espera(() => G.buscaTexto(d.abre), t);
       if (t !== paso) return;
       x?.click();
     }
-    if (d.foco) return G.enfoca(d.foco);
-    if (d.sel) return G.guiar(() => visible(document.querySelector(d.sel)));
+    // sel (uno o varios) es la alternativa si el botón no está: en el celular el inbox va fundido en las tarjetas de la lista.
+    if (d.foco || d.sel) return G.guiar(() => (d.foco && G.porTexto(d.foco)) || [].concat(d.sel || []).map(q => visible(document.querySelector(q))).find(Boolean));
   }
 
   function ir(n) {

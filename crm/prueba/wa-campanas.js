@@ -213,7 +213,7 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
     $('wc-pl-cuerpo').textContent = p ? p.cuerpo : '';
     $('wc-vars').innerHTML = p ? Array.from({ length: p.variables }, (_, i) => reservas && i === 0
       ? '<label class="wc-campo">Valor de {{1}}<input type="text" data-wc-var="0" value="{{nombre}}" readonly title="Primer nombre de cada cliente"></label>'
-      : `<label class="wc-campo">Valor de {{${i + 1}}}${reservas ? '' : ' (usa {{nombre}} para el primer nombre)'}<input type="text" data-wc-var="${i}" maxlength="200"${i === 0 ? ' value="{{nombre}}"' : ''}></label>`).join('') : '';
+      : `<label class="wc-campo">Valor de {{${i + 1}}}${reservas ? ' (usa {{destino}} para el destino de su viaje)' : ' (usa {{nombre}} para el primer nombre)'}<input type="text" data-wc-var="${i}" maxlength="200"${i === 0 ? ' value="{{nombre}}"' : ''}></label>`).join('') : '';
   }
 
   const segmento = () => reservas ? {
