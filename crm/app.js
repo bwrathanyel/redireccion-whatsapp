@@ -274,6 +274,7 @@ function iconoCanalLead(canal) {
 const ESTADOS_CICLO = ESTADOS;
 const SERVICIOS = ['Vuelos', 'Full Day', 'Hospedaje', 'Paquete Todo Incluido', 'Hotel', 'Tour', 'Evento', 'Otro'];
 const VENTA = ['PAGO REALIZADO', 'VENTA COMPLETA'];
+const LINK_PAGO_ESTADOS = ['COTIZACION ENVIADA', 'EN ESPERA DE PAGO', ...VENTA];
 // Próxima acción (leads.proxima_accion_*): los leads cerrados no cuentan como seguimiento.
 const ESTADOS_SIN_SEGUIMIENTO = [...VENTA, 'PERDIDO'];
 const FILTRO_SIN_SEGUIMIENTO = `(${ESTADOS_SIN_SEGUIMIENTO.map(e => `"${e}"`).join(',')})`;
@@ -7527,8 +7528,9 @@ function leadCardHtml(l) {
     `<span>${textoTelefonoLead(l)}</span>`,
     ROL !== 'asesor' && l.asesor ? `<span>${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</span>` : '',
   ].filter(Boolean).join('<span class="ec-dot">·</span>');
-  const chipsFichas = fichas ? [pc.etiquetas['Fecha estimada'] || pc.etiquetas.Fechas, pc.etiquetas.Presupuesto && 'Presupuesto ' + pc.etiquetas.Presupuesto]
-    .filter(Boolean).map(t => `<span class="lc-chip">${esc(t)}</span>`).join('') : '';
+  const fechaViaje = pc.etiquetas['Fecha estimada'] || pc.etiquetas.Fechas || l.fecha_estimada;
+  const chipsFichas = [fechaViaje && `<i class="fas fa-calendar-days"></i>${esc(fechaViaje)}`, fichas && pc.etiquetas.Presupuesto && esc('Presupuesto ' + pc.etiquetas.Presupuesto)]
+    .filter(Boolean).map(t => `<span class="lc-chip">${t}</span>`).join('');
   return `<div class="entity-card lead-card ${sinAtenderDatos ? 'tiene-sin-atender' : ''}" data-lead-id="${l.id}" style="position:relative;border-left:4px solid ${estadoColor}">
     <input type="checkbox" class="lead-check solo-admin-borrar" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''} style="position:absolute;top:10px;right:10px;width:18px;height:18px">
     <div class="lc-head">
@@ -7552,7 +7554,7 @@ function leadCardHtml(l) {
     <div class="ec-context">${contexto}</div>
     ${pc.resumen ? `<div class="lc-consulta${fichas ? ' larga' : ''}" title="${esc(pc.resumen)}">${esc(pc.resumen)}</div>` : ''}
     ${pc.avisos.length || chipsFichas ? `<div class="lc-chips">${pc.avisos.map(a => `<span class="lc-chip aviso"><i class="fas fa-triangle-exclamation"></i>${esc(a)}</span>`).join('')}${chipsFichas}</div>` : ''}
-    ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-tag"></i><span>Última oferta: ${esc(pc.oferta)}</span></div>` : ''}
+    ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-hotel"></i><span>IA recomendó: ${esc(pc.oferta)}</span></div>` : ''}
     <div class="lc-fill"></div>
     <div class="lc-foot">
       ${cta ? `<button type="button" class="lc-cta" data-accion="${cta.key}"><i class="fas ${cta.icono}"></i>${cta.texto}</button>` : '<span class="lc-cta-vacio"></span>'}
@@ -7994,7 +7996,7 @@ function openDrawer(l, opciones = {}) {
           <div id="res-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
           <div class="edit-err" id="res-err"></div>
           <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, true) : ''}
-        ${(vende || esOficina()) && VENTA.includes(l.estado) ? seccion('link-pago', 'fa-link', 'Link de pago', `
+        ${(vende || esOficina()) && LINK_PAGO_ESTADOS.includes(l.estado) ? seccion('link-pago', 'fa-link', 'Link de pago', `
           <div class="csub" style="margin-bottom:8px">El cliente abre el link, elige cómo pagar (Zelle, Pago Móvil o Binance) y sube su comprobante. Vence en 24 horas; oficina lo verifica.</div>
           <label class="fl">Reserva</label>
           <select id="lp-reserva" class="ei" disabled><option value="">Cargando reservas…</option></select>
@@ -8088,6 +8090,7 @@ function openDrawer(l, opciones = {}) {
   }
   if (document.getElementById('lp-emitir')) {
     document.getElementById('lp-emitir').onclick = () => emitirLinkPago(l);
+    if (!document.getElementById('res-lista')) lpCargarReservas(l);
     cargarLinksPagoLead(l);
   }
   cargarConversacionLead(l);
@@ -11946,6 +11949,8 @@ const MSG_VERIFICAR_PAGO_WEB = {
   ...MSG_VERIFICAR_PAGO,
   no_es_pago_web: 'Este pago no es de una compra hecha en la web.',
   no_es_pago_de_reserva: 'Este pago no está atado a una reserva.',
+  falta_reserva: 'Elige en la tarjeta la reserva a la que se abona el pago.',
+  supera_saldo: 'El pago supera el saldo pendiente de la reserva.',
   pago_no_declarado: 'El cliente aún no declaró este pago. Recarga la lista.',
   reserva_liberada: 'El cupo de esta reserva ya se liberó por vencimiento. Habla con el cliente y rehaz la reserva a mano antes de cobrar.',
   reserva_no_disponible: 'La reserva ya no está disponible (cerrada o eliminada). Revísala antes de aprobar.',
@@ -12038,6 +12043,7 @@ function pagoWebCard(p) {
       ${cargos.length ? `<div class="ec-row" style="margin-top:2px;padding-left:20px">Incluye ${esc(cargos.join(' y '))}</div>` : ''}
       <div class="ec-row"><i class="fas fa-user"></i> ${esc(p.asesor || 'Sin asignar')}${p.lead_telefono ? ' · ' + esc(p.lead_telefono) : ''}</div>
       <div class="ec-row"><i class="fas fa-clock"></i> ${p.declarado_en ? 'Declarado ' + esc(tiempoRelativo(p.declarado_en)) : 'Sin declarar'}</div>
+      ${pend && pagoSinReserva(p) ? `<label class="fl" style="margin-top:8px">Reserva a la que se abona</label><select class="ei" data-pagores="${p.id}" data-lead="${p.lead_id}" disabled><option value="">Cargando reservas…</option></select>` : ''}
       <div data-pagoweb-prev="${p.id}" style="display:none;margin-top:10px"></div>
       ${acciones.length ? `<div class="inbox-actions">${acciones.join('')}</div>` : ''}
     </div>`;
@@ -12120,6 +12126,30 @@ async function loadPagos(silencioso = false) {
     ${espera.length ? `<details class="pagos-espera"><summary><i class="fas fa-hourglass-half"></i> Esperando que el cliente pague <span class="pagos-col-n">${espera.length}</span></summary>
       <div class="leads-inbox-grid">${espera.map(card).join('')}</div></details>` : ''}`;
   if (!silencioso) entradaLista(lista);
+  pagoResCargar(lista);
+}
+
+// Link o captura emitidos sin reserva: oficina elige la reserva del cliente al verificar.
+// La elección sobrevive al refresco silencioso del tablero.
+const PAGO_RES_ELEGIDA = {};
+const pagoSinReserva = p => !pagoEsWeb(p) && !p.reserva_id;
+async function pagoResCargar(lista) {
+  const sels = [...lista.querySelectorAll('[data-pagores]')];
+  const porLead = {};
+  for (const sel of sels) (porLead[sel.dataset.lead] ||= []).push(sel);
+  await Promise.all(Object.entries(porLead).map(async ([lead, ss]) => {
+    const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: Number(lead) });
+    const rs = error || !data?.ok ? null : (data.reservas || []).filter(r => r.activo);
+    for (const sel of ss) {
+      if (!sel.isConnected) continue;
+      sel.innerHTML = rs === null ? '<option value="">No se pudieron cargar las reservas</option>'
+        : !rs.length ? '<option value="">El cliente no tiene reservas: créala en su ficha</option>'
+        : '<option value="">Elige la reserva…</option>' + rs.map(resOpcion).join('');
+      sel.disabled = !rs?.length;
+      if (PAGO_RES_ELEGIDA[sel.dataset.pagores]) sel.value = PAGO_RES_ELEGIDA[sel.dataset.pagores];
+      sel.onchange = () => { PAGO_RES_ELEGIDA[sel.dataset.pagores] = sel.value; };
+    }
+  }));
 }
 
 function pagoAsesorCard(p) {
@@ -12187,7 +12217,10 @@ async function verificarPagoWebAccion(id, modo, btn) {
   const p = PAGOS_CACHE.find(x => x.id === id && x._web);
   if (!p) return;
   const aprobar = modo !== 'rechazar';
-  const cod = p.codigo || 'la reserva';
+  const resSel = pagoSinReserva(p) ? document.querySelector(`[data-pagores="${id}"]`) : null;
+  const resElegida = Number(resSel?.value) || null;
+  if (aprobar && pagoSinReserva(p) && !resElegida) { errToast(MSG_VERIFICAR_PAGO_WEB.falta_reserva); return; }
+  const cod = p.codigo || (resElegida ? resSel.selectedOptions[0].textContent.split(' · ')[0] : 'la reserva');
   let motivo = null;
   if (aprobar) {
     const aviso = modo === 'tarde'
@@ -12219,6 +12252,7 @@ ${pagoEsWeb(p)
   const params = { p_pago_id: id, p_aprobar: aprobar };
   if (motivo) params.p_motivo = motivo.trim();
   if (modo === 'tarde') params.p_sin_declaracion = true;
+  if (aprobar && resElegida) params.p_reserva_id = resElegida;
   const { data, error } = await sb.rpc(pagoEsWeb(p) ? 'verificar_pago_web' : 'verificar_pago_reserva', params);
   if (error || !data?.ok) {
     if (btn) btn.disabled = false;
@@ -12242,7 +12276,8 @@ const RPA_ERR = {
   reserva_no_disponible: 'La reserva ya no está activa.', riel_invalido: 'Elige el método de pago.',
   falta_referencia: 'Escribe la referencia del pago.', comprobante_path_invalido: 'No se pudo guardar la captura. Vuelve a pegarla.',
   monto_invalido: 'Pon un monto mayor a 0.', tasa_invalida: 'Elige la tasa BCV.',
-  tasa_no_disponible: 'No hay tasa BCV cargada hoy. Avísale a oficina.', referencia_duplicada: 'Esa referencia ya está registrada en esta reserva.',
+  tasa_no_disponible: 'No hay tasa BCV cargada hoy. Avísale a oficina.', referencia_duplicada: 'Esa referencia ya está registrada para este cliente.',
+  falta_cliente: 'Elige el cliente.',
 };
 const PAGO_MIO_COLOR = { emitido: 'var(--muted)', pendiente_verificacion: 'var(--amber)', verificado: 'var(--green)', rechazado: 'var(--danger)', vencido: 'var(--muted)' };
 const lpUrl = token => `https://destinoyeventoslotus360.com/pagar/${token}`;
@@ -12257,7 +12292,7 @@ function pagoMioCard(p) {
         <span class="badge-st" style="color:${PAGO_MIO_COLOR[p.estado] || 'var(--muted)'}">${esc(link && p.estado === 'emitido' ? 'Esperando al cliente' : PAGO_ESTADO_LABEL[p.estado] || p.estado)}</span></div>
       <div style="margin-top:8px;${PAGO_WEB_MONO};font-size:20px;font-weight:800;color:var(--txt)">${esc(pagoMioMonto(p))}</div>
       <div class="ec-row">${esc(p.riel ? PAGO_RIEL_LABEL[p.riel] || p.riel : 'El cliente elige el método')}${p.referencia_declarada ? ' · Ref. ' + esc(p.referencia_declarada) : ''}</div>
-      <div class="ec-row"><i class="fas fa-${link ? 'link' : 'user-pen'}"></i> ${link ? 'Link de pago' : 'Cargado por ti'} · ${esc(p.codigo || '')}</div>
+      <div class="ec-row"><i class="fas fa-${link ? 'link' : 'user-pen'}"></i> ${link ? 'Link de pago' : 'Cargado por ti'} · ${esc(p.codigo || 'Sin reserva todavía')}</div>
       ${p.estado === 'rechazado' && p.motivo_rechazo ? `<div class="ec-row" style="color:var(--danger)"><i class="fas fa-circle-xmark"></i> ${esc(p.motivo_rechazo)}</div>` : ''}
       <div class="ec-row"><i class="fas fa-clock"></i> ${esc(tiempoRelativo(p.declarado_en || p.created_at))}${p.estado === 'emitido' ? ' · vence ' + esc(fmtFechaHoraCaracas(p.expira_en)) : ''}</div>
       <div class="inbox-actions">
@@ -12304,9 +12339,7 @@ function rpaReservas(rs) {
   const sel = rpaEl('rpa-reserva');
   sel.disabled = true;
   if (!RPA?.lead) sel.innerHTML = '<option value="">Elige primero el cliente</option>';
-  else if (rs === null) sel.innerHTML = '<option value="">No se pudieron cargar las reservas</option>';
-  else if (!rs.length) sel.innerHTML = '<option value="">Sin reservas activas: créala desde la ficha del cliente</option>';
-  else { sel.disabled = false; sel.innerHTML = rs.map(resOpcion).join(''); }
+  else { sel.disabled = false; sel.innerHTML = (rs || []).map(resOpcion).join('') + SIN_RESERVA_OPT; }
 }
 function rpaRielCambio() {
   const riel = val('rpa-riel'), bs = riel === 'pago_movil' || riel === 'transferencia';
@@ -12398,9 +12431,8 @@ async function rpaCaptura(file) {
 }
 async function rpaEnviar() {
   const btn = rpaEl('rpa-enviar');
-  const reserva = Number(val('rpa-reserva')), riel = val('rpa-riel'), monto = parseFloat(val('rpa-monto')), ref = val('rpa-referencia').trim();
+  const reserva = Number(val('rpa-reserva')) || null, riel = val('rpa-riel'), monto = parseFloat(val('rpa-monto')), ref = val('rpa-referencia').trim();
   if (!RPA?.lead) return rpaErr('Elige el cliente.');
-  if (!reserva) return rpaErr('Elige la reserva.');
   if (!RPA.file) return rpaErr('Pega la captura del pago.');
   if (!riel) return rpaErr(RPA_ERR.riel_invalido);
   if (!(monto > 0)) return rpaErr(RPA_ERR.monto_invalido);
@@ -12417,9 +12449,9 @@ async function rpaEnviar() {
     if (up.error && !/exist|duplicate/i.test(up.error.message || '')) throw new Error('No se pudo subir la captura: ' + up.error.message);
     const { data, error } = await sb.rpc('registrar_pago_asesor', {
       p_reserva_id: reserva, p_monto: monto, p_riel: riel, p_tasa_tipo: val('rpa-tasa'),
-      p_referencia: ref, p_comprobante_path: path, p_comprobante_datos: RPA.ocr,
+      p_referencia: ref, p_comprobante_path: path, p_comprobante_datos: RPA.ocr, p_lead_id: RPA.lead.id,
     });
-    if (error || !data?.ok) { rpaErr(RPA_ERR[data?.error] || error?.message || data?.error || 'No se pudo registrar el pago.'); return; }
+    if (error || !data?.ok) { rpaErr(data?.error === 'supera_saldo' ? errSaldo(data) : RPA_ERR[data?.error] || error?.message || data?.error || 'No se pudo registrar el pago.'); return; }
     closeSheet('rpa-sheet');
     okToast(`Pago enviado a verificar (${money(data.monto_usd)})`);
     loadPagos();
@@ -12456,19 +12488,23 @@ function setupRegistrarPagoAsesor() {
 
 const LP_ERR = {
   reserva_no_disponible: 'La reserva ya no está activa.', monto_invalido: 'Pon un monto mayor a 0.', tasa_invalida: 'Elige la tasa BCV.',
+  falta_cliente: 'Abre la ficha del cliente de nuevo.',
 };
+const errSaldo = d => `El monto supera el saldo de la reserva (${money(Number(d?.saldo_pendiente || 0))}).`;
+// Sin reserva todavía: oficina la elige al verificar el pago.
+const SIN_RESERVA_OPT = '<option value="">Sin reserva todavía</option>';
 function lpPintarReservas(rs) {
   const sel = document.getElementById('lp-reserva');
   if (!sel) return;
-  sel.disabled = true;
-  if (rs === null) sel.innerHTML = '<option value="">No se pudieron cargar las reservas</option>';
-  else if (!rs.length) sel.innerHTML = '<option value="">Crea primero una reserva</option>';
-  else {
-    sel.disabled = false;
-    sel.innerHTML = rs.map(resOpcion).join('');
-    const saldo = () => { const s = sel.selectedOptions[0]?.dataset.saldo; if (Number(s) > 0) document.getElementById('lp-monto').value = s; };
-    sel.onchange = saldo; saldo();
-  }
+  sel.disabled = false;
+  sel.innerHTML = (rs || []).map(resOpcion).join('') + SIN_RESERVA_OPT;
+  const saldo = () => { const s = sel.selectedOptions[0]?.dataset.saldo; if (Number(s) > 0) document.getElementById('lp-monto').value = s; };
+  sel.onchange = saldo; saldo();
+  if (rs === null) document.getElementById('lp-err').textContent = 'No se pudieron cargar las reservas; puedes emitir sin reserva.';
+}
+async function lpCargarReservas(l) {
+  const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: l.id });
+  lpPintarReservas(error || !data?.ok ? null : (data.reservas || []).filter(r => r.activo));
 }
 async function cargarLinksPagoLead(l) {
   const box = document.getElementById('lp-links');
@@ -12478,23 +12514,22 @@ async function cargarLinksPagoLead(l) {
   if (error) { box.innerHTML = '<div class="csub">No se pudieron cargar los links anteriores</div>'; return; }
   const ps = (Array.isArray(data) ? data : []).filter(p => p.origen === 'asesor');
   box.innerHTML = ps.map(p => `
-    <div class="lp-link"><i class="fas fa-link"></i> <span>${esc(pagoMioMonto(p))} · ${esc(p.codigo || '')}${p.riel ? ' · ' + esc(PAGO_RIEL_LABEL[p.riel] || p.riel) : ''}</span>
+    <div class="lp-link"><i class="fas fa-link"></i> <span>${esc(pagoMioMonto(p))} · ${esc(p.codigo || 'Sin reserva')}${p.riel ? ' · ' + esc(PAGO_RIEL_LABEL[p.riel] || p.riel) : ''}</span>
       ${p.token ? `<button type="button" class="pagos-copiar" data-lp-copiar="${esc(p.token)}" aria-label="Copiar link" title="Copiar link"><i class="fas fa-copy"></i></button>` : ''}
       <span class="lp-st" style="color:${PAGO_MIO_COLOR[p.estado] || 'var(--muted)'}">${esc(p.estado === 'emitido' ? 'Sin pagar' : PAGO_ESTADO_LABEL[p.estado] || p.estado)}</span></div>`).join('');
   box.querySelectorAll('[data-lp-copiar]').forEach(b => b.onclick = () => copiarLinkPago(b.dataset.lpCopiar));
 }
 async function emitirLinkPago(l) {
   const btn = document.getElementById('lp-emitir'), err = document.getElementById('lp-err'), out = document.getElementById('lp-resultado');
-  const reserva = Number(val('lp-reserva')), monto = parseFloat(val('lp-monto'));
+  const reserva = Number(val('lp-reserva')) || null, monto = parseFloat(val('lp-monto'));
   err.textContent = '';
-  if (!reserva) { err.textContent = 'Elige la reserva.'; return; }
   if (!(monto > 0)) { err.textContent = LP_ERR.monto_invalido; return; }
   btn.disabled = true;
   const antes = btn.innerHTML;
   btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Generando...';
-  const { data, error } = await sb.rpc('emitir_link_pago', { p_reserva_id: reserva, p_monto_usd: monto, p_tasa_tipo: val('lp-tasa') });
+  const { data, error } = await sb.rpc('emitir_link_pago', { p_reserva_id: reserva, p_monto_usd: monto, p_tasa_tipo: val('lp-tasa'), p_lead_id: l.id });
   btn.disabled = false; btn.innerHTML = antes;
-  if (error || !data?.ok) { err.textContent = LP_ERR[data?.error] || error?.message || data?.error || 'No se pudo generar el link.'; return; }
+  if (error || !data?.ok) { err.textContent = data?.error === 'supera_saldo' ? errSaldo(data) : LP_ERR[data?.error] || error?.message || data?.error || 'No se pudo generar el link.'; return; }
   const url = lpUrl(data.token), wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
   out.style.display = 'block';
   out.innerHTML = `
