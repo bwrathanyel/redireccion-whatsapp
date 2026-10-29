@@ -192,6 +192,7 @@ export function crearAbonos(c) {
     const { data, error } = await sb.functions.invoke('analizar-comprobante', { body: { reserva_id: est.reservaId, mime: archivo.type || 'image/jpeg', imagen } });
     if (token !== est.tokenIA || !document.getElementById('ab-ia')) return;
     if (error || !data?.ok) { aviso.textContent = 'No se pudo leer: completá los datos a mano.'; return; }
+    if (typeof registrarUsoHerramienta === 'function') registrarUsoHerramienta(null, 'leer_comprobante', est.reservaId);
     const d = data.datos || {}, puestos = [];
     const monto = document.getElementById('ab-monto'), moneda = document.getElementById('ab-moneda'), ref = document.getElementById('ab-ref');
     if (d.moneda && moneda && !monto.value) { moneda.value = d.moneda; est.moneda = d.moneda; puestos.push('moneda'); }

@@ -2460,7 +2460,7 @@ function abrirEditorPersona(usuarioId) {
       <div class="edit-err" id="pe-err"></div>
       <button class="dbtn save" id="pe-guardar" type="button"><i class="fas fa-check"></i> Guardar</button>
       <label class="fl" style="margin-top:14px">Nueva contraseña (opcional)</label>
-      <div class="ei-clave"><input id="pe-password" class="ei" type="password" minlength="12" placeholder="Mínimo 12 caracteres"></div>
+      <div class="ei-clave"><input id="pe-password" class="ei" type="password" minlength="8" placeholder="Mínimo 8 caracteres"></div>
       <button class="dbtn save" id="pe-guardar-clave" type="button"><i class="fas fa-check"></i> Guardar contraseña</button>
       <div class="form-hint">Queda activa de inmediato, sin pedirle cambiarla al entrar.</div>
       <button class="dbtn gh" id="pe-restablecer" type="button"><i class="fas fa-key"></i> Restablecer acceso</button>
@@ -2481,7 +2481,7 @@ function abrirEditorPersona(usuarioId) {
 async function restablecerAcceso(usuarioId) {
   const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
   const password = val('pe-password');
-  if (password && password.length < 12) { document.getElementById('pe-err').textContent = 'La contraseña debe tener al menos 12 caracteres.'; return; }
+  if (password && password.length < 8) { document.getElementById('pe-err').textContent = 'La contraseña debe tener al menos 8 caracteres.'; return; }
   if (!u || !(await confirmarSheet({ titulo: `¿Restablecer el acceso de ${u.nombre}?`, detalle: password ? 'La contraseña elegida por el administrador quedará activa de inmediato.' : 'Vas a recibir una contraseña temporal para pasársela una sola vez. La persona deberá cambiarla al entrar.', textoOk: 'Restablecer' }))) return;
   const { data, error } = await sb.functions.invoke('restablecer-acceso', { body: { usuario_id: usuarioId, password: password || undefined } });
   if (error || !data?.ok) { errToast('No se pudo restablecer el acceso.'); return; }
@@ -2502,7 +2502,7 @@ async function guardarClavePersona(usuarioId) {
   const err = document.getElementById('pe-err');
   const password = val('pe-password');
   err.textContent = '';
-  if (!password || password.length < 12) { err.textContent = 'La contraseña debe tener al menos 12 caracteres.'; return; }
+  if (!password || password.length < 8) { err.textContent = 'La contraseña debe tener al menos 8 caracteres.'; return; }
   if (!u || !(await confirmarSheet({ titulo: `¿Guardar la contraseña de ${u.nombre}?`, detalle: 'Queda activa de inmediato. No se le pide cambiarla al entrar y no se toca su pregunta de seguridad.', textoOk: 'Guardar contraseña' }))) return;
   const btn = document.getElementById('pe-guardar-clave');
   btn.disabled = true;
@@ -2555,7 +2555,7 @@ async function guardarPersona(usuarioId) {
   const clave = val('pe-password');
   let toast = 'Datos actualizados';
   if (clave) {
-    if (clave.length < 12) { btn.disabled = false; err.textContent = 'La contraseña debe tener al menos 12 caracteres.'; return; }
+    if (clave.length < 8) { btn.disabled = false; err.textContent = 'La contraseña debe tener al menos 8 caracteres.'; return; }
     const r = await sb.functions.invoke('restablecer-acceso', { body: { usuario_id: usuarioId, password: clave, modo: 'fijar' } });
     if (r.error || !r.data?.ok) { btn.disabled = false; err.textContent = ERR_PERSONAL[r.data?.error] || 'Se guardaron los datos pero no la contraseña.'; return; }
     toast = 'Datos y contraseña actualizados';
@@ -2848,9 +2848,9 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   const btn = document.getElementById('setupBtn'), errEl = document.getElementById('setupErr');
   const p1 = val('setupPwd'), p2 = val('setupPwd2'), pregunta = val('setupPregunta').trim(), respuesta = val('setupRespuesta').trim();
   errEl.textContent = '';
-  if (p1.length < 12) { errEl.textContent = 'La contraseña debe tener al menos 12 caracteres'; return; }
+  if (p1.length < 8) { errEl.textContent = 'La contraseña debe tener al menos 8 caracteres'; return; }
   if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
-  if (pregunta.length < 8 || respuesta.length < 8 || /^\d+$/.test(respuesta)) { errEl.textContent = 'Usa una pregunta y respuesta de al menos 8 caracteres; la respuesta no puede ser sólo números'; return; }
+  if (pregunta.length < 5 || respuesta.length < 3) { errEl.textContent = 'Escribe una pregunta (5+ caracteres) y una respuesta (3+ caracteres)'; return; }
   btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
   const { error: e1 } = await sb.auth.updateUser({ password: p1 });
   const { error: e2 } = e1 ? { error: null } : await sb.rpc('set_pregunta_seguridad', { p_pregunta: pregunta, p_respuesta: respuesta });
@@ -2920,7 +2920,7 @@ async function enviarRecuperacion(e) {
   const codigo = val('forgotCodigo').trim(), p1 = val('forgotPwd'), p2 = val('forgotPwd2');
   if (!/^\d{6}$/.test(codigo)) { errEl.textContent = 'El código tiene 6 dígitos'; return; }
   // bcrypt corta a 72 bytes: con tildes/ñ el límite en caracteres queda más bajo
-  if (p1.length < 12 || bytesUtf8(p1) > 72) { errEl.textContent = 'La contraseña debe tener entre 12 y 72 caracteres (menos si lleva tildes o ñ)'; return; }
+  if (p1.length < 8 || bytesUtf8(p1) > 72) { errEl.textContent = 'La contraseña debe tener entre 8 y 72 caracteres (menos si lleva tildes o ñ)'; return; }
   if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
   ocupado(true, 'Guardando...');
   const { data, error } = await sb.functions.invoke('recuperar-acceso', { body: { accion: 'confirmar', username, codigo, password: p1 } });
@@ -2928,7 +2928,7 @@ async function enviarRecuperacion(e) {
   if (error || !data?.ok) {
     const cod = await errorDeFuncion(error);
     errEl.textContent = cod === 'codigo_invalido' ? 'Código incorrecto o vencido. Revisa el correo o pide otro código.'
-      : cod === 'password_invalido' ? 'La contraseña debe tener entre 12 y 72 caracteres'
+      : cod === 'password_invalido' ? 'La contraseña debe tener entre 8 y 72 caracteres'
       : 'No se pudo guardar la contraseña. Pide otro código y prueba con una contraseña distinta.';
     return;
   }
@@ -2971,9 +2971,9 @@ document.getElementById('claimForm').addEventListener('submit', async e => {
   const btn = document.getElementById('claimFormBtn'), errEl = document.getElementById('claimFormErr');
   const p1 = val('claimPwd'), p2 = val('claimPwd2'), pregunta = val('claimPregunta').trim(), respuesta = val('claimRespuesta').trim();
   errEl.textContent = '';
-  if (p1.length < 12) { errEl.textContent = 'La contraseña debe tener al menos 12 caracteres'; return; }
+  if (p1.length < 8) { errEl.textContent = 'La contraseña debe tener al menos 8 caracteres'; return; }
   if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
-  if (pregunta.length < 8 || respuesta.length < 8 || /^\d+$/.test(respuesta)) { errEl.textContent = 'Usa una pregunta y respuesta de al menos 8 caracteres; la respuesta no puede ser sólo números'; return; }
+  if (pregunta.length < 5 || respuesta.length < 3) { errEl.textContent = 'Escribe una pregunta (5+ caracteres) y una respuesta (3+ caracteres)'; return; }
   btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
   try {
     const r = await fetch(CLAIM_FN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: claimUsername, password: p1, pregunta, respuesta }) });
@@ -5653,6 +5653,7 @@ async function rvLeerDocumento(p, archivo, aplicar) {
   poner('nombre', d.nombre); poner('apellido', d.apellido); poner('nacionalidad', d.nacionalidad);
   if (RV_TIPO_DOC[d.tipo_documento]) p.querySelector('#rv-p-tipodoc').value = d.tipo_documento;
   poner('numdoc', d.numero_documento); aplicar();
+  registrarUsoHerramienta(null, 'leer_documento', RV_RESERVA_ID);
   if (d.nacionalidad) p.querySelector('details.rs-mas')?.setAttribute('open', '');
   const vence = d.vencimiento && new Date(d.vencimiento) < new Date(Date.now() + 180 * 864e5) ? ` Ojo: vence el ${d.vencimiento}.` : '';
   msg.textContent = `Datos leídos del documento${d.confianza < 0.6 ? ' (foto poco clara)' : ''}: revisalos y guardá.${vence}`;
@@ -8095,6 +8096,16 @@ function aplicarChatPegado(l, res) {
   closeSheet('pegar-chat-sheet');
   pintarLecturaDatos();
   okToast(n ? `Ficha actualizada (${n})` : 'No se aplicó nada');
+  if (n) registrarUsoHerramienta(l.id, 'pegar_chat');
+}
+
+// Solo para medir adopción: un fallo acá no se le muestra al asesor. Desde una
+// reserva no hay lead a mano y se saca del caso de postventa.
+async function registrarUsoHerramienta(leadId, herramienta, reservaId) {
+  try {
+    if (!leadId && reservaId) leadId = (await sb.from('postventa_casos').select('lead_id').eq('id', reservaId).maybeSingle()).data?.lead_id;
+    if (leadId) await sb.rpc('registrar_uso_herramienta', { p_lead_id: leadId, p_herramienta: herramienta });
+  } catch {}
 }
 
 /* ---------- Respuesta sugerida (EF sugerir-respuesta): texto listo para
@@ -8114,6 +8125,7 @@ async function abrirTextoIA(l) {
   txt.disabled = false;
   if (error || !data?.ok) { txt.value = ''; err.textContent = data?.error === 'lead_no_encontrado' ? 'No tenés acceso a ese lead.' : 'No se pudo armar la respuesta. Probá de nuevo en un momento.'; return; }
   txt.value = data.mensaje || '';
+  registrarUsoHerramienta(l.id, 'texto_ia');
 }
 
 /* ---------- Conversación/Actividad del registro de lead (Fase 3, tabs
