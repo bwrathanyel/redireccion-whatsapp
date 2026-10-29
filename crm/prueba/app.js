@@ -22864,12 +22864,9 @@ async function iaMover(id, delta, btn) {
 const TAR_TAB_META = [
   { key: 'hotsale', label: 'Hot Sales' },
   { key: 'ia', label: 'IA (curación)' },
-  { key: 'promo', label: 'Promociones' },
   { key: 'excursion', label: 'Excursiones' },
   { key: 'traslado', label: 'Traslados' },
   { key: 'hotel', label: 'Hoteles' },
-  { key: 'paquete', label: 'Paquetes' },
-  { key: 'boleteria', label: 'Boletería' },
 ];
 let tabsOcultas = [], tabsOcultasListo = null;
 async function cargarTabsOcultas() {
