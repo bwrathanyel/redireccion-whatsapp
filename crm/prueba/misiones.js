@@ -132,7 +132,7 @@
   /* ---------- Estilos ---------- */
   // Sin movimiento (reduced-motion o paleta «sereno»): el foco aparece en su lugar y la flecha queda quieta.
   const QUIETO = s => `${s} #prueba-spot,${s} #prueba-spot.pp-fijo{transition:opacity .15s}${s} #prueba-flecha .pf-linea{transition:none}${s} #prueba-flecha.pp-listo g{animation:none}`
-    + `${s} #prueba-panel .pp-avance,${s} #prueba-panel .pp-detalle{transition:none}${s} #prueba-panel.festejo .pp-anillo,${s} #sidebar-nav .pp-ilumina,${s} #sidebar-nav .pp-nuevo-item{animation:none}`;
+    + `${s} #prueba-panel,${s} #prueba-panel .pp-fila,${s} #prueba-panel .pp-avance,${s} #prueba-panel .pp-detalle{transition:none}${s} #prueba-panel.festejo .pp-anillo,${s} #sidebar-nav .pp-ilumina,${s} #sidebar-nav .pp-nuevo-item{animation:none}`;
   const css = document.createElement('style');
   css.textContent = `
 #prueba-panel{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99980;width:min(460px,calc(100vw - 32px));color:var(--txt,#eee);font:14px/1.4 system-ui,sans-serif}
@@ -162,6 +162,9 @@
 @keyframes pp-pulso{40%{transform:scale(1.14);filter:drop-shadow(0 0 8px rgba(79,191,127,.7))}}
 body.prueba-guiada .main{padding-bottom:88px}
 @media (min-width:761px){body:has(.drawer.open) #prueba-panel{left:16px;transform:none;width:min(400px,calc(100vw - 32px))}}
+@media (min-width:761px) and (pointer:fine){#prueba-panel{transition:scale .2s ease}#prueba-panel .pp-fila{cursor:grab;user-select:none;transition:box-shadow .2s ease}#prueba-panel .pp-fila button{cursor:pointer}#prueba-panel.pp-arrastra{scale:1.03}#prueba-panel.pp-arrastra .pp-fila{cursor:grabbing;box-shadow:0 24px 48px -16px rgba(0,0,0,.75)}}
+#prueba-panel.pp-abajo .pp-detalle{bottom:auto;top:calc(100% + 8px);transform:translateY(-6px)}
+#prueba-panel.pp-abierto.pp-abajo .pp-detalle{transform:none}
 #sidebar-nav .pp-ilumina{animation:pp-ilumina 1s ease-in-out 2}
 @keyframes pp-ilumina{50%{background:rgba(255,176,32,.16);box-shadow:inset 0 0 0 1px rgba(255,176,32,.6),0 0 18px -4px rgba(255,176,32,.55)}}
 #sidebar-nav .pp-nuevo-item{animation:pp-aparece .6s cubic-bezier(.22,1,.36,1)}
@@ -567,6 +570,7 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
         if (acc === 'reiniciar' && confirm('¿Empezar de cero? Se borra lo que hiciste en la práctica.')) { mide('mision_reiniciar'); try { sessionStorage.removeItem(CLAVE); } catch { /* nada que limpiar */ } location.reload(); }
         pinta();
       });
+      arrastrable(panel);
       document.body.appendChild(panel);
     }
     const ls = lista(), hechas = ls.filter(x => estado.hechas.includes(x.id)).length, mi = actual();
@@ -593,7 +597,72 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     panel.classList.toggle('pp-hecho', !!estado.pausa || !mi);
     panel.classList.toggle('pp-abierto', abierto && !!det);
     if (festejo) { panel.classList.remove('festejo'); void panel.offsetWidth; panel.classList.add('festejo'); }
+    ubica();
   }
+  /* ---------- Píldora movible (solo desktop con mouse) ---------- */
+  // Posición en píxeles de pantalla; el panel vive en body{zoom:.9}, así que left/top/translate van divididos por el zoom.
+  const POS = 'prueba-pos', movible = () => matchMedia('(min-width:761px) and (pointer:fine)').matches, zoomBody = () => parseFloat(getComputedStyle(document.body).zoom) || 1;
+  function ubica() {
+    if (!panel || panel.classList.contains('pp-arrastra')) return null;
+    let p = null; try { p = movible() && JSON.parse(ss(POS)); } catch { /* posición corrupta: vuelve a la de siempre */ }
+    const s = panel.style, fila = panel.querySelector('.pp-fila');
+    panel.classList.toggle('pp-movido', !!p); fila.title = movible() ? 'Arrastrá para moverla · doble clic para volver a su lugar' : '';
+    if (!p) { s.left = s.top = s.bottom = s.transform = ''; panel.classList.remove('pp-abajo'); return null; }
+    // offsetWidth y no el rect: al soltar todavía corre la transición de scale y el rect sale inflado.
+    const z = zoomBody(), w = panel.offsetWidth * z, h = panel.offsetHeight * z;
+    const x = Math.round(Math.min(Math.max(8, p.x), innerWidth - w - 8)), y = Math.round(Math.min(Math.max(8, p.y), innerHeight - h - 8));
+    Object.assign(s, { left: x / z + 'px', top: y / z + 'px', bottom: 'auto', transform: 'none' });
+    panel.classList.toggle('pp-abajo', y < panel.querySelector('.pp-detalle').getBoundingClientRect().height + 16);
+    return { left: x, top: y };
+  }
+  // FLIP: arranca donde estaba y se asienta en su lugar nuevo con un rebote corto; la flecha de la guía lo acompaña.
+  function asienta(antes, despues) {
+    const s = panel.style, z = zoomBody();
+    if (quieto() || !despues) return remide();
+    s.transition = 'none'; s.translate = `${(antes.left - despues.left) / z}px ${(antes.top - despues.top) / z}px`;
+    void panel.offsetWidth;
+    s.transition = 'translate .38s cubic-bezier(.2,1.3,.4,1),scale .2s ease'; s.translate = '';
+    const t0 = performance.now(), sigue = () => { remide(); if (performance.now() - t0 < 420) requestAnimationFrame(sigue); else s.transition = ''; };
+    requestAnimationFrame(sigue);
+  }
+  function arrastrable(el) {
+    let a = null;
+    const mueve = () => { a.raf = 0; el.style.translate = `${a.dx / a.z}px ${a.dy / a.z}px`; remide(); };
+    el.addEventListener('pointerdown', e => {
+      if (e.button || !movible() || !e.target.closest('.pp-fila') || e.target.closest('button')) return;
+      a = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, vivo: false, raf: 0 };
+      el.setPointerCapture(e.pointerId);
+    });
+    el.addEventListener('pointermove', e => {
+      if (!a || e.pointerId !== a.id) return;
+      a.dx = e.clientX - a.x0; a.dy = e.clientY - a.y0;
+      // Umbral de 4 px: un click con temblor de mano no se convierte en arrastre.
+      if (!a.vivo) {
+        if (Math.hypot(a.dx, a.dy) < 4) return;
+        const r = el.getBoundingClientRect(), z = zoomBody();
+        a.vivo = true; a.r = r; a.z = z;
+        Object.assign(el.style, { transition: quieto() ? 'none' : 'scale .2s ease', left: r.left / z + 'px', top: r.top / z + 'px', bottom: 'auto', transform: 'none' });
+        el.classList.add('pp-movido', 'pp-arrastra');
+      }
+      if (!a.raf) a.raf = requestAnimationFrame(mueve);
+    });
+    const suelta = e => {
+      if (!a || e.pointerId !== a.id) return;
+      const b = a; a = null; cancelAnimationFrame(b.raf);
+      if (!b.vivo) return;
+      const antes = { left: b.r.left + b.dx, top: b.r.top + b.dy };
+      ss(POS, JSON.stringify({ x: Math.round(antes.left), y: Math.round(antes.top) }));
+      el.classList.remove('pp-arrastra'); el.style.translate = ''; el.style.transition = '';
+      asienta(antes, ubica());
+    };
+    el.addEventListener('pointerup', suelta); el.addEventListener('pointercancel', suelta);
+    el.addEventListener('dblclick', e => {
+      if (!movible() || e.target.closest('button') || !ss(POS)) return;
+      const r = el.getBoundingClientRect(); ss(POS, null); ubica();
+      asienta(r, el.getBoundingClientRect());
+    });
+  }
+  addEventListener('resize', () => ubica(), { passive: true });
   addEventListener('pointerdown', e => { if (abierto && panel && !panel.contains(e.target) && !e.target.closest?.('#prueba-modal')) { abierto = false; pinta(); } }, true);
   function registra(d) {
     const mi = actual();
