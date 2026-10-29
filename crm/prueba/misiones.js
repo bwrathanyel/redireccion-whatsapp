@@ -18,8 +18,12 @@
         ok: d => d.tipo === 'busqueda' && /margarita/i.test(d.texto) },
       { id: 'cotizar', titulo: 'Registra la cotización', sel: '#dacc-estado', foco: 'María González', texto: 'Ya le mandaste el precio a María por WhatsApp. Toca su nombre en la lista para abrir su ficha y, en el selector de estado de arriba, elige <b>Cotización enviada</b>. (Si cotizas con el botón «Cotizar», el CRM lo registra solo.) Si ya lo hiciste antes, toca Saltar.', sec: 'leads',
         ok: d => esLead(d, 'registrar_cotizacion_enviada') || esLead(d, 'actualizar_lead', a => a.p_estado === 'COTIZACION ENVIADA') },
+      { id: 'cotizacion', titulo: 'Arma una cotización en PDF', sel: '#cb-lead-q', texto: 'Aquí armas la cotización formal que le mandas al cliente. 1) En <b>Vincular cliente del CRM</b> escribe <b>María</b> y elígela de la lista: queda ligada a su ficha. 2) En el servicio 1 cambia el tipo (Boleto, Hotel, Paquete, Full day, Tour…) a <b>Tour</b> y escribe el nombre, ej. «Tour Salto Ángel». 3) Pon cuántos adultos van y la tarifa por persona: el total se calcula solo. ¿Algo más? «Agregar servicio» suma otro renglón. 4) Toca <b>Descargar PDF</b> (en el celular, «PDF»): queda guardada con su número y lista para enviar.', sec: 'cotizacion-boletos',
+        ok: d => d.tipo === 'insert' && d.tabla === 'cotizaciones_boleteria' },
       { id: 'abono', titulo: 'Registra un abono', foco: 'Registrar abono', texto: 'Ricardo Díaz ya pagó la mitad de su viaje y debe $325. Anota un pago parcial que te hizo: en su tarjeta toca <b>Registrar abono</b>, escribe un monto menor o igual al saldo (ej. 100) y confirma.', sec: 'mis-ventas',
         ok: d => esLead(d, 'registrar_abono_venta') },
+      { id: 'voucher', titulo: 'Genera un voucher', sel: '#vc-lead-q', texto: 'El voucher es el comprobante de la reserva que recibe el cliente. 1) Busca a <b>María</b> en el buscador de cliente y elígela: su nombre y teléfono se llenan solos. 2) En Hospedaje escribe el destino (ej. <b>Margarita</b>); hotel, fechas y personas son opcionales aquí. 3) En Pago pon el total (ej. 300). 4) Toca <b>Generar voucher</b> y, en la hoja que sale, elige <b>Generar solo el PDF</b> (con un cliente real, «Crear venta» además la deja cerrada y facturada).', sec: 'voucher',
+        ok: d => esLead(d, 'voucher_preparar') },
       { id: 'tareas', titulo: 'Revisa tus tareas', texto: 'Aquí está tu día: lo que te asignaron y tus recordatorios. Toca una tarea para ver sus pasos y qué falta.', sec: 'tareas',
         ok: d => esLead(d, 'tarea_detalle') },
       { id: 'lyra', titulo: 'Pídele ayuda a Lyra', texto: 'Abre a Lyra con el círculo de abajo a la izquierda (o con Ctrl+Z, fuera de cualquier campo) y escríbele: «¿cómo va la reserva de María González?».', sec: null,
@@ -32,6 +36,8 @@
         ok: d => d.tipo === 'click' && d.dentro === 'ranking' },
       { id: 'pago', titulo: 'Verifica un pago', foco: 'Comprobante', texto: 'Cuando un asesor avisa que su cliente pagó, el pago queda en «Por verificar». Toca «Comprobante» para ver la prueba y, si todo cuadra, toca «Aprobar» y confirma.', sec: 'pagos',
         ok: d => esLead(d, 'verificar_pago', a => a.p_aprobar !== false) || esLead(d, 'confirmar_venta') },
+      { id: 'voucher', titulo: 'Genera un voucher', sel: '#vc-lead-q', texto: 'El voucher es el comprobante de la reserva que recibe el cliente. 1) Busca a <b>María</b> en el buscador de cliente y elígela: su nombre y teléfono se llenan solos. 2) En Hospedaje escribe el destino (ej. <b>Margarita</b>); hotel, fechas y personas son opcionales aquí. 3) En Pago pon el total (ej. 300). 4) Toca <b>Generar voucher</b> y, en la hoja que sale, elige <b>Generar solo el PDF</b> (en el CRM real, «Crear venta» o vincular una reserva la deja facturada).', sec: 'voucher',
+        ok: d => esLead(d, 'voucher_preparar') },
       { id: 'comisiones', titulo: 'Revisa las comisiones', texto: 'Se calculan solas con cada venta aprobada y se pagan el 5 y el 20. Toca una tarjeta para ver de qué ventas sale cada monto.', sec: 'comisiones',
         ok: d => d.tipo === 'click' && d.dentro === 'comisiones' },
       { id: 'repartir', titulo: 'Reparte números', foco: 'Detectar', texto: 'Un cliente escribió directo y hay que dárselo a un asesor. Pega en el cuadro estas dos líneas: «0414-5550101 Marta» y «0424-5550102 Jorge». Toca «Detectar números», revísalos y toca «Repartir». En «Asignar» eliges un asesor o dejas el reparto automático.', sec: 'repartir',
@@ -96,8 +102,8 @@
     { icono: '🎯', titulo: 'Tu guía', texto: 'Abajo verás una barrita con tu tarea. Toca <b>Llévame</b> y te muestro dónde ir. La <b>i</b> te explica la tarea otra vez; ahí también puedes <b>Saltar</b> o <b>Reiniciar</b>.' },
   ];
   const CIERRE = {
-    asesor: 'Repite tú solo el caso completo: atiende a un cliente, abre su ficha, cotízale y registra su pago. Si te trabas, pregúntale a Lyra.',
-    admin: 'Repite tú solo el recorrido: aprueba un pago, reparte un número, asigna una tarea y revisa quién vino hoy. Si te trabas, pregúntale a Lyra.',
+    asesor: 'Repite tú solo el caso completo: atiende a un cliente, abre su ficha, ármale la cotización en PDF, registra su pago y genérale el voucher. Si te trabas, pregúntale a Lyra.',
+    admin: 'Repite tú solo el recorrido: aprueba un pago, genera un voucher, reparte un número, asigna una tarea y revisa quién vino hoy. Si te trabas, pregúntale a Lyra.',
   };
   const cierre = () => CIERRE[P.m.rol] || CIERRE.asesor;
 

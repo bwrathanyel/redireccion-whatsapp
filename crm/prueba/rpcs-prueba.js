@@ -1018,6 +1018,12 @@ const RPCS_ASESOR = {
   // Boletería: la asesora demo no es de boletería; responden vacío sin error.
   agentes_boleteria_estado: (m, a) => [], listar_cola_boleteria: (m, a) => [],
   registrar_contacto_lead: (m, a) => OK,
+  // Voucher: sin ventas parecidas; queda en el historial y se confirma sin tocar reservas.
+  voucher_revisar_venta: (m, a) => ({ ok: true, reservas: [] }),
+  voucher_preparar: (m, a) => { const t = m.tablas.vouchers ||= [], n = 1200 + t.length + 1;
+    const v = { ...g(a, 'p_datos'), id: n, numero_factura: n, revision: 1, created_at: new Date().toISOString(), pdf_path: null, reserva_id: null };
+    t.push(v); return { ok: true, voucher: v }; },
+  voucher_confirmar_venta: (m, a) => ({ ok: true, lead_id: null, reserva_id: null, codigo: null }),
   ...RPCS_TAREAS,
 };
 

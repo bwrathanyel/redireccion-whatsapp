@@ -79,7 +79,8 @@
     else if (op === 'is') r = ['null', 'true', 'false'].includes(v) ? (v === 'null' ? a == null : a === valor(v)) : false;
     else if (op === 'in') r = lista(v).includes(String(a));
     else if (op === 'like' || op === 'ilike') {
-      const pat = '^' + escRe(decodeURIComponent(v)).replace(/\\\*/g, '.*').replace(/%/g, '.*') + '$';
+      let crudo = v; try { crudo = decodeURIComponent(v); } catch { /* '%ma…' de un ilike ya viene decodificado */ }
+      const pat = '^' + escRe(crudo).replace(/\\\*/g, '.*').replace(/%/g, '.*') + '$';
       r = a != null && new RegExp(pat, op === 'ilike' ? 'i' : '').test(String(a));
     }
     else if (op === 'cs') r = Array.isArray(a) && lista(v.replace(/^\{|\}$/g, '')).every(x => a.map(String).includes(x));
@@ -142,7 +143,7 @@
       for (const f of nuevas) {
         const previa = conflicto && m.tablas[tabla].find(x => conflicto.split(',').every(c => x[c] === f[c]));
         if (previa) Object.assign(previa, f);
-        else { if (f.id == null) f.id = nuevoId(tabla); if (f.created_at == null) f.created_at = D.hace(0); m.tablas[tabla].push(f); }
+        else { if (f.id == null) f.id = nuevoId(tabla); if (f.created_at == null) f.created_at = D.hace(0); if (tabla === 'cotizaciones_boleteria' && f.numero == null) f.numero = f.id; m.tablas[tabla].push(f); }
       }
       emite({ tipo: 'insert', tabla, filas: nuevas });
       return resp(objeto(h) ? nuevas[0] : nuevas, 201);
