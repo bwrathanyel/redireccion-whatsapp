@@ -1444,6 +1444,16 @@ input.ei[type=date],input.ei[type=datetime-local],input.ei[type=time]{color-sche
 .ef-comprob{margin:2px 0 7px}.ef-comprob .btn-sm{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .ef-comprob.leyendo .btn-sm{opacity:.55;pointer-events:none}
 .ef-comprob-st{display:none;font-size:12px;margin-top:6px;color:var(--muted)}.ef-comprob-st.show{display:block}.ef-comprob-st.malo{color:#ff8a8a}
+.rpa-resultados{display:flex;flex-direction:column;gap:4px;margin-top:6px}.rpa-resultados:empty{display:none}
+.rpa-resultados button{text-align:left;background:rgba(var(--ink-rgb),.04);border:1px solid var(--line);border-radius:9px;padding:8px 10px;color:var(--txt);cursor:pointer;font:inherit}
+.rpa-resultados button:hover,.rpa-resultados button:focus-visible{border-color:var(--accent,#7c5cff)}
+.rpa-pegar{display:flex;flex-direction:column;align-items:center;gap:6px;border:1.5px dashed var(--line);border-radius:12px;padding:16px;text-align:center;color:var(--muted);font-size:13px;cursor:text}
+.rpa-pegar:focus{outline:none;border-color:var(--accent,#7c5cff)}.rpa-pegar.leyendo{opacity:.6}
+.rpa-pegar img{max-width:100%;max-height:220px;border-radius:9px;border:1px solid var(--line)}
+.rpa-link{color:var(--accent,#7c5cff);text-decoration:underline;cursor:pointer}
+.lp-links{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.lp-link{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12.5px}
+.lp-link .lp-st{margin-left:auto;font-weight:700}
 .ef-abono.malo{background:rgba(239,68,68,.09);border-color:rgba(239,68,68,.3);color:#ffa5a5}
 .ef-serv{background:rgba(10,12,28,.55);border:1.5px solid var(--line2);border-radius:12px;padding:9px 11px 11px;margin-bottom:9px}
 .ef-serv-top{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin-bottom:2px}
@@ -4542,6 +4552,9 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .pv-card-foot{margin-top:14px;padding-top:13px;border-top:1px solid var(--line);flex-wrap:wrap}
 .pv-card-foot .pv-btn{min-height:44px;flex:1 0 auto;padding:0 9px;white-space:nowrap}
 .pv-card-foot .pv-btn.wa{flex:0 0 44px;width:44px;height:44px;padding:0;font-size:17px}
+.pv-card-foot .pv-btn.del,.pv-card-foot .pv-btn.exp{flex:0 0 44px;width:44px;height:44px;padding:0;font-size:15px;color:var(--muted)}
+.pv-card-foot .pv-btn.exp:not(:disabled):hover{color:var(--accent);border-color:var(--accent)}
+.pv-card-foot .pv-btn.del:not(:disabled):hover{color:var(--danger);border-color:var(--danger)}
 .pv-card-foot .pv-btn:disabled{opacity:.45;cursor:default}
 .pv-card-foot .pv-btn:focus-visible,#pv-abono-sheet :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 #pv-abono-sheet{overflow-y:auto;max-height:85dvh}
@@ -8348,6 +8361,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <section class="section" id="sec-postventa">
       <div class="pv-toolbar">
         <div class="pv-search"><i class="fas fa-search"></i><input id="pv-search" type="search" placeholder="Buscar cliente, destino o localizador..."></div>
+        <button class="pv-refresh" id="pv-exportar" type="button" title="Exportar reservas (PDF o texto)" aria-label="Exportar reservas"><i class="fas fa-file-export"></i></button>
         <button class="pv-refresh" id="pv-refresh" type="button" title="Actualizar" aria-label="Actualizar postventa"><i class="fas fa-rotate"></i></button>
       </div>
       <!-- Filtros rápidos (reemplazan a los 6 KPI): se arman en JS con renderPvResumen -->
@@ -9347,7 +9361,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       <div class="card">
         <h2><i class="fas fa-money-check-dollar"></i> Pagos por verificar</h2>
         <div class="csub">El recorrido de cada pago: se verifica contra el banco, se confirma la reserva con el proveedor (localizador) y queda en Reservas y Cobros. Las tarjetas avanzan solas de columna.</div>
-        <div class="exp-fila"><div class="export-dd">
+        <div class="exp-fila"><button class="btn-sm" type="button" id="rpa-abrir"><i class="fas fa-plus"></i> Registrar pago de cliente</button><div class="export-dd nav-asesor-hide">
           <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'pagos')"><i class="fas fa-download"></i> Exportar</button>
           <div class="export-dd-menu" id="export-menu-pagos">
             <button onclick="exportarPDF('pagos','Pagos por verificar')"><i class="fas fa-file-pdf"></i> PDF</button>
@@ -11744,6 +11758,63 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
     <button class="dbtn" id="ef-cancelar" type="button" style="flex:1">Cancelar</button>
     <button class="dbtn save" id="ef-enviar" type="button" style="flex:1"><i class="fas fa-check"></i> Crear reserva</button>
+  </div>
+</div>
+
+<!-- Registrar pago de cliente (asesor/oficina, desde Pagos por verificar): queda en la cola de oficina -->
+<div class="sheet" id="rpa-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-receipt"></i> Registrar pago de cliente</div>
+  <div class="edit-box" style="margin-top:4px">
+    <label class="fl">Cliente</label>
+    <input id="rpa-buscar" class="ei" placeholder="Nombre o teléfono de tu cliente" autocomplete="off">
+    <div id="rpa-resultados" class="rpa-resultados"></div>
+    <div class="ef-cliente" id="rpa-cliente" hidden></div>
+
+    <label class="fl">Reserva</label>
+    <select id="rpa-reserva" class="ei" disabled><option value="">Elige primero el cliente</option></select>
+
+    <label class="fl">Captura del pago</label>
+    <div class="rpa-pegar" id="rpa-pegar" tabindex="0">
+      <i class="fas fa-paste"></i>
+      <span>Pega la captura (Ctrl+V) o <label for="rpa-archivo" class="rpa-link">elige un archivo</label></span>
+      <input type="file" id="rpa-archivo" accept="image/jpeg,image/png,image/webp" hidden>
+      <img id="rpa-preview" alt="Captura del pago" hidden>
+    </div>
+    <div class="ef-comprob-st" id="rpa-st"></div>
+
+    <div class="ef-fila">
+      <div style="flex:1">
+        <label class="fl">Método</label>
+        <select id="rpa-riel" class="ei">
+          <option value="">Elige uno...</option>
+          <option value="zelle">Zelle</option>
+          <option value="pago_movil">Pago Móvil</option>
+          <option value="transferencia">Transferencia</option>
+          <option value="binance">Binance (USDT)</option>
+        </select>
+      </div>
+      <div style="flex:1" id="rpa-tasa-box" hidden>
+        <label class="fl">Tasa BCV</label>
+        <select id="rpa-tasa" class="ei"><option value="USD">Dólar</option><option value="EUR">Euro</option></select>
+      </div>
+    </div>
+    <div class="ef-fila">
+      <div style="flex:1">
+        <label class="fl" id="rpa-monto-l">Monto</label>
+        <input id="rpa-monto" class="ei" type="number" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div style="flex:1">
+        <label class="fl">Referencia</label>
+        <input id="rpa-referencia" class="ei" placeholder="Número de referencia" autocomplete="off">
+      </div>
+    </div>
+    <div class="csub" id="rpa-equiv"></div>
+    <div class="edit-err" id="rpa-err"></div>
+  </div>
+  <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
+    <button class="dbtn" id="rpa-cancelar" type="button" style="flex:1">Cancelar</button>
+    <button class="dbtn save" id="rpa-enviar" type="button" style="flex:1"><i class="fas fa-paper-plane"></i> Enviar a verificar</button>
   </div>
 </div>
 

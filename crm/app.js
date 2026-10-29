@@ -3407,6 +3407,7 @@ function setupPostventa() {
     if (b) { PV_RAPIDO = PV_RAPIDO === b.dataset.rapido ? '' : b.dataset.rapido; renderPostventa(); }
   });
   document.getElementById('pv-refresh')?.addEventListener('click', loadPostventa);
+  document.getElementById('pv-exportar')?.addEventListener('click', pvExportarVarias);
   document.getElementById('pv-search')?.addEventListener('input', () => {
     clearTimeout(PV_SEARCH_TIMER); PV_SEARCH_TIMER = setTimeout(loadPostventa, 280);
   });
@@ -3690,6 +3691,221 @@ function pvWire(grid, lista, antes = () => {}) {
   grid.querySelectorAll('[data-pv-wa]').forEach(b => b.onclick = () => window.open(`https://wa.me/${b.dataset.pvWa}`, '_blank', 'noopener'));
   grid.querySelectorAll('[data-pv-abono]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); pvAbrirAbonoReserva(lista.find(c => c.id === Number(b.dataset.pvAbono)), b); });
   grid.querySelectorAll('[data-pv-servicio]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvServicio)), 'nuevo-servicio'); });
+  grid.querySelectorAll('[data-pv-eliminar]').forEach(b => b.onclick = () => { if (!b.disabled) pvEliminarReserva(lista.find(c => c.id === Number(b.dataset.pvEliminar)), b); });
+  grid.querySelectorAll('[data-pv-exportar]').forEach(b => b.onclick = () => pvExportarUna(lista.find(c => c.id === Number(b.dataset.pvExportar))));
+}
+/* ---------- Exportar reservas (PDF o texto) ----------
+   Cada usuario exporta lo que ya ve: postventa_bandeja, reserva_detalle y reserva_abonos_lista
+   aplican sus permisos en el servidor. Nunca salen costos ni proveedor: el archivo puede
+   terminar en manos del cliente. */
+const PVX_FORMATOS = [{ v: 'pdf', t: 'PDF' }, { v: 'txt', t: 'Texto (.txt)' }];
+const pvxFormatoPref = () => { try { return localStorage.getItem('pvx-formato') || 'pdf'; } catch { return 'pdf'; } };
+const pvxFecha = iso => iso ? fmtFechaSolo(String(iso).slice(0, 10)) : '';
+const pvxViaje = (a, b) => !a ? 'Sin fecha' : b && String(b).slice(0, 10) !== String(a).slice(0, 10) ? `${pvxFecha(a)} – ${pvxFecha(b)}` : pvxFecha(a);
+const pvxUsd = n => '$' + nf('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0);
+const pvxPax = s => [s.pax_adultos ? `${s.pax_adultos} ${s.pax_adultos == 1 ? 'adulto' : 'adultos'}` : '', s.pax_ninos ? `${s.pax_ninos} ${s.pax_ninos == 1 ? 'niño' : 'niños'}` : ''].filter(Boolean).join(', ');
+const pvxDoc = p => [p.tipo_documento, p.numero_documento].filter(Boolean).join(' ');
+const pvxNombre = p => [p.nombre, p.apellido].filter(Boolean).join(' ') + (p.titular ? ' (titular)' : '');
+const pvxDestino = x => x.r?.destino || x.c.destino || x.c.servicio || 'Sin destino';
+async function pvxDetalle(c) {
+  const [d, a] = await Promise.all([
+    sb.rpc('reserva_detalle', { p_reserva_id: c.id }),
+    ['admin', 'asesor', 'administrativo'].includes(ROL) ? sb.rpc('reserva_abonos_lista', { p_reserva_id: c.id }) : null,
+  ]);
+  const det = !d.error && d.data?.ok ? d.data : null;
+  if (!det) console.error('reserva_detalle', c.id, d.error || d.data);
+  return { c, r: det?.reserva || null, ok: !!det,
+    servicios: (det?.servicios || []).filter(s => !s.anulado_en),
+    pasajeros: det?.pasajeros || [],
+    abonos: (a && !a.error && a.data?.ok ? a.data.abonos || [] : []).filter(x => !x.anulado_en) };
+}
+// 6 a la vez: con ~100 reservas son ~200 RPC y no conviene dispararlas todas juntas.
+async function pvxDetalles(casos) {
+  const out = new Array(casos.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(6, casos.length) }, async () => {
+    while (i < casos.length) { const k = i++; out[k] = await pvxDetalle(casos[k]); }
+  }));
+  return out;
+}
+function pvxTexto(items, { titulo, filtros, detalle }) {
+  const L = [titulo.toUpperCase(), `Destino y Eventos Lotus 360 · generado ${new Date().toLocaleString('es-VE')}${MI_NOMBRE ? ` por ${MI_NOMBRE}` : ''}`];
+  if (filtros) L.push(filtros);
+  if (items.length > 1) {
+    const sum = k => items.reduce((s, x) => s + Number(x.c[k] || 0), 0);
+    L.push(`${items.length} reservas · Total ${pvxUsd(sum('monto_total'))} · Pagado ${pvxUsd(sum('monto_pagado'))} · Saldo ${pvxUsd(sum('saldo_pendiente'))}`);
+  }
+  const raya = '='.repeat(60);
+  items.forEach(x => {
+    const c = x.c;
+    L.push('', raya, `${c.codigo || 'Sin código'} · ${c.nombre || 'Sin nombre'}`, raya);
+    [['Teléfono', c.telefono], ['Asesor', c.asesor], ['Destino', pvxDestino(x)], ['Viaje', pvxViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin)],
+      ['Etapa', (PV_ETAPAS[c.etapa] || [c.etapa])[0]], ['Localizador', c.localizador_reserva],
+      ['Total', pvxUsd(c.monto_total)], ['Pagado', pvxUsd(c.monto_pagado)], ['Saldo', pvxUsd(c.saldo_pendiente)]]
+      .filter(([, v]) => v).forEach(([k, v]) => L.push(`${(k + ':').padEnd(13)}${v}`));
+    if (!detalle) return;
+    if (!x.ok) { L.push('', '(No se pudo cargar el detalle de esta reserva)'); return; }
+    L.push('', 'SERVICIOS');
+    if (!x.servicios.length) L.push('  Sin servicios cargados');
+    x.servicios.forEach(s => L.push(`  - ${(RV_TIPOS[s.tipo] || [s.tipo])[0]}${s.descripcion ? `: ${s.descripcion}` : ''}`,
+      '    ' + [s.destino, s.fecha_inicio ? pvxViaje(s.fecha_inicio, s.fecha_fin) : '', s.hora ? String(s.hora).slice(0, 5) : '', pvxPax(s),
+        s.localizador ? `Loc. ${s.localizador}` : '', s.estado, s.precio_usd_centavos != null ? pvxUsd(s.precio_usd_centavos / 100) : ''].filter(Boolean).join(' · ')));
+    L.push('', 'PASAJEROS');
+    if (!x.pasajeros.length) L.push('  Sin pasajeros cargados');
+    x.pasajeros.forEach(p => L.push(`  - ${pvxNombre(p)}` + [pvxDoc(p), p.fecha_nacimiento ? `nac. ${pvxFecha(p.fecha_nacimiento)}` : '', p.nacionalidad, p.telefono, p.email].filter(Boolean).map(v => ` · ${v}`).join('')));
+    if (x.abonos.length) {
+      L.push('', 'ABONOS');
+      x.abonos.forEach(a => L.push(`  - ${pvxFecha(a.fecha)} · ${pvxUsd(a.monto_usd)}` + [a.metodo, a.referencia ? `ref. ${a.referencia}` : ''].filter(Boolean).map(v => ` · ${v}`).join('')));
+    }
+  });
+  return L.join('\n') + '\n';
+}
+async function pvxPdf(items, { titulo, filtros, detalle }) {
+  await ensureVoucherLibs();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  let F = 'helvetica', st = s => (s === 'normal' ? 'normal' : 'bold');
+  try {
+    (await cargarFuentesPdf()).forEach(([a, e, b]) => { doc.addFileToVFS(a, b); doc.addFont(a, 'Poppins', e); });
+    F = 'Poppins'; st = s => s;
+  } catch (_e) { /* sin Poppins sale en Helvetica */ }
+  const C = { navy: [15, 23, 42], naranja: [234, 118, 22], gris: [100, 116, 139], claro: [148, 163, 184], linea: [226, 232, 240], suave: [248, 250, 252] };
+  const T = s => pdfSinEmojis(s);
+  const font = (s, size, rgb) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...rgb); };
+  const X0 = 40, X1 = 572, ALTO = 792, PIE = 50;
+  const tabla = (y, head, body, extra = {}) => {
+    doc.autoTable({ startY: y, head: head ? [head] : undefined, body, margin: { left: X0, right: 612 - X1, bottom: PIE }, theme: 'grid',
+      styles: { font: F, fontStyle: st('normal'), fontSize: 8, cellPadding: 4, textColor: C.navy, lineColor: C.linea, lineWidth: 0.5, overflow: 'linebreak' },
+      headStyles: { font: F, fontStyle: st('semibold'), fillColor: C.navy, textColor: 255 },
+      footStyles: { font: F, fontStyle: st('semibold'), fillColor: C.suave, textColor: C.navy },
+      alternateRowStyles: { fillColor: C.suave }, ...extra });
+    return doc.lastAutoTable.finalY;
+  };
+  const lugar = (y, falta) => { if (y + falta <= ALTO - PIE) return y; doc.addPage(); return 50; };
+  const subtitulo = (y, t) => { y = lugar(y + 16, 40); font('semibold', 10, C.naranja); doc.text(T(t), X0, y); return y + 6; };
+  font('medium', 7.5, C.naranja); doc.text('DESTINO Y EVENTOS LOTUS 360', X0, 44, { charSpace: 1.2 });
+  font('bold', 17, C.navy); doc.text(T(titulo), X0, 66);
+  font('normal', 8.5, C.gris);
+  const sub = doc.splitTextToSize(T([filtros, `Generado ${new Date().toLocaleString('es-VE')}${MI_NOMBRE ? ` por ${MI_NOMBRE}` : ''}`].filter(Boolean).join(' · ')), X1 - X0);
+  doc.text(sub, X0, 82);
+  let y = 82 + sub.length * 11;
+  doc.setDrawColor(...C.linea); doc.setLineWidth(1); doc.line(X0, y, X1, y);
+  y += 12;
+  if (items.length > 1) {
+    const sum = k => items.reduce((s, x) => s + Number(x.c[k] || 0), 0);
+    y = tabla(y, ['Código', 'Cliente', 'Destino', 'Viaje', 'Etapa', 'Asesor', 'Total', 'Pagado', 'Saldo'],
+      items.map(x => [x.c.codigo || '', x.c.nombre || '', pvxDestino(x), pvxViaje(x.c.fecha_viaje_inicio, x.c.fecha_viaje_fin), (PV_ETAPAS[x.c.etapa] || [x.c.etapa])[0], x.c.asesor || '',
+        pvxUsd(x.c.monto_total), pvxUsd(x.c.monto_pagado), pvxUsd(x.c.saldo_pendiente)].map(T)),
+      { foot: [[`${items.length} reservas`, '', '', '', '', '', pvxUsd(sum('monto_total')), pvxUsd(sum('monto_pagado')), pvxUsd(sum('saldo_pendiente'))]],
+        styles: { font: F, fontStyle: st('normal'), fontSize: 7.5, cellPadding: 3.5, textColor: C.navy, lineColor: C.linea, lineWidth: 0.5 },
+        columnStyles: { 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' } } });
+  }
+  if (detalle) items.forEach((x, n) => {
+    const c = x.c;
+    if (items.length > 1) { doc.addPage(); y = 50; } else if (n) y = lugar(y, 120);
+    font('bold', 13, C.navy); doc.text(T(`${c.codigo || 'Sin código'} · ${c.nombre || 'Sin nombre'}`), X0, y + 4);
+    y = tabla(y + 14, null, [
+      ['Teléfono', c.telefono || '—', 'Asesor', c.asesor || '—'],
+      ['Destino', pvxDestino(x), 'Etapa', (PV_ETAPAS[c.etapa] || [c.etapa])[0] || '—'],
+      ['Viaje', pvxViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin), 'Localizador', c.localizador_reserva || '—'],
+      ['Total', pvxUsd(c.monto_total), 'Pagado / Saldo', `${pvxUsd(c.monto_pagado)} / ${pvxUsd(c.saldo_pendiente)}`],
+    ].map(f => f.map(T)), { columnStyles: { 0: { fontStyle: st('semibold'), textColor: C.gris, cellWidth: 70 }, 2: { fontStyle: st('semibold'), textColor: C.gris, cellWidth: 80 } }, alternateRowStyles: {} });
+    if (!x.ok) { y = subtitulo(y, 'No se pudo cargar el detalle de esta reserva'); return; }
+    y = subtitulo(y, 'Servicios');
+    y = x.servicios.length ? tabla(y, ['Tipo', 'Descripción', 'Fechas', 'Pax', 'Localizador', 'Estado', 'Precio'],
+      x.servicios.map(s => [(RV_TIPOS[s.tipo] || [s.tipo])[0], [s.descripcion, s.destino].filter(Boolean).join(' · '), s.fecha_inicio ? pvxViaje(s.fecha_inicio, s.fecha_fin) + (s.hora ? ` ${String(s.hora).slice(0, 5)}` : '') : '',
+        pvxPax(s), s.localizador || '', s.estado || '', s.precio_usd_centavos != null ? pvxUsd(s.precio_usd_centavos / 100) : ''].map(T)),
+      { columnStyles: { 6: { halign: 'right' } } }) : (font('normal', 8.5, C.gris), doc.text('Sin servicios cargados', X0, y + 10), y + 14);
+    y = subtitulo(y, 'Pasajeros');
+    y = x.pasajeros.length ? tabla(y, ['Nombre', 'Documento', 'Nacimiento', 'Nacionalidad', 'Contacto'],
+      x.pasajeros.map(p => [pvxNombre(p), pvxDoc(p), pvxFecha(p.fecha_nacimiento), p.nacionalidad || '', [p.telefono, p.email].filter(Boolean).join(' · ')].map(T)))
+      : (font('normal', 8.5, C.gris), doc.text('Sin pasajeros cargados', X0, y + 10), y + 14);
+    if (x.abonos.length) {
+      y = subtitulo(y, 'Abonos');
+      y = tabla(y, ['Fecha', 'Método', 'Referencia', 'Monto'], x.abonos.map(a => [pvxFecha(a.fecha), a.metodo || '', a.referencia || '', pvxUsd(a.monto_usd)].map(T)), { columnStyles: { 3: { halign: 'right' } } });
+    }
+    y += 18;
+  });
+  const total = doc.getNumberOfPages();
+  for (let p = 1; p <= total; p++) {
+    doc.setPage(p);
+    font('normal', 7.5, C.claro);
+    doc.text(T(`Lotus 360 · ${titulo}`), X0, ALTO - 24);
+    doc.text(`Página ${p} de ${total}`, X1, ALTO - 24, { align: 'right' });
+  }
+  return doc.output('blob');
+}
+async function pvxGenerar(casos, { formato, detalle, titulo, filtros = '', archivo }) {
+  try { localStorage.setItem('pvx-formato', formato); } catch {}
+  if (casos.length > 1) okToast(`Preparando ${casos.length} reservas…`);
+  try {
+    const items = detalle ? await pvxDetalles(casos) : casos.map(c => ({ c, ok: true, servicios: [], pasajeros: [], abonos: [] }));
+    const fallidas = items.filter(x => !x.ok).length;
+    if (formato === 'txt') descargarArchivo(new Blob(['﻿' + pvxTexto(items, { titulo, filtros, detalle })], { type: 'text/plain;charset=utf-8' }), archivo + '.txt');
+    else await pdfEntregar(await pvxPdf(items, { titulo, filtros, detalle }), archivo + '.pdf');
+    if (fallidas) errToast(`${fallidas} ${fallidas === 1 ? 'reserva salió' : 'reservas salieron'} sin detalle (no se pudo cargar)`);
+    else okToast(casos.length > 1 ? `${casos.length} reservas exportadas` : 'Reserva exportada');
+  } catch (e) {
+    console.error('exportar reservas', e);
+    errToast(formato === 'pdf' ? 'No se pudo generar el PDF' : 'No se pudo exportar');
+  }
+}
+async function pvExportarUna(c) {
+  if (!c) return;
+  const r = await confirmarSheet({ titulo: `Exportar ${c.codigo || 'reserva'}`, detalle: `${c.nombre || 'Cliente'}: datos, servicios, pasajeros y abonos. Sin costos de proveedor.`, textoOk: 'Exportar',
+    campos: [{ id: 'formato', label: 'Formato', tipo: 'select', valor: pvxFormatoPref(), requerido: true, opciones: PVX_FORMATOS }] });
+  if (!r) return;
+  pvxGenerar([c], { formato: r.formato, detalle: true, titulo: `Reserva ${c.codigo || ''}`.trim(), archivo: `Reserva-${pdfSlug(c.codigo || c.nombre)}` });
+}
+async function pvExportarVarias() {
+  if (!POSTVENTA.length) { errToast('No hay reservas para exportar'); return; }
+  const grupos = [...new Set(POSTVENTA.map(pvGrupoDe))].sort((a, b) => a === 'Sin destino' ? 1 : b === 'Sin destino' ? -1 : a.localeCompare(b, 'es'));
+  const busqueda = document.getElementById('pv-search')?.value.trim() || '';
+  const r = await confirmarSheet({
+    titulo: 'Exportar reservas',
+    detalle: `${ROL === 'asesor' ? 'Salen tus reservas' : 'Salen las reservas que ves'} en esta sección, sin costos de proveedor. Las fechas filtran por fecha de viaje; vacías = sin límite.${busqueda ? `\nSe respeta la búsqueda «${busqueda}».` : ''}`,
+    textoOk: 'Exportar',
+    campos: [
+      { id: 'destino', label: 'Destino', tipo: 'select', valor: PV_GRUPO, opciones: [{ v: '', t: 'Todos los destinos' }, ...grupos.map(g => ({ v: g, t: g }))] },
+      { id: 'etapa', label: 'Etapa', tipo: 'select', valor: PV_ETAPA, opciones: [{ v: '', t: 'Todas las etapas' }, ...Object.entries(PV_ETAPAS).map(([k, [t]]) => ({ v: k, t }))] },
+      { id: 'desde', label: 'Viaje desde', tipo: 'date' },
+      { id: 'hasta', label: 'Viaje hasta', tipo: 'date' },
+      { id: 'formato', label: 'Formato', tipo: 'select', valor: pvxFormatoPref(), requerido: true, opciones: PVX_FORMATOS },
+      { id: 'detalle', label: 'Incluir servicios, pasajeros y abonos de cada reserva', tipo: 'check', valor: true },
+    ],
+  });
+  if (!r) return;
+  let { desde, hasta } = r;
+  if (desde && hasta && desde > hasta) [desde, hasta] = [hasta, desde];
+  // Solapamiento con el viaje: entra si el viaje toca el rango; sin fecha de viaje no entra cuando hay rango.
+  const casos = POSTVENTA.filter(c => {
+    if (r.destino && pvGrupoDe(c) !== r.destino) return false;
+    if (r.etapa && c.etapa !== r.etapa) return false;
+    if (!desde && !hasta) return true;
+    const ini = String(c.fecha_viaje_inicio || '').slice(0, 10), fin = String(c.fecha_viaje_fin || '').slice(0, 10) || ini;
+    return !!ini && (!desde || fin >= desde) && (!hasta || ini <= hasta);
+  }).sort((a, b) => String(a.fecha_viaje_inicio || '9999').localeCompare(String(b.fecha_viaje_inicio || '9999')) || a.id - b.id);
+  if (!casos.length) { errToast('Ninguna reserva coincide con esos filtros'); return; }
+  const rango = desde || hasta ? `Viaje: ${desde ? pvxFecha(desde) : '…'} – ${hasta ? pvxFecha(hasta) : '…'}` : '';
+  const filtros = [r.destino && `Destino: ${r.destino}`, r.etapa && `Etapa: ${PV_ETAPAS[r.etapa][0]}`, rango, busqueda && `Búsqueda: ${busqueda}`].filter(Boolean).join(' · ');
+  const archivo = ['Reservas', r.destino && pdfSlug(r.destino), desde, hasta, !desde && !hasta && hoy()].filter(Boolean).join('-');
+  pvxGenerar(casos, { formato: r.formato, detalle: r.detalle, titulo: r.destino ? `Reservas · ${r.destino}` : 'Reservas', filtros, archivo });
+}
+// Borrado real (RPC eliminar_reserva): si la reserva tiene factura, abonos vigentes, comisión o pagos a proveedor, el servidor lo rechaza.
+async function pvEliminarReserva(c, btn) {
+  if (!c || !esOficina()) return;
+  const motivo = await pedirTexto({ titulo: `Eliminar reserva ${c.codigo || ''}`.trim(), detalle: `${c.nombre || 'Cliente'}: se borran sus servicios, pasajeros y documentos. No se puede deshacer.`, label: 'Motivo (opcional)', tipo: 'textarea', textoOk: 'Eliminar', destructivo: true });
+  if (motivo === null) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('eliminar_reserva', { p_reserva_id: c.id, p_motivo: motivo || null });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo eliminar: ' + rvErr(error, data)); return; }
+  okToast(data.codigo ? `Reserva ${data.codigo} eliminada` : 'Reserva eliminada');
+  btn.closest('.pv-card')?.remove();
+  POSTVENTA = POSTVENTA.filter(x => x.id !== c.id);
+  if (currentSec === 'postventa') loadPostventa(true);
+  if (currentSec === 'reservas-empresas') loadReservasEmpresas();
+  if (currentSec === 'boleteria' && bolTab === 'reservas') loadBolReservas();
 }
 // Chips de «Falta» de la tarjeta: una por motivo (las repetidas se cuentan) y una última si no hay seguimiento.
 function pvFaltaChips(c, vencido) {
@@ -3757,7 +3973,7 @@ function pvCardHtml(c, extra = '') {
       <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>Saldo <b>${money(c.saldo_pendiente)}</b></span></div>
       <div class="pv-progress${total > 0 && pagado >= total ? ' full' : ''}"><span style="width:${pct}%"></span></div>
       ${faltaHtml}${c.incidencia_abierta ? '<div class="pv-meta"><span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span></div>' : ''}
-      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button" aria-label="WhatsApp de ${esc(c.nombre || 'cliente')}" title="Abrir WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></button>` : ''}${['admin','asesor','administrativo'].includes(ROL) ? `<button class="pv-btn" data-pv-abono="${c.id}" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente"'}>+ Abono</button><button class="pv-btn" data-pv-servicio="${c.id}" type="button">+ Servicio</button>` : ''}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar</button></div>
+      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button" aria-label="WhatsApp de ${esc(c.nombre || 'cliente')}" title="Abrir WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></button>` : ''}<button class="pv-btn exp" data-pv-exportar="${c.id}" type="button" aria-label="Exportar reserva ${esc(c.codigo || '')}" title="Exportar (PDF o texto)"><i class="fas fa-file-arrow-down" aria-hidden="true"></i></button>${['admin','asesor','administrativo'].includes(ROL) ? `<button class="pv-btn" data-pv-abono="${c.id}" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente"'}>+ Abono</button><button class="pv-btn" data-pv-servicio="${c.id}" type="button">+ Servicio</button>` : ''}${esOficina() ? `<button class="pv-btn del" data-pv-eliminar="${c.id}" type="button" aria-label="Eliminar reserva ${esc(c.codigo || '')}" title="Eliminar reserva"><i class="fas fa-trash-can" aria-hidden="true"></i></button>` : ''}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar</button></div>
     </article>`;
 }
 // Abonos de la tarjeta: siempre por reserva, sin usar reserva_principal ni registrar_abono_venta.
@@ -4065,6 +4281,8 @@ const RV_ERR = {
   lead_fuera_de_postventa: 'El cliente todavía no está EN ESPERA DE PAGO ni PAGO REALIZADO: su asesor tiene que moverlo antes de crear la reserva',
   lead_no_coincide: 'La solicitud es de otro cliente', reserva_no_disponible: 'Esa reserva ya no está abierta', solicitud_cerrada: 'La solicitud ya está cerrada',
   solicitud_no_existe: 'La solicitud ya no existe', falta_lead: 'Elegí el cliente', lead_no_disponible: 'Ese cliente no existe o fue eliminado',
+  tiene_factura: 'Tiene factura registrada: no se puede eliminar', tiene_abonos: 'Tiene abonos vigentes: anúlalos primero',
+  tiene_comision: 'Tiene una comisión cargada: recházala o elimínala primero', tiene_pagos_proveedor: 'Ya tiene pagos a proveedor registrados',
 };
 const rvErr = (error, data) => RV_ERR[data?.error] || RV_ERR[error?.message] || data?.error || error?.message || 'error desconocido';
 const rvMonto = (cent, mon) => (Number(cent || 0) / 100).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (mon || 'USD');
@@ -7776,6 +7994,18 @@ function openDrawer(l, opciones = {}) {
           <div id="res-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
           <div class="edit-err" id="res-err"></div>
           <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, true) : ''}
+        ${(vende || esOficina()) && VENTA.includes(l.estado) ? seccion('link-pago', 'fa-link', 'Link de pago', `
+          <div class="csub" style="margin-bottom:8px">El cliente abre el link, elige cómo pagar (Zelle, Pago Móvil o Binance) y sube su comprobante. Vence en 24 horas; oficina lo verifica.</div>
+          <label class="fl">Reserva</label>
+          <select id="lp-reserva" class="ei" disabled><option value="">Cargando reservas…</option></select>
+          <div class="ef-fila">
+            <div style="flex:1"><label class="fl">Monto (USD)</label><input id="lp-monto" class="ei" type="number" min="0" step="0.01" placeholder="0.00"></div>
+            <div style="flex:1"><label class="fl">Si paga en Bs, tasa BCV</label><select id="lp-tasa" class="ei"><option value="USD">Dólar</option><option value="EUR">Euro</option></select></div>
+          </div>
+          <div class="edit-err" id="lp-err"></div>
+          <button class="dbtn save" id="lp-emitir" type="button" style="width:100%;margin-top:6px"><i class="fas fa-link"></i> Generar link</button>
+          <div id="lp-resultado" style="display:none;margin-top:10px"></div>
+          <div class="lp-links" id="lp-links"></div>`, false) : ''}
         <section class="dbloque" id="conv-bloque" hidden>
           <div class="dbloque-h"><span><i class="fas fa-robot"></i> Chat con la IA</span><button type="button" class="dbloque-btn" id="conv-ver">Ver todo</button></div>
           <div id="conv-preview" class="conv-preview"></div>
@@ -7855,6 +8085,10 @@ function openDrawer(l, opciones = {}) {
   if (document.getElementById('res-lista')) {
     document.getElementById('res-nueva').onclick = () => crearReservaLead(l);
     cargarReservasLead(l);
+  }
+  if (document.getElementById('lp-emitir')) {
+    document.getElementById('lp-emitir').onclick = () => emitirLinkPago(l);
+    cargarLinksPagoLead(l);
   }
   cargarConversacionLead(l);
   document.getElementById('drawer').classList.add('open');
@@ -7940,6 +8174,7 @@ async function cargarReservasLead(l) {
   const box = document.getElementById('res-lista'); if (!box) return;
   const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: l.id });
   if (!box.isConnected) return;
+  lpPintarReservas(error || !data?.ok ? null : (data.reservas || []).filter(r => r.activo));
   if (error || !data?.ok) { console.error('reservas_de_lead', error || data); box.innerHTML = '<div class="csub">No se pudieron cargar las reservas</div>'; return; }
   const rs = data.reservas || [];
   box.innerHTML = rs.length ? rs.map(r => {
@@ -11710,6 +11945,7 @@ const PAGO_ESTADO_LABEL = {
 const MSG_VERIFICAR_PAGO_WEB = {
   ...MSG_VERIFICAR_PAGO,
   no_es_pago_web: 'Este pago no es de una compra hecha en la web.',
+  no_es_pago_de_reserva: 'Este pago no está atado a una reserva.',
   pago_no_declarado: 'El cliente aún no declaró este pago. Recarga la lista.',
   reserva_liberada: 'El cupo de esta reserva ya se liberó por vencimiento. Habla con el cliente y rehaz la reserva a mano antes de cobrar.',
   reserva_no_disponible: 'La reserva ya no está disponible (cerrada o eliminada). Revísala antes de aprobar.',
@@ -11737,6 +11973,9 @@ function pagoWebMontoBanco(p) {
   return `${pre} ${pagoWebDec(p.monto_centavos)}`;
 }
 const PAGO_WEB_MONO = 'font-family:ui-monospace,SFMono-Regular,Menlo,monospace';
+// pagos_web_cola trae también los pagos del asesor atados a reserva (link y captura): se verifican con verificar_pago_reserva.
+const PAGO_ORIGEN = { web: ['globe', 'Compra web'], asesor: ['link', 'Link de pago'], asesor_captura: ['user-pen', 'Cargado'] };
+const pagoEsWeb = p => !p.origen || p.origen === 'web';
 // Cargos de la compra (gestión web, IGTF): resumen los trae mezclados con el hotel ("Hotel + Cargo… + IGTF…").
 const esCargoWeb = t => /^(cargo por gesti|igtf)/i.test(String(t).trim());
 const refNormal = r => String(r || '').replace(/\s+/g, '').toLowerCase();
@@ -11756,8 +11995,8 @@ function pagoWebCard(p) {
   const servicios = partes.filter(t => !esCargoWeb(t));
   const cargos = partes.filter(esCargoWeb);
   const repetida = pagoWebRefRepetida(p);
-  const slaTxt = pend
-    ? `Verificar antes de ${fmtFechaHoraCaracas(p.verificar_antes_de)}${p.sla_vencido ? ' · plazo vencido' : ''}`
+  const slaTxt = pend && !p.verificar_antes_de ? ''
+    : pend ? `Verificar antes de ${fmtFechaHoraCaracas(p.verificar_antes_de)}${p.sla_vencido ? ' · plazo vencido' : ''}`
     : p.estado === 'emitido' || p.estado === 'vencido' ? `Plazo de pago: ${fmtFechaHoraCaracas(p.expira_en)}` : '';
   const sub = [
     PAGO_RIEL_LABEL[p.riel] || p.riel,
@@ -11769,7 +12008,7 @@ function pagoWebCard(p) {
   if (pend) {
     acciones.push(`<button type="button" class="inbox-btn atender" data-pagoweb-aprobar="${p.id}"><i class="fas fa-check"></i> Verificar y confirmar</button>`);
     acciones.push(`<button type="button" class="inbox-btn nopuedo" data-pagoweb-rechazar="${p.id}"><i class="fas fa-xmark"></i> Rechazar</button>`);
-  } else if (p.estado === 'vencido' || p.estado === 'emitido') {
+  } else if ((p.estado === 'vencido' || p.estado === 'emitido') && pagoEsWeb(p)) {
     acciones.push(`<button type="button" class="inbox-btn avisar" data-pagoweb-tarde="${p.id}"><i class="fas fa-check"></i> Ya pagó: confirmar</button>`);
   }
   const etapa = pagoEtapa(p);
@@ -11795,7 +12034,7 @@ function pagoWebCard(p) {
         ${p.referencia_declarada ? `<button type="button" class="pagos-copiar" data-pagoweb-copiar="${p.id}" aria-label="Copiar referencia" title="Copiar referencia"><i class="fas fa-copy"></i></button>` : ''}
       </div>
       ${repetida ? `<div class="ec-row" style="color:var(--danger);font-weight:700"><i class="fas fa-triangle-exclamation"></i> Referencia repetida (${esc(repetida.codigo || repetida.lead_nombre || 'otro pago')})</div>` : ''}
-      <div class="ec-row"><i class="fas fa-globe"></i> Compra web ${esc(p.codigo || '')}${servicios.length ? ' · ' + esc(servicios.join(' + ')) : ''}</div>
+      <div class="ec-row"><i class="fas fa-${PAGO_ORIGEN[p.origen || 'web'][0]}"></i> ${esc(PAGO_ORIGEN[p.origen || 'web'][1])}${p.origen === 'asesor_captura' && p.emitido_por ? ' por ' + esc(p.emitido_por) : ''} ${esc(p.codigo || '')}${servicios.length ? ' · ' + esc(servicios.join(' + ')) : ''}</div>
       ${cargos.length ? `<div class="ec-row" style="margin-top:2px;padding-left:20px">Incluye ${esc(cargos.join(' y '))}</div>` : ''}
       <div class="ec-row"><i class="fas fa-user"></i> ${esc(p.asesor || 'Sin asignar')}${p.lead_telefono ? ' · ' + esc(p.lead_telefono) : ''}</div>
       <div class="ec-row"><i class="fas fa-clock"></i> ${p.declarado_en ? 'Declarado ' + esc(tiempoRelativo(p.declarado_en)) : 'Sin declarar'}</div>
@@ -11830,6 +12069,7 @@ async function loadPagos(silencioso = false) {
   const empty = document.getElementById('pagos-empty');
   const lista = document.getElementById('pagos-lista');
   if (!lista) return;
+  if (!esOficina()) return loadPagosAsesor(silencioso);
   // No repintar debajo de un comprobante abierto: se cerraría mientras lo miran.
   if (silencioso && [...lista.querySelectorAll('[data-pagoweb-prev]')].some(e => e.style.display !== 'none')) return;
   const carga = ++PAGOS_CARGA;
@@ -11966,7 +12206,9 @@ ${cotejar}${repetida ? `
 
 Ojo: la misma referencia aparece en ${repetida.codigo || repetida.lead_nombre || 'otro pago'}.` : ''}
 
-Al confirmar se registra el abono, se confirman los servicios, el lead pasa a PAGO REALIZADO y el cliente recibe por correo su localizador.`,
+${pagoEsWeb(p)
+  ? 'Al confirmar se registra el abono, se confirman los servicios, el lead pasa a PAGO REALIZADO y el cliente recibe por correo su localizador.'
+  : 'Al confirmar se registra el abono en la reserva y, si es la reserva principal, el lead pasa a PAGO REALIZADO.'}`,
       textoOk: 'Verificar y confirmar',
     }))) return;
   } else {
@@ -11977,7 +12219,7 @@ Al confirmar se registra el abono, se confirman los servicios, el lead pasa a PA
   const params = { p_pago_id: id, p_aprobar: aprobar };
   if (motivo) params.p_motivo = motivo.trim();
   if (modo === 'tarde') params.p_sin_declaracion = true;
-  const { data, error } = await sb.rpc('verificar_pago_web', params);
+  const { data, error } = await sb.rpc(pagoEsWeb(p) ? 'verificar_pago_web' : 'verificar_pago_reserva', params);
   if (error || !data?.ok) {
     if (btn) btn.disabled = false;
     errToast(MSG_VERIFICAR_PAGO_WEB[data?.error] || error?.message || data?.error || 'No se pudo procesar el pago');
@@ -11985,6 +12227,7 @@ Al confirmar se registra el abono, se confirman los servicios, el lead pasa a PA
     return;
   }
   if (!aprobar) okToast('Pago rechazado');
+  else if (!pagoEsWeb(p)) okToast(`Pago verificado y abonado a ${data.codigo}${Number(data.saldo_pendiente) > 0 ? ` · saldo ${money(data.saldo_pendiente)}` : ''}`);
   else okToast(data.correo_encolado
     ? `Reserva ${data.codigo} confirmada. El correo con el localizador sale en unos minutos.`
     : `Reserva ${data.codigo} confirmada. El cliente no dejó correo: envíale el código por WhatsApp.`);
@@ -11994,10 +12237,284 @@ Al confirmar se registra el abono, se confirman los servicios, el lead pasa a PA
   if (currentSec === 'balance') loadBalance();
 }
 
+/* ---------- Pagos del asesor: su lista, el alta con captura y el link del drawer ---------- */
+const RPA_ERR = {
+  reserva_no_disponible: 'La reserva ya no está activa.', riel_invalido: 'Elige el método de pago.',
+  falta_referencia: 'Escribe la referencia del pago.', comprobante_path_invalido: 'No se pudo guardar la captura. Vuelve a pegarla.',
+  monto_invalido: 'Pon un monto mayor a 0.', tasa_invalida: 'Elige la tasa BCV.',
+  tasa_no_disponible: 'No hay tasa BCV cargada hoy. Avísale a oficina.', referencia_duplicada: 'Esa referencia ya está registrada en esta reserva.',
+};
+const PAGO_MIO_COLOR = { emitido: 'var(--muted)', pendiente_verificacion: 'var(--amber)', verificado: 'var(--green)', rechazado: 'var(--danger)', vencido: 'var(--muted)' };
+const lpUrl = token => `https://destinoyeventoslotus360.com/pagar/${token}`;
+const resOpcion = r => `<option value="${r.id}" data-saldo="${Math.max(Number(r.monto_total || 0) - Number(r.monto_pagado || 0), 0).toFixed(2)}">${esc(r.codigo)} · ${money(Number(r.monto_pagado || 0))} de ${money(Number(r.monto_total || 0))}</option>`;
+const pagoMioMonto = p => p.riel ? pagoWebMontoBanco(p) : `$ ${pagoWebDec(p.monto_usd_centavos)}`;
+
+function pagoMioCard(p) {
+  const link = p.origen === 'asesor';
+  return `
+    <div class="entity-card inbox-card" data-pago="${p.id}">
+      <div class="ec-top"><div class="ec-nombre">${esc(p.cliente || 'Sin nombre')}</div>
+        <span class="badge-st" style="color:${PAGO_MIO_COLOR[p.estado] || 'var(--muted)'}">${esc(link && p.estado === 'emitido' ? 'Esperando al cliente' : PAGO_ESTADO_LABEL[p.estado] || p.estado)}</span></div>
+      <div style="margin-top:8px;${PAGO_WEB_MONO};font-size:20px;font-weight:800;color:var(--txt)">${esc(pagoMioMonto(p))}</div>
+      <div class="ec-row">${esc(p.riel ? PAGO_RIEL_LABEL[p.riel] || p.riel : 'El cliente elige el método')}${p.referencia_declarada ? ' · Ref. ' + esc(p.referencia_declarada) : ''}</div>
+      <div class="ec-row"><i class="fas fa-${link ? 'link' : 'user-pen'}"></i> ${link ? 'Link de pago' : 'Cargado por ti'} · ${esc(p.codigo || '')}</div>
+      ${p.estado === 'rechazado' && p.motivo_rechazo ? `<div class="ec-row" style="color:var(--danger)"><i class="fas fa-circle-xmark"></i> ${esc(p.motivo_rechazo)}</div>` : ''}
+      <div class="ec-row"><i class="fas fa-clock"></i> ${esc(tiempoRelativo(p.declarado_en || p.created_at))}${p.estado === 'emitido' ? ' · vence ' + esc(fmtFechaHoraCaracas(p.expira_en)) : ''}</div>
+      <div class="inbox-actions">
+        ${p.comprobante_path ? `<button type="button" class="inbox-btn pagos-sec" data-pago-comprobante="${p.id}"><i class="fas fa-receipt"></i> Ver comprobante</button>` : ''}
+        ${p.token ? `<button type="button" class="inbox-btn" data-lp-copiar="${esc(p.token)}"><i class="fas fa-copy"></i> Copiar link</button>` : ''}
+      </div>
+    </div>`;
+}
+
+async function loadPagosAsesor(silencioso) {
+  const loading = document.getElementById('pagos-loading'), empty = document.getElementById('pagos-empty'), lista = document.getElementById('pagos-lista');
+  const carga = ++PAGOS_CARGA;
+  if (!silencioso) { loading.classList.add('show'); empty.classList.remove('show'); lista.innerHTML = ''; }
+  const { data, error } = await sb.rpc('mis_pagos_asesor', { p_limite: 100 });
+  if (carga !== PAGOS_CARGA) return;
+  loading.classList.remove('show');
+  if (error) { errToast(error.message || 'No se pudieron cargar tus pagos'); return; }
+  PAGOS_CACHE = (Array.isArray(data) ? data : []).map(p => ({ ...p, id: p.pago_id, lead_nombre: p.cliente }));
+  empty.classList.toggle('show', !PAGOS_CACHE.length);
+  lista.innerHTML = PAGOS_CACHE.length ? `<div class="leads-inbox-grid">${PAGOS_CACHE.map(pagoMioCard).join('')}</div>` : '';
+  if (!silencioso) entradaLista(lista);
+}
+
+async function copiarLinkPago(token) {
+  try { await navigator.clipboard.writeText(lpUrl(token)); okToast('Link copiado'); }
+  catch { errToast('El navegador no dejó copiar'); }
+}
+
+let RPA = null, RPA_BUSQ = 0, RPA_TASAS = null;
+const rpaEl = id => document.getElementById(id);
+const rpaErr = t => { rpaEl('rpa-err').textContent = t || ''; };
+function rpaEstado(texto, malo) {
+  const st = rpaEl('rpa-st');
+  st.textContent = texto || '';
+  st.className = 'ef-comprob-st' + (texto ? ' show' : '') + (malo ? ' malo' : '');
+}
+function rpaPreview(file) {
+  const img = rpaEl('rpa-preview');
+  if (img.src) URL.revokeObjectURL(img.src);
+  if (!file) { img.hidden = true; img.removeAttribute('src'); return; }
+  img.src = URL.createObjectURL(file); img.hidden = false;
+}
+function rpaReservas(rs) {
+  const sel = rpaEl('rpa-reserva');
+  sel.disabled = true;
+  if (!RPA?.lead) sel.innerHTML = '<option value="">Elige primero el cliente</option>';
+  else if (rs === null) sel.innerHTML = '<option value="">No se pudieron cargar las reservas</option>';
+  else if (!rs.length) sel.innerHTML = '<option value="">Sin reservas activas: créala desde la ficha del cliente</option>';
+  else { sel.disabled = false; sel.innerHTML = rs.map(resOpcion).join(''); }
+}
+function rpaRielCambio() {
+  const riel = val('rpa-riel'), bs = riel === 'pago_movil' || riel === 'transferencia';
+  rpaEl('rpa-tasa-box').hidden = !bs;
+  rpaEl('rpa-monto-l').textContent = bs ? 'Monto en Bs' : riel === 'binance' ? 'Monto en USDT' : 'Monto en USD';
+  rpaEquiv();
+}
+async function rpaEquiv() {
+  const box = rpaEl('rpa-equiv'), riel = val('rpa-riel'), monto = parseFloat(val('rpa-monto'));
+  box.textContent = '';
+  if (!(riel === 'pago_movil' || riel === 'transferencia') || !(monto > 0)) return;
+  if (!RPA_TASAS) {
+    const { data } = await sb.from('tasas_cambio').select('moneda,tasa');
+    RPA_TASAS = Object.fromEntries((data || []).map(t => [t.moneda, Number(t.tasa)]));
+  }
+  const tasa = RPA_TASAS[val('rpa-tasa')];
+  box.textContent = tasa ? `≈ ${money(monto / tasa)} a tasa BCV ${val('rpa-tasa') === 'EUR' ? 'euro' : 'dólar'} de hoy (${tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : 'No hay tasa BCV cargada hoy.';
+}
+function rpaAbrir() {
+  RPA = { lead: null, file: null, ocr: null, sol: crypto.randomUUID(), leads: [] };
+  ['rpa-buscar', 'rpa-monto', 'rpa-referencia', 'rpa-riel'].forEach(id => { rpaEl(id).value = ''; });
+  rpaEl('rpa-resultados').innerHTML = '';
+  rpaEl('rpa-cliente').hidden = true;
+  rpaEl('rpa-buscar').hidden = false;
+  rpaReservas(null); rpaPreview(null); rpaEstado(''); rpaErr(''); rpaRielCambio();
+  openSheet('rpa-sheet');
+  setTimeout(() => rpaEl('rpa-buscar').focus(), 60);
+}
+async function rpaBuscar() {
+  const box = rpaEl('rpa-resultados'), q = val('rpa-buscar').trim().replace(/[%,()*\\]/g, '');
+  const busq = ++RPA_BUSQ;
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  let consulta = sb.from('leads').select('id,nombre,telefono,asesor').is('eliminado_at', null)
+    .or(`nombre.ilike.%${q}%,telefono.ilike.%${q}%`).order('updated_at', { ascending: false }).limit(8);
+  if (ROL === 'asesor') consulta = consulta.eq('asesor', MI_NOMBRE);
+  const { data, error } = await consulta;
+  if (busq !== RPA_BUSQ || !RPA) return;
+  if (error) { box.innerHTML = '<div class="csub">No se pudo buscar</div>'; return; }
+  RPA.leads = data || [];
+  box.innerHTML = RPA.leads.length
+    ? RPA.leads.map(l => `<button type="button" data-rpa-lead="${l.id}">${esc(l.nombre || 'Sin nombre')}<span class="csub"> · ${esc(l.telefono || '')}${ROL === 'asesor' ? '' : ' · ' + esc(l.asesor || 'Sin asesor')}</span></button>`).join('')
+    : `<div class="csub">Sin resultados${ROL === 'asesor' ? ' entre tus clientes' : ''}</div>`;
+}
+async function rpaElegir(l) {
+  RPA.lead = l;
+  rpaEl('rpa-resultados').innerHTML = '';
+  rpaEl('rpa-buscar').hidden = true;
+  const cli = rpaEl('rpa-cliente');
+  cli.hidden = false;
+  cli.innerHTML = `<b>${esc(l.nombre || 'Sin nombre')}</b> ${esc(l.telefono || '')} <button type="button" class="rpa-link" id="rpa-cambiar" style="background:none;border:0;font:inherit">Cambiar</button>`;
+  rpaEl('rpa-cambiar').onclick = () => { RPA.lead = null; cli.hidden = true; rpaEl('rpa-buscar').hidden = false; rpaEl('rpa-buscar').focus(); rpaReservas(null); };
+  const sel = rpaEl('rpa-reserva');
+  sel.disabled = true; sel.innerHTML = '<option value="">Cargando reservas…</option>';
+  const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: l.id });
+  if (RPA?.lead !== l) return;
+  rpaReservas(error || !data?.ok ? null : (data.reservas || []).filter(r => r.activo));
+}
+async function rpaCaptura(file) {
+  if (!file || !RPA) return;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { rpaEstado('Usa una captura JPG, PNG o WebP.', true); return; }
+  if (file.size > 5242880) { rpaEstado('La imagen pesa más de 5 MB.', true); return; }
+  Object.assign(RPA, { file, ocr: null, sol: crypto.randomUUID() });
+  rpaPreview(file);
+  const caja = rpaEl('rpa-pegar');
+  caja.classList.add('leyendo'); rpaEstado('Leyendo comprobante…');
+  try {
+    const { data, error } = await sb.functions.invoke('leer-comprobante', { body: { mime: file.type, imagen: await archivoABase64(file) } });
+    if (RPA?.file !== file) return;
+    if (error || !data?.ok) {
+      const m = error ? await msgErrorFn(error, data) : (data?.error || 'extraccion_fallida');
+      rpaEstado(m === 'no_es_comprobante' ? 'Esa imagen no parece un comprobante. Revísala.' : `No pude leerla: ${EF_COMP_ERRORES[m] || m}. Llena los datos a mano.`, true);
+      return;
+    }
+    const d = data.datos || {}, met = String(d.metodo || '').toLowerCase();
+    RPA.ocr = d;
+    const riel = /zelle/.test(met) ? 'zelle' : /m[oó]vil/.test(met) ? 'pago_movil' : /transfer/.test(met) ? 'transferencia' : /binance|usdt/.test(met) ? 'binance' : '';
+    if (riel) rpaEl('rpa-riel').value = riel;
+    if (d.referencia) rpaEl('rpa-referencia').value = d.referencia;
+    if (d.monto != null) rpaEl('rpa-monto').value = Number(d.monto).toFixed(2);
+    rpaRielCambio();
+    rpaEstado(`Leído${d.confianza < 0.6 ? ' (lectura dudosa)' : ''}. Revisa que coincida con la captura antes de enviar.`);
+  } catch (e) {
+    console.error('leer-comprobante', e);
+    rpaEstado('No pude leer la captura. Llena los datos a mano.', true);
+  } finally {
+    caja.classList.remove('leyendo');
+    rpaEl('rpa-archivo').value = '';
+  }
+}
+async function rpaEnviar() {
+  const btn = rpaEl('rpa-enviar');
+  const reserva = Number(val('rpa-reserva')), riel = val('rpa-riel'), monto = parseFloat(val('rpa-monto')), ref = val('rpa-referencia').trim();
+  if (!RPA?.lead) return rpaErr('Elige el cliente.');
+  if (!reserva) return rpaErr('Elige la reserva.');
+  if (!RPA.file) return rpaErr('Pega la captura del pago.');
+  if (!riel) return rpaErr(RPA_ERR.riel_invalido);
+  if (!(monto > 0)) return rpaErr(RPA_ERR.monto_invalido);
+  if (!ref) return rpaErr(RPA_ERR.falta_referencia);
+  rpaErr('');
+  btn.disabled = true;
+  const antes = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Enviando...';
+  try {
+    // La policy del bucket solo deja subir bajo asesor/<uid>/; el nombre es por intento, así reintentar no duplica.
+    const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[RPA.file.type];
+    const path = `asesor/${MI_USUARIO_ID}/${RPA.sol}.${ext}`;
+    const up = await sb.storage.from('comprobantes-pago').upload(path, RPA.file, { contentType: RPA.file.type, upsert: false });
+    if (up.error && !/exist|duplicate/i.test(up.error.message || '')) throw new Error('No se pudo subir la captura: ' + up.error.message);
+    const { data, error } = await sb.rpc('registrar_pago_asesor', {
+      p_reserva_id: reserva, p_monto: monto, p_riel: riel, p_tasa_tipo: val('rpa-tasa'),
+      p_referencia: ref, p_comprobante_path: path, p_comprobante_datos: RPA.ocr,
+    });
+    if (error || !data?.ok) { rpaErr(RPA_ERR[data?.error] || error?.message || data?.error || 'No se pudo registrar el pago.'); return; }
+    closeSheet('rpa-sheet');
+    okToast(`Pago enviado a verificar (${money(data.monto_usd)})`);
+    loadPagos();
+  } catch (e) {
+    rpaErr(e.message || 'No se pudo registrar el pago.');
+  } finally {
+    btn.disabled = false; btn.innerHTML = antes;
+  }
+}
+function setupRegistrarPagoAsesor() {
+  rpaEl('rpa-abrir')?.addEventListener('click', rpaAbrir);
+  let t = 0;
+  rpaEl('rpa-buscar')?.addEventListener('input', () => { clearTimeout(t); t = setTimeout(rpaBuscar, 250); });
+  rpaEl('rpa-resultados')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-rpa-lead]');
+    const l = b && RPA?.leads.find(x => x.id === Number(b.dataset.rpaLead));
+    if (l) rpaElegir(l);
+  });
+  rpaEl('rpa-archivo')?.addEventListener('change', e => rpaCaptura(e.target.files?.[0]));
+  rpaEl('rpa-riel')?.addEventListener('change', rpaRielCambio);
+  rpaEl('rpa-tasa')?.addEventListener('change', rpaEquiv);
+  rpaEl('rpa-monto')?.addEventListener('input', rpaEquiv);
+  rpaEl('rpa-cancelar')?.addEventListener('click', () => closeSheet('rpa-sheet'));
+  rpaEl('rpa-enviar')?.addEventListener('click', rpaEnviar);
+  // Ctrl+V con la hoja abierta: solo se intercepta si hay una imagen, así pegar texto en Referencia sigue igual.
+  document.addEventListener('paste', e => {
+    if (sheetAbierta !== 'rpa-sheet') return;
+    const item = [...(e.clipboardData?.items || [])].find(i => i.kind === 'file' && i.type.startsWith('image/'));
+    if (!item) return;
+    e.preventDefault();
+    rpaCaptura(item.getAsFile());
+  });
+}
+
+const LP_ERR = {
+  reserva_no_disponible: 'La reserva ya no está activa.', monto_invalido: 'Pon un monto mayor a 0.', tasa_invalida: 'Elige la tasa BCV.',
+};
+function lpPintarReservas(rs) {
+  const sel = document.getElementById('lp-reserva');
+  if (!sel) return;
+  sel.disabled = true;
+  if (rs === null) sel.innerHTML = '<option value="">No se pudieron cargar las reservas</option>';
+  else if (!rs.length) sel.innerHTML = '<option value="">Crea primero una reserva</option>';
+  else {
+    sel.disabled = false;
+    sel.innerHTML = rs.map(resOpcion).join('');
+    const saldo = () => { const s = sel.selectedOptions[0]?.dataset.saldo; if (Number(s) > 0) document.getElementById('lp-monto').value = s; };
+    sel.onchange = saldo; saldo();
+  }
+}
+async function cargarLinksPagoLead(l) {
+  const box = document.getElementById('lp-links');
+  if (!box) return;
+  const { data, error } = await sb.rpc('mis_pagos_asesor', { p_lead_id: l.id, p_limite: 10 });
+  if (!box.isConnected) return;
+  if (error) { box.innerHTML = '<div class="csub">No se pudieron cargar los links anteriores</div>'; return; }
+  const ps = (Array.isArray(data) ? data : []).filter(p => p.origen === 'asesor');
+  box.innerHTML = ps.map(p => `
+    <div class="lp-link"><i class="fas fa-link"></i> <span>${esc(pagoMioMonto(p))} · ${esc(p.codigo || '')}${p.riel ? ' · ' + esc(PAGO_RIEL_LABEL[p.riel] || p.riel) : ''}</span>
+      ${p.token ? `<button type="button" class="pagos-copiar" data-lp-copiar="${esc(p.token)}" aria-label="Copiar link" title="Copiar link"><i class="fas fa-copy"></i></button>` : ''}
+      <span class="lp-st" style="color:${PAGO_MIO_COLOR[p.estado] || 'var(--muted)'}">${esc(p.estado === 'emitido' ? 'Sin pagar' : PAGO_ESTADO_LABEL[p.estado] || p.estado)}</span></div>`).join('');
+  box.querySelectorAll('[data-lp-copiar]').forEach(b => b.onclick = () => copiarLinkPago(b.dataset.lpCopiar));
+}
+async function emitirLinkPago(l) {
+  const btn = document.getElementById('lp-emitir'), err = document.getElementById('lp-err'), out = document.getElementById('lp-resultado');
+  const reserva = Number(val('lp-reserva')), monto = parseFloat(val('lp-monto'));
+  err.textContent = '';
+  if (!reserva) { err.textContent = 'Elige la reserva.'; return; }
+  if (!(monto > 0)) { err.textContent = LP_ERR.monto_invalido; return; }
+  btn.disabled = true;
+  const antes = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Generando...';
+  const { data, error } = await sb.rpc('emitir_link_pago', { p_reserva_id: reserva, p_monto_usd: monto, p_tasa_tipo: val('lp-tasa') });
+  btn.disabled = false; btn.innerHTML = antes;
+  if (error || !data?.ok) { err.textContent = LP_ERR[data?.error] || error?.message || data?.error || 'No se pudo generar el link.'; return; }
+  const url = lpUrl(data.token), wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
+  out.style.display = 'block';
+  out.innerHTML = `
+    <div class="csub" style="margin-bottom:6px"><i class="fas fa-circle-check" style="color:var(--green)"></i> Link listo. Vence el ${esc(fmtFechaHoraCaracas(data.expira_en))}.</div>
+    <div style="display:flex;gap:8px">
+      <input class="ei" type="text" readonly value="${esc(url)}" style="flex:1">
+      <button type="button" class="dbtn" id="lp-copiar" aria-label="Copiar link"><i class="fas fa-copy"></i></button>
+      ${wa ? `<a class="dbtn" href="https://wa.me/${wa}?text=${encodeURIComponent(`Aquí puedes hacer tu pago: ${url}`)}" target="_blank" rel="noopener" aria-label="Enviar por WhatsApp"><i class="fab fa-whatsapp"></i></a>` : ''}
+    </div>`;
+  document.getElementById('lp-copiar').onclick = () => copiarLinkPago(data.token);
+  cargarLinksPagoLead(l);
+}
+
 function setupPagos() {
   const lista = document.getElementById('pagos-lista');
   if (!lista) return;
+  setupRegistrarPagoAsesor();
   lista.addEventListener('click', e => {
+    const lp = e.target.closest('[data-lp-copiar]');
+    if (lp) return copiarLinkPago(lp.dataset.lpCopiar);
     const ver = e.target.closest('[data-pago-comprobante]');
     if (ver) return abrirComprobantePago(Number(ver.dataset.pagoComprobante));
     const apr = e.target.closest('[data-pago-aprobar]');
@@ -32733,7 +33250,7 @@ const NAV_ITEMS = [
   { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, costos, gastos y utilidad por periodo' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
   // Entrada propia desde 2026-10-22 (antes pestaña de Cobros): late en rojo con pagos por verificar (setupAvisoPagos).
-  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar', badge: 'nav-pagos-count', badgeDefault: '0' },
+  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', roles: '', sub: 'Pagos de clientes pendientes de verificar', badge: 'nav-pagos-count', badgeDefault: '0' },
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones', padre: 'grp-cobros', roles: '', sub: 'Se calculan solas; pagos el 5 y el 20' },
   { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
