@@ -3943,6 +3943,31 @@ body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
   }
 }
 .seg.tab-oculta{opacity:.45}
+/* Tarifario móvil compacto (2026-10-29): eran ~430px de menús antes de la primera
+   tarjeta. Pestañas de grupo más bajas, categorías en un renglón con scroll, y
+   BT Travel + admin + vista dentro del menú ⋯ del buscador (setupTarMas en app.js). */
+.tar-mas-btn,.tar-mas-pop{display:none}
+@media(max-width:760px){
+  #sec-tarifario .nav-tabs-sec{margin-bottom:8px;padding:3px}
+  #sec-tarifario .nav-tabs-sec .seg{min-height:36px;padding:0 12px;font-size:12.5px}
+  #sec-tarifario .tar-tabs-row{margin-bottom:8px}
+  #sec-tarifario #tar-tabs{margin-bottom:0}
+  #sec-tarifario #tar-tabs .seg{min-height:36px;padding:0 13px;font-size:13px}
+  #sec-tarifario .tar-buscador{position:relative;flex-wrap:nowrap;margin-bottom:8px}
+  #sec-tarifario .tar-buscador .tar-search{flex:1 1 auto;order:0}
+  #sec-tarifario .tar-search input{padding-right:78px}
+  #sec-tarifario .tar-buscador .tar-search .tcount{position:absolute;right:42px;top:50%;transform:translateY(-50%);flex:none;order:0;margin:0;font-size:11px;pointer-events:none}
+  #sec-tarifario .tcount-u{display:none}
+  .tar-mas-btn{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;border-radius:11px;border:1px solid var(--line2);background:var(--panel-solid);color:var(--muted);font-size:16px;cursor:pointer}
+  .tar-mas-btn[aria-expanded="true"]{border-color:var(--accent);color:var(--accent-ink)}
+  #tar-mas-pop.abierto{display:flex;flex-direction:column;gap:8px;position:absolute;top:calc(100% + 6px);right:0;z-index:40;min-width:230px;padding:8px;border-radius:12px;background:var(--panel-solid);border:1px solid var(--line2);box-shadow:0 12px 32px rgba(0,0,0,.35)}
+  #tar-mas-pop .tar-admin-actions{flex-direction:column;align-items:stretch;gap:2px;padding:0;background:none;border:0;box-shadow:none;backdrop-filter:none;animation:none}
+  #tar-mas-pop .tar-admin-btn{width:100%;height:40px;justify-content:flex-start;gap:10px;padding:0 10px;font-size:13px;color:var(--txt)}
+  #tar-mas-pop .tar-admin-btn i{width:18px;text-align:center}
+  #tar-mas-pop .tar-admin-btn:not(.tar-bt-pdf-btn)::after{content:attr(title)}
+  #tar-mas-pop .tar-admin-btn[hidden]{display:none}
+  #tar-mas-pop .view-switch{justify-content:space-between}
+}
 .tar-oculto-admin{position:relative;opacity:.55}
 .tar-oculto-badge{position:absolute;top:6px;right:6px;background:#ef4444;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;z-index:2;text-transform:uppercase;letter-spacing:.4px;pointer-events:none}
 /* Distinta de .tar-oculto-badge (ese es "lo saqué del catálogo"): esta es
@@ -5780,7 +5805,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
      varias líneas en vez de scrollear en horizontal sin señal de que hay más. */
   .dquick{display:grid;grid-auto-flow:row;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-bottom:4px;padding-bottom:2px}
   .dquick>*{min-width:0}
-  #leads-tabs,#fact-tabs,#tar-tabs,#mv-tabs,#gp-tabs,#cm-tabs,#prov-tabs,.lead-tabs{flex-wrap:wrap;overflow:visible;-webkit-mask-image:none;mask-image:none}
+  #leads-tabs,#fact-tabs,#mv-tabs,#gp-tabs,#cm-tabs,#prov-tabs,.lead-tabs{flex-wrap:wrap;overflow:visible;-webkit-mask-image:none;mask-image:none}
   .lead-tabs{gap:7px;flex-wrap:wrap;margin:14px 0}
   .lead-tabs::-webkit-scrollbar{display:none}
   .lead-tab-btn{flex:0 0 auto;min-height:var(--tap);padding:0 16px;border-radius:999px}
@@ -8495,6 +8520,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <button class="mfs-trigger mfs-icon" id="tar-mfs-trigger" data-mfs="tar-toolbar" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
         <div class="view-switch" id="tar-view-switch"></div>
         <span class="tcount" id="tar-count"></span>
+        <button class="tar-mas-btn" id="tar-mas-btn" type="button" aria-label="Más opciones" title="Más opciones" aria-expanded="false" aria-controls="tar-mas-pop"><i class="fas fa-ellipsis"></i></button>
+        <div class="tar-mas-pop" id="tar-mas-pop"></div>
       </div>
       <div class="chips-bar" id="tar-chips"></div>
       <div class="tar-ia-box" id="tar-ia-box" hidden>

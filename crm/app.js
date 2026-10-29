@@ -22333,6 +22333,26 @@ const TAR_SEL_PRODUCTOS = '*, tarifa_destacada_id, tarifas(*, tarifario_bloques(
 // Filtrar ANTES del límite del embed: sin esto 1000 históricas pueden dejar
 // fuera todas las tarifas actuales de un hotel (Venetur, Aria, Morrocoy).
 const tarConsultaProductos = q => q.eq('tarifas.vigente', true);
+// Móvil: BT Travel, las acciones de admin y el selector de vista viven en el menú ⋯
+// del buscador, y el contador dentro de la caja. Se reubican al cruzar el ancho de
+// móvil (no al abrir el menú), así escritorio queda igual que siempre.
+function setupTarMas() {
+  const btn = document.getElementById('tar-mas-btn'), pop = document.getElementById('tar-mas-pop');
+  if (!btn || !pop) return;
+  const fila = document.querySelector('#sec-tarifario .tar-tabs-row'), acc = fila.querySelector('.tar-admin-actions');
+  const filtros = document.getElementById('tar-mfs-trigger'), vs = document.getElementById('tar-view-switch');
+  const cnt = document.getElementById('tar-count'), caja = document.querySelector('#sec-tarifario .tar-search');
+  const abrir = si => { pop.classList.toggle('abierto', si); btn.setAttribute('aria-expanded', si); };
+  const ubicar = () => {
+    if (esMovil()) { pop.append(acc, vs); caja.append(cnt); }
+    else { abrir(false); fila.append(acc); filtros.after(vs); vs.after(cnt); }
+  };
+  MENU_MQ.addEventListener('change', ubicar); ubicar();
+  btn.onclick = e => { e.stopPropagation(); abrir(!pop.classList.contains('abierto')); };
+  pop.addEventListener('click', e => { if (e.target.closest('button')) abrir(false); });
+  document.addEventListener('click', e => { if (!pop.contains(e.target)) abrir(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') abrir(false); });
+}
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas']);
   const mesSel = document.getElementById('tar-f-mes');
@@ -22343,9 +22363,11 @@ function setupTarifarioTabs() {
   document.querySelectorAll('#tar-tabs .seg').forEach(b => b.onclick = () => {
     document.querySelectorAll('#tar-tabs .seg').forEach(x => x.classList.remove('on'));
     b.classList.add('on'); tarTab = b.dataset.tab;
+    const g = esMovil() && b.parentNode; if (g) g.scrollLeft = b.offsetLeft - (g.clientWidth - b.offsetWidth) / 2;
     actualizarVisibilidadFiltrosTarifario();
     loadTarifario();
   });
+  setupTarMas();
   actualizarVisibilidadFiltrosTarifario();
   let deb; const debRender = () => { clearTimeout(deb); deb = setTimeout(renderTarifario, 200); };
   document.getElementById('tar-search').addEventListener('input', debRender);
@@ -22714,7 +22736,7 @@ function renderTarifarioIA() {
        || (p.productos?.nombre || '').toLowerCase().includes(q)
        || (p.destino || '').toLowerCase().includes(q)));
 
-  document.getElementById('tar-count').textContent = `${fmt(promos.length)} promociones`;
+  document.getElementById('tar-count').innerHTML = `${fmt(promos.length)}<span class="tcount-u"> promociones</span>`;
   document.getElementById('tar-empty').classList.toggle('show', promos.length === 0);
   document.getElementById('tar-chips').innerHTML = '';
 
@@ -24038,7 +24060,7 @@ function renderTarifario() {
       : promosHotSales(filtered);
   }
 
-  document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
+  document.getElementById('tar-count').innerHTML = `${fmt(filtered.length)}<span class="tcount-u"> ítems</span>`;
   tarChips();
   // En Paquetes la grilla siempre tiene el bloque de Paquetes Lotus arriba.
   document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0 && tarTab !== 'paquete');
