@@ -3123,7 +3123,7 @@ async function startApp() {
     }
   } catch (_) { /* fallo de red: se conserva by_advisor */ }
   // La sección guardada (ej. voucher) se activa antes de que ACTIVOS exista y su select quedaba vacío.
-  if (ROL === 'admin' && seccionValida && seccionGuardada === 'voucher' && ACTIVOS.length) loadVoucherSeccion();
+  if (esOficina() && seccionValida && seccionGuardada === 'voucher' && ACTIVOS.length) loadVoucherSeccion();
   if (esOficina()) activateSection(seccionValida ? seccionGuardada : 'dashboard');
   renderHoy();
   renderAll();
@@ -3909,7 +3909,7 @@ function abrirPostventa(c, accionInicial = null) {
         </div>
         <label class="fl" for="pv-e-localizador">Localizador general</label><input class="ei" id="pv-e-localizador" value="${esc(c.localizador_reserva || '')}" placeholder="Código de confirmación">
         <label class="pv-doc" style="margin-top:10px"><input type="checkbox" id="pv-e-incidencia" ${c.incidencia_abierta ? 'checked' : ''}>Hay una incidencia que requiere atención</label>
-        ${ROL === 'admin' ? `<div class="rs-admin"><span class="rs-lbl">Solo admin</span><label class="fl" for="pv-e-proveedor">Proveedor</label><input class="ei" id="pv-e-proveedor" value="${esc(c.proveedor || '')}" placeholder="Hotel, aerolínea u operador">
+        ${esOficina() ? `<div class="rs-admin"><span class="rs-lbl">Solo admin</span><label class="fl" for="pv-e-proveedor">Proveedor</label><input class="ei" id="pv-e-proveedor" value="${esc(c.proveedor || '')}" placeholder="Hotel, aerolínea u operador">
         <label class="fl" for="pv-e-costo-neto">Costo neto (USD) <span style="font-weight:400;color:var(--muted2)">— lo que le pagamos al proveedor</span></label><input class="ei" id="pv-e-costo-neto" type="number" min="0" step="0.01" value="${c.costo_neto ?? ''}" placeholder="Sin definir">
         <label class="fl" for="pv-e-empresa">Empresa <span style="font-weight:400;color:var(--muted2)">— agencia o corporativo que la pidió</span></label><select class="ei" id="pv-e-empresa" disabled><option value="">Cargando…</option></select>
         <label class="fl" for="pv-e-empresa-ref">Referencia de la empresa</label><input class="ei" id="pv-e-empresa-ref" maxlength="120" value="${esc(c.referencia_empresa || '')}" placeholder="Orden de compra, file, etc." disabled></div>` : ''}
@@ -3943,7 +3943,7 @@ function abrirPostventa(c, accionInicial = null) {
   const yaAbierto = document.getElementById('drawer').classList.contains('open');
   document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!yaAbierto) navPush({ type: 'drawer' });
   rvIniciar(c.id, accionInicial === 'nuevo-servicio' ? 'servicios' : accionInicial === 'abonos' ? 'abonos' : 'resumen', accionInicial);
-  if (ROL === 'admin') pvCargarEmpresas(c);
+  if (esOficina()) pvCargarEmpresas(c);
 }
 // Sin empresa_id en la bandeja (migración 20260925190000 sin aplicar) se deduce de las reservas de cada empresa.
 let PV_EMPRESA_PREVIA = null;
@@ -7771,7 +7771,7 @@ function openDrawer(l, opciones = {}) {
 
       </div>
       <div class="dhago">
-        ${vende && VENTA.includes(l.estado) ? seccion('reservas', 'fa-suitcase-rolling', 'Reservas del cliente', `
+        ${(vende || esOficina()) && VENTA.includes(l.estado) ? seccion('reservas', 'fa-suitcase-rolling', 'Reservas del cliente', `
           <div class="csub" style="margin-bottom:8px">Cada viaje del cliente es una reserva. La primera se cierra con el lead; las adicionales se facturan aparte.</div>
           <div id="res-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
           <div class="edit-err" id="res-err"></div>
@@ -16488,7 +16488,7 @@ function setupVozIA() {
   // en cada login de asesor, para una sección que ni siquiera puede abrir.
   // También hace que la vista previa de rol "asesor" (ver activarVistaPreviaRol)
   // se comporte igual que un asesor real: sin esta sección.
-  if (ROL !== 'admin' && ROL !== 'marketing') return;
+  if (!esOficina() && ROL !== 'marketing') return;
   document.getElementById('vi-modo')?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-vi-modo]');
     if (!b) return;
@@ -19239,7 +19239,7 @@ function renderVentas() {
       <div class="vt-acciones">
         <button class="vt-accion" type="button" style="--c:var(--blue)" title="Descargar el PDF de esta venta" onclick="exportarVentaPdf(${f.id})"><i class="fas fa-file-pdf"></i> PDF</button>
         ${f.lead_id ? `<button class="vt-accion" type="button" style="--c:var(--accent-ink)" title="Abrir la ficha del cliente" onclick="abrirClienteDesdeFacturacion(${f.lead_id})"><i class="fas fa-user"></i> Ver cliente</button>` : ''}
-        ${pagada && ROL === 'admin' ? `<button class="vt-accion vt-anular" type="button" style="--c:var(--danger)" title="Anular esta factura" onclick="anularFacturaUI(${f.id})"><i class="fas fa-ban"></i> Anular</button>` : ''}
+        ${pagada && esOficina() ? `<button class="vt-accion vt-anular" type="button" style="--c:var(--danger)" title="Anular esta factura" onclick="anularFacturaUI(${f.id})"><i class="fas fa-ban"></i> Anular</button>` : ''}
       </div>
     </article>`;
   }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${factVentasFiltro || mes || asesor || val('fact-ventas-search') ? 'Nada coincide con el filtro' : 'Sin facturas'}</div>`;
@@ -20522,7 +20522,7 @@ const btNorm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 const btFinTarifa = t => [tarVentaHasta(t), t.fecha_fin].filter(Boolean).sort()[0] || null;
 const btSumarDias = n => { const d = new Date(hoy() + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 async function loadBtTravel() {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   const cargando = document.getElementById('bt-loading');
   if (!BT_DATA) cargando?.classList.add('show');
   if (!PROV_CACHE.length) await loadProveedores();
@@ -21819,7 +21819,7 @@ function cmClickResumen(e) {
 const CM_SIN_VENTA = { sin_vendedor: 'el asesor no tiene usuario en el CRM', gemela: 'duplicada de otra reserva que sí comisiona', rechazada: 'rechazada por ti' };
 async function cmLoadSinVenta() {
   const cont = document.getElementById('cm-aviso-sin-venta');
-  if (ROL !== 'admin') { cont.innerHTML = ''; return; }
+  if (!esOficina()) { cont.innerHTML = ''; return; }
   const { data, error } = await sb.rpc('comision_sin_venta_listar');
   if (error || !data?.length) { cont.innerHTML = ''; return; }
   const n = data.length;
@@ -21853,7 +21853,7 @@ function cmVentaCardHtml(v, i) {
   const venta = servicios.reduce((s, k) => s + Number(v['monto_' + k]), 0);
   const meta = [v.reserva_codigo, v.destino, esOficina() ? v.vendedor : null].filter(Boolean).map(esc).join(' · ');
   const pie = (v.reserva_id && v.reserva_codigo ? `<button type="button" class="btn-sm" data-cm-reserva="${v.reserva_id}" data-cm-cod="${esc(v.reserva_codigo)}"><i class="fas fa-arrow-up-right-from-square" aria-hidden="true"></i> Ver reserva</button>` : '')
-    + (ROL === 'admin' && v.estado === 'verificada' ? `<button type="button" class="btn-sm cm-mas" data-cm-mas-venta="${v.id}" aria-label="Más acciones" title="Más acciones"><i class="fas fa-ellipsis" aria-hidden="true"></i></button>` : '');
+    + (esOficina() && v.estado === 'verificada' ? `<button type="button" class="btn-sm cm-mas" data-cm-mas-venta="${v.id}" aria-label="Más acciones" title="Más acciones"><i class="fas fa-ellipsis" aria-hidden="true"></i></button>` : '');
   return `<article class="lt-card${v.estado === 'rechazada' ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}">
     <div class="lt-card-cab"><div class="lt-card-tit" title="${esc(v.cliente_nombre)}">${esc(v.cliente_nombre)}</div>${v.origen === 'historico' ? '<span class="cm-estado">Histórica</span>' : ''}${cmChip(v.estado)}</div>
     ${meta ? `<div class="lt-card-meta">${meta}</div>` : ''}
@@ -21924,7 +21924,7 @@ function cmPagoCardHtml(l, i) {
     <div class="lt-card-meta">${meta}</div>
     <div class="lt-card-pie">
       <div class="cm-com"><span class="cm-nota">Total</span> <b>${ivMoney(l.total)}</b></div>
-      ${ROL === 'admin' && l.estado === 'emitida' ? `<button type="button" class="btn-sm cm-mas" data-cm-mas-inv="${l.id}" aria-label="Más acciones" title="Más acciones"><i class="fas fa-ellipsis" aria-hidden="true"></i></button>` : ''}
+      ${esOficina() && l.estado === 'emitida' ? `<button type="button" class="btn-sm cm-mas" data-cm-mas-inv="${l.id}" aria-label="Más acciones" title="Más acciones"><i class="fas fa-ellipsis" aria-hidden="true"></i></button>` : ''}
     </div>
   </article>`;
 }
@@ -22064,7 +22064,7 @@ function setupImportarVouchers() {
   const drop = document.getElementById('iv-drop');
   if (!input || input._wired) return;
   input._wired = true;
-  if (ROL === 'admin') sb.rpc('listar_empresas_cliente', { p_solo_activos: true }).then(({ data, error }) => {
+  if (esOficina()) sb.rpc('listar_empresas_cliente', { p_solo_activos: true }).then(({ data, error }) => {
     if (error || !Array.isArray(data) || !data.length) return;
     IV_EMPRESAS = data.map(e => ({ id: e.id, nombre: e.nombre }));
     ivRender();
@@ -22195,7 +22195,7 @@ function ivRender() {
   if (!cont) return;
   ivBarra();
   if (!IV_FILAS.length) { cont.innerHTML = ''; return; }
-  const esAdmin = ROL === 'admin', conEmpresa = esAdmin && IV_EMPRESAS.length > 0;
+  const esAdmin = ROL === 'admin', conEmpresa = esOficina() && IV_EMPRESAS.length > 0;
   const abiertas = IV_FILAS.filter(ivAbierta);
   const cards = IV_FILAS.map(f => {
     const d = f.datos || {};
@@ -23902,7 +23902,7 @@ function tarBorrFilaHtml(c) {
 function tarPintarBorrador() {
   const host = document.getElementById('tar-borrador');
   if (!host) return;
-  if (ROL !== 'admin' || (tarTab !== 'excursion' && tarTab !== 'traslado')) { host.innerHTML = ''; host.dataset.firma = ''; return; }
+  if (!esOficina() || (tarTab !== 'excursion' && tarTab !== 'traslado')) { host.innerHTML = ''; host.dataset.firma = ''; return; }
   if (!tarBorradorPedido) { tarBorradorPedido = true; tarCargarBorrador().then(tarPintarBorrador).catch(() => {}); return; }
   const firma = tarBorrador ? `${tarBorrador.id}` : '-';
   if (host.dataset.firma === firma) return;
@@ -24228,7 +24228,7 @@ const paqRutas = (p, rutas) => (p.vuelo_origenes || []).filter(o => PAQ_ORIGENES
   .map(o => rutas.find(r => r.origen_iata === o && r.destino_iata === p.vuelo_destino_iata)).filter(Boolean);
 const paqFecha = iso => new Date(iso + 'T00:00:00Z').toLocaleDateString('es-VE', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 function paqTarjetaHtml(p, rutas) {
-  const rs = paqRutas(p, rutas), admin = ROL === 'admin';
+  const rs = paqRutas(p, rutas), admin = esOficina();
   const foto = (p.hotel?.producto_fotos || []).filter(f => f.activo !== false && f.habitacion_id == null)
     .sort((a, b) => (b.es_principal - a.es_principal) || a.orden - b.orden)[0];
   const cuando = p.fecha_entrada ? `Salida fija ${paqFecha(p.fecha_entrada)} → ${paqFecha(p.fecha_salida)}` : `El cliente elige: ${p.noches_min} a ${p.noches_max} noches`;
@@ -24260,7 +24260,7 @@ async function paqPintar(q, fDestino) {
   const lista = d.paquetes.filter(p => (!fDestino || p.hotel?.destino === fDestino)
     && (!q || `${p.titulo} ${p.hotel?.nombre || ''} ${p.hotel?.destino || ''} ${p.etiqueta || ''}`.toLowerCase().includes(q)));
   host.innerHTML = `<div class="tar-destino-header paq-cabecera"><i class="fas fa-suitcase-rolling"></i> Paquetes Lotus · boleto + hotel <span>${lista.length}</span>`
-    + `${ROL === 'admin' ? '<button class="btn-sm paq-nuevo" type="button" data-paq-accion="nuevo"><i class="fas fa-plus"></i> Nuevo paquete</button>' : ''}</div>`
+    + `${esOficina() ? '<button class="btn-sm paq-nuevo" type="button" data-paq-accion="nuevo"><i class="fas fa-plus"></i> Nuevo paquete</button>' : ''}</div>`
     + (lista.length ? `<div class="paq-grid">${lista.map(p => paqTarjetaHtml(p, d.rutas)).join('')}</div>` : '<div class="paq-vacio">Sin paquetes con este filtro.</div>');
 }
 async function paqRefrescar() { await paqCargar(true); if (tarTab === 'paquete') renderTarifario(); }
@@ -24270,7 +24270,7 @@ async function paqAccion(acc, id) {
     try { await navigator.clipboard.writeText(PAQ_WEB + p.slug); okToast('Enlace copiado'); } catch { errToast('El navegador no dejó copiar'); }
     return;
   }
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   if (acc === 'nuevo' || acc === 'editar') return paqForm(acc === 'editar' ? p : null);
   if (acc === 'activo' && p) {
     const { error } = await sb.from('paquetes').update({ activo: !p.activo }).eq('id', p.id);
@@ -25250,7 +25250,7 @@ function tcHsSegHtml(t) {
   if (!esOficina()) return '';
   const est = t.hot_sale_estado === 'poner' ? 'poner' : t.hot_sale_estado === 'quitar' ? 'quitar' : 'auto';
   const btn = (v, lbl) => `<button type="button" class="promo-hs-seg-b${est === v ? ' on' : ''}" data-hs-set="${v}" data-hs-set-id="${t.id}">${lbl}</button>`;
-  return `<div class="promo-hs-seg admin-only oficina-ok" role="group" aria-label="Hot Sales" title="Eje manual de Hot Sales">${btn('poner', 'Fijar')}${btn('auto', 'Auto')}${btn('quitar', 'Excluir')}</div>`;
+  return `<div class="promo-hs-seg admin-only" role="group" aria-label="Hot Sales" title="Eje manual de Hot Sales">${btn('poner', 'Fijar')}${btn('auto', 'Auto')}${btn('quitar', 'Excluir')}</div>`;
 }
 // RPC de la fila de título. Mismo molde que hsToggleTarifa (confirm de
 // necesita_publicar incluido) pero tri-estado: acepta 'auto' además de
@@ -25815,7 +25815,7 @@ const TAR_JUNTAR_ERR = {
   fechas_no_contiguas: 'las fechas no están pegadas',
 };
 async function tarJuntarTarifas(queda, sale, btn) {
-  if (ROL !== 'admin' || !TAR_DRAWER_ITEM?.tarifas) return;
+  if (!esOficina() || !TAR_DRAWER_ITEM?.tarifas) return;
   const q = TAR_DRAWER_ITEM.tarifas.find(t => Number(t.id) === queda);
   const s = TAR_DRAWER_ITEM.tarifas.find(t => Number(t.id) === sale);
   if (!q || !s) return;
@@ -27492,7 +27492,7 @@ function dmPintarCanales() {
     const el = document.getElementById('dm-nuevo-' + c), n = dmPendientes[c].size;
     el.hidden = !n; el.textContent = n > 9 ? '9+' : String(n);
   }
-  document.getElementById('dm-wa-todos').hidden = !(dmCanal === 'whatsapp' && ROL === 'admin');
+  document.getElementById('dm-wa-todos').hidden = !(dmCanal === 'whatsapp' && esOficina());
   document.getElementById('dm-buscar').placeholder = dmCanal === 'whatsapp' ? 'Buscar nombre o teléfono' : dmCanal === 'instagram' ? 'Buscar @usuario, nombre o teléfono' : 'Buscar perfil, nombre o teléfono';
 }
 async function dmContar() {
@@ -27769,7 +27769,7 @@ function setupWhatsapp() {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && currentSec === 'whatsapp') waTick(); });
 }
 async function loadWhatsapp() {
-  if (ROL !== 'admin') return;
+  if (!esOficina()) return;
   if (!waNumeros) {
     try { waNumeros = (await waInvocar({ accion: 'numeros' })).numeros; } catch { errToast('No se pudo conectar con WhatsApp'); return; }
     let guardado = null;
@@ -29853,7 +29853,7 @@ function vcElegirLead(l) {
   const llenar = (id, v) => { const el = document.getElementById(id); if (el && v && !el.value.trim()) el.value = v; };
   llenar('vc-cliente-nombre', l.nombre); llenar('vc-telefono', l.telefono); llenar('vc-destino', l.destino);
   const sel = document.getElementById('vc-asesor');
-  if (ROL === 'admin' && l.asesor && [...sel.options].some(o => o.value === l.asesor)) sel.value = l.asesor;
+  if (esOficina() && l.asesor && [...sel.options].some(o => o.value === l.asesor)) sel.value = l.asesor;
   vcPintarLead(); vcActualizarPreview();
   document.getElementById('vc-cliente-seccion').open = false;
   document.querySelector('#vc-cliente-seccion > summary').focus({ preventScroll: true });
@@ -29992,7 +29992,7 @@ window.vcLimpiar = () => { document.getElementById('vc-hecho').hidden = true; vc
 async function loadVoucherSeccion() {
   const sel = document.getElementById('vc-asesor');
   const optHtml = (nombre, sel_) => `<option value="${esc(nombre)}" ${nombre === sel_ ? 'selected' : ''}>${esc(nombre)}</option>`;
-  if (ROL === 'admin') {
+  if (esOficina()) {
     const preSel = ACTIVOS.includes(MI_NOMBRE) ? MI_NOMBRE : ACTIVOS[0];
     sel.innerHTML = ACTIVOS.map(n => optHtml(n, preSel)).join('');
     sel.disabled = false;
@@ -30196,7 +30196,7 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
   if (sinNombre >= 0) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)); errToast(`Falta el nombre del servicio adicional ${sinNombre + 1} (o quitalo)`); return; }
   const planInicial = vcPlan();
   if (planInicial.modo === 'cargando') { errToast('Esperá a que carguen las reservas del cliente'); return; }
-  const asesorNombre = ROL === 'admin' ? (val('vc-asesor').trim() || MI_NOMBRE) : MI_NOMBRE;
+  const asesorNombre = esOficina() ? (val('vc-asesor').trim() || MI_NOMBRE) : MI_NOMBRE;
   const fila = {
     creado_por: MI_USUARIO_ID, asesor_nombre: asesorNombre, cliente_nombre: clienteNombre,
     documento_identidad: val('vc-documento').trim() || null, telefono: val('vc-telefono').trim() || null,
@@ -32671,28 +32671,28 @@ function setupMisNotas() {
 // las necesitan. Mis Notas, Voz IA y Consultor IA salieron del
 // menú por falta de uso; su HTML y sus setup* siguen intactos.
 const NAV_ITEMS = [
-  { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide nav-administrativo-ok' },
-  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', roles: 'nav-administrativo-ok', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
-  { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', padre: 'grp-inicio', roles: 'nav-admin-only nav-administrativo-ok' },
-  { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario nav-administrativo-ok', id: 'nav-informe-diario' },
-  { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-ok' },
-  { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: 'nav-administrativo-ok' },
+  { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide' },
+  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
+  { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', padre: 'grp-inicio', roles: 'nav-admin-only' },
+  { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
+  { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-no' },
+  { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: 'nav-administrativo-no' },
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
-  { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only', sub: 'Pegá números o capturas y se reparten entre los asesores' },
-  { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok', sub: 'Chat interno del equipo', badge: 'nav-msg-count', badgeDefault: '—' },
+  { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only nav-administrativo-no', sub: 'Pegá números o capturas y se reparten entre los asesores' },
+  { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Chat interno del equipo', badge: 'nav-msg-count', badgeDefault: '—' },
   // Meta DM (2026-10-07): los chats del bot (Instagram, Facebook, WhatsApp) salieron
   // de Mensajes a su propia entrada. La vista vieja de WhatsApp por número salió
   // del menú; admin la abre desde la pestaña WhatsApp de Meta DM.
   { sec: 'dms', icon: 'fa-brands fa-meta', label: 'Meta DM', padre: 'grp-bandeja', roles: '', sub: 'Chats del bot en Instagram, Facebook y WhatsApp, en vivo y con la ficha del cliente' },
   { sec: 'wa-bandeja', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp empresa', padre: 'grp-bandeja', roles: '', sub: 'Clientes que respondieron al número de la empresa', badge: 'nav-wab-count', badgeDefault: '0' },
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-bandeja', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
-  { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok' },
-  { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok' },
-  { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok nav-administrativo-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
-  { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', padre: 'grp-tarifario', roles: 'nav-administrativo-ok', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
-  { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: 'nav-administrativo-ok', sub: 'Servicios, pasajeros, documentos y cobros' },
-  { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
-  { sec: 'campanas-wa', icon: 'fa-brands fa-whatsapp', label: 'Campañas WhatsApp', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Plantillas a clientes con venta: campañas, audiencia y envíos' },
+  { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
+  { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
+  { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', padre: 'grp-tarifario', roles: '', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
+  { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
+  { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
+  { sec: 'campanas-wa', icon: 'fa-brands fa-whatsapp', label: 'Campañas WhatsApp', padre: 'grp-reservas', roles: 'nav-admin-only nav-administrativo-no', sub: 'Plantillas a clientes con venta: campañas, audiencia y envíos' },
   // En modo Boletería, Reservas solo abría el voucher de hospedaje: lo reemplaza Cotizaciones (2026-10-12).
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'bol-solicitudes', icon: 'fas fa-list-ol', label: 'Solicitudes', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Vuelos que piden los asesores, repartidos entre agentes', badge: 'nav-bol-sol-count', badgeDefault: '0' },
@@ -32700,26 +32700,26 @@ const NAV_ITEMS = [
   // Ya no es pestaña de Leads (2026-10-17): entrada propia del menú en todos los modos (también la ficha del lead la abre con cbDesdeLead).
   { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
-  { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Ventas, costos, gastos y utilidad por periodo' },
-  { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-ok' },
+  { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, costos, gastos y utilidad por periodo' },
+  { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
   // Entrada propia desde 2026-10-22 (antes pestaña de Cobros): late en rojo con pagos por verificar (setupAvisoPagos).
-  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Links de pago declarados, pendientes de aprobar', badge: 'nav-pagos-count', badgeDefault: '0' },
-  { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones', padre: 'grp-cobros', roles: 'nav-administrativo-ok', sub: 'Se calculan solas; pagos el 5 y el 20' },
-  { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
-  { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
+  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar', badge: 'nav-pagos-count', badgeDefault: '0' },
+  { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones', padre: 'grp-cobros', roles: '', sub: 'Se calculan solas; pagos el 5 y el 20' },
+  { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
+  { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
   { sec: 'bt-travel', icon: 'fas fa-umbrella-beach', label: 'BT Travel', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles todo incluido, stop sales, reservas y pagos' },
-  { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Ventas, calidad, errores y costos' },
+  { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, calidad, errores y costos' },
   { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', padre: 'grp-ia', roles: 'nav-boleteria-ok', sub: 'Lyra: cotiza, revisa reservas, busca en la web y escribe a proveedores' },
-  { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Posadas que quieren el asistente' },
-  { sec: 'propuestas', icon: 'fas fa-handshake', label: 'Alianzas y propuestas', padre: 'grp-ia', roles: 'nav-admin-only', sub: 'Quienes escriben al bot para ofrecer algo' },
-  { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok nav-administrativo-ok' },
+  { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Posadas que quieren el asistente' },
+  { sec: 'propuestas', icon: 'fas fa-handshake', label: 'Alianzas y propuestas', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Quienes escriben al bot para ofrecer algo' },
+  { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok' },
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
-  { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only nav-administrativo-ok' },
+  { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only' },
   { sec: 'induccion', icon: 'fas fa-graduation-cap', label: 'Inducción', padre: 'grp-equipo', roles: 'nav-admin-only', sub: 'Cómo le fue a cada persona en el modo de prueba' },
   // Tareas v2 (2026-10-23): entrada propia para todos los roles; antes solo freelancers o quien tuviera una abierta.
-  { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok nav-administrativo-ok', sub: 'Tu día: lo que te asignaron y tus recordatorios', badge: 'nav-tareas-v2-count', badgeDefault: '0' },
-  { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Videotutoriales', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-administrativo-ok' },
-  { sec: 'actualizaciones', icon: 'fas fa-bullhorn', label: 'Actualizaciones', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok nav-administrativo-ok' },
+  { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Tu día: lo que te asignaron y tus recordatorios', badge: 'nav-tareas-v2-count', badgeDefault: '0' },
+  { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Videotutoriales', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok' },
+  { sec: 'actualizaciones', icon: 'fas fa-bullhorn', label: 'Actualizaciones', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok' },
   { sec: 'proyecto-constructor', icon: 'fas fa-drafting-compass', label: 'Proyecto Constructor', padre: 'grp-ayuda', roles: 'nav-admin-only', sub: 'Avance del CRM que se vende a otras empresas' },
 ];
 // Orden del menú (fijo por áreas desde 2026-10-16, ya no se arrastra). `hoja`:
@@ -32755,7 +32755,7 @@ const PADRE_DE = Object.fromEntries(NAV_ITEMS.filter(it => it.padre).map(it => [
 // las lleva): el padre hereda la unión de las de sus hijas. Las que ocultan
 // (nav-admin-only, solo-voucher...) no se heredan; eso lo resuelve
 // actualizarPadresNav mirando si alguna hija quedó visible.
-const NAV_ROLES_HABILITAN = ['nav-marketing-ok', 'nav-boleteria-ok', 'nav-modo-boleteria-ok', 'nav-administrativo-ok'];
+const NAV_ROLES_HABILITAN = ['nav-marketing-ok', 'nav-boleteria-ok', 'nav-modo-boleteria-ok'];
 
 function renderNavItems() {
   // `orden`: posición original de las entradas y títulos, para devolver a su
@@ -32790,7 +32790,7 @@ function renderNavItems() {
   // tipeado, y eso reaparecía el link aunque el usuario no tuviera permiso
   // (bug real, visto en vivo 2026-08-19).
   document.body.classList.toggle('ve-informe-diario', MI_VE_INFORME_DIARIO);
-  document.body.classList.toggle('puede-ver-voucher', ROL === 'admin' || ROL === 'asesor');
+  document.body.classList.toggle('puede-ver-voucher', esOficina() || ROL === 'asesor');
 }
 
 /* ---------- Favoritos: entradas que cada persona fija arriba con la estrella ----------

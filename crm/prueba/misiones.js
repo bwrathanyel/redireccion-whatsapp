@@ -1,4 +1,4 @@
-// Modo Prueba: franja de aviso, acceso rápido por rol en el login y práctica guiada.
+// Modo Prueba: acceso rápido por rol en el login y práctica guiada.
 // La práctica abre el CRM de a poco: el menú arranca vacío y cada misión desbloquea su sección con una explicación.
 // Las misiones se tildan solas escuchando 'prueba:accion' (prueba-mock.js) y la sección visible.
 (() => {
@@ -62,6 +62,37 @@
     tareas: { icono: '✅', titulo: 'Se abrió: Tareas', texto: 'Tu lista del día: lo que te asigna administración y los recordatorios que te dejas tú. Empieza la jornada por aquí.' },
     ranking: { icono: '🏆', titulo: 'Se abrió: Ranking', texto: 'Cómo va cada asesor en ventas y en atención. Sirve para ver quién necesita una mano, no para regañar.' },
     comisiones: { icono: '🧮', titulo: 'Se abrió: Comisiones', texto: 'Lo que gana cada asesor por sus ventas. Se calcula solo cuando apruebas un pago; tú solo revisas y marcas lo pagado.' },
+    // Secciones sin misión: el intro sale la primera vez que se entra (ver el intervalo de señales).
+    'clientes-asignados': { icono: '👤', titulo: 'Se abrió: Clientes Asignados', texto: 'Los clientes que te asignaron para atender. Los abres desde aquí y sigues con ellos igual que en Leads.' },
+    'cotizacion-boletos': { icono: '📄', titulo: 'Se abrió: Cotizaciones', texto: 'Armas una cotización con hospedaje, paquetes, tours y boletos, y sale lista en un PDF para mandársela al cliente.' },
+    dms: { icono: '💬', titulo: 'Se abrió: Meta DM', texto: 'Los chats del bot en Instagram, Facebook y WhatsApp, en vivo. Al lado ves la ficha del cliente, así sabes con quién hablas antes de responder.' },
+    'wa-bandeja': { icono: '🟢', titulo: 'Se abrió: WhatsApp empresa', texto: 'Los chats del número de WhatsApp de la empresa. Desde aquí les contestas a los clientes sin usar tu teléfono.' },
+    correo: { icono: '✉️', titulo: 'Se abrió: Correo', texto: 'La bandeja de Gmail vinculada a tus clientes: los correos que te escriben aparecen aquí.' },
+    galeria: { icono: '🖼️', titulo: 'Se abrió: Galería', texto: 'Fotos de promociones, hoteles, paquetes y excursiones, listas para mandárselas al cliente cuando le cotizas.' },
+    apartamentos: { icono: '🏠', titulo: 'Se abrió: Apartamentos', texto: 'Casas y posadas que tienen apartamentos propios: cada unidad con sus habitaciones y sus fotos.' },
+    'stop-sales': { icono: '⛔', titulo: 'Se abrió: Stop Sales', texto: 'Qué hoteles <b>no se pueden vender</b> en ciertas fechas porque no tienen cupo, o cuáles hay que confirmar antes. Míralo antes de cotizar: así no le ofreces al cliente una noche sin disponibilidad.' },
+    postventa: { icono: '🧳', titulo: 'Se abrió: Reservas', texto: 'Cada venta cerrada se vuelve una reserva. Aquí cargas servicios, pasajeros y documentos, ves lo cobrado y lo que falta, y le haces seguimiento al viaje.' },
+    voucher: { icono: '🎫', titulo: 'Se abrió: Voucher', texto: 'Generas el voucher del servicio (hospedaje, excursiones, traslados) en PDF para entregárselo al cliente.' },
+    'importar-vouchers': { icono: '📥', titulo: 'Se abrió: Importar vouchers', texto: 'Subes vouchers en PDF y quedan cargados como venta.' },
+    asistente: { icono: '🤖', titulo: 'Se abrió: Asistente', texto: 'Lyra en grande: revisa reservas, carga servicios y pasajeros, deja notas y escribe a proveedores, siempre con tus permisos.' },
+    manual: { icono: '🎬', titulo: 'Se abrió: Videotutoriales', texto: 'Videos cortos donde Lyra te explica cada parte del CRM, paso a paso. Vuelve aquí cuando tengas una duda.' },
+    actualizaciones: { icono: '🆕', titulo: 'Se abrió: Actualizaciones', texto: 'Todo lo que se agregó o mejoró en el CRM, con su fecha.' },
+    boleteria: { icono: '✈️', titulo: 'Se abrió: Boletería', texto: 'Rutas, aerolíneas, precios y requisitos de vuelo, para cotizar boletos.' },
+    'informe-diario': { icono: '📝', titulo: 'Se abrió: Informe Diario', texto: 'El resumen con el que cada asesor cierra su jornada. Lo lees al final del día para saber cómo le fue a cada uno.' },
+    'reservas-empresas': { icono: '🏢', titulo: 'Se abrió: Reservas de empresas', texto: 'Reservas y cotizaciones de clientes empresariales, agrupadas por empresa.' },
+    'campanas-wa': { icono: '📣', titulo: 'Se abrió: Campañas WhatsApp', texto: 'Mensajes por WhatsApp a clientes que ya compraron: armas la campaña, eliges a quién le llega y ves los envíos. En la práctica no sale nada.' },
+    balance: { icono: '📈', titulo: 'Se abrió: Balance', texto: 'Cuánto entró y cuánto salió: ventas, costos, gastos y la utilidad que queda, por día, semana o mes.' },
+    facturacion: { icono: '🧾', titulo: 'Se abrió: Facturación', texto: 'Las facturas de las ventas y el porcentaje de comisión de cada asesor.' },
+    induccion: { icono: '🎓', titulo: 'Se abrió: Inducción', texto: 'Cómo le fue a cada persona en esta misma práctica: cuánto tardó, qué tareas saltó y dónde se trabó.' },
+    proveedores: { icono: '🤝', titulo: 'Se abrió: Proveedores', texto: 'A quién le compra Lotus y cuánto margen deja cada uno.' },
+    empresas: { icono: '🏛️', titulo: 'Se abrió: Empresas', texto: 'Agencias, corporativos y alianzas con los que trabaja Lotus: su crédito y sus reservas.' },
+    'bt-travel': { icono: '🏝️', titulo: 'Se abrió: BT Travel', texto: 'El mayorista de hoteles todo incluido: disponibilidad, reservas y pagos.' },
+    'rendimiento-ia': { icono: '🧠', titulo: 'Se abrió: Rendimiento IA', texto: 'Cómo vende la IA que atiende a los clientes: ventas, calidad de las respuestas, rapidez y lo que cuesta.' },
+    'ia-atencion': { icono: '🛎️', titulo: 'Se abrió: Prospectos de IA', texto: 'Posadas y apartamentos que pidieron el asistente de IA desde la página: posibles clientes de ese servicio.' },
+    propuestas: { icono: '💼', titulo: 'Se abrió: Alianzas y propuestas', texto: 'Quienes le escriben al bot para ofrecer algo, no para comprar. Quedan aquí para que no se mezclen con los clientes.' },
+    redes: { icono: '📱', titulo: 'Se abrió: Redes', texto: 'Las métricas de Instagram: cómo rinde cada publicación, con un análisis de la IA.' },
+    'clientes-eventos': { icono: '🎪', titulo: 'Se abrió: Clientes Eventos', texto: 'Quienes se registraron con el QR del stand en un evento y los premios que ganaron.' },
+    'proyecto-constructor': { icono: '🏗️', titulo: 'Se abrió: Proyecto Constructor', texto: 'El avance del CRM que Lotus vende a otras empresas.' },
   };
   const bienvenida = rol => [
     { icono: '👋', titulo: `¡Hola${ss('prueba:nombre') ? ', ' + escHtml(ss('prueba:nombre')) : ''}! Esta es tu práctica`, texto: rol === 'admin'
@@ -104,7 +135,6 @@
     + `${s} #prueba-panel .pp-avance,${s} #prueba-panel .pp-detalle{transition:none}${s} #prueba-panel.festejo .pp-anillo,${s} #sidebar-nav .pp-ilumina,${s} #sidebar-nav .pp-nuevo-item{animation:none}`;
   const css = document.createElement('style');
   css.textContent = `
-#prueba-franja{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99990;padding:3px 12px;border-radius:0 0 10px 10px;font:600 11.5px/1.4 system-ui,sans-serif;letter-spacing:.02em;color:#1a1200;background:#ffb020;box-shadow:0 4px 14px -6px rgba(0,0,0,.5);pointer-events:none;white-space:nowrap}
 #prueba-panel{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99980;width:min(460px,calc(100vw - 32px));color:var(--txt,#eee);font:14px/1.4 system-ui,sans-serif}
 #prueba-panel .pp-fila{display:flex;align-items:center;gap:10px;padding:5px 5px 5px 6px;border-radius:999px;background:color-mix(in srgb,var(--panel-solid,#1b1b1f) 84%,transparent);-webkit-backdrop-filter:blur(12px) saturate(1.2);backdrop-filter:blur(12px) saturate(1.2);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 12px 30px -14px rgba(0,0,0,.6)}
 #prueba-panel .pp-anillo{position:relative;flex:none;display:grid;place-items:center;width:38px;height:38px}
@@ -186,10 +216,6 @@ body.prueba-guiada #prueba-candado{display:block}
 #prueba-inicio .pi-cargo:hover,#prueba-inicio .pi-cargo:focus-visible{border-color:#ffb020;background:rgba(255,176,32,.08);outline:none}
 #forgotLink,#claimLink,#loginPrueba{display:none!important}
 @media (max-width:760px){
-  #prueba-franja{left:0;right:0;transform:none;border-radius:0;padding:calc(2px + env(safe-area-inset-top)) 10px 2px;font-size:11px;text-align:center;white-space:normal}
-  #prueba-franja .pf-mas{display:none}
-  body:has(#prueba-franja){padding-top:calc(18px + env(safe-area-inset-top))}
-  body:has(#prueba-franja) .mobile-brand{top:calc(18px + env(safe-area-inset-top))}
   #prueba-panel{left:10px;right:84px;width:auto;transform:none;bottom:calc(18px + env(safe-area-inset-bottom));font-size:13px}
   body.prueba-lyra #prueba-panel{left:76px}
   body:has(input:focus,textarea:focus,select:focus) #prueba-panel{display:none}
@@ -206,12 +232,6 @@ body.prueba-guiada #prueba-candado{display:block}
 @media (prefers-reduced-motion:reduce){${QUIETO('')}}
 ${QUIETO(':root[data-paleta="sereno"]')}`;
   document.head.appendChild(css);
-
-  /* ---------- Franja ---------- */
-  const franja = document.createElement('div');
-  franja.id = 'prueba-franja';
-  franja.innerHTML = 'MODO PRUEBA · datos ficticios<span class="pf-mas"> · nada de esto es real</span>';
-  document.body.appendChild(franja);
 
   /* ---------- Pantalla de inicio: nombre y cargo ---------- */
   // El nombre entra en los datos de ejemplo (datos-prueba.js lo lee al cargar), por eso se recarga antes de entrar.
@@ -596,6 +616,10 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     if (document.getElementById('drawer')?.classList.contains('open')) registra({ tipo: 'ficha' });
     const s = visible();
     if (s !== secVisible) { secVisible = s; if (s) { mide('seccion', { seccion: s }); registra({ tipo: 'seccion', sec: s }); } pinta(); }
+    // Sección con explicación a la que se llegó sin misión (menú completo, accesos directos): se explica una vez.
+    if (s && INTROS[s] && !estado.vistas.includes(s) && estado.bienvenida && !enLogin() && !presentando() && !document.getElementById('prueba-modal')) {
+      estado.vistas.push(s); guarda(estado); modal([INTROS[s]], 'Entendido', pinta);
+    }
   }, 700);
   document.addEventListener('input', e => { if (e.target.id === 'tar-search') registra({ tipo: 'busqueda', texto: e.target.value }); }, true);
   /* ---------- Nada sale hacia WhatsApp, correo ni teléfono ---------- */
