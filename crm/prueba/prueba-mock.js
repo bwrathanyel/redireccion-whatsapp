@@ -80,8 +80,9 @@
     else if (op === 'in') r = lista(v).includes(String(a));
     else if (op === 'like' || op === 'ilike') {
       let crudo = v; try { crudo = decodeURIComponent(v); } catch { /* '%ma…' de un ilike ya viene decodificado */ }
-      const pat = '^' + escRe(crudo).replace(/\\\*/g, '.*').replace(/%/g, '.*') + '$';
-      r = a != null && new RegExp(pat, op === 'ilike' ? 'i' : '').test(String(a));
+      const plano = s => op === 'ilike' ? s.normalize('NFD').replace(/[̀-ͯ]/g, '') : s;
+      const pat = '^' + escRe(plano(crudo)).replace(/\\\*/g, '.*').replace(/%/g, '.*') + '$';
+      r = a != null && new RegExp(pat, op === 'ilike' ? 'i' : '').test(plano(String(a)));
     }
     else if (op === 'cs') r = Array.isArray(a) && lista(v.replace(/^\{|\}$/g, '')).every(x => a.map(String).includes(x));
     else r = true;

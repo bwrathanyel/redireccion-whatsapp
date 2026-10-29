@@ -16,8 +16,6 @@
         ok: d => d.tipo === 'ficha' },
       { id: 'tarifario', titulo: 'Busca en el Tarifario', foco: 'Hoteles', texto: 'Pestaña <b>Hoteles</b> → busca <b>Margarita</b>. Mira cuántos hay y desde qué precio: eso le ofreces a María.', sec: 'tarifario',
         ok: d => d.tipo === 'busqueda' && /margarita/i.test(d.texto) },
-      { id: 'cotizar', titulo: 'Registra la cotización', sel: '#dacc-estado', foco: 'María González', texto: 'Abre la ficha de María y en el estado de arriba elige <b>Cotización enviada</b>: así sabes a quién darle seguimiento. Con el botón «Cotizar» se marca solo.', sec: 'leads',
-        ok: d => esLead(d, 'registrar_cotizacion_enviada') || esLead(d, 'actualizar_lead', a => a.p_estado === 'COTIZACION ENVIADA') },
       { id: 'cotizacion', titulo: 'Arma una cotización en PDF', sel: '#cb-lead-q', texto: '1) <b>Vincular cliente</b>: busca a María.<br>2) Servicio 1: tipo <b>Tour</b>, nombre «Tour Salto Ángel».<br>3) Adultos y tarifa: el total sale solo.<br>4) <b>Descargar PDF</b>: queda numerada y lista para enviar.', sec: 'cotizacion-boletos',
         ok: d => d.tipo === 'insert' && d.tabla === 'cotizaciones_boleteria' },
       { id: 'abono', titulo: 'Registra un abono', foco: 'Registrar abono', texto: 'Ricardo Díaz debe $325. En su tarjeta toca <b>Registrar abono</b>, pon 100 y confirma: el saldo se descuenta solo.', sec: 'mis-ventas',
