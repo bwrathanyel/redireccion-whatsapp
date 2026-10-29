@@ -132,7 +132,7 @@
   /* ---------- Estilos ---------- */
   // Sin movimiento (reduced-motion o paleta «sereno»): el foco aparece en su lugar y la flecha queda quieta.
   const QUIETO = s => `${s} #prueba-spot,${s} #prueba-spot.pp-fijo{transition:opacity .15s}${s} #prueba-flecha .pf-linea{transition:none}${s} #prueba-flecha.pp-listo g{animation:none}`
-    + `${s} #prueba-panel,${s} #prueba-panel .pp-fila,${s} #prueba-panel .pp-avance,${s} #prueba-panel .pp-detalle{transition:none}${s} #prueba-panel.festejo .pp-anillo,${s} #sidebar-nav .pp-ilumina,${s} #sidebar-nav .pp-nuevo-item{animation:none}`;
+    + `${s} #prueba-panel,${s} #prueba-panel .pp-fila,${s} #prueba-panel .pp-avance,${s} #prueba-panel .pp-detalle{transition:none}${s} #prueba-panel .pp-fila button.pp-ir,${s} #prueba-panel.festejo .pp-anillo,${s} #sidebar-nav .pp-ilumina,${s} #sidebar-nav .pp-nuevo-item{animation:none}`;
   const css = document.createElement('style');
   css.textContent = `
 #prueba-panel{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99980;width:min(460px,calc(100vw - 32px));color:var(--txt,#eee);font:14px/1.4 system-ui,sans-serif}
@@ -159,6 +159,8 @@
 #prueba-panel .pp-detalle .pp-acc{flex-wrap:wrap}
 #prueba-panel button.pp-reini{margin-left:auto;border-color:transparent;color:var(--muted,#aaa);text-decoration:underline}
 #prueba-panel.festejo .pp-anillo{animation:pp-pulso .8s}
+#prueba-panel .pp-fila button.pp-ir{animation:pp-luz .9s ease-in-out infinite}
+@keyframes pp-luz{50%{box-shadow:0 0 0 3px rgba(255,176,32,.35),0 0 18px 4px rgba(255,176,32,.8);filter:brightness(1.2)}}
 @keyframes pp-pulso{40%{transform:scale(1.14);filter:drop-shadow(0 0 8px rgba(79,191,127,.7))}}
 body.prueba-guiada .main{padding-bottom:88px}
 @media (min-width:761px){body:has(.drawer.open) #prueba-panel{left:16px;transform:none;width:min(400px,calc(100vw - 32px))}}
