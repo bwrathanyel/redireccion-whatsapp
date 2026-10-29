@@ -5289,6 +5289,17 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .pv-wa-grupo>summary>i:not(.flecha){color:var(--tc,var(--muted))}.pv-wa-grupo>summary small{margin-left:auto;font-size:11px;font-weight:600;color:var(--muted)}.pv-wa-grupo .pv-wa-cuerpo{border-top:1px solid var(--line);padding:4px 5px 5px}
 .pv-wa-sec{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted2);margin:18px 0 2px}.pv-wa-tr .nom .pv-wa-mov{display:none}
 @media(max-width:700px){.pv-wa-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.pv-wa-buscar{max-width:none;margin-left:0}.pv-wa-th{display:none}.pv-wa-tr{grid-template-columns:minmax(0,1fr) auto}.pv-wa-tr>.c-asesor,.pv-wa-tr>.c-fecha,.pv-wa-tr>.c-tel,.pv-wa-tr>.c-estado{display:none}.pv-wa-tr .nom .pv-wa-mov{display:block}}
+/* Campañas WhatsApp (pestaña de Reservas, solo admin) */
+.pvc-toolbar{align-items:center}.pvc-intro{flex:1;min-width:0;margin:0}.pvc-intro i{color:var(--wa)}
+.pvc-kpis{grid-template-columns:repeat(5,minmax(0,1fr))}
+.pvc-bloque{margin-bottom:14px}
+.pvc-cab{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}.pvc-cab h2{font-size:14px;margin:0 0 4px}.pvc-cab .ria-sub{margin:0;max-width:72ch}
+.pvc-th,.pvc-tr{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1.3fr) minmax(0,1fr) 128px 104px;gap:11px;align-items:center}
+.pvc-th{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted2);padding:0 9px 7px;border-bottom:1px solid var(--line2)}
+.pvc-tr{font-size:12px;color:var(--muted);padding:9px;border-bottom:1px solid var(--line);transition:background .16s}.pvc-tr:last-child{border-bottom:0}.pvc-tr:hover{background:color-mix(in srgb,var(--txt) 3%,transparent)}
+.pvc-tr>div{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pvc-tr .nom b{display:block;color:var(--txt);overflow:hidden;text-overflow:ellipsis}.pvc-tr .nom small{display:block;font-size:11px;overflow:hidden;text-overflow:ellipsis}
+.pvc-tr .num{font-variant-numeric:tabular-nums}.pvc-tr .pvc-mov{display:none}
+@media(max-width:700px){.pvc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.pvc-th{display:none}.pvc-tr{grid-template-columns:minmax(0,1fr) auto}.pvc-tr>.c-pl,.pvc-tr>.c-por,.pvc-tr>.c-fecha{display:none}.pvc-tr .pvc-mov{display:block}}
 .ria-detalles{margin-bottom:12px}.ria-detalles>summary{cursor:pointer;list-style:none;font-size:12.5px;font-weight:800;color:var(--muted);padding:10px 2px}.ria-detalles>summary::-webkit-details-marker{display:none}.ria-detalles>summary::before{content:"▸ ";display:inline-block;transition:transform .15s}.ria-detalles[open]>summary{color:var(--txt)}.ria-detalles[open]>summary::before{transform:rotate(90deg)}
 @media(max-width:760px){.ria-dashboard{grid-template-columns:repeat(2,1fr)}.ria-db-title{grid-column:1/-1}.ria-grid{grid-template-columns:1fr}.ria-paso{grid-template-columns:100px 1fr 38px}.ria-cal-head,.ria-cal-fila{grid-template-columns:minmax(115px,1fr) 62px 62px}.ria-cal-head.ria-mod,.ria-cal-fila.ria-mod{grid-template-columns:minmax(96px,1fr) repeat(var(--n,3),58px);gap:6px}}
 /* ---------- Clientes de la IA: consumo del mes -------------------------
@@ -8315,10 +8326,6 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </div>
       <!-- Filtros rápidos (reemplazan a los 6 KPI): se arman en JS con renderPvResumen -->
       <div class="pv-resumen chips-scroll" id="pv-resumen" aria-label="Filtros rápidos"></div>
-      <details class="ria-detalles pv-wa" id="pv-wa" hidden>
-        <summary>Campaña WhatsApp a clientes con venta (solo administradores)</summary>
-        <div class="ria-card" id="pv-wa-body"><div class="ria-sub">Cargando...</div></div>
-      </details>
       <div class="pv-filtros">
         <div class="pv-stagebar chips-scroll" id="pv-stagebar" aria-label="Filtrar por etapa">
           <button class="pv-stage on" type="button" data-etapa="">Todos <b class="pv-n"></b></button>
@@ -8348,6 +8355,21 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         </div>
       </div>
       <div class="pv-grid" id="pv-grid"><div class="pv-empty"><i class="fas fa-circle-notch fa-spin"></i>Cargando postventa...</div></div>
+    </section>
+
+    <!-- CAMPAÑAS WHATSAPP (pestaña de Reservas; solo admin): campañas por plantilla a clientes con venta, audiencia elegible e historial de envíos -->
+    <section class="section" id="sec-campanas-wa">
+      <div class="pv-toolbar pvc-toolbar">
+        <div class="ria-sub pvc-intro"><i class="fa-brands fa-whatsapp"></i> Plantillas por Zernio a clientes con venta. Nada sale sin la aprobación de un administrador.</div>
+        <button class="pv-refresh" id="pvc-refresh" type="button" title="Actualizar" aria-label="Actualizar campañas"><i class="fas fa-rotate"></i></button>
+      </div>
+      <div class="pv-wa-kpis pvc-kpis" id="pvc-kpis"></div>
+      <div class="ria-card pvc-bloque" id="pvc-campanas"><div class="ria-sub">Cargando...</div></div>
+      <div class="ria-card pvc-bloque" id="pv-wa-body"><div class="ria-sub">Cargando...</div></div>
+      <div class="ria-card pvc-bloque">
+        <div class="pvc-cab"><div><h2>Envíos individuales</h2><div class="ria-sub">Plantillas mandadas una por una desde las fichas (recordatorios, seguimiento, reseñas). Últimos 100.</div></div></div>
+        <div id="pvc-envios"><div class="ria-sub">Cargando...</div></div>
+      </div>
     </section>
 
     <!-- RESERVAS DE EMPRESAS (pestaña de Reservas; solo admin): reservas y cotizaciones de clientes empresariales, filtradas por empresa -->

@@ -1687,7 +1687,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
   'manual', 'actualizaciones'
@@ -3410,14 +3410,12 @@ function setupPostventa() {
   document.getElementById('pv-search')?.addEventListener('input', () => {
     clearTimeout(PV_SEARCH_TIMER); PV_SEARCH_TIMER = setTimeout(loadPostventa, 280);
   });
-  const wa = document.getElementById('pv-wa');
-  wa?.addEventListener('toggle', () => { if (wa.open) pvWhatsappCargar(); });
+  document.getElementById('pvc-refresh')?.addEventListener('click', loadCampanasWa);
   document.getElementById('pv-wa-body')?.addEventListener('click', async e => {
     const d = e.target.closest('button[data-wa-dias]');
     if (d) { PV_WA_DIAS = Number(d.dataset.waDias); pvWhatsappCargar(); return; }
     const f = e.target.closest('button[data-wa-filtro]');
     if (f) { PV_WA_FILTRO = f.dataset.waFiltro; pvWhatsappRender(); return; }
-    if (e.target.closest('#pv-wa-campanas')) { pvCampanas().abrir(); return; }
     const b = e.target.closest('button[data-wa-lead]');
     if (!b) return;
     b.disabled = true;
@@ -3455,6 +3453,62 @@ async function pvWhatsappCargar() {
   if (error) { console.error('postventa_segmento_whatsapp', error); body.innerHTML = '<div class="ria-vacio">No se pudo cargar el segmento.</div>'; return; }
   PV_WA_DATA = data || {};
   pvWhatsappRender();
+  pvcKpis();
+}
+/* ---------- Campañas WhatsApp (pestaña de Reservas; solo admin) ----------
+   Arriba los KPIs, después las campañas (wa-campanas.js embebido, con su asistente),
+   la audiencia elegible (postventa_segmento_whatsapp) y los envíos sueltos desde fichas
+   (wa_plantilla_envios; RLS ya da lectura a admin, sin RPC nueva). */
+let PVC_ENVIOS30 = null;
+async function loadCampanasWa() {
+  if (ROL !== 'admin') return;
+  pvCampanas().montar(document.getElementById('pvc-campanas'), { alCambiar: pvcContarEnvios });
+  pvWhatsappCargar();
+  pvcContarEnvios();
+  pvcEnvios();
+}
+async function pvcContarEnvios() {
+  const desde = new Date(Date.now() - 30 * 864e5).toISOString();
+  const n = estado => sb.from('wa_plantilla_envios').select('id', { count: 'exact', head: true }).eq('estado', estado).gte('creado_en', desde);
+  const [env, fal] = await Promise.all([n('enviado'), n('fallido')]);
+  PVC_ENVIOS30 = env.error || fal.error ? null : { enviados: env.count || 0, fallidos: fal.count || 0 };
+  pvcKpis();
+}
+function pvcKpis() {
+  const cont = document.getElementById('pvc-kpis');
+  if (!cont) return;
+  const r = PV_WA_DATA?.resumen || {}, e = PVC_ENVIOS30;
+  const v = x => x == null ? '—' : fmt(x);
+  const kpi = (t, x, d, ic, c) => `<div class="pv-wa-kpi" style="--kc:${c}"><span><i class="fas ${ic}"></i>${t}</span><b>${v(x)}</b><small>${d}</small></div>`;
+  const pct = r.vendidos ? Math.round((r.elegibles || 0) * 100 / r.vendidos) : 0;
+  cont.innerHTML = kpi('Con venta', PV_WA_DATA ? r.vendidos || 0 : null, 'clientes con venta cerrada', 'fa-bag-shopping', 'var(--txt)')
+    + kpi('Elegibles', PV_WA_DATA ? r.elegibles || 0 : null, `${pct}% · ${PV_WA_DIAS} días desde el viaje`, 'fa-circle-check', 'var(--green)')
+    + kpi('Enviados', e?.enviados, 'plantillas en 30 días', 'fa-paper-plane', 'var(--blue)')
+    + kpi('Fallidos', e?.fallidos, 'plantillas en 30 días', 'fa-triangle-exclamation', 'var(--amber)')
+    + kpi('No contactar', PV_WA_DATA ? r.excluidos?.no_contactar || 0 : null, 'lo pidieron explícitamente', 'fa-ban', 'var(--danger)');
+}
+async function pvcEnvios() {
+  const cont = document.getElementById('pvc-envios');
+  if (!cont) return;
+  const { data, error } = await sb.from('wa_plantilla_envios').select('id,creado_en,origen,plantilla,telefono,estado,error,lead_id,enviado_por')
+    .in('origen', ['manual', 'resena']).order('creado_en', { ascending: false }).limit(100);
+  if (error) { console.error('wa_plantilla_envios', error); cont.innerHTML = '<div class="ria-vacio">No se pudo cargar el historial.</div>'; return; }
+  if (!data.length) { cont.innerHTML = '<div class="ria-vacio">Todavía no se mandó ninguna plantilla desde una ficha.</div>'; return; }
+  const ids = [...new Set(data.map(r => r.lead_id).filter(Boolean))];
+  const { data: leads } = ids.length ? await sb.from('leads').select('id,nombre').in('id', ids) : { data: [] };
+  const nombre = new Map((leads || []).map(l => [l.id, l.nombre]));
+  const fecha = f => new Date(f).toLocaleString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const fila = r => {
+    const okEnv = r.estado === 'enviado', col = okEnv ? 'var(--green)' : 'var(--danger)', quien = r.enviado_por || 'Sistema';
+    return `<div class="pvc-tr">
+      <div class="nom"><b>${esc(nombre.get(r.lead_id) || r.telefono)}</b><small class="num">${esc(r.telefono)}</small>
+        <small class="pvc-mov">${esc(r.plantilla)} · ${esc(quien)} · ${esc(fecha(r.creado_en))}</small></div>
+      <div class="c-pl" title="${esc(r.plantilla)}">${esc(r.plantilla)}${r.origen === 'resena' ? ' <span class="pv-wa-tag" style="--tc:var(--purple)">Reseña</span>' : ''}</div>
+      <div class="c-por">${esc(quien)}</div>
+      <div class="c-fecha num">${esc(fecha(r.creado_en))}</div>
+      <div><span class="pv-wa-tag" style="--tc:${col}"${r.error ? ` title="${esc(r.error)}"` : ''}><i class="fas ${okEnv ? 'fa-check' : 'fa-xmark'}"></i>${okEnv ? 'Enviado' : 'Falló'}</span></div></div>`;
+  };
+  cont.innerHTML = `<div class="pvc-th"><span>Cliente</span><span>Plantilla</span><span>Enviado por</span><span>Fecha</span><span>Estado</span></div>${data.map(fila).join('')}`;
 }
 function pvWhatsappRender() {
   const body = document.getElementById('pv-wa-body');
@@ -3463,19 +3517,10 @@ function pvWhatsappRender() {
   const excl = Object.entries(r.excluidos || {}).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
   const totalExcl = excl.reduce((s, [, n]) => s + n, 0);
   if (PV_WA_FILTRO !== 'todos' && PV_WA_FILTRO !== 'elegibles' && !excl.some(([k]) => k === PV_WA_FILTRO)) PV_WA_FILTRO = 'todos';
-  const kpi = (t, v, d, ic, c) => `<div class="pv-wa-kpi" style="--kc:${c}"><span><i class="fas ${ic}"></i>${t}</span><b>${fmt(v)}</b><small>${d}</small></div>`;
   const chip = (k, t, n, ic, c) => `<button class="pv-stage${PV_WA_FILTRO === k ? ' on' : ''}" type="button" data-wa-filtro="${k}" aria-pressed="${PV_WA_FILTRO === k}"${c ? ` style="--tc:${c}"` : ''}>${ic ? `<i class="fas ${ic}"></i>` : ''}${esc(t)} <b>${fmt(n)}</b></button>`;
-  const pct = r.vendidos ? Math.round((r.elegibles || 0) * 100 / r.vendidos) : 0;
   body.innerHTML = `
-    <div class="pv-wa-head"><div><h2>Clientes con venta listos para WhatsApp</h2>
-      <div class="ria-sub">Elegible = teléfono válido, viaje terminado hace al menos los días elegidos (o cierre, si no hay fecha de viaje), sin incidencia abierta, sin contacto reciente y sin haber pedido que no lo contacten.</div></div>
-      <button class="btn-sm lt-primario" type="button" id="pv-wa-campanas"><i class="fas fa-bullhorn"></i> Campañas por WhatsApp</button></div>
-    <div class="pv-wa-kpis">
-      ${kpi('Con venta', r.vendidos || 0, 'clientes con venta cerrada', 'fa-bag-shopping', 'var(--txt)')}
-      ${kpi('Elegibles', r.elegibles || 0, `${pct}% del total`, 'fa-circle-check', 'var(--green)')}
-      ${kpi('Excluidos', totalExcl, `${excl.length} ${excl.length === 1 ? 'motivo' : 'motivos'}`, 'fa-filter', 'var(--amber)')}
-      ${kpi('No contactar', r.excluidos?.no_contactar || 0, 'lo pidieron explícitamente', 'fa-ban', 'var(--danger)')}
-    </div>
+    <div class="pvc-cab"><div><h2>Audiencia elegible</h2>
+      <div class="ria-sub">Elegible = teléfono válido, viaje terminado hace al menos los días elegidos (o cierre, si no hay fecha de viaje), sin incidencia abierta, sin contacto reciente y sin haber pedido que no lo contacten. ${fmt(totalExcl)} excluidos por ${excl.length} ${excl.length === 1 ? 'motivo' : 'motivos'}.</div></div></div>
     <div class="pv-wa-ctrl"><span class="pv-wa-etq">Días desde el viaje</span>
       <div class="pv-wa-seg" role="group" aria-label="Días mínimos desde el viaje">${PV_WA_PRESETS.map(n => `<button type="button" data-wa-dias="${n}" class="${n === PV_WA_DIAS ? 'on' : ''}" aria-pressed="${n === PV_WA_DIAS}">${n}</button>`).join('')}</div>
       <input class="pv-wa-buscar" id="pv-wa-buscar" type="search" placeholder="Buscar cliente, destino o asesor..." value="${esc(PV_WA_BUSCAR)}" aria-label="Buscar en la campaña"></div>
@@ -3527,8 +3572,6 @@ async function loadPostventa(silencioso) {
   silencioso = silencioso === true;
   const grid = document.getElementById('pv-grid');
   if (!grid || ROL === 'marketing') return;
-  const waPanel = document.getElementById('pv-wa');
-  if (waPanel) { waPanel.hidden = !esOficina(); if (waPanel.open && !silencioso) pvWhatsappCargar(); }
   if (!silencioso || !grid.children.length) grid.innerHTML = '<div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div>';
   const busqueda = document.getElementById('pv-search')?.value.trim() || null;
   const [resumen, bandeja] = await Promise.all([
@@ -32648,6 +32691,7 @@ const NAV_ITEMS = [
   { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', padre: 'grp-tarifario', roles: 'nav-administrativo-ok', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: 'nav-administrativo-ok', sub: 'Servicios, pasajeros, documentos y cobros' },
   { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only nav-administrativo-ok', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
+  { sec: 'campanas-wa', icon: 'fa-brands fa-whatsapp', label: 'Campañas WhatsApp', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Plantillas a clientes con venta: campañas, audiencia y envíos' },
   // En modo Boletería, Reservas solo abría el voucher de hospedaje: lo reemplaza Cotizaciones (2026-10-12).
   { sec: 'voucher', icon: 'fas fa-file-invoice', label: 'Voucher', padre: 'grp-reservas', roles: 'solo-voucher', id: 'nav-voucher', badge: 'nav-voucher-count', badgeDefault: '0' },
   { sec: 'bol-solicitudes', icon: 'fas fa-list-ol', label: 'Solicitudes', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Vuelos que piden los asesores, repartidos entre agentes', badge: 'nav-bol-sol-count', badgeDefault: '0' },
@@ -33034,6 +33078,7 @@ function cargarSeccion(sec) {
   if (sec === 'proveedores') loadProveedores();
   if (sec === 'empresas') loadEmpresas();
   if (sec === 'reservas-empresas') loadReservasEmpresas();
+  if (sec === 'campanas-wa') loadCampanasWa();
   if (sec === 'bt-travel') loadBtTravel();
   if (sec === 'apartamentos') loadApartamentos();
   if (sec === 'asistente') loadAsistente();
