@@ -6583,6 +6583,20 @@ async function loadMisVentasVentas() {
   renderMisVentasKPIs();
   renderMisVentasCards();
 }
+// D6: el abono de «Mis ventas» va por la reserva (pestaña Abonos), no por registrar_abono_venta.
+// Con varias reservas con saldo, abre el lead para elegir cuál.
+async function mvAbrirAbono(fila, btn) {
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: fila.cliente });
+  btn.disabled = false;
+  const reservas = (data || []).filter(x => x.lead_id === fila.lead_id);
+  const conSaldo = reservas.filter(x => Number(x.saldo_pendiente) > 0);
+  const c = conSaldo.length === 1 ? conSaldo[0] : reservas.length === 1 ? reservas[0] : null;
+  if (c) return abrirPostventa(c, 'abonos');
+  if (error || !reservas.length) return errToast(error ? 'No se pudo abrir la reserva' : 'Esta venta no tiene una reserva activa: creala desde el lead.');
+  okToast(`Tiene ${reservas.length} reservas: elegí en cuál cargar el abono.`);
+  abrirLeadDesdeMisVentas(fila.lead_id);
+}
 function renderMisVentasKPIs() {
   const thisMonth = new Date().toISOString().slice(0, 7);
   const delMes = MV_DATA.filter(r => (r.fecha_cierre || '').slice(0, 7) === thisMonth);
@@ -6631,7 +6645,7 @@ function renderMisVentasCards() {
   box.querySelectorAll('[data-mv-abono]').forEach(btn => btn.addEventListener('click', e => {
     e.stopPropagation();
     const fila = MV_DATA.find(r => r.lead_id === Number(btn.dataset.mvAbono));
-    if (fila) window.abrirRegistrarAbonoVentaUI(fila.lead_id, fila.saldo);
+    if (fila) mvAbrirAbono(fila, btn);
   }));
   box.querySelectorAll('[data-mv-completar]').forEach(btn => btn.addEventListener('click', async e => {
     e.stopPropagation();
@@ -20904,9 +20918,6 @@ async function confirmarMontoSheet() {
   if (MONTO_SHEET_ACCION.tipo === 'comision') {
     if (valor > 100) { err.textContent = 'El porcentaje no puede superar 100.'; btn.disabled = false; btn.innerHTML = previo; return; }
     resultado = await sb.rpc('editar_comision_manual', { p_comision_id: MONTO_SHEET_ACCION.id, p_porcentaje: valor });
-  } else if (MONTO_SHEET_ACCION.tipo === 'venta') {
-    if (valor > MONTO_SHEET_ACCION.saldoPendiente) { err.textContent = 'El abono no puede superar el saldo.'; btn.disabled = false; btn.innerHTML = previo; return; }
-    resultado = await sb.rpc('registrar_abono_venta', { p_lead_id: MONTO_SHEET_ACCION.id, p_monto: valor });
   } else {
     if (valor > MONTO_SHEET_ACCION.saldoPendiente) { err.textContent = 'El abono no puede superar el saldo pendiente.'; btn.disabled = false; btn.innerHTML = previo; return; }
     resultado = await sb.rpc('registrar_abono_proveedor', { p_cxp_id: MONTO_SHEET_ACCION.id, p_monto: valor });
@@ -20917,19 +20928,9 @@ async function confirmarMontoSheet() {
   closeSheet('monto-sheet');
   okToast(MONTO_SHEET_ACCION.tipo === 'comision' ? `Comisión actualizada a ${valor}%` : `Abono de ${money(valor)} registrado`);
   if (MONTO_SHEET_ACCION.tipo === 'comision') { loadComisionesAdmin(); }
-  else if (MONTO_SHEET_ACCION.tipo === 'venta') { loadMisVentasVentas(); }
   else { await loadCuentasPorPagar(); }
   MONTO_SHEET_ACCION = null;
 }
-window.abrirRegistrarAbonoVentaUI = (leadId, saldoPendiente) => {
-  MONTO_SHEET_ACCION = { tipo: 'venta', id: leadId, saldoPendiente };
-  document.getElementById('monto-sheet-title').textContent = 'Registrar abono de esta venta';
-  document.getElementById('monto-sheet-label').textContent = `Monto abonado (saldo: ${money(saldoPendiente)})`;
-  const input = document.getElementById('monto-sheet-input');
-  input.min = 0; input.max = saldoPendiente; input.step = 0.01; input.value = '';
-  document.getElementById('monto-sheet-error').textContent = '';
-  openSheet('monto-sheet'); input.focus();
-};
 window.editarPorcentajeComision = async (asesorId) => {
   const a = FACT_ASESORES_CACHE.find(x => x.id === asesorId);
   if (!a) return;
@@ -36714,6 +36715,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-30', emoji: '🧾', titulo: '«Registrar abono» de Mis ventas abre la reserva', texto: 'En Mis ventas, «Registrar abono» ahora abre la reserva en la pestaña Abonos, con el mismo formulario de siempre: método, referencia, captura, servicio y tasa. Así cada abono queda con su recibo y su voucher. Si el cliente tiene varias reservas con saldo, abre el lead para que elijas cuál.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-30', emoji: '💱', titulo: 'Abonos: servicio que paga y tasa del cobro', texto: 'Al registrar un abono en Reservas › Abonos ahora elegís a qué servicio va (el hospedaje viene marcado) y, si es en bolívares, a qué tasa se cobra: BCV dólar, BCV euro o USDT (Binance P2P, se actualiza cada hora). La vista previa muestra la tasa y el equivalente en dólares; si la tasa cambió mientras tenías el formulario abierto, te avisa antes de registrar. Si cargás un pago con el mismo monto y referencia que otro de las últimas 48 horas, te pregunta si es el mismo antes de duplicarlo. El voucher de abonos ya no adivina cuál pago es del boleto.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-30', emoji: '💳', titulo: 'Abonos sin duplicados y documentos más claros', texto: 'Al registrar un abono, si los documentos no salen igual se avisa que el pago quedó guardado: no hay que cargarlo de nuevo, se usa «Reintentar documentos». Reintentar después de un corte ya no duplica el abono. El Pago móvil pasa solo a bolívares. Al anular un abono se anula su recibo y el voucher se reimprime sin ese pago. Los errores de documentos ahora dicen el motivo real.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-30', emoji: '🧾', titulo: 'Voucher de abonos del hospedaje', texto: 'En Reservas > Servicios, el botón "Voucher de abonos" arma un PDF del hospedaje con cada abono en su fila: fecha, método, referencia y monto (los pagos en bolívares muestran el monto en Bs y la tasa). El resumen cuenta solo el hotel: total, pagado y lo que resta. El pago de los boletos, que va de contado, no entra. Queda descargado y adjunto al hotel.', roles: ['admin', 'asesor'] },
