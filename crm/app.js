@@ -30936,15 +30936,41 @@ async function cargarHistorialVouchers(append) {
     <div class="lt-card-pie">
       <button class="btn-sm${v.pdf_path ? ' lt-primario' : ''}" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})"><i class="fas ${v.pdf_path ? 'fa-file-pdf' : 'fa-rotate'}"></i> ${v.pdf_path ? 'Ver PDF' : 'Reconstruir'}</button>
       ${DR?.acciones('voucher', v) || ''}
-      ${v.reserva_codigo ? `<button class="vc-chip-res" type="button" data-vc-res="${v.reserva_id}" data-cod="${esc(v.reserva_codigo)}" title="Abrir la ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> ${esc(v.reserva_codigo)}</button>` : ''}
+      ${v.reserva_codigo ? `<button class="vc-chip-res" type="button" data-vc-res="${v.reserva_id}" data-cod="${esc(v.reserva_codigo)}" title="Abrir la ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> ${esc(v.reserva_codigo)}</button>`
+        : vcPuedePasar(v) ? `<button class="btn-sm" type="button" data-vc-pasar="${v.id}" title="Vincular con el cliente y crear su ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> Pasar a Reservas</button>` : ''}
     </div>
   </article>`).join('');
   if (!append && !filas) tbody.innerHTML = '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin vouchers</div>';
   else tbody.innerHTML = append ? tbody.innerHTML + filas : filas;
   tbody.querySelectorAll('[data-vc-res]').forEach(b => b.onclick = () => abrirReservaDeLead(Number(b.dataset.vcRes), b.dataset.cod, b));
+  tbody.querySelectorAll('[data-vc-pasar]').forEach(b => b.onclick = () => vcPasarAReservas(Number(b.dataset.vcPasar), b));
   if (!append) entradaLista(tbody);
   if (masBtn) masBtn.style.display = (data || []).length < VC_PAGE_SIZE ? 'none' : '';
   await actualizarBadgeVoucher();
+}
+// voucher_confirmar_venta: solo admin o el asesor que lo generó, y con el PDF guardado.
+const vcPuedePasar = v => !v.reserva_id && !v.anulado_en && v.pdf_path && (ROL === 'admin' || (ROL === 'asesor' && v.creado_por === MI_USUARIO_ID));
+// Voucher generado como «solo PDF»: misma hoja que al generar (match de cliente / reservas similares).
+async function vcPasarAReservas(id, btn) {
+  btn.disabled = true;
+  try {
+    const { data: v, error } = await sb.from('vouchers').select('*').eq('id', id).single();
+    if (error || !v) throw new Error('No se pudo leer el voucher');
+    const plan = await vcRevisarOperacion(v, { modo: 'solo' });
+    if (!plan || plan.modo === 'solo') return;
+    const cierre = await sb.rpc('voucher_confirmar_venta', { p_voucher_id: v.id, p_modo: plan.modo,
+      p_lead_id: plan.lead?.id || null, p_reserva_id: plan.reserva?.id || null,
+      p_revisadas: plan.revisadas || [], p_motivo: plan.motivo || null, p_pdf_path: v.pdf_path });
+    if (cierre.error || !cierre.data?.ok) throw new Error('No se pasó a Reservas: ' + (cierre.error?.message || cierre.data?.error || 'error desconocido'));
+    if (cierre.data.reutilizado) throw new Error('Este voucher ya tenía su operación confirmada');
+    const pdf = await sb.storage.from('vouchers-pdf').download(v.pdf_path);
+    const nombre = docNombre([`Voucher ${String(v.numero_factura).padStart(6, '0')}`, v.cliente_nombre, v.destino_hospedaje, docFecha(v.fecha_entrada)]);
+    const e = pdf.error ? 'no se pudo descargar el PDF' : await vcAdjuntarPdf(cierre.data.reserva_id, cierre.data.servicio_id, pdf.data, nombre);
+    if (e) errToast(`Quedó en Reservas (${cierre.data.codigo}), pero el PDF no se adjuntó a la ficha: ${e}`);
+    else okToast(`Voucher N° ${v.numero_factura} en Reservas · ${cierre.data.codigo}`);
+    cargarHistorialVouchers(false);
+  } catch (e) { console.error('vcPasarAReservas', e); errToast(e.message); }
+  finally { btn.disabled = false; }
 }
 function cargarMasVouchers() { vcOffset += VC_PAGE_SIZE; cargarHistorialVouchers(true); }
 window.cargarMasVouchers = cargarMasVouchers;
