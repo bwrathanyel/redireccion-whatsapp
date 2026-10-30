@@ -31476,26 +31476,19 @@ function vcpDibujarVoucher(doc, v, ctx) {
   }
 
   // ---------- Pago ----------
-  if (y + 98 > 742) { doc.addPage(); y = 40; }
-  const yp = y, half = (VCP_W - 16) / 2;
-  const yA = tabla('FORMA DE PAGO', [
-    ['MÉTODO', txt(v.forma_pago) || '—'],
-    ...(v.referencia_pago ? [['REF. PAGO MÓVIL', txt(v.referencia_pago)]] : []),
-  ], yp, { width: half, lab: 70, cols: 2 });
-  const yB = tabla('RESUMEN DE PAGO', [
+  // Con abonos (pedido del dueño 30-oct): primero lo que el cliente pagó, abono por abono, y abajo el
+  // resumen con el total. Sin el cuadro «Forma de pago»: cada abono ya dice su método y referencia.
+  const resumen = (yR, opt) => tabla('RESUMEN DE PAGO', [
     ['TOTAL GENERAL', { content: usd(v.total_general), styles: { halign: 'right', fontStyle: st('semibold') } }],
     ['PAGADO', { content: usd(v.monto_pagado), styles: { halign: 'right', fontStyle: st('semibold') } }],
     [{ content: 'RESTA', styles: { fillColor: vcpTinte(VCP.naranja, .9), textColor: VCP.ambarOsc, fontStyle: st('bold'), fontSize: 8.4 } },
       { content: usd(v.resta), styles: { halign: 'right', fontStyle: st('bold'), fontSize: 13, textColor: VCP.ambarOsc, fillColor: vcpTinte(VCP.naranja, .9) } }],
-  ], yp, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
-  y = Math.max(yA, yB);
-
-  // ---------- Abonos (opcional: el voucher reimpreso al registrar un abono los detalla; el nuevo va resaltado) ----------
+  ], yR, opt);
+  const half = (VCP_W - 16) / 2;
   if (Array.isArray(v.abonos_detalle) && v.abonos_detalle.length) {
-    y += gap;
     if (y + 60 > 742) { doc.addPage(); y = 40; }
     const nuevo = { fillColor: vcpTinte(VCP.naranja, .9), fontStyle: st('bold') };
-    conBorde({
+    y = conBorde({
       startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
       styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 5, bottom: 5, left: 9, right: 9 } },
       headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
@@ -31503,8 +31496,18 @@ function vcpDibujarVoucher(doc, v, ctx) {
       head: [['ABONOS', 'MÉTODO', 'REFERENCIA', 'MONTO']],
       body: v.abonos_detalle.map(a => [a.nuevo ? `${a.fecha} · nuevo` : a.fecha, a.metodo || '—', a.referencia || '—', usd(a.monto)]
         .map(x => a.nuevo ? { content: x, styles: nuevo } : x)),
-    }, VCP_X0, VCP_W);
+    }, VCP_X0, VCP_W) + gap;
+    if (y + 80 > 742) { doc.addPage(); y = 40; }
+    resumen(y, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
+    return;
   }
+  if (y + 98 > 742) { doc.addPage(); y = 40; }
+  const yp = y;
+  tabla('FORMA DE PAGO', [
+    ['MÉTODO', txt(v.forma_pago) || '—'],
+    ...(v.referencia_pago ? [['REF. PAGO MÓVIL', txt(v.referencia_pago)]] : []),
+  ], yp, { width: half, lab: 70, cols: 2 });
+  resumen(yp, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
 }
 
 // Pie común a las 4 páginas; se dibuja al final, cuando ya se sabe el total.

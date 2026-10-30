@@ -435,11 +435,11 @@ export function crearAbonos(c) {
   // Líneas de abonos del voucher reimpreso: los vigentes del servicio `S` + el nuevo (resaltado). Lo
   // cobrado sin fila de abono (p. ej. el pago que traía un voucher importado) va como «Pagos anteriores».
   function abonosDetalle(abono, pagado, S = null) {
-    const fila = (a, nuevo) => ({ fecha: diaMesAnio(a.fecha), metodo: a.metodo, referencia: a.referencia, monto: Number(a.monto_usd || 0), nuevo });
+    const fila = (a, nuevo) => ({ fecha: diaMesAnio(a.fecha), metodo: /^(saldo anterior|sin especificar)$/i.test(a.metodo || '') ? 'Abono' : a.metodo, referencia: a.referencia, monto: Number(a.monto_usd || 0), nuevo });
     const otros = (est.datos?.abonos || []).filter(a => !a.anulado_en && Number(a.id) !== Number(abono?.id) && delServicio(a, S));
     const filas = [...otros.map(a => fila(a, false)), ...(abono ? [fila(abono, true)] : [])];
     const sinDetalle = Math.round((Number(pagado || 0) - filas.reduce((s, f) => s + f.monto, 0)) * 100) / 100;
-    return sinDetalle > 0 ? [{ fecha: '—', metodo: 'Pagos anteriores', referencia: '', monto: sinDetalle }, ...filas] : filas;
+    return sinDetalle > 0 ? [{ fecha: '—', metodo: 'Abono anterior', referencia: '', monto: sinDetalle }, ...filas] : filas;
   }
 
   // Reserva sin voucher propio: se reimprime desde la reserva con el N° del voucher importado
