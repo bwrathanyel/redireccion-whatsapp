@@ -4884,18 +4884,19 @@ function rvArmarVoucherPaquete(datos) {
   };
   return { v, entrada };
 }
-// Voucher de abonos (2026-10-30): los abonos son siempre del hospedaje y los boletos se pagan de
-// contado, así que el abono que cubre justo el boleto (todos juntos, o cada uno) sale del detalle.
+// Voucher de abonos: solo el hospedaje. Cada abono sabe a qué servicio fue (reserva_abonos.servicio_id,
+// 2026-10-31); los de otro servicio (el boleto de contado) quedan fuera y los sin servicio cuentan.
 function rvVoucherSoloAbonos(v, servs, abonos) {
   const cent = x => Math.round(Number(x || 0) * 100);
-  const boletos = servs.filter(s => s.tipo === 'boleto_aereo' && s.precio_usd_centavos != null).map(s => Number(s.precio_usd_centavos));
-  const totalBol = boletos.reduce((t, x) => t + x, 0);
-  const resto = [...abonos];
-  const sacar = c => { const i = resto.findIndex(a => cent(a.monto_usd) === c); if (i >= 0) resto.splice(i, 1); return i >= 0; };
-  if (totalBol && !sacar(totalBol)) boletos.forEach(sacar);
   const idx = servs.map((s, i) => s.tipo === 'hospedaje' ? i : -1).filter(i => i >= 0);
+  const hospIds = idx.map(i => Number(servs[i].id));
+  const resto = abonos.filter(a => a.servicio_id == null || hospIds.includes(Number(a.servicio_id)));
+  const totalBol = servs.filter(s => s.tipo !== 'hospedaje').reduce((t, s) => t + (Number(s.precio_usd_centavos) || 0), 0);
   const totalHosp = idx.reduce((t, i) => t + (Number(servs[i].precio_usd_centavos) || 0), 0) || Math.max(0, cent(v.total_general) - totalBol);
-  const pagado = resto.reduce((t, a) => t + cent(a.monto_usd), 0);
+  const cobrado = resto.reduce((t, a) => t + cent(a.monto_usd), 0);
+  // M4: nunca pagado > total; si pasa, hay un abono mal asignado a un servicio.
+  if (cobrado > totalHosp) errToast('Los abonos del hospedaje suman más que su total: revisá a qué servicio va cada abono.');
+  const pagado = Math.min(cobrado, totalHosp);
   const dia = iso => iso ? new Date(iso).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
   const bs = n => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   Object.assign(v, {
@@ -4905,7 +4906,7 @@ function rvVoucherSoloAbonos(v, servs, abonos) {
     total_general: totalHosp / 100, monto_pagado: pagado / 100, resta: Math.max(0, totalHosp - pagado) / 100,
     abonos_detalle: resto.map(a => ({
       fecha: dia(a.fecha), referencia: a.referencia || '', monto: Number(a.monto_usd || 0),
-      metodo: a.moneda && a.moneda !== 'USD' ? `${a.metodo || 'Pago'} · Bs ${bs(a.monto_original)}${a.tasa_usd_ves ? ' a ' + bs(a.tasa_usd_ves) : ''}` : a.metodo,
+      metodo: a.moneda && a.moneda !== 'USD' ? `${a.metodo || 'Pago'} · Bs ${bs(a.monto_original)}${a.tasa_usd_ves ? ' a tasa ' + ({ EUR: 'BCV euro ', USDT: 'USDT ' }[a.tasa_tipo] || 'BCV ') + bs(a.tasa_usd_ves) : ''}` : a.metodo,
     })),
   });
 }
@@ -11461,6 +11462,8 @@ const EF_ERRORES = {
   falta_metodo_pago: 'Falta el método de pago',
   falta_monto_pagado: 'Falta el monto que pagó',
   pagado_mayor_que_total: 'El monto pagado es mayor que el total de la venta',
+  posible_duplicado: 'Ese pago (mismo monto y referencia) ya se cargó en las últimas 48 horas. Revisá la reserva antes de repetirlo',
+  solicitud_con_otros_datos: 'Ese envío ya se registró con otros datos. Recargá y revisá la reserva',
   lead_no_disponible: 'Este lead ya no está disponible',
   otro_no_combina: 'No se puede combinar "Otro" con otro tipo de venta',
 };
@@ -36711,6 +36714,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-30', emoji: '💱', titulo: 'Abonos: servicio que paga y tasa del cobro', texto: 'Al registrar un abono en Reservas › Abonos ahora elegís a qué servicio va (el hospedaje viene marcado) y, si es en bolívares, a qué tasa se cobra: BCV dólar, BCV euro o USDT (Binance P2P, se actualiza cada hora). La vista previa muestra la tasa y el equivalente en dólares; si la tasa cambió mientras tenías el formulario abierto, te avisa antes de registrar. Si cargás un pago con el mismo monto y referencia que otro de las últimas 48 horas, te pregunta si es el mismo antes de duplicarlo. El voucher de abonos ya no adivina cuál pago es del boleto.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-30', emoji: '💳', titulo: 'Abonos sin duplicados y documentos más claros', texto: 'Al registrar un abono, si los documentos no salen igual se avisa que el pago quedó guardado: no hay que cargarlo de nuevo, se usa «Reintentar documentos». Reintentar después de un corte ya no duplica el abono. El Pago móvil pasa solo a bolívares. Al anular un abono se anula su recibo y el voucher se reimprime sin ese pago. Los errores de documentos ahora dicen el motivo real.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-30', emoji: '🧾', titulo: 'Voucher de abonos del hospedaje', texto: 'En Reservas > Servicios, el botón "Voucher de abonos" arma un PDF del hospedaje con cada abono en su fila: fecha, método, referencia y monto (los pagos en bolívares muestran el monto en Bs y la tasa). El resumen cuenta solo el hotel: total, pagado y lo que resta. El pago de los boletos, que va de contado, no entra. Queda descargado y adjunto al hotel.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-29', emoji: '🤖', titulo: 'Chats donde la IA vende sola', texto: 'En Meta DM → WhatsApp hay un filtro nuevo, «IA vende», con los chats que la IA atiende de punta a punta para cerrar la venta (hoy 1 de cada 10 contactos nuevos de WhatsApp). El número al lado dice cuántos van.', roles: ['admin'] },
