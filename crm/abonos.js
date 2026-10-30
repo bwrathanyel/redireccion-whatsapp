@@ -263,10 +263,11 @@ export function crearAbonos(c) {
         referencia: data.referencia, fecha: new Date().toISOString(),
       }, data.monto_pagado, data.saldo_pendiente);
       if (docs.fallo) c.error(`Abono registrado, pero los documentos no salieron: ${docs.fallo}`);
-      else c.ok(`Abono registrado · ${docs.voucherInfo ? `Voucher ${docs.voucherInfo.numero} rev. ${docs.voucherInfo.revision}` : 'sin revisión de voucher'}${docs.reciboId ? ' · Recibo' : ''} · saldo ${usd(data.saldo_pendiente)}`);
+      else c.ok(`Abono registrado · ${docs.voucherInfo ? `Voucher ${docs.voucherInfo.numero}${docs.voucherInfo.revision ? ` rev. ${docs.voucherInfo.revision}` : ''}` : 'sin voucher'}${docs.reciboId ? ' · Recibo' : ''} · saldo ${usd(data.saldo_pendiente)}`);
       est.datos = null;
       await cargar(est.reservaId);
       c.pagosCambiaron?.();
+      await ofrecerDocumento(docs, data.saldo_pendiente);
     } catch (e) {
       poner(mensaje(e));
       c.error(mensaje(e));
@@ -314,12 +315,13 @@ export function crearAbonos(c) {
     });
     if (!pre?.candidato || Number(pre.candidato.monto_pagado) === Number(actual.monto_pagado)) return null;
     const operacion = crypto.randomUUID();
-    const pdf = await c.pdfVoucher(pre.candidato);
+    const pdf = await c.pdfVoucher({ ...pre.candidato, abonos_detalle: abonosDetalle(abono, pagado) });
+    const nombre = c.nombreArchivo ? c.nombreArchivo('voucher', pre.candidato) : `Voucher-${pre.candidato.numero_factura || v.id}-r${pre.candidato.revision}.pdf`;
     const path = `${miUid()}/documentos/voucher/${v.id}/r${pre.candidato.revision}-${operacion}.pdf`;
     const up = await sb.storage.from('vouchers-pdf').upload(path, pdf, { contentType: 'application/pdf' });
     if (up.error && String(up.error.statusCode) !== '409') throw new Error('No se pudo subir el PDF del voucher.');
     const adjunto = c.prepararAdjunto && pre.candidato.reserva_id
-      ? await c.prepararAdjunto(pre.candidato.reserva_id, pre.impacto?.servicio_id ?? null, pdf, c.nombreArchivo ? c.nombreArchivo('voucher', pre.candidato) : `Voucher-${pre.candidato.numero_factura || v.id}-r${pre.candidato.revision}.pdf`)
+      ? await c.prepararAdjunto(pre.candidato.reserva_id, pre.impacto?.servicio_id ?? null, pdf, nombre)
       : null;
     const r = await rpcDoc('documento_guardar', {
       p_tipo: 'voucher', p_id: String(v.id), p_version: actual.revision || 1, p_datos: datos,
@@ -327,7 +329,53 @@ export function crearAbonos(c) {
       p_huella: pre.huella, p_pdf_path: path,
       p_finanzas: { tipo: 'sincronizar_abono', abono_id: abono.id }, p_adjunto: adjunto,
     });
-    return { revision: r.documento?.revision ?? pre.candidato.revision, documentoId: r.documento?.revision_documento_reserva ?? null, numero: r.documento?.numero_factura || v.numero_factura };
+    return { revision: r.documento?.revision ?? pre.candidato.revision, documentoId: r.documento?.revision_documento_reserva ?? null, numero: r.documento?.numero_factura || v.numero_factura, voucherId: v.id, pdf, nombre };
+  }
+
+  // Líneas de abonos del voucher reimpreso: los vigentes + el nuevo (resaltado). Lo cobrado sin
+  // fila de abono (p. ej. el pago que traía un voucher importado) va como «Pagos anteriores».
+  function abonosDetalle(abono, pagado) {
+    const fila = (a, nuevo) => ({ fecha: diaMesAnio(a.fecha), metodo: a.metodo, referencia: a.referencia, monto: Number(a.monto_usd || 0), nuevo });
+    const filas = [...(est.datos?.abonos || []).filter(a => !a.anulado_en && Number(a.id) !== Number(abono.id)).map(a => fila(a, false)), fila(abono, true)];
+    const sinDetalle = Math.round((Number(pagado || 0) - filas.reduce((s, f) => s + f.monto, 0)) * 100) / 100;
+    return sinDetalle > 0 ? [{ fecha: '—', metodo: 'Pagos anteriores', referencia: '', monto: sinDetalle }, ...filas] : filas;
+  }
+
+  // Reserva sin voucher propio: se reimprime desde la reserva con el N° del voucher importado
+  // (sin N°, rotulado con el código de la reserva). No crea fila en vouchers ni gasta numeración.
+  async function voucherDeReserva(abono, pagado, saldo) {
+    const d = est.datos || {};
+    if (!c.voucherReserva || !c.adjuntarVoucher || !puedeGenerar()) return null;
+    const base = c.voucherReserva({ reservaId: est.reservaId, pagado, saldo, metodo: abono.metodo, referencia: abono.referencia });
+    if (!base) return null;
+    const numero = d.voucher_importado?.numero_voucher ? String(d.voucher_importado.numero_voucher).padStart(6, '0') : '';
+    const v = { ...base, numero_factura: numero, rotulo: `Voucher ${numero || d.codigo || ''} · abono del ${diaMesAnio(abono.fecha)}`, abonos_detalle: abonosDetalle(abono, pagado) };
+    await c.librerias();
+    const pdf = await c.pdfVoucher(v);
+    const nombre = c.nombreArchivo ? c.nombreArchivo('voucher', { ...v, numero_factura: numero || d.codigo, fecha_entrada: null }) : `Voucher ${numero || d.codigo}.pdf`;
+    await c.adjuntarVoucher(est.reservaId, pdf, nombre);
+    return { numero: numero || d.codigo, revision: null, documentoId: null, pdf, nombre };
+  }
+
+  // Tras el abono: el voucher al día (o, sin voucher, el recibo) listo para mandarlo al cliente.
+  async function ofrecerDocumento(docs, saldo) {
+    const v = docs.voucherInfo, doc = v?.pdf ? v : docs.recibo;
+    if (!doc?.pdf || !c.confirmar) return;
+    const file = new File([doc.pdf], doc.nombre, { type: 'application/pdf' });
+    const compartir = !!navigator.canShare?.({ files: [file] });
+    const titulo = v?.pdf ? `Voucher ${v.numero}${v.revision ? ` · revisión ${v.revision}` : ''} actualizado` : 'Recibo del abono listo';
+    const ok = await c.confirmar({ titulo, textoOk: compartir ? 'Compartir con el cliente' : 'Descargar PDF', textoCancelar: 'Cerrar',
+      detalle: `${v?.pdf ? 'Incluye el abono nuevo, el total abonado' : 'Esta reserva no tiene voucher para reimprimir. El recibo trae el total pagado'} y el saldo de ${usd(saldo)}.\nYa quedó adjunto en la reserva.` });
+    if (!ok) return;
+    let accion = 'descarga';
+    if (compartir) {
+      try { await navigator.share({ files: [file], title: doc.nombre }); accion = 'compartir'; }
+      catch (e) { if (e.name === 'AbortError') return; c.descargar(doc.pdf, doc.nombre); }
+    } else c.descargar(doc.pdf, doc.nombre);
+    if (v?.pdf && v.revision && v.voucherId) {
+      try { await rpcDoc('documento_registrar_entrega', { p_tipo: 'voucher', p_id: String(v.voucherId), p_version: v.revision, p_accion: accion, p_operacion: crypto.randomUUID() }); }
+      catch { /* la entrega ya ocurrió: solo falta el registro en el historial */ }
+    }
   }
 
   // Recibo de abono: 1 página con el membrete del voucher.
@@ -386,9 +434,9 @@ export function crearAbonos(c) {
     const d = est.datos || {};
     let actual = null;
     if (d.voucher?.id) { try { actual = (await rpcDoc('documento_historial', { p_tipo: 'voucher', p_id: String(d.voucher.id) }))?.actual || null; } catch { actual = null; } }
-    let voucherInfo = null, reciboId = null, fallo = null;
+    let voucherInfo = null, reciboId = null, recibo = null, fallo = null;
     try {
-      voucherInfo = await revisarVoucher(abono, pagado, actual);
+      voucherInfo = d.voucher?.id ? await revisarVoucher(abono, pagado, actual) : await voucherDeReserva(abono, pagado, saldo);
     } catch (e) { fallo = mensaje(e); }
     try {
       if (puedeGenerar()) {
@@ -399,7 +447,8 @@ export function crearAbonos(c) {
           monto_usd: abono.monto_usd, metodo: abono.metodo, referencia: abono.referencia,
           total_pagado: pagado, saldo,
         });
-        reciboId = await adjuntarRecibo(blob, c.nombreArchivo ? c.nombreArchivo('recibo', { cliente: actual?.cliente_nombre, codigo: d.codigo, fecha: abono.fecha }) : `Recibo abono ${diaMesAnio(abono.fecha)}.pdf`);
+        recibo = { pdf: blob, nombre: c.nombreArchivo ? c.nombreArchivo('recibo', { cliente: actual?.cliente_nombre, codigo: d.codigo, fecha: abono.fecha }) : `Recibo abono ${diaMesAnio(abono.fecha)}.pdf` };
+        reciboId = await adjuntarRecibo(blob, recibo.nombre);
       }
     } catch (e) { fallo = fallo || mensaje(e); }
     try {
@@ -409,7 +458,7 @@ export function crearAbonos(c) {
         p_voucher_revision: voucherInfo?.revision ?? null, p_error: fallo,
       });
     } catch { /* el abono ya está guardado: el estado de documentos no lo puede tumbar */ }
-    return { voucherInfo, reciboId, fallo };
+    return { voucherInfo, reciboId, recibo, fallo };
   }
 
   async function verRecibo(documentoId, btn) {
@@ -431,6 +480,7 @@ export function crearAbonos(c) {
     if (docs.fallo) c.error(`No se pudieron generar los documentos: ${docs.fallo}`);
     else c.ok('Documentos del abono generados.');
     est.datos = null; await cargar(est.reservaId);
+    await ofrecerDocumento(docs, est.datos?.saldo_pendiente ?? a.saldo);
   }
 
   // Punto de montaje que llama app.js desde rvIniciar.

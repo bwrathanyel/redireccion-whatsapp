@@ -4739,52 +4739,12 @@ const rvVoucherRango = s => {
   const fechas = !ini ? '' : fin && s.fecha_fin !== s.fecha_inicio ? `${ini} al ${fin}` : ini;
   return [fechas, s.hora ? String(s.hora).slice(0, 5) : ''].filter(Boolean).join(' ');
 };
-// Voucher de todo el paquete (hotel + vuelos + traslados...). Si falta cédula, teléfono o
-// forma de pago, la misma hoja de confirmación los pide antes de armar el PDF.
-async function rvGenerarVoucherPaquete(btn) {
+// Datos del voucher del paquete con la reserva abierta (RV_DET). `datos`: cliente, documento, teléfono,
+// forma de pago y referencia. También lo usa el abono para reimprimir el voucher de una reserva sin voucher propio.
+function rvArmarVoucherPaquete(datos) {
   const c = PV_ACTUAL, det = RV_DET || {}, r = det.reserva || {};
   const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
-  if (!servs.length) { errToast('La reserva no tiene servicios activos para el voucher.'); return; }
   const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
-  const titular = pax.find(p => p.titular) || pax[0] || null;
-  const prev = RV_VOUCHER_PAQUETE.get(RV_RESERVA_ID) || {};
-  const cliente = (([titular?.nombre, titular?.apellido].filter(Boolean).join(' ').trim()) || String(c?.nombre || r.cliente || '').trim()).replace(/\s+/g, ' ');
-  const documento = titular?.numero_documento || prev.documento || '';
-  const telefono = titular?.telefono || c?.telefono || r.telefono || prev.telefono || '';
-  // Forma de pago y referencia: lo confirmado antes en este voucher, la reserva, y si no el último abono vigente.
-  let ultimo = null;
-  if (!prev.formaPago && !r.forma_pago) {
-    try {
-      const { data: lista } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: RV_RESERVA_ID });
-      ultimo = (lista?.abonos || []).filter(a => !a.anulado_en)
-        .sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
-    } catch (e) { console.error('voucher: abonos', e); }
-  }
-  const formaPago = prev.formaPago || r.forma_pago || RV_METODO_A_VOUCHER[ultimo?.metodo] || '';
-  const referencia = prev.referencia || r.referencia_pago || ultimo?.referencia || '';
-  const faltan = [];
-  if (!cliente || /^sin nombre$/i.test(cliente)) faltan.push('nombre');
-  if (!documento) faltan.push('cédula');
-  if (!telefono) faltan.push('teléfono');
-  if (!formaPago) faltan.push('forma de pago');
-  let datos = { cliente, documento, telefono, formaPago, referencia };
-  if (faltan.length) {
-    const f = await confirmarSheet({
-      titulo: 'Datos del voucher del paquete',
-      detalle: `Falta completar: ${faltan.join(', ')}. Estos datos van impresos en el voucher.`,
-      textoOk: 'Generar voucher',
-      campos: [
-        { id: 'cliente', label: 'Nombre y apellido', valor: cliente, requerido: true, placeholder: 'Titular de la reserva' },
-        { id: 'documento', label: 'Cédula del titular', valor: documento, requerido: true, placeholder: 'V-12.345.678' },
-        { id: 'telefono', label: 'Teléfono', valor: telefono, requerido: true, placeholder: '0414-1234567' },
-        { id: 'formaPago', label: 'Forma de pago', tipo: 'select', valor: formaPago, requerido: true, opciones: [{ v: '', t: 'Elegí una...' }, ...RV_VOUCHER_PAGOS.map(p => ({ v: p, t: p }))] },
-        { id: 'referencia', label: 'Referencia del pago móvil', valor: referencia, requeridoSi: out => out.formaPago === 'Pago móvil', placeholder: 'Número o últimos dígitos' },
-      ],
-    });
-    if (!f) return;
-    datos = f;
-    RV_VOUCHER_PAQUETE.set(RV_RESERVA_ID, datos);
-  }
   const doc = String(datos.documento || '').trim();
   const documentoFinal = /^[\d.\s]+$/.test(doc) ? rvDocMostrar(doc, 'cedula') : doc.toUpperCase();
   const inicios = servs.map(s => s.fecha_inicio).filter(Boolean).sort();
@@ -4836,6 +4796,55 @@ async function rvGenerarVoucherPaquete(btn) {
     }),
     pasajeros: pax.map(p => ({ nombre: [p.nombre, p.apellido].filter(Boolean).join(' '), documento: p.numero_documento ? [RV_TIPO_DOC[p.tipo_documento] || '', p.numero_documento].filter(Boolean).join(' ') : '' })),
   };
+  return { v, entrada };
+}
+// Voucher de todo el paquete (hotel + vuelos + traslados...). Si falta cédula, teléfono o
+// forma de pago, la misma hoja de confirmación los pide antes de armar el PDF.
+async function rvGenerarVoucherPaquete(btn) {
+  const c = PV_ACTUAL, det = RV_DET || {}, r = det.reserva || {};
+  const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
+  if (!servs.length) { errToast('La reserva no tiene servicios activos para el voucher.'); return; }
+  const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
+  const titular = pax.find(p => p.titular) || pax[0] || null;
+  const prev = RV_VOUCHER_PAQUETE.get(RV_RESERVA_ID) || {};
+  const cliente = (([titular?.nombre, titular?.apellido].filter(Boolean).join(' ').trim()) || String(c?.nombre || r.cliente || '').trim()).replace(/\s+/g, ' ');
+  const documento = titular?.numero_documento || prev.documento || '';
+  const telefono = titular?.telefono || c?.telefono || r.telefono || prev.telefono || '';
+  // Forma de pago y referencia: lo confirmado antes en este voucher, la reserva, y si no el último abono vigente.
+  let ultimo = null;
+  if (!prev.formaPago && !r.forma_pago) {
+    try {
+      const { data: lista } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: RV_RESERVA_ID });
+      ultimo = (lista?.abonos || []).filter(a => !a.anulado_en)
+        .sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
+    } catch (e) { console.error('voucher: abonos', e); }
+  }
+  const formaPago = prev.formaPago || r.forma_pago || RV_METODO_A_VOUCHER[ultimo?.metodo] || '';
+  const referencia = prev.referencia || r.referencia_pago || ultimo?.referencia || '';
+  const faltan = [];
+  if (!cliente || /^sin nombre$/i.test(cliente)) faltan.push('nombre');
+  if (!documento) faltan.push('cédula');
+  if (!telefono) faltan.push('teléfono');
+  if (!formaPago) faltan.push('forma de pago');
+  let datos = { cliente, documento, telefono, formaPago, referencia };
+  if (faltan.length) {
+    const f = await confirmarSheet({
+      titulo: 'Datos del voucher del paquete',
+      detalle: `Falta completar: ${faltan.join(', ')}. Estos datos van impresos en el voucher.`,
+      textoOk: 'Generar voucher',
+      campos: [
+        { id: 'cliente', label: 'Nombre y apellido', valor: cliente, requerido: true, placeholder: 'Titular de la reserva' },
+        { id: 'documento', label: 'Cédula del titular', valor: documento, requerido: true, placeholder: 'V-12.345.678' },
+        { id: 'telefono', label: 'Teléfono', valor: telefono, requerido: true, placeholder: '0414-1234567' },
+        { id: 'formaPago', label: 'Forma de pago', tipo: 'select', valor: formaPago, requerido: true, opciones: [{ v: '', t: 'Elegí una...' }, ...RV_VOUCHER_PAGOS.map(p => ({ v: p, t: p }))] },
+        { id: 'referencia', label: 'Referencia del pago móvil', valor: referencia, requeridoSi: out => out.formaPago === 'Pago móvil', placeholder: 'Número o últimos dígitos' },
+      ],
+    });
+    if (!f) return;
+    datos = f;
+    RV_VOUCHER_PAQUETE.set(RV_RESERVA_ID, datos);
+  }
+  const { v, entrada } = rvArmarVoucherPaquete(datos), codigo = v.codigo_reserva, destino = v.destino_hospedaje;
   const previo = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...'; }
   try {
@@ -30238,6 +30247,20 @@ function abonosModulo() {
     pdfVoucher: async d => new Blob([await construirVoucherPdf(d)], { type: 'application/pdf' }),
     descargar: vcDescargar,
     nombreArchivo: docNombrePorTipo,
+    confirmar: confirmarSheet,
+    adjuntarVoucher: async (reservaId, pdf, nombre) => { const falla = await vcAdjuntarPdf(reservaId, null, pdf, nombre); if (falla) throw new Error(falla); },
+    // Reserva sin voucher propio: el voucher se rearma con la reserva abierta en el drawer (RV_DET),
+    // con el pagado/saldo que devolvió el abono. Sin la reserva cargada o sin servicios, no hay voucher.
+    voucherReserva: ({ reservaId, pagado, saldo, metodo, referencia }) => {
+      const det = RV_DET, r = det?.reserva || {}, c = PV_ACTUAL || {};
+      if (Number(RV_RESERVA_ID) !== Number(reservaId) || !(det?.servicios || []).some(s => !s.anulado_en && s.estado !== 'cancelado')) return null;
+      const pax = (det.pasajeros || []).filter(p => !p.anulado_en), t = pax.find(p => p.titular) || pax[0] || null;
+      const { v } = rvArmarVoucherPaquete({
+        cliente: [t?.nombre, t?.apellido].filter(Boolean).join(' ').trim() || c.nombre || r.cliente || '',
+        documento: t?.numero_documento || '', telefono: t?.telefono || c.telefono || r.telefono || '',
+        formaPago: r.forma_pago || RV_METODO_A_VOUCHER[metodo] || metodo || '', referencia: r.referencia_pago || referencia || '' });
+      return { ...v, numero_factura: '', total_general: Math.round((Number(pagado) + Number(saldo)) * 100) / 100, monto_pagado: Number(pagado), resta: Number(saldo) };
+    },
     prepararAdjunto: async (reservaId, servicioId, pdf, nombre) => {
       const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: reservaId, servicio_id: servicioId, tipo: 'voucher', nombre, mime: 'application/pdf', tamano: pdf.size } });
       if (firma.error || !firma.data?.ok) throw new Error('No se pudo preparar el PDF de la reserva. La revisión vigente sigue igual.');
@@ -31336,6 +31359,22 @@ function vcpDibujarVoucher(doc, v, ctx) {
       { content: usd(v.resta), styles: { halign: 'right', fontStyle: st('bold'), fontSize: 13, textColor: VCP.ambarOsc, fillColor: vcpTinte(VCP.naranja, .9) } }],
   ], yp, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
   y = Math.max(yA, yB);
+
+  // ---------- Abonos (opcional: el voucher reimpreso al registrar un abono los detalla; el nuevo va resaltado) ----------
+  if (Array.isArray(v.abonos_detalle) && v.abonos_detalle.length) {
+    y += gap;
+    if (y + 60 > 742) { doc.addPage(); y = 40; }
+    const nuevo = { fillColor: vcpTinte(VCP.naranja, .9), fontStyle: st('bold') };
+    conBorde({
+      startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
+      styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 5, bottom: 5, left: 9, right: 9 } },
+      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
+      columnStyles: { 0: { cellWidth: 120 }, 3: { halign: 'right', fontStyle: st('semibold') } },
+      head: [['ABONOS', 'MÉTODO', 'REFERENCIA', 'MONTO']],
+      body: v.abonos_detalle.map(a => [a.nuevo ? `${a.fecha} · nuevo` : a.fecha, a.metodo || '—', a.referencia || '—', usd(a.monto)]
+        .map(x => a.nuevo ? { content: x, styles: nuevo } : x)),
+    }, VCP_X0, VCP_W);
+  }
 }
 
 // Pie común a las 4 páginas; se dibuja al final, cuando ya se sabe el total.
@@ -31476,7 +31515,7 @@ async function construirVoucherPdf(v) {
   doc.addPage();
   vcpDibujarTerminos(doc, ctx, VC_TERMINOS);
   vcpPie(doc, ctx, nVoucher);
-  drRotularPdf(doc, v.numero_factura ? `Voucher ${v.numero_factura} · revisión ${v.revision || 1}` : `Voucher ${v.codigo_reserva || ''}`);
+  drRotularPdf(doc, v.rotulo || v.numero_factura ? v.rotulo || `Voucher ${v.numero_factura} · revisión ${v.revision || 1}` : `Voucher ${v.codigo_reserva || ''}`);
   return doc.output('arraybuffer');
 }
 
