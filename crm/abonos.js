@@ -134,7 +134,7 @@ export function crearAbonos(c) {
       <div class="ab-chips">${chips}</div>
       <label class="fl" for="ab-ref">Referencia</label><input class="ei" id="ab-ref" maxlength="120" placeholder="Número de operación">
       <label class="fl" for="ab-nota">Nota (opcional)</label><textarea class="ei" id="ab-nota" maxlength="2000" rows="2"></textarea>
-      <label class="fl" for="ab-file">Captura del comprobante del pago</label>
+      <label class="fl" for="ab-file">Captura del comprobante del pago (opcional)</label>
       <input class="ei" id="ab-file" type="file" accept="image/jpeg,image/png,image/webp">
       <p class="ab-ia" id="ab-ia" hidden></p>
       <p class="ab-err" id="ab-err"></p>
@@ -181,7 +181,7 @@ export function crearAbonos(c) {
     const eq = document.getElementById('ab-usd');
     if (eq) eq.textContent = !monto || !tasa ? '—' : usd(monto / tasa);
   }
-  // La captura ya es obligatoria: se aprovecha para prellenar (EF analizar-comprobante).
+  // Si suben la captura, se aprovecha para prellenar (EF analizar-comprobante).
   // Solo completa lo que está vacío; nunca registra nada.
   async function leerComprobante(archivo) {
     const aviso = document.getElementById('ab-ia'); if (!aviso) return;
@@ -242,7 +242,6 @@ export function crearAbonos(c) {
     const archivo = est.archivo || document.getElementById('ab-file')?.files?.[0] || null;
     if (!(monto > 0)) return poner(ERRORES.monto_invalido);
     if (!est.metodo) return poner(ERRORES.metodo_invalido);
-    if (!archivo && est.metodo !== 'Efectivo') return poner(ERRORES.captura_requerida);
     est.guardando = true;
     btn.disabled = true;
     try {
