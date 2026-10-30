@@ -2316,6 +2316,10 @@ function renderPersonalCards() {
   grid.querySelectorAll('[data-desbloquear]').forEach(b => { b.onclick = () => desbloquearFreelancerUI(b.dataset.desbloquear); });
   grid.querySelectorAll('[data-exentar]').forEach(b => { b.onclick = () => exceptuarHoy(b.dataset.exentar); });
   grid.querySelectorAll('[data-timeline]').forEach(b => { b.onclick = () => abrirTimelineAsesor(b.dataset.timeline, b.dataset.timelineNombre); });
+  grid.querySelectorAll('[data-ficha]').forEach(c => {
+    c.onclick = e => { if (!e.target.closest('button,a,input,select,summary')) abrirFichaPersona(c.dataset.ficha); };
+    c.onkeydown = e => { if (e.target === c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrirFichaPersona(c.dataset.ficha); } };
+  });
 }
 
 /* ---------- Timeline del día por asesor (admin, Gestión de Personal) ---------- */
@@ -2349,60 +2353,133 @@ async function cargarTimelineAsesor() {
 document.getElementById('timeline-fecha')?.addEventListener('change', cargarTimelineAsesor);
 document.getElementById('timeline-cerrar')?.addEventListener('click', () => closeSheet('timeline-asesor-sheet'));
 
-function cardPersonaHtml(u) {
-  const ico = iconoDePersona(u);
-  const chips = (u.es_freelancer ? '<span class="pc-chip">Freelance</span>' : '')
-    + (u.bloqueado ? '<span class="pc-chip pc-chip-rojo">Bloqueado</span>' : '');
-  const cargo = u.cargo ? esc(u.cargo) : '<span class="pc-cargo-vacio">Sin cargo asignado</span>';
-  const dias = (u.dias || []).map(diaPersonaHtml).join('');
-  const detalle = dias
-    ? '<details class="pc-dias"><summary><i class="fas fa-calendar-days"></i> Ver día por día (' + (u.dias || []).length + ')</summary>' + dias + '</details>'
-    : '<div class="pc-vacio">Todavía no se conectó desde que arrancó el contador.</div>';
-
-  // Asistencia de hoy: antes era una pestaña aparte. Acá vive donde importa,
-  // en la tarjeta de la persona.
+// Asistencia de hoy: antes era una pestaña aparte. Vive en la tarjeta y en la ficha.
+function asistPersonaHtml(u) {
   const asist = u.exento_hoy
     ? '<span class="pc-asist exento">Exento hoy</span>'
     : u.marco_hoy
       ? '<span class="pc-asist ok">Marcó hoy</span>'
       : '<span class="pc-asist no">No marcó hoy</span>';
   const strikes = u.strikes_mes ? '<span class="pc-asist strike">' + u.strikes_mes + ' strike' + (u.strikes_mes === 1 ? '' : 's') + ' este mes</span>' : '';
-  const exentarBtn = (!u.exento_hoy && !u.marco_hoy)
-    ? '<button class="btn-sm" data-exentar="' + u.usuario_id + '">Exceptuar hoy</button>' : '';
+  return asist + strikes;
+}
+const puedeExentar = u => !u.exento_hoy && !u.marco_hoy;
 
-  // Bloque freelance: activo vs idle. Solo tiene sentido para freelancers --
-  // son los únicos con latido de actividad y con bloqueo a los 15 min.
+// Bloque freelance: activo vs idle. Solo tiene sentido para freelancers --
+// son los únicos con latido de actividad y con bloqueo a los 15 min.
+function frlPersonaHtml(u) {
   const a = u.actividad || {};
-  const frlBloque = u.es_freelancer
-    ? '<div class="pc-frl">'
-      + '<div class="pc-frl-r"><span>Trabajo real hoy</span><b>' + fmtMinutos(a.activo_hoy || 0) + '</b></div>'
-      + '<div class="pc-frl-r"><span>Inactivo hoy</span><b class="pc-idle">' + fmtMinutos(a.idle_hoy || 0) + '</b></div>'
-      + '<div class="pc-frl-r"><span>Semana (real / inactivo)</span><b>' + fmtMinutos(a.activo_semana || 0) + ' / ' + fmtMinutos(a.idle_semana || 0) + '</b></div>'
-      + (u.strikes_freelancer ? '<div class="pc-frl-r"><span>Bloqueos por inactividad</span><b>' + u.strikes_freelancer + '</b></div>' : '')
-      + '</div>'
+  return '<div class="pc-frl">'
+    + '<div class="pc-frl-r"><span>Trabajo real hoy</span><b>' + fmtMinutos(a.activo_hoy || 0) + '</b></div>'
+    + '<div class="pc-frl-r"><span>Inactivo hoy</span><b class="pc-idle">' + fmtMinutos(a.idle_hoy || 0) + '</b></div>'
+    + '<div class="pc-frl-r"><span>Semana (real / inactivo)</span><b>' + fmtMinutos(a.activo_semana || 0) + ' / ' + fmtMinutos(a.idle_semana || 0) + '</b></div>'
+    + (u.strikes_freelancer ? '<div class="pc-frl-r"><span>Bloqueos por inactividad</span><b>' + u.strikes_freelancer + '</b></div>' : '')
+  + '</div>';
+}
+
+function avatarPersonaHtml(u, grande) {
+  const ico = iconoDePersona(u);
+  return '<div class="pc-ico' + (grande ? ' gpf-ava' : '') + '" style="background:' + ico.c + '1f;color:' + ico.c + '"><i class="fas ' + ico.i + '"></i>'
+    + (u.conectado_ahora ? '<span class="pc-online" title="Conectado ahora"></span>' : '') + '</div>';
+}
+
+function cardPersonaHtml(u) {
+  const chips = (u.es_freelancer ? '<span class="pc-chip">Freelance</span>' : '')
+    + (u.bloqueado ? '<span class="pc-chip pc-chip-rojo">Bloqueado</span>' : '');
+  const cargo = u.cargo ? esc(u.cargo) : '<span class="pc-cargo-vacio">Sin cargo asignado</span>';
+  const exentarBtn = puedeExentar(u) ? '<button class="btn-sm" type="button" data-exentar="' + u.usuario_id + '">Exceptuar hoy</button>' : '';
+  const a = u.actividad || {};
+  const frl = u.es_freelancer
+    ? '<div class="pc-frl-mini"><span>Real hoy <b>' + fmtMinutos(a.activo_hoy || 0) + '</b></span><span>Inactivo <b class="pc-idle">' + fmtMinutos(a.idle_hoy || 0) + '</b></span></div>'
     : '';
   const desbloquear = (u.es_freelancer && u.bloqueado)
-    ? '<button class="dbtn save pc-desbloq" data-desbloquear="' + u.usuario_id + '"><i class="fas fa-unlock"></i> Desbloquear</button>' : '';
+    ? '<button class="dbtn save pc-desbloq" type="button" data-desbloquear="' + u.usuario_id + '"><i class="fas fa-unlock"></i> Desbloquear</button>' : '';
 
-  return '<div class="pc' + (u.bloqueado ? ' pc-bloq' : '') + '">'
+  return '<div class="pc pc-click' + (u.bloqueado ? ' pc-bloq' : '') + '" data-ficha="' + u.usuario_id + '" role="button" tabindex="0" aria-label="Ver ficha de ' + esc(u.nombre || 'Sin nombre') + '">'
     + '<div class="pc-top">'
-      + '<div class="pc-ico" style="background:' + ico.c + '1f;color:' + ico.c + '"><i class="fas ' + ico.i + '"></i></div>'
+      + avatarPersonaHtml(u)
       + '<div class="pc-id">'
-        + '<div class="pc-nombre">' + esc(u.nombre || 'Sin nombre') + (u.conectado_ahora ? '<span class="pc-online" title="Conectado ahora"></span>' : '') + chips + '</div>'
+        + '<div class="pc-nombre">' + esc(u.nombre || 'Sin nombre') + chips + '</div>'
         + '<div class="pc-rol">' + (ROL_LABEL_GP[rolPersonal(u)] || esc(u.rol || '')) + (u.username ? ' · @' + esc(u.username) : '') + '</div>'
         + '<div class="pc-cargo">' + cargo + '</div>'
       + '</div>'
-      + '<button class="pc-edit" type="button" data-editar="' + u.usuario_id + '" title="Editar"><i class="fas fa-pen"></i></button>'
-      + (u.rol === 'asesor' ? '<button class="pc-edit" type="button" data-timeline="' + u.usuario_id + '" data-timeline-nombre="' + esc(u.nombre || '') + '" title="Ver el día"><i class="fas fa-timeline"></i></button>' : '')
+      + '<button class="pc-edit" type="button" data-editar="' + u.usuario_id + '" title="Editar" aria-label="Editar a ' + esc(u.nombre || '') + '"><i class="fas fa-pen"></i></button>'
     + '</div>'
-    + '<div class="pc-asist-row">' + asist + strikes + exentarBtn + '</div>'
+    + '<div class="pc-asist-row">' + asistPersonaHtml(u) + exentarBtn + '</div>'
     + '<div class="pc-cifras" title="Tiempo con el CRM abierto y a la vista. No cuenta la pestaña en segundo plano ni la jornada que quedó sin cerrar.">'
     + '<div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_hoy) + '</span><span class="pc-cifra-t">Presente hoy</span></div>'
     + '<div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_semana) + '</span><span class="pc-cifra-t">Esta semana</span></div></div>'
-    + frlBloque
+    + frl
     + desbloquear
-    + detalle
+    + '<div class="pc-mas"><span>' + ((u.dias || []).length ? 'Ficha y día por día' : 'Ver ficha') + '</span><i class="fas fa-chevron-right"></i></div>'
   + '</div>';
+}
+
+/* ---------- Ficha completa del miembro (click en la tarjeta) ---------- */
+function abrirFichaPersona(usuarioId, sinPush) {
+  const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
+  if (!u) return;
+  const id = u.usuario_id;
+  const admin = ROL === 'admin';
+  const estado = u.bloqueado ? '<span class="pc-asist no">Bloqueado</span>'
+    : u.conectado_ahora ? '<span class="pc-asist ok">Conectado ahora</span>' : '<span class="pc-asist">Desconectado</span>';
+  const permisos = [
+    [u.es_freelancer, 'fa-user-clock', 'Freelancer'],
+    [u.es_boleteria, 'fa-ticket', 'Boletería'],
+    [u.ve_voucher, 'fa-file-invoice', 'Vouchers'],
+    [u.ve_informe_diario, 'fa-file-lines', 'Informe diario'],
+  ].map(([on, i, t]) => '<span class="gpf-perm-chip' + (on ? ' on' : '') + '"><i class="fas ' + (on ? i : 'fa-minus') + '"></i> ' + t + '</span>').join('');
+  const contacto = [
+    ['fa-at', u.username ? '@' + u.username : ''],
+    ['fa-envelope', u.correo],
+    ['fa-phone', u.whatsapp],
+  ].filter(c => c[1]).map(([i, t]) => '<div class="gpf-dato"><i class="fas ' + i + '"></i><span>' + esc(t) + '</span></div>').join('');
+  const nDias = Number(document.getElementById((personalSoloFreelancers ? 'frl' : 'gp') + '-personal-dias')?.value) || 7;
+  const totalPeriodo = (u.dias || []).reduce((s, d) => s + (d.minutos || 0), 0);
+  const dias = (u.dias || []).map(diaPersonaHtml).join('');
+  const acciones = (admin ? '<button class="dbtn save" type="button" id="gpf-editar"><i class="fas fa-pen"></i> Editar</button>' : '')
+    + (u.rol === 'asesor' ? '<button class="dbtn gh" type="button" id="gpf-timeline"><i class="fas fa-timeline"></i> Ver el día</button>' : '')
+    + (puedeExentar(u) ? '<button class="dbtn gh" type="button" id="gpf-exentar"><i class="fas fa-calendar-check"></i> Exceptuar hoy</button>' : '')
+    + (u.es_freelancer && u.bloqueado ? '<button class="dbtn gh" type="button" id="gpf-desbloq"><i class="fas fa-unlock"></i> Desbloquear</button>' : '');
+
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="gpf-head">
+      ${avatarPersonaHtml(u, true)}
+      <div class="gpf-id">
+        <div class="dn">${esc(u.nombre || 'Sin nombre')}</div>
+        <div class="pc-rol">${ROL_LABEL_GP[rolPersonal(u)] || esc(u.rol || '')}</div>
+        <div class="gpf-cargo">${u.cargo ? esc(u.cargo) : '<span class="pc-cargo-vacio">Sin cargo asignado</span>'}</div>
+        <div class="gpf-estado">${estado}</div>
+      </div>
+    </div>
+    ${acciones ? '<div class="gpf-acciones">' + acciones + '</div>' : ''}
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-calendar-day"></i> Hoy</div>
+      <div class="pc-asist-row">${asistPersonaHtml(u)}</div>
+      <div class="pc-cifras gpf-cifras" title="Tiempo con el CRM abierto y a la vista. No cuenta la pestaña en segundo plano ni la jornada que quedó sin cerrar.">
+        <div class="pc-cifra"><span class="pc-cifra-v">${fmtMinutos(u.minutos_hoy)}</span><span class="pc-cifra-t">Presente hoy</span></div>
+        <div class="pc-cifra"><span class="pc-cifra-v">${fmtMinutos(u.minutos_semana)}</span><span class="pc-cifra-t">Esta semana</span></div>
+        <div class="pc-cifra"><span class="pc-cifra-v">${fmtMinutos(totalPeriodo)}</span><span class="pc-cifra-t">Últimos ${nDias} días</span></div>
+      </div>
+      ${u.es_freelancer ? frlPersonaHtml(u) : ''}
+    </section>
+    ${contacto ? '<section class="gpf-sec"><div class="gpf-sec-t"><i class="fas fa-address-card"></i> Contacto</div>' + contacto + '</section>' : ''}
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-key"></i> Accesos</div>
+      <div class="gpf-perms">${permisos}</div>
+    </section>
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-calendar-days"></i> Día por día${dias ? ' <span class="gpf-sec-n">' + (u.dias || []).length + '</span>' : ''}</div>
+      ${dias || '<div class="gpf-vacio">Todavía no se conectó desde que arrancó el contador.</div>'}
+    </section>`;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerBg').classList.add('open');
+  if (!sinPush) navPush({ type: 'drawer' });
+  const on = (sel, fn) => { const b = document.getElementById(sel); if (b) b.onclick = fn; };
+  on('gpf-editar', () => abrirEditorPersona(id, true));
+  on('gpf-timeline', () => { window.closeDrawer(); abrirTimelineAsesor(id, u.nombre); });
+  on('gpf-exentar', () => { window.closeDrawer(); exceptuarHoy(id); });
+  on('gpf-desbloq', () => { window.closeDrawer(); desbloquearFreelancerUI(id); });
 }
 
 function diaPersonaHtml(d) {
@@ -2422,60 +2499,109 @@ function diaPersonaHtml(d) {
 }
 
 /* ---------- Alta / edición / baja ---------- */
-function abrirEditorPersona(usuarioId) {
+function abrirEditorPersona(usuarioId, desdeFicha) {
   const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
   if (!u) return;
+  const esAsesor = u.rol === 'asesor' || u.asesor_id;
+  // Género: lo agrega la migración 20261027180000 (dsh). Sin la columna en
+  // personal_resumen no se muestra, así guardar no choca con una RPC que no existe.
+  const conGenero = esAsesor && 'genero' in u;
+  const permiso = (id, on, titulo, detalle) => `
+      <label class="gpf-switch"><span class="gpf-switch-txt"><b>${titulo}</b><small>${detalle}</small></span>
+        <input type="checkbox" role="switch" id="${id}"${on ? ' checked' : ''}></label>`;
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead"><div><div class="dn">${esc(u.nombre)}</div><div class="dm">@${esc(u.username || '')}</div></div></div>
-    <div class="edit-box" style="margin-top:16px">
-      <div class="eb-title"><i class="fas fa-id-card"></i> Datos</div>
-      <label class="fl">Nombre</label>
+    <div class="gpf-head">
+      ${desdeFicha ? '<button class="pc-edit gpf-volver" type="button" id="gpf-volver" title="Volver a la ficha" aria-label="Volver a la ficha"><i class="fas fa-arrow-left"></i></button>' : ''}
+      ${avatarPersonaHtml(u, true)}
+      <div class="gpf-id">
+        <div class="dn">${esc(u.nombre || 'Sin nombre')}</div>
+        <div class="pc-rol">Editar${u.username ? ' · @' + esc(u.username) : ''}</div>
+        ${u.bloqueado ? '<div class="gpf-estado"><span class="pc-asist no">Bloqueado</span></div>' : ''}
+      </div>
+    </div>
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-id-card"></i> Perfil</div>
+      <label class="fl" for="pe-nombre">Nombre</label>
       <input id="pe-nombre" class="ei" type="text" value="${esc(u.nombre || '')}">
-      <label class="fl">Usuario (con el que inicia sesión)</label>
-      <input id="pe-username" class="ei" type="text" autocapitalize="off" autocorrect="off" value="${esc(u.username || '')}">
-      <label class="fl">Correo</label>
-      <input id="pe-correo" class="ei" type="email" autocapitalize="off" autocorrect="off" placeholder="nombre@ejemplo.com" value="${esc(u.correo || '')}">
-      <label class="fl">Cargo</label>
+      <label class="fl" for="pe-cargo">Cargo</label>
       <input id="pe-cargo" class="ei" type="text" placeholder="Ej: Ejecutivo de Boletería · Gerente Administrativo" value="${esc(u.cargo || '')}">
-      <label class="fl">Rol</label>
+      <label class="fl" for="pe-username">Usuario (con el que inicia sesión)</label>
+      <input id="pe-username" class="ei" type="text" autocapitalize="off" autocorrect="off" value="${esc(u.username || '')}">
+      <label class="fl" for="pe-correo">Correo</label>
+      <input id="pe-correo" class="ei" type="email" autocapitalize="off" autocorrect="off" placeholder="nombre@ejemplo.com" value="${esc(u.correo || '')}">
+    </section>
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-user-tag"></i> Rol${esAsesor ? ' y contacto' : ''}</div>
+      <label class="fl" for="pe-rol">Rol</label>
       <select id="pe-rol" class="ei">
         ${['asesor', 'asesor_boleteria', 'admin', 'marketing', 'boleteria', 'administrativo'].map(r => `<option value="${r}"${rolPersonal(u) === r ? ' selected' : ''}>${VISTA_ROL_LABEL[r] || ROL_LABEL_GP[r] || r}</option>`).join('')}
       </select>
-      ${(u.rol === 'asesor' || u.asesor_id) ? `
-      <label class="fl">Teléfono</label>
+      ${esAsesor ? `
+      <label class="fl" for="pe-whatsapp">Teléfono</label>
       <input id="pe-whatsapp" class="ei" type="tel" placeholder="Ej: +58 412 1234567" value="${esc(u.whatsapp || '')}">
-      <label class="fl">Grupo de Telegram</label>
-      <input id="pe-telegram" class="ei" type="text" placeholder="ID del grupo o chat" value="${esc(u.telegram_chat_id || '')}">
-      <label class="fl">Género</label>
+      <label class="fl" for="pe-telegram">Grupo de Telegram</label>
+      <input id="pe-telegram" class="ei" type="text" placeholder="ID del grupo o chat" value="${esc(u.telegram_chat_id || '')}">` : ''}
+      ${conGenero ? `
+      <label class="fl" for="pe-genero">Género</label>
       <select id="pe-genero" class="ei">
         <option value=""${u.genero ? '' : ' selected'}>Sin definir</option>
         <option value="femenino"${u.genero === 'femenino' ? ' selected' : ''}>Femenino — «la asesora»</option>
         <option value="masculino"${u.genero === 'masculino' ? ' selected' : ''}>Masculino — «el asesor»</option>
       </select>
       <div class="form-hint">Así la IA le habla de esta persona al cliente: «la asesora Ambar» o «el asesor Luis». Si queda sin definir, la IA evita el artículo y no lo adivina por el nombre.</div>` : ''}
-      <label class="pe-check" style="margin-top:12px"><input type="checkbox" id="pe-freelancer"${u.es_freelancer ? ' checked' : ''}> Es freelancer (se bloquea a los 15 min sin actividad)</label>
-      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-boleteria"${u.es_boleteria ? ' checked' : ''}> Es agente de boletería (atiende la cola de solicitudes de vuelos)</label>
-      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-voucher"${u.ve_voucher ? ' checked' : ''}> Ve vouchers</label>
-      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-informe"${u.ve_informe_diario ? ' checked' : ''}> Ve informe diario</label>
-      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-bloqueado"${u.bloqueado ? ' checked' : ''}> Bloqueado (sin acceso, sin darlo de baja)</label>
-      <div class="edit-err" id="pe-err"></div>
-      <button class="dbtn save" id="pe-guardar" type="button"><i class="fas fa-check"></i> Guardar</button>
-      <label class="fl" style="margin-top:14px">Nueva contraseña (opcional)</label>
+    </section>
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-key"></i> Permisos</div>
+      ${permiso('pe-freelancer', u.es_freelancer, 'Freelancer', 'Se bloquea a los 15 min sin actividad.')}
+      ${permiso('pe-boleteria', u.es_boleteria, 'Agente de boletería', 'Atiende la cola de solicitudes de vuelos. Para un asesor, elegí el rol «Asesor + Boletería».')}
+      ${permiso('pe-voucher', u.ve_voucher, 'Ve vouchers', 'Accede a la sección de vouchers.')}
+      ${permiso('pe-informe', u.ve_informe_diario, 'Ve informe diario', 'Recibe y consulta el informe del día.')}
+    </section>
+    <input type="checkbox" id="pe-bloqueado" hidden${u.bloqueado ? ' checked' : ''}>
+    <div class="edit-err" id="pe-err"></div>
+    <button class="dbtn save gpf-guardar" id="pe-guardar" type="button"><i class="fas fa-check"></i> Guardar cambios</button>
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-lock"></i> Contraseña</div>
+      <label class="fl" for="pe-password">Nueva contraseña</label>
       <div class="ei-clave"><input id="pe-password" class="ei" type="password" minlength="8" placeholder="Mínimo 8 caracteres"></div>
-      <button class="dbtn save" id="pe-guardar-clave" type="button"><i class="fas fa-check"></i> Guardar contraseña</button>
       <div class="form-hint">Queda activa de inmediato, sin pedirle cambiarla al entrar.</div>
-      <button class="dbtn gh" id="pe-restablecer" type="button"><i class="fas fa-key"></i> Restablecer acceso</button>
-      <div class="form-hint">Genera una contraseña temporal para pasársela una sola vez; la persona la cambia al entrar.</div>
-      <button class="dbtn gh" id="pe-baja" type="button" style="color:#ef4444"><i class="fas fa-user-slash"></i> Dar de baja</button>
-      <div style="font-size:11px;color:var(--muted2);margin-top:10px;line-height:1.5">Dar de baja le quita el acceso al instante y lo saca de las listas, pero <b>no borra su historial</b> de asistencia, leads ni comisiones. Se puede reactivar.</div>
-    </div>`;
+      <div class="gpf-fila">
+        <button class="dbtn gh" id="pe-guardar-clave" type="button"><i class="fas fa-check"></i> Guardar contraseña</button>
+        <button class="dbtn gh" id="pe-restablecer" type="button"><i class="fas fa-key"></i> Clave temporal</button>
+      </div>
+      <div class="form-hint">«Clave temporal» genera una contraseña para pasársela una sola vez; la persona la cambia al entrar.</div>
+    </section>
+    <section class="gpf-sec gpf-peligro">
+      <div class="gpf-sec-t"><i class="fas fa-triangle-exclamation"></i> Zona sensible</div>
+      <div class="gpf-peligro-fila">
+        <div><b>${u.bloqueado ? 'Acceso bloqueado' : 'Bloquear acceso'}</b><small>${u.bloqueado ? 'No puede entrar al CRM. Su cuenta sigue activa.' : 'Le quita la entrada sin darlo de baja.'}</small></div>
+        <button class="dbtn peligro" id="pe-bloquear" type="button"><i class="fas fa-${u.bloqueado ? 'lock-open' : 'lock'}"></i> ${u.bloqueado ? 'Desbloquear' : 'Bloquear'}</button>
+      </div>
+      <div class="gpf-peligro-fila">
+        <div><b>Dar de baja</b><small>Le quita el acceso y lo saca de las listas, pero <b>no borra su historial</b> de asistencia, leads ni comisiones. Se puede reactivar.</small></div>
+        <button class="dbtn peligro" id="pe-baja" type="button"><i class="fas fa-user-slash"></i> Dar de baja</button>
+      </div>
+    </section>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
-  navPush({ type: 'drawer' });
+  if (!desdeFicha) navPush({ type: 'drawer' });
   document.getElementById('pe-guardar').onclick = () => guardarPersona(usuarioId);
   document.getElementById('pe-guardar-clave').onclick = () => guardarClavePersona(usuarioId);
   document.getElementById('pe-restablecer').onclick = () => restablecerAcceso(usuarioId);
   document.getElementById('pe-baja').onclick = () => bajaPersonal(usuarioId, false);
+  document.getElementById('pe-bloquear').onclick = async () => {
+    const bloquear = !u.bloqueado;
+    if (!(await confirmarSheet({
+      titulo: bloquear ? `¿Bloquear el acceso de ${u.nombre}?` : `¿Desbloquear a ${u.nombre}?`,
+      detalle: (bloquear ? 'No va a poder entrar al CRM hasta que lo desbloquees.' : 'Vuelve a poder entrar al CRM.') + ' También se guardan los cambios de este formulario.',
+      textoOk: bloquear ? 'Bloquear' : 'Desbloquear', destructivo: bloquear,
+    }))) return;
+    document.getElementById('pe-bloqueado').checked = bloquear;
+    await guardarPersona(usuarioId);
+    const cb = document.getElementById('pe-bloqueado');
+    if (cb) cb.checked = !!u.bloqueado;
+  };
+  document.getElementById('gpf-volver')?.addEventListener('click', () => abrirFichaPersona(usuarioId, true));
   montarOjo(document.getElementById('pe-password'));
 }
 
@@ -36157,6 +36283,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-29', emoji: '👥', titulo: 'Ficha completa de cada persona del equipo', texto: 'En Gestión de Personal → Personal, tocá cualquier tarjeta para ver la ficha completa: estado, asistencia de hoy, tiempo presente, contacto, accesos y el día por día. El editor ahora va por secciones (Perfil, Rol, Permisos con interruptores, Contraseña) y bloquear o dar de baja quedaron aparte, en una zona sensible con confirmación.', roles: ['admin'] },
   { fecha: '2026-10-28', emoji: '📅', titulo: 'Rendimiento IA por día exacto', texto: 'Nuevo botón "Elegir día" junto a Hoy / 7 días / 30 días: abrí el calendario, elegí cualquier fecha pasada y el panel muestra las estadísticas de ese día completo, comparadas contra el mismo día de la semana anterior.', roles: ['admin'] },
   { fecha: '2026-10-27', emoji: '🎯', titulo: 'Reparto por destino', texto: 'El Reparto objetivo tiene una pestaña nueva, «Por destino»: cada destino (Margarita, Los Roques, Canaima, Mérida, Otros nacionales, Corporativo e Internacional) puede tener su propio reparto entre asesores. Mientras no lo actives, ese destino se sigue sorteando con el reparto Nacional tal como está hoy, sin cambiarle nada a nadie. La pestaña muestra cuántos leads trajo cada destino en los últimos 90 días, cómo se están repartiendo de verdad entre los asesores, y antes de guardar el efecto sobre la carga de cada uno: el porcentaje que le tocaría y cuánto se mueve. «Quitar reparto propio» devuelve el destino al reparto general.', roles: ['admin'] },
   { fecha: '2026-10-26', emoji: '🖱️', titulo: 'Tareas: se ve qué se puede abrir', texto: 'En Tareas, cada fila de la lista ahora muestra una flecha al costado y se ilumina en naranja al pasar el mouse; la flecha también se enciende. Las pestañas, los filtros, el bloque «Cola diaria», las tarjetas de Mi día y las personas de Equipo responden igual al pasar el mouse, y con el teclado cada elemento marca dónde estás.', roles: ROLES_TODOS },
