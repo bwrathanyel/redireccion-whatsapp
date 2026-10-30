@@ -31492,11 +31492,11 @@ function vcpDibujarVoucher(doc, v, ctx) {
   const half = (VCP_W - 16) / 2;
   if (Array.isArray(v.abonos_detalle) && v.abonos_detalle.length) {
     if (y + 75 > 742) { doc.addPage(); y = 40; }
-    y = resumen(y, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 }) + gap;
+    y = resumen(y, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 }) + 6;
     const nuevo = { fillColor: vcpTinte(VCP.naranja, .9), fontStyle: st('bold') };
     y = conBorde({
-      startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
-      styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 5, bottom: 5, left: 9, right: 9 } },
+      startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 44 }, rowPageBreak: 'avoid',
+      styles: { font: F, fontStyle: st('medium'), fontSize: 8.4, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 3, bottom: 3, left: 9, right: 9 } },
       headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
       columnStyles: { 0: { cellWidth: 120 }, 3: { halign: 'right', fontStyle: st('semibold') } },
       head: [['ABONOS', 'MÉTODO', 'REFERENCIA', 'MONTO']],
