@@ -94,13 +94,14 @@ const nf = (loc, o) => { const k = 'n' + loc + JSON.stringify(o || {}); let f = 
 const fmt = n => typeof (n ?? 0) === 'number' ? nf('es-VE').format(n ?? 0) : (n ?? 0).toLocaleString('es-VE');
 
 // Nombre legible y uniforme para todo documento que se descarga del CRM:
-// "Lotus 360 - Voucher 006364 - Juan Pérez - Los Roques - 2026-11-15.pdf".
+// "Lotus 360 - Voucher 006364 - Juan Perez - Los Roques - 2026-11-15.pdf".
 // La empresa va primero (así se agrupan en la carpeta), después qué es, de
-// quién y la fecha AAAA-MM-DD al final, que ordena sola. Se quitan solo los
-// caracteres que Windows no acepta; acentos y espacios se conservan.
+// quién y la fecha AAAA-MM-DD al final, que ordena sola. Se quitan los
+// caracteres que Windows no acepta y los acentos: al compartir el PDF por
+// WhatsApp desde Windows el nombre llegaba como «JOSÃ ISTURIZ».
 const DOC_EMPRESA = 'Lotus 360';
 const docParte = (v, max = 50) => {
-  const t = String(v ?? '').normalize('NFC').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const t = String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (t.length <= max) return t;
   const c = t.slice(0, max);
   return (c.includes(' ') ? c.slice(0, c.lastIndexOf(' ')) : c).replace(/[\s,.;:-]+$/, '');
@@ -4698,7 +4699,7 @@ async function rvGenerarVoucher(servicioId, btn) {
     documento_identidad: titular ? [RV_TIPO_DOC[titular.tipo_documento] || '', titular.numero_documento].filter(Boolean).join(' ') : '',
     telefono: (titular?.telefono) || c.telefono || '', asesor_nombre: c.asesor || '',
     destino_hospedaje: hosp ? (hosp.detalle?.hotel || hosp.descripcion || '') : (r.destino || c.destino || ''),
-    fecha_entrada: fecha(hosp?.fecha_inicio), fecha_salida: fecha(hosp?.fecha_fin),
+    fecha_entrada: fecha(c.fecha_viaje_inicio || r.fecha_viaje_inicio || hosp?.fecha_inicio), fecha_salida: fecha(c.fecha_viaje_fin || r.fecha_viaje_fin || hosp?.fecha_fin),
     check_in: hosp?.detalle?.check_in || '', check_out: hosp?.detalle?.check_out || '',
     modalidad: hosp?.detalle?.plan || '', habitaciones: hosp?.detalle?.habitacion || '',
     total_dias: hosp?.detalle?.noches ? `${hosp.detalle.noches} noches` : '',
@@ -4749,7 +4750,8 @@ function rvArmarVoucherPaquete(datos) {
   const documentoFinal = /^[\d.\s]+$/.test(doc) ? rvDocMostrar(doc, 'cedula') : doc.toUpperCase();
   const inicios = servs.map(s => s.fecha_inicio).filter(Boolean).sort();
   const fines = servs.map(s => s.fecha_fin || s.fecha_inicio).filter(Boolean).sort();
-  const entrada = inicios[0] || r.fecha_viaje_inicio, salida = fines[fines.length - 1] || r.fecha_viaje_fin;
+  // Check-in/out del voucher = Inicio/Fin del viaje de la reserva; las fechas de los servicios solo si faltan.
+  const entrada = c?.fecha_viaje_inicio || r.fecha_viaje_inicio || inicios[0], salida = c?.fecha_viaje_fin || r.fecha_viaje_fin || fines[fines.length - 1];
   const hosp = servs.find(s => s.tipo === 'hospedaje') || null;
   const destinos = [...new Set(servs.map(s => s.destino).filter(Boolean))];
   const destinoBase = r.destino || c?.destino || destinos[0] || '';
