@@ -5638,6 +5638,16 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .iv-tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
   padding:2px 7px;border-radius:999px;background:var(--panel);border:1px solid var(--line2);color:var(--muted2)}
 .iv-tag.empresa{display:block;width:max-content;max-width:100%;margin-top:7px;color:var(--blue);border-color:color-mix(in srgb,var(--blue) 35%,transparent)}
+.iv-sob{display:flex;flex-direction:column;gap:7px;margin-top:8px}
+.iv-card input[type=search]{width:100%;height:38px;background:var(--bg2);border:1px solid var(--line2);border-radius:10px;padding:0 11px;color:var(--txt);font-size:12.5px}
+.iv-sob-res{display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto}
+.iv-sob-r{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;min-height:40px;padding:6px 10px;text-align:left;
+  background:var(--bg2);border:1px solid var(--line2);border-radius:10px;color:var(--txt);font:inherit;font-size:12px;cursor:pointer}
+.iv-sob-r span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.iv-sob-r em{font-style:normal;font-weight:700;font-variant-numeric:tabular-nums}
+.iv-sob-r:hover{border-color:var(--accent)}
+.iv-sob-r.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.iv-sob-vacio{font-size:11.5px;color:var(--muted2)}
 .iv-copiar{align-self:flex-start;padding:2px 0;background:none;border:0;color:var(--accent);font:inherit;font-size:11px;font-weight:700;cursor:pointer}
 .iv-copiar:hover{text-decoration:underline}
 .iv-aviso{display:flex;gap:9px;padding:9px 11px;border-radius:10px;border-left:3px solid var(--amber);background:color-mix(in srgb,var(--amber) 10%,transparent);

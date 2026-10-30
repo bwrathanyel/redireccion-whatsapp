@@ -4230,11 +4230,16 @@ function abrirPostventa(c, accionInicial = null) {
       <div class="rs-grid2">
         <div><label class="rs-lbl" for="pv-e-inicio">Inicio</label><input class="ei" id="pv-e-inicio" type="date" value="${esc(c.fecha_viaje_inicio || '')}"></div>
         <div><label class="rs-lbl" for="pv-e-fin">Fin</label><input class="ei" id="pv-e-fin" type="date" value="${esc(c.fecha_viaje_fin || '')}"></div>
-        <div><span class="rs-lbl">Destino</span><div class="rs-ro">${esc(c.destino || c.servicio || 'Sin definir')}</div></div>
+        <div><label class="rs-lbl" for="pv-e-destino">Destino</label><input class="ei" id="pv-e-destino" maxlength="200" value="${esc(c.destino || '')}" placeholder="${esc(c.servicio || 'Sin definir')}"></div>
         <div><span class="rs-lbl">Etapa</span><div class="rs-ro rs-ro-etapa"><span id="pv-e-etapa-txt">${esc((PV_ETAPAS[c.etapa] || [c.etapa])[0])}</span><button class="rs-q" id="pv-e-etapa-cambiar" type="button" aria-expanded="false">Cambiar</button></div></div>
       </div>
       <select class="ei" id="pv-e-etapa" aria-label="Etapa" hidden>${opt(PV_ETAPAS, c.etapa)}</select>
       <div class="csub">La etapa se actualiza sola según pagos, servicios y fechas; «Cambiar» la fija a mano.</div>
+      <div class="rs-sec">Cliente <span>Titular de la reserva (cambia también en su lead)</span></div>
+      <div class="rs-grid2">
+        <div><label class="rs-lbl" for="pv-e-nombre">Nombre</label><input class="ei" id="pv-e-nombre" maxlength="160" value="${esc(c.nombre || '')}"></div>
+        <div><label class="rs-lbl" for="pv-e-telefono">Teléfono</label><input class="ei" id="pv-e-telefono" type="tel" maxlength="40" value="${esc(c.telefono || '')}"></div>
+      </div>
       <div class="rs-sec">Checklist <span>Las marcas «Auto» las pone el sistema</span></div>
       <div class="pv-doc-grid rs-chk-box">${Object.entries(PV_DOCS).map(([k, t]) => pvChkFila(k, t, docs)).join('')}</div>
       <div class="rs-sec">Mensajes al cliente <span>WhatsApp con plantilla aprobada; antes de enviar se ve el texto</span></div>
@@ -4315,6 +4320,16 @@ async function pvGuardarEmpresa() {
   PV_EMPRESA_PREVIA = { id, ref };
   return null;
 }
+// Nombre, teléfono y destino viven en el lead: actualizar_lead ignora los vacíos (no borra).
+async function pvGuardarCliente() {
+  const c = PV_ACTUAL, cambio = {};
+  [['nombre', 'p_nombre'], ['telefono', 'p_telefono'], ['destino', 'p_destino']].forEach(([k, p]) => {
+    const v = val('pv-e-' + k).trim(); if (v && v !== (c[k] || '')) cambio[p] = v;
+  });
+  if (!Object.keys(cambio).length) return null;
+  const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: c.lead_id, ...cambio });
+  return error || !data?.ok ? (error?.message || data?.error || 'error desconocido') : null;
+}
 async function guardarPostventa(marcarPagado) {
   if (!PV_ACTUAL) return;
   const btn = document.getElementById(marcarPagado ? 'pv-e-pago' : 'pv-e-guardar');
@@ -4341,8 +4356,10 @@ async function guardarPostventa(marcarPagado) {
   });
   if (error || !data?.ok) { btn.disabled = false; btn.innerHTML = previo; err.textContent = 'No se pudo guardar: ' + (errReserva(error, data) || 'error desconocido'); return; }
   const errEmpresa = await pvGuardarEmpresa();
+  const errCliente = await pvGuardarCliente();
   btn.disabled = false; btn.innerHTML = previo;
   if (errEmpresa) { err.textContent = 'La postventa se guardó, pero no la empresa: ' + errEmpresa; return; }
+  if (errCliente) { err.textContent = 'La postventa se guardó, pero no los datos del cliente: ' + errCliente; return; }
   window.closeDrawer();
   // Si lo cerró un asesor, guardar_postventa lo manda a verificación en vez
   // de a PAGO REALIZADO directo (ver 20260728000000_blindar_cierre_venta.sql)
@@ -22918,7 +22935,20 @@ function ivElegirLeadInicial(fila) {
 function ivAplicarEmpresa(f, empresa) {
   f.empresa_id = empresa;
   const c = (f.candidatos || []).find(x => x.id === f.lead_id);
-  if (empresa && c && !f.vincular && !f.crear_lead && (c.motivos || []).every(m => m === 'telefono')) { f.lead_id = null; f.crear_lead = true; }
+  if (empresa && c && !f.vincular && !f.modoSob && !f.crear_lead && (c.motivos || []).every(m => m === 'telefono')) { f.lead_id = null; f.crear_lead = true; }
+}
+
+// «Sobrescribir»: sin búsqueda se ofrecen las reservas parecidas que ya encontró ivReservasSimilares.
+const ivSobSimilares = f => (f.similares || []).map(r => ({ id: r.id, codigo: r.codigo, cliente: r.cliente, monto_total: r.monto_total, lead_id: r.lead_id }));
+async function ivBuscarReservas(q) {
+  const { data, error } = await sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: q });
+  if (error) { console.error('postventa_bandeja', error); return []; }
+  return (data || []).slice(0, 8).map(r => ({ id: r.id, codigo: r.codigo, cliente: r.nombre, monto_total: r.monto_total, lead_id: r.lead_id, destino: r.destino, inicio: r.fecha_viaje_inicio }));
+}
+function ivSobResHtml(f) {
+  const lista = f.sobRes || ivSobSimilares(f);
+  if (!lista.length) return `<div class="iv-sob-vacio">${(f.sobQ || '').trim().length < 2 ? 'Escribí al menos 2 letras.' : 'Sin reservas con ese dato.'}</div>`;
+  return lista.map(r => `<button type="button" class="iv-sob-r${f.sobrescribir?.id === r.id ? ' on' : ''}" data-rid="${r.id}" aria-pressed="${f.sobrescribir?.id === r.id}"><b>${esc(r.codigo || '#' + r.id)}</b><span>${esc(r.cliente || 'Sin nombre')}${r.destino ? ' · ' + esc(r.destino) : ''}${r.inicio ? ' · ' + esc(pvFecha(r.inicio)) : ''}</span><em>${ivMoney(r.monto_total)}</em></button>`).join('');
 }
 
 function ivMoney(n) { return n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -22963,26 +22993,30 @@ function ivRender() {
     if (f.estado === 'error' && !d.numero_voucher) return `<article class="iv-card" data-e="error"><div class="iv-card-cab"><div class="iv-card-id"><div class="iv-num vacio">No se pudo leer</div>${archivo}</div><span class="iv-estado">Error</span></div>${ivAviso(f.resultado && f.resultado !== 'no se pudo leer' ? ivTexto(f.resultado) : 'Probá con otro PDF o cargá la venta a mano.', 'error')}</article>`;
     const cand = (f.candidatos || []).find(c => c.id === f.lead_id);
     const sims = f.similares || [];
-    const opciones = [`<option value="" ${f.crear_lead && !f.vincular ? 'selected' : ''}>➕ Crear lead nuevo</option>`].concat(
+    const opciones = [`<option value="" ${f.crear_lead && !f.vincular && !f.modoSob ? 'selected' : ''}>➕ Crear lead nuevo</option>`,
+      `<option value="s" ${f.modoSob ? 'selected' : ''}>✏️ ${f.sobrescribir ? `Sobrescribir ${esc(f.sobrescribir.codigo || '#' + f.sobrescribir.id)} · ${esc(f.sobrescribir.cliente || '')}` : 'Sobrescribir una reserva existente…'}</option>`].concat(
       sims.map(r => `<option value="r:${r.id}" ${f.vincular === r.id ? 'selected' : ''}>🔗 Ya está en el CRM: ${esc(r.codigo || '#' + r.id)} · ${esc(r.cliente)} · ${ivMoney(r.monto_total)} (no duplica)</option>`),
-      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && !f.vincular && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}${c.motivos ? ` (${esc(ivMotivos(c))})` : ''}</option>`)
+      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && !f.vincular && !f.modoSob && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}${c.motivos ? ` (${esc(ivMotivos(c))})` : ''}</option>`)
     ).join('');
-    const debil = cand && !cand.fuerte && !f.crear_lead && !f.vincular;
+    const debil = cand && !cand.fuerte && !f.crear_lead && !f.vincular && !f.modoSob;
     const empresa = f.empresa_id && IV_EMPRESAS.find(e => e.id === f.empresa_id);
     const sinMonto = empresa && !(Number(d.total_cobrado) > 0);
     const abierta = ivAbierta(f);
-    const posible = !f.vincular && sims.find(r => !r.fuerte);
+    const posible = !f.vincular && !f.modoSob && sims.find(r => !r.fuerte);
     const mismatch = cand && !f.crear_lead && !f.vincular && cand.asesor && ivNorm(cand.asesor) !== ivNorm(d.asesor_pdf);
     const otras = abierta && f.empresa_id ? abiertas.filter(x => x !== f && x.empresa_id !== f.empresa_id).length : 0;
     const num = d.numero_voucher != null && d.numero_voucher !== '' ? esc(String(d.numero_voucher)) : '';
     const avisos = [
       abierta && debil && ivAviso('Coincide solo el nombre: revisá que sea el mismo cliente o elegí ➕ Crear lead nuevo.'),
       abierta && posible && ivAviso(`Ojo: ${esc(posible.codigo || '#' + posible.id)} de ${esc(posible.cliente)} tiene el mismo monto. Si es este viaje, elegí 🔗 para no duplicar la venta.`),
+      abierta && f.modoSob && ivAviso(f.sobrescribir
+        ? `Se reemplazan los servicios, el total, las fechas y el hotel de <b>${esc(f.sobrescribir.codigo || '#' + f.sobrescribir.id)}</b>, y el nombre, teléfono y destino del cliente. Los abonos y una factura que ya exista no se tocan.`
+        : 'Buscá y elegí la reserva que este voucher va a sobrescribir.'),
       abierta && mismatch && ivAviso(`El lead es de ${esc(cand.asesor)}, el voucher dice ${esc(d.asesor_pdf)}.${esAdmin ? ` <label><input type="checkbox" class="iv-reasignar" ${f.reasignar ? 'checked' : ''}> reasignar</label>` : ''}`),
       f.resultado && f.estado !== 'hecho' && ivAviso(ivTexto(f.resultado), ['error', 'duplicado'].includes(f.estado) ? 'error' : ''),
       d.nota_revision && !f.resultado && ivAviso(ivTexto(d.nota_revision)),
     ].filter(Boolean).join('');
-    const icono = f.vincular ? 'link' : f.crear_lead ? 'user-plus' : 'user-check';
+    const icono = f.modoSob ? 'pen-to-square' : f.vincular ? 'link' : f.crear_lead ? 'user-plus' : 'user-check';
     return `<article class="iv-card" data-e="${f.estado}" data-fid="${f.id}"${abierta ? ` data-sel="${f.sel ? 1 : 0}"` : ''}>
       <div class="iv-card-cab">
         ${abierta ? `<label class="iv-check" title="Incluir en la importación"><input type="checkbox" class="iv-sel" aria-label="Importar voucher ${num || esc(f.nombre)}" ${f.sel ? 'checked' : ''}></label>` : ''}
@@ -22996,10 +23030,10 @@ function ivRender() {
       </div>
       ${abierta || conEmpresa ? `<div class="iv-destino">
         ${conEmpresa ? `<div class="iv-sec"><h4><i class="fas fa-building" aria-hidden="true"></i> Empresa</h4>${abierta ? `<select class="iv-empresa" aria-label="Empresa del voucher ${num}"><option value="">Particular</option>${IV_EMPRESAS.map(e => `<option value="${e.id}" ${f.empresa_id === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>` : esc(empresa?.nombre || 'Particular')}</div>${otras ? `<button type="button" class="iv-copiar">Usar en ${otras === 1 ? 'la otra tarjeta' : `las otras ${otras}`}</button>` : ''}` : ''}
-        ${abierta ? `<div class="iv-sec"><h4><i class="fas fa-${icono}" aria-hidden="true"></i> Se carga en</h4><select class="iv-lead" aria-label="Dónde se carga el voucher ${num}">${opciones}</select></div>` : ''}
+        ${abierta ? `<div class="iv-sec"><h4><i class="fas fa-${icono}" aria-hidden="true"></i> Se carga en</h4><select class="iv-lead" aria-label="Dónde se carga el voucher ${num}">${opciones}</select>${f.modoSob ? `<div class="iv-sob"><input type="search" class="iv-sob-q" aria-label="Buscar la reserva a sobrescribir" placeholder="Código, cliente o teléfono" value="${esc(f.sobQ || '')}"><div class="iv-sob-res">${ivSobResHtml(f)}</div></div>` : ''}</div>` : ''}
       </div>` : ''}
       ${avisos}
-      ${f.estado === 'hecho' ? `<div class="iv-ok"><i class="fas fa-circle-check" aria-hidden="true"></i><div><b>${f.sin_factura ? 'Sin factura · empresa' : 'Facturado ' + ivMoney(f.resultado_monto)}</b><span>${esc(f.resultado || '')}</span></div></div>` : ''}
+      ${f.estado === 'hecho' ? `<div class="iv-ok"><i class="fas fa-circle-check" aria-hidden="true"></i><div><b>${f.sobrescrita ? 'Reserva sobrescrita' + (f.resultado_monto ? ' · facturado ' + ivMoney(f.resultado_monto) : '') : f.sin_factura ? 'Sin factura · empresa' : 'Facturado ' + ivMoney(f.resultado_monto)}</b><span>${esc(f.resultado || '')}</span></div></div>` : ''}
     </article>`;
   }).join('');
   const nSel = abiertas.filter(f => f.sel).length;
@@ -23011,9 +23045,27 @@ function ivRender() {
     card.querySelector('.iv-sel')?.addEventListener('change', e => { f.sel = e.target.checked; ivRender(); });
     card.querySelector('.iv-lead')?.addEventListener('change', e => {
       const v = e.target.value, sim = v.startsWith('r:') ? (f.similares || []).find(r => r.id === +v.slice(2)) : null;
+      f.modoSob = v === 's';
+      if (f.modoSob) { f.vincular = null; f.crear_lead = false; f.lead_id = f.sobrescribir?.lead_id ?? null; ivRender(); document.querySelector(`.iv-card[data-fid="${f.id}"] .iv-sob-q`)?.focus(); return; }
+      f.sobrescribir = null;
       f.vincular = sim ? sim.id : null;
       f.lead_id = sim ? sim.lead_id : (v ? +v : null);
       f.crear_lead = !v; ivRender();
+    });
+    const sobQ = card.querySelector('.iv-sob-q');
+    sobQ?.addEventListener('input', () => {
+      f.sobQ = sobQ.value; clearTimeout(f.sobT);
+      f.sobT = setTimeout(async () => {
+        const q = f.sobQ.trim(), lista = q.length < 2 ? null : await ivBuscarReservas(q);
+        if (f.sobQ.trim() !== q) return;
+        f.sobRes = lista;
+        const res = document.querySelector(`.iv-card[data-fid="${f.id}"] .iv-sob-res`); if (res) res.innerHTML = ivSobResHtml(f);
+      }, 300);
+    });
+    card.querySelector('.iv-sob-res')?.addEventListener('click', e => {
+      const b = e.target.closest('[data-rid]'); if (!b) return;
+      const r = (f.sobRes || ivSobSimilares(f)).find(x => x.id === +b.dataset.rid); if (!r) return;
+      f.sobrescribir = r; f.lead_id = r.lead_id; ivRender();
     });
     card.querySelector('.iv-reasignar')?.addEventListener('change', e => f.reasignar = e.target.checked);
     card.querySelector('.iv-empresa')?.addEventListener('change', e => { ivAplicarEmpresa(f, Number(e.target.value) || null); ivRender(); });
@@ -23029,10 +23081,20 @@ function ivRender() {
 async function ivImportar() {
   const pend = IV_FILAS.filter(f => f.sel && ivAbierta(f));
   if (!pend.length) { errToast('No hay filas para importar'); return; }
+  const sinElegir = pend.find(f => f.modoSob && !f.sobrescribir);
+  if (sinElegir) { errToast(`Elegí la reserva a sobrescribir del voucher ${sinElegir.datos.numero_voucher || sinElegir.nombre}`); return; }
+  const sobs = pend.filter(f => f.modoSob);
+  if (sobs.length && !await confirmarSheet({
+    titulo: sobs.length === 1 ? `Sobrescribir ${sobs[0].sobrescribir.codigo || 'la reserva'}` : `Sobrescribir ${sobs.length} reservas`,
+    detalle: sobs.map(f => `${f.sobrescribir.codigo || '#' + f.sobrescribir.id} (${f.sobrescribir.cliente || 'sin nombre'}) ← voucher ${f.datos.numero_voucher || f.nombre}`).join('\n')
+      + '\n\nSe reemplazan servicios, total, fechas, hotel y los datos del cliente. Los abonos y una factura existente no se tocan.',
+    textoOk: 'Sobrescribir',
+  })) return;
   const btn = document.getElementById('iv-importar-btn');
   IV_IMPORTANDO = true; btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Importando…';
   const filas = pend.map(f => ({
     datos: f.datos, lead_id: f.crear_lead ? null : f.lead_id, crear_lead: f.crear_lead, vincular_reserva_id: f.vincular || null,
+    sobrescribir_reserva_id: f.modoSob ? f.sobrescribir?.id || null : null,
     reasignar: f.reasignar, empresa_id: f.empresa_id || null, pdf_base64: f.pdf_b64, archivo_hash: f.hash,
   }));
   const { data, error } = await sb.functions.invoke('voucher-a-venta', { body: { accion: 'importar', filas } });
@@ -23042,7 +23104,7 @@ async function ivImportar() {
   (data.resultados || []).forEach(r => { porNum[r.numero_voucher] = r; });
   pend.forEach(f => {
     const r = porNum[f.datos.numero_voucher]; if (!r) return;
-    if (r.estado === 'importado') { f.estado = 'hecho'; f.resultado = 'Lead #' + r.lead_id + (r.factura_id ? ' · factura #' + r.factura_id : '') + (r.nota ? ' · ' + r.nota : ''); f.resultado_monto = r.monto_facturado; f.sin_factura = !r.factura_id && !!r.empresa_id; f.sel = false; }
+    if (r.estado === 'importado') { f.estado = 'hecho'; f.resultado = 'Lead #' + r.lead_id + (r.factura_id ? ' · factura #' + r.factura_id : '') + (r.nota ? ' · ' + r.nota : ''); f.resultado_monto = r.monto_facturado; f.sin_factura = !r.factura_id && !!r.empresa_id; f.sobrescrita = !!r.sobrescrita; f.sel = false; }
     else if (r.estado === 'ya_facturado') { f.estado = 'duplicado'; f.resultado = r.nota || 'El lead ya tenía factura'; f.sel = false; }
     else if (r.estado === 'duplicado') { f.estado = 'duplicado'; f.resultado = 'Voucher ya importado antes'; f.sel = false; }
     else { f.estado = 'error'; f.resultado = r.error || 'error'; }
