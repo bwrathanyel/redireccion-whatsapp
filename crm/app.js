@@ -31492,7 +31492,6 @@ function vcpDibujarVoucher(doc, v, ctx) {
   const half = (VCP_W - 16) / 2;
   if (Array.isArray(v.abonos_detalle) && v.abonos_detalle.length) {
     if (y + 75 > 742) { doc.addPage(); y = 40; }
-    y = resumen(y, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 }) + 6;
     const nuevo = { fillColor: vcpTinte(VCP.naranja, .9), fontStyle: st('bold') };
     y = conBorde({
       startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 44 }, rowPageBreak: 'avoid',
@@ -31502,7 +31501,9 @@ function vcpDibujarVoucher(doc, v, ctx) {
       head: [['ABONOS', 'MÉTODO', 'REFERENCIA', 'MONTO']],
       body: v.abonos_detalle.map(a => [a.nuevo ? `${a.fecha} · nuevo` : a.fecha, (a.metodo || '—') + (a.servicio ? ` · ${a.servicio}` : ''), a.referencia || '—', usd(a.monto)]
         .map(x => a.nuevo ? { content: x, styles: nuevo } : x)),
-    }, VCP_X0, VCP_W);
+    }, VCP_X0, VCP_W) + 6;
+    if (y + 75 > 742) { doc.addPage(); y = 40; }
+    resumen(y, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
     return;
   }
   if (y + 98 > 742) { doc.addPage(); y = 40; }
