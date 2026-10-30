@@ -437,16 +437,17 @@ export function crearAbonos(c) {
     return r.documento_id;
   }
 
-  async function cadenaAbono(abono, pagado, saldo) {
+  // `reciboPrevio`: al reintentar, el recibo que ya quedó adjunto no se vuelve a generar (no duplica).
+  async function cadenaAbono(abono, pagado, saldo, reciboPrevio = null) {
     const d = est.datos || {};
     let actual = null;
     if (d.voucher?.id) { try { actual = (await rpcDoc('documento_historial', { p_tipo: 'voucher', p_id: String(d.voucher.id) }))?.actual || null; } catch { actual = null; } }
-    let voucherInfo = null, reciboId = null, recibo = null, fallo = null;
+    let voucherInfo = null, reciboId = reciboPrevio, recibo = null, fallo = null;
     try {
       voucherInfo = d.voucher?.id ? await revisarVoucher(abono, pagado, actual) : await voucherDeReserva(abono, pagado, saldo);
     } catch (e) { fallo = mensaje(e); }
     try {
-      if (puedeGenerar()) {
+      if (puedeGenerar() && !reciboPrevio) {
         const blob = await reciboPdf({
           codigo: d.codigo, cliente: actual?.cliente_nombre, numero: voucherInfo?.numero || d.voucher?.numero_factura,
           revision: voucherInfo?.revision || d.voucher?.revision, fechaTexto: diaMesAnio(abono.fecha),
@@ -482,7 +483,7 @@ export function crearAbonos(c) {
     if (!a || !est.datos) return;
     const previo = btn?.innerHTML;
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...'; }
-    const docs = await cadenaAbono({ id: a.id, monto_usd: a.monto_usd, monto_original: a.monto_original, moneda: a.moneda, tasa_usd_ves: a.tasa_usd_ves, metodo: a.metodo, referencia: a.referencia, fecha: a.fecha }, est.datos.monto_pagado, est.datos.saldo_pendiente);
+    const docs = await cadenaAbono({ id: a.id, monto_usd: a.monto_usd, monto_original: a.monto_original, moneda: a.moneda, tasa_usd_ves: a.tasa_usd_ves, metodo: a.metodo, referencia: a.referencia, fecha: a.fecha }, est.datos.monto_pagado, est.datos.saldo_pendiente, a.recibo_documento_id || null);
     if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
     if (docs.fallo) c.error(`No se pudieron generar los documentos: ${docs.fallo}`);
     else c.ok('Documentos del abono generados.');
