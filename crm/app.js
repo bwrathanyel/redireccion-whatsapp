@@ -28222,6 +28222,10 @@ function dmElegirCanal(canal) {
   if (canal === dmCanal || !DM_CANALES[canal]) return;
   dmCanal = canal; dmPendientes[canal].clear();
   try { localStorage.setItem('dm-canal', canal); } catch {}
+  if (dmFiltro === 'ia' && canal !== 'whatsapp') {
+    dmFiltro = 'todos';
+    document.querySelectorAll('#dm-filtros .dm-filtro').forEach(x => x.classList.toggle('on', x.dataset.f === 'todos'));
+  }
   // El chat abierto es de otro canal: se cierra para que el tema nuevo no lo pinte.
   dmLimpiarChat();
   dmPintarCanales();
@@ -28235,18 +28239,29 @@ function dmPintarCanales() {
     el.hidden = !n; el.textContent = n > 9 ? '9+' : String(n);
   }
   document.getElementById('dm-wa-todos').hidden = !(dmCanal === 'whatsapp' && esOficina());
+  document.getElementById('dm-filtro-ia').hidden = !(dmCanal === 'whatsapp' && esOficina());
   document.getElementById('dm-buscar').placeholder = dmCanal === 'whatsapp' ? 'Buscar nombre o teléfono' : dmCanal === 'instagram' ? 'Buscar @usuario, nombre o teléfono' : 'Buscar perfil, nombre o teléfono';
 }
 async function dmContar() {
   await Promise.all(Object.keys(DM_CANALES).map(async c => {
     const { count } = await sb.from('manychat_ia_sesiones').select('external_id', { count: 'exact', head: true }).ilike('campos->>canal', '%' + c);
     document.getElementById('dm-n-' + c).textContent = count ? count.toLocaleString('es-VE') : '';
-  }));
+  }), dmCargarIaIds());
+}
+// Chats del brazo ia_cierra (la IA vende sola). La RPC solo responde a oficina.
+let dmIaIds = new Set();
+async function dmCargarIaIds() {
+  if (!esOficina()) return;
+  const { data, error } = await sb.rpc('dm_ia_vende_ids');
+  if (error) { console.error('dm_ia_vende_ids', error); return; }
+  dmIaIds = new Set(data || []);
+  document.getElementById('dm-n-ia').textContent = dmIaIds.size ? dmIaIds.size.toLocaleString('es-VE') : '';
 }
 function dmQuery() {
   let q = sb.from('manychat_ia_sesiones').select(DM_COLS).ilike('campos->>canal', '%' + dmCanal).order('updated_at', { ascending: false }).limit(DM_PAGINA + 1);
   if (dmFiltro === 'conv') q = q.eq('lead_creado', false);
   if (dmFiltro === 'lead') q = q.eq('lead_creado', true);
+  if (dmFiltro === 'ia') q = q.in('external_id', dmIaIds.size ? [...dmIaIds] : ['__ninguno__']);
   const t = dmBusqueda().replace(/[,()*%"\\]/g, ' ').trim();
   if (t) {
     const cond = ['nombre_ig', 'campos->>nombre', 'campos->>telefono'].map(c => `${c}.ilike."*${t}*"`);
@@ -28260,6 +28275,7 @@ function dmQuery() {
 async function dmCargar(mas) {
   const gen = ++dmGen, cont = document.getElementById('dm-inbox');
   if (!mas) cont.innerHTML = '<div class="msg-empty"><i class="fas fa-spinner fa-spin"></i></div>';
+  if (dmFiltro === 'ia' && !mas) { await dmCargarIaIds(); if (gen !== dmGen) return; }
   let q = dmQuery();
   if (mas && dmSesiones.length) q = q.lt('updated_at', dmSesiones[dmSesiones.length - 1].updated_at);
   const { data, error } = await q;
@@ -28465,6 +28481,7 @@ function dmDesuscribir() {
 function dmPasaFiltro(s) {
   if (dmFiltro === 'conv' && s.lead_creado) return false;
   if (dmFiltro === 'lead' && !s.lead_creado) return false;
+  if (dmFiltro === 'ia' && !dmIaIds.has(s.external_id)) return false;
   const t = dmBusqueda().toLowerCase();
   if (!t) return true;
   const dig = t.replace(/\D/g, '');
@@ -36283,6 +36300,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-29', emoji: '🤖', titulo: 'Chats donde la IA vende sola', texto: 'En Meta DM → WhatsApp hay un filtro nuevo, «IA vende», con los chats que la IA atiende de punta a punta para cerrar la venta (hoy 1 de cada 10 contactos nuevos de WhatsApp). El número al lado dice cuántos van.', roles: ['admin'] },
   { fecha: '2026-10-29', emoji: '👥', titulo: 'Ficha completa de cada persona del equipo', texto: 'En Gestión de Personal → Personal, tocá cualquier tarjeta para ver la ficha completa: estado, asistencia de hoy, tiempo presente, contacto, accesos y el día por día. El editor ahora va por secciones (Perfil, Rol, Permisos con interruptores, Contraseña) y bloquear o dar de baja quedaron aparte, en una zona sensible con confirmación.', roles: ['admin'] },
   { fecha: '2026-10-28', emoji: '📅', titulo: 'Rendimiento IA por día exacto', texto: 'Nuevo botón "Elegir día" junto a Hoy / 7 días / 30 días: abrí el calendario, elegí cualquier fecha pasada y el panel muestra las estadísticas de ese día completo, comparadas contra el mismo día de la semana anterior.', roles: ['admin'] },
   { fecha: '2026-10-27', emoji: '🎯', titulo: 'Reparto por destino', texto: 'El Reparto objetivo tiene una pestaña nueva, «Por destino»: cada destino (Margarita, Los Roques, Canaima, Mérida, Otros nacionales, Corporativo e Internacional) puede tener su propio reparto entre asesores. Mientras no lo actives, ese destino se sigue sorteando con el reparto Nacional tal como está hoy, sin cambiarle nada a nadie. La pestaña muestra cuántos leads trajo cada destino en los últimos 90 días, cómo se están repartiendo de verdad entre los asesores, y antes de guardar el efecto sobre la carga de cada uno: el porcentaje que le tocaría y cuánto se mueve. «Quitar reparto propio» devuelve el destino al reparto general.', roles: ['admin'] },
