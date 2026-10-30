@@ -4233,7 +4233,7 @@ function abrirPostventa(c, accionInicial = null) {
     <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent-ink)"><i class="fas fa-handshake-angle"></i></div><div><div class="dn">${esc(c.nombre)}</div><div class="dm">${esc(c.codigo || '')}${c.principal === false ? ' (adicional)' : ''} · ${esc(c.destino || c.servicio || 'Postventa')} · ${esc(c.asesor || 'Sin asignar')}</div></div></div>
     <div class="seg-group seg-group-sm rv-tabs">${rvTabsHtml(true)}</div>
     <div data-rv-panel="resumen"><div class="rs-wrap">
-      <div data-rv-check></div>
+      <div data-rv-check></div><div id="pv-e-otras"></div>
       <div class="rs-sec">Dinero <span id="pv-e-modo">Se calcula solo desde servicios y abonos</span></div>
       <div class="rs-stats" id="pv-e-balance"><div class="rs-stat"><span class="rs-lbl">Total</span><b id="pv-d-total">—</b></div><div class="rs-stat"><span class="rs-lbl">Pagado</span><b id="pv-d-pagado">—</b></div><div class="rs-stat" id="pv-d-saldo-box"><span class="rs-lbl">Saldo</span><b id="pv-d-saldo">—</b></div></div>
       <div id="pv-e-total-row" ${c.con_servicios ? 'hidden' : ''}><label class="fl" for="pv-e-total">Monto total (USD)</label><input class="ei" id="pv-e-total" type="number" min="0" step="0.01" value="${Number(c.monto_total || 0)}">
@@ -4295,7 +4295,9 @@ function abrirPostventa(c, accionInicial = null) {
     const go = e.target.closest('[data-rv-go]'); if (go) return rvIr(go.dataset.rvGo, go.dataset.id);
     const sg = e.target.closest('[data-pv-seg]'); if (sg) pvSeguimientoRapido(sg.dataset.pvSeg);
     const mj = e.target.closest('[data-pv-msj]'); if (mj) pvMensajeCliente(c, mj.dataset.pvMsj, mj);
+    const ot = e.target.closest('[data-pv-otra]'); if (ot) abrirReservaDeLead(Number(ot.dataset.pvOtra), ot.dataset.cod, ot);
   };
+  pvOtrasPintar(c);
   PV_HAB_SEL = new Map();
   resumen.addEventListener('change', e => { const h = e.target.closest('[data-pv-hab]'); if (h) PV_HAB_SEL.set(Number(h.dataset.pvHab), h.value); });
   document.getElementById('pv-e-guardar').onclick = () => guardarPostventa(false);
@@ -4346,6 +4348,15 @@ async function pvGuardarCliente() {
   if (!Object.keys(cambio).length) return null;
   const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: c.lead_id, ...cambio });
   return error || !data?.ok ? (error?.message || data?.error || 'error desconocido') : null;
+}
+// Otras ventas del mismo cliente (reservas activas del lead), para que cada ficha avise de la otra.
+async function pvOtrasPintar(c) {
+  const box = document.getElementById('pv-e-otras'); if (!box || !c.lead_id) return;
+  const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: c.lead_id });
+  if (error || !data?.ok || box !== document.getElementById('pv-e-otras')) return;
+  const otras = (data.reservas || []).filter(r => r.activo && r.id !== c.id);
+  box.innerHTML = otras.length ? `<div class="rv-check"><i class="fas fa-suitcase-rolling"></i> ${otras.length > 1 ? `Este cliente tiene ${otras.length} ventas más` : 'Este cliente tiene otra venta'}:
+    ${otras.map(r => `<button class="rs-q" type="button" data-pv-otra="${r.id}" data-cod="${esc(r.codigo || '')}">${esc(r.codigo || '#' + r.id)}${r.fecha_viaje_inicio ? ' · ' + pvFecha(r.fecha_viaje_inicio) : ''} · ${money(Number(r.monto_total || 0))}</button>`).join(' ')}</div>` : '';
 }
 // Habitación de cada hospedaje en el Resumen, con las del tarifario del hotel. Sin tocarla queda la del
 // servicio o, si no tenía, la primera del tarifario (la misma que toma solo el formulario de reserva).
@@ -23072,7 +23083,8 @@ function ivRender() {
     const opciones = [`<option value="" ${f.crear_lead && !f.vincular && !f.modoSob ? 'selected' : ''}>➕ Crear lead nuevo</option>`,
       `<option value="s" ${f.modoSob ? 'selected' : ''}>✏️ ${f.sobrescribir ? `Sobrescribir ${esc(f.sobrescribir.codigo || '#' + f.sobrescribir.id)} · ${esc(f.sobrescribir.cliente || '')}` : 'Sobrescribir una reserva existente…'}</option>`].concat(
       sims.map(r => `<option value="r:${r.id}" ${f.vincular === r.id ? 'selected' : ''}>🔗 Ya está en el CRM: ${esc(r.codigo || '#' + r.id)} · ${esc(r.cliente)} · ${ivMoney(r.monto_total)} (no duplica)</option>`),
-      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && !f.vincular && !f.modoSob && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}${c.motivos ? ` (${esc(ivMotivos(c))})` : ''}</option>`)
+      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && !f.vincular && !f.modoSob && !f.nueva && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}${c.motivos ? ` (${esc(ivMotivos(c))})` : ''}</option>`
+        + `<option value="n:${c.id}" ${f.nueva && f.lead_id === c.id ? 'selected' : ''}>🧳 Nueva venta de #${c.id} ${esc(c.nombre)} (reserva aparte)</option>`)
     ).join('');
     const debil = cand && !cand.fuerte && !f.crear_lead && !f.vincular && !f.modoSob;
     const empresa = f.empresa_id && IV_EMPRESAS.find(e => e.id === f.empresa_id);
@@ -23088,6 +23100,7 @@ function ivRender() {
       abierta && f.modoSob && ivAviso(f.sobrescribir
         ? `Se reemplazan los servicios, el total, las fechas y el hotel de <b>${esc(f.sobrescribir.codigo || '#' + f.sobrescribir.id)}</b>, y el nombre, teléfono y destino del cliente. Los abonos y una factura que ya exista no se tocan.`
         : 'Buscá y elegí la reserva que este voucher va a sobrescribir.'),
+      abierta && f.nueva && ivAviso(`Se crea una reserva aparte para <b>${esc(cand?.nombre || '#' + f.lead_id)}</b>, con su propia factura por lo cobrado. Sus otras reservas no se tocan y cada ficha muestra la otra venta.`),
       abierta && mismatch && ivAviso(`El lead es de ${esc(cand.asesor)}, el voucher dice ${esc(d.asesor_pdf)}.${esAdmin ? ` <label><input type="checkbox" class="iv-reasignar" ${f.reasignar ? 'checked' : ''}> reasignar</label>` : ''}`),
       f.resultado && f.estado !== 'hecho' && ivAviso(ivTexto(f.resultado), ['error', 'duplicado'].includes(f.estado) ? 'error' : ''),
       d.nota_revision && !f.resultado && ivAviso(ivTexto(d.nota_revision)),
@@ -23121,7 +23134,8 @@ function ivRender() {
     card.querySelector('.iv-sel')?.addEventListener('change', e => { f.sel = e.target.checked; ivRender(); });
     card.querySelector('.iv-lead')?.addEventListener('change', e => {
       const v = e.target.value, sim = v.startsWith('r:') ? (f.similares || []).find(r => r.id === +v.slice(2)) : null;
-      f.modoSob = v === 's';
+      f.modoSob = v === 's'; f.nueva = v.startsWith('n:');
+      if (f.nueva) { f.sobrescribir = null; f.vincular = null; f.crear_lead = false; f.lead_id = +v.slice(2); ivRender(); return; }
       if (f.modoSob) { f.vincular = null; f.crear_lead = false; f.lead_id = f.sobrescribir?.lead_id ?? null; ivRender(); document.querySelector(`.iv-card[data-fid="${f.id}"] .iv-sob-q`)?.focus(); return; }
       f.sobrescribir = null;
       f.vincular = sim ? sim.id : null;
@@ -23171,6 +23185,7 @@ async function ivImportar() {
   const filas = pend.map(f => ({
     datos: f.datos, lead_id: f.crear_lead ? null : f.lead_id, crear_lead: f.crear_lead, vincular_reserva_id: f.vincular || null,
     sobrescribir_reserva_id: f.modoSob ? f.sobrescribir?.id || null : null,
+    nueva_reserva: !!f.nueva && !f.crear_lead && !f.modoSob && !!f.lead_id,
     reasignar: f.reasignar, empresa_id: f.empresa_id || null, pdf_base64: f.pdf_b64, archivo_hash: f.hash,
   }));
   const { data, error } = await sb.functions.invoke('voucher-a-venta', { body: { accion: 'importar', filas } });
