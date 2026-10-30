@@ -4019,13 +4019,26 @@ async function pvExportarVarias() {
   const archivo = ['Reservas', r.destino && pdfSlug(r.destino), desde, hasta, !desde && !hasta && hoy()].filter(Boolean).join('-');
   pvxGenerar(casos, { formato: r.formato, detalle: r.detalle, titulo: r.destino ? `Reservas · ${r.destino}` : 'Reservas', filtros, archivo });
 }
-// Borrado real (RPC eliminar_reserva): si la reserva tiene factura, abonos vigentes, comisión o pagos a proveedor, el servidor lo rechaza.
+// Borrado real (RPC eliminar_reserva): factura, abonos y comisión se borran con la reserva; el servidor solo rechaza
+// si ya hay comisión pagada al asesor o pagos a proveedor. p_solo_revisar trae qué se va a borrar para el aviso.
 async function pvEliminarReserva(c, btn) {
   if (!c || !esOficina()) return;
-  const motivo = await pedirTexto({ titulo: `Eliminar reserva ${c.codigo || ''}`.trim(), detalle: `${c.nombre || 'Cliente'}: se borran sus servicios, pasajeros y documentos. No se puede deshacer.`, label: 'Motivo (opcional)', tipo: 'textarea', textoOk: 'Eliminar', destructivo: true });
+  btn.disabled = true;
+  const { data: rev, error: errRev } = await sb.rpc('eliminar_reserva', { p_reserva_id: c.id, p_solo_revisar: true });
+  btn.disabled = false;
+  if (errRev || !rev?.ok) { errToast('No se puede eliminar: ' + rvErr(errRev, rev)); return; }
+  const extra = [
+    ...(rev.facturas || []).map(f => `la factura ${f.numero ? '#' + f.numero : 'sin número'} (${rvMonto(Number(f.monto) * 100, f.moneda)})`),
+    rev.abonos ? `${rev.abonos} abono${rev.abonos > 1 ? 's' : ''} (${rvMonto(Number(rev.abonos_usd) * 100, 'USD')})` : '',
+    rev.comisiones ? (rev.comisiones > 1 ? `${rev.comisiones} comisiones del asesor` : 'la comisión del asesor') : '',
+  ].filter(Boolean);
+  const detalle = `${c.nombre || 'Cliente'}: se borran sus servicios, pasajeros y documentos`
+    + (extra.length ? `, y también ${extra.join(', ')}.${rev.facturas?.length ? ' El N° de factura queda sin usar.' : ''}` : '.')
+    + (rev.pagos ? ` Los pagos del cliente quedan en su ficha, sin reserva.` : '') + ' No se puede deshacer.';
+  const motivo = await pedirTexto({ titulo: `Eliminar reserva ${c.codigo || ''}`.trim(), detalle, label: 'Motivo (opcional)', tipo: 'textarea', textoOk: 'Eliminar', destructivo: true });
   if (motivo === null) return;
   btn.disabled = true;
-  const { data, error } = await sb.rpc('eliminar_reserva', { p_reserva_id: c.id, p_motivo: motivo || null });
+  const { data, error } = await sb.rpc('eliminar_reserva', { p_reserva_id: c.id, p_motivo: motivo || null, p_firma: rev.firma });
   btn.disabled = false;
   if (error || !data?.ok) { errToast('No se pudo eliminar: ' + rvErr(error, data)); return; }
   okToast(data.codigo ? `Reserva ${data.codigo} eliminada` : 'Reserva eliminada');
@@ -4236,6 +4249,7 @@ function abrirPostventa(c, accionInicial = null) {
       </div>
       <select class="ei" id="pv-e-etapa" aria-label="Etapa" hidden>${opt(PV_ETAPAS, c.etapa)}</select>
       <div class="csub">La etapa se actualiza sola según pagos, servicios y fechas; «Cambiar» la fija a mano.</div>
+      <div id="pv-e-habs"></div>
       <div class="rs-sec">Cliente <span>Titular de la reserva (cambia también en su lead)</span></div>
       <div class="rs-grid2">
         <div><label class="rs-lbl" for="pv-e-nombre">Nombre</label><input class="ei" id="pv-e-nombre" maxlength="160" value="${esc(c.nombre || '')}"></div>
@@ -4282,6 +4296,8 @@ function abrirPostventa(c, accionInicial = null) {
     const sg = e.target.closest('[data-pv-seg]'); if (sg) pvSeguimientoRapido(sg.dataset.pvSeg);
     const mj = e.target.closest('[data-pv-msj]'); if (mj) pvMensajeCliente(c, mj.dataset.pvMsj, mj);
   };
+  PV_HAB_SEL = new Map();
+  resumen.addEventListener('change', e => { const h = e.target.closest('[data-pv-hab]'); if (h) PV_HAB_SEL.set(Number(h.dataset.pvHab), h.value); });
   document.getElementById('pv-e-guardar').onclick = () => guardarPostventa(false);
   document.getElementById('pv-e-pago')?.addEventListener('click', () => {
     document.getElementById('pv-e-pagado').value = document.getElementById('pv-e-total').value;
@@ -4331,6 +4347,47 @@ async function pvGuardarCliente() {
   const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: c.lead_id, ...cambio });
   return error || !data?.ok ? (error?.message || data?.error || 'error desconocido') : null;
 }
+// Habitación de cada hospedaje en el Resumen, con las del tarifario del hotel. Sin tocarla queda la del
+// servicio o, si no tenía, la primera del tarifario (la misma que toma solo el formulario de reserva).
+let PV_HAB_SEL = new Map(), PV_HOTELES = null;
+const PV_HAB_VACIAS = ['hotel', 'posada', 'turistico', 'turistica', 'de', 'del', 'la', 'el', 'los', 'las', 'y'];
+const pvHabTokens = s => cbTarNorm(s).replace(/[^a-z0-9 ]/g, ' ').split(' ').filter(w => w.length > 1 && !PV_HAB_VACIAS.includes(w));
+// Los hospedajes importados de vouchers traen el hotel como texto: se busca el producto cuyo nombre contiene
+// al del servicio o viceversa; si dos empatan, no se adivina.
+async function pvHotelProducto(d) {
+  if (/^\d{1,18}$/.test(String(d.producto_id ?? ''))) return Number(d.producto_id);
+  const h = pvHabTokens(d.hotel); if (!h.length) return null;
+  PV_HOTELES ||= sb.from('productos').select('id,nombre').in('tipo', ['hotel', 'paquete']).eq('activo', true).limit(2000)
+    .then(r => { if (r.error) { PV_HOTELES = null; return []; } return r.data || []; });
+  const sub = (a, b) => a.every(w => b.includes(w));
+  const c = (await PV_HOTELES).map(p => ({ id: Number(p.id), t: pvHabTokens(p.nombre) })).filter(p => p.t.length && (sub(p.t, h) || sub(h, p.t)))
+    .map(p => ({ id: p.id, n: p.t.filter(w => h.includes(w)).length })).sort((a, b) => b.n - a.n);
+  return c.length && (c.length === 1 || c[0].n > c[1].n) ? c[0].id : null;
+}
+async function pvHabPintar() {
+  const box = document.getElementById('pv-e-habs'), id = RV_RESERVA_ID;
+  if (!box || !PV_ACTUAL) return;
+  const hosp = (RV_DET?.servicios || []).filter(s => s.tipo === 'hospedaje' && !s.anulado_en && s.detalle?.hotel);
+  const filas = (await Promise.all(hosp.map(async s => {
+    const d = s.detalle, prod = await pvHotelProducto(d).catch(() => null);
+    const tar = prod ? await cbTraerTarifas(prod).catch(() => []) : [], delPlan = d.plan ? cbTarDelPlan(tar, d.plan) : tar;
+    const ops = cbTarOpciones(delPlan.length ? delPlan : tar, 'habitacion');
+    return ops.length ? { s, d, ops: [...new Set([d.habitacion, ...ops].filter(Boolean))], actual: PV_HAB_SEL.get(s.id) ?? (d.habitacion || ops[0]) } : null;
+  }))).filter(Boolean);
+  if (id !== RV_RESERVA_ID || box !== document.getElementById('pv-e-habs')) return;
+  box.innerHTML = filas.length ? `<div class="rs-grid2">${filas.map(({ s, d, ops, actual }) => `<div><label class="rs-lbl" for="pv-e-hab-${s.id}">Habitación${filas.length > 1 ? ' · ' + esc(d.hotel) : ''}</label>
+    <select class="ei" id="pv-e-hab-${s.id}" data-pv-hab="${s.id}" title="${esc(d.hotel)}">${ops.map(o => `<option value="${esc(o)}"${o === actual ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`).join('')}</div>
+    <div class="csub">Habitaciones del tarifario${filas.length > 1 ? '' : ' de ' + esc(filas[0].d.hotel)}; si no la cambiás, queda la marcada.</div>` : '';
+}
+async function pvGuardarHabitaciones() {
+  for (const sel of document.querySelectorAll('#pv-e-habs [data-pv-hab]')) {
+    const s = (RV_DET?.servicios || []).find(x => x.id === Number(sel.dataset.pvHab));
+    if (!s || !sel.value || sel.value === (s.detalle?.habitacion || '')) continue;
+    const { data, error } = await sb.rpc('guardar_servicio', { p_reserva_id: RV_RESERVA_ID, p_servicio_id: s.id, p_datos: { detalle: { ...s.detalle, habitacion: sel.value } } });
+    if (error || !data?.ok) return rvErr(error, data);
+  }
+  return null;
+}
 async function guardarPostventa(marcarPagado) {
   if (!PV_ACTUAL) return;
   const btn = document.getElementById(marcarPagado ? 'pv-e-pago' : 'pv-e-guardar');
@@ -4358,9 +4415,11 @@ async function guardarPostventa(marcarPagado) {
   if (error || !data?.ok) { btn.disabled = false; btn.innerHTML = previo; err.textContent = 'No se pudo guardar: ' + (errReserva(error, data) || 'error desconocido'); return; }
   const errEmpresa = await pvGuardarEmpresa();
   const errCliente = await pvGuardarCliente();
+  const errHab = await pvGuardarHabitaciones();
   btn.disabled = false; btn.innerHTML = previo;
   if (errEmpresa) { err.textContent = 'La postventa se guardó, pero no la empresa: ' + errEmpresa; return; }
   if (errCliente) { err.textContent = 'La postventa se guardó, pero no los datos del cliente: ' + errCliente; return; }
+  if (errHab) { err.textContent = 'La postventa se guardó, pero no la habitación: ' + errHab; return; }
   window.closeDrawer();
   // Si lo cerró un asesor, guardar_postventa lo manda a verificación en vez
   // de a PAGO REALIZADO directo (ver 20260728000000_blindar_cierre_venta.sql)
@@ -4428,6 +4487,8 @@ const RV_ERR = {
   solicitud_no_existe: 'La solicitud ya no existe', falta_lead: 'Elegí el cliente', lead_no_disponible: 'Ese cliente no existe o fue eliminado',
   tiene_factura: 'Tiene factura registrada: no se puede eliminar', tiene_abonos: 'Tiene abonos vigentes: anúlalos primero',
   tiene_comision: 'Tiene una comisión cargada: recházala o elimínala primero', tiene_pagos_proveedor: 'Ya tiene pagos a proveedor registrados',
+  comision_pagada: 'La comisión de esta reserva ya se le pagó al asesor: no se puede eliminar',
+  reserva_cambio: 'La reserva cambió (factura, abono o comisión nueva) mientras confirmabas: vuelve a intentarlo',
 };
 const rvErr = (error, data) => RV_ERR[data?.error] || RV_ERR[error?.message] || data?.error || error?.message || 'error desconocido';
 const rvMonto = (cent, mon) => (Number(cent || 0) / 100).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (mon || 'USD');
@@ -4545,7 +4606,7 @@ function rvRender() {
   const n = { servicios: servicios.filter(s => !s.anulado_en).length, pasajeros: pasajeros.length, documentos: documentos.length };
   document.querySelectorAll('#drawerContent [data-rv-n]').forEach(x => x.textContent = n[x.dataset.rvN] || '');
   rvResumenTotal(reserva || {});
-  rvChecklist();
+  rvChecklist(); pvHabPintar();
   rvRenderServicios(true); rvRenderPasajeros(true); rvRenderDocumentos(true);
 }
 // suave = recarga de fondo (rvCargar): no pisar un formulario abierto ni un archivo ya elegido.
