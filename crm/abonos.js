@@ -187,6 +187,7 @@ export function crearAbonos(c) {
         <span class="ab-origen">${esc(a.moneda)} ${num(a.monto_original)}${a.moneda === 'VES' && a.tasa_usd_ves ? ` · tasa ${a.tasa_tipo ? nombreTasa(a.tasa_tipo) + ' ' : ''}${num(a.tasa_usd_ves, 4)}` : ''}</span>
         <span class="ab-tag">${esc(a.metodo)}</span>
         ${serv ? `<span class="ab-tag" title="${esc(nombreServ(serv))}">${esc(TIPO_SERV[serv.tipo] || serv.tipo)}</span>` : ''}
+        ${/^inicial/i.test(a.nota || '') ? '<span class="ab-tag">Inicial reserva</span>' : ''}
         ${a.respaldo ? '<span class="ab-tag ab-respaldo">Sin detalle</span>' : ''}
         ${a.anulado_en ? '<span class="ab-tag ab-anulada-tag">Anulado</span>' : ''}
       </div>

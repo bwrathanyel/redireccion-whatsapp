@@ -4910,7 +4910,7 @@ function rvVoucherSoloAbonos(v, servs, abonos, formaPago = '') {
     abonos_detalle: resto.map(a => ({
       fecha: dia(a.fecha), referencia: a.referencia || '', monto: Number(a.monto_usd || 0),
       metodo: /^(saldo anterior|sin especificar)$/i.test(a.metodo || '') ? (formaPago || 'Abono') : a.metodo,
-      servicio: servDe(a) && servDe(a).tipo !== 'hospedaje' ? ({ boleto_aereo: 'Boleto aéreo', traslado_terrestre: 'Traslado', traslado_maritimo: 'Traslado', full_day: 'Full day', seguro: 'Seguro' }[servDe(a).tipo] || 'Otro servicio') : '',
+      servicio: /^inicial/i.test(a.nota || '') ? 'Inicial reserva' : servDe(a) && servDe(a).tipo !== 'hospedaje' ? ({ boleto_aereo: 'Boleto aéreo', traslado_terrestre: 'Traslado', traslado_maritimo: 'Traslado', full_day: 'Full day', seguro: 'Seguro' }[servDe(a).tipo] || 'Otro servicio') : '',
     })),
   });
 }
