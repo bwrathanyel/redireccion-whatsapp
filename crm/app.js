@@ -4886,7 +4886,7 @@ function rvArmarVoucherPaquete(datos) {
 }
 // Voucher de abonos: solo el hospedaje. Cada abono sabe a qué servicio fue (reserva_abonos.servicio_id,
 // 2026-10-31); los de otro servicio (el boleto de contado) quedan fuera y los sin servicio cuentan.
-function rvVoucherSoloAbonos(v, servs, abonos) {
+function rvVoucherSoloAbonos(v, servs, abonos, formaPago = '') {
   const cent = x => Math.round(Number(x || 0) * 100);
   const idx = servs.map((s, i) => s.tipo === 'hospedaje' ? i : -1).filter(i => i >= 0);
   const hospIds = idx.map(i => Number(servs[i].id));
@@ -4906,7 +4906,7 @@ function rvVoucherSoloAbonos(v, servs, abonos) {
     total_general: totalHosp / 100, monto_pagado: pagado / 100, resta: Math.max(0, totalHosp - pagado) / 100,
     abonos_detalle: resto.map(a => ({
       fecha: dia(a.fecha), referencia: a.referencia || '', monto: Number(a.monto_usd || 0),
-      metodo: a.moneda && a.moneda !== 'USD' ? `${a.metodo || 'Pago'} · Bs ${bs(a.monto_original)}${a.tasa_usd_ves ? ' a tasa ' + ({ EUR: 'BCV euro ', USDT: 'USDT ' }[a.tasa_tipo] || 'BCV ') + bs(a.tasa_usd_ves) : ''}` : a.metodo,
+      metodo: a.moneda && a.moneda !== 'USD' ? `${a.metodo || 'Pago'} · Bs ${bs(a.monto_original)}${a.tasa_usd_ves ? ' a tasa ' + ({ EUR: 'BCV euro ', USDT: 'USDT ' }[a.tasa_tipo] || 'BCV ') + bs(a.tasa_usd_ves) : ''}` : /^(saldo anterior|sin especificar)$/i.test(a.metodo || '') ? (formaPago || 'Abono') : a.metodo,
     })),
   });
 }
@@ -4922,7 +4922,8 @@ async function rvGenerarVoucherPaquete(btn, soloAbonos = false) {
   const titular = pax.find(p => p.titular) || pax[0] || null;
   const prev = RV_VOUCHER_PAQUETE.get(RV_RESERVA_ID) || {};
   const cliente = (([titular?.nombre, titular?.apellido].filter(Boolean).join(' ').trim()) || String(c?.nombre || r.cliente || '').trim()).replace(/\s+/g, ' ');
-  const documento = titular?.numero_documento || prev.documento || '';
+  // La cédula sale del pasajero: el titular, y si no tiene, el primero que la tenga.
+  const documento = titular?.numero_documento || pax.find(p => p.numero_documento)?.numero_documento || prev.documento || '';
   const telefono = titular?.telefono || c?.telefono || r.telefono || prev.telefono || '';
   // Forma de pago y referencia: lo confirmado antes en este voucher, la reserva, y si no el último abono vigente.
   let ultimo = null, abonos = [];
@@ -4964,7 +4965,7 @@ async function rvGenerarVoucherPaquete(btn, soloAbonos = false) {
     RV_VOUCHER_PAQUETE.set(RV_RESERVA_ID, datos);
   }
   const { v, entrada } = rvArmarVoucherPaquete(datos), codigo = v.codigo_reserva, destino = v.destino_hospedaje;
-  if (soloAbonos) rvVoucherSoloAbonos(v, servs, abonos);
+  if (soloAbonos) rvVoucherSoloAbonos(v, servs, abonos, datos.formaPago);
   const que = soloAbonos ? 'Voucher de abonos' : 'Voucher del paquete';
   const previo = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...'; }
@@ -36715,6 +36716,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-30', emoji: '🧾', titulo: 'Voucher de abonos: el primer pago sale como abono', texto: 'En el voucher de abonos, el primer pago de la reserva (el que antes salía como «Saldo anterior») ahora aparece como un abono más, con la forma de pago de la reserva. La cédula sale del pasajero titular, o del primero que la tenga cargada.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-30', emoji: '🧾', titulo: '«Registrar abono» de Mis ventas abre la reserva', texto: 'En Mis ventas, «Registrar abono» ahora abre la reserva en la pestaña Abonos, con el mismo formulario de siempre: método, referencia, captura, servicio y tasa. Así cada abono queda con su recibo y su voucher. Si el cliente tiene varias reservas con saldo, abre el lead para que elijas cuál.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-30', emoji: '💱', titulo: 'Abonos: servicio que paga y tasa del cobro', texto: 'Al registrar un abono en Reservas › Abonos ahora elegís a qué servicio va (el hospedaje viene marcado) y, si es en bolívares, a qué tasa se cobra: BCV dólar, BCV euro o USDT (Binance P2P, se actualiza cada hora). La vista previa muestra la tasa y el equivalente en dólares; si la tasa cambió mientras tenías el formulario abierto, te avisa antes de registrar. Si cargás un pago con el mismo monto y referencia que otro de las últimas 48 horas, te pregunta si es el mismo antes de duplicarlo. El voucher de abonos ya no adivina cuál pago es del boleto.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-30', emoji: '💳', titulo: 'Abonos sin duplicados y documentos más claros', texto: 'Al registrar un abono, si los documentos no salen igual se avisa que el pago quedó guardado: no hay que cargarlo de nuevo, se usa «Reintentar documentos». Reintentar después de un corte ya no duplica el abono. El Pago móvil pasa solo a bolívares. Al anular un abono se anula su recibo y el voucher se reimprime sin ese pago. Los errores de documentos ahora dicen el motivo real.', roles: ['admin', 'asesor'] },
