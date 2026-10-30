@@ -4890,23 +4890,25 @@ function rvVoucherSoloAbonos(v, servs, abonos, formaPago = '') {
   const cent = x => Math.round(Number(x || 0) * 100);
   const idx = servs.map((s, i) => s.tipo === 'hospedaje' ? i : -1).filter(i => i >= 0);
   const hospIds = idx.map(i => Number(servs[i].id));
-  const resto = abonos.filter(a => a.servicio_id == null || hospIds.includes(Number(a.servicio_id)));
-  const totalBol = servs.filter(s => s.tipo !== 'hospedaje').reduce((t, s) => t + (Number(s.precio_usd_centavos) || 0), 0);
-  const totalHosp = idx.reduce((t, i) => t + (Number(servs[i].precio_usd_centavos) || 0), 0) || Math.max(0, cent(v.total_general) - totalBol);
+  // Pedido del dueño 30-oct: el voucher de abonos muestra todos los abonos de la reserva (también el del
+  // boleto, rotulado con su servicio) y el resumen de la reserva completa.
+  const resto = abonos;
+  const servDe = a => servs.find(s => Number(s.id) === Number(a.servicio_id));
+  const totalHosp = servs.reduce((t, s) => t + (Number(s.precio_usd_centavos) || 0), 0) || cent(v.total_general);
   const cobrado = resto.reduce((t, a) => t + cent(a.monto_usd), 0);
   // M4: nunca pagado > total; si pasa, hay un abono mal asignado a un servicio.
-  if (cobrado > totalHosp) errToast('Los abonos del hospedaje suman más que su total: revisá a qué servicio va cada abono.');
+  if (cobrado > totalHosp) errToast('Los abonos suman más que el total de la reserva: revisá los abonos.');
   const pagado = Math.min(cobrado, totalHosp);
   const dia = iso => iso ? new Date(iso).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
   const bs = n => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   Object.assign(v, {
-    titulo_voucher: 'VOUCHER DE ABONOS · HOSPEDAJE', etiqueta_detalle: 'DETALLE DEL HOSPEDAJE',
-    etiqueta_destino: 'HOTEL / DESTINO', etiqueta_servicios: 'HOSPEDAJE',
-    servicios: idx.map(i => v.servicios[i]),
+    titulo_voucher: 'VOUCHER DE ABONOS', etiqueta_detalle: 'DETALLE DEL HOSPEDAJE',
+    etiqueta_destino: 'HOTEL / DESTINO', etiqueta_servicios: 'SERVICIOS',
     total_general: totalHosp / 100, monto_pagado: pagado / 100, resta: Math.max(0, totalHosp - pagado) / 100,
     abonos_detalle: resto.map(a => ({
       fecha: dia(a.fecha), referencia: a.referencia || '', monto: Number(a.monto_usd || 0),
       metodo: a.moneda && a.moneda !== 'USD' ? `${a.metodo || 'Pago'} · Bs ${bs(a.monto_original)}${a.tasa_usd_ves ? ' a tasa ' + ({ EUR: 'BCV euro ', USDT: 'USDT ' }[a.tasa_tipo] || 'BCV ') + bs(a.tasa_usd_ves) : ''}` : /^(saldo anterior|sin especificar)$/i.test(a.metodo || '') ? (formaPago || 'Abono') : a.metodo,
+      servicio: servDe(a) && servDe(a).tipo !== 'hospedaje' ? ({ boleto_aereo: 'Boleto aéreo', traslado_terrestre: 'Traslado', traslado_maritimo: 'Traslado', full_day: 'Full day', seguro: 'Seguro' }[servDe(a).tipo] || 'Otro servicio') : '',
     })),
   });
 }
@@ -31486,7 +31488,8 @@ function vcpDibujarVoucher(doc, v, ctx) {
   ], yR, opt);
   const half = (VCP_W - 16) / 2;
   if (Array.isArray(v.abonos_detalle) && v.abonos_detalle.length) {
-    if (y + 60 > 742) { doc.addPage(); y = 40; }
+    if (y + 140 > 742) { doc.addPage(); y = 40; }
+    y = resumen(y, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 }) + gap;
     const nuevo = { fillColor: vcpTinte(VCP.naranja, .9), fontStyle: st('bold') };
     y = conBorde({
       startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
@@ -31494,11 +31497,9 @@ function vcpDibujarVoucher(doc, v, ctx) {
       headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
       columnStyles: { 0: { cellWidth: 120 }, 3: { halign: 'right', fontStyle: st('semibold') } },
       head: [['ABONOS', 'MÉTODO', 'REFERENCIA', 'MONTO']],
-      body: v.abonos_detalle.map(a => [a.nuevo ? `${a.fecha} · nuevo` : a.fecha, a.metodo || '—', a.referencia || '—', usd(a.monto)]
+      body: v.abonos_detalle.map(a => [a.nuevo ? `${a.fecha} · nuevo` : a.fecha, (a.metodo || '—') + (a.servicio ? ` · ${a.servicio}` : ''), a.referencia || '—', usd(a.monto)]
         .map(x => a.nuevo ? { content: x, styles: nuevo } : x)),
-    }, VCP_X0, VCP_W) + gap;
-    if (y + 80 > 742) { doc.addPage(); y = 40; }
-    resumen(y, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
+    }, VCP_X0, VCP_W);
     return;
   }
   if (y + 98 > 742) { doc.addPage(); y = 40; }
