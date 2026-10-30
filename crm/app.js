@@ -30989,24 +30989,29 @@ function cargarImagenBase64(src) {
 
 let vcSolicitudPendiente = null, vcGenerando = false;
 async function vcRevisarOperacion(fila, plan) {
-  const { data, error } = await sb.rpc('voucher_revisar_venta', { p_datos: fila });
+  // Sin cliente elegido: mismo match que Importar (teléfono/cédula/nombre) para no crear un lead duplicado.
+  const [{ data, error }, cands] = await Promise.all([sb.rpc('voucher_revisar_venta', { p_datos: fila }),
+    plan.lead ? [] : ivBuscarLeads({ cliente_nombre: fila.cliente_nombre, telefono: fila.telefono, documento: fila.documento_identidad }).catch(() => [])]);
   if (error || !data?.ok) throw new Error('No se pudieron revisar las ventas existentes. Intenta de nuevo.');
-  const similares = data.reservas || [];
+  const similares = data.reservas || [], leads = cands.slice(0, 5);
   const opciones = [{ v: '', t: 'Selecciona qué operación corresponde' }, ...similares.map(r => ({
     v: String(r.id), t: `${r.codigo} · ${r.cliente} · ${r.fecha_viaje_inicio || 'sin fecha'} / ${r.fecha_viaje_fin || 'sin fecha'} · Total ${vcMoney(r.monto_total)} · Abono ${vcMoney(r.monto_pagado)}`,
   }))];
   if (plan.reserva && !similares.some(r => r.id === plan.reserva.id)) opciones.push({ v: String(plan.reserva.id), t: `${plan.reserva.codigo} · ${plan.lead.nombre} · Reserva seleccionada` });
-  opciones.push({ v: 'nueva', t: plan.lead ? 'Crear otra venta para el cliente seleccionado' : 'Crear una venta para un cliente nuevo' });
-  opciones.push({ v: 'solo', t: 'Generar solo el PDF' });
+  opciones.push(...leads.map(c => ({ v: 'lead:' + c.id, t: `Cliente existente: ${c.nombre || 'Sin nombre'} · ${c.telefono || 'sin teléfono'} · ${c.estado || '—'}${c.asesor ? ' · ' + c.asesor : ''} (${ivMotivos(c)})` })));
+  opciones.push({ v: 'nueva', t: plan.lead ? 'Crear otra venta para el cliente seleccionado' : 'Crear un cliente nuevo con su venta' });
+  opciones.push({ v: 'solo', t: 'Generar solo el PDF (no queda en Reservas)' });
+  const fuerte = !similares.length && leads.find(c => c.fuerte);
   // Una sola hoja: encadenar otra confirmarSheet/pedirTexto la deja cerrada por el history.back de esta.
   const eleccion = await confirmarSheet({ titulo: similares.length ? 'Revisa las ventas antes de generar' : '¿Vincular o crear una venta?', textoOk: 'Generar voucher',
-    detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)} · Saldo ${vcMoney(fila.resta)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : 'Elige expresamente cómo guardar este voucher.'}\nCrear venta factura una sola vez el abono${Number(fila.monto_pagado) > 0 ? ' de ' + vcMoney(fila.monto_pagado) : ' (hoy no hay abono cargado)'}.`,
-    campos: [{ id: 'operacion', tipo: 'select', label: 'Operación', requerido: true, valor: '', opciones },
-      ...(similares.length ? [{ id: 'motivo', tipo: 'textarea', label: 'Motivo si es una venta distinta (mínimo 8 caracteres)', placeholder: 'Qué diferencia esta compra de las existentes', requeridoSi: out => out.operacion === 'nueva' }] : [])],
+    detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)} · Saldo ${vcMoney(fila.resta)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : leads.length ? `El cliente ya podría estar en el CRM (${leads.length === 1 ? '1 coincidencia' : leads.length + ' coincidencias'} por teléfono o nombre): elige su ficha para no duplicarlo.` : 'Elige expresamente cómo guardar este voucher.'}\nCrear venta factura una sola vez el abono${Number(fila.monto_pagado) > 0 ? ' de ' + vcMoney(fila.monto_pagado) : ' (hoy no hay abono cargado)'}.`,
+    campos: [{ id: 'operacion', tipo: 'select', label: 'Operación', requerido: true, valor: fuerte ? 'lead:' + fuerte.id : '', opciones },
+      ...(similares.length ? [{ id: 'motivo', tipo: 'textarea', label: 'Motivo si es una venta distinta (mínimo 8 caracteres)', placeholder: 'Qué diferencia esta compra de las existentes', requeridoSi: out => out.operacion === 'nueva' || out.operacion?.startsWith('lead:') }] : [])],
   });
   if (!eleccion) return null;
   if (eleccion.operacion === 'solo') return { modo: 'solo' };
-  if (eleccion.operacion !== 'nueva') {
+  if (eleccion.operacion.startsWith('lead:')) plan = { ...plan, lead: leads.find(c => 'lead:' + c.id === eleccion.operacion) };
+  else if (eleccion.operacion !== 'nueva') {
     const reserva = similares.find(r => String(r.id) === eleccion.operacion) || plan.reserva;
     if (!reserva) throw new Error('La reserva seleccionada ya no está disponible.');
     return { modo: 'vincular', lead: { id: reserva.lead_id || plan.lead.id, nombre: reserva.cliente || plan.lead.nombre }, reserva };
