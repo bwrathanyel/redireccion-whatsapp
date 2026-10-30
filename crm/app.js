@@ -4977,10 +4977,14 @@ async function rvGenerarVoucherPaquete(btn, soloAbonos = false) {
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
     const nombre = docNombre([`${soloAbonos ? 'Voucher abonos' : 'Voucher'} ${codigo || RV_RESERVA_ID}`, v.cliente_nombre, destino, docFecha(entrada)]);
+    // El voucher nuevo reemplaza a los anteriores del mismo tipo (mismo servicio y mismo inicio de nombre).
+    const sid = soloAbonos ? hosp.id : null, base = nombre.split(' - ').slice(0, 2).join(' - ') + ' - ';
+    const viejos = (RV_DET?.documentos || []).filter(d => d.tipo === 'voucher' && !d.anulado_en && (d.servicio_id ?? null) === sid && String(d.nombre || '').startsWith(base)).map(d => d.id);
     let falla = null;
-    try { falla = await vcAdjuntarPdf(RV_RESERVA_ID, soloAbonos ? hosp.id : null, blob, nombre); } catch (e) { falla = e?.message || 'error de red'; }
+    try { falla = await vcAdjuntarPdf(RV_RESERVA_ID, sid, blob, nombre); } catch (e) { falla = e?.message || 'error de red'; }
+    if (!falla && viejos.length) await Promise.all(viejos.map(id => sb.rpc('anular_documento', { p_documento_id: id }).then(({ error }) => error && console.error('voucher: anular previo', id, error))));
     // Con la hora en el nombre: el navegador del teléfono abría el PDF viejo con el mismo nombre en vez del nuevo.
-    vcDescargar(blob, nombre.replace(/.pdf$/i, '') + ' ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/D/g, '-') + '.pdf');
+    vcDescargar(blob, nombre.replace(/\.pdf$/i, '') + ' ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/\D/g, '-') + '.pdf');
     if (falla) errToast(`${que} generado y descargado, pero no se adjuntó a la reserva: ${falla}`);
     else { okToast(`${que} generado, descargado y adjunto` + (pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
   } catch (e) {
