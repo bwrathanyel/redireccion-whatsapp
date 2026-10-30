@@ -3969,12 +3969,12 @@ function pvCardHtml(c, extra = '') {
         : '<div class="pv-falta ok"><i class="fas fa-check" aria-hidden="true"></i> Todo en orden</div>')
         + (c.proximo_seguimiento_at ? `<div class="pv-meta"><span class="${vencido ? 'overdue' : ''}"><i class="fas fa-bell"></i>Seguimiento: ${tiempoSeguimiento(c.proximo_seguimiento_at)}</span></div>` : '');
     return `<article class="pv-card" data-id="${c.id}">
-      <div class="pv-card-top"><span class="pv-chip${c.etapa === 'LISTO_PARA_VIAJAR' ? ' ok' : ''}"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span>${c.prioridad && c.prioridad !== 'NORMAL' ? `<span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span>` : ''}${viajeHtml}</div>
+      <div class="pv-card-top"><span class="pv-chip${c.etapa === 'LISTO_PARA_VIAJAR' ? ' ok' : ''}"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span>${c.prioridad && c.prioridad !== 'NORMAL' ? `<span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span>` : ''}${viajeHtml}<span class="pv-tools"><button class="pv-tool" data-pv-exportar="${c.id}" type="button" aria-label="Exportar reserva ${esc(c.codigo || '')}" title="Exportar (PDF o texto)"><i class="fas fa-file-arrow-down" aria-hidden="true"></i></button>${esOficina() ? `<button class="pv-tool del" data-pv-eliminar="${c.id}" type="button" aria-label="Eliminar reserva ${esc(c.codigo || '')}" title="Eliminar reserva"><i class="fas fa-trash-can" aria-hidden="true"></i></button>` : ''}</span></div>
       <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span style="font-size:10.5px;font-weight:500;color:var(--muted2)">${esc(c.codigo || '')}${c.principal === false ? ' · adicional' : ''}</span></div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}${falta === null ? '' : ` · ${esc(pvRangoViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin))}`}</div>${extra}
       <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>Saldo <b>${money(c.saldo_pendiente)}</b></span></div>
       <div class="pv-progress${total > 0 && pagado >= total ? ' full' : ''}"><span style="width:${pct}%"></span></div>
       ${faltaHtml}${c.incidencia_abierta ? '<div class="pv-meta"><span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span></div>' : ''}
-      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button" aria-label="WhatsApp de ${esc(c.nombre || 'cliente')}" title="Abrir WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></button>` : ''}<button class="pv-btn exp" data-pv-exportar="${c.id}" type="button" aria-label="Exportar reserva ${esc(c.codigo || '')}" title="Exportar (PDF o texto)"><i class="fas fa-file-arrow-down" aria-hidden="true"></i></button>${['admin','asesor','administrativo'].includes(ROL) ? `<button class="pv-btn" data-pv-abono="${c.id}" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente"'}>+ Abono</button><button class="pv-btn" data-pv-servicio="${c.id}" type="button">+ Servicio</button>` : ''}${esOficina() ? `<button class="pv-btn del" data-pv-eliminar="${c.id}" type="button" aria-label="Eliminar reserva ${esc(c.codigo || '')}" title="Eliminar reserva"><i class="fas fa-trash-can" aria-hidden="true"></i></button>` : ''}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar</button></div>
+      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button" aria-label="WhatsApp de ${esc(c.nombre || 'cliente')}" title="Abrir WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></button>` : ''}${['admin','asesor','administrativo'].includes(ROL) ? `<button class="pv-btn" data-pv-abono="${c.id}" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente"'}>+ Abono</button><button class="pv-btn" data-pv-servicio="${c.id}" type="button">+ Servicio</button>` : ''}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar</button></div>
     </article>`;
 }
 // Abonos de la tarjeta: siempre por reserva, sin usar reserva_principal ni registrar_abono_venta.
@@ -12016,6 +12016,7 @@ function pagoWebCard(p) {
   } else if ((p.estado === 'vencido' || p.estado === 'emitido') && pagoEsWeb(p)) {
     acciones.push(`<button type="button" class="inbox-btn avisar" data-pagoweb-tarde="${p.id}"><i class="fas fa-check"></i> Ya pagó: confirmar</button>`);
   }
+  if (p.estado === 'vencido' || p.estado === 'emitido') acciones.push(`<button type="button" class="inbox-btn pagos-sec" data-pagoweb-descartar="${p.id}"><i class="fas fa-trash-can"></i> Descartar</button>`);
   const etapa = pagoEtapa(p);
   const tot = Number(p.servicios_total || 0), conLoc = Number(p.servicios_con_localizador || 0);
   if (etapa === 'reserva' && p.reserva_id) acciones.push(`<button type="button" class="inbox-btn atender" data-pagoweb-reserva="${p.id}"><i class="fas fa-ticket"></i> Cargar localizador${tot - conLoc === 1 ? '' : 'es'}</button>`);
@@ -12562,6 +12563,18 @@ async function emitirLinkPago(l) {
   cargarLinksPagoLead(l);
 }
 
+async function descartarPago(id, btn) {
+  const p = PAGOS_CACHE.find(x => x.id === id);
+  const web = p && pagoEsWeb(p) && p.reserva_id;
+  if (!confirm(`¿Descartar este pago${p?.lead_nombre ? ' de ' + p.lead_nombre : ''}? El link deja de funcionar${web ? ' y se libera el cupo de la reserva web' : ''}.`)) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('descartar_pago', { p_pago_id: id });
+  btn.disabled = false;
+  if (error || !data?.ok) return errToast(data?.error === 'estado_invalido' ? 'Ese pago ya fue declarado o verificado' : error?.message || data?.error || 'No se pudo descartar');
+  okToast('Pago descartado');
+  loadPagos(true);
+}
+
 function setupPagos() {
   const lista = document.getElementById('pagos-lista');
   if (!lista) return;
@@ -12586,6 +12599,8 @@ function setupPagos() {
     }
     const wTarde = e.target.closest('[data-pagoweb-tarde]');
     if (wTarde) return verificarPagoWebAccion(Number(wTarde.dataset.pagowebTarde), 'tarde', wTarde);
+    const wDes = e.target.closest('[data-pagoweb-descartar]');
+    if (wDes) return descartarPago(Number(wDes.dataset.pagowebDescartar), wDes);
     // El localizador se carga por servicio en la ficha de la reserva; al volver a Pagos la tarjeta avanza sola.
     const wRes = e.target.closest('[data-pagoweb-reserva]');
     if (wRes) {

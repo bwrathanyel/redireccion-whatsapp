@@ -4555,9 +4555,12 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .pv-card-foot{margin-top:14px;padding-top:13px;border-top:1px solid var(--line);flex-wrap:wrap}
 .pv-card-foot .pv-btn{min-height:44px;flex:1 0 auto;padding:0 9px;white-space:nowrap}
 .pv-card-foot .pv-btn.wa{flex:0 0 44px;width:44px;height:44px;padding:0;font-size:17px}
-.pv-card-foot .pv-btn.del,.pv-card-foot .pv-btn.exp{flex:0 0 44px;width:44px;height:44px;padding:0;font-size:15px;color:var(--muted)}
-.pv-card-foot .pv-btn.exp:not(:disabled):hover{color:var(--accent);border-color:var(--accent)}
-.pv-card-foot .pv-btn.del:not(:disabled):hover{color:var(--danger);border-color:var(--danger)}
+.pv-tools{display:inline-flex;gap:5px;margin-left:auto}
+.pv-viaje+.pv-tools{margin-left:0}
+.pv-tool{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:999px;border:1px solid var(--line2);background:rgba(255,255,255,.03);color:var(--muted);font-size:11.5px;cursor:pointer;transition:color .16s,border-color .16s,background .16s;position:relative}
+.pv-tool::after{content:"";position:absolute;inset:-8px -2px}
+.pv-tool:hover{color:var(--accent);border-color:var(--accent)}
+.pv-tool.del:hover{color:var(--danger);border-color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,transparent)}
 .pv-card-foot .pv-btn:disabled{opacity:.45;cursor:default}
 .pv-card-foot .pv-btn:focus-visible,#pv-abono-sheet :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 #pv-abono-sheet{overflow-y:auto;max-height:85dvh}
