@@ -2,35 +2,67 @@
 // Vive aparte de app.js (mismo patrón que wa-campanas.js). La key de Zernio nunca
 // baja al navegador; los topes y permisos de escritura se validan en la EF.
 // Plan: ~/.claude/plans/podemos-montar-un-gestor-imperative-firefly.md
+// Diseño: docs/superpowers/specs/2026-10-30-ads-meta-tarjetas-design.md
 const CSS = `
-.am-barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
-.am-barra select{min-height:38px}
+.am-barra{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin:0 0 14px}
+.am-barra select,.am-busca{min-height:38px}
+.am-busca{flex:1 1 180px;max-width:280px}
+.am-chip{display:inline-flex;align-items:center;gap:7px;min-height:38px;padding:0 14px;border-radius:999px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;transition:.16s}
+.am-chip.on{border-color:var(--accent-ink);color:var(--accent-ink);background:var(--accent-soft)}
 .am-sinc{font-size:11px;color:var(--muted);margin-left:auto}
-.am-tabla{width:100%;border-collapse:collapse;font-size:12.5px}
-.am-tabla th{position:sticky;top:0;background:var(--panel);text-align:right;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line2);white-space:nowrap}
-.am-tabla th:first-child,.am-tabla td:first-child{text-align:left}
-.am-tabla td{padding:8px 6px;border-bottom:1px solid var(--line2);text-align:right;white-space:nowrap;vertical-align:middle}
-.am-tabla td:first-child{white-space:normal;min-width:240px}
-.am-fila-camp{cursor:pointer}
-.am-fila-camp td:first-child b{font-weight:700}
-.am-fila-conj td:first-child{padding-left:22px}
-.am-fila-anun td:first-child{padding-left:40px}
-.am-nom{display:flex;gap:8px;align-items:center}
-.am-nom img{width:34px;height:34px;object-fit:cover;border-radius:6px;flex:0 0 auto}
-.am-nom small{display:block;color:var(--muted);font-size:10.5px}
-.am-est{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;background:var(--line2);color:var(--muted)}
-.am-est.on{background:color-mix(in srgb,#16a34a 18%,transparent);color:#15803d}
-.am-crm{color:var(--accent-ink);font-weight:700}
-.am-acc{display:inline-flex;gap:4px}
-.am-acc button{min-height:30px;padding:0 8px}
+.am-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:14px}
+.am-card{display:flex;flex-direction:column;border:1px solid var(--line2);border-radius:14px;overflow:hidden;background:var(--panel);cursor:pointer;transition:border-color .16s,transform .16s}
+.am-card:hover{border-color:var(--accent-ink);transform:translateY(-2px)}
+.am-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.am-foto{position:relative;aspect-ratio:1;background:var(--bg2);display:grid;place-items:center;color:var(--muted);font-size:28px}
+.am-foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.am-est{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:800;padding:2px 9px;border-radius:999px;background:var(--line2);color:var(--muted)}
+.am-est.on::before{content:'';width:7px;height:7px;border-radius:999px;background:var(--green)}
+.am-foto .am-est{position:absolute;top:9px;left:9px;background:var(--velo-foto);color:var(--sobre-foto)}
+.am-foto .am-est.on::before{background:var(--precio-sobre-foto)}
+.am-cuerpo{display:flex;flex-direction:column;gap:4px;flex:1;padding:11px 14px}
+.am-tit{font-size:13px;font-weight:700;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.am-gasto{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.am-res{font-size:11.5px;color:var(--muted)}
+.am-crm{font-size:11.5px;font-weight:700;color:var(--accent-ink)}
+.am-pie{padding:0 14px 11px}
+.am-acc{display:inline-flex;flex-wrap:wrap;gap:4px}
+.am-acc button{min-height:32px;padding:0 9px}
 .am-vacio{padding:28px;text-align:center;color:var(--muted)}
-.am-posts{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.am-vacio .btn-sm{margin-top:11px}
+.am-aviso{font-size:12px;color:var(--muted);margin:7px 0 0}
+.am-det-tit{font-size:18px;font-weight:800;line-height:1.25;margin:0 44px 4px 0}
+.am-det-sub{display:flex;flex-wrap:wrap;gap:7px;align-items:center;font-size:11.5px;color:var(--muted)}
+.am-det-foto{display:grid;place-items:center;position:relative;width:100%;aspect-ratio:1;margin:14px 0;border-radius:12px;overflow:hidden;background:var(--bg2);color:var(--muted);font-size:34px}
+.am-det-foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.am-ver{position:absolute;right:9px;bottom:9px;padding:4px 11px;border-radius:999px;background:var(--velo-foto);color:var(--sobre-foto);font-size:11px;font-weight:700}
+.am-met{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:14px 0}
+.am-met div{border:1px solid var(--line);border-radius:10px;padding:7px 9px}
+.am-met small,.am-det-h{display:block;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+.am-met b{font-size:13px}
+.am-met .crm b{color:var(--accent-ink)}
+.am-det-h{margin:22px 0 7px}
+.am-conj{border-top:1px solid var(--line);margin-top:9px;padding-top:9px}
+.am-conj-cab{display:flex;gap:7px;align-items:center;justify-content:space-between;font-size:12px;font-weight:700}
+.am-conj-cab small{display:block;font-size:11px;font-weight:400;color:var(--muted)}
+.am-anun{display:flex;gap:9px;align-items:center;padding:7px 0}
+.am-anun>img,.am-anun>.am-sin{flex:0 0 auto;width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--bg2);display:grid;place-items:center;color:var(--muted)}
+.am-anun>div{flex:1;min-width:0;font-size:12.5px;overflow-wrap:anywhere}
+.am-anun a{color:inherit}
+.am-anun small{display:block;font-size:11px;color:var(--muted)}
+.am-posts{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:9px}
 .am-post{border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:var(--panel);cursor:pointer;text-align:left;padding:0}
 .am-post img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
-.am-post div{padding:7px 8px;font-size:11px;color:var(--muted)}
+.am-post div{padding:7px 9px;font-size:11px;color:var(--muted)}
 .am-post.on{outline:2px solid var(--accent-ink)}
-.am-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:12px 0}
-.am-aviso{font-size:12px;color:var(--muted);margin:6px 0 0}
+.am-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px;margin:14px 0}
+@media (max-width:640px){
+  .am-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .am-cuerpo{padding:9px 11px}
+  .am-pie{padding:0 11px 9px}
+  .am-gasto{font-size:18px}
+  .am-met{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 `;
 const CTAS = [
   { v: 'INSTAGRAM_MESSAGE', t: 'Enviar mensaje por Instagram' },
@@ -43,17 +75,31 @@ const ERRORES = {
   meta_ads_sin_conectar: 'La cuenta de Meta Ads no está conectada en Zernio.',
   zernio_no_responde: 'Zernio no respondió. Probá de nuevo en un minuto.',
 };
+// Nombre que se muestra en el CRM (pedido del dueño 30-oct); en Meta siguen con su nombre original.
+const ALIAS_CUENTAS = {
+  '1227849214235821': 'Destino y Eventos Lotus 360 Instagram',
+  '1402478865116363': 'Proacción Instagram',
+};
+const OBJETIVOS = {
+  LINK_CLICKS: 'Clics al enlace', OUTCOME_TRAFFIC: 'Tráfico', OUTCOME_ENGAGEMENT: 'Interacción',
+  POST_ENGAGEMENT: 'Interacción', MESSAGES: 'Mensajes', OUTCOME_LEADS: 'Clientes potenciales',
+  OUTCOME_AWARENESS: 'Reconocimiento', REACH: 'Alcance', VIDEO_VIEWS: 'Reproducciones', OUTCOME_SALES: 'Ventas',
+};
 
 export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', raiz }) {
   const admin = rol === 'admin';
-  let cuentas = [], cuenta = '', tope = 20, dias = 30, abiertas = new Set(), datos = null, vista = 'arbol';
-  let posts = [], postSel = null, pedido = 0, ocupado = false;
+  let cuentas = [], cuenta = '', tope = 20, dias = 30, conGasto = true, busca = '', datos = null, vista = 'arbol';
+  let posts = [], postSel = null, pedido = 0, ocupado = false, campSel = null, fondo = null, cajon = null;
   const $ = sel => raiz.querySelector(sel);
   const usd = n => '$' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const ent = n => Number(n || 0).toLocaleString('es-VE');
   const div = (a, b) => (b > 0 ? a / b : null);
   const iso = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const haceDias = n => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
+  const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const nombreCuenta = c => ALIAS_CUENTAS[String(c.id).replace(/^act_/, '')] || (!c.nombre || /^\d+$/.test(c.nombre.trim()) ? `Cuenta …${String(c.id).slice(-4)}` : c.nombre);
+  const anuncios = camp => camp.conjuntos.flatMap(s => s.anuncios);
+  const portada = camp => anuncios(camp).find(a => a.miniatura) || {};
 
   async function invocar(body) {
     const { data, error: e } = await sb.functions.invoke('ads-meta-zernio', { body });
@@ -77,69 +123,145 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
         <div class="ria-sub">Gasto de Meta cruzado con los leads y ventas que trajo cada anuncio. Solo cuentan los anuncios que abren un chat (Instagram, Messenger o WhatsApp).</div></div>
         ${admin ? '<button class="btn-sm lt-primario" type="button" data-am="nuevo"><i class="fas fa-rocket"></i> Promocionar post</button>' : ''}</div>
       <div class="am-barra">
-        <select class="ei" id="am-cuenta"></select>
-        <div class="seg-group" id="am-dias">${[7, 30, 90].map(d => `<button class="seg${d === dias ? ' on' : ''}" data-dias="${d}">${d} días</button>`).join('')}</div>
-        <button class="btn-sm" type="button" data-am="recargar"><i class="fas fa-rotate"></i></button>
+        <select class="ei" id="am-cuenta" aria-label="Cuenta publicitaria"></select>
+        <div class="seg-group" id="am-dias">${[7, 30, 90].map(d => `<button class="seg${d === dias ? ' on' : ''}" type="button" data-dias="${d}">${d} días</button>`).join('')}</div>
+        <button class="am-chip on" type="button" data-am="gasto" aria-pressed="true"><i class="fas fa-dollar-sign"></i> Solo con gasto</button>
+        <input class="ei am-busca" id="am-busca" type="search" placeholder="Buscar campaña" aria-label="Buscar campaña">
+        <button class="btn-sm" type="button" data-am="recargar" title="Recargar"><i class="fas fa-rotate"></i></button>
         <span class="am-sinc" id="am-sinc"></span>
       </div>
       <div class="kpis kpis-5" id="am-kpis"></div>
-      <div class="card" style="margin-top:12px;overflow:auto" id="am-cuerpo"><div class="am-vacio">Cargando…</div></div>`;
+      <div id="am-cuerpo"><div class="am-vacio">Cargando…</div></div>`;
     raiz.addEventListener('click', clic);
-    raiz.addEventListener('change', e => { if (e.target.id === 'am-cuenta') { cuenta = e.target.value; cargarArbol(); } });
+    raiz.addEventListener('change', e => { if (e.target.id === 'am-cuenta') { cuenta = e.target.value; cerrar(); cargarArbol(); } });
+    raiz.addEventListener('input', e => { if (e.target.id === 'am-busca') { busca = norm(e.target.value.trim()); if (vista === 'arbol' && datos) pintarArbol(); } });
+    raiz.addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('am-card')) { e.preventDefault(); abrir(e.target.dataset.camp); }
+    });
+    fondo = document.createElement('div'); fondo.className = 'drawer-bg';
+    cajon = document.createElement('aside');
+    cajon.className = 'drawer am-drawer'; cajon.setAttribute('role', 'dialog'); cajon.setAttribute('aria-modal', 'true'); cajon.setAttribute('aria-label', 'Detalle de campaña');
+    cajon.innerHTML = '<button class="dclose" type="button" data-am="cerrar" aria-label="Cerrar">✕</button><div id="am-det"></div>';
+    document.body.append(fondo, cajon);
+    fondo.addEventListener('click', cerrar);
+    cajon.addEventListener('click', clic);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && campSel && !document.querySelector('.sheet.open')) cerrar(); });
   }
 
   function pintarCuentas() {
-    $('#am-cuenta').innerHTML = cuentas.map(c => `<option value="${esc(c.id)}"${c.id === cuenta ? ' selected' : ''}>${esc(c.nombre)}${c.activa ? '' : ' (inactiva)'}</option>`).join('');
+    $('#am-cuenta').innerHTML = cuentas.map(c => `<option value="${esc(c.id)}"${c.id === cuenta ? ' selected' : ''}>${esc(nombreCuenta(c))}${c.activa ? '' : ' (inactiva)'}</option>`).join('');
   }
 
   function kpis(c) {
     const m = c.reduce((a, x) => ({ g: a.g + x.metricas.gasto, conv: a.conv + x.metricas.conversaciones, l: a.l + x.crm.leads, v: a.v + x.crm.ventas, $: a.$ + x.crm.monto }), { g: 0, conv: 0, l: 0, v: 0, $: 0 });
     const k = [
-      ['Gasto', usd(m.g), 'fa-dollar-sign', '#2563eb'],
-      ['Chats (Meta)', ent(m.conv), 'fa-comments', '#7c3aed'],
-      ['Leads CRM', `${ent(m.l)}${m.l ? ' · ' + usd(div(m.g, m.l)) + ' c/u' : ''}`, 'fa-user-plus', '#0891b2'],
-      ['Ventas', `${ent(m.v)}${m.v ? ' · ' + usd(div(m.g, m.v)) + ' c/u' : ''}`, 'fa-cart-shopping', '#16a34a'],
-      ['Vendido / gasto', m.g ? (m.$ / m.g).toFixed(1) + 'x' : '—', 'fa-scale-balanced', '#ea580c'],
+      ['Gasto', usd(m.g), 'fa-dollar-sign', 'var(--blue)'],
+      ['Chats (Meta)', ent(m.conv), 'fa-comments', 'var(--purple)'],
+      ['Leads CRM', `${ent(m.l)}${m.l ? ' · ' + usd(div(m.g, m.l)) + ' c/u' : ''}`, 'fa-user-plus', 'var(--amber)'],
+      ['Ventas', `${ent(m.v)}${m.v ? ' · ' + usd(div(m.g, m.v)) + ' c/u' : ''}`, 'fa-cart-shopping', 'var(--green)'],
+      ['Vendido / gasto', m.g ? (m.$ / m.g).toFixed(1) + 'x' : '—', 'fa-scale-balanced', 'var(--accent)'],
     ];
     $('#am-kpis').innerHTML = k.map(c => `<div class="kpi" style="--kc:${c[3]}"><div class="kt"><i class="fas ${c[2]}"></i>${c[0]}</div><div class="kv">${c[1]}</div></div>`).join('');
   }
 
   const estado = e => `<span class="am-est${e === 'active' ? ' on' : ''}">${e === 'active' ? 'Activo' : e === 'paused' ? 'Pausado' : esc(e || '—')}</span>`;
+  const objetivo = o => (o ? esc(OBJETIVOS[o] || o.replace(/^OUTCOME_/, '').replace(/_/g, ' ').toLowerCase()) : '');
+  const foto = (a, clase) => (a.miniatura ? `<img src="${esc(a.miniatura)}" alt="" loading="lazy">` : `<i class="fas fa-bullhorn${clase ? ' ' + clase : ''}"></i>`);
 
-  function celdas(n) {
-    const m = n.metricas, c = n.crm;
-    return `<td>${usd(m.gasto)}</td><td>${ent(m.alcance)}</td><td>${ent(m.clics)}</td><td>${ent(m.conversaciones)}</td>
-      <td class="am-crm">${ent(c.leads)}</td><td>${c.leads ? usd(div(m.gasto, c.leads)) : '—'}</td>
-      <td class="am-crm">${ent(c.ventas)}</td><td>${c.ventas ? usd(div(m.gasto, c.ventas)) : '—'}</td>`;
+  function resultado(m) {
+    if (m.conversaciones) return `${ent(m.conversaciones)} chats · ${usd(div(m.gasto, m.conversaciones))} c/u`;
+    if (m.clics) return `${ent(m.clics)} clics · ${usd(div(m.gasto, m.clics))} c/u`;
+    return `${ent(m.alcance)} de alcance`;
+  }
+  const lineaCrm = c => [c.leads ? `${ent(c.leads)} lead${c.leads > 1 ? 's' : ''}` : '', c.ventas ? `${ent(c.ventas)} venta${c.ventas > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ');
+
+  const editable = n => admin && ['active', 'paused'].includes(n.estado);
+  const dato = (nivel, n, plataforma) => `data-nivel="${nivel}" data-id="${esc(n.id)}" data-plat="${esc(plataforma)}" data-nombre="${esc(n.nombre)}" data-estado="${esc(n.estado)}"`;
+  const btnPresupuesto = (nivel, n, plataforma) => (editable(n) && n.presupuesto?.tipo === 'daily'
+    ? `<button class="btn-sm" type="button" data-am="presupuesto" ${dato(nivel, n, plataforma)} data-monto="${n.presupuesto.monto}" title="Presupuesto diario">${usd(n.presupuesto.monto)}/día</button>` : '');
+  const btnEstado = (nivel, n, plataforma) => (editable(n)
+    ? `<button class="btn-sm" type="button" data-am="estado" ${dato(nivel, n, plataforma)} title="${n.estado === 'active' ? 'Pausar' : 'Activar'}" aria-label="${n.estado === 'active' ? 'Pausar' : 'Activar'}"><i class="fas fa-${n.estado === 'active' ? 'pause' : 'play'}"></i></button>` : '');
+  const grupo = (...b) => (b.join('') ? `<span class="am-acc">${b.join('')}</span>` : '');
+  const botones = (nivel, n, plataforma, conPresupuesto) => grupo(conPresupuesto ? btnPresupuesto(nivel, n, plataforma) : '', btnEstado(nivel, n, plataforma));
+
+  // Presupuesto CBO vive en la campaña; ABO con un solo conjunto (los boosts) se edita desde la campaña igual.
+  function accionesCamp(camp) {
+    const unico = camp.nivel_presupuesto !== 'campaign' && camp.conjuntos.length === 1 ? camp.conjuntos[0] : null;
+    const pres = camp.nivel_presupuesto === 'campaign' ? btnPresupuesto('campana', camp, camp.plataforma) : unico ? btnPresupuesto('conjunto', unico, camp.plataforma) : '';
+    return grupo(pres, btnEstado('campana', camp, camp.plataforma));
   }
 
-  function acciones(nivel, n, plataforma) {
-    if (!admin || !['active', 'paused'].includes(n.estado)) return '<td></td>';
-    const dato = `data-nivel="${nivel}" data-id="${esc(n.id)}" data-plat="${esc(plataforma)}" data-nombre="${esc(n.nombre)}" data-estado="${esc(n.estado)}"`;
-    const pres = nivel !== 'anuncio' && n.presupuesto?.tipo === 'daily'
-      ? `<button class="btn-sm" type="button" data-am="presupuesto" ${dato} data-monto="${n.presupuesto.monto}" title="Presupuesto diario">${usd(n.presupuesto.monto)}/día</button>` : '';
-    return `<td><span class="am-acc">${pres}<button class="btn-sm" type="button" data-am="estado" ${dato} title="${n.estado === 'active' ? 'Pausar' : 'Activar'}"><i class="fas fa-${n.estado === 'active' ? 'pause' : 'play'}"></i></button></span></td>`;
+  function tarjeta(camp) {
+    const crm = lineaCrm(camp.crm), pie = accionesCamp(camp);
+    return `<article class="am-card" data-camp="${esc(camp.id)}" tabindex="0" role="button" aria-label="${esc(camp.nombre)}">
+      <div class="am-foto">${foto(portada(camp))}${estado(camp.estado)}</div>
+      <div class="am-cuerpo"><div class="am-tit">${esc(camp.nombre)}</div><div class="am-gasto">${usd(camp.metricas.gasto)}</div>
+        <div class="am-res">${resultado(camp.metricas)}</div>${crm ? `<div class="am-crm">${crm}</div>` : ''}</div>
+      ${pie ? `<div class="am-pie">${pie}</div>` : ''}</article>`;
+  }
+
+  function visibles() {
+    const c = datos?.campanas || [];
+    return busca ? c.filter(x => norm(x.nombre).includes(busca)) : c;
   }
 
   function pintarArbol() {
-    const c = datos?.campanas || [];
+    const todas = datos?.campanas || [], c = visibles();
     kpis(c);
     $('#am-sinc').textContent = datos?.sincronizado ? 'Meta sincronizado ' + new Date(datos.sincronizado).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' }) : '';
-    if (!c.length) { $('#am-cuerpo').innerHTML = '<div class="am-vacio">Sin campañas en este período.</div>'; return; }
-    const filas = c.map(camp => {
-      const abierta = abiertas.has(camp.id);
-      let h = `<tr class="am-fila-camp" data-camp="${esc(camp.id)}"><td><div class="am-nom"><i class="fas fa-chevron-${abierta ? 'down' : 'right'}"></i><div><b>${esc(camp.nombre)}</b><small>${estado(camp.estado)} ${esc(camp.objetivo || '')}</small></div></div></td>${celdas(camp)}${acciones('campana', camp.nivel_presupuesto === 'campaign' ? camp : { ...camp, presupuesto: null }, camp.plataforma)}</tr>`;
-      if (!abierta) return h;
-      for (const s of camp.conjuntos) {
-        h += `<tr class="am-fila-conj"><td><div class="am-nom"><div>${esc(s.nombre)}<small>${estado(s.estado)} ${esc(s.destino || '')}</small></div></div></td>${celdas(s)}${acciones('conjunto', camp.nivel_presupuesto === 'campaign' ? { ...s, presupuesto: null } : s, camp.plataforma)}</tr>`;
-        for (const a of s.anuncios) {
-          h += `<tr class="am-fila-anun"><td><div class="am-nom">${a.miniatura ? `<img src="${esc(a.miniatura)}" alt="" loading="lazy">` : ''}<div>${a.enlace ? `<a href="${esc(a.enlace)}" target="_blank" rel="noopener">${esc(a.nombre)}</a>` : esc(a.nombre)}<small>${estado(a.estado)}</small></div></div></td>${celdas(a)}${acciones('anuncio', a, camp.plataforma)}</tr>`;
-        }
-      }
-      return h;
-    }).join('');
-    $('#am-cuerpo').innerHTML = `<table class="am-tabla"><thead><tr><th>Campaña / conjunto / anuncio</th><th>Gasto</th><th>Alcance</th><th>Clics</th><th>Chats</th><th>Leads</th><th>$/lead</th><th>Ventas</th><th>$/venta</th><th></th></tr></thead><tbody>${filas}</tbody></table>
-      ${datos.errores?.crm ? '<div class="am-aviso">No se pudieron leer los leads del CRM: las columnas Leads y Ventas pueden estar en cero.</div>' : ''}`;
+    const aviso = datos?.errores?.crm ? '<div class="am-aviso">No se pudieron leer los leads del CRM: leads y ventas pueden estar en cero.</div>' : '';
+    if (!todas.length) {
+      $('#am-cuerpo').innerHTML = conGasto
+        ? `<div class="am-vacio">Ninguna campaña gastó en estos ${dias} días.<br><button class="btn-sm" type="button" data-am="gasto">Ver todas</button></div>`
+        : '<div class="am-vacio">Sin campañas en este período.</div>';
+    } else if (!c.length) {
+      $('#am-cuerpo').innerHTML = '<div class="am-vacio">Ninguna campaña coincide con la búsqueda.</div>';
+    } else {
+      $('#am-cuerpo').innerHTML = `<div class="am-grid">${c.map(tarjeta).join('')}</div>${aviso}`;
+    }
+    if (campSel) pintarDetalle();
+  }
+
+  function pintarDetalle() {
+    const camp = (datos?.campanas || []).find(x => x.id === campSel);
+    if (!camp) return cerrar();
+    const m = camp.metricas, c = camp.crm, p = portada(camp);
+    const met = [
+      ['Gasto', usd(m.gasto)], ['Alcance', ent(m.alcance)], ['Clics', ent(m.clics)], ['Chats', ent(m.conversaciones)],
+      ['Leads', ent(c.leads), 1], ['$/lead', c.leads ? usd(div(m.gasto, c.leads)) : '—', 1],
+      ['Ventas', ent(c.ventas), 1], ['$/venta', c.ventas ? usd(div(m.gasto, c.ventas)) : '—', 1],
+    ];
+    const fila = a => `<div class="am-anun">${a.miniatura ? `<img src="${esc(a.miniatura)}" alt="" loading="lazy">` : '<span class="am-sin"><i class="fas fa-bullhorn"></i></span>'}
+      <div>${a.enlace ? `<a href="${esc(a.enlace)}" target="_blank" rel="noopener">${esc(a.nombre)}</a>` : esc(a.nombre)}
+        <small>${estado(a.estado)} ${usd(a.metricas.gasto)} · ${resultado(a.metricas)}</small></div>${botones('anuncio', a, camp.plataforma, false)}</div>`;
+    const lista = camp.conjuntos.length > 1
+      ? camp.conjuntos.map(s => `<div class="am-conj"><div class="am-conj-cab"><div>${esc(s.nombre)}<small>${estado(s.estado)} ${esc(s.destino || '')} · ${usd(s.metricas.gasto)}</small></div>
+          ${botones('conjunto', s, camp.plataforma, camp.nivel_presupuesto !== 'campaign')}</div>${s.anuncios.map(fila).join('')}</div>`).join('')
+      : anuncios(camp).map(fila).join('');
+    const n = anuncios(camp).length;
+    cajon.querySelector('#am-det').innerHTML = `
+      <h3 class="am-det-tit">${esc(camp.nombre)}</h3>
+      <div class="am-det-sub">${estado(camp.estado)}${objetivo(camp.objetivo)}</div>
+      ${p.enlace ? `<a class="am-det-foto" href="${esc(p.enlace)}" target="_blank" rel="noopener">${foto(p)}<span class="am-ver">Ver en Instagram ↗</span></a>` : `<div class="am-det-foto">${foto(p)}</div>`}
+      ${accionesCamp(camp)}
+      <div class="am-met">${met.map(x => `<div${x[2] ? ' class="crm"' : ''}><small>${x[0]}</small><b>${x[1]}</b></div>`).join('')}</div>
+      <div class="am-det-h">${n} anuncio${n === 1 ? '' : 's'}</div>${lista || '<div class="am-aviso">Sin anuncios en este período.</div>'}`;
+  }
+
+  function abrir(id) {
+    campSel = id;
+    pintarDetalle();
+    fondo.classList.add('open'); cajon.classList.add('open');
+    cajon.querySelector('.dclose').focus();
+  }
+
+  // La grilla se repinta tras cada acción: el foco vuelve a la tarjeta por id, no por nodo.
+  function cerrar() {
+    if (!campSel) return;
+    const id = campSel;
+    campSel = null;
+    fondo.classList.remove('open'); cajon.classList.remove('open');
+    raiz.querySelector(`.am-card[data-camp="${window.CSS.escape(id)}"]`)?.focus();
   }
 
   // Gana el último pedido: cambiar cuenta o rango mientras carga no pinta datos viejos.
@@ -148,7 +270,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     const n = ++pedido;
     $('#am-cuerpo').innerHTML = '<div class="am-vacio">Cargando…</div>';
     try {
-      const d = await invocar({ accion: 'arbol', cuenta, desde: haceDias(dias), hasta: iso(new Date()) });
+      const d = await invocar({ accion: 'arbol', cuenta, desde: haceDias(dias), hasta: iso(new Date()), con_gasto: conGasto });
       if (n !== pedido || vista !== 'arbol') return;
       datos = d;
       pintarArbol();
@@ -187,12 +309,13 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
 
   async function abrirNuevo() {
     vista = 'nuevo'; postSel = null;
+    cerrar();
     $('#am-kpis').innerHTML = '';
     $('#am-cuerpo').innerHTML = '<div class="am-vacio">Cargando publicaciones…</div>';
     try {
       posts = (await invocar({ accion: 'posts' })).posts;
     } catch (e) { $('#am-cuerpo').innerHTML = `<div class="am-vacio">${esc(e.message)}</div>`; return; }
-    $('#am-cuerpo').innerHTML = `
+    $('#am-cuerpo').innerHTML = `<div class="card">
       <div class="pvc-cab"><h2>Promocionar un post de Instagram</h2><button class="btn-sm" type="button" data-am="volver"><i class="fas fa-arrow-left"></i> Volver</button></div>
       <div class="am-posts">${posts.map(p => `<button class="am-post" type="button" data-post="${esc(p.id)}">${p.miniatura ? `<img src="${esc(p.miniatura)}" alt="" loading="lazy">` : ''}<div>${esc((p.fecha || '').slice(0, 10))} · alcance ${ent(p.alcance)}<br>${esc(p.texto.slice(0, 70))}</div></button>`).join('') || '<div class="am-vacio">Sin publicaciones en los últimos 30 días.</div>'}</div>
       <div class="am-form">
@@ -203,7 +326,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
         <label class="fl">Países (ISO, coma)<input class="ei" id="am-paises" value="VE"></label>
       </div>
       <button class="btn-sm lt-primario" type="button" data-am="validar"><i class="fas fa-check"></i> Revisar con Meta</button>
-      <div class="am-aviso">Primero Meta lo revisa sin crear nada. Al confirmar se crea <b>en pausa</b>: se activa desde la lista, con fecha de fin siempre.</div>`;
+      <div class="am-aviso">Primero Meta lo revisa sin crear nada. Al confirmar se crea <b>en pausa</b>: se activa desde la lista, con fecha de fin siempre.</div></div>`;
   }
 
   function leerBoost() {
@@ -252,13 +375,16 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     const a = t.dataset.am;
     if (a === 'estado') return cambiarEstado(t.dataset);
     if (a === 'presupuesto') return cambiarPresupuesto(t.dataset);
+    if (a === 'cerrar') return cerrar();
+    if (a === 'gasto') {
+      conGasto = !conGasto;
+      const chip = $('.am-chip'); chip.classList.toggle('on', conGasto); chip.setAttribute('aria-pressed', String(conGasto));
+      vista = 'arbol'; return cargarArbol();
+    }
     if (a === 'recargar' || a === 'volver') { vista = 'arbol'; return cargarArbol(); }
     if (a === 'nuevo') return abrirNuevo();
     if (a === 'validar') return validarBoost();
-    if (t.dataset.camp && !e.target.closest('button')) {
-      abiertas.has(t.dataset.camp) ? abiertas.delete(t.dataset.camp) : abiertas.add(t.dataset.camp);
-      pintarArbol();
-    }
+    if (t.dataset.camp) abrir(t.dataset.camp);
   }
 
   let montado = false;
