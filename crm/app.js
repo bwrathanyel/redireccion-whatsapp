@@ -4902,12 +4902,14 @@ function rvVoucherSoloAbonos(v, servs, abonos, formaPago = '') {
   const dia = iso => iso ? new Date(iso).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
   const bs = n => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   Object.assign(v, {
+    // Sin tabla de pasajeros (la cédula ya va en Datos del cliente): así el resumen y los abonos caben en la página 1.
+    pasajeros: [],
     titulo_voucher: 'VOUCHER DE ABONOS', etiqueta_detalle: 'DETALLE DEL HOSPEDAJE',
     etiqueta_destino: 'HOTEL / DESTINO', etiqueta_servicios: 'SERVICIOS',
     total_general: totalHosp / 100, monto_pagado: pagado / 100, resta: Math.max(0, totalHosp - pagado) / 100,
     abonos_detalle: resto.map(a => ({
       fecha: dia(a.fecha), referencia: a.referencia || '', monto: Number(a.monto_usd || 0),
-      metodo: a.moneda && a.moneda !== 'USD' ? `${a.metodo || 'Pago'} · Bs ${bs(a.monto_original)}${a.tasa_usd_ves ? ' a tasa ' + ({ EUR: 'BCV euro ', USDT: 'USDT ' }[a.tasa_tipo] || 'BCV ') + bs(a.tasa_usd_ves) : ''}` : /^(saldo anterior|sin especificar)$/i.test(a.metodo || '') ? (formaPago || 'Abono') : a.metodo,
+      metodo: /^(saldo anterior|sin especificar)$/i.test(a.metodo || '') ? (formaPago || 'Abono') : a.metodo,
       servicio: servDe(a) && servDe(a).tipo !== 'hospedaje' ? ({ boleto_aereo: 'Boleto aéreo', traslado_terrestre: 'Traslado', traslado_maritimo: 'Traslado', full_day: 'Full day', seguro: 'Seguro' }[servDe(a).tipo] || 'Otro servicio') : '',
     })),
   });
@@ -31488,7 +31490,7 @@ function vcpDibujarVoucher(doc, v, ctx) {
   ], yR, opt);
   const half = (VCP_W - 16) / 2;
   if (Array.isArray(v.abonos_detalle) && v.abonos_detalle.length) {
-    if (y + 140 > 742) { doc.addPage(); y = 40; }
+    if (y + 75 > 742) { doc.addPage(); y = 40; }
     y = resumen(y, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 }) + gap;
     const nuevo = { fillColor: vcpTinte(VCP.naranja, .9), fontStyle: st('bold') };
     y = conBorde({
