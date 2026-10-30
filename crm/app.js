@@ -12110,14 +12110,28 @@ async function loadPagos(silencioso = false) {
   const idsWeb = new Set([...idsPendientes, ...web.map(w => w.id)]);
   PAGOS_CACHE = [...web, ...(rLista.data.pagos || []).filter(p => !idsWeb.has(p.id))].filter(p => pagoEtapa(p));
   pintarAvisoPagos((rLista.data.pagos || []).length);
-  const de = k => PAGOS_CACHE.filter(p => pagoEtapa(p) === k);
+  empty.classList.toggle('show', !PAGOS_CACHE.length);
+  if (!PAGOS_CACHE.length) { lista.innerHTML = ''; return; }
+  pintarTableroPagos(lista, silencioso);
+}
+
+// Compras de la web vs links/capturas que mandan los asesores. Las filas de listar_pagos
+// no traen origen y nunca son web (pagos_web_cola ya trae todas las de origen web).
+const pagoCanal = p => p._web && pagoEsWeb(p) ? 'web' : 'asesor';
+const PAGOS_CANALES = [['todos', 'Todos'], ['web', 'Compras web'], ['asesor', 'Links de asesores']];
+let PAGOS_CANAL = localStorage.getItem('pagos_canal') || 'todos';
+function pintarTableroPagos(lista, silencioso) {
+  if (!PAGOS_CANALES.some(([k]) => k === PAGOS_CANAL)) PAGOS_CANAL = 'todos';
+  const delCanal = PAGOS_CANAL === 'todos' ? PAGOS_CACHE : PAGOS_CACHE.filter(p => pagoCanal(p) === PAGOS_CANAL);
+  const porVerificar = k => PAGOS_CACHE.filter(p => pagoEtapa(p) === 'verificar' && (k === 'todos' || pagoCanal(p) === k)).length;
+  const de = k => delCanal.filter(p => pagoEtapa(p) === k);
   // Las confirmadas se acumulan para siempre: solo las más recientes (la cola ya viene de la más nueva a la más vieja).
   const cols = { verificar: de('verificar'), reserva: de('reserva'), confirmada: de('confirmada').slice(0, PAGOS_CONFIRMADAS_MAX) };
   const espera = de('espera');
-  empty.classList.toggle('show', !PAGOS_CACHE.length);
-  if (!PAGOS_CACHE.length) { lista.innerHTML = ''; return; }
   const card = p => p._web ? pagoWebCard(p) : pagoAsesorCard(p);
-  lista.innerHTML = `<div class="pagos-tablero">${PAGOS_ETAPAS.map(e => `
+  lista.innerHTML = `<div class="seg-group pagos-canales" role="tablist">${PAGOS_CANALES.map(([k, t]) => { const n = porVerificar(k); return `
+    <button class="seg${k === PAGOS_CANAL ? ' on' : ''}" type="button" role="tab" aria-selected="${k === PAGOS_CANAL}" data-pagos-canal="${k}"><i class="fas fa-${k === 'web' ? 'globe' : k === 'asesor' ? 'link' : 'layer-group'}"></i> ${t}${n ? ` <span class="pagos-canal-n" title="${n} por verificar">${n}</span>` : ''}</button>`; }).join('')}</div>
+    <div class="pagos-tablero">${PAGOS_ETAPAS.map(e => `
     <section class="pagos-col" data-etapa="${e.k}" style="--etapa:${e.color}">
       <header class="pagos-col-head"><span class="pagos-col-punto"></span><h3>${esc(e.t)}</h3><span class="pagos-col-n">${cols[e.k].length}</span></header>
       <div class="pagos-col-sub">${esc(e.s)}</div>
@@ -12125,6 +12139,11 @@ async function loadPagos(silencioso = false) {
     </section>`).join('')}</div>
     ${espera.length ? `<details class="pagos-espera"><summary><i class="fas fa-hourglass-half"></i> Esperando que el cliente pague <span class="pagos-col-n">${espera.length}</span></summary>
       <div class="leads-inbox-grid">${espera.map(card).join('')}</div></details>` : ''}`;
+  lista.querySelectorAll('[data-pagos-canal]').forEach(b => b.onclick = () => {
+    PAGOS_CANAL = b.dataset.pagosCanal;
+    localStorage.setItem('pagos_canal', PAGOS_CANAL);
+    pintarTableroPagos(lista, true);
+  });
   if (!silencioso) entradaLista(lista);
   pagoResCargar(lista);
 }
@@ -34087,7 +34106,6 @@ function setupLeadsTabs() {
   }));
   document.getElementById('lf-refrescar')?.addEventListener('click', () => loadLeadsEnFacturacion());
   document.getElementById('ll-refrescar')?.addEventListener('click', () => loadLeadsAsignadosLote());
-  loadLeadsEnFacturacion(); // el contador de la pestaña tiene que estar antes de que la abran
   loadLeadsAsignadosLote(); // idem: el badge de "Asignados en lote" cuenta pendientes
   loadColaBoleteria();
   setupLeadsDropTargets();

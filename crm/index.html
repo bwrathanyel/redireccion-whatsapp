@@ -2338,6 +2338,9 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .pagos-col-sub{font-size:11.5px;color:var(--muted);margin:4px 0 11px}
 .pagos-col-cards{display:flex;flex-direction:column;gap:11px}
 .pagos-col-vacio{padding:22px 11px;border:1px dashed var(--line2);border-radius:12px;text-align:center;font-size:12px;color:var(--muted)}
+.pagos-canales{display:inline-flex;flex-wrap:wrap;margin-bottom:12px}
+.pagos-canales .seg{display:inline-flex;align-items:center;gap:6px;min-height:36px}
+.pagos-canal-n{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--danger);color:#fff;font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
 .pagos-espera{margin-top:14px;border:1px solid var(--line);border-radius:14px;padding:11px}
 .pagos-espera summary{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;font-weight:800;color:var(--muted);min-height:28px}
 .pagos-espera[open] summary{margin-bottom:11px}
@@ -7640,6 +7643,23 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   .lyra-sug{min-height:40px;font-size:13px}
   .lyra-clip{width:44px}
 }
+/* Leads en móvil más denso (2026-10-29): filtros en la misma fila que el
+   indicador en vivo, sin la caja que envolvía la lista (doble padding) y
+   tarjetas más ajustadas. Los toques siguen en 44px vía área extendida. */
+@media(max-width:760px){
+  #sec-leads .leads-pipeline-head{margin-bottom:10px !important;min-height:var(--tap,44px)}
+  #sec-leads .leads-pipeline-head .mfs-trigger{margin:0 0 0 auto}
+  #sec-leads [data-leads-panel="pipeline"]>.card{padding:0;background:none;border:0;box-shadow:none}
+  #leads-cards.card-grid{gap:10px}
+  #leads-cards .lead-card{padding:11px 13px}
+  #leads-cards .lead-card .lc-head{margin-bottom:6px;min-height:0}
+  #leads-cards .lead-card .chip-estado{position:relative;min-height:32px;padding:0 12px}
+  #leads-cards .lead-card .chip-estado::after{content:'';position:absolute;inset:-6px 0}
+  #leads-cards .lead-card .lc-consulta{margin-top:7px}
+  #leads-cards .lead-card .lc-chips,#leads-cards .lead-card .lc-oferta{margin-top:5px}
+  #leads-cards .lead-card .lc-foot{padding-top:9px}
+  #leads-cards .lead-card .lc-fill{flex-basis:9px}
+}
 </style>
 </head>
 <body>
@@ -8190,13 +8210,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     </section>
 
     <section class="section" id="sec-leads">
-      <div class="seg-group chips-scroll" id="leads-tabs">
-        <button class="seg on" data-leads-tab="pipeline">Leads</button>
-        <!-- Boletería y Asignados en lote se quitaron (pedido del dueño 2026-10-16); Solicitudes vive en el modo Boletería. -->
-        <button class="seg" data-leads-tab="facturacion">En facturación <span class="lih-count" id="leads-fact-count">0</span></button>
-        <button class="seg nav-admin-only" data-leads-tab="colaboraciones">Colaboraciones</button>
-      </div>
-
+      <!-- Sub-pestañas En facturación / Colaboraciones quitadas (pedido del dueño 2026-10-29): ocupaban una fila entera en móvil. -->
       <div class="leads-tab-panel" data-leads-panel="pipeline">
         <div class="leads-pipeline-head" style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
           <div class="live-indicator" id="leads-live-indicator">
@@ -8204,6 +8218,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
             <span class="live-status" id="leads-live-status"></span>
           </div>
           <button class="dbtn save" id="nl-abrir-btn" type="button" style="width:auto;flex:none;padding:8px 14px"><i class="fas fa-user-plus"></i> Nuevo lead</button>
+          <button class="mfs-trigger mfs-icon" id="leads-mfs-trigger" data-mfs="leads-tbar" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
         </div>
         <div class="leads-inbox" id="leads-inbox">
           <div class="leads-inbox-head">
@@ -8213,7 +8228,6 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <div class="tbl-state" id="inbox-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tenés leads nuevos esperando respuesta</div></div>
           <div class="leads-inbox-grid" id="inbox-grid"></div>
         </div>
-        <button class="mfs-trigger mfs-icon" id="leads-mfs-trigger" data-mfs="leads-tbar" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
         <div class="tbar mfs" id="leads-tbar">
             <div class="lf-dd">
               <button class="lf-btn" id="leads-filtros-btn" type="button" aria-expanded="false" aria-controls="leads-filtros-pop"><i class="fas fa-sliders"></i> Filtros <b id="leads-filtros-n"></b> <i class="fas fa-chevron-down lf-flecha"></i></button>
