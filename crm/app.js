@@ -4456,7 +4456,7 @@ const RV_DETALLE = {
   traslado_terrestre: [['origen', 'Origen'], ['destino', 'Destino'], ['vehiculo', 'Vehículo']],
   traslado_maritimo: [['embarcadero', 'Embarcadero'], ['embarcacion', 'Embarcación'], ['ida_vuelta', 'Ida y vuelta', 'bool']],
   full_day: [['excursion', 'Excursión'], ['punto_encuentro', 'Punto de encuentro'], ['incluye', 'Incluye']],
-  hospedaje: [['hotel', 'Hotel'], ['habitacion', 'Habitación'], ['plan', 'Plan'], ['noches', 'Noches', 'calc'], ['check_in', 'Check-in'], ['check_out', 'Check-out'], ['voucher', 'N° de voucher']],
+  hospedaje: [['hotel', 'Hotel'], ['habitacion', 'Habitación'], ['plan', 'Plan'], ['noches', 'Noches', 'calc'], ['voucher', 'N° de voucher']],
   seguro: [['aseguradora', 'Aseguradora'], ['cobertura', 'Cobertura'], ['poliza', 'Póliza']],
   otro: [['nota', 'Nota']],
 };
@@ -4763,6 +4763,7 @@ async function rvGenerarVoucher(servicioId, btn) {
   const titular = pax.find(p => p.titular) || pax[0] || null;
   const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
   const hosp = servs.find(s => s.tipo === 'hospedaje');
+  const fv = rvVoucherFechasViaje(c, r, hosp);
   const total = Number(r.monto_total ?? c.monto_total ?? 0), pagado = Number(r.monto_pagado ?? c.monto_pagado ?? 0);
   const fecha = s => s ? pvFecha(s) : '';
   const v = {
@@ -4771,8 +4772,8 @@ async function rvGenerarVoucher(servicioId, btn) {
     documento_identidad: titular ? [RV_TIPO_DOC[titular.tipo_documento] || '', titular.numero_documento].filter(Boolean).join(' ') : '',
     telefono: (titular?.telefono) || c.telefono || '', asesor_nombre: c.asesor || '',
     destino_hospedaje: hosp ? (hosp.detalle?.hotel || hosp.descripcion || '') : (r.destino || c.destino || ''),
-    fecha_entrada: fecha(c.fecha_viaje_inicio || r.fecha_viaje_inicio || hosp?.fecha_inicio), fecha_salida: fecha(c.fecha_viaje_fin || r.fecha_viaje_fin || hosp?.fecha_fin),
-    check_in: hosp?.detalle?.check_in || '', check_out: hosp?.detalle?.check_out || '',
+    fecha_entrada: fecha(fv.entrada), fecha_salida: fecha(fv.salida),
+    etiqueta_entrada: fv.etqEntrada, etiqueta_salida: fv.etqSalida, check_in: '', check_out: '',
     modalidad: hosp?.detalle?.plan || '', habitaciones: hosp?.detalle?.habitacion || '',
     total_dias: hosp?.detalle?.noches ? `${hosp.detalle.noches} noches` : '',
     adultos: r.pax_adultos || servs.reduce((n, s) => Math.max(n, Number(s.pax_adultos || 0)), 0) || null,
@@ -4806,6 +4807,11 @@ async function rvGenerarVoucher(servicioId, btn) {
     if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
   }
 }
+const rvVoucherFechasViaje = (c, r, hosp) => {
+  const ini = c?.fecha_viaje_inicio || r.fecha_viaje_inicio, fin = c?.fecha_viaje_fin || r.fecha_viaje_fin;
+  return ini || fin ? { entrada: ini, salida: fin, etqEntrada: 'FECHA DE IDA', etqSalida: 'FECHA DE REGRESO' }
+    : { entrada: hosp?.fecha_inicio, salida: hosp?.fecha_fin, etqEntrada: 'CHECK-IN', etqSalida: 'CHECK-OUT' };
+};
 const rvVoucherFechaIso = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : ''; };
 const rvVoucherRango = s => {
   const ini = rvVoucherFechaIso(s.fecha_inicio), fin = rvVoucherFechaIso(s.fecha_fin);
@@ -4822,9 +4828,10 @@ function rvArmarVoucherPaquete(datos) {
   const documentoFinal = /^[\d.\s]+$/.test(doc) ? rvDocMostrar(doc, 'cedula') : doc.toUpperCase();
   const inicios = servs.map(s => s.fecha_inicio).filter(Boolean).sort();
   const fines = servs.map(s => s.fecha_fin || s.fecha_inicio).filter(Boolean).sort();
-  // Check-in/out del voucher = Inicio/Fin del viaje de la reserva; las fechas de los servicios solo si faltan.
-  const entrada = c?.fecha_viaje_inicio || r.fecha_viaje_inicio || inicios[0], salida = c?.fecha_viaje_fin || r.fecha_viaje_fin || fines[fines.length - 1];
   const hosp = servs.find(s => s.tipo === 'hospedaje') || null;
+  // Fechas del voucher = Inicio/Fin del viaje (Resumen) como ida/regreso; sin ellas, check-in/out del hospedaje.
+  const fv = rvVoucherFechasViaje(c, r, hosp);
+  const entrada = fv.entrada || inicios[0], salida = fv.salida || fines[fines.length - 1];
   const destinos = [...new Set(servs.map(s => s.destino).filter(Boolean))];
   const destinoBase = r.destino || c?.destino || destinos[0] || '';
   const hotel = hosp ? String(hosp.detalle?.hotel || hosp.descripcion || '').trim() : '';
@@ -4845,7 +4852,7 @@ function rvArmarVoucherPaquete(datos) {
     asesor_nombre: c?.asesor || r.asesor || '',
     destino_hospedaje: destino,
     fecha_entrada: rvVoucherFechaIso(entrada), fecha_salida: rvVoucherFechaIso(salida),
-    check_in: '', check_out: '',
+    etiqueta_entrada: fv.etqEntrada, etiqueta_salida: fv.etqSalida, check_in: '', check_out: '',
     modalidad: hosp?.detalle?.plan || 'Paquete turístico', habitaciones: hosp?.detalle?.habitacion || '',
     total_dias: noches ? `${noches} noches` : dias > 0 ? `${dias} noches` : '',
     adultos, ninos,
@@ -31388,8 +31395,9 @@ function vcpDibujarVoucher(doc, v, ctx) {
   const etiquetaDestino = txt(v.etiqueta_destino) || 'DESTINO / HOSPEDAJE';
   y = tabla(etiquetaDetalle, conHosp ? [
     [etiquetaDestino, { content: txt(v.destino_hospedaje) || '—', colSpan: 3, styles: { fontStyle: st('bold'), fontSize: 10.5 } }],
-    ['FECHA DE ENTRADA', txt(v.fecha_entrada) || '—', 'CHECK IN', txt(v.check_in) || '—'],
-    ['FECHA DE SALIDA', txt(v.fecha_salida) || '—', 'CHECK OUT', txt(v.check_out) || '—'],
+    // Sin hora de check-in/out (voucher armado desde la reserva) la fecha ocupa la fila entera.
+    [txt(v.etiqueta_entrada) || 'FECHA DE ENTRADA', ...(txt(v.check_in) ? [txt(v.fecha_entrada) || '—', 'CHECK IN', txt(v.check_in)] : [{ content: txt(v.fecha_entrada) || '—', colSpan: 3 }])],
+    [txt(v.etiqueta_salida) || 'FECHA DE SALIDA', ...(txt(v.check_out) ? [txt(v.fecha_salida) || '—', 'CHECK OUT', txt(v.check_out)] : [{ content: txt(v.fecha_salida) || '—', colSpan: 3 }])],
     ['MODALIDAD', txt(v.modalidad) || '—', 'DURACIÓN', txt(v.total_dias) || '—'],
     ['HABITACIONES / CLASE', ancho(v.habitaciones)],
     ['ADULTOS', txt(v.adultos) || '—', 'NIÑOS', txt(v.ninos) || 'N/A'],
