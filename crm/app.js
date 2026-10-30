@@ -4979,7 +4979,8 @@ async function rvGenerarVoucherPaquete(btn, soloAbonos = false) {
     const nombre = docNombre([`${soloAbonos ? 'Voucher abonos' : 'Voucher'} ${codigo || RV_RESERVA_ID}`, v.cliente_nombre, destino, docFecha(entrada)]);
     let falla = null;
     try { falla = await vcAdjuntarPdf(RV_RESERVA_ID, soloAbonos ? hosp.id : null, blob, nombre); } catch (e) { falla = e?.message || 'error de red'; }
-    vcDescargar(blob, nombre);
+    // Con la hora en el nombre: el navegador del teléfono abría el PDF viejo con el mismo nombre en vez del nuevo.
+    vcDescargar(blob, nombre.replace(/.pdf$/i, '') + ' ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/D/g, '-') + '.pdf');
     if (falla) errToast(`${que} generado y descargado, pero no se adjuntó a la reserva: ${falla}`);
     else { okToast(`${que} generado, descargado y adjunto` + (pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
   } catch (e) {
