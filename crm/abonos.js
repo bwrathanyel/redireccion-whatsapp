@@ -198,7 +198,7 @@ export function crearAbonos(c) {
         <span class="ab-tag">${esc(a.metodo)}</span>
         ${serv ? `<span class="ab-tag" title="${esc(nombreServ(serv))}">${esc(TIPO_SERV[serv.tipo] || serv.tipo)}</span>` : ''}
         ${/^inicial/i.test(a.nota || '') ? '<span class="ab-tag">Inicial reserva</span>' : ''}
-        ${a.respaldo ? '<span class="ab-tag ab-respaldo">Sin detalle</span>' : ''}
+        ${a.respaldo ? '<span class="ab-tag ab-respaldo" title="Lo cobrado antes de que existiera el registro de abonos: no tiene recibo propio">Cobrado antes</span>' : ''}
         ${a.anulado_en ? '<span class="ab-tag ab-anulada-tag">Anulado</span>' : ''}
       </div>
       <p class="ab-fila-sub">${esc(c.fecha(a.fecha))}${ref}${a.asesor ? ' · ' + esc(a.asesor) : ''}</p>
@@ -470,12 +470,19 @@ export function crearAbonos(c) {
     const adjunto = c.prepararAdjunto && pre.candidato.reserva_id
       ? await c.prepararAdjunto(pre.candidato.reserva_id, pre.impacto?.servicio_id ?? null, pdf, nombre)
       : null;
-    const r = await rpcDoc('documento_guardar', {
-      p_tipo: 'voucher', p_id: String(v.id), p_version: actual.revision || 1, p_datos: datos,
-      p_motivo: `${anulacion ? 'Anulación del abono' : 'Abono'} ${usd(abono.monto_usd)} del ${diaMesAnio(abono.fecha)}`, p_operacion: operacion,
-      p_huella: pre.huella, p_pdf_path: path,
-      p_finanzas: { tipo: 'sincronizar_abono', abono_id: abono.id }, p_adjunto: adjunto,
-    });
+    let r;
+    try {
+      r = await rpcDoc('documento_guardar', {
+        p_tipo: 'voucher', p_id: String(v.id), p_version: actual.revision || 1, p_datos: datos,
+        p_motivo: `${anulacion ? 'Anulación del abono' : 'Abono'} ${usd(abono.monto_usd)} del ${diaMesAnio(abono.fecha)}`, p_operacion: operacion,
+        p_huella: pre.huella, p_pdf_path: path,
+        p_finanzas: { tipo: 'sincronizar_abono', abono_id: abono.id }, p_adjunto: adjunto,
+      });
+    } catch (e) {
+      // Sin revisión guardada, el PDF subido no lo referencia nadie: se borra para no dejar huérfanos.
+      sb.storage.from('vouchers-pdf').remove([path]).catch(() => {});
+      throw e;
+    }
     return { revision: r.documento?.revision ?? pre.candidato.revision, documentoId: r.documento?.revision_documento_reserva ?? null, numero: r.documento?.numero_factura || v.numero_factura, voucherId: v.id, pdf, nombre };
   }
 
@@ -589,7 +596,7 @@ export function crearAbonos(c) {
 
   async function adjuntarRecibo(blob, nombre) {
     const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: est.reservaId, servicio_id: null, tipo: 'recibo_abono', nombre, mime: 'application/pdf', tamano: blob.size } });
-    if (firma.error || !firma.data?.ok) throw new Error('No se pudo preparar el recibo en la reserva.');
+    if (firma.error || !firma.data?.ok) throw new Error(`No se pudo preparar el recibo en la reserva${c.errorFn ? ` (${await c.errorFn(firma.error, firma.data)})` : ''}.`);
     const up = await sb.storage.from('reservas-documentos').uploadToSignedUrl(firma.data.path, firma.data.token, blob, { contentType: 'application/pdf' });
     if (up.error) throw new Error('No se pudo subir el recibo a la reserva.');
     const r = await rpcDoc('registrar_documento', { p_reserva_id: est.reservaId, p_servicio_id: null, p_tipo: 'recibo_abono', p_storage_path: firma.data.path, p_nombre: nombre });
@@ -597,7 +604,8 @@ export function crearAbonos(c) {
   }
 
   // `reciboPrevio`: al reintentar, el recibo que ya quedó adjunto no se vuelve a generar (no duplica).
-  async function cadenaAbono(abono, pagado, saldo, reciboPrevio = null) {
+  // `alAbono` ({ pagado, saldo }): los totales del recibo cuando no son los de hoy (reintento de un abono viejo).
+  async function cadenaAbono(abono, pagado, saldo, reciboPrevio = null, alAbono = null) {
     const d = est.datos || {};
     let actual = null;
     if (d.voucher?.id) { try { actual = (await rpcDoc('documento_historial', { p_tipo: 'voucher', p_id: String(d.voucher.id) }))?.actual || null; } catch { actual = null; } }
@@ -614,7 +622,7 @@ export function crearAbonos(c) {
           revision: voucherInfo?.revision || d.voucher?.revision, fechaTexto: diaMesAnio(abono.fecha),
           monto_original: abono.monto_original, moneda: abono.moneda, tasa: abono.tasa_usd_ves, tasa_tipo: abono.tasa_tipo,
           monto_usd: abono.monto_usd, metodo: abono.metodo, referencia: abono.referencia,
-          total_pagado: pagado, saldo,
+          total_pagado: alAbono?.pagado ?? pagado, saldo: alAbono?.saldo ?? saldo,
         });
         recibo = { pdf: blob, nombre: c.nombreArchivo ? c.nombreArchivo('recibo', { cliente: actual?.cliente_nombre, codigo: d.codigo, fecha: abono.fecha }) : `Recibo abono ${diaMesAnio(abono.fecha)}.pdf` };
         reciboId = await adjuntarRecibo(blob, recibo.nombre);
@@ -644,7 +652,13 @@ export function crearAbonos(c) {
     if (!a || !est.datos) return;
     const previo = btn?.innerHTML;
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...'; }
-    const docs = await cadenaAbono({ id: a.id, monto_usd: a.monto_usd, monto_original: a.monto_original, moneda: a.moneda, tasa_usd_ves: a.tasa_usd_ves, tasa_tipo: a.tasa_tipo, metodo: a.metodo, referencia: a.referencia, servicio_id: a.servicio_id ?? null, fecha: a.fecha }, est.datos.monto_pagado, est.datos.saldo_pendiente, a.recibo_documento_id || null);
+    // El recibo de un abono viejo lleva el pagado y el saldo de ese momento: sus abonos vivos hasta
+    // él + lo cobrado sin fila. El voucher sí se revisa con lo de hoy.
+    const d = est.datos, vivos = (d.abonos || []).filter(x => !x.anulado_en);
+    const suma = l => l.reduce((s, x) => s + Number(x.monto_usd || 0), 0);
+    const pagadoAlAbono = Math.round((suma(vivos.filter(x => Number(x.id) <= id)) + Math.max(0, Number(d.monto_pagado || 0) - suma(vivos))) * 100) / 100;
+    const alAbono = { pagado: pagadoAlAbono, saldo: Math.max(0, Math.round((Number(d.monto_total || 0) - pagadoAlAbono) * 100) / 100) };
+    const docs = await cadenaAbono({ id: a.id, monto_usd: a.monto_usd, monto_original: a.monto_original, moneda: a.moneda, tasa_usd_ves: a.tasa_usd_ves, tasa_tipo: a.tasa_tipo, metodo: a.metodo, referencia: a.referencia, servicio_id: a.servicio_id ?? null, fecha: a.fecha }, d.monto_pagado, d.saldo_pendiente, a.recibo_documento_id || null, alAbono);
     if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
     if (docs.fallo) c.error(`No se pudieron generar los documentos: ${docs.fallo}`);
     else c.ok('Documentos del abono generados.');

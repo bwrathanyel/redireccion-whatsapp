@@ -12647,7 +12647,7 @@ const RPA_ERR = {
 };
 const PAGO_MIO_COLOR = { emitido: 'var(--muted)', pendiente_verificacion: 'var(--amber)', verificado: 'var(--green)', rechazado: 'var(--danger)', vencido: 'var(--muted)' };
 const lpUrl = token => `https://destinoyeventoslotus360.com/pagar/${token}`;
-const resOpcion = r => `<option value="${r.id}" data-saldo="${Math.max(Number(r.monto_total || 0) - Number(r.monto_pagado || 0), 0).toFixed(2)}">${esc(r.codigo)} · ${money(Number(r.monto_pagado || 0))} de ${money(Number(r.monto_total || 0))}</option>`;
+const resOpcion = r => `<option value="${r.id}" data-saldo="${Math.max(Number(r.monto_total || 0) - Number(r.monto_pagado || 0) - Number(r.en_links || 0), 0).toFixed(2)}">${esc(r.codigo)} · ${money(Number(r.monto_pagado || 0))} de ${money(Number(r.monto_total || 0))}</option>`;
 const pagoMioMonto = p => p.riel ? pagoWebMontoBanco(p) : `$ ${pagoWebDec(p.monto_usd_centavos)}`;
 
 function pagoMioCard(p) {
@@ -12717,9 +12717,10 @@ async function rpaEquiv() {
   const box = rpaEl('rpa-equiv'), riel = val('rpa-riel'), monto = parseFloat(val('rpa-monto'));
   box.textContent = '';
   if (!(riel === 'pago_movil' || riel === 'transferencia') || !(monto > 0)) return;
-  if (!RPA_TASAS) {
+  // Las tasas se actualizan durante el día: la caché dura 10 minutos.
+  if (!RPA_TASAS || Date.now() - RPA_TASAS._en > 600000) {
     const { data } = await sb.from('tasas_cambio').select('moneda,tasa');
-    RPA_TASAS = Object.fromEntries((data || []).map(t => [t.moneda, Number(t.tasa)]));
+    if (data?.length || !RPA_TASAS) RPA_TASAS = { ...Object.fromEntries((data || []).map(t => [t.moneda, Number(t.tasa)])), _en: Date.now() };
   }
   const tasa = RPA_TASAS[val('rpa-tasa')];
   box.textContent = tasa ? `≈ ${money(monto / tasa)} a tasa BCV ${val('rpa-tasa') === 'EUR' ? 'euro' : 'dólar'} de hoy (${tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : 'No hay tasa BCV cargada hoy.';
@@ -12870,8 +12871,14 @@ function lpPintarReservas(rs) {
   if (rs === null) document.getElementById('lp-err').textContent = 'No se pudieron cargar las reservas; puedes emitir sin reserva.';
 }
 async function lpCargarReservas(l) {
-  const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: l.id });
-  lpPintarReservas(error || !data?.ok ? null : (data.reservas || []).filter(r => r.activo));
+  // El saldo precargado descuenta los links vivos (mismo criterio que emitir_link_pago); si no se
+  // pueden leer, queda el saldo bruto y el servidor igual rechaza el exceso.
+  const [{ data, error }, links] = await Promise.all([sb.rpc('reservas_de_lead', { p_lead_id: l.id }),
+    sb.from('pagos').select('reserva_id,monto_usd_centavos').eq('lead_id', l.id).not('reserva_id', 'is', null)
+      .or(`estado.eq.pendiente_verificacion,and(estado.eq.emitido,expira_en.gt.${new Date().toISOString()})`)]);
+  const enLinks = {};
+  (links.data || []).forEach(p => { enLinks[p.reserva_id] = (enLinks[p.reserva_id] || 0) + Number(p.monto_usd_centavos || 0) / 100; });
+  lpPintarReservas(error || !data?.ok ? null : (data.reservas || []).filter(r => r.activo).map(r => ({ ...r, en_links: enLinks[r.id] || 0 })));
 }
 async function cargarLinksPagoLead(l) {
   const box = document.getElementById('lp-links');
@@ -30402,12 +30409,15 @@ function abonosModulo() {
     descargar: vcDescargar,
     nombreArchivo: docNombrePorTipo,
     confirmar: confirmarSheet,
-    adjuntarVoucher: async (reservaId, pdf, nombre) => { const falla = await vcAdjuntarPdf(reservaId, null, pdf, nombre); if (falla) throw new Error(falla); },
+    // Reemplaza al voucher de reserva previo (mismo nombre base): reintentar no suma otro PDF vigente.
+    adjuntarVoucher: async (reservaId, pdf, nombre) => { const falla = await vcAdjuntarVoucherReemplazando(reservaId, null, pdf, nombre); if (falla) throw new Error(falla); },
+    errorFn: async (error, data) => { const m = await msgErrorFn(error, data); return RV_ERR[m] || m; },
     // Reserva sin voucher propio: el voucher se rearma con la reserva abierta en el drawer (RV_DET),
     // con el pagado/saldo que devolvió el abono. Sin la reserva cargada o sin servicios, no hay voucher.
     voucherReserva: ({ reservaId, pagado, saldo, metodo, referencia }) => {
       const det = RV_DET, r = det?.reserva || {}, c = PV_ACTUAL || {};
-      if (Number(RV_RESERVA_ID) !== Number(reservaId) || !(det?.servicios || []).some(s => !s.anulado_en && s.estado !== 'cancelado')) return null;
+      if (Number(RV_RESERVA_ID) !== Number(reservaId) || !det) throw new Error('la ficha de la reserva no está cargada: abrila y tocá Reintentar documentos');
+      if (!(det.servicios || []).some(s => !s.anulado_en && s.estado !== 'cancelado')) return null;
       const pax = (det.pasajeros || []).filter(p => !p.anulado_en), t = pax.find(p => p.titular) || pax[0] || null;
       const { v } = rvArmarVoucherPaquete({
         cliente: [t?.nombre, t?.apellido].filter(Boolean).join(' ').trim() || c.nombre || r.cliente || '',
@@ -30417,7 +30427,7 @@ function abonosModulo() {
     },
     prepararAdjunto: async (reservaId, servicioId, pdf, nombre) => {
       const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: reservaId, servicio_id: servicioId, tipo: 'voucher', nombre, mime: 'application/pdf', tamano: pdf.size } });
-      if (firma.error || !firma.data?.ok) throw new Error('No se pudo preparar el PDF de la reserva. La revisión vigente sigue igual.');
+      if (firma.error || !firma.data?.ok) { const m = await msgErrorFn(firma.error, firma.data); throw new Error(`No se pudo preparar el PDF de la reserva (${RV_ERR[m] || m}). La revisión vigente sigue igual.`); }
       const up = await sb.storage.from('reservas-documentos').uploadToSignedUrl(firma.data.path, firma.data.token, pdf, { contentType: 'application/pdf' });
       if (up.error) throw new Error('No se pudo subir el PDF a la reserva. Reintenta para guardar la revisión.');
       return { path: firma.data.path, nombre };
@@ -31243,7 +31253,7 @@ const vcDescargarConHora = (blob, nombre) => vcDescargar(blob, nombre.replace(/\
 // El voucher nuevo reemplaza a los anteriores del mismo tipo (mismo servicio y mismo inicio de nombre).
 async function vcAdjuntarVoucherReemplazando(reservaId, servicioId, blob, nombre) {
   const base = nombre.split(' - ').slice(0, 2).join(' - ') + ' - ';
-  const viejos = (RV_RESERVA_ID === reservaId ? RV_DET?.documentos || [] : []).filter(d => d.tipo === 'voucher' && (d.servicio_id ?? null) === (servicioId ?? null) && String(d.nombre || '').startsWith(base)).map(d => d.id);
+  const viejos = (Number(RV_RESERVA_ID) === Number(reservaId) ? RV_DET?.documentos || [] : []).filter(d => d.tipo === 'voucher' && (d.servicio_id ?? null) === (servicioId ?? null) && String(d.nombre || '').startsWith(base)).map(d => d.id);
   const falla = await vcAdjuntarPdf(reservaId, servicioId, blob, nombre);
   if (!falla && viejos.length) await Promise.all(viejos.map(id => sb.rpc('anular_documento', { p_documento_id: id }).then(({ error }) => error && console.error('voucher: anular previo', id, error))));
   return falla;
@@ -33613,7 +33623,7 @@ async function msgErrorFn(error, data) {
   if (data?.error) return data.error;
   const ctx = error?.context;
   if (ctx && typeof ctx.json === 'function') {
-    try { const body = await ctx.clone().json(); if (body?.error) return body.error; } catch {}
+    try { const body = await ctx.clone().json(); if (body?.error) return body.error === 'error_rpc' && body.detalle ? body.detalle : body.error; } catch {}
   }
   return error?.message || 'error desconocido';
 }
