@@ -8797,10 +8797,46 @@ async function cargarConversacionLead(l) {
   if (!CONV_HIST.length) return;
   const quien = m => m.rol === 'ia' ? 'Lotus IA' : 'Cliente';
   if (preview) preview.innerHTML = CONV_HIST.slice(-3).map(m => `<div class="conv-mini ${m.rol === 'ia' ? 'ia' : 'lead'}"><b>${quien(m)}:</b> ${esc(m.texto)}</div>`).join('');
-  CONV_CACHE = CONV_HIST.map(m => `<div class="conv-msg ${m.rol === 'ia' ? 'ia' : 'lead'}"><div class="conv-who">${quien(m)}</div>${esc(m.texto)}</div>`).join('');
-  if (box) box.innerHTML = CONV_CACHE;
+  const red = dmRed(l.canal);
+  CONV_CACHE = dmBurbujasHtml(CONV_HIST, l);
+  if (box) { box.innerHTML = CONV_CACHE; box.className = `dm-body dm-${red.k}`; requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; }); }
+  const sheet = document.getElementById('conv-lead-sheet');
+  if (sheet) sheet.dataset.red = red.k;
   const canal = document.getElementById('conv-lead-canal');
-  if (canal) canal.textContent = `Gestionada por la IA en ${l.canal || 'el canal'} (ManyChat), solo lectura · ${CONV_HIST.length} mensajes`;
+  if (canal) canal.innerHTML = `<div class="dm-avatar">${esc(dmInicial(l))}</div><div class="dm-quien"><b>${esc(l.nombre || 'Cliente')}</b><span><i class="${red.icono}"></i> ${red.nombre} · atendido por Lotus IA · ${CONV_HIST.length} mensajes</span></div>`;
+}
+// El historial se pinta como el DM de la red por donde llegó el cliente
+// (Instagram, Messenger, WhatsApp, TikTok); lo demás cae a un chat neutro.
+const DM_REDES = {
+  ig: { nombre: 'Instagram', icono: 'fab fa-instagram' },
+  fb: { nombre: 'Messenger', icono: 'fab fa-facebook-messenger' },
+  wa: { nombre: 'WhatsApp', icono: 'fab fa-whatsapp' },
+  tt: { nombre: 'TikTok', icono: 'fab fa-tiktok' },
+  web: { nombre: 'Chat', icono: 'fas fa-comments' }
+};
+function dmRed(canal) {
+  const c = String(canal || '').toLowerCase();
+  const k = c.includes('insta') ? 'ig' : (c.includes('face') || c.includes('messenger')) ? 'fb' : c.includes('whats') ? 'wa' : c.includes('tiktok') ? 'tt' : 'web';
+  return { k, ...DM_REDES[k] };
+}
+const dmInicial = l => (String(l.nombre || '').trim()[0] || '?').toUpperCase();
+function dmTextoHtml(m) {
+  const adj = String(m.texto).match(/^\[el cliente envi[oó] ([^\]]*?)(?:\s*--[^\]]*)?\]\s*(?:\(ref:[^)]*\))?\s*/i);
+  if (!adj) return `${m.voz ? '<i class="fas fa-microphone dm-voz"></i> ' : ''}${esc(m.texto)}`;
+  const que = adj[1].toLowerCase(), resto = m.texto.slice(adj[0].length);
+  const icono = que.includes('video') ? 'fa-video' : (que.includes('audio') || que.includes('voz')) ? 'fa-microphone' : 'fa-image';
+  return `<span class="dm-adjunto"><i class="fas ${icono}"></i> Envió ${esc(adj[1])}</span>${resto ? `<br>${esc(resto)}` : ''}`;
+}
+function dmBurbujasHtml(hist, l) {
+  return hist.map((m, i) => {
+    const lado = m.rol === 'ia' ? 'yo' : 'el';
+    const ladoDe = j => hist[j] ? (hist[j].rol === 'ia' ? 'yo' : 'el') : null;
+    const pos = ladoDe(i - 1) === lado ? (ladoDe(i + 1) === lado ? 'medio' : 'fin') : (ladoDe(i + 1) === lado ? 'inicio' : 'solo');
+    const fotos = (Array.isArray(m.fotos) ? m.fotos : []).filter(u => typeof u === 'string' && /^https:\/\//.test(u));
+    const fotosHtml = fotos.length ? `<div class="dm-fotos">${fotos.slice(0, 6).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(u.replace('/_d/1280/', '/_d/256/'))}" alt=""></a>`).join('')}</div>` : '';
+    const avatar = lado === 'el' ? `<div class="dm-mini-av">${pos === 'fin' || pos === 'solo' ? esc(dmInicial(l)) : ''}</div>` : '';
+    return `<div class="dm-fila ${lado} ${pos}">${avatar}<div class="dm-col">${fotosHtml}<div class="dm-burbuja">${dmTextoHtml(m)}</div></div></div>`;
+  }).join('');
 }
 async function cargarActividadLead(l) {
   const box = document.getElementById('act-body');
