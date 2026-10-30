@@ -4767,9 +4767,27 @@ async function rvGenerarVoucher(servicioId, btn) {
   const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
   const titular = pax.find(p => p.titular) || pax[0] || null;
   const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
-  const hosp = servs.find(s => s.tipo === 'hospedaje');
-  const fv = rvVoucherFechasViaje(c, r, hosp);
-  const total = Number(r.monto_total ?? c.monto_total ?? 0), pagado = Number(r.monto_pagado ?? c.monto_pagado ?? 0);
+  // M2: el voucher de un servicio lleva solo ese servicio, su precio y lo pagado a él (antes, toda la reserva).
+  const hosp = s0.tipo === 'hospedaje' ? s0 : null;
+  // El voucher de un hotel lleva su check-in y check-out, no las fechas de todo el viaje.
+  const fv = rvVoucherFechasViaje(hosp ? null : c, hosp ? {} : r, hosp);
+  if (s0.precio_usd_centavos == null) return errToast('Cargá el precio del servicio antes de generar su voucher.');
+  const total = Number(s0.precio_usd_centavos) / 100;
+  const previo = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Voucher...'; }
+  const soltar = () => { if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; } };
+  let pagado = 0;
+  try {
+    const { data: lista, error } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: c.id });
+    if (error) throw error;
+    const vig = (lista?.abonos || []).filter(a => !a.anulado_en), suma = xs => xs.reduce((n, a) => n + Number(a.monto_usd || 0), 0);
+    // Los abonos sin servicio (los anteriores a servicio_id) y lo cobrado sin fila de abono van al único
+    // servicio, o al primer hospedaje (regla del dueño: los abonos son del hospedaje).
+    const hosps = servs.filter(s => s.tipo === 'hospedaje').sort((a, b) => a.id - b.id);
+    const absorbe = (servs.length === 1 ? servs[0] : hosps[0])?.id === s0.id;
+    const sinFila = absorbe ? Math.max(0, Number(lista?.monto_pagado ?? r.monto_pagado ?? 0) - suma(vig)) : 0;
+    pagado = Math.min(total, Math.round((suma(vig.filter(a => Number(a.servicio_id) === s0.id || (absorbe && !a.servicio_id))) + sinFila) * 100) / 100);
+  } catch (e) { soltar(); return errToast('No pude leer los abonos: ' + (e?.message || e)); }
   const fecha = s => s ? pvFecha(s) : '';
   const v = {
     codigo_reserva: c.codigo || r.codigo || '', created_at: new Date().toISOString(),
@@ -4781,11 +4799,11 @@ async function rvGenerarVoucher(servicioId, btn) {
     etiqueta_entrada: fv.etqEntrada, etiqueta_salida: fv.etqSalida, check_in: '', check_out: '',
     modalidad: hosp?.detalle?.plan || '', habitaciones: hosp?.detalle?.habitacion || '',
     total_dias: hosp?.detalle?.noches ? `${hosp.detalle.noches} noches` : '',
-    adultos: r.pax_adultos || servs.reduce((n, s) => Math.max(n, Number(s.pax_adultos || 0)), 0) || null,
-    ninos: String(r.pax_ninos || servs.reduce((n, s) => Math.max(n, Number(s.pax_ninos || 0)), 0) || ''),
+    adultos: s0.pax_adultos || r.pax_adultos || null,
+    ninos: String(s0.pax_ninos || r.pax_ninos || ''),
     status_reserva: 'CONFIRMADO', total_general: total, monto_pagado: pagado, resta: Math.round((total - pagado) * 100) / 100,
     forma_pago: '', referencia_pago: '',
-    servicios: servs.map(s => {
+    servicios: [s0].map(s => {
       const tks = (det.boletos || []).filter(b => b.servicio_id === s.id && b.numero_ticket).map(b => b.numero_ticket);
       const vuelos = s.tipo === 'boleto_aereo' ? (det.tramos || []).filter(t => t.servicio_id === s.id)
         .map(t => `${t.origen_iata || ''} a ${t.destino_iata || ''} ${rvFechaHoraTramo(t.sale_en)}${t.numero_vuelo ? ' · vuelo ' + t.numero_vuelo : ''}`.trim()).join('\n') : '';
@@ -4795,21 +4813,19 @@ async function rvGenerarVoucher(servicioId, btn) {
         monto: s.precio_usd_centavos != null ? Number(s.precio_usd_centavos) / 100 : null };
     }),
   };
-  const previo = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Voucher...'; }
   try {
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
-    const nombre = docNombre([`Voucher ${v.codigo_reserva || c.id}`, v.cliente_nombre, v.destino_hospedaje, docFecha(hosp?.fecha_inicio)]);
-    const falla = await vcAdjuntarPdf(c.id, servicioId, blob, nombre);
-    vcDescargar(blob, nombre);
+    const nombre = docNombre([`Voucher ${v.codigo_reserva || c.id}`, v.cliente_nombre, v.destino_hospedaje, docFecha(s0.fecha_inicio)]);
+    const falla = await vcAdjuntarVoucherReemplazando(c.id, servicioId, blob, nombre);
+    vcDescargarConHora(blob, nombre);
     if (falla) errToast(`Voucher generado y descargado, pero no se adjuntó a la ficha: ${falla}`);
-    else if (servs.some(s => s.tipo === 'boleto_aereo' && !(det.boletos || []).some(b => b.servicio_id === s.id && b.numero_ticket))) errToast('Voucher generado y adjunto, pero el boleto todavía no tiene e-tickets cargados (botón Tickets).');
+    else if (s0.tipo === 'boleto_aereo' && !(det.boletos || []).some(b => b.servicio_id === s0.id && b.numero_ticket)) errToast('Voucher generado y adjunto, pero el boleto todavía no tiene e-tickets cargados (botón Tickets).');
     else okToast('Voucher generado, descargado y adjunto a la reserva');
   } catch (e) {
     errToast('No se pudo generar el voucher: ' + (e?.message || e));
   } finally {
-    if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
+    soltar();
   }
 }
 const rvVoucherFechasViaje = (c, r, hosp) => {
@@ -4977,14 +4993,9 @@ async function rvGenerarVoucherPaquete(btn, soloAbonos = false) {
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
     const nombre = docNombre([`${soloAbonos ? 'Voucher abonos' : 'Voucher'} ${codigo || RV_RESERVA_ID}`, v.cliente_nombre, destino, docFecha(entrada)]);
-    // El voucher nuevo reemplaza a los anteriores del mismo tipo (mismo servicio y mismo inicio de nombre).
-    const sid = soloAbonos ? hosp.id : null, base = nombre.split(' - ').slice(0, 2).join(' - ') + ' - ';
-    const viejos = (RV_DET?.documentos || []).filter(d => d.tipo === 'voucher' && !d.anulado_en && (d.servicio_id ?? null) === sid && String(d.nombre || '').startsWith(base)).map(d => d.id);
     let falla = null;
-    try { falla = await vcAdjuntarPdf(RV_RESERVA_ID, sid, blob, nombre); } catch (e) { falla = e?.message || 'error de red'; }
-    if (!falla && viejos.length) await Promise.all(viejos.map(id => sb.rpc('anular_documento', { p_documento_id: id }).then(({ error }) => error && console.error('voucher: anular previo', id, error))));
-    // Con la hora en el nombre: el navegador del teléfono abría el PDF viejo con el mismo nombre en vez del nuevo.
-    vcDescargar(blob, nombre.replace(/\.pdf$/i, '') + ' ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/\D/g, '-') + '.pdf');
+    try { falla = await vcAdjuntarVoucherReemplazando(RV_RESERVA_ID, soloAbonos ? hosp.id : null, blob, nombre); } catch (e) { falla = e?.message || 'error de red'; }
+    vcDescargarConHora(blob, nombre);
     if (falla) errToast(`${que} generado y descargado, pero no se adjuntó a la reserva: ${falla}`);
     else { okToast(`${que} generado, descargado y adjunto` + (pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
   } catch (e) {
@@ -12845,7 +12856,8 @@ const LP_ERR = {
   reserva_no_disponible: 'La reserva ya no está activa.', monto_invalido: 'Pon un monto mayor a 0.', tasa_invalida: 'Elige la tasa BCV.',
   falta_cliente: 'Abre la ficha del cliente de nuevo.',
 };
-const errSaldo = d => `El monto supera el saldo de la reserva (${money(Number(d?.saldo_pendiente || 0))}).`;
+const errSaldo = d => `El monto supera el saldo de la reserva (${money(Number(d?.saldo_pendiente || 0))}${Number(d?.en_links) > 0 ? `; ${money(Number(d.en_links))} ya están en links sin pagar` : ''}).`;
+let LP_SESION = crypto.randomUUID();
 // Sin reserva todavía: oficina la elige al verificar el pago.
 const SIN_RESERVA_OPT = '<option value="">Sin reserva todavía</option>';
 function lpPintarReservas(rs) {
@@ -12882,8 +12894,12 @@ async function emitirLinkPago(l) {
   btn.disabled = true;
   const antes = btn.innerHTML;
   btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Generando...';
-  const { data, error } = await sb.rpc('emitir_link_pago', { p_reserva_id: reserva, p_monto_usd: monto, p_tasa_tipo: val('lp-tasa'), p_lead_id: l.id });
+  // Reintento del mismo envío (respuesta perdida): misma clave, el servidor devuelve el link ya emitido.
+  const clave = `lp:${l.id}:${reserva || 0}:${Math.round(monto * 100)}:${val('lp-tasa')}:${LP_SESION}`;
+  const { data, error } = await sb.rpc('emitir_link_pago', { p_reserva_id: reserva, p_monto_usd: monto, p_tasa_tipo: val('lp-tasa'), p_lead_id: l.id, p_idempotency_key: clave });
   btn.disabled = false; btn.innerHTML = antes;
+  // La clave solo se conserva si la respuesta se perdió; si el servidor contestó, el próximo intento es otro envío.
+  if (data) LP_SESION = crypto.randomUUID();
   if (error || !data?.ok) { err.textContent = data?.error === 'supera_saldo' ? errSaldo(data) : LP_ERR[data?.error] || error?.message || data?.error || 'No se pudo generar el link.'; return; }
   const url = lpUrl(data.token), wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
   out.style.display = 'block';
@@ -31222,6 +31238,16 @@ async function vcAdjuntarPdf(reservaId, servicioId, blob, nombre) {
   return error || !data?.ok ? rvErr(error, data) : null;
 }
 function vcDescargar(blob, nombre) { descargarArchivo(blob, nombre); }
+// Con la hora en el nombre: el navegador del teléfono abría el PDF viejo con el mismo nombre en vez del nuevo.
+const vcDescargarConHora = (blob, nombre) => vcDescargar(blob, nombre.replace(/\.pdf$/i, '') + ' ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/\D/g, '-') + '.pdf');
+// El voucher nuevo reemplaza a los anteriores del mismo tipo (mismo servicio y mismo inicio de nombre).
+async function vcAdjuntarVoucherReemplazando(reservaId, servicioId, blob, nombre) {
+  const base = nombre.split(' - ').slice(0, 2).join(' - ') + ' - ';
+  const viejos = (RV_RESERVA_ID === reservaId ? RV_DET?.documentos || [] : []).filter(d => d.tipo === 'voucher' && (d.servicio_id ?? null) === (servicioId ?? null) && String(d.nombre || '').startsWith(base)).map(d => d.id);
+  const falla = await vcAdjuntarPdf(reservaId, servicioId, blob, nombre);
+  if (!falla && viejos.length) await Promise.all(viejos.map(id => sb.rpc('anular_documento', { p_documento_id: id }).then(({ error }) => error && console.error('voucher: anular previo', id, error))));
+  return falla;
+}
 function vcPintarHecho(h) {
   const box = document.getElementById('vc-hecho');
   box.innerHTML = `<b><i class="fas fa-circle-check"></i> Voucher N° ${fmt(h.numero)} generado</b><span>${esc(h.resumen)}</span>
