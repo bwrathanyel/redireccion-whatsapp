@@ -22888,7 +22888,11 @@ async function ivLeerArchivos(files) {
       const { data, error } = await sb.functions.invoke('voucher-a-venta', {
         body: { accion: 'leer', pdf_base64: fila.pdf_b64, nombre_archivo: file.name },
       });
-      if (error || !data?.ok) { fila.estado = 'error'; fila.resultado = data?.detalle || data?.error || error?.message || 'no se pudo leer'; ivRender(); continue; }
+      if (error || !data?.ok) {
+        // Con status ≠ 2xx supabase-js deja el cuerpo en error.context: ahí viene el motivo real (detalle).
+        const cuerpo = data || await error?.context?.json?.().catch(() => null);
+        fila.estado = 'error'; fila.resultado = cuerpo?.detalle || cuerpo?.error || error?.message || 'no se pudo leer'; ivRender(); continue;
+      }
       fila.datos = data.datos;
       fila.estado = data.datos.necesita_revision ? 'revisar' : 'ok';
       fila.candidatos = await ivBuscarLeads(data.datos);
