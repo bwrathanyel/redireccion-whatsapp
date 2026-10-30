@@ -307,14 +307,19 @@ export function crearAbonos(c) {
   async function revisarVoucher(abono, pagado, actual) {
     if (!actual || actual.anulado_en || !puedeGenerar()) return null;
     const v = est.datos.voucher;
-    const datos = { ...actual, monto_pagado: Number(pagado) };
+    // Voucher de una parte de la reserva (p. ej. solo el hotel): el resto se paga de contado
+    // (boletos), así que le toca lo cobrado menos esa parte, entre lo que ya tenía y su total.
+    const totalDoc = Number(actual.total_general || 0);
+    const fuera = Math.max(0, Number(est.datos.monto_total || 0) - totalDoc);
+    const pagadoDoc = Math.min(totalDoc, Math.max(Number(actual.monto_pagado || 0), Math.round((Number(pagado) - fuera) * 100) / 100));
+    const datos = { ...actual, monto_pagado: pagadoDoc };
     const pre = await rpcDoc('documento_preparar', {
       p_tipo: 'voucher', p_id: String(v.id), p_version: actual.revision || 1,
       p_datos: datos, p_finanzas: { tipo: 'sincronizar_abono', abono_id: abono.id },
     });
     if (!pre?.candidato || Number(pre.candidato.monto_pagado) === Number(actual.monto_pagado)) return null;
     const operacion = crypto.randomUUID();
-    const pdf = await c.pdfVoucher({ ...pre.candidato, abonos_detalle: abonosDetalle(abono, pagado) });
+    const pdf = await c.pdfVoucher({ ...pre.candidato, abonos_detalle: abonosDetalle(abono, pagadoDoc, fuera) });
     const nombre = c.nombreArchivo ? c.nombreArchivo('voucher', pre.candidato) : `Voucher-${pre.candidato.numero_factura || v.id}-r${pre.candidato.revision}.pdf`;
     const path = `${miUid()}/documentos/voucher/${v.id}/r${pre.candidato.revision}-${operacion}.pdf`;
     const up = await sb.storage.from('vouchers-pdf').upload(path, pdf, { contentType: 'application/pdf' });
@@ -333,9 +338,12 @@ export function crearAbonos(c) {
 
   // Líneas de abonos del voucher reimpreso: los vigentes + el nuevo (resaltado). Lo cobrado sin
   // fila de abono (p. ej. el pago que traía un voucher importado) va como «Pagos anteriores».
-  function abonosDetalle(abono, pagado) {
+  // `fuera`: lo de la reserva que no cubre el voucher; el abono que la paga justa no va al detalle.
+  function abonosDetalle(abono, pagado, fuera = 0) {
     const fila = (a, nuevo) => ({ fecha: diaMesAnio(a.fecha), metodo: a.metodo, referencia: a.referencia, monto: Number(a.monto_usd || 0), nuevo });
-    const filas = [...(est.datos?.abonos || []).filter(a => !a.anulado_en && Number(a.id) !== Number(abono.id)).map(a => fila(a, false)), fila(abono, true)];
+    const otros = (est.datos?.abonos || []).filter(a => !a.anulado_en && Number(a.id) !== Number(abono.id));
+    const sale = fuera > 0 ? otros.findIndex(a => Math.round(Number(a.monto_usd) * 100) === Math.round(fuera * 100)) : -1;
+    const filas = [...otros.filter((_, i) => i !== sale).map(a => fila(a, false)), fila(abono, true)];
     const sinDetalle = Math.round((Number(pagado || 0) - filas.reduce((s, f) => s + f.monto, 0)) * 100) / 100;
     return sinDetalle > 0 ? [{ fecha: '—', metodo: 'Pagos anteriores', referencia: '', monto: sinDetalle }, ...filas] : filas;
   }
