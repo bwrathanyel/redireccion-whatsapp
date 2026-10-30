@@ -5,6 +5,7 @@ import { crearPropuestas } from './propuestas.js';
 import { crearBandejaWa } from './whatsapp-bandeja.js';
 import { crearTareas } from './tareas.js';
 import { crearCampanasWa } from './wa-campanas.js';
+import { crearAdsMeta } from './ads-meta.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -295,7 +296,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], balance: ['Balance', 'Ventas, costos, gastos y utilidad por periodo'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de servicio (hospedaje, excursiones, traslados) en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], balance: ['Balance', 'Ventas, costos, gastos y utilidad por periodo'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], ads: ['Anuncios Meta', 'Gasto de Meta cruzado con leads y ventas del CRM'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de servicio (hospedaje, excursiones, traslados) en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
   tareas: ['Tareas', 'Tu día: lo asignado y tus recordatorios'],
   comisiones: ['Comisiones', 'Se calculan solas al pagarse la reserva · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
@@ -1691,7 +1692,7 @@ const IR_SECCIONES = [
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
-  'rendimiento-ia', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
+  'rendimiento-ia', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads',
   'manual', 'actualizaciones'
 ];
 function seccionInicialPermitida() {
@@ -3571,7 +3572,9 @@ const PV_WA_PRESETS = [0, 15, 30, 60, 90];
 let PV_RT_TIMER = null;
 let PV_WA_DIAS = 30, PV_WA_FILTRO = 'todos', PV_WA_BUSCAR = '', PV_WA_DATA = null;
 let PV_CAMPANAS = null;
-const pvCampanas = () => PV_CAMPANAS ||= crearCampanasWa({ sb, esc, ok: okToast, error: errToast, origen: 'reservas', rol: ROL, etapaTxt: k => (PV_ETAPAS[k] || [k])[0] });
+let ADS_META = null;
+const adsMeta = () => ADS_META ||= crearAdsMeta({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('ads-root') });
+const pvCampanas = () => PV_CAMPANAS ||=crearCampanasWa({ sb, esc, ok: okToast, error: errToast, origen: 'reservas', rol: ROL, etapaTxt: k => (PV_ETAPAS[k] || [k])[0] });
 const pvWaMotivo = k => k ? (PV_WA_MOTIVOS[k] || [k, 'fa-circle-minus', 'var(--muted)']) : PV_WA_ELEGIBLE;
 async function pvWhatsappCargar() {
   const body = document.getElementById('pv-wa-body');
@@ -4670,6 +4673,7 @@ function rvAccion(accion, id, btn) {
     case 'nuevo-servicio': return rvForm({ tipo: 'servicio', id: null });
     case 'voucher': return rvGenerarVoucher(n, btn);
     case 'voucher-paquete': return rvGenerarVoucherPaquete(btn);
+    case 'voucher-abonos': return rvGenerarVoucherPaquete(btn, true);
     case 'editar-servicio': case 'emitir': return rvEditarServicio(n);
     case 'costo': return rvForm({ tipo: 'costo', id: n });
     case 'nuevo-pasajero': return rvForm({ tipo: 'pasajero', id: null });
@@ -4734,7 +4738,8 @@ function rvBarraServicios(ss) {
   const ia = rvAgente() && vivos.some(s => s.tipo === 'boleto_aereo');
   return `<div class="rv-add-barra"><button class="dbtn save rv-add rv-add-pri" type="button" data-rv-accion="nuevo-servicio" aria-label="Agregar servicio"><i class="fas fa-plus"></i> Servicio</button>
     <button class="dbtn gh rv-add rv-add-subir" type="button" data-rv-accion="subir-archivo"><i class="fas fa-file-arrow-up"></i> ${ia ? 'Subir ticket o voucher y que la IA lo lea' : 'Subir ticket o voucher'}</button>
-    ${vivos.length ? '<button class="dbtn gh rv-add rv-add-voucher" type="button" data-rv-accion="voucher-paquete"><i class="fas fa-suitcase-rolling"></i> Voucher del paquete</button>' : ''}</div>`;
+    ${vivos.length ? '<button class="dbtn gh rv-add rv-add-voucher" type="button" data-rv-accion="voucher-paquete"><i class="fas fa-suitcase-rolling"></i> Voucher del paquete</button>' : ''}
+    ${rvVista() !== 'boleteria' && vivos.some(s => s.tipo === 'hospedaje' && s.estado !== 'cancelado') ? '<button class="dbtn gh rv-add rv-add-voucher" type="button" data-rv-accion="voucher-abonos"><i class="fas fa-receipt"></i> Voucher de abonos</button>' : ''}</div>`;
 }
 // Desglose del gerente (2026-10-16): Hotel · Traslado · Boletería, cada uno con su proveedor y su neto.
 function rvSeccionesHtml(ss, vista) {
@@ -4879,12 +4884,39 @@ function rvArmarVoucherPaquete(datos) {
   };
   return { v, entrada };
 }
+// Voucher de abonos (2026-10-30): los abonos son siempre del hospedaje y los boletos se pagan de
+// contado, así que el abono que cubre justo el boleto (todos juntos, o cada uno) sale del detalle.
+function rvVoucherSoloAbonos(v, servs, abonos) {
+  const cent = x => Math.round(Number(x || 0) * 100);
+  const boletos = servs.filter(s => s.tipo === 'boleto_aereo' && s.precio_usd_centavos != null).map(s => Number(s.precio_usd_centavos));
+  const totalBol = boletos.reduce((t, x) => t + x, 0);
+  const resto = [...abonos];
+  const sacar = c => { const i = resto.findIndex(a => cent(a.monto_usd) === c); if (i >= 0) resto.splice(i, 1); return i >= 0; };
+  if (totalBol && !sacar(totalBol)) boletos.forEach(sacar);
+  const idx = servs.map((s, i) => s.tipo === 'hospedaje' ? i : -1).filter(i => i >= 0);
+  const totalHosp = idx.reduce((t, i) => t + (Number(servs[i].precio_usd_centavos) || 0), 0) || Math.max(0, cent(v.total_general) - totalBol);
+  const pagado = resto.reduce((t, a) => t + cent(a.monto_usd), 0);
+  const dia = iso => iso ? new Date(iso).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+  const bs = n => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  Object.assign(v, {
+    titulo_voucher: 'VOUCHER DE ABONOS · HOSPEDAJE', etiqueta_detalle: 'DETALLE DEL HOSPEDAJE',
+    etiqueta_destino: 'HOTEL / DESTINO', etiqueta_servicios: 'HOSPEDAJE',
+    servicios: idx.map(i => v.servicios[i]),
+    total_general: totalHosp / 100, monto_pagado: pagado / 100, resta: Math.max(0, totalHosp - pagado) / 100,
+    abonos_detalle: resto.map(a => ({
+      fecha: dia(a.fecha), referencia: a.referencia || '', monto: Number(a.monto_usd || 0),
+      metodo: a.moneda && a.moneda !== 'USD' ? `${a.metodo || 'Pago'} · Bs ${bs(a.monto_original)}${a.tasa_usd_ves ? ' a ' + bs(a.tasa_usd_ves) : ''}` : a.metodo,
+    })),
+  });
+}
 // Voucher de todo el paquete (hotel + vuelos + traslados...). Si falta cédula, teléfono o
 // forma de pago, la misma hoja de confirmación los pide antes de armar el PDF.
-async function rvGenerarVoucherPaquete(btn) {
+async function rvGenerarVoucherPaquete(btn, soloAbonos = false) {
   const c = PV_ACTUAL, det = RV_DET || {}, r = det.reserva || {};
   const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
   if (!servs.length) { errToast('La reserva no tiene servicios activos para el voucher.'); return; }
+  const hosp = servs.find(s => s.tipo === 'hospedaje');
+  if (soloAbonos && !hosp) { errToast('La reserva no tiene hospedaje activo para el voucher de abonos.'); return; }
   const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
   const titular = pax.find(p => p.titular) || pax[0] || null;
   const prev = RV_VOUCHER_PAQUETE.get(RV_RESERVA_ID) || {};
@@ -4892,14 +4924,19 @@ async function rvGenerarVoucherPaquete(btn) {
   const documento = titular?.numero_documento || prev.documento || '';
   const telefono = titular?.telefono || c?.telefono || r.telefono || prev.telefono || '';
   // Forma de pago y referencia: lo confirmado antes en este voucher, la reserva, y si no el último abono vigente.
-  let ultimo = null;
-  if (!prev.formaPago && !r.forma_pago) {
+  let ultimo = null, abonos = [];
+  if (soloAbonos || (!prev.formaPago && !r.forma_pago)) {
     try {
-      const { data: lista } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: RV_RESERVA_ID });
-      ultimo = (lista?.abonos || []).filter(a => !a.anulado_en)
-        .sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
-    } catch (e) { console.error('voucher: abonos', e); }
+      const { data: lista, error } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: RV_RESERVA_ID });
+      if (error) throw error;
+      abonos = (lista?.abonos || []).filter(a => !a.anulado_en).sort((a, b) => Number(a.id) - Number(b.id));
+      ultimo = abonos[abonos.length - 1] || null;
+    } catch (e) {
+      console.error('voucher: abonos', e);
+      if (soloAbonos) { errToast('No pude leer los abonos: ' + (e?.message || e)); return; }
+    }
   }
+  if (soloAbonos && !abonos.length) { errToast('La reserva todavía no tiene abonos registrados.'); return; }
   const formaPago = prev.formaPago || r.forma_pago || RV_METODO_A_VOUCHER[ultimo?.metodo] || '';
   const referencia = prev.referencia || r.referencia_pago || ultimo?.referencia || '';
   const faltan = [];
@@ -4926,19 +4963,21 @@ async function rvGenerarVoucherPaquete(btn) {
     RV_VOUCHER_PAQUETE.set(RV_RESERVA_ID, datos);
   }
   const { v, entrada } = rvArmarVoucherPaquete(datos), codigo = v.codigo_reserva, destino = v.destino_hospedaje;
+  if (soloAbonos) rvVoucherSoloAbonos(v, servs, abonos);
+  const que = soloAbonos ? 'Voucher de abonos' : 'Voucher del paquete';
   const previo = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...'; }
   try {
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
-    const nombre = docNombre([`Voucher ${codigo || RV_RESERVA_ID}`, v.cliente_nombre, destino, docFecha(entrada)]);
+    const nombre = docNombre([`${soloAbonos ? 'Voucher abonos' : 'Voucher'} ${codigo || RV_RESERVA_ID}`, v.cliente_nombre, destino, docFecha(entrada)]);
     let falla = null;
-    try { falla = await vcAdjuntarPdf(RV_RESERVA_ID, null, blob, nombre); } catch (e) { falla = e?.message || 'error de red'; }
+    try { falla = await vcAdjuntarPdf(RV_RESERVA_ID, soloAbonos ? hosp.id : null, blob, nombre); } catch (e) { falla = e?.message || 'error de red'; }
     vcDescargar(blob, nombre);
-    if (falla) errToast(`Voucher generado y descargado, pero no se adjuntó a la reserva: ${falla}`);
-    else { okToast('Voucher del paquete generado, descargado y adjunto' + (pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
+    if (falla) errToast(`${que} generado y descargado, pero no se adjuntó a la reserva: ${falla}`);
+    else { okToast(`${que} generado, descargado y adjunto` + (pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
   } catch (e) {
-    errToast('No se pudo generar el voucher del paquete: ' + (e?.message || e));
+    errToast(`No se pudo generar el ${que.toLowerCase()}: ` + (e?.message || e));
   } finally {
     if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
   }
@@ -33842,6 +33881,7 @@ const NAV_ITEMS = [
   { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Posadas que quieren el asistente' },
   { sec: 'propuestas', icon: 'fas fa-handshake', label: 'Alianzas y propuestas', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Quienes escriben al bot para ofrecer algo' },
   { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok' },
+  { sec: 'ads', icon: 'fas fa-bullhorn', label: 'Anuncios Meta', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Gasto, leads y ventas por anuncio' },
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
   { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only' },
   { sec: 'induccion', icon: 'fas fa-graduation-cap', label: 'Inducción', padre: 'grp-equipo', roles: 'nav-admin-only', sub: 'Cómo le fue a cada persona en el modo de prueba' },
@@ -34236,6 +34276,7 @@ function cargarSeccion(sec) {
   if (sec === 'repartir') repPoblarAsesores();
   if (sec === 'stop-sales') { loadStopSalesVigentes(); ssCargarPdfActual(); }
   if (sec === 'redes') cargarRedActual();
+  if (sec === 'ads') adsMeta().cargar();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'cotizacion-boletos') cbCargarSeccion();
   if (sec === 'bol-solicitudes') bolColaAlEntrar();
@@ -36670,6 +36711,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-30', emoji: '🧾', titulo: 'Voucher de abonos del hospedaje', texto: 'En Reservas > Servicios, el botón "Voucher de abonos" arma un PDF del hospedaje con cada abono en su fila: fecha, método, referencia y monto (los pagos en bolívares muestran el monto en Bs y la tasa). El resumen cuenta solo el hotel: total, pagado y lo que resta. El pago de los boletos, que va de contado, no entra. Queda descargado y adjunto al hotel.', roles: ['admin', 'asesor'] },
   { fecha: '2026-10-29', emoji: '🤖', titulo: 'Chats donde la IA vende sola', texto: 'En Meta DM → WhatsApp hay un filtro nuevo, «IA vende», con los chats que la IA atiende de punta a punta para cerrar la venta (hoy 1 de cada 10 contactos nuevos de WhatsApp). El número al lado dice cuántos van.', roles: ['admin'] },
   { fecha: '2026-10-29', emoji: '👥', titulo: 'Ficha completa de cada persona del equipo', texto: 'En Gestión de Personal → Personal, tocá cualquier tarjeta para ver la ficha completa: estado, asistencia de hoy, tiempo presente, contacto, accesos y el día por día. El editor ahora va por secciones (Perfil, Rol, Permisos con interruptores, Contraseña) y bloquear o dar de baja quedaron aparte, en una zona sensible con confirmación.', roles: ['admin'] },
   { fecha: '2026-10-28', emoji: '📅', titulo: 'Rendimiento IA por día exacto', texto: 'Nuevo botón "Elegir día" junto a Hoy / 7 días / 30 días: abrí el calendario, elegí cualquier fecha pasada y el panel muestra las estadísticas de ese día completo, comparadas contra el mismo día de la semana anterior.', roles: ['admin'] },
