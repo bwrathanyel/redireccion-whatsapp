@@ -58,6 +58,8 @@ const CSS = `
 .am-post img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
 .am-post div{padding:7px 9px;font-size:11px;color:var(--muted)}
 .am-post.on{outline:2px solid var(--accent-ink)}
+.am-post-datos{display:block;margin-top:5px;font-weight:600}
+.am-post-pagar{display:block;margin-top:5px;color:var(--accent-ink);font-weight:600}
 .am-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px;margin:14px 0}
 @media (max-width:640px){
   .am-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
@@ -94,7 +96,7 @@ const OBJETIVOS = {
 export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', raiz }) {
   const admin = rol === 'admin';
   let cuentas = [], cuenta = '', tope = 20, dias = 30, conGasto = true, busca = '', tipoFiltro = '', datos = null, vista = 'arbol';
-  let posts = [], postSel = null, igs = { cuenta: null, lista: [], propio: null }, igSel = '', pedido = 0, ocupado = false, campSel = null, fondo = null, cajon = null, pausas = new Map();
+  let posts = [], cobertura = null, postSel = null, igs = { cuenta: null, lista: [], propio: null }, igSel = '', pedido = 0, ocupado = false, campSel = null, fondo = null, cajon = null, pausas = new Map();
   const $ = sel => raiz.querySelector(sel);
   const usd = n => '$' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const ent = n => Number(n || 0).toLocaleString('es-VE');
@@ -400,13 +402,15 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
         igs = { cuenta, lista: r.cuentas || [], propio: r.propio };
         if (!igs.lista.some(c => c.id === igSel)) igSel = igs.propio || '';
       }
-      posts = (await invocar({ accion: 'posts', cuenta, ig: igSel || undefined })).posts;
+      const r = await invocar({ accion: 'posts_ranking', cuenta, ig: igSel || undefined });
+      posts = r.posts; cobertura = r.cobertura;
     } catch (e) { $('#am-cuerpo').innerHTML = `<div class="am-vacio">${esc(e.message)}</div>`; return; }
     const selIg = igs.lista.length > 1 ? `<label class="fl">Cuenta de Instagram<select class="ei" id="am-ig">${igs.lista.map(c => `<option value="${esc(c.id)}"${c.id === igSel ? ' selected' : ''}>@${esc(c.usuario)}</option>`).join('')}</select></label>` : '';
     $('#am-cuerpo').innerHTML = `<div class="card">
       <div class="pvc-cab"><h2>Promocionar un post de Instagram</h2><button class="btn-sm" type="button" data-am="volver"><i class="fas fa-arrow-left"></i> Volver</button></div>
       ${selIg}
-      <div class="am-posts">${posts.map(p => `<button class="am-post" type="button" data-post="${esc(p.id)}">${p.miniatura ? `<img src="${esc(p.miniatura)}" alt="" loading="lazy">` : ''}<div>${esc((p.fecha || '').slice(0, 10))}${p.alcance == null ? '' : ` · alcance ${ent(p.alcance)}`}<br>${esc((p.texto || '').slice(0, 70))}</div></button>`).join('') || '<div class="am-vacio">Sin publicaciones recientes.</div>'}</div>
+      ${cobertura ? `<div class="am-aviso">Solo ${ent(cobertura.con_post)} de ${ent(cobertura.leads)} leads de Instagram desde el ${esc(cobertura.desde)} tienen publicación identificada (los que entran por comentario). Orden: leads y luego interacciones; las ventas se muestran, no pesan en el orden.</div>` : ''}
+      <div class="am-posts">${posts.map(p => `<button class="am-post" type="button" data-post="${esc(p.id)}">${p.miniatura ? `<img src="${esc(p.miniatura)}" alt="" loading="lazy">` : ''}<div>${esc((p.fecha || '').slice(0, 10))}${p.alcance == null ? '' : ` · alcance ${ent(p.alcance)}`}<br>${esc((p.texto || '').slice(0, 70))}<span class="am-post-datos">${ent(p.leads)} leads · ${ent(p.ventas)} ventas${p.interacciones == null ? '' : ` · ${ent(p.interacciones)} interacciones`}</span><span class="am-post-pagar">Pagar este post</span></div></button>`).join('') || '<div class="am-vacio">Sin publicaciones recientes.</div>'}</div>
       <div class="am-form">
         <label class="fl">Nombre<input class="ei" id="am-nombre" maxlength="120" placeholder="Ej.: Mérida diciembre"></label>
         <label class="fl">Botón<select class="ei" id="am-cta">${CTAS.map(c => `<option value="${c.v}">${c.t}</option>`).join('')}</select></label>
@@ -463,6 +467,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     if (t.dataset.post) {
       postSel = t.dataset.post;
       raiz.querySelectorAll('.am-post').forEach(b => b.classList.toggle('on', b === t));
+      $('.am-form').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       const n = $('#am-nombre');
       n.closest('.am-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
       n.focus({ preventScroll: true }); return;

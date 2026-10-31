@@ -12410,7 +12410,9 @@ function pagoWebRefRepetida(p) {
 function pagoWebCard(p) {
   const centavosUsd = p.moneda === 'VES' ? p.monto_usd_centavos : (p.monto_usd_centavos ?? p.monto_centavos);
   const total = p.total_usd == null ? null : Number(p.total_usd);
-  const descuadre = total != null && centavosUsd != null && Math.abs(Number(centavosUsd) / 100 - total) > 0.01;
+  // Un pago de plan de abonos es solo una parte del total: no se compara contra él.
+  const planTxt = p.plan_id == null ? '' : p.plan_que === 'saldo' ? 'Saldo completo' : `Cuota ${p.plan_cuota_n} de ${p.plan_cuotas_total}`;
+  const descuadre = !planTxt && total != null && centavosUsd != null && Math.abs(Number(centavosUsd) / 100 - total) > 0.01;
   const pend = p.estado === 'pendiente_verificacion';
   const partes = String(p.resumen || '').split(' + ').map(t => t.trim()).filter(Boolean);
   const servicios = partes.filter(t => !esCargoWeb(t));
@@ -12449,6 +12451,7 @@ function pagoWebCard(p) {
       ${p.disponibilidad === 'sin_cupo' ? `<div class="ec-row" style="color:var(--danger);font-weight:700"><i class="fas fa-ban"></i> El hotel cerró cupo (stop sale) después de la reserva${pend ? ' · el cliente ya declaró el pago: reubícalo o devuélvele el dinero' : ' · aún no paga: contáctalo para cambiar fechas u hotel'}</div>` : ''}
       <div style="margin-top:10px;${PAGO_WEB_MONO};font-size:22px;font-weight:800;line-height:1.2;color:var(--txt)">${esc(pagoWebMontoBanco(p))}</div>
       <div class="ec-row" style="margin-top:2px">${esc(sub)}</div>
+      ${planTxt ? `<div class="ec-row" style="font-weight:700"><i class="fas fa-calendar-check"></i> Plan de abonos · ${esc(planTxt)}</div>` : ''}
       ${total != null ? `<div class="ec-row" ${descuadre ? 'style="color:var(--danger);font-weight:700"' : ''}><i class="fas fa-${descuadre ? 'triangle-exclamation' : 'scale-balanced'}"></i> Total de la reserva: $${esc(pagoWebDec(total * 100))}${descuadre ? ' · el monto no coincide' : ''}</div>` : ''}
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
         <span style="font-size:12px;color:var(--muted)">Ref.</span>
@@ -36836,6 +36839,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-31', emoji: '🗓️', titulo: 'Pagos por verificar: se ve la cuota del plan de abonos', texto: 'Los pagos de un plan de abonos ahora muestran «Plan de abonos · Cuota 1 de 4» (o «Saldo completo») y ya no salen en rojo con «el monto no coincide». Verifique el monto y la referencia contra el banco como siempre.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-31', emoji: '📣', titulo: 'Promocionar post: más claro y con cuenta de Instagram', texto: 'En Marketing › Anuncios Meta › Promocionar post, al tocar una publicación la pantalla baja sola al formulario (nombre, botón, presupuesto, días y países). Si la cuenta publicitaria tiene varias cuentas de Instagram, ahora podés elegir con cuál anunciar.', roles: ['admin'] },
   { fecha: '2026-10-30', emoji: '🧳', titulo: 'Un solo «Voucher de la reserva»', texto: 'En Reservas > Servicios, «Voucher del paquete» y «Voucher de abonos» ahora son un solo botón: «Voucher de la reserva». Trae todos los servicios y, si la reserva tiene abonos, la tabla de abonos con el resumen de pago. Al generarlo, el voucher anterior de la reserva (también los de abonos) deja de estar vigente. El voucher de cada servicio sigue en su tarjeta. Se quitó el botón «Subir ticket o voucher» de la barra: los archivos se suben en la pestaña Documentos, y boletería sigue cargando tickets desde el menú ⋯ del boleto.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-30', emoji: '🧾', titulo: 'Voucher de abonos: el primer pago sale como abono', texto: 'En el voucher de abonos, el primer pago de la reserva (el que antes salía como «Saldo anterior») ahora aparece como un abono más, con la forma de pago de la reserva. La cédula sale del pasajero titular, o del primero que la tenga cargada.', roles: ['admin', 'asesor', 'administrativo'] },
