@@ -8191,6 +8191,18 @@ function actualizarBadgeLeads(pendientes) {
 // historial que antes vivían en pestañas que nadie abría. Cada campo se guarda
 // solo (autoguardarLead). Los inputs conservan sus ids: FIELD_IDS_LEAD,
 // valorLeadParaCampo y aplicarActualizacionLeadAbierto siguen igual.
+// Costo por lead solo de anuncios de venta (lead_origen_anuncio lo deja en null para reclutamiento/terceros).
+async function pintarOrigenAnuncio(leadId) {
+  const { data: o, error } = await sb.rpc('lead_origen_anuncio', { p_lead: leadId });
+  const chip = document.getElementById('d-origen-ad');
+  if (error || !o || !chip || currentLead?.id !== leadId) return;
+  const nombre = o.anuncio || o.campana || '';
+  const texto = nombre ? `Vino del anuncio «${nombre.slice(0, 60)}»` : o.ref ? `Vino del enlace «${o.ref}»` : 'Vino de un anuncio de Meta';
+  const costo = o.costo_por_lead != null ? ` · ~$${Number(o.costo_por_lead).toFixed(2)} por lead` : '';
+  chip.innerHTML = `<i class="fas fa-bullhorn"></i>${esc(texto + costo)}`;
+  if (o.anuncio && o.anuncio.length > 60) chip.title = o.anuncio;
+}
+
 function openDrawer(l, opciones = {}) {
   currentLead = l;
   camposSuciosLead = new Set(); conflictoLeadPendiente = false; CONFLICTO_IDS_LEAD = new Set();
@@ -8213,10 +8225,12 @@ function openDrawer(l, opciones = {}) {
   const lectura = (etiqueta, id, extra = '') => `<div class="dl-fila"><dt>${etiqueta}</dt><dd><span data-lect="${id}"></span>${extra}</dd></div>`;
   const dis = soloLectura ? 'disabled' : '';
   const badges = `${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}`;
+  if (l.meta_ad_id || l.meta_ref) queueMicrotask(() => pintarOrigenAnuncio(l.id));
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead dhead-lead" style="--est:${estColor}"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="dhead-info"><div class="dn"><span id="d-nombre">${esc(nombreLead(l))}</span>${badgePrioridadIA(l)}${badgeSeguidorIG(l)}</div>
       <div class="dm"><span class="dm-chip"><i class="fas fa-phone"></i>${textoTelefonoLead(l)}</span>${l.canal ? `<span class="dm-chip"><i class="${iconoCanalLead(l.canal)}"></i>${esc(l.canal)}</span>` : ''}${l.destino ? `<span class="dm-chip"><i class="fas fa-location-dot"></i>${esc(l.destino)}</span>` : ''}<span class="dm-chip"><i class="fas fa-clock"></i>${esc(tiempoRelativo(l.fecha_creacion))}</span></div>
+      ${l.meta_ad_id || l.meta_ref ? '<div class="dm"><span class="dm-chip" id="d-origen-ad"><i class="fas fa-bullhorn"></i>Vino de un anuncio de Meta</span></div>' : ''}
       ${badges.trim() ? `<div class="dh-badges">${badges}</div>` : ''}</div></div>
 
     <div class="dacc">

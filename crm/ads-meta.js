@@ -25,6 +25,9 @@ const CSS = `
 .am-gasto{font-size:22px;font-weight:800;letter-spacing:-.02em}
 .am-res{font-size:11.5px;color:var(--muted)}
 .am-crm{font-size:11.5px;font-weight:700;color:var(--accent-ink)}
+.am-tipo{align-self:flex-start;display:inline-flex;font-size:10px;font-weight:800;padding:2px 9px;border-radius:999px;border:1px solid var(--line2);color:var(--muted)}
+.am-tipo-sel{margin:11px 0 0}
+.am-prog{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--muted)}
 .am-pie{padding:0 14px 11px}
 .am-acc{display:inline-flex;flex-wrap:wrap;gap:4px}
 .am-acc button{min-height:32px;padding:0 9px}
@@ -80,6 +83,8 @@ const ALIAS_CUENTAS = {
   '1227849214235821': 'Destino y Eventos Lotus 360 Instagram',
   '1402478865116363': 'Proacción Instagram',
 };
+// Solo las de venta entran en el costo por lead/venta (tipo automático en SQL: meta_campana_tipo).
+const TIPOS = { venta: 'Venta', reclutamiento: 'Reclutamiento', tercero: 'De terceros' };
 const OBJETIVOS = {
   LINK_CLICKS: 'Clics al enlace', OUTCOME_TRAFFIC: 'Tráfico', OUTCOME_ENGAGEMENT: 'Interacción',
   POST_ENGAGEMENT: 'Interacción', MESSAGES: 'Mensajes', OUTCOME_LEADS: 'Clientes potenciales',
@@ -88,8 +93,8 @@ const OBJETIVOS = {
 
 export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', raiz }) {
   const admin = rol === 'admin';
-  let cuentas = [], cuenta = '', tope = 20, dias = 30, conGasto = true, busca = '', datos = null, vista = 'arbol';
-  let posts = [], postSel = null, pedido = 0, ocupado = false, campSel = null, fondo = null, cajon = null;
+  let cuentas = [], cuenta = '', tope = 20, dias = 30, conGasto = true, busca = '', tipoFiltro = '', datos = null, vista = 'arbol';
+  let posts = [], postSel = null, pedido = 0, ocupado = false, campSel = null, fondo = null, cajon = null, pausas = new Map();
   const $ = sel => raiz.querySelector(sel);
   const usd = n => '$' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const ent = n => Number(n || 0).toLocaleString('es-VE');
@@ -100,6 +105,8 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
   const nombreCuenta = c => ALIAS_CUENTAS[String(c.id).replace(/^act_/, '')] || (!c.nombre || /^\d+$/.test(c.nombre.trim()) ? `Cuenta …${String(c.id).slice(-4)}` : c.nombre);
   const anuncios = camp => camp.conjuntos.flatMap(s => s.anuncios);
   const portada = camp => anuncios(camp).find(a => a.miniatura) || {};
+  const tipoDe = camp => camp.tipo || 'venta';
+  const esVenta = camp => tipoDe(camp) === 'venta';
 
   async function invocar(body) {
     const { data, error: e } = await sb.functions.invoke('ads-meta-zernio', { body });
@@ -126,6 +133,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
         <select class="ei" id="am-cuenta" aria-label="Cuenta publicitaria"></select>
         <div class="seg-group" id="am-dias">${[7, 30, 90].map(d => `<button class="seg${d === dias ? ' on' : ''}" type="button" data-dias="${d}">${d} días</button>`).join('')}</div>
         <button class="am-chip on" type="button" data-am="gasto" aria-pressed="true"><i class="fas fa-dollar-sign"></i> Solo con gasto</button>
+        <select class="ei" id="am-tipo" aria-label="Tipo de campaña"><option value="">Todos los tipos</option>${Object.entries(TIPOS).map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>
         <input class="ei am-busca" id="am-busca" type="search" placeholder="Buscar campaña" aria-label="Buscar campaña">
         <button class="btn-sm" type="button" data-am="recargar" title="Recargar"><i class="fas fa-rotate"></i></button>
         <span class="am-sinc" id="am-sinc"></span>
@@ -133,7 +141,10 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       <div class="kpis kpis-5" id="am-kpis"></div>
       <div id="am-cuerpo"><div class="am-vacio">Cargando…</div></div>`;
     raiz.addEventListener('click', clic);
-    raiz.addEventListener('change', e => { if (e.target.id === 'am-cuenta') { cuenta = e.target.value; cerrar(); cargarArbol(); } });
+    raiz.addEventListener('change', e => {
+      if (e.target.id === 'am-cuenta') { cuenta = e.target.value; cerrar(); cargarArbol(); }
+      if (e.target.id === 'am-tipo') { tipoFiltro = e.target.value; if (vista === 'arbol' && datos) pintarArbol(); }
+    });
     raiz.addEventListener('input', e => { if (e.target.id === 'am-busca') { busca = norm(e.target.value.trim()); if (vista === 'arbol' && datos) pintarArbol(); } });
     raiz.addEventListener('keydown', e => {
       if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('am-card')) { e.preventDefault(); abrir(e.target.dataset.camp); }
@@ -145,6 +156,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     document.body.append(fondo, cajon);
     fondo.addEventListener('click', cerrar);
     cajon.addEventListener('click', clic);
+    cajon.addEventListener('change', e => { if (e.target.id === 'am-tipo-camp') cambiarTipo(e.target); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && campSel && !document.querySelector('.sheet.open')) cerrar(); });
   }
 
@@ -153,13 +165,14 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
   }
 
   function kpis(c) {
-    const m = c.reduce((a, x) => ({ g: a.g + x.metricas.gasto, conv: a.conv + x.metricas.conversaciones, l: a.l + x.crm.leads, v: a.v + x.crm.ventas, $: a.$ + x.crm.monto }), { g: 0, conv: 0, l: 0, v: 0, $: 0 });
+    const m = c.reduce((a, x) => ({ g: a.g + x.metricas.gasto, gv: a.gv + (esVenta(x) ? x.metricas.gasto : 0), conv: a.conv + x.metricas.conversaciones, l: a.l + x.crm.leads, v: a.v + x.crm.ventas, $: a.$ + x.crm.monto }), { g: 0, gv: 0, conv: 0, l: 0, v: 0, $: 0 });
+    const cu = n => (n && m.gv ? ' · ' + usd(div(m.gv, n)) + ' c/u' : '');
     const k = [
       ['Gasto', usd(m.g), 'fa-dollar-sign', 'var(--blue)'],
       ['Chats (Meta)', ent(m.conv), 'fa-comments', 'var(--purple)'],
-      ['Leads CRM', `${ent(m.l)}${m.l ? ' · ' + usd(div(m.g, m.l)) + ' c/u' : ''}`, 'fa-user-plus', 'var(--amber)'],
-      ['Ventas', `${ent(m.v)}${m.v ? ' · ' + usd(div(m.g, m.v)) + ' c/u' : ''}`, 'fa-cart-shopping', 'var(--green)'],
-      ['Vendido / gasto', m.g ? (m.$ / m.g).toFixed(1) + 'x' : '—', 'fa-scale-balanced', 'var(--accent)'],
+      ['Leads CRM', `${ent(m.l)}${cu(m.l)}`, 'fa-user-plus', 'var(--amber)'],
+      ['Ventas', `${ent(m.v)}${cu(m.v)}`, 'fa-cart-shopping', 'var(--green)'],
+      ['Vendido / gasto', m.gv ? (m.$ / m.gv).toFixed(1) + 'x' : '—', 'fa-scale-balanced', 'var(--accent)'],
     ];
     $('#am-kpis').innerHTML = k.map(c => `<div class="kpi" style="--kc:${c[3]}"><div class="kt"><i class="fas ${c[2]}"></i>${c[0]}</div><div class="kv">${c[1]}</div></div>`).join('');
   }
@@ -191,18 +204,27 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     return grupo(pres, btnEstado('campana', camp, camp.plataforma));
   }
 
+  // Las aplica el cron de las 11:20 UTC (7:20 a. m. en Caracas) del día elegido.
+  const diaPausa = p => new Date(p.pausar_en).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', timeZone: 'America/Caracas' });
+  const lineaPausa = camp => (pausas.has(camp.id) ? `<div class="am-prog"><i class="fas fa-clock"></i> Se pausa el ${diaPausa(pausas.get(camp.id))}</div>` : '');
+  function btnPausa(camp) {
+    if (!admin) return '';
+    const p = pausas.get(camp.id);
+    if (p) return `<button class="btn-sm" type="button" data-am="prog-cancelar" data-pausa="${p.id}" data-nombre="${esc(camp.nombre)}">Cancelar pausa del ${diaPausa(p)}</button>`;
+    return camp.estado === 'active' ? `<button class="btn-sm" type="button" data-am="prog" ${dato('campana', camp, camp.plataforma)}><i class="fas fa-clock"></i> Pausar el…</button>` : '';
+  }
+
   function tarjeta(camp) {
     const crm = lineaCrm(camp.crm), pie = accionesCamp(camp);
     return `<article class="am-card" data-camp="${esc(camp.id)}" tabindex="0" role="button" aria-label="${esc(camp.nombre)}">
       <div class="am-foto">${foto(portada(camp))}${estado(camp.estado)}</div>
       <div class="am-cuerpo"><div class="am-tit">${esc(camp.nombre)}</div><div class="am-gasto">${usd(camp.metricas.gasto)}</div>
-        <div class="am-res">${resultado(camp.metricas)}</div>${crm ? `<div class="am-crm">${crm}</div>` : ''}</div>
+        <div class="am-res">${resultado(camp.metricas)}</div>${crm ? `<div class="am-crm">${crm}</div>` : ''}${lineaPausa(camp)}${esVenta(camp) ? '' : `<span class="am-tipo">${TIPOS[tipoDe(camp)]}</span>`}</div>
       ${pie ? `<div class="am-pie">${pie}</div>` : ''}</article>`;
   }
 
   function visibles() {
-    const c = datos?.campanas || [];
-    return busca ? c.filter(x => norm(x.nombre).includes(busca)) : c;
+    return (datos?.campanas || []).filter(x => (!busca || norm(x.nombre).includes(busca)) && (!tipoFiltro || tipoDe(x) === tipoFiltro));
   }
 
   function pintarArbol() {
@@ -215,7 +237,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
         ? `<div class="am-vacio">Ninguna campaña gastó en estos ${dias} días.<br><button class="btn-sm" type="button" data-am="gasto">Ver todas</button></div>`
         : '<div class="am-vacio">Sin campañas en este período.</div>';
     } else if (!c.length) {
-      $('#am-cuerpo').innerHTML = '<div class="am-vacio">Ninguna campaña coincide con la búsqueda.</div>';
+      $('#am-cuerpo').innerHTML = `<div class="am-vacio">Ninguna campaña coincide con ${busca ? 'la búsqueda' : 'el tipo elegido'}.</div>`;
     } else {
       $('#am-cuerpo').innerHTML = `<div class="am-grid">${c.map(tarjeta).join('')}</div>${aviso}`;
     }
@@ -225,12 +247,18 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
   function pintarDetalle() {
     const camp = (datos?.campanas || []).find(x => x.id === campSel);
     if (!camp) return cerrar();
-    const m = camp.metricas, c = camp.crm, p = portada(camp);
+    const m = camp.metricas, c = camp.crm, p = portada(camp), v = esVenta(camp);
     const met = [
       ['Gasto', usd(m.gasto)], ['Alcance', ent(m.alcance)], ['Clics', ent(m.clics)], ['Chats', ent(m.conversaciones)],
-      ['Leads', ent(c.leads), 1], ['$/lead', c.leads ? usd(div(m.gasto, c.leads)) : '—', 1],
-      ['Ventas', ent(c.ventas), 1], ['$/venta', c.ventas ? usd(div(m.gasto, c.ventas)) : '—', 1],
+      ['Leads', ent(c.leads), 1], ['$/lead', v && c.leads ? usd(div(m.gasto, c.leads)) : '—', 1],
+      ['Ventas', ent(c.ventas), 1], ['$/venta', v && c.ventas ? usd(div(m.gasto, c.ventas)) : '—', 1],
     ];
+    const tipo = admin
+      ? `<label class="fl am-tipo-sel">Tipo<select class="ei" id="am-tipo-camp" data-id="${esc(camp.id)}" data-nombre="${esc(camp.nombre)}">
+          <option value="auto"${camp.tipo_fijado ? '' : ' selected'}>Automático${camp.tipo_fijado ? '' : ' · ' + TIPOS[tipoDe(camp)]}</option>
+          ${Object.entries(TIPOS).map(([k, t]) => `<option value="${k}"${camp.tipo_fijado && camp.tipo === k ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+        <div class="am-aviso">Solo las de venta cuentan en el costo por lead y por venta.</div>`
+      : '';
     const fila = a => `<div class="am-anun">${a.miniatura ? `<img src="${esc(a.miniatura)}" alt="" loading="lazy">` : '<span class="am-sin"><i class="fas fa-bullhorn"></i></span>'}
       <div>${a.enlace ? `<a href="${esc(a.enlace)}" target="_blank" rel="noopener">${esc(a.nombre)}</a>` : esc(a.nombre)}
         <small>${estado(a.estado)} ${usd(a.metricas.gasto)} · ${resultado(a.metricas)}</small></div>${botones('anuncio', a, camp.plataforma, false)}</div>`;
@@ -241,9 +269,9 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     const n = anuncios(camp).length;
     cajon.querySelector('#am-det').innerHTML = `
       <h3 class="am-det-tit">${esc(camp.nombre)}</h3>
-      <div class="am-det-sub">${estado(camp.estado)}${objetivo(camp.objetivo)}</div>
+      <div class="am-det-sub">${estado(camp.estado)}${objetivo(camp.objetivo)}<span class="am-tipo">${TIPOS[tipoDe(camp)]}</span></div>
       ${p.enlace ? `<a class="am-det-foto" href="${esc(p.enlace)}" target="_blank" rel="noopener">${foto(p)}<span class="am-ver">Ver en Instagram ↗</span></a>` : `<div class="am-det-foto">${foto(p)}</div>`}
-      ${accionesCamp(camp)}
+      ${accionesCamp(camp)}${lineaPausa(camp)}${grupo(btnPausa(camp))}${tipo}
       <div class="am-met">${met.map(x => `<div${x[2] ? ' class="crm"' : ''}><small>${x[0]}</small><b>${x[1]}</b></div>`).join('')}</div>
       <div class="am-det-h">${n} anuncio${n === 1 ? '' : 's'}</div>${lista || '<div class="am-aviso">Sin anuncios en este período.</div>'}`;
   }
@@ -270,9 +298,13 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     const n = ++pedido;
     $('#am-cuerpo').innerHTML = '<div class="am-vacio">Cargando…</div>';
     try {
-      const d = await invocar({ accion: 'arbol', cuenta, desde: haceDias(dias), hasta: iso(new Date()), con_gasto: conGasto });
+      const [d, pp] = await Promise.all([
+        invocar({ accion: 'arbol', cuenta, desde: haceDias(dias), hasta: iso(new Date()), con_gasto: conGasto }),
+        invocar({ accion: 'pausas' }).catch(() => null),
+      ]);
       if (n !== pedido || vista !== 'arbol') return;
       datos = d;
+      if (pp) pausas = new Map((pp.pausas || []).map(p => [p.objeto_id, p]));
       pintarArbol();
     } catch (e) {
       if (n === pedido) $('#am-cuerpo').innerHTML = `<div class="am-vacio">${esc(e.message)}</div>`;
@@ -292,6 +324,41 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       ok(nuevo === 'paused' ? 'Pausado en Meta' : 'Activado en Meta');
       cargarArbol();
     } catch (e) { error(e.message); }
+  }
+
+  async function programarPausa(d) {
+    const manana = iso(new Date(Date.now() + 86400000));
+    const r = await confirmar({
+      titulo: 'Pausar en una fecha', detalle: `«${d.nombre}»\nSe pausa sola ese día a las 7:20 a. m. (hora Caracas). Sirve para boosts sin fecha de fin.`,
+      textoOk: 'Programar', campos: [
+        { id: 'fecha', label: 'Día', tipo: 'date', valor: manana, requerido: true },
+        { id: 'motivo', label: 'Motivo', tipo: 'text', placeholder: 'Ej.: el evento terminó' },
+      ],
+    });
+    if (!r) return;
+    try {
+      await invocar({ accion: 'pausa_programar', nivel: d.nivel, id: d.id, nombre: d.nombre, motivo: r.motivo, pausar_en: `${r.fecha}T11:00:00Z` });
+      ok('Pausa programada');
+      cargarArbol();
+    } catch (e) { error(e.message); }
+  }
+
+  async function cancelarPausa(d) {
+    if (!await confirmar({ titulo: 'Cancelar pausa programada', detalle: `«${d.nombre}»\nSigue activa hasta que la pauses a mano.`, textoOk: 'Cancelar pausa' })) return;
+    try {
+      await invocar({ accion: 'pausa_cancelar', pausa_id: Number(d.pausa) });
+      ok('Pausa cancelada');
+      cargarArbol();
+    } catch (e) { error(e.message); }
+  }
+
+  async function cambiarTipo(sel) {
+    sel.disabled = true;
+    try {
+      await invocar({ accion: 'tipo', id: sel.dataset.id, tipo: sel.value, nombre: sel.dataset.nombre });
+      ok('Tipo guardado');
+      cargarArbol();
+    } catch (e) { error(e.message); sel.disabled = false; }
   }
 
   async function cambiarPresupuesto(d) {
@@ -375,6 +442,8 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     const a = t.dataset.am;
     if (a === 'estado') return cambiarEstado(t.dataset);
     if (a === 'presupuesto') return cambiarPresupuesto(t.dataset);
+    if (a === 'prog') return programarPausa(t.dataset);
+    if (a === 'prog-cancelar') return cancelarPausa(t.dataset);
     if (a === 'cerrar') return cerrar();
     if (a === 'gasto') {
       conGasto = !conGasto;
