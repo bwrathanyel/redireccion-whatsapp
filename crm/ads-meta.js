@@ -157,7 +157,10 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     document.body.append(fondo, cajon);
     fondo.addEventListener('click', cerrar);
     cajon.addEventListener('click', clic);
-    cajon.addEventListener('change', e => { if (e.target.id === 'am-tipo-camp') cambiarTipo(e.target); });
+    cajon.addEventListener('change', e => {
+      if (e.target.id === 'am-tipo-camp') cambiarTipo(e.target);
+      if (e.target.id === 'am-evento') cambiarEvento(e.target);
+    });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && campSel && !document.querySelector('.sheet.open')) cerrar(); });
   }
 
@@ -258,7 +261,9 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       ? `<label class="fl am-tipo-sel">Tipo<select class="ei" id="am-tipo-camp" data-id="${esc(camp.id)}" data-nombre="${esc(camp.nombre)}">
           <option value="auto"${camp.tipo_fijado ? '' : ' selected'}>Automático${camp.tipo_fijado ? '' : ' · ' + TIPOS[tipoDe(camp)]}</option>
           ${Object.entries(TIPOS).map(([k, t]) => `<option value="${k}"${camp.tipo_fijado && camp.tipo === k ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
-        <div class="am-aviso">Solo las de venta cuentan en el costo por lead y por venta.</div>`
+        <div class="am-aviso">Solo las de venta cuentan en el costo por lead y por venta.</div>
+        <label class="fl am-tipo-sel">Fecha del evento<input type="date" class="ei" id="am-evento" data-id="${esc(camp.id)}" data-nombre="${esc(camp.nombre)}" value="${esc(camp.fecha_evento || '')}"></label>
+        <div class="am-aviso">Si pasa esa fecha y la campaña sigue gastando, el agente pide en Telegram permiso para pausarla.</div>`
       : '';
     const fila = a => `<div class="am-anun">${a.miniatura ? `<img src="${esc(a.miniatura)}" alt="" loading="lazy">` : '<span class="am-sin"><i class="fas fa-bullhorn"></i></span>'}
       <div>${a.enlace ? `<a href="${esc(a.enlace)}" target="_blank" rel="noopener">${esc(a.nombre)}</a>` : esc(a.nombre)}
@@ -360,6 +365,15 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       ok('Tipo guardado');
       cargarArbol();
     } catch (e) { error(e.message); sel.disabled = false; }
+  }
+
+  async function cambiarEvento(inp) {
+    inp.disabled = true;
+    try {
+      await invocar({ accion: 'evento', id: inp.dataset.id, fecha: inp.value || null, nombre: inp.dataset.nombre });
+      ok(inp.value ? 'Fecha del evento guardada' : 'Fecha del evento borrada');
+      cargarArbol();
+    } catch (e) { error(e.message); inp.disabled = false; }
   }
 
   async function cambiarPresupuesto(d) {

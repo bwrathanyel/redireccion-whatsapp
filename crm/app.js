@@ -4228,6 +4228,73 @@ async function pvMensajeCliente(c, plantilla, btn) {
   } finally { btn.disabled = false; }
 }
 
+// Plan de abonos web de la reserva: cuotas con el estado que deriva plan_estado. Las acciones son de oficina y el
+// servidor las revalida (tope de fecha, mora vigente, pago por verificar).
+const PV_PLAN_ESTADO = { al_dia: 'Al día', por_vencer: 'Cuota por vencer', atrasado: 'Atrasado', en_mora: 'En mora', completado: 'Completado', cancelado: 'Cancelado', credito: 'Crédito a favor' };
+const PV_PLAN_CUOTA = { pagada: 'Pagada', proxima: 'Próxima', pendiente: 'Pendiente', vencida: 'Vencida' };
+const PV_PLAN_ERR = {
+  plan_no_disponible: 'Ese plan ya no existe', plan_cerrado: 'El plan ya está cerrado', cuota_no_disponible: 'Esa cuota no existe', cuota_pagada: 'Esa cuota ya está pagada',
+  fecha_invalida: 'La nueva fecha debe ser futura y posterior a la actual', fecha_despues_de_siguiente: 'Esa fecha pasa la de la cuota siguiente: extiende primero esa', fecha_fuera_de_tope: 'La fecha pasa del tope de 20 días antes del viaje', viaje_sin_fecha: 'La reserva no tiene fecha de viaje',
+  plan_no_en_mora: 'El plan ya no está en mora', mora_ya_no_aplica: 'El cliente ya no está en mora: pagó o le extendieron la cuota', pago_en_verificacion: 'Hay un pago por verificar: resuélvelo primero',
+  motivo_requerido: 'Hace falta el motivo', sin_abonos: 'No hay abonos para convertir en crédito',
+};
+const pvPlanUsd = n => '$' + nf('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0);
+async function pvPlanPintar(c) {
+  const box = document.getElementById('pv-e-plan'); if (!box) return;
+  const { data, error } = await sb.rpc('plan_de_reserva', { p_reserva_id: c.id });
+  if (box !== document.getElementById('pv-e-plan')) return;
+  const p = data?.plan;
+  if (error || !p?.ok) { box.innerHTML = ''; return; }
+  const abierto = ['al_dia', 'por_vencer', 'atrasado', 'en_mora'].includes(p.estado);
+  const fila = q => `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line2);font-size:13px">
+      <b style="min-width:62px">Cuota ${q.n}</b><span style="flex:1;min-width:120px">${fmtFechaSolo(q.vence_el)}${q.extendida ? ' · extendida' : ''} · ${pvPlanUsd(q.monto_usd)}</span>
+      <span style="color:${q.estado === 'vencida' ? 'var(--danger)' : 'var(--muted)'}">${PV_PLAN_CUOTA[q.estado] || esc(q.estado)}</span>
+      ${abierto && esOficina() && q.estado !== 'pagada' ? `<button class="rs-q" type="button" data-pv-plan="extender" data-n="${q.n}" data-vence="${esc(q.vence_el)}">Extender</button>` : ''}
+    </div>`;
+  box.innerHTML = `<div class="rs-sec">Plan de abonos <span>${PV_PLAN_ESTADO[p.estado] || esc(p.estado)} · pagado ${pvPlanUsd(p.pagado_usd)} de ${pvPlanUsd(p.total_usd)}</span></div>
+    ${p.estado === 'en_mora' ? '<div class="rv-check"><i class="fas fa-triangle-exclamation"></i> Pasó la gracia sin pagar. Nada se canceló todavía: extiende la cuota o confirma la cancelación.</div>' : ''}
+    ${(p.cuotas || []).map(fila).join('')}
+    ${esOficina() && (abierto || p.estado === 'completado') ? `<div class="rs-quick">
+      ${p.estado === 'en_mora' ? '<button class="rs-q" type="button" data-pv-plan="cancelar">Confirmar cancelación por mora</button>' : ''}
+      <button class="rs-q" type="button" data-pv-plan="credito">Crédito a favor (factor externo)</button></div>` : ''}`;
+  box.onclick = e => { const b = e.target.closest('[data-pv-plan]'); if (b) pvPlanAccion(c, p, b); };
+  // guardar_postventa reactiva la reserva: con el plan cancelado o en crédito se perdería el cierre.
+  if (['cancelado', 'credito'].includes(p.estado)) {
+    ['pv-e-guardar', 'pv-e-pago'].forEach(id => { const b = document.getElementById(id); if (b) { b.disabled = true; b.title = 'La reserva se cerró desde su plan de abonos'; } });
+  }
+}
+async function pvPlanAccion(c, p, btn) {
+  const accion = btn.dataset.pvPlan;
+  let rpc, args, listo;
+  // Lo abonado pudo cambiar desde que se abrió la ficha, y el diálogo pide confirmar ese monto.
+  if (accion !== 'extender') {
+    const { data } = await sb.rpc('plan_de_reserva', { p_reserva_id: c.id });
+    if (data?.plan?.ok) p = data.plan;
+  }
+  if (accion === 'extender') {
+    const tope = p.viaje_inicio ? new Date(new Date(p.viaje_inicio + 'T12:00:00').getTime() - 20 * 86400000).toISOString().slice(0, 10) : null;
+    const fecha = await pedirTexto({ titulo: `Extender la cuota ${btn.dataset.n}`, detalle: `Hoy vence el ${fmtFechaSolo(btn.dataset.vence)}.${tope ? ` Tope: ${fmtFechaSolo(tope)} (20 días antes del viaje).` : ''} El cliente vuelve a recibir los recordatorios con la fecha nueva.`, label: 'Nueva fecha', tipo: 'date', valor: btn.dataset.vence, requerido: true, textoOk: 'Extender' });
+    if (!fecha) return;
+    rpc = 'plan_extender_cuota'; args = { p_plan_id: p.plan_id, p_n: Number(btn.dataset.n), p_fecha: fecha }; listo = 'Cuota extendida';
+  } else if (accion === 'cancelar') {
+    const si = await confirmarSheet({ titulo: 'Confirmar cancelación por mora', detalle: `Se cierra la reserva ${c.codigo || ''} y sus servicios quedan cancelados. El cliente pierde ${pvPlanUsd(p.pagado_usd)} abonados, según las condiciones del plan. Avisa antes al hotel y al cliente: no se le manda nada automático. No se puede deshacer desde aquí.`, textoOk: 'Cancelar la reserva', destructivo: true });
+    if (!si) return;
+    rpc = 'plan_cancelar_por_mora'; args = { p_plan_id: p.plan_id }; listo = 'Reserva cancelada por mora';
+  } else {
+    const motivo = await pedirTexto({ titulo: 'Crédito a favor por factor externo', detalle: `${c.fecha_viaje_fin && c.fecha_viaje_fin < hoyCaracas() ? 'Ojo: la fecha del viaje ya pasó. ' : ''}Solo si no viajó por algo ajeno al cliente y a la agencia. Se crea un crédito de ${pvPlanUsd(p.pagado_usd)} que vence en 6 meses, y la reserva se cierra con sus servicios cancelados. No se puede deshacer desde aquí.`, label: 'Motivo', tipo: 'textarea', requerido: true, textoOk: 'Crear crédito', destructivo: true });
+    if (!motivo) return;
+    rpc = 'plan_marcar_credito'; args = { p_plan_id: p.plan_id, p_motivo: motivo }; listo = null;
+  }
+  btn.disabled = true;
+  try {
+    const { data, error } = await sb.rpc(rpc, args);
+    if (error || !data?.ok) { console.error(rpc, error || data); errToast(PV_PLAN_ERR[data?.error] || 'No se pudo completar la acción'); return; }
+    okToast(listo || `Crédito de ${pvPlanUsd(data.monto_usd)} creado y reserva cerrada`);
+    await pvPlanPintar(c);
+    if (accion !== 'extender') { await Promise.all([loadPostventa(), loadStats()]); renderAll(); }
+  } finally { btn.disabled = false; }
+}
+
 function abrirPostventa(c, accionInicial = null) {
   if (!c) return; PV_ACTUAL = c;
   const opt = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
@@ -4243,6 +4310,7 @@ function abrirPostventa(c, accionInicial = null) {
         <div class="csub">Esta reserva no tiene servicios cargados: el total se escribe a mano. Al agregar el primer servicio pasa a calcularse solo.</div></div>
       <input id="pv-e-pagado" type="hidden" value="${Number(c.monto_pagado || 0)}">
       <div id="pv-e-comision"></div>
+      <div id="pv-e-plan"></div>
       <div class="rs-sec">Viaje <span>Fechas, destino y etapa</span></div>
       <div class="rs-grid2">
         <div><label class="rs-lbl" for="pv-e-inicio">Inicio</label><input class="ei" id="pv-e-inicio" type="date" value="${esc(c.fecha_viaje_inicio || '')}"></div>
@@ -4301,6 +4369,7 @@ function abrirPostventa(c, accionInicial = null) {
     const ot = e.target.closest('[data-pv-otra]'); if (ot) abrirReservaDeLead(Number(ot.dataset.pvOtra), ot.dataset.cod, ot);
   };
   pvOtrasPintar(c);
+  pvPlanPintar(c);
   PV_HAB_SEL = new Map();
   resumen.addEventListener('change', e => { const h = e.target.closest('[data-pv-hab]'); if (h) PV_HAB_SEL.set(Number(h.dataset.pvHab), h.value); });
   document.getElementById('pv-e-guardar').onclick = () => guardarPostventa(false);
