@@ -4664,16 +4664,20 @@ function rvTrasCambio() {
   if (currentSec === 'apartamentos' && APTO_TAB === 'disp') loadDisponibilidad();
   if (currentSec === 'boleteria' && bolTab === 'reservas') loadBolReservas();
 }
+// Lote 3 (2026-10-31): cuántas veces se usa cada botón de Reservas, para decidir qué UI sobra (tabla uso_botones).
+const RV_SIN_MEDIR = new Set(['menu', 'cancelar', 'elegir-archivo', 'tramo-mas', 'tramo-menos']);
+function registrarUsoBoton(boton, reservaId) {
+  if (reservaId) sb.rpc('registrar_uso_boton', { p_reserva_id: reservaId, p_boton: boton }).then(() => {}, () => {});
+}
 function rvAccion(accion, id, btn) {
   const n = id ? Number(id) : null;
   if (accion !== 'menu') rvMenuCerrar(false, false);
+  if (!RV_SIN_MEDIR.has(accion)) registrarUsoBoton('rv:' + accion, RV_RESERVA_ID);
   switch (accion) {
     case 'menu': return rvMenuAbrir(btn);
-    case 'subir-archivo': return rvSubirArchivo();
     case 'nuevo-servicio': return rvForm({ tipo: 'servicio', id: null });
     case 'voucher': return rvGenerarVoucher(n, btn);
-    case 'voucher-paquete': return rvGenerarVoucherPaquete(btn);
-    case 'voucher-abonos': return rvGenerarVoucherPaquete(btn, true);
+    case 'voucher-reserva': return rvGenerarVoucherReserva(btn);
     case 'editar-servicio': case 'emitir': return rvEditarServicio(n);
     case 'costo': return rvForm({ tipo: 'costo', id: n });
     case 'nuevo-pasajero': return rvForm({ tipo: 'pasajero', id: null });
@@ -4733,13 +4737,10 @@ function rvRenderServicios(suave) {
 }
 function rvBarraServicios(ss) {
   if (!rvPuedeEditar()) return '';
-  const vivos = ss.filter(s => !s.anulado_en);
-  // Con un boleto vivo y rol de boletería el botón abre los Tickets del boleto, donde la IA lee el archivo.
-  const ia = rvAgente() && vivos.some(s => s.tipo === 'boleto_aereo');
+  // Lote 3: sin «Subir ticket o voucher» (los archivos se suben en Documentos; boletería, desde Tickets del boleto).
+  const vivos = ss.filter(s => !s.anulado_en && s.estado !== 'cancelado');
   return `<div class="rv-add-barra"><button class="dbtn save rv-add rv-add-pri" type="button" data-rv-accion="nuevo-servicio" aria-label="Agregar servicio"><i class="fas fa-plus"></i> Servicio</button>
-    <button class="dbtn gh rv-add rv-add-subir" type="button" data-rv-accion="subir-archivo"><i class="fas fa-file-arrow-up"></i> ${ia ? 'Subir ticket o voucher y que la IA lo lea' : 'Subir ticket o voucher'}</button>
-    ${vivos.length ? '<button class="dbtn gh rv-add rv-add-voucher" type="button" data-rv-accion="voucher-paquete"><i class="fas fa-suitcase-rolling"></i> Voucher del paquete</button>' : ''}
-    ${rvVista() !== 'boleteria' && vivos.some(s => s.tipo === 'hospedaje' && s.estado !== 'cancelado') ? '<button class="dbtn gh rv-add rv-add-voucher" type="button" data-rv-accion="voucher-abonos"><i class="fas fa-receipt"></i> Voucher de abonos</button>' : ''}</div>`;
+    ${vivos.length ? '<button class="dbtn gh rv-add rv-add-voucher" type="button" data-rv-accion="voucher-reserva"><i class="fas fa-suitcase-rolling"></i> Voucher de la reserva</button>' : ''}</div>`;
 }
 // Desglose del gerente (2026-10-16): Hotel · Traslado · Boletería, cada uno con su proveedor y su neto.
 function rvSeccionesHtml(ss, vista) {
@@ -4900,14 +4901,10 @@ function rvArmarVoucherPaquete(datos) {
   };
   return { v, entrada };
 }
-// Voucher de abonos: solo el hospedaje. Cada abono sabe a qué servicio fue (reserva_abonos.servicio_id,
-// 2026-10-31); los de otro servicio (el boleto de contado) quedan fuera y los sin servicio cuentan.
-function rvVoucherSoloAbonos(v, servs, abonos, formaPago = '') {
+// Pedido del dueño 30-oct: con abonos, el voucher de la reserva muestra cada abono (el de otro servicio
+// rotulado con su servicio, reserva_abonos.servicio_id) y el resumen de la reserva completa.
+function rvVoucherConAbonos(v, servs, abonos, formaPago = '') {
   const cent = x => Math.round(Number(x || 0) * 100);
-  const idx = servs.map((s, i) => s.tipo === 'hospedaje' ? i : -1).filter(i => i >= 0);
-  const hospIds = idx.map(i => Number(servs[i].id));
-  // Pedido del dueño 30-oct: el voucher de abonos muestra todos los abonos de la reserva (también el del
-  // boleto, rotulado con su servicio) y el resumen de la reserva completa.
   const resto = abonos;
   const servDe = a => servs.find(s => Number(s.id) === Number(a.servicio_id));
   const totalHosp = servs.reduce((t, s) => t + (Number(s.precio_usd_centavos) || 0), 0) || cent(v.total_general);
@@ -4920,8 +4917,6 @@ function rvVoucherSoloAbonos(v, servs, abonos, formaPago = '') {
   Object.assign(v, {
     // Sin tabla de pasajeros (la cédula ya va en Datos del cliente): así el resumen y los abonos caben en la página 1.
     pasajeros: [],
-    titulo_voucher: 'VOUCHER DE ABONOS', etiqueta_detalle: 'DETALLE DEL HOSPEDAJE',
-    etiqueta_destino: 'HOTEL / DESTINO', etiqueta_servicios: 'SERVICIOS',
     total_general: totalHosp / 100, monto_pagado: pagado / 100, resta: Math.max(0, totalHosp - pagado) / 100,
     abonos_detalle: resto.map(a => ({
       fecha: dia(a.fecha), referencia: a.referencia || '', monto: Number(a.monto_usd || 0),
@@ -4930,14 +4925,13 @@ function rvVoucherSoloAbonos(v, servs, abonos, formaPago = '') {
     })),
   });
 }
-// Voucher de todo el paquete (hotel + vuelos + traslados...). Si falta cédula, teléfono o
-// forma de pago, la misma hoja de confirmación los pide antes de armar el PDF.
-async function rvGenerarVoucherPaquete(btn, soloAbonos = false) {
+// Voucher de la reserva (lote 3: une el del paquete y el de abonos): todos los servicios (hotel + vuelos +
+// traslados...) y, si hay abonos, cada abono. Si falta cédula, teléfono o forma de pago, la misma hoja
+// de confirmación los pide antes de armar el PDF.
+async function rvGenerarVoucherReserva(btn) {
   const c = PV_ACTUAL, det = RV_DET || {}, r = det.reserva || {};
   const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
   if (!servs.length) { errToast('La reserva no tiene servicios activos para el voucher.'); return; }
-  const hosp = servs.find(s => s.tipo === 'hospedaje');
-  if (soloAbonos && !hosp) { errToast('La reserva no tiene hospedaje activo para el voucher de abonos.'); return; }
   const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
   const titular = pax.find(p => p.titular) || pax[0] || null;
   const prev = RV_VOUCHER_PAQUETE.get(RV_RESERVA_ID) || {};
@@ -4946,8 +4940,9 @@ async function rvGenerarVoucherPaquete(btn, soloAbonos = false) {
   const documento = titular?.numero_documento || pax.find(p => p.numero_documento)?.numero_documento || prev.documento || '';
   const telefono = titular?.telefono || c?.telefono || r.telefono || prev.telefono || '';
   // Forma de pago y referencia: lo confirmado antes en este voucher, la reserva, y si no el último abono vigente.
+  // Sin acceso a los abonos (boletería) o si falla la lectura, sale el voucher sin la tabla de abonos.
   let ultimo = null, abonos = [];
-  if (soloAbonos || (!prev.formaPago && !r.forma_pago)) {
+  if (rvVista() !== 'boleteria') {
     try {
       const { data: lista, error } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: RV_RESERVA_ID });
       if (error) throw error;
@@ -4955,10 +4950,8 @@ async function rvGenerarVoucherPaquete(btn, soloAbonos = false) {
       ultimo = abonos[abonos.length - 1] || null;
     } catch (e) {
       console.error('voucher: abonos', e);
-      if (soloAbonos) { errToast('No pude leer los abonos: ' + (e?.message || e)); return; }
     }
   }
-  if (soloAbonos && !abonos.length) { errToast('La reserva todavía no tiene abonos registrados.'); return; }
   const formaPago = prev.formaPago || r.forma_pago || RV_METODO_A_VOUCHER[ultimo?.metodo] || '';
   const referencia = prev.referencia || r.referencia_pago || ultimo?.referencia || '';
   const faltan = [];
@@ -4969,7 +4962,7 @@ async function rvGenerarVoucherPaquete(btn, soloAbonos = false) {
   let datos = { cliente, documento, telefono, formaPago, referencia };
   if (faltan.length) {
     const f = await confirmarSheet({
-      titulo: 'Datos del voucher del paquete',
+      titulo: 'Datos del voucher de la reserva',
       detalle: `Falta completar: ${faltan.join(', ')}. Estos datos van impresos en el voucher.`,
       textoOk: 'Generar voucher',
       campos: [
@@ -4985,16 +4978,18 @@ async function rvGenerarVoucherPaquete(btn, soloAbonos = false) {
     RV_VOUCHER_PAQUETE.set(RV_RESERVA_ID, datos);
   }
   const { v, entrada } = rvArmarVoucherPaquete(datos), codigo = v.codigo_reserva, destino = v.destino_hospedaje;
-  if (soloAbonos) rvVoucherSoloAbonos(v, servs, abonos, datos.formaPago);
-  const que = soloAbonos ? 'Voucher de abonos' : 'Voucher del paquete';
+  if (abonos.length) rvVoucherConAbonos(v, servs, abonos, datos.formaPago);
+  const que = 'Voucher de la reserva', base = `Voucher ${codigo || RV_RESERVA_ID}`;
   const previo = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...'; }
   try {
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
-    const nombre = docNombre([`${soloAbonos ? 'Voucher abonos' : 'Voucher'} ${codigo || RV_RESERVA_ID}`, v.cliente_nombre, destino, docFecha(entrada)]);
+    const nombre = docNombre([base, v.cliente_nombre, destino, docFecha(entrada)]);
+    // También deja sin efecto los «Voucher abonos» del hotel de antes de unir los dos botones.
+    const deAbonos = d => String(d.nombre || '').startsWith(`Voucher abonos ${codigo || RV_RESERVA_ID} - `);
     let falla = null;
-    try { falla = await vcAdjuntarVoucherReemplazando(RV_RESERVA_ID, soloAbonos ? hosp.id : null, blob, nombre); } catch (e) { falla = e?.message || 'error de red'; }
+    try { falla = await vcAdjuntarVoucherReemplazando(RV_RESERVA_ID, null, blob, nombre, deAbonos); } catch (e) { falla = e?.message || 'error de red'; }
     vcDescargarConHora(blob, nombre);
     if (falla) errToast(`${que} generado y descargado, pero no se adjuntó a la reserva: ${falla}`);
     else { okToast(`${que} generado, descargado y adjunto` + (pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
@@ -5134,14 +5129,6 @@ function rvMenuAbrir(btn) {
 }
 // «Subir ticket o voucher»: con un boleto vivo y rol de boletería abre sus Tickets (ahí la IA lee el ticket);
 // si no, lleva a Documentos con el tipo y el servicio ya elegidos.
-function rvSubirArchivo() {
-  const vivos = (RV_DET?.servicios || []).filter(s => !s.anulado_en), boletos = vivos.filter(s => s.tipo === 'boleto_aereo');
-  if (rvAgente() && boletos.length) return rvForm({ tipo: 'tickets', id: (boletos.find(b => !rvTicketsDocs(b).length) || boletos[0]).id });
-  const hotel = vivos.find(s => s.tipo === 'hospedaje' && ['confirmado', 'emitido'].includes(s.estado) && !rvTieneVoucher(s)) || vivos.find(s => s.tipo === 'hospedaje');
-  if (hotel) return rvDocAbrir('voucher', hotel.id);
-  if (boletos.length) return rvDocAbrir('boleto', boletos[0].id);
-  rvDocAbrir(rvDocTipoSugerido());
-}
 function rvEditarServicio(n) {
   const s = (RV_DET?.servicios || []).find(x => x.id === n);
   if (s?.tipo === 'boleto_aereo' && !bolCatalogo) return bolAsegurarCatalogo().then(() => rvForm({ tipo: 'servicio', id: n }));
@@ -30409,6 +30396,8 @@ function abonosModulo() {
     descargar: vcDescargar,
     nombreArchivo: docNombrePorTipo,
     confirmar: confirmarSheet,
+    // app.js es módulo: sin esto abonos.js no ve estas funciones (leer_comprobante no se medía).
+    usoBoton: registrarUsoBoton, usoHerramienta: registrarUsoHerramienta,
     // Reemplaza al voucher de reserva previo (mismo nombre base): reintentar no suma otro PDF vigente.
     adjuntarVoucher: async (reservaId, pdf, nombre) => { const falla = await vcAdjuntarVoucherReemplazando(reservaId, null, pdf, nombre); if (falla) throw new Error(falla); },
     errorFn: async (error, data) => { const m = await msgErrorFn(error, data); return RV_ERR[m] || m; },
@@ -31251,9 +31240,9 @@ function vcDescargar(blob, nombre) { descargarArchivo(blob, nombre); }
 // Con la hora en el nombre: el navegador del teléfono abría el PDF viejo con el mismo nombre en vez del nuevo.
 const vcDescargarConHora = (blob, nombre) => vcDescargar(blob, nombre.replace(/\.pdf$/i, '') + ' ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/\D/g, '-') + '.pdf');
 // El voucher nuevo reemplaza a los anteriores del mismo tipo (mismo servicio y mismo inicio de nombre).
-async function vcAdjuntarVoucherReemplazando(reservaId, servicioId, blob, nombre) {
+async function vcAdjuntarVoucherReemplazando(reservaId, servicioId, blob, nombre, tambien = () => false) {
   const base = nombre.split(' - ').slice(0, 2).join(' - ') + ' - ';
-  const viejos = (Number(RV_RESERVA_ID) === Number(reservaId) ? RV_DET?.documentos || [] : []).filter(d => d.tipo === 'voucher' && (d.servicio_id ?? null) === (servicioId ?? null) && String(d.nombre || '').startsWith(base)).map(d => d.id);
+  const viejos = (Number(RV_RESERVA_ID) === Number(reservaId) ? RV_DET?.documentos || [] : []).filter(d => d.tipo === 'voucher' && !d.anulado_en && (((d.servicio_id ?? null) === (servicioId ?? null) && String(d.nombre || '').startsWith(base)) || tambien(d))).map(d => d.id);
   const falla = await vcAdjuntarPdf(reservaId, servicioId, blob, nombre);
   if (!falla && viejos.length) await Promise.all(viejos.map(id => sb.rpc('anular_documento', { p_documento_id: id }).then(({ error }) => error && console.error('voucher: anular previo', id, error))));
   return falla;
@@ -36764,6 +36753,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-10-30', emoji: '🧳', titulo: 'Un solo «Voucher de la reserva»', texto: 'En Reservas > Servicios, «Voucher del paquete» y «Voucher de abonos» ahora son un solo botón: «Voucher de la reserva». Trae todos los servicios y, si la reserva tiene abonos, la tabla de abonos con el resumen de pago. Al generarlo, el voucher anterior de la reserva (también los de abonos) deja de estar vigente. El voucher de cada servicio sigue en su tarjeta. Se quitó el botón «Subir ticket o voucher» de la barra: los archivos se suben en la pestaña Documentos, y boletería sigue cargando tickets desde el menú ⋯ del boleto.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
   { fecha: '2026-10-30', emoji: '🧾', titulo: 'Voucher de abonos: el primer pago sale como abono', texto: 'En el voucher de abonos, el primer pago de la reserva (el que antes salía como «Saldo anterior») ahora aparece como un abono más, con la forma de pago de la reserva. La cédula sale del pasajero titular, o del primero que la tenga cargada.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-30', emoji: '🧾', titulo: '«Registrar abono» de Mis ventas abre la reserva', texto: 'En Mis ventas, «Registrar abono» ahora abre la reserva en la pestaña Abonos, con el mismo formulario de siempre: método, referencia, captura, servicio y tasa. Así cada abono queda con su recibo y su voucher. Si el cliente tiene varias reservas con saldo, abre el lead para que elijas cuál.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-10-30', emoji: '💱', titulo: 'Abonos: servicio que paga y tasa del cobro', texto: 'Al registrar un abono en Reservas › Abonos ahora elegís a qué servicio va (el hospedaje viene marcado) y, si es en bolívares, a qué tasa se cobra: BCV dólar, BCV euro o USDT (Binance P2P, se actualiza cada hora). La vista previa muestra la tasa y el equivalente en dólares; si la tasa cambió mientras tenías el formulario abierto, te avisa antes de registrar. Si cargás un pago con el mismo monto y referencia que otro de las últimas 48 horas, te pregunta si es el mismo antes de duplicarlo. El voucher de abonos ya no adivina cuál pago es del boleto.', roles: ['admin', 'asesor', 'administrativo'] },
