@@ -94,7 +94,7 @@ const OBJETIVOS = {
 export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', raiz }) {
   const admin = rol === 'admin';
   let cuentas = [], cuenta = '', tope = 20, dias = 30, conGasto = true, busca = '', tipoFiltro = '', datos = null, vista = 'arbol';
-  let posts = [], postSel = null, pedido = 0, ocupado = false, campSel = null, fondo = null, cajon = null, pausas = new Map();
+  let posts = [], postSel = null, igs = { cuenta: null, lista: [], propio: null }, igSel = '', pedido = 0, ocupado = false, campSel = null, fondo = null, cajon = null, pausas = new Map();
   const $ = sel => raiz.querySelector(sel);
   const usd = n => '$' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const ent = n => Number(n || 0).toLocaleString('es-VE');
@@ -143,6 +143,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     raiz.addEventListener('click', clic);
     raiz.addEventListener('change', e => {
       if (e.target.id === 'am-cuenta') { cuenta = e.target.value; cerrar(); cargarArbol(); }
+      if (e.target.id === 'am-ig') { igSel = e.target.value; abrirNuevo(); }
       if (e.target.id === 'am-tipo') { tipoFiltro = e.target.value; if (vista === 'arbol' && datos) pintarArbol(); }
     });
     raiz.addEventListener('input', e => { if (e.target.id === 'am-busca') { busca = norm(e.target.value.trim()); if (vista === 'arbol' && datos) pintarArbol(); } });
@@ -380,11 +381,18 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     $('#am-kpis').innerHTML = '';
     $('#am-cuerpo').innerHTML = '<div class="am-vacio">Cargando publicaciones…</div>';
     try {
-      posts = (await invocar({ accion: 'posts' })).posts;
+      if (igs.cuenta !== cuenta) {
+        const r = await invocar({ accion: 'ig_cuentas', cuenta }).catch(() => ({ cuentas: [], propio: null }));
+        igs = { cuenta, lista: r.cuentas || [], propio: r.propio };
+        if (!igs.lista.some(c => c.id === igSel)) igSel = igs.propio || '';
+      }
+      posts = (await invocar({ accion: 'posts', cuenta, ig: igSel || undefined })).posts;
     } catch (e) { $('#am-cuerpo').innerHTML = `<div class="am-vacio">${esc(e.message)}</div>`; return; }
+    const selIg = igs.lista.length > 1 ? `<label class="fl">Cuenta de Instagram<select class="ei" id="am-ig">${igs.lista.map(c => `<option value="${esc(c.id)}"${c.id === igSel ? ' selected' : ''}>@${esc(c.usuario)}</option>`).join('')}</select></label>` : '';
     $('#am-cuerpo').innerHTML = `<div class="card">
       <div class="pvc-cab"><h2>Promocionar un post de Instagram</h2><button class="btn-sm" type="button" data-am="volver"><i class="fas fa-arrow-left"></i> Volver</button></div>
-      <div class="am-posts">${posts.map(p => `<button class="am-post" type="button" data-post="${esc(p.id)}">${p.miniatura ? `<img src="${esc(p.miniatura)}" alt="" loading="lazy">` : ''}<div>${esc((p.fecha || '').slice(0, 10))} · alcance ${ent(p.alcance)}<br>${esc(p.texto.slice(0, 70))}</div></button>`).join('') || '<div class="am-vacio">Sin publicaciones en los últimos 30 días.</div>'}</div>
+      ${selIg}
+      <div class="am-posts">${posts.map(p => `<button class="am-post" type="button" data-post="${esc(p.id)}">${p.miniatura ? `<img src="${esc(p.miniatura)}" alt="" loading="lazy">` : ''}<div>${esc((p.fecha || '').slice(0, 10))}${p.alcance == null ? '' : ` · alcance ${ent(p.alcance)}`}<br>${esc((p.texto || '').slice(0, 70))}</div></button>`).join('') || '<div class="am-vacio">Sin publicaciones recientes.</div>'}</div>
       <div class="am-form">
         <label class="fl">Nombre<input class="ei" id="am-nombre" maxlength="120" placeholder="Ej.: Mérida diciembre"></label>
         <label class="fl">Botón<select class="ei" id="am-cta">${CTAS.map(c => `<option value="${c.v}">${c.t}</option>`).join('')}</select></label>
@@ -398,7 +406,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
 
   function leerBoost() {
     return {
-      accion: 'boost', cuenta, post: postSel,
+      accion: 'boost', cuenta, post: postSel, ig: igSel || undefined,
       nombre: $('#am-nombre').value.trim(), cta: $('#am-cta').value,
       diario: Number($('#am-diario').value), dias: Number($('#am-dias-boost').value),
       paises: $('#am-paises').value.toUpperCase().split(/[\s,]+/).filter(Boolean),
@@ -412,14 +420,17 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     if (!b.nombre) return error('Ponele un nombre.');
     ocupado = true;
     try {
+      ok('Meta lo está revisando: tarda cerca de un minuto…');
       const v = await invocar(b);
       const r = v.resumen;
+      const comoIg = r.ig ? `Anuncia como @${igs.lista.find(c => c.id === r.ig)?.usuario || r.ig}.\n` : '';
       const si = await confirmar({
         titulo: 'Meta lo aceptó: ¿crear en pausa?',
-        detalle: `«${r.nombre}»\n${usd(r.diario)} por día × ${r.dias} días (máximo ${usd(r.total_max)}), hasta ${r.fin}.\nPaíses: ${r.paises.join(', ')}.\nQueda pausada: no gasta hasta que la actives.`,
+        detalle: `«${r.nombre}»\n${comoIg}${usd(r.diario)} por día × ${r.dias} días (máximo ${usd(r.total_max)}), hasta ${r.fin}.\nPaíses: ${r.paises.join(', ')}.\nQueda pausada: no gasta hasta que la actives.`,
         textoOk: 'Crear en pausa',
       });
       if (!si) return;
+      ok('Creando en pausa: tarda cerca de un minuto…');
       await invocar({ ...b, confirmar: true });
       ok('Campaña creada en pausa');
       vista = 'arbol';
@@ -437,7 +448,10 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     }
     if (t.dataset.post) {
       postSel = t.dataset.post;
-      raiz.querySelectorAll('.am-post').forEach(b => b.classList.toggle('on', b === t)); return;
+      raiz.querySelectorAll('.am-post').forEach(b => b.classList.toggle('on', b === t));
+      const n = $('#am-nombre');
+      n.closest('.am-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      n.focus({ preventScroll: true }); return;
     }
     const a = t.dataset.am;
     if (a === 'estado') return cambiarEstado(t.dataset);
